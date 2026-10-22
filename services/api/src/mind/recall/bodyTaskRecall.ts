@@ -1,5 +1,6 @@
 import type { CompanionStateStore, MemoryAudience } from '@shannon/cognition';
-import type { TaskMemory, TaskMemoryItem } from '../memory/taskMemoryPorts.js';
+import type { TaskMemory, TaskMemoryItem, TaskMemoryReadSnapshot } from '../memory/taskMemoryPorts.js';
+import { inTurns, type TurnsMeasure } from '../memory/memoryStepsPorts.js';
 import type { JevChooser, JevQuestion } from '../../infra/models/jev/jevChoice.js';
 import { JEV_QUESTION_SETS, jevNoul } from '../../infra/models/jev/jevChoice.js';
 import type { TaskRecallPacket } from './taskRecallPorts.js';
@@ -20,6 +21,10 @@ import type { TurnMemoryRecall } from './turnMemoryRecall.js';
  *   decision now"), and only those it is sure of are kept, none allowed. A timeout or failure keeps the situation order.
  * - What the decision shows is read again through memory's own gate at each decision (`TaskMemory.read`): a memory forgotten or withheld
  *   meanwhile is never shown, and only what is shown becomes the decision's source (`sourceIds`).
+ * - recall-yield (2026-10-22; run 31: the first pool held the API's thread 2,448 + 1,318 + 1,428 ms): with a memory that has steps
+ *   (`TaskMemory.steps`), the snapshot, the searches, the read of what is shown and its sources are made in turns of the loop
+ *   (`memorySteps.ts`), each giving what the read at once gives; the read of what is shown is made again if a source row changed while it
+ *   was made (`readNow`). `measure.held`: the longest turn it held.
  */
 export const BODY_RECALL = Object.freeze({ items: 3, text: 240, poolSearch: 40, poolNearest: 40, poolGroups: 80,
   poolMilliseconds: 10 * 60_000, poolDecisions: 30, jevCandidates: 24, jevKeep: 0.7 });
@@ -45,9 +50,15 @@ export interface BodyRecallMeasure {
   jev: { ms: number; source: 'jev' | 'fallback'; kept: number } | null;
   /**
    * mb-llmc r7 (run 31: the pool at its 14th decision held the API's thread 2,448 + 1,318 ms, run 30's 999 ms): each search's own time
-   * (synchronous, one turn of the loop each), when the pool was made. Absent: no pool made.
+   * (from its start to its end, turns of the loop between included), when the pool was made. Absent: no pool made.
    */
   searchMs?: number[];
+  /**
+   * recall-yield (2026-10-22): the longest the recall held the API's thread in one turn of the loop, and how many times it gave the
+   * thread back, over the snapshot, the pool and the read of what is shown (`memorySteps.ts`). Absent: the recall ran whole (a memory
+   * without steps).
+   */
+  held?: TurnsMeasure;
 }
 
 export interface BodyTaskRecall {
@@ -60,6 +71,8 @@ interface Group { id: string; ids: string[]; text: string; observedAt: string; c
 interface Pool { groups: Group[]; size: number; builtAt: number; decisions: number; capped: boolean }
 type Search = { scopeKey: string; goal: string; present: MemoryAudience; signal?: AbortSignal };
 const emptyPool = (builtAt: number): Pool => ({ groups: [], size: 0, builtAt, decisions: 0, capped: false });
+/** The pool's three searches: by the goal, by the game and the goal, by the game's records. */
+const poolQueries = (goal: string) => [goal, `マイクラ ${goal}`, 'ゲームの記憶 マイクラ'];
 
 /** Her own death, as the game's records say it (a task experience that mentions a death is its own record, not hers). */
 const DEATH = /マイクラで死んだ|死んでしまった|^死んだ|died\b/u;
@@ -192,7 +205,11 @@ export function createBodyTaskRecall(parts: {
   const keyOf = (scopeKey: string, taskId: string) => `${scopeKey}\u0000${taskId}`;
   const cancel = (scopeKey: string, taskId: string) => { pools.delete(keyOf(scopeKey, taskId)); };
 
-  async function build(input: Search, searchMs: number[] = []): Promise<Pool> {
+  /** How a recall in turns runs its steps (`memorySteps.ts`): on this recall's clock, seeing its abort, measuring its longest turn. */
+  const turnsOf = (input: Search, held: TurnsMeasure) => ({ clock, measure: held, ...(input.signal ? { signal: input.signal } : {}) });
+
+  async function build(input: Search, searchMs: number[] = [], held?: TurnsMeasure): Promise<Pool> {
+    if (parts.memory.steps && held) return buildInTurns(parts.memory.steps, input, searchMs, held);
     // No provenance: the pool only picks records, and what is shown is read again with its sources (`shownOf`). Listing the whole lineage of
     // up to 1,200 candidates, three times, was 3.0 s of the API's thread at the first decision of run 23 (poolMs 3,029; mb-r23).
     // Run 27 (2026-10-22): the three searches in one go still held the thread 3.1 s (poolMs 3,076, the event loop blocked 4,960 ms at the
@@ -200,7 +217,7 @@ export function createBodyTaskRecall(parts: {
     // get through between them.
     const lists: TaskMemoryItem[][] = [];
     let shared: ReturnType<NonNullable<TaskMemory['readSnapshot']>> | undefined;
-    for (const query of [input.goal, `マイクラ ${input.goal}`, 'ゲームの記憶 マイクラ']) {
+    for (const query of poolQueries(input.goal)) {
       await new Promise<void>(resolve => setImmediate(resolve));
       input.signal?.throwIfAborted();
       const began = clock();
@@ -210,11 +227,36 @@ export function createBodyTaskRecall(parts: {
       lists.push(shared ? shared.withholding.withReadSnapshot(search) : search());
       searchMs.push(Math.round(clock() - began));
     }
+    return poolOf(input, lists, shared?.state ?? parts.state.snapshot(input.scopeKey));
+  }
+
+  /**
+   * recall-yield (2026-10-22; run 31: 2,448 + 1,318 ms at once, each search still one turn): the same three searches in turns of the loop.
+   * One snapshot of the pool's own for all three, held open meanwhile, so what one search decided the next finds made; each search settles
+   * its candidates' lineage a remembered turn at a time (`TaskMemory.steps`). The lists are the ones the searches give whole.
+   */
+  async function buildInTurns(steps: NonNullable<TaskMemory['steps']>, input: Search, searchMs: number[], held: TurnsMeasure): Promise<Pool> {
+    const turns = turnsOf(input, held), lists: TaskMemoryItem[][] = [];
+    const shared = await inTurns(steps.snapshot(input.scopeKey), turns);
+    const release = shared.withholding.hold();
+    try {
+      for (const query of poolQueries(input.goal)) {
+        const began = clock();
+        lists.push(await inTurns(steps.search(input.scopeKey, query, input.present, BODY_RECALL.poolSearch, { kind: 'experience' }, shared,
+          { provenance: false }), turns));
+        searchMs.push(Math.round(clock() - began));
+      }
+    } finally { release(); }
+    return poolOf(input, lists, shared.state);
+  }
+
+  /** The pool of the searches' lists; the memories nearest the goal join it later. */
+  function poolOf(input: Search, lists: readonly TaskMemoryItem[][], snapshot: TaskMemoryReadSnapshot['state']): Pool {
     // A search that came back full may have left more of the same record out: its counts are lower bounds ("×N+").
     const pool: Pool = { groups: [], size: 0, builtAt: clock(), decisions: 0,
       capped: lists.some(list => list.length >= BODY_RECALL.poolSearch) };
     addToPool(pool, lists.flat().map(item => ({ item, base: 0.3 })));
-    if (parts.nearest) void nearest(pool, input, shared?.state ?? parts.state.snapshot(input.scopeKey));
+    if (parts.nearest) void nearest(pool, input, snapshot);
     return pool;
   }
 
@@ -223,10 +265,12 @@ export function createBodyTaskRecall(parts: {
     // Experiences only, as the searches: a conversation's summary or a note is not a body task's record.
     return parts.nearest!({ scopeKey: input.scopeKey, query: input.goal, snapshot, present: input.present, limit: BODY_RECALL.poolNearest,
       isEligible: candidate => candidate.kind === 'experience',
-      ...(input.signal ? { signal: input.signal } : {}) }).then(result => {
+      ...(input.signal ? { signal: input.signal } : {}) }).then(async result => {
       if (!result.hits.length) return;
       const similarity = new Map(result.hits.map(hit => [hit.id, hit.similarity]));
-      const items = parts.memory.read(input.scopeKey, result.hits.map(hit => hit.id), input.present, undefined, { provenance: false });
+      const ids = result.hits.map(hit => hit.id);
+      const items = parts.memory.steps ? (await readNow(input, ids, { longestMs: 0, turns: 0 }, false)).items
+        : parts.memory.read(input.scopeKey, ids, input.present, undefined, { provenance: false });
       addToPool(pool, items.map(item => ({ item, base: Math.min(0.6, similarity.get(item.id) ?? 0) })));
     }).catch(() => { /* the deterministic pool stands */ });
   }
@@ -234,10 +278,10 @@ export function createBodyTaskRecall(parts: {
   /** The pool of this task, made again when it is old. */
   async function poolFor(input: Search & { taskId: string }, measure: BodyRecallMeasure): Promise<Pool> {
     const key = keyOf(input.scopeKey, input.taskId);
-    const held = pools.get(key);
-    if (held && clock() - held.builtAt <= BODY_RECALL.poolMilliseconds && held.decisions < BODY_RECALL.poolDecisions) return held;
+    const kept = pools.get(key);
+    if (kept && clock() - kept.builtAt <= BODY_RECALL.poolMilliseconds && kept.decisions < BODY_RECALL.poolDecisions) return kept;
     const started = clock(), searchMs: number[] = [];
-    const pool = await build(input, searchMs);
+    const pool = await build(input, searchMs, measure.held);
     measure.poolMs = Math.round(clock() - started);
     measure.searchMs = searchMs;
     pools.set(key, pool);
@@ -245,18 +289,50 @@ export function createBodyTaskRecall(parts: {
     return pool;
   }
 
-  /** The texts of these groups as memory's gate reads them now: a memory forgotten or withheld since the pool was made has none. */
-  function gated(input: Search, groups: readonly Group[]): Map<Group, string> {
+  /**
+   * What `ids` give through memory's gate now (with their sources when `withSources`). With steps, in turns of the loop: a snapshot of
+   * its own, held open for the read. The rows a memory's visibility is read from are the same before and after it (`rowsMark`), else it
+   * is read again (once more in turns, then at once): so it is what one read made at its end gives, as the read at once was.
+   */
+  async function readNow(input: Search, ids: readonly string[], held: TurnsMeasure | undefined, withSources: boolean):
+    Promise<{ items: TaskMemoryItem[]; sources: readonly string[] }> {
+    const steps = parts.memory.steps;
+    for (let attempt = 0; steps && held && attempt < 2; attempt++) {
+      const mark = steps.rowsMark();
+      if (mark === null) break;
+      const found = await readInTurns(steps, input, ids, held, withSources);
+      if (steps.rowsMark() === mark && parts.memory.available(input.scopeKey, input.present)) return found;
+    }
     const shared = parts.memory.readSnapshot?.(input.scopeKey);
-    const read = () => parts.memory.read(input.scopeKey, groups.map(group => group.id), input.present, shared, { provenance: false });
-    const items = new Map((shared ? shared.withholding.withReadSnapshot(read) : read()).map(item => [item.id, item.summary]));
+    const read = () => {
+      const items = parts.memory.read(input.scopeKey, ids, input.present, shared, { provenance: false });
+      return { items, sources: withSources ? parts.memory.sources(input.scopeKey, items.map(item => item.id), shared) : [] };
+    };
+    return shared ? shared.withholding.withReadSnapshot(read) : read();
+  }
+  async function readInTurns(steps: NonNullable<TaskMemory['steps']>, input: Search, ids: readonly string[], held: TurnsMeasure,
+    withSources: boolean): Promise<{ items: TaskMemoryItem[]; sources: readonly string[] }> {
+    const turns = turnsOf(input, held);
+    const shared = await inTurns(steps.snapshot(input.scopeKey), turns);
+    const release = shared.withholding.hold();
+    try {
+      const items = await inTurns(steps.read(input.scopeKey, ids, input.present, shared, { provenance: false }), turns);
+      const sources = withSources ? await inTurns(steps.sources(input.scopeKey, items.map(item => item.id), shared), turns) : [];
+      return { items, sources };
+    } finally { release(); }
+  }
+
+  /** The texts of these groups as memory's gate reads them now: a memory forgotten or withheld since the pool was made has none. */
+  async function gated(input: Search, groups: readonly Group[], held: TurnsMeasure | undefined): Promise<Map<Group, string>> {
+    const read = await readNow(input, groups.map(group => group.id), held, false);
+    const items = new Map(read.items.map(item => [item.id, item.summary]));
     return new Map(groups.flatMap(group => items.has(group.id) ? [[group, recordEssence(items.get(group.id)!).text] as const] : []));
   }
 
   /** Jev's judgement of the best candidates, each read through the gate first (Jev never sees what she may no longer recall). */
-  async function judged(input: Search, cues: BodyRecallCues, ranked: ReadonlyArray<{ group: Group }>):
+  async function judged(input: Search, cues: BodyRecallCues, ranked: ReadonlyArray<{ group: Group }>, held: TurnsMeasure | undefined):
     Promise<{ groups: Group[]; jev: NonNullable<BodyRecallMeasure['jev']> }> {
-    const readable = gated(input, ranked.slice(0, BODY_RECALL.jevCandidates).map(item => item.group));
+    const readable = await gated(input, ranked.slice(0, BODY_RECALL.jevCandidates).map(item => item.group), held);
     const candidates = [...readable.keys()];
     const started = clock();
     const keys = candidates.map((_, index) => `m${index}`);
@@ -278,13 +354,9 @@ export function createBodyTaskRecall(parts: {
     return { groups: kept.slice(0, BODY_RECALL.items), jev: { ms, source: decision.source, kept: kept.length } };
   }
   /** What the decision shows, read again through memory's own gate: what was forgotten or withheld since the pool was made is not shown. */
-  function shownOf(input: Search, chosen: readonly Group[], capped: boolean, since?: string): { items: TaskMemoryItem[]; sources: readonly string[] } {
-    const shared = parts.memory.readSnapshot?.(input.scopeKey);
-    const read = () => {
-      const items = parts.memory.read(input.scopeKey, chosen.map(group => group.id), input.present, shared, { provenance: false });
-      return { items, sources: parts.memory.sources(input.scopeKey, items.map(item => item.id), shared) };
-    };
-    const { items, sources } = shared ? shared.withholding.withReadSnapshot(read) : read();
+  async function shownOf(input: Search, chosen: readonly Group[], capped: boolean, since: string | undefined, held: TurnsMeasure | undefined):
+    Promise<{ items: TaskMemoryItem[]; sources: readonly string[] }> {
+    const { items, sources } = await readNow(input, chosen.map(group => group.id), held, true);
     const byId = new Map(chosen.map(group => [group.id, group]));
     return { items: items.map(item => {
       const text = viewText({ ...byId.get(item.id)!, text: recordEssence(item.summary).text }, capped);
@@ -298,7 +370,8 @@ export function createBodyTaskRecall(parts: {
     async packet(input) {
       const at = new Date().toISOString();
       const empty = (status: TaskRecallPacket['status']): TaskRecallPacket => ({ contextVersion: 'body', observedAt: at, status, items: [], sourceIds: [] });
-      const measure: BodyRecallMeasure = { poolMs: null, pool: 0, groups: 0, shown: 0, chars: 0, tags: [...input.cues.tags], jev: null };
+      const measure: BodyRecallMeasure = { poolMs: null, pool: 0, groups: 0, shown: 0, chars: 0, tags: [...input.cues.tags], jev: null,
+        ...(parts.memory.steps ? { held: { longestMs: 0, turns: 0 } } : {}) };
       if (input.signal?.aborted) return { packet: empty('cancelled'), measure };
       if (!parts.memory.available(input.scopeKey, input.present)) {
         cancel(input.scopeKey, input.taskId);
@@ -314,11 +387,11 @@ export function createBodyTaskRecall(parts: {
         const ranked = scored(pool.groups, input.cues);
         let chosen = ranked.filter(item => item.fits).slice(0, BODY_RECALL.items).map(item => item.group);
         if (parts.jevOn && parts.jev && ranked.length) {
-          const judgedBy = await judged(input, input.cues, ranked);
+          const judgedBy = await judged(input, input.cues, ranked, measure.held);
           measure.jev = judgedBy.jev;
           if (judgedBy.jev.source === 'jev') chosen = judgedBy.groups;
         }
-        ({ items, sources } = shownOf(input, chosen, pool.capped, input.cues.since));
+        ({ items, sources } = await shownOf(input, chosen, pool.capped, input.cues.since, measure.held));
       } catch (error) {
         // Recall never stops a decision: a read that failed (a lineage past its bound, a store error) gives none this time. A pool that could
         // not be made is held empty, so that the next decisions do not make it again at once.

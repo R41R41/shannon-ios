@@ -79,6 +79,21 @@ export function createFcaSharedWiring(parts: {
       step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
       return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources, undefined, 'memory');
     },
+    /**
+     * `observeMemory`, with the guard's walk of the new sources made first in turns of the loop (`FcaSourceGuard.warm`; run 31: 862 ms at
+     * once for a body recall's 315 sources): the check that follows is then a reuse, or walks at once if anything changed meanwhile. What
+     * an FCA step's recall packets (the task's and the body's) observe their sources with (`serverFcaWiring.ts`).
+     */
+    async observeMemoryInTurns(step: TaskStep, ids: readonly string[], signal?: AbortSignal) {
+      if (!parts.ownerAlone()) return false;
+      const observationId = createHash('sha256').update(JSON.stringify([...new Set(ids)].sort())).digest('hex');
+      if (!parts.runtime.observeSources(step, { observationId, recalledMemoryIds: ids })) return false;
+      step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
+      await parts.visible.warm?.(step.scopeKey, step.snapshot.task, step.snapshot.sources, undefined, 'memory', signal);
+      signal?.throwIfAborted();
+      step.snapshot.sources = parts.runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
+      return parts.visible.sources(step.scopeKey, step.snapshot.task, step.snapshot.sources, undefined, 'memory');
+    },
   };
 }
 

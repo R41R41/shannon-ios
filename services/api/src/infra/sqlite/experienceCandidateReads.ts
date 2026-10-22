@@ -31,6 +31,63 @@ export function readWhileUnchanged<T>(database: DatabaseSync, scopeKey: string, 
   return value;
 }
 
+/**
+ * `readWhileUnchanged` in steps (`memorySteps.ts`): `load()` reads the rows a page at a time. What it read is kept and given only when no
+ * source row changed while it read (its mark is the one before the first page), and so is what one read would give at the end; else, or
+ * inside a transaction, `whole()` reads them at once as before.
+ */
+export function* readWhileUnchangedSteps<T>(database: DatabaseSync, scopeKey: string, load: () => Generator<void, T, undefined>,
+  whole: () => T): Generator<void, T, undefined> {
+  if (database.isTransaction) return whole();
+  let byScope = reads.get(database);
+  if (!byScope) reads.set(database, byScope = new Map());
+  const mark = sourceRowsMark(database), known = byScope.get(scopeKey);
+  if (mark !== null && known?.mark === mark) return known.value as T;
+  if (mark === null) return whole();
+  const value = yield* load();
+  if (database.isTransaction || sourceRowsMark(database) !== mark) return whole();
+  byScope.set(scopeKey, { mark, value });
+  return value;
+}
+
+/** The rows of one step of `candidateSteps` (a body task's episode is about 12 KB of payload). */
+const CANDIDATE_PAGE = 25;
+
+/**
+ * The conversation store's `experienceCandidates` a page at a time (`ConversationStore.experienceCandidateSteps`): the same rows (the newest
+ * `maximumExperiences` by `sequence`), parsed by `parse` in the same order, given as `whole()` (that read at once) gives them when no source
+ * row changed meanwhile (`readWhileUnchangedSteps`).
+ */
+export function candidateSteps<T>(context: { database: DatabaseSync; maximumExperiences: number }, scopeKey: string,
+  parse: (row: ExperienceRow) => T[], whole: () => readonly T[]): Generator<void, readonly T[], undefined> {
+  return readWhileUnchangedSteps(context.database, scopeKey, () => candidatePages(context.database, scopeKey, context.maximumExperiences, parse), whole);
+}
+function* candidatePages<T>(database: DatabaseSync, scopeKey: string, maximum: number, parse: (row: ExperienceRow) => T[]):
+  Generator<void, readonly T[], undefined> {
+  const rows: ExperienceRow[] = [], page = prepared(database, `
+    SELECT sequence, event_id, scope_key, event_type, observed_at, payload_json
+    FROM experience_events
+    WHERE scope_key = ? AND event_type = 'turn.completed' AND sequence < ?
+    ORDER BY sequence DESC
+    LIMIT ?
+  `);
+  for (let before = Number.MAX_SAFE_INTEGER; rows.length < maximum;) {
+    const wanted = Math.min(CANDIDATE_PAGE, maximum - rows.length);
+    const found = page.all(scopeKey, before, wanted) as unknown as ExperienceRow[];
+    rows.push(...found);
+    if (found.length < wanted) break;
+    before = found.at(-1)!.sequence;
+    yield;
+  }
+  rows.reverse();
+  const parsed: T[] = [];
+  for (let start = 0; start < rows.length; start += CANDIDATE_PAGE) {
+    for (const row of rows.slice(start, start + CANDIDATE_PAGE)) parsed.push(...parsedRow(database, scopeKey, row, maximum, parse));
+    yield;
+  }
+  return Object.freeze(parsed);
+}
+
 const keptReads = new WeakMap<DatabaseSync, Map<string, { mark: string; value: unknown }>>();
 const KEPT_READS = 64;
 

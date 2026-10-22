@@ -6,6 +6,7 @@ import type { MemorySearchHit, MemorySearchOptions } from './store/sqliteMemoryS
 import type { FeedbackState } from '../../contracts/feedbackContract.js';
 import type { ReportCard, ReportCardNote } from '../../contracts/conversationExtrasContract.js';
 import type { TaskMemoryReadSnapshot } from './taskMemoryPorts.js';
+import type { Steps } from './memorySteps.js';
 
 /** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */
 export const isPlatformThreadId = (threadId: string): boolean => /^platform:[a-z]+:[0-9a-f]{32}$/u.test(threadId);
@@ -206,6 +207,11 @@ export interface ConversationStore {
    */
   appendReportCardOnce?(scopeKey: string, threadId: string, messageId: string, note: ReportCardNote): StoredConversationMessage;
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[];
+  /**
+   * `experienceCandidates(scopeKey)` in steps (`memorySteps.ts`): the same turns read a page at a time, kept and given as the whole read
+   * would be when no source row changed meanwhile, else read whole at the end. Absent: a caller reads them whole.
+   */
+  experienceCandidateSteps?(scopeKey: string): Steps<readonly ShannonExperience[]>;
   /** Deterministic full-text recall over all experiences and thread summaries. */
   searchMemory?(scopeKey: string, text: string, limit?: number, options?: MemorySearchOptions): readonly MemorySearchHit[];
   appendTurn(

@@ -51,7 +51,7 @@ export interface FcaStepPorts {
   /** A body task's recall (`bodyTaskRecall.ts`); the task recall above is never started for a body task. */
   bodyRecall?: BodyTaskRecall;
   evidence?: FcaEvidence;
-  observeMemory?(ids: readonly string[]): boolean;
+  observeMemory?(ids: readonly string[]): boolean | Promise<boolean>;
   tools?: FcaExternalTools;
   history?: { codec: FcaHistoryCodec; summarizer?: FcaHistorySummarizer; policy?: Partial<FcaHistoryPolicy>;
     /** mb-llmc r3: the summary is made beside the steps (`prepareFcaHistory`); absent: it is made in the step that needs it. */
@@ -203,7 +203,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const recall = recallContext ? await observeAsync('recall', { phase: 'decision_packet', maximumWaitMs: recallContext.waitMilliseconds },
     () => metrics.timed('recallMs', () => ports.recall!.packet(recallContext.input, { waitMilliseconds: recallContext.waitMilliseconds })),
     value => ({ status: value.status, itemCount: value.items.length, sourceCount: value.sourceIds.length })) : undefined;
-  if (recall?.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(recall.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
+  if (recall?.sourceIds.length && (!ports.observeMemory || !await ports.observeMemory(recall.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
   await checked();
   if (recall) observerHandoff('recall', 'context', { phase: 'decision_packet', status: recall.status, itemCount: recall.items.length, sourceCount: recall.sourceIds.length });
   // Minecraft run 7 (2026-10-14): 1.8–5.8 s of the API's one thread per step here. It now walks rarely and lets I/O through between walks.
@@ -240,7 +240,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     const found = await metrics.timed('recallMs', () => ports.bodyRecall!.packet({ scopeKey: step.scopeKey, taskId: step.taskId,
       goal: step.snapshot.task.goal, cues: ports.body?.recallCues?.() ?? { words: [], tags: [] }, present: OWNER_AUDIENCE, signal }));
     metrics.bodyRecall(found.measure);
-    if (found.packet.sourceIds.length && (!ports.observeMemory || !ports.observeMemory(found.packet.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
+    if (found.packet.sourceIds.length && (!ports.observeMemory || !await ports.observeMemory(found.packet.sourceIds))) throw new Error('FCA_SOURCE_WITHHELD');
     if (found.packet.items.length) request.recall = found.packet;
     await checked();
   }

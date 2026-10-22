@@ -82,6 +82,11 @@ export class MemoryWithholding {
     this.queryDepth += 1;
     try { return work(); } finally { this.queryDepth -= 1; }
   }
+  /** That read held open across turns of the loop until the returned function is called (`memorySteps.ts`): only on a withholding of its own. */
+  hold(): () => void {
+    this.query(() => { this.queryDepth += 1; });
+    return () => { this.queryDepth -= 1; };
+  }
 
   /**
    * Whether a remembered turn's read receipt is still available, asked of the native reader once per receipt and time within one
@@ -111,13 +116,11 @@ export class MemoryWithholding {
     scoped.root = this.root;
     return scoped;
   }
-
   /** Related synchronous checks share one graph walk; a subsequent read starts fresh. */
   withReadSnapshot<T>(work: () => T, preloaded: readonly ShannonExperience[] = []): T {
     for (const row of preloaded) this.experiences.set(row.id, row);
     return this.query(work);
   }
-
   constructor(
     private readonly state: CompanionStateSnapshot,
     private readonly store: ConversationStore | null,
@@ -131,13 +134,10 @@ export class MemoryWithholding {
     for (const candidate of candidates ?? []) this.experiences.set(candidate.id, candidate);
     if (withheld && candidates) this.hiddenExperiences = withheld;
   }
-
   /** The turns this state withholds among the candidates (derived once; a caller with the same state and candidates may pass it on). */
   withheldExperiences(): readonly ShannonExperience[] { return this.hidden(); }
-
   /** True when no forgotten, rejected or corrected item exists: nothing can be withheld. */
   get inactive(): boolean { return this.rules.length === 0; }
-
   /** Experiences that are the source of a withheld item or quote its evidence. */
   private hidden(): readonly ShannonExperience[] {
     if (this.hiddenExperiences) return this.hiddenExperiences;

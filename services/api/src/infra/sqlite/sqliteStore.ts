@@ -334,6 +334,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   }
   taskExperiences(): SQLiteTaskExperiences { return new SQLiteTaskExperiences(this.context.database); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
+  experienceCandidateSteps(scopeKey: string) { return this.conversations.experienceCandidateSteps(scopeKey); }
   searchMemory(scopeKey: string, text: string, limit?: number, options?: MemorySearchOptions): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit, options); }
   embeddingScopes() { return this.embeddings.embeddingScopes(); }
   pendingEmbeddingSources(scopeKey: string, model: string, stateVersion: number, limit: number) { return this.embeddings.pendingEmbeddingSources(scopeKey, model, stateVersion, limit); }

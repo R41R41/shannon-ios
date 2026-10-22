@@ -2,6 +2,7 @@ import type { MemorySearchOptions } from './store/sqliteMemorySearch.js';
 import type { CompanionStateSnapshot, MemoryAudience } from '@shannon/cognition';
 import type { MemoryWithholding } from './memoryVisibility.js';
 import type { ShannonExperience } from './conversationContract.js';
+import type { Steps } from './memorySteps.js';
 export interface TaskMemoryItem {
   id: string; summary: string; observedAt: string; evidence: string; applicability: string;
   /** Canonical provenance, rechecked by the same disclosure/forgetting gate on each read. */
@@ -47,7 +48,27 @@ export interface TaskMemory {
      * that only asks which ids are readable (the FCA source guard's walk, everySourceVisible) has no use for it.
      */
     options?: { provenance?: boolean }): TaskMemoryItem[];
+  /**
+   * The same search, read and source walk in steps (`memorySteps.ts`), for a caller that gives the API's thread back between them
+   * (production run 31: a body recall's first pool held it 2,448 ms at once). `snapshot`: a state and withholding of the caller's own,
+   * which no other read shares; the caller holds its withholding open (`MemoryWithholding.hold`) while it runs `search` and `read` with
+   * it, and lets it go after. Each gives what the synchronous call gives. Absent: callers run the synchronous calls.
+   */
+  steps?: {
+    snapshot(scopeKey: string): Steps<TaskMemoryReadSnapshot>;
+    search(scopeKey: string, query: string, present: MemoryAudience, limit: number | undefined, options: MemorySearchOptions | undefined,
+      shared: TaskMemoryReadSnapshot, readOptions?: { provenance?: boolean }): Steps<TaskMemoryItem[]>;
+    read(scopeKey: string, ids: readonly string[], present: MemoryAudience, shared: TaskMemoryReadSnapshot,
+      options?: { provenance?: boolean }): Steps<TaskMemoryItem[]>;
+    sources(scopeKey: string, ids: readonly string[], shared: TaskMemoryReadSnapshot): Steps<string[]>;
+    /**
+     * The mark of the rows a memory's visibility is read from (`ConversationStore.provenanceMark`, else the database's own), null where
+     * none can be read: the same before and after a read in turns, no such row changed while it was read.
+     */
+    rowsMark(): string | null;
+  };
   execute(name: string, input: Record<string, unknown>, context: TaskMemoryContext, signal?: AbortSignal): Promise<TaskMemoryResult>;
 }
 export { createTaskMemory } from './taskMemory.js';
+export type { Steps } from './memorySteps.js';
 export { taskExperienceDraft, taskExperienceId, type TaskExperienceOutcome, type TaskExperienceRecord } from './taskExperience.js';

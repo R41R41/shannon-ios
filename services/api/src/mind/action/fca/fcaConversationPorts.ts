@@ -55,6 +55,11 @@ export interface FcaSourceGuard {
   /** The verdict `sources` would reuse now, or undefined where it would walk (nothing is walked or remembered). */
   peek?(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string): boolean | undefined;
   /**
+   * The walk `sources` would make now, in turns of the loop (`memorySteps.ts`), its verdict kept as that walk keeps it when nothing it
+   * rests on changed meanwhile: the `sources` asked right after is then a reuse. Nothing is answered; `sources` still decides.
+   */
+  warm?(scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId?: string, via?: FcaWalkCaller, signal?: AbortSignal): Promise<void>;
+  /**
    * Whether `peek` would answer false now, for the gates that act on nothing else (`peekedVisible`): the moment's state and read
    * receipts are asked only where a withheld verdict is kept for these sources.
    */

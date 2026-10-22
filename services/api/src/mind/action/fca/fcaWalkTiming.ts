@@ -26,19 +26,25 @@ export class FcaWalkTiming {
       this.parts[part] += this.now() - at;
     }
   }
+  /** Adds `milliseconds` to `part` (a part timed across turns of the loop, `FcaSourceGuard.warm`). */
+  add(part: Part, milliseconds: number): void { this.parts[part] += milliseconds; }
   /** What kind of check this was, and the rows it walked (none for a reused verdict). */
   note(mode: 'full' | 'partial' | 'reuse' | 'peek', walked: readonly TaskSource[] = []): void {
     this.mode = mode;
     this.walked = walked;
   }
 
-  report(thresholdMilliseconds: number, via: FcaWalkCaller, log: (line: string) => void): void {
+  /**
+   * `held`: a check walked in turns of the loop (`FcaSourceGuard.warm`): its total and walk include the turns between, and the line ends
+   * with the longest turn it held the thread (`held=`) and how many times it gave it back (`turns=`).
+   */
+  report(thresholdMilliseconds: number, via: FcaWalkCaller, log: (line: string) => void, held?: { longestMs: number; turns: number }): void {
     try {
       const total = Math.round(this.now() - this.started);
       if (this.mode === null || total < thresholdMilliseconds) return;
       const ids = new Set(this.walked.flatMap(source => source.recalledMemoryIds)).size, ms = (part: Part) => Math.round(this.parts[part]);
       log(`Shannon FCA source walk total=${total} epoch=${ms('epoch')} provenance=${ms('provenance')} reads=${ms('reads')} walk=${ms('walk')}`
-        + ` sources=${this.walked.length} ids=${ids} mode=${this.mode} via=${via}`);
+        + ` sources=${this.walked.length} ids=${ids} mode=${this.mode} via=${via}${held ? ` held=${held.longestMs} turns=${held.turns}` : ''}`);
     } catch { /* never throws */ }
   }
 }

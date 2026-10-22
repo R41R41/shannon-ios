@@ -18,7 +18,7 @@ import {
 } from '../../mind/memory/store/conversationStore.js';
 import type { ActivityItem } from '../../mind/memory/memoryService.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../surfaces/text/threadTitle.js';
-import { parsedRow, readWhileUnchanged } from './experienceCandidateReads.js';
+import { candidateSteps, parsedRow, readWhileUnchanged } from './experienceCandidateReads.js';
 import {
   conciseThreadTitle,
   freezeStoredMessage,
@@ -275,7 +275,7 @@ export class SQLiteConversationRepository implements ConversationStore {
     `).all(scopeKey, this.context.maximumExperiences) as unknown as EventRow[];
     return Object.freeze(rows.reverse().flatMap(row => parsedRow(this.context.database, scopeKey, row, this.context.maximumExperiences, experienceFromRow)));
   }); }
-
+  experienceCandidateSteps(scope: string) { return candidateSteps(this.context, scope, experienceFromRow, () => this.experienceCandidates(scope)); }
   experiencesById(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[] {
     const ids = [...new Set(experienceIds)].slice(0, 200);
     if (!ids.length) return Object.freeze([]);

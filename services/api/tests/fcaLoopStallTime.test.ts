@@ -65,10 +65,13 @@ describe('the rules that depend on the time of a reading are the ones the lineag
   it('uses the time of the reading in the lineage decision at exactly the places the memo accounts for', () => {
     const source = readFileSync(`${ROOT}services/api/src/mind/memory/taskMemory.ts`, 'utf8');
     const uses = source.split('\n').filter(line => line.includes('parts.now()') && !line.trim().startsWith('//')).map(line => line.trim());
-    expect(uses.length, `uses of the reading time in taskMemory.ts: ${uses.join(' | ')}`).toBe(3);
+    expect(uses.length, `uses of the reading time in taskMemory.ts: ${uses.join(' | ')}`).toBe(4);
     // the memo's own clock, the lineage decision, and the item's own decision: all three are the one reading time of the read.
     expect(uses.filter(line => line.includes('withholdsReply({')).length).toBe(2);
     expect(uses.filter(line => line.includes('since = withheld.memos.lineages')).length).toBe(1);
+    // recall-yield: a read in turns notes the time it settled an id at (`settle`); that time only says which verdicts are made before
+    // the read, never what one is (`recallYield.test.ts` holds a read in turns to the read at once).
+    expect(uses.filter(line => line.includes('settled = withheld.memos.settled')).length).toBe(1);
   });
 
   it('hides a reply from the boundary down and never above it, for every rule of a real state', () => {

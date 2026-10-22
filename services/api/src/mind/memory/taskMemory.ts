@@ -2,10 +2,12 @@ import { searchOptions, matchesSearch, withinSearchRange } from '../../infra/sea
 import { isOwnerOnly, memoryControlFor, memoryIdentifier, searchMemoryDocuments, visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore, type MemoryAudience } from '@shannon/cognition';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { ownerImpressionReader } from '../recall/impressionRecallPorts.js';
-import { DeepChains, deepWalk, settleDeepChains } from './recallChainDepth.js';
+import { DeepChains, chainOrder, deepWalk, settleDeepChains } from './recallChainDepth.js';
 import { MemoryWithholding, type ReadSourceVisible } from './memoryVisibility.js';
+import { whole, type Steps } from './memorySteps.js';
 import type { ConversationStore, ShannonExperience } from './conversationContract.js';
 import type { ShannonKnowledgeStore } from './store/sqliteShannonKnowledge.js';
+import type { MemorySearchOptions } from './store/sqliteMemorySearch.js';
 import type { TaskMemory, TaskMemoryItem, TaskMemoryReadSnapshot } from './taskMemoryPorts.js';
 
 export interface TaskMemoryParts {
@@ -19,6 +21,8 @@ export interface TaskMemoryParts {
 }
 /** The most distinct ids a walk of one item's sources (`sources`) may reach; past it the read fails (`TASK_MEMORY_LINEAGE_LIMIT`), closed. */
 const SOURCE_WALK_LIMIT = 5000;
+/** How many ids and edges a walk of sources goes through between two of its steps (`memorySteps.ts`). */
+const SOURCE_STEP_WORK = 8_192;
 
 /** A fact, relationship or promise by its id: the first of those in this order that has it (what a `find` over the three lists gave). */
 function scalarIndex(state: CompanionStateSnapshot): ReadonlyMap<string, { sourceExperienceId?: string | null }> {
@@ -70,14 +74,32 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     kept = key !== null && after === mark ? { key, snapshot } : null;
     return snapshot;
   };
-  const read: TaskMemory['read'] = (scope, ids, present, shared, options) => {
+  const read: TaskMemory['read'] = (scope, ids, present, shared, options) => whole(readSteps(scope, ids, present, shared, options, false));
+  /**
+   * A read in steps (`memorySteps.ts`). `inTurns`, with `shared` (whose withholding the caller holds open, `MemoryWithholding.hold`):
+   * before the read, its ids' lineage is settled children first, one remembered turn's verdict a step (`settle`), and each id's bound of
+   * sources counted in steps, so that the read finds them made. Settled only where the graph has no cycle and no chain past the walks'
+   * bound (`chainOrder`): there a verdict does not depend on the order it is made in, and each is the one the whole read makes. Else, and
+   * without `inTurns`, it is the synchronous read.
+   */
+  function* readSteps(scope: string, ids: readonly string[], present: MemoryAudience, shared: TaskMemoryReadSnapshot | undefined,
+    options: { provenance?: boolean } | undefined, inTurns: boolean): Steps<TaskMemoryItem[]> {
     if (!available(scope, present)) return [];
     const state = shared?.state ?? parts.state.snapshot(scope), store = parts.conversations;
     const gate = new DisclosureGate(present, state, store, scope);
     const withheld = shared?.withholding ?? new MemoryWithholding(state, store, scope, undefined, parts.readSourceVisible);
+    const reader = readerOf(scope, present, state, gate, withheld, shared);
+    if (!inTurns || !shared) return withheld.withReadSnapshot(() => whole(reader.items(ids, options)));
+    yield* reader.settle([...new Set(ids)].slice(0, 40), options?.provenance === false);
+    // Inside the caller's hold: the read's scope is already open (`withReadSnapshot` would only nest in it), and each item is a step.
+    return yield* reader.items(ids, options);
+  }
+  /** What one read decides with: its gate, its withholding, its own verdicts of lineage (`lineage`), and the items it gives. */
+  function readerOf(scope: string, present: MemoryAudience, state: CompanionStateSnapshot, gate: DisclosureGate, withheld: MemoryWithholding,
+    shared: TaskMemoryReadSnapshot | undefined) {
+    const store = parts.conversations;
     const interestLine = selfInterestLines(store, scope, present);
     const impressionLine = ownerImpressionReader(store, state, scope, present, parts.environment);
-    return withheld.withReadSnapshot(() => {
     const canonical = new Map<string, ReturnType<NonNullable<ConversationStore['experiencesById']>>[number] | null>();
     const experienceOf = (id: string) => {
       if (shared?.experience) return shared.experience(id);
@@ -152,30 +174,70 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
       if (!edges) withheld.memos.sourceEdges.set(id, edges = sourceEdges(scope, id, experienceOf, state, scalars));
       return edges;
     };
-    const withinSourceLimit = (start: string): Record<string, never> => {
+    /** Whether more than the bound is reachable from `start` (kept for the scope, `withinSourceLimit`), counted a few thousand ids a step. */
+    function* overSteps(start: string): Steps<boolean> {
       let over = withheld.memos.sourceOverflow.get(start);
-      if (over === undefined) {
-        const found = new Set<string>(), pending = [start];
-        over = false;
-        for (let next = 0; next < pending.length; next++) {
-          const id = pending[next]!;
-          if (found.has(id)) continue;
-          found.add(id);
-          if (found.size > walkLimit || (id !== start && withheld.memos.sourceOverflow.get(id) === true)) {
-            over = true;
-            break;
-          }
-          for (const edge of edgesOf(id)) pending.push(edge);
+      if (over !== undefined) return over;
+      const found = new Set<string>(), pending = [start];
+      over = false;
+      for (let next = 0, work = 0; next < pending.length; next++) {
+        if (++work >= SOURCE_STEP_WORK) {
+          work = 0;
+          yield;
         }
-        withheld.memos.sourceOverflow.set(start, over);
-        // Whatever a walk that stayed within the bound went through reaches no more than that walk did: it is within the bound too.
-        if (!over) for (const id of found) if (!withheld.memos.sourceOverflow.has(id)) withheld.memos.sourceOverflow.set(id, false);
+        const id = pending[next]!;
+        if (found.has(id)) continue;
+        found.add(id);
+        if (found.size > walkLimit || (id !== start && withheld.memos.sourceOverflow.get(id) === true)) {
+          over = true;
+          break;
+        }
+        const edges = edgesOf(id);
+        work += edges.length;
+        for (const edge of edges) pending.push(edge);
       }
-      if (over) throw new Error('TASK_MEMORY_LINEAGE_LIMIT');
+      withheld.memos.sourceOverflow.set(start, over);
+      // Whatever a walk that stayed within the bound went through reaches no more than that walk did: it is within the bound too.
+      if (!over) for (const id of found) if (!withheld.memos.sourceOverflow.has(id)) withheld.memos.sourceOverflow.set(id, false);
+      return over;
+    }
+    const withinSourceLimit = (start: string): Record<string, never> => {
+      if (whole(overSteps(start))) throw new Error('TASK_MEMORY_LINEAGE_LIMIT');
       return {};
     };
+    /** What the lineage walk and the walks under it go on to from `id`: what `lineageEdges` gives, and a thread's messages' recalled ids. */
+    const settleEdges = (id: string): readonly string[] => {
+      const edges = lineageEdges(id);
+      if (!id.startsWith('thread:')) return edges;
+      const messages = store.threadSummaryLineage?.(scope, id.slice(7))?.messages ?? [];
+      return [...edges, ...messages.flatMap(message => message.recalledMemoryIds ?? [])];
+    };
+    /**
+     * The lineage of `ids` and all under it, children first, one verdict a step (none past an id settled at this time of reading or an
+     * earlier one: what it decided serves a later reading); then their bounds of sources (`readSteps`).
+     */
+    function* settle(ids: readonly string[], bounded: boolean): Steps<void> {
+      const at = parts.now(), settled = withheld.memos.settled;
+      const done = (id: string) => {
+        const when = settled.get(id);
+        return when !== undefined && when <= at;
+      };
+      const found = yield* chainOrder(ids.filter(id => !done(id)), id => done(id) ? [] : settleEdges(id));
+      if (found !== 'too_deep') {
+        for (const id of found.order) {
+          if (done(id)) continue;
+          lineageVisible(id);
+          settled.set(id, at);
+          yield;
+        }
+      }
+      if (bounded) for (const id of ids) yield* overSteps(id);
+    }
+    /** The items of the first 40 distinct `ids` this read gives (the read as it was), one id a step. */
+    function* itemsOf(ids: readonly string[], options?: { provenance?: boolean }): Steps<TaskMemoryItem[]> {
     const items: TaskMemoryItem[] = [];
     for (const id of [...new Set(ids)].slice(0, 40)) {
+      yield;
       let summary: string | undefined, at = '', evidence = '', applicability = 'recorded observation';
       let confidence: number | null = null;
       let provenanceKind: 'experience' | 'thread' | 'knowledge' | 'state' = 'state';
@@ -229,25 +291,35 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         confidence, conflicts: [], detailRef: id, ...listed });
     }
     return items;
-    });
-  };
+    }
+    return { settle, items: itemsOf };
+  }
   // Within one read, the read's own state (2026-10-13: a state read per recalled item, ~80 per report walk).
   const sources = (scope: string, ids: readonly string[], cachedExperience?: (id: string) => ShannonExperience | null,
-    readState?: CompanionStateSnapshot) => {
+    readState?: CompanionStateSnapshot) => whole(sourceSteps(scope, ids, cachedExperience, readState));
+  /** `sources` in steps of a few thousand ids met (`memorySteps.ts`): the same walk, the same order. */
+  function* sourceSteps(scope: string, ids: readonly string[], cachedExperience?: (id: string) => ShannonExperience | null,
+    readState?: CompanionStateSnapshot): Steps<string[]> {
     const found = new Set<string>(), pending = [...ids], state = readState ?? parts.state.snapshot(scope), scalars = scalarIndex(state);
     const experienceOf = cachedExperience ?? ((id: string) => parts.conversations.experiencesById?.(scope, [id])[0] ?? null);
     // An index, not `shift()`: the queue held every edge met (production run 15, 2026-10-19: ~44,000 for one item of a body task's
     // episode pool), and shifting an array that long moves all of it each time, which held the API's thread for seconds per decision.
-    for (let next = 0; next < pending.length; next++) {
+    for (let next = 0, work = 0; next < pending.length; next++) {
+      if (++work >= SOURCE_STEP_WORK) {
+        work = 0;
+        yield;
+      }
       const id = pending[next]!;
       if (found.has(id)) continue;
       found.add(id);
       if (found.size > walkLimit) throw new Error('TASK_MEMORY_LINEAGE_LIMIT');
       // An id already found would be passed over when its turn came: it is not queued (the order of `found` is the same).
-      for (const edge of sourceEdges(scope, id, experienceOf, state, scalars)) if (!found.has(edge)) pending.push(edge);
+      const edges = sourceEdges(scope, id, experienceOf, state, scalars);
+      work += edges.length;
+      for (const edge of edges) if (!found.has(edge)) pending.push(edge);
     }
     return [...found];
-  };
+  }
   /** What a walk of the sources of `id` goes on to: the turns behind a thread's messages or a knowledge document, what a turn recalled, the turn behind a fact. */
   const sourceEdges = (scope: string, id: string, experienceOf: (id: string) => ShannonExperience | null, state: CompanionStateSnapshot,
     scalars: ReadonlyMap<string, { sourceExperienceId?: string | null }>): readonly string[] => {
@@ -257,7 +329,11 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     const recalled = experienceOf(id)?.recalledMemoryIds ?? [], scalar = scalars.get(id);
     return scalar?.sourceExperienceId && !memoryControlFor(state, id)?.overrideText ? [...recalled, scalar.sourceExperienceId] : recalled;
   };
-  const search: TaskMemory['search'] = (scope, query, present, limit = 8, options, shared, readOptions) => {
+  const search: TaskMemory['search'] = (scope, query, present, limit, options, shared, readOptions) =>
+    whole(searchSteps(scope, query, present, limit, options, shared, readOptions, false));
+  /** `search` in steps: each chunk of candidates is a read in steps (`readSteps`, with `inTurns` as there). */
+  function* searchSteps(scope: string, query: string, present: MemoryAudience, limit = 8, options: MemorySearchOptions | undefined,
+    shared: TaskMemoryReadSnapshot | undefined, readOptions: { provenance?: boolean } | undefined, inTurns: boolean): Steps<TaskMemoryItem[]> {
     if (!available(scope, present)) return [];
     const state = shared?.state ?? parts.state.snapshot(scope);
     const candidates = [...state.userFacts, ...state.relationships].map(item => ({ id: item.id, text: item.statement, observedAt: item.observedAt }));
@@ -266,15 +342,33 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
     candidates.push(...state.prospectiveMemories.map(item => ({ id: item.id, text: item.summary, observedAt: item.updatedAt })));
     const ids = [...(parts.conversations.searchMemory?.(scope, query, options ? 1200 : 40, options ? { ...options, offset: 0 } : undefined) ?? []).map(hit => hit.id),
       ...searchMemoryDocuments(query, candidates, 20).map(item => item.id)];
-    if (!options) return read(scope, ids, present, shared, readOptions).slice(0, Math.max(1, Math.min(12, limit)));
+    if (!options) return (yield* readSteps(scope, ids, present, shared, readOptions, inTurns)).slice(0, Math.max(1, Math.min(12, limit)));
     const unique = [...new Set(ids)], found: TaskMemoryItem[] = [];
-    for (let offset = 0; offset < unique.length; offset += 40) found.push(...read(scope, unique.slice(offset, offset + 40), present, shared, readOptions));
+    for (let offset = 0; offset < unique.length; offset += 40) {
+      found.push(...yield* readSteps(scope, unique.slice(offset, offset + 40), present, shared, readOptions, inTurns));
+    }
     const visible = found.filter(item => (!options.kind || (options.kind === 'thread' ? item.id.startsWith('thread:') : options.kind === 'knowledge' ? item.id.startsWith('knowledge:') : !item.id.startsWith('thread:') && !item.id.startsWith('knowledge:') && Boolean(shared?.experience ? shared.experience(item.id) : parts.conversations.experiencesById?.(scope, [item.id]).length)))
       && withinSearchRange(item.observedAt, options) && (!options.match || matchesSearch(item.summary, query, options)));
     if (options.order === 'newest' || options.order === 'oldest') visible.sort((a, b) => (options.order === 'oldest' ? (Date.parse(a.observedAt) - Date.parse(b.observedAt)) : (Date.parse(b.observedAt) - Date.parse(a.observedAt))) || a.id.localeCompare(b.id));
     return visible.slice(options.offset ?? 0, (options.offset ?? 0) + Math.max(1, Math.min(40, limit)));
+  }
+  /** A snapshot of the caller's own (`TaskMemory.steps`): the moment's state and remembered turns, under a withholding no one else reads. */
+  function* ownSnapshot(scope: string): Steps<TaskMemoryReadSnapshot> {
+    const store = parts.conversations;
+    const candidates = store.experienceCandidateSteps ? yield* store.experienceCandidateSteps(scope) : store.experienceCandidates(scope);
+    const state = parts.state.snapshot(scope);
+    const withholding = new MemoryWithholding(state, store, scope, candidates, parts.readSourceVisible);
+    return { state, withholding, experience: id => withholding.experienceRow(id) };
+  }
+  const steps: NonNullable<TaskMemory['steps']> = {
+    snapshot: ownSnapshot,
+    search: (scope, query, present, limit, options, shared, readOptions) =>
+      searchSteps(scope, query, present, limit, options, shared, readOptions, true),
+    read: (scope, ids, present, shared, options) => readSteps(scope, ids, present, shared, options, true),
+    sources: (scope, ids, shared) => sourceSteps(scope, ids, shared?.experience, shared?.state),
+    rowsMark: () => parts.conversations.provenanceMark?.() ?? parts.conversations.changeMark?.() ?? null,
   };
-  return { available, search, read, sources: (scope, ids, shared) => sources(scope, ids, shared?.experience, shared?.state), readSnapshot, async execute(name, input, context, signal) {
+  return { available, search, read, sources: (scope, ids, shared) => sources(scope, ids, shared?.experience, shared?.state), readSnapshot, steps, async execute(name, input, context, signal) {
     if (signal?.aborted) return { status: 'cancelled', items: [], sourceIds: [] };
     if (!available(context.scopeKey, context.present)) return { status: 'withheld', items: [], sourceIds: [] };
     let items: TaskMemoryItem[];

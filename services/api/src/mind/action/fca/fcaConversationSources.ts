@@ -10,6 +10,8 @@ import { shannonTool } from '../../tools/toolRegistryPorts.js';
 import { observedStep } from '../../../infra/observer/observerContext.js';
 import { FcaWalkTiming, type FcaWalkCaller } from './fcaWalkTiming.js';
 import { provenanceEdits } from '../../memory/provenanceEditsPorts.js';
+import { inTurns, whole, type Steps, type TurnsMeasure } from '../../memory/memoryStepsPorts.js';
+import { everyIdReads, walkInTurns } from './fcaSourceWalkSteps.js';
 import { FcaProvenanceFoldCache, foldFcaProvenance, foldedProvenanceCovers, foldedProvenanceResidual } from './fcaProvenanceFold.js';
 
 /** Closed provenance covers replay and its summary lineage without copying either into the task's history. */
@@ -151,13 +153,15 @@ export function createFcaSourceGuard(parts: {
     epochs.set(scopeKey, fresh);
     return fresh;
   };
-  /** Read receipts asked once per check (with the check's own snapshot), and recorded for the verdict. */
-  const recordedReads = (epoch: Epoch, scopeKey: string) => {
+  /** Read receipts asked once per check (with the check's own snapshot), and recorded for the verdict; `own`: a walk in turns (`warm`). */
+  const recordedReads = (epoch: Epoch, scopeKey: string, own = false) => {
     const { state, candidates, withheld } = epoch;
     const seen = new Map<string, readonly [string, string, boolean]>();
     // The remembered turns are put in a withholding once per epoch, not once per check; what the reader memoizes for one walk (a skill it
-    // read) is kept under this check's own `walk`, so a later check asks again.
-    const withholding = () => epoch.reads ??= new MemoryWithholding(state, parts.conversations, scopeKey, candidates, undefined, withheld);
+    // read) is kept under this check's own `walk`, so a later check asks again. A walk in turns holds its own open: no other check reads under it.
+    const made = () => new MemoryWithholding(state, parts.conversations, scopeKey, candidates, undefined, withheld);
+    let mine: MemoryWithholding | undefined;
+    const withholding = () => own ? mine ??= made() : epoch.reads ??= made();
     const walk = {};
     // The rows the withholding's turns were read under, while still theirs: the reader then shares its answers with the next moments'.
     const rows = () => epoch.rows === null ? {} : { rows: epoch.rows };
@@ -171,7 +175,8 @@ export function createFcaSourceGuard(parts: {
     } : undefined;
     /** The checks made inside `work` are one synchronous read of the receipts: they share the withholding's memos and its one look at the turns' receipts. */
     const together = <T>(work: () => T): T => parts.readSourceVisible ? withholding().withReadSnapshot(work) : work();
-    return { check, together, list: () => [...seen.values()] };
+    const hold = (): (() => void) => parts.readSourceVisible ? withholding().hold() : () => {}; // `together` for a walk in turns
+    return { check, together, hold, list: () => [...seen.values()] };
   };
   /** Still the same answers for every receipt a stored verdict consulted, under the current snapshot. */
   const readsUnchanged = (epoch: Epoch, scopeKey: string, reads: Verdict['reads'], every = false): boolean => {
@@ -232,13 +237,26 @@ export function createFcaSourceGuard(parts: {
     via: FcaWalkCaller = 'other'): boolean | undefined => {
     const timing = new FcaWalkTiming(monotonic);
     try {
-      return judge(scopeKey, task, rows, pendingStepId, peek, timing);
+      return whole(judgeSteps(scopeKey, task, rows, pendingStepId, peek, timing, false));
     } finally {
       timing.report(parts.walkLogMilliseconds ?? FCA_SOURCE_WALK_LOG_MS, via, log);
     }
   };
-  const judge = (scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: Peek,
-    timing: FcaWalkTiming): boolean | undefined => {
+  /**
+   * recall-yield (run 31: a body recall's 315 sources walked 862 ms at once): `sources`' walk in turns of the loop (`fcaSourceWalkSteps.ts`),
+   * its verdict kept as the walk at once keeps it, only if nothing it rests on moved meanwhile (`movedSince`; else `sources` walks at once).
+   */
+  const warm: NonNullable<FcaSourceGuard['warm']> = async (scopeKey, task, rows, pendingStepId, via = 'other', signal) => {
+    const timing = new FcaWalkTiming(monotonic), held: TurnsMeasure = { longestMs: 0, turns: 0 };
+    try {
+      await inTurns(judgeSteps(scopeKey, task, rows, pendingStepId, false, timing, true), { clock: monotonic, measure: held, ...(signal ? { signal } : {}) });
+    } catch { /* nothing kept: the check that follows walks at once */ } finally {
+      timing.report(parts.walkLogMilliseconds ?? FCA_SOURCE_WALK_LOG_MS, via, log, held);
+    }
+  };
+  /** `decide`'s check; `inTurns`: the walk in steps (`warm`), whose verdict is kept only if nothing it rests on changed while it walked. */
+  function* judgeSteps(scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: Peek,
+    timing: FcaWalkTiming, inTurns: boolean): Steps<boolean | undefined> {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
@@ -259,6 +277,8 @@ export function createFcaSourceGuard(parts: {
       }
       const key = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null, sources]);
       const known = verdicts.get(key);
+      // In turns, the moment's remembered turns are read a page at a time first (kept by the store while unchanged, `epochFor` finds them).
+      if (inTurns && parts.conversations.experienceCandidateSteps) yield* parts.conversations.experienceCandidateSteps(scopeKey);
       const epoch = timing.time('epoch', () => epochFor(scopeKey)), state = epoch.state, at = clock();
       // A gate that acts only on a known "withheld" (`peekedVisible`) learns nothing from a visible verdict or none: what `peek` would
       // answer there (the verdict, or undefined) is read the same by it, so the receipts are not asked again for it. Production run 18:
@@ -284,13 +304,15 @@ export function createFcaSourceGuard(parts: {
       const walked = timing.time('provenance', () => base ? foldedProvenanceResidual(base.folded, sources) : sources);
       timing.note(base ? 'partial' : 'full', walked);
       if (base) counts.partial += 1; else counts.walked += 1;
-      const edits = provenanceEdits(); // Before the walk: an edit during or after it makes the base stale.
-      const reads = recordedReads(epoch, scopeKey), checked = { ...parts, readSourceVisible: reads.check };
+      const edits = provenanceEdits(), mark = rowsMark(); // Before the walk: an edit during or after it makes the base stale.
+      const reads = recordedReads(epoch, scopeKey, inTurns), checked = { ...parts, readSourceVisible: reads.check };
       const withholding = new MemoryWithholding(state, parts.conversations, scopeKey, epoch.candidates, reads.check, epoch.withheld);
       // One synchronous check: every source shares this snapshot and one walk of the recall graph (`withReadSnapshot`), where each
       // memory chunk used to build its own and walk the whole graph again.
-      const visible = timing.time('walk', () => !walked.length
-        || reads.together(() => withholding.withReadSnapshot(() => everySourceVisible(checked, scopeKey, task, walked, pendingStepId, state, withholding))));
+      const walk = (steps: boolean) => everySourceVisible(checked, scopeKey, task, walked, pendingStepId, state, withholding, steps);
+      const visible = inTurns ? yield* walkInTurns(timing, monotonic, walked, [reads.hold, () => withholding.hold()], walk(true))
+        : timing.time('walk', () => !walked.length || reads.together(() => withholding.withReadSnapshot(() => whole(walk(false)))));
+      if (inTurns && movedSince(scopeKey, state.version, edits, mark)) return undefined;
       // A base keeps the time of its own full walk, so it is never extended past `baseWindow`; it asks again every read it consulted
       // (each distinct receipt once: the list does not grow over the window).
       const baseAt = base?.at ?? at, allReads = distinctReads([...base?.reads ?? [], ...reads.list()]);
@@ -301,7 +323,10 @@ export function createFcaSourceGuard(parts: {
       if (visible) remember(bases, baseKey, { version: state.version, at: baseAt, visible, reads: allReads, folded: sources, edits }, at, baseWindow);
       return visible;
     } catch { return false; }
-  };
+  }
+  /** After a walk in turns (`warm`): whether the state's version, the provenance edits or the source rows moved since it began. */
+  const movedSince = (scopeKey: string, version: number, edits: number, mark: string | null) =>
+    parts.state.snapshot(scopeKey).version !== version || provenanceEdits() !== edits || mark === null || rowsMark() !== mark;
   const sourcesVisible: FcaSourceGuard['sources'] = (scopeKey, task, rows, pendingStepId, via) =>
     decide(scopeKey, task, rows, pendingStepId, false, via) === true;
   /**
@@ -311,8 +336,9 @@ export function createFcaSourceGuard(parts: {
   const peek: NonNullable<FcaSourceGuard['peek']> = (scopeKey, task, rows, pendingStepId) => decide(scopeKey, task, rows, pendingStepId, 'peek');
   /** Whether `peek` would answer false now: what the once-a-second gates act on (`peekedVisible`). */
   const withheld: NonNullable<FcaSourceGuard['withheld']> = (scopeKey, task, rows) => decide(scopeKey, task, rows, undefined, 'withheld', 'gate') === false;
-  const everySourceVisible = (checked: typeof parts, scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId: string | undefined,
-    state: CompanionStateSnapshot, withholding: MemoryWithholding): boolean => {
+  /** Every source visible, in steps: `inTurns`, each chunk of a memory source is a read in steps (`TaskMemory.steps`), else read at once. */
+  function* everySourceVisible(checked: typeof parts, scopeKey: string, task: TaskView, sources: readonly TaskSource[], pendingStepId: string | undefined,
+    state: CompanionStateSnapshot, withholding: MemoryWithholding, inTurns: boolean): Steps<boolean> {
     // One fresh read of each remembered turn for the whole walk: each 40-id read used to fetch every turn of its lineage again, one
     // query and one parse each. Minecraft run 10 (2026-10-14), profiled on a copy of the production database: 5,366 fetches of
     // 190 distinct turns, 0.9–1.5 s a walk; with one read each, 0.4–0.6 s. The rows are read now, as before, only not again.
@@ -325,8 +351,7 @@ export function createFcaSourceGuard(parts: {
     for (const source of sources) {
       if (source.kind === 'memory') {
         const memory = createTaskMemory({ ...checked, now: () => source.observedAt });
-        const ids = [...new Set(source.recalledMemoryIds)];
-        for (let offset = 0; offset < ids.length; offset += 40) if (memory.read(scopeKey, ids.slice(offset, offset + 40), { kind: 'owner' }, shared, { provenance: false }).length !== ids.slice(offset, offset + 40).length) return false;
+        if (!(yield* everyIdReads(memory, scopeKey, [...new Set(source.recalledMemoryIds)], shared, inTurns))) return false;
         if (source.readSourceIds?.some(id => !checked.readSourceVisible?.(scopeKey, id, source.observedAt))
           || withholding.withholdsReply({ text: [task.title, task.goal, task.completionCriteria, task.summary].join('\n'),
             observedAt: source.observedAt, recalledMemoryIds: source.recalledMemoryIds })) return false;
@@ -344,7 +369,7 @@ export function createFcaSourceGuard(parts: {
           text: [task.title, task.goal, task.completionCriteria, task.summary].join('\n') })) return false;
     }
     return true;
-  };
+  }
   const content: NonNullable<FcaSourceGuard['content']> = (scopeKey, taskId, text, observedAt) => {
     try {
       if (!parts.ownerAlone() || scopeKey !== parts.ownerScope) return false;
@@ -397,7 +422,7 @@ export function createFcaSourceGuard(parts: {
   return Object.assign((scopeKey: string, taskId: string, pendingStepId?: string, via: FcaWalkCaller = 'task') => {
     const task = parts.runtime.get(scopeKey, taskId);
     return Boolean(task && sourcesVisible(scopeKey, task, parts.runtime.taskSources(scopeKey, taskId), pendingStepId, via));
-  }, { sources: sourcesVisible, peek, withheld, progress, content, covers, residual, walks: () => ({ ...counts, baseReads: baseReads() }) });
+  }, { sources: sourcesVisible, peek, warm, withheld, progress, content, covers, residual, walks: () => ({ ...counts, baseReads: baseReads() }) });
 }
 
 /** How `decide` is asked: a whole check (false), `peek`, or `withheld` (`peek` as the gates read it). */

@@ -1,4 +1,5 @@
 import { memoryControlFor, type CompanionStateSnapshot } from '@shannon/cognition';
+import { whole, type Steps } from './memorySteps.js';
 /**
  * Walks of the recall graph (what a remembered turn recalled, and what that recalled) are recursive, and a game chat that goes on for
  * days makes one long chain of turns that each recalled the one before. 2026-10-17: at a few thousand turns the recursion overflowed
@@ -76,8 +77,11 @@ export class ScopeMemos {
   /** For the bound of a task memory read's source walk (`taskMemory.ts`): the ids each id's sources go on to, and per start id whether it is over. */
   readonly sourceEdges = new Map<string, readonly string[]>();
   readonly sourceOverflow = new Map<string, boolean>();
+  /** The ids a read in turns has settled (`taskMemory.ts`, `settle`), with the time of the reading it settled them at. */
+  readonly settled = new Map<string, string>();
   clear(): void {
-    const memos = [this.recalled, this.timeless, this.provenance, this.reads, this.sources, this.lineages, this.sourceEdges, this.sourceOverflow];
+    const memos = [this.recalled, this.timeless, this.provenance, this.reads, this.sources, this.lineages, this.sourceEdges, this.sourceOverflow,
+      this.settled];
     for (const memo of memos) memo.clear();
   }
   /** Keeps a recalled id's verdict as the one for any time where it is (nswersAtAnyTime). */
@@ -146,12 +150,33 @@ export function cautiousOutsideWalks<T>(cautious: T, ask: () => T): T {
  */
 export function settleDeepChains(roots: readonly string[], children: (id: string) => readonly string[], warm: (id: string) => void,
   maximum = MAXIMUM_WALK_DEPTH, settleAbove = SETTLE_ABOVE, chains?: DeepChains): 'ok' | 'too_deep' {
+  const found = whole(chainOrder(roots, children, maximum, chains));
+  if (found === 'too_deep') return found;
+  for (const id of found.order) if (found.height.get(id)! > settleAbove) warm(id);
+  return 'ok';
+}
+
+/**
+ * How much `chainOrder` does between two of its steps: an edge followed counts one, a node entered (its edges asked of the store, a
+ * remembered turn read by id where it is not among the moment's) counts `CHAIN_ENTER_WORK`.
+ */
+const CHAIN_STEP_WORK = 512, CHAIN_ENTER_WORK = 16;
+
+/**
+ * The nodes below `roots`, children before parents, each with the length of the longest chain from it down (its height), or
+ * `'too_deep'` for a chain of more than `maximum` nodes or a cycle (`settleDeepChains`). In steps (`memorySteps.ts`): a read in turns
+ * settles each node of a dense recall graph in this order, so that each one's verdict finds its children's made.
+ */
+export function* chainOrder(roots: readonly string[], children: (id: string) => readonly string[], maximum = MAXIMUM_WALK_DEPTH,
+  chains?: DeepChains): Steps<{ order: string[]; height: ReadonlyMap<string, number> } | 'too_deep'> {
   const height = new Map<string, number>();
   const onPath = new Set<string>();
   const order: string[] = [];
   const stack: { id: string; kids: readonly string[]; next: number; height: number }[] = [];
+  let work = 0;
   const enter = (id: string) => {
     onPath.add(id);
+    work += CHAIN_ENTER_WORK;
     stack.push({ id, kids: children(id), next: 0, height: 1 });
   };
   const tooDeep = (): 'too_deep' => {
@@ -171,6 +196,10 @@ export function settleDeepChains(roots: readonly string[], children: (id: string
     enter(root);
     while (stack.length) {
       if (stack.length > maximum) return tooDeep();
+      if (++work >= CHAIN_STEP_WORK) {
+        work = 0;
+        yield;
+      }
       const top = stack[stack.length - 1]!;
       if (top.next < top.kids.length) {
         const child = top.kids[top.next++]!;
@@ -189,8 +218,7 @@ export function settleDeepChains(roots: readonly string[], children: (id: string
       if (parent) parent.height = Math.max(parent.height, top.height + 1);
     }
   }
-  for (const id of order) if (height.get(id)! > settleAbove) warm(id);
-  return 'ok';
+  return { order, height };
 }
 
 /** What the walks can ask of the store: a remembered turn, and the turns a knowledge document was made from. */
