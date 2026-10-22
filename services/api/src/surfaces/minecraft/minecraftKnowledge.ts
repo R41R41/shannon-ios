@@ -226,5 +226,25 @@ export const R5_KNOWLEDGE = [
 ].join('\n');
 /** r5: r4's appendix and `R5_KNOWLEDGE` (the same bytes at every decision). */
 export const LLMC_SYSTEM_APPENDIX_R5 = [LLMC_SYSTEM_APPENDIX_R4, R5_KNOWLEDGE].join('\n\n');
-/** The appendix of the mode's models: r5's (r4's and `R5_KNOWLEDGE`) when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
-export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R5 : LLMC_SYSTEM_APPENDIX; }
+
+/**
+ * r6 (run 29, owner 2026-10-22 「r6 を作り 2 モデルで比べる」): begun in a Nether fortress, Sonnet went for the blazes at 10 s past the plan's
+ * "now" (a table), fell to 3.7 health with no food at hunger 17, waited 325 s for health that never came, and stopped the task with
+ * fca_wait. The code now says the facts first (the current node, what the place's check lacks, health that does not come back and where
+ * food is); this says what they are, how an act names its node, and what a wait is in this mode. Read the same by Sonnet and Opus.
+ */
+export const R6_KNOWLEDGE = [
+  '## 計画の今・準備の不足・回復・待ち',
+  '- live の body.planNow が計画の今の節。act の why は、その手がどの節のためかを [節の id] で始める（例「[p1.2] 丸石でハーフブロックを作る」）。'
+    + '今の節と違う節の手なら「[p2.1] 理由: …」と、今の節を後にする理由を 1 行書く。急ぎの手（離れる・食べる・囲う）は「[急ぎ] …」。',
+  '- live の body.shortage（準備の不足）は、今の節と次元の「出発の点検」と持ち物をコードが比べた事実（作業台・ハーフブロック・盾・金の防具・足場のブロック・食料）。'
+    + 'ネザーの中から始まった時も、入った時と同じ点検。戦い・奥への移動の前に何を先にするかを決める材料にする。',
+  '- 体力の自然回復は満腹 18 以上の時だけ。live の body.recovery（と wait の結果の「頭:」の行）に「自然に戻らない」と出ている間は、'
+    + 'wait や fca_wait で待っても体力は戻らない。食料が 0 で回復が要る時は、待たずに食料を取りに行く（recovery の「食料の当て」: 近い動物・村・畑、ネザーならホグリン・帰りのゲート）。',
+  '- fca_wait: 返事を待つ相手のいない依頼（運用者の依頼）では、このモードの待ちでタスクは止まらない。待つ物（焼き上がり・満腹 18 以上での回復）の事実か、'
+    + '「待つ物が無い」が 1 行で返る。その場で待つなら mc.act の wait の手で（体が待つ）。止めるのは運用者。',
+].join('\n');
+/** r6: r5's appendix and `R6_KNOWLEDGE` (the same bytes at every decision). */
+export const LLMC_SYSTEM_APPENDIX_R6 = [LLMC_SYSTEM_APPENDIX_R5, R6_KNOWLEDGE].join('\n\n');
+/** The appendix of the mode's models: r6's (r5's and `R6_KNOWLEDGE`) when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
+export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R6 : LLMC_SYSTEM_APPENDIX; }

@@ -21,7 +21,8 @@ import { withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
-import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R5 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R6 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { llmcWaitLine } from '../surfaces/minecraft/minecraftLlmcReadiness.js';
 import { seenDoneUpdate } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
 import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
@@ -222,10 +223,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     const world = observe()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
   };
+  // r6: the first plan begins where she is, with what the place lacks in its input (`FIRST_PLAN_SYSTEM_R6`).
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
-    ...(llmc.probe ? { r4: { world: worldOf, system: FIRST_PLAN_SYSTEM_R5 } } : {}) });
+    ...(llmc.probe ? { r4: { world: worldOf, system: FIRST_PLAN_SYSTEM_R6, readiness: true } } : {}) });
   const display = () => plan.port.display();
-  const bodyParts = { plan: display, planView: () => plan.port.view() };
+  const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {
     const tree = plan.port.tree();
@@ -246,6 +248,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools ? { ...ports, tools: llmcTools(ports.tools) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
+      // r6 (run 29: the third fca_wait of an operator's request stopped the task): a wait is answered with what there is to wait for.
+      waitAnswer: { line: () => llmcWaitLine(observe(), plan.port.tree().nodes), amend: amendAnthropicControl },
       permitWindowMs: LLMC_PERMIT_WINDOW_MS, lookahead: llmc.lookahead, selector: LLMC_CATALOG_SELECTOR,
       history: { codec: anthropicFcaHistoryCodec, ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy,
         ahead: { port: llmc.historyAhead, hard: LLMC_HISTORY_HARD } },

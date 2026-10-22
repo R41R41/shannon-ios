@@ -6,6 +6,11 @@ import { createFoodTrend, llmcPlanTokens, minecraftLlmcLive, type FoodTrend } fr
 import { llmcStoredResult } from './minecraftLlmc.js';
 import { createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise } from './minecraftLlmcProbe.js';
 import { cautionFact } from './minecraftLlmcCaution.js';
+import type { PlanTree } from '@shannon/mind';
+import { foodLeads, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { planNowLine } from './minecraftLlmcNode.js';
+import type { ActInput } from '../../contracts/minecraftActContract.js';
+import { normalizeActInput } from './minecraftLlmcShape.js';
 
 /**
  * What a Minecraft task's body lifecycle takes in the LLM-centric mode (`createMinecraftTaskBody`, `llmc`): the task's plan (for the
@@ -16,6 +21,8 @@ export interface LlmcBodyParts {
   plan(): BodyPlanView | undefined;
   /** The plan's path as the decision reads it (its tokens count against the live state's bound). */
   planView(): object | null;
+  /** r6: the whole tree (the places of its nodes: the gate back, for where food is). Absent: none read. */
+  planTree?(): PlanTree;
 }
 
 interface TaskEvents {
@@ -138,7 +145,35 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
   const jobs = world && (world.jobs ?? world.activeFurnaces) as BodyValue | undefined;
   return minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
-    ...(r4?.investigation.length ? { investigation: r4.investigation } : {}), ...(r4?.scan.length ? { scan: r4.scan } : {}) }, llmcPlanTokens(plan));
+    ...(r4?.investigation.length ? { investigation: r4.investigation } : {}), ...(r4?.scan.length ? { scan: r4.scan } : {}),
+    ...(r4 ? readinessParts(llmc, plan, observation) : {}) }, llmcPlanTokens(plan));
+}
+
+/**
+ * r6 (with the probe, as r4's parts): the current node before the map, what its stage lacks, and health that does not come back with
+ * where food is (`minecraftLlmcReadiness.ts`). Facts only: what to do with them is the decision's.
+ */
+export function readinessParts(llmc: LlmcBodyParts, view: object | null, observation: BodyObservation | null)
+  : { planNow?: string; shortage?: string; recovery?: string[] } {
+  const planNow = planNowLine(view as { now?: unknown; path?: unknown } | null), facts = readinessOf(observation);
+  const out = planNow ? { planNow } : {};
+  if (!facts) return out;
+  const display = llmc.plan(), nowTitle = display?.nodes.find(node => node.id === display.current)?.title ?? null;
+  const shortage = preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle });
+  const recovery = recoveryLine(facts.hunger, facts.health, facts.food);
+  let nodes: PlanTree['nodes'] = [];
+  try { nodes = llmc.planTree?.().nodes ?? []; } catch { nodes = []; }
+  return { ...out, ...(shortage ? { shortage } : {}), ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}) };
+}
+
+/** r6: an act with a wait hand, stored with the fact that health does not come back now (the same words as the live state's). */
+export function withRecoveryFact(name: string, input: unknown, stored: string, observation: BodyObservation | null): string {
+  if (name !== MC_ACT_TOOL) return stored;
+  let hands: readonly { do?: string }[] = [];
+  try { hands = (normalizeActInput(input).input as ActInput | null)?.hands ?? []; } catch { hands = []; }
+  const facts = hands.some(hand => hand.do === 'wait') ? readinessOf(observation) : null;
+  const recovery = facts ? recoveryLine(facts.hunger, facts.health, facts.food) : null;
+  return recovery ? `${stored}\n頭: ${recovery}` : stored;
 }
 
 /**
@@ -257,7 +292,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     storedResult(call, text) {
       const { stored, shown } = llmcStoredResult(call.name, text);
       if (shown) events.keep(shown);
-      return stored;
+      // r6 (run 29: 325 s of waits at hunger 17 and no food): a wait's result says when health cannot come back.
+      return r4 ? withRecoveryFact(call.name, call.input, stored, parts.observe()) : stored;
     },
     noteResult(call, result, durationMilliseconds) {
       body.noteResult?.(call, result, durationMilliseconds);

@@ -151,6 +151,13 @@ export interface LlmcLiveParts {
   investigation?: readonly string[];
   /** r4: the body's scan of the land, shown once when a new one came (`scanLines`, at most 10 lines): counted in the bound, never cut. */
   scan?: readonly string[];
+  /**
+   * r6 (run 29): just before the map, counted in the bound and never cut: the current plan node (`planNowLine`), what its stage lacks
+   * (`preparationShortage`), and health that does not come back with where food is (`recoveryLine`, `foodLeads`). Absent: no key.
+   */
+  planNow?: string | null;
+  shortage?: string | null;
+  recovery?: readonly string[];
 }
 
 /** The longest the shown results may be together (characters; a view's map is about 2,500). */
@@ -169,6 +176,12 @@ export function lookHint(world: Record<string, unknown>, healthLost = 0): string
   return null;
 }
 
+/** r6: the plan's now, the shortage and the recovery, each only when there is one. */
+function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'shortage' | 'recovery'>): Record<string, unknown> {
+  return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.shortage ? { shortage: parts.shortage } : {}),
+    ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}) };
+}
+
 /** The live body of one decision, bounded (`LLMC_LIVE_TOKENS` with `planTokens` of the plan's path already used). */
 export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<string, unknown> {
   const { observation } = parts;
@@ -181,6 +194,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   const look = lookHint(world, parts.healthLost ?? 0);
   const live: Record<string, unknown> = {
     ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
+    ...readinessFields(parts),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
     landmarks: strings(world.mapLandmarks, LANDMARKS),
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),

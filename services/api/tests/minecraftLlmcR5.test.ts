@@ -11,7 +11,7 @@ import { doneFacts, nodesSeenDone, parseDoneWhen, seenDoneUpdate } from '../src/
 import {
   FIRST_PLAN_SYSTEM_R4, FIRST_PLAN_SYSTEM_R5, forgetFirstPlans, SCAN_WAIT, seedPlan, startFirstPlan,
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, llmcSystemAppendix, R5_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, llmcSystemAppendix, R5_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCompletionMistake } from '../src/wiring/minecraftLlmcWiring.js';
 
 /**
@@ -204,7 +204,9 @@ describe('the completion and the knowledge (r5)', () => {
   it('the knowledge: a completion only on the goal seen, never cut by time; stairs one step at a time; the code\'s own plan changes', () => {
     for (const words of ['ドラゴンの死を見た時だけ', '時間や遠さで区切らない', '計画を見直して続ける', '階段は 1 段ずつ', '足の前の 2 マス（頭と足）を掘ってから 1 歩下りる',
       '間のブロックを先に掘る', 'have:', 'caution']) expect(R5_KNOWLEDGE).toContain(words);
-    expect(llmcSystemAppendix(true)).toBe(`${LLMC_SYSTEM_APPENDIX_R4}\n\n${R5_KNOWLEDGE}`);
+    // r6: the mode's appendix is r6's now (minecraftLlmcR6.test.ts), which begins with r5's.
+    expect(LLMC_SYSTEM_APPENDIX_R5).toBe(`${LLMC_SYSTEM_APPENDIX_R4}\n\n${R5_KNOWLEDGE}`);
+    expect(llmcSystemAppendix(true).startsWith(LLMC_SYSTEM_APPENDIX_R5)).toBe(true);
     expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
   });
 });

@@ -6,6 +6,7 @@ import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
 import { MC_PROBE_TOOL } from '../contracts/minecraftProbeContract.js';
 import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema, urgentWatch } from '../surfaces/minecraft/minecraftLlmc.js';
 import { frameCreatures } from '../surfaces/minecraft/minecraftLlmcProbeInput.js';
+import { noteActNode, tagActWhy, type ActNodeMark } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
@@ -75,6 +76,8 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       ? { feet: feetOf(control.observe(bodyId)), creatures: frameCreatures(control.observe(bodyId)) } : undefined) : null;
     if (prepared?.problem) return toolFailure('invalid_input', prepared.problem, { retryable: false });
     if (prepared) call = { ...call, input: prepared.input as typeof call.input };
+    const node = parts.llmc?.probe && prepared ? nodeTagged(call, parts.llmc.plan(), prepared.fixes) : null;
+    if (node) call = node.call;
     const schema = call.name === 'minecraft.observe' ? EMPTY
       : (parts.llmc ? llmcSchema(call.name) : undefined) ?? skills.find(skill => `mc.${skill.name}` === call.name)?.inputSchema;
     if (!schema || !validSkillInput(call.input, schema)) return toolFailure('invalid_input', '道具の引数が登録された形式に合わない。', { retryable: false });
@@ -98,6 +101,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     }
     const id = `skill:${createHash('sha256').update(call.operationId).digest('hex')}`;
     if (parts.llmc && llmcSchema(call.name)) {
+      noteActNode(step.taskId, node?.mark ?? null, line => console.info(line));
       return runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [] });
     }
     active.stepOutcome = 'unknown';
@@ -118,6 +122,17 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     }
     return result;
   } };
+}
+/**
+ * r6: an act's why names the plan node it is for (`[p1.2] …`); without one the head puts the current node first, said among the fixes
+ * (`minecraftLlmcNode.ts`). Null for any other call.
+ */
+function nodeTagged(call: Parameters<FcaExternalTools['execute']>[0], plan: BodyPlanView | undefined, fixes: string[])
+  : { call: Parameters<FcaExternalTools['execute']>[0]; mark: ActNodeMark | null } | null {
+  if (call.name !== MC_ACT_TOOL) return null;
+  const tagged = tagActWhy(call.input, plan);
+  if (tagged.fix) fixes.push(tagged.fix);
+  return { call: tagged.fix ? { ...call, input: tagged.input as typeof call.input } : call, mark: tagged.mark };
 }
 /**
  * `mc.act` / `mc.view` on the body (design mb-llm-centric 2.3): the command carries the plan, its deadline is the act's ceiling, and an

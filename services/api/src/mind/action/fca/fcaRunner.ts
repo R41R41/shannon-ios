@@ -19,7 +19,7 @@ import { prepareFcaHistory } from './fcaHistory.js';
 import { withCoreAnchor, type FcaObsMode } from './fcaCoreTools.js';
 import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './fcaCoreHistory.js';
 import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.js';
-import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate } from './fcaWaitGate.js';
+import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate, type FcaWaitAnswer } from './fcaWaitGate.js';
 import { startFcaLookahead, withRealResult, type FcaLookahead } from './fcaLookahead.js';
 import { investigateFcaBody } from './fcaBodyInvestigation.js';
 import { FCA_COMPLETION_MISTAKES_STOP, sayCompletionMistake, type FcaCompletionMistake } from './fcaCompletionMistake.js';
@@ -85,6 +85,7 @@ export interface FcaStepPorts {
   /** Design mb-llm-centric 2.3: how long one lease grant serves every check of the step (`permitDue`, `fcaPlanTools.ts`). */
   permitWindowMs?: number;
   completionMistake?: FcaCompletionMistake; // mb-llmc r5: a turned-back completion, told in one line, counted only in a row
+  waitAnswer?: FcaWaitAnswer; // mb-llmc r6: a wait nobody can answer is answered in one line and never stops the task (`fcaWaitGate.ts`)
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
@@ -221,7 +222,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const stillFreshFor = (call: FcaToolCall | undefined) => call && ports.body?.guardFor
     ? metrics.timed('guardMs', async () => await ports.body!.guardFor!(bodyRevision, call) && await observationFresh()) : stillFresh();
   const skillIndex = metrics.timedSync('contextMs', () => ports.tools?.skillIndex?.());
-  const waitGate = fcaWaitGate(step, runtime, ports.waitCounterpart, prior);
+  const waitGate = fcaWaitGate(step, runtime, ports.waitCounterpart, prior, ports.waitAnswer);
   const waiting = waitGate.fact();
   await checked();
   const request: FcaModelInput = prepared ? prepared.request : metrics.timedSync('contextMs', () => ({ ...input,
@@ -433,7 +434,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       const child = runtime.get(step.scopeKey, id); return child && !['completed', 'failed'].includes(child.phase);
     }))) disposition = 'wait';
   // A wait nobody can answer is turned away a bounded number of times, then committed and the task stopped (below).
-  const gated = waitGate.apply(disposition);
+  const gated = waitGate.apply(disposition, history);
   disposition = gated.disposition;
   await checked('local');
   if (disposition === 'complete' && !bodyStale && ports.tools?.progress) await metrics.timed('verifyMs', async () => {

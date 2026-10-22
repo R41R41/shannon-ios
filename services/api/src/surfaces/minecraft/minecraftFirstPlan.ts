@@ -2,6 +2,10 @@ import { orderedPlan, planFromSeeds, PLAN_LIMITS, type PlanSeed, type PlanTree }
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
 import { DRAGON_KNOWLEDGE, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE } from './minecraftKnowledge.js';
 import { scanForPlan } from './minecraftLlmcProbe.js';
+import { carriedItemCounts } from './minecraftItems.js';
+import { carriedFood } from './minecraftLlmcLive.js';
+import { preparationShortage, recoveryLine } from './minecraftLlmcReadiness.js';
+import { parseDoneWhen } from './minecraftPlanDone.js';
 
 /**
  * The first plan tree of a Minecraft task (design mb-llm-centric 2.5, 2.6: the route becomes the first plan, asked of a strong model once;
@@ -63,10 +67,17 @@ const BEYOND: readonly PlanSeed[] = [
   node('ストロングホールド', { children: [node('2地点で投げて三角測量'), node('交点で地下へ'), node('ポータルの部屋で枠に12個')] }),
   node('エンドでドラゴン', { children: [node('クリスタルを弓で壊す'), node('止まり木で剣・ベッドの爆発'), node('奈落に落ちない')] }),
 ];
-/** The fixed first plan of a goal (null: none for this goal). */
-export function seedPlan(goal: string): PlanTree | null {
+/**
+ * The fixed first plan of a goal (null: none for this goal). r6 (run 29: a task begun in the Nether fortress held the whole seed; only
+ * 「黒曜石10とゲート」 was seen done, and 「村を回る」, with no predicate, was "now" until the strong model's plan came): `dimension`, where the
+ * task begins. A dragon's task begun in the Nether starts at the check before going deeper (`BEYOND`), one begun in the End at the dragon.
+ */
+export function seedPlan(goal: string, dimension: string | null = null): PlanTree | null {
   const kind = planGoal(goal);
   if (!kind) return null;
+  const where = dimension?.replace(/^minecraft:/u, '') ?? null;
+  if (kind === 'dragon' && where === 'the_nether') return planFromSeeds(BEYOND);
+  if (kind === 'dragon' && where === 'the_end') return planFromSeeds(BEYOND.slice(-1));
   const seeds = kind === 'dragon' ? [...TO_NETHER, ...BEYOND] : [...TO_NETHER, node('ネザーに入る', { doneWhen: 'dim:the_nether' })];
   return planFromSeeds(seeds);
 }
@@ -126,6 +137,19 @@ export const FIRST_PLAN_SYSTEM_R5 = [
     + '"at:196,69,237~6"。観測で確かめようのない節（探す・回る・見る）は ""。',
 ].join('\n');
 /**
+ * r6 (run 29: begun in a Nether fortress, the plan's 28 nodes put no food before the blazes; Sonnet went to the spawner at 10 s with one
+ * mutton and no table, slabs or shield): the plan begins where she is, and what the place's check lacks (the input's 「準備の不足」, the code's
+ * fact) is its first node.
+ */
+export const FIRST_PLAN_SYSTEM_R6 = [
+  FIRST_PLAN_SYSTEM_R5,
+  '今いる所から（r6）:',
+  '- 計画は入力の「ディメンション」の今いる所から始める（ネザー・エンドから始まった時に、オーバーワールドの最初の節は書かない）。',
+  '- 入力に「準備の不足」があれば、最初の節を「出発の点検」にし、足りない物（食料を含む）をその子の節にする。各子に作り方か取りに行く所（走査の座標）を where に、'
+    + '観測の形の doneWhen（have:物>=数・food>=点）を書く。ネザーで食料が足りなければ、真紅の森のホグリンか、帰りのゲートからオーバーワールドへ戻って狩る節にする。',
+  '- 戦い（ブレイズ・エンダーマン）と奥への移動の節は、その点検の後に置く。',
+].join('\n');
+/**
  * How long the first plan waits for the body's scan when none is there yet (r4; the body scans once its chunks have settled after a
  * spawn: 2 s at least, 15 s at most, then about 30 ms). The plan is asked in the background; the seed plan holds meanwhile. r5 (the
  * body's r5 waits for 8 tenths of the server's view to load, up to 15 s after the spawn, and the head's first decision may come a few
@@ -137,7 +161,7 @@ const text = (value: unknown, limit: number) => typeof value === 'string' ? valu
 const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
 /** The input: the goal, where and when she is, what she carries, and what the body knows of the land (cut to `inputCharacters`). */
-export function firstPlanInput(goal: string, world: Record<string, unknown> | null, options: { scan?: boolean } = {}): string {
+export function firstPlanInput(goal: string, world: Record<string, unknown> | null, options: { scan?: boolean; readiness?: boolean } = {}): string {
   const part = (label: string, value: unknown, limit: number) => {
     const shown = typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value);
     return shown ? [`${label}: ${shown.slice(0, limit)}`] : [];
@@ -146,10 +170,23 @@ export function firstPlanInput(goal: string, world: Record<string, unknown> | nu
   const scan = options.scan ? scanForPlan(world?.scan) : null;
   return [`依頼: ${text(goal, 400)}`, ...part('位置', world?.position, 80), ...part('ディメンション', world?.dimension, 40),
     ...part('バイオーム', world?.biome, 60), ...part('時刻', world?.time, 20), ...part('持ち物', world?.inventory, 800),
+    ...(options.readiness && world ? [...part('着ている物', world.worn, 200), ...readinessInput(world)] : []),
     ...(scan ? [`走査（読み込み済みの範囲の目印）:\n${scan.slice(0, 2_400)}`] : []),
     ...part('目印', world?.mapLandmarks, 1_500), ...part('地図の要約', world?.mapSummary, 1_500),
     ...part('場所の記憶', world?.rememberedPlaces, 1_000), ...part('通ったバイオーム', world?.biomesSeen, 400)]
     .join('\n').slice(0, FIRST_PLAN.inputCharacters);
+}
+
+/**
+ * r6: what the place she begins in lacks (`preparationShortage`, the check of the Nether's depth when she is there), and health that does
+ * not come back: the code's facts, for the first node.
+ */
+function readinessInput(world: Record<string, unknown>): string[] {
+  const dimension = typeof world.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;
+  const food = carriedFood(world, {}).points, health = typeof world.health === 'number' ? world.health : null;
+  const shortage = preparationShortage({ dimension, counts: carriedItemCounts(world, {}), food, nowTitle: null });
+  const recovery = recoveryLine(typeof world.food === 'number' ? world.food : null, health, food);
+  return [`食料: ${food} 点`, ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }
 
 /** A node's texts from the answer; r4: its forbid and caution too (within the tree's bounds; an answer without them is as before). */
@@ -178,11 +215,17 @@ export function planFromAnswer(answer: unknown): PlanTree | null {
 }
 
 const key = (value: string | undefined) => (value ?? '').replace(/\s+/gu, '').toLowerCase();
-/** `next` with the nodes `held` has done marked done in it too (same title, or same `doneWhen`). */
+/**
+ * `next` with the nodes `held` has done marked done in it too (same title, or same `doneWhen`). r6 (run 29: the strong model's 「動物を狩り
+ * 肉を焼く」, doneWhen food>=100, came in done with 15.6 points of food: the seed's node of the same doneWhen had been closed under a parent
+ * seen done): a node whose doneWhen is a predicate is never carried by its words; the frame says whether it holds (`minecraftPlanDone.ts`,
+ * at the same read). Only a node in free words is carried by its title or doneWhen.
+ */
 export function carryDone(held: PlanTree, next: PlanTree): PlanTree {
   const done = held.nodes.filter(item => item.state === 'done');
   const titles = new Set(done.map(item => key(item.title))), proofs = new Set(done.flatMap(item => item.doneWhen ? [key(item.doneWhen)] : []));
-  const carried = (item: PlanTree['nodes'][number]) => titles.has(key(item.title)) || (item.doneWhen !== undefined && proofs.has(key(item.doneWhen)));
+  const carried = (item: PlanTree['nodes'][number]) => !parseDoneWhen(item.doneWhen)
+    && (titles.has(key(item.title)) || (item.doneWhen !== undefined && proofs.has(key(item.doneWhen))));
   const nodes = next.nodes.map(item => carried(item) ? { ...item, state: 'done' as const } : item);
   // A parent whose children are all done is done (deepest first), as `applyPlanUpdate` keeps it.
   for (const item of orderedPlan(nodes).reverse()) {
@@ -236,11 +279,15 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
    */
   r4?: { world(): Record<string, unknown> | null; waitMs?: number; everyMs?: number;
     /** r5: the words asked with (`FIRST_PLAN_SYSTEM_R5`, doneWhen as predicates). Absent: r4's. */
-    system?: string } }): void {
+    system?: string;
+    /** r6: the place's shortage and the recovery fact in the input (`readinessInput`). Absent: not. */
+    readiness?: boolean } }): void {
   const slot = slotOf(parts.taskId);
   if (slot.asked || parts.held.revision > 1) return;
   slot.asked = true;
-  if (!parts.held.nodes.length) slot.seed = seedPlan(parts.goal);
+  // r6: the seed begins where she is (a dragon's task begun in the Nether: at the check before going deeper).
+  const dimension = typeof parts.world?.dimension === 'string' ? parts.world.dimension : null;
+  if (!parts.held.nodes.length) slot.seed = seedPlan(parts.goal, dimension);
   if (!parts.planner) return;
   const planner = parts.planner;
   const abort = new AbortController(), began = Date.now();
@@ -251,7 +298,8 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
   const r4 = parts.r4;
   const ask = r4 ? withScan(r4, parts.world).then(world => {
     say(`Shannon Minecraft first plan scan task=${parts.taskId} scan=${world?.scan ? 'yes' : 'none'} waitedMs=${Date.now() - began}`);
-    return planner(r4.system ?? FIRST_PLAN_SYSTEM_R4, firstPlanInput(parts.goal, world, { scan: true }), abort.signal);
+    return planner(r4.system ?? FIRST_PLAN_SYSTEM_R4, firstPlanInput(parts.goal, world, { scan: true, ...(r4.readiness ? { readiness: true } : {}) }),
+      abort.signal);
   }) : planner(FIRST_PLAN_SYSTEM, firstPlanInput(parts.goal, parts.world), abort.signal);
   ask.then(answer => {
     const tree = abort.signal.aborted ? null : planFromAnswer(answer);

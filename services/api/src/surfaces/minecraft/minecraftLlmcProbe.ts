@@ -62,6 +62,8 @@ interface ActRecord {
   dest: ActPos | null; target: ActPos | string | null;
   /** r5: the stopped hand's kind and its line as the result said it (for the fact noted at a second surprise). */
   hand?: { do: string; line: string } | null;
+  /** r6: the attack hand that hit nothing, as its line said it (the fact of a second miss when no sight answered). */
+  missHand?: { do: string; line: string } | null;
 }
 /** The act's hands as the body ran them (the model's input in the contract's shape). */
 function handsOf(input: unknown): readonly ActHand[] {
@@ -81,9 +83,11 @@ function aimOf(hand: ActHand | undefined): Pick<ActRecord, 'dest' | 'target'> {
 export function readActRecord(ok: boolean, text: string, input: unknown): ActRecord {
   const hands = handsOf(input), lines = text.split('\n');
   // An attack hand that hit nothing, and what it aimed at.
-  const missed = lines.map(line => /^(\d+) attack /u.exec(line) && NO_HIT.test(line) ? Number(/^(\d+)/u.exec(line)![1]) : null).find(index => index !== null);
-  const miss = missed !== undefined && missed !== null;
-  const missAim = miss ? aimOf(hands[missed! - 1]).target : null;
+  const missedLine = lines.find(line => /^\d+ attack /u.test(line) && NO_HIT.test(line));
+  const miss = missedLine !== undefined, missed = miss ? Number(/^(\d+)/u.exec(missedLine)![1]) : null;
+  // r6: a hold with no target names the nearest one in its line (the body's r6 words: 「最寄り blaze #9 (308,69,73) …」).
+  const missAim = miss ? aimOf(hands[missed! - 1]).target ?? nearestNamed(missedLine) : null;
+  const missHand = miss ? { do: 'attack', line: missedLine.replace(/^\d+ attack \S+ /u, '').slice(0, 160) } : null;
   for (const line of lines) {
     const match = /^(\d+) ([A-Za-z]+) [止失] (.+)$/u.exec(line);
     if (!match) continue;
@@ -94,14 +98,14 @@ export function readActRecord(ok: boolean, text: string, input: unknown): ActRec
     // r5: a pickup names no place in its input; the drop is where its line says (the body's r5 words), when it does.
     const target = aim.target ?? (match[2] === 'pickup' ? firstPos(match[3]!) : null) ?? missAim;
     return { key: `${match[2]}:${reason}`, reason, dig: match[2] === 'dig', miss, dest: aim.dest, target,
-      hand: { do: match[2]!, line: match[3]!.slice(0, 160) } };
+      hand: { do: match[2]!, line: match[3]!.slice(0, 160) }, missHand };
   }
   // A refusal before the body (not a shape the result already names: the act's own fields say how to mend it).
   if (!ok && !/^(act |急ぎ: |（頭が形を直して送った)/u.test(text) && !/^引数が|^手\d+（/u.test(text)) {
     const words = lines[0]!.replace(/[0-9.]+/gu, 'n').slice(0, 24);
-    return { key: `拒否:${words}`, reason: words, dig: false, miss, dest: null, target: missAim };
+    return { key: `拒否:${words}`, reason: words, dig: false, miss, dest: null, target: missAim, missHand };
   }
-  return { key: null, reason: null, dig: false, miss, dest: null, target: missAim };
+  return { key: null, reason: null, dig: false, miss, dest: null, target: missAim, missHand };
 }
 
 const WINDOW = 6, REPEAT_COOLDOWN = 4, OXYGEN_COOLDOWN = 3, FOUND_METERS = 24;
@@ -123,6 +127,12 @@ function watchOf(taskId: string): WatchState {
 const firstPos = (text: string): ActPos | null => {
   const match = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u.exec(text);
   return match ? { x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) } : null;
+};
+/** The creature a line names after 「最寄り」 (its `#id`, else its place), or null. */
+const nearestNamed = (line: string): ActPos | string | null => {
+  const tail = line.split('最寄り')[1];
+  if (!tail) return null;
+  return /^\s*\S+ (#\d+)/u.exec(tail)?.[1] ?? firstPos(tail);
 };
 const around = (): ProbeInput => ({ kind: 'around', radius: 8 });
 const column = (feet: ActPos, bounds: { up: number; down: number }): ProbeInput => ({ kind: 'column', x: Math.floor(feet.x), z: Math.floor(feet.z),
@@ -218,11 +228,18 @@ function actSurprises(acts: readonly ActRecord[], fresh: readonly ActRecord[], f
         nth: nth(`repeat:${latest.key}`), hand: hand(latest) });
     }
   }
-  if (fresh.some(item => item.miss) && due('miss', 2)) {
-    const aimed = [...fresh].reverse().find(item => item.miss && item.target)?.target ?? null;
-    out.push({ code: 'miss', line: '攻撃が 1 度も当たらなかった（当たり 0）', probes: [...sight(aimed), around()] });
-  }
-  return out;
+  return [...out, ...missSurprise(fresh, due, nth)];
+}
+/**
+ * An attack that hit nothing: a sight of what it aimed at and around. r6 (run 29: two misses, no count, so the second never noted its
+ * fact): counted as every other surprise, with the hand that missed.
+ */
+function missSurprise(fresh: readonly ActRecord[], due: Due, nth: (key: string) => number): Surprise[] {
+  if (!fresh.some(item => item.miss) || !due('miss', 2)) return [];
+  const aimed = [...fresh].reverse().find(item => item.miss && item.target)?.target ?? null;
+  const missed = [...fresh].reverse().find(item => item.missHand)?.missHand ?? null;
+  return [{ code: 'miss', line: '攻撃が 1 度も当たらなかった（当たり 0）', probes: [...(aimed ? [{ kind: 'sight' as const, target: aimed }] : []), around()],
+    nth: nth('miss'), hand: missed ? { ...missed, aim: typeof aimed === 'object' ? aimed : null } : null }];
 }
 /** A drop within this many blocks of her feet is looked at (sight: a wall, a hole between); farther, the way to it (path). */
 const DROP_SIGHT_METERS = 6;
@@ -244,10 +261,14 @@ function foundSurprise(found: ActPos | null, planWhere: string | null): Surprise
 }
 export type SurpriseWatch = ReturnType<typeof createSurpriseWatch>;
 
-/** The probes of a step: in the surprises' order (the dangers first), each once, at most `LLMC_PROBE.maxProbes`. */
+/**
+ * The probes of a step: in the surprises' order (the dangers first), each once, at most `LLMC_PROBE.maxProbes`. r6 (run 29: a health
+ * surprise took both places with its around and column, and the miss's sight never went): each surprise's first probe first, then the rest.
+ */
 export function stepProbes(surprises: readonly Surprise[]): ProbeInput[] {
   const out: ProbeInput[] = [], seen = new Set<string>();
-  for (const probe of surprises.flatMap(item => item.probes)) {
+  const firsts = surprises.flatMap(item => item.probes.slice(0, 1)), rest = surprises.flatMap(item => item.probes.slice(1));
+  for (const probe of [...firsts, ...rest]) {
     const key = probe.kind === 'around' ? 'around' : JSON.stringify(probe);
     if (seen.has(key)) continue;
     seen.add(key);

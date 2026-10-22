@@ -3,6 +3,7 @@ import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_PROGRES
 import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput } from '../../../mind/action/fca/fcaPorts.js';
 import type { TaskRecallPacket } from '../../../mind/recall/taskRecallPorts.js';
 import { providerToolName } from '../../../mind/tools/toolRegistryPorts.js';
+import { FCA_WAIT_RULE as WAIT_RULE, fcaWaitRule } from './anthropicFcaControl.js';
 import { estimatedAnthropicCostUsd, knownCount, knownInput, tokenCount, unknownCostUpperBound } from '../claude/claudeUsage.js';
 import { claudeClient } from '../claude/claudeClient.js';
 import { sendClaudeOnce } from '../claude/claudeOnce.js';
@@ -90,10 +91,6 @@ const CONTROL_TOOLS: Anthropic.Tool[] = [
 const ONE_HOUR = { type: 'ephemeral' as const, ttl: '1h' as const };
 const OWNER_CLOCK_RULE = 'Count 今日, 明日 and other relative dates on this clock, in the owner\'s time zone, never in UTC. '
   + 'Write explicit dates in searches and reports.';
-/** With `waiting` (`fcaWaitGate.ts`): nobody can answer the task, so a wait waits for nothing. Data for the decision, never her words. */
-const WAIT_RULE = 'Nobody can send this task a message or answer a question: it has no unfinished child task and whoever handed it over '
-  + 'cannot reply. fca_wait is turned away until refusedWaits reaches refusalLimit; a wait after that stops the task. '
-  + 'Continue toward the goal with the offered tools, or use fca_complete once the completion criteria are met.';
 /**
  * With a body (`body`, its `pace` from `minecraftPace`): the L101–L103 lessons of the Minebot campaign (a run of steps without progress,
  * and idle waits while nobody could answer, used up the run). Restated only when it changed, as the other elided parts are.
@@ -426,7 +423,8 @@ function decisionFields(input: FcaModelInput, ownerClock: Record<string, unknown
     ...(input.sharedContext ? { sharedContext: input.body !== undefined ? bodySharedContext(input.sharedContext, input.task.id) : input.sharedContext,
       contextInstructions: FCA_CONTEXT_INSTRUCTIONS } : {}), ...planField(input),
     ...(input.recall ? { recall: input.body !== undefined ? bodyRecallView(input.recall) : modelRecall(input.recall) } : {}), ...(input.progress ? { progress: input.progress, progressInstructions: SHANNON_FCA_PROGRESS_CAPABILITY.text } : {}), ...(input.observations ? { observations: input.observations } : {}), ...(input.body ? { body: input.body, bodyInstructions: BODY_RULE } : {}),
-    ...(input.waiting ? { waiting: { ...input.waiting, rule: WAIT_RULE } } : {}), ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
+    ...(input.waiting ? { waiting: { ...input.waiting, rule: fcaWaitRule(input.waiting) } } : {}),
+    ...(input.skillIndex ? { skillIndex: input.skillIndex } : {}) };
 }
 
 /**
