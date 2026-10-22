@@ -78,6 +78,31 @@ describe('Minecraft common FCA body protocol', () => {
     expect((await outcome).outcome).toBe('cancelled');
     expect(f.control.poll(f.scope, f.poll()).commands).toEqual([]);
   });
+  // Minecraft run 34 (2026-10-22): a step's own read-only probes were still in flight when its next guard looked (the investigation's budget
+  // had run out), the step was declared FCA_BODY_OUTCOME_UNKNOWN, and its cancel settled them as `cancelled` a moment later.
+  it('does not count a read-only probe in flight or cancelled as an open body operation, but still counts a motor command', async () => {
+    const f = fixture();
+    const probe = { ...f.command, id: 'probe:one', skill: 'probe', arguments: { kind: 'sight' } };
+    const running = f.control.command(probe, undefined);
+    expect(f.control.poll(f.scope, f.poll()).commands.map(c => c.id)).toEqual(['probe:one']);
+    f.control.poll(f.scope, f.poll({ activeOperationIds: ['probe:one'] }));
+    expect(f.store.phase('probe:one')).not.toBe('settled');
+    expect(f.store.safe('task')).toBe(true); // in flight: nothing to touch
+    f.control.cancelTask('task'); // the step's abort, as the body adapter does at its end
+    expect(f.store.safe('task')).toBe(true);
+    f.control.poll(f.scope, f.poll({ activeOperationIds: ['probe:one'], receipts: [f.receipt({ id: 'probe:one', outcome: 'cancelled' })] }));
+    expect((await running).outcome).toBe('cancelled');
+    expect(f.store.safe('task')).toBe(true);
+    // A motor command stays open until its own receipt, however it is cancelled: its effect is uncertain.
+    const dig = f.control.command({ ...f.command, id: 'dig-1' });
+    f.control.poll(f.scope, f.poll());
+    f.control.poll(f.scope, f.poll({ activeOperationIds: ['dig-1'] }));
+    f.control.cancelTask('task');
+    expect(f.store.safe('task')).toBe(false);
+    f.control.poll(f.scope, f.poll({ activeOperationIds: ['dig-1'], receipts: [f.receipt({ id: 'dig-1', outcome: 'cancelled' })] }));
+    expect((await dig).outcome).toBe('cancelled');
+    expect(f.store.safe('task')).toBe(true);
+  });
   it('allows only original-lease stop cleanup after owner and execution authority disappear', async () => {
     const f = fixture(); f.disallow();
     await expect(f.control.command(f.command)).rejects.toThrow('LEASE_INVALID');
