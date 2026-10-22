@@ -21,6 +21,8 @@ import { withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
+import { llmcCoreKnowledge } from '../surfaces/minecraft/minecraftKnowledgeCore.js';
+import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R9 } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { llmcWaitLine } from '../surfaces/minecraft/minecraftLlmcReadiness.js';
 import { seenDoneUpdate } from '../surfaces/minecraft/minecraftPlanDone.js';
@@ -144,6 +146,8 @@ export interface LlmcWiring {
    * the mode as r3 (fc7bed7) had it, byte for byte.
    */
   probe: boolean;
+  /** SHANNON_MINECRAFT_OWN_PROMPT (ADR-0014 D3): the body task's own words for the decisions, the summary and the first plan. */
+  ownPrompt?: boolean;
   models: { main: FcaModel; escalate: FcaModel | null };
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
@@ -164,10 +168,13 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   const names = llmcModelNames(values), log = parts.log ?? (line => console.info(line));
   const probe = switchOn(values, 'SHANNON_MINECRAFT_LLMC_PROBE');
   // Every decision model of the mode reads the same appendix (r4's with the probe on): the main one and the one it is raised to.
-  const appendix = llmcSystemAppendix(probe);
+  // SHANNON_MINECRAFT_OWN_PROMPT (ADR-0014 D3): the body task's own instructions with the pruned knowledge instead.
+  const own = switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT');
+  const appendix = own ? llmcCoreKnowledge(probe) : llmcSystemAppendix(probe);
   const make = (model: string) => {
     const apiKey = keyFor(values, model);
-    return apiKey || base.client ? createAnthropicFcaModel({ ...base, model, ...(apiKey ? { apiKey } : {}), systemAppendix: appendix }) : null;
+    return apiKey || base.client ? createAnthropicFcaModel({ ...base, model, ...(apiKey ? { apiKey } : {}), systemAppendix: appendix,
+      ...(own ? { minecraftOwnPrompt: true } : {}) }) : null;
   };
   const main = make(names.main);
   if (!main) {
@@ -175,14 +182,18 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
     return null;
   }
   const haikuKey = keyFor(values, DEFAULT_HAIKU_MODEL);
-  log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}${probe ? ' probe=on' : ''}`);
-  return { names, probe, models: { main, escalate: names.escalate ? make(names.escalate) : null },
+  log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}${probe ? ' probe=on' : ''}`
+    + (own ? ' ownPrompt=on' : ''));
+  return { names, probe, ...(own ? { ownPrompt: true } : {}), models: { main, escalate: names.escalate ? make(names.escalate) : null },
     summarizer: haikuKey || base.client
       ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
-        maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
+        ...(own ? { minecraftOwnPrompt: true } : {}), maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
     policy: LLMC_HISTORY_POLICY, lookahead: createLlmcLookahead(log), historyAhead: createFcaHistoryAhead(),
     ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, probe ? FIRST_PLAN_SCHEMA_R4 : FIRST_PLAN_SCHEMA) };
 }
+
+/** The first plan's words with the probe on: r9's, or with SHANNON_MINECRAFT_OWN_PROMPT the strategic knowledge instead (`minecraftStrategy.ts`). */
+export function firstPlanSystem(own: boolean): string { return own ? ownFirstPlanSystem() : FIRST_PLAN_SYSTEM_R9; }
 
 /**
  * r4: the way to send one fixed probe of a surprise to the task's body, or null while the body is not there or has no `probe` (its
@@ -227,7 +238,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r8: a gap crossed in the rock or by a walled bridge (`FIRST_PLAN_SYSTEM_R8`); r9: the done of a node by its own condition, a place with
   // its dimension, the pearls after the rods, the golden armour in the check (`FIRST_PLAN_SYSTEM_R9`).
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
-    ...(llmc.probe ? { r4: { world: worldOf, system: FIRST_PLAN_SYSTEM_R9, readiness: true } } : {}) });
+    ...(llmc.probe ? { r4: { world: worldOf, system: firstPlanSystem(llmc.ownPrompt === true), readiness: true } } : {}) });
   const display = () => plan.port.display();
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.

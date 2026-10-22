@@ -130,10 +130,13 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         totalTokens: usage.totalTokens, estimatedCostUsd: usage.estimatedCostUsd, occurredAt: new Date().toISOString() });
     };
     const timeZone = ownerTimeZone(values);
+    // SHANNON_MINECRAFT_OWN_PROMPT (ADR-0014 D3): a Minecraft body task of the old mode reads its own instructions; every other task as before.
     const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }),
-      compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS), stopGraceMilliseconds: FCA_MODEL_STOP_GRACE_MILLISECONDS });
+      compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS), stopGraceMilliseconds: FCA_MODEL_STOP_GRACE_MILLISECONDS,
+      ...(switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT') ? { minecraftOwnPrompt: true } : {}) });
     // SHANNON_FCA_SUMMARY_MODEL=haiku (P4): a body task's summaries by Haiku, rare; absent, every task is as it was.
-    const summaries = configuredFcaSummaries(values, createAnthropicFcaSummarizer({ ...provider, recordUsage }), recordUsage);
+    const summaries = configuredFcaSummaries(values, createAnthropicFcaSummarizer({ ...provider, recordUsage }), recordUsage,
+      switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT'));
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };

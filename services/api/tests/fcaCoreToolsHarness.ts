@@ -56,6 +56,8 @@ export interface ScenarioOptions {
   appendOnly?: boolean;
   /** Decision d answers with a model error instead (a Response), e.g. the 400 of a refused beta. */
   refuse?: (decision: number, body: Record<string, unknown>) => Response | null;
+  /** More options of the decision model (e.g. `minecraftOwnPrompt`). */
+  modelOptions?: Partial<Parameters<typeof createAnthropicFcaModel>[0]>;
 }
 export const SUMMARY_POLICY: Partial<FcaHistoryPolicy> = { maximumRounds: 9, recentRounds: 3 };
 export const WIDE_POLICY: Partial<FcaHistoryPolicy> = { maximumRounds: 80, recentRounds: 6, maximumNativeCharacters: 900_000,
@@ -104,7 +106,7 @@ export function scenario(options: ScenarioOptions = {}) {
     if (options.contextCall && d === 3) calls.unshift(use(`${id}_context`, 'fca_context', { expectations: [], appraisals: [] }));
     return message([{ type: 'thinking', thinking: '次の作業', signature: `signed-${d}-${'s'.repeat(300)}` }, ...calls], 'tool_use');
   });
-  const model = createAnthropicFcaModel({ apiKey: 'synthetic', model: 'claude-sonnet-5-5', fetcher: fixture.fetcher, recordUsage() {} });
+  const model = createAnthropicFcaModel({ apiKey: 'synthetic', model: 'claude-sonnet-5-5', fetcher: fixture.fetcher, recordUsage() {}, ...options.modelOptions });
   const summarizer = createAnthropicFcaSummarizer({ apiKey: 'synthetic', model: 'claude-sonnet-5-5', fetcher: fixture.fetcher, recordUsage() {} });
   const tools: FcaExternalTools = { ...(options.skillIndex ? { skillIndex: () => options.skillIndex! } : {}), get definitions() { return options.catalogAt ? options.catalogAt(decisions + 1) : BASE_CATALOG; },
     async execute(call) {

@@ -18,7 +18,7 @@ export interface FcaStepSummary { summarizer: FcaHistorySummarizer; policy?: Par
  * ignored and logged without its value.
  */
 export function configuredFcaSummaries(values: Readonly<Record<string, string | undefined>>, decision: FcaHistorySummarizer,
-  recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage']): { decision: FcaHistorySummarizer; body: FcaStepSummary } {
+  recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'], ownPrompt = false): { decision: FcaHistorySummarizer; body: FcaStepSummary } {
   const same = { decision, body: { summarizer: decision } };
   const choice = values.SHANNON_FCA_SUMMARY_MODEL?.trim().toLowerCase();
   if (!choice || choice === 'decision') return same;
@@ -33,6 +33,8 @@ export function configuredFcaSummaries(values: Readonly<Record<string, string | 
       + '(SHANNON_HAIKU_API_KEY, SHANNON_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY); the decision model summarizes');
     return same;
   }
-  return { decision, body: { summarizer: createAnthropicFcaSummarizer({ model: DEFAULT_HAIKU_MODEL, apiKey, recordUsage, body: true }),
+  // `ownPrompt` (SHANNON_MINECRAFT_OWN_PROMPT): the body summary reads the body task's own words; absent, as before.
+  return { decision, body: { summarizer: createAnthropicFcaSummarizer({ model: DEFAULT_HAIKU_MODEL, apiKey, recordUsage, body: true,
+    ...(ownPrompt ? { minecraftOwnPrompt: true } : {}) }),
     policy: FCA_BODY_HISTORY_POLICY } };
 }
