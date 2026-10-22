@@ -102,6 +102,17 @@ export interface FcaBodyLifecycle {
    * body's last result failed, so the act chosen now is not followed by a decision asked ahead (`fcaLookahead.ts`). Absent: never.
    */
   troubled?(): boolean;
+  /**
+   * mb-llmc r8 (run 32: a hostile came in sight while the decision was awaited; the answer took 10.3 s and reached the body after her
+   * death): polled while the model's decision is awaited. A line (the hostile) when one she must act on has come since the request was
+   * built, once a decision: the decision is thrown away and asked again at once on a short urgent state (`fcaUrgentDecision.ts`).
+   * Absent: never.
+   */
+  interrupt?(): string | null;
+  /** r8: the request is built again for a decision asked after an `interrupt`: the next `context()` is the same decision's. */
+  rebuilding?(): void;
+  /** r8: a decision made on an urgent state has come: how long the model took on it, whether an earlier request was thrown away, and how long that had run. */
+  decided?(info: { ms: number; aborted: boolean; thrownMs: number }): void;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */
   close(): Promise<void>;
 }

@@ -15,9 +15,13 @@ export function decisionRequestMetrics(history: readonly Anthropic.MessageParam[
   built: { level: number | null; elidedParts: readonly string[] },
   transient?: { providerTransformations: number; cuts?: Metrics['cuts'] }): Metrics {
   const read = usage.cachedInputTokens, write = usage.cacheCreationInputTokens;
+  // mb-llmc r8: the live state is the only part of a transient request after the last cache breakpoint (a turn-scoped system message may
+  // carry no marker); its estimate beside `inputNew` says how much of the input that is not cached is that state.
+  const live = transient ? turn.find(isFcaClearAtMessage) : undefined;
   // A turn-scoped system message that a later message follows is stored but never rendered: not part of the stored tokens.
   return { storedTokens: estimatedAnthropicTokens(history.filter(message => !isFcaClearAtMessage(message))), tailTokens: estimatedAnthropicTokens(turn),
     inputNew: Math.max(0, usage.inputTokens - read - write), inputRead: read, inputWrite: write, outputTokens: usage.outputTokens,
     inputTransformations: built.elidedParts.length + (built.level === null ? 0 : 1) + (transient?.providerTransformations ?? 0),
+    ...(live ? { liveTokens: estimatedAnthropicTokens([live]) } : {}),
     ...(transient ? { obsMode: 'transient' as const } : {}), ...(transient?.cuts ? { cuts: transient.cuts } : {}) };
 }

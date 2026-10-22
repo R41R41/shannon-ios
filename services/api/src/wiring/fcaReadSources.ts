@@ -1,4 +1,4 @@
-import { memoryControlFor, visibleMemoryText, type CompanionStateStore } from '@shannon/cognition';
+import { indexedMemoryControlFor, visibleMemoryText, type CompanionStateStore } from '@shannon/cognition';
 import { MemoryWithholding, insideDeepWalk, isStackOverflow } from '../mind/memory/memoryVisibilityPorts.js';
 import type { TaskMemoryReadSnapshot as ReadSourceSnapshot } from '../mind/memory/taskMemoryPorts.js';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
@@ -164,7 +164,7 @@ function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, s
       const { family, id } = parsed;
       const { state, withholding } = shared;
       const blocked = [sourceId, id].some(key => {
-        const control = memoryControlFor(state, key);
+        const control = indexedMemoryControlFor(state, key);
         return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
       });
       if (blocked) return false;
@@ -183,7 +183,7 @@ function readSourceVisible(parts: FcaReadSourcesOptions, skillOf: SkillReader, s
           // `/revision/` is a skill.read pin, `/gist-revision/` and `/gist` a gist pin (`fcaSkillGistSource.ts`): the same checks.
           const { skillId, revisionId, controlKeys } = parsed.skill!;
           if (controlKeys.some(key => {
-            const control = memoryControlFor(state, key);
+            const control = indexedMemoryControlFor(state, key);
             return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
           })) return false;
           const skill = skillOf(scopeKey, skillId, revisionId);
@@ -240,7 +240,7 @@ export function fcaReadSourceRetained(state: Pick<CompanionStateStore, 'snapshot
     const keys = [sourceId, id, ...(skillRevision ? [decodeURIComponent(skillRevision[1]!), decodeURIComponent(skillRevision[2]!),
       `shannon-skill://${skillRevision[1]!}`] : skillBare ? [decodeURIComponent(skillBare[1]!), `shannon-skill://${skillBare[1]!}`] : [])];
     if (keys.some(key => {
-      const control = memoryControlFor(snapshot, key);
+      const control = indexedMemoryControlFor(snapshot, key);
       return control && (control.status !== 'active' || Boolean(control.overrideText && observedAt <= (control.contextInvalidatedAt ?? control.updatedAt)));
     })) return false;
     return !new MemoryWithholding(snapshot, conversations, scopeKey).withholdsReply({ text: '', observedAt, recalledMemoryIds: keys });

@@ -1,4 +1,5 @@
 import type { FcaBodyLifecycle } from './fcaPorts.js';
+import type { FcaObservationLifecycle } from './fcaObservation.js';
 import type { FcaLookahead } from './fcaLookahead.js';
 import type { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 
@@ -17,4 +18,11 @@ export async function investigateFcaBody(ports: { body?: FcaBodyLifecycle; looka
   metrics.investigated(found);
   ports.lookahead?.drop?.(taskId, 'surprise');
   return true;
+}
+
+/** Closes the body's lifecycle and the observations' (a step's monitors); the first failure is thrown after all have been closed. */
+export async function closeFcaMonitors(ports: { body?: FcaBodyLifecycle; observations?: readonly FcaObservationLifecycle[] }): Promise<void> {
+  const results = await Promise.allSettled([ports.body?.close(), ...(ports.observations ?? []).map(observation => observation.close())]);
+  const failure = results.find(result => result.status === 'rejected');
+  if (failure?.status === 'rejected') throw failure.reason;
 }

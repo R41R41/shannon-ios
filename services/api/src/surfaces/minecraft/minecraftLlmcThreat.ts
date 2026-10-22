@@ -33,8 +33,10 @@ export const isShooter = (name: string): boolean => SHOOTERS.has(name);
 /** A creeper's blast goes through a wall: it is never walled off. */
 const NEVER_WALLED = new Set(['creeper']);
 
-export interface NearThreat { id: number | null; name: string; distance: number; at: ActPos | null; dy: number | null; canReachMe: boolean | null }
-/** The hostiles of a frame, nearest first, with their id, place, height against her feet and the body's own `canReachMe`. */
+export interface NearThreat { id: number | null; name: string; distance: number; at: ActPos | null; dy: number | null; canReachMe: boolean | null;
+  /** r8: the body's own `canSee` (its check at every frame, `threatExposure`): whether the hostile sees her; absent or null: not said. */
+  canSee?: boolean | null }
+/** The hostiles of a frame, nearest first, with their id, place, height against her feet and the body's own `canReachMe` and `canSee`. */
 export function nearThreats(observation: BodyObservation | null): NearThreat[] {
   const world = plain(observation?.state.world) ?? {};
   const feet = readPos(world.position), feetY = finite(plain(world.position)?.y);
@@ -44,7 +46,8 @@ export function nearThreats(observation: BodyObservation | null): NearThreat[] {
     const at = readPos(entity.position), y = finite(plain(entity.position)?.y);
     return [{ id: typeof entity.id === 'number' && Number.isInteger(entity.id) ? entity.id : null, name: entity.name, distance, at,
       dy: feet && y !== null && feetY !== null ? Math.round(y - feetY) : null,
-      canReachMe: typeof entity.canReachMe === 'boolean' ? entity.canReachMe : null }];
+      canReachMe: typeof entity.canReachMe === 'boolean' ? entity.canReachMe : null,
+      canSee: typeof entity.canSee === 'boolean' ? entity.canSee : null }];
   }).sort((left, right) => left.distance - right.distance);
 }
 

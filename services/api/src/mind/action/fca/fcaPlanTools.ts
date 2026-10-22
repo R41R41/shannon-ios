@@ -77,6 +77,11 @@ export interface FcaPlanInbox { take(taskId: string, tree: PlanTree): { tree: Pl
 export interface FcaPlanPort {
   /** The path to the current node (live), or null when the task holds no plan yet. */
   view(): (PlanPathView & { revision: number; note?: string }) | null;
+  /**
+   * mb-llmc r8: what a decision's live state shows of the plan when the body says the current node itself (`planNow`, with the path above
+   * it): the view without its `path` and `now`, which `planNow` repeats. Absent: `view()`.
+   */
+  liveView?(): Record<string, unknown> | null;
   /** What a body shows (`BodyTaskContext.plan`), or undefined. */
   display(): ReturnType<typeof planDisplay> | undefined;
   /** The flat copy, when the tree changed in this step (the commit writes `plan_json` and the event then). */
@@ -91,13 +96,15 @@ export interface FcaPlanPort {
 
 /** The plan part of a decision's input (`FcaModelInput.plan`), when the task keeps a plan. */
 export function planInput(plan: FcaPlanPort | undefined): { plan?: Record<string, unknown> } {
-  const view = plan?.view();
+  const view = plan?.liveView ? plan.liveView() : plan?.view();
   return view ? { plan: { ...view } } : {};
 }
 
 export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown; inbox?: FcaPlanInbox; log?(line: string): void;
   /** mb-llmc r4: offer the tool with forbid and caution (`PLAN_UPDATE_RULES_DEFINITION`). Absent: as before. */
   rules?: boolean;
+  /** mb-llmc r8: the live state shows the plan without the path and the now that the body's `planNow` says (`FcaPlanPort.liveView`). Absent: whole. */
+  compact?: boolean;
   /**
    * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done, `minecraftPlanDone.ts`), applied before
    * the decision reads the path. Absent: none.
@@ -139,6 +146,14 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       settle();
       return tree.nodes.length ? { revision: tree.revision, ...planPath(tree), ...(note ? { note } : {}) } : null;
     },
+    ...(parts.compact ? { liveView() {
+      const view = port.view();
+      if (!view) return null;
+      // The now is repeated by `planNow` only where it has one; a tree with no current node keeps its view whole.
+      if (!view.now) return { ...view };
+      const { path: _path, now: _now, ...rest } = view;
+      return rest;
+    } } : {}),
     display: () => tree.nodes.length ? planDisplay(tree) : undefined,
     committed: () => changed ? flatPlan(tree) : null,
     tree: () => tree,

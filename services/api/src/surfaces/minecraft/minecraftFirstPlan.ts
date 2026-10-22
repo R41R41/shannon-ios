@@ -169,6 +169,19 @@ export const FIRST_PLAN_SYSTEM_R7 = [
   '- 要塞の中・ブレイズの部屋の近くを通る移動の節は、通路を歩かず 1 段下の岩（ネザーラック）にトンネルを掘る道にし、その節の caution に「射線の中で止まらない」と書く。',
 ].join('\n');
 /**
+ * r8 (run 32: Opus's plan said 「p1.1 湧き場から岩の中を西へ」 and the move was made in the rock until the rock ended; then a one-wide bridge
+ * without walls went over the lava sea, in sight of a fortress corridor, and she died on it): a node that crosses a gap in the Nether is
+ * planned in the rock or as a bridge with walls, and says so in its caution.
+ */
+export const FIRST_PLAN_SYSTEM_R8 = [
+  FIRST_PLAN_SYSTEM_R7,
+  '空所を渡る節（r8）:',
+  '- ネザーの空所（溶岩の海・深い穴・崖）を渡る節は、岩の中のトンネル（空所の縁の 1 段下の岩）か、両脇の足の高さに壁を置いた橋の道にする。'
+    + '壁の無い幅 1 の橋は、落差 4 以上・敵のいる構造物（要塞・砦の遺跡）の近くでは使わない。',
+  '- そういう節の caution に「橋は両脇に壁を置く」「橋の上で立ち止まらない」を書く（30 字以内）。',
+].join('\n');
+
+/**
  * How long the first plan waits for the body's scan when none is there yet (r4; the body scans once its chunks have settled after a
  * spawn: 2 s at least, 15 s at most, then about 30 ms). The plan is asked in the background; the seed plan holds meanwhile. r5 (the
  * body's r5 waits for 8 tenths of the server's view to load, up to 15 s after the spawn, and the head's first decision may come a few

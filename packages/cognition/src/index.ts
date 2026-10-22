@@ -357,7 +357,7 @@ export {
 } from './disclosure.js';
 export { MEMORY_SENSITIVITY_CATEGORIES } from './types.js';
 export type { MemoryAudience, MemoryDisclosure, MemorySensitivity, MemorySensitivityCategory } from './types.js';
-export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';
+export { memoryIdentifier, visibleMemoryText, memoryControlFor, indexedMemoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';
 export { memoryEvidenceCacheSize, memoryEvidenceCounters, resetMemoryEvidenceCache, withoutMemoryEvidenceCache } from './memoryEvidence.js';
 export { memoryKeyTerms, memoryWithholdingRules, restatesWithheldMemory, ruleWithholdsText, type MemoryWithholdingRule } from './withholding.js';
 export { restatedMemoryKept } from './withholding.js';

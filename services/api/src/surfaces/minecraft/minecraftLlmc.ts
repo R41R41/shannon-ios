@@ -18,8 +18,12 @@ import { isShooter } from './minecraftLlmcThreat.js';
  * runs `mc.act` and `mc.view` on the body, how a result reads to the model, when the next decision is asked while an act runs, and when
  * an act is cut for a hostile come near (an urgent step).
  */
-/** An act is long enough to ask the next decision while it runs (design 2.3: four seconds). */
-export const LLMC_LOOKAHEAD_MS = 4_000;
+/**
+ * An act is long enough to ask the next decision while it runs (design 2.3: four seconds; r8: eight). Run 32: 16 asked ahead, 5 taken,
+ * 11 thrown away (7 after a failed act, 4 too old), about a tenth of the cost; a decision takes 7–10 s (p50 7.4), so one asked ahead of an
+ * act under about 8 s is not ready when the act ends, and its call is paid for all the same.
+ */
+export const LLMC_LOOKAHEAD_MS = 8_000;
 /** A hostile this near, not near when the act began and not watched by its own `stopIf`, cuts the act (an urgent step). */
 export const LLMC_URGENT_METERS = 6;
 /** The ms added to an act's ceiling for the command's deadline (delivery and the body's own stop). */

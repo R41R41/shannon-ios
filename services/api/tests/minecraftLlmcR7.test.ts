@@ -178,7 +178,8 @@ describe('the check forbids the fight before it is done (runs 30, 31: the only f
 
 describe('the knowledge (r7)', () => {
   it('the blaze says 「準備が済んでから」 before the fight\'s hands; r3\'s appendix is as it was', () => {
-    expect(llmcSystemAppendix(true)).toBe(LLMC_SYSTEM_APPENDIX_R7);
+    // r8 adds its own section after r7's (minecraftLlmcR8.test.ts): the mode with the probe on reads r8's.
+    expect(llmcSystemAppendix(true).startsWith(LLMC_SYSTEM_APPENDIX_R7)).toBe(true);
     expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
     expect(LLMC_SYSTEM_APPENDIX).toContain('## ブレイズ\n- ブレイズロッド 7 本以上');
     expect(LLMC_SYSTEM_APPENDIX_R7).not.toContain('## ブレイズ\n');

@@ -8,6 +8,8 @@ export interface ActionExecution {
   /** Content-free measurement of the decision's request (`fca_decision_metrics`): estimates and the provider's usage counts. Never persisted. */
   modelMetrics?:{storedTokens:number;tailTokens:number;inputNew:number;inputRead:number;inputWrite:number;outputTokens:number;
     inputTransformations:number;obsMode?:'transient';
+    /** A transient request: the estimate of its live state's tokens (the part after the last cache breakpoint). */
+    liveTokens?:number;
     /** A transient request: how it was shortened to fit (levels in characters, null: not cut), content-free. */
     cuts?:{catalog:number|null;state:number|null;live:number|null;trim:number|null;over:boolean;replayRelaxed:boolean;deferred:boolean;
       parts:number;items:number}};

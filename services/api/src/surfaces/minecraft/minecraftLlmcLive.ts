@@ -163,6 +163,11 @@ export interface LlmcLiveParts {
    * recovery, never before them, and no urgent step for them. Absent: no key.
    */
   unreachable?: readonly string[];
+  /**
+   * r8 (run 32: a one-wide bridge over the lava sea, the drop not on the map): the footing round her feet (`footingLine`), after the
+   * unreachable lines and before the map, counted in the bound and never cut. Absent: no key.
+   */
+  footing?: string | null;
 }
 
 /** The longest the shown results may be together (characters; a view's map is about 2,500). */
@@ -181,11 +186,11 @@ export function lookHint(world: Record<string, unknown>, healthLost = 0): string
   return null;
 }
 
-/** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off hostiles. */
-function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'shortage' | 'recovery' | 'unreachable'>): Record<string, unknown> {
+/** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off hostiles; r8: then the footing. */
+function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'shortage' | 'recovery' | 'unreachable' | 'footing'>): Record<string, unknown> {
   return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.shortage ? { shortage: parts.shortage } : {}),
     ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
-    ...(parts.unreachable?.length ? { unreachable: [...parts.unreachable] } : {}) };
+    ...(parts.unreachable?.length ? { unreachable: [...parts.unreachable] } : {}), ...(parts.footing ? { footing: parts.footing } : {}) };
 }
 
 /** The live body of one decision, bounded (`LLMC_LIVE_TOKENS` with `planTokens` of the plan's path already used). */
@@ -223,10 +228,33 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(shown.length ? { lastResults: shown } : {}) };
 }
 
-/** The results shown this once, together at most `LAST_RESULTS_CHARS` (the last one cut). */
-function shownResults(results: readonly string[]): string[] {
+/**
+ * r8 (run 32: the decision for a wither skeleton in sight took 10.3 s, 696 tokens of answer): the live state of an urgent decision, short:
+ * the urgent lines (and the surprises' facts), the footing, the plan's now by its title, the map, her state, the hostiles, what she holds,
+ * the last events and the results shown this once (at most `URGENT_RESULTS_CHARS`), and how to answer (`answer`). No landmarks, stops,
+ * scan, food trend, near creatures or jobs: they come back with the next decision that is not urgent.
+ */
+export const URGENT_RESULTS_CHARS = 2_400;
+const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
+export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
+  | 'footing'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
+  const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
+  if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), answer: parts.answer };
+  const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
+  const results = shownResults(parts.lastResults ?? [], URGENT_RESULTS_CHARS);
+  return { ...urgent, ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
+    ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
+    map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
+    state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
+    threats: seen(world.nearbyThreats, URGENT_THREATS), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),
+    ...(parts.events.length ? { events: parts.events.slice(-URGENT_EVENTS) } : {}), ...(results.length ? { lastResults: results } : {}),
+    answer: parts.answer };
+}
+
+/** The results shown this once, together at most `room` characters (the last one cut). */
+function shownResults(results: readonly string[], limit = LAST_RESULTS_CHARS): string[] {
   const shown: string[] = [];
-  let room = LAST_RESULTS_CHARS;
+  let room = limit;
   for (const text of results) {
     if (room <= 0) break;
     shown.push(text.length <= room ? text : `${text.slice(0, room)}…（長いため後略）`);

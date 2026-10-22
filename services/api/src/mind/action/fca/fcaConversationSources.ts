@@ -5,8 +5,7 @@ import { MemoryWithholding } from '../../memory/memoryVisibilityPorts.js';
 import type { TaskMemoryReadSnapshot } from '../../memory/taskMemoryPorts.js';
 import type { ConversationStore, ShannonExperience } from '../../memory/memoryPorts.js';
 import type { TaskRuntime, TaskSource, TaskView } from '../taskRuntime/taskRuntimePorts.js';
-import type { FcaReadReceipt, FcaObservedSources, FcaSourceGuard } from './fcaConversationPorts.js';
-import { shannonTool } from '../../tools/toolRegistryPorts.js';
+import type { FcaSourceGuard } from './fcaConversationPorts.js';
 import { observedStep } from '../../../infra/observer/observerContext.js';
 import { FcaWalkTiming, type FcaWalkCaller } from './fcaWalkTiming.js';
 import { provenanceEdits } from '../../memory/provenanceEditsPorts.js';
@@ -59,6 +58,13 @@ export const FCA_SOURCE_VERDICT_MS = 5_000;
  * so it is never extended past this window.
  */
 export const FCA_SOURCE_BASE_MS = 30_000;
+/**
+ * mb-llmc r8 (run 32: `source walk` mode=full, ids about 320, 300–860 ms of the API's one thread, 780 ms and 925 ms blocks, at 12:26:40 and
+ * 12:27:28 — the base had run out): a check that finds its base this old makes a new one at once in turns of the loop (`refreshBase`), so that
+ * the checks that follow walk only the sources the base did not check and never the whole provenance on the thread. A step comes every 10–15 s
+ * and a base lives `FCA_SOURCE_BASE_MS`, so one this old is renewed before it ends.
+ */
+export const FCA_SOURCE_BASE_REFRESH_MS = 15_000;
 /** A walk of at least this long is named, content-free, in the journal (`Shannon FCA source walk`). */
 export const FCA_SOURCE_WALK_LOG_MS = 100;
 const FCA_SOURCE_VERDICTS_KEPT = 256;
@@ -246,17 +252,31 @@ export function createFcaSourceGuard(parts: {
    * recall-yield (run 31: a body recall's 315 sources walked 862 ms at once): `sources`' walk in turns of the loop (`fcaSourceWalkSteps.ts`),
    * its verdict kept as the walk at once keeps it, only if nothing it rests on moved meanwhile (`movedSince`; else `sources` walks at once).
    */
-  const warm: NonNullable<FcaSourceGuard['warm']> = async (scopeKey, task, rows, pendingStepId, via = 'other', signal) => {
+  const warmWith = async (scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, via: FcaWalkCaller,
+    signal: AbortSignal | undefined, forceFull: boolean) => {
     const timing = new FcaWalkTiming(monotonic), held: TurnsMeasure = { longestMs: 0, turns: 0 };
     try {
-      await inTurns(judgeSteps(scopeKey, task, rows, pendingStepId, false, timing, true), { clock: monotonic, measure: held, ...(signal ? { signal } : {}) });
+      const walk = judgeSteps(scopeKey, task, rows, pendingStepId, false, timing, true, forceFull);
+      await inTurns(walk, { clock: monotonic, measure: held, ...(signal ? { signal } : {}) });
     } catch { /* nothing kept: the check that follows walks at once */ } finally {
       timing.report(parts.walkLogMilliseconds ?? FCA_SOURCE_WALK_LOG_MS, via, log, held);
     }
   };
-  /** `decide`'s check; `inTurns`: the walk in steps (`warm`), whose verdict is kept only if nothing it rests on changed while it walked. */
+  const warm: NonNullable<FcaSourceGuard['warm']> = (scopeKey, task, rows, pendingStepId, via = 'other', signal) =>
+    warmWith(scopeKey, task, rows, pendingStepId, via, signal, false);
+  /** r8: a base this old (`FCA_SOURCE_BASE_REFRESH_MS`) is made anew in turns, once at a time for a task's base, after the check in hand. */
+  const refreshing = new Set<string>();
+  const refreshBase = (baseKey: string, scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined) => {
+    if (refreshing.has(baseKey)) return;
+    refreshing.add(baseKey);
+    setImmediate(() => { void warmWith(scopeKey, task, rows, pendingStepId, 'refresh', undefined, true).finally(() => refreshing.delete(baseKey)); }).unref?.();
+  };
+  /**
+   * `decide`'s check; `inTurns`: the walk in steps (`warm`), whose verdict is kept only if nothing it rests on changed while it walked.
+   * `forceFull` (r8, the renewing of a base): the verdict and the base in hand are not used, the whole provenance is walked.
+   */
   function* judgeSteps(scopeKey: string, task: TaskView, rows: readonly TaskSource[], pendingStepId: string | undefined, peek: Peek,
-    timing: FcaWalkTiming, inTurns: boolean): Steps<boolean | undefined> {
+    timing: FcaWalkTiming, inTurns: boolean, forceFull = false): Steps<boolean | undefined> {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
@@ -289,7 +309,7 @@ export function createFcaSourceGuard(parts: {
         return true;
       }
       const unchanged = (reads: Verdict['reads'], every = false) => timing.time('reads', () => readsUnchanged(epoch, scopeKey, reads, every));
-      if (known && known.version === state.version && at >= known.at && at - known.at < FCA_SOURCE_VERDICT_MS && unchanged(known.reads)) {
+      if (!forceFull && known && known.version === state.version && at >= known.at && at - known.at < FCA_SOURCE_VERDICT_MS && unchanged(known.reads)) {
         if (!peek) counts.reused += 1;
         timing.note(peek ? 'peek' : 'reuse');
         return known.visible;
@@ -299,7 +319,7 @@ export function createFcaSourceGuard(parts: {
         return peek === 'withheld' ? true : undefined;
       }
       const baseKey = JSON.stringify([scopeKey, task.id, task.title, task.goal, task.completionCriteria, task.summary, pendingStepId ?? null]);
-      const base = usableBase(bases.get(baseKey), unchanged, state.version, at);
+      const base = forceFull ? null : usableBase(bases.get(baseKey), unchanged, state.version, at);
       // With a base, only what it did not check (`foldedProvenanceResidual`); without one, all of it.
       const walked = timing.time('provenance', () => base ? foldedProvenanceResidual(base.folded, sources) : sources);
       timing.note(base ? 'partial' : 'full', walked);
@@ -321,6 +341,7 @@ export function createFcaSourceGuard(parts: {
       const verdictAt = Math.max(baseAt, Math.min(at, baseAt + baseWindow - FCA_SOURCE_VERDICT_MS));
       remember(verdicts, key, { version: state.version, at: verdictAt, visible, reads: allReads }, at, FCA_SOURCE_VERDICT_MS);
       if (visible) remember(bases, baseKey, { version: state.version, at: baseAt, visible, reads: allReads, folded: sources, edits }, at, baseWindow);
+      if (visible && !inTurns && at - baseAt >= FCA_SOURCE_BASE_REFRESH_MS) refreshBase(baseKey, scopeKey, task, rows, pendingStepId);
       return visible;
     } catch { return false; }
   }
@@ -466,23 +487,4 @@ function unboundSourceVisible(source: TaskSource, task: TaskView, pendingStepId:
     recalledMemoryIds: source.recalledMemoryIds, text: [task.title, task.goal, task.completionCriteria, task.summary].join('\n') });
 }
 
-/** Trusted executor receipts only. Unknown or missing private read metadata is explicit, never treated as public. */
-export function fcaReadReceiptSources(receipt: FcaReadReceipt): FcaObservedSources {
-  if (!receipt.ok) return {};
-  const tool = shannonTool(receipt.name);
-  // Public reads: the web, places, the weather and a rough route carry nothing of the owner's; nor does the Minecraft servers' state
-  // (`minecraft.lifecycle_status`: Minecraft run 11, 2026-10-14, its first FCA call was read as an unresolved private receipt, the
-  // task's sources were held after the call and the step closed unknown), as her body's own observations carry none.
-  if (tool?.domain === 'task_runtime' || tool?.domain === 'minecraft_lifecycle'
-    || ['web.search', 'web.read', 'places.search', 'weather.forecast', 'route.estimate'].includes(receipt.name)) return {};
-  const documents = receipt.documents?.sourceIds ?? receipt.documents?.read;
-  if (!documents) return tool?.effect === 'read'
-    ? { readSourceIds: [`fca-unresolved://${receipt.name}`] } : {};
-  const ids = documents.map(id => {
-    if (typeof id !== 'string' || !id || id.length > 200) return 'fca-unresolved://invalid-receipt';
-    if (/^(?:shannon-study|aether-document|notion-page|voyager-task|calendar-item|shannon-folder|shannon-skill):\/\//u.test(id)) return id;
-    return receipt.name.startsWith('aether') || receipt.name.startsWith('ownerDocs.')
-      ? `aether-document://${encodeURIComponent(id)}` : 'fca-unresolved://unknown-receipt';
-  });
-  return { readSourceIds: [...new Set(ids)] };
-}
+export { fcaReadReceiptSources } from './fcaReadReceiptSources.js';

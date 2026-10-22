@@ -1,5 +1,5 @@
-import { currentActionExecution } from '../../../infra/context/actionExecution.js';
-import { eventLoopBlockedMilliseconds } from '../../../infra/observer/eventLoopWatch.js';
+import { currentActionExecution, type ActionExecution } from '../../../infra/context/actionExecution.js';
+import { eventLoopBlockedMilliseconds, namedWork } from '../../../infra/observer/eventLoopWatch.js';
 import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
 
 /**
@@ -36,6 +36,17 @@ type Spent = 'selectorMs' | 'recallMs' | 'summaryMs' | 'llmMs' | 'recallStartMs'
 type Other = 'startMs' | 'permitMs' | 'guardMs' | 'contextMs' | 'verifyMs' | 'closeMs' | 'commitMs' | 'progressMs';
 const toolName = (name: string) => /^[A-Za-z0-9_.:-]{1,80}$/u.test(name) ? name : 'other';
 const whole = (value: number) => Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+/**
+ * The provider's input of a decision in counts (mb-llmc r8, run 32: 「キャッシュに無い入力」 was read from `new` alone, and the cache's write was
+ * left out): `new` is what is after the last cache breakpoint (a transient task's live state), `read` is served by the cache, `write` is
+ * stored in it at the one-hour price (twice the input's), `uncached` is `new` + `write`, `live` is the estimate of the live state's tokens
+ * (when the request had one), and `hit` is `read` over all three, in thousandths.
+ */
+function inputCounts(metrics: NonNullable<ActionExecution['modelMetrics']>): Record<string, number> {
+  const all = metrics.inputNew + metrics.inputRead + metrics.inputWrite;
+  return { new: metrics.inputNew, read: metrics.inputRead, write: metrics.inputWrite, uncached: metrics.inputNew + metrics.inputWrite,
+    ...(metrics.liveTokens !== undefined ? { live: metrics.liveTokens } : {}), hit: all > 0 ? Math.round(1000 * metrics.inputRead / all) : 0 };
+}
 
 export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Readonly<Record<string, unknown>>,
   options: { now?: () => number; clock?: () => number; log?: (line: string) => void; enteredAt?: number } = {}) {
@@ -51,7 +62,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   const tools: string[] = [], skipped: string[] = [];
   let recalled: BodyRecallMeasure | null = null;
   /** mb-llmc r3: an urgent step (`FcaBodyLifecycle.urgent`), and what the history did beside the decision (`prepareFcaHistory`'s `ahead`). */
-  let urgent = false;
+  let urgent = false, thrown: number | null = null;
   const ahead: string[] = [];
   /** mb-llmc r4: what the body's investigation did before the decision (`FcaBodyLifecycle.investigate`), or null. */
   let probe: { surprises: string[]; probes: number; answered: number } | null = null;
@@ -66,15 +77,18 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   };
   return {
     index,
-    /** Runs `work`, adding its time to one of the parts (a part may run more than once; it is summed). */
-    async timed<T>(part: Spent | Other, work: () => Promise<T>): Promise<T> {
+    /**
+     * Runs `work`, adding its time to one of the parts (a part may run more than once; it is summed). `skip`: r8, a call thrown away
+     * after an interrupt (`fcaUrgentDecision.ts`) adds nothing when it ends: its time is the interrupt's (`thrownMs`), not the decision's.
+     */
+    async timed<T>(part: Spent | Other, work: () => Promise<T>, skip?: () => boolean): Promise<T> {
       const at = clock();
-      try { return await work(); } finally { add(part, clock() - at); }
+      try { return await work(); } finally { if (!skip?.()) add(part, clock() - at); }
     },
     /** `timed` for synchronous work: what it held the API's one thread. */
     timedSync<T>(part: Spent | Other, work: () => T): T {
       const at = clock();
-      try { return work(); } finally { add(part, clock() - at); }
+      try { return namedWork(`fca_${part}`, work); } finally { add(part, clock() - at); }
     },
     tool(name: string, milliseconds: number): void {
       tools.push(toolName(name));
@@ -88,6 +102,11 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     bodyRecall(measure: BodyRecallMeasure): void { recalled = measure; },
     /** The step was urgent (mb-llmc r3). */
     urgent(): void { urgent = true; },
+    /** mb-llmc r8: the decision awaited was thrown away after `milliseconds` for a hostile that came, and asked again (`fcaUrgentDecision.ts`). */
+    interrupted(milliseconds: number): void {
+      urgent = true;
+      thrown = whole(milliseconds);
+    },
     /** What the history's summary ahead did in this step: `started`, `installed`, `waited` (mb-llmc r3). Content-free. */
     ahead(what: string): void { if (ahead.length < 4) ahead.push(/^[a-z_]{1,24}$/u.test(what) ? what : 'other'); },
     /** The body's investigation (mb-llmc r4): its surprises' closed codes and the probes sent and answered. Content-free. */
@@ -107,16 +126,21 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
           recallMs: Math.round(spent.recallMs), recallStartMs: Math.round(spent.recallStartMs), evidenceMs: Math.round(spent.evidenceMs),
           summaryMs: Math.round(spent.summaryMs), tools, toolMs: Math.round(toolMs),
           storedTokens: metrics?.storedTokens ?? null, tailTokens: metrics?.tailTokens ?? null,
-          in: metrics ? { new: metrics.inputNew, read: metrics.inputRead, write: metrics.inputWrite } : null, out: metrics?.outputTokens ?? null,
+          in: metrics ? inputCounts(metrics) : null, out: metrics?.outputTokens ?? null,
           loopBlockedMs: Math.round(eventLoopBlockedMilliseconds() - loopStarted),
           other: Object.fromEntries(Object.entries(other).map(([key, value]) => [key, Math.round(value)])), permitAsks, gap: gap(),
-          ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
-          ...(urgent ? { urgent } : {}), ...(ahead.length ? { summaryAhead: ahead } : {}),
-          ...(probe ? { probe: { ...probe, ms: Math.round(spent.probeMs) } } : {}),
-          ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}), ...(metrics?.cuts ? { cut: metrics.cuts } : {}) }));
+          ...optional(metrics) }));
       } catch { /* measuring never fails a step */ }
     },
   };
+  /** The fields of the line that are there only when there is something to say. */
+  function optional(metrics: ActionExecution['modelMetrics']): Record<string, unknown> {
+    return { ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
+      ...(urgent ? { urgent } : {}), ...(thrown !== null ? { interrupt: { thrownMs: thrown } } : {}),
+      ...(ahead.length ? { summaryAhead: ahead } : {}),
+      ...(probe ? { probe: { ...probe, ms: Math.round(spent.probeMs) } } : {}),
+      ...(metrics ? { inputTransformations: metrics.inputTransformations } : {}), ...(metrics?.cuts ? { cut: metrics.cuts } : {}) };
+  }
   function add(part: Spent | Other, milliseconds: number): void {
     if (part in spent) spent[part as Spent] += milliseconds;
     else other[part as Other] += milliseconds;

@@ -13,6 +13,7 @@ import type { FcaEvidence } from './fcaEvidencePorts.js';
 import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaBodyLifecycle, FcaExternalTools, FcaModel, FcaModelInput, FcaToolCall } from './fcaPorts.js';
 import { decideWithRetry, FCA_RETRY_REFRESH_MS } from './fcaProviderRetry.js';
+import { decideInterruptibly } from './fcaUrgentDecision.js';
 import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { failureRefreshes, openFcaTool, selectFcaTools, selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
@@ -21,7 +22,7 @@ import { fcaTransientHistory, isFcaTransientTask, shouldForceFcaEpoch } from './
 import { isTransientUnsupported, legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART, fcaWaitGate, type FcaWaitAnswer } from './fcaWaitGate.js';
 import { startFcaLookahead, withRealResult, type FcaLookahead } from './fcaLookahead.js';
-import { investigateFcaBody } from './fcaBodyInvestigation.js';
+import { closeFcaMonitors, investigateFcaBody } from './fcaBodyInvestigation.js';
 import { FCA_COMPLETION_MISTAKES_STOP, sayCompletionMistake, type FcaCompletionMistake } from './fcaCompletionMistake.js';
 import { reflexCutCheckpoint, reflexCutRunOf, repeatedFailureReason, settleReflexStep } from './fcaReflexCuts.js';
 import { failureSinceCheckpoint, failureSinceOf, failureStops, nextFailureSince } from './fcaFailureLadder.js';
@@ -269,13 +270,17 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   };
   /** The request in hand (the one last sent, rebuilt by every `freshen`) and when it was built: a fallback starts from this, never from the first one. */
   let latest = { asked: request, at: Date.now() };
-  const decide = (asked: FcaModelInput) => {
+  const ask = (asked: FcaModelInput, cancel: AbortSignal) => {
     latest = { asked, at: Date.now() };
-    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(latest.asked, signal)), { signal, recheck: () => checked('fresh'),
-      delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
-      refresh: async () => { latest = { asked: await freshen(latest.asked), at: Date.now() }; },
-      log: line => console.warn(`${line} task=${step.taskId}`) });
+    const thrown = () => cancel !== signal && cancel.aborted && !signal.aborted;
+    return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(latest.asked, cancel), thrown), { signal: cancel,
+      recheck: () => checked('fresh'), delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
+      log: line => console.warn(`${line} task=${step.taskId}`),
+      refresh: async () => { latest = { asked: await freshen(latest.asked), at: Date.now() }; } });
   };
+  const decide = (asked: FcaModelInput) => decideInterruptibly({ body: ports.body, signal, request: asked, ask,
+    interrupted: ({ thrownMs }) => metrics.interrupted(thrownMs),
+    again: async request => { ports.body?.rebuilding?.(); await checked('fresh'); return freshen(request); } });
   if (!prepared) await checked('fresh');
   const output = prepared ? prepared.output : await decide(request).catch(async error => {
     // The very first decision of a transient task refused for its betas: no signed history exists, so it starts again in the legacy shape.
@@ -493,8 +498,3 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   return saved;
 }
 
-async function closeFcaMonitors(ports: FcaStepPorts): Promise<void> {
-  const results = await Promise.allSettled([ports.body?.close(), ...(ports.observations ?? []).map(observation => observation.close())]);
-  const failure = results.find(result => result.status === 'rejected');
-  if (failure?.status === 'rejected') throw failure.reason;
-}

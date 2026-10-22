@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { ObserverDraft, ObserverJson, ObserverNodeId, ObserverTaskLink } from '../../contracts/observerContract.js';
 import { beginTurnSteps, flushTurnSteps, markModelStart, timedStep, turnStepsSnapshot, type TurnStep } from './turnSteps.js';
+import { namedWork } from './eventLoopWatch.js';
 
 export type ObserverSink = (event: ObserverDraft) => void;
 type Run = ObserverTaskLink & { scopeKey: string; runId: string; parent: string | null; root: string; activeNode?:ObserverNodeId; activeSpan?:string; latest: Map<ObserverNodeId,string>; audience: 'owner' | 'others' };
@@ -134,7 +135,11 @@ export async function observeAsync<T>(node:ObserverNodeId,input:unknown,work:()=
     catch(error){emit(parent,{spanId:id,node,kind:'span.failed',elapsedMs:performance.now()-started,output:{status:'failed',errorKind:error instanceof Error?error.name:'UnknownError'}});throw error;}
   });
 }
+/** The synchronous work of a node, kept by name when it lasts (`namedWork`: a block of the loop is told what it overlapped). */
 export function observeSync<T>(node:ObserverNodeId,input:unknown,work:()=>T,project?:(value:T)=>unknown,meta?:{model?:string}):T {
+  return namedWork(`observe_${node}`,()=>observeSyncInner(node,input,work,project,meta));
+}
+function observeSyncInner<T>(node:ObserverNodeId,input:unknown,work:()=>T,project?:(value:T)=>unknown,meta?:{model?:string}):T {
   const parent=context.getStore();if(!sink||!parent||parent.audience!=='owner')return work();
   const id=randomUUID(),started=performance.now();parent.latest.set(node,id);
   emit(parent,{spanId:id,node,kind:'span.started',input:projected(()=>input),...(meta?.model?{model:meta.model}:{})});

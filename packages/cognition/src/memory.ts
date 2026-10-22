@@ -11,8 +11,33 @@ export function memoryIdentifier(kind: MemoryKind, text: string): string {
   return `${kind}-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
+type MemoryControl = CompanionStateSnapshot['memoryControls'][number];
+/**
+ * mb-llmc r8 (run 32: the source guard asked 66,674 read-receipt answers in a minute, each looking for its controls by a scan of all of
+ * them, twice or more): a snapshot's list of controls is read once into an index by memory id (the first control of an id, as the scan
+ * found it). A snapshot's list is never changed in place (a state change makes a new list), so the index is the list's as long as the
+ * list lives; a short list is scanned as before.
+ */
+const controlIndexes = new WeakMap<readonly MemoryControl[], Map<string, MemoryControl>>();
+const INDEXED_FROM = 12;
 export function memoryControlFor(snapshot: CompanionStateSnapshot, memoryId: string) {
   return snapshot.memoryControls.find(control => control.memoryId === memoryId);
+}
+/**
+ * `memoryControlFor` by the index, for the callers that ask thousands of times for one snapshot (the read-receipt answers). Kept apart from
+ * `memoryControlFor`: the recall walks call that one at the very end of a deep stack (`isStackOverflow`), where a larger body of code in the
+ * callee changes where the stack runs out.
+ */
+export function indexedMemoryControlFor(snapshot: CompanionStateSnapshot, memoryId: string): MemoryControl | undefined {
+  const controls = snapshot.memoryControls;
+  if (controls.length < INDEXED_FROM) return controls.find(control => control.memoryId === memoryId);
+  let index = controlIndexes.get(controls);
+  if (!index) {
+    index = new Map();
+    for (const control of controls) if (!index.has(control.memoryId)) index.set(control.memoryId, control);
+    controlIndexes.set(controls, index);
+  }
+  return index.get(memoryId);
 }
 
 export function visibleMemoryText(

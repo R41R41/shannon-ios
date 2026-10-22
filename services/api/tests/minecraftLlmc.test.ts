@@ -134,9 +134,11 @@ describe('the mode\'s tools', () => {
     expect(storedBodyResult(MC_ACT_TOOL, 'x'.repeat(3_000))).toHaveLength(3_000);
   });
 
-  it('asks ahead only for an act of four seconds or more', () => {
+  it('asks ahead only for an act of eight seconds or more (r8; r2–r7: four)', () => {
     expect(llmcLongCall({ name: MC_ACT_TOOL, input: { hands: [{ do: 'eat' }] } })).toBe(false);
-    expect(llmcLongCall({ name: MC_ACT_TOOL, input: { hands: [{ do: 'dig', at: Array.from({ length: 6 }, () => ({ x: 0, y: 0, z: 0 })) }] } })).toBe(true);
+    // Six digs are 5.4 s: not asked ahead now (run 32: 11 of 16 asked ahead were thrown away); ten are 9 s.
+    expect(llmcLongCall({ name: MC_ACT_TOOL, input: { hands: [{ do: 'dig', at: Array.from({ length: 6 }, () => ({ x: 0, y: 0, z: 0 })) }] } })).toBe(false);
+    expect(llmcLongCall({ name: MC_ACT_TOOL, input: { hands: [{ do: 'dig', at: Array.from({ length: 10 }, () => ({ x: 0, y: 0, z: 0 })) }] } })).toBe(true);
     expect(llmcLongCall({ name: 'mc.find-blocks', input: {} })).toBe(false);
   });
 

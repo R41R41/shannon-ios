@@ -305,5 +305,34 @@ export const R7_KNOWLEDGE = [
  * bytes at every decision).
  */
 export const LLMC_SYSTEM_APPENDIX_R7 = [LLMC_SYSTEM_APPENDIX_R6.replace(DRAGON_KNOWLEDGE, () => DRAGON_KNOWLEDGE_R7), R7_KNOWLEDGE].join('\n\n');
-/** The appendix of the mode's models: r7's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
-export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R7 : LLMC_SYSTEM_APPENDIX; }
+
+/**
+ * r8 (run 32, owner 2026-10-22): in the Nether she stopped at the edge of the rock and put a one-wide bridge without walls over the lava sea
+ * (24–30 blocks of air under it) in sight of a fortress corridor; a wither skeleton there hit her three times in 2.3 s, the third knock threw
+ * her off, and the lava killed her (the pack lost, 1,100 s to rebuild). The footing is now a line of the live state (`footing`); this says
+ * how to cross a gap, what to do when the footing says she would fall, and how an urgent decision is asked (a short state, a short answer).
+ */
+export const R8_KNOWLEDGE = [
+  '## 空所を渡る・足場（r8。実走32: 要塞の外の溶岩の海の上に壁の無い幅 1 の橋を 30m 伸ばし、通路のウィザースケルトンに 2.3 秒で 3 回打たれ、'
+    + '押されて橋から落ちて溶岩で死んだ。持ち物を全部失い、立て直しに 1,100 秒かかった）',
+  '- ネザーで空所（溶岩の海・深い穴・崖）を渡る時は、(1) 岩の中のトンネル（空所の縁から 1 段下の岩を掘る・岩のある回り道）か、'
+    + '(2) 両脇（足の高さ）に壁のブロックを置いた橋、のどちらかにする。橋は 1 マス進むごとに、足元の床と、その両脇の足の高さに壁を置く'
+    + '（要塞の通路から見える所は、頭の高さにも）。',
+  '- 壁の無い幅 1 の橋は使わない: 落差 4 以上の所、敵のいる構造物（要塞・砦の遺跡）の近く、ウィザースケルトン・ブレイズ・ガストの見える所。'
+    + '落ちると溶岩で死に、持ち物を全部失う。',
+  '- live の body.footing は足の周りの床の事実（体の地図と column の調べから、コードが書く）: 「幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。押されたら落ちる」。'
+    + '「押されたら落ちる」が出ている間は、立ち止まらない・その場で跳ばない・縁で積まない。近接の敵（wither_skeleton・zombified_piglin・piglin_brute・'
+    + 'hoglin・zombie など）が見えたら、まず空所から離れる（来た道を戻る・壁のある所・岩の中へ）か、敵との間にブロックを置く。',
+  '- 落差 3 以下で床のある空所は降りてよい。足場の事実に落差が出ない時（footing が無い）は、周りに空所は無い。',
+  '- 近接の敵が見えたら、体の反射が 0.25 秒ごとに見て、空所の縁なら空所から離れる 1 歩か間のブロックを出す（最大 3 手）。台帳に「これ以上は反射でしない」と'
+    + '出たら、その先の逃げ方・戦うかどうかは判断で。',
+  '- 地中で素手の時: mc.probe column（自分の列）の「真上」の行が、地表までの固い段数と 1 段の秒（素手の石は約 7.7 秒・土は約 0.8 秒）を言う。柔らかい列を選ぶ。',
+  '- 急ぎの判断（live に urgent がある時）の live は短い状態: urgent・footing・planNow（題だけ）・map・state・threats・inventory・events・lastResults だけ。'
+    + '最後の answer の行に従う: 考えは 2〜3 文、mc.act は 1 つ、手は 3 つまで。landmarks などは次の急ぎでない判断で戻る。',
+  '- 判断は次の 1 手を決める: 長い計画は plan.update に任せ、毎回の考えは短くする（迷う間も敵は来る）。',
+  '- live の plan は、body.planNow と重なる「道」と「今」を省いて出る（done・next・blocked・rules）。今の節とその道は body.planNow を読む。',
+].join('\n');
+/** r8: r7's appendix and `R8_KNOWLEDGE` (the same bytes at every decision). */
+export const LLMC_SYSTEM_APPENDIX_R8 = [LLMC_SYSTEM_APPENDIX_R7, R8_KNOWLEDGE].join('\n\n');
+/** The appendix of the mode's models: r8's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
+export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R8 : LLMC_SYSTEM_APPENDIX; }

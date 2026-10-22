@@ -1,8 +1,9 @@
 import type { TaskSource } from '../taskRuntime/taskRuntimePorts.js';
+import { namedWork } from '../../../infra/observer/eventLoopWatch.js';
 
 /** Who asked for a check, for the slow-walk line only: a closed set of words, never task or memory content. */
 export type FcaWalkCaller = 'step' | 'tool' | 'body' | 'evidence' | 'memory' | 'conversation' | 'task' | 'progress' | 'skill_read'
-  | 'child' | 'child_monitor' | 'gate' | 'other';
+  | 'child' | 'child_monitor' | 'gate' | 'refresh' | 'other';
 type Part = 'epoch' | 'provenance' | 'reads' | 'walk';
 
 /**
@@ -21,7 +22,7 @@ export class FcaWalkTiming {
   time<T>(part: Part, work: () => T): T {
     const at = this.now();
     try {
-      return work();
+      return namedWork(`source_walk_${part}`, work);
     } finally {
       this.parts[part] += this.now() - at;
     }
