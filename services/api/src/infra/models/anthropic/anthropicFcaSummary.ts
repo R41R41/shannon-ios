@@ -26,10 +26,11 @@ export class FcaSummaryInvalidError extends Error {
  * most 80 characters, a string) refused, and the task was left unknown. Only an answer with no usable summary is refused now.
  */
 export function createAnthropicFcaSummarizer(options: AnthropicFcaOptions & { body?: boolean }): FcaHistorySummarizer {
-  const { body = false, ...modelOptions } = options;
+  // SHANNON_MINECRAFT_OWN_PROMPT: only a body summary reads the body task's own words (`minecraftProfile`'s summary); the goal is unchanged.
+  const { body = false, minecraftOwnPrompt, ...modelOptions } = options;
   const itemCharacters = body ? COMPACTION_BODY_ITEM_CHARACTERS : COMPACTION_V1.maximumItemCharacters;
   // Each summary input is new and nothing continues the request: only its fixed prefix is cached (`continued`).
-  const model = createAnthropicFcaModel({ ...modelOptions, continued: false });
+  const model = createAnthropicFcaModel({ ...modelOptions, continued: false, ...(body && minecraftOwnPrompt ? { minecraftOwnPrompt: true } : {}) });
   return { async summarize(input, signal) {
     const output = await model.decide({ task: { id: 'fca-history-summary', title: 'Task working-memory compaction',
       goal: summaryGoal(body),

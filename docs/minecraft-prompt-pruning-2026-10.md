@@ -3,7 +3,7 @@
 - 決定: ライ氏 2026-10-22「人格・3つのアプリなどの不要な決まりは minebot での応答では入れないことにしよう。残りの決まりも、継ぎ足して肥大化しているのなら必要なもののみに整理しよう。」（Syzygy ADR-0014 D3）
 - 元: 本番 3008876b（rel38）の体のタスクの指示文。新: `services/api/src/infra/models/anthropic/anthropicFcaMinecraftSystem.ts`（共通の部分）と `services/api/src/surfaces/minecraft/minecraftKnowledgeCore.ts`（LLM 中心モードの知識）。
 - 切り替え: `SHANNON_MINECRAFT_OWN_PROMPT=on` の時だけ。既定 off で、off の要求は 3008876b と 1 バイトも違わない（`tests/minecraftOwnPromptOff.test.ts`）。
-- 初期計画（Opus、`minecraftFirstPlan.ts`）の指示文は変えていない。ルートの数・順番・材料の知識は、これまでどおり初期計画が全部読み、計画ツリーに書く。
+- 初期計画（Opus）と履歴の要約（Haiku）も、ライ氏の答え（2026-10-22、フォーム「同じ方針で絞る」）で同じスイッチの裏で絞った（下の「初期計画と要約」）。
 
 ## 大きさ（LLM 中心 r9、主判断の system。`tests/minecraftOwnPrompt.test.ts` が測る）
 
@@ -249,7 +249,30 @@ llmcTokens は日本語の場面で合わせた推定で、英文の部分は多
 | Never spend money, contact or publish, change code or settings, copy yourself | ADR-0002（してはいけないこと・承認が要るもの）。人格を外すと一緒に消えるので、体のタスクのために残す |
 | Never write what the owner keeps private into a plan, a why or a summary | ADR-0002（内緒を書かない） |
 
-## ライ氏に確かめたい点
+## 初期計画と要約（ライ氏の答え 2026-10-22）
+
+| | 前（llmcTokens） | 後 | 中身 |
+|---|---:|---:|---|
+| 体のタスクの履歴の要約（Haiku、system 全体。汎用 protocol 2,319 を含む） | 8,385 | 3,555 | 人格・3 つのアプリ・できることの一覧を外し、`# Minecraft body task: history summary` の短い見出しと手順の指示だけ。8 区画の要約の決まり（goal と道具）は 1 バイトも変えていない |
+| 初期計画（Opus、`FIRST_PLAN_SYSTEM_R9` の system 文） | 9,253 | 4,561 | 計画の書き方（r4〜r9 の節・済みの形・順番）はそのまま。ルートと戦術の知識（ORDER・FOOD・VILLAGE・DRAGON_R7・NETHER_ENTRY）を、作戦の知識 `STRATEGY_KNOWLEDGE`（`minecraftStrategy.ts`）に置き換えた。1 行目の「シャノンの」も外した |
+
+作戦の知識の中身: 順番（オーバーワールド→ネザー→エンド）、旧手順 11 個の要点（原木・木と石のツルハシ・石の斧・板・食料と羊とベッド・鉄・バケツ・鉄の防具・ダイヤ・黒曜石・ゲート。ADR-0014 §7-3）、場所（要塞の帯・砦の遺跡・歪んだ森、ブレイズとパールの見込み、ネザーで作れる物）、ストロングホールドの中の形とポータルの部屋、エンドの戦い方の要点と帰り方。
+
+- 作戦の知識は初期計画だけが読む。主判断の指示文には入らない（`minecraftOwnPrompt.test.ts` が確かめる）。初期計画は戦術の決まり（`minecraftKnowledgeCore.ts`、DRAGON_R7 のブレイズの待ち場など）を読まない。
+- 「ストロングホールドの中の形」と「エンドからの帰り方」は、主判断から外したものを作戦の知識へ移した（上の表の「外す」の一部）。雪玉は外したまま。食料点の表と持ち物の一覧は、これまでどおりコードが計算する。
+- 初期計画と要約の要求の頭の汎用 protocol（`cacheOneShotRequest` が置く）はそのまま。
+- 旧モードの要約は `SHANNON_FCA_SUMMARY_MODEL=haiku` の時だけ体のタスク専用の要約器になる。それ以外は主判断の要約器を共有するので変わらない。
+- 初期計画の新しい文は probe on（r4 以降）の時だけ。probe off（r3）の初期計画は前のまま。
+
+## ライ氏の答え（2026-10-22）
+
+1. **共有の気持ち（affect）:** 外したまま比べる（「外して比べる」）。スイッチが on の間、体のタスクからは fca_context の予測・評価が来ないため、予測の台帳（ADR-0006・0008）に Minecraft の行は入らない。
+2. **要約と初期計画:** 同じ方針で絞った（上）。
+3. **要塞とエンド:** 作戦の知識へ移した（上）。
+4. **旧手順 11 個の要点:** 作戦の知識に入れた（上）。主判断には入れていない。
+5. **legacy の形:** そのまま（人格は外し、汎用 protocol は残す）。
+
+## 前に確かめたかった点（上の答えで決着）
 
 1. **共有の気持ち（affect）を体のタスクから外すこと。** 人格の側として外した（live の sharedContext も、その使い方の説明も）。fca_context の予測・評価が体のタスクから来なくなるので、予測の台帳（ADR-0006・0008）に Minecraft の行が入らなくなる。残したいなら、説明だけ短くして戻せる。
 2. **旧モードの legacy の形（`SHANNON_FCA_OBS_MODE=legacy`）** は、人格とできることの一覧を外し、汎用の transport は残した（その形のキャッシュの印は `cacheHaikuRequest` が置くため）。今は戻り道でしか使わない。

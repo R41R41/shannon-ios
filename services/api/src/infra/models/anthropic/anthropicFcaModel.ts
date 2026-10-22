@@ -157,8 +157,10 @@ export class AnthropicFcaModel implements FcaModel {
       // even when its conversation starts a new public epoch (Minebot lane, 2026-10-14, task 788da00a: every step was a new
       // epoch and read only the tools and the protocol prefix, 1,792–1,798 tokens, writing the instructions again each time).
       const menuInstructions = transient ? `${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}` : FCA_MENU_INSTRUCTIONS;
-      // SHANNON_MINECRAFT_OWN_PROMPT: a legacy decision that carries a body reads the body task's header instead of the persona.
-      const base = this.minecraft && input.body !== undefined ? this.minecraft.legacy : this.system;
+      // SHANNON_MINECRAFT_OWN_PROMPT: a legacy decision that carries a body reads the body task's header instead of the persona, and a body
+      // summary (a one-shot model, `continued: false`, given the switch only for a body: `anthropicFcaSummary.ts`) the summary's header.
+      const own = this.minecraft, oneShot = this.options.continued === false;
+      const base = own && oneShot ? own.summary : own && input.body !== undefined ? own.legacy : this.system;
       const system = [{ type: 'text' as const, text: input.catalog ? `${base}\n\n${menuInstructions}` : base, cache_control: ONE_HOUR }];
       const continued = this.options.continued !== false, replay = continued ? markedHistory(history) : history;
       const bodyOf = (turn: Anthropic.MessageParam[]) => {

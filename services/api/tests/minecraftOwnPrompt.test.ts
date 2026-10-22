@@ -14,7 +14,9 @@ import { configuredMinecraftLlmc } from '../src/wiring/minecraftLlmcWiring.js';
 import { MAP_LEGEND } from '../src/contracts/minecraftActContract.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 import { quiet, requestDigest, scenario, WIDE_POLICY } from './fcaCoreToolsHarness.js';
-import { llmcRequests, LLMC_TOOLS } from './support/minecraftBodyRequests.js';
+import { bodySummaryRequest, firstPlanRequest, llmcRequests, LLMC_TOOLS } from './support/minecraftBodyRequests.js';
+import { STRATEGY_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 
 /**
  * SHANNON_MINECRAFT_OWN_PROMPT (Syzygy ADR-0014 D3, owner 2026-10-22): a Minecraft body task's request carries its own instructions. The
@@ -167,5 +169,35 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     expect(second![0]!.text).toBe(HAIKU_PROTOCOL_PREFIX);
     expect(second![1]!.text).toContain(llmcSystemAppendix(true));
     vi.restoreAllMocks();
+  });
+
+  it('the body summary reads no persona, apps or capability list; its compaction goal is unchanged', async () => {
+    const off = await bodySummaryRequest(), on = await bodySummaryRequest({ minecraftOwnPrompt: true });
+    const text = (body: Record<string, unknown>) => systemOf(body).map(block => block.text).filter(item => item !== HAIKU_PROTOCOL_PREFIX).join('\n');
+    expectNoConversationRules(text(on));
+    expect(text(on)).toContain('# Minecraft body task: history summary');
+    expect(text(off)).toContain('[シャノンの人格]');
+    // The eight-section contract is the goal and the tool: the same bytes.
+    expect(JSON.stringify(on.messages)).toBe(JSON.stringify(off.messages));
+    expect(JSON.stringify(on.tools)).toBe(JSON.stringify(off.tools));
+    const size = (body: Record<string, unknown>) => llmcTokens(systemOf(body).map(block => block.text).join(''));
+    console.info(JSON.stringify({ event: 'minecraft_own_prompt_summary_size', before: size(off), after: size(on) }));
+    expect(size(on)).toBeLessThan(size(off) - 3_000);
+  });
+
+  it('the first plan reads the strategic knowledge, not the tactics or her name; the decision never reads the strategy', async () => {
+    const off = await firstPlanRequest(), on = await firstPlanRequest({ SHANNON_MINECRAFT_OWN_PROMPT: 'on' });
+    const text = JSON.stringify(on.body.system);
+    expect(on.system).toContain(STRATEGY_KNOWLEDGE);
+    expect(on.system).not.toContain('シャノン');
+    expectNoConversationRules(on.system);
+    for (const tactics of [DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE, '## マイクラの体の決め方', '待ち場', '## 詰まった時の調べ方'])
+      expect(on.system).not.toContain(tactics);
+    expect(text).toContain('済みの形と順番（r9）');
+    expect(off.system).not.toContain(STRATEGY_KNOWLEDGE);
+    const decisions = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
+    for (const body of decisions) expect(JSON.stringify(body.system)).not.toContain('作戦の知識');
+    console.info(JSON.stringify({ event: 'minecraft_own_prompt_first_plan_size', before: { characters: off.system.length, llmcTokens: llmcTokens(off.system) },
+      after: { characters: on.system.length, llmcTokens: llmcTokens(on.system) } }));
   });
 });

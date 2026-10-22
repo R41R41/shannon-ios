@@ -852,6 +852,7 @@
     "surfaces/minecraft/minecraftSkillPointers.ts",
     "surfaces/minecraft/minecraftStage.ts",
     "surfaces/minecraft/minecraftStoredResult.ts",
+    "surfaces/minecraft/minecraftStrategy.ts",
     "surfaces/minecraft/minecraftTaskMetrics.ts",
     "surfaces/minecraft/minecraftTransientBody.ts",
     "surfaces/minecraft/minecraftTransientObservation.ts",

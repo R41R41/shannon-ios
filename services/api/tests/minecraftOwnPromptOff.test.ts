@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { llmcSystemAppendix } from '../src/surfaces/minecraft/minecraftKnowledge.js';
-import { llmcRequests } from './support/minecraftBodyRequests.js';
+import { bodySummaryRequest, firstPlanRequest, llmcRequests } from './support/minecraftBodyRequests.js';
 import { quiet, requestDigest, scenario, WIDE_POLICY, SUMMARY_POLICY } from './fcaCoreToolsHarness.js';
 
 /**
@@ -14,6 +14,8 @@ const GOLDEN = {
   transient_summaries: ['eddf94d3b1ef91bb', '4654cbc14a63f06f', '29c338928c4f6968', 'c7d701daf38462bd', '5e224b1666fe64a8', '1f954f2300fd6062', '6c83287ac9460438', 'bd159dbfd829db5b', '6ab0fa01fc78289a', '1397581d5bbb00b6', '96e65cc04c6eecc9', '618e7cbfa9e928ca', '14861444176cfc3b', '4b95dcc001993096', '8082bd578945bd54', '986243b7895b2b7c', '2fcdd4ee172a4ea6', 'a26562c0f4493a6e', '40e1720a7e199452', '85a712416337f6cd', '4e5fd1ac8522395d', '47b5ea5fcd6dedcb', '320e614b4b3f2400', 'f9b05a5c5e73477c', 'a3440dfd6e93254e', '91c50bf7552be186', '9932b51e0651bf11', 'd4f5a098babc10ee', 'c4b888ef93df63b6', '71a51e890bcadd55'],
   llmc_r9: ['98cd4677604476d9', 'ab830df7827b78a4'],
   llmc_r3: ['eaf06e2c7aeae254', '4ae1fde19f78e950'],
+  body_summary: ['54841a24b34c54d9'],
+  first_plan: ['ee49ad61e3913cfb'],
 };
 
 const live = (step: number) => ({ observation: { position: { x: 10 + step, y: 64, z: -3 }, health: 20, food: 18 }, pace: { minutes: step } });
@@ -32,6 +34,8 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT off is the production request, byte for b
       transient_one_epoch: await transientDigests(WIDE_POLICY), transient_summaries: await transientDigests(SUMMARY_POLICY),
       llmc_r9: (await llmcRequests({ systemAppendix: llmcSystemAppendix(true) })).map(requestDigest),
       llmc_r3: (await llmcRequests({ systemAppendix: llmcSystemAppendix(false) })).map(requestDigest),
+      body_summary: [requestDigest(await bodySummaryRequest())],
+      first_plan: [requestDigest((await firstPlanRequest()).body)],
     };
     if (process.env.GOLDEN_CAPTURE) console.error(`GOLDEN ${JSON.stringify(found)}`);
     expect(found).toEqual(GOLDEN);

@@ -213,7 +213,8 @@ export const SWITCHES = [
     name: 'SHANNON_MINECRAFT_OWN_PROMPT', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
     doc: 'ADR-0014 D3 (owner 2026-10-22): a Minecraft body task (either mode) reads its own instructions: no persona, three apps, capability '
       + 'list, owner clock or shared affect; the ADR-0002 boundaries, who directs her and privacy kept; the LLM-centric knowledge pruned '
-      + '(docs/minecraft-prompt-pruning-2026-10.md). Off: every request as before, byte for byte.',
+      + '(docs/minecraft-prompt-pruning-2026-10.md); the body summary drops the persona and the first plan reads strategic knowledge. '
+      + 'Off: every request as before, byte for byte.',
   },
   {
     name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],

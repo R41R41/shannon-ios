@@ -40,3 +40,39 @@ export async function llmcRequests(options: Partial<AnthropicFcaOptions>): Promi
   vi.restoreAllMocks();
   return fixture.bodies;
 }
+
+/** One body summary (`createAnthropicFcaSummarizer` with `body: true`, Haiku): the request as sent. */
+export async function bodySummaryRequest(options: Partial<AnthropicFcaOptions> = {}): Promise<Record<string, unknown>> {
+  const { createAnthropicFcaSummarizer } = await import('../../src/infra/models/anthropic/anthropicFcaSummary.js');
+  const { emptyTemplate } = await import('@shannon/mind');
+  const { coversFromId: _from, coversToId: _to, ...template } = emptyTemplate();
+  template['次'] = ['作業台を置く'];
+  const usage = { input_tokens: 12, output_tokens: 50, cache_creation_input_tokens: 700, cache_read_input_tokens: 0,
+    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 700 } };
+  const fixture = scriptedAnthropic([message([{ type: 'tool_use', id: 'summary', name: 'fca_history_summary', input: { template: JSON.stringify(template) } }],
+    'tool_use', { model: 'claude-haiku-5-5', usage })]);
+  vi.spyOn(console, 'info').mockImplementation(() => {});
+  const summarizer = createAnthropicFcaSummarizer({ apiKey: 'synthetic', model: 'claude-haiku-5-5', fetcher: fixture.fetcher, recordUsage() {}, body: true,
+    ...options });
+  await summarizer.summarize({ previous: null, rounds: [{ sequence: 1, stepId: 'step', messages: [{ id: 'm', role: 'user', content: '原木を 3 つ掘った' }] }] },
+    new AbortController().signal);
+  vi.restoreAllMocks();
+  return fixture.bodies[0]!;
+}
+
+/** The first plan's request (`configuredMinecraftLlmc` with the probe on, so r9's words), with the given switches. */
+export async function firstPlanRequest(values: Readonly<Record<string, string>> = {}): Promise<{ body: Record<string, unknown>; system: string }> {
+  const { configuredMinecraftLlmc } = await import('../../src/wiring/minecraftLlmcWiring.js');
+  const { FIRST_PLAN_SYSTEM_R9 } = await import('../../src/surfaces/minecraft/minecraftFirstPlan.js');
+  const { firstPlanSystem } = await import('../../src/wiring/minecraftLlmcWiring.js') as { firstPlanSystem?: (own: boolean) => string };
+  const planned: Array<Record<string, unknown>> = [];
+  const client = { messages: { async create(body: unknown) { planned.push(body as Record<string, unknown>);
+    return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{"nodes":[]}' }], usage: { input_tokens: 1, output_tokens: 1 } } as never; } } };
+  vi.spyOn(console, 'info').mockImplementation(() => {});
+  const llmc = configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', SHANNON_MINECRAFT_LLMC_PROBE: 'on', ANTHROPIC_API_KEY: 'k', ...values },
+    { recordUsage() {} }, { log: () => {}, client })!;
+  const system = firstPlanSystem ? firstPlanSystem(values.SHANNON_MINECRAFT_OWN_PROMPT === 'on') : FIRST_PLAN_SYSTEM_R9;
+  await llmc.planner!(system, '依頼: エンドラを倒して', new AbortController().signal);
+  vi.restoreAllMocks();
+  return { body: planned[0]!, system };
+}
