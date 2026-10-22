@@ -53,13 +53,15 @@ export interface CutStages {
  */
 export function transientRequest(parts: { model: string; maximumOutputTokens: number; compactAboveTokens: number; systemText: string;
   input: FcaModelInput; supplied: Record<string, unknown>; history: readonly Anthropic.MessageParam[];
-  menu: { tools: Anthropic.Tool[]; appended: Anthropic.MessageParam[] } }) {
+  menu: { tools: Anthropic.Tool[]; appended: Anthropic.MessageParam[] };
+  /** The transport block of system[0] (absent: `HAIKU_PROTOCOL_PREFIX`; a Minecraft body task's own: `MINECRAFT_TRANSPORT`). */
+  protocol?: string }) {
   const { model, input, supplied, history, menu } = parts, maximum = parts.compactAboveTokens, limit = input.replayTokenLimit;
-  const hour = { type: 'ephemeral' as const, ttl: '1h' as const };
+  const hour = { type: 'ephemeral' as const, ttl: '1h' as const }, protocol = parts.protocol ?? HAIKU_PROTOCOL_PREFIX;
   const system = [{ type: 'text' as const, cache_control: hour, text: parts.systemText }];
   const fixed = { model, max_tokens: parts.maximumOutputTokens, tools: menu.tools, tool_choice: { type: 'auto' as const },
     thinking: FCA_TRANSIENT_THINKING, output_config: { effort: 'low' as const },
-    system: [{ type: 'text', text: HAIKU_PROTOCOL_PREFIX, cache_control: hour }, ...system] };
+    system: [{ type: 'text', text: protocol, cache_control: hour }, ...system] };
   const turnOf = (row: Record<string, unknown>, live: Record<string, unknown> | null, full: boolean): Anthropic.MessageParam[] => [
     ...[stateMessage(row, full)].filter((message): message is Anthropic.MessageParam => message !== null), ...menu.appended,
     ...(live ? [clearAtMessage(JSON.stringify(live))] : [])];
@@ -115,7 +117,7 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
   const turn = turnOf(fitted.row, fitted.live, stored.full);
   const body = cacheFcaBodyRequest({ model, max_tokens: parts.maximumOutputTokens, system, messages: [...history, ...turn], tools: menu.tools,
     tool_choice: { type: 'auto' as const }, thinking: FCA_TRANSIENT_THINKING, output_config: { effort: 'low' as const },
-  } as unknown as Anthropic.MessageCreateParamsNonStreaming);
+  } as unknown as Anthropic.MessageCreateParamsNonStreaming, protocol);
   // `level`: the lowest of the character levels cut; when only the live state's structure was trimmed (no text cut), its trim level (1 to 5),
   // so that a trim alone is not reported as no cut at all (review 5, L-4); the whole stages are in `sent.stages`.
   const counts = liveSkillCounts(input.transient), levels = [stages.catalog, stages.state, stages.live].filter((level): level is number => level !== null);
