@@ -11,7 +11,7 @@ import {
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { foodLeads, llmcWaitLine, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
-import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, llmcSystemAppendix, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, llmcSystemAppendix, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 
 /**
  * mb-llmc r6 (production run 29, 2026-10-22, Sonnet main, r5: begun inside a Nether fortress, the blazes at 10 s past the plan's "now",
@@ -257,7 +257,8 @@ describe('an act names the plan node it is for (a hypothesis, measured by the sh
     expect((tagActWhy(act(), plan).input as { why: string }).why).toBe('[p1.1]');
     expect((tagActWhy(act('x'.repeat(120)), plan).input as { why: string }).why).toHaveLength(120);
     expect(tagActWhy(act('[p1.1.1] 幹を掘る'), plan)).toMatchObject({ fix: null, mark: { node: 'p1.1.1', by: 'model', on: true } });
-    expect(tagActWhy(act('[p1] 点検'), plan).mark).toMatchObject({ on: true });
+    // r7: a parent's tag is counted apart, not on (minecraftLlmcR7.test.ts).
+    expect(tagActWhy(act('[p1] 点検'), plan).mark).toMatchObject({ on: false, parent: true });
     expect(tagActWhy(act('[p2.1] 理由: 4m にいて逃げられない'), plan).mark).toMatchObject({ on: false, reason: true });
     expect(tagActWhy(act('[p2.1] ブレイズ'), plan).mark).toMatchObject({ on: false, reason: false });
     expect(tagActWhy(act('[急ぎ] 離れる'), plan).mark).toMatchObject({ urgent: true, on: false });
@@ -268,7 +269,7 @@ describe('an act names the plan node it is for (a hypothesis, measured by the sh
     const lines: string[] = [];
     for (const why of ['[p1.1] 板', '[p2.1] 理由: 近い', '[急ぎ] 離れる', 'なし']) noteActNode('r6-acts', tagActWhy(act(why), plan).mark, line => lines.push(line));
     expect(lines.at(-1)).toBe('Shannon Minecraft act node task=r6-acts node=p1.1 current=p1.1 by=head on=1 reason=0 acts=4 onPlan=1 off=1 offReason=1'
-      + ' urgent=1 head=1 share=0.25');
+      + ' urgent=1 head=1 parent=0 share=0.25');
     expect(noteActNode('r6-acts', null, line => lines.push(line))).toBeNull();
   });
 
@@ -280,7 +281,8 @@ describe('an act names the plan node it is for (a hypothesis, measured by the sh
 
 describe('the knowledge (r6)', () => {
   it('follows r5\'s, with the node tag, the shortage, the recovery\'s branch and the wait', () => {
-    expect(llmcSystemAppendix(true)).toBe(`${LLMC_SYSTEM_APPENDIX_R5}\n\n${R6_KNOWLEDGE}`);
+    // r7 is r6's with its own blaze and R7_KNOWLEDGE (minecraftLlmcR7.test.ts).
+    expect(LLMC_SYSTEM_APPENDIX_R6).toBe(`${LLMC_SYSTEM_APPENDIX_R5}\n\n${R6_KNOWLEDGE}`);
     expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
     for (const words of ['[p1.2]', '理由:', '[急ぎ]', 'body.shortage', 'ネザーの中から始まった時も', '満腹 18 以上の時だけ',
       '食料が 0 で回復が要る時は、待たずに食料を取りに行く', 'fca_wait', '止めるのは運用者']) expect(R6_KNOWLEDGE).toContain(words);

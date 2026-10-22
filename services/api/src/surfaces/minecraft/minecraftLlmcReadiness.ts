@@ -1,4 +1,4 @@
-import type { PlanNode } from '@shannon/mind';
+import { orderedPlan, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
@@ -87,9 +87,12 @@ const feetOf = (world: Record<string, unknown>): Feet | null => {
 };
 const ANIMALS = /^(?:cow|pig|sheep|chicken|rabbit|mooshroom|goat|hoglin)$/u;
 const VILLAGE_ROW = /^(?:村の鐘|ベッド|干し草|畑|作物)/u;
-/** The first `(x,y,z)` of a text. */
-const firstPos = (text: string): Feet | null => {
-  const match = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u.exec(text);
+/**
+ * The first `(x,y,z)` of a text, or its first bare `x,y,z`. r7 (run 30: the plan's 「ゲートから戻り狩って焼く」 had where `5,35,12`, with no
+ * brackets, so the gate back was never said): both, as `planDone`'s `at:` reads it.
+ */
+export const firstPos = (text: string): Feet | null => {
+  const match = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u.exec(text) ?? /(?<![\d.])(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)(?![\d.])/u.exec(text);
   return match ? { x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) } : null;
 };
 
@@ -124,6 +127,32 @@ export function foodLeads(world: Record<string, unknown>, dimension: string | nu
   const nether = dimension === 'the_nether' && !near.some(line => /hoglin|crimson|真紅/u.test(line)) ? '・ホグリン・真紅の森は見えていない' : '';
   return `食料の当て: ${near.length ? near.join('・') : `近くに動物・村・畑は見えていない${scan ? '（走査の範囲）' : ''}`}${nether}${gate ? `・${gate}` : ''}`;
 }
+
+/** A plan node about food: its doneWhen asks food points, or its title is about getting or cooking food. */
+const FOOD_NODE = /食料|食べ物|狩|肉|ホグリン|パン/u;
+/**
+ * r7 (runs 29, 30: hunger 17 and no food, health that did not come back, and the plan's food node 「ゲートから戻り狩って焼く」 (p1.5) stayed
+ * behind 「歪んだ幹で作業台」 (p1.1), 118 m the other way; Sonnet never went for food in 1,338 s): while health does not come back and she
+ * has no food, the plan's first open food node is said before its now, with its place and how far: 「回復が先: 食料の節 [p1.5] ゲートから
+ * 戻り狩って焼く＠5,35,12（約 313m）」. Null when there is none, or the current node is one (or under one).
+ */
+export function foodFirstLine(nodes: readonly PlanNode[], current: string | null, feet: Feet | null): string | null {
+  const open = (node: PlanNode) => node.state !== 'done';
+  const leaf = (node: PlanNode) => !nodes.some(child => child.parentId === node.id && open(child));
+  const isFood = (node: PlanNode) => /food>=/u.test(node.doneWhen ?? '') || FOOD_NODE.test(node.title);
+  const parent = new Map(nodes.map(node => [node.id, node.parentId]));
+  for (let at: string | null = current, guard = 0; at && guard < 16; at = parent.get(at) ?? null, guard += 1) {
+    const node = nodes.find(item => item.id === at);
+    if (node && isFood(node)) return null;
+  }
+  const food = orderedPlan(nodes).find(node => open(node) && leaf(node) && isFood(node) && node.id !== current);
+  if (!food) return null;
+  const at = food.where ? firstPos(food.where) : null;
+  const far = at && feet ? `（約 ${Math.round(Math.hypot(at.x - feet.x, at.z - feet.z))}m）` : '';
+  return `回復が先: 食料の節 [${food.id}] ${food.title}${food.where ? `＠${food.where.slice(0, 40)}` : ''}${far}`;
+}
+/** The feet of a frame's world (for the readiness lines). */
+export function feetIn(world: Record<string, unknown>): Feet | null { return feetOf(world); }
 
 /** The furnaces at work in the frame (`world.jobs`): how many, and the soonest done in seconds. */
 function furnaces(world: Record<string, unknown>): string | null {

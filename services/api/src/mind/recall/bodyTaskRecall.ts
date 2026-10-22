@@ -43,6 +43,11 @@ const PLACE = /\(-?\d+,\s*-?\d+,\s*-?\d+\)/u;
 export interface BodyRecallMeasure {
   poolMs: number | null; pool: number; groups: number; shown: number; chars: number; tags: readonly string[];
   jev: { ms: number; source: 'jev' | 'fallback'; kept: number } | null;
+  /**
+   * mb-llmc r7 (run 31: the pool at its 14th decision held the API's thread 2,448 + 1,318 ms, run 30's 999 ms): each search's own time
+   * (synchronous, one turn of the loop each), when the pool was made. Absent: no pool made.
+   */
+  searchMs?: number[];
 }
 
 export interface BodyTaskRecall {
@@ -187,7 +192,7 @@ export function createBodyTaskRecall(parts: {
   const keyOf = (scopeKey: string, taskId: string) => `${scopeKey}\u0000${taskId}`;
   const cancel = (scopeKey: string, taskId: string) => { pools.delete(keyOf(scopeKey, taskId)); };
 
-  async function build(input: Search): Promise<Pool> {
+  async function build(input: Search, searchMs: number[] = []): Promise<Pool> {
     // No provenance: the pool only picks records, and what is shown is read again with its sources (`shownOf`). Listing the whole lineage of
     // up to 1,200 candidates, three times, was 3.0 s of the API's thread at the first decision of run 23 (poolMs 3,029; mb-r23).
     // Run 27 (2026-10-22): the three searches in one go still held the thread 3.1 s (poolMs 3,076, the event loop blocked 4,960 ms at the
@@ -198,10 +203,12 @@ export function createBodyTaskRecall(parts: {
     for (const query of [input.goal, `マイクラ ${input.goal}`, 'ゲームの記憶 マイクラ']) {
       await new Promise<void>(resolve => setImmediate(resolve));
       input.signal?.throwIfAborted();
+      const began = clock();
       shared = parts.memory.readSnapshot?.(input.scopeKey);
       const search = () => parts.memory.search(input.scopeKey, query, input.present, BODY_RECALL.poolSearch, { kind: 'experience' }, shared,
         { provenance: false });
       lists.push(shared ? shared.withholding.withReadSnapshot(search) : search());
+      searchMs.push(Math.round(clock() - began));
     }
     // A search that came back full may have left more of the same record out: its counts are lower bounds ("×N+").
     const pool: Pool = { groups: [], size: 0, builtAt: clock(), decisions: 0,
@@ -229,9 +236,10 @@ export function createBodyTaskRecall(parts: {
     const key = keyOf(input.scopeKey, input.taskId);
     const held = pools.get(key);
     if (held && clock() - held.builtAt <= BODY_RECALL.poolMilliseconds && held.decisions < BODY_RECALL.poolDecisions) return held;
-    const started = clock();
-    const pool = await build(input);
+    const started = clock(), searchMs: number[] = [];
+    const pool = await build(input, searchMs);
     measure.poolMs = Math.round(clock() - started);
+    measure.searchMs = searchMs;
     pools.set(key, pool);
     if (pools.size > 64) pools.delete(pools.keys().next().value!);
     return pool;

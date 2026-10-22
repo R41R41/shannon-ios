@@ -129,7 +129,7 @@ describe('an act names its plan node, through the real tools (a hypothesis; the 
     const command = (await run.command())!;
     expect(command.arguments).toMatchObject({ why: '[p1.1] ブレイズを倒す' });
     expect(lines.find(line => line.startsWith('Shannon Minecraft act node')))
-      .toBe(`Shannon Minecraft act node task=${run.task.id} node=p1.1 current=p1.1 by=head on=1 reason=0 acts=1 onPlan=0 off=0 offReason=0 urgent=0 head=1 share=0.00`);
+      .toBe(`Shannon Minecraft act node task=${run.task.id} node=p1.1 current=p1.1 by=head on=1 reason=0 acts=1 onPlan=0 off=0 offReason=0 urgent=0 head=1 parent=0 share=0.00`);
   });
 
   it('a tag of the model is sent as written and read: another node with its reason', async () => {

@@ -1,6 +1,8 @@
 import { orderedPlan, planFromSeeds, PLAN_LIMITS, type PlanSeed, type PlanTree } from '@shannon/mind';
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
-import { DRAGON_KNOWLEDGE, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE } from './minecraftKnowledge.js';
+import {
+  DRAGON_KNOWLEDGE, DRAGON_KNOWLEDGE_R7, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE,
+} from './minecraftKnowledge.js';
 import { scanForPlan } from './minecraftLlmcProbe.js';
 import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
@@ -32,6 +34,8 @@ export function planGoal(goal: string): Goal {
 }
 
 const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => ({ title, ...extra });
+/** r7: the check's forbid (the seed's, and the words the first plan is asked to write: `FIRST_PLAN_SYSTEM_R7`). */
+export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
 /** r5: each `doneWhen` that an observation can show is written as one (`minecraftPlanDone.ts`): the head marks the node done when it holds. */
 const TO_NETHER: readonly PlanSeed[] = [
   node('木と石の道具', { doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
@@ -51,9 +55,13 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('火打ち金（火打石は砂利）', { doneWhen: 'have:flint_and_steel|dim:the_nether' }),
     node('食料100点以上に足す', { doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { doneWhen: 'dim:the_nether' })] }),
 ];
-/** Run 26 (owner 2026-10-21): she went on to the fortress with no table, slabs, shield or food; each stage past the gate starts with a check. */
+/**
+ * Run 26 (owner 2026-10-21): she went on to the fortress with no table, slabs, shield or food; each stage past the gate starts with a check.
+ * r7 (runs 29–31): the check forbids the fight before it is done (`CHECK_FORBID`, as the first plan is asked to write it).
+ */
 const BEYOND: readonly PlanSeed[] = [
   node('出発の点検（ネザーの奥へ）', { doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12', note: '足りない物はゲートのそばで作る',
+    forbid: [CHECK_FORBID],
     children: [node('ネザーの幹で作業台（持ち歩く）', { doneWhen: 'have:crafting_table' }), node('深層岩の丸石でハーフブロック12', { doneWhen: 'have:slab>=12' }),
       node('かまどで鉄を焼き盾', { doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { doneWhen: 'food>=100' })] }),
   node('ネザー要塞を探す', { note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'ネザーレンガ（N）が見える' }),
@@ -148,6 +156,17 @@ export const FIRST_PLAN_SYSTEM_R6 = [
   '- 入力に「準備の不足」があれば、最初の節を「出発の点検」にし、足りない物（食料を含む）をその子の節にする。各子に作り方か取りに行く所（走査の座標）を where に、'
     + '観測の形の doneWhen（have:物>=数・food>=点）を書く。ネザーで食料が足りなければ、真紅の森のホグリンか、帰りのゲートからオーバーワールドへ戻って狩る節にする。',
   '- 戦い（ブレイズ・エンダーマン）と奥への移動の節は、その点検の後に置く。',
+].join('\n');
+/**
+ * r7 (runs 30, 31: Opus's first plan put the check first both times, and its only forbid was 「スポナーを掘らない」 under the blazes; Sonnet
+ * and Opus went for the blazes at 10–13 s anyway): the check's node carries 「点検が済むまで湧き場の前で戦わない」 as a forbid (the seed's
+ * too, `CHECK_FORBID`), and a move through a fortress is planned in the rock below its corridors. The knowledge's blaze is r7's.
+ */
+export const FIRST_PLAN_SYSTEM_R7 = [
+  FIRST_PLAN_SYSTEM_R6.replace(DRAGON_KNOWLEDGE, () => DRAGON_KNOWLEDGE_R7),
+  '点検が済むまで戦わない（r7）:',
+  `- 「出発の点検」の節には forbid に「${CHECK_FORBID}」を書く（この 1 行は 80 字まで）。ブレイズの節はその点検の後。`,
+  '- 要塞の中・ブレイズの部屋の近くを通る移動の節は、通路を歩かず 1 段下の岩（ネザーラック）にトンネルを掘る道にし、その節の caution に「射線の中で止まらない」と書く。',
 ].join('\n');
 /**
  * How long the first plan waits for the body's scan when none is there yet (r4; the body scans once its chunks have settled after a

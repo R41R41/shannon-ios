@@ -103,8 +103,8 @@ export const ORDER_KNOWLEDGE = [
   '- 持って入る: 鉄の全身・盾・鉄かダイヤの剣とツルハシ・弓と矢（あれば）・ブロック 64（丸石）・食料 100 点以上・水バケツ・ベッド（爆発用）。',
 ].join('\n');
 
-/** Owner 2026-10-21 「エンドラ討伐に向けて徹底的に」: the Nether, the fortress, the blaze, the pearls, the eyes, the stronghold, the End. */
-export const DRAGON_KNOWLEDGE = [
+/** The Nether, the fortress and the check before going deeper (the first part of `DRAGON_KNOWLEDGE`). */
+const NETHER_KNOWLEDGE = [
   '## ネザー',
   '- ネザーの x・z はオーバーワールドの 1/8。ネザーで 100 歩くとオーバーワールドの 800。帰りのゲートの座標を計画の where に書いておく。',
   '- 地面: ネザーラック（n）・ソウルサンド（u、遅い）・マグマ（M、乗ると燃える）・溶岩の海（L）。y=31 より下は溶岩の海。崖の縁と溶岩の隣は歩かない。',
@@ -121,6 +121,9 @@ export const DRAGON_KNOWLEDGE = [
   '- ネザーでの作り直し: 歪んだ森・真紅の森の幹（warped_stem・crimson_stem）→ 板 → 作業台と棒。深層岩の丸石か丸石 3 → ハーフブロック 6'
     + '（2 回で 12）。丸石 8 → かまど → 原鉄を焼く → 盾（板 6・鉄 1）。金塊 9 → 金の延べ棒 1。',
   '- 食料が 100 点に足りなければ、ゲートからオーバーワールドへ戻って狩る（+300〜500 秒）。真紅の森のホグリン（焼いた豚と同じ 20.8 点）でもよい。',
+].join('\n');
+/** The blaze as r3–r6 said it (the fight's hands first). */
+const BLAZE_KNOWLEDGE = [
   '## ブレイズ',
   '- ブレイズロッド 7 本以上（アイ 12〜14 個分は 6〜7 本。粉はロッド1で2つ）。ドロップは 1 体で平均 0.5 本: 14 体ほど、300〜500 秒。',
   '- 待ち場: スポナー（S）から 3〜5 マス、同じ高さか 1 段下に 2×1 の隠れ場を作る。三方を囲い、目の高さに下付きのハーフブロックを置いて隙間にする。'
@@ -131,6 +134,8 @@ export const DRAGON_KNOWLEDGE = [
     + 'stopIf hpBelow 12 で引き、隙間をふさいで満腹 18 以上で回復を待つ。棒はブレイズがいない時に pickup（溶岩・柵に注意）。',
   '- スポナーは壊さない（掘らない）。',
   '- 雪玉は 1 個 3 ダメージ（7 個で 1 体）、遠くから打てる。雪のバイオームで取れる時だけ（食料で戻る時のついでに）。',
+].join('\n');
+const PEARL_TO_END_KNOWLEDGE = [
   '## エンダーパール 12 個前後',
   '- エンダーマン: 歪んだ森（青い森、ネザー）に多く、夜のオーバーワールドにも出る。目を合わせない（look で足元）。2 マスの高さの天井の下に立つと入って来られない。'
     + '剣と盾で、accept: ["enderman"]。体力 40。水に入れない。',
@@ -155,6 +160,31 @@ export const DRAGON_KNOWLEDGE = [
   '- エンダーマンは目を合わせない（look で足元）。ブロックを置いて 2 マスの天井を作ると守れる。',
   '- 倒したら真ん中のポータルで帰れる。',
 ].join('\n');
+/** Owner 2026-10-21 「エンドラ討伐に向けて徹底的に」: the Nether, the fortress, the blaze, the pearls, the eyes, the stronghold, the End. */
+export const DRAGON_KNOWLEDGE = [NETHER_KNOWLEDGE, BLAZE_KNOWLEDGE, PEARL_TO_END_KNOWLEDGE].join('\n');
+
+/**
+ * r7 (runs 29–31, 2026-10-22: Sonnet twice and Opus once, from the same start under the spawner, went for the blazes at 10–13 s, before
+ * the check; the section handed them the fight's hands first, ready to use): the blaze with 「準備が済んでから」 before the fight's hands,
+ * and what to do when it starts under the spawner. The hands themselves as before.
+ */
+export const BLAZE_KNOWLEDGE_R7 = [
+  '## ブレイズ（準備が済んでから戦う）',
+  '- 戦うのは「出発の点検」（作業台・ハーフブロック 12・盾・食料 100 点）が済んでから。点検の前にブレイズが近くにいる時（湧き場の下・横で始まった時も）は戦わない: '
+    + '射線の外（ブレイズから見えない岩の中）へ離れて塞ぎ、計画の準備の節へ。準備の前に火の玉を受けた時も、打ち返さずに離れて塞ぐ'
+    + '（実走29〜31: 3 本とも準備の前に湧き場の下で戦い、体力と食料を失った。棒は 0〜1 本）。',
+  '- ブレイズロッド 7 本以上（アイ 12〜14 個分は 6〜7 本。粉はロッド1で2つ）。ドロップは 1 体で平均 0.5 本: 14 体ほど、300〜500 秒。',
+  '- 準備が済んだら、待ち場: スポナー（S）から 3〜5 マス、同じ高さか 1 段下に 2×1 の隠れ場を作る。三方を囲い、目の高さに下付きのハーフブロックを置いて隙間にする。'
+    + '火の玉の多くは隙間で止まる。ブレイズは近寄って来るので、隙間ごしに剣で打つ（鉄の剣で 4 打）。',
+  '- hold は届く所で: 部屋の床と同じ高さで、部屋へ開いたマス（地図の上の層で部屋と続いている . ）に立って待つ。床・天井・壁の向こうでは届かない'
+    + '（実走26: 部屋の床の下でその場の hold をして 61 秒届かなかった）。今の所が部屋の下や横なら、開いた所へ walk か pillarUp で寄せ、高さを合わせてから hold。',
+  '- 戦う act には accept: ["blaze"] を付け、attack(target=blaze, hold=true, seconds=20〜30) で待ち打つ。盾は offhand に equip（体が構える）。'
+    + 'stopIf hpBelow 12 で引き、隙間をふさいで満腹 18 以上で回復を待つ。棒はブレイズがいない時に pickup（溶岩・柵に注意）。',
+  '- スポナーは壊さない（掘らない）。',
+  '- 雪玉は 1 個 3 ダメージ（7 個で 1 体）、遠くから打てる。雪のバイオームで取れる時だけ（食料で戻る時のついでに）。',
+].join('\n');
+/** r7: `DRAGON_KNOWLEDGE` with the blaze of r7 (`BLAZE_KNOWLEDGE_R7`). */
+export const DRAGON_KNOWLEDGE_R7 = [NETHER_KNOWLEDGE, BLAZE_KNOWLEDGE_R7, PEARL_TO_END_KNOWLEDGE].join('\n');
 
 /** The whole appendix of the mode's instructions: rules, the map legend, the knowledge. */
 export const LLMC_SYSTEM_APPENDIX = [LLMC_RULES, MAP_LEGEND, DANGER_KNOWLEDGE, WOOD_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, ORDER_KNOWLEDGE,
@@ -246,5 +276,34 @@ export const R6_KNOWLEDGE = [
 ].join('\n');
 /** r6: r5's appendix and `R6_KNOWLEDGE` (the same bytes at every decision). */
 export const LLMC_SYSTEM_APPENDIX_R6 = [LLMC_SYSTEM_APPENDIX_R5, R6_KNOWLEDGE].join('\n\n');
-/** The appendix of the mode's models: r6's (r5's and `R6_KNOWLEDGE`) when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
-export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R6 : LLMC_SYSTEM_APPENDIX; }
+
+/**
+ * r7 (runs 29–31, owner 2026-10-22 「作って走らせる」): the urgent line now says whether a near hostile reaches (the body's sight), the walled
+ * off are said after the plan's now; how to move in a fortress (run 31: the corridor to the gate opened on the blaze room, dead in 10 s;
+ * run 30's tunnel in the rock at y=58 took no fireball); and what a stopIf stop in a blaze's line asks first (run 31: the health stop at
+ * 8.7 left her standing there, burning).
+ */
+export const R7_KNOWLEDGE = [
+  '## 急ぎの行・届かない敵（r7）',
+  '- live の body.urgent の敵の行は、体の sight で調べた届くかの事実を言う: 「見える（射線の中）」は撃たれる・打てる所、「見えない…道はある」は回って来る。'
+    + '急ぎの手（離れる・食べる・囲う）は「[急ぎ] …」で出す。急ぎを理由にブレイズを打ちに行かない。',
+  '- live の body.unreachable の「壁の向こうで届かない（間に …）」相手は、こちらを撃てず、こちらも打てない。急ぎではない: 計画の今の節（planNow）と準備の不足（shortage）を先にする。',
+  '## ネザーの移動（要塞の中・ブレイズの部屋の近く。実走31: ゲートへ戻る通路がブレイズの部屋とつながっていて、火の玉と燃えで 10 秒で死に、持ち物を全部失った。'
+    + '実走30: 同じ西行きを y=58 の岩の中のトンネルで進み、火の玉を一度も受けなかった）',
+  '- 要塞の中やブレイズの部屋（スポナー S）の近くを移動する時は、要塞の通路（ネザーレンガの床・橋・階段）を歩かない。'
+    + '通路の床より 1 段以上下のネザーラック（岩）に、1 幅・2 マスの高さのトンネルを掘って進む（足と頭の 2 マスを dig → 1 歩 walk、を繰り返す。1m 約 2 秒）。',
+  '- トンネルは横と上が岩のまま残るので、ブレイズ・ガストから見えない。開いた所（通路・部屋・溶岩の海の上の崖）に出たら、そこで止まらずに岩へ戻るか塞ぐ。',
+  '- 射線の中（ブレイズから見える所）では立ち止まらない: wait・hold・食べる・作る手は、見えない所（岩の中・塞いだ所）に入ってから。',
+  '- ネザーでは水バケツで火を消せない。燃えている間は 1 秒に 1 ずつ減る: 見えない所へ入る・塞ぐのが先。',
+  '## stopIf で止まった時（実走31: 体力の止め 8.7 で手が止まり、体は射線の中に立ったまま燃え続けた。次の判断は 8 秒後で、間に合わなかった）',
+  '- stopIf（hpBelow・hostileWithin）で止まった次の判断は急ぎ（要約・想起を飛ばす）。live の body.urgent の先頭に「今いる所は blaze #n から見える（射線の中）」と出たら、'
+    + 'その場で囲う・食べる・待つ前に、まず見えない所へ（来た道を 2〜3 歩戻る・1 段下の岩へ掘る）。そこで塞いでから食べる。',
+  '- 射線の中を通る act の hpBelow は高め（12 以上）にする。体力が低い時は、射線の中の道を使わない（岩の中を掘る）。',
+].join('\n');
+/**
+ * r7: r6's appendix with the blaze of r7 (`DRAGON_KNOWLEDGE_R7`: 「準備が済んでから」 before the fight's hands) and `R7_KNOWLEDGE` (the same
+ * bytes at every decision).
+ */
+export const LLMC_SYSTEM_APPENDIX_R7 = [LLMC_SYSTEM_APPENDIX_R6.replace(DRAGON_KNOWLEDGE, () => DRAGON_KNOWLEDGE_R7), R7_KNOWLEDGE].join('\n\n');
+/** The appendix of the mode's models: r7's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
+export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R7 : LLMC_SYSTEM_APPENDIX; }

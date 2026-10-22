@@ -13,7 +13,7 @@ import {
 } from '../src/surfaces/minecraft/minecraftLlmcProbe.js';
 import { prepareProbeInput, probeAnswerText } from '../src/surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
-import { INVESTIGATE_KNOWLEDGE, LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, llmcSystemAppendix, NETHER_ENTRY_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { INVESTIGATE_KNOWLEDGE, LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, llmcSystemAppendix, NETHER_ENTRY_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { createFcaPlanTools, PLAN_UPDATE_DEFINITION, PLAN_UPDATE_RULES_DEFINITION } from '../src/mind/action/fca/fcaPlanTools.js';
 import {
   firstPlanInput, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM, FIRST_PLAN_SYSTEM_R4, forgetFirstPlans, planFromAnswer, SCAN_WAIT,
@@ -440,7 +440,8 @@ describe('the knowledge r4 adds (shared note 5)', () => {
     expect(LLMC_SYSTEM_APPENDIX_R4.startsWith(LLMC_SYSTEM_APPENDIX)).toBe(true);
     expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
     // r5 follows r4's words with its own (`R5_KNOWLEDGE`).
-    expect(llmcSystemAppendix(true).startsWith(LLMC_SYSTEM_APPENDIX_R4)).toBe(true);
+    // r5–r7 follow r4's (r7 with its own blaze: minecraftLlmcR7.test.ts).
+    expect(LLMC_SYSTEM_APPENDIX_R5.startsWith(LLMC_SYSTEM_APPENDIX_R4)).toBe(true);
     expect(LLMC_SYSTEM_APPENDIX).not.toContain('mc.probe');
   });
 });

@@ -6,8 +6,9 @@ import type { BodyPlanView } from '../../contracts/bodyControlContract.js';
  *
  * - The model writes the node first in the act's `why` (`[p1.2] …`; another node than the current one with 「理由: …」; `[急ぎ]` for an
  *   urgent hand). A why without a tag gets the current node's put first by the head (`tagActWhy`), said in the result as a form fixed.
- * - Each act sent is counted per task (`noteActNode`): how many were for the current node (or a node on its path), how many for another,
- *   how many of those said why, how many urgent, how many the head tagged. The log line carries the share on the plan.
+ * - Each act sent is counted per task (`noteActNode`): how many were for the current node (or one under it; r7: not a parent's tag, nor a
+ *   why with 「理由:」), how many for a parent (`parent`), how many for another, how many of those said why, how many urgent, how many the
+ *   head tagged. The log line carries the share on the plan.
  */
 export const URGENT_TAG = '急ぎ';
 const TAG = /^\s*\[([A-Za-z0-9][A-Za-z0-9_.-]{0,31}|急ぎ)\]\s*/u;
@@ -19,23 +20,29 @@ export interface ActNodeMark {
   node: string;
   current: string | null;
   by: 'model' | 'head';
-  /** For the current node, a node above it or one under it. */
+  /**
+   * For the current node or one under it, with no reason of another node's. r7 (runs 30, 31: 「[p1] ブレイズを打つ」 under the current p1.1,
+   * and 「[p1.1] 理由: … ゲートへ戻り食料」, were both counted on): a parent's tag is not on (`parent`), nor a why with 「理由:」.
+   */
   on: boolean;
   urgent: boolean;
-  /** Another node's act with its reason written. */
+  /** Another node's act with its reason written (r7: the current node's tag with 「理由:」 too). */
   reason: boolean;
+  /** r7: the tag is a node above the current one (counted apart, not on). */
+  parent?: boolean;
 }
 
-/** Whether `id` is the current node, one of its parents or one under it. */
-export function onCurrentPath(plan: Pick<BodyPlanView, 'current' | 'nodes'>, id: string): boolean {
+/** Where `id` stands against the current node: itself or under it (`leaf`), above it (`parent`), or elsewhere (`off`). */
+export function nodeAgainstCurrent(plan: Pick<BodyPlanView, 'current' | 'nodes'>, id: string): 'leaf' | 'parent' | 'off' {
   const current = plan.current;
-  if (!current) return false;
+  if (!current) return 'off';
   const parent = new Map(plan.nodes.map(node => [node.id, node.parentId]));
   const up = (from: string | null, target: string): boolean => {
     for (let at = from, guard = 0; at && guard < 16; at = parent.get(at) ?? null, guard += 1) if (at === target) return true;
     return false;
   };
-  return id === current || up(current, id) || up(id, current);
+  if (id === current || up(id, current)) return 'leaf';
+  return up(current, id) ? 'parent' : 'off';
 }
 
 /** The act with its why tagged by the node it is for: the model's own tag kept; none, the current node's put first. */
@@ -45,22 +52,23 @@ export function tagActWhy(input: unknown, plan: BodyPlanView | undefined): { inp
   const why = typeof act.why === 'string' ? act.why : '';
   const tag = TAG.exec(why)?.[1];
   if (tag) {
-    const urgent = tag === URGENT_TAG, on = !urgent && onCurrentPath(plan, tag);
-    return { input, fix: null, mark: { node: tag, current: plan.current, by: 'model', on, urgent, reason: !on && !urgent && REASON.test(why) } };
+    const urgent = tag === URGENT_TAG, where = urgent ? 'off' : nodeAgainstCurrent(plan, tag), reason = !urgent && REASON.test(why);
+    const on = where === 'leaf' && !reason, parent = where === 'parent' && !reason;
+    return { input, fix: null, mark: { node: tag, current: plan.current, by: 'model', on, urgent, reason, ...(parent ? { parent } : {}) } };
   }
   const tagged = `[${plan.current}] ${why.trim()}`.trim().slice(0, WHY_LIMIT);
   return { input: { ...act, why: tagged }, fix: `why に今の節 [${plan.current}] を付けた`,
     mark: { node: plan.current, current: plan.current, by: 'head', on: true, urgent: false, reason: false } };
 }
 
-interface Tally { acts: number; on: number; off: number; offReason: number; urgent: number; head: number }
+interface Tally { acts: number; on: number; off: number; offReason: number; urgent: number; head: number; parent: number }
 const tallies = new Map<string, Tally>();
 /** Counts one act sent for the task and says it in the log (its node, the current one, and the task's share on the plan so far). */
 export function noteActNode(taskId: string, mark: ActNodeMark | null, log: (line: string) => void): Tally | null {
   if (!mark) return null;
   let tally = tallies.get(taskId);
   if (!tally) {
-    tally = { acts: 0, on: 0, off: 0, offReason: 0, urgent: 0, head: 0 };
+    tally = { acts: 0, on: 0, off: 0, offReason: 0, urgent: 0, head: 0, parent: 0 };
     tallies.set(taskId, tally);
     if (tallies.size > 32) tallies.delete(tallies.keys().next().value as string);
   }
@@ -68,6 +76,7 @@ export function noteActNode(taskId: string, mark: ActNodeMark | null, log: (line
   if (mark.by === 'head') tally.head += 1;
   else if (mark.urgent) tally.urgent += 1;
   else if (mark.on) tally.on += 1;
+  else if (mark.parent) tally.parent += 1;
   else {
     tally.off += 1;
     if (mark.reason) tally.offReason += 1;
@@ -76,7 +85,7 @@ export function noteActNode(taskId: string, mark: ActNodeMark | null, log: (line
   try {
     log(`Shannon Minecraft act node task=${taskId} node=${mark.node} current=${mark.current ?? '-'} by=${mark.by} on=${mark.on ? 1 : 0}`
       + ` reason=${mark.reason ? 1 : 0} acts=${tally.acts} onPlan=${tally.on} off=${tally.off} offReason=${tally.offReason} urgent=${tally.urgent}`
-      + ` head=${tally.head} share=${share}`);
+      + ` head=${tally.head} parent=${tally.parent} share=${share}`);
   } catch { /* a log never fails a step */ }
   return { ...tally };
 }

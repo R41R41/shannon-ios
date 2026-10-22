@@ -158,6 +158,11 @@ export interface LlmcLiveParts {
   planNow?: string | null;
   shortage?: string | null;
   recovery?: readonly string[];
+  /**
+   * r7 (runs 29–31): the near hostiles the body's sight found walled off (`urgentFacts`): after the plan's now, the shortage and the
+   * recovery, never before them, and no urgent step for them. Absent: no key.
+   */
+  unreachable?: readonly string[];
 }
 
 /** The longest the shown results may be together (characters; a view's map is about 2,500). */
@@ -176,10 +181,11 @@ export function lookHint(world: Record<string, unknown>, healthLost = 0): string
   return null;
 }
 
-/** r6: the plan's now, the shortage and the recovery, each only when there is one. */
-function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'shortage' | 'recovery'>): Record<string, unknown> {
+/** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off hostiles. */
+function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'shortage' | 'recovery' | 'unreachable'>): Record<string, unknown> {
   return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.shortage ? { shortage: parts.shortage } : {}),
-    ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}) };
+    ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
+    ...(parts.unreachable?.length ? { unreachable: [...parts.unreachable] } : {}) };
 }
 
 /** The live body of one decision, bounded (`LLMC_LIVE_TOKENS` with `planTokens` of the plan's path already used). */
@@ -210,8 +216,10 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   };
   // r3: outside the bound (never cut, at most `LAST_RESULTS_CHARS`): the results shown this once.
   const shown = shownResults(parts.lastResults ?? []);
-  // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`).
-  return { ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}), ...fitLive(live, planTokens),
+  // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`). r7 (run 31: stopped by its health stop in the
+  // blaze's line, the next decision read the surprise first): the urgent lines before it (counted in the bound as before, never cut).
+  const { urgent, ...rest } = fitLive(live, planTokens);
+  return { ...(urgent ? { urgent } : {}), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}), ...rest,
     ...(shown.length ? { lastResults: shown } : {}) };
 }
 

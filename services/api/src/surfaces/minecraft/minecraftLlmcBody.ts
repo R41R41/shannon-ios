@@ -4,13 +4,22 @@ import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import type { ProbeInput } from '../../contracts/minecraftProbeContract.js';
 import { createFoodTrend, llmcPlanTokens, minecraftLlmcLive, type FoodTrend } from './minecraftLlmcLive.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
-import { createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise } from './minecraftLlmcProbe.js';
+import {
+  createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise, type SurpriseFrame,
+} from './minecraftLlmcProbe.js';
 import { cautionFact } from './minecraftLlmcCaution.js';
 import type { PlanTree } from '@shannon/mind';
-import { foodLeads, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { feetIn, foodFirstLine, foodLeads, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import {
+  inSightLine, keepThreatSight, keptThreatSight, nearThreats, readThreatSight, sightProbe, THREAT_SIGHT, threatLine, threatSightKey,
+  threatSightMeters, threatSightTargets, walledOff, type NearThreat, type ThreatSight,
+} from './minecraftLlmcThreat.js';
 import { planNowLine } from './minecraftLlmcNode.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
+
+/** The first index of the hostiles' sight probes in a step (the surprises' are 0 and 1). */
+const THREAT_SIGHT_INDEX = 10;
 
 /**
  * What a Minecraft task's body lifecycle takes in the LLM-centric mode (`createMinecraftTaskBody`, `llmc`): the task's plan (for the
@@ -35,13 +44,15 @@ interface TaskEvents {
   health: number | null;
   /** r5: the last act did not go as asked (no decision is asked ahead of the next one). */
   actFailed: boolean;
+  /** r7: the last act was stopped by its own stopIf (where it stopped is looked at from the shooters near). */
+  stopIf: boolean;
 }
 const tasks = new Map<string, TaskEvents>();
 function eventsOf(taskId: string): TaskEvents {
   let state = tasks.get(taskId);
   if (!state) {
     state = { lines: [], seq: 0, read: 0, arrival: null, failed: false, trend: createFoodTrend(), pending: [], cut: null, health: null,
-      actFailed: false };
+      actFailed: false, stopIf: false };
     tasks.set(taskId, state);
     if (tasks.size > 32) tasks.delete(tasks.keys().next().value as string);
   }
@@ -60,30 +71,47 @@ const LOW_HEALTH = 8;
  * hostile (its `stopIf.hostileWithin`, or the head's urgent cut).
  */
 export function urgentReasons(observation: BodyObservation | null, cut: string | null): string[] {
-  const world = (observation?.state.world ?? {}) as { nearbyThreats?: unknown; health?: unknown };
-  const threats = (Array.isArray(world.nearbyThreats) ? world.nearbyThreats as Array<Record<string, unknown>> : [])
-    .flatMap(item => typeof item?.name === 'string' && typeof item.distance === 'number' && Number.isFinite(item.distance)
-      ? [{ name: item.name, distance: item.distance }] : []).sort((left, right) => left.distance - right.distance);
-  const reasons: string[] = [];
-  const near = threats.find(item => item.distance <= (item.name === 'creeper' ? CREEPER_URGENT_METERS : LLMC_URGENT_NEAR_METERS));
-  if (near) reasons.push(`${near.name} ${near.distance.toFixed(1)}m${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}`);
-  const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
-  if (health !== null && health <= LOW_HEALTH && threats.some(item => item.distance <= 16)) reasons.push(`体力 ${Math.round(health * 10) / 10} で敵が近い`);
-  if (cut) reasons.push(cut);
-  return reasons;
+  return urgentFacts(observation, cut).reasons;
 }
-/** Why a result makes the next step urgent: a reflex or a hostile cut the act (r3). */
-function cutOf(text: string, bodyReflex: boolean): string | null {
+/** How near a hostile makes a step urgent (a creeper a little farther). */
+export const urgentMeters = (name: string) => name === 'creeper' ? CREEPER_URGENT_METERS : LLMC_URGENT_NEAR_METERS;
+/**
+ * r7 (runs 29–31: 「blaze 4.0m」 first in the live state at almost every step, the blaze 2–6 up behind the bricks; 3 of 3 runs fought
+ * before the check): the reasons with what the body's sight found of each near hostile (`sights`, by id; none: as r3 said them), and
+ * the hostiles that can neither see her nor come (`walledOff`), which make no step urgent and are said after the plan's now
+ * (`unreachable`). `inSight`: after a stopIf stop, that a hostile sees her where she stopped, said first (run 31).
+ */
+export function urgentFacts(observation: BodyObservation | null, cut: string | null, sights: ReadonlyMap<number, ThreatSight> | null = null,
+  inSight: string | null = null): { reasons: string[]; unreachable: string[] } {
+  const world = (observation?.state.world ?? {}) as { health?: unknown };
+  const known = (threat: NearThreat) => threat.id !== null ? sights?.get(threat.id) : undefined;
+  const threats = nearThreats(observation), walled = threats.filter(threat => walledOff(threat, known(threat)));
+  const open = threats.filter(threat => !walled.includes(threat));
+  const reasons: string[] = inSight ? [inSight] : [];
+  const near = open.find(item => item.distance <= urgentMeters(item.name));
+  if (near) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}`);
+  const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
+  if (health !== null && health <= LOW_HEALTH && open.some(item => item.distance <= 16)) reasons.push(`体力 ${Math.round(health * 10) / 10} で敵が近い`);
+  if (cut) reasons.push(cut);
+  const unreachable = walled.filter(item => item.distance <= urgentMeters(item.name)).slice(0, THREAT_SIGHT.max).map(item => threatLine(item, known(item)));
+  return { reasons, unreachable };
+}
+/**
+ * Why a result makes the next step urgent: a reflex or a hostile cut the act (r3). r7 (`stopIfHp`, with the probe; run 31: the health
+ * stop at 8.7 left her standing in the blaze's line, burning, and the next decision took 8 s): a stopIf on health too.
+ */
+function cutOf(text: string, bodyReflex: boolean, stopIfHp = false): string | null {
   if (/急ぎ: .+ が近づいたので act を止めた/u.test(text)) return '前の act は敵が近づいて止めた';
   if (bodyReflex) return '前の act は体の反射が止めた';
-  return /stopIf: hostileWithin/u.test(text) ? '前の act は stopIf（敵が近い）で止まった' : null;
+  if (/stopIf: hostileWithin/u.test(text)) return '前の act は stopIf（敵が近い）で止まった';
+  return stopIfHp && /stopIf: hpBelow/u.test(text) ? '前の act は stopIf（体力）で止まった' : null;
 }
 
 /**
  * What happened to the body since the task's last decision that no tool result says (a reflex that took the body, a death, a login, a new
  * dimension): told in the live state (`events`) once, and the reason a recall runs (design 2.3: recall only on an event).
  */
-export function createLlmcEvents(taskId: string) {
+export function createLlmcEvents(taskId: string, options: { stopIfHp?: boolean } = {}) {
   const state = eventsOf(taskId);
   let shown: string[] = [], results: string[] = [], healthLost = 0;
   const note = (line: string) => {
@@ -105,12 +133,15 @@ export function createLlmcEvents(taskId: string) {
       if (bodyReflex) note(`反射が ${name} を止めた`);
       state.failed = !ok;
       if (name === MC_ACT_TOOL) {
-        state.cut = cutOf(text, bodyReflex);
+        state.cut = cutOf(text, bodyReflex, options.stopIfHp === true);
         state.actFailed = !ok;
+        state.stopIf = /（stopIf: /u.test(text);
       }
     },
     /** r5: whether the last act failed (`FcaBodyLifecycle.troubled`). */
     actFailed: () => state.actFailed,
+    /** r7: whether the last act was stopped by its own stopIf. */
+    stoppedByStopIf: () => state.stopIf,
     /** r3: a result's whole text the history keeps short, for the next decision's live state. */
     keep(text: string) {
       state.pending.push(text);
@@ -139,13 +170,14 @@ export type LlmcEvents = ReturnType<typeof createLlmcEvents>;
 /** The live body of an LLM-centric decision: the map-first state, bounded beside the plan's path. */
 export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observation: BodyObservation | null,
   elapsedMinutes: number | null, urgent: readonly string[] = [],
-  r4: { investigation: readonly string[]; scan: readonly string[] } | null = null): Record<string, unknown> {
+  r4: { investigation: readonly string[]; scan: readonly string[]; unreachable?: readonly string[] } | null = null): Record<string, unknown> {
   const plan = llmc.planView();
   const world = observation?.state.world as Record<string, unknown> | undefined;
   const jobs = world && (world.jobs ?? world.activeFurnaces) as BodyValue | undefined;
   return minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(r4?.investigation.length ? { investigation: r4.investigation } : {}), ...(r4?.scan.length ? { scan: r4.scan } : {}),
+    ...(r4?.unreachable?.length ? { unreachable: r4.unreachable } : {}),
     ...(r4 ? readinessParts(llmc, plan, observation) : {}) }, llmcPlanTokens(plan));
 }
 
@@ -163,7 +195,10 @@ export function readinessParts(llmc: LlmcBodyParts, view: object | null, observa
   const recovery = recoveryLine(facts.hunger, facts.health, facts.food);
   let nodes: PlanTree['nodes'] = [];
   try { nodes = llmc.planTree?.().nodes ?? []; } catch { nodes = []; }
-  return { ...out, ...(shortage ? { shortage } : {}), ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}) };
+  // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the plan is not changed).
+  const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? null, feetIn(facts.world)) : null;
+  return { ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}), ...(shortage ? { shortage } : {}),
+    ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}) };
 }
 
 /** r6: an act with a wait hand, stored with the fact that health does not come back now (the same words as the live state's). */
@@ -222,11 +257,50 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   observe(): BodyObservation | null; arrival(): { at: number | null; kind: string | null }; now?: () => number; log?(line: string): void;
   /** r4: surprises probed before the decision, and the body's scan in the live state. Absent: as r3. */
   r4?: LlmcProbeParts }): FcaBodyLifecycle {
-  const events = createLlmcEvents(parts.taskId), now = parts.now ?? Date.now, began = Date.parse(parts.createdAt);
-  let observation: BodyObservation | null = null, reasons: string[] = [];
   const r4 = parts.r4, watch = r4 ? createSurpriseWatch(parts.taskId) : null;
+  const events = createLlmcEvents(parts.taskId, { stopIfHp: !!r4 }), now = parts.now ?? Date.now, began = Date.parse(parts.createdAt);
+  let observation: BodyObservation | null = null, reasons: string[] = [];
   let investigation: string[] = [], scan: string[] = [];
+  // r7: what the body's sight found of the near hostiles this step (by id), the line said first after a stopIf stop, and the walled-off.
+  let sights = new Map<number, ThreatSight>(), inSight: string | null = null, unreachable: string[] = [];
   const say = (line: string) => { try { (parts.log ?? (text => console.info(text)))(line); } catch { /* a log never fails a step */ } };
+  /**
+   * r7: the near hostiles (`threatSightTargets`) looked at with the body's sight, at once, beside the surprises' probes, waited
+   * `LLMC_PROBE.urgentBudgetMs` at most; an answer for the same hostile, block and feet is kept for the task. After a stopIf stop, the
+   * shooters within 16 m too, and whether one sees her where she stopped (`inSightLine`).
+   */
+  const lookAtThreats = async (seen: BodyObservation | null, feet: SurpriseFrame['feet'],
+    run: ((input: ProbeInput, index: number) => Promise<string | null>) | null): Promise<void> => {
+    sights = new Map();
+    inSight = null;
+    const afterStop = events.stoppedByStopIf(), began = performance.now();
+    const targets = threatSightTargets(nearThreats(seen), threat => threatSightMeters(threat, urgentMeters(threat.name), afterStop));
+    if (!targets.length) return;
+    const asked: NearThreat[] = [];
+    for (const threat of targets) {
+      const known = keptThreatSight(parts.taskId, threatSightKey(threat, feet));
+      if (known) sights.set(threat.id!, known);
+      else asked.push(threat);
+    }
+    if (run && asked.length) {
+      const jobs = asked.map(async (threat, index) => {
+        try {
+          // The index past the surprises' (a probe's command id is the step's and its index).
+          const sight = readThreatSight(await run(sightProbe(threat), THREAT_SIGHT_INDEX + index));
+          if (!sight) return;
+          sights.set(threat.id!, sight);
+          keepThreatSight(parts.taskId, threatSightKey(threat, feet), sight);
+        } catch { /* no answer: as r3 said it */ }
+      });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([Promise.all(jobs), new Promise<void>(resolve => { timer = setTimeout(resolve, LLMC_PROBE.urgentBudgetMs); })]);
+      clearTimeout(timer);
+    }
+    inSight = afterStop ? inSightLine(targets, sights) : null;
+    const walled = targets.filter(threat => walledOff(threat, sights.get(threat.id!))).length;
+    say(`Shannon Minecraft threat sight task=${parts.taskId} looked=${targets.length} asked=${run ? asked.length : 0} known=${sights.size}`
+      + ` walled=${walled} inSight=${inSight ? 1 : 0} afterStop=${afterStop ? 1 : 0} ms=${Math.round(performance.now() - began)}`);
+  };
   return { ...body,
     context() {
       const value = body.context();
@@ -247,11 +321,12 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       return value;
     },
     transient: () => llmcTransient(parts.llmc, events, observation, Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null, reasons,
-      r4 ? { investigation, scan } : null),
+      r4 ? { investigation, scan, unreachable } : null),
     ...(r4 && watch ? {
       /**
        * r4: before the decision, the surprises since the last one (`createSurpriseWatch`) and their fixed probes, sent at once and waited
        * for `LLMC_PROBE.budgetMs` at most (an urgent step's `urgentBudgetMs`); what came is said first in this decision's live state.
+       * r7: beside them, the near hostiles looked at with the body's sight (`lookAtThreats`), for whether the step is urgent and its line.
        */
       async investigate(): Promise<FcaBodyInvestigation | null> {
         const seen = parts.observe();
@@ -260,12 +335,16 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
         try { where = r4.planWhere(); } catch { where = null; }
         const surprises = watch.detect(frame, where);
         investigation = [];
-        if (!surprises.length) return null;
-        const probes = stepProbes(surprises), urgent = urgentReasons(seen, events.cut()).length > 0;
         let run: ReturnType<LlmcProbeParts['probe']> = null;
         try { run = r4.probe(); } catch { run = null; }
-        const done = await runInvestigation({ surprises, probes: run ? probes : [], feet: frame.feet, run,
-          budgetMs: urgent ? LLMC_PROBE.urgentBudgetMs : LLMC_PROBE.budgetMs });
+        const looking = lookAtThreats(seen, frame.feet, run);
+        if (!surprises.length) {
+          await looking;
+          return null;
+        }
+        const probes = stepProbes(surprises), urgent = urgentReasons(seen, events.cut()).length > 0;
+        const [done] = await Promise.all([runInvestigation({ surprises, probes: run ? probes : [], feet: frame.feet, run,
+          budgetMs: urgent ? LLMC_PROBE.urgentBudgetMs : LLMC_PROBE.budgetMs }), looking]);
         investigation = done.lines;
         const codes = surprises.map(item => item.code);
         const sent = run ? probes.length : 0;
@@ -282,7 +361,9 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     // r5 (run 28: a plan row of run 27's task, in another world, was recalled with its coordinates): what was before this task is marked.
     recallCues: () => ({ ...(body.recallCues?.() ?? { words: [], tags: [] }), since: parts.createdAt }),
     urgent() {
-      reasons = urgentReasons(parts.observe(), events.cut());
+      const facts = urgentFacts(parts.observe(), events.cut(), r4 ? sights : null, r4 ? inSight : null);
+      reasons = facts.reasons;
+      unreachable = facts.unreachable;
       if (reasons.length) {
         const line = `Shannon Minecraft urgent step task=${parts.taskId} reasons=${reasons.length}`;
         try { (parts.log ?? (text => console.info(text)))(line); } catch { /* a log never fails a step */ }

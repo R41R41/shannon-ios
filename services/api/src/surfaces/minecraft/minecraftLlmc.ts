@@ -11,6 +11,7 @@ import { MC_PROBE_SKILL, MC_PROBE_TOOL, PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } 
 import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
 import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type ProbeContext } from './minecraftLlmcProbeInput.js';
 import { validSkillInput } from './minecraftControlValidation.js';
+import { isShooter } from './minecraftLlmcThreat.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the tools it offers, how it
@@ -165,21 +166,23 @@ function actResult(receipt: MinecraftControlReceipt, urgent: string | null): Too
     ...(act.done > 0 ? { progressed: true as const } : {}) };
 }
 
-/** The hostiles of a frame, nearest first. */
-function hostiles(observation: BodyObservation | null): Array<{ name: string; distance: number }> {
+/** The hostiles of a frame, nearest first (with the body's own `canSee`, when the frame says it). */
+function hostiles(observation: BodyObservation | null): Array<{ name: string; distance: number; canSee?: boolean }> {
   const world = observation?.state.world as { nearbyThreats?: unknown } | undefined;
   return (Array.isArray(world?.nearbyThreats) ? world!.nearbyThreats as Array<Record<string, unknown>> : [])
     .flatMap(item => typeof item?.name === 'string' && typeof item.distance === 'number' && Number.isFinite(item.distance)
-      ? [{ name: item.name, distance: item.distance }] : []).sort((left, right) => left.distance - right.distance);
+      ? [{ name: item.name, distance: item.distance, ...(typeof item.canSee === 'boolean' ? { canSee: item.canSee } : {}) }] : [])
+    .sort((left, right) => left.distance - right.distance);
 }
 
 /**
  * Watches the frames while an act runs: a hostile within `LLMC_URGENT_METERS` that was not that near when the act began, where the act's
  * own `stopIf.hostileWithin` does not already watch that distance, aborts it (the decision runs again at once). Returns the signal for the
- * command and what cut it (or null), and a stop for the watch.
+ * command and what cut it (or null), and a stop for the watch. r7 (`walled`, with the probe; run 30: a blaze 5.6 m above the tunnel in the
+ * rock cut its digging): a shooter the frame says cannot see her (the body's own check at every frame) does not cut it.
  */
-export function urgentWatch(input: unknown, observe: () => BodyObservation | null, parent: AbortSignal, everyMs = 250)
-  : { signal: AbortSignal; reason(): string | null; stop(): void } {
+export function urgentWatch(input: unknown, observe: () => BodyObservation | null, parent: AbortSignal, everyMs = 250,
+  options: { walled?: boolean } = {}): { signal: AbortSignal; reason(): string | null; stop(): void } {
   const watched = (input as ActInput | null)?.stopIf?.hostileWithin ?? 0;
   // The kinds she took on in this act (`accept`) are hers to fight: they never cut it.
   const near = new Set([...(input as ActInput | null)?.accept ?? [],
@@ -190,7 +193,8 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
   parent.addEventListener('abort', cancel, { once: true });
   if (parent.aborted) cancel();
   const timer = watched >= LLMC_URGENT_METERS ? null : setInterval(() => {
-    const come = hostiles(observe()).find(item => item.distance <= LLMC_URGENT_METERS && !near.has(item.name));
+    const come = hostiles(observe()).find(item => item.distance <= LLMC_URGENT_METERS && !near.has(item.name)
+      && !(options.walled && isShooter(item.name) && item.canSee === false));
     if (!come || controller.signal.aborted) return;
     reason = `${come.name} ${come.distance.toFixed(1)}m`;
     controller.abort('urgent');

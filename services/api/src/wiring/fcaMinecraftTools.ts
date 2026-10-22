@@ -102,7 +102,8 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const id = `skill:${createHash('sha256').update(call.operationId).digest('hex')}`;
     if (parts.llmc && llmcSchema(call.name)) {
       noteActNode(step.taskId, node?.mark ?? null, line => console.info(line));
-      return runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [] });
+      return runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [],
+        walled: parts.llmc.probe === true });
     }
     active.stepOutcome = 'unknown';
     const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',
@@ -140,9 +141,11 @@ function nodeTagged(call: Parameters<FcaExternalTools['execute']>[0], plan: Body
  */
 async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; bodyId: string; id: string; skill: string;
   call: Parameters<FcaExternalTools['execute']>[0]; active: NonNullable<ReturnType<typeof currentActionExecution>>; plan: BodyPlanView | undefined;
-  fixes: readonly string[] }) {
+  fixes: readonly string[];
+  /** r7 (with the probe): a shooter the frame says cannot see her does not cut the act (`urgentWatch`). */
+  walled?: boolean }) {
   const { control, step, bodyId, call, active } = parts;
-  const watch = call.name === MC_ACT_TOOL ? urgentWatch(call.input, () => control.observe(bodyId), call.signal) : null;
+  const watch = call.name === MC_ACT_TOOL ? urgentWatch(call.input, () => control.observe(bodyId), call.signal, 250, { walled: parts.walled === true }) : null;
   active.stepOutcome = 'unknown';
   try {
     // An act's deadline from its hands, a walk's from its length from where she stands now (run 27: 80 m cut at 17 s).

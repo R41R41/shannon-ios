@@ -21,7 +21,7 @@ import { withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
-import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R6 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R7 } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { llmcWaitLine } from '../surfaces/minecraft/minecraftLlmcReadiness.js';
 import { seenDoneUpdate } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
@@ -223,9 +223,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     const world = observe()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
   };
-  // r6: the first plan begins where she is, with what the place lacks in its input (`FIRST_PLAN_SYSTEM_R6`).
+  // r6: the first plan begins where she is, with what the place lacks in its input; r7: the check's forbid asked for (`FIRST_PLAN_SYSTEM_R7`).
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
-    ...(llmc.probe ? { r4: { world: worldOf, system: FIRST_PLAN_SYSTEM_R6, readiness: true } } : {}) });
+    ...(llmc.probe ? { r4: { world: worldOf, system: FIRST_PLAN_SYSTEM_R7, readiness: true } } : {}) });
   const display = () => plan.port.display();
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
