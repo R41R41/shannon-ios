@@ -22,7 +22,7 @@ import { elidedDecision, estimatedAnthropicTokens, FCA_RESTATED_RULE, restatedKn
 import { reportDispatchFailure, reportRejection } from './anthropicRejection.js';
 import { classifyDispatchFailure, failureError, failureMayHaveBeenCharged, refusalError } from './anthropicFcaFailure.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
-import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
+import { decisionRequestMetrics, measuredCall } from './anthropicFcaMetrics.js';
 import { transientRequest, type CutStages } from './anthropicFcaTransientRequest.js';
 import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransientFallback.js';
 import { FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, inputTransformations, isFcaClearAtMessage,
@@ -209,7 +209,7 @@ export class AnthropicFcaModel implements FcaModel {
       return { turn, menu, body: bodyOf(turn), built };
     }, value => observedFcaRequest(value.body), { model: this.model });
     const requestTokens = logRequestSize(this.model, history, body, turn, built);
-    let message: Anthropic.Message, dispatched = false;
+    let message: Anthropic.Message, dispatched = false, dispatchedAt = performance.now();
     const execution = currentActionExecution();
     // Once sent, a stop lets the request finish within its grace (`stopGraceMilliseconds`); the timeout still applies.
     const grace = this.options.stopGraceMilliseconds && this.options.stopGraceMilliseconds > 0 ? graceAfter(signal, this.options.stopGraceMilliseconds) : null;
@@ -223,6 +223,7 @@ export class AnthropicFcaModel implements FcaModel {
           // The runner just rechecked audience, sources and its awaited lease permit. Keep dispatch synchronous.
           combined.throwIfAborted();
           dispatched = true;
+          dispatchedAt = performance.now();
           if (!execution) return;
           execution.modelOutcome = 'unknown';
           delete execution.modelUsage;
@@ -270,6 +271,7 @@ export class AnthropicFcaModel implements FcaModel {
       const extra = transient ? { providerTransformations: transformed.count, cuts: (built as RequestBuilt).sent?.stages } : undefined;
       try { execution.modelMetrics = decisionRequestMetrics(history, turn, usage, built, extra); } catch { delete execution.modelMetrics; }
     }
+    measuredCall({ execution, input, message, usage, body, history, turn, transient, model: this.model, milliseconds: performance.now() - dispatchedAt });
     validateHaikuCacheUsage(message.usage);
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');

@@ -6,6 +6,7 @@ import {
   DEFENSIVE_SKILLS, FAST_JUDGMENT_LIMITS, FIGHT_SKILLS, fastBodyState, fastJudgment, fastJudgmentCut, fastSkillMilliseconds, type FastDecision,
 } from '../../mind/action/reflex/fastJudgment.js';
 import type { MinecraftControl } from './minecraftControl.js';
+import { frameTime, logReflexTiming, type ReflexTiming } from './minecraftReflexTiming.js';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 /** How long a cut-off FCA skill may take to settle before the fast skill is sent (the body runs one skill at a time). */
@@ -147,15 +148,19 @@ export function createMinecraftFastJudgment(parts: {
       + ` entryToDispatchMs=${Math.max(0, sentAt - sent.judgedAt)} runMs=${Math.max(0, now() - sentAt)} outcome=${outcome}`
       + ` failure=${sent.failureType}${failed ? ` restMs=${FAST_JUDGMENT_LIMITS.restMs}` : ''}${sent.interrupted ? ' cut=true' : ''}${reflexTag(byReflex)}`);
   };
-  const run = async (bodyId: string, first: FastDecision, entry: ReflexEntryFacts, judged: { arrived: number | null; at: number },
+  const run = async (bodyId: string, first: FastDecision, entry: ReflexEntryFacts, judged: { arrived: number | null; at: number; detectedAt: number | null },
     signal: AbortSignal) => {
     count += 1;
     const sessionId = `${step.id}:fast:${count}`, id = `fast:${hash(sessionId)}`;
     governor.began(step.taskId, now(), entry);
+    /** ADR-0014 D8: when each stage of this decision happened, written once when it ends (`minecraftReflexTiming.ts`). */
+    const timing: ReflexTiming = { path: 'fast', task: step.taskId, kind: first.kind, rule: first.rule, skill: first.skill, detectedAt: judged.detectedAt,
+      decidedAt: judged.at, dispatchedAt: null, receiptAt: null, outcome: null, discard: null };
     let effective = false, decision = first, cooldown = true, interrupted = false, sentAt = now();
     /** A dropped answer did not do what a cooldown would be for in the success case: it waits `dangerCooldownMs` like any ineffective session. */
     const discard = (reason: keyof typeof discards, hold: string, detail: Record<string, string | number | boolean | null>) => {
       discards[reason] += 1;
+      timing.discard = reason;
       parts.log?.(`Shannon Minecraft fast judgment dropped task=${step.taskId} kind=${decision.kind} reason=${reason} discards=${discards[reason]}`);
       return parts.hold(hold, { ...detail, discards: discards[reason] });
     };
@@ -182,6 +187,7 @@ export function createMinecraftFastJudgment(parts: {
       }
       if (signal.aborted || !await parts.permit(signal).catch(() => false)) {
         discards.not_permitted += 1;
+        timing.discard = 'not_permitted';
         return;
       }
       parts.touched();
@@ -189,16 +195,23 @@ export function createMinecraftFastJudgment(parts: {
       let outcome: string, byReflex = false, failureType = '-';
       // The entry's time to the command (run 16 logged it after the skill had run, so a 15 s fight read as a 15 s wait to start).
       sentAt = now();
+      timing.dispatchedAt = sentAt;
       try {
         const receipt = await control.command({ id, context: parts.context(bodyId, sessionId), lease: step.lease, kind: 'skill',
           skill: decision.skill, arguments: decision.arguments, milliseconds: fastSkillMilliseconds(decision.skill) }, signal);
         outcome = receipt.outcome;
+        timing.receiptAt = now();
+        timing.outcome = outcome;
         byReflex = receipt.failureType === 'interrupted_by_reflex';
         if (typeof receipt.failureType === 'string' && /^[a-z_]{1,40}$/u.test(receipt.failureType)) failureType = receipt.failureType;
         parts.stepOutcome('acknowledged');
       } catch (error) {
         // Never sent (the body went away, the lease moved): nothing happened. Sent and lost: unknown, as any body command.
-        if (!control.store.command(id)) return discard('not_sent', 'fast_not_sent', { skill: decision.skill });
+        if (!control.store.command(id)) {
+          timing.dispatchedAt = null;
+          return discard('not_sent', 'fast_not_sent', { skill: decision.skill });
+        }
+        timing.outcome = 'unknown';
         if (decision.kind === 'shelter') rest(decision.skill);
         if (interrupted) spend();
         parts.unknown();
@@ -209,7 +222,11 @@ export function createMinecraftFastJudgment(parts: {
       settled(decision, { outcome, failureType, byReflex, interrupted, sentAt, judgedAt: judged.at });
       parts.send(JSON.stringify({ kind: 'body.fast', eventId: sessionId, bodyId, decision: decision.kind, rule: decision.rule,
         skill: decision.skill, outcome }), sessionId);
-    } finally { governor.ended(step.taskId, now(), entry, effective, cooldown); }
+    } finally {
+      governor.ended(step.taskId, now(), entry, effective, cooldown);
+      Object.assign(timing, { kind: decision.kind, rule: decision.rule, skill: decision.skill });
+      if (parts.log) logReflexTiming(parts.log, timing);
+    }
   };
 
   return {
@@ -252,7 +269,7 @@ export function createMinecraftFastJudgment(parts: {
       if (!live()) return null;
       frames = 0;
       lastKind = null;
-      return run(bodyId, decision, entry, { arrived: control.arrivedAt(bodyId), at: now() }, signal);
+      return run(bodyId, decision, entry, { arrived: control.arrivedAt(bodyId), at: now(), detectedAt: frameTime(observation.receivedAt) }, signal);
     },
   };
 }

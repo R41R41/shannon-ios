@@ -101,7 +101,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const { runtime } = ports;
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
-  const metrics = fcaDecisionMetrics(step.taskId, step.snapshot.task.createdAt, prior, enteredAt === undefined ? {} : { enteredAt });
+  const bodyTask = ports.keepBodyTools?.() === true; // ADR-0014 D8: a body task's calls and summary are counted (`fcaTaskTelemetry.ts`).
+  const metrics = fcaDecisionMetrics(step.taskId, step.snapshot.task.createdAt, prior, { body: bodyTask, ...(enteredAt === undefined ? {} : { enteredAt }) });
   const maintenance = step.snapshot.task.origin === 'maintenance' && step.snapshot.task.kind === 'sleep';
   const progress = (event: TaskProgressEvent) => {
     if (maintenance) return;
@@ -147,14 +148,12 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
   }, () => ({ allowed: true })));
   await checked();
-  // A body task's decision carries no recall packet, in either shape (run 15, 2026-10-19: 2.3–7.3k characters of past episodes in every
-  // stored decision, and 2.7 s of each step): what she did before is one `memory.search` away (offered to every task) when it matters.
-  const bodyTask = ports.keepBodyTools?.() === true;
+  // A body task's decision carries no recall packet (run 15: 2.3–7.3k characters in every stored decision, 2.7 s a step): `memory.search` has it.
   const surprised = bodyTask && await investigateFcaBody(ports, step.taskId, metrics, signal);
   if (surprised) await checked();
   const unsettled = surprised || (bodyTask && ports.body?.troubled?.() === true); // r5: then no decision is asked ahead
   // A decision asked while the last body call ran, still good for this step (`fcaLookahead.ts`): no model call; none after a surprise (r4).
-  const taken = surprised ? null : ports.lookahead?.take(step) ?? null;
+  const taken = metrics.lookahead(surprised ? null : ports.lookahead?.take(step) ?? null);
   // The real result of the call it went on from stands where the running one stood (the model and the next lookahead see it).
   const prepared = taken ? { ...taken, request: withRealResult(taken.request, step.snapshot.history) } : null;
   // mb-llmc r3 (run 27: a creeper stopped her act at 3.9 m and the next decision came 12.8 s later): an urgent step asks the model at once,
@@ -349,6 +348,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       && definition.domain === 'minecraft_body' && definition.effect !== 'read') === true;
     let earlierFailed = false;
     const notRun = new Set<string>();
+    metrics.decided(decision.calls.map(call => ({ name: call.name, act: bodyAction(call.name) })));
     for (const [index, call] of decision.calls.entries()) {
       await checked(ports.tools?.permitsItself?.(call.name) ? 'local' : 'fresh');
       if (!await stillFreshFor(call)) bodyStale = true;
@@ -394,7 +394,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
           ...(ports.observeTasks ? { observed: ports.observeTasks } : {}) });
       },
       value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null })).catch(error => { progress({ operationId, tool: call.name, status: 'unknown' }); ports.evidence?.unknown(step, call); throw error; });
-      if (skipped) metrics.skipped(call.name); else metrics.tool(call.name, performance.now() - toolStarted);
+      if (skipped) metrics.skipped(call.name); else metrics.tool(call.name, performance.now() - toolStarted, { input: call.input, ok: result.ok });
       progress({ operationId, tool: call.name, status: result.ok ? 'received' : 'failed', ...(result.ok && result.readReceipt ? { read: result.readReceipt } : {}), ...(result.ok && call.name === 'task.send' && call.input && typeof call.input === 'object' && (call.input as Record<string, unknown>).id === step.snapshot.task.parentId && typeof (call.input as Record<string, unknown>).message === 'string' ? { report: { text: String((call.input as Record<string, unknown>).message) } } : {}) });
       if (skipped) ports.evidence?.notRun?.(step, call);
       else if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
@@ -473,7 +473,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     lastTurn: JSON.stringify(saved.history.at(-1) ?? null),
     preparedAt: preparedNext.preparedAt, request: preparedNext.request, output: preparedNext.output, selection: selection ? structuredClone(selection) : null });
   else if (preparedNext) ports.lookahead?.wasted?.(step.taskId, 'stale');
-  if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.
+  if (!maintenance) metrics.emit(saved.task.phase); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.
   if (saved.task.phase === 'waiting') {
     observerHandoff('store', 'wait', { phase: saved.task.phase });
     observeSync('wait', { phase: 'checkpoint', measured: 'state' }, () => undefined, () => ({ phase: saved.task.phase }));
@@ -485,14 +485,14 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ports.bodyRecall?.cancel(step.scopeKey, step.taskId);
   }
   if (gated.stop && saved.task.phase === 'waiting') {
-    runtime.stop(step.scopeKey, step.taskId, FCA_WAIT_WITHOUT_COUNTERPART);
+    runtime.stop(step.scopeKey, step.taskId, metrics.stopping(FCA_WAIT_WITHOUT_COUNTERPART));
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   // A body task stops on a failure after the fifth was read, and when nothing has moved for a while (`failureStops`).
   const toolFailuresStop = failureStops({ body: bodyTask, failures: consecutiveToolFailures, priorFailures: priorToolFailures,
     since: failureSince, now: Date.now() });
   if (toolFailuresStop || completionVerificationFailures >= FCA_COMPLETION_MISTAKES_STOP) {
-    runtime.stop(step.scopeKey, step.taskId, toolFailuresStop ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure');
+    runtime.stop(step.scopeKey, step.taskId, metrics.stopping(toolFailuresStop ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure'));
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;

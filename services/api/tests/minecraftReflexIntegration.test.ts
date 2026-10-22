@@ -319,8 +319,8 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     answer.resolve(wait());
   });
   it('with the fast judgment on, meets a zombie right after arrival by taking shelter: no stop, no picture, no image reflex (ADR-0011 stage 2)', async () => {
-    const answer = deferred<FcaModelOutput>();
-    const f = fixture(() => f.modelInputs.length === 1 ? answer.promise : wait(), { fast: true });
+    const answer = deferred<FcaModelOutput>(), logs: string[] = [];
+    const f = fixture(() => f.modelInputs.length === 1 ? answer.promise : wait(), { fast: true, logs });
     cleanups.push(async () => answer.resolve(wait()));
     await f.driver.tick(); await f.until(() => f.modelInputs.length === 1, 'ordinary model waiting');
     // Within 30 s of the body's arrival (a login or a respawn): shelter first, as after each death of run 11.
@@ -337,6 +337,13 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
     const snapshot = f.driver.runtime.snapshot('owner', f.task.id)!;
     expect(snapshot.history.find(entry => (entry as { role?: string }).role === 'tool_results')).toMatchObject({ results: [{ id: 'move', ok: false }] });
     expect(snapshot.messages.map(m => JSON.parse(m.text))).toContainEqual(expect.objectContaining({ kind: 'body.fast', decision: 'shelter', rule: 'respawn_shelter', outcome: 'completed' }));
+    // ADR-0014 D8: one timing line for the decision, in order, with the body's receipt and no text.
+    const timing = logs.filter(line => line.startsWith('{"event":"minecraft_reflex_timing"')).map(line => JSON.parse(line) as Record<string, unknown>);
+    expect(timing).toHaveLength(1);
+    expect(timing[0]).toMatchObject({ path: 'fast', kind: 'shelter', rule: 'respawn_shelter', skill: 'dig-shelter', outcome: 'completed', discard: null });
+    const { detectedAt, decidedAt, dispatchedAt, receiptAt } = timing[0] as Record<string, number>;
+    expect([detectedAt, decidedAt, dispatchedAt, receiptAt].every(Number.isFinite)).toBe(true);
+    expect(detectedAt! <= decidedAt! && decidedAt! <= dispatchedAt! && dispatchedAt! <= receiptAt!).toBe(true);
   });
 
   it('a decision that got no answer is asked once more while the fast judgment keeps guarding the body: the shelter taken in the wait makes the retried decision stale (Minebot runs 12 and 13)', async () => {
@@ -377,7 +384,8 @@ describe('task-owned Minecraft reflex with the real FCA and physical receipt tra
       f.danger(true);
       if (fast) { f.threats([{ name: 'zombie', distance: 2, canReachMe: true }]); f.facts({ floorActive: true }); }
       for (let i = 0; i < 20; i++) { f.pump(); await delay(1); }
-      if (fast) expect(logs).toEqual([expect.stringMatching(/^Shannon reflex entry held task=\S+ reason=floor_active$/u)]);
+      // ADR-0014 D8: beside its fixed line, a held entry writes one timing line (closed codes and times only).
+      if (fast) expect(logs).toEqual([expect.stringMatching(/^Shannon reflex entry held task=\S+ reason=floor_active$/u), expect.stringMatching(/^\{"event":"minecraft_reflex_timing".*"discard":"floor_active"\}$/u)]);
       else expect(logs).toEqual([]);
       expect(f.commands.filter(command => command.kind !== 'capture')).toEqual([]);
       answer.resolve(wait()); await f.driver.drain();

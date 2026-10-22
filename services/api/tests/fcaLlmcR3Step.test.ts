@@ -114,7 +114,7 @@ describe('an urgent step (run 27: 12.8 s from a creeper at 3.9 m to the next dec
     const f = fixture({ ahead: true, summaryMs: 0, urgent: () => true, recallWanted: true });
     await f.run();
     expect(f.recalls()).toBe(0);
-    expect(metrics(f.lines)[0]).toMatchObject({ urgent: true });
+    expect(metrics(f.lines)[0]).toMatchObject({ urgent: true, kind: 'urgent' });
   });
 
   it('a step that is not urgent asks the recall after an event, as before', async () => {

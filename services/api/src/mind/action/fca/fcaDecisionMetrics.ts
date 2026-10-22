@@ -1,6 +1,7 @@
 import { currentActionExecution, type ActionExecution } from '../../../infra/context/actionExecution.js';
 import { eventLoopBlockedMilliseconds, namedWork } from '../../../infra/observer/eventLoopWatch.js';
 import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
+import { fcaTaskTelemetry } from './fcaTaskTelemetry.js';
 
 /**
  * Observation redesign P1 (measurement only): one content-free journal line per committed FCA decision, `fca_decision_metrics`,
@@ -13,6 +14,12 @@ import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
  *    "loopBlockedMs":<ms of event-loop blocks named meanwhile>,"inputTransformations":<n, when the model reported it>,
  *    "cut":{"catalog","state","live":<characters or null>,"over","replayRelaxed","deferred":<bool>,"parts","items":<n>} (a transient request
  *    that was shortened to fit: the stage of each cut, whether even the floor left it over, how many parts and tool descriptions are named cut)}
+ *
+ * Syzygy ADR-0014 D8 (measurement only), added to the line: `kind` ("main", "urgent" or "first_plan": the decision's own call), `model` (the id
+ * the provider answered with), `ttftMs` (time to the first token; null where the transport does not stream, never 0) and `layers`
+ * ({"policy","tools","history","task","live","retrieved"}: token estimates of the request's input layers, `llmcTokens`; the provider's
+ * own counts stay in `in`). `lookahead: "taken"` marks a step that took the decision asked ahead (no model call of its own: `in` is null).
+ * The model calls that are no decision of the step (asked ahead, history summaries) write `fca_aux_call` (`anthropicFcaModel.ts`).
  *
  * `recallStartMs` is what the recall's deterministic start held the API's one thread (0 when a settling body defers it into the packet,
  * whose time is then in `recallMs`); `evidenceMs` is the evidence's shared context, wall time like `recallMs` (it lets I/O through).
@@ -49,11 +56,15 @@ function inputCounts(metrics: NonNullable<ActionExecution['modelMetrics']>): Rec
 }
 
 export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Readonly<Record<string, unknown>>,
-  options: { now?: () => number; clock?: () => number; log?: (line: string) => void; enteredAt?: number } = {}) {
+  options: { now?: () => number; clock?: () => number; log?: (line: string) => void; enteredAt?: number; body?: boolean;
+    summaryLog?: (line: string) => void } = {}) {
   const clock = options.clock ?? (() => performance.now()), now = options.now ?? Date.now, log = options.log ?? ((line: string) => console.info(line));
   const before = Number(prior.fcaDecisionIndex), index = (Number.isSafeInteger(before) && before >= 0 ? before : 0) + 1;
   const started = clock(), loopStarted = eventLoopBlockedMilliseconds(), execution = currentActionExecution(), startedAt = now();
   if (execution) delete execution.modelMetrics; // A reading of an earlier decision on the same execution is never this one's.
+  // ADR-0014 D8: a body task's model calls are counted for its summary (`fcaTaskTelemetry.ts`); the call's kind is set before each attempt.
+  if (execution && options.body) execution.telemetry = { taskId, kind: 'main' };
+  let attempts = 0, taken = false, planned: Array<{ name: string; act: boolean }> = [];
   const spent: Record<Spent, number> = { selectorMs: 0, recallMs: 0, summaryMs: 0, llmMs: 0, recallStartMs: 0, evidenceMs: 0, probeMs: 0 };
   const other: Record<Other, number> = { startMs: options.enteredAt === undefined ? 0 : Math.max(0, started - options.enteredAt),
     permitMs: 0, guardMs: 0, contextMs: 0, verifyMs: 0, closeMs: 0, commitMs: 0, progressMs: 0 };
@@ -66,6 +77,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   const ahead: string[] = [];
   /** mb-llmc r4: what the body's investigation did before the decision (`FcaBodyLifecycle.investigate`), or null. */
   let probe: { surprises: string[]; probes: number; answered: number } | null = null;
+  const kindOf = (): 'main' | 'urgent' | 'first_plan' => urgent ? 'urgent' : index === 1 ? 'first_plan' : 'main';
   /** The time before this step, from the previous decision's commit (`gap` above). */
   const gap = () => {
     if (committedBefore === null) return null;
@@ -83,6 +95,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
      */
     async timed<T>(part: Spent | Other, work: () => Promise<T>, skip?: () => boolean): Promise<T> {
       const at = clock();
+      if (part === 'llmMs') attempts += 1;
+      if (part === 'llmMs' && execution?.telemetry) execution.telemetry.kind = kindOf();
       try { return await work(); } finally { if (!skip?.()) add(part, clock() - at); }
     },
     /** `timed` for synchronous work: what it held the API's one thread. */
@@ -90,10 +104,14 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
       const at = clock();
       try { return namedWork(`fca_${part}`, work); } finally { add(part, clock() - at); }
     },
-    tool(name: string, milliseconds: number): void {
+    /** A tool call ended (`result`: its arguments are only compared, a failed same call repeated is counted for the task summary). */
+    tool(name: string, milliseconds: number, result?: { input: unknown; ok: boolean }): void {
       tools.push(toolName(name));
       toolMs += milliseconds;
+      if (result && options.body) fcaTaskTelemetry.toolCall(taskId, name, result.input, result.ok);
     },
+    /** The calls of the decision, and which of them act on the body (a decision of `plan.update` and no act is plan-only). */
+    decided(calls: ReadonlyArray<{ name: string; act: boolean }>): void { planned = [...calls]; },
     /** One ask of the action lease of the mind (checked in fcaRunner.ts asks only some of the times it checks). */
     asked(): void { permitAsks += 1; },
     /** A body action of the response left unrun because an earlier one of it failed. */
@@ -102,6 +120,18 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     bodyRecall(measure: BodyRecallMeasure): void { recalled = measure; },
     /** The step was urgent (mb-llmc r3). */
     urgent(): void { urgent = true; },
+    /** The decision asked ahead that this step took, or null (`fcaLookahead.ts`): the step then asks no model. */
+    lookahead<T>(prepared: T | null): T | null {
+      taken = prepared !== null;
+      return prepared;
+    },
+    /** The task is being stopped by its runner: its summary line, then the reason as it was. */
+    stopping<T>(reason: T): T {
+      if (options.body) fcaTaskTelemetry.summary(taskId, 'stopped', options.summaryLog);
+      return reason;
+    },
+    /** The kind of this step's decision call (ADR-0014 D8): the first decision of a task asks for its first plan. */
+    kind: kindOf,
     /** mb-llmc r8: the decision awaited was thrown away after `milliseconds` for a hostile that came, and asked again (`fcaUrgentDecision.ts`). */
     interrupted(milliseconds: number): void {
       urgent = true;
@@ -116,21 +146,26 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     },
     /** `fcaCommittedAt`: when this decision committed (epoch ms), the start of the next one's `gap`. */
     checkpoint: (): Record<string, unknown> => ({ fcaDecisionIndex: index, fcaCommittedAt: now() }),
-    /** Writes the line (the decision has committed). Never throws. */
-    emit(): void {
+    /** Writes the line (the decision has committed), then the task's counters (`phase`: the task's after the commit). Never throws. */
+    emit(phase?: string): void {
       try {
         const metrics = currentActionExecution()?.modelMetrics, began = Date.parse(createdAt);
-        log(JSON.stringify({ event: 'fca_decision_metrics', task: taskId, d: index,
+        log(JSON.stringify({ event: 'fca_decision_metrics', task: taskId, d: index, kind: kindOf(),
           t: Number.isFinite(began) ? Math.max(0, Math.round((now() - began) / 1000)) : null, obsMode: metrics?.obsMode ?? 'legacy',
           llmMs: Math.round(spent.llmMs), stepMs: Math.round(clock() - started), selectorMs: Math.round(spent.selectorMs),
           recallMs: Math.round(spent.recallMs), recallStartMs: Math.round(spent.recallStartMs), evidenceMs: Math.round(spent.evidenceMs),
           summaryMs: Math.round(spent.summaryMs), tools, toolMs: Math.round(toolMs),
           storedTokens: metrics?.storedTokens ?? null, tailTokens: metrics?.tailTokens ?? null,
           in: metrics ? inputCounts(metrics) : null, out: metrics?.outputTokens ?? null,
+          ...(metrics?.model ? { model: metrics.model } : {}), ttftMs: metrics?.ttftMs ?? null, ...(metrics?.layers ? { layers: metrics.layers } : {}),
+          ...(taken ? { lookahead: 'taken' } : {}),
           loopBlockedMs: Math.round(eventLoopBlockedMilliseconds() - loopStarted),
           other: Object.fromEntries(Object.entries(other).map(([key, value]) => [key, Math.round(value)])), permitAsks, gap: gap(),
           ...optional(metrics) }));
       } catch { /* measuring never fails a step */ }
+      if (options.body) {
+        fcaTaskTelemetry.decision(taskId, { attempts, interrupted: thrown !== null, surprised: probe !== null, taken, planned, phase }, options.summaryLog);
+      }
     },
   };
   /** The fields of the line that are there only when there is something to say. */

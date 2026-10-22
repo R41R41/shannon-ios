@@ -10,9 +10,15 @@ export interface ActionExecution {
     inputTransformations:number;obsMode?:'transient';
     /** A transient request: the estimate of its live state's tokens (the part after the last cache breakpoint). */
     liveTokens?:number;
+    /** Syzygy ADR-0014 D8: the model id that answered, the time to its first token (null: the transport does not stream), and the estimate
+     * of the input by layer (`llmcTokens`; counts only). */
+    model?:string;ttftMs?:number|null;
+    layers?:{policy:number;tools:number;history:number;task:number;live:number;retrieved:number};
     /** A transient request: how it was shortened to fit (levels in characters, null: not cut), content-free. */
     cuts?:{catalog:number|null;state:number|null;live:number|null;trim:number|null;over:boolean;replayRelaxed:boolean;deferred:boolean;
       parts:number;items:number}};
+  /** Syzygy ADR-0014 D8 (measurement only): whose model call this is and of which kind (`fcaTaskTelemetry.ts`). Never persisted. */
+  telemetry?:{taskId:string;kind:'main'|'urgent'|'lookahead'|'first_plan'|'summary'};
   /**
    * An FCA step asked its model for its decision (`fcaRunner.ts`). Before that, a step has run only internal work and model calls
    * whose results it keeps (recall, tool selection, history summaries): a hold there may be retried (`heldBeforeAnyEffect`).

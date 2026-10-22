@@ -7,7 +7,8 @@ import { currentActionExecution, inActionExecution } from '../../../infra/contex
 export function isolatedModelCall<T>(work: () => Promise<T>): Promise<T> {
   const step = currentActionExecution();
   if (!step) return work();
-  return inActionExecution({ lease: step.lease, signal: step.signal, permit: (resources, signal) => step.permit(resources, signal) }, work);
+  return inActionExecution({ lease: step.lease, signal: step.signal, permit: (resources, signal) => step.permit(resources, signal),
+    ...(step.telemetry ? { telemetry: { taskId: step.telemetry.taskId, kind: 'lookahead' as const } } : {}) }, work);
 }
 
 /** The longest a summary asked beside the steps may take. */
@@ -19,5 +20,6 @@ export const DETACHED_SUMMARY_MS = 120_000;
 export function detachedModelCall<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const signal = AbortSignal.timeout(DETACHED_SUMMARY_MS), step = currentActionExecution();
   if (!step) return work(signal);
-  return inActionExecution({ lease: step.lease, signal, permit: (resources, permitSignal) => step.permit(resources, permitSignal) }, () => work(signal));
+  return inActionExecution({ lease: step.lease, signal, permit: (resources, permitSignal) => step.permit(resources, permitSignal),
+    ...(step.telemetry ? { telemetry: { taskId: step.telemetry.taskId, kind: 'summary' as const } } : {}) }, () => work(signal));
 }

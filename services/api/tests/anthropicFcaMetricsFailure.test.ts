@@ -4,7 +4,8 @@ import { inActionExecution, type ActionExecution } from '../src/infra/context/ac
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 
-vi.mock('../src/infra/models/anthropic/anthropicFcaMetrics.js', () => ({ decisionRequestMetrics: () => { throw new Error('metrics helper failed'); } }));
+vi.mock('../src/infra/models/anthropic/anthropicFcaMetrics.js', async importOriginal => ({ ...await importOriginal<object>(),
+  decisionRequestMetrics: () => { throw new Error('metrics helper failed'); } }));
 
 describe('measurement never fails a decision', () => {
   it('returns the decision when the request-metrics helper throws after the response was billed', async () => {

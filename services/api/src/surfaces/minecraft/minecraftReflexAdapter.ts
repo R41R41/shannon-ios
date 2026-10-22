@@ -19,6 +19,7 @@ import {
 import { createReflexGovernor, reflexPlace, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
 import { observerHandoff } from '../../infra/observer/observerContext.js';
 import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
+import { createReflexTimings } from './minecraftReflexTiming.js';
 import { createBodyRevisions, createFightOwner, fightCall } from './minecraftFightOwner.js';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
@@ -130,7 +131,8 @@ export function createMinecraftTaskBody(parts: {
   // Before the task's first decision (none in its history, no call noted yet) a reflex starts on its own only for concrete danger
   // seen in `REFLEX_DANGER_FRAMES` frames in a row; never for `stuck` or `visual`. What held it back is told to the Observer once.
   let decided = step.snapshot.history.length > 0 || recentResults.length > 0, dangerFrames = 0, held = '';
-  const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS, log = parts.log ?? ((line: string) => console.info(line));
+  const spawnGrace = parts.spawnGraceMilliseconds ?? MINECRAFT_SPAWN_GRACE_MILLISECONDS, log = parts.log ?? ((line: string) => console.info(line)),
+    timings = createReflexTimings({ task: step.taskId, now, log, held: !!parts.fastJudgment }); // ADR-0014 D8: when each stage happened
   // Measurement only (observation redesign P1): it reads this body's frames and writes journal lines; no decision depends on it.
   // mb-r25: every frame also tells the route whether its step is late now (`minecraftRouteWatch.ts`), not only the decisions.
   const metrics = stepMetrics(step, now, parts.metricsLog, routeWatcher({ plan: routePlan, createdAt: step.snapshot.task.createdAt, now }));
@@ -140,7 +142,7 @@ export function createMinecraftTaskBody(parts: {
   const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
     if (held !== reason) {
       observerHandoff('bodyObserve', 'reflex', { phase: 'entry_held', reason, ...detail });
-      if (parts.fastJudgment) log(`Shannon reflex entry held task=${step.taskId} reason=${reason}`);
+      timings.held(reason, detail);
     }
     held = reason;
   };
@@ -219,8 +221,9 @@ export function createMinecraftTaskBody(parts: {
         if (parts.evidence && !parts.evidence.beforeActions(step, { decision: { kind: 'tools', calls: [call] }, history: [] })) throw new Error('FCA_EVIDENCE_FENCED');
         execution!.stepOutcome = 'unknown';
         try {
-          const receipt = await control.command({ id: `reflex:${hash(operation.operationId)}`, context: operation.context, lease, kind: 'reflex', operation,
-            milliseconds: Math.max(1, Date.parse(operation.deadlineAt) - now()) }, signal);
+          const receipt = await timings.around(operation.context.sessionId, operation.candidate.operation, () => control.command({
+            id: `reflex:${hash(operation.operationId)}`, context: operation.context, lease, kind: 'reflex', operation,
+            milliseconds: Math.max(1, Date.parse(operation.deadlineAt) - now()) }, signal));
           const action = receipt.action;
           if (!action) throw new Error('FCA_BODY_ACTION_ACK_REQUIRED');
           execution!.stepOutcome = 'acknowledged';
@@ -249,7 +252,7 @@ export function createMinecraftTaskBody(parts: {
     const interrupting = mode === 'explicit' || activeAction !== undefined;
     if (interrupting) revisions.hard();
     modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
-    const job = controller.run(request, signal);
+    const job = timings.session(request.context.sessionId, mode).track(controller.run(request, signal));
     if (entry) governor.began(step.taskId, now(), entry);
     // Effective: a body action completed in it. A session that only observed and returned is followed by its mode's cooldown.
     const ended = (effective: boolean) => { if (entry) governor.ended(step.taskId, now(), entry, effective); };
@@ -287,7 +290,7 @@ export function createMinecraftTaskBody(parts: {
     // each on a long task, the API's thread blocked every ~5 s while this monitor polled every 250 ms). It is asked only once a
     // frame could start a reflex; nothing is shown, sent or started before it, and the entry asks it again (below).
     if (closed || active) return;
-    const bodyId = bound(), observation = bodyId ? control.observe(bodyId) : null;
+    const bodyId = bound(), observation = timings.seen(bodyId ? control.observe(bodyId) : null);
     // The image-free fast judgment comes first and needs no picture (ADR-0011 stage 2, run 11).
     if (fast && bodyId && observation && observation.sequence !== lastFastSequence) {
       lastFastSequence = observation.sequence;
