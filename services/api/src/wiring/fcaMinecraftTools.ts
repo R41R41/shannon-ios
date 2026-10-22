@@ -7,6 +7,8 @@ import { MC_PROBE_TOOL } from '../contracts/minecraftProbeContract.js';
 import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema, urgentWatch } from '../surfaces/minecraft/minecraftLlmc.js';
 import { frameCreatures } from '../surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { checkedStopIf } from '../surfaces/minecraft/minecraftLlmcStopIf.js';
+import { waitForReflexRelease } from '../surfaces/minecraft/minecraftLlmcReflexHold.js';
+import { preflightOfFrame, preflightText } from '../surfaces/minecraft/minecraftLlmcPreflight.js';
 import { noteActNode, tagActWhy, type ActNodeMark } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
@@ -52,7 +54,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
    */
   llmc?: { plan(): BodyPlanView | undefined;
     /** r4 (SHANNON_MINECRAFT_LLMC_PROBE): `mc.probe` is offered when the body has `probe`. */
-    probe?: boolean };
+    probe?: boolean;
+    /** SHANNON_MINECRAFT_ACT_PREFLIGHT: an act the map shows the body would refuse at a hand's start is not sent (`minecraftLlmcPreflight.ts`). */
+    preflight?: boolean };
 }): FcaExternalTools {
   const { control, step } = parts;
   const bodyId = control.store.body(step.taskId) ?? (control.available().length === 1 ? control.available()[0]! : null);
@@ -92,6 +96,12 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     if (!schema || !validSkillInput(call.input, schema)) return toolFailure('invalid_input', '道具の引数が登録された形式に合わない。', { retryable: false });
     const refused = fightRefusal(call.name, call.input, () => control.observe(bodyId));
     if (refused) return refused;
+    // act-preflight: a hand the map shows for certain the body would refuse at its start is not sent; the fact comes back at once.
+    const held = parts.llmc?.preflight && call.name === MC_ACT_TOOL ? preflightOfFrame(call.input, control.observe(bodyId), step.taskId) : null;
+    if (held) {
+      console.info(`Shannon Minecraft act held before send task=${step.taskId} hand=${held.hand} do=${held.kind} code=${held.code}`);
+      return toolFailure('refused', preflightText(held), { retryable: true });
+    }
     if (!control.store.bind(step.taskId, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     if (call.name === 'minecraft.observe') return toolOk(JSON.stringify(control.observe(bodyId)));
     const active = currentActionExecution();
@@ -155,6 +165,17 @@ async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; b
   walled?: boolean }) {
   const { control, step, bodyId, call, active } = parts;
   const watch = call.name === MC_ACT_TOOL ? urgentWatch(call.input, () => control.observe(bodyId), call.signal, 250, { walled: parts.walled === true }) : null;
+  let fixes = parts.fixes;
+  try {
+    // r10 (H2, run 34): an act is not sent while a multi-hand reflex holds the body (its lease would cut it and leave it unsettled).
+    if (call.name === MC_ACT_TOOL && parts.walled === true) {
+      const held = await waitForReflexRelease({ observe: () => control.observe(bodyId), signal: watch?.signal ?? call.signal });
+      if (held.kind) {
+        console.info(`Shannon Minecraft act waited for reflex task=${step.taskId} kind=${held.kind} ms=${held.waitedMs} gaveUp=${held.gaveUp ? 1 : 0}`);
+        fixes = [...fixes, `反射 ${held.kind} が体を握っていたので ${(held.waitedMs / 1000).toFixed(1)} 秒待ってから送った${held.gaveUp ? '（放さないまま上限）' : ''}`];
+      }
+    }
+  } catch { /* waiting never fails a call */ }
   active.stepOutcome = 'unknown';
   try {
     // An act's deadline from its hands, a walk's from its length from where she stands now (run 27: 80 m cut at 17 s).
@@ -162,7 +183,7 @@ async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; b
     const receipt = await control.command({ id: parts.id, context: minecraftTaskContext(step, bodyId, step.id, parts.plan), lease: step.lease,
       kind: 'skill', skill: parts.skill, arguments: call.input as Record<string, unknown>, milliseconds }, watch?.signal ?? call.signal);
     active.stepOutcome = 'acknowledged';
-    return llmcResult(call.name, receipt, watch?.reason() ?? null, parts.fixes);
+    return llmcResult(call.name, receipt, watch?.reason() ?? null, fixes, call.input, control.observe(bodyId));
   } finally { watch?.stop(); }
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {

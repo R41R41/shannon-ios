@@ -138,6 +138,11 @@ export const LLMC_CATALOG_SELECTOR: FcaToolSelector = {
   },
 };
 
+/** The switches of the mode that are on, as the wiring's own fields (` ownPrompt=on` in the log). */
+const flagsOn = (flags: Record<string, boolean>): Record<string, true> =>
+  Object.fromEntries(Object.entries(flags).filter(([, on]) => on).map(([name]) => [name, true]));
+const flagWords = (flags: Record<string, boolean>): string => Object.keys(flagsOn(flags)).map(name => ` ${name}=on`).join('');
+
 export interface LlmcWiring {
   names: LlmcModelNames;
   /**
@@ -148,6 +153,8 @@ export interface LlmcWiring {
   probe: boolean;
   /** SHANNON_MINECRAFT_OWN_PROMPT (ADR-0014 D3): the body task's own words for the decisions, the summary and the first plan. */
   ownPrompt?: boolean;
+  /** SHANNON_MINECRAFT_ACT_PREFLIGHT (ADR-0014 D3): an act the map shows the body would refuse at a hand's start is not sent. */
+  preflight?: boolean;
   models: { main: FcaModel; escalate: FcaModel | null };
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
@@ -171,6 +178,7 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   // SHANNON_MINECRAFT_OWN_PROMPT (ADR-0014 D3): the body task's own instructions with the pruned knowledge instead.
   const own = switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT');
   const appendix = own ? llmcCoreKnowledge(probe) : llmcSystemAppendix(probe);
+  const preflight = switchOn(values, 'SHANNON_MINECRAFT_ACT_PREFLIGHT');
   const make = (model: string) => {
     const apiKey = keyFor(values, model);
     return apiKey || base.client ? createAnthropicFcaModel({ ...base, model, ...(apiKey ? { apiKey } : {}), systemAppendix: appendix,
@@ -183,8 +191,8 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   }
   const haikuKey = keyFor(values, DEFAULT_HAIKU_MODEL);
   log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}${probe ? ' probe=on' : ''}`
-    + (own ? ' ownPrompt=on' : ''));
-  return { names, probe, ...(own ? { ownPrompt: true } : {}), models: { main, escalate: names.escalate ? make(names.escalate) : null },
+    + flagWords({ ownPrompt: own, preflight }));
+  return { names, probe, ...flagsOn({ ownPrompt: own, preflight }), models: { main, escalate: names.escalate ? make(names.escalate) : null },
     summarizer: haikuKey || base.client
       ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
         ...(own ? { minecraftOwnPrompt: true } : {}), maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
@@ -249,7 +257,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   return {
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null },
-    tools: { llmc: { plan: display, ...(llmc.probe ? { probe: true } : {}) } },
+    tools: { llmc: { plan: display, ...flagsOn({ probe: llmc.probe, preflight: llmc.preflight === true }) } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,

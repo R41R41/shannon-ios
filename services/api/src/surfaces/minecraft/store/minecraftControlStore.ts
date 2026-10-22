@@ -2,6 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { MinecraftControlCommand, MinecraftControlReceipt } from '../../../contracts/minecraftControlContract.js';
 import type { ActionLease } from '../../../contracts/actionThreadContract.js';
 
+/** The body's read-only probe skill (`PROBE_SKILL` in `minecraftProbeContract.ts`; not imported, which would widen the worker entries' closures). */
+const PROBE_SKILL = 'probe';
+
 /** The marker of a receipt the API wrote when it closed an operation the body never answered (`minecraftOperationReconcile.ts`). */
 export const RECONCILED_BY_RELEASE = 'release_proof';
 
@@ -117,8 +120,16 @@ export class MinecraftControlStore {
       .get(lease.holder, lease.generation, taskId, scopeKey);
     return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
   }
+  /**
+   * Whether the task has no body operation whose effect is still open. A read-only probe (`mc.probe`, `probe:` ids) touches nothing, so
+   * it is never open: Minecraft run 34 (2026-10-22): a step's own probes were still in flight when the investigation's budget ran out,
+   * the next guard saw them unsettled, the step was declared FCA_BODY_OUTCOME_UNKNOWN and its cancel settled them a moment later as
+   * `cancelled` with every input released; seven such steps used up the body recovery limit and paused the task.
+   */
   safe(taskId: string): boolean {
-    return this.db.prepare("SELECT 1 FROM fca_body_operations WHERE task_id=? AND (phase!='settled' OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1").get(taskId) === undefined;
+    return this.db.prepare(`SELECT 1 FROM fca_body_operations WHERE task_id=? AND COALESCE(json_extract(command_json,'$.skill'),'')!=?
+      AND (phase!='settled' OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1`)
+      .get(taskId, PROBE_SKILL) === undefined;
   }
   bind(taskId: string, bodyId: string): boolean {
     const old = this.body(taskId); if (old) return old === bodyId;

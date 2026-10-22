@@ -35,7 +35,7 @@ export interface Footing {
 }
 
 interface Grid { cells: Map<string, string> }
-interface Drawn { feet: ActPos; mode: string; layers: Map<number, Grid>; top: Grid | null }
+export interface Drawn { feet: ActPos; mode: string; layers: Map<number, Grid>; top: Grid | null }
 const HEADER = /^地図 v1 足=\((-?\d+),(-?\d+),(-?\d+)\) x=(-?\d+)\.\.(-?\d+) z=(-?\d+)\.\.(-?\d+) 方式=(\w+)/u;
 const LAYER = /^y=(-?\d+)(?: x=(-?\d+)\.\.(-?\d+) z=(-?\d+)\.\.(-?\d+))?\s*$/u;
 const ROW = /^\s*(-?\d+) (.+)$/u;
@@ -70,6 +70,15 @@ export function readMap(map: string | undefined): Drawn | null {
 }
 
 const solid = (symbol: string) => !OPEN.has(symbol) && !WATER.has(symbol) && !LAVA.has(symbol) && symbol !== '?';
+/** r10: the symbol of a block in a drawn map, or undefined where the map does not show it (another layer, past its edge). */
+export function mapSymbol(drawn: Drawn | null, x: number, y: number, z: number): string | undefined {
+  return drawn?.layers.get(y)?.cells.get(`${x},${z}`);
+}
+/** r10: whether a block of the drawn map is solid (a wall to dig); null where the map does not say. */
+export function mapSolid(drawn: Drawn | null, x: number, y: number, z: number): boolean | null {
+  const symbol = mapSymbol(drawn, x, y, z);
+  return symbol === undefined || symbol === '?' ? null : solid(symbol);
+}
 const bottomOf = (symbol: string): Bottom => LAVA.has(symbol) ? 'lava' : WATER.has(symbol) ? 'water' : 'floor';
 
 type GapMaker = (drop: number, deeper: boolean, bottom: Bottom, name?: string) => FootingGap;

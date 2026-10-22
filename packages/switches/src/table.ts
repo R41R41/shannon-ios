@@ -217,6 +217,13 @@ export const SWITCHES = [
       + 'Off: every request as before, byte for byte.',
   },
   {
+    name: 'SHANNON_MINECRAFT_ACT_PREFLIGHT', default: 'off', kind: 'on_only', owner: 'minecraft', requires: ['SHANNON_MINECRAFT_LLM_CENTRIC'],
+    doc: 'ADR-0014 D3 (owner 2026-10-23): before an mc.act is sent, its hands are walked against the newest frame map; a hand the body would '
+      + 'refuse at its start for a reason the map shows for certain (a walk into a wall or to a cell with no floor or no route, a place into a '
+      + 'filled cell or onto air) is not sent, and the fact comes back at once as the result. Nothing is mended or added; what the map does not '
+      + 'show is sent as it is. Off: as before.',
+  },
+  {
     name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
     doc: 'Owner 2026-10-20 (dc-live): every conversation (the app, Discord text and calls) is given her Minecraft body\'s present from its latest frame '
       + '(task, step against its target seconds, health, hunger, danger, items, map); the moments her frames show are noticed.',

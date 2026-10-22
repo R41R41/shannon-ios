@@ -165,6 +165,8 @@ export interface ActResult {
   stoppedBy?: 'failure' | 'reflex' | 'stopIf' | 'inventoryFull' | 'cancelled' | 'deadline';
   /** stopIf: which (`hostileWithin:zombie 4.2m`, `hpBelow:7`). reflex: what the reflex did and where she is (`溶岩から上がった (12,64,-3)`). */
   stoppedWhy?: string;
+  /** r10 (the body): the act came while a reflex held the body and began when it let go ("反射 flee（低体力の逃走）の最中のため、放された後に始めた（待ち 1.6秒）"). */
+  afterReflex?: string;
   lines: readonly ActHandLine[];
   /** Where she stands and her health and food after the act. */
   at: ActPos; hp: number; food: number;
