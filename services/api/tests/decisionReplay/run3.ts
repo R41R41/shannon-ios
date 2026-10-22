@@ -51,7 +51,8 @@ async function chain(id: string): Promise<void> {
     const r10 = r10Input(decision, info);
     const rewrite: SceneRewrite = { rows: r10.rows, turn: r10.turn };
     const live = r10.turn.find(entry => entry.role === 'system')!;
-    if (slim.knowledge) rewrite.turn = [knowledgeEntry(JSON.parse(String(live.content)) as Record<string, any>, split, live), ...r10.turn];
+    // 場面の知識は live の直前（system が 2 つ続くのは配列の終わりだけ許される）。
+    if (slim.knowledge) rewrite.turn = r10.turn.flatMap(entry => entry === live ? [knowledgeEntry(JSON.parse(String(live.content)) as Record<string, any>, split, live), entry] : [entry]);
     if (slim.history) rewrite.history = (slim.short ? shortenEntries : (entries: never) => entries)(compactHistory(decision, 3, 6, r10.rows) as never);
     else if (slim.short) rewrite.rows = r10.rows.map(shortenEntries);
     const request = await buildRequest(variant, decision, decision.run.core, bootstrapOf(decision.run.key, decision.epoch), '5m', false, previous?.decision, rewrite);
