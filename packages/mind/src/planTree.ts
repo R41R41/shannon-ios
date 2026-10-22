@@ -286,11 +286,19 @@ class PlanEdit {
       if (kids.length && kids.every(kid => kid.state === 'done') && node.state !== 'blocked') node.state = 'done';
     }
   }
+  /** r9: whether a node above `node` is done (a done node leaves nothing under it to do, so none of its open children is the next). */
+  doneAbove(node: PlanNode): boolean {
+    for (let up = node.parentId, guard = 0; up !== null && guard < PLAN_LIMITS.nodes; up = this.nodes.get(up)?.parentId ?? null, guard += 1) {
+      if (this.nodes.get(up)?.state === 'done') return true;
+    }
+    return false;
+  }
   /** The first node not done after `from` in order (or from the start): a leaf before its parent's turn comes. */
   nextOpen(from: string | null): string | null {
     const order = orderedPlan([...this.nodes.values()]);
     const start = from === null ? 0 : order.findIndex(node => node.id === from) + 1;
-    const open = (node: PlanNode) => node.state !== 'done' && node.state !== 'blocked' && !this.children(node.id).some(kid => kid.state !== 'done');
+    const open = (node: PlanNode) => node.state !== 'done' && node.state !== 'blocked' && !this.children(node.id).some(kid => kid.state !== 'done')
+      && !this.doneAbove(node);
     return [...order.slice(start), ...order.slice(0, start)].find(open)?.id ?? null;
   }
 }
@@ -325,7 +333,7 @@ function settleCurrent(edit: PlanEdit, named: string | null | undefined): string
   }
   edit.settleParents();
   const now = edit.current === null ? undefined : edit.nodes.get(edit.current);
-  if (named === undefined && (!now || now.state === 'done')) edit.current = edit.nextOpen(now ? now.id : null);
+  if (named === undefined && (!now || now.state === 'done' || edit.doneAbove(now))) edit.current = edit.nextOpen(now ? now.id : null);
   return null;
 }
 
@@ -355,8 +363,15 @@ export function planPath(tree: PlanTree): PlanPathView {
   const now = tree.current ? byId.get(tree.current) ?? null : null;
   for (let up = now?.parentId ? byId.get(now.parentId) : undefined; up; up = up.parentId ? byId.get(up.parentId) : undefined) path.unshift(up.title);
   const order = orderedPlan(tree.nodes), from = now ? order.findIndex(node => node.id === now.id) + 1 : 0;
+  // r9: a node under a done one is not next (the done node leaves nothing under it to do).
+  const doneAbove = (node: PlanNode) => {
+    for (let up = node.parentId ? byId.get(node.parentId) : undefined; up; up = up.parentId ? byId.get(up.parentId) : undefined) {
+      if (up.state === 'done') return true;
+    }
+    return false;
+  };
   const next = order.slice(from).filter(node => node.state === 'continue' || node.state === 'wait')
-    .filter(node => !order.some(other => other.parentId === node.id && other.state !== 'done')).slice(0, PLAN_LIMITS.next);
+    .filter(node => !order.some(other => other.parentId === node.id && other.state !== 'done') && !doneAbove(node)).slice(0, PLAN_LIMITS.next);
   const rules = planRules(tree, now);
   return { done: `${tree.nodes.filter(node => node.state === 'done').length}/${tree.nodes.length}`, path,
     now: now ? nodeLine(now) : null, next: next.map(nodeLine),

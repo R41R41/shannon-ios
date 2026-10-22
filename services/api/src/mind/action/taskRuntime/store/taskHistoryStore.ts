@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { checkedTemplate, COMPACTION_BODY_ITEM_CHARACTERS, COMPACTION_SECTIONS } from '@shannon/mind';
 import type { TaskHistoryCommit, TaskHistoryRound, TaskHistorySummary, TaskHistoryWindow } from '../taskHistoryPorts.js';
 import type { TaskSource, TaskStatus, TaskStep } from '../taskRuntimePorts.js';
+import { namedWork } from '../../../../infra/observer/eventLoopWatch.js';
 import { enableFcaProvenanceSets, requireStoredSources, storedSourcesJson } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 
 /** Derived summaries never replace the append-only native history. Caller owns the task transaction and lease fence. */
@@ -23,7 +24,8 @@ export class TaskHistoryStore {
    */
   appendStep(step: TaskStep, entries: string, disposition: string, at: string, status: TaskStatus): void {
     if (disposition === 'continue' && entries === '[]') return;
-    this.append(step.scopeKey, step.taskId, step.id, entries, at, status, step.snapshot.sources);
+    // r9: named, so that a block of the loop at a commit says whether it was the round's sources (the reference to them) or the rest.
+    namedWork('commit_history', () => this.append(step.scopeKey, step.taskId, step.id, entries, at, status, step.snapshot.sources));
   }
   /** A round's stored sources (a copy, or a reference read now); an unresolved reference stops the read (`FCA_PROVENANCE_UNRESOLVED`). */
   window(scopeKey: string, taskId: string, sources: readonly TaskSource[]): TaskHistoryWindow {

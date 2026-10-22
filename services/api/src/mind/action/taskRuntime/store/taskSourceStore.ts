@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { taskSourceOfRow } from '../../../../infra/sqlite/fcaProvenanceSets.js';
+import { namedWork } from '../../../../infra/observer/eventLoopWatch.js';
+import { cachedTaskSourceOfRow } from '../../../../infra/sqlite/fcaProvenanceSets.js';
 import type { TaskConversationSource, TaskRecord, TaskSource, TaskSourceObservation, TaskStep } from '../taskRuntimePorts.js';
 
 /** Conversation lineage only; canonical memory content is never copied here. */
@@ -36,7 +37,8 @@ export class TaskSourceStore {
           OR m.message_id IN (SELECT value FROM json_each(?))))))) ORDER BY s.observed_at,s.step_id`)
       .all(task.scopeKey, task.id, task.kind, activeStepId, task.kind, messageIds === undefined ? 0 : 1, task.kind, JSON.stringify(messageIds ?? []));
     const pendingRuns = rows.some(row => row.state === 'pending') && this.runsOnPendingOrigin(task.id);
-    return rows.map(row => taskSourceOfRow(row, pendingRuns && row.state === 'pending'));
+    // r9: a memory row (never changed) is handed as the source it was last read as, while it reads the same (`cachedTaskSourceOfRow`).
+    return namedWork('task_sources', () => rows.map(row => cachedTaskSourceOfRow(this.db, row, pendingRuns && row.state === 'pending')));
   }
   inherit(task: TaskRecord, activeStepId: string | null, targetId: string, messageId = '', messageIds?: readonly string[]): void {
     for (const source of this.refs(task, activeStepId, messageIds)) this.db.prepare(

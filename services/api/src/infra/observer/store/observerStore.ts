@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ObserverBatch, ObserverDraft, ObserverEvent } from '../../../contracts/observerContract.js';
 import { installObserverSink } from '../observerContext.js';
+import { namedWork } from '../eventLoopWatch.js';
 
 /** The client's spans (pcm, STT handoff) are capped apart from the server's. */
 const laneOf=(event:{origin?:string})=>event.origin==='client'?'client':'server';
@@ -49,7 +50,13 @@ export class SQLiteObserverStore {
     try{this.knownLost=(this.db.prepare('SELECT dropped FROM observer_loss WHERE id=1').get() as {dropped:number}).dropped;}catch{/* retain the last known shared count */}
     return Math.min(Number.MAX_SAFE_INTEGER,this.knownLost+this.pendingLost);
   }
-  prune():void {if(this.disposed)return;if(this.pendingLost)this.flush();try{this.trim();this.db.exec('PRAGMA wal_checkpoint(PASSIVE)');}catch{/* sidecar contention never affects a task */}}
+  prune():void {
+    if(this.disposed)return;
+    namedWork('observer_prune',()=>{
+      if(this.pendingLost)this.flush();
+      try{this.trim();this.db.exec('PRAGMA wal_checkpoint(PASSIVE)');}catch{/* sidecar contention never affects a task */}
+    });
+  }
   /** Expired rows, then each lane beyond its own cap (oldest first). Runs inside the caller's transaction or alone. */
   private trim():void {
     this.db.prepare('DELETE FROM observer_events WHERE recorded_ms < ?').run(this.now()-this.retentionMs);
@@ -66,6 +73,9 @@ export class SQLiteObserverStore {
   /** Called by scheduled publisher, never awaited by the response path. Failed writes retry only their loss counter. */
   flush():void {
     if(this.disposed||(!this.queue.length&&!this.pendingLost))return;
+    namedWork('observer_flush',()=>this.flushBatch());
+  }
+  private flushBatch():void {
     const batch=this.queue.splice(0,64),pending=this.pendingLost;
     let rejected=0;
     try{

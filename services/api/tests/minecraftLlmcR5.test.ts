@@ -54,7 +54,10 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
     expect(facts.food).toBe(44);
     const done = nodesSeenDone(tree, facts);
     // Wood and stone (all three tools), the food and the bed (bread 44 points, a bed), the iron pickaxe is not yet the iron node (no bucket).
-    expect(done).toEqual(expect.arrayContaining(['p1', 'p1.1', 'p1.2', 'p1.3', 'p2', 'p2.3']));
+    // r9: a node is done by its own predicate: p1 (the pack: the stone pickaxe) and its children p1.2, p1.3 (their tools) are; p1.1 (6 logs: she has 4)
+    // is not closed with its parent, and a parent done by the pack leaves its open children as they are (nothing under it is picked next).
+    expect(done).toEqual(expect.arrayContaining(['p1', 'p1.2', 'p1.3', 'p2', 'p2.3']));
+    expect(done).not.toContain('p1.1');
     expect(done).not.toContain('p3');
     const seen = seenDoneUpdate(tree, RUN28)!;
     const lines: string[] = [];

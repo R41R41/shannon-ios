@@ -180,8 +180,49 @@ export function readSourceAnswers(parts: FcaReadSourcesOptions, log: (line: stri
       if (!making.length) taskEvidenceReads.delete(taskRecords);
     }
   };
+  /** Object identities as short numbers, for a fingerprint (the skill checks are an object a fresh read makes anew). */
+  const objectIds = new WeakMap<object, number>();
+  let objectCount = 0;
+  const objectId = (value: object): number => {
+    let id = objectIds.get(value);
+    if (id === undefined) objectIds.set(value, id = ++objectCount);
+    return id;
+  };
+  /**
+   * r9: the receipt ids whose answers rest only on the inputs above: a skill, and the documents whose answer is the connection's flag. Any
+   * other family (the Aether context, a study piece, a folder's host, the calendar) asks the clock or an outside store: never kept.
+   */
+  const KEPT_FAMILY = /^(?:shannon-skill|aether-document|notion-page|voyager-task):\/\//u;
+  const families = new WeakMap<readonly string[], { kept: boolean; skill: boolean }>();
+  const familiesOf = (ids: readonly string[]) => {
+    let known = families.get(ids);
+    if (!known) {
+      known = { kept: ids.every(id => KEPT_FAMILY.test(id)), skill: ids.some(id => id.startsWith('shannon-skill://')) };
+      families.set(ids, known);
+    }
+    return known;
+  };
   return {
     tracked, readSkill,
+    /**
+     * r9: the inputs every answer about `ids` (at any time) is made from, as one string: the rows' mark, the state's version, update time and
+     * number of controls, the connections' flags, and for a skill the checks a read takes now and her skills' mark. The same string at two
+     * moments means each answer would be given again (`changed` is null for every kept answer), so a list found unchanged is unchanged.
+     * Null where that cannot be told: inside a transaction (no mark), a receipt of a family that is never kept, a skill with no checks.
+     */
+    fingerprint(scopeKey: string, state: ReadSourceSnapshot['state'], ids: readonly string[]): string | null {
+      const mark = markOf();
+      if (mark === null) return null;
+      // No receipt named: the inputs alone, her skills' among them when there are checks (to see none moved while a walk was made).
+      const family = ids.length ? familiesOf(ids) : { kept: true, skill: Boolean(parts.skillChecks) };
+      if (!family.kept) return null;
+      let skills = '';
+      if (family.skill) {
+        const checks = parts.skillChecks?.(scopeKey, true) ?? null;
+        if (checks === null || checks.mark === null) { if (ids.length) return null; } else skills = `${objectId(checks.checks)}:${checks.mark}`;
+      }
+      return [mark, state.version, state.updatedAt, state.memoryControls.length, FLAGS.map(flag => flagOf(flag) ? 1 : 0).join(''), skills, scopeKey].join('|');
+    },
     /** `make()`'s answer, or the one made under the same inputs in this moment. */
     answer(scopeKey: string, sourceId: string, observedAt: string, shared: ReadSourceSnapshot, make: () => boolean): boolean {
       count('asked');

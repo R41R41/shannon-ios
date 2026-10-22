@@ -6,6 +6,7 @@ import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
 import { MC_PROBE_TOOL } from '../contracts/minecraftProbeContract.js';
 import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema, urgentWatch } from '../surfaces/minecraft/minecraftLlmc.js';
 import { frameCreatures } from '../surfaces/minecraft/minecraftLlmcProbeInput.js';
+import { checkedStopIf } from '../surfaces/minecraft/minecraftLlmcStopIf.js';
 import { noteActNode, tagActWhy, type ActNodeMark } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
@@ -76,7 +77,15 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       ? { feet: feetOf(control.observe(bodyId)), creatures: frameCreatures(control.observe(bodyId)) } : undefined) : null;
     if (prepared?.problem) return toolFailure('invalid_input', prepared.problem, { retryable: false });
     if (prepared) call = { ...call, input: prepared.input as typeof call.input };
-    const node = parts.llmc?.probe && prepared ? nodeTagged(call, parts.llmc.plan(), prepared.fixes) : null;
+    // r9: the act's stopIf against the frame (an hpBelow at or above her health stops it before its first hand; a wait with no hostileWithin).
+    if (prepared && parts.llmc?.probe && call.name === MC_ACT_TOOL) {
+      const checked = checkedStopIf(call.input, control.observe(bodyId));
+      if (checked.fixes.length) {
+        call = { ...call, input: checked.input as typeof call.input };
+        prepared.fixes.push(...checked.fixes);
+      }
+    }
+    const node =parts.llmc?.probe && prepared ? nodeTagged(call, parts.llmc.plan(), prepared.fixes) : null;
     if (node) call = node.call;
     const schema = call.name === 'minecraft.observe' ? EMPTY
       : (parts.llmc ? llmcSchema(call.name) : undefined) ?? skills.find(skill => `mc.${skill.name}` === call.name)?.inputSchema;

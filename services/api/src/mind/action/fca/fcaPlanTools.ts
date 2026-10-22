@@ -54,6 +54,8 @@ export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
     `禁止と注意: forbid（id の節で、してはいけない事を 1 行足す）・caution（気をつける事を 1 行足す）・lift（text の行を消す）。id が無ければ今の節。`,
     `1 行 ${PLAN_LIMITS.rule}字まで、各 ${PLAN_LIMITS.rules} 行まで（超えると古い行から消える）。add・split の節にも forbid・caution の配列を書ける。`,
     'live の plan.rules に、今の節と親の道の禁止・注意が出る（その節を離れると出ない）。驚きの後に原因が分かったら書き、要らなくなったら lift する。',
+    '済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。親が済みでも子は済みにならない（子は自分の条件か set state=done で）。',
+    '場所・次元の条件（dim:・at:）の親は、子が済むまで済みにならない。済み扱いの子（消費して無くなった板・棒など）は set state=done で自分で閉じる。',
   ].join(''),
   nativeInputSchema: { type: 'object', additionalProperties: false, required: [], properties: {
     ops: { type: 'array', maxItems: PLAN_LIMITS.ops, items: { type: 'object', additionalProperties: false, required: ['op'], properties: {
@@ -100,6 +102,9 @@ export function planInput(plan: FcaPlanPort | undefined): { plan?: Record<string
   return view ? { plan: { ...view } } : {};
 }
 
+/** r9: the held set last said for each task (`Shannon FCA plan held`), so a step that finds the same set says nothing. */
+const heldSaid = new Map<string, string>();
+
 export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown; inbox?: FcaPlanInbox; log?(line: string): void;
   /** mb-llmc r4: offer the tool with forbid and caution (`PLAN_UPDATE_RULES_DEFINITION`). Absent: as before. */
   rules?: boolean;
@@ -109,7 +114,9 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
    * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done, `minecraftPlanDone.ts`), applied before
    * the decision reads the path. Absent: none.
    */
-  seen?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[] } | null }):
+  seen?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[];
+    /** r9: nodes whose place or dimension holds while a child is open, so are not done (`p2←p2.1,p2.3`): said in the log when the set changes. */
+    held?: readonly string[] } | null }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
   const kept = readPlanTree((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
   let tree = kept ?? emptyPlanTree(), changed = false, note: string | undefined;
@@ -129,7 +136,15 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   const settle = () => {
     let seen: ReturnType<NonNullable<typeof parts.seen>> = null;
     try { seen = tree.nodes.length ? parts.seen?.(tree) ?? null : null; } catch { seen = null; }
-    if (seen) amend(seen.update, 'settled', ` seen=${seen.ids.slice(0, 8).join(',')}`);
+    if (seen?.ids.length) amend(seen.update, 'settled', ` seen=${seen.ids.slice(0, 8).join(',')}`);
+    // r9: a node whose place holds with children open is not done; said once per change, so the log shows what the code left open.
+    const held = (seen?.held ?? []).join(' ');
+    if (held !== (heldSaid.get(parts.taskId) ?? '')) {
+      heldSaid.delete(parts.taskId);
+      heldSaid.set(parts.taskId, held);
+      if (heldSaid.size > 32) heldSaid.delete(heldSaid.keys().next().value as string);
+      if (held) say(`Shannon FCA plan held task=${parts.taskId} revision=${tree.revision} held=${held}`);
+    }
   };
   /** A tree handed in (the first plan) replaces the one held, its done nodes carried over (`inbox.take`). */
   const adopt = () => {

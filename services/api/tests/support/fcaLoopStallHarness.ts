@@ -189,7 +189,7 @@ export async function runLoopStall(options: LoopStallOptions): Promise<LoopStall
           { checkpoint: step.snapshot.checkpoint, permit: permitProgress, observationSignal: (name, signal) => body.body.toolSignal(name, signal) }) };
     } });
   visible = createFcaSourceGuard({ runtime: driver.runtime, state: world.store, conversations: world.store, ownerScope: 'owner', ownerAlone,
-    readSourceVisible: dense.readSourceVisible, log: walkLog, ...(options.walkLogMilliseconds !== undefined ? { walkLogMilliseconds: options.walkLogMilliseconds } : {}), ...(variant === 'run14' ? { baseMilliseconds: FCA_SOURCE_VERDICT_MS } : {}) });
+    readSourceVisible: dense.readSourceVisible, ...(variant !== 'run14' && dense.readSourceVisible.fingerprint ? { readFingerprint: dense.readSourceVisible.fingerprint } : {}), log: walkLog, ...(options.walkLogMilliseconds !== undefined ? { walkLogMilliseconds: options.walkLogMilliseconds } : {}), ...(variant === 'run14' ? { baseMilliseconds: FCA_SOURCE_VERDICT_MS } : {}) });
   shared = createFcaSharedWiring({ db: actions.db, runtime: driver.runtime, state: world.store, affect: world.store, conversations: world.store,
     memory: world.ports.proposals, ownerScope: 'owner', ownerAlone, visible, readSourceVisible: dense.readSourceVisible, now: clock, provenanceRefs: true });
   const wake = () => { void shared.evidence?.drain({ segments: true }).catch(() => {}); void driver.tick().catch(() => {}); };

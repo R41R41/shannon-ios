@@ -13,13 +13,20 @@ import { carriedFood } from './minecraftLlmcLive.js';
  * - `have:<item>` or `have:<item>>=<n>`: she carries (or wears) n of it (1 when no count). `<item>` is an id (`stone_pickaxe`) or the end of
  *   ids (`log` is any `*_log`, `bed` any `*_bed`, `bucket` any `*_bucket`); the counts of every id it names are added.
  * - `dim:<the_nether|the_end|overworld>` (`nether`, `end` too): the dimension she is in.
- * - `at:<x>,<y>,<z>` or `at:<x>,<y>,<z>~<r>`: her feet within r blocks of it (4 when not given).
+ * - `at:<x>,<y>,<z>` or `at:<x>,<y>,<z>~<r>`: her feet within r blocks of it (4 when not given). r9 (run 33: `dim:overworld|at:40,64,96~200`
+ *   was seen done while she stood in the Nether at x 250, the Nether's x being the overworld's eighth): a place is in one dimension.
+ *   `at:x,y,z~r@nether` (or `@overworld`, `@end`) says which; else the dimension of a `dim:` in the same predicate, else that of the
+ *   nearest `dim:` node before it in the plan (`nodesSeenDone`), else none is known and the place alone is compared.
  * - `food>=<n>`: the food she carries, in points (`carriedFood`).
+ *
+ * r9 (run 33: 3 nodes seen done that were not): a node is done by its own predicate only (or by the model's `plan.update`), never because
+ * a parent is. A node that has children still open is done by a predicate of the pack (`have:`, `food>=`: what the work made is in hand),
+ * never by a predicate of a place or a dimension (`dim:`, `at:`: true on arriving, before the work under it is done).
  */
 export type DoneClause =
   | { kind: 'have'; item: string; count: number }
   | { kind: 'dim'; dimension: string }
-  | { kind: 'at'; x: number; y: number; z: number; r: number }
+  | { kind: 'at'; x: number; y: number; z: number; r: number; dimension?: string }
   | { kind: 'food'; points: number };
 /** Alternatives, each a list of clauses that must all hold. */
 export type DonePredicate = DoneClause[][];
@@ -34,10 +41,26 @@ function clauseOf(text: string): DoneClause | null {
   if (have) return ITEM.test(have[1]!) ? { kind: 'have', item: have[1]!, count: Math.max(1, Number(have[2] ?? 1)) } : null;
   const dim = /^dim:([a-z_]{1,16})$/u.exec(text);
   if (dim) return DIMENSIONS[dim[1]!] ? { kind: 'dim', dimension: DIMENSIONS[dim[1]!]! } : null;
-  const at = new RegExp(`^at:\\(?(${NUMBER}),(${NUMBER}),(${NUMBER})\\)?(?:~(\\d{1,3}))?$`, 'u').exec(text);
-  if (at) return { kind: 'at', x: Number(at[1]), y: Number(at[2]), z: Number(at[3]), r: Number(at[4] ?? 4) };
+  const at = new RegExp(`^at:\\(?(${NUMBER}),(${NUMBER}),(${NUMBER})\\)?(?:~(\\d{1,3}))?(?:@([a-z_]{1,16}))?$`, 'u').exec(text);
+  if (at) {
+    const where = at[5] === undefined ? undefined : DIMENSIONS[at[5]];
+    if (at[5] !== undefined && !where) return null;
+    return { kind: 'at', x: Number(at[1]), y: Number(at[2]), z: Number(at[3]), r: Number(at[4] ?? 4), ...(where ? { dimension: where } : {}) };
+  }
   const food = /^food>=(\d{1,4})$/u.exec(text);
   return food ? { kind: 'food', points: Number(food[1]) } : null;
+}
+
+/** The one dimension a predicate's `dim:` clauses name, or null (none, or more than one). */
+export function predicateDimension(predicate: DonePredicate): string | null {
+  const dimensions = new Set(predicate.flatMap(clauses => clauses.flatMap(clause => clause.kind === 'dim' ? [clause.dimension] : [])));
+  return dimensions.size === 1 ? [...dimensions][0]! : null;
+}
+/** The predicate with each place that names no dimension given `fallback` (the predicate's own `dim:` first, else `fallback`), or as it is. */
+function withPlaces(predicate: DonePredicate, fallback: string | null): DonePredicate {
+  const own = predicateDimension(predicate) ?? fallback;
+  if (!own) return predicate;
+  return predicate.map(clauses => clauses.map(clause => clause.kind === 'at' && !clause.dimension ? { ...clause, dimension: own } : clause));
 }
 
 /** The predicate a `doneWhen` is written as, or null when it is not one (free words, or any part that does not read). */
@@ -45,7 +68,8 @@ export function parseDoneWhen(text: string | undefined): DonePredicate | null {
   const compact = (text ?? '').replace(/\s+/gu, '').toLowerCase();
   if (!compact || compact.length > 120) return null;
   const alternatives = compact.split('|').map(part => part.split('&').map(clauseOf));
-  return alternatives.every(clauses => clauses.length > 0 && clauses.every(clause => clause !== null)) ? alternatives as DonePredicate : null;
+  return alternatives.every(clauses => clauses.length > 0 && clauses.every(clause => clause !== null))
+    ? withPlaces(alternatives as DonePredicate, null) : null;
 }
 
 /** What a predicate is checked against: the frame's counts (worn included), dimension, feet and food points. */
@@ -63,10 +87,12 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
     dimension: typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null };
 }
 
+/** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a piglin does not attack her in it). */
+const GOLD_ARMOUR = /^golden_(?:helmet|chestplate|leggings|boots)$/u;
 /** How many of `item` she has: the id itself, or every id that ends in `_<item>`. */
 function carried(counts: ReadonlyMap<string, number>, item: string): number {
   let total = 0;
-  for (const [name, count] of counts) if (name === item || name.endsWith(`_${item}`)) total += count;
+  for (const [name, count] of counts) if (name === item || name.endsWith(`_${item}`) || (item === 'gold_armor' && GOLD_ARMOUR.test(name))) total += count;
   return total;
 }
 function holds(clause: DoneClause, facts: DoneFacts): boolean {
@@ -74,34 +100,76 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
     case 'have': return carried(facts.counts, clause.item) >= clause.count;
     case 'dim': return facts.dimension === clause.dimension;
     case 'food': return facts.food >= clause.points;
-    case 'at': return !!facts.feet && Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y, facts.feet.z - clause.z) <= clause.r;
+    case 'at': return !!facts.feet && (!clause.dimension || facts.dimension === null || facts.dimension === clause.dimension)
+      && Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y, facts.feet.z - clause.z) <= clause.r;
   }
 }
 export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): boolean {
   return predicate.some(clauses => clauses.every(clause => holds(clause, facts)));
 }
+/** Whether the alternative of the predicate that holds says only what the pack holds (`have:`, `food>=`): what the work made is in hand. */
+function holdsByThePack(predicate: DonePredicate, facts: DoneFacts): boolean {
+  const alternative = predicate.find(clauses => clauses.every(clause => holds(clause, facts)));
+  return !!alternative && alternative.every(clause => clause.kind === 'have' || clause.kind === 'food');
+}
+
+/** Each node's predicate, its places given the dimension of the nearest `dim:` node before it (itself first) when they name none. */
+function predicatesOf(tree: PlanTree): Map<string, DonePredicate> {
+  const out = new Map<string, DonePredicate>();
+  let near: string | null = null;
+  for (const node of orderedPlan(tree.nodes)) {
+    const own = parseDoneWhen(node.doneWhen);
+    if (own) out.set(node.id, withPlaces(own, near));
+    near = (own ? predicateDimension(own) : null) ?? near;
+  }
+  return out;
+}
 
 /**
- * The nodes the frame shows done: each node not yet done or blocked whose `doneWhen` reads as a predicate that holds, with every node under
- * it that is still open (a done parent leaves nothing under it to do). In the tree's order; empty when none.
+ * The nodes the frame shows done: each node not yet done or blocked whose `doneWhen` reads as a predicate that holds. r9 (run 33: p2 `dim:the_nether`
+ * was true at the start and closed p2.3 `have:blaze_rod>=7` with 0 rods; p4 `dim:overworld` was true after the respawn and closed the three
+ * steps of throwing the eyes; both parents' children were closed with them): a node is done by its own predicate and never because a parent
+ * is, a parent whose children are still open is done by the pack alone (`holdsByThePack`), and a place is checked in its dimension. A
+ * parent done by the pack leaves its open children as they are (the plan's own rule: nothing under a done node is picked as the next).
+ * In the tree's order; empty when none.
  */
 export function nodesSeenDone(tree: PlanTree, facts: DoneFacts): string[] {
-  const out = new Set<string>();
-  const below = (id: string): PlanNode[] => tree.nodes.filter(node => node.parentId === id).flatMap(node => [node, ...below(node.id)]);
-  for (const node of orderedPlan(tree.nodes)) {
-    if (node.state === 'done' || node.state === 'blocked' || out.has(node.id)) continue;
-    const predicate = parseDoneWhen(node.doneWhen);
+  const out = new Set<string>(), predicates = predicatesOf(tree);
+  const open = (node: PlanNode) => node.state !== 'done' && node.state !== 'blocked' && !out.has(node.id);
+  // Deepest first: a parent is judged after its children, so that a child its own predicate closed does not hold it open.
+  for (const node of orderedPlan(tree.nodes).reverse()) {
+    if (node.state === 'done' || node.state === 'blocked') continue;
+    const predicate = predicates.get(node.id);
     if (!predicate || !predicateHolds(predicate, facts)) continue;
+    if (tree.nodes.some(child => child.parentId === node.id && open(child)) && !holdsByThePack(predicate, facts)) continue;
     out.add(node.id);
-    for (const child of below(node.id)) if (child.state !== 'done' && child.state !== 'blocked') out.add(child.id);
   }
   return orderedPlan(tree.nodes).map(node => node.id).filter(id => out.has(id));
 }
 
-/** The update that marks them done (the current node then moves on by itself), or null when the frame shows none. */
-export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | null): { update: PlanUpdate; ids: string[] } | null {
+/**
+ * The nodes whose predicate holds while a child of theirs is still open and the predicate is of a place or a dimension (so the node is not
+ * done): `p2 [dim:the_nether] ← p2.1・p2.3`, for the log only, once per change of the set.
+ */
+export function nodesHeldOpen(tree: PlanTree, facts: DoneFacts): Array<{ id: string; open: string[] }> {
+  const predicates = predicatesOf(tree), done = new Set(nodesSeenDone(tree, facts));
+  return orderedPlan(tree.nodes).flatMap(node => {
+    const predicate = predicates.get(node.id);
+    if (!predicate || node.state === 'done' || node.state === 'blocked' || done.has(node.id) || !predicateHolds(predicate, facts)) return [];
+    const open = tree.nodes.filter(child => child.parentId === node.id && child.state !== 'done' && child.state !== 'blocked' && !done.has(child.id));
+    return open.length ? [{ id: node.id, open: open.map(child => child.id) }] : [];
+  });
+}
+
+/**
+ * The update that marks them done (the current node then moves on by itself), or null when the frame shows none. r9: `held` names the
+ * nodes whose place or dimension holds while a child is open (`p2←p2.1,p2.3`), for the log; with no node done and some held, the update is empty.
+ */
+export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | null): { update: PlanUpdate; ids: string[]; held?: string[] } | null {
   const facts = doneFacts(observation);
   if (!facts || !tree.nodes.length) return null;
-  const ids = nodesSeenDone(tree, facts);
-  return ids.length ? { update: { ops: ids.slice(0, 24).map(id => ({ op: 'set' as const, id, state: 'done' as const })) }, ids: ids.slice(0, 24) } : null;
+  const ids = nodesSeenDone(tree, facts).slice(0, 24);
+  const held = nodesHeldOpen(tree, facts).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
+  if (!ids.length && !held.length) return null;
+  return { update: { ops: ids.map(id => ({ op: 'set' as const, id, state: 'done' as const })) }, ids, ...(held.length ? { held } : {}) };
 }

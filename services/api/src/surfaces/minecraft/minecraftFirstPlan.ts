@@ -35,7 +35,7 @@ export function planGoal(goal: string): Goal {
 
 const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => ({ title, ...extra });
 /** r7: the check's forbid (the seed's, and the words the first plan is asked to write: `FIRST_PLAN_SYSTEM_R7`). */
-export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
+export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
 /** r5: each `doneWhen` that an observation can show is written as one (`minecraftPlanDone.ts`): the head marks the node done when it holds. */
 const TO_NETHER: readonly PlanSeed[] = [
   node('木と石の道具', { doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
@@ -60,10 +60,11 @@ const TO_NETHER: readonly PlanSeed[] = [
  * r7 (runs 29–31): the check forbids the fight before it is done (`CHECK_FORBID`, as the first plan is asked to write it).
  */
 const BEYOND: readonly PlanSeed[] = [
-  node('出発の点検（ネザーの奥へ）', { doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12', note: '足りない物はゲートのそばで作る',
+  node('出発の点検（ネザーの奥へ）', { doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12&have:gold_armor', note: '足りない物はゲートのそばで作る',
     forbid: [CHECK_FORBID],
     children: [node('ネザーの幹で作業台（持ち歩く）', { doneWhen: 'have:crafting_table' }), node('深層岩の丸石でハーフブロック12', { doneWhen: 'have:slab>=12' }),
-      node('かまどで鉄を焼き盾', { doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { doneWhen: 'food>=100' })] }),
+      node('かまどで鉄を焼き盾', { doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { doneWhen: 'food>=100' }),
+      node('金の防具を1つ着る（ピグリンが襲わない）', { doneWhen: 'have:gold_armor' })] }),
   node('ネザー要塞を探す', { note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'ネザーレンガ（N）が見える' }),
   node('ブレイズロッド7以上', { doneWhen: 'have:blaze_rod>=7', children: [node('スポナーから3〜5マスに隙間つきの待ち場'),
     node('accept blaze で14体ほど倒す'), node('棒を拾う（ブレイズがいない時）')] }),
@@ -180,6 +181,19 @@ export const FIRST_PLAN_SYSTEM_R8 = [
     + '壁の無い幅 1 の橋は、落差 4 以上・敵のいる構造物（要塞・砦の遺跡）の近くでは使わない。',
   '- そういう節の caution に「橋は両脇に壁を置く」「橋の上で立ち止まらない」を書く（30 字以内）。',
 ].join('\n');
+/**
+ * r9 (run 33: p2 `dim:the_nether` was true at the start and its three children, among them 「ブレイズロッド7本」 with 0 rods, were closed with it;
+ * p4 `dim:overworld` after the respawn; p1.5 `at:` of the overworld's place while she stood in the Nether): a node is done by its own
+ * condition; a place is written with its dimension; the pearls come after the rods; the check holds one piece of golden armour.
+ */
+export const FIRST_PLAN_SYSTEM_R9 = [
+  FIRST_PLAN_SYSTEM_R8,
+  '済みの形と順番（r9）:',
+  '- at: には次元を付ける: "at:196,69,237~6@overworld"、ネザーなら "@nether"（ネザーの x・z はオーバーワールドの 1/8。付けないと別の次元の同じ数字で済みになる）。',
+  '- 子のある節の doneWhen は、子の仕事が済んだ後にだけ真になる持ち物の形（have:blaze_rod>=7 など）にする。dim:・at:（着いた事）は子の無い節に書く。'
+    + '親が済んでも子は済みにならない: 子は自分の doneWhen（無ければ計画の更新）で済む。消費して無くなる物（板・棒・原木）は子の doneWhen にしない。',
+  '- 順番: ブレイズロッド（7 本以上）の節はエンダーパールの節より前。「出発の点検」には金の防具 1 つ（have:gold_armor）も入れる（ネザーのピグリンは金の防具を着ていないと襲う）。',
+].join('\n');
 
 /**
  * How long the first plan waits for the body's scan when none is there yet (r4; the body scans once its chunks have settled after a
@@ -264,7 +278,15 @@ export function carryDone(held: PlanTree, next: PlanTree): PlanTree {
     const kids = nodes.filter(child => child.parentId === item.id);
     if (kids.length && kids.every(child => child.state === 'done')) nodes[nodes.findIndex(other => other.id === item.id)] = { ...item, state: 'done' };
   }
-  const open = orderedPlan(nodes).find(item => item.state !== 'done' && !nodes.some(child => child.parentId === item.id && child.state !== 'done'));
+  // r9: a node under a done one is not the open one (a done node leaves nothing under it to do, `planTree.ts`).
+  const doneAbove = (item: PlanTree['nodes'][number]) => {
+    for (let up = nodes.find(other => other.id === item.parentId); up; up = nodes.find(other => other.id === up!.parentId)) {
+      if (up.state === 'done') return true;
+    }
+    return false;
+  };
+  const open = orderedPlan(nodes).find(item => item.state !== 'done' && !nodes.some(child => child.parentId === item.id && child.state !== 'done')
+    && !doneAbove(item));
   return { ...next, revision: held.revision + 1, nodes, current: open?.id ?? null };
 }
 

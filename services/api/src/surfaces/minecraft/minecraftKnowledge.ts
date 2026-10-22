@@ -334,5 +334,46 @@ export const R8_KNOWLEDGE = [
 ].join('\n');
 /** r8: r7's appendix and `R8_KNOWLEDGE` (the same bytes at every decision). */
 export const LLMC_SYSTEM_APPENDIX_R8 = [LLMC_SYSTEM_APPENDIX_R7, R8_KNOWLEDGE].join('\n\n');
-/** The appendix of the mode's models: r8's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
-export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R8 : LLMC_SYSTEM_APPENDIX; }
+
+/**
+ * r9 (run 33, owner 2026-10-22): with no food, shield or golden armour she followed an enderman for 280 s, a plain piglin followed her and
+ * hit her five times in 5.5 s while she stepped away, the urgent act's `stopIf hpBelow 9` (her health was 6.6) stopped it with 0 hands, and
+ * she died (the pack lost, 750 s to rebuild with bare hands). The calls were 6.6 a minute on acts of 3 hands and 3.5 s. This says what
+ * a piglin is without golden armour, the order of the pearls, what a chasing melee enemy is answered with, how a stopIf is put, how
+ * the plan's done is kept, and how long an act may be.
+ */
+export const R9_KNOWLEDGE = [
+  '## ネザーのピグリン・追ってくる近接の敵・パールの順（r9。実走33: 食料・盾・金の防具なしでエンダーマンを約 280 秒追い、通常のピグリンに追われて'
+    + '5.5 秒で 5 回打たれ、体力 20 から死んだ。持ち物を全部失い、立て直しに 750 秒かかった）',
+  '- ピグリン（通常・ブルート）は、金の防具を 1 つ着けるまで襲う。ネザーでは、金の防具を 1 つ着けるまでピグリンの近く（8m）に長居しない。'
+    + '金の防具は「出発の点検」の項目: 金の延べ棒 4（靴）〜5（兜）、金塊 9 で延べ棒 1、ネザーの金鉱石（g）は掘ると金塊が出てかまどで延べ棒になる。着るまでは、砦の遺跡・ピグリンの群れの近くを避ける。',
+  '- エンダーパールはブレイズの棒（7 本）の後。計画の順を守る。順を飛ばす時（棒を先に取れない理由がある時）は、plan.update の理由に書く。'
+    + '食料・盾・金の防具が無いまま遠出して敵を追うのは、実走33 の死の形。',
+  '- 追ってくる地上の近接の敵（ピグリン・ゾンビ・ウィザースケルトンなど）は、離れても同じ速さで追われ、1 秒ちょっとごとに打たれる。離れる 1 歩では逃げ切れない。選ぶ手:'
+    + ' (1) 鉄以上の剣を持っていれば打ち返す（equip で剣を持つ→ accept にその種類 → attack target=#id, untilDead。ピグリンは体力 16、鉄の剣で 3 打前後）。'
+    + ' (2) 剣が無い・体力 6 以下なら、敵との間に place（足と頭の高さの 2 マス）か、pillarUp n=2 で 2 段上がる（足の周りに落差 3 以上・溶岩が無い時だけ）。'
+    + '体の反射も同じ順で動く: 剣か斧を持っていて体力が 6 より上なら体が打ち返し（見える・3m 内の一番近い相手、1 手に最大 2 回）、持っていない・体力 6 以下なら'
+    + '間のブロックか 2 段積んで上がる。台帳に「打ち返した 2 回・当たった 2・相手の残り体力 …」と出る。「これ以上は反射でしない」と出たら、その先は判断で（上の (1)(2)）。',
+  '## 石の中・素手で地表へ出る時（r9。実走33: 死後に石の中から素手で 750 秒かけて階段を掘った）',
+  '- 自分の x,z で mc.probe column を聞く（隣の列や足から下だけでなく、自分の列）。答えの「真上」の行（above）が、頭の上の固い段数・開く高さ・1 段の秒（素手の石は約 7.7 秒・土は約 0.8 秒）を言う。'
+    + 'それで真上へ掘るか、柔らかい列（土・砂利）へ寄るか、階段にするかを決める。',
+  '- walk が「そこまで進まなかった」で止まった時の文は、足のマスの下・次のマス（足・頭・下）・そのマスにいる物を言う: 塞いでいる物を掘る・避ける手を、その事実から選ぶ。'
+    + '「そのものには立てない（下 n マスが空気）」は、続く「立てる隣」へ walk する。',
+  '## 計画の済み（r9）',
+  '- 親の節が済みになっても子は済みにならない。子は自分の doneWhen の条件か、あなたの plan.update（set state=done）で済む。'
+    + '場所・次元（dim:・at:）だけの条件の親は、子が済むまで済みにならない（ログに held と出る）。at: は次元ごとの場所（@nether・@overworld）。',
+  '- 消費して無くなる物（板・棒・原木）を条件にした子は、親の物ができても自動では済みにならない: できた時に自分で done にする。',
+  '## stopIf の置き方（r9）',
+  '- hpBelow は今の体力より低い値にする。今の体力以上の値だと act は 1 手も動かずに止まる（実走33: 体力 6.6 の時の hpBelow 9）。'
+    + '頭が外して結果の先頭で知らせるが、その act に体力の守りが無くなる: 体力が低い時は戦う act を出さず、離れる・塞ぐ・食べるを先にする。',
+  '- 待つ・待ち打ちの手（wait・attack の hold・目を合わせて待つ）の act には stopIf hostileWithin 4〜8 を付ける（付けなければ頭が 4 を足す。accept の種類は除かれる）。',
+  '## 手を長く（r9。実走33: 呼び出しが 1 分に 6.6 回。act は平均 3 手・3.5 秒で、判断の費用の多くは短い act の数だった）',
+  '- 同じ種類の手が続く場面（トンネルを掘る・階段を下りる・橋を掛ける・採掘・歩きながら掘る）は、1 回の act に 10〜12 手（上限 12）入れる。'
+    + 'dig の at は 1 手に 8〜16 マス、walk の path は 1 手に 8〜32 点まで書ける。地図で見えている先まで一度に出す。',
+  '- 安全は act の中で保たれる: 反射（溶岩・落下・溺れ・燃え・逃走）はいつも効き、stopIf（hostileWithin・hpBelow・blockChanged）と onFail が、'
+    + '予想と違った所で act を止めて返す。止まった行とその周りで次の act を直す。短く刻むほど、1 手ごとに判断の費用と待ち（5〜8 秒）がかかる。',
+].join('\n');
+/** r9: r8's appendix and `R9_KNOWLEDGE` (the same bytes at every decision). */
+export const LLMC_SYSTEM_APPENDIX_R9 = [LLMC_SYSTEM_APPENDIX_R8, R9_KNOWLEDGE].join('\n\n');
+/** The appendix of the mode's models: r9's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
+export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R9 : LLMC_SYSTEM_APPENDIX; }

@@ -232,7 +232,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         return small ? small.menu(stepParts) : stepParts; } });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
       conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone,
-      readSourceVisible }) : undefined;
+      readSourceVisible, ...(readSourceVisible?.fingerprint ? { readFingerprint: readSourceVisible.fingerprint } : {}) }) : undefined;
     if (visible && sleep) {
       const foregroundVisible = visible;
       visible = Object.assign((scope: string, id: string, pending?: string, via?: FcaWalkCaller) => {

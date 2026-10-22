@@ -53,7 +53,9 @@ export function fcaProductionShape(shape: Partial<Record<keyof typeof PRODUCTION
   let alone = true;
   const ownerAlone = () => alone;
   const readSourceVisible = createFcaReadSources({ ownerScope: 'owner', ownerAlone, state: world.store, conversations: world.store,
-    skill: (scope, id, revision) => skills.readSource!(scope, id, revision) });
+    skill: (scope, id, revision) => skills.readSource!(scope, id, revision),
+    // As the server wires it (server.ts): the checks a skill read takes and her skills' mark, so that answers about skills are kept.
+    ...(skills.readSourceChecks ? { skillChecks: (scope: string, renew: boolean) => skills.readSourceChecks!(scope, renew) } : {}) });
   world.store.readSourceVisible = readSourceVisible;
   const at = () => world.now();
   const h = actionHarness(at); migrateAgentTasks(h.db);

@@ -346,7 +346,8 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
 
 describe('the knowledge and the first plan (r8)', () => {
   it('the appendix of the mode is r7\'s and r8\'s section: a gap crossed in the rock or by a walled bridge, never a bare one-wide bridge', () => {
-    expect(llmcSystemAppendix(true)).toBe(LLMC_SYSTEM_APPENDIX_R8);
+    // r9 adds its section after r8's (the same bytes up to it).
+    expect(llmcSystemAppendix(true).startsWith(LLMC_SYSTEM_APPENDIX_R8)).toBe(true);
     expect(LLMC_SYSTEM_APPENDIX_R8).toBe(`${LLMC_SYSTEM_APPENDIX_R7}\n\n${R8_KNOWLEDGE}`);
     for (const words of ['岩の中のトンネル', '両脇（足の高さ）に壁のブロックを置いた橋', '壁の無い幅 1 の橋は使わない', '落差 4 以上', '敵のいる構造物（要塞・砦の遺跡）',
       'body.footing', '押されたら落ちる', '近接の敵', 'まず空所から離れる', '敵との間にブロックを置く', '急ぎの判断', '考えは 2〜3 文', 'body.planNow']) {

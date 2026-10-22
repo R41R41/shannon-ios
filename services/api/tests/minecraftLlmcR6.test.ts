@@ -177,14 +177,16 @@ describe('a wait nobody can answer is answered in one line (the runner: fcaLlmcR
 describe('the first plan\'s done nodes are carried by the frame (run 29: 「動物を狩り肉を焼く」 food>=100 came in done at 15.6 points)', () => {
   it('a predicate node is never carried by its words; a node in free words is, by its title', () => {
     const held = seedPlan(GOAL)!;
-    // As in run 29: the parent 「黒曜石10とゲート」 seen done in the Nether closed its child 「食料100点以上に足す」 (food>=100) with it.
+    // Run 29: the parent 「黒曜石10とゲート」 seen done in the Nether closed its child 「食料100点以上に足す」 (food>=100) with it. r9: it does not
+    // (a node is done by its own predicate); the model's own `done` on that child is what the plan then carries over, as below.
     const nether = frame(START);
     const seen = seenDoneUpdate(held, nether)!;
     const plan = createFcaPlanTools({ taskId: 'r6-carry-held', checkpoint: { fcaPlanTree: held }, seen: tree => seenDoneUpdate(tree, nether) });
     plan.port.view();
-    const settled = plan.port.tree();
+    const seenTree = plan.port.tree();
     expect(seen.ids.length).toBeGreaterThan(0);
-    expect(settled.nodes.find(node => node.doneWhen === 'food>=100')!.state).toBe('done');
+    expect(seenTree.nodes.find(node => node.doneWhen === 'food>=100')!.state).toBe('continue');
+    const settled = { ...seenTree, nodes: seenTree.nodes.map(node => node.doneWhen === 'food>=100' ? { ...node, state: 'done' as const } : node) };
     const answer = planFromAnswer({ nodes: [
       { id: 'p1', parent: '', title: '出発の点検', where: '', doneWhen: '' },
       { id: 'p1.1', parent: 'p1', title: '作業台と板を作る', where: '', doneWhen: 'have:crafting_table' },

@@ -280,7 +280,8 @@ export const ACT_DESCRIPTION = [
   '形: why は act に 1 つ（手の中に書かない。手の短い説明は note）。at・path・items は 1 つでも配列 [ ] で書く。',
   'かまど（F・燻製器・溶鉱炉）は furnace（op=take で出来上がりを取る、op=put で入れる）。chest は箱・樽（C）だけ。',
   'use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石 1 枚の向こうの水は、その石を dig してから use bucket）。',
-  'stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たしたら全体を止めて返す。',
+  'stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たしたら全体を止めて返す。hpBelow は今の体力より低い値（以上だと 1 手も動かず止まる）。待つ手の act には hostileWithin。',
+  '同じ種類の手が続く場面（トンネル・階段・橋・採掘）は、10〜12 手を 1 つの act に入れる（dig の at は 16 マスまで、walk の path は 32 点まで 1 手に）。止まりは反射・stopIf・onFail が守る。',
   'accept: この act で戦うと決めた敵の種類（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
     + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
   'onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、ほかは stop。'

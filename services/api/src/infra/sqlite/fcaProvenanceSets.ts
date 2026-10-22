@@ -40,6 +40,37 @@ export function taskSourceOfRow(row: SourceRow, pending: boolean): TaskSource {
     ...(row.read_ids_json !== '[]' ? { readSourceIds: JSON.parse(String(row.read_ids_json)) as string[] } : {}) } as TaskSource;
 }
 
+/**
+ * mb-llmc r9 (run 33: `fca_commit` / `observe_store` / `observe_taskHub` 140–604 ms at a step's commit; its task held 41 memory rows of about
+ * 14,000 characters of recalled ids each, 558,000 in all, and each commit and each begin read them again, parsed them, stringified them for
+ * a copy and read and parsed them once more to check the reference against it): a memory row is written once and never changed (above), so
+ * the source a row was read as is kept per connection, under the row's own values, and handed again while the row reads the same. The
+ * sources are frozen (shared). A conversation row, which changes from `pending`, is parsed anew every time.
+ */
+interface RowEntry { scope: unknown; observedAt: unknown; state: unknown; recalled: unknown; read: unknown; source: TaskSource }
+const rowCaches = new WeakMap<DatabaseSync, Map<string, RowEntry>>();
+const ROWS_KEPT = 4_096;
+export function cachedTaskSourceOfRow(db: DatabaseSync, row: SourceRow, pending: boolean): TaskSource {
+  if (row.source_kind !== 'memory') return taskSourceOfRow(row, pending);
+  const stepId = String(row.step_id);
+  const cache = rowCaches.get(db) ?? new Map<string, RowEntry>();
+  rowCaches.set(db, cache);
+  const known = cache.get(stepId);
+  if (known && known.scope === row.scope_key && known.observedAt === row.observed_at && known.state === row.state
+    && known.recalled === row.recalled_ids_json && known.read === row.read_ids_json) return known.source;
+  const parsed = taskSourceOfRow(row, pending);
+  const source = Object.freeze({ ...parsed, recalledMemoryIds: Object.freeze([...parsed.recalledMemoryIds]) as string[],
+    ...parsed.readSourceIds ? { readSourceIds: Object.freeze([...parsed.readSourceIds]) as string[] } : {} }) as TaskSource;
+  cache.delete(stepId);
+  if (cache.size >= ROWS_KEPT) cache.delete(cache.keys().next().value!);
+  cache.set(stepId, { scope: row.scope_key, observedAt: row.observed_at, state: row.state, recalled: row.recalled_ids_json, read: row.read_ids_json, source });
+  return source;
+}
+/** Whether `source` is the very object kept for its memory row (so it is that row as it is stored: a memory row never changes). */
+function isKeptRow(db: DatabaseSync, source: TaskSource): boolean {
+  return source.kind === 'memory' && rowCaches.get(db)?.get(source.stepId)?.source === source;
+}
+
 /** Makes the set table (step `execution/013_fca_provenance_sets`) where references are written: by the switch's owners only. */
 export function enableFcaProvenanceSets(db: DatabaseSync): void {
   if (ready.has(db)) return;
@@ -57,22 +88,25 @@ export function isProvenanceReference(json: string): boolean {
  * else the copy (`JSON.stringify(sources)`, as every row before). The caller holds the write transaction of the record.
  */
 export function storedSourcesJson(db: DatabaseSync, scopeKey: string, sources: readonly TaskSource[], byReference: boolean): string {
-  const copy = JSON.stringify(sources);
-  if (!byReference || !sources.length) return copy;
+  if (!byReference || !sources.length) return JSON.stringify(sources);
   try {
     enableFcaProvenanceSets(db);
     const stepIds = sources.map(source => source.stepId);
     const setId = `sha256:${createHash('sha256').update(JSON.stringify([scopeKey, stepIds])).digest('hex')}`;
-    const resolved = resolveRows(db, scopeKey, stepIds);
-    if (!resolved || JSON.stringify(resolved) !== copy) return copy;
+    // r9: the sources that are the objects kept for their (never changing) memory rows are those rows; the others are read now and compared.
+    const others = sources.filter(source => !isKeptRow(db, source));
+    if (others.length) {
+      const resolved = resolveRows(db, scopeKey, others.map(source => source.stepId));
+      if (!resolved || others.some((source, index) => JSON.stringify(resolved[index]) !== JSON.stringify(source))) return JSON.stringify(sources);
+    }
     const listed = JSON.stringify(stepIds);
     db.prepare('INSERT OR IGNORE INTO fca_provenance_sets(set_id,scope_key,step_ids_json,size,created_at) VALUES(?,?,?,?,?)')
       .run(setId, scopeKey, listed, stepIds.length, new Date().toISOString());
     const stored = db.prepare('SELECT scope_key,step_ids_json FROM fca_provenance_sets WHERE set_id=?').get(setId);
-    if (stored?.scope_key !== scopeKey || stored.step_ids_json !== listed) return copy;
+    if (stored?.scope_key !== scopeKey || stored.step_ids_json !== listed) return JSON.stringify(sources);
     return JSON.stringify({ set: setId });
   } catch {
-    return copy;
+    return JSON.stringify(sources);
   }
 }
 
@@ -118,7 +152,7 @@ function resolveRows(db: DatabaseSync, scopeKey: string, stepIds: readonly strin
   for (const id of stepIds) {
     const row = byId.get(id);
     if (!row || row.scope_key !== scopeKey || row.state === 'pending') return null;
-    resolved.push(taskSourceOfRow(row, false));
+    resolved.push(cachedTaskSourceOfRow(db, row, false));
   }
   return resolved;
 }

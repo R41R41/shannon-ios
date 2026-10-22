@@ -38,7 +38,9 @@ export interface FcaReadSourcesOptions {
  * caller's snapshot and withholding of the same synchronous check (the FCA source guard), so that many receipts share one walk.
  */
 export function createFcaReadSources(parts: FcaReadSourcesOptions):
-  (scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot) => boolean {
+  ((scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot) => boolean) & {
+    /** r9: the inputs every answer about these receipts is made from (`fcaReadSourceAnswers.ts` `fingerprint`), for the source guard's `readFingerprint`. */
+    fingerprint?(scopeKey: string, state: ReadSourceSnapshot['state'], ids: readonly string[]): string | null } {
   const job = readSourceJob(parts.conversations);
   // The mark answers are kept under (the source rows', `provenanceMark.ts`): made here, where the reader is made, after every schema.
   parts.conversations.prepareProvenanceMark?.();
@@ -63,7 +65,7 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
     else answers.readSkill(scopeKey);
     return known.get(key)!;
   };
-  return (scopeKey, sourceId, observedAt, shared) => {
+  const visible = (scopeKey: string, sourceId: string, observedAt: string, shared?: ReadSourceSnapshot): boolean => {
     try {
       if (scopeKey !== parts.ownerScope || !parts.ownerAlone() || sourceId.length > 240) return false;
       if (shared) return answers.answer(scopeKey, sourceId, observedAt, shared,
@@ -78,6 +80,7 @@ export function createFcaReadSources(parts: FcaReadSourcesOptions):
       return false;
     }
   };
+  return Object.assign(visible, { fingerprint: answers.fingerprint });
 }
 
 /**
