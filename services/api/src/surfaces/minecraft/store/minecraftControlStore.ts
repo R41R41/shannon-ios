@@ -1,7 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { MinecraftControlCommand, MinecraftControlReceipt } from '../../../contracts/minecraftControlContract.js';
 import type { ActionLease } from '../../../contracts/actionThreadContract.js';
-import { MC_PROBE_SKILL } from '../../../contracts/minecraftProbeContract.js';
+
+/** The body's read-only probe skill (`PROBE_SKILL` in `minecraftProbeContract.ts`; not imported, which would widen the worker entries' closures). */
+const PROBE_SKILL = 'probe';
 
 /** The marker of a receipt the API wrote when it closed an operation the body never answered (`minecraftOperationReconcile.ts`). */
 export const RECONCILED_BY_RELEASE = 'release_proof';
@@ -127,7 +129,7 @@ export class MinecraftControlStore {
   safe(taskId: string): boolean {
     return this.db.prepare(`SELECT 1 FROM fca_body_operations WHERE task_id=? AND COALESCE(json_extract(command_json,'$.skill'),'')!=?
       AND (phase!='settled' OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1`)
-      .get(taskId, MC_PROBE_SKILL) === undefined;
+      .get(taskId, PROBE_SKILL) === undefined;
   }
   bind(taskId: string, bodyId: string): boolean {
     const old = this.body(taskId); if (old) return old === bodyId;
