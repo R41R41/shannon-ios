@@ -84,3 +84,10 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 見え方（`views5.ts` の `VIEWS`）: v1 = 生の答え、v1t = 本番の変換を通した答え。候補を足す時はここに cand（生）・candt（候補の変換を通した答え）を足す。`judge5.ts` は本番の記録 + 全見え方を場面ごとに 1 回で採点（基準と候補を同じ呼び出しで、出どころを伏せて混ぜる）、`report5.ts` が表。
 - 候補の口: 版の表に `cand`、`candidateAdapter.ts`（候補の頭の関数につなぐ所。できるまで投げる）。
 - 試験: `tests/decisionTransform.test.ts`。
+
+## 10/23 の追加 (5): 候補の版（mb-llmc-cand fdd976c）の確かめ
+
+- 台の branch は `codex/shannon/decision-replay-cand`（decision-replay の上に mb-llmc-cand を merge）。つなぎ: `candidateAdapter.ts`（candidateFixed・candidateLive・candidateAct を記録の判断から呼ぶ）。
+- 回す: `run6.ts`（候補。基準 v1 と同じ回数。守りが止めたら事実を tool_result で返して 1 回だけ聞き直し、部分送りは「送った前の手 + 聞き直しの答えの手」の組）、採点は `judge5.ts --only=v1,v1t,candt`（本番の記録・基準・候補を場面ごとに 1 回で）、表は `report5.ts --views=v1,v1t,candt --candidate=candt --baseline=v1t`（11 節が合格の線との照らし合わせ）。
+- 間違いの仕分け用: `failDump5.ts`（× の答えを候補の live と並べる）、`guardDump5.ts`（守りが止めた答えを、守りが見た地図と並べる）。
+- 結果のまとめ: `results/candidate-check-20261023.md`。

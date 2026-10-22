@@ -1,10 +1,16 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadAllRuns, dataFile } from './allRuns.js';
-import { contextOf } from './checks.js';
+import { answerOf, contextOf } from './checks.js';
+import { candidateInput } from '../../src/surfaces/minecraft/minecraftLlmcV2.js';
+import { llmcPrepare } from '../../src/surfaces/minecraft/minecraftLlmc.js';
+import { checkedStopIf } from '../../src/surfaces/minecraft/minecraftLlmcStopIf.js';
+import { heldOfFrame } from '../../src/surfaces/minecraft/minecraftLlmcPartial.js';
+import { candFrame } from './candidateAdapter.js';
+import { frames } from './sceneSet.js';
 import { loadJudged, type Candidate } from './judge.js';
 import { costOf } from './ledger.js';
-import { decisionOf, loadScenes, type SceneFile } from './score.js';
+import { decisionOf, loadScenes, scoreAnswer, type SceneFile } from './score.js';
 import { candidatesOf5, latest, readRows, VIEWS } from './views5.js';
 
 /**
@@ -92,6 +98,14 @@ out.push(`| ×の種類 | ${ids.join(' | ')} |`, `|---|${ids.map(() => '---:').j
 for (const [kind, per] of [...kinds].sort((a, b) => [...b[1].values()].reduce((x, y) => x + y, 0) - [...a[1].values()].reduce((x, y) => x + y, 0))) out.push(`| ${kind} | ${ids.map(id => per.get(id) ?? 0).join(' | ')} |`);
 out.push(`| （答えの数） | ${ids.map(id => table.filter(item => item.variant === id).length).join(' | ')} |`);
 
+type Usage = { input: number; output: number; cacheWrite: number; cacheRead: number };
+const assumedOne = (model: string, u: Usage) => costOf(model, { input: u.input, output: u.output, cacheWrite: 800, cacheRead: Math.max(0, u.cacheRead + u.cacheWrite - 800), cacheWrite1h: 800, cacheWrite5m: 0 });
+/** 本番想定の 1 判断: 履歴は毎判断キャッシュから読み、尾 800 トークンだけ 1 時間書き込みで書く。守りで聞き直した行は、1 回目と聞き直しをそれぞれ本番想定にして足す。 */
+function assumedRow(row: { usage: Usage; firstUsage?: Usage }, model: string): number {
+  const f1 = row.firstUsage;
+  if (!f1 || row.usage.output === f1.output) return assumedOne(model, row.usage);
+  return assumedOne(model, f1) + assumedOne(model, { input: row.usage.input - f1.input, output: row.usage.output - f1.output, cacheWrite: row.usage.cacheWrite - f1.cacheWrite, cacheRead: row.usage.cacheRead - f1.cacheRead });
+}
 out.push('\n## 4. 時間・トークン・費用（1 判断。自分の PC からストリームで測る。キャッシュは 5 分、場面の間は連続でないので本番より書き込みが多い）\n');
 const apiKey = process.env.SHANNON_ANTHROPIC_API_KEY ?? '';
 const client = apiKey ? new Anthropic({ apiKey, maxRetries: 2 }) : null;
@@ -112,10 +126,10 @@ out.push('| 変種 | 呼び出し | 最初のブロックまで p50 / p95 (s) | 
 for (const variant of variantsOf) {
   const list = rows.filter(row => row.variant === variant);
   const acts = list.filter(row => row.answer.tool === 'mc.act');
-  const answerTokens = (await Promise.all(acts.map(row => tokensOf(row.answer.input)))).filter((v): v is number => v !== null);
+  const answerTokens = (await Promise.all(acts.map(row => tokensOf((row as { rawFinal?: unknown }).rawFinal ?? (row as { rawFirst?: unknown }).rawFirst ?? row.answer.input)))).filter((v): v is number => v !== null);
   // 本番想定: 履歴は毎判断キャッシュから読み、尾 800 トークンだけ 1 時間書き込みで書く。
   const model = variant === 'v3' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
-  const assumed = mean(list.map(row => costOf(model, { input: row.usage.input, output: row.usage.output, cacheWrite: 800, cacheRead: Math.max(0, row.usage.cacheRead + row.usage.cacheWrite - 800), cacheWrite1h: 800, cacheWrite5m: 0 })));
+  const assumed = mean(list.map(row => assumedRow(row, model)));
   const first = list.map(row => row.tFirstBlock! / 1000);
   out.push(`| ${variant} | ${list.length} | ${f(quantile(first, 0.5))} / ${f(quantile(first, 0.95))} | ${f(quantile(list.map(r => r.tEnd / 1000), 0.5))} / ${f(quantile(list.map(r => r.tEnd / 1000), 0.95))} | ${f(mean(list.map(r => r.usage.input + r.usage.cacheRead + r.usage.cacheWrite)), 0)} | ${f(mean(list.map(r => r.usage.input)), 0)} | ${f(mean(list.map(r => r.usage.cacheRead)), 0)} | ${f(mean(list.map(r => r.usage.cacheWrite)), 0)} | ${f(mean(list.map(r => r.usage.output)), 0)} | ${f(mean(answerTokens), 0)} | ${f(mean(list.map(r => r.usage.output)) - mean(answerTokens), 0)} | ${f(mean(list.map(r => r.costUsd)), 4)} | ${f(assumed, 4)} | ${f(list.reduce((sum, r) => sum + r.costUsd, 0), 2)} |`);
 }
@@ -190,6 +204,61 @@ const cats = new Map<string, number>();
 for (const scene of scenes) cats.set(scene.category.join('+'), (cats.get(scene.category.join('+')) ?? 0) + 1);
 out.push('', `場面 ${scenes.length}: ${[...cats].map(([k, n]) => `${k} ${n}`).join('、')}。`);
 
+if (candidate) {
+  type Guard = { stopped: boolean; sentHands?: number; hand?: number; code?: string; reask?: string; stoppedAgain?: boolean };
+  const candRows = rows.filter(row => row.variant === 'cand') as Array<(typeof rows)[number] & { sent?: { guard?: Guard }; rawFirst?: unknown }>;
+  out.push('\n## 10. 候補の守り（部分送り・規則の守り）\n');
+  const guarded = candRows.filter(row => row.sent?.guard);
+  const whole = guarded.filter(row => row.sent!.guard!.stopped), part = guarded.filter(row => !row.sent!.guard!.stopped);
+  const reasks = [...new Set(guarded.map(row => row.sent!.guard!.reask ?? '-'))].map(kind => `${kind} ${guarded.filter(row => (row.sent!.guard!.reask ?? '-') === kind).length}`).join('、');
+  out.push(`- 候補の答え ${candRows.length} 個のうち、守りが止めた答え ${guarded.length}（全部止め ${whole.length}、部分送り ${part.length}）。聞き直しの答えの道具: ${reasks}。聞き直しの答えがまた止まった: ${guarded.filter(row => row.sent!.guard!.stoppedAgain).length}。`);
+  // 誤って止めたか: 止められた 1 回目の答え（全部の手）を検査にかけ、塞がったマスへ歩く・くり返し・場面の必須で × にならないなら、検査の目では「止める必要が無かった」（疑い）。
+  const sceneById = new Map(scenes.map(scene => [scene.id, scene]));
+  const unneeded: string[] = [];
+  const codes = new Map<string, number>();
+  const lines: string[] = [];
+  let sure = 0;
+  for (const row of guarded) {
+    const scene = sceneById.get(row.scene)!, decision = decisionOf(runs, scene), context = contextOf(decision);
+    const frame = candFrame(decision, frames(runs, decision.run.key));
+    const prepared = llmcPrepare('mc.act', candidateInput('mc.act', row.rawFirst));
+    const held = prepared.problem ? null : heldOfFrame(checkedStopIf(prepared.input, frame).input, frame, `replay-${row.scene}-${row.rep}`);
+    const code = held?.code ?? '?';
+    codes.set(code, (codes.get(code) ?? 0) + 1);
+    const raw = answerOf([{ type: 'tool_use', name: 'mc_act', input: candidateInput('mc.act', row.rawFirst) }] as never);
+    const score = scoreAnswer(scene, context, raw);
+    const hit = score.failed.some(reason => /^(塞がったマスへ歩く|同じ止まり)/u.test(reason) || /^[a-z][a-z0-9-]+:/u.test(reason));
+    if (hit) sure += 1; else unneeded.push(`${row.scene.slice(0, 3)} r${row.rep}`);
+    lines.push(`| ${row.scene.slice(0, 3)} r${row.rep} | ${row.sent!.guard!.stopped ? '全部止め' : `部分送り（手 1〜${row.sent!.guard!.sentHands}）`} | 手 ${held?.hand ?? '?'} ${code} | ${hit ? '検査でも ×（確かな止め）' : '検査では × にならない（疑い）'} | ${(held?.line ?? '').slice(0, 110)} |`);
+  }
+  out.push(`- 止めた手の種類（code）: ${[...codes].map(([code, n]) => `${code} ${n}`).join('、')}。`);
+  out.push(`- 止められた 1 回目の答え ${guarded.length} 個を検査にかけると、塞がったマスへ歩く・くり返し・場面の必須で × になった物 ${sure}。検査では × にならなかった止め（誤って止めた疑い。中身は人が読む）: ${unneeded.length}${unneeded.length ? `（${unneeded.join('、')}）` : ''}。`);
+  out.push('', '| 場面・回 | 止め方 | 止めた手 | 検査の目 | 返した事実（先頭） |', '|---|---|---|---|---|', ...lines, '');
+  // 合格の線
+  const sel = (id: string) => table.filter(item => item.variant === id);
+  const decidedOf = (list: Entry[]) => list.filter(item => item.final.verdict !== '?');
+  const meanOf = (list: Entry[]) => mean(decidedOf(list).map(item => points[item.final.verdict]!));
+  const walkErrors = (list: Entry[]) => list.reduce((n, item) => n + item.failed.filter(reason => /^塞がったマスへ歩く/u.test(reason)).length, 0);
+  const ruleErrors = (list: Entry[]) => list.reduce((n, item) => n + item.failed.filter(reason => /^[a-z][a-z0-9-]+:/u.test(reason)).length, 0);
+  const per90 = (n: number, list: Entry[]) => n * 90 / Math.max(1, list.length);
+  const b = sel(baseline), c = sel(candidate);
+  const leftC = perScene(candidate, table), rightB = perScene(baseline, table);
+  const diffs = scenes.flatMap(scene => Number.isFinite(leftC.get(scene.id)!) && Number.isFinite(rightB.get(scene.id)!) ? [leftC.get(scene.id)! - rightB.get(scene.id)!] : []);
+  const boot = Array.from({ length: 4000 }, () => mean(Array.from({ length: diffs.length }, () => diffs[Math.floor(random() * diffs.length)]!))).sort((x, y) => x - y);
+  const candStat = rows.filter(row => row.variant === 'cand'), baseStat = rows.filter(row => row.variant === 'v1');
+  const p50 = (list: typeof rows) => quantile(list.map(row => row.tEnd / 1000), 0.5);
+  out.push(`\n## 11. 改修案の「合格の線」との照らし合わせ（基準 = ${baseline}、候補 = ${candidate}）\n`, '| 物差し | 基準 | 候補 | 合格の線 | 判定 |', '|---|---:|---:|---|---|');
+  const mC = meanOf(c), mB = meanOf(b), lo = boot[100]!, hi = boot[3899]!;
+  out.push(`| 平均点（○1・△0.5・×0、未採点 ${count(b, '?')} / ${count(c, '?')} を除く） | ${f(mB, 2)} | ${f(mC, 2)}（差 ${f(mean(diffs), 3)}、95% の幅 ${f(lo, 3)} 〜 ${f(hi, 3)}） | 0.70 以上、差の幅が 0 を含まない | ${mC >= 0.7 && lo > 0 ? '通った' : '通らなかった'} |`);
+  const wB = per90(walkErrors(b), b), wC = per90(walkErrors(c), c);
+  out.push(`| 塞がった・床の無いマスへの walk の誤り（90 答えあたり） | ${f(wB, 1)}（${walkErrors(b)}/${b.length}） | ${f(wC, 1)}（${walkErrors(c)}/${c.length}） | 2 以下 | ${wC <= 2 ? '通った' : '通らなかった'} |`);
+  const rB = per90(ruleErrors(b), b), rC = per90(ruleErrors(c), c);
+  out.push(`| 規則の誤り（場面の必須の検査。90 答えあたり） | ${f(rB, 1)}（${ruleErrors(b)}/${b.length}） | ${f(rC, 1)}（${ruleErrors(c)}/${c.length}） | 基準の半分以下 | ${rC <= rB / 2 ? '通った' : '通らなかった'} |`);
+  out.push(`| 1 判断の中央値（聞き直しを含む。自分の PC からのストリーム） | ${f(p50(baseStat), 1)} 秒 | ${f(p50(candStat), 1)} 秒 | 6.0 秒以下 | ${p50(candStat) <= 6 ? '通った' : '通らなかった'} |`);
+  const cB = mean(baseStat.map(row => assumedRow(row, 'claude-opus-5-5'))), cC = mean(candStat.map(row => assumedRow(row, 'claude-opus-5-5')));
+  out.push(`| 1 判断の費用（本番想定） | $${f(cB, 4)} | $${f(cC, 4)} | $0.045 以下 | ${cC <= 0.045 ? '通った' : '通らなかった'} |`);
+  out.push('\n（改修案の「今の本番」の列は 0.54 / 15 / 8 前後 / 7.0 秒 / $0.053 で、これは専用の指示文版 v2 の値だった。この表の基準は v1（本番 3008876 の指示文と live）+ 本番の頭の変換で、今回測り直した値。）');
+}
 writeFileSync(dataFile(flag('out', 'report5-tables.md')), `${out.join('\n')}\n`);
 writeFileSync(dataFile('report5-entries.json'), JSON.stringify(table.map(item => ({ scene: item.scene.id, key: item.key, variant: item.variant, rep: item.rep, verdict: item.final.verdict, by: item.final.by, reason: item.final.reason, failed: item.failed })), null, 1));
 console.log(out.join('\n'));
