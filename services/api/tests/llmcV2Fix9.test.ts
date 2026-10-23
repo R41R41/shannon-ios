@@ -166,13 +166,19 @@ describe('B3: the history summary of the mode keeps facts', () => {
     const fixture = scriptedAnthropic([answer(template)]);
     const result = await createAnthropicFcaSummarizer({ apiKey: 'synthetic', fetcher: fixture.fetcher, recordUsage() {}, body: true, minecraftOwnPrompt: true,
       ...(v2 ? { minecraftV2Facts: true } : {}) }).summarize({ ...summaryInput, previous: previous as never }, new AbortController().signal);
-    return { result: result as Record<string, string[]>, sent: JSON.stringify(fixture.bodies[0]), lines: info.mock.calls.map(call => String(call[0])) };
+    const tools = ((fixture.bodies[0] as { tools?: Array<{ name: string }> }).tools ?? []).map(tool => tool.name);
+    return { result: result as Record<string, string[]>, sent: JSON.stringify(fixture.bodies[0]), tools, lines: info.mock.calls.map(call => String(call[0])) };
   };
   it('asks for what was done, where, what failed and why and what is open; no rules, no 「未確認」 for what every live state shows, only the six tools', async () => {
-    const { sent } = await summarize({ ...empty(), 済み: ['鉄 4 を (253,-55,154) で掘った'] });
+    const { sent, tools } = await summarize({ ...empty(), 済み: ['鉄 4 を (253,-55,154) で掘った'] });
     for (const wanted of ['Write facts only', 'Never write a rule, a limit, a threshold, a constraint or an order for the next step', 'Use [] for 制約',
-      'Never call the inventory, the worn armor, health, hunger or the position unknown or unchecked', 'Name no tool except mc.act, mc.probe, mc.view, plan.update, fca_wait and fca_complete',
+      'Never call the inventory, the worn armor, health, hunger or the position unknown or unchecked', 'Name no tool except mc.act, mc.probe, mc.view and plan.update',
       'Keep coordinates']) expect(sent).toContain(wanted);
+    // Run 36 d=86: the hazards the results showed stay as facts (not rules), two recorded readings stay two, 次 is empty.
+    for (const wanted of ['Keep every hazard the results showed, with its place and what it did: lava or water beside a cell', 'These are facts, not rules',
+      'write both as they were recorded', 'Use [] for 次: the plan with its open nodes is in every live state']) expect(sent).toContain(wanted);
+    // The summarizer is offered its one tool and no control tool (it called the summary tool and fca_complete together, FCA_MODEL_CONTROL_MIXED).
+    expect(tools).toEqual(['fca_history_summary']);
     expect(sent).not.toContain('Preserve constraints');
     for (const section of COMPACTION_SECTIONS) expect(sent).toContain(section);
     expect(foreignToolNames(sent)).toEqual([]);
@@ -181,9 +187,9 @@ describe('B3: the history summary of the mode keeps facts', () => {
     const previous = { ...empty(), 次: ['find-blocks で探す', 'p2.1 ゲートを建てる'], coversFromId: null, coversToId: null };
     const { result, lines } = await summarize({ 済み: ['鉄 4 を (253,-55,154) で掘った'], 詰まり: ['次: minecraft.observe で所持品・装備を確認（未確認のため）', '(229,-54,196) への walk が止まった: 足の下が空気'] }, previous);
     expect(result['詰まり']).toEqual(['(229,-54,196) への walk が止まった: 足の下が空気']);
-    expect(result['次']).toEqual(['p2.1 ゲートを建てる']);
+    expect(result['次']).toEqual([]);
     expect(result['済み']).toEqual(['鉄 4 を (253,-55,154) で掘った']);
-    expect(lines.filter(line => line.includes('fca_summary_scrubbed')).map(line => JSON.parse(line))).toEqual([{ event: 'fca_summary_scrubbed', dropped: 2, neutralized: 0 }]);
+    expect(lines.filter(line => line.includes('fca_summary_scrubbed')).map(line => JSON.parse(line))).toEqual([{ event: 'fca_summary_scrubbed', dropped: 1, neutralized: 0 }]);
   });
   it('keeps the words of a fact that only mentions such a name (the name replaced), and leaves real names of the six and look-alikes alone', () => {
     expect(scrubForeignToolItems(['find-blocks が (1,2,3) を指した（計画の where と違う）']))
@@ -194,6 +200,14 @@ describe('B3: the history summary of the mode keeps facts', () => {
     expect(scrubForeignToolItems(same.slice(0, 5)).dropped).toBe(0);
     expect(scrubForeignToolItems(['Minecraft.net', 'observed it']).neutralized).toBe(0);
     expect(scrubForeignToolItems(['task.replan を使う', 'goal.verify で確認', 'mc.find-blocks で探す', 'minecraft.reflex を呼ぶ', '→ find-blocks で調べる']).dropped).toBe(5);
+  });
+  it('leaves 次 empty in the mode, whatever the answer or the previous summary wrote (the plan in the live state has the open nodes), and keeps hazard facts', async () => {
+    const previous = { ...empty(), 次: ['p2.1 ゲートを建てる'], coversFromId: null, coversToId: null };
+    const hazard = '(252,-24,209) の dig は溶岩が流れ込んで止まった。(253,-24,208) は溶岩の隣';
+    const { result } = await summarize({ 済み: ['鉄 4 を掘った'], 詰まり: [hazard], 次: ['p7.2 溶岩に水を注ぐ（済み）', 'p2.1 ゲートを建てる'] }, previous);
+    expect(result['次']).toEqual([]);
+    expect(result['詰まり']).toEqual([hazard]);
+    expect(scrubForeignToolItems([hazard]).kept).toEqual([hazard]);
   });
   it('does not drop a fact that says where a tool found something; only the name is replaced', () => {
     expect(scrubForeignToolItems(['find-blocks で (10,64,3) に鉄があった', 'mc.find-blocks で見つけた鉄は (1,2,3)', '次: 黒曜石は find-blocks の答えの (5,6,7)']))

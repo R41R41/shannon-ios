@@ -148,7 +148,9 @@ export class AnthropicFcaModel implements FcaModel {
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
       const menu = transient ? transientFcaTools(input, history, CONTROL_TOOLS, [FCA_CONTEXT_TOOL], this.v2() ? MINECRAFT_V2_TOOLS : undefined)
-        : nativeFcaTools(input, history, CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
+        // SHANNON_MINECRAFT_LLMC_V2's history summary is offered its one summary tool and no control tool: asked to "name no tool except … fca_complete" it
+        // sometimes called the summary tool and fca_complete together (FCA_MODEL_CONTROL_MIXED, 2 of 32 summaries in the replay bench of 8607283).
+        : nativeFcaTools(input, history, this.options.minecraftSummaryFacts ? [] : CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
       if (transient) return this.transientRequest(input, history, menu, ownerClock);
       // A part this epoch's replay already showed in full is not restated (`anthropicFcaHistory.ts`, `elidedDecision`); the message is stored as sent.
