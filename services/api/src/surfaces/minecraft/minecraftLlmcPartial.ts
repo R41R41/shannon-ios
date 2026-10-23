@@ -2,6 +2,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
+import { seenReopenStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
 
 /**
@@ -16,7 +17,7 @@ export interface Held {
   /** 1 始まり。 */
   hand: number;
   code: string;
-  kind: 'walk' | 'place';
+  kind: string;
   /** 「手 2 walk 一歩ではない: …（地図で確かめた）。…。」 */
   line: string;
 }
@@ -28,11 +29,19 @@ function preflightLine(stop: PreflightStop): string {
 }
 const ruleLine = (stop: RuleStop): string => `手 ${stop.hand} ${stop.kind} ${stop.word}: ${stop.why}。`;
 
-/** 2 つの守りのうち、手の番号の小さい方（同じなら 4f98156 の方）。どちらも止めなければ null。 */
-export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string): Held | null {
+const handLine = (stop: HandStop): string => `手 ${stop.hand} ${stop.kind}: ${stop.line}。`;
+/**
+ * The guards' stops, the one with the smallest hand number (the same hand: the act-preflight's, then the rule guard's, the seen-again dig, the
+ * urgent limit). `urgent`: the decision was an urgent one (its live state's answer line says 「手は 3 つまで」). Null when none holds.
+ */
+export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): Held | null {
   const stand = preflightOfFrame(input, frame, taskId), rule = ruleGuardOfFrame(input, frame, taskId);
-  if (stand && (!rule || stand.hand <= rule.hand)) return { hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) };
-  return rule ? { hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) } : null;
+  const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],
+    ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
+  for (const stop of [seenReopenStop(input, frame), urgentLimitStop(input, urgent)]) {
+    if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
+  }
+  return found.reduce<Held | null>((first, next) => !first || next.hand < first.hand ? next : first, null);
 }
 
 /** 手 1 … k−1 だけの act（他の欄はそのまま）。手が 1 つも残らなければ null（全部止める）。 */
@@ -68,8 +77,8 @@ export function withHeldTail(result: ToolResult, tail: string): ToolResult {
 
 /** What the tools do with a held act in v2: nothing held, the whole act turned back, or a part sent with a tail. */
 export type HoldV2 = { whole: string; held: Held } | { part: unknown; tail: string; held: Held } | null;
-export function holdV2(input: unknown, frame: BodyObservation | null, taskId: string): HoldV2 {
-  const held = heldOfFrame(input, frame, taskId);
+export function holdV2(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): HoldV2 {
+  const held = heldOfFrame(input, frame, taskId, urgent);
   if (!held) return null;
   const part = sentPart(input, held);
   if (part === null) return { whole: heldWhole(held), held };
@@ -85,10 +94,10 @@ const say = (line: string): void => { console.info(line); };
  * hand the map faults, and the log line and the words are the same as they were. With v2 (SHANNON_MINECRAFT_LLMC_V2), the preflight and the rule
  * guard: the hands before the held one are sent and the rest comes back as a fact (`holdV2`).
  */
-export function heldBeforeSend(mode: { preflight?: boolean; v2?: boolean } | undefined, input: unknown, frame: BodyObservation | null,
+export function heldBeforeSend(mode: { preflight?: boolean; v2?: boolean; urgent?: boolean } | undefined, input: unknown, frame: BodyObservation | null,
   taskId: string): BeforeSend | null {
   if (mode?.v2) {
-    const hold = holdV2(input, frame, taskId);
+    const hold = holdV2(input, frame, taskId, mode.urgent === true);
     if (!hold) return null;
     if ('whole' in hold) {
       say(`Shannon Minecraft act held before send task=${taskId} hand=${hold.held.hand} do=${hold.held.kind} code=${hold.held.code}`);
