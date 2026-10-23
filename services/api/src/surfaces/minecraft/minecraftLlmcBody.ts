@@ -63,6 +63,18 @@ function eventsOf(taskId: string): TaskEvents {
   return state;
 }
 
+/**
+ * SHANNON_MINECRAFT_LLMC_V2: whether the decision a task's tools are now running was an urgent one (its live state was the short one with the
+ * answer line 「手は 3 つまで」): the act preflight's urgent limit (`minecraftLlmcHandGuards.ts`) reads it when the act is sent.
+ */
+const urgentDecisions = new Map<string, boolean>();
+function noteUrgentDecision(taskId: string, urgent: boolean): void {
+  urgentDecisions.delete(taskId);
+  urgentDecisions.set(taskId, urgent);
+  if (urgentDecisions.size > 32) urgentDecisions.delete(urgentDecisions.keys().next().value as string);
+}
+export const urgentDecision = (taskId: string): boolean => urgentDecisions.get(taskId) === true;
+
 /** A hostile this near makes a step urgent (a creeper a little farther: its blast reaches about 7 m). */
 export const LLMC_URGENT_NEAR_METERS = 8;
 const CREEPER_URGENT_METERS = 10;
@@ -375,7 +387,9 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       baseline = approachingIds(observation, urgentMeters);
       const minutes = Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null;
       // r8: an urgent step, or a decision asked again after an interrupt, reads the short state.
-      if (r4 && (reasons.length > 0 || interrupted !== null)) return urgentState(minutes);
+      const urgentNow = !!r4 && (reasons.length > 0 || interrupted !== null);
+      if (v2) noteUrgentDecision(parts.taskId, urgentNow);
+      if (urgentNow) return urgentState(minutes);
       return llmcTransient(parts.llmc, events, observation, minutes, reasons, r4 ? { investigation, scan, unreachable, footing } : null, v2);
     },
     ...(r4 ? {
@@ -460,5 +474,6 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
 /** For tests: no task holds events. */
 export function forgetLlmcEvents(): void {
   tasks.clear();
+  urgentDecisions.clear();
   scansShown.clear();
 }

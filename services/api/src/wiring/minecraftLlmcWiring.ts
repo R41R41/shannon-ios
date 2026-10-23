@@ -17,7 +17,7 @@ import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
 import { firstPlanInbox, planGoal, startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
-import { withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
+import { urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
@@ -271,7 +271,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   return {
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null },
-    tools: { llmc: { plan: display, ...flagsOn({ probe: llmc.probe, preflight: llmc.preflight === true, v2: llmc.v2 === true }) } },
+    tools: { llmc: { plan: display, ...flagsOn({ probe: llmc.probe, preflight: llmc.preflight === true, v2: llmc.v2 === true }),
+      ...(llmc.v2 ? { urgent: () => urgentDecision(step.taskId) } : {}) } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,

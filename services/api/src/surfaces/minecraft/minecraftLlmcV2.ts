@@ -44,6 +44,7 @@ export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolD
   return MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name)).map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : tool);
 }
 export const candidateInput = (name: string, input: unknown): unknown => name === MC_ACT_TOOL ? expandShortAct(input).input : input;
+export { isUrgentLive } from './minecraftLlmcHandGuards.js';
 export const candidateInstructions = (): string => V2_ALWAYS;
 
 /** The hooks the model's options take (`createAnthropicFcaModel`, `minecraftV2`). */
@@ -67,14 +68,16 @@ export interface CandidateAct {
 /**
  * The model's `mc.act` as the body's tool takes it, from the model's raw input (hands in lines or hands) and the newest frame: the hands made
  * ready (`candidateInput`), the shape put right and checked (`llmcPrepare`), the stopIf looked at (`checkedStopIf`), then the guards
- * (`heldBeforeSend` with the switch on). The frame may be a made one (`state.world`: `localMap`, `position`, `health`, `nearbyThreats`).
+ * (`heldBeforeSend` with the switch on). The frame may be a made one (`state.world`: `localMap`, `position`, `health`, `nearbyThreats`, and
+ * `recentStops`: the body's stop lines, from which a dig of a cell that stopped for 「見られる」 a moment ago is held). `options.urgent`: the decision
+ * was an urgent one (`isUrgentLive(live)`), so the act goes to the body three hands at most.
  */
-export function candidateAct(raw: unknown, frame: BodyObservation | null, taskId = 'replay'): CandidateAct {
+export function candidateAct(raw: unknown, frame: BodyObservation | null, taskId = 'replay', options: { urgent?: boolean } = {}): CandidateAct {
   const prepared = llmcPrepare(MC_ACT_TOOL, candidateInput(MC_ACT_TOOL, raw));
   if (prepared.problem) return { input: raw, fixes: prepared.fixes, problem: prepared.problem };
   const checked = checkedStopIf(prepared.input, frame);
   const fixes = [...prepared.fixes, ...checked.fixes];
-  const held = heldBeforeSend({ preflight: true, v2: true }, checked.input, frame, taskId);
+  const held = heldBeforeSend({ preflight: true, v2: true, urgent: options.urgent === true }, checked.input, frame, taskId);
   if (held?.result) return { input: checked.input, fixes, problem: null, guard: { stopped: true, hand: 1, text: held.result.text } };
   if (held) {
     const sent = (held.input as { hands: unknown[] }).hands.length;

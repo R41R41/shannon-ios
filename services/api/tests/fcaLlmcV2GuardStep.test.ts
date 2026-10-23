@@ -20,7 +20,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); vi.restoreAllMocks(); forgetActNodes(); });
 const at = () => '2026-10-23T00:00:00.000Z';
 
-type World = { position: { x: number; y: number; z: number }; localMap: string; nearbyThreats?: unknown[]; health: number };
+type World = { position: { x: number; y: number; z: number }; localMap: string; nearbyThreats?: unknown[]; health: number; recentStops?: string[] };
 /** Rock around the feet (220,56,62) with a corridor along +x two cells long. */
 function rock(): World {
   const lines = ['地図 v1 足=(220,56,62) x=213..227 z=55..69 方式=layers 上=北'];
@@ -49,7 +49,7 @@ function ledge(sees: boolean): World {
 const ACT_DONE = (n: number) => JSON.stringify({ v: 1, ok: true, done: n, of: n, ms: 1000, at: { x: 222, y: 56, z: 62 }, hp: 20, food: 20,
   lines: Array.from({ length: n }, (_, i) => ({ i: i + 1, do: 'walk', status: 'done', line: `(22${i + 1},56,62) に着いた` })) });
 
-function run(flags: { preflight: boolean; v2: boolean }, world: World, hands: unknown[]) {
+function run(flags: { preflight: boolean; v2: boolean; urgent?: boolean }, world: World, hands: unknown[]) {
   const h = actionHarness(at), store = new MinecraftControlStore(h.db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world',
     onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
@@ -75,7 +75,7 @@ function run(flags: { preflight: boolean; v2: boolean }, world: World, hands: un
       return { decision: { kind: 'tools', calls: [{ id: 'c-1', name: MC_ACT_TOOL, input: { hands, why: '[p1.2] 東へ', stopIf: { hpBelow: 12 } } }] }, history: [{ role: 'assistant', content: 'call' }] };
     }, toolResults: results => ({ role: 'user', results }) },
     stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
-      llmc: { plan: () => plan, probe: true, ...(flags.preflight ? { preflight: true } : {}), ...(flags.v2 ? { v2: true } : {}) } }) }),
+      llmc: { plan: () => plan, probe: true, ...(flags.preflight ? { preflight: true } : {}), ...(flags.v2 ? { v2: true } : {}), ...(flags.urgent ? { urgent: () => true } : {}) } }) }),
   });
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id, { title: 'End', goal: 'エンドラを討伐して' }, 'owner-request');
   store.bind(task.id, 'minecraft:world');
@@ -172,5 +172,38 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
     await old.driver.tick();
     await old.waitPending();
     expect(((await old.answer(ACT_DONE(3)))?.arguments as { hands: unknown[] }).hands).toHaveLength(3);
+  });
+
+  it('v2, an urgent decision: the act goes to the body three hands at most, and the rest comes back as a fact (not urgent: whole)', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const five = [walk(221), walk(222), walk(221), walk(222), walk(221)];
+    const urgent = run({ preflight: true, v2: true, urgent: true }, rock(), five);
+    await urgent.driver.tick();
+    await urgent.waitPending();
+    expect(((await urgent.answer(ACT_DONE(3)))?.arguments as { hands: unknown[] }).hands).toHaveLength(3);
+    expect(urgent.seen.join('\n')).toContain('手 4 から先 2 手（全 5 手のうち）は体へ送っていない');
+    expect(urgent.seen.join('\n')).toContain('急ぎの判断は 3 手まで');
+    const calm = run({ preflight: true, v2: true }, rock(), five);
+    await calm.driver.tick();
+    await calm.waitPending();
+    expect(((await calm.answer(ACT_DONE(5)))?.arguments as { hands: unknown[] }).hands).toHaveLength(5);
+  });
+
+  it('v2: a dig of the cell that stopped for 「見られる」 a moment ago is not sent without exposeOk, and goes with it', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const world = { ...rock(), recentStops: ['(221,56,62) 見られる 3秒前'],
+      nearbyThreats: [{ name: 'blaze', id: 7, distance: 6, position: { x: 226, y: 58, z: 60 }, canSee: true }] };
+    const dig = (extra: object) => [{ do: 'dig', at: [{ x: 221, y: 56, z: 62 }], ...extra }];
+    const held = run({ preflight: true, v2: true }, world, dig({}));
+    await held.driver.tick();
+    await held.driver.drain();
+    await held.driver.tick();
+    await held.driver.drain();
+    expect(held.pending()).toBe(0);
+    expect(held.seen.join('\n')).toContain('(221,56,62) は直前に「見られる」で止まった（3秒前。今も見える敵: blaze #7 6.0m）');
+    const open = run({ preflight: true, v2: true }, world, dig({ exposeOk: true }));
+    await open.driver.tick();
+    await open.waitPending();
+    expect(open.pending()).toBe(1);
   });
 });

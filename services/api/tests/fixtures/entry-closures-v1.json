@@ -807,6 +807,7 @@
     "surfaces/minecraft/minecraftLlmcCaution.ts",
     "surfaces/minecraft/minecraftLlmcContext.ts",
     "surfaces/minecraft/minecraftLlmcFooting.ts",
+    "surfaces/minecraft/minecraftLlmcHandGuards.ts",
     "surfaces/minecraft/minecraftLlmcLive.ts",
     "surfaces/minecraft/minecraftLlmcLiveEnemies.ts",
     "surfaces/minecraft/minecraftLlmcLiveMap.ts",

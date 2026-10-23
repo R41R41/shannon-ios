@@ -58,7 +58,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     /** SHANNON_MINECRAFT_ACT_PREFLIGHT: an act the map shows the body would refuse at a hand's start is not sent (`minecraftLlmcPreflight.ts`). */
     preflight?: boolean;
     /** SHANNON_MINECRAFT_LLMC_V2: the guards send the hands before the one they hold and add the rule guard (`minecraftLlmcPartial.ts`). */
-    v2?: boolean };
+    v2?: boolean;
+    /** SHANNON_MINECRAFT_LLMC_V2: whether the decision now running was an urgent one (its act is held to three hands). */
+    urgent?(): boolean };
 }): FcaExternalTools {
   const { control, step } = parts;
   const bodyId = control.store.body(step.taskId) ?? (control.available().length === 1 ? control.available()[0]! : null);
@@ -99,7 +101,8 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const refused = fightRefusal(call.name, call.input, () => control.observe(bodyId));
     if (refused) return refused;
     // act-preflight: a hand the map shows for certain the body would refuse at its start is not sent; the fact comes back at once.
-    const hold = call.name === MC_ACT_TOOL ? heldBeforeSend(parts.llmc, call.input, control.observe(bodyId), step.taskId) : null;
+    const mode = { preflight: parts.llmc?.preflight, v2: parts.llmc?.v2, urgent: parts.llmc?.urgent?.() === true };
+    const hold = call.name === MC_ACT_TOOL ? heldBeforeSend(mode, call.input, control.observe(bodyId), step.taskId) : null;
     if (hold?.result) return hold.result;
     if (hold) call = { ...call, input: hold.input as typeof call.input };
     if (!control.store.bind(step.taskId, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
