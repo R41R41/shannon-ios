@@ -20,7 +20,7 @@ const SECTIONS = ['目的', '制約', '済み', '途中', '詰まり', '決め�
 interface Source { label: string; tag: string; run: string; epoch: number; text: string }
 const runs = loadAllRuns();
 const sources: Source[] = [];
-for (const run of ['r37', 'r36']) for (const tag of ['base', 'fix', 'base2', 'base3', 'fix2', 'fix3', 'fix4']) {
+for (const run of ['r37', 'r36']) for (const tag of ['base', 'fix', 'base2', 'base3', 'fix2', 'fix3', 'fix4', 'fixB1', 'fixB2', 'fixB3', 'fixB4']) {
   const file = dataFile(`bootstrap-${run}.${tag}.json`);
   if (!existsSync(file)) continue;
   const all = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string>;
