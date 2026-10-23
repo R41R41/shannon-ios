@@ -222,8 +222,10 @@ export function awayLines(view: MapView, feet: P, hostile: Watched | null): stri
   const steps = DIRS.flatMap(dir => {
     if (dir.dx !== 0 && dir.dz !== 0 && !cornerOk(read, feet, dir.dx, dir.dz)) return [];
     const best = bestStep(stepOptions(read, feet, feet.x + dir.dx, feet.z + dir.dz));
-    return best && !best.dig.length && far(best.to) >= far(feet) + 0.5 ? [`${dir.name} ${ptText(best.to)}`] : [];
+    return best && !best.dig.length && far(best.to) >= far(feet) + 0.5 ? [`${dir.name} ${ptText(best.to)}${stepWord(best)}`] : [];
   });
   const who = `#${hostile.id} ${hostile.name}（${hostile.meters}m）から離れる、掘らずに歩ける隣`;
   return [steps.length ? `${who}: ${steps.join('・')}` : `${who}は無い（周りの 8 方向の 1 歩は、どれも近づくか、掘る・置くが要る）`];
 }
+/** How the step goes, when it is not on the level: the cell written is the one she stands in after it (as the step lines say 「1 段上りで … に着く」). */
+const stepWord = (step: Step): string => step.kind === 'up' ? '（1 段上り）' : step.kind === 'down' ? `（${step.drop} 段下り）` : '';

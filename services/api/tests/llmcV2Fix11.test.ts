@@ -197,3 +197,25 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
     expect(V2_ALWAYS).toContain('急ぎの時の live は、urgent・investigation・planNow・footing・around・liquid・map・state・threats・inventory・events・lastResults・answer だけ');
   });
 });
+
+describe('s14 with the scene\'s own numbers: the feet are the map\'s 足=, the words are x east+ and z south+, the cells are the neighbours', () => {
+  // The recorded frame of s14: feet (195,65,60), the enderman #499 at (191,59,57) (西4・北3・下6, in sight). The situation text of the scene says (200,65,63);
+  // the live state, the map's 足= and the enderman's offsets all say (195,65,60). Rock under the feet and south of them (one up); air elsewhere.
+  const rows = (y: number) => Array.from({ length: 7 }, (_, row) => `${String(57 + row).padStart(2)} ${Array.from({ length: 7 }, (_, col) => {
+    const x = 192 + col, z = 57 + row;
+    if (y === 65 && x === 195 && z === 60) return '@';
+    return (y === 64 && x === 195 && z === 60) || (y === 65 && x === 195 && z === 61) ? 'n' : '.';
+  }).join(' ')}`);
+  const map = ['地図 v1 足=(195,65,60) x=192..198 z=57..63 方式=layers 上=北',
+    ...[67, 66, 65, 64, 63].flatMap(y => [`y=${y}`, ...rows(y)])].join('\n');
+  const away = (rewriteLlmcLive({ plan: {}, body: { state: { at: '(195,65,60)' }, map,
+    urgent: ['#499 enderman 7.9m (191,59,57) 西4・北3・下6（判断を待つ間に出た）・見える（射線の中）'] } }).live.body as Record<string, any>).away as string[];
+  it('writes the step south from the map\'s feet, the cell she stands in after going up one, and says it goes up', () => {
+    expect(away).toEqual(['#499 enderman（7.9m）から離れる、掘らずに歩ける隣: 南 (195,66,61)（1 段上り）']);
+  });
+  it('is a neighbour column of the feet (one step in x and z), north is toward it and not written', () => {
+    const cell = /南 \((\d+),(\d+),(\d+)\)/u.exec(away[0]!)!;
+    expect([Number(cell[1]) - 195, Number(cell[3]) - 60]).toEqual([0, 1]);
+    expect(away[0]).not.toMatch(/北|西/u);
+  });
+});
