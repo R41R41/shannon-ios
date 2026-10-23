@@ -92,7 +92,7 @@ export function nearWorthy(name: string, distance: number, needs: NearNeeds): bo
 /** The kinds that hurt from where they see her (by name: the frame says `shooter` only within 24 m). */
 export const SHOOTER_KINDS: ReadonlySet<string> = new Set(['skeleton', 'stray', 'bogged', 'blaze', 'ghast', 'pillager', 'witch', 'breeze', 'shulker',
   'guardian', 'elder_guardian', 'wither', 'ender_dragon']);
-/** How far a hostile still gets a line of its own: a shooter 48 m, a creeper 32 m, any other `LINE_METERS` (24 m). */
+/** How far a hostile still gets a line of its own: a shooter 48 m, a creeper or an enderman 32 m, any other `LINE_METERS` (24 m). */
 export function lineMeters(name: string): number {
-  return SHOOTER_KINDS.has(name) ? 48 : name === 'creeper' ? 32 : 24;
+  return SHOOTER_KINDS.has(name) ? 48 : name === 'creeper' || name === 'enderman' ? 32 : 24;
 }

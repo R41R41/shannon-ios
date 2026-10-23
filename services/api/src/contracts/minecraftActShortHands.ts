@@ -7,7 +7,8 @@ import type { ActHand } from './minecraftActContract.js';
  *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物 [slot] | craft 物 [個数]
  *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false] | use 物 [x,y,z] [face=F] [target=T]
  *   どの手にも rel（足からの差）、onFail=continue|stop、note="短い説明" を付けられる。
- *   上に無い形（furnace・chest・drop・shoot、use の ほかの欄など）は `json {手の JSON}` の 1 行。
+ *   drop 物 [数] [target=#id か x,y,z]
+ *   上に無い形（furnace・chest・shoot、use の ほかの欄など）は `json {手の JSON}` の 1 行。
  * 往復（手 → 1 行 → 手）が元と同じにならない手は、必ず json の行に落ちる（欄を黙って失わない）。
  */
 type Fields = Record<string, unknown>;
@@ -47,6 +48,10 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   equip: hand => hand.item ? [hand.item, ...(hand.slot ? [hand.slot] : [])] : null,
   craft: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   pickup: hand => [...given('range', hand.range), ...given('target', hand.target)],
+  // `drop 物 [数] [target=#id か x,y,z]`: one kind, one place at most (a second kind or both a target and a place are a json line).
+  drop: hand => hand.items?.length === 1 && (hand.at?.length ?? 0) <= 1 && !(hand.at?.length && hand.target)
+    ? [hand.items[0]!.item, ...(hand.items[0]!.count !== undefined ? [String(hand.items[0]!.count)] : []), ...given('target', hand.target),
+      ...(hand.at?.length ? [pos(hand.at[0]!)] : [])] : null,
   look: hand => hand.to ? [pos(hand.to)] : hand.yaw !== undefined && hand.pitch !== undefined ? [`yaw=${hand.yaw}`, `pitch=${hand.pitch}`] : null,
   attack: hand => hand.target
     ? [hand.target, ...flag(hand.hold, 'hold'), ...given('seconds', hand.seconds), ...given('untilDead', hand.untilDead)] : null,
@@ -98,6 +103,9 @@ const READERS: Record<string, Reader> = {
   craft: ({ words, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('craft', '物の名前が要る'),
   pickup: ({ hand }) => done(hand),
+  drop: ({ words, cells, hand }) => words[0] && cells.length <= 1
+    ? done({ ...hand, items: [{ item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }], ...(cells.length ? { at: [cells[0]] } : {}) })
+    : bad('drop', '物の名前が要る（座標は 1 つまで）'),
   look: ({ cells, hand }) => done(cells.length ? { ...hand, to: cells[0] } : hand),
   attack: ({ words, hand }) => words[0] ? done({ ...hand, target: words[0] }) : bad('attack', '相手が要る'),
   use: ({ words, cells, hand }) => words[0]

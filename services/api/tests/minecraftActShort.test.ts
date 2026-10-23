@@ -52,11 +52,11 @@ describe('short hands: one hand, one line', () => {
     expect(roundTrip({ do: 'dig', at: [cell(1, 2, 3)], note: '頭の上を開ける' })).toBe('dig 1,2,3 note="頭の上を開ける"');
     expect(roundTrip({ do: 'wait', seconds: 1, note: '引用 " と \\ を含む', rel: true })).toContain('note="引用 \\" と \\\\ を含む"');
   });
-  it('puts furnace, chest, drop and shoot, and a hand with fields the line cannot say, in a json line', () => {
+  it('puts furnace, chest, shoot, a drop of two kinds, and a hand with fields the line cannot say, in a json line (a one-kind drop has a line: mb-llmc-cand 10)', () => {
     const hands: ActHand[] = [
       { do: 'furnace', at: [cell(1, 2, 3)], op: 'put', item: 'iron_ore', count: 8, fuel: 'coal', fuelCount: 2 },
       { do: 'chest', at: [cell(1, 2, 3)], op: 'take', items: [{ item: 'coal', count: 4 }] },
-      { do: 'drop', items: [{ item: 'gold_ingot', count: 1 }], target: '#12' },
+      { do: 'drop', items: [{ item: 'gold_ingot', count: 1 }, { item: 'coal' }], target: '#12' },
       { do: 'shoot', target: '#12', item: 'bow', charge: 1, n: 3 },
       { do: 'walk', to: cell(1, 2, 3), rel: false },
       { do: 'use', item: 'bucket', at: [cell(1, 2, 3), cell(1, 2, 4)] },

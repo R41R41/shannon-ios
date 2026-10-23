@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
+import { handToLine, lineToHand, SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 import { foreignToolNames } from '../src/contracts/minecraftLlmcToolWords.js';
 import { PLAN_UPDATE_RULES_DEFINITION } from '../src/mind/action/fca/fcaPlanTools.js';
 import { anthropicFcaHistoryCodec, anthropicFcaHistoryCodecV2 } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
@@ -300,5 +300,29 @@ describe('the review of 10: words restored in the hand and dictionary', () => {
     expect(V2_ALWAYS).toContain('health（0〜20。ハート 1 個 = 2）');
     expect(V2_ALWAYS).toContain('自分が投げたと分かっている物（屑・予備のつるはし）は出ない');
     expect(V2_ALWAYS).not.toContain('（自分が投げた物は出ない）');
+  });
+});
+
+describe('the bench of 10 (cd-fixes-20261024): craft, drop, reach, far endermen', () => {
+  it('says exactly which crafts need a crafting table (2×2 recipes, flint and steel included, need none)', () => {
+    expect(SHORT_ACT_DESCRIPTION).toContain('2×2 で作れる物（板・棒・作業台・松明・火打ち金など）は作業台が要らない');
+    expect(SHORT_ACT_DESCRIPTION).toContain('3×3 の物（ツルハシ・剣・盾・かまど・バケツ・ハーフブロックなど）は作業台が5m内に要る');
+    expect(SHORT_ACT_DESCRIPTION).not.toContain('craft 物 [個数]（作業台が5m内に要る）');
+  });
+  it('gives drop a line form again, round trips with the json form, and reads a target or a place', () => {
+    expect(SHORT_ACT_DESCRIPTION).toContain('drop 物 [数] [target=#id か X,Y,Z]');
+    expect(lineToHand('drop gold_ingot 1 target=#12')).toEqual({ do: 'drop', items: [{ item: 'gold_ingot', count: 1 }], target: '#12' });
+    expect(lineToHand('drop cobblestone 64 1,2,3')).toEqual({ do: 'drop', items: [{ item: 'cobblestone', count: 64 }], at: [{ x: 1, y: 2, z: 3 }] });
+    expect(lineToHand('drop cobblestone')).toEqual({ do: 'drop', items: [{ item: 'cobblestone' }] });
+    expect(handToLine({ do: 'drop', items: [{ item: 'gold_ingot', count: 1 }], target: '#12' } as never)).toBe('drop gold_ingot 1 target=#12');
+    expect(handToLine({ do: 'drop', items: [{ item: 'a' }, { item: 'b' }] } as never).startsWith('json ')).toBe(true);
+  });
+  it('restores the reach guidance where dig is explained: 5 m at a time, not 16 cells at once', () => {
+    expect(SHORT_ACT_DESCRIPTION).toContain('届くのは目から5m以内のマス: トンネルや階段は5mずつ');
+    expect(SHORT_ACT_DESCRIPTION).toContain('16マスを一度に掘ると、奥は手が届かず止まる');
+  });
+  it('keeps a far enderman (28.5 m) as a line, and a far zombie folded', () => {
+    const out = rewritten({ threats: ['#1 enderman 28.5m (28,2,0)', '#2 zombie 28.5m (0,2,28)'] }).body.threats as string[];
+    expect(out).toEqual(['#1 enderman 28.5m (28,2,0) 東28・上2', 'ほか 1 体（zombie 1。いちばん近い: zombie 28.5m・上 2）']);
   });
 });
