@@ -3,7 +3,7 @@ import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { liquidLines } from './minecraftLlmcLiquid.js';
 import { obsidianWays } from './minecraftLlmcObsidianWays.js';
 import { packLines } from './minecraftLlmcPack.js';
-import { nearWorthy, planWantsFood } from './minecraftLlmcReachWords.js';
+import { nearNeeds, nearWorthy, type NearNeeds } from './minecraftLlmcReachWords.js';
 import { expandAround, normalizeMap } from './minecraftLlmcLiveMap.js';
 import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
 import { repeatedFailures } from './minecraftLlmcRepeat.js';
@@ -148,31 +148,32 @@ function rewriteState(value: unknown, notes: RewriteNotes): unknown {
 
 /**
  * mb-llmc-cand 10 (D2: 「#6545 item 0.7m」 named no item, bats and far villagers filled `near`): the creatures and dropped items that are worth a line
- * (`nearWorthy`): a dropped item within 16 m, a villager within 12 m, a food animal within 24 m when the plan wants food, anything else within 16 m.
+ * (`nearWorthy`, with what the situation needs: `nearNeeds`: food animals, sheep for wool, villagers to trade with).
  */
-function nearLines(list: readonly string[], foodWanted: boolean, notes: RewriteNotes): string[] {
+function nearLines(list: readonly string[], needs: NearNeeds, notes: RewriteNotes): string[] {
   const kept = dropOmits(list, notes).filter(line => {
     const m = /^#\d+ (item \S+|\S+) ([\d.]+)m/u.exec(line);
-    return !m || nearWorthy(m[1]!, Number(m[2]), foodWanted);
+    return !m || nearWorthy(m[1]!, Number(m[2]), needs);
   });
   if (kept.length < list.length) notes.dropped.push(`near ${list.length - kept.length} 行（関係の薄い生き物・遠い物）`);
   return kept;
 }
+const NO_NEEDS: NearNeeds = { food: false, sheep: false, folk: false };
 /** The label of a done-condition, 「（済み: …）」 read as 「done」: 「（済む条件: …）」 (mb-llmc-cand 10, C2). */
 export const doneWords = (text: string): string => text.replace(/（済み: /gu, '（済む条件: ');
 
 /** The keys mb-llmc-cand 10 words anew: `planNow` (C2) and `near` (D2). Undefined: not one of them. */
-function rewriteNamed(key: string, value: unknown, notes: RewriteNotes, foodWanted: boolean): unknown {
+function rewriteNamed(key: string, value: unknown, notes: RewriteNotes, needs: NearNeeds): unknown {
   if (key === 'planNow' && typeof value === 'string') return doneWords(value);
-  return key === 'near' && Array.isArray(value) ? nearLines(strings(value), foodWanted, notes) : undefined;
+  return key === 'near' && Array.isArray(value) ? nearLines(strings(value), needs, notes) : undefined;
 }
 
 /** The body's own lines, one key at a time. */
-function rewriteBodyKey(key: string, value: unknown, self: P | null, notes: RewriteNotes, foodWanted = false): unknown {
+function rewriteBodyKey(key: string, value: unknown, self: P | null, notes: RewriteNotes, needs: NearNeeds = NO_NEEDS): unknown {
   if (key === 'state') return rewriteState(value, notes);
   if (key === 'inventory' && Array.isArray(value)) return mergeInventory(strings(value), notes);
   if (key === 'landmarks' && Array.isArray(value)) return self ? fixLandmarks(strings(value), self, notes) : value;
-  const own = rewriteNamed(key, value, notes, foodWanted);
+  const own = rewriteNamed(key, value, notes, needs);
   if (own !== undefined) return own;
   if (key === 'stops' && Array.isArray(value)) return dropOmits(strings(value), notes);
   if (key === 'lastResults' && Array.isArray(value)) {
@@ -229,7 +230,7 @@ function addPack(body: Rec, inventory: unknown, notes: RewriteNotes, bodyIn: Rec
   body.pack = lines;
   notes.added.push('pack');
 }
-function rewriteBody(bodyIn: Rec, notes: RewriteNotes, foodWanted = false): Rec {
+function rewriteBody(bodyIn: Rec, notes: RewriteNotes, needs: NearNeeds = NO_NEEDS): Rec {
   const self = parsePos(String(rec(bodyIn.state)?.at ?? ''));
   const enemies = self ? mergeEnemies(bodyIn, self) : { urgent: bodyIn.urgent, threats: bodyIn.threats, merged: 0 };
   if (enemies.merged) notes.merged.push(`敵の行 ${enemies.merged} 減らした`);
@@ -244,7 +245,7 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes, foodWanted = false): Rec 
       Object.assign(body, mapFields(bodyIn, value, notes));
       continue;
     }
-    body[key] = rewriteBodyKey(key, value, self, notes, foodWanted);
+    body[key] = rewriteBodyKey(key, value, self, notes, needs);
     if (key === 'inventory') addPack(body, value, notes, bodyIn);
     if (key === 'stops' && repeated.length) body.repeat = repeated;
   }
@@ -267,7 +268,7 @@ export function rewriteLlmcLive(live: Rec): { live: Rec; notes: RewriteNotes } {
   const plan = rec(live.plan);
   if (plan) out.plan = rewritePlan(plan, String(bodyIn.planNow ?? ''), layers ? mapView(layers) : null, notes);
   try {
-    out.body = rewriteBody(bodyIn, notes, planWantsFood(`${String(bodyIn.planNow ?? '')} ${JSON.stringify(plan?.next ?? '')}`));
+    out.body = rewriteBody(bodyIn, notes, nearNeeds(bodyIn, JSON.stringify(plan?.next ?? '')));
   } catch {
     out.body = bodyIn;
   }

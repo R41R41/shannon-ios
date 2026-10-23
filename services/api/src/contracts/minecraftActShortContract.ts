@@ -36,7 +36,8 @@ const SHORT_LINES = [
   '  40m 以上先は地図の外の座標を渡してよい（64m ごとに区切って歩き、掘る所で止まる）。',
   '  ポータル（p・e）へは、そのマスを最後の点にして range=0 で入る。',
   'dig X,Y,Z ... [tool=名] [exposeOk] [takeOk] [collect=false]',
-  '  順に掘る（16マスまで）。素手は tool=hand。around が「掘る (x,y,z)」と名指ししたマスは全部 dig してから walk する（頭のマスを掘り残すと着かない）。',
+  '  順に掘る（1 手に16マスまで書ける）。素手は tool=hand。around が「掘る (x,y,z)」と名指ししたマスは全部 dig してから walk する（頭のマスを掘り残すと着かない）。',
+  '  届くのは目から5m以内のマス: トンネルや階段は5mずつ（掘る→歩いて進む→掘る）の手の列にする。16マスを一度に掘ると、奥は手が届かず止まる。',
   '  exposeOk: 敵に見られても掘る。takeOk: 村の物も掘る。',
   '  collect=false: 掘るだけで拾いに歩かない。階段・トンネルで石や土を掘り進む dig に付ける（付けないと拾い続けて満杯になる）。'
     + '原木・鉱石など拾う物の dig には付けない。持ち物の空きは live の pack。',
@@ -44,12 +45,15 @@ const SHORT_LINES = [
   '  place は空気（. か *）で、6面のどれかが固いマスへ。足と頭のマス・草花（,）・水・レール・ポータル・周りが全部空気の宙には置けない。',
   '  pillarUp は真下に置きながら N 段登る（縦穴を上る）。',
   'use 物 [X,Y,Z] [face=..] [target=#id]',
-  '  バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と face）。',
+  '  バケツで汲む・注ぐ、火打ち金、ベッドで寝る（夜か雷雨の時だけ。昼は寝られない。ネザー・エンドでは爆発する）、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と face）。',
   '  use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石1枚の向こうの水は、その石を dig してから use bucket）。',
-  'craft 物 [個数]（作業台が5m内に要る） / equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
+  'craft 物 [個数]',
+  '  2×2 で作れる物（板・棒・作業台・松明・火打ち金など）は作業台が要らない。3×3 の物（ツルハシ・剣・盾・かまど・バケツ・ハーフブロックなど）は作業台が5m内に要る。',
+  'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
+  'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
   'pickup [range=N] [target=..]',
-  'furnace・chest・drop・shoot は json の形で書く。',
+  'furnace・chest・shoot は json の形で書く。',
   '',
   '## json の欄（手ごとに決まっている。ほかの欄は断られる。どの手にも rel・note・onFail）',
   '- walk: to か path・sprint・range / dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: item・at（1つ）・face・target',
@@ -63,7 +67,7 @@ const SHORT_LINES = [
   'json {"do":"shoot","target":"#12","item":"bow","charge":1,"n":3}（target の代わりに at も可）',
   '',
   '## 止める・守る',
-  '- stopIf は文字列 "hostileWithin=8 hpBelow=10"（hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たしたら全体を止めて返す。'
+  '- stopIf は文字列 "hostileWithin=8 hpBelow=10"（hostileWithin は敵までの m、hpBelow は体力 0〜20、hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たしたら全体を止めて返す。'
     + 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。待つ手の act には hostileWithin。',
   '- accept は、この act で戦うと決めた敵の種類の配列（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
     + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
