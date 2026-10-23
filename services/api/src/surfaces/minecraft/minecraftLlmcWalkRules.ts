@@ -26,13 +26,13 @@ export const NAME: Readonly<Record<string, string>> = Object.freeze({
 /** The symbol and its name as the legend writes them (a portal read under the body's rules is `p` or `e`, a fence `+`; never the reader's own marks). */
 export const nameOf = (symbol: string | undefined): string => symbol === undefined ? '地図の外' : `${legendOf(symbol)} ${NAME[symbol] ?? '不明'}`;
 /**
- * What entering a portal's cell is, for the live state (mb-llmc-cand 9, run 37: the cell was told as 「歩けない: がポータル」 among the lava): where she
- * goes in (feet and head in the cell, the obsidian of the frame under her) and what it does. Null for a cell with no portal in it.
+ * What entering a portal's cell is, for the live state (mb-llmc-cand 9, run 37: the cell was told as 「歩けない: がポータル」 among the lava): a cell
+ * whose FEET cell is a portal (the shared rule with the body: the head cell is a portal or passable, checked by the caller) and what it does.
+ * Null when the feet cell is no portal (feet in air and a portal over the head is no way in).
  */
-export function portalWords(feet: string | undefined, head: string | undefined): string | null {
-  const symbol = isPortal(feet) ? feet : isPortal(head) ? head : undefined;
-  if (symbol === PORTAL) return 'ネザーポータル（中に立って約 4 秒で次元が変わる）';
-  if (symbol === END_PORTAL) return 'エンドポータル（入ると次元が変わる）';
+export function portalWords(feet: string | undefined): string | null {
+  if (feet === PORTAL) return 'ネザーポータル（中に立って約 4 秒で次元が変わる）';
+  if (feet === END_PORTAL) return 'エンドポータル（入ると次元が変わる）';
   return null;
 }
 /** Hard (not walked through, not filled): a wall of any shape. */
