@@ -104,7 +104,7 @@ interface Seen { line: string; distance: number }
  * dropped item (`cobblestone×4`), leaves out an item she threw herself and the hostiles (the threats say them); null: as the old mode wrote it.
  */
 const seenName = (entity: Record<string, unknown>, mode: SeenMode): string => mode === 'near' && entity.name === 'item'
-  ? `item ${itemWords(entity)}` : cleanText(entity.name as string);
+  ? `item${itemWords(entity) ? ` ${itemWords(entity)}` : ''}` : cleanText(entity.name as string);
 function seen(value: unknown, limit: number, mode: SeenMode = null): string[] {
   const items: Seen[] = (Array.isArray(value) ? value : []).flatMap(item => {
     const entity = record(item);

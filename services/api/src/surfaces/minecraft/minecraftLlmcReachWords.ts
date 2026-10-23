@@ -37,33 +37,62 @@ export function reachSuffix(entity: Rec): string {
   return [...kind ? [REACH_TEXT[kind]] : [], ...entity.shooter === true ? [SHOOTER_WORD] : []].map(part => `・${part}`).join('');
 }
 
-/** What a dropped item is, `cobblestone×4`; a stack the body did not name is `item`. */
+/** What a dropped item is, `cobblestone×4`; empty for a stack the body did not name (the line then says just `item`). */
 export function itemWords(entity: Rec): string {
   const name = typeof entity.itemName === 'string' && entity.itemName ? entity.itemName.replace(/^minecraft:/u, '') : null;
   const count = typeof entity.itemCount === 'number' && Number.isFinite(entity.itemCount) ? entity.itemCount : null;
-  return name ? `${name}×${count ?? 1}` : 'item';
+  return name ? `${name}×${count ?? 1}` : '';
 }
 
-const FOOD_ANIMALS = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit', 'mooshroom']);
+const FOOD_ANIMALS = new Set(['cow', 'pig', 'chicken', 'rabbit', 'mooshroom']);
 const IRRELEVANT = new Set(['bat', 'cod', 'salmon', 'tropical_fish', 'pufferfish', 'squid', 'glow_squid', 'axolotl', 'parrot', 'bee', 'tadpole',
   'frog', 'turtle', 'dolphin']);
 const VILLAGE_FOLK = new Set(['villager', 'wandering_trader', 'iron_golem']);
-/** How far a dropped item, a villager and anything else is worth a line (a pickup reaches a few metres); food animals only when the plan wants food. */
-export const NEAR_METERS = Object.freeze({ item: 16, folk: 12, other: 16, food: 24 });
+/** How far a dropped item, a villager and anything else is worth a line; food animals and sheep only when the plan needs them. */
+export const NEAR_METERS = Object.freeze({ item: 16, folk: 12, tradeFolk: 24, other: 16, food: 24 });
 const FOOD_PLAN = /食料|食べ物|食べる|肉|動物|牧場|畑|food/u;
+const BED_PLAN = /ベッド|羊毛|bed|wool/u;
+const TRADE_PLAN = /交易|取引|村|trade/u;
+/** Food below this many points is short for the first night's iron (the instructions' stage knowledge: 40〜60 before it). */
+const FOOD_SHORT_POINTS = 40;
+const FOOD_SHORT_LEVEL = 14;
 
-/** Whether the plan (its current node and the next ones) asks for food, which makes the food animals nearby worth a line. */
-export const planWantsFood = (planText: string): boolean => FOOD_PLAN.test(planText);
+/** What the situation needs of the creatures nearby: food animals, sheep (wool for beds), villagers to trade with. */
+export interface NearNeeds { food: boolean; sheep: boolean; folk: boolean }
+const text = (value: unknown): string => typeof value === 'string' ? value : Array.isArray(value) ? value.map(text).join(' ') : '';
+/**
+ * From the body of the live state and the plan's text: food animals when the plan names food, her food level is 14 or less, her food points are below
+ * 40, the shortage names food or the recovery says health does not come back; sheep too when the plan or the shortage names a bed or wool;
+ * villagers within 24 m (not 12) when the plan names a trade or a village.
+ */
+export function nearNeeds(body: Rec, planText: string): NearNeeds {
+  const state = (body.state && typeof body.state === 'object' ? body.state : {}) as Rec;
+  const food = (body.food && typeof body.food === 'object' ? body.food : {}) as Rec;
+  const level = typeof state.food === 'number' ? state.food : 20, points = typeof food.points === 'number' ? food.points : Infinity;
+  const plan = `${planText} ${text(body.planNow)}`, shortage = text(body.shortage);
+  const hungry = level <= FOOD_SHORT_LEVEL || points < FOOD_SHORT_POINTS || /食料/u.test(shortage) || text(body.recovery) !== '';
+  const wantsFood = FOOD_PLAN.test(plan) || hungry;
+  return { food: wantsFood, sheep: wantsFood || BED_PLAN.test(plan) || /ベッド/u.test(shortage), folk: TRADE_PLAN.test(plan) };
+}
 
 /**
- * Whether a line of `near` (`#id name 12.3m (x,y,z)`) is worth showing: a dropped item within 16 m (not one she threw away herself), a villager within
- * 12 m, a food animal within 24 m when the plan wants food, any other creature within 16 m; never bats, fish and the like.
+ * Whether a line of `near` (`#id name 12.3m (x,y,z)`) is worth showing: a dropped item within 16 m, a villager within 12 m (24 m when the plan trades),
+ * a food animal within 24 m when she needs food (a sheep also when she needs wool), any other creature within 16 m; never bats, fish and the like.
  */
-export function nearWorthy(name: string, distance: number, foodWanted: boolean): boolean {
+export function nearWorthy(name: string, distance: number, needs: NearNeeds): boolean {
   const kind = name.replace(/^item .*/u, 'item');
   if (kind === 'item') return distance <= NEAR_METERS.item;
   if (IRRELEVANT.has(kind)) return false;
-  if (FOOD_ANIMALS.has(kind)) return foodWanted && distance <= NEAR_METERS.food;
-  if (VILLAGE_FOLK.has(kind)) return distance <= NEAR_METERS.folk;
+  if (FOOD_ANIMALS.has(kind)) return needs.food && distance <= NEAR_METERS.food;
+  if (kind === 'sheep') return needs.sheep && distance <= NEAR_METERS.food;
+  if (VILLAGE_FOLK.has(kind)) return distance <= (needs.folk ? NEAR_METERS.tradeFolk : NEAR_METERS.folk);
   return distance <= NEAR_METERS.other;
+}
+
+/** The kinds that hurt from where they see her (by name: the frame says `shooter` only within 24 m). */
+export const SHOOTER_KINDS: ReadonlySet<string> = new Set(['skeleton', 'stray', 'bogged', 'blaze', 'ghast', 'pillager', 'witch', 'breeze', 'shulker',
+  'guardian', 'elder_guardian', 'wither', 'ender_dragon']);
+/** How far a hostile still gets a line of its own: a shooter 48 m, a creeper 32 m, any other `LINE_METERS` (24 m). */
+export function lineMeters(name: string): number {
+  return SHOOTER_KINDS.has(name) ? 48 : name === 'creeper' ? 32 : 24;
 }

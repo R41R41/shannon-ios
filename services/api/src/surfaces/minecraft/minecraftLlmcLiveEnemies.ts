@@ -1,4 +1,4 @@
-import { REACH_SHORT, REACH_TEXT, SHOOTER_WORD, type ReachKind } from './minecraftLlmcReachWords.js';
+import { lineMeters, REACH_SHORT, REACH_TEXT, SHOOTER_KINDS, SHOOTER_WORD, type ReachKind } from './minecraftLlmcReachWords.js';
 import { ptText, type P } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -45,15 +45,22 @@ class Hostiles {
   all(): Enemy[] { return this.order.map(id => this.byId.get(id)!); }
 }
 
-/** A hostile that gets a line of its own: near, one a probe or the urgent lines said something of, or one that sees her or has a way. */
-const matters = (e: Enemy): boolean => e.wait || e.dist <= LINE_METERS || e.notes.length > 0 || e.reach === 'seen' || e.reach === 'path';
-/** The hostiles that do not matter now, in one line: how many, and the nearest with its height against her feet and how it stands to her. */
+/** A hostile that gets a line: within its distance (24 m; creeper 32; shooter 48, by name), or named by a probe or the urgent lines, or in sight or with a way. */
+const matters = (e: Enemy): boolean => e.wait || e.dist <= lineMeters(e.name) || e.notes.length > 0 || e.reach === 'seen' || e.reach === 'path';
+const isShooter = (e: Enemy): boolean => e.shooter || SHOOTER_KINDS.has(e.name);
+/** The others in one line: how many by kind (a shooter marked), and the nearest with its height against her feet and how it stands to her. */
 function farLine(far: readonly Enemy[], self: P): string[] {
   const first = far[0];
   if (!first) return [];
   const dy = first.pos ? first.pos.y - self.y : 0;
   const how = [...dy ? [`${dy > 0 ? '上' : '下'} ${Math.abs(dy)}`] : [], ...first.reach ? [REACH_SHORT[first.reach]] : []];
-  return [`ほか ${far.length} 体（いちばん近い: ${first.name} ${first.dist}m${how.map(part => `・${part}`).join('')}）`];
+  const kinds = new Map<string, number>();
+  for (const e of far) {
+    const kind = `${e.name}${isShooter(e) ? `（${SHOOTER_WORD}）` : ''}`;
+    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+  }
+  const counts = [...kinds].map(([name, count]) => `${name} ${count}`).join('・');
+  return [`ほか ${far.length} 体（${counts}。いちばん近い: ${first.name} ${first.dist}m${how.map(part => `・${part}`).join('')}）`];
 }
 
 /** The enemy lines of a body live: `urgent` (nearest first, with the hostile's facts) and `threats` (the rest), each hostile once. */
@@ -88,7 +95,7 @@ export function mergeEnemies(body: Record<string, unknown>, self: P): { urgent: 
     const rel = e.pos ? ` ${ptText(e.pos)} ${relText(self, e.pos)}` : '';
     // The probe's own words of the reach (with what lies between) are the better ones: the frame's are said only where there are none.
     const frame = e.reach && !e.notes.some(note => REACH_NOTE.test(note)) ? [REACH_TEXT[e.reach]] : [];
-    const note = [...e.notes.filter(Boolean), ...frame, ...e.shooter ? [SHOOTER_WORD] : []].join('・');
+    const note = [...e.notes.filter(Boolean), ...frame, ...isShooter(e) ? [SHOOTER_WORD] : []].join('・');
     return `#${e.id} ${e.name} ${e.dist}m${rel}${e.wait ? '（判断を待つ間に出た）' : ''}${note ? `・${note}` : ''}`;
   };
   const all = hostiles.all();

@@ -49,11 +49,22 @@ describe('C1: a hostile gets a line when it matters now, with how it stands to h
     expect(lines[0]).toMatch(/^#1 zombie 10\.4m \(8,0,6\) 東8・南6・見える（射線の中）$/u);
     expect(lines[1]).toContain('壁の向こうで届かない');
     expect(lines[2]).toContain('見えない・道はある（回って来る）');
-    expect(lines[3]).toBe('ほか 2 体（いちばん近い: zombie 39.6m・上 35・壁の向こう）');
+    expect(lines[3]).toBe('ほか 2 体（zombie 1・creeper 1。いちばん近い: zombie 39.6m・上 35・壁の向こう）');
   });
   it('says nothing of reach where the frame says nothing (not made up), and keeps a far hostile that sees her or has a way', () => {
     const out = rewritten({ threats: ['#9 zombie 60m (0,40,0)', '#8 skeleton 44m (10,0,0)・見える（射線の中）'] });
-    expect(out.body.threats).toEqual(['#8 skeleton 44m (10,0,0) 東10・見える（射線の中）', 'ほか 1 体（いちばん近い: zombie 60m・上 40）']);
+    expect(out.body.threats).toEqual(['#8 skeleton 44m (10,0,0) 東10・見える（射線の中）・飛び道具', 'ほか 1 体（zombie 1。いちばん近い: zombie 60m・上 40）']);
+  });
+  it('keeps a line for a shooter up to 48 m and a creeper up to 32 m by name, marked, and counts the rest by kind in the one line', () => {
+    const out = rewritten({ threats: ['#1 ghast 41m (0,10,0)', '#2 skeleton 30m (30,0,0)', '#3 creeper 31m (31,0,0)', '#4 creeper 33m (33,0,0)',
+      '#5 zombie 40m (0,0,40)', '#6 skeleton 49m (49,0,0)', '#7 zombie 50m (50,0,0)'] }).body.threats as string[];
+    expect(out.slice(0, 3)).toEqual(['#2 skeleton 30m (30,0,0) 東30・飛び道具', '#3 creeper 31m (31,0,0) 東31', '#1 ghast 41m (0,10,0) 上10・飛び道具']);
+    expect(out[3]).toBe('ほか 4 体（creeper 1・zombie 2・skeleton（飛び道具） 1。いちばん近い: creeper 33m）');
+  });
+  it('says in the dictionary which hostiles get a line, and that a far one is not written', () => {
+    expect(V2_ALWAYS).toContain('飛び道具の種類（スケルトン・ブレイズ・ガスト');
+    expect(V2_ALWAYS).toContain('48m 内');
+    expect(V2_ALWAYS).not.toContain('見える・道があるときだけ行になり');
   });
   it('keeps a hostile the urgent lines name, with the probe\'s own words of its reach (the frame\'s are not said twice)', () => {
     const out = rewritten({ urgent: ['blaze #5 30.0m・上 2・見える（射線の中）'], threats: ['#5 blaze 30m (5,2,0)・壁の向こうで届かない'] });
@@ -159,16 +170,41 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
   it('names an item with its count, leaves out the one she threw and the hostiles (the threats say them)', () => {
     const near = live({ nearbyEntities: entities }).near as string[];
     expect(near).toContain('#1 item cobblestone×4 0.7m (0,0,1)');
-    expect(near).toContain('#3 item item 1.6m (1,0,2)');
+    expect(near).toContain('#3 item 1.6m (1,0,2)');
     expect(near.join('\n')).not.toContain('#2 ');
     expect(near.join('\n')).not.toContain('zombie');
   });
   it('drops the bat, the far villager and the cow unless the plan wants food; keeps the near villager', () => {
-    const out = rewritten(live({ nearbyEntities: entities })).body;
-    expect(out.near).toEqual(['#1 item cobblestone×4 0.7m (0,0,1)', '#3 item item 1.6m (1,0,2)', '#6 villager 9m (9,0,0)']);
-    const food = rewritten({ ...live({ nearbyEntities: entities }), planNow: '[p2.4] 食料を集める' }).body;
+    const out = rewritten(live({ nearbyEntities: entities, inventory: [{ name: 'bread', count: 10 }] })).body;
+    expect(out.near).toEqual(['#1 item cobblestone×4 0.7m (0,0,1)', '#3 item 1.6m (1,0,2)', '#6 villager 9m (9,0,0)']);
+    const food = rewritten({ ...live({ nearbyEntities: entities, inventory: [{ name: 'bread', count: 10 }] }), planNow: '[p2.4] 食料を集める' }).body;
     expect(food.near).toContain('#7 cow 14m (14,0,0)');
     expect(JSON.stringify(food.near)).not.toContain('bat');
+  });
+  const fed = { inventory: [{ name: 'bread', count: 10 }], food: 20 };
+  const sheepAndFolk = [...entities, { id: 9, name: 'sheep', kind: 'passive', distance: 10, position: { x: 10, y: 0, z: 1 } },
+    { id: 10, name: 'villager', kind: 'passive', distance: 20, position: { x: 20, y: 0, z: 1 } }];
+  const nearOf = (world: Record<string, unknown>, extra: Record<string, unknown> = {}, plan: Record<string, unknown> = {}) =>
+    rewriteLlmcLive({ plan, body: { ...live({ nearbyEntities: sheepAndFolk, ...fed, ...world }), ...extra } }).live.body as Record<string, any>;
+  it('shows food animals when she is fed only if the plan names food; hides them (and sheep, and a villager at 20 m) otherwise', () => {
+    const quiet = nearOf({}).near.join('\n');
+    for (const gone of ['cow', 'sheep', '#10 villager']) expect(quiet).not.toContain(gone);
+  });
+  it('shows food animals when her food is 14 or less, her points are under 40, the shortage names food or health does not come back', () => {
+    expect(nearOf({ food: 14 }).near.join('\n')).toContain('cow');
+    expect(nearOf({ inventory: [{ name: 'bread', count: 2 }] }).near.join('\n')).toContain('cow');
+    expect(nearOf({}, { shortage: '食料が足りない' }).near.join('\n')).toContain('cow');
+    expect(nearOf({}, { recovery: ['体力が戻らない'] }).near.join('\n')).toContain('cow');
+  });
+  it('shows the sheep when the plan or the shortage names a bed or wool, and the villager at 20 m when the plan trades or names a village', () => {
+    expect(nearOf({}, { planNow: '[p3.1] 羊毛を取る' }).near.join('\n')).toContain('sheep');
+    expect(nearOf({}, { planNow: '[p3.1] 羊毛を取る' }).near.join('\n')).not.toContain('cow');
+    expect(nearOf({}, { shortage: 'ベッドが足りない' }).near.join('\n')).toContain('sheep');
+    expect(nearOf({}, { planNow: '[p2.3] 村人と交易する' }).near.join('\n')).toContain('#10 villager');
+    expect(nearOf({}, {}, { next: ['p2 村を回る'] }).near.join('\n')).toContain('#10 villager');
+  });
+  it('writes a stack the body did not name as just 「item」', () => {
+    expect(live({ nearbyEntities: [{ id: 3, name: 'item', kind: 'passive', distance: 1, position: { x: 0, y: 0, z: 1 } }] }).near[0]).toBe('#3 item 1m (0,0,1)');
   });
   it('the old mode\'s near lines are as they were', () => {
     expect(live({ nearbyEntities: entities }, false).near[0]).toBe('#1 item 0.7m (0,0,1)');
@@ -252,5 +288,17 @@ describe('D3: the bootstrap of a new epoch as readable lines', () => {
   });
   it('is shorter than the JSON it replaces', () => {
     expect(readableBootstrap(stored)!.length).toBeLessThan(stored.length);
+  });
+});
+
+describe('the review of 10: words restored in the hand and dictionary', () => {
+  it('says in mc.act that a bed works at night or in a thunderstorm only, and the units of stopIf', () => {
+    expect(SHORT_ACT_DESCRIPTION).toContain('ベッドで寝る（夜か雷雨の時だけ。昼は寝られない');
+    expect(SHORT_ACT_DESCRIPTION).toContain('hostileWithin は敵までの m、hpBelow は体力 0〜20');
+  });
+  it('gives the unit of health and says which thrown items are not shown', () => {
+    expect(V2_ALWAYS).toContain('health（0〜20。ハート 1 個 = 2）');
+    expect(V2_ALWAYS).toContain('自分が投げたと分かっている物（屑・予備のつるはし）は出ない');
+    expect(V2_ALWAYS).not.toContain('（自分が投げた物は出ない）');
   });
 });
