@@ -1,5 +1,5 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
-import { NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
+import { isHard, NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
 
 /**
  * mb-llmc v2 (実走37: 10 m 先に覆い 1 枚の溶岩 (173,-16,147) があったのに、走査で見えた 85 m 先の自然の黒曜石 (253,-55,154) へ階段で向かい、約 260 秒かかった。
@@ -42,7 +42,6 @@ const show = (item: Found | null, none: string): string => item ? `${ptText(item
 
 
 const SIDES: ReadonlyArray<readonly [number, number, number]> = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-const LIQUID = new Set(['w', '-', 'L', 'l']);
 const CONTACTS = 3;
 /**
  * mb-llmc-cand 11 (bench s67: the water source was one cell from her and the lava source two, and the answers dug beside the lava, where the water did
@@ -53,7 +52,7 @@ export function contactCells(view: MapView, self: P): string[] {
   const found: Array<{ at: P; meters: number; water: P; lava: P }> = [];
   for (const [y, layer] of view.layers.layers) {
     for (const [key, symbol] of layer) {
-      if (LIQUID.has(symbol)) continue;
+      if (!isHard(symbol)) continue;
       const [x, z] = key.split(',').map(Number) as [number, number];
       const beside = (wanted: string): P | null => {
         const side = SIDES.find(([dx, dy, dz]) => view.symbol(x + dx, y + dy, z + dz) === wanted);

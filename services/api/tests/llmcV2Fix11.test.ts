@@ -9,7 +9,7 @@ import { obsidianWays } from '../src/surfaces/minecraft/minecraftLlmcObsidianWay
 import { BODY_RULES, mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { DRAGON_MILESTONES, isDragonPlan, meterLine, milestoneWords, roadLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { routeLines } from '../src/surfaces/minecraft/minecraftLlmcRoute.js';
-import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { digWords, lavaNext } from '../src/surfaces/minecraft/minecraftLlmcWalkRules.js';
 
 /**
@@ -132,7 +132,7 @@ describe('chapter 4 A: the road and the pace', () => {
   });
   it('takes the last milestone the frame shows as reached (one used up does not hold it back), and ends with the Nether', () => {
     expect(meterLine(tree, have([['diamond_pickaxe', 1], ['water_bucket', 1]]), 1_200 / 60)).toContain('次の節目 黒曜石 10 個 目安 1,500 秒');
-    expect(meterLine(tree, have([['diamond_pickaxe', 1]], 'the_nether'), 1_700 / 60)).toBe('目安: 今 1,700 秒・節目（ネザー まで）は全部済んだ');
+    expect(meterLine(tree, have([['diamond_pickaxe', 1]], 'the_nether'), 1_700 / 60)).toBe('目安: 今 1,700 秒（節目は全部済んだ）');
   });
   it('is absent for another plan, an unknown time or no frame', () => {
     expect(meterLine(notDragon, have([]), 1)).toBeNull();
@@ -156,5 +156,44 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 250, 600, 1_000, 1_000, 1_500, 1_800]);
     expect(V2_ALWAYS).toMatch(/^- road: /mu);
     expect(V2_ALWAYS).toMatch(/^- meter: /mu);
+  });
+});
+
+describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the first urgent enemy, the cells that meet', () => {
+  const tree = seedPlan('エンドラを倒して')!;
+  const done = (ids: string[], current: string | null = null, extra: Record<string, string> = {}) => ({ ...tree, current,
+    nodes: tree.nodes.map(node => ({ ...node, state: ids.includes(node.id) ? 'done' as const : extra[node.id] === 'blocked' ? 'blocked' as const : node.state })) });
+  const bare = frame({ position: { x: 0, y: 0, z: 0 }, dimension: 'overworld', inventory: [] });
+  it('keeps a milestone reached when its item is used up and she is back in the overworld (the plan holds the node done)', () => {
+    // The obsidian went into the gate, she went through and came back: the pack holds nothing, the dimension is the overworld.
+    expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 1,800 秒（あと 150 秒）');
+    expect(meterLine(done(['p6', 'p6.1', 'p6.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒（節目は全部済んだ）');
+  });
+  it('does not go back to an earlier milestone, and shows no next target after the last', () => {
+    const line = meterLine(done(['p6']), bare, 100 / 60)!;
+    expect(line).toBe('目安: 今 100 秒（節目は全部済んだ）');
+    expect(line).not.toContain('次の節目');
+  });
+  it('writes a blocked node before the current one as 止, as the dictionary says', () => {
+    const road = roadLine(done(['p1', 'p2'], 'p5.1', { p3: 'blocked' }))!;
+    expect(road).toContain('鉄（止）');
+    expect(road).toContain('ダイヤ◀今');
+  });
+  it('takes the first urgent enemy that has a place, whatever its distance, and then the next one', () => {
+    const open: Record<string, string> = {};
+    for (let x = -3; x <= 3; x += 1) for (let z = -3; z <= 3; z += 1) for (const y of [0, 1]) open[`${x},${y},${z}`] = '.';
+    const body = (urgent: string[]) => rewriteLlmcLive({ plan: {}, body: { state: { at: '(0,0,0)' }, map: mapOf(open), urgent } }).live.body as Record<string, any>;
+    expect((body(['#7 ghast 30.0m (0,0,-30)', '#8 blaze 5.0m (3,0,0)']).away as string[])[0]).toContain('#7 ghast（30m）');
+    expect((body(['blaze 5.0m', '#8 blaze 5.0m (3,0,0)']).away as string[])[0]).toContain('#8 blaze');
+  });
+  it('does not name an air cell or an unloaded one as a cell where the water and the lava meet', () => {
+    const view = viewOf(mapOf({ '0,0,1': 'w', '1,0,2': 'L', '0,0,2': '.', '1,0,1': '?' }));
+    expect(obsidianWays({ planNow: '[p7.2] 黒曜石を作る' }, origin, view)).toHaveLength(1);
+  });
+  it('says in the instructions: beds explode in the Nether and the End, shortage is not skipped for speed, the cell to open is away from her feet, and the urgent live\'s fields', () => {
+    expect(V2_ALWAYS).toContain('ネザー・エンドのベッドは爆発する: そこでは寝ない');
+    expect(V2_ALWAYS).toContain('shortage の準備（食料・防具・盾など）は、速さのために省かない');
+    expect(V2_STAGES.prep).toContain('足元・立っているマスからは離れたマスを開ける');
+    expect(V2_ALWAYS).toContain('急ぎの時の live は、urgent・investigation・planNow・footing・around・liquid・map・state・threats・inventory・events・lastResults・answer だけ');
   });
 });

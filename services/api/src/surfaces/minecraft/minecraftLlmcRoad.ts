@@ -45,29 +45,37 @@ export function roadLine(tree: PlanTree | null | undefined): string | null {
   if (!tree || !isDragonPlan(tree)) return null;
   const top = orderedPlan(tree.nodes).filter(node => node.parentId === null), current = topOf(tree);
   const here = Math.max(0, top.findIndex(node => node.id === current));
-  const done = top.slice(0, here).filter(node => node.state === 'done'), open = top.slice(here);
+  const done = top.slice(0, here).filter(node => node.state === 'done' || node.state === 'blocked'), open = top.slice(here);
   const early = done.length > SHOWN_DONE ? `済み ${done.length - SHOWN_DONE} 節 ` : '';
   const mark = (node: PlanNode, index: number): string => index === 0 && current ? '◀今' : MARKS[node.state] ?? '';
   const shown = open.slice(0, SHOWN_AFTER + 1).map((node, index) => `${label(node)}${mark(node, index)}`);
-  const left = open.length - shown.length, before = done.slice(-SHOWN_DONE).map(node => `${label(node)}✓`).join(' ');
+  const left = open.length - shown.length, before = done.slice(-SHOWN_DONE).map(node => `${label(node)}${MARKS[node.state]}`).join(' ');
   return `道のり: ${early}${before}${done.length ? ' → ' : ''}${shown.join(' → ')}${left > 0 ? ` → ほか ${left} 節` : ''}`;
 }
 
+/** Whether a node the plan holds done names the milestone's own condition: reached, whatever the frame shows now (the pack used up, the dimension left). */
+const doneInPlan = (tree: PlanTree, clause: string): boolean => tree.nodes.some(node => {
+  const text = (node.doneWhen ?? '').replace(/\s+/gu, '').toLowerCase();
+  // A dimension in an alternative (「have:obsidian>=10|dim:the_nether」) is not what the node being done says: only a node that names it alone counts.
+  return node.state === 'done' && text.split(/[|&]/u).includes(clause) && (!clause.startsWith('dim:') || !text.includes('|'));
+});
 /**
- * `body.meter`: the seconds since the task began, the next milestone (the first after the last one the frame shows reached) with its target and how far
- * ahead or behind. Null when the plan is not the dragon's or the time is not known.
+ * `body.meter`: the seconds since the task began, and the next milestone (the first after the last one reached) with its target and how far ahead or
+ * behind. A milestone is reached when the frame shows it or when the plan holds a node done by that very condition, so it stays reached when the
+ * obsidian is used up or she is back in the overworld: the plan carries it, nothing else is kept. After the last one only the seconds are said.
+ * Null when the plan is not the dragon's or the time is not known.
  */
 export function meterLine(tree: PlanTree | null | undefined, observation: BodyObservation | null, elapsedMinutes: number | null): string | null {
   const facts = doneFacts(observation);
-  if (!isDragonPlan(tree) || elapsedMinutes === null || !facts) return null;
+  if (!tree || !isDragonPlan(tree) || elapsedMinutes === null || !facts) return null;
   const now = Math.round(elapsedMinutes * 60);
   let last = -1;
   DRAGON_MILESTONES.forEach((item, index) => {
     const predicate = parseDoneWhen(item.doneWhen);
-    if (predicate && predicateHolds(predicate, facts)) last = index;
+    if ((predicate && predicateHolds(predicate, facts)) || doneInPlan(tree, item.doneWhen)) last = index;
   });
   const next = DRAGON_MILESTONES[last + 1];
-  if (!next) return `目安: 今 ${grouped(now)} 秒・節目（${DRAGON_MILESTONES.at(-1)!.name} まで）は全部済んだ`;
+  if (!next) return `目安: 今 ${grouped(now)} 秒（節目は全部済んだ）`;
   const gap = next.seconds - now;
   const state = gap >= 0 ? `あと ${grouped(gap)} 秒` : `${grouped(-gap)} 秒遅れ`;
   return `目安: 今 ${grouped(now)} 秒・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）`;
