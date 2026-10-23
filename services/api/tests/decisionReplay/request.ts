@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicFcaModel } from '../../src/infra/models/anthropic/anthropicFcaModel.js';
+import * as historyModule from '../../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { anthropicFcaHistoryCodec } from '../../src/infra/models/anthropic/anthropicFcaHistory.js';
+/** mb-llmc-cand 10 の木は、bootstrap を読める行にする codec（anthropicFcaHistoryCodecV2）を持つ。前の木は持たない。 */
+const BOOTSTRAP_CODEC = ((historyModule as Record<string, unknown>).anthropicFcaHistoryCodecV2 ?? anthropicFcaHistoryCodec) as typeof anthropicFcaHistoryCodec;
 import { FCA_TRANSIENT_BETAS } from '../../src/infra/models/anthropic/anthropicFcaTransient.js';
 import { llmcSystemAppendix } from '../../src/surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCoreKnowledge } from '../../src/surfaces/minecraft/minecraftKnowledgeCore.js';
@@ -130,7 +133,7 @@ export function sceneMessages(decision: Decision, bootstrapText: string | null, 
   const rows = decision.run.rows.slice(decision.epochStart, decision.index);
   const entries = rewrite.rows ? rewrite.rows.flat() : rows.flatMap(row => row.entries);
   // 履歴をまるごと作り替える版（v8 の圧縮）は bootstrap も使わない。
-  const history = rewrite.history ?? [...(bootstrapText ? anthropicFcaHistoryCodec.bootstrap(bootstrapText) as Entry[] : []), ...entries];
+  const history = rewrite.history ?? [...(bootstrapText ? BOOTSTRAP_CODEC.bootstrap(bootstrapText) as Entry[] : []), ...entries];
   return { messages: [...keepThinking ? history : withoutThinking(history), ...(rewrite.turn ?? decision.turn), ...(rewrite.extra ?? [])], epochRows: rows.length, bootstrap: !!bootstrapText };
 }
 

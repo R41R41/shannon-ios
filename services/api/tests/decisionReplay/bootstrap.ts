@@ -17,7 +17,11 @@ const SUMMARY_INPUT_CHARACTERS = 64_000;
 const dataDir = new URL('./data/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 /** B の直しの比べ: DECISION_REPLAY_BOOTSTRAP_TAG=base|fix で要約を本番の頭の設定（minecraftOwnPrompt、修正の版は minecraftV2Facts も）で作り直し、bootstrap-<run>.<tag>.json に置く。 */
 export const BOOTSTRAP_TAG = process.env.DECISION_REPLAY_BOOTSTRAP_TAG ?? '';
-export const bootstrapFile = (run: Run) => `${dataDir}bootstrap-${run.key}${BOOTSTRAP_TAG ? `.${BOOTSTRAP_TAG}` : ''}.json`;
+export const bootstrapFile = (run: Run) => {
+  const tagged = `${dataDir}bootstrap-${run.key}${BOOTSTRAP_TAG ? `.${BOOTSTRAP_TAG}` : ''}.json`;
+  // 作り直しの無い run（実走27〜34）は、タグ付きが無ければ前の（タグ無しの）作り直しを使う。
+  return BOOTSTRAP_TAG && !existsSync(tagged) ? `${dataDir}bootstrap-${run.key}.json` : tagged;
+};
 
 type Projected = { sequence: number; stepId: string; messages: unknown[] };
 function projected(run: Run, from: number, to: number): Projected[] {

@@ -1,0 +1,1002 @@
+{
+ "s52": {
+  "id": "s52-r28-1110-steady",
+  "chars": 108320,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5609,
+  "stage": "（この場面の知識: prep・blaze）",
+  "stated": false,
+  "messages": 34,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 5
+  }
+ },
+ "s53": {
+  "id": "s53-r28-1150-steady",
+  "chars": 216583,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5758,
+  "stage": "（この場面の知識: prep）",
+  "stated": false,
+  "messages": 77,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s58": {
+  "id": "s58-r28-1175-after-stop",
+  "chars": 39903,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7160,
+  "stage": "（この場面の知識: prep）",
+  "stated": true,
+  "messages": 3,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": true,
+    "hand": 1
+   },
+   "hands": 6
+  }
+ },
+ "s42": {
+  "id": "s42-r28-1197-steady",
+  "chars": 58886,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6461,
+  "stage": "（この場面の知識: prep）",
+  "stated": false,
+  "messages": 12,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s43": {
+  "id": "s43-r28-1201-steady",
+  "chars": 91553,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6632,
+  "stage": "（この場面の知識: prep）",
+  "stated": false,
+  "messages": 24,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 9
+  }
+ },
+ "s44": {
+  "id": "s44-r28-1204-steady",
+  "chars": 114653,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6412,
+  "stage": "（この場面の知識: prep）",
+  "stated": false,
+  "messages": 33,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 5
+  }
+ },
+ "s54": {
+  "id": "s54-r28-1205-steady",
+  "chars": 121808,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5619,
+  "stage": "（この場面の知識: prep）",
+  "stated": false,
+  "messages": 36,
+  "act": {
+   "problem": null,
+   "fixes": 1,
+   "guard": null,
+   "hands": 3
+  }
+ },
+ "s45": {
+  "id": "s45-r28-1214-steady",
+  "chars": 187669,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6633,
+  "stage": "（この場面の知識: prep）",
+  "stated": false,
+  "messages": 65,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 5
+   },
+   "hands": 4
+  }
+ },
+ "s46": {
+  "id": "s46-r30-1258-after-stop",
+  "chars": 100741,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7387,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 32,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": true,
+    "hand": 1
+   },
+   "hands": 3
+  }
+ },
+ "s36": {
+  "id": "s36-r30-1273-steady",
+  "chars": 211330,
+  "system": 7156,
+  "tools": 8820,
+  "live": 4952,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": true,
+  "messages": 80,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s37": {
+  "id": "s37-r30-1276-steady",
+  "chars": 49243,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5142,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 9,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 2
+  }
+ },
+ "s38": {
+  "id": "s38-r30-1282-steady",
+  "chars": 89392,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5335,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": true,
+  "messages": 29,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s57": {
+  "id": "s57-r30-1287-steady",
+  "chars": 118326,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5449,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 44,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s39": {
+  "id": "s39-r30-1289-steady",
+  "chars": 130040,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5449,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 50,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 2
+  }
+ },
+ "s48": {
+  "id": "s48-r30-1293-after-stop",
+  "chars": 157985,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6078,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": true,
+  "messages": 64,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s47": {
+  "id": "s47-r31-1302-after-stop",
+  "chars": 72982,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6532,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 20,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 2
+  }
+ },
+ "s63": {
+  "id": "s63-r31-1308-urgent",
+  "chars": 112236,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5451,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 38,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 1
+  }
+ },
+ "s40": {
+  "id": "s40-r31-1316-steady",
+  "chars": 173130,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7175,
+  "stage": "（この場面の知識: prep・blaze）",
+  "stated": false,
+  "messages": 64,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 6
+  }
+ },
+ "s41": {
+  "id": "s41-r31-1317-steady",
+  "chars": 179676,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5407,
+  "stage": "（この場面の知識: prep・blaze）",
+  "stated": false,
+  "messages": 67,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 8
+  }
+ },
+ "s01": {
+  "id": "s01-r32-1321-head-cell",
+  "chars": 54904,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6983,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 11,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 7
+  }
+ },
+ "s02": {
+  "id": "s02-r32-1322-seen-stop",
+  "chars": 61886,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6811,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 14,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 8
+  }
+ },
+ "s24": {
+  "id": "s24-r32-1325-tunnel",
+  "chars": 83459,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5284,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 23,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 6
+  }
+ },
+ "s28": {
+  "id": "s28-r32-1334-after-plan-update",
+  "chars": 153939,
+  "system": 7156,
+  "tools": 8820,
+  "live": 8431,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 52,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s19": {
+  "id": "s19-r32-1336-lava-gap",
+  "chars": 171265,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7053,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": true,
+  "messages": 59,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 12
+  }
+ },
+ "s20": {
+  "id": "s20-r32-1344-accept-seen",
+  "chars": 52186,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6514,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 6,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 11
+  }
+ },
+ "s21": {
+  "id": "s21-r32-1345-death",
+  "chars": 60065,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6348,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 9,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s03": {
+  "id": "s03-r32-1353-bare-hand",
+  "chars": 120689,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6585,
+  "stage": "（この場面の知識: prep・blaze）",
+  "stated": false,
+  "messages": 35,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 6
+  }
+ },
+ "s11": {
+  "id": "s11-r33-1389-first-urgent",
+  "chars": 24630,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5280,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": true,
+  "messages": 2,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 1
+  }
+ },
+ "s34": {
+  "id": "s34-r33-1395-blaze-6m",
+  "chars": 61815,
+  "system": 7156,
+  "tools": 8820,
+  "live": 4730,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 21,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s05": {
+  "id": "s05-r33-1403-solid-target",
+  "chars": 111950,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6461,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 46,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s06": {
+  "id": "s06-r33-1405-pillar-air",
+  "chars": 127679,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6726,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 52,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s29": {
+  "id": "s29-r33-1409-head-cell",
+  "chars": 156769,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7640,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 64,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s25": {
+  "id": "s25-r33-1411-tunnel",
+  "chars": 170414,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5859,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 70,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 6
+  }
+ },
+ "s49": {
+  "id": "s49-r33-1413-steady",
+  "chars": 183780,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5996,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 77,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s12": {
+  "id": "s12-r33-1426-void-piglin",
+  "chars": 98096,
+  "system": 7156,
+  "tools": 8820,
+  "live": 4707,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": true,
+  "messages": 30,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s50": {
+  "id": "s50-r33-1434-steady",
+  "chars": 154533,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5427,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 57,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s07": {
+  "id": "s07-r33-1436-void-edge",
+  "chars": 168411,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7265,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 63,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 6
+  }
+ },
+ "s13": {
+  "id": "s13-r33-1443-enderman-sight",
+  "chars": 75711,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5822,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": false,
+  "messages": 16,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 2
+  }
+ },
+ "s62": {
+  "id": "s62-r33-1446-urgent",
+  "chars": 95222,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5327,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": false,
+  "messages": 25,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 3
+  }
+ },
+ "s14": {
+  "id": "s14-r33-1452-walk-solid",
+  "chars": 134070,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5190,
+  "stage": "（この場面の知識: prep・nether・pearl）",
+  "stated": false,
+  "messages": 44,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": true,
+    "hand": 1
+   },
+   "hands": 2
+  }
+ },
+ "s32": {
+  "id": "s32-r33-1456-low-hp-eat",
+  "chars": 158163,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6906,
+  "stage": "（この場面の知識: prep・nether・pearl）",
+  "stated": false,
+  "messages": 56,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s31": {
+  "id": "s31-r33-1457-plan-skip",
+  "chars": 164122,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6804,
+  "stage": "（この場面の知識: prep・nether・pearl）",
+  "stated": false,
+  "messages": 59,
+  "act": null
+ },
+ "s51": {
+  "id": "s51-r33-1463-steady",
+  "chars": 46645,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5869,
+  "stage": "（この場面の知識: nether・pearl）",
+  "stated": false,
+  "messages": 6,
+  "act": {
+   "problem": null,
+   "fixes": 1,
+   "guard": null,
+   "hands": 5
+  }
+ },
+ "s33": {
+  "id": "s33-r33-1473-void-edge-4th",
+  "chars": 119711,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7075,
+  "stage": "（この場面の知識: nether・pearl）",
+  "stated": false,
+  "messages": 37,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 2
+  }
+ },
+ "s15": {
+  "id": "s15-r33-1476-zpiglin-sight",
+  "chars": 137656,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5836,
+  "stage": "（この場面の知識: nether・pearl）",
+  "stated": false,
+  "messages": 47,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 1
+  }
+ },
+ "s22": {
+  "id": "s22-r33-1479-wait-without-guard",
+  "chars": 159463,
+  "system": 7156,
+  "tools": 8820,
+  "live": 7002,
+  "stage": "（この場面の知識: nether・pearl）",
+  "stated": false,
+  "messages": 56,
+  "act": {
+   "problem": null,
+   "fixes": 1,
+   "guard": null,
+   "hands": 5
+  }
+ },
+ "s23": {
+  "id": "s23-r33-1480-death",
+  "chars": 165967,
+  "system": 7156,
+  "tools": 8820,
+  "live": 6180,
+  "stage": "（この場面の知識: nether・pearl）",
+  "stated": false,
+  "messages": 59,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 3
+  }
+ },
+ "s59": {
+  "id": "s59-r33-1491-after-stop",
+  "chars": 75239,
+  "system": 7156,
+  "tools": 8820,
+  "live": 5773,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 18,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": true,
+    "hand": 1
+   },
+   "hands": 1
+  }
+ },
+ "s30": {
+  "id": "s30-r34-1516-after-plan-update",
+  "chars": 95351,
+  "system": 7156,
+  "tools": 8993,
+  "live": 7443,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 34,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 2
+   },
+   "hands": 1
+  }
+ },
+ "s08": {
+  "id": "s08-r34-1520-follow-look-line",
+  "chars": 126166,
+  "system": 7156,
+  "tools": 8993,
+  "live": 5282,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 46,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 6
+  }
+ },
+ "s16": {
+  "id": "s16-r34-1522-blaze-close",
+  "chars": 140219,
+  "system": 7156,
+  "tools": 8993,
+  "live": 4182,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": true,
+  "messages": 53,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 2
+  }
+ },
+ "s55": {
+  "id": "s55-r34-1530-steady",
+  "chars": 200621,
+  "system": 7156,
+  "tools": 8993,
+  "live": 5416,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 78,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 4
+  }
+ },
+ "s09": {
+  "id": "s09-r34-1536-bridge-repeat",
+  "chars": 59687,
+  "system": 7156,
+  "tools": 8993,
+  "live": 7428,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 10,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 10
+  }
+ },
+ "s60": {
+  "id": "s60-r34-1537-after-stop",
+  "chars": 68833,
+  "system": 7156,
+  "tools": 8993,
+  "live": 7105,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 14,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 12
+  }
+ },
+ "s35": {
+  "id": "s35-r34-1538-on-bridge",
+  "chars": 78067,
+  "system": 7156,
+  "tools": 8993,
+  "live": 5661,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": true,
+  "messages": 18,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 1
+  }
+ },
+ "s61": {
+  "id": "s61-r34-1541-urgent",
+  "chars": 98311,
+  "system": 7156,
+  "tools": 8993,
+  "live": 5531,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": false,
+  "messages": 29,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 3
+  }
+ },
+ "s27": {
+  "id": "s27-r34-1548-tunnel",
+  "chars": 145649,
+  "system": 7156,
+  "tools": 8993,
+  "live": 5112,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 51,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 6
+  }
+ },
+ "s56": {
+  "id": "s56-r34-1549-steady",
+  "chars": 151978,
+  "system": 7156,
+  "tools": 8993,
+  "live": 5112,
+  "stage": "（この場面の知識: prep・nether・blaze）",
+  "stated": false,
+  "messages": 54,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": {
+    "stopped": false,
+    "hand": 3
+   },
+   "hands": 2
+  }
+ },
+ "s17": {
+  "id": "s17-r34-1550-piglin-sight",
+  "chars": 160813,
+  "system": 7156,
+  "tools": 8993,
+  "live": 6328,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": true,
+  "messages": 58,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 3
+  }
+ },
+ "s18": {
+  "id": "s18-r34-1552-low-hp",
+  "chars": 172962,
+  "system": 7156,
+  "tools": 8993,
+  "live": 5409,
+  "stage": "（この場面の知識: prep・nether）",
+  "stated": false,
+  "messages": 65,
+  "act": {
+   "problem": null,
+   "fixes": 0,
+   "guard": null,
+   "hands": 1
+  }
+ }
+}

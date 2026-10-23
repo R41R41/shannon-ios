@@ -1,0 +1,34 @@
+{"scene":"s64-r37-1931-portal-entry","key":"candO|3","variant":"candO","rep":3,"verdict":"○","reason":"ポータルのマスへ walk して 6 秒待つ。hostileWithin も付いていて条件を満たす"}
+{"scene":"s64-r37-1931-portal-entry","key":"candO|2","variant":"candO","rep":2,"verdict":"○","reason":"ポータルのマスへ walk して 5 秒待つ。stopIf も付いていて条件どおり"}
+{"scene":"s64-r37-1931-portal-entry","key":"candN|3","variant":"candN","rep":3,"verdict":"○","reason":"ポータルのマスへ walk して 5 秒待つ。1 つの act で次元を変える手"}
+{"scene":"s64-r37-1931-portal-entry","key":"candN|1","variant":"candN","rep":1,"verdict":"○","reason":"ポータルのマスへ walk して 5 秒待つ。hostileWithin 付きで条件どおり"}
+{"scene":"s64-r37-1931-portal-entry","key":"candN|2","variant":"candN","rep":2,"verdict":"○","reason":"ポータルのマスへ walk して 5 秒待つ。寄り道がなく条件を満たす"}
+{"scene":"s64-r37-1931-portal-entry","key":"candO|1","variant":"candO","rep":1,"verdict":"○","reason":"ポータルのマスへ walk して 5 秒待つ。寄り道がなく条件を満たす"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candO|2","variant":"candO","rep":2,"verdict":"○","reason":"to= で書き直しポータルへ walk、wait と hostileWithin あり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candN|1","variant":"candN","rep":1,"verdict":"○","reason":"to= でポータルへ walk し待つ。枠の座標メモは問題なし"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candN|2","variant":"candN","rep":2,"verdict":"○","reason":"「帰り」の書き方は不正確だが、手は条件どおりの walk と待機"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candN|3","variant":"candN","rep":3,"verdict":"○","reason":"条件どおり to= でポータルへ入り、6 秒待つ"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candO|1","variant":"candO","rep":1,"verdict":"○","reason":"to= でポータルへ walk、wait と hostileWithin あり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candO|3","variant":"candO","rep":3,"verdict":"○","reason":"to= でポータルへ walk、wait と hostileWithin あり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"禁じた奥掘りをしており、待つ act に hostileWithin もない"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"live通りにそのまま火打ち金を作る。手持ちの枠で作れるので通る"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candO|1","variant":"candO","rep":1,"verdict":"○","reason":"live通りにそのまま火打ち金を作る。手持ちの枠で作れるので通る"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candO|2","variant":"candO","rep":2,"verdict":"○","reason":"live通りにそのまま火打ち金を作る。手持ちの枠で作れるので通る"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candN|3","variant":"candN","rep":3,"verdict":"△","reason":"1手目で作れるが、要らない作業台作りと2回目のクラフトが余計"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candO|3","variant":"candO","rep":3,"verdict":"○","reason":"条件どおり火打ち金を1手で作る。確認に判断を使っていない"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candN|2","variant":"candN","rep":2,"verdict":"×","reason":"要らない作業台を2回作る。原木を持つか不明で作る前に止まりうる"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candN|1","variant":"candN","rep":1,"verdict":"△","reason":"作業台は不要。板を作る段で止まると火打ち金まで届かない"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candO|1","variant":"candO","rep":1,"verdict":"○","reason":"遮るマスを先に掘り、溶岩の隣を開けて流す。条件どおり"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candN|3","variant":"candN","rep":3,"verdict":"○","reason":"視線を遮る(252,-23,208)を先に掘ってから掘る。条件どおり"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"prod","variant":"prod","rep":"prod","verdict":"△","reason":"掘る順は正しいが、空のバケツを使う手は意味がない"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candN|1","variant":"candN","rep":1,"verdict":"×","reason":"水とつながらず、溶岩の通り道を自分の足元側へ開けてしまう"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candO|2","variant":"candO","rep":2,"verdict":"△","reason":"止まった原因に触れず、水へつながる道も作れない"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candO|3","variant":"candO","rep":3,"verdict":"○","reason":"遮るマスを掘ってから溶岩の隣を開ける。条件どおり"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candN|2","variant":"candN","rep":2,"verdict":"○","reason":"遮るマスを先に掘り、同じ失敗をくり返していない"}
+{"scene":"s68-r37-1813-early-bed","key":"candN|2","variant":"candN","rep":2,"verdict":"○","reason":"扉の内側へ入り、見える位置から箱を開けてベッドを掘る。通る手"}
+{"scene":"s68-r37-1813-early-bed","key":"candO|3","variant":"candO","rep":3,"verdict":"○","reason":"扉の内側へ入り、見える位置から箱を開けてベッドを掘る。通る手"}
+{"scene":"s68-r37-1813-early-bed","key":"candN|3","variant":"candN","rep":3,"verdict":"○","reason":"家の中へ入り、箱を空けてからベッドを掘って拾う。通る見込みが高い"}
+{"scene":"s68-r37-1813-early-bed","key":"prod","variant":"prod","rep":"prod","verdict":"△","reason":"ベッドの二つ目の座標は一つ目を掘ると消え、そこで止まりやすい"}
+{"scene":"s68-r37-1813-early-bed","key":"candO|1","variant":"candO","rep":1,"verdict":"○","reason":"扉の内側(158,67,200)は箱とベッドの隣。見えて届く位置"}
+{"scene":"s68-r37-1813-early-bed","key":"candN|1","variant":"candN","rep":1,"verdict":"○","reason":"家に入って箱を開け、素手でベッドを掘って拾う。通る手"}
+{"scene":"s68-r37-1813-early-bed","key":"candO|2","variant":"candO","rep":2,"verdict":"○","reason":"中へ入ってから箱とベッドを取る。直前の見えないdigは繰り返していない"}

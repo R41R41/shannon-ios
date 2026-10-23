@@ -34,6 +34,12 @@ const dynamic = (path: string): Promise<Record<string, any> | null> => import(pa
 const words = await dynamic('../../src/surfaces/minecraft/' + 'minecraftLlmcStateWords.js');
 const requests = await dynamic('../../src/wiring/' + 'fcaMinecraftRequests.js');
 export const hasStateWords = !!words?.timeWords;
+/** mb-llmc-cand 10（敵の見え方・near の絞り・日本語の system など）の木か（reach の語の部品がある）。 */
+const reach = await dynamic('../../src/surfaces/minecraft/' + 'minecraftLlmcReachWords.js');
+export const hasReachWords = !!reach;
+const v2mod = await dynamic('../../src/surfaces/minecraft/' + 'minecraftLlmcV2.js');
+/** 状態メッセージの progress に、完了の証明を言い切る文（binding.plain）を足す（この版だけ）。 */
+export const progressPlain = (progress: unknown): unknown => typeof v2mod?.progressWithPlain === 'function' ? v2mod.progressWithPlain(progress) : progress;
 
 /** 状態の言葉（時刻・息）: 修正の版だけ（本番では体の状態から作る所で、記録の live では state の欄を書き換える）。基準の版は何もしない。 */
 export function withStateWords<T extends Record<string, any>>(live: T): T {
@@ -51,18 +57,51 @@ export function rebuiltLive(live: Record<string, any>): Record<string, any> | nu
   const body = live.body as Record<string, any>;
   const map = typeof body.map === 'string' ? denormalizeMap(body.map) : null;
   let derived: Record<string, any> = {};
+  let derivedPlan: unknown;
   if (map) {
     const raw: Record<string, any> = {};
     for (const [key, value] of Object.entries(body)) if (!DERIVED.includes(key)) raw[key] = key === 'map' ? map : value;
-    derived = (rewriteLlmcLive({ ...live, body: raw }).live.body ?? {}) as Record<string, any>;
+    const made = rewriteLlmcLive({ ...live, body: raw }).live;
+    derived = (made.body ?? {}) as Record<string, any>;
+    derivedPlan = made.plan;
   }
+  // mb-llmc-cand 10 の書き直し（敵の行の絞り・near の絞り・済む条件の言い換え）は、書き直し済みの行に当てても同じ形になる（試した: 実走37 の 146 判断で
+  // 敵・near・今の節だけが変わる）ので、この版（reach の語の部品がある木）では、その欄も差し替える。前の版の書き直しは、書き直し済みの敵の行に当てると壊れる（差し替えない）。
+  const alsoNew = hasReachWords ? ['threats', 'near', 'planNow'] : [];
   const out: Record<string, any> = {};
   for (const [key, value] of Object.entries(body)) {
     if (key === 'around') { for (const name of MAP_FIELDS) if (derived[name] !== undefined) out[name] = derived[name]; continue; }
     if (MAP_FIELDS.includes(key)) continue;
-    out[key] = value;
+    out[key] = alsoNew.includes(key) && derived[key] !== undefined ? derived[key] : value;
   }
-  return withStateWords({ ...live, body: out });
+  const result = { ...live, body: out } as Record<string, any>;
+  if (hasReachWords && derivedPlan) result.plan = derivedPlan;
+  return withStateWords(withNewLastResults(result));
+}
+
+/**
+ * mb-llmc-cand 10 (D1): 結果の行は履歴にあるので、live の lastResults は履歴に無い所だけ（止まった手の周り。長い結果は 1 行目の後）。記録の lastResults は全文なので、
+ * この版では act の結果は「止まった所の周り」の行だけ、それ以外の長い結果は 1 行目を外して残りを出す（`llmcStoredResult(…, v2)` と同じ分け方）。周りの行が無い act の結果は出さない。
+ */
+const AROUND_LINE = /^\s*(周り（上の層から|止まった所 )/u;
+const ACT_RESULT = /(^|\n)(act \d|送る前に止めた|手 ?\d+（)/u;
+export function withNewLastResults<T extends Record<string, any>>(live: T): T {
+  const body = live.body as Record<string, any> | undefined;
+  if (!hasReachWords || !Array.isArray(body?.lastResults)) return live;
+  const kept = (body!.lastResults as unknown[]).flatMap(item => {
+    if (typeof item !== 'string') return [item];
+    if (ACT_RESULT.test(item)) {
+      const lines = item.split('\n').filter(line => AROUND_LINE.test(line));
+      return lines.length ? [lines.join('\n')] : [];
+    }
+    // 1 行目が 200 字を超える結果は、履歴には 200 字までしか残らない（llmcStoredResult の keptAndRest）ので、全文を出す。
+    const firstLine = item.split('\n')[0] ?? '';
+    const rest = firstLine.length > 200 ? item : item.split('\n').slice(1).join('\n');
+    return rest ? [rest] : [];
+  });
+  const next: Record<string, any> = { ...body };
+  if (kept.length) next.lastResults = kept; else delete next.lastResults;
+  return { ...live, body: next };
 }
 
 /** 任務の知らせの文（本番 rel41 の物 → この木の版の物）。修正の版は V2 の文に替える。 */
