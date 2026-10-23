@@ -50,7 +50,8 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean 
   if (Math.ceil(total / 64) >= FILLER_SLOTS) {
     const kinds = filler.slice(0, 4).map(([name, n]) => `${name}×${n}`).join('・');
     out.push(`掘って拾い続けた石や土 ${total} 個（${kinds}）が約 ${Math.ceil(total / 64)} マスを占める。`
-      + 'dig は拾いに歩く (collect 既定 true)。使わない掘りは collect=false');
+      + 'dig は拾いに歩く (collect 既定 true): 階段・トンネルで使わない石や土を掘る dig は collect=false。捨てるなら drop（体は 3m 以上先へ水平に投げる。'
+      + 'その近くに立ち続ける・歩くと拾い直す）');
   }
   const beds = bedsIn(lines);
   if (beds >= 2 && !options.forEnd) out.push(`ベッドは足りている（${beds}）。これ以上取りに行かない（エンドの前に羊毛から 4〜6 に増やす）`);

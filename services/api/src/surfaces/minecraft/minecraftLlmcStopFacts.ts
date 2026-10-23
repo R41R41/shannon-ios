@@ -97,7 +97,7 @@ function stepFact(line: ActHandLine): string | null {
 function standFact(line: ActHandLine, hand: ActHand): string | null {
   const filled = /そのものには立てない（足のマスが (\S+?) で埋まっている/u.exec(line.line);
   const void_ = /そのものには立てない（下 (\d+)( 以上)? マスが空気/u.exec(line.line);
-  const target = line.line.match(/^一歩ではない: \((-?\d+),(-?\d+),(-?\d+)\)/u);
+  const target = line.line.match(/^一歩ではない(?:（元:.*?）(?=[:：]))?: \((-?\d+),(-?\d+),(-?\d+)\)/u);
   const cell = target ? { x: Number(target[1]), y: Number(target[2]), z: Number(target[3]) } : hand.to ?? null;
   if (hand.do !== 'walk' || !cell || (!filled && !void_)) return null;
   if (filled) return `目的地 ${posText(cell)} は ${filled[1]} で埋まっている: dig at [${posText(cell)}] で空けてから立つか、「立てる隣」へ walk する`;
