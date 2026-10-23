@@ -11,6 +11,7 @@ import {
 } from './minecraftLlmcProbe.js';
 import { cautionFact } from './minecraftLlmcCaution.js';
 import type { PlanTree } from '@shannon/mind';
+import { meterLine, roadLine } from './minecraftLlmcRoad.js';
 import { feetIn, foodFirstLine, foodLeads, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 import {
   inSightLine, keepThreatSight, keptThreatSight, nearThreats, readThreatSight, sightProbe, THREAT_SIGHT, threatLine, threatSightKey,
@@ -203,7 +204,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(r4?.investigation.length ? { investigation: r4.investigation } : {}), ...(r4?.scan.length ? { scan: r4.scan } : {}),
     ...(r4?.unreachable?.length ? { unreachable: r4.unreachable } : {}), ...(r4?.footing ? { footing: r4.footing } : {}),
-    ...(r4 ? readinessParts(llmc, plan, observation, v2) : {}) }, llmcPlanTokens(plan), v2);
+    ...(r4 ? readinessParts(llmc, plan, observation, v2) : {}), ...roadParts(llmc, observation, elapsedMinutes, v2) }, llmcPlanTokens(plan), v2);
 }
 
 /**
@@ -476,4 +477,13 @@ export function forgetLlmcEvents(): void {
   tasks.clear();
   urgentDecisions.clear();
   scansShown.clear();
+}
+
+/** mb-llmc-cand 11: the mode's road and meter lines of a dragon task (`minecraftLlmcRoad.ts`); none for the old mode or another task. */
+function roadParts(llmc: LlmcBodyParts, observation: BodyObservation | null, minutes: number | null, v2: boolean): { road?: string; meter?: string } {
+  if (!v2) return {};
+  let tree: PlanTree | null = null;
+  try { tree = llmc.planTree?.() ?? null; } catch { tree = null; }
+  const road = roadLine(tree), meter = meterLine(tree, observation, minutes);
+  return { ...(road ? { road } : {}), ...(meter ? { meter } : {}) };
 }
