@@ -71,6 +71,14 @@ describe('B1: a portal is a place she goes into, never lava', () => {
     // The upper cells of the gate are not listed again, and the lines name no portal at y=+1 or +2.
     expect(lines.filter(line => line.includes('入れる:'))).toHaveLength(1);
   });
+  it('never says 入れる of a portal whose head cell is fire, lava or a web (the body\'s rule: the head cell is a portal or passable)', () => {
+    for (const harm of ['f', 'L', 'x']) {
+      const map = mapOf([at(2, 0, 0), at(2, 1, 0), [at(1, 0, 0), 'p'] as [Cell, string], [at(1, 1, 0), harm] as [Cell, string], [at(1, -1, 0), 'O'] as [Cell, string]]);
+      const text = aroundLines(viewOf(map), feet).join('\n');
+      expect(text, harm).not.toContain('入れる');
+      expect(text, harm).toMatch(/東 \(1,0,0\): .*歩けない/u);
+    }
+  });
   it('tells an end portal by its own words and writes the legend\'s symbols p and e', () => {
     expect(aroundLines(viewOf(gateMap(1, 'e')), feet).find(line => line.startsWith('東 '))).toBe('東 (1,0,0): 入れる: エンドポータル（入ると次元が変わる）');
     expect(legendOf(PORTAL)).toBe('p');
@@ -170,7 +178,7 @@ describe('B3: the history summary of the mode keeps facts', () => {
     expect(foreignToolNames(sent)).toEqual([]);
   });
   it('drops the summary items that name a tool outside the six, from the answer and from the previous summary the answer kept, and logs the count', async () => {
-    const previous = { ...empty(), 次: ['find-blocks で黒曜石を探す', 'p2.1 ゲートを建てる'], coversFromId: null, coversToId: null };
+    const previous = { ...empty(), 次: ['find-blocks で探す', 'p2.1 ゲートを建てる'], coversFromId: null, coversToId: null };
     const { result, lines } = await summarize({ 済み: ['鉄 4 を (253,-55,154) で掘った'], 詰まり: ['次: minecraft.observe で所持品・装備を確認（未確認のため）', '(229,-54,196) への walk が止まった: 足の下が空気'] }, previous);
     expect(result['詰まり']).toEqual(['(229,-54,196) への walk が止まった: 足の下が空気']);
     expect(result['次']).toEqual(['p2.1 ゲートを建てる']);
@@ -185,7 +193,18 @@ describe('B3: the history summary of the mode keeps facts', () => {
     expect(scrubForeignToolItems(same).kept.slice(0, 7)).toEqual(same.slice(0, 7));
     expect(scrubForeignToolItems(same.slice(0, 5)).dropped).toBe(0);
     expect(scrubForeignToolItems(['Minecraft.net', 'observed it']).neutralized).toBe(0);
-    expect(scrubForeignToolItems(['task.replan を使う', 'goal.verify で確かめる', 'mc.find-blocks で探す', 'minecraft.reflex を呼ぶ']).dropped).toBe(4);
+    expect(scrubForeignToolItems(['task.replan を使う', 'goal.verify で確認', 'mc.find-blocks で探す', 'minecraft.reflex を呼ぶ', '→ find-blocks で調べる']).dropped).toBe(5);
+  });
+  it('does not drop a fact that says where a tool found something; only the name is replaced', () => {
+    expect(scrubForeignToolItems(['find-blocks で (10,64,3) に鉄があった', 'mc.find-blocks で見つけた鉄は (1,2,3)', '次: 黒曜石は find-blocks の答えの (5,6,7)']))
+      .toEqual({ kept: ['（道具名略） で (10,64,3) に鉄があった', '（道具名略） で見つけた鉄は (1,2,3)', '次: 黒曜石は （道具名略） の答えの (5,6,7)'], neutralized: 3, dropped: 0 });
+  });
+  it('scrubs the previous summary it falls back to as well', async () => {
+    const previous = { ...empty(), 済み: ['find-blocks で (10,64,3) に鉄があった', '木を 8 本集めた'], coversFromId: null, coversToId: null };
+    const { result } = await summarize({ 次: ['次: minecraft.observe で所持品を確認'], 詰まり: ['find-blocks で探す'] }, { ...previous, 済み: [] });
+    expect(Object.values(result).flat().filter(item => typeof item === 'string')).toEqual([]);
+    const back = await summarize({ 次: ['次: minecraft.observe で所持品を確認'] }, { ...previous, 次: [] });
+    expect(back.result['済み']).toEqual(['（道具名略） で (10,64,3) に鉄があった', '木を 8 本集めた']);
   });
   it('falls back to the previous summary when the scrub leaves nothing, and refuses an answer that is nothing after it when there is none', async () => {
     const previous = { ...empty(), 済み: ['鉄 4 を (253,-55,154) で掘った'], coversFromId: null, coversToId: null };

@@ -67,7 +67,16 @@ function ownOptions(body: boolean, own: boolean, facts: boolean): Pick<Anthropic
  * (`scrubForeignToolItems`); the counts are logged (content-free). A summary the scrub leaves with no item is the previous one, or, with none, refused.
  */
 function scrubbedSummary<T extends object>(result: T, previous: T | null | undefined): T {
-  const out: Record<string, unknown> = { ...(result as Record<string, unknown>) };
+  const own = scrubSections(result);
+  const kept = own.items > 0 ? own : previous ? scrubSections(previous) : null;
+  if (!kept) throw new FcaSummaryInvalidError('empty');
+  const neutralized = own.neutralized + (kept === own ? 0 : kept.neutralized), dropped = own.dropped + (kept === own ? 0 : kept.dropped);
+  if (neutralized || dropped) console.info(JSON.stringify({ event: 'fca_summary_scrubbed', dropped, neutralized }));
+  return kept.out as T;
+}
+/** A summary's sections with the tool names of the mode's scrub applied (the previous summary's too: its items may name them). */
+function scrubSections(template: object): { out: Record<string, unknown>; items: number; neutralized: number; dropped: number } {
+  const out: Record<string, unknown> = { ...(template as Record<string, unknown>) };
   let neutralized = 0, dropped = 0, items = 0;
   for (const section of COMPACTION_SECTIONS) {
     const list = out[section];
@@ -78,10 +87,7 @@ function scrubbedSummary<T extends object>(result: T, previous: T | null | undef
     items += cleaned.kept.length;
     out[section] = Object.freeze(cleaned.kept);
   }
-  if (neutralized || dropped) console.info(JSON.stringify({ event: 'fca_summary_scrubbed', dropped, neutralized }));
-  if (items > 0) return out as T;
-  if (!previous) throw new FcaSummaryInvalidError('empty');
-  return previous;
+  return { out, items, neutralized, dropped };
 }
 
 /**

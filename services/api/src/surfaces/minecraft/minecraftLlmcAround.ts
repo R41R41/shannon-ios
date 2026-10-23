@@ -32,8 +32,10 @@ function stepHow(best: Step): string {
  * 歩ける, or 掘れば歩ける with the cells to dig.
  */
 function bestWords(view: MapView, best: Step): string {
-  const gate = portalWords(view.symbol(best.to.x, best.to.y, best.to.z));
-  if (gate && isHard(view.symbol(best.to.x, best.to.y + 1, best.to.z))) return '入れない: ポータルの最上段（頭が枠に当たる）。下の段のポータルのマスへ';
+  // The body's rule: the head cell of a portal's cell is a portal or passable; fire, lava or a web over it is no way in (and never 入れる).
+  const over = view.symbol(best.to.x, best.to.y + 1, best.to.z);
+  const gate = isHarm(over) ? null : portalWords(view.symbol(best.to.x, best.to.y, best.to.z));
+  if (gate && isHard(over)) return '入れない: ポータルの最上段（頭が枠に当たる）。下の段のポータルのマスへ';
   if (best.dig.length) return `掘れば歩ける: 掘る ${digText(view, best.dig)}`;
   return gate ? `入れる: ${gate}` : '歩ける';
 }

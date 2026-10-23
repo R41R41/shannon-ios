@@ -41,10 +41,17 @@ const SCRUB_NAMES = new RegExp([
 export const SCRUBBED_NAME = '（道具名略）';
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-/** An item that tells to use the tool (「次: …」, 「…で確認」, 「use …」): there is nothing left of it without the tool. */
+/**
+ * An item that tells to use the tool, in an explicit form (「…で確認」「…で調べ」「…を使う」「…を呼ぶ」「use …」, or a line that starts with 次 or → and
+ * names the tool as what to use): there is nothing left of it without the tool. A fact (「find-blocks で (10,64,3) に鉄があった」) is not one.
+ */
 function instructs(item: string, names: readonly string[]): boolean {
-  if (/^\s*(?:次|→|next)\s*[:：]?/iu.test(item)) return true;
-  return names.some(name => new RegExp(`${escaped(name)}\\s*(?:で|を使|を呼|を実行|に聞|から読|ツール)|\\b(?:use|call|run)\\s+${escaped(name)}`, 'iu').test(item));
+  const next = /^\s*(?:次|→|next)\s*[:：]?/iu.test(item);
+  return names.some(name => {
+    const tool = escaped(name);
+    if (new RegExp(`${tool}\\s*(?:で\\s*(?:確認|調べ|探)|を\\s*(?:使|呼|実行)|に聞|から読|ツール)|\\b(?:use|call|run)\\s+${tool}`, 'iu').test(item)) return true;
+    return next && new RegExp(`${tool}\\s*(?:で|を|に|から|して)`, 'u').test(item);
+  });
 }
 
 /**
