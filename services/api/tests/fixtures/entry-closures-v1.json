@@ -821,6 +821,7 @@
     "surfaces/minecraft/minecraftLlmcProbeInput.ts",
     "surfaces/minecraft/minecraftLlmcReadiness.ts",
     "surfaces/minecraft/minecraftLlmcReflexHold.ts",
+    "surfaces/minecraft/minecraftLlmcRepeat.ts",
     "surfaces/minecraft/minecraftLlmcRoute.ts",
     "surfaces/minecraft/minecraftLlmcRuleGuard.ts",
     "surfaces/minecraft/minecraftLlmcShape.ts",

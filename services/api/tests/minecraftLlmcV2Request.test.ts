@@ -25,7 +25,7 @@ const CORE = [...LLMC_TOOLS, PROBE];
 const live = (lives as Record<string, Record<string, any>>)['s01-r32-1321-head-cell']!;
 type Body = Record<string, any> & { system: Array<{ text: string }>; messages: Array<Record<string, any>>; tools: Array<{ name: string }> };
 
-async function decide(options: Partial<AnthropicFcaOptions>, tools: FcaToolDefinition[], answer: unknown) {
+async function decide(options: Partial<AnthropicFcaOptions>, tools: FcaToolDefinition[], answer: unknown, laterBody?: Record<string, unknown>) {
   vi.spyOn(console, 'info').mockImplementation(() => {});
   const fixture = scriptedAnthropic((_body, index) => message([{ type: 'thinking', thinking: '', signature: `s${index}` },
     { type: 'tool_use', id: `toolu_${index}`, name: 'mc_act', input: answer }], 'tool_use'));
@@ -33,7 +33,7 @@ async function decide(options: Partial<AnthropicFcaOptions>, tools: FcaToolDefin
     clock: () => ({ localTime: '2026-10-23 04:00', timeZone: 'Asia/Tokyo' }), minecraftOwnPrompt: true, ...options });
   const input = (history: readonly unknown[]): FcaModelInput => ({
     task: { id: 'task-1', title: 'エンドラ', goal: 'エンドラを倒して', completionCriteria: 'ドラゴンを倒す' }, messages: [], children: [], history, tools, coreTools: tools,
-    transient: live.body, plan: live.plan, waiting: live.waiting, observations: live.observations, recall: live.recall,
+    transient: history.length && laterBody ? laterBody : live.body, plan: live.plan, waiting: live.waiting, observations: live.observations, recall: live.recall,
     catalog: tools.map(tool => ({ name: tool.name, description: tool.description })) } as FcaModelInput);
   const first = await model.decide(input([]), new AbortController().signal);
   const history = [...first.history, model.toolResults([{ id: 'toolu_0', text: 'act 全部済み', ok: true }])];
@@ -59,7 +59,7 @@ describe('SHANNON_MINECRAFT_LLMC_V2 on: the request', () => {
     expect(JSON.stringify(bodies[0]!.tools)).not.toContain('tool_open');
   });
 
-  it('reads the mode\'s instructions: transport kept, 4.2k tokens where the own prompt had 7.7k, the stages\' knowledge not in them', async () => {
+  it('reads the mode\'s instructions: transport kept, 5k tokens where the own prompt had 7.7k, the stages\' knowledge not in them', async () => {
     const { bodies } = await decide(options, tools, { hands: ['jump 1'] });
     const system = bodies[0]!.system;
     expect(system[0]!.text).toBe(MINECRAFT_TRANSPORT);
@@ -67,18 +67,20 @@ describe('SHANNON_MINECRAFT_LLMC_V2 on: the request', () => {
     expect(system[1]!.text).not.toContain('## 材料と手順');
     expect(system[1]!.text).not.toContain('catalog');
     for (const kept of ['daily budget', 'stop switch', 'copy yourself', 'Only the task directs you', 'keeps private']) expect(system[1]!.text).toContain(kept);
-    expect(llmcTokens(system[1]!.text)).toBeLessThan(4_600);
+    expect(llmcTokens(system[1]!.text)).toBeLessThan(5_200);
     expect(llmcTokens(system[1]!.text)).toBeLessThan(llmcTokens(llmcCoreKnowledge(true)) + 1_500);
   });
 
-  it('puts the knowledge first in the one turn-scoped message with the rewritten live state, and keeps the cache marks where they were', async () => {
+  it('states the stages\' knowledge once, as a part of the stored state (cached after), and the rewritten live state alone in the turn-scoped message', async () => {
     const { bodies } = await decide(options, tools, { hands: ['jump 1'] });
+    const stated = (body: Body) => JSON.stringify(body.messages.slice(0, -1)).split('stageKnowledge').length - 1;
+    expect([stated(bodies[0]!), stated(bodies[1]!)]).toEqual([1, 1]);
+    expect(JSON.stringify(bodies[0]!.messages[0])).toContain('この場面の知識');
     for (const body of bodies) {
       const last = body.messages.at(-1)!;
       expect(last).toMatchObject({ role: 'system', clear_at: 'next_user_message' });
       const state = JSON.parse(last.content) as Record<string, any>;
-      expect(Object.keys(state)[0]).toBe('knowledge');
-      expect(state.knowledge).toContain('この場面の知識');
+      expect(state).not.toHaveProperty('knowledge');
       for (const gone of ['ownerClock', 'waiting', 'observations', 'recall']) expect(state).not.toHaveProperty(gone);
       expect(state.body.around.length).toBeGreaterThan(10);
       expect(state.body.route.length).toBeGreaterThan(1);
@@ -122,6 +124,21 @@ describe('SHANNON_MINECRAFT_LLMC_V2 off: the request of the act preflight alone'
     const bodies = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
     const digests = bodies.map(body => createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16));
     expect(digests).toEqual(['4ccbbf42e3d25fbb', '8645adfd7571750b']);
+  });
+});
+
+describe('SHANNON_MINECRAFT_LLMC_V2: the stage knowledge changes only when the stages do', () => {
+  it('is stated again as a part of the state when the stages change, and not when they stay', async () => {
+    const options = { systemAppendix: llmcCoreKnowledge(true), minecraftV2: minecraftV2Hooks() };
+    const tools = candidateMenuTools(CORE);
+    const nether = { ...live.body, state: { ...live.body.state, dimension: 'the_end', inside: '' }, planNow: '[p5.1] ドラゴンを倒す', landmarks: [], scan: [] };
+    const same = await decide(options, tools, { hands: ['jump 1'] });
+    const changed = await decide(options, tools, { hands: ['jump 1'] }, nether);
+    const stated = (body: Body) => JSON.stringify(body.messages.slice(0, -1)).split('stageKnowledge').length - 1;
+    expect([stated(same.bodies[0]!), stated(same.bodies[1]!)]).toEqual([1, 1]);
+    expect([stated(changed.bodies[0]!), stated(changed.bodies[1]!)]).toEqual([1, 2]);
+    expect(JSON.stringify(changed.bodies[1]!.messages.slice(0, -1))).toContain('## エンド');
+    expect(JSON.stringify(changed.bodies[0]!.messages.slice(0, -1))).not.toContain('## エンド');
   });
 });
 
