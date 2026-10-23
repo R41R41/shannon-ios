@@ -133,7 +133,7 @@ function predicatesOf(tree: PlanTree): Map<string, DonePredicate> {
  * parent done by the pack leaves its open children as they are (the plan's own rule: nothing under a done node is picked as the next).
  * In the tree's order; empty when none.
  */
-export function nodesSeenDone(tree: PlanTree, facts: DoneFacts): string[] {
+export function nodesSeenDone(tree: PlanTree, facts: DoneFacts, inOrder = false): string[] {
   const out = new Set<string>(), predicates = predicatesOf(tree);
   const open = (node: PlanNode) => node.state !== 'done' && node.state !== 'blocked' && !out.has(node.id);
   // Deepest first: a parent is judged after its children, so that a child its own predicate closed does not hold it open.
@@ -144,15 +144,42 @@ export function nodesSeenDone(tree: PlanTree, facts: DoneFacts): string[] {
     if (tree.nodes.some(child => child.parentId === node.id && open(child)) && !holdsByThePack(predicate, facts)) continue;
     out.add(node.id);
   }
-  return orderedPlan(tree.nodes).map(node => node.id).filter(id => out.has(id));
+  const ids = orderedPlan(tree.nodes).map(node => node.id).filter(id => out.has(id));
+  return inOrder ? afterEarlier(tree, ids, predicates, facts) : ids;
+}
+
+/**
+ * mb-llmc v2 (run 35: p2 `at:310,66,74~10@nether` was closed at the start, in the overworld, while p1 was open; p5 `dim:overworld` was closed on the
+ * food trip while p3 was pending): a node a place or a dimension shows done is closed only when every node before it in the plan (but its own
+ * ancestors) is done, blocked or closed in this pass: the place is passed through on the way to work not yet done. What the pack shows
+ * (`have:`, `food>=`) is closed whenever it is true, as before.
+ */
+function afterEarlier(tree: PlanTree, seen: string[], predicates: Map<string, DonePredicate>, facts: DoneFacts): string[] {
+  const order = orderedPlan(tree.nodes), byId = new Map(order.map(node => [node.id, node] as const));
+  const closed = new Set<string>();
+  const ancestors = (node: PlanNode): Set<string> => {
+    const out = new Set<string>();
+    for (let up = byId.get(node.parentId ?? ''); up && !out.has(up.id); up = byId.get(up.parentId ?? '')) out.add(up.id);
+    return out;
+  };
+  const open = (other: PlanNode) => other.state !== 'done' && other.state !== 'blocked' && !closed.has(other.id);
+  for (const node of order) {
+    if (node.state === 'done' || node.state === 'blocked') continue;
+    if (!seen.includes(node.id)) continue;
+    const byPack = holdsByThePack(predicates.get(node.id)!, facts);
+    const mine = ancestors(node);
+    const earlier = order.slice(0, order.indexOf(node)).some(other => !mine.has(other.id) && open(other));
+    if (byPack || !earlier) closed.add(node.id);
+  }
+  return seen.filter(id => closed.has(id));
 }
 
 /**
  * The nodes whose predicate holds while a child of theirs is still open and the predicate is of a place or a dimension (so the node is not
  * done): `p2 [dim:the_nether] ← p2.1・p2.3`, for the log only, once per change of the set.
  */
-export function nodesHeldOpen(tree: PlanTree, facts: DoneFacts): Array<{ id: string; open: string[] }> {
-  const predicates = predicatesOf(tree), done = new Set(nodesSeenDone(tree, facts));
+export function nodesHeldOpen(tree: PlanTree, facts: DoneFacts, inOrder = false): Array<{ id: string; open: string[] }> {
+  const predicates = predicatesOf(tree), done = new Set(nodesSeenDone(tree, facts, inOrder));
   return orderedPlan(tree.nodes).flatMap(node => {
     const predicate = predicates.get(node.id);
     if (!predicate || node.state === 'done' || node.state === 'blocked' || done.has(node.id) || !predicateHolds(predicate, facts)) return [];
@@ -161,15 +188,16 @@ export function nodesHeldOpen(tree: PlanTree, facts: DoneFacts): Array<{ id: str
   });
 }
 
+export interface SeenDone { update: PlanUpdate; ids: string[]; held?: string[] }
 /**
  * The update that marks them done (the current node then moves on by itself), or null when the frame shows none. r9: `held` names the
  * nodes whose place or dimension holds while a child is open (`p2←p2.1,p2.3`), for the log; with no node done and some held, the update is empty.
  */
-export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | null): { update: PlanUpdate; ids: string[]; held?: string[] } | null {
+export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | null, inOrder = false): SeenDone | null {
   const facts = doneFacts(observation);
   if (!facts || !tree.nodes.length) return null;
-  const ids = nodesSeenDone(tree, facts).slice(0, 24);
-  const held = nodesHeldOpen(tree, facts).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
+  const ids = nodesSeenDone(tree, facts, inOrder).slice(0, 24);
+  const held = nodesHeldOpen(tree, facts, inOrder).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
   if (!ids.length && !held.length) return null;
   return { update: { ops: ids.map(id => ({ op: 'set' as const, id, state: 'done' as const })) }, ids, ...(held.length ? { held } : {}) };
 }

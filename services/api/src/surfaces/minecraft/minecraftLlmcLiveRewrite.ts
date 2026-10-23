@@ -1,7 +1,7 @@
 import { aroundLines } from './minecraftLlmcAround.js';
 import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { expandAround, normalizeMap } from './minecraftLlmcLiveMap.js';
-import { mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
+import { isNether, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
 import { repeatedFailures } from './minecraftLlmcRepeat.js';
 import { goalOf, routeLines } from './minecraftLlmcRoute.js';
 import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
@@ -165,7 +165,7 @@ function rewriteBodyKey(key: string, value: unknown, self: P | null, notes: Rewr
 /** The map's place in the body: the facts made from it (`around`, `route`), then the map on one range. */
 function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes): Rec {
   const map = typeof bodyIn.map === 'string' ? bodyIn.map : undefined;
-  const layers = readLayers(map);
+  const layers = readLayers(map, { nether: isNether(rec(bodyIn.state)?.dimension) });
   const out: Rec = {};
   if (layers) {
     const view = mapView(layers), planNow = String(bodyIn.planNow ?? '');
@@ -214,7 +214,7 @@ export function rewriteLlmcLive(live: Rec): { live: Rec; notes: RewriteNotes } {
   }
   const bodyIn = rec(live.body);
   if (!bodyIn) return { live: out, notes };
-  const layers = typeof bodyIn.map === 'string' ? readLayers(bodyIn.map) : null;
+  const layers = typeof bodyIn.map === 'string' ? readLayers(bodyIn.map, { nether: isNether(rec(bodyIn.state)?.dimension) }) : null;
   const plan = rec(live.plan);
   if (plan) out.plan = rewritePlan(plan, String(bodyIn.planNow ?? ''), layers ? mapView(layers) : null, notes);
   try {

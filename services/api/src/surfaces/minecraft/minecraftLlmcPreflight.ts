@@ -1,8 +1,9 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActHand, ActPos } from '../../contracts/minecraftActContract.js';
 import { columnKey, keptColumnFact } from './minecraftLlmcFooting.js';
-import { mapView, posText, readLayers, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { isNether, mapView, posText, readLayers, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 import { routeAnswer, routeWhy } from './minecraftLlmcPreflightRoute.js';
+import { nearestStand } from './minecraftLlmcWalkRules.js';
 import { placeStop, unstandable, type ColumnOf, type Found, type PreflightCode } from './minecraftLlmcPreflightStand.js';
 
 export type { PreflightCode };
@@ -38,6 +39,8 @@ export interface PreflightWorld {
   map: string | undefined;
   feet: ActPos | null;
   column?: ColumnOf;
+  /** SHANNON_MINECRAFT_LLMC_V2: the symbols the guards did not name are read as the body's walk reads them (`BodyRules`). */
+  rules?: BodyRules;
 }
 export interface PreflightStop {
   /** 1-based, as the result's lines count the hands. */
@@ -51,7 +54,16 @@ export interface PreflightStop {
 }
 
 /** Which of the checks are on (the route is the newest; each can be named off to see what it adds). */
-export interface PreflightOptions { route?: boolean }
+export interface PreflightOptions {
+  route?: boolean;
+  bodyRules?: boolean;
+  /**
+   * SHANNON_MINECRAFT_LLMC_V2: a place with `onFail: 'continue'` that the map faults is not a stop (the body skips the cell and goes on): the fact is
+   * pushed to `notes` and the walk-through ends there (what the hand then did to the map is not known).
+   */
+  continuePlace?: boolean;
+  notes?: string[];
+}
 
 /**
  * Where she is, as far as the walk-through knows. `at`: the cell she stands in for certain. `via`: where the route search starts when she
@@ -83,6 +95,15 @@ function noRoute(from: Cell | null, to: Cell, view: MapView): Found | null {
   return { code: 'no_route', cell: to, why: `${posText(to)} へ掘らず置かずに行く道が無い（${routeWhy(view, from, to, answer)}）` };
 }
 
+/**
+ * SHANNON_MINECRAFT_LLMC_V2: a target whose own cell is a wall (a trunk, rock, a wart block) is told with the standing place beside it, nearest to
+ * the feet the map was drawn for: 「隣の立てるマス (x,y,z)」, or that the map shows none.
+ */
+function withNeighbour(found: Found, target: Cell, view: MapView): Found {
+  if (found.code !== 'feet_solid' && found.code !== 'head_solid') return found;
+  const stand = nearestStand(view, target, view.layers.feet);
+  return { ...found, why: `${found.why}（${stand ? `隣の立てるマス ${posText(stand)}` : '隣の立てるマスは地図に無い'}）` };
+}
 /** A walk's targets (a path's points, or the one): each a place no body stands in, or with no route to it from the one before. */
 function walkStop(hand: ActHand, origin: Cell | null, base: Cell | null | undefined, view: MapView, world: PreflightWorld,
   options: PreflightOptions): Found | null {
@@ -94,7 +115,7 @@ function walkStop(hand: ActHand, origin: Cell | null, base: Cell | null | undefi
     const range = i === points.length - 1 ? (finite(hand.range) ? hand.range : 0.5) : 0;
     if (range >= 1) continue;
     const found = unstandable(cell, view, world.column) ?? (options.route !== false ? noRoute(from, cell, view) : null);
-    if (found) return found;
+    if (found) return options.bodyRules ? withNeighbour(found, cell, view) : found;
     from = cell;
   }
   return null;
@@ -195,6 +216,10 @@ export function preflightAct(input: unknown, world: PreflightWorld, options: Pre
     if (hand.rel === true && !track.at) return null;
     const base: Cell | null | undefined = hand.rel === true ? track.at : undefined;
     const stop = handStop(hand, index + 1, track.at ?? track.via, base, view, world, options);
+    if (stop && options.continuePlace && stop.kind === 'place' && hand.onFail === 'continue') {
+      options.notes?.push(`手 ${stop.hand} place: ${stop.why}。onFail continue なので体は飛ばして続ける（この手の他のマスは置く）`);
+      return null;
+    }
     if (stop) return stop;
     if (!advance(hand, track, base, view)) return null;
   }
@@ -204,7 +229,7 @@ export function preflightAct(input: unknown, world: PreflightWorld, options: Pre
 /** The hands, the map with its overlay and where she stands, when the act and the frame can be walked through at all. */
 function startOf(input: unknown, world: PreflightWorld): { hands: unknown[]; view: MapView; track: Track } | null {
   const hands = (input as { hands?: unknown } | null)?.hands;
-  const layers = readLayers(world.map);
+  const layers = readLayers(world.map, world.rules);
   const feet = world.feet ? cellOf(world.feet) : null;
   if (!Array.isArray(hands) || !layers || !feet) return null;
   // A map drawn for another cell than the frame's feet is older than the frame: it says nothing of the world now.
@@ -214,12 +239,13 @@ function startOf(input: unknown, world: PreflightWorld): { hands: unknown[]; vie
 
 /** The preflight of an act against the newest frame of the body (its map, her feet) and the column answers the head kept for the task. */
 export function preflightOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, options?: PreflightOptions): PreflightStop | null {
-  const world = frame?.state.world as { localMap?: unknown; position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined;
+  const world = frame?.state.world as { localMap?: unknown; dimension?: unknown; position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined;
   const at = world?.position;
   const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
   const facts = keptColumnFact(taskId);
   const map = typeof world?.localMap === 'string' ? world.localMap : undefined;
-  return preflightAct(input, { map, feet, column: (cell, feetY) => facts(columnKey(cell, feetY)) }, options);
+  const rules = options?.bodyRules ? { nether: isNether(world?.dimension) } : undefined;
+  return preflightAct(input, { map, feet, ...(rules ? { rules } : {}), column: (cell, feetY) => facts(columnKey(cell, feetY)) }, options);
 }
 
 /** The act's result when it is held: the body's closed word first, the hand, the fact, and that the body was sent nothing. */
@@ -238,11 +264,12 @@ export type { Cell };
  * cannot be walked through. Used to say, when only part of an act is sent, where the sent hands leave her.
  */
 export function standAfterHands(input: unknown, frame: BodyObservation | null, taskId: string, count: number): { at: Cell | null; via: Cell | null } | null {
-  const world = frame?.state.world as { localMap?: unknown; position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined;
+  const world = frame?.state.world as { localMap?: unknown; dimension?: unknown; position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined;
   const at = world?.position;
   const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
   const map = typeof world?.localMap === 'string' ? world.localMap : undefined;
-  const start = startOf(input, { map, feet, column: (cell, feetY) => keptColumnFact(taskId)(columnKey(cell, feetY)) });
+  const rules = { nether: isNether(world?.dimension) };
+  const start = startOf(input, { map, feet, rules, column: (cell, feetY) => keptColumnFact(taskId)(columnKey(cell, feetY)) });
   if (!start) return null;
   const { hands, view, track } = start;
   for (const [index, raw] of hands.entries()) {

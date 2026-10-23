@@ -63,6 +63,8 @@ export interface CandidateAct {
   problem: string | null;
   /** The guards (act preflight, rule guard): `stopped` when nothing goes to the body, `sentHands` when a part does; `text` is the fact the model reads. */
   guard?: { stopped: boolean; hand: number; sentHands?: number; code?: string; text: string };
+  /** A fact added to the result of an act that went whole (a place with onFail continue the map faults: the body skips the cell, the act goes on). */
+  note?: string;
 }
 
 /**
@@ -79,11 +81,11 @@ export function candidateAct(raw: unknown, frame: BodyObservation | null, taskId
   const fixes = [...prepared.fixes, ...checked.fixes];
   const held = heldBeforeSend({ preflight: true, v2: true, urgent: options.urgent === true }, checked.input, frame, taskId);
   if (held?.result) return { input: checked.input, fixes, problem: null, guard: { stopped: true, hand: 1, text: held.result.text } };
-  if (held) {
+  if (held?.input) {
     const sent = (held.input as { hands: unknown[] }).hands.length;
     return { input: held.input, fixes, problem: null, guard: { stopped: false, hand: sent + 1, sentHands: sent, text: held.tail ?? '' } };
   }
-  return { input: checked.input, fixes, problem: null };
+  return { input: checked.input, fixes, problem: null, ...held?.note ? { note: held.note } : {} };
 }
 
 /**

@@ -34,8 +34,9 @@ const handLine = (stop: HandStop): string => `手 ${stop.hand} ${stop.kind}: ${s
  * The guards' stops, the one with the smallest hand number (the same hand: the act-preflight's, then the rule guard's, the seen-again dig, the
  * urgent limit). `urgent`: the decision was an urgent one (its live state's answer line says 「手は 3 つまで」). Null when none holds.
  */
-export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): Held | null {
-  const stand = preflightOfFrame(input, frame, taskId), rule = ruleGuardOfFrame(input, frame, taskId);
+export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, notes?: string[]): Held | null {
+  const options = { bodyRules: true, continuePlace: true, ...(notes ? { notes } : {}) };
+  const stand = preflightOfFrame(input, frame, taskId, options), rule = ruleGuardOfFrame(input, frame, taskId);
   const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
   for (const stop of [seenReopenStop(input, frame), urgentLimitStop(input, urgent)]) {
@@ -76,10 +77,11 @@ export function withHeldTail(result: ToolResult, tail: string): ToolResult {
 }
 
 /** What the tools do with a held act in v2: nothing held, the whole act turned back, or a part sent with a tail. */
-export type HoldV2 = { whole: string; held: Held } | { part: unknown; tail: string; held: Held } | null;
+export type HoldV2 = { whole: string; held: Held } | { part: unknown; tail: string; held: Held } | { note: string } | null;
 export function holdV2(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): HoldV2 {
-  const held = heldOfFrame(input, frame, taskId, urgent);
-  if (!held) return null;
+  const notes: string[] = [];
+  const held = heldOfFrame(input, frame, taskId, urgent, notes);
+  if (!held) return notes.length ? { note: notes.join('\n') } : null;
   const part = sentPart(input, held);
   if (part === null) return { whole: heldWhole(held), held };
   const total = (input as { hands: unknown[] }).hands.length;
@@ -87,7 +89,9 @@ export function holdV2(input: unknown, frame: BodyObservation | null, taskId: st
 }
 
 /** What the tools do with an act before it is sent: its result now (nothing is sent), or the act to send and the tail to add to the result. */
-export interface BeforeSend { result?: ToolResult; input?: unknown; tail?: string }
+export interface BeforeSend { result?: ToolResult; input?: unknown; tail?: string; note?: string }
+/** A fact added to a result that stays what the body made of it (a hand the guards let go with a word: `continuePlace`). */
+export function withNote(result: ToolResult, note: string): ToolResult { return { ...result, text: `${result.text}\n${note}` }; }
 const say = (line: string): void => { console.info(line); };
 /**
  * The guards before an `mc.act` goes to the body. Without v2, the 4f98156 act-preflight alone (`preflight`): the whole act is held at the first
@@ -99,6 +103,7 @@ export function heldBeforeSend(mode: { preflight?: boolean; v2?: boolean; urgent
   if (mode?.v2) {
     const hold = holdV2(input, frame, taskId, mode.urgent === true);
     if (!hold) return null;
+    if ('note' in hold) return { note: hold.note };
     if ('whole' in hold) {
       say(`Shannon Minecraft act held before send task=${taskId} hand=${hold.held.hand} do=${hold.held.kind} code=${hold.held.code}`);
       return { result: toolFailure('refused', hold.whole, { retryable: true }) };

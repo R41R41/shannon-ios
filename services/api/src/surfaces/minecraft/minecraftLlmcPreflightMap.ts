@@ -7,19 +7,22 @@ import type { ActPos } from '../../contracts/minecraftActContract.js';
  * act go as it is (a door, a fence or a plant may be passable, a floor or a wall by its state).
  */
 export type Cell = ActPos;
+/** A nether or end portal, as `readLayers` reads it under the body's rules (`BodyRules`): never entered, no floor, nothing to set against. No map has it. */
+export const PORTAL = '¤';
 /** A block the walk cannot enter and a block is not put into: a wall, whatever its shape (the rules read a full box, a slab and a stair alike). */
 export const SOLID = new Set('#:sIinNuOEGicdgrXWHSTFCo$'.split(''));
 /** Never entered by the walk: lava, fire (and campfires), cobweb and powder snow, magma. */
-export const HARM = new Set(['L', 'l', 'f', 'x', 'M']);
+export const HARM = new Set(['L', 'l', 'f', 'x', 'M', PORTAL]);
 /** Known not to be a floor to stand on: air, water, lava, fire, a web. A plant or carpet `,` may be a carpet (a floor): not named. */
-export const NOT_FLOOR = new Set(['.', '*', 'w', '-', 'L', 'l', 'f', 'x']);
+export const NOT_FLOOR = new Set(['.', '*', 'w', '-', 'L', 'l', 'f', 'x', PORTAL]);
 /** Known not to be a block to set against (boundingBox not a block). A plant `,` may be a carpet: not named. */
-export const NOT_SUPPORT = new Set(['.', '*', 'w', '-', 'L', 'l', 'f', 'x', 't']);
+export const NOT_SUPPORT = new Set(['.', '*', 'w', '-', 'L', 'l', 'f', 'x', 't', PORTAL]);
 /** Air or what a fall goes through as air (the walk's own count of the cells under a target). */
 export const AIRISH = new Set(['.', '*', 'f', 'x']);
 /** A body in water or on a ladder needs no floor. */
 export const STANDS = new Set(['w', '-', 'h']);
 export const NAMES: Readonly<Record<string, string>> = Object.freeze({
+  [PORTAL]: 'ポータル',
   '#': '石の類', ':': '土の類', s: '砂・砂利', I: '氷', n: 'netherrack', N: 'nether_bricks', u: 'ソウルサンド・ソウルソイル', O: '黒曜石', E: 'エンドストーン',
   G: 'glowstone', i: '鉄鉱石', c: '石炭鉱石', d: 'ダイヤ鉱石', g: '金鉱石', r: 'レッドストーン鉱石', o: '鉱石', X: '岩盤', W: '原木', H: '干し草', S: 'スポナー',
   F: 'かまど', T: '作業台', C: 'チェスト・樽', $: '固いブロック', L: '溶岩', l: '溶岩', f: '火', x: 'クモの巣', M: 'magma_block', w: '水', '-': '水', '.': '空気',
@@ -28,6 +31,23 @@ export const cellKey = (cell: Cell) => `${cell.x},${cell.y},${cell.z}`;
 export const posText = (cell: Cell) => `(${cell.x},${cell.y},${cell.z})`;
 export const word = (symbol: string | undefined) => `${NAMES[symbol ?? ''] ?? '固いブロック'}（地図 ${symbol ?? '?'}）`;
 export const blocked = (symbol: string | undefined) => symbol !== undefined && (SOLID.has(symbol) || HARM.has(symbol));
+
+/**
+ * mb-llmc v2: the walk's rules of the body (Shannon `utils/walkRules.ts` `cellWay`/`floorOf`, `utils/localMap.ts` `symbolFor`) for the symbols the
+ * guards did not name. A symbol is read under them (`readLayers`' `rules`) as: a nether or end portal `p` `e` → never entered, no floor (`PORTAL`);
+ * an end portal frame `Q` `R` → a wall; and, in the Nether (no leaves there), `%`, which the map draws for leaves and for the wart blocks and the
+ * shroomlight, → a wall (`$`). What the map cannot tell apart stays not named: `P` (planks and trapdoors, signs, plates), `D` (a door opens, an
+ * iron door does not), `+` (a fence or a pane is a wall, a fence gate opens), `%` outside the Nether (leaves are broken on the way). A map symbol
+ * that splits them is for the body's side (reported).
+ */
+export interface BodyRules { nether: boolean }
+export function bodySymbol(symbol: string, rules: BodyRules): string {
+  if (symbol === 'p' || symbol === 'e') return PORTAL;
+  if (symbol === 'Q' || symbol === 'R') return '$';
+  return rules.nether && symbol === '%' ? '$' : symbol;
+}
+/** Whether a frame's dimension is the Nether. */
+export const isNether = (dimension: unknown): boolean => typeof dimension === 'string' && /nether/u.test(dimension);
 
 /** The map's layers (y → "x,z" → symbol) and the feet cell it was drawn for. */
 export interface Layers { feet: ActPos; mode: string; layers: Map<number, Map<string, string>> }
@@ -40,7 +60,7 @@ const ROW = /^\s*(-?\d+) (.+)$/u;
  * feet. (`readMap` of the footing gives a layer with no range the main grid's first column, which is right only when the widths are
  * equal; it is not changed, so the rest of the mode stays as it was.) The top grid's two-character cells are not read.
  */
-export function readLayers(map: string | undefined): Layers | null {
+export function readLayers(map: string | undefined, rules?: BodyRules): Layers | null {
   const lines = (map ?? '').split('\n');
   const head = HEADER.exec(lines[0] ?? '');
   if (!head) return null;
@@ -60,7 +80,7 @@ export function readLayers(map: string | undefined): Layers | null {
     if (!row || !current) continue;
     const symbols = row[2]!.split(' ');
     const x0 = current.x0 ?? (symbols.length === width ? mainX : feet.x - Math.floor(symbols.length / 2));
-    symbols.forEach((symbol, index) => current!.cells.set(`${x0 + index},${Number(row[1])}`, symbol));
+    symbols.forEach((symbol, index) => current!.cells.set(`${x0 + index},${Number(row[1])}`, rules ? bodySymbol(symbol, rules) : symbol));
   }
   return { feet, mode: head[8]!, layers };
 }

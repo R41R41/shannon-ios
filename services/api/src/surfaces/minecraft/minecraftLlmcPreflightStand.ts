@@ -1,6 +1,6 @@
 import type { ActPos } from '../../contracts/minecraftActContract.js';
 import type { ColumnFact } from './minecraftLlmcFooting.js';
-import { AIRISH, blocked, HARM, NOT_FLOOR, NOT_SUPPORT, posText, SOLID, STANDS, word, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { AIRISH, blocked, HARM, NOT_FLOOR, NOT_SUPPORT, PORTAL, posText, SOLID, STANDS, word, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 
 /**
  * The cell checks of the act's preflight (`minecraftLlmcPreflight.ts`): the body's `unstandable` for a walk's target (Shannon-mb-llmc-r10
@@ -40,7 +40,7 @@ function floorStop(cell: Cell, view: MapView): Found | null {
     break;
   }
   const wet = under === 'w' || under === '-';
-  const depth = wet ? `下 ${posText(underCell)} が水（立つ床にならない）` : `下 ${exact ? `${air}` : `${air} 以上`} マスが空気（立つ床が無い）`;
+  const depth = wet || under === PORTAL ? `下 ${posText(underCell)} が${wet ? '水' : 'ポータル'}（立つ床にならない）` : `下 ${exact ? `${air}` : `${air} 以上`} マスが空気（立つ床が無い）`;
   return { code: 'no_floor', cell: underCell, why: `足のマス ${posText(cell)} の${depth}` };
 }
 

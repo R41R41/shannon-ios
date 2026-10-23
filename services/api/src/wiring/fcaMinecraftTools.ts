@@ -8,7 +8,7 @@ import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult,
 import { frameCreatures } from '../surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { checkedStopIf } from '../surfaces/minecraft/minecraftLlmcStopIf.js';
 import { waitForReflexRelease } from '../surfaces/minecraft/minecraftLlmcReflexHold.js';
-import { heldBeforeSend, withHeldTail } from '../surfaces/minecraft/minecraftLlmcPartial.js';
+import { heldBeforeSend, withHeldTail, withNote } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import { noteActNode, tagActWhy, type ActNodeMark } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
@@ -104,7 +104,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const mode = { preflight: parts.llmc?.preflight, v2: parts.llmc?.v2, urgent: parts.llmc?.urgent?.() === true };
     const hold = call.name === MC_ACT_TOOL ? heldBeforeSend(mode, call.input, control.observe(bodyId), step.taskId) : null;
     if (hold?.result) return hold.result;
-    if (hold) call = { ...call, input: hold.input as typeof call.input };
+    if (hold?.input) call = { ...call, input: hold.input as typeof call.input };
     if (!control.store.bind(step.taskId, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     if (call.name === 'minecraft.observe') return toolOk(JSON.stringify(control.observe(bodyId)));
     const active = currentActionExecution();
@@ -126,7 +126,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       noteActNode(step.taskId, node?.mark ?? null, line => console.info(line));
       const sent = await runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [],
         walled: parts.llmc.probe === true, v2: parts.llmc.v2 === true });
-      return hold?.tail ? withHeldTail(sent, hold.tail) : sent;
+      return hold?.tail ? withHeldTail(sent, hold.tail) : hold?.note ? withNote(sent, hold.note) : sent;
     }
     active.stepOutcome = 'unknown';
     const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',

@@ -251,7 +251,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   noteLlmcFeet(step.taskId, () => feetOf(observe()));
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    ...(llmc.probe ? { rules: true, compact: true } : {}), seen: tree => seenDoneUpdate(tree, observe()) });
+    ...(llmc.probe ? { rules: true, compact: true } : {}), seen: tree => seenDoneUpdate(tree, observe(), llmc.v2 === true) });
   const worldOf = () => {
     const world = observe()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;

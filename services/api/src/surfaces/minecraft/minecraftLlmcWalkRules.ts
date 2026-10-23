@@ -19,7 +19,7 @@ export const NAME: Readonly<Record<string, string>> = Object.freeze({
   H: '干し草', S: 'スポナー', F: 'かまど', T: '作業台', C: 'チェスト', B: 'ベッド', $: '固いブロック', L: '溶岩', l: '流れる溶岩', f: '火',
   x: 'クモの巣', M: 'マグマブロック', w: '水', '-': '流れる水', '.': '空気', '*': '空気', '@': '空気(自分の足)', '!': '空気(敵の足)',
   m: '空気(動物の足)', ',': '草花', h: 'はしご・つた', t: '松明', '=': 'レール', D: '扉', P: '板', '+': '柵・ガラス', '%': '葉', k: '作物',
-  p: 'ネザーポータル', Q: 'エンドポータル枠', R: 'エンドポータル枠', e: 'エンドポータル', '?': '未ロード',
+  p: 'ネザーポータル', Q: 'エンドポータル枠', R: 'エンドポータル枠', e: 'エンドポータル', '?': '未ロード', '¤': 'ポータル',
 });
 export const nameOf = (symbol: string | undefined): string => symbol === undefined ? '地図の外' : `${symbol} ${NAME[symbol] ?? '不明'}`;
 /** Hard (not walked through, not filled): a wall of any shape. */
@@ -123,6 +123,30 @@ export function fallText(view: MapView, x: number, y: number, z: number): string
   const fall = fallOf(view, x, y, z);
   if (fall.open) return `落差 ${fall.n} 以上（地図は y=${y - fall.n + 1} まで。それより下は地図に無い）`;
   return `落差 ${fall.n}、下は ${nameOf(fall.below)}`;
+}
+
+/** Whether a body can stand in the cell: feet and head open, a floor under the feet (the map shows all three; water and a ladder are not stood in). */
+export function canStandAt(view: MapView, c: P): boolean {
+  const floor = view.symbol(c.x, c.y - 1, c.z);
+  return isOpen(view.symbol(c.x, c.y, c.z)) && isOpen(view.symbol(c.x, c.y + 1, c.z)) && floor !== undefined && !noFloor(floor) && !isHarm(floor);
+}
+/** The cells beside a cell (the eight round it at its height, those a step up and down, the cells over and under it) a body can stand in. */
+export function standNeighbours(view: MapView, cell: P): P[] {
+  const out: P[] = [];
+  for (let dy = 1; dy >= -1; dy -= 1) {
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        const c = { x: cell.x + dx, y: cell.y + dy, z: cell.z + dz };
+        if ((dx || dy || dz) && canStandAt(view, c)) out.push(c);
+      }
+    }
+  }
+  return out;
+}
+/** The standing place beside a cell nearest to `from`, or null. */
+export function nearestStand(view: MapView, cell: P, from: P): P | null {
+  const dist = (c: P) => Math.hypot(c.x - from.x, c.y - from.y, c.z - from.z);
+  return standNeighbours(view, cell).sort((a, b) => dist(a) - dist(b))[0] ?? null;
 }
 
 export const DIRS: ReadonlyArray<{ name: string; dx: number; dz: number }> = [
