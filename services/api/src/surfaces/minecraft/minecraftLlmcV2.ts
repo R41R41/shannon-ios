@@ -41,7 +41,15 @@ const MENU_ORDER = ['mc.act', 'mc.probe', 'mc.view', 'plan.update'];
 export const v2MenuTool = (tool: Pick<FcaToolDefinition, 'name'>): boolean => MENU_ORDER.includes(tool.name);
 
 export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolDefinition[] {
-  return MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name)).map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : tool);
+  const ordered = MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name));
+  return ordered.map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : reachWords(tool));
+}
+/**
+ * The body reaches 5 m for dig, place, use, chest, furnace and craft (mb-llmc-cand 2, \`BLOCK_REACH\`); the probe's description, shared with the switch off,
+ * still says 4.5 m: in the mode's menu it says 5 m.
+ */
+function reachWords(tool: FcaToolDefinition): FcaToolDefinition {
+  return tool.description.includes('4.5m') ? { ...tool, description: tool.description.replace(/4\.5m/gu, '5m') } : tool;
 }
 export const candidateInput = (name: string, input: unknown): unknown => name === MC_ACT_TOOL ? expandShortAct(input).input : input;
 export { isUrgentLive } from './minecraftLlmcHandGuards.js';

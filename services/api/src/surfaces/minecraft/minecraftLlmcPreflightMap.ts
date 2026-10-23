@@ -9,12 +9,14 @@ import type { ActPos } from '../../contracts/minecraftActContract.js';
 export type Cell = ActPos;
 /** A nether or end portal, as `readLayers` reads it under the body's rules (`BodyRules`): never entered, no floor, nothing to set against. No map has it. */
 export const PORTAL = '¤';
+/** A fence or a wall (`+` of the legend of mb-llmc-cand 2), as `readLayers` reads it under the body's rules: a wall 1.5 high, never a floor. No map has it. */
+export const FENCE = '‖';
 /** A block the walk cannot enter and a block is not put into: a wall, whatever its shape (the rules read a full box, a slab and a stair alike). */
-export const SOLID = new Set('#:sIinNuOEGicdgrXWHSTFCo$'.split(''));
+export const SOLID = new Set('#:sIinNuOEGicdgrXWHSTFCo$YKb‖'.split(''));
 /** Never entered by the walk: lava, fire (and campfires), cobweb and powder snow, magma. */
 export const HARM = new Set(['L', 'l', 'f', 'x', 'M', PORTAL]);
 /** Known not to be a floor to stand on: air, water, lava, fire, a web. A plant or carpet `,` may be a carpet (a floor): not named. */
-export const NOT_FLOOR = new Set(['.', '*', 'w', '-', 'L', 'l', 'f', 'x', PORTAL]);
+export const NOT_FLOOR = new Set(['.', '*', 'w', '-', 'L', 'l', 'f', 'x', 'A', 'J', 'K', PORTAL, FENCE]);
 /** Known not to be a block to set against (boundingBox not a block). A plant `,` may be a carpet: not named. */
 export const NOT_SUPPORT = new Set(['.', '*', 'w', '-', 'L', 'l', 'f', 'x', 't', PORTAL]);
 /** Air or what a fall goes through as air (the walk's own count of the cells under a target). */
@@ -22,10 +24,11 @@ export const AIRISH = new Set(['.', '*', 'f', 'x']);
 /** A body in water or on a ladder needs no floor. */
 export const STANDS = new Set(['w', '-', 'h']);
 export const NAMES: Readonly<Record<string, string>> = Object.freeze({
-  [PORTAL]: 'ポータル',
+  [PORTAL]: 'ポータル', [FENCE]: '柵・壁',
   '#': '石の類', ':': '土の類', s: '砂・砂利', I: '氷', n: 'netherrack', N: 'nether_bricks', u: 'ソウルサンド・ソウルソイル', O: '黒曜石', E: 'エンドストーン',
   G: 'glowstone', i: '鉄鉱石', c: '石炭鉱石', d: 'ダイヤ鉱石', g: '金鉱石', r: 'レッドストーン鉱石', o: '鉱石', X: '岩盤', W: '原木', H: '干し草', S: 'スポナー',
-  F: 'かまど', T: '作業台', C: 'チェスト・樽', $: '固いブロック', L: '溶岩', l: '溶岩', f: '火', x: 'クモの巣', M: 'magma_block', w: '水', '-': '水', '.': '空気',
+  F: 'かまど', T: '作業台', C: 'チェスト・樽', $: '固いブロック', Y: 'ウォートブロック・シュルームライト', K: '鉄の扉・トラップドア', b: 'ガラス・鉄格子・鎖',
+  A: '木のトラップドア', J: '木のフェンスゲート', L: '溶岩', l: '溶岩', f: '火', x: 'クモの巣', M: 'magma_block', w: '水', '-': '水', '.': '空気',
 });
 export const cellKey = (cell: Cell) => `${cell.x},${cell.y},${cell.z}`;
 export const posText = (cell: Cell) => `(${cell.x},${cell.y},${cell.z})`;
@@ -33,21 +36,21 @@ export const word = (symbol: string | undefined) => `${NAMES[symbol ?? ''] ?? '�
 export const blocked = (symbol: string | undefined) => symbol !== undefined && (SOLID.has(symbol) || HARM.has(symbol));
 
 /**
- * mb-llmc v2: the walk's rules of the body (Shannon `utils/walkRules.ts` `cellWay`/`floorOf`, `utils/localMap.ts` `symbolFor`) for the symbols the
- * guards did not name. A symbol is read under them (`readLayers`' `rules`) as: a nether or end portal `p` `e` → never entered, no floor (`PORTAL`);
- * an end portal frame `Q` `R` → a wall; and, in the Nether (no leaves there), `%`, which the map draws for leaves and for the wart blocks and the
- * shroomlight, → a wall (`$`). What the map cannot tell apart stays not named: `P` (planks and trapdoors, signs, plates), `D` (a door opens, an
- * iron door does not), `+` (a fence or a pane is a wall, a fence gate opens), `%` outside the Nether (leaves are broken on the way). A map symbol
- * that splits them is for the body's side (reported).
+ * mb-llmc v2: the walk's rules of the body (Shannon `utils/walkRules.ts` `cellWay`/`floorOf`, `utils/localMap.ts` `symbolFor`, the legend `MAP_LEGEND_V2`
+ * of mb-llmc-cand 2) for the symbols the guards read as the legends before it. A symbol is read under them (`readLayers`' `rules`) as: a nether or end
+ * portal `p` `e` → never entered, no floor (`PORTAL`); an end portal frame `Q` `R`, planks and the like `P`, a bed `B` → a wall (`$`); fences and walls `+`
+ * → a wall that is no floor (`FENCE`, 1.5 high); a wooden door `D` → `A` (opened on the way, no floor). `Y` `K` `b` are walls and `A` `J` `K` no floor in the
+ * sets above; `%` is leaves only (broken on the way, a floor: not named), so the Nether's wart blocks need no rule of the dimension (`Y`). `q` (signs,
+ * plates, buttons, levers) is walked through: not named.
  */
-export interface BodyRules { nether: boolean }
-export function bodySymbol(symbol: string, rules: BodyRules): string {
+export interface BodyRules { readonly bodyLegend: 2 }
+export const BODY_RULES: BodyRules = Object.freeze({ bodyLegend: 2 });
+export function bodySymbol(symbol: string, _rules: BodyRules): string {
   if (symbol === 'p' || symbol === 'e') return PORTAL;
-  if (symbol === 'Q' || symbol === 'R') return '$';
-  return rules.nether && symbol === '%' ? '$' : symbol;
+  if (symbol === 'D') return 'A';
+  if (symbol === '+') return FENCE;
+  return symbol === 'Q' || symbol === 'R' || symbol === 'P' || symbol === 'B' ? '$' : symbol;
 }
-/** Whether a frame's dimension is the Nether. */
-export const isNether = (dimension: unknown): boolean => typeof dimension === 'string' && /nether/u.test(dimension);
 
 /** The map's layers (y → "x,z" → symbol) and the feet cell it was drawn for. */
 export interface Layers { feet: ActPos; mode: string; layers: Map<number, Map<string, string>> }

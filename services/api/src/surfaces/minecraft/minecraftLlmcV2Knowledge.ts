@@ -1,3 +1,4 @@
+import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
 /**
  * SHANNON_MINECRAFT_LLMC_V2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -15,7 +16,7 @@ const DECIDE = [
   '- why は節の札で始める（「[p1.2] 丸石でハーフブロック」。別の節なら「[p2.1] 理由: …」、急ぎは「[急ぎ] …」）。長い結果は次の判断の lastResults に一度だけ全文が出て、'
     + '履歴には 1 行しか残らない: 後で要る座標は plan の where か why に書く。',
   '- 止まったら、返った行（理由・そのマスの今の中身・周り）と around で原因を直す。同じ手を同じまま出さない。「一歩ではない」は段差 2 以上か着いていない、'
-    + '「届かない」は 4.5m 内へ寄る、「掘れない」は道具か X、「見えない：間に (x,y,z)」はその間を先に掘る、「そのものには立てない」は続く「立てる隣」へ。素手の dig は tool:"hand"。',
+    + '「届かない」は 5m 内へ寄る、「掘れない」は道具か X、「見えない：間に (x,y,z)」はその間を先に掘る、「そのものには立てない」は続く「立てる隣」へ。素手の dig は tool:"hand"。',
   '- 分からない時・同じ止まりが 2 回・落ちた時は、手の前に mc.view か mc.probe（同じ止まり→history と path か sight、落ちた→column、敵→around）。'
     + '原因が分かったら plan.update の forbid か caution に書く。体を止めない: 焼く・待つ間も近くの手を入れる。満杯の前に余りを drop（丸石は 64 残す）。石や土を掘り進むだけの dig は collect=false（拾わない）。',
 ].join('\n');
@@ -39,10 +40,9 @@ const MAP = [
   '- 見出しの足=(x,y,z) が足のマス、頭は y+1。この 2 マスには place できない。層は全部同じ範囲、行の頭が z、列の見出しが x の下 1 桁、^ の列が足の x、? は範囲の外。'
     + 'rel: true では {x:1,y:0,z:0} が足の東隣、{x:0,y:-1,z:0} が足の下。',
   '- place は空気（. か *）で 6 面のどれかが固いマスへ。草花（,）・水・レール・周りが全部 . の宙には置けない。縦穴を上るのは pillarUp。40m 以上先は walk に地図の外の座標を渡してよい。',
-  '- 記号: @ 自分の足 / ! 敵の足 / m 動物の足 / * 60秒以内に歩いた空気 / . 空気 / , 草花 / X 岩盤 / # 石の類 / : 土 / s 砂 / I 氷 / w 水源 / - 流れる水 / L 溶岩源 / l 流れる溶岩 / f 火 / x クモの巣'
-    + ' / i 鉄 c 石炭 d ダイヤ g 金 r レッドストーン o 他の鉱石 / W 原木 % 葉（ネザーではイボブロック・シュルームライト。固い）P 板 D 扉 + 柵・ガラス h はしご t 松明 = レール / F かまど T 作業台 C チェスト B ベッド H 干し草 k 作物 S スポナー'
-    + ' / O 黒曜石 p ポータル n ネザーラック u ソウルサンド N ネザーレンガ M マグマ G グロウストーン E エンドストーン Q R 枠 e エンドポータル $ 他の固い物。'
-    + 'surface 形は「記号＋高さ」（0〜9 上、+ 10以上上、a〜i 下、v 10以上下）。縦: 足の列を同じ記号の続きで（「上: y=46〜51 .×6 / y=52 #」）。',
+  // The body's legend, word for word (mb-llmc-cand 2): its symbol lines and the surface form's. The layers' ranges are the v2 map's own (above).
+  ...MAP_LEGEND_V2.split('\n').slice(0, 10),
+  '縦: 足の列の上下を同じ記号の続きで（「上: y=46〜51 .×6 / y=52 #」は頭から空気が 6 段、その上が石）。',
 ].join('\n');
 
 /** Rules the own prompt had and the first candidate lost (the replay's A: the facts were there and the answer went against them). */

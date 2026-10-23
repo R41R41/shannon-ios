@@ -1,7 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActHand, ActPos } from '../../contracts/minecraftActContract.js';
 import { columnKey, keptColumnFact } from './minecraftLlmcFooting.js';
-import { isNether, mapView, posText, readLayers, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { BODY_RULES, mapView, posText, readLayers, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 import { routeAnswer, routeWhy } from './minecraftLlmcPreflightRoute.js';
 import { nearestStand } from './minecraftLlmcWalkRules.js';
 import { placeStop, unstandable, type ColumnOf, type Found, type PreflightCode } from './minecraftLlmcPreflightStand.js';
@@ -244,7 +244,7 @@ export function preflightOfFrame(input: unknown, frame: BodyObservation | null, 
   const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
   const facts = keptColumnFact(taskId);
   const map = typeof world?.localMap === 'string' ? world.localMap : undefined;
-  const rules = options?.bodyRules ? { nether: isNether(world?.dimension) } : undefined;
+  const rules = options?.bodyRules ? BODY_RULES : undefined;
   return preflightAct(input, { map, feet, ...(rules ? { rules } : {}), column: (cell, feetY) => facts(columnKey(cell, feetY)) }, options);
 }
 
@@ -268,8 +268,7 @@ export function standAfterHands(input: unknown, frame: BodyObservation | null, t
   const at = world?.position;
   const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
   const map = typeof world?.localMap === 'string' ? world.localMap : undefined;
-  const rules = { nether: isNether(world?.dimension) };
-  const start = startOf(input, { map, feet, rules, column: (cell, feetY) => keptColumnFact(taskId)(columnKey(cell, feetY)) });
+  const start = startOf(input, { map, feet, rules: BODY_RULES, column: (cell, feetY) => keptColumnFact(taskId)(columnKey(cell, feetY)) });
   if (!start) return null;
   const { hands, view, track } = start;
   for (const [index, raw] of hands.entries()) {

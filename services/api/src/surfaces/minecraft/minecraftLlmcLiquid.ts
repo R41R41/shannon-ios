@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { HandStop } from './minecraftLlmcHandGuards.js';
-import { isNether, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
+import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
 import { isHard, keyOf, nameOf, ptText, type P } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -10,10 +10,12 @@ import { isHard, keyOf, nameOf, ptText, type P } from './minecraftLlmcWalkRules.
  * 地図の記号 (w 水源 / - 流れる水 / L 溶岩源 / l 流れる溶岩 / O 黒曜石) と足の位置だけから作る。事実だけで、手は決めない。
  */
 const EYE = 1.62;
-/** How far the body's sight, use and place reach from the eye (the body says 4.5 m; its dig text says 5 m). */
-export const USE_REACH = 4.5;
-/** A bucket's use beyond this is out of reach by any of the body's texts: held before sending (inside it, the body decides). */
-const HELD_REACH = 5.0;
+/**
+ * How far dig, place, use, chest, furnace and craft reach: one number (mb-llmc-cand 2, `utils/blockReach.ts` `BLOCK_REACH`), measured from the
+ * eye (the feet + 1.62) to the middle of the block. The body stops a hand beyond it without trying, so a bucket's use held beyond it
+ * is a stop the body would have made.
+ */
+export const USE_REACH = 5.0;
 /** What the run measured: a dig of a cell in water takes about 6 seconds, in air about 1. */
 const WATER_DIG = '水中のマスの dig は 1 マス 6 秒ほど（空気中は約 1 秒）、流れの中の walk は同じマスで進めないことがある';
 const RANGE = 7, SHOWN = 3;
@@ -101,7 +103,7 @@ function afterWalk(hand: Rec): P | null {
 export function useReachStop(input: unknown, frame: BodyObservation | null): HandStop | null {
   const world = rec(frame?.state.world), at = rec(world?.position);
   const x = num(at?.x), y = num(at?.y), z = num(at?.z);
-  const layers = typeof world?.localMap === 'string' ? readLayers(world.localMap, { nether: isNether(world.dimension) }) : null;
+  const layers = typeof world?.localMap === 'string' ? readLayers(world.localMap, BODY_RULES) : null;
   const hands = Array.isArray(rec(input)?.hands) ? rec(input)!.hands as unknown[] : [];
   if (!layers || x === null || y === null || z === null) return null;
   const feet = { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
@@ -135,8 +137,8 @@ function bucketTarget(hand: Rec, view: MapView): P | null {
 function reachStop(hand: number, item: string, view: MapView, eye: Eye, feet: P, cell: P): HandStop | null {
   const reach = meters(eye, cell);
   const symbol = view.symbol(cell.x, cell.y, cell.z), what = `${ptText(cell)}（${nameOf(symbol)}）`;
-  if (reach > HELD_REACH) {
-    return { hand, kind: 'use', code: 'use_reach', line: `${item} の use: ${what} は目から ${reach.toFixed(1)}m（use・sight・place は ${USE_REACH}m まで）。`
+  if (reach > USE_REACH) {
+    return { hand, kind: 'use', code: 'use_reach', line: `${item} の use: ${what} は目から ${reach.toFixed(1)}m（dig・place・use は ${USE_REACH}m まで）。`
       + `${ptText(cell)} の ${USE_REACH}m 内に立ってから use する（先に walk）` };
   }
   const between = blockBetween(view, eye, cell, feet);

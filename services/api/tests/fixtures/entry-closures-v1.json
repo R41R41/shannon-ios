@@ -23,6 +23,7 @@
     "contracts/minecraftBodyContract.ts",
     "contracts/minecraftControlContract.ts",
     "contracts/minecraftLifecycleContract.ts",
+    "contracts/minecraftMapLegendV2.ts",
     "contracts/minecraftProbeContract.ts",
     "contracts/modelModeContract.ts",
     "contracts/moodHistoryContract.ts",

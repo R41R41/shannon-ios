@@ -18,7 +18,7 @@ const SHORT_GRAMMAR = [
   'dig X,Y,Z ...（順に掘る。16マスまで）[tool=名] [exposeOk: 敵に見られても掘る] [takeOk: 村の物も掘る] [collect=false: 掘るだけで拾いに歩かない。丸石・土を掘り進む時に付ける。持ち物の空きは live の body.pack]',
   'place ブロック名 X,Y,Z ... [face=down] / pillarUp N [ブロック名]（真下に置きながら N 段登る）',
   'use 物 [X,Y,Z] [face=..] [target=#id]: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と face）',
-  'look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / equip 物 [slot] / craft 物 [個数: 作業台が4.5m内に要る] / eat [物] / wait 秒（0.5〜30）',
+  'look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / equip 物 [slot] / craft 物 [個数: 作業台が5m内に要る] / eat [物] / wait 秒（0.5〜30）',
   'attack 相手(#id か名前) [hold: その場で待って届いたら打つ・追わない] [seconds=N] [untilDead=false] / pickup [range=N] [target=..]',
   'どの手にも rel（その手を始める時の足のブロックからの差。x 東+・z 南+・y 上+）と onFail=continue|stop を付けられる。',
   '上に無い形は json {手の JSON} の 1 行。at・items は 1 つでも配列:',

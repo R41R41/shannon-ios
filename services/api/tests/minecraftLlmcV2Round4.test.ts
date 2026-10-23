@@ -6,7 +6,7 @@ import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropic
 import type { FcaModelInput, FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 import { llmcCoreKnowledge } from '../src/surfaces/minecraft/minecraftKnowledgeCore.js';
 import { preflightAct, preflightText } from '../src/surfaces/minecraft/minecraftLlmcPreflight.js';
-import { bodySymbol, isNether, mapView, PORTAL, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
+import { BODY_RULES, bodySymbol, FENCE, mapView, PORTAL, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { heldBeforeSend } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { goalOf, routeLines } from '../src/surfaces/minecraft/minecraftLlmcRoute.js';
 import { candidateAct, candidateLive, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
@@ -47,34 +47,29 @@ const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVers
   state: { world: world as never }, facts: {} });
 
 describe('the map\'s symbols as the body\'s walk reads them (utils/walkRules.ts, utils/localMap.ts)', () => {
-  it('reads a portal as a cell she does not enter and does not stand on, the end portal frame as a wall, and the wart blocks of the Nether as walls', () => {
-    expect(bodySymbol('p', { nether: false })).toBe(PORTAL);
-    expect(bodySymbol('e', { nether: true })).toBe(PORTAL);
-    expect(bodySymbol('Q', { nether: false })).toBe('$');
-    expect(bodySymbol('R', { nether: false })).toBe('$');
-    expect(bodySymbol('%', { nether: true })).toBe('$');
-    expect(bodySymbol('%', { nether: false })).toBe('%');
-    expect(bodySymbol('#', { nether: true })).toBe('#');
-    expect(isNether('the_nether')).toBe(true);
-    expect(isNether('overworld')).toBe(false);
-    expect(isNether(undefined)).toBe(false);
+  it('reads a portal as a cell she does not enter and does not stand on, the frame, planks and fences as walls, a wooden door as one opened on the way', () => {
+    expect(bodySymbol('p', BODY_RULES)).toBe(PORTAL);
+    expect(bodySymbol('e', BODY_RULES)).toBe(PORTAL);
+    for (const symbol of ['Q', 'R', 'P']) expect(bodySymbol(symbol, BODY_RULES)).toBe('$');
+    expect(bodySymbol('+', BODY_RULES)).toBe(FENCE);
+    expect(bodySymbol('D', BODY_RULES)).toBe('A');
+    // The wart blocks have their own symbol (Y) in the legend of mb-llmc-cand 2; the leaves are the only '%': no rule of the dimension.
+    for (const symbol of ['%', 'Y', 'K', 'b', 'q', 'J', '#']) expect(bodySymbol(symbol, BODY_RULES)).toBe(symbol);
   });
   it('leaves the map as drawn when no rules are given (the act preflight alone reads what it read before)', () => {
     const map = mapOf([[at(1, 0, 0), 'p']]);
     expect(readLayers(map)!.layers.get(0)!.get('1,0')).toBe('p');
-    expect(readLayers(map, { nether: false })!.layers.get(0)!.get('1,0')).toBe(PORTAL);
+    expect(readLayers(map, BODY_RULES)!.layers.get(0)!.get('1,0')).toBe(PORTAL);
     expect(mapView(readLayers(map)!).symbol(1, 0, 0)).toBe('p');
   });
-  it('stops a walk onto a wart block in the Nether, and lets the same symbol go outside it (leaves are broken on the way)', () => {
-    const open = [...corridor(3), [at(3, 0, 0), '%'] as [Cell, string]].filter(item => !(Array.isArray(item) ? false : item.x === 3 && item.y === 0));
-    const map = mapOf(open);
-    const nether = preflightAct({ hands: [walk(3, 0, 0)] }, { map, feet, rules: { nether: true } });
-    expect(nether).toMatchObject({ kind: 'walk', code: 'feet_solid' });
-    expect(preflightAct({ hands: [walk(3, 0, 0)] }, { map, feet, rules: { nether: false } })).toBeNull();
+  it('stops a walk onto a wart block (Y), a pane (b), an iron door (K) and a fence (+); lets a leaf (%), a wooden door (D) and a plate (q) go', () => {
+    const stand = (symbol: string) => preflightAct({ hands: [walk(3, 0, 0)] }, { map: mapOf([...corridor(2), at(3, 1, 0), [at(3, 0, 0), symbol] as [Cell, string]]), feet, rules: BODY_RULES });
+    for (const symbol of ['Y', 'b', 'K', '+', 'P']) expect(stand(symbol), symbol).toMatchObject({ kind: 'walk', code: 'feet_solid' });
+    for (const symbol of ['%', 'D', 'A', 'J', 'q']) expect(stand(symbol), symbol).toBeNull();
   });
   it('stops a walk to a place over a portal with the portal named as the floor that is not one', () => {
     const open = [...corridor(2), [at(2, -1, 0), 'p'] as [Cell, string]];
-    const stop = preflightAct({ hands: [walk(2, 0, 0)] }, { map: mapOf(open), feet, rules: { nether: false } })!;
+    const stop = preflightAct({ hands: [walk(2, 0, 0)] }, { map: mapOf(open), feet, rules: BODY_RULES })!;
     expect(stop.why).toContain('下 (2,-1,0) がポータル（立つ床にならない）');
   });
 });

@@ -57,7 +57,7 @@ describe('the obsidian scene: water, lava and the bucket', () => {
     const text = liquidLines(view(), FEET).join('\n');
     expect(text).toContain('水: 源 1 マス・流れ 4 マス');
     expect(text).toContain('水中のマスの dig は 1 マス 6 秒ほど');
-    expect(text).toMatch(/水の源（汲み戻せる）: \(251,-24,208\) 目から 5\.\dm・届かない（4\.5m まで）/u);
+    expect(text).toMatch(/水の源（汲み戻せる）: \(251,-24,208\) 目から 5\.\dm・届かない（5m まで）/u);
     expect(text).toContain('溶岩: 源 2 マス・流れ 0 マス。近い源: ');
     expect(text).toContain('(252,-24,209)');
   });
@@ -79,7 +79,7 @@ describe('the obsidian scene: water, lava and the bucket', () => {
     const stop = useReachStop({ hands: [bucket(251, -24, 208)] }, obsidianFrame())!;
     expect(stop).toMatchObject({ hand: 1, kind: 'use', code: 'use_reach' });
     expect(stop.line).toContain('(251,-24,208)');
-    expect(stop.line).toMatch(/目から 5\.\dm（use・sight・place は 4\.5m まで）/u);
+    expect(stop.line).toMatch(/目から 5\.\dm（dig・place・use は 5m まで）/u);
   });
   it('holds it when a hard block stands between the eye and the source after a walk (seq 1789: 目との間の (249,-23,205) が deepslate)', () => {
     const stop = useReachStop({ hands: [walk(248, -24, 205), bucket(251, -24, 208)] }, obsidianFrame())!;

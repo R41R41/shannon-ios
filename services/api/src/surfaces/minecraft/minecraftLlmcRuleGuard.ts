@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActHand, ActPos } from '../../contracts/minecraftActContract.js';
-import { cellKey, isNether, mapView, posText, readLayers, SOLID, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { BODY_RULES, cellKey, mapView, posText, readLayers, SOLID, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 import type { ColumnOf } from './minecraftLlmcPreflightStand.js';
 import { lookOf, type Look } from './minecraftLlmcSurfaceLook.js';
 import { columnKey, keptColumnFact } from './minecraftLlmcFooting.js';
@@ -189,6 +189,6 @@ export function ruleGuardOfFrame(input: unknown, frame: BodyObservation | null, 
   const at = world?.position;
   const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
   const map = typeof world?.localMap === 'string' ? world.localMap : undefined;
-  const rules = { nether: isNether(world?.dimension) };
-  return ruleGuardAct(input, { map, feet, rules, column: (cell, feetY) => keptColumnFact(taskId)(columnKey(cell, feetY)) }, seenThreats(frame, taskId));
+  const column = (cell: Cell, feetY: number) => keptColumnFact(taskId)(columnKey(cell, feetY));
+  return ruleGuardAct(input, { map, feet, rules: BODY_RULES, column }, seenThreats(frame, taskId));
 }
