@@ -45,7 +45,7 @@ class Hostiles {
   all(): Enemy[] { return this.order.map(id => this.byId.get(id)!); }
 }
 
-/** A hostile that gets a line: within its distance (24 m; creeper 32; shooter 48, by name), or named by a probe or the urgent lines, or in sight or with a way. */
+/** A hostile that gets a line: within its distance (24 m; creeper 32; shooter 48, by name), named by a probe or urgent, or in sight or with a way. */
 const matters = (e: Enemy): boolean => e.wait || e.dist <= lineMeters(e.name) || e.notes.length > 0 || e.reach === 'seen' || e.reach === 'path';
 const isShooter = (e: Enemy): boolean => e.shooter || SHOOTER_KINDS.has(e.name);
 /** The others in one line: how many by kind (a shooter marked), and the nearest with its height against her feet and how it stands to her. */
