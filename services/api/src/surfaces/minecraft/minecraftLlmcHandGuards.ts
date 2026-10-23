@@ -72,3 +72,29 @@ export function seenReopenStop(input: unknown, frame: BodyObservation | null): H
   }
   return null;
 }
+
+/**
+ * mb-llmc-cand 10 (bench s55: `dig -1,0,0` and `walk -3,0,0` written without `rel`, a bot at 230,-54,… sent to the world's origin): a hand without `rel` whose
+ * every coordinate has |x| and |z| under `SMALL_COORDINATE` while her feet are `FAR_FROM_FEET` metres or more away on the level is a relative number
+ * written as an absolute one: it is not sent, and the fact says what to write (the coordinates are absolute; `rel` makes them differences from her feet).
+ */
+export const SMALL_COORDINATE = 10;
+export const FAR_FROM_FEET = 40;
+const handPoints = (hand: Rec): Array<{ x: number; y: number; z: number }> => [rec(hand.to), ...(Array.isArray(hand.path) ? hand.path.map(rec) : []),
+  ...(Array.isArray(hand.at) ? hand.at.map(rec) : [])].filter((at): at is Rec => at !== null)
+  .flatMap(at => typeof at.x === 'number' && typeof at.y === 'number' && typeof at.z === 'number' ? [{ x: at.x, y: at.y, z: at.z }] : []);
+export function smallCoordinateStop(input: unknown, frame: BodyObservation | null): HandStop | null {
+  const feet = rec(rec(frame?.state.world)?.position);
+  if (!feet || typeof feet.x !== 'number' || typeof feet.y !== 'number' || typeof feet.z !== 'number') return null;
+  for (const [index, hand] of handsOf(input).entries()) {
+    const points = hand.rel === true ? [] : handPoints(hand);
+    if (!points.length || !points.every(at => Math.abs(at.x) < SMALL_COORDINATE && Math.abs(at.z) < SMALL_COORDINATE)) continue;
+    const far = Math.hypot(points[0]!.x - feet.x, points[0]!.z - feet.z);
+    if (far < FAR_FROM_FEET) continue;
+    const at = points[0]!, stand = `(${Math.floor(feet.x)},${Math.floor(feet.y)},${Math.floor(feet.z)})`;
+    return { hand: index + 1, kind: String(hand.do ?? '?'), code: 'small_absolute',
+      line: `座標 (${at.x},${at.y},${at.z}) は足 ${stand} から ${Math.round(far)}m 離れている。座標は絶対座標（世界の座標）で、足からの差で書く時は rel を付ける（例 dig 1,0,0 rel）。`
+        + `足からの差のつもりなら rel を付けるか、足 ${stand} からの座標で書き直す` };
+  }
+  return null;
+}

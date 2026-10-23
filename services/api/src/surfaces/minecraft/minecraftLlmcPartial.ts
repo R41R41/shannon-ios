@@ -2,7 +2,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
-import { seenReopenStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
+import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
@@ -43,7 +43,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   const stand = preflightOfFrame(input, frame, taskId, options), rule = ruleGuardOfFrame(input, frame, taskId);
   const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
-  for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), urgentLimitStop(input, urgent)]) {
+  for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
   }
   return found.reduce<Held | null>((first, next) => !first || next.hand < first.hand ? next : first, null);

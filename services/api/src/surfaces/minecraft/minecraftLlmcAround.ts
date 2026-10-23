@@ -1,6 +1,6 @@
 import { isPortal, type MapView } from './minecraftLlmcPreflightMap.js';
 import {
-  bestStep, cornerOk, DIRS, fallOf, fallText, isHard, isHarm, isOpen, nameOf, NAME, noFloor, portalWords, ptText, stepOptions, type P, type Step,
+  bestStep, cornerOk, digWords, DIRS, fallOf, fallText, isHard, isHarm, isOpen, nameOf, NAME, noFloor, portalWords, ptText, stepOptions, type P, type Step,
 } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -21,7 +21,7 @@ export const AROUND_RANGE = 6;
 const ROWS_PER_KIND = 8;
 const triple = (view: MapView, cell: P) => `足 ${nameOf(view.symbol(cell.x, cell.y, cell.z))}・頭 ${nameOf(view.symbol(cell.x, cell.y + 1, cell.z))}`
   + `・床 ${nameOf(view.symbol(cell.x, cell.y - 1, cell.z))}`;
-const digText = (view: MapView, cells: readonly P[]) => cells.map(c => `${ptText(c)} ${NAME[view.symbol(c.x, c.y, c.z) ?? ''] ?? '?'}`).join('、');
+const digText = digWords;
 
 function stepHow(best: Step): string {
   if (best.kind === 'level') return '';
@@ -200,3 +200,29 @@ export function aroundLines(view: MapView, feet: P): string[] {
 /** The line before the cells beyond the first step; what is not written is said in the instructions' dictionary (`around`). */
 export const AROUND_HEAD = '足の周りの 1 歩より先（この判断の始めの frame の地図から。水平 6・足と頭と床が地図にある高さ。z=行 x=範囲。'
   + '書いていない所は足も頭も固い岩か、地図の端で不明）:';
+
+/** A hostile as the live state's line gives it: its name, id, how far, where. */
+export interface Watched { name: string; id: string; meters: number; at: P }
+const WATCH = /^#(\d+) (\S+) ([\d.]+)m \((-?\d+),(-?\d+),(-?\d+)\)/u;
+/** The hostile the first of `lines` says (the urgent ones first, then those that see her within 16 m), or null. */
+export function watchedHostile(urgent: readonly string[] | undefined, threats: readonly string[] | undefined): Watched | null {
+  const line = urgent?.find(item => WATCH.test(item)) ?? threats?.find(item => WATCH.test(item) && item.includes('見える（射線の中）'));
+  const m = line ? WATCH.exec(line) : null;
+  return m && Number(m[3]) <= 16 ? { id: m[1]!, name: m[2]!, meters: Number(m[3]), at: { x: +m[4]!, y: +m[5]!, z: +m[6]! } } : null;
+}
+/**
+ * mb-llmc-cand 11 (bench s14: an enderman 7.9 m away and in sight, the walk went west and north, toward it): the steps of the ten that take her away from the
+ * hostile, each a step the walk's rules make without digging (the cell she would stand in is farther from it than her feet by half a block or more).
+ * `body.away`. Facts from the map and the hostile's place: where to go is the decision's.
+ */
+export function awayLines(view: MapView, feet: P, hostile: Watched | null): string[] {
+  if (!hostile) return [];
+  const read = unloadedAsUnknown(view), far = (c: P) => Math.hypot(c.x - hostile.at.x, c.y - hostile.at.y, c.z - hostile.at.z);
+  const steps = DIRS.flatMap(dir => {
+    if (dir.dx !== 0 && dir.dz !== 0 && !cornerOk(read, feet, dir.dx, dir.dz)) return [];
+    const best = bestStep(stepOptions(read, feet, feet.x + dir.dx, feet.z + dir.dz));
+    return best && !best.dig.length && far(best.to) >= far(feet) + 0.5 ? [`${dir.name} ${ptText(best.to)}`] : [];
+  });
+  const who = `#${hostile.id} ${hostile.name}（${hostile.meters}m）から離れる、掘らずに歩ける隣`;
+  return [steps.length ? `${who}: ${steps.join('・')}` : `${who}は無い（周りの 8 方向の 1 歩は、どれも近づくか、掘る・置くが要る）`];
+}

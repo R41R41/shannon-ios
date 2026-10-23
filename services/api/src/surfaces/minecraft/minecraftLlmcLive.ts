@@ -200,6 +200,9 @@ export interface LlmcLiveParts {
    * unreachable lines and before the map, counted in the bound and never cut. Absent: no key.
    */
   footing?: string | null;
+  /** mb-llmc-cand 11 (v2, a dragon task): the stage road and the pace against the milestones' targets (`minecraftLlmcRoad.ts`), after the plan's now. */
+  road?: string | null;
+  meter?: string | null;
 }
 
 /** The longest the shown results may be together (characters; a view's map is about 2,500). */
@@ -219,8 +222,10 @@ export function lookHint(world: Record<string, unknown>, healthLost = 0): string
 }
 
 /** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off hostiles; r8: then the footing. */
-function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'shortage' | 'recovery' | 'unreachable' | 'footing'>): Record<string, unknown> {
-  return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.shortage ? { shortage: parts.shortage } : {}),
+function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'road' | 'meter' | 'shortage' | 'recovery' | 'unreachable' | 'footing'>)
+  : Record<string, unknown> {
+  return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.road ? { road: parts.road } : {}), ...(parts.meter ? { meter: parts.meter } : {}),
+    ...(parts.shortage ? { shortage: parts.shortage } : {}),
     ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
     ...(parts.unreachable?.length ? { unreachable: [...parts.unreachable] } : {}), ...(parts.footing ? { footing: parts.footing } : {}) };
 }

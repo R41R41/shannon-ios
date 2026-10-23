@@ -1,4 +1,4 @@
-import { aroundLines } from './minecraftLlmcAround.js';
+import { aroundLines, awayLines, watchedHostile, type Watched } from './minecraftLlmcAround.js';
 import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { liquidLines } from './minecraftLlmcLiquid.js';
 import { obsidianWays } from './minecraftLlmcObsidianWays.js';
@@ -194,13 +194,15 @@ function rewriteBodyKey(key: string, value: unknown, self: P | null, notes: Rewr
 }
 
 /** The map's place in the body: the facts made from it (`around`, `route`), then the map on one range. */
-function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes): Rec {
+function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Watched | null = null): Rec {
   const map = typeof bodyIn.map === 'string' ? bodyIn.map : undefined;
   const layers = readLayers(map, BODY_RULES);
   const out: Rec = {};
   if (layers) {
     const view = mapView(layers), planNow = String(bodyIn.planNow ?? '');
     out.around = aroundLines(view, layers.feet);
+    const away = awayLines(view, layers.feet, watched);
+    if (away.length) out.away = away;
     notes.added.push('around');
     const liquid = liquidLines(view, layers.feet);
     if (liquid.length) {
@@ -242,7 +244,7 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes, needs: NearNeeds = NO_NEE
       continue;
     }
     if (key === 'map') {
-      Object.assign(body, mapFields(bodyIn, value, notes));
+      Object.assign(body, mapFields(bodyIn, value, notes, watchedHostile(strings(enemies.urgent), strings(enemies.threats))));
       continue;
     }
     body[key] = rewriteBodyKey(key, value, self, notes, needs);

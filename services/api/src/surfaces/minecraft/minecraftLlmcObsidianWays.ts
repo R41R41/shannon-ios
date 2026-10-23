@@ -1,5 +1,5 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
-import { ptText, type P } from './minecraftLlmcWalkRules.js';
+import { NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
 
 /**
  * mb-llmc v2 (実走37: 10 m 先に覆い 1 枚の溶岩 (173,-16,147) があったのに、走査で見えた 85 m 先の自然の黒曜石 (253,-55,154) へ階段で向かい、約 260 秒かかった。
@@ -40,14 +40,43 @@ function inLines(lines: readonly string[], word: RegExp, self: P, from: string):
 const nearest = (items: Found[]): Found | null => items.sort((a, b) => a.meters - b.meters)[0] ?? null;
 const show = (item: Found | null, none: string): string => item ? `${ptText(item.at)} まで ${Math.round(item.meters)}m（${item.from}）` : none;
 
+
+const SIDES: ReadonlyArray<readonly [number, number, number]> = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+const LIQUID = new Set(['w', '-', 'L', 'l']);
+const CONTACTS = 3;
+/**
+ * mb-llmc-cand 11 (bench s67: the water source was one cell from her and the lava source two, and the answers dug beside the lava, where the water did
+ * not reach and the lava came to her feet): the cells of the map that are not liquid themselves and have a water source and a lava source beside them, nearest
+ * first, each with the two sources. Opening such a cell lets the water and the lava meet. Facts from the map only: what to do with them is the decision's.
+ */
+export function contactCells(view: MapView, self: P): string[] {
+  const found: Array<{ at: P; meters: number; water: P; lava: P }> = [];
+  for (const [y, layer] of view.layers.layers) {
+    for (const [key, symbol] of layer) {
+      if (LIQUID.has(symbol)) continue;
+      const [x, z] = key.split(',').map(Number) as [number, number];
+      const beside = (wanted: string): P | null => {
+        const side = SIDES.find(([dx, dy, dz]) => view.symbol(x + dx, y + dy, z + dz) === wanted);
+        return side ? { x: x + side[0], y: y + side[1], z: z + side[2] } : null;
+      };
+      const water = beside('w'), lava = beside('L');
+      if (water && lava) found.push({ at: { x, y, z }, meters: distance(self, { x, y, z }), water, lava });
+    }
+  }
+  const name = (at: P): string => NAME[view.symbol(at.x, at.y, at.z) ?? ''] ?? '?';
+  return found.sort((a, b) => a.meters - b.meters).slice(0, CONTACTS).map(item => `${ptText(item.at)} 目から ${item.meters.toFixed(1)}m（${name(item.at)}）`
+    + `・隣の水の源 ${ptText(item.water)}・溶岩の源 ${ptText(item.lava)}`);
+}
 /** `body.obsidian`: the nearest lava and the nearest obsidian beside each other, when the plan's node is the obsidian. Empty otherwise. */
 export function obsidianWays(body: Rec, self: P, view: MapView | null): string[] {
   if (!/黒曜石/u.test(String(body.planNow ?? ''))) return [];
   const landmarks = strings(body.landmarks), scan = strings(body.scan);
   const lava = nearest([...view ? inMap(view, self, 'L') : [], ...inLines(landmarks, /^L |溶岩/u, self, '目印'), ...inLines(scan, /溶岩/u, self, '走査')]);
   const obsidian = nearest([...view ? inMap(view, self, 'O') : [], ...inLines(landmarks, /^O |黒曜石/u, self, '目印'), ...inLines(scan, /黒曜石/u, self, '走査')]);
+  const contact = view ? contactCells(view, self) : [];
   if (!lava && !obsidian) return [];
   const closer = lava && (!obsidian || lava.meters < obsidian.meters) ? '（溶岩の方が近い）' : '';
   return [`黒曜石 10 個の元: 溶岩の源 ${show(lava, '見えていない')} / 自然の黒曜石 ${show(obsidian, '見えていない')}${closer}。`
-    + '階段掘りは 0.5〜0.9 マス/秒（ダイヤのツルハシ）、溶岩に水を注いで 1 個目ができるまで 30〜50 秒、黒曜石の dig は空気中で 1 個約 9 秒（実走37）'];
+    + '階段掘りは 0.5〜0.9 マス/秒（ダイヤのツルハシ）、溶岩に水を注いで 1 個目ができるまで 30〜50 秒、黒曜石の dig は空気中で 1 個約 9 秒（ダイヤのツルハシ・測った値）',
+    ...contact.length ? [`水の源と溶岩の源の両方に隣り合うマス（開けると水と溶岩が出会う）: ${contact.join(' / ')}。溶岩の源だけに隣り合う岩を開けると、溶岩が流れ込む`] : []];
 }

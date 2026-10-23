@@ -167,3 +167,13 @@ export const DIRS: ReadonlyArray<{ name: string; dx: number; dz: number }> = [
   { name: '北', dx: 0, dz: -1 }, { name: '南', dx: 0, dz: 1 }, { name: '東', dx: 1, dz: 0 }, { name: '西', dx: -1, dz: 0 },
   { name: '北東', dx: 1, dz: -1 }, { name: '北西', dx: -1, dz: -1 }, { name: '南東', dx: 1, dz: 1 }, { name: '南西', dx: -1, dz: 1 },
 ];
+
+/** Whether a cell has lava (`L` a source, `l` flowing) beside it (six sides): opening it lets the lava in (mb-llmc-cand 11, bench s67). */
+export function lavaNext(view: MapView, cell: P): boolean {
+  return [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
+    .some(([dx, dy, dz]) => 'Ll'.includes(view.symbol(cell.x + dx!, cell.y + dy!, cell.z + dz!) ?? '-'));
+}
+/** The cells to dig as the live state writes them (`(x,y,z) 石の類`), a cell beside lava marked: the lava flows in when it is opened. */
+export function digWords(view: MapView, cells: readonly P[]): string {
+  return cells.map(c => `${ptText(c)} ${NAME[view.symbol(c.x, c.y, c.z) ?? ''] ?? '?'}${lavaNext(view, c) ? '（溶岩の隣: 開けると溶岩が流れ込む）' : ''}`).join('、');
+}
