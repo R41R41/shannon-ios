@@ -6,7 +6,7 @@ import { createAnthropicFcaModel } from '../src/infra/models/anthropic/anthropic
 import type { FcaModelInput, FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 import { llmcCoreKnowledge } from '../src/surfaces/minecraft/minecraftKnowledgeCore.js';
 import { preflightAct, preflightText } from '../src/surfaces/minecraft/minecraftLlmcPreflight.js';
-import { BODY_RULES, bodySymbol, FENCE, mapView, PORTAL, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
+import { BODY_RULES, bodySymbol, END_PORTAL, FENCE, mapView, PORTAL, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { heldBeforeSend } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { goalOf, routeLines } from '../src/surfaces/minecraft/minecraftLlmcRoute.js';
 import { candidateAct, candidateLive, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
@@ -47,9 +47,9 @@ const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVers
   state: { world: world as never }, facts: {} });
 
 describe('the map\'s symbols as the body\'s walk reads them (utils/walkRules.ts, utils/localMap.ts)', () => {
-  it('reads a portal as a cell she does not enter and does not stand on, the frame, planks and fences as walls, a wooden door as one opened on the way', () => {
+  it('reads a portal as a cell she goes into and does not stand on (not harm), the frame, planks and fences as walls, a wooden door as one opened on the way', () => {
     expect(bodySymbol('p', BODY_RULES)).toBe(PORTAL);
-    expect(bodySymbol('e', BODY_RULES)).toBe(PORTAL);
+    expect(bodySymbol('e', BODY_RULES)).toBe(END_PORTAL);
     for (const symbol of ['Q', 'R', 'P']) expect(bodySymbol(symbol, BODY_RULES)).toBe('$');
     expect(bodySymbol('+', BODY_RULES)).toBe(FENCE);
     expect(bodySymbol('D', BODY_RULES)).toBe('A');

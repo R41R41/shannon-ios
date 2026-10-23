@@ -37,11 +37,12 @@ describe('the legend of the map', () => {
 
 describe('the symbols as the body\'s walk classes them (the body\'s list, 2026-10-23 15:20)', () => {
   const read = (symbol: string) => bodySymbol(symbol, BODY_RULES);
+  // mb-llmc-cand 9 (run 37): a portal is a cell she goes into on purpose, not a cell she never enters.
   const PASSABLE = '., *@!mw-htk=q'.replace(/[ ]/gu, '');
   const OPENED = 'DAJ', BROKEN = '%';
-  const WALLS = '#:sIYPK+bNW$EnuOMGXFTCBHS', NEVER = ['L', 'l', 'f', 'x', 'p', 'e'];
+  const WALLS = '#:sIYPK+bNW$EnuOMGXFTCBHS', NEVER = ['L', 'l', 'f', 'x'];
   it('walks through the passable ones, opens D A J and breaks % on the way: none of them is a wall to the guards', () => {
-    for (const symbol of [...PASSABLE, ...OPENED, ...BROKEN]) expect(blocked(read(symbol)), symbol).toBe(false);
+    for (const symbol of [...PASSABLE, ...OPENED, ...BROKEN, 'p', 'e']) expect(blocked(read(symbol)), symbol).toBe(false);
   });
   it('stops at every wall of the body\'s list and at the cells it never enters', () => {
     for (const symbol of [...WALLS, ...NEVER]) expect(blocked(read(symbol)), symbol).toBe(true);

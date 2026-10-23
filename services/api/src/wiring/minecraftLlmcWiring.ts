@@ -182,6 +182,11 @@ function v2On(values: Readonly<Record<string, string | undefined>>, needs: Recor
   if (!on) log('Shannon Minecraft LLMC_V2 off: it needs SHANNON_MINECRAFT_OWN_PROMPT, _LLMC_PROBE and _ACT_PREFLIGHT');
   return on;
 }
+/** Whether the mode runs, from the switches alone (no log): the same rule as `v2On` and the LLM-centric mode's own switch. */
+export function llmcV2Enabled(values: Readonly<Record<string, string | undefined>>): boolean {
+  return switchOn(values, 'SHANNON_MINECRAFT_LLM_CENTRIC') && switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT')
+    && switchOn(values, 'SHANNON_MINECRAFT_LLMC_PROBE') && switchOn(values, 'SHANNON_MINECRAFT_ACT_PREFLIGHT') && switchOn(values, 'SHANNON_MINECRAFT_LLMC_V2');
+}
 export function configuredMinecraftLlmc(values: Readonly<Record<string, string | undefined>>,
   base: Omit<AnthropicFcaOptions, 'model' | 'apiKey' | 'systemAppendix'>, parts: { log?(line: string): void; client?: PlanClient } = {}): LlmcWiring | null {
   if (!switchOn(values, 'SHANNON_MINECRAFT_LLM_CENTRIC')) return null;
@@ -209,7 +214,7 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   return { names, probe, ...flagsOn({ ownPrompt: own, preflight, v2 }), models: { main, escalate: names.escalate ? make(names.escalate) : null },
     summarizer: haikuKey || base.client
       ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
-        ...(own ? { minecraftOwnPrompt: true } : {}), maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
+        ...(own ? { minecraftOwnPrompt: true } : {}), ...(v2 ? { minecraftV2Facts: true } : {}), maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
     policy: LLMC_HISTORY_POLICY, lookahead: createLlmcLookahead(log), historyAhead: createFcaHistoryAhead(),
     ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, probe ? FIRST_PLAN_SCHEMA_R4 : FIRST_PLAN_SCHEMA) };
 }

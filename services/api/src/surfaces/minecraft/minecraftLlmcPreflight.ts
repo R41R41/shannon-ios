@@ -1,7 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActHand, ActPos } from '../../contracts/minecraftActContract.js';
 import { columnKey, keptColumnFact } from './minecraftLlmcFooting.js';
-import { BODY_RULES, mapView, PORTAL, posText, readLayers, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { blocked, BODY_RULES, isPortal, mapView, posText, readLayers, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 import { routeAnswer, routeWhy } from './minecraftLlmcPreflightRoute.js';
 import { nearestStand } from './minecraftLlmcWalkRules.js';
 import { placeStop, unstandable, type ColumnOf, type Found, type PreflightCode } from './minecraftLlmcPreflightStand.js';
@@ -114,8 +114,11 @@ function walkStop(hand: ActHand, origin: Cell | null, base: Cell | null | undefi
     // A point other than the last has range 0; the last has the hand's range (default 0.5). A range of one or more asks no stand.
     const range = i === points.length - 1 ? (finite(hand.range) ? hand.range : 0.5) : 0;
     if (range >= 1) continue;
-    // SHANNON_MINECRAFT_LLMC_V2 (run 37: the walk into the gate's cell was held, 「塞がっている」): a portal is entered by walking into it.
-    if (options.bodyRules && view.symbol(cell.x, cell.y, cell.z) === PORTAL) {
+    // SHANNON_MINECRAFT_LLMC_V2 (run 37: the walk into the gate's cell was held, 「塞がっている」): a portal is entered by walking into it
+    // (feet or head in a portal's cell, the floor under it the frame's obsidian or the portal itself). It is how the dimension changes.
+    const feetSymbol = view.symbol(cell.x, cell.y, cell.z);
+    // Only the last point of a path may be a portal (the body never uses one as a pass-through cell); an earlier one is checked as any cell.
+    if (options.bodyRules && i === points.length - 1 && (isPortal(feetSymbol) || (isPortal(view.symbol(cell.x, cell.y + 1, cell.z)) && !blocked(feetSymbol)))) {
       from = cell;
       continue;
     }

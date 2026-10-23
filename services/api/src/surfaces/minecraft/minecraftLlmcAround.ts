@@ -1,6 +1,6 @@
-import type { MapView } from './minecraftLlmcPreflightMap.js';
+import { isPortal, type MapView } from './minecraftLlmcPreflightMap.js';
 import {
-  bestStep, cornerOk, DIRS, fallOf, fallText, isHard, isHarm, isOpen, nameOf, NAME, noFloor, ptText, stepOptions, type P, type Step,
+  bestStep, cornerOk, DIRS, fallOf, fallText, isHard, isHarm, isOpen, nameOf, NAME, noFloor, portalWords, ptText, stepOptions, type P, type Step,
 } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -27,6 +27,15 @@ function stepHow(best: Step): string {
   if (best.kind === 'level') return '';
   return best.kind === 'up' ? `1 段上りで ${ptText(best.to)} に着く` : `${best.drop} 段下りで ${ptText(best.to)} に着く`;
 }
+/**
+ * What the best step to a cell is: 入れる (a portal's cell: how the dimension changes; mb-llmc-cand 9, run 37: it was told 「歩けない: がポータル」),
+ * 歩ける, or 掘れば歩ける with the cells to dig.
+ */
+function bestWords(view: MapView, best: Step): string {
+  if (best.dig.length) return `掘れば歩ける: 掘る ${digText(view, best.dig)}`;
+  const gate = portalWords(view.symbol(best.to.x, best.to.y, best.to.z), view.symbol(best.to.x, best.to.y + 1, best.to.z));
+  return gate ? `入れる: ${gate}` : '歩ける';
+}
 /** One direction's line: the cell next to her and what the step to it needs; null for a diagonal the corners shut (said together, `diagonalLine`). */
 function stepLine(view: MapView, feet: P, dir: { name: string; dx: number; dz: number }): string | null {
   const tx = feet.x + dir.dx, tz = feet.z + dir.dz;
@@ -35,8 +44,7 @@ function stepLine(view: MapView, feet: P, dir: { name: string; dx: number; dz: n
   if (dir.dx !== 0 && dir.dz !== 0 && !cornerOk(view, feet, dir.dx, dir.dz)) return null;
   const options = stepOptions(view, feet, tx, tz), best = bestStep(options);
   const how = best && best.kind !== 'level' ? `（${stepHow(best)}）` : '';
-  if (best && !best.dig.length) return `${head}歩ける${how}`;
-  if (best) return `${head}掘れば歩ける: 掘る ${digText(view, best.dig)}${how}`;
+  if (best) return `${head}${bestWords(view, best)}${how}`;
   const level = options[0]!;
   if (level.bad?.includes('床が無い')) return `${head}${triple(view, cell)} → ${level.dig.length ? '掘っても' : ''}床が無い（${fallText(view, tx, feet.y - 1, tz)}）`;
   return `${head}${triple(view, cell)} → 歩けない: ${level.bad ?? '理由不明'}`;
@@ -61,12 +69,23 @@ export function stepLines(view: MapView, feet: P): string[] {
   return lines;
 }
 
-type Kind = 'walk' | 'headDig' | 'feetDig' | 'void' | 'harm';
+type Kind = 'walk' | 'headDig' | 'feetDig' | 'void' | 'harm' | 'portal';
+/**
+ * Harm in her feet, head or floor cell (lava, fire, a web, magma); else a portal in her feet or head cell (the other of the two open): a cell she goes
+ * into, never harm or a void. The cells inside the portal over its first cell have the portal under them: the same way in, not listed again (null).
+ * Undefined: neither.
+ */
+function specialKind(feet: string, head: string, floor: string): { kind: Kind } | null | undefined {
+  if (isHarm(feet) || isHarm(head) || isHarm(floor)) return { kind: 'harm' };
+  if (portalWords(feet, head) === null || !isOpen(feet) || !isOpen(head)) return undefined;
+  return isPortal(floor) ? null : { kind: 'portal' };
+}
 /** What a cell is as a place to stand, from its feet, head and floor (all three shown by the map), or null (rock to dig through, or not shown). */
 function kindOf(view: MapView, c: P): { kind: Kind; fall?: string } | null {
   const feet = view.symbol(c.x, c.y, c.z), head = view.symbol(c.x, c.y + 1, c.z), floor = view.symbol(c.x, c.y - 1, c.z);
   if (feet === undefined || head === undefined || floor === undefined) return null;
-  if (isHarm(feet) || isHarm(head) || isHarm(floor)) return { kind: 'harm' };
+  const special = specialKind(feet, head, floor);
+  if (special !== undefined) return special;
   const feetOpen = isOpen(feet), headOpen = isOpen(head);
   if (!feetOpen && !headOpen) return null;
   if (noFloor(floor)) return feetOpen && headOpen ? { kind: 'void', fall: fallText(view, c.x, c.y - 1, c.z) } : null;
@@ -89,7 +108,7 @@ function rowsOf(cells: readonly P[]): string[] {
     return `z=${z} x=${runs.join(',')}`;
   });
 }
-const KIND_TEXT: Record<Kind, string> = { walk: '歩ける', headDig: '頭を掘れば歩ける', feetDig: '足を掘れば歩ける', void: '床が無い', harm: '溶岩・火・クモの巣・マグマ' };
+const KIND_TEXT: Record<Kind, string> = { walk: '歩ける', headDig: '頭を掘れば歩ける', feetDig: '足を掘れば歩ける', void: '床が無い', harm: '溶岩・火・クモの巣・マグマ', portal: '入れる（ポータル）' };
 function listRows(rows: readonly string[]): string {
   return rows.length > ROWS_PER_KIND ? `${rows.slice(0, ROWS_PER_KIND).join(' / ')} / ほか ${rows.length - ROWS_PER_KIND} 行は略` : rows.join(' / ');
 }
@@ -119,6 +138,16 @@ function levelCells(view: MapView, feet: P, y: number, range: number): Map<Kind,
   }
   return by;
 }
+/** The portal cells of a level, one line for each portal (the nether's and the end's are told apart). */
+function portalLines(view: MapView, label: string, cells: readonly P[]): string[] {
+  const by = new Map<string, P[]>();
+  for (const c of cells) {
+    const feet = view.symbol(c.x, c.y, c.z), head = view.symbol(c.x, c.y + 1, c.z);
+    const symbol = isPortal(feet) ? feet! : head!;
+    by.set(symbol, [...by.get(symbol) ?? [], c]);
+  }
+  return [...by].map(([symbol, list]) => `${label} 入れる: ${portalWords(symbol, undefined)}: ${listRows(rowsOf(list))}`);
+}
 /** The void cells on a level, grouped by their fall (the same fall in one row list). */
 function voidLines(view: MapView, cells: readonly P[]): string[] {
   const by = new Map<string, P[]>();
@@ -140,6 +169,7 @@ export function cellLines(view: MapView, feet: P, range = AROUND_RANGE): string[
       const cells = by.get(kind);
       if (cells?.length) lines.push(`${label} ${KIND_TEXT[kind]}: ${listRows(rowsOf(cells))}`);
     }
+    lines.push(...portalLines(view, label, by.get('portal') ?? []));
     if (by.get('void')?.length) lines.push(...voidLines(view, by.get('void')!).map(text => `${label} ${text}`));
   }
   return lines;

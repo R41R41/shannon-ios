@@ -1,6 +1,7 @@
 import type { BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
 import type { LlmCentricWorld } from '../../contracts/minecraftActContract.js';
 import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
+import { breathWords, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 
 /**
@@ -19,8 +20,8 @@ export const LLMC_LIVE_TOKENS = 3_000;
 const THREATS = 8, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 36, EVENTS = 6;
 /** SHANNON_MINECRAFT_LLMC_V2: no `ほか N 件（長いため略）` (人手の点検: 127 か所、見えない件数の合計 848): every hostile, the whole pack, a bound nothing reaches. */
 const V2_THREATS = 24, V2_INVENTORY = 80, V2_LIVE_TOKENS = 12_000;
-const CAPS = { threats: THREATS, inventory: INVENTORY, bound: LLMC_LIVE_TOKENS };
-const V2_CAPS = { threats: V2_THREATS, inventory: V2_INVENTORY, bound: V2_LIVE_TOKENS };
+const CAPS = { threats: THREATS, inventory: INVENTORY, bound: LLMC_LIVE_TOKENS, v2: false };
+const V2_CAPS = { threats: V2_THREATS, inventory: V2_INVENTORY, bound: V2_LIVE_TOKENS, v2: true };
 
 /**
  * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25, `~` 2.45, `; @ ! $`
@@ -117,19 +118,30 @@ function stacks(value: unknown): string[] {
   });
 }
 
+/**
+ * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37: "time":"99" with no unit): the time of day in words, from the body's numeric `timeOfDay`
+ * (0–23999) first and its `time` string as the fallback; null when it is neither a number nor the Nether's or the End's.
+ */
+function timeOf(world: Record<string, unknown>, dimension: BodyValue | undefined): string | null {
+  const raw = finite(world.timeOfDay) !== null ? String(world.timeOfDay) : String(world.time);
+  return timeWords(raw, typeof dimension === 'string' ? dimension : undefined);
+}
+
 /** Her state in one object: where, the time, health, hunger, air, what she holds and wears. */
-function stateOf(world: Record<string, unknown>, observation: BodyObservation): Record<string, BodyValue> {
+function stateOf(world: Record<string, unknown>, observation: BodyObservation, v2 = false): Record<string, BodyValue> {
   const at = record(world.position);
   const out: Record<string, BodyValue> = {};
   if (at && finite(at.x) !== null) out.at = `(${Math.floor(Number(at.x))},${Math.floor(Number(at.y))},${Math.floor(Number(at.z))})`;
   const dimension = world.dimension ?? observation.facts.dimension;
   if (typeof dimension === 'string') out.dimension = dimension.replace(/^minecraft:/u, '');
   for (const key of ['inside', 'biome', 'time', 'weather', 'heldItem', 'worn'] as const) {
-    if (typeof world[key] === 'string') out[key] = cleanText(world[key] as string);
+    if (typeof world[key] !== 'string') continue;
+    out[key] = (v2 && key === 'time' ? timeOf(world, out.dimension) : null) ?? cleanText(world[key] as string);
   }
   for (const key of ['health', 'food', 'saturation', 'oxygen', 'armor'] as const) {
     const value = finite(world[key]);
-    if (value !== null) out[key] = round1(value);
+    // SHANNON_MINECRAFT_LLMC_V2 (run 37: oxygen 400 on dry land, 20 later): one scale, 息 n/20.
+    if (value !== null) out[key] = v2 && key === 'oxygen' ? breathWords(value)! : round1(value);
   }
   return out;
 }
@@ -205,7 +217,7 @@ function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS):
   const { observation } = parts;
   if (!observation) return { connected: false, events: parts.events.slice(-EVENTS) };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
-  const state = stateOf(world, observation);
+  const state = stateOf(world, observation, caps.v2);
   parts.trend.note(finite(world.food), finite(world.saturation));
   const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, caps.threats);
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
@@ -244,7 +256,7 @@ function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS):
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
+  | 'footing'> & { planNowTitle: string | null; answer: string; v2?: boolean }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
   if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), answer: parts.answer };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
@@ -252,7 +264,7 @@ export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation'
   return { ...urgent, ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
     ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
-    state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
+    state: { ...stateOf(world, observation, parts.v2 === true), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     threats: seen(world.nearbyThreats, URGENT_THREATS), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),
     ...(parts.events.length ? { events: parts.events.slice(-URGENT_EVENTS) } : {}), ...(results.length ? { lastResults: results } : {}),
     answer: parts.answer };

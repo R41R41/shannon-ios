@@ -316,7 +316,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     const nowLine = planNowLine(parts.llmc.planView() as { now?: unknown; path?: unknown } | null);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing,
-      planNowTitle: planNowTitle(nowLine), answer: URGENT_ANSWER });
+      planNowTitle: planNowTitle(nowLine), answer: URGENT_ANSWER, ...(v2 ? { v2 } : {}) });
     urgentTokens = llmcTokens(JSON.stringify(live));
     return live;
   };

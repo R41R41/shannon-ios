@@ -1,4 +1,4 @@
-import { HARM, NOT_FLOOR, SOLID, STANDS, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { END_PORTAL, HARM, isPortal, legendOf, NOT_FLOOR, PORTAL, SOLID, STANDS, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 
 /**
  * mb-llmc v2 (Syzygy ADR-0014 D0 "不明は不明のまま"): the walk's rules on a map, as facts for the live state's `around` and `route`
@@ -20,9 +20,21 @@ export const NAME: Readonly<Record<string, string>> = Object.freeze({
   x: 'クモの巣', M: 'マグマブロック', w: '水', '-': '流れる水', '.': '空気', '*': '空気', '@': '空気(自分の足)', '!': '空気(敵の足)',
   m: '空気(動物の足)', ',': '草花', h: 'はしご・つた', t: '松明', '=': 'レール', D: '木の扉', P: '板・階段・ハーフブロック・本棚', '+': '柵・壁', '%': '葉', k: '作物',
   Y: 'ウォートブロック・シュルームライト', A: '木のトラップドア', J: '木のフェンスゲート', K: '鉄の扉・鉄のトラップドア', b: 'ガラス・鉄格子・鎖', q: '看板・感圧板・ボタン・レバー',
-  p: 'ネザーポータル', Q: 'エンドポータル枠', R: 'エンドポータル枠', e: 'エンドポータル', '?': '未ロード', '¤': 'ポータル', '‖': '柵・壁',
+  p: 'ネザーポータル', Q: 'エンドポータル枠', R: 'エンドポータル枠', e: 'エンドポータル', '?': '未ロード', [PORTAL]: 'ネザーポータル', [END_PORTAL]: 'エンドポータル',
+  '‖': '柵・壁',
 });
-export const nameOf = (symbol: string | undefined): string => symbol === undefined ? '地図の外' : `${symbol} ${NAME[symbol] ?? '不明'}`;
+/** The symbol and its name as the legend writes them (a portal read under the body's rules is `p` or `e`, a fence `+`; never the reader's own marks). */
+export const nameOf = (symbol: string | undefined): string => symbol === undefined ? '地図の外' : `${legendOf(symbol)} ${NAME[symbol] ?? '不明'}`;
+/**
+ * What entering a portal's cell is, for the live state (mb-llmc-cand 9, run 37: the cell was told as 「歩けない: がポータル」 among the lava): where she
+ * goes in (feet and head in the cell, the obsidian of the frame under her) and what it does. Null for a cell with no portal in it.
+ */
+export function portalWords(feet: string | undefined, head: string | undefined): string | null {
+  const symbol = isPortal(feet) ? feet : isPortal(head) ? head : undefined;
+  if (symbol === PORTAL) return 'ネザーポータル（中に立って約 4 秒で次元が変わる）';
+  if (symbol === END_PORTAL) return 'エンドポータル（入ると次元が変わる）';
+  return null;
+}
 /** Hard (not walked through, not filled): a wall of any shape. */
 export const isHard = (symbol: string | undefined) => symbol !== undefined && SOLID.has(symbol);
 /** Hurts to enter: lava, fire, cobweb, magma. */
@@ -56,7 +68,8 @@ export function stepOption(view: MapView, from: P, tx: number, tz: number, kind:
     need({ x: tx, y, z: tz });
     need({ x: tx, y: y + 1, z: tz });
     const feet = s(tx, y, tz);
-    if (!(feet !== undefined && STANDS.has(feet))) floorAt({ x: tx, y: y - 1, z: tz });
+    // A cell in a portal asks no floor (she goes in; the portal's own cells above the obsidian have a portal under them).
+    if (!(feet !== undefined && (STANDS.has(feet) || isPortal(feet)))) floorAt({ x: tx, y: y - 1, z: tz });
     return { kind, drop: 0, to: { x: tx, y, z: tz }, dig, bad };
   }
   if (kind === 'up') {

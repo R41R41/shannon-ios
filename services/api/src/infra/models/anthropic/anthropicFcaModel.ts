@@ -88,6 +88,11 @@ export interface AnthropicFcaOptions {
   minecraftOwnPrompt?: boolean;
   /** SHANNON_MINECRAFT_LLMC_V2 (needs `minecraftOwnPrompt`): six fixed tools, the mode's instructions and live state (`MinecraftV2Hooks`). */
   minecraftV2?: MinecraftV2Hooks;
+  /**
+   * SHANNON_MINECRAFT_LLMC_V2 (needs `minecraftOwnPrompt`; the history summary only, `anthropicFcaSummary.ts`): the summary's instructions are
+   * its header alone, without the step instructions that name the task tools (`task.replan`, `fca_context`) the summarizer is not given.
+   */
+  minecraftSummaryFacts?: boolean;
 }
 
 const CONTROL_TOOLS: Anthropic.Tool[] = [
