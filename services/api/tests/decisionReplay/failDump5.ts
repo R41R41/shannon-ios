@@ -21,7 +21,8 @@ for (const scene of loadScenes()) {
   const bad = entries.filter(item => item.scene === scene.id && item.variant === viewId && item.verdict === verdict);
   if (!bad.length) continue;
   const decision = decisionOf(runs, scene);
-  const { live } = candidateLive(decision.live);
+  const prodLive = process.env.PROD_LIVE === '1';
+  const live = prodLive ? decision.live : candidateLive(decision.live).live;
   const body = live.body as Record<string, any>;
   text += `\n\n################ ${scene.id}: ${scene.title}\nSITUATION: ${scene.situation}\nCORRECT: ${scene.correct}\nHINDSIGHT: ${scene.hindsight}\n`;
   for (const item of bad) {
@@ -30,11 +31,13 @@ for (const scene of loadScenes()) {
     const guard = (row as { sent?: { guard?: unknown } }).sent?.guard;
     text += `\n--- ${viewId} 回${item.rep} 採点 ${item.verdict}（${item.by}）: ${item.reason}\n検査で外れた: ${item.failed.join(' / ') || '-'}\n${answerText(answerOfSent(sent))}\n`;
     if (guard) text += `守り: ${JSON.stringify(guard).slice(0, 700)}\n`;
-    if (viewId === 'candt') text += `モデルが書いた短い書き方(1 回目): ${JSON.stringify((row as { rawFirst?: unknown }).rawFirst).slice(0, 900)}\n`;
+    if (viewId.startsWith('cand')) text += `モデルが書いた短い書き方(1 回目): ${JSON.stringify((row as { rawFirst?: unknown }).rawFirst).slice(0, 900)}\n`;
   }
-  text += `\n--- 候補の live の関係する所\nknowledge(先頭 300 字): ${String(live.knowledge ?? '').slice(0, 300)}\nurgent: ${JSON.stringify(body.urgent ?? null)}\nplanNow: ${body.planNow}\nthreats: ${JSON.stringify(body.threats ?? null)}\nfooting: ${body.footing ?? '-'}\n`;
+  text += `\n--- ${prodLive ? '本番の live（モデルが見た物）の関係する所' : '候補の live の関係する所'}\nknowledge(先頭 300 字): ${String(live.knowledge ?? '').slice(0, 300)}\nurgent: ${JSON.stringify(body.urgent ?? null)}\nplanNow: ${body.planNow}\nthreats: ${JSON.stringify(body.threats ?? null)}\nfooting: ${body.footing ?? '-'}\n`;
   text += `around:\n${(body.around ?? []).join('\n')}\nroute:\n${(body.route ?? []).join('\n') || '(なし)'}\nlastResults:\n${(body.lastResults ?? []).join('\n===\n') || '(なし)'}\n`;
   if (body.investigation) text += `investigation:\n${body.investigation.join('\n')}\n`;
+  if (body.repeat) text += `repeat:\n${body.repeat.join('\n')}\n`;
+  if (body.stops) text += `stops:\n${body.stops.join('\n')}\n`;
   text += `map(先頭 2500 字):\n${String(body.map ?? '').slice(0, 2500)}\n`;
 }
 writeFileSync(out, text);

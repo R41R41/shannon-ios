@@ -28,10 +28,12 @@ const TOOL: Anthropic.Tool = { name: 'grade', description: '各候補の採点�
 
 const pos = (cell: { x: number; y: number; z: number }) => `(${cell.x},${cell.y},${cell.z})`;
 export function handLine(hand: Hand): string {
+  if (!hand || typeof hand !== 'object') return `（読めない手: ${String(hand).slice(0, 80)}）`;
   const bits: string[] = [];
   if (hand.to) bits.push(`to=${pos(hand.to)}`);
-  if (hand.path?.length) bits.push(`path→${pos(hand.path.at(-1)!)}`);
-  if (hand.at?.length) bits.push(`at=${hand.at.slice(0, 4).map(pos).join('')}${hand.at.length > 4 ? `…×${hand.at.length}` : ''}`);
+  if (Array.isArray(hand.path) && hand.path.length) bits.push(`path→${pos(hand.path.at(-1)!)}`);
+  if (hand.at && !Array.isArray(hand.at)) bits.push(`at=${JSON.stringify(hand.at).slice(0, 60)}`);
+  else if (hand.at?.length) bits.push(`at=${hand.at.slice(0, 4).map(pos).join('')}${hand.at.length > 4 ? `…×${hand.at.length}` : ''}`);
   for (const name of ['block', 'item', 'target', 'tool', 'seconds', 'n', 'hold', 'exposeOk', 'face', 'op', 'on', 'onFail'] as const) if (hand[name] !== undefined) bits.push(`${name}=${String(hand[name])}`);
   return `${hand.do} ${bits.join(' ')}`.trim();
 }

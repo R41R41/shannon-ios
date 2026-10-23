@@ -16,7 +16,7 @@ import { latest, readRows } from './views5.js';
 const wanted = (process.argv[2] ?? '').split(',').filter(Boolean);
 const out = process.argv[3] ?? dataFile('guard-dump5.txt');
 const runs = loadAllRuns();
-const rows = latest(readRows()).filter(row => row.variant === 'cand' && (row as { sent?: { guard?: unknown } }).sent?.guard);
+const rows = latest(readRows()).filter(row => row.variant === (process.env.VARIANT ?? 'cand') && (row as { sent?: { guard?: unknown } }).sent?.guard);
 let text = '';
 for (const scene of loadScenes()) {
   if (wanted.length && !wanted.includes(scene.id.slice(0, 3))) continue;

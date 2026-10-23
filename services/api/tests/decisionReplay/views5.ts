@@ -18,9 +18,11 @@ export const VIEWS: View[] = [
   { id: 'v1', variant: 'v1', transform: 'none', label: '基準 v1（今の本番の指示文と live）の生の答え' },
   { id: 'v1t', variant: 'v1', transform: 'production', label: '基準 v1 + 本番の頭の変換（形の整え・stopIf の点検）' },
   { id: 'cand', variant: 'cand', transform: 'none', label: '候補 cand（モデルの最終の答えを手の JSON に戻しただけ。変換・守りなし）' },
-  { id: 'candt', variant: 'cand', transform: 'candidate', label: '候補 cand + 候補の頭の変換（戻し・形・stopIf・守り・部分送り・聞き直しの組）' },
+  { id: 'candt', variant: 'cand', transform: 'candidate', label: '前の候補（fdd976c）+ 候補の頭の変換（戻し・形・stopIf・守り・部分送り・聞き直しの組）' },
+  { id: 'cand2', variant: 'cand2', transform: 'none', label: '新しい候補（44376fb）のモデルの最終の答え（変換・守りなし）' },
+  { id: 'cand2t', variant: 'cand2', transform: 'candidate', label: '新しい候補（44376fb）+ 候補の頭の変換' },
 ];
-export const RESULT_FILES = ['results.jsonl', 'results2.jsonl', 'results4.jsonl', 'results5.jsonl', 'results6.jsonl'];
+export const RESULT_FILES = ['results.jsonl', 'results2.jsonl', 'results4.jsonl', 'results5.jsonl', 'results6.jsonl', 'results7.jsonl'];
 export function readRows(files = RESULT_FILES): Row2[] {
   return files.flatMap(name => existsSync(dataFile(name)) ? readFileSync(dataFile(name), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as Row2) : []);
 }

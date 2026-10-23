@@ -91,3 +91,10 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 回す: `run6.ts`（候補。基準 v1 と同じ回数。守りが止めたら事実を tool_result で返して 1 回だけ聞き直し、部分送りは「送った前の手 + 聞き直しの答えの手」の組）、採点は `judge5.ts --only=v1,v1t,candt`（本番の記録・基準・候補を場面ごとに 1 回で）、表は `report5.ts --views=v1,v1t,candt --candidate=candt --baseline=v1t`（11 節が合格の線との照らし合わせ）。
 - 間違いの仕分け用: `failDump5.ts`（× の答えを候補の live と並べる）、`guardDump5.ts`（守りが止めた答えを、守りが見た地図と並べる）。
 - 結果のまとめ: `results/candidate-check-20261023.md`。
+
+## 10/23 の追加 (6): 直した候補（44376fb）の確かめ
+
+- 段の知識は live の外（`candidateStage`）。台は履歴の状態メッセージ（各ラウンドの最初の user の JSON）に `stageKnowledge` を、epoch の最初と stage が変わったラウンドにだけ足す（`candidateAdapter.ts` の `candRows`・`candTurn`）。
+- 回す: `run6.ts --variant=cand2 --out=results7.jsonl`（基準 v1 と同じ回数）。採点: `judge5.ts --only=v1t,candt,cand2t --out=judge6.jsonl`（2 回目 `--out=judge6b.jsonl --force --scenes=…`）。表: `report5.ts --views=v1t,candt,cand2t --candidate=cand2t --previous=candt --baseline=v1t --judge=judge6.jsonl --judge2=judge6b.jsonl`。
+- 仕分け用: `PROD_LIVE=1 failDump5.ts v1t ×`（本番の live で基準の ×）、`failDump5.ts cand2t ×`、`VARIANT=cand2 guardDump5.ts`。
+- 結果のまとめ: `results/candidate-fix-20261023.md`。

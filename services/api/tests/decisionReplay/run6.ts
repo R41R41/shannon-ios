@@ -3,7 +3,7 @@ import { answerOf } from './checks.js';
 import { callDecision, type CallResult } from './call.js';
 import { loadAllRuns, dataFile } from './allRuns.js';
 import { bootstrapFile } from './bootstrap.js';
-import { candFixed, candFrame, candShorten, candTurn, candidateAct } from './candidateAdapter.js';
+import { candFixed, candFrame, candRows, candTurn, candidateAct } from './candidateAdapter.js';
 import { CAP, guard, spent } from './ledger.js';
 import { candidateInput } from '../../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { frames, scenesFor } from './sceneSet.js';
@@ -28,7 +28,7 @@ const dry = args.includes('--dry');
 export const RESULTS6 = dataFile(flag('out') ?? 'results6.jsonl');
 const apiKey = process.env.SHANNON_ANTHROPIC_API_KEY ?? '';
 if (!apiKey && !dry) throw new Error('SHANNON_ANTHROPIC_API_KEY');
-const VARIANT = 'cand';
+const VARIANT = flag('variant') ?? 'cand';
 const MODEL = 'claude-opus-5-5';
 
 export interface Sent6 { tool: string | null; input: unknown; fixes: string[]; problem: string | null; changed: boolean;
@@ -65,10 +65,10 @@ async function build(item: Item, previous: Item | undefined, extra: Entry[] = []
   const { decision } = item;
   const fixed = await candFixed(decision.run.core);
   const { turn, notes } = candTurn(decision);
-  const rows = decision.run.rows.slice(decision.epochStart, decision.index).map(row => candShorten(row.entries));
+  const rows = candRows(decision);
   const { messages } = sceneMessages(decision, bootstrapOf(decision.run.key, decision.epoch), false, { rows, turn, extra });
   const alsoAt = previous && previous.decision.run === decision.run && previous.decision.epochStart === decision.epochStart && previous.decision.index < decision.index
-    ? sceneMessages(previous.decision, bootstrapOf(decision.run.key, decision.epoch), false, { rows: previous.decision.run.rows.slice(decision.epochStart, previous.decision.index).map(row => candShorten(row.entries)), turn: candTurn(previous.decision).turn }).messages.length - 2 : undefined;
+    ? sceneMessages(previous.decision, bootstrapOf(decision.run.key, decision.epoch), false, { rows: candRows(previous.decision), turn: candTurn(previous.decision).turn }).messages.length - 2 : undefined;
   const body = markCache({ ...fixed.fixed, model: MODEL, messages } as Record<string, any>, '5m', alsoAt);
   return { body, headers: fixed.headers, notes, live: turn.find(entry => entry.role === 'system')! };
 }
@@ -122,8 +122,8 @@ async function chain(): Promise<void> {
       if (firstResult.ok && act && !act.problem && act.guard) {
         const useId = String(one.use!.id);
         const partial = !act.guard.stopped;
-        const resultText = partial
-          ? `act 全部済み（送った手 1〜${act.guard.sentHands} は体が動かした。結果の行は台では省略）\n${act.guard.text}` : act.guard.text;
+        // 部分送りの文（候補が作る）は、送った手と送った後の足の見積もりを自分で言う。体の実際の結果の行は台に無い。
+        const resultText = act.guard.text;
         const extra: Entry[] = [{ role: 'assistant', content: [{ type: 'tool_use', id: useId, name: 'mc_act', input: one.rawInput }] },
           { role: 'user', content: [{ type: 'tool_result', tool_use_id: useId, content: resultText, is_error: true }] }, { ...first.live }];
         const again = await build(item, undefined, extra);

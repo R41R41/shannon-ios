@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { BodyObservation } from '../../src/contracts/bodyControlContract.js';
 import { actToShort } from '../../src/contracts/minecraftActShortContract.js';
 import type { FcaToolDefinition } from '../../src/mind/action/fca/fcaPorts.js';
-import { candidateAct, candidateLive } from '../../src/surfaces/minecraft/minecraftLlmcV2.js';
+import { candidateAct, candidateLive, candidateStage, candidateStageState } from '../../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { candidateFixed, type CandidateFixed } from '../../src/wiring/minecraftLlmcV2Request.js';
 import { contextOf } from './checks.js';
 import type { Decision, Entry } from './load.js';
@@ -25,10 +25,55 @@ export function candFixed(core: readonly FcaToolDefinition[]): Promise<Candidate
   return fixedCache.get(key)!;
 }
 
-/** 判断の後ろの入れ替わる部分: 候補の live を JSON にして、記録の live の entry と入れ替える。 */
-export function candTurn(decision: Decision): { turn: Entry[]; notes: unknown } {
-  const { live, notes } = candidateLive(decision.live);
-  return { turn: decision.turn.map(entry => entry.role === 'system' ? { ...entry, content: JSON.stringify(live) } : entry), notes };
+/**
+ * 段の知識（stage）の置き方（06:30 の入口）: live には入れず、保存される状態の 1 つの部 stageKnowledge として、その判断の epoch の履歴の
+ * 状態メッセージ（各ラウンドの最初の user の text。stateUpdate が full か changed の JSON）に足す。足すのは、epoch の最初のラウンドと、前のラウンドと
+ * stage が違うラウンドだけ（全判断には付けない）。台の場面は 1 判断ずつなので、前のラウンドの stage は、そのラウンドの記録の live から candidateStage で
+ * 同じ関数で求める（stage が無い（null）ラウンドは何も足さない = 前の物が立ったまま）。
+ */
+function stageOf(live: Record<string, unknown>): string | null {
+  return candidateStage(live) ?? null;
+}
+function withStage(entries: readonly Entry[], stage: string, full: boolean): Entry[] {
+  const first = entries[0];
+  const block = first && Array.isArray(first.content) ? (first.content as Array<Record<string, any>>)[0] : undefined;
+  if (first?.role === 'user' && block?.type === 'text' && typeof block.text === 'string') {
+    try {
+      const state = JSON.parse(block.text) as Record<string, unknown>;
+      const next = { ...state, stageKnowledge: stage };
+      return [{ ...first, content: [{ ...block, text: JSON.stringify(next) }, ...(first.content as unknown[]).slice(1)] }, ...entries.slice(1)];
+    } catch { /* not a JSON state: add a state of its own below */ }
+  }
+  return [{ role: 'user', content: [{ type: 'text', text: candidateStageState(stage, full) }] }, ...entries];
+}
+/** 履歴の epoch の rows に、段の知識を足し、過去の act を短い書き方にする。 */
+export function candRows(decision: Decision): Entry[][] {
+  const rows = decision.run.rows.slice(decision.epochStart, decision.index);
+  let previous: string | null = null;
+  return rows.map((row, k) => {
+    const stage = stageOf(liveOfRow(row.entries));
+    const entries = stage && (k === 0 || stage !== previous) ? withStage(row.entries, stage, k === 0) : row.entries;
+    if (stage) previous = stage;
+    return candShorten(entries);
+  });
+}
+/** 判断の後ろの入れ替わる部分: 候補の live を JSON にして記録の live の entry と入れ替え、段が変わった時（と epoch の最初）は状態に stageKnowledge を足す。 */
+export function candTurn(decision: Decision): { turn: Entry[]; notes: unknown; stage: string | null; stated: boolean } {
+  const { live, notes, stage } = candidateLive(decision.live);
+  let turn = decision.turn.map(entry => entry.role === 'system' ? { ...entry, content: JSON.stringify(live) } : entry);
+  // その前のラウンドで立っている段（同じ epoch の中で、stage があった最後のラウンド）。
+  let previous: string | null = null;
+  for (const row of decision.run.rows.slice(decision.epochStart, decision.index)) previous = stageOf(liveOfRow(row.entries)) ?? previous;
+  const first = decision.index === decision.epochStart;
+  const stated = !!stage && (first || stage !== previous);
+  if (stated) turn = withStage(turn, stage!, first);
+  return { turn, notes, stage: stage ?? null, stated };
+}
+function liveOfRow(entries: readonly Entry[]): Record<string, any> {
+  const entry = entries.find(item => item.role === 'system');
+  const raw = entry?.content;
+  const text = typeof raw === 'string' ? raw : Array.isArray(raw) ? (raw as Array<{ text?: string }>).map(block => block.text ?? '').join('') : '';
+  try { return JSON.parse(text) as Record<string, any>; } catch { return {}; }
 }
 
 /** 履歴の過去の act（assistant の tool_use mc_act）を、候補の短い書き方の行にする。 */

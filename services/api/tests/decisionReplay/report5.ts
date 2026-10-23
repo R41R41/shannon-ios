@@ -206,7 +206,8 @@ out.push('', `場面 ${scenes.length}: ${[...cats].map(([k, n]) => `${k} ${n}`).
 
 if (candidate) {
   type Guard = { stopped: boolean; sentHands?: number; hand?: number; code?: string; reask?: string; stoppedAgain?: boolean };
-  const candRows = rows.filter(row => row.variant === 'cand') as Array<(typeof rows)[number] & { sent?: { guard?: Guard }; rawFirst?: unknown }>;
+  const candVariant = views.find(view => view.id === candidate)!.variant;
+  const candRows = rows.filter(row => row.variant === candVariant) as Array<(typeof rows)[number] & { sent?: { guard?: Guard }; rawFirst?: unknown }>;
   out.push('\n## 10. 候補の守り（部分送り・規則の守り）\n');
   const guarded = candRows.filter(row => row.sent?.guard);
   const whole = guarded.filter(row => row.sent!.guard!.stopped), part = guarded.filter(row => !row.sent!.guard!.stopped);
@@ -241,23 +242,28 @@ if (candidate) {
   const walkErrors = (list: Entry[]) => list.reduce((n, item) => n + item.failed.filter(reason => /^塞がったマスへ歩く/u.test(reason)).length, 0);
   const ruleErrors = (list: Entry[]) => list.reduce((n, item) => n + item.failed.filter(reason => /^[a-z][a-z0-9-]+:/u.test(reason)).length, 0);
   const per90 = (n: number, list: Entry[]) => n * 90 / Math.max(1, list.length);
-  const b = sel(baseline), c = sel(candidate);
-  const leftC = perScene(candidate, table), rightB = perScene(baseline, table);
-  const diffs = scenes.flatMap(scene => Number.isFinite(leftC.get(scene.id)!) && Number.isFinite(rightB.get(scene.id)!) ? [leftC.get(scene.id)! - rightB.get(scene.id)!] : []);
-  const boot = Array.from({ length: 4000 }, () => mean(Array.from({ length: diffs.length }, () => diffs[Math.floor(random() * diffs.length)]!))).sort((x, y) => x - y);
-  const candStat = rows.filter(row => row.variant === 'cand'), baseStat = rows.filter(row => row.variant === 'v1');
+  const b = sel(baseline);
+  const columns = [...(flag('previous', '') ? [flag('previous', '')] : []), candidate].filter(id => ids.includes(id));
+  const boots = new Map<string, { diff: number; lo: number; hi: number }>();
+  for (const id of columns) {
+    const left = perScene(id, table), right = perScene(baseline, table);
+    const diffs = scenes.flatMap(scene => Number.isFinite(left.get(scene.id)!) && Number.isFinite(right.get(scene.id)!) ? [left.get(scene.id)! - right.get(scene.id)!] : []);
+    const boot = Array.from({ length: 4000 }, () => mean(Array.from({ length: diffs.length }, () => diffs[Math.floor(random() * diffs.length)]!))).sort((x, y) => x - y);
+    boots.set(id, { diff: mean(diffs), lo: boot[100]!, hi: boot[3899]! });
+  }
+  const statOf = (id: string) => rows.filter(row => row.variant === views.find(view => view.id === id)!.variant);
+  const baseStat = rows.filter(row => row.variant === 'v1');
   const p50 = (list: typeof rows) => quantile(list.map(row => row.tEnd / 1000), 0.5);
-  out.push(`\n## 11. 改修案の「合格の線」との照らし合わせ（基準 = ${baseline}、候補 = ${candidate}）\n`, '| 物差し | 基準 | 候補 | 合格の線 | 判定 |', '|---|---:|---:|---|---|');
-  const mC = meanOf(c), mB = meanOf(b), lo = boot[100]!, hi = boot[3899]!;
-  out.push(`| 平均点（○1・△0.5・×0、未採点 ${count(b, '?')} / ${count(c, '?')} を除く） | ${f(mB, 2)} | ${f(mC, 2)}（差 ${f(mean(diffs), 3)}、95% の幅 ${f(lo, 3)} 〜 ${f(hi, 3)}） | 0.70 以上、差の幅が 0 を含まない | ${mC >= 0.7 && lo > 0 ? '通った' : '通らなかった'} |`);
-  const wB = per90(walkErrors(b), b), wC = per90(walkErrors(c), c);
-  out.push(`| 塞がった・床の無いマスへの walk の誤り（90 答えあたり） | ${f(wB, 1)}（${walkErrors(b)}/${b.length}） | ${f(wC, 1)}（${walkErrors(c)}/${c.length}） | 2 以下 | ${wC <= 2 ? '通った' : '通らなかった'} |`);
-  const rB = per90(ruleErrors(b), b), rC = per90(ruleErrors(c), c);
-  out.push(`| 規則の誤り（場面の必須の検査。90 答えあたり） | ${f(rB, 1)}（${ruleErrors(b)}/${b.length}） | ${f(rC, 1)}（${ruleErrors(c)}/${c.length}） | 基準の半分以下 | ${rC <= rB / 2 ? '通った' : '通らなかった'} |`);
-  out.push(`| 1 判断の中央値（聞き直しを含む。自分の PC からのストリーム） | ${f(p50(baseStat), 1)} 秒 | ${f(p50(candStat), 1)} 秒 | 6.0 秒以下 | ${p50(candStat) <= 6 ? '通った' : '通らなかった'} |`);
-  const cB = mean(baseStat.map(row => assumedRow(row, 'claude-opus-5-5'))), cC = mean(candStat.map(row => assumedRow(row, 'claude-opus-5-5')));
-  out.push(`| 1 判断の費用（本番想定） | $${f(cB, 4)} | $${f(cC, 4)} | $0.045 以下 | ${cC <= 0.045 ? '通った' : '通らなかった'} |`);
-  out.push('\n（改修案の「今の本番」の列は 0.54 / 15 / 8 前後 / 7.0 秒 / $0.053 で、これは専用の指示文版 v2 の値だった。この表の基準は v1（本番 3008876 の指示文と live）+ 本番の頭の変換で、今回測り直した値。）');
+  const verdict = (ok: boolean) => ok ? '通った' : '通らなかった';
+  out.push(`\n## 11. 改修案の「合格の線」との照らし合わせ（基準 = ${baseline}、候補 = ${columns.join('・')}）\n`, `| 物差し | 基準 ${baseline} | ${columns.map(id => `${id}`).join(' | ')} | 合格の線 | 判定（${columns.join(' / ')}） |`, `|---|---:|${columns.map(() => '---:').join('|')}|---|---|`);
+  const meanRow = columns.map(id => { const c = sel(id), bt = boots.get(id)!; return `${f(meanOf(c), 2)}（差 ${f(bt.diff, 3)}、幅 ${f(bt.lo, 3)} 〜 ${f(bt.hi, 3)}）`; });
+  out.push(`| 平均点（○1・△0.5・×0） | ${f(meanOf(b), 2)} | ${meanRow.join(' | ')} | 0.70 以上、差の幅が 0 を含まない | ${columns.map(id => verdict(meanOf(sel(id)) >= 0.7 && boots.get(id)!.lo > 0)).join(' / ')} |`);
+  out.push(`| 塞がった・床の無いマスへの walk の誤り（90 答えあたり） | ${f(per90(walkErrors(b), b), 1)}（${walkErrors(b)}/${b.length}） | ${columns.map(id => { const c = sel(id); return `${f(per90(walkErrors(c), c), 1)}（${walkErrors(c)}/${c.length}）`; }).join(' | ')} | 2 以下 | ${columns.map(id => verdict(per90(walkErrors(sel(id)), sel(id)) <= 2)).join(' / ')} |`);
+  out.push(`| 規則の誤り（場面の必須の検査の ×。90 答えあたり） | ${f(per90(ruleErrors(b), b), 1)}（${ruleErrors(b)}/${b.length}） | ${columns.map(id => { const c = sel(id); return `${f(per90(ruleErrors(c), c), 1)}（${ruleErrors(c)}/${c.length}）`; }).join(' | ')} | 基準の半分以下（仕分けの数は別の表） | ${columns.map(id => verdict(per90(ruleErrors(sel(id)), sel(id)) <= per90(ruleErrors(b), b) / 2)).join(' / ')} |`);
+  out.push(`| 1 判断の中央値（聞き直しを含む） | ${f(p50(baseStat), 1)} 秒 | ${columns.map(id => `${f(p50(statOf(id)), 1)} 秒（p95 ${f(quantile(statOf(id).map(row => row.tEnd / 1000), 0.95), 1)}）`).join(' | ')} | 6.0 秒以下 | ${columns.map(id => verdict(p50(statOf(id)) <= 6)).join(' / ')} |`);
+  const cost = (list: typeof rows) => mean(list.map(row => assumedRow(row, 'claude-opus-5-5')));
+  out.push(`| 1 判断の費用（本番想定） | $${f(cost(baseStat), 4)} | ${columns.map(id => `$${f(cost(statOf(id)), 4)}`).join(' | ')} | $0.045 以下 | ${columns.map(id => verdict(cost(statOf(id)) <= 0.045)).join(' / ')} |`);
+  out.push('\n（改修案の「今の本番」の列は 0.54 / 15 / 8 前後 / 7.0 秒 / $0.053 で、これは専用の指示文版 v2 の値だった。この表の基準は v1（本番 3008876 の指示文と live）+ 本番の頭の変換。）');
 }
 writeFileSync(dataFile(flag('out', 'report5-tables.md')), `${out.join('\n')}\n`);
 writeFileSync(dataFile('report5-entries.json'), JSON.stringify(table.map(item => ({ scene: item.scene.id, key: item.key, variant: item.variant, rep: item.rep, verdict: item.final.verdict, by: item.final.by, reason: item.final.reason, failed: item.failed })), null, 1));
