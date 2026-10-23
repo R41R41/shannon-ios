@@ -79,13 +79,22 @@ const BEYOND: readonly PlanSeed[] = [
 /**
  * SHANNON_MINECRAFT_LLMC_V2 (run 36, the pass mark: the Nether within 30 minutes): before the gate only what the gate needs. The gate's food 100 is
  * the check after she is in (`BEYOND`), the food before it is the 40 of 「食料とベッド」, and the village's beds are one or two, not all (the 4 the
- * End needs are made from wool before it, `出発の点検（エンドへ）`; run 36 spent 85 s fetching two beds more with three in the pack).
+ * End needs are made from wool before it, `出発の点検（エンドへ）`; runs 36 and 37 spent 85–90 s fetching beds more with three in the pack). Run 37: the
+ * iron before the Nether is about ten (pickaxe 3, bucket 3, shield 1, flint and steel 1), not the 24–36 with the armour (660 s of digging and smelting).
  */
+const DROPPED_BEFORE_GATE = (seed: PlanSeed): boolean => seed.doneWhen === 'food>=100' || seed.title === '鉄の全身の防具';
 export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
-  return seeds.map(seed => ({ ...seed,
-    ...seed.title === '村を回る（ベッド全部・干し草・畑・箱）' ? { title: '村を回る（ベッド1〜2・干し草・畑・箱）' } : {},
-    ...seed.children ? { children: gateFirst(seed.children).filter(child => child.doneWhen !== 'food>=100') } : {} }));
+  return seeds.map(seed => ({ ...seed, ...gateFirstFields(seed),
+    ...seed.children ? { children: gateFirst(seed.children).filter(child => !DROPPED_BEFORE_GATE(child)).map(ironFirst) } : {} }));
 }
+/** The fields of the seed the gate's side changes: the village's beds (one is enough), the food, and the iron before the Nether (about ten). */
+function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
+  if (seed.title === '村を回る（ベッド全部・干し草・畑・箱）') return { title: '村を回る（ベッド1〜2・干し草・畑・箱）' };
+  if (seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
+  if (seed.title === '鉄（24〜36）') return { title: '鉄（ネザーの前は約10）', doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' };
+  return {};
+}
+const ironFirst = (seed: PlanSeed): PlanSeed => seed.title === '鉄を掘る（y=16前後・洞窟）' ? { ...seed, title: '鉄を約10個掘る（y=16前後・洞窟）' } : seed;
 /**
  * The fixed first plan of a goal (null: none for this goal). r6 (run 29: a task begun in the Nether fortress held the whole seed; only
  * 「黒曜石10とゲート」 was seen done, and 「村を回る」, with no predicate, was "now" until the strong model's plan came): `dimension`, where the

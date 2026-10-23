@@ -33,8 +33,15 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
   return { used, filler: [...filler].sort((a, b) => b[1] - a[1]) };
 }
 
-/** `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more. Empty when the inventory is not a list. */
-export function packLines(lines: readonly string[]): string[] {
+/** The beds carried (each stack `x_bed×n`). */
+export function bedsIn(lines: readonly string[]): number {
+  return lines.reduce((sum, line) => sum + Number(/^[a-z_]*_bed×(\d+)/u.exec(line)?.[1] ?? 0), 0);
+}
+/**
+ * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run 36 and 37 (85–90 s each): with two beds or more
+ * the beds are enough (the End asks four, made from wool before it: `forEnd`). Empty when the inventory is not a list.
+ */
+export function packLines(lines: readonly string[], options: { forEnd?: boolean } = {}): string[] {
   if (!lines.length) return [];
   const { used, filler } = packFacts(lines);
   const free = Math.max(0, PACK_SLOTS - used);
@@ -45,5 +52,7 @@ export function packLines(lines: readonly string[]): string[] {
     out.push(`掘って拾い続けた石や土 ${total} 個（${kinds}）が約 ${Math.ceil(total / 64)} マスを占める。`
       + 'dig は拾いに歩く (collect 既定 true)。使わない掘りは collect=false');
   }
+  const beds = bedsIn(lines);
+  if (beds >= 2 && !options.forEnd) out.push(`ベッドは足りている（${beds}）。これ以上取りに行かない（エンドの前に羊毛から 4〜6 に増やす）`);
   return out;
 }

@@ -3,6 +3,7 @@ import type { ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { seenReopenStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
+import { furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
 
@@ -36,6 +37,8 @@ const handLine = (stop: HandStop): string => `手 ${stop.hand} ${stop.kind}: ${s
  * urgent limit). `urgent`: the decision was an urgent one (its live state's answer line says 「手は 3 つまで」). Null when none holds.
  */
 export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, notes?: string[]): Held | null {
+  const wait = furnaceWaitNote(input, frame);
+  if (wait) notes?.push(wait);
   const options = { bodyRules: true, continuePlace: true, ...(notes ? { notes } : {}) };
   const stand = preflightOfFrame(input, frame, taskId, options), rule = ruleGuardOfFrame(input, frame, taskId);
   const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],

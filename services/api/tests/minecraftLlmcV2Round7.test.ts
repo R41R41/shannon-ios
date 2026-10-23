@@ -1,0 +1,134 @@
+import { describe, expect, it } from 'vitest';
+import type { PlanTree } from '@shannon/mind';
+import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
+import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { furnaceWaitNote } from '../src/surfaces/minecraft/minecraftLlmcFurnaceWait.js';
+import { rewriteLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
+import { obsidianWays } from '../src/surfaces/minecraft/minecraftLlmcObsidianWays.js';
+import { bedsIn, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
+import { preflightAct } from '../src/surfaces/minecraft/minecraftLlmcPreflight.js';
+import { BODY_RULES } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
+import { candidateAct } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
+import { stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { GATE_FIRST_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftStrategy.js';
+
+/**
+ * SHANNON_MINECRAFT_LLMC_V2, the seventh round (run 37, rel41: the first time from nothing into the Nether, in 2,335 s; 535 s over the pass mark): the iron before
+ * the Nether about ten, no standing at the furnace, the near lava beside the far obsidian, a walk into the gate's cell not held, the beds that are enough.
+ * The scenes are built from the coordinates and words of the run (task of 2026-10-23 16:20): the stand at the furnace at 855–1,030 s, the lava (173,-16,147)
+ * 10 m off and the obsidian (253,-55,154) 85 m off, the walk to (229,-54,196) held at 2,308.
+ */
+type Cell = { x: number; y: number; z: number };
+const at = (x: number, y: number, z: number): Cell => ({ x, y, z });
+const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,
+  state: { world: world as never }, facts: {} });
+
+describe('a walk into the gate\'s cell (run 37, +2,308: held as 「塞がっている」, six seconds lost)', () => {
+  /** x=-4..4: a corridor of air to (3,0,0), the portal cell `p` at (3,0,0) with its head cell, rock round. */
+  function gate(): string {
+    const lines = ['地図 v1 足=(0,0,0) x=-4..4 z=-2..2 方式=layers 上=北'];
+    for (const y of [1, 0, -1]) {
+      lines.push(y === 1 ? `y=${y} x=-4..4 z=-2..2` : `y=${y}`);
+      for (let z = -2; z <= 2; z += 1) {
+        lines.push(` ${z} ${Array.from({ length: 9 }, (_, i) => {
+          const x = i - 4;
+          if (z !== 0) return '#';
+          if (y === -1) return 'O';
+          return x === 0 && y === 0 ? '@' : x >= 1 && x <= 2 ? '.' : x === 3 ? 'p' : x < 0 ? '#' : '#';
+        }).join(' ')}`);
+      }
+    }
+    return lines.join('\n');
+  }
+  const walk = { hands: [{ do: 'walk', to: at(3, 0, 0), range: 0 }] };
+  it('lets the walk into the portal go in the mode (a portal is entered by walking into it), and holds a walk into a wall as before', () => {
+    expect(preflightAct(walk, { map: gate(), feet: at(0, 0, 0), rules: BODY_RULES }, { bodyRules: true })).toBeNull();
+    expect(preflightAct({ hands: [{ do: 'walk', to: at(4, 0, 0), range: 0 }] }, { map: gate(), feet: at(0, 0, 0), rules: BODY_RULES }, { bodyRules: true }))
+      .toMatchObject({ kind: 'walk', code: 'feet_solid' });
+  });
+  it('is the same without the mode: the portal symbol is read as the legends before read it (nothing named)', () => {
+    expect(preflightAct(walk, { map: gate(), feet: at(0, 0, 0) })).toBeNull();
+  });
+});
+
+describe('the beds: enough with two (runs 36 and 37: 85–90 s fetching beds with three in the pack)', () => {
+  const BEDS = ['purple_bed×1', 'blue_bed×1', 'red_bed×1', 'cobblestone×12'];
+  it('counts the beds in the stacks and says they are enough from two, not in front of the End', () => {
+    expect(bedsIn(BEDS)).toBe(3);
+    expect(packLines(BEDS).at(-1)).toBe('ベッドは足りている（3）。これ以上取りに行かない（エンドの前に羊毛から 4〜6 に増やす）');
+    expect(packLines(['purple_bed×1', 'cobblestone×12']).join('\n')).not.toContain('ベッドは足りている');
+    expect(packLines(BEDS, { forEnd: true }).join('\n')).not.toContain('ベッドは足りている');
+  });
+  it('is in the rewritten live state, and not when the plan\'s node is the End\'s', () => {
+    const live = (planNow: string) => rewriteLlmcLive({ body: { map: undefined, state: { dimension: 'overworld' }, planNow, inventory: BEDS }, plan: {} }).live.body as Record<string, unknown>;
+    expect((live('[p2.1] 村を回る').pack as string[]).join('\n')).toContain('ベッドは足りている（3）');
+    expect((live('[p17] エンドへ: アイをはめる').pack as string[]).join('\n')).not.toContain('ベッドは足りている');
+  });
+});
+
+describe('the seed plan: the iron before the Nether about ten and one bed (the v2 seed; the switch off\'s seed is as it was)', () => {
+  const rows = (tree: PlanTree) => tree.nodes.map(node => `${node.id} ${node.title}|${node.doneWhen ?? ''}`);
+  const off = seedPlan('エンドラを倒して')!, on = seedPlan('エンドラを倒して', null, true)!;
+  it('before: iron 24–36 with the whole armour; after: about ten, the pickaxe, the bucket and the shield, no armour node', () => {
+    expect(rows(off)).toContain('p3 鉄（24〜36）|have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield');
+    expect(rows(off).some(line => line.includes('鉄の全身の防具'))).toBe(true);
+    expect(rows(on)).toContain('p3 鉄（ネザーの前は約10）|have:iron_pickaxe&have:bucket&have:shield');
+    expect(rows(on).some(line => line.includes('鉄の全身の防具'))).toBe(false);
+    expect(rows(on).some(line => line.includes('鉄を約10個掘る（y=16前後・洞窟）'))).toBe(true);
+  });
+  it('before: the beds node done by `have:bed` and all the village\'s beds; after: `have:bed>=1` and one or two', () => {
+    expect(rows(off)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed');
+    expect(rows(on)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed>=1');
+    expect(rows(on).some(line => line.includes('ベッド1〜2'))).toBe(true);
+  });
+  it('is said to the first plan: the iron, the beds and the armour that comes after', () => {
+    expect(GATE_FIRST_KNOWLEDGE).toContain('ネザーの前の鉄は約 10 個（ツルハシ 3・バケツ 3・盾 1・火打ち金 1');
+    expect(GATE_FIRST_KNOWLEDGE).toContain('ベッドの節の doneWhen は have:bed>=1');
+    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('ネザーの前に要る鉄は約 10');
+  });
+});
+
+describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iron in one furnace, six waits)', () => {
+  const world = (leftMs: number) => frame({ jobs: [{ status: 'waiting_external', remainingEstimateMs: leftMs, input: 'raw_iron', count: 22, position: at(158, 66, 200), completionVerified: false }] });
+  const waits = (...seconds: number[]) => ({ hands: seconds.map(value => ({ do: 'wait', seconds: value })) });
+  it('adds the seconds left to an act that waits ten seconds or more, and says the wait can hold other hands', () => {
+    const note = furnaceWaitNote(waits(30, 30), world(151_000))!;
+    expect(note).toBe('手 1 wait（合わせて 60 秒）: かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒。立って待たず、その間に掘る・集める・作る手を入れられる');
+  });
+  it('says nothing for a short wait, for no furnace, or for a furnace that is done or in another dimension', () => {
+    expect(furnaceWaitNote(waits(3), world(151_000))).toBeNull();
+    expect(furnaceWaitNote(waits(30), frame({}))).toBeNull();
+    expect(furnaceWaitNote(waits(30), world(0))).toBeNull();
+    expect(furnaceWaitNote(waits(30), frame({ jobs: [{ status: 'different_dimension', remainingEstimateMs: 90_000, input: 'raw_iron', count: 4, position: at(1, 2, 3) }] }))).toBeNull();
+  });
+  it('is a note on the result of the act through the replay\'s entry, and the act goes whole', () => {
+    const entry = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000));
+    expect(entry.note).toContain('かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
+    expect(entry.guard).toBeUndefined();
+    expect(V2_ALWAYS).toContain('かまどに入れたら焼ける間（live の jobs の残り秒）は立って待たず');
+  });
+});
+
+describe('the near lava beside the far obsidian (run 37, 1,349–1,611 s: 85 m of stair to a natural obsidian, a lava 10 m off)', () => {
+  const SELF = at(170, -14, 150);
+  const LANDMARKS = ['L 溶岩源 (173,-16,147) 東3・北3・下2 溜まりの源 4', 'O 黒曜石 (253,-55,154) 東83・南4・下41 ×6', 'ほか2件（長いため略）'];
+  it('puts both distances side by side with where each was read, and says the lava is the nearer', () => {
+    const [line] = obsidianWays({ planNow: '[p6.2] 溶岩に水を注ぎ黒曜石10', landmarks: LANDMARKS }, SELF, null);
+    expect(line).toContain('溶岩の源 (173,-16,147) まで 5m（目印）');
+    expect(line).toContain('自然の黒曜石 (253,-55,154) まで 93m（目印）（溶岩の方が近い）');
+    expect(line).toContain('階段掘りは 0.5〜0.9 マス/秒');
+  });
+  it('reads the scan\'s rows too, and says what is not in sight', () => {
+    expect(obsidianWays({ planNow: '[p6.2] 黒曜石', landmarks: [], scan: ['溶岩の溜まり 1か所: 10m 東 (173,-16,147)'] }, SELF, null)[0])
+      .toContain('溶岩の源 (173,-16,147) まで 5m（走査） / 自然の黒曜石 見えていない');
+    expect(obsidianWays({ planNow: '[p6.2] 黒曜石', landmarks: [] }, SELF, null)).toEqual([]);
+  });
+  it('is only for the obsidian\'s node, and is `body.obsidian` in the rewritten live state', () => {
+    expect(obsidianWays({ planNow: '[p5.1] 鉄のツルハシ', landmarks: LANDMARKS }, SELF, null)).toEqual([]);
+    const body = { map: undefined, state: { at: '(170,-14,150)', dimension: 'overworld' }, planNow: '[p6.2] 黒曜石', landmarks: LANDMARKS };
+    expect((rewriteLlmcLive({ body, plan: {} }).live.body as Record<string, unknown>).obsidian).toBeUndefined();
+  });
+  it('is said in the knowledge of the obsidian: 20 m', () => {
+    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('溶岩が 20m 内にあれば、既存の黒曜石へ行くより水で固めて作る方が早い');
+  });
+});
