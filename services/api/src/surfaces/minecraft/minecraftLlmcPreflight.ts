@@ -104,6 +104,21 @@ function withNeighbour(found: Found, target: Cell, view: MapView): Found {
   const stand = nearestStand(view, target, view.layers.feet);
   return { ...found, why: `${found.why}（${stand ? `隣の立てるマス ${posText(stand)}` : '隣の立てるマスは地図に無い'}）` };
 }
+/**
+ * SHANNON_MINECRAFT_LLMC_V2 (run 37: the walk into the gate's cell was held, 「塞がっている」), the rule shared with the body: a cell is entered as a portal
+ * only when its FEET cell is a portal (`p` or `e`) and its head cell is a portal or passable, and only as the LAST point of a walk (the body never uses a
+ * portal as a pass-through cell). `'enter'`: it is one, the walk goes; a stop: the top row (the head meets the frame) or a portal in the middle of a path;
+ * null: the cell is no portal's (feet in air with a portal over the head is no way in: the ordinary checks).
+ */
+function portalWalk(cell: Cell, last: boolean, view: MapView): Found | 'enter' | null {
+  if (!isPortal(view.symbol(cell.x, cell.y, cell.z))) return null;
+  if (!last) return { code: 'portal_path', cell, why: `${posText(cell)} はポータルのマス。ポータルは walk の最後の点にだけ（途中の点にしない）` };
+  const headCell = { ...cell, y: cell.y + 1 };
+  if (blocked(view.symbol(headCell.x, headCell.y, headCell.z))) {
+    return { code: 'portal_top', cell: headCell, why: 'ポータルの最上段は頭が枠に当たって入れない。下の段のポータルのマスへ' };
+  }
+  return 'enter';
+}
 /** A walk's targets (a path's points, or the one): each a place no body stands in, or with no route to it from the one before. */
 function walkStop(hand: ActHand, origin: Cell | null, base: Cell | null | undefined, view: MapView, world: PreflightWorld,
   options: PreflightOptions): Found | null {
@@ -114,14 +129,12 @@ function walkStop(hand: ActHand, origin: Cell | null, base: Cell | null | undefi
     // A point other than the last has range 0; the last has the hand's range (default 0.5). A range of one or more asks no stand.
     const range = i === points.length - 1 ? (finite(hand.range) ? hand.range : 0.5) : 0;
     if (range >= 1) continue;
-    // SHANNON_MINECRAFT_LLMC_V2 (run 37: the walk into the gate's cell was held, 「塞がっている」): a portal is entered by walking into it
-    // (feet or head in a portal's cell, the floor under it the frame's obsidian or the portal itself). It is how the dimension changes.
-    const feetSymbol = view.symbol(cell.x, cell.y, cell.z);
-    // Only the last point of a path may be a portal (the body never uses one as a pass-through cell); an earlier one is checked as any cell.
-    if (options.bodyRules && i === points.length - 1 && (isPortal(feetSymbol) || (isPortal(view.symbol(cell.x, cell.y + 1, cell.z)) && !blocked(feetSymbol)))) {
+    const gate = options.bodyRules ? portalWalk(cell, i === points.length - 1, view) : null;
+    if (gate === 'enter') {
       from = cell;
       continue;
     }
+    if (gate) return gate;
     const found = unstandable(cell, view, world.column) ?? (options.route !== false ? noRoute(from, cell, view) : null);
     if (found) return options.bodyRules ? withNeighbour(found, cell, view) : found;
     from = cell;
@@ -163,6 +176,12 @@ function afterWalk(hand: ActHand, track: Track, base: Cell | null | undefined): 
   if (exact) track.via = last!;
 }
 
+/** Whether the walk's last point is a portal's cell (its feet cell a portal) that it goes into (a range of one or more does not). */
+function entersPortal(hand: ActHand, base: Cell | null | undefined, view: MapView): boolean {
+  const last = cellsOf(walkPoints(hand), base).at(-1);
+  return !!last && !(finite(hand.range) && hand.range >= 1) && isPortal(view.symbol(last.x, last.y, last.z));
+}
+
 /** A dig opens its cells and, by default, walks to pick up what dropped: afterwards she stands somewhere the walk reaches from here. */
 function afterDig(hand: ActHand, track: Track, base: Cell | null | undefined, view: MapView): void {
   for (const cell of cellsOf(hand.at ?? [], base)) view.open(cell);
@@ -192,7 +211,8 @@ function advance(hand: ActHand, track: Track, base: Cell | null | undefined, vie
   switch (hand.do) {
     case 'walk':
       afterWalk(hand, track, base);
-      return true;
+      // A walk into a portal changes the dimension: the body stops the act there, and the hands after it are not walked through against this map.
+      return !entersPortal(hand, base, view);
     case 'dig':
       afterDig(hand, track, base, view);
       return true;

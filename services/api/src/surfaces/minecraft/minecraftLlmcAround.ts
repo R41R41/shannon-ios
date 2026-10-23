@@ -32,8 +32,9 @@ function stepHow(best: Step): string {
  * 歩ける, or 掘れば歩ける with the cells to dig.
  */
 function bestWords(view: MapView, best: Step): string {
+  const gate = portalWords(view.symbol(best.to.x, best.to.y, best.to.z));
+  if (gate && isHard(view.symbol(best.to.x, best.to.y + 1, best.to.z))) return '入れない: ポータルの最上段（頭が枠に当たる）。下の段のポータルのマスへ';
   if (best.dig.length) return `掘れば歩ける: 掘る ${digText(view, best.dig)}`;
-  const gate = portalWords(view.symbol(best.to.x, best.to.y, best.to.z), view.symbol(best.to.x, best.to.y + 1, best.to.z));
   return gate ? `入れる: ${gate}` : '歩ける';
 }
 /** One direction's line: the cell next to her and what the step to it needs; null for a diagonal the corners shut (said together, `diagonalLine`). */
@@ -71,14 +72,13 @@ export function stepLines(view: MapView, feet: P): string[] {
 
 type Kind = 'walk' | 'headDig' | 'feetDig' | 'void' | 'harm' | 'portal';
 /**
- * Harm in her feet, head or floor cell (lava, fire, a web, magma); else a portal in her feet or head cell (the other of the two open): a cell she goes
- * into, never harm or a void. The cells inside the portal over its first cell have the portal under them: the same way in, not listed again (null).
- * Undefined: neither.
+ * A portal in her feet cell with a portal or a passable cell over it (the rule shared with the body), whatever is under it (an end portal over lava is
+ * still a way in): a cell she goes into, never harm or a void. The cells inside the portal over its first cell have the portal under them: the same way
+ * in, not listed again (null). Else harm in her feet, head or floor cell (lava, fire, a web, magma). Undefined: neither.
  */
 function specialKind(feet: string, head: string, floor: string): { kind: Kind } | null | undefined {
-  if (isHarm(feet) || isHarm(head) || isHarm(floor)) return { kind: 'harm' };
-  if (portalWords(feet, head) === null || !isOpen(feet) || !isOpen(head)) return undefined;
-  return isPortal(floor) ? null : { kind: 'portal' };
+  if (portalWords(feet) !== null && isOpen(head)) return isPortal(floor) ? null : { kind: 'portal' };
+  return isHarm(feet) || isHarm(head) || isHarm(floor) ? { kind: 'harm' } : undefined;
 }
 /** What a cell is as a place to stand, from its feet, head and floor (all three shown by the map), or null (rock to dig through, or not shown). */
 function kindOf(view: MapView, c: P): { kind: Kind; fall?: string } | null {
@@ -142,11 +142,10 @@ function levelCells(view: MapView, feet: P, y: number, range: number): Map<Kind,
 function portalLines(view: MapView, label: string, cells: readonly P[]): string[] {
   const by = new Map<string, P[]>();
   for (const c of cells) {
-    const feet = view.symbol(c.x, c.y, c.z), head = view.symbol(c.x, c.y + 1, c.z);
-    const symbol = isPortal(feet) ? feet! : head!;
+    const symbol = view.symbol(c.x, c.y, c.z)!;
     by.set(symbol, [...by.get(symbol) ?? [], c]);
   }
-  return [...by].map(([symbol, list]) => `${label} 入れる: ${portalWords(symbol, undefined)}: ${listRows(rowsOf(list))}`);
+  return [...by].map(([symbol, list]) => `${label} 入れる: ${portalWords(symbol)}: ${listRows(rowsOf(list))}`);
 }
 /** The void cells on a level, grouped by their fall (the same fall in one row list). */
 function voidLines(view: MapView, cells: readonly P[]): string[] {

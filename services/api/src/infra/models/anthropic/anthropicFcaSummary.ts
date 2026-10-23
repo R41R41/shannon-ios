@@ -1,7 +1,7 @@
 import { COMPACTION_BODY_ITEM_CHARACTERS, COMPACTION_SECTIONS, COMPACTION_V1, checkedTemplate, compactionItem, mergedTemplate } from '@shannon/mind';
 import type { FcaHistorySummarizer } from '../../../mind/action/fca/fcaHistoryPorts.js';
 import type { ShannonToolDefinition } from '../../../mind/tools/toolRegistryPorts.js';
-import { withoutForeignToolLines } from '../../../contracts/minecraftLlmcToolWords.js';
+import { scrubForeignToolItems } from '../../../contracts/minecraftLlmcToolWords.js';
 import { createAnthropicFcaModel, type AnthropicFcaOptions } from './anthropicFcaModel.js';
 
 const summaryTool: ShannonToolDefinition = {
@@ -51,7 +51,7 @@ export function createAnthropicFcaSummarizer(options: AnthropicFcaOptions & { bo
     // A section the answer leaves out keeps the previous summary's items (as the conversation replay does); one it gives replaces them.
     const named = COMPACTION_SECTIONS.filter(section => Array.isArray(row[section]) || typeof row[section] === 'string');
     const result = input.previous ? mergedTemplate(input.previous, template, named, itemCharacters) : template;
-    return facts ? withoutForeignTools(result) : result;
+    return facts ? scrubbedSummary(result, input.previous) : result;
   } };
 }
 
@@ -62,21 +62,26 @@ function ownOptions(body: boolean, own: boolean, facts: boolean): Pick<Anthropic
 }
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37: a summary said 「次: minecraft.observe で所持品を確認」 and "find-blocks"): an item that names a
- * tool the mode does not offer is dropped, from the answer and from the previous summary's items the answer kept; how many is logged (content-free).
+ * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37: a summary said 「次: minecraft.observe で所持品を確認」 and "find-blocks"): in the answer and in the
+ * previous summary's items it kept, a name of a tool the mode does not offer is replaced by neutral words, and an item that tells to use it is dropped
+ * (`scrubForeignToolItems`); the counts are logged (content-free). A summary the scrub leaves with no item is the previous one, or, with none, refused.
  */
-function withoutForeignTools<T extends Record<string, unknown>>(template: T): T {
-  const out: Record<string, unknown> = { ...template };
-  let dropped = 0;
+function scrubbedSummary<T extends object>(result: T, previous: T | null | undefined): T {
+  const out: Record<string, unknown> = { ...(result as Record<string, unknown>) };
+  let neutralized = 0, dropped = 0, items = 0;
   for (const section of COMPACTION_SECTIONS) {
-    const items = out[section];
-    if (!Array.isArray(items)) continue;
-    const cleaned = withoutForeignToolLines(items.filter((item): item is string => typeof item === 'string'));
+    const list = out[section];
+    if (!Array.isArray(list)) continue;
+    const cleaned = scrubForeignToolItems(list.filter((item): item is string => typeof item === 'string'));
+    neutralized += cleaned.neutralized;
     dropped += cleaned.dropped;
+    items += cleaned.kept.length;
     out[section] = Object.freeze(cleaned.kept);
   }
-  if (dropped) console.info(JSON.stringify({ event: 'fca_summary_scrubbed', dropped }));
-  return out as T;
+  if (neutralized || dropped) console.info(JSON.stringify({ event: 'fca_summary_scrubbed', dropped, neutralized }));
+  if (items > 0) return out as T;
+  if (!previous) throw new FcaSummaryInvalidError('empty');
+  return previous;
 }
 
 /**

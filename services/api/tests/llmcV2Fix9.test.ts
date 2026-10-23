@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { COMPACTION_SECTIONS } from '@shannon/mind';
 import { PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../src/contracts/minecraftProbeContract.js';
-import { foreignToolNames, withoutForeignToolLines } from '../src/contracts/minecraftLlmcToolWords.js';
+import { foreignToolNames, scrubForeignToolItems } from '../src/contracts/minecraftLlmcToolWords.js';
 import { createAnthropicFcaSummarizer } from '../src/infra/models/anthropic/anthropicFcaSummary.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import type { FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
@@ -80,7 +80,8 @@ describe('B1: a portal is a place she goes into, never lava', () => {
     const go = (hands: unknown[], symbol = 'p') => preflightAct({ hands }, world(gateMap(3, symbol)), { bodyRules: true });
     expect(go([walk(3, 0, 0)])).toBeNull();
     expect(go([walk(3, 1, 0)])).toBeNull();
-    expect(go([{ do: 'walk', path: [at(1, 0, 0), at(2, 0, 0), at(3, 0, 0), at(3, 1, 0)], range: 0 }])).toBeNull();
+    expect(go([{ do: 'walk', path: [at(1, 0, 0), at(2, 0, 0), at(3, 0, 0)], range: 0 }])).toBeNull();
+    expect(go([{ do: 'walk', path: [at(1, 0, 0), at(3, 0, 0), at(3, 1, 0)], range: 0 }])).toMatchObject({ code: 'portal_path' });
     expect(go([walk(3, 0, 0)], 'e')).toBeNull();
     expect(go([walk(4, 0, 0)])).toMatchObject({ kind: 'walk', code: 'feet_solid' });
   });
@@ -110,7 +111,7 @@ describe('B2: no text of the mode names a tool it does not offer', () => {
     expect(foreignToolNames('（find-blocks・view top）と find-structure、mc.find-blocks、mc.mine-block')).toEqual(['find-blocks', 'view top', 'find-structure', 'mc.find-blocks', 'mc.mine-block']);
     expect(foreignToolNames('mc.act mc.probe kind=scan mc.view mode=top plan.update fca_wait fca_complete mc_act mc_probe mc_view plan_update')).toEqual([]);
     expect(foreignToolNames('次: minecraft.observe で所持品を確認')).toEqual(['minecraft.observe']);
-    expect(withoutForeignToolLines(['a', '次: find-blocks で探す', 'b'])).toEqual({ kept: ['a', 'b'], dropped: 1 });
+    expect(scrubForeignToolItems(['a', '次: find-blocks で探す', 'b'])).toEqual({ kept: ['a', 'b'], neutralized: 0, dropped: 1 });
   });
   it('is true of the request\'s fixed part (system blocks and the six tools), the stages, the first plan, the task note and the hints', async () => {
     const fixed = await candidateFixed([...LLMC_TOOLS, PROBE]);
@@ -174,7 +175,26 @@ describe('B3: the history summary of the mode keeps facts', () => {
     expect(result['詰まり']).toEqual(['(229,-54,196) への walk が止まった: 足の下が空気']);
     expect(result['次']).toEqual(['p2.1 ゲートを建てる']);
     expect(result['済み']).toEqual(['鉄 4 を (253,-55,154) で掘った']);
-    expect(lines.filter(line => line.includes('fca_summary_scrubbed')).map(line => JSON.parse(line))).toEqual([{ event: 'fca_summary_scrubbed', dropped: 2 }]);
+    expect(lines.filter(line => line.includes('fca_summary_scrubbed')).map(line => JSON.parse(line))).toEqual([{ event: 'fca_summary_scrubbed', dropped: 2, neutralized: 0 }]);
+  });
+  it('keeps the words of a fact that only mentions such a name (the name replaced), and leaves real names of the six and look-alikes alone', () => {
+    expect(scrubForeignToolItems(['find-blocks が (1,2,3) を指した（計画の where と違う）']))
+      .toEqual({ kept: ['（道具名略） が (1,2,3) を指した（計画の where と違う）'], neutralized: 1, dropped: 0 });
+    const same = ['mc.act の 3 手目が止まった', 'mc.probe kind=scan で村を見つけた', 'mc.view mode=top で確認済み', 'plan.update で節を足した',
+      'mc.acting は道具でない', 'Minecraft.net の話ではない', 'mc.act-ion', 'observed the lava at (1,2,3)', 'observe した結果は無い'];
+    expect(scrubForeignToolItems(same).kept.slice(0, 7)).toEqual(same.slice(0, 7));
+    expect(scrubForeignToolItems(same.slice(0, 5)).dropped).toBe(0);
+    expect(scrubForeignToolItems(['Minecraft.net', 'observed it']).neutralized).toBe(0);
+    expect(scrubForeignToolItems(['task.replan を使う', 'goal.verify で確かめる', 'mc.find-blocks で探す', 'minecraft.reflex を呼ぶ']).dropped).toBe(4);
+  });
+  it('falls back to the previous summary when the scrub leaves nothing, and refuses an answer that is nothing after it when there is none', async () => {
+    const previous = { ...empty(), 済み: ['鉄 4 を (253,-55,154) で掘った'], coversFromId: null, coversToId: null };
+    const only = { 次: ['次: minecraft.observe で所持品を確認'], 詰まり: ['find-blocks で探す'] };
+    const { result } = await summarize(only, { ...previous, 済み: [] });
+    expect(Object.values(result).flat().filter(item => typeof item === 'string')).toEqual([]);
+    const kept = await summarize({ ...only }, previous);
+    expect(kept.result['済み']).toEqual(['鉄 4 を (253,-55,154) で掘った']);
+    await expect(summarize(only)).rejects.toMatchObject({ reason: 'empty' });
   });
   it('changes nothing for a summary that is not of the mode (the earlier instruction and no scrub)', async () => {
     const { result, sent, lines } = await summarize({ ...empty(), 次: ['minecraft.observe で確認'] }, null, false);
@@ -219,5 +239,55 @@ describe('B4: her state in words', () => {
     const urgent = minecraftLlmcUrgentLive({ observation: frame({ position: { x: 1, y: 2, z: 3 }, dimension: 'overworld', time: '15000', oxygen: 400 }),
       elapsedMinutes: 1, events: [], planNowTitle: null, answer: 'a', v2: true });
     expect(urgent.state).toMatchObject({ time: '夜（朝まで 約 7 分）', oxygen: '息 20/20' });
+  });
+});
+
+/**
+ * The rule the head and the body share for entering a portal: a cell is entered as a portal only when its FEET cell is a portal (`p`, or `e` for the
+ * end portal and the end gateway alike) and its head cell is a portal or passable; only as the LAST point of a walk; a walk into one ends the act's
+ * walk-through (the dimension changes). The column: floor y=-2, rows y=-1 (bottom), 0 (middle: her own level), +1 (top), the frame over it at y=+2.
+ */
+describe('the portal cases the head and the body agree on', () => {
+  const corridor = [at(1, 0, 0), at(2, 0, 0), at(1, 1, 0), at(2, 1, 0)];
+  /** The rows not given as portal are air (the bottom one) or the frame's rock. */
+  const column = (symbol: string, rows: number[] = [-1, 0, 1], floor = 'O'): string => mapOf([...corridor, [at(3, -2, 0), floor] as [Cell, string],
+    ...rows.map(y => [at(3, y, 0), symbol] as [Cell, string]), ...(rows.includes(-1) ? [] : [at(3, -1, 0)]), [at(3, 2, 0), 'O'] as [Cell, string]]);
+  const go = (map: string, hands: unknown[]) => preflightAct({ hands }, world(map), { bodyRules: true });
+  const table: Array<[string, string, unknown[], string | null]> = [
+    ['bottom row', column('p'), [walk(3, -1, 0)], null],
+    ['middle row', column('p'), [walk(3, 0, 0)], null],
+    ['middle row with the default range', column('p'), [{ do: 'walk', to: at(3, 0, 0) }], null],
+    ['top row: the head meets the frame', column('p'), [walk(3, 1, 0)], 'portal_top'],
+    ['end portal over lava', column('e', [-1, 0, 1], 'L'), [walk(3, -1, 0)], null],
+    ['end gateway (read as e)', column('e'), [walk(3, 0, 0)], null],
+    ['a portal as a middle point of a path', column('p'), [{ do: 'walk', path: [at(2, 0, 0), at(3, -1, 0), at(3, 0, 0)], range: 0 }], 'portal_path'],
+    ['a portal as the last point of a path', column('p'), [{ do: 'walk', path: [at(1, 0, 0), at(2, 0, 0), at(3, 0, 0)], range: 0 }], null],
+    ['feet in air, a portal over the head', column('p', [0, 1]), [walk(3, -1, 0)], null],
+    ['a wall beside the column', column('p'), [walk(4, 0, 0)], 'feet_solid'],
+  ];
+  it.each(table)('walk to %s', (_name, map, hands, code) => {
+    const stop = go(map, hands);
+    if (code === null) expect(stop).toBeNull();
+    else expect(stop).toMatchObject({ kind: 'walk', code });
+    if (stop) expect(preflightText(stop)).not.toMatch(/¤|¢/u);
+  });
+  it('says the top row is no way in, in the words the coordinator gave', () => {
+    expect(go(column('p'), [walk(3, 1, 0)])!.why).toBe('ポータルの最上段は頭が枠に当たって入れない。下の段のポータルのマスへ');
+    expect(go(column('p'), [{ do: 'walk', path: [at(2, 0, 0), at(3, -1, 0), at(3, 0, 0)], range: 0 }])!.why).toContain('ポータルは walk の最後の点にだけ');
+  });
+  it('lists the cell to enter the way the preflight reads it: the bottom row (the rows over it have a portal under them), an end portal over lava, never the top row or a cell in air', () => {
+    const around = (map: string) => aroundLines(viewOf(map), feet).join('\n');
+    expect(around(column('p'))).toContain('y=-1（-1） 入れる: ネザーポータル（中に立って約 4 秒で次元が変わる）: z=0 x=3');
+    expect(around(column('p'))).not.toMatch(/y=0（足） 入れる|y=1（\+1） 入れる/u);
+    expect(around(column('e', [-1, 0, 1], 'L'))).toContain('y=-1（-1） 入れる: エンドポータル（入ると次元が変わる）: z=0 x=3');
+    expect(around(column('e', [-1, 0, 1], 'L'))).not.toContain('溶岩・火・クモの巣・マグマ: z=0 x=3');
+    expect(around(column('p', [0, 1]))).not.toMatch(/y=-1（-1） 入れる/u);
+  });
+  it('does not walk the hands after a walk into a portal against the old dimension\'s map (the body stops the act there)', () => {
+    const wall = walk(4, 0, 0);
+    expect(go(column('p'), [wall])).toMatchObject({ code: 'feet_solid' });
+    expect(go(column('p'), [walk(3, 0, 0), wall])).toBeNull();
+    expect(go(column('p'), [walk(3, 0, 0, 1), wall])).toMatchObject({ hand: 2, code: 'feet_solid' });
+    expect(go(column('p'), [walk(2, 0, 0), wall])).toMatchObject({ hand: 2, code: 'feet_solid' });
   });
 });

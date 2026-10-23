@@ -6,7 +6,8 @@ import { AIRISH, blocked, HARM, isPortal, NOT_FLOOR, NOT_SUPPORT, posText, SOLID
  * The cell checks of the act's preflight (`minecraftLlmcPreflight.ts`): the body's `unstandable` for a walk's target (Shannon-mb-llmc-r10
  * `primitives/walk.ts` + `utils/walkRules.ts` `whyNotStand`), and the two refusals of a place into a cell (`primitives/place.ts`).
  */
-export type PreflightCode = 'feet_solid' | 'feet_harm' | 'head_solid' | 'head_harm' | 'no_floor' | 'floor_lava' | 'no_route' | 'occupied' | 'no_support';
+export type PreflightCode = 'feet_solid' | 'feet_harm' | 'head_solid' | 'head_harm' | 'no_floor' | 'floor_lava' | 'no_route' | 'occupied' | 'no_support'
+  | 'portal_path' | 'portal_top';
 export interface Found { code: PreflightCode; cell: ActPos; why: string }
 /** The head's kept `column` answer for a cell at her feet's height, when it has one. */
 export type ColumnOf = (at: ActPos, feetY: number) => ColumnFact | undefined;
