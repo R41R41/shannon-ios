@@ -7,6 +7,8 @@ import { anthropicFcaHistoryCodec, anthropicFcaHistoryCodecV2 } from '../src/inf
 import { readableBootstrap } from '../src/infra/models/anthropic/anthropicFcaBootstrapText.js';
 import { MINECRAFT_TRANSPORT, V2_CONTROL_WORDS } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
 import { llmcStoredResult } from '../src/surfaces/minecraft/minecraftLlmc.js';
+import { smallCoordinateStop } from '../src/surfaces/minecraft/minecraftLlmcHandGuards.js';
+import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { aroundLines } from '../src/surfaces/minecraft/minecraftLlmcAround.js';
 import { createFoodTrend, minecraftLlmcLive, minecraftLlmcUrgentLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { rewriteLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
@@ -239,7 +241,7 @@ describe('D3: one language, one topic in one place, a dictionary of the live fie
   it('puts the hand grammar in the mc_act description: the json fields of every hand, with walk\'s `to` or `path` (not `at`)', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('walk: to か path・sprint・range');
     expect(SHORT_ACT_DESCRIPTION).toContain('walk に at は使えない');
-    expect(SHORT_ACT_DESCRIPTION).toContain('rel（座標を、その手を始める時の足のブロックからの差にする');
+    expect(SHORT_ACT_DESCRIPTION).toContain('足からの差で書きたい手は rel を付ける');
     expect(SHORT_ACT_DESCRIPTION).toContain('place は空気（. か *）で、6面のどれかが固いマスへ');
     for (const kind of ['dig', 'place', 'pillarUp', 'use', 'look', 'jump', 'sneak', 'equip', 'craft', 'attack', 'eat', 'pickup', 'wait', 'furnace', 'chest', 'drop', 'shoot']) {
       expect(SHORT_ACT_DESCRIPTION, kind).toMatch(new RegExp(`${kind}: `, 'u'));
@@ -324,5 +326,34 @@ describe('the bench of 10 (cd-fixes-20261024): craft, drop, reach, far endermen'
   it('keeps a far enderman (28.5 m) as a line, and a far zombie folded', () => {
     const out = rewritten({ threats: ['#1 enderman 28.5m (28,2,0)', '#2 zombie 28.5m (0,2,28)'] }).body.threats as string[];
     expect(out).toEqual(['#1 enderman 28.5m (28,2,0) 東28・上2', 'ほか 1 体（zombie 1。いちばん近い: zombie 28.5m・上 2）']);
+  });
+});
+
+describe('the bench rerun of 10: absolute coordinates unless rel', () => {
+  const frameAt = (x: number, y: number, z: number) => frame({ position: { x, y, z } });
+  it('says in mc.act that coordinates are absolute unless the hand has rel, with one example of each', () => {
+    expect(SHORT_ACT_DESCRIPTION).toContain('rel を付けない限り、すべて世界の絶対座標');
+    expect(SHORT_ACT_DESCRIPTION).toContain('dig 230,-54,196      ← 絶対座標');
+    expect(SHORT_ACT_DESCRIPTION).toContain('dig 0,0,-1 rel');
+    expect(lineToHand('dig 0,0,-1 rel')).toEqual({ do: 'dig', at: [{ x: 0, y: 0, z: -1 }], rel: true });
+  });
+  it('holds a hand with small numbers and no rel while she is far away, and says what to write', () => {
+    const stop = smallCoordinateStop({ hands: [{ do: 'walk', to: { x: 230, y: -54, z: 198 } }, { do: 'dig', at: [{ x: -1, y: 0, z: 0 }] }] }, frameAt(230, -54, 197));
+    expect(stop).toMatchObject({ hand: 2, kind: 'dig', code: 'small_absolute' });
+    expect(stop!.line).toContain('座標は絶対座標');
+    expect(stop!.line).toContain('rel を付ける');
+    expect(stop!.line).toContain('(230,-54,197)');
+  });
+  it('lets go what is plausible: rel, real coordinates, a bot near the origin, no feet', () => {
+    const far = frameAt(230, -54, 197);
+    expect(smallCoordinateStop({ hands: [{ do: 'dig', at: [{ x: -1, y: 0, z: 0 }], rel: true }] }, far)).toBeNull();
+    expect(smallCoordinateStop({ hands: [{ do: 'walk', to: { x: 3, y: 64, z: 0 } }, { do: 'dig', at: [{ x: 229, y: -54, z: 196 }] }] }, frameAt(2, 64, 2))).toBeNull();
+    expect(smallCoordinateStop({ hands: [{ do: 'walk', to: { x: 3, y: 64, z: 0 } }] }, frameAt(2, 64, 2))).toBeNull();
+    expect(smallCoordinateStop({ hands: [{ do: 'wait', seconds: 1 }, { do: 'jump' }] }, far)).toBeNull();
+    expect(smallCoordinateStop({ hands: [{ do: 'dig', at: [{ x: -1, y: 0, z: 0 }] }] }, null)).toBeNull();
+  });
+  it('turns the act back whole when it is the first hand, before anything is sent (the mode\'s guards)', () => {
+    const held = heldOfFrame({ hands: [{ do: 'walk', to: { x: -3, y: 0, z: 0 } }] }, frameAt(230, -54, 197), 'task-small');
+    expect(held).toMatchObject({ hand: 1, kind: 'walk', code: 'small_absolute' });
   });
 });
