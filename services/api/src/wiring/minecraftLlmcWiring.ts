@@ -215,7 +215,7 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
 }
 
 /** The first plan's words with the probe on: r9's, or with SHANNON_MINECRAFT_OWN_PROMPT the strategic knowledge instead (`minecraftStrategy.ts`). */
-export function firstPlanSystem(own: boolean): string { return own ? ownFirstPlanSystem() : FIRST_PLAN_SYSTEM_R9; }
+export function firstPlanSystem(own: boolean, v2 = false): string { return own ? ownFirstPlanSystem(v2) : FIRST_PLAN_SYSTEM_R9; }
 
 /**
  * r4: the way to send one fixed probe of a surprise to the task's body, or null while the body is not there or has no `probe` (its
@@ -260,7 +260,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r8: a gap crossed in the rock or by a walled bridge (`FIRST_PLAN_SYSTEM_R8`); r9: the done of a node by its own condition, a place with
   // its dimension, the pearls after the rods, the golden armour in the check (`FIRST_PLAN_SYSTEM_R9`).
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
-    ...(llmc.probe ? { r4: { world: worldOf, system: firstPlanSystem(llmc.ownPrompt === true), readiness: true } } : {}) });
+    ...(llmc.probe ? { r4: { world: worldOf, system: firstPlanSystem(llmc.ownPrompt === true, llmc.v2 === true), readiness: true } } : {}),
+    ...(llmc.v2 ? { v2: true } : {}) });
   const display = () => plan.port.display();
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.

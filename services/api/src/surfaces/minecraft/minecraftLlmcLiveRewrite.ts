@@ -1,5 +1,7 @@
 import { aroundLines } from './minecraftLlmcAround.js';
 import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
+import { liquidLines } from './minecraftLlmcLiquid.js';
+import { packLines } from './minecraftLlmcPack.js';
 import { expandAround, normalizeMap } from './minecraftLlmcLiveMap.js';
 import { isNether, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
 import { repeatedFailures } from './minecraftLlmcRepeat.js';
@@ -171,6 +173,11 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes): Rec {
     const view = mapView(layers), planNow = String(bodyIn.planNow ?? '');
     out.around = aroundLines(view, layers.feet);
     notes.added.push('around');
+    const liquid = liquidLines(view, layers.feet);
+    if (liquid.length) {
+      out.liquid = liquid;
+      notes.added.push('liquid');
+    }
     const goal = goalOf(planNow);
     if (goal) {
       out.route = routeLines(view, layers.feet, goal, /^\[([^\]]+)\]/u.exec(planNow)?.[1] ?? '今の節');
@@ -181,6 +188,13 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes): Rec {
   return out;
 }
 
+/** `body.pack`: the free slots of the pack, from the inventory lines as the body wrote them (one line a stack). */
+function addPack(body: Rec, inventory: unknown, notes: RewriteNotes): void {
+  const lines = packLines(strings(inventory));
+  if (!lines.length) return;
+  body.pack = lines;
+  notes.added.push('pack');
+}
 function rewriteBody(bodyIn: Rec, notes: RewriteNotes): Rec {
   const self = parsePos(String(rec(bodyIn.state)?.at ?? ''));
   const enemies = self ? mergeEnemies(bodyIn, self) : { urgent: bodyIn.urgent, threats: bodyIn.threats, merged: 0 };
@@ -197,6 +211,7 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes): Rec {
       continue;
     }
     body[key] = rewriteBodyKey(key, value, self, notes);
+    if (key === 'inventory') addPack(body, value, notes);
     if (key === 'stops' && repeated.length) body.repeat = repeated;
   }
   if (repeated.length && !body.repeat) body.repeat = repeated;

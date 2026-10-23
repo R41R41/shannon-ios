@@ -114,7 +114,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
    * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done, `minecraftPlanDone.ts`), applied before
    * the decision reads the path. Absent: none.
    */
-  seen?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[];
+  seen?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[]; closed?: readonly string[];
     /** r9: nodes whose place or dimension holds while a child is open, so are not done (`p2←p2.1,p2.3`): said in the log when the set changes. */
     held?: readonly string[] } | null }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
@@ -136,7 +136,8 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   const settle = () => {
     let seen: ReturnType<NonNullable<typeof parts.seen>> = null;
     try { seen = tree.nodes.length ? parts.seen?.(tree) ?? null : null; } catch { seen = null; }
-    if (seen?.ids.length) amend(seen.update, 'settled', ` seen=${seen.ids.slice(0, 8).join(',')}`);
+    const closed = seen?.closed?.length ? ` closed=${seen.closed.join(',')}` : '';
+    if (seen?.ids.length) amend(seen.update, 'settled', ` seen=${seen.ids.slice(0, 8).join(',')}${closed}`);
     // r9: a node whose place holds with children open is not done; said once per change, so the log shows what the code left open.
     const held = (seen?.held ?? []).join(' ');
     if (held !== (heldSaid.get(parts.taskId) ?? '')) {

@@ -1,0 +1,387 @@
+{
+ "schema": "shannon.plan-tree.v1",
+ "revision": 21,
+ "current": "p7.2",
+ "nodes": [
+  {
+   "id": "p1",
+   "parentId": null,
+   "order": 0,
+   "title": "村を回って物資を取る",
+   "state": "done",
+   "where": "141,75,204",
+   "doneWhen": "have:bed>=3"
+  },
+  {
+   "id": "p1.1",
+   "parentId": "p1",
+   "order": 0,
+   "title": "原木を集める",
+   "state": "done",
+   "where": "139,76,202",
+   "doneWhen": "have:log>=8"
+  },
+  {
+   "id": "p1.2",
+   "parentId": "p1",
+   "order": 1,
+   "title": "ベッドを取る",
+   "state": "done",
+   "where": "141,75,204",
+   "doneWhen": "have:bed>=3",
+   "forbid": [
+    "村の鉄ゴーレムを殴らない"
+   ]
+  },
+  {
+   "id": "p1.3",
+   "parentId": "p1",
+   "order": 2,
+   "title": "村の箱を開ける",
+   "state": "continue",
+   "where": "157,67,200"
+  },
+  {
+   "id": "p1.4",
+   "parentId": "p1",
+   "order": 3,
+   "title": "鍛冶屋の箱を開ける",
+   "state": "continue",
+   "where": "187,63,201"
+  },
+  {
+   "id": "p2",
+   "parentId": null,
+   "order": 1,
+   "title": "石の道具を作る",
+   "state": "done",
+   "doneWhen": "have:stone_pickaxe&have:stone_sword"
+  },
+  {
+   "id": "p2.1",
+   "parentId": "p2",
+   "order": 0,
+   "title": "木のツルハシを作る",
+   "state": "done",
+   "doneWhen": "have:wooden_pickaxe"
+  },
+  {
+   "id": "p2.2",
+   "parentId": "p2",
+   "order": 1,
+   "title": "丸石を掘り石の道具",
+   "state": "done",
+   "doneWhen": "have:stone_pickaxe&have:stone_sword",
+   "forbid": [
+    "素手で真下を掘らない"
+   ]
+  },
+  {
+   "id": "p3",
+   "parentId": null,
+   "order": 2,
+   "title": "食料を集めて焼く",
+   "state": "done",
+   "doneWhen": "food>=50",
+   "caution": [
+    "東のtaigaで動物を探す"
+   ]
+  },
+  {
+   "id": "p3.1",
+   "parentId": "p3",
+   "order": 0,
+   "title": "石炭か木炭を4つ",
+   "state": "done",
+   "where": "179,70,208",
+   "doneWhen": "have:coal>=4",
+   "note": "179,70,208の石炭は湖の上で届かない。原木を焼いて木炭にしてもよい",
+   "caution": [
+    "(186,62,202): 的そのものには立てない（足のマスが podzol で埋まっている）",
+    "(179,63,194) の walk: 一歩ではない: 4秒進めず止まった（今 (181,63,197)（自分から同じマス）、的まで 3.6m（range …"
+   ]
+  },
+  {
+   "id": "p3.2",
+   "parentId": "p3",
+   "order": 1,
+   "title": "動物を狩って焼く",
+   "state": "done",
+   "where": "143,75,202",
+   "doneWhen": "food>=50",
+   "caution": [
+    "walk: 一歩ではない: (201,72,171) への掘らない道が無い（今 (195,71,185)（自分から同じマス）、的まで 15.3m（range …"
+   ]
+  },
+  {
+   "id": "p4",
+   "parentId": null,
+   "order": 3,
+   "title": "鉄を集める",
+   "state": "done",
+   "where": "192,66,190",
+   "doneWhen": "have:iron_ingot>=24|have:iron_chestplate"
+  },
+  {
+   "id": "p4.1",
+   "parentId": "p4",
+   "order": 0,
+   "title": "洞窟で鉄鉱石を掘る",
+   "state": "continue",
+   "where": "207,30,203",
+   "doneWhen": "have:raw_iron>=24",
+   "caution": [
+    "溶岩の隣を掘らない"
+   ]
+  },
+  {
+   "id": "p4.2",
+   "parentId": "p4",
+   "order": 1,
+   "title": "鉄を焼く",
+   "state": "continue",
+   "where": "143,75,202",
+   "doneWhen": "have:iron_ingot>=24"
+  },
+  {
+   "id": "p5",
+   "parentId": null,
+   "order": 4,
+   "title": "鉄の装備を作る",
+   "state": "done",
+   "doneWhen": "have:iron_pickaxe&have:bucket&have:shield"
+  },
+  {
+   "id": "p5.1",
+   "parentId": "p5",
+   "order": 0,
+   "title": "鉄のツルハシとバケツ",
+   "state": "done",
+   "doneWhen": "have:iron_pickaxe&have:bucket"
+  },
+  {
+   "id": "p5.2",
+   "parentId": "p5",
+   "order": 1,
+   "title": "盾と鉄の防具",
+   "state": "done",
+   "doneWhen": "have:shield&have:iron_chestplate"
+  },
+  {
+   "id": "p6",
+   "parentId": null,
+   "order": 5,
+   "title": "ダイヤを掘る",
+   "state": "done",
+   "where": "156,-25,208",
+   "doneWhen": "have:diamond_pickaxe",
+   "caution": [
+    "溶岩の隣を掘らない",
+    "(207,73,174): 的そのものには立てない（下 1 マスが空気（立つ床が無い））"
+   ]
+  },
+  {
+   "id": "p7",
+   "parentId": null,
+   "order": 6,
+   "title": "黒曜石を作る",
+   "state": "continue",
+   "where": "148,65,218",
+   "doneWhen": "have:obsidian>=10",
+   "caution": [
+    "溶岩の隣を掘らない"
+   ]
+  },
+  {
+   "id": "p7.1",
+   "parentId": "p7",
+   "order": 0,
+   "title": "水を汲む",
+   "state": "done",
+   "where": "水源 240,-15,210（地下）",
+   "doneWhen": "have:water_bucket",
+   "note": "ダイヤ7・ダイヤツルハシ有り",
+   "caution": [
+    "(238,-16,207) の walk: 一歩ではない: 道の3/3番目で: 4秒進めず止まった（今 (238,-16,206)（自分から同じマス）、的まで…"
+   ]
+  },
+  {
+   "id": "p7.2",
+   "parentId": "p7",
+   "order": 1,
+   "title": "溶岩に水を注ぎ掘る",
+   "state": "continue",
+   "where": "溶岩源 252,-25,210（地下）",
+   "doneWhen": "have:obsidian>=10",
+   "caution": [
+    "(249,-24,206) の water は見えない: 間に deepslate (249,-23,205)",
+    "(252,-24,207) の walk: 一歩ではない: 道の5/7番目で: 4秒進めず止まった（今 (251,-24,204)（自分から同じマス）、的まで…",
+    "(252,-24,209) の deepslate は目から 5.9m: 手が届かない（4.5m まで）"
+   ]
+  },
+  {
+   "id": "p8",
+   "parentId": null,
+   "order": 7,
+   "title": "ゲートを建てて入る",
+   "state": "continue",
+   "doneWhen": "dim:the_nether"
+  },
+  {
+   "id": "p8.1",
+   "parentId": "p8",
+   "order": 0,
+   "title": "火打ち金を作る",
+   "state": "continue",
+   "doneWhen": "have:flint_and_steel"
+  },
+  {
+   "id": "p8.2",
+   "parentId": "p8",
+   "order": 1,
+   "title": "枠を建て点火して入る",
+   "state": "continue",
+   "doneWhen": "dim:the_nether"
+  },
+  {
+   "id": "p9",
+   "parentId": null,
+   "order": 8,
+   "title": "出発の点検",
+   "state": "continue",
+   "doneWhen": "have:shield&have:gold_armor&food>=100",
+   "forbid": [
+    "点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ"
+   ]
+  },
+  {
+   "id": "p9.1",
+   "parentId": "p9",
+   "order": 0,
+   "title": "帰りのゲート座標を記憶",
+   "state": "continue"
+  },
+  {
+   "id": "p9.2",
+   "parentId": "p9",
+   "order": 1,
+   "title": "金の防具を作る",
+   "state": "continue",
+   "doneWhen": "have:gold_armor"
+  },
+  {
+   "id": "p9.3",
+   "parentId": "p9",
+   "order": 2,
+   "title": "作業台とハーフ",
+   "state": "continue",
+   "doneWhen": "have:crafting_table&have:slab>=6"
+  },
+  {
+   "id": "p9.4",
+   "parentId": "p9",
+   "order": 3,
+   "title": "食料を100点にする",
+   "state": "continue",
+   "doneWhen": "food>=100"
+  },
+  {
+   "id": "p10",
+   "parentId": null,
+   "order": 9,
+   "title": "要塞を探す",
+   "state": "continue",
+   "caution": [
+    "橋は両脇に壁を置く",
+    "橋の上で立ち止まらない"
+   ]
+  },
+  {
+   "id": "p11",
+   "parentId": null,
+   "order": 10,
+   "title": "ブレイズロッド集め",
+   "state": "continue",
+   "doneWhen": "have:blaze_rod>=7",
+   "caution": [
+    "射線の中で止まらない"
+   ]
+  },
+  {
+   "id": "p12",
+   "parentId": null,
+   "order": 11,
+   "title": "エンダーパール集め",
+   "state": "continue",
+   "doneWhen": "have:ender_pearl>=12"
+  },
+  {
+   "id": "p13",
+   "parentId": null,
+   "order": 12,
+   "title": "オーバーワールドへ戻る",
+   "state": "continue",
+   "doneWhen": "dim:overworld"
+  },
+  {
+   "id": "p14",
+   "parentId": null,
+   "order": 13,
+   "title": "アイを作る",
+   "state": "continue",
+   "doneWhen": "have:ender_eye>=12"
+  },
+  {
+   "id": "p15",
+   "parentId": null,
+   "order": 14,
+   "title": "三角測量で位置を探す",
+   "state": "continue"
+  },
+  {
+   "id": "p16",
+   "parentId": null,
+   "order": 15,
+   "title": "ポータル部屋を目指す",
+   "state": "continue"
+  },
+  {
+   "id": "p17",
+   "parentId": null,
+   "order": 16,
+   "title": "エンドの準備と突入",
+   "state": "continue",
+   "doneWhen": "dim:the_end"
+  },
+  {
+   "id": "p17.1",
+   "parentId": "p17",
+   "order": 0,
+   "title": "弓と矢と食料をそろえる",
+   "state": "continue",
+   "doneWhen": "have:bow&have:arrow>=30&food>=80"
+  },
+  {
+   "id": "p17.2",
+   "parentId": "p17",
+   "order": 1,
+   "title": "アイをはめて入る",
+   "state": "continue",
+   "doneWhen": "dim:the_end"
+  },
+  {
+   "id": "p18",
+   "parentId": null,
+   "order": 17,
+   "title": "クリスタルを壊す",
+   "state": "continue"
+  },
+  {
+   "id": "p19",
+   "parentId": null,
+   "order": 18,
+   "title": "ドラゴンを倒す",
+   "state": "continue"
+  }
+ ]
+}

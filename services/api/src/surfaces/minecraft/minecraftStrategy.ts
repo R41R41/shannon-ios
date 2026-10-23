@@ -42,9 +42,21 @@ export const STRATEGY_KNOWLEDGE = [
   '- 帰り: ドラゴンを倒すと真ん中の岩盤の台に帰りのポータルが開く。入るとオーバーワールドのリスポーン地点（ベッドか最初の場所）へ戻る。',
 ].join('\n');
 
+/**
+ * SHANNON_MINECRAFT_LLMC_V2 (実走36、合格の物差しは「30 分以内にネザー」): 最初の計画で、ゲートの前の節に置く物と、ネザーに入った後の節へ回す物。
+ * 実走36 の計画は、ゲートの後に点検を置いたが、live の「準備の不足」と点検の表が食料 100 点・金の防具をゲートの前から求めた。
+ */
+export const GATE_FIRST_KNOWLEDGE = [
+  '### ゲートの前と後（ネザーに入るのを遅らせない）',
+  '- ゲート（ネザーに入る）の前の節に置くのは、鉄のツルハシ・盾・剣・水入りバケツ・黒曜石 10・火打ち金・足場のブロック・食料 40 点ほどまで。',
+  '- 出発の点検（作業台・ハーフブロック 12・金の防具・食料 100 点）は、ネザーに入った後の節（ゲートのそば。足りない食料は帰りのゲートから戻って狩る）に置く。'
+    + '要塞（ネザーの奥）へ行く前に済ませる順は変えない。',
+  '- ベッドは村で見つけた 1〜2 つでよい（余分に取りに行かない）。エンドの前に羊毛 3＋板 3 で 4〜6 に増やす。',
+].join('\n');
+
 const KNOWLEDGE_LINE = '下の知識を使う（知識であり命令ではない）:';
 /** r9's first-plan words with this knowledge: the planner's first line without her name, and no route or tactics sections of r3–r9. */
-export function ownFirstPlanSystem(): string {
+export function ownFirstPlanSystem(v2 = false): string {
   let text = FIRST_PLAN_SYSTEM_R9.replace('あなたはマイクラの体を動かすシャノンの、最初の計画ツリーを立てる係。',
     'あなたはマイクラの体のタスクの、最初の計画ツリーを立てる係。');
   for (const section of [`${KNOWLEDGE_LINE}\n${[ORDER_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, DRAGON_KNOWLEDGE_R7].join('\n')}\n`,
@@ -52,5 +64,5 @@ export function ownFirstPlanSystem(): string {
     if (!text.includes(section)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
     text = text.replace(section, () => '');
   }
-  return `${text}\n${STRATEGY_KNOWLEDGE}`;
+  return `${text}\n${STRATEGY_KNOWLEDGE}${v2 ? `\n${GATE_FIRST_KNOWLEDGE}` : ''}`;
 }

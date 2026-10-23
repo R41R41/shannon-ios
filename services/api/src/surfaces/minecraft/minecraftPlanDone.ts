@@ -1,4 +1,4 @@
-import { orderedPlan, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
+import { orderedPlan, PLAN_LIMITS, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
@@ -188,16 +188,41 @@ export function nodesHeldOpen(tree: PlanTree, facts: DoneFacts, inOrder = false)
   });
 }
 
-export interface SeenDone { update: PlanUpdate; ids: string[]; held?: string[] }
+export interface SeenDone { update: PlanUpdate; ids: string[]; held?: string[]; closed?: string[] }
+
+/**
+ * mb-llmc v2 (run 36, task 40bd0b3e: p1 `have:bed>=3` was seen done at 104 s with 「村の箱を開ける」「鍛冶屋の箱を開ける」 open, p4
+ * `have:iron_ingot>=24|have:iron_chestplate` with 「洞窟で鉄鉱石を掘る」「鉄を焼く」 open: a parent done by the pack leaves its children
+ * `continue` for good, and the plan shows work to do under a node that is done): a node open under one that is done (or seen done in this pass) is
+ * not needed any more, and is closed as done with the reason in its note. Its nearest done ancestor is named. Never a blocked node.
+ */
+export function closedUnder(tree: PlanTree, seen: readonly string[]): Array<{ id: string; by: string; note: string }> {
+  const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
+  const done = new Set([...tree.nodes.filter(node => node.state === 'done').map(node => node.id), ...seen]);
+  const out: Array<{ id: string; by: string; note: string }> = [];
+  for (const node of orderedPlan(tree.nodes)) {
+    if (done.has(node.id) || node.state === 'blocked') continue;
+    let by: PlanNode | undefined;
+    for (let up = byId.get(node.parentId ?? ''); up && !by; up = byId.get(up.parentId ?? '')) if (done.has(up.id)) by = up;
+    if (!by) continue;
+    const why = `不要になった（${by.id} が済んだ${by.doneWhen ? `: ${by.doneWhen}` : ''}）`;
+    out.push({ id: node.id, by: by.id, note: (node.note ? `${why} ${node.note}` : why).slice(0, PLAN_LIMITS.text) });
+  }
+  return out;
+}
 /**
  * The update that marks them done (the current node then moves on by itself), or null when the frame shows none. r9: `held` names the
  * nodes whose place or dimension holds while a child is open (`p2←p2.1,p2.3`), for the log; with no node done and some held, the update is empty.
  */
-export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | null, inOrder = false): SeenDone | null {
+export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | null, v2 = false): SeenDone | null {
   const facts = doneFacts(observation);
   if (!facts || !tree.nodes.length) return null;
-  const ids = nodesSeenDone(tree, facts, inOrder).slice(0, 24);
-  const held = nodesHeldOpen(tree, facts, inOrder).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
-  if (!ids.length && !held.length) return null;
-  return { update: { ops: ids.map(id => ({ op: 'set' as const, id, state: 'done' as const })) }, ids, ...(held.length ? { held } : {}) };
+  const seen = nodesSeenDone(tree, facts, v2).slice(0, 24);
+  const under = v2 ? closedUnder(tree, seen) : [];
+  const held = nodesHeldOpen(tree, facts, v2).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
+  if (!seen.length && !under.length && !held.length) return null;
+  const ops = [...seen.map(id => ({ op: 'set' as const, id, state: 'done' as const })),
+    ...under.map(item => ({ op: 'set' as const, id: item.id, state: 'done' as const, note: item.note }))].slice(0, PLAN_LIMITS.ops);
+  return { update: { ops }, ids: [...seen, ...under.map(item => item.id)].slice(0, PLAN_LIMITS.ops),
+    ...(held.length ? { held } : {}), ...(under.length ? { closed: under.map(item => `${item.id}←${item.by}`).slice(0, 8) } : {}) };
 }
