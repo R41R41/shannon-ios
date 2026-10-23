@@ -458,7 +458,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       return reasons.length > 0;
     },
     storedResult(call, text) {
-      const { stored, shown } = llmcStoredResult(call.name, text);
+      const { stored, shown } = llmcStoredResult(call.name, text, v2);
       if (shown) events.keep(shown);
       // r6 (run 29: 325 s of waits at hunger 17 and no food): a wait's result says when health cannot come back.
       return r4 ? withRecoveryFact(call.name, call.input, stored, parts.observe()) : stored;

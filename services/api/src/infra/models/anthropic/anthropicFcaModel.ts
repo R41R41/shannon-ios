@@ -26,7 +26,8 @@ import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompa
 import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
 import { transientRequest, type CutStages } from './anthropicFcaTransientRequest.js';
 import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransientFallback.js';
-import { MINECRAFT_V2_TOOLS, minecraftProfile, type MinecraftProfile, type MinecraftV2Hooks } from './anthropicFcaMinecraftSystem.js';
+import { MINECRAFT_V2_TOOLS, minecraftProfile, V2_CONTROL_WORDS, type MinecraftProfile, type MinecraftV2Hooks }
+  from './anthropicFcaMinecraftSystem.js';
 import { FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, inputTransformations, isFcaClearAtMessage,
   appendixOf, planField, renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
 
@@ -95,14 +96,17 @@ export interface AnthropicFcaOptions {
   minecraftSummaryFacts?: boolean;
 }
 
+const controlTool = (name: string, description: string, summary: string): Anthropic.Tool => ({ name, description, strict: true,
+  input_schema: { type: 'object', properties: { summary: { type: 'string', description: summary } }, required: ['summary'], additionalProperties: false } });
 const CONTROL_TOOLS: Anthropic.Tool[] = [
   ['fca_wait', 'Wait for another task or new information. Summarize the concrete dependency; this does not finish the task.'],
   ['fca_complete', 'Finish this task only when its completion criteria are satisfied. Summarize the result using observed evidence.'],
-].map(([name, description]) => ({
-  name: name!, description: description!, strict: true,
-  input_schema: { type: 'object', properties: { summary: { type: 'string', description: 'A nonempty, public summary, at most 2000 characters.' } },
-    required: ['summary'], additionalProperties: false },
-}));
+].map(([name, description]) => controlTool(name!, description!, 'A nonempty, public summary, at most 2000 characters.'));
+/** The controls and tool names of a request by whether the mode (V2_CONTROL_WORDS: its Japanese controls) is on ('true'). */
+const MENUS: Readonly<Record<string, { controls: Anthropic.Tool[]; names: readonly string[] | undefined }>> = {
+  true: { controls: V2_CONTROL_WORDS.map(([name, description, summary]) => controlTool(name, description, summary)), names: MINECRAFT_V2_TOOLS },
+  false: { controls: CONTROL_TOOLS, names: undefined },
+};
 const ONE_HOUR = { type: 'ephemeral' as const, ttl: '1h' as const };
 
 /** One native Messages request per decision. Scheduling, execution and authority stay with the caller. */
@@ -147,7 +151,8 @@ export class AnthropicFcaModel implements FcaModel {
       model: this.model, historyMessageCount: history.length, deliveredMessageCount: input.messages.length,
       offeredTools: input.tools.map(tool => observedFcaToolName(tool.name)),
     }, () => {
-      const menu = transient ? transientFcaTools(input, history, CONTROL_TOOLS, [FCA_CONTEXT_TOOL], this.v2() ? MINECRAFT_V2_TOOLS : undefined)
+      const menu = transient
+        ? transientFcaTools(input, history, MENUS[String(this.v2() !== null)]!.controls, [FCA_CONTEXT_TOOL], MENUS[String(this.v2() !== null)]!.names)
         // SHANNON_MINECRAFT_LLMC_V2's history summary is offered its one summary tool and no control tool: asked to "name no tool except … fca_complete" it
         // sometimes called the summary tool and fca_complete together (FCA_MODEL_CONTROL_MIXED, 2 of 32 summaries in the replay bench of 8607283).
         : nativeFcaTools(input, history, this.options.minecraftSummaryFacts ? [] : CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
@@ -286,9 +291,10 @@ export class AnthropicFcaModel implements FcaModel {
     return { ...built, menu, built: built.built as RequestBuilt };
   }
   /** The mode's hooks, only with the own prompt (a body task of the mode reads no other instructions). */
-  private v2Parts(): { rewriteLive?: MinecraftV2Hooks['rewriteLive']; stageKnowledge?: MinecraftV2Hooks['stageKnowledge'] } {
+  private v2Parts(): { rewriteLive?: MinecraftV2Hooks['rewriteLive']; stageKnowledge?: MinecraftV2Hooks['stageKnowledge'];
+    progress?: NonNullable<MinecraftV2Hooks['progress']> } {
     const hooks = this.v2();
-    return hooks ? { rewriteLive: hooks.rewriteLive, stageKnowledge: hooks.stageKnowledge } : {};
+    return hooks ? { rewriteLive: hooks.rewriteLive, stageKnowledge: hooks.stageKnowledge, ...(hooks.progress ? { progress: hooks.progress } : {}) } : {};
   }
   private v2(): MinecraftV2Hooks | null { return this.minecraft && this.options.minecraftV2 ? this.options.minecraftV2 : null; }
   toolResults(results: readonly { id: string; text: string; ok: boolean }[]): Anthropic.MessageParam {

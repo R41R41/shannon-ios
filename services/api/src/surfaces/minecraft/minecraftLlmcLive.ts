@@ -1,6 +1,7 @@
 import type { BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
 import type { LlmCentricWorld } from '../../contracts/minecraftActContract.js';
 import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
+import { itemWords, reachSuffix } from './minecraftLlmcReachWords.js';
 import { breathWords, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 
@@ -20,8 +21,12 @@ export const LLMC_LIVE_TOKENS = 3_000;
 const THREATS = 8, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 36, EVENTS = 6;
 /** SHANNON_MINECRAFT_LLMC_V2: no `ほか N 件（長いため略）` (人手の点検: 127 か所、見えない件数の合計 848): every hostile, the whole pack, a bound nothing reaches. */
 const V2_THREATS = 24, V2_INVENTORY = 80, V2_LIVE_TOKENS = 12_000;
-const CAPS = { threats: THREATS, inventory: INVENTORY, bound: LLMC_LIVE_TOKENS, v2: false };
-const V2_CAPS = { threats: V2_THREATS, inventory: V2_INVENTORY, bound: V2_LIVE_TOKENS, v2: true };
+type SeenMode = 'threat' | 'near' | null;
+/** How the mode writes the hostiles and the creatures near (`seen`): the old mode writes neither word of reach nor the item's name. */
+const OLD_MODES: { threat: SeenMode; near: SeenMode } = { threat: null, near: null };
+const V2_MODES: { threat: SeenMode; near: SeenMode } = { threat: 'threat', near: 'near' };
+const CAPS = { threats: THREATS, inventory: INVENTORY, bound: LLMC_LIVE_TOKENS, v2: false, modes: OLD_MODES };
+const V2_CAPS = { threats: V2_THREATS, inventory: V2_INVENTORY, bound: V2_LIVE_TOKENS, v2: true, modes: V2_MODES };
 
 /**
  * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25, `~` 2.45, `; @ ! $`
@@ -94,18 +99,29 @@ export function createFoodTrend(now: () => number = Date.now) {
 export type FoodTrend = ReturnType<typeof createFoodTrend>;
 
 interface Seen { line: string; distance: number }
-function seen(value: unknown, limit: number): string[] {
+/**
+ * `mode` (SHANNON_MINECRAFT_LLMC_V2, mb-llmc-cand 10): `threat` writes how the hostile stands to her after its place (`reachSuffix`); `near` names a
+ * dropped item (`cobblestone×4`), leaves out an item she threw herself and the hostiles (the threats say them); null: as the old mode wrote it.
+ */
+const seenName = (entity: Record<string, unknown>, mode: SeenMode): string => mode === 'near' && entity.name === 'item'
+  ? `item ${itemWords(entity)}` : cleanText(entity.name as string);
+function seen(value: unknown, limit: number, mode: SeenMode = null): string[] {
   const items: Seen[] = (Array.isArray(value) ? value : []).flatMap(item => {
     const entity = record(item);
     if (!entity || typeof entity.name !== 'string') return [];
+    if (mode === 'near' && (entity.droppedByMe === true || entity.kind === 'hostile')) return [];
     const distance = finite(entity.distance) ?? 99;
     const at = record(entity.position);
     const where = at && finite(at.x) !== null ? ` (${Math.floor(Number(at.x))},${Math.floor(Number(at.y))},${Math.floor(Number(at.z))})` : '';
     const id = finite(entity.id) !== null ? `#${entity.id} ` : '';
-    return [{ line: `${id}${cleanText(entity.name)} ${round1(distance)}m${where}`, distance }];
+    return [{ line: `${id}${seenName(entity, mode)} ${round1(distance)}m${where}${mode === 'threat' ? reachSuffix(entity) : ''}`, distance }];
   });
   return items.sort((left, right) => left.distance - right.distance).slice(0, limit).map(item => item.line);
 }
+
+/** Whether a `near` line is a threat's creature too (the old mode: the same text; the mode's: the same `#id`, the threat's line has more words). */
+const taken = (threats: readonly string[], line: string, v2: boolean): boolean => v2
+  ? /^#\d+ /u.test(line) && threats.some(threat => threat.startsWith(`${line.split(' ')[0]} `)) : threats.includes(line);
 
 function stacks(value: unknown): string[] {
   return (Array.isArray(value) ? value : []).flatMap(item => {
@@ -219,7 +235,7 @@ function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS):
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
   const state = stateOf(world, observation, caps.v2);
   parts.trend.note(finite(world.food), finite(world.saturation));
-  const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, caps.threats);
+  const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, caps.threats, caps.modes.threat);
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
   const look = lookHint(world, parts.healthLost ?? 0);
   const live: Record<string, unknown> = {
@@ -234,7 +250,8 @@ function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS):
     food: { points: food.points, items: food.items, lostIn5min: parts.trend.lostIn5min() },
     inventory: stacks(world.inventory).slice(0, caps.inventory),
     threats,
-    near: seen(world.nearbyEntities, OTHERS + caps.threats).filter(line => !threats.includes(line)).slice(0, OTHERS),
+    near: seen(world.nearbyEntities, OTHERS + caps.threats, caps.modes.near)
+      .filter(line => !taken(threats, line, caps.v2)).slice(0, OTHERS),
     ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
     ...(parts.events.length ? { events: parts.events.slice(-EVENTS) } : {}),
   };
@@ -265,7 +282,7 @@ export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation'
     ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
     state: { ...stateOf(world, observation, parts.v2 === true), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
-    threats: seen(world.nearbyThreats, URGENT_THREATS), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),
+    threats: seen(world.nearbyThreats, URGENT_THREATS, parts.v2 === true ? 'threat' : null), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),
     ...(parts.events.length ? { events: parts.events.slice(-URGENT_EVENTS) } : {}), ...(results.length ? { lastResults: results } : {}),
     answer: parts.answer };
 }

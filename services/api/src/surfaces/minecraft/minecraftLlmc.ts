@@ -139,15 +139,24 @@ const SHOWN_RESULT_CHARS = 6_000;
  * (`around`, for the next decision only); any other result past `LLMC_KEPT_RESULT_CHARS` is kept as its first line and says where the
  * whole was. The stored text never changes afterwards (the replay stays byte for byte the same: the cache holds).
  */
-export function llmcStoredResult(name: string, text: string): { stored: string; shown: string | null } {
+export function llmcStoredResult(name: string, text: string, v2 = false): { stored: string; shown: string | null } {
   if (name === MC_ACT_TOOL) {
     const lines = text.split('\n'), kept = lines.filter(line => !line.startsWith(AROUND_PREFIX));
+    // mb-llmc-cand 10 (D1): the mode shows only what the history does not have, the stopped hands' surroundings, not the act's lines again.
+    const shown = v2 ? lines.filter(line => line.startsWith(AROUND_PREFIX)).join('\n') : text;
     return kept.length === lines.length ? { stored: text, shown: null }
-      : { stored: [...kept, '（止まった手の周りは、この次の判断の live.lastResults に一度だけ出した）'].join('\n'), shown: text.slice(0, SHOWN_RESULT_CHARS) };
+      : { stored: [...kept, '（止まった手の周りは、この次の判断の live.lastResults に一度だけ出した）'].join('\n'), shown: shown.slice(0, SHOWN_RESULT_CHARS) };
   }
   if (text.length <= LLMC_KEPT_RESULT_CHARS) return { stored: text, shown: null };
   const first = (text.split('\n')[0] ?? '').slice(0, 200);
+  if (v2) return keptAndRest(text, first);
   return { stored: `${first}…（全文 ${text.length}字は、この次の判断の live.lastResults に一度だけ出した）`, shown: text.slice(0, SHOWN_RESULT_CHARS) };
+}
+/** The mode's long result (a view's map, a probe's answer, a plan): the history keeps the first line, the next decision shows the lines after it once. */
+function keptAndRest(text: string, first: string): { stored: string; shown: string | null } {
+  const whole = (text.split('\n')[0] ?? '').length <= first.length;
+  const rest = whole ? text.slice(first.length).replace(/^\n/u, '') : text;
+  return { stored: `${first}…（続き ${rest.length}字は、この次の判断の live.lastResults に一度だけ出した）`, shown: rest.slice(0, SHOWN_RESULT_CHARS) };
 }
 
 /** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before sending (said first). */

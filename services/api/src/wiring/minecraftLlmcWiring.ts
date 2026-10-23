@@ -19,7 +19,7 @@ import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
-import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
+import { anthropicFcaHistoryCodec, anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { llmcSystemAppendix } from '../surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCoreKnowledge } from '../surfaces/minecraft/minecraftKnowledgeCore.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
@@ -294,7 +294,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       // r6 (run 29: the third fca_wait of an operator's request stopped the task): a wait is answered with what there is to wait for.
       waitAnswer: { line: () => llmcWaitLine(observe(), plan.port.tree().nodes), amend: amendAnthropicControl },
       permitWindowMs: LLMC_PERMIT_WINDOW_MS, lookahead: llmc.lookahead, selector: LLMC_CATALOG_SELECTOR,
-      history: { codec: anthropicFcaHistoryCodec, ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy,
+      history: { codec: llmc.v2 ? anthropicFcaHistoryCodecV2 : anthropicFcaHistoryCodec,
+        ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy,
         ahead: { port: llmc.historyAhead, hard: LLMC_HISTORY_HARD } },
       // r3: the old path's evidence (its expectations, appraisals and shared context) is not the mode's: in run 27 it walked the task's
       // sources 114 times (about 51 s of the API's one thread) and wrote 1,600 characters of shared context into every live state.

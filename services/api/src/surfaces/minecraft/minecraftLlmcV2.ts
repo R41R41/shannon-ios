@@ -42,7 +42,28 @@ export const v2MenuTool = (tool: Pick<FcaToolDefinition, 'name'>): boolean => ME
 
 export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolDefinition[] {
   const ordered = MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name));
-  return ordered.map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : reachWords(tool));
+  return ordered.map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : planWords(reachWords(tool)));
+}
+/**
+ * mb-llmc-cand 10 (C2): the plan tool's description says 「済み」 of the done-condition (read as done): in the mode it says 済む条件, as the live state does.
+ */
+function planWords(tool: FcaToolDefinition): FcaToolDefinition {
+  if (tool.name !== 'plan.update') return tool;
+  const description = tool.description
+    .replace('済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。',
+      '済む条件: doneWhen が観測の形（have:・dim:・at:・food>=）の節は、live では「（済む条件: …）」と出る。頭のコードがその条件が満たされた時に済みにする。')
+    .replace('済み扱いの子（消費して無くなった板・棒など）は set state=done で自分で閉じる。',
+      '消費して無くなる物（板・棒など）の子は、作った時に set state=done で自分で閉じる。');
+  return { ...tool, description };
+}
+const DRAGON_PLAIN = '完了の証明は、体がエンドラの死を見届けたことだけ（条件 witnessed-dragon: 体の記録 mc.goal-evidence の boss.verified が true。'
+  + 'あなたが呼ぶ道具ではない）。計画の節が済んだ・完了を要求した・自分で報告した、だけでは完了にならない。';
+/** The progress as the model reads it: with the dragon's binding (`minecraftGoalBinding`, unchanged), one plain sentence of what proves completion. */
+export function progressWithPlain(progress: unknown): unknown {
+  const row = progress && typeof progress === 'object' && !Array.isArray(progress) ? progress as Record<string, unknown> : null;
+  const binding = row?.binding && typeof row.binding === 'object' ? row.binding as Record<string, unknown> : null;
+  const conditions = Array.isArray(binding?.conditions) ? binding!.conditions as Array<{ id?: unknown }> : [];
+  return row && binding && conditions.some(item => item?.id === 'witnessed-dragon') ? { ...row, binding: { ...binding, plain: DRAGON_PLAIN } } : progress;
 }
 /**
  * The body reaches 5 m for dig, place, use, chest, furnace and craft (mb-llmc-cand 2, \`BLOCK_REACH\`); the probe's description, shared with the switch off,
@@ -57,8 +78,10 @@ export const candidateInstructions = (): string => V2_ALWAYS;
 
 /** The hooks the model's options take (`createAnthropicFcaModel`, `minecraftV2`). */
 export function minecraftV2Hooks(): { knowledge: string; rewriteLive(live: Record<string, unknown>): Record<string, unknown>;
-  stageKnowledge(live: Record<string, unknown>): string | undefined; callInput(name: string, input: unknown): unknown } {
-  return { knowledge: V2_ALWAYS, rewriteLive: live => candidateLive(live).live, stageKnowledge: candidateStage, callInput: candidateInput };
+  stageKnowledge(live: Record<string, unknown>): string | undefined; callInput(name: string, input: unknown): unknown;
+  progress(progress: unknown): unknown } {
+  return { knowledge: V2_ALWAYS, rewriteLive: live => candidateLive(live).live, stageKnowledge: candidateStage, callInput: candidateInput,
+    progress: progressWithPlain };
 }
 
 /** What the head does to a model's `mc.act` before the body sees it, for the replay: the same order as `fcaMinecraftTools.ts`. */
