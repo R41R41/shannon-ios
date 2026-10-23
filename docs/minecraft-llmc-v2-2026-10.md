@@ -206,3 +206,18 @@ v2 の時だけ。切の request・動きは 4f98156 のまま。
 | drop の結果に「落ちた先 … 3m 以上離れたので拾い直さない」 | `body.pack` の石や土の行に、体と同じ 3m（「drop は 3m 以上先へ水平に投げる。その近くに立ち続ける・歩くと拾い直す」）。階段・トンネルの dig の `collect=false` を既定の書き方として勧めた（手の型は足していない）：act の説明の dig の行と v2 の知識に「階段・トンネルで石や土を掘り進む dig に付ける。原木・鉱石など拾う物の dig には付けない」 |
 
 - `collect=false` を勧めるかは「以前より良くなるか」で決めた：実走37 は 1,400 秒以降 collect=false になって cobbled_deepslate がほぼ増えなくなった一方、満杯 8 回・約 150 秒、drop は足元に戻って拾い直されて効かなかった。拾う物（原木・鉱石・ダイヤ）には付けない注意を添えて入れた。
+
+## 10 回目: 要求を「これだけ渡された人が正しい手を選べる」形に（C・D と書き方の整理）
+
+v2 の時だけ。旧の request・live は変えない（digest の試験はそのまま）。
+
+| 項目 | 変え方 | 場所 |
+|---|---|---|
+| C1 敵 | 24m 内・急ぎの名指し・見える／道がある敵だけ 1 体 1 行に、体の `reach`（なければ `canSee`・`canReachMe`）を「見える（射線の中）／見えない・道はある／壁の向こうで届かない」と飛び道具の印で書く。残りは「ほか N 体（いちばん近い: zombie 40m・上 35・壁の向こう）」の 1 行。測っていない所は何も書かない | `minecraftLlmcReachWords.ts`・`minecraftLlmcLive.ts`（`seen`）・`minecraftLlmcLiveEnemies.ts`（`farLine`） |
+| C2 計画 | 「（済み: …）」を「（済む条件: …）」に（planNow・plan.next・plan.now・plan.update の説明・system） | `minecraftLlmcLiveRewrite.ts`（`doneWords`）・`minecraftLlmcV2.ts`（`planWords`） |
+| C3 around | `?`（未ロード）を歩ける所に数えず、「不明（未ロード）」の行に。「書いていない所」は固い岩と地図の端（不明）の 2 通りと言う | `minecraftLlmcAround.ts`（`unloadedAsUnknown`） |
+| D1 lastResults | act は止まった手の周りだけ、長い結果は最初の行より後だけ（履歴の行と重ならない） | `minecraftLlmc.ts`（`llmcStoredResult` の `v2`） |
+| D2 near | 落ちている物は `item 名前×数`（自分が投げた物は出さない）、コウモリ・魚・遠い村人は出さない、食べられる動物は計画に食料がある時だけ | `minecraftLlmcReachWords.ts`（`nearWorthy`）・`minecraftLlmcLiveRewrite.ts`（`nearLines`） |
+| D3 書き方 | system を日本語に（header・決まり・読み方）、live 項目の辞典、手の書き方と json の欄は mc.act の説明へ、制御 2 つの日本語の説明、履歴の bootstrap を読める行に（状態の文は 1 回）、完了の証明の 1 文（`progress.binding.plain`） | `anthropicFcaMinecraftSystem.ts`・`minecraftLlmcV2Knowledge.ts`・`minecraftActShortContract.ts`・`anthropicFcaBootstrapText.ts`・`anthropicFcaHistory.ts`（`anthropicFcaHistoryCodecV2`） |
+
+試験は `services/api/tests/llmcV2Fix10.test.ts`。

@@ -72,7 +72,23 @@ export function stepLines(view: MapView, feet: P): string[] {
   return lines;
 }
 
-type Kind = 'walk' | 'headDig' | 'feetDig' | 'void' | 'harm' | 'portal';
+type Kind = 'walk' | 'headDig' | 'feetDig' | 'void' | 'harm' | 'portal' | 'unknown';
+/**
+ * mb-llmc-cand 10 (C3, ADR-0014 D0-3 「不明は不明のまま」): `?` (not loaded) is no air, and the walk rules read it as open. The cells round her read the
+ * map with `?` as a cell the map does not show (so none of them is walked into on a guess), and the cells of the map that are `?` are said apart, as 不明.
+ */
+export function unloadedAsUnknown(view: MapView): MapView {
+  const symbol = (x: number, y: number, z: number): string | undefined => {
+    const found = view.symbol(x, y, z);
+    return found === '?' ? undefined : found;
+  };
+  return { ...view, symbol, known: (x, y, z) => view.known(x, y, z) && symbol(x, y, z) !== undefined };
+}
+/** A cell the map shows in part, one of its feet, head and floor cells `?` (not loaded) and the others shown: not known, and said so. */
+function unloaded(raw: MapView, c: P): boolean {
+  const cells = [raw.symbol(c.x, c.y, c.z), raw.symbol(c.x, c.y + 1, c.z), raw.symbol(c.x, c.y - 1, c.z)];
+  return cells.includes('?') && !cells.includes(undefined);
+}
 /**
  * A portal in her feet cell with a portal or a passable cell over it (the rule shared with the body), whatever is under it (an end portal over lava is
  * still a way in): a cell she goes into, never harm or a void. The cells inside the portal over its first cell have the portal under them: the same way
@@ -110,7 +126,8 @@ function rowsOf(cells: readonly P[]): string[] {
     return `z=${z} x=${runs.join(',')}`;
   });
 }
-const KIND_TEXT: Record<Kind, string> = { walk: '歩ける', headDig: '頭を掘れば歩ける', feetDig: '足を掘れば歩ける', void: '床が無い', harm: '溶岩・火・クモの巣・マグマ', portal: '入れる（ポータル）' };
+const KIND_TEXT: Record<Kind, string> = { walk: '歩ける', headDig: '頭を掘れば歩ける', feetDig: '足を掘れば歩ける', void: '床が無い',
+  harm: '溶岩・火・クモの巣・マグマ', portal: '入れる（ポータル）', unknown: '不明（未ロード。歩けるかどうか分からない）' };
 function listRows(rows: readonly string[]): string {
   return rows.length > ROWS_PER_KIND ? `${rows.slice(0, ROWS_PER_KIND).join(' / ')} / ほか ${rows.length - ROWS_PER_KIND} 行は略` : rows.join(' / ');
 }
@@ -126,13 +143,13 @@ function levelsOf(view: MapView, feet: P): number[] {
  * The cells of one level, by kind. A cell with no floor is a fact for her own level only (below it, the same air column is the head room of
  * a lower place to stand); a cell whose feet are rock and whose head is air is the floor of the place above when that is a place to stand.
  */
-function levelCells(view: MapView, feet: P, y: number, range: number): Map<Kind, P[]> {
+function levelCells(view: MapView, feet: P, y: number, range: number, raw: MapView = view): Map<Kind, P[]> {
   const near = (c: P) => y === feet.y && Math.abs(c.x - feet.x) <= 1 && Math.abs(c.z - feet.z) <= 1;
   const by = new Map<Kind, P[]>();
   for (let dz = -range; dz <= range; dz += 1) {
     for (let dx = -range; dx <= range; dx += 1) {
       const c = { x: feet.x + dx, y, z: feet.z + dz };
-      const found = kindOf(view, c);
+      const found = kindOf(view, c) ?? (raw !== view && unloaded(raw, c) ? { kind: 'unknown' as const } : null);
       if (!found || near(c) || (found.kind === 'void' && y !== feet.y)) continue;
       if (found.kind === 'feetDig' && (y !== feet.y || kindOf(view, { ...c, y: y + 1 })?.kind === 'walk')) continue;
       by.set(found.kind, [...by.get(found.kind) ?? [], c]);
@@ -160,13 +177,13 @@ function voidLines(view: MapView, cells: readonly P[]): string[] {
   return [...by].map(([fall, list]) => `床が無い（${fall}）: ${listRows(rowsOf(list))}`);
 }
 /** The cells within `range` blocks, level by level: what each is as a place to stand. */
-export function cellLines(view: MapView, feet: P, range = AROUND_RANGE): string[] {
+export function cellLines(view: MapView, feet: P, range = AROUND_RANGE, raw: MapView = view): string[] {
   const lines: string[] = [];
   for (const y of levelsOf(view, feet)) {
     const rel = y - feet.y;
     const label = `y=${y}（${rel === 0 ? '足' : rel > 0 ? `+${rel}` : `${rel}`}）`;
-    const by = levelCells(view, feet, y, range);
-    for (const kind of ['walk', 'headDig', 'feetDig', 'harm'] as const) {
+    const by = levelCells(view, feet, y, range, raw);
+    for (const kind of ['walk', 'headDig', 'feetDig', 'harm', 'unknown'] as const) {
       const cells = by.get(kind);
       if (cells?.length) lines.push(`${label} ${KIND_TEXT[kind]}: ${listRows(rowsOf(cells))}`);
     }
@@ -177,6 +194,9 @@ export function cellLines(view: MapView, feet: P, range = AROUND_RANGE): string[
 }
 /** `around`: the ten cells next to her, then the cells within the range. */
 export function aroundLines(view: MapView, feet: P): string[] {
-  return [...stepLines(view, feet), '足の周りの 1 歩より先（この判断の始めの frame の地図から。水平 6・足と頭と床が地図にある高さだけ。z=行 x=範囲）:',
-    ...cellLines(view, feet)];
+  const read = unloadedAsUnknown(view);
+  return [...stepLines(read, feet), AROUND_HEAD, ...cellLines(read, feet, AROUND_RANGE, view)];
 }
+/** The line before the cells beyond the first step; what is not written is said in the instructions' dictionary (`around`). */
+export const AROUND_HEAD = '足の周りの 1 歩より先（この判断の始めの frame の地図から。水平 6・足と頭と床が地図にある高さ。z=行 x=範囲。'
+  + '書いていない所は足も頭も固い岩か、地図の端で不明）:';

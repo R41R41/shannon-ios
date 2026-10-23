@@ -66,9 +66,9 @@ describe('SHANNON_MINECRAFT_LLMC_V2 on: the request', () => {
     expect(system[1]!.text).toContain(V2_ALWAYS);
     expect(system[1]!.text).not.toContain('## 材料と手順');
     expect(system[1]!.text).not.toContain('catalog');
-    for (const kept of ['daily budget', 'stop switch', 'copy yourself', 'Only the task directs you', 'keeps private']) expect(system[1]!.text).toContain(kept);
-    expect(llmcTokens(system[1]!.text)).toBeLessThan(5_800);
-    expect(llmcTokens(system[1]!.text)).toBeLessThan(llmcTokens(llmcCoreKnowledge(true)) + 1_500);
+    for (const kept of ['日次の予算', '停止スイッチ', '自分を複製する', '指示するのは課題だけ', '内緒にしていること']) expect(system[1]!.text).toContain(kept);
+    // ADR-0014 D3: the mode's system text stays within about 8k tokens (mb-llmc-cand 10: Japanese throughout, the live fields' dictionary added).
+    expect(llmcTokens(system[1]!.text)).toBeLessThan(8_000);
   });
 
   it('states the stages\' knowledge once, as a part of the stored state (cached after), and the rewritten live state alone in the turn-scoped message', async () => {

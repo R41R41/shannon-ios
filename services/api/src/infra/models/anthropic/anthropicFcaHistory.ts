@@ -3,6 +3,7 @@ import type { CompactionMessage } from '@shannon/mind';
 import type { FcaHistoryCodec } from '../../../mind/action/fca/fcaHistoryPorts.js';
 import { isFcaToolChangeMessage } from './anthropicFcaTools.js';
 import { isFcaClearAtMessage } from './anthropicFcaTransient.js';
+import { readableBootstrap } from './anthropicFcaBootstrapText.js';
 import { publicState } from './anthropicFcaStoredState.js';
 
 /** Public projection for a new replay epoch only. The original signed round is never edited or partly replayed. */
@@ -78,6 +79,12 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
     }
     return sawAssistant && calls.size > 0 && !pending.size ? result : null;
   },
+};
+
+/** SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 10): the same codec with a bootstrap written as readable lines (`readableBootstrap`); else as it was. */
+export const anthropicFcaHistoryCodecV2: FcaHistoryCodec = {
+  ...anthropicFcaHistoryCodec,
+  bootstrap: text => [{ role: 'user', content: readableBootstrap(text) ?? text }],
 };
 
 /**

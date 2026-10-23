@@ -44,8 +44,9 @@ describe('the pack and the drop (the body: thrown 3 m or more off, not picked up
     expect(line).toContain('階段・トンネルで使わない石や土を掘る dig は collect=false');
   });
   it('recommends collect=false for the stair and the tunnel, not for what is picked up (a log, an ore), in the act\'s description and the knowledge', () => {
-    expect(SHORT_ACT_DESCRIPTION).toContain('[collect=false: 掘るだけで拾いに歩かない。階段・トンネルで石や土を掘り進む dig に付ける');
+    // mb-llmc-cand 10: a per-hand rule is in the hand's description only, no longer repeated in the instructions.
+    expect(SHORT_ACT_DESCRIPTION).toContain('collect=false: 掘るだけで拾いに歩かない。階段・トンネルで石や土を掘り進む dig に付ける');
     expect(SHORT_ACT_DESCRIPTION).toContain('原木・鉱石など拾う物の dig には付けない');
-    expect(V2_ALWAYS).toContain('階段・トンネルで石や土を掘り進む dig は collect=false（付けないと拾い続けて満杯。原木・鉱石の dig には付けない）');
+    expect(V2_ALWAYS).not.toContain('collect=false');
   });
 });

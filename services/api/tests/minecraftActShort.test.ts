@@ -164,11 +164,13 @@ describe('short hands: the tool', () => {
     expect(validSkillInput({ hands: ['jump'], extra: 1 }, schema)).toBe(false);
     expect(validSkillInput({ why: 'w' }, schema)).toBe(false);
   });
-  it('is the act description with the hand lines said in place of the json hands', () => {
+  it('is the act description with the hand lines said in place of the json hands, and holds the whole grammar (mb-llmc-cand 10: one topic in one place)', () => {
     expect(SHORT_ACT_DESCRIPTION).not.toContain('手（do）と引数');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('at・path・items は 1 つでも配列 [ ] で書く');
     expect(SHORT_ACT_DESCRIPTION).toContain('walk X,Y,Z');
     expect(SHORT_ACT_DESCRIPTION).toContain('json {"do":"furnace"');
-    for (const line of ACT_DESCRIPTION.split('\n').slice(5)) expect(SHORT_ACT_DESCRIPTION).toContain(line);
+    // The cut-offs of the old text are still said, now in the description's own sections.
+    for (const word of ['stopIf は文字列', 'accept は', 'onFail:', 'hpBelow は今の体力より低い値', '石1枚の向こうの水は、その石を dig してから use bucket',
+      'chest は', '箱・樽だけ']) expect(SHORT_ACT_DESCRIPTION, word).toContain(word);
   });
 });
