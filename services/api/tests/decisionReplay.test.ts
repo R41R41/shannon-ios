@@ -166,6 +166,8 @@ describe('decision replay: v8, the narrowed form', () => {
   it.runIf(haveData)('every recorded act of runs 27–34 goes through a line and back as it was (a hand with no line goes as json)', () => {
     let acts = 0, mismatched = 0, errors = 0;
     for (const run of loadAllRuns().values()) {
+      // 実走36・37（本番 rel41）は記録の手が最初から短い書き方の行（文字列）。この試験は JSON の手の記録（27〜34）だけ。
+      if (run.key === 'r36' || run.key === 'r37') continue;
       for (const decision of decisions(run)) {
         if (decision.call?.name !== 'mc_act' || !Array.isArray(decision.call.input.hands)) continue;
         acts += 1;

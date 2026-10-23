@@ -1,0 +1,32 @@
+{"scene":"s64-r37-1931-portal-entry","key":"candF|2","variant":"candF","rep":2,"verdict":"×","reason":"d=127で止まったwalk (229,-54,196)をrange無しで繰り返している"}
+{"scene":"s64-r37-1931-portal-entry","key":"candF|1","variant":"candF","rep":1,"verdict":"×","reason":"直前に『立てない』で止まった同じwalkの繰り返しで、また止まる見込み"}
+{"scene":"s64-r37-1931-portal-entry","key":"candF|3","variant":"candF","rep":3,"verdict":"×","reason":"止まった手と同じwalk to=(229,-54,196)で、range指定などの工夫も無い"}
+{"scene":"s64-r37-1931-portal-entry","key":"candB|2","variant":"candB","rep":2,"verdict":"×","reason":"wait6は良いが、walkは直前に止まった手と同じで体が入れない"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candF|2","variant":"candF","rep":2,"verdict":"○","reason":"to でポータルへ walk し6秒待つ、hostileWithin 付き"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candF|3","variant":"candF","rep":3,"verdict":"○","reason":"to でポータルへ walk し6秒待つ、hostileWithin 付き"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"欄を直してポータルへ walk＋待機、条件どおり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candB|2","variant":"candB","rep":2,"verdict":"○","reason":"to でポータルのマスへ入り待つ、敵停止条件もあり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candB|3","variant":"candB","rep":3,"verdict":"○","reason":"正しい欄で walk しポータルで待つ、条件を満たす"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"正しい欄で walk しポータルで待つ、条件を満たす"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"奥を掘る迂回で条件に反し、hostileWithin もない"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candF|3","variant":"candF","rep":3,"verdict":"○","reason":"liveの所持品を読み、確認に回さず火打ち金をクラフト。条件どおり"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candB|3","variant":"candB","rep":3,"verdict":"○","reason":"flint入手を受けてすぐ火打ち金をクラフト。条件どおり"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"計画p6.3どおりmc.act一つで火打ち金をクラフト"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"計画p6.3どおりmc.act一つで火打ち金をクラフト"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candB|2","variant":"candB","rep":2,"verdict":"○","reason":"計画p6.3どおりmc.act一つで火打ち金をクラフト"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"計画p6.3どおりmc.act一つで火打ち金をクラフト"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candF|2","variant":"candF","rep":2,"verdict":"○","reason":"計画p6.3どおりmc.act一つで火打ち金をクラフト"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candF|1","variant":"candF","rep":1,"verdict":"△","reason":"寄ってから掘るが水源座標を誤読、水が流れるか不明"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candB|3","variant":"candB","rep":3,"verdict":"○","reason":"遮るマスを先に掘り溶岩の隣を開ける、条件どおり"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"prod","variant":"prod","rep":"prod","verdict":"△","reason":"掘る順は良いが空バケツを空中に使っても注げない"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"遮るマスを先に掘り溶岩隣を開ける。lookは無害"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candF|3","variant":"candF","rep":3,"verdict":"○","reason":"遮るマスを掘り溶岩の隣253,-24,208を開ける"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candF|2","variant":"candF","rep":2,"verdict":"○","reason":"遮るマスを先に掘り溶岩の隣を両方開ける"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candB|2","variant":"candB","rep":2,"verdict":"○","reason":"遮るマスを先に掘り溶岩隣を開ける、条件を満たす"}
+{"scene":"s68-r37-1813-early-bed","key":"candB|3","variant":"candB","rep":3,"verdict":"○","reason":"扉を通り箱の横へ入り、箱を取ってからベッドを掘る。通る見込みが高い"}
+{"scene":"s68-r37-1813-early-bed","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"本番と同じ流れで、ベッドの隣へ入って掘り、そのあと箱を取る"}
+{"scene":"s68-r37-1813-early-bed","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"家の中のベッドの隣へ入り、箱を取ってからベッドを掘る正しい手"}
+{"scene":"s68-r37-1813-early-bed","key":"candF|2","variant":"candF","rep":2,"verdict":"○","reason":"家の中のベッドの隣へ入り、箱を取ってからベッドを掘る正しい手"}
+{"scene":"s68-r37-1813-early-bed","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"中へ入って箱とベッドを取る。足側の掘りも失敗時は続行になっている"}
+{"scene":"s68-r37-1813-early-bed","key":"candB|2","variant":"candB","rep":2,"verdict":"○","reason":"中へ入って箱とベッドを取る。足側の掘りも失敗時は続行になっている"}
+{"scene":"s68-r37-1813-early-bed","key":"candF|3","variant":"candF","rep":3,"verdict":"○","reason":"中へ入って見える位置から箱とベッドを取る。条件に合う"}

@@ -1,6 +1,7 @@
 import { llmcPrepare } from '../../src/surfaces/minecraft/minecraftLlmc.js';
 import { MC_ACT_TOOL } from '../../src/contracts/minecraftActContract.js';
 import type { Decision } from './load.js';
+import { denormalizeMap } from './liveRebuild.js';
 
 /**
  * 決まった検査（機械で白黒が付く物）。場面ごとのファイル（scenes/*.json）が、これを名前で呼ぶ。
@@ -86,7 +87,7 @@ export function contextOf(decision: Decision): Context {
     const from = { x: +m[1]!, y: +m[2]!, z: +m[3]! }, to = m[4] ? { x: +m[4], y: +m[5]!, z: +m[6]! } : from;
     return [{ from: m[4] ? from : undefined, to, reason: m[7]!, secondsAgo: Number(m[8]) }];
   });
-  return { decision, live, self, hp: Number(state.health ?? 20), food: Number(state.food ?? 20), threats, grid: decodeMap(body.map), stopped: stoppedHand(decision),
+  return { decision, live, self, hp: Number(state.health ?? 20), food: Number(state.food ?? 20), threats, grid: decodeMap(typeof body.map === 'string' ? denormalizeMap(body.map) ?? body.map : body.map), stopped: stoppedHand(decision),
     recentStops, visible, urgent: Array.isArray(body.urgent) && body.urgent.length > 0, hasAnswerLine: typeof body.answer === 'string',
     inventory: Array.isArray(body.inventory) ? body.inventory : [] };
 }

@@ -20,7 +20,8 @@ export interface SceneFile {
   /** 自動の検査を切る（理由を note に）。 */
   auto?: { repeat?: boolean; walk?: boolean }; note?: string;
 }
-export const scenesDir = new URL('./scenes/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+/** 場面のファイルの置き場所。既定は scenes/（60 場面）、DECISION_REPLAY_SCENES_DIR=scenes-b で B の直しの比べの場面。 */
+export const scenesDir = new URL(`./${process.env.DECISION_REPLAY_SCENES_DIR ?? 'scenes'}/`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 export function loadScenes(dir = scenesDir): SceneFile[] {
   return readdirSync(dir).filter(name => name.endsWith('.json')).sort().map(name => JSON.parse(readFileSync(`${dir}${name}`, 'utf8')) as SceneFile);
 }

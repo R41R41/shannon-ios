@@ -1,0 +1,67 @@
+{
+  "id": "s65-r37-1932-portal-after-shape-error",
+  "run": "r37",
+  "seq": 1932,
+  "category": [
+    "progress",
+    "stopped"
+  ],
+  "title": "実走37 d=129: ポータルへの walk が書き方の誤りで通らなかった直後。同じ入り方を直して出す",
+  "situation": "実走37 38.6 分、(229,-54,197)（overworld）。計画の今の節 [p6.4] ゲートを建て入る。前の判断 d=128 は look → json walk at=(229,-54,196) → wait 6 を出し、結果は『手2（walk）: at は使えない（walk の欄: to・path・sprint・range・rel・note・onFail）』で体には何も送られなかった（位置は (229,-54,197) のまま）。ネザーポータルは x=229..230・y=-54..-52・z=196（地図の p）、下は枠の黒曜石。敵は 39m 以上先だけ。HP20・満腹20。",
+  "correct": "walk の欄（to・range）で書き直して、ポータルのマス（(229,-54,196) など）へ walk し、約 4 秒立って待つ。迂回して奥を掘る・別の場所を調べる・持ち物の確認・枠の作り直しをしない。待つ act には hostileWithin。",
+  "hindsight": "実際の答え（本番 rel41）: dig (229,-53,195)(229,-54,195) collect=false → walk (229,-54,195) → wait 6。dig だけが済み（1/1）、walk は頭の送る前の点検が『(229,-54,196)・(229,-53,196) のポータル（地図 ¤）が塞がっている』と止めた（体には送られず）。次の d=130 で walk (229,-54,195) range=1 + wait 6 が通り、体は (229,-54,196) に着いて『次元が変わった』。",
+  "judge": "always",
+  "auto": {
+    "repeat": false
+  },
+  "must": [
+    {
+      "id": "walk-into-portal",
+      "why": "ポータルのマス（またはすぐ向こう）へ walk して入る（足の今のマス (229,-54,197) は含まない）",
+      "check": {
+        "kind": "some",
+        "match": {
+          "do": "walk",
+          "near": [
+            229.5,
+            -53.5,
+            195.5,
+            1.4
+          ]
+        }
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "mc-act",
+      "why": "mc.act を出す",
+      "check": {
+        "kind": "tool",
+        "in": [
+          "mc.act"
+        ]
+      }
+    },
+    {
+      "id": "wait-after",
+      "why": "入ったら待つ",
+      "check": {
+        "kind": "some",
+        "match": {
+          "do": "wait"
+        }
+      }
+    },
+    {
+      "id": "no-dig",
+      "why": "奥を掘る迂回をしない",
+      "check": {
+        "kind": "none",
+        "match": {
+          "do": "dig"
+        }
+      }
+    }
+  ]
+}

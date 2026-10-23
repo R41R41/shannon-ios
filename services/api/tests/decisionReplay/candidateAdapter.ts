@@ -7,6 +7,7 @@ import { candidateFixed, type CandidateFixed } from '../../src/wiring/minecraftL
 import { contextOf } from './checks.js';
 import type { Decision, Entry } from './load.js';
 import { frameBefore, type Frames } from './preflightFrames.js';
+import { denormalizeMap, rebuiltLive, taskNoteSwap, withStateWords } from './liveRebuild.js';
 
 /**
  * 候補の版（branch codex/shannon/mb-llmc-cand fdd976c、台の branch は codex/shannon/decision-replay-cand）を台に入れる口。候補の頭が
@@ -46,21 +47,52 @@ function withStage(entries: readonly Entry[], stage: string, full: boolean): Ent
   }
   return [{ role: 'user', content: [{ type: 'text', text: candidateStageState(stage, full) }] }, ...entries];
 }
+/**
+ * 実走36・37（本番 rel41）の記録の live は書き直し済みの形なので、候補の書き直しは「地図から作る欄」を作り直して差し替える（liveRebuild.ts）。
+ * 実走27〜34 の記録の live は書き直し前の形で、これまでどおり candidateLive を通す。
+ */
+function liveOfDecision(live: Record<string, unknown>): { live: Record<string, unknown>; notes: unknown; stage: string | null } {
+  const rebuilt = rebuiltLive(live as Record<string, any>);
+  if (!rebuilt) { const made = candidateLive(live); return { ...made, live: withStateWords(made.live as Record<string, any>) }; }
+  return { live: rebuilt, notes: { rebuilt: true }, stage: candidateStage(live) ?? null };
+}
+/** 記録の状態メッセージに残る段の知識（本番がその時付けた物）を外す。台が、この木の版の段の知識を付け直す。 */
+function withoutStored(entries: readonly Entry[]): Entry[] {
+  const swap = taskNoteSwap();
+  return entries.map((entry, i) => {
+    if (entry.role !== 'user' || !Array.isArray(entry.content)) return entry;
+    const blocks = (entry.content as Array<Record<string, any>>).map(block => {
+      if (block?.type !== 'text' || typeof block.text !== 'string') return block;
+      let text = block.text;
+      if (swap && text.includes(swap.from)) text = text.split(swap.from).join(swap.to);
+      if (!text.includes('"stageKnowledge"')) return text === block.text ? block : { ...block, text };
+      try {
+        const state = JSON.parse(text) as Record<string, unknown>;
+        delete state.stageKnowledge;
+        return { ...block, text: JSON.stringify(state) };
+      } catch { return text === block.text ? block : { ...block, text }; }
+    });
+    // 段の知識だけの状態（stateUpdate だけが残る）は、台がこの版の物を付け直すので外す。
+    const only = blocks.length === 1 && blocks[0]?.type === 'text' && ['{"stateUpdate":"changed"}', '{"stateUpdate":"full"}'].includes(String(blocks[0].text));
+    return only ? null as never : { ...entry, content: blocks };
+  }).filter(Boolean);
+}
 /** 履歴の epoch の rows に、段の知識を足し、過去の act を短い書き方にする。 */
 export function candRows(decision: Decision): Entry[][] {
   const rows = decision.run.rows.slice(decision.epochStart, decision.index);
   let previous: string | null = null;
   return rows.map((row, k) => {
     const stage = stageOf(liveOfRow(row.entries));
-    const entries = stage && (k === 0 || stage !== previous) ? withStage(row.entries, stage, k === 0) : row.entries;
+    const clean = withoutStored(row.entries);
+    const entries = stage && (k === 0 || stage !== previous) ? withStage(clean, stage, k === 0) : clean;
     if (stage) previous = stage;
     return candShorten(entries);
   });
 }
 /** 判断の後ろの入れ替わる部分: 候補の live を JSON にして記録の live の entry と入れ替え、段が変わった時（と epoch の最初）は状態に stageKnowledge を足す。 */
 export function candTurn(decision: Decision): { turn: Entry[]; notes: unknown; stage: string | null; stated: boolean } {
-  const { live, notes, stage } = candidateLive(decision.live);
-  let turn = decision.turn.map(entry => entry.role === 'system' ? { ...entry, content: JSON.stringify(live) } : entry);
+  const { live, notes, stage } = liveOfDecision(decision.live);
+  let turn = withoutStored(decision.turn).map(entry => entry.role === 'system' ? { ...entry, content: JSON.stringify(live) } : entry);
   // その前のラウンドで立っている段（同じ epoch の中で、stage があった最後のラウンド）。
   let previous: string | null = null;
   for (const row of decision.run.rows.slice(decision.epochStart, decision.index)) previous = stageOf(liveOfRow(row.entries)) ?? previous;
@@ -99,8 +131,10 @@ export function candFrame(decision: Decision, info: Frames): BodyObservation {
     return { id: Number(threat.id), name: threat.name, distance: threat.meters, position: threat.pos, canReachMe, canSee };
   });
   const feet = frame.feet ?? context.self;
+  // 記録の live の地図が「そろえた地図」なら、守りが読める層の形に戻す（実走36・37。前の act の結果の地図が無い時の代わり）。
+  const mapText = frame.map && frame.from === 'live' ? denormalizeMap(frame.map) ?? frame.map : frame.map;
   return { schemaVersion: 1, bodyId: 'replay', sequence: 0, stateAt: '', receivedAt: '', connected: true, facts: {},
-    state: { world: { health: context.hp, position: { x: feet.x + 0.5, y: feet.y, z: feet.z + 0.5 }, ...(frame.map ? { localMap: frame.map } : {}), ...(Array.isArray(body.stops) ? { recentStops: body.stops } : {}), nearbyThreats } as never } };
+    state: { world: { health: context.hp, position: { x: feet.x + 0.5, y: feet.y, z: feet.z + 0.5 }, ...(mapText ? { localMap: mapText } : {}), ...(Array.isArray(body.stops) ? { recentStops: body.stops } : {}), nearbyThreats } as never } };
 }
 
 export { candidateAct };

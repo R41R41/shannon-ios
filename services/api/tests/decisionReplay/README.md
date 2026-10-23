@@ -105,3 +105,11 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 検査「同じ止まりのくり返し」の誤判定を直した（`checks.ts`: 止まったマス 1 つだけを見る・離れた足の場所からの同じマスは別・道具を名指しした掘り直しは別・recentStops の「掘れない」は目標にしない）。手の数の決まり（`answerLine`）は、部分送りの組の各 act の最大で見る（`Answer.partsMax`）。
 - 回す: `run6.ts --variant=cand3 --out=results8.jsonl --scenes=<新しく回す場面>`、他の場面は前の結果へかけ直し（`--reuse=results7.jsonl --reuse-variant=cand2`。1 回目の守りの結果が前と同じなら前の聞き直しの答えを使い、違う時だけ新しく聞き直す。`--dry` で、違う答えの数だけ見られる）。採点の下ごしらえは `seedJudge7.ts`（前の採点を写し、同じ答えの採点は版を越えて写す）→ `judge5.ts --out=judge7.jsonl`。
 - 結果のまとめ: `results/candidate-guards-20261023.md`。
+
+## 10/23 の追加 (8): B の直し（mb-llmc-cand 73244fc → 8607283）の確かめ
+
+- 比べる 2 つの木: 基準 = 73244fc、修正 = 8607283（台の branch `codex/shannon/decision-replay-cand` に 8607283 を merge）。基準の木は、台の merge の前の commit に 73244fc を merge した worktree に `services/api/tests/decisionReplay/` をこの branch の物で上書きして作る（`node_modules`・`data/` は修正の木へのジャンクション）。同じコードを 2 つの木で動かし、差は版（`src/`）の差だけ。
+- 実走36・37（本番 rel41）の取り込み: `data/export3.txt`・`journal3.txt`（VM は読むだけ。`vm/export-history.sh` と同じ形）、`load.ts` の鍵 `r36`（task 40bd0b3e）・`r37`（7e6dd108）。記録の live は本番がもう書き直した後の形なので、`liveRebuild.ts` が、そろえた地図を層の形に戻して `rewriteLlmcLive` を通し、**地図から作る欄（around・liquid・obsidian・route）だけ**この木の版の物に差し替える（残りは記録のまま。基準の木の around は本番 rel41 の物と同じ形になる）。修正の木だけ、状態の言葉（時刻・息）と任務の知らせの文（V2）も当てる。段の知識は、記録に残る本番の物を外してこの木の `candidateStage` で付け直す（`candidateAdapter.ts`）。
+- 要約（bootstrap）: `DECISION_REPLAY_BOOTSTRAP_TAG=base|fix` で、その木の要約器（Haiku、`minecraftOwnPrompt` に修正の木は `minecraftV2Facts`）で epoch を作り直す（`makeBootstrapsB.ts`、`bootstrap-<run>.<tag>.json`）。`DECISION_REPLAY_BOOTSTRAP_REAL=off` で本物の bootstrap も使わず作り直す。要約の呼び出しの失敗は `summary-calls-<tag>.log` に数える。
+- 場面: `scenes-b/`（s64〜s68。`DECISION_REPLAY_SCENES_DIR=scenes-b`）。回す: `run6.ts --variant=candB|candF --reps=3 --out=results-b.jsonl`（基準の木 / 修正の木）。採点と表: `reportB.ts [--judge] --out=judge-b2.jsonl`、集計: `tallyB.ts`、要約の数え方: `sumCount.ts`。回帰（API を使わない）: `offlineB.ts <out.json>`（2 つの木で）→ `compareB.ts`。
+- 結果のまとめ: `results/b-fixes-20261023.md`。試験: `tests/decisionReplayB.test.ts`。
