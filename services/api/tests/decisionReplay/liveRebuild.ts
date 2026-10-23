@@ -109,3 +109,42 @@ export function taskNoteSwap(): { from: string; to: string } | null {
   const from = requests?.MINECRAFT_REQUEST_CONTEXT, to = requests?.MINECRAFT_REQUEST_CONTEXT_V2;
   return typeof from === 'string' && typeof to === 'string' ? { from, to } : null;
 }
+
+/**
+ * mb-llmc-cand 11（v2、エンドラの課題）: live の `road`（道のり）と `meter`（目安）。本番は計画の木・体の frame・経過時間から作る。記録には判断ごとの計画の木が無いので、
+ * 実走の最後の木を、その判断の今の節（planNow の id）に合わせて写す: 今の節の上の節より前の節は済み（blocked は除く）、それ以降は続き。meter は live の持ち物・着ている物・次元・
+ * 経過分（state.minutes）から。この木（road の部品がある木）だけ。地図から作る欄ではないので、前の版には何も足さない。
+ */
+const road = await dynamic('../../src/surfaces/minecraft/' + 'minecraftLlmcRoad.js');
+const mind = await dynamic('@shannon/' + 'mind');
+export function withRoad<T extends Record<string, any>>(live: T, tree: unknown): T {
+  const body = live.body as Record<string, any> | undefined;
+  const source = tree as { nodes?: Array<Record<string, any>> } | null | undefined;
+  if (!road?.roadLine || !mind?.orderedPlan || !body || !source?.nodes) return live;
+  const current = /^\[([^\]]+)\]/u.exec(String(body.planNow ?? ''))?.[1];
+  if (!current) return live;
+  const nodes = source.nodes.map(node => ({ ...node }));
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const topOf = (id: string): string | undefined => { let at = byId.get(id); while (at?.parentId) at = byId.get(at.parentId); return at?.id; };
+  const top = mind.orderedPlan(nodes).filter((node: Record<string, any>) => node.parentId === null).map((node: Record<string, any>) => node.id as string);
+  const here = top.indexOf(topOf(current) ?? '');
+  if (here < 0) return live;
+  const blocked = new Set<string>((live.plan?.blocked ?? []).flatMap((text: string) => [...String(text).matchAll(/p\d+(?:\.\d+)*/gu)].map(match => match[0])));
+  for (const node of nodes) {
+    const index = top.indexOf(topOf(node.id) ?? '');
+    node.state = blocked.has(node.id) ? 'blocked' : index < here ? 'done' : index === here ? (node.id === current ? 'active' : node.state === 'done' && byId.get(node.id) ? 'continue' : 'continue') : 'continue';
+  }
+  const view = { ...source, nodes, current };
+  const state = (body.state ?? {}) as Record<string, any>;
+  const at = /\((-?\d+),(-?\d+),(-?\d+)\)/u.exec(String(state.at ?? ''));
+  const observation = { state: { world: { inventory: body.inventory ?? [], worn: state.worn, dimension: state.dimension,
+    ...(at ? { position: { x: +at[1]!, y: +at[2]!, z: +at[3]! } } : {}) } }, facts: {} };
+  const roadText = road.roadLine(view), meterText = typeof state.minutes === 'number' ? road.meterLine(view, observation, state.minutes) : null;
+  if (!roadText && !meterText) return live;
+  const out: Record<string, any> = {};
+  for (const [key, value] of Object.entries(body)) {
+    out[key] = value;
+    if (key === 'planNow') { if (roadText) out.road = roadText; if (meterText) out.meter = meterText; }
+  }
+  return { ...live, body: out };
+}

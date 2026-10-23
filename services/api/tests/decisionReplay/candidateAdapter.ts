@@ -7,7 +7,7 @@ import { candidateFixed, type CandidateFixed } from '../../src/wiring/minecraftL
 import { contextOf } from './checks.js';
 import type { Decision, Entry } from './load.js';
 import { frameBefore, type Frames } from './preflightFrames.js';
-import { denormalizeMap, progressPlain, rebuiltLive, taskNoteSwap, withNewLastResults, withStateWords } from './liveRebuild.js';
+import { denormalizeMap, progressPlain, rebuiltLive, taskNoteSwap, withNewLastResults, withRoad, withStateWords } from './liveRebuild.js';
 
 /**
  * 候補の版（branch codex/shannon/mb-llmc-cand fdd976c、台の branch は codex/shannon/decision-replay-cand）を台に入れる口。候補の頭が
@@ -51,11 +51,11 @@ function withStage(entries: readonly Entry[], stage: string, full: boolean): Ent
  * 実走36・37（本番 rel41）の記録の live は書き直し済みの形なので、候補の書き直しは「地図から作る欄」を作り直して差し替える（liveRebuild.ts）。
  * 実走27〜34 の記録の live は書き直し前の形で、これまでどおり candidateLive を通す。
  */
-function liveOfDecision(live: Record<string, unknown>): { live: Record<string, unknown>; notes: unknown; stage: string | null } {
+function liveOfDecision(live: Record<string, unknown>, tree?: unknown): { live: Record<string, unknown>; notes: unknown; stage: string | null } {
   const rebuilt = rebuiltLive(live as Record<string, any>);
   // 書き直し前の記録の live: 周りの行（止まった手の周り）の取り出しは書き直しの前に（書き直しが座標つきに直す）。
-  if (!rebuilt) { const made = candidateLive(withNewLastResults(live as Record<string, any>)); return { ...made, live: withStateWords(made.live as Record<string, any>) }; }
-  return { live: rebuilt, notes: { rebuilt: true }, stage: candidateStage(live) ?? null };
+  if (!rebuilt) { const made = candidateLive(withNewLastResults(live as Record<string, any>)); return { ...made, live: withRoad(withStateWords(made.live as Record<string, any>), tree) }; }
+  return { live: withRoad(rebuilt, tree), notes: { rebuilt: true }, stage: candidateStage(live) ?? null };
 }
 /** 記録の状態メッセージに残る段の知識（本番がその時付けた物）を外す。台が、この木の版の段の知識を付け直す。 */
 function withoutStored(entries: readonly Entry[]): Entry[] {
@@ -94,7 +94,7 @@ export function candRows(decision: Decision): Entry[][] {
 }
 /** 判断の後ろの入れ替わる部分: 候補の live を JSON にして記録の live の entry と入れ替え、段が変わった時（と epoch の最初）は状態に stageKnowledge を足す。 */
 export function candTurn(decision: Decision): { turn: Entry[]; notes: unknown; stage: string | null; stated: boolean } {
-  const { live, notes, stage } = liveOfDecision(decision.live);
+  const { live, notes, stage } = liveOfDecision(decision.live, decision.run.tree);
   let turn = withoutStored(decision.turn).map(entry => entry.role === 'system' ? { ...entry, content: JSON.stringify(live) } : entry);
   // その前のラウンドで立っている段（同じ epoch の中で、stage があった最後のラウンド）。
   let previous: string | null = null;
