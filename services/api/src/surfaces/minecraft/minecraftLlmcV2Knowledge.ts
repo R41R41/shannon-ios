@@ -28,6 +28,8 @@ const LIVE = [
   '- body.route: 計画の今の節の ＠x,y,z への道。掘らずに行ける所までと、掘り k マスを許した時の最も近い立ち位置・道の点（walk の path に使える）・掘るマス。敵の目と体力は含まない。',
   '- 敵は 1 体 1 行。「見える（射線の中）」は撃たれる所、「見えない…道はある」は回って来る、「壁の向こうで届かない」は急ぎではない（planNow と shortage を先に）。'
     + '相対位置は今の足から。「今いる所は … から見える」と出たら、囲う・食べる前に見えない所へ。',
+  '- body.repeat: 同じ的・同じ止まりが 2 回以上あった事実（コードが数えた）。その手は同じまま出さない。',
+  '- around が「掘る (x,y,z)」と名指ししたマスは全部 dig してから walk する（頭のマスだけ掘り残さない）。',
   '- landmarks と scan は今の次元の物（[overworld] 付きは別の次元）。state.inside は今いる構造物。次元が変わったら scan を見て計画を見直す。',
 ].join('\n');
 
@@ -40,6 +42,17 @@ const MAP = [
     + ' / i 鉄 c 石炭 d ダイヤ g 金 r レッドストーン o 他の鉱石 / W 原木 % 葉 P 板 D 扉 + 柵・ガラス h はしご t 松明 = レール / F かまど T 作業台 C チェスト B ベッド H 干し草 k 作物 S スポナー'
     + ' / O 黒曜石 p ポータル n ネザーラック u ソウルサンド N ネザーレンガ M マグマ G グロウストーン E エンドストーン Q R 枠 e エンドポータル $ 他の固い物。'
     + 'surface 形は「記号＋高さ」（0〜9 上、+ 10以上上、a〜i 下、v 10以上下）。縦: 足の列を同じ記号の続きで（「上: y=46〜51 .×6 / y=52 #」）。',
+].join('\n');
+
+/** Rules the own prompt had and the first candidate lost (the replay's A: the facts were there and the answer went against them). */
+const REPEAT = [
+  '## くり返さない・追わない',
+  '- live.look が出たら（同じ止まりが続いている）、次の act の前に mc.view か mc.probe を出す。手を重ねる前に調べる。',
+  '- 「見られる」で止まったマスを、exposeOk を付けて掘り直さない。見られない別のマス（敵と反対側・下の岩）を掘る。敵のいる側へ近づく向きに掘らない・歩かない。',
+  '- attack が「届かない」で 2 回止まった的は追わない（エンダーマン・ブレイズ・遠いピグリンを追って歩き回らない。hold で来るのを待つか離れる）。'
+    + '食料・盾・金の防具が無いまま遠出して敵を追うのは、実走33 の死の形。',
+  '- 置けなかった橋・床が無い道を、同じ手のまま onFail continue で出し直さない。支えのある（隣が固い）マスから順に置く。壁付きの橋かトンネルにする。',
+  '- 自分で書いた注意（plan.rules・forbid・caution）に反して節を飛ばさない。',
 ].join('\n');
 
 const FALLS = [
@@ -70,7 +83,7 @@ const PLAN = [
 ].join('\n');
 
 /** The text every decision reads (the knowledge part of the cached system text). */
-export const V2_ALWAYS = [DECIDE, LIVE, MAP, FALLS, DANGER, PLAN].join('\n\n');
+export const V2_ALWAYS = [DECIDE, LIVE, REPEAT, MAP, FALLS, DANGER, PLAN].join('\n\n');
 
 export type StageId = 'prep' | 'nether' | 'blaze' | 'pearl' | 'end';
 export const STAGE_IDS: readonly StageId[] = ['prep', 'nether', 'blaze', 'pearl', 'end'];
@@ -103,7 +116,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   pearl: [
     '## パールとアイ',
-    '- エンダーマン（歪んだ森に多い）: 目を合わせない（look で足元）、2 高の天井の下には来られない、accept ["enderman"]。ピグリンには金の延べ棒を drop target=ピグリン（真珠は 2〜4%）。',
+    '- エンダーマン（歪んだ森に多い）: 目を合わせない（look で足元）、2 高の天井の下には来られない、accept ["enderman"]。追って歩き回らない（来るのを待つ）。ピグリンには金の延べ棒を drop target=ピグリン（真珠は 2〜4%）。',
     '- アイ（粉 1 + 真珠 1）を 12〜14 個。use item=ender_eye（at 無し）で方位 bearingDeg が返る。200m 以上離れた 2 地点で投げ、方位 θ（0 北・90 東、x は sinθ・z は −cosθ）の線の交点を where に。',
     '- ストロングホールド: 交点で階段を下り、ポータルの枠（Q）12 か所に use item=ender_eye at=枠 face=up。',
   ].join('\n'),
@@ -126,7 +139,7 @@ export function stagesFor(live: Rec): StageId[] {
   const body = rec(live.body) ?? {}, state = rec(body.state) ?? {};
   const dimension = String(state.dimension ?? '');
   const where = { node: `${text(body.planNow)} ${text(rec(live.plan)?.next)}`, inside: String(state.inside ?? ''), inventory: text(body.inventory),
-    near: `${text(body.threats)} ${text(body.urgent)} ${text(body.landmarks)} ${text(body.scan)}` };
+    near: `${text(body.landmarks)} ${text(body.scan)}` };
   const found = STAGE_IDS.filter(id => STAGE_WHEN[id](dimension, where));
   return found.length ? found : [dimension === 'the_nether' ? 'nether' : 'prep'];
 }

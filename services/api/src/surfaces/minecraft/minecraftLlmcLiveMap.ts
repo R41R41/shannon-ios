@@ -16,27 +16,27 @@ export function normalizeMap(map: string | undefined): string | undefined {
     const m = /^y=(-?\d+)/u.exec(line);
     if (m) ys.push(Number(m[1]));
   }
-  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  // The range every layer shows (the smallest layer's): a cell outside it is cut, so that no cell is a `?` that only the layout made.
+  let x0 = -Infinity, x1 = Infinity, z0 = -Infinity, z1 = Infinity;
   for (const grid of layers.layers.values()) {
-    for (const key of grid.keys()) {
-      const [x, z] = key.split(',').map(Number) as [number, number];
-      x0 = Math.min(x0, x);
-      x1 = Math.max(x1, x);
-      z0 = Math.min(z0, z);
-      z1 = Math.max(z1, z);
-    }
+    const xs = [...grid.keys()].map(key => Number(key.split(',')[0])), zs = [...grid.keys()].map(key => Number(key.split(',')[1]));
+    x0 = Math.max(x0, Math.min(...xs));
+    x1 = Math.min(x1, Math.max(...xs));
+    z0 = Math.max(z0, Math.min(...zs));
+    z1 = Math.min(z1, Math.max(...zs));
   }
   const feet = layers.feet;
   // The surface form's top grid (symbol and height, two characters a cell) stays as it is, up to the first layer.
   const firstLayer = lines.findIndex((line, i) => i > 0 && /^y=-?\d+/u.test(line));
   const out: string[] = [lines[0]!, ...(layers.mode === 'surface' ? lines.slice(1, firstLayer) : [])];
-  out.push(`（以下の層は全部 x=${x0}..${x1} z=${z0}..${z1} の同じ範囲。範囲の外のマスは ?。^ の列が足の x=${feet.x}）`);
+  out.push(`（以下の層は全部 x=${x0}..${x1} z=${z0}..${z1} の同じ範囲（全層が持つ範囲。外は around か mc.view）。^ の列が足の x=${feet.x}。列の見出しは x の下 1 桁）`);
   const ticks = Array.from({ length: x1 - x0 + 1 }, (_, i) => String(Math.abs(x0 + i) % 10));
+  out.push(`z\\x ${ticks.join(' ')}`);
   const caret = `${' '.repeat(4 + 2 * (feet.x - x0))}^`;
   for (const y of ys) {
     const grid = layers.layers.get(y)!;
     const rel = y - feet.y;
-    out.push(`y=${y}（足${rel === 0 ? 'の高さ' : rel > 0 ? ` +${rel}` : ` ${rel}`}）`, `z\\x ${ticks.join(' ')}`, caret);
+    out.push(`y=${y}（足${rel === 0 ? 'の高さ' : rel > 0 ? ` +${rel}` : ` ${rel}`}）`, caret);
     for (let z = z0; z <= z1; z += 1) {
       const row = Array.from({ length: x1 - x0 + 1 }, (_, i) => grid.get(`${x0 + i},${z}`) ?? '?');
       out.push(`${String(z).padStart(3)} ${row.join(' ')}`);

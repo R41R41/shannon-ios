@@ -78,7 +78,9 @@ describe('SHANNON_MINECRAFT_LLMC_V2 through the runner', () => {
     const last = decide.at(-1)!.messages as Array<Record<string, any>>;
     expect(JSON.stringify(last)).toContain('walk 300,66,73');
     expect(JSON.stringify(last)).not.toContain('"do":"walk"');
-    expect(Object.keys(JSON.parse(String(last.at(-1)!.content)))[0]).toBe('knowledge');
+    expect(Object.keys(JSON.parse(String(last.at(-1)!.content)))).not.toContain('knowledge');
+    // The stages' knowledge is stated once, in the first state, and stands (it did not change in these decisions).
+    expect(JSON.stringify(last.slice(0, -1)).split('stageKnowledge').length - 1).toBe(1);
     expect(decisions).toBeGreaterThanOrEqual(4);
   }, 60_000);
 });

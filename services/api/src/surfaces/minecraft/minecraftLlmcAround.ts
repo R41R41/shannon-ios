@@ -1,6 +1,6 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
 import {
-  bestStep, cornerOk, DIRS, fallText, isHard, isHarm, isOpen, nameOf, NAME, noFloor, ptText, stepOptions, type P, type Step,
+  bestStep, cornerOk, DIRS, fallOf, fallText, isHard, isHarm, isOpen, nameOf, NAME, noFloor, ptText, stepOptions, type P, type Step,
 } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -18,7 +18,7 @@ import {
  */
 export const AROUND_RANGE = 6;
 /** How many rows of one kind a level lists before it says how many it left out. */
-const ROWS_PER_KIND = 14;
+const ROWS_PER_KIND = 8;
 const triple = (view: MapView, cell: P) => `足 ${nameOf(view.symbol(cell.x, cell.y, cell.z))}・頭 ${nameOf(view.symbol(cell.x, cell.y + 1, cell.z))}`
   + `・床 ${nameOf(view.symbol(cell.x, cell.y - 1, cell.z))}`;
 const digText = (view: MapView, cells: readonly P[]) => cells.map(c => `${ptText(c)} ${NAME[view.symbol(c.x, c.y, c.z) ?? ''] ?? '?'}`).join('、');
@@ -27,24 +27,33 @@ function stepHow(best: Step): string {
   if (best.kind === 'level') return '';
   return best.kind === 'up' ? `1 段上りで ${ptText(best.to)} に着く` : `${best.drop} 段下りで ${ptText(best.to)} に着く`;
 }
-/** One direction's line: the cell next to her and what the step to it needs. */
-function stepLine(view: MapView, feet: P, dir: { name: string; dx: number; dz: number }): string {
+/** One direction's line: the cell next to her and what the step to it needs; null for a diagonal the corners shut (said together, `diagonalLine`). */
+function stepLine(view: MapView, feet: P, dir: { name: string; dx: number; dz: number }): string | null {
   const tx = feet.x + dir.dx, tz = feet.z + dir.dz;
-  const head = `${dir.name} ${ptText({ x: tx, y: feet.y, z: tz })}: ${triple(view, { x: tx, y: feet.y, z: tz })} → `;
-  if (dir.dx !== 0 && dir.dz !== 0 && !cornerOk(view, feet, dir.dx, dir.dz)) {
-    return `${head}斜めの角の両方の列（${ptText({ x: feet.x + dir.dx, y: feet.y, z: feet.z })} と ${ptText({ x: feet.x, y: feet.y, z: feet.z + dir.dz })}）`
-      + 'の足か頭が固い: 斜めには歩けない（斜めは角のどちらかの列の足と頭が空いている時だけ）';
-  }
+  const cell = { x: tx, y: feet.y, z: tz };
+  const head = `${dir.name} ${ptText(cell)}: `;
+  if (dir.dx !== 0 && dir.dz !== 0 && !cornerOk(view, feet, dir.dx, dir.dz)) return null;
   const options = stepOptions(view, feet, tx, tz), best = bestStep(options);
-  if (best && !best.dig.length) return `${head}歩ける${best.kind === 'level' ? '' : `（${stepHow(best)}）`}`;
-  if (best) return `${head}掘れば歩ける: 掘る ${digText(view, best.dig)}${best.kind === 'level' ? '' : `（${stepHow(best)}）`}`;
+  const how = best && best.kind !== 'level' ? `（${stepHow(best)}）` : '';
+  if (best && !best.dig.length) return `${head}歩ける${how}`;
+  if (best) return `${head}掘れば歩ける: 掘る ${digText(view, best.dig)}${how}`;
   const level = options[0]!;
-  if (level.bad?.includes('床が無い')) return `${head}${level.dig.length ? '掘っても' : ''}床が無い（${fallText(view, tx, feet.y - 1, tz)}）`;
-  return `${head}歩けない: ${level.bad ?? '理由不明'}`;
+  if (level.bad?.includes('床が無い')) return `${head}${triple(view, cell)} → ${level.dig.length ? '掘っても' : ''}床が無い（${fallText(view, tx, feet.y - 1, tz)}）`;
+  return `${head}${triple(view, cell)} → 歩けない: ${level.bad ?? '理由不明'}`;
 }
-/** The ten cells next to her, one line each. */
+/** The diagonals whose two corner columns are shut, in one line. */
+function diagonalLine(feet: P, shut: ReadonlyArray<{ name: string; dx: number; dz: number }>): string[] {
+  const cells = shut.map(dir => `${dir.name} ${ptText({ x: feet.x + dir.dx, y: feet.y, z: feet.z + dir.dz })}`).join('・');
+  return shut.length ? [`斜めには歩けない（角の両方の列の足か頭が固い）: ${cells}`] : [];
+}
+/** The cells next to her: the eight directions (the shut diagonals together), the cell over her head, the cell under her feet. */
 export function stepLines(view: MapView, feet: P): string[] {
-  const lines = DIRS.map(dir => stepLine(view, feet, dir));
+  const lines: string[] = [], shut: Array<{ name: string; dx: number; dz: number }> = [];
+  for (const dir of DIRS) {
+    const line = stepLine(view, feet, dir);
+    if (line) lines.push(line); else shut.push(dir);
+  }
+  lines.push(...diagonalLine(feet, shut));
   const over = view.symbol(feet.x, feet.y + 2, feet.z), under = view.symbol(feet.x, feet.y - 1, feet.z);
   lines.push(`上 頭の上 ${ptText({ x: feet.x, y: feet.y + 2, z: feet.z })}: ${isHard(over) ? `固い（${nameOf(over)}）` : nameOf(over)}`);
   lines.push(`下 足の下 ${ptText({ x: feet.x, y: feet.y - 1, z: feet.z })}: ${noFloor(under) ? `床が無い（${fallText(view, feet.x, feet.y - 1, feet.z)}）`
@@ -80,8 +89,7 @@ function rowsOf(cells: readonly P[]): string[] {
     return `z=${z} x=${runs.join(',')}`;
   });
 }
-const KIND_TEXT: Record<Kind, string> = { walk: '歩ける', headDig: '頭を掘れば歩ける（掘る = 頭のマス (x,y+1,z)）', feetDig: '足を掘れば歩ける（掘る = 足のマス (x,y,z)）',
-  void: '床が無い', harm: '溶岩・火・クモの巣・マグマが足か頭か床にある（入らない）' };
+const KIND_TEXT: Record<Kind, string> = { walk: '歩ける', headDig: '頭を掘れば歩ける', feetDig: '足を掘れば歩ける', void: '床が無い', harm: '溶岩・火・クモの巣・マグマ' };
 function listRows(rows: readonly string[]): string {
   return rows.length > ROWS_PER_KIND ? `${rows.slice(0, ROWS_PER_KIND).join(' / ')} / ほか ${rows.length - ROWS_PER_KIND} 行は略` : rows.join(' / ');
 }
@@ -98,12 +106,13 @@ function levelsOf(view: MapView, feet: P): number[] {
  * a lower place to stand); a cell whose feet are rock and whose head is air is the floor of the place above when that is a place to stand.
  */
 function levelCells(view: MapView, feet: P, y: number, range: number): Map<Kind, P[]> {
+  const near = (c: P) => y === feet.y && Math.abs(c.x - feet.x) <= 1 && Math.abs(c.z - feet.z) <= 1;
   const by = new Map<Kind, P[]>();
   for (let dz = -range; dz <= range; dz += 1) {
     for (let dx = -range; dx <= range; dx += 1) {
       const c = { x: feet.x + dx, y, z: feet.z + dz };
       const found = kindOf(view, c);
-      if (!found || (found.kind === 'void' && y !== feet.y)) continue;
+      if (!found || near(c) || (found.kind === 'void' && y !== feet.y)) continue;
       if (found.kind === 'feetDig' && (y !== feet.y || kindOf(view, { ...c, y: y + 1 })?.kind === 'walk')) continue;
       by.set(found.kind, [...by.get(found.kind) ?? [], c]);
     }
@@ -114,7 +123,8 @@ function levelCells(view: MapView, feet: P, y: number, range: number): Map<Kind,
 function voidLines(view: MapView, cells: readonly P[]): string[] {
   const by = new Map<string, P[]>();
   for (const c of cells) {
-    const text = fallText(view, c.x, c.y - 1, c.z);
+    const fall = fallOf(view, c.x, c.y - 1, c.z);
+    const text = fall.open ? '落差 1 以上、地図に底が無い' : `落差 ${fall.n}、下は ${nameOf(fall.below)}`;
     by.set(text, [...by.get(text) ?? [], c]);
   }
   return [...by].map(([fall, list]) => `床が無い（${fall}）: ${listRows(rowsOf(list))}`);
@@ -124,7 +134,7 @@ export function cellLines(view: MapView, feet: P, range = AROUND_RANGE): string[
   const lines: string[] = [];
   for (const y of levelsOf(view, feet)) {
     const rel = y - feet.y;
-    const label = `y=${y}（足${rel === 0 ? 'の高さ' : rel > 0 ? ` +${rel}` : ` ${rel}`}）`;
+    const label = `y=${y}（${rel === 0 ? '足' : rel > 0 ? `+${rel}` : `${rel}`}）`;
     const by = levelCells(view, feet, y, range);
     for (const kind of ['walk', 'headDig', 'feetDig', 'harm'] as const) {
       const cells = by.get(kind);
@@ -136,6 +146,6 @@ export function cellLines(view: MapView, feet: P, range = AROUND_RANGE): string[
 }
 /** `around`: the ten cells next to her, then the cells within the range. */
 export function aroundLines(view: MapView, feet: P): string[] {
-  return [...stepLines(view, feet), '足の周り（この判断の始めの frame の地図から。水平 6 マス。地図に足・頭・床が全部ある高さだけ。足も頭も固い所と、地図に無い所は書かない）:',
+  return [...stepLines(view, feet), '足の周りの 1 歩より先（この判断の始めの frame の地図から。水平 6・足と頭と床が地図にある高さだけ。z=行 x=範囲）:',
     ...cellLines(view, feet)];
 }

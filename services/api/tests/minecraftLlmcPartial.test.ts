@@ -55,9 +55,10 @@ describe('the hand held, the part sent', () => {
   it('says what was not sent: from hand k on, how many of all, the fact, and that nothing of them moved', () => {
     const held = heldOfFrame(intoRock, frame(), 'task-1')!;
     const tail = heldTail(held, 4);
-    expect(tail).toMatch(/^手 3 から先 2 手（全 4 手のうち）は体へ送っていない（送る前に止めた。手は 1 つも動いていない）: 手 3 walk 一歩ではない/u);
+    expect(tail).toMatch(/^手 1〜2 は体へ送った（結果は上の行。動いた手は書き直さない）。手 3 から先 2 手（全 4 手のうち）は体へ送っていない（送る前に止めた。手は 1 つも動いていない）: 手 3 walk 一歩ではない/u);
+    expect(heldTail(held, 4, { at: { x: 222, y: 56, z: 62 }, via: null })).toContain('送った手のあと、足は (222,56,62)（地図での見積もり。体の「今」の行が正）。手 3 から先');
     const hold = holdV2(intoRock, frame(), 'task-1');
-    expect(hold && 'tail' in hold ? hold.tail : '').toBe(tail);
+    expect(hold && 'tail' in hold ? hold.tail : '').toContain('足は (222,56,62)');
   });
 
   it('prefers the earlier hand of two guards, and the act-preflight when both hold the same one', () => {

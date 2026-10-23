@@ -230,3 +230,26 @@ export function preflightText(stop: PreflightStop): string {
   return `送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 ${stop.hand} ${stop.kind} ${stop.word}: ${stop.why}（地図で確かめた）。${how}。`;
 }
 export type { Cell };
+
+/**
+ * Where she stands after the first `count` hands of the act, when they go as asked, as far as the walk-through knows (the same tracking as the
+ * preflight's): `at` the cell she stands in for certain (the last walk's end, a pillar's top), or null when a hand after it moves her in a way
+ * the map does not say (a dig that walks to pick up, an attack, a pickup); `via` the cell she is near then. Null when the act or the frame
+ * cannot be walked through. Used to say, when only part of an act is sent, where the sent hands leave her.
+ */
+export function standAfterHands(input: unknown, frame: BodyObservation | null, taskId: string, count: number): { at: Cell | null; via: Cell | null } | null {
+  const world = frame?.state.world as { localMap?: unknown; position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined;
+  const at = world?.position;
+  const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
+  const map = typeof world?.localMap === 'string' ? world.localMap : undefined;
+  const start = startOf(input, { map, feet, column: (cell, feetY) => keptColumnFact(taskId)(columnKey(cell, feetY)) });
+  if (!start) return null;
+  const { hands, view, track } = start;
+  for (const [index, raw] of hands.entries()) {
+    if (index >= count) break;
+    const hand = raw as ActHand | null;
+    if (!hand || typeof hand !== 'object' || (hand.rel === true && !track.at)) return { at: null, via: track.via };
+    if (!advance(hand, track, hand.rel === true ? track.at : undefined, view)) return { at: null, via: track.via };
+  }
+  return { at: track.at, via: track.via };
+}

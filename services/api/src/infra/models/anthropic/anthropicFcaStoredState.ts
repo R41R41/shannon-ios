@@ -11,10 +11,10 @@ import type Anthropic from '@anthropic-ai/sdk';
  */
 export const STATE_MARK = '{"stateUpdate":';
 /** The parts a stored state may carry besides the catalog, in order. The task is always stated first, and in full. */
-const PARTS = ['task', 'children', 'messages', 'skillIndex', 'sharedContext', 'progress'] as const;
+const PARTS = ['task', 'children', 'messages', 'skillIndex', 'sharedContext', 'progress', 'stageKnowledge'] as const;
 const EMPTY_LIST = new Set(['children', 'messages']);
 /** Parts that may be absent from a decision (no index, no shared context, no progress tools), and so be stated as removed. */
-const OPTIONAL = new Set(['skillIndex', 'sharedContext', 'progress']);
+const OPTIONAL = new Set(['skillIndex', 'sharedContext', 'progress', 'stageKnowledge']);
 
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 24);
 /** What a catalog item is compared by. A digest: the key of a cut item is written into the state that cut it, never the whole. */
@@ -183,7 +183,8 @@ export function storedState(supplied: Record<string, unknown>, history: readonly
     return typeof id !== 'string' || !stated.messages.has(id);
   });
   const changed = changedParts([['task', statedTask(supplied.task)], ['children', supplied.children], ['messages', messages],
-    ['skillIndex', supplied.skillIndex], ['sharedContext', supplied.sharedContext], ['progress', supplied.progress]], stated, restate);
+    ['skillIndex', supplied.skillIndex], ['sharedContext', supplied.sharedContext], ['progress', supplied.progress],
+    ['stageKnowledge', supplied.stageKnowledge]], stated, restate);
   const catalog = catalogPart(supplied.catalog, stated, restate), parts = changed.parts;
   // The catalog comes after the messages and before the skill index, as it stood in the decision message.
   const row: Record<string, unknown> = { ...changed.row, ...catalog };
@@ -201,7 +202,7 @@ export function stateMessage(row: Record<string, unknown>, full: boolean): Anthr
 export const stateText = (row: Record<string, unknown>, full: boolean): string => JSON.stringify({ stateUpdate: full ? 'full' : 'changed', ...row });
 
 /** The parts a summary or a size budget does not read whole: the catalog and the skill index, which each epoch's first state says again. */
-const RESTATED_BY_STATE = ['catalog', 'catalogChanges', 'skillIndex'] as const;
+const RESTATED_BY_STATE = ['catalog', 'catalogChanges', 'skillIndex', 'stageKnowledge'] as const;
 export function publicState(text: string): string {
   if (!text.startsWith(STATE_MARK)) return text;
   let row: Record<string, unknown> | null = null;

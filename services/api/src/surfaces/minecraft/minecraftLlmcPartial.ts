@@ -1,7 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
-import { preflightOfFrame, preflightText, type PreflightStop } from './minecraftLlmcPreflight.js';
+import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
 
 /**
@@ -46,9 +46,14 @@ export function sentPart(input: unknown, held: Held): unknown {
 export const heldWhole = (held: Held): string => `${HEAD}${held.line}`;
 
 /** 結果の後ろに足す文: 手 k から先 n 手は体へ送っていない。 */
-export function heldTail(held: Held, total: number): string {
-  const rest = total - held.hand + 1;
-  return `手 ${held.hand} から先 ${rest} 手（全 ${total} 手のうち）は体へ送っていない（送る前に止めた。手は 1 つも動いていない）: ${held.line}`;
+/** Where the sent hands leave her: the cell she stands in for certain, or the cell she is near. */
+interface Stand { at: { x: number; y: number; z: number } | null; via: { x: number; y: number; z: number } | null }
+export function heldTail(held: Held, total: number, stand: Stand | null = null): string {
+  const rest = total - held.hand + 1, sent = held.hand === 2 ? '手 1' : `手 1〜${held.hand - 1}`;
+  const cell = stand?.at ?? stand?.via, near = stand?.at ? '' : ' の近く';
+  const where = cell ? `送った手のあと、足は (${cell.x},${cell.y},${cell.z})${near}（地図での見積もり。体の「今」の行が正）。` : '';
+  const done = `${sent} は体へ送った（結果は上の行。動いた手は書き直さない）。${where}`;
+  return `${done}手 ${held.hand} から先 ${rest} 手（全 ${total} 手のうち）は体へ送っていない（送る前に止めた。手は 1 つも動いていない）: ${held.line}`;
 }
 
 /**
@@ -69,7 +74,7 @@ export function holdV2(input: unknown, frame: BodyObservation | null, taskId: st
   const part = sentPart(input, held);
   if (part === null) return { whole: heldWhole(held), held };
   const total = (input as { hands: unknown[] }).hands.length;
-  return { part, tail: heldTail(held, total), held };
+  return { part, tail: heldTail(held, total, standAfterHands(input, frame, taskId, held.hand - 1)), held };
 }
 
 /** What the tools do with an act before it is sent: its result now (nothing is sent), or the act to send and the tail to add to the result. */

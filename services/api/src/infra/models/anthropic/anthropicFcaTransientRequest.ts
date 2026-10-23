@@ -57,7 +57,9 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
   /** The transport block of system[0] (absent: `HAIKU_PROTOCOL_PREFIX`; a Minecraft body task's own: `MINECRAFT_TRANSPORT`). */
   protocol?: string;
   /** SHANNON_MINECRAFT_LLMC_V2: the live state rewritten before it is sized, cut and sent. */
-  rewriteLive?(live: Record<string, unknown>): Record<string, unknown> }) {
+  rewriteLive?(live: Record<string, unknown>): Record<string, unknown>;
+  /** SHANNON_MINECRAFT_LLMC_V2: the knowledge of the stages the live state calls for, stated (as a part of the stored state) only when it changed. */
+  stageKnowledge?(live: Record<string, unknown>): string | undefined }) {
   const { model, input, supplied, history, menu } = parts, maximum = parts.compactAboveTokens, limit = input.replayTokenLimit;
   const hour = { type: 'ephemeral' as const, ttl: '1h' as const }, protocol = parts.protocol ?? HAIKU_PROTOCOL_PREFIX;
   const system = [{ type: 'text' as const, cache_control: hour, text: parts.systemText }];
@@ -88,8 +90,9 @@ export function transientRequest(parts: { model: string; maximumOutputTokens: nu
     requestFits(full)(row, live) && (limit === undefined || continuedTokens(row, full) <= limit);
 
   // SHANNON_MINECRAFT_LLMC_V2: the live state as the mode writes it (`rewriteLive`, with the stages' knowledge as its first field).
-  const live = parts.rewriteLive ? parts.rewriteLive(liveObject(supplied, input.transient)) : liveObject(supplied, input.transient);
-  const kept = storedFields(supplied);
+  const raw = liveObject(supplied, input.transient);
+  const live = parts.rewriteLive ? parts.rewriteLive(raw) : raw;
+  const kept = storedFields(parts.stageKnowledge ? { ...supplied, stageKnowledge: parts.stageKnowledge(raw) } : supplied);
   let stored = storedState(kept, history);
   let deferred = false;
   if (stored.hasCut) {

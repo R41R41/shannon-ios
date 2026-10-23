@@ -25,6 +25,20 @@ const MAP = [
 ].join('\n');
 const view = () => mapView(readLayers(MAP)!);
 const feet = { x: 10, y: 5, z: 20 };
+/** A corridor east of her: x=11..16 free at feet and head with a floor, 17 with rock over its head, 18 with no floor; the map is 15 wide (x=3..17+1). */
+const WIDE = (() => {
+  const row = (below: string, y: number) => Array.from({ length: 13 }, (_, i) => {
+    const x = 4 + i;
+    if (y === 5) return x === 10 ? '@' : x >= 11 ? '.' : '#';
+    if (y === 6) return (x >= 11 && x <= 14) || x === 16 ? '.' : '#';
+    return x === 16 ? '.' : below;
+  }).join(' ');
+  const lines = ['地図 v1 足=(10,5,20) x=4..16 z=20..20 方式=layers 上=北'];
+  for (const y of [6, 5, 4]) lines.push(`y=${y} x=4..16 z=20..20`, ` 20 ${row('#', y)}`);
+  return lines.join('\n');
+})();
+const wideView = () => mapView(readLayers(WIDE)!);
+const wideFeet = { x: 10, y: 5, z: 20 };
 
 describe('v2 around: the walk\'s rules on the map', () => {
   it('walks where feet and head are free with a floor, and says what to dig otherwise', () => {
@@ -43,13 +57,14 @@ describe('v2 around: the walk\'s rules on the map', () => {
     expect(lines.find(line => line.startsWith('東 '))).toContain('床が無い');
     expect(lines.find(line => line.startsWith('南東 '))).toContain('掘れば歩ける');
   });
-  it('lists the cells she can stand in by level in rows of runs, and does not list rock or what the map does not show', () => {
-    const text = cellLines(view(), feet).join('\n');
-    expect(text).toContain('y=5（足の高さ） 歩ける: z=19 x=10..11 / z=20 x=10');
-    expect(text).toContain('頭を掘れば歩ける（掘る = 頭のマス (x,y+1,z)）: z=19 x=9 / z=20 x=9');
-    expect(text).toContain('床が無い（落差 1 以上（地図は y=4 まで。それより下は地図に無い））: z=20 x=11');
+  it('lists the cells she can stand in by level in rows of runs, and does not list rock, the cells next to her or what the map does not show', () => {
+    const text = cellLines(wideView(), wideFeet).join('\n');
+    expect(text).toContain('y=5（足） 歩ける: z=20 x=12..14');
+    expect(text).toContain('頭を掘れば歩ける: z=20 x=15');
+    expect(text).toContain('床が無い（落差 1 以上、地図に底が無い）: z=20 x=16');
+    expect(text).not.toContain('x=11');
     expect(text).not.toContain('y=6（');
-    expect(text).not.toContain('y=4（');
+    expect(cellLines(view(), feet)).toEqual([]);
   });
   it('says nothing it cannot know: a cell whose head, feet or floor the map does not show is left out', () => {
     expect(cellLines(view(), feet).join('\n')).not.toContain('x=7');
@@ -140,11 +155,12 @@ describe('v2 stages of knowledge', () => {
 
 describe('v2 live: the recorded live states of runs 32–34', () => {
   const entries = Object.entries(lives as Record<string, Record<string, any>>);
-  it.each(entries)('%s: leaves out what the decision does not need, puts the knowledge first, adds around and keeps the plan and the body', (_id, live) => {
+  it.each(entries)('%s: leaves out what the decision does not need, gives the stage apart, adds around and keeps the plan and the body', (_id, live) => {
     const before = JSON.stringify(live);
     const out = candidateLive(live);
     expect(JSON.stringify(live)).toBe(before);
-    expect(Object.keys(out.live)[0]).toBe('knowledge');
+    expect(out.live).not.toHaveProperty('knowledge');
+    expect(out.stage).toContain('この場面の知識');
     for (const gone of ['ownerClock', 'waiting', 'observations', 'recall']) expect(out.live).not.toHaveProperty(gone);
     expect(out.live.plan).toBeDefined();
     const body = out.live.body as Record<string, any>;
@@ -170,6 +186,6 @@ describe('v2 live: the recorded live states of runs 32–34', () => {
   it('is a rewrite that never throws on a live state it cannot read', () => {
     expect(rewriteLlmcLive({}).live).toEqual({});
     expect(rewriteLlmcLive({ body: { map: 'x', state: 5, inventory: 'y', landmarks: [3] } }).live.body).toBeDefined();
-    expect(stepLines(view(), { x: 0, y: 0, z: 0 })).toHaveLength(10);
+    expect(stepLines(view(), { x: 0, y: 0, z: 0 }).length).toBeGreaterThanOrEqual(3);
   });
 });

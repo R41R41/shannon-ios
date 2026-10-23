@@ -15,7 +15,8 @@ import { stageKnowledge, V2_ALWAYS } from './minecraftLlmcV2Knowledge.js';
  * - `candidateLive(live)`: the live state as the decision reads it. In: the object the model's request builds from the task's state (`liveObject`:
  *   `ownerClock`, `waiting`, `observations`, `recall`, `plan`, `body`…), or a recorded one (a `system` entry with `clear_at`, parsed). Out: the
  *   rewritten live state (`minecraftLlmcLiveRewrite.ts`: fields left out, one line to a hostile, the pack added up, `body.around`,
- *   `body.route`, the map on one range) with `knowledge` first (`stageKnowledge`: the stages the code picked). Same in, same out.
+ *   `body.route`, `body.repeat`, the map on one range) and `stage`, the knowledge of the stages the code picked (`stageKnowledge`): not in the
+ *   live state but a part of the stored state, `stageKnowledge`, stated again only when it changes. Same in, same out.
  * - `candidateMenuTools(core)`: the tool definitions of the mode from any list of the body's and the plan's (the recorded core or the body's
  *   catalog): `mc.act` with the hands written one to a line, `mc.probe`, `mc.view`, `plan.update`, in this order (`MINECRAFT_V2_TOOLS`);
  *   everything else is left out. The controls (`fca_wait`, `fca_complete`) are the model's own and come after.
@@ -24,11 +25,12 @@ import { stageKnowledge, V2_ALWAYS } from './minecraftLlmcV2Knowledge.js';
  * - `candidateInstructions()`: the cached instructions' knowledge (`V2_ALWAYS`); `minecraftV2System` (`anthropicFcaMinecraftSystem.ts`) puts the
  *   header, the decision protocol and the reading before it.
  */
-export function candidateLive(live: Record<string, unknown>): { live: Record<string, unknown>; notes: RewriteNotes } {
+export function candidateLive(live: Record<string, unknown>): { live: Record<string, unknown>; notes: RewriteNotes; stage: string | null } {
   const { live: rewritten, notes } = rewriteLlmcLive(live);
-  const knowledge = stageKnowledge(rewritten);
-  return { live: knowledge ? { knowledge, ...rewritten } : rewritten, notes };
+  return { live: rewritten, notes, stage: stageKnowledge(live) };
 }
+/** The knowledge of the stages the live state calls for (a part of the stored state, stated again only when it changes), or undefined. */
+export const candidateStage = (live: Record<string, unknown>): string | undefined => stageKnowledge(live) ?? undefined;
 
 /** The mode's `mc.act` definition: the hands one to a line. */
 export function shortActDefinition(base: FcaToolDefinition): FcaToolDefinition {
@@ -46,8 +48,8 @@ export const candidateInstructions = (): string => V2_ALWAYS;
 
 /** The hooks the model's options take (`createAnthropicFcaModel`, `minecraftV2`). */
 export function minecraftV2Hooks(): { knowledge: string; rewriteLive(live: Record<string, unknown>): Record<string, unknown>;
-  callInput(name: string, input: unknown): unknown } {
-  return { knowledge: V2_ALWAYS, rewriteLive: live => candidateLive(live).live, callInput: candidateInput };
+  stageKnowledge(live: Record<string, unknown>): string | undefined; callInput(name: string, input: unknown): unknown } {
+  return { knowledge: V2_ALWAYS, rewriteLive: live => candidateLive(live).live, stageKnowledge: candidateStage, callInput: candidateInput };
 }
 
 /** What the head does to a model's `mc.act` before the body sees it, for the replay: the same order as `fcaMinecraftTools.ts`. */
@@ -80,3 +82,10 @@ export function candidateAct(raw: unknown, frame: BodyObservation | null, taskId
   }
   return { input: checked.input, fixes, problem: null };
 }
+
+/**
+ * The stored-state text that states the stages' knowledge (what the model's request puts into the history when the stages change, and in the
+ * epoch's first state): for the replay, which has no stored state of its own to carry it. `{"stateUpdate":"changed","stageKnowledge":…}`; in an
+ * epoch's first state the request writes `"full"` and the task beside it.
+ */
+export const candidateStageState = (stage: string, full = false): string => JSON.stringify({ stateUpdate: full ? 'full' : 'changed', stageKnowledge: stage });

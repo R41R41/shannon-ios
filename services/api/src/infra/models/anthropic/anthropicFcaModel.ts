@@ -275,10 +275,14 @@ export class AnthropicFcaModel implements FcaModel {
     const supplied = own ? decisionFields({ ...input, sharedContext: undefined }, undefined, true) : decisionFields(input, ownerClock, true);
     const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens, compactAboveTokens: this.compactAboveTokens,
       systemText: own?.transient ?? `${this.transientSystem}\n\n${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}`, input, history, menu,
-      supplied, ...(own ? { protocol: own.protocol } : {}), ...(this.v2() ? { rewriteLive: this.v2()!.rewriteLive } : {}) });
+      supplied, ...(own ? { protocol: own.protocol } : {}), ...this.v2Parts() });
     return { ...built, menu, built: built.built as RequestBuilt };
   }
   /** The mode's hooks, only with the own prompt (a body task of the mode reads no other instructions). */
+  private v2Parts(): { rewriteLive?: MinecraftV2Hooks['rewriteLive']; stageKnowledge?: MinecraftV2Hooks['stageKnowledge'] } {
+    const hooks = this.v2();
+    return hooks ? { rewriteLive: hooks.rewriteLive, stageKnowledge: hooks.stageKnowledge } : {};
+  }
   private v2(): MinecraftV2Hooks | null { return this.minecraft && this.options.minecraftV2 ? this.options.minecraftV2 : null; }
   toolResults(results: readonly { id: string; text: string; ok: boolean }[]): Anthropic.MessageParam {
     const ids = new Set<string>();

@@ -2,6 +2,7 @@ import { aroundLines } from './minecraftLlmcAround.js';
 import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { expandAround, normalizeMap } from './minecraftLlmcLiveMap.js';
 import { mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
+import { repeatedFailures } from './minecraftLlmcRepeat.js';
 import { goalOf, routeLines } from './minecraftLlmcRoute.js';
 import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
 
@@ -18,6 +19,7 @@ import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
  *   about a cell the map now shows she can stand in, a `biome` the dimension has not, `（undefined マス）`;
  * - joins the enemies by id into one line each (`minecraftLlmcLiveEnemies.ts`), adds up the pack by kind, works out the landmarks' east/west and
  *   north/south from her feet now (the height is the body's as written), writes a stopped hand's surroundings with whole coordinates;
+ * - says what stopped again in `body.repeat` (`minecraftLlmcRepeat.ts`);
  * - adds `body.around` (`minecraftLlmcAround.ts`) and `body.route` (`minecraftLlmcRoute.ts`) from the map text, and puts every layer of the
  *   map on one range (`minecraftLlmcLiveMap.ts`).
  */
@@ -183,7 +185,7 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes): Rec {
   const self = parsePos(String(rec(bodyIn.state)?.at ?? ''));
   const enemies = self ? mergeEnemies(bodyIn, self) : { urgent: bodyIn.urgent, threats: bodyIn.threats, merged: 0 };
   if (enemies.merged) notes.merged.push(`敵の行 ${enemies.merged} 減らした`);
-  const body: Rec = {};
+  const body: Rec = {}, repeated = repeatedFailures(bodyIn);
   for (const [key, value] of Object.entries(bodyIn)) {
     if (key === 'unreachable') continue;
     if (key === 'urgent' || key === 'threats') {
@@ -195,7 +197,9 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes): Rec {
       continue;
     }
     body[key] = rewriteBodyKey(key, value, self, notes);
+    if (key === 'stops' && repeated.length) body.repeat = repeated;
   }
+  if (repeated.length && !body.repeat) body.repeat = repeated;
   return body;
 }
 
