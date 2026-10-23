@@ -203,20 +203,20 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(r4?.investigation.length ? { investigation: r4.investigation } : {}), ...(r4?.scan.length ? { scan: r4.scan } : {}),
     ...(r4?.unreachable?.length ? { unreachable: r4.unreachable } : {}), ...(r4?.footing ? { footing: r4.footing } : {}),
-    ...(r4 ? readinessParts(llmc, plan, observation) : {}) }, llmcPlanTokens(plan), v2);
+    ...(r4 ? readinessParts(llmc, plan, observation, v2) : {}) }, llmcPlanTokens(plan), v2);
 }
 
 /**
  * r6 (with the probe, as r4's parts): the current node before the map, what its stage lacks, and health that does not come back with
  * where food is (`minecraftLlmcReadiness.ts`). Facts only: what to do with them is the decision's.
  */
-export function readinessParts(llmc: LlmcBodyParts, view: object | null, observation: BodyObservation | null)
+export function readinessParts(llmc: LlmcBodyParts, view: object | null, observation: BodyObservation | null, v2 = false)
   : { planNow?: string; shortage?: string; recovery?: string[] } {
   const planNow = planNowLine(view as { now?: unknown; path?: unknown } | null), facts = readinessOf(observation);
   const out = planNow ? { planNow } : {};
   if (!facts) return out;
   const display = llmc.plan(), nowTitle = display?.nodes.find(node => node.id === display.current)?.title ?? null;
-  const shortage = preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle });
+  const shortage = preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle, ...(v2 ? { v2 } : {}) });
   const recovery = recoveryLine(facts.hunger, facts.health, facts.food);
   let nodes: PlanTree['nodes'] = [];
   try { nodes = llmc.planTree?.().nodes ?? []; } catch { nodes = []; }
@@ -316,7 +316,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     const nowLine = planNowLine(parts.llmc.planView() as { now?: unknown; path?: unknown } | null);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing,
-      planNowTitle: planNowTitle(nowLine), answer: URGENT_ANSWER });
+      planNowTitle: planNowTitle(nowLine), answer: URGENT_ANSWER, ...(v2 ? { v2 } : {}) });
     urgentTokens = llmcTokens(JSON.stringify(live));
     return live;
   };

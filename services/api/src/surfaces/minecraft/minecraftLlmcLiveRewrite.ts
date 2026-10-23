@@ -1,7 +1,10 @@
 import { aroundLines } from './minecraftLlmcAround.js';
 import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
+import { liquidLines } from './minecraftLlmcLiquid.js';
+import { obsidianWays } from './minecraftLlmcObsidianWays.js';
+import { packLines } from './minecraftLlmcPack.js';
 import { expandAround, normalizeMap } from './minecraftLlmcLiveMap.js';
-import { mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
+import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
 import { repeatedFailures } from './minecraftLlmcRepeat.js';
 import { goalOf, routeLines } from './minecraftLlmcRoute.js';
 import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
@@ -165,12 +168,22 @@ function rewriteBodyKey(key: string, value: unknown, self: P | null, notes: Rewr
 /** The map's place in the body: the facts made from it (`around`, `route`), then the map on one range. */
 function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes): Rec {
   const map = typeof bodyIn.map === 'string' ? bodyIn.map : undefined;
-  const layers = readLayers(map);
+  const layers = readLayers(map, BODY_RULES);
   const out: Rec = {};
   if (layers) {
     const view = mapView(layers), planNow = String(bodyIn.planNow ?? '');
     out.around = aroundLines(view, layers.feet);
     notes.added.push('around');
+    const liquid = liquidLines(view, layers.feet);
+    if (liquid.length) {
+      out.liquid = liquid;
+      notes.added.push('liquid');
+    }
+    const ways = obsidianWays(bodyIn, layers.feet, view);
+    if (ways.length) {
+      out.obsidian = ways;
+      notes.added.push('obsidian');
+    }
     const goal = goalOf(planNow);
     if (goal) {
       out.route = routeLines(view, layers.feet, goal, /^\[([^\]]+)\]/u.exec(planNow)?.[1] ?? '今の節');
@@ -181,6 +194,14 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes): Rec {
   return out;
 }
 
+/** `body.pack`: the free slots of the pack, from the inventory lines as the body wrote them (one line a stack). */
+function addPack(body: Rec, inventory: unknown, notes: RewriteNotes, bodyIn: Rec): void {
+  const forEnd = /エンド|ストロング|ドラゴン|アイ/u.test(String(bodyIn.planNow ?? '')) || rec(bodyIn.state)?.dimension === 'the_end';
+  const lines = packLines(strings(inventory), { forEnd });
+  if (!lines.length) return;
+  body.pack = lines;
+  notes.added.push('pack');
+}
 function rewriteBody(bodyIn: Rec, notes: RewriteNotes): Rec {
   const self = parsePos(String(rec(bodyIn.state)?.at ?? ''));
   const enemies = self ? mergeEnemies(bodyIn, self) : { urgent: bodyIn.urgent, threats: bodyIn.threats, merged: 0 };
@@ -197,6 +218,7 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes): Rec {
       continue;
     }
     body[key] = rewriteBodyKey(key, value, self, notes);
+    if (key === 'inventory') addPack(body, value, notes, bodyIn);
     if (key === 'stops' && repeated.length) body.repeat = repeated;
   }
   if (repeated.length && !body.repeat) body.repeat = repeated;
@@ -214,7 +236,7 @@ export function rewriteLlmcLive(live: Rec): { live: Rec; notes: RewriteNotes } {
   }
   const bodyIn = rec(live.body);
   if (!bodyIn) return { live: out, notes };
-  const layers = typeof bodyIn.map === 'string' ? readLayers(bodyIn.map) : null;
+  const layers = typeof bodyIn.map === 'string' ? readLayers(bodyIn.map, BODY_RULES) : null;
   const plan = rec(live.plan);
   if (plan) out.plan = rewritePlan(plan, String(bodyIn.planNow ?? ''), layers ? mapView(layers) : null, notes);
   try {

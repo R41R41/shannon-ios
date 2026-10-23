@@ -33,7 +33,7 @@ import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
 import { minecraftRoutePlannerPart } from './minecraftRouteWiring.js';
-import { configuredMinecraftLlmc, llmcLifecycle, llmcStepParts } from './minecraftLlmcWiring.js';
+import { configuredMinecraftLlmc, llmcLifecycle, llmcStepParts, llmcV2Enabled } from './minecraftLlmcWiring.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
 import { configuredFcaSummaries } from './fcaSummaryWiring.js';
@@ -267,6 +267,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     })() : null;
     const requests = minecraft && conversation && visible ? fcaMinecraftRequests({ ...parts, control: minecraft.control,
       runtime: runtime.runtime, conversation, visible, stop: runtime.stop, sourceVisible: id => sourceVisible(parts.ownerScope, id),
+      ...(llmcV2Enabled(values) ? { llmcV2: true } : {}),
       atomic: work => underWriteLock(db, null, '', work, 'fca_minecraft_admission') }) : null;
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);

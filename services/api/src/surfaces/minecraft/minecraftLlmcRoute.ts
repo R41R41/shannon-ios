@@ -1,5 +1,6 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
-import { bestStep, cornerOk, DIRS, isOpen, keyOf, NAME, ptText, stepOptions, type P } from './minecraftLlmcWalkRules.js';
+import { bestStep, cornerOk, DIRS, isHard, isHarm, isOpen, keyOf, NAME, nameOf, nearestStand, ptText } from './minecraftLlmcWalkRules.js';
+import { standNeighbours, stepOptions, type P } from './minecraftLlmcWalkRules.js';
 
 /**
  * mb-llmc v2 `route` (改修案 2.2; 再現台 v9b の `body.route`): the way to the place the plan's current node names, from the map alone.
@@ -125,22 +126,40 @@ function candidateLine(view: MapView, reach: Map<string, Reach>, top: Reach, goa
   const dig = route.dig.length ? `。掘るマス（${route.dig.length}）: ${digText(view, route.dig)}` : '';
   return `${k === 0 ? '掘らずに行ける範囲の、' : `掘り ${route.dig.length} マスまで許した時の、`}目的地に最も近い立ち位置 ${arrived ? '（目的地に着く）' : ''}${where}。${walk}${dig}`;
 }
+/**
+ * Where to walk to: the goal's own cell when she can stand there (or the map does not show it), else a standing place beside it. A trunk, a rock or
+ * a wall as the node's place cannot be stood in (the body stops 「一歩ではない」: 11 times in run 35). The reached place with the fewest digs
+ * first, else the nearest to her feet; none beside it: the goal as it was and a line that says so.
+ */
+function aimOf(view: MapView, goal: Goal, reach: Map<string, Reach>, feet: P): { aim: Goal; words: string | null } {
+  const symbol = view.symbol(goal.at.x, goal.at.y, goal.at.z);
+  if (symbol === undefined || !(isHard(symbol) || isHarm(symbol))) return { aim: goal, words: null };
+  const beside = standNeighbours(view, goal.at);
+  const cost = (c: P) => reach.get(keyOf(c))!;
+  const reached = beside.filter(c => reach.has(keyOf(c))).sort((a, b) => cost(a).digs - cost(b).digs || cost(a).steps - cost(b).steps);
+  const stand = reached[0] ?? nearestStand(view, goal.at, feet);
+  const solid = `目的地のマス ${ptText(goal.at)} は${isHarm(symbol) ? '入れない' : '固い'}（${nameOf(symbol)}）`;
+  if (!stand) return { aim: goal, words: `${solid}。隣の立てるマスは地図に無い（周りも固いか、地図の外）` };
+  return { aim: { at: stand, range: 1 }, words: `${solid}。隣の立てるマス ${ptText(stand)} を行き先にする（${reached[0] ? '行ける' : '今の道では行けない'}）` };
+}
 /** The way to the goal: where she gets to without digging, then with more cells dug while that brings her at least a block nearer (four lines at most). */
 export function routeLines(view: MapView, feet: P, goal: Goal, label: string): string[] {
   const reach = reachable(view, feet, DIG_LIMIT);
-  const dist = (c: P) => Math.hypot(c.x - goal.at.x, c.y - goal.at.y, c.z - goal.at.z);
+  const { aim, words } = aimOf(view, goal, reach, feet);
+  const dist = (c: P) => Math.hypot(c.x - aim.at.x, c.y - aim.at.y, c.z - aim.at.z);
   const inMap = view.known(goal.at.x, goal.at.y, goal.at.z);
   const lines = [`計画 ${label} の目的地 ${ptText(goal.at)}（足から 水平 ${horizontal(feet, goal.at).toFixed(1)}m・高さ ${sign(goal.at.y - feet.y)}。`
     + `${inMap ? '地図の中' : '地図の外'}${goal.range > 1 ? `。済みの条件は目的地の ${goal.range}m 以内` : ''}）。`
-    + '地図はこの判断の始めの frame。歩きの決まりは walk と同じ（掘らず置かず、上り 1・下り 3 まで、2〜4 マスの空きは走って越える）。敵に見られるかは含まない'];
+    + '地図はこの判断の始めの frame。歩きの決まりは walk と同じ（掘らず置かず、上り 1・下り 3 まで、2〜4 マスの空きは走って越える）。敵に見られるかは含まない',
+    ...words ? [words] : []];
   let previous = Infinity, shown = 0;
   for (let k = 0; k <= DIG_LIMIT && shown < 4; k += 1) {
-    const top = nearest(reach, goal.at, k);
+    const top = nearest(reach, aim.at, k);
     if (!top || (k > 0 && dist(top.cell) > previous - 1)) continue;
     previous = dist(top.cell);
     shown += 1;
-    const arrived = dist(top.cell) <= Math.max(goal.range, 0.9);
-    lines.push(candidateLine(view, reach, top, goal, k, arrived));
+    const arrived = dist(top.cell) <= Math.max(aim.range, 0.9);
+    lines.push(candidateLine(view, reach, top, aim, k, arrived));
     if (arrived) break;
   }
   if (shown === 1 && lines.length === 2) lines.push('掘り 6 マスまで許しても、これより目的地に近づく立ち位置は地図の中に無い（地図の外へ出る道は含まない）');

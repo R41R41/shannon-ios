@@ -33,13 +33,14 @@ describe('the hand held, the part sent', () => {
   it('holds the first hand the map faults, in the words of the act-preflight, and sends the hands before it with everything else of the act', () => {
     const held = heldOfFrame(intoRock, frame(), 'task-1')!;
     expect(held).toMatchObject({ hand: 3, kind: 'walk', code: 'feet_solid' });
-    expect(held.line).toMatch(/^手 3 walk 一歩ではない: 足のマス \(224,56,62\) が 石の類（地図 #） で埋まっている（地図で確かめた）。/u);
+    expect(held.line).toMatch(/^手 3 walk 一歩ではない: 足のマス \(224,56,62\) が 石の類（地図 #） で埋まっている（隣の立てるマスは地図に無い）（地図で確かめた）。/u);
     expect(sentPart(intoRock, held)).toEqual({ ...intoRock, hands: [walk(221), walk(222)] });
   });
 
   it('turns the whole act back when the first hand is the one held, in the very words of 4f98156', () => {
     const input = { hands: [walk(224), walk(222)] };
-    const stop = preflightOfFrame(input, frame(), 'task-1')!;
+    const stop = preflightOfFrame(input, frame(), 'task-1', { bodyRules: true })!;
+    expect(preflightText(preflightOfFrame(input, frame(), 'task-1')!)).toBe(preflightText(stop).replace('（隣の立てるマスは地図に無い）', ''));
     const hold = holdV2(input, frame(), 'task-1')!;
     expect(hold).toMatchObject({ whole: preflightText(stop) });
     expect(heldWhole(heldOfFrame(input, frame(), 'task-1')!)).toBe(preflightText(stop));

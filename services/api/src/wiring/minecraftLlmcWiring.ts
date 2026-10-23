@@ -182,6 +182,11 @@ function v2On(values: Readonly<Record<string, string | undefined>>, needs: Recor
   if (!on) log('Shannon Minecraft LLMC_V2 off: it needs SHANNON_MINECRAFT_OWN_PROMPT, _LLMC_PROBE and _ACT_PREFLIGHT');
   return on;
 }
+/** Whether the mode runs, from the switches alone (no log): the same rule as `v2On` and the LLM-centric mode's own switch. */
+export function llmcV2Enabled(values: Readonly<Record<string, string | undefined>>): boolean {
+  return switchOn(values, 'SHANNON_MINECRAFT_LLM_CENTRIC') && switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT')
+    && switchOn(values, 'SHANNON_MINECRAFT_LLMC_PROBE') && switchOn(values, 'SHANNON_MINECRAFT_ACT_PREFLIGHT') && switchOn(values, 'SHANNON_MINECRAFT_LLMC_V2');
+}
 export function configuredMinecraftLlmc(values: Readonly<Record<string, string | undefined>>,
   base: Omit<AnthropicFcaOptions, 'model' | 'apiKey' | 'systemAppendix'>, parts: { log?(line: string): void; client?: PlanClient } = {}): LlmcWiring | null {
   if (!switchOn(values, 'SHANNON_MINECRAFT_LLM_CENTRIC')) return null;
@@ -209,13 +214,13 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
   return { names, probe, ...flagsOn({ ownPrompt: own, preflight, v2 }), models: { main, escalate: names.escalate ? make(names.escalate) : null },
     summarizer: haikuKey || base.client
       ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
-        ...(own ? { minecraftOwnPrompt: true } : {}), maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
+        ...(own ? { minecraftOwnPrompt: true } : {}), ...(v2 ? { minecraftV2Facts: true } : {}), maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
     policy: LLMC_HISTORY_POLICY, lookahead: createLlmcLookahead(log), historyAhead: createFcaHistoryAhead(),
     ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, probe ? FIRST_PLAN_SCHEMA_R4 : FIRST_PLAN_SCHEMA) };
 }
 
 /** The first plan's words with the probe on: r9's, or with SHANNON_MINECRAFT_OWN_PROMPT the strategic knowledge instead (`minecraftStrategy.ts`). */
-export function firstPlanSystem(own: boolean): string { return own ? ownFirstPlanSystem() : FIRST_PLAN_SYSTEM_R9; }
+export function firstPlanSystem(own: boolean, v2 = false): string { return own ? ownFirstPlanSystem(v2) : FIRST_PLAN_SYSTEM_R9; }
 
 /**
  * r4: the way to send one fixed probe of a surprise to the task's body, or null while the body is not there or has no `probe` (its
@@ -251,7 +256,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   noteLlmcFeet(step.taskId, () => feetOf(observe()));
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    ...(llmc.probe ? { rules: true, compact: true } : {}), seen: tree => seenDoneUpdate(tree, observe()) });
+    ...(llmc.probe ? { rules: true, compact: true } : {}), seen: tree => seenDoneUpdate(tree, observe(), llmc.v2 === true) });
   const worldOf = () => {
     const world = observe()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
@@ -260,7 +265,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r8: a gap crossed in the rock or by a walled bridge (`FIRST_PLAN_SYSTEM_R8`); r9: the done of a node by its own condition, a place with
   // its dimension, the pearls after the rods, the golden armour in the check (`FIRST_PLAN_SYSTEM_R9`).
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
-    ...(llmc.probe ? { r4: { world: worldOf, system: firstPlanSystem(llmc.ownPrompt === true), readiness: true } } : {}) });
+    ...(llmc.probe ? { r4: { world: worldOf, system: firstPlanSystem(llmc.ownPrompt === true, llmc.v2 === true), readiness: true } } : {}),
+    ...(llmc.v2 ? { v2: true } : {}) });
   const display = () => plan.port.display();
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.

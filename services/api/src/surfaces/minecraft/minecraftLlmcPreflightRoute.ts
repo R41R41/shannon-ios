@@ -1,4 +1,4 @@
-import { blocked, NOT_FLOOR, posText, STANDS, word, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { blocked, isPortal, NOT_FLOOR, posText, STANDS, word, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 
 /**
  * Whether the walk can get from one cell to another without digging or laying a block, as far as the map says for certain
@@ -30,7 +30,8 @@ class Search {
   stands = (x: number, y: number, z: number): boolean => {
     if (!this.passable(x, y, z) || !this.passable(x, y + 1, z)) return false;
     const feet = this.view.symbol(x, y, z);
-    if (feet !== undefined && STANDS.has(feet)) return true;
+    // A cell in a portal (v2: only a map read under the body's rules has one) is where she goes in; the portal under it is no floor to ask.
+    if (feet !== undefined && (STANDS.has(feet) || isPortal(feet))) return true;
     const under = this.view.symbol(x, y - 1, z);
     return !(under !== undefined && NOT_FLOOR.has(under));
   };

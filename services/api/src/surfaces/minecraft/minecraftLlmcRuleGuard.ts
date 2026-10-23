@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActHand, ActPos } from '../../contracts/minecraftActContract.js';
-import { cellKey, mapView, posText, readLayers, SOLID, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { BODY_RULES, cellKey, mapView, posText, readLayers, SOLID, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 import type { ColumnOf } from './minecraftLlmcPreflightStand.js';
 import { lookOf, type Look } from './minecraftLlmcSurfaceLook.js';
 import { columnKey, keptColumnFact } from './minecraftLlmcFooting.js';
@@ -38,7 +38,7 @@ export interface RuleStop {
   cell: ActPos;
   why: string;
 }
-export interface RuleWorld { map: string | undefined; feet: ActPos | null; column?: ColumnOf }
+export interface RuleWorld { map: string | undefined; feet: ActPos | null; column?: ColumnOf; rules?: BodyRules }
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const cellOf = (value: unknown): Cell | null => {
@@ -119,7 +119,7 @@ function bridgeWords(cell: Cell, facts: BridgeFacts, seen: readonly SeenThreat[]
 interface Start { hands: ActHand[]; view: MapView; look: Look; planned: Set<string> }
 function startOf(input: unknown, world: RuleWorld): Start | null {
   const hands = (input as { hands?: unknown } | null)?.hands;
-  const layers = readLayers(world.map);
+  const layers = readLayers(world.map, world.rules);
   const feet = world.feet ? cellOf(world.feet) : null;
   if (!Array.isArray(hands) || !layers || !feet) return null;
   // 足と違う場所を描いた地図は、フレームより古い。
@@ -185,9 +185,10 @@ export function seenThreats(observation: BodyObservation | null, taskId: string)
 
 /** The rule guard against the newest frame of the body (its map, her feet, the hostiles that see her). */
 export function ruleGuardOfFrame(input: unknown, frame: BodyObservation | null, taskId: string): RuleStop | null {
-  const world = frame?.state.world as { localMap?: unknown; position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined;
+  const world = frame?.state.world as { localMap?: unknown; dimension?: unknown; position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined;
   const at = world?.position;
   const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
   const map = typeof world?.localMap === 'string' ? world.localMap : undefined;
-  return ruleGuardAct(input, { map, feet, column: (cell, feetY) => keptColumnFact(taskId)(columnKey(cell, feetY)) }, seenThreats(frame, taskId));
+  const column = (cell: Cell, feetY: number) => keptColumnFact(taskId)(columnKey(cell, feetY));
+  return ruleGuardAct(input, { map, feet, rules: BODY_RULES, column }, seenThreats(frame, taskId));
 }

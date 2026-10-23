@@ -34,6 +34,15 @@ const STAGES: Readonly<Record<Stage, { title: string; food: number; needs: reado
     { label: 'ベッド', count: 4, pattern: BED_ITEM }, { label: '弓', count: 1, pattern: /^bow$/u }, { label: '矢', count: 30, pattern: /^arrow$/u },
     { label: 'エンダーアイ', count: 12, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
 };
+/**
+ * SHANNON_MINECRAFT_LLMC_V2 (run 36: the entry's shortage said 食料 100 点・鉄の防具 4・水入りバケツ while the node was the obsidian, and the plan put
+ * 金の防具・ハーフブロック・食料 100 点 before the gate; the pass mark is the Nether within 30 minutes): what the gate needs is a pickaxe, a shield, a
+ * sword, blocks to stand on and food for the first stretch (40 points). The rest (the table, slabs, gold armour, food 100) is the check after
+ * she is in (`nether_deep`), which still holds before the fortress.
+ */
+const ENTRY_V2: { title: string; food: number; needs: readonly Need[] } = { title: 'ネザーに入る前', food: 40, needs: [
+  { label: '盾', count: 1, pattern: /^shield$/u }, { label: '剣', count: 1, pattern: /^(?:stone|iron|diamond|netherite)_sword$/u },
+  { label: '鉄以上のツルハシ', count: 1, pattern: /^(?:iron|diamond|netherite)_pickaxe$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS }] };
 const END_NODE = /ストロングホールド|エンド(?!ウ)|三角|ポータルの部屋|アイ/u;
 const GATE_NODE = /ゲート|ネザーに入|黒曜石|火打/u;
 
@@ -57,10 +66,11 @@ function held(counts: ItemCounts, need: Need): number {
 }
 
 /** The one line of what is missing for the stage, or null (no stage, nothing missing). */
-export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowTitle: string | null }): string | null {
+export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowTitle: string | null;
+  v2?: boolean }): string | null {
   const stage = preparationStage(parts.dimension, parts.counts, parts.nowTitle);
   if (!stage) return null;
-  const table = STAGES[stage], none: string[] = [], short: string[] = [];
+  const table = parts.v2 && stage === 'nether_entry' ? ENTRY_V2 : STAGES[stage], none: string[] = [], short: string[] = [];
   for (const need of table.needs) {
     const have = held(parts.counts, need);
     if (have <= 0) none.push(need.label);

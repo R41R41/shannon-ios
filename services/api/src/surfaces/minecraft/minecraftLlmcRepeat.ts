@@ -19,10 +19,13 @@ function stopsOf(list: readonly string[]): Array<{ cell: string; reason: string;
     return m ? [{ cell: m[1]!, reason: m[2]!, count: m[3] ? Number(m[3]) : 1 }] : [];
   });
 }
-/** The stopped or failed hands of a result text: `3 dig 止 見られる: (308,66,73)（…`, the hand's kind, the word, a cell or a creature. */
+/**
+ * The stopped or failed hands of a result text: `3 dig 止 見られる: (308,66,73)（…`, the hand's kind, the word, a cell or a creature. mb-llmc-cand 3: a walk's
+ * stop may carry its cause right after the word (`一歩ではない（元: 水の中・…）: 本文`, up to 260 characters); the cause is left out of the cell it reads.
+ */
 function stoppedHands(text: string): Array<{ do: string; reason: string; cell: string | null; target: string | null }> {
   return text.split('\n').flatMap(line => {
-    const m = /^(\d+) (\w+) (?:止|失) ([^:：\s（(]+)[:：]?\s*(.*)$/u.exec(line);
+    const m = /^(\d+) (\w+) (?:止|失) ([^:：\s（(]+)(?:（元:.*?）(?=[:：]))?[:：]?\s*(.*)$/u.exec(line);
     if (!m) return [];
     const rest = m[4] ?? '';
     const creature = /([a-z_]+)（id (\d+)）/u.exec(rest);

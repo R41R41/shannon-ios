@@ -1,6 +1,6 @@
 import type { ActPos } from '../../contracts/minecraftActContract.js';
 import type { ColumnFact } from './minecraftLlmcFooting.js';
-import { AIRISH, blocked, HARM, NOT_FLOOR, NOT_SUPPORT, posText, SOLID, STANDS, word, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
+import { AIRISH, blocked, HARM, isPortal, NOT_FLOOR, NOT_SUPPORT, posText, SOLID, STANDS, word, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 
 /**
  * The cell checks of the act's preflight (`minecraftLlmcPreflight.ts`): the body's `unstandable` for a walk's target (Shannon-mb-llmc-r10
@@ -40,7 +40,7 @@ function floorStop(cell: Cell, view: MapView): Found | null {
     break;
   }
   const wet = under === 'w' || under === '-';
-  const depth = wet ? `下 ${posText(underCell)} が水（立つ床にならない）` : `下 ${exact ? `${air}` : `${air} 以上`} マスが空気（立つ床が無い）`;
+  const depth = wet || isPortal(under) ? `下 ${posText(underCell)} が${wet ? '水' : 'ポータル'}（立つ床にならない）` : `下 ${exact ? `${air}` : `${air} 以上`} マスが空気（立つ床が無い）`;
   return { code: 'no_floor', cell: underCell, why: `足のマス ${posText(cell)} の${depth}` };
 }
 
@@ -80,6 +80,8 @@ function noSupport(cell: Cell, view: MapView, placed: ReadonlySet<string>): bool
 export function placeStop(cell: Cell, view: MapView, placed: ReadonlySet<string>, faceGiven: boolean): Found | null {
   const here = view.symbol(cell.x, cell.y, cell.z);
   if (here === undefined || here === '?') return null;
+  // A portal's cell holds a block the body does not replace (SHANNON_MINECRAFT_LLMC_V2: only a map read under the body's rules has one).
+  if (isPortal(here)) return { code: 'occupied', cell, why: `${posText(cell)} は埋まっている（そのマスは ${word(here)}。ポータルの中には置けない）` };
   if (SOLID.has(here) && !placed.has(`${cell.x},${cell.y},${cell.z}`)) {
     return { code: 'occupied', cell, why: `${posText(cell)} は埋まっている（そのマスは ${word(here)}。置く必要は無い）` };
   }

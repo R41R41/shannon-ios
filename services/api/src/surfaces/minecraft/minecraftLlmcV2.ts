@@ -41,7 +41,15 @@ const MENU_ORDER = ['mc.act', 'mc.probe', 'mc.view', 'plan.update'];
 export const v2MenuTool = (tool: Pick<FcaToolDefinition, 'name'>): boolean => MENU_ORDER.includes(tool.name);
 
 export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolDefinition[] {
-  return MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name)).map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : tool);
+  const ordered = MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name));
+  return ordered.map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : reachWords(tool));
+}
+/**
+ * The body reaches 5 m for dig, place, use, chest, furnace and craft (mb-llmc-cand 2, \`BLOCK_REACH\`); the probe's description, shared with the switch off,
+ * still says 4.5 m: in the mode's menu it says 5 m.
+ */
+function reachWords(tool: FcaToolDefinition): FcaToolDefinition {
+  return tool.description.includes('4.5m') ? { ...tool, description: tool.description.replace(/4\.5m/gu, '5m') } : tool;
 }
 export const candidateInput = (name: string, input: unknown): unknown => name === MC_ACT_TOOL ? expandShortAct(input).input : input;
 export { isUrgentLive } from './minecraftLlmcHandGuards.js';
@@ -63,6 +71,8 @@ export interface CandidateAct {
   problem: string | null;
   /** The guards (act preflight, rule guard): `stopped` when nothing goes to the body, `sentHands` when a part does; `text` is the fact the model reads. */
   guard?: { stopped: boolean; hand: number; sentHands?: number; code?: string; text: string };
+  /** A fact added to the result of an act that went whole (a place with onFail continue the map faults: the body skips the cell, the act goes on). */
+  note?: string;
 }
 
 /**
@@ -79,11 +89,11 @@ export function candidateAct(raw: unknown, frame: BodyObservation | null, taskId
   const fixes = [...prepared.fixes, ...checked.fixes];
   const held = heldBeforeSend({ preflight: true, v2: true, urgent: options.urgent === true }, checked.input, frame, taskId);
   if (held?.result) return { input: checked.input, fixes, problem: null, guard: { stopped: true, hand: 1, text: held.result.text } };
-  if (held) {
+  if (held?.input) {
     const sent = (held.input as { hands: unknown[] }).hands.length;
     return { input: held.input, fixes, problem: null, guard: { stopped: false, hand: sent + 1, sentHands: sent, text: held.tail ?? '' } };
   }
-  return { input: checked.input, fixes, problem: null };
+  return { input: checked.input, fixes, problem: null, ...held?.note ? { note: held.note } : {} };
 }
 
 /**

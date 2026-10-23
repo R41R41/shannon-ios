@@ -15,10 +15,11 @@ export const SHORT_HAND_ERROR_KEY = '書き方の誤り';
 const SHORT_GRAMMAR = [
   'hands は手の文字列の配列（1 手 1 行。座標は x,y,z の整数、複数の座標・点は空白で続ける。行末に note="40字までの説明" を付けられる）:',
   'walk X,Y,Z（点を空白で続けると path）[sprint] [range=N]: 掘らない・置かない・段差1と泳ぎだけ。地図の外の遠い点は64mごとに区切って歩き、掘る所で止まる',
-  'dig X,Y,Z ...（順に掘る。16マスまで）[tool=名] [exposeOk: 敵に見られても掘る] [takeOk: 村の物も掘る] [collect=false]',
+  'dig X,Y,Z ...（順に掘る。16マスまで）[tool=名] [exposeOk: 敵に見られても掘る] [takeOk: 村の物も掘る]'
+    + ' [collect=false: 掘るだけで拾いに歩かない。階段・トンネルで石や土を掘り進む dig に付ける（付けないと拾い続けて満杯になる）。原木・鉱石など拾う物の dig には付けない。持ち物の空きは live の body.pack]',
   'place ブロック名 X,Y,Z ... [face=down] / pillarUp N [ブロック名]（真下に置きながら N 段登る）',
   'use 物 [X,Y,Z] [face=..] [target=#id]: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と face）',
-  'look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / equip 物 [slot] / craft 物 [個数: 作業台が4.5m内に要る] / eat [物] / wait 秒（0.5〜30）',
+  'look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / equip 物 [slot] / craft 物 [個数: 作業台が5m内に要る] / eat [物] / wait 秒（0.5〜30）',
   'attack 相手(#id か名前) [hold: その場で待って届いたら打つ・追わない] [seconds=N] [untilDead=false] / pickup [range=N] [target=..]',
   'どの手にも rel（その手を始める時の足のブロックからの差。x 東+・z 南+・y 上+）と onFail=continue|stop を付けられる。',
   '上に無い形は json {手の JSON} の 1 行。at・items は 1 つでも配列:',
