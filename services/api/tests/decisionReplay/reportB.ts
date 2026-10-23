@@ -65,7 +65,7 @@ for (const scene of loadScenes()) {
   });
   out.push(`### ${scene.id}`, `${scene.title}`, '');
   const mark = (variant: string) => cells.filter(cell => cell.variant === variant).map(cell => cell.verdict).join('');
-  out.push(`- 本番の記録: ${cells.find(cell => cell.variant === 'prod')?.verdict ?? '-'}　基準 ${mark(VARIANTS[0]!)}　修正 ${mark(VARIANTS[1]!)}`, '');
+  out.push(`- 本番の記録: ${cells.find(cell => cell.variant === 'prod')?.verdict ?? '-'}　${VARIANTS.map(variant => variant + " " + mark(variant)).join("　")}`, '');
   out.push('| 版 | 回 | 判定 | 決め方 | 理由・外れた検査 | 答え（要約） | 秒 | 出力 tok |', '|---|---:|:-:|---|---|---|---:|---:|');
   for (const cell of cells) {
     const head = cell.text.split('\n').slice(0, 5).map(line => line.trim()).join(' / ').replace(/\|/gu, '/').slice(0, 170);
