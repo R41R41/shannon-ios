@@ -10,7 +10,7 @@ import type { Decision } from './load.js';
 export type Pos = { x: number; y: number; z: number };
 export interface Hand { do: string; to?: Pos; path?: Pos[]; at?: Pos[]; block?: string; item?: string; target?: string; hold?: boolean; exposeOk?: boolean;
   seconds?: number; n?: number; on?: boolean; tool?: string; onFail?: string; [key: string]: unknown }
-export interface Answer { tool: string | null; input: any; hands: Hand[]; stopIf?: Record<string, number>; accept?: string[]; why?: string; shapeProblem: string | null }
+export interface Answer { /** 部分送りの組（送った前の手 + 聞き直しの答えの手）の、1 つの act の手の数の最大。本番では別々の act なので、手の数の決まりはこちらで見る。 */ partsMax?: number; tool: string | null; input: any; hands: Hand[]; stopIf?: Record<string, number>; accept?: string[]; why?: string; shapeProblem: string | null }
 
 export function answerOf(content: Array<Record<string, any>>): Answer {
   const use = content.find(block => block.type === 'tool_use');
@@ -61,7 +61,7 @@ export interface Threat { id: string; name: string; meters: number; pos: Pos }
 export interface Context {
   decision: Decision; live: Record<string, any>; self: Pos; hp: number; food: number; threats: Threat[]; grid: Grid;
   /** The previous act's stopped hand (from the previous round's call and the result the live carries), if any. */
-  stopped: { do: string; reason: string; hand: Hand } | null;
+  stopped: { do: string; reason: string; hand: Hand; cell?: Pos } | null;
   /** 直近の止まり（live.body.stops）で、行き先がはっきりしている物。 */
   recentStops: Array<{ from?: Pos; to: Pos; reason: string; secondsAgo: number }>;
   visible: Array<{ name: string; id: string; meters: number }>;
@@ -105,7 +105,9 @@ function stoppedHand(decision: Decision): Context['stopped'] {
   // A hand cut off from outside (a reflex, a stopIf, the body's own cancel) was not wrong by itself: nothing to repeat.
   if (!m || /server_cancel|命令が止められた|stopIf|反射/u.test(m[0])) return null;
   const hand = (call.input.hands ?? [])[Number(m[1]) - 1] as Hand | undefined;
-  return hand ? { do: m[2]!, reason: m[3]!, hand } : null;
+  // 止まった所のマス（結果の行に座標があれば）: 手が複数のマスを持つ時、止まったのはそのうちの 1 つだけ（他は済んでいる）。
+  const at = ['掘れない', '届かない', '見られる'].includes(m[3]!) ? /\((-?\d+),(-?\d+),(-?\d+)\)/.exec(m[4] ?? '') : null;
+  return hand ? { do: m[2]!, reason: m[3]!, hand, ...(at ? { cell: { x: +at[1]!, y: +at[2]!, z: +at[3]! } } : {}) } : null;
 }
 
 /* ---------------------------------------------------------------- 手の照合 */
@@ -122,11 +124,15 @@ const CHANGES_WORLD = new Set(['walk', 'dig', 'place', 'pillarUp', 'craft', 'use
 /** 同じ止まりの手のくり返し: 直前に止まった手と同じ種類・同じ行き先（先頭のマス）の手が、世界を変える手の前に無いまま出ている。 */
 export function repeatsStop(answer: Answer, context: Context): string | null {
   const targets: Array<{ do: string; cells: Pos[]; hand?: Hand; reason: string; exposeOkFixes: boolean }> = [];
-  if (context.stopped) targets.push({ do: context.stopped.do, cells: cellsOf(context.stopped.hand), hand: context.stopped.hand, reason: context.stopped.reason,
+  if (context.stopped) targets.push({ do: context.stopped.do, cells: context.stopped.cell ? [context.stopped.cell] : cellsOf(context.stopped.hand), hand: context.stopped.hand, reason: context.stopped.reason,
     exposeOkFixes: context.stopped.reason === '見られる' });
   const doesOf: Record<string, string[]> = { 一歩ではない: ['walk'], 置けない: ['place'], 見られる: ['dig'], 掘れない: ['dig'], 届かない: ['dig', 'attack', 'use', 'pickup'] };
   for (const stop of context.recentStops) {
     if (stop.secondsAgo > 20) continue;
+    // 「掘れない」は Digging aborted のように一時の物が多く、その間の act が先へ進めた後の掘り直し（本番の正しい手も同じ）は、同じ手のくり返しではない。直前の act 自身の止まり（context.stopped）だけで見る。
+    if (stop.reason === '掘れない') continue;
+    // 止まった時の足の場所から今は離れている（別の場所から同じマスへ向かう）なら、同じ手のくり返しではない。
+    if (stop.from && dist(stop.from, context.self) > 1.5) continue;
     for (const kind of doesOf[stop.reason] ?? []) targets.push({ do: kind, cells: [stop.to], reason: stop.reason, exposeOkFixes: stop.reason === '見られる' });
   }
   for (let index = 0; index < answer.hands.length; index += 1) {
@@ -141,6 +147,8 @@ export function repeatsStop(answer: Answer, context: Context): string | null {
         if (!cells.length || !target.cells.some(other => same(cells[0]!, other))) continue;
       } else if (!target.hand) continue;
       if (target.exposeOkFixes && hand.exposeOk) continue;
+      // 「掘れない」（道具が無い等）の後に、道具を名指しして掘り直す手は、同じ手ではない。
+      if (target.reason === '掘れない' && hand.do === 'dig' && hand.tool !== undefined && (target.hand?.tool ?? undefined) !== hand.tool) continue;
       const shown = cells[0] ? ` (${cells[0].x},${cells[0].y},${cells[0].z})` : '';
       return `手${index + 1} ${hand.do} が直前に止まった手（${target.reason}）と同じ${shown}`;
     }
@@ -313,7 +321,8 @@ export function runCheck(check: Check, answer: Answer, context: Context): CheckR
     }
     case 'answerLine': {
       if (!context.hasAnswerLine) return { pass: true, detail: '答え方の行なし' };
-      return { pass: answer.hands.length <= 3, detail: `手 ${answer.hands.length} 個（答え方の行: 3 つまで）` };
+      const n = answer.partsMax ?? answer.hands.length;
+      return { pass: n <= 3, detail: `手 ${n} 個（答え方の行: 3 つまで）` };
     }
     case 'whyTag': {
       const tag = context.urgent ? /^\[(急ぎ|[a-z]\d+(\.\d+)*)\]/u : /^\[[a-z]\d+(\.\d+)*\]/u;

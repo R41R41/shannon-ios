@@ -98,3 +98,10 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 回す: `run6.ts --variant=cand2 --out=results7.jsonl`（基準 v1 と同じ回数）。採点: `judge5.ts --only=v1t,candt,cand2t --out=judge6.jsonl`（2 回目 `--out=judge6b.jsonl --force --scenes=…`）。表: `report5.ts --views=v1t,candt,cand2t --candidate=cand2t --previous=candt --baseline=v1t --judge=judge6.jsonl --judge2=judge6b.jsonl`。
 - 仕分け用: `PROD_LIVE=1 failDump5.ts v1t ×`（本番の live で基準の ×）、`failDump5.ts cand2t ×`、`VARIANT=cand2 guardDump5.ts`。
 - 結果のまとめ: `results/candidate-fix-20261023.md`。
+
+## 10/23 の追加 (7): 守りを足した候補（358f5c9）の確かめ
+
+- `candidateAct(raw, frame, taskId, { urgent: isUrgentLive(live) })`、frame の `recentStops` に live の `body.stops`。
+- 検査「同じ止まりのくり返し」の誤判定を直した（`checks.ts`: 止まったマス 1 つだけを見る・離れた足の場所からの同じマスは別・道具を名指しした掘り直しは別・recentStops の「掘れない」は目標にしない）。手の数の決まり（`answerLine`）は、部分送りの組の各 act の最大で見る（`Answer.partsMax`）。
+- 回す: `run6.ts --variant=cand3 --out=results8.jsonl --scenes=<新しく回す場面>`、他の場面は前の結果へかけ直し（`--reuse=results7.jsonl --reuse-variant=cand2`。1 回目の守りの結果が前と同じなら前の聞き直しの答えを使い、違う時だけ新しく聞き直す。`--dry` で、違う答えの数だけ見られる）。採点の下ごしらえは `seedJudge7.ts`（前の採点を写し、同じ答えの採点は版を越えて写す）→ `judge5.ts --out=judge7.jsonl`。
+- 結果のまとめ: `results/candidate-guards-20261023.md`。

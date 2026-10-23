@@ -224,13 +224,13 @@ if (candidate) {
     const frame = candFrame(decision, frames(runs, decision.run.key));
     const prepared = llmcPrepare('mc.act', candidateInput('mc.act', row.rawFirst));
     const held = prepared.problem ? null : heldOfFrame(checkedStopIf(prepared.input, frame).input, frame, `replay-${row.scene}-${row.rep}`);
-    const code = held?.code ?? '?';
+    const code = held?.code ?? (row.sent!.guard!.sentHands === 3 && !row.sent!.guard!.stopped ? 'urgent_limit' : '?');
     codes.set(code, (codes.get(code) ?? 0) + 1);
     const raw = answerOf([{ type: 'tool_use', name: 'mc_act', input: candidateInput('mc.act', row.rawFirst) }] as never);
     const score = scoreAnswer(scene, context, raw);
     const hit = score.failed.some(reason => /^(塞がったマスへ歩く|同じ止まり)/u.test(reason) || /^[a-z][a-z0-9-]+:/u.test(reason));
     if (hit) sure += 1; else unneeded.push(`${row.scene.slice(0, 3)} r${row.rep}`);
-    lines.push(`| ${row.scene.slice(0, 3)} r${row.rep} | ${row.sent!.guard!.stopped ? '全部止め' : `部分送り（手 1〜${row.sent!.guard!.sentHands}）`} | 手 ${held?.hand ?? '?'} ${code} | ${hit ? '検査でも ×（確かな止め）' : '検査では × にならない（疑い）'} | ${(held?.line ?? '').slice(0, 110)} |`);
+    lines.push(`| ${row.scene.slice(0, 3)} r${row.rep} | ${row.sent!.guard!.stopped ? '全部止め' : `部分送り（手 1〜${row.sent!.guard!.sentHands}）`} | 手 ${held?.hand ?? (code === 'urgent_limit' ? 4 : '?')} ${code} | ${hit ? '検査でも ×（確かな止め）' : '検査では × にならない（疑い）'} | ${(held?.line ?? '').slice(0, 110)} |`);
   }
   out.push(`- 止めた手の種類（code）: ${[...codes].map(([code, n]) => `${code} ${n}`).join('、')}。`);
   out.push(`- 止められた 1 回目の答え ${guarded.length} 個を検査にかけると、塞がったマスへ歩く・くり返し・場面の必須で × になった物 ${sure}。検査では × にならなかった止め（誤って止めた疑い。中身は人が読む）: ${unneeded.length}${unneeded.length ? `（${unneeded.join('、')}）` : ''}。`);
@@ -243,7 +243,7 @@ if (candidate) {
   const ruleErrors = (list: Entry[]) => list.reduce((n, item) => n + item.failed.filter(reason => /^[a-z][a-z0-9-]+:/u.test(reason)).length, 0);
   const per90 = (n: number, list: Entry[]) => n * 90 / Math.max(1, list.length);
   const b = sel(baseline);
-  const columns = [...(flag('previous', '') ? [flag('previous', '')] : []), candidate].filter(id => ids.includes(id));
+  const columns = [...(flag('previous', '') ? flag('previous', '').split(',') : []), candidate].filter(id => ids.includes(id));
   const boots = new Map<string, { diff: number; lo: number; hi: number }>();
   for (const id of columns) {
     const left = perScene(id, table), right = perScene(baseline, table);

@@ -100,7 +100,7 @@ export function candFrame(decision: Decision, info: Frames): BodyObservation {
   });
   const feet = frame.feet ?? context.self;
   return { schemaVersion: 1, bodyId: 'replay', sequence: 0, stateAt: '', receivedAt: '', connected: true, facts: {},
-    state: { world: { health: context.hp, position: { x: feet.x + 0.5, y: feet.y, z: feet.z + 0.5 }, ...(frame.map ? { localMap: frame.map } : {}), nearbyThreats } as never } };
+    state: { world: { health: context.hp, position: { x: feet.x + 0.5, y: feet.y, z: feet.z + 0.5 }, ...(frame.map ? { localMap: frame.map } : {}), ...(Array.isArray(body.stops) ? { recentStops: body.stops } : {}), nearbyThreats } as never } };
 }
 
 export { candidateAct };

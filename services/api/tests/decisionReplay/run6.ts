@@ -5,7 +5,7 @@ import { loadAllRuns, dataFile } from './allRuns.js';
 import { bootstrapFile } from './bootstrap.js';
 import { candFixed, candFrame, candRows, candTurn, candidateAct } from './candidateAdapter.js';
 import { CAP, guard, spent } from './ledger.js';
-import { candidateInput } from '../../src/surfaces/minecraft/minecraftLlmcV2.js';
+import { candidateInput, isUrgentLive } from '../../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { frames, scenesFor } from './sceneSet.js';
 import { markCache, replayClient, sceneMessages } from './request.js';
 import { readRows, latest } from './views5.js';
@@ -48,6 +48,12 @@ const have = (scene: string) => read(flag('out') ?? 'results6.jsonl').filter(row
 const v1Reps = new Map<string, number>();
 for (const row of latest(readRows())) if (row.variant === 'v1') v1Reps.set(row.scene, Math.max(v1Reps.get(row.scene) ?? 0, row.rep));
 const scenes = scenesFor(runs, flag('scenes')?.split(','));
+/** 作り直しなしで使う前の結果（--reuse=results7.jsonl --reuse-variant=cand2）: 守りを足して、前の答えにかけ直す。1 回目の答えに対する守りの結果が前と同じなら、前の聞き直しの答えもそのまま使う（API を使わない）。違う時だけ聞き直しを新しく回す。 */
+const reuseRows = new Map<string, Row6>();
+if (flag('reuse')) for (const row of read(flag('reuse')!)) if (row.variant === (flag('reuse-variant') ?? 'cand2') && row.ok) reuseRows.set(`${row.scene}|${row.rep}`, row);
+const synthetic = (name: string, input: unknown, usage: Usage4, costUsd: number, tEnd: number, base: Row6): CallResult => ({ ok: true, content: [{ type: 'tool_use', id: 'toolu_reused', name, input }], stopReason: 'tool_use',
+  usage: { ...usage }, costUsd, tMessageStart: base.tMessageStart, tFirstBlock: base.tFirstBlock, tFirstToolInput: base.tFirstToolInput, tEnd, inputTransformations: [] });
+const toolName = (tool: string | null) => String(tool).replace(/^mc./, 'mc_').replace(/^plan./, 'plan_');
 const client = dry ? null : replayClient(apiKey);
 const bootstrapOf = (key: string, epoch: number): string | null => {
   if (epoch === 0) return null;
@@ -57,6 +63,8 @@ const bootstrapOf = (key: string, epoch: number): string | null => {
 };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const GUESS = 0.08;
+let newReasks = 0;
+const sumDiff = (a: Usage4, b: Usage4): Usage4 => ({ input: a.input - b.input, output: a.output - b.output, cacheWrite: a.cacheWrite - b.cacheWrite, cacheRead: a.cacheRead - b.cacheRead });
 const sumUsage = (a: Usage4, b: Usage4): Usage4 => ({ input: a.input + b.input, output: a.output + b.output, cacheWrite: a.cacheWrite + b.cacheWrite, cacheRead: a.cacheRead + b.cacheRead });
 const usageOf = (result: CallResult): Usage4 => ({ input: result.usage.input, output: result.usage.output, cacheWrite: result.usage.cacheWrite, cacheRead: result.usage.cacheRead });
 
@@ -101,20 +109,35 @@ async function chain(): Promise<void> {
     previous = item;
     const doneReps = new Set(have(scene.id).map(row => row.rep));
     if (dry) {
-      console.log(VARIANT, scene.id.slice(0, 3), 'chars', JSON.stringify(first.body).length, 'tools', first.body.tools.length, 'need', Math.max(0, want - doneReps.size));
+      const notes: string[] = [];
+      for (let rep = 1; rep <= want && reuseRows.size; rep += 1) {
+        const stored = reuseRows.get(`${scene.id}|${rep}`);
+        if (!stored || !stored.sent.guard && stored.answer.tool !== 'mc.act') continue;
+        const firstTool = stored.sent.guard ? 'mc.act' : stored.answer.tool;
+        if (firstTool !== 'mc.act') continue;
+        const act = candidateAct(stored.rawFirst, candFrame(decision, frames(runs, decision.run.key)), `replay-${scene.id}-${rep}`, { urgent: isUrgentLive(decision.live) });
+        const old = stored.sent.guard;
+        const same = (!act.guard && !old) || (!!act.guard && !!old && act.guard.stopped === old.stopped && act.guard.hand === old.hand);
+        if (!same) notes.push(`r${rep}:${old ? `${old.stopped ? '全' : '部'}${old.hand}` : '-'}→${act.guard ? `${act.guard.stopped ? '全' : '部'}${act.guard.hand}${act.guard.code ?? ''}` : '-'}`);
+      }
+      console.log(VARIANT, scene.id.slice(0, 3), 'chars', JSON.stringify(first.body).length, 'tools', first.body.tools.length, 'need', Math.max(0, want - doneReps.size), notes.length ? `NEWGUARD ${notes.join(' ')}` : '');
       continue;
     }
     const info = frames(runs, decision.run.key);
     for (let rep = 1; rep <= want; rep += 1) {
       if (doneReps.has(rep)) continue;
       const taskId = `replay-${scene.id}-${rep}`;
-      const firstResult = await call(first.body, first.headers, 'replay-cand', `${scene.id} r${rep}`);
+      const stored = reuseRows.get(`${scene.id}|${rep}`);
+      const storedFirstTool = stored ? (stored.sent.guard ? 'mc.act' : stored.answer.tool) : null;
+      const firstResult = stored && stored.firstUsage ? synthetic(toolName(storedFirstTool), stored.rawFirst, stored.firstUsage, stored.firstCostUsd ?? 0, stored.firstTEnd ?? stored.tEnd, stored)
+        : await call(first.body, first.headers, 'replay-cand', `${scene.id} r${rep}`);
+      const urgent = isUrgentLive(decision.live);
       const one = expanded(firstResult);
       const frame = candFrame(decision, info);
       let usage = usageOf(firstResult), cost = firstResult.costUsd, tEnd = firstResult.tEnd, ok = firstResult.ok, error = firstResult.error;
       let final = one, finalResult = firstResult;
       let sent: Sent6;
-      const act = one.tool === 'mc.act' && one.use ? candidateAct(one.rawInput, frame, taskId) : null;
+      const act = one.tool === 'mc.act' && one.use ? candidateAct(one.rawInput, frame, taskId, { urgent }) : null;
       if (!act) sent = { tool: one.tool, input: one.answer.input, fixes: [], problem: one.tool ? null : '道具の呼び出しが無い', changed: false };
       else sent = { tool: 'mc.act', input: act.input, fixes: act.fixes, problem: act.problem, changed: JSON.stringify(act.input) !== JSON.stringify(one.answer.input),
         ...(act.guard ? { guard: { stopped: act.guard.stopped, hand: act.guard.hand, sentHands: act.guard.sentHands, code: act.guard.code, text: act.guard.text } } : {}) };
@@ -126,12 +149,15 @@ async function chain(): Promise<void> {
         const resultText = act.guard.text;
         const extra: Entry[] = [{ role: 'assistant', content: [{ type: 'tool_use', id: useId, name: 'mc_act', input: one.rawInput }] },
           { role: 'user', content: [{ type: 'tool_result', tool_use_id: useId, content: resultText, is_error: true }] }, { ...first.live }];
-        const again = await build(item, undefined, extra);
-        const second = await call(again.body, again.headers, 'replay-cand-reask', `${scene.id} r${rep}`);
+        // 前の結果を使う時、1 回目の守りの結果（止め方と止めた手）が前と同じで、前に聞き直していたなら、その聞き直しの答えをそのまま使う。
+        const old = stored?.sent.guard;
+        const sameGuard = !!stored && !!old && old.stopped === act.guard.stopped && old.hand === act.guard.hand && stored.rawFinal !== undefined && !!stored.firstUsage;
+        const second = sameGuard ? synthetic(toolName(stored!.answer.tool), stored!.rawFinal, sumDiff(stored!.usage, stored!.firstUsage!), (stored!.costUsd) - (stored!.firstCostUsd ?? 0), stored!.tEnd - (stored!.firstTEnd ?? 0), stored!)
+          : await (async () => { const again = await build(item, undefined, extra); newReasks += 1; return call(again.body, again.headers, 'replay-cand-reask', `${scene.id} r${rep}`); })();
         usage = sumUsage(usage, usageOf(second)); cost += second.costUsd; tEnd += second.tEnd;
         const two = expanded(second);
         rawFinal = two.rawInput;
-        const act2 = two.tool === 'mc.act' && two.use ? candidateAct(two.rawInput, frame, taskId) : null;
+        const act2 = two.tool === 'mc.act' && two.use ? candidateAct(two.rawInput, frame, taskId, { urgent }) : null;
         ok = second.ok; error = second.error; final = two; finalResult = second;
         const guardInfo = { stopped: act.guard.stopped, hand: act.guard.hand, sentHands: act.guard.sentHands, code: act.guard.code, text: act.guard.text,
           reask: two.tool ?? 'none' };
@@ -160,5 +186,5 @@ async function chain(): Promise<void> {
 if (process.argv[1]?.endsWith('run6.ts')) {
   console.log(`run6 start scenes=${scenes.length} spent $${spent().toFixed(3)} cap $${CAP}${dry ? ' DRY' : ''}`);
   await chain();
-  console.log('done; spent $', spent().toFixed(3));
+  console.log('done; spent $', spent().toFixed(3), 'new reasks', newReasks);
 }

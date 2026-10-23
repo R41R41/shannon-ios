@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadAllRuns } from './decisionReplay/allRuns.js';
 import { answerOfSent, observationOf, productionTransform } from './decisionReplay/headTransform.js';
+import { answerOf, contextOf, repeatsStop } from './decisionReplay/checks.js';
 import { decisionOf, loadScenes } from './decisionReplay/score.js';
 import { VARIANTS } from './decisionReplay/request.js';
 
@@ -66,5 +67,17 @@ describe.skipIf(!haveData)('production head transform on recorded scenes', () =>
     expect(world.health).toBeGreaterThan(0);
     expect(world.nearbyThreats.length).toBeGreaterThan(0);
     expect(world.nearbyThreats.some(threat => threat.canReachMe === false)).toBe(true);
+  });
+});
+
+describe.skipIf(!haveData)('the repeated-stop check no longer takes a different hand for a repeat', () => {
+  const runs = haveData ? loadAllRuns() : new Map();
+  const context = (prefix: string) => contextOf(decisionOf(runs, loadScenes().find(scene => scene.id.startsWith(prefix))!));
+  const answer = (hands: unknown[]) => answerOf([{ type: 'tool_use', name: 'mc_act', input: { why: '[p1.1] t', hands } }] as never);
+  it('s43: a dig of a cell that stopped some seconds ago, after the act went on past it, is not the previous act\'s stop', () => {
+    expect(repeatsStop(answer([{ do: 'dig', at: [{ x: 181, y: 50, z: 199 }] }]), context('s43'))).toBeNull();
+  });
+  it('s43: the cell the previous act itself stopped at is still a repeat', () => {
+    expect(repeatsStop(answer([{ do: 'dig', at: [{ x: 181, y: 49, z: 200 }] }]), context('s43'))).toContain('同じ');
   });
 });

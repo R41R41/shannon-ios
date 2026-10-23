@@ -20,9 +20,11 @@ export const VIEWS: View[] = [
   { id: 'cand', variant: 'cand', transform: 'none', label: '候補 cand（モデルの最終の答えを手の JSON に戻しただけ。変換・守りなし）' },
   { id: 'candt', variant: 'cand', transform: 'candidate', label: '前の候補（fdd976c）+ 候補の頭の変換（戻し・形・stopIf・守り・部分送り・聞き直しの組）' },
   { id: 'cand2', variant: 'cand2', transform: 'none', label: '新しい候補（44376fb）のモデルの最終の答え（変換・守りなし）' },
-  { id: 'cand2t', variant: 'cand2', transform: 'candidate', label: '新しい候補（44376fb）+ 候補の頭の変換' },
+  { id: 'cand2t', variant: 'cand2', transform: 'candidate', label: '直した候補（44376fb）+ 候補の頭の変換' },
+  { id: 'cand3', variant: 'cand3', transform: 'none', label: '守りを足した候補（358f5c9）のモデルの最終の答え（変換・守りなし）' },
+  { id: 'cand3t', variant: 'cand3', transform: 'candidate', label: '守りを足した候補（358f5c9）+ 候補の頭の変換' },
 ];
-export const RESULT_FILES = ['results.jsonl', 'results2.jsonl', 'results4.jsonl', 'results5.jsonl', 'results6.jsonl', 'results7.jsonl'];
+export const RESULT_FILES = ['results.jsonl', 'results2.jsonl', 'results4.jsonl', 'results5.jsonl', 'results6.jsonl', 'results7.jsonl', 'results8.jsonl'];
 export function readRows(files = RESULT_FILES): Row2[] {
   return files.flatMap(name => existsSync(dataFile(name)) ? readFileSync(dataFile(name), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as Row2) : []);
 }
@@ -54,6 +56,8 @@ export async function candidatesOf5(scene: SceneFile, decision: Decision, rows: 
         : answerOfSent(sent);
       // 部分送りの組（送った前の手 + 聞き直しの答えの手）は、本番では別々の act（それぞれ 12 手まで）。組の手の数が 12 を超えるだけの形の問題は問わない（STRICT_COMBINED=1 で問う）。
       if (!process.env.STRICT_COMBINED && (row as { sent?: { combined?: boolean } }).sent?.combined && answer.shapeProblem && /hands は 1〜12 個/u.test(answer.shapeProblem)) answer = { ...answer, shapeProblem: null };
+      const guard = (row as { sent?: { combined?: boolean; guard?: { sentHands?: number } } }).sent;
+      if (guard?.combined && guard.guard?.sentHands !== undefined) answer = { ...answer, partsMax: Math.max(guard.guard.sentHands, answer.hands.length - guard.guard.sentHands) };
       list.push({ key: `${view.id}|${row.rep}`, variant: view.id, rep: row.rep, answer, score: scoreAnswer(scene, context, answer) });
     }
   }
