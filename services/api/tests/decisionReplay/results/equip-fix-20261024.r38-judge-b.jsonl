@@ -1,0 +1,14 @@
+{"scene":"s64-r37-1931-portal-entry","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"ポータルのマスへwalkしてwait5、hostileWithin付き。条件どおり"}
+{"scene":"s64-r37-1931-portal-entry","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"ポータルのマスへwalkしてwait5、hostileWithin付き。条件どおり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"walkをtoで直しポータルへ入り6秒待つ。hostileWithinもあり条件どおり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"walkをtoで直しポータルへ入り6秒待つ。hostileWithinもあり条件どおり"}
+{"scene":"s65-r37-1932-portal-after-shape-error","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"奥を掘って迂回する手で条件に反する。hostileWithinもない"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"live を読み、確認に寄らず火打ち金を作る。条件どおり"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"live を読み、確認に寄らず火打ち金を作る。条件どおり"}
+{"scene":"s66-r37-1927-after-summary-flint","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"計画どおり craft flint_and_steel を 1 手で出している"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"遮る(252,-23,208)を掘ってから先へ進む。観測に寄らずp7.2を進めている"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"candB|1","variant":"candB","rep":1,"verdict":"△","reason":"遮るマスを先に掘るのは正しいが、2マス開けるだけで黒曜石作りまで進まない"}
+{"scene":"s67-r36-1791-after-summary-lava","key":"prod","variant":"prod","rep":"prod","verdict":"○","reason":"視線を遮るマスを先に掘ってから溶岩の隣を開け、注ぐ流れで条件に合う"}
+{"scene":"s68-r37-1813-early-bed","key":"candB|1","variant":"candB","rep":1,"verdict":"○","reason":"家に入り見える所から掘る。202はonFail続行で安全"}
+{"scene":"s68-r37-1813-early-bed","key":"prod","variant":"prod","rep":"prod","verdict":"△","reason":"201を壊すと202も消え、2つ目の掘りで止まりそう"}
+{"scene":"s68-r37-1813-early-bed","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"扉側へ回って掘り、箱と拾いまで通る本番同等の手"}

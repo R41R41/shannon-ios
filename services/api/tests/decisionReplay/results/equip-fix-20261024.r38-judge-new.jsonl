@@ -1,0 +1,31 @@
+{"scene":"s69-r38-1959-cliff-tree","key":"candB|2","variant":"candB","rep":2,"verdict":"×","reason":"同じ崖の木へ土の段で登る手のくり返しで、条件に反する"}
+{"scene":"s69-r38-1959-cliff-tree","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"崖沿いの土の階段で同じ木を狙う手。別の木へ行かず条件違反"}
+{"scene":"s70-r38-1980-armour-before-diamonds","key":"candF|2","variant":"candF","rep":2,"verdict":"×","reason":"why が[p4.1]ダイヤのまま。鉄の防具が目的に出ていない"}
+{"scene":"s70-r38-1980-armour-before-diamonds","key":"candB|2","variant":"candB","rep":2,"verdict":"×","reason":"ダイヤへまっすぐ階段で下りる。防具を先に作る決まりに反する"}
+{"scene":"s70-r38-1980-armour-before-diamonds","key":"candB|1","variant":"candB","rep":1,"verdict":"×","reason":"why が「ダイヤへ」と明言。鉄の防具を後回しにしている"}
+{"scene":"s70-r38-1980-armour-before-diamonds","key":"candB|3","variant":"candB","rep":3,"verdict":"×","reason":"[p4.1]のまま下りる。鉄の防具の目的が why にも計画にもない"}
+{"scene":"s71-r38-2007-lava-pool","key":"candB|1","variant":"candB","rep":1,"verdict":"×","reason":"溜まりを探さず85m先の自然黒曜石へ計画を変えている。劣る手"}
+{"scene":"s71-r38-2007-lava-pool","key":"candB|3","variant":"candB","rep":3,"verdict":"×","reason":"85m先の自然黒曜石へ長い階段で向かう劣る手"}
+{"scene":"s71-r38-2007-lava-pool","key":"candF|3","variant":"candF","rep":3,"verdict":"△","reason":"鉄を焼く方向は正しいが、作業台なしでかまどを作るので止まりそう"}
+{"scene":"s71-r38-2007-lava-pool","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"自然黒曜石へ階段で下る遠回りの手。溜まりを探していない"}
+{"scene":"s71-r38-2007-lava-pool","key":"candF|1","variant":"candF","rep":1,"verdict":"△","reason":"焼く方向は正しいが、作業台を置く前にかまどを作る順序で止まりそう"}
+{"scene":"s71-r38-2007-lava-pool","key":"candB|2","variant":"candB","rep":2,"verdict":"×","reason":"85m先の自然黒曜石へ下る遠回りの手"}
+{"scene":"s71-r38-2007-lava-pool","key":"candF|2","variant":"candF","rep":2,"verdict":"○","reason":"作業台を置いてからかまどを作り、鉄を焼く。準備不足に手を付けている"}
+{"scene":"s72-r38-2042-furnace-wait","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"焼ける間に水を注いで黒曜石の支度をしており、待ちも短い"}
+{"scene":"s72-r38-2042-furnace-wait","key":"candB|3","variant":"candB","rep":3,"verdict":"△","reason":"待たずに掘っているが、下の溶岩で黒曜石が燃えるおそれが残る"}
+{"scene":"s72-r38-2042-furnace-wait","key":"candB|2","variant":"candB","rep":2,"verdict":"△","reason":"掘る手は入るが、手数が多く溶岩のそばで途中で止まりそう"}
+{"scene":"s72-r38-2042-furnace-wait","key":"candB|1","variant":"candB","rep":1,"verdict":"×","reason":"意味のない drop のあと30秒立って待つだけで、条件に反する"}
+{"scene":"s72-r38-2042-furnace-wait","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"本番と同じ形で、25秒も待つ。手1で止まった前例がある"}
+{"scene":"s72-r38-2042-furnace-wait","key":"candF|3","variant":"candF","rep":3,"verdict":"○","reason":"水で下の溶岩を固め、水も汲み戻す。待ちは短く、支度が進む"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candB|3","variant":"candB","rep":3,"verdict":"×","reason":"防具を作らずにゲートを建てて入る手で、持ち主の決まりに反する"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"兜・胸当て・脚を作らないまま点火しており、決まりに反する"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candB|1","variant":"candB","rep":1,"verdict":"×","reason":"防具なしでゲートを建てて入る手。本番と同じ誤り"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candB|2","variant":"candB","rep":2,"verdict":"×","reason":"鉄20を使わず防具なしで枠を作って点火する手で、条件に反する"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candF|1","variant":"candF","rep":1,"verdict":"○","reason":"鉄20で兜・胸当て・脚をちょうど作って着る。入る前の要の1歩"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candB|2","variant":"candB","rep":2,"verdict":"×","reason":"防具を作らずにゲートに火をつける。持ち主の決まりに反する"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"prod","variant":"prod","rep":"prod","verdict":"×","reason":"防具なしのままゲートを組んで火をつける手で、誤り"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candF2|2","variant":"candF2","rep":2,"verdict":"○","reason":"鉄20で兜・胸当て・脚を作って着る。条件どおりの要の手"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candF2|1","variant":"candF2","rep":1,"verdict":"△","reason":"防具の手は正しいが、持っていない甘い実を食べる手で止まる"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candB|1","variant":"candB","rep":1,"verdict":"×","reason":"防具を作らずにゲートを建てて入る。決まりに反する"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candB|3","variant":"candB","rep":3,"verdict":"×","reason":"防具なしでネザーへ入る手で、条件に反する"}
+{"scene":"s73-r38-2080-gate-without-armour","key":"candF2|3","variant":"candF2","rep":3,"verdict":"○","reason":"兜・胸当て・脚を作って着る。鉄20でちょうど作れ、条件どおり"}
