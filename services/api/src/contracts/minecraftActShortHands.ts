@@ -28,6 +28,13 @@ function sorted(value: unknown): unknown {
 const same = (a: unknown, b: unknown) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
 /* ------------------------------------------------------------------ 手 → 1 行 */
+/**
+ * The slot words of `equip` the body takes are hand, offhand, head, chest, legs and feet. Bench 2026-10-24 (run 38 d127, the iron armour made and put on):
+ * 2 answers of 3 wrote `equip iron_chestplate torso` (the live state's worn line says 頭・胴・脚・足・左手), and the act was refused. Those words are read as the body's.
+ */
+const SLOT_WORDS: Readonly<Record<string, string>> = { torso: 'chest', body: 'chest', chestplate: 'chest', helmet: 'head', leg: 'legs', leggings: 'legs',
+  boots: 'feet', foot: 'feet', mainhand: 'hand', main: 'hand', off: 'offhand', off_hand: 'offhand', 頭: 'head', 胴: 'chest', 脚: 'legs', 足: 'feet',
+  右手: 'hand', 左手: 'offhand' };
 type Words = string[] | null;
 const flag = (on: boolean | undefined, word: string): string[] => on === true ? [word] : [];
 const given = (key: string, value: unknown): string[] => value === undefined ? [] : [`${key}=${String(value)}`];
@@ -99,7 +106,7 @@ const READERS: Record<string, Reader> = {
   sneak: ({ words, hand }) => words[0] === 'on' || words[0] === 'off' ? done({ ...hand, on: words[0] === 'on' }) : bad('sneak', 'on か off'),
   jump: ({ words, hand }) => done(isCount(words[0]) ? { ...hand, n: Number(words[0]) } : hand),
   eat: ({ words, hand }) => done(words[0] ? { ...hand, item: words[0] } : hand),
-  equip: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(words[1] ? { slot: words[1] } : {}) }) : bad('equip', '物の名前が要る'),
+  equip: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(words[1] ? { slot: SLOT_WORDS[words[1]] ?? words[1] } : {}) }) : bad('equip', '物の名前が要る'),
   craft: ({ words, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('craft', '物の名前が要る'),
   pickup: ({ hand }) => done(hand),

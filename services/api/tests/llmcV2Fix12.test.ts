@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanTree } from '@shannon/mind';
+import { expandShortAct } from '../src/contracts/minecraftActShortContract.js';
 import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
 import { PLAN_UPDATE_RULES_DEFINITION } from '../src/mind/action/fca/fcaPlanTools.js';
 import { gateFirst, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -161,5 +162,15 @@ describe('run 38: the size of the lava pools (1,090–1,310 s on single sources 
     expect(prep).toContain('10 個には源が 10 以上ある溜まりへ行く');
     expect(prep).toContain('崖の上・高い所の木へ土で登る手が 2 回止まったら、その木はやめて別の木へ');
     expect(prep).not.toMatch(/実走\d/u);
+  });
+});
+
+describe('the bench of 2026-10-24: the slot words of equip', () => {
+  it('reads the worn line\'s words and the usual English ones as the body\'s slots, and leaves the body\'s own as they are', () => {
+    const slots = (hands: string[]) => ((expandShortAct({ hands }).input as { hands: Array<{ slot?: string }> }).hands).map(hand => hand.slot);
+    expect(slots(['equip iron_helmet head', 'equip iron_chestplate torso', 'equip iron_leggings legs', 'equip golden_boots 足', 'equip shield 左手']))
+      .toEqual(['head', 'chest', 'legs', 'feet', 'offhand']);
+    expect(slots(['equip iron_chestplate'])).toEqual([undefined]);
+    expect(expandShortAct({ hands: ['equip iron_chestplate torso'] }).errors).toEqual([]);
   });
 });
