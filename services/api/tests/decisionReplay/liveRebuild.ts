@@ -76,7 +76,7 @@ export function rebuiltLive(live: Record<string, any>): Record<string, any> | nu
   }
   const result = { ...live, body: out } as Record<string, any>;
   if (hasReachWords && derivedPlan) result.plan = derivedPlan;
-  return withStateWords(withNewLastResults(result));
+  return withPrep(withStateWords(withNewLastResults(result)));
 }
 
 /**
@@ -102,6 +102,45 @@ export function withNewLastResults<T extends Record<string, any>>(live: T): T {
   const next: Record<string, any> = { ...body };
   if (kept.length) next.lastResults = kept; else delete next.lastResults;
   return { ...live, body: next };
+}
+
+/**
+ * v2 12 回目（2026-10-24、防具の決まり・今の節の条件）: 本番は `shortage`（準備の不足）と `planNow` を体の frame と計画の木から作る（minecraftLlmcBody.ts）ので、
+ * 記録の live には、その判断の時の本番の版（rel42）の物が残る。決まりの表（minecraftLlmcPrepRules.ts）がある木だけ、記録の持ち物（inventory の「名前×数」）・
+ * 着ている物（state.worn）・食料の点・次元・今の節の題からこの木の `preparationShortage` で作り直し、今の節の済む条件にこの木の `doneStatusWords` の「今:」を足す。
+ * 基準の木（表が無い）は記録のまま＝本番 rel42 の出力。近似: 持ち物は live に出た行だけ（「ほか N 件は略」の分は数えない）。
+ */
+const prep = await dynamic('../../src/surfaces/minecraft/' + 'minecraftLlmcPrepRules.js');
+const readiness = await dynamic('../../src/surfaces/minecraft/' + 'minecraftLlmcReadiness.js');
+const planDone = await dynamic('../../src/surfaces/minecraft/' + 'minecraftPlanDone.js');
+const items = await dynamic('../../src/surfaces/minecraft/' + 'minecraftItems.js');
+export const hasPrepRules = !!prep && typeof planDone?.doneStatusWords === 'function';
+export function withPrep<T extends Record<string, any>>(live: T): T {
+  const body = live.body as Record<string, any> | undefined;
+  if (!hasPrepRules || !body) return live;
+  const state = (body.state ?? {}) as Record<string, any>;
+  const worn: string[] = typeof items?.wornItems === 'function' ? items.wornItems(state.worn) : [];
+  const counts = new Map<string, number>();
+  for (const line of Array.isArray(body.inventory) ? body.inventory as unknown[] : []) {
+    const m = typeof line === 'string' ? /^([a-z_0-9]+)×(\d+)/u.exec(line) : null;
+    if (m) counts.set(m[1]!, (counts.get(m[1]!) ?? 0) + Number(m[2]));
+  }
+  for (const name of worn) counts.set(name, (counts.get(name) ?? 0) + 1);
+  const dimension = typeof state.dimension === 'string' ? state.dimension.replace(/^minecraft:/u, '') : null;
+  const food = Number((body.food as Record<string, unknown> | undefined)?.points ?? 0) || 0;
+  const now = typeof body.planNow === 'string' ? body.planNow : '';
+  const nowTitle = /^\[[^\]]+\]\s*([^＠（]+)/u.exec(now)?.[1]?.trim() ?? null;
+  const out: Record<string, any> = { ...body };
+  const shortage = readiness!.preparationShortage({ dimension, counts, food, nowTitle, v2: true, worn });
+  if (shortage) out.shortage = shortage; else delete out.shortage;
+  const at = /\((-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\)/u.exec(String(state.at ?? ''));
+  const facts = { counts, dimension, food, feet: at ? { x: Number(at[1]), y: Number(at[2]), z: Number(at[3]) } : null };
+  const cond = /（済む条件: ([^）]+)）/u.exec(now);
+  if (cond) {
+    const status = planDone!.doneStatusWords(cond[1], facts);
+    if (status) out.planNow = now.replace(cond[0], `（済む条件: ${cond[1]}／今: ${status}）`);
+  }
+  return { ...live, body: out };
 }
 
 /** 任務の知らせの文（本番 rel41 の物 → この木の版の物）。修正の版は V2 の文に替える。 */
