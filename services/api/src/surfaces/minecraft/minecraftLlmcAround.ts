@@ -206,9 +206,10 @@ export interface Watched { name: string; id: string; meters: number; at: P }
 const WATCH = /^#(\d+) (\S+) ([\d.]+)m \((-?\d+),(-?\d+),(-?\d+)\)/u;
 /** The hostile the first of `lines` says (the urgent ones first, then those that see her within 16 m), or null. */
 export function watchedHostile(urgent: readonly string[] | undefined, threats: readonly string[] | undefined): Watched | null {
-  const line = urgent?.find(item => WATCH.test(item)) ?? threats?.find(item => WATCH.test(item) && item.includes('見える（射線の中）'));
+  const first = urgent?.find(item => WATCH.test(item));
+  const line = first ?? threats?.find(item => WATCH.test(item) && item.includes('見える（射線の中）') && Number(WATCH.exec(item)![3]) <= 16);
   const m = line ? WATCH.exec(line) : null;
-  return m && Number(m[3]) <= 16 ? { id: m[1]!, name: m[2]!, meters: Number(m[3]), at: { x: +m[4]!, y: +m[5]!, z: +m[6]! } } : null;
+  return m ? { id: m[1]!, name: m[2]!, meters: Number(m[3]), at: { x: +m[4]!, y: +m[5]!, z: +m[6]! } } : null;
 }
 /**
  * mb-llmc-cand 11 (bench s14: an enderman 7.9 m away and in sight, the walk went west and north, toward it): the steps of the ten that take her away from the
@@ -221,8 +222,10 @@ export function awayLines(view: MapView, feet: P, hostile: Watched | null): stri
   const steps = DIRS.flatMap(dir => {
     if (dir.dx !== 0 && dir.dz !== 0 && !cornerOk(read, feet, dir.dx, dir.dz)) return [];
     const best = bestStep(stepOptions(read, feet, feet.x + dir.dx, feet.z + dir.dz));
-    return best && !best.dig.length && far(best.to) >= far(feet) + 0.5 ? [`${dir.name} ${ptText(best.to)}`] : [];
+    return best && !best.dig.length && far(best.to) >= far(feet) + 0.5 ? [`${dir.name} ${ptText(best.to)}${stepWord(best)}`] : [];
   });
   const who = `#${hostile.id} ${hostile.name}（${hostile.meters}m）から離れる、掘らずに歩ける隣`;
   return [steps.length ? `${who}: ${steps.join('・')}` : `${who}は無い（周りの 8 方向の 1 歩は、どれも近づくか、掘る・置くが要る）`];
 }
+/** How the step goes, when it is not on the level: the cell written is the one she stands in after it (as the step lines say 「1 段上りで … に着く」). */
+const stepWord = (step: Step): string => step.kind === 'up' ? '（1 段上り）' : step.kind === 'down' ? `（${step.drop} 段下り）` : '';
