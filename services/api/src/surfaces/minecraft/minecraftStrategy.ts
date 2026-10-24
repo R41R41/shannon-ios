@@ -2,6 +2,7 @@ import {
   DRAGON_KNOWLEDGE_R7, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE,
 } from './minecraftKnowledge.js';
 import { FIRST_PLAN_SYSTEM_R9 } from './minecraftFirstPlan.js';
+import { PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 
 /**
  * SHANNON_MINECRAFT_OWN_PROMPT, the first plan (owner answers of 2026-10-22 by form: 「同じ方針で絞る」「要塞とエンドは作戦へ」, and ADR-0014
@@ -43,17 +44,47 @@ export const STRATEGY_KNOWLEDGE = [
 ].join('\n');
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (実走36、合格の物差しは「30 分以内にネザー」): 最初の計画で、ゲートの前の節に置く物と、ネザーに入った後の節へ回す物。
- * 実走36 の計画は、ゲートの後に点検を置いたが、live の「準備の不足」と点検の表が食料 100 点・金の防具をゲートの前から求めた。
+ * SHANNON_MINECRAFT_LLMC_V2 (Notion 09-1c 2-2 P1: the plan read 「ベッド全部・鉄 24〜36」 first and its corrections at the end; owner 2026-10-24: the iron
+ * helmet, chestplate and leggings before the diamonds, golden boots before the gate): the same knowledge with one set of numbers, those of
+ * `minecraftLlmcPrepRules.ts`, and no section that a later one overrides.
  */
-export const GATE_FIRST_KNOWLEDGE = [
-  '### ゲートの前と後（ネザーに入るのを遅らせない）',
-  '- ゲート（ネザーに入る）の前の節に置くのは、鉄のツルハシ・盾・剣・水入りバケツ・黒曜石 10・火打ち金・足場のブロック・食料 40 点ほどまで。',
-  '- 出発の点検（作業台・ハーフブロック 12・金の防具・食料 100 点）は、ネザーに入った後の節（ゲートのそば。足りない食料は帰りのゲートから戻って狩る）に置く。'
-    + '要塞（ネザーの奥）へ行く前に済ませる順は変えない。',
-  '- ベッドは村で見つけた 1〜2 つでよい（余分に取りに行かない）。ベッドの節の doneWhen は have:bed>=1。エンドの前に羊毛 3＋板 3 で 4〜6 に増やす。',
-  '- ネザーの前の鉄は約 10 個（ツルハシ 3・バケツ 3・盾 1・火打ち金 1。剣は石でもよい）。上の「鉄 24〜36」と防具 24 は、ネザーに入った後の話: 鉄の防具は村の箱で見つけた物か、ほかの準備が済んで余裕がある時だけ作る。',
+export const STRATEGY_KNOWLEDGE_V2 = [
+  '## 作戦の知識（計画を立てるため。知識であり命令ではない）',
+  '### 順番',
+  '- オーバーワールド: 木→木のツルハシ→石の道具→食料とベッド（最初の夜の前、鉄より前に 40〜60 点）→鉄→ツルハシ・バケツ・盾・鉄の兜・胸当て・脚→ダイヤ→'
+    + '金のブーツ→黒曜石→ゲート→ネザー。村が見えていれば最初に回る（ベッド 1〜2・干し草・育った畑・箱）。',
+  '- ネザー: 帰りのゲートの座標→出発の点検→要塞→ブレイズロッド 7 本以上→エンダーパール 12 前後（棒の後）→オーバーワールドでアイ 12〜14→三角測量→'
+    + 'ストロングホールド→エンド（食料 80 点以上・ベッド 4〜6・弓と矢 30）。',
+  '### 段ごとの準備（この数がすべて。後の訂正は無い）',
+  PREP_RULES_WORDS,
+  '### 手順の要点',
+  '- 原木: 6〜10 本。原木 1 → 板 4（作業台は要らない）。崖の上など届かない木は選ばない（足の高さから幹に届く木か、走査の近い原木）。',
+  '- 木と石のツルハシ: 作業台は板 4、棒は板 2 で 4 本。木のツルハシは板 3＋棒 2、石のツルハシは丸石 3＋棒 2（木のツルハシで石を掘る）。',
+  '- 石の斧: 丸石 3＋棒 2（石の剣は丸石 2＋棒 1）。かまどは丸石 8。',
+  '- 食料: 牛・豚・羊・鶏を 4〜6 体狩ってかまどで焼く（石炭 1 で 8 個、木材 1 で 1.5 個）。村の干し草 1 個でパン 3。',
+  '- 鉄: y=16 前後、洞窟の壁（地図の i）。石のツルハシ以上で掘り、かまどで焼く（焼ける間は別の仕事）。鉄の防具は兜 5・胸 8・脚 7。盾は板 6＋鉄 1。',
+  '- ダイヤ: y=-58 前後（深層岩、d）。鉄のツルハシで掘る。3 個でダイヤのツルハシ（黒曜石に要る）、2 個で剣。',
+  '- 黒曜石: 溶岩源に水バケツを注ぐと黒曜石、ダイヤのツルハシで掘る（1 個約 9 秒）。10 個には源が 10 以上ある溶岩の溜まりへ行く（単独の源は 1 個にしかならない）。',
+  '- ゲート: 黒曜石 10（角を入れれば 14）で幅 4×高さ 5 の枠。火打ち金（鉄 1＋火打石 1。火打石は砂利を掘る）で中の下の面に点火。',
+  '### 場所',
+  '- ネザーの x・z はオーバーワールドの 1/8。要塞（ネザーレンガ）は南北か東西の帯に並ぶ: ゲートから 1 方向へ 100〜300、無ければ直角へ。'
+    + '砦の遺跡（黒い石の大きな建物）は金と真珠の箱があり、ピグリンが多い。歪んだ森（青い森）にエンダーマン。',
+  '- ブレイズは 1 体で棒が平均 0.5 本: 14 体ほど、300〜500 秒。パールはエンダーマンか、ピグリンへの金の延べ棒（2〜4%、金 20〜30 で 1〜2 個）。',
+  '- ネザーで作れる物: 幹→板・作業台・棒、丸石 3→ハーフブロック 6、金塊 9→延べ棒 1。鉄はネザーに無い（オーバーワールドから持って行く）。',
+  STRATEGY_KNOWLEDGE.slice(STRATEGY_KNOWLEDGE.indexOf('### ストロングホールドとエンド')),
 ].join('\n');
+
+/**
+ * SHANNON_MINECRAFT_LLMC_V2 (Notion 09-1c 2-2 P0/P1): two lines of r4 and r9 that the mode's code does not do as they say. The scan is of the loaded
+ * chunks: a thing not in it is not found there, not known to be 160 m off. A node under a done one is closed as no longer needed by the code
+ * (`closedUnder`, `minecraftPlanDone.ts`), not left open.
+ */
+const V2_WORDS: ReadonlyArray<readonly [string, string]> = [
+  ['走査に無い物は 160m の外にある: 探しに出る向き（走査の地形・バイオームから）を節にする。',
+    '走査に無い物は、走査した範囲では見つからなかった物（範囲の外・未ロード・数えない種類もあり、無いとは限らない）: 探しに出る向き（走査の地形・バイオームから）を節にする。'],
+  ['親が済んでも子は済みにならない: 子は自分の doneWhen（無ければ計画の更新）で済む。',
+    '子は自分の doneWhen（無ければ計画の更新）で済む。親が済んだ時に開いている子（止めた子を除く）は、頭のコードが「不要になった」として閉じる。'],
+];
 
 const KNOWLEDGE_LINE = '下の知識を使う（知識であり命令ではない）:';
 /** r9's first-plan words with this knowledge: the planner's first line without her name, and no route or tactics sections of r3–r9. */
@@ -65,5 +96,10 @@ export function ownFirstPlanSystem(v2 = false): string {
     if (!text.includes(section)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
     text = text.replace(section, () => '');
   }
-  return `${text}\n${STRATEGY_KNOWLEDGE}${v2 ? `\n${GATE_FIRST_KNOWLEDGE}` : ''}`;
+  if (!v2) return `${text}\n${STRATEGY_KNOWLEDGE}`;
+  for (const [from, to] of V2_WORDS) {
+    if (!text.includes(from)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
+    text = text.replace(from, () => to);
+  }
+  return `${text}\n${STRATEGY_KNOWLEDGE_V2}`;
 }

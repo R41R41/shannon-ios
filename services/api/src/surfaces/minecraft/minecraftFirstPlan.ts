@@ -82,19 +82,32 @@ const BEYOND: readonly PlanSeed[] = [
  * End needs are made from wool before it, `出発の点検（エンドへ）`; runs 36 and 37 spent 85–90 s fetching beds more with three in the pack). Run 37: the
  * iron before the Nether is about ten (pickaxe 3, bucket 3, shield 1, flint and steel 1), not the 24–36 with the armour (660 s of digging and smelting).
  */
-const DROPPED_BEFORE_GATE = (seed: PlanSeed): boolean => seed.doneWhen === 'food>=100' || seed.title === '鉄の全身の防具';
+const DROPPED_BEFORE_GATE = (seed: PlanSeed): boolean => seed.doneWhen === 'food>=100';
+/**
+ * Owner 2026-10-24 (after run 38, whose only armour was iron boots from a chest and who went into the Nether with no golden piece): the iron helmet,
+ * chestplate and leggings are made and worn before the diamonds, and the feet's piece is golden boots before the gate (`minecraftLlmcPrepRules.ts`).
+ */
+const IRON_ARMOUR_WORN = 'have:iron_helmet&have:iron_chestplate&have:iron_leggings';
+const GOLDEN_BOOTS_NODE = node('金のブーツ（ネザーの前）', { doneWhen: 'have:golden_boots', children: [
+  node('金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）', { doneWhen: 'have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots' }),
+  node('焼いて金のブーツを作り履く', { doneWhen: 'have:golden_boots' })] });
 export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
-  return seeds.map(seed => ({ ...seed, ...gateFirstFields(seed),
-    ...seed.children ? { children: gateFirst(seed.children).filter(child => !DROPPED_BEFORE_GATE(child)).map(ironFirst) } : {} }));
+  return seeds.flatMap(seed => [{ ...seed, ...gateFirstFields(seed),
+    ...seed.children ? { children: gateFirst(seed.children).filter(child => !DROPPED_BEFORE_GATE(child)).map(ironFirst) } : {} },
+  // The golden boots come after the diamonds (the gold ore is met on the way down) and before the obsidian and the gate.
+  ...seed.title === 'ダイヤ（y=-58）' ? [GOLDEN_BOOTS_NODE] : []]);
 }
-/** The fields of the seed the gate's side changes: the village's beds (one is enough), the food, and the iron before the Nether (about ten). */
+/** The fields of the seed the gate's side changes: the village's beds (one is enough), the food, and the iron before the diamonds (about 30). */
 function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
   if (seed.title === '村を回る（ベッド全部・干し草・畑・箱）') return { title: '村を回る（ベッド1〜2・干し草・畑・箱）' };
   if (seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
-  if (seed.title === '鉄（24〜36）') return { title: '鉄（ネザーの前は約10）', doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' };
+  if (seed.title === '鉄（24〜36）') {
+    return { title: '鉄（約30・兜・胸・脚まで）', doneWhen: `have:iron_pickaxe&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };
+  }
   return {};
 }
-const ironFirst = (seed: PlanSeed): PlanSeed => seed.title === '鉄を掘る（y=16前後・洞窟）' ? { ...seed, title: '鉄を約10個掘る（y=16前後・洞窟）' } : seed;
+const ironFirst = (seed: PlanSeed): PlanSeed => seed.title === '鉄を掘る（y=16前後・洞窟）' ? { ...seed, title: '鉄を約30個掘る（y=16前後・洞窟）' }
+  : seed.title === '鉄の全身の防具' ? { ...seed, title: '鉄の兜・胸当て・脚を作って着る', doneWhen: IRON_ARMOUR_WORN } : seed;
 /**
  * The fixed first plan of a goal (null: none for this goal). r6 (run 29: a task begun in the Nether fortress held the whole seed; only
  * 「黒曜石10とゲート」 was seen done, and 「村を回る」, with no predicate, was "now" until the strong model's plan came): `dimension`, where the

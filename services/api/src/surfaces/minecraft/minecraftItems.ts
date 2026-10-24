@@ -54,7 +54,7 @@ export function carriedItemCounts(world: Frame, facts: Frame): Map<string, numbe
  * pack lists slots 9-44 only, so a chestplate put on (the body's armour reflex wears what she carries) left every count at once.
  * Registry-shaped ids after a label only; `なし` and the wear are not items.
  */
-function wornItems(worn: unknown): string[] {
+export function wornItems(worn: unknown): string[] {
   if (typeof worn !== 'string') return [];
   return [...worn.slice(0, 400).matchAll(/:\s*(?:minecraft:)?([a-z][a-z0-9_]{0,63})/gu)].map(match => match[1]!).slice(0, 5);
 }

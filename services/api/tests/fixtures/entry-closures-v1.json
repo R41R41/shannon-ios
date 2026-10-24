@@ -825,6 +825,7 @@
     "surfaces/minecraft/minecraftLlmcPreflightMap.ts",
     "surfaces/minecraft/minecraftLlmcPreflightRoute.ts",
     "surfaces/minecraft/minecraftLlmcPreflightStand.ts",
+    "surfaces/minecraft/minecraftLlmcPrepRules.ts",
     "surfaces/minecraft/minecraftLlmcProbe.ts",
     "surfaces/minecraft/minecraftLlmcProbeInput.ts",
     "surfaces/minecraft/minecraftLlmcReachWords.ts",

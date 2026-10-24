@@ -1,4 +1,6 @@
-import type { BodyPlanView } from '../../contracts/bodyControlContract.js';
+import type { PlanTree } from '@shannon/mind';
+import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
+import { doneFacts, doneStatusWords } from './minecraftPlanDone.js';
 
 /**
  * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes from the first act;
@@ -97,6 +99,39 @@ export function planNowLine(view: { now?: unknown; path?: unknown } | null): str
   if (!match) return null;
   const path = Array.isArray(view?.path) ? (view!.path as unknown[]).filter(item => typeof item === 'string').slice(-2) : [];
   return `[${match[1]}] ${match[2]}${path.length ? `（道: ${path.join(' › ')}）` : ''}`.slice(0, 200);
+}
+
+const NOW_LIMIT = 200;
+/**
+ * Notion 09-1c 2-5 (the current node was one string cut at 200 characters from its end, so a long where or path could cut its done-condition; and the
+ * condition was not read beside it): the current node from its own fields, with how far the frame meets its condition (`doneStatusWords`), in the order
+ * the decision needs them: id and title, the condition and its status, the place, the note, the path. Past the bound the path goes first, then the note,
+ * then the place is shortened; the condition is kept. 「[p4.3] 鉄の兜・胸当て・脚を着る（済む条件: have:iron_helmet&…／今: 未: iron_leggings 0/1）＠… （道: 鉄 › …）」.
+ */
+export function currentNodeLine(node: { id: string; title: string; where?: string | undefined; doneWhen?: string | undefined; note?: string | undefined },
+  pathOf: unknown, status: string | null): string {
+  const path = Array.isArray(pathOf) ? pathOf.filter((item): item is string => typeof item === 'string') : [];
+  const head = `[${node.id}] ${node.title}`;
+  const condition = node.doneWhen ? `（済む条件: ${node.doneWhen}${status ? `／今: ${status}` : ''}）` : status ? `（今: ${status}）` : '';
+  const way = path.length ? `（道: ${path.slice(-2).join(' › ')}）` : '';
+  const note = node.note ? ` ${node.note}` : '';
+  const place = (where: string | undefined) => where ? `＠${where}` : '';
+  const shorter = node.where?.slice(0, 40);
+  for (const line of [`${head}${condition}${place(node.where)}${note}${way}`, `${head}${condition}${place(node.where)}${note}`,
+    `${head}${condition}${place(node.where)}`, `${head}${condition}${place(shorter)}`]) {
+    if (line.length <= NOW_LIMIT) return line;
+  }
+  return `${head}${condition}`.slice(0, NOW_LIMIT);
+}
+
+/**
+ * `body.planNow`: in the mode (`v2`) the current node from its fields with its condition read against the frame (`currentNodeLine`); otherwise, or with no
+ * current node in the tree, the plan view's line as before (`planNowLine`).
+ */
+export function planNowOf(tree: PlanTree | null, view: unknown, observation: BodyObservation | null, v2: boolean): string | null {
+  const node = v2 && tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
+  const shown = view as { now?: unknown; path?: unknown } | null;
+  return node ? currentNodeLine(node, shown?.path, doneStatusWords(node.doneWhen, doneFacts(observation))) : planNowLine(shown);
 }
 
 /** For tests: no task holds a tally. */

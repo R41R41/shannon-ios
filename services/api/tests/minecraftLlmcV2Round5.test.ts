@@ -9,7 +9,7 @@ import { packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPac
 import { mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { rewriteLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
-import { GATE_FIRST_KNOWLEDGE, ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { ownFirstPlanSystem, STRATEGY_KNOWLEDGE, STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { closedUnder, doneFacts, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import run36Plan from './fixtures/minecraft-run36-plan-v1.json' with { type: 'json' };
 
@@ -168,13 +168,16 @@ describe('the plan tree of run 36 (task 40bd0b3e, revision 21): children left op
 
 describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
   const owned = (items: Array<[string, number]>) => carriedItemCounts({ inventory: items.map(([name, count]) => ({ name, count })) }, {});
-  const GEAR: Array<[string, number]> = [['shield', 1], ['stone_sword', 1], ['iron_pickaxe', 1], ['cobblestone', 64]];
-  it('the entry\'s shortage asks 40 points of food and a pickaxe, a shield, a sword and blocks; not 100 points, the armour or the water bucket', () => {
+  // Owner 2026-10-24 (after run 38): the gate also asks the iron helmet, chestplate and leggings and the golden boots (`minecraftLlmcPrepRules.ts`).
+  const GEAR: Array<[string, number]> = [['shield', 1], ['stone_sword', 1], ['iron_pickaxe', 1], ['cobblestone', 64], ['iron_helmet', 1],
+    ['iron_chestplate', 1], ['iron_leggings', 1], ['golden_boots', 1]];
+  it('the entry\'s shortage asks 40 points of food, a pickaxe, a shield, a sword, blocks and the armour; not 100 points or the water bucket', () => {
     const parts = { dimension: 'overworld', counts: owned(GEAR), food: 48, nowTitle: '黒曜石を作る' };
     expect(preparationShortage({ ...parts, v2: true })).toBeNull();
     expect(preparationShortage(parts)).toContain('食料 48 点（目安 100）');
     expect(preparationShortage({ ...parts, v2: true, food: 24 })).toBe('準備の不足（ネザーに入る前）: 食料 24 点（目安 40）');
-    expect(preparationShortage({ ...parts, v2: true, counts: owned([['stone_sword', 1]]) })).toContain('盾・鉄以上のツルハシ・足場のブロックが無い');
+    expect(preparationShortage({ ...parts, v2: true, counts: owned([['stone_sword', 1]]) }))
+      .toContain('鉄以上のツルハシ・盾・鉄の兜・胸当て・脚・金のブーツ・足場のブロックが無い');
   });
   it('the check inside the Nether is as it was (the table, slabs, gold armour and food 100 before the fortress)', () => {
     const nether = { dimension: 'the_nether', counts: owned([['shield', 1]]), food: 48, nowTitle: '要塞を探す' };
@@ -188,18 +191,19 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     expect(titles(on).some(line => line.includes('食料100点以上に足す'))).toBe(false);
     expect(titles(on)).toContain('村を回る（ベッド1〜2・干し草・畑・箱）|');
     expect(titles(off)).toContain('村を回る（ベッド全部・干し草・畑・箱）|');
-    expect(on.nodes.length).toBe(off.nodes.length - 2);
+    // Food 100 goes after the gate; the golden boots (a node and two children) come after the diamonds.
+    expect(on.nodes.length).toBe(off.nodes.length + 2);
     expect(titles(seedPlan('エンドラを倒して', null, false)!)).toEqual(titles(off));
     expect(titles(on).some(line => line.startsWith('出発の点検（ネザーの奥へ）'))).toBe(true);
     expect(gateFirst([]).length).toBe(0);
   });
   it('the first plan\'s words, with the mode: the gate\'s side and the Nether\'s side of the check, and the beds', () => {
     const on = ownFirstPlanSystem(true), off = ownFirstPlanSystem();
-    expect(on).toContain(GATE_FIRST_KNOWLEDGE);
-    expect(off).not.toContain('ゲートの前と後');
-    expect(on.startsWith(off)).toBe(true);
-    expect(GATE_FIRST_KNOWLEDGE).toContain('出発の点検（作業台・ハーフブロック 12・金の防具・食料 100 点）は、ネザーに入った後の節');
-    expect(GATE_FIRST_KNOWLEDGE).toContain('要塞（ネザーの奥）へ行く前に済ませる順は変えない');
-    expect(GATE_FIRST_KNOWLEDGE).toContain('ベッドは村で見つけた 1〜2 つでよい');
+    // Notion 09-1c P1: the mode's words carry one set of numbers (`STRATEGY_KNOWLEDGE_V2`), not the old ones and their corrections.
+    expect(on).toContain(STRATEGY_KNOWLEDGE_V2);
+    expect(off).toContain(STRATEGY_KNOWLEDGE);
+    expect(on).not.toContain('24〜36');
+    expect(on).toContain('ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点');
+    expect(on).toContain('ベッドは村で見つけた 1〜2 つでよい');
   });
 });
