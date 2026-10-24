@@ -13,11 +13,12 @@ import { cautionFact } from './minecraftLlmcCaution.js';
 import type { PlanTree } from '@shannon/mind';
 import { meterLine, roadLine } from './minecraftLlmcRoad.js';
 import { feetIn, foodFirstLine, foodLeads, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { wornItems } from './minecraftItems.js';
 import {
   inSightLine, keepThreatSight, keptThreatSight, nearThreats, readThreatSight, sightProbe, THREAT_SIGHT, threatLine, threatSightKey,
   threatSightMeters, threatSightTargets, walledOff, type NearThreat, type ThreatSight,
 } from './minecraftLlmcThreat.js';
-import { planNowLine } from './minecraftLlmcNode.js';
+import { planNowLine, planNowOf } from './minecraftLlmcNode.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
 import { shooterLineText } from './minecraftLlmcSightLine.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
@@ -207,20 +208,24 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
     ...(r4 ? readinessParts(llmc, plan, observation, v2) : {}), ...roadParts(llmc, observation, elapsedMinutes, v2) }, llmcPlanTokens(plan), v2);
 }
 
+/** The plan's tree, or null (none, or it could not be read). */
+function planTreeOf(llmc: LlmcBodyParts): PlanTree | null {
+  try { return llmc.planTree?.() ?? null; } catch { return null; }
+}
 /**
  * r6 (with the probe, as r4's parts): the current node before the map, what its stage lacks, and health that does not come back with
  * where food is (`minecraftLlmcReadiness.ts`). Facts only: what to do with them is the decision's.
  */
 export function readinessParts(llmc: LlmcBodyParts, view: object | null, observation: BodyObservation | null, v2 = false)
   : { planNow?: string; shortage?: string; recovery?: string[] } {
-  const planNow = planNowLine(view as { now?: unknown; path?: unknown } | null), facts = readinessOf(observation);
+  const facts = readinessOf(observation);
+  const tree = planTreeOf(llmc), nodes = tree?.nodes ?? [], planNow = planNowOf(tree, view, observation, v2);
   const out = planNow ? { planNow } : {};
   if (!facts) return out;
-  const display = llmc.plan(), nowTitle = display?.nodes.find(node => node.id === display.current)?.title ?? null;
-  const shortage = preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle, ...(v2 ? { v2 } : {}) });
+  const display = llmc.plan(), nowTitle = display?.nodes.find(item => item.id === display.current)?.title ?? null;
+  const shortage = preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle,
+    ...(v2 ? { v2, worn: wornItems(facts.world.worn) } : {}) });
   const recovery = recoveryLine(facts.hunger, facts.health, facts.food);
-  let nodes: PlanTree['nodes'] = [];
-  try { nodes = llmc.planTree?.().nodes ?? []; } catch { nodes = []; }
   // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the plan is not changed).
   const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? null, feetIn(facts.world)) : null;
   return { ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}), ...(shortage ? { shortage } : {}),

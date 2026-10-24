@@ -108,12 +108,17 @@ const V2_HEADER = [
   '- お金を使う・誰かに連絡や公開をする・シャノンのコード・設定・記憶を変える・自分を複製する、はしない。'
     + '持ち主が内緒にしていることは、計画・why・要約に書かない。',
 ].join('\n');
+/**
+ * Notion 09-1c 2-2 P0 (the rules said one call of one kind while plan.update said it may come with the body's hands, and 「失敗した体の手」 mixed the calls
+ * of a response with the hands of one act): the runner runs a response's calls in their order and skips a body call after a body call that failed
+ * (`fcaRunner.ts`); inside one act the hands follow onFail. Said as the code does it.
+ */
 const V2_DECIDE = [
   '## 1 判断の決まり',
-  '- 1 判断で出すのは、mc.act 1 つ（調べるだけなら mc.probe か mc.view、計画を直すなら plan.update）、fca_wait 1 つ、fca_complete 1 つのどれか。'
+  '- mc.act は 1 判断に 1 つまで。plan.update は mc.act の前に置けば同じ応答でよい（書いた順に実行）。probe・view の結果を見て決める手は次の判断で。'
     + '制御（fca_wait・fca_complete）は他の呼び出しと混ぜない。',
   '- 呼び出しは「頼む」だけで、結果は次の判断で返る。結果を作らない・済んだと決めつけない。',
-  '- 同じ応答の中で、失敗した体の手より後ろの体の手は実行されない。',
+  '- 体の呼び出しが失敗すると、同じ応答の後ろの体の呼び出しは実行されない。act の中の手は順に動き、失敗は onFail に従う（反射・stopIf・満杯・時間切れは act 全体を止める）。',
   '- fca_complete は目的を観測した時だけ。エンドラ討伐では、体がエンドラの死を見届けた時（progress の条件 boss.verified が true）。'
     + '時間や距離・自分の報告・完了の要求の文面は証明にならない。',
   '- 失敗が分かった後は方法を変える。結果が分からない書き込みは、そのまま出し直さない（二重になるため）。',

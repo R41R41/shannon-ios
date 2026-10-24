@@ -107,6 +107,31 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
 export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): boolean {
   return predicate.some(clauses => clauses.every(clause => holds(clause, facts)));
 }
+/** A clause as the status says it: `iron_leggings 0/1`, `食料 32/40 点`, `次元 the_nether`, `(10,64,5) から 12m`. */
+function clauseWords(clause: DoneClause, facts: DoneFacts): string {
+  switch (clause.kind) {
+    case 'have': return `${clause.item} ${Math.min(carried(facts.counts, clause.item), clause.count)}/${clause.count}`;
+    case 'food': return `食料 ${Math.round(facts.food)}/${clause.points} 点`;
+    case 'dim': return `次元 ${clause.dimension}（今 ${facts.dimension ?? '不明'}）`;
+    case 'at': return facts.feet ? `(${clause.x},${clause.y},${clause.z}) から ${Math.round(Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y,
+      facts.feet.z - clause.z))}m（${clause.r}m 内で済む）` : `(${clause.x},${clause.y},${clause.z}) までは不明`;
+  }
+}
+/**
+ * Notion 09-1c 2-5 (the current node's done-condition read beside it): how far the frame meets a `doneWhen`, from the observation alone. 「満たしている」;
+ * 「未: iron_leggings 0/1・iron_helmet 0/1」 (the alternative with the most clauses holding, its missing ones); 「観測では確かめられない」 for free words; null
+ * with no frame (unknown, not unmet).
+ */
+export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts | null): string | null {
+  if (!doneWhen?.trim()) return null;
+  const predicate = parseDoneWhen(doneWhen);
+  if (!predicate) return '観測では確かめられない（済んだら set state=done）';
+  if (!facts) return null;
+  if (predicateHolds(predicate, facts)) return '満たしている';
+  const best = [...predicate].sort((a, b) => b.filter(clause => holds(clause, facts)).length / b.length
+    - a.filter(clause => holds(clause, facts)).length / a.length)[0]!;
+  return `未: ${best.filter(clause => !holds(clause, facts)).map(clause => clauseWords(clause, facts)).join('・')}`;
+}
 /** Whether the alternative of the predicate that holds says only what the pack holds (`have:`, `food>=`): what the work made is in hand. */
 function holdsByThePack(predicate: DonePredicate, facts: DoneFacts): boolean {
   const alternative = predicate.find(clauses => clauses.every(clause => holds(clause, facts)));

@@ -66,6 +66,57 @@ export function contactCells(view: MapView, self: P): string[] {
   return found.sort((a, b) => a.meters - b.meters).slice(0, CONTACTS).map(item => `${ptText(item.at)} 目から ${item.meters.toFixed(1)}m（${name(item.at)}）`
     + `・隣の水の源 ${ptText(item.water)}・溶岩の源 ${ptText(item.lava)}`);
 }
+/** Enough sources for the ten obsidian of a gate. */
+export const POOL_SOURCES = 10;
+/**
+ * Run 38 (2026-10-24: from +1,090 s she went to single lava sources one after another and reached a pool of 64 sources at +1,310 s, about 220 s):
+ * the map's lava sources joined into pools (side by side, the six faces), each with its nearest cell and how many sources it has.
+ */
+export function lavaPools(view: MapView, self: P): Array<Found & { sources: number }> {
+  const cells = new Map<string, P>();
+  for (const [y, layer] of view.layers.layers) {
+    for (const [key, symbol] of layer) {
+      if (symbol !== 'L') continue;
+      const [x, z] = key.split(',').map(Number) as [number, number];
+      cells.set(`${x},${y},${z}`, { x, y, z });
+    }
+  }
+  const seen = new Set<string>(), pools: Array<Found & { sources: number }> = [];
+  for (const [key, start] of cells) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const queue = [start];
+    let near: P = start, sources = 0;
+    while (queue.length) {
+      const at = queue.pop()!;
+      sources += 1;
+      if (distance(self, at) < distance(self, near)) near = at;
+      for (const [dx, dy, dz] of SIDES) {
+        const next = `${at.x + dx},${at.y + dy},${at.z + dz}`;
+        if (cells.has(next) && !seen.has(next)) {
+          seen.add(next);
+          queue.push(cells.get(next)!);
+        }
+      }
+    }
+    pools.push({ at: near, meters: distance(self, near), from: '地図', sources });
+  }
+  return pools.sort((a, b) => a.meters - b.meters);
+}
+/** The scan's and the landmarks' lava rows with a count of sources (「溶岩の溜まり 3 つ以上（最寄り 西 4m・源 28） (x,y,z)」, 「L 溶岩源 (x,y,z) … 溜まりの源 4」). */
+function countedPools(lines: readonly string[], self: P, from: string): Array<Found & { sources: number }> {
+  return lines.flatMap(line => {
+    const at = /溶岩/u.test(line) ? pointOf(line) : null, count = /源\s*(\d+)/u.exec(line);
+    return at && count ? [{ at, meters: distance(self, at), from, sources: Number(count[1]) }] : [];
+  });
+}
+/** The words of the pools: the nearest of ten sources or more, and how small the nearest source's pool is when it is under ten. */
+function poolsLine(pools: Array<Found & { sources: number }>, lava: Found | null): string {
+  const big = pools.filter(pool => pool.sources >= POOL_SOURCES).sort((a, b) => a.meters - b.meters)[0];
+  const near = lava ? pools.find(pool => pool.at.x === lava.at.x && pool.at.y === lava.at.y && pool.at.z === lava.at.z) : undefined;
+  const small = near && near.sources < POOL_SOURCES ? `（いちばん近い源の溜まりは源 ${near.sources}: 黒曜石も ${near.sources} 個まで）` : '';
+  return `。源が ${POOL_SOURCES} 以上の溜まり ${big ? `${show(big, '')}・源 ${big.sources}` : '見えていない'}${small}`;
+}
 /** `body.obsidian`: the nearest lava and the nearest obsidian beside each other, when the plan's node is the obsidian. Empty otherwise. */
 export function obsidianWays(body: Rec, self: P, view: MapView | null): string[] {
   if (!/黒曜石/u.test(String(body.planNow ?? ''))) return [];
@@ -75,7 +126,9 @@ export function obsidianWays(body: Rec, self: P, view: MapView | null): string[]
   const contact = view ? contactCells(view, self) : [];
   if (!lava && !obsidian) return [];
   const closer = lava && (!obsidian || lava.meters < obsidian.meters) ? '（溶岩の方が近い）' : '';
-  return [`黒曜石 10 個の元: 溶岩の源 ${show(lava, '見えていない')} / 自然の黒曜石 ${show(obsidian, '見えていない')}${closer}。`
+  const pools = [...view ? lavaPools(view, self) : [], ...countedPools(landmarks, self, '目印'), ...countedPools(scan, self, '走査')];
+  const poolWords = poolsLine(pools, lava);
+  return [`黒曜石 10 個の元: 溶岩の源 ${show(lava, '見えていない')} / 自然の黒曜石 ${show(obsidian, '見えていない')}${closer}${poolWords}。`
     + '階段掘りは 0.5〜0.9 マス/秒（ダイヤのツルハシ）、溶岩に水を注いで 1 個目ができるまで 30〜50 秒、黒曜石の dig は空気中で 1 個約 9 秒（ダイヤのツルハシ・測った値）',
     ...contact.length ? [`水の源と溶岩の源の両方に隣り合うマス（開けると水と溶岩が出会う）: ${contact.join(' / ')}。溶岩の源だけに隣り合う岩を開けると、溶岩が流れ込む`] : []];
 }

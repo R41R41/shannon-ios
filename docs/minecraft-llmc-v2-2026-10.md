@@ -221,3 +221,22 @@ v2 の時だけ。旧の request・live は変えない（digest の試験はそ
 | D3 書き方 | system を日本語に（header・決まり・読み方）、live 項目の辞典、手の書き方と json の欄は mc.act の説明へ、制御 2 つの日本語の説明、履歴の bootstrap を読める行に（状態の文は 1 回）、完了の証明の 1 文（`progress.binding.plain`） | `anthropicFcaMinecraftSystem.ts`・`minecraftLlmcV2Knowledge.ts`・`minecraftActShortContract.ts`・`anthropicFcaBootstrapText.ts`・`anthropicFcaHistory.ts`（`anthropicFcaHistoryCodecV2`） |
 
 試験は `services/api/tests/llmcV2Fix10.test.ts`。
+
+## 12 回目: 防具の決まり・Notion 09-1c の仕様の一致・実走38 の反省（2026-10-24）
+
+v2 の時だけ。切の request・seed・first plan の文は変えない（`ownFirstPlanSystem()`・`PLAN_UPDATE_RULES_DEFINITION` はそのまま）。
+
+| 項目 | 変え方 | 場所 |
+|---|---|---|
+| 防具（持ち主 10/24） | 鉄の兜・胸当て・脚はダイヤを掘る前に作って着る、靴は金のブーツ（ネザーの前）。決まりは 1 つの表から、計画の種・最初の計画の知識・段の知識・準備の不足（「ダイヤを掘る前」の段を足し、持っているが着ていない防具も言う）へ | `minecraftLlmcPrepRules.ts`（新）・`minecraftFirstPlan.ts`（`gateFirst`）・`minecraftLlmcReadiness.ts`・`minecraftLlmcV2Knowledge.ts` |
+| 最初の計画の数（Notion P1） | 旧い数（ベッド全部・鉄 24〜36）と末尾の訂正をやめ、v2 の作戦の知識を 1 組の数で書く。走査に無い物は「その範囲では見つからなかった」、済んだ親の下の開いた子は「不要になった」で閉じると言う | `minecraftStrategy.ts`（`STRATEGY_KNOWLEDGE_V2`・`V2_WORDS`） |
+| 呼び出しと失敗の範囲（Notion P0） | mc.act は 1 判断に 1 つ、plan.update は前に置けば同じ応答でよい（runner は書いた順に実行）。体の呼び出しの失敗と act の中の手の onFail を分けて言う | `anthropicFcaMinecraftSystem.ts`（`V2_DECIDE`）・`minecraftLlmcV2.ts`（`planWords`） |
+| 体力（Notion P0） | 打ち返しは体力 8 超（「8 以下では戦わない」と一致） | `minecraftLlmcV2Knowledge.ts`（`DANGER`） |
+| 無い・不明（Notion P1） | 「出ていない項目 = 無い」をやめ、省いた・未測定・未ロード・範囲外・急ぎの版は不明と言う。plan.done は済み扱いの節の数、next は予定の順 | `minecraftLlmcV2Knowledge.ts`（`LIVE`） |
+| 今の節（Notion 2-5） | planNow を節の欄から作り、済む条件を末尾切れにせず、今の観測で読んだ結果（満たしている・未: 足りない物 数/要る数・確かめられない）を添える | `minecraftLlmcNode.ts`（`currentNodeLine`）・`minecraftPlanDone.ts`（`doneStatusWords`）・`minecraftLlmcBody.ts` |
+| 溶岩の溜まり（実走38 の約 220 秒） | body.obsidian に源が 10 以上の溜まり（地図でつながった源・目印と走査の「源 N」）と、いちばん近い源の溜まりの大きさ | `minecraftLlmcObsidianWays.ts`（`lavaPools`） |
+| 木（実走38 の約 200 秒） | 足の高さから届く木を選び、土で登る手が 2 回止まったら別の木へ（段の知識） | `minecraftLlmcV2Knowledge.ts`（`prep`） |
+| かまど（実走38 の 58 秒） | wait は他に手が無い時だけ | `minecraftLlmcV2Knowledge.ts`（`DECIDE`） |
+
+決まりの文は 8,266 → 8,299 トークン（上限 8,300）。足した分は重なる説明を削って埋めた。試験は `services/api/tests/llmcV2Fix12.test.ts`。
+しなかったこと: Notion の 4（判断・usage・先読みの時刻を同じ span へ）と 7（先読みの調整）は、資料自身の順のとおり実走の計測の後。体の止まりの行の元（実走38 で walk 13 行中 6）は体の側。

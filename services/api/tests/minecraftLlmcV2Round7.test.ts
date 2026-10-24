@@ -10,7 +10,8 @@ import { preflightAct } from '../src/surfaces/minecraft/minecraftLlmcPreflight.j
 import { BODY_RULES } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { candidateAct } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
-import { GATE_FIRST_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2, the seventh round (run 37, rel41: the first time from nothing into the Nether, in 2,335 s; 535 s over the pass mark): the iron before
@@ -69,22 +70,25 @@ describe('the beds: enough with two (runs 36 and 37: 85–90 s fetching beds wit
 describe('the seed plan: the iron before the Nether about ten and one bed (the v2 seed; the switch off\'s seed is as it was)', () => {
   const rows = (tree: PlanTree) => tree.nodes.map(node => `${node.id} ${node.title}|${node.doneWhen ?? ''}`);
   const off = seedPlan('エンドラを倒して')!, on = seedPlan('エンドラを倒して', null, true)!;
-  it('before: iron 24–36 with the whole armour; after: about ten, the pickaxe, the bucket and the shield, no armour node', () => {
+  // Owner 2026-10-24 (after run 38): the iron helmet, chestplate and leggings worn before the diamonds; the boots are golden (`minecraftLlmcV2Fix12.test.ts`).
+  it('before: iron 24–36 with the whole armour; after: about 30, the pickaxe, the bucket, the shield and the helmet, chestplate and leggings worn', () => {
     expect(rows(off)).toContain('p3 鉄（24〜36）|have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield');
     expect(rows(off).some(line => line.includes('鉄の全身の防具'))).toBe(true);
-    expect(rows(on)).toContain('p3 鉄（ネザーの前は約10）|have:iron_pickaxe&have:bucket&have:shield');
-    expect(rows(on).some(line => line.includes('鉄の全身の防具'))).toBe(false);
-    expect(rows(on).some(line => line.includes('鉄を約10個掘る（y=16前後・洞窟）'))).toBe(true);
+    expect(rows(on)).toContain('p3 鉄（約30・兜・胸・脚まで）|have:iron_pickaxe&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings');
+    expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
+    expect(rows(on).some(line => line.includes('鉄を約30個掘る（y=16前後・洞窟）'))).toBe(true);
   });
   it('before: the beds node done by `have:bed` and all the village\'s beds; after: `have:bed>=1` and one or two', () => {
     expect(rows(off)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed');
     expect(rows(on)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed>=1');
     expect(rows(on).some(line => line.includes('ベッド1〜2'))).toBe(true);
   });
-  it('is said to the first plan: the iron, the beds and the armour that comes after', () => {
-    expect(GATE_FIRST_KNOWLEDGE).toContain('ネザーの前の鉄は約 10 個（ツルハシ 3・バケツ 3・盾 1・火打ち金 1');
-    expect(GATE_FIRST_KNOWLEDGE).toContain('ベッドの節の doneWhen は have:bed>=1');
-    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('ネザーの前に要る鉄は約 10');
+  it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
+    expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 30（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）');
+    expect(PREP_RULES_WORDS).toContain('ベッドの節の doneWhen は have:bed>=1');
+    expect(ownFirstPlanSystem(true)).toContain(PREP_RULES_WORDS);
+    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(PREP_RULES_WORDS);
+    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).not.toContain('約 10');
   });
 });
 
@@ -105,7 +109,7 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     const entry = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000));
     expect(entry.note).toContain('かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
     expect(entry.guard).toBeUndefined();
-    expect(V2_ALWAYS).toContain('かまどに入れたら焼ける間（live の jobs の残り秒）は立って待たず');
+    expect(V2_ALWAYS).toContain('かまどに入れたら焼ける間（jobs の残り秒）は掘る・集める・作る手を入れる（wait は他に手が無い時だけ）');
   });
 });
 

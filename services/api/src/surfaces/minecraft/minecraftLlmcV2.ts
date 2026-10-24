@@ -46,14 +46,23 @@ export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolD
 }
 /**
  * mb-llmc-cand 10 (C2): the plan tool's description says 「済み」 of the done-condition (read as done): in the mode it says 済む条件, as the live state does.
+ * Notion 09-1c 2-2 P0 (2026-10-24): it also said 「親が済みでも子は済みにならない」 while the mode's code closes an open child under a done node as no longer
+ * needed (`closedUnder`), and 「体の手と同じ応答で出してよい」 with no order: the order of the response is the order the calls run.
  */
+const PLAN_WORDS: ReadonlyArray<readonly [string, string]> = [
+  ['済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。',
+    '済む条件: doneWhen が観測の形（have:・dim:・at:・food>=）の節は、live では「（済む条件: …）」と出る。頭のコードがその条件が満たされた時に済みにする。'],
+  ['親が済みでも子は済みにならない（子は自分の条件か set state=done で）。',
+    '親が済むと、その下の開いた子（blocked を除く）は「不要になった」として閉じる（成果を得て済んだのではない）。'],
+  ['済み扱いの子（消費して無くなった板・棒など）は set state=done で自分で閉じる。',
+    '消費して無くなる物（板・棒など）の子は、作った時に set state=done で自分で閉じる。'],
+  ['体の手と同じ応答で出してよい。', '同じ応答で mc.act を続けてよい（plan.update を先に書く。書いた順に実行される）。'],
+];
 function planWords(tool: FcaToolDefinition): FcaToolDefinition {
   if (tool.name !== 'plan.update') return tool;
-  const description = tool.description
-    .replace('済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。',
-      '済む条件: doneWhen が観測の形（have:・dim:・at:・food>=）の節は、live では「（済む条件: …）」と出る。頭のコードがその条件が満たされた時に済みにする。')
-    .replace('済み扱いの子（消費して無くなった板・棒など）は set state=done で自分で閉じる。',
-      '消費して無くなる物（板・棒など）の子は、作った時に set state=done で自分で閉じる。');
+  let description = tool.description;
+  // The plain definition (without the probe's rules) has no r9 lines: each is changed where it stands.
+  for (const [from, to] of PLAN_WORDS) description = description.replace(from, () => to);
   return { ...tool, description };
 }
 const DRAGON_PLAIN = '完了の証明は、体がエンドラの死を見届けたことだけ（条件 witnessed-dragon: 体の記録 mc.goal-evidence の boss.verified が true。'
