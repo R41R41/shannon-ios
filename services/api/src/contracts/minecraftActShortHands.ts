@@ -106,7 +106,8 @@ const READERS: Record<string, Reader> = {
   sneak: ({ words, hand }) => words[0] === 'on' || words[0] === 'off' ? done({ ...hand, on: words[0] === 'on' }) : bad('sneak', 'on か off'),
   jump: ({ words, hand }) => done(isCount(words[0]) ? { ...hand, n: Number(words[0]) } : hand),
   eat: ({ words, hand }) => done(words[0] ? { ...hand, item: words[0] } : hand),
-  equip: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(words[1] ? { slot: SLOT_WORDS[words[1]] ?? words[1] } : {}) }) : bad('equip', '物の名前が要る'),
+  equip: ({ words, hand }) => words[0]
+    ? done({ ...hand, item: words[0], ...(words[1] ? { slot: SLOT_WORDS[words[1]] ?? words[1] } : {}) }) : bad('equip', '物の名前が要る'),
   craft: ({ words, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('craft', '物の名前が要る'),
   pickup: ({ hand }) => done(hand),
