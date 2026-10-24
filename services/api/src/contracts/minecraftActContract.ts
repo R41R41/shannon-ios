@@ -1,5 +1,5 @@
 /**
- * The LLM-centric Minecraft body (design mb-llm-centric, 2026-10-21; head switch SHANNON_MINECRAFT_LLM_CENTRIC, body MINEBOT_LLM_CENTRIC):
+ * The LLM-centric Minecraft body (design mb-llm-centric, 2026-10-21; head switch the LLM-centric mode, body MINEBOT_LLM_CENTRIC):
  * the head owns this contract, the body follows it (shared note `mb-llm-centric-contract.md`). Four parts:
  *
  * 1. `mc.act` (body skill `act`): up to 12 small hands run in order, each checked; the run stops at the first that does not go as asked,
@@ -296,10 +296,6 @@ export const VIEW_DESCRIPTION = [
   'mode: layers（y ごとの層）/ top（上から。表面の記号と高さ）/ slice（中心を通る縦の断面。axis=ns か ew）/ column（その x,z の縦の列）。',
   'center（既定は足）、radius（1〜32、既定12）、yFrom・yTo、only（見たい種類だけ。ほかは # と . にまとめる）。6,000マスを超えると top を2×2にまとめる。',
 ].join('\n');
-
-/** The body skills the head offers in the LLM-centric mode beside `mc.act` and `mc.view` (reads only): others are not offered. */
-export const LLMC_READ_SKILLS: ReadonlySet<string> = new Set(['find-blocks', 'find-structure', 'list-nearby-entities', 'check-recipe',
-  'check-container', 'goal-evidence']);
 
 const pos = (description: string) => ({ type: 'object', description, additionalProperties: false, required: ['x', 'y', 'z'],
   properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } });

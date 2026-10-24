@@ -13,8 +13,7 @@ import { BODY_RULES, HARM, legendOf, mapView, PORTAL, readLayers } from '../src/
 import { breathWords, timeWords } from '../src/surfaces/minecraft/minecraftLlmcStateWords.js';
 import { stageKnowledge, V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { candidateFixed } from '../src/wiring/minecraftLlmcV2Request.js';
-import { llmcV2Enabled } from '../src/wiring/minecraftLlmcWiring.js';
-import { MINECRAFT_REQUEST_CONTEXT, MINECRAFT_REQUEST_CONTEXT_V2 } from '../src/wiring/fcaMinecraftRequests.js';
+import { MINECRAFT_REQUEST_CONTEXT } from '../src/wiring/fcaMinecraftRequests.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 import { LLMC_TOOLS } from './support/minecraftBodyRequests.js';
 
@@ -130,21 +129,15 @@ describe('B2: no text of the mode names a tool it does not offer', () => {
     for (const [id, text] of Object.entries(V2_STAGES)) expect(foreignToolNames(text), id).toEqual([]);
     const known = stageKnowledge({ body: { state: { dimension: 'overworld' }, planNow: '[p1] 木・鉄・ネザー' }, plan: {} });
     expect(foreignToolNames(known ?? '')).toEqual([]);
-    expect(foreignToolNames(JSON.stringify(seedPlan('エンドラを倒して', null, true)))).toEqual([]);
+    expect(foreignToolNames(JSON.stringify(seedPlan('エンドラを倒して')))).toEqual([]);
     expect(foreignToolNames(lookHint({ recentStops: ['一歩ではない ×2'] }) ?? '')).toEqual([]);
     expect(foreignToolNames(lookHint({ oxygen: 4 }) ?? '')).toEqual([]);
-    expect(foreignToolNames(MINECRAFT_REQUEST_CONTEXT_V2)).toEqual([]);
+    expect(foreignToolNames(MINECRAFT_REQUEST_CONTEXT)).toEqual([]);
   });
-  it('writes the task note of the mode with its own tools, and keeps the earlier note for every other mode (the switches decide)', () => {
-    expect(foreignToolNames(MINECRAFT_REQUEST_CONTEXT)).toEqual(['minecraft.observe', 'minecraft.reflex']);
-    expect(MINECRAFT_REQUEST_CONTEXT_V2).toContain('毎判断の live');
-    expect(MINECRAFT_REQUEST_CONTEXT_V2).toContain('mc.probe');
-    expect(MINECRAFT_REQUEST_CONTEXT_V2).toContain('mc.view');
-    const all = { SHANNON_MINECRAFT_LLM_CENTRIC: 'on', SHANNON_MINECRAFT_OWN_PROMPT: 'on', SHANNON_MINECRAFT_LLMC_PROBE: 'on', SHANNON_MINECRAFT_ACT_PREFLIGHT: 'on',
-      SHANNON_MINECRAFT_LLMC_V2: 'on' };
-    expect(llmcV2Enabled(all)).toBe(true);
-    expect(llmcV2Enabled({ ...all, SHANNON_MINECRAFT_LLMC_V2: undefined })).toBe(false);
-    expect(llmcV2Enabled({ ...all, SHANNON_MINECRAFT_ACT_PREFLIGHT: undefined })).toBe(false);
+  it('writes the task note with the mode\'s own tools', () => {
+    expect(MINECRAFT_REQUEST_CONTEXT).toContain('毎判断の live');
+    expect(MINECRAFT_REQUEST_CONTEXT).toContain('mc.probe');
+    expect(MINECRAFT_REQUEST_CONTEXT).toContain('mc.view');
   });
   it('tells the scan and the view by the tools\' own words where the stages sent her to find-blocks and view top', () => {
     expect(V2_STAGES.prep).toContain('mc.probe kind=scan');
@@ -257,20 +250,19 @@ describe('B4: her state in words', () => {
     expect(breathWords(-3)).toBe('息 0/20');
     expect(breathWords(null)).toBeNull();
   });
-  const live = (world: Record<string, unknown>, v2: boolean) => minecraftLlmcLive({ elapsedMinutes: 3, trend: createFoodTrend(() => 0), events: [],
-    observation: frame({ position: { x: 1, y: 2, z: 3 }, dimension: 'overworld', health: 20, food: 20, ...world }) }, 0, v2).state as Record<string, unknown>;
-  it('puts them in the mode\'s live state (and leaves the other mode\'s as it was: the raw numbers)', () => {
-    const early = live({ time: '99', oxygen: 400 }, true), later = live({ time: '4439', oxygen: 20 }, true);
+  const live = (world: Record<string, unknown>) => minecraftLlmcLive({ elapsedMinutes: 3, trend: createFoodTrend(() => 0), events: [],
+    observation: frame({ position: { x: 1, y: 2, z: 3 }, dimension: 'overworld', health: 20, food: 20, ...world }) }).state as Record<string, unknown>;
+  it('puts them in the live state', () => {
+    const early = live({ time: '99', oxygen: 400 }), later = live({ time: '4439', oxygen: 20 });
     expect(early).toMatchObject({ time: '朝（日の出から 5 秒、夜まで 約 11 分）', oxygen: '息 20/20' });
     expect(later).toMatchObject({ time: '朝（日の出から 約 4 分、夜まで 約 7 分）', oxygen: '息 20/20' });
-    expect(live({ time: '15000', oxygen: 6, dimension: 'the_nether' }, true)).toMatchObject({ time: '（時刻なし）', oxygen: '息 6/20' });
-    expect(live({ time: '99', oxygen: 400 }, false)).toMatchObject({ time: '99', oxygen: 400 });
+    expect(live({ time: '15000', oxygen: 6, dimension: 'the_nether' })).toMatchObject({ time: '（時刻なし）', oxygen: '息 6/20' });
     // The body's numeric timeOfDay is read first, its time string is the fallback.
-    expect(live({ time: '24099', timeOfDay: 99, oxygen: 20 }, true)).toMatchObject({ time: '朝（日の出から 5 秒、夜まで 約 11 分）' });
+    expect(live({ time: '24099', timeOfDay: 99, oxygen: 20 })).toMatchObject({ time: '朝（日の出から 5 秒、夜まで 約 11 分）' });
   });
   it('is the same in the urgent live state of the mode', () => {
     const urgent = minecraftLlmcUrgentLive({ observation: frame({ position: { x: 1, y: 2, z: 3 }, dimension: 'overworld', time: '15000', oxygen: 400 }),
-      elapsedMinutes: 1, events: [], planNowTitle: null, answer: 'a', v2: true });
+      elapsedMinutes: 1, events: [], planNowTitle: null, answer: 'a' });
     expect(urgent.state).toMatchObject({ time: '夜（朝まで 約 7 分）', oxygen: '息 20/20' });
   });
 });

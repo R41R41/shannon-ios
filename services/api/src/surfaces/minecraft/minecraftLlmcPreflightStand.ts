@@ -81,7 +81,7 @@ function noSupport(cell: Cell, view: MapView, placed: ReadonlySet<string>): bool
 export function placeStop(cell: Cell, view: MapView, placed: ReadonlySet<string>, faceGiven: boolean): Found | null {
   const here = view.symbol(cell.x, cell.y, cell.z);
   if (here === undefined || here === '?') return null;
-  // A portal's cell holds a block the body does not replace (SHANNON_MINECRAFT_LLMC_V2: only a map read under the body's rules has one).
+  // A portal's cell holds a block the body does not replace (mb-llmc v2: only a map read under the body's rules has one).
   if (isPortal(here)) return { code: 'occupied', cell, why: `${posText(cell)} は埋まっている（そのマスは ${word(here)}。ポータルの中には置けない）` };
   if (SOLID.has(here) && !placed.has(`${cell.x},${cell.y},${cell.z}`)) {
     return { code: 'occupied', cell, why: `${posText(cell)} は埋まっている（そのマスは ${word(here)}。置く必要は無い）` };

@@ -48,10 +48,10 @@ describe('SHANNON_MINECRAFT_LLMC_V2 through the runner', () => {
         { type: 'tool_use', id: `toolu_${index}`, name: 'mc_act', input: { why: '[p1.1] 離れる', hands: [`walk ${300 + index},66,73`, 'dig 309,67,73 tool=hand'], stopIf: 'hpBelow=10' } }], 'tool_use');
     });
     const model = createAnthropicFcaModel({ apiKey: 'synthetic', model: 'claude-opus-5-5', fetcher: fixture.fetcher, recordUsage() {}, minecraftOwnPrompt: true,
-      systemAppendix: llmcCoreKnowledge(true), minecraftV2: minecraftV2Hooks() });
+      systemAppendix: llmcCoreKnowledge(), minecraftV2: minecraftV2Hooks() });
     let decisions = 0;
     const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
-      stepPorts: () => ({ tools: llmcTools(tools, true), keepBodyTools: () => true, obsMode: 'transient' as const,
+      stepPorts: () => ({ tools: llmcTools(tools), keepBodyTools: () => true, obsMode: 'transient' as const,
         selector: { async select(request: { tools: Array<{ name: string }> }) { return { names: request.tools.map(tool => tool.name), source: 'catalog' as const }; } },
         body: { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), guard: async () => true, toolSignal: (_n: string, parent: AbortSignal) => parent,
           close: async () => {}, transient: () => { decisions += 1; return live.body; }, storedResult: (call: { name: string }, text: string) => storedBodyResult(call.name, text) },

@@ -7,7 +7,7 @@ import { forgetSurpriseWatches } from '../src/surfaces/minecraft/minecraftLlmcPr
 import { forgetThreatSights } from '../src/surfaces/minecraft/minecraftLlmcThreat.js';
 import { forgetFirstPlans, FIRST_PLAN_SYSTEM_R7, FIRST_PLAN_SYSTEM_R8, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
-import { LLMC_SYSTEM_APPENDIX_R7, LLMC_SYSTEM_APPENDIX_R8, llmcSystemAppendix, R8_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX_R7, LLMC_SYSTEM_APPENDIX_R8, R8_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import {
   columnKey, footingFromMap, footingLine, footingProbes, forgetColumnFacts, keepColumnFact, keptColumnFact, lookAtFooting, readAroundFooting, readColumnFact, readMap,
 } from '../src/surfaces/minecraft/minecraftLlmcFooting.js';
@@ -224,7 +224,8 @@ describe('the short live state of an urgent decision (run 32: 696 tokens of answ
       urgent: ['wither_skeleton #696 6.1m・上 6・見える（射線の中）'], investigation: [], footing: '足場: 幅 1 の橋（落差 28、下は溶岩）。押されたら落ちる',
       planNowTitle: '[p1.2] 橋を西へ', answer: '急ぎの答え方: 短く' });
     expect(Object.keys(short)).toEqual(['urgent', 'planNow', 'footing', 'map', 'state', 'threats', 'inventory', 'events', 'lastResults', 'answer']);
-    expect(short.threats).toEqual(['#696 wither_skeleton 6.1m (256,61,76)']);
+    expect(short.threats).toHaveLength(1);
+    expect((short.threats as string[])[0]).toMatch(/^#696 wither_skeleton 6\.1m \(256,61,76\)/u);
     expect(short.inventory).toEqual(['cobblestone×64', 'netherrack×40', 'cooked_mutton×1']);
     expect(short).not.toHaveProperty('landmarks');
     expect(short).not.toHaveProperty('stops');
@@ -347,7 +348,6 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
 describe('the knowledge and the first plan (r8)', () => {
   it('the appendix of the mode is r7\'s and r8\'s section: a gap crossed in the rock or by a walled bridge, never a bare one-wide bridge', () => {
     // r9 adds its section after r8's (the same bytes up to it).
-    expect(llmcSystemAppendix(true).startsWith(LLMC_SYSTEM_APPENDIX_R8)).toBe(true);
     expect(LLMC_SYSTEM_APPENDIX_R8).toBe(`${LLMC_SYSTEM_APPENDIX_R7}\n\n${R8_KNOWLEDGE}`);
     for (const words of ['岩の中のトンネル', '両脇（足の高さ）に壁のブロックを置いた橋', '壁の無い幅 1 の橋は使わない', '落差 4 以上', '敵のいる構造物（要塞・砦の遺跡）',
       'body.footing', '押されたら落ちる', '近接の敵', 'まず空所から離れる', '敵との間にブロックを置く', '急ぎの判断', '考えは 2〜3 文', 'body.planNow']) {

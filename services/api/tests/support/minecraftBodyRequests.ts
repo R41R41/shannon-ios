@@ -61,17 +61,17 @@ export async function bodySummaryRequest(options: Partial<AnthropicFcaOptions> =
 }
 
 /** The first plan's request (`configuredMinecraftLlmc` with the probe on, so r9's words), with the given switches. */
-export async function firstPlanRequest(values: Readonly<Record<string, string>> = {}): Promise<{ body: Record<string, unknown>; system: string }> {
+export async function firstPlanRequest(own = true): Promise<{ body: Record<string, unknown>; system: string }> {
   const { configuredMinecraftLlmc } = await import('../../src/wiring/minecraftLlmcWiring.js');
   const { FIRST_PLAN_SYSTEM_R9 } = await import('../../src/surfaces/minecraft/minecraftFirstPlan.js');
-  const { firstPlanSystem } = await import('../../src/wiring/minecraftLlmcWiring.js') as { firstPlanSystem?: (own: boolean) => string };
+  const { ownFirstPlanSystem } = await import('../../src/surfaces/minecraft/minecraftStrategy.js');
   const planned: Array<Record<string, unknown>> = [];
   const client = { messages: { async create(body: unknown) { planned.push(body as Record<string, unknown>);
     return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{"nodes":[]}' }], usage: { input_tokens: 1, output_tokens: 1 } } as never; } } };
   vi.spyOn(console, 'info').mockImplementation(() => {});
-  const llmc = configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', SHANNON_MINECRAFT_LLMC_PROBE: 'on', ANTHROPIC_API_KEY: 'k', ...values },
-    { recordUsage() {} }, { log: () => {}, client })!;
-  const system = firstPlanSystem ? firstPlanSystem(values.SHANNON_MINECRAFT_OWN_PROMPT === 'on') : FIRST_PLAN_SYSTEM_R9;
+  const llmc = configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} }, { log: () => {}, client })!;
+  // `own`: the words the wiring asks with (`ownFirstPlanSystem`); false: r9's, as the request was before the task's own words.
+  const system = own ? ownFirstPlanSystem() : FIRST_PLAN_SYSTEM_R9;
   await llmc.planner!(system, '依頼: エンドラを倒して', new AbortController().signal);
   vi.restoreAllMocks();
   return { body: planned[0]!, system };

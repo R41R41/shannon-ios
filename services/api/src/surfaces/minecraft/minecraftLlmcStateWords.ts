@@ -1,5 +1,5 @@
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37): two numbers of her state said in the words a person reads. `time` was the world's ticks with no unit
+ * mb-llmc v2 (mb-llmc-cand 9, run 37): two numbers of her state said in the words a person reads. `time` was the world's ticks with no unit
  * ("99", "4439"); `oxygen` was 400 early in the run and 20 later (mineflayer's air supply is 0 to 20 under water, and the body's frame reports 400 on dry land
  * in 1.21.11: `GoalVerifier` of the body reads above 20 as full air). Facts only; what to do with them is the decision's.
  */

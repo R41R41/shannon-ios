@@ -1,5 +1,5 @@
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (owner 2026-10-24, after run 38: 「鉄装備を足しか作らない。金装備をしてからネザーに行っていない。最善は足だけ金ブーツ。その他レギンス、
+ * mb-llmc v2 (owner 2026-10-24, after run 38: 「鉄装備を足しか作らない。金装備をしてからネザーに行っていない。最善は足だけ金ブーツ。その他レギンス、
  * チェストプレート、ヘルメットは鉄にしてからダイヤ採掘やネザーに行くべき」; Notion 09-1c 6-2: the gate's, the fortress's and the End's rules in one place, from
  * which the first plan's words, the stage knowledge and the shortage are made, instead of old numbers corrected at the end).
  *

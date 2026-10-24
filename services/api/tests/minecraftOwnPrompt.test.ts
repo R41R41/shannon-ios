@@ -7,7 +7,7 @@ import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.
 import { FCA_CONTEXT_INSTRUCTIONS } from '../src/infra/models/anthropic/anthropicFcaContext.js';
 import { estimatedAnthropicTokens } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
-import { llmcSystemAppendix } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX_R9 } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCoreKnowledge } from '../src/surfaces/minecraft/minecraftKnowledgeCore.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { configuredMinecraftLlmc } from '../src/wiring/minecraftLlmcWiring.js';
@@ -15,7 +15,7 @@ import { MAP_LEGEND } from '../src/contracts/minecraftActContract.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 import { quiet, requestDigest, scenario, WIDE_POLICY } from './fcaCoreToolsHarness.js';
 import { bodySummaryRequest, firstPlanRequest, llmcRequests, LLMC_TOOLS } from './support/minecraftBodyRequests.js';
-import { STRATEGY_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 
 /**
@@ -62,7 +62,7 @@ const live = (step: number) => ({ observation: { position: { x: 10 + step, y: 64
 
 describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', () => {
   it('pins the transport and the instructions of both modes (golden)', async () => {
-    const [llmc] = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
+    const [llmc] = await llmcRequests({ systemAppendix: llmcCoreKnowledge(), minecraftOwnPrompt: true });
     quiet();
     const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, body: live, steps: 3, modelOptions: { minecraftOwnPrompt: true } });
     expect(await run.settle()).toBe('completed');
@@ -78,7 +78,7 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
   }, 60_000);
 
   it('carries no persona, three apps, capability list, owner clock, report card or shared affect (both modes)', async () => {
-    const llmc = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
+    const llmc = await llmcRequests({ systemAppendix: llmcCoreKnowledge(), minecraftOwnPrompt: true });
     quiet();
     const run = scenario({ mode: () => 'transient', policy: WIDE_POLICY, body: live, steps: 4, modelOptions: { minecraftOwnPrompt: true } });
     expect(await run.settle()).toBe('completed');
@@ -96,8 +96,8 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
   }, 60_000);
 
   it('keeps the cache marks where they were and the live state last', async () => {
-    const off = await llmcRequests({ systemAppendix: llmcSystemAppendix(true) });
-    const on = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
+    const off = await llmcRequests({ systemAppendix: LLMC_SYSTEM_APPENDIX_R9 });
+    const on = await llmcRequests({ systemAppendix: llmcCoreKnowledge(), minecraftOwnPrompt: true });
     expect(on.map(markPaths)).toEqual(off.map(markPaths));
     expect(on.map(markPaths)[1]).toEqual(['system[0]', 'system[1]', 'messages[-2].user[0]']);
     for (const body of on) {
@@ -114,8 +114,8 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
   }, 60_000);
 
   it('makes the instructions about 8k tokens where they were about 31k (llmcTokens), and says so', async () => {
-    const [off] = await llmcRequests({ systemAppendix: llmcSystemAppendix(true) });
-    const [on] = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
+    const [off] = await llmcRequests({ systemAppendix: LLMC_SYSTEM_APPENDIX_R9 });
+    const [on] = await llmcRequests({ systemAppendix: llmcCoreKnowledge(), minecraftOwnPrompt: true });
     const measure = (body: Record<string, unknown>) => {
       const texts = systemOf(body).map(block => block.text);
       return { characters: texts.join('').length, llmcTokens: texts.reduce((sum, text) => sum + llmcTokens(text), 0),
@@ -127,9 +127,6 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     expect(after.llmcTokens).toBeLessThanOrEqual(8_100);
     expect(after.estimated).toBeLessThanOrEqual(7_000);
     expect(after.llmcTokens / before.llmcTokens).toBeLessThan(0.3);
-    // r3's mode (no probe) gets no line that names mc.probe, investigation, forbid or caution.
-    expect(llmcCoreKnowledge(false)).not.toMatch(/mc\.probe|investigation|forbid|caution/u);
-    expect(llmcCoreKnowledge(false)).toContain('mc.view');
   }, 60_000);
 
   it('a legacy decision that carries a body reads the body header instead of the persona; one without a body is as before', async () => {
@@ -152,23 +149,15 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     vi.restoreAllMocks();
   });
 
-  it('the wiring reads the switch: on, both decision models get the own instructions; off, r9\'s appendix as before', async () => {
+  it('the wiring gives the decision model the own instructions', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
     const fixture = scriptedAnthropic(() => message([{ type: 'text', text: 'ok' }], 'end_turn'));
-    const values = { SHANNON_MINECRAFT_LLM_CENTRIC: 'on', SHANNON_MINECRAFT_LLMC_PROBE: 'on', ANTHROPIC_API_KEY: 'k' };
-    const lines: string[] = [];
-    const on = configuredMinecraftLlmc({ ...values, SHANNON_MINECRAFT_OWN_PROMPT: 'on' }, { recordUsage() {}, fetcher: fixture.fetcher }, { log: line => lines.push(line) })!;
-    const off = configuredMinecraftLlmc(values, { recordUsage() {}, fetcher: fixture.fetcher }, { log: () => {} })!;
-    expect(lines[0]).toContain('ownPrompt=on');
+    const llmc = configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k' }, { recordUsage() {}, fetcher: fixture.fetcher }, { log: () => {} })!;
     const input: FcaModelInput = { task: { id: 't', title: 't', goal: 'g', completionCriteria: 'c' }, messages: [], children: [], history: [],
       tools: LLMC_TOOLS, coreTools: LLMC_TOOLS, transient: { map: 'm' }, catalog: LLMC_TOOLS.map(tool => ({ name: tool.name, description: tool.description })) };
-    await on.models.main.decide(input, new AbortController().signal).catch(() => null);
-    await off.models.main.decide(input, new AbortController().signal).catch(() => null);
-    const [first, second] = fixture.bodies.map(body => systemOf(body));
+    await llmc.models.main.decide(input, new AbortController().signal).catch(() => null);
+    const [first] = fixture.bodies.map(body => systemOf(body));
     expect(first![0]!.text).toBe(MINECRAFT_TRANSPORT);
-    expect(first![1]!.text).toContain(llmcCoreKnowledge(true));
-    expect(second![0]!.text).toBe(HAIKU_PROTOCOL_PREFIX);
-    expect(second![1]!.text).toContain(llmcSystemAppendix(true));
     vi.restoreAllMocks();
   });
 
@@ -187,16 +176,16 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
   });
 
   it('the first plan reads the strategic knowledge, not the tactics or her name; the decision never reads the strategy', async () => {
-    const off = await firstPlanRequest(), on = await firstPlanRequest({ SHANNON_MINECRAFT_OWN_PROMPT: 'on' });
+    const off = await firstPlanRequest(false), on = await firstPlanRequest();
     const text = JSON.stringify(on.body.system);
-    expect(on.system).toContain(STRATEGY_KNOWLEDGE);
+    expect(on.system).toContain(STRATEGY_KNOWLEDGE_V2);
     expect(on.system).not.toContain('シャノン');
     expectNoConversationRules(on.system);
     for (const tactics of [DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE, '## マイクラの体の決め方', '待ち場', '## 詰まった時の調べ方'])
       expect(on.system).not.toContain(tactics);
     expect(text).toContain('済みの形と順番（r9）');
-    expect(off.system).not.toContain(STRATEGY_KNOWLEDGE);
-    const decisions = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
+    expect(off.system).not.toContain(STRATEGY_KNOWLEDGE_V2);
+    const decisions = await llmcRequests({ systemAppendix: llmcCoreKnowledge(), minecraftOwnPrompt: true });
     for (const body of decisions) expect(JSON.stringify(body.system)).not.toContain('作戦の知識');
     console.info(JSON.stringify({ event: 'minecraft_own_prompt_first_plan_size', before: { characters: off.system.length, llmcTokens: llmcTokens(off.system) },
       after: { characters: on.system.length, llmcTokens: llmcTokens(on.system) } }));

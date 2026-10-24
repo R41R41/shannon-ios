@@ -14,7 +14,7 @@ import { foodFirstLine, foodLeads } from '../src/surfaces/minecraft/minecraftLlm
 import { forgetActNodes, noteActNode, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import {
   BLAZE_KNOWLEDGE_R7, DRAGON_KNOWLEDGE, DRAGON_KNOWLEDGE_R7, LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R6, LLMC_SYSTEM_APPENDIX_R7,
-  llmcSystemAppendix, R7_KNOWLEDGE,
+  R7_KNOWLEDGE,
 } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { startGcWatch } from '../src/infra/observer/eventLoopWatch.js';
 import { createBodyTaskRecall } from '../src/mind/recall/bodyTaskRecall.js';
@@ -85,11 +85,9 @@ describe('the urgent line says whether a hostile reaches, by the body\'s sight (
     await body.investigate!(new AbortController().signal);
     expect(body.urgent!()).toBe(true);
     body.context();
-    // r10 (H5): a shooter in sight is said with the cell on the line to it, after the line r7 wrote.
     const urgent = (body.transient!() as { urgent: string[] }).urgent;
     expect(urgent).toHaveLength(1);
-    expect(urgent[0]!.startsWith('blaze #9 4.0m・上 6・見える（射線の中）')).toBe(true);
-    expect(urgent[0]).toMatch(/。線上のマス \(-?\d+,-?\d+,-?\d+\)/u);
+    expect(urgent[0]).toBe('blaze #9 4.0m・上 6・見える（射線の中）');
   });
 
   it('no answer (no probe, or none in time): as r3 said it; a creeper is never walled off; a walker not in sight that can come is urgent', () => {
@@ -106,24 +104,18 @@ describe('the urgent line says whether a hostile reaches, by the body\'s sight (
     expect(readThreatSight('ただの文')).toBeNull();
   });
 
-  it('a shooter the frame says cannot see her does not cut an act (run 30: a blaze 5.6 m above cut the tunnel\'s digging); a walker does', async () => {
+  it('a shooter the frame says cannot see her does not cut an act (run 30: a blaze 5.6 m above cut the tunnel\'s digging); one that sees her does', async () => {
     let threats: unknown[] = [];
     const observe = () => frame({ ...START, nearbyThreats: threats });
     const blaze = { ...BLAZE, distance: 5.6, canSee: false };
     threats = [];
-    const walledWatch = urgentWatch({ hands: [] }, observe, new AbortController().signal, 5, { walled: true });
+    const walledWatch = urgentWatch({ hands: [] }, observe, new AbortController().signal, 5);
     threats = [blaze];
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(walledWatch.reason()).toBeNull();
     walledWatch.stop();
     threats = [];
-    const before = urgentWatch({ hands: [] }, observe, new AbortController().signal, 5);
-    threats = [blaze];
-    await new Promise(resolve => setTimeout(resolve, 30));
-    expect(before.reason()).toBe('blaze 5.6m');
-    before.stop();
-    threats = [];
-    const seen = urgentWatch({ hands: [] }, observe, new AbortController().signal, 5, { walled: true });
+    const seen = urgentWatch({ hands: [] }, observe, new AbortController().signal, 5);
     threats = [{ ...blaze, canSee: true }];
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(seen.reason()).toBe('blaze 5.6m');
@@ -156,13 +148,11 @@ describe('a stopIf stop in the line of a blaze (run 31: the health stop at 8.7 l
     expect(live.urgent).toContain('前の act は stopIf（体力）で止まった');
   });
 
-  it('without the probe a health stop is not urgent (as r6); a hostile stop is, as before', () => {
+  it('a hostile stop is urgent too', () => {
     const plain = withLlmcBody({ start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
       toolSignal: (_name, parent) => parent, async close() {} },
     { llmc: { plan: () => undefined, planView: () => null }, taskId: 'r7-off', createdAt: '2026-10-22T00:00:00Z', observe: () => frame({ ...corridor, nearbyThreats: [] }),
-      arrival: () => ({ at: 1, kind: 'login' }), log: () => {} });
-    plain.noteResult!({ id: 'a', name: MC_ACT_TOOL, input: {} }, toolFailure('failed', stopped, { retryable: true }), 1000);
-    expect(plain.urgent!()).toBe(false);
+      arrival: () => ({ at: 1, kind: 'login' }), log: () => {}, r4: { probe: () => null, planWhere: () => null } });
     plain.noteResult!({ id: 'b', name: MC_ACT_TOOL, input: {} }, toolFailure('failed', 'act 0/1 済みで止まった（stopIf: hostileWithin:blaze #9 7.0m）', { retryable: true }), 1000);
     expect(plain.urgent!()).toBe(true);
   });
@@ -183,8 +173,6 @@ describe('the check forbids the fight before it is done (runs 30, 31: the only f
 describe('the knowledge (r7)', () => {
   it('the blaze says 「準備が済んでから」 before the fight\'s hands; r3\'s appendix is as it was', () => {
     // r8 adds its own section after r7's (minecraftLlmcR8.test.ts): the mode with the probe on reads r8's.
-    expect(llmcSystemAppendix(true).startsWith(LLMC_SYSTEM_APPENDIX_R7)).toBe(true);
-    expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
     expect(LLMC_SYSTEM_APPENDIX).toContain('## ブレイズ\n- ブレイズロッド 7 本以上');
     expect(LLMC_SYSTEM_APPENDIX_R7).not.toContain('## ブレイズ\n');
     expect(LLMC_SYSTEM_APPENDIX_R7).toBe(`${LLMC_SYSTEM_APPENDIX_R6.replace(DRAGON_KNOWLEDGE, () => DRAGON_KNOWLEDGE_R7)}\n\n${R7_KNOWLEDGE}`);

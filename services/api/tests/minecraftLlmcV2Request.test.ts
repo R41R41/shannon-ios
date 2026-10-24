@@ -8,7 +8,8 @@ import { llmcCoreKnowledge } from '../src/surfaces/minecraft/minecraftKnowledgeC
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { candidateInput, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
-import { configuredMinecraftLlmc, llmcMenuTool, llmcTools } from '../src/wiring/minecraftLlmcWiring.js';
+import { configuredMinecraftLlmc, llmcTools } from '../src/wiring/minecraftLlmcWiring.js';
+import { v2MenuTool } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { candidateFixed } from '../src/wiring/minecraftLlmcV2Request.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 import { llmcRequests, LLMC_TOOLS } from './support/minecraftBodyRequests.js';
@@ -45,7 +46,7 @@ const markPaths = (body: Body) => body.messages.flatMap((entry, index) => (Array
   .flatMap((block: Record<string, unknown>, at: number) => block.cache_control ? [`messages[-${body.messages.length - index}].${entry.role}[${at}]`] : []));
 
 describe('SHANNON_MINECRAFT_LLMC_V2 on: the request', () => {
-  const options = { systemAppendix: llmcCoreKnowledge(true), minecraftV2: minecraftV2Hooks() };
+  const options = { systemAppendix: llmcCoreKnowledge(), minecraftV2: minecraftV2Hooks() };
   const tools = candidateMenuTools(CORE);
 
   it('declares six tools in a fixed order: no tool_open, no fca_context, the hands one to a line', async () => {
@@ -114,23 +115,15 @@ describe('SHANNON_MINECRAFT_LLMC_V2 on: the request', () => {
     const named = (name: string, domain: FcaToolDefinition['domain']) => ({ name, domain });
     const kept = [named('mc.act', 'minecraft_body'), named('mc.probe', 'minecraft_body'), named('mc.view', 'minecraft_body'), named('plan.update', 'task_runtime'),
       named('mc.find-blocks', 'minecraft_body'), named('minecraft.observe', 'minecraft_body'), named('goal.progress', 'task_runtime'), named('memory.search', 'memory_read')]
-      .filter(tool => llmcMenuTool(tool, true)).map(tool => tool.name);
+      .filter(tool => v2MenuTool(tool)).map(tool => tool.name);
     expect(kept).toEqual(['mc.act', 'mc.probe', 'mc.view', 'plan.update']);
-    expect(llmcTools({ definitions: [], execute: async () => { throw new Error('none'); } } as never, true).definitions).toEqual([]);
-  });
-});
-
-describe('SHANNON_MINECRAFT_LLMC_V2 off: the request of the act preflight alone', () => {
-  it('is byte for byte the request of 4f98156 (the digests were taken there)', async () => {
-    const bodies = await llmcRequests({ systemAppendix: llmcCoreKnowledge(true), minecraftOwnPrompt: true });
-    const digests = bodies.map(body => createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16));
-    expect(digests).toEqual(['4ccbbf42e3d25fbb', '8645adfd7571750b']);
+    expect(llmcTools({ definitions: [], execute: async () => { throw new Error('none'); } } as never).definitions).toEqual([]);
   });
 });
 
 describe('SHANNON_MINECRAFT_LLMC_V2: the stage knowledge changes only when the stages do', () => {
   it('is stated again as a part of the state when the stages change, and not when they stay', async () => {
-    const options = { systemAppendix: llmcCoreKnowledge(true), minecraftV2: minecraftV2Hooks() };
+    const options = { systemAppendix: llmcCoreKnowledge(), minecraftV2: minecraftV2Hooks() };
     const tools = candidateMenuTools(CORE);
     const nether = { ...live.body, state: { ...live.body.state, dimension: 'the_end', inside: '' }, planNow: '[p5.1] ドラゴンを倒す', landmarks: [], scan: [] };
     const same = await decide(options, tools, { hands: ['jump 1'] });
@@ -143,23 +136,6 @@ describe('SHANNON_MINECRAFT_LLMC_V2: the stage knowledge changes only when the s
   });
 });
 
-describe('SHANNON_MINECRAFT_LLMC_V2: the switch', () => {
-  const env = (extra: Record<string, string>) => ({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', ANTHROPIC_API_KEY: 'k', ...extra });
-  const on = { SHANNON_MINECRAFT_OWN_PROMPT: 'on', SHANNON_MINECRAFT_LLMC_PROBE: 'on', SHANNON_MINECRAFT_ACT_PREFLIGHT: 'on' };
-  it('is on only with the own prompt, the probe and the act preflight, and says so in the log when it cannot be', () => {
-    const lines: string[] = [];
-    const made = (extra: Record<string, string>) => configuredMinecraftLlmc(env(extra), { recordUsage() {} }, { log: line => lines.push(line) })!;
-    expect(made({ ...on, SHANNON_MINECRAFT_LLMC_V2: 'on' }).v2).toBe(true);
-    expect(lines.at(-1)).toContain('v2=on');
-    for (const missing of Object.keys(on)) {
-      const partial = Object.fromEntries(Object.entries(on).filter(([name]) => name !== missing));
-      expect(made({ ...partial, SHANNON_MINECRAFT_LLMC_V2: 'on' }).v2, missing).toBeUndefined();
-      expect(lines.join('\n')).toContain('LLMC_V2 off: it needs');
-    }
-    expect(made(on).v2).toBeUndefined();
-  });
-});
-
 describe('SHANNON_MINECRAFT_LLMC_V2: the fixed part for the decision replay', () => {
   it('is the system blocks and the six tools the production model sends, made from the recorded core', async () => {
     const fixed = await candidateFixed(CORE);
@@ -167,7 +143,7 @@ describe('SHANNON_MINECRAFT_LLMC_V2: the fixed part for the decision replay', ()
     expect(fixed.system[0]!.text).toBe(MINECRAFT_TRANSPORT);
     expect(fixed.tools.map(tool => tool.name)).toEqual(['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'fca_wait', 'fca_complete']);
     expect(fixed.headers['anthropic-beta']).toContain('mid-conversation-system-clear-at');
-    const { bodies } = await decide({ systemAppendix: llmcCoreKnowledge(true), minecraftV2: minecraftV2Hooks() }, candidateMenuTools(CORE), { hands: ['jump 1'] });
+    const { bodies } = await decide({ systemAppendix: llmcCoreKnowledge(), minecraftV2: minecraftV2Hooks() }, candidateMenuTools(CORE), { hands: ['jump 1'] });
     expect(JSON.stringify(fixed.system)).toBe(JSON.stringify(bodies[0]!.system));
     expect(JSON.stringify(fixed.tools)).toBe(JSON.stringify(bodies[0]!.tools));
   });

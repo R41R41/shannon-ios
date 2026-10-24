@@ -8,7 +8,7 @@ import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
 
 /**
- * mb-llmc-cand 部分送り（改修案 §2.4、SHANNON_MINECRAFT_LLMC_V2）。送る前の守り（地図で確かにできない手・規則に反する手）が手 k を止める時、
+ * mb-llmc-cand 部分送り（改修案 §2.4、mb-llmc v2）。送る前の守り（地図で確かにできない手・規則に反する手）が手 k を止める時、
  * 今は act 全体が止まり、止める手の前にあった手（平均 1.3 手）も動かない。部分送りは、手 1 … k−1 だけを体へ送り（stopIf・accept・why はそのまま。
  * 手は直さず足さない）、体の結果の後ろに「手 k から先は体へ送っていない」と事実を添える。k = 1 は今まで通り、体に何も送らず事実を返す。
  */
@@ -98,25 +98,17 @@ export interface BeforeSend { result?: ToolResult; input?: unknown; tail?: strin
 export function withNote(result: ToolResult, note: string): ToolResult { return { ...result, text: `${result.text}\n${note}` }; }
 const say = (line: string): void => { console.info(line); };
 /**
- * The guards before an `mc.act` goes to the body. Without v2, the 4f98156 act-preflight alone (`preflight`): the whole act is held at the first
- * hand the map faults, and the log line and the words are the same as they were. With v2 (SHANNON_MINECRAFT_LLMC_V2), the preflight and the rule
- * guard: the hands before the held one are sent and the rest comes back as a fact (`holdV2`).
+ * The guards before an `mc.act` goes to the body (the act preflight and the rule guard): the hands before the held one are sent and the rest comes
+ * back as a fact (`holdV2`). `urgent`: the decision was an urgent one.
  */
-export function heldBeforeSend(mode: { preflight?: boolean; v2?: boolean; urgent?: boolean } | undefined, input: unknown, frame: BodyObservation | null,
-  taskId: string): BeforeSend | null {
-  if (mode?.v2) {
-    const hold = holdV2(input, frame, taskId, mode.urgent === true);
-    if (!hold) return null;
-    if ('note' in hold) return { note: hold.note };
-    if ('whole' in hold) {
-      say(`Shannon Minecraft act held before send task=${taskId} hand=${hold.held.hand} do=${hold.held.kind} code=${hold.held.code}`);
-      return { result: toolFailure('refused', hold.whole, { retryable: true }) };
-    }
-    say(`Shannon Minecraft act held partway task=${taskId} hand=${hold.held.hand} sent=${hold.held.hand - 1} code=${hold.held.code}`);
-    return { input: hold.part, tail: hold.tail };
+export function heldBeforeSend(urgent: boolean, input: unknown, frame: BodyObservation | null, taskId: string): BeforeSend | null {
+  const hold = holdV2(input, frame, taskId, urgent);
+  if (!hold) return null;
+  if ('note' in hold) return { note: hold.note };
+  if ('whole' in hold) {
+    say(`Shannon Minecraft act held before send task=${taskId} hand=${hold.held.hand} do=${hold.held.kind} code=${hold.held.code}`);
+    return { result: toolFailure('refused', hold.whole, { retryable: true }) };
   }
-  const held = mode?.preflight ? preflightOfFrame(input, frame, taskId) : null;
-  if (!held) return null;
-  say(`Shannon Minecraft act held before send task=${taskId} hand=${held.hand} do=${held.kind} code=${held.code}`);
-  return { result: toolFailure('refused', preflightText(held), { retryable: true }) };
+  say(`Shannon Minecraft act held partway task=${taskId} hand=${hold.held.hand} sent=${hold.held.hand - 1} code=${hold.held.code}`);
+  return { input: hold.part, tail: hold.tail };
 }

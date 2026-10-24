@@ -4,7 +4,7 @@ import { llmcCoreKnowledge } from '../surfaces/minecraft/minecraftKnowledgeCore.
 import { candidateMenuTools, minecraftV2Hooks } from '../surfaces/minecraft/minecraftLlmcV2.js';
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2, for the decision replay: the fixed part of a request of the mode (the system blocks and the tools, with their cache marks
+ * mb-llmc v2, for the decision replay: the fixed part of a request of the mode (the system blocks and the tools, with their cache marks
  * and the fields beside them: model, thinking, effort, tool_choice), as the production model builds it, from the body's tool definitions of a recorded
  * run (`core`; the menu of the mode is picked from them, `mc.act` with the hands one to a line). The model is the production one
  * (`createAnthropicFcaModel` with the own prompt and the mode's hooks); its transport refuses on purpose, so nothing is sent.
@@ -23,7 +23,7 @@ export async function candidateFixed(core: readonly FcaToolDefinition[], model =
     return Promise.reject(new Error('captured'));
   } } };
   const mode = createAnthropicFcaModel({ model, client: client as never, recordUsage() {}, minecraftOwnPrompt: true,
-    systemAppendix: llmcCoreKnowledge(true), minecraftV2: minecraftV2Hooks() });
+    systemAppendix: llmcCoreKnowledge(), minecraftV2: minecraftV2Hooks() });
   const menu = candidateMenuTools(core), quiet = { info: console.info, warn: console.warn };
   console.info = console.warn = () => undefined;
   try {

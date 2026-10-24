@@ -2,7 +2,7 @@ import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
 import { milestoneWords } from './minecraftLlmcRoad.js';
 import { PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
+ * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
  *   the decision protocol and the reading (`anthropicFcaMinecraftSystem.ts`) it is the cached system text, aimed at three thousand tokens.
  * - `V2_STAGES`: the knowledge of a stage of the route (materials, the Nether, the blazes, the pearls and eyes, the End), which the code picks

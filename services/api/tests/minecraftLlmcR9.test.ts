@@ -4,7 +4,7 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { ACT_DESCRIPTION, MC_ACT_TOOL } from '../src/contracts/minecraftActContract.js';
 import { createFcaPlanTools } from '../src/mind/action/fca/fcaPlanTools.js';
 import { forgetFirstPlans, FIRST_PLAN_SYSTEM_R8, FIRST_PLAN_SYSTEM_R9, carryDone, planFromAnswer, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { LLMC_SYSTEM_APPENDIX_R8, LLMC_SYSTEM_APPENDIX_R9, llmcSystemAppendix, R9_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX_R8, LLMC_SYSTEM_APPENDIX_R9, R9_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { doneFacts, nodesHeldOpen, nodesSeenDone, parseDoneWhen, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { checkedStopIf } from '../src/surfaces/minecraft/minecraftLlmcStopIf.js';
 
@@ -65,9 +65,10 @@ describe('the plan\'s done is each node\'s own (run 33: p2.3 with 0 rods, p4 aft
     expect(done).not.toContain('p2.3');
     const held = nodesHeldOpen(tree, doneFacts(NETHER_START)!);
     expect(held).toEqual([{ id: 'p2', open: ['p2.2', 'p2.3'] }]);
+    // mb-llmc v2: the plan closes a place only once the nodes before it are done (`afterEarlier`): p2.1 waits for p1.
     const update = seenDoneUpdate(tree, NETHER_START)!;
-    expect(update.held).toEqual(['p2←p2.2,p2.3']);
-    expect(update.ids).toEqual(['p2.1']);
+    expect(update.held).toEqual(['p2←p2.1,p2.2,p2.3']);
+    expect(update.ids).toEqual([]);
   });
 
   it('the plan\'s tool leaves p2.3 open at the start, says what it holds open in the log once, and the blaze node can be the current one', () => {
@@ -81,7 +82,7 @@ describe('the plan\'s done is each node\'s own (run 33: p2.3 with 0 rods, p4 aft
     expect(settled.nodes.find(node => node.id === 'p2.3')!.state).toBe('continue');
     expect(settled.nodes.find(node => node.id === 'p2')!.state).toBe('continue');
     expect(lines.filter(line => line.startsWith('Shannon FCA plan held task=r9-start'))).toHaveLength(1);
-    expect(lines.find(line => line.startsWith('Shannon FCA plan held'))).toContain('held=p2←p2.2,p2.3');
+    expect(lines.find(line => line.startsWith('Shannon FCA plan held'))).toContain('held=p2←p2.1,p2.2,p2.3');
     const chosen = applyPlanUpdate(settled, { current: 'p2.3' });
     expect(chosen.tree.current).toBe('p2.3');
   });
@@ -207,7 +208,6 @@ describe('the stopIf looked at against the frame (run 33 +997: hpBelow 9 at heal
 
 describe('the words (r9)', () => {
   it('the mode\'s appendix is r8\'s with r9\'s section: the piglin, the pearls after the rods, the chase, the stopIf, the long act, the bare-hand column', () => {
-    expect(llmcSystemAppendix(true)).toBe(LLMC_SYSTEM_APPENDIX_R9);
     expect(LLMC_SYSTEM_APPENDIX_R9).toBe(`${LLMC_SYSTEM_APPENDIX_R8}\n\n${R9_KNOWLEDGE}`);
     for (const words of ['金の防具を 1 つ着けるまでピグリンの近く（8m）に長居しない', 'エンダーパールはブレイズの棒（7 本）の後', 'plan.update の理由に書く',
       '離れても同じ速さで追われ', '打ち返す', 'pillarUp n=2', '体力 6 以下', '親の節が済みになっても子は済みにならない', '消費して無くなる物',
@@ -215,7 +215,6 @@ describe('the words (r9)', () => {
       '自分の x,z で mc.probe column を聞く', '「真上」の行（above）', '素手の石は約 7.7 秒', '足のマスの下・次のマス（足・頭・下）・そのマスにいる物']) {
       expect(R9_KNOWLEDGE).toContain(words);
     }
-    expect(llmcSystemAppendix(false)).not.toContain('R9');
   });
 
   it('the act\'s description says the stopIf\'s hpBelow and the long act', () => {

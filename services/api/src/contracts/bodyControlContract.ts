@@ -20,7 +20,7 @@ export interface BodyTaskContext {
     recentResults: readonly { name: string; ok: boolean; summary: string }[] };
   /**
    * The task's plan tree (`@shannon/mind` planTree, design mb-llm-centric 2.7), for display only: the body shows it (ShannonUI mod v2's
-   * nested task tree) and never acts on it. Present only on a task that holds a plan (SHANNON_MINECRAFT_LLM_CENTRIC); absent, the body
+   * nested task tree) and never acts on it. Present only on a task that holds a plan (the LLM-centric mode); absent, the body
    * shows what it showed before. A body that does not know it ignores it.
    */
   plan?: BodyPlanView;

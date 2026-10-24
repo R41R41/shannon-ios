@@ -191,7 +191,7 @@ export const LLMC_SYSTEM_APPENDIX = [LLMC_RULES, MAP_LEGEND, DANGER_KNOWLEDGE, W
   DRAGON_KNOWLEDGE].join('\n\n');
 
 /**
- * r4 (SHANNON_MINECRAFT_LLMC_PROBE; owner 2026-10-22 「判断のループの sonnet が自力でも調べられるようにしたいので、調査系の道具や詰まった場合には
+ * r4 (mb-llmc r4; owner 2026-10-22 「判断のループの sonnet が自力でも調べられるようにしたいので、調査系の道具や詰まった場合には
  * こう調べると良いという指示を加えたい」): how to look when stuck (the head's investigation, `mc.probe`), the forbid and caution of the plan, and
  * how to read a dangerous fact. Arch-check 6: a probe that showed the fact did not mend the hand without the knowledge of what to do with
  * it (S1: seven blocks of air read as a foothold; S2: a lake's section, and she dug down into it).
@@ -375,5 +375,4 @@ export const R9_KNOWLEDGE = [
 ].join('\n');
 /** r9: r8's appendix and `R9_KNOWLEDGE` (the same bytes at every decision). */
 export const LLMC_SYSTEM_APPENDIX_R9 = [LLMC_SYSTEM_APPENDIX_R8, R9_KNOWLEDGE].join('\n\n');
-/** The appendix of the mode's models: r9's when SHANNON_MINECRAFT_LLMC_PROBE is on, else r3's as it was. */
-export function llmcSystemAppendix(probe: boolean): string { return probe ? LLMC_SYSTEM_APPENDIX_R9 : LLMC_SYSTEM_APPENDIX; }
+/** The appendix of the mode's models: r9's when mb-llmc r4 is on, else r3's as it was. */

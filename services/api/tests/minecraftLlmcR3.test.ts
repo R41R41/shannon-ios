@@ -6,7 +6,7 @@ import { actResultText, AROUND_PREFIX, llmcPrepare, llmcStoredResult, LLMC_KEPT_
 import { forgetLlmcEvents, urgentReasons, withLlmcBody } from '../src/surfaces/minecraft/minecraftLlmcBody.js';
 import { createFoodTrend, lookHint, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { DANGER_KNOWLEDGE, LLMC_SYSTEM_APPENDIX, WOOD_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
-import { llmcMenuTool, llmcTools } from '../src/wiring/minecraftLlmcWiring.js';
+import { llmcTools } from '../src/wiring/minecraftLlmcWiring.js';
 import { createFcaProgressTools } from '../src/mind/action/fca/fcaProgressTools.js';
 import type { FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 
@@ -50,14 +50,6 @@ describe('a hand that fails need not stop the act (run 27: [equip stone_sword, w
 });
 
 describe('the mode\'s menu and goal progress (run 27: 48 tools of her other work at every epoch, the failures restated every round)', () => {
-  it('keeps the body\'s, the plan\'s, the goal\'s and the memory reads; not her research tools, the image reflex or skill.read', () => {
-    const names = ['mc.act', 'mc.view', 'mc.find-blocks', 'minecraft.observe', 'plan.update', 'goal.set_conditions', 'study_list', 'web_search',
-      'music_play', 'minecraft_start', 'minecraft.reflex', 'skill.read'];
-    const kept = names.filter(name => llmcMenuTool({ name, domain: name.startsWith('m') && name.includes('.') ? 'minecraft_body' : 'meta' }));
-    expect(kept).toEqual(['mc.act', 'mc.view', 'mc.find-blocks', 'minecraft.observe', 'plan.update', 'goal.set_conditions']);
-    expect(llmcMenuTool({ name: 'memory.search', domain: 'memory_read' })).toBe(true);
-  });
-
   it('the tools port: the menu, no skill index, and progress without the failed calls (which every act result already says)', async () => {
     const base = { definitions: [tool('mc.act', 'minecraft_body'), tool('study_list'), tool('skill.read')], skillIndex: () => 'skills',
       async execute() { return { ok: false, text: 'x', failure: 'failed' as const, retryable: true }; } };
@@ -65,7 +57,7 @@ describe('the mode\'s menu and goal progress (run 27: 48 tools of her other work
     progress.progress.observed('op-1', 'mc.act', { ok: false, text: 'x', failure: 'failed', retryable: true });
     expect(progress.progress.context().failures).toHaveLength(1);
     const mode = llmcTools(progress);
-    expect(mode.definitions.map(definition => definition.name)).toEqual(['mc.act', 'goal.set_conditions', 'goal.verify']);
+    expect(mode.definitions.map(definition => definition.name)).toEqual(['mc.act']);
     expect(mode.skillIndex).toBeUndefined();
     mode.progress!.observed('op-2', 'mc.act', { ok: false, text: 'y', failure: 'failed', retryable: true });
     expect(mode.progress!.context()).toMatchObject({ failures: [], replans: [], conditions: [] });
@@ -75,11 +67,11 @@ describe('the mode\'s menu and goal progress (run 27: 48 tools of her other work
 
 describe('a long result kept short in the history, shown whole once (run 27: an observation 5,066 characters, a plan 2,842 kept to the end)', () => {
   const map = `地図 v1 足=(1,64,2)\n${'# . '.repeat(800)}`;
-  it('a view past the bound: its first line stored, the whole shown once', () => {
+  it('a view past the bound: its first line stored, the rest shown once', () => {
     const { stored, shown } = llmcStoredResult(MC_VIEW_TOOL, map);
     expect(stored.length).toBeLessThan(LLMC_KEPT_RESULT_CHARS);
-    expect(stored).toMatch(/^地図 v1 足=\(1,64,2\)…（全文 \d+字は、この次の判断の live\.lastResults に一度だけ出した）$/u);
-    expect(shown).toBe(map);
+    expect(stored).toMatch(/^地図 v1 足=\(1,64,2\)…（続き \d+字は、この次の判断の live\.lastResults に一度だけ出した）$/u);
+    expect(shown).toBe(map.slice(map.indexOf('\n') + 1));
     expect(llmcStoredResult('mc.find-blocks', 'oak_log (3,64,9) 7m')).toEqual({ stored: 'oak_log (3,64,9) 7m', shown: null });
   });
 
@@ -88,19 +80,19 @@ describe('a long result kept short in the history, shown whole once (run 27: an 
     const { stored, shown } = llmcStoredResult(MC_ACT_TOOL, text);
     expect(stored).not.toContain(AROUND_PREFIX);
     expect(stored).toContain('1 place 止 置けない (1,64,2) 自分の足のマス');
-    expect(shown).toBe(text);
+    expect(shown).toBe(text.split('\n')[2]);
     expect(llmcStoredResult(MC_ACT_TOOL, 'act 全部済み（1/1、1.0秒）')).toEqual({ stored: 'act 全部済み（1/1、1.0秒）', shown: null });
   });
 
-  it('the body lifecycle stores the short text and the next live state alone shows the whole', () => {
+  it('the body lifecycle stores the short text and the next live state alone shows the rest', () => {
     const inner = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
       toolSignal: (_name: string, parent: AbortSignal) => parent, async close() {} };
     const body = withLlmcBody(inner, { llmc: { plan: () => undefined, planView: () => null }, taskId: 'r3-shown', createdAt: new Date().toISOString(),
-      observe: () => frame({ localMap: 'm', health: 20 }), arrival: () => ({ at: null, kind: null }) });
+      observe: () => frame({ localMap: 'm', health: 20 }), arrival: () => ({ at: null, kind: null }), r4: { probe: () => null, planWhere: () => null } });
     body.context();
     expect(body.storedResult!({ id: 'v', name: MC_VIEW_TOOL, input: {} }, map)).toContain('live.lastResults');
     body.context();
-    expect((body.transient!() as { lastResults?: string[] }).lastResults).toEqual([map]);
+    expect((body.transient!() as { lastResults?: string[] }).lastResults).toEqual([map.slice(map.indexOf('\n') + 1)]);
     body.context();
     expect((body.transient!() as { lastResults?: string[] }).lastResults).toBeUndefined();
   });
@@ -120,7 +112,7 @@ describe('an urgent step (run 27: a creeper stopped her act at 3.9 m; the next d
       toolSignal: (_name: string, parent: AbortSignal) => parent, async close() {} };
     const lines: string[] = [];
     const body = withLlmcBody(inner, { llmc: { plan: () => undefined, planView: () => null }, taskId: 'r3-urgent', createdAt: new Date().toISOString(),
-      observe: () => frame({ localMap: 'm', health: 20, nearbyThreats: threats }), arrival: () => ({ at: null, kind: null }), log: line => lines.push(line) });
+      observe: () => frame({ localMap: 'm', health: 20, nearbyThreats: threats }), arrival: () => ({ at: null, kind: null }), log: line => lines.push(line), r4: { probe: () => null, planWhere: () => null } });
     expect(body.urgent!()).toBe(false);
     body.noteResult!({ id: 'a', name: MC_ACT_TOOL, input: {} }, { ok: false, retryable: true,
       text: 'act 1/3 済みで止まった（stopIf: hostileWithin:creeper #12 3.9m）' });

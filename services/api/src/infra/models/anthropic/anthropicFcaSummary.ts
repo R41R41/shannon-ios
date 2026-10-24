@@ -27,10 +27,10 @@ export class FcaSummaryInvalidError extends Error {
  * most 80 characters, a string) refused, and the task was left unknown. Only an answer with no usable summary is refused now.
  */
 export function createAnthropicFcaSummarizer(options: AnthropicFcaOptions & { body?: boolean; minecraftV2Facts?: boolean }): FcaHistorySummarizer {
-  // SHANNON_MINECRAFT_OWN_PROMPT: only a body summary reads the body task's own words (`minecraftProfile`'s summary); the goal is unchanged.
+  // the own prompt: only a body summary reads the body task's own words (`minecraftProfile`'s summary); the goal is unchanged.
   const { body = false, minecraftOwnPrompt, minecraftV2Facts, ...modelOptions } = options;
   const itemCharacters = body ? COMPACTION_BODY_ITEM_CHARACTERS : COMPACTION_V1.maximumItemCharacters;
-  // SHANNON_MINECRAFT_LLMC_V2: a body summary of the mode keeps facts only (`v2FactsGoal`) and names no tool it was not given.
+  // mb-llmc v2: a body summary of the mode keeps facts only (`v2FactsGoal`) and names no tool it was not given.
   const facts = body && minecraftV2Facts === true;
   // Each summary input is new and nothing continues the request: only its fixed prefix is cached (`continued`).
   const model = createAnthropicFcaModel({ ...modelOptions, continued: false, ...ownOptions(body, minecraftOwnPrompt === true, facts) });
@@ -62,7 +62,7 @@ function ownOptions(body: boolean, own: boolean, facts: boolean): Pick<Anthropic
 }
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37: a summary said 「次: minecraft.observe で所持品を確認」 and "find-blocks"): in the answer and in the
+ * mb-llmc v2 (mb-llmc-cand 9, run 37: a summary said 「次: minecraft.observe で所持品を確認」 and "find-blocks"): in the answer and in the
  * previous summary's items it kept, a name of a tool the mode does not offer is replaced by neutral words, and an item that tells to use it is dropped
  * (`scrubForeignToolItems`); the counts are logged (content-free). A summary the scrub leaves with no item is the previous one, or, with none, refused.
  */
@@ -113,7 +113,7 @@ function summaryGoal(body: boolean, v2Facts = false): string {
 }
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9; run 37: the summary wrote 「walkは一歩ずつ」「hpBelow=14」「dropのitemsは0〜8種類」 that nothing said,
+ * mb-llmc v2 (mb-llmc-cand 9; run 37: the summary wrote 「walkは一歩ずつ」「hpBelow=14」「dropのitemsは0〜8種類」 that nothing said,
  * and 「次: minecraft.observe で所持品・装備を確認（未確認のため）」 with the inventory and the worn armor in every live state): the body summary of
  * the mode keeps facts only. The eight sections are the codec's; rules and cautions are the plan's forbid and caution (shown in the live
  * state), so the summary writes none.

@@ -1,7 +1,7 @@
 import { MAP_LEGEND } from '../../contracts/minecraftActContract.js';
 
 /**
- * SHANNON_MINECRAFT_OWN_PROMPT (Syzygy ADR-0014 D3; owner 2026-10-22 「人格・3つのアプリなどの不要な決まりは minebot での応答では入れないことに
+ * the own prompt (Syzygy ADR-0014 D3; owner 2026-10-22 「人格・3つのアプリなどの不要な決まりは minebot での応答では入れないことに
  * しよう。残りの決まりも、継ぎ足して肥大化しているのなら必要なもののみに整理しよう」): the LLM-centric body's knowledge, pruned from r9's
  * `LLMC_SYSTEM_APPENDIX_R9` (17,126 characters) into a few principles with short examples. What each rule of r3–r9 became (kept, merged,
  * removed: a duplicate, said by the code or the tool definitions, superseded, or one run's patch) is in `docs/minecraft-prompt-pruning-2026-10.md`.
@@ -101,13 +101,6 @@ const END = [
 ].join('\n');
 
 /** The pruned knowledge of the mode; without the probe (r3's mode) the `mc.probe` lines are not said. */
-export function llmcCoreKnowledge(probe: boolean): string {
-  const sections = [DECIDE, MAP, FALLS, DANGER, PLAN, MATERIALS, NETHER, END];
-  const text = sections.join('\n\n');
-  return probe ? text : withoutProbe(text);
-}
-
-/** r3's mode offers no `mc.probe`, no plan forbid or caution and no investigation: the lines that name them are left out. */
-function withoutProbe(text: string): string {
-  return text.split('\n').filter(line => !/mc\.probe|investigation|forbid|caution/u.test(line)).join('\n');
+export function llmcCoreKnowledge(): string {
+  return [DECIDE, MAP, FALLS, DANGER, PLAN, MATERIALS, NETHER, END].join('\n\n');
 }

@@ -2,7 +2,7 @@
 
 - 決定: ライ氏 2026-10-22「人格・3つのアプリなどの不要な決まりは minebot での応答では入れないことにしよう。残りの決まりも、継ぎ足して肥大化しているのなら必要なもののみに整理しよう。」（Syzygy ADR-0014 D3）
 - 元: 本番 3008876b（rel38）の体のタスクの指示文。新: `services/api/src/infra/models/anthropic/anthropicFcaMinecraftSystem.ts`（共通の部分）と `services/api/src/surfaces/minecraft/minecraftKnowledgeCore.ts`（LLM 中心モードの知識）。
-- 切り替え: `SHANNON_MINECRAFT_OWN_PROMPT=on` の時だけ。既定 off で、off の要求は 3008876b と 1 バイトも違わない（`tests/minecraftOwnPromptOff.test.ts`）。
+- 切り替え: **無い**（2026-10-24 に撤去、`minecraft-llmc-v2-2026-10.md` の「13 回目」）。当時は `SHANNON_MINECRAFT_OWN_PROMPT=on` の時だけで、off の要求は 3008876b と同じだった。
 - 初期計画（Opus）と履歴の要約（Haiku）も、ライ氏の答え（2026-10-22、フォーム「同じ方針で絞る」）で同じスイッチの裏で絞った（下の「初期計画と要約」）。
 
 ## 大きさ（LLM 中心 r9、主判断の system。`tests/minecraftOwnPrompt.test.ts` が測る）

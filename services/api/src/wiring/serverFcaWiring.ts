@@ -33,7 +33,7 @@ import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
 import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
 import { minecraftRoutePlannerPart } from './minecraftRouteWiring.js';
-import { configuredMinecraftLlmc, llmcLifecycle, llmcStepParts, llmcV2Enabled } from './minecraftLlmcWiring.js';
+import { configuredMinecraftLlmc, llmcLifecycle, llmcStepParts } from './minecraftLlmcWiring.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
 import { configuredFcaSummaries } from './fcaSummaryWiring.js';
@@ -130,19 +130,18 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         totalTokens: usage.totalTokens, estimatedCostUsd: usage.estimatedCostUsd, occurredAt: new Date().toISOString() });
     };
     const timeZone = ownerTimeZone(values);
-    // SHANNON_MINECRAFT_OWN_PROMPT (ADR-0014 D3): a Minecraft body task of the old mode reads its own instructions; every other task as before.
+    // A Minecraft body task reads its own instructions (ADR-0014 D3); every other task as before.
     const model = createAnthropicFcaModel({ ...provider, recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }),
       compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS), stopGraceMilliseconds: FCA_MODEL_STOP_GRACE_MILLISECONDS,
-      ...(switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT') ? { minecraftOwnPrompt: true } : {}) });
+      minecraftOwnPrompt: true });
     // SHANNON_FCA_SUMMARY_MODEL=haiku (P4): a body task's summaries by Haiku, rare; absent, every task is as it was.
-    const summaries = configuredFcaSummaries(values, createAnthropicFcaSummarizer({ ...provider, recordUsage }), recordUsage,
-      switchOn(values, 'SHANNON_MINECRAFT_OWN_PROMPT'));
+    const summaries = configuredFcaSummaries(values, createAnthropicFcaSummarizer({ ...provider, recordUsage }), recordUsage);
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
     // A Minecraft task's skill reads, settled by what the task then does (`fcaSkillOutcomes.ts`).
     // SHANNON_MINECRAFT_AGENDA (mb-arch): the next decision asked while the body works, and the executor around its tools.
-    // SHANNON_MINECRAFT_LLM_CENTRIC (design mb-llm-centric): a body task decides in small steps from a map; no agenda, procedure or fast judgment.
+    // A body task decides in small steps from a map (design mb-llm-centric); no agenda, procedure or fast judgment.
     const llmc = configuredMinecraftLlmc(values, { recordUsage, clock: () => ({ localTime: ownerLocalClock(new Date(), timeZone), timeZone }),
         compactAboveTokens: fcaCompactAboveTokens(values.SHANNON_FCA_COMPACT_ABOVE_TOKENS), stopGraceMilliseconds: FCA_MODEL_STOP_GRACE_MILLISECONDS }),
       minecraft = withMinecraftAgendaParts(withSkillOutcomes(
@@ -267,7 +266,6 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     })() : null;
     const requests = minecraft && conversation && visible ? fcaMinecraftRequests({ ...parts, control: minecraft.control,
       runtime: runtime.runtime, conversation, visible, stop: runtime.stop, sourceVisible: id => sourceVisible(parts.ownerScope, id),
-      ...(llmcV2Enabled(values) ? { llmcV2: true } : {}),
       atomic: work => underWriteLock(db, null, '', work, 'fca_minecraft_admission') }) : null;
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);

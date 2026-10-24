@@ -1,5 +1,5 @@
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37: the request named `minecraft.observe`, `minecraft.reflex`, `find-blocks`, `find-structure` and
+ * mb-llmc v2 (mb-llmc-cand 9, run 37: the request named `minecraft.observe`, `minecraft.reflex`, `find-blocks`, `find-structure` and
  * `view top`, tools its menu does not have, in the task note, the stages' knowledge and a history summary): the tools the mode offers, and what names
  * one it does not. The tools are `mc.act`, `mc.probe`, `mc.view`, `plan.update` (the provider's names: `mc_act` …) and the two controls.
  */

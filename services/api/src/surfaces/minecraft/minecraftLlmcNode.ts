@@ -125,11 +125,11 @@ export function currentNodeLine(node: { id: string; title: string; where?: strin
 }
 
 /**
- * `body.planNow`: in the mode (`v2`) the current node from its fields with its condition read against the frame (`currentNodeLine`); otherwise, or with no
- * current node in the tree, the plan view's line as before (`planNowLine`).
+ * `body.planNow`: the current node from its fields with its condition read against the frame (`currentNodeLine`); with no current node in
+ * the tree, the plan view's line (`planNowLine`).
  */
-export function planNowOf(tree: PlanTree | null, view: unknown, observation: BodyObservation | null, v2: boolean): string | null {
-  const node = v2 && tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
+export function planNowOf(tree: PlanTree | null, view: unknown, observation: BodyObservation | null): string | null {
+  const node = tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
   const shown = view as { now?: unknown; path?: unknown } | null;
   return node ? currentNodeLine(node, shown?.path, doneStatusWords(node.doneWhen, doneFacts(observation))) : planNowLine(shown);
 }

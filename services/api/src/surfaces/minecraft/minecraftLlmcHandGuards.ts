@@ -1,7 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 
 /**
- * mb-llmc-cand 送る前の守りの足し 2 つ（SHANNON_MINECRAFT_LLMC_V2、再現台 candidate-fix-20261023 の A: live に事実があるのに反した答え）。部分送りと同じ形:
+ * mb-llmc-cand 送る前の守りの足し 2 つ（mb-llmc v2、再現台 candidate-fix-20261023 の A: live に事実があるのに反した答え）。部分送りと同じ形:
  * 止める手の前までは体へ送り、止めた手から先は送らず事実を返す。手は直さず足さない。
  *
  * 1. `urgentLimitStop`: 急ぎの判断（live の答え方の行 `URGENT_ANSWER` が「手は 3 つまで」と言った判断）の act が 4 手以上なら、手 4 から先は送らない（s12・s34）。

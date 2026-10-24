@@ -92,30 +92,19 @@ describe('the result: the body\'s own first, the tail after', () => {
 });
 
 describe('heldBeforeSend: what the tools do before they send', () => {
-  it('without v2 it is the act-preflight alone: the whole act turned back, the same log line, nothing when it is off', () => {
+  it('the hands before the held one are sent, with a tail and a log line that says so', () => {
     const lines: string[] = [];
     vi.spyOn(console, 'info').mockImplementation(line => { lines.push(String(line)); });
-    const off = heldBeforeSend({ preflight: true }, intoRock, frame(), 'task-1')!;
-    expect(off.result?.text).toBe(preflightText(preflightOfFrame(intoRock, frame(), 'task-1')!));
-    expect(off.input).toBeUndefined();
-    expect(lines).toEqual(['Shannon Minecraft act held before send task=task-1 hand=3 do=walk code=feet_solid']);
-    expect(heldBeforeSend({}, intoRock, frame(), 'task-1')).toBeNull();
-    expect(heldBeforeSend(undefined, intoRock, frame(), 'task-1')).toBeNull();
-  });
-
-  it('with v2 the hands before the held one are sent, with a tail and a log line that says so', () => {
-    const lines: string[] = [];
-    vi.spyOn(console, 'info').mockImplementation(line => { lines.push(String(line)); });
-    const part = heldBeforeSend({ preflight: true, v2: true }, intoRock, frame(), 'task-1')!;
+    const part = heldBeforeSend(false, intoRock, frame(), 'task-1')!;
     expect(part.result).toBeUndefined();
     expect(part.input).toEqual({ ...intoRock, hands: [walk(221), walk(222)] });
     expect(part.tail).toContain('手 3 から先 2 手');
     expect(lines).toEqual(['Shannon Minecraft act held partway task=task-1 hand=3 sent=2 code=feet_solid']);
   });
 
-  it('with v2 and the first hand held the whole act is turned back, as before', () => {
+  it('with the first hand held the whole act is turned back', () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
-    const whole = heldBeforeSend({ v2: true }, { hands: [walk(224)] }, frame(), 'task-1')!;
+    const whole = heldBeforeSend(false, { hands: [walk(224)] }, frame(), 'task-1')!;
     expect(whole.result?.text.startsWith('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 1 walk 一歩ではない')).toBe(true);
     expect(whole.result).toMatchObject({ ok: false, failure: 'refused', retryable: true });
   });

@@ -4,7 +4,7 @@ import { toolFailure, toolOk, type ToolResult } from '../../mind/tools/toolRegis
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import {
-  ACT_DESCRIPTION, ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, LLMC_READ_SKILLS, MC_ACT_SKILL, MC_ACT_TOOL,
+  ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, MC_ACT_SKILL, MC_ACT_TOOL,
   MC_VIEW_SKILL, MC_VIEW_TOOL, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
@@ -13,7 +13,6 @@ import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
 import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type ProbeContext } from './minecraftLlmcProbeInput.js';
 import { validSkillInput } from './minecraftControlValidation.js';
 import { isShooter } from './minecraftLlmcThreat.js';
-import { stopFacts } from './minecraftLlmcStopFacts.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the tools it offers, how it
@@ -33,22 +32,16 @@ const COMMAND_MARGIN_MS = 5_000;
 const VIEW_MS = 15_000;
 
 /**
- * The tools of the mode, from the body's catalog: `mc.act` and `mc.view` in the head's own words, r4's `mc.probe` (in the head's words too,
- * when `probe` is on and the body offers it), and the reads it keeps.
+ * The tools of the mode, from the body's catalog: `mc.act` (the hands written one to a line, `minecraftActShortContract.ts`), `mc.view` and
+ * `mc.probe`, each in the head's own words, when the body offers it.
  */
 export function llmcBodyDefinitions(skills: readonly MinecraftSkillDefinition[],
-  definition: (name: string, description: string, readOnly: boolean) => FcaToolDefinition,
-  options: { probe?: boolean; v2?: boolean } = {}): FcaToolDefinition[] {
+  definition: (name: string, description: string, readOnly: boolean) => FcaToolDefinition): FcaToolDefinition[] {
   const has = (name: string) => skills.some(skill => skill.name === name);
-  // SHANNON_MINECRAFT_LLMC_V2: the hands written one to a line (`minecraftActShortContract.ts`), and none of the reads.
-  const act = options.v2 ? { ...definition(MC_ACT_TOOL, SHORT_ACT_DESCRIPTION, false), nativeInputSchema: SHORT_ACT_INPUT_SCHEMA }
-    : { ...definition(MC_ACT_TOOL, ACT_DESCRIPTION, false), nativeInputSchema: ACT_INPUT_SCHEMA };
   return [
-    ...(has(MC_ACT_SKILL) ? [act] : []),
+    ...(has(MC_ACT_SKILL) ? [{ ...definition(MC_ACT_TOOL, SHORT_ACT_DESCRIPTION, false), nativeInputSchema: SHORT_ACT_INPUT_SCHEMA }] : []),
     ...(has(MC_VIEW_SKILL) ? [{ ...definition(MC_VIEW_TOOL, VIEW_DESCRIPTION, true), nativeInputSchema: VIEW_INPUT_SCHEMA }] : []),
-    ...(options.probe && has(MC_PROBE_SKILL) ? [{ ...definition(MC_PROBE_TOOL, PROBE_DESCRIPTION, true), nativeInputSchema: PROBE_INPUT_SCHEMA }] : []),
-    ...(options.v2 ? [] : skills).filter(skill => LLMC_READ_SKILLS.has(skill.name))
-      .map(skill => ({ ...definition(`mc.${skill.name}`, skill.description, skill.readOnly), nativeInputSchema: skill.inputSchema })),
+    ...(has(MC_PROBE_SKILL) ? [{ ...definition(MC_PROBE_TOOL, PROBE_DESCRIPTION, true), nativeInputSchema: PROBE_INPUT_SCHEMA }] : []),
   ];
 }
 /**
@@ -139,18 +132,17 @@ const SHOWN_RESULT_CHARS = 6_000;
  * (`around`, for the next decision only); any other result past `LLMC_KEPT_RESULT_CHARS` is kept as its first line and says where the
  * whole was. The stored text never changes afterwards (the replay stays byte for byte the same: the cache holds).
  */
-export function llmcStoredResult(name: string, text: string, v2 = false): { stored: string; shown: string | null } {
+export function llmcStoredResult(name: string, text: string): { stored: string; shown: string | null } {
   if (name === MC_ACT_TOOL) {
     const lines = text.split('\n'), kept = lines.filter(line => !line.startsWith(AROUND_PREFIX));
     // mb-llmc-cand 10 (D1): the mode shows only what the history does not have, the stopped hands' surroundings, not the act's lines again.
-    const shown = v2 ? lines.filter(line => line.startsWith(AROUND_PREFIX)).join('\n') : text;
+    const shown = lines.filter(line => line.startsWith(AROUND_PREFIX)).join('\n');
     return kept.length === lines.length ? { stored: text, shown: null }
       : { stored: [...kept, '（止まった手の周りは、この次の判断の live.lastResults に一度だけ出した）'].join('\n'), shown: shown.slice(0, SHOWN_RESULT_CHARS) };
   }
   if (text.length <= LLMC_KEPT_RESULT_CHARS) return { stored: text, shown: null };
   const first = (text.split('\n')[0] ?? '').slice(0, 200);
-  if (v2) return keptAndRest(text, first);
-  return { stored: `${first}…（全文 ${text.length}字は、この次の判断の live.lastResults に一度だけ出した）`, shown: text.slice(0, SHOWN_RESULT_CHARS) };
+  return keptAndRest(text, first);
 }
 /** The mode's long result (a view's map, a probe's answer, a plan): the history keeps the first line, the next decision shows the lines after it once. */
 function keptAndRest(text: string, first: string): { stored: string; shown: string | null } {
@@ -160,9 +152,8 @@ function keptAndRest(text: string, first: string): { stored: string; shown: stri
 }
 
 /** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before sending (said first). */
-export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null, fixes: readonly string[] = [], input?: unknown,
-  observation: BodyObservation | null = null): ToolResult {
-  const result = name === MC_VIEW_TOOL ? viewResult(receipt) : name === MC_PROBE_TOOL ? probeResult(receipt) : actResult(receipt, urgent, input, observation);
+export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null, fixes: readonly string[] = []): ToolResult {
+  const result = name === MC_VIEW_TOOL ? viewResult(receipt) : name === MC_PROBE_TOOL ? probeResult(receipt) : actResult(receipt, urgent);
   return fixes.length ? { ...result, text: `（頭が形を直して送った: ${fixes.join('、')}）\n${result.text}` } : result;
 }
 function viewResult(receipt: MinecraftControlReceipt): ToolResult {
@@ -175,17 +166,14 @@ function probeResult(receipt: MinecraftControlReceipt): ToolResult {
   if (receipt.outcome !== 'completed' || !receipt.result) return toolFailure('failed', `調べられなかった: ${receipt.result?.slice(0, 300) ?? receipt.outcome}`);
   return toolOk(probeAnswerText(receipt.result, false));
 }
-function actResult(receipt: MinecraftControlReceipt, urgent: string | null, input?: unknown, observation: BodyObservation | null = null): ToolResult {
+function actResult(receipt: MinecraftControlReceipt, urgent: string | null): ToolResult {
   const act = readActResult(receipt.result);
   const cut = urgent ? `急ぎ: ${urgent} が近づいたので act を止めた。\n` : '';
   if (!act) {
     const words = receipt.result?.slice(0, 600) ?? '';
     return receipt.outcome === 'completed' ? toolOk(`${cut}${words || 'act 済み'}`) : toolFailure('failed', `${cut}act ${receipt.outcome}: ${words}`);
   }
-  // r10 (H3): what a stopped hand's cut line leaves out (the cell out of reach and how far, the cells a step must dig…), from the result's own fields.
-  let facts: string[] = [];
-  try { facts = input === undefined ? [] : stopFacts(act, normalizeActInput(input).input, observation); } catch { facts = []; }
-  const text = `${cut}${actResultText(act)}${facts.length ? `\n${facts.join('\n')}` : ''}`;
+  const text = `${cut}${actResultText(act)}`;
   if (act.ok && receipt.outcome === 'completed') return toolOk(text);
   // A reflex or an urgent cut is no fault of the decision (`bodyReflex`); an act that did some of its hands moved (`progressed`).
   const failed = toolFailure('failed', text, { retryable: true });
@@ -209,7 +197,7 @@ function hostiles(observation: BodyObservation | null): Array<{ name: string; di
  * rock cut its digging): a shooter the frame says cannot see her (the body's own check at every frame) does not cut it.
  */
 export function urgentWatch(input: unknown, observe: () => BodyObservation | null, parent: AbortSignal, everyMs = 250,
-  options: { walled?: boolean } = {}): { signal: AbortSignal; reason(): string | null; stop(): void } {
+): { signal: AbortSignal; reason(): string | null; stop(): void } {
   const watched = (input as ActInput | null)?.stopIf?.hostileWithin ?? 0;
   // The kinds she took on in this act (`accept`) are hers to fight: they never cut it.
   const near = new Set([...(input as ActInput | null)?.accept ?? [],
@@ -221,7 +209,7 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
   if (parent.aborted) cancel();
   const timer = watched >= LLMC_URGENT_METERS ? null : setInterval(() => {
     const come = hostiles(observe()).find(item => item.distance <= LLMC_URGENT_METERS && !near.has(item.name)
-      && !(options.walled && isShooter(item.name) && item.canSee === false));
+      && !(isShooter(item.name) && item.canSee === false));
     if (!come || controller.signal.aborted) return;
     reason = `${come.name} ${come.distance.toFixed(1)}m`;
     controller.abort('urgent');

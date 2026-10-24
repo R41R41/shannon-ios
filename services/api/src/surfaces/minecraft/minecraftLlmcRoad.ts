@@ -3,7 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { doneFacts, parseDoneWhen, predicateHolds } from './minecraftPlanDone.js';
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 11, chapter 4 A: the goal's yardstick and the stage road): for a task that goes for the dragon, two lines of the live
+ * mb-llmc v2 (mb-llmc-cand 11, chapter 4 A: the goal's yardstick and the stage road): for a task that goes for the dragon, two lines of the live
  * state that the code makes from facts, never the model: `road`, the plan's top-level nodes in their order with what is done and where she is
  * (「準備✓ 鉄✓ ダイヤ◀今 → 黒曜石 → ゲート → ネザー…」), and `meter`, the seconds since the task began against the owner's targets for the route's milestones
  * (「今 812 秒・次の節目 ダイヤのツルハシ 目安 1,000 秒（あと 188 秒）」). A milestone is reached when its done-condition holds in the frame (`doneWhen`, the plan's own

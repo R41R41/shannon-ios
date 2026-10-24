@@ -1,5 +1,5 @@
 /**
- * mb-llmc-cand 10 (SHANNON_MINECRAFT_LLMC_V2, run 37): what the live state says of how a creature stands to her, in one set of words.
+ * mb-llmc-cand 10 (mb-llmc v2, run 37): what the live state says of how a creature stands to her, in one set of words.
  * The model's instructions promised, for every hostile, 「見える（射線の中）／見えない…道はある／壁の向こうで届かない」, and the lines of
  * the hostiles that were not urgent carried none of them. The body's frame says it (`reach`: in_sight | path_no_sight | walled | unknown, within
  * 24 m; `canSee` and `canReachMe`, within 16 m, `canReachMe: false` up to 32 m; `shooter`; item entities: `itemName`, `itemCount`,

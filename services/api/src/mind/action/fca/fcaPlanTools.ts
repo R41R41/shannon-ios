@@ -41,7 +41,7 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
 };
 
 /**
- * mb-llmc r4 (SHANNON_MINECRAFT_LLMC_PROBE; owner 2026-10-22): the same tool with each node's forbid and caution (arch-check 23: of what a
+ * mb-llmc r4 (mb-llmc r4; owner 2026-10-22): the same tool with each node's forbid and caution (arch-check 23: of what a
  * supervisor wrote, those held longest and worked). The ops `forbid` / `caution` add a line to a node (the current one when `id` is absent),
  * `lift` takes one off; `add` and `split` may carry them. The words and the schema are fixed (part of the cached prefix).
  */

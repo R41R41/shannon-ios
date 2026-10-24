@@ -81,7 +81,7 @@ export const anthropicFcaHistoryCodec: FcaHistoryCodec = {
   },
 };
 
-/** SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 10): the same codec with a bootstrap written as readable lines (`readableBootstrap`); else as it was. */
+/** mb-llmc v2 (mb-llmc-cand 10): the same codec with a bootstrap written as readable lines (`readableBootstrap`); else as it was. */
 export const anthropicFcaHistoryCodecV2: FcaHistoryCodec = {
   ...anthropicFcaHistoryCodec,
   bootstrap: text => [{ role: 'user', content: readableBootstrap(text) ?? text }],
