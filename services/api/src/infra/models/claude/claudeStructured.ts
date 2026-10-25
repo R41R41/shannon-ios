@@ -35,6 +35,7 @@ export const BACKGROUND_ROUTES = Object.freeze({
   inner_note: 'memory_background', // Syzygy ADR-0012: the reflection that writes her inner note, after a turn.
   voice_summary: 'memory_background', // The voice history's summary (owner decision 2026-10-14), after a turn, without thinking.
   feeling_sentence: 'chat', // Syzygy ADR-0013 D7: her feeling in two or three lines, before a strong text reply, without thinking.
+  minecraft_feeling: 'chat', // Owner 2026-10-26: what her own acts in Minecraft make her feel, now and then, beside the decisions.
 } as const satisfies Readonly<Record<string, LlmUsageLane>>);
 
 export type BackgroundRoute = keyof typeof BACKGROUND_ROUTES;

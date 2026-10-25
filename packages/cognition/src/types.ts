@@ -303,6 +303,8 @@ export type CompanionStateEvent =
   | { type: 'expressive-emotion-updated'; emotion: ShannonExpressiveEmotion }
   /** Her body was touched: moves the continuous mood and the conversational feeling by the one table in `touchEmotion.ts`. */
   | { type: 'body-touched'; touch: ShannonTouch }
+  /** A moment of her Minecraft body (a death, a first, a thought of hers while playing): the one table in `gameEmotion.ts`. */
+  | { type: 'game-felt'; moment: import('./gameEmotion.js').ShannonGameMoment }
   /** Stage 2: her stance on a touch became known (she decided it): its prediction error moves valence and arousal. */
   | { type: 'touch-appraised'; outcome: ShannonTouchOutcome }
   /** Syzygy ADR-0008 stage 1, step 7b: a settled choice of hers moves her mood by the same bounded step (error δ = r − V, expectation V, u), `share` of it (the hourly safeguard). */

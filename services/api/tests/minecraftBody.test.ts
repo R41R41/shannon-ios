@@ -795,10 +795,10 @@ describe('game.died through POST /v1/body/events', () => {
 
   it('is part of the closed vocabulary, with its own closed field', () => {
     expect(BODY_EVENT_TYPES).toEqual(expect.arrayContaining([...BODY_GAME_EVENT_TYPES]));
-    expect(BODY_GAME_EVENT_TYPES).toEqual(['game.died']);
+    expect(BODY_GAME_EVENT_TYPES).toEqual(['game.died', 'game.hurt', 'game.danger', 'game.milestone', 'game.night_survived', 'game.owner_near']);
   });
 
-  it('from her Minecraft body becomes one experience in the server\'s words, and moves no feeling', async () => {
+  it('from her Minecraft body becomes one experience in the server\'s words, and moves her feeling once', async () => {
     const { events, memories, store, close, path } = bodyHarness();
     const before = store.snapshot('owner');
     const first = await events(DEVICE, died('death-1'));
@@ -823,7 +823,57 @@ describe('game.died through POST /v1/body/events', () => {
     expect(memories().map(memory => memory.summary)).toContain(gameDeathSummary('somemod:cursed_pie', START));
     expect(gameDeathSummary('somemod:cursed_pie', START)).toMatch(/マイクラで死んだ。$/u);
     expect(memories()).toHaveLength(2);
+    // Phase 2 (owner 2026-10-26): dying frustrates her, through the one game table; the duplicate moved nothing again.
+    const after = store.snapshot('owner');
+    expect(after.emotion.valence).toBeLessThan(before.emotion.valence);
+    expect(after.expressiveEmotion).toMatchObject({ primary: 'frustrated', cause: 'マイクラで死んでしまった' });
+    close();
+  });
+
+  const at = (seconds: number) => new Date(Date.parse(START) + seconds * 1_000).toISOString();
+  const game = (id: string, type: string, extra: Record<string, unknown> = {}, seconds = 0) =>
+    ({ id, type, audience: 'owner', occurredAt: at(seconds), ...extra });
+
+  it('phase 2: a first, a hit, a near death, a night and the owner come near each move her feeling; firsts are remembered', async () => {
+    const { events, memories, store, clock, close } = bodyHarness();
+    const receipt = await events(DEVICE, game('m-1', 'game.milestone', { cause: 'milestone:first_diamond' }));
+    expect((receipt.body as BodyIngestReceipt).results).toEqual([{ id: 'm-1', status: 'stored' }]);
+    expect(store.snapshot('owner').expressiveEmotion).toMatchObject({ primary: 'excited', cause: 'マイクラでダイヤを見つけた' });
+    expect(memories().map(memory => memory.summary)).toEqual([expect.stringMatching(/マイクラでダイヤを見つけた。$/u)]);
+    // A dragon later is a stronger joy, and a memory of its own.
+    clock.at = at(600);
+    await events(DEVICE, game('m-2', 'game.milestone', { cause: 'milestone:dragon_killed' }, 600));
+    expect(store.snapshot('owner').expressiveEmotion).toMatchObject({ primary: 'triumphant', cause: 'マイクラでエンダードラゴンを倒した' });
+    expect(memories()).toHaveLength(2);
+    // A bad hit and a near death are felt (and not remembered); a night lived through and the owner come near too.
+    clock.at = at(3_600);
+    for (const [id, type, extra] of [['h', 'game.hurt', { strength: 0.5, cause: 'minecraft:mob_attack' }], ['d', 'game.danger', { cause: 'danger:lava' }],
+      ['n', 'game.night_survived', {}], ['o', 'game.owner_near', {}]] as const) {
+      expect(((await events(DEVICE, game(id, type, extra, 3_600))).body as BodyIngestReceipt).results).toEqual([{ id, status: 'stored' }]);
+    }
+    expect(memories()).toHaveLength(2);
+    expect(store.snapshot('owner').expressiveEmotion?.cause).toMatch(/^マイクラで/u);
+    close();
+  });
+
+  it('phase 2: a moment sent long after it happened is stored but not felt', async () => {
+    const { events, store, clock, close } = bodyHarness();
+    clock.at = at(600);
+    const before = store.snapshot('owner');
+    await events(DEVICE, game('late', 'game.milestone', { cause: 'milestone:nether_entered' }, 0));
     expect(store.snapshot('owner').emotion).toEqual(before.emotion);
+    expect(store.snapshot('owner').expressiveEmotion?.cause ?? '').not.toMatch(/^マイクラで/u);
+    close();
+  });
+
+  it('phase 2: refuses a hit without its strength, and a danger or first outside the closed table', async () => {
+    const { events, close } = bodyHarness();
+    for (const item of [game('a', 'game.hurt'), game('b', 'game.hurt', { strength: 2 }), game('c', 'game.hurt', { strength: 0.2, cause: 'lava' }),
+      game('d', 'game.danger', { cause: 'danger:spiders' }), game('e', 'game.danger'), game('f', 'game.milestone', { cause: 'milestone:first_cake' }),
+      game('g', 'game.milestone', { cause: 'minecraft:diamond' }), game('h', 'game.night_survived', { cause: 'minecraft:night' }),
+      game('i', 'game.owner_near', { strength: 1 })]) {
+      expect((await events(DEVICE, item)).status).toBe(400);
+    }
     close();
   });
 
