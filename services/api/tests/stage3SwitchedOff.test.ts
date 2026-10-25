@@ -58,6 +58,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * heart review: a 「？」 no longer raises her arousal, and a shown feeling of her own draws her numeric mood; with them the turn's lines
  * his words call for): the prompts and kept rows that carry her mood's numbers or those lines, in text-promise, text-others, text-name,
  * tool-round, body-touch, body-touch-others and platform (and text-name's second chat request, which carries that prompt).
+ * One digest of `reach-out` was changed by hand on 2026-10-26 for a change that is not stage 3's (owner: her face shows beside a
+ * message she starts, so the Talk's icon is not the usual face): `conversation_messages`, whose row now keeps `messageEmotion`.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 
