@@ -245,7 +245,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools
-      ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe, goal: step.snapshot.task.goal }) } : ports,
+      // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the
+      // API's thread must not turn a done task back.
+      ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
       // r6 (run 29: the third fca_wait of an operator's request stopped the task): a wait is answered with what there is to wait for.
