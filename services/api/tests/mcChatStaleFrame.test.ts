@@ -18,6 +18,7 @@ import { LLMC_STALE_FRAME_MS, minecraftLlmcLive, minecraftLlmcUrgentLive, create
 import { llmcStepParts } from '../src/wiring/minecraftLlmcWiring.js';
 import { createLlmcLookahead } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { createFcaHistoryAhead } from '../src/mind/action/fca/fcaHistory.js';
+import { minecraftGoalBinding } from '../src/wiring/fcaMinecraftGoalBinding.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 
 /**
@@ -291,5 +292,38 @@ describe('finding the open request does not walk the provenance of every task ev
     await api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: 'game-stop' }, experienceId: said(f, '止めて'), intent: { kind: 'stop', goal: '' } });
     expect(f.runtime.get('owner', made.request!.id)?.phase).toBe('stopped');
     expect(asked.filter(id => old.includes(id))).toEqual([]);
+  });
+});
+
+describe('the task keeps his words when they are a dragon request (the model rewrote them in the task of 2026-10-25)', () => {
+  const rewritten = 'エンダードラゴンを倒すため、装備や食料などを整えてエンドへ向かい、討伐を進める';
+  const task = (f: Fixture, id: string) => f.runtime.get('owner', id)!;
+
+  it.each(['エンドラを討伐して', 'マイクラでエンドラを討伐して', 'エンドラ討伐して'])('%s: the goal is what he said, so the dragon evidence binds', async words => {
+    const f = fixture();
+    const made = (await f.api.intent({ scopeKey: 'owner', request: { ...f.request, message: words }, experienceId: said(f, words),
+      intent: { kind: 'task', goal: rewritten } }))!;
+    expect(made.goal).toBe(words);
+    const row = task(f, made.request!.id);
+    expect(row.goal).toBe(words);
+    expect(minecraftGoalBinding({ scopeKey: 'owner', id: row.id, goal: row.goal, completionCriteria: row.completionCriteria }, 'minecraft:world')).toBeDefined();
+    expect(f.runtime.snapshot('owner', row.id)!.messages.map(message => message.text)).toContain(`ゲーム内の本人の依頼: ${words}`);
+  });
+
+  it('a message to the task under way is his words too, and another request keeps the goal of the model', async () => {
+    const f = fixture();
+    const first = (await f.api.intent({ scopeKey: 'owner', request: { ...f.request, message: 'エンドラを討伐して' }, experienceId: said(f, 'エンドラを討伐して'),
+      intent: { kind: 'task', goal: rewritten } }))!;
+    const again = (await f.api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: 'game-two', message: 'エンドラ討伐して' },
+      experienceId: said(f, 'エンドラ討伐して'), intent: { kind: 'task', goal: '続ける' } }))!;
+    expect(again.request?.id).toBe(first.request?.id);
+    expect(f.runtime.snapshot('owner', first.request!.id)!.messages.map(message => message.text)).toContain('ゲーム内の本人の言葉（いまのタスクへ）: エンドラ討伐して');
+    f.runtime.stop('owner', first.request!.id, 'test');
+    const other = (await f.api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: 'game-three', message: '羊毛を集めてベッドを作って' },
+      experienceId: said(f, '羊毛'), intent: { kind: 'task', goal: '羊毛を集めてベッドを作る' } }))!;
+    expect(task(f, other.request!.id).goal).toBe('羊毛を集めてベッドを作る');
+    const compound = (await f.api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: 'game-four', message: 'エンドラを倒す前に畑を作って' },
+      experienceId: said(f, '畑'), intent: { kind: 'task', goal: '畑を作ってからエンドラを倒す' } }))!;
+    expect(compound.goal).toBe('畑を作ってからエンドラを倒す');
   });
 });

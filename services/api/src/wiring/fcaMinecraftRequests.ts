@@ -10,6 +10,7 @@ import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort
 import { fcaMinecraftVoice } from './fcaMinecraftVoice.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { fcaMinecraftBodyWake } from './fcaMinecraftBodyWake.js';
+import { isNativeDragonGoal } from './fcaMinecraftGoalBinding.js';
 
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
@@ -29,6 +30,15 @@ export function admittedMinecraftRequest(
 ): boolean {
   return bound && task.origin === 'owner_request' && task.completionCriteria === MINECRAFT_REQUEST_CRITERIA
     && (parent?.kind === 'root' || parent?.kind === 'conversation');
+}
+
+/**
+ * The owner's own words when they are one of the closed dragon requests (`isNativeDragonGoal`), else null. mc-chat-stale-frame (2026-10-26): the
+ * model that reads the chat turn rewrites the goal (「エンドラを討伐して」 became 「エンダードラゴンを倒すため、装備や食料などを整えて…」), the
+ * rewrite is in no closed set, and the task lost the dragon's trusted completion evidence and the body's dragon tools. The task keeps what he said.
+ */
+export function ownDragonWords(message: unknown): string | null {
+  return typeof message === 'string' && isNativeDragonGoal(message) ? message.trim() : null;
 }
 
 /** Existing conversation tools now refer to common tasks. No legacy queue or planner fallback in this mode. */
@@ -142,14 +152,15 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       const sourceId = input.experienceId!;
       if (intent.kind === 'stop') { for (const task of bound(undefined, unfinished)) await parts.stop(task.id, 'owner_game_stop'); return intent; }
       const bodyId = parts.control.bodyId(input.request.serverId);
+      const goal = ownDragonWords(input.request.message) ?? intent.goal;
       // A Minecraft request of his under way takes the words as a message (「続けて」 in run 19 would have been a second task beside it).
       const running = openRequest(bodyId);
       if (running) {
         try {
           parts.runtime.observeExternal(scopeKey, running.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId],
-            observedAt: input.request.observedAt, text: `ゲーム内の本人の言葉（いまのタスクへ）: ${intent.goal}` });
+            observedAt: input.request.observedAt, text: `ゲーム内の本人の言葉（いまのタスクへ）: ${goal}` });
           log(`Shannon Minecraft intent delivered task=${running.id} as=message`);
-          return { ...intent, request: { id: running.id } };
+          return { ...intent, goal, request: { id: running.id } };
         } catch (error) {
           // It ended meanwhile (`FCA_TARGET_FINISHED`): a new task, as before. A changed retry of the same request still conflicts.
           if (!(error instanceof Error) || error.message !== 'FCA_TARGET_FINISHED') throw error;
@@ -157,11 +168,11 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       }
       return parts.atomic(() => {
         // Only the asking turn (the event below), not the root's whole set (owner decision 2026-10-15, `TaskChildOptions`).
-        const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(intent.goal), `mc:${input.request.requestId}`,
+        const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(goal), `mc:${input.request.requestId}`,
           { sources: 'asking' });
-        parts.runtime.observeExternal(scopeKey, task.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId], observedAt: input.request.observedAt, text: `ゲーム内の本人の依頼: ${intent.goal}` });
+        parts.runtime.observeExternal(scopeKey, task.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId], observedAt: input.request.observedAt, text: `ゲーム内の本人の依頼: ${goal}` });
         if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
-        return { ...intent, request: { id: task.id } };
+        return { ...intent, goal, request: { id: task.id } };
       });
     },
   };
