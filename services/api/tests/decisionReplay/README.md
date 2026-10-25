@@ -113,3 +113,10 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 要約（bootstrap）: `DECISION_REPLAY_BOOTSTRAP_TAG=base|fix` で、その木の要約器（Haiku、`minecraftOwnPrompt` に修正の木は `minecraftV2Facts`）で epoch を作り直す（`makeBootstrapsB.ts`、`bootstrap-<run>.<tag>.json`）。`DECISION_REPLAY_BOOTSTRAP_REAL=off` で本物の bootstrap も使わず作り直す。要約の呼び出しの失敗は `summary-calls-<tag>.log` に数える。
 - 場面: `scenes-b/`（s64〜s68。`DECISION_REPLAY_SCENES_DIR=scenes-b`）。回す: `run6.ts --variant=candB|candF --reps=3 --out=results-b.jsonl`（基準の木 / 修正の木）。採点と表: `reportB.ts [--judge] --out=judge-b2.jsonl`、集計: `tallyB.ts`、要約の数え方: `sumCount.ts`。回帰（API を使わない）: `offlineB.ts <out.json>`（2 つの木で）→ `compareB.ts`。
 - 結果のまとめ: `results/b-fixes-20261023.md`。試験: `tests/decisionReplayB.test.ts`。
+
+## 10/26 の追加: Sonnet 5.5 を今の main（rel44）の入力で測る
+
+- 台の branch は `codex/shannon/decision-replay-sonnet`（decision-replay-cand 3df12bb の上に main 0df88ce を merge）。main のスイッチ撤去に合わせて台の側だけ直した（`request.ts`・`slim.ts`・試験の `llmcCoreKnowledge()`、削除された部品の写しを `legacy/` に）。旧基準 v1 の要求の一致の試験は skip（指示文が main で消えた）。
+- 版: O（Opus 5.5）・S（Sonnet 5.5）・N（Sonnet で見えない考えを切る。このモデルは `thinking:{type:"disabled"}` を 400 で断り、`{type:"between_tools"}` を受ける）・S×2（S の組から `makeS2.ts` が作る）。回すのは `run6.ts --model=… --thinking=between_tools --variant=O|S|N --out=sn-<版>.jsonl`、採点は `judge10.ts`、表は `report10.ts`、仕分け用は `dump10.ts`、足・頭のマスへの place の数は `ownCell10.ts`（共通部品は `sonnet10.ts`）。
+- 要約は main の要約器で作り直す: `DECISION_REPLAY_BOOTSTRAP_TAG=fixM DECISION_REPLAY_BOOTSTRAP_NEW=1 DECISION_REPLAY_BOOTSTRAP_REAL=off makeBootstrapsB.ts r28 r30 r31 r32 r33 r34`（`BOOTSTRAP_NEW=1` でタグ付きのファイルを必ず新しく作る）。実走38 は前回の `fix38` の物を `bootstrap-r38.fixM.json` に写して使う。
+- 結果のまとめ: `results/sonnet-replay-20261026.md`。

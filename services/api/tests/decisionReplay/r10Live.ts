@@ -1,8 +1,8 @@
 import { answerOf } from './checks.js';
 import type { Decision, Entry } from './load.js';
 import { posOf, type ActRecord, type Frames } from './preflightFrames.js';
-import { stopFacts } from '../../src/surfaces/minecraft/minecraftLlmcStopFacts.js';
-import { sightLineText, hurtsFromAfar } from '../../src/surfaces/minecraft/minecraftLlmcSightLine.js';
+import { stopFacts } from './legacy/minecraftLlmcStopFacts.js';
+import { sightLineText, hurtsFromAfar } from './legacy/minecraftLlmcSightLine.js';
 import type { BodyObservation } from '../../src/contracts/bodyControlContract.js';
 import type { ActResult } from '../../src/contracts/minecraftActContract.js';
 

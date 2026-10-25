@@ -6,7 +6,7 @@ import { anthropicFcaHistoryCodec } from '../../src/infra/models/anthropic/anthr
 /** mb-llmc-cand 10 の木は、bootstrap を読める行にする codec（anthropicFcaHistoryCodecV2）を持つ。前の木は持たない。 */
 const BOOTSTRAP_CODEC = ((historyModule as Record<string, unknown>).anthropicFcaHistoryCodecV2 ?? anthropicFcaHistoryCodec) as typeof anthropicFcaHistoryCodec;
 import { FCA_TRANSIENT_BETAS } from '../../src/infra/models/anthropic/anthropicFcaTransient.js';
-import { llmcSystemAppendix } from '../../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX } from '../../src/surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCoreKnowledge } from '../../src/surfaces/minecraft/minecraftKnowledgeCore.js';
 import { shortActTool, slimTools, splitKnowledge, type Slim } from './slim.js';
 import { REWRITE_LEGEND } from './rewriteLive.js';
@@ -93,7 +93,7 @@ async function captureOnce(variant: Variant, core: readonly FcaToolDefinition[])
     return Promise.reject(new Error('captured'));
   } } };
   const model = createAnthropicFcaModel({ model: variant.model, client: client as never, recordUsage() {},
-    systemAppendix: variant.ownPrompt ? (variant.slim?.knowledge ? splitKnowledge().always : llmcCoreKnowledge(true)) : llmcSystemAppendix(true), ...(variant.ownPrompt ? { minecraftOwnPrompt: true } : {}) });
+    systemAppendix: variant.ownPrompt ? (variant.slim?.knowledge ? splitKnowledge().always : llmcCoreKnowledge()) : LLMC_SYSTEM_APPENDIX, ...(variant.ownPrompt ? { minecraftOwnPrompt: true } : {}) });
   console.info = console.warn = console.error = console.log = () => undefined;
   try {
     await model.decide({ task: { id: 'replay', title: 'replay', goal: 'エンドラを討伐してください', completionCriteria: 'replay' }, messages: [], children: [], history: [],

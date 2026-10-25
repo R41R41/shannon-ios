@@ -188,7 +188,7 @@ describe('decision replay: v8, the narrowed form', () => {
       .map(tool => tool.name)).toEqual(['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'fca_wait', 'fca_complete']);
     const split = splitKnowledge();
     expect(Object.keys(split.stages)).toEqual(['prep', 'nether', 'end']);
-    expect([split.always, split.stages.prep, split.stages.nether, split.stages.end].join('\n\n')).toBe(llmcCoreKnowledge(true).replace(/\n\n(?=## 材料と手順)/u, '\n\n'));
+    expect([split.always, split.stages.prep, split.stages.nether, split.stages.end].join('\n\n')).toBe(llmcCoreKnowledge().replace(/\n\n(?=## 材料と手順)/u, '\n\n'));
     expect(stagesFor({ body: { planNow: '[p1.2] 歪んだ幹で作業台', state: { dimension: 'overworld' } } })).toEqual(['prep']);
     expect(stagesFor({ body: { planNow: '[p3.1] ブレイズロッド 7 本', state: { dimension: 'the_nether', inside: 'ネザー要塞の中' } } })).toEqual(['nether']);
     expect(stagesFor({ body: { planNow: '[p4.1] エンダーアイでストロングホールドを探す', state: { dimension: 'overworld' } } })).toEqual(['prep', 'end']);
@@ -227,7 +227,8 @@ describe('decision replay: the request is the production request', () => {
     expect(body.messages[2].cache_control).toBeUndefined();
   });
 
-  it.runIf(haveData)('is byte for byte the request production sent (journal requestCharacters), for run 34\'s first epoch with the thinking kept', async () => {
+  // 10/26: main 0df88ce が旧基準 v1 の指示文（R9 の知識。スイッチ撤去で消えた）を削除したので、v1 の要求は本番の記録とはもう一致しない。v1 は今の台で使わない。
+  it.skip('is byte for byte the request production sent (journal requestCharacters), for run 34\'s first epoch with the thinking kept', async () => {
     const runs = loadRuns(dataFile('export1.txt'), dataFile('journal.txt'));
     const run = runs.get('r34')!;
     const sizes = new Set((loadRequestSizes(dataFile('journal.txt')).get(run.taskId) ?? []).map(item => item.requestCharacters));

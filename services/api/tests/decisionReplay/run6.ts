@@ -29,7 +29,19 @@ export const RESULTS6 = dataFile(flag('out') ?? 'results6.jsonl');
 const apiKey = process.env.SHANNON_ANTHROPIC_API_KEY ?? '';
 if (!apiKey && !dry) throw new Error('SHANNON_ANTHROPIC_API_KEY');
 const VARIANT = flag('variant') ?? 'cand';
-const MODEL = 'claude-opus-5-5';
+/** 10/26: 版のモデルと考えの設定（Sonnet の比べ）。--model=claude-sonnet-5-5、--thinking=off（見えない考えを切る）| default（本番の adaptive）、--effort=low|medium|... （省略は本番の low）。 */
+const MODEL = flag('model') ?? 'claude-opus-5-5';
+const THINKING = flag('thinking') ?? 'default';
+const EFFORT = flag('effort');
+/** 本番の要求の考えの設定（adaptive・effort low）を、この版の設定に替える。 */
+function withThinking(body: Record<string, any>): Record<string, any> {
+  const next = { ...body };
+  if (THINKING === 'off') { next.thinking = { type: 'disabled' }; }
+  if (THINKING === 'between_tools') { next.thinking = { type: 'between_tools' }; }
+  if (EFFORT) next.output_config = { ...(next.output_config ?? {}), effort: EFFORT };
+  if (THINKING === 'off' && flag('no-effort') !== undefined) delete next.output_config;
+  return next;
+}
 
 export interface Sent6 { tool: string | null; input: unknown; fixes: string[]; problem: string | null; changed: boolean;
   guard?: { stopped: boolean; hand?: number; sentHands?: number; code?: string; text?: string; reask?: string }; combined?: boolean }
@@ -40,6 +52,9 @@ export interface Row6 extends Row2 {
   rawFirst?: unknown;
   /** 最終の答えが聞き直しの答えの時、その短い書き方のまま。 */
   rawFinal?: unknown;
+  /** 10/26: 1 回目の答えの block の種類（thinking・text・tool_use）と、見える考えの文字数（Sonnet の比べ）。 */
+  blockTypes?: string[];
+  thinkChars?: number;
 }
 
 const runs = loadAllRuns();
@@ -77,7 +92,7 @@ async function build(item: Item, previous: Item | undefined, extra: Entry[] = []
   const { messages } = sceneMessages(decision, bootstrapOf(decision.run.key, decision.epoch), false, { rows, turn, extra });
   const alsoAt = previous && previous.decision.run === decision.run && previous.decision.epochStart === decision.epochStart && previous.decision.index < decision.index
     ? sceneMessages(previous.decision, bootstrapOf(decision.run.key, decision.epoch), false, { rows: candRows(previous.decision), turn: candTurn(previous.decision).turn }).messages.length - 2 : undefined;
-  const body = markCache({ ...fixed.fixed, model: MODEL, messages } as Record<string, any>, '5m', alsoAt);
+  const body = withThinking(markCache({ ...fixed.fixed, model: MODEL, messages } as Record<string, any>, '5m', alsoAt));
   return { body, headers: fixed.headers, notes, live: turn.find(entry => entry.role === 'system')! };
 }
 
@@ -176,7 +191,8 @@ async function chain(): Promise<void> {
         answer: { tool: final.tool, input: final.answer.input, why: final.answer.why, shapeProblem: final.answer.shapeProblem }, stopReason: finalResult.stopReason, usage, costUsd: cost,
         tMessageStart: firstResult.tMessageStart, tFirstBlock: firstResult.tFirstBlock, tFirstToolInput: firstResult.tFirstToolInput, tEnd, transformations: firstResult.inputTransformations.length,
         requestChars: JSON.stringify(first.body).length, at: new Date().toISOString(), sent, rawFirst: one.rawInput, ...(rawFinal !== undefined ? { rawFinal } : {}),
-        firstUsage: usageOf(firstResult), firstCostUsd: firstResult.costUsd, firstTEnd: firstResult.tEnd };
+        firstUsage: usageOf(firstResult), firstCostUsd: firstResult.costUsd, firstTEnd: firstResult.tEnd,
+        blockTypes: firstResult.content.map(block => String(block.type)), thinkChars: firstResult.content.reduce((sum, block) => sum + (block.type === 'thinking' ? String(block.thinking ?? '').length : block.type === 'text' ? String(block.text ?? '').length : 0), 0) };
       appendFileSync(RESULTS6, `${JSON.stringify(row)}\n`);
       if (row.ok) doneReps.add(rep);
       console.log(`${VARIANT} ${scene.id} r${rep} ${row.ok ? 'ok' : `NG ${row.error}`} ${one.tool} ${(tEnd / 1000).toFixed(1)}s out=${usage.output} $${cost.toFixed(4)} ${sent.guard ? `guard=${sent.guard.stopped ? '全止' : `部分${sent.guard.sentHands}`}→${sent.guard.reask}` : ''} total $${spent().toFixed(3)}`);

@@ -26,7 +26,7 @@ export type StageId = 'prep' | 'nether' | 'end';
 const STAGE_TITLES: Record<StageId, string> = { prep: '## 材料と手順', nether: '## ネザー・要塞・ブレイズ', end: '## パール・アイ・エンド' };
 export interface KnowledgeSplit { always: string; stages: Record<StageId, string> }
 export function splitKnowledge(): KnowledgeSplit {
-  const sections = llmcCoreKnowledge(true).split(/\n\n(?=## )/u);
+  const sections = llmcCoreKnowledge().split(/\n\n(?=## )/u);
   const stages = {} as Record<StageId, string>;
   const always: string[] = [];
   for (const section of sections) {
