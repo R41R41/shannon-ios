@@ -19,6 +19,17 @@ import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
  * three tokens a cell, `; @ ! $` two, a letter one; so the map now writes water `w` and sand and gravel `s` (minecraftActContract.ts).
  */
 export const LLMC_LIVE_TOKENS = 12_000;
+/**
+ * How old the body's last frame may be for a decision to read it (a command needs a frame of 3 s, `MinecraftControl.frame`). mc-chat-stale-frame
+ * (2026-10-26): an 8 s stall of the API's thread left the live saying `connected: false` and the chat request's task waited for a body that
+ * was there. Past this the body is taken for gone.
+ */
+export const LLMC_STALE_FRAME_MS = 15_000;
+/** The live's one line for a body seen `ageMs` ago (older than a command's frame): how old, so the decision does not take it for now. */
+export const bodyAgeField = (line: string | null | undefined): { bodyAge?: string } => line ? { bodyAge: line } : {};
+export function staleBodyLine(ageMs: number): string {
+  return `体の様子は ${Math.max(1, Math.round(ageMs / 1000))} 秒前のもの（新しい観測がまだ届いていない。位置や敵はもう動いているかもしれない）`;
+}
 const THREATS = 24, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 80, EVENTS = 6;
 type SeenMode = 'threat' | 'near';
 
@@ -194,6 +205,8 @@ export interface LlmcLiveParts {
    * unreachable lines and before the map, counted in the bound and never cut. Absent: no key.
    */
   footing?: string | null;
+  /** mc-chat-stale-frame: the body was last seen this long ago (`staleBodyLine`); absent: the frame is the current one. */
+  bodyAge?: string | null;
   /** mb-llmc-cand 11 (a dragon task): the stage road and the pace against the milestones' targets (`minecraftLlmcRoad.ts`), after the plan's now. */
   road?: string | null;
   meter?: string | null;
@@ -236,6 +249,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   const look = lookHint(world, parts.healthLost ?? 0);
   const live: Record<string, unknown> = {
     ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
+    ...bodyAgeField(parts.bodyAge),
     ...readinessFields(parts),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
     landmarks: strings(world.mapLandmarks, LANDMARKS),
@@ -268,12 +282,12 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
+  | 'footing' | 'bodyAge'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
   if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), answer: parts.answer };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
   const results = shownResults(parts.lastResults ?? [], URGENT_RESULTS_CHARS);
-  return { ...urgent, ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
+  return { ...urgent, ...bodyAgeField(parts.bodyAge), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
     ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
     state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },

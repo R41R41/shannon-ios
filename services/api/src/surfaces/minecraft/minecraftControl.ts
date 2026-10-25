@@ -125,6 +125,16 @@ export class MinecraftControl {
     return frame && frame.poll.observation.connected && ageMs <= maxAgeMs ? { observation: frame.poll.observation, ageMs } : null;
   }
   /**
+   * The body's picture for a decision (not for a command): its current frame, or an older connected one at most `maxAgeMs` old, with how
+   * old it is and whether it is of the current kind (`current`: a command could be sent on it). mc-chat-stale-frame (2026-10-26): source
+   * walks blocked the API's one thread for 8 s, no poll could be read, and the next decision's live said the body was not connected
+   * though it had polled 200 ms before the stall. A decision reads the body as it was a few seconds ago, and is told how long ago.
+   */
+  seen(bodyId: string, maxAgeMs: number): { observation: BodyObservation; ageMs: number; current: boolean } | null {
+    const found = this.latest(bodyId, maxAgeMs);
+    return found ? { ...found, current: this.frame(bodyId) !== null } : null;
+  }
+  /**
    * Whether this body cannot give a first-person picture now, so a session that requires one would only end
    * `observation_unavailable` (Minebot lane 2026-10-14: a task's whole first step went to such a session, decisions 0).
    * The body says so (`rendererConfigured: false`), or a capture of its current connection came back without a picture and

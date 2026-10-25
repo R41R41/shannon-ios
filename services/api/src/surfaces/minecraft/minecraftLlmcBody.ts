@@ -2,7 +2,10 @@ import type { BodyObservation, BodyPlanView, BodyValue } from '../../contracts/b
 import type { FcaBodyInvestigation, FcaBodyLifecycle } from '../../mind/action/fca/fcaPorts.js';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import type { ProbeInput } from '../../contracts/minecraftProbeContract.js';
-import { createFoodTrend, llmcPlanTokens, llmcTokens, minecraftLlmcLive, minecraftLlmcUrgentLive, type FoodTrend } from './minecraftLlmcLive.js';
+import {
+  bodyAgeField, createFoodTrend, llmcPlanTokens, llmcTokens, minecraftLlmcLive, minecraftLlmcUrgentLive, staleBodyLine, type FoodTrend,
+} from './minecraftLlmcLive.js';
+import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
 import { approachingIds, newApproach, planNowTitle, URGENT_ANSWER } from './minecraftLlmcUrgent.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
@@ -192,7 +195,8 @@ export type LlmcEvents = ReturnType<typeof createLlmcEvents>;
 /** The live body of an LLM-centric decision: the map-first state, bounded beside the plan's path. */
 export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observation: BodyObservation | null,
   elapsedMinutes: number | null, urgent: readonly string[] = [],
-  seen: { investigation?: readonly string[]; scan?: readonly string[]; unreachable?: readonly string[]; footing?: string | null } = {})
+  seen: { investigation?: readonly string[]; scan?: readonly string[]; unreachable?: readonly string[]; footing?: string | null;
+    bodyAge?: string | null } = {})
   : Record<string, unknown> {
   const plan = llmc.planView();
   const world = observation?.state.world as Record<string, unknown> | undefined;
@@ -201,6 +205,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(seen.investigation?.length ? { investigation: seen.investigation } : {}), ...(seen.scan?.length ? { scan: seen.scan } : {}),
     ...(seen.unreachable?.length ? { unreachable: seen.unreachable } : {}), ...(seen.footing ? { footing: seen.footing } : {}),
+    ...bodyAgeField(seen.bodyAge),
     ...readinessParts(llmc, plan, observation), ...roadParts(llmc, observation, elapsedMinutes) }, llmcPlanTokens(plan));
 }
 
@@ -282,11 +287,17 @@ const healthOf = (observation: BodyObservation | null): number | null => {
  */
 export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyParts; taskId: string; createdAt: string;
   observe(): BodyObservation | null; arrival(): { at: number | null; kind: string | null }; now?: () => number; log?(line: string): void;
+  /**
+   * mc-chat-stale-frame: the body as a decision reads it, a frame a few seconds old included (`MinecraftControl.seen`). Everything that
+   * sends a command or watches for danger keeps `observe` (the current frame); only the decision's context and live read this. Absent:
+   * the decision reads `observe`.
+   */
+  seen?(): { observation: BodyObservation; ageMs: number; current: boolean } | null;
   /** r4: surprises probed before the decision, and the body's scan in the live state. */
   r4: LlmcProbeParts }): FcaBodyLifecycle {
   const r4 = parts.r4, watch = createSurpriseWatch(parts.taskId);
   const events = createLlmcEvents(parts.taskId), now = parts.now ?? Date.now, began = Date.parse(parts.createdAt);
-  let observation: BodyObservation | null = null, reasons: string[] = [];
+  let observation: BodyObservation | null = null, bodyAge: string | null = null, reasons: string[] = [];
   let investigation: string[] = [], scan: string[] = [];
   // r7: what the body's sight found of the near hostiles this step (by id), the line said first after a stopIf stop, and the walled-off.
   let sights = new Map<number, ThreatSight>(), inSight: string | null = null, unreachable: string[] = [];
@@ -315,7 +326,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     const facts = urgentFacts(observation, events.cut(), sights, inSight);
     const nowLine = planNowLine(parts.llmc.planView() as { now?: unknown; path?: unknown } | null);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
-      urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing,
+      urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing, bodyAge,
       planNowTitle: planNowTitle(nowLine), answer: URGENT_ANSWER });
     urgentTokens = llmcTokens(JSON.stringify(live));
     return live;
@@ -367,7 +378,12 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
         urgentTokens = null;
       }
       const value = body.context();
-      observation = parts.observe();
+      // The body as a decision reads it: the current frame, or an older one (said how old in the live); none only past `LLMC_STALE_FRAME_MS`.
+      const sight = parts.seen?.() ?? null;
+      observation = parts.seen ? sight?.observation ?? null : parts.observe();
+      bodyAge = sight && !sight.current ? staleBodyLine(sight.ageMs) : null;
+      // A decision that finds no body is noted: its task, if it waits for that, is woken when a frame is there (`fcaMinecraftBodyWake.ts`).
+      noteBodySeen(parts.taskId, observation !== null, now());
       const arrival = parts.arrival();
       events.arrival(arrival.at, arrival.kind);
       events.take(healthOf(observation), again);
@@ -390,7 +406,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       const urgentNow = reasons.length > 0 || interrupted !== null;
       noteUrgentDecision(parts.taskId, urgentNow);
       if (urgentNow) return urgentState(minutes);
-      return llmcTransient(parts.llmc, events, observation, minutes, reasons, { investigation, scan, unreachable, footing });
+      return llmcTransient(parts.llmc, events, observation, minutes, reasons, { investigation, scan, unreachable, footing, bodyAge });
     },
     /** r8: a hostile she must act on that has come since the request was built (once a decision), see `FcaBodyLifecycle.interrupt`. */
     interrupt: (): string | null => {
