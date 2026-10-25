@@ -399,11 +399,17 @@ export function flatPlan(tree: PlanTree): Array<{ id: string; title: string; sta
     status: node.id === tree.current ? 'running' : node.state === 'done' ? 'completed' : 'pending' }));
 }
 
-/** What a body shows (`BodyPlanView`): ids, parents, titles, states and the current node; the reason of a blocked one. */
+/**
+ * What a body shows (`BodyPlanView`): ids, parents, titles, states and the current node; the reason of a blocked one, and the node's
+ * `where`, `doneWhen`, `note`, `forbid` and `caution` when it has them (for the ShannonUI mod's tooltips; no model reads this).
+ */
 export function planDisplay(tree: PlanTree): { revision: number; current: string | null;
-  nodes: Array<{ id: string; parentId: string | null; title: string; state: PlanNodeState; reason?: string }> } {
+  nodes: Array<{ id: string; parentId: string | null; title: string; state: PlanNodeState; reason?: string; where?: string; doneWhen?: string;
+    note?: string; forbid?: string[]; caution?: string[] }> } {
   return { revision: tree.revision, current: tree.current, nodes: orderedPlan(tree.nodes).map(node => ({ id: node.id, parentId: node.parentId,
-    title: node.title, state: node.state, ...(node.state === 'blocked' && node.reason ? { reason: node.reason } : {}) })) };
+    title: node.title, state: node.state, ...(node.state === 'blocked' && node.reason ? { reason: node.reason } : {}),
+    ...(node.where ? { where: node.where } : {}), ...(node.doneWhen ? { doneWhen: node.doneWhen } : {}), ...(node.note ? { note: node.note } : {}),
+    ...(node.forbid?.length ? { forbid: [...node.forbid] } : {}), ...(node.caution?.length ? { caution: [...node.caution] } : {}) })) };
 }
 
 /** A tree made whole from drafts (the first plan): each with its children, in order. Null when it does not fit the bounds. */

@@ -85,4 +85,15 @@ describe('plan tree', () => {
     expect(planDisplay(tree)).toMatchObject({ revision: 1, current: 'p1.1' });
     expect(planDisplay(tree).nodes[0]).toEqual({ id: 'p1', parentId: null, title: '木と石の道具', state: 'continue' });
   });
+
+  it('the body view carries where, doneWhen, note, forbid and caution only on the nodes that have them', () => {
+    const tree = applyPlanUpdate(base(), { ops: [{ op: 'set', id: 'p3', note: '村の鉄を先に' }, { op: 'forbid', id: 'p2', text: '夜に村へ出ない' },
+      { op: 'caution', id: 'p2', text: '村人を殴らない' }] }).tree;
+    const nodes = planDisplay(tree).nodes;
+    expect(nodes.find(node => node.id === 'p1.2')).toEqual({ id: 'p1.2', parentId: 'p1', title: '石のツルハシ', state: 'continue', doneWhen: 'stone_pickaxe' });
+    expect(nodes.find(node => node.id === 'p2')).toEqual({ id: 'p2', parentId: null, title: '食料（鉄より前）', state: 'continue', where: '(196,69,237) 村',
+      forbid: ['夜に村へ出ない'], caution: ['村人を殴らない'] });
+    expect(nodes.find(node => node.id === 'p3')).toMatchObject({ note: '村の鉄を先に' });
+    expect(nodes.find(node => node.id === 'p3')).not.toHaveProperty('forbid');
+  });
 });
