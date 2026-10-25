@@ -172,7 +172,34 @@ Sent through the existing `POST /v1/body/events` of `docs/body-contract.md`, wit
 - Only from the configured device, in the owner's scope. From any other device the event answers `ignored` with `reason: not_game_body`. Her Minecraft body reports nothing but game events: anything else it sends answers `ignored` with `reason: game_only`.
 - **A game body, never a body that shows her** (core owner decision, 2026-10-06). 「ゲームの体」 is identified by the `deviceId` of `SHANNON_MINECRAFT_BODY_JSON` alone and never registers: `PUT /v1/body/capabilities` from that device answers `403 GAME_BODY_CAPABILITIES_DENIED`. Only `game.*` events are taken from it; everything else answers `game_only`. It is never counted in `othersPresent` (its game events are left out of the fallback, its presence reads note no audience, and it has no registration to stand in), never "the call elsewhere" of `ownerCallElsewhere`, never a full body a `409 OWNER_IN_CALL_ELSEWHERE` is for, and never a body that is touched or feels a touch, even if a registration for it was stored before this rule (`ShannonBody.isGameBody`). If more games or bodies need registering later, that is decided then by adding a `kind` to the registration.
 - A stored death becomes one experience (`experience_events`, source `body.game`) in the server's own words, from a closed table of causes: 「ゲームの記憶: 10月5日の夜、マイクラで死んだ（溶岩）。」 An unknown cause is remembered without one. Like a touch, it has no conversation message and no words of the owner (`speaker: unknown`); recall, search, the Memory screen and forgetting treat it like any other experience. A repeated `id` answers `duplicate` and writes nothing again.
-- Phase 1 moves no feeling.
+- Dying moves her feeling (phase 2, below).
+
+## Game events and her feeling (phase 2, owner decision 2026-10-26)
+
+Owner: 「出来事はコードで、考えていることは並列の Haiku でまれに」「行動には感情を使わない」. Her Minecraft body sends closed game events
+beside `game.died`; each moves her feeling through the one game table (`packages/cognition/src/gameEmotion.ts`, reducer event
+`game-felt`), as a touch moves it through the touch table. Nothing reads the feeling back into what her body does: the Minecraft
+decisions, the plan and the body are given no feeling.
+
+| Type | Fields beside `id`, `type`, `audience`, `occurredAt` | Feeling (cause words after 「マイクラで」) | Remembered |
+| --- | --- | --- | --- |
+| `game.died` | `cause` (namespaced id, required) | frustrated (死んでしまった) | yes, as before |
+| `game.hurt` | `strength` (required, 0..1: the share of her health lost at once), `cause` (optional namespaced id) | surprised, or shocked from 0.3 (攻撃を受けた / 大けがをした) | no |
+| `game.danger` | `cause`: `danger:lava`, `danger:fall`, `danger:drown`, `danger:fire`, `danger:explosion`, `danger:mob` | shocked or anxious (溶岩に落ちかけた …) | no |
+| `game.milestone` | `cause`: `milestone:first_iron`, `milestone:first_diamond`, `milestone:nether_entered`, `milestone:fortress_found`, `milestone:blaze_rod`, `milestone:end_entered`, `milestone:dragon_killed` | happy, excited, pride or triumphant (ダイヤを見つけた …) | yes (`game: { type: 'milestone' }`) |
+| `game.night_survived` | none | relief (夜を越えた) | no |
+| `game.owner_near` | none | happy (ライ氏がそばに来た) | no |
+
+- A moment moves the mood a bounded step (`SHANNON_GAME_MOOD_STEP`) and offers its feeling to the one resolver: a stronger present feeling
+  (from a conversation, a touch or an earlier moment) stays, a contrary one strong enough replaces it.
+- A moment that arrives more than two minutes after it happened (`GAME_FEELING_FRESH_MILLISECONDS`) is stored and remembered, not felt.
+- From her own acts in a body task (`services/api/src/mind/emotion/minecraftFeeling.ts`), beside the decisions: the head counts acts
+  that fail in a row (a reflex cut or a partial success is no failure) and feels stuck at 3 and at 6; and now and then (at most every
+  90 seconds, after 3 new acts) one Haiku request (background route `minecraft_feeling`, no thinking) reads her recent aims (`why`) and
+  results and names one feeling of playing (`SHANNON_GAME_THOUGHT_KINDS`, or none), felt as a `thought` moment. The decision loop hands
+  over each act synchronously and waits for nothing.
+- Her face: under `SHANNON_SINGLE_FACE` a feeling a game moment brought (`isGameFeeling`) shows on presence for every body while it
+  lasts; any other feeling keeps the face it had. Her Minecraft body reads presence (`mood.expression`) and sends it to ExpressionMod.
 
 ## Requests (phase 4, retired)
 
@@ -217,7 +244,7 @@ A refused turn must never stop the Minebot from playing; it may stay silent.
 
 Decided direction. Phase 4 is built ([Requests](#requests-phase-4)) and phase 5a in dev; the rest is not.
 
-2. **Other game events and feeling.** More closed event types (for example `game.respawned`, `game.advancement` with a namespaced id, `game.hurt` with a bounded amount, `game.slept`, `game.joined`/`game.left`), each with closed fields only. A small reducer turns them into her feeling through the one emotion entrance (as a touch does in `bodyTouch.ts`), and the important ones into experiences in fixed words. Deciding which events reach her feeling is an emotion-source change and needs the owner's approval.
+2. **Other game events and feeling.** Built (owner decision 2026-10-26): see [Game events and her feeling](#game-events-and-her-feeling-phase-2-owner-decision-2026-10-26).
 3. **Friends by whisper.** Friends talk to her by whisper (`kind: dm`) as their own conversation, with her impressions and person memory of them, and the people screen showing where she met them; channel turns keep the shared rules. Joining players as `participants` for the context.
 4. **Requests from anywhere** (built for the app and the game chat). Choices made: the game-chat `intent` became one entrance to the queue (the server enqueues it and the body claims it like any other) rather than the body acting and reporting separately, so there is one path for progress, cancel and results; she learns the result from the `[マイクラの体で起きたこと]` block and an experience, not by reaching out. The capability line `minecraft_body` was added now (with its evidence test), worded as conditional (「ワールドに入っている時」), because the tool exists; on 2026-10-06 it was made conditional in fact (only while the body is present; see [Her tools](#her-tools)), so that the default prompt stays as it was. Discord was built in phase 5a (below). Not built: her reaching out when a request finishes; the block in voice turns.
 5. **Discord and production.** 5a (built in dev, 2026-10-06): the Discord bot (Shannon-dev, behind its own default-off `SHANNON_CORE_PLATFORM_REPLY=true`) asks `POST /v1/platform/reply` (off unless `SHANNON_PLATFORM_REPLY=on`) for the reply to a bound conversation instead of its own model, falling back to its own path on any failure. The owner's DM bound `owner-private` is the owner alone, so 「マイクラで木材集めといて」 there is her `minecraft.request` into this queue while the body is present, and a later 「何頼んだっけ？」 there reads `[マイクラの体で起きたこと]`. A shared channel and friends get no tools but, while Aether is configured, her Aether reading tools inside 「シャノン用フォルダ」 (owner decisions 2026-10-06; her game chat itself offers none). 5b (not built): the production rollout behind the default-off flags (the absent `SHANNON_MINECRAFT_BODY_JSON` is off today), with a backup, a paired production device, bindings for the owner's real DM, and a smoke test on the lab server first; her reaching out on Discord when a request finishes.

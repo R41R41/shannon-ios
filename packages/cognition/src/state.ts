@@ -25,6 +25,7 @@ import { SHANNON_OWNER_NAME } from './persona.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { appraiseChoice, appraiseTouch } from './touchAppraisal.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
+import { feelGame, gameFeeling } from './gameEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
 import type { MemoryDisclosure } from './types.js';
 
@@ -333,6 +334,24 @@ export function reduceCompanionState(
       if (sameEmotion(felt.emotion, current.emotion) && current.expressiveEmotion
         && sameShannonExpressiveEmotion(felt.expressiveEmotion, current.expressiveEmotion)) return current;
       next = { ...current, emotion: felt.emotion, expressiveEmotion: felt.expressiveEmotion };
+      break;
+    }
+    case 'game-felt': {
+      // As a touch: the one game table moves the mood a bounded step and offers a feeling to the one resolver. A moment it
+      // cannot name (a short run of failures, a thought with no kind) is nothing: not even her clock moves.
+      if (!gameFeeling(event.moment)) return current;
+      const { state, awakeMs } = awakeState(current, nowIso, timing);
+      const felt = feelGame(state, event.moment, nowIso, timing);
+      if (timing.clock === 'awake') {
+        const feeling = !felt.expressiveEmotion || felt.expressiveEmotion === state.expressiveEmotion ? null
+          : committedFeeling(state, felt.expressiveEmotion, awakeMs, nowIso, timing);
+        if (!feeling && sameEmotion(felt.emotion, state.emotion)) return state === current ? current : freezeSnapshot(state);
+        next = { ...state, emotion: felt.emotion, ...feeling };
+        break;
+      }
+      if (sameEmotion(felt.emotion, current.emotion) && (felt.expressiveEmotion === current.expressiveEmotion || (felt.expressiveEmotion
+        && current.expressiveEmotion && sameShannonExpressiveEmotion(felt.expressiveEmotion, current.expressiveEmotion)))) return current;
+      next = { ...current, emotion: felt.emotion, ...(felt.expressiveEmotion ? { expressiveEmotion: felt.expressiveEmotion } : {}) };
       break;
     }
     case 'touch-appraised': case 'choice-appraised': { // ADR-0006 stage 2 / ADR-0008 7b: a stance's, or a settled choice's, prediction error moves valence and arousal.
