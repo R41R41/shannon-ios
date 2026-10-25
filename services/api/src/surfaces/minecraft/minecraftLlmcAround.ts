@@ -209,7 +209,11 @@ export const AROUND_HEAD = '足の周りの 1 歩より先（この判断の始�
   + '書いていない所は足も頭も固い岩か、地図の端で不明）:';
 
 /** A hostile as the live state's line gives it: its name, id, how far, where. */
-export interface Watched { name: string; id: string; meters: number; at: P; /** The line says it sees her or shoots (見える・飛び道具): a line of sight matters. */ ranged?: boolean }
+export interface Watched {
+  name: string; id: string; meters: number; at: P;
+  /** The line says it sees her or shoots (見える・飛び道具): a line of sight matters. */
+  ranged?: boolean;
+}
 const WATCH = /^#(\d+) (\S+) ([\d.]+)m \((-?\d+),(-?\d+),(-?\d+)\)/u;
 /** The hostile the first of `lines` says (the urgent ones first, then those that see her within 16 m), or null. */
 export function watchedHostile(urgent: readonly string[] | undefined, threats: readonly string[] | undefined): Watched | null {

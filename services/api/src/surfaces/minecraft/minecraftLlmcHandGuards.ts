@@ -54,27 +54,43 @@ function seeingHostile(world: Rec): string | null {
 }
 
 /**
- * Where she stands when a hand begins, for a `rel` hand's cells (differences from her feet when the hand begins): the frame's feet cell until a hand moves
- * her in a way the hands do not say (a walk with a range, a dig that walks to pick up, an attack, a pickup), then not known (null: that hand and the ones
- * after it are not read). mc-sonnet-guards: a relative dig of a cell that stopped for 「見られる」 went past the guard.
+ * Where she stands when a hand begins, for a `rel` hand's cells (differences from her feet when the hand begins): the frame's feet cell until a hand
+ * moves her in a way the hands do not say (a walk with a range, a dig that walks to pick up, an attack, a pickup), then not known (null: that hand and
+ * the ones after it are not read). mc-sonnet-guards: a relative dig of a cell that stopped for 「見られる」 went past the guard.
  */
-function feetCell(world: Rec): { x: number; y: number; z: number } | null {
-  const at = rec(world.position);
-  return at && typeof at.x === 'number' && typeof at.y === 'number' && typeof at.z === 'number' ? { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) } : null;
-}
 type Here = { x: number; y: number; z: number } | null;
+const whole = (at: Rec | null): Here => at && typeof at.x === 'number' && typeof at.y === 'number' && typeof at.z === 'number'
+  ? { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) } : null;
+/** Where an exact walk ends (its last point; a walk with a range of one or more, or no point, leaves her somewhere not known). */
+function walkEnd(hand: Rec, here: { x: number; y: number; z: number }): Here {
+  const points = [...(Array.isArray(hand.path) ? hand.path : []), ...(hand.to ? [hand.to] : [])];
+  const last = whole(rec(points.at(-1)));
+  if (!last || (typeof hand.range === 'number' && hand.range >= 1)) return null;
+  return hand.rel === true ? { x: here.x + last.x, y: here.y + last.y, z: here.z + last.z } : last;
+}
+const MOVES_HER = new Set(['attack', 'pickup', 'shoot', 'drop', 'pillarUp']);
 function movedBy(hand: Rec, here: Here): Here {
   if (!here) return null;
-  if (hand.do === 'walk') {
-    const points = [...(Array.isArray(hand.path) ? hand.path : []), ...(hand.to ? [hand.to] : [])].map(rec).filter((p): p is Rec => p !== null);
-    const last = points.at(-1);
-    if (!last || typeof last.x !== 'number' || typeof last.y !== 'number' || typeof last.z !== 'number' || (typeof hand.range === 'number' && hand.range >= 1)) return null;
-    return hand.rel === true ? { x: here.x + Math.floor(last.x), y: here.y + Math.floor(last.y), z: here.z + Math.floor(last.z) }
-      : { x: Math.floor(last.x), y: Math.floor(last.y), z: Math.floor(last.z) };
-  }
+  if (hand.do === 'walk') return walkEnd(hand, here);
   if (hand.do === 'dig') return hand.collect === false ? here : null;
-  if (hand.do === 'attack' || hand.do === 'pickup' || hand.do === 'shoot' || hand.do === 'drop' || hand.do === 'pillarUp') return null;
-  return here;
+  return MOVES_HER.has(String(hand.do)) ? null : here;
+}
+
+/** The held-dig line for a cell that stopped for 「見られる」. */
+function reopenLine(key: string, age: number, world: Rec): string {
+  const hostile = seeingHostile(world);
+  return `(${key}) は直前に「見られる」で止まった（${age}秒前${hostile ? `。今も見える敵: ${hostile}` : ''}）。開けるなら exposeOk を付ける。`
+    + 'ほかのマスを掘るなら、見られない別のマス（敵と反対側・下の岩）を';
+}
+/** The first cell of a dig (without exposeOk) that stopped for 「見られる」 within `SEEN_REOPEN_SECONDS`: its key and age. */
+function seenCellOf(hand: Rec, base: { x: number; y: number; z: number }, stops: Map<string, number>): { key: string; age: number } | null {
+  if (hand.do !== 'dig' || (hand.exposeOk !== undefined && hand.exposeOk !== false)) return null;
+  for (const cell of Array.isArray(hand.at) ? hand.at : []) {
+    const at = whole(rec(cell));
+    const key = at ? `${at.x + base.x},${at.y + base.y},${at.z + base.z}` : '';
+    if (stops.has(key)) return { key, age: stops.get(key)! };
+  }
+  return null;
 }
 
 /** The first dig without exposeOk of a cell that stopped for 「見られる」 a moment ago. */
@@ -82,22 +98,11 @@ export function seenReopenStop(input: unknown, frame: BodyObservation | null): H
   const world = rec(frame?.state.world) ?? {};
   const stops = seenStops(world.recentStops);
   if (!stops.size) return null;
-  let here: Here = feetCell(world);
+  let here: Here = whole(rec(world.position));
   for (const [index, hand] of handsOf(input).entries()) {
     const base = hand.rel === true ? here : { x: 0, y: 0, z: 0 };
-    if (hand.do === 'dig' && base && (hand.exposeOk === undefined || hand.exposeOk === false)) {
-      for (const cell of Array.isArray(hand.at) ? hand.at : []) {
-        const at = rec(cell);
-        if (!at || typeof at.x !== 'number' || typeof at.y !== 'number' || typeof at.z !== 'number') continue;
-        const key = `${Math.floor(at.x) + base.x},${Math.floor(at.y) + base.y},${Math.floor(at.z) + base.z}`;
-        const age = stops.get(key);
-        if (age === undefined) continue;
-        const hostile = seeingHostile(world);
-        return { hand: index + 1, kind: 'dig', code: 'reopen_seen',
-          line: `(${key}) は直前に「見られる」で止まった（${age}秒前${hostile ? `。今も見える敵: ${hostile}` : ''}）。開けるなら exposeOk を付ける。`
-            + 'ほかのマスを掘るなら、見られない別のマス（敵と反対側・下の岩）を' };
-      }
-    }
+    const found = base ? seenCellOf(hand, base, stops) : null;
+    if (found) return { hand: index + 1, kind: 'dig', code: 'reopen_seen', line: reopenLine(found.key, found.age, world) };
     here = movedBy(hand, here);
   }
   return null;
