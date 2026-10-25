@@ -248,3 +248,9 @@ v2 の時だけ。切の request・seed・first plan の文は変えない（`ow
 - off の側だけにあったコードを消した: r10 の止まりの補足（`minecraftLlmcStopFacts.ts`）と射線のマス（`minecraftLlmcSightLine.ts`）、読むだけの体の技（`LLMC_READ_SKILLS`）、知識の切り替え（`llmcSystemAppendix`・`llmcCoreKnowledge` の probe 引数）、v2 でない live の上限（3,000 トークン・敵 8・持ち物 36）、v2 でない種の計画（鉄 24〜36・ベッド全部・ゲート前の食料 100）と「ネザーに入る前」の古い表、v2 でない計画の済み（前の節を待たない閉じ方）、recall。
 - 古い動きを確かめていたテストは消すか、新しい動きに合わせた（`fcaLlmcPreflightStep.test.ts`・`minecraftOwnPromptOff` の LLM 中心の digest・`minecraftLlmcV2Request` の「off の要求」）。
 - 体: `MINEBOT_LLM_CENTRIC`・`MINEBOT_SYNC_INFLATE` を外した（Shannon の branch `codex/shannon/no-body-switches`）。
+
+## 14 回目: Sonnet 5.5 のための送る前の守り 3 つ（再現台 `sonnet-guards-20261026.md`、本番には入れていない）
+
+- 守り（送る前、`minecraftLlmcPreflight.ts`）: 足か頭のマスへの place（`own_cell`。手の前の walk を追う。onFail continue は止めずメモのまま）、溶岩の隣の石を掘る dig（`lava_next`。水が隣・黒曜石は除く。体の閉じた語「溶岩が流れ込む」）。相対座標（rel）の「見られる」マスの掘り直しも足から読んで止める。
+- 入れなかった物（再現台の先頭の版 1f60d93 にあって、効きが見えなかった物）: `around` の先頭行、`away` の退き先の行、橋の守りの返しの足し文、決まりの文の条件づけ。決まりの文は元のまま（8,297 トークン、上限 8,300）。
+- 試験: `minecraftLlmcSonnetGuards.test.ts`。`minecraftLlmcPreflight.test.ts` の再現台の答えの照合は、新しく止まる 5 答え（△4・×1、○は 0）を数え直した。
