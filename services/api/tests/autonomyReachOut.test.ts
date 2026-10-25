@@ -17,7 +17,7 @@ import { BODY_LIMITS } from '../src/contracts/bodyContract.js';
 import { SQLiteBodyStore } from '../src/surfaces/body/store/bodyStore.js';
 import { SQLiteInitiativeStore } from '../src/surfaces/outreach/store/initiativeStore.js';
 import { SQLitePushNotificationStore } from '../src/surfaces/outreach/pushNotifications.js';
-import { REACH_OUT_OTHERS_AUDIENCE, SQLiteReachOutSpeaker, reachOutOfSource } from '../src/surfaces/outreach/reachOutDelivery.js';
+import { REACH_OUT_OTHERS_AUDIENCE, SQLiteReachOutSpeaker, reachOutFace, reachOutOfSource } from '../src/surfaces/outreach/reachOutDelivery.js';
 import type { BodyPresence } from '../src/surfaces/body/shannonBody.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { speakTimePrivacyCheck } from '../src/mind/perception/voiceCompanionPresence.js';
@@ -87,7 +87,8 @@ describe('reach_out: one message of her own', () => {
     const text = 'ライ氏、いま何をしていますか。ボクは少し気になりました。';
     // The Talk.
     expect(w.messages()).toEqual([expect.objectContaining({ thread_id: w.threadId, role: 'assistant', content: text })]);
-    expect(JSON.parse(w.messages()[0]!.metadata_json)).toMatchObject({ reachOut: { reason: 'wonder' } });
+    // With the face of why she wrote, as the initiative has it: the Talk's icon is not the usual face (2026-10-26).
+    expect(JSON.parse(w.messages()[0]!.metadata_json)).toMatchObject({ reachOut: { reason: 'wonder' }, messageEmotion: { expression: 'curious' } });
     // The initiative, with enough to tell what it is.
     const unread = w.initiatives.unreadMessages(scope);
     expect(unread).toEqual([expect.objectContaining({ threadId: w.threadId, content: text, kind: 'reach_out', reason: 'wonder', expression: 'curious', sourceTitle: 'シャノンから' })]);
@@ -107,6 +108,16 @@ describe('reach_out: one message of her own', () => {
     const day = w.entries();
     expect(autonomyDayLog(day)).toBe('次にすることを考え、自分から1回話しかけました。');
     expect(autonomyDayPhrases(day)).toContain('自分から1回話しかけた');
+  });
+
+  it('shows a feeling her own words carry beside her message, and otherwise the face of why she wrote', () => {
+    const at = '2026-10-19T22:03:34.518Z';
+    const tsun = reachOutFace('wonder', 'おかえり、ライ氏。……別にいいですけど。ちゃんと横になれた？', at);
+    expect(tsun.kind).toBe('sulky');
+    expect(tsun.expression).not.toBe('curious');
+    expect(reachOutFace('share', 'この記事を見つけました。', at)).toMatchObject({ expression: 'excited' });
+    expect(reachOutFace('upcoming', '14時から歯医者です。', at)).toMatchObject({ expression: 'thinking' });
+    expect(reachOutFace('wonder', 'ライ氏、いま何をしていますか。', at).kind).toBeUndefined();
   });
 
   it('has no count of messages a day when the owner writes unlimited, and then says nothing of a count', async () => {

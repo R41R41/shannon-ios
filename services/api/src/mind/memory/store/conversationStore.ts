@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { searchMemoryDocuments } from '@shannon/cognition';
+import { searchMemoryDocuments, type ShannonMessageEmotion } from '@shannon/cognition';
 import type { MemorySearchHit } from './sqliteMemorySearch.js';
 import type { ShannonConversationItem } from '../../../infra/models/chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../../surfaces/text/threadTitle.js';
@@ -242,12 +242,13 @@ export class InMemoryConversationStore implements ConversationStore {
     return experience;
   }
 
-  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): StoredConversationMessage {
+  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, messageEmotion?: ShannonMessageEmotion): StoredConversationMessage {
     const resolvedThreadId = this.threadId(scopeKey, threadId);
     const threads = this.conversations.get(scopeKey) ?? new Map<string, StoredConversationMessage[]>();
     const conversation = threads.get(resolvedThreadId) ?? [];
     const note: StoredConversationMessage = {
       id: randomUUID(), sourceExperienceId: `${noteKind}:${randomUUID()}`, role: 'assistant', content, observedAt,
+      ...(messageEmotion ? { messageEmotion: Object.freeze({ ...messageEmotion }) } : {}),
     };
     conversation.push(note);
     threads.set(resolvedThreadId, conversation.slice(-this.maximumConversationItems));

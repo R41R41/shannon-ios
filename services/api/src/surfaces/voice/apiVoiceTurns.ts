@@ -1,4 +1,4 @@
-import { UNKNOWN_GUEST_PRESENCE, messageEmotionForOthers, type CompanionStateStore } from '@shannon/cognition';
+import { UNKNOWN_GUEST_PRESENCE, messageEmotionForOthers, type CompanionStateStore, type ShannonFace } from '@shannon/cognition';
 import { presentCompanionState, resolveReplyEmotion } from '../../mind/emotion/companionPresence.js';
 import { storedVoiceFace } from '../../mind/emotion/voiceEmotionPlan.js';
 import { feelingVoice, type FeelingPort } from '../../mind/emotion/feelingPorts.js';
@@ -17,7 +17,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
   background: TurnBackgroundService; now: () => string; chatModel?: ShannonChatModel;
   /** Her line from a touch (`bodyReaction.ts`): the first voice turn that answers it stores it before his words. */
-  reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string } | null };
+  reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string; face?: ShannonFace } | null };
   looks?: { turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void };
   feedback?: FeedbackPorts;
   fcaVoice?: () => FcaVoicePort | null;
@@ -70,7 +70,10 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   // (no user side, no experience). With someone else able to hear, the turn follows the companion rules and her
   // line stays out of the Talk: it was context for the reply and remains in the memory of the touch.
   if (reaction && reaction.audience === 'owner' && !('audience' in companion)) {
-    dependencies.conversationStore.appendNote?.(scopeKey, threadId, reaction.text, reaction.saidAt, 'body-reaction');
+    // The line keeps the face she said it with, so its icon in the Talk is not the usual face (2026-10-26).
+    const { valence, arousal, openness } = captured.emotion;
+    dependencies.conversationStore.appendNote?.(scopeKey, threadId, reaction.text, reaction.saidAt, 'body-reaction',
+      reaction.face ? { valence, arousal, openness, ...reaction.face } : undefined);
   }
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
     messageEmotion: storedEmotion, completedAt, timeZone, ...companion, ...(utteranceId ? { utteranceId } : {}) };

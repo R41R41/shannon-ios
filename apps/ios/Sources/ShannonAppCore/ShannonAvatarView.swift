@@ -27,7 +27,7 @@ public struct ShannonAvatarView: View {
 
     public var body: some View {
         if presetRawValue == ShannonPersonaPreset.bot.rawValue {
-            ShannonBotIcon(size: size, label: face.accessibilityDescription)
+            ShannonBotIcon(expression: expression, size: size, label: face.accessibilityDescription)
         } else {
             expressionAvatar
         }
@@ -140,21 +140,29 @@ public struct ShannonChatAvatarView: View {
     }
 }
 
+/// The bot's icon: her Waterlight face, still, with the eyes of the face she has now. The app icon (L06) is this face with
+/// the usual eyes; drawing it keeps the icon's look and lets it change with her feeling (2026-10-26: a fixed picture never did).
 private struct ShannonBotIcon: View {
+    let expression: ShannonExpressionDTO
     let size: CGFloat
     let label: String
+
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
     var body: some View {
-        icon.resizable().scaledToFill().frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
-            .accessibilityElement(children: .ignore).accessibilityLabel(label)
-    }
-    private var icon: Image {
-#if canImport(UIKit)
-        if let image = ShannonAppIconAssets.uiImage(for: ShannonAppIconChoice.level06.previewAssetName) { return Image(uiImage: image) }
-#elseif canImport(AppKit)
-        if let image = ShannonAppIconAssets.nsImage(for: ShannonAppIconChoice.level06.previewAssetName) { return Image(nsImage: image) }
-#endif
-        return Image(systemName: "eyes")
+        let pose = ShannonEyeRig.pose(for: expression, activity: .idle, elapsedTime: 0, isAnimated: false)
+        let frame = ShannonEyeRig.frame(pose: pose, elapsedTime: 0, isAnimated: false)
+        ShannonWaterlightCanvas(
+            frame: frame,
+            increasedContrast: colorSchemeContrast == .increased,
+            blushOpacity: ShannonEyeRig.hasPersistentBlush(expression) ? 0.40 : 0
+        )
+        .frame(width: size, height: size)
+        // The canvas leaves a margin around her face; the icon is the face edge to edge.
+        .scaleEffect(1 / (2 * ShannonWaterlightVisualTokens.bodyRadiusRatio))
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        .accessibilityElement(children: .ignore).accessibilityLabel(label)
     }
 }
 
