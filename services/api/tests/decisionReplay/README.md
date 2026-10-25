@@ -120,3 +120,9 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 版: O（Opus 5.5）・S（Sonnet 5.5）・N（Sonnet で見えない考えを切る。このモデルは `thinking:{type:"disabled"}` を 400 で断り、`{type:"between_tools"}` を受ける）・S×2（S の組から `makeS2.ts` が作る）。回すのは `run6.ts --model=… --thinking=between_tools --variant=O|S|N --out=sn-<版>.jsonl`、採点は `judge10.ts`、表は `report10.ts`、仕分け用は `dump10.ts`、足・頭のマスへの place の数は `ownCell10.ts`（共通部品は `sonnet10.ts`）。
 - 要約は main の要約器で作り直す: `DECISION_REPLAY_BOOTSTRAP_TAG=fixM DECISION_REPLAY_BOOTSTRAP_NEW=1 DECISION_REPLAY_BOOTSTRAP_REAL=off makeBootstrapsB.ts r28 r30 r31 r32 r33 r34`（`BOOTSTRAP_NEW=1` でタグ付きのファイルを必ず新しく作る）。実走38 は前回の `fix38` の物を `bootstrap-r38.fixM.json` に写して使う。
 - 結果のまとめ: `results/sonnet-replay-20261026.md`。
+
+## 10/26 の追加 (2): mc-sonnet-guards（Sonnet のための守りと入力の直し）の確かめ
+
+- 候補 = shannon-ios `codex/shannon/mc-sonnet-guards`（測ったのは 8993dc7）。版は `sonnet26.ts`（O・S・B2・C、切り分けの A1・A2）。回すのは `run6.ts --model=claude-sonnet-5-5 --variant=C --out=g26-C-a.jsonl`（`DECISION_REPLAY_FORBID=fixed` で古い計画の木に点検の節の禁止の決まりを足す台の側の直し。基準 S は前回の `sn-S.jsonl`）、採点は `judge26.ts --out=judge26.jsonl`（2 回目は `--force --out=judge26b.jsonl`）、表は `report26.ts [--judge=judge26b.jsonl]`、切り分けは `abl26.ts judge26c.jsonl`。
+- 守りの照合（API を使わない）: `guards26.ts`（記録の答えに今の src の守りをかける）、`heldAudit26.ts`（止めた手を止めずに送った場合の検査）、`seenLeak26.ts`・`ownMiss26.ts`・`lava26.ts`。
+- 結果のまとめ: `results/sonnet-guards-20261026.md`。

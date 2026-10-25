@@ -4,6 +4,7 @@ import { actToShort } from '../../src/contracts/minecraftActShortContract.js';
 import type { FcaToolDefinition } from '../../src/mind/action/fca/fcaPorts.js';
 import { candidateAct, candidateLive, candidateStage, candidateStageState } from '../../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { candidateFixed, type CandidateFixed } from '../../src/wiring/minecraftLlmcV2Request.js';
+import { CHECK_FORBID } from '../../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { contextOf } from './checks.js';
 import type { Decision, Entry } from './load.js';
 import { frameBefore, type Frames } from './preflightFrames.js';
@@ -18,6 +19,29 @@ import { denormalizeMap, progressPlain, rebuiltLive, taskNoteSwap, withNewLastRe
  *    本番が持つ「頭が保ってきた柱の答え・sight の答え」（keptColumnFact・keptThreatSight）は台に無い。
  *  - 部分送りの結果: 体が実際に返す結果の行は無いので、「手 1…k-1 は送った」という 1 行と、候補が作る「手 k から先は送っていない」の文を返す。
  */
+/**
+ * 10/26 mc-sonnet-guards: 点検の節の禁止の決まり（CHECK_FORBID）の台の側の直し。DECISION_REPLAY_FORBID=fixed の時だけ、
+ *  - 実走28〜31 の古い計画の木（r7 より前: 禁止の決まりが無い。s47 の原因）の live に、点検の節（planNow が「出発の点検」の道）の禁止の決まりを足す、
+ *  - 記録の「受けた時は離れて塞ぐ」を、この木の CHECK_FORBID の文に替える（この木が古い文なら変わらない）。
+ * 本番では新しい run の最初の計画がこの文を書く（種の木が CHECK_FORBID を持つ）ので、これは「その run だったら」の写し。
+ */
+const FORBID_FIXED = process.env.DECISION_REPLAY_FORBID === 'fixed';
+const OLD_FORBID_TAIL = '湧き場の前で戦わない。受けた時は離れて塞ぐ';
+const NEW_FORBID_TAIL = CHECK_FORBID.slice(CHECK_FORBID.indexOf('湧き場の前で戦わない'));
+export const forbidText = (text: string): string => FORBID_FIXED ? text.split(OLD_FORBID_TAIL).join(NEW_FORBID_TAIL) : text;
+function withForbid(live: Record<string, any>): Record<string, any> {
+  if (!FORBID_FIXED) return live;
+  const plan = live.plan as Record<string, any> | undefined;
+  const body = live.body as Record<string, any> | undefined;
+  if (!plan || !Array.isArray(plan.rules)) return live;
+  const rules = (plan.rules as string[]).map(forbidText);
+  const now = String(body?.planNow ?? '');
+  if (/出発の点検/u.test(now) && !rules.some(rule => /湧き場の前で戦わない/u.test(rule))) {
+    const id = /^\[(p\d+)/u.exec(now)?.[1] ?? 'p1';
+    rules.push(`禁止（${id}）: ${CHECK_FORBID}`);
+  }
+  return { ...live, plan: { ...plan, rules } };
+}
 const fixedCache = new Map<string, Promise<CandidateFixed>>();
 /** 要求の固定部分（system 2 ブロックと道具）。run の core（道具の定義）ごとに 1 回。 */
 export function candFixed(core: readonly FcaToolDefinition[]): Promise<CandidateFixed> {
@@ -54,8 +78,8 @@ function withStage(entries: readonly Entry[], stage: string, full: boolean): Ent
 function liveOfDecision(live: Record<string, unknown>, tree?: unknown): { live: Record<string, unknown>; notes: unknown; stage: string | null } {
   const rebuilt = rebuiltLive(live as Record<string, any>);
   // 書き直し前の記録の live: 周りの行（止まった手の周り）の取り出しは書き直しの前に（書き直しが座標つきに直す）。
-  if (!rebuilt) { const made = candidateLive(withNewLastResults(live as Record<string, any>)); return { ...made, live: withRoad(withStateWords(made.live as Record<string, any>), tree) }; }
-  return { live: withRoad(rebuilt, tree), notes: { rebuilt: true }, stage: candidateStage(live) ?? null };
+  if (!rebuilt) { const made = candidateLive(withNewLastResults(live as Record<string, any>)); return { ...made, live: withForbid(withRoad(withStateWords(made.live as Record<string, any>), tree)) }; }
+  return { live: withForbid(withRoad(rebuilt, tree)), notes: { rebuilt: true }, stage: candidateStage(live) ?? null };
 }
 /** 記録の状態メッセージに残る段の知識（本番がその時付けた物）を外す。台が、この木の版の段の知識を付け直す。 */
 function withoutStored(entries: readonly Entry[]): Entry[] {
@@ -64,7 +88,7 @@ function withoutStored(entries: readonly Entry[]): Entry[] {
     if (entry.role !== 'user' || !Array.isArray(entry.content)) return entry;
     const blocks = (entry.content as Array<Record<string, any>>).map(block => {
       if (block?.type !== 'text' || typeof block.text !== 'string') return block;
-      let text = block.text;
+      let text = forbidText(block.text);
       if (swap && text.includes(swap.from)) text = text.split(swap.from).join(swap.to);
       if (!text.includes('"stageKnowledge"') && !text.includes('"progress"')) return text === block.text ? block : { ...block, text };
       try {
