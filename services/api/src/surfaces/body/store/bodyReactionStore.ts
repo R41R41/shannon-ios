@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { isShannonEmotionKind, type ShannonEmotionKind, type ShannonTouchKind } from '@shannon/cognition';
+import { isShannonEmotionKind, type ShannonEmotionKind, type ShannonFace, type ShannonTouchKind } from '@shannon/cognition';
 import type { BodyAudience, BodyTouchGesture, BodyTouchReflex, BodyTouchSide } from '../../../contracts/bodyContract.js';
 import { partCounts, recentTouchFacts, type PartCount, type TouchFact } from './bodyTouchFacts.js';
 export type { PartCount, TouchFact } from './bodyTouchFacts.js';
@@ -115,6 +115,8 @@ export interface ReactionLine {
   audience: BodyAudience;
   saidAt: string;
   messageId: string;
+  /** Her face as she said the line (the stored answer's message), so the Talk shows it beside the line; absent in older rows. */
+  face?: ShannonFace;
 }
 
 interface BurstRow {
@@ -482,6 +484,19 @@ export class SQLiteBodyReactionStore {
   private line(scopeKey: string, reactionId: string, states: readonly ReactionLinkState[]): ReactionLine | null {
     const row = this.database.prepare('SELECT * FROM body_reactions WHERE scope_key = ? AND reaction_id = ?').get(scopeKey, reactionId) as unknown as ReactionRow | undefined;
     if (!row || !row.line_text || !row.said_at || !row.message_id || !states.includes(row.link_state as ReactionLinkState)) return null;
-    return { id: row.reaction_id, text: row.line_text, threadId: row.thread_id, audience: row.audience as BodyAudience, saidAt: row.said_at, messageId: row.message_id };
+    const face = answerFace(row.answer_json);
+    return { id: row.reaction_id, text: row.line_text, threadId: row.thread_id, audience: row.audience as BodyAudience, saidAt: row.said_at, messageId: row.message_id, ...(face ? { face } : {}) };
+  }
+}
+
+/** The face of the stored answer's line (`message.expression`, `message.feeling`); null when there is none or it cannot be read. */
+function answerFace(raw: string | null): ShannonFace | null {
+  if (!raw) return null;
+  try {
+    const message = (JSON.parse(raw) as Partial<BodyReactionAnswer>).message;
+    if (!message || typeof message.expression !== 'string') return null;
+    return { expression: message.expression, ...(typeof message.feeling === 'string' ? { feeling: message.feeling } : {}) };
+  } catch {
+    return null;
   }
 }

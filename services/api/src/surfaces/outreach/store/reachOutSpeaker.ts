@@ -5,10 +5,22 @@ import { DatabaseSync } from 'node:sqlite';
 import { REACH_OUT_CALL_KEY_PREFIX, REACH_OUT_FOLLOW_UP_KEY_PREFIX, REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX, REACH_OUT_OTHERS_AUDIENCE, REACH_OUT_SOURCE_PREFIX, REACH_OUT_SOURCE_TITLE, type ReachOutDelivery, reachOutOfSource } from '../reachOutVocabulary.js';
 import type { ReachOutReason } from '../../../mind/action/ownTime/autonomyLoopPrompts.js';
 import { randomUUID } from 'node:crypto';
+import { createShannonMessageEmotion, messageEmotionKind, resolveShannonEmotionState, type ShannonMessageEmotion } from '@shannon/cognition';
 
 const EXPRESSION: Readonly<Record<ObservedReachOutReason, 'curious' | 'excited' | 'thinking'>> = Object.freeze({
   share: 'excited', wonder: 'curious', upcoming: 'thinking', saw: 'curious', follow_up: 'curious',
 });
+/** The quiet mood her own messages are written with, as the topics she starts (`initiativeStore.ts`) are without a state. */
+const REACH_OUT_MOOD = Object.freeze({ valence: 0.18, arousal: 0.28, openness: 0.66 });
+
+/**
+ * Her face beside a message she started (2026-10-26: these had none, so the Talk showed the usual face): a feeling her own
+ * words carry, read as any reply's words are (「べつに待ってたわけじゃないけど」), else the face of why she wrote.
+ */
+export function reachOutFace(reason: ObservedReachOutReason, text: string, at: string): ShannonMessageEmotion {
+  const feeling = resolveShannonEmotionState({ provisionalPrimary: 'neutral', provisionalIntensity: 0.15, transcript: '', reply: text, now: at });
+  return messageEmotionKind(feeling) ? createShannonMessageEmotion(REACH_OUT_MOOD, feeling) : { ...REACH_OUT_MOOD, expression: EXPRESSION[reason] };
+}
 
 /** The intent of one message at a delivery point: its reason, its subject, when it arose (the thought that chose it) and its words. */
 function intentOf(point: ProactivePoint, reason: ObservedReachOutReason, subject: string | null | undefined, input: { text: string; arisenAt?: string }, at: string): ProactiveDeliveryIntent {
@@ -180,6 +192,7 @@ export class SQLiteReachOutSpeaker {
       `).run(randomUUID(), scopeKey, threadId, `initiative:${initiativeId}`, input.text, at, JSON.stringify({
         // She chose to leave it as text (her moment speech, owner decision 2026-10-14): a body shows it and does not say it aloud.
         initiativeId, sourceItemId, reachOut: { reason: input.reason, ...(input.spoken === false ? { spoken: false } : {}) },
+        messageEmotion: reachOutFace(input.reason, input.text, at),
       }));
       this.database.prepare('UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?').run(at, scopeKey, threadId);
       if (this.gate) {

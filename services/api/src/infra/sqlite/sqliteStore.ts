@@ -7,7 +7,7 @@ import { prepareSourceRowsMark } from './provenanceMarkMigration.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
-import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming, MemoryAudience } from '@shannon/cognition';
+import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming, MemoryAudience, ShannonMessageEmotion } from '@shannon/cognition';
 import type { FcaAffectEvidence } from '../../mind/emotion/emotionPorts.js';
 import { ownerSpoke } from '@shannon/cognition';
 import type { BackgroundJobPayload, BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from '../../mind/sleep/store/backgroundJobStore.js';
@@ -350,7 +350,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   experienceObservedAt(scopeKey: string, ids: readonly string[]) { return this.shannonKnowledge.experienceObservedAt(scopeKey, ids); }
   appendTurn(scopeKey: string, threadId: string, userMessage: string, shannonReply: string, observedAt: string, context?: TurnPersistenceContext) { return this.conversations.appendTurn(scopeKey, threadId, userMessage, shannonReply, observedAt, context); }
   ingestPlatformTurn(input: PlatformTurnPersistenceInput) { return this.conversations.ingestPlatformTurn(input); }
-  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string) { return this.conversations.appendNote(scopeKey, threadId, content, observedAt, noteKind); }
+  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, messageEmotion?: ShannonMessageEmotion) { return this.conversations.appendNote(scopeKey, threadId, content, observedAt, noteKind, messageEmotion); }
   recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]) { return this.conversations.recordTurnCaptures(scopeKey, captures); }
   turnCaptures(scopeKey: string, turnIds: readonly string[]) { return this.conversations.turnCaptures(scopeKey, turnIds); }
   /** A thread's messages, kept while the database is unchanged: one recall step asked for the same few threads 14 times, each read and parsed whole. */

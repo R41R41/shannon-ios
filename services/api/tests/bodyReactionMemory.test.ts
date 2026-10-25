@@ -87,6 +87,9 @@ describe('conversation only if he answers', () => {
     const line = conversationStore.conversationHistory(scope, talk.threadId)[2]!;
     expect(line.sourceExperienceId).toMatch(/^body-reaction:/u);
     expect(line.observedAt).toBe('2026-10-02T06:20:00.000Z');
+    // It keeps the face she said it with, so the Talk's icon is not the usual face (2026-10-26).
+    expect(line.messageEmotion).toMatchObject({ expression: answer.message!.expression });
+    expect(line.messageEmotion?.feeling).toBe(answer.message!.feeling);
     expect(conversationStore.experienceCandidates(scope).map(item => item.userMessage)).toEqual(['おはよう', 'なんでもないよ、えらいなと思って']);
     expect(reactionStore.reaction(scope, answer.id)).toMatchObject({ linkState: 'stored' });
 
