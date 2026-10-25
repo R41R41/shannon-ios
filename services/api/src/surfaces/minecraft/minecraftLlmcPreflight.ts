@@ -4,7 +4,7 @@ import { columnKey, keptColumnFact } from './minecraftLlmcFooting.js';
 import { blocked, BODY_RULES, isPortal, mapView, posText, readLayers, type BodyRules, type Cell, type MapView } from './minecraftLlmcPreflightMap.js';
 import { routeAnswer, routeWhy } from './minecraftLlmcPreflightRoute.js';
 import { nearestStand } from './minecraftLlmcWalkRules.js';
-import { placeStop, unstandable, type ColumnOf, type Found, type PreflightCode } from './minecraftLlmcPreflightStand.js';
+import { lavaDigStop, ownCellStop, placeStop, unstandable, type ColumnOf, type Found, type PreflightCode } from './minecraftLlmcPreflightStand.js';
 
 export type { PreflightCode };
 
@@ -24,7 +24,9 @@ export type { PreflightCode };
  * - walk, when no route reaches the target without digging or laying a block even taking every cell the map does not name the way that lets
  *   her through (`minecraftLlmcPreflightRoute.ts`): the route search finds no way either (`no_path`, `段差`, `頭の高さ`, a drop past three).
  * - place, for each cell: the cell holds a block that is not replaced (`置けない`: は埋まっている), or no neighbour is a block to set against
- *   (all six faces known to be open: `置けない`: 支えになる面が無い).
+ *   (all six faces known to be open: `置けない`: 支えになる面が無い), or it is the cell she stands in (feet, and the head over it) while she is known to
+ *   stand there (mc-sonnet-guards: `置けない`: 今立っているマス).
+ * - dig (mc-sonnet-guards): a block with lava beside it (and no water beside it, and not obsidian): `溶岩が流れ込む` (the body's closed word for it).
  * The cells the earlier hands of the same act change are written on the map as they would be (a dig opens its cells, a place fills them);
  * a hand whose effect is not known (a `use`, a pillarUp from an unknown place) ends the walk-through there.
  */
@@ -45,9 +47,9 @@ export interface PreflightWorld {
 export interface PreflightStop {
   /** 1-based, as the result's lines count the hands. */
   hand: number;
-  kind: 'walk' | 'place';
+  kind: 'walk' | 'place' | 'dig';
   /** The body's closed word for the stop it would have made. */
-  word: '一歩ではない' | '置けない';
+  word: '一歩ではない' | '置けない' | '溶岩が流れ込む';
   code: PreflightCode;
   cell: ActPos;
   why: string;
@@ -142,28 +144,44 @@ function walkStop(hand: ActHand, origin: Cell | null, base: Cell | null | undefi
   return null;
 }
 
-/** A place's cells in order: each a filled cell, or one with no face (a cell this hand placed before gives the next its face). */
-function placeCellsStop(hand: ActHand, base: Cell | null | undefined, view: MapView): Found | null {
+/** A place's cells in order: each a filled cell, or one with no face (a cell this hand placed before gives the next its face), or her own. */
+function placeCellsStop(hand: ActHand, base: Cell | null | undefined, view: MapView, at: Cell | null): Found | null {
   const cells = cellsOf(hand.at ?? [], base);
   if (cells.length !== (hand.at?.length ?? 0)) return null;
   const placed = new Set<string>();
   for (const cell of cells) {
-    const found = placeStop(cell, view, placed, hand.face !== undefined);
+    const found = ownCellStop(cell, at) ?? placeStop(cell, view, placed, hand.face !== undefined);
     if (found) return found;
     placed.add(`${cell.x},${cell.y},${cell.z}`);
   }
   return null;
 }
 
+/** A dig's cells in order: each a block with lava beside it is held (the cells before it are opened on the map as the dig goes). */
+function digCellsStop(hand: ActHand, base: Cell | null | undefined, view: MapView): Found | null {
+  const cells = cellsOf(hand.at ?? [], base);
+  if (cells.length !== (hand.at?.length ?? 0)) return null;
+  for (const cell of cells) {
+    const found = lavaDigStop(cell, view);
+    if (found) return found;
+    view.open(cell);
+  }
+  return null;
+}
+
 function handStop(hand: ActHand, number: number, origin: Cell | null, base: Cell | null | undefined, view: MapView, world: PreflightWorld,
-  options: PreflightOptions): PreflightStop | null {
+  options: PreflightOptions, at: Cell | null = null): PreflightStop | null {
   if (hand.do === 'walk') {
     const found = walkStop(hand, origin, base, view, world, options);
     return found ? { hand: number, kind: 'walk', word: '一歩ではない', ...found } : null;
   }
   if (hand.do === 'place') {
-    const found = placeCellsStop(hand, base, view);
+    const found = placeCellsStop(hand, base, view, at);
     return found ? { hand: number, kind: 'place', word: '置けない', ...found } : null;
+  }
+  if (hand.do === 'dig' && options.bodyRules) {
+    const found = digCellsStop(hand, base, view);
+    return found ? { hand: number, kind: 'dig', word: '溶岩が流れ込む', ...found } : null;
   }
   return null;
 }
@@ -243,7 +261,7 @@ export function preflightAct(input: unknown, world: PreflightWorld, options: Pre
     // Relative cells count from where she stands when the hand begins: not known, the hands after it cannot be walked through.
     if (hand.rel === true && !track.at) return null;
     const base: Cell | null | undefined = hand.rel === true ? track.at : undefined;
-    const stop = handStop(hand, index + 1, track.at ?? track.via, base, view, world, options);
+    const stop = handStop(hand, index + 1, track.at ?? track.via, base, view, world, options, track.at);
     if (stop && options.continuePlace && stop.kind === 'place' && hand.onFail === 'continue') {
       options.notes?.push(`手 ${stop.hand} place: ${stop.why}。onFail continue なので体は飛ばして続ける（この手の他のマスは置く）`);
       return null;
@@ -280,6 +298,8 @@ export function preflightOfFrame(input: unknown, frame: BodyObservation | null, 
 export function preflightText(stop: PreflightStop): string {
   const how = stop.kind === 'walk'
     ? 'walk は掘らず置かない。先に dig か place で足と頭の 2 マスと床を整えるか、別の道・別の着く所へ'
+    : stop.kind === 'dig' ? '溶岩の隣は掘らない。溶岩に接しない別のマスを掘るか、先に溶岩の面へ place（水を注ぐなら use）してから'
+    : stop.code === 'own_cell' ? '足の下に積むなら pillarUp、隣に置くなら足の周りの別のマスへ（先に walk で離れてから置いてもよい）'
     : stop.code === 'occupied' ? '置く必要が無いか、別のマスへ' : '固いブロックに接するマスから順に置く';
   return `送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 ${stop.hand} ${stop.kind} ${stop.word}: ${stop.why}（地図で確かめた）。${how}。`;
 }
