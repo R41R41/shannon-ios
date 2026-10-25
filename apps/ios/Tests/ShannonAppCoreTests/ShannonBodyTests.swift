@@ -1412,6 +1412,43 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertNil(ShannonBodyReactionLink.shared.forDelegation(ownerMode: true, utterance: "もしもし"))
     }
 
+    /// 「声: 出さない」 keeps her line in (shown, not said); 「耳: 聞かない」 lets her say it and opens no microphone after.
+    func testTheVoiceAndEarPillsHoldHerLineAndTheMicrophone() async {
+        let speaker = FakeLineSpeaker()
+        let voice = ShannonBodyVoice(speaker: speaker, arbiter: ShannonSpeechArbiter())
+        let out = FlagBox(false)
+        let ear = FlagBox(true)
+        let heard = LineBox()
+        voice.voiceOut = { out.value }
+        voice.earOpen = { ear.value }
+        voice.listen = { line, _ in heard.values.append(line) }
+        let line = ShannonBodyTouchCoordinator.Line(
+            id: "m", text: "えへへ", face: nil, reactionID: "t", threadID: nil, listenSeconds: 6, audience: .owner)
+        XCTAssertFalse(voice.canSpeakNow)
+        let aloud = LevelBox()
+        await voice.say(line) { aloud.values.append($0 ? 1 : 0) }
+        XCTAssertEqual(speaker.spoken, [])
+        XCTAssertEqual(aloud.values, [0])
+        XCTAssertEqual(heard.values.count, 0)
+
+        out.value = true
+        ear.value = false
+        await voice.say(line)
+        XCTAssertEqual(speaker.spoken, ["えへへ"])
+        XCTAssertEqual(heard.values.count, 0)
+
+        ear.value = true
+        await voice.say(line)
+        XCTAssertEqual(heard.values.count, 1)
+        // Both are on until the owner switches one off.
+        let defaults = UserDefaults(suiteName: "shannon.voice-ear.tests")!
+        defaults.removePersistentDomain(forName: "shannon.voice-ear.tests")
+        XCTAssertTrue(ShannonVoiceEar.speaks(defaults))
+        XCTAssertTrue(ShannonVoiceEar.listens(defaults))
+        defaults.set(false, forKey: ShannonVoiceEar.listensKey)
+        XCTAssertFalse(ShannonVoiceEar.listens(defaults))
+    }
+
     func testALineSaidWithOthersAroundIsNeverSpokenAndASpokenLineIsMarked() async {
         let client = FakeBodyClient()
         await client.setAnswer(.init(

@@ -132,6 +132,11 @@ extension ShannonDesktopRootView {
             // A call is visible on every page beside the camera's state (owner decision 2026-10-06, option B):
             // 「音声会話・〈いまの段階〉」, its time, mute and 終了; the row shows Talk.
             ShannonDesktopVoiceCallRow(call: voiceCall) { selectDestination(.talk) }
+            // 「声」 and 「耳」 on every page, the same pills as at the Windows body's feet and over the iPhone's composer
+            // (voice.speak-listen-pills, 2026-10-26).
+            ShannonVoiceEarPills()
+                .padding(.horizontal, ShannonDesktopSpacing.medium)
+                .padding(.vertical, 2)
             // The camera's state is always visible (A14): 切／見てよい／いま見ています. It opens 設定 › カメラ.
             ShannonAppLookStateReader(conversation: conversation) { state in
                 sidebarFooterLine(state.line, hint: "設定のカメラを開きます") {

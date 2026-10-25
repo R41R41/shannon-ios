@@ -42,7 +42,21 @@ final class ShannonDesktopBodyMenuSection: ShannonDesktopMenuBarSection {
         let stream = ShannonDesktopMenuItem(ShannonGeneratedStrings.desktopStreamTitle, state: output.isOn ? .on : .off) { [weak output] in
             output.map { $0.setOn(!$0.isOn) }
         }
-        var items: [NSMenuItem] = [shown, onTop, size, stream]
+        // 「声」 and 「耳」 (voice.speak-listen-pills, 2026-10-26): the same switches and words as the pills.
+        let speaks = ShannonVoiceEar.speaks(), listens = ShannonVoiceEar.listens()
+        let voiceOut = ShannonDesktopMenuItem(
+            speaks ? ShannonGeneratedStrings.voiceOutOn : ShannonGeneratedStrings.voiceOutOff, state: speaks ? .on : .off
+        ) { [weak self] in
+            UserDefaults.standard.set(!ShannonVoiceEar.speaks(), forKey: ShannonVoiceEar.speaksKey)
+            self?.refresh()
+        }
+        let ear = ShannonDesktopMenuItem(
+            listens ? ShannonGeneratedStrings.voiceEarOn : ShannonGeneratedStrings.voiceEarOff, state: listens ? .on : .off
+        ) { [weak self] in
+            UserDefaults.standard.set(!ShannonVoiceEar.listens(), forKey: ShannonVoiceEar.listensKey)
+            self?.refresh()
+        }
+        var items: [NSMenuItem] = [shown, onTop, size, stream, voiceOut, ear]
         // Only while the page is out (the menu enables every item that has an action, so it is left out otherwise).
         if output.state == .live {
             items.append(ShannonDesktopMenuItem(ShannonGeneratedStrings.desktopStreamCopyURL) { [weak output] in output?.copyPageURL() })

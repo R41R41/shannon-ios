@@ -1272,8 +1272,44 @@
             "shannon-desktop:src/desk/views/WakeSection.tsx",
             "shannon-desktop:src/renderer/wakeUi.ts"
           ],
-          "note": "既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。場所は設定が WakeSection.tsx、足もとの印が wakeUi.ts（体のスレッドの知らせ、2026-10-06）。足もとの印は Windows では「呼びかけ: 」を前に付けて出す（呼ばれました を除く）。",
-          "read": "2026-10-06"
+          "note": "既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。場所は設定が WakeSection.tsx、足もとの印が wakeUi.ts（体のスレッドの知らせ、2026-10-06）。2026-10-26 から、足もとの印は「耳」のしるし（voice.speak-listen-pills）の中に「耳: 」を前に付けて出す（呼ばれました を除く）。「耳: 聞かない」の間は待たない。",
+          "read": "2026-10-26"
+        }
+      }
+    },
+    {
+      "id": "voice.speak-listen-pills",
+      "area": "voice",
+      "title": "声と耳のしるし（いつも見える）",
+      "description": "「声: 出す／出さない」（通話の外で、シャノンの言葉を声に出すか）と「耳: 聞く／聞かない」（シャノンが自分からマイクを開いてよいか。話したあとの返事待ち、Windows では入れていれば名前の待ち受けも）。いつも見える所に、同じ見た目のピルで並べ、押すと切り替わる。既定はどちらも入（それまでの動きのまま）。持ち主が始める通話は、どちらでも声の会話のまま。所有者の依頼（2026-10-26「発話・聴覚のボタンを常に表示したい」）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift"
+          ],
+          "note": "トークの入力欄の上、右寄せ（一覧の表示でも向き合う表示でも）。声は、触れたときの一言（ShannonBodyVoice）とイヤホンの話しかけ（speaksNow）に効く。耳は、一言とイヤホンの話しかけのあとの返事待ちに効く。branch codex/shannon/voice-ear-pills（Mac か Xcode Cloud での確かめが要る）。",
+          "read": "2026-10-26"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/DesktopBody/ShannonDesktopBodyMenuSection.swift"
+          ],
+          "note": "サイドバーの下（どのページでも見える、カメラの状態の上）と、メニューバーの体の区画。声は、体の一言・自分から話しかけた一言・場面の一言（どれも ShannonBodyVoice を通る）とイヤホンの話しかけに効く。デスクトップの体の窓の足もとには、まだ置いていない（窓は体の形の上でしかクリックを受けない）。branch codex/shannon/voice-ear-pills。",
+          "read": "2026-10-26"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/renderer/index.html",
+            "shannon-desktop:src/renderer/wakeUi.ts"
+          ],
+          "note": "体の足もとの右、声のしるしの上に耳のしるし（カメラのしるしは左）。声は以前からある「返事を声で読み上げる」と同じ設定。耳は新しい設定 listen（既定は入）で、切のときは名前の待ち受けも、触れたあとの返事待ちもマイクを開かない。管理画面の 設定 › 声 にも同じ切り替え。shannon-desktop の branch codex/shannon/voice-buttons。",
+          "read": "2026-10-26"
         }
       }
     },

@@ -173,8 +173,8 @@ public final class ShannonPrivateListeningModel {
         isRoutePrivate && !othersPresent && isAppRunning
     }
 
-    /// The app would say a message of hers aloud now.
-    public var speaksNow: Bool { speaksEnabled && isPrivatelyListening }
+    /// The app would say a message of hers aloud now. 「声: 出さない」 (`ShannonVoiceEar`) keeps her voice in, here too.
+    public var speaksNow: Bool { speaksEnabled && ShannonVoiceEar.speaks(defaults) && isPrivatelyListening }
 
     /// A message could actually reach this app now: it would speak, and the server takes its reports and has the feature on.
     public var canBeOffered: Bool { speaksNow && serverDelivers && !serverRefuses }

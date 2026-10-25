@@ -206,6 +206,11 @@ extension ShannonConversationView {
                     .transition(.opacity)
                 }
 #endif
+                // 「声」 and 「耳」, always over the composer in either display, as at the Windows body's feet
+                // (voice.speak-listen-pills, 2026-10-26).
+                ShannonVoiceEarPills()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, ShannonSpacing.large)
 #if os(iOS)
                 if usesGirlDialogue {
                     // Option C (owner pick 2026-10-13): one line of work in progress over the composer, and in a

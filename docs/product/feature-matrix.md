@@ -9,13 +9,13 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 ## 件数
 
-機能は全部で 155 件。
+機能は全部で 156 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 128 | 3 | 9 | 12 | 3 | 0 |
-| macOS | 139 | 3 | 8 | 2 | 3 | 0 |
-| Windows | 72 | 21 | 41 | 15 | 4 | 2 |
+| iOS | 129 | 3 | 9 | 12 | 3 | 0 |
+| macOS | 140 | 3 | 8 | 2 | 3 | 0 |
+| Windows | 73 | 21 | 41 | 15 | 4 | 2 |
 
 ## 構成（入口）（`structure`）
 
@@ -130,6 +130,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `voice.location-in-call` | **通話中にいまいる場所を伝える**【iPhone だけ】 許可した場合だけ、いまいる場所を通話に添える。 | ○ | × | × |
 | `voice.diagnostics` | **音声の診断** 声の処理にかかった時間を見て、コピーする。 | ○ | ○ | × |
 | `voice.wake-name` | **「シャノン」と呼んで話しかける**【デスクトップの追加】 名前を呼ばれたら聞き始める（ADR-0002 の追記。名前の聞き取りは端末の中だけ。既定は切。カメラは常に取らない）。置き場所は 設定 › 声 と、待っている間の体の足もとの印。 | × | × | ○ |
+| `voice.speak-listen-pills` | **声と耳のしるし（いつも見える）** 「声: 出す／出さない」（通話の外で、シャノンの言葉を声に出すか）と「耳: 聞く／聞かない」（シャノンが自分からマイクを開いてよいか。話したあとの返事待ち、Windows では入れていれば名前の待ち受けも）。いつも見える所に、同じ見た目のピルで並べ、押すと切り替わる。既定はどちらも入（それまでの動きのまま）。持ち主が始める通話は、どちらでも声の会話のまま。所有者の依頼（2026-10-26「発話・聴覚のボタンを常に表示したい」）。 | ○ | ○ | ○ |
 
 - `voice.conversation` macOS（○）: A16（2026-10-06）。トークの入力欄の「音声会話を開始」（波の形）から始め、通話は入力欄の上の帯に出る。姿は会話の横の「すがた」（通話が始まると開く）。iPhone と同じ通話（Gemini のカスケード、割り込み、エコーの見分け）を、AVAudioEngine の Voice Processing I/O で動かす。Mac が眠らないようにする。
 - `voice.conversation` Windows（△）: 身体の窓だけ（「話す」「切る」）。管理画面には無い。
@@ -152,7 +153,10 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `voice.diagnostics` macOS（○）: 設定 › 管理 › 診断。Mac の通話も、iPhone と同じ処理の段階と時間を残す（中身は残さない）。
 - `voice.wake-name` iOS（×）: iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。
 - `voice.wake-name` macOS（×）: iPhone と Mac は、Windows で測ってから決める（所有者の決定、2026-10-05。名前への誤反応の 1 日の回数と、名前から返事までの遅れ）。iPhone は、するとしてもアプリが前に出ている間か充電中に限り、省電力モード中は待たない。
-- `voice.wake-name` Windows（○）: 既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。場所は設定が WakeSection.tsx、足もとの印が wakeUi.ts（体のスレッドの知らせ、2026-10-06）。足もとの印は Windows では「呼びかけ: 」を前に付けて出す（呼ばれました を除く）。
+- `voice.wake-name` Windows（○）: 既定は切。設定 › 声 の「名前で呼ぶ」で入れる（試しに呼ぶボタンと、聞き取れた時刻）。待っている間は体の足もとの印で状態を出す（待っています／話し中は休み／準備中／待てません／呼ばれました。文は design/strings.ja.json の voice.wakeName.*）。「話し中は休み」は、所有者がほかのアプリでシャノンと通話している間（presence の ownerCallElsewhere.active、docs/body-contract.md）の足もとの印でもある。方法 A（Silero VAD と ReazonSpeech の hotword）。所有者の決定（Syzygy ADR-0002 の追記、2026-10-05）。場所は設定が WakeSection.tsx、足もとの印が wakeUi.ts（体のスレッドの知らせ、2026-10-06）。2026-10-26 から、足もとの印は「耳」のしるし（voice.speak-listen-pills）の中に「耳: 」を前に付けて出す（呼ばれました を除く）。「耳: 聞かない」の間は待たない。
+- `voice.speak-listen-pills` iOS（○）: トークの入力欄の上、右寄せ（一覧の表示でも向き合う表示でも）。声は、触れたときの一言（ShannonBodyVoice）とイヤホンの話しかけ（speaksNow）に効く。耳は、一言とイヤホンの話しかけのあとの返事待ちに効く。branch codex/shannon/voice-ear-pills（Mac か Xcode Cloud での確かめが要る）。
+- `voice.speak-listen-pills` macOS（○）: サイドバーの下（どのページでも見える、カメラの状態の上）と、メニューバーの体の区画。声は、体の一言・自分から話しかけた一言・場面の一言（どれも ShannonBodyVoice を通る）とイヤホンの話しかけに効く。デスクトップの体の窓の足もとには、まだ置いていない（窓は体の形の上でしかクリックを受けない）。branch codex/shannon/voice-ear-pills。
+- `voice.speak-listen-pills` Windows（○）: 体の足もとの右、声のしるしの上に耳のしるし（カメラのしるしは左）。声は以前からある「返事を声で読み上げる」と同じ設定。耳は新しい設定 listen（既定は入）で、切のときは名前の待ち受けも、触れたあとの返事待ちもマイクを開かない。管理画面の 設定 › 声 にも同じ切り替え。shannon-desktop の branch codex/shannon/voice-buttons。
 
 ## 作業（`tasks`）
 

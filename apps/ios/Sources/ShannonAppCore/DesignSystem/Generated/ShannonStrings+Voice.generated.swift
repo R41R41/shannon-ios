@@ -110,4 +110,20 @@ extension ShannonGeneratedStrings {
     public static let voiceGuestHidesTalk = "友人も一緒の通話中は、トークを隠しています"
     /// `voice.mac.sendWaitsForGuestCall`
     public static let voiceMacSendWaitsForGuestCall = "友人も一緒の通話を終了するか、もう一度つなぐと送れます"
+    /// `voice.out.on`
+    public static let voiceOutOn = "声: 出す"
+    /// `voice.out.off`
+    public static let voiceOutOff = "声: 出さない"
+    /// `voice.out.hintOn`
+    public static let voiceOutHintOn = "通話の外でも、シャノンの言葉を声に出します。押すと、声を出さないようにします。"
+    /// `voice.out.hintOff`
+    public static let voiceOutHintOff = "通話の外では、吹き出しと文字だけで伝えます。押すと、声にも出します。"
+    /// `voice.ear.on`
+    public static let voiceEarOn = "耳: 聞く"
+    /// `voice.ear.off`
+    public static let voiceEarOff = "耳: 聞かない"
+    /// `voice.ear.hintOn`
+    public static let voiceEarHintOn = "シャノンが話したあと、少しの間だけマイクで返事を聞きます。押すと、自分からは聞かないようにします。"
+    /// `voice.ear.hintOff`
+    public static let voiceEarHintOff = "シャノンは自分からはマイクを開きません。話すときは通話のボタンを押してください。押すと、聞くようにします。"
 }

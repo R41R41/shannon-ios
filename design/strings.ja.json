@@ -1446,6 +1446,64 @@
       "note": "体の足もとの印。名前が聞こえて、続く話を聞いている。Syzygy ADR-0002 の追記（2026-10-05、所有者の決定）。Windows だけ（iPhone と Mac は、Windows で測ってから決める）。"
     },
     {
+      "key": "voice.out.on",
+      "text": "声: 出す",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/main.ts",
+      "windowsNow": "声: 出す",
+      "note": "いつも見える所に出す、声のしるし（voice.speak-listen-pills）。通話の外で、シャノンの言葉を声に出すか。押すと切り替わる。3 つのアプリで同じ見た目（ピル、左にスピーカーの印）。2026-10-26。"
+    },
+    {
+      "key": "voice.out.off",
+      "text": "声: 出さない",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/main.ts",
+      "windowsNow": "声: 出さない",
+      "note": "声のしるしの切の状態。吹き出しと文字では伝える。通話（持ち主が始めた声の会話）は声のまま。"
+    },
+    {
+      "key": "voice.out.hintOn",
+      "text": "通話の外でも、シャノンの言葉を声に出します。押すと、声を出さないようにします。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/main.ts",
+      "note": "声のしるしの手がかり（Windows は title、Apple は help と VoiceOver のヒント）。"
+    },
+    {
+      "key": "voice.out.hintOff",
+      "text": "通話の外では、吹き出しと文字だけで伝えます。押すと、声にも出します。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/main.ts",
+      "note": "声のしるしの手がかり（切のとき）。"
+    },
+    {
+      "key": "voice.ear.on",
+      "text": "耳: 聞く",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
+      "note": "いつも見える所に出す、耳のしるし（voice.speak-listen-pills）。シャノンが自分からマイクを開いてよいか（話したあとの返事待ち。Windows は、入れていれば名前の待ち受けも）。押すと切り替わる。Windows で名前を待っている間は「耳: 」の後に voice.wakeName.state.* の文を出す。2026-10-26。"
+    },
+    {
+      "key": "voice.ear.off",
+      "text": "耳: 聞かない",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
+      "note": "耳のしるしの切の状態。自分からはマイクを開かない。通話のボタン（持ち主が押す）はそのまま使える。"
+    },
+    {
+      "key": "voice.ear.hintOn",
+      "text": "シャノンが話したあと、少しの間だけマイクで返事を聞きます。押すと、自分からは聞かないようにします。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
+      "note": "耳のしるしの手がかり。"
+    },
+    {
+      "key": "voice.ear.hintOff",
+      "text": "シャノンは自分からはマイクを開きません。話すときは通話のボタンを押してください。押すと、聞くようにします。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEarPills.swift",
+      "windows": "shannon-desktop:src/renderer/wakeUi.ts",
+      "note": "耳のしるしの手がかり（切のとき）。"
+    },
+    {
       "key": "nav.delivery",
       "text": "配信",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",

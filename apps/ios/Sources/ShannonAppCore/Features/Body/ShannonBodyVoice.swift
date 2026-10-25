@@ -80,6 +80,10 @@ public final class ShannonBodyVoice {
     public var mayAnswerInVoice: @MainActor () -> Bool = { true }
     /// Opens the microphone for his answer: the voice conversation of the iPhone or, since A16, of the Mac.
     public var listen: Listen?
+    /// 「声」 is on (`ShannonVoiceEar`): off, her line is shown and not said. Asked like `mayAnswerInVoice`, also mid-line.
+    var voiceOut: @MainActor () -> Bool = { ShannonVoiceEar.speaks() }
+    /// 「耳」 is on (`ShannonVoiceEar`): off, the microphone is not opened for his answer after her line.
+    var earOpen: @MainActor () -> Bool = { ShannonVoiceEar.listens() }
 
     public init(
         streamSpeech: @escaping ShannonEarphoneSpeaker.StreamSpeech, callIsActive: @escaping @MainActor () -> Bool,
@@ -102,7 +106,7 @@ public final class ShannonBodyVoice {
     }
 
     /// Whether her line would be spoken if she said one now.
-    public var canSpeakNow: Bool { !isTaken && mayAnswerInVoice() }
+    public var canSpeakNow: Bool { !isTaken && mayAnswerInVoice() && voiceOut() }
 
     private var isTaken: Bool { arbiter.isBusyForTouchLine || callIsActive() }
     /// The same, not counting this line itself.
@@ -123,12 +127,12 @@ public final class ShannonBodyVoice {
         // Asked before the first sound, after the wait for the voice, and for every piece of sound.
         let outcome = await speaker.speak(line.text) { [weak self] in
             guard let self else { return false }
-            return !self.isTakenByOthers && self.mayAnswerInVoice()
+            return !self.isTakenByOthers && self.mayAnswerInVoice() && self.voiceOut()
         }
         ShannonSpeechLevelPublisher.shared.end()
         heard(outcome == .spoken || outcome == .cutShort)
         // Only a line that was said to its end is answered aloud; everything is asked once more before the microphone opens.
-        guard outcome == .spoken, line.listenSeconds > 0, let listen, !isTakenByOthers, mayAnswerInVoice() else { return }
+        guard outcome == .spoken, line.listenSeconds > 0, let listen, !isTakenByOthers, mayAnswerInVoice(), earOpen() else { return }
         await listen(line, line.listenSeconds)
     }
 

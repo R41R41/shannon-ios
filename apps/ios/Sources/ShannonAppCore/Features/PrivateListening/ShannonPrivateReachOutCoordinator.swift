@@ -187,7 +187,8 @@ public final class ShannonPrivateReachOutCoordinator {
             settle(offer.id, .spoken)
             // The report goes out beside the microphone, not before it: his answer must not wait for the network.
             let reporting = Task { @MainActor [weak self] in await self?.flushReports() }
-            if claim.listenSeconds > 0, let listener, stillPrivate(), !isConversationActive() {
+            // 「耳: 聞かない」 (`ShannonVoiceEar`): she said it, and does not open the microphone for his answer.
+            if claim.listenSeconds > 0, let listener, ShannonVoiceEar.listens(defaults), stillPrivate(), !isConversationActive() {
                 activity = .listening
                 await listener.listen(for: claim.listenSeconds, after: claim.message)
             }
