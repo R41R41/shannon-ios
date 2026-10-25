@@ -17,6 +17,7 @@ import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { validSkillInput } from '../surfaces/minecraft/minecraftControlValidation.js';
 import { armourCrafted, fightRefusal, minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
+import type { MinecraftFeelingPort } from '../mind/emotion/minecraftFeeling.js';
 
 const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId = step.id, plan?: BodyPlanView): BodyTaskContext {
@@ -55,6 +56,11 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
   llmc?: { plan(): BodyPlanView | undefined;
     /** Whether the decision now running was an urgent one (its act is held to three hands). */
     urgent?(): boolean };
+  /**
+   * Owner 2026-10-26: each finished act is handed to her feeling beside the decisions (`minecraftFeeling.ts`), synchronously and
+   * without waiting for anything; nothing comes back to the decision. Absent: nothing is felt from her acts.
+   */
+  feelings?: MinecraftFeelingPort;
 }): FcaExternalTools {
   const { control, step } = parts;
   const bodyId = control.store.body(step.taskId) ?? (control.available().length === 1 ? control.available()[0]! : null);
@@ -119,6 +125,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     if (parts.llmc && llmcSchema(call.name)) {
       noteActNode(step.taskId, node?.mark ?? null, line => console.info(line));
       const sent = await runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [] });
+      if (call.name === MC_ACT_TOOL) parts.feelings?.noted({ scopeKey: step.scopeKey, taskId: step.taskId, goal: step.snapshot.task.goal,
+        why: String((call.input as { why?: unknown } | null)?.why ?? ''), ok: sent.ok, reflex: sent.bodyReflex === true,
+        progressed: sent.progressed === true, outcome: sent.text.split('\n').find(text => !text.startsWith('（頭が形を直して')) ?? '' });
       return hold?.tail ? withHeldTail(sent, hold.tail) : hold?.note ? withNote(sent, hold.note) : sent;
     }
     active.stepOutcome = 'unknown';

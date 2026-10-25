@@ -58,6 +58,7 @@ import { configureDatabase, openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { switchOn } from '@shannon/switches';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
+import type { MinecraftFeelingPort } from '../mind/emotion/minecraftFeeling.js';
 import { configuredResponseModel, isHaikuModel, replacementModel } from '../infra/models/anthropic/haikuConfig.js';
 import { createAnthropicFcaModel } from '../infra/models/anthropic/anthropicFcaModel.js';
 import { fcaCompactAboveTokens } from '../infra/models/anthropic/anthropicFcaCompaction.js';
@@ -98,6 +99,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   skillOpen?: SkillTurnPorts['open'];
   /** SHANNON_MINECRAFT_LIVE (session dc-live): told what task a Minecraft body is on, for the conversations' view of it. */
   live?: MinecraftLiveSink;
+  /** Owner 2026-10-26: her feeling from her own acts in a body task, beside the decisions (`minecraftFeeling.ts`). */
+  minecraftFeelings?: MinecraftFeelingPort;
 }) {
   const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
@@ -222,6 +225,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           ...(small ? [small.planTools] : []),
           ...(minecraft ? [withMinecraftProgress(withMinecraftAgenda(fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone,
             sourcesVisible: () => check.whole('tool') ?? false, ...(small ? small.tools : {}),
+            ...(small && parts.minecraftFeelings ? { feelings: parts.minecraftFeelings } : {}),
             ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }),
             { on: minecraft.agenda.on, taskId: step.taskId, judge: minecraftOpportunityJudge(jev, step.scopeKey), log: line => console.info(line),
               ...minecraftProcedureStepParts(_runtime, step), observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? ''),

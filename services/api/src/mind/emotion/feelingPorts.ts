@@ -13,7 +13,7 @@ import {
   type ReplyCheckContext,
   presentFor, presentationIdOf, utteranceKind, type CompanionStateSnapshot, type Presentation, type ShannonExpressiveEmotion,
   type ShannonMessageEmotion, type FeelingAudience, type FeelingChannel, type FeelingEvent, type FeelingFace, type FeelingFaceState,
-  type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace, CHARACTER_REGIONS,
+  type FeelingRegister, type FeelingTurnDecision, type ReplyEmotion, type ShannonEmotionKind, type ShannonFace, CHARACTER_REGIONS, isGameFeeling, messageEmotionKind,
 } from '@shannon/cognition';
 import { capFor, regionFace, regionOf, routedOrChecked, spaceDecision, spaceIdentity, voiceSpaceIdentity, warnCapped } from './characterSpaceHooks.js';
 import { checkContext, checkFacts, registerNow, voiceGuardContext } from './feelingTurnCheck.js';
@@ -217,6 +217,15 @@ function turnHints(handle: FeelingTurnHandle): Pick<FeelingFaceState, 'drawer' |
   const decision = handle.decision;
   const drawer = decision && decision.drawer !== 'none' ? { drawer: decision.drawer } : {};
   return { ...drawer, ...(handle.register !== 'normal' ? { register: handle.register } : {}) };
+}
+
+/** The kind of the feeling she has now when a game moment brought it (`isGameFeeling`) and it shows; nothing otherwise. */
+function gameFeelingFace(snapshot: CompanionStateSnapshot, at: string): { feeling?: ShannonEmotionKind } {
+  return safely(() => {
+    const present = presentShannonFeeling(snapshot, at, emotionTiming());
+    const kind = isGameFeeling(present) ? messageEmotionKind(present) : undefined;
+    return kind ? { feeling: kind } : {};
+  }, {});
 }
 
 function faceState(port: FeelingPort, scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot,
@@ -485,7 +494,10 @@ export const feelingBody = Object.freeze({
     return safely(() => {
       const key = touchKey(audience === 'owner' ? 'owner' : 'others');
       const opinion = { ...(note?.shown ? { noteShown: note.shown } : {}), ...(note?.tell === 'blush' ? { tell: 'blush' as const } : {}) };
-      const face = feelingFace(faceState(port, scopeKey, key, at, snapshot, { mood: faceForMood(snapshot.emotion), ...opinion }), key.audience);
+      // Phase 2 of her Minecraft body (owner 2026-10-26): a feeling a game moment brought shows on every body while it lasts, as a
+      // reply's shows on the bubble; any other feeling keeps the face it had (the stance, the note, the mood).
+      const game = gameFeelingFace(snapshot, at);
+      const face = feelingFace(faceState(port, scopeKey, key, at, snapshot, { mood: faceForMood(snapshot.emotion), ...opinion, ...game }), key.audience);
       const { feeling: _feeling, tell: _tell, until: _until, ...rest } = mood as T & { until?: string };
       // Her note's `until` rides with its blush, for the owner alone (the face's tell is only ever given to him).
       const until = face.tell && note?.until ? { until: note.until } : {};
