@@ -191,6 +191,34 @@ export {
   type ShannonTouchFeeling,
   type ShannonTouchFeelingStep,
 } from './touchEmotion.js';
+// Phase 2 of her Minecraft body: what a game moment, or a thought of hers while playing, does to the one emotion state.
+export {
+  SHANNON_GAME_BAD_HURT,
+  SHANNON_GAME_CAUSE_PREFIX,
+  SHANNON_GAME_DANGERS,
+  SHANNON_GAME_DANGER_FEELINGS,
+  SHANNON_GAME_MILESTONES,
+  SHANNON_GAME_MILESTONE_FEELINGS,
+  SHANNON_GAME_MOMENT_KINDS,
+  SHANNON_GAME_MOOD_STEP,
+  SHANNON_GAME_STUCK_FROM,
+  SHANNON_GAME_STUCK_LONG_FROM,
+  SHANNON_GAME_THOUGHT_INTENSITY,
+  SHANNON_GAME_THOUGHT_KINDS,
+  feelGame,
+  gameCause,
+  gameFeeling,
+  gameThoughtWords,
+  holdsFeelingThroughGame,
+  isGameFeeling,
+  isShannonGameDanger,
+  isShannonGameMilestone,
+  isShannonGameThoughtKind,
+  type ShannonGameDanger,
+  type ShannonGameMilestone,
+  type ShannonGameMoment,
+  type ShannonGameMomentKind,
+} from './gameEmotion.js';
 // Syzygy ADR-0006 stage 1 (影): the prediction layer and the new dynamics, computed beside the current ones and read by nothing that acts.
 export {
   SHANNON_PREDICTION_COEFFICIENTS,

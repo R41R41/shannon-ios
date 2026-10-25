@@ -68,7 +68,7 @@ describe('v2 around: the walk\'s rules on the map', () => {
   });
   it('says nothing it cannot know: a cell whose head, feet or floor the map does not show is left out', () => {
     expect(cellLines(view(), feet).join('\n')).not.toContain('x=7');
-    expect(aroundLines(view(), feet)).toHaveLength(10 + 1 + cellLines(view(), feet).length);
+    expect(aroundLines(view(), feet)).toHaveLength(1 + 10 + 1 + cellLines(view(), feet).length);
   });
 });
 

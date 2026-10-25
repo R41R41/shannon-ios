@@ -1,4 +1,4 @@
-import type { ShannonEmotionKind, ShannonExpression, ShannonFeeling } from '@shannon/cognition';
+import { SHANNON_GAME_DANGERS, SHANNON_GAME_MILESTONES, type ShannonEmotionKind, type ShannonExpression, type ShannonFeeling } from '@shannon/cognition';
 import {
   BODY_TOUCH_PARTS, BODY_TOUCH_PART_WORDS, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchPart, type BodyTouchRegion,
 } from '../surfaces/body/bodyTouchWords.js';
@@ -103,14 +103,19 @@ export const BODY_PRESENCE_EVENT_TYPES = ['ownerAway', 'ownerReturned'] as const
 export const BODY_PLAIN_EVENT_TYPES = ['callStarted', 'callEnded', 'windowHidden', 'windowShown', 'appStarted'] as const;
 /**
  * What happened to her Minecraft body (`docs/minecraft-body-contract.md`). Taken only from the one device configured
- * as that body, in the owner's scope; a closed set, each with its own closed fields and no text.
+ * as that body, in the owner's scope; a closed set, each with its own closed fields and no text. Phase 2 (owner 2026-10-26):
+ * a hit (`strength`: the share of her health lost at once), a near death (`cause` `danger:<kind>`), a first on the way to the
+ * dragon (`cause` `milestone:<kind>`), a night lived through and the owner come near; each moves her feeling (`gameEmotion.ts`).
  */
-export const BODY_GAME_EVENT_TYPES = ['game.died'] as const;
+export const BODY_GAME_EVENT_TYPES = ['game.died', 'game.hurt', 'game.danger', 'game.milestone', 'game.night_survived', 'game.owner_near'] as const;
 export const BODY_EVENT_TYPES = [...BODY_TOUCH_EVENT_TYPES, ...BODY_PRESENCE_EVENT_TYPES, ...BODY_PLAIN_EVENT_TYPES, ...BODY_GAME_EVENT_TYPES] as const;
 export type BodyGameEventType = typeof BODY_GAME_EVENT_TYPES[number];
 export const isBodyGameEvent = (type: string): type is BodyGameEventType => (BODY_GAME_EVENT_TYPES as readonly string[]).includes(type);
 /** A game's namespaced id, such as `minecraft:lava`. */
 const GAME_ID = /^[a-z0-9_.-]{1,32}:[a-z0-9_./-]{1,64}$/u;
+/** The cause of a near death (`danger:lava`) and of a first (`milestone:first_diamond`): closed, from the one game table. */
+export const BODY_GAME_DANGER_CAUSES = SHANNON_GAME_DANGERS.map(kind => `danger:${kind}`);
+export const BODY_GAME_MILESTONE_CAUSES = SHANNON_GAME_MILESTONES.map(kind => `milestone:${kind}`);
 
 export type BodyEventType = typeof BODY_EVENT_TYPES[number];
 export type BodyAudience = 'owner' | 'others';
@@ -199,7 +204,10 @@ export interface BodyEvent {
   gesture?: BodyTouchGesture;
   input?: BodyTouchInput;
   reflex?: BodyTouchReflex;
-  /** `game.died` only: the game's id of what killed her body, such as `minecraft:lava`. */
+  /**
+   * `game.died`: the game's id of what killed her body, such as `minecraft:lava`; `game.hurt` (optional): what hit her;
+   * `game.danger`: `danger:<kind>`; `game.milestone`: `milestone:<kind>`.
+   */
   cause?: string;
 }
 
@@ -234,7 +242,8 @@ const integerWithin = (value: unknown, maximum: number): value is number => type
 function allowedEventFields(type: BodyEventType): readonly string[] {
   if (includes(BODY_TOUCH_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'durationMs', 'strength', 'region', ...BODY_TOUCH_DETAIL_FIELDS];
   if (includes(BODY_PRESENCE_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'minutesAway'];
-  if (type === 'game.died') return [...COMMON_EVENT_FIELDS, 'cause'];
+  if (type === 'game.died' || type === 'game.danger' || type === 'game.milestone') return [...COMMON_EVENT_FIELDS, 'cause'];
+  if (type === 'game.hurt') return [...COMMON_EVENT_FIELDS, 'cause', 'strength'];
   return COMMON_EVENT_FIELDS;
 }
 
@@ -258,7 +267,15 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
     if (item.durationMs !== undefined && !integerWithin(item.durationMs, BODY_LIMITS.durationMs)) return `${at}.durationMs is invalid`;
     if (item.strength !== undefined && !(typeof item.strength === 'number' && item.strength >= 0 && item.strength <= 1)) return `${at}.strength must be 0..1`;
     if (item.minutesAway !== undefined && !integerWithin(item.minutesAway, BODY_LIMITS.minutesAway)) return `${at}.minutesAway is invalid`;
-    if (item.type === 'game.died' && (typeof item.cause !== 'string' || !GAME_ID.test(item.cause))) return `${at}.cause must be a namespaced id such as minecraft:lava`;
+    if ((item.type === 'game.died' || (item.type === 'game.hurt' && item.cause !== undefined))
+      && (typeof item.cause !== 'string' || !GAME_ID.test(item.cause))) return `${at}.cause must be a namespaced id such as minecraft:lava`;
+    if (item.type === 'game.hurt' && item.strength === undefined) return `${at}.strength is required for game.hurt`;
+    if (item.type === 'game.danger' && !includes(BODY_GAME_DANGER_CAUSES, item.cause)) {
+      return `${at}.cause must be one of ${BODY_GAME_DANGER_CAUSES.join(', ')}`;
+    }
+    if (item.type === 'game.milestone' && !includes(BODY_GAME_MILESTONE_CAUSES, item.cause)) {
+      return `${at}.cause must be one of ${BODY_GAME_MILESTONE_CAUSES.join(', ')}`;
+    }
     const region = isBodyTouchRegion(item.region) ? item.region : undefined;
     // Touch vocabulary 2 on a touch type only (on any other type the fields were refused above).
     const detail = includes(BODY_TOUCH_EVENT_TYPES, item.type) ? validatedTouchDetail(item, item.type, region) : {};

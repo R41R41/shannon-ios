@@ -8,6 +8,9 @@ import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 import { operatorMinecraftRequests, type OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
 import { fcaMinecraftVoice } from './fcaMinecraftVoice.js';
+import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
+import { fcaMinecraftBodyWake } from './fcaMinecraftBodyWake.js';
+import { isNativeDragonGoal } from './fcaMinecraftGoalBinding.js';
 
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
@@ -29,6 +32,15 @@ export function admittedMinecraftRequest(
     && (parent?.kind === 'root' || parent?.kind === 'conversation');
 }
 
+/**
+ * The owner's own words when they are one of the closed dragon requests (`isNativeDragonGoal`), else null. mc-chat-stale-frame (2026-10-26): the
+ * model that reads the chat turn rewrites the goal (「エンドラを討伐して」 became 「エンダードラゴンを倒すため、装備や食料などを整えて…」), the
+ * rewrite is in no closed set, and the task lost the dragon's trusted completion evidence and the body's dragon tools. The task keeps what he said.
+ */
+export function ownDragonWords(message: unknown): string | null {
+  return typeof message === 'string' && isNativeDragonGoal(message) ? message.trim() : null;
+}
+
 /** Existing conversation tools now refer to common tasks. No legacy queue or planner fallback in this mode. */
 export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime: TaskRuntime; conversation: FcaConversationPort;
   visible: FcaSourceGuard; ownerScope: string; ownerAlone(): boolean; stop(id: string, reason: string): Promise<TaskView[]>;
@@ -38,38 +50,53 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   /** Where the content-free lines go (`console.log` when absent). */
   log?(line: string): void;
 }): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
-  admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests; voice: VoiceMinecraftPort } {
-  const bound = (visible: (id: string) => boolean = id => parts.visible(parts.ownerScope, id)) => {
+  admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests; voice: VoiceMinecraftPort;
+  /** Wakes a task that slept for a body that was not there, once the body is (`fcaMinecraftBodyWake.ts`); ticked every second by the wake. */
+  bodyWake: ReturnType<typeof fcaMinecraftBodyWake> } {
+  /**
+   * The tasks bound to a body that `visible` lets through. `keep` (cheap, from the task's own record) is asked first: `visible` is the source
+   * guard, a walk of the task's provenance, 100–370 ms of the API's one thread each in production. mc-chat-stale-frame (2026-10-26): the chat request
+   * of 2026-10-25 03:23 asked it of all 48 tasks ever bound to the body, the 31 that held sources walked in full, one after the other (8 s with
+   * no poll of the body read), to find the one open request there was not.
+   */
+  const bound = (visible: (id: string) => boolean = id => parts.visible(parts.ownerScope, id), keep: (task: TaskView) => boolean = () => true) => {
     const tasks: TaskView[] = [];
     for (let offset = 0; ; offset += 100) {
       const page = parts.runtime.list(parts.ownerScope, { limit: 100, offset });
-      tasks.push(...page.filter(task => parts.control.store.body(task.id) && visible(task.id)));
+      tasks.push(...page.filter(task => parts.control.store.body(task.id) && keep(task) && visible(task.id)));
       if (page.length < 100) return tasks;
     }
   };
+  /** A task a stop can still do something to: not one that already stopped or ended (`runtime.stop` would only write the request again). */
+  const unfinished = (task: TaskView) => !['stopped', 'completed', 'failed'].includes(task.phase);
   const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA,
     context: MINECRAFT_REQUEST_CONTEXT });
   const log = parts.log ?? ((line: string) => console.log(line));
-  /** What refuses an in-game request before her reply is made: the scope, someone else known to be present, no frame of the body. */
+  /**
+   * What refuses an in-game request before her reply is made: the scope, someone else known to be present, no frame of the body. A frame
+   * a few seconds old still shows a body (mc-chat-stale-frame, 2026-10-26: a stall of the API's thread made a body that had
+   * polled 4 s before look gone); the task's decisions are told how old their picture is.
+   */
   const admission = (input: { scopeKey: string; request: { serverId: string } }): MinecraftIntentRefusal | null =>
     input.scopeKey !== parts.ownerScope ? 'not_owner_scope' : !parts.ownerAlone() ? 'others_present'
-      : !parts.control.frame(parts.control.bodyId(input.request.serverId)) ? 'body_unavailable' : null;
+      : !parts.control.latest(parts.control.bodyId(input.request.serverId), LLMC_STALE_FRAME_MS) ? 'body_unavailable' : null;
   /**
    * The newest Minecraft request of his (`admittedMinecraftRequest`, not a task that merely touched the body) on this body that can
    * still take a message and act on it: ready, executing or waiting, and not paused (a stopping task would drop it).
    */
-  const openRequest = (bodyId: string): TaskView | undefined => bound()
-    .filter(task => ['ready', 'executing', 'waiting'].includes(task.phase) && task.status !== 'paused' && parts.control.store.body(task.id) === bodyId
-      && admittedMinecraftRequest(task, task.parentId ? parts.runtime.get(parts.ownerScope, task.parentId) : null, true))
+  const openRequest = (bodyId: string): TaskView | undefined => bound(undefined, task => ['ready', 'executing', 'waiting'].includes(task.phase)
+    && task.status !== 'paused' && parts.control.store.body(task.id) === bodyId
+    && admittedMinecraftRequest(task, task.parentId ? parts.runtime.get(parts.ownerScope, task.parentId) : null, true))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
   const refused = (reason: MinecraftIntentRefusal, kind: string) => {
     log(`Shannon Minecraft intent refused reason=${reason} kind=${kind}`);
     return { kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason };
   };
   const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
-    sourceVisible: parts.sourceVisible, atomic: parts.atomic, bound: () => bound(), openRequest, spec, log });
+    sourceVisible: parts.sourceVisible, atomic: parts.atomic, bound: () => bound(undefined, unfinished), openRequest, spec, log });
   return {
     voice,
+    bodyWake: fcaMinecraftBodyWake({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, log }),
     operator: operatorMinecraftRequests({ ...parts, bound: () => bound(() => true), spec }),
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();
@@ -123,16 +150,17 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
         : !input.experienceId ? 'no_turn' : !parts.sourceVisible(input.experienceId) ? 'turn_not_visible' : null;
       if (reason) return refused(reason, intent.kind);
       const sourceId = input.experienceId!;
-      if (intent.kind === 'stop') { for (const task of bound()) await parts.stop(task.id, 'owner_game_stop'); return intent; }
+      if (intent.kind === 'stop') { for (const task of bound(undefined, unfinished)) await parts.stop(task.id, 'owner_game_stop'); return intent; }
       const bodyId = parts.control.bodyId(input.request.serverId);
+      const goal = ownDragonWords(input.request.message) ?? intent.goal;
       // A Minecraft request of his under way takes the words as a message (「続けて」 in run 19 would have been a second task beside it).
       const running = openRequest(bodyId);
       if (running) {
         try {
           parts.runtime.observeExternal(scopeKey, running.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId],
-            observedAt: input.request.observedAt, text: `ゲーム内の本人の言葉（いまのタスクへ）: ${intent.goal}` });
+            observedAt: input.request.observedAt, text: `ゲーム内の本人の言葉（いまのタスクへ）: ${goal}` });
           log(`Shannon Minecraft intent delivered task=${running.id} as=message`);
-          return { ...intent, request: { id: running.id } };
+          return { ...intent, goal, request: { id: running.id } };
         } catch (error) {
           // It ended meanwhile (`FCA_TARGET_FINISHED`): a new task, as before. A changed retry of the same request still conflicts.
           if (!(error instanceof Error) || error.message !== 'FCA_TARGET_FINISHED') throw error;
@@ -140,11 +168,11 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       }
       return parts.atomic(() => {
         // Only the asking turn (the event below), not the root's whole set (owner decision 2026-10-15, `TaskChildOptions`).
-        const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(intent.goal), `mc:${input.request.requestId}`,
+        const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(goal), `mc:${input.request.requestId}`,
           { sources: 'asking' });
-        parts.runtime.observeExternal(scopeKey, task.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId], observedAt: input.request.observedAt, text: `ゲーム内の本人の依頼: ${intent.goal}` });
+        parts.runtime.observeExternal(scopeKey, task.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId], observedAt: input.request.observedAt, text: `ゲーム内の本人の依頼: ${goal}` });
         if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
-        return { ...intent, request: { id: task.id } };
+        return { ...intent, goal, request: { id: task.id } };
       });
     },
   };

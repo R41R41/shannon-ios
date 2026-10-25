@@ -25,6 +25,7 @@ import { observeSync } from '../../infra/observer/observerContext.js';
 import type { JevChooser } from '../../infra/models/jev/jevChoice.js';
 import type { FeelingTurnJevInput } from '../../contracts/feelingEventContract.js';
 import { emotionTiming } from './emotionTiming.js';
+import { gameFeelingFace } from './gameFeelingFace.js';
 import type { FeelingEvents, FeelingKey, FeelingLines } from './feelingEvents.js';
 import { OWNER_PRIVATE_MARK, type FeelingDays } from './feelingDays.js';
 import type { StreamFeeling } from './streamFeeling.js';
@@ -485,7 +486,8 @@ export const feelingBody = Object.freeze({
     return safely(() => {
       const key = touchKey(audience === 'owner' ? 'owner' : 'others');
       const opinion = { ...(note?.shown ? { noteShown: note.shown } : {}), ...(note?.tell === 'blush' ? { tell: 'blush' as const } : {}) };
-      const face = feelingFace(faceState(port, scopeKey, key, at, snapshot, { mood: faceForMood(snapshot.emotion), ...opinion }), key.audience);
+      const game = gameFeelingFace(snapshot, at);
+      const face = feelingFace(faceState(port, scopeKey, key, at, snapshot, { mood: faceForMood(snapshot.emotion), ...opinion, ...game }), key.audience);
       const { feeling: _feeling, tell: _tell, until: _until, ...rest } = mood as T & { until?: string };
       // Her note's `until` rides with its blush, for the owner alone (the face's tell is only ever given to him).
       const until = face.tell && note?.until ? { until: note.until } : {};

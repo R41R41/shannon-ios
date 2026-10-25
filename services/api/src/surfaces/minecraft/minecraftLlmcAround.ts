@@ -1,4 +1,6 @@
 import { isPortal, type MapView } from './minecraftLlmcPreflightMap.js';
+import { retreatLine } from './minecraftLlmcRetreat.js';
+import type { Look } from './minecraftLlmcSurfaceLook.js';
 import {
   bestStep, cornerOk, digWords, DIRS, fallOf, fallText, isHard, isHarm, isOpen, nameOf, NAME, noFloor, portalWords, ptText, stepOptions, type P, type Step,
 } from './minecraftLlmcWalkRules.js';
@@ -192,31 +194,40 @@ export function cellLines(view: MapView, feet: P, range = AROUND_RANGE, raw: Map
   }
   return lines;
 }
-/** `around`: the ten cells next to her, then the cells within the range. */
+/**
+ * `around`: the cell she stands in first (mc-sonnet-guards, replay bench 2026-10-26: Sonnet 5.5 put a block into its own feet or head cell in 6 of 69 answers,
+ * Opus 5.5 in 2 of 51), then the ten cells next to her, then the cells within the range.
+ */
 export function aroundLines(view: MapView, feet: P): string[] {
   const read = unloadedAsUnknown(view);
-  return [...stepLines(read, feet), AROUND_HEAD, ...cellLines(read, feet, AROUND_RANGE, view)];
+  return [standLine(feet), ...stepLines(read, feet), AROUND_HEAD, ...cellLines(read, feet, AROUND_RANGE, view)];
 }
+/** The cells she is in: no block is put into them. */
+export const standLine = (feet: P): string => `立っているマス: 足 ${ptText(feet)}・頭 ${ptText({ x: feet.x, y: feet.y + 1, z: feet.z })}（この 2 マスには place できない）`;
 /** The line before the cells beyond the first step; what is not written is said in the instructions' dictionary (`around`). */
 export const AROUND_HEAD = '足の周りの 1 歩より先（この判断の始めの frame の地図から。水平 6・足と頭と床が地図にある高さ。z=行 x=範囲。'
   + '書いていない所は足も頭も固い岩か、地図の端で不明）:';
 
 /** A hostile as the live state's line gives it: its name, id, how far, where. */
-export interface Watched { name: string; id: string; meters: number; at: P }
+export interface Watched {
+  name: string; id: string; meters: number; at: P;
+  /** The line says it sees her or shoots (見える・飛び道具): a line of sight matters. */
+  ranged?: boolean;
+}
 const WATCH = /^#(\d+) (\S+) ([\d.]+)m \((-?\d+),(-?\d+),(-?\d+)\)/u;
 /** The hostile the first of `lines` says (the urgent ones first, then those that see her within 16 m), or null. */
 export function watchedHostile(urgent: readonly string[] | undefined, threats: readonly string[] | undefined): Watched | null {
   const first = urgent?.find(item => WATCH.test(item));
   const line = first ?? threats?.find(item => WATCH.test(item) && item.includes('見える（射線の中）') && Number(WATCH.exec(item)![3]) <= 16);
   const m = line ? WATCH.exec(line) : null;
-  return m ? { id: m[1]!, name: m[2]!, meters: Number(m[3]), at: { x: +m[4]!, y: +m[5]!, z: +m[6]! } } : null;
+  return m ? { id: m[1]!, name: m[2]!, meters: Number(m[3]), at: { x: +m[4]!, y: +m[5]!, z: +m[6]! }, ranged: /見える|飛び道具/u.test(line!) } : null;
 }
 /**
  * mb-llmc-cand 11 (bench s14: an enderman 7.9 m away and in sight, the walk went west and north, toward it): the steps of the ten that take her away from the
  * hostile, each a step the walk's rules make without digging (the cell she would stand in is farther from it than her feet by half a block or more).
  * `body.away`. Facts from the map and the hostile's place: where to go is the decision's.
  */
-export function awayLines(view: MapView, feet: P, hostile: Watched | null): string[] {
+export function awayLines(view: MapView, feet: P, hostile: Watched | null, look?: Look): string[] {
   if (!hostile) return [];
   const read = unloadedAsUnknown(view), far = (c: P) => Math.hypot(c.x - hostile.at.x, c.y - hostile.at.y, c.z - hostile.at.z);
   const steps = DIRS.flatMap(dir => {
@@ -225,7 +236,10 @@ export function awayLines(view: MapView, feet: P, hostile: Watched | null): stri
     return best && !best.dig.length && far(best.to) >= far(feet) + 0.5 ? [`${dir.name} ${ptText(best.to)}${stepWord(best)}`] : [];
   });
   const who = `#${hostile.id} ${hostile.name}（${hostile.meters}m）から離れる、掘らずに歩ける隣`;
-  return [steps.length ? `${who}: ${steps.join('・')}` : `${who}は無い（周りの 8 方向の 1 歩は、どれも近づくか、掘る・置くが要る）`];
+  const away = steps.length ? `${who}: ${steps.join('・')}` : `${who}は無い（周りの 8 方向の 1 歩は、どれも近づくか、掘る・置くが要る）`;
+  // mc-sonnet-guards: for a hostile that sees her or shoots, the nearest place the map's blocks cut its line (`minecraftLlmcRetreat.ts`).
+  const retreat = look && hostile.ranged ? retreatLine(read, look, feet, hostile) : null;
+  return retreat ? [away, retreat] : [away];
 }
 /** How the step goes, when it is not on the level: the cell written is the one she stands in after it (as the step lines say 「1 段上りで … に着く」). */
 const stepWord = (step: Step): string => step.kind === 'up' ? '（1 段上り）' : step.kind === 'down' ? `（${step.drop} 段下り）` : '';

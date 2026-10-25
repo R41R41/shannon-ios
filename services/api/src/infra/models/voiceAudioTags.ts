@@ -8,6 +8,9 @@
  * tag: each sound added 0.5–1.1 s of laughter, breath or a throat sound, a whisper took the pitch out of its clause, a pause doubled
  * or tripled the longest silence, [sleepy] was 7 dB quieter. [shouts] changed nothing (left out); [sweetly] and [nervously] were
  * the faintest (kept: they do no harm). Tags not listed here were not tried.
+ * 2026-10-26 (shannon-desktop `voice-samples/emotion`): two neutral sentences read with each tag alone, against the spread of four
+ * seeds without one: [crying], [sad] and [worried] slowed and lowered her voice 4–6 times that spread ([crying] higher and broken),
+ * [angry] made it louder and harder, [mischievously] lower and wider, [curious] and [happy] about 2.5 times. Added.
  */
 export const VOICE_AUDIO_TAGS = Object.freeze({
   /** How the voice is produced. */
@@ -15,7 +18,7 @@ export const VOICE_AUDIO_TAGS = Object.freeze({
   /** Sounds between or inside words. */
   sounds: ['laughs', 'giggles', 'chuckles', 'sighs', 'exhales', 'gasps', 'clears throat', 'yawns', 'gulps', 'sniffs', 'inhales deeply', 'hums'],
   /** A feeling for the words that follow. */
-  feelings: ['sleepy', 'sweetly', 'excited', 'nervously', 'tearfully', 'pouting'],
+  feelings: ['sleepy', 'sweetly', 'excited', 'nervously', 'tearfully', 'pouting', 'happy', 'sad', 'worried', 'crying', 'angry', 'curious', 'mischievously'],
   /** A silence. */
   pauses: ['short pause', 'long pause'],
 } as const);
@@ -161,7 +164,9 @@ const GEMINI_DIRECTIONS: Readonly<Record<VoiceAudioTag, string>> = Object.freeze
   'clears throat': '途中で小さく咳払いをする。', yawns: '途中であくびまじりに。', gulps: '途中でごくりと息をのむ。',
   sniffs: '途中で鼻をすする。', 'inhales deeply': '途中で深く息を吸う。', hums: '途中で小さく鼻歌まじりに。',
   sleepy: '眠そうに、ゆるく。', sweetly: '甘えた声で。', excited: 'わくわくと弾んで。', nervously: 'そわそわと落ち着かずに。',
-  tearfully: '涙ぐんだ声で。', pouting: '口をとがらせて拗ねたように。',
+  tearfully: '涙ぐんだ声で。', pouting: '口をとがらせて拗ねたように。', happy: '途中から嬉しそうに。', sad: '途中から悲しげに。',
+  worried: '途中から心配そうに。', crying: '途中から泣き声で。', angry: '途中から怒った声で、叫ばずに。', curious: '途中から興味津々に。',
+  mischievously: '途中からいたずらっぽく。',
   'short pause': '途中で短い間を置く。', 'long pause': '途中で長めの間を置く。',
 });
 
@@ -200,7 +205,7 @@ export class VoiceSegmentTags {
 }
 
 /**
- * How the reply model may use them: short, rare, and only the listed ones. In English like the other spoken-delivery lines; the tags
+ * How the reply model may use them: where her voice really changes, and only the listed ones. In English like the other spoken-delivery lines; the tags
  * themselves stay English because the voice reads them.
  */
 export const VOICE_AUDIO_TAG_LINES: readonly string[] = Object.freeze([
@@ -208,9 +213,13 @@ export const VOICE_AUDIO_TAG_LINES: readonly string[] = Object.freeze([
   '- Your words are spoken by an expressive voice. Where the delivery truly changes, you may put one of these tags, in square brackets and '
   + 'lowercase, right before the words it colours (also mid-sentence): '
   + `${[...VOICE_AUDIO_TAGS.voice, ...VOICE_AUDIO_TAGS.sounds, ...VOICE_AUDIO_TAGS.feelings, ...VOICE_AUDIO_TAGS.pauses].map(tag => `[${tag}]`).join(' ')}.`,
-  '- Use them rarely: most replies have none, a few have one, never more than two in a reply. Choose the moment that earns it: '
-  + '[whispers] for a secret or something said close and quietly, [softly] or [sweetly] for affection, [sleepy] or [yawns] late at night '
-  + 'when drowsy, [laughs] or [giggles] when something is really funny, [sighs] for real relief or resignation, [gasps] for real surprise.',
+  // Owner's plan 2026-10-25: from rare to where the scene asks for it; still never on every reply.
+  '- Put one where her voice would really change: a laugh, a sigh, a whisper, a word said through tears, a turn from teasing to sincere '
+  + 'or from a joke to real worry. A short plain reply needs none; a reply of a few sentences may have one or two. At most one feeling '
+  + 'tag in a sentence, and never the same tag twice in a reply. Choose the moment that earns it: [whispers] for a secret or something '
+  + 'said close and quietly, [softly] or [sweetly] for affection, [sleepy] or [yawns] late at night when drowsy, [laughs] or [giggles] '
+  + 'when something is really funny, [sighs] for real relief or resignation, [gasps] for real surprise, [pouting] when sulking, '
+  + '[tearfully] or [crying] only when really moved or hurt, [angry] only when really angry.',
   '- The tags are never shown or read as words. Do not write any other bracketed direction, and do not also write the sound as text '
   + 'right beside its tag (no 「（笑）」 next to [laughs]).',
   // Owner 2026-10-20 08:03: an English sentence was spoken in a Japanese reply (`withoutStrayEnglish` drops one that still comes).

@@ -154,7 +154,8 @@ describe('a place the body would refuse (primitives/place.ts)', () => {
     const shaft = [at(0, 0, 0), at(0, 1, 0), at(0, 2, 0), at(0, 3, 0)];
     // The cell she stood in is a block after the pillar: a place into it is a place into a filled cell.
     expect(hold([{ do: 'pillarUp', n: 1 }, { do: 'place', block: 'cobblestone', at: [at(0, 0, 0)] }], shaft)).toMatchObject({ code: 'occupied', hand: 2 });
-    expect(hold([{ do: 'place', block: 'cobblestone', at: [at(0, 0, 0)] }], shaft)).toBeNull();
+    // A block put into the cell she stands in, with no pillar before it, is held (mc-sonnet-guards: the body cannot place there).
+    expect(hold([{ do: 'place', block: 'cobblestone', at: [at(0, 0, 0)] }], shaft)).toMatchObject({ code: 'own_cell', hand: 1 });
   });
 });
 
@@ -217,16 +218,17 @@ describe('against the answers of the decision replay (32 scenes; the answers of 
     const stopped = held.filter(item => item.stop);
     const by = (verdict: string) => stopped.filter(item => item.answer.verdict === verdict).length;
     const total = (verdict: string) => held.filter(item => item.answer.verdict === verdict).length;
-    // Counted, not argued: 192 acts, 54 held. Graded × 31 of 79; graded ○ 17 of 76 and △ 6 of 37 are held too — each of them
-    // is an answer that puts a block into a cell the map shows filled, floats a block with no face, or walks to a cell the map shows as rock
-    // or with no head room (the grade of the replay does not look at the map's cells; the body would stop at the same hand).
-    expect({ answers: held.length, held: stopped.length, 'ok-held': by('○'), 'half-held': by('△'), 'bad-held': by('×') }).toEqual({ answers: 192, held: 54, 'ok-held': 17, 'half-held': 6, 'bad-held': 31 });
+    // Counted, not argued: 192 acts, 59 held. Graded × 32 of 79; graded ○ 17 of 76 and △ 10 of 37 are held too — each of them
+    // is an answer that puts a block into a cell the map shows filled or into the cell she stands in (mc-sonnet-guards: 5 more, 4 of them △ and 1 ×),
+    // floats a block with no face, or walks to a cell the map shows as rock or with no head room (the grade of the replay does not look at the map's
+    // cells; the body would stop at the same hand).
+    expect({ answers: held.length, held: stopped.length, 'ok-held': by('○'), 'half-held': by('△'), 'bad-held': by('×') }).toEqual({ answers: 192, held: 59, 'ok-held': 17, 'half-held': 10, 'bad-held': 32 });
     expect(by('×') / total('×')).toBeGreaterThan(0.3);
-    expect((by('○') + by('△')) / (total('○') + total('△'))).toBeLessThan(0.25);
+    expect((by('○') + by('△')) / (total('○') + total('△'))).toBeLessThan(0.3);
   });
   it('every ○ or △ answer it holds is a place into a filled cell, a floating place, a walk into rock, no floor or no route (the fact is in the text)', () => {
     for (const item of held.filter(entry => entry.stop && entry.answer.verdict !== '×')) {
-      expect(['occupied', 'no_support', 'feet_solid', 'head_solid', 'no_floor', 'no_route']).toContain(item.stop!.code);
+      expect(['occupied', 'no_support', 'own_cell', 'feet_solid', 'head_solid', 'no_floor', 'no_route']).toContain(item.stop!.code);
       expect(preflightText(item.stop!)).toMatch(/^送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 \d+ (walk 一歩ではない|place 置けない): /u);
     }
   });

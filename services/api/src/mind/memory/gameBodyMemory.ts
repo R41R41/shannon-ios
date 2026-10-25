@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { OWNER_AUDIENCE, type MemoryDisclosure } from '@shannon/cognition';
+import { OWNER_AUDIENCE, SHANNON_GAME_MILESTONE_FEELINGS, isShannonGameMilestone, type MemoryDisclosure } from '@shannon/cognition';
 import type { BodyEvent } from '../../contracts/bodyContract.js';
 import { touchWhen } from './bodyTouchExperience.js';
 
@@ -20,7 +20,7 @@ export interface GameExperience {
   summary: string;
   disclosure: MemoryDisclosure;
   /** `died`: phase 1. `request`: phase 4, a request to her Minecraft body that finished (`minecraftBodyRequests.ts`). */
-  game: { type: 'died'; cause: string } | { type: 'request'; requestId: string; state: string };
+  game: { type: 'died'; cause: string } | { type: 'milestone'; milestone: string } | { type: 'request'; requestId: string; state: string };
 }
 
 export interface GameExperienceWriter {
@@ -89,4 +89,19 @@ export function gameDeathExperience(scopeKey: string, deviceId: string, event: B
     disclosure: GAME_DISCLOSURE,
     game: { type: 'died', cause: event.cause },
   };
+}
+
+/** 「ゲームの記憶: 10月26日の夜、マイクラでネザーに着いた。」 The words of the one game table; null for a kind it does not know. */
+export function gameMilestoneSummary(cause: string, at: string): string | null {
+  const kind = cause.split(':', 2)[1];
+  return isShannonGameMilestone(kind) ? `ゲームの記憶: ${touchWhen(at)}、マイクラで${SHANNON_GAME_MILESTONE_FEELINGS[kind].done}。` : null;
+}
+
+/** A first on the way to the dragon, remembered once (phase 2). Null for a cause that names no first. */
+export function gameMilestoneExperience(scopeKey: string, deviceId: string, event: BodyEvent & { cause: string }): GameExperience | null {
+  const summary = gameMilestoneSummary(event.cause, event.occurredAt);
+  return summary ? {
+    id: gameExperienceId(scopeKey, deviceId, event.id), observedAt: event.occurredAt, summary, disclosure: GAME_DISCLOSURE,
+    game: { type: 'milestone', milestone: event.cause },
+  } : null;
 }

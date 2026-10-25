@@ -21,7 +21,8 @@ import { isReflexPart } from './bodyTouchReflex.js';
 import { ConversationLooks } from '../../mind/perception/conversationLooks.js';
 import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallSurface } from '../../mind/perception/perceptionPorts.js';
 import type { TouchExperienceWriter } from '../../mind/memory/bodyTouchExperience.js';
-import { gameDeathExperience, type GameExperienceWriter } from '../../mind/memory/memoryPorts.js';
+import type { GameExperienceWriter } from '../../mind/memory/memoryPorts.js';
+import { feelGame, rememberGame } from './bodyGameMoments.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './store/bodyStore.js';
 import { presentCompanionState } from '../../mind/emotion/companionPresence.js';
 import { ownerDay } from '@shannon/cognition';
@@ -222,7 +223,10 @@ export class ShannonBody {
       });
     });
     this.feel(scopeKey, deviceId, events, results, this.store.surface(scopeKey, deviceId));
-    if (gameAllowed) this.rememberGame(scopeKey, deviceId, events, results);
+    if (gameAllowed) {
+      rememberGame(this.dependencies.game?.experiences, scopeKey, deviceId, events, results);
+      feelGame(this.dependencies.stateStore, scopeKey, events, results, time);
+    }
     return {
       schemaVersion: BODY_SCHEMA_VERSION, results,
       stored: results.filter(result => result.status === 'stored').length,
@@ -280,21 +284,6 @@ export class ShannonBody {
   }
   claimTouchReflex(scope: string, device: string, id: string) { return this.dependencies.fcaTouch?.()?.claim(scope, device, id) ?? Promise.resolve(null); }
   reportTouchReflex(scope: string, device: string, id: string, result: FcaTouchResult) { return this.dependencies.fcaTouch?.()?.report(scope, device, id, result) ?? Promise.resolve(false); }
-
-  /**
-   * A stored game event becomes an experience in the server's words (phase 1: dying). After the store's own
-   * transaction, as a touch; a failure loses the memory of one event, never the receipt. No feeling moves yet.
-   */
-  private rememberGame(scopeKey: string, deviceId: string, events: readonly BodyEvent[], results: readonly BodyEventResult[]): void {
-    const writer = this.dependencies.game?.experiences;
-    if (!writer) return;
-    for (const [index, event] of events.entries()) {
-      if (event.type !== 'game.died' || !event.cause || results[index]?.status !== 'stored') continue;
-      try { writer.write(scopeKey, gameDeathExperience(scopeKey, deviceId, { ...event, cause: event.cause })); } catch (error) {
-        console.error('Shannon game memory failed', error instanceof Error ? error.message : 'unknown');
-      }
-    }
-  }
 
   /** True while the body last told the server that someone other than the owner can see or hear it. Throws when it cannot be read. */
   othersPresent(scopeKey: string, at: string): boolean {
