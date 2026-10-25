@@ -112,7 +112,8 @@ function bridgeWords(cell: Cell, facts: BridgeFacts, seen: readonly SeenThreat[]
   const fall = `落差 ${facts.fall}${exact ? bottomWords(facts.bottom) : ' 以上'}`;
   const side = facts.side > 0 ? `・両脇の下も ${facts.side} 段以上が空気` : '';
   return `${first.label} が見えている（${first.rel}、${first.distance.toFixed(1)}m${more}）。置く ${posText(cell)} は足場が幅 1 で、`
-    + `両脇（床と足の高さ）は空気で壁が無く、真下は${fall}${side}（壁の無い橋）。橋は壁付き（両脇の足の高さに壁）にするか、トンネルで回る`;
+    + `両脇（床と足の高さ）は空気で壁が無く、真下は${fall}${side}（壁の無い橋）。橋は壁付き（両脇の足の高さに壁）にするか、トンネルで回る。`
+    + '見えている間は橋を伸ばして進まず、先に射線を切る（間にブロックを置く・live の away に立ち位置が出ていればそこへ）か、来た道を戻る';
 }
 
 /** 手を順に写す前の用意: 手の一覧、足の場所と合う地図、この act が置くマス。できなければ null。 */

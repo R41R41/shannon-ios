@@ -9,6 +9,7 @@ import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPr
 import { repeatedFailures } from './minecraftLlmcRepeat.js';
 import { goalOf, routeLines } from './minecraftLlmcRoute.js';
 import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
+import { lookOf } from './minecraftLlmcSurfaceLook.js';
 
 /**
  * mb-llmc v2: the live state as the decision reads it (改修案 2.2; 再現台 v9b の `rewriteLive`, the rules in its `rewriteRules.md`). **A pure
@@ -201,7 +202,7 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Wa
   if (layers) {
     const view = mapView(layers), planNow = String(bodyIn.planNow ?? '');
     out.around = aroundLines(view, layers.feet);
-    const away = awayLines(view, layers.feet, watched);
+    const away = awayLines(view, layers.feet, watched, lookOf(view, map, layers.feet));
     if (away.length) out.away = away;
     notes.added.push('around');
     const liquid = liquidLines(view, layers.feet);

@@ -35,7 +35,7 @@ export function planGoal(goal: string): Goal {
 
 const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => ({ title, ...extra });
 /** r7: the check's forbid (the seed's, and the words the first plan is asked to write: `FIRST_PLAN_SYSTEM_R7`). */
-export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
+export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。離れて塞ぐのは急ぎの行が出た時だけ';
 /** r5: each `doneWhen` that an observation can show is written as one (`minecraftPlanDone.ts`): the head marks the node done when it holds. */
 const TO_NETHER: readonly PlanSeed[] = [
   node('木と石の道具', { doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
