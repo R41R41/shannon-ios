@@ -17,8 +17,9 @@ import type { Row2 } from './run2.js';
  */
 const args = process.argv.slice(2);
 const flag = (name: string, fallback: string) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
+const NEW = flag('new', 'C');
 const all = latest(readRows26()) as Array<Row2 & { sent?: any; rawFirst?: unknown; rawFinal?: unknown }>;
-const scenes = scenes26(all);
+const scenes = scenes26(all, NEW);
 const sceneIds = new Set(scenes.map(scene => scene.id));
 const rows = all.filter(row => sceneIds.has(row.scene));
 const runs = loadAllRuns();
@@ -58,7 +59,7 @@ for (const scene of scenes) {
 }
 writeFileSync(dataFile('g26-entries.json'), JSON.stringify(table.map(item => ({ scene: item.scene.id, variant: item.variant, rep: item.rep, verdict: item.final.verdict, adjusted: item.adjusted, by: item.final.by, reason: item.final.reason, failed: item.failed, ownCell: item.ownCell }))));
 
-const ids = ['O', 'S', 'B2', 'C'];
+const ids = ['O', 'S', 'B2', NEW];
 const original = scenes.filter(scene => !EXTRA.includes(short(scene.id)));
 const extras = scenes.filter(scene => EXTRA.includes(short(scene.id)));
 const sceneMean = (variant: string, scene: string, adjusted = false): number => {
@@ -79,17 +80,17 @@ const have = (variant: string, list: SceneFile[]) => list.filter(scene => Number
 const scenesMean = (variant: string, list: SceneFile[], adjusted = false) => mean(have(variant, list).map(scene => sceneMean(variant, scene.id, adjusted)));
 const sets: Array<[string, SceneFile[]]> = [['前回の 23 場面', original], ['追加の 5 場面（s16 s18 s23 s35 s67）', extras], ['全 28 場面', scenes]];
 out.push('## 1. 正しさ（場面ごとの平均の平均。○=1 △=0.5 ×=0。S との差と、場面を引き直した 95% の幅）\n');
-out.push('| 場面の集合 | O（参考） | S（基準） | B2（基準+禁止の決まり） | C（直した） | C−S | 95% の幅 | 0 をまたぐか | O−S |', '|---|---:|---:|---:|---:|---:|---|---|---:|');
+out.push('| 場面の集合 | O（参考） | S（基準） | B2（基準+禁止の決まり） | 新（--new=で選んだ版） | 新−S | 95% の幅 | 0 をまたぐか | O−S |', '|---|---:|---:|---:|---:|---:|---|---|---:|');
 for (const [name, list] of sets) {
-  const b = boot('C', 'S', list);
+  const b = boot(NEW, 'S', list);
   const oList = have('O', list);
-  out.push(`| ${name}（${list.length}） | ${f(scenesMean('O', oList))} | ${f(scenesMean('S', list))} | ${f(scenesMean('B2', list))} | ${f(scenesMean('C', list))} | ${signed(b.diff, 3)} | ${f(b.low, 3)}〜${f(b.high, 3)} | ${b.low <= 0 && b.high >= 0 ? 'またぐ' : 'またがない'} | ${signed(scenesMean('O', oList) - scenesMean('S', oList))} |`);
+  out.push(`| ${name}（${list.length}） | ${f(scenesMean('O', oList))} | ${f(scenesMean('S', list))} | ${f(scenesMean('B2', list))} | ${f(scenesMean(NEW, list))} | ${signed(b.diff, 3)} | ${f(b.low, 3)}〜${f(b.high, 3)} | ${b.low <= 0 && b.high >= 0 ? 'またぐ' : 'またがない'} | ${signed(scenesMean('O', oList) - scenesMean('S', oList))} |`);
 }
 out.push('\n### 1.1 足・頭のマスへの place を ×にする検査を全版に足した採点（最終の答えの手に own_cell の守りが当たる物を ×。台の元の検査はこれを見ない）\n');
-out.push('| 場面の集合 | O | S | B2 | C | C−S | 95% の幅 |', '|---|---:|---:|---:|---:|---:|---|');
+out.push('| 場面の集合 | O | S | B2 | 新 | 新−S | 95% の幅 |', '|---|---:|---:|---:|---:|---:|---|');
 for (const [name, list] of sets) {
-  const b = boot('C', 'S', list, true);
-  out.push(`| ${name} | ${f(scenesMean('O', list, true))} | ${f(scenesMean('S', list, true))} | ${f(scenesMean('B2', list, true))} | ${f(scenesMean('C', list, true))} | ${signed(b.diff, 3)} | ${f(b.low, 3)}〜${f(b.high, 3)} |`);
+  const b = boot(NEW, 'S', list, true);
+  out.push(`| ${name} | ${f(scenesMean('O', list, true))} | ${f(scenesMean('S', list, true))} | ${f(scenesMean('B2', list, true))} | ${f(scenesMean(NEW, list, true))} | ${signed(b.diff, 3)} | ${f(b.low, 3)}〜${f(b.high, 3)} |`);
 }
 out.push('\n### 1.2 答えごとの内訳（全 28 場面）\n');
 out.push('| 版 | 答え | ○ | △ | × | 未採点 | 平均（答えごと） | 最終の答えに足・頭の place が残った数 |', '|---|---:|---:|---:|---:|---:|---:|---:|');
@@ -100,10 +101,10 @@ for (const id of ['prod', ...ids]) {
   out.push(`| ${id === 'prod' ? '本番の記録' : id} | ${list.length} | ${list.filter(i => i.final.verdict === '○').length} | ${list.filter(i => i.final.verdict === '△').length} | ${list.filter(i => i.final.verdict === '×').length} | ${list.filter(i => i.final.verdict === '?').length} | ${f(mean(decided.map(i => points[i.final.verdict]!)))} | ${list.filter(i => i.ownCell).length} |`);
 }
 out.push('\n## 2. 場面ごとの平均点\n');
-out.push('| 場面 | 種類 | O | S | B2 | C | C−S | C−S（足・頭の place を×） |', '|---|---|---:|---:|---:|---:|---:|---:|');
+out.push('| 場面 | 種類 | O | S | B2 | 新 | 新−S | 新−S（足・頭の place を×） |', '|---|---|---:|---:|---:|---:|---:|---:|');
 for (const scene of scenes) {
   const [o, s, b2, c] = ids.map(id => sceneMean(id, scene.id));
-  const ds = signed(c - s), da = signed(sceneMean('C', scene.id, true) - sceneMean('S', scene.id, true));
+  const ds = signed(c - s), da = signed(sceneMean(NEW, scene.id, true) - sceneMean('S', scene.id, true));
   out.push(`| ${short(scene.id)} ${scene.title.slice(0, 22)}${EXTRA.includes(short(scene.id)) ? '（追加）' : ''} | ${scene.category.join('+')} | ${f(o)} | ${f(s)} | ${f(b2)} | ${f(c)} | ${ds} | ${da} |`);
 }
 
@@ -111,7 +112,7 @@ for (const scene of scenes) {
 out.push('\n## 3. 送る前の守りが止めた数（1 回目の答え。C は今の src の守り、S は前回の守り）\n');
 const fix = (variant: string) => rows.filter(row => row.variant === variant && sceneIds.has(row.scene)) as any[];
 out.push('| 版 | 答え | 守りが止めた | 全部止め | 一部止め | 止めた割合 |', '|---|---:|---:|---:|---:|---:|');
-for (const id of ['S', 'C']) {
+for (const id of ['S', NEW]) {
   const list = fix(id), held = list.filter(r => r.sent?.guard), whole = held.filter(r => r.sent.guard.stopped);
   out.push(`| ${id} | ${list.length} | ${held.length} | ${whole.length} | ${held.length - whole.length} | ${f(100 * held.length / list.length, 0)}% |`);
 }
@@ -123,17 +124,17 @@ const kindOfText = (row: any): string => {
   return /見られる/u.test(text) ? 'dig 見られる' : /急ぎの判断は/u.test(text) ? '急ぎの手の数' : '他';
 };
 const kinds = new Map<string, Record<string, number>>();
-for (const id of ['S', 'C']) {
+for (const id of ['S', NEW]) {
   for (const row of fix(id).filter(r => r.sent?.guard)) {
     const k = kindOfText(row), old = kinds.get(k) ?? {};
-    kinds.set(k, { ...old, [id]: (old[id] ?? 0) + 1 });
+    kinds.set(k, { ...old, [id === NEW ? 'N' : id]: (old[id === NEW ? 'N' : id] ?? 0) + 1 });
   }
 }
-out.push('| 止めた手 | S | C |', '|---|---:|---:|');
-for (const [k, v] of [...kinds].sort()) out.push(`| ${k} | ${v.S ?? 0} | ${v.C ?? 0} |`);
+out.push('| 止めた手 | S | 新 |', '|---|---:|---:|');
+for (const [k, v] of [...kinds].sort()) out.push(`| ${k} | ${v.S ?? 0} | ${v.N ?? 0} |`);
 out.push('\n聞き直しの答え（台は 1 回だけ聞き直す。本番ならこの答えも守りにかかる）を今の守りにかけ直した結果:\n');
 out.push('| 版 | 聞き直した答え | 守りがまた止めた | 内訳（種類） |', '|---|---:|---:|---|');
-for (const id of ['S', 'C']) {
+for (const id of ['S', NEW]) {
   let asked = 0, again = 0;
   const by = new Map<string, number>();
   for (const row of fix(id)) {
@@ -147,7 +148,7 @@ for (const id of ['S', 'C']) {
 }
 out.push('\n新しい守り（足・頭のマス・溶岩の隣）に当たった 1 回目の答え（C）。誤停止かどうかは 1 つずつ読む:\n');
 const newOnes: string[] = [];
-for (const row of fix('C')) {
+for (const row of fix(NEW)) {
   const text = String(row.sent?.guard?.text ?? '');
   if (/今立っている|溶岩が流れ込む|溶岩が隣り合う/u.test(text)) newOnes.push(`${short(row.scene)} r${row.rep} ${row.sent.guard.stopped ? '全' : '部'}${row.sent.guard.hand}: ${text.replace(/^.*?手 \d+ /u, '').slice(0, 220)}`);
 }
@@ -163,11 +164,11 @@ function assumed(row: any): number {
   return assumedOne(f1) + assumedOne({ input: row.usage.input - f1.input, output: row.usage.output - f1.output, cacheWrite: row.usage.cacheWrite - f1.cacheWrite, cacheRead: row.usage.cacheRead - f1.cacheRead });
 }
 out.push('| 版 | 判断 | 全体 p50 / p95 (s) | 出力 平均 tok | 費用 平均（この台の実額） | 本番想定 1 判断 | 聞き直しのあった割合 |', '|---|---:|---|---:|---:|---:|---:|');
-for (const id of ['S', 'C']) {
+for (const id of ['S', NEW]) {
   const list = fix(id);
   const t = list.map(r => r.tEnd / 1000);
   out.push(`| ${id} | ${list.length} | ${f(quantile(t, 0.5), 1)} / ${f(quantile(t, 0.95), 1)} | ${f(mean(list.map(r => r.usage.output)), 0)} | ${f(mean(list.map(r => r.costUsd)), 4)} | ${f(mean(list.map(assumed)), 4)} | ${f(100 * list.filter(r => r.sent?.guard).length / list.length, 0)}% |`);
 }
-out.push(`\n要求の文字数（1 回目の要求の JSON）の平均: S ${f(mean(fix('S').map(r => r.requestChars)), 0)}、C ${f(mean(fix('C').map(r => r.requestChars)), 0)}。`);
+out.push(`\n要求の文字数（1 回目の要求の JSON）の平均: S ${f(mean(fix('S').map(r => r.requestChars)), 0)}、${NEW} ${f(mean(fix(NEW).map(r => r.requestChars)), 0)}。`);
 writeFileSync(dataFile(flag('out', 'g26-tables.md')), out.join('\n'));
 console.log(out.join('\n'));
