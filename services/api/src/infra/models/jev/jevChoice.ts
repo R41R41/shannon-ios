@@ -111,7 +111,7 @@ export const JEV_QUESTION_SETS = Object.freeze({
   /** Session mb-arch (`SHANNON_MINECRAFT_AGENDA`): whether a Minecraft body takes a thing in reach now, between the calls asked of it. */
   minecraftOpportunity: 'mc_opportunity.v1',
   /** Owner 2026-10-21 (`SHANNON_ADDRESSED`): whether words in a voice conversation were said to her (`mind/perception/addressed.ts`). */
-  addressed: 'addressed.v1',
+  addressed: 'addressed.v2',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';

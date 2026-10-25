@@ -54,6 +54,7 @@ import { createConfiguredVoiceTranscriber } from './infra/models/voiceTranscript
 import { createVoiceTranscriptionRoute } from './surfaces/voice/transcriptionRoute.js';
 import { handlePlatformBridgeRequest, isPlatformBridgePath } from './surfaces/platform/serverPlatformBridgeRoute.js';
 import { configuredAddressedVoice, createConfiguredPlatformBridgeRoute } from './wiring/platformBridgeWiring.js';
+import { configuredListening, configuredListenRoute } from './wiring/listenWiring.js';
 import { SQLitePersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
 import { VOICE_CALL_MEMORY_PATH } from './infra/http/apiPeopleMemoryRoutes.js';
@@ -242,7 +243,10 @@ const kernel = createLocalApiKernel(now, {
   ...(mind ? { mind: mind.mind } : {}), operationOutcomes: operationOutcomes.read,
 });
 stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
-const addressed = configuredAddressedVoice(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, bodyRunning: () => (fca?.minecraft?.voice?.state().running ?? null) !== null }), platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: () => fca?.minecraft?.voice ?? null }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge);
+const listening = configuredListening(process.env, configuredDatabasePath());
+const bodyRunning = () => (fca?.minecraft?.voice?.state().running ?? null) !== null;
+const addressed = configuredAddressedVoice(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, bodyRunning }), platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: () => fca?.minecraft?.voice ?? null, listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge);
+const serveListen = configuredListenRoute(listening, addressed.judge, bodyRunning);
 // What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
 const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway, voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
 const port = parsePort(process.env.SHANNON_API_PORT);
@@ -367,7 +371,7 @@ const server = createServer(async (request, response) => {
     }
     if (isSkillsPath(url.pathname)) { await skillsRoute(request, response, principal, url.pathname); return; }
     if (await deviceActions.serve(request, response, principal, url) || innerNote?.serve(request, response, principal, url)
-      || await addressed.serve(request, response, principal, url)) return;
+      || await addressed.serve(request, response, principal, url) || await serveListen(request, response, principal, url)) return;
     if (await stage5.serve(request,response,principal,url)) return;
     if (handleRetiredVoiceRoute(url.pathname,response)) return;
     if (url.pathname === '/v1/voice/transcriptions') {

@@ -32,6 +32,7 @@ import { VOICE_SENTENCE_CUT } from '../surfaces/text/chatSentenceStream.js';
 import { oneHeadEnabled } from '../contracts/oneHeadContract.js';
 import type { AddressedJudge } from '../mind/perception/addressed.js';
 export { configuredAddressedVoice } from './addressedWiring.js';
+import type { Listening } from '../surfaces/voice/listening.js';
 
 export function createConfiguredPlatformBridgeRoute(
   environment: Readonly<Record<string, string | undefined>>,
@@ -47,6 +48,8 @@ export function createConfiguredPlatformBridgeRoute(
     conversation: PlatformReplyConversation & Pick<PlatformVoiceConversation, 'seatedVoiceTurn'>; databasePath: string;
     /** `SHANNON_DC_VOICE`: her Minecraft body's side of an owner's spoken request, read at each turn (the part may connect later). */
     voiceMinecraft?: () => VoiceMinecraftPort | null;
+    /** Listening transcription for the voice channel (`POST /v1/platform/voice/transcribe`); null without `GROQ_API_KEY`. */
+    listening?: Listening | null;
   } | null = null,
   /** Syzygy ADR-0008 stage 3 (F5): the memory outbox (null: switched off); F6: the people facts' readers (null: off). */
   memory: MemoryProposals | null = null,
@@ -73,6 +76,7 @@ export function createConfiguredPlatformBridgeRoute(
       environment: () => environment, rooms: voiceRooms, addressed, ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
     }),
     mouth: voiceMouth, speech: configuredVoiceSpeech(environment), scopeKey: configuration.scopeKey, environment: () => environment,
+    listening: replies.listening ?? null,
   } : null;
   return { configuration, chatModel, service, reply, voice, environment: () => environment, close: () => {
     turns?.close();

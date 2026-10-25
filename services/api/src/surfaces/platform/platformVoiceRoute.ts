@@ -11,6 +11,8 @@ import { SHANNON_PLATFORM_VOICE_PREFIX, platformVoiceEnabled, type VoiceTurnLine
 import type { PlatformVoiceService } from './platformVoice.js';
 import { VOICE_FILLERS } from './voiceFillers.js';
 import { VOICE_MOUTH_LIMITS, VOICE_MOUTH_RESULTS, type VoiceMouthQueue, type VoiceMouthSay } from './voiceMouth.js';
+import { wavDurationMs } from '../../infra/models/groqTranscription.js';
+import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from '../voice/listening.js';
 
 /**
  * `/v1/platform/voice/*` (dc-voice, 2026-10-20): what a platform runtime in a voice channel asks of her one mind. The bridge's service
@@ -21,6 +23,9 @@ import { VOICE_MOUTH_LIMITS, VOICE_MOUTH_RESULTS, type VoiceMouthQueue, type Voi
  * - `GET fillers`: the short sounds a `decision` line may name, for the body to keep as audio.
  * - `POST say` / `POST mouth/poll` / `POST mouth/result`: her mouth (`voiceMouth.ts`, `dc-speak-interface.md`).
  * - `POST wording`: event facts put into her words. `POST said`: what she said by herself, or was heard saying before being talked over.
+ * - `POST transcribe`: one utterance (base64 WAV, 16 kHz mono, 30 s at most) to text through the listening transcriber the Windows
+ *   resident uses (Groq, one shared allowance; owner 2026-10-26, docs/listening-contract.md). 503 `LISTEN_NOT_CONFIGURED` without
+ *   `GROQ_API_KEY`. Whether it is answered is still decided by `turn`.
  */
 export interface PlatformVoiceRoutes {
   service: PlatformVoiceService;
@@ -29,6 +34,8 @@ export interface PlatformVoiceRoutes {
   speech: Pick<ElevenSpeechGateway, 'stream'> | null;
   scopeKey: string;
   environment?: () => SwitchValues;
+  /** Listening transcription (`listening.ts`); null without `GROQ_API_KEY` (transcribe answers 503). */
+  listening?: Listening | null;
 }
 
 const MAXIMUM_SPEECH_CHARACTERS = 400;
@@ -86,6 +93,7 @@ export async function handlePlatformVoiceRequest(
 
 async function dispatch(name: string, request: IncomingMessage, response: ServerResponse, routes: PlatformVoiceRoutes): Promise<void> {
   if (name === 'turn') return turn(request, response, routes);
+  if (name === 'transcribe') return transcribe(request, response, routes);
   if (name === 'speech') return speech(request, response, routes);
   if (name === 'fillers') return sendJson(response, 200, { items: VOICE_FILLERS.map(({ id, text, style }) => ({ id, text, style })) });
   if (name === 'wording') return sendJson(response, 200, await routes.service.wording(await readJson(request, 8 * 1024)));
@@ -123,6 +131,25 @@ async function turn(request: IncomingMessage, response: ServerResponse, routes: 
   }
   await queue;
   if (!response.destroyed) response.end();
+}
+
+const MAXIMUM_TRANSCRIBE_BYTES = 16_000 * 2 * 31 + 1_024;
+
+/** One Discord utterance to text (`listening.ts`). The words go back to the body for its turn; nothing is kept here. */
+async function transcribe(request: IncomingMessage, response: ServerResponse, routes: PlatformVoiceRoutes): Promise<void> {
+  const listening = routes.listening;
+  if (!listening) return sendJson(response, 503, { error: 'LISTEN_NOT_CONFIGURED', message: 'Listening transcription is not configured on the server.' });
+  const body = await readJson(request, 1_500_000);
+  const row = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
+  const audio = row ? decodedAudio(row.audio, MAXIMUM_TRANSCRIBE_BYTES) : null;
+  const durationMs = audio ? wavDurationMs(audio) : null;
+  if (!audio || durationMs === null || durationMs > LISTEN_MAXIMUM_MS) {
+    return sendJson(response, 400, { error: 'BAD_REQUEST', message: 'audio must be a WAV of 30 s at most.' });
+  }
+  const heard = await listening.transcribe(audio, durationMs, 'discord');
+  if (heard.status === 'ok') return sendJson(response, 200, { status: 'ok', text: heard.text, sttMs: heard.sttMs });
+  if (heard.status === 'limited') return sendJson(response, 200, { status: 'limited', sttMs: 0, limited: heard.limited });
+  return sendJson(response, 200, { status: heard.status, sttMs: heard.sttMs });
 }
 
 interface SpeechAsk {

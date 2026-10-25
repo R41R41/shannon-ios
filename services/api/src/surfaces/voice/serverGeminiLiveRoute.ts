@@ -69,7 +69,8 @@ export function createGeminiLiveRoute(
     try {
       const result = transcriptionProvider === 'openai' && openAIGateway
         ? {
-          ...await openAIGateway.createSession({ ...clientPlatform(requestBody.clientPlatform) }),
+          // `manualTurns`: a client that ends turns with its own voice detection (Windows, 2026-10-26) gets gpt-live-transcribe.
+          ...await openAIGateway.createSession({ ...clientPlatform(requestBody.clientPlatform), manualTurns: requestBody.manualTurns === true }),
           voice: speechVoice,
           threadId: session.threadId,
           instructions: session.instructions,

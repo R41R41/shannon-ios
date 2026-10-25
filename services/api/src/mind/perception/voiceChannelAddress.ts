@@ -8,7 +8,7 @@ import { guestAddressDecision, type GuestAddressReason } from '../../surfaces/vo
  */
 export type VoiceAddressReason = GuestAddressReason | 'solo' | 'fragment'
   // `SHANNON_ADDRESSED` (`addressed.ts`): said to her by name, a follow-up of the one she just spoke to, or not said to her.
-  | 'bare_call' | 'stop' | 'continuation' | 'no_name' | 'about_her' | 'not_to_her';
+  | 'bare_call' | 'stop' | 'continuation' | 'asked_alone' | 'no_name' | 'about_her' | 'not_to_her';
 
 export interface VoiceAddress {
   respond: boolean;
