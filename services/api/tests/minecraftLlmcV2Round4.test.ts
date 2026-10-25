@@ -92,7 +92,7 @@ describe('a place with onFail continue the map faults', () => {
   it('goes through the part-send as a note on the result, and through the replay\'s entry as `note`', () => {
     const world = frame({ localMap: mapOf(corridor(3)), position: feet, dimension: 'overworld' });
     const act = { hands: [place('continue'), walk(2, 0, 0)] };
-    const sent = heldBeforeSend({ preflight: true, v2: true }, act, world, 't')!;
+    const sent = heldBeforeSend(false, act, world, 't')!;
     expect(sent.result).toBeUndefined();
     expect(sent.input).toBeUndefined();
     expect(sent.note).toContain('onFail continue');
@@ -168,10 +168,9 @@ describe('a plan\'s places are passed through on the way to work not yet done', 
     const tree = treeOf([['p1', null, '地上へ', 'dim:overworld'], ['p1.1', 'p1', '歩く', 'at:40,64,96~4@overworld'], ['p2', null, '次', 'have:iron_ingot>=3']]);
     expect(nodesSeenDone(tree, doneFacts(overworld)!, true)).toEqual(['p1', 'p1.1']);
   });
-  it('is the update the plan tool applies, and the old order when the mode is off', () => {
+  it('is the update the plan tool applies', () => {
     const tree = treeOf(RUN35);
-    expect(seenDoneUpdate(tree, nether)!.ids).toEqual(['p2']);
-    expect(seenDoneUpdate(tree, nether, true)).toBeNull();
+    expect(seenDoneUpdate(tree, nether)).toBeNull();
   });
 });
 
@@ -201,7 +200,7 @@ describe('a run from the start of a new world (the overworld, nothing carried)',
     const fixture = scriptedAnthropic((_body, index) => message([{ type: 'thinking', thinking: '', signature: `s${index}` },
       { type: 'tool_use', id: `toolu_${index}`, name: 'mc_act', input: { hands: ['jump 1'] } }], 'tool_use'));
     const model = createAnthropicFcaModel({ apiKey: 'synthetic', model: 'claude-opus-5-5', fetcher: fixture.fetcher, recordUsage() {},
-      clock: () => ({ localTime: '2026-10-23 04:00', timeZone: 'Asia/Tokyo' }), minecraftOwnPrompt: true, systemAppendix: llmcCoreKnowledge(true), minecraftV2: minecraftV2Hooks() });
+      clock: () => ({ localTime: '2026-10-23 04:00', timeZone: 'Asia/Tokyo' }), minecraftOwnPrompt: true, systemAppendix: llmcCoreKnowledge(), minecraftV2: minecraftV2Hooks() });
     const input = { task: { id: 'task-1', title: 'エンドラ', goal: 'エンドラを倒して', completionCriteria: 'ドラゴンを倒す' }, messages: [], children: [], history: [], tools, coreTools: tools,
       transient: body(), plan, waiting: fixtureLive.waiting, observations: fixtureLive.observations, catalog: tools.map(tool => ({ name: tool.name, description: tool.description })) } as unknown as FcaModelInput;
     await model.decide(input, new AbortController().signal);

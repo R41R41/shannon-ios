@@ -10,7 +10,7 @@ export type { PreflightCode };
 
 /**
  * mb-llmc act-preflight (Syzygy ADR-0014 D3 "決まりはまずコードで守る", D0 "不明は不明のまま"; owner 2026-10-23; head switch
- * SHANNON_MINECRAFT_ACT_PREFLIGHT, default off). Before an `mc.act` goes to the body, its hands are walked in order against the newest
+ * the act preflight, default off). Before an `mc.act` goes to the body, its hands are walked in order against the newest
  * frame's map (and the cell column answers the head has kept): a hand the body's own rules refuse *at its start* for a reason the map shows
  * for certain is not sent, and the fact comes back at once as the act's result. The hand is never mended and nothing is added to the act
  * (no new automatic move of the body); a cell the map does not show, a symbol that is not plain, a hand whose effect on the map is not
@@ -39,7 +39,7 @@ export interface PreflightWorld {
   map: string | undefined;
   feet: ActPos | null;
   column?: ColumnOf;
-  /** SHANNON_MINECRAFT_LLMC_V2: the symbols the guards did not name are read as the body's walk reads them (`BodyRules`). */
+  /** mb-llmc v2: the symbols the guards did not name are read as the body's walk reads them (`BodyRules`). */
   rules?: BodyRules;
 }
 export interface PreflightStop {
@@ -58,7 +58,7 @@ export interface PreflightOptions {
   route?: boolean;
   bodyRules?: boolean;
   /**
-   * SHANNON_MINECRAFT_LLMC_V2: a place with `onFail: 'continue'` that the map faults is not a stop (the body skips the cell and goes on): the fact is
+   * mb-llmc v2: a place with `onFail: 'continue'` that the map faults is not a stop (the body skips the cell and goes on): the fact is
    * pushed to `notes` and the walk-through ends there (what the hand then did to the map is not known).
    */
   continuePlace?: boolean;
@@ -96,7 +96,7 @@ function noRoute(from: Cell | null, to: Cell, view: MapView): Found | null {
 }
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2: a target whose own cell is a wall (a trunk, rock, a wart block) is told with the standing place beside it, nearest to
+ * mb-llmc v2: a target whose own cell is a wall (a trunk, rock, a wart block) is told with the standing place beside it, nearest to
  * the feet the map was drawn for: 「隣の立てるマス (x,y,z)」, or that the map shows none.
  */
 function withNeighbour(found: Found, target: Cell, view: MapView): Found {
@@ -105,7 +105,7 @@ function withNeighbour(found: Found, target: Cell, view: MapView): Found {
   return { ...found, why: `${found.why}（${stand ? `隣の立てるマス ${posText(stand)}` : '隣の立てるマスは地図に無い'}）` };
 }
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (run 37: the walk into the gate's cell was held, 「塞がっている」), the rule shared with the body: a cell is entered as a portal
+ * mb-llmc v2 (run 37: the walk into the gate's cell was held, 「塞がっている」), the rule shared with the body: a cell is entered as a portal
  * only when its FEET cell is a portal (`p` or `e`) and its head cell is a portal or passable, and only as the LAST point of a walk (the body never uses a
  * portal as a pass-through cell). `'enter'`: it is one, the walk goes; a stop: the top row (the head meets the frame) or a portal in the middle of a path;
  * null: the cell is no portal's (feet in air with a portal over the head is no way in: the ordinary checks).

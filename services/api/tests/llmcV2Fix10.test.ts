@@ -24,8 +24,8 @@ import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMin
  */
 const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,
   state: { world: world as never }, facts: {} });
-const live = (world: Record<string, unknown>, v2 = true): Record<string, any> => minecraftLlmcLive({ elapsedMinutes: 3, trend: createFoodTrend(() => 0), events: [],
-  observation: frame({ position: { x: 0, y: 0, z: 0 }, dimension: 'overworld', health: 20, food: 20, ...world }) }, 0, v2);
+const live = (world: Record<string, unknown>): Record<string, any> => minecraftLlmcLive({ elapsedMinutes: 3, trend: createFoodTrend(() => 0), events: [],
+  observation: frame({ position: { x: 0, y: 0, z: 0 }, dimension: 'overworld', health: 20, food: 20, ...world }) });
 const hostile = (id: number, name: string, distance: number, at: [number, number, number], extra: Record<string, unknown> = {}) =>
   ({ id, name, kind: 'hostile', distance, position: { x: at[0], y: at[1], z: at[2] }, ...extra });
 const rewritten = (body: Record<string, unknown>, plan: Record<string, unknown> = {}) => rewriteLlmcLive({ plan, body: { state: { at: '(0,0,0)' }, ...body } }).live as Record<string, any>;
@@ -74,12 +74,9 @@ describe('C1: a hostile gets a line when it matters now, with how it stands to h
     expect(String(out.body.urgent[0])).toContain('見える（射線の中）');
     expect(String(out.body.urgent[0])).not.toContain('壁の向こう');
   });
-  it('is written for the mode only: the old mode\'s lines are as they were', () => {
-    expect(live({ nearbyThreats: frameThreats }, false).threats[0]).toBe('#1 zombie 10.4m (8,0,6)');
-  });
   it('the urgent live state says it the same way', () => {
     const state = minecraftLlmcUrgentLive({ observation: frame({ position: { x: 0, y: 0, z: 0 }, nearbyThreats: frameThreats }), elapsedMinutes: 1, events: [],
-      planNowTitle: null, answer: 'a', v2: true });
+      planNowTitle: null, answer: 'a' });
     expect((state.threats as string[])[0]).toContain('・見える（射線の中）');
   });
 });
@@ -138,23 +135,20 @@ describe('C3: an unknown cell is said as unknown, not as rock', () => {
 describe('D1: the last results show only what the history line does not have', () => {
   const act = ['act 3/5 済みで止まった（failure）', '1 walk 済 (1,0,0) に着いた', '2 walk 止 一歩ではない: (2,0,0)',
     '  周り（上の層から、北が上・西が左）x=1..3 z=-1..1 y=1: ###/#.#/### y=0: ###/#@#/### y=-1: ###/###/###', '今 (1,0,0) 体力20 満腹20'].join('\n');
-  it('an act: only the surroundings of the stopped hand (the history has the rest); the old mode shows the whole', () => {
-    const v2 = llmcStoredResult('mc.act', act, true), old = llmcStoredResult('mc.act', act);
+  it('an act: only the surroundings of the stopped hand (the history has the rest)', () => {
+    const v2 = llmcStoredResult('mc.act', act);
     expect(v2.shown).toBe(act.split('\n')[3]);
-    expect(old.shown).toBe(act);
-    expect(v2.stored).toBe(old.stored);
     expect(v2.stored).toContain('1 walk 済 (1,0,0) に着いた');
   });
   it('an act with nothing of the kind shows nothing', () => {
-    expect(llmcStoredResult('mc.act', '行 1\n行 2', true)).toEqual({ stored: '行 1\n行 2', shown: null });
+    expect(llmcStoredResult('mc.act', '行 1\n行 2')).toEqual({ stored: '行 1\n行 2', shown: null });
   });
   it('a long result: the history keeps the first line, the next decision shows the lines after it, once', () => {
     const view = `地図 v1 足=(0,0,0) x=0..1 z=0..1 方式=layers 上=北\n${'y=0\n 0 # #\n 1 # #\n'.repeat(40)}`;
-    const v2 = llmcStoredResult('mc.view', view, true);
+    const v2 = llmcStoredResult('mc.view', view);
     expect(v2.stored.startsWith('地図 v1 足=(0,0,0) x=0..1 z=0..1 方式=layers 上=北…（続き ')).toBe(true);
     expect(v2.shown!.startsWith('y=0')).toBe(true);
     expect(v2.shown).not.toContain('地図 v1');
-    expect(llmcStoredResult('mc.view', view).shown).toBe(view.slice(0, 6000));
   });
 });
 
@@ -207,9 +201,6 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
   });
   it('writes a stack the body did not name as just 「item」', () => {
     expect(live({ nearbyEntities: [{ id: 3, name: 'item', kind: 'passive', distance: 1, position: { x: 0, y: 0, z: 1 } }] }).near[0]).toBe('#3 item 1m (0,0,1)');
-  });
-  it('the old mode\'s near lines are as they were', () => {
-    expect(live({ nearbyEntities: entities }, false).near[0]).toBe('#1 item 0.7m (0,0,1)');
   });
 });
 

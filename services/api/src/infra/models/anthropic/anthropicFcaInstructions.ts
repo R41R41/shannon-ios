@@ -3,7 +3,7 @@ import { FCA_RESTATED_RULE } from './anthropicFcaHistory.js';
 /**
  * The fixed words of an FCA decision's instructions (moved here from `anthropicFcaModel.ts` unchanged, byte for byte: the goldens of
  * `fcaObsModeLegacyGolden.test.ts` and `minecraftOwnPromptOff.test.ts` hold them). A Minecraft body task's own words are in
- * `anthropicFcaMinecraftSystem.ts` (SHANNON_MINECRAFT_OWN_PROMPT).
+ * `anthropicFcaMinecraftSystem.ts` (the own prompt).
  */
 export const OWNER_CLOCK_RULE = 'Count 今日, 明日 and other relative dates on this clock, in the owner\'s time zone, never in UTC. '
   + 'Write explicit dates in searches and reports.';

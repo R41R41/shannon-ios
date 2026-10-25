@@ -11,7 +11,7 @@ import {
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { foodLeads, llmcWaitLine, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
-import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, llmcSystemAppendix, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 
 /**
  * mb-llmc r6 (production run 29, 2026-10-22, Sonnet main, r5: begun inside a Nether fortress, the blazes at 10 s past the plan's "now",
@@ -96,7 +96,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     const home = counts({ ...START, dimension: 'overworld' });
     expect(preparationShortage({ ...home, nowTitle: '原木を集める' })).toBeNull();
     expect(preparationShortage({ ...home, nowTitle: 'ゲートを組んで火をつける' }))
-      .toBe('準備の不足（ネザーに入る前）: 盾・足場のブロックが無い。食料 15.6 点（目安 100）');
+      .toBe('準備の不足（ネザーに入る前）: 盾・金のブーツ・足場のブロックが無い。食料 15.6 点（目安 40）');
     expect(preparationShortage({ ...home, nowTitle: '2地点で投げて三角測量' })).toMatch(/^準備の不足（エンドへ）: ベッド・弓・矢・エンダーアイ・足場のブロックが無い/u);
   });
 
@@ -125,16 +125,15 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     next: [], blocked: [] };
   const display = { revision: 3, current: 'p1.1', nodes: [{ id: 'p1', parentId: null, title: '出発の点検（ネザーの奥へ）', state: 'continue' as const },
     { id: 'p1.1', parentId: 'p1', title: '作業台と板を作る', state: 'continue' as const }] };
-  const body = (world: Record<string, unknown>, probe: boolean) => withLlmcBody({ start() {}, revision: () => 0,
+  const body = (world: Record<string, unknown>) => withLlmcBody({ start() {}, revision: () => 0,
     context: () => ({ revision: 0, observation: null }), async guard() { return true; }, toolSignal: (_name, parent) => parent, async close() {} },
   { llmc: { plan: () => display as never, planView: () => view, planTree: () => ({ schema: 'shannon.plan-tree.v1', revision: 3, current: 'p1.1', nodes: [
     { id: 'p4', parentId: null, order: 3, title: 'ゲートでオーバーワールドへ', state: 'continue', where: '(5,35,12)' }] }) },
-  taskId: `r6-live-${probe}`, createdAt: '2026-10-22T00:00:00Z', observe: () => frame({ ...world, localMap: '地図' }),
-  arrival: () => ({ at: 1, kind: 'login' }), log: () => {},
-  ...(probe ? { r4: { probe: () => null, planWhere: () => null } } : {}) });
+  taskId: 'r6-live', createdAt: '2026-10-22T00:00:00Z', observe: () => frame({ ...world, localMap: '地図' }),
+  arrival: () => ({ at: 1, kind: 'login' }), log: () => {}, r4: { probe: () => null, planWhere: () => null } });
 
-  it('in this order, counted and never cut; none of it without the probe', () => {
-    const shaft = body(SHAFT, true);
+  it('in this order, counted and never cut', () => {
+    const shaft = body(SHAFT);
     shaft.context();
     const live = shaft.transient!() as Record<string, unknown>;
     const keys = Object.keys(live);
@@ -143,18 +142,15 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     expect(live.shortage).toBe('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具が無い。食料 0 点（目安 100）');
     expect(live.recovery).toEqual(['この状態では体力は自然に戻らない（満腹 17＜18、食料 0 点）',
       '食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）']);
-    const off = body(SHAFT, false);
-    off.context();
-    expect(Object.keys(off.transient!() as object)).not.toContain('planNow');
   });
 
   it('a wait\'s result says health does not come back; not at hunger 18 or more, not for an act without a wait', () => {
-    const shaft = body(SHAFT, true);
+    const shaft = body(SHAFT);
     const wait = { id: 'w', name: MC_ACT_TOOL, input: { hands: [{ do: 'wait', seconds: 30 }] } };
     expect(shaft.storedResult!(wait, 'act 全部済み（1/1、30.0秒）\n1 wait 済 30秒待った'))
       .toBe('act 全部済み（1/1、30.0秒）\n1 wait 済 30秒待った\n頭: この状態では体力は自然に戻らない（満腹 17＜18、食料 0 点）');
     expect(shaft.storedResult!({ ...wait, input: { hands: [{ do: 'walk', to: at(1, 2, 3) }] } }, 'act 全部済み')).toBe('act 全部済み');
-    expect(body({ ...SHAFT, food: 19 }, true).storedResult!(wait, 'act 全部済み')).toBe('act 全部済み');
+    expect(body({ ...SHAFT, food: 19 }).storedResult!(wait, 'act 全部済み')).toBe('act 全部済み');
   });
 });
 
@@ -192,7 +188,7 @@ describe('the first plan\'s done nodes are carried by the frame (run 29: 「動�
       { id: 'p1.1', parent: 'p1', title: '作業台と板を作る', where: '', doneWhen: 'have:crafting_table' },
       { id: 'p5', parent: '', title: 'オーバーワールドで準備', where: '', doneWhen: '' },
       { id: 'p5.1', parent: 'p5', title: '動物を狩り肉を焼く', where: '', doneWhen: 'food>=100' },
-      { id: 'p5.2', parent: 'p5', title: '村を回る（ベッド全部・干し草・畑・箱）', where: '', doneWhen: '' }] })!;
+      { id: 'p5.2', parent: 'p5', title: '村を回る（ベッド1〜2・干し草・畑・箱）', where: '', doneWhen: '' }] })!;
     const freeDone = { ...settled, nodes: settled.nodes.map(node => /村を回る/u.test(node.title) ? { ...node, state: 'done' as const } : node) };
     const carried = carryDone(freeDone, answer);
     expect(carried.nodes.find(node => node.id === 'p5.1')!.state).toBe('continue');
@@ -285,7 +281,6 @@ describe('the knowledge (r6)', () => {
   it('follows r5\'s, with the node tag, the shortage, the recovery\'s branch and the wait', () => {
     // r7 is r6's with its own blaze and R7_KNOWLEDGE (minecraftLlmcR7.test.ts).
     expect(LLMC_SYSTEM_APPENDIX_R6).toBe(`${LLMC_SYSTEM_APPENDIX_R5}\n\n${R6_KNOWLEDGE}`);
-    expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
     for (const words of ['[p1.2]', '理由:', '[急ぎ]', 'body.shortage', 'ネザーの中から始まった時も', '満腹 18 以上の時だけ',
       '食料が 0 で回復が要る時は、待たずに食料を取りに行く', 'fca_wait', '止めるのは運用者']) expect(R6_KNOWLEDGE).toContain(words);
   });

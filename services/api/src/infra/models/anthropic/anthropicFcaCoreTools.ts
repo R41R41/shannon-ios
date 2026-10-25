@@ -85,7 +85,7 @@ export function transientFcaTools(input: FcaModelInput, history: readonly Anthro
     if (names.get(tool.name) !== definition.name || others.has(tool.name)) throw new Error('FCA_MODEL_TOOL_CONFLICT');
     if (!coreNames.has(tool.name)) others.set(tool.name, tool);
   }
-  // SHANNON_MINECRAFT_LLMC_V2: a fixed menu (`fixed`: the provider names in the order they are declared, the controls after them) has no
+  // mb-llmc v2: a fixed menu (`fixed`: the provider names in the order they are declared, the controls after them) has no
   // tool_open and no fca_context; what changes between decisions is only what follows the cached prefix.
   if (!fixed) names.set(fcaOpenTool.name, TOOL_OPEN_NAME);
   const declared = declaredInline(history);

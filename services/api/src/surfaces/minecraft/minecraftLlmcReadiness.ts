@@ -18,39 +18,32 @@ import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } f
 type Stage = 'nether_deep' | 'nether_entry' | 'end' | 'diamonds';
 type Need = PrepNeed;
 
-const ARMOUR = /^(?:iron|diamond|netherite)_(?:helmet|chestplate|leggings|boots)$/u;
-const STAGES: Readonly<Record<Exclude<Stage, 'diamonds'>, { title: string; food: number; needs: readonly Need[] }>> = {
+const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: number; needs: readonly Need[] }>> = {
   nether_deep: { title: 'ネザーの奥へ', food: 100, needs: [
     { label: '作業台', count: 1, pattern: /^crafting_table$/u }, { label: 'ハーフブロック', count: 12, pattern: /_slab$/u },
     { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u },
     { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
-  nether_entry: { title: 'ネザーに入る前', food: 100, needs: [
-    { label: '鉄の防具', count: 4, pattern: ARMOUR, slots: true }, { label: '盾', count: 1, pattern: /^shield$/u },
-    { label: '剣', count: 1, pattern: /^(?:stone|iron|diamond|netherite)_sword$/u },
-    { label: '鉄以上のツルハシ', count: 1, pattern: /^(?:iron|diamond|netherite)_pickaxe$/u },
-    { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
   end: { title: 'エンドへ', food: 80, needs: [
     { label: 'ベッド', count: 4, pattern: BED_ITEM }, { label: '弓', count: 1, pattern: /^bow$/u }, { label: '矢', count: 30, pattern: /^arrow$/u },
     { label: 'エンダーアイ', count: 12, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
 };
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (run 36: the entry's shortage said 食料 100 点・鉄の防具 4・水入りバケツ while the node was the obsidian, and the plan put
+ * The gate (run 36: the entry's shortage said 食料 100 点・鉄の防具 4・水入りバケツ while the node was the obsidian, and the plan put
  * 金の防具・ハーフブロック・食料 100 点 before the gate; the pass mark is the Nether within 30 minutes): what the gate needs is a pickaxe, a shield, a
  * sword, blocks to stand on and food for the first stretch (40 points). The rest (the table, slabs, gold armour, food 100) is the check after
  * she is in (`nether_deep`), which still holds before the fortress.
  * Owner 2026-10-24 (after run 38: only iron boots from a chest, no golden piece at the gate): the gate and the diamonds read the one table of
  * `minecraftLlmcPrepRules.ts` (the iron helmet, chestplate and leggings worn before the diamonds, the golden boots before the gate).
  */
-const ENTRY_V2: PrepStage = BEFORE_GATE;
 const END_NODE = /ストロングホールド|エンド(?!ウ)|三角|ポータルの部屋|アイ/u;
 const GATE_NODE = /ゲート|ネザーに入|黒曜石|火打|金のブーツ/u;
 const DIAMOND_NODE = /ダイヤ/u;
 
 /**
- * The stage whose check holds now: by the dimension, and in the overworld by the current node's title (and eyes carried). `v2`: a node of the
- * diamonds is checked against `BEFORE_DIAMONDS` (the old modes have no such stage).
+ * The stage whose check holds now: by the dimension, and in the overworld by the current node's title (and eyes carried); a node of the
+ * diamonds is checked against `BEFORE_DIAMONDS`.
  */
-export function preparationStage(dimension: string | null, counts: ItemCounts, nowTitle: string | null, v2 = false): Stage | null {
+export function preparationStage(dimension: string | null, counts: ItemCounts, nowTitle: string | null): Stage | null {
   if (dimension === 'the_nether') {
     const rods = countMatching(counts, /^blaze_rod$/u), pearls = countMatching(counts, /^(?:ender_pearl|ender_eye)$/u);
     return rods >= 7 && pearls >= 12 ? null : 'nether_deep';
@@ -58,7 +51,7 @@ export function preparationStage(dimension: string | null, counts: ItemCounts, n
   if (dimension !== 'overworld') return null;
   if (countMatching(counts, /^ender_eye$/u) > 0 || (nowTitle && END_NODE.test(nowTitle))) return 'end';
   if (nowTitle && GATE_NODE.test(nowTitle)) return 'nether_entry';
-  return v2 && nowTitle && DIAMOND_NODE.test(nowTitle) ? 'diamonds' : null;
+  return nowTitle && DIAMOND_NODE.test(nowTitle) ? 'diamonds' : null;
 }
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
@@ -74,10 +67,10 @@ function held(counts: ItemCounts, need: Need): number {
  * that is to be worn and is only carried is said as such (「着ていない: iron_helmet」), since armour in the pack does not protect.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowTitle: string | null;
-  v2?: boolean; worn?: readonly string[] }): string | null {
-  const stage = preparationStage(parts.dimension, parts.counts, parts.nowTitle, parts.v2 === true);
+  worn?: readonly string[] }): string | null {
+  const stage = preparationStage(parts.dimension, parts.counts, parts.nowTitle);
   if (!stage) return null;
-  const table = stage === 'diamonds' ? BEFORE_DIAMONDS : parts.v2 && stage === 'nether_entry' ? ENTRY_V2 : STAGES[stage];
+  const table: PrepStage = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
   const none: string[] = [], short: string[] = [], unworn: string[] = [];
   for (const need of table.needs) {
     const have = held(parts.counts, need);

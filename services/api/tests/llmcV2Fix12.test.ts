@@ -27,7 +27,7 @@ const owned = (items: Array<[string, number]>, worn = '') => carriedItemCounts({
 const rows = (tree: PlanTree) => tree.nodes.map(node => `${node.id} ${node.title}|${node.doneWhen ?? ''}`);
 
 describe('the armour: iron helmet, chestplate and leggings before the diamonds, golden boots before the gate', () => {
-  const on = seedPlan('エンドラを倒して', null, true)!, off = seedPlan('エンドラを倒して')!;
+  const on = seedPlan('エンドラを倒して')!;
   it('puts the three iron pieces under the iron, and the golden boots between the diamonds and the obsidian', () => {
     const tops = on.nodes.filter(node => node.parentId === null).map(node => node.title);
     expect(tops.indexOf('金のブーツ（ネザーの前）')).toBe(tops.indexOf('ダイヤ（y=-58）') + 1);
@@ -35,19 +35,16 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
     expect(rows(on)).toContain('p6 金のブーツ（ネザーの前）|have:golden_boots');
     expect(rows(on)).toContain('p6.1 金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）|have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots');
-    expect(rows(off).some(line => line.includes('金のブーツ'))).toBe(false);
     expect(gateFirst([]).length).toBe(0);
   });
   it('asks the three pieces worn at the diamonds\' node, and says one carried and not worn', () => {
-    const base = { dimension: 'overworld', food: 50, nowTitle: 'ダイヤ3以上を掘る', v2: true };
+    const base = { dimension: 'overworld', food: 50, nowTitle: 'ダイヤ3以上を掘る' };
     const kit: Array<[string, number]> = [['iron_pickaxe', 1], ['bucket', 1], ['shield', 1]];
     expect(preparationShortage({ ...base, counts: owned(kit), worn: [] })).toBe('準備の不足（ダイヤを掘る前）: 鉄の兜・胸当て・脚が無い');
     const armour: Array<[string, number]> = [...kit, ['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]];
     expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate'] }))
       .toBe('準備の不足（ダイヤを掘る前）: 持っているが着ていない: iron_leggings');
     expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate', 'iron_leggings'] })).toBeNull();
-    // The old modes have no diamonds' stage.
-    expect(preparationShortage({ ...base, v2: false, counts: owned(kit) })).toBeNull();
   });
   it('asks the golden boots at the gate, iron boots do not stand for them', () => {
     const gate: Array<[string, number]> = [['iron_pickaxe', 1], ['shield', 1], ['iron_sword', 1], ['cobblestone', 64], ['iron_helmet', 1],
@@ -61,11 +58,10 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
   it('says the rules once, the same words in the first plan and the stage knowledge, with no old numbers', () => {
     expect(PREP_RULES_WORDS).toContain('ダイヤを掘りに下りる前: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）');
     expect(PREP_RULES_WORDS).toContain('靴は鉄でなく金のブーツ（金の延べ棒 4）');
-    const plan = ownFirstPlanSystem(true);
+    const plan = ownFirstPlanSystem();
     expect(plan).toContain(PREP_RULES_WORDS);
     for (const old of ['鉄 24〜36', '24〜36 個', 'ネザーの前の鉄は約 10', '防具は箱で見つけた物か余裕がある時だけ', 'ベッド全部']) expect(plan, old).not.toContain(old);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(PREP_RULES_WORDS);
-    expect(ownFirstPlanSystem()).toContain('24〜36');
   });
 });
 
@@ -96,11 +92,10 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
     expect(PLAN_UPDATE_RULES_DEFINITION.description).toContain('親が済みでも子は済みにならない');
   });
   it('the first plan reads the scan as not found there, and the closing of the children under a done node', () => {
-    const plan = ownFirstPlanSystem(true);
+    const plan = ownFirstPlanSystem();
     expect(plan).not.toContain('走査に無い物は 160m の外にある');
     expect(plan).toContain('走査した範囲では見つからなかった物');
     expect(plan).not.toContain('親が済んでも子は済みにならない');
-    expect(ownFirstPlanSystem()).toContain('走査に無い物は 160m の外にある');
   });
 });
 

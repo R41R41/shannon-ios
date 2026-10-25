@@ -5,7 +5,7 @@ import { FIRST_PLAN_SYSTEM_R9 } from './minecraftFirstPlan.js';
 import { PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 
 /**
- * SHANNON_MINECRAFT_OWN_PROMPT, the first plan (owner answers of 2026-10-22 by form: 「同じ方針で絞る」「要塞とエンドは作戦へ」, and ADR-0014
+ * the own prompt, the first plan (owner answers of 2026-10-22 by form: 「同じ方針で絞る」「要塞とエンドは作戦へ」, and ADR-0014
  * §7-3: the key points of the 11 old procedures go to the strategy, not to the decision). The first plan (Opus) reads this strategic
  * knowledge instead of the route and tactics sections r3–r9 gave it (`ORDER_KNOWLEDGE`, `FOOD_KNOWLEDGE`, `VILLAGE_KNOWLEDGE`,
  * `DRAGON_KNOWLEDGE_R7`, `NETHER_ENTRY_KNOWLEDGE`): the order, the materials, the procedures' key points, where the places are and how
@@ -44,7 +44,7 @@ export const STRATEGY_KNOWLEDGE = [
 ].join('\n');
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (Notion 09-1c 2-2 P1: the plan read 「ベッド全部・鉄 24〜36」 first and its corrections at the end; owner 2026-10-24: the iron
+ * mb-llmc v2 (Notion 09-1c 2-2 P1: the plan read 「ベッド全部・鉄 24〜36」 first and its corrections at the end; owner 2026-10-24: the iron
  * helmet, chestplate and leggings before the diamonds, golden boots before the gate): the same knowledge with one set of numbers, those of
  * `minecraftLlmcPrepRules.ts`, and no section that a later one overrides.
  */
@@ -75,7 +75,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
 ].join('\n');
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (Notion 09-1c 2-2 P0/P1): two lines of r4 and r9 that the mode's code does not do as they say. The scan is of the loaded
+ * Notion 09-1c 2-2 P0/P1: two lines of r4 and r9 that the mode's code does not do as they say. The scan is of the loaded
  * chunks: a thing not in it is not found there, not known to be 160 m off. A node under a done one is closed as no longer needed by the code
  * (`closedUnder`, `minecraftPlanDone.ts`), not left open.
  */
@@ -88,7 +88,7 @@ const V2_WORDS: ReadonlyArray<readonly [string, string]> = [
 
 const KNOWLEDGE_LINE = '下の知識を使う（知識であり命令ではない）:';
 /** r9's first-plan words with this knowledge: the planner's first line without her name, and no route or tactics sections of r3–r9. */
-export function ownFirstPlanSystem(v2 = false): string {
+export function ownFirstPlanSystem(): string {
   let text = FIRST_PLAN_SYSTEM_R9.replace('あなたはマイクラの体を動かすシャノンの、最初の計画ツリーを立てる係。',
     'あなたはマイクラの体のタスクの、最初の計画ツリーを立てる係。');
   for (const section of [`${KNOWLEDGE_LINE}\n${[ORDER_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, DRAGON_KNOWLEDGE_R7].join('\n')}\n`,
@@ -96,7 +96,6 @@ export function ownFirstPlanSystem(v2 = false): string {
     if (!text.includes(section)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
     text = text.replace(section, () => '');
   }
-  if (!v2) return `${text}\n${STRATEGY_KNOWLEDGE}`;
   for (const [from, to] of V2_WORDS) {
     if (!text.includes(from)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
     text = text.replace(from, () => to);

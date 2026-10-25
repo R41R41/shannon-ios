@@ -9,7 +9,7 @@ import { packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPac
 import { mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { rewriteLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
-import { ownFirstPlanSystem, STRATEGY_KNOWLEDGE, STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { ownFirstPlanSystem, STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { closedUnder, doneFacts, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import run36Plan from './fixtures/minecraft-run36-plan-v1.json' with { type: 'json' };
 
@@ -94,12 +94,11 @@ describe('the obsidian scene: water, lava and the bucket', () => {
     expect(useReachStop({ hands: [{ do: 'walk', to: at(250, -24, 207), range: 2 }, bucket(251, -24, 208)] }, obsidianFrame())).toBeNull();
     expect(useReachStop({ hands: [{ do: 'use', item: 'flint_and_steel', at: [at(251, -24, 208)] }] }, obsidianFrame())).toBeNull();
   });
-  it('goes through the part-send: the hands before the held use are sent, and it is not held when the mode is off', () => {
+  it('goes through the part-send: the hands before the held use are sent', () => {
     const act = { hands: [{ do: 'equip', item: 'bucket' }, bucket(251, -24, 208), { do: 'wait', seconds: 2 }], why: '[p7.2] 汲み戻す' };
-    const held = heldBeforeSend({ preflight: true, v2: true }, act, obsidianFrame(), 't')!;
+    const held = heldBeforeSend(false, act, obsidianFrame(), 't')!;
     expect((held.input as { hands: unknown[] }).hands).toHaveLength(1);
     expect(held.tail).toContain('手 2 use');
-    expect(heldBeforeSend({ preflight: true }, act, obsidianFrame(), 't')).toBeNull();
   });
 });
 
@@ -127,15 +126,8 @@ describe('the plan tree of run 36 (task 40bd0b3e, revision 21): children left op
   const start = (): PlanTree => ({ ...tree, current: 'p1.1', nodes: tree.nodes.map(node => ({ ...node, state: node.id === 'p1.1' ? 'done' as const : 'continue' as const })) });
   const pack = (items: Array<[string, number]>) => frame({ dimension: 'overworld', position: at(141, 75, 204), food: 20, inventory: items.map(([name, count]) => ({ name, count })) });
   const stateOf = (result: PlanTree, id: string) => result.nodes.find(node => node.id === id)!;
-  it('was: p1 done by `have:bed>=3` with 村の箱 and 鍛冶屋の箱 still `continue` (the fault of the run)', () => {
+  it('is: the two boxes are closed done with the reason in their note, and the parent stays done', () => {
     const seen = seenDoneUpdate(start(), pack([['red_bed', 1], ['blue_bed', 1], ['purple_bed', 1]]))!;
-    expect(seen.ids).toEqual(['p1', 'p1.2', 'p13']);
-    const after = applyPlanUpdate(start(), seen.update).tree;
-    expect(stateOf(after, 'p1').state).toBe('done');
-    expect(['p1.3', 'p1.4'].map(id => stateOf(after, id).state)).toEqual(['continue', 'continue']);
-  });
-  it('is: in the mode the two boxes are closed done with the reason in their note, and the parent stays done', () => {
-    const seen = seenDoneUpdate(start(), pack([['red_bed', 1], ['blue_bed', 1], ['purple_bed', 1]]), true)!;
     expect(seen.ids).toEqual(['p1', 'p1.2', 'p1.3', 'p1.4']);
     expect(seen.closed).toEqual(['p1.3←p1', 'p1.4←p1']);
     const after = applyPlanUpdate(start(), seen.update).tree;
@@ -145,7 +137,7 @@ describe('the plan tree of run 36 (task 40bd0b3e, revision 21): children left op
   });
   it('closes the iron under p4 (`have:iron_chestplate` from the village box): 洞窟で鉄鉱石を掘る・鉄を焼く', () => {
     const base = start();
-    const seen = seenDoneUpdate(base, pack([['iron_chestplate', 1]]), true)!;
+    const seen = seenDoneUpdate(base, pack([['iron_chestplate', 1]]))!;
     expect(seen.ids).toContain('p4');
     expect(seen.closed).toEqual(expect.arrayContaining(['p4.1←p4', 'p4.2←p4']));
     const after = applyPlanUpdate(base, seen.update).tree;
@@ -173,35 +165,27 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     ['iron_chestplate', 1], ['iron_leggings', 1], ['golden_boots', 1]];
   it('the entry\'s shortage asks 40 points of food, a pickaxe, a shield, a sword, blocks and the armour; not 100 points or the water bucket', () => {
     const parts = { dimension: 'overworld', counts: owned(GEAR), food: 48, nowTitle: '黒曜石を作る' };
-    expect(preparationShortage({ ...parts, v2: true })).toBeNull();
-    expect(preparationShortage(parts)).toContain('食料 48 点（目安 100）');
-    expect(preparationShortage({ ...parts, v2: true, food: 24 })).toBe('準備の不足（ネザーに入る前）: 食料 24 点（目安 40）');
-    expect(preparationShortage({ ...parts, v2: true, counts: owned([['stone_sword', 1]]) }))
+    expect(preparationShortage(parts)).toBeNull();
+    expect(preparationShortage({ ...parts, food: 24 })).toBe('準備の不足（ネザーに入る前）: 食料 24 点（目安 40）');
+    expect(preparationShortage({ ...parts, counts: owned([['stone_sword', 1]]) }))
       .toContain('鉄以上のツルハシ・盾・鉄の兜・胸当て・脚・金のブーツ・足場のブロックが無い');
   });
   it('the check inside the Nether is as it was (the table, slabs, gold armour and food 100 before the fortress)', () => {
     const nether = { dimension: 'the_nether', counts: owned([['shield', 1]]), food: 48, nowTitle: '要塞を探す' };
-    expect(preparationShortage({ ...nether, v2: true })).toBe(preparationShortage(nether));
     expect(preparationShortage(nether)).toContain('食料 48 点（目安 100）');
   });
-  it('the seed plan has no food 100 before the gate and one or two beds from the village; off it is the seed as it was', () => {
+  it('the seed plan has no food 100 before the gate and one or two beds from the village', () => {
     const titles = (tree: PlanTree) => tree.nodes.map(node => `${node.title}|${node.doneWhen ?? ''}`);
-    const off = seedPlan('エンドラを倒して')!, on = seedPlan('エンドラを倒して', null, true)!;
-    expect(titles(off)).toContain('食料100点以上に足す|food>=100');
+    const on = seedPlan('エンドラを倒して')!;
     expect(titles(on).some(line => line.includes('食料100点以上に足す'))).toBe(false);
     expect(titles(on)).toContain('村を回る（ベッド1〜2・干し草・畑・箱）|');
-    expect(titles(off)).toContain('村を回る（ベッド全部・干し草・畑・箱）|');
-    // Food 100 goes after the gate; the golden boots (a node and two children) come after the diamonds.
-    expect(on.nodes.length).toBe(off.nodes.length + 2);
-    expect(titles(seedPlan('エンドラを倒して', null, false)!)).toEqual(titles(off));
     expect(titles(on).some(line => line.startsWith('出発の点検（ネザーの奥へ）'))).toBe(true);
     expect(gateFirst([]).length).toBe(0);
   });
   it('the first plan\'s words, with the mode: the gate\'s side and the Nether\'s side of the check, and the beds', () => {
-    const on = ownFirstPlanSystem(true), off = ownFirstPlanSystem();
+    const on = ownFirstPlanSystem();
     // Notion 09-1c P1: the mode's words carry one set of numbers (`STRATEGY_KNOWLEDGE_V2`), not the old ones and their corrections.
     expect(on).toContain(STRATEGY_KNOWLEDGE_V2);
-    expect(off).toContain(STRATEGY_KNOWLEDGE);
     expect(on).not.toContain('24〜36');
     expect(on).toContain('ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点');
     expect(on).toContain('ベッドは村で見つけた 1〜2 つでよい');

@@ -49,7 +49,7 @@ function ledge(sees: boolean): World {
 const ACT_DONE = (n: number) => JSON.stringify({ v: 1, ok: true, done: n, of: n, ms: 1000, at: { x: 222, y: 56, z: 62 }, hp: 20, food: 20,
   lines: Array.from({ length: n }, (_, i) => ({ i: i + 1, do: 'walk', status: 'done', line: `(22${i + 1},56,62) に着いた` })) });
 
-function run(flags: { preflight: boolean; v2: boolean; urgent?: boolean }, world: World, hands: unknown[]) {
+function run(flags: { urgent?: boolean }, world: World, hands: unknown[]) {
   const h = actionHarness(at), store = new MinecraftControlStore(h.db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world',
     onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
@@ -75,7 +75,7 @@ function run(flags: { preflight: boolean; v2: boolean; urgent?: boolean }, world
       return { decision: { kind: 'tools', calls: [{ id: 'c-1', name: MC_ACT_TOOL, input: { hands, why: '[p1.2] 東へ', stopIf: { hpBelow: 12 } } }] }, history: [{ role: 'assistant', content: 'call' }] };
     }, toolResults: results => ({ role: 'user', results }) },
     stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
-      llmc: { plan: () => plan, probe: true, ...(flags.preflight ? { preflight: true } : {}), ...(flags.v2 ? { v2: true } : {}), ...(flags.urgent ? { urgent: () => true } : {}) } }) }),
+      llmc: { plan: () => plan, ...(flags.urgent ? { urgent: () => true } : {}) } }) }),
   });
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id, { title: 'End', goal: 'エンドラを討伐して' }, 'owner-request');
   store.bind(task.id, 'minecraft:world');
@@ -100,7 +100,7 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
   it('v2: the two hands before the held walk go to the body, and the result carries the fact of the third as a tail, after the body\'s own line', async () => {
     const lines: string[] = [];
     vi.spyOn(console, 'info').mockImplementation(line => { lines.push(String(line)); });
-    const held = run({ preflight: true, v2: true }, rock(), hands);
+    const held = run({}, rock(), hands);
     await held.driver.tick();
     await held.waitPending();
     expect(held.pending()).toBe(1);
@@ -115,20 +115,9 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
     expect(lines.find(line => line.startsWith('Shannon Minecraft act held partway'))).toMatch(/hand=3 sent=2 code=feet_solid$/u);
   });
 
-  it('not v2 (the preflight alone): the same act is turned back whole and nothing is sent', async () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
-    const whole = run({ preflight: true, v2: false }, rock(), hands);
-    await whole.driver.tick();
-    await whole.driver.drain();
-    await whole.driver.tick();
-    await whole.driver.drain();
-    expect(whole.pending()).toBe(0);
-    expect(whole.seen.join('\n')).toContain('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 3 walk 一歩ではない');
-  });
-
   it('v2: when the first hand is the held one nothing is sent either', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
-    const first = run({ preflight: true, v2: true }, rock(), [walk(224), walk(222)]);
+    const first = run({}, rock(), [walk(224), walk(222)]);
     await first.driver.tick();
     await first.driver.drain();
     await first.driver.tick();
@@ -139,7 +128,7 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
 
   it('v2: an act the guards do not fault goes whole, and its result has no tail', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
-    const clean = run({ preflight: true, v2: true }, rock(), [walk(221), walk(222)]);
+    const clean = run({}, rock(), [walk(221), walk(222)]);
     await clean.driver.tick();
     await clean.waitPending();
     expect(clean.pending()).toBe(1);
@@ -151,7 +140,7 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
   const bridge = [{ do: 'sneak', on: true }, { do: 'place', block: 'nether_bricks', at: [{ x: 11, y: 9, z: 0 }] }, { do: 'walk', to: { x: 11, y: 10, z: 0 } }];
   it('v2: a bare bridge over a deep drop with a hostile in sight is held at its place; the sneak before it is sent', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
-    const seen = run({ preflight: true, v2: true }, ledge(true), bridge);
+    const seen = run({}, ledge(true), bridge);
     await seen.driver.tick();
     await seen.waitPending();
     expect(seen.pending()).toBe(1);
@@ -162,28 +151,24 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
     expect(seen.seen.join('\n')).toContain('壁の無い橋');
   });
 
-  it('v2: the same bridge with nothing in sight goes whole; the rule guard is not in the act-preflight alone', async () => {
+  it('v2: the same bridge with nothing in sight goes whole', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
-    const quiet = run({ preflight: true, v2: true }, ledge(false), bridge);
+    const quiet = run({}, ledge(false), bridge);
     await quiet.driver.tick();
     await quiet.waitPending();
     expect(((await quiet.answer(ACT_DONE(3)))?.arguments as { hands: unknown[] }).hands).toHaveLength(3);
-    const old = run({ preflight: true, v2: false }, ledge(true), bridge);
-    await old.driver.tick();
-    await old.waitPending();
-    expect(((await old.answer(ACT_DONE(3)))?.arguments as { hands: unknown[] }).hands).toHaveLength(3);
   });
 
   it('v2, an urgent decision: the act goes to the body three hands at most, and the rest comes back as a fact (not urgent: whole)', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
     const five = [walk(221), walk(222), walk(221), walk(222), walk(221)];
-    const urgent = run({ preflight: true, v2: true, urgent: true }, rock(), five);
+    const urgent = run({ urgent: true }, rock(), five);
     await urgent.driver.tick();
     await urgent.waitPending();
     expect(((await urgent.answer(ACT_DONE(3)))?.arguments as { hands: unknown[] }).hands).toHaveLength(3);
     expect(urgent.seen.join('\n')).toContain('手 4 から先 2 手（全 5 手のうち）は体へ送っていない');
     expect(urgent.seen.join('\n')).toContain('急ぎの判断は 3 手まで');
-    const calm = run({ preflight: true, v2: true }, rock(), five);
+    const calm = run({}, rock(), five);
     await calm.driver.tick();
     await calm.waitPending();
     expect(((await calm.answer(ACT_DONE(5)))?.arguments as { hands: unknown[] }).hands).toHaveLength(5);
@@ -194,14 +179,14 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
     const world = { ...rock(), recentStops: ['(221,56,62) 見られる 3秒前'],
       nearbyThreats: [{ name: 'blaze', id: 7, distance: 6, position: { x: 226, y: 58, z: 60 }, canSee: true }] };
     const dig = (extra: object) => [{ do: 'dig', at: [{ x: 221, y: 56, z: 62 }], ...extra }];
-    const held = run({ preflight: true, v2: true }, world, dig({}));
+    const held = run({}, world, dig({}));
     await held.driver.tick();
     await held.driver.drain();
     await held.driver.tick();
     await held.driver.drain();
     expect(held.pending()).toBe(0);
     expect(held.seen.join('\n')).toContain('(221,56,62) は直前に「見られる」で止まった（3秒前。今も見える敵: blaze #7 6.0m）');
-    const open = run({ preflight: true, v2: true }, world, dig({ exposeOk: true }));
+    const open = run({}, world, dig({ exposeOk: true }));
     await open.driver.tick();
     await open.waitPending();
     expect(open.pending()).toBe(1);

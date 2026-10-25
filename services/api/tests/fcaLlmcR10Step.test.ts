@@ -47,7 +47,7 @@ function actRun(reflexes: () => Array<Record<string, unknown>>, held: () => stri
         history: [{ role: 'assistant', content: 'call' }] };
     }, toolResults: results => ({ role: 'user', results }) },
     stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
-      llmc: { plan: () => plan, probe: true } }) }),
+      llmc: { plan: () => plan } }) }),
   });
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id, { title: 'End', goal: 'エンドラを討伐して' }, 'owner-request');
   store.bind(task.id, 'minecraft:world');

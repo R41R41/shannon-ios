@@ -1,5 +1,5 @@
 /**
- * SHANNON_MINECRAFT_LLMC_V2: the body's legend of the map (mb-llmc-cand 2, Shannon 974c19f `utils/localMap.ts` `MAP_LEGEND`), word for word. The body split
+ * mb-llmc v2: the body's legend of the map (mb-llmc-cand 2, Shannon 974c19f `utils/localMap.ts` `MAP_LEGEND`), word for word. The body split
  * the symbols by what the walk does with the block (`%` leaves only; `Y` the Nether's wart blocks and shroomlight; `P` planks, stairs, slabs, bookshelves;
  * `D` `A` `J` a wooden door, trapdoor, fence gate; `K` iron door and trapdoor; `+` fences and walls; `b` glass, panes, bars, chains;
  * `q` signs, plates, buttons, levers). `MAP_LEGEND` of `minecraftActContract.ts` is the legend of the bodies before it, which the switch off still sends;

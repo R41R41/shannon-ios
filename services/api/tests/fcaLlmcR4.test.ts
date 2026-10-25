@@ -51,7 +51,7 @@ function fixture(decide: (index: number) => { name: string; input: unknown }, ex
       return { decision: { kind: 'tools', calls: [{ id: 'c-1', name: call.name, input: call.input }] }, history: [{ role: 'assistant', content: 'call' }] }; },
       toolResults: results => ({ role: 'user', results }) },
     stepPorts: (_runtime, step) => {
-      const body = fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true, llmc: { plan: () => undefined, probe: true } });
+      const body = fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true, llmc: { plan: () => undefined } });
       const more = extra?.(step, control);
       return { tools: more ? combineFcaTools(body, { definitions: more, async execute(call) {
         const run = llmcProbeRunner(control, step)();
@@ -160,15 +160,14 @@ describe('the models of the mode with Sonnet as its main one (shared note 6)', (
     const client = { messages: { async create(body: unknown) { planned.push(body as Record<string, unknown>);
       return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{"nodes":[]}' }], usage: { input_tokens: 1, output_tokens: 1 } } as never; } } };
     // r5: the raise is off unless the environment asks for it (`next`: the one above the main model).
-    const llmc = configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', SHANNON_MINECRAFT_LLMC_PROBE: 'on', ANTHROPIC_API_KEY: 'k',
+    const llmc = configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k',
       SHANNON_MINECRAFT_LLMC_MODEL: 'claude-sonnet-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' }, { recordUsage() {}, fetcher: fixture.fetcher },
     { log: line => lines.push(line), client })!;
     await llmc.planner!('system', 'input', new AbortController().signal);
     expect(planned[0]!.model).toBe('claude-opus-5-5');
     expect(JSON.stringify(planned[0])).toContain('"forbid"');
     expect(llmc.names).toEqual({ main: 'claude-sonnet-5-5', escalate: 'claude-opus-5-5', plan: 'claude-opus-5-5' });
-    expect(llmc.probe).toBe(true);
-    expect(lines[0]).toBe('Shannon Minecraft LLM-centric models main=claude-sonnet-5-5 escalate=claude-opus-5-5 plan=claude-opus-5-5 probe=on');
+    expect(lines[0]).toBe('Shannon Minecraft LLM-centric models main=claude-sonnet-5-5 escalate=claude-opus-5-5 plan=claude-opus-5-5');
     expect(llmcModelRouter(llmc.models, { consecutiveToolFailures: 1 })).toBe(llmc.models.main);
     expect(llmcModelRouter(llmc.models, { consecutiveToolFailures: 2 })).toBe(llmc.models.escalate);
     const tools = [PLAN_UPDATE_RULES_DEFINITION];
@@ -178,9 +177,6 @@ describe('the models of the mode with Sonnet as its main one (shared note 6)', (
     for (const model of [llmc.models.main, llmc.models.escalate!] as FcaModel[]) await model.decide(input, new AbortController().signal).catch(() => null);
     const sent = fixture.bodies.map(item => ({ model: item.model, system: JSON.stringify(item.system) }));
     expect(sent.map(item => item.model)).toEqual(['claude-sonnet-5-5', 'claude-opus-5-5']);
-    const heading = INVESTIGATE_KNOWLEDGE.split('\n')[0]!;
-    for (const item of sent) expect(item.system).toContain(heading);
-    const off = configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} }, { log: () => {} })!;
-    expect(off.probe).toBe(false);
+    for (const item of sent) expect(item.system).toContain('# Minecraft の体の課題');
   });
 });

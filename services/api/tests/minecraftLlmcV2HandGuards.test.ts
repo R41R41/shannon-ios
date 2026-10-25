@@ -31,13 +31,12 @@ describe('the urgent limit', () => {
     expect(isUrgentLive({ body: { map: 'x' } })).toBe(false);
     expect(isUrgentLive({})).toBe(false);
   });
-  it('is the three hands sent and the tail of the rest through the part-send, and nothing when the mode is not v2', () => {
+  it('is the three hands sent and the tail of the rest through the part-send, and nothing when the decision is not urgent', () => {
     const five = { hands: [walk(1), walk(2), walk(3), dig(4), walk(5)], why: '[急ぎ] 離れる' };
-    const sent = heldBeforeSend({ preflight: true, v2: true, urgent: true }, five, null, 't')!;
+    const sent = heldBeforeSend(true, five, null, 't')!;
     expect((sent.input as { hands: unknown[]; why: string }).hands).toHaveLength(3);
     expect(sent.tail).toContain('手 4 から先 2 手（全 5 手のうち）は体へ送っていない');
-    expect(heldBeforeSend({ preflight: true, v2: true }, five, null, 't')).toBeNull();
-    expect(heldBeforeSend({ preflight: true, urgent: true }, five, null, 't')).toBeNull();
+    expect(heldBeforeSend(false, five, null, 't')).toBeNull();
   });
   it('through the replay\'s entry: the lines of the model are made into hands and held at the fourth', () => {
     const act = candidateAct({ hands: ['wait 1', 'wait 1', 'wait 1', 'wait 1', 'wait 1'], why: '[急ぎ] x' }, null, 'replay', { urgent: true });
@@ -83,19 +82,15 @@ describe('a dig of a cell that stopped for 「見られる」 a moment ago', () 
 describe('the urgent decision of a task, as the tools ask it', () => {
   const PIGLIN = { id: 848, name: 'piglin', kind: 'hostile', distance: 5, position: { x: 219.5, y: 58, z: 62.5 }, canSee: true, canReachMe: true };
   const base = () => ({ start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; }, tools: undefined }) as never;
-  it('is true when the live state of the decision is the urgent one, false when the next is not, and is kept for v2 only', () => {
+  it('is true when the live state of the decision is the urgent one, false when the next is not', () => {
     forgetLlmcEvents();
     let seen = frame({ position: { x: 226.5, y: 57, z: 63.5 }, health: 16, nearbyThreats: [PIGLIN] });
-    const parts = (v2: boolean) => ({ llmc: { plan: () => undefined, planView: () => null }, taskId: v2 ? 'v2-task' : 'old-task', createdAt: '2026-10-23T00:00:00.000Z',
-      observe: () => seen, arrival: () => ({ at: null, kind: null }), log() {}, r4: { probe: () => null, planWhere: () => null }, ...(v2 ? { v2: true } : {}) }) as never;
-    const mode = withLlmcBody(base(), parts(true)), old = withLlmcBody(base(), parts(false));
-    for (const lifecycle of [mode, old]) {
-      lifecycle.context();
-      lifecycle.urgent?.();
-      lifecycle.transient?.();
-    }
+    const mode = withLlmcBody(base(), { llmc: { plan: () => undefined, planView: () => null }, taskId: 'v2-task', createdAt: '2026-10-23T00:00:00.000Z',
+      observe: () => seen, arrival: () => ({ at: null, kind: null }), log() {}, r4: { probe: () => null, planWhere: () => null } });
+    mode.context();
+    mode.urgent?.();
+    mode.transient?.();
     expect(urgentDecision('v2-task')).toBe(true);
-    expect(urgentDecision('old-task')).toBe(false);
     seen = frame({ position: { x: 226.5, y: 57, z: 63.5 }, health: 20, nearbyThreats: [] });
     mode.context();
     mode.urgent?.();

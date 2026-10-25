@@ -53,7 +53,7 @@ export function cacheFcaBodyRequest<T extends Anthropic.MessageCreateParamsNonSt
   if (!usesOneHourAnthropicCache(body.model)) return body;
   if (body.cache_control) throw new AnthropicUsageEvidenceError('HAIKU_CACHE_PROTOCOL_INVALID');
   const system = typeof body.system === 'string' ? [{ type: 'text' as const, text: body.system }] : [...(body.system ?? [])];
-  // `prefix`: the transport block of system[0]; a Minecraft body task's own (SHANNON_MINECRAFT_OWN_PROMPT, `anthropicFcaMinecraftSystem.ts`).
+  // `prefix`: the transport block of system[0]; a Minecraft body task's own (the own prompt, `anthropicFcaMinecraftSystem.ts`).
   const installed = system[0]?.type === 'text' && system[0].text === prefix;
   const request = { ...body, messages: markedLastStored(body.messages), system: installed ? system
     : [{ type: 'text' as const, text: prefix, cache_control: ONE_HOUR }, ...system] } as T;

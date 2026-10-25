@@ -9,7 +9,7 @@ import { rewriteLlmcLive, type RewriteNotes } from './minecraftLlmcLiveRewrite.j
 import { stageKnowledge, V2_ALWAYS } from './minecraftLlmcV2Knowledge.js';
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (改修案 2.1〜2.3, ADR-0014): the mode's entry points. Every function here is a pure function of the recorded
+ * mb-llmc v2 (改修案 2.1〜2.3, ADR-0014): the mode's entry points. Every function here is a pure function of the recorded
  * material, so the decision replay calls the same code the model's request does:
  *
  * - `candidateLive(live)`: the live state as the decision reads it. In: the object the model's request builds from the task's state (`liveObject`:
@@ -75,7 +75,7 @@ export function progressWithPlain(progress: unknown): unknown {
   return row && binding && conditions.some(item => item?.id === 'witnessed-dragon') ? { ...row, binding: { ...binding, plain: DRAGON_PLAIN } } : progress;
 }
 /**
- * The body reaches 5 m for dig, place, use, chest, furnace and craft (mb-llmc-cand 2, \`BLOCK_REACH\`); the probe's description, shared with the switch off,
+ * The body reaches 5 m for dig, place, use, chest, furnace and craft (mb-llmc-cand 2, \`BLOCK_REACH\`); the probe's description
  * still says 4.5 m: in the mode's menu it says 5 m.
  */
 function reachWords(tool: FcaToolDefinition): FcaToolDefinition {
@@ -110,7 +110,7 @@ export interface CandidateAct {
 /**
  * The model's `mc.act` as the body's tool takes it, from the model's raw input (hands in lines or hands) and the newest frame: the hands made
  * ready (`candidateInput`), the shape put right and checked (`llmcPrepare`), the stopIf looked at (`checkedStopIf`), then the guards
- * (`heldBeforeSend` with the switch on). The frame may be a made one (`state.world`: `localMap`, `position`, `health`, `nearbyThreats`, and
+ * (`heldBeforeSend`). The frame may be a made one (`state.world`: `localMap`, `position`, `health`, `nearbyThreats`, and
  * `recentStops`: the body's stop lines, from which a dig of a cell that stopped for 「見られる」 a moment ago is held). `options.urgent`: the decision
  * was an urgent one (`isUrgentLive(live)`), so the act goes to the body three hands at most.
  */
@@ -119,7 +119,7 @@ export function candidateAct(raw: unknown, frame: BodyObservation | null, taskId
   if (prepared.problem) return { input: raw, fixes: prepared.fixes, problem: prepared.problem };
   const checked = checkedStopIf(prepared.input, frame);
   const fixes = [...prepared.fixes, ...checked.fixes];
-  const held = heldBeforeSend({ preflight: true, v2: true, urgent: options.urgent === true }, checked.input, frame, taskId);
+  const held = heldBeforeSend(options.urgent === true, checked.input, frame, taskId);
   if (held?.result) return { input: checked.input, fixes, problem: null, guard: { stopped: true, hand: 1, text: held.result.text } };
   if (held?.input) {
     const sent = (held.input as { hands: unknown[] }).hands.length;

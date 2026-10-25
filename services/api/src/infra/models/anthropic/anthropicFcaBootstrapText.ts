@@ -1,5 +1,5 @@
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 10, D3 「履歴のノイズ」): the public bootstrap of a new replay epoch as lines a person can read. The shared
+ * mb-llmc v2 (mb-llmc-cand 10, D3 「履歴のノイズ」): the public bootstrap of a new replay epoch as lines a person can read. The shared
  * history code writes it as one JSON text (`{"kind":"fca_public_history","summary":…,"rounds":[…]}`) and every message in it is an escaped JSON string
  * (`"content":"{\"name\":\"mc_act\",\"input\":{…}}"`, a result with its line breaks as `\n`); each round also ends with
  * 「Committed task status after this round: queued. A requested completion is not proof of completion.」, 6 to 8 times the same words.

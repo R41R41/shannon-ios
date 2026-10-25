@@ -9,24 +9,18 @@ import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
  * The body part of a decision's live state in the LLM-centric mode (design mb-llm-centric 2.2, 2.3, 2.6): the map first, then what is
  * off it (landmarks), the recent stops, her state, her food in points, the pack, what is near, and what happened since the last decision.
  * Everything else the old live state carried (skill pointers and gists, milestone and route lines, phase facts, the pace ledger) is
- * left out: the plan tree and the map say it. Bounded to `LLMC_LIVE_TOKENS` (the plan's path and this part together): the map first and
- * never cut, then the rest cut in the order of `SHRINK` (the farther creatures, the pack's tail, the later landmarks, …).
+ * left out: the plan tree and the map say it. Bounded to `LLMC_LIVE_TOKENS` (the plan's path and this part together), a bound nothing
+ * reaches (人手の点検: 127 か所の `ほか N 件（長いため略）`, 848 lines unseen): every hostile, the whole pack. The map first and never cut,
+ * then the rest cut in the order of `SHRINK` (the farther creatures, the pack's tail, the later landmarks, …).
  *
  * Token count: `llmcTokens`, fitted to the provider's count_tokens (scene replay r2, 2026-10-22: 149 texts of six scenes' live states,
  * maps, layers and parts, and probes of each map symbol; `services/api/scripts/minecraft-llmc-scene.ts --count` measures it again).
  * The first estimate (a map at 1.8 characters a token, the rest by `estimatedAnthropicTokens`) counted 10–48% short: water (`~ `) was
  * three tokens a cell, `; @ ! $` two, a letter one; so the map now writes water `w` and sand and gravel `s` (minecraftActContract.ts).
  */
-export const LLMC_LIVE_TOKENS = 3_000;
-const THREATS = 8, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 36, EVENTS = 6;
-/** SHANNON_MINECRAFT_LLMC_V2: no `ほか N 件（長いため略）` (人手の点検: 127 か所、見えない件数の合計 848): every hostile, the whole pack, a bound nothing reaches. */
-const V2_THREATS = 24, V2_INVENTORY = 80, V2_LIVE_TOKENS = 12_000;
-type SeenMode = 'threat' | 'near' | null;
-/** How the mode writes the hostiles and the creatures near (`seen`): the old mode writes neither word of reach nor the item's name. */
-const OLD_MODES: { threat: SeenMode; near: SeenMode } = { threat: null, near: null };
-const V2_MODES: { threat: SeenMode; near: SeenMode } = { threat: 'threat', near: 'near' };
-const CAPS = { threats: THREATS, inventory: INVENTORY, bound: LLMC_LIVE_TOKENS, v2: false, modes: OLD_MODES };
-const V2_CAPS = { threats: V2_THREATS, inventory: V2_INVENTORY, bound: V2_LIVE_TOKENS, v2: true, modes: V2_MODES };
+export const LLMC_LIVE_TOKENS = 12_000;
+const THREATS = 24, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 80, EVENTS = 6;
+type SeenMode = 'threat' | 'near';
 
 /**
  * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25, `~` 2.45, `; @ ! $`
@@ -100,12 +94,12 @@ export type FoodTrend = ReturnType<typeof createFoodTrend>;
 
 interface Seen { line: string; distance: number }
 /**
- * `mode` (SHANNON_MINECRAFT_LLMC_V2, mb-llmc-cand 10): `threat` writes how the hostile stands to her after its place (`reachSuffix`); `near` names a
- * dropped item (`cobblestone×4`), leaves out an item she threw herself and the hostiles (the threats say them); null: as the old mode wrote it.
+ * `mode` (mb-llmc-cand 10): `threat` writes how the hostile stands to her after its place (`reachSuffix`); `near` names a dropped item
+ * (`cobblestone×4`), leaves out an item she threw herself and the hostiles (the threats say them).
  */
 const seenName = (entity: Record<string, unknown>, mode: SeenMode): string => mode === 'near' && entity.name === 'item'
   ? `item${itemWords(entity) ? ` ${itemWords(entity)}` : ''}` : cleanText(entity.name as string);
-function seen(value: unknown, limit: number, mode: SeenMode = null): string[] {
+function seen(value: unknown, limit: number, mode: SeenMode): string[] {
   const items: Seen[] = (Array.isArray(value) ? value : []).flatMap(item => {
     const entity = record(item);
     if (!entity || typeof entity.name !== 'string') return [];
@@ -119,9 +113,9 @@ function seen(value: unknown, limit: number, mode: SeenMode = null): string[] {
   return items.sort((left, right) => left.distance - right.distance).slice(0, limit).map(item => item.line);
 }
 
-/** Whether a `near` line is a threat's creature too (the old mode: the same text; the mode's: the same `#id`, the threat's line has more words). */
-const taken = (threats: readonly string[], line: string, v2: boolean): boolean => v2
-  ? /^#\d+ /u.test(line) && threats.some(threat => threat.startsWith(`${line.split(' ')[0]} `)) : threats.includes(line);
+/** Whether a `near` line is a threat's creature too (the same `#id`: the threat's line has more words). */
+const taken = (threats: readonly string[], line: string): boolean =>
+  /^#\d+ /u.test(line) && threats.some(threat => threat.startsWith(`${line.split(' ')[0]} `));
 
 function stacks(value: unknown): string[] {
   return (Array.isArray(value) ? value : []).flatMap(item => {
@@ -135,7 +129,7 @@ function stacks(value: unknown): string[] {
 }
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37: "time":"99" with no unit): the time of day in words, from the body's numeric `timeOfDay`
+ * mb-llmc-cand 9 (run 37: "time":"99" with no unit): the time of day in words, from the body's numeric `timeOfDay`
  * (0–23999) first and its `time` string as the fallback; null when it is neither a number nor the Nether's or the End's.
  */
 function timeOf(world: Record<string, unknown>, dimension: BodyValue | undefined): string | null {
@@ -144,7 +138,7 @@ function timeOf(world: Record<string, unknown>, dimension: BodyValue | undefined
 }
 
 /** Her state in one object: where, the time, health, hunger, air, what she holds and wears. */
-function stateOf(world: Record<string, unknown>, observation: BodyObservation, v2 = false): Record<string, BodyValue> {
+function stateOf(world: Record<string, unknown>, observation: BodyObservation): Record<string, BodyValue> {
   const at = record(world.position);
   const out: Record<string, BodyValue> = {};
   if (at && finite(at.x) !== null) out.at = `(${Math.floor(Number(at.x))},${Math.floor(Number(at.y))},${Math.floor(Number(at.z))})`;
@@ -152,12 +146,12 @@ function stateOf(world: Record<string, unknown>, observation: BodyObservation, v
   if (typeof dimension === 'string') out.dimension = dimension.replace(/^minecraft:/u, '');
   for (const key of ['inside', 'biome', 'time', 'weather', 'heldItem', 'worn'] as const) {
     if (typeof world[key] !== 'string') continue;
-    out[key] = (v2 && key === 'time' ? timeOf(world, out.dimension) : null) ?? cleanText(world[key] as string);
+    out[key] = (key === 'time' ? timeOf(world, out.dimension) : null) ?? cleanText(world[key] as string);
   }
   for (const key of ['health', 'food', 'saturation', 'oxygen', 'armor'] as const) {
     const value = finite(world[key]);
-    // SHANNON_MINECRAFT_LLMC_V2 (run 37: oxygen 400 on dry land, 20 later): one scale, 息 n/20.
-    if (value !== null) out[key] = v2 && key === 'oxygen' ? breathWords(value)! : round1(value);
+    // Run 37 (oxygen 400 on dry land, 20 later): one scale, 息 n/20.
+    if (value !== null) out[key] = key === 'oxygen' ? breathWords(value)! : round1(value);
   }
   return out;
 }
@@ -200,7 +194,7 @@ export interface LlmcLiveParts {
    * unreachable lines and before the map, counted in the bound and never cut. Absent: no key.
    */
   footing?: string | null;
-  /** mb-llmc-cand 11 (v2, a dragon task): the stage road and the pace against the milestones' targets (`minecraftLlmcRoad.ts`), after the plan's now. */
+  /** mb-llmc-cand 11 (a dragon task): the stage road and the pace against the milestones' targets (`minecraftLlmcRoad.ts`), after the plan's now. */
   road?: string | null;
   meter?: string | null;
 }
@@ -231,16 +225,13 @@ function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'road' | 'meter'
 }
 
 /** The live body of one decision, bounded (`LLMC_LIVE_TOKENS` with `planTokens` of the plan's path already used). */
-export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0, v2 = false): Record<string, unknown> {
-  return buildLive(parts, planTokens, v2 ? V2_CAPS : CAPS);
-}
-function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS): Record<string, unknown> {
+export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<string, unknown> {
   const { observation } = parts;
   if (!observation) return { connected: false, events: parts.events.slice(-EVENTS) };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
-  const state = stateOf(world, observation, caps.v2);
+  const state = stateOf(world, observation);
   parts.trend.note(finite(world.food), finite(world.saturation));
-  const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, caps.threats, caps.modes.threat);
+  const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, THREATS, 'threat');
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
   const look = lookHint(world, parts.healthLost ?? 0);
   const live: Record<string, unknown> = {
@@ -253,10 +244,9 @@ function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS):
     ...(look ? { look } : {}),
     state: { ...state, ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     food: { points: food.points, items: food.items, lostIn5min: parts.trend.lostIn5min() },
-    inventory: stacks(world.inventory).slice(0, caps.inventory),
+    inventory: stacks(world.inventory).slice(0, INVENTORY),
     threats,
-    near: seen(world.nearbyEntities, OTHERS + caps.threats, caps.modes.near)
-      .filter(line => !taken(threats, line, caps.v2)).slice(0, OTHERS),
+    near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
     ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
     ...(parts.events.length ? { events: parts.events.slice(-EVENTS) } : {}),
   };
@@ -264,7 +254,7 @@ function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS):
   const shown = shownResults(parts.lastResults ?? []);
   // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`). r7 (run 31: stopped by its health stop in the
   // blaze's line, the next decision read the surprise first): the urgent lines before it (counted in the bound as before, never cut).
-  const { urgent, ...rest } = fitLive(live, planTokens, caps.bound);
+  const { urgent, ...rest } = fitLive(live, planTokens);
   return { ...(urgent ? { urgent } : {}), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}), ...rest,
     ...(shown.length ? { lastResults: shown } : {}) };
 }
@@ -278,7 +268,7 @@ function buildLive(parts: LlmcLiveParts, planTokens: number, caps: typeof CAPS):
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing'> & { planNowTitle: string | null; answer: string; v2?: boolean }): Record<string, unknown> {
+  | 'footing'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
   if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), answer: parts.answer };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
@@ -286,8 +276,8 @@ export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation'
   return { ...urgent, ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
     ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
-    state: { ...stateOf(world, observation, parts.v2 === true), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
-    threats: seen(world.nearbyThreats, URGENT_THREATS, parts.v2 === true ? 'threat' : null), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),
+    state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
+    threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),
     ...(parts.events.length ? { events: parts.events.slice(-URGENT_EVENTS) } : {}), ...(results.length ? { lastResults: results } : {}),
     answer: parts.answer };
 }
@@ -325,9 +315,9 @@ const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['invento
   ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
 
 /** Leaves out the parts that matter least until the live body fits beside the plan. */
-function fitLive(live: Record<string, unknown>, planTokens: number, bound = LLMC_LIVE_TOKENS): Record<string, unknown> {
+function fitLive(live: Record<string, unknown>, planTokens: number): Record<string, unknown> {
   const out: Record<string, unknown> = { ...live };
-  const budget = bound - planTokens;
+  const budget = LLMC_LIVE_TOKENS - planTokens;
   for (const [key, keep] of SHRINK) {
     if (llmcLiveTokens(out) <= budget) break;
     if (key === 'food.items') {

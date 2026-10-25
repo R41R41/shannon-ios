@@ -1,7 +1,7 @@
 import { REPORT_FORM_RULE, STEP_INSTRUCTIONS } from './anthropicFcaInstructions.js';
 
 /**
- * SHANNON_MINECRAFT_OWN_PROMPT (Syzygy ADR-0014 D3, owner decision 2026-10-22): a Minecraft body task's own instructions. A body task (a
+ * the own prompt (Syzygy ADR-0014 D3, owner decision 2026-10-22): a Minecraft body task's own instructions. A body task (a
  * transient task, `keepBodyTools`, or a legacy decision that carries a body) reads no persona or character core, no three apps, no list of
  * what she can do in conversation, no owner clock, no report-card form and no shared affect. What stays is what the task's safety and
  * correctness need: the boundaries of Syzygy ADR-0002 (budget, the stop switch, what needs approval, no copy of herself), the privacy of
@@ -50,7 +50,7 @@ const SUMMARY_HEADER = [
     + 'into the summary.',
 ].join('\n');
 
-/** SHANNON_MINECRAFT_LLMC_V2: the same header with facts only (what was done and where, what failed and why, what is open): no next step to tell. */
+/** mb-llmc v2: the same header with facts only (what was done and where, what failed and why, what is open): no next step to tell. */
 const SUMMARY_HEADER_V2 = [
   '# Minecraft body task: history summary',
   'You compact the working memory of a Minecraft body task. This is not conversation: no character voice. Write the items in '
@@ -85,7 +85,7 @@ const READING = [
 ].join('\n');
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2 (改修案 2.1): how a request of the mode is read, in fewer words. The mode offers six tools (mc.act, mc.probe,
+ * mb-llmc v2 (改修案 2.1): how a request of the mode is read, in fewer words. The mode offers six tools (mc.act, mc.probe,
  * mc.view, plan.update, fca_wait, fca_complete) and no catalog, skill index, recall or waiting line; the knowledge of the stages the code
  * picked is a part of the stored state, stated again only when the stages change; the hands of mc.act are written one to a line.
  */
@@ -165,7 +165,7 @@ export function minecraftLegacySystem(stepInstructions: string): string {
 }
 
 /**
- * SHANNON_MINECRAFT_LLMC_V2: what the mode puts into the request beyond its words (`knowledge`, the cached instructions' knowledge): the live
+ * mb-llmc v2: what the mode puts into the request beyond its words (`knowledge`, the cached instructions' knowledge): the live
  * state rewritten before it is sized and sent (`rewriteLive`, with the stages' knowledge as its first field), and a call's input made ready
  * for the body (`callInput`: the hands written one to a line become the contract's hands). Built by the wiring (`minecraftLlmcV2.ts`).
  */
@@ -191,7 +191,7 @@ export const MINECRAFT_V2_TOOLS: readonly string[] = ['mc_act', 'mc_probe', 'mc_
 
 /** What a model with `minecraftOwnPrompt` sends a body task: system[0] (`protocol`), system[1] of a transient and of a legacy decision. */
 export interface MinecraftProfile { protocol: string; transient: string; legacy: string; summary: string }
-/** The profile of a model (`AnthropicFcaOptions.minecraftOwnPrompt`, its `systemAppendix` as the knowledge), or null while the switch is off. */
+/** The profile of a model (`AnthropicFcaOptions.minecraftOwnPrompt`, its `systemAppendix` as the knowledge), or null for a model that serves no body task. */
 export function minecraftProfile(options: { minecraftOwnPrompt?: boolean; systemAppendix?: string; minecraftV2?: MinecraftV2Hooks;
   minecraftSummaryFacts?: boolean }): MinecraftProfile | null {
   if (!options.minecraftOwnPrompt) return null;

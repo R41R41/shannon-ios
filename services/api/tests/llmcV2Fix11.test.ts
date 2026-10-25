@@ -116,7 +116,7 @@ describe('chapter 4 A: the road and the pace', () => {
   });
   it('writes the top-level nodes: the done ones with ✓, the one she is in with ◀今, the next five, and how many are left', () => {
     const road = roadLine(withStates(['p1', 'p2', 'p3', 'p4'], 'p5.1'))!;
-    expect(road).toBe('道のり: 済み 1 節 食料とベッド✓ 鉄✓ 水入りバケツ✓ → ダイヤ◀今 → 黒曜石10とゲート → 出発の点検 → ネザー要塞を探す → ブレイズロッド7以上 → エンダーパール12前後 → ほか 4 節');
+    expect(road).toBe('道のり: 済み 1 節 食料とベッド✓ 鉄✓ 水入りバケツ✓ → ダイヤ◀今 → 金のブーツ → 黒曜石10とゲート → 出発の点検 → ネザー要塞を探す → ブレイズロッド7以上 → ほか 5 節');
   });
   it('is absent for a plan that is not the dragon\'s', () => {
     expect(roadLine(notDragon)).toBeNull();
@@ -139,11 +139,11 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(meterLine(tree, have([]), null)).toBeNull();
     expect(meterLine(tree, null, 1)).toBeNull();
   });
-  it('puts both lines in the live state after planNow for the mode, and leaves the old mode\'s as it was', () => {
+  it('puts both lines in the live state after planNow', () => {
     const parts = { elapsedMinutes: 1, trend: createFoodTrend(() => 0), events: [], observation: frame({ position: { x: 1, y: 2, z: 3 }, dimension: 'overworld' }),
       planNow: '[p1.1] 原木', road: '道のり: A◀今 → B', meter: '目安: 今 60 秒・次の節目 ベッド 目安 150 秒（あと 90 秒）' };
-    expect(Object.keys(minecraftLlmcLive(parts, 0, true)).slice(0, 3)).toEqual(['planNow', 'road', 'meter']);
-    expect(Object.keys(minecraftLlmcLive({ ...parts, road: null, meter: null }, 0, false))).not.toContain('road');
+    expect(Object.keys(minecraftLlmcLive(parts)).slice(0, 3)).toEqual(['planNow', 'road', 'meter']);
+    expect(Object.keys(minecraftLlmcLive({ ...parts, road: null, meter: null }))).not.toContain('road');
   });
   it('gives the goal and the yardstick in the instructions, the numbers from the one constant, and each line in the dictionary', () => {
     const system = minecraftV2System(V2_ALWAYS);
@@ -166,11 +166,11 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   const bare = frame({ position: { x: 0, y: 0, z: 0 }, dimension: 'overworld', inventory: [] });
   it('keeps a milestone reached when its item is used up and she is back in the overworld (the plan holds the node done)', () => {
     // The obsidian went into the gate, she went through and came back: the pack holds nothing, the dimension is the overworld.
-    expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 1,800 秒（あと 150 秒）');
-    expect(meterLine(done(['p6', 'p6.1', 'p6.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒（節目は全部済んだ）');
+    expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6', 'p7.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 1,800 秒（あと 150 秒）');
+    expect(meterLine(done(['p7', 'p7.1', 'p7.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒（節目は全部済んだ）');
   });
   it('does not go back to an earlier milestone, and shows no next target after the last', () => {
-    const line = meterLine(done(['p6']), bare, 100 / 60)!;
+    const line = meterLine(done(['p7']), bare, 100 / 60)!;
     expect(line).toBe('目安: 今 100 秒（節目は全部済んだ）');
     expect(line).not.toContain('次の節目');
   });

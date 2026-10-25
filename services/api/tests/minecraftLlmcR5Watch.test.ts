@@ -83,7 +83,7 @@ describe('another task\'s places in the recall (run 28: run 27\'s plan row, anot
 describe('the models and the completion\'s receipt (r5)', () => {
   it('no raise unless the environment asks for one (run 28: 9 raises, 23% of the cost, the same stops after)', () => {
     expect(llmcModelNames({}).escalate).toBeNull();
-    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' }).escalate).toBe('claude-opus-5-5');
+    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-sonnet-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' }).escalate).toBe('claude-opus-5-5');
   });
 
   it('the model\'s receipt of a completion is replaced by the line, as an error; nothing else is', async () => {

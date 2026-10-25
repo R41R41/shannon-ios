@@ -8,7 +8,8 @@ import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.
 import type { MinecraftControlPoll, MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import { actionResource } from '../src/contracts/actionThreadContract.js';
-import { ACT_INPUT_SCHEMA, MC_ACT_TOOL, type ActResult } from '../src/contracts/minecraftActContract.js';
+import { MC_ACT_TOOL, type ActResult } from '../src/contracts/minecraftActContract.js';
+import { SHORT_ACT_INPUT_SCHEMA } from '../src/contracts/minecraftActShortContract.js';
 import type { BodyPlanView } from '../src/contracts/bodyControlContract.js';
 import { configuredMinecraftLlmc } from '../src/wiring/minecraftLlmcWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -58,11 +59,11 @@ async function dispatched(f: ReturnType<typeof fixture>) {
   return f.poll().commands[0];
 }
 
-describe('mc.act through the control (switch on)', () => {
+describe('mc.act through the control', () => {
   it('offers only the mode\'s tools, sends the act with the plan, and reads its result as lines', async () => {
     const f = fixture(true), command = (await dispatched(f))!;
     expect(f.calls[0]!.tools.map(tool => tool.name).filter(name => /^(mc|minecraft)\./u.test(name))).toEqual(['minecraft.observe', MC_ACT_TOOL]);
-    expect(f.calls[0]!.tools.find(tool => tool.name === MC_ACT_TOOL)!.nativeInputSchema).toBe(ACT_INPUT_SCHEMA);
+    expect(f.calls[0]!.tools.find(tool => tool.name === MC_ACT_TOOL)!.nativeInputSchema).toBe(SHORT_ACT_INPUT_SCHEMA);
     expect(command).toMatchObject({ kind: 'skill', skill: 'act', arguments: HANDS, context: { taskId: f.task.id, plan: PLAN } });
     const result: ActResult = { v: 1, ok: true, done: 2, of: 2, at: { x: 3, y: 64, z: 4 }, hp: 20, food: 19, ms: 2_100,
       lines: [{ i: 1, do: 'walk', status: 'done', line: '(0,64,0)→(3,64,4) 1.5秒' }, { i: 2, do: 'chest', status: 'done', line: 'bread×6 を取った' }],
@@ -82,7 +83,7 @@ describe('mc.act through the control (switch on)', () => {
   });
 });
 
-describe('the switch off: as before', () => {
+describe('a task outside the mode: as before', () => {
   it('every body skill is offered in the body\'s words, and a command carries no plan', async () => {
     const f = fixture(false, { hands: [] }), command = (await dispatched(f))!;
     expect(f.calls[0]!.tools.map(tool => tool.name).filter(name => /^(mc|minecraft)\./u.test(name))).toEqual(['minecraft.observe', MC_ACT_TOOL, 'mc.move-to']);
@@ -92,11 +93,10 @@ describe('the switch off: as before', () => {
     await f.driver.drain();
   });
 
-  it('the wiring makes nothing of the mode while SHANNON_MINECRAFT_LLM_CENTRIC is off', () => {
-    expect(configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} })).toBeNull();
-    expect(configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on' }, { recordUsage() {} }, { log: () => {} })).toBeNull();
-    const on = configuredMinecraftLlmc({ SHANNON_MINECRAFT_LLM_CENTRIC: 'on', ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} }, { log: () => {} })!;
-    expect(on.names).toEqual({ main: 'claude-sonnet-5-5', escalate: null, plan: 'claude-opus-5-5' });
+  it('the wiring makes nothing of the mode without a key, and the mode with one', () => {
+    expect(configuredMinecraftLlmc({}, { recordUsage() {} }, { log: () => {} })).toBeNull();
+    const on = configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} }, { log: () => {} })!;
+    expect(on.names).toEqual({ main: 'claude-opus-5-5', escalate: null, plan: 'claude-opus-5-5' });
     expect(on.models.escalate).toBeNull();
     expect(on.planner).toBeTypeOf('function');
     expect(on.summarizer).not.toBeNull();

@@ -13,7 +13,7 @@ import {
 } from '../src/surfaces/minecraft/minecraftLlmcProbe.js';
 import { prepareProbeInput, probeAnswerText } from '../src/surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
-import { INVESTIGATE_KNOWLEDGE, LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, llmcSystemAppendix, NETHER_ENTRY_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { INVESTIGATE_KNOWLEDGE, LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, NETHER_ENTRY_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { createFcaPlanTools, PLAN_UPDATE_DEFINITION, PLAN_UPDATE_RULES_DEFINITION } from '../src/mind/action/fca/fcaPlanTools.js';
 import {
   firstPlanInput, FIRST_PLAN_SCHEMA, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM, FIRST_PLAN_SYSTEM_R4, forgetFirstPlans, planFromAnswer, SCAN_WAIT,
@@ -253,15 +253,6 @@ describe('the lifecycle investigates before the decision and says it first in th
     expect(scanLines({ ...scan, trigger: 'login', rows: Array.from({ length: 20 }, (_, index) => `row${index}`) }, null)!.lines).toHaveLength(10); // r5: the range row and 9 rows
   });
 
-  it('without r4 the lifecycle has no investigate and shows no scan (switch off: as r3)', () => {
-    const lifecycle = withLlmcBody(inner(), { llmc: plan, taskId: 'r4-off', createdAt: new Date().toISOString(),
-      observe: () => frame({ ...here(20), localMap: 'm', scan: { trigger: 'login', at: 't', text: 'x' } }), arrival: () => ({ at: 1, kind: 'login' }) });
-    expect(lifecycle.investigate).toBeUndefined();
-    lifecycle.context();
-    const live = lifecycle.transient!();
-    expect(live).not.toHaveProperty('scan');
-    expect(live).not.toHaveProperty('investigation');
-  });
 });
 
 describe('mc.probe: offered in the head\'s words, put into the body\'s form (the body\'s 04:10 form)', () => {
@@ -272,13 +263,12 @@ describe('mc.probe: offered in the head\'s words, put into the body\'s form (the
     cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] });
   const context = { feet: at(10.5, 64, -3.5), creatures: [{ id: 41, name: 'blaze', distance: 6.2 }, { id: 7, name: 'blaze', distance: 9 }] };
 
-  it('offered only with r4 and a body that has probe; a read, after mc.view, with the head\'s fixed words and schema', () => {
+  it('offered with a body that has probe; a read, after mc.view, with the head\'s fixed words and schema', () => {
     const skills = [skill('act'), skill('view'), skill('probe'), skill('find-blocks')];
-    expect(llmcBodyDefinitions(skills, definition).map(tool => tool.name)).toEqual(['mc.act', 'mc.view', 'mc.find-blocks']);
-    const tools = llmcBodyDefinitions(skills, definition, { probe: true });
-    expect(tools.map(tool => tool.name)).toEqual(['mc.act', 'mc.view', 'mc.probe', 'mc.find-blocks']);
+    const tools = llmcBodyDefinitions(skills, definition);
+    expect(tools.map(tool => tool.name)).toEqual(['mc.act', 'mc.view', 'mc.probe']);
     expect(tools[2]).toMatchObject({ effect: 'read', nativeInputSchema: PROBE_INPUT_SCHEMA });
-    expect(llmcBodyDefinitions([skill('act')], definition, { probe: true }).map(tool => tool.name)).toEqual(['mc.act']);
+    expect(llmcBodyDefinitions([skill('act')], definition).map(tool => tool.name)).toEqual(['mc.act']);
   });
 
   it('each kind in the body\'s form: a creature by name becomes the nearest one\'s #id, a column gets its x, z and bounds', () => {
@@ -438,7 +428,6 @@ describe('the knowledge r4 adds (shared note 5)', () => {
     for (const words of ['crimson_stem', 'warped_stem', 'crafting_table', 'cobblestone_slab', 'shield', 'offhand', '帰りのゲートの座標'])
       expect(NETHER_ENTRY_KNOWLEDGE).toContain(words);
     expect(LLMC_SYSTEM_APPENDIX_R4.startsWith(LLMC_SYSTEM_APPENDIX)).toBe(true);
-    expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
     // r5 follows r4's words with its own (`R5_KNOWLEDGE`).
     // r5–r7 follow r4's (r7 with its own blaze: minecraftLlmcR7.test.ts).
     expect(LLMC_SYSTEM_APPENDIX_R5.startsWith(LLMC_SYSTEM_APPENDIX_R4)).toBe(true);

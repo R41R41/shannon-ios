@@ -82,15 +82,15 @@ export interface AnthropicFcaOptions {
   stopGraceMilliseconds?: number;
   /** Words after a transient body task's instructions (the LLM-centric body's rules, `minecraftKnowledge.ts`). */ systemAppendix?: string;
   /**
-   * SHANNON_MINECRAFT_OWN_PROMPT (Syzygy ADR-0014 D3): a Minecraft body task (a transient task, or a legacy decision with a body) reads
+   * the own prompt (Syzygy ADR-0014 D3): a Minecraft body task (a transient task, or a legacy decision with a body) reads
    * its own instructions (`anthropicFcaMinecraftSystem.ts`, with `systemAppendix` as its knowledge) behind its own transport block, and its
-   * live state carries no owner clock and no shared affect. Absent or false: every request as before, byte for byte.
+   * live state carries no owner clock and no shared affect. Absent: a model that serves no body task (the plain summarizer).
    */
   minecraftOwnPrompt?: boolean;
-  /** SHANNON_MINECRAFT_LLMC_V2 (needs `minecraftOwnPrompt`): six fixed tools, the mode's instructions and live state (`MinecraftV2Hooks`). */
+  /** mb-llmc v2 (needs `minecraftOwnPrompt`): six fixed tools, the mode's instructions and live state (`MinecraftV2Hooks`). */
   minecraftV2?: MinecraftV2Hooks;
   /**
-   * SHANNON_MINECRAFT_LLMC_V2 (needs `minecraftOwnPrompt`; the history summary only, `anthropicFcaSummary.ts`): the summary's instructions are
+   * mb-llmc v2 (needs `minecraftOwnPrompt`; the history summary only, `anthropicFcaSummary.ts`): the summary's instructions are
    * its header alone, without the step instructions that name the task tools (`task.replan`, `fca_context`) the summarizer is not given.
    */
   minecraftSummaryFacts?: boolean;
@@ -119,7 +119,7 @@ export class AnthropicFcaModel implements FcaModel {
   /** The instructions of a transient body task (`anthropicFcaTransient.ts`): what the delta and live-state messages mean, and the rules their fields had. */
   private readonly transientSystem: string;
   private readonly compactAboveTokens: number;
-  /** SHANNON_MINECRAFT_OWN_PROMPT: a body task's own instructions and transport block; null while the switch is off. */
+  /** the own prompt: a body task's own instructions and transport block; null for a model that serves no body task. */
   private readonly minecraft: MinecraftProfile | null;
 
   constructor(private readonly options: AnthropicFcaOptions) {
@@ -153,7 +153,7 @@ export class AnthropicFcaModel implements FcaModel {
     }, () => {
       const menu = transient
         ? transientFcaTools(input, history, MENUS[String(this.v2() !== null)]!.controls, [FCA_CONTEXT_TOOL], MENUS[String(this.v2() !== null)]!.names)
-        // SHANNON_MINECRAFT_LLMC_V2's history summary is offered its one summary tool and no control tool: asked to "name no tool except … fca_complete" it
+        // mb-llmc v2's history summary is offered its one summary tool and no control tool: asked to "name no tool except … fca_complete" it
         // sometimes called the summary tool and fca_complete together (FCA_MODEL_CONTROL_MIXED, 2 of 32 summaries in the replay bench of 8607283).
         : nativeFcaTools(input, history, this.options.minecraftSummaryFacts ? [] : CONTROL_TOOLS, input.sharedContext ? [FCA_CONTEXT_TOOL] : []);
       const clock = this.options.clock?.(), ownerClock = clock ? { ...clock, rule: OWNER_CLOCK_RULE } : undefined;
@@ -171,8 +171,8 @@ export class AnthropicFcaModel implements FcaModel {
       // even when its conversation starts a new public epoch (Minebot lane, 2026-10-14, task 788da00a: every step was a new
       // epoch and read only the tools and the protocol prefix, 1,792–1,798 tokens, writing the instructions again each time).
       const menuInstructions = transient ? `${FCA_MENU_INSTRUCTIONS}\n${FCA_CORE_MENU_INSTRUCTIONS}` : FCA_MENU_INSTRUCTIONS;
-      // SHANNON_MINECRAFT_OWN_PROMPT: a legacy decision that carries a body reads the body task's header instead of the persona, and a body
-      // summary (a one-shot model, `continued: false`, given the switch only for a body: `anthropicFcaSummary.ts`) the summary's header.
+      // the own prompt: a legacy decision that carries a body reads the body task's header instead of the persona, and a body
+      // summary (a one-shot model, `continued: false`, given the own prompt only for a body: `anthropicFcaSummary.ts`) the summary's header.
       const own = this.minecraft, oneShot = this.options.continued === false;
       const base = own && oneShot ? own.summary : own && input.body !== undefined ? own.legacy : this.system;
       const system = [{ type: 'text' as const, text: input.catalog ? `${base}\n\n${menuInstructions}` : base, cache_control: ONE_HOUR }];
@@ -266,7 +266,7 @@ export class AnthropicFcaModel implements FcaModel {
     const decided = decodeDecision(message.content, menu.names, history, input.sharedContext || transient ? FCA_CONTEXT_NAME : undefined);
     const hooks = this.v2();
     const decision = hooks && decided.kind === 'tools' ? { ...decided, calls: decided.calls.map(call => ({ ...call, input: hooks.callInput(call.name, call.input) as typeof call.input })) } : decided;
-    // SHANNON_MINECRAFT_OWN_PROMPT: a transient body task is shown no shared context, so its fca_context is answered as not provided.
+    // the own prompt: a transient body task is shown no shared context, so its fca_context is answered as not provided.
     const unshared = !input.sharedContext || this.minecraft !== null;
     const context = unshared && transient ? fcaContextNotProvided(message.content) : decodeFcaContext(message.content, decision, input);
     const appended: Anthropic.MessageParam[] = [...turn, { role: 'assistant', content: message.content }];
@@ -282,7 +282,7 @@ export class AnthropicFcaModel implements FcaModel {
   /** A transient body task's request: see `transientRequest` (`anthropicFcaTransientRequest.ts`). */
   private transientRequest(input: FcaModelInput, history: readonly Anthropic.MessageParam[], menu: ReturnType<typeof transientFcaTools>,
     ownerClock: Record<string, unknown> | undefined) {
-    // SHANNON_MINECRAFT_OWN_PROMPT: the body task's own instructions and transport block; no owner clock and no shared affect in its live state.
+    // the own prompt: the body task's own instructions and transport block; no owner clock and no shared affect in its live state.
     const own = this.minecraft;
     const supplied = own ? decisionFields({ ...input, sharedContext: undefined }, undefined, true) : decisionFields(input, ownerClock, true);
     const built = transientRequest({ model: this.model, maximumOutputTokens: this.maximumOutputTokens, compactAboveTokens: this.compactAboveTokens,

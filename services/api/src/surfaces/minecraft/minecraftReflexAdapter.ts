@@ -82,7 +82,7 @@ export function createMinecraftTaskBody(parts: {
   /** Where the content-free measurement lines (`minecraftTaskMetrics`: milestones, stage, adoption, gaps) go; the journal when absent. */
   metricsLog?(line: string): void;
   /**
-   * SHANNON_MINECRAFT_LLM_CENTRIC (design mb-llm-centric): a reflex session's context carries the plan. The live state and the recall's
+   * the LLM-centric mode (design mb-llm-centric): a reflex session's context carries the plan. The live state and the recall's
    * events are the wrapper's (`withLlmcBody`, `minecraftLlmcBody.ts`). Absent: as before.
    */
   llmc?: { plan(): BodyPlanView | undefined };

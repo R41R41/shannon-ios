@@ -11,14 +11,11 @@ import { fcaMinecraftVoice } from './fcaMinecraftVoice.js';
 
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
-/** The working note every admitted Minecraft request is handed as its first inbox line. */
-export const MINECRAFT_REQUEST_CONTEXT = '共通FCAのmc.*の道具で実行する。判断ごとの身体の観測は要約で、全体はminecraft.observeで読む。'
-  + '一人称画像が得られるときはminecraft.reflexで視覚操作の短いセッションを要求できる。';
 /**
- * The same note with SHANNON_MINECRAFT_LLMC_V2 (mb-llmc-cand 9, run 37: the model was told of `minecraft.observe` and `minecraft.reflex`, tools its
- * menu does not have; the mode's menu is mc.act, mc.probe, mc.view, plan.update and the two controls).
+ * The working note every admitted Minecraft request is handed as its first inbox line (mb-llmc-cand 9, run 37: an earlier note told of
+ * `minecraft.observe` and `minecraft.reflex`, tools the menu does not have; the menu is mc.act, mc.probe, mc.view, plan.update and the two controls).
  */
-export const MINECRAFT_REQUEST_CONTEXT_V2 = '体の今の状態は毎判断の live に出る。もっと見たい時は mc.probe（周りの事実）か mc.view（地図を広く・別の向きで）で調べ、手は mc.act で出す。';
+export const MINECRAFT_REQUEST_CONTEXT = '体の今の状態は毎判断の live に出る。もっと見たい時は mc.probe（周りの事実）か mc.view（地図を広く・別の向きで）で調べ、手は mc.act で出す。';
 
 /**
  * Whether a task is a Minecraft request the owner made, as admitted: bound to a body at creation, with the admission's criteria,
@@ -36,8 +33,6 @@ export function admittedMinecraftRequest(
 export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime: TaskRuntime; conversation: FcaConversationPort;
   visible: FcaSourceGuard; ownerScope: string; ownerAlone(): boolean; stop(id: string, reason: string): Promise<TaskView[]>;
   sourceVisible(id: string): boolean;
-  /** SHANNON_MINECRAFT_LLMC_V2: the working note of an admitted request is the mode's (`MINECRAFT_REQUEST_CONTEXT_V2`). */
-  llmcV2?: boolean;
   /** Same SQLite connection as task authority and body bindings; nested authority writes use savepoints. */
   atomic<T>(work: () => T): T;
   /** Where the content-free lines go (`console.log` when absent). */
@@ -53,7 +48,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     }
   };
   const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA,
-    context: parts.llmcV2 ? MINECRAFT_REQUEST_CONTEXT_V2 : MINECRAFT_REQUEST_CONTEXT });
+    context: MINECRAFT_REQUEST_CONTEXT });
   const log = parts.log ?? ((line: string) => console.log(line));
   /** What refuses an in-game request before her reply is made: the scope, someone else known to be present, no frame of the body. */
   const admission = (input: { scopeKey: string; request: { serverId: string } }): MinecraftIntentRefusal | null =>

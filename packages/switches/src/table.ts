@@ -198,43 +198,6 @@ export const SWITCHES = [
     doc: 'A Minecraft task plans ahead while its body works, fills waits, takes nearby needs and resumes (mb-arch); with the working events.',
   },
   {
-    name: 'SHANNON_MINECRAFT_LLM_CENTRIC', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
-    doc: 'Design mb-llm-centric (2026-10-21): a Minecraft task decides in small steps from a map of the blocks around her (mc.act, mc.view), '
-      + 'keeps its own plan tree (plan.update), and runs no procedure, agenda detour or fast judgment. Models: SHANNON_MINECRAFT_LLMC_MODEL, '
-      + '_ESCALATE_MODEL (r5: unset is no raise; a model name, or next), _PLAN_MODEL. The body must run MINEBOT_LLM_CENTRIC=on. Off: as before.',
-  },
-  {
-    name: 'SHANNON_MINECRAFT_LLMC_PROBE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: ['SHANNON_MINECRAFT_LLM_CENTRIC'],
-    doc: 'mb-llmc r4 (owner 2026-10-22): a surprise (health, a fall, air, the same stop twice, no hit) has the body probed before the decision '
-      + 'and said first in its live state; the model gets mc.probe, the body\'s world scan goes to the first plan and the live state, plan '
-      + 'nodes carry forbid and caution, and the knowledge says how to look when stuck. Needs the body\'s probe skill. Off: as r3.',
-  },
-  {
-    name: 'SHANNON_MINECRAFT_OWN_PROMPT', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
-    doc: 'ADR-0014 D3 (owner 2026-10-22): a Minecraft body task (either mode) reads its own instructions: no persona, three apps, capability '
-      + 'list, owner clock or shared affect; the ADR-0002 boundaries, who directs her and privacy kept; the LLM-centric knowledge pruned '
-      + '(docs/minecraft-prompt-pruning-2026-10.md); the body summary drops the persona and the first plan reads strategic knowledge. '
-      + 'Off: every request as before, byte for byte.',
-  },
-  {
-    name: 'SHANNON_MINECRAFT_ACT_PREFLIGHT', default: 'off', kind: 'on_only', owner: 'minecraft', requires: ['SHANNON_MINECRAFT_LLM_CENTRIC'],
-    doc: 'ADR-0014 D3 (owner 2026-10-23): before an mc.act is sent, its hands are walked against the newest frame map; a hand the body would '
-      + 'refuse at its start for a reason the map shows for certain (a walk into a wall or to a cell with no floor or no route, a place into a '
-      + 'filled cell or onto air) is not sent, and the fact comes back at once as the result. Nothing is mended or added; what the map does not '
-      + 'show is sent as it is. Off: as before.',
-  },
-  {
-    name: 'SHANNON_MINECRAFT_LLMC_V2', default: 'off', kind: 'on_only', owner: 'minecraft',
-    requires: ['SHANNON_MINECRAFT_OWN_PROMPT', 'SHANNON_MINECRAFT_LLMC_PROBE', 'SHANNON_MINECRAFT_ACT_PREFLIGHT'],
-    doc: 'ADR-0014 / improvement plan 2026-10-23 (candidate, not in production): a Minecraft body task of the LLM-centric mode is asked what the '
-      + 'decision needs and no more. Six fixed tools (mc.act with the hands one to a line, mc.probe, mc.view, plan.update, fca_wait, fca_complete); '
-      + 'instructions cut again and the knowledge of the stage the code picks put before the live state; a live state with one line to a hostile, '
-      + 'the pack added up, the landmarks from her feet now, no omitted lines, an around and a route made from the map, and no owner clock, waiting '
-      + 'line, observation hash or recall; the stop notes and shooter line cells of r10 left out (its reflex hold kept); the act preflight sends '
-      + 'the hands before the one it holds, and holds a bare one-wide bridge over a fall of four or more while a hostile sees her. Needs the own '
-      + 'prompt, the probe and the act preflight, else it stays off (logged). Off: every request and every move as with the act preflight alone.',
-  },
-  {
     name: 'SHANNON_MINECRAFT_LIVE', default: 'off', kind: 'on_only', owner: 'minecraft', requires: [],
     doc: 'Owner 2026-10-20 (dc-live): every conversation (the app, Discord text and calls) is given her Minecraft body\'s present from its latest frame '
       + '(task, step against its target seconds, health, hunger, danger, items, map); the moments her frames show are noticed.',

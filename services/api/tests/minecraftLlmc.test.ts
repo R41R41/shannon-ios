@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sceneDecision, sceneInput, type LlmcScene } from '../src/surfaces/minecraft/minecraftLlmcScene.js';
 import {
-  ACT_INPUT_SCHEMA, actMilliseconds, actProblem, LLMC_READ_SKILLS, MAP_LEGEND, MC_ACT_TOOL, MC_VIEW_TOOL, VIEW_INPUT_SCHEMA, type ActResult,
+  ACT_INPUT_SCHEMA, actMilliseconds, actProblem, MAP_LEGEND, MC_ACT_TOOL, MC_VIEW_TOOL, VIEW_INPUT_SCHEMA, type ActResult,
 } from '../src/contracts/minecraftActContract.js';
+import { SHORT_ACT_INPUT_SCHEMA } from '../src/contracts/minecraftActShortContract.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import type { MinecraftSkillDefinition } from '../src/contracts/minecraftControlContract.js';
 import { skillSchema, validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
@@ -85,13 +86,12 @@ describe('the mode\'s tools', () => {
     input: { type: 'object', properties: {}, required: [], additionalProperties: false }, domain: 'minecraft_body', effect: readOnly ? 'read' : 'write',
     cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] });
 
-  it('offers mc.act and mc.view in the head\'s own words and schema, and only the reads of the mode beside them', () => {
+  it('offers mc.act and mc.view in the head\'s own words and schema, and no read beside them', () => {
     const tools = llmcBodyDefinitions([skill('act'), skill('view', true), skill('move-to'), skill('find-blocks', true), skill('run-anything'),
       skill('goal-evidence', true)], definition);
-    expect(tools.map(tool => tool.name)).toEqual([MC_ACT_TOOL, MC_VIEW_TOOL, 'mc.find-blocks', 'mc.goal-evidence']);
-    expect(tools[0]!.nativeInputSchema).toBe(ACT_INPUT_SCHEMA);
+    expect(tools.map(tool => tool.name)).toEqual([MC_ACT_TOOL, MC_VIEW_TOOL]);
+    expect(tools[0]!.nativeInputSchema).toBe(SHORT_ACT_INPUT_SCHEMA);
     expect(tools[0]!.description).not.toContain('体の act');
-    expect([...LLMC_READ_SKILLS].every(name => !name.startsWith('mc.'))).toBe(true);
     expect(llmcBodyDefinitions([skill('move-to')], definition)).toEqual([]);
   });
 
@@ -196,7 +196,7 @@ describe('the live state (design 2.2, 2.6): the map first, at most 3,000 tokens'
     expect(trend.lostIn5min()).toBe(6);
   });
 
-  it('the body lifecycle of the mode: the map-first live state, and a recall only after an event', () => {
+  it('the body lifecycle of the mode: the map-first live state, and no recall', () => {
     let arrival = { at: 10 as number | null, kind: 'login' as string | null };
     const noted: string[] = [];
     const inner = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
@@ -204,30 +204,27 @@ describe('the live state (design 2.2, 2.6): the map first, at most 3,000 tokens'
       noteResult: (call: { name: string }) => { noted.push(call.name); } };
     const plan = planPath(seedPlan('ネザーへ行って')!);
     const body = withLlmcBody(inner, { llmc: { plan: () => undefined, planView: () => plan }, taskId: 'w1', createdAt: new Date(Date.now() - 120_000).toISOString(),
-      observe: () => frame(FULL_WORLD), arrival: () => arrival });
+      observe: () => frame(FULL_WORLD), arrival: () => arrival, r4: { probe: () => null, planWhere: () => null } });
     body.context();
-    expect(Object.keys(body.transient!())[0]).toBe('map');
+    expect(Object.keys(body.transient!())).toEqual(expect.arrayContaining(['planNow', 'map']));
     expect(body.recallWanted!()).toBe(false);
     body.noteResult!({ id: 'a', name: MC_ACT_TOOL, input: {} }, { ok: false, text: 'x', retryable: true, bodyReflex: true });
     expect(noted).toEqual([MC_ACT_TOOL]);
     arrival = { at: 20, kind: 'death' };
     body.context();
-    expect(body.recallWanted!()).toBe(true);
+    expect(body.recallWanted!()).toBe(false);
     expect((body.transient!() as { events: string[] }).events).toHaveLength(2);
   });
 
-  it('events are told once and are what a recall waits for', () => {
+  it('events are told once', () => {
     const events = createLlmcEvents('t1');
     events.arrival(100, 'login');
     events.take();
-    expect(events.wanted()).toBe(false);
     events.result('mc.act', false, true);
     events.arrival(200, 'death');
     expect(events.take()).toEqual(['反射が mc.act を止めた', '死んでリスポーンした（持ち物を落とした所へ戻るか決める）']);
-    expect(events.wanted()).toBe(true);
     events.result('mc.act', true, false);
     expect(events.take()).toEqual([]);
-    expect(events.wanted()).toBe(false);
   });
 });
 
@@ -305,9 +302,9 @@ describe('the scene replay (one decision of any model on a frozen scene)', () =>
 });
 
 describe('the models (owner: chosen after the scene replay, each by the environment)', () => {
-  it('main Sonnet, no raise (r5), the first plan by Opus by default; each name from the environment', () => {
-    expect(llmcModelNames({})).toEqual({ main: 'claude-sonnet-5-5', escalate: null, plan: 'claude-opus-5-5' });
-    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' })).toMatchObject({ escalate: 'claude-opus-5-5' });
+  it('main Opus (owner 2026-10-24), no raise (r5), the first plan by Opus by default; each name from the environment', () => {
+    expect(llmcModelNames({})).toEqual({ main: 'claude-opus-5-5', escalate: null, plan: 'claude-opus-5-5' });
+    expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-sonnet-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' })).toMatchObject({ escalate: 'claude-opus-5-5' });
     expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-haiku-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'on' }))
       .toMatchObject({ main: 'claude-haiku-5-5', escalate: 'claude-sonnet-5-5' });
     expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-haiku-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'claude-opus-5-5' }).escalate)
@@ -315,7 +312,7 @@ describe('the models (owner: chosen after the scene replay, each by the environm
     expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'claude-opus-5-5', SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' }).escalate).toBeNull();
     expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'none' }).escalate).toBeNull();
     expect(llmcModelNames({ SHANNON_MINECRAFT_LLMC_MODEL: 'gpt-x', SHANNON_MINECRAFT_LLMC_PLAN_MODEL: 'claude-sonnet-5-5' }))
-      .toMatchObject({ main: 'claude-sonnet-5-5', plan: 'claude-sonnet-5-5' });
+      .toMatchObject({ main: 'claude-opus-5-5', plan: 'claude-sonnet-5-5' });
   });
 
   it('a decision is raised while the task has failed twice in a row', () => {

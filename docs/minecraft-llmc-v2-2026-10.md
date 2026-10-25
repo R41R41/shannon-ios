@@ -2,7 +2,7 @@
 
 - 決定: ライ氏 2026-10-23「改修案のとおり候補の版を作り、再現台で確かめて。本番にはまだ入れない」。改修案は Syzygy `notes/minebot-improvement-plan-2026-10-23.md`、根拠は ADR-0014 と再現台の結果（shannon-ios `codex/shannon/decision-replay` の `results/`）。
 - 土台: `codex/shannon/act-preflight` 4f98156（3008876 ＋ `fix/llmc-probe-cancel-unknown` ＋ `feat/minecraft-own-prompt` ＋ r10 の頭 ＋ 送る前の守り）。この上に branch `codex/shannon/mb-llmc-cand`。
-- 切り替え: `SHANNON_MINECRAFT_LLMC_V2`。既定 off。**`SHANNON_MINECRAFT_OWN_PROMPT`・`SHANNON_MINECRAFT_LLMC_PROBE`・`SHANNON_MINECRAFT_ACT_PREFLIGHT` が全部 on の時だけ on になる**（足りない時は log に理由を出して off）。off の時の要求は 4f98156 と 1 バイトも違わない（`tests/minecraftLlmcV2Request.test.ts` の digest は 4f98156 で取った）。
+- 切り替え: **無い**（2026-10-24 に撤去。下の「13 回目」）。当時は `SHANNON_MINECRAFT_LLMC_V2` と、その前提の `SHANNON_MINECRAFT_OWN_PROMPT`・`SHANNON_MINECRAFT_LLMC_PROBE`・`SHANNON_MINECRAFT_ACT_PREFLIGHT`・`SHANNON_MINECRAFT_LLM_CENTRIC` で切り替えていた。
 - 体の側の直し（目印・持ち物・biome・undefined）は Shannon の `codex/shannon/mb-llmc-cand`。頭と体の分担は r4-contract.md の「2026-10-23 03:50 頭（mb-llmc-cand）」。
 
 ## 何を足し、何を外したか
@@ -240,3 +240,11 @@ v2 の時だけ。切の request・seed・first plan の文は変えない（`ow
 
 決まりの文は 8,266 → 8,299 トークン（上限 8,300）。足した分は重なる説明を削って埋めた。試験は `services/api/tests/llmcV2Fix12.test.ts`。
 しなかったこと: Notion の 4（判断・usage・先読みの時刻を同じ span へ）と 7（先読みの調整）は、資料自身の順のとおり実走の計測の後。体の止まりの行の元（実走38 で walk 13 行中 6）は体の側。
+
+## 13 回目: 切り替えの撤去（2026-10-24）
+
+- 決定: ライ氏 2026-10-24「そもそも切り替える仕組みもいらない。常に最新版を使っていい。リグレッションはしない前提でいい。してもgithubの履歴から直せるし、無駄にコードを複雑にしてるだけ。」
+- 頭: `SHANNON_MINECRAFT_LLM_CENTRIC`・`_LLMC_PROBE`・`_OWN_PROMPT`・`_ACT_PREFLIGHT`・`_LLMC_V2` をスイッチ表（`packages/switches`）とコードから外した。マイクラの体のタスクは、鍵がある限りいつもこの版（6 つの道具・この版の指示文と live・送る前の守り・r4 の調べ）で動く。主判断の既定は Opus（`SHANNON_MINECRAFT_LLMC_MODEL` で変えられる。モデル名は設定でありスイッチではない）。
+- off の側だけにあったコードを消した: r10 の止まりの補足（`minecraftLlmcStopFacts.ts`）と射線のマス（`minecraftLlmcSightLine.ts`）、読むだけの体の技（`LLMC_READ_SKILLS`）、知識の切り替え（`llmcSystemAppendix`・`llmcCoreKnowledge` の probe 引数）、v2 でない live の上限（3,000 トークン・敵 8・持ち物 36）、v2 でない種の計画（鉄 24〜36・ベッド全部・ゲート前の食料 100）と「ネザーに入る前」の古い表、v2 でない計画の済み（前の節を待たない閉じ方）、recall。
+- 古い動きを確かめていたテストは消すか、新しい動きに合わせた（`fcaLlmcPreflightStep.test.ts`・`minecraftOwnPromptOff` の LLM 中心の digest・`minecraftLlmcV2Request` の「off の要求」）。
+- 体: `MINEBOT_LLM_CENTRIC`・`MINEBOT_SYNC_INFLATE` を外した（Shannon の branch `codex/shannon/no-body-switches`）。

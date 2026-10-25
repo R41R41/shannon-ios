@@ -4,7 +4,7 @@ import { handToLine, lineToHand, pos, readPos } from './minecraftActShortHands.j
 export { handToLine, lineToHand };
 
 /**
- * `mc.act` の手の短い書き方（mb-llmc-cand、SHANNON_MINECRAFT_LLMC_V2）の契約。モデルは hands を 1 手 1 行の文字列の配列で書き、頭のコードが
+ * `mc.act` の手の短い書き方（mb-llmc-cand、mb-llmc v2）の契約。モデルは hands を 1 手 1 行の文字列の配列で書き、頭のコードが
  * 体へ送る前に今の JSON（`ActInput`）に直す（`expandShortAct`）。実走27〜34 の mc.act 499 件が往復で元と同じになることは試験で確かめる
  * （`minecraftActShort.test.ts`）。体の schema・結果（`ActResult`）は変えない。行の文法は `minecraftActShortHands.ts`。
  */

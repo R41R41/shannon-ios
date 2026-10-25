@@ -67,26 +67,23 @@ describe('the beds: enough with two (runs 36 and 37: 85–90 s fetching beds wit
   });
 });
 
-describe('the seed plan: the iron before the Nether about ten and one bed (the v2 seed; the switch off\'s seed is as it was)', () => {
+describe('the seed plan: the iron before the Nether and one bed', () => {
   const rows = (tree: PlanTree) => tree.nodes.map(node => `${node.id} ${node.title}|${node.doneWhen ?? ''}`);
-  const off = seedPlan('エンドラを倒して')!, on = seedPlan('エンドラを倒して', null, true)!;
+  const on = seedPlan('エンドラを倒して')!;
   // Owner 2026-10-24 (after run 38): the iron helmet, chestplate and leggings worn before the diamonds; the boots are golden (`minecraftLlmcV2Fix12.test.ts`).
-  it('before: iron 24–36 with the whole armour; after: about 30, the pickaxe, the bucket, the shield and the helmet, chestplate and leggings worn', () => {
-    expect(rows(off)).toContain('p3 鉄（24〜36）|have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield');
-    expect(rows(off).some(line => line.includes('鉄の全身の防具'))).toBe(true);
+  it('about 30 iron, the pickaxe, the bucket, the shield and the helmet, chestplate and leggings worn', () => {
     expect(rows(on)).toContain('p3 鉄（約30・兜・胸・脚まで）|have:iron_pickaxe&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings');
     expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
     expect(rows(on).some(line => line.includes('鉄を約30個掘る（y=16前後・洞窟）'))).toBe(true);
   });
-  it('before: the beds node done by `have:bed` and all the village\'s beds; after: `have:bed>=1` and one or two', () => {
-    expect(rows(off)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed');
+  it('the beds node done by `have:bed>=1` and one or two', () => {
     expect(rows(on)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed>=1');
     expect(rows(on).some(line => line.includes('ベッド1〜2'))).toBe(true);
   });
   it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
     expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 30（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）');
     expect(PREP_RULES_WORDS).toContain('ベッドの節の doneWhen は have:bed>=1');
-    expect(ownFirstPlanSystem(true)).toContain(PREP_RULES_WORDS);
+    expect(ownFirstPlanSystem()).toContain(PREP_RULES_WORDS);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(PREP_RULES_WORDS);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).not.toContain('約 10');
   });

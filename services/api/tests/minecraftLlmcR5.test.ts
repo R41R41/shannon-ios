@@ -11,7 +11,7 @@ import { doneFacts, nodesSeenDone, parseDoneWhen, seenDoneUpdate } from '../src/
 import {
   FIRST_PLAN_SYSTEM_R4, FIRST_PLAN_SYSTEM_R5, forgetFirstPlans, SCAN_WAIT, seedPlan, startFirstPlan,
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, llmcSystemAppendix, R5_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R5_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCompletionMistake } from '../src/wiring/minecraftLlmcWiring.js';
 
 /**
@@ -55,7 +55,7 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
     const done = nodesSeenDone(tree, facts);
     // Wood and stone (all three tools), the food and the bed (bread 44 points, a bed), the iron pickaxe is not yet the iron node (no bucket).
     // r9: a node is done by its own predicate: p1 (the pack: the stone pickaxe) and its children p1.2, p1.3 (their tools) are; p1.1 (6 logs: she has 4)
-    // is not closed with its parent, and a parent done by the pack leaves its open children as they are (nothing under it is picked next).
+    // is not closed with its parent, and the open children under a parent done by the pack are closed by the plan (`closedUnder`).
     expect(done).toEqual(expect.arrayContaining(['p1', 'p1.2', 'p1.3', 'p2', 'p2.3']));
     expect(done).not.toContain('p1.1');
     expect(done).not.toContain('p3');
@@ -68,7 +68,9 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
     expect(view.now).toMatch(/^p2\.[12] |^p3\.1 /u);
     expect(plan.port.committed()).not.toBeNull();
     expect(lines.some(line => line.startsWith('Shannon FCA plan settled task=r5-plan'))).toBe(true);
-    expect(seen.ids).toEqual(done);
+    expect(seen.ids.slice(0, done.length)).toEqual(done);
+    // v2: the open children under a done parent are closed as no longer needed, after the nodes the frame shows done.
+    expect(seen.closed?.length).toBeGreaterThan(0);
     // Read again: nothing more to do, no line.
     const before = lines.length;
     plan.port.view();
@@ -210,6 +212,5 @@ describe('the completion and the knowledge (r5)', () => {
     // r6: the mode's appendix is r6's now (minecraftLlmcR6.test.ts), which begins with r5's.
     expect(LLMC_SYSTEM_APPENDIX_R5).toBe(`${LLMC_SYSTEM_APPENDIX_R4}\n\n${R5_KNOWLEDGE}`);
     expect(LLMC_SYSTEM_APPENDIX_R6.startsWith(LLMC_SYSTEM_APPENDIX_R5)).toBe(true);
-    expect(llmcSystemAppendix(false)).toBe(LLMC_SYSTEM_APPENDIX);
   });
 });
