@@ -13,7 +13,7 @@ import { V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2K
 /**
  * mc-sonnet-guards (decision replay 2026-10-26, Sonnet 5.5 against Opus 5.5 on the rel44 input): what the code holds before an act is sent
  * (a block put into her own feet or head cell, a dig beside lava, a dig of a cell that stopped for 「見られる」 written relative to her feet), what the
- * live says (the cell she stands in, the nearest place that cuts a hostile's line) and the words of two rules that Sonnet read without their condition.
+ * live says (the cell she stands in, the nearest place that cuts a hostile's line).
  */
 type Cell = { x: number; y: number; z: number };
 const at = (x: number, y: number, z: number): Cell => ({ x, y, z });
@@ -166,15 +166,13 @@ describe('the nearest place that cuts a hostile\'s line (away)', () => {
   });
 });
 
-describe('the rules Sonnet read without their condition (s49: a block put up against blazes that were not shooting; s47: the opposite)', () => {
-  it('the check\'s forbid says when to move away and close the gap: only when an urgent line is there (and stays within the first plan\'s 80 characters)', () => {
-    expect(CHECK_FORBID).toContain('離れて塞ぐのは急ぎの行が出た時だけ');
-    expect(CHECK_FORBID).not.toContain('受けた時');
-    expect(CHECK_FORBID.length).toBeLessThanOrEqual(80);
+describe('the dictionary of the live says what the new lines are', () => {
+  it('names the retreat place in away (the cell line itself says the cell she stands in)', () => {
+    expect(V2_ALWAYS).toContain('射線を切れる最寄りの立ち位置（歩いて行ける所。間に固いブロック）が出ることもある');
   });
-  it('the always-read text and the blaze stage give [急ぎ] and the retreat only to a decision with an urgent line', () => {
-    expect(V2_ALWAYS).toContain('urgent が出た判断の急ぎの手だけ「[急ぎ] …」');
-    expect(V2_ALWAYS).toContain('出ていない判断は急ぎではない');
-    expect(V2_STAGES.blaze).toContain('urgent に出た（近い・撃たれる）時だけ、射線の外の岩へ離れて塞ぐ。出ていなければ shortage を埋める手を進める');
+  it('leaves the words of the rules as they were (the replay of 2026-10-26 did not show that putting a condition in them helped)', () => {
+    expect(CHECK_FORBID).toContain('湧き場の前で戦わない。受けた時は離れて塞ぐ');
+    expect(V2_ALWAYS).toContain('急ぎは「[急ぎ] …」');
+    expect(V2_STAGES.blaze).toContain('準備の前に近くにいる・撃たれた時は戦わず');
   });
 });
