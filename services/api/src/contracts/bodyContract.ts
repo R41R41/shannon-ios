@@ -267,10 +267,15 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
     if (item.durationMs !== undefined && !integerWithin(item.durationMs, BODY_LIMITS.durationMs)) return `${at}.durationMs is invalid`;
     if (item.strength !== undefined && !(typeof item.strength === 'number' && item.strength >= 0 && item.strength <= 1)) return `${at}.strength must be 0..1`;
     if (item.minutesAway !== undefined && !integerWithin(item.minutesAway, BODY_LIMITS.minutesAway)) return `${at}.minutesAway is invalid`;
-    if ((item.type === 'game.died' || (item.type === 'game.hurt' && item.cause !== undefined)) && (typeof item.cause !== 'string' || !GAME_ID.test(item.cause))) return `${at}.cause must be a namespaced id such as minecraft:lava`;
+    if ((item.type === 'game.died' || (item.type === 'game.hurt' && item.cause !== undefined))
+      && (typeof item.cause !== 'string' || !GAME_ID.test(item.cause))) return `${at}.cause must be a namespaced id such as minecraft:lava`;
     if (item.type === 'game.hurt' && item.strength === undefined) return `${at}.strength is required for game.hurt`;
-    if (item.type === 'game.danger' && !includes(BODY_GAME_DANGER_CAUSES, item.cause)) return `${at}.cause must be one of ${BODY_GAME_DANGER_CAUSES.join(', ')}`;
-    if (item.type === 'game.milestone' && !includes(BODY_GAME_MILESTONE_CAUSES, item.cause)) return `${at}.cause must be one of ${BODY_GAME_MILESTONE_CAUSES.join(', ')}`;
+    if (item.type === 'game.danger' && !includes(BODY_GAME_DANGER_CAUSES, item.cause)) {
+      return `${at}.cause must be one of ${BODY_GAME_DANGER_CAUSES.join(', ')}`;
+    }
+    if (item.type === 'game.milestone' && !includes(BODY_GAME_MILESTONE_CAUSES, item.cause)) {
+      return `${at}.cause must be one of ${BODY_GAME_MILESTONE_CAUSES.join(', ')}`;
+    }
     const region = isBodyTouchRegion(item.region) ? item.region : undefined;
     // Touch vocabulary 2 on a touch type only (on any other type the fields were refused above).
     const detail = includes(BODY_TOUCH_EVENT_TYPES, item.type) ? validatedTouchDetail(item, item.type, region) : {};

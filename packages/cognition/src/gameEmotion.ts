@@ -16,7 +16,9 @@ import type { CompanionStateSnapshot, ShannonEmotion, ShannonEmotionKind, Shanno
 export const SHANNON_GAME_MOMENT_KINDS = ['died', 'hurt', 'danger', 'milestone', 'stuck', 'nightSurvived', 'ownerNear', 'thought'] as const;
 export type ShannonGameMomentKind = typeof SHANNON_GAME_MOMENT_KINDS[number];
 /** Firsts of the way to the dragon, as the body names them (closed). */
-export const SHANNON_GAME_MILESTONES = ['first_iron', 'first_diamond', 'nether_entered', 'fortress_found', 'blaze_rod', 'end_entered', 'dragon_killed'] as const;
+export const SHANNON_GAME_MILESTONES = [
+  'first_iron', 'first_diamond', 'nether_entered', 'fortress_found', 'blaze_rod', 'end_entered', 'dragon_killed',
+] as const;
 export type ShannonGameMilestone = typeof SHANNON_GAME_MILESTONES[number];
 /** What nearly killed her body (closed). */
 export const SHANNON_GAME_DANGERS = ['lava', 'fall', 'drown', 'fire', 'explosion', 'mob'] as const;
@@ -105,23 +107,27 @@ export function gameFeeling(moment: ShannonGameMoment): (GameRow & { weight: num
     case 'hurt': return { ...(clamp(moment.strength ?? 0, 0, 1) >= SHANNON_GAME_BAD_HURT ? HURT_BADLY : HURT), weight: 1 };
     case 'danger': return isShannonGameDanger(moment.danger) ? { ...SHANNON_GAME_DANGER_FEELINGS[moment.danger], weight: 1 } : null;
     case 'milestone': return isShannonGameMilestone(moment.milestone) ? { ...SHANNON_GAME_MILESTONE_FEELINGS[moment.milestone], weight: 1 } : null;
-    case 'stuck': {
-      const count = Math.trunc(clamp(moment.count ?? 0, 0, 999));
-      return count >= SHANNON_GAME_STUCK_LONG_FROM ? { ...STUCK_LONG, weight: 1 } : count >= SHANNON_GAME_STUCK_FROM ? { ...STUCK, weight: 1 } : null;
-    }
+    case 'stuck': return stuckRow(moment);
     case 'nightSurvived': return { ...NIGHT, weight: 1 };
     case 'ownerNear': return { ...OWNER_NEAR, weight: 1 };
-    case 'thought': {
-      const thought = moment.thought;
-      const words = gameThoughtWords(thought?.words);
-      if (!thought || !isShannonEmotionKind(thought.primary) || !isShannonGameThoughtKind(thought.primary) || !words) return null;
-      const sign = shannonEmotionSign(thought.primary);
-      // Pleasant or not by the kind's own sign; how awake it is, the middle of the range: only the sign is read from a thought.
-      return { done: words, primary: thought.primary, weight: THOUGHT_WEIGHT,
-        intensity: clamp(thought.intensity, SHANNON_GAME_THOUGHT_INTENSITY.minimum, SHANNON_GAME_THOUGHT_INTENSITY.maximum),
-        mood: Object.freeze({ valence: sign * 0.35, arousal: 0.5, openness: 0.5 }) };
-    }
+    case 'thought': return thoughtRow(moment);
   }
+}
+
+function stuckRow(moment: ShannonGameMoment): (GameRow & { weight: number }) | null {
+  const count = Math.trunc(clamp(moment.count ?? 0, 0, 999));
+  return count >= SHANNON_GAME_STUCK_LONG_FROM ? { ...STUCK_LONG, weight: 1 } : count >= SHANNON_GAME_STUCK_FROM ? { ...STUCK, weight: 1 } : null;
+}
+
+function thoughtRow(moment: ShannonGameMoment): (GameRow & { weight: number }) | null {
+  const thought = moment.thought;
+  const words = gameThoughtWords(thought?.words);
+  if (!thought || !isShannonEmotionKind(thought.primary) || !isShannonGameThoughtKind(thought.primary) || !words) return null;
+  const sign = shannonEmotionSign(thought.primary);
+  // Pleasant or not by the kind's own sign; how awake it is, the middle of the range: only the sign is read from a thought.
+  return { done: words, primary: thought.primary, weight: THOUGHT_WEIGHT,
+    intensity: clamp(thought.intensity, SHANNON_GAME_THOUGHT_INTENSITY.minimum, SHANNON_GAME_THOUGHT_INTENSITY.maximum),
+    mood: Object.freeze({ valence: sign * 0.35, arousal: 0.5, openness: 0.5 }) };
 }
 
 /** Why she feels it, in the stored state's words (「マイクラでダイヤを見つけた」). Shown to the owner as the cause of 「いま」. */

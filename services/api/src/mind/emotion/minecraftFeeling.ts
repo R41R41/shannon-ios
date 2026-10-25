@@ -1,5 +1,6 @@
 import {
-  CHARACTER_CORE, characterCoreBlock, SHANNON_GAME_STUCK_FROM, SHANNON_GAME_STUCK_LONG_FROM, SHANNON_GAME_THOUGHT_KINDS, gameThoughtWords, isShannonGameThoughtKind,
+  CHARACTER_CORE, characterCoreBlock, SHANNON_GAME_STUCK_FROM, SHANNON_GAME_STUCK_LONG_FROM, SHANNON_GAME_THOUGHT_KINDS, gameThoughtWords,
+  isShannonGameThoughtKind,
   type CharacterCore, type CompanionStateStore, type ShannonGameMoment,
 } from '@shannon/cognition';
 import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
@@ -88,7 +89,9 @@ export class MinecraftFeelings implements MinecraftFeelingPort {
       if (note.ok || note.progressed) scope.failed = 0;
       else if (!note.reflex) {
         scope.failed += 1;
-        if (scope.failed === SHANNON_GAME_STUCK_FROM || scope.failed === SHANNON_GAME_STUCK_LONG_FROM) this.feel(note.scopeKey, { kind: 'stuck', count: scope.failed });
+        if (scope.failed === SHANNON_GAME_STUCK_FROM || scope.failed === SHANNON_GAME_STUCK_LONG_FROM) {
+          this.feel(note.scopeKey, { kind: 'stuck', count: scope.failed });
+        }
       }
       const at = this.now();
       if (this.dependencies.appraiser && !scope.running && scope.fresh >= MINECRAFT_THOUGHT_LIMITS.newActs
