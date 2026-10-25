@@ -9,6 +9,9 @@ import type { TaskMemoryReadSnapshot } from './taskMemoryPorts.js';
 import type { Steps } from './memorySteps.js';
 
 /** Threads of the platform bridge (`platformBridgeThreadId`): `platform:<platform>:<32 hex>`. Never the default Talk. */
+/** Her face beside a note (`appendNote`), kept as the note's `messageEmotion`. */
+export type NoteFace = ShannonMessageEmotion;
+
 export const isPlatformThreadId = (threadId: string): boolean => /^platform:[a-z]+:[0-9a-f]{32}$/u.test(threadId);
 
 export interface ShannonExperience extends RecallCandidate {
@@ -226,9 +229,9 @@ export interface ConversationStore {
   /**
    * Adds a Shannon-authored note to a thread without a user message and without an
    * experience event, so it never becomes a memory, promise, or profile source.
-   * `messageEmotion`: her face as she said it (her line for a touch), so the Talk's icon shows it; absent, the usual face.
+   * `face`: her face as she said it (her line for a touch), stored as `messageEmotion` so the Talk's icon shows it; absent, the usual face.
    */
-  appendNote?(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, messageEmotion?: ShannonMessageEmotion): StoredConversationMessage;
+  appendNote?(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, face?: NoteFace): StoredConversationMessage;
   /** Durable per-turn capture records. Optional so lightweight stores stay valid. */
   recordTurnCaptures?(scopeKey: string, captures: readonly TurnCaptureRecord[]): void;
   turnCaptures?(scopeKey: string, turnIds: readonly string[]): readonly TurnCaptureRecord[];

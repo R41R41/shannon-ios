@@ -17,7 +17,10 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
   background: TurnBackgroundService; now: () => string; chatModel?: ShannonChatModel;
   /** Her line from a touch (`bodyReaction.ts`): the first voice turn that answers it stores it before his words. */
-  reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string; face?: ShannonFace } | null };
+  reactions?: {
+    claim(scopeKey: string, reactionId: unknown):
+      { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string; face?: ShannonFace } | null;
+  };
   looks?: { turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void };
   feedback?: FeedbackPorts;
   fcaVoice?: () => FcaVoicePort | null;

@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { searchMemoryDocuments, type ShannonMessageEmotion } from '@shannon/cognition';
+import { searchMemoryDocuments } from '@shannon/cognition';
 import type { MemorySearchHit } from './sqliteMemorySearch.js';
 import type { ShannonConversationItem } from '../../../infra/models/chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from '../../../surfaces/text/threadTitle.js';
 import type { TurnCaptureRecord } from './turnCaptures.js';
-import { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, type VoiceSummaryRecord, boundedRecalledMemoryIds, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
-export { isPlatformThreadId, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, type VoiceSummaryRecord, MAXIMUM_RECALLED_MEMORY_IDS, boundedRecalledMemoryIds, type ShannonSourceAttribution, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
+import { isPlatformThreadId, type NoteFace, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, type VoiceSummaryRecord, boundedRecalledMemoryIds, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
+export { isPlatformThreadId, type NoteFace, type ShannonExperience, turnDisclosure, type ThreadSummaryLineage, type ReplaySummaryRecord, type ReplayEpochRecord, type ReplayChannel, type VoiceSummaryRecord, MAXIMUM_RECALLED_MEMORY_IDS, boundedRecalledMemoryIds, type ShannonSourceAttribution, type ConversationThread, type StoredConversationMessage, type TurnPersistenceContext, type PlatformTurnPersistenceInput, type PlatformTurnPersistenceResult, type ConversationStore, threadNavigation } from '../conversationContract.js';
 
 export class InMemoryConversationStore implements ConversationStore {
   private readonly conversations = new Map<string, Map<string, StoredConversationMessage[]>>();
@@ -242,13 +242,13 @@ export class InMemoryConversationStore implements ConversationStore {
     return experience;
   }
 
-  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, messageEmotion?: ShannonMessageEmotion): StoredConversationMessage {
+  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, face?: NoteFace): StoredConversationMessage {
     const resolvedThreadId = this.threadId(scopeKey, threadId);
     const threads = this.conversations.get(scopeKey) ?? new Map<string, StoredConversationMessage[]>();
     const conversation = threads.get(resolvedThreadId) ?? [];
     const note: StoredConversationMessage = {
       id: randomUUID(), sourceExperienceId: `${noteKind}:${randomUUID()}`, role: 'assistant', content, observedAt,
-      ...(messageEmotion ? { messageEmotion: Object.freeze({ ...messageEmotion }) } : {}),
+      ...(face ? { messageEmotion: Object.freeze({ ...face }) } : {}),
     };
     conversation.push(note);
     threads.set(resolvedThreadId, conversation.slice(-this.maximumConversationItems));

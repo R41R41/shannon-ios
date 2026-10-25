@@ -491,12 +491,9 @@ export class SQLiteBodyReactionStore {
 
 /** The face of the stored answer's line (`message.expression`, `message.feeling`); null when there is none or it cannot be read. */
 function answerFace(raw: string | null): ShannonFace | null {
-  if (!raw) return null;
   try {
-    const message = (JSON.parse(raw) as Partial<BodyReactionAnswer>).message;
-    if (!message || typeof message.expression !== 'string') return null;
-    return { expression: message.expression, ...(typeof message.feeling === 'string' ? { feeling: message.feeling } : {}) };
-  } catch {
-    return null;
-  }
+    const message = raw ? (JSON.parse(raw) as Partial<BodyReactionAnswer>).message : null;
+    return message && typeof message.expression === 'string'
+      ? { expression: message.expression, ...(typeof message.feeling === 'string' ? { feeling: message.feeling } : {}) } : null;
+  } catch { return null; }
 }

@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ShannonConversationItem } from '../models/chatModel.js';
-import { normalizeDisclosure, type ShannonMessageEmotion } from '@shannon/cognition';
+import { normalizeDisclosure } from '@shannon/cognition';
 import {
   boundedRecalledMemoryIds,
   threadNavigation,
   turnDisclosure,
-  isPlatformThreadId,
+  isPlatformThreadId, type NoteFace,
   type ThreadSummaryLineage,
   type ConversationStore,
   type ConversationThread,
@@ -368,12 +368,12 @@ export class SQLiteConversationRepository implements ConversationStore {
     return Object.freeze({ id: turnId, userMessage, shannonReply, summary, observedAt, disclosure });
   }
 
-  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, messageEmotion?: ShannonMessageEmotion): StoredConversationMessage {
+  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string, face?: NoteFace): StoredConversationMessage {
     const effectiveThreadId = this.threadId(scopeKey, threadId);
     this.ensureThread(scopeKey, effectiveThreadId, null);
     const row: MessageRow = {
       message_id: randomUUID(), thread_id: effectiveThreadId, turn_id: `${noteKind}:${randomUUID()}`,
-      role: 'assistant', content, observed_at: observedAt, metadata_json: JSON.stringify({ noteKind, ...(messageEmotion ? { messageEmotion } : {}) }),
+      role: 'assistant', content, observed_at: observedAt, metadata_json: JSON.stringify({ noteKind, ...(face ? { messageEmotion: face } : {}) }),
     };
     this.context.transaction(() => {
       // No user row and no experience event: the note is display history only.
