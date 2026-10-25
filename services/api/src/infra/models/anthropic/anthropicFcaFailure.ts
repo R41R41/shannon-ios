@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
+import { FcaNoDecisionError, FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
 import { FcaProviderError, retryableStatus } from '../../../mind/action/fca/fcaProviderRetry.js';
 import { connectionFailedBeforeResponse, providerFailureFacts, providerServerError } from './anthropicRejection.js';
 
@@ -49,6 +49,20 @@ export function failureError(failure: DispatchFailure): Error {
 /** The error for a provider refusal (4xx): the statuses worth asking again carry `retry-after`, the others stay a plain closed code. */
 export function refusalError(status: number, error: { headers?: unknown }): Error {
   return retryableStatus(status) ? new FcaProviderError(status, retryAfterMilliseconds(error)) : new Error(`FCA_MODEL_HTTP_${status}`);
+}
+
+/**
+ * The error for a finished answer that called no tool (`stop_reason` other than `tool_use`, `max_tokens` and `refusal` having been told
+ * apart): asked again once by the runner (`retryVerdict`). Content-free line: what the answer held, so that the next one tells whether it
+ * was words only, or thinking only (2026-10-26 04:50, Sonnet 5.5: `end_turn`, 371 output tokens, the line did not exist yet).
+ */
+export function missingDecision(message: Pick<Anthropic.Message, 'stop_reason' | 'content' | 'usage' | 'model'>, taskId: string): Error {
+  const blocks: Record<string, number> = {};
+  for (const block of message.content) blocks[block.type] = (blocks[block.type] ?? 0) + 1;
+  const text = message.content.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0);
+  console.warn(JSON.stringify({ event: 'fca_decision_missing', task: taskId, model: message.model, stopReason: message.stop_reason, blocks,
+    textCharacters: text, outputTokens: message.usage?.output_tokens ?? null }));
+  return new FcaNoDecisionError();
 }
 
 const MAXIMUM_RETRY_AFTER_MS = 600_000;

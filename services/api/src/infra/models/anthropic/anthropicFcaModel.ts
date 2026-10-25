@@ -21,7 +21,7 @@ import { currentActionExecution } from '../../context/actionExecution.js';
 import { elidedDecision, estimatedAnthropicTokens, restatedKnowledge, unchangedParts } from './anthropicFcaHistory.js';
 import { BODY_RULE, OWNER_CLOCK_RULE, STEP_INSTRUCTIONS, stepInstructions } from './anthropicFcaInstructions.js';
 import { reportDispatchFailure, reportRejection } from './anthropicRejection.js';
-import { classifyDispatchFailure, failureError, failureMayHaveBeenCharged, refusalError } from './anthropicFcaFailure.js';
+import { classifyDispatchFailure, failureError, failureMayHaveBeenCharged, missingDecision, refusalError } from './anthropicFcaFailure.js';
 import { compactedDecision, FCA_COMPACT_ABOVE_TOKENS } from './anthropicFcaCompaction.js';
 import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
 import { transientRequest, type CutStages } from './anthropicFcaTransientRequest.js';
@@ -262,7 +262,7 @@ export class AnthropicFcaModel implements FcaModel {
     if (combined.aborted) throw new Error('FCA_MODEL_ABORTED');
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');
     if (message.stop_reason === 'refusal') throw new Error('FCA_MODEL_REFUSED');
-    if (message.stop_reason !== 'tool_use') throw new Error('FCA_MODEL_DECISION_MISSING');
+    if (message.stop_reason !== 'tool_use') throw missingDecision(message, input.task.id);
     const decided = decodeDecision(message.content, menu.names, history, input.sharedContext || transient ? FCA_CONTEXT_NAME : undefined);
     const hooks = this.v2();
     const decision = hooks && decided.kind === 'tools' ? { ...decided, calls: decided.calls.map(call => ({ ...call, input: hooks.callInput(call.name, call.input) as typeof call.input })) } : decided;

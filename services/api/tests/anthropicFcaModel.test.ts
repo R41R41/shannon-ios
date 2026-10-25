@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AnthropicFcaModel, createAnthropicFcaModel, type AnthropicFcaClient, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { estimatedAnthropicCostUsd, unknownCostUpperBound } from '../src/infra/models/claude/claudeUsage.js';
 import { retryAfterMilliseconds } from '../src/infra/models/anthropic/anthropicFcaFailure.js';
-import { FcaProviderError } from '../src/mind/action/fca/fcaProviderRetry.js';
+import { FcaProviderError, retryVerdict } from '../src/mind/action/fca/fcaProviderRetry.js';
 import { HAIKU_PROTOCOL_PREFIX } from '../src/infra/models/anthropic/haikuCache.js';
 import { claudeTool } from '../src/infra/models/anthropic/anthropicRequest.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
@@ -14,7 +14,7 @@ import { message, scriptedAnthropic, type AnthropicMessage, withoutCacheMarkers 
 import { installObserverSink, withObserverRun } from '../src/infra/observer/observerContext.js';
 import type { ObserverDraft } from '../src/contracts/observerContract.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
-import { FcaNoResponseError } from '../src/mind/action/fca/fcaNoResponse.js';
+import { FcaNoDecisionError, FcaNoResponseError } from '../src/mind/action/fca/fcaNoResponse.js';
 
 const tools: ShannonToolDefinition[] = ['task.create', 'task.list', 'task.get', 'task.send'].map(name => ({
   name, description: `Synthetic definition of ${name}`, domain: 'meta', effect: 'write', cost: 'none',
@@ -325,6 +325,27 @@ describe('FCA usage evidence and invalid decisions', () => {
     expect(fixture.bodies).toHaveLength(1);
     expect(fixture.receipts).toHaveLength(1);
     expect(fixture.receipts[0]!.usageComplete).toBe(true);
+  });
+
+  it('tells an answer that called no tool from the other closed refusals: a typed error the runner asks again, and a content-free line', async () => {
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const fixture = harness([answer([{ type: 'thinking', thinking: 'secret reasoning', signature: 's' }, { type: 'text', text: 'Done with the logs.' }],
+        nativeUsage(), 'end_turn')]);
+      const failure = await fixture.model.decide(input(), signal()).then(() => null, (error: Error) => error);
+      expect(failure).toBeInstanceOf(FcaNoDecisionError);
+      expect(failure?.message).toBe('FCA_MODEL_DECISION_MISSING');
+      expect(retryVerdict(failure)).toMatchObject({ reason: 'no_decision', possiblyBilled: false, attempts: 2 });
+      expect(fixture.receipts).toHaveLength(1);
+      const line = String(warned.mock.calls.map(call => String(call[0])).find(text => text.includes('fca_decision_missing')));
+      expect(JSON.parse(line)).toMatchObject({ event: 'fca_decision_missing', stopReason: 'end_turn', blocks: { thinking: 1, text: 1 }, textCharacters: 19 });
+      expect(line).not.toContain('secret reasoning');
+      expect(line).not.toContain('Done with the logs');
+      for (const stop of ['max_tokens', 'refusal']) {
+        const other = harness([answer([call()], nativeUsage(), stop)]);
+        expect(retryVerdict(await other.model.decide(input(), signal()).then(() => null, (error: Error) => error))).toBeNull();
+      }
+    } finally { warned.mockRestore(); }
   });
 
   it('rejects reused tool ids, malformed history and provider-name collisions', async () => {

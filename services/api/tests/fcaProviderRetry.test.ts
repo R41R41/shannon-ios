@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FcaNoResponseError } from '../src/mind/action/fca/fcaNoResponse.js';
+import { FcaNoDecisionError, FcaNoResponseError } from '../src/mind/action/fca/fcaNoResponse.js';
 import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import {
   decideWithRetry, FCA_RETRY_POLICY, FcaDecisionUnavailableError, FcaProviderError, retryableStatus, retryVerdict, retryWaitMs,
@@ -270,5 +270,28 @@ describe('asking for a decision again', () => {
     const run = script([new FcaProviderError(503)]);
     await expect(decideWithRetry(run.attempt, parts({ signal: controller.signal }))).rejects.toThrow('FCA_MODEL_HTTP_503');
     expect(run.calls()).toBe(1);
+  });
+});
+
+describe('an answer that called no tool (production 2026-10-26 04:50, Sonnet 5.5: end_turn, 1 of 16 decisions)', () => {
+  it('is asked again once, with the same closed code if it fails again, and is not counted as a charge in doubt', async () => {
+    expect(retryVerdict(new FcaNoDecisionError())).toEqual({ reason: 'no_decision', possiblyBilled: false, retryAfterMs: null, attempts: 2 });
+    const again = script([new FcaNoDecisionError()]);
+    const log: string[] = [];
+    expect(await decideWithRetry(again.attempt, parts({ log: line => log.push(line) }))).toBe(output);
+    expect(again.calls()).toBe(2);
+    expect(log).toEqual(['Shannon FCA decision retry reason=no_decision attempt=2/2 waitMs=0']);
+    const same = script(Array(5).fill(new FcaNoDecisionError()));
+    const failure = await decideWithRetry(same.attempt, parts()).catch(error => error as FcaDecisionUnavailableError);
+    expect(failure).toBeInstanceOf(FcaDecisionUnavailableError);
+    expect(failure).toMatchObject({ message: 'FCA_MODEL_DECISION_MISSING', reason: 'no_decision', attempts: 2, possiblyBilled: false });
+    expect(same.calls()).toBe(2);
+  });
+
+  it('counts its requests with the others of the decision: a miss after a provider failure is not asked a third time', async () => {
+    const mixed = script([new FcaNoDecisionError(), new FcaProviderError(503), new FcaNoDecisionError()]);
+    const failure = await decideWithRetry(mixed.attempt, parts()).catch(error => error as FcaDecisionUnavailableError);
+    expect(failure).toMatchObject({ message: 'FCA_MODEL_DECISION_MISSING', reason: 'no_decision', attempts: 3 });
+    expect(mixed.calls()).toBe(3);
   });
 });

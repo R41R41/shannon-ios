@@ -1,4 +1,4 @@
-import { FcaNoResponseError } from './fcaNoResponse.js';
+import { FcaNoDecisionError, FcaNoResponseError } from './fcaNoResponse.js';
 import type { FcaModelOutput } from './fcaPorts.js';
 
 /**
@@ -52,7 +52,10 @@ export class FcaDecisionUnavailableError extends Error {
   }
 }
 
-export interface RetryVerdict { reason: string; possiblyBilled: boolean; retryAfterMs: number | null }
+/** `attempts`: the requests this kind of failure is asked for, the first included (absent: the policy's `maxAttempts`). */
+export interface RetryVerdict { reason: string; possiblyBilled: boolean; retryAfterMs: number | null; attempts?: number }
+/** An answer that called no tool is asked again once: a second one that is the same is not luck (it goes on as an unavailable decision). */
+const NO_DECISION_ATTEMPTS = 2;
 
 /** Whether a failed attempt may be asked again, and why (a closed reason for the log). */
 export function retryVerdict(error: unknown): RetryVerdict | null {
@@ -60,6 +63,7 @@ export function retryVerdict(error: unknown): RetryVerdict | null {
     return retryableStatus(error.status) ? { reason: `http_${error.status}`, possiblyBilled: false, retryAfterMs: error.retryAfterMs } : null;
   }
   if (error instanceof FcaNoResponseError) return { reason: error.reason, possiblyBilled: error.possiblyBilled, retryAfterMs: null };
+  if (error instanceof FcaNoDecisionError) return { reason: 'no_decision', possiblyBilled: false, retryAfterMs: null, attempts: NO_DECISION_ATTEMPTS };
   return null;
 }
 
@@ -114,10 +118,13 @@ function wait(milliseconds: number, signal: AbortSignal): Promise<boolean> {
   });
 }
 
+/** The requests a failure of this kind is asked for, the first included. */
+const attemptLimit = (verdict: RetryVerdict, policy: FcaRetryPolicy): number => Math.min(policy.maxAttempts, verdict.attempts ?? policy.maxAttempts);
+
 /** Whether another attempt may follow failure number `failed`, and after how long; null ends the retries. */
 function nextWait(verdict: RetryVerdict, state: { failed: number; billed: number; elapsed: number }, parts: FcaRetryParts): number | null {
   const policy = parts.policy ?? FCA_RETRY_POLICY;
-  if (state.failed >= policy.maxAttempts || state.billed > policy.maxPossiblyBilled) return null;
+  if (state.failed >= attemptLimit(verdict, policy) || state.billed > policy.maxPossiblyBilled) return null;
   if (verdict.retryAfterMs !== null && verdict.retryAfterMs > policy.maxRetryAfterMs) return null;
   if (parts.afford && !parts.afford()) return null;
   const suggested = retryWaitMs(state.failed, verdict.retryAfterMs, policy, parts.random);
@@ -148,7 +155,7 @@ export async function decideWithRetry(attempt: () => Promise<FcaModelOutput>, pa
         parts.log?.(`Shannon FCA decision unavailable reason=${verdict.reason} attempts=${state.failed}`);
         throw new FcaDecisionUnavailableError((error as Error).message, verdict.reason, state.failed, state.billed > 0, verdict.retryAfterMs);
       }
-      parts.log?.(`Shannon FCA decision retry reason=${verdict.reason} attempt=${state.failed + 1}/${policy.maxAttempts} waitMs=${taken}`);
+      parts.log?.(`Shannon FCA decision retry reason=${verdict.reason} attempt=${state.failed + 1}/${attemptLimit(verdict, policy)} waitMs=${taken}`);
       if (!await wait(taken, parts.signal)) throw new Error('FCA_MODEL_ABORTED');
       await parts.recheck();
       if (parts.refresh && now() - builtAt >= FCA_RETRY_REFRESH_MS) {

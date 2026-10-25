@@ -25,3 +25,16 @@ export class FcaNoResponseError extends Error {
 
 /** 2-5 s: one short wait with jitter before a decision that got no answer is asked once more. Kept for callers of the old single retry. */
 export const FCA_NO_RESPONSE_RETRY_DELAY = () => 2_000 + Math.floor(Math.random() * 3_000);
+
+/**
+ * A finished, billed answer that called no tool (`stop_reason` `end_turn`: Minecraft production 2026-10-26 04:50, Sonnet 5.5, 1 of 16 decisions of a
+ * task, 371 output tokens). Nothing was parsed or executed, so the same request is asked again once (`retryVerdict`); its message stays
+ * `FCA_MODEL_DECISION_MISSING`, so a caller that does not retry sees what it always saw. Its spend is recorded by the adapter.
+ */
+export class FcaNoDecisionError extends Error {
+  readonly beforeResponse = false;
+  constructor() {
+    super('FCA_MODEL_DECISION_MISSING');
+    this.name = 'FcaNoDecisionError';
+  }
+}
