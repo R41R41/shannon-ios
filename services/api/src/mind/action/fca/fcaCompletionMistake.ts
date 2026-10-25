@@ -6,7 +6,7 @@
  * (every turned-back completion counts, from the start).
  */
 export interface FcaCompletionMistake {
-  line(inARow: number): string;
+  line(inARow: number, reason?: string): string;
   /** The native message that answered the completion, with `text` in place of its receipt; null when it is not one. */
   amend?(turn: unknown, text: string): unknown | null;
 }
@@ -14,8 +14,8 @@ export interface FcaCompletionMistake {
 export const FCA_COMPLETION_MISTAKES_STOP = 5;
 
 /** The step's history with the mistake's line in place of the last turn's receipt (in place; a failing amend leaves it as it was). */
-export function sayCompletionMistake(history: unknown[], mistake: FcaCompletionMistake, inARow: number): void {
+export function sayCompletionMistake(history: unknown[], mistake: FcaCompletionMistake, inARow: number, turnedBack?: { reason?: string }): void {
   let amended: unknown = null;
-  try { amended = mistake.amend?.(history.at(-1), mistake.line(inARow)) ?? null; } catch { amended = null; }
+  try { amended = mistake.amend?.(history.at(-1), mistake.line(inARow, turnedBack?.reason)) ?? null; } catch { amended = null; }
   if (amended && history.length) history[history.length - 1] = amended;
 }

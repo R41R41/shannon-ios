@@ -139,7 +139,7 @@ function holdsByThePack(predicate: DonePredicate, facts: DoneFacts): boolean {
 }
 
 /** Each node's predicate, its places given the dimension of the nearest `dim:` node before it (itself first) when they name none. */
-function predicatesOf(tree: PlanTree): Map<string, DonePredicate> {
+export function predicatesOf(tree: PlanTree): Map<string, DonePredicate> {
   const out = new Map<string, DonePredicate>();
   let near: string | null = null;
   for (const node of orderedPlan(tree.nodes)) {

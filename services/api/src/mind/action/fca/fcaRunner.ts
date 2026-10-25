@@ -323,7 +323,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   let failedByCuts = false;
   let completionVerificationFailures = Number(prior.completionVerificationFailures ?? 0);
   if (!Number.isSafeInteger(completionVerificationFailures) || completionVerificationFailures < 0) completionVerificationFailures = 0;
-  let completionRejected = false;
+  let completionRejected = null as { reason?: string } | null;
   const decision = output.decision;
   if (ports.completionMistake && decision.kind === 'tools') completionVerificationFailures = 0;
   let disposition: 'continue' | 'wait' | 'complete' = decision.kind === 'tools' ? 'continue' : decision.kind;
@@ -449,11 +449,11 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (ports.body && !await ports.body.guard(bodyRevision)) bodyStale = true;
     if (!bodyStale) {
       const verification = await ports.tools!.progress!.verifyCompletion({ scopeKey: step.scopeKey, taskId: step.taskId, operationId: `${step.id}:completion`, name: 'goal.verify', input: {}, signal }, () => checked('fresh'));
-      if (verification.status === 'not_verified') { disposition = 'continue'; completionRejected = true; completionVerificationFailures++; }
+      if (verification.status === 'not_verified') { disposition = 'continue'; completionRejected = verification; completionVerificationFailures++; }
       else completionVerificationFailures = 0;
     }
   });
-  if (completionRejected && ports.completionMistake) sayCompletionMistake(history, ports.completionMistake, completionVerificationFailures);
+  if (completionRejected && ports.completionMistake) sayCompletionMistake(history, ports.completionMistake, completionVerificationFailures, completionRejected);
   // No detached recall may keep spending after the segment's completion receipt becomes visible.
   await metrics.timed('closeMs', async () => ports.recall?.finishSegment(step.scopeKey, step.taskId));
   if (!await stillFresh()) bodyStale = true;

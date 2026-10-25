@@ -14,6 +14,7 @@ import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaLookahead } from '../mind/action/fca/fcaLookahead.js';
 import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
 import { firstPlanInbox, planGoal, startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { COMPLETION_WAY, observedCompletion, withCompletionRule, type LlmcCompletion } from '../surfaces/minecraft/minecraftLlmcCompletion.js';
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
@@ -66,11 +67,17 @@ export const LLMC_SUMMARY_OUTPUT_TOKENS = 8_000;
  * and the goal progress without its list of failed calls (run 27: the list grew with every failed act and the whole progress was stated again in
  * the history each time, about 2,800 characters a round; each act's own result says how it failed).
  */
-export function llmcTools(tools: FcaExternalTools): FcaExternalTools {
+export function llmcTools(tools: FcaExternalTools, completion?: LlmcCompletion): FcaExternalTools {
   const { skillIndex: _index, ...rest } = tools;
   const progress = tools.progress;
   return { ...rest, definitions: tools.definitions.filter(tool => v2MenuTool(tool)),
-    ...(progress ? { progress: { ...progress, context: () => ({ ...progress.context(), failures: [], replans: [] }) } } : {}) };
+    ...(progress ? { progress: { ...progress, context: () => withCompletionRule({ ...progress.context(), failures: [], replans: [] }, completion),
+      // A completion of a task bound to no goal is checked by its plan and the new frame (`minecraftLlmcCompletion.ts`), not by conditions
+      // the model would set with a tool the mode does not offer.
+      ...(completion ? { async verifyCompletion(call, permit) {
+        const result = await progress.verifyCompletion(call, permit);
+        return result.status === 'not_verified' && result.bindingId === null ? observedCompletion(result, completion) : result;
+      } } : {}) } } : {}) };
 }
 
 const MODELS = new Set([DEFAULT_HAIKU_MODEL, 'claude-sonnet-5-5', OPUS_MODEL]);
@@ -115,7 +122,8 @@ export function llmcModelRouter(models: { main: FcaModel; escalate: FcaModel | n
  */
 export function llmcCompletionMistake(goal: string): FcaCompletionMistake {
   const seen = planGoal(goal) === 'dragon' ? 'ドラゴンの死を見た時だけ' : planGoal(goal) === 'nether' ? 'ネザーに入った時だけ' : '依頼の目的を観測した時だけ';
-  return { line: inARow => `完了の誤り（続けて ${inARow} 回目）: 依頼の達成は、まだ観測で確かめられない。完了は${seen}。`
+  return { line: (inARow, reason) => reason ? `完了の誤り（続けて ${inARow} 回目）: ${reason}。${COMPLETION_WAY}`
+    : `完了の誤り（続けて ${inARow} 回目）: 依頼の達成は、まだ観測で確かめられない。完了は${seen}。`
     + '時間や遠さで区切らない。届かないと思ったら、計画を見直して続ける（時間と費用の上限は運用者が止める）。', amend: amendAnthropicControl };
 }
 
@@ -236,7 +244,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       r4: { probe: llmcProbeRunner(control, step), planWhere,
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }),
     /** The step's ports with the mode's menu (`llmcTools`). */
-    menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools ? { ...ports, tools: llmcTools(ports.tools) } : ports,
+    menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools
+      ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe, goal: step.snapshot.task.goal }) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
       // r6 (run 29: the third fca_wait of an operator's request stopped the task): a wait is answered with what there is to wait for.

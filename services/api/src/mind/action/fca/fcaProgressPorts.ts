@@ -11,6 +11,8 @@ export interface FcaGoalCheck { conditionId: string; operationId: string; tool: 
 export interface FcaGoalVerification {
   status: 'verified' | 'not_verified' | 'self_reported'; bindingId: string | null;
   checks: readonly FcaGoalCheck[]; suggestedChecks: readonly FcaGoalCheck[];
+  /** Why a completion was turned back, in the owner's words, when the check knows (the mistake's line carries it; never stored). */
+  reason?: string;
 }
 export interface FcaProgress {
   binding?: FcaGoalBinding;

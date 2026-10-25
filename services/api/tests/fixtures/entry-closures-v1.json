@@ -812,6 +812,7 @@
     "surfaces/minecraft/minecraftLlmcAround.ts",
     "surfaces/minecraft/minecraftLlmcBody.ts",
     "surfaces/minecraft/minecraftLlmcCaution.ts",
+    "surfaces/minecraft/minecraftLlmcCompletion.ts",
     "surfaces/minecraft/minecraftLlmcContext.ts",
     "surfaces/minecraft/minecraftLlmcFooting.ts",
     "surfaces/minecraft/minecraftLlmcFurnaceWait.ts",
