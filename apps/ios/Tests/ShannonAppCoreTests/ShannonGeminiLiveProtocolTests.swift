@@ -124,11 +124,11 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         )
         XCTAssertEqual(
             ShannonElevenCascadeSpeech.style(for: "大丈夫？", plan: caring),
-            "[anime character] [reassuringly] [calmly]"
+            "[anime character] [gently] [calmly]"
         )
         XCTAssertEqual(
             ShannonElevenCascadeSpeech.style(for: "今日はどうしたの？", plan: nil),
-            "[anime character] [playfully] [energetically]"
+            "[anime character]"
         )
         let smug = ShannonVoicePlanDTO(
             shouldRespond: true, conversationClass: .direct,
@@ -148,7 +148,7 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         )
         XCTAssertEqual(
             ShannonElevenCascadeSpeech.style(for: "そばにいますよ", plan: tender),
-            "[anime character] [reassuringly] [softly]"
+            "[anime character] [lovingly] [softly]"
         )
     }
 
@@ -165,8 +165,8 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "もうちょっとかまってよ", plan: plan(.attentionSeeking)),
                        "[anime character] [sweetly]")
         XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "ずっと一緒にいるよ", plan: plan(.affectionate)),
-                       "[anime character] [reassuringly] [softly]")
-        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "疲れたね", plan: plan(.tired, .gentle)), "[anime character] [calmly]")
+                       "[anime character] [lovingly] [softly]")
+        XCTAssertEqual(ShannonElevenCascadeSpeech.style(for: "疲れたね", plan: plan(.tired, .gentle)), "[anime character] [tired] [calmly]")
         XCTAssertTrue(ShannonGeminiCascadeSpeech.style(for: "これは内緒ね", plan: plan(.playful)).contains("ささやき声"))
         XCTAssertTrue(ShannonGeminiCascadeSpeech.style(for: "おやすみ", plan: plan(.sleepy)).contains("眠そうに"))
     }

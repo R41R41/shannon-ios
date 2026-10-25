@@ -40,6 +40,15 @@ describe('her voice audio tags', () => {
     expect(geminiVoiceRequest('[sighs] うん。', 'x'.repeat(499)).style).toHaveLength(500);
   });
 
+  // 2026-10-26: the feelings that changed her voice when played (voiceAudioTags.ts); [shouts] still did not and stays out.
+  it('keeps the feelings measured on her voice, for the voice only', () => {
+    expect(elevenVoiceText('[crying] ごめんね。')).toBe('[crying] ごめんね。');
+    expect(elevenVoiceText('ねえ、[mischievously] 内緒にしてあげる。')).toBe('ねえ、 [mischievously] 内緒にしてあげる。');
+    expect(displayedVoiceText('[angry] だめ。')).toBe('だめ。');
+    expect(geminiVoiceRequest('[worried] 大丈夫？', '明るく。')).toEqual({ text: '大丈夫？', style: '明るく。 途中から心配そうに。' });
+    expect(elevenVoiceText('[shouts] だめ！')).toBe('だめ！');
+  });
+
   it('carries a sentence that is only tags to the next sentence', () => {
     const tags = new VoiceSegmentTags();
     expect(tags.take('うん、いいよ。')).toEqual({ text: 'うん、いいよ。' });
