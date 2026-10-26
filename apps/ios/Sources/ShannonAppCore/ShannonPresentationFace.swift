@@ -67,7 +67,8 @@ public enum ShannonPresentationFace {
         let drawn = drawnID(for: id) ?? fallbackID
         if let expression = ShannonExpressionDTO(rawValue: drawn) { return expression.assetName }
         if let kind = kindPicture[drawn], ShannonEmotionKindIcon.bundled.contains(kind) { return kind.assetName }
-        return (nearest[drawn] ?? .neutral).assetName
+        // 素の顔 is her plain face; calm, its nearest eye shape, is drawn smiling with closed eyes.
+        return (drawn == "blankFace" ? .neutral : nearest[drawn] ?? .neutral).assetName
     }
 
     /// Ids that are one of the drawn feeling kinds; the others take the nearest face (`nearest`).

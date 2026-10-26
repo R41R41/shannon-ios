@@ -39,6 +39,7 @@ struct ShannonPresentationFaceTests {
         #expect(ShannonPresentationFace.pictureAssetName(for: "irked") == "shannon-expression-annoyed")
         #expect(ShannonPresentationFace.pictureAssetName(for: "flatStare") == "shannon-emotion-deadpan")
         #expect(ShannonPresentationFace.pictureAssetName(for: "tender") == "shannon-expression-tender")
+        #expect(ShannonPresentationFace.pictureAssetName(for: "blankFace") == "shannon-expression-neutral")
         #expect(ShannonPresentationFace.pictureAssetName(for: "fromANewerServer") == "shannon-expression-neutral")
     }
 
