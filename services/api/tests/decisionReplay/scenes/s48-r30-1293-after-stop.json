@@ -1,0 +1,13 @@
+{
+  "id": "s48-r30-1293-after-stop",
+  "run": "r30",
+  "seq": 1293,
+  "category": [
+    "stopped"
+  ],
+  "title": "止まった直後: act 0/4 済みで止まった（failure）",
+  "situation": "実走30 8.7 分、(244,58,73)（the_nether・ネザー要塞の中）、体力 10.1。計画の今の節: [p1.1] 歪んだ幹で作業台と棒＠195,66,60（済み: have:crafting_table&have:stick>=4）（道: 出発の点検）。敵 5 体（#780 wither_skeleton 7.8m (244,63,67)、#781 wither_skeleton 16.6m (232,61,62)）。前の act: act 0/4 済みで止まった（failure）。急ぎの行: wither_skeleton 7.8m。",
+  "correct": "直前に止まった手（1 dig 止 無い: 命令が止められた（server_cancel）（手の途中））と同じ手を同じまま出さない。返った行と地図で原因を直す（頭の高さが固いなら先に dig、床が無ければ先に place、届かないなら歩いて近づく）。地図で通れる所にだけ手を出す。",
+  "hindsight": "実際の答え（本番）: 1. dig at=(244,58,74)(244,59,74) / 2. walk to=(244,58,76) / 3. walk to=(200,62,70)。体の結果: 急ぎ: wither_skeleton 5.8m が近づいたので act を止めた。。止まったのは seq 1292 の act。",
+  "judge": "always"
+}

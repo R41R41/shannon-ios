@@ -80,7 +80,10 @@ const SHORT_LINES = [
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
   'pickup [range=N] [target=..]',
-  'furnace・chest・shoot は json の形で書く。',
+  'chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 iron_ingot）',
+  'furnace X,Y,Z take   furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]   （かまど・溶鉱炉・燻製器。例: furnace 12,64,-3 put raw_iron 8 fuel=coal fuelCount=2。'
+    + '裸で furnace/chest と書いても座標と op が無いと断られる）',
+  'shoot は json の形で書く。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。',
   '',
   '## json の欄（手ごとに決まっている。ほかの欄は断られる。どの手にも rel・note・onFail）',
   '- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: at・count・seconds・canPlace・maxPlace / '

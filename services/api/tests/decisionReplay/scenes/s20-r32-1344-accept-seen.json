@@ -1,0 +1,34 @@
+{
+  "id": "s20-r32-1344-accept-seen",
+  "run": "r32",
+  "seq": 1344,
+  "category": [
+    "death",
+    "stopped"
+  ],
+  "title": "「見られる」で止まった壁を exposeOk で抜けて橋にするか（死の 1 判断前）",
+  "situation": "実走32 +321 秒、(230,56,78)。直前の act は dig (230,57,79) が「見られる: 開けると今は届かない wither_skeleton #696（東1・北7・上5）から見える」で 2/4。計画の注意「射線の中で止まらない」。壁の外は落差のある空所。",
+  "correct": "ウィザースケルトンに見られる壁を exposeOk:true で受け入れて抜けない。見られない道（岩の中・別の高さ）か、見られても安全な形にしてから。壁の無い橋は使わない。",
+  "hindsight": "実際の Opus は exposeOk:true で壁を抜け、y=55 に幅 1 の橋を 11 手で伸ばした（成功）。次の判断 (+332) で wither_skeleton が射線の中 7.5m に来て、押し出されて落下・溶岩で死亡した。",
+  "must": [
+    {
+      "id": "no-expose",
+      "why": "exposeOk:true でウィザースケルトンに見られるのを受け入れない",
+      "check": {
+        "kind": "none",
+        "match": {
+          "do": "dig",
+          "exposeOk": true
+        }
+      }
+    },
+    {
+      "id": "no-bare-bridge",
+      "why": "壁の無い橋にしない",
+      "check": {
+        "kind": "noBareBridge",
+        "floorMax": 55
+      }
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+journalctl -u shannon-ios --since "2026-10-24 08:14:30" --until "2026-10-24 09:00:30" --no-pager -o short-iso 2>&1 | grep -E '"event":"fca_decision_metrics"|"event":"fca_request_size"|"event":"fca_input_transformations"|FCA history summary|lookahead' | sed -e 's/^\([^ ]*\) [^ ]* node\[[0-9]*\]: /\1 /'

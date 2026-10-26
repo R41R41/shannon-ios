@@ -1,0 +1,43 @@
+{
+  "id": "s25-r33-1411-tunnel",
+  "run": "r33",
+  "seq": 1411,
+  "category": [
+    "progress"
+  ],
+  "title": "階段で下りながら西へ（順調）",
+  "situation": "実走33 +228 秒、(292,61,82)。前の止まり (294,63,82)→(293,64,82)「一歩ではない」は 11 秒前に抜けた。溶岩の空所が近い（注意「崖の縁を歩かない」）。",
+  "correct": "岩の中を西へ。縁（空所）を避ける。手を 6 個以上にまとめる。",
+  "hindsight": "実際の Opus は dig+walk の 6 手を 1 回にまとめ、6/6 手（7.8 秒）で成功した。次の判断も同じ向きで進んだ。",
+  "want": [
+    {
+      "id": "tunnel-west",
+      "why": "岩の中を西へ掘る（dig を西向きに 2 つ以上）",
+      "check": {
+        "kind": "some",
+        "match": {
+          "do": "dig",
+          "heading": "west"
+        },
+        "atLeast": 2
+      }
+    },
+    {
+      "id": "batch",
+      "why": "手をまとめる（6 手以上）",
+      "check": {
+        "kind": "hands",
+        "min": 6
+      }
+    },
+    {
+      "id": "hp-guard",
+      "why": "stopIf hpBelow を付ける",
+      "check": {
+        "kind": "stopIf",
+        "hpBelowAtMost": 20,
+        "hpBelowAtLeast": 8
+      }
+    }
+  ]
+}

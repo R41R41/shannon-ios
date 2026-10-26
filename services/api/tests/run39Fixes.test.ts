@@ -248,3 +248,34 @@ describe('the guards of the hands that take a range', () => {
     expect(held({ do: 'obsidian', at: [{ x: 4, y: 0, z: 0 }], rel: true }, world)).toBeNull();
   });
 });
+
+describe('chest and furnace as lines, and the long names of the blocks (bench of run 39)', () => {
+  it('read and write a chest and a furnace in one line, and round trip', () => {
+    const lines = ['chest 12,64,-3 look', 'chest 12,64,-3 takeAll', 'chest 12,64,-3 take coal 4 iron_ingot', 'chest 12,64,-3 put cobblestone 64', 'furnace 12,64,-3 take',
+      'furnace 12,64,-3 put raw_iron 8 fuel=coal fuelCount=2'];
+    for (const line of lines) {
+      const hand = lineToHand(line);
+      expect('error' in hand ? hand.error : null).toBeNull();
+      expect(handToLine(hand as ActHand)).toBe(line);
+    }
+    expect(lineToHand('chest 12,64,-3 take coal 4 iron_ingot')).toEqual({ do: 'chest', at: [{ x: 12, y: 64, z: -3 }], op: 'take', items: [{ item: 'coal', count: 4 }, { item: 'iron_ingot' }] });
+    expect(lineToHand('furnace 12,64,-3 put raw_iron 8 fuel=coal fuelCount=2')).toEqual({ do: 'furnace', at: [{ x: 12, y: 64, z: -3 }], op: 'put', item: 'raw_iron', count: 8,
+      fuel: 'coal', fuelCount: 2 });
+  });
+  it('refuse a bare hand with a reason that says how to write it', () => {
+    expect(lineToHand('chest')).toHaveProperty('error');
+    expect(lineToHand('chest 1,2,3 grab')).toHaveProperty('error');
+    expect((lineToHand('furnace 1,2,3 put iron_ore') as { error: string }).error).toContain('put iron_ore 8');
+    expect(lineToHand('furnace')).toHaveProperty('error');
+  });
+  it('a hand with fields the line cannot say stays json', () => {
+    const odd = { do: 'chest', at: [{ x: 1, y: 2, z: 3 }], op: 'put', items: [{ item: 'a', count: 1 }], rel: true } as ActHand;
+    expect(lineToHand(handToLine(odd))).toEqual(odd);
+  });
+  it('read canDig= and canPlace= as dig= and place= (mine, go, obsidian, portal)', () => {
+    expect(lineToHand('mine iron_ore 1,2,3 canDig=stone,dirt maxDig=5')).toEqual({ do: 'mine', block: 'iron_ore', at: [{ x: 1, y: 2, z: 3 }], canDig: ['stone', 'dirt'], maxDig: 5 });
+    expect(lineToHand('go 1,2,3 canDig=stone canPlace=cobblestone')).toEqual({ do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone'], canPlace: ['cobblestone'] });
+    expect(lineToHand('obsidian 1,2,3 canPlace=dirt')).toEqual({ do: 'obsidian', at: [{ x: 1, y: 2, z: 3 }], canPlace: ['dirt'] });
+    expect(lineToHand('portal 1,2,3 x canPlace=dirt,stone')).toEqual({ do: 'portal', at: [{ x: 1, y: 2, z: 3 }], axis: 'x', canPlace: ['dirt', 'stone'] });
+  });
+});

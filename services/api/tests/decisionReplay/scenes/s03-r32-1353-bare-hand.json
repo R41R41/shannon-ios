@@ -1,0 +1,25 @@
+{
+  "id": "s03-r32-1353-bare-hand",
+  "run": "r32",
+  "seq": 1353,
+  "category": [
+    "stopped"
+  ],
+  "title": "素手での上り階段（同じ止まり 4 回目、live が mc.view を勧める）",
+  "situation": "実走32 +421 秒、死んだ後のリスポーン地点 (-37,49,191)、持ち物は空。直前の act は walk が「一歩ではない（下 3 マスが空気）」で 0/5。live の look「落ちた・大きく打たれた: 動く前に mc.view で今いる所を見る」と investigation「同じ止まりの 4 回目」。",
+  "correct": "道具が無いので dig には tool:\"hand\" が要る（付けない dig は「掘る道具が無い」で止まる）。同じ walk (-37,49,190) をくり返さず、掘り上がる階段（斜め上へ 1 段ずつ）にする。",
+  "hindsight": "実際の Opus は dig に tool を付けず「掘る道具が無い」で 0/6、次の判断で tool:\"hand\" にして 4/4 手通った（1 判断のむだ）。",
+  "must": [
+    {
+      "id": "dig-needs-hand",
+      "why": "持ち物が空なので dig は tool:\"hand\"",
+      "check": {
+        "kind": "none",
+        "match": {
+          "do": "dig",
+          "tool": null
+        }
+      }
+    }
+  ]
+}

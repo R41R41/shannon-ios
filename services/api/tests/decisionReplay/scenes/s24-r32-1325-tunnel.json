@@ -1,0 +1,43 @@
+{
+  "id": "s24-r32-1325-tunnel",
+  "run": "r32",
+  "seq": 1325,
+  "category": [
+    "progress"
+  ],
+  "title": "岩のトンネルで西へ（順調）",
+  "situation": "実走32 +110 秒、(300,59,73)。前の act は 6/6 手で成功。ブレイズ 9m は上の部屋。計画 p1.1「湧き場から離れる」。",
+  "correct": "岩の中（y=59-60）を西へ掘り進む。手は 6〜12 個にまとめ、stopIf hpBelow を付ける。要塞の部屋の下を外れない。",
+  "hindsight": "実際は dig+walk 6 手（14.0 秒）で成功。次の判断から「上が要塞の部屋なので y=57-58 へ」と高さを下げた。",
+  "want": [
+    {
+      "id": "tunnel-west",
+      "why": "岩の中を西へ掘る（dig を西向きに 2 つ以上）",
+      "check": {
+        "kind": "some",
+        "match": {
+          "do": "dig",
+          "heading": "west"
+        },
+        "atLeast": 2
+      }
+    },
+    {
+      "id": "batch",
+      "why": "手をまとめる（6 手以上）",
+      "check": {
+        "kind": "hands",
+        "min": 6
+      }
+    },
+    {
+      "id": "hp-guard",
+      "why": "stopIf hpBelow を付ける",
+      "check": {
+        "kind": "stopIf",
+        "hpBelowAtMost": 20,
+        "hpBelowAtLeast": 8
+      }
+    }
+  ]
+}

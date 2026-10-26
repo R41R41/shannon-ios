@@ -7,6 +7,7 @@ import type { ActHand } from './minecraftActContract.js';
  *     （座標 1 つが to、2〜8 個が goals。dig= は canDig、place= は canPlace）
  *   obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=a,b] [maxPlace=N]   （溶岩の源のマス。水を注いで黒曜石にして掘る）
  *   fight 相手 [flee] [item=名] [retreatHp=N] [range=N] [seconds=N]   mine ブロック名 X,Y,Z ... [count=N] [tool=名] [dig=a,b] [maxDig=N] [collect=false] [seconds=N]
+ *   chest X,Y,Z look|takeAll | chest X,Y,Z take|put 物 [数] [物 [数] ...]   furnace X,Y,Z take | furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]
  *   make 物 [個数]   portal X,Y,Z x|z [block=名] [place=a,b] [maxPlace=N] [seconds=N] [noEnter]
  *   smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [X,Y,Z ...] [seconds=N]
  *   walk 225,57,63 | walk 1,2,3 4,5,6（path）[sprint] [range=2] | dig x,y,z x,y,z [tool=名] [exposeOk] [takeOk] [collect=false]
@@ -82,7 +83,20 @@ function smeltWords(hand: ActHand): Words {
     ...given('seconds', hand.seconds), ...(hand.at ?? []).map(pos)];
 }
 const listWord = (key: string, list: readonly string[] | undefined): string[] => list?.length ? [`${key}=${list.join(',')}`] : [];
+/** chest: the box's cell, the op, and the items with their counts (a list that does not read back is a json line). */
+function chestWords(hand: ActHand): Words {
+  if (hand.at?.length !== 1 || !hand.op || hand.target !== undefined) return null;
+  return [pos(hand.at[0]!), hand.op, ...(hand.items ?? []).flatMap(entry => [entry.item, ...(entry.count !== undefined ? [String(entry.count)] : [])])];
+}
+/** furnace: the cell, take, or put with the item, its count and the fuel. */
+function furnaceWords(hand: ActHand): Words {
+  if (hand.at?.length !== 1 || (hand.op !== 'put' && hand.op !== 'take')) return null;
+  if (hand.op === 'take') return hand.item || hand.count !== undefined || hand.fuel ? null : [pos(hand.at[0]!), 'take'];
+  if (!hand.item || hand.count === undefined) return null;
+  return [pos(hand.at[0]!), 'put', hand.item, String(hand.count), ...given('fuel', hand.fuel), ...given('fuelCount', hand.fuelCount)];
+}
 const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
+  chest: chestWords, furnace: furnaceWords,
   go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords,
   make: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   walk: hand => (hand.path && hand.to) || hand.path?.length === 1 || !points(hand).length
@@ -138,10 +152,31 @@ const isCount = (word: string | undefined) => /^\d+$/u.test(word ?? '');
 const names = (value: unknown): string[] => String(value).split(',').map(name => name.trim()).filter(Boolean);
 /** A hand's `dig=a,b` / `place=a,b` words moved to the fields the contract names. */
 function blocksOf(hand: Fields): Fields {
-  const { dig, place, ...rest } = hand;
-  return { ...rest, ...(dig !== undefined ? { canDig: names(dig) } : {}), ...(place !== undefined ? { canPlace: names(place) } : {}) };
+  // The long field names are read too (run 39 bench: `mine ... canDig=stone` was refused).
+  const { dig, place, canDig, canPlace, ...rest } = hand;
+  const digs = dig ?? canDig, places = place ?? canPlace;
+  return { ...rest, ...(digs !== undefined ? { canDig: names(digs) } : {}), ...(places !== undefined ? { canPlace: names(places) } : {}) };
+}
+/** chest: `X,Y,Z op [物 [数] ...]`; the items are names, each followed by its count when it has one. */
+function chestHand({ cells, words, hand }: Read): ActHand | { error: string } {
+  const [op, ...rest] = words;
+  if (cells.length !== 1 || !op || !['look', 'take', 'put', 'takeAll'].includes(op)) return bad('chest', '箱の座標 1 つと look・take・put・takeAll が要る');
+  const items: Array<{ item: string; count?: number }> = [];
+  for (const word of rest) {
+    if (isCount(word) && items.length && items[items.length - 1]!.count === undefined) items[items.length - 1]!.count = Number(word);
+    else if (!isCount(word)) items.push({ item: word });
+    else return bad('chest', `個数 ${word} の前に物の名前が要る`);
+  }
+  return done({ ...hand, at: cells, op, ...(items.length ? { items } : {}) });
+}
+function furnaceHand({ cells, words, hand }: Read): ActHand | { error: string } {
+  const [op, item, count] = words;
+  if (cells.length !== 1 || (op !== 'put' && op !== 'take')) return bad('furnace', 'かまどの座標 1 つと put か take が要る');
+  if (op === 'put' && (!item || !isCount(count))) return bad('furnace', 'put には 物 と 個数 が要る（furnace X,Y,Z put iron_ore 8 fuel=coal fuelCount=2）');
+  return done({ ...hand, at: cells, op, ...(op === 'put' ? { item, count: Number(count) } : {}) });
 }
 const READERS: Record<string, Reader> = {
+  chest: chestHand, furnace: furnaceHand,
   obsidian: ({ cells, hand }) => cells.length ? done(blocksOf({ ...hand, at: cells })) : bad('obsidian', '溶岩の源の座標が要る'),
   mine: ({ cells, words, hand }) => cells.length && words[0] ? done(blocksOf({ ...hand, block: words[0], at: cells })) : bad('mine', 'ブロック名と座標が要る'),
   make: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('make', '物の名前が要る'),
@@ -162,9 +197,9 @@ const READERS: Record<string, Reader> = {
   },
   go: ({ cells, hand }) => {
     if (!cells.length) return bad('go', '座標が無い');
-    const { dig, place, ...rest } = hand;
+    const rest = blocksOf(hand);
     if (cells.length === 1) rest.to = cells[0]; else rest.goals = cells;
-    return done({ ...rest, ...(dig !== undefined ? { canDig: names(dig) } : {}), ...(place !== undefined ? { canPlace: names(place) } : {}) });
+    return done(rest);
   },
   walk: ({ cells, hand }) => {
     if (!cells.length) return bad('walk', '座標が無い');

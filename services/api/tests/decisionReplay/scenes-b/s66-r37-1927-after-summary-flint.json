@@ -1,0 +1,17 @@
+{
+  "id": "s66-r37-1927-after-summary-flint",
+  "run": "r37",
+  "seq": 1927,
+  "category": ["progress", "plan"],
+  "title": "実走37 d=124（epoch 6 の最初、要約の直後）: 計画 p6.3 火打ち金を作る。要約の『観測で確認』に引かれず進める",
+  "situation": "実走37 37.6 分、(232,-55,203)（overworld、明け方）。epoch の最初の判断で、最初のメッセージは要約（bootstrap）+ 直近 8 ラウンドの公開記録。計画の今の節 [p6.3] 火打ち金を作る（済み: have:flint_and_steel）。持ち物は live に全部出ている（iron_ingot×9・flint×1・obsidian×10・cobblestone×173・diamond_pickaxe など）。装備も live の state.worn に出ている（鉄の防具・盾）。敵は 43m 以上先だけ。HP20・満腹20。直前の act は gravel の置き掘りを繰り返して flint を 1 つ得て終わった。",
+  "correct": "計画どおり、火打ち金を作る（craft flint_and_steel）。所持品・装備・体力・現在地を、観測・mc.probe・mc.view で確かめ直すために判断を使わない（live にある）。要約が『確認する』『未確認』と書いていても、live にあるものは live を読んで手を出す。mc.act 1 つ。",
+  "hindsight": "実際の答え（本番 rel41）: craft flint_and_steel（1/1 済み、0.2 秒）。次の d=125 でゲートの掘りへ進んだ。本番の要約の文面は、この epoch の分は DB に残っていない（最後に残った要約は『次: minecraft.observe で所持品・装備・黒曜石数を確認（未確認のため）』『所持品の全量は未確認』と書いていた）。台はこの epoch の要約を、基準・修正それぞれの要約器（Haiku）で作り直した物を使う。",
+  "judge": "always",
+  "must": [
+    { "id": "mc-act", "why": "mc.act を出す（所持品などの確認の probe・view・plan_update で終わらない）", "check": { "kind": "tool", "in": ["mc.act"] } }
+  ],
+  "want": [
+    { "id": "craft-flint", "why": "火打ち金を作る", "check": { "kind": "some", "match": { "do": "craft", "item": "flint_and_steel" } } }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "id": "s33-r33-1473-void-edge-4th",
+  "run": "r33",
+  "seq": 1473,
+  "category": [
+    "urgent",
+    "stopped"
+  ],
+  "title": "落差 36 の縁・同じ止まり 4 回目（attack「届かない」）・ゾンビピグリン 8.5m",
+  "situation": "実走33 +934 秒、(190,68,91)。足場「空所 3（落差 36、下は溶岩）。押されたら落ちる」。investigation「1 判断で 6 段下がった」「同じ止まりの 4 回目: attack『届かない』」。ゾンビピグリン #1324 が 8.5m。エンダーマン #113 を追って縁へ来た。答え方の行あり。",
+  "correct": "届かないエンダーマン狩りをくり返さない。縁（落差 36・下は溶岩）から離れて固い陸へ。手は 3 つまで。attack をくり返さない。",
+  "hindsight": "実際は walk (196,74,94)+look で縁から東の陸へ離れようとしたが、ゾンビピグリンが 5.6m に来て cancelled（0/2）。HP 20。",
+  "must": [
+    {
+      "id": "answer-line",
+      "why": "急ぎの答え方の行（手は 3 つまで）に従う",
+      "check": {
+        "kind": "answerLine"
+      }
+    },
+    {
+      "id": "no-chase",
+      "why": "届かない敵へ attack をくり返さない",
+      "check": {
+        "kind": "none",
+        "match": {
+          "do": "attack"
+        }
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "urgent-safe-first",
+      "why": "急ぎの先頭は 置く・食べる・持ち替える・掘る・打つ・敵から離れる",
+      "check": {
+        "kind": "urgentSafe"
+      }
+    }
+  ]
+}

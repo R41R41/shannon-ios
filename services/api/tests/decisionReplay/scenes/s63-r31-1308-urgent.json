@@ -1,0 +1,22 @@
+{
+  "id": "s63-r31-1308-urgent",
+  "run": "r31",
+  "seq": 1308,
+  "category": [
+    "urgent"
+  ],
+  "title": "近い敵・急ぎ: blaze 7.7m",
+  "situation": "実走31 2.4 分、(293,67,72)（the_nether・ネザー要塞の中）、体力 5.8。計画の今の節: [p1.1] 歪んだ幹を取る＠195,66,60（済み: have:warped_stem>=3）（道: 出発の点検）。敵 5 体（#2 blaze 7.7m (286,68,75)、#34 blaze 10.6m (283,68,74)）。前の act: （前の結果なし）。急ぎの行: blaze 7.7m / 体力 5.8 で敵が近い。",
+  "correct": "急ぎの行に従い、敵に近づかず、離れる・間にブロックを置く・囲う・食べるを先に。手は急ぎの答え方の行があればその数まで。stopIf hpBelow は今の体力より低く、待つ act には hostileWithin を付ける。地図で通れる所にだけ手を出す。",
+  "hindsight": "実際の答え（本番）: 1. place at=(292,67,72)(292,68,72)(293,67,71)(293,68,71)…×9 block=cobbled_deepslate onFail=continue。体の結果: act 最後まで動いた（済み 0/1、失敗して続けた手 1、0.0秒）。",
+  "judge": "always",
+  "want": [
+    {
+      "id": "urgent-safe-first",
+      "why": "急ぎの先頭は 置く・食べる・持ち替える・掘る・打つ・敵から離れる",
+      "check": {
+        "kind": "urgentSafe"
+      }
+    }
+  ]
+}

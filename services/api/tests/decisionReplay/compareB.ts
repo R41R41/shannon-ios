@@ -1,0 +1,20 @@
+import { readFileSync } from 'node:fs';
+import { dataFile } from './allRuns.js';
+/** offlineB.ts の 2 つの出力（基準・修正）を並べる。 node --import tsx tests/decisionReplay/compareB.ts offline-base.json offline-fix.json */
+const [, , a, b] = process.argv;
+const base = JSON.parse(readFileSync(dataFile(a!), 'utf8')) as Record<string, any>, fix = JSON.parse(readFileSync(dataFile(b!), 'utf8')) as Record<string, any>;
+const ids = Object.keys(base);
+const median = (list: number[]) => { const s = [...list].sort((x, y) => x - y); return s.length ? (s[Math.floor((s.length - 1) / 2)]! + s[Math.ceil((s.length - 1) / 2)]!) / 2 : 0; };
+const errors = ids.filter(id => base[id].error || fix[id]?.error);
+const both = ids.filter(id => !base[id].error && !fix[id]?.error);
+const delta = both.map(id => fix[id].chars - base[id].chars), pct = both.map(id => (fix[id].chars - base[id].chars) / base[id].chars * 100);
+console.log(`場面 ${ids.length}、組めなかった ${errors.length} ${errors.join(',')}`);
+console.log(`要求の文字数の差（修正 − 基準）: 中央値 ${median(delta)} 字（${median(pct).toFixed(2)}%）、最小 ${Math.min(...delta)}、最大 ${Math.max(...delta)}、平均 ${(delta.reduce((x, y) => x + y, 0) / delta.length).toFixed(0)}`);
+console.log(`live の文字数の差: 中央値 ${median(both.map(id => fix[id].live - base[id].live))}、最小 ${Math.min(...both.map(id => fix[id].live - base[id].live))}、最大 ${Math.max(...both.map(id => fix[id].live - base[id].live))}`);
+console.log(`system の差: ${[...new Set(both.map(id => fix[id].system - base[id].system))].join(',')}、道具の差: ${[...new Set(both.map(id => fix[id].tools - base[id].tools))].join(',')}`);
+console.log(`段が違う場面: ${both.filter(id => base[id].stage !== fix[id].stage).map(id => `${id}(${base[id].stage}→${fix[id].stage})`).join(' ') || 'なし'}`);
+const withAct = both.filter(id => base[id].act && fix[id].act);
+const guardOf = (act: any) => act?.error ? `ERR ${act.error}` : act?.problem ? `形:${String(act.problem).slice(0, 30)}` : act?.guard ? `${act.guard.stopped ? '全' : '部'}${act.guard.hand}${act.guard.code ?? ''}` : '通る';
+console.log(`記録の本番の答え（mc.act）${withAct.length} 件を候補の頭に通す: 通る 基準 ${withAct.filter(id => guardOf(base[id].act) === '通る').length} / 修正 ${withAct.filter(id => guardOf(fix[id].act) === '通る').length}、形の問題 基準 ${withAct.filter(id => guardOf(base[id].act).startsWith('形')).length} / 修正 ${withAct.filter(id => guardOf(fix[id].act).startsWith('形')).length}、例外 基準 ${withAct.filter(id => guardOf(base[id].act).startsWith('ERR')).length} / 修正 ${withAct.filter(id => guardOf(fix[id].act).startsWith('ERR')).length}`);
+const differ = withAct.filter(id => guardOf(base[id].act) !== guardOf(fix[id].act));
+console.log(`通り方が違う: ${differ.map(id => `${id}(${guardOf(base[id].act)}→${guardOf(fix[id].act)})`).join(' ') || 'なし'}`);

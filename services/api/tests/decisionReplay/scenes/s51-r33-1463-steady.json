@@ -1,0 +1,13 @@
+{
+  "id": "s51-r33-1463-steady",
+  "run": "r33",
+  "seq": 1463,
+  "category": [
+    "progress"
+  ],
+  "title": "順調に進む: 歪んだ森でエンダーマン＠195,66,60（済み: have",
+  "situation": "実走33 13 分、(199,60,71)（the_nether・ネザー要塞の中）、体力 20。計画の今の節: [p3.1] 歪んだ森でエンダーマン＠195,66,60（済み: have:ender_pearl>=12）（道: エンダーパール集め）。敵 8 体（#976 enderman 17.3m (183,64,75)、#1293 zombified_piglin 23.3m (201,47,52)）。前の act: （前の結果なし）。急ぎの行は無い。",
+  "correct": "計画の今の節を進める手を、地図で通れる所にだけ出す（塞がったマス・床の無いマスへ walk しない、埋まったマスへ place しない、頭のマスを掘らずに壁の向こうへ歩かない）。同じ種類の手が続くなら手をまとめ、危険（敵・溶岩・落差・見られる所）を避ける。",
+  "hindsight": "実際の答え（本番）: 1. walk to=(201,60,71) / 2. look to=(183,66,75) / 3. wait seconds=2 / 4. attack target=enderman seconds=25 hold=true / 5. pickup onFail=continue。体の結果: act 3/5 済みで止まった（failure）。",
+  "judge": "always"
+}

@@ -1,0 +1,31 @@
+{
+  "id": "s62-r33-1446-urgent",
+  "run": "r33",
+  "seq": 1446,
+  "category": [
+    "urgent"
+  ],
+  "title": "近い敵・急ぎ: enderman #499 4.3m・下 4・見えない（間に (195,64,6",
+  "situation": "実走33 9.7 分、(195,65,60)（the_nether・ネザー要塞の脇）、体力 20。計画の今の節: [p1.2] 歪んだ幹を取る。敵 4 体（#499 enderman 4.3m (196,61,59)、#944 piglin 20.1m (198,48,50)）。前の act: （前の結果なし）。急ぎの行: enderman #499 4.3m・下 4・見えない（間に (195,64,60) netherrack）・道はある（回って来る） / 前の act は敵が近づいて止めた。",
+  "correct": "急ぎの行に従い、敵に近づかず、離れる・間にブロックを置く・囲う・食べるを先に。手は急ぎの答え方の行があればその数まで。stopIf hpBelow は今の体力より低く、待つ act には hostileWithin を付ける。地図で通れる所にだけ手を出す。",
+  "hindsight": "実際の答え（本番）: 1. craft item=warped_planks / 2. craft item=crafting_table / 3. craft item=stick。体の結果: act 0/3 済みで止まった（failure）。",
+  "judge": "always",
+  "must": [
+    {
+      "id": "answer-line",
+      "why": "急ぎの答え方の行（手は 3 つまで）に従う",
+      "check": {
+        "kind": "answerLine"
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "urgent-safe-first",
+      "why": "急ぎの先頭は 置く・食べる・持ち替える・掘る・打つ・敵から離れる",
+      "check": {
+        "kind": "urgentSafe"
+      }
+    }
+  ]
+}

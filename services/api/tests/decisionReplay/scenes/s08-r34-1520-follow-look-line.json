@@ -1,0 +1,24 @@
+{
+  "id": "s08-r34-1520-follow-look-line",
+  "run": "r34",
+  "seq": 1520,
+  "category": [
+    "stopped"
+  ],
+  "title": "live の look 行「同じ止まりが続いている: mc.view で見て別の道を」",
+  "situation": "実走34 +160 秒、(289,59,73) の岩のトンネル。直前の stops は「届かない」「一歩ではない」。live の look 行が「次の act の前に mc.view（slice か layers、radius 6〜10）で周りを広く見て、別の道・別の手を決める」と言っている。ブレイズが上 8m に 4 体。",
+  "correct": "look 行の指示どおり mc.view で周りを見るのが先（または、見られないと分かっている道で掘る）。上のブレイズに見られるマスを不用意に開けない。",
+  "hindsight": "実際の Opus は mc.view を使わず dig (289,58,73) から始め、「見られる」（ブレイズ #38）で 0/6 手止まった。",
+  "want": [
+    {
+      "id": "view-first",
+      "why": "mc.view で見る（look 行の指示）",
+      "check": {
+        "kind": "tool",
+        "in": [
+          "mc.view"
+        ]
+      }
+    }
+  ]
+}
