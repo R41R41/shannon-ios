@@ -12,6 +12,8 @@ import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js'
 import { fcaMinecraftBodyWake } from './fcaMinecraftBodyWake.js';
 import { isNativeDragonGoal } from './fcaMinecraftGoalBinding.js';
 
+/** How long the mod's 「やめる」 waits for the body's stop acknowledgement before it is answered (the stop is already asked). */
+export const OWNER_STOP_WAIT_MS = 3_000;
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
 /**
@@ -51,6 +53,8 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   log?(line: string): void;
 }): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
   admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests; voice: VoiceMinecraftPort;
+  /** The mod's 「やめる」 (`MINECRAFT_STOP_PATH`): stops the owner's unfinished body task(s) without a conversation turn. */
+  ownerStop(input: { taskId?: string }): Promise<{ stopped: string[]; open: number }>;
   /** Wakes a task that slept for a body that was not there, once the body is (`fcaMinecraftBodyWake.ts`); ticked every second by the wake. */
   bodyWake: ReturnType<typeof fcaMinecraftBodyWake> } {
   /**
@@ -94,8 +98,31 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   };
   const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
     sourceVisible: parts.sourceVisible, atomic: parts.atomic, bound: () => bound(undefined, unfinished), openRequest, spec, log });
+  /**
+   * dragon26 (the mod's 「やめる」 was said to her as 「今の作業をやめて」 and refused twice as `turn_not_visible`, so the task ran on): the stop of
+   * the owner's own button. It is the owner's body device (the route checked it) stopping the owner's tasks bound to a body, so no turn's
+   * sources are asked: `taskId` narrows it to that task (the mod shows one), none stops every unfinished one. The runtime's stop waits for the
+   * body's acknowledgement; the answer does not wait longer than `OWNER_STOP_WAIT_MS` for it (the stop itself goes on).
+   */
+  const ownerStop = async (input: { taskId?: string }): Promise<{ stopped: string[]; open: number }> => {
+    const open = bound(() => true, unfinished);
+    const targets = input.taskId ? open.filter(task => task.id === input.taskId) : open;
+    const stops = targets.map(async task => {
+      log(`Shannon Minecraft owner stop requested task=${task.id} reason=owner_ui_stop phase=${task.phase}`);
+      try {
+        const after = await parts.stop(task.id, 'owner_ui_stop');
+        log(`Shannon Minecraft owner stop settled task=${task.id} phase=${after.find(item => item.id === task.id)?.phase ?? 'unknown'}`);
+      } catch (error) {
+        log(`Shannon Minecraft owner stop failed task=${task.id} code=${error instanceof Error ? error.message.slice(0, 60) : 'unknown'}`);
+      }
+    });
+    await Promise.race([Promise.allSettled(stops), new Promise<void>(resolve => setTimeout(resolve, OWNER_STOP_WAIT_MS).unref())]);
+    if (!targets.length) log(`Shannon Minecraft owner stop found nothing task=${input.taskId ?? '-'} open=${open.length}`);
+    return { stopped: targets.map(task => task.id), open: open.length };
+  };
   return {
     voice,
+    ownerStop,
     bodyWake: fcaMinecraftBodyWake({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, log }),
     operator: operatorMinecraftRequests({ ...parts, bound: () => bound(() => true), spec }),
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {

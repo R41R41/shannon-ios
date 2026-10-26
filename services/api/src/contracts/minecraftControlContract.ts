@@ -3,6 +3,11 @@ import type { BodyActionReceipt, BodyCandidateDraft, BodyObservation, BodyOperat
 
 /** Separate from the legacy game-chat/body request contract: no planner executes on this device. */
 export const MINECRAFT_CONTROL_PATH = '/v1/body/minecraft/control';
+/**
+ * The owner's 「やめる」 in ShannonUIMod, sent by the body straight to the head's stop (dragon26 fix 4: the button went through a conversation
+ * turn and was refused twice as `turn_not_visible`). The body sends `{ taskId? }`; the answer is `{ stopped: string[]; open: number }`.
+ */
+export const MINECRAFT_STOP_PATH = '/v1/body/minecraft/stop';
 export interface MinecraftSkillDefinition {
   name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; readOnly: boolean;
   /** How long the body lets this skill run, when it says (`minecraftSkillMilliseconds`); optional. */

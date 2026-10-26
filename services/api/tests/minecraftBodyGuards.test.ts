@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { disclosureDecision, groupAudience } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
@@ -21,6 +22,7 @@ import { MINECRAFT_BODY_LIMITS } from '../src/contracts/minecraftBodyContract.js
 import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/mind/inhibition/minecraftTurnAllowance.js';
 import { SQLiteSurfaceTurnLog } from '../src/mind/action/respond/store/surfaceTurnStore.js';
 import { PLATFORM_REPLY_LIMITS } from '../src/surfaces/platform/platformReply.js';
+import { MINECRAFT_STOP_PATH } from '../src/contracts/minecraftControlContract.js';
 import { createMinecraftBodyWiring, gameBodyMayCall } from '../src/wiring/serverMinecraftBodyWiring.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { readApiSource } from './support/sources.js';
@@ -92,6 +94,32 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     expect(wiring.refusesConsole(request('GET', 'Bearer app'), sent().response, devices)).toBe(false);
     wiring.close();
     store.close();
+  });
+
+  it('answers the 「やめる」 of the mod (POST /v1/body/minecraft/stop) for the body device only, with a closed input (dragon26 fix 4)', async () => {
+    const path = databasePath();
+    const wiring = createMinecraftBodyWiring({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION }, path);
+    const post = (body: string, who = DEVICE, method = 'POST') => {
+      const done: { status?: number; body?: unknown } = {};
+      const response = { writeHead: (status: number) => { done.status = status; }, end: (text: string) => { done.body = JSON.parse(text); } } as unknown as ServerResponse;
+      const incoming = Object.assign(Readable.from(body ? [Buffer.from(body)] : []), { method, headers: { authorization: '' } }) as unknown as IncomingMessage;
+      return wiring.serve(incoming, response, MINECRAFT_STOP_PATH, principal(who)).then(handled => ({ handled, ...done }));
+    };
+    expect(await post('{}')).toMatchObject({ handled: true, status: 503, body: { error: 'FCA_BODY_NOT_ENABLED' } });
+    const asked: unknown[] = [];
+    wiring.connectControl({ control: { latest: () => null } as never, intent: async () => ({ kind: 'none', goal: '' }),
+      stop: async input => { asked.push(input); return { stopped: input.taskId ? [input.taskId] : [], open: 1 }; } });
+    expect(await post('{"taskId":"task-1"}')).toMatchObject({ handled: true, status: 200, body: { stopped: ['task-1'], open: 1 } });
+    expect(await post('')).toMatchObject({ status: 200, body: { stopped: [], open: 1 } });
+    expect(asked).toEqual([{ taskId: 'task-1' }, {}]);
+    expect(await post('{"taskId":"a b"}')).toMatchObject({ status: 400, body: { error: 'MINECRAFT_STOP_INPUT_INVALID' } });
+    expect(await post('[1]')).toMatchObject({ status: 400 });
+    expect(await post('{bad')).toMatchObject({ status: 400 });
+    expect(await post('{}', DEVICE, 'GET')).toMatchObject({ status: 405 });
+    // Another device of the owner is not her body (the same answer as the control route gives).
+    expect(await post('{}', 'owner-iphone')).toMatchObject({ handled: true, status: 403, body: { error: 'FCA_BODY_DEVICE_DENIED' } });
+    expect(asked).toHaveLength(2);
+    wiring.close();
   });
 
   it('without SHANNON_MINECRAFT_BODY_JSON holds no device back', async () => {

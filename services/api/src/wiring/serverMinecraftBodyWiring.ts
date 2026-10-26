@@ -1,6 +1,6 @@
 import { MINECRAFT_LIFECYCLE_PATH } from '../contracts/minecraftLifecycleContract.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
-import { MINECRAFT_CONTROL_PATH } from '../contracts/minecraftControlContract.js';
+import { MINECRAFT_CONTROL_PATH, MINECRAFT_STOP_PATH } from '../contracts/minecraftControlContract.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftBodyDependencies } from '../surfaces/minecraft/minecraftBody.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -43,7 +43,9 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
-    admission?: MinecraftBodyDependencies['fcaAdmission'] } | null = null;
+    admission?: MinecraftBodyDependencies['fcaAdmission'];
+    /** The mod's 「やめる」, straight to the stop of the owner's body task(s) (`MINECRAFT_STOP_PATH`). */
+    stop?(input: { taskId?: string }): Promise<{ stopped: string[]; open: number }> } | null = null;
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
@@ -109,6 +111,28 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
           const input = await readJson(request, 1024 * 1024);
           try { sendJson(response, 200, common.control.poll(principal, input)); }
           catch { sendJson(response, 400, { error: 'FCA_BODY_POLL_INVALID' }); }
+        }
+        return true;
+      }
+      if (path === MINECRAFT_STOP_PATH) {
+        if (request.method !== 'POST') sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+        else if (!principal || !isGameBody(principal) || principal.scopeKey !== configuration?.ownerScopeKey) {
+          sendJson(response, 403, { error: 'FCA_BODY_DEVICE_DENIED' });
+        } else if (!common?.stop) sendJson(response, 503, { error: 'FCA_BODY_NOT_ENABLED' });
+        else {
+          let taskId: unknown;
+          let valid = true;
+          try {
+            const input = await readJson(request, 4 * 1024);
+            if (input !== undefined && (!input || typeof input !== 'object' || Array.isArray(input))) valid = false;
+            else taskId = (input as { taskId?: unknown } | undefined)?.taskId;
+          } catch { valid = false; }
+          const shaped = taskId === undefined || (typeof taskId === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/u.test(taskId));
+          if (!valid || !shaped) sendJson(response, 400, { error: 'MINECRAFT_STOP_INPUT_INVALID' });
+          else {
+            try { sendJson(response, 200, await common.stop(taskId === undefined ? {} : { taskId: taskId as string })); }
+            catch { sendJson(response, 500, { error: 'MINECRAFT_STOP_FAILED' }); }
+          }
         }
         return true;
       }

@@ -164,6 +164,33 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     });
   });
 
+  it('stops the owner\'s unfinished body task from the mod\'s 「やめる」 whatever its turn shows, naming the task or not (dragon26 fix 4)', async () => {
+    const lines: string[] = [], f = fixture();
+    let visibleTurn = true;
+    const api = fcaMinecraftRequests({ runtime: f.runtime, control: f.control, conversation: f.conversation, visible: createFcaSourceGuard({ runtime: f.runtime, state: f.state, conversations: f.conversations,
+      ownerScope: 'owner', ownerAlone: () => false }), ownerScope: 'owner',
+      ownerAlone: () => false, sourceVisible: () => visibleTurn, stop: async (id, reason) => { lines.push(`stop ${reason}`); return f.runtime.stop('owner', id, reason); },
+      atomic: work => underWriteLock(f.db, null, '', work, 'minecraft_test'), log: line => lines.push(line) });
+    const made = (await f.api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'asking-turn', intent: { kind: 'task', goal: 'Find stone' } }))!;
+    const id = made.request!.id;
+    // The same call that the in-game words 「今の作業をやめて」 would make is refused here, as it was on 2026-10-26.
+    visibleTurn = false; f.source(false);
+    expect(await api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'asking-turn', intent: { kind: 'stop', goal: '' } })).toMatchObject({ reason: 'others_present' });
+    // The button needs neither the turn, the source guard nor the owner being alone: only that the task is the owner's and bound to a body.
+    expect(await api.ownerStop({ taskId: 'not-this-one' })).toEqual({ stopped: [], open: 1 });
+    expect(f.runtime.get('owner', id)?.phase).not.toBe('stopped');
+    expect(await api.ownerStop({ taskId: id })).toEqual({ stopped: [id], open: 1 });
+    expect(f.runtime.get('owner', id)?.phase).toBe('stopped');
+    expect(lines).toEqual(expect.arrayContaining(['stop owner_ui_stop', `Shannon Minecraft owner stop requested task=${id} reason=owner_ui_stop phase=ready`,
+      `Shannon Minecraft owner stop found nothing task=not-this-one open=1`]));
+    // Nothing unfinished is left: stopping again finds nothing and stops nothing.
+    expect(await api.ownerStop({})).toEqual({ stopped: [], open: 0 });
+    // A task that only touched the body is stopped too when no id is named (the button stops what the body is doing), never another owner's.
+    const other = f.runtime.createChild('owner', f.root.id, { title: 'research', goal: 'research', completionCriteria: 'other' }, 'other-task');
+    expect(f.bodyStore.bind(other.id, 'minecraft:world')).toBe(true);
+    expect((await api.ownerStop({})).stopped).toEqual([other.id]);
+  });
+
   // The real wiring (`sources: 'asking'`) under the switch as the server wires it (`serverFcaWiring.ts`): on, the in-game request
   // inherits only its own asking turn; off, the root's whole accumulated set as before.
   it.each([[true], [false]])('a game-chat task inherits only its asking turn when the switch is %s, not the root\'s accumulated sources', async on => {

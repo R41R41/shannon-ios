@@ -24,6 +24,18 @@ const SOURCE_WALK_LIMIT = 5000;
 /** How many ids and edges a walk of sources goes through between two of its steps (`memorySteps.ts`). */
 const SOURCE_STEP_WORK = 8_192;
 
+/**
+ * A thread message's source turn, or none. dragon26 (2026-10-26, fix 4): a message of her own initiative (a reach-out, an announcement, a study showing)
+ * is stored with the source `initiative:<id>`, which names no turn. Every walk here asked for that "turn" as an experience, found none and called the whole
+ * thread summary invisible, so every turn that recalled a long thread (96 messages, two of hers) was invisible, and so was every knowledge document and every
+ * later turn that rested on one: the owner's 「やめる」 and 「今の作業をやめて」 were refused as `turn_not_visible` for that reason alone. Her own message
+ * has no turn lineage to check (the withholding of a thread summary already judges its text, its recalled memories and its read sources: `memoryVisibility.ts`
+ * does not look for a turn behind it either); any other source that is no experience is still unknown, and closed.
+ */
+const INITIATIVE_SOURCE = /^initiative:/u;
+const turnSource = (message: { sourceExperienceId?: string | null }): string | undefined =>
+  message.sourceExperienceId && !INITIATIVE_SOURCE.test(message.sourceExperienceId) ? message.sourceExperienceId : undefined;
+
 /** A fact, relationship or promise by its id: the first of those in this order that has it (what a `find` over the three lists gave). */
 function scalarIndex(state: CompanionStateSnapshot): ReadonlyMap<string, { sourceExperienceId?: string | null }> {
   const rows = new Map<string, { sourceExperienceId?: string | null }>();
@@ -113,7 +125,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
       if (experience) return experience.recalledMemoryIds ?? [];
       if (id.startsWith('thread:')) {
         const messages = store.threadSummaryLineage?.(scope, id.slice(7))?.messages ?? [];
-        return messages.flatMap(message => message.sourceExperienceId ? [message.sourceExperienceId] : []);
+        return messages.flatMap(message => turnSource(message) ? [turnSource(message)!] : []);
       }
       if (id.startsWith('knowledge:')) return knowledge?.listShannonKnowledge(scope).find(row => row.id === id.slice(10))?.sourceExperienceIds ?? [];
       const scalar = [...state.userFacts, ...state.relationships, ...state.prospectiveMemories].find(row => row.id === id);
@@ -151,7 +163,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         if (id.startsWith('thread:')) {
           const lineage = store.threadSummaryLineage?.(scope, id.slice(7));
           return Boolean(lineage) && !withheld.withholdsThreadSummary(id.slice(7)) && lineage!.messages.every(message =>
-            !message.sourceExperienceId || lineageVisible(message.sourceExperienceId, seen));
+            !turnSource(message) || lineageVisible(turnSource(message)!, seen));
         }
         if (id.startsWith('knowledge:')) {
           const doc = knowledge?.listShannonKnowledge(scope).find(row => row.id === id.slice(10));
@@ -247,7 +259,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
         const thread = id.slice(7), lineage = store.threadSummaryLineage?.(scope, thread);
         if (!lineage || !gate.allowsThreadSummary(thread) || withheld.withholdsThreadSummary(thread)) continue;
         summary = store.threadSummary(scope, thread); at = lineage.updatedAt ?? '';
-        if (lineage.messages.some(message => message.sourceExperienceId && !lineageVisible(message.sourceExperienceId))) continue;
+        if (lineage.messages.some(message => turnSource(message) && !lineageVisible(turnSource(message)!))) continue;
         applicability = 'conversation summary; original messages remain the evidence';
       } else if (id.startsWith('knowledge:')) {
         provenanceKind = 'knowledge';
@@ -324,7 +336,7 @@ export function createTaskMemory(parts: TaskMemoryParts): TaskMemory {
   const sourceEdges = (scope: string, id: string, experienceOf: (id: string) => ShannonExperience | null, state: CompanionStateSnapshot,
     scalars: ReadonlyMap<string, { sourceExperienceId?: string | null }>): readonly string[] => {
     if (id.startsWith('thread:')) return (parts.conversations.threadSummaryLineage?.(scope, id.slice(7))?.messages ?? [])
-      .flatMap(message => message.sourceExperienceId ? [message.sourceExperienceId] : []);
+      .flatMap(message => turnSource(message) ? [turnSource(message)!] : []);
     if (id.startsWith('knowledge:')) return knowledge?.listShannonKnowledge(scope).find(row => row.id === id.slice(10))?.sourceExperienceIds ?? [];
     const recalled = experienceOf(id)?.recalledMemoryIds ?? [], scalar = scalars.get(id);
     return scalar?.sourceExperienceId && !memoryControlFor(state, id)?.overrideText ? [...recalled, scalar.sourceExperienceId] : recalled;
