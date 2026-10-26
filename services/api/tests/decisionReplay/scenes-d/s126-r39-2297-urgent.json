@@ -1,0 +1,31 @@
+{
+  "id": "s126-r39-2297-urgent",
+  "run": "r39",
+  "seq": 2297,
+  "category": [
+    "urgent"
+  ],
+  "title": "近い敵・急ぎ: #2612 creeper 8.6m (21,40,3) 西3・北8・下1・見え",
+  "situation": "実走39 18.1 分、(24,41,11)（overworld）、体力 20。計画の今の節: [p6] 地下のベッドを取る。敵 3 体（#2710 zombie 9.5m (27,40,2) 東3・北9・下1・壁の向こうで届かない、#2711 skeleton 10.6m (17,44,4) 西7・北7・上3・壁の向こうで届かない・飛び道具）。前の act: （前の結果なし）。急ぎの行: #2612 creeper 8.6m (21,40,3) 西3・北8・下1・見えない（間に (24,42,10) stone ほか 7）・道はある（回って来る）（爆発は約7m まで届く）。",
+  "correct": "急ぎの行に従い、敵に近づかず、離れる・間にブロックを置く・囲う・食べるを先に。手は急ぎの答え方の行があればその数まで。stopIf hpBelow は今の体力より低く、待つ act には hostileWithin を付ける。地図で通れる所にだけ手を出す。",
+  "hindsight": "実際の答え（本番）: 1. craft item=dark_oak_planks / 2. craft item=shield / 3. craft item=iron_helmet / 4. equip item=iron_helmet / 5. equip item=shield。体の結果: act 1/3 済みで止まった（failure）。",
+  "judge": "always",
+  "must": [
+    {
+      "id": "answer-line",
+      "why": "急ぎの答え方の行（手は 3 つまで）に従う",
+      "check": {
+        "kind": "answerLine"
+      }
+    }
+  ],
+  "want": [
+    {
+      "id": "urgent-safe-first",
+      "why": "急ぎの先頭は 置く・食べる・持ち替える・掘る・打つ・敵から離れる",
+      "check": {
+        "kind": "urgentSafe"
+      }
+    }
+  ]
+}

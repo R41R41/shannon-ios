@@ -1,0 +1,13 @@
+{
+  "id": "s116-r39-2208-after-stop",
+  "run": "r39",
+  "seq": 2208,
+  "category": [
+    "stopped"
+  ],
+  "title": "止まった直後: （前の結果なし）",
+  "situation": "実走39 1 分、(9,65,-5)（overworld）、体力 20。計画の今の節: [p1] 原木を集める（済む条件: have:log>=8／今: 未: log 4/8）＠9,72,-3。敵 2 体（#700 skeleton 32.1m (24,37,0) 東15・南5・下28・飛び道具、ほか 15 体（zombie 5・enderman 1・skeleton（飛び道具） 6・creeper 3。いちばん近い: zombie 24.2m・下 22））。前の act: （前の結果なし）。急ぎの行は無い。",
+  "correct": "直前に止まった手（5 craft 止 無い: wooden_pickaxe は作業台が要る。手の届く所（5m）に作業台が無い（48m 内に無い））と同じ手を同じまま出さない。返った行と地図で原因を直す（頭の高さが固いなら先に dig、床が無ければ先に place、届かないなら歩いて近づく）。地図で通れる所にだけ手を出す。",
+  "hindsight": "実際の答え（本番）: 1. place at=(10,65,-5) block=crafting_table / 2. craft item=dark_oak_planks / 3. craft item=wooden_pickaxe / 4. craft item=wooden_sword。体の結果: act 0/4 済みで止まった（failure）。",
+  "judge": "always"
+}

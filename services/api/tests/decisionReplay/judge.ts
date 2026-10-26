@@ -20,6 +20,8 @@ const SYSTEM = [
   '- ×: 条件に反する手、直前に止まった手のくり返し、危険（落ちる・射線に残る・敵に近づく）、体に通らない手。',
   '「実際に起きたこと」は、本番で別の答えを出した時の後知恵です。それが正解とは限らず、候補が違う手でも条件を満たせば ○ です。',
   '自動検査の欄は機械が先に見た事実です（通った／外れた）。座標・地図の細かい読みは、状況の文にある事実だけを根拠にしてください。',
+  '答えに pre・done・repeat・replace の欄があれば、それは体の「やることの列」の欄です。pre: 項目を始める直前に体が確かめる条件（満たさなければ始めず後ろも捨てる）。'
+    + 'done: 満たした所で手の途中でも済みにする条件。repeat: 手の組を最大その回数まわす（rel の手の組なら足の位置から数え直す）。これらを使うかどうかは採点の対象ではありません。使った場合は、意味どおりに働いて場面の要を満たすかで見てください。',
   '理由は 40 字以内の日本語で。grade ツールだけを 1 回呼んでください。',
 ].join('\n');
 const TOOL: Anthropic.Tool = { name: 'grade', description: '各候補の採点を出す。',
@@ -35,13 +37,22 @@ export function handLine(hand: Hand): string {
   if (hand.at && !Array.isArray(hand.at)) bits.push(`at=${JSON.stringify(hand.at).slice(0, 60)}`);
   else if (hand.at?.length) bits.push(`at=${hand.at.slice(0, 4).map(pos).join('')}${hand.at.length > 4 ? `…×${hand.at.length}` : ''}`);
   for (const name of ['block', 'item', 'target', 'tool', 'seconds', 'n', 'hold', 'exposeOk', 'face', 'op', 'on', 'onFail'] as const) if (hand[name] !== undefined) bits.push(`${name}=${String(hand[name])}`);
+  if ((hand as { rel?: unknown }).rel === true) bits.push('rel（座標は足からの差）');
   return `${hand.do} ${bits.join(' ')}`.trim();
+}
+const conditionMod = await import('../../src/contracts/' + 'minecraftActCondition.js').catch(() => null) as { conditionText?: (value: unknown) => string } | null;
+const conditionOf = (value: unknown): string => { try { return conditionMod?.conditionText?.(value as never) ?? JSON.stringify(value); } catch { return JSON.stringify(value); } };
+/** 列の版の欄（pre・done・repeat・replace）。基準の木には無いので、あれば出す。 */
+function queueFields(input: Record<string, unknown>): string[] {
+  return [input.pre !== undefined ? `  pre（始める前に体が確かめる）=${conditionOf(input.pre)}` : '', input.done !== undefined ? `  done（満たしたら済み）=${conditionOf(input.done)}` : '',
+    input.repeat !== undefined ? `  repeat=${String(input.repeat)}（手の組を最大この回数まわす）` : '', input.replace !== undefined ? `  replace=${JSON.stringify(input.replace)}` : ''].filter(Boolean);
 }
 export function answerText(answer: Answer): string {
   if (!answer.tool) return '（道具の呼び出しなし）';
   if (answer.tool !== 'mc.act') return `${answer.tool} ${JSON.stringify(answer.input).slice(0, 220)}`;
   return [`mc.act why="${answer.why ?? ''}"`, ...answer.hands.map((hand, index) => `  ${index + 1}. ${handLine(hand)}`),
-    answer.stopIf ? `  stopIf=${JSON.stringify(answer.stopIf)}` : '', answer.accept?.length ? `  accept=${answer.accept.join(',')}` : ''].filter(Boolean).join('\n');
+    answer.stopIf ? `  stopIf=${JSON.stringify(answer.stopIf)}` : '', answer.accept?.length ? `  accept=${answer.accept.join(',')}` : '',
+    ...queueFields((answer.input ?? {}) as Record<string, unknown>)].filter(Boolean).join('\n');
 }
 
 export interface Candidate { key: string; variant: string; rep: number | 'prod'; answer: Answer; score: Score }

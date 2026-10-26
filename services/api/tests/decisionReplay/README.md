@@ -126,3 +126,9 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 候補 = shannon-ios `codex/shannon/mc-sonnet-guards`（測ったのは 8993dc7）。版は `sonnet26.ts`（O・S・B2・C、切り分けの A1・A2）。回すのは `run6.ts --model=claude-sonnet-5-5 --variant=C --out=g26-C-a.jsonl`（`DECISION_REPLAY_FORBID=fixed` で古い計画の木に点検の節の禁止の決まりを足す台の側の直し。基準 S は前回の `sn-S.jsonl`）、採点は `judge26.ts --out=judge26.jsonl`（2 回目は `--force --out=judge26b.jsonl`）、表は `report26.ts [--judge=judge26b.jsonl]`、切り分けは `abl26.ts judge26c.jsonl`。
 - 守りの照合（API を使わない）: `guards26.ts`（記録の答えに今の src の守りをかける）、`heldAudit26.ts`（止めた手を止めずに送った場合の検査）、`seenLeak26.ts`・`ownMiss26.ts`・`lava26.ts`。
 - 結果のまとめ: `results/sonnet-guards-20261026.md`。
+
+## 10/26 の追加 (3): 列の版（mc-task-queue）の確かめ
+
+- 10/26 の動作確認の実走（dragon26）を r39 として読む: `ingest39.ts <フォルダ>` が data/export5.txt を作る（`load.ts`・`allRuns.ts` に r39）。場面は `makeScenes39.ts`（`DECISION_REPLAY_SCENES_DIR=scenes-d`、`list39.ts`・`flags39.ts` は選ぶ時の一覧）。`checks.ts` の `answerOf` は、短い書き方の行（rel52 以降の本番の答え）を手に戻してから読む。
+- 基準の木（fb011ad）と候補の木（566abe5）にこのフォルダを写して、それぞれで `run6.ts --variant=B|Q` を回す。候補の live には `candidateAdapter.ts` の `withQueue` が「列: 空」の行を足す。採点は候補の木で `judgeQ.ts`、表は `reportQ.ts`。版と場面は `sonnetQ.ts`。
+- 結果のまとめ: `results/task-queue-20261026.md`。

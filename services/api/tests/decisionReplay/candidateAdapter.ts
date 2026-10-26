@@ -42,6 +42,27 @@ function withForbid(live: Record<string, any>): Record<string, any> {
   }
   return { ...live, plan: { ...plan, rules } };
 }
+/**
+ * 10/26 mc-task-queue: 列の版（queueLines がある木）の live は、planNow・road・meter の次に `queue`（列の行）を持つ。台は 1 判断ずつなので、
+ * 列は「空（体は止まっている）」の 1 行だけを足す（実行中の項目を作り出さない: 記録の判断は前の act の結果が出た後で、その時の列は空だった）。
+ * 基準の木（queueLines が無い）は何もしない。
+ */
+const dynamicQueue = (path: string): Promise<Record<string, any> | null> => import(path).catch(() => null);
+const queueWords = await dynamicQueue('../../src/surfaces/minecraft/' + 'minecraftLlmcQueueWords.js');
+export const hasQueueTree = !!queueWords?.queueLines;
+function withQueue(live: Record<string, any>): Record<string, any> {
+  const body = live.body as Record<string, any> | undefined;
+  if (!hasQueueTree || !body || body.queue) return live;
+  const lines: string[] = queueWords!.queueLines([], null, { progress: null, leftMs: 0 });
+  const next: Record<string, any> = {};
+  const after = ['meter', 'road', 'planNow'].find(key => key in body);
+  for (const [key, value] of Object.entries(body)) {
+    next[key] = value;
+    if (key === after) next.queue = lines;
+  }
+  if (!after) next.queue = lines;
+  return { ...live, body: next };
+}
 const fixedCache = new Map<string, Promise<CandidateFixed>>();
 /** 要求の固定部分（system 2 ブロックと道具）。run の core（道具の定義）ごとに 1 回。 */
 export function candFixed(core: readonly FcaToolDefinition[]): Promise<CandidateFixed> {
@@ -78,8 +99,8 @@ function withStage(entries: readonly Entry[], stage: string, full: boolean): Ent
 function liveOfDecision(live: Record<string, unknown>, tree?: unknown): { live: Record<string, unknown>; notes: unknown; stage: string | null } {
   const rebuilt = rebuiltLive(live as Record<string, any>);
   // 書き直し前の記録の live: 周りの行（止まった手の周り）の取り出しは書き直しの前に（書き直しが座標つきに直す）。
-  if (!rebuilt) { const made = candidateLive(withNewLastResults(live as Record<string, any>)); return { ...made, live: withForbid(withRoad(withStateWords(made.live as Record<string, any>), tree)) }; }
-  return { live: withForbid(withRoad(rebuilt, tree)), notes: { rebuilt: true }, stage: candidateStage(live) ?? null };
+  if (!rebuilt) { const made = candidateLive(withNewLastResults(live as Record<string, any>)); return { ...made, live: withQueue(withForbid(withRoad(withStateWords(made.live as Record<string, any>), tree))) }; }
+  return { live: withQueue(withForbid(withRoad(rebuilt, tree))), notes: { rebuilt: true }, stage: candidateStage(live) ?? null };
 }
 /** 記録の状態メッセージに残る段の知識（本番がその時付けた物）を外す。台が、この木の版の段の知識を付け直す。 */
 function withoutStored(entries: readonly Entry[]): Entry[] {

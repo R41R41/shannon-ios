@@ -1,5 +1,6 @@
 import { llmcPrepare } from '../../src/surfaces/minecraft/minecraftLlmc.js';
 import { MC_ACT_TOOL } from '../../src/contracts/minecraftActContract.js';
+import { expandShortAct } from '../../src/contracts/minecraftActShortContract.js';
 import type { Decision } from './load.js';
 import { denormalizeMap } from './liveRebuild.js';
 
@@ -16,8 +17,9 @@ export interface Answer { /** 部分送りの組（送った前の手 + 聞き�
 export function answerOf(content: Array<Record<string, any>>): Answer {
   const use = content.find(block => block.type === 'tool_use');
   const tool = use ? String(use.name).replace(/^mc_/, 'mc.').replace(/^plan_/, 'plan.').replace(/^fca_/, 'fca_') : null;
-  const input = use?.input ?? {};
   const act = use && use.name === 'mc_act';
+  // 10/26: 実走39（rel52 以降の記録）の本番の mc.act は短い書き方の行（hands が文字）。台は手の JSON で読むので、行を手に戻してから読む。
+  const input = act ? (expandShortAct(use?.input ?? {}).input as Record<string, any>) : (use?.input ?? {});
   const prepared = act ? llmcPrepare(MC_ACT_TOOL, input) : null;
   return { tool, input, hands: act && Array.isArray(input.hands) ? input.hands as Hand[] : [], stopIf: act ? input.stopIf : undefined, accept: act ? input.accept : undefined,
     why: typeof input.why === 'string' ? input.why : undefined, shapeProblem: prepared?.problem ?? null };
