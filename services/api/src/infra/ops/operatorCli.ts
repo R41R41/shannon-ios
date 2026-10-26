@@ -14,6 +14,8 @@ export const OPERATOR_CLI_USAGE = [
   '  opsCli.ts minecraft status',
   '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] <goal...>',
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
+  '  opsCli.ts minecraft budget --operator <label> (<task-id> | --latest) <yen>',
+  '      (change a running request\'s yen cap, from its next decision on; not below what it has used, not above the request cap)',
   '  opsCli.ts minecraft <start|stop|login|logout|set_day> --operator <label> [--server <id>]',
   '  opsCli.ts minecraft start --operator <label> [--server <id>] [--keep-world]',
   '      (--keep-world: keep the current world even while the owner\'s 新しいワールドで始める switch is on)',
@@ -109,6 +111,15 @@ function cancelEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   return { ...base, args: { taskId: parsed.positional[0] } };
 }
 
+/** `budget <task-id> <yen>` or `budget --latest <yen>`: the yen is a whole number here; the API refuses 0 and anything over the cap, and audits it. */
+function budgetEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
+  knownFlags(parsed, ['--operator', '--latest']);
+  const latest = parsed.flags.get('--latest') === true;
+  if (parsed.positional.length !== (latest ? 1 : 2)) throw new UsageError('budget takes (<task-id> | --latest) and the new yen cap');
+  const budgetYen = whole(parsed.positional[parsed.positional.length - 1], 'the budget');
+  return { ...base, args: { ...(latest ? { latest: true } : { taskId: parsed.positional[0] }), budgetYen } };
+}
+
 function lifecycleEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   knownFlags(parsed, base.op === 'start' ? ['--operator', '--server', '--keep-world'] : ['--operator', '--server']);
   if (parsed.positional.length) throw new UsageError(`${base.op} takes no words, only --server`);
@@ -148,6 +159,7 @@ export function operatorEnvelope(argv: readonly string[], env: Readonly<Record<s
   if (domain !== 'minecraft') return { ...base, args: {} };
   if (op === 'request') return requestEnvelope(base, parsed);
   if (op === 'cancel') return cancelEnvelope(base, parsed);
+  if (op === 'budget') return budgetEnvelope(base, parsed);
   return lifecycleEnvelope(base, parsed);
 }
 
@@ -167,7 +179,10 @@ function status(path: string, io: OperatorCliIo, deps: OperatorCliDeps): number 
     return 1;
   }
   io.out(`open operator requests: ${inspection.open.length}`);
-  for (const row of inspection.open) io.out(`  ${auditLine(row)}`);
+  for (const row of inspection.open) {
+    const changed = row.taskId ? inspection.changedBudgets?.[row.taskId] : undefined;
+    io.out(`  ${auditLine(row)}${changed === undefined ? '' : `  yen_now=${changed}`}`);
+  }
   io.out(`recent audit (${inspection.recent.length}):`);
   for (const row of inspection.recent) io.out(`  ${auditLine(row)}`);
   return 0;

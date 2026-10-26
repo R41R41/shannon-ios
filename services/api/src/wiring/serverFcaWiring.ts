@@ -279,6 +279,7 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const operator = parts.operator ? startOperatorMinecraft({ ...parts.operator, audit: operatorAudit, path: parts.path, scopeKey: parts.ownerScope,
       now: parts.now ?? (() => new Date().toISOString()), ownerAlone: parts.ownerAlone, log: line => console.log(line),
       requests: minecraft && requests ? { ...requests.operator, wake } : null, bodyRecheck: minecraft?.recheck ?? null,
+      spentYen: id => budgetStore.usedYen(id),
       talkNotes: operatorTalkNotes(values) }) : null;
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
       localTime: () => ownerLocalClock(new Date(), timeZone), requester: operatorRequester(operatorAudit, parts.ownerScope),

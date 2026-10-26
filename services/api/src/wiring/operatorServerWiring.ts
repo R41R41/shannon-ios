@@ -77,6 +77,8 @@ export interface OperatorServerParts extends OperatorHostParts {
   requests: (OperatorMinecraftRequests & { wake(): void }) | null;
   /** The body re-check (`minecraftBodyRecheckWiring.ts`), when Minecraft is on: `minecraft release` asks it to check again now. */
   bodyRecheck?: Pick<MinecraftBodyRecheck, 'request'> | null;
+  /** What a task has used in yen (confirmed and estimated), for `minecraft budget`'s refusal to lower a cap below it. */
+  spentYen?(taskId: string): number;
   /** `SHANNON_OPERATOR_TALK_NOTES` (`operatorTalkNotes`): whether an operator's action is also noted in the owner's Talk. */
   talkNotes?: boolean;
   log(line: string): void;
@@ -112,6 +114,7 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
     scopeKey: parts.scopeKey, enabled: () => audit.enabled, ownerAlone: parts.ownerAlone, now: parts.now, audit: audit.store,
     lifecycle: parts.lifecycle?.operator ?? null, requests: parts.requests, actions: parts.actions, bodyRecheck: parts.bodyRecheck ?? null,
     lifecycleUnresolved: () => parts.lifecycle?.service.store.unresolved() ?? false, skillImport: parts.skillImport ?? null,
+    ...(parts.spentYen ? { spentYen: parts.spentYen } : {}),
     activity: recorder(parts),
     note: (id, text, at) => {
       // Owner 2026-10-19: a quarter of her lines in a week were these notices. They stay in the audit and the activity record

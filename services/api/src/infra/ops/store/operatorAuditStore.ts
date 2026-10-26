@@ -22,6 +22,13 @@ export interface OperatorAuditRow extends Required<Omit<OperatorAuditDraft, 'act
 
 const text = (value: unknown): string | null => value === null || value === undefined ? null : String(value);
 
+/** The yen of the newest accepted `minecraft budget` row of a task (2026-10-26), or null when the operator never changed its cap. */
+function budgetChange(db: DatabaseSync, taskId: string): number | null {
+  const found = db.prepare(`SELECT budget_yen FROM operator_audit WHERE task_id=? AND command='budget' AND event='accepted'
+    AND budget_yen IS NOT NULL ORDER BY sequence DESC LIMIT 1`).get(taskId);
+  return found ? Number(found.budget_yen) : null;
+}
+
 function row(value: Record<string, unknown>): OperatorAuditRow {
   return Object.freeze({
     sequence: Number(value.sequence), eventId: String(value.event_id), operationId: String(value.operation_id), scopeKey: String(value.scope_key),
@@ -99,11 +106,16 @@ export class OperatorAuditStore {
     return Number(found?.count ?? 0);
   }
 
-  /** The per-task yen cap the operator asked for, or null for any task it did not start. */
+  /**
+   * The per-task yen cap in force for a request the operator started, or null for any task it did not start. The one resolution of
+   * that cap (the budget check, `minecraft budget`'s own refusals and the CLI's status all read it here): the newest accepted
+   * `budget` row's yen when the operator changed it since, else the request's own `--budget-yen`. The request's row is never written over.
+   */
   budgetYen(taskId: string): number | null {
     const found = this.db.prepare(`SELECT budget_yen FROM operator_audit WHERE task_id=? AND command='request' AND event='accepted'
       ORDER BY sequence LIMIT 1`).get(taskId);
-    return found && found.budget_yen !== null ? Number(found.budget_yen) : null;
+    if (!found) return null;
+    return budgetChange(this.db, taskId) ?? (found.budget_yen !== null ? Number(found.budget_yen) : null);
   }
 
   /** Accepted invocations of the last hour (the rate limit counts the record, so a restart does not reset it). */
@@ -137,6 +149,8 @@ export interface OperatorAuditInspection {
    * by any other path (completed, failed, retired, cancelled or stopped: `agent_tasks` is the authority, the audit is not).
    */
   open: OperatorAuditRow[];
+  /** The cap now in force of each open request the operator changed (`minecraft budget`), by task id; the request's own row keeps its first. */
+  changedBudgets?: Record<string, number>;
 }
 
 /**
@@ -147,19 +161,25 @@ export function inspectOperatorAudit(path: string, now: string, limit = 10): Ope
   const db = openDatabase(path, 'readOnly');
   try {
     const recorded = appliedSchemaSteps(db).find(step => step.id === OPERATOR_AUDIT_STEP.id);
-    if (!recorded) return { step: 'missing', recent: [], open: [] };
+    if (!recorded) return { step: 'missing', recent: [], open: [], changedBudgets: {} };
     const step = recorded.checksum === schemaStepChecksum(OPERATOR_AUDIT_STEP) ? 'applied' : 'changed';
     const read = (sql: string, ...values: Array<string | number>) => db.prepare(sql).all(...values).map(value => row(value as Record<string, unknown>));
     const since = new Date(Date.parse(now) - 48 * 3600_000).toISOString();
     // 2026-10-14: a request whose task failed by itself (no operator cancel) stayed "open"; the task's own status closes it.
     const ended = tableExists(db, 'agent_tasks') ? `AND NOT EXISTS (SELECT 1 FROM agent_tasks t WHERE t.task_id=a.task_id
         AND (t.status IN ('completed','failed','cancelled') OR (t.status='paused' AND t.pause_reason='fca_stopped')))` : '';
+    const open = read(`SELECT a.* FROM operator_audit a WHERE a.command='request' AND a.event='accepted' AND a.occurred_at>=?
+        AND NOT EXISTS (SELECT 1 FROM operator_audit b WHERE b.task_id=a.task_id AND b.event IN ('stopped','time_limit')) ${ended}
+        ORDER BY a.sequence DESC LIMIT 20`, since);
+    const changedBudgets: Record<string, number> = {};
+    for (const request of open) {
+      const changed = request.taskId ? budgetChange(db, request.taskId) : null;
+      if (request.taskId && changed !== null) changedBudgets[request.taskId] = changed;
+    }
     return {
       step,
       recent: read('SELECT * FROM operator_audit ORDER BY sequence DESC LIMIT ?', Math.max(1, Math.min(200, Math.trunc(limit)))),
-      open: read(`SELECT a.* FROM operator_audit a WHERE a.command='request' AND a.event='accepted' AND a.occurred_at>=?
-        AND NOT EXISTS (SELECT 1 FROM operator_audit b WHERE b.task_id=a.task_id AND b.event IN ('stopped','time_limit')) ${ended}
-        ORDER BY a.sequence DESC LIMIT 20`, since),
+      open, changedBudgets,
     };
   } finally {
     db.close();

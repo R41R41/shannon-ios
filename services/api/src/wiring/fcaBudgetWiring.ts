@@ -85,8 +85,9 @@ export function fcaBudget(options: {
   /** Whether the task is a Minecraft request the owner made, as admitted (`admittedMinecraftRequest`); absent, no task is. */
   minecraftRequest?(task: TaskView): boolean;
   /**
-   * A lower yen cap for one admitted Minecraft request, or null: the operator's `--budget-yen` (2026-10-14). It only lowers the
-   * request's cap, never raises it, and touches no other task.
+   * A lower yen cap for one admitted Minecraft request, or null: the operator's cap, which is its `--budget-yen` (2026-10-14) or the
+   * newest `minecraft budget` change to it (2026-10-26; `OperatorAuditStore.budgetYen`, read at every check, so a change holds from the
+   * task's next decision). It only lowers the request's cap (an operator may not raise it above the request cap), and touches no other task.
    */
   taskCapYen?(taskId: string): number | null;
 }): FcaBudget {

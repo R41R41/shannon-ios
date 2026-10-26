@@ -26,6 +26,8 @@ export interface OperatorMinecraftParts {
   actions: ActionThreads | null;
   /** The body re-check (`minecraftBodyRecheckWiring.ts`); absent without a configured body. */
   bodyRecheck?: Pick<MinecraftBodyRecheck, 'request'> | null;
+  /** What a task has used so far in yen, confirmed and estimated (`TaskBudgetStore`): `minecraft budget` never lowers a cap below it. Absent: no lowering. */
+  spentYen?(taskId: string): number;
   lifecycleUnresolved(): boolean;
   activity(at: string, entry: OperatorActivity): void;
   /** A short note in the owner's Talk, written once per id. */
@@ -59,7 +61,8 @@ const MESSAGES: Partial<Record<OperatorCode, string>> = {
   recheck_busy: '体の確認をいま実行中です。',
   not_settled: 'ログイン直後で、サーバーの状態（ほかの参加者の数）をまだ確かめられません。少し待ってからもう一度頼んでください。',
 };
-const SKILL_IMPORT_MESSAGES = { 'dry-run': '取り込みの計画です。問題が無ければ plan hash で apply します。',
+const BUDGET_NOT_RUNNING = 'このタスクはもう止まっているか、止めている途中です。予算を変えても再開はしません（止まった理由が予算でも同じです。再開はライ氏の操作で、新しく頼むこともできます）。';
+const SKILL_IMPORT_MESSAGES ={ 'dry-run': '取り込みの計画です。問題が無ければ plan hash で apply します。',
   apply: 'スキルの取り込みを記録しました。', refused: 'スキルの取り込みを受け付けませんでした（skillImport に理由があります）。' };
 
 /** The operator code of a skill import answer: the importer's own refusals by name, the route's status otherwise. */
@@ -211,6 +214,34 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     return c.reply('accepted', 'stopped', '停止要求を受け付けました。身体操作の停止確認後に停止済みになります。', { taskId: found.id });
   }
 
+  /**
+   * `minecraft budget`: the cap of a running request the operator started, changed to another yen amount (up to the request cap, down to
+   * what the task has used). It is a new `budget` row of the audit (who, when, which task, from what to what) and never a write over the
+   * request's row; the budget check reads it through `OperatorAuditStore.budgetYen`, so it holds from the task's next decision on. A task
+   * that has stopped (for its cap, its estimates, or a cancel) is not resumed by this, so a change to it is refused.
+   */
+  async function budget(c: Context, input: Extract<OperatorInput, { command: 'budget' }>) {
+    const requests = parts.requests;
+    if (!requests) return c.refuse('body_unavailable');
+    const found = target(c, requests, input.taskId);
+    if ('code' in found) return c.refuse(found.code, undefined, input.taskId ? { taskId: input.taskId } : {});
+    const task = requests.get(found.id);
+    if (!task || FINISHED.includes(task.phase)) return c.refuse('not_running', BUDGET_NOT_RUNNING, { taskId: found.id });
+    const from = parts.audit.budgetYen(found.id) ?? OPERATOR_LIMITS.maxBudgetYen, spent = parts.spentYen?.(found.id) ?? null;
+    if (input.budgetYen < from && (spent === null || input.budgetYen < spent)) {
+      const reason = spent === null ? '使った額を確かめられないので、下げることはできません。' : `もう${spent}円使っているので、それより低くはできません。`;
+      return c.refuse('budget_below_spent', reason, { taskId: found.id, budgetYen: input.budgetYen });
+    }
+    audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted',
+      argsJson: c.argsJson, taskId: found.id, budgetYen: input.budgetYen, detail: `from=${from} to=${input.budgetYen} spent=${spent ?? 'unknown'}` });
+    parts.activity(c.at, { summary: `運用者（${c.operator}）が、代わりに始めたマイクラの依頼の予算の上限を${from}円から${input.budgetYen}円に変えました。`,
+      tool: 'operator.minecraft.budget', outcome: 'done', reasonCode: 'operator_cli',
+      detail: `operation=${c.operationId} task=${found.id} yen=${from}->${input.budgetYen}` });
+    parts.note(`${c.operationId}:budget`, operatorTalkNote('budget', task.goal), c.at);
+    return c.reply('accepted', 'accepted', `予算の上限を${from}円から${input.budgetYen}円にしました。走っているタスクの次の判断から効きます。`,
+      { taskId: found.id, budgetYen: input.budgetYen });
+  }
+
   /** `minecraft release`: the body is asked again whether it is stopped with every input released (a request, never a force). */
   async function release(c: Context) {
     if (!parts.bodyRecheck) return c.refuse('body_unavailable');
@@ -265,6 +296,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     const parsed = c.parsed.input;
     if (parsed.command === 'lifecycle') return lifecycle(c, parsed, serverId);
     if (parsed.command === 'request') return request(c, parsed);
+    if (parsed.command === 'budget') return budget(c, parsed);
     if (parsed.command === 'release') return release(c);
     if (parsed.command === 'skill_import') return skillImport(c, parsed);
     return cancel(c, parsed);

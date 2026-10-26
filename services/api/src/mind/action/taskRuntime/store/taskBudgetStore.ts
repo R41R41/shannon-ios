@@ -27,6 +27,12 @@ export class TaskBudgetStore {
     return { steps: Number(row.steps), yen: Number(row.yen), cappedAt: row.capped_at ? String(row.capped_at) : null, ...estimated };
   }
 
+  /** What the task has used in yen, confirmed and estimated together (an operator's cap change never goes below it). */
+  usedYen(taskId: string): number {
+    const spent = this.spent(taskId);
+    return spent.yen + spent.estimatedYen;
+  }
+
   /** One paid step of the task, and its confirmed yen (0 for a step whose only charge is an unconfirmed one). */
   add(taskId: string, scopeKey: string, origin: string, yen: number, at: string): TaskSpent {
     this.db.prepare(`
