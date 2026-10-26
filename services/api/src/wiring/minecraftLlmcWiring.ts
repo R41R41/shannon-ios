@@ -11,7 +11,6 @@ import type { FcaHistoryAhead, FcaHistoryPolicy } from '../mind/action/fca/fcaHi
 import { createFcaHistoryAhead } from '../mind/action/fca/fcaHistory.js';
 import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
-import type { FcaLookahead } from '../mind/action/fca/fcaLookahead.js';
 import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
 import { firstPlanInbox, planGoal, startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { COMPLETION_WAY, observedCompletion, withCompletionRule, type LlmcCompletion } from '../surfaces/minecraft/minecraftLlmcCompletion.js';
@@ -19,12 +18,11 @@ import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
-import { createLlmcLookahead, feetOf, noteLlmcFeet } from '../surfaces/minecraft/minecraftLlmc.js';
+import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
-import { llmcWaitLine } from '../surfaces/minecraft/minecraftLlmcReadiness.js';
 import { seenDoneUpdate } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { followNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
@@ -146,8 +144,6 @@ export interface LlmcWiring {
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
   planner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>;
-  /** The one lookahead of the mode (kept across every task's steps): the next decision asked while a long act runs. */
-  lookahead: FcaLookahead;
   /** r3: the summaries made beside the steps, by task. */
   historyAhead: FcaHistoryAhead;
 }
@@ -175,7 +171,7 @@ export function configuredMinecraftLlmc(values: Readonly<Record<string, string |
     summarizer: haikuKey || base.client
       ? createAnthropicFcaSummarizer({ ...base, model: DEFAULT_HAIKU_MODEL, ...(haikuKey ? { apiKey: haikuKey } : {}), body: true,
         minecraftOwnPrompt: true, minecraftV2Facts: true, maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS }) : null,
-    policy: LLMC_HISTORY_POLICY, lookahead: createLlmcLookahead(log), historyAhead: createFcaHistoryAhead(),
+    policy: LLMC_HISTORY_POLICY, historyAhead: createFcaHistoryAhead(),
     ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client) };
 }
 
@@ -204,7 +200,7 @@ export function llmcProbeRunner(control: MinecraftControl, step: TaskStep): () =
 
 /**
  * One body task's parts in the mode: its plan (the tool, the port, the first plan asked at its first decision), the body's and the body
- * tools' options, and the step ports that make its steps small (the model router, the plan, the lease window, the lookahead, the
+ * tools' options, and the step ports that make its steps small (the model router, the plan, the lease window, the
  * fixed menu, the history policy).
  */
 export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: MinecraftControl, log: (line: string) => void = line => console.info(line)) {
@@ -213,7 +209,6 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // What a decision reads: the current frame, or one up to `LLMC_STALE_FRAME_MS` old (mc-chat-stale-frame). Commands and the watch for danger keep `observe`.
   const seen = () => control.seen(bodyId(), LLMC_STALE_FRAME_MS);
   const decided = () => seen()?.observation ?? null;
-  noteLlmcFeet(step.taskId, () => feetOf(observe()));
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
     rules: true, compact: true, seen: tree => seenDoneUpdate(tree, observe()), follow: tree => followNode(step.taskId, tree) });
@@ -227,6 +222,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
     r4: { world: worldOf, system: ownFirstPlanSystem(), readiness: true } });
   const display = () => plan.port.display();
+  // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step decides again while its items run.
+  const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId,
+    context: () => minecraftTaskContext(step, bodyId(), step.id, display()), observe, log });
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {
@@ -235,12 +233,12 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   };
   return {
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
-    body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null },
-    tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId) } },
+    body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null, openIds: () => queue.openIds() },
+    tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
-      observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log,
+      observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       r4: { probe: llmcProbeRunner(control, step), planWhere,
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }),
@@ -251,9 +249,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
-      // r6 (run 29: the third fca_wait of an operator's request stopped the task): a wait is answered with what there is to wait for.
-      waitAnswer: { line: () => llmcWaitLine(decided(), plan.port.tree().nodes), amend: amendAnthropicControl },
-      permitWindowMs: LLMC_PERMIT_WINDOW_MS, lookahead: llmc.lookahead, selector: LLMC_CATALOG_SELECTOR,
+      permitWindowMs: LLMC_PERMIT_WINDOW_MS, selector: LLMC_CATALOG_SELECTOR,
       history: { codec: anthropicFcaHistoryCodecV2,
         ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy,
         ahead: { port: llmc.historyAhead, hard: LLMC_HISTORY_HARD } },

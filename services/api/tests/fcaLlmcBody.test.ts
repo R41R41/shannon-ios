@@ -13,6 +13,7 @@ import { SHORT_ACT_INPUT_SCHEMA } from '../src/contracts/minecraftActShortContra
 import type { BodyPlanView } from '../src/contracts/bodyControlContract.js';
 import { configuredMinecraftLlmc } from '../src/wiring/minecraftLlmcWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
+import { queueBody, queueFor } from './support/llmcQueueHarness.js';
 
 /**
  * Design mb-llm-centric 2.3 and 2.7 through the real control: `mc.act` is offered in the head's words, checked before the body sees it,
@@ -25,6 +26,7 @@ const PLAN: BodyPlanView = { revision: 3, current: 'p2', nodes: [{ id: 'p1', par
 const HANDS = { hands: [{ do: 'walk', to: { x: 3, y: 64, z: 4 } }, { do: 'chest', at: [{ x: 4, y: 64, z: 4 }], op: 'takeAll' }], stopIf: { hostileWithin: 8 } };
 
 function fixture(llmc: boolean, input: unknown = HANDS) {
+  const news: string[] = [];
   const h = actionHarness(() => at), calls: FcaModelInput[] = [], bodyStore = new MinecraftControlStore(h.db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
   let sequence = 0;
@@ -45,13 +47,16 @@ function fixture(llmc: boolean, input: unknown = HANDS) {
       ? { decision: { kind: 'wait', summary: 'next' }, history: [{ role: 'assistant', content: 'read the act' }] }
       : { decision: { kind: 'tools', calls: [{ id: 'act-1', name: MC_ACT_TOOL, input }] }, history: [{ role: 'assistant', content: 'act' }] }; },
       toolResults: results => ({ role: 'user', results }) },
-    stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
-      ...(llmc ? { llmc: { plan: () => PLAN } } : {}) }) }),
+    stepPorts: (_runtime, step) => {
+      const queue = queueFor(control, step, PLAN);
+      return { ...(llmc ? { keepBodyTools: () => true, body: queueBody(queue, news) } : {}), tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
+        ...(llmc ? { llmc: { plan: () => PLAN, queue } } : {}) }) };
+    },
   });
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id, { title: 'Food', goal: 'エンドラを倒して' }, 'owner-request');
   bodyStore.bind(task.id, 'minecraft:world');
   closes.push(async () => { await driver.close(); h.close(); });
-  return { ...h, driver, task, control, bodyStore, calls, poll };
+  return { ...h, driver, task, control, bodyStore, calls, poll, news };
 }
 async function dispatched(f: ReturnType<typeof fixture>) {
   await f.driver.tick();
@@ -70,7 +75,11 @@ describe('mc.act through the control', () => {
       container: { at: { x: 4, y: 64, z: 4 }, kind: 'chest', items: [] } };
     f.poll([{ id: command.id, connectionId: 'connection', outcome: 'completed', inputsReleased: true, observedAt: at, result: JSON.stringify(result) }]);
     await f.driver.drain(); await f.driver.tick(); await f.driver.drain();
-    const read = JSON.stringify(f.calls[1]!.history);
+    // The act returns when the body has it (the queue's item); its own lines come as news when it ends.
+    expect(JSON.stringify(f.calls[0]!.history)).toBeDefined();
+    expect(JSON.stringify(f.calls[1]!.history)).toContain('列に入れた q');
+    // It stands in the history of the round it ended in, or (no tool result left to carry it) in the news kept for the next decision.
+    const read = JSON.stringify(f.calls[1]!.history) + f.news.join('\n');
     expect(read).toContain('act 全部済み（2/2、2.1秒）');
     expect(read).toContain('2 chest 済 bread×6 を取った');
   });

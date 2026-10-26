@@ -9,7 +9,7 @@ import { seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import {
   carryDone, FIRST_PLAN_SYSTEM_R5, FIRST_PLAN_SYSTEM_R6, firstPlanInbox, firstPlanInput, forgetFirstPlans, planFromAnswer, seedPlan, startFirstPlan,
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { foodLeads, llmcWaitLine, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { foodLeads, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 
@@ -151,22 +151,6 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
       .toBe('act 全部済み（1/1、30.0秒）\n1 wait 済 30秒待った\n頭: この状態では体力は自然に戻らない（満腹 17＜18、食料 0 点）');
     expect(shaft.storedResult!({ ...wait, input: { hands: [{ do: 'walk', to: at(1, 2, 3) }] } }, 'act 全部済み')).toBe('act 全部済み');
     expect(body({ ...SHAFT, food: 19 }).storedResult!(wait, 'act 全部済み')).toBe('act 全部済み');
-  });
-});
-
-describe('a wait nobody can answer is answered in one line (the runner: fcaLlmcR6Step.test.ts)', () => {
-  it('nothing to wait for: the recovery fact and where food is, and to go on', () => {
-    const line = llmcWaitLine(frame(SHAFT), [{ id: 'p4', parentId: null, order: 3, title: 'ゲートへ', state: 'continue', where: '(5,35,12)' }]);
-    expect(line.split('\n')).toHaveLength(1);
-    for (const words of ['待ちではタスクは止まらない', '待つ物が無い', 'この状態では体力は自然に戻らない（満腹 17＜18、食料 0 点）', '帰りのゲート (5,35,12)',
-      '計画の今の節を続ける']) expect(line).toContain(words);
-  });
-
-  it('health coming back at hunger 18, or a furnace at work: what there is to wait for, and how', () => {
-    expect(llmcWaitLine(frame({ ...SHAFT, food: 19, health: 10 }))).toContain('待つ物: 体力の回復（満腹 19≥18、体力 10/20）。その場で待つなら mc.act の wait の手で');
-    expect(llmcWaitLine(frame({ ...SHAFT, jobs: [{ position: at(1, 2, 3), remainingEstimateMs: 40_400, input: 'beef' }] })))
-      .toContain('待つ物: かまどの焼き上がり（1 件、早いもので約 40 秒）');
-    expect(llmcWaitLine(null)).toContain('体の観測が無い');
   });
 });
 

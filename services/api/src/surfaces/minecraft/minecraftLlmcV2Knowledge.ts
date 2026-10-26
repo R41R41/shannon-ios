@@ -23,7 +23,9 @@ const GOAL = [
 
 const DECIDE = [
   '## 決め方（判断の原則。手の書き方は mc.act の説明）',
-  '- 毎判断、live の urgent・planNow・shortage・footing・around・route・threats・lastResults と plan を読み、mc.act を 1 つ出す。',
+  '- 毎判断、live の urgent・planNow・shortage・footing・around・route・threats・lastResults と plan を読み、mc.act を 1〜2 つ出す（列に足す）。',
+  '- act は列の項目。体は項目を順に 1 つずつ動かし、実行中の残りが少なくなると次の判断が来る。足す項目は、列の最後の項目が済んだ後の世界を前提にする（1 つの判断で足すのは 1〜2 項目）。',
+  '- pre・done は条件の型で書けるものだけ。書けなければ書かない（前提を書かなくても、項目が止まれば後ろは体が捨てる）。列が止まったら、残りは体が捨てている。',
   '- 結果を待たずに決められる手は 1 つの act にまとめる（最大 12。掘る・歩く・橋など同じ手の続きは 10〜12 手）。小分けにすると 1 判断ごとの待ちで遅い。',
   '- 急ぐ手（離れる・食べる・囲う）は先頭に。座標は live の完全な座標をそのまま使う。',
   '- why は節の札で始める（「[p1.2] 丸石でハーフブロック」。別の節なら「[p2.1] 理由: …」、急ぎは「[急ぎ] …」）。どの節の手かが履歴で分かる。',
@@ -86,7 +88,8 @@ const LIVE = [
   '- jobs: かまどなど外の仕事と残り秒の見積。',
   '- events: 前の判断の後の出来事（着いた・死んだ・次元が変わった・反射が止めた）。',
   '- lastResults: 履歴に無い前の結果を 1 回だけ（止まった手の周りの 3×3×3・view の地図・probe の続き）。',
-  '- 急ぎの時の live は、urgent・investigation・planNow・footing・around・liquid・map・state・threats・inventory・events・lastResults・answer だけ。',
+  '- queue: 体の列（実行中を含めて 3 つまで）。▶ が実行中で、残りの秒・手の進み・済む条件の今、・が待ちの項目と前提。足せる数も出る。"列: 空" は体が止まっている印。',
+  '- 急ぎの時の live は、urgent・investigation・planNow・queue・footing・around・liquid・map・state・threats・inventory・events・lastResults・answer だけ。',
 ].join('\n');
 
 const MAP = [

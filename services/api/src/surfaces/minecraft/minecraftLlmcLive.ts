@@ -207,6 +207,8 @@ export interface LlmcLiveParts {
   footing?: string | null;
   /** mc-chat-stale-frame: the body was last seen this long ago (`staleBodyLine`); absent: the frame is the current one. */
   bodyAge?: string | null;
+  /** Task queue (design minebot-task-queue): the items the body runs and waits with, one line each (`minecraftLlmcQueue.ts`), after the plan's now. */
+  queue?: readonly string[];
   /** mb-llmc-cand 11 (a dragon task): the stage road and the pace against the milestones' targets (`minecraftLlmcRoad.ts`), after the plan's now. */
   road?: string | null;
   meter?: string | null;
@@ -229,9 +231,10 @@ export function lookHint(world: Record<string, unknown>, healthLost = 0): string
 }
 
 /** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off hostiles; r8: then the footing. */
-function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'road' | 'meter' | 'shortage' | 'recovery' | 'unreachable' | 'footing'>)
+function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'road' | 'meter' | 'queue' | 'shortage' | 'recovery' | 'unreachable' | 'footing'>)
   : Record<string, unknown> {
   return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.road ? { road: parts.road } : {}), ...(parts.meter ? { meter: parts.meter } : {}),
+    ...(parts.queue?.length ? { queue: [...parts.queue] } : {}),
     ...(parts.shortage ? { shortage: parts.shortage } : {}),
     ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
     ...(parts.unreachable?.length ? { unreachable: [...parts.unreachable] } : {}), ...(parts.footing ? { footing: parts.footing } : {}) };
@@ -282,13 +285,14 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing' | 'bodyAge'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
+  | 'footing' | 'bodyAge' | 'queue'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
   if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), answer: parts.answer };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
   const results = shownResults(parts.lastResults ?? [], URGENT_RESULTS_CHARS);
   return { ...urgent, ...bodyAgeField(parts.bodyAge), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
-    ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
+    ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}),
+    ...(parts.queue?.length ? { queue: [...parts.queue] } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
     state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),

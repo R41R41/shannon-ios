@@ -241,8 +241,8 @@ describe('D3: one language, one topic in one place, a dictionary of the live fie
   });
   it('says the two controls in Japanese in the mode\'s request and keeps the shared ones', async () => {
     const names = V2_CONTROL_WORDS.map(([name]) => name);
-    expect(names).toEqual(['fca_wait', 'fca_complete']);
-    const complete = V2_CONTROL_WORDS[1]!;
+    expect(names).toEqual(['fca_complete']);
+    const complete = V2_CONTROL_WORDS[0]!;
     expect(complete[1]).toContain('boss.verified');
     expect(complete[1]).not.toMatch(/[A-Za-z]{4,} [a-z]{3,} [a-z]{3,}/u);
   });

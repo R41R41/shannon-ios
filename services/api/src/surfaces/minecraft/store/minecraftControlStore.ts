@@ -43,7 +43,7 @@ export class MinecraftControlStore {
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   pending(bodyId: string): Array<{ command: MinecraftControlCommand; delivered: boolean; confirmed: boolean; cancelled: boolean }> {
-    return this.db.prepare("SELECT command_json,phase,cancelled FROM fca_body_operations WHERE body_id=? AND phase!='settled' ORDER BY created_at,id").all(bodyId)
+    return this.db.prepare("SELECT command_json,phase,cancelled FROM fca_body_operations WHERE body_id=? AND phase!='settled' ORDER BY created_at,rowid").all(bodyId)
       .map(row => ({ command: JSON.parse(String(row.command_json)), delivered: row.phase === 'delivered' || row.phase === 'running',
         confirmed: row.phase === 'running', cancelled: row.cancelled === 1 }));
   }

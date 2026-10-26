@@ -86,6 +86,8 @@ export function createMinecraftTaskBody(parts: {
    * events are the wrapper's (`withLlmcBody`, `minecraftLlmcBody.ts`). Absent: as before.
    */
   llmc?: { plan(): BodyPlanView | undefined };
+  /** The task queue's open items (the command ids the step itself still waits for): not an unsettled operation for the guard (`MinecraftControlStore.safe`). */
+  openIds?(): ReadonlySet<string>;
 }): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const governor = parts.governor ?? createReflexGovernor(), monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(),
@@ -344,7 +346,7 @@ export function createMinecraftTaskBody(parts: {
     const job = tick(); monitoring = job;
     void job.catch(error => { if (!monitorAbort.signal.aborted) fault = error; }).finally(() => { if (monitoring === job) monitoring = null; });
   };
-  const safe = () => !unknown && control.store.safe(step.taskId);
+  const safe = () => !unknown && control.store.safe(step.taskId, parts.openIds?.());
   // A body tool that changes something (not read-only), named by a gist the deciding step was shown; learning never fails a step.
   const noteGistFollowed = (name: string, input: unknown) => {
     const id = availableBody();

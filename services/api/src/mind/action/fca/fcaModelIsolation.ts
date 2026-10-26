@@ -1,15 +1,5 @@
 import { currentActionExecution, inActionExecution } from '../../../infra/context/actionExecution.js';
 
-/**
- * A decision asked ahead runs beside the step, not as its model request: under the step's lease and permit, with its own bookkeeping, so
- * the step's model outcome, usage and metrics stay the step's (a stop during a long call is still a confirmed stop).
- */
-export function isolatedModelCall<T>(work: () => Promise<T>): Promise<T> {
-  const step = currentActionExecution();
-  if (!step) return work();
-  return inActionExecution({ lease: step.lease, signal: step.signal, permit: (resources, signal) => step.permit(resources, signal) }, work);
-}
-
 /** The longest a summary asked beside the steps may take. */
 export const DETACHED_SUMMARY_MS = 120_000;
 /**

@@ -1,10 +1,9 @@
-import { createFcaLookahead, type FcaLookahead } from '../../mind/action/fca/fcaLookahead.js';
-import type { FcaToolCall, FcaToolDefinition } from '../../mind/action/fca/fcaPorts.js';
+import type { FcaToolDefinition } from '../../mind/action/fca/fcaPorts.js';
 import { toolFailure, toolOk, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import {
-  ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, MC_ACT_SKILL, MC_ACT_TOOL,
+  ACT_INPUT_SCHEMA, actMilliseconds, actProblem, MC_ACT_SKILL, MC_ACT_TOOL,
   MC_VIEW_SKILL, MC_VIEW_TOOL, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
@@ -17,15 +16,9 @@ import { urgentRange } from './minecraftLlmcUrgent.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the tools it offers, how it
- * runs `mc.act` and `mc.view` on the body, how a result reads to the model, when the next decision is asked while an act runs, and when
- * an act is cut for a hostile come near (an urgent step).
+ * runs `mc.view` and `mc.probe` on the body, how a result reads to the model, and when an act is cut for a hostile come near (an urgent step).
+ * (`mc.act` is an item of the task queue: `minecraftLlmcQueue.ts`.)
  */
-/**
- * An act is long enough to ask the next decision while it runs (design 2.3: four seconds; r8: eight). Run 32: 16 asked ahead, 5 taken,
- * 11 thrown away (7 after a failed act, 4 too old), about a tenth of the cost; a decision takes 7–10 s (p50 7.4), so one asked ahead of an
- * act under about 8 s is not ready when the act ends, and its call is paid for all the same.
- */
-export const LLMC_LOOKAHEAD_MS = 8_000;
 /** A hostile this near, not near when the act began and not watched by its own `stopIf`, cuts the act (an urgent step). */
 export const LLMC_URGENT_METERS = 6;
 /** The ms added to an act's ceiling for the command's deadline (delivery and the body's own stop). */
@@ -223,23 +216,4 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
     parent.removeEventListener('abort', cancel);
   };
   return { signal: controller.signal, reason: () => reason, stop };
-}
-
-/** An act whose hands take long enough that the next decision is asked while it runs (`from`: her feet now, for the walks). */
-export function llmcLongCall(call: Pick<FcaToolCall, 'name' | 'input'>, from: ActPos | null = null): boolean {
-  if (call.name !== MC_ACT_TOOL || !call.input || typeof call.input !== 'object') return false;
-  try { return actExpectedMilliseconds(normalizeActInput(call.input).input as ActInput, from) >= LLMC_LOOKAHEAD_MS; } catch { return false; }
-}
-/** Each task's way to read her feet now (set by the task's step parts), for a walk's length in the lookahead. */
-const feetOfTask = new Map<string, () => ActPos | null>();
-export function noteLlmcFeet(taskId: string, read: () => ActPos | null): void {
-  feetOfTask.delete(taskId);
-  feetOfTask.set(taskId, read);
-  if (feetOfTask.size > 32) feetOfTask.delete(feetOfTask.keys().next().value as string);
-}
-/** The mode's lookahead: no agenda acts between the steps, so a decision asked ahead is fresh while the step's history is. */
-export function createLlmcLookahead(log: (line: string) => void): FcaLookahead {
-  return createFcaLookahead({ wanted: (call, taskId) => { let from: ActPos | null = null;
-    try { from = feetOfTask.get(taskId)?.() ?? null; } catch { /* unknown: a walk counts its default length */ }
-    return llmcLongCall(call, from); }, log });
 }

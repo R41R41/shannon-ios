@@ -66,6 +66,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   const ahead: string[] = [];
   /** mb-llmc r4: what the body's investigation did before the decision (`FcaBodyLifecycle.investigate`), or null. */
   let probe: { surprises: string[]; probes: number; answered: number } | null = null;
+  /** Task queue: the decisions of the step (a stretch) and whether the last was thrown away for a queue that changed. */
+  let stretch: { rounds: number; thrown: boolean } | null = null;
   /** The time before this step, from the previous decision's commit (`gap` above). */
   const gap = () => {
     if (committedBefore === null) return null;
@@ -114,6 +116,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
       probe = { surprises: found.surprises.slice(0, 8).map(code => /^[a-z_]{1,24}$/u.test(code) ? code : 'other'),
         probes: Number.isSafeInteger(found.probes) ? found.probes : 0, answered: Number.isSafeInteger(found.answered) ? found.answered : 0 };
     },
+    /** The step decided `rounds` times while items ran (`fcaStretch.ts`); `thrown`: the last was thrown away. Only a step of more than one is told. */
+    stretch(rounds: number, thrown: boolean): void { stretch = rounds > 1 || thrown ? { rounds, thrown } : null; },
     /** `fcaCommittedAt`: when this decision committed (epoch ms), the start of the next one's `gap`. */
     checkpoint: (): Record<string, unknown> => ({ fcaDecisionIndex: index, fcaCommittedAt: now() }),
     /** Writes the line (the decision has committed). Never throws. */
@@ -136,6 +140,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   /** The fields of the line that are there only when there is something to say. */
   function optional(metrics: ActionExecution['modelMetrics']): Record<string, unknown> {
     return { ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
+      ...(stretch ? { stretch } : {}),
       ...(urgent ? { urgent } : {}), ...(thrown !== null ? { interrupt: { thrownMs: thrown } } : {}),
       ...(ahead.length ? { summaryAhead: ahead } : {}),
       ...(probe ? { probe: { ...probe, ms: Math.round(spent.probeMs) } } : {}),

@@ -94,7 +94,7 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
   const waits = (...seconds: number[]) => ({ hands: seconds.map(value => ({ do: 'wait', seconds: value })) });
   it('adds the seconds left to an act that waits ten seconds or more, and says the wait can hold other hands', () => {
     const note = furnaceWaitNote(waits(30, 30), world(151_000))!;
-    expect(note).toBe('手 1 wait（合わせて 60 秒）: かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒。立って待たず、その間に掘る・集める・作る手を入れられる');
+    expect(note).toBe('手 1 wait（合わせて 60 秒）: かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒。立って待たず、その間に掘る・集める・作る項目を列に足せる（焼き上がりを取る項目は pre に furnace:x,y,z）');
   });
   it('says nothing for a short wait, for no furnace, or for a furnace that is done or in another dimension', () => {
     expect(furnaceWaitNote(waits(3), world(151_000))).toBeNull();

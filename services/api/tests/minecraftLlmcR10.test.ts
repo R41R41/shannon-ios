@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { urgentFacts } from '../src/surfaces/minecraft/minecraftLlmcBody.js';
-import { reflexHolding, reflexLine, waitForReflexRelease } from '../src/surfaces/minecraft/minecraftLlmcReflexHold.js';
+import { reflexHolding, reflexLine } from '../src/surfaces/minecraft/minecraftLlmcReflexHold.js';
 
 /**
  * mb-llmc r10 (production run 34, 2026-10-22; task ae935fa1, 580 s): H2 the multi-hand reflex that holds the body (the seventh unknown).
@@ -45,24 +45,5 @@ describe('H2: the multi-hand reflex that holds the body', () => {
     expect(reasons[0]).toMatch(/^反射の最中: flee（低体力で逃げ道なし：足元を掘って下がった）。体は反射が握っている。act は反射が放した/u);
     expect(reasons[1]).toContain('piglin 6.9m');
     expect(urgentFacts(withLedger([FLEE(0)]), null).reasons).toEqual([]);
-  });
-
-  it('the send waits until the reflex lets go, at most the limit; an aborted wait ends at once', async () => {
-    let now = 0;
-    const clock = { now: () => now, sleep: async (ms: number) => { now += ms; } };
-    let calls = 0;
-    const letGoAfter = (count: number) => () => (calls++ < count ? withLedger([FLEE(0)]) : withLedger([FLEE(3)]));
-    const free = await waitForReflexRelease({ observe: letGoAfter(4), signal: new AbortController().signal, ...clock });
-    expect(free).toEqual({ waitedMs: 1000, kind: 'flee', gaveUp: false });
-    now = 0;
-    const stuck = await waitForReflexRelease({ observe: () => withLedger([FLEE(0)]), signal: new AbortController().signal, maxMs: 2000, ...clock });
-    expect(stuck).toMatchObject({ kind: 'flee', gaveUp: true, waitedMs: 2000 });
-    now = 0;
-    const none = await waitForReflexRelease({ observe: () => withLedger([]), signal: new AbortController().signal, ...clock });
-    expect(none).toEqual({ waitedMs: 0, kind: null, gaveUp: false });
-    const aborted = new AbortController();
-    aborted.abort();
-    now = 0;
-    expect(await waitForReflexRelease({ observe: () => withLedger([FLEE(0)]), signal: aborted.signal, ...clock })).toMatchObject({ gaveUp: true, waitedMs: 0 });
   });
 });

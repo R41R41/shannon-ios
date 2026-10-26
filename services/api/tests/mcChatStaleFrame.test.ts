@@ -16,7 +16,6 @@ import { forgetAllBodyAbsent, tasksWithoutBody } from '../src/surfaces/minecraft
 import { forgetLlmcEvents, withLlmcBody } from '../src/surfaces/minecraft/minecraftLlmcBody.js';
 import { LLMC_STALE_FRAME_MS, minecraftLlmcLive, minecraftLlmcUrgentLive, createFoodTrend } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { llmcStepParts } from '../src/wiring/minecraftLlmcWiring.js';
-import { createLlmcLookahead } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { createFcaHistoryAhead } from '../src/mind/action/fca/fcaHistory.js';
 import { minecraftGoalBinding } from '../src/wiring/fcaMinecraftGoalBinding.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -153,10 +152,10 @@ describe('the chat request of 2026-10-25 03:23, with the stall', () => {
     expect(f.api.admission({ scopeKey: 'owner', request: f.request })).toBe('body_unavailable');
   });
 
-  it('the step parts of the mode hand a decision the old frame, and the wait line reads it', async () => {
+  it('the step parts of the mode hand a decision the old frame', async () => {
     const f = fixture(), id = await chatTask(f), step = begin(f, id);
     const llmc = { names: { main: 'm', escalate: null, plan: 'p' }, models: { main: {} as never, escalate: null }, summarizer: null, policy: {},
-      lookahead: createLlmcLookahead(() => undefined), historyAhead: createFcaHistoryAhead() };
+      historyAhead: createFcaHistoryAhead() };
     const parts = llmcStepParts(llmc as never, step, f.control, () => undefined);
     const inner = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
       toolSignal: (_name: string, parent: AbortSignal) => parent, async close() {} };
@@ -164,11 +163,9 @@ describe('the chat request of 2026-10-25 03:23, with the stall', () => {
     f.advance(9_000);
     body.context();
     expect(body.transient!()).toMatchObject({ map: 'map', bodyAge: expect.stringContaining('9 秒前') });
-    expect(parts.ports.waitAnswer.line()).not.toContain('体の観測が無い');
     f.advance(7_000);
     body.context();
     expect(body.transient!()).toMatchObject({ connected: false });
-    expect(parts.ports.waitAnswer.line()).toContain('体の観測が無い');
   });
 });
 

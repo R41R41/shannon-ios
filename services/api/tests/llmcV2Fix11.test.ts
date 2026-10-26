@@ -194,7 +194,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
     expect(V2_ALWAYS).toContain('ネザー・エンドのベッドは爆発する: そこでは寝ない');
     expect(V2_ALWAYS).toContain('shortage の準備（食料・防具・盾など）は、速さのために省かない');
     expect(V2_STAGES.prep).toContain('足元・立っているマスからは離れたマスを開ける');
-    expect(V2_ALWAYS).toContain('急ぎの時の live は、urgent・investigation・planNow・footing・around・liquid・map・state・threats・inventory・events・lastResults・answer だけ');
+    expect(V2_ALWAYS).toContain('急ぎの時の live は、urgent・investigation・planNow・queue・footing・around・liquid・map・state・threats・inventory・events・lastResults・answer だけ');
   });
 });
 

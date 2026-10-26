@@ -115,8 +115,8 @@ const V2_HEADER = [
  */
 const V2_DECIDE = [
   '## 1 判断の決まり',
-  '- mc.act は 1 判断に 1 つまで。plan.update は mc.act の前に置けば同じ応答でよい（書いた順に実行）。probe・view の結果を見て決める手は次の判断で。'
-    + '制御（fca_wait・fca_complete）は他の呼び出しと混ぜない。',
+  '- mc.act は 1 判断に 2 つまで（列の項目。体は順に動かす）。plan.update は mc.act の前に置けば同じ応答でよい（書いた順に実行）。probe・view の結果を見て決める手は次の判断で。'
+    + '制御（fca_complete）は他の呼び出しと混ぜない。',
   '- 呼び出しは「頼む」だけで、結果は次の判断で返る。結果を作らない・済んだと決めつけない。',
   '- 体の呼び出しが失敗すると、同じ応答の後ろの体の呼び出しは実行されない。act の中の手は順に動き、失敗は onFail に従う（反射・stopIf・満杯・時間切れは act 全体を止める）。',
   '- fca_complete は目的を観測した時だけ。エンドラ討伐では、体がエンドラの死を見届けた時（progress の条件 boss.verified が true）。'
@@ -178,11 +178,10 @@ export interface MinecraftV2Hooks {
   progress?(progress: unknown): unknown;
 }
 /**
- * mb-llmc-cand 10 (D3): the two controls in the mode's one language (the shared `CONTROL_TOOLS` of `anthropicFcaModel.ts` keep their words for every
+ * mb-llmc-cand 10 (D3): the controls in the mode's one language (the shared `CONTROL_TOOLS` of `anthropicFcaModel.ts` keep their words for every
  * other surface). Same names, same input: only the descriptions differ.
  */
 export const V2_CONTROL_WORDS: ReadonlyArray<readonly [string, string, string]> = [
-  ['fca_wait', '他の課題や新しい情報を待つ。待つ相手を具体的に書く。課題は終わらない。誰も答えられない間は断られるので、体を進める。', '公開の要約（空でない・2000字まで）'],
   ['fca_complete', '完了条件を満たした時だけ、課題を終える。エンドラ討伐は、体がエンドラの死を見届けた時（progress の条件 boss.verified が true）。'
     + '要約は観測した事実で書く。', '公開の要約（空でない・2000字まで）'],
 ];

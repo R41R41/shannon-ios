@@ -56,6 +56,37 @@ export interface FcaModelInput {
 /** Task-owned short control may interrupt body work while ordinary inference is awaiting a response. */
 /** What a body's investigation did (`FcaBodyLifecycle.investigate`): closed codes and counts only, for the metrics line. */
 export interface FcaBodyInvestigation { surprises: readonly string[]; probes: number; answered: number; ms: number }
+/** Why a step that has items open decides again, or ends (`FcaBodyQueue.ready`). */
+export type FcaQueueWake =
+  /** Nothing is open: the step ends (the next step decides from the start). */
+  | 'empty'
+  /** No item waits and the running one has `T` seconds or less left (T: the median of the last decisions): decide now. */
+  | 'remaining'
+  /** An item ended badly and the ones behind it are dropped: the step ends once they are settled. */
+  | 'dropped'
+  /** The body saw a surprise: decide now, with items still open (the decision may replace them). */
+  | 'alert'
+  /** A message came for the task: what waits is dropped, the running item is let finish, the step ends. */
+  | 'message';
+/** The result of an item that ended, for the decision that reads it. `ran`: the body ran it; `dropped`: it never started (its text says why). */
+export interface FcaQueueNews { kind: 'ran' | 'dropped'; item: string; call: FcaToolCall; operationId: string; result: ToolResult; ms: number; label: string }
+export interface FcaBodyQueue {
+  /** The command ids of the items still open (the lifecycle's `safe` does not count them as unsettled). */
+  openIds(): ReadonlySet<string>;
+  open(): boolean;
+  /** Waits, with no model call, until the step should decide again or end. `drain`: only until nothing is open. Throws what an item's receipt threw. */
+  ready(options: { signal: AbortSignal; drain: boolean; messages?(): boolean; alert?(): boolean }): Promise<FcaQueueWake>;
+  /** The items that ended since the last take, oldest first. */
+  take(): FcaQueueNews[];
+  /** Changes with every drop (an item that ended badly, a replaced or expired one): a decision asked before it is thrown away. */
+  version(): number;
+  /** How long the model took for a decision (the median of the last ten is when `ready` says `remaining`). */
+  noteDecision(milliseconds: number): void;
+  /** Takes the items that wait off the queue (the running one goes on); returns how many. */
+  dropWaiting(): number;
+  /** Takes everything off, the running item stopped: the step is being stopped. */
+  cancelAll(): void;
+}
 export interface FcaBodyLifecycle {
   start(signal: AbortSignal): void;
   revision(): number;
@@ -93,15 +124,9 @@ export interface FcaBodyLifecycle {
   urgent?(): boolean;
   /**
    * mb-llmc r4 (owner 2026-10-22): before the decision, the body's own check for a surprise since the last one (health, a fall, the same
-   * stop twice…) and its fixed probes, bounded in time; what they found goes into this decision's live state (`transient`). A decision
-   * asked ahead (the lookahead) is not taken after a surprise: it was asked without it. Null: no surprise. Absent: never.
+   * stop twice…) and its fixed probes, bounded in time; what they found goes into this decision's live state (`transient`). Null: no surprise. Absent: never.
    */
   investigate?(signal: AbortSignal): Promise<FcaBodyInvestigation | null>;
-  /**
-   * mb-llmc r5 (run 28: of about 40 decisions asked ahead 12 were taken, and most of the rest were thrown away because the act failed): the
-   * body's last result failed, so the act chosen now is not followed by a decision asked ahead (`fcaLookahead.ts`). Absent: never.
-   */
-  troubled?(): boolean;
   /**
    * mb-llmc r8 (run 32: a hostile came in sight while the decision was awaited; the answer took 10.3 s and reached the body after her
    * death): polled while the model's decision is awaited. A line (the hostile) when one she must act on has come since the request was
@@ -113,6 +138,21 @@ export interface FcaBodyLifecycle {
   rebuilding?(): void;
   /** r8: a decision made on an urgent state has come: how long the model took on it, whether an earlier request was thrown away, and how long that had run. */
   decided?(info: { ms: number; aborted: boolean; thrownMs: number }): void;
+  /**
+   * The task queue (design minebot-task-queue, 2026-10-26): the body's items this step put in and still waits for. A step that has items open
+   * goes on instead of committing: it decides again when `queue.ready` says so, with items running, and commits only when none is open.
+   */
+  queue?: FcaBodyQueue;
+  /**
+   * A surprise (`investigate`'s detection) the body saw while items run: true makes `queue.ready` say `alert`, and the next `investigate` has it
+   * (probes and all). Never throws. Absent: none.
+   */
+  alert?(): boolean;
+  /**
+   * The words of items that ended during a round that has no tool result to carry them (the decision after them was a completion): shown to the
+   * next decision once, with the results the history keeps short. Never throws. Absent: dropped.
+   */
+  noteNews?(text: string): void;
   /** Stop monitoring, cancel held inputs and await every in-flight callback before the segment receipt is committed. */
   close(): Promise<void>;
 }

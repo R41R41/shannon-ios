@@ -68,7 +68,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
 describe('Notion 09-1c: the rules said as the code keeps them', () => {
   const system = minecraftV2System(V2_ALWAYS);
   it('one act a decision, plan.update first in the same response, a probe\'s answer before the hand that needs it', () => {
-    expect(system).toContain('mc.act は 1 判断に 1 つまで。plan.update は mc.act の前に置けば同じ応答でよい（書いた順に実行）');
+    expect(system).toContain('mc.act は 1 判断に 2 つまで（列の項目。体は順に動かす）。plan.update は mc.act の前に置けば同じ応答でよい（書いた順に実行）');
     expect(system).not.toContain('のどれか。');
     expect(system).toContain('act の中の手は順に動き、失敗は onFail に従う（反射・stopIf・満杯・時間切れは act 全体を止める）');
   });

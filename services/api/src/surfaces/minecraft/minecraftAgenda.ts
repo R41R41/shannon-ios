@@ -79,12 +79,6 @@ export function minecraftAgendaLines(taskId: string): string[] {
   return agendaLines(since.entries);
 }
 
-/** Whether the executor began anything for this task after `at` (a decision asked before it no longer fits the world). */
-export function agendaActedSince(taskId: string, at: number): boolean {
-  const state = states.get(taskId);
-  return !!state && state.agenda.since(0).entries.some(entry => entry.startedAt >= at);
-}
-
 type Call = Parameters<FcaExternalTools['execute']>[0];
 interface Parts {
   on: boolean; taskId: string; observe(): BodyObservation | null; judge?: MinecraftAgendaJudge; now?: () => number; log?(line: string): void;

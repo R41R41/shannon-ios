@@ -116,13 +116,13 @@ describe('B2: no text of the mode names a tool it does not offer', () => {
   it('finds the names of run 37 and lets the six pass', () => {
     expect(foreignToolNames('全体はminecraft.observeで読む。minecraft.reflexで')).toEqual(['minecraft.observe', 'minecraft.reflex']);
     expect(foreignToolNames('（find-blocks・view top）と find-structure、mc.find-blocks、mc.mine-block')).toEqual(['find-blocks', 'view top', 'find-structure', 'mc.find-blocks', 'mc.mine-block']);
-    expect(foreignToolNames('mc.act mc.probe kind=scan mc.view mode=top plan.update fca_wait fca_complete mc_act mc_probe mc_view plan_update')).toEqual([]);
+    expect(foreignToolNames('mc.act mc.probe kind=scan mc.view mode=top plan.update fca_complete mc_act mc_probe mc_view plan_update')).toEqual([]);
     expect(foreignToolNames('次: minecraft.observe で所持品を確認')).toEqual(['minecraft.observe']);
     expect(scrubForeignToolItems(['a', '次: find-blocks で探す', 'b'])).toEqual({ kept: ['a', 'b'], neutralized: 0, dropped: 1 });
   });
   it('is true of the request\'s fixed part (system blocks and the six tools), the stages, the first plan, the task note and the hints', async () => {
     const fixed = await candidateFixed([...LLMC_TOOLS, PROBE]);
-    expect(fixed.tools.map(tool => tool.name)).toEqual(['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'fca_wait', 'fca_complete']);
+    expect(fixed.tools.map(tool => tool.name)).toEqual(['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'fca_complete']);
     for (const block of fixed.system) expect(foreignToolNames(block.text), block.text.slice(0, 40)).toEqual([]);
     for (const tool of fixed.tools) expect(foreignToolNames(JSON.stringify(tool)), String(tool.name)).toEqual([]);
     expect(foreignToolNames(V2_ALWAYS)).toEqual([]);

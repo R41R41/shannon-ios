@@ -10,6 +10,7 @@ import { actionResource } from '../src/contracts/actionThreadContract.js';
 import { MC_ACT_TOOL } from '../src/contracts/minecraftActContract.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { actionHarness } from './support/actionThreadHarness.js';
+import { queueBody, queueFor } from './support/llmcQueueHarness.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2 (the guards): through the real control and tools, with the act-preflight on, an act whose third walk goes into rock is
@@ -66,7 +67,7 @@ function run(flags: { urgent?: boolean }, world: World, hands: unknown[]) {
   const plan = { revision: 3, current: 'p1.2', nodes: [{ id: 'p1', parentId: null, title: '出発の点検', state: 'continue' as const },
     { id: 'p1.2', parentId: 'p1', title: '西の幹へ', state: 'continue' as const }] };
   let decided = 0;
-  const seen: string[] = [];
+  const seen: string[] = [], news: string[] = [];
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: at,
     model: { async decide(input: unknown) {
       decided += 1;
@@ -74,8 +75,11 @@ function run(flags: { urgent?: boolean }, world: World, hands: unknown[]) {
       if (decided > 1) return { decision: { kind: 'wait', summary: 'next' }, history: [{ role: 'assistant', content: 'read' }] };
       return { decision: { kind: 'tools', calls: [{ id: 'c-1', name: MC_ACT_TOOL, input: { hands, why: '[p1.2] 東へ', stopIf: { hpBelow: 12 } } }] }, history: [{ role: 'assistant', content: 'call' }] };
     }, toolResults: results => ({ role: 'user', results }) },
-    stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
-      llmc: { plan: () => plan, ...(flags.urgent ? { urgent: () => true } : {}) } }) }),
+    stepPorts: (_runtime, step) => {
+      const queue = queueFor(control, step, plan);
+      return { keepBodyTools: () => true, body: queueBody(queue, news), tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
+        llmc: { plan: () => plan, queue, ...(flags.urgent ? { urgent: () => true } : {}) } }) };
+    },
   });
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id, { title: 'End', goal: 'エンドラを討伐して' }, 'owner-request');
   store.bind(task.id, 'minecraft:world');
@@ -91,7 +95,7 @@ function run(flags: { urgent?: boolean }, world: World, hands: unknown[]) {
     await driver.drain();
     return sent;
   };
-  return { driver, pending, waitPending, answer, seen };
+  return { driver, pending, waitPending, answer, seen, news };
 }
 const walk = (x: number) => ({ do: 'walk', to: { x, y: 56, z: 62 } });
 
@@ -107,11 +111,12 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
     const sent = await held.answer(ACT_DONE(2));
     expect((sent?.arguments as { hands: unknown[]; stopIf: unknown; why: string }).hands).toEqual([walk(221), walk(222)]);
     expect(sent?.arguments).toMatchObject({ stopIf: { hpBelow: 12 }, why: '[p1.2] 東へ' });
-    const text = held.seen.join('\n');
+    const text = `${held.seen.join('\n')}\n${held.news.join('\n')}`;
     expect(text).toContain('act 全部済み（2/2');
     expect(text).toContain('手 3 から先 1 手（全 3 手のうち）は体へ送っていない（送る前に止めた。手は 1 つも動いていない）: 手 3 walk 一歩ではない: 足のマス (224,56,62) が 石の類');
-    expect(text.indexOf('act 全部済み（2/2')).toBeLessThan(text.indexOf('手 3 から先 1 手'));
-    expect(text).toContain('"ok":false');
+    // The item was put in the queue with the fact of the hands left out; the body's own line comes later, as news.
+    expect(text.indexOf('手 3 から先 1 手')).toBeLessThan(text.indexOf('act 全部済み（2/2'));
+    expect(text).toContain('列に入れた q');
     expect(lines.find(line => line.startsWith('Shannon Minecraft act held partway'))).toMatch(/hand=3 sent=2 code=feet_solid$/u);
   });
 

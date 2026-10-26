@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { applyPlanUpdate, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { createFcaPlanTools } from '../src/mind/action/fca/fcaPlanTools.js';
-import { forgetActNodes, followNode, noteActNode, type ActNodeMark } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
+import { forgetActNodes, followNode, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { doneFacts, doneStatusWords, nodesSeenDone } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { descentNote } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { isDragonPlan, meterLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
@@ -29,54 +29,45 @@ function treeOf(rows: readonly Row[], current: string | null): PlanTree {
   });
   return { schema: 'shannon.plan-tree.v1', revision: 1, current, nodes };
 }
-const mark = (node: string, current: string | null, extra: Partial<ActNodeMark> = {}): ActNodeMark =>
-  ({ node, current, by: 'model', on: node === current, urgent: false, reason: false, ...extra });
-const quiet = () => undefined;
 
 const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,
   state: { world: world as never }, facts: {} });
 const pack = (...items: Array<[string, number]>) => items.map(([name, count]) => ({ name, count }));
 
-describe('fix 1: the current node follows the node the model keeps working on', () => {
+describe('fix 1: the current node follows the node of the item the body starts (task queue)', () => {
   const rows: Row[] = [['p1', null, '原木を集める', 'have:log>=8'], ['p5', null, '動物を狩り焼く', 'food>=40'], ['p6', null, '地下のベッドを取る', 'have:bed>=1'],
     ['p7', null, '鉄を掘る', 'have:iron_ingot>=24']];
-  it('moves after two acts in a row for the same other node, and leaves the nodes passed open', () => {
+  it('moves when an item starts for another node, and leaves the nodes passed open', () => {
     const tree = treeOf(rows, 'p1');
-    noteActNode('t1', mark('p7', 'p1'), quiet);
     expect(followNode('t1', tree)).toBeNull();
-    noteActNode('t1', mark('p7', 'p1'), quiet);
-    expect(followNode('t1', tree)).toEqual({ to: 'p7', from: 'p1', acts: 2 });
+    noteItemStart('t1', 'p7');
+    expect(followNode('t1', tree)).toEqual({ to: 'p7', from: 'p1', acts: 1 });
     const moved = applyPlanUpdate(tree, { ops: [], current: 'p7' }).tree;
     expect(moved.current).toBe('p7');
     expect(moved.nodes.filter(node => node.state === 'done')).toEqual([]);
     expect(followNode('t1', moved)).toBeNull();
   });
-  it('does not move for tags that differ, an urgent hand, a head tag, a parent, a done node, or a current node the model changed itself', () => {
+  it('is read once for each item; does not move for no node, the current node, a done node, a node above the current one or a node holding it', () => {
     const tree = treeOf(rows, 'p1');
-    noteActNode('t2', mark('p5', 'p1'), quiet);
-    noteActNode('t2', mark('p7', 'p1'), quiet);
+    noteItemStart('t2', null);
     expect(followNode('t2', tree)).toBeNull();
-    noteActNode('t2', mark('p7', 'p1'), quiet);
-    noteActNode('t2', mark('急ぎ', 'p1', { urgent: true }), quiet);
-    expect(followNode('t2', tree)).toEqual({ to: 'p7', from: 'p1', acts: 2 });
-    noteActNode('t2', mark('p7', 'p1', { by: 'head' }), quiet);
+    noteItemStart('t2', 'p1');
     expect(followNode('t2', tree)).toBeNull();
-    noteActNode('t3', mark('p7', 'p1'), quiet);
-    noteActNode('t3', mark('p7', 'p1'), quiet);
+    noteItemStart('t3', 'p7');
     const done = { ...tree, nodes: tree.nodes.map(node => node.id === 'p7' ? { ...node, state: 'done' as const } : node) };
     expect(followNode('t3', done)).toBeNull();
-    expect(followNode('t3', { ...tree, current: 'p5' })).toBeNull();
+    noteItemStart('t3', 'p7');
+    expect(followNode('t3', { ...tree, current: 'p7' })).toBeNull();
+    expect(followNode('t3', tree)).toBeNull();
   });
   it('goes to the first open leaf of a node with children', () => {
     const tree = treeOf([['p1', null, '木'], ['p2', null, '鉄'], ['p2.1', 'p2', '掘る'], ['p2.2', 'p2', '焼く']], 'p1');
-    noteActNode('t4', mark('p2', 'p1'), quiet);
-    noteActNode('t4', mark('p2', 'p1'), quiet);
+    noteItemStart('t4', 'p2');
     expect(followNode('t4', tree)?.to).toBe('p2.1');
   });
   it('moves the plan at the next read, once, and says so in the log and the plan\'s note', () => {
     const tree = treeOf(rows, 'p1');
-    noteActNode('t5', mark('p7', 'p1'), quiet);
-    noteActNode('t5', mark('p7', 'p1'), quiet);
+    noteItemStart('t5', 'p7');
     const lines: string[] = [];
     const plan = createFcaPlanTools({ taskId: 't5', checkpoint: { fcaPlanTree: tree }, rules: true, compact: true, log: line => lines.push(line),
       follow: held => followNode('t5', held) });

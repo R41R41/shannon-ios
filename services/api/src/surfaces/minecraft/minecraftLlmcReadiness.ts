@@ -13,7 +13,6 @@ import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } f
  *   pack: 「準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾が無い。食料 15.6 点（目安 100）」. Null when nothing is missing.
  * - `recoveryLine`: health below full and hunger under 18, where health does not come back by itself; `foodLeads`: where food is
  *   (animals near, the scan's village rows, a hoglin and a crimson forest in the Nether, the gate back with its distance).
- * - `llmcWaitLine`: what an `fca_wait` of a task nobody can answer is told (what there is to wait for, or that there is nothing).
  */
 type Stage = 'nether_deep' | 'nether_entry' | 'end' | 'diamonds';
 type Need = PrepNeed;
@@ -169,15 +168,6 @@ export function foodFirstLine(nodes: readonly PlanNode[], current: string | null
 /** The feet of a frame's world (for the readiness lines). */
 export function feetIn(world: Record<string, unknown>): Feet | null { return feetOf(world); }
 
-/** The furnaces at work in the frame (`world.jobs`): how many, and the soonest done in seconds. */
-function furnaces(world: Record<string, unknown>): string | null {
-  const jobs = (Array.isArray(world.jobs) ? world.jobs : []).flatMap(item => {
-    const left = finite(record(item)?.remainingEstimateMs);
-    return left !== null ? [left] : [];
-  });
-  return jobs.length ? `かまどの焼き上がり（${jobs.length} 件、早いもので約 ${Math.max(0, Math.round(Math.min(...jobs) / 1000))} 秒）` : null;
-}
-
 /** The readiness facts of a frame: its dimension, counts, food points, hunger and health. */
 export function readinessOf(observation: BodyObservation | null): { world: Record<string, unknown>; dimension: string | null; counts: ItemCounts;
   food: number; hunger: number | null; health: number | null } | null {
@@ -187,23 +177,6 @@ export function readinessOf(observation: BodyObservation | null): { world: Recor
   return { world, counts: carriedItemCounts(world, observation.facts), food: carriedFood(world, observation.facts).points,
     hunger: finite(world.food), health: finite(world.health),
     dimension: typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null };
-}
-
-/**
- * What an `fca_wait` of a task nobody can answer is told in the mode (one line; it never stops the task): what there is to wait for (a
- * furnace at work, health coming back at hunger 18 or more), or that there is nothing, with the recovery fact and where food is.
- */
-export function llmcWaitLine(observation: BodyObservation | null, nodes: readonly PlanNode[] = []): string {
-  const facts = readinessOf(observation);
-  const head = '待ちではタスクは止まらない（運用者の依頼: 返事を待つ相手はいない）。';
-  if (!facts) return `${head}体の観測が無い: 待つ物は分からない。計画の今の節を続ける。`;
-  const regen = facts.hunger !== null && facts.health !== null && facts.hunger >= 18 && facts.health < 20
-    ? `体力の回復（満腹 ${round1(facts.hunger)}≥18、体力 ${round1(facts.health)}/20）` : null;
-  const waits = [furnaces(facts.world), regen].filter(Boolean);
-  if (waits.length) return `${head}待つ物: ${waits.join('・')}。その場で待つなら mc.act の wait の手で（体が待つ）。`;
-  const recovery = recoveryLine(facts.hunger, facts.health, facts.food);
-  return `${head}待つ物が無い（焼いている物は無い${recovery ? `・${recovery}` : ''}）。`
-    + `${recovery ? `${foodLeads(facts.world, facts.dimension, nodes)}。` : ''}計画の今の節を続ける。`;
 }
 
 /**

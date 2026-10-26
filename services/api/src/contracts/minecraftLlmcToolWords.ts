@@ -3,7 +3,7 @@
  * `view top`, tools its menu does not have, in the task note, the stages' knowledge and a history summary): the tools the mode offers, and what names
  * one it does not. The tools are `mc.act`, `mc.probe`, `mc.view`, `plan.update` (the provider's names: `mc_act` …) and the two controls.
  */
-export const V2_TOOL_NAMES: readonly string[] = Object.freeze(['mc.act', 'mc.probe', 'mc.view', 'plan.update', 'fca_wait', 'fca_complete']);
+export const V2_TOOL_NAMES: readonly string[] = Object.freeze(['mc.act', 'mc.probe', 'mc.view', 'plan.update', 'fca_complete']);
 
 /** Words that name a tool other than the six: the old body tools (`mc.mine-block`, `mc.find-*`), `minecraft.*`, the finders, the catalog's and the memory's. */
 const FOREIGN = new RegExp([

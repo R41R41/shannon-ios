@@ -22,8 +22,3 @@ export function amendAnthropicControl(turn: unknown, text: string): Anthropic.Me
 export const FCA_WAIT_RULE = 'Nobody can send this task a message or answer a question: it has no unfinished child task and whoever handed it over '
   + 'cannot reply. fca_wait is turned away until refusedWaits reaches refusalLimit; a wait after that stops the task. '
   + 'Continue toward the goal with the offered tools, or use fca_complete once the completion criteria are met.';
-/** mb-llmc r6 (`waits: 'answered'`, `FcaWaitAnswer`): a wait is answered with what there is to wait for, and never stops the task. */
-export const FCA_WAIT_ANSWERED_RULE = 'Nobody can send this task a message or answer a question. fca_wait never stops this task: it is answered in '
-  + 'one line with what there is to wait for in the world (a furnace, health coming back), or that there is nothing, and the task goes on.';
-/** The rule that goes with a wait fact (the decision's `waiting`). */
-export function fcaWaitRule(waiting: object): string { return 'waits' in waiting ? FCA_WAIT_ANSWERED_RULE : FCA_WAIT_RULE; }

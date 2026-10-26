@@ -18,6 +18,7 @@ import { createFoodTrend, minecraftLlmcLive } from '../src/surfaces/minecraft/mi
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { applyPlanUpdate, planPath } from '@shannon/mind';
 import { actionHarness } from './support/actionThreadHarness.js';
+import { queueFor } from './support/llmcQueueHarness.js';
 import { message, scriptedAnthropic, withoutCacheMarkers } from './support/anthropicFixtures.js';
 import { layersMap } from './support/minecraftMaps.js';
 
@@ -51,7 +52,7 @@ function fixture(decide: (index: number) => { name: string; input: unknown }, ex
       return { decision: { kind: 'tools', calls: [{ id: 'c-1', name: call.name, input: call.input }] }, history: [{ role: 'assistant', content: 'call' }] }; },
       toolResults: results => ({ role: 'user', results }) },
     stepPorts: (_runtime, step) => {
-      const body = fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true, llmc: { plan: () => undefined } });
+      const body = fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true, llmc: { plan: () => undefined, queue: queueFor(control, step) } });
       const more = extra?.(step, control);
       return { tools: more ? combineFcaTools(body, { definitions: more, async execute(call) {
         const run = llmcProbeRunner(control, step)();

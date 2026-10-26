@@ -63,30 +63,18 @@ export function tagActWhy(input: unknown, plan: BodyPlanView | undefined): { inp
     mark: { node: plan.current, current: plan.current, by: 'head', on: true, urgent: false, reason: false } };
 }
 
-interface Tally { acts: number; on: number; off: number; offReason: number; urgent: number; head: number; parent: number;
-  /**
-   * The nodes the model's last acts were tagged for, newest last (a head-tagged act's node is `null`; an urgent or parent's tag is not counted), with the
-   * current node it was sent under: `followNode` reads them.
-   */
-  tags: Array<{ node: string | null; current: string | null }> }
+interface Tally { acts: number; on: number; off: number; offReason: number; urgent: number; head: number; parent: number }
 const tallies = new Map<string, Tally>();
-/** The tag of an act sent, for `followNode`: the model's own (not an urgent hand's or a parent's), or the head's put-in (a break in a run). */
-function keepTag(tally: Tally, mark: ActNodeMark): void {
-  if (mark.by === 'head') tally.tags.push({ node: null, current: mark.current });
-  else if (!mark.urgent && !mark.parent) tally.tags.push({ node: mark.node, current: mark.current });
-  if (tally.tags.length > FOLLOW_KEPT) tally.tags.shift();
-}
 /** Counts one act sent for the task and says it in the log (its node, the current one, and the task's share on the plan so far). */
 export function noteActNode(taskId: string, mark: ActNodeMark | null, log: (line: string) => void): Tally | null {
   if (!mark) return null;
   let tally = tallies.get(taskId);
   if (!tally) {
-    tally = { acts: 0, on: 0, off: 0, offReason: 0, urgent: 0, head: 0, parent: 0, tags: [] };
+    tally = { acts: 0, on: 0, off: 0, offReason: 0, urgent: 0, head: 0, parent: 0 };
     tallies.set(taskId, tally);
     if (tallies.size > 32) tallies.delete(tallies.keys().next().value as string);
   }
   tally.acts += 1;
-  keepTag(tally, mark);
   if (mark.by === 'head') tally.head += 1;
   else if (mark.urgent) tally.urgent += 1;
   else if (mark.on) tally.on += 1;
@@ -101,7 +89,7 @@ export function noteActNode(taskId: string, mark: ActNodeMark | null, log: (line
       + ` reason=${mark.reason ? 1 : 0} acts=${tally.acts} onPlan=${tally.on} off=${tally.off} offReason=${tally.offReason} urgent=${tally.urgent}`
       + ` head=${tally.head} parent=${tally.parent} share=${share}`);
   } catch { /* a log never fails a step */ }
-  return { ...tally, tags: [...tally.tags] };
+  return { ...tally };
 }
 
 /** The current node as the live state shows it before the map: `[p1.1] 作業台と板を作る＠…（済み: …）` and the path above it. */
@@ -146,21 +134,27 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   return node ? currentNodeLine(node, shown?.path, doneStatusWords(node.doneWhen, doneFacts(observation))) : planNowLine(shown);
 }
 
-/** The acts in a row, tagged for the one same node that is not the current one, after which the head moves the current node to it. */
-export const FOLLOW_AFTER = 2;
-const FOLLOW_KEPT = 4;
+/** The node of the item the body started last, until `followNode` reads it once (task queue: the plan's current node follows the work). */
+const started = new Map<string, string>();
+export function noteItemStart(taskId: string, node: string | null): void {
+  if (!node) return;
+  started.delete(taskId);
+  started.set(taskId, node);
+  if (started.size > 32) started.delete(started.keys().next().value as string);
+}
 /**
  * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: plan.update 0 and no 「理由:」 in 125 decisions, 85 of 104 acts tagged for another node than the current
  * one; the plan's now said 原木を集める for 471 s while she smelted iron, and 動物を狩り焼く / 地下のベッドを取る while she did the iron again): the node the
- * model keeps working on is the plan's current node. When its last `FOLLOW_AFTER` acts were tagged for the same node (not the current one, not urgent, not a
- * node above), the head moves the current node to its first open leaf: the plan, its display (the mod's task tab) and the live's now say what she does.
- * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the tags do not agree.
+ * body works on is the plan's current node. Task queue (design 8.2): when an item starts for a node that is not the current one (not done, not blocked, not
+ * a node above), the head moves the current node to that node's first open leaf: the plan, its display (the mod's task tab) and the live's now say
+ * what she does.
+ * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the node is the current one or
+ * already holds it. Read once for each item started.
  */
 export function followNode(taskId: string, tree: PlanTree): { to: string; from: string | null; acts: number } | null {
-  const tags = tallies.get(taskId)?.tags.slice(-FOLLOW_AFTER) ?? [];
-  const target = tags[0]?.node;
-  // Sent under the current node the plan has now (a change of the model's own, by plan.update, since then, ends the run).
-  if (tags.length < FOLLOW_AFTER || !target || tags.some(tag => tag.node !== target || tag.current !== tree.current)) return null;
+  const target = started.get(taskId);
+  started.delete(taskId);
+  if (!target) return null;
   const order = orderedPlan(tree.nodes), byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const open = (id: string) => byId.get(id)?.state !== 'done' && byId.get(id)?.state !== 'blocked' && byId.has(id);
   if (!open(target)) return null;
@@ -170,8 +164,11 @@ export function followNode(taskId: string, tree: PlanTree): { to: string; from: 
   };
   const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
   if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
-  return { to: leaf.id, from: tree.current, acts: tags.length };
+  return { to: leaf.id, from: tree.current, acts: 1 };
 }
 
 /** For tests: no task holds a tally. */
-export function forgetActNodes(): void { tallies.clear(); }
+export function forgetActNodes(): void {
+  tallies.clear();
+  started.clear();
+}

@@ -1,6 +1,5 @@
 import type { FcaBodyLifecycle } from './fcaPorts.js';
 import type { FcaObservationLifecycle } from './fcaObservation.js';
-import type { FcaLookahead } from './fcaLookahead.js';
 import type { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 
 /**
@@ -9,14 +8,13 @@ import type { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
  * metrics line (`probe`) and a decision asked ahead is dropped (it was asked without what the probes found). True when there was one.
  * Never throws: a failing investigation is no surprise, and the step goes on as before.
  */
-export async function investigateFcaBody(ports: { body?: FcaBodyLifecycle; lookahead?: FcaLookahead }, taskId: string,
+export async function investigateFcaBody(ports: { body?: FcaBodyLifecycle }, taskId: string,
   metrics: ReturnType<typeof fcaDecisionMetrics>, signal: AbortSignal): Promise<boolean> {
   const body = ports.body;
   if (!body?.investigate) return false;
   const found = await metrics.timed('probeMs', () => body.investigate!(signal)).catch(() => null);
   if (!found) return false;
   metrics.investigated(found);
-  ports.lookahead?.drop?.(taskId, 'surprise');
   return true;
 }
 

@@ -9,9 +9,9 @@ import type { MinecraftControlPoll } from '../src/contracts/minecraftControlCont
 import { actionResource } from '../src/contracts/actionThreadContract.js';
 import { MC_ACT_TOOL } from '../src/contracts/minecraftActContract.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
-import { FCA_WAIT_REFUSALS, type FcaWaitAnswer } from '../src/mind/action/fca/fcaWaitGate.js';
-import { amendAnthropicControl } from '../src/infra/models/anthropic/anthropicFcaControl.js';
+import { FCA_WAIT_REFUSALS } from '../src/mind/action/fca/fcaWaitGate.js';
 import { actionHarness } from './support/actionThreadHarness.js';
+import { queueBody, queueFor } from './support/llmcQueueHarness.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 
 /**
@@ -25,7 +25,7 @@ const at = () => '2026-10-22T00:00:00.000Z';
 const RECEIPT = JSON.stringify({ received: true, requestedDecision: 'wait' });
 
 /** A task model that asks to wait at every decision, with the provider's history (the wait and its receipt). */
-function waitingRun(answer?: FcaWaitAnswer) {
+function waitingRun() {
   const h = actionHarness(at);
   cleanups.push(h.close);
   const inputs: FcaModelInput[] = [];
@@ -37,7 +37,7 @@ function waitingRun(answer?: FcaWaitAnswer) {
         { role: 'assistant', content: [{ type: 'tool_use', id, name: 'fca_wait', input: { summary: 's' } }] },
         { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: RECEIPT }] }] };
     }, toolResults: results => ({ role: 'user', results }) },
-    stepPorts: () => ({ waitCounterpart: () => false, ...(answer ? { waitAnswer: answer } : {}) }),
+    stepPorts: () => ({ waitCounterpart: () => false }),
   });
   cleanups.push(() => driver.close());
   const root = driver.runtime.ensureRoot('owner');
@@ -46,32 +46,8 @@ function waitingRun(answer?: FcaWaitAnswer) {
   return { driver, task, inputs, step };
 }
 
-describe('a wait nobody can answer, in the mode (run 29: the third fca_wait stopped the task)', () => {
-  const answer: FcaWaitAnswer = { line: () => '待ちではタスクは止まらない（運用者の依頼: 返事を待つ相手はいない）。待つ物が無い（焼いている物は無い）。計画の今の節を続ける。',
-    amend: amendAnthropicControl };
-
-  it('never stops the task and counts no refusal; the decision is told waits are answered', async () => {
-    const run = waitingRun(answer);
-    for (let index = 0; index < FCA_WAIT_REFUSALS + 3; index++) {
-      const view = await run.step();
-      expect(view.phase).toBe('ready');
-      expect(run.driver.runtime.snapshot('owner', run.task.id)!.checkpoint).not.toHaveProperty('fcaWaitRefusals');
-    }
-    expect(run.inputs).toHaveLength(FCA_WAIT_REFUSALS + 3);
-    expect(run.inputs[0]!.waiting).toEqual({ replyPossible: false, waits: 'answered' });
-  });
-
-  it('is answered in one line in place of its receipt, as an error the next decision reads', async () => {
-    const run = waitingRun(answer);
-    await run.step();
-    await run.step();
-    const last = JSON.stringify(run.inputs[1]!.history.at(-1));
-    expect(last).toContain('待つ物が無い');
-    expect(last).toContain('"is_error":true');
-    expect(last).not.toContain('received');
-  });
-
-  it('without the answer (another task): turned away twice, then the task stops, as before', async () => {
+describe('a wait nobody can answer (another task than a body task of the mode: it has no fca_wait)', () => {
+  it('turned away twice, then the task stops', async () => {
     const run = waitingRun();
     for (let refused = 1; refused <= FCA_WAIT_REFUSALS; refused++) expect((await run.step()).phase).toBe('ready');
     expect(await run.step()).toMatchObject({ phase: 'stopped', pauseReason: 'fca_stopped' });
@@ -103,8 +79,11 @@ function actRun(why: string) {
       return { decision: { kind: 'tools', calls: [{ id: 'c-1', name: MC_ACT_TOOL, input: { hands: [{ do: 'wait', seconds: 1 }], why } }] },
         history: [{ role: 'assistant', content: 'call' }] };
     }, toolResults: results => ({ role: 'user', results }) },
-    stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
-      llmc: { plan: () => plan } }) }),
+    stepPorts: (_runtime, step) => {
+      const queue = queueFor(control, step, plan);
+      return { keepBodyTools: () => true, body: queueBody(queue), tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
+        llmc: { plan: () => plan, queue } }) };
+    },
   });
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id, { title: 'End', goal: 'エンドラを討伐して' }, 'owner-request');
   store.bind(task.id, 'minecraft:world');

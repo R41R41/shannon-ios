@@ -69,7 +69,7 @@ describe('SHANNON_MINECRAFT_LLMC_V2 through the runner', () => {
     const decide = fixture.bodies.filter(body => (body.tools as Array<{ name?: string }>).some(tool => tool.name === 'mc_act'));
     expect(decide.length).toBeGreaterThanOrEqual(4);
     for (const body of decide) {
-      expect((body.tools as Array<{ name: string }>).map(tool => tool.name)).toEqual(['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'fca_wait', 'fca_complete']);
+      expect((body.tools as Array<{ name: string }>).map(tool => tool.name)).toEqual(['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'fca_complete']);
     }
     expect(new Set(decide.map(body => JSON.stringify(body.tools))).size).toBe(1);
     expect(executed.map(item => item.name)).toEqual(Array(executed.length).fill('mc.act'));

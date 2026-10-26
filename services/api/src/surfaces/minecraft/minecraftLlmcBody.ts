@@ -25,6 +25,7 @@ import { planNowLine, planNowOf } from './minecraftLlmcNode.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
+import { queueLifecycle, type LlmcQueue } from './minecraftLlmcQueueBody.js';
 
 /** The first index of the hostiles' sight probes in a step (the surprises' are 0 and 1), and of the footing's column probes (r8). */
 const THREAT_SIGHT_INDEX = 10, FOOTING_INDEX = 20;
@@ -50,8 +51,6 @@ interface TaskEvents {
   cut: string | null;
   /** r3: her health at the last decision, for what a fall or a blast took since. */
   health: number | null;
-  /** r5: the last act did not go as asked (no decision is asked ahead of the next one). */
-  actFailed: boolean;
   /** r7: the last act was stopped by its own stopIf (where it stopped is looked at from the shooters near). */
   stopIf: boolean;
 }
@@ -60,7 +59,7 @@ function eventsOf(taskId: string): TaskEvents {
   let state = tasks.get(taskId);
   if (!state) {
     state = { lines: [], seq: 0, read: 0, arrival: null, failed: false, trend: createFoodTrend(), pending: [], cut: null, health: null,
-      actFailed: false, stopIf: false };
+      stopIf: false };
     tasks.set(taskId, state);
     if (tasks.size > 32) tasks.delete(tasks.keys().next().value as string);
   }
@@ -156,12 +155,9 @@ export function createLlmcEvents(taskId: string) {
       state.failed = !ok;
       if (name === MC_ACT_TOOL) {
         state.cut = cutOf(text, bodyReflex);
-        state.actFailed = !ok;
         state.stopIf = /（stopIf: /u.test(text);
       }
     },
-    /** r5: whether the last act failed (`FcaBodyLifecycle.troubled`). */
-    actFailed: () => state.actFailed,
     /** r7: whether the last act was stopped by its own stopIf. */
     stoppedByStopIf: () => state.stopIf,
     /** r3: a result's whole text the history keeps short, for the next decision's live state. */
@@ -196,7 +192,7 @@ export type LlmcEvents = ReturnType<typeof createLlmcEvents>;
 export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observation: BodyObservation | null,
   elapsedMinutes: number | null, urgent: readonly string[] = [],
   seen: { investigation?: readonly string[]; scan?: readonly string[]; unreachable?: readonly string[]; footing?: string | null;
-    bodyAge?: string | null } = {})
+    bodyAge?: string | null; queue?: readonly string[] } = {})
   : Record<string, unknown> {
   const plan = llmc.planView();
   const world = observation?.state.world as Record<string, unknown> | undefined;
@@ -205,6 +201,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(seen.investigation?.length ? { investigation: seen.investigation } : {}), ...(seen.scan?.length ? { scan: seen.scan } : {}),
     ...(seen.unreachable?.length ? { unreachable: seen.unreachable } : {}), ...(seen.footing ? { footing: seen.footing } : {}),
+    ...(seen.queue?.length ? { queue: seen.queue } : {}),
     ...bodyAgeField(seen.bodyAge),
     ...readinessParts(llmc, plan, observation), ...roadParts(llmc, observation, elapsedMinutes) }, llmcPlanTokens(plan));
 }
@@ -282,11 +279,12 @@ const healthOf = (observation: BodyObservation | null): number | null => {
 /**
  * A body task's lifecycle in the mode: its live state is the map-first one (`llmcTransient`), the events since the last decision are read
  * at each context (an arrival of the body; a result a reflex cut or that failed), and a recall is wanted only after one (design 2.3).
- * r3: a long result is kept short in the history and shown whole once (`llmcStoredResult`), and a step is urgent (`urgentReasons`) while a
- * hostile is close or the last act was cut by one or by a reflex. Everything else is the body's as it was.
+ * r3: a long result is kept short in the history and shown whole once (`llmcStoredResult`), and a step is urgent (`urgentReasons`) while a hostile is
+ * close or the last act was cut by one. Task queue: the live state shows the queue, and `queueLifecycle` adds its port. Everything else is as it was.
  */
 export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyParts; taskId: string; createdAt: string;
   observe(): BodyObservation | null; arrival(): { at: number | null; kind: string | null }; now?: () => number; log?(line: string): void;
+  queue?: LlmcQueue; // the task queue of the step (`minecraftLlmcQueue.ts`): the live state's lines, the lifecycle's port, a decision's staleness
   /**
    * mc-chat-stale-frame: the body as a decision reads it, a frame a few seconds old included (`MinecraftControl.seen`). Everything that
    * sends a command or watches for danger keeps `observe` (the current frame); only the decision's context and live read this. Absent:
@@ -327,7 +325,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     const nowLine = planNowLine(parts.llmc.planView() as { now?: unknown; path?: unknown } | null);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing, bodyAge,
-      planNowTitle: planNowTitle(nowLine), answer: URGENT_ANSWER });
+      planNowTitle: planNowTitle(nowLine), queue: parts.queue?.lines(observation) ?? [], answer: URGENT_ANSWER });
     urgentTokens = llmcTokens(JSON.stringify(live));
     return live;
   };
@@ -376,6 +374,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       if (!again) {
         interrupted = null;
         urgentTokens = null;
+        parts.queue?.mark();
       }
       const value = body.context();
       // The body as a decision reads it: the current frame, or an older one (said how old in the live); none only past `LLMC_STALE_FRAME_MS`.
@@ -406,7 +405,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       const urgentNow = reasons.length > 0 || interrupted !== null;
       noteUrgentDecision(parts.taskId, urgentNow);
       if (urgentNow) return urgentState(minutes);
-      return llmcTransient(parts.llmc, events, observation, minutes, reasons, { investigation, scan, unreachable, footing, bodyAge });
+      return llmcTransient(parts.llmc, events, observation, minutes, reasons, { investigation, scan, unreachable, footing, bodyAge,
+        queue: parts.queue?.lines(observation) ?? [] });
     },
     /** r8: a hostile she must act on that has come since the request was built (once a decision), see `FcaBodyLifecycle.interrupt`. */
     interrupt: (): string | null => {
@@ -415,6 +415,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       return interrupted;
     },
     rebuilding: () => { rebuild = true; },
+    ...queueLifecycle({ queue: parts.queue, observe: parts.observe, arrival: () => parts.arrival().at, peek: () => watch.peek(),
+      keep: text => events.keep(text) }, body),
     decided: ({ ms, aborted, thrownMs }: { ms: number; aborted: boolean; thrownMs: number }) => {
       if (urgentTokens !== null) {
         say(`Shannon Minecraft urgent decision task=${parts.taskId} ms=${ms} aborted=${aborted ? 1 : 0} ctxTokens=${urgentTokens}`
@@ -456,8 +458,6 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     },
     // No recall: the mode's live state shows none.
     recallWanted: () => false,
-    // r5: no decision asked ahead of an act chosen right after a failed one (run 28: 73% of acts failed within seconds).
-    troubled: () => events.actFailed(),
     // r5 (run 28: a plan row of run 27's task, in another world, was recalled with its coordinates): what was before this task is marked.
     recallCues: () => ({ ...(body.recallCues?.() ?? { words: [], tags: [] }), since: parts.createdAt }),
     urgent() {

@@ -4,8 +4,9 @@ import { finite, plain } from './minecraftLlmcProbeInput.js';
 /**
  * mb-llmc r10 (H2; run 34, 2026-10-22, the seventh unknown: the flee reflex held the body at 17:30:00–12 and dug her down nine blocks; an
  * urgent act sent at 17:30:05 was cut by the reflex's lease, sat unsettled 4 s and made the step unknown, and the recovery limit stopped the
- * task): an act is not sent to the body while a reflex is holding it. The decision still runs at once and is told (`reflexLine`, first among
- * the urgent lines); only the sending waits, at most `REFLEX_WAIT_MS`. How the head knows, in order:
+ * task): an act does not start while a reflex is holding the body. The decision still runs at once and is told (`reflexLine`, first among
+ * the urgent lines); only the start waits, and the body does the waiting for every item of its queue (`afterReflex`, `controlLoop`/`nativeBody`).
+ * How the head knows, in order:
  * - the body's r10 says it in the observation: `facts.reflexHeld`, the name of the reflex that holds the body (`floor-flee`, `floor-last-stand`,
  *   `floor-cover`, `floor-melee`, `floor-eat`, `floor-armor`, `floor-retreat`, `lava-escape`, `auto-swim`) or null; the gap between two hands of an
  *   episode counts as held. A key that is there decides (null: free);
@@ -16,7 +17,6 @@ import { finite, plain } from './minecraftLlmcProbeInput.js';
 export const REFLEX_HOLD_KINDS: ReadonlySet<string> = new Set(['flee', 'cover', 'melee']);
 /** Seconds without a new hand of the episode after which the reflex has let go (a ledger entry's age is whole seconds, so 2 is 1.5 s or more). */
 export const REFLEX_SILENT_SECONDS = 2;
-export const REFLEX_WAIT_MS = 6_000;
 
 export interface ReflexHold { kind: string; detail: string; ageSec: number; by: 'facts' | 'ledger' }
 const newestEntry = (observation: BodyObservation | null, wanted?: (kind: string) => boolean) => {
@@ -55,23 +55,4 @@ export function reflexLine(hold: ReflexHold | null): string | null {
 export function reflexLines(observation: BodyObservation | null): string[] {
   const line = reflexLine(reflexHolding(observation));
   return line ? [line] : [];
-}
-
-/**
- * Waits for the reflex to let go: samples the frame every `everyMs` and returns when none holds, the signal aborts or `maxMs` passes. The
- * result says how long it waited and which reflex held (none: 0 ms), and whether it gave up with the reflex still holding.
- */
-export async function waitForReflexRelease(parts: { observe(): BodyObservation | null; signal: AbortSignal; maxMs?: number; everyMs?: number;
-  now?(): number; sleep?(ms: number): Promise<void> }): Promise<{ waitedMs: number; kind: string | null; gaveUp: boolean }> {
-  const now = parts.now ?? (() => Date.now()), sleep = parts.sleep ?? ((ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms); })),
-    maxMs = parts.maxMs ?? REFLEX_WAIT_MS, every = parts.everyMs ?? 250, began = now();
-  let kind: string | null = null;
-  for (;;) {
-    const hold = reflexHolding(parts.observe());
-    if (!hold) return { waitedMs: Math.round(now() - began), kind, gaveUp: false };
-    kind ??= hold.kind;
-    if (parts.signal.aborted) return { waitedMs: Math.round(now() - began), kind, gaveUp: true };
-    if (now() - began >= maxMs) return { waitedMs: Math.round(now() - began), kind, gaveUp: true };
-    await sleep(every);
-  }
 }

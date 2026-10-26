@@ -8,7 +8,7 @@ import { SHORT_ACT_INPUT_SCHEMA } from '../src/contracts/minecraftActShortContra
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import type { MinecraftSkillDefinition } from '../src/contracts/minecraftControlContract.js';
 import { skillSchema, validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
-import { actResultText, llmcBodyDefinitions, llmcInputProblem, llmcLongCall, llmcResult, urgentWatch } from '../src/surfaces/minecraft/minecraftLlmc.js';
+import { actResultText, llmcBodyDefinitions, llmcInputProblem, llmcResult, urgentWatch } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { carriedFood, createFoodTrend, LLMC_LIVE_TOKENS, llmcLiveTokens, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcEvents, forgetLlmcEvents, withLlmcBody } from '../src/surfaces/minecraft/minecraftLlmcBody.js';
 import {
@@ -132,14 +132,6 @@ describe('the mode\'s tools', () => {
     expect(view.text).toBe(`${map}\nC 村の箱 (1,2,3)`);
     expect(storedBodyResult(MC_VIEW_TOOL, view.text)).toBe(view.text);
     expect(storedBodyResult(MC_ACT_TOOL, 'x'.repeat(3_000))).toHaveLength(3_000);
-  });
-
-  it('asks ahead only for an act of eight seconds or more (r8; r2–r7: four)', () => {
-    expect(llmcLongCall({ name: MC_ACT_TOOL, input: { hands: [{ do: 'eat' }] } })).toBe(false);
-    // Six digs are 5.4 s: not asked ahead now (run 32: 11 of 16 asked ahead were thrown away); ten are 9 s.
-    expect(llmcLongCall({ name: MC_ACT_TOOL, input: { hands: [{ do: 'dig', at: Array.from({ length: 6 }, () => ({ x: 0, y: 0, z: 0 })) }] } })).toBe(false);
-    expect(llmcLongCall({ name: MC_ACT_TOOL, input: { hands: [{ do: 'dig', at: Array.from({ length: 10 }, () => ({ x: 0, y: 0, z: 0 })) }] } })).toBe(true);
-    expect(llmcLongCall({ name: 'mc.find-blocks', input: {} })).toBe(false);
   });
 
   it('an urgent step: a hostile come within 6 m cuts the act, unless its own stopIf watches it', async () => {

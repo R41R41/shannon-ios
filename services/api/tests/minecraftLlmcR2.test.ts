@@ -7,7 +7,7 @@ import {
   actExpectedMilliseconds, actMilliseconds, MAP_LEGEND, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_INPUT_SCHEMA, ACT_DESCRIPTION, type ActResult,
 } from '../src/contracts/minecraftActContract.js';
 import { normalizeActInput, schemaProblem } from '../src/surfaces/minecraft/minecraftLlmcShape.js';
-import { actResultText, llmcLongCall, llmcMilliseconds, llmcPrepare, llmcResult } from '../src/surfaces/minecraft/minecraftLlmc.js';
+import { actResultText, llmcMilliseconds, llmcPrepare, llmcResult } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { createFoodTrend, LLMC_LIVE_TOKENS, llmcLiveTokens, llmcPlanTokens, llmcTokens, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { LLMC_SYSTEM_APPENDIX } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA, FIRST_PLAN_SYSTEM, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -66,7 +66,6 @@ describe('the act\'s time from its hands (run 27: a walk of 80 m was cut at 17 s
     expect(actMilliseconds(west80, feet)).toBeGreaterThan(35_000);
     expect(llmcMilliseconds(MC_ACT_TOOL, west80, feet)).toBeGreaterThan(40_000);
     expect(actExpectedMilliseconds(west80, feet)).toBeGreaterThan(15_000);
-    expect(llmcLongCall({ name: MC_ACT_TOOL, input: west80 }, feet)).toBe(true);
     // A path is its points' length; a short one stays short; each hand starts where the one before ended.
     const path = { hands: [{ do: 'walk' as const, path: [{ x: 0, y: 69, z: 10 }, { x: 0, y: 69, z: 40 }] }] };
     expect(actExpectedMilliseconds(path, feet)).toBeGreaterThan(7_000);

@@ -2,14 +2,15 @@ import { createHash } from 'node:crypto';
 import type { FcaExternalTools, FcaToolDefinition } from '../mind/action/fca/fcaPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { BodyPlanView, BodyTaskContext } from '../contracts/bodyControlContract.js';
-import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
+import { MC_ACT_TOOL, type ActInput } from '../contracts/minecraftActContract.js';
 import { MC_PROBE_TOOL } from '../contracts/minecraftProbeContract.js';
-import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema, urgentWatch } from '../surfaces/minecraft/minecraftLlmc.js';
+import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema } from '../surfaces/minecraft/minecraftLlmc.js';
+import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { frameCreatures } from '../surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { checkedStopIf } from '../surfaces/minecraft/minecraftLlmcStopIf.js';
-import { waitForReflexRelease } from '../surfaces/minecraft/minecraftLlmcReflexHold.js';
-import { heldBeforeSend, withHeldTail, withNote } from '../surfaces/minecraft/minecraftLlmcPartial.js';
+import { withNote } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import { noteActNode, tagActWhy, type ActNodeMark } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { actGuards, feelWhenItsDone, replacedOnly, sendItem } from './fcaMinecraftActItem.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
@@ -55,7 +56,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
    */
   llmc?: { plan(): BodyPlanView | undefined;
     /** Whether the decision now running was an urgent one (its act is held to three hands). */
-    urgent?(): boolean };
+    urgent?(): boolean;
+    /** The task queue (`minecraftLlmcQueue.ts`): an `mc.act` is an item put in it, and the tool returns when the body has the item. */
+    queue: LlmcQueue };
   /**
    * Owner 2026-10-26: each finished act is handed to her feeling beside the decisions (`minecraftFeeling.ts`), synchronously and
    * without waiting for anything; nothing comes back to the decision. Absent: nothing is felt from her acts.
@@ -63,6 +66,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
   feelings?: MinecraftFeelingPort;
 }): FcaExternalTools {
   const { control, step } = parts;
+  if (parts.feelings && parts.llmc) feelWhenItsDone(parts.llmc.queue, parts.feelings, step);
   const bodyId = control.store.body(step.taskId) ?? (control.available().length === 1 ? control.available()[0]! : null);
   const frame = bodyId ? control.frame(bodyId) : null;
   const skills = frame?.poll.skills ?? [];
@@ -80,6 +84,10 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const denied = authorizeToolCall(offered ?? null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;
     if (!bodyId || !control.frame(bodyId)) return toolFailure('unavailable', 'マイクラの体の最新観測が届いていない。');
+    // Task queue: an input of nothing but `replace` only takes items off.
+    const queue = parts.llmc?.queue;
+    const only = queue && call.name === MC_ACT_TOOL ? await replacedOnly(queue, call.input) : null;
+    if (only) return only;
     // The mode's own tools: put into shape where the model's meaning is plain, then checked field by field (r2: one line says where).
     const prepared = parts.llmc && llmcSchema(call.name) ? llmcPrepare(call.name, call.input, call.name === MC_PROBE_TOOL
       ? { feet: feetOf(control.observe(bodyId)), creatures: frameCreatures(control.observe(bodyId)) } : undefined) : null;
@@ -100,11 +108,12 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     if (!schema || !validSkillInput(call.input, schema)) return toolFailure('invalid_input', '道具の引数が登録された形式に合わない。', { retryable: false });
     const refused = fightRefusal(call.name, call.input, () => control.observe(bodyId));
     if (refused) return refused;
-    // act-preflight: a hand the map shows for certain the body would refuse at its start is not sent; the fact comes back at once.
-    const hold = parts.llmc && call.name === MC_ACT_TOOL
-      ? heldBeforeSend(parts.llmc.urgent?.() === true, call.input, control.observe(bodyId), step.taskId) : null;
-    if (hold?.result) return hold.result;
-    if (hold?.input) call = { ...call, input: hold.input as typeof call.input };
+    // Task queue: the items it replaces go first; the guards and the new item follow the world they leave.
+    const guards = parts.llmc && call.name === MC_ACT_TOOL
+      ? await actGuards({ queue: parts.llmc.queue, urgent: parts.llmc.urgent?.() === true, input: call.input as ActInput,
+        frame: control.observe(bodyId), taskId: step.taskId }) : null;
+    if (guards?.hold?.result) return guards.led(guards.hold.result);
+    if (guards?.hold?.input) call = { ...call, input: guards.hold.input as typeof call.input };
     if (!control.store.bind(step.taskId, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     if (call.name === 'minecraft.observe') return toolOk(JSON.stringify(control.observe(bodyId)));
     const active = currentActionExecution();
@@ -124,11 +133,13 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const id = `skill:${createHash('sha256').update(call.operationId).digest('hex')}`;
     if (parts.llmc && llmcSchema(call.name)) {
       noteActNode(step.taskId, node?.mark ?? null, line => console.info(line));
-      const sent = await runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [] });
-      if (call.name === MC_ACT_TOOL) parts.feelings?.noted({ scopeKey: step.scopeKey, taskId: step.taskId, goal: step.snapshot.task.goal,
-        why: String((call.input as { why?: unknown } | null)?.why ?? ''), ok: sent.ok, reflex: sent.bodyReflex === true,
-        progressed: sent.progressed === true, outcome: sent.text.split('\n').find(text => !text.startsWith('（頭が形を直して')) ?? '' });
-      return hold?.tail ? withHeldTail(sent, hold.tail) : hold?.note ? withNote(sent, hold.note) : sent;
+      if (guards) {
+        const sent = await sendItem({ queue: parts.llmc.queue, control, bodyId, call, skill: current!.name, fixes: prepared?.fixes ?? [],
+          node: node?.mark?.node ?? null, frame: control.observe(bodyId) });
+        const said = guards.hold?.tail ?? guards.hold?.note;
+        return guards.led(said && sent.ok ? withNote(sent, said) : sent);
+      }
+      return await runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [] });
     }
     active.stepOutcome = 'unknown';
     const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',
@@ -168,27 +179,13 @@ async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; b
   call: Parameters<FcaExternalTools['execute']>[0]; active: NonNullable<ReturnType<typeof currentActionExecution>>; plan: BodyPlanView | undefined;
   fixes: readonly string[] }) {
   const { control, step, bodyId, call, active } = parts;
-  const watch = call.name === MC_ACT_TOOL ? urgentWatch(call.input, () => control.observe(bodyId), call.signal, 250) : null;
-  let fixes = parts.fixes;
-  try {
-    // r10 (H2, run 34): an act is not sent while a multi-hand reflex holds the body (its lease would cut it and leave it unsettled).
-    if (call.name === MC_ACT_TOOL) {
-      const held = await waitForReflexRelease({ observe: () => control.observe(bodyId), signal: watch?.signal ?? call.signal });
-      if (held.kind) {
-        console.info(`Shannon Minecraft act waited for reflex task=${step.taskId} kind=${held.kind} ms=${held.waitedMs} gaveUp=${held.gaveUp ? 1 : 0}`);
-        fixes = [...fixes, `反射 ${held.kind} が体を握っていたので ${(held.waitedMs / 1000).toFixed(1)} 秒待ってから送った${held.gaveUp ? '（放さないまま上限）' : ''}`];
-      }
-    }
-  } catch { /* waiting never fails a call */ }
   active.stepOutcome = 'unknown';
-  try {
-    // An act's deadline from its hands, a walk's from its length from where she stands now (run 27: 80 m cut at 17 s).
-    const milliseconds = llmcMilliseconds(call.name, call.input, feetOf(control.observe(bodyId)));
-    const receipt = await control.command({ id: parts.id, context: minecraftTaskContext(step, bodyId, step.id, parts.plan), lease: step.lease,
-      kind: 'skill', skill: parts.skill, arguments: call.input as Record<string, unknown>, milliseconds }, watch?.signal ?? call.signal);
-    active.stepOutcome = 'acknowledged';
-    return llmcResult(call.name, receipt, watch?.reason() ?? null, fixes);
-  } finally { watch?.stop(); }
+  // A view's or a probe's deadline: its own time.
+  const milliseconds = llmcMilliseconds(call.name, call.input, feetOf(control.observe(bodyId)));
+  const receipt = await control.command({ id: parts.id, context: minecraftTaskContext(step, bodyId, step.id, parts.plan), lease: step.lease,
+    kind: 'skill', skill: parts.skill, arguments: call.input as Record<string, unknown>, milliseconds }, call.signal);
+  active.stepOutcome = 'acknowledged';
+  return llmcResult(call.name, receipt, null, parts.fixes);
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {
   return { definitions: ports.flatMap(port => port?.definitions ?? []), skillIndex: () => ports.map(port => port?.skillIndex?.() ?? '').filter(Boolean).join('\n\n'),

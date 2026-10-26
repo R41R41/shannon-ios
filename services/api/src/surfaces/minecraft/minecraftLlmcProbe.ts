@@ -148,6 +148,8 @@ const round1 = (value: number) => Math.round(value * 10) / 10;
 export function createSurpriseWatch(taskId: string) {
   const state = watchOf(taskId);
   return {
+    /** The frame the last decision read (task queue: what a surprise is measured from while items run), or null. */
+    peek: (): SurpriseFrame | null => state.last,
     noteResult(name: string, ok: boolean, text: string, input: unknown): void {
       if (name === MC_ACT_TOOL) {
         const record = readActRecord(ok, text, input);
