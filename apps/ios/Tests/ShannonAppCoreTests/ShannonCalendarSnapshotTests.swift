@@ -15,7 +15,8 @@ final class ShannonCalendarSnapshotTests: XCTestCase {
         calendar: String? = "仕事",
         location: String? = nil,
         recurring: Bool = false,
-        declined: Bool = false
+        declined: Bool = false,
+        attendees: [String] = []
     ) -> ShannonCalendarSourceEvent {
         ShannonCalendarSourceEvent(
             identifier: identifier,
@@ -26,7 +27,8 @@ final class ShannonCalendarSnapshotTests: XCTestCase {
             calendarTitle: calendar,
             location: location,
             isRecurring: recurring,
-            isDeclined: declined
+            isDeclined: declined,
+            attendees: attendees
         )
     }
 
@@ -50,6 +52,19 @@ final class ShannonCalendarSnapshotTests: XCTestCase {
             calendar: "仕事",
             location: "駅前クリニック"
         )])
+    }
+
+    func testAttendeesAreNamesOnlyAndARepeatIsFlagged() {
+        let events = mapped([
+            event("M1", startsIn: 2, attendees: [" 田中 一郎 ", "", "佐藤", "佐藤", String(repeating: "名", count: 90)]),
+            event("R1", startsIn: 3, recurring: true),
+        ])
+        XCTAssertEqual(events[0].attendees, ["田中 一郎", "佐藤", String(repeating: "名", count: 80)])
+        XCTAssertNil(events[0].recurring)
+        XCTAssertNil(events[1].attendees)
+        XCTAssertEqual(events[1].recurring, true)
+        let many = mapped([event("M2", startsIn: 2, attendees: (0..<40).map { "人\($0)" })])
+        XCTAssertEqual(many[0].attendees?.count, ShannonCalendarSharingBounds.maximumAttendees)
     }
 
     func testRecurringOccurrencesGetTheirStartInTheIdentifier() {
@@ -76,16 +91,16 @@ final class ShannonCalendarSnapshotTests: XCTestCase {
 
     func testOnlyEventsTouchingTheWindowAreKept() {
         let events = mapped([
-            event("ended-long-ago", startsIn: -5),
+            event("ended-yesterday", startsIn: -30),
             event("just-ended", startsIn: -1.5),
             event("ongoing", startsIn: -3, lasts: 4),
-            event("last-day", startsIn: 14 * 24 - 1),
-            event("beyond", startsIn: 14 * 24 + 1),
+            event("last-day", startsIn: 29 * 24 - 1),
+            event("beyond", startsIn: 29 * 24 + 1),
         ])
         XCTAssertEqual(events.map(\.id), ["ongoing", "just-ended", "last-day"])
         let window = ShannonCalendarSnapshotBuilder.window(now: now)
-        XCTAssertEqual(window.start, now.addingTimeInterval(-3_600))
-        XCTAssertEqual(window.end, now.addingTimeInterval(14 * 86_400))
+        XCTAssertEqual(window.start, now.addingTimeInterval(-86_400))
+        XCTAssertEqual(window.end, now.addingTimeInterval(29 * 86_400))
         XCTAssertLessThanOrEqual(window.end.timeIntervalSince(window.start), 31 * 86_400)
     }
 
@@ -143,8 +158,8 @@ final class ShannonCalendarSnapshotTests: XCTestCase {
         XCTAssertEqual(object["scopeKey"] as? String, "owner-a")
         XCTAssertEqual(object["generatedAt"] as? String, "2026-10-02T09:00:00+09:00")
         XCTAssertEqual(object["timeZone"] as? String, "Asia/Tokyo")
-        XCTAssertEqual(object["windowStart"] as? String, "2026-10-02T08:00:00+09:00")
-        XCTAssertEqual(object["windowEnd"] as? String, "2026-10-16T09:00:00+09:00")
+        XCTAssertEqual(object["windowStart"] as? String, "2026-10-01T09:00:00+09:00")
+        XCTAssertEqual(object["windowEnd"] as? String, "2026-10-31T09:00:00+09:00")
         let events = try XCTUnwrap(object["events"] as? [[String: Any]])
         XCTAssertEqual(Set(events[0].keys), ["id", "title", "start", "end", "allDay", "calendar", "location"])
         XCTAssertEqual(Set(events[1].keys), ["id", "title", "start", "end", "allDay"])
@@ -210,7 +225,7 @@ final class ShannonCalendarSnapshotTests: XCTestCase {
         XCTAssertEqual(text(.sent(at: now, count: 12)), "最終送信 10月2日 09:00・12件")
         XCTAssertEqual(text(.failed(lastSentAt: nil, count: 0)), "送れませんでした。次の機会にもう一度送ります")
         XCTAssertEqual(ShannonCalendarSharingCopy.toggleTitle, "カレンダーの予定をシャノンに伝える")
-        for phrase in ["題名・時刻・場所・カレンダー名", "14日ぶん", "声をかけたり答えたりするため", "サーバーから削除します"] {
+        for phrase in ["題名・時刻・場所・カレンダー名・参加者の名前", "30日ぶん", "空いている時間を探したり", "メモ・URLは送りません", "サーバーから削除します"] {
             XCTAssertTrue(ShannonCalendarSharingCopy.explanation.contains(phrase), phrase)
         }
         XCTAssertEqual(ShannonCalendarSharingStatus.designPreview(named: "permission"), .needsPermission)

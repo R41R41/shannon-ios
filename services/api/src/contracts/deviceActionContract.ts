@@ -12,7 +12,7 @@ export const DEVICE_MUSIC_PLAYS_PATH = '/v1/device/music/plays';
 const RESULT_PATH = /^\/v1\/device\/actions\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/result$/u;
 
 export const DEVICE_ACTION_KINDS = Object.freeze([
-  'reminder.create', 'timer.start', 'calendar.create_event',
+  'reminder.create', 'timer.start', 'calendar.create_event', 'calendar.update_event', 'calendar.delete_event',
   'music.search', 'music.recent', 'music.play', 'music.control', 'music.playlist_create',
 ] as const);
 export type DeviceActionKind = typeof DEVICE_ACTION_KINDS[number];
@@ -26,7 +26,10 @@ export const DEVICE_LIVE_KINDS: readonly DeviceActionKind[] = Object.freeze([
 
 export type DeviceActionStatus = 'pending' | 'claimed' | 'done' | 'failed' | 'denied' | 'expired';
 export type DeviceReportedStatus = 'done' | 'failed' | 'denied';
-export const DEVICE_ACTION_CODES = Object.freeze(['unsupported', 'not_authorized', 'not_found', 'invalid', 'past', 'unavailable', 'failed'] as const);
+/** `changed`: the event the owner confirmed a change of was changed on the device since (its title or time no longer match). */
+export const DEVICE_ACTION_CODES = Object.freeze([
+  'unsupported', 'not_authorized', 'not_found', 'invalid', 'past', 'unavailable', 'failed', 'changed',
+] as const);
 export type DeviceActionCode = typeof DEVICE_ACTION_CODES[number];
 export const MUSIC_PLAY_OUTCOMES = Object.freeze(['started', 'skipped', 'finished', 'stopped'] as const);
 export type MusicPlayOutcome = typeof MUSIC_PLAY_OUTCOMES[number];
@@ -54,6 +57,8 @@ export const DEVICE_ACTION_LIMITS = Object.freeze({
 /** How long an action waits to be taken, by kind: a read or a song is worth nothing later; a reminder still is. */
 export const DEVICE_ACTION_EXPIRY_SECONDS: Readonly<Record<DeviceActionKind, number>> = Object.freeze({
   'reminder.create': 24 * 3_600, 'calendar.create_event': 24 * 3_600, 'timer.start': 10 * 60,
+  // A change the owner confirmed is still his wish a few hours later, not the next day.
+  'calendar.update_event': 6 * 3_600, 'calendar.delete_event': 6 * 3_600,
   'music.search': 30, 'music.recent': 30, 'music.play': 120, 'music.control': 60, 'music.playlist_create': 120,
 });
 

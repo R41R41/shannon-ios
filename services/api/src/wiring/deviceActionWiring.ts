@@ -6,6 +6,7 @@ import type { ShannonToolRunner } from '../mind/tools/shannonToolRunner.js';
 import { DeviceActions } from '../surfaces/device/deviceActions.js';
 import { createDeviceActionRoute } from '../surfaces/device/deviceActionRoutes.js';
 import { SQLiteDeviceActionStore } from '../surfaces/device/store/deviceActionStore.js';
+import type { OwnerUpcoming } from '../mind/memory/ownerUpcoming.js';
 
 export interface DeviceActionWiring {
   actions: DeviceActions | null;
@@ -23,7 +24,7 @@ const MAINTAIN_MILLISECONDS = 10 * 60_000;
  * table is opened, no device tool exists, and the routes answer 403; a switch turned off later is read at each use.
  */
 export function configuredDeviceActions(environment: Readonly<Record<string, string | undefined>>, path: string, now: () => string,
-  tools: Pick<ShannonToolRunner, 'useDeviceActions'>): DeviceActionWiring {
+  tools: Pick<ShannonToolRunner, 'useDeviceActions'>, calendar?: Pick<OwnerUpcoming, 'calendarEvent'>): DeviceActionWiring {
   const ownerScopeKey = configuredOwnerScope(environment);
   const store = deviceActionsEnabled(environment) ? new SQLiteDeviceActionStore(path) : null;
   const actions = store ? new DeviceActions({ store, ownerScopeKey, now, enabled: () => deviceActionsEnabled(environment) }) : null;
@@ -34,6 +35,9 @@ export function configuredDeviceActions(environment: Readonly<Record<string, str
       wait: (scopeKey, id, milliseconds, signal) => actions.wait(scopeKey, id, milliseconds, signal),
       told: (scopeKey, id) => actions.told(scopeKey, id),
       now,
+      supports: (scopeKey, kind) => actions.supports(scopeKey, kind),
+      recent: (scopeKey, since) => actions.recent(scopeKey, since),
+      ...(calendar ? { calendarEvent: (scopeKey: string, ref: string) => calendar.calendarEvent(scopeKey, ref) } : {}),
     });
   }
   const timer = actions ? setInterval(() => actions.maintain(), MAINTAIN_MILLISECONDS) : null;

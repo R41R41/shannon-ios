@@ -81,7 +81,8 @@ export function configuredJevChooser(
 export function readToolPorts(
   environment: Readonly<Record<string, string | undefined>>,
   parts: { notion: NotionSource | null; voyagerCatalog: VoyagerCatalog;
-    upcoming: Pick<OwnerUpcoming, 'promptFor'> & Partial<Pick<OwnerUpcoming, 'promptWithSources' | 'searchWithSources' | 'loopLines'>>; chatModel: ShannonChatModel; now?: () => string },
+    upcoming: Pick<OwnerUpcoming, 'promptFor'> & Partial<Pick<OwnerUpcoming, 'promptWithSources' | 'searchWithSources' | 'freeTimeWithSources' | 'loopLines'>>;
+    chatModel: ShannonChatModel; now?: () => string },
 ): ReadToolPorts | null {
   if (!skillRoutingSwitches(environment).readTools) return null;
   return {
@@ -107,6 +108,10 @@ export function readToolPorts(
     },
     ...(parts.upcoming.searchWithSources ? { upcomingSearch: (scopeKey: string, input: Record<string, unknown>) => {
       const projection = parts.upcoming.searchWithSources!(scopeKey, input);
+      return { text: projection.prompt, sourceIds: projection.sourceIds.map(id => `calendar-item://${encodeURIComponent(id)}`) };
+    } } : {}),
+    ...(parts.upcoming.freeTimeWithSources ? { freeTime: (scopeKey: string, input: Record<string, unknown>) => {
+      const projection = parts.upcoming.freeTimeWithSources!(scopeKey, input);
       return { text: projection.prompt, sourceIds: projection.sourceIds.map(id => `calendar-item://${encodeURIComponent(id)}`) };
     } } : {}),
     daily: dailyToolPorts(environment, {

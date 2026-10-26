@@ -29,8 +29,8 @@ public final class ShannonDeviceActionModel {
     @ObservationIgnored private var playingSince = Date.distantPast
 
     /// The kinds this app can do (the server hands nothing else to it).
-    static let kinds = ["reminder.create", "timer.start", "calendar.create_event", "music.search", "music.recent", "music.play",
-                        "music.control", "music.playlist_create"]
+    static let kinds = ["reminder.create", "timer.start", "calendar.create_event", "calendar.update_event", "calendar.delete_event",
+                        "music.search", "music.recent", "music.play", "music.control", "music.playlist_create"]
 
     public init(
         client: (any ShannonDeviceActionServing)?,
@@ -142,6 +142,8 @@ public final class ShannonDeviceActionModel {
         switch action.kind {
         case "reminder.create": return await eventKit.createReminder(action)
         case "calendar.create_event": return await eventKit.createEvent(action)
+        case "calendar.update_event": return await eventKit.updateEvent(action)
+        case "calendar.delete_event": return await eventKit.deleteEvent(action)
         case "timer.start": return await ShannonDeviceTimers.start(action)
         case "music.search": return await music.search(action)
         case "music.recent": return await music.recent()

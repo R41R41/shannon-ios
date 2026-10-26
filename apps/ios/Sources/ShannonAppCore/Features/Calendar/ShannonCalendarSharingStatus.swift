@@ -43,11 +43,12 @@ public enum ShannonCalendarSharingStatus: Equatable, Sendable {
 public enum ShannonCalendarSharingCopy {
     public static let sectionTitle = "予定"
     public static let toggleTitle = "カレンダーの予定をシャノンに伝える"
-    public static let explanation = "予定の題名・時刻・場所・カレンダー名を、これから14日ぶんだけシャノンのサーバーへ送ります。"
-        + "シャノンが予定を知って、声をかけたり答えたりするために使います。"
-        + "メモ・参加者・URLは送りません。オフにすると、送った予定をサーバーから削除します。"
+    public static let explanation = "予定の題名・時刻・場所・カレンダー名・参加者の名前・繰り返しかどうかを、"
+        + "今日から30日ぶんだけシャノンのサーバーへ送ります。"
+        + "シャノンが予定を知って、声をかけたり答えたり、予定や空いている時間を探したりするために使います。"
+        + "メモ・URLは送りません。オフにすると、送った予定をサーバーから削除します。"
     public static let openSettingsTitle = "カレンダーの権限を設定で開く"
-    public static let toggleHint = "オンにするとカレンダーの予定を読み取り、これから14日ぶんをシャノンのサーバーへ送ります。"
+    public static let toggleHint = "オンにするとカレンダーの予定を読み取り、今日から30日ぶんをシャノンのサーバーへ送ります。"
         + "オフにすると送った予定をサーバーから削除します"
 
     public static func statusText(

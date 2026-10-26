@@ -258,14 +258,17 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   // Her device tools (docs/device-actions-contract.md): the outbox, its routes and the executors; only in a turn that offers them.
   device_actions: () => exists(DeviceActions.prototype.request, DeviceActions.prototype.poll, DeviceActions.prototype.report, createDeviceActionRoute,
     deviceActionExecutors, ShannonToolRunner.prototype.useDeviceActions)
-    && ['reminder.create', 'timer.start', 'calendar.create_event', 'music.search', 'music.recent', 'music.play', 'music.control', 'music.playlist_create']
+    && ['reminder.create', 'timer.start', 'calendar.create_event', 'calendar.update_event', 'calendar.delete_event', 'calendar.undo', 'music.search',
+      'music.recent', 'music.play', 'music.control', 'music.playlist_create']
       .every(name => SHANNON_TOOLS.some(tool => tool.name === name && tool.domain === 'device_action' && tool.surfaces.join() === 'text,voice' && tool.audiences.join() === 'owner_alone'))
     && !shannonCapabilityPrompt('owner').includes(SHANNON_DEVICE_ACTIONS_CAPABILITY.text)
     && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).endsWith(SHANNON_DEVICE_ACTIONS_CAPABILITY.text)
     // In that turn the timer and the calendar entry are no longer in 「今はできないこと」 (2026-10-13 daily evals D1–D3).
     && !withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes(`- ${SHANNON_LIMITATIONS.find(item => item.id === 'exact_time_alarm')!.text}`)
     && !withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes(`- ${SHANNON_LIMITATIONS.find(item => item.id === 'calendar_mail')!.text}`)
-    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes('- カレンダーの予定の変更・削除、メールやメッセージの送信'),
+    // Changing and deleting an event are tools too (a proposal she shows, then his yes): only what no tool does stays.
+    && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes('- メールやメッセージの送信、ほかの人への電話、予約、購入。')
+    && SHANNON_DEVICE_ACTIONS_CAPABILITY.text.includes('予定を変える・消す時は、先に案をライ氏に見せ'),
   phone_call: () => exists(preparePhoneCall, IncomingCallRequests.prototype.request, IncomingCalls.prototype.tick, APNsVoipPushSender.prototype.send)
     && autonomyDomain(AUTONOMY_CALL_DOMAIN)?.rule === 'free' && incomingCallsEnabled({}) && !incomingCallsEnabled({ SHANNON_INCOMING_CALLS: 'off' }),
 };

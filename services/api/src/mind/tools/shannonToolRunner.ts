@@ -19,7 +19,7 @@ import {
   isReadToolDomain, offeredTools, providerToolName, shannonTool, toolFailure, toolForSurface, toolFromProviderName,
   type ReadToolDomain, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
 } from './shannonTools.js';
-import { READ_TOOL_PORT, readToolExecutors, type ReadToolPorts } from './shannonReadTools.js';
+import { READ_TOOL_NAME_PORT, READ_TOOL_PORT, readToolExecutors, type ReadToolPorts } from './shannonReadTools.js';
 import { skillExecutors } from './shannonSkillTools.js';
 import type { SkillTurnPorts } from '../../contracts/skillMemoryContract.js';
 import { skillHash } from '../memory/memoryPorts.js';
@@ -387,7 +387,7 @@ export class ShannonToolRunner {
   }
 
   private readsFor(domain: ReadToolDomain, name?: string): boolean {
-    return Boolean(this.reads?.[name === 'web.read' ? 'webRead' : READ_TOOL_PORT[domain]]);
+    return Boolean(this.reads?.[READ_TOOL_NAME_PORT[name ?? ''] ?? READ_TOOL_PORT[domain]]);
   }
 
   /** Syzygy ADR-0008 stage 1: told of every conversation call that ran (`SHANNON_CHOICE_LEDGER`); never set, nothing is told. */

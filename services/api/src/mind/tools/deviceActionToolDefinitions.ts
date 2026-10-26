@@ -13,6 +13,9 @@ const DEVICE = 'ライ氏の端末（iPhoneかMacのシャノンのアプリ）'
 const ASKED = 'ライ氏に頼まれた時だけ使う。';
 const MUSIC_TASTE = '選ぶ時は music.recent でライ氏のよく聴く曲・最近の曲・ライブラリを見て、会話の雰囲気といまのボクの気持ちに合うものを、ライブラリとカタログから選ぶ。';
 const NOT_YET = '端末の報告が届くまで、済んだとは言わない。';
+const REF = 'ref は schedule_upcoming の結果の「ref: …」。';
+const CONFIRM_FLOW = '1回目は案を返すだけで、まだ変えない。案をライ氏に見せ、次の返事ではいと言われたら confirm だけを付けて呼び直す。';
+const confirm = text('ライ氏がはいと言った案の confirm（1回目の結果）。これだけを書く', 12);
 
 type Properties = Record<string, ToolInputProperty>;
 const OWNER_ALONE = Object.freeze(['owner_alone'] as const);
@@ -43,7 +46,24 @@ export const DEVICE_ACTION_TOOLS: readonly ShannonToolDefinition[] = Object.free
     durationMinutes: { type: 'integer', description: '長さ（分）', minimum: 5, maximum: 10_080 },
     location: text('場所（なければ書かない）', 200),
     notes: text('メモ（なければ書かない）', 500),
+    calendar: text('入れるカレンダーの名前（ふだんは書かない。いつものカレンダーに入る）', 80),
   }, ['title', 'start']),
+  define('calendar.update_event', `${DEVICE}のカレンダーの予定を1件変える（時間・題名・場所・メモ・カレンダー）。${REF}${ASKED}${CONFIRM_FLOW}${NOT_YET}`, 'write', {
+    ref: text('変える予定の ref', 12),
+    title: text('新しい題名（変える時だけ）', 120),
+    start: text(`新しい始まり。${LOCAL_TIME}。終日は YYYY-MM-DD（長さはそのまま）`, 16, 10),
+    end: text(`新しい終わり。${LOCAL_TIME}（終日は YYYY-MM-DD）`, 16),
+    durationMinutes: { type: 'integer', description: '新しい長さ（分）', minimum: 5, maximum: 10_080 },
+    location: text('新しい場所（変える時だけ）', 200),
+    notes: text('新しいメモ（前のメモと置きかわる）', 500),
+    calendar: text('移す先のカレンダーの名前', 80),
+    confirm,
+  }),
+  define('calendar.delete_event', `${DEVICE}のカレンダーの予定を1件消す。${REF}${ASKED}${CONFIRM_FLOW}消したあとも calendar_undo で戻せる。${NOT_YET}`, 'write', {
+    ref: text('消す予定の ref', 12),
+    confirm,
+  }),
+  define('calendar.undo', `${DEVICE}のカレンダーで、ボクがこの24時間に入れた・変えた・消したことを、新しいものから1つ元に戻す。${ASKED}${NOT_YET}`, 'write', {}),
   define('music.search', `${DEVICE}で、Apple Musicの曲・アルバム・プレイリストを探す。ライブラリ（ライ氏の持っている曲）か`
     + 'カタログ（Apple Music全体）から。結果の id を music.play に渡す。端末のアプリが開いていない時は使えない。', 'read', {
     query: text('探す言葉（曲名・アーティスト・雰囲気など）', 100, 1),
@@ -73,6 +93,9 @@ export const DEVICE_ACTION_SUMMARIES: Readonly<Record<string, string>> = Object.
   'reminder.create': 'ライ氏の端末のリマインダーに通知つきで入れる',
   'timer.start': 'ライ氏の端末でタイマーを始める',
   'calendar.create_event': 'ライ氏の端末のカレンダーに予定を入れる',
+  'calendar.update_event': 'ライ氏のカレンダーの予定を変える（案を見せて確かめてから）',
+  'calendar.delete_event': 'ライ氏のカレンダーの予定を消す（案を見せて確かめてから）',
+  'calendar.undo': 'ボクがカレンダーにしたことを1つ元に戻す',
   'music.search': 'Apple Musicの曲やアルバムを端末で探す',
   'music.recent': 'ライ氏の最近の曲・よく聴く曲・プレイリストを見る',
   'music.play': 'ライ氏の端末でApple Musicの曲をかける',

@@ -37,8 +37,8 @@ function idIn(result: ToolResult): string {
 /** Her read tools of Syzygy ADR-0008 stage 2, step 3, and their own gate domains. */
 /** The real web reads are text-only (deep research: a call hands research to a task with the voice-only `web.research`). */
 const TEXT_ONLY = new Set(['web.search', 'web.read']);
-const READ_TOOL_DOMAIN_OF: Readonly<Record<string, string>> = { 'notion.read': 'notion_read', 'voyager.tasks': 'voyager_read', 'schedule.upcoming': 'schedule_read', 'places.search': 'places_search', 'web.search': 'web_search', 'web.read': 'web_search' };
-const DEVICE_TOOL_NAMES: ReadonlySet<string> = new Set(['reminder.create', 'timer.start', 'calendar.create_event', 'music.search', 'music.recent', 'music.play', 'music.control', 'music.playlist_create']);
+const READ_TOOL_DOMAIN_OF: Readonly<Record<string, string>> = { 'notion.read': 'notion_read', 'voyager.tasks': 'voyager_read', 'schedule.upcoming': 'schedule_read', 'schedule.free_time': 'schedule_read', 'places.search': 'places_search', 'web.search': 'web_search', 'web.read': 'web_search' };
+const DEVICE_TOOL_NAMES: ReadonlySet<string> = new Set(['reminder.create', 'timer.start', 'calendar.create_event', 'calendar.update_event', 'calendar.delete_event', 'calendar.undo', 'music.search', 'music.recent', 'music.play', 'music.control', 'music.playlist_create']);
 
 describe('the tool registry (ADR-0003 stage 1)', () => {
   it('tags every tool as acting or describing (ADR-0008 §14): today exactly the write effect, and an unknown name never acts', () => {
@@ -73,9 +73,9 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     expect(SHANNON_TOOLS.map(tool => tool.name).sort()).toEqual([
       'aether.propose', 'aether.read', 'aether.search', 'aetherFolder.create', 'aetherFolder.delete', 'aetherFolder.list', 'aetherFolder.update',
       'brief.morning', 'folder.create', 'folder.delete', 'folder.list', 'folder.move', 'folder.read', 'folder.rename', 'folder.search', 'folder.update',
-      'memory.read', 'memory.search', 'minecraft.cancel', 'minecraft.lifecycle_status', 'minecraft.login', 'minecraft.logout', 'minecraft.request', 'minecraft.set_day', 'minecraft.start', 'minecraft.status', 'minecraft.stop', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'route.estimate', 'schedule.upcoming',
+      'memory.read', 'memory.search', 'minecraft.cancel', 'minecraft.lifecycle_status', 'minecraft.login', 'minecraft.logout', 'minecraft.request', 'minecraft.set_day', 'minecraft.start', 'minecraft.status', 'minecraft.stop', 'notion.read', 'ownerDocs.read', 'ownerDocs.search', 'places.search', 'route.estimate', 'schedule.free_time', 'schedule.upcoming',
       'skill.read', 'study.create', 'study.delete', 'study.list', 'study.move', 'study.read', 'study.rename', 'study.restore', 'study.search', 'study.update', 'task.create', 'task.get', 'task.list', 'task.send', 'voyager.tasks', 'weather.forecast', 'web.read', 'web.research', 'web.search',
-      'calendar.create_event', 'music.control', 'music.play', 'music.playlist_create', 'music.recent', 'music.search', 'reminder.create', 'timer.start',
+      'calendar.create_event', 'calendar.delete_event', 'calendar.undo', 'calendar.update_event', 'music.control', 'music.play', 'music.playlist_create', 'music.recent', 'music.search', 'reminder.create', 'timer.start',
     ].sort());
     // Conversation only: her Minecraft body (phase 4) and a proposal to the owner's Aether inbox.
     // and her read tools of ADR-0008 stage 2.

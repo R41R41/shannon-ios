@@ -27,6 +27,8 @@ export interface ReadToolPorts {
   /** The owner's upcoming items as the conversation's projection gives them to him alone. */
   upcoming?: (scopeKey: string, range: 'day' | 'week') => ReadToolText;
   upcomingSearch?: (scopeKey: string, input: Record<string, unknown>) => ReadToolText;
+  /** The owner's free time between calendar events (`scheduleSearch.ts`). */
+  freeTime?: (scopeKey: string, input: Record<string, unknown>) => ReadToolText;
   /** Weather, a rough route and the morning brief (`shannonDailyTools.ts`, domain `daily_read`). */
   daily?: DailyToolPorts;
   /** The place skill for a query in an area; `spoken` for a voice turn. */
@@ -40,6 +42,18 @@ export const READ_TOOL_PORT: Readonly<Record<ReadToolDomain, keyof ReadToolPorts
   notion_read: 'notion', voyager_read: 'voyagerTasks', schedule_read: 'upcoming', places_search: 'places', web_search: 'web',
 });
 
+/** What she is told when a search's span or words could not be used, by the code the read threw. */
+const SEARCH_PROBLEMS: Readonly<Record<string, string>> = Object.freeze({
+  SCHEDULE_WHEN_UNREAD: 'when を読めなかった。「来週の水曜の午後」「今週末」「10月30日の15時から17時」のように書くか、after と before を ISO で書く。',
+  SCHEDULE_RANGE_PAST: 'その期間はもう過ぎている。カレンダーは今日の分とこれからの分しか分からない。',
+  SCHEDULE_RANGE_INVALID: '期間は今日から31日先までにする。',
+  SCHEDULE_HOURS_INVALID: 'fromHour は toHour より前にする。',
+});
+const SEARCH_PROBLEM = '検索条件の日時・範囲・語数を確認して呼び直す。';
+
+/** The read tools whose port is not their domain's. */
+export const READ_TOOL_NAME_PORT: Readonly<Record<string, keyof ReadToolPorts>> = Object.freeze({ 'web.read': 'webRead', 'schedule.free_time': 'freeTime' });
+
 const UNAVAILABLE = toolFailure('unavailable', 'いまは読めなかった。', { retryable: true, refusal: { why: '読む先に届かなかった', wouldWork: '少しあとでもう一度' } });
 
 function prepared(summary: string, read: () => Promise<ReadToolText> | ReadToolText): PreparedToolCall {
@@ -51,7 +65,10 @@ function prepared(summary: string, read: () => Promise<ReadToolText> | ReadToolT
         return { result: toolOk(text.trim() ? text : '（何も見つからなかった）'), record: { summary, outcome: 'done' },
           ...(typeof readResult === 'string' ? {} : { documents: { sourceIds: readResult.sourceIds } }) };
       } catch (error) {
-        if (error instanceof Error && /^(?:SEARCH|SCHEDULE)_/u.test(error.message)) return { result: toolFailure('invalid_input', '検索条件の日時・範囲・語数を確認して呼び直す。', { retryable: false }), record: { summary, outcome: 'failed' } };
+        if (error instanceof Error && /^(?:SEARCH|SCHEDULE)_/u.test(error.message)) {
+          const result = toolFailure('invalid_input', SEARCH_PROBLEMS[error.message] ?? SEARCH_PROBLEM, { retryable: false });
+          return { result, record: { summary, outcome: 'failed' } };
+        }
         return { result: UNAVAILABLE, record: { summary: `${summary}（読めませんでした）`, outcome: 'failed', reasonCode: 'unavailable' } };
       }
     },
@@ -90,6 +107,10 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
         return prepared('ライ氏の予定を条件で検索しました。', () => ports.upcomingSearch!(context.scopeKey, input));
       }
       return prepared('会話の中でライ氏のこれからの予定を見ました。', () => ports.upcoming!(context.scopeKey, range));
+    },
+    'schedule.free_time': (input, context) => {
+      if (!ports.freeTime) return missing;
+      return prepared('ライ氏の空いている時間を探しました。', () => ports.freeTime!(context.scopeKey, input));
     },
     'places.search': (input, context) => {
       if (!ports.places) return missing;

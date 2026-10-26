@@ -63,6 +63,17 @@ export class DeviceActions {
     return { kind: 'queued', action: created.action, duplicate: created.duplicate, connected: devices.length > 0 };
   }
 
+  /** Whether one of the owner's devices said lately that it can do `kind` (its app is new enough). */
+  supports(scopeKey: string, kind: DeviceActionKind): boolean {
+    const since = new Date(Date.parse(this.options.now()) - DEVICE_ACTION_LIMITS.keepDays * 86_400_000).toISOString();
+    try { return this.options.store.devices(scopeKey, since).some(device => device.kinds.includes(kind)); } catch { return false; }
+  }
+
+  /** What she asked of his devices since `since`, newest first (the calendar's undo reads it). */
+  recent(scopeKey: string, since: string): readonly StoredDeviceAction[] {
+    try { return this.options.store.recent(scopeKey, since, 40); } catch { return []; }
+  }
+
   /**
    * The action once its device answered, or as it stands when `milliseconds` ran out or `signal` aborted. Never throws.
    */
@@ -158,6 +169,7 @@ export class DeviceActions {
 
 const KIND_WORDS: Readonly<Record<DeviceActionKind, string>> = Object.freeze({
   'reminder.create': 'リマインダー', 'timer.start': 'タイマー', 'calendar.create_event': 'カレンダーの予定', 'music.search': '曲を探す',
+  'calendar.update_event': 'カレンダーの予定を変える', 'calendar.delete_event': 'カレンダーの予定を消す',
   'music.recent': '最近の曲', 'music.play': '曲をかける', 'music.control': '再生の操作', 'music.playlist_create': 'プレイリストを作る',
 });
 
@@ -174,5 +186,6 @@ export function deviceActionLine(action: StoredDeviceAction): string {
     || words(action.payload.action, 12);
   const when = words(action.payload.due) || words(action.payload.start) || '';
   const code = action.code ? `（${action.code}）` : '';
+  if (typeof action.payload.undoOf === 'string') return `カレンダーの取り消し${subject ? `「${subject}」` : ''}: ${STATUS_WORDS[action.status]}${code}`;
   return `${KIND_WORDS[action.kind]}${subject ? `「${subject}」` : ''}${when ? ` ${when}` : ''}: ${STATUS_WORDS[action.status]}${code}`;
 }

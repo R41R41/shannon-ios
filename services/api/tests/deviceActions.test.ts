@@ -168,7 +168,9 @@ describe('her device tools in a conversation', () => {
     expect(owner).toContain(limitation('exact_time_alarm'));
     expect(offered.systemPrompt).not.toContain(limitation('exact_time_alarm'));
     expect(offered.systemPrompt).not.toContain(limitation('calendar_mail'));
-    expect(offered.systemPrompt).toContain('- カレンダーの予定の変更・削除、メールやメッセージの送信、ほかの人への電話、予約、購入。');
+    // Adding, changing and deleting events are tools now: only what no tool does stays in the calendar line.
+    expect(offered.systemPrompt).toContain('- メールやメッセージの送信、ほかの人への電話、予約、購入。');
+    expect(offered.systemPrompt).not.toContain('カレンダーの予定の変更・削除、');
     expect(offered.systemPrompt).not.toContain('今はできないこと」のカレンダー');
     for (const other of ['media_generation', 'binary_documents', 'owner_content_write', 'speaker_identification']) expect(offered.systemPrompt).toContain(limitation(other));
     expect(withToolCapabilityLines(offered).systemPrompt).toBe(offered.systemPrompt);

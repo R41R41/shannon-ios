@@ -1,5 +1,6 @@
 import { MINECRAFT_LIFECYCLE_TOOLS, MINECRAFT_LIFECYCLE_SUMMARIES } from './minecraftLifecycleToolDefinitions.js';
-import { STUDY_SEARCH_INPUTS, SCHEDULE_SEARCH_INPUTS } from './searchToolInputs.js';
+import { STUDY_SEARCH_INPUTS, SCHEDULE_SEARCH_INPUTS as SCHEDULE_INPUTS } from './searchToolInputs.js';
+import { SCHEDULE_FREE_INPUTS, SCHEDULE_DESCRIPTIONS, SCHEDULE_SUMMARIES } from './searchToolInputs.js';
 import { MEMORY_TOOLS } from './memoryToolDefinitions.js';
 import { TASK_TOOLS } from './taskToolDefinitions.js';
 import { WEB_RESEARCH_DOING, WEB_RESEARCH_SUMMARIES, WEB_RESEARCH_TOOLS } from './webResearchToolDefinitions.js';
@@ -300,9 +301,8 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
   readTool({ name: 'voyager.tasks', domain: 'voyager_read',
     description: `ライ氏のVoyagerのタスクを読む（読むだけ）。queryに題名の言葉を指定すると検索し、指定しなければ未完了タスクの一覧を見る。件数や文字数で省略された時は結果に示す。タスクを作る・変えるのは、ここではできない（「タスクにして」「整理して」の提案で）。${READ_RULE}`,
     input: schema({ query: { type: 'string', description: '探す言葉（タスクの題名にありそうな言葉）。書かなければ未完了タスクの一覧', maxLength: 160 } }) }),
-  readTool({ name: 'schedule.upcoming', domain: 'schedule_read',
-    description: `ライ氏のこれからの予定・期日のある約束・日付のあるタスクを見る（見るだけ）。カレンダーはアプリが共有している時だけ分かる。${READ_RULE}`,
-    input: schema({ ...SCHEDULE_SEARCH_INPUTS, range: { type: 'string', description: 'day（これから48時間。ふだんはこれ）か week（8日）', enum: ['day', 'week'] } }) }),
+  readTool({ name: 'schedule.upcoming', domain: 'schedule_read', description: SCHEDULE_DESCRIPTIONS.upcoming + READ_RULE, input: schema(SCHEDULE_INPUTS) }),
+  readTool({ name: 'schedule.free_time', domain: 'schedule_read', description: SCHEDULE_DESCRIPTIONS.free + READ_RULE, input: schema(SCHEDULE_FREE_INPUTS) }),
   readTool({ name: 'places.search', domain: 'places_search', cost: 'model',
     description: `お店や施設の候補を、ウェブで調べて地図リンクつきで探す。端末の位置は使わないので、場所（駅や町の名前）を area に書く。近くの、と言われて場所が分からない時は、どこの近くかを聞く。${READ_RULE}`,
     input: schema({
@@ -327,7 +327,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
  * changes with it; `shannonTools.test.ts` holds that every tool has one.
  */
 export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
-  ...MINECRAFT_LIFECYCLE_SUMMARIES, ...DAILY_SUMMARIES, ...DEVICE_ACTION_SUMMARIES,
+  ...MINECRAFT_LIFECYCLE_SUMMARIES, ...DAILY_SUMMARIES, ...DEVICE_ACTION_SUMMARIES, ...SCHEDULE_SUMMARIES,
   'memory.search': '目的や人物、過去の出来事から関連する記憶を探す', 'memory.read': 'IDを指定して記憶の詳細と根拠を読む',
   'task.create': '目的と完了条件を渡して子タスクを作る', 'task.list': 'タスクと子の一覧を確認する', 'task.get': '指定タスクの状態を読む', 'task.send': '別のタスクへ連絡する',
   'web.search': 'ウェブで今の情報を調べる（ニュース・営業時間など。天気予報は weather_forecast）', ...WEB_RESEARCH_SUMMARIES,
@@ -362,7 +362,6 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
   'minecraft.cancel': 'マイクラの体に頼んだことをやめてもらう',
   'notion.read': 'ライ氏のNotionの共有ページを探して読む',
   'voyager.tasks': 'ライ氏のVoyagerのタスクを検索、または未完了一覧で読む',
-  'schedule.upcoming': 'ライ氏のこれからの予定と期日のある約束を見る',
   'places.search': 'お店や施設の候補を地図リンクつきで探す',
   'skill.read': 'ボクのスキル（自分の手順書）を1つ開いて読む',
 });
@@ -389,7 +388,7 @@ export const TOOL_DOING: Readonly<Record<string, ToolDoing>> = Object.freeze({
   'aether.propose': 'acts',
   'minecraft.request': 'acts', 'minecraft.status': 'describes', 'minecraft.cancel': 'acts',
   'notion.read': 'describes', 'voyager.tasks': 'describes', 'schedule.upcoming': 'describes', 'places.search': 'describes', 'web.search': 'describes',
-  'skill.read': 'describes', ...DEVICE_ACTION_DOING,
+  'skill.read': 'describes', 'schedule.free_time': 'describes', ...DEVICE_ACTION_DOING,
 });
 
 /** Whether a tool acts or describes (an unknown name describes: it is never evidence of doing). */

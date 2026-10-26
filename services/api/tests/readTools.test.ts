@@ -123,7 +123,8 @@ describe('the audience matrix of her reads: as today, with the read tools on', (
     const on = await text(kernel(true), ASK_ALL);
     // No turn is slower or poorer than today: the same projections, the same turn context, and the tools in addition.
     expect(on.turnContext).toBe(off.turnContext);
-    expect(readToolsOf(on)).toEqual(READ_TOOL_DOMAINS.filter(domain => domain !== 'web_search').sort()); // This recording model has no native search port.
+    // This recording model has no native search port. The schedule has two tools: its search and its free time.
+    expect(readToolsOf(on)).toEqual([...READ_TOOL_DOMAINS.filter(domain => domain !== 'web_search'), 'schedule_read'].sort());
     // Her description says so in that turn only.
     expect(on.systemPrompt).toContain('読む道具:');
     expect(off.systemPrompt).not.toContain('読む道具:');
@@ -153,7 +154,7 @@ describe('the audience matrix of her reads: as today, with the read tools on', (
     const offTools = await voice(kernel(false), '書斎のメモと今日の予定を見せて');
     const onTools = await voice(kernel(true), '書斎のメモと今日の予定を見せて');
     expect(projected(onTools)).toEqual(projected(offTools));
-    expect(readToolsOf(onTools)).toEqual(READ_TOOL_DOMAINS.filter(domain => domain !== 'web_search').sort());
+    expect(readToolsOf(onTools)).toEqual([...READ_TOOL_DOMAINS.filter(domain => domain !== 'web_search'), 'schedule_read'].sort());
   });
 
   it('reads as today when the session does not serve the tools: others known to the server, or Jev chose the web', async () => {

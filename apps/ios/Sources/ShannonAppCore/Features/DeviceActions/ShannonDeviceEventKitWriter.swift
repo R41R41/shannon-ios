@@ -1,15 +1,16 @@
 @preconcurrency import EventKit
 import Foundation
 
-/// Adds what Shannon was asked for to the owner's own Reminders and Calendar (`reminder.create`, `calendar.create_event`).
-/// Access is asked the first time it is needed: full access to reminders, and write-only access to events unless the
-/// app already reads the calendar for sharing. Nothing is read back except the new item's identifier.
+/// Adds what Shannon was asked for to the owner's own Reminders and Calendar (`reminder.create`, `calendar.create_event`),
+/// and changes or deletes an event he confirmed (`calendar.update_event`, `calendar.delete_event`, in
+/// `ShannonDeviceEventKitEditor.swift`). Access is asked the first time it is needed: full access to reminders, write-only
+/// access to events for adding one unless the app already reads the calendar for sharing, and full access to change one.
 final class ShannonDeviceEventKitWriter: @unchecked Sendable {
     private let lock = NSLock()
     private var cachedStore: EKEventStore?
 
     /// Created only when an action needs it, as `ShannonEventKitCalendarSource` does.
-    private var store: EKEventStore {
+    var store: EKEventStore {
         lock.withLock {
             if let cachedStore { return cachedStore }
             let created = EKEventStore()
@@ -41,17 +42,8 @@ final class ShannonDeviceEventKitWriter: @unchecked Sendable {
     }
 
     func createEvent(_ action: ShannonDeviceActionDTO) async -> ShannonDeviceActionReportDTO {
-        guard let title = action.string("title"), let startText = action.string("start") else { return .failed(.invalid) }
-        let allDay = action.payload["allDay"]?.boolValue ?? (startText.count == 10)
-        guard let start = Self.localDate(startText) else { return .failed(.invalid) }
-        let end: Date
-        if let endText = action.string("end"), let parsed = Self.localDate(endText) {
-            end = parsed
-        } else if let minutes = action.number("durationMinutes") {
-            end = start.addingTimeInterval(minutes * 60)
-        } else {
-            end = allDay ? start : start.addingTimeInterval(3_600)
-        }
+        guard let title = action.string("title"), let times = Self.eventTimes(action) else { return .failed(.invalid) }
+        let (start, end, allDay) = times
         guard await eventAccess() else { return .denied() }
         let store = store
         let event = EKEvent(eventStore: store)
@@ -61,7 +53,9 @@ final class ShannonDeviceEventKitWriter: @unchecked Sendable {
         event.isAllDay = allDay
         event.location = action.string("location")
         event.notes = action.string("notes")
-        guard let calendar = store.defaultCalendarForNewEvents else { return .failed(.unavailable) }
+        // A calendar he named (an undo puts an event back where it was); otherwise the default one.
+        guard let calendar = action.string("calendar").flatMap({ Self.writableCalendar(named: $0, in: store) })
+            ?? store.defaultCalendarForNewEvents else { return .failed(.unavailable) }
         event.calendar = calendar
         do {
             try store.save(event, span: .thisEvent, commit: true)
@@ -85,6 +79,26 @@ final class ShannonDeviceEventKitWriter: @unchecked Sendable {
         case .notDetermined: return (try? await store.requestWriteOnlyAccessToEvents()) ?? false
         default: return false
         }
+    }
+
+    /// When a new event begins and ends: absolute times (`startAt`, `endAt`, from an undo), or the owner's local
+    /// `start` with `end` or `durationMinutes` (an hour by default; a day for a date alone).
+    static func eventTimes(_ action: ShannonDeviceActionDTO) -> (Date, Date, Bool)? {
+        if let startAt = action.string("startAt").flatMap(ShannonDeviceActionClock.date) {
+            let allDay = action.payload["allDay"]?.boolValue ?? false
+            let endAt = action.string("endAt").flatMap(ShannonDeviceActionClock.date) ?? startAt.addingTimeInterval(3_600)
+            return (startAt, allDay ? max(startAt, endAt.addingTimeInterval(-1)) : endAt, allDay)
+        }
+        guard let startText = action.string("start"), let start = localDate(startText) else { return nil }
+        let allDay = action.payload["allDay"]?.boolValue ?? (startText.count == 10)
+        if let endText = action.string("end"), let parsed = localDate(endText) { return (start, parsed, allDay) }
+        if let minutes = action.number("durationMinutes") { return (start, start.addingTimeInterval(minutes * 60), allDay) }
+        return (start, allDay ? start : start.addingTimeInterval(3_600), allDay)
+    }
+
+    /// A calendar of this device that takes changes, by its exact name.
+    static func writableCalendar(named name: String, in store: EKEventStore) -> EKCalendar? {
+        store.calendars(for: .event).first { $0.title == name && $0.allowsContentModifications }
     }
 
     /// `due` is the owner's local wall time (YYYY-MM-DDTHH:mm); `dueAt` an absolute time the server computed.

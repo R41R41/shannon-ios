@@ -299,6 +299,9 @@ const REMINDER_REQUEST = new RegExp(`リマインド|リマインダー|忘れ�
 // 「起こして」 only with a time (「朝」「明日」「〜後」「〜時」): 「問題を起こして」 is no alarm.
 const TIMER_REQUEST = /タイマー|アラーム|目覚まし|[0-9０-９一二三四五六七八九十]+(?:分|時間|秒)半?(?:後に|後で|後、|たったら|経ったら)|(?:朝|明日|あした|あさって|後|時|分|半)[にはでも、]?\s*起こして/u;
 const CALENDAR_REQUEST = /予定(?:を|に)?(?:入れて|入れといて|入れておいて|追加)|カレンダーに/u;
+// Changing, moving, cancelling or deleting an event, and undoing what she did there (「さっきの予定、戻して」).
+const CALENDAR_CHANGE_REQUEST = /(?:予定|会議|打ち合わせ|打合せ|ミーティング|カレンダー)[^。！？!?\n]{0,16}?(?:消して|削除|キャンセル|ずらして|変えて|変更|動かして|移して|延期|戻して|取り消して)/u;
+const FREE_TIME_REQUEST = /空いて(?:る|いる)(?:時間|日|とこ)|空き時間|暇な(?:時間|日)|(?:何時|いつ)(?:なら|が)空いて/u;
 const WEATHER_REQUEST = /天気|天候|予報|気温|降水|傘|雨|雪|晴れ|曇り|くもり/u;
 
 /**
@@ -309,6 +312,8 @@ export function askedToolNames(words: string): string[] {
   return [
     ...(TIMER_REQUEST.test(words) || REMINDER_REQUEST.test(words) ? ['timer.start', 'reminder.create'] : []),
     ...(CALENDAR_REQUEST.test(words) ? ['calendar.create_event'] : []),
+    ...(CALENDAR_CHANGE_REQUEST.test(words) ? ['schedule.upcoming', 'calendar.update_event', 'calendar.delete_event', 'calendar.undo'] : []),
+    ...(FREE_TIME_REQUEST.test(words) ? ['schedule.free_time'] : []),
     ...(MUSIC_REQUEST.test(words) ? ['music.search', 'music.recent', 'music.play', 'music.control'] : []),
     ...(WEATHER_REQUEST.test(words) ? ['weather.forecast'] : []),
   ];
@@ -320,7 +325,7 @@ export function askedToolNames(words: string): string[] {
  * a yes to her own music proposal is matched where this is called.
  */
 export function asksForDeviceAction(transcript: string): boolean {
-  return [MUSIC_REQUEST, REMINDER_REQUEST, TIMER_REQUEST, CALENDAR_REQUEST].some(pattern => pattern.test(transcript));
+  return [MUSIC_REQUEST, REMINDER_REQUEST, TIMER_REQUEST, CALENDAR_REQUEST, CALENDAR_CHANGE_REQUEST].some(pattern => pattern.test(transcript));
 }
 
 const proposesMusic = (reply: string) => /曲|音楽|かけ(?:ましょう|ようか|ても)|流し(?:ましょう|ようか|ても)/u.test(reply);
@@ -349,8 +354,9 @@ function offersMinecraftRequest(runner: ShannonToolRunner | undefined, scopeKey:
 }
 
 /** Her reply offered something she would do with her tools and asks him to say yes (「中を見てみましょうか？」). */
-const HER_THING = /(?:メモ|ノート|物語|お話|ファイル|フォルダ|書斎|下書き|原稿|ゴミ箱)/u;
-const HER_ACT = /(?:作|書|消|残|保存|読|見|開|移|直|まとめ|置|戻)/u;
+// 予定・カレンダー (2026-10-26): her proposal to change or delete an event asks the same yes.
+const HER_THING = /(?:メモ|ノート|物語|お話|ファイル|フォルダ|書斎|下書き|原稿|ゴミ箱|予定|カレンダー)/u;
+const HER_ACT = /(?:作|書|消|残|保存|読|見|開|移|直|まとめ|置|戻|変)/u;
 const ASKS_YES = /(?:(?:ましょう|ます|ても|ていい|でいい|いいです|よろしいです|します|しましょう)か|どうしますか|[？?])[。．\s]*$/u;
 
 export function asksToConfirmToolAction(reply: string): boolean {

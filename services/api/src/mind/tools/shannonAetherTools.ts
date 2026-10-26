@@ -219,8 +219,8 @@ export function documentText(document: AetherDocument): string {
  * and so is one that searches the web or places: the adapter sends no tools then (`offersTools`, `voiceTools` in `chatModel.ts`).
  */
 /** The device tools that act: her device line and the limitations it answers follow these; the reminder boundary the first two. */
-const DEVICE_WRITES: ReadonlySet<string> = new Set(['timer.start', 'reminder.create', 'calendar.create_event', 'music.play', 'music.control',
-  'music.playlist_create']);
+const DEVICE_WRITES: ReadonlySet<string> = new Set(['timer.start', 'reminder.create', 'calendar.create_event', 'calendar.update_event',
+  'calendar.delete_event', 'calendar.undo', 'music.play', 'music.control', 'music.playlist_create']);
 const DEVICE_ALERTS: ReadonlySet<string> = new Set(['timer.start', 'reminder.create']);
 
 export function withToolCapabilityLines<T extends { systemPrompt: string; turnContext?: string; tools?: { definitions: readonly { name: string; domain?: string }[]; menu?: { offered: readonly { name: string; domain?: string }[] } }; useWebSearch?: boolean; placeSearch?: unknown }>(request: T): T {

@@ -7,6 +7,8 @@ import { clip, neutralMarkers, type ToolExecutionContext, type ToolExecutor, typ
 import { toolFailure, toolOk, type ToolResult } from './shannonTools.js';
 import { withToolEvidence } from './toolEvidence.js';
 import { DEVICE_ACTION_TOOLS } from './deviceActionToolDefinitions.js';
+import { calendarEditExecutors, CALENDAR_EDIT_KINDS, calendarDoneText } from './shannonCalendarEditTools.js';
+import type { UpcomingItem } from '../memory/schedulePorts.js';
 import { ownerTimeZone } from '../../infra/time/localDate.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
@@ -22,6 +24,12 @@ export interface DeviceActionToolPort {
   wait(scopeKey: string, id: string, milliseconds: number, signal?: AbortSignal): Promise<StoredDeviceAction | null>;
   told(scopeKey: string, id: string): void;
   now(): string;
+  /** The calendar event a schedule search's `ref` names (`OwnerUpcoming.calendarEvent`); absent, the edit tools find none. */
+  calendarEvent?(scopeKey: string, ref: string): UpcomingItem | null;
+  /** Whether one of the owner's devices can do `kind` (its app is new enough); absent, every kind is assumed. */
+  supports?(scopeKey: string, kind: DeviceActionKind): boolean;
+  /** What she asked of his devices since `since`, newest first (the calendar's undo). */
+  recent?(scopeKey: string, since: string): readonly StoredDeviceAction[];
 }
 
 const LOCAL_MINUTE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/u;
@@ -83,7 +91,7 @@ function eventPayload(input: ToolInput, now: string): Built {
   return { payload: {
     title: words(input, 'title'), start, allDay, ...optional('end', end),
     ...optional('durationMinutes', end ? undefined : duration ?? (allDay ? undefined : 60)),
-    ...optional('location', words(input, 'location')), ...optional('notes', words(input, 'notes')),
+    ...optional('location', words(input, 'location')), ...optional('notes', words(input, 'notes')), ...optional('calendar', words(input, 'calendar')),
   } };
 }
 
@@ -114,6 +122,7 @@ function payloadFor(kind: DeviceActionKind, input: ToolInput, now: string): Buil
     case 'music.play': return playPayload(input);
     case 'music.control': return { payload: { action: words(input, 'action') } };
     case 'music.playlist_create': return playlistPayload(input);
+    case 'calendar.update_event': case 'calendar.delete_event': return { problem: 'この変更は calendar の変更の道具が作る' };
   }
 }
 
@@ -126,7 +135,7 @@ const LIMIT = toolFailure('limit', '端末に頼んだまま済んでいない�
 const CODE_TEXT: Readonly<Record<string, string>> = Object.freeze({
   unsupported: 'この端末ではできない（Macではプレイリストを作れない、など）', not_authorized: '端末でシャノンのアプリに許可がない（設定アプリで許可すればできる）',
   not_found: '端末で見つからなかった', invalid: '端末が中身を読めなかった', past: 'もう時間が過ぎていた', unavailable: '端末でいま使えなかった（Apple Musicの契約やネットなど）',
-  failed: '端末でうまくいかなかった',
+  failed: '端末でうまくいかなかった', changed: '案を作ったあとで、その予定が端末で変わっていた（もう一度探してから案を作り直す）',
 });
 
 const lineOf = (value: unknown, maximum = 80) => typeof value === 'string' ? neutralMarkers(clip(value, maximum)) : '';
@@ -161,10 +170,11 @@ function readText(action: StoredDeviceAction): string {
 
 function doneText(action: StoredDeviceAction): string {
   const result = action.result ?? {};
+  const calendar = calendarDoneText(action);
+  if (calendar) return calendar;
   switch (action.kind) {
     case 'reminder.create': return `リマインダーに入れた（端末で確認済み）: 「${lineOf(action.payload.title)}」`;
     case 'timer.start': return `タイマーを始めた（端末で確認済み）: ${Number(action.payload.seconds)}秒${quoted(action.payload.label)}`;
-    case 'calendar.create_event': return `カレンダーに入れた（端末で確認済み）: 「${lineOf(action.payload.title)}」 ${lineOf(action.payload.start, 16)}`;
     case 'music.play': return `かけ始めた（端末で確認済み）: ${quoted(result.title) || quoted(action.payload.query)}${byArtist(result.artist)}`;
     case 'music.control': return `端末で ${lineOf(action.payload.action, 12)} した。`;
     case 'music.playlist_create': return `プレイリスト「${lineOf(action.payload.name)}」を作った（端末で確認済み）。`;
@@ -188,7 +198,8 @@ function pendingResult(action: StoredDeviceAction, connected: boolean): ToolResu
     { outcome: 'queued', action: action.kind, target: { kind: 'device_action', id: action.id }, operationId: action.id });
 }
 
-async function run(port: DeviceActionToolPort, kind: DeviceActionKind, payload: Payload, context: ToolExecutionContext,
+/** Writes one action, waits for its device as long as the turn allows, and says what became of it. */
+export async function requestDeviceAction(port: DeviceActionToolPort, kind: DeviceActionKind, payload: Payload, context: ToolExecutionContext,
   signal?: AbortSignal): Promise<ToolRun> {
   const summary = '会話の中で、ライ氏の端末に頼みごとを渡しました。';
   // A retry of the same turn asks the device once.
@@ -220,8 +231,8 @@ export function deviceActionExecutors(port: DeviceActionToolPort): Readonly<Reco
     if (!port.available(context.scopeKey)) return OFF;
     const built = payloadFor(kind, input, port.now());
     if ('problem' in built) return toolFailure('invalid_input', `入力が正しくない（${built.problem}）。`, { retryable: false });
-    return { summary: 'ライ氏の端末に頼みごとを渡す。', run: (signal?: AbortSignal) => run(port, kind, built.payload, context, signal) };
+    return { summary: 'ライ氏の端末に頼みごとを渡す。', run: (signal?: AbortSignal) => requestDeviceAction(port, kind, built.payload, context, signal) };
   };
-  const kinds = DEVICE_ACTION_TOOLS.map(tool => tool.name).filter(isDeviceActionKind);
-  return Object.freeze(Object.fromEntries(kinds.map(kind => [kind, executor(kind)])));
+  const kinds = DEVICE_ACTION_TOOLS.map(tool => tool.name).filter(isDeviceActionKind).filter(kind => !CALENDAR_EDIT_KINDS.includes(kind));
+  return Object.freeze({ ...Object.fromEntries(kinds.map(kind => [kind, executor(kind)])), ...calendarEditExecutors(port, requestDeviceAction) });
 }

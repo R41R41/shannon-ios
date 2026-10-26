@@ -63,7 +63,10 @@ describe('PUT /v1/calendar/upcoming', () => {
     const good = event('a', '歯医者', HOUR, 2 * HOUR);
     const refused: [string, Record<string, unknown>][] = [
       ['an unknown field', snapshot([good], { note: 'x' })],
-      ['an unknown event field', snapshot([{ ...good, attendees: [] }])],
+      ['an unknown event field', snapshot([{ ...good, notes: 'x' }])],
+      ['attendees that are not strings', snapshot([{ ...good, attendees: [1] }])],
+      ['more than 30 attendees', snapshot([{ ...good, attendees: Array.from({ length: 31 }, (_, index) => `人${index}`) }])],
+      ['a recurring flag that is not a boolean', snapshot([{ ...good, recurring: 'yes' }])],
       ['more than 300 events', snapshot(Array.from({ length: CALENDAR_LIMITS.events + 1 }, (_, index) => event(`e${index}`, '予定', HOUR, 2 * HOUR)))],
       ['a window longer than 31 days', snapshot([good], { windowEnd: at(32 * 24 * HOUR) })],
       ['a window that ends before it starts', snapshot([good], { windowEnd: at(-HOUR) })],

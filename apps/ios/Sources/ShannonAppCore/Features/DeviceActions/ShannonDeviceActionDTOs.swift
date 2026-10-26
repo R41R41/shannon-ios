@@ -114,6 +114,8 @@ public enum ShannonDeviceActionCode: String, Sendable {
     case past
     case unavailable
     case failed
+    /// The event he confirmed a change of is no longer what the change was made from.
+    case changed
 }
 
 public struct ShannonDeviceActionReportResponseDTO: Decodable, Equatable, Sendable {

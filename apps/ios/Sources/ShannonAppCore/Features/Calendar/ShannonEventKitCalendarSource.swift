@@ -50,6 +50,13 @@ public final class ShannonEventKitCalendarSource: ShannonCalendarEventSource, @u
         }
     }
 
+    /// A participant's name, or the address of the invitation when the calendar has no name for them.
+    private static func attendeeName(_ participant: EKParticipant) -> String? {
+        if let name = participant.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
+        let address = participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
+        return address.isEmpty ? nil : address
+    }
+
     /// Copies only the fields of the server contract out of EventKit.
     private static func sourceEvent(_ event: EKEvent) -> ShannonCalendarSourceEvent? {
         guard let identifier = event.eventIdentifier, let start = event.startDate, let end = event.endDate else {
@@ -66,7 +73,8 @@ public final class ShannonEventKitCalendarSource: ShannonCalendarEventSource, @u
             calendarTitle: event.calendar?.title,
             location: event.location,
             isRecurring: event.hasRecurrenceRules || event.isDetached,
-            isDeclined: declined
+            isDeclined: declined,
+            attendees: (event.attendees ?? []).filter { !$0.isCurrentUser }.compactMap(Self.attendeeName)
         )
     }
 }

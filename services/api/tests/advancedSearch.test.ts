@@ -7,6 +7,7 @@ import { StudyStore, type StudyDraft } from '../src/mind/action/ownTime/store/st
 import type { SQLiteAutonomyStore } from '../src/mind/action/ownTime/ownTimePorts.js';
 import { OwnerUpcoming } from '../src/mind/memory/ownerUpcoming.js';
 import { SQLiteUpcomingStore } from '../src/mind/memory/store/upcomingStore.js';
+import { eventRef } from '../src/mind/memory/scheduleSearch.js';
 import { createTaskMemory } from '../src/mind/memory/taskMemory.js';
 import { studyExecutors } from '../src/mind/tools/shannonStudyTools.js';
 import { readToolExecutors } from '../src/mind/tools/shannonReadTools.js';
@@ -266,8 +267,9 @@ describe('received schedule search', () => {
       { id: 'two', title: '100%_ review', location: 'Tokyo', hours: 3 }, { id: 'not-literal', title: '100percentX review', location: 'Tokyo', hours: 4 }]);
     const result = f.upcoming.searchWithSources('owner', { query: '100%_ Tokyo', kind: 'calendar', offset: 1, limit: 1 });
     expect(result.sourceIds).toEqual([`calendar:two@${at(3)}`]);
-    expect(result.prompt).toContain(`calendar:two@${at(3)}`);
-    expect(result.prompt).not.toContain('calendar:one@');
+    // A calendar line carries its short ref (what the edit tools take), not the long device id.
+    expect(result.prompt).toContain(`ref: ${eventRef('two', at(3))}`);
+    expect(result.prompt).not.toContain(eventRef('one', at(2)));
     expect(result.prompt).not.toContain('unrelated');
     expect(result.prompt).toContain('受信済み');
   });
@@ -294,7 +296,7 @@ describe('received schedule search', () => {
       return { text: result.prompt, sourceIds: result.sourceIds };
     } })['schedule.upcoming']!;
     const context = { scopeKey: 'owner', surface: 'text' as const, audience: 'owner_alone' as const, memory: toolSessionMemory() };
-    const invalid: ToolInput[] = [{ after: '2026-02-30T00:00:00Z' }, { after: at(-1) }, { before: at(32 * 24) }];
+    const invalid: ToolInput[] = [{ after: '2026-02-30T00:00:00Z' }, { after: at(-72), before: at(-48) }, { when: '火星の三日後' }];
     for (const input of invalid) {
       const prepared = executor(input, context);
       if (!('run' in prepared)) throw new Error('schedule search not prepared');

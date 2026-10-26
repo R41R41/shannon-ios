@@ -162,19 +162,20 @@ export const SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY = Object.freeze({
 export const SHANNON_DEVICE_ACTIONS_CAPABILITY = Object.freeze({
   id: 'device_actions', audience: 'owner',
   text: '端末に頼む: ライ氏と二人だけの会話で頼まれたら、ライ氏のiPhoneやMacのシャノンのアプリを通して、リマインダー（通知つき）・タイマー・'
-    + 'カレンダーの予定を入れる（入れた予定を動かす・消すことはできない）。'
+    + 'カレンダーの予定を入れる。予定を変える・消す時は、先に案をライ氏に見せ、次の返事ではいと言われてから実行する（ボクがしたことは元に戻せる）。'
     + 'Apple Musicで曲を探してかけ、止める・飛ばす。曲はライ氏が頼んだ時か、ボクの提案にライ氏が応じた時だけかけ、'
     + '自分から黙ってかけない（かけたい曲は言葉で提案する）。選ぶ時はライ氏のよく聴く曲や最近の曲から、会話の雰囲気といまの気持ちに合うものを選び、'
     + '理由をひと言添える。端末の報告が届くまで済んだとは言わない。アプリが開いていない時、音楽はかけられない。',
 } as const satisfies ShannonCapability);
 
 /**
- * What the device does, out of 「今はできないこと」: the calendar line keeps only what no tool does, and the timer line goes.
+ * What the device does, out of 「今はできないこと」: the calendar line keeps only what no tool does (adding, changing and deleting
+ * events are tools now), and the timer line goes.
  * Built from `SHANNON_LIMITATIONS`, so a change of those words cannot leave a stale line behind.
  */
 export function deviceActionsLimitationRewrites(): readonly (readonly [string, string])[] {
   return [
-    [`- ${limitationText('calendar_mail')}\n`, '- カレンダーの予定の変更・削除、メールやメッセージの送信、ほかの人への電話、予約、購入。\n'],
+    [`- ${limitationText('calendar_mail')}\n`, '- メールやメッセージの送信、ほかの人への電話、予約、購入。\n'],
     [`- ${limitationText('exact_time_alarm')}\n`, ''],
   ];
 }

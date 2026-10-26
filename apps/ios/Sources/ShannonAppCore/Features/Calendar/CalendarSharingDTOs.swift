@@ -1,7 +1,7 @@
 import Foundation
 
 /// One upcoming event exactly as `PUT /v1/calendar/upcoming` accepts it.
-/// Notes, attendees and URLs have no field here, so they cannot be sent.
+/// Notes and URLs have no field here, so they cannot be sent. Absent optionals are left out of the JSON.
 public struct ShannonCalendarEventDTO: Codable, Equatable, Sendable {
     public let id: String
     public let title: String
@@ -10,6 +10,10 @@ public struct ShannonCalendarEventDTO: Codable, Equatable, Sendable {
     public let allDay: Bool
     public let calendar: String?
     public let location: String?
+    /// The other people invited, by name.
+    public let attendees: [String]?
+    /// True for an occurrence of a repeating event; nil otherwise.
+    public let recurring: Bool?
 
     public init(
         id: String,
@@ -18,7 +22,9 @@ public struct ShannonCalendarEventDTO: Codable, Equatable, Sendable {
         end: String,
         allDay: Bool,
         calendar: String? = nil,
-        location: String? = nil
+        location: String? = nil,
+        attendees: [String]? = nil,
+        recurring: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -27,6 +33,8 @@ public struct ShannonCalendarEventDTO: Codable, Equatable, Sendable {
         self.allDay = allDay
         self.calendar = calendar
         self.location = location
+        self.attendees = attendees
+        self.recurring = recurring
     }
 }
 
@@ -75,10 +83,13 @@ public enum ShannonCalendarSharingBounds {
     public static let maximumCalendar = 80
     public static let maximumLocation = 200
     public static let maximumID = 200
+    public static let maximumAttendees = 30
+    public static let maximumAttendee = 80
     public static let maximumBodyBytes = 256 * 1024
-    /// One hour back so an event that is happening now is still known.
-    public static let lookBehind: TimeInterval = 60 * 60
-    public static let lookAhead: TimeInterval = 14 * 24 * 60 * 60
+    /// One day back, so that today's earlier events and one that is happening now are still known.
+    public static let lookBehind: TimeInterval = 24 * 60 * 60
+    /// With the day back, 30 days in all: inside the server's 31-day window.
+    public static let lookAhead: TimeInterval = 29 * 24 * 60 * 60
 }
 
 /// The paired connection a snapshot belongs to.

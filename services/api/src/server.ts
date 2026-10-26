@@ -191,7 +191,7 @@ const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(
   notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
 const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
 const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim()) : undefined;
-const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools);
+const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools, ownerUpcoming.upcoming);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
 const innerNote = configuredInnerNote(process.env, persistentStore, autonomyConfig.timeZone, now); // ADR-0012 stage 1; SHANNON_INNER_NOTE=off: null.
 const feeling = configuredFeeling(process.env, { databasePath: configuredDatabasePath(), timeZone: autonomyConfig.timeZone, now, // ADR-0013 stage 1; off: null.

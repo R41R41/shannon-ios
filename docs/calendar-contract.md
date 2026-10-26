@@ -3,7 +3,9 @@
 Status: implemented on the server (2026-10-02). The apps that send it are built against this document.
 Schema version: `1`. Source: `services/api/src/contracts/calendarContract.ts`, `calendarRoutes.ts`, `upcomingStore.ts`, `ownerUpcoming.ts`.
 
-Owner decision (2026-10-02): Shannon should know what is coming up for the owner, so that she can answer "what is on today?" and, in her own time, speak up about something that is near. The apps read the calendar on the owner's device and send a bounded snapshot. **The server never reads a calendar service and never writes a calendar.**
+Owner decision (2026-10-02): Shannon should know what is coming up for the owner, so that she can answer "what is on today?" and, in her own time, speak up about something that is near. The apps read the calendar on the owner's device and send a bounded snapshot. **The server never reads a calendar service and never writes a calendar** (it asks the owner's own app to, through the device-action outbox: `docs/device-actions-contract.md`, "Changing the calendar").
+
+Owner request (2026-10-26, 「スケジュール検索を高度に、追加・削除・編集も」): the snapshot also carries the names of the other people invited and whether an event repeats, the apps send from a day back to 29 days ahead, and her schedule tools search it by a span in the owner's words, by words, people, place and calendar, and find free time (see "Her schedule tools").
 
 ## Transport
 
@@ -26,6 +28,7 @@ Replaces **this device's** snapshot whole. An event that is no longer in the dev
   "windowEnd": "2026-10-09T01:00:00.000Z",
   "events": [
     { "id": "A1B2:2026-10-02", "title": "歯医者", "start": "2026-10-02T14:00:00+09:00", "end": "2026-10-02T15:00:00+09:00", "allDay": false, "calendar": "個人", "location": "駅前" },
+    { "id": "E5F6@2026-10-05T00:30:00Z", "title": "定例", "start": "2026-10-05T09:30:00+09:00", "end": "2026-10-05T10:00:00+09:00", "allDay": false, "calendar": "仕事", "attendees": ["田中 一郎", "佐藤"], "recurring": true },
     { "id": "C3D4", "title": "祝日", "start": "2026-10-03T00:00:00+09:00", "end": "2026-10-04T00:00:00+09:00", "allDay": true }
   ]
 }
@@ -44,6 +47,8 @@ Replaces **this device's** snapshot whole. An event that is no longer in the dev
 | `events[].allDay` | boolean | yes | For an all-day event send its bounds as the device's calendar gives them, in the device's zone: an end at 23:59:59 of the last day and an end at 00:00:00 of the day after are both accepted. |
 | `events[].calendar` | string | no | Name of the calendar, at most 80 characters. Leave it out when empty; `null` is refused. |
 | `events[].location` | string | no | At most 200 characters. Leave it out when empty; `null` is refused. |
+| `events[].attendees` | array of strings | no | The other people invited, by name (the address when the calendar has none); the owner is left out. At most **30** names of at most **80** characters; empty names are dropped. Leave it out when there are none; `null` is refused. (2026-10-26) |
+| `events[].recurring` | boolean | no | `true` for an occurrence of a repeating event. Leave it out otherwise. (2026-10-26) |
 
 Lengths are counted in UTF-16 code units (the length of a JavaScript or Swift `utf16` string), so one emoji counts as two.
 
@@ -90,10 +95,19 @@ A device that is unpaired while offline, or whose pairing ran out, cannot send `
 ## What the server does with a snapshot
 
 - It is stored per device in `calendar_device_snapshots` (additive table). **A snapshot is used for seven days after it was received**; after that it is ignored until the device sends again. Send at least daily, and again when the calendar changes.
-- Events are owner-private material, like the rest of what she knows about him. They reach a model through one projection only (`upcomingForOwner`, `ownerUpcoming.ts`), together with promises that have a due time and, when Voyager is configured for it, dated Voyager tasks:
+- Events are owner-private material, like the rest of what she knows about him. They reach a model through `ownerUpcoming.ts` only (`upcomingForOwner`, and `items` for the schedule tools), together with promises that have a due time and, when Voyager is configured for it, dated Voyager tasks:
   - **An owner conversation turn that asks about the schedule** (text and owner voice): one block of at most 12 lines for the next 48 hours (8 days when he names a week), each line a kind, an owner-local time, the title, and the place. With no device sharing, the block says so, so she does not invent events. With other people present every line carries the marker of owner-private information and the speak-time check decides what is said aloud; a promise he keeps secret from the people present is left out.
   - **Her own activity**, only while she may speak up on her own (`reach_out`): at most 12 lines for the next 24 hours, each a kind, a time and a title. No place, no calendar name, no id.
 - No route here calls a model, writes as Shannon, or creates a memory.
+
+## Her schedule tools (2026-10-26)
+
+Two read tools of the registry (domain `schedule_read`; the owner alone, in a conversation; `scheduleSearch.ts`, `scheduleWhen.ts`):
+
+- `schedule.upcoming` (search): `when` takes the span in the owner's words (「来週の水曜の午後」「今週末」「10月30日の15時から17時」「3日後」「来週末まで」; weeks begin on Monday; a part of the day such as 午後 12:00–18:00 becomes the window of every day of a longer span); `after`/`before` (ISO) remain for what `when` cannot say. `query` matches all its words in the title, place, attendees and calendar name; `who` matches each name (さん・様 dropped) in the attendees or the title; `place` the location; `calendar` any of the names given (`仕事、個人`). A filter of place, person or calendar searches calendar events only. A span is clipped to the start of today and to 31 days ahead (the line says so). Each calendar line carries its calendar, up to six attendees, 「繰り返し」 and a `ref` (`ev` + 8 hex of SHA-256 of the device id and the start): what `calendar.update_event` and `calendar.delete_event` take. The header names the calendars the snapshot holds (every account on the sharing devices).
+- `schedule.free_time`: the gaps between calendar events in each day's hours (`fromHour`/`toHour`, the part of the day of `when`, or 9–21), at least `minMinutes` (30) long, never before now; at most 30 slots. All-day events, promises and tasks do not fill time; all-day events are listed beside.
+
+Provenance is unchanged: the subjects of exactly the lines shown (`calendar-item://…`).
 
 ## Errors
 
@@ -112,6 +126,6 @@ A device that is unpaired while offline, or whose pairing ran out, cannot send `
 
 ## Not built
 
-- Writing to a calendar, invitations, attendees, notes, alarms, and recurrence rules. Only what is listed above is accepted.
+- Notes, alarms, URLs and recurrence rules in the snapshot; changing a whole series of a repeating event (only one occurrence); inviting people. Only what is listed above is accepted.
 - A push from the server when the snapshot is stale. The device decides when to send.
 - Reading a calendar service from the server.

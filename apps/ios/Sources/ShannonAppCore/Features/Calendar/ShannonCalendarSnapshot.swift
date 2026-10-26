@@ -1,7 +1,8 @@
 import Foundation
 
-/// What the app may read from one calendar event. Notes, attendees and URLs are
-/// deliberately absent: the reader never hands them to the rest of the app.
+/// What the app may read from one calendar event. Notes and URLs are deliberately
+/// absent: the reader never hands them to the rest of the app. Attendees are names only
+/// (the owner left out), so that Shannon can find an event by who is in it.
 public struct ShannonCalendarSourceEvent: Equatable, Sendable {
     public let identifier: String
     public let title: String?
@@ -14,6 +15,8 @@ public struct ShannonCalendarSourceEvent: Equatable, Sendable {
     public let isRecurring: Bool
     /// True when the owner declined the invitation or the event was cancelled.
     public let isDeclined: Bool
+    /// The other people invited, by name (or address when the calendar has no name).
+    public let attendees: [String]
 
     public init(
         identifier: String,
@@ -24,7 +27,8 @@ public struct ShannonCalendarSourceEvent: Equatable, Sendable {
         calendarTitle: String? = nil,
         location: String? = nil,
         isRecurring: Bool = false,
-        isDeclined: Bool = false
+        isDeclined: Bool = false,
+        attendees: [String] = []
     ) {
         self.identifier = identifier
         self.title = title
@@ -35,6 +39,7 @@ public struct ShannonCalendarSourceEvent: Equatable, Sendable {
         self.location = location
         self.isRecurring = isRecurring
         self.isDeclined = isDeclined
+        self.attendees = attendees
     }
 }
 
@@ -105,7 +110,9 @@ public enum ShannonCalendarSnapshotBuilder {
                     end: timestamp(item.event.end, timeZone: timeZone),
                     allDay: item.event.isAllDay,
                     calendar: clipped(item.event.calendarTitle, to: ShannonCalendarSharingBounds.maximumCalendar),
-                    location: clipped(item.event.location, to: ShannonCalendarSharingBounds.maximumLocation)
+                    location: clipped(item.event.location, to: ShannonCalendarSharingBounds.maximumLocation),
+                    attendees: attendees(item.event.attendees),
+                    recurring: item.event.isRecurring ? true : nil
                 )
             }
     }
@@ -149,6 +156,16 @@ public enum ShannonCalendarSnapshotBuilder {
         guard event.isRecurring else { return clip(event.identifier, to: limit) }
         let suffix = "@" + timestamp(event.start, timeZone: .gmt)
         return clip(event.identifier, to: limit - suffix.utf16.count) + suffix
+    }
+
+    /// Names, trimmed and clipped, empty ones and repeats left out, at most the server's count; nil when none is left.
+    static func attendees(_ names: [String]) -> [String]? {
+        var seen = Set<String>()
+        let kept = names
+            .compactMap { clipped($0, to: ShannonCalendarSharingBounds.maximumAttendee) }
+            .filter { seen.insert($0).inserted }
+            .prefix(ShannonCalendarSharingBounds.maximumAttendees)
+        return kept.isEmpty ? nil : Array(kept)
     }
 
     /// Trimmed and clipped; nil when nothing is left.
