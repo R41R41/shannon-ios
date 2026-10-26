@@ -30,6 +30,14 @@ public enum ShannonPrivateListeningCopy {
         + "イヤホンを外すと待機は止まり、もう一度つないだあとはこのアプリを開くと再開します。"
         + "アプリを上にスワイプして終了したときも待機は止まります。"
         + "話しかけたあとの数秒間はマイクを使うため、画面の上にマイク使用中の表示が出ます。"
+    /// The footer of the speaking rows: the iPhone adds its standby.
+    public static var speakingExplanation: String {
+#if os(macOS)
+        speaksExplanation
+#else
+        speaksExplanation + "\n\n" + standbyExplanation
+#endif
+    }
 
     public static func speaksStatus(enabled: Bool, speaksNow: Bool, serverDelivers: Bool = true) -> String {
         if !enabled { return "オフ" }

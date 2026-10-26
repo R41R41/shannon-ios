@@ -2686,7 +2686,7 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift#figureDisplayOptions"
           ],
           "note": "トークの表示の切り替えボタンの長押しと、設定 › すがた（A6）。"
@@ -2695,7 +2695,7 @@
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#displayOptions",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift"
           ],
           "note": "パネルのメニュー（iPhone の表示の切り替えボタンの長押しと同じ項目）と、設定 › すがた（A15）。"
         },
@@ -2714,7 +2714,7 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift#ShannonLive2DBody",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage+Body.swift#setBody",
             "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift#figureDisplayOptions"
@@ -2724,7 +2724,7 @@
         "macos": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#public struct ShannonFigureSettingsSection",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift#public struct ShannonFigureSettingsRows",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#ShannonLive2DBody.selection"
           ],
           "note": "設定 › すがた › 体 と、パネルのメニュー。パネルの姿に効く（A15）。"
@@ -2836,7 +2836,7 @@
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonDialogueFigure.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
           ],
           "note": "映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。 目だけのときは映し方を出さない（体のページが大きさと位置だけを使う）。"
@@ -2962,7 +2962,7 @@
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift#shannonBodyAttachment",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#reportsTouch"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift#reportsTouch"
           ],
           "note": "設定 › すがた の「体に起きたことをシャノンに伝える」（既定は切）。入のとき、触れた場所・触れ方・長さ・強さ・時刻と、体が身を引いたかどうかだけが届き、返事は姿の近くの吹き出し（A15）。 Mac ではふだん相手は所有者ひとりで、音声会話を「友人も一緒」にしている間とそのあと 5 分は、ほかの人もいるものとして届く（A16）。説明にそう書いた（settings.figure.touchMac）。"
         },
@@ -3037,7 +3037,7 @@
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyVoice.swift#ShannonBodyReplyMode",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift"
           ],
           "note": "設定 › すがた（A6）。声で返すのは、トークの向き合う表示の姿が見えている間だけ。"
@@ -3045,7 +3045,7 @@
         "macos": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift#replyModeRawValue",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift#replyModeRawValue",
             "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonDesktopVoiceCall+Listen.swift#bodyListen",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonTalkFigurePanel.swift"
           ],
@@ -3268,7 +3268,7 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningSettingsRows.swift",
             "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningModel.swift"
           ]
         },
@@ -3348,7 +3348,7 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningSettingsSection.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningSettingsRows.swift"
           ]
         },
         "macos": {
@@ -3638,15 +3638,15 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift"
           ],
           "note": "姿、体（人の姿／目だけ、2026-10-05）、映し方（人の姿のときだけ）、位置を戻す、トークで姿を見る、体に起きたことを伝える、触れたときの返事（A6）。"
         },
         "macos": {
           "status": "yes",
           "evidence": [
-            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift#ShannonFigureSettingsSection",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift#ShannonFigureSettingsRows",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsRows.swift"
           ],
           "note": "iPhone と同じ 設定 › すがた: 姿、体、映し方、位置を戻す、トークで姿を見る（押すとトークと「すがた」のパネル）、体に起きたことを伝える、触れたときの返事（A15）。"
         },
@@ -3670,7 +3670,7 @@
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift#adminSection",
-            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift#adminSection"
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift#settingsAdminPage"
           ],
           "note": "設定の先頭（シャノンの札の下）に 管理: 運用・接続中の端末・配信・診断。「接続と詳細」は無くした（A5）。接続中の端末は端末の一覧と解除だけを、設定 › 接続 はこの端末の接続（状態、確認、この端末の解除）を開く（2026-10-05）。"
         },

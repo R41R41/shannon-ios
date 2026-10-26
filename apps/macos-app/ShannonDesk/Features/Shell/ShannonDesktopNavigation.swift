@@ -110,30 +110,32 @@ enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
     var maximumWidth: CGFloat { self == .figure ? 560 : 390 }
 }
 
-/// The parts of 設定 on the Mac: 管理 first (運用, 接続中の端末, 配信, 診断), then the others in the
-/// order of docs/product/information-architecture.md 1. The left column lists them; the right shows one.
+/// The parts of 設定 on the Mac, in the groups and order of the iPhone (plan A, owner's choice 2026-10-26): シャノン,
+/// 声と耳, 見る・知る, このアプリ, and 管理 last (判断モデル, 運用, 接続中の端末, 配信, 診断). The left column lists them
+/// under those headers; the right shows one.
 enum DesktopSettingsPage: String, CaseIterable, Hashable {
+    case figure
+    case voice
+    case camera
+    case sources
+    case folder
+    case appearance
+    case earphones
+    case connection
+    case modelMode
     case ops
     case devices
     case delivery
     case diagnostics
-    case figure
-    case camera
-    case earphones
-    case voice
-    case modelMode
-    case calendar
-    case folder
-    case appearance
-    case connection
-    case sources
 
-    static let admin: [DesktopSettingsPage] = [.ops, .devices, .delivery, .diagnostics]
-    static let others: [DesktopSettingsPage] = [.figure, .camera, .earphones, .voice, .modelMode, .calendar, .folder, .appearance, .connection, .sources]
+    static let admin: [DesktopSettingsPage] = [.modelMode, .ops, .devices, .delivery, .diagnostics]
+    /// シャノン, 声と耳, 見る・知る, このアプリ and 管理, in order.
+    static let groups: [[DesktopSettingsPage]] = [[.figure], [.voice], [.camera, .sources, .folder], [.appearance, .earphones, .connection], admin]
 
-    /// 運用 is offered only by a server that has it; the page falls back to the next part of 管理.
+    /// 運用 is offered only by a server that has it; the page falls back to the next part of 管理. 予定 was a page of its
+    /// own before plan A and is in 見る・知る now.
     static func restoring(_ rawValue: String?, opsSupported: Bool) -> DesktopSettingsPage {
-        let page = rawValue.flatMap(DesktopSettingsPage.init(rawValue:)) ?? .ops
+        let page: DesktopSettingsPage = rawValue == "calendar" ? .camera : rawValue.flatMap(DesktopSettingsPage.init(rawValue:)) ?? .figure
         return page == .ops && !opsSupported ? .devices : page
     }
 }

@@ -14,15 +14,71 @@ extension ShannonConversationView {
 
     func settingsSheetContent(_ palette: ShannonPalette) -> some View {
         NavigationStack {
+            // Plan A (owner's choice 2026-10-26): by what he wants to do. シャノン, 声と耳 (with 声を出す場面), 見る・知る,
+            // このアプリ, and 管理 last in one row. iPhone and Mac have the same parts in the same order.
             List {
                 Section {
                     settingsProfileRow(palette)
                     ShannonPersonaPresetPicker(activeProvider: geminiLiveVoiceModel.phase.isCallActive ? geminiLiveVoiceModel.speechProvider : nil)
+                    ShannonFigureSettingsRows(.figure, showInTalk: showFigureInTalk)
+                    Picker(selection: ShannonPersonaPreset.avatarSelection($chatAvatarStyleRawValue)) {
+                        ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
+                            Text(style.japaneseName).tag(style.rawValue)
+                        }
+                    } label: {
+                        settingsLabel(ShannonGeneratedStrings.settingsChatIcon, symbol: "person.crop.circle", palette: palette)
+                    }
+                    .accessibilityHint("チャットでシャノンの返答横に表示するアイコンを切り替えます。ホーム画面のアプリアイコンは変わりません")
+                } header: {
+                    Text(ShannonGeneratedStrings.settingsGroupShannon)
+                } footer: {
+                    ShannonFigureSettingsFooter()
                 }
 
-                adminSection(palette)
+                Section {
+                    ShannonVoiceEarSettingsRows()
+                    Picker(selection: ShannonPersonaPreset.voiceSelection($speechProviderRawValue)) {
+                        ForEach(ShannonSpeechProvider.allCases) { provider in
+                            Text(provider.japaneseName).tag(provider.rawValue)
+                        }
+                    } label: {
+                        settingsLabel(ShannonGeneratedStrings.settingsVoiceKind, symbol: "waveform", palette: palette)
+                    }
+                    .accessibilityHint("Geminiで作った声とElevenLabsのShannonクローンを切り替えます。次に開始する音声会話から適用します")
+                } header: {
+                    Text(ShannonGeneratedStrings.settingsGroupVoiceEar)
+                } footer: {
+                    Text(ShannonGeneratedStrings.settingsGroupVoiceEarFooter)
+                }
 
-                Section("見た目") {
+                Section {
+                    ShannonFigureSettingsRows(.replyMode)
+                    ShannonPrivateListeningSettingsRows(.speaking)
+                } header: {
+                    Text(ShannonGeneratedStrings.settingsGroupVoiceScenes)
+                } footer: {
+                    Text(ShannonBodyCopy.replyModeExplanation + "\n\n" + ShannonPrivateListeningCopy.speakingExplanation)
+                }
+
+#if os(iOS)
+                ShannonIncomingCallSettingsSection(header: nil)
+#endif
+
+                ShannonAppLookSettingsSection(header: ShannonGeneratedStrings.settingsGroupSenses)
+                Section {
+                    ShannonFigureSettingsRows(.touch)
+                }
+                ShannonCalendarSharingSettingsSection(header: nil)
+                Section {
+                    settingsValueButton(
+                        title: "情報源",
+                        value: worldSubscriptionModel.summary,
+                        symbol: "newspaper",
+                        palette: palette
+                    ) { showsWorldSubscriptions = true }
+                }
+
+                Section {
                     settingsValueButton(
                         title: "外観",
                         value: ShannonSettingsSummary.appearanceLabel(savedAppearanceMode),
@@ -35,67 +91,13 @@ extension ShannonConversationView {
                         symbol: "app.dashed",
                         palette: palette
                     ) { showsAppIconSettings = true }
-                    Picker(selection: ShannonPersonaPreset.avatarSelection($chatAvatarStyleRawValue)) {
-                        ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
-                            Text(style.japaneseName).tag(style.rawValue)
-                        }
+                    NavigationLink {
+                        settingsEarphonesPage(palette)
                     } label: {
-                        settingsLabel("アバター", symbol: "person.crop.circle", palette: palette)
-                    }
-                    .accessibilityHint("チャットでシャノンの返答横に表示するアイコンを切り替えます。ホーム画面のアプリアイコンは変わりません")
-                }
-
-                Section {
-                    LabeledContent {
-                        Text(settingsVoiceLabel)
-                            .foregroundStyle(palette.textSecondary)
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(ShannonGeneratedStrings.settingsSectionVoice)
-                                Text("次の通話から反映")
-                                    .font(.shannon(.footnote))
-                                    .foregroundStyle(palette.textSecondary)
-                            }
-                        } icon: {
-                            Image(systemName: "speaker.wave.2").foregroundStyle(palette.action)
-                        }
+                        settingsLabel(ShannonPrivateListeningCopy.sectionTitle, symbol: "headphones", palette: palette)
                     }
                     .frame(minHeight: ShannonTouchTarget.minimum)
-                    .accessibilityElement(children: .combine)
-                    Picker(selection: ShannonPersonaPreset.voiceSelection($speechProviderRawValue)) {
-                        ForEach(ShannonSpeechProvider.allCases) { provider in
-                            Text(provider.japaneseName).tag(provider.rawValue)
-                        }
-                    } label: {
-                        settingsLabel("読み上げ", symbol: "waveform", palette: palette)
-                    }
-                    .accessibilityHint("Geminiで作った声とElevenLabsのShannonクローンを切り替えます。次に開始する音声会話から適用します")
-                } header: {
-                    Text("声と会話")
-                } footer: {
-                    Text("声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。")
-                }
-
-                ShannonModelModeSettingsSection(scopeKey: model.scopeKey,
-                    client: model.client as? any ShannonModelModeServing,
-                    connected: connectionModel?.isConnected == true, isDesignPreview: model.isDesignPreview)
-                    .id(model.scopeKey)
-
-                ShannonFigureSettingsSection(showInTalk: showFigureInTalk)
-
-                ShannonCalendarSharingSettingsSection()
-
-                ShannonAppLookSettingsSection()
-
-                ShannonPrivateListeningSettingsSection()
-
-#if os(iOS)
-                ShannonIncomingCallSettingsSection()
-#endif
-
-                // 配信 and 診断 are in 管理 at the top; 「接続と詳細」 is no more (decision 2026-10-03).
-                Section {
+                    .accessibilityIdentifier("settings-earphones")
                     if let connectionModel {
                         settingsValueButton(
                             title: ShannonGeneratedStrings.settingsConnection,
@@ -104,12 +106,24 @@ extension ShannonConversationView {
                             palette: palette
                         ) { showsConnectionDetails = true }
                     }
-                    settingsValueButton(
-                        title: "情報源",
-                        value: worldSubscriptionModel.summary,
-                        symbol: "newspaper",
-                        palette: palette
-                    ) { showsWorldSubscriptions = true }
+                } header: {
+                    Text(ShannonGeneratedStrings.settingsGroupThisApp)
+                }
+
+                Section {
+                    NavigationLink {
+                        settingsAdminPage(palette)
+                    } label: {
+                        LabeledContent {
+                            Text(ShannonGeneratedStrings.settingsGroupAdminSummary)
+                                .foregroundStyle(palette.textSecondary)
+                                .lineLimit(1)
+                        } label: {
+                            settingsLabel(ShannonGeneratedStrings.navAdmin, symbol: "server.rack", palette: palette)
+                        }
+                    }
+                    .frame(minHeight: ShannonTouchTarget.minimum)
+                    .accessibilityIdentifier("settings-admin")
                 }
             }
             .navigationDestination(isPresented: $settingsShowsOps) { adminOpsPage }

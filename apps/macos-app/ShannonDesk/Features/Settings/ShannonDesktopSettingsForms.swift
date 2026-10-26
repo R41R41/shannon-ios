@@ -8,10 +8,23 @@ extension ShannonDesktopRootView {
         Form {
             switch settingsPage {
             case .figure:
-                // 「トークで姿を見る」 opens the 「すがた」 panel beside Talk (A15).
-                ShannonFigureSettingsSection {
-                    selectDestination(.talk)
-                    showAuxiliaryPanel(.figure)
+                Section {
+                    ShannonPersonaPresetPicker(activeProvider: voiceCall.session.phase.isCallActive ? voiceCall.session.speechProvider : nil)
+                    // 「トークで姿を見る」 opens the 「すがた」 panel beside Talk (A15).
+                    ShannonFigureSettingsRows(.figure) {
+                        selectDestination(.talk)
+                        showAuxiliaryPanel(.figure)
+                    }
+                    Picker(ShannonGeneratedStrings.settingsChatIcon, selection: ShannonPersonaPreset.avatarSelection($chatAvatarStyleRawValue)) {
+                        ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
+                            Text(style.japaneseName).tag(style.rawValue)
+                        }
+                    }
+                    .help("トークでシャノンの返答の横に出すアイコンを切り替えます。Dock のアイコンは変わりません")
+                } header: {
+                    Text(ShannonGeneratedStrings.settingsFigure)
+                } footer: {
+                    ShannonFigureSettingsFooter()
                 }
                 // Her desktop body (A17): her window, on top, her size (also in the menu bar item).
                 ShannonDesktopBodySettingsSection()
@@ -21,12 +34,21 @@ extension ShannonDesktopRootView {
                 ShannonAppLookSettingsSection()
                 // Her desktop body's one look at the room: its own switch, off by default (Syzygy ADR-0002).
                 ShannonDesktopBodyCameraSection()
+                Section { ShannonFigureSettingsRows(.touch) }
+                ShannonCalendarSharingSettingsSection()
             case .earphones:
-                ShannonPrivateListeningSettingsSection()
-            case .voice:
-                Section { ShannonPersonaPresetPicker(activeProvider: voiceCall.session.phase.isCallActive ? voiceCall.session.speechProvider : nil) }
-                // The voice of a voice conversation, of her words through the earphones and of a touch (A16), as on the iPhone.
                 Section {
+                    ShannonPrivateListeningSettingsRows(.earphones)
+                } header: {
+                    Text(ShannonPrivateListeningCopy.sectionTitle)
+                } footer: {
+                    Text(ShannonPrivateListeningCopy.explanation)
+                }
+            case .voice:
+                // 声 and 耳 first, then the voice of a voice conversation, of her words through the earphones and of a touch
+                // (A16), as on the iPhone; then where she speaks up.
+                Section {
+                    ShannonVoiceEarSettingsRows()
                     Picker(ShannonGeneratedStrings.voiceMacProvider, selection: ShannonPersonaPreset.voiceSelection($speechProviderRawValue)) {
                         ForEach(ShannonSpeechProvider.allCases) { provider in
                             Text(provider.japaneseName).tag(provider.rawValue)
@@ -39,12 +61,20 @@ extension ShannonDesktopRootView {
                         .font(.shannonDesktop(.caption))
                         .foregroundStyle(.secondary)
                 } header: {
-                    Text(ShannonGeneratedStrings.settingsSectionVoice)
+                    Text(ShannonGeneratedStrings.settingsGroupVoiceEar)
+                } footer: {
+                    Text(ShannonGeneratedStrings.settingsGroupVoiceEarFooter)
+                }
+                Section {
+                    ShannonFigureSettingsRows(.replyMode)
+                    ShannonPrivateListeningSettingsRows(.speaking)
+                } header: {
+                    Text(ShannonGeneratedStrings.settingsGroupVoiceScenes)
+                } footer: {
+                    Text(ShannonBodyCopy.replyModeExplanation + "\n\n" + ShannonPrivateListeningCopy.speakingExplanation)
                 }
             case .modelMode:
                 ShannonModelModeSettingsSection(conversation: conversation, connected: connection.isConnected)
-            case .calendar:
-                ShannonCalendarSharingSettingsSection()
             case .folder:
                 // Her folder on this Mac (A18 S2, S3): chosen, paused, checked and stopped here; she lists, searches, reads and changes it.
                 ShannonFolderHostSettingsSection()
@@ -75,12 +105,6 @@ extension ShannonDesktopRootView {
             Button("アプリアイコンを選ぶ") {
                 showsAppIconSettings = true
             }
-            Picker("アバター", selection: ShannonPersonaPreset.avatarSelection($chatAvatarStyleRawValue)) {
-                ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
-                    Text(style.japaneseName).tag(style.rawValue)
-                }
-            }
-            .help("トークでシャノンの返答の横に出すアイコンを切り替えます。Dock のアイコンは変わりません")
         }
 
         Section("Shannon Desk") {

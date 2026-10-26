@@ -90,3 +90,46 @@ private struct ShannonVoiceEarPill: View {
         .accessibilityAddTraits(.isButton)
     }
 }
+
+/// 「声」 and 「耳」 as the first rows of 設定 › 声と耳 (plan A, 2026-10-26): the same two switches as the pills, with the
+/// words the pills use, so that 設定 holds every switch of her voice in one place.
+public struct ShannonVoiceEarSettingsRows: View {
+    @AppStorage(ShannonVoiceEar.speaksKey) private var speaks = true
+    @AppStorage(ShannonVoiceEar.listensKey) private var listens = true
+
+    public init() {}
+
+    public var body: some View {
+        row(isOn: $speaks, title: speaks ? ShannonGeneratedStrings.voiceOutOn : ShannonGeneratedStrings.voiceOutOff,
+            detail: speaks ? ShannonGeneratedStrings.voiceOutHintOn : ShannonGeneratedStrings.voiceOutHintOff,
+            symbol: speaks ? "speaker.wave.2" : "speaker.slash")
+            .accessibilityIdentifier("settings-voice-out")
+        row(isOn: $listens, title: listens ? ShannonGeneratedStrings.voiceEarOn : ShannonGeneratedStrings.voiceEarOff,
+            detail: listens ? ShannonGeneratedStrings.voiceEarHintOn : ShannonGeneratedStrings.voiceEarHintOff,
+            symbol: "ear")
+            .accessibilityIdentifier("settings-voice-ear")
+    }
+
+    private func row(isOn: Binding<Bool>, title: String, detail: String, symbol: String) -> some View {
+        Toggle(isOn: isOn) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                    Text(detail)
+                        .font(.shannon(.footnote))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: symbol)
+            }
+        }
+        .frame(minHeight: ShannonVoiceEarSettingsRows.minimumHeight)
+    }
+
+#if os(iOS)
+    private static let minimumHeight = ShannonTouchTarget.minimum
+#else
+    private static let minimumHeight: CGFloat = 0
+#endif
+}

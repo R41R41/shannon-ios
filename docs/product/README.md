@@ -98,7 +98,7 @@ iOS と共通のコード（`apps/ios/Sources/ShannonAppCore`）は、色の役�
 | 種類 | 直接書いている値 | 場所 |
 |---|---|---|
 | 色 | `Color.accentColor`（OS の強調色。`action` ではない） 7 か所 | `Features/Autonomy/ShannonAutonomyActivityPage.swift`、`ShannonStudyViews.swift`、`ShannonStudyPieceLink.swift`、`ShannonOrganizeSessionCard.swift` |
-| 色 | `.foregroundStyle(.secondary)` など OS の色 53 か所（`textSecondary` ではない） | `Features/Autonomy/*`、`Features/Calendar/ShannonCalendarSharingSettingsSection.swift`、`Features/Look/ShannonAppLookSettingsSection.swift`、`Features/PrivateListening/ShannonPrivateListeningSettingsSection.swift`、`ShannonOrganizeSessionCard.swift`、`ShannonWorldSubscriptions.swift`、`DesignSystem/ShannonDialogueComponents.swift` |
+| 色 | `.foregroundStyle(.secondary)` など OS の色 53 か所（`textSecondary` ではない） | `Features/Autonomy/*`、`Features/Calendar/ShannonCalendarSharingSettingsSection.swift`、`Features/Look/ShannonAppLookSettingsSection.swift`、`Features/PrivateListening/ShannonPrivateListeningSettingsRows.swift`、`ShannonOrganizeSessionCard.swift`、`ShannonWorldSubscriptions.swift`、`DesignSystem/ShannonDialogueComponents.swift` |
 | 色 | `Color.white`、`Color.primary.opacity(0.05)`、`.secondary.opacity(0.08)` | `ShannonAvatarView.swift`、`Features/Voice/ShannonVoiceGlowView.swift`、`Features/Autonomy/ShannonStudyPieceLink.swift`、`ShannonOrganizeSessionCard.swift` |
 | 色 | 水の光の目の 12 色（顔の地、目、頬） | `ShannonWaterlightVisualTokens.swift`。キャラクターの絵としての値で、わざと別にしてある。`tokens.json` には入れていない |
 | 角丸 | 22、18、12、2 | `DesignSystem/ShannonDialogueComponents.swift`（22、2）、`ShannonOrganizeSessionCard.swift`（18、12） |

@@ -86,7 +86,12 @@ public struct ShannonIncomingCallSettingsSection: View {
     @State private var microphone = ShannonMediaPermission.currentMicrophone()
     @Environment(\.colorScheme) private var colorScheme
 
-    public init() {}
+    /// The section's header: its own name, or none when it follows the one before (plan A, in 「声を出す場面」).
+    let header: String?
+
+    public init(header: String? = ShannonIncomingCallCopy.sectionTitle) {
+        self.header = header
+    }
 
     public var body: some View {
         if let settings = ShannonIncomingCalls.settings {
@@ -119,7 +124,7 @@ public struct ShannonIncomingCallSettingsSection: View {
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Text(ShannonIncomingCallCopy.sectionTitle)
+                if let header { Text(header) }
             } footer: {
                 Text(ShannonIncomingCallCopy.explanation)
             }

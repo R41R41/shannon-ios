@@ -1,16 +1,51 @@
 import SwiftUI
 
-/// 「設定 › 管理」 (docs/product/information-architecture.md, 4): 運用, 接続中の端末, 配信 and 診断,
-/// at the top of Settings. 運用 carries the mark and its reason in one line while something there
-/// deserves a look; before the first report it says so, and the row stays.
+/// 「設定 › 管理」 (docs/product/information-architecture.md, 4): 判断モデル, 運用, 接続中の端末, 配信 and 診断, on a page of
+/// their own behind the last row of Settings (plan A, 2026-10-26: what is for running her comes last). 運用 carries the
+/// mark and its reason in one line while something there deserves a look; before the first report it says so.
 extension ShannonConversationView {
+    /// The page behind 管理.
+    func settingsAdminPage(_ palette: ShannonPalette) -> some View {
+        List {
+            ShannonModelModeSettingsSection(scopeKey: model.scopeKey,
+                client: model.client as? any ShannonModelModeServing,
+                connected: connectionModel?.isConnected == true, isDesignPreview: model.isDesignPreview)
+                .id(model.scopeKey)
+            adminSection(palette)
+        }
+        .scrollContentBackground(.hidden)
+        .background(palette.canvas)
+        .navigationTitle(ShannonGeneratedStrings.navAdmin)
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
+    }
+
+    /// The page behind このアプリ › イヤホン: what the sound comes out of, and the earphones he registered.
+    func settingsEarphonesPage(_ palette: ShannonPalette) -> some View {
+        List {
+            Section {
+                ShannonPrivateListeningSettingsRows(.earphones)
+            } footer: {
+                Text(ShannonPrivateListeningCopy.explanation)
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(palette.canvas)
+        .navigationTitle(ShannonPrivateListeningCopy.sectionTitle)
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
+    }
+
     func adminSection(_ palette: ShannonPalette) -> some View {
         Section {
             if yousu.ops.isSupported {
-                Button { settingsShowsOps = true } label: {
+                NavigationLink {
+                    adminOpsPage
+                } label: {
                     opsRow(palette)
                 }
-                .buttonStyle(.plain)
                 .accessibilityElement(children: .combine)
                 .accessibilityHint(ShannonGeneratedStrings.adminOpsHint)
                 .accessibilityIdentifier("settings-admin-ops")
@@ -38,8 +73,6 @@ extension ShannonConversationView {
                 palette: palette
             ) { showsVoiceDiagnostics = true }
             .accessibilityHint("音声の処理時間を確認・コピーします")
-        } header: {
-            Text(ShannonGeneratedStrings.navAdmin)
         }
         // The number of connected devices on its row, without opening the list first.
         .task(id: connectionModel?.isConnected) {
@@ -84,10 +117,6 @@ extension ShannonConversationView {
                     .foregroundStyle(palette.attention)
                     .accessibilityLabel("確かめたいことがあります")
             }
-            Image(systemName: "chevron.right")
-                .font(.shannon(.caption).weight(.semibold))
-                .foregroundStyle(palette.textSecondary)
-                .accessibilityHidden(true)
         }
         .frame(minHeight: ShannonTouchTarget.minimum)
         .contentShape(Rectangle())

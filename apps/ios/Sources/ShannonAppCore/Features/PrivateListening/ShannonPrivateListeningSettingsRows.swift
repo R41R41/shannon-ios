@@ -5,105 +5,109 @@ import UIKit
 import AppKit
 #endif
 
-/// The settings section for earphones, shared by the iPhone and Mac apps: what the sound comes out
-/// of now, the earphones the owner registered, and whether Shannon is being told "only I can hear".
-/// It shows nothing when the app did not provide a model.
-public struct ShannonPrivateListeningSettingsSection: View {
+/// The earphone rows of 設定, shared by the iPhone and Mac apps, by the part of 設定 they belong to (plan A, 2026-10-26).
+/// `earphones` (このアプリ › イヤホン): what the sound comes out of now, the earphones the owner registered, and whether
+/// Shannon is being told "only I can hear". `speaking` (声を出す場面): whether she speaks up through the earphones, and
+/// on the iPhone the standby that lets her. Rows only: each part of 設定 makes its section. Nothing without a model.
+public struct ShannonPrivateListeningSettingsRows: View {
+    public enum Part: Sendable { case earphones, speaking }
+
+    let part: Part
     @Environment(ShannonPrivateListeningModel.self) private var model: ShannonPrivateListeningModel?
 
-    public init() {}
+    public init(_ part: Part) {
+        self.part = part
+    }
 
     public var body: some View {
         if let model {
-            ShannonPrivateListeningSectionContent(model: model)
+            ShannonPrivateListeningRowsContent(model: model, part: part)
         }
     }
 }
 
-struct ShannonPrivateListeningSectionContent: View {
+struct ShannonPrivateListeningRowsContent: View {
     let model: ShannonPrivateListeningModel
+    let part: ShannonPrivateListeningSettingsRows.Part
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Section {
-            currentOutputRow
-            if let output = model.registrableOutput {
-                Button(ShannonPrivateListeningCopy.registerTitle(output.name)) {
-                    model.registerCurrentOutput()
-                }
-                .frame(minHeight: ShannonTouchTarget.minimum)
-                .accessibilityIdentifier("settings-earphones-register")
-            }
-            ForEach(model.registered) { earphones in
-                registeredRow(earphones)
-            }
-            Toggle(ShannonPrivateListeningCopy.wiredTitle, isOn: Binding(
-                get: { model.wiredCountsAsPrivate },
-                set: { counts in model.setWiredCountsAsPrivate(counts) }
-            ))
-            .frame(minHeight: ShannonTouchTarget.minimum)
-            .accessibilityHint(ShannonPrivateListeningCopy.wiredHint)
-            .accessibilityIdentifier("settings-earphones-wired")
-            LabeledContent(ShannonPrivateListeningCopy.statusTitle) {
-                Text(ShannonPrivateListeningCopy.statusText(model.status))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-                    .accessibilityIdentifier("private-listening-status")
-            }
-            .frame(minHeight: ShannonTouchTarget.minimum)
-        } header: {
-            Text(ShannonPrivateListeningCopy.sectionTitle)
-        } footer: {
-            Text(ShannonPrivateListeningCopy.explanation)
+        switch part {
+        case .earphones: earphoneRows
+        case .speaking: speakingRows
         }
-        .onAppear { model.evaluate() }
+    }
 
-        Section {
-            Toggle(isOn: Binding(
-                get: { model.speaksEnabled },
-                set: { enabled in setSpeaks(enabled) }
-            )) {
-                statusLabel(
-                    ShannonPrivateListeningCopy.speaksTitle,
-                    status: ShannonPrivateListeningCopy.speaksStatus(
-                        enabled: model.speaksEnabled, speaksNow: model.speaksNow, serverDelivers: model.serverDelivers || model.status != .reported
-                    ),
-                    symbol: "waveform", identifier: "earphone-speaking-status"
-                )
+    @ViewBuilder
+    private var earphoneRows: some View {
+        currentOutputRow
+            .onAppear { model.evaluate() }
+        if let output = model.registrableOutput {
+            Button(ShannonPrivateListeningCopy.registerTitle(output.name)) {
+                model.registerCurrentOutput()
             }
             .frame(minHeight: ShannonTouchTarget.minimum)
-            .accessibilityHint(ShannonPrivateListeningCopy.speaksHint)
-            .accessibilityIdentifier("settings-earphone-speaking")
-            if model.speaksEnabled, !model.microphoneIsPermitted {
-                Text(ShannonPrivateListeningCopy.microphoneDenied)
-                    .font(.shannon(.footnote))
-                    .foregroundStyle(.secondary)
-            }
-#if os(iOS)
-            Toggle(isOn: Binding(
-                get: { model.standbyEnabled },
-                set: { enabled in model.setStandbyEnabled(enabled) }
-            )) {
-                statusLabel(
-                    ShannonPrivateListeningCopy.standbyTitle,
-                    status: ShannonPrivateListeningCopy.standbyStatus(
-                        model.standbyState, enabled: model.speaksEnabled && model.standbyEnabled, lowPowerMode: model.isLowPowerMode
-                    ),
-                    symbol: "moon.zzz", identifier: "earphone-standby-status"
-                )
-            }
-            .disabled(!model.speaksEnabled)
-            .frame(minHeight: ShannonTouchTarget.minimum)
-            .accessibilityHint(ShannonPrivateListeningCopy.standbyHint)
-            .accessibilityIdentifier("settings-earphone-standby")
-#endif
-        } footer: {
-#if os(macOS)
-            Text(ShannonPrivateListeningCopy.speaksExplanation)
-#else
-            Text(ShannonPrivateListeningCopy.speaksExplanation + "\n\n" + ShannonPrivateListeningCopy.standbyExplanation)
-#endif
+            .accessibilityIdentifier("settings-earphones-register")
         }
+        ForEach(model.registered) { earphones in
+            registeredRow(earphones)
+        }
+        Toggle(ShannonPrivateListeningCopy.wiredTitle, isOn: Binding(
+            get: { model.wiredCountsAsPrivate },
+            set: { counts in model.setWiredCountsAsPrivate(counts) }
+        ))
+        .frame(minHeight: ShannonTouchTarget.minimum)
+        .accessibilityHint(ShannonPrivateListeningCopy.wiredHint)
+        .accessibilityIdentifier("settings-earphones-wired")
+        LabeledContent(ShannonPrivateListeningCopy.statusTitle) {
+            Text(ShannonPrivateListeningCopy.statusText(model.status))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+                .accessibilityIdentifier("private-listening-status")
+        }
+        .frame(minHeight: ShannonTouchTarget.minimum)
+    }
+
+    @ViewBuilder
+    private var speakingRows: some View {
+        Toggle(isOn: Binding(
+            get: { model.speaksEnabled },
+            set: { enabled in setSpeaks(enabled) }
+        )) {
+            statusLabel(
+                ShannonPrivateListeningCopy.speaksTitle,
+                status: ShannonPrivateListeningCopy.speaksStatus(
+                    enabled: model.speaksEnabled, speaksNow: model.speaksNow, serverDelivers: model.serverDelivers || model.status != .reported
+                ),
+                symbol: "waveform", identifier: "earphone-speaking-status"
+            )
+        }
+        .frame(minHeight: ShannonTouchTarget.minimum)
+        .accessibilityHint(ShannonPrivateListeningCopy.speaksHint)
+        .accessibilityIdentifier("settings-earphone-speaking")
+        if model.speaksEnabled, !model.microphoneIsPermitted {
+            Text(ShannonPrivateListeningCopy.microphoneDenied)
+                .font(.shannon(.footnote))
+                .foregroundStyle(.secondary)
+        }
+#if os(iOS)
+        Toggle(isOn: Binding(
+            get: { model.standbyEnabled },
+            set: { enabled in model.setStandbyEnabled(enabled) }
+        )) {
+            statusLabel(
+                ShannonPrivateListeningCopy.standbyTitle,
+                status: ShannonPrivateListeningCopy.standbyStatus(
+                    model.standbyState, enabled: model.speaksEnabled && model.standbyEnabled, lowPowerMode: model.isLowPowerMode
+                ),
+                symbol: "moon.zzz", identifier: "earphone-standby-status"
+            )
+        }
+        .disabled(!model.speaksEnabled)
+        .frame(minHeight: ShannonTouchTarget.minimum)
+        .accessibilityHint(ShannonPrivateListeningCopy.standbyHint)
+        .accessibilityIdentifier("settings-earphone-standby")
+#endif
     }
 
     private func setSpeaks(_ enabled: Bool) {

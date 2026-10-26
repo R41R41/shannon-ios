@@ -13,7 +13,12 @@ public struct ShannonAppLookSettingsSection: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
 
-    public init() {}
+    /// The section's header: its own name, another part of 設定's, or none when it follows the one before (plan A).
+    let header: String?
+
+    public init(header: String? = ShannonAppLookCopy.sectionTitle) {
+        self.header = header
+    }
 
     public var body: some View {
         Section {
@@ -46,7 +51,7 @@ public struct ShannonAppLookSettingsSection: View {
                 .accessibilityIdentifier("settings-app-look-permission")
             }
         } header: {
-            Text(ShannonAppLookCopy.sectionTitle)
+            if let header { Text(header) }
         } footer: {
             Text(ShannonAppLookCopy.explanation)
         }

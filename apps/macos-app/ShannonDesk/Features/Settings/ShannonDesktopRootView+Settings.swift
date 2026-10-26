@@ -2,8 +2,8 @@ import AppKit
 import ShannonAppCore
 import SwiftUI
 
-/// 設定 on the Mac (docs/product/information-architecture.md 2): parts on the left, the chosen one on
-/// the right. 管理 comes first, with 運用 carrying the mark and its reason in one line (roadmap A12).
+/// 設定 on the Mac (docs/product/information-architecture.md 2): parts on the left under the iPhone's groups (plan A,
+/// 2026-10-26), the chosen one on the right. 管理 comes last, with 運用 carrying the mark and its reason in one line (A12).
 extension ShannonDesktopRootView {
     var settingsPage: DesktopSettingsPage {
         DesktopSettingsPage.restoring(settingsPageRawValue, opsSupported: yousu.ops.isSupported)
@@ -39,7 +39,34 @@ extension ShannonDesktopRootView {
             Section {
                 settingsProfileCard
             }
+            Section(ShannonGeneratedStrings.settingsGroupShannon) {
+                Label(ShannonGeneratedStrings.settingsFigure, systemImage: "person.crop.rectangle")
+                    .tag(DesktopSettingsPage.figure)
+            }
+            Section(ShannonGeneratedStrings.settingsGroupVoiceEar) {
+                Label(ShannonGeneratedStrings.settingsGroupVoiceEar, systemImage: "speaker.wave.2")
+                    .tag(DesktopSettingsPage.voice)
+            }
+            Section(ShannonGeneratedStrings.settingsGroupSenses) {
+                Label("カメラと予定", systemImage: "camera")
+                    .tag(DesktopSettingsPage.camera)
+                Label("情報源", systemImage: "newspaper")
+                    .tag(DesktopSettingsPage.sources)
+                // Her folder on this Mac (A18), as on Windows.
+                Label(ShannonGeneratedStrings.settingsSectionFolder, systemImage: "folder")
+                    .tag(DesktopSettingsPage.folder)
+            }
+            Section(ShannonGeneratedStrings.settingsGroupThisApp) {
+                Label("外観", systemImage: "circle.lefthalf.filled")
+                    .tag(DesktopSettingsPage.appearance)
+                Label(ShannonPrivateListeningCopy.sectionTitle, systemImage: "earbuds")
+                    .tag(DesktopSettingsPage.earphones)
+                Label(ShannonGeneratedStrings.settingsConnection, systemImage: "link")
+                    .tag(DesktopSettingsPage.connection)
+            }
             Section(ShannonGeneratedStrings.navAdmin) {
+                Label("判断モデル", systemImage: "slider.horizontal.3")
+                    .tag(DesktopSettingsPage.modelMode)
                 if yousu.ops.isSupported {
                     settingsOpsRow
                         .tag(DesktopSettingsPage.ops)
@@ -52,29 +79,6 @@ extension ShannonDesktopRootView {
                     .tag(DesktopSettingsPage.delivery)
                 Label(ShannonGeneratedStrings.navDiagnostics, systemImage: "waveform.badge.magnifyingglass")
                     .tag(DesktopSettingsPage.diagnostics)
-            }
-            Section {
-                Label(ShannonGeneratedStrings.settingsFigure, systemImage: "person.crop.rectangle")
-                    .tag(DesktopSettingsPage.figure)
-                Label(ShannonGeneratedStrings.settingsSectionCamera, systemImage: "camera")
-                    .tag(DesktopSettingsPage.camera)
-                Label(ShannonPrivateListeningCopy.sectionTitle, systemImage: "earbuds")
-                    .tag(DesktopSettingsPage.earphones)
-                Label(ShannonGeneratedStrings.settingsSectionVoice, systemImage: "speaker.wave.2")
-                    .tag(DesktopSettingsPage.voice)
-                Label("判断モデル", systemImage: "slider.horizontal.3")
-                    .tag(DesktopSettingsPage.modelMode)
-                Label(ShannonCalendarSharingCopy.sectionTitle, systemImage: "calendar")
-                    .tag(DesktopSettingsPage.calendar)
-                // Her folder on this Mac (A18), as on Windows.
-                Label(ShannonGeneratedStrings.settingsSectionFolder, systemImage: "folder")
-                    .tag(DesktopSettingsPage.folder)
-                Label("外観", systemImage: "circle.lefthalf.filled")
-                    .tag(DesktopSettingsPage.appearance)
-                Label(ShannonGeneratedStrings.settingsConnection, systemImage: "link")
-                    .tag(DesktopSettingsPage.connection)
-                Label("情報源", systemImage: "newspaper")
-                    .tag(DesktopSettingsPage.sources)
             }
         }
         .listStyle(.sidebar)
@@ -159,7 +163,7 @@ extension ShannonDesktopRootView {
             ShannonConnectionView(model: connection, part: .connection)
         case .sources:
             ShannonWorldSubscriptionView(model: worldSubscriptions)
-        case .figure, .camera, .earphones, .voice, .modelMode, .calendar, .folder, .appearance:
+        case .figure, .camera, .earphones, .voice, .modelMode, .folder, .appearance:
             settingsForm
         }
     }

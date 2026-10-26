@@ -1280,10 +1280,10 @@
     },
     {
       "key": "voice.mac.provider",
-      "text": "読み上げ",
+      "text": "声の種類",
       "apple": "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift",
       "only": "apple",
-      "note": "Mac の 設定 › 声 の選択（settings.voice-provider。iPhone と同じ名前）。"
+      "note": "Mac の 設定 › 声と耳 の選択（settings.voice-provider。iPhone の settings.voiceKind と同じ名前。2026-10-26 に「読み上げ」から変えた）。"
     },
     {
       "key": "voice.mac.providerHint",
@@ -1294,7 +1294,7 @@
     },
     {
       "key": "voice.mac.providerNote",
-      "text": "声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。イヤホンで話しかける声と、触れたときに声で返す声も同じです。",
+      "text": "声の種類の変更は、通話中の会話を変えず次の通話から反映されます。イヤホンで話しかける声と、触れたときに声で返す声も同じです。",
       "apple": "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopSettingsForms.swift",
       "only": "apple",
       "note": "Mac の 設定 › 声 の説明。前の文は iPhone の注記と同じ。後の文は、Mac のイヤホンの声と触れたときの声も同じ設定を読むこと。"
@@ -1506,7 +1506,7 @@
     {
       "key": "nav.delivery",
       "text": "配信",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
       "note": "設定 › 管理 の中。Mac では、作業の中にも「配信」として出す。"
@@ -1514,7 +1514,7 @@
     {
       "key": "nav.diagnostics",
       "text": "診断",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
       "macNow": "（無い）",
@@ -1574,6 +1574,69 @@
       "decided": "2026-10-05",
       "windowsNow": "この PC のシャノン",
       "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。Windows だけの設定の区画。"
+    },
+    {
+      "key": "settings.group.shannon",
+      "text": "シャノン",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "設定の区画（案 A「目的別」、所有者の選択 2026-10-26）。iPhone と Mac で同じ区画と順。 見た目と体（モード、すがた、体、トークのアイコン）。"
+    },
+    {
+      "key": "settings.group.voiceEar",
+      "text": "声と耳",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "設定の区画（案 A「目的別」、所有者の選択 2026-10-26）。iPhone と Mac で同じ区画と順。 声: 出す、耳: 聞く、声の種類。"
+    },
+    {
+      "key": "settings.group.voiceScenes",
+      "text": "声を出す場面",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "設定の区画（案 A「目的別」、所有者の選択 2026-10-26）。iPhone と Mac で同じ区画と順。 声と耳の続き。触れたときの返事、イヤホン、電話。「声: 出す」の時だけ効く。"
+    },
+    {
+      "key": "settings.group.senses",
+      "text": "見る・知る",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "設定の区画（案 A「目的別」、所有者の選択 2026-10-26）。iPhone と Mac で同じ区画と順。 カメラ、体に起きたこと、予定、情報源（Mac は専用フォルダも）。"
+    },
+    {
+      "key": "settings.group.thisApp",
+      "text": "このアプリ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "設定の区画（案 A「目的別」、所有者の選択 2026-10-26）。iPhone と Mac で同じ区画と順。 外観、アプリアイコン、イヤホンの登録、接続。"
+    },
+    {
+      "key": "settings.group.voiceEarFooter",
+      "text": "「声: 出さない」の間は、下の場面でも声を出しません。「耳: 聞かない」の間は、話したあとに返事を待ちません。声の種類は、次の通話から反映されます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "声と耳 の区画の下の説明。"
+    },
+    {
+      "key": "settings.group.adminSummary",
+      "text": "判断モデル・運用・端末・配信・診断",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "管理 の 1 行（押すと管理のページ）の値。運用する人向けのものを 1 か所にまとめる。"
+    },
+    {
+      "key": "settings.voiceKind",
+      "text": "声の種類",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "声と耳 の Picker（Gemini／ElevenLabs）。前の名前は「読み上げ」（読み上げの設定ではなかった）。"
+    },
+    {
+      "key": "settings.chatIcon",
+      "text": "トークのアイコン",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "only": "apple",
+      "note": "シャノン の区画の Picker（表情アイコン／2つ目のアイコン）。前の名前は「アバター」。"
     },
     {
       "key": "shannon.card.nothingWaiting",

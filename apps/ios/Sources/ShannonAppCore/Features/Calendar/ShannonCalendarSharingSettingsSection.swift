@@ -8,17 +8,23 @@ import UIKit
 public struct ShannonCalendarSharingSettingsSection: View {
     @Environment(ShannonCalendarSharingModel.self) private var model: ShannonCalendarSharingModel?
 
-    public init() {}
+    /// The section's header: its own name, another part of 設定's, or none when it follows the one before (plan A).
+    let header: String?
+
+    public init(header: String? = ShannonCalendarSharingCopy.sectionTitle) {
+        self.header = header
+    }
 
     public var body: some View {
         if let model {
-            ShannonCalendarSharingSectionContent(model: model)
+            ShannonCalendarSharingSectionContent(model: model, header: header)
         }
     }
 }
 
 struct ShannonCalendarSharingSectionContent: View {
     let model: ShannonCalendarSharingModel
+    let header: String?
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
 
@@ -60,7 +66,7 @@ struct ShannonCalendarSharingSectionContent: View {
                 .accessibilityIdentifier("settings-calendar-permission")
             }
         } header: {
-            Text(ShannonCalendarSharingCopy.sectionTitle)
+            if let header { Text(header) }
         } footer: {
             Text(ShannonCalendarSharingCopy.explanation)
         }

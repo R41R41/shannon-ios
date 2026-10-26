@@ -18,6 +18,24 @@ extension ShannonGeneratedStrings {
     public static let settingsSectionFolder = "専用フォルダ"
     /// `settings.section.thisPC`
     public static let settingsSectionThisPC = "この PC のシャノン"
+    /// `settings.group.shannon`
+    public static let settingsGroupShannon = "シャノン"
+    /// `settings.group.voiceEar`
+    public static let settingsGroupVoiceEar = "声と耳"
+    /// `settings.group.voiceScenes`
+    public static let settingsGroupVoiceScenes = "声を出す場面"
+    /// `settings.group.senses`
+    public static let settingsGroupSenses = "見る・知る"
+    /// `settings.group.thisApp`
+    public static let settingsGroupThisApp = "このアプリ"
+    /// `settings.group.voiceEarFooter`
+    public static let settingsGroupVoiceEarFooter = "「声: 出さない」の間は、下の場面でも声を出しません。「耳: 聞かない」の間は、話したあとに返事を待ちません。声の種類は、次の通話から反映されます。"
+    /// `settings.group.adminSummary`
+    public static let settingsGroupAdminSummary = "判断モデル・運用・端末・配信・診断"
+    /// `settings.voiceKind`
+    public static let settingsVoiceKind = "声の種類"
+    /// `settings.chatIcon`
+    public static let settingsChatIcon = "トークのアイコン"
     /// `settings.figure.showInTalk`
     public static let settingsFigureShowInTalk = "トークで姿を見る"
     /// `settings.figure.showInTalkHint`

@@ -361,14 +361,15 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         }
     }
 
-    func testSettingsOpenWithAdminFirstAndFallBackWithoutOps() {
-        XCTAssertEqual(DesktopSettingsPage.admin, [.ops, .devices, .delivery, .diagnostics])
-        XCTAssertEqual(DesktopSettingsPage.admin + DesktopSettingsPage.others, DesktopSettingsPage.allCases)
-        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: true), .ops)
-        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: false), .devices)
+    func testSettingsFollowPlanAAndFallBackWithoutOps() {
+        // Plan A (2026-10-26): シャノン, 声と耳, 見る・知る, このアプリ, and 管理 last.
+        XCTAssertEqual(DesktopSettingsPage.admin, [.modelMode, .ops, .devices, .delivery, .diagnostics])
+        XCTAssertEqual(DesktopSettingsPage.groups.flatMap { $0 }, DesktopSettingsPage.allCases)
+        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: true), .figure)
+        XCTAssertEqual(DesktopSettingsPage.restoring(nil, opsSupported: false), .figure)
         XCTAssertEqual(DesktopSettingsPage.restoring("ops", opsSupported: false), .devices)
-        XCTAssertEqual(DesktopSettingsPage.restoring("calendar", opsSupported: false), .calendar)
-        XCTAssertEqual(DesktopSettingsPage.restoring("unknown", opsSupported: true), .ops)
+        XCTAssertEqual(DesktopSettingsPage.restoring("calendar", opsSupported: false), .camera)
+        XCTAssertEqual(DesktopSettingsPage.restoring("unknown", opsSupported: true), .figure)
     }
 
     func testDevelopmentOptionsDiscardUnsupportedModelAndNormalizeReasoning() {

@@ -89,11 +89,11 @@ extension ShannonGeneratedStrings {
     /// `voice.mac.dictationStop`
     public static let voiceMacDictationStop = "音声入力を終了"
     /// `voice.mac.provider`
-    public static let voiceMacProvider = "読み上げ"
+    public static let voiceMacProvider = "声の種類"
     /// `voice.mac.providerHint`
     public static let voiceMacProviderHint = "Geminiで作った声とElevenLabsのShannonクローンを切り替えます。次に開始する音声会話から適用します"
     /// `voice.mac.providerNote`
-    public static let voiceMacProviderNote = "声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。イヤホンで話しかける声と、触れたときに声で返す声も同じです。"
+    public static let voiceMacProviderNote = "声の種類の変更は、通話中の会話を変えず次の通話から反映されます。イヤホンで話しかける声と、触れたときに声で返す声も同じです。"
     /// `voice.mac.rowTitle`
     public static func voiceMacRowTitle(phase: String) -> String { "音声会話・\(phase)" }
     /// `voice.mac.rowHint`
