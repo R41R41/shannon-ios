@@ -5,6 +5,10 @@ import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract
  * and 4 of the first 5 acts were cut at their deadline; its 2.4 s guess never asked the next decision ahead):
  * - walk: the way's length from where she will stand when it begins (her feet, then each hand's end) through `path` or to `to`,
  *   across and up; typical at 4.3 m/s, the ceiling at half that (a way round) plus 3 s; 32 m when where she stands is not known;
+ * - go (run 39): the straight distance to the nearest of its cells at 4.3 m/s with a third more for the digging and the bridging, within its `seconds`
+ *   (default 60); the ceiling is its `seconds` and 2 s, for the body stops the hand at `seconds` and the act's deadline must lie after it;
+ * - obsidian, fight, mine, make, portal, smelt (run 39): the ceiling is the hand's `seconds` (obsidian 90, fight 20, mine 60, portal 60, smelt 30) and 2 s; the
+ *   expected time is obsidian 20 s and 8 s each, fight half its seconds, mine 1.5 s a block, make 1 s and 0.5 s each, portal 25 s, smelt 6 s and 2 s a kind;
  * - dig, place: by the cells; pillarUp, jump, shoot: by `n`; attack and wait: by `seconds`; craft: by `count`; the rest fixed.
  * Task queue: an act that repeats its hands (`repeat`) takes that many times as long; the ceiling is still the body's one bound,
  * the expected time is not capped.
@@ -15,28 +19,51 @@ export const ACT_MAX_MS = 170_000;
 type HandTime = (hand: ActHand, metres: number) => number;
 const cells = (hand: ActHand) => hand.at?.length ?? 1, times = (hand: ActHand) => hand.n ?? 1;
 const walkMs = (hand: ActHand, metres: number) => 1_000 * metres / (hand.sprint ? SPRINT_MPS : WALK_MPS);
+/** go: the most the hand may take (its `seconds`), and about how long it takes (the straight way and a third more, within the most). */
+export const GO_DEFAULT_SECONDS = 60;
+const goMostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? GO_DEFAULT_SECONDS);
+/** The hands that take a range (run 39) and their default `seconds`. */
+const SECONDS_BY_KIND: Partial<Record<HandKind, number>> = { obsidian: 90, fight: 20, mine: 60, portal: 60, smelt: 30 };
+const mostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? SECONDS_BY_KIND[hand.do] ?? 30) + 2_000;
+const blocksOf = (hand: ActHand) => Math.max(1, hand.count ?? 1);
+const goTypicalMs = (hand: ActHand, metres: number) => Math.min(goMostMs(hand), 1_000 + 1.3 * walkMs(hand, metres));
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
-  walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
+  walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), go: hand => goMostMs(hand) + 2_000,
+  obsidian: mostMs, fight: mostMs, mine: mostMs, portal: mostMs, smelt: mostMs, make: hand => 3_000 + 1_000 * blocksOf(hand),
+  dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
   pillarUp: hand => 1_200 * times(hand), attack: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
   shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1)) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
   pickup: hand => 3_000 + 1_000 * (hand.range ?? 6), use: () => 4_000, craft: hand => 2_000 + 300 * Math.min(64, hand.count ?? 1),
   jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: () => 5_000, eat: () => 4_000,
 };
 const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
-  walk: (hand, metres) => 500 + walkMs(hand, metres), dig: hand => 900 * cells(hand), place: hand => 400 * cells(hand),
+  walk: (hand, metres) => 500 + walkMs(hand, metres), go: goTypicalMs,
+  obsidian: hand => Math.min(mostMs(hand), 20_000 + 8_000 * blocksOf(hand)), fight: hand => 500 * (hand.seconds ?? 20),
+  mine: hand => Math.min(mostMs(hand), 1_500 * blocksOf(hand) + 1_000),
+  make: hand => 1_000 + 500 * blocksOf(hand), portal: () => 25_000, smelt: hand => 6_000 + 2_000 * (hand.items?.length ?? 1),
+  dig: hand => 900 * cells(hand), place: hand => 400 * cells(hand),
   pillarUp: hand => 600 * times(hand), attack: hand => Math.min(8_000, 1_000 * (hand.seconds ?? 6)), wait: hand => 1_000 * (hand.seconds ?? 1),
   eat: () => 1_700, pickup: hand => 1_000 + 300 * (hand.range ?? 6), use: () => 1_000, shoot: hand => (500 + 1_000 * (hand.charge ?? 1)) * times(hand),
   craft: hand => 500 + 150 * Math.min(64, hand.count ?? 1), jump: hand => 600 * times(hand), chest: () => 1_500, furnace: () => 1_200,
   equip: () => 300, look: () => 200, sneak: () => 200, drop: hand => 300 * (hand.items?.length ?? 1),
 };
 const distance = (from: ActPos, to: ActPos) => Math.hypot(to.x - from.x, to.z - from.z) + Math.abs(to.y - from.y);
+/** A walk's points; a go's single cell, or the nearest of its goals (the first when she is not known to stand anywhere). */
+function nearestOf(hand: ActHand, at: ActPos | null): readonly ActPos[] {
+  if (hand.do === 'walk') return hand.path?.length ? hand.path : hand.to ? [hand.to] : [];
+  if (hand.to) return [hand.to];
+  const goals = hand.goals ?? [];
+  if (!at || goals.length < 2) return goals.slice(0, 1);
+  const absolute = (goal: ActPos) => hand.rel ? { x: at.x + goal.x, y: at.y + goal.y, z: at.z + goal.z } : goal;
+  return [goals.reduce((best, goal) => distance(at, absolute(goal)) < distance(at, absolute(best)) ? goal : best)];
+}
 /** Each hand with the metres it walks: from `from` (her feet when the act begins), each hand starting where the one before ended. */
 function handMetres(input: ActInput, from: ActPos | null): Array<{ hand: ActHand; metres: number }> {
   let at: ActPos | null = from ? { x: Math.floor(from.x), y: Math.floor(from.y), z: Math.floor(from.z) } : null;
   return input.hands.map(hand => {
     if (hand.do === 'pillarUp' && at) at = { ...at, y: at.y + times(hand) };
-    if (hand.do !== 'walk') return { hand, metres: 0 };
-    const points = (hand.path?.length ? hand.path : hand.to ? [hand.to] : []).map(point => hand.rel && at
+    if (hand.do !== 'walk' && hand.do !== 'go') return { hand, metres: 0 };
+    const points = nearestOf(hand, at).map(point => hand.rel && at
       ? { x: at.x + point.x, y: at.y + point.y, z: at.z + point.z } : point);
     if (!points.length) return { hand, metres: 0 };
     let metres = 0;

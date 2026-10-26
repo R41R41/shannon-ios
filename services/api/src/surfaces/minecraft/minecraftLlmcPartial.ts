@@ -7,6 +7,8 @@ import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js
 import { descentNote } from './minecraftLlmcReadiness.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
+import { goStop } from './minecraftLlmcGoGuard.js';
+import { rangeStop } from './minecraftLlmcRangeGuard.js';
 
 /**
  * mb-llmc-cand 部分送り（改修案 §2.4、mb-llmc v2）。送る前の守り（地図で確かにできない手・規則に反する手）が手 k を止める時、
@@ -47,7 +49,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
-    furnaceStandStop(input, frame, taskId, urgent)]) {
+    furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
   }
   return found.reduce<Held | null>((first, next) => !first || next.hand < first.hand ? next : first, null);

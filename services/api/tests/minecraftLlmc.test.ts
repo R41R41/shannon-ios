@@ -41,7 +41,7 @@ const FULL_WORLD = {
 };
 
 describe('the contract (mc.act, mc.view)', () => {
-  it('its schemas fit the wire subset the body checks (anyOf of at most 4, 32 properties, depth 6)', () => {
+  it('its schemas fit the wire subset the body checks (anyOf of at most 16, 48 properties, depth 8)', () => {
     expect(skillSchema(ACT_INPUT_SCHEMA)).toBe(true);
     expect(skillSchema(VIEW_INPUT_SCHEMA)).toBe(true);
     expect(JSON.stringify(ACT_INPUT_SCHEMA).length).toBeLessThan(16_000);

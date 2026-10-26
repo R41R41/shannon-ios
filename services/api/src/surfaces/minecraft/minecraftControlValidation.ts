@@ -14,6 +14,8 @@ const SKILL_SCHEMA_DEPTH = 8;
  * body's whole catalog: every poll was a 400 FCA_BODY_POLL_INVALID, so the head never saw the body. 16 leaves room for the kinds still to come.
  */
 const SKILL_SCHEMA_ANY_OF = 16;
+/** The most properties an object schema may have. run 39 (2026-10-26): the act's hand has 43 with the new hands' fields (it had 31); 48 leaves room. */
+const SKILL_SCHEMA_PROPERTIES = 48;
 /** Bounded JSON-schema subset; native skill validation remains authoritative at the actuator. */
 export function skillSchema(value: unknown, depth = 0): value is Readonly<Record<string, unknown>> {
   if (!record(value) || depth > SKILL_SCHEMA_DEPTH) return false;
@@ -27,7 +29,7 @@ export function skillSchema(value: unknown, depth = 0): value is Readonly<Record
   }
   if (!['object', 'array', 'string', 'integer', 'number', 'boolean', 'null'].includes(String(value.type))) return false;
   if (value.type === 'object') {
-    if (!record(value.properties) || Object.keys(value.properties).length > 32 || value.additionalProperties !== false) return false;
+    if (!record(value.properties) || Object.keys(value.properties).length > SKILL_SCHEMA_PROPERTIES || value.additionalProperties !== false) return false;
     if (Object.entries(value.properties).some(([key, schema]) => !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) || !skillSchema(schema, depth + 1))) return false;
     if (!Array.isArray(value.required) || value.required.some(key => typeof key !== 'string' || !Object.hasOwn(value.properties as object, key))) return false;
   }

@@ -231,6 +231,11 @@ function advance(hand: ActHand, track: Track, base: Cell | null | undefined, vie
       afterWalk(hand, track, base);
       // A walk into a portal changes the dimension: the body stops the act there, and the hands after it are not walked through against this map.
       return !entersPortal(hand, base, view);
+    // A go leaves her where the body's own way took her: the map after it is not known, and the hands after it are not walked through.
+    case 'go':
+      track.at = null;
+      track.via = null;
+      return false;
     case 'dig':
       afterDig(hand, track, base, view);
       return true;

@@ -43,8 +43,8 @@ describe('the act as the model writes it (scene replay: Haiku wrote why in a han
       .toBe('手1（walk）: block は使えない（walk の欄: to・path・sprint・range・rel・note・onFail）');
     expect(schemaProblem({ hands: [{ do: 'walk', to: { x: 1, y: 2, z: 3 }, why: 'x', speed: 2 }] }, ACT_INPUT_SCHEMA))
       .toBe('手1（walk）の why・speed は無い欄（why は act に 1 つ）。walk の欄: to・path・sprint・range・rel・note・onFail');
-    expect(llmcPrepare(MC_ACT_TOOL, { hands: [{ do: 'wait', seconds: 45 }] }).problem).toContain('手1（wait）の seconds は 0.5〜30（今は 45）');
-    expect(llmcPrepare(MC_ACT_TOOL, { hands: [{ do: 'fly' }] }).problem).toContain('手1（fly）の do は walk・dig・');
+    expect(llmcPrepare(MC_ACT_TOOL, { hands: [{ do: 'wait', seconds: 45 }] }).problem).toContain('手1（wait）: seconds は 0.5〜30');
+    expect(llmcPrepare(MC_ACT_TOOL, { hands: [{ do: 'fly' }] }).problem).toContain('手1（fly）の do は walk・go・dig・');
     expect(llmcPrepare(MC_ACT_TOOL, { hands: Array.from({ length: 13 }, () => ({ do: 'jump' })) }).problem).toContain('hands は 1〜12 個（今は 13 個）');
     expect(llmcPrepare(MC_ACT_TOOL, { hands: [{ do: 'dig', at: [{ x: 1, y: 2 }] }] }).problem).toContain('手1（dig）の at[1] に z が要る');
   });

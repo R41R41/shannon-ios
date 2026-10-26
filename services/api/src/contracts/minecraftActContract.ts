@@ -15,6 +15,7 @@
  */
 import type { WorldScan } from './minecraftProbeContract.js';
 import { CONDITION_SCHEMA, validCondition, type ActCondition } from './minecraftActCondition.js';
+import { handProblem } from './minecraftActHandRules.js';
 
 export const MC_ACT_SKILL = 'act' as const;
 export const MC_VIEW_SKILL = 'view' as const;
@@ -26,8 +27,8 @@ export const ACT_MAX_HANDS = 12;
 /** A block position, or a point to walk to. With the hand's `rel: true`, x/y/z count from her feet block when that hand begins. */
 export interface ActPos { x: number; y: number; z: number }
 export type ActFace = 'up' | 'down' | 'north' | 'south' | 'east' | 'west';
-export const HAND_KINDS = ['walk', 'dig', 'place', 'pillarUp', 'use', 'look', 'jump', 'sneak', 'equip', 'craft', 'furnace', 'chest',
-  'attack', 'shoot', 'eat', 'drop', 'pickup', 'wait'] as const;
+export const HAND_KINDS = ['walk', 'go', 'dig', 'place', 'pillarUp', 'use', 'look', 'jump', 'sneak', 'equip', 'craft', 'furnace', 'chest',
+  'attack', 'shoot', 'eat', 'drop', 'pickup', 'wait', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt'] as const;
 export type HandKind = typeof HAND_KINDS[number];
 export const EQUIP_SLOTS = ['hand', 'offhand', 'head', 'chest', 'legs', 'feet'] as const;
 
@@ -37,7 +38,7 @@ export const EQUIP_SLOTS = ['hand', 'offhand', 'head', 'chest', 'legs', 'feet'] 
  */
 export interface ActHand {
   do: HandKind;
-  /** walk: where to arrive (within `range`, default 0.5); look: the point to face. */
+  /** walk, go: where to arrive (within `range`, default 0.5); look: the point to face. */
   to?: ActPos;
   /** walk: the way, point by point (each next point a step or a straight run the body can walk without digging). */
   path?: readonly ActPos[];
@@ -66,15 +67,45 @@ export interface ActHand {
    * reach, for `seconds` (or until `stopIf`); never chase. Without it an attack chases by walk's rules (no digging: it stops and says so).
    */
   hold?: boolean;
-  /** wait: seconds (0.5–30); attack: the most seconds (default 20). */
+  /** wait: seconds (0.5–30); attack: the most seconds (default 20); go: the most seconds the hand may take (5–120, default 60). */
   seconds?: number;
   /** shoot: seconds to draw (0.2–3, default 1.0: a full bow). */
   charge?: number;
   /** jump: times; pillarUp: blocks to rise (each a jump with a block placed under the feet); shoot: arrows. */
   n?: number;
-  /** walk: sprint (default false). */
+  /**
+   * go (run 39): where she may go instead of `to`: 2–8 cells, any one of which ends the hand (the way to the nearest is taken). The model lists the cells; the
+   * body never searches for them. `rel` counts all of them from her feet.
+   */
+  goals?: readonly ActPos[];
+  /** go: the blocks the body may dig on its way (ids, or the words stone, dirt, sand, wood). None: it digs nothing. */
+  canDig?: readonly string[];
+  /** go: the blocks the body may put down on its way (a footing, a bridge, a pillar, a filled hole). None: it places nothing. */
+  canPlace?: readonly string[];
+  /** go: the most blocks she may drop at one step (0–10, default 3). */
+  maxDrop?: number;
+  /** go: swim and wade (default false: water and the deep water beside the way are avoided). Lava and fire are always avoided. */
+  waterOk?: boolean;
+  /** go: the most blocks dug (0–200, default 40) and placed (0–100, default 24). */
+  maxDig?: number; maxPlace?: number;
+  /**
+   * Run 39 (2026-10-26), the hands that take a range from the model and work out the small moves themselves (`go`, `obsidian`, `fight`, `mine`,
+   * `make`, `portal`,
+   * `smelt`; `docs/minecraft-hands-2026-10.md`): the model decides what, where and how far, and what may be done; the body does the seconds-fine work. Never a
+   * search of its own beyond what the model named; always a limit and the counts back.
+   * fight: `flee` runs from the target instead of fighting (default fight); `retreatHp` leaves the fight and eats or runs when health falls under it (1–19).
+   */
+  stance?: 'fight' | 'flee';
+  retreatHp?: number;
+  /** portal: the frame's plane runs along x or z. */
+  axis?: 'x' | 'z';
+  /** smelt: how many furnaces the batch is split over (1–4). */
+  furnaces?: number;
+  /** portal: go in once it burns (default true). */
+  enter?: boolean;
+  /** walk, go: sprint (default false). */
   sprint?: boolean;
-  /** walk: arrive within this many blocks (0–4, default 0.5). pickup: the search radius (1–16, default 6). */
+  /** walk, go: arrive within this many blocks (0–4, default 0.5). pickup: the search radius (1–16, default 6). */
   range?: number;
   /** equip: where (default hand). */
   slot?: typeof EQUIP_SLOTS[number];
@@ -284,6 +315,8 @@ export const ACT_DESCRIPTION = [
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、外れたら（失敗・反射・stopIf・満杯）そこで止めて、手ごとの1行と新しい地図を返す。',
   '体は自分で決めない: 回り道・置き場所・道具作り・片づけ・夜の睡眠・戦うかどうかは、あなたが地図と状態を見て手で出す。',
   '手（do）と引数: walk(to か path, sprint, range: 掘らない・置かない。段差1と泳ぎだけ。地図の外の遠い点は64mごとに区切って歩き、掘る所で止まる) / '
+    + 'go(to か goals: 行き先（goals は候補のマス 2〜8、どれか 1 つに着けば済み）, canDig: 掘ってよい物, canPlace: 置いてよい物, maxDrop, waterOk, seconds, maxDig, maxPlace: '
+    + '道は体が引く。許した物だけ掘り・置いて着くまで歩く。溶岩は避ける) / '
     + 'dig(at: 順に掘る, tool, collect, exposeOk: 敵に見られても掘る, takeOk: 村の物も掘る) / place(block, at, face) / pillarUp(n: 真下に置きながら n 段登る, block) / '
     + 'use(item, at, face, target: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、エンダーアイを投げる（at 無し: 飛んだ方位と距離が返る）・枠にはめる（at と face）) / '
     + 'look(to か yaw・pitch) / jump(n) / sneak(on) / equip(item, slot) / craft(item, count: 作業台が4.5m内に要る) / '
@@ -337,7 +370,19 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         target: { type: 'string', maxLength: 64, description: '生き物（#id か名前）' },
         untilDead: { type: 'boolean' },
         hold: { type: 'boolean' },
-        seconds: { type: 'number', minimum: 0.5, maximum: 30 },
+        goals: { type: 'array', minItems: 2, maxItems: 8, items: pos('行き先の候補'), description: 'go の行き先の候補（どれか 1 つに着けば済み）' },
+        canDig: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'string', maxLength: 40 }, description: 'go で掘ってよい物（id か stone・dirt・sand・wood）' },
+        canPlace: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'go で置いてよい物（足場・橋・柱）' },
+        maxDrop: { type: 'integer', minimum: 0, maximum: 10 },
+        waterOk: { type: 'boolean' },
+        stance: { type: 'string', enum: ['fight', 'flee'] },
+        retreatHp: { type: 'integer', minimum: 1, maximum: 19 },
+        axis: { type: 'string', enum: ['x', 'z'] },
+        furnaces: { type: 'integer', minimum: 1, maximum: 4 },
+        enter: { type: 'boolean' },
+        maxDig: { type: 'integer', minimum: 0, maximum: 200 },
+        maxPlace: { type: 'integer', minimum: 0, maximum: 100 },
+        seconds: { type: 'number', minimum: 0.5, maximum: 120 },
         charge: { type: 'number', minimum: 0.2, maximum: 3 },
         n: { type: 'integer', minimum: 1, maximum: 16 },
         sprint: { type: 'boolean' },
@@ -383,36 +428,6 @@ export const VIEW_INPUT_SCHEMA = Object.freeze({
   },
 });
 
-/** What each kind takes: required fields, then the optional ones; any other field is a problem. */
-const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly string[])[]; may: readonly string[] }>> = {
-  walk: { needs: [['to', 'path']], may: ['sprint', 'range'] },
-  dig: { needs: [['at']], may: ['tool', 'collect', 'exposeOk', 'takeOk'] },
-  place: { needs: [['at'], ['block']], may: ['face'] },
-  pillarUp: { needs: [['n']], may: ['block'] },
-  use: { needs: [['item']], may: ['at', 'face', 'target'] },
-  look: { needs: [['to', 'yaw']], may: ['pitch'] },
-  jump: { needs: [], may: ['n'] },
-  sneak: { needs: [['on']], may: [] },
-  equip: { needs: [['item']], may: ['slot'] },
-  craft: { needs: [['item']], may: ['count'] },
-  furnace: { needs: [['at'], ['op']], may: ['item', 'count', 'fuel', 'fuelCount'] },
-  chest: { needs: [['at'], ['op']], may: ['items'] },
-  attack: { needs: [['target']], may: ['untilDead', 'seconds', 'hold'] },
-  shoot: { needs: [['target', 'at']], may: ['item', 'charge', 'n'] },
-  eat: { needs: [], may: ['item'] },
-  drop: { needs: [['items']], may: ['target', 'at'] },
-  pickup: { needs: [], may: ['target', 'range'] },
-  wait: { needs: [['seconds']], may: [] },
-};
-const COMMON = new Set(['do', 'rel', 'note', 'onFail']);
-/** The fields a kind of hand takes (needed, then optional, then the common ones), for a refusal that names them. */
-export function handFieldNames(kind: HandKind): string[] {
-  const fields = HAND_FIELDS[kind];
-  return fields ? [...fields.needs.flat(), ...fields.may, 'rel', 'note', 'onFail'] : [];
-}
-const ONE_AT: ReadonlySet<HandKind> = new Set(['use', 'furnace', 'chest', 'shoot', 'drop']);
-
-/** What is wrong with an act's hands beyond the schema (a field a kind does not take, a missing one), or null. Closed words, Japanese. */
 export function actProblem(input: ActInput): string | null {
   for (const [index, hand] of input.hands.entries()) {
     const problem = handProblem(hand) ?? (input.repeat === undefined ? null : repeatProblem(hand));
@@ -429,27 +444,10 @@ function queueFieldProblem(input: ActInput): string | null {
 }
 /** A repeated hand that names cells must count them from her feet: the same absolute cells asked again are the same cells. */
 function repeatProblem(hand: ActHand): string | null {
-  const named = hand.to !== undefined || (hand.path?.length ?? 0) > 0 || (hand.at?.length ?? 0) > 0;
+  const named = hand.to !== undefined || (hand.path?.length ?? 0) > 0 || (hand.goals?.length ?? 0) > 0 || (hand.at?.length ?? 0) > 0;
   return named && !hand.rel ? 'repeat の手は rel:true で書く（絶対座標の手を繰り返すと同じマスをまた掘る・置くことになる）' : null;
 }
 /** One hand's fields against its kind, then the checks a kind adds. */
-function handProblem(hand: ActHand): string | null {
-  const fields = HAND_FIELDS[hand.do];
-  if (!fields) return 'do が分からない';
-  const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
-  const extra = Object.keys(hand).filter(key => !allowed.has(key));
-  if (extra.length) return `${extra.join('・')} は使えない（${hand.do} の欄: ${handFieldNames(hand.do).join('・')}）`;
-  const missing = fields.needs.find(group => !group.some(key => (hand as unknown as Record<string, unknown>)[key] !== undefined));
-  if (missing) return `${missing.join(' か ')} が要る`;
-  if (ONE_AT.has(hand.do) && hand.at && hand.at.length !== 1) return 'at は 1 つ';
-  return KIND_CHECKS[hand.do]?.(hand) ?? null;
-}
-const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> = {
-  furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : null,
-  chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : null,
-  wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
-};
-
 /** An act's result as the body sent it (`ActResult`), or null when it is not one. */
 export function readActResult(text: string | undefined): ActResult | null {
   if (!text) return null;
@@ -468,4 +466,5 @@ export function readViewResult(text: string | undefined): ViewResult | null {
   } catch { return null; }
 }
 
+export { handFieldNames } from './minecraftActHandRules.js';
 export { ACT_MAX_MS, actMilliseconds, actExpectedMilliseconds, actRemainingMilliseconds } from './minecraftActTime.js';

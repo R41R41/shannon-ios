@@ -7,12 +7,13 @@
  * - `need.appeared` / `need.gone`: a thing an unmet need wants came into or went out of reach (subject: the need's own id).
  * - `action.progress`: how the running command goes, every few seconds (subject: the command's id).
  * - `action.stalled`: the command's own measure has not got better for a while (the surface measures; the arbiter decides).
+ * - `furnace.done` (run 39, 2026-10-26): a batch put in a furnace has come due, told once (subject `furnace:x,y,z`, data.text the words). Nothing is folded.
  *
  * Like the rest of this package it holds no timer, no database and no network: the service hands events in and asks what it needs.
  * The log is per body and per connection: a body that connects again numbers its events from 1 again.
  */
 export const WORKING_EVENTS_V1 = 'working.events.v1';
-export const WORKING_EVENT_KINDS = Object.freeze(['need.appeared', 'need.gone', 'action.progress', 'action.stalled'] as const);
+export const WORKING_EVENT_KINDS = Object.freeze(['need.appeared', 'need.gone', 'action.progress', 'action.stalled', 'furnace.done'] as const);
 export type WorkingEventKind = typeof WORKING_EVENT_KINDS[number];
 export type WorkingScalar = string | number | boolean | null;
 
@@ -151,7 +152,7 @@ export class WorkingEventLog {
       this.needMap.set(event.subject, { id: event.subject, need: String(d.need ?? ''), name: String(d.name ?? ''), distance: numberOf(d.distance),
         canReach: d.canReach !== false, at: event.at, data: d });
     } else if (event.kind === 'need.gone') this.needMap.delete(event.subject);
-    else {
+    else if (event.kind !== 'furnace.done') {
       const before = this.progressMap.get(event.subject);
       const since = numberOf(d.sinceProgressMs) ?? 0;
       // Still stalled while the time since progress keeps growing; progress (it falls back) ends the stall.

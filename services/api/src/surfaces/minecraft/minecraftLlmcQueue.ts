@@ -51,7 +51,7 @@ function keep<T>(map: Map<string, T>, key: string, value: T): void {
 }
 
 interface QueueItem {
-  item: string; id: string; operationId: string; call: FcaToolCall; node: string | null; why: string; input: ActInput;
+  item: string; id: string; operationId: string; call: FcaToolCall; node: string | null; current: string | null; why: string; input: ActInput;
   pre: ActCondition | undefined; done: ActCondition | undefined; maxMs: number; startBy: number; from: ActPos | null;
   enqueuedAt: number; startedAt: number | null; ended: boolean; abort: AbortController; watch: ReturnType<typeof urgentWatch> | null;
   fixes: readonly string[]; because: string | null;
@@ -61,6 +61,8 @@ interface QueueItem {
 }
 export interface QueueAdd {
   call: FcaToolCall; operationId: string; input: ActInput; arguments: Record<string, unknown>; skill: string; pre?: ActCondition;
+  /** The plan's current node when the model sent it (the plan follows the work only under the same one). */
+  current?: string | null;
   node: string | null; why: string; fixes: readonly string[]; maxMs: number;
 }
 export interface QueueDeps {
@@ -91,6 +93,8 @@ export interface LlmcQueue extends FcaBodyQueue {
   stale(): boolean;
   /** Told of each item the body ran when it ends, with its result (her feelings read it). */
   onRan(listener: RanListener): void;
+  /** The furnaces that came due since the last look (the body's `furnace.done` events, run 39): one line each, once. */
+  furnaceNews(): string[];
   stop(): void;
   /** Waits (at most `waitMs`) until every item the body was given has answered: a step that ends is closed only after them. */
   settled(waitMs?: number): Promise<void>;
@@ -99,7 +103,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   const now = deps.now ?? Date.now, sleep = deps.sleep ?? sleepMs;
   const items: QueueItem[] = [], news: FcaQueueNews[] = [], listeners: RanListener[] = [];
   let stopped = false, version = 0, marked = 0, error: unknown = null, pumpTimer: ReturnType<typeof setInterval> | null = null;
-  let droppedSeen = 0, droppedNow = 0;
+  let droppedSeen = 0, droppedNow = 0, furnaceCursor: number | null = null;
   let execution: ReturnType<typeof currentActionExecution>;
   const open = () => items.filter(item => !item.ended);
   const bump = () => {
@@ -130,7 +134,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     const first = open()[0];
     if (first && first.startedAt === null) {
       first.startedAt = now();
-      noteItemStart(deps.taskId, first.node);
+      noteItemStart(deps.taskId, first.node, first.current);
       const watch = urgentWatch(first.input, deps.observe, first.abort.signal, 250);
       first.watch = watch;
       watch.signal.addEventListener('abort', () => first.abort.abort(watch.signal.reason), { once: true });
@@ -193,7 +197,8 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   function makeItem(spec: QueueAdd, label: string, maxMs: number, startInMs: number): QueueItem {
     const at = now();
     const item: QueueItem = { item: label, id: `skill:${createHash('sha256').update(spec.operationId).digest('hex')}`, operationId: spec.operationId,
-      call: spec.call, node: spec.node, why: spec.why, input: spec.input, pre: spec.pre, done: spec.input.done, maxMs, startBy: at + startInMs,
+      call: spec.call, node: spec.node, current: spec.current ?? null, why: spec.why, input: spec.input, pre: spec.pre, done: spec.input.done, maxMs,
+      startBy: at + startInMs,
       from: feetOf(deps.observe()), enqueuedAt: at, startedAt: null, ended: false, abort: new AbortController(), watch: null,
       fixes: spec.fixes, because: null, handKey: null, handSince: at, reason: () => item.watch?.reason() ?? null };
     return item;
@@ -207,6 +212,14 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
 
   return {
     onRan(listener) { listeners.push(listener); },
+    furnaceNews() {
+      const log = deps.control.working(deps.bodyId());
+      if (!log) return [];
+      furnaceCursor ??= log.cursor();
+      const since = log.since(furnaceCursor);
+      furnaceCursor = since.cursor;
+      return since.events.filter(event => event.kind === 'furnace.done').map(event => String(event.data.text ?? `かまど ${event.subject} の焼きが終わった`));
+    },
     mark() { marked = version; },
     stale: () => version !== marked,
     // Once the items are taken off (a stop, the close of the step) an unsettled one is unsafe again: the guard must not look past it.

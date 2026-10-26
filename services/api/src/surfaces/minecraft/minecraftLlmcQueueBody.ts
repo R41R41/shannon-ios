@@ -60,7 +60,10 @@ export function queueLifecycle(parts: { queue: LlmcQueue | undefined; observe():
       const kinds = alertKinds(parts.peek(), surpriseFrame(parts.observe(), parts.arrival()));
       const fresh = [...kinds].some(kind => !alerted.has(kind));
       alerted = kinds;
-      return fresh;
+      // A furnace that came due (the body's `furnace.done`) is told to the next decision once, and is a reason to decide now: its take-out is an item.
+      const furnaces = queue?.furnaceNews() ?? [];
+      for (const line of furnaces) parts.keep(line);
+      return fresh || furnaces.length > 0;
     },
   };
 }

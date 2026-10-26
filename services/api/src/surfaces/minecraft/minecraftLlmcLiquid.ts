@@ -84,7 +84,7 @@ type Rec = Record<string, unknown>;
 const rec = (value: unknown): Rec | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Rec : null;
 const num = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 /** Hands that move her somewhere not known or change what stands between: a use after one of them is not judged (a walk: `afterWalk`). */
-const MOVES = new Set(['pillarUp', 'jump', 'dig', 'place', 'pickup', 'attack', 'shoot', 'chest', 'furnace', 'craft']);
+const MOVES = new Set(['go', 'pillarUp', 'jump', 'dig', 'place', 'pickup', 'attack', 'shoot', 'chest', 'furnace', 'craft']);
 /** Where an exact walk (one with a range under 1, to a cell or along a path) leaves her: the cell, or null (a loose one, a relative one). */
 function afterWalk(hand: Rec): P | null {
   const last = Array.isArray(hand.path) && hand.path.length ? rec(hand.path.at(-1)) : rec(hand.to);

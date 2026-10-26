@@ -193,8 +193,9 @@ function lowestReach(hands: unknown, feetY: number): number {
   let lowest = feetY;
   for (const raw of Array.isArray(hands) ? hands : []) {
     const hand = record(raw);
-    if (hand?.do !== 'walk' && hand?.do !== 'dig') continue;
-    const points = [record(hand.to), ...(Array.isArray(hand.path) ? hand.path.map(record) : []), ...(Array.isArray(hand.at) ? hand.at.map(record) : [])];
+    if (hand?.do !== 'walk' && hand?.do !== 'go' && hand?.do !== 'dig') continue;
+    const points = [record(hand.to), ...(Array.isArray(hand.path) ? hand.path.map(record) : []), ...(Array.isArray(hand.goals) ? hand.goals.map(record) : []),
+      ...(Array.isArray(hand.at) ? hand.at.map(record) : [])];
     for (const point of points) {
       const y = finite(point?.y);
       if (y !== null) lowest = Math.min(lowest, hand.rel === true ? feetY + y : y);

@@ -100,13 +100,14 @@ export function workingEventLines(events: readonly WorkingEvent[], limit: number
   const latestNeed = new Map<string, number>();
   events.forEach((event, index) => { if (event.kind.startsWith('need.')) latestNeed.set(String(event.data.need), index); });
   const latest = (event: WorkingEvent, index: number) => event.kind.startsWith('need.') && latestNeed.get(String(event.data.need)) === index;
-  const kept = events.filter((event, index) => event.kind === 'action.stalled' || latest(event, index));
-  const stalls = kept.filter(event => event.kind === 'action.stalled').slice(-limit);
+  const kept = events.filter((event, index) => event.kind === 'action.stalled' || event.kind === 'furnace.done' || latest(event, index));
+  const stalls = kept.filter(event => event.kind === 'action.stalled' || event.kind === 'furnace.done').slice(-limit);
   const room = limit - stalls.length;
-  const needs = room > 0 ? kept.filter(event => event.kind !== 'action.stalled').slice(-room) : [];
+  const needs = room > 0 ? kept.filter(event => event.kind !== 'action.stalled' && event.kind !== 'furnace.done').slice(-room) : [];
   const chosen = kept.filter(event => stalls.includes(event) || needs.includes(event));
   const lines = chosen.flatMap(event => {
     const d = event.data;
+    if (event.kind === 'furnace.done') return [String(d.text ?? `かまど ${event.subject.replace('furnace:', '')} の焼きが終わった`)];
     const distance = typeof d.distance === 'number' ? d.distance : null;
     if (event.kind === 'need.appeared') return [`見えた: ${String(d.name)}（${String(d.need)}）${metres(distance)}${d.canReach === false ? '・届かない' : ''}`];
     if (event.kind === 'need.gone') return [`見えなくなった: ${String(d.name)}（${String(d.need)}）`];

@@ -75,7 +75,9 @@ function handsOf(input: unknown): readonly ActHand[] {
 /** Where a hand went or what it aimed at (its own coordinates; a rel hand's are not known here). */
 function aimOf(hand: ActHand | undefined): Pick<ActRecord, 'dest' | 'target'> {
   if (!hand || hand.rel) return { dest: null, target: null };
-  if (hand.do === 'walk') return { dest: hand.path?.length ? hand.path[hand.path.length - 1]! : hand.to ?? null, target: null };
+  if (hand.do === 'walk' || hand.do === 'go') {
+    return { dest: hand.path?.length ? hand.path[hand.path.length - 1]! : hand.to ?? hand.goals?.[0] ?? null, target: null };
+  }
   if (hand.do === 'attack' || hand.do === 'shoot') return { dest: null, target: hand.target ?? hand.at?.[0] ?? null };
   return { dest: null, target: hand.at?.[0] ?? null };
 }

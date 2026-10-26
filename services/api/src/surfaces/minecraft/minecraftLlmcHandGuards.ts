@@ -69,9 +69,10 @@ function walkEnd(hand: Rec, here: { x: number; y: number; z: number }): Here {
   return hand.rel === true ? { x: here.x + last.x, y: here.y + last.y, z: here.z + last.z } : last;
 }
 const MOVES_HER = new Set(['attack', 'pickup', 'shoot', 'drop', 'pillarUp']);
-function movedBy(hand: Rec, here: Here): Here {
+export function movedBy(hand: Rec, here: Here): Here {
   if (!here) return null;
-  if (hand.do === 'walk') return walkEnd(hand, here);
+  // A go ends at its one cell when that is exact (no range, no candidates); otherwise somewhere the body chose.
+  if (hand.do === 'walk' || (hand.do === 'go' && !hand.goals)) return walkEnd(hand, here);
   if (hand.do === 'dig') return hand.collect === false ? here : null;
   return MOVES_HER.has(String(hand.do)) ? null : here;
 }
@@ -116,6 +117,7 @@ export function seenReopenStop(input: unknown, frame: BodyObservation | null): H
 export const SMALL_COORDINATE = 10;
 export const FAR_FROM_FEET = 40;
 const handPoints = (hand: Rec): Array<{ x: number; y: number; z: number }> => [rec(hand.to), ...(Array.isArray(hand.path) ? hand.path.map(rec) : []),
+  ...(Array.isArray(hand.goals) ? hand.goals.map(rec) : []),
   ...(Array.isArray(hand.at) ? hand.at.map(rec) : [])].filter((at): at is Rec => at !== null)
   .flatMap(at => typeof at.x === 'number' && typeof at.y === 'number' && typeof at.z === 'number' ? [{ x: at.x, y: at.y, z: at.z }] : []);
 export function smallCoordinateStop(input: unknown, frame: BodyObservation | null): HandStop | null {

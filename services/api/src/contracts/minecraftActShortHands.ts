@@ -3,6 +3,12 @@ import type { ActHand } from './minecraftActContract.js';
 /**
  * 手の短い書き方（mb-llmc-cand、再現台 v8d/v9c の `shortHands.ts` を本番の形にした物）。手 1 つが 1 行の文字列で、頭のコードが体へ送る前に
  * 今の JSON（`ActHand`）に直す。
+ *   go X,Y,Z [X,Y,Z ...] [dig=stone,dirt] [place=cobblestone] [range=N] [seconds=N] [maxDrop=N] [maxDig=N] [maxPlace=N] [waterOk] [sprint]
+ *     （座標 1 つが to、2〜8 個が goals。dig= は canDig、place= は canPlace）
+ *   obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=a,b] [maxPlace=N]   （溶岩の源のマス。水を注いで黒曜石にして掘る）
+ *   fight 相手 [flee] [item=名] [retreatHp=N] [range=N] [seconds=N]   mine ブロック名 X,Y,Z ... [count=N] [tool=名] [dig=a,b] [maxDig=N] [collect=false] [seconds=N]
+ *   make 物 [個数]   portal X,Y,Z x|z [block=名] [place=a,b] [maxPlace=N] [seconds=N] [noEnter]
+ *   smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [X,Y,Z ...] [seconds=N]
  *   walk 225,57,63 | walk 1,2,3 4,5,6（path）[sprint] [range=2] | dig x,y,z x,y,z [tool=名] [exposeOk] [takeOk] [collect=false]
  *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物 [slot] | craft 物 [個数]
  *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false] | use 物 [x,y,z] [face=F] [target=T]
@@ -40,7 +46,45 @@ const flag = (on: boolean | undefined, word: string): string[] => on === true ? 
 const given = (key: string, value: unknown): string[] => value === undefined ? [] : [`${key}=${String(value)}`];
 const points = (hand: ActHand): readonly Cell[] => hand.path?.length ? hand.path : hand.to ? [hand.to] : [];
 
+/** go: where (one cell is `to`, 2–8 are `goals`), the blocks it may dig and place, and its limits. A hand with both `to` and `goals` is a json line. */
+function goWords(hand: ActHand): Words {
+  if (hand.to && hand.goals?.length) return null;
+  const cells = hand.to ? [hand.to] : hand.goals ?? [];
+  if (!cells.length) return null;
+  return [...cells.map(pos), ...listWord('dig', hand.canDig), ...listWord('place', hand.canPlace),
+    ...given('range', hand.range), ...given('seconds', hand.seconds), ...given('maxDrop', hand.maxDrop), ...given('maxDig', hand.maxDig),
+    ...given('maxPlace', hand.maxPlace), ...flag(hand.waterOk, 'waterOk'), ...flag(hand.sprint, 'sprint')];
+}
+/** obsidian, mine, portal: the cells, then the blocks the hand may place or dig, and its limits. */
+function obsidianWords(hand: ActHand): Words {
+  return hand.at?.length ? [...hand.at.map(pos), ...given('count', hand.count), ...given('seconds', hand.seconds), ...listWord('place', hand.canPlace),
+    ...given('maxPlace', hand.maxPlace)] : null;
+}
+function mineWords(hand: ActHand): Words {
+  return hand.block && hand.at?.length ? [hand.block, ...hand.at.map(pos), ...given('count', hand.count), ...given('tool', hand.tool),
+    ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig), ...given('collect', hand.collect), ...given('seconds', hand.seconds)] : null;
+}
+function portalWords(hand: ActHand): Words {
+  return hand.at?.length === 1 && hand.axis ? [pos(hand.at[0]!), hand.axis, ...given('block', hand.block), ...listWord('place', hand.canPlace),
+    ...given('maxPlace', hand.maxPlace),
+    ...given('seconds', hand.seconds), ...(hand.enter === false ? ['noEnter'] : given('enter', hand.enter))] : null;
+}
+function fightWords(hand: ActHand): Words {
+  if (!hand.target) return null;
+  return [hand.target, ...(hand.stance === 'flee' ? ['flee'] : given('stance', hand.stance)), ...given('item', hand.item),
+    ...given('retreatHp', hand.retreatHp),    ...given('range', hand.range), ...given('seconds', hand.seconds)];
+}
+/** smelt: one kind of input in a line (several kinds are a json line). */
+function smeltWords(hand: ActHand): Words {
+  const only = hand.items?.length === 1 && hand.items[0]!.count !== undefined ? hand.items[0]! : null;
+  if (!only) return null;
+  return [only.item, String(only.count), ...given('fuel', hand.fuel), ...given('fuelCount', hand.fuelCount), ...given('furnaces', hand.furnaces),
+    ...given('seconds', hand.seconds), ...(hand.at ?? []).map(pos)];
+}
+const listWord = (key: string, list: readonly string[] | undefined): string[] => list?.length ? [`${key}=${list.join(',')}`] : [];
 const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
+  go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords,
+  make: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   walk: hand => (hand.path && hand.to) || hand.path?.length === 1 || !points(hand).length
     ? null : [...points(hand).map(pos), ...flag(hand.sprint, 'sprint'), ...given('range', hand.range)],
   dig: hand => hand.at?.length
@@ -90,7 +134,38 @@ const done = (hand: Fields) => hand as unknown as ActHand;
 const bad = (verb: string, reason: string) => ({ error: `${verb}: ${reason}` });
 const isCount = (word: string | undefined) => /^\d+$/u.test(word ?? '');
 
+/** The names of `dig=a,b` / `place=a,b` as the list a go takes. */
+const names = (value: unknown): string[] => String(value).split(',').map(name => name.trim()).filter(Boolean);
+/** A hand's `dig=a,b` / `place=a,b` words moved to the fields the contract names. */
+function blocksOf(hand: Fields): Fields {
+  const { dig, place, ...rest } = hand;
+  return { ...rest, ...(dig !== undefined ? { canDig: names(dig) } : {}), ...(place !== undefined ? { canPlace: names(place) } : {}) };
+}
 const READERS: Record<string, Reader> = {
+  obsidian: ({ cells, hand }) => cells.length ? done(blocksOf({ ...hand, at: cells })) : bad('obsidian', '溶岩の源の座標が要る'),
+  mine: ({ cells, words, hand }) => cells.length && words[0] ? done(blocksOf({ ...hand, block: words[0], at: cells })) : bad('mine', 'ブロック名と座標が要る'),
+  make: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('make', '物の名前が要る'),
+  fight: ({ words, hand }) => {
+    if (!words[0]) return bad('fight', '相手（#id か名前）が要る');
+    const { flee, ...rest } = hand;
+    return done({ ...rest, target: words[0], ...(flee === true ? { stance: 'flee' } : {}) });
+  },
+  portal: ({ cells, words, hand }) => {
+    const axis = words.find(word => word === 'x' || word === 'z');
+    if (cells.length !== 1 || !axis) return bad('portal', '枠の内側の左下の座標 1 つと向き x か z が要る');
+    const { noEnter, ...rest } = blocksOf({ ...hand, at: cells, axis });
+    return done({ ...rest, ...(noEnter === true ? { enter: false } : {}) });
+  },
+  smelt: ({ cells, words, hand }) => {
+    if (!words[0] || !isCount(words[1])) return bad('smelt', '入れる物と個数が要る（種類が 2 つ以上なら json）');
+    return done({ ...hand, items: [{ item: words[0], count: Number(words[1]) }], ...(cells.length ? { at: cells } : {}) });
+  },
+  go: ({ cells, hand }) => {
+    if (!cells.length) return bad('go', '座標が無い');
+    const { dig, place, ...rest } = hand;
+    if (cells.length === 1) rest.to = cells[0]; else rest.goals = cells;
+    return done({ ...rest, ...(dig !== undefined ? { canDig: names(dig) } : {}), ...(place !== undefined ? { canPlace: names(place) } : {}) });
+  },
   walk: ({ cells, hand }) => {
     if (!cells.length) return bad('walk', '座標が無い');
     if (cells.length === 1) hand.to = cells[0]; else hand.path = cells;
@@ -119,7 +194,8 @@ const READERS: Record<string, Reader> = {
   use: ({ words, cells, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(cells.length ? { at: [cells[0]] } : {}) }) : bad('use', '物の名前が要る'),
 };
-const FLAGS: Record<string, string> = { rel: 'rel', sprint: 'sprint', exposeOk: 'exposeOk', takeOk: 'takeOk', hold: 'hold' };
+const FLAGS: Record<string, string> = { rel: 'rel', sprint: 'sprint', exposeOk: 'exposeOk', takeOk: 'takeOk', hold: 'hold', waterOk: 'waterOk', flee: 'flee',
+  noEnter: 'noEnter' };
 const NOTE = /\s+note=("(?:[^"\\]|\\.)*")/u;
 
 /** `key=value` の値: true・false・数はその型、それ以外は文字。 */
