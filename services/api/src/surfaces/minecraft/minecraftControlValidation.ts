@@ -9,6 +9,11 @@ const boundedJSON = (v: unknown, length: number) => { try { return JSON.stringif
 
 /** The task queue's `act` takes a condition (an array of arrays of objects) in `done`: two levels deeper than the schemas before it. */
 const SKILL_SCHEMA_DEPTH = 8;
+/**
+ * The most alternatives an `anyOf` may have. run 39 (2026-10-26, rel55): the body's `done` condition is one object schema per kind of clause (11), and 4 refused the
+ * body's whole catalog: every poll was a 400 FCA_BODY_POLL_INVALID, so the head never saw the body. 16 leaves room for the kinds still to come.
+ */
+const SKILL_SCHEMA_ANY_OF = 16;
 /** Bounded JSON-schema subset; native skill validation remains authoritative at the actuator. */
 export function skillSchema(value: unknown, depth = 0): value is Readonly<Record<string, unknown>> {
   if (!record(value) || depth > SKILL_SCHEMA_DEPTH) return false;
@@ -16,7 +21,10 @@ export function skillSchema(value: unknown, depth = 0): value is Readonly<Record
   if (Object.keys(value).some(key => !allowed.includes(key))) return false;
   if (value.description !== undefined && (typeof value.description !== 'string' || value.description.length > 2000)) return false;
   if (['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'].some(key => value[key] !== undefined && (typeof value[key] !== 'number' || !Number.isFinite(value[key])))) return false;
-  if (value.anyOf !== undefined) return Array.isArray(value.anyOf) && value.anyOf.length > 0 && value.anyOf.length <= 4 && value.anyOf.every(item => skillSchema(item, depth + 1));
+  if (value.anyOf !== undefined) {
+    return Array.isArray(value.anyOf) && value.anyOf.length > 0 && value.anyOf.length <= SKILL_SCHEMA_ANY_OF
+      && value.anyOf.every(item => skillSchema(item, depth + 1));
+  }
   if (!['object', 'array', 'string', 'integer', 'number', 'boolean', 'null'].includes(String(value.type))) return false;
   if (value.type === 'object') {
     if (!record(value.properties) || Object.keys(value.properties).length > 32 || value.additionalProperties !== false) return false;
