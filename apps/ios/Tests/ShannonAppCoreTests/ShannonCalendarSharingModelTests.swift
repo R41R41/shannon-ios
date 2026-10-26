@@ -64,8 +64,9 @@ final class ShannonCalendarSharingModelTests: XCTestCase {
         let sent = try JSONDecoder().decode(ShannonCalendarUpcomingRequestDTO.self, from: try XCTUnwrap(client.bodies.first))
         XCTAssertEqual(sent.scopeKey, "owner-a")
         XCTAssertEqual(sent.events.map(\.title), ["歯医者"])
-        XCTAssertEqual(source.lastWindow?.start, clock.now.addingTimeInterval(-3_600))
-        XCTAssertEqual(source.lastWindow?.end, clock.now.addingTimeInterval(14 * 86_400))
+        // A day back (today's earlier events) and 29 days ahead: 30 days, inside the server's 31.
+        XCTAssertEqual(source.lastWindow?.start, clock.now.addingTimeInterval(-86_400))
+        XCTAssertEqual(source.lastWindow?.end, clock.now.addingTimeInterval(29 * 86_400))
         XCTAssertEqual(model.status, .sent(at: clock.now, count: 1))
     }
 
