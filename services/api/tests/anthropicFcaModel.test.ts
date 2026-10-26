@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY } from '@shannon/cognition';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setAsideNote } from '../src/infra/models/anthropic/anthropicFcaDecision.js';
 import { AnthropicFcaModel, createAnthropicFcaModel, type AnthropicFcaClient, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { estimatedAnthropicCostUsd, unknownCostUpperBound } from '../src/infra/models/claude/claudeUsage.js';
 import { retryAfterMilliseconds } from '../src/infra/models/anthropic/anthropicFcaFailure.js';
@@ -89,6 +90,44 @@ describe('native one-step FCA model', () => {
     expect(fixture.receipts).toEqual([{ model: 'claude-haiku-5-5', usageComplete: true, inputTokens: 712, cachedInputTokens: 0,
       cacheCreationInputTokens: 700, outputTokens: 30, totalTokens: 742,
       estimatedCostUsd: estimatedAnthropicCostUsd('claude-haiku-5-5', { input: 12, output: 30, cacheWrite: 700, cacheRead: 0, searches: 0 }) }]);
+  });
+
+  describe('a control call that comes with another one (run 41: FCA_MODEL_CONTROL_MIXED left the step unknown for 1.5 minutes)', () => {
+    const note = (name: string, taken: 'tools' | 'wait' | 'complete') => setAsideNote(name, taken);
+    it.each(['fca_complete', 'fca_wait'])('a %s beside a tool is set aside: the tool is the decision, the control has its result, and nothing throws', async name => {
+      const content = [call(name, 'control-1', { summary: 'Done' }), call('task_list', 'tool-1')];
+      const fixture = harness([answer(content)]);
+      const result = await fixture.model.decide(input(), signal());
+      expect(result.decision.kind).toBe('tools');
+      expect(result.decision.kind === 'tools' ? result.decision.calls.map(item => item.id) : []).toEqual(['tool-1']);
+      expect(result.auxiliaryResults).toEqual([{ id: 'control-1', ok: false, text: note(name, 'tools') }]);
+      expect(result.history[result.history.length - 1]).toEqual({ role: 'assistant', content });
+      expect(JSON.parse(result.auxiliaryResults![0]!.text).note).toContain('単独');
+    });
+    it('a wait beside a completion: the wait is taken, both have their results in the next message, and the completion is told it was not taken', async () => {
+      const content = [call('fca_complete', 'done-1', { summary: 'Done' }), call('fca_wait', 'wait-1', { summary: 'Waiting' })];
+      const fixture = harness([answer(content)]);
+      const result = await fixture.model.decide(input(), signal());
+      expect(result.decision).toEqual({ kind: 'wait', summary: 'Waiting' });
+      const results = (result.history[2] as { content: Array<{ tool_use_id: string; is_error: boolean; content: string }> }).content;
+      expect(results.map(item => item.tool_use_id).sort()).toEqual(['done-1', 'wait-1']);
+      expect(results.find(item => item.tool_use_id === 'wait-1')).toMatchObject({ is_error: false, content: JSON.stringify({ received: true, requestedDecision: 'wait' }) });
+      expect(results.find(item => item.tool_use_id === 'done-1')).toMatchObject({ is_error: true, content: note('fca_complete', 'wait') });
+    });
+    it('every tool_use of the answer has a result when the tools run (the runner puts the control\'s result beside the calls\')', async () => {
+      const content = [call('fca_complete', 'control-1', { summary: 'Done' }), call('task_list', 'tool-1'), call('task_get', 'tool-2')];
+      const fixture = harness([answer(content)]);
+      const result = await fixture.model.decide(input(), signal());
+      const ids = [...(result.decision.kind === 'tools' ? result.decision.calls.map(item => item.id) : []), ...result.auxiliaryResults!.map(item => item.id)].sort();
+      expect(ids).toEqual(['control-1', 'tool-1', 'tool-2']);
+    });
+    it('a control alone is as it was, and two completions or an empty summary are still refused', async () => {
+      const alone = await harness([answer([call('fca_complete', 'c', { summary: 'Done' })])]).model.decide(input(), signal());
+      expect(alone.decision).toEqual({ kind: 'complete', summary: 'Done' });
+      expect(alone.auxiliaryResults).toBeUndefined();
+      await expect(harness([answer([call('fca_complete', 'c', { summary: ' ' }), call('task_list', 't')])]).model.decide(input(), signal())).resolves.toMatchObject({ decision: { kind: 'tools' } });
+      await expect(harness([answer([call('fca_complete', 'c', { summary: ' ' })])]).model.decide(input(), signal())).rejects.toThrow('FCA_MODEL_SUMMARY_INVALID');
+    });
   });
 
   it.each(['wait', 'complete'] as const)('acknowledges the %s control call before the next native request', async kind => {
@@ -315,8 +354,6 @@ describe('FCA usage evidence and invalid decisions', () => {
     [[call(), call('task_get')], 'tool_use', 'FCA_MODEL_CALL_INVALID'],
     [[call('not_offered')], 'tool_use', 'FCA_MODEL_TOOL_NOT_OFFERED'],
     [[call('task_list', 'bad-input', [])], 'tool_use', 'FCA_MODEL_CALL_INVALID'],
-    [[call('fca_wait', 'wait', { summary: 'Waiting' }), call()], 'tool_use', 'FCA_MODEL_CONTROL_MIXED'],
-    [[call('fca_wait', 'wait', { summary: 'Waiting' }), call('fca_complete', 'done', { summary: 'Done' })], 'tool_use', 'FCA_MODEL_CONTROL_MIXED'],
     [[call('fca_complete', 'done', { summary: ' ' })], 'tool_use', 'FCA_MODEL_SUMMARY_INVALID'],
     [[call('fca_complete', 'done', { summary: 'Done', extra: true })], 'tool_use', 'FCA_MODEL_SUMMARY_INVALID'],
   ])('rejects an invalid decision without a repair call (%s, %s)', async (content, stop, code) => {

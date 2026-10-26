@@ -62,7 +62,7 @@ function fakeQueue(script: Step[]) {
 }
 
 function fixture(decisions: Array<FcaDecision | ((input: FcaModelInput) => Promise<FcaDecision>)>, queue: ReturnType<typeof fakeQueue> | null, options: {
-  recall?: boolean; stale?: () => boolean; messages?: () => boolean } = {}) {
+  recall?: boolean; stale?: () => boolean; messages?: () => boolean; aux?: Array<{ id: string; text: string; ok: boolean }> } = {}) {
   const db = new DatabaseSync(':memory:'); databases.push(db); migrateAgentTasks(db);
   const actions = new SQLiteActionStore(db);
   const runtime = new SQLiteTaskRuntimeStore(db, { authority: new SQLiteFcaTaskAuthority(db), now: () => at,
@@ -89,7 +89,8 @@ function fixture(decisions: Array<FcaDecision | ((input: FcaModelInput) => Promi
         const decision = typeof next === 'function' ? await Promise.race([next(input), new Promise<never>((_, reject) => {
           signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
         })]) : next;
-        return { decision, history: [{ role: 'user', content: `decision ${index + 1}` }, { role: 'assistant', content: `turn ${index + 1}` }] };
+        return { decision, history: [{ role: 'user', content: `decision ${index + 1}` }, { role: 'assistant', content: `turn ${index + 1}` }],
+          ...(index === 0 && options.aux ? { auxiliaryResults: options.aux } : {}) };
       },
       toolResults(value) { return { role: 'user', content: value.map(item => ({ type: 'tool_result', tool_use_id: item.id, content: item.text, ok: item.ok })) }; } },
       tools: combineFcaTools({ definitions: [ACT], async execute() { return toolOk(queue ? `列に入れた ${queue.put()}` : 'act 全部済み'); } }) };
@@ -176,6 +177,34 @@ describe('the results of the items', () => {
     await f.run();
     expect(queue.stats().drains).toBeGreaterThanOrEqual(1);
     expect(f.noted.join('\n')).toContain('q1 [p1] x: q1 済み');
+  });
+});
+
+describe('a step that ends on an error while items run (run 41: the step was left unknown for 1.5 minutes)', () => {
+  it('takes the items off at once, so that the step settles and the next request is not refused as busy', async () => {
+    const queue = fakeQueue([{ wake: 'remaining' }]);
+    const f = fixture([act('a'), async () => { throw new Error('FCA_MODEL_SUMMARY_INVALID'); }], queue);
+    await expect(f.run()).rejects.toThrow('FCA_MODEL_SUMMARY_INVALID');
+    expect(queue.stats().cancelled).toBe(1);
+    expect(queue.stats().open).toEqual([]);
+    expect(f.commits()).toBe(0);
+  });
+  it('an error of the very first decision (no item open yet) is only thrown, as before', async () => {
+    const queue = fakeQueue([]);
+    const f = fixture([async () => { throw new Error('FCA_MODEL_OUTPUT_INVALID'); }], queue);
+    await expect(f.run()).rejects.toThrow('FCA_MODEL_OUTPUT_INVALID');
+    expect(queue.stats().open).toEqual([]);
+  });
+  it('a result the model adapter gives for a control call it set aside goes with the tool results of the round', async () => {
+    const aux = [{ id: 'control-1', ok: false, text: 'set aside' }];
+    const queue = fakeQueue([{ wake: 'remaining' }, { wake: 'empty' }]);
+    const f = fixture([act('a'), act('b'), { kind: 'wait', summary: 'end' }], queue, { aux });
+    await f.run();
+    expect(f.inputs.length).toBeGreaterThanOrEqual(2);
+    const second = text(f.inputs[1]!.history);
+    expect(second).toContain('control-1');
+    expect(second).toContain('set aside');
+    expect(second.indexOf('control-1')).toBeLessThan(second.indexOf('列に入れた'));
   });
 });
 

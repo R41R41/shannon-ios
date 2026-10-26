@@ -95,6 +95,7 @@
     "infra/models/anthropic/anthropicFcaContext.ts",
     "infra/models/anthropic/anthropicFcaControl.ts",
     "infra/models/anthropic/anthropicFcaCoreTools.ts",
+    "infra/models/anthropic/anthropicFcaDecision.ts",
     "infra/models/anthropic/anthropicFcaFailure.ts",
     "infra/models/anthropic/anthropicFcaHistory.ts",
     "infra/models/anthropic/anthropicFcaInstructions.ts",

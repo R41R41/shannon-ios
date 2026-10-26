@@ -14,6 +14,7 @@ import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCa
 import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
+import { answeredTurn, decodeDecision } from './anthropicFcaDecision.js';
 import { FCA_CORE_MENU_INSTRUCTIONS, transientFcaTools } from './anthropicFcaCoreTools.js';
 import { bodyRecallView, bodySharedContext, decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided }
   from './anthropicFcaContext.js';
@@ -263,18 +264,13 @@ export class AnthropicFcaModel implements FcaModel {
     if (message.stop_reason === 'max_tokens') throw new Error('FCA_MODEL_TRUNCATED');
     if (message.stop_reason === 'refusal') throw new Error('FCA_MODEL_REFUSED');
     if (message.stop_reason !== 'tool_use') throw missingDecision(message, input.task.id);
-    const decided = decodeDecision(message.content, menu.names, history, input.sharedContext || transient ? FCA_CONTEXT_NAME : undefined);
+    const { decision: decided, set_aside: setAside } = decodeDecision(message.content, menu.names, history, input.sharedContext || transient ? FCA_CONTEXT_NAME : undefined);
     const hooks = this.v2();
     const decision = hooks && decided.kind === 'tools' ? { ...decided, calls: decided.calls.map(call => ({ ...call, input: hooks.callInput(call.name, call.input) as typeof call.input })) } : decided;
     // the own prompt: a transient body task is shown no shared context, so its fca_context is answered as not provided.
     const unshared = !input.sharedContext || this.minecraft !== null;
     const context = unshared && transient ? fcaContextNotProvided(message.content) : decodeFcaContext(message.content, decision, input);
-    const appended: Anthropic.MessageParam[] = [...turn, { role: 'assistant', content: message.content }];
-    if (decision.kind !== 'tools') {
-      const control = message.content.find(block => block.type === 'tool_use' && CONTROL_TOOLS.some(tool => tool.name === block.name)) as Anthropic.ToolUseBlock;
-      appended.push(this.toolResults([...(context.auxiliaryResults ?? []), { id: control.id, text: JSON.stringify({ received: true, requestedDecision: decision.kind }), ok: true }]));
-      delete context.auxiliaryResults;
-    }
+    const appended = answeredTurn({ turn, content: message.content, decision, setAside, context, toolResults: results => this.toolResults(results) });
     // A transient request whose state was cut, and could be whole in a new epoch, says so: the runner may start the next epoch earlier (`fcaStateCut`).
     return { decision, history: appended, ...context, ...((built as RequestBuilt).sent ? { stateCut: (built as RequestBuilt).sent!.cut } : {}) };
   }
@@ -468,31 +464,6 @@ function nativeHistory(history: readonly unknown[]): Anthropic.MessageParam[] {
     // Preserve signed, redacted and future native blocks verbatim. Never normalize or summarize this prefix.
     return item as Anthropic.MessageParam;
   });
-}
-
-function decodeDecision(content: Anthropic.ContentBlock[], names: Map<string, string>, history: readonly Anthropic.MessageParam[], auxiliary?: string): FcaDecision {
-  if (!Array.isArray(content) || !content.length || content.some(block => !object(block))) throw new Error('FCA_MODEL_OUTPUT_INVALID');
-  const allCalls = content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use');
-  const calls = allCalls.filter(call => call.name !== auxiliary);
-  if (!calls.length) throw new Error('FCA_MODEL_DECISION_MISSING');
-  const used = new Set(history.flatMap(message => message.role === 'assistant' && Array.isArray(message.content)
-    ? message.content.filter(block => block.type === 'tool_use').map(block => block.id) : []));
-  for (const call of allCalls) {
-    if (!nonempty(call.id) || used.has(call.id) || !object(call.input)) throw new Error('FCA_MODEL_CALL_INVALID');
-    used.add(call.id);
-  }
-  const controls = calls.filter(call => CONTROL_TOOLS.some(tool => tool.name === call.name));
-  if (controls.length) {
-    if (calls.length !== 1) throw new Error('FCA_MODEL_CONTROL_MIXED');
-    const value = object(controls[0]!.input)!;
-    if (Object.keys(value).length !== 1 || !nonempty(value.summary) || value.summary.length > 2_000) throw new Error('FCA_MODEL_SUMMARY_INVALID');
-    return { kind: controls[0]!.name === 'fca_wait' ? 'wait' : 'complete', summary: value.summary };
-  }
-  return { kind: 'tools', calls: calls.map(call => {
-    const name = names.get(call.name);
-    if (!name) throw new Error('FCA_MODEL_TOOL_NOT_OFFERED');
-    return { id: call.id, name, input: call.input };
-  }) };
 }
 
 function object(value: unknown): Record<string, unknown> | null { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; }

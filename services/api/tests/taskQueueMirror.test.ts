@@ -8,6 +8,7 @@ import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlRec
 import type { ActInput } from '../src/contracts/minecraftActContract.js';
 import { createLlmcQueue, forgetLlmcQueues, queueWakeMs, QUEUE_MAX, QUEUE_T } from '../src/surfaces/minecraft/minecraftLlmcQueue.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
+import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 
 /**
  * The head's mirror of the body's item queue (design minebot-task-queue, 2026-10-26) against the real control, with the body played by hand: the items
@@ -299,5 +300,45 @@ describe('the lines of the live state', () => {
     expect(lines[0]).toMatch(/^▶ q1 \[p1\] 項目1 実行中: 済む: have:log>=10・残り約 \d+ 秒$/u);
     expect(lines[1]).toBe('・ q2 [p7] 項目2 待ち: 前提 near:furnace~5（前の項目の後で体が確かめる）');
     expect(lines[2]).toBe('足せるのは あと 1 つ（q2 の後）。差し替えは replace');
+  });
+});
+
+describe('a step that ends on an error: the items are taken off, and the outcome stays unknown until the body answers (ADR-0014 §9, D5)', () => {
+  const inStep = <T>(work: (execution: ActionExecution) => Promise<T>) => {
+    const execution: ActionExecution = { lease, signal: new AbortController().signal, permit: async () => true };
+    return inActionExecution(execution, () => work(execution));
+  };
+  it('the body answers the cancel: the items settle, the step is acknowledged, and the wait ends at once', async () => {
+    await inStep(async execution => {
+      const f = setup();
+      await f.queue.add(f.spec(wait1));
+      await f.queue.add(f.spec(dig(1)));
+      f.take();
+      expect(execution.stepOutcome).toBe('unknown');
+      f.queue.cancelAll();
+      expect(f.queue.openIds().size).toBe(0);
+      // The body's answers: the running one cancelled, the waiting one dropped.
+      const running = f.running.shift()!;
+      f.receipts.push({ id: running, connectionId: 'connection', outcome: 'cancelled', inputsReleased: true, observedAt: at, result: 'cancelled', failureType: 'server_cancel' });
+      f.dropRest('前の項目が止まった');
+      f.poll();
+      const began = Date.now();
+      await f.queue.settled(2_000);
+      await settle();
+      expect(f.queue.open()).toBe(false);
+      expect(execution.stepOutcome).toBe('acknowledged');
+      expect(Date.now() - began).toBeLessThan(1_000);
+    });
+  });
+  it('the body does not answer: the step is not called settled on a guess (the outcome stays unknown)', async () => {
+    await inStep(async execution => {
+      const f = setup();
+      await f.queue.add(f.spec(wait1));
+      f.take();
+      f.queue.cancelAll();
+      await delay(300);
+      await f.queue.settled(100);
+      expect(execution.stepOutcome).toBe('unknown');
+    });
   });
 });

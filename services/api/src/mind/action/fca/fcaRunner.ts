@@ -335,6 +335,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     } catch (error) {
       if (!thrownAway || signal.aborted) {
         progress({ operationId, tool: 'fca.decide', status: 'unknown' });
+        // Run 41: a step that ends on an error with items still running in the body leaves nobody to watch them and its outcome unknown until they end (1.5 minutes
+        // of a refused request, minecraft_busy). The items are taken off here, so that their answers settle the step within a moment (`queueLifecycle.close`).
+        queue?.cancelAll();
         throw error;
       }
     } finally { if (watch) clearInterval(watch); }
