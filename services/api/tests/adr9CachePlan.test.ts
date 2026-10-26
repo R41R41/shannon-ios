@@ -98,7 +98,8 @@ describe('the stable prefix', () => {
 
   it.each([['Haiku', HAIKU], ['Sonnet', SONNET]] as const)('sends the common schema, an owner turn\'s, unless a rarer field makes the turn an exception (%s)', (_name, settings) => {
     const off = (request: ShannonChatModelRequest) => claudeTextBody(settings, { ...request, tools: undefined }, undefined).output_config;
-    const common = off({ ...base, offerReplyFeeling: true });
+    // An owner turn in the app's Talk: her feeling and her reaction (rich chat §4).
+    const common = off({ ...base, offerReplyFeeling: true, offerReaction: true });
     for (const [name, request] of Object.entries(variants)) {
       const body = sent(request, settings);
       const exception = ['feeling', 'required', 'place'].includes(name);

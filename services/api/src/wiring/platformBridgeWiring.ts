@@ -19,6 +19,8 @@ import { PlatformPeople, platformPeopleEnabled } from '../mind/memory/platformPe
 import type { MemoryProposals } from '../mind/memory/memoryPorts.js';
 import { SQLiteSurfaceTurnLog } from '../mind/action/respond/store/surfaceTurnStore.js';
 import { PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled, type PlatformReplyConversation } from '../surfaces/platform/platformReply.js';
+import { PlatformReactions } from '../surfaces/platform/platformReactions.js';
+import { SQLitePlatformReactionLog } from '../surfaces/platform/store/platformReactionLog.js';
 
 import type { PlatformBridgeRouteDependencies } from '../surfaces/platform/serverPlatformBridgeRoute.js';
 import { PlatformVoiceService, platformVoiceEnabled, type PlatformVoiceConversation } from '../surfaces/platform/platformVoice.js';
@@ -65,8 +67,11 @@ export function createConfiguredPlatformBridgeRoute(
     peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, memory, facts) : null, () => platformPeopleEnabled(environment),
     () => oneHeadEnabled(environment));
   const turns = replies && platformReplyEnabled(environment) ? new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_reply_turns') : null;
+  // Reactions there (rich chat §4) go with the reply route: they are told to her next typed turn in that conversation.
+  const reactionLog = replies && turns ? new SQLitePlatformReactionLog(replies.databasePath) : null;
+  const reactions = reactionLog ? new PlatformReactions({ scopeKey: configuration.scopeKey, bridge: service, log: reactionLog, now }) : null;
   const reply = replies && turns ? new PlatformReplyService({
-    scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns, now,
+    scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns, now, reactions,
   }) : null;
   // A Discord voice channel (`SHANNON_DC_VOICE`, dc-voice): its own turn log, the one mouth queue, her ElevenLabs voice.
   const voiceTurns = replies && platformVoiceEnabled(environment) ? new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_voice_turns') : null;
@@ -79,8 +84,9 @@ export function createConfiguredPlatformBridgeRoute(
     mouth: voiceMouth, speech: configuredVoiceSpeech(environment), scopeKey: configuration.scopeKey, environment: () => environment,
     listening: replies.listening ?? null,
   } : null;
-  return { configuration, chatModel, service, reply, voice, environment: () => environment, close: () => {
+  return { configuration, chatModel, service, reply, reactions, voice, environment: () => environment, close: () => {
     turns?.close();
+    reactionLog?.close();
     voiceTurns?.close();
   } };
 }

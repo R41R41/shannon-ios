@@ -16,6 +16,8 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     public var feedback: ShannonFeedbackDTO? = nil
     /// She looks through this app's camera now: capture one frame and answer it.
     public var appLook: ShannonAppLookAskDTO? = nil
+    /// Her reaction on the message this turn answered (rich chat §4); absent from older servers and on most turns.
+    public var shannonReaction: ShannonOwnReactionDTO? = nil
 
     public init(
         mode: String,

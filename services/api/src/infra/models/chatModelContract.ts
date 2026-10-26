@@ -72,6 +72,11 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   offerAppLook?: boolean;
   /** The structured reply gets a `minecraftIntent` field: in a game-chat turn of the owner she may ask her Minecraft body to do something (`minecraftBody.ts`). */
   offerMinecraftIntent?: boolean;
+  /**
+   * The structured reply gets a `reaction` field: one emoji she may put on the message she answers (`replyReaction.ts`). The surface
+   * decides (the app's own Talk while the owner alone reads it, a Discord message); the Claude request only (the historical GPT profile ignores it).
+   */
+  offerReaction?: boolean;
   /** The reply is shown in the app's Talk (rich chat): the request says how to show tables, charts and images. Absent elsewhere. */
   richBlocks?: boolean;
   /** Her registry tools for this turn (`chatModelTools.ts`); offered unless the turn forces a web search. */
@@ -136,6 +141,8 @@ export interface ShannonChatModelResult {
   appLook?: string;
   /** What she asked her Minecraft body to do, only in a turn that offered the field. */
   minecraftIntent?: MinecraftIntent;
+  /** The emoji she put on the message she answered, only in a turn that offered the field (`replyReaction.ts`). */
+  reaction?: string;
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;

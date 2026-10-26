@@ -71,7 +71,9 @@ export type VoiceTurnLine =
   | { type: 'sentence'; index: number; text: string; voiceText?: string; correction?: true }
   | { type: 'intent'; kind: 'task_message' | 'task' | 'stop' | 'none'; delivered: boolean; taskId?: string; reason?: string }
   | { type: 'done'; reply: string; threadId: string; duplicate: boolean; silent?: true; reason?: string;
-    timings?: { decisionMs: number; firstSentenceMs: number | null; totalMs: number } }
+    timings?: { decisionMs: number; firstSentenceMs: number | null; totalMs: number };
+    /** A typed message's answer only (rich chat §4): the emoji she put on the message she answered; the entry adds it as her reaction. */
+    reaction?: string }
   | { type: 'error'; status: number; error: string };
 
 /** What a retry is answered with: the words, or that she had nothing to say. */

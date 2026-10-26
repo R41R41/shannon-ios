@@ -70,6 +70,56 @@
       "note": "Windows は「今回はWebで調べる」。語は同じで、前に「今回は」が付く。"
     },
     {
+      "key": "talk.reaction.add",
+      "text": "反応を付ける",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonMessageReactionViews.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx",
+      "note": "rich chat §4（2026-10-26）。メッセージにマウスを乗せた時のボタン。"
+    },
+    {
+      "key": "talk.reaction.more",
+      "text": "ほかの絵文字を選ぶ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonMessageReactionViews.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx"
+    },
+    {
+      "key": "talk.reaction.picker",
+      "text": "反応を選ぶ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonMessageReactionViews.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx"
+    },
+    {
+      "key": "talk.reaction.by",
+      "text": "{who}が付けました",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonMessageReactionViews.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx",
+      "note": "チップの説明。who は talk.reaction.who.*。"
+    },
+    {
+      "key": "talk.reaction.who.owner",
+      "text": "ライ氏",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonRichChatDTOs.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx"
+    },
+    {
+      "key": "talk.reaction.who.shannon",
+      "text": "シャノン",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonRichChatDTOs.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx"
+    },
+    {
+      "key": "talk.reaction.who.both",
+      "text": "ライ氏とシャノン",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonRichChatDTOs.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx"
+    },
+    {
+      "key": "talk.reaction.failed",
+      "text": "反応を付けられませんでした。もう一度お試しください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonReactions.swift",
+      "windows": "shannon-desktop:src/desk/views/TalkView.tsx"
+    },
+    {
       "key": "common.loading",
       "text": "読み込み中…",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryCommitmentsPage.swift",

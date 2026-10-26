@@ -113,9 +113,11 @@ describe('F2: a call in a plan turn without tools', () => {
 });
 
 describe('F4: the fields a plan turn uses', () => {
-  it('says feeling is null on a common turn that does not offer it, and nothing on an exception turn', () => {
-    expect(fieldsLines(request)).toEqual(['[このターンの返答の欄] feeling はこのターンでは使わないので null にする。']);
-    expect(fieldsLines({ ...request, offerReplyFeeling: true })).toEqual([]);
+  it('says feeling is null and reaction empty on a common turn that does not offer them, and nothing on an exception turn', () => {
+    expect(fieldsLines(request)).toEqual(['[このターンの返答の欄] feeling はこのターンでは使わないので null にする。reaction はこのターンでは使わないので空文字にする。']);
+    expect(fieldsLines({ ...request, offerReaction: true })).toEqual(['[このターンの返答の欄] feeling はこのターンでは使わないので null にする。']);
+    expect(fieldsLines({ ...request, offerReplyFeeling: true })).toEqual(['[このターンの返答の欄] reaction はこのターンでは使わないので空文字にする。']);
+    expect(fieldsLines({ ...request, offerReplyFeeling: true, offerReaction: true })).toEqual([]);
     expect(fieldsLines({ ...request, offerMinecraftIntent: true })).toEqual([]);
   });
 

@@ -15,6 +15,8 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     /// Rich chat: a report card (owner alone, its work still visible) and the owner's reactions (owner alone).
     public var reportCard: ShannonReportCardDTO? = nil
     public var reactions: [String]? = nil
+    /// Her own reactions on this message (rich chat §4), projected like `reactions`.
+    public var shannonReactions: [String]? = nil
     public let captures: [ShannonTurnCaptureDTO]?
     public let reminder: ShannonReminderDTO?
     /// A piece of her study this message is about; the timeline shows a card that opens the reader.

@@ -246,11 +246,22 @@ export class TextConversation implements ConversationModality<TextTurnResult> {
       ...(inline && (body.webSearch === true || settled?.web) ? { useWebSearch: true } : {}),
       ...(inline && settled?.answer.menu?.chosen.includes('web_search') ? { requireWebSearch: true as const } : {}), ...thinking,
       ...(surface?.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}), ...tierRequest(this.tier), ...feelingText.route(this.feelingTurn),
+      ...(this.offersReaction() ? { offerReaction: true } : {}),
       ...(replySonnetEnabled() ? { conversationReply: true as const } : {}), // SHANNON_REPLY_SONNET: her reply is Sonnet's; off, as it was.
       richBlocks: !surface,
       // A surface's conversation has its own fixed title.
       generateThreadTitle: surface ? false : parts.deps.conversationStore.needsAutomaticThreadTitle(this.scopeKey, threadId),
     });
+  }
+
+  /**
+   * Whether her reply may carry a reaction on the message it answers (rich chat §4): a surface that shows one says so (a Discord
+   * message); the app's own Talk while the owner alone reads it and its reactions are composed.
+   */
+  private offersReaction(): boolean {
+    const { surface, audience } = this.input;
+    if (surface) return surface.offerReaction === true;
+    return audience.alone && Boolean(this.parts.extras()?.shannonReacts);
   }
 
   /** The history is a character budget (the replay summary covers the rest). Stage 3's blocks, then ADR-0013's, follow the turn's context. */
@@ -335,6 +346,7 @@ export class TextConversation implements ConversationModality<TextTurnResult> {
     this.proposal(response, experience);
     response.thread = deps.conversationStore.listThreads(this.scopeKey).find(thread => thread.threadId === threadId);
     Object.assign(response, this.roomLook.decide({ ...completion, reply }, threadId)); // One look, only if this turn offered it (conversationLooks.ts).
+    if (experience && completion.reaction && !surface) this.reacted(response, experience.id, completion.reaction);
     if (experience) {
       deps.background.schedule(completedTurn, experience.id);
       observerHandoff('store', 'memory', { experienceId: experience.id, status: 'scheduled' });
@@ -346,6 +358,14 @@ export class TextConversation implements ConversationModality<TextTurnResult> {
     parts.mind?.turnEnded?.(); // Stage 3: what the mind noted is written after the response.
     return { response: withSentenceStream(completion, { status: 200, body: audience.visible(response) }), completion,
       ...(experience ? { experienceId: experience.id } : {}) };
+  }
+
+  /** Her reaction (rich chat §4) on the owner's message of the stored turn, and on the response so the app shows it at once. */
+  private reacted(response: ChatResponse, turnId: string, emoji: string): void {
+    const { parts, input } = this;
+    const ownerAlone = (() => { try { return parts.ownerAlone(this.scopeKey) === true; } catch { return false; } })();
+    const reaction = parts.extras()?.shannonReacts?.(this.scopeKey, input.threadId, turnId, emoji, input.audience.alone && ownerAlone) ?? null;
+    if (reaction) response.shannonReaction = reaction;
   }
 
   /** The stored turn's id on the response, her feedback bound to it, the mind's item re-read at render. */

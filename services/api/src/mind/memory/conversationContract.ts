@@ -137,6 +137,8 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   reportCard?: ReportCard;
   /** The owner's emoji reactions on this message, oldest first; projected for the owner alone, never stored in the message. */
   reactions?: readonly string[];
+  /** Her own emoji reactions on this message (rich chat §4), projected like `reactions`. */
+  shannonReactions?: readonly string[];
   /** Provenance of a reply: IDs recalled into its prompt. Server-side only; never sent to clients. */
   recalledMemoryIds?: readonly string[];
 }

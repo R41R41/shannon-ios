@@ -12,11 +12,12 @@ import type { ShannonChatModelRequest } from '../chatModel.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions } from '../chatModelTools.js';
 import {
   chatTurnInstructions, chatTurnSchema, offerInstructions, offeredReplyFields, offersTools, withCommonOffers, withoutTurnInstructions,
+  type TurnReplyField,
 } from '../chatModelTurn.js';
 import type { ClaudeChatSettings } from './anthropicConfig.js';
 import { appendForegroundMenu, stableOpener } from './anthropicForegroundMenu.js';
 import {
-  claudeTextBody, claudeTool, claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_TEXT_LINES, spokenReplyLines, textThinking,
+  claudeTextBody, claudeTool, claudeTools, claudeTurnMessages, conversationEffort, CLAUDE_TEXT_LINES, reactionLines, spokenReplyLines, textThinking,
   textTurnConversation, WEB_ANSWER_LINE,
 } from './anthropicRequest.js';
 import { structuredSchema } from './anthropicSchema.js';
@@ -69,8 +70,11 @@ function commonSchema(): Record<string, unknown> {
  * output format changes for that turn; tools, system and the breakpoints stay). Counted per turn (`planSchemaOf`).
  */
 export function exceptionTurn(request: ShannonChatModelRequest): boolean {
-  return offeredReplyFields(request).some(field => field !== 'feeling');
+  return offeredReplyFields(request).some(field => !COMMON_FIELDS.includes(field));
 }
+
+/** The offered fields the common schema holds: her feeling and her reaction (`withCommonOffers`). */
+const COMMON_FIELDS: readonly TurnReplyField[] = Object.freeze(['feeling', 'reaction']);
 
 let schemaOnce: Record<string, unknown> | undefined;
 let pairOnce: readonly Anthropic.Tool[] | undefined;
@@ -145,8 +149,11 @@ export function stableLayers(request: Pick<ShannonChatModelRequest, 'systemPromp
  * the schema it has without the plan and needs no line.
  */
 export function fieldsLines(request: ShannonChatModelRequest): string[] {
-  if (exceptionTurn(request) || offeredReplyFields(request).includes('feeling')) return [];
-  return ['[このターンの返答の欄] feeling はこのターンでは使わないので null にする。'];
+  if (exceptionTurn(request)) return [];
+  const offered = offeredReplyFields(request);
+  const unused = [...(offered.includes('feeling') ? [] : ['feeling はこのターンでは使わないので null にする。']),
+    ...(offered.includes('reaction') ? [] : ['reaction はこのターンでは使わないので空文字にする。'])];
+  return unused.length ? [`[このターンの返答の欄] ${unused.join('')}`] : [];
 }
 
 function toolLine(request: ShannonChatModelRequest): string {
@@ -219,7 +226,7 @@ export function plannedChatBody(settings: ClaudeChatSettings, request: ShannonCh
     max_tokens: 16_000,
     // Rich chat's lines depend on the surface, not the turn (the app's Talk always, other surfaces never): they stay in the system.
     system: cachedSystem([instructions, CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
-      ...spokenReplyLines(request)].join('\n\n')),
+      ...reactionLines(request), ...spokenReplyLines(request)].join('\n\n')),
     messages: withTurnLines(claudeTurnMessages(textTurnConversation(fixed)), planTurnLines(request, layers)),
     tools: planToolPair(),
     tool_choice: { type: 'auto' },

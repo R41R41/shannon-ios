@@ -71,6 +71,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public let reportCard: ShannonReportCardDTO?
     /// The owner's reactions, oldest first, as the server last sent them.
     public let reactions: [String]
+    /// Her own reactions on this message (rich chat §4), as the server last sent them.
+    public let shannonReactions: [String]
 
     public init(
         id: UUID = UUID(),
@@ -89,11 +91,13 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         feedback: ShannonFeedbackDTO? = nil,
         serverID: String? = nil,
         reportCard: ShannonReportCardDTO? = nil,
-        reactions: [String] = []
+        reactions: [String] = [],
+        shannonReactions: [String] = []
     ) {
         self.serverID = serverID
         self.reportCard = reportCard
         self.reactions = reactions
+        self.shannonReactions = shannonReactions
         self.feedback = feedback
         self.studyPiece = studyPiece
         self.turnID = turnID
@@ -128,7 +132,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             feedback: feedback,
             serverID: serverID,
             reportCard: reportCard,
-            reactions: reactions
+            reactions: reactions,
+            shannonReactions: shannonReactions
         )
     }
 
@@ -150,7 +155,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             feedback: feedback,
             serverID: serverID,
             reportCard: reportCard,
-            reactions: reactions
+            reactions: reactions,
+            shannonReactions: shannonReactions
         )
     }
 
@@ -159,7 +165,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         ConversationMessage(
             id: id, role: role, text: text, sentAt: sentAt, deliveryState: deliveryState, emotionSnapshot: emotionSnapshot,
             artifacts: artifacts, sourceAttribution: sourceAttribution, places: places, turnID: turnID, captures: captures,
-            reminder: reminder, studyPiece: studyPiece, feedback: feedback, serverID: serverID, reportCard: reportCard, reactions: reactions
+            reminder: reminder, studyPiece: studyPiece, feedback: feedback, serverID: serverID, reportCard: reportCard, reactions: reactions,
+            shannonReactions: shannonReactions
         )
     }
 }

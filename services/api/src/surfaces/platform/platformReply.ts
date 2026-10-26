@@ -10,6 +10,7 @@ import {
 import { platformDisplayName, type PlatformConversationKind } from '../../mind/memory/platformPeople.js';
 import { OPEN_CONVERSATION_TITLE, keepOwnerPlatformTurn, platformTextTurnInput, rememberPlatformPerson } from '../../mind/memory/platformMemoryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import type { PlatformReactions } from './platformReactions.js';
 
 /**
  * `POST /v1/platform/reply` (`docs/platform-people-contract.md`, "Replies"). A platform runtime (the Shannon-dev Discord
@@ -58,6 +59,8 @@ export interface PlatformReplyResponse {
   duplicate: boolean;
   /** The turn was answered and deliberately not remembered (another person's turn): as `ignored` of `POST /v1/platform/turns`, or `people_disabled` / `rate_limited`. */
   ignored?: string;
+  /** The emoji she put on the message she answered (rich chat §4): the entry adds it as her reaction. */
+  reaction?: string;
 }
 
 /** `SHANNON_PLATFORM_REPLY` must say on: the route makes a paid model call per message. */
@@ -77,6 +80,8 @@ export class PlatformReplyService {
     conversation: PlatformReplyConversation;
     turns: MinecraftTurnLog;
     now: CompanionClock;
+    /** What people put on messages there lately (`platformReactions.ts`); absent: the turn is told none. */
+    reactions?: Pick<PlatformReactions, 'turnBlock'> | null;
   }) {}
 
   async reply(value: unknown): Promise<PlatformReplyResponse> {
@@ -128,11 +133,15 @@ export class PlatformReplyService {
     let ignored: string | undefined;
     // A conversation nobody bound (one head) is titled by the channel's own name when the body gave it.
     const binding = request.title && policy.binding.title === OPEN_CONVERSATION_TITLE ? { ...policy.binding, title: request.title } : policy.binding;
+    const reacted = this.dependencies.reactions?.turnBlock(request.platform, request.conversationId) ?? '';
     const result = await this.dependencies.conversation.textTurn(platformTextTurnInput({
       scopeKey, policy,
       message: owner ? request.userMessage : `${request.sourceDisplayName}: ${request.userMessage}`, rawMessage: request.userMessage,
-      prompt: platformDeliveryInstructions(request.platform, binding, request.conversationKind, policy.gate.ownerOnly, owner ? null : request.sourceDisplayName!),
+      prompt: [platformDeliveryInstructions(request.platform, binding, request.conversationKind, policy.gate.ownerOnly, owner ? null : request.sourceDisplayName!),
+        reacted].filter(Boolean).join('\n\n'),
       threadTitle: binding.title,
+      // A message there is shown with reactions: her reply may put one on the message it answers.
+      offerReaction: true,
       // Her minecraft.* tools, like all her tools, reach only a conversation the owner alone reads.
       ...(owner && policy.gate.ownerOnly ? { minecraftTools: true } : {}),
       // Not told what she did on her own to reach the owner: a platform conversation is not where that is talked about.
@@ -166,6 +175,7 @@ export class PlatformReplyService {
       threadId: policy.threadId,
       duplicate: false,
       ...(ignored ? { ignored } : {}),
+      ...(completion.reaction ? { reaction: completion.reaction } : {}),
     };
   }
 }

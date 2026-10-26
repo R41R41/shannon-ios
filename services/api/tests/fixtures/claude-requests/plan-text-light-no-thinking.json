@@ -51,7 +51,7 @@
      },
      {
       "role": "system",
-      "content": "合成された今のターンの文脈\n\n[このターンの返答の欄] feeling はこのターンでは使わないので null にする。"
+      "content": "合成された今のターンの文脈\n\n[このターンの返答の欄] feeling はこのターンでは使わないので null にする。reaction はこのターンでは使わないので空文字にする。"
      },
      {
       "role": "system",
@@ -482,6 +482,10 @@
            "description": "（0〜2件）"
           }
          ]
+        },
+        "reaction": {
+         "type": "string",
+         "description": "相手のいまのメッセージに付ける絵文字1つ（リアクション）。付けたい時だけ。付けない時（たいてい）は空文字"
         }
        },
        "required": [
@@ -492,7 +496,8 @@
         "taskProposal",
         "intentPlan",
         "artifacts",
-        "threadTitle"
+        "threadTitle",
+        "reaction"
        ]
       }
      }
@@ -550,7 +555,7 @@
      },
      {
       "role": "system",
-      "content": "合成された今のターンの文脈\n\n[このターンの返答の欄] feeling はこのターンでは使わないので null にする。"
+      "content": "合成された今のターンの文脈\n\n[このターンの返答の欄] feeling はこのターンでは使わないので null にする。reaction はこのターンでは使わないので空文字にする。"
      },
      {
       "role": "system",
@@ -1011,6 +1016,10 @@
            "description": "（0〜2件）"
           }
          ]
+        },
+        "reaction": {
+         "type": "string",
+         "description": "相手のいまのメッセージに付ける絵文字1つ（リアクション）。付けたい時だけ。付けない時（たいてい）は空文字"
         }
        },
        "required": [
@@ -1021,7 +1030,8 @@
         "taskProposal",
         "intentPlan",
         "artifacts",
-        "threadTitle"
+        "threadTitle",
+        "reaction"
        ]
       }
      }
@@ -1067,9 +1077,9 @@
    "prefix": {
     "tools": "f60390fc",
     "system": "d4c7dbee",
-    "schema": "954aaf9c",
+    "schema": "f1c1a76f",
     "effort": "524b0813",
-    "history": "003535ea"
+    "history": "c0bf3852"
    },
    "thread": "a5f7fbd8",
    "cachePlan": true,
@@ -1089,9 +1099,9 @@
    "prefix": {
     "tools": "f60390fc",
     "system": "d4c7dbee",
-    "schema": "954aaf9c",
+    "schema": "f1c1a76f",
     "effort": "524b0813",
-    "history": "003535ea"
+    "history": "c0bf3852"
    },
    "thread": "a5f7fbd8",
    "cachePlan": true,

@@ -4,6 +4,7 @@ import { normalizedThreadTitle } from '../../surfaces/text/threadTitle.js';
 import { validatedPlaces, type ShannonPlace } from '../../integrations/places/placeDiscovery.js';
 import { parsedReplyFeeling, type ChatReplyFeeling } from '../../mind/emotion/chatReplyFeeling.js';
 import { parsedMinecraftIntent, type MinecraftIntent } from '../../surfaces/minecraft/minecraftIntent.js';
+import { parsedReplyReaction } from '../../mind/action/respond/replyReaction.js';
 import type {
   ShannonChatAttachment,
   ShannonGeneratedArtifact,
@@ -81,6 +82,7 @@ export function parseStructuredTurn(raw: string): {
   replyFeeling?: ChatReplyFeeling;
   appLook?: string;
   minecraftIntent?: MinecraftIntent;
+  reaction?: string;
 } {
   if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
   const value = parseJson(raw);
@@ -111,7 +113,9 @@ export function parseStructuredTurn(raw: string): {
     ...(minecraftIntent ? { minecraftIntent } : {}) };
   // Absent, null or unreadable is no decided feeling: the turn is read as it always was.
   const feeling = parsedReplyFeeling(object.feeling);
-  const replyFeeling = feeling ? { replyFeeling: feeling } : {};
+  // Her reaction rides with it: absent, null or anything but one emoji is none (`replyReaction.ts`).
+  const reaction = parsedReplyReaction(object.reaction);
+  const replyFeeling = { ...(feeling ? { replyFeeling: feeling } : {}), ...(reaction ? { reaction } : {}) };
   if (object.taskProposal === null) {
     if (taskDecision.disposition === 'propose') throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
     return {

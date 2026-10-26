@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { REPORT_CARD_NOTE_KIND, type ConversationExtrasPorts } from '../contracts/conversationExtrasContract.js';
+import { REPORT_CARD_NOTE_KIND, type ConversationExtrasPorts, type MessageReactionView } from '../contracts/conversationExtrasContract.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createReactionRoute, REACTIONS_PATH } from '../infra/http/reactionRoutes.js';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
@@ -26,19 +26,24 @@ export function createConversationExtras(parts: {
   const ports: ConversationExtrasPorts = {
     project(scopeKey, threadId, messages, ownerAlone) {
       const mine = scopeKey === parts.ownerScope && ownerAlone;
-      let reacted: ReadonlyMap<string, string[]> = new Map();
+      let reacted: ReadonlyMap<string, MessageReactionView> = new Map();
       if (mine) { try { reacted = reactions.forMessages(scopeKey, threadId); } catch { /* No reactions, never a guess. */ } }
       return Object.freeze(messages.flatMap((message): StoredConversationMessage[] => {
-        const { reactions: _stale, ...plain } = message;
+        const { reactions: _stale, shannonReactions: _staleHers, ...plain } = message;
         const card = message.reportCard ?? null, note = message.sourceExperienceId?.startsWith(`${REPORT_CARD_NOTE_KIND}:`) === true;
         if ((card || note) && (!mine || !card || !visible(card.taskId))) return [];
-        const emojis = mine ? reacted.get(message.id) : undefined;
-        return [Object.freeze({ ...plain, ...(emojis?.length ? { reactions: Object.freeze([...emojis]) } : {}) })];
+        const view = mine ? reacted.get(message.id) : undefined;
+        return [Object.freeze({ ...plain, ...(view?.emojis.length ? { reactions: Object.freeze([...view.emojis]) } : {}),
+          ...(view?.shannonEmojis?.length ? { shannonReactions: Object.freeze([...view.shannonEmojis]) } : {}) })];
       }));
     },
     turnContext(scopeKey, threadId, ownerAlone) {
       if (scopeKey !== parts.ownerScope || !ownerAlone) return '';
       try { return reactions.turnContext(scopeKey, threadId); } catch { return ''; }
+    },
+    shannonReacts(scopeKey, threadId, turnId, emoji, ownerAlone) {
+      if (scopeKey !== parts.ownerScope || !ownerAlone) return null;
+      try { return reactions.react(scopeKey, threadId, turnId, emoji); } catch { return null; }
     },
   };
   const route = createReactionRoute({ reactions, ownerScopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone });

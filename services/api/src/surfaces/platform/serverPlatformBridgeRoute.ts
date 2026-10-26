@@ -20,6 +20,7 @@ import type { MemoryProposals } from '../../mind/memory/memoryPorts.js';
 import { PlatformReplyService, SHANNON_PLATFORM_REPLY_PATH, platformReplyEnabled, type PlatformReplyConversation } from './platformReply.js';
 import { handlePlatformVoiceRequest, isPlatformVoicePath, type PlatformVoiceRoutes } from './platformVoiceRoute.js';
 import { handleConverseRequest, isConversePath } from './platformConverse.js';
+import { SHANNON_PLATFORM_REACTIONS_PATH, type PlatformReactions } from './platformReactions.js';
 import type { SwitchValues } from '@shannon/switches';
 
 export interface PlatformBridgeRouteDependencies {
@@ -28,6 +29,8 @@ export interface PlatformBridgeRouteDependencies {
   chatModel: ShannonChatModel;
   /** `POST /v1/platform/reply`: null while `SHANNON_PLATFORM_REPLY` is not on (503). */
   reply?: PlatformReplyService | null;
+  /** `POST /v1/platform/reactions` (rich chat §4): composed with the reply route; null answers 503. */
+  reactions?: PlatformReactions | null;
   /** /v1/platform/voice/* (platformVoiceRoute.ts): null while the route is not composed; each answers 503 while SHANNON_DC_VOICE is off. */
   voice?: PlatformVoiceRoutes | null;
   /** The server's switches (one head: `POST /v1/converse` answers 503 while `SHANNON_ONE_HEAD` is off); absent, the process's. */
@@ -39,7 +42,8 @@ export const SHANNON_PLATFORM_PLACES_PATH = '/v1/platform/places';
 
 export function isPlatformBridgePath(path: string): boolean {
   return path === SHANNON_PLATFORM_TURN_PATH || path === SHANNON_PLATFORM_CONTEXT_PATH
-    || path === SHANNON_PLATFORM_PLACES_PATH || path === SHANNON_PLATFORM_REPLY_PATH || isPlatformVoicePath(path) || isConversePath(path);
+    || path === SHANNON_PLATFORM_PLACES_PATH || path === SHANNON_PLATFORM_REPLY_PATH || path === SHANNON_PLATFORM_REACTIONS_PATH
+    || isPlatformVoicePath(path) || isConversePath(path);
 }
 
 export async function handlePlatformBridgeRequest(
@@ -71,6 +75,10 @@ export async function handlePlatformBridgeRequest(
     await handlePlatformBridgeReply(request, response, dependencies);
     return;
   }
+  if (path === SHANNON_PLATFORM_REACTIONS_PATH) {
+    await handlePlatformBridgeReaction(request, response, dependencies);
+    return;
+  }
   await handlePlatformBridgeTurn(request, response, dependencies);
 }
 
@@ -95,6 +103,38 @@ export async function handlePlatformBridgeReply(
   } catch (error) {
     if (error instanceof PlatformBridgeError) {
       sendJson(response, error.status, { error: error.code, message: error.message });
+      return;
+    }
+    throw error;
+  }
+}
+
+/**
+ * `POST /v1/platform/reactions`: someone put an emoji on a message there, or took it off (`platformReactions.ts`). Kept for her next
+ * turn in that conversation; nothing answers it. 202 with `recorded`; refused as `/v1/platform/context` refuses.
+ */
+export async function handlePlatformBridgeReaction(
+  request: IncomingMessage,
+  response: ServerResponse,
+  dependencies: PlatformBridgeRouteDependencies | null,
+): Promise<void> {
+  if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+  if (!dependencies) return sendJson(response, 503, { error: 'PLATFORM_BRIDGE_NOT_CONFIGURED' });
+  if (!bearerAuthorized(request.headers.authorization, dependencies.configuration.token)) {
+    return sendJson(response, 401, { error: 'PLATFORM_BRIDGE_UNAUTHORIZED' });
+  }
+  if (!dependencies.reactions) {
+    return sendJson(response, 503, { error: 'PLATFORM_REACTIONS_DISABLED', message: 'Platform replies are switched off on the server.' });
+  }
+  try {
+    sendJson(response, 202, dependencies.reactions.receive(await readJson(request, 8 * 1024)));
+  } catch (error) {
+    if (error instanceof PlatformBridgeError) {
+      sendJson(response, error.status, { error: error.code, message: error.message });
+      return;
+    }
+    if (error instanceof SyntaxError) {
+      sendJson(response, 400, { error: 'BAD_REQUEST', message: 'JSON body is invalid.' });
       return;
     }
     throw error;

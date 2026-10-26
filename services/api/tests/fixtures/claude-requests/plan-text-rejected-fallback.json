@@ -51,7 +51,7 @@
      },
      {
       "role": "system",
-      "content": "合成された今のターンの文脈\n\n[ボクの道具] この返事では道具を出していない。tool_open と tool_call は呼ばずに、そのまま答える。\n\n[このターンの返答の欄] feeling はこのターンでは使わないので null にする。"
+      "content": "合成された今のターンの文脈\n\n[ボクの道具] この返事では道具を出していない。tool_open と tool_call は呼ばずに、そのまま答える。\n\n[このターンの返答の欄] feeling はこのターンでは使わないので null にする。reaction はこのターンでは使わないので空文字にする。"
      }
     ],
     "tools": [
@@ -400,6 +400,10 @@
            "description": "（0〜2件）"
           }
          ]
+        },
+        "reaction": {
+         "type": "string",
+         "description": "相手のいまのメッセージに付ける絵文字1つ（リアクション）。付けたい時だけ。付けない時（たいてい）は空文字"
         }
        },
        "required": [
@@ -410,7 +414,8 @@
         "taskProposal",
         "intentPlan",
         "artifacts",
-        "threadTitle"
+        "threadTitle",
+        "reaction"
        ]
       }
      }

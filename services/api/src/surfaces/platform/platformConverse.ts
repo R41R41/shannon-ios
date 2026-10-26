@@ -16,7 +16,7 @@ import type { PlatformVoiceService } from './platformVoice.js';
  *
  * - `modality: 'voice'`: the Discord voice channel's turn (`PlatformVoiceService`, through the one voice turn the apps use).
  * - `modality: 'text'`: a Discord message, bound or not, the owner's or anyone's (`PlatformReplyService`, the text turn); its reply is
- *   one `sentence` (a message is posted whole).
+ *   one `sentence` (a message is posted whole), and `done` may carry `reaction`, the emoji she puts on that message (rich chat §4).
  *
  * A refusal before the first line is JSON (400, 403, 409, 429, 503); after it, an `error` line.
  */
@@ -89,7 +89,8 @@ async function textLines(reply: PlatformReplyService, turn: ConversationTurn, wr
   const answer = await reply.replyRequest(replyRequestOf(turn));
   write({ type: 'decision', respond: true, reason: 'text', filler: null });
   if (answer.reply) write({ type: 'sentence', index: 0, text: answer.reply });
-  write({ type: 'done', reply: answer.reply, threadId: answer.threadId, duplicate: answer.duplicate, ...(answer.reply ? {} : { silent: true as const }) });
+  write({ type: 'done', reply: answer.reply, threadId: answer.threadId, duplicate: answer.duplicate, ...(answer.reply ? {} : { silent: true as const }),
+    ...(answer.reaction ? { reaction: answer.reaction } : {}) });
 }
 
 /** A modality whose part is switched off on the server: 503, and the entry answers as it did before. */

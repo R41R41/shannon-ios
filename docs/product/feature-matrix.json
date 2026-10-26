@@ -4454,7 +4454,7 @@
       "id": "talk.reactions",
       "area": "talk",
       "title": "絵文字の反応",
-      "description": "どのメッセージにも、長押し（Mac は右クリックかマウスを乗せたボタン）で絵文字を付ける。❤️ 😂 👍 😮 🥲 🙏 と「＋」でほかの絵文字。いくつでも付け、押すと外せる。シャノンの返事への反応は学びの手がかりになり、次の返事で自然に触れる。ひとりの時だけ。",
+      "description": "どのメッセージにも、長押し（Mac は右クリックかマウスを乗せたボタン、Windows はマウスを乗せたボタン）で絵文字を付ける。❤️ 😂 👍 😮 🥲 🙏 と「＋」でほかの絵文字。いくつでも付け、押すと外せる。シャノンの返事への反応は学びの手がかりになり、付けた・外したは次の返事で気持ちの手がかりとして読む。シャノンも返事と一緒に、相手のメッセージに絵文字を 1 つ付けることがある（Discord では本物のリアクション）。チップは絵文字ごとに付けた人数を出す。ひとりの時だけ。",
       "surfaces": {
         "ios": {
           "status": "yes",
@@ -4474,8 +4474,13 @@
           "note": "所有者が2026-10-13に案Aを選んだ（Syzygy ADR-0009 §10）。分岐 ui-rich-chat の実装で、Xcode Cloud のビルドと実機の確認はまだ。"
         },
         "windows": {
-          "status": "not_applicable",
-          "reason": "所有者の決定（2026-10-13、Syzygy ADR-0009 §10）は iPhone と Mac の画面。Windows の体へ足す決定は無い。"
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TalkView.tsx",
+            "shannon-desktop:src/desk/reactions.ts"
+          ],
+          "note": "所有者の依頼（2026-10-26）で管理画面のトークに足した（分岐 codex/shannon/emoji-reactions）。リリースと実機の確認はまだ。",
+          "read": "2026-10-26"
         }
       }
     },

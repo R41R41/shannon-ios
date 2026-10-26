@@ -36,7 +36,8 @@ public struct ShannonReactionMenuItems: View {
     }
 }
 
-/// The reactions under a message, each with its count; tapping one takes it off, 「＋」 opens the picker.
+/// The reactions under a message, one chip per emoji with how many put it on (the owner and she, Discord-style); his are
+/// outlined. Tapping a chip turns his on or off (hers stays), 「＋」 opens the picker.
 public struct ShannonReactionChips: View {
     let message: ConversationMessage
     let model: ShannonReactionsModel
@@ -50,39 +51,44 @@ public struct ShannonReactionChips: View {
     }
 
     public var body: some View {
-        let emojis = model.emojis(for: message)
+        let chips = model.chips(for: message)
         let palette = ShannonPalette.resolve(colorScheme)
-        if !emojis.isEmpty, let target = model.target(for: message, threadID: threadID) {
+        if !chips.isEmpty {
+            let target = model.target(for: message, threadID: threadID)
             HStack(spacing: ShannonSpacing.extraSmall) {
-                ForEach(emojis, id: \.self) { emoji in
+                ForEach(chips, id: \.emoji) { chip in
                     Button {
-                        Task { await model.toggle(emoji, on: message, threadID: threadID) }
+                        Task { await model.toggle(chip.emoji, on: message, threadID: threadID) }
                     } label: {
-                        Text("\(emoji) 1")
+                        Text("\(chip.emoji) \(chip.count)")
                             .font(.shannon(.footnote).monospacedDigit())
                             .padding(.horizontal, ShannonSpacing.small)
                             .padding(.vertical, 3)
-                            .background(palette.intelligenceSoft, in: Capsule())
-                            .overlay { Capsule().stroke(palette.brandPresence.opacity(0.45), lineWidth: 0.8) }
+                            .background(chip.mine ? palette.intelligenceSoft : palette.subtleSurface, in: Capsule())
+                            .overlay { Capsule().stroke(palette.brandPresence.opacity(chip.mine ? 0.45 : 0), lineWidth: 0.8) }
                     }
                     .buttonStyle(.plain)
                     .frame(minHeight: 32)
-                    .accessibilityLabel("\(emoji)、付けています")
-                    .accessibilityHint("押すと外します")
+                    .disabled(target == nil)
+                    .help("\(chip.who)が付けました")
+                    .accessibilityLabel("\(chip.emoji)、\(chip.who)が付けています")
+                    .accessibilityHint(target == nil ? "" : chip.mine ? "押すと外します" : "押すと付けます")
                 }
-                Button {
-                    model.pickerTarget = target
-                } label: {
-                    Image(systemName: "face.smiling")
-                        .font(.shannon(.footnote))
-                        .foregroundStyle(palette.textSecondary)
-                        .padding(.horizontal, ShannonSpacing.small)
-                        .padding(.vertical, 3)
-                        .background(palette.subtleSurface, in: Capsule())
+                if let target {
+                    Button {
+                        model.pickerTarget = target
+                    } label: {
+                        Image(systemName: "face.smiling")
+                            .font(.shannon(.footnote))
+                            .foregroundStyle(palette.textSecondary)
+                            .padding(.horizontal, ShannonSpacing.small)
+                            .padding(.vertical, 3)
+                            .background(palette.subtleSurface, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 32)
+                    .accessibilityLabel("反応を足す")
                 }
-                .buttonStyle(.plain)
-                .frame(minHeight: 32)
-                .accessibilityLabel("反応を足す")
                 if model.isPending(message) {
                     ProgressView().controlSize(.mini)
                 }

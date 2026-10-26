@@ -78,6 +78,8 @@ export interface PlatformSurfaceTurn {
   threadTitle: string;
   /** Her Minecraft body's game chat: the structured intent field (owner only). */
   offerMinecraftIntent?: boolean;
+  /** A typed platform message shown with reactions: her reply may put one emoji on it (`TextTurnSurface.offerReaction`). */
+  offerReaction?: boolean;
   /** A voice channel: her words are heard, not read (`TextTurnSurface.voice`). */
   voice?: boolean;
   /** Her `minecraft.*` tools are offered by the app's owner-alone rule; game chat asks through its intent instead. */
@@ -99,6 +101,7 @@ export function platformTextTurnInput(turn: PlatformSurfaceTurn): TextTurnInput 
       prompt: turn.prompt,
       threadTitle: turn.threadTitle,
       ...(turn.offerMinecraftIntent ? { offerMinecraftIntent: true } : {}),
+      ...(turn.offerReaction ? { offerReaction: true } : {}),
       ...(turn.voice ? { voice: true } : {}),
       ...(turn.minecraftTools ? { minecraftTools: true } : {}),
       // Where the owner is not there to release a protected line of his (someone else's DM), none is given.

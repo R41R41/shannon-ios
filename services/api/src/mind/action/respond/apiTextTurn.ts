@@ -109,6 +109,8 @@ export interface TextTurnSurface {
   /** The fixed title of the surface's conversation; no automatic title is made. */
   threadTitle: string;
   offerMinecraftIntent?: boolean;
+  /** Her reply may carry one emoji on the message it answers (rich chat §4): a surface that shows reactions (a Discord message). */
+  offerReaction?: boolean;
   /**
    * Her words are heard, not read (a Discord voice channel, `platformVoice.ts`): the text register (a typed reply's form and pacing)
    * does not apply, and the reply's sentences may go out while the model writes whoever is present (`generateChatTurn`): the

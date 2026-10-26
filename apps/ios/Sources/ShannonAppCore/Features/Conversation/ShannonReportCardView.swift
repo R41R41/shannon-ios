@@ -147,7 +147,7 @@ struct ShannonReportDetailView: View {
     }
 }
 
-/// What a message carries below it in the Talk (rich chat): its report card and the owner's reactions. Hidden while others
+/// What a message carries below it in the Talk (rich chat): its report card and the reactions on it. Hidden while others
 /// may see the screen. Shared by the iPhone and the Mac.
 public struct ShannonMessageExtras: View {
     let message: ConversationMessage
@@ -161,7 +161,8 @@ public struct ShannonMessageExtras: View {
     public var body: some View {
         let reactions = conversation.reactions
         let card = reactions.othersPresent ? nil : message.reportCard
-        let chips = !reactions.emojis(for: message).isEmpty && reactions.target(for: message, threadID: conversation.selectedThreadId) != nil
+        // His reactions and hers (rich chat §4); hers show also before his message was read back from the server.
+        let chips = !reactions.chips(for: message).isEmpty
         let notice = reactions.noticeMessageID == message.id ? reactions.notice : nil
         // Nothing at all when there is nothing to show, so the Talk list adds no spacing under the message.
         if card != nil || chips || notice != nil {

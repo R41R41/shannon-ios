@@ -1,6 +1,7 @@
 import { placeSearchInstructions, placeSearchSchema } from '../../integrations/places/placeDiscovery.js';
 import type { ShannonChatModelRequest, ShannonChatModelResult } from './chatModel.js';
 import { REPLY_FEELING_SCHEMA, replyFeelingInstructions } from '../../mind/emotion/chatReplyFeeling.js';
+import { REPLY_REACTION_SCHEMA } from '../../mind/action/respond/replyReaction.js';
 import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,
@@ -64,7 +65,7 @@ export function chatTurnRequestBody(
         type: 'json_schema',
         name: 'shannon_chat_turn',
         strict: true,
-        schema: chatTurnSchema(request),
+        schema: chatTurnSchema(withoutReactionOffer(request)),
       },
     },
     max_output_tokens: 2_200,
@@ -185,8 +186,10 @@ export function chatTurnSchema(request: ShannonChatModelRequest): Record<string,
       },
       ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
       ...(request.offerMinecraftIntent ? { minecraftIntent: MINECRAFT_INTENT_SCHEMA } : {}),
+      // Last, so nothing before it changes for a turn that does not offer it.
+      ...(request.offerReaction ? { reaction: REPLY_REACTION_SCHEMA } : {}),
     },
-    required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), 'threadTitle'],
+    required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.offerMinecraftIntent ? ['minecraftIntent'] : []), 'threadTitle', ...(request.offerReaction ? ['reaction'] : [])],
   };
 }
 
@@ -236,6 +239,7 @@ export function chatTurnResult(
     ...(request.offerRoomLook && structured.roomLook ? { roomLook: structured.roomLook } : {}), ...(request.offerAppLook && structured.appLook ? { appLook: structured.appLook } : {}),
     ...(request.offerReplyFeeling && structured.replyFeeling ? { replyFeeling: structured.replyFeeling } : {}),
     ...(request.offerMinecraftIntent && structured.minecraftIntent ? { minecraftIntent: structured.minecraftIntent } : {}),
+    ...(request.offerReaction && structured.reaction ? { reaction: structured.reaction } : {}),
     ...(structured.artifacts.length ? { artifacts: structured.artifacts } : {}),
     ...(request.generateThreadTitle && structured.threadTitle ? { threadTitle: structured.threadTitle } : {}),
     taskDecision: structured.taskDecision,
@@ -250,13 +254,13 @@ export function offersTools(request: Pick<ShannonChatModelRequest, 'tools' | 'us
 }
 
 /** The fields a text turn may add to its structured reply (Syzygy ADR-0009 stage 1, M4: the cache plan's exception turns). */
-export type TurnReplyField = 'feeling' | 'places' | 'roomLook' | 'appLook' | 'minecraftIntent' | 'webSearchNeedsInput';
+export type TurnReplyField = 'feeling' | 'places' | 'roomLook' | 'appLook' | 'minecraftIntent' | 'webSearchNeedsInput' | 'reaction';
 
 /** The fields this turn adds to its structured reply (the required web read's own field among them). */
 export function offeredReplyFields(request: ShannonChatModelRequest): TurnReplyField[] {
   const offers: Array<[TurnReplyField, unknown]> = [['feeling', request.offerReplyFeeling], ['places', request.placeSearch],
     ['roomLook', request.offerRoomLook], ['appLook', request.offerAppLook], ['minecraftIntent', request.offerMinecraftIntent],
-    ['webSearchNeedsInput', request.requireWebSearch]];
+    ['webSearchNeedsInput', request.requireWebSearch], ['reaction', request.offerReaction]];
   return offers.filter(([, offered]) => Boolean(offered)).map(([field]) => field);
 }
 
@@ -275,7 +279,17 @@ export function offeredFeelingAnswered(request: ShannonChatModelRequest, structu
   return request.offerReplyFeeling ? Boolean(structured.replyFeeling) : null;
 }
 
-/** The offers of the cache plan's common schema (ADR-0009 stage 1, M4 grammar fix): her reply's feeling, as an owner turn has it. */
+/**
+ * The offers of the cache plan's common schema (ADR-0009 stage 1, M4 grammar fix): her reply's feeling and her reaction, as an
+ * owner turn in the app's Talk has them.
+ */
 export function withCommonOffers(request: ShannonChatModelRequest): ShannonChatModelRequest {
-  return { ...request, offerReplyFeeling: true };
+  return { ...request, offerReplyFeeling: true, offerReaction: true };
+}
+
+/** The request the historical GPT adapter reads: her reaction is a Claude request's field only (`replyReaction.ts`). */
+export function withoutReactionOffer(request: ShannonChatModelRequest): ShannonChatModelRequest {
+  if (!request.offerReaction) return request;
+  const { offerReaction: _offer, ...rest } = request;
+  return rest;
 }

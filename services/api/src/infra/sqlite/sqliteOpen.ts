@@ -46,6 +46,8 @@ export const SQLITE_PROFILES = Object.freeze({
   outreach: profile({ wal: true, synchronous: 'NORMAL' }),
   /** The operator's append-only audit (`infra/ops/store/operatorAuditStore.ts`, 2026-10-14): one short write per event. */
   operatorAudit: profile({ wal: true }),
+  /** Reactions on platform messages (`surfaces/platform/store/platformReactionLog.ts`, 2026-10-26), as the platform answer logs open. */
+  platformReactions: profile({ wal: true, synchronous: 'NORMAL' }),
   /** The sleep worker's read-only view of task proofs (`wiring/configuredWorkerFeedback.ts`). */
   readOnly: profile({ readOnly: true }),
 });

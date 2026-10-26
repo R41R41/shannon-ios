@@ -66,6 +66,8 @@ extension ShannonConversationModel {
             let organizeSession = response.uiBlocks?.compactMap(\.session).first
             let replyMessage = Self.reconciledReply(response, provisionalID: replyID)
             messages.append(replyMessage)
+            // Her reaction on what he just sent (rich chat §4): shown under his message at once.
+            if let reaction = response.shannonReaction { reactions.noteShannonReaction(reaction, onMessage: userMessageID) }
             feedback.setContext(threadID: response.threadId, othersPresent: feedback.othersPresent)
             feedback.install([response.feedback].compactMap { $0 }, threadID: response.threadId)
             // The reply never waits for memory extraction; what was captured is fetched afterwards.

@@ -7,6 +7,7 @@ import {
   VOICE_NATURAL_INSTRUCTIONS,
 } from '../../../mind/action/respond/respondInstructions.js';
 import { turnHintLines } from '../../../mind/action/respond/turnHintLines.js';
+import { REPLY_REACTION_INSTRUCTIONS } from '../../../mind/action/respond/replyReaction.js';
 import { TOOLS_WITHHELD_INSTRUCTIONS, toolInstructions, type ShannonModelToolSession } from '../chatModelTools.js';
 import { chatTurnContextBlocks, chatTurnInstructions, chatTurnSchema, offersTools } from '../chatModelTurn.js';
 import { attachmentProjection, WEB_SEARCH_INSTRUCTIONS } from '../chatModelSupport.js';
@@ -141,6 +142,11 @@ export function conversationEffort(_settings: ClaudeChatSettings): ClaudeChatSet
 
 const system = (text: string, model: string): Anthropic.TextBlockParam[] => [{ type: 'text', text, cache_control: { type: 'ephemeral', ...(usesOneHourAnthropicCache(model) ? { ttl: '1h' as const } : {}) } }];
 
+/** Her reaction's instructions, in the system of a turn that offers the field (the surface decides: `replyReaction.ts`). */
+export function reactionLines(request: Pick<ShannonChatModelRequest, 'offerReaction'>): string[] {
+  return request.offerReaction ? [REPLY_REACTION_INSTRUCTIONS] : [];
+}
+
 /** A voice turn answered through the structured text request keeps the spoken rules (`spokenReply`). */
 export function spokenReplyLines(request: Pick<ShannonChatModelRequest, 'spokenReply'>): string[] {
   return request.spokenReply ? [SPOKEN_STRUCTURED_REPLY_LINE, SHORT_VOICE_REPLY_INSTRUCTIONS, VOICE_NATURAL_INSTRUCTIONS] : [];
@@ -174,7 +180,7 @@ export function claudeTextBody(settings: ClaudeChatSettings, request: ShannonCha
     max_tokens: 16_000,
     // Rich chat: how a text reply is shown (tables, charts, images), for the app's own Talk only.
     system: system([instructions, CLAUDE_TEXT_LINES, ...(request.richBlocks ? [RICH_TEXT_BLOCK_INSTRUCTIONS] : []),
-      ...spokenReplyLines(request), ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
+      ...reactionLines(request), ...spokenReplyLines(request), ...(web ? [WEB_ANSWER_LINE] : [])].join('\n\n'), settings.model),
     messages: claudeTurnMessages(textTurnConversation(request)),
     ...(tools.length ? { tools, tool_choice: { type: 'auto' as const } } : {}),
     thinking: textThinking(settings, request),

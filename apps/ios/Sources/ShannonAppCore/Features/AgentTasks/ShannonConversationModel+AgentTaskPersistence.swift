@@ -157,7 +157,8 @@ extension ShannonConversationModel {
             feedback: role == .shannon ? message.feedback : nil,
             serverID: message.id,
             reportCard: role == .shannon ? message.reportCard : nil,
-            reactions: message.reactions ?? []
+            reactions: message.reactions ?? [],
+            shannonReactions: message.shannonReactions ?? []
         )
     }
 

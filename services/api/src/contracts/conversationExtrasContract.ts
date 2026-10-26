@@ -112,7 +112,11 @@ export function reactionFeedback(emojis: readonly string[]): 'good' | 'bad' | nu
   return score > 0 ? 'good' : score < 0 ? 'bad' : null;
 }
 
-export interface MessageReactionView { messageId: string; emojis: string[] }
+/** A message's reactions: the owner's (`emojis`) and, when she put any, hers (`shannonEmojis`, §4; old clients ignore it). */
+export interface MessageReactionView { messageId: string; emojis: string[]; shannonEmojis?: string[] }
+
+/** Her reaction of a turn, on the owner's message it answered (`ChatResponse.shannonReaction`). */
+export interface ShannonReaction { messageId: string; emoji: string }
 
 /** The read side the conversation route and a text turn use. Absent: no report card and no reaction reaches anyone. */
 export interface ConversationExtrasPorts {
@@ -121,8 +125,10 @@ export interface ConversationExtrasPorts {
    * (a forgotten source hides the card), and each message's reactions while he is alone. Never adds a message.
    */
   project(scopeKey: string, threadId: string, messages: readonly StoredConversationMessage[], ownerAlone: boolean): readonly StoredConversationMessage[];
-  /** A short block for her next text turn: reactions the owner added to her messages lately. Empty when none or not alone. */
+  /** A short block for her next text turn: reactions the owner put on or took off lately. Empty when none or not alone. */
   turnContext(scopeKey: string, threadId: string, ownerAlone: boolean): string;
+  /** Her reaction on the owner's message of a stored turn (§4); null when he is not alone or the message is not found. */
+  shannonReacts?(scopeKey: string, threadId: string, turnId: string, emoji: string, ownerAlone: boolean): ShannonReaction | null;
 }
 
 /** Her text turn's line about reactions: only a turn of the owner's alone in the app's own Talk (no other surface), never throws. */
@@ -137,7 +143,7 @@ export function reactionTurnLine(ports: ConversationExtrasPorts | null, turn: {
 export function withoutReportCards(messages: readonly StoredConversationMessage[]): readonly StoredConversationMessage[] {
   return Object.freeze(messages.flatMap(message => {
     if (message.reportCard || message.sourceExperienceId?.startsWith(`${REPORT_CARD_NOTE_KIND}:`)) return [];
-    const { reactions: _reactions, ...plain } = message;
+    const { reactions: _reactions, shannonReactions: _hers, ...plain } = message;
     return [Object.freeze(plain)];
   }));
 }

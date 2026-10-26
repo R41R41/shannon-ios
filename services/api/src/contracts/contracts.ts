@@ -102,6 +102,8 @@ export interface ChatResponse {
   systemPrompt: string;
   state: CompanionStateSnapshot;
   artifacts?: ShannonGeneratedArtifact[];
+  /** Her reaction on the owner's message this turn answered (rich chat §4, `docs/rich-chat-contract.md`); old clients ignore it. */
+  shannonReaction?: { messageId: string; emoji: string };
   /** She looks through the app's camera now: the app captures one frame and answers `POST /v1/app/looks/{id}` before `expiresAt`. */
   appLook?: { id: string; camera: 'back' | 'front'; expiresAt: string; lifetimeSeconds: number };
   uiBlocks?: Array<{
