@@ -43,12 +43,39 @@ export type ListenTranscript =
   | { status: 'ok'; text: string; ms: number }
   | { status: 'empty' | 'hallucination'; ms: number };
 
-export type GroqTranscriptionFailure = 'GROQ_RATE_LIMITED' | 'GROQ_FAILED';
+/**
+ * Why Groq could not transcribe. `GROQ_RATE_LIMITED` (429) and `GROQ_QUOTA` (402, or a body that speaks of quota or credit) mean
+ * the free tier or a limit is used up for a while; `GROQ_UNREACHABLE` means no answer at all (network, timeout, 5xx);
+ * `GROQ_FAILED` is anything else (a request it refused). The first three take listening back to the way it was until Groq answers
+ * again (`listening.ts`); the last fails one utterance only.
+ */
+export type GroqTranscriptionFailure = 'GROQ_RATE_LIMITED' | 'GROQ_QUOTA' | 'GROQ_UNREACHABLE' | 'GROQ_FAILED';
 
 export class GroqTranscriptionError extends Error {
-  constructor(readonly code: GroqTranscriptionFailure, readonly upstreamStatus?: number) {
+  constructor(readonly code: GroqTranscriptionFailure, readonly upstreamStatus?: number, readonly retryAfterSeconds?: number) {
     super(code);
   }
+}
+
+/** A Groq duration (`2m59.56s`, `7.66s`, `1h`), or plain seconds (`Retry-After: 30`), in seconds; null when neither. */
+export function durationSeconds(value: string | null | undefined): number | null {
+  const text = value?.trim();
+  if (!text) return null;
+  if (/^\d+(?:\.\d+)?$/u.test(text)) return Number(text);
+  let total = 0;
+  let matched = false;
+  for (const [, amount, unit] of text.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/gu)) {
+    matched = true;
+    total += Number(amount) * (unit === 'h' ? 3600 : unit === 'm' ? 60 : unit === 'ms' ? 0.001 : 1);
+  }
+  return matched ? total : null;
+}
+
+/** When Groq says it can be asked again (Retry-After, or the latest of its rate-limit resets), in seconds; undefined when it says nothing. */
+export function retryAfterOf(headers: Headers): number | undefined {
+  const values = ['retry-after', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset-audio-seconds']
+    .map(name => durationSeconds(headers.get(name))).filter((value): value is number => value !== null && value >= 0);
+  return values.length ? Math.ceil(Math.max(...values)) : undefined;
 }
 
 export interface ListenTranscriber {
@@ -86,11 +113,15 @@ export class GroqTranscriber implements ListenTranscriber {
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
       });
     } catch {
-      throw new GroqTranscriptionError('GROQ_FAILED');
+      throw new GroqTranscriptionError('GROQ_UNREACHABLE');
     }
     if (!response.ok) {
-      await response.text().catch(() => '');
-      throw new GroqTranscriptionError(response.status === 429 ? 'GROQ_RATE_LIMITED' : 'GROQ_FAILED', response.status);
+      const body = (await response.text().catch(() => '')).slice(0, 2_000).toLowerCase();
+      const retryAfter = retryAfterOf(response.headers);
+      const code: GroqTranscriptionFailure = response.status === 429 ? 'GROQ_RATE_LIMITED'
+        : response.status === 402 || /quota|credit|billing|insufficient|exceeded/u.test(body) ? 'GROQ_QUOTA'
+          : response.status >= 500 ? 'GROQ_UNREACHABLE' : 'GROQ_FAILED';
+      throw new GroqTranscriptionError(code, response.status, retryAfter);
     }
     let text = '';
     try {

@@ -12,7 +12,7 @@ import type { PlatformVoiceService } from './platformVoice.js';
 import { VOICE_FILLERS } from './voiceFillers.js';
 import { VOICE_MOUTH_LIMITS, VOICE_MOUTH_RESULTS, type VoiceMouthQueue, type VoiceMouthSay } from './voiceMouth.js';
 import { wavDurationMs } from '../../infra/models/groqTranscription.js';
-import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from '../voice/listening.js';
+import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from '../../infra/models/listening.js';
 
 /**
  * `/v1/platform/voice/*` (dc-voice, 2026-10-20): what a platform runtime in a voice channel asks of her one mind. The bridge's service
@@ -25,7 +25,8 @@ import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from '../voice/listen
  * - `POST wording`: event facts put into her words. `POST said`: what she said by herself, or was heard saying before being talked over.
  * - `POST transcribe`: one utterance (base64 WAV, 16 kHz mono, 30 s at most) to text through the listening transcriber the Windows
  *   resident uses (Groq, one shared allowance; owner 2026-10-26, docs/listening-contract.md). 503 `LISTEN_NOT_CONFIGURED` without
- *   `GROQ_API_KEY`. Whether it is answered is still decided by `turn`.
+ *   `GROQ_API_KEY`; `status: 'unavailable'` with `retryAfterSeconds` while Groq's free tier or limit is used up or it does not answer
+ *   (the body then transcribes the way it did). Whether it is answered is still decided by `turn`.
  */
 export interface PlatformVoiceRoutes {
   service: PlatformVoiceService;
@@ -148,7 +149,13 @@ async function transcribe(request: IncomingMessage, response: ServerResponse, ro
   }
   const heard = await listening.transcribe(audio, durationMs, 'discord');
   if (heard.status === 'ok') return sendJson(response, 200, { status: 'ok', text: heard.text, sttMs: heard.sttMs });
-  if (heard.status === 'limited') return sendJson(response, 200, { status: 'limited', sttMs: 0, limited: heard.limited });
+  if (heard.status === 'limited') {
+    return sendJson(response, 200, { status: 'limited', sttMs: 0, limited: heard.limited, retryAfterSeconds: heard.retryAfterSeconds });
+  }
+  // Groq's free tier or limit is used up, or it does not answer: the body transcribes the way it did until then.
+  if (heard.status === 'unavailable') {
+    return sendJson(response, 200, { status: 'unavailable', sttMs: heard.sttMs, reason: heard.reason, retryAfterSeconds: heard.retryAfterSeconds });
+  }
   return sendJson(response, 200, { status: heard.status, sttMs: heard.sttMs });
 }
 

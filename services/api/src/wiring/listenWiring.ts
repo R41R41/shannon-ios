@@ -5,7 +5,7 @@ import { GroqTranscriber } from '../infra/models/groqTranscription.js';
 import { configuredListenLimits, ListenUsage } from '../infra/models/listenUsage.js';
 import type { AddressedJudge } from '../mind/perception/addressed.js';
 import { createListenRoute, LISTEN_PATH } from '../surfaces/voice/listenRoute.js';
-import { Listening } from '../surfaces/voice/listening.js';
+import { Listening } from '../infra/models/listening.js';
 
 /**
  * Listening (owner 2026-10-26, docs/listening-contract.md): Groq transcription and the allowance the Windows resident and the Discord
@@ -14,7 +14,12 @@ import { Listening } from '../surfaces/voice/listening.js';
  */
 export function configuredListening(environment: Readonly<Record<string, string | undefined>>, databasePath: string): Listening | null {
   const key = environment.GROQ_API_KEY?.trim();
-  if (!key) return null;
+  // One line at start: which way listening goes (no key: the way it was, the resident's name waiting and the body's own Whisper).
+  if (!key) {
+    console.log('Shannon listening way=fallback reason=no_key');
+    return null;
+  }
+  console.log('Shannon listening way=groq model=whisper-large-v3-turbo');
   return new Listening(new GroqTranscriber(key), new ListenUsage(configuredListenLimits(environment), join(dirname(databasePath), 'listen-usage.json')));
 }
 

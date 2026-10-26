@@ -45,7 +45,9 @@ interface Stored {
   hours: Record<string, number>;
 }
 
-const emptyDay = (day: string): Stored => ({ day, requests: 0, audioSeconds: 0, billedSeconds: 0, estimatedUsd: 0, bySource: { windows: 0, discord: 0 }, hours: {} });
+const emptyDay = (day: string): Stored => ({
+  day, requests: 0, audioSeconds: 0, billedSeconds: 0, estimatedUsd: 0, bySource: { windows: 0, discord: 0 }, hours: {},
+});
 
 export class ListenUsage {
   private stored: Stored;
@@ -112,7 +114,8 @@ export class ListenUsage {
     try {
       const value = JSON.parse(readFileSync(this.path, 'utf8')) as Partial<Stored>;
       if (value.day !== day || typeof value.requests !== 'number') return emptyDay(day);
-      return { ...emptyDay(day), ...value, bySource: { windows: value.bySource?.windows ?? 0, discord: value.bySource?.discord ?? 0 }, hours: value.hours ?? {} };
+      const bySource = { windows: value.bySource?.windows ?? 0, discord: value.bySource?.discord ?? 0 };
+      return { ...emptyDay(day), ...value, bySource, hours: value.hours ?? {} };
     } catch {
       return emptyDay(day);
     }

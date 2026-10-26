@@ -582,13 +582,20 @@ describe('her Minecraft body\'s present in a voice reply (dc-live, SHANNON_MINEC
 describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
   const ADDRESSED = { SHANNON_DC_VOICE: 'on', SHANNON_ADDRESSED: 'on' };
 
-  /** A Jev that says "not to her" for talk about her (「ってさ」) and "to her" for everything else it is asked. */
+  /**
+   * A Jev that says "not to her" for talk about her (「ってさ」) and "to her" for everything else it is asked; for words without her name
+   * outside her window (asked only with the owner alone, since 2026-10-26), "to her" only for a question or a request.
+   */
   function judge() {
     const asked: string[] = [];
     const chooser = {
       decide: async (request: { state: unknown }) => {
-        const state = request.state as { utterance: string };
+        const state = request.state as { utterance: string; name_in_utterance?: string; follows_her_last_words?: boolean };
         asked.push(state.utterance);
+        if (state.name_in_utterance === 'none' && state.follows_her_last_words !== true) {
+          const asks = /[?？]|教えて|わかる/u.test(state.utterance);
+          return { value: { addressed: asks, target: asks ? 'shannon' : 'self', noul: asks ? 0.9 : 0.1, reason: asks ? 'asked_alone' : 'no_name' }, source: 'jev' as const };
+        }
         const about = /ってさ|だって/u.test(state.utterance);
         return { value: { addressed: !about, target: about ? 'about_shannon' : 'shannon', noul: about ? 0.05 : 0.95, reason: about ? 'about_her' : /シャノン/u.test(state.utterance) ? 'named' : 'continuation' }, source: 'jev' as const };
       },
@@ -596,13 +603,26 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     return { asked, judge: new AddressedJudge({ chooser }) };
   }
 
-  it('stays quiet for words that do not call her, also with the owner alone, and asks nobody', async () => {
+  it('with the owner alone asks Jev about words without her name and answers only a question or a request (2026-10-26)', async () => {
     const { asked, judge: j } = judge();
     const { say, model, close } = harness(ADDRESSED, undefined, j);
     const lines = await say('あー疲れた、今日は早く寝よう');
     expect(typeOf(lines)).toEqual(['decision', 'done']);
     expect(lines[0]).toMatchObject({ respond: false, reason: 'no_name' });
     expect(lines[1]).toMatchObject({ silent: true, reason: 'no_name' });
+    expect(model.requests).toHaveLength(0);
+    const asks = await say('明日の天気わかる？');
+    expect(asks[0]).toMatchObject({ respond: true, reason: 'asked_alone' });
+    expect(model.requests).toHaveLength(1);
+    expect(asked).toEqual(['あー疲れた、今日は早く寝よう', '明日の天気わかる？']);
+    await close();
+  });
+
+  it('stays quiet for words that do not call her in a room of several, and asks nobody', async () => {
+    const { asked, judge: j } = judge();
+    const { say, model, close } = harness(ADDRESSED, undefined, j);
+    const lines = await say('明日の天気わかる？', { participants: [OWNER, FRIEND] });
+    expect(lines[0]).toMatchObject({ respond: false, reason: 'no_name' });
     expect(model.requests).toHaveLength(0);
     expect(asked).toEqual([]);
     await close();
@@ -630,7 +650,8 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     expect(follow[0]).toMatchObject({ respond: true, reason: 'continuation' });
     expect(model.requests).toHaveLength(2);
     advance(40_000);
-    const late = await say('それってどういう意味？');
+    // After the window, in a room of several (with the owner alone it would be asked of Jev as words without her name).
+    const late = await say('それってどういう意味？', { participants: [OWNER, FRIEND] });
     expect(late[0]).toMatchObject({ respond: false, reason: 'no_name' });
     expect(model.requests).toHaveLength(2);
     expect(asked).toEqual(['シャノン、今日の予定を教えて', 'それってどういう意味？']);
@@ -655,7 +676,7 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     const { asked, judge: j } = judge();
     const { say, close } = harness(ADDRESSED, undefined, j);
     expect((await say('それってどういう意味？', { shannonSpokeMsAgo: 3_000 }))[0]).toMatchObject({ respond: true, reason: 'continuation' });
-    expect((await say('それってどういう意味？', { shannonSpokeMsAgo: 30_000 }))[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect((await say('それってどういう意味？', { shannonSpokeMsAgo: 30_000, participants: [OWNER, FRIEND] }))[0]).toMatchObject({ respond: false, reason: 'no_name' });
     expect(asked).toHaveLength(1);
     await close();
     const silent = harness(ADDRESSED, undefined, new AddressedJudge({ chooser: null }));
@@ -675,7 +696,8 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     const friend = await say('止めて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ', speakingNow: true });
     // A friend's 止めて is no stop word for her: it is judged like any other words (here she was speaking, so Jev is asked).
     expect(friend[0]).not.toMatchObject({ reason: 'stop' });
-    expect(asked).toEqual(['止めて']);
+    // The first 止めて (the owner alone, she was not speaking) was asked as words without her name; the friend's was asked too.
+    expect(asked).toEqual(['止めて', '止めて']);
     expect(model.requests.length).toBeGreaterThanOrEqual(3);
     await close();
   });

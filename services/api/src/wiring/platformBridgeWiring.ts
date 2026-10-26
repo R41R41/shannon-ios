@@ -32,7 +32,8 @@ import { VOICE_SENTENCE_CUT } from '../surfaces/text/chatSentenceStream.js';
 import { oneHeadEnabled } from '../contracts/oneHeadContract.js';
 import type { AddressedJudge } from '../mind/perception/addressed.js';
 export { configuredAddressedVoice } from './addressedWiring.js';
-import type { Listening } from '../surfaces/voice/listening.js';
+export { configuredListening, configuredListenRoute } from './listenWiring.js';
+import type { Listening } from '../infra/models/listening.js';
 
 export function createConfiguredPlatformBridgeRoute(
   environment: Readonly<Record<string, string | undefined>>,

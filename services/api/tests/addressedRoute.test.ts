@@ -28,6 +28,11 @@ function talkAboutIsNo() {
     decide: async (request: { state: unknown }) => {
       const state = request.state as Record<string, unknown>;
       asked.push(state);
+      // No name and not after her, with the owner alone (since 2026-10-26): to her only when it asks something of her.
+      if (state.name_in_utterance === 'none' && state.follows_her_last_words !== true) {
+        const asks = /[?？]|教えて|わかる/u.test(String(state.utterance));
+        return { value: { addressed: asks, target: asks ? 'shannon' : 'self', noul: asks ? 0.9 : 0.1, reason: asks ? 'asked_alone' : 'no_name' }, source: 'jev' as const };
+      }
       const about = /ってさ/u.test(String(state.utterance));
       return { value: { addressed: !about, target: about ? 'about_shannon' : 'shannon', noul: about ? 0.05 : 0.95, reason: about ? 'about_her' : /シャノン/u.test(String(state.utterance)) ? 'named' : 'continuation' }, source: 'jev' as const };
     },
@@ -45,20 +50,26 @@ describe('POST /v1/voice/addressed', () => {
     const no = await call({ text: 'シャノンってさ、昨日エンドラで死んだんだって' });
     expect(await no.json()).toMatchObject({ addressed: false, reason: 'about_her', source: 'jev' });
     expect(asked[0]).toMatchObject({ people_present: 1, alone_with_shannon: true, speaker: 'owner', shannon_spoke_seconds_ago: null });
-    // No name and not after her: no question, and not to her.
+    // No name and not after her, with the owner alone (owner 2026-10-26): Jev is asked, and talking to himself is not to her.
     const quiet = await call({ text: 'あー疲れた、今日は早く寝よう' });
-    expect(await quiet.json()).toMatchObject({ addressed: false, reason: 'no_name', source: 'rule', asked: false });
-    expect(asked).toHaveLength(2);
+    expect(await quiet.json()).toMatchObject({ addressed: false, reason: 'no_name', source: 'jev', asked: true });
+    const asks = await call({ text: '明日の天気わかる？' });
+    expect(await asks.json()).toMatchObject({ addressed: true, reason: 'asked_alone', source: 'jev', asked: true });
+    expect(asked).toHaveLength(4);
+    // Others listening (a guest call): no name and not after her is not asked at all.
+    expect(await (await call({ text: '明日の天気わかる？', guest: true })).json()).toMatchObject({ addressed: false, reason: 'no_name', source: 'rule', asked: false });
   });
 
   it('reads how long ago she spoke and whether others are listening', async () => {
     const { asked, judge } = talkAboutIsNo();
     const call = await serve(judge);
     expect(await (await call({ text: 'それってどういう意味？', shannonSpokeMsAgo: 4_000, lastLine: '次はネザーだね。' })).json()).toMatchObject({ addressed: true, reason: 'continuation' });
-    expect(await (await call({ text: 'それってどういう意味？', shannonSpokeMsAgo: 40_000 })).json()).toMatchObject({ addressed: false, asked: false });
+    // After her window, with the owner alone, a question is still asked of Jev (owner 2026-10-26); with others listening it is not.
+    expect(await (await call({ text: 'それってどういう意味？', shannonSpokeMsAgo: 40_000 })).json()).toMatchObject({ addressed: true, reason: 'asked_alone', asked: true });
+    expect(await (await call({ text: 'それってどういう意味？', shannonSpokeMsAgo: 40_000, guest: true })).json()).toMatchObject({ addressed: false, asked: false });
     await call({ text: 'シャノン、聞いて', guest: true });
     expect(asked[0]).toMatchObject({ shannon_spoke_seconds_ago: 4, shannon_last_line: '次はネザーだね。', follows_her_last_words: true });
-    expect(asked[1]).toMatchObject({ people_present: 2, alone_with_shannon: false });
+    expect(asked[2]).toMatchObject({ people_present: 2, alone_with_shannon: false });
   });
 
   it('refuses what it cannot judge: no device, a bad body, the switch off, too many', async () => {
@@ -93,7 +104,8 @@ describe('stop words on the route', () => {
     expect(await (await call({ text: 'ストップ' })).json()).toMatchObject({ addressed: true, reason: 'stop' });
     expect(await (await call({ text: 'ストップ', guest: true })).json()).toMatchObject({ addressed: false });
     expect((await call({ text: '止めて', speaking: 'yes' })).status).toBe(400);
-    expect(asked).toEqual([]);
+    // Only the first 止めて (alone, she was not speaking) went to Jev, as words without her name; the stop words passed by rule.
+    expect(asked).toHaveLength(1);
   });
 });
 

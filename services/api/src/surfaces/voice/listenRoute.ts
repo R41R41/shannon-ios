@@ -4,7 +4,8 @@ import { wavDurationMs } from '../../infra/models/groqTranscription.js';
 import { readJson, sendJson } from '../../infra/http/serverHttp.js';
 import type { AddressedInput, AddressedJudge, AddressedVerdict } from '../../mind/perception/addressed.js';
 import { nameMatch } from '../../mind/perception/addressedName.js';
-import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from './listening.js';
+import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening, type ListenResult } from '../../infra/models/listening.js';
+import type { ListenUsageToday } from '../../infra/models/listenUsage.js';
 
 /**
  * `POST /v1/voice/listen` (owner 2026-10-26, docs/listening-contract.md): the Windows resident listens all the time and sends each
@@ -17,6 +18,8 @@ import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from './listening.js'
  * Answer 200: `{ heard, respond, reason?, text?, sttMs, judgeMs?, usage, limited? }`. `heard`: words were made out; `respond`: she
  * answers (then `text` is the transcript); `limited`: the shared allowance is spent (the resident goes back to waiting for her name on
  * the PC until the next UTC day); `degraded: 'stt_error'`: Groq failed this time (the resident falls back for this utterance only).
+ * `degraded: 'groq_unavailable'` with `retryAfterSeconds`: Groq's free tier or limit is used up, or it does not answer; the resident listens
+ * the way it did (her name on the PC) and asks again after that many seconds. `limited` comes with `retryAfterSeconds` too.
  * 503 `LISTEN_NOT_CONFIGURED` without `GROQ_API_KEY`. The words are used for this request only and are written nowhere here.
  */
 export const LISTEN_PATH = '/v1/voice/listen';
@@ -58,6 +61,27 @@ function nameOnlyVerdict(text: string): Pick<AddressedVerdict, 'addressed' | 're
   return nameMatch(text) ? { addressed: true, reason: 'named' } : { addressed: false, reason: 'no_name' };
 }
 
+/** The request's audio, its length and its context, or null when it is not one this route takes. */
+function validatedListen(body: unknown): { audio: Uint8Array; durationMs: number; context: Context } | null {
+  const row = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
+  const audio = row ? decodedAudio(row.audio, MAXIMUM_AUDIO_BYTES) : null;
+  const context = row ? contextOf(row) : null;
+  const durationMs = audio ? wavDurationMs(audio) : null;
+  if (!audio || !context || durationMs === null || durationMs > LISTEN_MAXIMUM_MS) return null;
+  return { audio, durationMs, context };
+}
+
+/** The answer for an utterance Groq did not make into words: the allowance, Groq away, an error, or silence. */
+function unheard(heard: Exclude<ListenResult, { status: 'ok' }>, usage: ListenUsageToday): Record<string, unknown> {
+  if (heard.status === 'limited') return { heard: false, respond: false, limited: heard.limited, retryAfterSeconds: heard.retryAfterSeconds, sttMs: 0, usage };
+  if (heard.status === 'unavailable') {
+    const { reason, retryAfterSeconds, sttMs } = heard;
+    return { heard: false, respond: false, degraded: 'groq_unavailable', reason, retryAfterSeconds, sttMs, usage };
+  }
+  if (heard.status === 'error') return { heard: false, respond: false, degraded: 'stt_error', sttMs: heard.sttMs, usage };
+  return { heard: false, respond: false, reason: heard.status, sttMs: heard.sttMs, usage };
+}
+
 export function createListenRoute(dependencies: {
   listening: Listening | null;
   judge: AddressedJudge | null;
@@ -88,18 +112,12 @@ export function createListenRoute(dependencies: {
     } catch {
       return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'body is invalid.' });
     }
-    const row = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
-    const audio = row ? decodedAudio(row.audio, MAXIMUM_AUDIO_BYTES) : null;
-    const context = row ? contextOf(row) : null;
-    const durationMs = audio ? wavDurationMs(audio) : null;
-    if (!audio || !context || durationMs === null || durationMs > LISTEN_MAXIMUM_MS) {
-      return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'audio must be a WAV of 30 s at most.' });
-    }
-    const heard = await listening.transcribe(audio, durationMs, 'windows');
+    const asked = validatedListen(body);
+    if (!asked) return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'audio must be a WAV of 30 s at most.' });
+    const { context } = asked;
+    const heard = await listening.transcribe(asked.audio, asked.durationMs, 'windows');
     const usage = listening.usage.today();
-    if (heard.status === 'limited') return sendJson(response, 200, { heard: false, respond: false, limited: heard.limited, sttMs: 0, usage });
-    if (heard.status === 'error') return sendJson(response, 200, { heard: false, respond: false, degraded: 'stt_error', sttMs: heard.sttMs, usage });
-    if (heard.status !== 'ok') return sendJson(response, 200, { heard: false, respond: false, reason: heard.status, sttMs: heard.sttMs, usage });
+    if (heard.status !== 'ok') return sendJson(response, 200, unheard(heard, usage));
     const judge = dependencies.judge;
     const verdict = judge
       ? await judge.judge(judgedInput(heard.text, context, principal.scopeKey, dependencies.bodyRunning?.() ?? false))

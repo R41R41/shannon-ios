@@ -7,7 +7,14 @@
 - Windows の対話中の文字起こしは **gpt-live-transcribe**。
 - Discord の 🎤 投稿は **返事をした発話だけ**。
 
-**状態（2026-10-26）**: 作っただけで、本番には入れていない（Groq の課金プランがまだ受け付けられていないため、ライ氏の指示）。テストと実機での確かめも、していない。branch は 3 つとも `codex/shannon/listening`。
+**状態（2026-10-26）**: ライ氏の決定「GROQ_API_KEY は無料枠でも多少動くので、無料枠で動くうちは使って、切れていたら今の方式に切り替える」で、Groq が使えない時の切り替えを足した（下の「Groq が使えない時」）。branch は 3 つとも `codex/shannon/listening`。
+
+## Groq が使えない時（今の方式へ自動で切り替え、戻ったら Groq へ）
+
+- 頭（`listening.ts`）: 鍵が無い（起動時に `Shannon listening way=fallback reason=no_key` を 1 行）、429（`GROQ_RATE_LIMITED`）、402 か quota・credit の言葉（`GROQ_QUOTA`）、つながらない・5xx（`GROQ_UNREACHABLE`）なら、Groq が言う時刻（Retry-After か、rate-limit の reset の遅い方）まで、言わなければ 1・5・15・60 分（続けて失敗するたびに延ばす）だけ、Groq に頼まない。その間は `unavailable` と `retryAfterSeconds` を返す。期限の後の最初の発話で Groq に聞き直し、答えたら戻る。変わるたびに 1 行（`Shannon listening way=fallback reason=… retryAfter=…s until=…` / `way=groq`）。その他の 4xx（`GROQ_FAILED`）は、その発話だけの失敗。
+- Windows: `unavailable`・`limited`・503 を受けたら、頭が言う秒数（言わなければ 10 分、30 秒〜1 日）だけ、今の方式（手元の Silero＋ReazonSpeech の名前の待ち受け）で聞き、その後に聴き流しへ戻して頭に聞き直す。変わるたびに `voice-log.jsonl` に `listen-way`（code = groq / local:理由）を 1 行。
+- Discord: 頭が Groq を使えない時（`not_configured`・`unavailable`・`limited`・`error`・古い頭の 404）は、その発話を今の方式（体の Whisper。体に Groq の鍵は無いので OpenAI whisper-1）で文字にする。頭には毎回聞く（同じ VM の中）ので、頭が Groq に戻れば次の発話から戻る。変わるたびに `[DcVoice] stt way=whisper reason=…` / `way=groq` を 1 行。
+- どの場合も、今より高い方式へは流れない。スイッチは無く、鍵の有無と Groq の答えだけで決まる。鍵が要るのは頭の api.env（`GROQ_API_KEY`）だけ（Windows と体は頭を通す）。
 
 ## 流れ
 
