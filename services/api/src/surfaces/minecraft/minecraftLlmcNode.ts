@@ -153,11 +153,13 @@ export function noteItemStart(taskId: string, node: string | null, current: stri
 }
 /**
  * The nodes of the preparation before the descent (run 40: p3 「食料を集める（狩り）」 and p4 「地下の準備」 were never the current node, the plan's now followed the
- * acts to the iron at 265 s, and she went down with 17.6 of 40 food points, no gold and no food hunted): a node that asks for food (its doneWhen has `food>=`) or
+ * acts to the iron at 265 s, and she went down with 17.6 of 40 food points, no gold and no food hunted): a node that asks for food (its doneWhen has
+ * `food>=`) or
  * whose title says food, hunting or preparing. The current node is not moved away from one that is open (`followNode`), and the live says so (`prepNote`).
  */
 const PREP_TITLE = /食料|食べ物|狩|動物|準備/u;
-export const isPrepNode = (node: { title: string; doneWhen?: string | undefined }): boolean => /food>=/u.test(node.doneWhen ?? '') || PREP_TITLE.test(node.title);
+export const isPrepNode = (node: { title: string; doneWhen?: string | undefined }): boolean =>
+  /food>=/u.test(node.doneWhen ?? '') || PREP_TITLE.test(node.title);
 /** The words beside the current node's line while it is a preparation node that is not done: the work may go on elsewhere, the node stays. */
 export const PREP_NOTE = '※準備の節（済むまで今の節は移らない。済ませてから下りる）';
 /**
@@ -171,23 +173,35 @@ export const PREP_NOTE = '※準備の節（済むまで今の節は移らない
  * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the tags do not agree.
  */
 export function followNode(taskId: string, tree: PlanTree): { to: string; from: string | null; acts: number } | null {
-  const order = orderedPlan(tree.nodes), byId = new Map(tree.nodes.map(node => [node.id, node] as const));
+  const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), { under, open } = questions;
+  // A parent's tag says nothing of the work under it: it is not counted, and it does not break a run.
+  const counted = (started.get(taskId) ?? []).filter(tag => !(tag.current && tag.node !== tag.current && under(tag.current, tag.node)));
+  const tags = counted.slice(-FOLLOW_AFTER), target = tags[0]?.node;
+  if (tags.length < FOLLOW_AFTER || !target || tags.some(tag => tag.node !== target || tag.current !== tree.current) || !open(target)) return null;
+  const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
+  if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
+  // Run 40: an open preparation node holds the current node (the work for another node may go on; the node that asks for the food stays the now).
+  if (heldByPreparation(tree, leaf.id, questions)) return null;
+  return { to: leaf.id, from: tree.current, acts: tags.length };
+}
+
+/** Whether the current node is an open preparation node that the work for `leaf` would move the now away from (not for the node itself or one under it). */
+function heldByPreparation(tree: PlanTree, leaf: string, questions: ReturnType<typeof treeQuestions>): boolean {
+  const now = tree.current ? questions.byId.get(tree.current) : undefined;
+  if (!now || !questions.open(now.id) || !isPrepNode(now)) return false;
+  const next = questions.byId.get(leaf);
+  return !!next && !isPrepNode(next) && !questions.under(leaf, now.id);
+}
+
+/** The tree's own questions: a node is open (not done, not blocked), and one is itself or under another. */
+function treeQuestions(tree: PlanTree) {
+  const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const under = (id: string, top: string): boolean => {
     for (let at: string | null = id, guard = 0; at && guard < 16; at = byId.get(at)?.parentId ?? null, guard += 1) if (at === top) return true;
     return false;
   };
-  // A parent's tag says nothing of the work under it: it is not counted, and it does not break a run.
-  const counted = (started.get(taskId) ?? []).filter(tag => !(tag.current && tag.node !== tag.current && under(tag.current, tag.node)));
-  const tags = counted.slice(-FOLLOW_AFTER), target = tags[0]?.node;
-  if (tags.length < FOLLOW_AFTER || !target || tags.some(tag => tag.node !== target || tag.current !== tree.current)) return null;
   const open = (id: string) => byId.get(id)?.state !== 'done' && byId.get(id)?.state !== 'blocked' && byId.has(id);
-  if (!open(target)) return null;
-  const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
-  if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
-  // Run 40: a preparation node that is open holds the current node (the work for another node may go on; the node that asks for the food stays the now).
-  const now = tree.current ? byId.get(tree.current) : undefined;
-  if (now && open(now.id) && isPrepNode(now) && !isPrepNode(leaf) && !under(leaf.id, now.id)) return null;
-  return { to: leaf.id, from: tree.current, acts: tags.length };
+  return { byId, under, open };
 }
 
 /** For tests: no task holds a tally. */
