@@ -132,3 +132,8 @@ node --import tsx tests/decisionReplay/report.ts                 # 表（data/re
 - 10/26 の動作確認の実走（dragon26）を r39 として読む: `ingest39.ts <フォルダ>` が data/export5.txt を作る（`load.ts`・`allRuns.ts` に r39）。場面は `makeScenes39.ts`（`DECISION_REPLAY_SCENES_DIR=scenes-d`、`list39.ts`・`flags39.ts` は選ぶ時の一覧）。`checks.ts` の `answerOf` は、短い書き方の行（rel52 以降の本番の答え）を手に戻してから読む。
 - 基準の木（fb011ad）と候補の木（566abe5）にこのフォルダを写して、それぞれで `run6.ts --variant=B|Q` を回す。候補の live には `candidateAdapter.ts` の `withQueue` が「列: 空」の行を足す。採点は候補の木で `judgeQ.ts`、表は `reportQ.ts`。版と場面は `sonnetQ.ts`。
 - 結果のまとめ: `results/task-queue-20261026.md`。
+
+## 10/27 の追加: 実走 39 の直しと新しい手 7 つ（mc-run39-fixes）の確かめ
+
+- 実走 39（rel55b、台の r40）を `ingest40.ts <run39-dump>` で読み（data/export6.txt）、新しい手が効くはずの 10 場面を `makeScenes40.ts`（`scenes-e/`）で作る。前回の 30 場面（`scenes-d/`）に足して 40。基準 P の dragon26 の答えは前回の列の版の答え（入力が同じ）。版と場面は `sonnetH.ts`、採点は `judgeH.ts`（`JUDGE_HANDS=neutral` が公平な言い方。新しい手の契約と欄を採点者に渡す）、表は `reportH.ts`。
+- 結果のまとめ: `results/run39-fixes-20261027.md`。

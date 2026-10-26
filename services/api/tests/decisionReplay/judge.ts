@@ -22,6 +22,14 @@ const SYSTEM = [
   '自動検査の欄は機械が先に見た事実です（通った／外れた）。座標・地図の細かい読みは、状況の文にある事実だけを根拠にしてください。',
   '答えに pre・done・repeat・replace の欄があれば、それは体の「やることの列」の欄です。pre: 項目を始める直前に体が確かめる条件（満たさなければ始めず後ろも捨てる）。'
     + 'done: 満たした所で手の途中でも済みにする条件。repeat: 手の組を最大その回数まわす（rel の手の組なら足の位置から数え直す）。これらを使うかどうかは採点の対象ではありません。使った場合は、意味どおりに働いて場面の要を満たすかで見てください。',
+  '答えに go・obsidian・fight・mine・make・portal・smelt の手があれば、それは「範囲を挙げて体に任せる手」です。LLM が何を・どこで・どこまでを決め、体は細部（道のマス・立ち位置・繰り返し・小さな失敗の直し）だけをこなし、挙げた範囲の外で目標を探さず選びません。契約: '
+    + 'go X,Y,Z（座標が 2〜8 個なら着けばよい候補）dig=掘ってよい物（stone・dirt・sand・wood などの短縮語。鉱石・箱・かまど・ベッド・扉・黒曜石・液体は掘らない）place=置いてよい物 seconds=上限 maxDrop=一度に落ちてよい段 maxDig maxPlace waterOk（溶岩・火・マグマの隣は必ず避ける。道の細部は体の仕事）。'
+    + 'obsidian at=溶岩の源のマス（1〜8）count（水バケツで注ぎ・固め・掘り・汲み戻す。ダイヤのツルハシと水バケツが要る）。fight target=#id か種類 stance（fight か flee）item retreatHp range seconds（挙げた相手だけ）。'
+    + 'mine block=種類 at=鉱脈のマス count tool canDig maxDig（同じ種類のつながりだけをたどって掘る）。make item count（途中の物を作る連鎖。材料が足りなければ何も作らず一覧を返す。作業台が近くに無ければ持っていれば置く）。'
+    + 'portal at=枠の内側の左下 axis（x か z）enter（黒曜石 10 個と火打ち金が要る）。smelt items=[{item,count}] fuel fuelCount furnaces at（入れたら手は終わり、焼き上がりは待たない。取り出しは furnace の手）。'
+    + (process.env.JUDGE_HANDS === 'neutral'
+      ? '新しい手を使うかどうかは採点の対象ではありません。体の中身（道を引く・黒曜石を作る等）はここからは見えないので、体が契約どおりに動くと仮定します。使った場合は、LLM が決める部分（行き先・対象・許す物・上限・理由）が契約の範囲に収まり、場面の状況に合うかだけで見てください。使わない答えは、書いた手が場面に合うかで同じように見てください。'
+      : '新しい手を使うかどうかは採点の対象ではありません。使った場合は、引数が契約の範囲に収まり、場面の要を満たす（その手で足りる所を細かい手で書かない・足りない所を任せない）かで見てください。'),
   '理由は 40 字以内の日本語で。grade ツールだけを 1 回呼んでください。',
 ].join('\n');
 const TOOL: Anthropic.Tool = { name: 'grade', description: '各候補の採点を出す。',
@@ -37,6 +45,9 @@ export function handLine(hand: Hand): string {
   if (hand.at && !Array.isArray(hand.at)) bits.push(`at=${JSON.stringify(hand.at).slice(0, 60)}`);
   else if (hand.at?.length) bits.push(`at=${hand.at.slice(0, 4).map(pos).join('')}${hand.at.length > 4 ? `…×${hand.at.length}` : ''}`);
   for (const name of ['block', 'item', 'target', 'tool', 'seconds', 'n', 'hold', 'exposeOk', 'face', 'op', 'on', 'onFail'] as const) if (hand[name] !== undefined) bits.push(`${name}=${String(hand[name])}`);
+  // 10/27: 新しい手（go・obsidian・fight・mine・make・portal・smelt）の欄も出す（上に無い欄を、そのまま key=値 で）。
+  const shown = new Set(['do', 'to', 'path', 'at', 'block', 'item', 'target', 'tool', 'seconds', 'n', 'hold', 'exposeOk', 'face', 'op', 'on', 'onFail', 'rel', 'note']);
+  for (const [key, value] of Object.entries(hand)) if (!shown.has(key) && value !== undefined) bits.push(`${key}=${(typeof value === 'string' ? value : JSON.stringify(value)).slice(0, 70)}`);
   if ((hand as { rel?: unknown }).rel === true) bits.push('rel（座標は足からの差）');
   return `${hand.do} ${bits.join(' ')}`.trim();
 }
