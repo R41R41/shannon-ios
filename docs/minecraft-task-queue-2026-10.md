@@ -9,7 +9,6 @@ The head's side of the wire between the head (this repo) and the body (Shannon r
   in the step, and the step commits only when nothing is unsettled.
 - The next decision is asked when no item waits and the running one has T seconds left (T: the median of the last ten decisions, 2 to 8 s).
 
-Worktrees: head `C:\Shannon\shannon-ios-wt\mc-task-queue` (branch codex/shannon/mc-task-queue, base 0f17ef0), body `C:\Shannon\Shannon-mc-task-queue` (same branch name, base 4ac81af).
 Everything below is NOT switchable: there is no flag. Every mc.act from the head becomes a queue item (`command.queue` present); a command without `queue` (probe, view, stop, release, capture, older head) keeps working as before.
 
 ## 1. Condition JSON (`ActCondition`), the only form the body reads (the head parses text into it; the body never parses text)
