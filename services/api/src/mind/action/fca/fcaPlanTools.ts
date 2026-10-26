@@ -116,7 +116,12 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
    */
   seen?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[]; closed?: readonly string[];
     /** r9: nodes whose place or dimension holds while a child is open, so are not done (`p2←p2.1,p2.3`): said in the log when the set changes. */
-    held?: readonly string[] } | null }):
+    held?: readonly string[] } | null;
+  /**
+   * run 26: after the nodes seen done, the node the model's last acts were tagged for, when it is not the current one: the current node moves to it
+   * (`followNode`, `minecraftLlmcNode.ts`) and the plan's note says so once. Absent: the current node moves only by the model's plan.update and by done.
+   */
+  follow?(tree: PlanTree): { to: string; from: string | null; acts: number } | null }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
   const kept = readPlanTree((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
   let tree = kept ?? emptyPlanTree(), changed = false, note: string | undefined;
@@ -147,6 +152,14 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       if (held) say(`Shannon FCA plan held task=${parts.taskId} revision=${tree.revision} held=${held}`);
     }
   };
+  /** run 26: the current node follows the node the model keeps working on (a change of the head's own, said in the log and once in the plan's note). */
+  const followed = () => {
+    let to: ReturnType<NonNullable<typeof parts.follow>> = null;
+    try { to = tree.nodes.length ? parts.follow?.(tree) ?? null : null; } catch { to = null; }
+    if (!to || !amend({ ops: [], current: to.to }, 'followed', ` from=${to.from ?? '-'} to=${to.to} acts=${to.acts}`)) return;
+    const words = `今の節を [${to.to}] に進めた（直前の ${to.acts} つの act が続けて [${to.to}] の札だったため。順を変えるなら plan.update の current で戻す。飛ばした節は順のまま残っている）`;
+    note = note ? `${note} ${words}` : words;
+  };
   /** A tree handed in (the first plan) replaces the one held, its done nodes carried over (`inbox.take`). */
   const adopt = () => {
     const handed = parts.inbox?.take(parts.taskId, tree);
@@ -160,6 +173,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
     view() {
       adopt();
       settle();
+      followed();
       return tree.nodes.length ? { revision: tree.revision, ...planPath(tree), ...(note ? { note } : {}) } : null;
     },
     ...(parts.compact ? { liveView() {

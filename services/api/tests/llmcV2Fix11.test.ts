@@ -166,7 +166,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   const bare = frame({ position: { x: 0, y: 0, z: 0 }, dimension: 'overworld', inventory: [] });
   it('keeps a milestone reached when its item is used up and she is back in the overworld (the plan holds the node done)', () => {
     // The obsidian went into the gate, she went through and came back: the pack holds nothing, the dimension is the overworld.
-    expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6', 'p7.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 1,800 秒（あと 150 秒）');
+    expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6', 'p7.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 1,800 秒（あと 150 秒）・まだの節目: ベッド（目安 150 秒。飛ばしたなら plan.update に書く）');
     expect(meterLine(done(['p7', 'p7.1', 'p7.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒（節目は全部済んだ）');
   });
   it('does not go back to an earlier milestone, and shows no next target after the last', () => {

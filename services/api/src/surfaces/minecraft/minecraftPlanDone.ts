@@ -95,9 +95,24 @@ function carried(counts: ReadonlyMap<string, number>, item: string): number {
   for (const [name, count] of counts) if (name === item || name.endsWith(`_${item}`) || (item === 'gold_armor' && GOLD_ARMOUR.test(name))) total += count;
   return total;
 }
+/**
+ * run 26 (2026-10-26: Opus's p1 `have:log>=8` never held, since the logs went into planks, a table and a pickaxe as they came (5 at most at once), and the
+ * plan's now said 原木を集める 未: log 0/8 for 471 s): what is made of the materials that are used up as they are gathered. A `have:` of such a material
+ * (a count the work could need: `MADE_FROM_UP_TO`) also holds when she carries what it was made into, which does not go back the way the material does.
+ * A bigger count (`have:cobblestone>=64`, blocks to stand on) is a stock, and is only the pack's.
+ */
+const MADE_INTO: ReadonlyArray<{ material: RegExp; into: RegExp; upTo: number }> = [
+  { material: /^(?:log|planks|stick)$/u, upTo: 24,
+    into: /^(?:crafting_table|(?:wooden|stone|golden|iron|diamond|netherite)_(?:pickaxe|axe|shovel|hoe|sword)|shield|chest|w+_bed|bed)$/u },
+  { material: /^cobblestone$/u, upTo: 8, into: /^(?:furnace|(?:stone|iron|diamond|netherite)_(?:pickaxe|axe|shovel|hoe|sword))$/u },
+];
+function madeInto(counts: ReadonlyMap<string, number>, clause: Extract<DoneClause, { kind: 'have' }>): boolean {
+  const rule = MADE_INTO.find(item => item.material.test(clause.item) && clause.count <= item.upTo);
+  return !!rule && [...counts].some(([name, count]) => count > 0 && rule.into.test(name));
+}
 function holds(clause: DoneClause, facts: DoneFacts): boolean {
   switch (clause.kind) {
-    case 'have': return carried(facts.counts, clause.item) >= clause.count;
+    case 'have': return carried(facts.counts, clause.item) >= clause.count || madeInto(facts.counts, clause);
     case 'dim': return facts.dimension === clause.dimension;
     case 'food': return facts.food >= clause.points;
     case 'at': return !!facts.feet && (!clause.dimension || facts.dimension === null || facts.dimension === clause.dimension)

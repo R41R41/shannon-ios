@@ -26,6 +26,7 @@ import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { llmcWaitLine } from '../surfaces/minecraft/minecraftLlmcReadiness.js';
 import { seenDoneUpdate } from '../surfaces/minecraft/minecraftPlanDone.js';
+import { followNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
 import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
 import { LLMC_PROBE } from '../surfaces/minecraft/minecraftLlmcProbe.js';
@@ -215,7 +216,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   noteLlmcFeet(step.taskId, () => feetOf(observe()));
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    rules: true, compact: true, seen: tree => seenDoneUpdate(tree, observe()) });
+    rules: true, compact: true, seen: tree => seenDoneUpdate(tree, observe()), follow: tree => followNode(step.taskId, tree) });
   const worldOf = () => {
     const world = decided()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;

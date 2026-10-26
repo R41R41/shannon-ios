@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { furnaceWaitNote } from '../src/surfaces/minecraft/minecraftLlmcFurnaceWait.js';
+import { forgetFurnaceStands, furnaceWaitNote } from '../src/surfaces/minecraft/minecraftLlmcFurnaceWait.js';
 import { rewriteLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
 import { obsidianWays } from '../src/surfaces/minecraft/minecraftLlmcObsidianWays.js';
 import { bedsIn, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
@@ -102,10 +102,20 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     expect(furnaceWaitNote(waits(30), world(0))).toBeNull();
     expect(furnaceWaitNote(waits(30), frame({ jobs: [{ status: 'different_dimension', remainingEstimateMs: 90_000, input: 'raw_iron', count: 4, position: at(1, 2, 3) }] }))).toBeNull();
   });
-  it('is a note on the result of the act through the replay\'s entry, and the act goes whole', () => {
-    const entry = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000));
+  it('is not sent the first time (a stand of waits only), and the same act again is sent whole with the note', () => {
+    forgetFurnaceStands();
+    const first = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand');
+    expect(first.guard?.stopped).toBe(true);
+    expect(first.guard?.text).toContain('立って待つだけの手（合わせて 60 秒）は送らない。かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
+    expect(first.guard?.text).toContain('2〜3基に分けて同時に焼く');
+    const entry = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand');
     expect(entry.note).toContain('かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
     expect(entry.guard).toBeUndefined();
+    // Hands that work beside the wait, an urgent decision, and a short wait are never held.
+    forgetFurnaceStands();
+    expect(candidateAct({ hands: ['dig 1,0,0 rel', 'wait 30'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
+    expect(candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand', { urgent: true }).guard).toBeUndefined();
+    expect(candidateAct({ hands: ['wait 5'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
     expect(V2_ALWAYS).toContain('かまどに入れたら焼ける間（jobs の残り秒）は掘る・集める・作る手を入れる（wait は他に手が無い時だけ）');
   });
 });

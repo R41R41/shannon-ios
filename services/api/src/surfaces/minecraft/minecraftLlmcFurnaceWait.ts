@@ -1,4 +1,5 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import type { HandStop } from './minecraftLlmcHandGuards.js';
 
 /**
  * mb-llmc v2 (実走37: 鉄 22 個を 1 つのかまどに入れ、wait×6 で 175 秒立って待った。他の手は何も入れなかった): an act with a long wait while a furnace works
@@ -12,13 +13,13 @@ const num = (value: unknown): number | null => typeof value === 'number' && Numb
 export const LONG_WAIT_SECONDS = 10;
 
 /** The furnaces still working, soonest first: where, what and the seconds left. */
-function working(frame: BodyObservation | null): Array<{ at: string; what: string; left: number }> {
+function working(frame: BodyObservation | null): Array<{ at: string; what: string; left: number; count: number }> {
   const jobs = rec(frame?.state.world)?.jobs;
   return (Array.isArray(jobs) ? jobs : []).flatMap(item => {
     const job = rec(item), at = rec(job?.position), ms = num(job?.remainingEstimateMs);
     if (!job || !at || ms === null || ms <= 0 || job.status !== 'waiting_external') return [];
     const where = `(${String(at.x)},${String(at.y)},${String(at.z)})`;
-    return [{ at: where, what: `${String(job.input ?? '')}×${String(job.count ?? '')}`, left: Math.round(ms / 1000) }];
+    return [{ at: where, what: `${String(job.input ?? '')}×${String(job.count ?? '')}`, left: Math.round(ms / 1000), count: num(job.count) ?? 0 }];
   }).sort((a, b) => a.left - b.left);
 }
 
@@ -35,3 +36,40 @@ export function furnaceWaitNote(input: unknown, frame: BodyObservation | null): 
   const shown = furnaces.slice(0, 2).map(item => `${item.at} の ${item.what} はあと約 ${item.left} 秒`).join('、');
   return `手 ${waits[0]!.hand} wait（合わせて ${Math.round(total)} 秒）: かまどの焼き上がりまで ${shown}。立って待たず、その間に掘る・集める・作る手を入れられる`;
 }
+
+/**
+ * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: 4 stands at the furnace, 244 s of 1,340, each time 6〜7 pieces in one furnace; the note above was in
+ * the result every time and the next act was wait only, four times of four; one of them wrote 「焼き上がりまで待ちつつ、足元の鉄を掘る」 and sent wait 30 + wait 30):
+ * an act whose hands are only waits (and the furnace's own, equip, look, eat) that add up to `STAND_REFUSE_SECONDS` while a furnace works is not sent the first
+ * time, and the fact comes back at once. The same act again, straight after, is sent: waiting may be the best there is. Not in an urgent decision.
+ * Pieces to smelt are split over more furnaces (a furnace takes 10 s a piece): the fact says so when one furnace holds `SPLIT_PIECES` or more.
+ */
+export const STAND_REFUSE_SECONDS = 20;
+const SPLIT_PIECES = 5;
+const STAND_KINDS = new Set(['wait', 'furnace', 'equip', 'look', 'eat']);
+const refused = new Map<string, number>();
+export function furnaceStandStop(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): HandStop | null {
+  const hands = Array.isArray(rec(input)?.hands) ? (rec(input)!.hands as unknown[]).map(rec) : [];
+  const total = hands.reduce((sum, hand) => sum + (hand?.do === 'wait' ? num(hand.seconds) ?? 0 : 0), 0);
+  const furnaces = working(frame);
+  const standing = hands.length > 0 && hands.every(hand => hand !== null && STAND_KINDS.has(String(hand.do)));
+  if (urgent || !standing || total < STAND_REFUSE_SECONDS || !furnaces.length) {
+    refused.delete(taskId);
+    return null;
+  }
+  if (refused.has(taskId)) {
+    refused.delete(taskId);
+    return null;
+  }
+  refused.set(taskId, 1);
+  if (refused.size > 32) refused.delete(refused.keys().next().value as string);
+  const first = hands.findIndex(hand => hand?.do === 'wait') + 1;
+  const shown = furnaces.slice(0, 2).map(item => `${item.at} の ${item.what} はあと約 ${item.left} 秒`).join('、');
+  const many = furnaces.find(item => item.count >= SPLIT_PIECES);
+  const split = many ? `。${many.what} は1基で ${many.count * 10} 秒かかる: 次は2〜3基に分けて同時に焼くと待ちが半分以下になる` : '';
+  return { hand: Math.max(1, first), kind: 'wait', code: 'furnace_stand',
+    line: `立って待つだけの手（合わせて ${Math.round(total)} 秒）は送らない。かまどの焼き上がりまで ${shown}${split}。`
+      + 'その間に掘る・集める・作る・狩る手を入れて出し直す。待つのが本当に最善なら、同じ act をもう一度出せば送る' };
+}
+/** For tests: no task has been refused a stand. */
+export function forgetFurnaceStands(): void { refused.clear(); }

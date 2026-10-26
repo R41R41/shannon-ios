@@ -175,7 +175,8 @@ export const FIRST_PLAN_SYSTEM_R5 = [
   '- doneWhen は、観測で確かめられる形で書く（頭のコードが毎判断に確かめて、その節を済みにし、今の節を次へ進める）。'
     + 'have:物 か have:物>=数（持ち物・着ている物。物は id か、log・planks・bed・bucket・slab のような id の末尾）、dim:the_nether か dim:the_end（次元）、'
     + 'at:x,y,z~半径（その近くに立つ）、food>=点（持っている食料点）。& で全部、| でどれか（& が先）。この形は 20 字を超えてよい（120 字まで）。',
-  '- 例: "have:stone_pickaxe&have:stone_sword"、"have:log>=6"、"food>=40&have:bed"、"have:iron_ingot>=24|have:iron_chestplate"、"dim:the_nether"、'
+  '- 例: "have:stone_pickaxe&have:stone_sword"、"have:log>=6|have:wooden_pickaxe"、"food>=40&have:bed"、'
+    + '"have:iron_ingot>=24|have:iron_chestplate"、"dim:the_nether"、'
     + '"at:196,69,237~6"。観測で確かめようのない節（探す・回る・見る）は ""。',
 ].join('\n');
 /**
@@ -224,7 +225,8 @@ export const FIRST_PLAN_SYSTEM_R9 = [
   '済みの形と順番（r9）:',
   '- at: には次元を付ける: "at:196,69,237~6@overworld"、ネザーなら "@nether"（ネザーの x・z はオーバーワールドの 1/8。付けないと別の次元の同じ数字で済みになる）。',
   '- 子のある節の doneWhen は、子の仕事が済んだ後にだけ真になる持ち物の形（have:blaze_rod>=7 など）にする。dim:・at:（着いた事）は子の無い節に書く。'
-    + '親が済んでも子は済みにならない: 子は自分の doneWhen（無ければ計画の更新）で済む。消費して無くなる物（板・棒・原木）は子の doneWhen にしない。',
+    + '親が済んでも子は済みにならない: 子は自分の doneWhen（無ければ計画の更新）で済む。消費して無くなる物（板・棒・原木）は子の doneWhen にしない。'
+    + '集める節（原木・丸石）の doneWhen は、集めた物で作った物との | にする（板や道具にすると数が減って戻る）: "have:log>=8|have:wooden_pickaxe"。',
   '- 順番: ブレイズロッド（7 本以上）の節はエンダーパールの節より前。「出発の点検」には金の防具 1 つ（have:gold_armor）も入れる（ネザーのピグリンは金の防具を着ていないと襲う）。',
 ].join('\n');
 

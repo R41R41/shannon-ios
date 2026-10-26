@@ -3,7 +3,8 @@ import type { ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
-import { furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
+import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
+import { descentNote } from './minecraftLlmcReadiness.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
 
@@ -39,11 +40,14 @@ const handLine = (stop: HandStop): string => `手 ${stop.hand} ${stop.kind}: ${s
 export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, notes?: string[]): Held | null {
   const wait = furnaceWaitNote(input, frame);
   if (wait) notes?.push(wait);
+  const dive = urgent ? null : descentNote(input, frame);
+  if (dive) notes?.push(dive);
   const options = { bodyRules: true, continuePlace: true, ...(notes ? { notes } : {}) };
   const stand = preflightOfFrame(input, frame, taskId, options), rule = ruleGuardOfFrame(input, frame, taskId);
   const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
-  for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent)]) {
+  for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
+    furnaceStandStop(input, frame, taskId, urgent)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
   }
   return found.reduce<Held | null>((first, next) => !first || next.hand < first.hand ? next : first, null);

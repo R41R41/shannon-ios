@@ -134,8 +134,8 @@ describe('the plan\'s done is each node\'s own (run 33: p2.3 with 0 rods, p4 aft
       ['c', null, '次']], 'a.1');
     const facts = doneFacts(frame({ position: at(0, 64, 0), dimension: 'the_nether', inventory: [{ name: 'iron_pickaxe', count: 1 }, { name: 'cooked_beef', count: 2 }] }))!;
     const done = nodesSeenDone(tree, facts);
-    // a: by the pack, its children untouched (planks consumed: a.1 stays as it is); b.2 by its own dim; b waits for b.1 (food 41.6 < 100).
-    expect(done).toEqual(['a', 'b.2']);
+    // a: by the pack; run 26: a.1 (8 planks, used up) is done by the pickaxe made of them; a.2 untouched; b.2 by its own dim; b waits for b.1 (food 41.6 < 100).
+    expect(done).toEqual(['a', 'a.1', 'b.2']);
     const applied = applyPlanUpdate(tree, { ops: done.map(id => ({ op: 'set' as const, id, state: 'done' as const })) });
     expect(applied.tree.current).toBe('b.1');
     expect(planPath(applied.tree).next).toEqual([expect.stringContaining('c ')]);

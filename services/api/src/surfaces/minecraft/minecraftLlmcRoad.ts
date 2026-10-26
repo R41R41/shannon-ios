@@ -20,6 +20,8 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: '黒曜石 10 個', seconds: 1_500, doneWhen: 'have:obsidian>=10' },
   { name: 'ネザー', seconds: 1_800, doneWhen: 'dim:the_nether' },
 ]);
+/** The milestones whose item stays in the pack (a bed, the pickaxes, the bucket): one passed over is still to do. */
+const KEPT_MILESTONES: ReadonlySet<string> = new Set(['have:bed', 'have:iron_pickaxe', 'have:bucket', 'have:diamond_pickaxe']);
 const grouped = (seconds: number): string => seconds.toLocaleString('en-US');
 /** The targets as the instructions say them: 「ベッド 150・鉄のツルハシ 250・…・ネザー 1,800」. */
 export const milestoneWords = (): string => DRAGON_MILESTONES.map(item => `${item.name} ${grouped(item.seconds)}`).join('・');
@@ -70,13 +72,29 @@ export function meterLine(tree: PlanTree | null | undefined, observation: BodyOb
   if (!tree || !isDragonPlan(tree) || elapsedMinutes === null || !facts) return null;
   const now = Math.round(elapsedMinutes * 60);
   let last = -1;
-  DRAGON_MILESTONES.forEach((item, index) => {
+  const reached = DRAGON_MILESTONES.map((item, index) => {
     const predicate = parseDoneWhen(item.doneWhen);
-    if ((predicate && predicateHolds(predicate, facts)) || doneInPlan(tree, item.doneWhen)) last = index;
+    const yes = (!!predicate && predicateHolds(predicate, facts)) || doneInPlan(tree, item.doneWhen);
+    if (yes) last = index;
+    return yes;
   });
-  const next = DRAGON_MILESTONES[last + 1];
-  if (!next) return `目安: 今 ${grouped(now)} 秒（節目は全部済んだ）`;
+  // run 26: a node of the plan names a milestone's own condition (「地下のベッドを取る」, have:bed>=1). The node she is on makes the meter point at it, though a later
+  // milestone is reached; and a milestone passed over (the bed after the bucket) is still said while the plan's node for it is not done.
+  const clausesOf = (node: PlanNode) => (node.doneWhen ?? '').replace(/s+/gu, '').toLowerCase().split(/[|&]/u);
+  const names = (node: PlanNode, item: Milestone) => clausesOf(node).some(clause => clause === item.doneWhen || clause.startsWith(`${item.doneWhen}>=`));
+  const current = tree.nodes.find(node => node.id === tree.current);
+  const throughTheGate = reached[reached.length - 1];
+  const named = throughTheGate ? -1 : DRAGON_MILESTONES.findIndex((item, index) => !reached[index] && !!current && names(current, item));
+  const nextIndex = named >= 0 ? named : last + 1;
+  const next = DRAGON_MILESTONES[nextIndex];
+  // The milestones kept in the pack (not the obsidian or the water that are used up), and not once she is through the gate.
+  const skippedIndex = throughTheGate ? -1 : reached.findIndex((yes, index) => !yes && index !== nextIndex && index < (next ? nextIndex : reached.length)
+    && KEPT_MILESTONES.has(DRAGON_MILESTONES[index]!.doneWhen)
+    && tree.nodes.some(node => node.state !== 'done' && names(node, DRAGON_MILESTONES[index]!)));
+  const passed = DRAGON_MILESTONES[skippedIndex];
+  const skipped = passed ? `・まだの節目: ${passed.name}（目安 ${grouped(passed.seconds)} 秒。飛ばしたなら plan.update に書く）` : '';
+  if (!next) return `目安: 今 ${grouped(now)} 秒（節目は全部済んだ）${skipped}`;
   const gap = next.seconds - now;
   const state = gap >= 0 ? `あと ${grouped(gap)} 秒` : `${grouped(-gap)} 秒遅れ`;
-  return `目安: 今 ${grouped(now)} 秒・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）`;
+  return `目安: 今 ${grouped(now)} 秒・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${skipped}`;
 }

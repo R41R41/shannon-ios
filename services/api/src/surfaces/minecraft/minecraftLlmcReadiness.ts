@@ -205,3 +205,38 @@ export function llmcWaitLine(observation: BodyObservation | null, nodes: readonl
   return `${head}待つ物が無い（焼いている物は無い${recovery ? `・${recovery}` : ''}）。`
     + `${recovery ? `${foodLeads(facts.world, facts.dimension, nodes)}。` : ''}計画の今の節を続ける。`;
 }
+
+/**
+ * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: the plan said 食料 before the iron, she went down to the iron at 166 s with 5 of 40 food points, came up the
+ * shaft for cows at 311 s (114 s, the pillar failing four times), went down again at 484 s, up at 705 s and down at 875 s; about 300 s on the stairs):
+ * an act that takes her 10 or more blocks down from the surface while the food she carries is under what the iron night needs says so in its result,
+ * with the cows in sight.
+ * A fact beside the act, which goes as it is; the food points are the stage knowledge's (`FOOD_BEFORE_DESCENT`, 40 before the iron).
+ */
+export const FOOD_BEFORE_DESCENT = 40;
+const SURFACE_Y = 45, DESCENT = 10;
+/** The lowest y the walks and digs of an act reach (a `rel` hand counts from her feet), or the feet's own when none goes lower. */
+function lowestReach(hands: unknown, feetY: number): number {
+  let lowest = feetY;
+  for (const raw of Array.isArray(hands) ? hands : []) {
+    const hand = record(raw);
+    if (hand?.do !== 'walk' && hand?.do !== 'dig') continue;
+    const points = [record(hand.to), ...(Array.isArray(hand.path) ? hand.path.map(record) : []), ...(Array.isArray(hand.at) ? hand.at.map(record) : [])];
+    for (const point of points) {
+      const y = finite(point?.y);
+      if (y !== null) lowest = Math.min(lowest, hand.rel === true ? feetY + y : y);
+    }
+  }
+  return lowest;
+}
+export function descentNote(input: unknown, frame: BodyObservation | null): string | null {
+  const facts = readinessOf(frame);
+  const feet = facts ? feetOf(facts.world) : null;
+  if (!facts || !feet || facts.dimension !== 'overworld' || facts.food >= FOOD_BEFORE_DESCENT || feet.y < SURFACE_Y) return null;
+  const lowest = lowestReach(record(input)?.hands, feet.y);
+  if (feet.y - lowest < DESCENT) return null;
+  const cows = foodLeads(facts.world, facts.dimension).replace(/^食料の当て: /u, '');
+  const near = /m/u.test(cows) && !cows.startsWith('近くに動物') ? `。近くに ${cows} が見えている` : '';
+  return `食料 ${round1(facts.food)} 点（鉄の夜の前は ${FOOD_BEFORE_DESCENT} 点）のまま地下 y=${Math.round(lowest)} へ下りる手${near}。`
+    + '下りてから地上へ戻ると縦穴の登りで 1〜2 分かかる: 先に狩る・焼く方が往復が減る。このまま行くなら why に理由を書く';
+}

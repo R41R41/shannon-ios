@@ -13,11 +13,27 @@ export const URGENT_ANSWER = '急ぎの答え方: 考えは 2〜3 文まで。mc
   + '離れる・敵との間にブロックを置く・囲う・食べるを先に（足場が「押されたら落ちる」なら、空所から離れるのが先）。';
 
 /**
- * A hostile she must act on now: within `meters`, a shooter only while it sees her (the body's `canSee`), any other while it can come
+ * run 26 (2026-10-26, 「エンドラを討伐して」: for 170 s the acts were cut 18 times by a creeper and zombies 5.6〜7.6 m away behind 4〜7 blocks of stone, 4 up, whose lines
+ * the live state itself said 「壁の向こうで届かない」 / 「見えない・道はある（回って来る）」; each cut left a three-hand act): how near a hostile makes a step urgent
+ * is by what the body says of its way. One the body says is sealed (`canReachMe` false, or `reach` walled) cuts nothing (a creeper, whose blast is near
+ * the wall, within `SEALED_CREEPER_METERS`); one that does not see her but has a way round, within `UNSEEN_URGENT_METERS` (it takes the time of the way
+ * to come);
+ * any other within `meters` as before. A field the body did not say counts for it. Shooters are by sight alone (`approaching`, the act's watch).
+ */
+export const UNSEEN_URGENT_METERS = 5;
+export const SEALED_CREEPER_METERS = 4;
+export function urgentRange(threat: { name: string; canReachMe?: boolean | null; canSee?: boolean | null; reach?: string | null }, meters: number): number {
+  if (threat.canReachMe === false || threat.reach === 'walled') return threat.name === 'creeper' ? Math.min(meters, SEALED_CREEPER_METERS) : 0;
+  if (isShooter(threat.name)) return meters;
+  return threat.canSee === false || threat.reach === 'path_no_sight' ? Math.min(meters, UNSEEN_URGENT_METERS) : meters;
+}
+
+/**
+ * A hostile she must act on now: within `meters` (`urgentRange`), a shooter only while it sees her (the body's `canSee`), any other while it can come
  * (`canReachMe` not false) and does not lack sight. A field the body did not say counts for it.
  */
 export function approaching(threat: NearThreat, meters: number): boolean {
-  if (threat.distance > meters) return false;
+  if (threat.distance > urgentRange(threat, meters)) return false;
   if (isShooter(threat.name)) return threat.canSee === true;
   return threat.canReachMe !== false && threat.canSee !== false;
 }

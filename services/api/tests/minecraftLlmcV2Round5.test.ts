@@ -188,6 +188,8 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     expect(on).toContain(STRATEGY_KNOWLEDGE_V2);
     expect(on).not.toContain('24〜36');
     expect(on).toContain('ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点');
-    expect(on).toContain('ベッドは村で見つけた 1〜2 つでよい');
+    expect(on).toContain('ベッドは村の家で 1〜2 つ');
+    // run 26: no village and no sheep, the bed under ground is not gone down to; the bed's node is put off and written so.
+    expect(on).toContain('村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む');
   });
 });

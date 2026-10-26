@@ -13,6 +13,7 @@ import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
 import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type ProbeContext } from './minecraftLlmcProbeInput.js';
 import { validSkillInput } from './minecraftControlValidation.js';
 import { isShooter } from './minecraftLlmcThreat.js';
+import { urgentRange } from './minecraftLlmcUrgent.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the tools it offers, how it
@@ -182,11 +183,13 @@ function actResult(receipt: MinecraftControlReceipt, urgent: string | null): Too
 }
 
 /** The hostiles of a frame, nearest first (with the body's own `canSee`, when the frame says it). */
-function hostiles(observation: BodyObservation | null): Array<{ name: string; distance: number; canSee?: boolean }> {
+function hostiles(observation: BodyObservation | null): Array<{ name: string; distance: number; canSee?: boolean; canReachMe?: boolean; reach?: string }> {
   const world = observation?.state.world as { nearbyThreats?: unknown } | undefined;
   return (Array.isArray(world?.nearbyThreats) ? world!.nearbyThreats as Array<Record<string, unknown>> : [])
     .flatMap(item => typeof item?.name === 'string' && typeof item.distance === 'number' && Number.isFinite(item.distance)
-      ? [{ name: item.name, distance: item.distance, ...(typeof item.canSee === 'boolean' ? { canSee: item.canSee } : {}) }] : [])
+      ? [{ name: item.name, distance: item.distance, ...(typeof item.canSee === 'boolean' ? { canSee: item.canSee } : {}),
+        ...(typeof item.canReachMe === 'boolean' ? { canReachMe: item.canReachMe } : {}),
+        ...(typeof item.reach === 'string' ? { reach: item.reach } : {}) }] : [])
     .sort((left, right) => left.distance - right.distance);
 }
 
@@ -208,7 +211,7 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
   parent.addEventListener('abort', cancel, { once: true });
   if (parent.aborted) cancel();
   const timer = watched >= LLMC_URGENT_METERS ? null : setInterval(() => {
-    const come = hostiles(observe()).find(item => item.distance <= LLMC_URGENT_METERS && !near.has(item.name)
+    const come = hostiles(observe()).find(item => item.distance <= urgentRange(item, LLMC_URGENT_METERS) && !near.has(item.name)
       && !(isShooter(item.name) && item.canSee === false));
     if (!come || controller.signal.aborted) return;
     reason = `${come.name} ${come.distance.toFixed(1)}m`;

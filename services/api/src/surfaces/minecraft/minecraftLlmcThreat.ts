@@ -35,7 +35,9 @@ const NEVER_WALLED = new Set(['creeper']);
 
 export interface NearThreat { id: number | null; name: string; distance: number; at: ActPos | null; dy: number | null; canReachMe: boolean | null;
   /** r8: the body's own `canSee` (its check at every frame, `threatExposure`): whether the hostile sees her; absent or null: not said. */
-  canSee?: boolean | null }
+  canSee?: boolean | null;
+  /** run 26: the body's `reach` word (in_sight | path_no_sight | walled | unknown), when it says one. */
+  reach?: string | null }
 /** The hostiles of a frame, nearest first, with their id, place, height against her feet and the body's own `canReachMe` and `canSee`. */
 export function nearThreats(observation: BodyObservation | null): NearThreat[] {
   const world = plain(observation?.state.world) ?? {};
@@ -47,7 +49,7 @@ export function nearThreats(observation: BodyObservation | null): NearThreat[] {
     return [{ id: typeof entity.id === 'number' && Number.isInteger(entity.id) ? entity.id : null, name: entity.name, distance, at,
       dy: feet && y !== null && feetY !== null ? Math.round(y - feetY) : null,
       canReachMe: typeof entity.canReachMe === 'boolean' ? entity.canReachMe : null,
-      canSee: typeof entity.canSee === 'boolean' ? entity.canSee : null }];
+      canSee: typeof entity.canSee === 'boolean' ? entity.canSee : null, reach: typeof entity.reach === 'string' ? entity.reach : null }];
   }).sort((left, right) => left.distance - right.distance);
 }
 

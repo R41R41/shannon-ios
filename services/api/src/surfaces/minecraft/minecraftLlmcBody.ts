@@ -7,7 +7,7 @@ import {
 } from './minecraftLlmcLive.js';
 import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
-import { approachingIds, newApproach, planNowTitle, URGENT_ANSWER } from './minecraftLlmcUrgent.js';
+import { approachingIds, newApproach, planNowTitle, urgentRange, URGENT_ANSWER } from './minecraftLlmcUrgent.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
 import {
   createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise, type SurpriseFrame,
@@ -108,7 +108,7 @@ export function urgentFacts(observation: BodyObservation | null, cut: string | n
   const threats = nearThreats(observation), walled = threats.filter(threat => walledOff(threat, known(threat)));
   const open = threats.filter(threat => !walled.includes(threat));
   const reasons: string[] = inSight ? [inSight] : [];
-  const near = open.find(item => item.distance <= urgentMeters(item.name));
+  const near = open.find(item => item.distance <= urgentRange(item, urgentMeters(item.name)));
   if (near) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}`);
   const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
   if (health !== null && health <= LOW_HEALTH && open.some(item => item.distance <= 16)) reasons.push(`体力 ${Math.round(health * 10) / 10} で敵が近い`);
