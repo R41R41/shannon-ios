@@ -66,13 +66,9 @@ export function createConfiguredPlatformBridgeRoute(
   const service = new PlatformBridgeService(configuration, stateStore, conversationStore, background, now,
     peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, memory, facts) : null, () => platformPeopleEnabled(environment),
     () => oneHeadEnabled(environment));
-  const turns = replies && platformReplyEnabled(environment) ? new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_reply_turns') : null;
-  // Reactions there (rich chat §4) go with the reply route: they are told to her next typed turn in that conversation.
-  const reactionLog = replies && turns ? new SQLitePlatformReactionLog(replies.databasePath) : null;
-  const reactions = reactionLog ? new PlatformReactions({ scopeKey: configuration.scopeKey, bridge: service, log: reactionLog, now }) : null;
-  const reply = replies && turns ? new PlatformReplyService({
-    scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns, now, reactions,
-  }) : null;
+  const typed = replies && platformReplyEnabled(environment)
+    ? typedReplies(replies, { scopeKey: configuration.scopeKey, bridge: service, conversationStore, now }) : null;
+  const reply = typed?.reply ?? null, reactions = typed?.reactions ?? null;
   // A Discord voice channel (`SHANNON_DC_VOICE`, dc-voice): its own turn log, the one mouth queue, her ElevenLabs voice.
   const voiceTurns = replies && platformVoiceEnabled(environment) ? new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_voice_turns') : null;
   const voice: PlatformVoiceRoutes | null = replies && voiceTurns ? {
@@ -85,9 +81,25 @@ export function createConfiguredPlatformBridgeRoute(
     listening: replies.listening ?? null,
   } : null;
   return { configuration, chatModel, service, reply, reactions, voice, environment: () => environment, close: () => {
-    turns?.close();
-    reactionLog?.close();
+    typed?.close();
     voiceTurns?.close();
+  } };
+}
+
+/**
+ * `POST /v1/platform/reply` (`SHANNON_PLATFORM_REPLY`): its turn log and the reply service, and the reactions there (rich chat §4),
+ * which go with it: they are told to her next typed turn in that conversation.
+ */
+function typedReplies(replies: { conversation: PlatformReplyConversation; databasePath: string }, parts: {
+  scopeKey: string; bridge: PlatformBridgeService; conversationStore: ConversationStore; now: CompanionClock;
+}) {
+  const turns = new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_reply_turns');
+  const log = new SQLitePlatformReactionLog(replies.databasePath);
+  const reactions = new PlatformReactions({ scopeKey: parts.scopeKey, bridge: parts.bridge, log, now: parts.now });
+  const reply = new PlatformReplyService({ ...parts, conversation: replies.conversation, turns, reactions });
+  return { reply, reactions, close: () => {
+    turns.close();
+    log.close();
   } };
 }
 
