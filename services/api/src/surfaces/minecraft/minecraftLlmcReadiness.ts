@@ -100,7 +100,8 @@ const feetOf = (world: Record<string, unknown>): Feet | null => {
   return x !== null && y !== null && z !== null ? { x, y, z } : null;
 };
 const ANIMALS = /^(?:cow|pig|sheep|chicken|rabbit|mooshroom|goat|hoglin)$/u;
-const VILLAGE_ROW = /^(?:村の鐘|ベッド|干し草|畑|作物)/u;
+/** The village's rows that are food or lead to it (run 40: the descent note named 「ベッド ×6」 as where food is; a bed is not food). */
+const VILLAGE_ROW = /^(?:村の鐘|干し草|畑|作物)/u;
 /**
  * The first `(x,y,z)` of a text, or its first bare `x,y,z`. r7 (run 30: the plan's 「ゲートから戻り狩って焼く」 had where `5,35,12`, with no
  * brackets, so the gate back was never said): both, as `planDone`'s `at:` reads it.

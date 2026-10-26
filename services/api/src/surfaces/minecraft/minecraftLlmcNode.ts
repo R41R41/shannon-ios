@@ -131,7 +131,11 @@ export function currentNodeLine(node: { id: string; title: string; where?: strin
 export function planNowOf(tree: PlanTree | null, view: unknown, observation: BodyObservation | null): string | null {
   const node = tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
   const shown = view as { now?: unknown; path?: unknown } | null;
-  return node ? currentNodeLine(node, shown?.path, doneStatusWords(node.doneWhen, doneFacts(observation))) : planNowLine(shown);
+  if (!node) return planNowLine(shown);
+  const status = doneStatusWords(node.doneWhen, doneFacts(observation));
+  // A preparation node that is not met says so beside its condition (the work for another node does not move it).
+  const held = node.state !== 'done' && isPrepNode(node) && status !== '満たしている' ? { ...node, note: node.note ? `${PREP_NOTE} ${node.note}` : PREP_NOTE } : node;
+  return currentNodeLine(held, shown?.path, status);
 }
 
 /** The items in a row, started for the one same node that is not the current one, after which the head moves the current node to it. */
@@ -147,6 +151,15 @@ export function noteItemStart(taskId: string, node: string | null, current: stri
   started.set(taskId, list);
   if (started.size > 32) started.delete(started.keys().next().value as string);
 }
+/**
+ * The nodes of the preparation before the descent (run 40: p3 「食料を集める（狩り）」 and p4 「地下の準備」 were never the current node, the plan's now followed the
+ * acts to the iron at 265 s, and she went down with 17.6 of 40 food points, no gold and no food hunted): a node that asks for food (its doneWhen has `food>=`) or
+ * whose title says food, hunting or preparing. The current node is not moved away from one that is open (`followNode`), and the live says so (`prepNote`).
+ */
+const PREP_TITLE = /食料|食べ物|狩|動物|準備/u;
+export const isPrepNode = (node: { title: string; doneWhen?: string | undefined }): boolean => /food>=/u.test(node.doneWhen ?? '') || PREP_TITLE.test(node.title);
+/** The words beside the current node's line while it is a preparation node that is not done: the work may go on elsewhere, the node stays. */
+export const PREP_NOTE = '※準備の節（済むまで今の節は移らない。済ませてから下りる）';
 /**
  * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: plan.update 0 and no 「理由:」 in 125 decisions, 85 of 104 acts tagged for another node than the current
  * one; the plan's now said 原木を集める for 471 s while she smelted iron, and 動物を狩り焼く / 地下のベッドを取る while she did the iron again): the node the
@@ -171,6 +184,9 @@ export function followNode(taskId: string, tree: PlanTree): { to: string; from: 
   if (!open(target)) return null;
   const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
   if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
+  // Run 40: a preparation node that is open holds the current node (the work for another node may go on; the node that asks for the food stays the now).
+  const now = tree.current ? byId.get(tree.current) : undefined;
+  if (now && open(now.id) && isPrepNode(now) && !isPrepNode(leaf) && !under(leaf.id, now.id)) return null;
   return { to: leaf.id, from: tree.current, acts: tags.length };
 }
 
