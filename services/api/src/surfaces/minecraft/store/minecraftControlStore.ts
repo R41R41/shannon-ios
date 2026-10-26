@@ -125,11 +125,15 @@ export class MinecraftControlStore {
    * it is never open: Minecraft run 34 (2026-10-22): a step's own probes were still in flight when the investigation's budget ran out,
    * the next guard saw them unsettled, the step was declared FCA_BODY_OUTCOME_UNKNOWN and its cancel settled them a moment later as
    * `cancelled` with every input released; seven such steps used up the body recovery limit and paused the task.
+   * The task queue (a step that goes on while its items run): `open` are the ids the step itself still waits for, which are not unsafe while they
+   * are unsettled; one settled with an unknown outcome or inputs not released still is.
    */
-  safe(taskId: string): boolean {
+  safe(taskId: string, open?: ReadonlySet<string>): boolean {
+    const ids = [...(open ?? [])];
+    const unsettled = ids.length ? `(phase!='settled' AND id NOT IN (${ids.map(() => '?').join(',')}))` : "phase!='settled'";
     return this.db.prepare(`SELECT 1 FROM fca_body_operations WHERE task_id=? AND COALESCE(json_extract(command_json,'$.skill'),'')!=?
-      AND (phase!='settled' OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1`)
-      .get(taskId, PROBE_SKILL) === undefined;
+      AND (${unsettled} OR json_extract(receipt_json,'$.outcome')='unknown' OR json_extract(receipt_json,'$.inputsReleased')!=1) LIMIT 1`)
+      .get(taskId, PROBE_SKILL, ...ids) === undefined;
   }
   bind(taskId: string, bodyId: string): boolean {
     const old = this.body(taskId); if (old) return old === bodyId;

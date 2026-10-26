@@ -7,9 +7,11 @@ export const record = (v: unknown): v is Record<string, unknown> => !!v && typeo
 export const timestamp = (v: unknown): v is string => typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v));
 const boundedJSON = (v: unknown, length: number) => { try { return JSON.stringify(v).length <= length; } catch { return false; } };
 
+/** The task queue's `act` takes a condition (an array of arrays of objects) in `done`: two levels deeper than the schemas before it. */
+const SKILL_SCHEMA_DEPTH = 8;
 /** Bounded JSON-schema subset; native skill validation remains authoritative at the actuator. */
 export function skillSchema(value: unknown, depth = 0): value is Readonly<Record<string, unknown>> {
-  if (!record(value) || depth > 6) return false;
+  if (!record(value) || depth > SKILL_SCHEMA_DEPTH) return false;
   const allowed = ['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'description', 'minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems', 'anyOf', 'default'];
   if (Object.keys(value).some(key => !allowed.includes(key))) return false;
   if (value.description !== undefined && (typeof value.description !== 'string' || value.description.length > 2000)) return false;
@@ -60,6 +62,18 @@ function validLiveSpeech(value: Record<string, unknown>): boolean {
     && (room.sinceHumanMs === null || typeof room.sinceHumanMs === 'number' && Number.isFinite(room.sinceHumanMs) && room.sinceHumanMs >= 0));
   return receiptsOk && roomOk;
 }
+/**
+ * The task queue's fields of a poll, both optional: the ids of the waiting items (at most 8) and how far the running item is (whole numbers, its
+ * repeat 1–8). A body without the queue sends neither.
+ */
+export function validQueueFields(value: Record<string, unknown>): boolean {
+  const queued = value.queuedOperationIds, progress = value.queue;
+  const idsOk = queued === undefined || (Array.isArray(queued) && queued.length <= 8 && queued.every(controlId));
+  const whole = (item: unknown, high: number) => Number.isSafeInteger(item) && Number(item) >= 1 && Number(item) <= high;
+  const progressOk = progress === undefined || (record(progress) && controlId(progress.id) && whole(progress.hand, 100_000) && whole(progress.of, 100_000)
+    && whole(progress.iteration, 100_000) && whole(progress.repeat, 8));
+  return idsOk && progressOk;
+}
 export function validControlPoll(value: unknown, now: number): value is MinecraftControlPoll {
   if (!record(value) || value.schemaVersion !== 1 || !controlId(value.serverId) || !controlId(value.connectionId)) return false;
   const o = value.observation;
@@ -78,7 +92,7 @@ export function validControlPoll(value: unknown, now: number): value is Minecraf
   if (!Array.isArray(value.activeOperationIds) || value.activeOperationIds.length > 8 || value.activeOperationIds.some(id => !controlId(id))) return false;
   // Each event is checked when it is taken (`WorkingEventLog`, the first 32 only); a malformed one is skipped, never the whole poll.
   if (value.events !== undefined && !Array.isArray(value.events)) return false;
-  if (!validLiveSpeech(value)) return false;
+  if (!validLiveSpeech(value) || !validQueueFields(value)) return false;
   return Array.isArray(value.receipts) && value.receipts.length <= 16 && value.receipts.every(r => record(r) && controlId(r.id)
     && r.connectionId === value.connectionId && ['completed', 'failed', 'cancelled', 'unknown'].includes(String(r.outcome))
     && typeof r.inputsReleased === 'boolean' && timestamp(r.observedAt) && (r.result === undefined || typeof r.result === 'string' && r.result.length <= 16_000)

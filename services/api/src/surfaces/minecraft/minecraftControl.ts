@@ -4,7 +4,7 @@ import { WorkingEventLog, type ActionLease, type WorkingEvent } from '@shannon/m
 import type { MinecraftBodyConfiguration } from '../../contracts/minecraftBodyContract.js';
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt, MinecraftControlReply, MinecraftLiveRoom, MinecraftLiveSpeech,
-  MinecraftLiveSpeechReceipt } from '../../contracts/minecraftControlContract.js';
+  MinecraftLiveSpeechReceipt, MinecraftQueueEnvelope, MinecraftQueueProgress } from '../../contracts/minecraftControlContract.js';
 import { MinecraftControlStore } from './store/minecraftControlStore.js';
 import { validControlPoll } from './minecraftControlValidation.js';
 
@@ -35,6 +35,12 @@ export const MINECRAFT_RETIRED_CONNECTION_MS = 5_000;
 const RECEIPTS_PER_POLL = 16;
 /** One command being waited for: when the wait gave it up, so the next poll cancels it (`command`). */
 interface Waiting { expired: boolean }
+/** Commands of the task queue one reply hands over at most (the body takes them in order; one runs and two wait). */
+const QUEUE_COMMANDS_PER_REPLY = 3;
+/** What a command is made from (`command`, `enqueue`). */
+export interface ControlCommandInput { id: string; context: BodyTaskContext; lease: ActionLease; kind: MinecraftControlCommand['kind'];
+  skill?: string; arguments?: Readonly<Record<string, unknown>>; operation?: MinecraftControlCommand['operation']; stop?: MinecraftControlCommand['stop'];
+  milliseconds?: number; queue?: MinecraftQueueEnvelope }
 const ioTurn = () => new Promise<void>(resolve => setImmediate(resolve));
 /** A paired body supplies observations and executes exact commands; the shared FCA owns all long-term decisions. */
 export class MinecraftControl {
@@ -83,6 +89,8 @@ export class MinecraftControl {
   /** The commands this process waits for, and when each was last handed to the body (`command`). */
   private readonly waiting = new Map<string, Waiting>();
   private readonly deliveries = new Map<string, number>();
+  /** When a poll last listed a command waiting in the body's queue: its time to run counts from then, not while it waits (`receiptOf`). */
+  private readonly queuedAt = new Map<string, number>();
   /**
    * What each body told while it worked (session mb-arch, stage 1): needs in reach, each command's progress, stalls. Kept here, in
    * memory, per body; the task's arbiter reads it (working). Taking them costs nothing when no one reads them.
@@ -206,7 +214,7 @@ export class MinecraftControl {
     // A command handed in an earlier reply is confirmed by this poll (the body lists it as active or sends its receipt), or it never
     // reached the body: the body polls one request at a time, so a poll handled after the delivering reply was sent either after
     // the body took that reply or after it gave up on it. With a full receipt list one may be left out, so nothing is concluded.
-    const reported = new Set([...input.activeOperationIds, ...input.receipts.map(receipt => receipt.id)]);
+    const reported = this.reportedIds(input);
     for (const row of this.store.pending(bodyId)) {
       if (row.command.connectionId !== input.connectionId || !row.delivered || row.confirmed) continue;
       if (reported.has(row.command.id)) this.store.confirm(row.command.id);
@@ -219,7 +227,7 @@ export class MinecraftControl {
       if (c.connectionId !== input.connectionId || expired || !this.allowed(c)) this.store.cancel(c.id);
       const cancelled = row.cancelled || this.store.receipt(c.id)?.outcome === 'cancelled' || expired || !this.allowed(c);
       if (cancelled) { if (row.delivered && c.connectionId === input.connectionId) cancel.push(c.id); continue; }
-      if (!row.delivered && commands.length < 1 && c.connectionId === input.connectionId && this.store.deliver(c.id)) {
+      if (!row.delivered && this.mayDeliver(commands, c) && c.connectionId === input.connectionId && this.store.deliver(c.id)) {
         commands.push(c);
         this.deliveries.set(c.id, this.options.now());
       }
@@ -228,6 +236,24 @@ export class MinecraftControl {
     return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}),
       ...(speech.length ? { speech } : {}) };
   }
+  /** One command a reply hands over: the first of any kind, then up to `QUEUE_COMMANDS_PER_REPLY` in all while every one of them is a queue item. */
+  private mayDeliver(handing: readonly MinecraftControlCommand[], next: MinecraftControlCommand): boolean {
+    return handing.length === 0 || (handing.length < QUEUE_COMMANDS_PER_REPLY && next.queue !== undefined && handing.every(item => item.queue !== undefined));
+  }
+  /**
+   * The ids a poll reports (running, receipts, and the queue's waiting ones); the waiting ones that this process waits for have their clocks start
+   * again from now (`receiptOf`).
+   */
+  private reportedIds(input: MinecraftControlPoll): Set<string> {
+    for (const id of input.queuedOperationIds ?? []) if (this.waiting.has(id)) this.queuedAt.set(id, this.options.now());
+    return new Set([...input.activeOperationIds, ...input.receipts.map(receipt => receipt.id), ...(input.queuedOperationIds ?? [])]);
+  }
+  /** The ids of the commands the newest current frame lists as waiting in the body's queue (in order). */
+  queued(bodyId: string): readonly string[] { return this.frame(bodyId)?.poll.queuedOperationIds ?? []; }
+  /** How far the body's running queue item is, from the newest current frame, or null. */
+  progress(bodyId: string): MinecraftQueueProgress | null { return this.frame(bodyId)?.poll.queue ?? null; }
+  /** Takes these commands off: a queued one the body has not got is settled `cancelled` at once; one it has is listed in the next reply's `cancel`. */
+  cancelQueued(ids: readonly string[]): void { for (const id of ids) this.store.cancel(id); }
   /** A poll that is an arrival (a login, a new connection, connected again, alive again, another dimension) keeps when and how. */
   private noteArrival(bodyId: string, old: MinecraftControlPoll | undefined, input: MinecraftControlPoll): void {
     const arrival = arrivalOf(old?.observation, input.observation, old ? old.connectionId !== input.connectionId : false);
@@ -260,8 +286,16 @@ export class MinecraftControl {
     const waiting = this.waiting.get(command.id);
     return waiting ? waiting.expired : Date.parse(command.deadlineAt) <= this.options.now();
   }
-  async command(input: { id: string; context: BodyTaskContext; lease: ActionLease; kind: MinecraftControlCommand['kind'];
-    skill?: string; arguments?: Readonly<Record<string, unknown>>; operation?: MinecraftControlCommand['operation']; stop?: MinecraftControlCommand['stop']; milliseconds?: number }, signal?: AbortSignal): Promise<MinecraftControlReceipt> {
+  /**
+   * A queue item (`mc.act` in the task queue): the command is inserted and this returns at once; `receipt` settles as `command`'s does (the same
+   * errors) once the body answers, however long the item waits in the body's queue. It never leaves an unhandled rejection: whoever awaits it gets the error.
+   */
+  enqueue(input: ControlCommandInput & { queue: MinecraftQueueEnvelope }, signal?: AbortSignal): { id: string; receipt: Promise<MinecraftControlReceipt> } {
+    const receipt = this.command(input, signal);
+    receipt.catch(() => undefined);
+    return { id: input.id, receipt };
+  }
+  async command(input: ControlCommandInput, signal?: AbortSignal): Promise<MinecraftControlReceipt> {
     // After a stall the body's queued polls are handled in the next I/O turn: a frame is judged gone only after it.
     if (!this.frame(input.context.bodyId)) await ioTurn();
     const frame = this.frame(input.context.bodyId); if (!frame) throw new Error('FCA_BODY_UNAVAILABLE');
@@ -270,7 +304,7 @@ export class MinecraftControl {
     const command: MinecraftControlCommand = { schemaVersion: 1, id: input.id, serverId: frame.poll.serverId, connectionId: frame.poll.connectionId,
       kind: input.kind, context: input.context, lease: input.lease, deadlineAt: new Date(this.options.now() + (input.milliseconds ?? 30_000)).toISOString(),
       ...(input.skill ? { skill: input.skill } : {}), ...(input.arguments ? { arguments: input.arguments } : {}),
-      ...(input.operation ? { operation: input.operation } : {}), ...(input.stop ? { stop: input.stop } : {}) };
+      ...(input.operation ? { operation: input.operation } : {}), ...(input.stop ? { stop: input.stop } : {}), ...(input.queue ? { queue: input.queue } : {}) };
     // Existing IDs only return original receipts; never issue a replacement after uncertain delivery.
     const existing = this.store.command(command.id);
     if (existing) {
@@ -288,7 +322,7 @@ export class MinecraftControl {
         return this.allowed(command) && this.frame(command.context.bodyId)?.poll.connectionId === command.connectionId;
       });
       return await this.receiptOf(command, input, waiting, signal);
-    } finally { this.waiting.delete(command.id); this.deliveries.delete(command.id); }
+    } finally { this.waiting.delete(command.id); this.deliveries.delete(command.id); this.queuedAt.delete(command.id); }
   }
   /**
    * Waits for the body's receipt. Minecraft run 6 (2026-10-14): the API's thread was blocked for 10 s while a stop was being handed
@@ -317,7 +351,7 @@ export class MinecraftControl {
         last = this.options.now();
         continue;
       }
-      if (signal?.aborted || !this.frame(bodyId) || now >= (this.deliveries.get(command.id) ?? inserted) + budget + lag || !this.allowed(input)) {
+      if (signal?.aborted || !this.frame(bodyId) || now >= Math.max(this.deliveries.get(command.id) ?? inserted, this.queuedAt.get(command.id) ?? 0) + budget + lag || !this.allowed(input)) {
         waiting.expired = true;
         this.store.cancel(command.id);
         cancellingAt ??= now;

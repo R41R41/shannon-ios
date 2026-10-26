@@ -1,5 +1,6 @@
 import { ACT_MAX_HANDS, type ActHand, type ActInput, type ActPos } from './minecraftActContract.js';
 import { handToLine, lineToHand, pos, readPos } from './minecraftActShortHands.js';
+import { conditionText, parseCondition } from './minecraftActCondition.js';
 
 export { handToLine, lineToHand };
 
@@ -78,6 +79,18 @@ const SHORT_LINES = [
   '- 同じ種類の手が続く場面（トンネル・階段・橋・採掘）は、10〜12 手を 1 つの act に入れる（dig の at は16マス、walk の path は32点まで1手に）。'
     + '止まりは反射・stopIf・onFail が守る。',
   '',
+  '## 列（やることの列）と「〜まで続ける」',
+  '- act は列の 1 項目。項目は体が 1 つずつ順に動かす（実行中を含めて 3 つまで）。実行中の項目の残りが少なくなると次の判断が来る。1 つの判断で足すのは 1〜2 項目。'
+    + '足す項目は、列の最後の項目が済んだ後の世界を前提に書く。列は live の「列」に出る。',
+  '- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。前提を書かなくても列は安全に動く。',
+  '- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる。 欄 done（条件の文字列）: 満たした所で、手の途中でも済みにする。',
+  '- 欄 repeat（2〜8）: 手の組を最大その回数までまわす。rel の手か、座標の無い手（attack・pickup・eat・craft・wait）だけ（絶対座標の手は断られる）。',
+  '  足の位置から数えるので、トンネル・階段・柱は 1 組を rel で書いて repeat にする。1 回まわしても何も変わらなければ体が止める。 done と一緒に使うと「〜まで続ける」になる。',
+  '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる）。差し替える時に使う。',
+  '- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・'
+    + 'dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。',
+  '- 例: pre "have:iron_ore>=3&near:furnace~4"。done "have:log>=10"。repeat 8 と done "at:26,51,7~2"（手は rel で書いたトンネルの 1 組）。',
+  '',
   '## 返る行',
   '- 行は「番号 手 済|止|失|未 本文」。止まった手の周りの 3×3×3 は、次の判断の live の lastResults に一度だけ出る。',
   '- 止まりの読み方: 「一歩ではない」は段差2以上か着いていない / 「届かない」は5m内へ寄る / 「掘れない」は道具か岩盤（X）/ '
@@ -94,10 +107,16 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     why: { type: 'string', maxLength: 120, description: 'この手の組のねらい（短く）' },
     stopIf: { type: 'string', maxLength: 120, description: '例 "hostileWithin=8 hpBelow=10"' },
     accept: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'この act で戦うと決めた敵の種類（体はそれから逃げない）' },
+    pre: { type: 'string', maxLength: 120, description: '始める直前に確かめる条件（例 "have:raw_iron>=3&near:furnace~4"）' },
+    done: { type: 'string', maxLength: 120, description: '満たした所で済みにする条件（例 "have:log>=10"）' },
+    repeat: { type: 'integer', minimum: 2, maximum: 8, description: '手の組を最大何回まわすか（rel の手だけ）' },
+    replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目（例 ["q15"]、全部は ["all"]）' },
   },
 });
 
-export interface ShortAct { why?: string; hands: string[]; stopIf?: string; accept?: string[] }
+export interface ShortAct {
+  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[];
+}
 
 const STOP_KEYS = ['hostileWithin', 'hpBelow', 'hungerBelow'] as const;
 function stopIfText(stopIf: NonNullable<ActInput['stopIf']>): string {
@@ -108,7 +127,9 @@ function stopIfText(stopIf: NonNullable<ActInput['stopIf']>): string {
 /** act 全体 → 短い書き方。 */
 export function actToShort(input: ActInput): ShortAct {
   return { ...(input.why !== undefined ? { why: input.why } : {}), hands: input.hands.map(handToLine),
-    ...(input.stopIf ? { stopIf: stopIfText(input.stopIf) } : {}), ...(input.accept?.length ? { accept: [...input.accept] } : {}) };
+    ...(input.stopIf ? { stopIf: stopIfText(input.stopIf) } : {}), ...(input.accept?.length ? { accept: [...input.accept] } : {}),
+    ...(input.pre ? { pre: conditionText(input.pre) } : {}), ...(input.done ? { done: conditionText(input.done) } : {}),
+    ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}) };
 }
 
 function stopIfOf(text: string, errors: string[]): Record<string, unknown> {
@@ -123,9 +144,9 @@ function stopIfOf(text: string, errors: string[]): Record<string, unknown> {
   }
   return stopIf;
 }
-function handsOf(value: unknown, errors: string[]): ActHand[] {
+function handsOf(value: unknown, errors: string[], replacing = false): ActHand[] {
   const items = Array.isArray(value) ? value : typeof value === 'string' ? value.split('\n') : [];
-  if (!items.length) errors.push('hands が無い');
+  if (!items.length && !replacing) errors.push('hands が無い');
   const hands: ActHand[] = [];
   for (const item of items) {
     if (item && typeof item === 'object' && !Array.isArray(item)) hands.push(item as ActHand);
@@ -140,12 +161,45 @@ function handsOf(value: unknown, errors: string[]): ActHand[] {
 export function shortToAct(input: unknown): { act: ActInput; errors: string[] } {
   const value = (input ?? {}) as { why?: unknown; hands?: unknown; stopIf?: unknown; accept?: unknown };
   const errors: string[] = [];
-  const act: Record<string, unknown> = { hands: handsOf(value.hands, errors) };
+  const queued = queueFieldsOf(input, errors);
+  const act: Record<string, unknown> = { hands: handsOf(value.hands, errors, !!queued.replace?.length) };
   if (typeof value.why === 'string') act.why = value.why;
   if (typeof value.stopIf === 'string') act.stopIf = stopIfOf(value.stopIf, errors);
   else if (value.stopIf && typeof value.stopIf === 'object') act.stopIf = value.stopIf;
   if (Array.isArray(value.accept)) act.accept = value.accept.filter(item => typeof item === 'string');
-  return { act: act as unknown as ActInput, errors };
+  return { act: { ...act, ...queued } as unknown as ActInput, errors };
+}
+
+/**
+ * The task queue's fields of a model's input: `pre` and `done` as text into the body's JSON (an unreadable one is an error naming the forms to
+ * write), `repeat` a whole number of 2–8, `replace` item ids (a bare id too). A field that is already JSON (a condition array) is kept as it is.
+ */
+function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace'> {
+  const value = (input ?? {}) as Record<string, unknown>, out: Record<string, unknown> = {};
+  for (const key of ['pre', 'done'] as const) {
+    const field = value[key];
+    if (field === undefined) continue;
+    if (typeof field !== 'string') {
+      out[key] = field;
+      continue;
+    }
+    const parsed = parseCondition(field, key);
+    if (parsed.ok) out[key] = parsed.condition; else errors.push(parsed.problem);
+  }
+  if (value.repeat !== undefined) {
+    if (Number.isInteger(value.repeat) && Number(value.repeat) >= 2 && Number(value.repeat) <= 8) out.repeat = value.repeat;
+    else errors.push('repeat の書き方の誤り: 2〜8 の整数で書く');
+  }
+  const replace = typeof value.replace === 'string' ? [value.replace] : value.replace;
+  if (Array.isArray(replace)) out.replace = replace.filter(item => typeof item === 'string');
+  return out;
+}
+/** The items a replace-only input takes off (no hands), or null when the input has hands or no replace. */
+export function replaceOnly(input: unknown): string[] | null {
+  const value = (input ?? {}) as { hands?: unknown; replace?: unknown };
+  const none = value.hands === undefined || (Array.isArray(value.hands) && value.hands.length === 0);
+  const replace = typeof value.replace === 'string' ? [value.replace] : value.replace;
+  return none && Array.isArray(replace) && replace.length > 0 ? replace.filter((item): item is string => typeof item === 'string') : null;
 }
 
 /**
@@ -155,13 +209,23 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
 export function expandShortAct(input: unknown): { input: unknown; errors: string[] } {
   const hands = (input as { hands?: unknown } | null)?.hands;
   const short = typeof hands === 'string' || (Array.isArray(hands) && hands.some(item => typeof item === 'string'));
-  if (!short) return { input, errors: [] };
+  if (!short) return json(input);
   const { act, errors } = shortToAct(input);
-  return { input: errors.length ? { ...act, [SHORT_HAND_ERROR_KEY]: errors.join(' / ').slice(0, 200) } : act, errors };
+  return { input: errors.length ? { ...act, [SHORT_HAND_ERROR_KEY]: errors.join(' / ').slice(0, 700) } : act, errors };
+}
+
+/** An input of json hands: only its queue fields are read from text (`pre`, `done`); anything else is the input as it is. */
+function json(input: unknown): { input: unknown; errors: string[] } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return { input, errors: [] };
+  const errors: string[] = [], queued = queueFieldsOf(input, errors);
+  if (!Object.keys(queued).length && !errors.length) return { input, errors };
+  const next = { ...(input as Record<string, unknown>), ...queued };
+  return { input: errors.length ? { ...next, [SHORT_HAND_ERROR_KEY]: errors.join(' / ').slice(0, 700) } : next, errors };
 }
 
 /** `expandShortAct` が読めなかった行の 1 行の誤り、または null。 */
 export function shortHandProblem(input: unknown): string | null {
   const text = input && typeof input === 'object' ? (input as Record<string, unknown>)[SHORT_HAND_ERROR_KEY] : undefined;
-  return typeof text === 'string' ? `手の書き方が読めない: ${text}` : null;
+  if (typeof text !== 'string') return null;
+  return /^(?:pre|done|repeat) の書き方の誤り/u.test(text) ? text : `手の書き方が読めない: ${text}`;
 }

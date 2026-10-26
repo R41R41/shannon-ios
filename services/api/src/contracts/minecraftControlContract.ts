@@ -1,5 +1,6 @@
 import type { ActionLease } from '@shannon/mind';
 import type { BodyActionReceipt, BodyCandidateDraft, BodyObservation, BodyOperation, BodyStopAcknowledgement, BodyStopRequest, BodyTaskContext } from './bodyControlContract.js';
+import type { ActCondition } from './minecraftActCondition.js';
 
 /** Separate from the legacy game-chat/body request contract: no planner executes on this device. */
 export const MINECRAFT_CONTROL_PATH = '/v1/body/minecraft/control';
@@ -13,12 +14,23 @@ export interface MinecraftSkillDefinition {
   /** How long the body lets this skill run, when it says (`minecraftSkillMilliseconds`); optional. */
   maxDurationMs?: number;
 }
+/**
+ * The task queue's envelope of an `act` command (design 2026-10-26, wire note `tq/contract.md` section 2): the item's id (`q15`), the item that
+ * must be the tail of the body's queue when it arrives (null: the head believes the queue empty), the plan node it is for, the condition checked once
+ * right before it starts, its own run limit counted from its start, and the time it must have started by. A command without it runs as before.
+ */
+export interface MinecraftQueueEnvelope {
+  item: string; after: string | null; node: string | null; pre?: ActCondition; maxMs: number; startBy: string;
+}
+/** How far the body's running queue item is (a poll's `queue`): `id` is the command's id; `hand` of the pass (1-based), the pass, and its repeat. */
+export interface MinecraftQueueProgress { id: string; hand: number; of: number; iteration: number; repeat: number }
 export interface MinecraftControlCommand {
   schemaVersion: 1; id: string; serverId: string; connectionId: string;
   kind: 'skill' | 'reflex' | 'stop' | 'release' | 'capture';
   context: BodyTaskContext; lease: ActionLease; deadlineAt: string;
   skill?: string; arguments?: Readonly<Record<string, unknown>>;
   operation?: BodyOperation; stop?: BodyStopRequest;
+  queue?: MinecraftQueueEnvelope;
 }
 export interface MinecraftControlReceipt {
   id: string; connectionId: string; outcome: 'completed' | 'failed' | 'cancelled' | 'unknown';
@@ -64,6 +76,10 @@ export interface MinecraftControlPoll {
   /** Whole catalog on initial connection and changes. Not selected by a second game planner. */
   skills?: readonly MinecraftSkillDefinition[];
   receipts: readonly MinecraftControlReceipt[]; activeOperationIds: readonly string[];
+  /** The ids of the queue's waiting items, in order (task queue); absent from a body without the queue. */
+  queuedOperationIds?: readonly string[];
+  /** How far the running queue item is (task queue); absent when none runs. */
+  queue?: MinecraftQueueProgress;
   /** What changed while the body works (`@shannon/mind` WorkingEvent), oldest first, at most 32; a body before mb-arch sends none. */
   events?: readonly unknown[];
   /** What the body did with the lines it was handed (speech of an earlier reply), and the room it plays in: only when it can speak. */

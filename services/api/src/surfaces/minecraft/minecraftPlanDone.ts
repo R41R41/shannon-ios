@@ -1,7 +1,9 @@
 import { orderedPlan, PLAN_LIMITS, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { carriedItemCounts } from './minecraftItems.js';
-import { carriedFood } from './minecraftLlmcLive.js';
+import { carried, clauseHolds, clauseLack, doneFacts, type DoneFacts } from './minecraftConditions.js';
+import { newerClause, type ActClause } from '../../contracts/minecraftActCondition.js';
+
+export { doneFacts, type DoneFacts };
 
 /**
  * mb-llmc r5 (run 28: Sonnet never called plan.update; the live state's "now" said 「p1.1 原木を集める」 to the end, 0 of 39 nodes done,
@@ -18,6 +20,8 @@ import { carriedFood } from './minecraftLlmcLive.js';
  *   `at:x,y,z~r@nether` (or `@overworld`, `@end`) says which; else the dimension of a `dim:` in the same predicate, else that of the
  *   nearest `dim:` node before it in the plan (`nodesSeenDone`), else none is known and the place alone is compared.
  * - `food>=<n>`: the food she carries, in points (`carriedFood`).
+ * - the task queue's forms (`minecraftConditions.ts`): `hp>=<n>`, `hunger>=<n>`, `free>=<n>`, `time:day|night` and `have:<item><<n>`, read on the frame
+ *   when it shows them (a frame without the fact leaves the node as it is, never done).
  *
  * r9 (run 33: 3 nodes seen done that were not): a node is done by its own predicate only (or by the model's `plan.update`), never because
  * a parent is. A node that has children still open is done by a predicate of the pack (`have:`, `food>=`: what the work made is in hand),
@@ -27,7 +31,9 @@ export type DoneClause =
   | { kind: 'have'; item: string; count: number }
   | { kind: 'dim'; dimension: string }
   | { kind: 'at'; x: number; y: number; z: number; r: number; dimension?: string }
-  | { kind: 'food'; points: number };
+  | { kind: 'food'; points: number }
+  /** A clause of the task queue's forms (`hp`, `hunger`, `free`, `time`, `have` with `<`), judged as the queue's conditions are. */
+  | { kind: 'act'; clause: ActClause };
 /** Alternatives, each a list of clauses that must all hold. */
 export type DonePredicate = DoneClause[][];
 
@@ -48,7 +54,9 @@ function clauseOf(text: string): DoneClause | null {
     return { kind: 'at', x: Number(at[1]), y: Number(at[2]), z: Number(at[3]), r: Number(at[4] ?? 4), ...(where ? { dimension: where } : {}) };
   }
   const food = /^food>=(\d{1,4})$/u.exec(text);
-  return food ? { kind: 'food', points: Number(food[1]) } : null;
+  if (food) return { kind: 'food', points: Number(food[1]) };
+  const newer = newerClause(text);
+  return newer ? { kind: 'act', clause: newer } : null;
 }
 
 /** The one dimension a predicate's `dim:` clauses name, or null (none, or more than one). */
@@ -72,29 +80,6 @@ export function parseDoneWhen(text: string | undefined): DonePredicate | null {
     ? withPlaces(alternatives as DonePredicate, null) : null;
 }
 
-/** What a predicate is checked against: the frame's counts (worn included), dimension, feet and food points. */
-export interface DoneFacts { counts: ReadonlyMap<string, number>; dimension: string | null; feet: { x: number; y: number; z: number } | null;
-  food: number }
-export function doneFacts(observation: BodyObservation | null): DoneFacts | null {
-  const world = observation?.state.world;
-  if (!world || typeof world !== 'object' || Array.isArray(world)) return null;
-  const frame = world as Record<string, unknown>;
-  const at = frame.position as { x?: unknown; y?: unknown; z?: unknown } | undefined;
-  const feet = at && [at.x, at.y, at.z].every(value => typeof value === 'number' && Number.isFinite(value))
-    ? { x: at.x as number, y: at.y as number, z: at.z as number } : null;
-  const dimension = frame.dimension ?? observation!.facts.dimension;
-  return { counts: carriedItemCounts(frame, observation!.facts), feet, food: carriedFood(frame, observation!.facts).points,
-    dimension: typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null };
-}
-
-/** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a piglin does not attack her in it). */
-const GOLD_ARMOUR = /^golden_(?:helmet|chestplate|leggings|boots)$/u;
-/** How many of `item` she has: the id itself, or every id that ends in `_<item>`. */
-function carried(counts: ReadonlyMap<string, number>, item: string): number {
-  let total = 0;
-  for (const [name, count] of counts) if (name === item || name.endsWith(`_${item}`) || (item === 'gold_armor' && GOLD_ARMOUR.test(name))) total += count;
-  return total;
-}
 /**
  * run 26 (2026-10-26: Opus's p1 `have:log>=8` never held, since the logs went into planks, a table and a pickaxe as they came (5 at most at once), and the
  * plan's now said 原木を集める 未: log 0/8 for 471 s): what is made of the materials that are used up as they are gathered. A `have:` of such a material
@@ -115,6 +100,7 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
     case 'have': return carried(facts.counts, clause.item) >= clause.count || madeInto(facts.counts, clause);
     case 'dim': return facts.dimension === clause.dimension;
     case 'food': return facts.food >= clause.points;
+    case 'act': return clauseHolds(clause.clause, facts) === true;
     case 'at': return !!facts.feet && (!clause.dimension || facts.dimension === null || facts.dimension === clause.dimension)
       && Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y, facts.feet.z - clause.z) <= clause.r;
   }
@@ -126,6 +112,7 @@ export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): bool
 function clauseWords(clause: DoneClause, facts: DoneFacts): string {
   switch (clause.kind) {
     case 'have': return `${clause.item} ${Math.min(carried(facts.counts, clause.item), clause.count)}/${clause.count}`;
+    case 'act': return clauseLack(clause.clause, facts);
     case 'food': return `食料 ${Math.round(facts.food)}/${clause.points} 点`;
     case 'dim': return `次元 ${clause.dimension}（今 ${facts.dimension ?? '不明'}）`;
     case 'at': return facts.feet ? `(${clause.x},${clause.y},${clause.z}) から ${Math.round(Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y,
@@ -150,7 +137,8 @@ export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts |
 /** Whether the alternative of the predicate that holds says only what the pack holds (`have:`, `food>=`): what the work made is in hand. */
 function holdsByThePack(predicate: DonePredicate, facts: DoneFacts): boolean {
   const alternative = predicate.find(clauses => clauses.every(clause => holds(clause, facts)));
-  return !!alternative && alternative.every(clause => clause.kind === 'have' || clause.kind === 'food');
+  const pack = (clause: DoneClause) => clause.kind === 'have' || clause.kind === 'food' || (clause.kind === 'act' && clause.clause.k === 'have');
+  return !!alternative && alternative.every(pack);
 }
 
 /** Each node's predicate, its places given the dimension of the nearest `dim:` node before it (itself first) when they name none. */
