@@ -27,6 +27,21 @@ struct ShannonPresentationFaceTests {
         }
     }
 
+    /// The ガール icon beside a reply is one of the drawn pictures, never a Live2D render (owner, 2026-10-26: some icons
+    /// looked like screenshots of the Live2D figure).
+    @Test
+    func everyIdIsDrawnWithADrawnPictureNotALive2DRender() {
+        for id in ShannonPresentationFace.bundledIDs.union(["fromANewerServer"]) {
+            let name = ShannonPresentationFace.pictureAssetName(for: id)
+            #expect(name.hasPrefix("shannon-expression-") || name.hasPrefix("shannon-emotion-"), "\(id)")
+            #expect(ShannonExpressionAssets.url(forAsset: name) != nil, "\(id) → \(name)")
+        }
+        #expect(ShannonPresentationFace.pictureAssetName(for: "irked") == "shannon-expression-annoyed")
+        #expect(ShannonPresentationFace.pictureAssetName(for: "flatStare") == "shannon-emotion-deadpan")
+        #expect(ShannonPresentationFace.pictureAssetName(for: "tender") == "shannon-expression-tender")
+        #expect(ShannonPresentationFace.pictureAssetName(for: "fromANewerServer") == "shannon-expression-neutral")
+    }
+
     @Test
     func withoutAnIdTheUsualFaceAndAnUnknownIdTheNeutralOne() {
         #expect(ShannonPresentationFace.drawnID(for: nil) == nil)

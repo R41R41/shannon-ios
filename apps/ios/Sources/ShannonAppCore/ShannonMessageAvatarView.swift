@@ -30,7 +30,7 @@ public enum ShannonMessageAvatarMood {
 /// message's feeling. VoiceOver reads the feeling's name, as before.
 ///
 /// A reply with a presentation id (Syzygy ADR-0013 D17) shows the face it was shown with, from that id
-/// (`ShannonPresentationFace`); without one, the face of its feeling as before.
+/// (`ShannonPresentationFace`), in the same drawn pictures as every other face; without one, the face of its feeling.
 public struct ShannonMessageAvatarView: View {
     public let face: ShannonFace
     public let size: CGFloat
@@ -55,7 +55,7 @@ public struct ShannonMessageAvatarView: View {
             if style == .secondAppIcon {
                 ShannonMessageEyesView(expression: presentationID.map(ShannonPresentationFace.eyeExpression(for:)) ?? face.expression, size: size)
             } else if let presentationID {
-                ShannonPresentationFaceView(id: presentationID, size: size)
+                ShannonMessageFaceCloseUp(assetName: ShannonPresentationFace.pictureAssetName(for: presentationID), size: size)
             } else {
                 ShannonMessageFaceCloseUp(face: face, size: size)
             }
@@ -98,8 +98,19 @@ struct ShannonMessageEyesView: View {
 /// to the face so the expression reads at message size. A Live2D figure per row would be one web view per
 /// message; the pictures are the same faces, already in the bundle.
 struct ShannonMessageFaceCloseUp: View {
-    let face: ShannonFace
+    /// One of the drawn pictures (`shannon-expression-*`, `shannon-emotion-*`).
+    let assetName: String
     let size: CGFloat
+
+    init(assetName: String, size: CGFloat) {
+        self.assetName = assetName
+        self.size = size
+    }
+
+    /// The picture of a face: its kind's own picture when it carries one, else the face's.
+    init(face: ShannonFace, size: CGFloat) {
+        self.init(assetName: ShannonExpressionAssets.assetName(for: face), size: size)
+    }
 
     /// The face pictures share one framing: the face sits around the middle, slightly below centre.
     static let zoom: CGFloat = 2.0
@@ -117,13 +128,11 @@ struct ShannonMessageFaceCloseUp: View {
 
     private var picture: Image {
 #if canImport(UIKit)
-        if let image = ShannonExpressionAssets.uiImage(forAsset: ShannonExpressionAssets.assetName(for: face))
-            ?? ShannonExpressionAssets.uiImage(for: face.expression) {
+        if let image = ShannonExpressionAssets.uiImage(forAsset: assetName) ?? ShannonExpressionAssets.uiImage(for: .neutral) {
             return Image(uiImage: image)
         }
 #elseif canImport(AppKit)
-        if let image = ShannonExpressionAssets.nsImage(forAsset: ShannonExpressionAssets.assetName(for: face))
-            ?? ShannonExpressionAssets.nsImage(for: face.expression) {
+        if let image = ShannonExpressionAssets.nsImage(forAsset: assetName) ?? ShannonExpressionAssets.nsImage(for: .neutral) {
             return Image(nsImage: image)
         }
 #endif

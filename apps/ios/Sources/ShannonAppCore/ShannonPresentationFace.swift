@@ -60,6 +60,23 @@ public enum ShannonPresentationFace {
         return names[drawn] ?? ShannonExpressionDTO.neutral.japaneseName
     }
 
+    /// The drawn picture beside a reply in the ガール style: a face's own picture, a feeling kind's picture where that kind is
+    /// the face (ジト目 is deadpan, ドヤ顔 triumphant), else the nearest face's picture. The `shannon-face-*` pictures are rendered
+    /// from Live2D and looked like screenshots among the drawn ones (owner, 2026-10-26), so they are not the icon any more.
+    public static func pictureAssetName(for id: String) -> String {
+        let drawn = drawnID(for: id) ?? fallbackID
+        if let expression = ShannonExpressionDTO(rawValue: drawn) { return expression.assetName }
+        if let kind = kindPicture[drawn], ShannonEmotionKindIcon.bundled.contains(kind) { return kind.assetName }
+        return (nearest[drawn] ?? .neutral).assetName
+    }
+
+    /// Ids that are one of the drawn feeling kinds; the others take the nearest face (`nearest`).
+    private static let kindPicture: [String: ShannonEmotionKindIcon] = [
+        "proud": .pride, "smug": .triumphant, "flatStare": .deadpan, "pout": .sulky, "tsun": .sulky, "shocked": .speechless,
+        "wink": .playful, "coverUp": .giggle, "tongueClick": .frustrated, "angry": .cuteAngry, "crying": .lamenting,
+        "wail": .lamenting,
+    ]
+
     private static let nearest: [String: ShannonExpressionDTO] = [
         "proud": .determined, "flustered": .embarrassed, "apologetic": .concerned,
         "businessSmile": .joyful, "strainedSmile": .wry, "blankFace": .calm, "listless": .sleepy, "tongueClick": .annoyed,
@@ -76,29 +93,4 @@ public enum ShannonPresentationFace {
         "angry": "怒っている", "crying": "泣いている", "pout": "ふくれている", "shocked": "がーん", "shout": "叫んでいる",
         "smug": "ドヤ顔", "wail": "大泣き", "wink": "ウインク",
     ]
-}
-
-/// The small round face of option A: the picture of the reply's presentation id, cropped to a circle, nothing else.
-struct ShannonPresentationFaceView: View {
-    let id: String
-    let size: CGFloat
-
-    var body: some View {
-        picture
-            .resizable()
-            .scaledToFill()
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-    }
-
-    private var picture: Image {
-        for name in [ShannonPresentationFace.assetName(for: id), "shannon-face-\(ShannonPresentationFace.fallbackID)"] {
-#if canImport(UIKit)
-            if let image = UIImage(named: name, in: .module, compatibleWith: nil) { return Image(uiImage: image) }
-#elseif canImport(AppKit)
-            if let image = Bundle.module.image(forResource: name) { return Image(nsImage: image) }
-#endif
-        }
-        return Image(systemName: "person.crop.circle.fill")
-    }
 }
