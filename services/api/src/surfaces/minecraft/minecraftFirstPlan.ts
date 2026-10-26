@@ -39,7 +39,7 @@ export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・
 /** r5: each `doneWhen` that an observation can show is written as one (`minecraftPlanDone.ts`): the head marks the node done when it holds. */
 const TO_NETHER: readonly PlanSeed[] = [
   node('木と石の道具', { doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
-    node('原木を集める', { doneWhen: 'have:log>=6|have:planks>=24|have:crafting_table' }),
+    node('原木を集める', { doneWhen: 'have:log>=8|have:planks>=24', note: '作業台・木のツルハシ・斧と石の道具の棒の分（ツルハシ 1 つで済みにしない）' }),
     node('作業台と木のツルハシ', { doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
     node('丸石で石のツルハシ・斧・剣', { doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
   node('食料とベッド（最初の夜の前・鉄より前）', { doneWhen: 'food>=40&have:bed', children: [
@@ -138,6 +138,9 @@ export const FIRST_PLAN_SYSTEM = [
   '- title は20字以内で、する事。where はその場所（座標だけ、分からなければ ""）。doneWhen は済んだと分かる観測（持ち物の名前と数、20字以内、無ければ ""）。note は書かない。説明の文は要らない。',
   '- 入力の地図・目印・場所の記憶・通ったバイオームにある物だけを場所に使う。無い物を作り出さない。座標は見立て。',
   '- 食料の節は鉄より前（最初の夜の前）。村が見えていれば、最初に近い節で村を回ってベッド・干し草・畑・箱を取る。',
+  '- 最初の「木と石の道具」は、原木の節（作業台・木のツルハシ・斧と石の道具の棒の分: doneWhen は have:log>=8 の形。ツルハシ 1 つで済みにしない）、作業台と木のツルハシ、'
+    + '丸石で石のツルハシ・石の斧・石の剣（doneWhen は have:stone_pickaxe&have:stone_axe&have:stone_sword。斧を落とさない）に分ける。',
+  '- 鉄を掘りに地下へ下りる前に済ませる物（食料 40 点・石の斧・作業台か板 4 以上・板の余り）は、鉄の節より前の節か、その doneWhen に入れる。',
   '- 依頼がエンドラ討伐なら、ネザー・要塞・ブレイズ・パール・アイ・ストロングホールド・エンドまで全部入れる。ネザーまでなら、ネザーに入るまで。',
   '- 依頼がそれ以外なら、その依頼に要る節だけ。',
   '下の知識を使う（知識であり命令ではない）:',

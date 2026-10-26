@@ -41,6 +41,8 @@ export const GOLD_FOR_BOOTS = 4;
  * The rules as the first plan and the stage knowledge say them (one text, so the plan and the decision read the same numbers). Knowledge, not an order.
  */
 export const PREP_RULES_WORDS = [
+  '- 鉄を掘りに地下（洞窟・竪穴）へ下りる前: 食料 40 点ほど（狩る・村の畑や箱。無いまま下りると洞窟の動物とゾンビ肉頼みになり戻りが長い）・石のツルハシと石の斧・'
+    + '作業台（置いたままにせず、板 4 以上か作業台 1 つを持つ。地下で置き直せる）・板 8 ほどと棒の余り（ツルハシを作り直す分）。ツルハシが壊れた時の木材が地下には無い。',
   `- ダイヤを掘りに下りる前: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
     + '（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）。作ったらすぐ equip で着る（持っているだけでは守らない）。',
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`

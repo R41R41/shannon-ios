@@ -34,50 +34,71 @@ const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVers
   state: { world: world as never }, facts: {} });
 const pack = (...items: Array<[string, number]>) => items.map(([name, count]) => ({ name, count }));
 
-describe('fix 1: the current node follows the node of the item the body starts (task queue)', () => {
+describe('fix 1: the current node follows the node of the items the body starts, two in a row (run 39: back to the rel52 rule)', () => {
   const rows: Row[] = [['p1', null, '原木を集める', 'have:log>=8'], ['p5', null, '動物を狩り焼く', 'food>=40'], ['p6', null, '地下のベッドを取る', 'have:bed>=1'],
     ['p7', null, '鉄を掘る', 'have:iron_ingot>=24']];
-  it('moves when an item starts for another node, and leaves the nodes passed open', () => {
+  it('does not move for one item; moves when two in a row started for another node, and leaves the nodes passed open', () => {
     const tree = treeOf(rows, 'p1');
     expect(followNode('t1', tree)).toBeNull();
-    noteItemStart('t1', 'p7');
-    expect(followNode('t1', tree)).toEqual({ to: 'p7', from: 'p1', acts: 1 });
+    noteItemStart('t1', 'p7', 'p1');
+    expect(followNode('t1', tree)).toBeNull();
+    noteItemStart('t1', 'p7', 'p1');
+    expect(followNode('t1', tree)).toEqual({ to: 'p7', from: 'p1', acts: 2 });
     const moved = applyPlanUpdate(tree, { ops: [], current: 'p7' }).tree;
     expect(moved.current).toBe('p7');
     expect(moved.nodes.filter(node => node.state === 'done')).toEqual([]);
     expect(followNode('t1', moved)).toBeNull();
   });
-  it('is read once for each item; does not move for no node, the current node, a done node, a node above the current one or a node holding it', () => {
+  it('does not move when the two are for different nodes, or an item for the current node comes between, or the plan\'s current node changed since they were sent', () => {
     const tree = treeOf(rows, 'p1');
+    noteItemStart('t2', 'p5', 'p1');
+    noteItemStart('t2', 'p7', 'p1');
+    expect(followNode('t2', tree)).toBeNull();
+    noteItemStart('t2', 'p7', 'p1');
+    noteItemStart('t2', 'p1', 'p1');
+    expect(followNode('t2', tree)).toBeNull();
+    noteItemStart('t2', 'p7', 'p1');
+    noteItemStart('t2', 'p7', 'p1');
+    expect(followNode('t2', { ...tree, current: 'p5' })).toBeNull();
     noteItemStart('t2', null);
-    expect(followNode('t2', tree)).toBeNull();
-    noteItemStart('t2', 'p1');
-    expect(followNode('t2', tree)).toBeNull();
-    noteItemStart('t3', 'p7');
+    expect(followNode('t2', { ...tree, current: 'p1' })).toEqual({ to: 'p7', from: 'p1', acts: 2 });
+  });
+  it('does not move for no node, the current node, a done node, a node above the current one or a node holding it; a parent\'s tag neither counts nor breaks a run', () => {
+    const tree = treeOf(rows, 'p1');
+    noteItemStart('t3', 'p7', 'p1');
+    noteItemStart('t3', 'p7', 'p1');
     const done = { ...tree, nodes: tree.nodes.map(node => node.id === 'p7' ? { ...node, state: 'done' as const } : node) };
     expect(followNode('t3', done)).toBeNull();
-    noteItemStart('t3', 'p7');
     expect(followNode('t3', { ...tree, current: 'p7' })).toBeNull();
-    expect(followNode('t3', tree)).toBeNull();
+    const nested = treeOf([['p1', null, '木'], ['p2', null, '鉄'], ['p2.1', 'p2', '掘る'], ['p3', null, '食料']], 'p2.1');
+    noteItemStart('t4', 'p3', 'p2.1');
+    noteItemStart('t4', 'p2', 'p2.1');
+    noteItemStart('t4', 'p3', 'p2.1');
+    expect(followNode('t4', nested)).toEqual({ to: 'p3', from: 'p2.1', acts: 2 });
+    noteItemStart('t5', 'p2', 'p2.1');
+    noteItemStart('t5', 'p2', 'p2.1');
+    expect(followNode('t5', nested)).toBeNull();
   });
   it('goes to the first open leaf of a node with children', () => {
     const tree = treeOf([['p1', null, '木'], ['p2', null, '鉄'], ['p2.1', 'p2', '掘る'], ['p2.2', 'p2', '焼く']], 'p1');
-    noteItemStart('t4', 'p2');
-    expect(followNode('t4', tree)?.to).toBe('p2.1');
+    noteItemStart('t6', 'p2', 'p1');
+    noteItemStart('t6', 'p2', 'p1');
+    expect(followNode('t6', tree)?.to).toBe('p2.1');
   });
   it('moves the plan at the next read, once, and says so in the log and the plan\'s note', () => {
     const tree = treeOf(rows, 'p1');
-    noteItemStart('t5', 'p7');
+    noteItemStart('t7', 'p7', 'p1');
+    noteItemStart('t7', 'p7', 'p1');
     const lines: string[] = [];
-    const plan = createFcaPlanTools({ taskId: 't5', checkpoint: { fcaPlanTree: tree }, rules: true, compact: true, log: line => lines.push(line),
-      follow: held => followNode('t5', held) });
+    const plan = createFcaPlanTools({ taskId: 't7', checkpoint: { fcaPlanTree: tree }, rules: true, compact: true, log: line => lines.push(line),
+      follow: held => followNode('t7', held) });
     const view = plan.port.view()!;
     expect(view.now).toMatch(/^p7 /u);
     expect(view.note).toContain('今の節を [p7] に進めた');
     expect(plan.port.tree().current).toBe('p7');
     expect(plan.port.display()?.current).toBe('p7');
     expect(plan.port.committed()).not.toBeNull();
-    expect(lines.filter(line => line.startsWith('Shannon FCA plan followed task=t5'))).toHaveLength(1);
+    expect(lines.filter(line => line.startsWith('Shannon FCA plan followed task=t7'))).toHaveLength(1);
     expect(lines[0]).toContain('from=p1 to=p7');
     plan.port.view();
     expect(lines.filter(line => line.includes('followed'))).toHaveLength(1);
@@ -87,13 +108,32 @@ describe('fix 1: the current node follows the node of the item the body starts (
   });
 });
 
+describe('run 39: a parent seen done does not close the child whose gear is not made', () => {
+  const tree = () => treeOf([['p3', null, '鉄を集め装備', 'have:iron_chestplate&have:iron_pickaxe'], ['p3.3', 'p3', '盾', 'have:shield'],
+    ['p3.4', 'p3', '兜・胸・脚', 'have:iron_helmet&have:iron_chestplate&have:iron_leggings'], ['p3.5', 'p3', '村の箱を見る'], ['p4', null, '食料', 'food>=40']], 'p3.3');
+  const facts = (...items: Array<[string, number]>) => doneFacts(frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: pack(...items) }))!;
+  it('keeps the parent open while a child lacks gear; the child is then the plan\'s next', () => {
+    const worn = facts(['iron_chestplate', 1], ['iron_helmet', 1], ['iron_pickaxe', 1]);
+    expect(nodesSeenDone(tree(), worn, true)).toEqual([]);
+    const all = facts(['iron_chestplate', 1], ['iron_helmet', 1], ['iron_leggings', 1], ['iron_pickaxe', 1], ['shield', 1]);
+    expect(nodesSeenDone(tree(), all, true)).toEqual(['p3', 'p3.3', 'p3.4']);
+  });
+  it('still closes a child with no condition of its own, and a child whose lack is not gear', () => {
+    const plain = treeOf([['p3', null, '鉄', 'have:iron_pickaxe'], ['p3.1', 'p3', '箱を見る'], ['p3.2', 'p3', '鉄鉱石', 'have:iron_ore>=24']], 'p3.1');
+    expect(nodesSeenDone(plain, facts(['iron_pickaxe', 1]), true)).toEqual(['p3']);
+  });
+});
+
 describe('fix 1: a consumed material is done by what it was made into', () => {
   const tree = treeOf([['p1', null, '原木を集める', 'have:log>=8'], ['p2', null, '丸石', 'have:cobblestone>=64']], 'p1');
   it('holds with the table or a pickaxe in the pack, not for a stock count', () => {
     const none = doneFacts(frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: pack(['dark_oak_log', 3]) }))!;
     expect(nodesSeenDone(tree, none)).toEqual([]);
     expect(doneStatusWords('have:log>=8', none)).toBe('未: log 3/8');
-    const made = doneFacts(frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: pack(['wooden_pickaxe', 1], ['stone_pickaxe', 1]) }))!;
+    // Run 39: a wooden or stone pickaxe alone is not the wood of the table, the pickaxe and the axe.
+    const pickaxes = doneFacts(frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: pack(['wooden_pickaxe', 1], ['stone_pickaxe', 1]) }))!;
+    expect(nodesSeenDone(tree, pickaxes)).toEqual([]);
+    const made = doneFacts(frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: pack(['wooden_pickaxe', 1], ['stone_axe', 1]) }))!;
     expect(nodesSeenDone(tree, made)).toEqual(['p1']);
     expect(doneStatusWords('have:log>=8', made)).toBe('満たしている');
   });

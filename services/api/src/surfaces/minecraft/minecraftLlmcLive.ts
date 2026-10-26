@@ -68,6 +68,28 @@ const finite = (value: unknown): number | null => typeof value === 'number' && N
 const strings = (value: unknown, limit: number): string[] => (Array.isArray(value) ? value : []).filter(item => typeof item === 'string')
   .slice(0, limit).map(item => clean(item as string).slice(0, 200));
 
+/** The name of the body's wood mark (the nearest plank or fence within 24 blocks: a mineshaft's supports, a hut), told only while she is short of wood. */
+export const WOOD_MARK = '木材（板・柵）';
+/** Planks she can make or holds under which wood is short: a table 4, a pickaxe 3, an axe 3 and the sticks 4. */
+export const WOOD_SHORT_PLANKS = 12;
+/** The planks she holds, a log counted as four. */
+export function planksHeld(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): number {
+  let planks = 0;
+  for (const [name, count] of carriedItemCounts(world, facts)) {
+    if (name.endsWith('_planks')) planks += count;
+    else if (name.endsWith('_log') || name.endsWith('_stem')) planks += count * 4;
+  }
+  return planks;
+}
+/** The landmark lines: the body's wood mark only while wood is short (run 39: no table below, 400 s, the mine's planks 30 m off and unsaid). */
+function landmarkLines(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): string[] {
+  const lines = strings(world.mapLandmarks, LANDMARKS);
+  if (planksHeld(world, facts) < WOOD_SHORT_PLANKS) {
+    return lines.map(line => line.includes(WOOD_MARK) ? `${line}（板が足りない間だけ出す。dig で取れる。作業台は板 4）` : line);
+  }
+  return lines.filter(line => !line.includes(WOOD_MARK));
+}
+
 /** The food she carries, as points (design 2.6): the total and each kind. */
 export function carriedFood(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): { points: number; items: string[] } {
   const counts = carriedItemCounts(world, facts);
@@ -255,7 +277,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...bodyAgeField(parts.bodyAge),
     ...readinessFields(parts),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
-    landmarks: strings(world.mapLandmarks, LANDMARKS),
+    landmarks: landmarkLines(world, observation.facts),
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
     stops: strings(world.recentStops, STOPS),
     ...(look ? { look } : {}),

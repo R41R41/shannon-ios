@@ -86,14 +86,19 @@ export function parseDoneWhen(text: string | undefined): DonePredicate | null {
  * (a count the work could need: `MADE_FROM_UP_TO`) also holds when she carries what it was made into, which does not go back the way the material does.
  * A bigger count (`have:cobblestone>=64`, blocks to stand on) is a stock, and is only the pack's.
  */
-const MADE_INTO: ReadonlyArray<{ material: RegExp; into: RegExp; upTo: number }> = [
-  { material: /^(?:log|planks|stick)$/u, upTo: 24,
-    into: /^(?:crafting_table|(?:wooden|stone|golden|iron|diamond|netherite)_(?:pickaxe|axe|shovel|hoe|sword)|shield|chest|w+_bed|bed)$/u },
+const TOOL = (kind: string) => new RegExp(`^(?:wooden|stone|golden|iron|diamond|netherite)_${kind}$`, 'u');
+const MADE_INTO: ReadonlyArray<{ material: RegExp; into: RegExp; upTo: number; together?: readonly RegExp[] }> = [
+  // Run 39 (2026-10-26: p1.1 `have:log>=8|have:wooden_pickaxe` was done at 3 logs the moment the pickaxe was made, and no axe was made): the wood of the
+  // table, the pickaxe and the axe is used up, so it is made into once she carries both a pickaxe and an axe (or an iron pickaxe, past the wood's tools);
+  // a wooden pickaxe alone is not that much.
+  { material: /^(?:log|planks|stick)$/u, upTo: 24, together: [TOOL('pickaxe'), TOOL('axe')],
+    into: /^(?:shield|chest|[a-z]+_bed|(?:iron|diamond|netherite)_pickaxe)$/u },
   { material: /^cobblestone$/u, upTo: 8, into: /^(?:furnace|(?:stone|iron|diamond|netherite)_(?:pickaxe|axe|shovel|hoe|sword))$/u },
 ];
 function madeInto(counts: ReadonlyMap<string, number>, clause: Extract<DoneClause, { kind: 'have' }>): boolean {
   const rule = MADE_INTO.find(item => item.material.test(clause.item) && clause.count <= item.upTo);
-  return !!rule && [...counts].some(([name, count]) => count > 0 && rule.into.test(name));
+  const has = (pattern: RegExp) => [...counts].some(([name, count]) => count > 0 && pattern.test(name));
+  return !!rule && (has(rule.into) || (!!rule.together && rule.together.every(has)));
 }
 function holds(clause: DoneClause, facts: DoneFacts): boolean {
   switch (clause.kind) {
@@ -104,6 +109,11 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
     case 'at': return !!facts.feet && (!clause.dimension || facts.dimension === null || facts.dimension === clause.dimension)
       && Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y, facts.feet.z - clause.z) <= clause.r;
   }
+}
+/** The alternative with the most of its clauses holding. */
+function bestAlternative(predicate: DonePredicate, facts: DoneFacts): DoneClause[] {
+  const share = (clauses: DoneClause[]) => clauses.filter(clause => holds(clause, facts)).length / clauses.length;
+  return [...predicate].sort((a, b) => share(b) - share(a))[0]!;
 }
 export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): boolean {
   return predicate.some(clauses => clauses.every(clause => holds(clause, facts)));
@@ -130,15 +140,26 @@ export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts |
   if (!predicate) return '観測では確かめられない（済んだら set state=done）';
   if (!facts) return null;
   if (predicateHolds(predicate, facts)) return '満たしている';
-  const best = [...predicate].sort((a, b) => b.filter(clause => holds(clause, facts)).length / b.length
-    - a.filter(clause => holds(clause, facts)).length / a.length)[0]!;
-  return `未: ${best.filter(clause => !holds(clause, facts)).map(clause => clauseWords(clause, facts)).join('・')}`;
+  return `未: ${bestAlternative(predicate, facts).filter(clause => !holds(clause, facts)).map(clause => clauseWords(clause, facts)).join('・')}`;
 }
 /** Whether the alternative of the predicate that holds says only what the pack holds (`have:`, `food>=`): what the work made is in hand. */
 function holdsByThePack(predicate: DonePredicate, facts: DoneFacts): boolean {
   const alternative = predicate.find(clauses => clauses.every(clause => holds(clause, facts)));
   const pack = (clause: DoneClause) => clause.kind === 'have' || clause.kind === 'food' || (clause.kind === 'act' && clause.clause.k === 'have');
   return !!alternative && alternative.every(pack);
+}
+
+/** What she wears and carries to use again, which the work does not use up: a pickaxe, a sword, armour, a shield. */
+const GEAR = /^(?:[a-z]+_)?(?:helmet|chestplate|leggings|boots|shield|sword|pickaxe|axe|shovel|hoe)$/u;
+/**
+ * run 39 (2026-10-26: p3 `have:iron_chestplate&have:iron_pickaxe` was seen done with the pickaxe and the chestplate, and p3.3 (a shield) and p3.4 (the helmet,
+ * the legs) closed with it; the legs and the shield were never made): whether a node's own predicate is unmet for want of gear only. Such a child holds its
+ * parent open, so the plan's next open node is that child and not the node after the parent.
+ */
+function unmetGear(predicate: DonePredicate | undefined, facts: DoneFacts): boolean {
+  if (!predicate || predicateHolds(predicate, facts)) return false;
+  const unmet = bestAlternative(predicate, facts).filter(clause => !holds(clause, facts));
+  return unmet.length > 0 && unmet.every(clause => clause.kind === 'have' && GEAR.test(clause.item));
 }
 
 /** Each node's predicate, its places given the dimension of the nearest `dim:` node before it (itself first) when they name none. */
@@ -169,7 +190,9 @@ export function nodesSeenDone(tree: PlanTree, facts: DoneFacts, inOrder = false)
     if (node.state === 'done' || node.state === 'blocked') continue;
     const predicate = predicates.get(node.id);
     if (!predicate || !predicateHolds(predicate, facts)) continue;
-    if (tree.nodes.some(child => child.parentId === node.id && open(child)) && !holdsByThePack(predicate, facts)) continue;
+    const kids = tree.nodes.filter(child => child.parentId === node.id && open(child));
+    if (kids.length && !holdsByThePack(predicate, facts)) continue;
+    if (kids.some(child => unmetGear(predicates.get(child.id), facts))) continue;
     out.add(node.id);
   }
   const ids = orderedPlan(tree.nodes).map(node => node.id).filter(id => out.has(id));

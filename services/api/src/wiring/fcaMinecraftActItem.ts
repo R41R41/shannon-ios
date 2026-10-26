@@ -21,7 +21,7 @@ import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js
 type Call = Parameters<FcaExternalTools['execute']>[0];
 
 export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftControl; bodyId: string; call: Call; skill: string;
-  fixes: readonly string[]; node: string | null; frame: BodyObservation | null }): Promise<ToolResult> {
+  fixes: readonly string[]; node: string | null; current?: string | null; frame: BodyObservation | null }): Promise<ToolResult> {
   const { queue, call } = parts, input = call.input as ActInput;
   const { pre, replace: _replace, ...args } = input;
   const fixes = parts.fixes.length ? `（頭が形を直して送った: ${parts.fixes.join('、')}）\n` : '';
@@ -32,7 +32,8 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   }
   const node = parts.node && parts.node !== URGENT_TAG ? parts.node : null;
   const added = await queue.add({ call: { id: call.operationId, name: call.name, input: call.input }, operationId: call.operationId, input,
-    arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, why: String(input.why ?? ''), fixes: [],
+    arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, current: parts.current ?? null,
+    why: String(input.why ?? ''), fixes: [],
     maxMs: actMilliseconds(input, feetOf(parts.control.observe(parts.bodyId))) });
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';

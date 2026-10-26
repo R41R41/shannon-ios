@@ -135,7 +135,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       noteActNode(step.taskId, node?.mark ?? null, line => console.info(line));
       if (guards) {
         const sent = await sendItem({ queue: parts.llmc.queue, control, bodyId, call, skill: current!.name, fixes: prepared?.fixes ?? [],
-          node: node?.mark?.node ?? null, frame: control.observe(bodyId) });
+          node: node?.mark?.node ?? null, current: node?.mark?.current ?? null, frame: control.observe(bodyId) });
         const said = guards.hold?.tail ?? guards.hold?.note;
         return guards.led(said && sent.ok ? withNote(sent, said) : sent);
       }

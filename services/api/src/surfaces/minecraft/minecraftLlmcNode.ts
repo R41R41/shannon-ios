@@ -134,37 +134,44 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   return node ? currentNodeLine(node, shown?.path, doneStatusWords(node.doneWhen, doneFacts(observation))) : planNowLine(shown);
 }
 
-/** The node of the item the body started last, until `followNode` reads it once (task queue: the plan's current node follows the work). */
-const started = new Map<string, string>();
-export function noteItemStart(taskId: string, node: string | null): void {
+/** The items in a row, started for the one same node that is not the current one, after which the head moves the current node to it. */
+export const FOLLOW_AFTER = 2;
+const FOLLOW_KEPT = 8;
+interface Started { node: string; current: string | null }
+/** The nodes of the items the body started, newest last, each with the current node the plan had when the model sent the item. */
+const started = new Map<string, Started[]>();
+export function noteItemStart(taskId: string, node: string | null, current: string | null = null): void {
   if (!node) return;
+  const list = [...(started.get(taskId) ?? []), { node, current }].slice(-FOLLOW_KEPT);
   started.delete(taskId);
-  started.set(taskId, node);
+  started.set(taskId, list);
   if (started.size > 32) started.delete(started.keys().next().value as string);
 }
 /**
  * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: plan.update 0 and no 「理由:」 in 125 decisions, 85 of 104 acts tagged for another node than the current
  * one; the plan's now said 原木を集める for 471 s while she smelted iron, and 動物を狩り焼く / 地下のベッドを取る while she did the iron again): the node the
- * body works on is the plan's current node. Task queue (design 8.2): when an item starts for a node that is not the current one (not done, not blocked, not
- * a node above), the head moves the current node to that node's first open leaf: the plan, its display (the mod's task tab) and the live's now say
- * what she does.
- * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the node is the current one or
- * already holds it. Read once for each item started.
+ * body works on is the plan's current node. Run 39 (2026-10-26: the queue's first version moved the node at each item that started, 7 moves in 34 minutes, and
+ * the nodes for food, legs, the shield and gold boots never became the current one): back to rel52's rule. When the last `FOLLOW_AFTER` items to start were
+ * for the same node (not the current one, not an urgent hand, not a node above the current one) and were sent under the current node the plan has now, the
+ * head moves the current node to that node's first open leaf: the plan, its display (the mod's task tab) and the live's now say what she does. An item for
+ * the current node (or one the head tagged) breaks a run.
+ * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the tags do not agree.
  */
 export function followNode(taskId: string, tree: PlanTree): { to: string; from: string | null; acts: number } | null {
-  const target = started.get(taskId);
-  started.delete(taskId);
-  if (!target) return null;
   const order = orderedPlan(tree.nodes), byId = new Map(tree.nodes.map(node => [node.id, node] as const));
-  const open = (id: string) => byId.get(id)?.state !== 'done' && byId.get(id)?.state !== 'blocked' && byId.has(id);
-  if (!open(target)) return null;
   const under = (id: string, top: string): boolean => {
     for (let at: string | null = id, guard = 0; at && guard < 16; at = byId.get(at)?.parentId ?? null, guard += 1) if (at === top) return true;
     return false;
   };
+  // A parent's tag says nothing of the work under it: it is not counted, and it does not break a run.
+  const counted = (started.get(taskId) ?? []).filter(tag => !(tag.current && tag.node !== tag.current && under(tag.current, tag.node)));
+  const tags = counted.slice(-FOLLOW_AFTER), target = tags[0]?.node;
+  if (tags.length < FOLLOW_AFTER || !target || tags.some(tag => tag.node !== target || tag.current !== tree.current)) return null;
+  const open = (id: string) => byId.get(id)?.state !== 'done' && byId.get(id)?.state !== 'blocked' && byId.has(id);
+  if (!open(target)) return null;
   const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
   if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
-  return { to: leaf.id, from: tree.current, acts: 1 };
+  return { to: leaf.id, from: tree.current, acts: tags.length };
 }
 
 /** For tests: no task holds a tally. */
