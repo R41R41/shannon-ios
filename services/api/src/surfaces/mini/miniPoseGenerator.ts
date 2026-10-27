@@ -36,10 +36,13 @@ const CONTACT_WORDS: Record<MiniContact, string> = {
   // Drawn without a board: with one, the model hangs her under it or lets her float in front of it. Her raised fists are the anchor.
   hang: 'hanging by both hands from an invisible horizontal bar at the top of the picture (do not draw the bar): both arms stretched straight up, both fists closed at the same height and they are the highest part of her, her body and legs dangling below',
   air: 'in mid-air with nothing under her',
+  wall: 'climbing UP the right-hand side of the green rectangle (the side of a window): seen from the side, facing left toward it, both hands and both feet gripping its right edge, her body beside it to the right',
 };
 
 export function drawPrompt(spec: MiniPoseSpec): string {
-  const guide = boardless(spec.contact)
+  const guide = spec.contact === 'wall'
+    ? 'The FIRST image is a layout guide: the tall bright green rectangle on the left is the side of an application window on a computer desktop; its RIGHT edge is the window\'s side.'
+    : boardless(spec.contact)
     ? 'The FIRST image is an empty transparent canvas: draw her in the middle of it, whole body visible with margin on every side.'
     : 'The FIRST image is a layout guide: the bright green rectangle is the top of an application window on a computer desktop; its top edge is the window\'s edge.';
   return [
@@ -49,7 +52,7 @@ export function drawPrompt(spec: MiniPoseSpec): string {
     'Draw her eyes open and her mouth closed unless what she is doing says otherwise.',
     ...(boardless(spec.contact) ? [] : ['Keep the green rectangle exactly where it is, the same size and the same flat pure green, untouched except where she overlaps it.']),
     'Keep the character exactly the same design, outfit, colors and chibi proportions (about 3 heads tall) as the character sheet, at the same scale as one figure on the sheet.',
-    'Only her and small things she holds. Transparent background everywhere else. No text, no symbols, no speech bubbles, no shadow on the background, no other characters.',
+    'Only her and small things she holds (and small swirls or sparkles right by her head when she is dizzy). Transparent background everywhere else. No text, no letters, no speech bubbles, no shadow on the background, no other characters.',
   ].join('\n');
 }
 
@@ -65,6 +68,18 @@ const BLINK_PROMPT = 'Edit this image. Change ONLY her eyes: if they are open, c
 // redraw changed the upper body, and asked to swap the legs the model gave the same legs back.
 const WALK_FRAMES = 4;
 const WALK_SHEET = { width: 2560, height: 1024 };
+const DANCE_PROMPT = [
+  'The FIRST image is the girl dancing (one frame). The SECOND image is her character sheet.',
+  'Draw a 4-frame DANCE LOOP animation sprite sheet of this exact chibi girl dancing happily in place, front view, a simple cute beat dance.',
+  'Four frames side by side in ONE row, left to right, evenly spaced, each frame the same size as the girl in the first image, all standing on the same horizontal ground line, nothing overlapping:',
+  '1. arms up to the left, hips to the right, one foot lifted',
+  '2. arms crossed in front, both feet down, knees bent a little',
+  '3. arms up to the right, hips to the left, the other foot lifted',
+  '4. arms crossed in front again, both feet down, knees bent a little',
+  'The same face as the first image, same hair, same outfit, same colors and the same size in every frame; the hair and skirt swing with the beat.',
+  'Flat pure green background (#00FF00) everywhere. No text, no numbers, no music notes, no frame borders, no shadows.',
+].join('\n');
+
 const WALK_PROMPT = [
   'The FIRST image is the girl walking (one frame). The SECOND image is her character sheet.',
   'Draw a 4-frame WALK CYCLE animation sprite sheet of this exact chibi girl walking to the LEFT, in the same three-quarter view as the first image.',
@@ -191,7 +206,8 @@ export class MiniPoseGenerator {
       if ('reason' in shaped) { reason = shaped.reason; this.options.library.reject(drawn.value, `${origin.id ?? 'reply'}-${shaped.reason}`); continue; }
       const variants = await this.variants(shaped.image, spec.variants, add, notes);
       costUsd += variants.costUsd;
-      const walk = spec.activity === 'walk' ? await this.walkCycle(shaped.image, add, notes) : null;
+      const walk = spec.activity === 'walk' || spec.activity === 'dance'
+        ? await this.walkCycle(shaped.image, add, notes, spec.activity === 'dance' ? DANCE_PROMPT : WALK_PROMPT) : null;
       if (walk) { costUsd += walk.costUsd; for (const [name, image] of walk.images ?? []) variants.images.set(name, image); }
       const inspectStarted = performance.now();
       const edge = spec.contact === 'air' ? null : shaped.anchor.y;
@@ -230,13 +246,13 @@ export class MiniPoseGenerator {
    * swing; centring on the whole figure would make her slide with her legs). A sheet whose frames touch their column's sides (an
    * overlapping figure) or whose sizes differ by more than a fifth is drawn again once.
    */
-  private async walkCycle(base: RgbaImage, add: (stage: string, value: number) => void, notes: string[]): Promise<{ images: Map<Exclude<MiniVariant, 'base'>, RgbaImage> | null; costUsd: number }> {
+  private async walkCycle(base: RgbaImage, add: (stage: string, value: number) => void, notes: string[], prompt = WALK_PROMPT): Promise<{ images: Map<Exclude<MiniVariant, 'base'>, RgbaImage> | null; costUsd: number }> {
     const box = solidBounds(base);
     let costUsd = 0;
     if (!box) return { images: null, costUsd };
     const height = box.bottom - box.top, head = headCentre(base, box);
     for (let attempt = 0; attempt < 2; attempt++) {
-      const drawn = await this.options.models.draw({ prompt: WALK_PROMPT, images: [encodePng(flatten(base, [0, 255, 0])), this.options.library.reference('sheet')],
+      const drawn = await this.options.models.draw({ prompt, images: [encodePng(flatten(base, [0, 255, 0])), this.options.library.reference('sheet')],
         quality: 'high', size: `${WALK_SHEET.width}x${WALK_SHEET.height}` });
       costUsd += drawn.costUsd;
       add('walk', drawn.seconds);
@@ -400,7 +416,14 @@ export function shapeBase(raw: RgbaImage, contact: MiniContact, backView = false
   if (!bounds) return { reason: 'empty' };
   const share = solidShare(keyed.image);
   if (share < 0.04 || share > 0.5) return { reason: `share:${share.toFixed(3)}` };
-  if (bounds.left < 4 || bounds.top < 4 || bounds.right > MINI_CANVAS - 5 || (boardless(contact) && bounds.bottom > MINI_CANVAS - 5)) return { reason: 'cut_off' };
+  // Climbing, she may touch the top or the bottom of the canvas (the side board runs its full height); never the right side.
+  if (contact === 'wall' ? bounds.right > MINI_CANVAS - 5 : bounds.left < 4 || bounds.top < 4 || bounds.right > MINI_CANVAS - 5 || (boardless(contact) && bounds.bottom > MINI_CANVAS - 5)) return { reason: 'cut_off' };
+  if (contact === 'wall') {
+    const side = (keyed as { side?: number | null }).side ?? null;
+    if (side === null) return { reason: 'no_side' };
+    if (bounds.right <= side) return { reason: 'not_on_side' };
+    return { image: keyed.image, anchor: { x: side, y: bounds.bottom }, bounds };
+  }
   if (!boardless(contact)) {
     if (keyed.edge === null) return { reason: 'no_edge' };
     // Her figure must actually meet the edge: something of her above it.

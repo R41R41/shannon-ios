@@ -3,6 +3,10 @@ import { serverEnvironment } from '../infra/config/serverEnvironment.js';
  * Looking at the room through the camera of her body (owner decision, Syzygy ADR-0002
  * addendum 2026-10-02; prose in `docs/body-contract.md`, "Looking at the room").
  *
+ * The frame of a look has a `source`: `camera` (the room, the default) or `screen` (the owner's screen, which
+ * he allows her to see once, owner request 2026-10-28). The two share the frame limits, the budget and the
+ * rule that nothing keeps the frame; only the instruction the model gets and the words she is recorded with differ.
+ *
  * One JPEG frame per look. The frame is checked here, shown to the conversation model
  * once, and dropped. Nothing in this file, or in any module it is passed to, stores it.
  */
@@ -71,6 +75,13 @@ export function roomLookChoice(value: unknown): RoomLookChoice | null {
   return value === 'asked' || value === 'curious' ? value : null;
 }
 
+/** What a frame shows: the room through the body's camera (the default, and what every older body sends), or the owner's screen. */
+export const BODY_LOOK_SOURCES = ['camera', 'screen'] as const;
+export type BodyLookSource = typeof BODY_LOOK_SOURCES[number];
+
+/** The Talk a screen look the owner started himself is about: an id of the same shape as any thread id, never her own-time pseudo thread. */
+const SCREEN_THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+
 export interface BodyLookImage {
   mediaType: 'image/jpeg';
   /** Standard base64 of the JPEG, without a data-URL prefix. */
@@ -80,8 +91,12 @@ export interface BodyLookImage {
 }
 
 export type BodyLookResult =
-  | { outcome: 'seen'; audience: 'owner' | 'others'; image: BodyLookImage }
-  | { outcome: 'refused'; code: BodyLookRefusalCode };
+  | {
+    outcome: 'seen'; audience: 'owner' | 'others'; image: BodyLookImage; source: BodyLookSource;
+    /** Only for a screen look the owner started himself (no look was open): the Talk she answers in. Absent: the latest one. */
+    threadId?: string;
+  }
+  | { outcome: 'refused'; code: BodyLookRefusalCode; source: BodyLookSource };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const unknownKey = (value: Record<string, unknown>, allowed: readonly string[]) => Object.keys(value).find(key => !allowed.includes(key));
@@ -115,14 +130,22 @@ export function jpegSize(bytes: Uint8Array): { width: number; height: number } |
  */
 export function validatedBodyLookResult(value: Record<string, unknown>): BodyLookResult | string {
   if (value.outcome === 'refused') {
-    const unknown = unknownKey(value, ['scopeKey', 'outcome', 'code']);
+    const unknown = unknownKey(value, ['scopeKey', 'outcome', 'code', 'source']);
     if (unknown) return `${unknown.slice(0, 40)} is not allowed`;
     if (!(BODY_LOOK_REFUSAL_CODES as readonly unknown[]).includes(value.code)) return 'code is invalid';
-    return { outcome: 'refused', code: value.code as BodyLookRefusalCode };
+    const refusedSource = sourceOf(value.source);
+    if (!refusedSource) return 'source must be camera or screen';
+    return { outcome: 'refused', code: value.code as BodyLookRefusalCode, source: refusedSource };
   }
   if (value.outcome !== 'seen') return 'outcome must be seen or refused';
-  const unknown = unknownKey(value, ['scopeKey', 'outcome', 'audience', 'image']);
+  const unknown = unknownKey(value, ['scopeKey', 'outcome', 'audience', 'image', 'source', 'threadId']);
   if (unknown) return `${unknown.slice(0, 40)} is not allowed`;
+  const source = sourceOf(value.source);
+  if (!source) return 'source must be camera or screen';
+  if (value.threadId !== undefined
+    && (source !== 'screen' || typeof value.threadId !== 'string' || !SCREEN_THREAD_ID.test(value.threadId) || value.threadId === BODY_LOOK_ACTIVITY_THREAD)) {
+    return 'threadId is allowed only with source screen and must be a thread id';
+  }
   if (value.audience !== 'owner' && value.audience !== 'others') return 'audience must be owner or others';
   const image = value.image;
   if (!isRecord(image)) return 'image must be an object';
@@ -149,7 +172,17 @@ export function validatedBodyLookResult(value: Record<string, unknown>): BodyLoo
   } finally {
     bytes.fill(0);
   }
-  return { outcome: 'seen', audience: value.audience, image: { mediaType: 'image/jpeg', base64, width: width as number, height: height as number } };
+  return {
+    outcome: 'seen', audience: value.audience, source,
+    image: { mediaType: 'image/jpeg', base64, width: width as number, height: height as number },
+    ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
+  };
+}
+
+/** The source of an answer; an older body names none and means the camera. Null: not a source. */
+function sourceOf(value: unknown): BodyLookSource | null {
+  if (value === undefined) return 'camera';
+  return (BODY_LOOK_SOURCES as readonly unknown[]).includes(value) ? value as BodyLookSource : null;
 }
 
 export interface BodyLookConfig {
@@ -195,6 +228,8 @@ export function configuredBodyLook(environment: Readonly<Record<string, string |
 
 export const BODY_LOOK_SOURCE_PREFIX = 'body-look:';
 export const BODY_LOOK_SOURCE_TITLE = '部屋を見た';
+/** The same for a look at the owner's screen. */
+export const BODY_SCREEN_LOOK_SOURCE_TITLE = '画面を見た';
 
 /** The look a source reference names, or null. `GET /v1/initiatives` returns it as `bodyLookId`. */
 export function bodyLookIdOfSource(sourceItemId: unknown): string | null {

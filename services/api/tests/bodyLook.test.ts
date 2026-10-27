@@ -693,7 +693,7 @@ describe('the frame is never kept', () => {
     const table = source('bodyLookStore.ts').match(/CREATE TABLE IF NOT EXISTS body_looks \(([\s\S]*?)\n\s*\);/u)![1]!;
     const columns = table.split('\n').map(line => line.trim().split(/\s+/u)[0]!).filter(Boolean);
     expect(columns).toEqual(['look_id', 'scope_key', 'device_id', 'thread_id', 'requested_at', 'expires_at', 'day_key', 'owner_asked',
-      'outcome', 'code', 'frame_received_at', 'completed_at']);
+      'outcome', 'code', 'frame_received_at', 'completed_at', 'source']);
     expect(table).not.toMatch(/BLOB|image|base64|content|text_|summary|description/iu);
     expect(source('bodyLookStore.ts').match(/CREATE TABLE/gu)).toHaveLength(1);
 

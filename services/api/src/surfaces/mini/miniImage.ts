@@ -13,10 +13,20 @@ const GUIDE_LEFT = 112, GUIDE_RIGHT = 912;
 
 export interface Box { left: number; top: number; right: number; bottom: number }
 
-/** The layout guide: a flat pure-green board that stands for the top of a window. `air` and `hang` have none (a transparent canvas). */
+/** Where the side board's right edge starts, for a `wall` picture (she clings to it). */
+export const GUIDE_SIDE = 420;
+
+/**
+ * The layout guide: a flat pure-green board that stands for the top of a window. `air` and `hang` have none (a transparent canvas);
+ * `wall` has a tall board on the left whose right edge is the window's side.
+ */
 export function guideFor(contact: MiniContact): RgbaImage {
   const image = blankImage(MINI_CANVAS, MINI_CANVAS);
   if (contact === 'air' || contact === 'hang') return image;
+  if (contact === 'wall') {
+    for (let y = 0; y < MINI_CANVAS; y++) for (let x = 60; x <= GUIDE_SIDE; x++) { const i = (y * MINI_CANVAS + x) * 4; image.data[i + 1] = 255; image.data[i + 3] = 255; }
+    return image;
+  }
   for (let y = GUIDE_EDGE; y < MINI_CANVAS; y++) {
     for (let x = GUIDE_LEFT; x <= GUIDE_RIGHT; x++) {
       const i = (y * MINI_CANVAS + x) * 4;
@@ -32,7 +42,7 @@ const greenness = (d: Uint8ClampedArray, i: number) => d[i + 1]! - Math.max(d[i]
  * Keys out the green board and reads the edge: the first row where the board covers a quarter of the width. Strong green goes
  * transparent, weak green half so and loses its green; the faint glow the model sometimes paints around her goes too.
  */
-export function keyGreen(source: RgbaImage): { image: RgbaImage; edge: number | null; board: [number, number] | null } {
+export function keyGreen(source: RgbaImage): { image: RgbaImage; edge: number | null; board: [number, number] | null; side: number | null } {
   const { width, height } = source, d = source.data, out = new Uint8ClampedArray(d);
   let edge: number | null = null, left = width, right = -1;
   for (let y = 0; y < height; y++) {
@@ -51,7 +61,14 @@ export function keyGreen(source: RgbaImage): { image: RgbaImage; edge: number | 
     if (g > 0) out[i + 1] = Math.max(d[i]!, d[i + 2]!);
     out[i + 3] = alpha < 24 ? 0 : alpha;
   }
-  return { image: { width, height, data: out }, edge, board: right >= 0 ? [left, right] : null };
+  // A side board's right edge: the last column the board fills for a quarter of the height.
+  let side: number | null = null;
+  for (let x = width - 1; x >= 0 && side === null; x--) {
+    let count = 0;
+    for (let y = 0; y < height; y++) { const i = (y * width + x) * 4; if (greenness(d, i) > 90 && d[i + 3]! > 128) count++; }
+    if (count > height * 0.25) side = x;
+  }
+  return { image: { width, height, data: out }, edge, board: right >= 0 ? [left, right] : null, side };
 }
 
 /** Clears the faint, nearly transparent haze outside her (some answers carry a glow even without a board). */

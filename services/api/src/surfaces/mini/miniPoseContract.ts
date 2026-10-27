@@ -6,7 +6,8 @@
  * A pose is one picture in four variants (the base, mouth open, eyes closed, both) that differ only in the face. A walk has four more
  * pictures, the frames of its walk cycle (`step1` to `step4`), that the desktop plays while she walks. `contact` is how she touches the surface; the desktop's engine decides where she is, the library what she does.
  */
-export const MINI_CONTACTS = ['stand', 'sit', 'lie', 'hang', 'air'] as const;
+/** `wall`: clinging to the side of a window while she climbs it. */
+export const MINI_CONTACTS = ['stand', 'sit', 'lie', 'hang', 'air', 'wall'] as const;
 export type MiniContact = typeof MINI_CONTACTS[number];
 
 /** Where she can be held when carried: by a wrist, an ankle, the top of the head, the back of the collar, or round the waist. */
@@ -22,6 +23,15 @@ export const MINI_SEED_EXPRESSIONS = [
   'determined', 'tender', 'calm', 'jealous', 'wry', 'exasperated', 'annoyed', 'concerned', 'sad', 'sleepy', 'neutral',
 ] as const;
 
+/**
+ * What a picture is for. The engine's own: rest, walk, jump, fall, carried, sleep, climb, peek (from a screen edge), dizzy. Shown by
+ * the desktop for what the owner's screen is doing: watch (her back to the viewer, the window under her), watchVideo (the same with
+ * popcorn, a video in full screen), type (a tiny laptop, the owner typing), dance (music playing), point (a notice), work (Shannon's
+ * own task running), ask (Shannon waiting for the owner).
+ */
+export type MiniActivity = 'rest' | 'walk' | 'jump' | 'fall' | 'carried' | 'sleep' | 'watch' | 'climb' | 'peek' | 'dizzy'
+  | 'watchVideo' | 'type' | 'dance' | 'point' | 'work' | 'ask';
+
 export interface MiniPoseEntry {
   id: string;
   contact: MiniContact;
@@ -32,7 +42,7 @@ export interface MiniPoseEntry {
   /** The same in a few Japanese words, for the owner's library page. */
   label: string;
   /** `watch`: her back to the viewer, watching the window under her (the desktop shows it while the owner works in that window). */
-  activity: 'rest' | 'walk' | 'jump' | 'fall' | 'carried' | 'sleep' | 'watch';
+  activity: MiniActivity;
   variants: MiniVariant[];
   /** The point that touches the surface, in picture pixels: the window's edge under her (or her feet in the air). */
   anchor: { x: number; y: number };

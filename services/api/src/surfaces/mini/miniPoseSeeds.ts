@@ -31,7 +31,7 @@ const FACES: Record<typeof MINI_SEED_EXPRESSIONS[number], [string, string]> = {
   neutral: ['a plain neutral look, arms relaxed', 'ふつう'],
 };
 
-const CONTACT_LABEL: Record<MiniContact, string> = { stand: '立つ', sit: '座る', lie: '寝そべる', hang: 'ぶら下がる', air: '空中' };
+const CONTACT_LABEL: Record<MiniContact, string> = { stand: '立つ', sit: '座る', lie: '寝そべる', hang: 'ぶら下がる', air: '空中', wall: '登る' };
 
 function face(contact: MiniContact, expression: typeof MINI_SEED_EXPRESSIONS[number]): MiniPoseSpec & { id: string } {
   const [words, label] = FACES[expression];
@@ -70,6 +70,25 @@ export const MINI_SEED_SPECS: readonly (MiniPoseSpec & { id: string })[] = Objec
     description: 'seen from BEHIND, her back to the viewer: standing on the edge, hands clasped behind her back, head tilted down as she looks at the window below her as if reading its screen, her long hair down her back' },
   { id: 'seed_watch_sit', contact: 'sit', expression: 'curious', activity: 'watch', variants: 'still', label: '画面を見る・座る',
     description: 'seen from BEHIND, her back to the viewer: sitting on the edge facing away, leaning forward with her hands on the edge, looking down at the window below as if watching its screen, her long hair down her back, her legs on the far side out of sight' },
+  // What she does for what is on the owner's screen and for her own moves (owner 2026-10-28: 「提案してくれた動きや反応を実装して」).
+  { id: 'seed_climb', contact: 'wall', expression: 'determined', activity: 'climb', variants: 'still', label: '登る',
+    description: 'climbing up energetically, one hand reaching higher, one knee raised, a determined little smile' },
+  { id: 'seed_peek', contact: 'stand', expression: 'curious', activity: 'peek', variants: 'face', label: '覗く',
+    description: 'leaning her upper body far to the left as if peeking around a corner, one hand raised by her face, her long hair hanging sideways, a curious mischievous look' },
+  { id: 'seed_dizzy', contact: 'stand', expression: 'confused', activity: 'dizzy', variants: 'still', label: '目を回す',
+    description: 'dizzy and wobbling, swirly spiral eyes, both hands on her head, knees bent and unsteady' },
+  { id: 'seed_type', contact: 'sit', expression: 'determined', activity: 'type', variants: 'face', label: 'タイピング',
+    description: 'typing fast on a tiny laptop resting on her lap, focused eyes on its screen, little motion lines by her fingers' },
+  { id: 'seed_watch_video', contact: 'sit', expression: 'joyful', activity: 'watchVideo', variants: 'still', label: '動画を観る',
+    description: 'seen from BEHIND, her back to the viewer: sitting on the edge facing away holding a bucket of popcorn on her lap, one hand reaching into it, watching the window below like a movie screen, her long hair down her back' },
+  { id: 'seed_point', contact: 'stand', expression: 'excited', activity: 'point', variants: 'face', label: '指さす',
+    description: 'pointing up and to the side excitedly with one arm stretched out, the other hand on her hip, as if saying look at that' },
+  { id: 'seed_work', contact: 'sit', expression: 'determined', activity: 'work', variants: 'face', label: '作業中',
+    description: 'working busily with a small wrench in one hand and a screwdriver in the other, a little open toolbox beside her, a hard-working look' },
+  { id: 'seed_ask', contact: 'stand', expression: 'curious', activity: 'ask', variants: 'face', label: '手を挙げる',
+    description: 'raising one hand high and straight up as if waiting to be called on, the other hand at her side, looking up expectantly' },
+  { id: 'seed_dance', contact: 'stand', expression: 'joyful', activity: 'dance', variants: 'face', label: '踊る',
+    description: 'dancing happily in place, front view, arms up to one side, hips swaying, one foot lifted' },
   { id: 'seed_land', contact: 'stand', expression: 'relieved', activity: 'rest', variants: 'face', label: '着地',
     description: 'just landed, knees bent and arms out for balance, a relieved smile' },
   { id: 'seed_sleep_lie', contact: 'lie', expression: 'sleepy', activity: 'sleep', variants: 'still', label: '寝そべって眠る',

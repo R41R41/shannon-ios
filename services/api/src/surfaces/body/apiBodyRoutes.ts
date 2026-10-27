@@ -142,13 +142,26 @@ function reactionResponse(outcome: BodyReactionOutcome): ApiResponse {
 
 const LOOK_REFUSALS = {
   disabled: [403, 'BODY_LOOK_DISABLED', 'Looking is switched off on the server.'],
+  wrong_source: [409, 'LOOK_SOURCE_MISMATCH', 'This look was opened for the other source (camera or screen).'],
   not_found: [404, 'LOOK_NOT_FOUND', 'No such look.'],
   wrong_device: [403, 'LOOK_NOT_YOURS', 'This look was given to another device.'],
   answered: [409, 'LOOK_ALREADY_ANSWERED', 'This look was already answered.'],
   expired: [410, 'LOOK_EXPIRED', 'This look expired before it was answered.'],
 } as const;
 
+/** A screen look the owner started that was not taken: nothing was opened and no model saw the frame. */
+const SCREEN_LOOK_UNAVAILABLE = {
+  no_viewer: [503, 'LOOK_VIEWER_UNAVAILABLE', 'The model that sees a look is not available on the server.'],
+  busy: [409, 'LOOK_BUSY', 'Another look is open; try again after it ends.'],
+  limit_hour: [429, 'RATE_LIMITED', 'The limit of looks in the last hour is used up.'],
+  limit_day: [429, 'RATE_LIMITED', 'The limit of looks today is used up.'],
+} as const;
+
 function lookResponse(answer: BodyLookAnswer): ApiResponse {
+  if (answer.kind === 'unavailable') {
+    const [status, error, message] = SCREEN_LOOK_UNAVAILABLE[answer.reason];
+    return { status, body: { error, message } };
+  }
   if (answer.kind !== 'done') {
     const [status, error, message] = LOOK_REFUSALS[answer.kind];
     return { status, body: { error, message } };

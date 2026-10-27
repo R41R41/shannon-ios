@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import {
   BODY_LOOK_ACTIVITY_THREAD, BODY_LOOK_LIMITS, configuredBodyLook, roomLookChoice,
-  type BodyLookCode, type BodyLookConfig, type BodyLookResult, type RoomLookChoice,
+  type BodyLookCode, type BodyLookConfig, type BodyLookResult, type BodyLookSource, type RoomLookChoice,
 } from '../../contracts/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE, ROOM_LOOK_UNAVAILABLE_REASON, UNOPENED_LINE, bodyLookNotSeenLine, type BodyLookUnavailable } from '../../mind/perception/bodyLookLines.js';
 import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
@@ -40,7 +40,7 @@ export interface BodyLookMessage {
 
 /** How her message about a look reaches the Talk. It receives text only, never a frame. */
 export interface BodyLookSpeaker {
-  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen' }, text: string, at: string): BodyLookMessage | null;
+  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen'; source?: BodyLookSource }, text: string, at: string): BodyLookMessage | null;
 }
 
 /** The API side of a look she takes in her own time. It is handed her text and token counts, never a frame. */
@@ -97,8 +97,12 @@ export interface BodyLookTurn {
   decide(choice: unknown, threadId: string): void;
 }
 
+/** Why a screen look the owner started was not taken at all (nothing was opened, and no model saw the frame). */
+export type ScreenLookUnavailable = 'no_viewer' | 'busy' | 'limit_hour' | 'limit_day';
+
 export type BodyLookAnswer =
-  | { kind: 'disabled' | 'not_found' | 'wrong_device' | 'answered' | 'expired' }
+  | { kind: 'disabled' | 'not_found' | 'wrong_device' | 'answered' | 'expired' | 'wrong_source' }
+  | { kind: 'unavailable'; reason: ScreenLookUnavailable }
   | { kind: 'done'; id: string; status: 'seen' | 'refused' | 'discarded' | 'failed'; message: BodyLookMessage | null };
 
 export { ROOM_LOOK_UNAVAILABLE_REASON, type BodyLookUnavailable };
@@ -123,6 +127,20 @@ export const BODY_LOOK_TOOL = 'body.look';
 export const BODY_LOOK_SEEN_SUMMARY = '部屋を一度見ました。';
 export const bodyLookNotSeenSummary = (code: BodyLookCode, frameDiscarded = false) =>
   `部屋を見ませんでした（${NOT_SEEN_REASON[code]}${frameDiscarded ? '。届いた1枚は見ずに捨てた' : ''}）。`;
+
+/** The screen look in the activity record. The frame is not part of it, only that she looked and how it ended. */
+export const BODY_SCREEN_LOOK_SEEN_SUMMARY = '画面を一度見ました。';
+const SCREEN_NOT_SEEN_REASON: Readonly<Partial<Record<BodyLookCode, string>>> = Object.freeze({
+  others_present: 'ほかの人がいるかもしれなかった', timeout: '体から返事がなかった', rate_limited: '回数の上限に達していた', model_failed: '届いた1枚を見られなかった',
+});
+export const bodyScreenLookNotSeenSummary = (code: BodyLookCode, frameDiscarded = false) =>
+  `画面を見ませんでした（${SCREEN_NOT_SEEN_REASON[code] ?? '画面を取れなかった'}${frameDiscarded ? '。届いた1枚は見ずに捨てた' : ''}）。`;
+/** What she says when the owner asked her to look at his screen and she could not: the room's lines speak of the room and the camera. */
+const SCREEN_NOT_SEEN_LINE: Readonly<Partial<Record<BodyLookCode, string>>> = Object.freeze({
+  others_present: 'ほかの人がいるかもしれないので、いまは見ないでおきます。',
+  model_failed: '画面を見せてもらったのですが、うまく見られませんでした。',
+});
+export const bodyScreenLookNotSeenLine = (code: BodyLookCode) => SCREEN_NOT_SEEN_LINE[code] ?? 'うまく画面を見られませんでした。';
 
 export const ROOM_LOOK_OFFER_PROMPT = `[部屋を見る]（いまは体のカメラで部屋を一度だけ見られる。${SHANNON_OWNER_NAME}に見てと言われた時か、自分が見たい時だけ、返答のroomLookで選ぶ。`
   + '見えたものはこの返事のあとで届く。この返事では見てみると伝えるだけにして、まだ見ていないものを語らない）';
@@ -277,7 +295,13 @@ export class BodyLooks {
     const asked = this.store.get(scopeKey, id);
     if (asked?.outcome === 'pending' && asked.deviceId === deviceId) await this.lookWaits.get(id)?.stored;
     const at = this.dependencies.now();
-    const look = this.store.get(scopeKey, id);
+    let look = this.store.get(scopeKey, id);
+    // A frame of the owner's screen for a look nobody opened: the owner pressed the button himself. Opened here, answered below.
+    if (!look && result.outcome === 'seen' && result.source === 'screen') {
+      const opened = this.openOwnerScreen(scopeKey, deviceId, id, result.threadId ?? '', at);
+      if ('kind' in opened) return opened;
+      look = opened;
+    }
     if (!look) return { kind: 'not_found' };
     if (look.deviceId !== deviceId) return { kind: 'wrong_device' };
     this.lookWaits.delete(id);
@@ -286,6 +310,8 @@ export class BodyLooks {
       this.sweep(scopeKey, at);
       return { kind: 'expired' };
     }
+    // The open look is of the room or of the screen, and so is the frame that answers it.
+    if (result.outcome === 'seen' && result.source !== look.source) return { kind: 'wrong_source' };
     // A look her activity loop opened: no Talk, her own model and key, and the loop records it.
     const own = look.threadId === BODY_LOOK_ACTIVITY_THREAD;
     const hand = own ? this.activity?.hand.get(scopeKey, id) ?? null : null;
@@ -309,6 +335,7 @@ export class BodyLooks {
       text = (await viewer.see({
         scopeKey, image: result.image, context: own ? [] : this.context(look),
         ...(hand ? { activity: { lookId: id, model: hand.model } } : {}),
+        ...(look.source === 'screen' ? { source: 'screen' as const } : {}),
       })).trim() || null;
     } catch { text = null; }
     this.spoken.delete(id);
@@ -327,7 +354,7 @@ export class BodyLooks {
     }
     if (text && this.store.advance(scopeKey, id, 'seeing', 'seen', doneAt)) {
       try {
-        this.dependencies.record(scopeKey, { summary: BODY_LOOK_SEEN_SUMMARY, outcome: 'done' });
+        this.dependencies.record(scopeKey, { summary: look.source === 'screen' ? BODY_SCREEN_LOOK_SEEN_SUMMARY : BODY_LOOK_SEEN_SUMMARY, outcome: 'done' });
       } catch {
         // A look that cannot be written to the activity record leaves no message either.
         return { kind: 'done', id, status: 'failed', message: null };
@@ -346,6 +373,32 @@ export class BodyLooks {
       if (look.outcome === 'pending' && overdue >= 0) this.close(look, 'pending', 'expired', 'timeout', at);
       else if (look.outcome === 'seeing' && overdue >= SEEING_GRACE_MILLISECONDS) this.close(look, 'seeing', 'failed', 'model_failed', at);
     }
+  }
+
+  /**
+   * The owner's own screen look: he pressed the button, so there is no model choice and no body presence to wait for. The look
+   * is opened here under the id the client chose, for its own device, in the Talk it names (or the latest one), and is answered
+   * by the same frame. It shares the room's budget; nothing else about the frame differs. When the look cannot be taken, nothing
+   * is opened and no model sees the frame.
+   */
+  private openOwnerScreen(
+    scopeKey: string, deviceId: string, id: string, threadId: string, at: string,
+  ): StoredBodyLook | { kind: 'answered' } | { kind: 'unavailable'; reason: ScreenLookUnavailable } {
+    this.sweep(scopeKey, at);
+    const time = Date.parse(at);
+    const unavailable: ScreenLookUnavailable | null = !this.viewer ? 'no_viewer'
+      : this.store.waiting(scopeKey).length ? 'busy'
+        : this.store.usedSince(scopeKey, new Date(time - 60 * 60_000).toISOString()) >= this.config.perHour ? 'limit_hour'
+          : this.store.usedOnDay(scopeKey, this.dependencies.dayKey(at)) >= this.config.perDay ? 'limit_day' : null;
+    if (unavailable) return { kind: 'unavailable', reason: unavailable };
+    this.store.prune(scopeKey, new Date(time - RETENTION_MILLISECONDS).toISOString());
+    const look = {
+      id, scopeKey, deviceId, threadId, requestedAt: at, expiresAt: new Date(time + BODY_LOOK_LIMITS.lifetimeMilliseconds).toISOString(),
+      ownerAsked: true, source: 'screen' as const,
+    };
+    let opened = false;
+    try { opened = this.store.open(look, this.dependencies.dayKey(at)); } catch { return { kind: 'answered' }; } // The id is already some other look's.
+    return opened ? { ...look, outcome: 'pending' as const } : { kind: 'unavailable', reason: 'busy' };
   }
 
   private availability(scopeKey: string, at: string, audience: unknown): { deviceId: string } | Unavailable {
@@ -434,9 +487,12 @@ export class BodyLooks {
     // Her activity loop reads the outcome and records it through the gate; nothing is said in a Talk.
     if (look.threadId === BODY_LOOK_ACTIVITY_THREAD) return { message: null };
     try {
-      this.dependencies.record(look.scopeKey, { summary: bodyLookNotSeenSummary(code, to === 'discarded'), outcome: 'failed', reasonCode: code });
+      const screen = look.source === 'screen';
+      this.dependencies.record(look.scopeKey, {
+        summary: screen ? bodyScreenLookNotSeenSummary(code, to === 'discarded') : bodyLookNotSeenSummary(code, to === 'discarded'), outcome: 'failed', reasonCode: code,
+      });
     } catch { /* her line below still tells the owner */ }
-    return { message: look.ownerAsked ? this.say(look, 'not_seen', bodyLookNotSeenLine(code), at) : null };
+    return { message: look.ownerAsked ? this.say(look, 'not_seen', look.source === 'screen' ? bodyScreenLookNotSeenLine(code) : bodyLookNotSeenLine(code), at) : null };
   }
 
   /**
@@ -459,6 +515,6 @@ export class BodyLooks {
   }
 
   private say(look: StoredBodyLook, outcome: 'seen' | 'not_seen', text: string, at: string): BodyLookMessage | null {
-    try { return this.dependencies.speaker.say(look.scopeKey, look.threadId, { id: look.id, outcome }, text, at); } catch { return null; }
+    try { return this.dependencies.speaker.say(look.scopeKey, look.threadId, { id: look.id, outcome, ...(look.source === 'screen' ? { source: 'screen' as const } : {}) }, text, at); } catch { return null; }
   }
 }

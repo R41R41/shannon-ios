@@ -12,7 +12,7 @@ import type { BodyLookMessage, BodyLookSpeaker } from '../bodyLook.js';
  * the extraction that runs after a turn never reads it, and no fact, promise, goal, or
  * person memory is made from it.
  */
-import { BODY_LOOK_SOURCE_PREFIX, BODY_LOOK_SOURCE_TITLE } from '../../../contracts/bodyLookContract.js';
+import { BODY_LOOK_SOURCE_PREFIX, BODY_LOOK_SOURCE_TITLE, BODY_SCREEN_LOOK_SOURCE_TITLE } from '../../../contracts/bodyLookContract.js';
 export { BODY_LOOK_SOURCE_PREFIX, BODY_LOOK_SOURCE_TITLE, bodyLookIdOfSource } from '../../../contracts/bodyLookContract.js';
 
 export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
@@ -23,7 +23,7 @@ export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
   }
 
-  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen' }, text: string, at: string): BodyLookMessage | null {
+  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen'; source?: 'camera' | 'screen' }, text: string, at: string): BodyLookMessage | null {
     // The conversation and initiative tables belong to other stores; without them there is nowhere to speak.
     for (const table of ['initiative_messages', 'conversation_messages', 'conversation_threads']) {
       if (!this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table)) return null;
@@ -40,7 +40,7 @@ export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
           (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url,
            content, expression, day_key, created_at)
         VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)
-      `).run(initiativeId, scopeKey, thread, sourceItemId, BODY_LOOK_SOURCE_TITLE, text,
+      `).run(initiativeId, scopeKey, thread, sourceItemId, look.source === 'screen' ? BODY_SCREEN_LOOK_SOURCE_TITLE : BODY_LOOK_SOURCE_TITLE, text,
         look.outcome === 'seen' ? 'curious' : 'thinking', sourceItemId, at);
       if (!inserted.changes) {
         this.database.exec('ROLLBACK');
@@ -51,7 +51,7 @@ export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
           (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
         VALUES (?, ?, ?, ?, 1, 'assistant', ?, ?, ?)
       `).run(messageId, scopeKey, thread, `initiative:${initiativeId}`, text, at, JSON.stringify({
-        initiativeId, sourceItemId, bodyLook: { id: look.id, outcome: look.outcome },
+        initiativeId, sourceItemId, bodyLook: { id: look.id, outcome: look.outcome, ...(look.source === 'screen' ? { source: 'screen' } : {}) },
       }));
       this.database.prepare('UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?').run(at, scopeKey, thread);
       this.database.exec('COMMIT');
@@ -85,10 +85,15 @@ export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
 
 /** For a kernel without the SQLite tables (local runs, tests): the message is a note in the Talk, with no initiative. */
 export function noteBodyLookSpeaker(
-  store: { appendNote?(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): { id: string } },
+  store: {
+    appendNote?(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): { id: string };
+    /** The Talk a thread id names, or the latest one for an empty id (a screen look the owner started without naming a Talk). */
+    threadId?(scopeKey: string, threadId?: string): string;
+  },
 ): BodyLookSpeaker {
   return {
-    say(scopeKey, threadId, _look, text, at) {
+    say(scopeKey, requested, _look, text, at) {
+      const threadId = requested ? requested : store.threadId?.(scopeKey) ?? requested;
       const note = store.appendNote?.(scopeKey, threadId, text, at, 'body-look');
       return note ? { id: note.id, threadId, text } : null;
     },
