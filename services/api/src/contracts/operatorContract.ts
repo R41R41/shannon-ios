@@ -84,7 +84,9 @@ export interface OperatorReply {
   skillImport?: unknown;
   /** `resume` and `held` (2026-10-28): where the held act began, where the body was held, and where it is now. */
   position?: string;
-  held?: Array<{ taskId: string; detail: string; position: string }>;
+  /** Run 44: `body` the body's own hold beside each (the same one, none, or another); `bodyOnly` a hold only the body keeps. */
+  held?: Array<{ taskId: string; detail: string; position: string; body?: string }>;
+  bodyOnly?: string;
 }
 
 const OPERATOR_LABEL = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$/u;

@@ -178,10 +178,23 @@ admission's `minecraft_busy`, `cancel` and the time limit all treat `stopped` as
   request is refused (`minecraft_busy`) while one is held.
 - `status` lists the held requests with their detail. The incident id names the box (`saves/minecraft/blackbox/<task>/<id>.json.gz`) and the
   scene (`saves/minecraft/scenes/<id>/`) in the body's working directory.
-- `resume (<task-id> | --latest)` queues the held task again (`resumed`). Its first step sends the act that failed once more with the same
-  arguments and `context.incident.resume` (the body moves the world again and runs it), writes what it did (`command = resume`,
+- `resume (<task-id> | --latest)` first sends the body a release naming the hold (`context.incident.resume`, with the held act's lease and
+  session: the control takes a lease the task's step once held for such a release, `leaseAttempted`). The body ends its hold, moves the world
+  (`tick unfreeze`) and says so in the release's receipt (`{"incident": {"op", "id", "done", "hold", "unfreeze"}}`). Only when it says `done`
+  is the task queued again (`resumed`); otherwise the resume is refused and both stay held (run 44, resume 1: a body restarted in between kept
+  its hold, the act that was to end it never reached it, and it refused every act while the head ran on). The task's first step sends the act
+  that failed once more with the same arguments from the step's start, under the step's lease with the body's resource (the run-44 resend went
+  out while the step's ports were made, and the control refused it: `FCA_BODY_LEASE_INVALID`), writes what it did (`command = resume`,
   `event = settled`, `code = replayed`), and the decisions go on from the plan. `not_held` when the task is not held.
-- `cancel` of a held request ends the hold (`stopped`); the body moves the world again at the first act of another task.
+- A body that refuses an act as held (`failureType = held`) while the head runs the task, or whose frame shows a hold
+  (`observation.state.incidentHold`) of a running task the head does not hold: the head goes back to held at once (a hold row with
+  `mismatch`, and the owner's stop path), and `resume` or `cancel` treats it as any hold. A body's hold of a task that is gone (a restart with
+  an old file) is ended by the head's tick (a release naming it, with the task's last lease; `command = hold_stale`). `status` shows the body's
+  hold beside each of the head's, and a hold only the body keeps.
+- The real head's pass of all this (no model, no paid key): `services/api/tests/minecraftHoldResumeLab.ts` (its header says how to run it with
+  the body's bundle).
+- `cancel` of a held request ends the hold (`stopped`) after a release naming it (`context.incident.cancel`); the reply says whether the body
+  ended its hold. One it did not end (the body away) is ended when the body comes back (the tick, above).
 - A resume, a cancel and the first act of another task always send `tick unfreeze`, whatever the hold says of the world (a world stopped by
   hand, as hold 1's was, moves again).
 

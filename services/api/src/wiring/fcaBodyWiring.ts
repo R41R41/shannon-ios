@@ -26,6 +26,8 @@ export function configuredFcaMinecraft(values: Readonly<Record<string, string | 
   const known = (lease: ActionLease, taskId: string) => bodyLeaseAttempt(leases.get(lease.id), parts.ownerScope, lease, taskId);
   const control = new MinecraftControl(new MinecraftControlStore(parts.db), parts.configuration, { now: Date.now, ownerAlone: parts.ownerAlone,
     leaseKnown: (lease, taskId) => bodyLeaseKnown(known(lease, taskId), body),
+    // Run 44, resume 1: a release naming a hold goes with the held act's lease, whose step the hold stopped.
+    leaseAttempted: (lease, taskId) => known(lease, taskId) !== null,
     leaseValid: (lease, taskId) => bodyLeaseValid(known(lease, taskId), lease, body, new Date().toISOString()) });
   const providers = createReflexProviders({ enabled: true, jev: parts.jev, decisions: { apiKey: values.OPENAI_API_KEY,
     unknownCostUpperBoundUsd: 0.02, loadImage: async reference => control.image(reference.ref), recordUsage: receipt => {

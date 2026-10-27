@@ -108,6 +108,12 @@ export class MinecraftControlStore {
       .get(lease.id, lease.holder, lease.generation);
     return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
   }
+  /** Run 44: the task's latest body command (a skill: never a release or a re-check), or null: the lease a release naming its hold goes with. */
+  lastOfTask(taskId: string): MinecraftControlCommand | null {
+    const row = this.db.prepare(`SELECT command_json FROM fca_body_operations WHERE task_id=? AND json_extract(command_json,'$.kind')='skill'
+      AND id NOT LIKE 'recheck:%' ORDER BY rowid DESC LIMIT 1`).get(taskId);
+    return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
+  }
   /**
    * The latest step command of the lease's holder and generation for the same task, under any of its leases: for a step that sent
    * nothing to the body itself (a judgment that stayed unknown). A holder is one runner process for every task it runs, and a

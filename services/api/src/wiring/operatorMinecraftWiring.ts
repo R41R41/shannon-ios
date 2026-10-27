@@ -39,11 +39,11 @@ export interface OperatorMinecraftParts {
 
 const FINISHED = ['stopped', 'completed', 'failed', 'stopping'];
 /** A hold row's detail (`hold` below): the incident, the held act's command and where it began and ended. */
-function holdDetail(detail: string | null): { incident?: string; command?: string; start?: Feet | null; end?: Feet | null } {
+function holdDetail(detail: string | null): { incident?: string; command?: string; start?: Feet | null; end?: Feet | null; mismatch?: string } {
   try {
     const value = JSON.parse(detail ?? '{}') as Record<string, unknown>;
     return { ...(typeof value.incident === 'string' ? { incident: value.incident } : {}), ...(typeof value.command === 'string' ? { command: value.command } : {}),
-      start: feet(value.start), end: feet(value.end) };
+      start: feet(value.start), end: feet(value.end), ...(typeof value.mismatch === 'string' ? { mismatch: value.mismatch } : {}) };
   } catch { return {}; }
 }
 /** Phases after which a held request holds nothing any more. */
@@ -219,17 +219,19 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     const found = target(c, requests, input.taskId);
     if ('code' in found) return c.refuse(found.code, undefined, input.taskId ? { taskId: input.taskId } : {});
     const task = requests.get(found.id);
-    // 2026-10-28: a held request is stopped already; its cancel ends the hold (audited as stopped: the world is moved again by the body at the next task's act).
+    // 2026-10-28: a held request is stopped already; its cancel ends the hold (audited as stopped). Run 44: a release naming the hold goes to the
+    // body first and its receipt says whether the body ended it; a body that did not (gone, another hold) is ended when it comes back (`tick`).
     const held = parts.audit.heldOf(found.id);
     if (held && task) {
-      // The world the hold stopped moves again: a release naming the hold goes to the body (2026-10-28).
       const detail = holdDetail(held.detail);
-      const moved = detail.incident && detail.command ? await (requests.unfreeze?.(detail.incident, detail.command) ?? Promise.resolve('no_port')) : 'no_incident';
+      const moved = detail.incident ? await (requests.incident?.('cancel', detail.incident, detail.command ?? '', found.id) ?? Promise.resolve({ ok: false, words: 'no_port' }))
+        : { ok: false, words: 'no_incident' };
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'stopped', code: 'stopped',
-        argsJson: c.argsJson, taskId: found.id, detail: `held ${task.phase} unfreeze=${moved}` });
+        argsJson: c.argsJson, taskId: found.id, detail: `held ${task.phase} body_hold_ended=${moved.ok} ${moved.words}`.slice(0, 600) });
       parts.activity(c.at, { summary: `運用者（${c.operator}）が、保留していたマイクラの依頼を止めました。`, tool: 'operator.minecraft.cancel',
         outcome: 'done', reasonCode: 'operator_cli', detail: `operation=${c.operationId} task=${found.id} held` });
-      return c.reply('accepted', 'stopped', `保留していた依頼を止めました。世界を動かすよう体に頼みました（${moved}）。`, { taskId: found.id });
+      return c.reply('accepted', 'stopped', moved.ok ? `保留していた依頼を止めました。体の保留も解け、世界が動きました（${moved.words}）。`
+        : `保留していた依頼を止めました。体の保留はまだ解けていません（${moved.words}）。体が戻った時に解きます。`, { taskId: found.id });
     }
     if (!task || FINISHED.includes(task.phase)) return c.refuse('not_running', undefined, { taskId: found.id });
     const stopped = await requests.stop(found.id, 'operator_minecraft_stop');
@@ -288,19 +290,30 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!hold) return c.refuse('not_held', undefined, { taskId: found.id });
     const task = requests.get(found.id);
     if (!task || task.phase !== 'stopped') return c.refuse('not_running', '保留した依頼がまだ止まりきっていないか、もう終わっています。', { taskId: found.id });
+    // Run 44, resume 1: the body ends its hold first (a release naming it: the hold ends and the world moves), and the task is resumed only when
+    // the body says so. Once a body restarted in between kept refusing every act (its hold was to end with the act sent again, and that act never
+    // reached it): the head ran, the body held, and decisions were paid for nothing. Neither goes on without the other.
+    const detail = holdDetail(hold.detail);
+    const unheld = detail.incident ? await (requests.incident?.('resume', detail.incident, detail.command ?? '', found.id) ?? Promise.resolve({ ok: false, words: 'no_port' }))
+      : { ok: false, words: 'no_incident' };
+    if (!unheld.ok) {
+      audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'refused', code: 'not_held', argsJson: c.argsJson,
+        taskId: found.id, detail: `body_hold_kept ${unheld.words}`.slice(0, 600) });
+      return c.refuse('refused', `体の保留を解けなかったので、再開しませんでした（${unheld.words}）。頭も体も保留のままです。体がつながっているか確かめて、もう一度 resume してください。`,
+        { taskId: found.id });
+    }
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted', argsJson: c.argsJson,
-      taskId: found.id, detail: `hold=${hold.sequence}` });
+      taskId: found.id, detail: `hold=${hold.sequence} body=${unheld.words}`.slice(0, 600) });
     const resumed = requests.resume(found.id);
     if (!resumed) {
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'refused', argsJson: c.argsJson,
         taskId: found.id, detail: 'runtime_resume_refused' });
-      return c.refuse('refused', 'タスクを再開できませんでした（実行時の再開が断られた）。', { taskId: found.id });
+      return c.refuse('refused', 'タスクを再開できませんでした（実行時の再開が断られた）。体の保留は解け、世界は動いています。cancel するか、もう一度 resume してください。', { taskId: found.id });
     }
     parts.activity(c.at, { summary: `運用者（${c.operator}）が、保留していたマイクラの依頼を再開しました。`, tool: 'operator.minecraft.resume',
       outcome: 'done', reasonCode: 'operator_cli', detail: `operation=${c.operationId} task=${found.id}` });
     requests.wake();
     // 2026-10-28: how far the body is from where the held act began (the act is sent again from here; the body never goes back by itself).
-    const detail = holdDetail(hold.detail);
     const position = driftWords(detail.start, requests.position?.() ?? null, detail.end);
     return c.reply('accepted', 'resumed', `再開しました。まず保留した act を同じ引数で出し直し、その後に計画の続きから判断します。${position}`, { taskId: found.id, position });
   }
@@ -338,6 +351,26 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     parts.activity(parts.now(), { summary: '運用者が代わりに始めたマイクラの依頼で重い失敗がありましたが、世界を止められないため保留せずに続けました（記録は取りました）。',
       tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: 'operator_hold_skipped', detail: `task=${taskId} incident=${incident.id} freeze=${String(incident.notHeld ?? '').slice(0, 60)}` });
   }
+  /**
+   * Run 44, resume 1: the body refused an act as held (or says in its frame it holds a hold of a running task) while the head had no hold: the
+   * head goes back to held (a hold row naming the body's hold, `mismatch`, and the owner's stop path), so that no decision is paid for while the
+   * body refuses every act, and the operator sees it in `status` and resumes or cancels it as any hold. False when there is nothing to do.
+   */
+  async function bodyHeld(taskId: string, body: { incident: string; why: string; seen: 'refused' | 'frame' }): Promise<boolean> {
+    const requests = parts.requests;
+    const request = parts.audit.requestOf(parts.scopeKey, taskId);
+    if (!requests || !request || parts.audit.heldOf(taskId)) return false;
+    const before = holdDetail(parts.audit.lastHoldOf(taskId)?.detail ?? null);
+    const same = before.incident === body.incident;
+    const detail = JSON.stringify({ incident: body.incident, why: body.why.slice(0, 160), frozen: null, command: same ? before.command ?? '' : '',
+      ...(same && before.start ? { start: before.start } : {}), ...(same && before.end ? { end: before.end } : {}), mismatch: `body_held:${body.seen}` });
+    audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold', event: 'settled', code: 'held', argsJson: request.argsJson,
+      taskId, detail: detail.slice(0, 600) });
+    parts.activity(parts.now(), { summary: '体がまだ保留していたので（頭との食い違い）、運用者が代わりに始めたマイクラの依頼を保留に戻しました。判断は止めています。',
+      tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: 'operator_hold_mismatch', detail: `task=${taskId} incident=${body.incident} seen=${body.seen}` });
+    await requests.stop(taskId, 'operator_hold').catch(() => []);
+    return true;
+  }
   /** After a resume: the act that failed, sent again, and what it did (written once). */
   function resumeChecked(taskId: string, line: string): void {
     const request = parts.audit.requestOf(parts.scopeKey, taskId);
@@ -349,13 +382,19 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
   /** `held` (read only, the CLI's status): the held requests, each with where the body is now against where the held act began. */
   function heldNow(c: Context) {
     const now = parts.requests?.position?.() ?? null;
+    const body = parts.requests?.bodyHold?.() ?? null;
     const held = parts.audit.heldTasks(parts.scopeKey).filter(row => row.taskId).map(row => {
       const detail = holdDetail(row.detail);
-      return { taskId: row.taskId!, detail: row.detail ?? '', position: driftWords(detail.start, now, detail.end) };
+      // Run 44: the body's own hold beside the head's, so that a disagreement shows.
+      const agree = !body ? '体は保留していない（食い違い: 頭だけ保留）' : body.id === detail.incident ? '体も同じ保留' : `食い違い: 体の保留は ${body.id}（task ${body.task}）`;
+      return { taskId: row.taskId!, detail: row.detail ?? '', position: driftWords(detail.start, now, detail.end),
+        body: `${agree}${detail.mismatch ? '。体が act を断ったので頭が保留に戻した' : ''}` };
     });
+    const loose = body && !held.some(entry => holdDetail(entry.detail).incident === body.id)
+      ? `食い違い: 体は保留 ${body.id}（task ${body.task}、${body.why}）を持つが、頭には開いた保留が無い` : null;
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'held', argsJson: c.argsJson,
-      detail: `held=${held.length}` });
-    return c.reply('accepted', 'held', `保留中の依頼 ${held.length} 件`, { held });
+      detail: `held=${held.length}${loose ? ' body_only' : ''}` });
+    return c.reply('accepted', 'held', `保留中の依頼 ${held.length} 件${loose ? `。${loose}` : ''}`, { held, ...(loose ? { bodyOnly: loose } : {}) });
   }
 
   /** `minecraft release`: the body is asked again whether it is stopped with every input released (a request, never a force). */
@@ -446,6 +485,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
   function tick(): void {
     if (!parts.requests) return;
     const requests = parts.requests, now = parts.now();
+    reconcile(requests, now);
     for (const row of parts.audit.requestsSince(parts.scopeKey, ago(now, 48 * HOUR_MS))) {
       const task = row.taskId ? requests.get(row.taskId) : null;
       // 2026-10-28: the time a request was held does not count: its deadline moves by it.
@@ -458,6 +498,31 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     }
   }
 
-  return { handle, tick, socketRefused, hold, notHeld, resumeChecked };
+  /**
+   * Run 44: the body's hold (its frame) against the head's. A hold of a task that is running and not held here is taken back as held
+   * (`bodyHeld`); a hold of a task that is gone (finished, failed, unknown here) is ended: a release naming it, with the task's last lease
+   * (a body restarted with the file of a task that ended). At most once a minute for the same hold; what was done is in the audit.
+   */
+  const reconciled = new Map<string, number>();
+  function reconcile(requests: NonNullable<OperatorMinecraftParts['requests']>, now: string): void {
+    const body = requests.bodyHold?.();
+    if (!body || parts.audit.heldOf(body.task)) return;
+    if (Date.parse(now) - (reconciled.get(body.id) ?? 0) < 60_000) return;
+    reconciled.set(body.id, Date.parse(now));
+    const task = requests.get(body.task);
+    const request = parts.audit.requestOf(parts.scopeKey, body.task);
+    if (task && request && !FINISHED.includes(task.phase)) { void bodyHeld(body.task, { incident: body.id, why: body.why, seen: 'frame' }).catch(() => false); return; }
+    const before = holdDetail(parts.audit.lastHoldOf(body.task)?.detail ?? null);
+    void (requests.incident?.('cancel', body.id, before.incident === body.id ? before.command ?? '' : '', body.task) ?? Promise.resolve({ ok: false, words: 'no_port' }))
+      .then(answer => {
+        audit({ operationId: request?.operationId ?? `operator:stale:${body.id}`.slice(0, 120), at: parts.now(), operator: request?.operator ?? 'system',
+          command: 'hold_stale', event: 'settled', code: answer.ok ? 'released' : 'not_held', argsJson: request?.argsJson ?? '{}', taskId: body.task,
+          detail: `body_hold=${body.id} task_phase=${task?.phase ?? 'unknown'} ${answer.words}`.slice(0, 600) });
+        if (answer.ok) parts.activity(parts.now(), { summary: '終わったマイクラの依頼の保留が体に残っていたので、解いて世界を動かしました。', tool: 'operator.minecraft.hold',
+          outcome: 'done', reasonCode: 'operator_hold_stale', detail: `task=${body.task} incident=${body.id}` });
+      }, () => undefined);
+  }
+
+  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked };
 }
 export type OperatorMinecraft = ReturnType<typeof createOperatorMinecraft>;

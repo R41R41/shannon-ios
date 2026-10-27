@@ -188,12 +188,15 @@ async function status(path: string, io: OperatorCliIo, deps: OperatorCliDeps, en
   // 2026-10-28: the requests held on a heavy failure, why, the incident (its box and scene have its id) and whether the world is stopped.
   io.out(`held operator requests: ${inspection.held?.length ?? 0}`);
   for (const row of inspection.held ?? []) io.out(`  ${auditLine(row)}  ${row.detail ?? ''}`);
-  // Where the body is now against where each held act began: asked of the running API (read only), when its socket is there.
-  if (inspection.held?.length && deps.socketPresent(socket)) {
+  // Where the body is now against where each held act began, and the body's own hold (run 44: a hold only one side keeps shows here): asked of
+  // the running API (read only), when its socket is there.
+  if (deps.socketPresent(socket)) {
     try {
       const reply = await deps.send(socket, { v: 1, operator: env.SHANNON_OPERATOR?.trim() || 'status', domain: 'minecraft', op: 'held', args: {} });
-      for (const entry of ((reply.body as { held?: Array<{ taskId: string; position: string }> } | null)?.held ?? [])) io.out(`  task=${entry.taskId}  ${entry.position}`);
-    } catch { io.out('  (今の位置は API に聞けなかった)'); }
+      const body = reply.body as { held?: Array<{ taskId: string; position: string; body?: string }>; bodyOnly?: string } | null;
+      for (const entry of body?.held ?? []) io.out(`  task=${entry.taskId}  ${entry.position}${entry.body ? `  ${entry.body}` : ''}`);
+      if (body?.bodyOnly) io.out(`  ${body.bodyOnly}`);
+    } catch { if (inspection.held?.length) io.out('  (今の位置は API に聞けなかった)'); }
   }
   io.out(`recent audit (${inspection.recent.length}):`);
   for (const row of inspection.recent) io.out(`  ${auditLine(row)}`);

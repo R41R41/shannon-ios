@@ -61,19 +61,43 @@ export function operatorMinecraftRequests(parts: {
       return at && [at.x, at.y, at.z].every(n => typeof n === 'number') ? [at.x as number, at.y as number, at.z as number] : null;
     },
     /**
-     * A held request cancelled (2026-10-28): a release of its held act's lease and session, naming the hold (`context.incident.cancel`): the body ends
-     * the hold and moves the world again (`/tick unfreeze`). The receipt's outcome, or why none came.
+     * A held request's hold ended on the body (2026-10-28 cancel; run 44 resume): a release of its held act's lease and session, naming the hold
+     * (`context.incident.cancel` or `resume`): the body ends the hold and moves the world again (`/tick unfreeze`), and says so in the receipt.
+     * `ok` only when the body says it holds nothing of it any more; `words` what came back (or why nothing did).
      */
-    unfreeze: async (incident: string, commandId: string): Promise<string> => {
-      const sent = parts.control.store.command(commandId);
-      if (!sent) return 'no_command';
-      const id = `unfreeze:${incident}:${Date.now()}`.slice(0, 150);
-      const context = { ...sent.context, incident: { cancel: incident } };
+    incident: async (op: 'resume' | 'cancel', incident: string, commandId: string, taskId: string): Promise<IncidentAnswer> => {
+      // The held act's own command, else the task's latest one (a hold taken back from the body's refusal names no act).
+      const sent = (commandId ? parts.control.store.command(commandId) : null) ?? parts.control.store.lastOfTask(taskId);
+      if (!sent) return { ok: false, words: 'no_command' };
+      const id = `${op === 'resume' ? 'unhold' : 'unfreeze'}:${incident}:${Date.now()}`.slice(0, 150);
+      const context = { ...sent.context, incident: { [op]: incident } };
       try {
-        const receipt = await parts.control.command({ id, context, lease: sent.lease, kind: 'release', stop: { context, requestId: id, reason: 'cancel' }, milliseconds: 5_000 });
-        return receipt.outcome;
-      } catch (error) { return error instanceof Error ? error.message : 'unknown'; }
+        const receipt = await parts.control.command({ id, context, lease: sent.lease, kind: 'release', stop: { context, requestId: id, reason: 'cancel' }, milliseconds: 8_000 });
+        const said = bodyIncident(receipt.result);
+        const ok = receipt.outcome === 'completed' && said?.done === true;
+        return { ok, words: said ? `${receipt.outcome} done=${said.done} hold=${said.hold ?? '-'} unfreeze=${String(said.unfreeze ?? '-').slice(0, 60)}`
+          : `${receipt.outcome} (体が保留について何も言わなかった: 古い体)` };
+      } catch (error) { return { ok: false, words: error instanceof Error ? error.message : 'unknown' }; }
+    },
+    /** The hold the body says it keeps (its newest frame, `state.incidentHold`, run 44), or null. */
+    bodyHold: (): BodyHold | null => {
+      const id = body();
+      const held = (id ? parts.control.observe(id)?.state as { incidentHold?: unknown } | undefined : undefined)?.incidentHold;
+      if (!held || typeof held !== 'object') return null;
+      const value = held as Record<string, unknown>;
+      return typeof value.id === 'string' && typeof value.task === 'string' ? { id: value.id, task: value.task, why: String(value.why ?? '') } : null;
     },
   };
 }
 export type OperatorMinecraftRequests = ReturnType<typeof operatorMinecraftRequests>;
+export interface IncidentAnswer { ok: boolean; words: string }
+export interface BodyHold { id: string; task: string; why: string }
+/** What a release naming a hold did, from its receipt's result (`{"incident": {"done", "hold", "unfreeze"}}`), or null. */
+export function bodyIncident(result: string | undefined): { done: boolean; hold: string | null; unfreeze: string | null } | null {
+  if (!result || !result.startsWith('{')) return null;
+  try {
+    const value = (JSON.parse(result) as { incident?: Record<string, unknown> }).incident;
+    if (!value || typeof value.done !== 'boolean') return null;
+    return { done: value.done, hold: typeof value.hold === 'string' ? value.hold : null, unfreeze: typeof value.unfreeze === 'string' ? value.unfreeze : null };
+  } catch { return null; }
+}

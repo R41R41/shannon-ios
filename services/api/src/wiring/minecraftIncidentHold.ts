@@ -25,6 +25,11 @@ export interface IncidentHoldPort {
    * 2026-10-28, run 44): written down (audit and activity), and the task goes on.
    */
   notHeld(taskId: string, incident: IncidentNote & { command: string }): void;
+  /**
+   * Run 44, resume 1: the body refused an act as held (or its frame shows a hold) while the head had none: the head goes back to held. False when
+   * there was nothing to do (held already, not the operator's).
+   */
+  bodyHeld(taskId: string, body: { incident: string; why: string; seen: 'refused' | 'frame' }): Promise<boolean>;
   /** After a `resume`, the hold whose act is to be sent again: its incident and the act's command id; null when there is none to send. */
   resumePending(taskId: string): { incident: string; command: string; start?: Feet | null } | null;
   /** The act sent again, and what it did (written once: the next step does not send it again). */

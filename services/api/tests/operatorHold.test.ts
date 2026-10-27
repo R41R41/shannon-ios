@@ -7,7 +7,7 @@ import { createOperatorMinecraft, type OperatorActivity, type OperatorMinecraftP
 import type { OperatorMinecraftRequests } from '../src/wiring/operatorMinecraftRequests.js';
 import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { driftWords, incidentOfResult } from '../src/wiring/minecraftIncidentHold.js';
-import { withIncident } from '../src/wiring/minecraftLlmcWiring.js';
+import { bodyHoldOf, withIncident } from '../src/wiring/minecraftLlmcWiring.js';
 
 /**
  * 2026-10-28 (owner: 「黒箱・現場の保存・止めて直す実走（保留と再開、世界を止める、台で再現→直す→その場で確かめる）」): an operator's request may ask to be
@@ -23,6 +23,9 @@ function service() {
   const audit = new OperatorAuditStore(new DatabaseSync(':memory:'));
   const tasks = new Map<string, TaskView>();
   const activity: OperatorActivity[] = [], stopped: string[] = [], resumed: string[] = [], unfrozen: string[] = [];
+  // What the body answers a release naming a hold, and the hold its frame shows (run 44).
+  const bodyAnswer: { next: { ok: boolean; words: string }; hold: { id: string; task: string; why: string } | null } = {
+    next: { ok: true, words: 'completed done=true hold=- unfreeze=ok' }, hold: null };
   let clock = at;
   const requests = {
     body: () => 'minecraft:world', open: () => [], get: (id: string) => tasks.get(id) ?? null,
@@ -30,7 +33,9 @@ function service() {
     stop: async (id: string) => { stopped.push(id); tasks.set(id, task(id, 'stopped')); return [tasks.get(id)!]; },
     resume: (id: string) => { resumed.push(id); tasks.set(id, task(id, 'ready')); return tasks.get(id)!; },
     position: () => [7.5, 100, 0.5] as [number, number, number],
-    unfreeze: async (incident: string, command: string) => { unfrozen.push(`${incident}/${command}`); return 'completed'; },
+    incident: async (op: string, incident: string, command: string, taskId: string) => {
+      unfrozen.push(`${op}:${incident}/${command}`); void taskId; return bodyAnswer.next; },
+    bodyHold: () => bodyAnswer.hold,
     wake: () => undefined,
   } as unknown as OperatorMinecraftRequests & { wake(): void };
   const parts: OperatorMinecraftParts = {
@@ -38,7 +43,7 @@ function service() {
     actions: { list: async () => [] } as unknown as OperatorMinecraftParts['actions'], lifecycleUnresolved: () => false,
     activity: (_at, entry) => activity.push(entry), note: () => undefined,
   };
-  return { operator: createOperatorMinecraft(parts), audit, tasks, activity, stopped, resumed, unfrozen,
+  return { operator: createOperatorMinecraft(parts), audit, tasks, activity, stopped, resumed, unfrozen, bodyAnswer,
     advance: (minutes: number) => { clock = new Date(Date.parse(clock) + minutes * 60_000).toISOString(); }, now: () => clock };
 }
 const incident = { id: '20261028T000000-act-ab12', why: 'go_stuck', frozen: true, freeze: 'The game is frozen', command: 'command-q115',
@@ -113,10 +118,81 @@ describe('the hold and the resume', () => {
     expect((await s.operator.handle(envelope('cancel', { latest: true }))).body).toMatchObject({ outcome: 'refused' });
     expect((await s.operator.handle(envelope('cancel', { taskId: TASK }))).body).toMatchObject({ outcome: 'accepted', code: 'stopped' });
     // The world the hold stopped moves again: a release naming the hold, of the held act's lease and session.
-    expect(s.unfrozen).toEqual([`${incident.id}/command-q115`]);
-    expect(s.audit.recent('owner', 5).find(row => row.command === 'cancel' && row.event === 'stopped')?.detail).toContain('unfreeze=completed');
+    expect(s.unfrozen).toEqual([`cancel:${incident.id}/command-q115`]);
+    expect(s.audit.recent('owner', 5).find(row => row.command === 'cancel' && row.event === 'stopped')?.detail).toContain('body_hold_ended=true');
     expect(s.audit.heldOf(TASK)).toBeNull();
     expect(s.audit.heldTasks('owner')).toEqual([]);
+  });
+});
+
+describe('run 44, resume 1: the head and the body hold together', () => {
+  async function held() {
+    const s = service();
+    await s.operator.handle(envelope('request', { goal: 'エンドラを討伐して', holdOnFailure: true }));
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    await s.operator.hold(TASK, incident);
+    return s;
+  }
+  it('resumes only after the body says its hold ended (a release naming it, sent first)', async () => {
+    const s = await held();
+    const reply = await s.operator.handle(envelope('resume', { latest: true }));
+    expect(reply.body).toMatchObject({ outcome: 'accepted', code: 'resumed' });
+    expect(s.unfrozen).toEqual([`resume:${incident.id}/command-q115`]);
+    expect(s.resumed).toEqual([TASK]);
+    expect(s.audit.recent('owner', 5).find(row => row.command === 'resume' && row.event === 'accepted')?.detail).toContain('done=true');
+  });
+  it('keeps both held when the body does not end its hold (gone, or another hold), and says so', async () => {
+    const s = await held();
+    s.bodyAnswer.next = { ok: false, words: 'FCA_BODY_UNAVAILABLE' };
+    const reply = await s.operator.handle(envelope('resume', { latest: true }));
+    expect(reply.body).toMatchObject({ outcome: 'refused', code: 'refused' });
+    expect(String((reply.body as { message?: string }).message)).toContain('頭も体も保留のまま');
+    expect(s.resumed).toEqual([]);
+    expect(s.audit.heldOf(TASK)).not.toBeNull();
+    expect(s.audit.resumePending(TASK)).toBeNull();
+    s.bodyAnswer.next = { ok: true, words: 'completed done=true' };
+    expect((await s.operator.handle(envelope('resume', { latest: true }))).body).toMatchObject({ outcome: 'accepted', code: 'resumed' });
+  });
+  it('goes back to held when the body refuses an act as held, keeping the held act to send again, and shows it in status', async () => {
+    const s = await held();
+    await s.operator.handle(envelope('resume', { latest: true }));
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    s.operator.resumeChecked(TASK, '再送できなかった');
+    expect(await s.operator.bodyHeld(TASK, { incident: incident.id, why: 'go_stuck', seen: 'refused' })).toBe(true);
+    expect(await s.operator.bodyHeld(TASK, { incident: incident.id, why: 'go_stuck', seen: 'refused' })).toBe(false);
+    expect(s.stopped).toEqual([TASK, TASK]);
+    const row = s.audit.heldOf(TASK)!;
+    expect(JSON.parse(row.detail!)).toMatchObject({ incident: incident.id, command: 'command-q115', mismatch: 'body_held:refused', start: [0.5, 100, 0.5] });
+    expect(s.activity.at(-1)).toMatchObject({ reasonCode: 'operator_hold_mismatch' });
+    s.bodyAnswer.hold = { id: incident.id, task: TASK, why: 'go_stuck' };
+    const status = await s.operator.handle(envelope('held'));
+    expect(status.body).toMatchObject({ held: [{ taskId: TASK, body: '体も同じ保留。体が act を断ったので頭が保留に戻した' }] });
+    s.bodyAnswer.hold = null;
+    expect((await s.operator.handle(envelope('held'))).body).toMatchObject({ held: [{ body: '体は保留していない（食い違い: 頭だけ保留）。体が act を断ったので頭が保留に戻した' }] });
+  });
+  it('ends a body\'s hold of a task that is gone (a restart with an old file), and takes back as held one of a running task', async () => {
+    const s = await held();
+    // The task ended while the body kept its hold (run 44: the budget stopped it).
+    await s.operator.handle(envelope('cancel', { taskId: TASK }));
+    s.tasks.set(TASK, task(TASK, 'failed'));
+    s.unfrozen.length = 0;
+    s.bodyAnswer.hold = { id: incident.id, task: TASK, why: 'go_stuck' };
+    expect((await s.operator.handle(envelope('held'))).body).toMatchObject({ bodyOnly: expect.stringContaining(`体は保留 ${incident.id}`) });
+    s.operator.tick();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(s.unfrozen).toEqual([`cancel:${incident.id}/command-q115`]);
+    expect(s.audit.recent('owner', 10).find(row => row.command === 'hold_stale')).toMatchObject({ code: 'released' });
+    // Not again within the minute.
+    s.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(s.unfrozen).toHaveLength(1);
+    // A running task the head does not hold, with the body's hold in its frame: held again.
+    const r = service();
+    await r.operator.handle(envelope('request', { goal: 'エンドラを討伐して', holdOnFailure: true }));
+    r.tasks.set(TASK, task(TASK, 'executing'));
+    r.bodyAnswer.hold = { id: 'body-hold-1', task: TASK, why: 'go_stuck' };
+    r.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(JSON.parse(r.audit.heldOf(TASK)!.detail!)).toMatchObject({ incident: 'body-hold-1', command: '', mismatch: 'body_held:frame' });
+    expect(r.stopped).toEqual([TASK]);
   });
 });
 
@@ -157,5 +233,8 @@ describe('the step\'s side', () => {
     expect(withIncident(context, false, null)).toBe(context);
     expect(withIncident(context, true, null)).toMatchObject({ incident: { hold: true } });
     expect(withIncident(context, true, 'x1')).toMatchObject({ incident: { hold: true, resume: 'x1' } });
+    // Run 44: the body's refusal of a held act names its hold.
+    expect(bodyHoldOf('保留中（20261027T184214-act-vpvqh: go_stuck）。再開の命令（resume）が来るまで動かない')).toEqual({ incident: '20261027T184214-act-vpvqh', why: 'go_stuck' });
+    expect(bodyHoldOf('go 止まった stuck: …')).toBeNull();
   });
 });

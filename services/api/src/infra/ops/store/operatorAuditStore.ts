@@ -132,6 +132,11 @@ export class OperatorAuditStore {
       ORDER BY h.sequence DESC LIMIT 1`).get(taskId);
     return found ? row(found as Record<string, unknown>) : null;
   }
+  /** Run 44: the task's newest hold row, open or not (the held act's command when the body's hold comes up again), or null. */
+  lastHoldOf(taskId: string): OperatorAuditRow | null {
+    const found = this.db.prepare(`SELECT * FROM operator_audit WHERE task_id=? AND command='hold' AND event='settled' ORDER BY sequence DESC LIMIT 1`).get(taskId);
+    return found ? row(found as Record<string, unknown>) : null;
+  }
   /** Every hold of a scope that no resume or stop has followed (the operator's status, and the admission of a new request). */
   heldTasks(scopeKey: string): OperatorAuditRow[] {
     return this.db.prepare(`SELECT * FROM operator_audit h WHERE h.scope_key=? AND h.command='hold' AND h.event='settled' ${OPEN_HOLD}

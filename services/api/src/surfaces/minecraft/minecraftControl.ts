@@ -43,6 +43,12 @@ export interface ControlCommandInput { id: string; context: BodyTaskContext; lea
   milliseconds?: number; queue?: MinecraftQueueEnvelope }
 const ioTurn = () => new Promise<void>(resolve => setImmediate(resolve));
 /** A paired body supplies observations and executes exact commands; the shared FCA owns all long-term decisions. */
+/** A release that names a hold to end (`context.incident.resume` or `cancel`, run 44). */
+function namesHold(context: { incident?: { resume?: unknown; cancel?: unknown } } | undefined): boolean {
+  return typeof context?.incident?.resume === 'string' && context.incident.resume.length > 0
+    || typeof context?.incident?.cancel === 'string' && context.incident.cancel.length > 0;
+}
+
 export class MinecraftControl {
   readonly frames = new Map<string, Frame>();
   private readonly images = new Map<string, { dataUrl: string; expires: number }>();
@@ -98,9 +104,15 @@ export class MinecraftControl {
   private readonly workingLogs = new Map<string, WorkingEventLog>();
   constructor(readonly store: MinecraftControlStore, readonly configuration: MinecraftBodyConfiguration,
     private readonly options: { now(): number; leaseValid(lease: ActionLease, taskId: string): boolean; ownerAlone(): boolean; leaseKnown?(lease: ActionLease, taskId: string): boolean; pollMilliseconds?: number; cancelWaitMilliseconds?: number;
+      /**
+       * Run 44, resume 1: whether the lease is one the task's step ever held (any state). A release naming a hold (`context.incident.resume` or
+       * `cancel`) is sent with the held act's lease, whose step the hold stopped: it ends the hold and releases, and moves nothing else.
+       */
+      leaseAttempted?(lease: ActionLease, taskId: string): boolean;
       /** How long a frame stays current (3 s); tests shorten it. */
       frameMilliseconds?: number }) {}
   private allowed(command: Pick<MinecraftControlCommand, 'kind' | 'lease' | 'context'>): boolean {
+    if (command.kind === 'release' && namesHold(command.context) && this.options.leaseAttempted?.(command.lease, command.context.taskId)) return true;
     if (command.kind === 'stop' || command.kind === 'release') return this.options.leaseKnown?.(command.lease, command.context.taskId) ?? this.options.leaseValid(command.lease, command.context.taskId);
     return this.options.ownerAlone() && this.options.leaseValid(command.lease, command.context.taskId);
   }

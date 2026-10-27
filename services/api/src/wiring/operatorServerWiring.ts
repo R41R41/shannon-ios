@@ -134,6 +134,7 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
     holdRequested: id => audit.store.holdOnFailure(id),
     hold: (id, incident) => service.hold(id, incident),
     notHeld: (id, incident) => service.notHeld(id, incident),
+    bodyHeld: (id, body) => service.bodyHeld(id, body),
     resumePending: id => {
       const row = audit.store.resumePending(id);
       if (!row) return null;

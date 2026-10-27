@@ -202,6 +202,24 @@ export function llmcProbeRunner(control: MinecraftControl, step: TaskStep): () =
   };
 }
 
+/** The hold a body named when it refused an act as held (「保留中（<id>: <why>）…」), or null. */
+export function bodyHoldOf(result: string | undefined): { incident: string; why: string } | null {
+  const found = /保留中（([^:：）]+)[:：]\s*([^）]*)）/u.exec(result ?? '');
+  return found ? { incident: found[1]!.trim(), why: found[2]!.trim() } : null;
+}
+/** Run 44: the held act sent again once the step has begun (inside its execution, where its lease may take the body), then the step as ever. */
+function withResend(lifecycle: FcaBodyLifecycle, resend: ((signal: AbortSignal) => Promise<void>) | null, log: (line: string) => void, taskId: string): FcaBodyLifecycle {
+  if (!resend) return lifecycle;
+  const start = lifecycle.start.bind(lifecycle);
+  let sent = false;
+  return Object.assign(lifecycle, { start(signal: AbortSignal) {
+    start(signal);
+    if (sent) return;
+    sent = true;
+    void resend(signal).catch(error => log(`Shannon Minecraft incident resend failed task=${taskId} ${String(error)}`));
+  } });
+}
+
 /** The command context with the fix run's incident fields (`minecraftIncidentHold.ts`): unchanged when there is nothing to say. */
 export function withIncident(context: BodyTaskContext, hold: boolean, resume: string | null): BodyTaskContext {
   if (!hold && !resume) return context;
@@ -236,7 +254,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const display = () => plan.port.display();
   // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step decides again while its items run.
   // 2026-10-28, the fix run (`minecraftIncidentHold.ts`): a request asked to be held on a heavy failure sends its acts with `incident.hold`; the act a
-  // resume sends again carries `incident.resume` (set for that one add only).
+  // resume sends again carries `incident.resume` (set for that one add only). Run 44: the body's hold is ended by the operator's resume before
+  // the task is queued again (`operatorMinecraftWiring.ts`), and the act goes again from the step's start, under its lease and with the body's resource.
+  let resend: ((signal: AbortSignal) => Promise<void>) | null = null;
   const holds = incidentHoldPort();
   const holdOn = holds?.holdRequested(step.taskId) === true;
   let resumeOf: string | null = null;
@@ -252,14 +272,35 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
         holds.notHeld(step.taskId, { ...incident, command: receipt.id });
         return;
       }
+      // Run 44, resume 1: the body refused the act as held while the head runs the task (a hold the head had ended, or never had): the head goes
+      // back to held at once, so no decision is paid for while every act is refused (once 25 in two minutes).
+      const refused = receipt?.failureType === 'held' ? bodyHoldOf(receipt.result) : null;
+      if (refused) {
+        log(`Shannon Minecraft incident body held task=${step.taskId} incident=${refused.incident} (the head goes back to held)`);
+        void holds.bodyHeld(step.taskId, { ...refused, seen: 'refused' }).catch(error => log(`Shannon Minecraft incident body held failed task=${step.taskId} ${String(error)}`));
+        return;
+      }
       if (!incident?.held || !receipt) return;
       log(`Shannon Minecraft incident hold task=${step.taskId} incident=${incident.id} frozen=${String(incident.frozen)} why=${incident.why.slice(0, 80)}`);
       void holds.hold(step.taskId, { ...incident, command: receipt.id }).catch(error => log(`Shannon Minecraft incident hold failed task=${step.taskId} ${String(error)}`));
     });
     const pending = holds.resumePending(step.taskId);
-    const sent = pending?.command ? control.store.command(pending.command) : null;
-    if (pending && (!sent || sent.skill !== 'act' || !sent.arguments)) holds.resumeChecked(step.taskId, `再送できなかった: act ${pending.command || '?'} が見つからない`);
-    else if (pending && sent?.arguments) {
+    // Run 44, resume 1: the act was sent while the step's ports were made, outside the step's execution and before its lease held the body: the
+    // control refused it (FCA_BODY_LEASE_INVALID) and it never reached the body. It goes from the step's start now (`wrap` below), as a tool's does:
+    // the task bound to the body, the body's resource permitted to the step's lease, then the queue.
+    if (pending) resend = async signal => {
+    const sent = pending.command ? control.store.command(pending.command) : null;
+    if (!sent || sent.skill !== 'act' || !sent.arguments) {
+      holds.resumeChecked(step.taskId, pending.command ? `再送できなかった: act ${pending.command} が見つからない` : '再送しなかった: 体の断りから戻した保留で、出し直す act が無い。計画の続きから判断する');
+      return;
+    }
+    const body = bodyId(), active = currentActionExecution();
+    if (!body || !control.store.bind(step.taskId, body)) { holds.resumeChecked(step.taskId, '再送できなかった: タスクに体が結び付いていない'); return; }
+    if (!active || active.lease.id !== step.lease.id || !await active.permit([actionResource(control.configuration.deviceId, 'minecraft-body')], signal)) {
+      holds.resumeChecked(step.taskId, '再送できなかった: この段の lease に体の使用が許されなかった');
+      return;
+    }
+    {
       const args = sent.arguments as Record<string, unknown>;
       resumeOf = pending.incident;
       const added = queue.add({ call: { id: `resume:${sent.id}`, name: MC_ACT_TOOL, input: args }, operationId: `resume:${randomUUID()}`, input: args as never,
@@ -277,9 +318,10 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
         first.done = true;
         holds.resumeChecked(step.taskId, `再開の確かめ（${drift}）: 同じ act を出し直した → ${result.ok ? '成功' : '失敗'}: ${result.text.replace(/\s+/gu, ' ').slice(0, 380)}`);
       });
-      void added.then(answer => { if (!answer.ok) { first.done = true; holds.resumeChecked(step.taskId, `再送を列が断った: ${answer.text.slice(0, 200)}`); } },
+      await added.then(answer => { if (!answer.ok) { first.done = true; holds.resumeChecked(step.taskId, `再送を列が断った: ${answer.text.slice(0, 200)}`); } },
         error => { first.done = true; holds.resumeChecked(step.taskId, `再送できなかった: ${String(error).slice(0, 200)}`); });
     }
+    };
   }
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
@@ -293,11 +335,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
-    wrap: (lifecycle: FcaBodyLifecycle) => withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
+    wrap: (lifecycle: FcaBodyLifecycle) => withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
       observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       r4: { probe: llmcProbeRunner(control, step), planWhere,
-        caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }),
+        caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }), resend, log, step.taskId),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the
