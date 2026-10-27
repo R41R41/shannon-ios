@@ -34,7 +34,7 @@ import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
-import { incidentHoldPort, incidentOfResult } from './minecraftIncidentHold.js';
+import { driftWords, incidentHoldPort, incidentOfResult } from './minecraftIncidentHold.js';
 import { randomUUID } from 'node:crypto';
 import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
 import type { BodyTaskContext } from '../contracts/bodyControlContract.js';
@@ -262,10 +262,14 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       resumeOf = null;
       log(`Shannon Minecraft incident resume task=${step.taskId} incident=${pending.incident} resend=${sent.id}`);
       const first = { done: false };
+      // 2026-10-28: how far the body is, when the act goes again, from where it began (the operator decides what the fix includes; the body never goes back by itself).
+      const at = (observe()?.state.world as { position?: { x?: number; y?: number; z?: number } } | undefined)?.position;
+      const drift = driftWords(pending.start, at && typeof at.x === 'number' ? [at.x, at.y ?? 0, at.z ?? 0] : null);
+      log(`Shannon Minecraft incident resume position task=${step.taskId} ${drift}`);
       queue.onRan((item, result) => {
         if (first.done || item.call.id !== `resume:${sent.id}`) return;
         first.done = true;
-        holds.resumeChecked(step.taskId, `再開の確かめ: 同じ act を出し直した → ${result.ok ? '成功' : '失敗'}: ${result.text.replace(/\s+/gu, ' ').slice(0, 480)}`);
+        holds.resumeChecked(step.taskId, `再開の確かめ（${drift}）: 同じ act を出し直した → ${result.ok ? '成功' : '失敗'}: ${result.text.replace(/\s+/gu, ' ').slice(0, 380)}`);
       });
       void added.then(answer => { if (!answer.ok) { first.done = true; holds.resumeChecked(step.taskId, `再送を列が断った: ${answer.text.slice(0, 200)}`); } },
         error => { first.done = true; holds.resumeChecked(step.taskId, `再送できなかった: ${String(error).slice(0, 200)}`); });

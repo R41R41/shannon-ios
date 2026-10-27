@@ -13,7 +13,7 @@ import { MINECRAFT_LIFECYCLE_ACTIONS, type MinecraftLifecycleAction } from './mi
  */
 export const OPERATOR_VIA = 'operator_cli';
 export const OPERATOR_DOMAINS = ['minecraft', 'skills'] as const;
-export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel', 'budget', 'release', 'skill_import', 'resume'] as const;
+export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel', 'budget', 'release', 'skill_import', 'resume', 'held'] as const;
 export type OperatorCommand = typeof OPERATOR_COMMANDS[number];
 export const OPERATOR_PATH = '/operator/v1/minecraft';
 /** Where the socket is, beside the database the CLI was told to use (never a guessed default path). */
@@ -66,6 +66,8 @@ export type OperatorInput =
   | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number; holdOnFailure?: boolean }
   /** A held request goes on: the act that failed is sent again with the same arguments first, then the decisions from the plan. */
   | { command: 'resume'; taskId: string | null }
+  /** The held requests with where the body is now against where the held act began (read only; the CLI's status asks it). */
+  | { command: 'held' }
   | { command: 'cancel'; taskId: string | null }
   /** A running request's yen cap, changed (2026-10-26, run 39): appended to the audit as a `budget` row, never written over the request's. */
   | { command: 'budget'; taskId: string | null; budgetYen: number }
@@ -80,6 +82,9 @@ export interface OperatorReply {
   taskId?: string; lifecycleId?: string; actionId?: string; deadlineAt?: string; budgetYen?: number;
   /** `skills import`: the body the paired route would answer (the plan, the receipt, or the importer's refusal). */
   skillImport?: unknown;
+  /** `resume` and `held` (2026-10-28): where the held act began, where the body was held, and where it is now. */
+  position?: string;
+  held?: Array<{ taskId: string; detail: string; position: string }>;
 }
 
 const OPERATOR_LABEL = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$/u;
@@ -212,7 +217,7 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.domain !== 'minecraft') return otherDomain(operator, value.domain, value.op, args);
   const allowed: Record<string, readonly string[]> = {
-    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest'], budget: ['taskId', 'latest', 'budgetYen'],
+    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest'], held: [], budget: ['taskId', 'latest', 'budgetYen'],
     start: ['serverId', 'keepWorld'],
   };
   const extra = Object.keys(args).find(key => !(allowed[value.op as string] ?? ['serverId']).includes(key));
@@ -221,6 +226,7 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.op === 'request') return request(operator, args);
   if (value.op === 'cancel') return cancel(operator, args);
+  if (value.op === 'held') return { ok: true, operator, input: { command: 'held' } };
   if (value.op === 'resume') {
     const parsed = cancel(operator, args);
     return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId } } : parsed;

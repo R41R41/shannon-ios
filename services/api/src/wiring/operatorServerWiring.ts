@@ -9,7 +9,7 @@ import type { AutonomyActivityRecord } from '../mind/inhibition/store/autonomyAc
 import type { RequesterOf } from '../mind/action/fca/fcaSpokenReport.js';
 import { OPERATOR_NOTE_KIND, OPERATOR_TITLE_PREFIX } from '../contracts/operatorContract.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
-import { setIncidentHoldPort } from './minecraftIncidentHold.js';
+import { feet, setIncidentHoldPort } from './minecraftIncidentHold.js';
 import { createOperatorMinecraft, type OperatorActivity } from './operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
@@ -136,7 +136,10 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
     resumePending: id => {
       const row = audit.store.resumePending(id);
       if (!row) return null;
-      try { const detail = JSON.parse(row.detail ?? '{}') as { incident?: string; command?: string }; return { incident: String(detail.incident ?? ''), command: String(detail.command ?? '') }; }
+      try {
+        const detail = JSON.parse(row.detail ?? '{}') as { incident?: string; command?: string; start?: unknown };
+        return { incident: String(detail.incident ?? ''), command: String(detail.command ?? ''), start: feet(detail.start) };
+      }
       catch { return { incident: '', command: '' }; }
     },
     resumeChecked: (id, line) => service.resumeChecked(id, line),

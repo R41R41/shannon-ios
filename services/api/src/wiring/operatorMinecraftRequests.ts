@@ -54,6 +54,26 @@ export function operatorMinecraftRequests(parts: {
     stop: (id: string, reason: string) => parts.stop(id, reason),
     /** A stopped task queued again (the runtime's explicit resume, as the owner's resume route does): a held request's `resume`. */
     resume: (id: string) => parts.runtime.resume(parts.ownerScope, id),
+    /** The body's feet now (the newest frame), or null: a held request's status and resume say how far it is from where the act began. */
+    position: (): [number, number, number] | null => {
+      const id = body();
+      const at = (id ? parts.control.observe(id)?.state.world as { position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined : undefined)?.position;
+      return at && [at.x, at.y, at.z].every(n => typeof n === 'number') ? [at.x as number, at.y as number, at.z as number] : null;
+    },
+    /**
+     * A held request cancelled (2026-10-28): a release of its held act's lease and session, naming the hold (`context.incident.cancel`): the body ends
+     * the hold and moves the world again (`/tick unfreeze`). The receipt's outcome, or why none came.
+     */
+    unfreeze: async (incident: string, commandId: string): Promise<string> => {
+      const sent = parts.control.store.command(commandId);
+      if (!sent) return 'no_command';
+      const id = `unfreeze:${incident}:${Date.now()}`.slice(0, 150);
+      const context = { ...sent.context, incident: { cancel: incident } };
+      try {
+        const receipt = await parts.control.command({ id, context, lease: sent.lease, kind: 'release', stop: { context, requestId: id, reason: 'cancel' }, milliseconds: 5_000 });
+        return receipt.outcome;
+      } catch (error) { return error instanceof Error ? error.message : 'unknown'; }
+    },
   };
 }
 export type OperatorMinecraftRequests = ReturnType<typeof operatorMinecraftRequests>;

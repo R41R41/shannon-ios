@@ -1079,6 +1079,7 @@
     "wiring/mindWiring.ts",
     "wiring/minecraftBodyRecheckWiring.ts",
     "wiring/minecraftBodyRouteWiring.ts",
+    "wiring/minecraftIncidentHold.ts",
     "wiring/minecraftLifecycleRecoveryWiring.ts",
     "wiring/minecraftLifecycleRunner.ts",
     "wiring/minecraftLifecycleWiring.ts",

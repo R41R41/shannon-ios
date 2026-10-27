@@ -171,7 +171,7 @@ function auditLine(row: OperatorAuditRow): string {
   return `${row.at}  ${row.operator}  ${row.command}/${row.event}  ${row.code}${row.action ? `  ${row.action}` : ''}${ids ? `  ${ids}` : ''}`;
 }
 
-function status(path: string, io: OperatorCliIo, deps: OperatorCliDeps): number {
+async function status(path: string, io: OperatorCliIo, deps: OperatorCliDeps, env: Readonly<Record<string, string | undefined>>): Promise<number> {
   const inspection = deps.inspect(path, deps.now());
   const socket = operatorSocketPath(path);
   io.out(`socket: ${deps.socketPresent(socket) ? 'present' : 'absent (SHANNON_OPERATOR_MINECRAFT off, or the API is not running)'}`);
@@ -188,6 +188,13 @@ function status(path: string, io: OperatorCliIo, deps: OperatorCliDeps): number 
   // 2026-10-28: the requests held on a heavy failure, why, the incident (its box and scene have its id) and whether the world is stopped.
   io.out(`held operator requests: ${inspection.held?.length ?? 0}`);
   for (const row of inspection.held ?? []) io.out(`  ${auditLine(row)}  ${row.detail ?? ''}`);
+  // Where the body is now against where each held act began: asked of the running API (read only), when its socket is there.
+  if (inspection.held?.length && deps.socketPresent(socket)) {
+    try {
+      const reply = await deps.send(socket, { v: 1, operator: env.SHANNON_OPERATOR?.trim() || 'status', domain: 'minecraft', op: 'held', args: {} });
+      for (const entry of ((reply.body as { held?: Array<{ taskId: string; position: string }> } | null)?.held ?? [])) io.out(`  task=${entry.taskId}  ${entry.position}`);
+    } catch { io.out('  (今の位置は API に聞けなかった)'); }
+  }
   io.out(`recent audit (${inspection.recent.length}):`);
   for (const row of inspection.recent) io.out(`  ${auditLine(row)}`);
   return 0;
@@ -200,7 +207,7 @@ function printReply(reply: { status: number; body: unknown }, io: OperatorCliIo)
     return 1;
   }
   const line = (key: string) => body[key] !== undefined && io.out(`${key}: ${String(body[key])}`);
-  for (const key of ['outcome', 'code', 'message', 'operationId', 'taskId', 'lifecycleId', 'actionId', 'deadlineAt', 'budgetYen']) line(key);
+  for (const key of ['outcome', 'code', 'message', 'operationId', 'taskId', 'lifecycleId', 'actionId', 'deadlineAt', 'budgetYen', 'position']) line(key);
   const problems = body.skillImport === undefined ? 0 : printSkillImport(body.skillImport, io);
   return body.outcome === 'accepted' && problems === 0 ? 0 : 1;
 }
@@ -238,7 +245,7 @@ export async function runOperatorCli(argv: readonly string[], env: Readonly<Reco
   try {
     if (!path || !isAbsolute(path)) throw new UsageError('SHANNON_DATABASE_PATH must name the database (an absolute path)');
     if (!existsSync(path)) throw new UsageError(`no database at ${path}`);
-    if (argv[0] === 'minecraft' && argv[1] === 'status' && argv.length === 2) return status(path, io, deps);
+    if (argv[0] === 'minecraft' && argv[1] === 'status' && argv.length === 2) return await status(path, io, deps, env);
     const envelope = operatorEnvelope(argv, env);
     if (Buffer.byteLength(JSON.stringify(envelope), 'utf8') > OPERATOR_LIMITS.bodyBytes) throw new UsageError('the request is too long');
     const socket = operatorSocketPath(path);

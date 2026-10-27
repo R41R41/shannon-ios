@@ -6,7 +6,7 @@ import { operatorEnvelope } from '../src/infra/ops/operatorCli.js';
 import { createOperatorMinecraft, type OperatorActivity, type OperatorMinecraftParts } from '../src/wiring/operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from '../src/wiring/operatorMinecraftRequests.js';
 import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
-import { incidentOfResult } from '../src/wiring/minecraftIncidentHold.js';
+import { driftWords, incidentOfResult } from '../src/wiring/minecraftIncidentHold.js';
 import { withIncident } from '../src/wiring/minecraftLlmcWiring.js';
 
 /**
@@ -22,13 +22,15 @@ const task = (id: string, phase: TaskView['phase']): TaskView => ({ id, phase, g
 function service() {
   const audit = new OperatorAuditStore(new DatabaseSync(':memory:'));
   const tasks = new Map<string, TaskView>();
-  const activity: OperatorActivity[] = [], stopped: string[] = [], resumed: string[] = [];
+  const activity: OperatorActivity[] = [], stopped: string[] = [], resumed: string[] = [], unfrozen: string[] = [];
   let clock = at;
   const requests = {
     body: () => 'minecraft:world', open: () => [], get: (id: string) => tasks.get(id) ?? null,
     admit: () => { tasks.set(TASK, task(TASK, 'ready')); return { ok: true as const, task: tasks.get(TASK)!, bodyId: 'minecraft:world' }; },
     stop: async (id: string) => { stopped.push(id); tasks.set(id, task(id, 'stopped')); return [tasks.get(id)!]; },
     resume: (id: string) => { resumed.push(id); tasks.set(id, task(id, 'ready')); return tasks.get(id)!; },
+    position: () => [7.5, 100, 0.5] as [number, number, number],
+    unfreeze: async (incident: string, command: string) => { unfrozen.push(`${incident}/${command}`); return 'completed'; },
     wake: () => undefined,
   } as unknown as OperatorMinecraftRequests & { wake(): void };
   const parts: OperatorMinecraftParts = {
@@ -36,10 +38,11 @@ function service() {
     actions: { list: async () => [] } as unknown as OperatorMinecraftParts['actions'], lifecycleUnresolved: () => false,
     activity: (_at, entry) => activity.push(entry), note: () => undefined,
   };
-  return { operator: createOperatorMinecraft(parts), audit, tasks, activity, stopped, resumed,
+  return { operator: createOperatorMinecraft(parts), audit, tasks, activity, stopped, resumed, unfrozen,
     advance: (minutes: number) => { clock = new Date(Date.parse(clock) + minutes * 60_000).toISOString(); }, now: () => clock };
 }
-const incident = { id: '20261028T000000-act-ab12', why: 'go_stuck', frozen: true, freeze: 'The game is frozen', command: 'command-q115' };
+const incident = { id: '20261028T000000-act-ab12', why: 'go_stuck', frozen: true, freeze: 'The game is frozen', command: 'command-q115',
+  start: [0.5, 100, 0.5] as [number, number, number], end: [3.21, 100, 0.5] as [number, number, number] };
 
 describe('the request and the resume, as the operator writes them', () => {
   it('reads --hold-on-failure and resume', () => {
@@ -67,7 +70,10 @@ describe('the hold and the resume', () => {
     expect(await s.operator.hold(TASK, incident)).toBe(false);
     expect(s.stopped).toEqual([TASK]);
     const held = s.audit.heldOf(TASK)!;
-    expect(JSON.parse(held.detail!)).toMatchObject({ incident: incident.id, why: 'go_stuck', frozen: true, command: 'command-q115' });
+    expect(JSON.parse(held.detail!)).toMatchObject({ incident: incident.id, why: 'go_stuck', frozen: true, command: 'command-q115', start: [0.5, 100, 0.5], end: [3.21, 100, 0.5] });
+    // The status (through the API) says where the body is now against where the held act began.
+    const status = await s.operator.handle(envelope('held'));
+    expect(status.body).toMatchObject({ code: 'held', held: [{ taskId: TASK, position: '保留した act の始まり (0.5,100,0.5)・保留した時 (3.2,100,0.5)・今 (7.5,100,0.5)（始まりから 7 m）' }] });
     expect(s.activity.at(-1)).toMatchObject({ tool: 'operator.minecraft.hold', reasonCode: 'operator_hold' });
     // A new request waits for the hold's resume or cancel.
     expect((await s.operator.handle(envelope('request', { goal: 'もう一つ' }))).body).toMatchObject({ outcome: 'refused', code: 'minecraft_busy' });
@@ -77,7 +83,7 @@ describe('the hold and the resume', () => {
     s.operator.tick();
     expect(s.stopped).toEqual([TASK]);
     const resumed = await s.operator.handle(envelope('resume', { latest: true }));
-    expect(resumed.body).toMatchObject({ outcome: 'accepted', code: 'resumed', taskId: TASK });
+    expect(resumed.body).toMatchObject({ outcome: 'accepted', code: 'resumed', taskId: TASK, position: expect.stringContaining('（始まりから 7 m）') });
     expect(s.resumed).toEqual([TASK]);
     expect(s.audit.heldOf(TASK)).toBeNull();
     expect(s.audit.resumePending(TASK)?.sequence).toBe(held.sequence);
@@ -106,6 +112,9 @@ describe('the hold and the resume', () => {
     await s.operator.hold(TASK, incident);
     expect((await s.operator.handle(envelope('cancel', { latest: true }))).body).toMatchObject({ outcome: 'refused' });
     expect((await s.operator.handle(envelope('cancel', { taskId: TASK }))).body).toMatchObject({ outcome: 'accepted', code: 'stopped' });
+    // The world the hold stopped moves again: a release naming the hold, of the held act's lease and session.
+    expect(s.unfrozen).toEqual([`${incident.id}/command-q115`]);
+    expect(s.audit.recent('owner', 5).find(row => row.command === 'cancel' && row.event === 'stopped')?.detail).toContain('unfreeze=completed');
     expect(s.audit.heldOf(TASK)).toBeNull();
     expect(s.audit.heldTasks('owner')).toEqual([]);
   });
@@ -116,6 +125,9 @@ describe('the step\'s side', () => {
     const result = JSON.stringify({ v: 1, ok: false, lines: [], incident: { id: 'x1', heavy: true, why: 'go_stuck', held: true, frozen: false, freeze: 'others_present:Rai1241' } });
     expect(incidentOfResult(result)).toEqual({ id: 'x1', heavy: true, why: 'go_stuck', held: true, frozen: false, freeze: 'others_present:Rai1241' });
     expect(incidentOfResult('{"v":1,"ok":true}')).toBeNull();
+    expect(incidentOfResult(JSON.stringify({ incident: { id: 'x2', start: [1, 2, 3], end: [4, 2, 3] } }))).toMatchObject({ start: [1, 2, 3], end: [4, 2, 3] });
+    expect(driftWords([1, 2, 3], null)).toBe('保留した act の始まり (1,2,3)・今 不明（体が見えない）');
+    expect(driftWords(null, [1, 2, 3])).toBe('保留した act の始まりの位置は記録に無い');
     expect(incidentOfResult('not json')).toBeNull();
     const context = { scopeKey: 'owner', taskId: TASK } as never;
     expect(withIncident(context, false, null)).toBe(context);

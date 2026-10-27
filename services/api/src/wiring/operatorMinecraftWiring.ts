@@ -13,6 +13,7 @@ import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import { runSkillImport, type SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
+import { driftWords, feet, type Feet } from './minecraftIncidentHold.js';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 
 /** What the activity record (「したことの記録」, shown in 自律活動 › 記録) keeps of an operator invocation. */
@@ -37,6 +38,14 @@ export interface OperatorMinecraftParts {
 }
 
 const FINISHED = ['stopped', 'completed', 'failed', 'stopping'];
+/** A hold row's detail (`hold` below): the incident, the held act's command and where it began and ended. */
+function holdDetail(detail: string | null): { incident?: string; command?: string; start?: Feet | null; end?: Feet | null } {
+  try {
+    const value = JSON.parse(detail ?? '{}') as Record<string, unknown>;
+    return { ...(typeof value.incident === 'string' ? { incident: value.incident } : {}), ...(typeof value.command === 'string' ? { command: value.command } : {}),
+      start: feet(value.start), end: feet(value.end) };
+  } catch { return {}; }
+}
 /** Phases after which a held request holds nothing any more. */
 const FINISHED_FOR_GOOD = ['completed', 'failed'];
 const HOUR_MS = 3_600_000;
@@ -213,11 +222,14 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     // 2026-10-28: a held request is stopped already; its cancel ends the hold (audited as stopped: the world is moved again by the body at the next task's act).
     const held = parts.audit.heldOf(found.id);
     if (held && task) {
+      // The world the hold stopped moves again: a release naming the hold goes to the body (2026-10-28).
+      const detail = holdDetail(held.detail);
+      const moved = detail.incident && detail.command ? await (requests.unfreeze?.(detail.incident, detail.command) ?? Promise.resolve('no_port')) : 'no_incident';
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'stopped', code: 'stopped',
-        argsJson: c.argsJson, taskId: found.id, detail: `held ${task.phase}` });
+        argsJson: c.argsJson, taskId: found.id, detail: `held ${task.phase} unfreeze=${moved}` });
       parts.activity(c.at, { summary: `運用者（${c.operator}）が、保留していたマイクラの依頼を止めました。`, tool: 'operator.minecraft.cancel',
         outcome: 'done', reasonCode: 'operator_cli', detail: `operation=${c.operationId} task=${found.id} held` });
-      return c.reply('accepted', 'stopped', '保留していた依頼を止めました（世界は次の依頼の最初の act で動き出します）。', { taskId: found.id });
+      return c.reply('accepted', 'stopped', `保留していた依頼を止めました。世界を動かすよう体に頼みました（${moved}）。`, { taskId: found.id });
     }
     if (!task || FINISHED.includes(task.phase)) return c.refuse('not_running', undefined, { taskId: found.id });
     const stopped = await requests.stop(found.id, 'operator_minecraft_stop');
@@ -287,7 +299,10 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     parts.activity(c.at, { summary: `運用者（${c.operator}）が、保留していたマイクラの依頼を再開しました。`, tool: 'operator.minecraft.resume',
       outcome: 'done', reasonCode: 'operator_cli', detail: `operation=${c.operationId} task=${found.id}` });
     requests.wake();
-    return c.reply('accepted', 'resumed', '再開しました。まず保留した act を同じ引数で出し直し、その後に計画の続きから判断します。', { taskId: found.id });
+    // 2026-10-28: how far the body is from where the held act began (the act is sent again from here; the body never goes back by itself).
+    const detail = holdDetail(hold.detail);
+    const position = driftWords(detail.start, requests.position?.() ?? null, detail.end);
+    return c.reply('accepted', 'resumed', `再開しました。まず保留した act を同じ引数で出し直し、その後に計画の続きから判断します。${position}`, { taskId: found.id, position });
   }
 
   /**
@@ -295,12 +310,12 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
    * is audited (why, the incident's id: its box and scene have it, whether the world stopped, the act's command id) and the task is stopped through the
    * owner's stop path (the plan, the pack and the task stay; no decision, no model). False when the task is not the operator's or asked for no hold.
    */
-  async function hold(taskId: string, incident: { id: string; why: string; frozen: boolean | null; freeze?: string; command: string }): Promise<boolean> {
+  async function hold(taskId: string, incident: { id: string; why: string; frozen: boolean | null; freeze?: string; command: string; start?: Feet | null; end?: Feet | null }): Promise<boolean> {
     const requests = parts.requests;
     const request = parts.audit.requestOf(parts.scopeKey, taskId);
     if (!requests || !request || !parts.audit.holdOnFailure(taskId) || parts.audit.heldOf(taskId)) return false;
     const detail = JSON.stringify({ incident: incident.id, why: incident.why.slice(0, 160), frozen: incident.frozen, ...(incident.freeze ? { freeze: incident.freeze.slice(0, 80) } : {}),
-      command: incident.command });
+      command: incident.command, ...(incident.start ? { start: incident.start } : {}), ...(incident.end ? { end: incident.end } : {}) });
     audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold', event: 'settled', code: 'held', argsJson: request.argsJson,
       taskId, detail: detail.slice(0, 600) });
     parts.activity(parts.now(), { summary: '運用者が代わりに始めたマイクラの依頼を、重い失敗で保留しました（世界を止め、記録を取りました）。', tool: 'operator.minecraft.hold',
@@ -314,6 +329,18 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!request) return;
     audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'resume', event: 'settled', code: 'replayed', argsJson: request.argsJson,
       taskId, detail: line.slice(0, 600) });
+  }
+
+  /** `held` (read only, the CLI's status): the held requests, each with where the body is now against where the held act began. */
+  function heldNow(c: Context) {
+    const now = parts.requests?.position?.() ?? null;
+    const held = parts.audit.heldTasks(parts.scopeKey).filter(row => row.taskId).map(row => {
+      const detail = holdDetail(row.detail);
+      return { taskId: row.taskId!, detail: row.detail ?? '', position: driftWords(detail.start, now, detail.end) };
+    });
+    audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'held', argsJson: c.argsJson,
+      detail: `held=${held.length}` });
+    return c.reply('accepted', 'held', `保留中の依頼 ${held.length} 件`, { held });
   }
 
   /** `minecraft release`: the body is asked again whether it is stopped with every input released (a request, never a force). */
@@ -374,6 +401,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (parsed.command === 'release') return release(c);
     if (parsed.command === 'skill_import') return skillImport(c, parsed);
     if (parsed.command === 'resume') return resume(c, parsed);
+    if (parsed.command === 'held') return heldNow(c);
     return cancel(c, parsed);
   }
 
