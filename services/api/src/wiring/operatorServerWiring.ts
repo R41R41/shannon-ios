@@ -9,6 +9,7 @@ import type { AutonomyActivityRecord } from '../mind/inhibition/store/autonomyAc
 import type { RequesterOf } from '../mind/action/fca/fcaSpokenReport.js';
 import { OPERATOR_NOTE_KIND, OPERATOR_TITLE_PREFIX } from '../contracts/operatorContract.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
+import { setIncidentHoldPort } from './minecraftIncidentHold.js';
 import { createOperatorMinecraft, type OperatorActivity } from './operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
@@ -128,6 +129,18 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
   });
   const timer = setInterval(() => service.tick(), TICK_MS);
   timer.unref();
+  // 2026-10-28: the fix run's hold, for the Minecraft steps of this process (`minecraftIncidentHold.ts`).
+  setIncidentHoldPort({
+    holdRequested: id => audit.store.holdOnFailure(id),
+    hold: (id, incident) => service.hold(id, incident),
+    resumePending: id => {
+      const row = audit.store.resumePending(id);
+      if (!row) return null;
+      try { const detail = JSON.parse(row.detail ?? '{}') as { incident?: string; command?: string }; return { incident: String(detail.incident ?? ''), command: String(detail.command ?? '') }; }
+      catch { return { incident: '', command: '' }; }
+    },
+    resumeChecked: (id, line) => service.resumeChecked(id, line),
+  });
   const socket = audit.enabled
     ? directory.then(() => serveOperatorSocket(socketPath, body => service.handle(body), reason => service.socketRefused(reason))).then(served => {
       parts.log(`Shannon operator Minecraft: serving ${socketPath}`);
@@ -140,6 +153,7 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
   return {
     async close() {
       clearInterval(timer);
+      setIncidentHoldPort(null);
       await (await socket)?.close();
       audit.close();
     },

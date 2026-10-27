@@ -75,7 +75,7 @@ const ioTurn = () => new Promise<void>(resolve => setImmediate(resolve));
 const sleepMs = (ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms).unref?.(); });
 const sameWork = (left: ActInput, right: ActInput): boolean =>
   JSON.stringify([left.hands, left.repeat, left.done]) === JSON.stringify([right.hands, right.repeat, right.done]);
-type RanListener = (item: { call: FcaToolCall; why: string }, result: ToolResult) => void;
+type RanListener = (item: { call: FcaToolCall; why: string }, result: ToolResult, receipt?: MinecraftControlReceipt) => void;
 
 /** The queue as the head's tools and lifecycle use it (`FcaBodyQueue` is what the runner sees of it). */
 export interface LlmcQueue extends FcaBodyQueue {
@@ -164,13 +164,13 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       bump();
       drop(item, item.item);
     } else if (taken) bump();
-    if (!taken) for (const listener of listeners) tell(listener, item, result);
+    if (!taken) for (const listener of listeners) tell(listener, item, result, receipt);
     settleFlag();
     pump();
   }
   /** Her feelings read each result; they never fail a step. */
-  function tell(listener: RanListener, item: QueueItem, result: ToolResult): void {
-    try { listener({ call: item.call, why: item.why }, result); } catch { /* feelings never fail a step */ }
+  function tell(listener: RanListener, item: QueueItem, result: ToolResult, receipt: MinecraftControlReceipt): void {
+    try { listener({ call: item.call, why: item.why }, result, receipt); } catch { /* feelings never fail a step */ }
   }
   function fail(item: QueueItem, cause: unknown): void {
     item.ended = true;

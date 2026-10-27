@@ -21,6 +21,9 @@ export interface OperatorAuditRow extends Required<Omit<OperatorAuditDraft, 'act
 }
 
 const text = (value: unknown): string | null => value === null || value === undefined ? null : String(value);
+/** A hold row (`h`) that no resume and no stop has followed. */
+const OPEN_HOLD = `AND NOT EXISTS (SELECT 1 FROM operator_audit r WHERE r.task_id=h.task_id AND r.command='resume' AND r.event='accepted' AND r.sequence>h.sequence)
+      AND NOT EXISTS (SELECT 1 FROM operator_audit s WHERE s.task_id=h.task_id AND s.event='stopped' AND s.sequence>h.sequence)`;
 
 /** The yen of the newest accepted `minecraft budget` row of a task (2026-10-26), or null when the operator never changed its cap. */
 function budgetChange(db: DatabaseSync, taskId: string): number | null {
@@ -118,6 +121,45 @@ export class OperatorAuditStore {
     return budgetChange(this.db, taskId) ?? (found.budget_yen !== null ? Number(found.budget_yen) : null);
   }
 
+  /** Whether the operator asked this request to be held on a heavy failure (`request --hold-on-failure`). */
+  holdOnFailure(taskId: string): boolean {
+    const found = this.db.prepare(`SELECT args_json FROM operator_audit WHERE task_id=? AND command='request' AND event='accepted' ORDER BY sequence LIMIT 1`).get(taskId);
+    try { return (JSON.parse(String(found?.args_json ?? '{}')) as { args?: { holdOnFailure?: unknown } }).args?.holdOnFailure === true; } catch { return false; }
+  }
+  /** The task's hold that no `resume` or stop has followed (`command='hold'`, `event='settled'`), or null. */
+  heldOf(taskId: string): OperatorAuditRow | null {
+    const found = this.db.prepare(`SELECT * FROM operator_audit h WHERE h.task_id=? AND h.command='hold' AND h.event='settled' ${OPEN_HOLD}
+      ORDER BY h.sequence DESC LIMIT 1`).get(taskId);
+    return found ? row(found as Record<string, unknown>) : null;
+  }
+  /** Every hold of a scope that no resume or stop has followed (the operator's status, and the admission of a new request). */
+  heldTasks(scopeKey: string): OperatorAuditRow[] {
+    return this.db.prepare(`SELECT * FROM operator_audit h WHERE h.scope_key=? AND h.command='hold' AND h.event='settled' ${OPEN_HOLD}
+      ORDER BY h.sequence DESC LIMIT 20`).all(scopeKey).map(value => row(value as Record<string, unknown>));
+  }
+  /** The resume accepted for a hold whose check (the failed act sent again) has not been written yet: the hold row it resumes, or null. */
+  resumePending(taskId: string): OperatorAuditRow | null {
+    const resume = this.db.prepare(`SELECT * FROM operator_audit r WHERE r.task_id=? AND r.command='resume' AND r.event='accepted'
+      AND NOT EXISTS (SELECT 1 FROM operator_audit c WHERE c.task_id=r.task_id AND c.command='resume' AND c.event='settled' AND c.sequence>r.sequence)
+      ORDER BY r.sequence DESC LIMIT 1`).get(taskId);
+    if (!resume) return null;
+    const hold = this.db.prepare(`SELECT * FROM operator_audit WHERE task_id=? AND command='hold' AND event='settled' AND sequence<? ORDER BY sequence DESC LIMIT 1`)
+      .get(taskId, Number(resume.sequence));
+    return hold ? row(hold as Record<string, unknown>) : null;
+  }
+  /** How long the task has been held in all (each hold to its resume or stop, the open one to `now`): the time limit does not count it. */
+  heldMs(taskId: string, now: string): number {
+    const rows = this.db.prepare(`SELECT command, event, occurred_at FROM operator_audit WHERE task_id=? AND ((command='hold' AND event='settled')
+      OR (command='resume' AND event='accepted') OR event='stopped') ORDER BY sequence`).all(taskId) as Array<{ command: string; event: string; occurred_at: string }>;
+    let total = 0, since: number | null = null;
+    for (const entry of rows) {
+      if (entry.command === 'hold') since ??= Date.parse(entry.occurred_at);
+      else if (since !== null) { total += Date.parse(entry.occurred_at) - since; since = null; }
+    }
+    if (since !== null) total += Date.parse(now) - since;
+    return Math.max(0, total);
+  }
+
   /** Accepted invocations of the last hour (the rate limit counts the record, so a restart does not reset it). */
   acceptedSince(scopeKey: string, since: string): number {
     const found = this.db.prepare(`SELECT COUNT(*) AS count FROM operator_audit WHERE scope_key=? AND event='accepted' AND occurred_at>=?`)
@@ -151,6 +193,8 @@ export interface OperatorAuditInspection {
   open: OperatorAuditRow[];
   /** The cap now in force of each open request the operator changed (`minecraft budget`), by task id; the request's own row keeps its first. */
   changedBudgets?: Record<string, number>;
+  /** 2026-10-28: the holds no resume or stop has followed (their detail: why, the incident, the world). */
+  held?: OperatorAuditRow[];
 }
 
 /**
@@ -176,10 +220,12 @@ export function inspectOperatorAudit(path: string, now: string, limit = 10): Ope
       const changed = request.taskId ? budgetChange(db, request.taskId) : null;
       if (request.taskId && changed !== null) changedBudgets[request.taskId] = changed;
     }
+    const held = read(`SELECT * FROM operator_audit h WHERE h.command='hold' AND h.event='settled' AND h.occurred_at>=? ${OPEN_HOLD}
+        ORDER BY h.sequence DESC LIMIT 20`, since);
     return {
       step,
       recent: read('SELECT * FROM operator_audit ORDER BY sequence DESC LIMIT ?', Math.max(1, Math.min(200, Math.trunc(limit)))),
-      open, changedBudgets,
+      open, changedBudgets, held,
     };
   } finally {
     db.close();

@@ -52,6 +52,8 @@ export function operatorMinecraftRequests(parts: {
     },
     /** The owner's stop path (`minecraft.cancel`): the runtime's stop, which waits for the body's stop acknowledgement. */
     stop: (id: string, reason: string) => parts.stop(id, reason),
+    /** A stopped task queued again (the runtime's explicit resume, as the owner's resume route does): a held request's `resume`. */
+    resume: (id: string) => parts.runtime.resume(parts.ownerScope, id),
   };
 }
 export type OperatorMinecraftRequests = ReturnType<typeof operatorMinecraftRequests>;

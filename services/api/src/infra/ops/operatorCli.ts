@@ -12,7 +12,9 @@ import { operatorSocketPath, requestOperatorSocket } from './operatorSocket.js';
 export const OPERATOR_CLI_USAGE = [
   'Usage (as the service user, with SHANNON_DATABASE_PATH set):',
   '  opsCli.ts minecraft status',
-  '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] <goal...>',
+  '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] [--hold-on-failure] <goal...>',
+  '      (--hold-on-failure: on a heavy failure the task is held, the world stopped, the box and the scene written; then `resume`)',
+  '  opsCli.ts minecraft resume --operator <label> (<task-id> | --latest)   (a held request goes on: the failed act again, then the plan)',
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
   '  opsCli.ts minecraft budget --operator <label> (<task-id> | --latest) <yen>',
   '      (change a running request\'s yen cap, from its next decision on; not below what it has used, not above the request cap)',
@@ -56,7 +58,7 @@ interface Parsed { flags: Map<string, string | true>; positional: string[] }
  */
 function parseArguments(argv: readonly string[]): Parsed {
   const flags = new Map<string, string | true>(), positional: string[] = [];
-  const bare = new Set(['--latest', '--keep-world']);
+  const bare = new Set(['--latest', '--keep-world', '--hold-on-failure']);
   for (let index = 0; index < argv.length; index += 1) {
     const item = argv[index]!;
     if (item === '--') {
@@ -92,7 +94,7 @@ function knownFlags(parsed: Parsed, allowed: readonly string[]): void {
 type Base = Pick<OperatorEnvelope, 'v' | 'operator' | 'domain' | 'op'>;
 
 function requestEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
-  knownFlags(parsed, ['--operator', '--max-minutes', '--budget-yen']);
+  knownFlags(parsed, ['--operator', '--max-minutes', '--budget-yen', '--hold-on-failure']);
   const goal = parsed.positional.join(' ').trim();
   if (!goal) throw new UsageError('the request needs a goal');
   // The same check as the API's (`garbledRequest`), before anything is sent: run 17's request came in garbled from a CP932 read.
@@ -101,7 +103,7 @@ function requestEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   const maxMinutes = whole(parsed.flags.get('--max-minutes'), '--max-minutes');
   const budgetYen = whole(parsed.flags.get('--budget-yen'), '--budget-yen');
   const limits = { ...(maxMinutes !== undefined ? { maxMinutes } : {}), ...(budgetYen !== undefined ? { budgetYen } : {}) };
-  return { ...base, args: { goal, ...limits } };
+  return { ...base, args: { goal, ...limits, ...(parsed.flags.get('--hold-on-failure') === true ? { holdOnFailure: true } : {}) } };
 }
 
 function cancelEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
@@ -158,7 +160,7 @@ export function operatorEnvelope(argv: readonly string[], env: Readonly<Record<s
   if (domain === 'skills' && op === 'import') return skillImportEnvelope(base, parsed);
   if (domain !== 'minecraft') return { ...base, args: {} };
   if (op === 'request') return requestEnvelope(base, parsed);
-  if (op === 'cancel') return cancelEnvelope(base, parsed);
+  if (op === 'cancel' || op === 'resume') return cancelEnvelope(base, parsed);
   if (op === 'budget') return budgetEnvelope(base, parsed);
   return lifecycleEnvelope(base, parsed);
 }
@@ -183,6 +185,9 @@ function status(path: string, io: OperatorCliIo, deps: OperatorCliDeps): number 
     const changed = row.taskId ? inspection.changedBudgets?.[row.taskId] : undefined;
     io.out(`  ${auditLine(row)}${changed === undefined ? '' : `  yen_now=${changed}`}`);
   }
+  // 2026-10-28: the requests held on a heavy failure, why, the incident (its box and scene have its id) and whether the world is stopped.
+  io.out(`held operator requests: ${inspection.held?.length ?? 0}`);
+  for (const row of inspection.held ?? []) io.out(`  ${auditLine(row)}  ${row.detail ?? ''}`);
   io.out(`recent audit (${inspection.recent.length}):`);
   for (const row of inspection.recent) io.out(`  ${auditLine(row)}`);
   return 0;

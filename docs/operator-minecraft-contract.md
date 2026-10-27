@@ -36,8 +36,9 @@ Envelope: `{ "v": 1, "operator": "<label>", "domain": "minecraft", "op": "<op>",
 
 | `op` | `args` |
 | --- | --- |
-| `request` | `goal` (1..1000 characters, no control characters), `maxMinutes` (1..120, default 30), `budgetYen` (1..2000, default 2000) |
+| `request` | `goal` (1..1000 characters, no control characters), `maxMinutes` (1..120, default 30), `budgetYen` (1..2000, default 2000), `holdOnFailure` (optional `true`: below) |
 | `cancel` | `taskId` (a task UUID) or `latest: true` |
+| `resume` | `taskId` (a task UUID) or `latest: true`: a request held on a heavy failure goes on (below) |
 | `budget` | `taskId` (a task UUID) or `latest: true`, and `budgetYen` (a whole number, 1..2000): see [Changing a running request's budget](#changing-a-running-requests-budget) |
 | `start` | `serverId` (optional when one server is registered), `keepWorld` (optional boolean; `true` only) |
 | `stop`, `login`, `logout`, `set_day` | `serverId` (optional when one server is registered) |
@@ -155,6 +156,28 @@ only by an explicit resume), not a stop still in flight. A task that was waiting
 acknowledgement and is `stopped` at once, body or no body (Minebot lane run 1, 2026-10-14: the task had waited since before the VM
 was evicted). `stop_requested = 1` stays on the checkpoint as the mark of that stop. A stopped task counts toward nothing: the
 admission's `minecraft_busy`, `cancel` and the time limit all treat `stopped` as finished, and it holds no lease.
+
+## Hold on a heavy failure and resume (the fix run, 2026-10-28)
+
+`request --hold-on-failure` (`holdOnFailure: true`) asks that a heavy failure of the body hold the request instead of letting it go on
+(owner 2026-10-28: 「黒箱・現場の保存・止めて直す実走」). It is an argument of the request, not a switch.
+
+- The request's acts carry `context.incident.hold`. The body (`backend/src/services/minebot/utils/incidents.ts`) writes its black box on
+  every act that did not succeed, and on a heavy one (a go `stuck`, `search_timeout`, or `limit_time` with fewer than 10 steps; an act that
+  failed after 60 s or more; health 4 or less, or a death, during it; the first failure of its kind in the task) also the scene (the world's
+  region, entities and poi files around it after `save-all flush`, and the server log). With the hold asked for, it first stops the world
+  (`/tick freeze`, never while anyone but the body is on the server: then it is not stopped, and the hold says so), holds the task's next acts
+  (refused as `held`, also after a restart of the body: the hold is kept in a file), and says so in the act's receipt (`incident`).
+- The head (`wiring/minecraftIncidentHold.ts`) reads that receipt and holds the task: an audit row (`command = hold`, `event = settled`,
+  `code = held`, `detail` = the incident id, why, whether the world stopped, the act's command id) and the owner's stop path. A held task makes
+  no decision and calls no model; the plan, the pack and the task are kept. Its time limit does not count the held time (`heldMs`). A new
+  request is refused (`minecraft_busy`) while one is held.
+- `status` lists the held requests with their detail. The incident id names the box (`saves/minecraft/blackbox/<task>/<id>.json.gz`) and the
+  scene (`saves/minecraft/scenes/<id>/`) in the body's working directory.
+- `resume (<task-id> | --latest)` queues the held task again (`resumed`). Its first step sends the act that failed once more with the same
+  arguments and `context.incident.resume` (the body moves the world again and runs it), writes what it did (`command = resume`,
+  `event = settled`, `code = replayed`), and the decisions go on from the plan. `not_held` when the task is not held.
+- `cancel` of a held request ends the hold (`stopped`); the body moves the world again at the first act of another task.
 
 ## Changing a running request's budget
 

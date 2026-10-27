@@ -13,7 +13,7 @@ import { MINECRAFT_LIFECYCLE_ACTIONS, type MinecraftLifecycleAction } from './mi
  */
 export const OPERATOR_VIA = 'operator_cli';
 export const OPERATOR_DOMAINS = ['minecraft', 'skills'] as const;
-export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel', 'budget', 'release', 'skill_import'] as const;
+export const OPERATOR_COMMANDS = ['lifecycle', 'request', 'cancel', 'budget', 'release', 'skill_import', 'resume'] as const;
 export type OperatorCommand = typeof OPERATOR_COMMANDS[number];
 export const OPERATOR_PATH = '/operator/v1/minecraft';
 /** Where the socket is, beside the database the CLI was told to use (never a guessed default path). */
@@ -50,13 +50,22 @@ export const OPERATOR_CODES = [
   'released', 'not_retained', 'not_confirmed', 'proof_refused', 'recheck_busy', 'not_settled',
   // The skill import (`skills import`): the importer's refusals, as the paired route answers them.
   'validation_failed', 'stale_plan',
+  // 2026-10-28, the fix run (`request --hold-on-failure`, `resume`): a task held on a heavy failure, and its resume.
+  'held', 'not_held', 'resumed',
 ] as const;
 export type OperatorCode = typeof OPERATOR_CODES[number];
 
 export type OperatorInput =
   /** keepWorld (--keep-world, start only): this start keeps the current world even while 「新しいワールドで始める」 is on. */
   | { command: 'lifecycle'; action: MinecraftLifecycleAction; serverId: string | null; keepWorld: boolean }
-  | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number }
+  /**
+   * holdOnFailure (2026-10-28, the fix run): on a heavy failure of the body (a go stuck or out of search time, an act that lost a minute, near death),
+   * the task is held instead of going on: no decision, the plan, the pack and the task kept, the world stopped (`/tick freeze`, never with anyone else
+   * on), the box and the scene written. `resume` goes on from there.
+   */
+  | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number; holdOnFailure?: boolean }
+  /** A held request goes on: the act that failed is sent again with the same arguments first, then the decisions from the plan. */
+  | { command: 'resume'; taskId: string | null }
   | { command: 'cancel'; taskId: string | null }
   /** A running request's yen cap, changed (2026-10-26, run 39): appended to the audit as a `budget` row, never written over the request's. */
   | { command: 'budget'; taskId: string | null; budgetYen: number }
@@ -129,10 +138,12 @@ function request(operator: string, args: Record<string, unknown>): OperatorParse
   }
   const budgetYen = integer(args.budgetYen, OPERATOR_LIMITS.maxBudgetYen);
   if (budgetYen === null || budgetYen < 1) return refuse(operator, 'invalid_input', '--budget-yen must be a positive integer');
+  const holdOnFailure = args.holdOnFailure === undefined ? false : args.holdOnFailure;
+  if (holdOnFailure !== true && holdOnFailure !== false) return refuse(operator, 'invalid_input', 'holdOnFailure must be true or false');
   if (budgetYen > OPERATOR_LIMITS.maxBudgetYen) {
     return refuse(operator, 'budget_above_cap', `--budget-yen may not exceed the Minecraft request cap of ${OPERATOR_LIMITS.maxBudgetYen} yen`);
   }
-  return { ok: true, operator, input: { command: 'request', goal, maxMinutes, budgetYen } };
+  return { ok: true, operator, input: { command: 'request', goal, maxMinutes, budgetYen, ...(holdOnFailure ? { holdOnFailure: true } : {}) } };
 }
 
 function cancel(operator: string, args: Record<string, unknown>): OperatorParse {
@@ -201,7 +212,7 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.domain !== 'minecraft') return otherDomain(operator, value.domain, value.op, args);
   const allowed: Record<string, readonly string[]> = {
-    request: ['goal', 'maxMinutes', 'budgetYen'], cancel: ['taskId', 'latest'], budget: ['taskId', 'latest', 'budgetYen'],
+    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest'], budget: ['taskId', 'latest', 'budgetYen'],
     start: ['serverId', 'keepWorld'],
   };
   const extra = Object.keys(args).find(key => !(allowed[value.op as string] ?? ['serverId']).includes(key));
@@ -210,6 +221,10 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.op === 'request') return request(operator, args);
   if (value.op === 'cancel') return cancel(operator, args);
+  if (value.op === 'resume') {
+    const parsed = cancel(operator, args);
+    return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId } } : parsed;
+  }
   if (value.op === 'budget') return budget(operator, args);
   if (value.op === 'release') return release(operator, args);
   return lifecycle(operator, value.op, args);

@@ -34,6 +34,10 @@ import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
+import { incidentHoldPort, incidentOfResult } from './minecraftIncidentHold.js';
+import { randomUUID } from 'node:crypto';
+import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
+import type { BodyTaskContext } from '../contracts/bodyControlContract.js';
 
 /**
  * The models of a Minecraft body task's decisions (design mb-llm-centric; owner 2026-10-21: the main model is chosen after replaying scenes with
@@ -198,6 +202,12 @@ export function llmcProbeRunner(control: MinecraftControl, step: TaskStep): () =
   };
 }
 
+/** The command context with the fix run's incident fields (`minecraftIncidentHold.ts`): unchanged when there is nothing to say. */
+export function withIncident(context: BodyTaskContext, hold: boolean, resume: string | null): BodyTaskContext {
+  if (!hold && !resume) return context;
+  return { ...context, incident: { ...(hold ? { hold: true } : {}), ...(resume ? { resume } : {}) } };
+}
+
 /**
  * One body task's parts in the mode: its plan (the tool, the port, the first plan asked at its first decision), the body's and the body
  * tools' options, and the step ports that make its steps small (the model router, the plan, the lease window, the
@@ -225,9 +235,42 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     r4: { world: worldOf, system: ownFirstPlanSystem(), readiness: true } });
   const display = () => plan.port.display();
   // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step decides again while its items run.
+  // 2026-10-28, the fix run (`minecraftIncidentHold.ts`): a request asked to be held on a heavy failure sends its acts with `incident.hold`; the act a
+  // resume sends again carries `incident.resume` (set for that one add only).
+  const holds = incidentHoldPort();
+  const holdOn = holds?.holdRequested(step.taskId) === true;
+  let resumeOf: string | null = null;
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId,
-    context: () => minecraftTaskContext(step, bodyId(), step.id, display()), observe, log });
+    context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
+  if (holds && holdOn) {
+    queue.onRan((_item, _result, receipt) => {
+      const incident = incidentOfResult(receipt?.result);
+      if (!incident?.held || !receipt) return;
+      log(`Shannon Minecraft incident hold task=${step.taskId} incident=${incident.id} frozen=${String(incident.frozen)} why=${incident.why.slice(0, 80)}`);
+      void holds.hold(step.taskId, { ...incident, command: receipt.id }).catch(error => log(`Shannon Minecraft incident hold failed task=${step.taskId} ${String(error)}`));
+    });
+    const pending = holds.resumePending(step.taskId);
+    const sent = pending?.command ? control.store.command(pending.command) : null;
+    if (pending && (!sent || sent.skill !== 'act' || !sent.arguments)) holds.resumeChecked(step.taskId, `再送できなかった: act ${pending.command || '?'} が見つからない`);
+    else if (pending && sent?.arguments) {
+      const args = sent.arguments as Record<string, unknown>;
+      resumeOf = pending.incident;
+      const added = queue.add({ call: { id: `resume:${sent.id}`, name: MC_ACT_TOOL, input: args }, operationId: `resume:${randomUUID()}`, input: args as never,
+        arguments: args, skill: 'act', node: sent.queue?.node ?? null, current: null, why: String(args.why ?? ''), fixes: [],
+        maxMs: Number(sent.queue?.maxMs ?? 60_000) });
+      resumeOf = null;
+      log(`Shannon Minecraft incident resume task=${step.taskId} incident=${pending.incident} resend=${sent.id}`);
+      const first = { done: false };
+      queue.onRan((item, result) => {
+        if (first.done || item.call.id !== `resume:${sent.id}`) return;
+        first.done = true;
+        holds.resumeChecked(step.taskId, `再開の確かめ: 同じ act を出し直した → ${result.ok ? '成功' : '失敗'}: ${result.text.replace(/\s+/gu, ' ').slice(0, 480)}`);
+      });
+      void added.then(answer => { if (!answer.ok) { first.done = true; holds.resumeChecked(step.taskId, `再送を列が断った: ${answer.text.slice(0, 200)}`); } },
+        error => { first.done = true; holds.resumeChecked(step.taskId, `再送できなかった: ${String(error).slice(0, 200)}`); });
+    }
+  }
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {
