@@ -66,7 +66,7 @@ describe('the first plan is told the place and what it lacks (run 29: 28 nodes, 
     const input = firstPlanInput(GOAL, START, { scan: true, readiness: true });
     expect(input).toContain('ディメンション: the_nether');
     expect(input).toContain('着ている物: 頭: iron_helmet');
-    expect(input).toContain('食料: 15.6 点');
+    expect(input).toMatch(/^食料 15\.6 点$/mu);
     expect(input).toContain('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具・足場のブロックが無い。食料 15.6 点（目安 100）');
     expect(firstPlanInput(GOAL, START, { scan: true })).not.toContain('準備の不足');
     expect(FIRST_PLAN_SYSTEM_R6.startsWith(FIRST_PLAN_SYSTEM_R5)).toBe(true);

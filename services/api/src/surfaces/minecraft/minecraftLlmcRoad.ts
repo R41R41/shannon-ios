@@ -3,6 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { doneFacts, parseDoneWhen, predicateHolds, type DoneFacts } from './minecraftPlanDone.js';
 import { carried } from './minecraftConditions.js';
 import { PREP_SKIP_SECONDS } from './minecraftLlmcPrepRules.js';
+import { foodPointsWords } from './minecraftFoodWords.js';
 
 /**
  * mb-llmc v2 (mb-llmc-cand 11, chapter 4 A: the goal's yardstick and the stage road): for a task that goes for the dragon, two lines of the live
@@ -43,7 +44,7 @@ export const isPrepMilestoneNode = (node: PlanNode): boolean => {
   return /地下の準備/u.test(node.title) || (points !== undefined && Number(points) >= 40 && Number(points) < 100);
 };
 const prepHolds = (facts: DoneFacts): boolean => facts.food >= 40 && (carried(facts.counts, 'crafting_table') > 0 || carried(facts.counts, 'planks') >= 4);
-const prepNow = (facts: DoneFacts): string => `食料 ${Math.round(facts.food)}/40 点・作業台 ${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}・板 ${carried(facts.counts, 'planks')}`;
+const prepNow = (facts: DoneFacts): string => `${foodPointsWords(facts.food, 40)}・作業台 ${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}・板 ${carried(facts.counts, 'planks')}`;
 export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ベッド', seconds: 150, doneWhen: 'have:bed' },
   // 300 s: the quickest preparation of runs 39-41 (run 40: two village chests, 39.6 points at +298; the table or planks 4 at +45 to +94).

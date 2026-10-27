@@ -3,6 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, PREP_SKIP_COST, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
+import { foodPointsWords } from './minecraftFoodWords.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first, written by the code
@@ -79,7 +80,7 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
       unworn.push(...[...parts.counts.keys()].filter(name => need.pattern.test(name) && !parts.worn!.includes(name)));
     }
   }
-  const food = parts.food < table.food ? `食料 ${round1(parts.food)} 点（目安 ${table.food}）` : '';
+  const food = parts.food < table.food ? `${foodPointsWords(parts.food)}（目安 ${table.food}）` : '';
   const said = [none.length ? `${none.join('・')}が無い` : '', short.join('・'), unworn.length ? `持っているが着ていない: ${unworn.join('・')}` : '', food]
     .filter(Boolean);
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
@@ -99,9 +100,20 @@ export const LOW_HEALTH_COST = '戻らないまま下りたり戦ったりする
  * health then takes to come back, and what going on without it cost (run 42: the line said the fact alone, 7 decisions in a row, and she went down at
  * 11.3 and died); null otherwise.
  */
-export function recoveryLine(hunger: number | null, health: number | null, food: number, counts?: ItemCounts): string | null {
+/**
+ * Run 43 (+2,095 to +2,117: health 14 to 10 under two or three drowned, she chose 「ドラウンドを倒し作業台」 over eating, and was at 0.3 when the body's
+ * reflex ate): the line says to eat before a fight too, with why and what it cost, while an enemy is near.
+ */
+export const EAT_UNDER_ATTACK = '敵が近い・打たれている時も、戦う前に 1 個食べる（食べるのは 1.6 秒。満腹 18 以上の間だけ打たれた分が戻る。実走 43 は体力 10 で食べずに戦い、0.3 まで減った）';
+/** A hostile within this many blocks makes the recovery line say to eat before a fight. */
+const ATTACK_NEAR = 8;
+export function enemyNear(world: Record<string, unknown>): boolean {
+  const threats = Array.isArray(world.nearbyThreats) ? world.nearbyThreats : [];
+  return threats.some(raw => { const distance = finite(record(raw)?.distance); return distance !== null && distance <= ATTACK_NEAR; });
+}
+export function recoveryLine(hunger: number | null, health: number | null, food: number, counts?: ItemCounts, attacked = false): string | null {
   if (hunger === null || health === null || health >= 20 || hunger >= 18) return null;
-  const fact = `体力 ${round1(health)}/20 は自然に戻らない（満腹 ${round1(hunger)}＜18、食料 ${round1(food)} 点）`;
+  const fact = `体力 ${round1(health)}/20 は自然に戻らない（満腹 ${round1(hunger)}＜18、${foodPointsWords(food)}）`;
   // Fill to 20, not 18: health coming back uses the fullness up (about 1.5 per point), so 18 gives a point or two and stops again.
   const now = Math.floor(hunger), need = 20 - now;
   // Natural regeneration at 18 or more: a point every 4 s (80 ticks).
@@ -118,7 +130,7 @@ export function recoveryLine(hunger: number | null, health: number | null, food:
   }
   const plan = !counts ? '' : now + got >= 18 ? `。${eat.join('・')} を食べると満腹 ${Math.min(20, now + got)} になり、${back}`
     : eat.length ? `。持ち物の食べ物（${eat.join('・')}）では満腹 ${now + got} までで 18 に届かない。食料の当てで足す` : '。持ち物に食べ物が無い。食料の当てで取る';
-  return `${fact}${plan}。${LOW_HEALTH_COST}`;
+  return `${fact}${plan}。${attacked ? `${EAT_UNDER_ATTACK}。` : ''}${LOW_HEALTH_COST}`;
 }
 
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value)
@@ -236,12 +248,55 @@ function lowestReach(hands: unknown, feetY: number): number {
   }
   return lowest;
 }
+/**
+ * Run 43 (+1,291 q95, 「[p5.1] ダイヤへ下りる」 from y≈14 to y=-56 with no table and no planks: the planks had gone into the furnace; at the diamonds
+ * 「作業台へ戻りダイヤのツルハシ」 took 270 s up and back, +1,351 to +1,623): the descent's check was the first one's only (from the surface). A hand
+ * that goes 10 or more further down underground without a table or 4 planks says so too: what cannot be made down there, and what it cost.
+ */
+function deepDescentNote(input: unknown, facts: NonNullable<ReturnType<typeof readinessOf>>, feet: Feet): string | null {
+  const planks = countMatching(facts.counts, /_planks$/u), logs = countMatching(facts.counts, /_(?:log|stem|wood|hyphae)$/u);
+  if (countMatching(facts.counts, /^crafting_table$/u) > 0 || planks >= TABLE_PLANKS) return null;
+  const lowest = lowestReach(record(input)?.hands, feet.y);
+  if (feet.y - lowest < DESCENT) return null;
+  const make = logs > 0 ? `原木 ${logs} がある。make crafting_table（原木 1 で板 4）を持ってから下りる` : '地上か坑道の木（柵・板）で板 4 を持ってから下りる';
+  return `作業台 無・板 ${planks} のまま y=${Math.round(lowest)} へ下りる手。下には木が無く、ダイヤのツルハシ・鉄の道具など作業台の要る物を作れない`
+    + `（実走 43 はダイヤの後に作業台へ戻る往復で約 270 秒）。${make}。かまどの燃料に最後の板を使わない`;
+}
+
+/** Items a furnace makes something of that the route needs: the ores (raw) and raw meat. */
+const TO_SMELT = /^(?:raw_iron|raw_gold|iron_ore|deepslate_iron_ore|gold_ore|deepslate_gold_ore|beef|porkchop|mutton|chicken|rabbit|cod|salmon|potato)$/u;
+/** What burns, in items smelted, that is not wanted for anything else (wood is the table's and the tools': said apart). */
+const FUELS: ReadonlyArray<readonly [RegExp, number]> = [[/^(?:coal|charcoal)$/u, 8], [/^coal_block$/u, 80], [/^lava_bucket$/u, 100]];
+const COAL_MARK = /石炭\[(?:deepslate_)?coal_ore\] \((-?\d+),(-?\d+),(-?\d+)\)[^×]*×(\d+)/u;
+/**
+ * Run 43 (+720 to +1,766, about 600 s: raw_iron ×15 with one plank, five waits before a furnace out of fuel, a climb to the surface for wood; the
+ * coal ore ×10 on the map at y=44 was passed on the way down): what she carries to smelt against the fuel she carries, with the nearest coal on the map.
+ * Null when the fuel is enough or there is nothing to smelt.
+ */
+export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts): string | null {
+  let items = 0;
+  for (const [name, count] of counts) if (TO_SMELT.test(name)) items += count;
+  if (items < 2) return null;
+  const burns = FUELS.reduce((sum, [pattern, each]) => sum + countMatching(counts, pattern) * each, 0);
+  if (burns >= items) return null;
+  const coal = Math.ceil((items - burns) / 8), planks = countMatching(counts, /_planks$/u);
+  const feet = feetOf(world);
+  const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter((line): line is string => typeof line === 'string');
+  const seen = marks.map(line => COAL_MARK.exec(line)).filter((m): m is RegExpExecArray => !!m)
+    .map(m => ({ x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), n: Number(m[4]) }))
+    .map(c => ({ ...c, far: feet ? Math.round(Math.hypot(c.x - feet.x, c.y - feet.y, c.z - feet.z)) : null }))
+    .sort((a, b) => (a.far ?? 1e9) - (b.far ?? 1e9))[0];
+  const where = seen ? `地図の石炭 (${seen.x},${seen.y},${seen.z}) ×${seen.n}${seen.far !== null ? ` が ${seen.far}m` : ''}` : '地図に石炭は見えていない';
+  return `燃料: 焼く物 ${items} 個に石炭 ${coal} が要る（石炭 1 で 8 個、板 1 枚は 1.5 個。板 ${planks} は作業台と道具の分）。${where}`;
+}
+
 export function descentNote(input: unknown, frame: BodyObservation | null): string | null {
   const facts = readinessOf(frame);
   const feet = facts ? feetOf(facts.world) : null;
-  if (!facts || !feet || facts.dimension !== 'overworld' || feet.y < SURFACE_Y) return null;
+  if (!facts || !feet || facts.dimension !== 'overworld') return null;
+  if (feet.y < SURFACE_Y) return deepDescentNote(input, facts, feet);
   // Run 41 (the table was missing as well: 372 s with none, and she died on the way up): the food and the table (or planks to make one) are the descent's.
-  const lacks = [facts.food < FOOD_BEFORE_DESCENT ? `食料 ${round1(facts.food)}/${FOOD_BEFORE_DESCENT} 点` : '',
+  const lacks = [facts.food < FOOD_BEFORE_DESCENT ? foodPointsWords(facts.food, FOOD_BEFORE_DESCENT) : '',
     countMatching(facts.counts, /^crafting_table$/u) < 1 && countMatching(facts.counts, /_planks$/u) < TABLE_PLANKS
       ? `作業台 無・板 ${countMatching(facts.counts, /_planks$/u)}` : ''].filter(Boolean);
   if (!lacks.length) return null;

@@ -2,6 +2,7 @@ import { orderedPlan, PLAN_LIMITS, type PlanNode, type PlanTree, type PlanUpdate
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, clauseHolds, clauseLack, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { newerClause, type ActClause } from '../../contracts/minecraftActCondition.js';
+import { foodPointsWords } from './minecraftFoodWords.js';
 
 export { doneFacts, type DoneFacts };
 
@@ -123,7 +124,7 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
   switch (clause.kind) {
     case 'have': return `${clause.item} ${Math.min(carried(facts.counts, clause.item), clause.count)}/${clause.count}`;
     case 'act': return clauseLack(clause.clause, facts);
-    case 'food': return `食料 ${Math.round(facts.food)}/${clause.points} 点`;
+    case 'food': return foodPointsWords(facts.food, clause.points);
     case 'dim': return `次元 ${clause.dimension}（今 ${facts.dimension ?? '不明'}）`;
     case 'at': return facts.feet ? `(${clause.x},${clause.y},${clause.z}) から ${Math.round(Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y,
       facts.feet.z - clause.z))}m（${clause.r}m 内で済む）` : `(${clause.x},${clause.y},${clause.z}) までは不明`;

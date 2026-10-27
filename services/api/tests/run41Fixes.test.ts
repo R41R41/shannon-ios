@@ -26,7 +26,7 @@ const withState = (done: string[], current: string | null, base: PlanTree = tree
 describe('the preparation is a milestone of the meter, with its seconds and its lateness', () => {
   it('is the next milestone after the bed, with the target, how late, what she has now and what leaving it out costs', () => {
     const line = meterLine(tree, have([['blue_bed', 1], ['spruce_planks', 2]]), 260 / 60)!;
-    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（あと 40 秒）・今 食料 0/40 点・作業台 無・板 2。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある');
+    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（あと 40 秒）・今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 2。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある');
     expect(meterLine(tree, have([['blue_bed', 1]]), 150 / 60)).toContain('目安 300 秒（あと 150 秒）');
   });
   it('is met by 40 food points with a table or 4 planks; a table alone or the food alone is not', () => {
@@ -42,7 +42,7 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     const kit = have([['blue_bed', 1], ['iron_pickaxe', 1]]);
     const open = meterLine(tree, kit, 400 / 60)!;
     expect(open).toContain('次の節目 バケツ');
-    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点・作業台 無・板 0。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある。飛ばしたなら plan.update に書く）');
+    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 0。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある。飛ばしたなら plan.update に書く）');
     expect(meterLine(withState(['p2'], null), kit, 400 / 60)).not.toContain('まだの節目');
   });
   it('points the meter at the preparation while the plan\'s current node is one, though a later milestone is met', () => {

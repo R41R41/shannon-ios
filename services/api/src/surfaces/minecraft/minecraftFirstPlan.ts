@@ -8,6 +8,7 @@ import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { preparationShortage, recoveryLine } from './minecraftLlmcReadiness.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
+import { foodPointsWords } from './minecraftFoodWords.js';
 
 /**
  * The first plan tree of a Minecraft task (design mb-llm-centric 2.5, 2.6: the route becomes the first plan, asked of a strong model once;
@@ -272,7 +273,7 @@ function readinessInput(world: Record<string, unknown>): string[] {
   const counts = carriedItemCounts(world, {});
   const shortage = preparationShortage({ dimension, counts, food, nowTitle: null });
   const recovery = recoveryLine(typeof world.food === 'number' ? world.food : null, health, food, counts);
-  return [`食料: ${food} 点`, ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
+  return [foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }
 
 /** A node's texts from the answer; r4: its forbid and caution too (within the tree's bounds; an answer without them is as before). */

@@ -144,7 +144,7 @@ describe('fix 3: a descent with too little food says so', () => {
   const down = { hands: [{ do: 'walk', to: { x: 3, y: 36, z: 4 } }] };
   it('is said for a hand that goes 10 or more down with food under 40, with the cows in sight', () => {
     const note = descentNote(down, surface([['cooked_beef', 1]], { nearbyEntities: [{ name: 'cow', distance: 14, id: 5 }] }))!;
-    expect(note).toContain('食料 20.8/40 点・作業台 無・板 0 のまま地下 y=36 へ下りる手');
+    expect(note).toContain('食料 20.8/40 点（あと 19.2 点: cooked_beef 1 個）・作業台 無・板 0 のまま地下 y=36 へ下りる手');
     expect(note).toContain('cow 14m');
     // Run 42: no way past it (「このまま行くなら why に…書く」 was read as one); the loss as the runs measured it.
     expect(note).not.toContain('このまま行くなら');

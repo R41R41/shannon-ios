@@ -37,6 +37,22 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
 export function bedsIn(lines: readonly string[]): number {
   return lines.reduce((sum, line) => sum + Number(/^[a-z_]*_bed×(\d+)/u.exec(line)?.[1] ?? 0), 0);
 }
+/** Free slots at or under this, the pack says what to drop before it is full. */
+export const FULL_SOON = 3;
+/** Stacks of a filler kind kept for pillars and bridges (the first kind, the most carried). */
+const KEEP_STACK = 64;
+/**
+ * Run 43 (the 36 slots filled with about 270 cobblestone and cobbled deepslate: bread could not be made, about 60 s at +2,343 to +2,402, and a go
+ * stopped full at +2,427; the pack's line said the free slots only after they were 0): at 3 free slots or fewer, what to drop, before it is full.
+ */
+function fullSoon(free: number, filler: ReadonlyArray<[string, number]>): string | null {
+  if (free > FULL_SOON) return null;
+  const drops = filler.map(([name, n], index) => [name, index === 0 ? Math.max(0, n - KEEP_STACK) : n] as const).filter(([, n]) => n > 0);
+  const kinds = drops.slice(0, 4).map(([name, n]) => `${name}×${n}（${Math.ceil(n / 64)} マス）`).join('・');
+  const keep = filler.length ? `${filler[0]![0]} 1 スタックは柱と橋に残す` : '';
+  return `空きが ${free} マス。満杯になると make・pickup・dig の物が入らず止まる（実走 43 はパンを作れず約 60 秒、go も満杯で止まった）。`
+    + (kinds ? `捨てる物の候補: ${kinds}。${keep}。drop で捨てる` : '要らない物を drop で捨てる');
+}
 /**
  * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run 36 and 37 (85–90 s each): with two beds or more
  * the beds are enough (the End asks four, made from wool before it: `forEnd`). Empty when the inventory is not a list.
@@ -46,6 +62,8 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean 
   const { used, filler } = packFacts(lines);
   const free = Math.max(0, PACK_SLOTS - used);
   const out = [`持ち物の空き ${free} マス（使用 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}。満杯だと dig・pickup が「満杯」で止まる）`];
+  const before = fullSoon(free, filler);
+  if (before) out.push(before);
   const total = filler.reduce((sum, [, n]) => sum + n, 0);
   if (Math.ceil(total / 64) >= FILLER_SLOTS) {
     const kinds = filler.slice(0, 4).map(([name, n]) => `${name}×${n}`).join('・');

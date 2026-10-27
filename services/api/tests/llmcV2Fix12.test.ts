@@ -105,7 +105,7 @@ describe('the current node with its condition read against the frame', () => {
     const when = 'have:iron_helmet&have:iron_chestplate&have:iron_leggings';
     expect(doneStatusWords(when, facts([['iron_helmet', 1]]))).toBe('未: iron_chestplate 0/1・iron_leggings 0/1');
     expect(doneStatusWords(when, facts([['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]]))).toBe('満たしている');
-    expect(doneStatusWords('food>=40&have:bed>=1', facts([['red_bed', 1]]))).toBe('未: 食料 30/40 点');
+    expect(doneStatusWords('food>=40&have:bed>=1', facts([['red_bed', 1]]))).toBe('未: 食料 30/40 点（あと 10 点: bread 1 個）');
     expect(doneStatusWords('have:obsidian>=10|dim:the_nether', facts([['obsidian', 7]]))).toBe('未: obsidian 7/10');
     expect(doneStatusWords('村を回る', facts([]))).toBe('観測では確かめられない（済んだら set state=done）');
     expect(doneStatusWords('have:bed', null)).toBeNull();
