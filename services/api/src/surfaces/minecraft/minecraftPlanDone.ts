@@ -240,7 +240,44 @@ export function nodesHeldOpen(tree: PlanTree, facts: DoneFacts, inOrder = false)
   });
 }
 
-export interface SeenDone { update: PlanUpdate; ids: string[]; held?: string[]; closed?: string[] }
+export interface SeenDone { update: PlanUpdate; ids: string[]; held?: string[]; closed?: string[]; descended?: string[] }
+
+const FOOD_CLAUSE = /food>=(\d{1,4})/u;
+/** A plan node for the preparation before the descent: its title says so, or its condition asks 40 to 99 food points (not the 100 of the gate). */
+export const isPrepMilestoneNode = (node: PlanNode): boolean => {
+  const points = FOOD_CLAUSE.exec((node.doneWhen ?? '').replace(/\s+/gu, '').toLowerCase())?.[1];
+  return /地下の準備/u.test(node.title) || (points !== undefined && Number(points) >= 40 && Number(points) < 100);
+};
+/** A node of the work down there (the iron and what comes after it): the preparation before the descent comes before the first one. */
+const UNDERGROUND_WORK = /raw_iron|iron_ingot|iron_(?:pickaxe|chestplate|leggings|helmet|boots)|diamond|obsidian|dim:the_nether/u;
+/** Below this y in the overworld the body is underground (the descent's own line, `minecraftLlmcReadiness.ts`). */
+export const DESCENT_SURFACE_Y = 45;
+/** Whether the body has gone down from the surface: underground in the overworld, or in the Nether or the End. */
+export function belowTheSurface(facts: DoneFacts): boolean {
+  const dimension = facts.dimension ?? 'overworld';
+  if (dimension === 'the_nether' || dimension === 'the_end') return true;
+  return dimension === 'overworld' && facts.feet !== null && facts.feet.y < DESCENT_SURFACE_Y;
+}
+/**
+ * Run 44 (p2.2 「箱と畑で食料」 `food>=40`, the now from +154 for about 609 s) and run 43 (p3 「食料40点と下る準備」, 2,126 s): a node of the preparation
+ * before the descent is for being met before going down. Down there her food points only go down (she eats), so its condition can no longer be met:
+ * the node held the now, the meter's 「地下の準備 … 遅れ」 stayed, and she went back up for food (131 s and more). Once the body is below the surface
+ * the node has done its part: it is closed, with what was lacking when she went down in its note (a body short of food is told so apart, by the
+ * health that does not come back). Never a blocked node; once closed it stays closed.
+ */
+export function descentClosed(tree: PlanTree, facts: DoneFacts, seen: readonly string[]): Array<{ id: string; note: string }> {
+  if (!belowTheSurface(facts)) return [];
+  const where = (facts.dimension ?? 'overworld') === 'overworld' && facts.feet ? `地下 y=${Math.round(facts.feet.y)}` : String(facts.dimension);
+  // Only the preparation before the first work down there (the iron): the End's preparation (run 44's p11 `food>=80&…`) is not closed by the Nether.
+  const order = orderedPlan(tree.nodes), down = order.findIndex(node => UNDERGROUND_WORK.test(node.doneWhen ?? ''));
+  if (down < 0) return [];
+  return order.slice(0, down).filter(node => node.state !== 'done' && node.state !== 'blocked' && !seen.includes(node.id) && isPrepMilestoneNode(node))
+    .map(node => {
+      const lack = doneStatusWords(node.doneWhen, facts)?.replace(/^未: /u, '') ?? null;
+      const why = `下りる前の準備の節: ${where} へ下りたので閉じた（下りた時に足りなかった物: ${lack && !/確かめられない/u.test(lack) ? lack : '無し'}）`;
+      return { id: node.id, note: (node.note ? `${why} ${node.note}` : why).slice(0, PLAN_LIMITS.text) };
+    });
+}
 
 /**
  * mb-llmc v2 (run 36, task 40bd0b3e: p1 `have:bed>=3` was seen done at 104 s with 「村の箱を開ける」「鍛冶屋の箱を開ける」 open, p4
@@ -270,13 +307,17 @@ export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | nu
   const facts = doneFacts(observation);
   if (!facts || !tree.nodes.length) return null;
   const seen = nodesSeenDone(tree, facts, true).slice(0, 24);
-  const under = closedUnder(tree, seen);
+  // Run 44: the preparation before the descent, closed once she is down (`descentClosed`); what is under it closes with it.
+  const descended = descentClosed(tree, facts, seen);
+  const under = closedUnder(tree, [...seen, ...descended.map(item => item.id)]).filter(item => !descended.some(down => down.id === item.id));
   const held = nodesHeldOpen(tree, facts, true).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
-  if (!seen.length && !under.length && !held.length) return null;
+  if (!seen.length && !under.length && !held.length && !descended.length) return null;
   const ops = [...seen.map(id => ({ op: 'set' as const, id, state: 'done' as const })),
+    ...descended.map(item => ({ op: 'set' as const, id: item.id, state: 'done' as const, note: item.note })),
     ...under.map(item => ({ op: 'set' as const, id: item.id, state: 'done' as const, note: item.note }))].slice(0, PLAN_LIMITS.ops);
-  return { update: { ops }, ids: [...seen, ...under.map(item => item.id)].slice(0, PLAN_LIMITS.ops),
-    ...(held.length ? { held } : {}), ...(under.length ? { closed: under.map(item => `${item.id}←${item.by}`).slice(0, 8) } : {}) };
+  return { update: { ops }, ids: [...seen, ...descended.map(item => item.id), ...under.map(item => item.id)].slice(0, PLAN_LIMITS.ops),
+    ...(held.length ? { held } : {}), ...(under.length ? { closed: under.map(item => `${item.id}←${item.by}`).slice(0, 8) } : {}),
+    ...(descended.length ? { descended: descended.map(item => item.id) } : {}) };
 }
 
 /** Run 42: the chest nodes an opened chest closes (`chestNodesDone`), after the nodes the frame shows done (each id once, within the ops' bound). */

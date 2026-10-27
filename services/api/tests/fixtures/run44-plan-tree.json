@@ -1,0 +1,389 @@
+{
+ "schema": "shannon.plan-tree.v1",
+ "revision": 10,
+ "current": "p2.2",
+ "nodes": [
+  {
+   "id": "p1",
+   "parentId": null,
+   "order": 0,
+   "title": "木と石の道具",
+   "state": "done",
+   "doneWhen": "have:stone_pickaxe&have:stone_axe&have:stone_sword"
+  },
+  {
+   "id": "p1.1",
+   "parentId": "p1",
+   "order": 0,
+   "title": "原木を8本集める",
+   "state": "done",
+   "where": "148,76,196",
+   "doneWhen": "have:log>=8|have:wooden_pickaxe"
+  },
+  {
+   "id": "p1.2",
+   "parentId": "p1",
+   "order": 1,
+   "title": "作業台と木のツルハシ",
+   "state": "done",
+   "where": "148,76,196",
+   "doneWhen": "have:wooden_pickaxe"
+  },
+  {
+   "id": "p1.3",
+   "parentId": "p1",
+   "order": 2,
+   "title": "丸石で石の道具3つ",
+   "state": "done",
+   "doneWhen": "have:stone_pickaxe&have:stone_axe&have:stone_sword",
+   "forbid": [
+    "素手で真下を掘らない"
+   ],
+   "caution": [
+    "craft: 無い: furnace×1 の材料が足りない: cobbled_deepslate 8（持っている 0／要る 8）（同じ所・同じ理由で2回目）"
+   ]
+  },
+  {
+   "id": "p2",
+   "parentId": null,
+   "order": 1,
+   "title": "村で食料とベッド",
+   "state": "continue",
+   "where": "204,64,196",
+   "doneWhen": "food>=40&have:bed"
+  },
+  {
+   "id": "p2.1",
+   "parentId": "p2",
+   "order": 0,
+   "title": "ベッドを取る",
+   "state": "done",
+   "where": "144,75,204",
+   "doneWhen": "have:bed>=1"
+  },
+  {
+   "id": "p2.2",
+   "parentId": "p2",
+   "order": 1,
+   "title": "箱と畑で食料",
+   "state": "continue",
+   "where": "157,67,200",
+   "doneWhen": "food>=40",
+   "forbid": [
+    "村の鉄ゴーレムを殴らない"
+   ],
+   "caution": [
+    "(208,31,214) の stone は見えない: 間に stone (208,32,213)"
+   ]
+  },
+  {
+   "id": "p2.3",
+   "parentId": "p2",
+   "order": 2,
+   "title": "鍛冶屋の箱を見る",
+   "state": "done",
+   "where": "187,63,201"
+  },
+  {
+   "id": "p3",
+   "parentId": null,
+   "order": 2,
+   "title": "下りる準備",
+   "state": "continue",
+   "where": "159,67,200",
+   "doneWhen": "food>=40&have:crafting_table|food>=40&have:planks>=4"
+  },
+  {
+   "id": "p4",
+   "parentId": null,
+   "order": 3,
+   "title": "鉄を集め装備",
+   "state": "continue",
+   "where": "192,66,190",
+   "doneWhen": "have:iron_chestplate&have:iron_leggings&have:iron_helmet"
+  },
+  {
+   "id": "p4.1",
+   "parentId": "p4",
+   "order": 0,
+   "title": "洞窟で鉄30を掘る",
+   "state": "done",
+   "where": "207,30,203",
+   "doneWhen": "have:raw_iron>=30|have:iron_ingot>=30|have:iron_chestplate",
+   "caution": [
+    "食料40点・作業台か板4を持ってから下りる",
+    "溶岩の隣を掘らない"
+   ]
+  },
+  {
+   "id": "p4.2",
+   "parentId": "p4",
+   "order": 1,
+   "title": "鉄を焼く",
+   "state": "done",
+   "where": "143,75,202",
+   "doneWhen": "have:iron_ingot>=30|have:iron_chestplate"
+  },
+  {
+   "id": "p4.3",
+   "parentId": "p4",
+   "order": 2,
+   "title": "ツルハシ・バケツ・盾",
+   "state": "continue",
+   "doneWhen": "have:iron_pickaxe&have:bucket&have:shield"
+  },
+  {
+   "id": "p4.4",
+   "parentId": "p4",
+   "order": 3,
+   "title": "鉄の防具を着る",
+   "state": "continue",
+   "doneWhen": "have:iron_chestplate&have:iron_leggings&have:iron_helmet"
+  },
+  {
+   "id": "p5",
+   "parentId": null,
+   "order": 4,
+   "title": "ダイヤと金",
+   "state": "continue",
+   "where": "156,-25,208",
+   "doneWhen": "have:diamond_pickaxe&have:golden_boots"
+  },
+  {
+   "id": "p5.1",
+   "parentId": "p5",
+   "order": 0,
+   "title": "ダイヤ3以上を掘る",
+   "state": "continue",
+   "where": "156,-25,208",
+   "doneWhen": "have:diamond>=3|have:diamond_pickaxe",
+   "caution": [
+    "鉄装備・盾・水バケツで下りる",
+    "溶岩の隣を掘らない"
+   ]
+  },
+  {
+   "id": "p5.2",
+   "parentId": "p5",
+   "order": 1,
+   "title": "金4で金のブーツ",
+   "state": "continue",
+   "where": "173,12,225",
+   "doneWhen": "have:golden_boots"
+  },
+  {
+   "id": "p5.3",
+   "parentId": "p5",
+   "order": 2,
+   "title": "ダイヤのツルハシ",
+   "state": "continue",
+   "doneWhen": "have:diamond_pickaxe"
+  },
+  {
+   "id": "p6",
+   "parentId": null,
+   "order": 5,
+   "title": "ゲートを作る",
+   "state": "continue",
+   "doneWhen": "dim:the_nether"
+  },
+  {
+   "id": "p6.1",
+   "parentId": "p6",
+   "order": 0,
+   "title": "黒曜石10を作る",
+   "state": "continue",
+   "where": "88,25,144",
+   "doneWhen": "have:obsidian>=10",
+   "caution": [
+    "溶岩の溜まりの縁に立たない"
+   ]
+  },
+  {
+   "id": "p6.2",
+   "parentId": "p6",
+   "order": 1,
+   "title": "火打ち金を作る",
+   "state": "continue",
+   "doneWhen": "have:flint_and_steel"
+  },
+  {
+   "id": "p6.3",
+   "parentId": "p6",
+   "order": 2,
+   "title": "枠を立て点火し入る",
+   "state": "continue",
+   "doneWhen": "dim:the_nether"
+  },
+  {
+   "id": "p7",
+   "parentId": null,
+   "order": 6,
+   "title": "出発の点検",
+   "state": "continue",
+   "doneWhen": "food>=100&have:slab>=12&have:gold_armor",
+   "forbid": [
+    "点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ"
+   ]
+  },
+  {
+   "id": "p7.1",
+   "parentId": "p7",
+   "order": 0,
+   "title": "帰りのゲートを覚える",
+   "state": "continue"
+  },
+  {
+   "id": "p7.2",
+   "parentId": "p7",
+   "order": 1,
+   "title": "作業台とハーフ12",
+   "state": "continue",
+   "doneWhen": "have:crafting_table&have:slab>=12"
+  },
+  {
+   "id": "p7.3",
+   "parentId": "p7",
+   "order": 2,
+   "title": "食料100点にする",
+   "state": "continue",
+   "doneWhen": "food>=100"
+  },
+  {
+   "id": "p7.4",
+   "parentId": "p7",
+   "order": 3,
+   "title": "金の防具を着る",
+   "state": "continue",
+   "doneWhen": "have:gold_armor"
+  },
+  {
+   "id": "p8",
+   "parentId": null,
+   "order": 7,
+   "title": "要塞でブレイズ",
+   "state": "continue",
+   "doneWhen": "have:blaze_rod>=7"
+  },
+  {
+   "id": "p8.1",
+   "parentId": "p8",
+   "order": 0,
+   "title": "要塞を探す",
+   "state": "continue",
+   "caution": [
+    "橋は両脇に壁を置く",
+    "橋の上で立ち止まらない"
+   ]
+  },
+  {
+   "id": "p8.2",
+   "parentId": "p8",
+   "order": 1,
+   "title": "湧き場へトンネル",
+   "state": "continue",
+   "caution": [
+    "射線の中で止まらない"
+   ]
+  },
+  {
+   "id": "p8.3",
+   "parentId": "p8",
+   "order": 2,
+   "title": "ブレイズを倒す",
+   "state": "continue",
+   "doneWhen": "have:blaze_rod>=7"
+  },
+  {
+   "id": "p9",
+   "parentId": null,
+   "order": 8,
+   "title": "パール12を集める",
+   "state": "continue",
+   "doneWhen": "have:ender_pearl>=12"
+  },
+  {
+   "id": "p10",
+   "parentId": null,
+   "order": 9,
+   "title": "アイ12を作る",
+   "state": "continue",
+   "doneWhen": "have:ender_eye>=12"
+  },
+  {
+   "id": "p10.1",
+   "parentId": "p10",
+   "order": 0,
+   "title": "ゲートで戻る",
+   "state": "continue",
+   "doneWhen": "dim:overworld"
+  },
+  {
+   "id": "p10.2",
+   "parentId": "p10",
+   "order": 1,
+   "title": "アイをクラフト",
+   "state": "continue",
+   "doneWhen": "have:ender_eye>=12"
+  },
+  {
+   "id": "p11",
+   "parentId": null,
+   "order": 10,
+   "title": "エンドの準備",
+   "state": "continue",
+   "doneWhen": "food>=80&have:bed>=4&have:arrow>=30"
+  },
+  {
+   "id": "p12",
+   "parentId": null,
+   "order": 11,
+   "title": "ストロングホールド",
+   "state": "continue",
+   "doneWhen": "dim:the_end"
+  },
+  {
+   "id": "p12.1",
+   "parentId": "p12",
+   "order": 0,
+   "title": "三角測量する",
+   "state": "continue"
+  },
+  {
+   "id": "p12.2",
+   "parentId": "p12",
+   "order": 1,
+   "title": "ポータル部屋を探す",
+   "state": "continue"
+  },
+  {
+   "id": "p12.3",
+   "parentId": "p12",
+   "order": 2,
+   "title": "アイをはめて入る",
+   "state": "continue",
+   "doneWhen": "dim:the_end"
+  },
+  {
+   "id": "p13",
+   "parentId": null,
+   "order": 12,
+   "title": "エンドラ討伐",
+   "state": "continue"
+  },
+  {
+   "id": "p13.1",
+   "parentId": "p13",
+   "order": 0,
+   "title": "クリスタルを壊す",
+   "state": "continue"
+  },
+  {
+   "id": "p13.2",
+   "parentId": "p13",
+   "order": 1,
+   "title": "ドラゴンを倒す",
+   "state": "continue"
+  }
+ ]
+}

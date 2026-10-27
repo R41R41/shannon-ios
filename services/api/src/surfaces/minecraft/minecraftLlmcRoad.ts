@@ -1,6 +1,6 @@
 import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { doneFacts, parseDoneWhen, predicateHolds, type DoneFacts } from './minecraftPlanDone.js';
+import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, type DoneFacts } from './minecraftPlanDone.js';
 import { carried } from './minecraftConditions.js';
 import { PREP_SKIP_SECONDS } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
@@ -37,12 +37,8 @@ export interface Milestone {
  * meter like the speed's, with its target and its seconds behind. Its target is inside the iron pickaxe's 250 s, which the descent begins after.
  */
 export const PREP_MILESTONE_NAME = '地下の準備（食料 40 点・作業台か板 4）';
-const FOOD_CLAUSE = /food>=(\d{1,4})/u;
-/** A plan node for the preparation before the descent: its title says so, or its condition asks 40 to 99 food points (not the 100 of the gate). */
-export const isPrepMilestoneNode = (node: PlanNode): boolean => {
-  const points = FOOD_CLAUSE.exec((node.doneWhen ?? '').replace(/\s+/gu, '').toLowerCase())?.[1];
-  return /地下の準備/u.test(node.title) || (points !== undefined && Number(points) >= 40 && Number(points) < 100);
-};
+/** A plan node for the preparation before the descent (`minecraftPlanDone.ts`, where a descent also closes it). */
+export { isPrepMilestoneNode } from './minecraftPlanDone.js';
 const prepHolds = (facts: DoneFacts): boolean => facts.food >= 40 && (carried(facts.counts, 'crafting_table') > 0 || carried(facts.counts, 'planks') >= 4);
 const prepNow = (facts: DoneFacts): string => `${foodPointsWords(facts.food, 40)}・作業台 ${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}・板 ${carried(facts.counts, 'planks')}`;
 export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
