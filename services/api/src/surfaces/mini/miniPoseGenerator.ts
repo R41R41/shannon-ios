@@ -2,9 +2,9 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { decodePng, encodePng, type RgbaImage } from './png.js';
 import { changedRegion, clearHaze, crop, flatten, guideFor, halve, headCentre, keyGreen, MINI_CANVAS, onWindow, placed, scaled, solidBounds, solidShare, strip, takeRegions, type ChangedRegion } from './miniImage.js';
-import { MINI_LIMITS, type MiniContact, type MiniPoseEntry, type MiniVariant } from './miniPoseContract.js';
+import { MINI_LIMITS, type MiniContact, type MiniGrip, type MiniPoseEntry, type MiniVariant } from './miniPoseContract.js';
 import type { MiniPoseLibrary } from './miniPoseLibrary.js';
-import type { MiniModels } from './miniPoseModels.js';
+import { MINI_MEASURE_MODEL, type MiniModels } from './miniPoseModels.js';
 
 /**
  * Drawing one mini pose: (1) the pose in words, when a reply asked for one no picture fits; (2) the base picture, drawn on the
@@ -21,6 +21,8 @@ export interface MiniPoseSpec {
   activity: MiniPoseEntry['activity'];
   /** `face`: the four face variants; `still`: the base alone (asleep). A walk also gets the four frames of its walk cycle. */
   variants: 'face' | 'still';
+  /** A carried picture: where she is held. The hold is measured on the drawing and becomes its anchor. */
+  grip?: MiniGrip;
 }
 
 export interface DrawOutcome { entry: MiniPoseEntry | null; reason: string | null; seconds: Record<string, number>; costUsd: number; attempts: number;
@@ -74,6 +76,18 @@ const WALK_PROMPT = [
   'The same face as the first image, same hair, same outfit, same colors and the same size in every frame; only the legs, arms and the hair and skirt sway change.',
   'Flat pure green background (#00FF00) everywhere. No text, no numbers, no frame borders, no shadows.',
 ].join('\n');
+
+const GRIP_WORDS: Record<MiniGrip, string> = {
+  arm: 'the wrist of her raised arm, where a hand holds her up',
+  leg: 'the ankle of her raised leg, where a hand holds her up upside down',
+  head: 'the top of her head, where a hand holds her up',
+  scruff: 'the back of her collar at the nape of her neck, where a hand holds her up',
+  torso: 'the middle of her waist, where a hand holds her up',
+};
+const MEASURE_INSTRUCTIONS = 'The image is 512x512 pixels and shows one chibi girl. Give the bounding box of her HEAD ONLY: from the top of her hair on '
+  + 'the skull (NOT the ahoge antenna, NOT the two hair buns) down to the bottom of her chin, and from one side of her skull to the other (NOT the long '
+  + 'hair hanging down, NOT the buns). If her head is tilted, still box the head itself. When "hold" is given, also give the one pixel point it '
+  + 'describes. Answer only JSON {"head":[left,top,right,bottom],"grip":[x,y] or null}.';
 
 const INSPECT_INSTRUCTIONS = 'You check drawings of a mascot character for a desktop app. The first image is her official character sheet (four views). '
   + 'The second image shows the new drawing; when it holds several panels side by side, the first panel is the base picture and the others are variants. '
@@ -173,7 +187,7 @@ export class MiniPoseGenerator {
     for (attempts = 1; attempts <= MINI_LIMITS.attempts; attempts++) {
       const drawn = await this.options.models.draw({ prompt: drawPrompt(spec), images: [encodePng(guideFor(spec.contact)), sheet, original], quality: 'high' });
       add('base', drawn.seconds); costUsd += drawn.costUsd;
-      const shaped = shapeBase(decodePng(drawn.value), spec.contact);
+      const shaped = shapeBase(decodePng(drawn.value), spec.contact, spec.activity === 'watch');
       if ('reason' in shaped) { reason = shaped.reason; this.options.library.reject(drawn.value, `${origin.id ?? 'reply'}-${shaped.reason}`); continue; }
       const variants = await this.variants(shaped.image, spec.variants, add, notes);
       costUsd += variants.costUsd;
@@ -192,12 +206,14 @@ export class MiniPoseGenerator {
       if (failed.length) { this.options.library.reject(encodePng(shaped.image), `${origin.id ?? 'reply'}-inspection`); reason = `inspection:${failed.join(',')}${typeof verdict.problems === 'string' && verdict.problems ? `:${verdict.problems.slice(0, 80)}` : ''}`; continue; }
       // A variant the inspector doubts is dropped, not the pose: she still has her base picture.
       if (verdict.variants_ok !== true) { if (variants.images.size) notes.push(`variants_doubted:${String(verdict.problems ?? '').slice(0, 80)}`); for (const name of [...variants.images.keys()]) variants.images.delete(name); }
-      const embedded = await this.options.models.embed([embedText(spec)]);
-      add('embed', embedded.seconds); costUsd += embedded.costUsd;
+      const [embedded, measured] = await Promise.all([this.options.models.embed([embedText(spec)]), this.measure(shaped.image, spec.grip ?? null)]);
+      add('embed', embedded.seconds); costUsd += embedded.costUsd + measured.costUsd; add('measure', measured.seconds);
+      if (spec.grip && !measured.grip) { reason = 'grip_not_found'; continue; }
       const id = origin.id ?? `p${this.now().slice(0, 10).replace(/-/g, '')}_${randomBytes(3).toString('hex')}`;
       const entry: MiniPoseEntry = {
         id, contact: spec.contact, expression: spec.expression, description: spec.description, label: spec.label, activity: spec.activity,
-        variants: ['base', ...variants.images.keys()], anchor: shaped.anchor, bounds: shaped.bounds, size: { width: MINI_CANVAS, height: MINI_CANVAS },
+        variants: ['base', ...variants.images.keys()], anchor: measured.grip ?? shaped.anchor, bounds: shaped.bounds, size: { width: MINI_CANVAS, height: MINI_CANVAS },
+        ...(measured.head ? { head: measured.head } : {}), ...(spec.grip ? { grip: spec.grip } : {}),
         source: origin.source, requestKey: origin.requestKey, createdAt: this.now(), uses: 0, lastUsedAt: null, retired: false,
       };
       const files = new Map<MiniVariant, Uint8Array>([['base', encodePng(shaped.image)]]);
@@ -275,6 +291,43 @@ export class MiniPoseGenerator {
     return { entry: kept, reason: null, seconds: rounded(seconds), costUsd, attempts: 1, notes };
   }
 
+  /**
+   * Her head box (for the desktop to match sizes across pictures) and, for a carried picture, the point she is held by, read by the
+   * vision model on the picture at half size. Two readings of the same picture agreed within 8 px (2026-10-28); a reading outside
+   * her figure is dropped.
+   */
+  async measure(image: RgbaImage, grip: MiniGrip | null): Promise<{ head: MiniPoseEntry['head'] | null; grip: { x: number; y: number } | null; seconds: number; costUsd: number }> {
+    const box = solidBounds(image);
+    try {
+      const read = await this.options.models.read({ instructions: MEASURE_INSTRUCTIONS, model: MINI_MEASURE_MODEL,
+        text: JSON.stringify({ size: '512x512', hold: grip ? GRIP_WORDS[grip] : null }), images: [halve(flatten(image, [236, 238, 242]))] });
+      const value = read.value as { head?: unknown; grip?: unknown };
+      const head = Array.isArray(value.head) && value.head.length === 4 && value.head.every(n => typeof n === 'number')
+        ? { left: value.head[0] * 2, top: value.head[1] * 2, right: value.head[2] * 2, bottom: value.head[3] * 2 } : null;
+      const point = Array.isArray(value.grip) && value.grip.length === 2 && value.grip.every(n => typeof n === 'number')
+        ? { x: Math.round(value.grip[0] * 2), y: Math.round(value.grip[1] * 2) } : null;
+      const inside = (x: number, y: number) => box !== null && x >= box.left - 20 && x <= box.right + 20 && y >= box.top - 20 && y <= box.bottom + 20;
+      return { head: head && head.bottom - head.top > 40 && inside(head.left, head.top) && inside(head.right, head.bottom) ? head : null,
+        grip: grip && point && inside(point.x, point.y) ? point : null, seconds: read.seconds, costUsd: read.costUsd };
+    } catch {
+      return { head: null, grip: null, seconds: 0, costUsd: 0 };
+    }
+  }
+
+  /** A kept pose's head (and hold) measured again, its pictures kept. */
+  async remeasure(id: string): Promise<MiniPoseEntry | null> {
+    const entry = this.options.library.get(id), vector = this.options.library.vector(id);
+    if (!entry || !vector) return null;
+    const base = decodePng(readFileSync(this.options.library.imagePath(id, 'base')));
+    const measured = await this.measure(base, entry.grip ?? null);
+    if (!measured.head) return null;
+    const kept: MiniPoseEntry = { ...entry, head: measured.head, ...(entry.grip && measured.grip ? { anchor: measured.grip } : {}) };
+    const files = new Map<MiniVariant, Uint8Array>();
+    for (const variant of entry.variants) files.set(variant, readFileSync(this.options.library.imagePath(id, variant)));
+    this.options.library.add(kept, files, vector);
+    return kept;
+  }
+
   /** A kept pose's face variants drawn again, its base kept (for a pose whose edits were all refused). */
   async redoVariants(id: string): Promise<DrawOutcome> {
     const seconds: Record<string, number> = {}, notes: string[] = [];
@@ -339,7 +392,7 @@ export function embedText(spec: Pick<MiniPoseSpec, 'contact' | 'expression' | 'd
 }
 
 /** The base picture keyed and measured; a picture whose board or figure cannot be read is refused. */
-export function shapeBase(raw: RgbaImage, contact: MiniContact):
+export function shapeBase(raw: RgbaImage, contact: MiniContact, backView = false):
   { image: RgbaImage; anchor: { x: number; y: number }; bounds: MiniPoseEntry['bounds'] } | { reason: string } {
   if (raw.width !== MINI_CANVAS || raw.height !== MINI_CANVAS) return { reason: 'size' };
   const keyed = boardless(contact) ? { image: clearHaze(raw), edge: null } : keyGreen(raw);
@@ -354,7 +407,7 @@ export function shapeBase(raw: RgbaImage, contact: MiniContact):
     if (bounds.top >= keyed.edge) return { reason: 'below_edge' };
     // Sitting, her legs hang in front of the window. Legs drawn behind the board went out with it (the seed's 23 sitting
     // pictures have 13 to 18% of her below the edge).
-    if (contact === 'sit' && shareBelow(keyed.image, keyed.edge + 5) < MIN_LEGS_BELOW) return { reason: 'legs_hidden' };
+    if (contact === 'sit' && !backView && shareBelow(keyed.image, keyed.edge + 5) < MIN_LEGS_BELOW) return { reason: 'legs_hidden' };
   }
   // A hang's edge is just under the top of her raised fists, so they grip it.
   const anchorY = contact === 'air' ? bounds.bottom : contact === 'hang' ? bounds.top + Math.round((bounds.bottom - bounds.top) * 0.035) : keyed.edge!;

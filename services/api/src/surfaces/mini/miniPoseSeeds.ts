@@ -54,6 +54,22 @@ export const MINI_SEED_SPECS: readonly (MiniPoseSpec & { id: string })[] = Objec
   { id: 'seed_carried', contact: 'air', expression: 'embarrassed', activity: 'carried', variants: 'face', label: 'つままれる',
     // Not "held by the collar": that wording was refused by the image model's moderation (2026-10-28).
     description: 'lifted gently into the air, floating with both arms spread out for balance and legs dangling, a flustered surprised pout' },
+  // Held by the owner's cursor: the hold is the anchor, so she hangs from wherever she was picked up. "Do not draw the hand": the
+  // cursor is the hand. Gentle wording: "held by the collar like a kitten" was refused by the image model's moderation.
+  ...([
+    ['arm', 'held up by one wrist so she dangles below her raised arm, her other arm and both legs hanging down, her long hair hanging straight down, a flustered pout', 'ぶら下げ・腕'],
+    ['leg', 'held up upside down by one ankle so she dangles head down below her raised leg, both hands holding her skirt in place, her long hair hanging straight down toward the ground, an embarrassed angry face', 'ぶら下げ・脚'],
+    ['head', 'held up by the top of her head so she dangles straight down below it, arms and legs limp, her long hair hanging down, a sulky face', 'ぶら下げ・頭'],
+    ['scruff', 'held up by the back of her blouse at the nape so she dangles below it like a lifted cat, arms and legs limp, her long hair hanging down, a resigned pout', 'ぶら下げ・首根っこ'],
+    ['torso', 'held up around her middle so her upper body droops forward on one side and her legs dangle on the other, arms and long hair hanging down, a surprised face', 'ぶら下げ・胴'],
+  ] as const).map(([grip, description, label]) => ({ id: `seed_carried_${grip}`, contact: 'air' as const, expression: 'embarrassed', activity: 'carried' as const,
+    variants: 'face' as const, grip, label, description: `${description}; do not draw any hand holding her` })),
+  // Watching the window she is on, her back to the viewer (owner 2026-10-28: 「後ろを向いて画面の表示を見てる仕草」). Sitting, her legs
+  // hang down the far side of the edge, out of sight.
+  { id: 'seed_watch_stand', contact: 'stand', expression: 'curious', activity: 'watch', variants: 'still', label: '画面を見る・立つ',
+    description: 'seen from BEHIND, her back to the viewer: standing on the edge, hands clasped behind her back, head tilted down as she looks at the window below her as if reading its screen, her long hair down her back' },
+  { id: 'seed_watch_sit', contact: 'sit', expression: 'curious', activity: 'watch', variants: 'still', label: '画面を見る・座る',
+    description: 'seen from BEHIND, her back to the viewer: sitting on the edge facing away, leaning forward with her hands on the edge, looking down at the window below as if watching its screen, her long hair down her back, her legs on the far side out of sight' },
   { id: 'seed_land', contact: 'stand', expression: 'relieved', activity: 'rest', variants: 'face', label: '着地',
     description: 'just landed, knees bent and arms out for balance, a relieved smile' },
   { id: 'seed_sleep_lie', contact: 'lie', expression: 'sleepy', activity: 'sleep', variants: 'still', label: '寝そべって眠る',

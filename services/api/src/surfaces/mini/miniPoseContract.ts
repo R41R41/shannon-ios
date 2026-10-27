@@ -9,6 +9,10 @@
 export const MINI_CONTACTS = ['stand', 'sit', 'lie', 'hang', 'air'] as const;
 export type MiniContact = typeof MINI_CONTACTS[number];
 
+/** Where she can be held when carried: by a wrist, an ankle, the top of the head, the back of the collar, or round the waist. */
+export const MINI_GRIPS = ['arm', 'leg', 'head', 'scruff', 'torso'] as const;
+export type MiniGrip = typeof MINI_GRIPS[number];
+
 export const MINI_VARIANTS = ['base', 'talk', 'blink', 'talkBlink', 'step1', 'step2', 'step3', 'step4'] as const;
 export type MiniVariant = typeof MINI_VARIANTS[number];
 
@@ -27,13 +31,21 @@ export interface MiniPoseEntry {
   description: string;
   /** The same in a few Japanese words, for the owner's library page. */
   label: string;
-  /** `walk`, `jump`, `fall`, `carried`, `sleep`, or `rest`: what the engine may use it for. */
-  activity: 'rest' | 'walk' | 'jump' | 'fall' | 'carried' | 'sleep';
+  /** `watch`: her back to the viewer, watching the window under her (the desktop shows it while the owner works in that window). */
+  activity: 'rest' | 'walk' | 'jump' | 'fall' | 'carried' | 'sleep' | 'watch';
   variants: MiniVariant[];
   /** The point that touches the surface, in picture pixels: the window's edge under her (or her feet in the air). */
   anchor: { x: number; y: number };
   /** Her solid pixels in the picture. */
   bounds: { left: number; top: number; right: number; bottom: number };
+  /**
+   * Her head in the picture (top of the hair to the chin, without the buns, the ahoge and the long hair), as the reading model
+   * boxed it. The image model draws her larger or smaller from pose to pose (up to half again); the desktop scales each picture
+   * so the heads match. Absent on a picture not measured yet: drawn as it is.
+   */
+  head?: { left: number; top: number; right: number; bottom: number };
+  /** A carried picture's hold: where the hand (the owner's cursor) holds her. Its anchor is that point. */
+  grip?: MiniGrip;
   size: { width: number; height: number };
   source: 'seed' | 'generated';
   /** The choose request that asked for it, so a client still speaking that reply can show it when it arrives. */

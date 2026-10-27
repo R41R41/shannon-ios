@@ -170,7 +170,8 @@ describe('drawing a pose', () => {
     expect(outcome.entry?.variants).toEqual(['base', 'talk', 'blink', 'talkBlink']);
     expect(outcome.entry?.anchor.y).toBe(580);
     expect(calls.draw).toBe(3);
-    expect(outcome.costUsd).toBeCloseTo(0.08 + 0.04 + 0.001, 5);
+    // the base, two face edits, the inspection and the measuring read (head box).
+    expect(outcome.costUsd).toBeCloseTo(0.08 + 0.04 + 0.001 + 0.001, 5);
     expect(library.get('seed_sit_joyful')).not.toBeNull();
   });
 

@@ -11,8 +11,11 @@ const EMBED_DIMENSIONS = 256;
 
 /** gpt-image-2.5 token prices (USD per million): text in 5, image in 8, image out 30. */
 const IMAGE_PRICE = { text: 5, imageIn: 8, imageOut: 30 };
-/** gpt-5.6-luna (`llmUsage.ts`): in 0.2, out 1.2. text-embedding-3-small: 0.02. */
+/** gpt-5.6-luna (`llmUsage.ts`): in 0.2, out 1.2; gpt-5.6-terra: in 2, out 12. text-embedding-3-small: 0.02. */
 const READ_PRICE = { input: 0.2, output: 1.2 };
+const TERRA_PRICE = { input: 2, output: 12 };
+/** Measuring a picture (its head box, a hold point): two terra readings agreed within 8 px. */
+export const MINI_MEASURE_MODEL = 'gpt-5.6-terra';
 const EMBED_PRICE = 0.02;
 
 export interface Measured<T> { value: T; seconds: number; costUsd: number }
@@ -20,7 +23,8 @@ export interface Measured<T> { value: T; seconds: number; costUsd: number }
 export interface MiniModels {
   /** `size` defaults to 1024x1024 (a walk's sheet is wider). */
   draw(request: { prompt: string; images: readonly Uint8Array[]; quality: 'low' | 'medium' | 'high'; size?: string }): Promise<Measured<Uint8Array>>;
-  read(request: { instructions: string; text: string; images?: readonly RgbaImage[] }): Promise<Measured<unknown>>;
+  /** `model` defaults to the small reading model; measuring a picture asks a stronger one. */
+  read(request: { instructions: string; text: string; images?: readonly RgbaImage[]; model?: string }): Promise<Measured<unknown>>;
   embed(texts: readonly string[]): Promise<Measured<number[][]>>;
 }
 
@@ -52,7 +56,7 @@ export class OpenAIMiniModels implements MiniModels {
     return { value: Buffer.from(b64, 'base64'), seconds, costUsd: imageCost(body.usage) };
   }
 
-  async read(request: { instructions: string; text: string; images?: readonly RgbaImage[] }): Promise<Measured<unknown>> {
+  async read(request: { instructions: string; text: string; images?: readonly RgbaImage[]; model?: string }): Promise<Measured<unknown>> {
     // The JSON format needs the word in the input itself, not only in the instructions.
     const content: unknown[] = [{ type: 'input_text', text: `${request.text}
 
@@ -61,7 +65,7 @@ Answer in JSON.` }];
     const started = performance.now();
     const response = await retried(() => this.fetcher('https://api.openai.com/v1/responses', {
       method: 'POST', headers: { Authorization: `Bearer ${this.options.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: this.options.readModel ?? MINI_READ_MODEL, instructions: request.instructions, input: [{ role: 'user', content }],
+      body: JSON.stringify({ model: request.model ?? this.options.readModel ?? MINI_READ_MODEL, instructions: request.instructions, input: [{ role: 'user', content }],
         text: { format: { type: 'json_object' } }, store: false }),
       signal: AbortSignal.timeout(60_000),
     }));
@@ -69,7 +73,8 @@ Answer in JSON.` }];
     const seconds = (performance.now() - started) / 1000;
     if (!response.ok) throw new Error(`MINI_READ_FAILED:${response.status}:${raw.slice(0, 200)}`);
     const body = parseJson(raw) as { usage?: { input_tokens?: number; output_tokens?: number } };
-    const costUsd = ((body.usage?.input_tokens ?? 0) * READ_PRICE.input + (body.usage?.output_tokens ?? 0) * READ_PRICE.output) / 1e6;
+    const price = request.model === MINI_MEASURE_MODEL ? TERRA_PRICE : READ_PRICE;
+    const costUsd = ((body.usage?.input_tokens ?? 0) * price.input + (body.usage?.output_tokens ?? 0) * price.output) / 1e6;
     return { value: parseJson(extractOutputText(body)), seconds, costUsd };
   }
 

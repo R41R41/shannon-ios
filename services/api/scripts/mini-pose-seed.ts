@@ -17,6 +17,8 @@ const flag = (name: string) => { const at = rest.indexOf(name); return at >= 0 ?
 const only = flag('--only')?.split(',');
 /** `--redo-variants id,id`: draw the face variants of these kept poses again (their base stays). */
 const redo = flag('--redo-variants')?.split(',');
+/** `--measure id,id|all`: measure the head (and a carried picture's hold) of these kept poses again. */
+const measure = flag('--measure');
 /** `--redo-walk id,id`: draw the walk cycle of these kept walks again. */
 const redoWalk = flag('--redo-walk')?.split(',');
 const concurrency = Number(flag('--concurrency') ?? 4);
@@ -25,6 +27,17 @@ const library = new MiniPoseLibrary(root);
 copyFileSync(sheet, join(root, 'reference', 'sheet.png'));
 copyFileSync(original, join(root, 'reference', 'original.png'));
 const generator = new MiniPoseGenerator({ library, models: new OpenAIMiniModels({ apiKey: process.env.OPENAI_API_KEY ?? '' }) });
+if (measure) {
+  const ids = measure === 'all' ? library.active().map(entry => entry.id) : measure.split(',');
+  let next = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => {
+    while (next < ids.length) {
+      const id = ids[next++]!, kept = await generator.remeasure(id);
+      console.log(`${id} ${kept?.head ? `head ${kept.head.bottom - kept.head.top}px${kept.grip ? ` grip ${kept.anchor.x},${kept.anchor.y}` : ''}` : 'FAILED'}`);
+    }
+  }));
+  process.exit(0);
+}
 if (redoWalk) {
   for (const id of redoWalk) {
     const outcome = await generator.redoWalk(id);
