@@ -174,7 +174,7 @@ export interface ActHandLine {
   /**
    * Japanese, at most 160 characters. done: what changed (`(201,45,277)→(205,45,277) 1.2秒`, `丸石×3 を得た`); stopped: the place and the
    * reason in closed words first (`届かない`, `一歩ではない`, `掘れない`, `置けない`, `無い`, `満杯`, `見られる`, `守られた物`, `溶岩が流れ込む`,
-   * `足場が無い`, `時間切れ`, `反射`, `stopIf`), then what is there now (`そのマスは stone`); skipped: `未実行`.
+   * `足場が無い`, `上から落ちる`, `時間切れ`, `反射`, `stopIf`), then what is there now (`そのマスは stone`); skipped: `未実行`.
    */
   line: string;
   /** stopped: the block or point where it stopped, when there is one. */

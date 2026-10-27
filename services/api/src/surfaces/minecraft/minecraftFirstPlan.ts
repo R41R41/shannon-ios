@@ -45,7 +45,8 @@ const TO_NETHER: readonly PlanSeed[] = [
   node('食料とベッド（最初の夜の前・鉄より前）', { doneWhen: 'food>=40&have:bed', children: [
     node('村を回る（ベッド全部・干し草・畑・箱）', { note: '村が見えなければ飛ばす' }),
     node('無ければ動物を4〜6体狩る'), node('かまどで肉を焼く・パンを作る', { doneWhen: 'food>=40' })] }),
-  node('鉄（24〜36）', { doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', children: [node('鉄を掘る（y=16前後・洞窟）'),
+  node('鉄（24〜36）', { doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる'],
+    children: [node('鉄を掘る（y=16前後・洞窟）'),
     node('焼いて鉄のツルハシ・バケツ・盾', { doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' }),
     node('鉄の全身の防具', { doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings&have:iron_boots' })] }),
   node('水入りバケツ', { doneWhen: 'have:water_bucket' }),

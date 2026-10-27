@@ -121,7 +121,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
    * run 26: after the nodes seen done, the node the model's last acts were tagged for, when it is not the current one: the current node moves to it
    * (`followNode`, `minecraftLlmcNode.ts`) and the plan's note says so once. Absent: the current node moves only by the model's plan.update and by done.
    */
-  follow?(tree: PlanTree): { to: string; from: string | null; acts: number } | null }):
+  follow?(tree: PlanTree): { to: string; from: string | null; acts: number; words?: string } | null }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
   const kept = readPlanTree((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
   let tree = kept ?? emptyPlanTree(), changed = false, note: string | undefined;
@@ -157,7 +157,8 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
     let to: ReturnType<NonNullable<typeof parts.follow>> = null;
     try { to = tree.nodes.length ? parts.follow?.(tree) ?? null : null; } catch { to = null; }
     if (!to || !amend({ ops: [], current: to.to }, 'followed', ` from=${to.from ?? '-'} to=${to.to} acts=${to.acts}`)) return;
-    const words = `今の節を [${to.to}] に進めた（体が [${to.to}] の項目を始めたため。順を変えるなら plan.update の current で戻す。飛ばした節は順のまま残っている）`;
+    // Run 41: the words are the follower's when it has them (a move to a preparation node says which and why; a move on names the nodes it passed).
+    const words = to.words ?? `今の節を [${to.to}] に進めた（体が [${to.to}] の項目を始めたため。順を変えるなら plan.update の current で戻す。飛ばした節は順のまま残っている）`;
     note = note ? `${note} ${words}` : words;
   };
   /** A tree handed in (the first plan) replaces the one held, its done nodes carried over (`inbox.take`). */

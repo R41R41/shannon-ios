@@ -1,4 +1,4 @@
-import { orderedPlan, type PlanTree } from '@shannon/mind';
+import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { doneFacts, doneStatusWords } from './minecraftPlanDone.js';
 
@@ -172,7 +172,7 @@ export const PREP_NOTE = '※準備の節（済むまで今の節は移らない
  * the current node (or one the head tagged) breaks a run.
  * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the tags do not agree.
  */
-export function followNode(taskId: string, tree: PlanTree): { to: string; from: string | null; acts: number } | null {
+export function followNode(taskId: string, tree: PlanTree): { to: string; from: string | null; acts: number; words: string } | null {
   const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), { under, open } = questions;
   // A parent's tag says nothing of the work under it: it is not counted, and it does not break a run.
   const counted = (started.get(taskId) ?? []).filter(tag => !(tag.current && tag.node !== tag.current && under(tag.current, tag.node)));
@@ -182,7 +182,31 @@ export function followNode(taskId: string, tree: PlanTree): { to: string; from: 
   if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
   // Run 40: an open preparation node holds the current node (the work for another node may go on; the node that asks for the food stays the now).
   if (heldByPreparation(tree, leaf.id, questions)) return null;
-  return { to: leaf.id, from: tree.current, acts: tags.length };
+  // Run 41 (the current node went p2.3 → p4.1 over p1.3 and p3, so no preparation node was ever the now and `heldByPreparation` never held): the work for a node that
+  // is no preparation, with a preparation node open before it, puts the current node on that preparation node (the tags stay, no hand is held).
+  const owed = openPreparation(order, leaf, questions);
+  if (owed) {
+    if (tree.current !== null && questions.under(tree.current, owed.id)) return null;
+    const to = order.find(node => questions.open(node.id) && questions.under(node.id, owed.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))) ?? owed;
+    return { to: to.id, from: tree.current, acts: tags.length, words: `今の節を [${to.id}] ${to.title.slice(0, 24)} に置いた（体が [${leaf.id}] の項目を続けて始めたが、先に済ませる準備の節 [${owed.id}] `
+      + `${owed.title.slice(0, 24)} が開いているため。札は [${leaf.id}] のまま、手は止めていない。準備は速さのために省かない。飛ばすなら plan.update で `
+      + 'その節を set state=done か blocked にして reason を書く）' };
+  }
+  const skipped = order.slice(tree.current === null ? 0 : order.findIndex(node => node.id === tree.current) + 1, order.indexOf(leaf))
+    .filter(node => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !questions.under(leaf.id, node.id)).slice(0, 3);
+  return { to: leaf.id, from: tree.current, acts: tags.length, words: `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため。順を変えるなら plan.update の current で戻す。`
+    + `飛ばした節は順のまま残っている${skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : ''}）` };
+}
+
+/**
+ * The first node before `leaf` in the plan's order that is open and a preparation node, and that the work for `leaf` is not under (a preparation of its own).
+ * A node whose children are all done or blocked has nothing left to do under it: it is not one (its own condition may be one only the model can mark).
+ */
+function openPreparation(order: readonly PlanNode[], leaf: PlanNode, questions: ReturnType<typeof treeQuestions>): PlanNode | undefined {
+  if (isPrepNode(leaf)) return undefined;
+  const before = order.indexOf(leaf);
+  const pending = (node: PlanNode) => !order.some(kid => kid.parentId === node.id) || order.some(kid => kid.parentId === node.id && questions.open(kid.id));
+  return order.find((node, index) => index < before && questions.open(node.id) && isPrepNode(node) && pending(node) && !questions.under(leaf.id, node.id));
 }
 
 /** Whether the current node is an open preparation node that the work for `leaf` would move the now away from (not for the node itself or one under it). */

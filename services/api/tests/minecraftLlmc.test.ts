@@ -165,8 +165,12 @@ describe('the live state (design 2.2, 2.6): the map first, at most 3,000 tokens'
     expect(live.map).toBe(FULL_WORLD.localMap);
     expect(llmcLiveTokens(live) + planTokens).toBeLessThanOrEqual(LLMC_LIVE_TOKENS);
     expect(planTokens).toBeLessThan(400);
-    expect(live.food).toMatchObject({ points: 85.6 });
-    expect(live.state).toMatchObject({ at: '(201,45,277)', dimension: 'overworld', health: 18, food: 15, saturation: 3.5, minutes: 12.3 });
+    expect(live.foodPoints).toMatchObject({ total: 85.6 });
+    expect(live).not.toHaveProperty('food');
+    // Run 41: the hunger bar is `fullness`, apart from the food points she carries; the five minutes' loss goes with the bar.
+    expect(live.state).toMatchObject({ at: '(201,45,277)', dimension: 'overworld', health: 18, fullness: 15, saturation: 3.5, minutes: 12.3 });
+    expect(live.state).toHaveProperty('fullnessLostIn5min');
+    expect(live.state).not.toHaveProperty('food');
     expect(live.events).toEqual(['反射が mc.act を止めた']);
   });
 

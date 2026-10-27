@@ -41,8 +41,10 @@ export const GOLD_FOR_BOOTS = 4;
  * The rules as the first plan and the stage knowledge say them (one text, so the plan and the decision read the same numbers). Knowledge, not an order.
  */
 export const PREP_RULES_WORDS = [
-  '- 鉄を掘りに地下（洞窟・竪穴）へ下りる前: 食料 40 点ほど（狩る・村の畑や箱。無いまま下りると洞窟の動物とゾンビ肉頼みになり戻りが長い）・石のツルハシと石の斧・'
-    + '作業台（置いたままにせず、板 4 以上か作業台 1 つを持つ。地下で置き直せる）・板 8 ほどと棒の余り（ツルハシを作り直す分）。ツルハシが壊れた時の木材が地下には無い。',
+  '- 鉄を掘りに地下（洞窟・竪穴）へ下りる前: 食料の点 40（狩る・村の畑や箱。満腹は 30 分もつので、飢えのためではない）・石のツルハシと石の斧・'
+    + '作業台 1 つか板 4 以上（置いたままにせず持つ。地下で置き直せる）・板 8 ほどと棒の余り（ツルハシを作り直す分）。',
+  '- 準備の理由: 地下には食べ物も木も無く、足りなくなると地上へ戻る上りの往復で約 150 秒かかる。ある実走では作業台が無いまま 372 秒止まり、上りの途中で死んだ。'
+    + '下りる手の why には今の数を括弧に書く（「[p4.1] 鉄へ下りる（食料 0/40・作業台 無・板 2）」）。足りない物は下りる前に埋める。',
   `- ダイヤを掘りに下りる前: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
     + '（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）。作ったらすぐ equip で着る（持っているだけでは守らない）。',
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
@@ -51,4 +53,15 @@ export const PREP_RULES_WORDS = [
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
   '- ベッドは村の家で 1〜2 つ（ベッドの節の doneWhen は have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan.update に書く）。'
     + '羊は見かけたら羊毛 3 を取り、エンドの前に板 3 と作って 4〜6 にする。',
+].join('\n');
+
+/**
+ * Run 41 (the plan had p1.3 「食料」 at the bed's coordinates and p4 「鉄を掘る」 with no caution for the descent; the preparation was passed over): what the first plan is
+ * asked to write of the preparation. A request to the planner, not a rule of the code.
+ */
+export const PLAN_PREP_WORDS = [
+  '地下へ下りる前の準備を節に書く:',
+  '- 地下へ下りる節（鉄・ダイヤを掘る節）の caution に、その前に済ませる準備を書く（30 字以内。例「食料40点・作業台か板4を持ってから下りる」）。',
+  '- 食料の節の where は、食料のある所（箱・畑・干し草の座標）にする。ベッドの座標にしない。見当たらなければ ""。',
+  '- 準備の節の doneWhen は観測の形で書く: 例 "food>=40&have:crafting_table|food>=40&have:planks>=4"。',
 ].join('\n');

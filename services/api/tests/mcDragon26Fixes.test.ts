@@ -35,7 +35,7 @@ const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVers
 const pack = (...items: Array<[string, number]>) => items.map(([name, count]) => ({ name, count }));
 
 describe('fix 1: the current node follows the node of the items the body starts, two in a row (run 39: back to the rel52 rule)', () => {
-  const rows: Row[] = [['p1', null, '原木を集める', 'have:log>=8'], ['p5', null, '動物を狩り焼く', 'food>=40'], ['p6', null, '地下のベッドを取る', 'have:bed>=1'],
+  const rows: Row[] = [['p1', null, '原木を集める', 'have:log>=8'], ['p5', null, '石炭を掘る', 'have:coal>=8'], ['p6', null, '地下のベッドを取る', 'have:bed>=1'],
     ['p7', null, '鉄を掘る', 'have:iron_ingot>=24']];
   it('does not move for one item; moves when two in a row started for another node, and leaves the nodes passed open', () => {
     const tree = treeOf(rows, 'p1');
@@ -43,7 +43,7 @@ describe('fix 1: the current node follows the node of the items the body starts,
     noteItemStart('t1', 'p7', 'p1');
     expect(followNode('t1', tree)).toBeNull();
     noteItemStart('t1', 'p7', 'p1');
-    expect(followNode('t1', tree)).toEqual({ to: 'p7', from: 'p1', acts: 2 });
+    expect(followNode('t1', tree)).toMatchObject({ to: 'p7', from: 'p1', acts: 2 });
     const moved = applyPlanUpdate(tree, { ops: [], current: 'p7' }).tree;
     expect(moved.current).toBe('p7');
     expect(moved.nodes.filter(node => node.state === 'done')).toEqual([]);
@@ -61,7 +61,7 @@ describe('fix 1: the current node follows the node of the items the body starts,
     noteItemStart('t2', 'p7', 'p1');
     expect(followNode('t2', { ...tree, current: 'p5' })).toBeNull();
     noteItemStart('t2', null);
-    expect(followNode('t2', { ...tree, current: 'p1' })).toEqual({ to: 'p7', from: 'p1', acts: 2 });
+    expect(followNode('t2', { ...tree, current: 'p1' })).toMatchObject({ to: 'p7', from: 'p1', acts: 2 });
   });
   it('does not move for no node, the current node, a done node, a node above the current one or a node holding it; a parent\'s tag neither counts nor breaks a run', () => {
     const tree = treeOf(rows, 'p1');
@@ -74,7 +74,7 @@ describe('fix 1: the current node follows the node of the items the body starts,
     noteItemStart('t4', 'p3', 'p2.1');
     noteItemStart('t4', 'p2', 'p2.1');
     noteItemStart('t4', 'p3', 'p2.1');
-    expect(followNode('t4', nested)).toEqual({ to: 'p3', from: 'p2.1', acts: 2 });
+    expect(followNode('t4', nested)).toMatchObject({ to: 'p3', from: 'p2.1', acts: 2 });
     noteItemStart('t5', 'p2', 'p2.1');
     noteItemStart('t5', 'p2', 'p2.1');
     expect(followNode('t5', nested)).toBeNull();
@@ -144,12 +144,23 @@ describe('fix 3: a descent with too little food says so', () => {
   const down = { hands: [{ do: 'walk', to: { x: 3, y: 36, z: 4 } }] };
   it('is said for a hand that goes 10 or more down with food under 40, with the cows in sight', () => {
     const note = descentNote(down, surface([['cooked_beef', 1]], { nearbyEntities: [{ name: 'cow', distance: 14, id: 5 }] }))!;
-    expect(note).toContain('食料 20.8 点（鉄の夜の前は 40 点）のまま地下 y=36 へ下りる手');
+    expect(note).toContain('食料 20.8/40 点・作業台 無・板 0 のまま地下 y=36 へ下りる手');
     expect(note).toContain('cow 14m');
-    expect(note).toContain('why に理由を書く');
+    expect(note).toContain('why に「[p4.1] 鉄へ下りる（食料 0/40・作業台 無・板 2）」の形で今の数と理由を書く');
+    expect(note).not.toContain('鉄の夜');
+    // Run 41: the reason in real numbers, not the fullness (it is 20) that the live shows beside it.
+    expect(note).toContain('上りの往復で約 150 秒かかる');
+    expect(note).toContain('372 秒止まり');
   });
-  it('is not said with enough food, for a short step down, from underground, or in the Nether', () => {
-    expect(descentNote(down, surface([['cooked_beef', 2]]))).toBeNull();
+  it('names the table when the food is enough but no table and fewer than 4 planks are carried (run 41: 372 s without one)', () => {
+    const noTable = descentNote(down, surface([['cooked_beef', 2], ['spruce_planks', 2]]))!;
+    expect(noTable).toContain('作業台 無・板 2 のまま地下 y=36 へ下りる手');
+    expect(noTable).not.toMatch(/^食料/u);
+    expect(descentNote(down, surface([['cooked_beef', 2], ['crafting_table', 1]]))).toBeNull();
+    expect(descentNote(down, surface([['cooked_beef', 2], ['spruce_planks', 4]]))).toBeNull();
+  });
+  it('is not said with enough food and a table, for a short step down, from underground, or in the Nether', () => {
+    expect(descentNote(down, surface([['cooked_beef', 2], ['crafting_table', 1]]))).toBeNull();
     expect(descentNote({ hands: [{ do: 'walk', to: { x: 3, y: 66, z: 4 } }] }, surface([]))).toBeNull();
     expect(descentNote(down, frame({ dimension: 'overworld', position: { x: 0, y: 30, z: 0 }, inventory: [] }))).toBeNull();
     expect(descentNote(down, frame({ dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, inventory: [] }))).toBeNull();

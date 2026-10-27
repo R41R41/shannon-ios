@@ -232,7 +232,7 @@ describe('the short live state of an urgent decision (run 32: 696 tokens of answ
     expect(short).not.toHaveProperty('near');
     const full = minecraftLlmcLive({ observation: frame(world), elapsedMinutes: 5.4, trend: createFoodTrend(), events: ['反射が mc.act を止めた'],
       lastResults: ['act 1/2 済みで止まった'], urgent: ['wither_skeleton #696 6.1m・上 6・見える（射線の中）'] });
-    expect(Object.keys(full)).toEqual(expect.arrayContaining(['landmarks', 'stops', 'near', 'food']));
+    expect(Object.keys(full)).toEqual(expect.arrayContaining(['landmarks', 'stops', 'near', 'foodPoints']));
     expect(llmcTokens(JSON.stringify(short))).toBeLessThan(llmcTokens(JSON.stringify(full)));
   });
 

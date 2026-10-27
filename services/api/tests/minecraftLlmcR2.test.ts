@@ -120,7 +120,7 @@ describe('the live state\'s tokens as the provider counts them (scene replay: th
     expect(llmcLiveTokens(live) + planTokens).toBeLessThanOrEqual(LLMC_LIVE_TOKENS);
     expect((live.landmarks as string[]).slice(0, 2)).toEqual(world.mapLandmarks.slice(0, 2));
     expect((live.inventory as string[]).length).toBeGreaterThanOrEqual(7);
-    expect(live.state).toMatchObject({ at: '(201,48,258)', health: 19.6, food: 14 });
+    expect(live.state).toMatchObject({ at: '(201,48,258)', health: 19.6, fullness: 14 });
   });
 });
 

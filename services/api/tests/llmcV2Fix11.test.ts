@@ -125,7 +125,7 @@ describe('chapter 4 A: the road and the pace', () => {
   const have = (items: Array<[string, number]>, dimension = 'overworld') => frame({ position: { x: 0, y: 0, z: 0 }, dimension,
     inventory: items.map(([name, count]) => ({ name, count })) });
   it('says the seconds and the next milestone with its target, ahead and behind', () => {
-    const kit = have([['blue_bed', 1], ['iron_pickaxe', 1], ['bucket', 1]]);
+    const kit = have([['blue_bed', 1], ['iron_pickaxe', 1], ['bucket', 1], ['crafting_table', 1], ['cooked_beef', 2]]);
     expect(meterLine(tree, kit, 812 / 60)).toBe('目安: 今 812 秒・次の節目 ダイヤのツルハシ 目安 1,000 秒（あと 188 秒）');
     expect(meterLine(tree, kit, 1_100 / 60)).toBe('目安: 今 1,100 秒・次の節目 ダイヤのツルハシ 目安 1,000 秒（100 秒遅れ）');
     expect(meterLine(tree, have([]), 30 / 60)).toBe('目安: 今 30 秒・次の節目 ベッド 目安 150 秒（あと 120 秒）');
@@ -152,8 +152,8 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(system).toContain('死ぬと持ち物と時間を失い');
     expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない');
     expect(system).toContain(milestoneWords());
-    expect(milestoneWords()).toBe('ベッド 150・鉄のツルハシ 250・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 1,800');
-    expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 250, 600, 1_000, 1_000, 1_500, 1_800]);
+    expect(milestoneWords()).toBe('ベッド 150・地下の準備 200・鉄のツルハシ 250・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 1,800');
+    expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 200, 250, 600, 1_000, 1_000, 1_500, 1_800]);
     expect(V2_ALWAYS).toMatch(/^- road: /mu);
     expect(V2_ALWAYS).toMatch(/^- meter: /mu);
   });
@@ -192,7 +192,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   });
   it('says in the instructions: beds explode in the Nether and the End, shortage is not skipped for speed, the cell to open is away from her feet, and the urgent live\'s fields', () => {
     expect(V2_ALWAYS).toContain('ネザー・エンドのベッドは爆発する: そこでは寝ない');
-    expect(V2_ALWAYS).toContain('shortage の準備（食料・防具・盾など）は、速さのために省かない');
+    expect(V2_ALWAYS).toContain('準備は速さのために省かない（地下の準備: 食料 40 点・作業台か板 4。shortage の防具・盾）');
     expect(V2_STAGES.prep).toContain('足元・立っているマスからは離れたマスを開ける');
     expect(V2_ALWAYS).toContain('急ぎの時の live は、urgent・investigation・planNow・queue・footing・around・liquid・map・state・threats・inventory・events・lastResults・answer だけ');
   });

@@ -57,7 +57,7 @@ function fakeQueue(script: Step[]) {
       return step.wake;
     },
   };
-  return { queue, put: () => { counter += 1; open.add(`q${counter}`); return `q${counter}`; }, bump: () => { version += 1; },
+  return { queue, put: () => { counter += 1; open.add(`q${counter}`); return `q${counter}`; }, bump: () => { version += 1; }, end,
     stats: () => ({ noted, cancelled, drains, waited, open: [...open] }) };
 }
 
@@ -217,6 +217,23 @@ describe('a queue that changes, and the limits', () => {
     expect(f.commits()).toBe(1);
     expect(text(f.runtime.snapshot('owner', f.task.id)!.history)).not.toContain('turn 2');
     expect(text(f.runtime.snapshot('owner', f.task.id)!.history)).toContain('turn 1');
+  });
+
+  it('the result of the item that threw the decision away stands in the last tool result of the round before (run 41: the reason of q103 and q143 reached no input)', async () => {
+    const queue = fakeQueue([{ wake: 'remaining' }]);
+    const reason = 'q1 [p1] x: act 0/1 済みで止まった（mine diamond: diamond は deepslate_diamond_ore）';
+    const f = fixture([act('a'), async () => { queue.end('q1', false, reason.slice('q1 [p1] x: '.length)); queue.bump(); await sleep(400); return act('b'); }], queue);
+    await f.run();
+    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 2, thrown: true } });
+    const history = f.runtime.snapshot('owner', f.task.id)!.history;
+    const kept = text(history);
+    expect(kept).toContain(`${NEWS_HEAD}\\n${reason}`);
+    expect(kept.split('deepslate_diamond_ore')).toHaveLength(2);
+    // It stands after the words of the round that had the item put in, in that round's own message, and the thrown decision's turn is not there.
+    expect(kept.indexOf('列に入れた q1')).toBeLessThan(kept.indexOf(NEWS_HEAD));
+    expect(kept).not.toContain('turn 2');
+    // The failure is counted by the ladder as a news is when the decision is not thrown away.
+    expect((f.runtime.snapshot('owner', f.task.id)!.checkpoint as { consecutiveToolFailures?: number }).consecutiveToolFailures).toBe(1);
   });
 
   it('after the limit of decisions it adds nothing more and waits for the queue to run dry', async () => {

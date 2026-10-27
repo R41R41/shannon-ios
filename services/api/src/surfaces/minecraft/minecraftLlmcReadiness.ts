@@ -188,6 +188,8 @@ export function readinessOf(observation: BodyObservation | null): { world: Recor
  * A fact beside the act, which goes as it is; the food points are the stage knowledge's (`FOOD_BEFORE_DESCENT`, 40 before the iron).
  */
 export const FOOD_BEFORE_DESCENT = 40;
+/** Planks that make a table (4), when the pack holds no table. */
+const TABLE_PLANKS = 4;
 const SURFACE_Y = 45, DESCENT = 10;
 /** The lowest y the walks and digs of an act reach (a `rel` hand counts from her feet), or the feet's own when none goes lower. */
 function lowestReach(hands: unknown, feetY: number): number {
@@ -207,11 +209,17 @@ function lowestReach(hands: unknown, feetY: number): number {
 export function descentNote(input: unknown, frame: BodyObservation | null): string | null {
   const facts = readinessOf(frame);
   const feet = facts ? feetOf(facts.world) : null;
-  if (!facts || !feet || facts.dimension !== 'overworld' || facts.food >= FOOD_BEFORE_DESCENT || feet.y < SURFACE_Y) return null;
+  if (!facts || !feet || facts.dimension !== 'overworld' || feet.y < SURFACE_Y) return null;
+  // Run 41 (the table was missing as well: 372 s with none, and she died on the way up): the food and the table (or planks to make one) are the descent's.
+  const lacks = [facts.food < FOOD_BEFORE_DESCENT ? `食料 ${round1(facts.food)}/${FOOD_BEFORE_DESCENT} 点` : '',
+    countMatching(facts.counts, /^crafting_table$/u) < 1 && countMatching(facts.counts, /_planks$/u) < TABLE_PLANKS
+      ? `作業台 無・板 ${countMatching(facts.counts, /_planks$/u)}` : ''].filter(Boolean);
+  if (!lacks.length) return null;
   const lowest = lowestReach(record(input)?.hands, feet.y);
   if (feet.y - lowest < DESCENT) return null;
   const cows = foodLeads(facts.world, facts.dimension).replace(/^食料の当て: /u, '');
   const near = /m/u.test(cows) && !cows.startsWith('近くに動物') ? `。近くに ${cows} が見えている` : '';
-  return `食料 ${round1(facts.food)} 点（鉄の夜の前は ${FOOD_BEFORE_DESCENT} 点）のまま地下 y=${Math.round(lowest)} へ下りる手${near}。`
-    + '下りてから地上へ戻ると縦穴の登りで 1〜2 分かかる: 先に狩る・焼く方が往復が減る。このまま行くなら why に理由を書く';
+  return `${lacks.join('・')} のまま地下 y=${Math.round(lowest)} へ下りる手${near}。`
+    + '地下には食べ物も木も無く、足りなくなると地上へ戻る上りの往復で約 150 秒かかる（ある実走では作業台が無いまま 372 秒止まり、上りの途中で死んだ）。'
+    + '先に狩る・焼く・作業台か板 4 を持つ方が往復が減る。このまま行くなら why に「[p4.1] 鉄へ下りる（食料 0/40・作業台 無・板 2）」の形で今の数と理由を書く';
 }

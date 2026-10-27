@@ -67,8 +67,8 @@ const text = (value: unknown): string => typeof value === 'string' ? value : Arr
  */
 export function nearNeeds(body: Rec, planText: string): NearNeeds {
   const state = (body.state && typeof body.state === 'object' ? body.state : {}) as Rec;
-  const food = (body.food && typeof body.food === 'object' ? body.food : {}) as Rec;
-  const level = typeof state.food === 'number' ? state.food : 20, points = typeof food.points === 'number' ? food.points : Infinity;
+  const food = (body.foodPoints && typeof body.foodPoints === 'object' ? body.foodPoints : {}) as Rec;
+  const level = typeof state.fullness === 'number' ? state.fullness : 20, points = typeof food.total === 'number' ? food.total : Infinity;
   const plan = `${planText} ${text(body.planNow)}`, shortage = text(body.shortage);
   const hungry = level <= FOOD_SHORT_LEVEL || points < FOOD_SHORT_POINTS || /食料/u.test(shortage) || text(body.recovery) !== '';
   const wantsFood = FOOD_PLAN.test(plan) || hungry;

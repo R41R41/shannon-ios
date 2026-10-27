@@ -207,7 +207,7 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
 describe('D3: one language, one topic in one place, a dictionary of the live fields', () => {
   const system = minecraftV2System(V2_ALWAYS);
   const FIELDS = ['urgent', 'planNow', 'shortage', 'recovery', 'footing', 'around', 'route', 'liquid', 'obsidian', 'pack', 'repeat', 'look', 'investigation',
-    'stops', 'landmarks', 'scan', 'state', 'food', 'inventory', 'threats', 'near', 'jobs', 'events', 'lastResults', 'map', 'answer'];
+    'stops', 'landmarks', 'scan', 'state', 'foodPoints', 'inventory', 'threats', 'near', 'jobs', 'events', 'lastResults', 'map', 'answer'];
   it('writes the mode\'s system text in Japanese: no English header, protocol or reading', () => {
     for (const gone of ['# Minecraft body task', '## Each decision', '## Reading the request', 'Only the task directs you', 'You choose the next actions']) {
       expect(system).not.toContain(gone);

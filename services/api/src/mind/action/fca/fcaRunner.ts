@@ -317,6 +317,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const queue = bodyTask ? ports.body?.queue : undefined;
   let output!: FcaModelOutput, decision!: FcaDecision, rounds = 0;
   let asked: FcaModelInput | null = request;
+  /** The last round's results and where its message stands in `history`: a decision thrown away puts the news of the items that ended after it there (run 41). */
+  let lastRound: { results: Array<{ id: string; text: string; ok: boolean }>; at: number } | null = null;
   while (asked) {
     rounds += 1;
     const operationId = rounds === 1 ? `${step.id}:decision` : `${step.id}:decision${rounds}`;
@@ -344,6 +346,18 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (!answer) {
       progress({ operationId, tool: 'fca.decide', status: 'failed' });
       metrics.stretch(rounds, true);
+      // Run 41 (q103 and q143: the reason of a failed mine, 「…は deepslate_diamond_ore」, was in no later input): the item whose bad end threw this decision away
+      // has its result in the queue's news, and the queue is this step's only. The news is settled as a round's is and stands at the end of the last tool result of
+      // the round before (its message in the history is made again); with no such round it goes to the next decision (`noteNews`).
+      if (queue) {
+        const news = settleNews(roundContext, queue.take());
+        if (news.outcomes.length && !state.bodyStale) settleOutcomes(news.outcomes);
+        if (news.text && lastRound?.results.length && history[lastRound.at] !== undefined) {
+          const last = lastRound.results.at(-1)!;
+          lastRound.results[lastRound.results.length - 1] = { ...last, text: `${last.text}\n${news.text}` };
+          history[lastRound.at] = ports.model.toolResults(lastRound.results);
+        } else if (news.text) ports.body?.noteNews?.(news.text);
+      }
       break;
     }
     output = answer;
@@ -372,7 +386,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
         round.results[round.results.length - 1] = { ...last, text: `${last.text}\n${news.text}` };
       }
     }
-    if (round) history.push(ports.model.toolResults(round.results));
+    if (round) {
+      lastRound = { results: round.results, at: history.length };
+      history.push(ports.model.toolResults(round.results));
+    }
     if (!continuing || state.bodyStale) {
       metrics.stretch(rounds, false);
       break;

@@ -2,7 +2,7 @@ import {
   DRAGON_KNOWLEDGE_R7, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE,
 } from './minecraftKnowledge.js';
 import { FIRST_PLAN_SYSTEM_R9 } from './minecraftFirstPlan.js';
-import { PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
+import { PLAN_PREP_WORDS, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 
 /**
  * the own prompt, the first plan (owner answers of 2026-10-22 by form: 「同じ方針で絞る」「要塞とエンドは作戦へ」, and ADR-0014
@@ -100,5 +100,5 @@ export function ownFirstPlanSystem(): string {
     if (!text.includes(from)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
     text = text.replace(from, () => to);
   }
-  return `${text}\n${STRATEGY_KNOWLEDGE_V2}`;
+  return `${text}\n${PLAN_PREP_WORDS}\n${STRATEGY_KNOWLEDGE_V2}`;
 }

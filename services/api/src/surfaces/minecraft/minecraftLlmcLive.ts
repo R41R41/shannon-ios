@@ -184,7 +184,8 @@ function stateOf(world: Record<string, unknown>, observation: BodyObservation): 
   for (const key of ['health', 'food', 'saturation', 'oxygen', 'armor'] as const) {
     const value = finite(world[key]);
     // Run 37 (oxygen 400 on dry land, 20 later): one scale, 息 n/20.
-    if (value !== null) out[key] = key === 'oxygen' ? breathWords(value)! : round1(value);
+    // Run 41: the hunger bar is `fullness` (満腹), apart from the food points she carries (`foodPoints`): both were `food`, and 「満腹 20」 read as the food being fine.
+    if (value !== null) out[key === 'food' ? 'fullness' : key] = key === 'oxygen' ? breathWords(value)! : round1(value);
   }
   return out;
 }
@@ -281,8 +282,9 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
     stops: strings(world.recentStops, STOPS),
     ...(look ? { look } : {}),
-    state: { ...state, ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
-    food: { points: food.points, items: food.items, lostIn5min: parts.trend.lostIn5min() },
+    state: { ...state, ...('fullness' in state ? { fullnessLostIn5min: parts.trend.lostIn5min() } : {}),
+      ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
+    foodPoints: { total: food.points, items: food.items },
     inventory: stacks(world.inventory).slice(0, INVENTORY),
     threats,
     near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
@@ -349,7 +351,7 @@ export function llmcPlanTokens(plan: unknown): number {
  * craft with are what a decision needs most.
  */
 const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['near', 0], ['stops', 2],
-  ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['food.items', -1], ['jobs', -1], ['inventory', 10], ['landmarks', 3],
+  ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['foodPoints.items', -1], ['jobs', -1], ['inventory', 10], ['landmarks', 3],
   ['threats', 2], ['stops', 1], ['events', 1],
   // A map of water (three tokens a cell) leaves little beside it: the last of the rest, the plan's path and her state kept.
   ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
@@ -360,9 +362,9 @@ function fitLive(live: Record<string, unknown>, planTokens: number): Record<stri
   const budget = LLMC_LIVE_TOKENS - planTokens;
   for (const [key, keep] of SHRINK) {
     if (llmcLiveTokens(out) <= budget) break;
-    if (key === 'food.items') {
-      const food = out.food as Record<string, unknown> | undefined;
-      if (food && 'items' in food) out.food = Object.fromEntries(Object.entries(food).filter(([name]) => name !== 'items'));
+    if (key === 'foodPoints.items') {
+      const food = out.foodPoints as Record<string, unknown> | undefined;
+      if (food && 'items' in food) out.foodPoints = Object.fromEntries(Object.entries(food).filter(([name]) => name !== 'items'));
       continue;
     }
     if (keep < 0) {
