@@ -246,6 +246,12 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   if (holds && holdOn) {
     queue.onRan((_item, _result, receipt) => {
       const incident = incidentOfResult(receipt?.result);
+      if (incident && receipt && !incident.held && incident.notHeld) {
+        // Run 44: the world could not be stopped, so the body did not hold; the task goes on and the operator reads why.
+        log(`Shannon Minecraft incident not held task=${step.taskId} incident=${incident.id} why=${incident.why.slice(0, 80)} freeze=${incident.notHeld.slice(0, 80)}`);
+        holds.notHeld(step.taskId, { ...incident, command: receipt.id });
+        return;
+      }
       if (!incident?.held || !receipt) return;
       log(`Shannon Minecraft incident hold task=${step.taskId} incident=${incident.id} frozen=${String(incident.frozen)} why=${incident.why.slice(0, 80)}`);
       void holds.hold(step.taskId, { ...incident, command: receipt.id }).catch(error => log(`Shannon Minecraft incident hold failed task=${step.taskId} ${String(error)}`));

@@ -166,8 +166,12 @@ admission's `minecraft_busy`, `cancel` and the time limit all treat `stopped` as
   every act that did not succeed, and on a heavy one (a go `stuck`, `search_timeout`, or `limit_time` with fewer than 10 steps; an act that
   failed after 60 s or more; health 4 or less, or a death, during it; the first failure of its kind in the task) also the scene (the world's
   region, entities and poi files around it after `save-all flush`, and the server log). With the hold asked for, it first stops the world
-  (`/tick freeze`, never while anyone but the body is on the server: then it is not stopped, and the hold says so), holds the task's next acts
+  (`/tick freeze`; the body's own name is read at the freeze, never counted as someone else), holds the task's next acts
   (refused as `held`, also after a restart of the body: the hold is kept in a file), and says so in the act's receipt (`incident`).
+- A world the body cannot stop (anyone but the body on the server, the players not known, the freeze refused) is not held (run 44, the
+  coordinator's choice of 2026-10-28: hold 1 was held in a moving world at night, no act was allowed, and the body died). The box and the
+  scene are taken, the receipt says why (`incident.notHeld`, the freeze's words), the head writes it down (`command = hold_skipped`,
+  `event = settled`, `code = not_held`, and the activity record) and the request goes on.
 - The head (`wiring/minecraftIncidentHold.ts`) reads that receipt and holds the task: an audit row (`command = hold`, `event = settled`,
   `code = held`, `detail` = the incident id, why, whether the world stopped, the act's command id) and the owner's stop path. A held task makes
   no decision and calls no model; the plan, the pack and the task are kept. Its time limit does not count the held time (`heldMs`). A new
@@ -178,6 +182,8 @@ admission's `minecraft_busy`, `cancel` and the time limit all treat `stopped` as
   arguments and `context.incident.resume` (the body moves the world again and runs it), writes what it did (`command = resume`,
   `event = settled`, `code = replayed`), and the decisions go on from the plan. `not_held` when the task is not held.
 - `cancel` of a held request ends the hold (`stopped`); the body moves the world again at the first act of another task.
+- A resume, a cancel and the first act of another task always send `tick unfreeze`, whatever the hold says of the world (a world stopped by
+  hand, as hold 1's was, moves again).
 
 ## Changing a running request's budget
 

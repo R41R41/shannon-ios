@@ -120,6 +120,30 @@ describe('the hold and the resume', () => {
   });
 });
 
+describe('run 44, hold 1: a world the body could not stop', () => {
+  it('is not held: the request goes on, nothing waits for a resume, and the audit and the activity say why', async () => {
+    const s = service();
+    await s.operator.handle(envelope('request', { goal: 'エンドラを討伐して', holdOnFailure: true }));
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    s.operator.notHeld(TASK, { ...incident, notHeld: 'others_present:Rai1241' });
+    expect(s.stopped).toEqual([]);
+    expect(s.audit.heldOf(TASK)).toBeNull();
+    expect(s.audit.heldTasks('owner')).toEqual([]);
+    const row = s.audit.recent('owner', 5).find(entry => entry.command === 'hold_skipped')!;
+    expect(row).toMatchObject({ event: 'settled', code: 'not_held', taskId: TASK });
+    expect(JSON.parse(row.detail!)).toMatchObject({ incident: incident.id, why: 'go_stuck', freeze: 'others_present:Rai1241', command: 'command-q115' });
+    expect(s.activity.at(-1)).toMatchObject({ tool: 'operator.minecraft.hold', reasonCode: 'operator_hold_skipped' });
+    expect((await s.operator.handle(envelope('resume', { taskId: TASK }))).body).toMatchObject({ outcome: 'refused', code: 'not_held' });
+    // A request that did not ask to be held writes nothing.
+    const other = service();
+    await other.operator.handle(envelope('request', { goal: 'エンドラを討伐して' }));
+    other.operator.notHeld(TASK, { ...incident, notHeld: 'others_present:Rai1241' });
+    expect(other.audit.recent('owner', 5).some(entry => entry.command === 'hold_skipped')).toBe(false);
+    expect(incidentOfResult(JSON.stringify({ incident: { id: 'x3', heavy: true, why: 'go_stuck', held: false, frozen: false, freeze: 'others_present:Rai1241',
+      notHeld: 'others_present:Rai1241' } }))).toMatchObject({ held: false, notHeld: 'others_present:Rai1241' });
+  });
+});
+
 describe('the step\'s side', () => {
   it('reads the incident of a receipt, and puts the hold or the resume in the command\'s context', () => {
     const result = JSON.stringify({ v: 1, ok: false, lines: [], incident: { id: 'x1', heavy: true, why: 'go_stuck', held: true, frozen: false, freeze: 'others_present:Rai1241' } });

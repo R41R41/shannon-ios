@@ -323,6 +323,21 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     await requests.stop(taskId, 'operator_hold').catch(() => []);
     return true;
   }
+  /**
+   * A heavy failure of a request that asked to be held, not held because the body could not stop the world (run 44, the coordinator's choice of
+   * 2026-10-28: someone else on the server; holding in a moving world left the body standing at night with no act, and it died). Its box and
+   * scene were taken; the request goes on. Written as `hold_skipped` (not a hold: nothing waits for a resume).
+   */
+  function notHeld(taskId: string, incident: { id: string; why: string; notHeld?: string; command: string; start?: Feet | null; end?: Feet | null }): void {
+    const request = parts.audit.requestOf(parts.scopeKey, taskId);
+    if (!request || !parts.audit.holdOnFailure(taskId)) return;
+    const detail = JSON.stringify({ incident: incident.id, why: incident.why.slice(0, 160), freeze: String(incident.notHeld ?? '').slice(0, 80), command: incident.command,
+      ...(incident.start ? { start: incident.start } : {}), ...(incident.end ? { end: incident.end } : {}) });
+    audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold_skipped', event: 'settled', code: 'not_held', argsJson: request.argsJson,
+      taskId, detail: detail.slice(0, 600) });
+    parts.activity(parts.now(), { summary: '運用者が代わりに始めたマイクラの依頼で重い失敗がありましたが、世界を止められないため保留せずに続けました（記録は取りました）。',
+      tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: 'operator_hold_skipped', detail: `task=${taskId} incident=${incident.id} freeze=${String(incident.notHeld ?? '').slice(0, 60)}` });
+  }
   /** After a resume: the act that failed, sent again, and what it did (written once). */
   function resumeChecked(taskId: string, line: string): void {
     const request = parts.audit.requestOf(parts.scopeKey, taskId);
@@ -443,6 +458,6 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     }
   }
 
-  return { handle, tick, socketRefused, hold, resumeChecked };
+  return { handle, tick, socketRefused, hold, notHeld, resumeChecked };
 }
 export type OperatorMinecraft = ReturnType<typeof createOperatorMinecraft>;

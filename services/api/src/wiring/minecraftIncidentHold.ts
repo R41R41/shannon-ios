@@ -2,7 +2,8 @@
  * The fix run's hold, as the Minecraft step sees it (2026-10-28, owner: 「止めて直す実走（保留と再開、世界を止める、台で再現→直す→その場で確かめる）」).
  *
  * - An operator's request made with `--hold-on-failure` sends its acts with `context.incident.hold`: on a heavy failure the body writes its black box
- *   and the scene, stops the world (`/tick freeze`, never with anyone else on the server) and says so in the act's receipt (`incident`).
+ *   and the scene, stops the world (`/tick freeze`, never with anyone else on the server) and says so in the act's receipt (`incident`). A world
+ *   it cannot stop is not held (run 44): the receipt says why (`notHeld`), the step writes it down (`notHeld`) and the task goes on.
  * - The step reads that receipt (`noteReceipt`) and asks the operator's service to hold the task (`hold`): audited, and stopped through the owner's
  *   stop path, so no decision is made, no model is called and nothing is counted while it waits; the plan, the pack and the task stay as they are.
  * - The operator's `resume` queues the task again. Its first step sends the act that failed once more with the same arguments and
@@ -12,12 +13,18 @@
  */
 /** `start`: the feet when the held act began; `end`: when it ended (where the body was held). */
 export type Feet = [number, number, number];
-export interface IncidentNote { id: string; heavy: boolean; why: string; held: boolean; frozen: boolean | null; freeze?: string; start?: Feet | null; end?: Feet | null }
+/** `notHeld`: a hold was asked for and not made, because the world could not be stopped (the body's freeze words; run 44, hold 1). */
+export interface IncidentNote { id: string; heavy: boolean; why: string; held: boolean; frozen: boolean | null; freeze?: string; notHeld?: string; start?: Feet | null; end?: Feet | null }
 export interface IncidentHoldPort {
   /** Whether this task's request asked to be held on a heavy failure. */
   holdRequested(taskId: string): boolean;
   /** Holds the task (audit and stop); false when it is not one to hold or is held already. */
   hold(taskId: string, incident: IncidentNote & { command: string }): Promise<boolean>;
+  /**
+   * A heavy failure the body did not hold because it could not stop the world (someone else on the server; the coordinator's choice of
+   * 2026-10-28, run 44): written down (audit and activity), and the task goes on.
+   */
+  notHeld(taskId: string, incident: IncidentNote & { command: string }): void;
   /** After a `resume`, the hold whose act is to be sent again: its incident and the act's command id; null when there is none to send. */
   resumePending(taskId: string): { incident: string; command: string; start?: Feet | null } | null;
   /** The act sent again, and what it did (written once: the next step does not send it again). */
@@ -47,6 +54,7 @@ export function incidentOfResult(result: string | undefined): IncidentNote | nul
     if (!value || typeof value.id !== 'string') return null;
     return { id: value.id, heavy: value.heavy === true, why: String(value.why ?? ''), held: value.held === true,
       frozen: typeof value.frozen === 'boolean' ? value.frozen : null, ...(typeof value.freeze === 'string' ? { freeze: value.freeze } : {}),
+      ...(typeof value.notHeld === 'string' && value.notHeld ? { notHeld: value.notHeld } : {}),
       ...(feet(value.start) ? { start: feet(value.start) } : {}), ...(feet(value.end) ? { end: feet(value.end) } : {}) };
   } catch { return null; }
 }
