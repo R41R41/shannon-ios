@@ -809,6 +809,7 @@
     "surfaces/minecraft/minecraftFightOwner.ts",
     "surfaces/minecraft/minecraftFillers.ts",
     "surfaces/minecraft/minecraftFirstPlan.ts",
+    "surfaces/minecraft/minecraftFoodWords.ts",
     "surfaces/minecraft/minecraftGistAdoption.ts",
     "surfaces/minecraft/minecraftIntent.ts",
     "surfaces/minecraft/minecraftItems.ts",
