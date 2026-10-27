@@ -112,6 +112,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   minecraftOpportunity: 'mc_opportunity.v1',
   /** Owner 2026-10-21 (`SHANNON_ADDRESSED`): whether words in a voice conversation were said to her (`mind/perception/addressed.ts`). */
   addressed: 'addressed.v2',
+  /** Owner 2026-10-28: which kept picture of the mini Shannon fits a reply, and whether the reply shows a gesture none has (`surfaces/mini/miniPoseChooser.ts`). */
+  miniPose: 'mini_pose.v2',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';
@@ -221,7 +223,7 @@ export function replayedAnswers(trace: Readonly<Record<string, unknown>>): Recor
 /** What one stage-2 decision writes to the decision traces (`contracts/decisionTraceContract.ts`), as closed values. */
 export interface JevChoiceTrace {
   surface: 'text' | 'voice';
-  decision: 'tool_menu' | 'difficulty' | 'recall_beam' | 'feeling_turn' | 'addressed';
+  decision: 'tool_menu' | 'difficulty' | 'recall_beam' | 'feeling_turn' | 'addressed' | 'mini_pose';
   answers: Readonly<Record<string, string | boolean | number | readonly string[]>>;
   outcome: 'ok' | 'timeout' | 'error' | 'fallback';
   model: string;
