@@ -45,9 +45,11 @@ const prepHolds = (facts: DoneFacts): boolean => facts.food >= 40 && (carried(fa
 const prepNow = (facts: DoneFacts): string => `食料 ${Math.round(facts.food)}/40 点・作業台 ${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}・板 ${carried(facts.counts, 'planks')}`;
 export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ベッド', seconds: 150, doneWhen: 'have:bed' },
-  { name: PREP_MILESTONE_NAME, seconds: 200, doneWhen: 'food>=40&have:crafting_table|food>=40&have:planks>=4', short: '地下の準備', kept: true, holds: prepHolds, node: isPrepMilestoneNode,
+  // 300 s: the quickest preparation of runs 39-41 (run 40: two village chests, 39.6 points at +298; the table or planks 4 at +45 to +94).
+  { name: PREP_MILESTONE_NAME, seconds: 300, doneWhen: 'food>=40&have:crafting_table|food>=40&have:planks>=4', short: '地下の準備', kept: true, holds: prepHolds, node: isPrepMilestoneNode,
     cost: '省くと上りの往復で約 150 秒失う', now: prepNow },
-  { name: '鉄のツルハシ', seconds: 250, doneWhen: 'have:iron_pickaxe' },
+  // 350 s, after the preparation (it was 250, before a preparation that takes 300): run 38 had it at +342 from a village chest.
+  { name: '鉄のツルハシ', seconds: 350, doneWhen: 'have:iron_pickaxe' },
   { name: 'バケツ', seconds: 600, doneWhen: 'have:bucket' },
   { name: 'ダイヤのツルハシ', seconds: 1_000, doneWhen: 'have:diamond_pickaxe' },
   { name: '水バケツ', seconds: 1_000, doneWhen: 'have:water_bucket' },
@@ -58,7 +60,7 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
 const KEPT_MILESTONES: ReadonlySet<string> = new Set(['have:bed', 'have:iron_pickaxe', 'have:bucket', 'have:diamond_pickaxe']);
 const isKept = (item: Milestone): boolean => item.kept === true || KEPT_MILESTONES.has(item.doneWhen);
 const grouped = (seconds: number): string => seconds.toLocaleString('en-US');
-/** The targets as the instructions say them: 「ベッド 150・鉄のツルハシ 250・…・ネザー 1,800」. */
+/** The targets as the instructions say them: 「ベッド 150・地下の準備 300・鉄のツルハシ 350・…・ネザー 1,800」. */
 export const milestoneWords = (): string => DRAGON_MILESTONES.map(item => `${item.short ?? item.name} ${grouped(item.seconds)}`).join('・');
 
 /** Whether the plan is the dragon's: a node of it names the dragon (the seeded plan's last node, 「エンドでドラゴン」). */

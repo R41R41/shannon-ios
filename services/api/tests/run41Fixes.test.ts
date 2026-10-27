@@ -26,12 +26,12 @@ const withState = (done: string[], current: string | null, base: PlanTree = tree
 describe('the preparation is a milestone of the meter, with its seconds and its lateness', () => {
   it('is the next milestone after the bed, with the target, how late, what she has now and what leaving it out costs', () => {
     const line = meterLine(tree, have([['blue_bed', 1], ['spruce_planks', 2]]), 260 / 60)!;
-    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 200 秒（60 秒遅れ）・今 食料 0/40 点・作業台 無・板 2。省くと上りの往復で約 150 秒失う');
-    expect(meterLine(tree, have([['blue_bed', 1]]), 150 / 60)).toContain('目安 200 秒（あと 50 秒）');
+    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（あと 40 秒）・今 食料 0/40 点・作業台 無・板 2。省くと上りの往復で約 150 秒失う');
+    expect(meterLine(tree, have([['blue_bed', 1]]), 150 / 60)).toContain('目安 300 秒（あと 150 秒）');
   });
   it('is met by 40 food points with a table or 4 planks; a table alone or the food alone is not', () => {
     const food = ['cooked_beef', 2] as [string, number];
-    expect(meterLine(tree, have([['blue_bed', 1], food, ['crafting_table', 1]]), 260 / 60)).toBe('目安: 今 260 秒・次の節目 鉄のツルハシ 目安 250 秒（10 秒遅れ）');
+    expect(meterLine(tree, have([['blue_bed', 1], food, ['crafting_table', 1]]), 260 / 60)).toBe('目安: 今 260 秒・次の節目 鉄のツルハシ 目安 350 秒（あと 90 秒）');
     expect(meterLine(tree, have([['blue_bed', 1], food, ['oak_planks', 4]]), 260 / 60)).toContain('次の節目 鉄のツルハシ');
     expect(meterLine(tree, have([['blue_bed', 1], ['crafting_table', 1]]), 260 / 60)).toContain('次の節目 地下の準備');
     expect(meterLine(tree, have([['blue_bed', 1], food]), 260 / 60)).toContain('次の節目 地下の準備');
@@ -42,14 +42,14 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     const kit = have([['blue_bed', 1], ['iron_pickaxe', 1]]);
     const open = meterLine(tree, kit, 400 / 60)!;
     expect(open).toContain('次の節目 バケツ');
-    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 200 秒。今 食料 0/40 点・作業台 無・板 0。省くと上りの往復で約 150 秒失う。飛ばしたなら plan.update に書く）');
+    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点・作業台 無・板 0。省くと上りの往復で約 150 秒失う。飛ばしたなら plan.update に書く）');
     expect(meterLine(withState(['p2'], null), kit, 400 / 60)).not.toContain('まだの節目');
   });
   it('points the meter at the preparation while the plan\'s current node is one, though a later milestone is met', () => {
     const food = tree.nodes.find(node => node.title.includes('肉を焼く'))!;
     expect(isPrepMilestoneNode(food)).toBe(true);
     const line = meterLine(withState([], food.id), have([['blue_bed', 1], ['iron_pickaxe', 1]]), 400 / 60)!;
-    expect(line).toContain('次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 200 秒（200 秒遅れ）');
+    expect(line).toContain('次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（100 秒遅れ）');
   });
   it('names the preparation by its title or by 40 to 99 food points, not by the 100 of the gate', () => {
     expect(isPrepMilestoneNode({ id: 'p3', parentId: null, order: 0, title: '地下の準備', state: 'continue' })).toBe(true);
@@ -58,8 +58,8 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
   });
   it('has its place between the bed and the iron pickaxe, in the one constant that the instructions read', () => {
     expect(DRAGON_MILESTONES.map(item => item.name).slice(0, 3)).toEqual(['ベッド', PREP_MILESTONE_NAME, '鉄のツルハシ']);
-    expect(DRAGON_MILESTONES.find(item => item.name === PREP_MILESTONE_NAME)!.seconds).toBe(200);
-    expect(milestoneWords()).toContain('ベッド 150・地下の準備 200・鉄のツルハシ 250');
+    expect(DRAGON_MILESTONES.find(item => item.name === PREP_MILESTONE_NAME)!.seconds).toBe(300);
+    expect(milestoneWords()).toContain('ベッド 150・地下の準備 300・鉄のツルハシ 350');
     expect(V2_ALWAYS).toContain(milestoneWords());
   });
 });
@@ -88,8 +88,8 @@ describe('the live says the hunger bar and the food she carries in two words', (
     expect(JSON.stringify(live.state)).not.toContain('"food"');
   });
   it('says so in the dictionary', () => {
-    expect(V2_ALWAYS).toMatch(/^- foodPoints: total（食料の点＝持ち物の食べ物の合計。満腹とは別）/mu);
-    expect(V2_ALWAYS).toContain('fullness（満腹 0〜20。食料の点とは別）');
+    expect(V2_ALWAYS).toMatch(/^- foodPoints: total（食料の点＝持ち物の食べ物の合計。満腹 fullness とは別）/mu);
+    expect(V2_ALWAYS).toContain('fullness（満腹 0〜20）');
     expect(V2_STAGES.prep).toContain('食料の点（live の foodPoints.total。満腹 fullness とは別）');
   });
 });
@@ -110,7 +110,7 @@ describe('the reason is in real numbers, and the rule is plain', () => {
   });
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
     expect(V2_ALWAYS).toContain('ネザーへ入るまでを 30 分以内に');
-    expect(V2_ALWAYS).toContain('準備は速さのために省かない（地下の準備: 食料 40 点・作業台か板 4。shortage の防具・盾）。足りないと上りの往復で 150 秒以上かかり、死ぬこともある。30 分は準備を含む。');
+    expect(V2_ALWAYS).toContain('準備（meter の地下の準備・shortage）は速さのために省かない。足りないと上りの往復で 150 秒以上かかり、死ぬこともある。30 分は準備を含む。');
     expect(V2_ALWAYS).not.toContain('鉄の夜');
     expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
   });
@@ -144,7 +144,7 @@ describe('the body\'s new stops and names are in the contract', () => {
   });
   it('says in mine and in the map\'s legend that an ore below y=0 is named with deepslate_, and which name to write', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine に書く名前');
-    expect(V2_ALWAYS).toContain('鉱石の id は y<0 で deepslate_ が付く（deepslate_iron_ore）。mine には landmarks の [ ] の中の名前を書く。');
+    expect(V2_ALWAYS).toContain('mine には landmarks の [ ] の中の id を書く（y<0 は deepslate_iron_ore など）。');
   });
   it('reads a landmark line that carries the ore\'s id in brackets, as it reads one without', () => {
     const self = { x: 150, y: -6, z: 208 };

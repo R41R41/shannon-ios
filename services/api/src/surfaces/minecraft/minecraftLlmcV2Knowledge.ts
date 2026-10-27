@@ -17,8 +17,8 @@ const GOAL = [
   '- 目的は課題の goal。持ち主の物差しは速さ: エンドラ討伐なら、ネザーへ入るまでを 30 分以内に、止まりや戻りを減らしてなめらかに進める。',
   '- 速さと同じだけ、生きていることが大事。死ぬと持ち物と時間を失い、用心より時間がかかる。',
   '- 時間を理由に止めたり、早く完了にしたりしない（完了は目的を観測した時だけ）。目安は物差しで、手を決める物ではない。',
-  '- 準備は速さのために省かない（地下の準備: 食料 40 点・作業台か板 4。shortage の防具・盾）。足りないと上りの往復で 150 秒以上かかり、死ぬこともある。30 分は準備を含む。',
-  `- エンドラ討伐の課題の節目の目安（開始からの秒）: ${milestoneWords()}。live の meter が、今と次の節目（準備も）を言う。`,
+  '- 準備（meter の地下の準備・shortage）は速さのために省かない。足りないと上りの往復で 150 秒以上かかり、死ぬこともある。30 分は準備を含む。',
+  `- エンドラ討伐の課題の節目の目安（開始からの秒）: ${milestoneWords()}。live の meter が、今と次の節目を言う。`,
 ].join('\n');
 
 const DECIDE = [
@@ -52,7 +52,7 @@ const LIVE = [
   '- plan: revision・done（済み扱いの節/全体。達成率ではない）・next（予定の次 3 節。すぐできるとは限らない）・blocked（止めた節と理由）・'
     + 'rules（今の節と親の禁止・注意。最大 8）。今の節と道は planNow にある。',
   '- 済む条件: 節の doneWhen。観測で満たされるとコードが済みにする（今済んだ印ではない）。親が済むと開いた子（止めた子以外）は「不要」で閉じる。',
-  '- urgent: 急ぎの理由（敵が近い・体力が低く敵がいる・前の act が反射か stopIf で止まった）。出ている時の live は短い版で、answer に従う。',
+  '- urgent: 急ぎの理由（敵が近い・体力が低く敵がいる・前の act が反射か stopIf で止まった）。answer に従う（live は末行の短い版）。',
   '- answer: 急ぎの時の答え方（考えは 2〜3 文・手は 3 つまで）。',
   '- investigation: 驚き（急な落下など）の後に頭が調べた probe の答え。',
   '- planNow: 今の節「[p6.4] 題（済む条件: …／今: 未: 足りない物 数/要る数）＠座標（道: 親›子）」。今: は条件を今の観測で読んだ結果。',
@@ -77,8 +77,8 @@ const LIVE = [
   '- scan: 体の走査（ログイン・リスポーン・次元変化の後に 1 回）。',
   '- stops: 最近の止まり（マス・理由・何秒前）。',
   '- state: at 位置・dimension・inside（今いる構造物）・biome・time・weather・heldItem・worn（防具の耐久 残り/最大）・'
-    + 'health（0〜20。ハート 1 個 = 2）・fullness（満腹 0〜20。食料の点とは別）・fullnessLostIn5min（5 分で減った満腹）・saturation（隠れた満腹の余り）・oxygen（息 n/20）・minutes（課題の経過分）。',
-  '- foodPoints: total（食料の点＝持ち物の食べ物の合計。満腹とは別）・items（品目×数（点））。',
+    + 'health（0〜20。ハート 1 個 = 2）・fullness（満腹 0〜20）・fullnessLostIn5min（5 分で減った満腹）・saturation（隠れた満腹の余り）・oxygen（息 n/20）・minutes（課題の経過分）。',
+  '- foodPoints: total（食料の点＝持ち物の食べ物の合計。満腹 fullness とは別）・items（品目×数（点））。',
   '- inventory: 持ち物（品目×数）。「ほか N 件は略」= 省いた分。',
   '- threats: 敵 1 体 1 行（#id 名前 距離 (座標) 方角・見え方）。行になるのは 24m 内、クリーパー・エンダーマン 32m 内、飛び道具の種類（スケルトン・ブレイズ・ガストなど）48m 内、急ぎで名指し・見える敵。'
     + '見え方: 見える（射線の中）= 撃たれる所 / 見えない・道はある = 回って来る / 壁の向こうで届かない = 急ぎではない / 飛び道具 = 遠くから撃つ種類。'
@@ -97,7 +97,7 @@ const MAP = [
   '- 足=(x,y,z) が足のマス、頭は y+1。層は全部同じ範囲。? は未ロード（不明）。',
   // The body's legend, word for word (mb-llmc-cand 2): its symbol lines and the surface form's. The layers' ranges are the v2 map's own (above).
   ...MAP_LEGEND_V2.split('\n').slice(0, 10),
-  '鉱石の id は y<0 で deepslate_ が付く（deepslate_iron_ore）。mine には landmarks の [ ] の中の名前を書く。',
+  'mine には landmarks の [ ] の中の id を書く（y<0 は deepslate_iron_ore など）。',
   '縦: 足の列の上下（「上: y=46〜51 .×6 / y=52 #」= 空気 6 段の上が石）。',
 ].join('\n');
 
