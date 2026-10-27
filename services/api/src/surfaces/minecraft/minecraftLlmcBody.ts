@@ -223,7 +223,7 @@ export function readinessParts(llmc: LlmcBodyParts, view: object | null, observa
   const display = llmc.plan(), nowTitle = display?.nodes.find(item => item.id === display.current)?.title ?? null;
   const shortage = preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle,
     worn: wornItems(facts.world.worn) });
-  const recovery = recoveryLine(facts.hunger, facts.health, facts.food);
+  const recovery = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts);
   // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the plan is not changed).
   const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? null, feetIn(facts.world)) : null;
   return { ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}), ...(shortage ? { shortage } : {}),
@@ -236,7 +236,7 @@ export function withRecoveryFact(name: string, input: unknown, stored: string, o
   let hands: readonly { do?: string }[] = [];
   try { hands = (normalizeActInput(input).input as ActInput | null)?.hands ?? []; } catch { hands = []; }
   const facts = hands.some(hand => hand.do === 'wait') ? readinessOf(observation) : null;
-  const recovery = facts ? recoveryLine(facts.hunger, facts.health, facts.food) : null;
+  const recovery = facts ? recoveryLine(facts.hunger, facts.health, facts.food, facts.counts) : null;
   return recovery ? `${stored}\n頭: ${recovery}` : stored;
 }
 

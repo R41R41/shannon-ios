@@ -23,8 +23,8 @@ import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicF
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
-import { seenDoneUpdate } from '../surfaces/minecraft/minecraftPlanDone.js';
-import { followNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { seenDoneUpdate, withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
+import { chestNodesDone, followNode, noteChestsOpened } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
 import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
 import { LLMC_PROBE } from '../surfaces/minecraft/minecraftLlmcProbe.js';
@@ -210,8 +210,10 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const seen = () => control.seen(bodyId(), LLMC_STALE_FRAME_MS);
   const decided = () => seen()?.observation ?? null;
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
+  // Run 42: a chest node is done when an act opened the chest at its place (`chestNodesDone`), with the nodes the frame shows done.
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    rules: true, compact: true, seen: tree => seenDoneUpdate(tree, observe()), follow: tree => followNode(step.taskId, tree) });
+    rules: true, compact: true, seen: tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
+    follow: tree => followNode(step.taskId, tree) });
   const worldOf = () => {
     const world = decided()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
@@ -225,6 +227,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step decides again while its items run.
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId,
     context: () => minecraftTaskContext(step, bodyId(), step.id, display()), observe, log });
+  queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {

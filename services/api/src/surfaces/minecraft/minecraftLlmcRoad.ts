@@ -2,6 +2,7 @@ import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { doneFacts, parseDoneWhen, predicateHolds, type DoneFacts } from './minecraftPlanDone.js';
 import { carried } from './minecraftConditions.js';
+import { PREP_SKIP_SECONDS } from './minecraftLlmcPrepRules.js';
 
 /**
  * mb-llmc v2 (mb-llmc-cand 11, chapter 4 A: the goal's yardstick and the stage road): for a task that goes for the dragon, two lines of the live
@@ -47,7 +48,7 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ベッド', seconds: 150, doneWhen: 'have:bed' },
   // 300 s: the quickest preparation of runs 39-41 (run 40: two village chests, 39.6 points at +298; the table or planks 4 at +45 to +94).
   { name: PREP_MILESTONE_NAME, seconds: 300, doneWhen: 'food>=40&have:crafting_table|food>=40&have:planks>=4', short: '地下の準備', kept: true, holds: prepHolds, node: isPrepMilestoneNode,
-    cost: '省くと上りの往復で約 150 秒失う', now: prepNow },
+    cost: `省くと地上へ戻るのに約 ${PREP_SKIP_SECONDS} 秒かかり、死ぬこともある`, now: prepNow },
   // 350 s, after the preparation (it was 250, before a preparation that takes 300): run 38 had it at +342 from a village chest.
   { name: '鉄のツルハシ', seconds: 350, doneWhen: 'have:iron_pickaxe' },
   { name: 'バケツ', seconds: 600, doneWhen: 'have:bucket' },

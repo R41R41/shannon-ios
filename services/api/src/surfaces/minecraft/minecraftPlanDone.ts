@@ -277,3 +277,12 @@ export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | nu
   return { update: { ops }, ids: [...seen, ...under.map(item => item.id)].slice(0, PLAN_LIMITS.ops),
     ...(held.length ? { held } : {}), ...(under.length ? { closed: under.map(item => `${item.id}←${item.by}`).slice(0, 8) } : {}) };
 }
+
+/** Run 42: the chest nodes an opened chest closes (`chestNodesDone`), after the nodes the frame shows done (each id once, within the ops' bound). */
+export function withChestsDone(seen: SeenDone | null, chests: { update: PlanUpdate; ids: readonly string[] } | null): SeenDone | null {
+  if (!chests?.ids.length) return seen;
+  const ids = chests.ids.filter(id => !seen?.ids.includes(id));
+  if (!ids.length) return seen;
+  const ops = [...(seen?.update.ops ?? []), ...(chests.update.ops ?? []).filter(op => 'id' in op && ids.includes(String(op.id)))].slice(0, PLAN_LIMITS.ops);
+  return { ...(seen ?? {}), update: { ...(seen?.update ?? {}), ops }, ids: [...(seen?.ids ?? []), ...ids].slice(0, PLAN_LIMITS.ops) };
+}

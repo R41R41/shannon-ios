@@ -269,8 +269,9 @@ export function firstPlanInput(goal: string, world: Record<string, unknown> | nu
 function readinessInput(world: Record<string, unknown>): string[] {
   const dimension = typeof world.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;
   const food = carriedFood(world, {}).points, health = typeof world.health === 'number' ? world.health : null;
-  const shortage = preparationShortage({ dimension, counts: carriedItemCounts(world, {}), food, nowTitle: null });
-  const recovery = recoveryLine(typeof world.food === 'number' ? world.food : null, health, food);
+  const counts = carriedItemCounts(world, {});
+  const shortage = preparationShortage({ dimension, counts, food, nowTitle: null });
+  const recovery = recoveryLine(typeof world.food === 'number' ? world.food : null, health, food, counts);
   return [`食料: ${food} 点`, ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }
 

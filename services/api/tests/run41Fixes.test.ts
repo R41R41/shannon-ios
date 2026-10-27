@@ -26,7 +26,7 @@ const withState = (done: string[], current: string | null, base: PlanTree = tree
 describe('the preparation is a milestone of the meter, with its seconds and its lateness', () => {
   it('is the next milestone after the bed, with the target, how late, what she has now and what leaving it out costs', () => {
     const line = meterLine(tree, have([['blue_bed', 1], ['spruce_planks', 2]]), 260 / 60)!;
-    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（あと 40 秒）・今 食料 0/40 点・作業台 無・板 2。省くと上りの往復で約 150 秒失う');
+    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（あと 40 秒）・今 食料 0/40 点・作業台 無・板 2。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある');
     expect(meterLine(tree, have([['blue_bed', 1]]), 150 / 60)).toContain('目安 300 秒（あと 150 秒）');
   });
   it('is met by 40 food points with a table or 4 planks; a table alone or the food alone is not', () => {
@@ -42,7 +42,7 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     const kit = have([['blue_bed', 1], ['iron_pickaxe', 1]]);
     const open = meterLine(tree, kit, 400 / 60)!;
     expect(open).toContain('次の節目 バケツ');
-    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点・作業台 無・板 0。省くと上りの往復で約 150 秒失う。飛ばしたなら plan.update に書く）');
+    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点・作業台 無・板 0。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある。飛ばしたなら plan.update に書く）');
     expect(meterLine(withState(['p2'], null), kit, 400 / 60)).not.toContain('まだの節目');
   });
   it('points the meter at the preparation while the plan\'s current node is one, though a later milestone is met', () => {
@@ -98,19 +98,19 @@ describe('the reason is in real numbers, and the rule is plain', () => {
   it('says the fullness lasts 30 minutes, that there is no food or wood underground, 150 s of climbs, and the 372 s without a table', () => {
     expect(PREP_RULES_WORDS).toContain('満腹は 30 分もつので、飢えのためではない');
     expect(PREP_RULES_WORDS).toContain('地下には食べ物も木も無く');
-    expect(PREP_RULES_WORDS).toContain('上りの往復で約 150 秒');
+    expect(PREP_RULES_WORDS).toContain('地上へ戻るのに約 500 秒かかる');
     expect(PREP_RULES_WORDS).toContain('372 秒止まり');
     expect(PREP_RULES_WORDS).not.toContain('戻りが長い');
     expect(PREP_RULES_WORDS).not.toContain('鉄の夜');
     expect(PREP_RULES_WORDS).not.toContain('の時だけ');
   });
-  it('asks for the numbers in the why of a hand that goes down, as a request', () => {
-    expect(PREP_RULES_WORDS).toContain('「[p4.1] 鉄へ下りる（食料 0/40・作業台 無・板 2）」');
-    expect(V2_STAGES.prep).toContain('「[p4.1] 鉄へ下りる（食料 0/40・作業台 無・板 2）」');
+  it('asks for the numbers in the why of a hand that goes down, as a check (run 42: the example of a pack that lacks all, as a way through, went)', () => {
+    expect(PREP_RULES_WORDS).toContain('「[p4.1] 鉄へ下りる（食料 40/40・作業台 有・板 6）」）。数は確かめで、足りない物は下りる前に埋める。');
+    expect(V2_STAGES.prep).toContain('「[p4.1] 鉄へ下りる（食料 40/40・作業台 有・板 6）」');
   });
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
     expect(V2_ALWAYS).toContain('ネザーへ入るまでを 30 分以内に');
-    expect(V2_ALWAYS).toContain('準備（meter の地下の準備・shortage）は速さのために省かない。足りないと上りの往復で 150 秒以上かかり、死ぬこともある。30 分は準備を含む。');
+    expect(V2_ALWAYS).toContain('準備（meter の地下の準備・shortage）は速さのために省かない。足りないと地上へ戻るのに約 500 秒かかり、死ぬこともある。30 分は準備を含む。');
     expect(V2_ALWAYS).not.toContain('鉄の夜');
     expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
   });

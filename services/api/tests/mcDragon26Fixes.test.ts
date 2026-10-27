@@ -146,10 +146,11 @@ describe('fix 3: a descent with too little food says so', () => {
     const note = descentNote(down, surface([['cooked_beef', 1]], { nearbyEntities: [{ name: 'cow', distance: 14, id: 5 }] }))!;
     expect(note).toContain('食料 20.8/40 点・作業台 無・板 0 のまま地下 y=36 へ下りる手');
     expect(note).toContain('cow 14m');
-    expect(note).toContain('why に「[p4.1] 鉄へ下りる（食料 0/40・作業台 無・板 2）」の形で今の数と理由を書く');
+    // Run 42: no way past it (「このまま行くなら why に…書く」 was read as one); the loss as the runs measured it.
+    expect(note).not.toContain('このまま行くなら');
     expect(note).not.toContain('鉄の夜');
     // Run 41: the reason in real numbers, not the fullness (it is 20) that the live shows beside it.
-    expect(note).toContain('上りの往復で約 150 秒かかる');
+    expect(note).toContain('地上へ戻るのに約 500 秒かかる');
     expect(note).toContain('372 秒止まり');
   });
   it('names the table when the food is enough but no table and fewer than 4 planks are carried (run 41: 372 s without one)', () => {

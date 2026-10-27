@@ -1,6 +1,6 @@
 import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
 import { milestoneWords } from './minecraftLlmcRoad.js';
-import { PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
+import { PREP_RULES_WORDS, PREP_SKIP_SECONDS } from './minecraftLlmcPrepRules.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -17,7 +17,7 @@ const GOAL = [
   '- 目的は課題の goal。持ち主の物差しは速さ: エンドラ討伐なら、ネザーへ入るまでを 30 分以内に、止まりや戻りを減らしてなめらかに進める。',
   '- 速さと同じだけ、生きていることが大事。死ぬと持ち物と時間を失い、用心より時間がかかる。',
   '- 時間を理由に止めたり、早く完了にしたりしない（完了は目的を観測した時だけ）。目安は物差しで、手を決める物ではない。',
-  '- 準備（meter の地下の準備・shortage）は速さのために省かない。足りないと上りの往復で 150 秒以上かかり、死ぬこともある。30 分は準備を含む。',
+  `- 準備（meter の地下の準備・shortage）は速さのために省かない。足りないと地上へ戻るのに約 ${PREP_SKIP_SECONDS} 秒かかり、死ぬこともある。30 分は準備を含む。`,
   `- エンドラ討伐の課題の節目の目安（開始からの秒）: ${milestoneWords()}。live の meter が、今と次の節目を言う。`,
 ].join('\n');
 

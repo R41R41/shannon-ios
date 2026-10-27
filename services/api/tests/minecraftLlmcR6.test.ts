@@ -9,7 +9,10 @@ import { seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import {
   carryDone, FIRST_PLAN_SYSTEM_R5, FIRST_PLAN_SYSTEM_R6, firstPlanInbox, firstPlanInput, forgetFirstPlans, planFromAnswer, seedPlan, startFirstPlan,
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { foodLeads, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { foodLeads, LOW_HEALTH_COST, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+/** Run 42: the fact, what to eat from the pack (none here) and what going on without it cost. */
+const NO_RECOVERY = '体力 3.7/20 は自然に戻らない（満腹 17＜18、食料 0 点）';
+const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い。食料の当てで取る。${LOW_HEALTH_COST}`;
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 
@@ -101,7 +104,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
   });
 
   it('health does not come back under hunger 18: said as the fact, never at 18 or at full health', () => {
-    expect(recoveryLine(17, 3.7, 0)).toBe('この状態では体力は自然に戻らない（満腹 17＜18、食料 0 点）');
+    expect(recoveryLine(17, 3.7, 0)).toBe(`${NO_RECOVERY}。${LOW_HEALTH_COST}`);
     expect(recoveryLine(18, 3.7, 0)).toBeNull();
     expect(recoveryLine(17, 20, 0)).toBeNull();
   });
@@ -140,7 +143,7 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     expect(keys.slice(0, 4)).toEqual(['planNow', 'shortage', 'recovery', 'map']);
     expect(live.planNow).toBe('[p1.1] 作業台と板を作る＠(296,66,70)（済み: have:crafting_table）（道: 出発の点検（ネザーの奥へ））');
     expect(live.shortage).toBe('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具が無い。食料 0 点（目安 100）');
-    expect(live.recovery).toEqual(['この状態では体力は自然に戻らない（満腹 17＜18、食料 0 点）',
+    expect(live.recovery).toEqual([NO_RECOVERY_LIVE,
       '食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）']);
   });
 
@@ -148,7 +151,7 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     const shaft = body(SHAFT);
     const wait = { id: 'w', name: MC_ACT_TOOL, input: { hands: [{ do: 'wait', seconds: 30 }] } };
     expect(shaft.storedResult!(wait, 'act 全部済み（1/1、30.0秒）\n1 wait 済 30秒待った'))
-      .toBe('act 全部済み（1/1、30.0秒）\n1 wait 済 30秒待った\n頭: この状態では体力は自然に戻らない（満腹 17＜18、食料 0 点）');
+      .toBe(`act 全部済み（1/1、30.0秒）\n1 wait 済 30秒待った\n頭: ${NO_RECOVERY_LIVE}`);
     expect(shaft.storedResult!({ ...wait, input: { hands: [{ do: 'walk', to: at(1, 2, 3) }] } }, 'act 全部済み')).toBe('act 全部済み');
     expect(body({ ...SHAFT, food: 19 }).storedResult!(wait, 'act 全部済み')).toBe('act 全部済み');
   });

@@ -2,7 +2,7 @@ import { orderedPlan, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
-import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, PREP_SKIP_COST, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first, written by the code
@@ -85,10 +85,40 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
 }
 
-/** Health that does not come back by itself (hunger under 18, health under full), said as the fact; null otherwise. */
-export function recoveryLine(hunger: number | null, health: number | null, food: number): string | null {
+/** The fullness each food gives (the game's own hunger points), for what to eat to reach 18. Raw chicken, spider eyes and the like are left out. */
+export const FULLNESS: Readonly<Record<string, number>> = Object.freeze({
+  rabbit_stew: 10, cooked_beef: 8, cooked_porkchop: 8, pumpkin_pie: 8, cooked_mutton: 6, cooked_salmon: 6, cooked_chicken: 6, golden_carrot: 6,
+  mushroom_stew: 6, beetroot_soup: 6, bread: 5, baked_potato: 5, cooked_cod: 5, cooked_rabbit: 5, apple: 4, carrot: 3, beef: 3, porkchop: 3,
+  rabbit: 3, mutton: 2, cod: 2, salmon: 2, melon_slice: 2, sweet_berries: 2, glow_berries: 2, cookie: 2, potato: 1, beetroot: 1, dried_kelp: 1,
+});
+/** Run 42: what the losses of going on with health that does not come back were (the line says them beside the fact). */
+export const LOW_HEALTH_COST = '戻らないまま下りたり戦ったりすると、落下や矢 2〜3 発で死ぬ（実走 42 は体力 11 のまま下りて落ち、矢で死んで持ち物を全部失い、立て直しに約 520 秒かかった）';
+
+/**
+ * Health that does not come back by itself (hunger under 18, health under full): the fact, what in the pack takes the fullness to 18 and how long
+ * health then takes to come back, and what going on without it cost (run 42: the line said the fact alone, 7 decisions in a row, and she went down at
+ * 11.3 and died); null otherwise.
+ */
+export function recoveryLine(hunger: number | null, health: number | null, food: number, counts?: ItemCounts): string | null {
   if (hunger === null || health === null || health >= 20 || hunger >= 18) return null;
-  return `この状態では体力は自然に戻らない（満腹 ${round1(hunger)}＜18、食料 ${round1(food)} 点）`;
+  const fact = `体力 ${round1(health)}/20 は自然に戻らない（満腹 ${round1(hunger)}＜18、食料 ${round1(food)} 点）`;
+  // Fill to 20, not 18: health coming back uses the fullness up (about 1.5 per point), so 18 gives a point or two and stops again.
+  const now = Math.floor(hunger), need = 20 - now;
+  // Natural regeneration at 18 or more: a point every 4 s (80 ticks).
+  const back = `満腹 18 以上の間は体力が 4 秒に 1 戻る（20 まで約 ${Math.max(5, Math.round((20 - health) * 4 / 5) * 5)} 秒。満腹が 18 を切ったらまた食べる）`;
+  const eat: string[] = [];
+  let got = 0;
+  for (const [name, each] of Object.entries(FULLNESS).sort((a, b) => b[1] - a[1])) {
+    if (got >= need) break;
+    const have = counts?.get(name) ?? 0;
+    if (have <= 0) continue;
+    const take = Math.min(have, Math.ceil((need - got) / each));
+    eat.push(`${name}×${take}`);
+    got += take * each;
+  }
+  const plan = !counts ? '' : now + got >= 18 ? `。${eat.join('・')} を食べると満腹 ${Math.min(20, now + got)} になり、${back}`
+    : eat.length ? `。持ち物の食べ物（${eat.join('・')}）では満腹 ${now + got} までで 18 に届かない。食料の当てで足す` : '。持ち物に食べ物が無い。食料の当てで取る';
+  return `${fact}${plan}。${LOW_HEALTH_COST}`;
 }
 
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value)
@@ -219,7 +249,12 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
   if (feet.y - lowest < DESCENT) return null;
   const cows = foodLeads(facts.world, facts.dimension).replace(/^食料の当て: /u, '');
   const near = /m/u.test(cows) && !cows.startsWith('近くに動物') ? `。近くに ${cows} が見えている` : '';
-  return `${lacks.join('・')} のまま地下 y=${Math.round(lowest)} へ下りる手${near}。`
-    + '地下には食べ物も木も無く、足りなくなると地上へ戻る上りの往復で約 150 秒かかる（ある実走では作業台が無いまま 372 秒止まり、上りの途中で死んだ）。'
-    + '先に狩る・焼く・作業台か板 4 を持つ方が往復が減る。このまま行くなら why に「[p4.1] 鉄へ下りる（食料 0/40・作業台 無・板 2）」の形で今の数と理由を書く';
+  // Run 42: she went down at health 11.3 that did not come back, fell and was shot dead; the health is the descent's too.
+  const health = finite(facts.world.health), hunger = finite(facts.world.food);
+  const hurt = health !== null && hunger !== null && health < 20 && hunger < 18 ? `。体力 ${round1(health)}/20 は戻らない（満腹 ${round1(hunger)}＜18）` : '';
+  // Run 42 (the note ended 「このまま行くなら why に…書く」 and she wrote the numbers and went down, as if that were the way through): the cost in
+  // what the runs measured, and what to do first; nothing that reads as a way past it.
+  return `${lacks.join('・')} のまま地下 y=${Math.round(lowest)} へ下りる手${hurt}${near}。`
+    + `地下には食べ物も木も無く、足りなくなると地上へ戻るのに${PREP_SKIP_COST}。`
+    + '下りる前に狩る・焼く・作業台か板 4 を持つ（食べ物の当てが近ければ、取るのは数十秒〜2 分）';
 }

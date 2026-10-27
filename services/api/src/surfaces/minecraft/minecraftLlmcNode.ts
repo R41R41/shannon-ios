@@ -174,8 +174,11 @@ export const PREP_NOTE = '※準備の節（済むまで今の節は移らない
  */
 export function followNode(taskId: string, tree: PlanTree): { to: string; from: string | null; acts: number; words: string } | null {
   const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), { under, open } = questions;
+  // Run 42 (Sonnet tagged p4.1 and p5.1 to p5.3, which the plan never had: every run of them was null and the now stayed on p1.2 for 700 s): a tag
+  // for a node the plan does not have is for its nearest ancestor that it has (p4.1 → p4).
+  const known = (started.get(taskId) ?? []).map(tag => ({ ...tag, node: existingNode(tag.node, questions.byId) }));
   // A parent's tag says nothing of the work under it: it is not counted, and it does not break a run.
-  const counted = (started.get(taskId) ?? []).filter(tag => !(tag.current && tag.node !== tag.current && under(tag.current, tag.node)));
+  const counted = known.filter(tag => !(tag.current && tag.node !== tag.current && under(tag.current, tag.node)));
   const tags = counted.slice(-FOLLOW_AFTER), target = tags[0]?.node;
   if (tags.length < FOLLOW_AFTER || !target || tags.some(tag => tag.node !== target || tag.current !== tree.current) || !open(target)) return null;
   const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
@@ -197,6 +200,59 @@ export function followNode(taskId: string, tree: PlanTree): { to: string; from: 
   return { to: leaf.id, from: tree.current, acts: tags.length, words: `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため。順を変えるなら plan.update の current で戻す。`
     + `飛ばした節は順のまま残っている${skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : ''}）` };
 }
+
+/** The node itself when the plan has it, else its nearest ancestor by the id's dots that it has (`p4.1` → `p4`), else the id as it was. */
+function existingNode(id: string, byId: ReadonlyMap<string, PlanNode>): string {
+  for (let at = id; at; at = at.includes('.') ? at.slice(0, at.lastIndexOf('.')) : '') if (byId.has(at)) return at;
+  return id;
+}
+
+/**
+ * Run 42 (p1.2 「村の箱を開ける」 where 157,67,200: the chest there was emptied at +62, the node had no doneWhen and Sonnet never set it done; it
+ * stayed the current node for 700 s, and under its preparation parent p1 the now never moved to p3 「食料を集める」): a node for opening a chest or
+ * barrel is done when an act opened one at its place. The chests opened, per task, from the act's result (`chest (x,y,z): …` and the hand's line).
+ */
+const CHEST_NODE = /箱|樽|チェスト|chest|barrel/iu;
+const CHEST_SEEN = /^(?:chest|trapped_chest|barrel) \((-?\d+),(-?\d+),(-?\d+)\): |\((-?\d+),(-?\d+),(-?\d+)\) の (?:chest|trapped_chest|barrel) の中身/gmu;
+const CHEST_KEPT = 16;
+interface Opened { x: number; y: number; z: number; node: string | null }
+const opened = new Map<string, Opened[]>();
+/** The chests an act's result says it opened (a hand `chest … 済` and the container's line), with the node its why was tagged for. */
+export function noteChestsOpened(taskId: string, text: string, why: string): void {
+  if (!/^\d+ chest 済/mu.test(text)) return;
+  const node = TAG.exec(why)?.[1] ?? null;
+  const found: Opened[] = [];
+  for (const match of text.matchAll(CHEST_SEEN)) {
+    const [x, y, z] = (match[1] !== undefined ? match.slice(1, 4) : match.slice(4, 7)).map(Number) as [number, number, number];
+    if (!found.some(item => item.x === x && item.y === y && item.z === z)) found.push({ x, y, z, node: node === URGENT_TAG ? null : node });
+  }
+  if (!found.length) return;
+  const list = [...(opened.get(taskId) ?? []), ...found].slice(-CHEST_KEPT);
+  opened.delete(taskId);
+  opened.set(taskId, list);
+  if (opened.size > 32) opened.delete(opened.keys().next().value as string);
+}
+/**
+ * The open chest nodes an opened chest closes: a node that says a chest or barrel, with no doneWhen of its own (one that has it is the frame's to
+ * close) and no open child, whose where is within 2 blocks of a chest opened, or with no where and the act tagged for it. Null when none.
+ */
+export function chestNodesDone(taskId: string, tree: PlanTree): { update: { ops: { op: 'set'; id: string; state: 'done'; reason: string }[] }; ids: string[] } | null {
+  const list = opened.get(taskId);
+  if (!list?.length || !tree.nodes.length) return null;
+  const { open } = treeQuestions(tree);
+  const ops: { op: 'set'; id: string; state: 'done'; reason: string }[] = [];
+  for (const node of tree.nodes) {
+    if (!open(node.id) || !CHEST_NODE.test(node.title) || node.doneWhen?.trim() || tree.nodes.some(kid => kid.parentId === node.id && open(kid.id))) continue;
+    const at = node.where ? firstPoint(node.where) : null;
+    const chest = list.find(item => at ? Math.max(Math.abs(item.x - at.x), Math.abs(item.y - at.y), Math.abs(item.z - at.z)) <= 2 : item.node === node.id);
+    if (chest) ops.push({ op: 'set', id: node.id, state: 'done', reason: `箱 (${chest.x},${chest.y},${chest.z}) を開けた（頭が閉じた）` });
+  }
+  return ops.length ? { update: { ops: ops.slice(0, 8) }, ids: ops.slice(0, 8).map(op => op.id) } : null;
+}
+const firstPoint = (text: string): { x: number; y: number; z: number } | null => {
+  const match = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u.exec(text) ?? /(?<![\d.])(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)(?![\d.])/u.exec(text);
+  return match ? { x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) } : null;
+};
 
 /**
  * The first node before `leaf` in the plan's order that is open and a preparation node, and that the work for `leaf` is not under (a preparation of its own).
@@ -232,4 +288,5 @@ function treeQuestions(tree: PlanTree) {
 export function forgetActNodes(): void {
   tallies.clear();
   started.clear();
+  opened.clear();
 }
