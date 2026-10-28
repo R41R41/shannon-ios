@@ -197,6 +197,9 @@ export interface ActInput {
   dependsOn?: readonly string[]; uses?: readonly number[];
 }
 
+/** The older passes of a repeating act whose lines were folded into counts (amendment A-6 11; the body's form, one entry a pass): how many hand lines it had, how many hands were done and how many stopped. */
+export interface EarlierPass { pass: number; lines: number; done: number; stopped: number }
+
 /** One line a hand, in order: what was done, or where and why it stopped, or that it did not run. */
 export interface ActHandLine {
   i: number; do: HandKind;
@@ -270,7 +273,7 @@ export interface ActResult {
    * here (the lines of the newest passes stay in `lines`).
    */
   outcome?: ActOutcome; handover?: Handover; eventsMore?: EventsMore;
-  earlierPasses?: { passes: number; lines: number; done: number; failed: number };
+  earlierPasses?: readonly EarlierPass[];
   earlierEvents?: readonly InventoryEvent[];
 }
 
@@ -553,5 +556,5 @@ export function readViewResult(text: string | undefined): ViewResult | null {
 }
 
 export { handFieldNames } from './minecraftActHandRules.js';
-export { ACT_MAX_MS, actMilliseconds, actExpectedMilliseconds, actRemainingMilliseconds, VERTICAL_MS_PER_STEP, verticalSteps } from './minecraftActTime.js';
+export { ACT_MAX_MS, actMilliseconds, actExpectedMilliseconds, actRemainingMilliseconds, tunedBy, VERTICAL_MS_PER_STEP, verticalSteps } from './minecraftActTime.js';
 export type { ActTimeTuning } from './minecraftActTime.js';

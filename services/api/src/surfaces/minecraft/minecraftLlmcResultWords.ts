@@ -110,17 +110,22 @@ export function handFacts(line: ActHandLine): string[] {
   return out.map(text => `${FACT}${text}`);
 }
 
-const SHIELD_WORDS: Readonly<Record<Handover['shield'], string>> = { kept: '盾は下げなかった', lowered: '盾が下がった', none: '盾は構えていなかった' };
+/** `dropped` (amendment A-6, the body's new value): the shield's hold broke off on the way to the act. Said as a fact only. A value this head does not know is said as that. */
+const SHIELD_WORDS: Readonly<Record<Handover['shield'], string>> = { kept: '盾は下げなかった', lowered: '盾が下がった', dropped: '盾が途切れた', none: '盾は構えていなかった' };
+const shieldWords = (shield: string): string => (SHIELD_WORDS as Readonly<Record<string, string>>)[shield] ?? '盾の状態は読めなかった';
 /** The fact lines of the act as a whole: what a reflex handed over. */
 export function actFacts(result: ActResult): string[] {
   const out: string[] = [];
   const handover = result.handover;
   if (handover) {
     out.push(`${FACT}反射 ${handover.from} から引き継いだ: 相手 #${handover.target} を ${num(handover.waitedMs / 1000)} 秒待った後、`
-      + `${handover.confirmed ? '同じ相手と確かめて続けた' : '同じ相手とは確かめられなかった'}・${SHIELD_WORDS[handover.shield]}`);
+      + `${handover.confirmed ? '同じ相手と確かめて続けた' : '同じ相手とは確かめられなかった'}・${shieldWords(handover.shield)}`);
   }
-  if (result.earlierPasses) {
-    out.push(`${FACT}古い周回 ${result.earlierPasses.passes} 回分（手の行 ${result.earlierPasses.lines}、済 ${result.earlierPasses.done}、失 ${result.earlierPasses.failed}）は数だけにまとめた`);
+  // The body's list of the passes folded into counts (one entry a pass): how many there are and the sums of their lines, done hands and stopped hands.
+  const earlier = Array.isArray(result.earlierPasses) ? result.earlierPasses.filter(pass => pass && [pass.lines, pass.done, pass.stopped].every(number => Number.isFinite(number))) : [];
+  if (earlier.length) {
+    const sum = (key: 'lines' | 'done' | 'stopped') => earlier.reduce((total, pass) => total + pass[key], 0);
+    out.push(`${FACT}古い周回 ${earlier.length} 回分（手の行 ${sum('lines')}、済 ${sum('done')}、止 ${sum('stopped')}）は数だけにまとめた`);
   }
   return out;
 }

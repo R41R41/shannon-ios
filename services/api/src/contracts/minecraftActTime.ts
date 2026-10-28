@@ -46,10 +46,21 @@ export const VERTICAL_DEFAULT_SECONDS = VERTICAL_DEFAULTS.seconds;
 export type ActTimeTuning = Partial<Record<keyof typeof VERTICAL_MS_PER_STEP, number>>;
 /** A measured ms a step the estimate may take: a finite number of 100 ms to 20 s, else the first guess is kept. */
 const measuredMs = (value: number | undefined): number | null => value !== undefined && Number.isFinite(value) && value >= 100 && value <= 20_000 ? value : null;
+/** The form a vertical hand runs in (stairs when it names none or one this head does not know). */
+export const verticalShapeOf = (hand: Pick<ActHand, 'shape'>): keyof typeof VERTICAL_MS_PER_STEP => hand.shape && Object.hasOwn(VERTICAL_MS_PER_STEP, hand.shape) ? hand.shape : 'stairs';
 const verticalStepMs = (hand: ActHand, tune: ActTimeTuning): number => {
-  const shape = hand.shape && Object.hasOwn(VERTICAL_MS_PER_STEP, hand.shape) ? hand.shape : 'stairs';
+  const shape = verticalShapeOf(hand);
   return measuredMs(tune[shape]) ?? VERTICAL_MS_PER_STEP[shape];
 };
+/**
+ * `tune` with what a vertical hand's result measured (amendment A-6 15): the `progress.msPerUnit` of its line, for the form that hand ran, when it is a number an estimate may take
+ * (else `tune` as it was). The newest measurement of a form replaces the one before it.
+ */
+export function tunedBy(tune: ActTimeTuning, hand: Pick<ActHand, 'do' | 'shape'> | undefined, msPerUnit: unknown): ActTimeTuning {
+  if (!hand || hand.do !== 'vertical' || typeof msPerUnit !== 'number') return tune;
+  const ms = measuredMs(msPerUnit);
+  return ms === null ? tune : { ...tune, [verticalShapeOf(hand)]: ms };
+}
 /** The steps of a vertical hand from the feet's y when it begins (the whole y of the feet; null: not known). */
 export function verticalSteps(hand: ActHand, feetY: number | null): number {
   return feetY === null || typeof hand.toY !== 'number' ? VERTICAL_UNKNOWN_STEPS : Math.abs(hand.toY - Math.floor(feetY));

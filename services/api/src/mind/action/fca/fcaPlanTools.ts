@@ -133,6 +133,11 @@ export interface FcaPlanPort {
   applyLedger(input: Omit<LedgerInput, 'nodes' | 'at'> & { at?: string }): LedgerAdded[];
   /** The ledger's memory (for a test and for the size measure). */
   ledgerSeen(): LedgerSeen;
+  /**
+   * The step's commit succeeded: what the checkpoint of this step held (the tree and the ledger's memory) is saved. The runner calls it right after the commit; the owner of the
+   * ledger's inputs then marks the receipts that checkpoint holds as processed (amendment A-6 12). Absent: nothing is told.
+   */
+  afterCommit?(): void;
 }
 
 /**
@@ -188,7 +193,12 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
    * run 26: after the nodes seen done, the node the model's last acts were tagged for, when it is not the current one: the current node moves to it
    * (`followNode`, `minecraftLlmcNode.ts`) and the plan's note says so once. Absent: the current node moves only by the model's plan.update and by done.
    */
-  follow?(tree: PlanTree): { to: string; from: string | null; acts: number; words?: string } | null }):
+  follow?(tree: PlanTree): { to: string; from: string | null; acts: number; words?: string } | null;
+  /**
+   * Amendment A-6 12: the checkpoint is being taken (the ledger's memory is read into it now), and the commit that saves it succeeded (`FcaPlanPort.afterCommit`). The owner of the
+   * receipts the ledger takes marks them processed only after the second, and only the ones it had taken at the first.
+   */
+  onCheckpoint?(): void; onCommitted?(): void }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
   const held = readPlanTreeWith((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
   const kept = held?.tree ?? null;
@@ -278,11 +288,15 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       return result.added;
     },
     ledgerSeen: () => ledgerSeen,
+    afterCommit() { try { parts.onCommitted?.(); } catch { /* the mark is retried by the next commit; a mark never fails a step */ } },
   };
   const tools: FcaExternalTools = {
     definitions: [parts.rules ? PLAN_UPDATE_RULES_DEFINITION : PLAN_UPDATE_DEFINITION],
-    checkpoint: () => tree.nodes.length || kept
-      ? { fcaPlanTree: tree, ...(ledgerSeen.eventIds.length || ledgerSeen.lastObs ? { fcaPlanLedgerSeen: ledgerSeen } : {}) } : {},
+    checkpoint: () => {
+      parts.onCheckpoint?.();
+      return tree.nodes.length || kept
+        ? { fcaPlanTree: tree, ...(ledgerSeen.eventIds.length || ledgerSeen.lastObs ? { fcaPlanLedgerSeen: ledgerSeen } : {}) } : {};
+    },
     async execute(call) {
       call.signal.throwIfAborted();
       if (call.name !== PLAN_UPDATE_TOOL) throw new Error('FCA_TOOL_NOT_OFFERED');

@@ -395,6 +395,8 @@ export class BodyDouble {
     }
     return this.connectionId;
   }
+  /** The body dropped its record of a command's events without restarting (the cap on unacknowledged events): the `events` command is answered `lost: true`. */
+  forgetEvents(id: string): void { this.records.delete(id); }
   /** The body process restarts: a new boot and connection; what it ran and what it held are gone with it, and so is its record of the events it had not delivered. */
   restart(): void {
     for (const entry of this.entries.values()) entry.state = 'ended';
@@ -551,7 +553,11 @@ export class BenchC {
     forgetCleanups();
   }
   /** The step's end: the plan (the tree and the ledger's memory) is saved as the runtime would keep it, so a head that starts after this reads it back. */
-  commit(): unknown { this.checkpoint = this.savedCheckpoint(); return this.checkpoint; }
+  commit(): unknown {
+    this.checkpoint = this.savedCheckpoint();
+    this.current.parts.ports.plan.afterCommit?.();      // the runner tells the plan it was saved (the receipts its ledger took are marked processed)
+    return this.checkpoint;
+  }
   /** The plan a head that starts next reads (what the last step committed): set by a test that begins from a saved task. */
   setCheckpoint(checkpoint: unknown): void { this.checkpoint = checkpoint; }
   /** The step's lifecycle of the body (the mode's `withLlmcBody` over an empty inner): what a decision reads (`context`), the frame it read (`readOf`) and whether the body has left it (`drifted`). */

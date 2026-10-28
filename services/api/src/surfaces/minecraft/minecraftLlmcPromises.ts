@@ -38,6 +38,11 @@ export interface LedgerInput {
   /** The body's inventory events (a receipt's `delta`s and pages, or an act-less reflex's WorkingEvent `inventory.changed`). */
   events: readonly InventoryEvent[];
   by?: LedgerBy;
+  /**
+   * Amendment A-6 14: the verb of the hand each event came from, by the event's id (`${command}:${pass}:${hand}:${seq}` names the hand; the receipt's line or the act as it was
+   * sent says what the hand was). One act can hold a craft and a smelt, so `by.do` (one verb for the whole call) is only the fallback of an event this does not name.
+   */
+  hands?: Readonly<Record<string, string>>;
   /** The definitions the command was sent with (`snapshotUses`). Absent: the act declared no use. */
   uses?: readonly UsesSnapshot[];
   /** The newest observation the caller has (an older one than the ledger took does not rewrite `have`). Call at each new observation too, with no events. */
@@ -72,9 +77,9 @@ const REASONS: Readonly<Record<string, string>> = { ingredient: 'craft_ingredien
   stored: 'stored', retrieved: 'retrieved' };
 /** The reasons of the body's events the ledger names (any other is read as `unexplained`). */
 export const LEDGER_REASONS: readonly string[] = Object.keys(REASONS);
-function reasonOf(event: InventoryEvent, by: LedgerBy | undefined): string {
+function reasonOf(event: InventoryEvent, by: LedgerBy | undefined, hands?: LedgerInput['hands']): string {
   const reason = event.reason as string;
-  return reason === 'ingredient' && by?.do === 'smelt' ? 'smelt_ingredient' : REASONS[reason] ?? 'unexplained';
+  return reason === 'ingredient' && (hands?.[event.id] ?? by?.do) === 'smelt' ? 'smelt_ingredient' : REASONS[reason] ?? 'unexplained';
 }
 
 /** What an observation gives the ledger: the connection it belongs to, its number, the counts, and the death counter it shows. */
@@ -114,7 +119,10 @@ const isWorn = (event: InventoryEvent): boolean => WORN_REASONS.has(event.reason
 /** `stored` and `retrieved` (a chest) and putting armour on are the item changing place: told as `moved`, never as consumed or gained. */
 const isMoved = (event: InventoryEvent): boolean => event.reason === 'stored' || event.reason === 'retrieved' || isWorn(event);
 
-/** `delta` is what the event does to the count she has (0 for armour put on: worn is counted); `shown` is what the event says (a worn piece is 1). */
+/**
+ * `delta` is what the event does to the count she has **of the item the promise is of now** (0 for armour put on: worn is counted, and 0 for an event of an item the promise was
+ * revised away from: it changes another item's count, which this promise does not count); `shown` is what the event says of the item it is put to (a worn piece is 1).
+ */
 interface Entry { event: InventoryEvent; delta: number; shown: number; declared: boolean; rev: number; item: string; connection: string; old: boolean }
 
 /** Where an event came from: the call's `by`, and what its id says (`${command}:${pass}:${hand}:${seq}`) where the call does not. */
@@ -171,15 +179,16 @@ export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: Ledger
     // The events that are this promise's: by the definition the command was sent with when the item is that, else by the promise as it is.
     const entries: Entry[] = [];
     for (const event of fresh) {
-      const viaSnapshot = snapshot ? deltaFor(snapshot.item, event) : 0;
-      const shown = viaSnapshot !== 0 ? viaSnapshot : deltaFor(promise.item, event);
+      // Amendment A-6 13: the definition the command was sent with says whose the event is (its item and rev); what it does to the count the promise keeps is by the item the promise is of now.
+      const viaSnapshot = snapshot ? deltaFor(snapshot.item, event) : 0, own = deltaFor(promise.item, event);
+      const shown = viaSnapshot !== 0 ? viaSnapshot : own;
       if (shown === 0) continue;
-      entries.push({ event, delta: isWorn(event) ? 0 : shown, shown, declared: viaSnapshot !== 0, rev: viaSnapshot !== 0 ? snapshot!.rev : promise.rev,
+      entries.push({ event, delta: isWorn(event) ? 0 : own, shown, declared: viaSnapshot !== 0, rev: viaSnapshot !== 0 ? snapshot!.rev : promise.rev,
         item: viaSnapshot !== 0 ? snapshot!.item : promise.item, connection: connectionOf(event), old: isOld(event) });
     }
     const pending = (ledgerSeen.ahead ?? []).filter(item => item.promise === promise.id);
     const live = entries.filter(entry => !entry.old);
-    const newAhead = (list: Entry[]): LedgerAhead[] => list.map(entry => ({ promise: promise.id, delta: entry.delta, connection: entry.connection, obsSeq: obsOf(entry.event) }));
+    const newAhead = (list: Entry[]): LedgerAhead[] => list.filter(entry => entry.delta !== 0).map(entry => ({ promise: promise.id, delta: entry.delta, connection: entry.connection, obsSeq: obsOf(entry.event) }));
     // What the new observation shows of the events not seen before, and what it does not show yet.
     const coveredPending = newer ? pending.filter(item => coveredBy(item.connection, item.obsSeq)) : [];
     const coveredLive = newer ? live.filter(entry => coveredBy(entry.connection, obsOf(entry.event))) : [];
@@ -202,13 +211,13 @@ export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: Ledger
     }
     const written: PromiseEvent[] = [];
     for (const line of lines) {
-      const first = line.entries[0]!, net = sum(line.entries), worn = !line.net && isWorn(first.event);
+      const first = line.entries[0]!, net = sumShown(line.entries), worn = !line.net && isWorn(first.event);
       cur = round1(cur + sum(line.entries.filter(entry => !entry.old)));
       if (net === 0 && !worn) continue;
-      const reason = line.net ? (net > 0 ? 'crafted' : 'craft_ingredient') : reasonOf(first.event, input.by);
+      const reason = line.net ? (net > 0 ? 'crafted' : 'craft_ingredient') : reasonOf(first.event, input.by, input.hands);
       const kind: PromiseEvent['kind'] = first.event.reason === 'death' ? 'lost_death' : first.event.reason === 'unexplained' ? 'unexplained' : !line.net && isMoved(first.event) ? 'moved' : net < 0 ? 'consumed' : 'gained';
       const source = byOf(input.by, first.event.id);
-      written.push({ id: first.event.id, at: input.at, kind, count: kind === 'unexplained' ? net : Math.abs(worn ? sumShown(line.entries) : net), have: Math.max(0, cur), declared: first.declared, reason,
+      written.push({ id: first.event.id, at: input.at, kind, count: kind === 'unexplained' ? net : Math.abs(net), have: Math.max(0, cur), declared: first.declared, reason,
         promiseRev: first.rev, item: first.item, ...(source ? { by: source } : {}) });
     }
     if (observed !== null && diff !== 0) {
@@ -338,18 +347,22 @@ function lineOf(promise: PlanPromise, facts: DoneFacts | null, context: PromiseL
   }
   const recent = context.since === undefined ? [] : promise.ledger.filter(event => event.at > context.since!);
   const died = recent.filter(event => event.kind === 'lost_death');
-  const changes = changesWords(recent.filter(event => event.kind !== 'lost_death'), unit);
+  const changes = changesWords(recent.filter(event => event.kind !== 'lost_death'), unit, promise.item);
   if (changes) parts.push(changes);
   if (died.length) parts.push(`死んで ${round1(died.reduce((total, event) => total + event.count, 0))}${unit || ' '}失った`);
   const short = have === undefined ? 0 : round1(promise.count - have);
   return `${head}: ${parts.join('・')}${short > 0 && !died.length ? `（足りない ${short}）` : ''}`;
 }
 
-/** 「直前に 2 減った（理由: …）」: what the events after the last decision took from the promise's item and gave to it. */
-function changesWords(events: readonly PromiseEvent[], unit: string): string {
+/**
+ * 「直前に 2 減った（理由: …）」: what the events after the last decision took from the promise's item and gave to it. An event put to the definition the promise had before it was
+ * revised to another item (its `item` is that item's) changed that item's count, not this one's: it is said apart, with its item (「改訂前の品目 板 が 4 減った」).
+ */
+function changesWords(all: readonly PromiseEvent[], unit: string, itemNow: string): string {
+  const events = all.filter(event => !event.item || event.item === itemNow), before = all.filter(event => event.item && event.item !== itemNow);
   const signed = (event: PromiseEvent): number => event.kind === 'consumed' ? -event.count : event.kind === 'gained' ? event.count
     : event.kind === 'moved' ? (event.reason === 'stored' ? -event.count : event.reason === 'retrieved' ? event.count : 0) : event.kind === 'unexplained' ? event.count : 0;
-  const part = (list: PromiseEvent[], word: string): string | null => {
+  const part = (list: PromiseEvent[], word: string, unit_ = unit): string | null => {
     if (!list.length) return null;
     const total = round1(list.reduce((sum, event) => sum + (event.reason === 'reflex_armor' && event.kind === 'moved' ? event.count : Math.abs(signed(event))), 0));
     const reasons = [...new Set(list.map(event => reasonWords(event.reason)))].filter(Boolean).join('・');
@@ -357,13 +370,19 @@ function changesWords(events: readonly PromiseEvent[], unit: string): string {
     const declaredWords = act.length ? (act.every(event => event.declared) ? '申告の用途' : act.some(event => event.declared) ? '一部は申告の用途' : '申告の用途ではない') : '';
     const placeOnly = list.every(event => event.kind === 'moved') ? (list.every(event => event.reason === 'reflex_armor') ? '持ち物から防具の欄へ移っただけで、持っている数は変わらない' : '置き場所が変わっただけ') : '';
     const note = [declaredWords, placeOnly].filter(Boolean).join('。');
-    return `${total}${unit || ' '}${word}${reasons ? `（理由: ${reasons}${note ? `。${note}` : ''}）` : ''}`;
+    return `${total}${unit_ || ' '}${word}${reasons ? `（理由: ${reasons}${note ? `。${note}` : ''}）` : ''}`;
   };
   const lessList = events.filter(event => signed(event) < 0), moreList = events.filter(event => signed(event) > 0);
   // Armour put on moves nothing in the count she has (worn is counted): it is said as what it is, beside the less and the more.
   const wornList = events.filter(event => event.kind === 'moved' && event.reason === 'reflex_armor');
   const worn = wornList.length ? part(wornList, '身に着けた') : null;
   const pieces = [part(lessList, '減った'), part(moreList, '増えた'), worn].filter((item): item is string => !!item);
+  for (const item of [...new Set(before.map(event => event.item!))]) {
+    const mine = before.filter(event => event.item === item);
+    const words = [part(mine.filter(event => signed(event) < 0), '減った', ''), part(mine.filter(event => signed(event) > 0), '増えた', ''), part(mine.filter(event => signed(event) === 0), '動いた', '')]
+      .filter((entry): entry is string => !!entry);
+    if (words.length) pieces.push(`改訂前の品目 ${itemWord(item)} が ${words.join('・')}`);
+  }
   return pieces.length ? `直前に ${pieces.join('・')}` : '';
 }
 

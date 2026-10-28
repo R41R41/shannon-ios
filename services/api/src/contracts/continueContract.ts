@@ -170,7 +170,7 @@ export interface ControlView {
   combatMark?: { skill: string; target?: number; until: string };
   waiting: { command: string; since: string; behind: string }[];
 }
-export interface Handover { from: string; target: number; waitedMs: number; reflexSettledAt: string; confirmed: boolean; shield: 'kept' | 'lowered' | 'none' }
+export interface Handover { from: string; target: number; waitedMs: number; reflexSettledAt: string; confirmed: boolean; shield: 'kept' | 'lowered' | 'dropped' | 'none' }
 export interface ReflexCappedData { limit: 'melee_hands' | 'melee_hits' | 'budget_arrow' | 'budget_eat' | 'budget_armor'; count: number; bridge: 'shield' | 'step_back' | 'none'; until: string | null }
 
 // ---- 5. life ---------------------------------------------------------------------------------------------------------------------------------

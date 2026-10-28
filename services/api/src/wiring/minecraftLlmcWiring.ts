@@ -259,7 +259,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   // Run 42: a chest node is done when an act opened the chest at its place (`chestNodesDone`), with the nodes the frame shows done.
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    rules: true, compact: true, seen: tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
+    rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen: tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
     follow: tree => followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(doneFacts(observe()))) });
   const worldOf = () => {
     const world = decided()?.state.world;

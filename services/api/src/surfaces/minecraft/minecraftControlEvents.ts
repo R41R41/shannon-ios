@@ -61,12 +61,34 @@ export function storedPages(store: MinecraftControlStore, command: string, fromS
   return { events, lost: false, nextSeq: next, complete: next >= total };
 }
 
-/** What the ledger takes of one command (`FcaPlanPort.applyLedger`'s input): the events once each, whose act they were, the definitions it was sent with and where the body was. */
+/**
+ * The verb of the hand each event came from (amendment A-6 14): the event's id names its pass and hand (`${command}:${pass}:${hand}:${seq}`), the receipt's line of that pass and hand says
+ * what it was, and an older pass folded into a count (no line of its own) is what the act was sent with at that hand. An event that names none (a reflex's) has no entry.
+ */
+export function handKindsOf(events: readonly InventoryEvent[], result: string | undefined, sent: readonly { do: string }[] | undefined): Record<string, string> {
+  const lines = readActResult(result)?.lines ?? [];
+  const out: Record<string, string> = {};
+  for (const event of events) {
+    const match = /^.+:(\d+):(\d+):\d+$/u.exec(event.id);
+    if (!match || event.id.startsWith('reflex:')) continue;
+    const pass = Number(match[1]), hand = Number(match[2]);
+    const line = lines.find(item => item.i === hand && (item.pass ?? 1) === pass);
+    const kind = line?.do ?? sent?.[hand - 1]?.do;
+    if (kind) out[event.id] = kind;
+  }
+  return out;
+}
+
+/**
+ * What the ledger takes of one command (`FcaPlanPort.applyLedger`'s input): the events once each, whose act they were, the definitions it was sent with and where the body was.
+ * `result` (the receipt's) and `sent` (the hands the act was sent with) tell each event's hand (`handKindsOf`): a smelt's ingredient is not a craft's.
+ */
 export function ledgerInputFor(parts: { id: string; item?: string; events: readonly InventoryEvent[]; uses: readonly UsesSnapshot[]; observation: BodyObservation | null;
-  connectionId: string; lost?: boolean }): Omit<LedgerInput, 'nodes' | 'at'> {
+  connectionId: string; lost?: boolean; result?: string | undefined; sent?: readonly { do: string }[] | undefined }): Omit<LedgerInput, 'nodes' | 'at'> {
+  const hands = handKindsOf(parts.events, parts.result, parts.sent);
   const by: LedgerBy = { command: parts.id, ...(parts.item ? { item: parts.item } : {}) };
   const run = (parts.observation?.state as { bodyRun?: { bodyBoot?: unknown; connectionId?: unknown } } | undefined)?.bodyRun;
   const from = typeof run?.bodyBoot === 'string' ? { bodyBoot: run.bodyBoot, connectionId: parts.connectionId } : undefined;
-  return { events: parts.events, by, ...(parts.uses.length ? { uses: parts.uses } : {}), observation: parts.observation, ...(from ? { from } : {}),
+  return { events: parts.events, by, ...(Object.keys(hands).length ? { hands } : {}), ...(parts.uses.length ? { uses: parts.uses } : {}), observation: parts.observation, ...(from ? { from } : {}),
     ...(parts.lost ? { lost: true } : {}) };
 }

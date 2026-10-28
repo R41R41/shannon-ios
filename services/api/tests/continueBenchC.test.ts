@@ -257,11 +257,12 @@ describe('boundary 3 (promises and spending): the receipts, the receipt box, the
     expect(bench.plan.ledgerSeen().eventIds.filter(id => id.startsWith(`${big}:`))).toHaveLength(40);
     expect(ledgerOf(bench, 6).have).toBe(60);
     const lines = ledgerOf(bench, 6).ledger.length, dropped = ledgerOf(bench, 6).dropped;
-    bench.commit();
+    bench.setCheckpoint(bench.savedCheckpoint());       // the plan was saved; the process stopped before the receipts were marked (amendment A-6 12)
     const unprocessed = bench.control().store.unprocessed(bench.run).length;
     expect(unprocessed).toBeGreaterThan(0);
     await bench.restartHead();
-    expect(await until(() => bench.control().store.unprocessed(bench.run).length === 0, 4_000)).toBe(true);
+    // the new head puts the box to the ledger again, and the commit of its first step marks it
+    expect(await until(() => { bench.commit(); return bench.control().store.unprocessed(bench.run).length === 0; }, 4_000)).toBe(true);
     await bench.settle(100);
     // The new head read every receipt in the box again; the ledger's memory (in the checkpoint) kept each event from going in twice.
     expect(ledgerOf(bench, 6).ledger).toHaveLength(lines);
@@ -297,7 +298,9 @@ describe('boundary 3 (promises and spending): the receipts, the receipt box, the
     expect(bench.control().store.row(id)!.receipt?.outcome).toBe('completed');
     expect(bench.control().store.unprocessed(bench.run).map(row => row.id)).toEqual([id]);
     await bench.restartHead();
-    expect(await until(() => bench.control().store.unprocessed(bench.run).length === 0, 4_000)).toBe(true);
+    expect(await until(() => ledgerOf(bench, 1).ledger.some(line => line.kind === 'consumed'), 4_000)).toBe(true);
+    // the box is put to the ledger by the new head and marked only when its plan is saved (amendment A-6 12)
+    expect(await until(() => { bench.commit(); return bench.control().store.unprocessed(bench.run).length === 0; }, 4_000)).toBe(true);
     await bench.settle(50);
     expect(ledgerOf(bench, 1).ledger.filter(line => line.kind === 'consumed')).toEqual([expect.objectContaining({ count: 3, id: `${id}:1:1:1` })]);
     expect(bench.plan.ledgerSeen().eventIds).toEqual([`${id}:1:1:1`]);

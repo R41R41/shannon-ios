@@ -934,10 +934,19 @@ describe('the queue: the head reads what the body decided and takes nothing off 
     await delay(30);
     expect(booked.map(input => input.events.map(item => item.id))).toEqual([['skill:old1:1:1:0']]);
     expect(booked[0]!.by).toMatchObject({ command: 'skill:old1', item: 'q5' });
+    // Amendment A-6 12: put to the ledger, not marked: the plan that holds it is not saved yet.
+    expect(f.store.unprocessed('t1').map(row => row.id)).toEqual(['skill:old1']);
+    // This head stops too, before it saved: the next one puts it again.
+    const second = setup({ rig: f, applyLedger: input => { booked.push(input as LedgerInput); } });
+    await delay(30);
+    expect(booked).toHaveLength(2);
+    // The plan is saved (the checkpoint taken, then the commit): now the receipt is marked taken, and a later head does not put it again.
+    second.queue.checkpointed();
+    second.queue.committed();
     expect(f.store.unprocessed('t1')).toEqual([]);
     setup({ rig: f, applyLedger: input => { booked.push(input as LedgerInput); } });
     await delay(30);
-    expect(booked).toHaveLength(1);
+    expect(booked).toHaveLength(2);
   });
   it('a correction the dead queue never said is said by the next one', async () => {
     const f = rig();

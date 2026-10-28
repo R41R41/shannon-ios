@@ -485,6 +485,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     history, disposition, ...(planCommit ? { plan: planCommit } : {}), checkpoint: { ...prior, ...(prior.fcaHeldRetries ? { fcaHeldRetries: 0 } : {}), ...(prior.fcaProviderRetries ? { fcaProviderRetries: 0 } : {}), ...ports.checkpoint?.(), ...ports.tools?.checkpoint?.(), ...(maintenance ? {} : metrics.checkpoint()), consecutiveToolFailures, ...failureSinceCheckpoint(failureSince, prior), ...reflexCutCheckpoint(reflexRun, prior), ...(ports.tools?.progress ? { completionVerificationFailures } : {}), ...(gated.refusedWaits ? { fcaWaitRefusals: gated.refusedWaits } : {}), ...(recallContext ? { fcaRecallInput: recallContext.checkpoint } : {}), ...(selection ? { fcaToolSelection: selection } : {}), ...(output.stateCut !== undefined ? { fcaStateCut: output.stateCut } : {}) }, ...(decision.kind !== 'tools' && !state.bodyStale ? { summary: completionRejected ? '完了条件を新しい観測でまだ確認できません。' : decision.summary } : {}),
   }), value => ({ ...provenance, committed: value !== null, phase: value?.task.phase ?? null })));
   if (!saved) throw new Error('FCA_COMMIT_FENCED');
+  // The plan it held is saved: what was waiting for that (the receipts its ledger took, amendment A-6 12) is marked now. Never fails a committed step.
+  try { ports.plan?.afterCommit?.(); } catch { /* retried by the next commit */ }
   if (!maintenance) metrics.emit(); // Maintenance (sleep) steps keep their checkpoint as it was and write no line.
   if (saved.task.phase === 'waiting') {
     observerHandoff('store', 'wait', { phase: saved.task.phase });

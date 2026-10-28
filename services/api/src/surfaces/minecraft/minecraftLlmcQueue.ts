@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import type { ActCondition } from '../../contracts/minecraftActCondition.js';
-import { actRemainingMilliseconds, readActResult, type ActInput, type ActPos } from '../../contracts/minecraftActContract.js';
+import { actRemainingMilliseconds, readActResult, tunedBy, type ActInput, type ActPos, type ActTimeTuning } from '../../contracts/minecraftActContract.js';
 import { dependStateOf, queueName, unitView, type DependState, type ItemOutcome, type MadeIn, type OperationState, type StageRow, type TraceIds } from '../../contracts/continueContract.js';
 import type { MinecraftControlReceipt, MinecraftQueueEnvelope, MinecraftQueueProgress } from '../../contracts/minecraftControlContract.js';
 import type { FcaBodyQueue, FcaQueueNews, FcaQueueWake, FcaToolCall } from '../../mind/action/fca/fcaPorts.js';
@@ -49,6 +49,8 @@ const TROUBLE_SETTLE_MS = 250;
 
 const decisionTimes = new Map<string, number[]>();
 const counters = new Map<string, number>();
+/** Amendment A-6 15: the ms a step the body measured for each form of a vertical hand (`progress.msPerUnit` of its results), by task, in place of the first guesses of an estimate. */
+const verticalSpeeds = new Map<string, ActTimeTuning>();
 /** T for a task: the median of its last decisions' seconds, within `QUEUE_T`. */
 export function queueWakeMs(taskId: string): number {
   const times = decisionTimes.get(taskId) ?? [];
@@ -61,6 +63,7 @@ export function queueWakeMs(taskId: string): number {
 export function forgetLlmcQueues(): void {
   decisionTimes.clear();
   counters.clear();
+  verticalSpeeds.clear();
 }
 /** A bounded per-task record: the newest keys kept. */
 function keep<T>(map: Map<string, T>, key: string, value: T): void {
@@ -155,6 +158,12 @@ export interface LlmcQueue extends FcaBodyQueue {
   /** The items still open (their marks and labels): the ones a hold is about to take off (chapter 8's 再開: the record of a hold that came again). */
   openItems(): { item: string; why: string }[];
   stop(): void;
+  /**
+   * The plan's checkpoint was taken (the step is about to save it): the receipts the ledger has taken so far are in it. And the plan was saved: those receipts are marked processed
+   * in the store (amendment A-6 12), not before: a head that stops between the two reads them again and the ledger keeps each event from being put twice.
+   */
+  checkpointed(): void;
+  committed(): void;
   /** Waits (at most `waitMs`) until every item the body was given has answered, and the cleanup after an unknown result has ended: a step that ends is closed only after them. */
   settled(waitMs?: number): Promise<void>;
 }
@@ -168,6 +177,9 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   let droppedSeen = 0, droppedNow = 0, failedSeen = 0, failedNow = 0, troubleAt: number | null = null, furnaceCursor: number | null = null, capped = false;
   let execution: ReturnType<typeof currentActionExecution>;
   const pending = new Set<Promise<unknown>>(), stopCleanup = new AbortController();
+  /** The commands whose events (and every page of them) the ledger has taken, and the ones of those the plan's last checkpoint holds (`checkpointed`). */
+  const booked = new Set<string>();
+  let sealed: string[] = [];
   const open = () => items.filter(item => !item.ended);
   const bump = () => {
     version += 1;
@@ -197,8 +209,9 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       item.handKey = key;
       item.handSince = now();
     }
-    if (!mine) return actRemainingMilliseconds(item.input, item.from, null, item.startedAt === null ? 0 : now() - item.startedAt);
-    return Math.max(0, actRemainingMilliseconds(item.input, item.from, { hand: mine.hand, iteration: mine.iteration }, 0) - (now() - item.handSince));
+    const tune = verticalSpeeds.get(deps.taskId) ?? {};
+    if (!mine) return actRemainingMilliseconds(item.input, item.from, null, item.startedAt === null ? 0 : now() - item.startedAt, tune);
+    return Math.max(0, actRemainingMilliseconds(item.input, item.from, { hand: mine.hand, iteration: mine.iteration }, 0, tune) - (now() - item.handSince));
   };
   /** The first open item is the one the body runs: its clock starts and its watch for a hostile comes near. */
   function pump(): void {
@@ -230,22 +243,40 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   const noteDropped = (item: QueueItem, why: string) => { dropLog.push({ item: item.item, why: `${itemLabel(item)}${why ? `（${why}）` : ''}`.slice(0, 120), at: now() }); if (dropLog.length > 32) dropLog.shift(); };
 
   /** What the ledger is given of a command that ended with a real result (chapter 3): its events once each, the rest by pages, the definitions it was sent with. */
+  /** The hands an act was sent with (the store keeps the command's arguments): what an event's hand was when the receipt has no line of its own for it (a folded pass). */
+  const sentHands = (id: string): { do: string }[] | undefined => {
+    const hands = (deps.control.store.command(id)?.arguments as { hands?: unknown } | undefined)?.hands;
+    return Array.isArray(hands) ? hands.filter((hand): hand is { do: string } => !!hand && typeof (hand as { do?: unknown }).do === 'string') : undefined;
+  };
   function book(item: Pick<QueueItem, 'id' | 'item' | 'uses'>, receipt: MinecraftControlReceipt): void {
     if (!deps.applyLedger || readActResult(receipt.result) === null) return;
     const { events, more } = eventsOfReceipt(receipt);
-    const apply = (input: ReturnType<typeof ledgerInputFor>) => { try { void deps.applyLedger!(input); } catch (cause) { log(`Shannon Minecraft ledger failed task=${deps.taskId} item=${item.item} ${String(cause).slice(0, 120)}`); } };
+    const apply = (input: ReturnType<typeof ledgerInputFor>): boolean => {
+      try { void deps.applyLedger!(input); return true; } catch (cause) { log(`Shannon Minecraft ledger failed task=${deps.taskId} item=${item.item} ${String(cause).slice(0, 120)}`); return false; }
+    };
     const base = { id: item.id, item: item.item, uses: item.uses, connectionId: receipt.connectionId };
-    apply(ledgerInputFor({ ...base, events, observation: deps.observe() }));
-    if (!more) return;
+    const sent = sentHands(item.id);
+    const first = apply(ledgerInputFor({ ...base, events, observation: deps.observe(), result: receipt.result, sent }));
+    if (!more) { if (first) booked.add(item.id); return; }
     const fetch = (async () => {
       const row = deps.control.store.row(item.id);
       const got = await deps.control.fetchEvents({ command: item.id, context: deps.context(), lease: deps.lease, fromSeq: Math.max(more.nextSeq, row?.fetchSeq ?? 0), total: more.total,
         signal: stopCleanup.signal });
       record(eventsRow(rowContext(item), got.lost));
-      if (got.events.length || got.lost) apply(ledgerInputFor({ ...base, events: got.events, observation: deps.observe(), lost: got.lost }));
+      const rest = got.events.length || got.lost ? apply(ledgerInputFor({ ...base, events: got.events, observation: deps.observe(), lost: got.lost, result: receipt.result, sent })) : true;
+      if (first && rest && (got.complete || got.lost)) booked.add(item.id);
     })().catch(() => undefined);
     pending.add(fetch);
     void fetch.finally(() => pending.delete(fetch));
+  }
+
+  /** Amendment A-6 15: the ms a step a vertical hand measured (`progress.msPerUnit`), kept for the task by the form that ran, for the next estimate. */
+  function learnSpeed(item: Pick<QueueItem, 'input'>, receipt: MinecraftControlReceipt): void {
+    const result = readActResult(receipt.result);
+    if (!result) return;
+    let tune = verticalSpeeds.get(deps.taskId) ?? {};
+    for (const line of result.lines) tune = tunedBy(tune, item.input.hands[line.i - 1], line.progress?.msPerUnit);
+    if (Object.keys(tune).length) keep(verticalSpeeds, deps.taskId, tune);
   }
 
   /** An item whose real result came (the first receipt, or the one after an unknown that is the correction). */
@@ -266,7 +297,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     // The head reads what the body decided; it takes nothing off because an item stopped. A drop the body made changes the queue a decision followed (`stale`).
     if (taken) { bump(); noteDropped(item, item.unit.droppedBecause?.code ?? item.because ?? ''); }
     else if (!result.ok) { failedNow += 1; troubleAt ??= now(); }
-    if (!taken) { book(item, receipt); for (const listener of listeners) tell(listener, item, result, receipt); }
+    if (!taken) { book(item, receipt); learnSpeed(item, receipt); for (const listener of listeners) tell(listener, item, result, receipt); }
     record(receivedRow(rowContext(item), receipt));
     settleFlag();
     pump();
@@ -477,16 +508,18 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
         const { events, more } = eventsOfReceipt(row.receipt);
         const tail = more ? storedPages(deps.control.store, row.id, Math.max(more.nextSeq, 0), more.total) : null;
         const base = { id: row.id, uses: row.uses, connectionId: row.receipt.connectionId, ...(deps.control.store.command(row.id)?.queue?.item ? { item: deps.control.store.command(row.id)!.queue!.item } : {}) };
-        deps.applyLedger(ledgerInputFor({ ...base, events: [...events, ...(tail?.events ?? [])], observation: deps.observe(), ...(tail?.lost ? { lost: true } : {}) }));
+        const sent = sentHands(row.id), result = row.receipt.result;
+        deps.applyLedger(ledgerInputFor({ ...base, events: [...events, ...(tail?.events ?? [])], observation: deps.observe(), result, sent, ...(tail?.lost ? { lost: true } : {}) }));
         if (more && tail && !tail.complete) {
           const got = await deps.control.fetchEvents({ command: row.id, context: deps.context(), lease: deps.lease, fromSeq: tail.nextSeq, total: more.total, signal: stopCleanup.signal });
           record(eventsRow({ ...rowContext(null), command: row.id }, got.lost));
-          if (got.events.length || got.lost) deps.applyLedger(ledgerInputFor({ ...base, events: got.events, observation: deps.observe(), ...(got.lost ? { lost: true } : {}) }));
+          if (got.events.length || got.lost) deps.applyLedger(ledgerInputFor({ ...base, events: got.events, observation: deps.observe(), result, sent, ...(got.lost ? { lost: true } : {}) }));
           if (!got.complete && !got.lost) continue;
         }
         done.push(row.id);
       }
-      deps.control.store.markProcessed(done);
+      // Taken by the ledger of this start, not yet saved: the receipts are marked processed once the plan that holds them is saved (`committed`).
+      for (const id of done) booked.add(id);
     } catch (cause) { log(`Shannon Minecraft receipt box failed task=${deps.taskId} ${String(cause).slice(0, 120)}`); }
   })();
 
@@ -503,6 +536,14 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     notes: () => noteLines.splice(0),
     droppedSince: since => dropLog.filter(entry => entry.at >= since).map(({ item, why }) => ({ item, why })),
     noteReflexCapped() { capped = true; },
+    checkpointed() { sealed = [...booked]; },
+    committed() {
+      const ids = sealed;
+      sealed = [];
+      if (!ids.length) return;
+      for (const id of ids) booked.delete(id);
+      try { deps.control.store.markProcessed(ids); } catch (cause) { log(`Shannon Minecraft receipt mark failed task=${deps.taskId} ${String(cause).slice(0, 120)}`); }
+    },
     openItems: () => open().map(item => ({ item: item.item, why: itemLabel(item) })),
     mark() { marked = version; },
     stale: () => version !== marked,
