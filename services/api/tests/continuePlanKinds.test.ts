@@ -346,8 +346,20 @@ describe('the facts said once (minecraftLlmcOnceFacts.ts)', () => {
     expect(pending('t1')).toEqual([]);
     expect(offer('t1', 'j', 'x')).toBe(true);
   });
+  it('measure/one-time-fact-delivery.json: a fact a compression dropped is offered with the next input, and is delivered when a request holds it', () => {
+    const sample = JSON.parse(fs.readFileSync(new URL('./fixtures/continue/measure/one-time-fact-delivery.json', import.meta.url), 'utf8')) as Record<string, any>;
+    const inLast: Record<string, boolean> = {}, deliveredAt: string[] = [];
+    offer('fixture-task', 'fact', sample.input.fact);
+    for (const decision of sample.input.decisions as Array<{ d: string; compressedOut?: boolean }>) {
+      // The input of this decision carries what is pending; the last request holds it unless the compression dropped it.
+      const carried = pending('fixture-task').map(item => item.key);
+      inLast[decision.d] = carried.includes('fact') && decision.compressedOut !== true;
+      if (inLast[decision.d]) { markDelivered('fixture-task', carried); deliveredAt.push(decision.d); }
+    }
+    expect(inLast).toEqual(sample.expected.inLastRequest);
+    expect(deliveredAt).toEqual([sample.expected.deliveredAt]);
+  });
 });
-
 describe('a node of the old plan seen done by the frame is not given a word of the head\'s', () => {
   it('a done node is closed by the frame as before, with no note', () => {
     const tree = seedPlan('エンドラを倒して')!;
