@@ -12,10 +12,10 @@
  *    reservation, the stop, the acquire and the first operation, and any `deactivateItem` between). A claim is not a pass.
  *  - `ledger`: the events the receipts and the pages delivered, by id and reason, against the ledger rows; the gaps of the delivery numbers; the commands whose events were told lost.
  *
- * The record lines the shield and the events need are PROVISIONAL (the body's A-6 9 rows have no form yet): `motor_state` lines with `point` and `deactivateItem`, and `hurt` lines;
- * see `TraceLine` in `judge.ts`.
+ * The shield's lines are the body's own `motor_state` rows (see `TraceLine` in `judge.ts`). The blows and her health are NOT a record the body writes for this: they are read from the
+ * observation (`state.combat.recentHits` and `state.world.health`), the one place the facts come from.
  */
-import type { CommandView, HandLineLike, Model, OpLine, Row, TraceLine } from './judge.js';
+import type { CommandView, ObservationLine, HandLineLike, Model, OpLine, Row, TraceLine } from './judge.js';
 import { bodyTimesOf, cmdKey, linesOf, ms } from './judge.js';
 
 /** A `go` that ends this many blocks above or below where it began is a long vertical move (a first value, a guess). */
@@ -113,7 +113,7 @@ export function timeSplits(model: Model): TimeSplit[] {
 }
 
 // ---- the shield ------------------------------------------------------------------------------------------------------------------------------------
-export interface ShieldPoint { point: string; at: string; up: boolean | null; deactivateItem: boolean | null }
+export interface ShieldPoint { point: string; at: string; up: boolean | null; deactivateItem: boolean | null; /** The shield was lowered, or deactivateItem was called, since the reservation (the body's counters). */ lowered: boolean }
 export type ShieldRecord = 'absent' | 'up' | 'interrupted' | 'down';
 export type ShieldVerdict = 'kept_verified' | 'none_consistent' | 'dropped_fact' | 'claim_mismatch' | 'not_judgeable';
 export interface ShieldMeasure {
@@ -138,12 +138,13 @@ export function shieldRecord(model: Model, command: CommandView): { record: Shie
   const lines = model.trace.filter((line): line is MotorState => line.kind === 'motor_state' && cmdKey(line.command) === command.id && (line.shield !== undefined || line.deactivateItem !== undefined)
     && (ms(line.at) ?? 0) >= from - 1_000 && (ms(line.at) ?? 0) <= to)
     .sort((left, right) => (ms(left.at) ?? 0) - (ms(right.at) ?? 0));
-  const points = lines.map((line): ShieldPoint => ({ point: line.point ?? 'state', at: line.at, up: typeof line.shield === 'boolean' ? line.shield : null, deactivateItem: typeof line.deactivateItem === 'boolean' ? line.deactivateItem : null }));
+  const points = lines.map((line): ShieldPoint => ({ point: line.point ?? 'state', at: line.at, up: typeof line.shield === 'boolean' ? line.shield : null, deactivateItem: typeof line.deactivateItem === 'boolean' ? line.deactivateItem : null,
+    lowered: (num(line.loweredSince) ?? 0) > 0 || (num(line.deactivatedSince) ?? 0) > 0 }));
   if (points.length === 0) return { record: 'absent', points };
   let seenUp = false, let_go = false;
   for (const point of points) {
     if (point.up === true) seenUp = true;
-    if (seenUp && (point.up === false || point.deactivateItem === true)) let_go = true;
+    if (seenUp && (point.up === false || point.deactivateItem === true || point.lowered)) let_go = true;
   }
   return { record: !seenUp ? 'down' : let_go ? 'interrupted' : 'up', points };
 }
@@ -161,18 +162,40 @@ export function shieldMeasures(model: Model): ShieldMeasure[] {
     const reserved = points.find(point => point.point === 'reservation')?.up;
     const shieldUpAtStart = typeof mark.shieldUp === 'boolean' ? mark.shieldUp : typeof reserved === 'boolean' ? reserved : null;
     const times = bodyTimesOf(command), accepted = ms(times?.acceptedAt) ?? -Infinity, ended = ms(times?.endedAt) ?? Infinity;
-    const hurts = model.trace.filter(line => line.kind === 'hurt' && (ms(line.at) ?? 0) >= accepted && (ms(line.at) ?? 0) <= ended);
+    const seen = blowsAndHealth(model.observations ?? [], accepted, ended, command.handStarts[0]?.ids.life ?? command.ops[0]?.life);
     const eat = command.ops.find(op => (op.op === 'consume' || op.op === 'eat') && effective(op));
     const verdict = judgeShield(claim, record, shieldUpAtStart, handover?.confirmed === true);
     out.push({ command: command.id, case: String(mark.case), stance, preface, shieldUpAtStart, claim, record, points, ...verdict,
-      hits: model.trace.some(line => line.kind === 'hurt') ? hurts.length : null,
-      hpAtStart: num(command.handStarts[0]?.hp) ?? null, firstEatAt: eat?.at ?? null,
+      hits: seen.hits, hpAtStart: seen.hpAtStart, firstEatAt: eat?.at ?? null,
       secondsToEat: eat ? Math.round(((ms(eat.at) ?? 0) - accepted) / 100) / 10 : null,
       group: `${stance ?? 'unknown'}/${preface ? 'already-first' : 'plain'}/${shieldUpAtStart === true ? 'shield' : shieldUpAtStart === false ? 'no-shield' : 'shield?'}` });
   }
   return out;
 }
 const commandOf = (model: Model, name: string): CommandView | undefined => model.commands.get(cmdKey(name)) ?? [...model.commands.values()].find(command => command.item === name.replace(/^skill:/u, ''));
+
+/**
+ * The blows taken while the hand-over's command ran and her health when it was accepted, both from the observation the head read: `state.combat.recentHits`
+ * ({at, attackerId, attackerType, damage, life}; the same blow is in many frames, so it is counted once) and `state.world.health` of the last frame at or before the acceptance.
+ * Null when the folder has no observations: they are never taken from another record.
+ */
+export function blowsAndHealth(frames: readonly ObservationLine[], accepted: number, ended: number, life?: number): { hits: number | null; hpAtStart: number | null } {
+  if (frames.length === 0) return { hits: null, hpAtStart: null };
+  const seen = new Set<string>();
+  for (const frame of frames) {
+    const hits = (frame.state?.combat as { recentHits?: unknown[] } | undefined)?.recentHits;
+    if (!Array.isArray(hits)) continue;
+    for (const hit of hits as { at?: unknown; attackerId?: unknown; attackerType?: unknown; damage?: unknown; life?: unknown }[]) {
+      const at = typeof hit.at === 'string' ? Date.parse(hit.at) : num(hit.at);
+      if (at === undefined || Number.isNaN(at) || at < accepted || at > ended) continue;
+      if (life !== undefined && typeof hit.life === 'number' && hit.life !== life) continue;
+      seen.add(`${at}|${String(hit.attackerId)}|${String(hit.attackerType)}|${String(hit.damage)}`);
+    }
+  }
+  const before = [...frames].filter(frame => (ms(frame.stateAt) ?? Infinity) <= accepted).sort((left, right) => (ms(left.stateAt) ?? 0) - (ms(right.stateAt) ?? 0)).pop();
+  const health = num((before?.state?.world as { health?: unknown } | undefined)?.health);
+  return { hits: frames.some(frame => Array.isArray((frame.state?.combat as { recentHits?: unknown } | undefined)?.recentHits)) ? seen.size : null, hpAtStart: health ?? null };
+}
 
 /** The claim of the result against the record of the operations. A `kept` that the record cannot show, or that the record contradicts, is no pass. */
 export function judgeShield(claim: string | null, record: ShieldRecord, shieldUpAtStart: boolean | null, confirmed: boolean): { verdict: ShieldVerdict; why: string } {
@@ -297,7 +320,7 @@ export function measureText(measures: Measures): string[] {
     lines.push(`  測り 時間 ${split.command}: 計 ${split.totalMs} ms・wait ${split.waitMs}・成果の無い go ${split.idleGoMs}・動けた ${split.effectiveMs}（${Math.round(split.effectiveShare * 100)}%）`);
   }
   for (const shield of measures.shield) {
-    lines.push(`  測り 盾 ${shield.command} [${shield.group}]: 申告 ${shield.claim ?? '-'}・操作の記録 ${shield.record}（${shield.points.map(point => `${point.point}:${point.up === null ? '?' : point.up ? '上' : '下'}${point.deactivateItem ? '+deactivate' : ''}`).join(' ') || '行なし'}）`
+    lines.push(`  測り 盾 ${shield.command} [${shield.group}]: 申告 ${shield.claim ?? '-'}・操作の記録 ${shield.record}（${shield.points.map(point => `${point.point}:${point.up === null ? '?' : point.up ? '上' : '下'}${point.deactivateItem || point.lowered ? '+deactivate' : ''}`).join(' ') || '行なし'}）`
       + `→ ${shield.verdict}（${shield.why}）・被弾 ${shield.hits ?? '-'}・HP ${shield.hpAtStart ?? '-'}・食事の始まり ${secs(shield.secondsToEat)}`);
   }
   const ledger = measures.ledger;

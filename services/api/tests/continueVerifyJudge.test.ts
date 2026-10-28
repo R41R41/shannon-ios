@@ -563,7 +563,10 @@ describe('A-5 3: the vertical evidence rows of the body (block_update, forced_mo
     const { verticalEvidenceOp } = await import('../../../tools/continue-verify/judge.js');
     const real = JSON.parse(readFileSync(new URL('./fixtures/continue/produced/vertical--boundary2-evidence.json', import.meta.url), 'utf8')) as { output: { evidenceRows: Record<string, unknown>[] } };
     const op = verticalEvidenceOp(real.output.evidenceRows[0]!);
-    expect(op).toMatchObject({ kind: 'op', op: 'block_update', command: 'lab:q16', hand: 1, life: 4, pos: [0, 98, 1], block: 'air', usedForCorrection: true, at: '2026-10-28T15:07:01.236Z' });
+    const row = real.output.evidenceRows[0] as { command: string; hand: number; life: number; at: string; to: string; pos: { x: number; y: number; z: number } };
+    // the cell, the time, the command and the block are the row's own: the run changes them, the form does not
+    expect(op).toMatchObject({ kind: 'op', op: 'block_update', command: row.command, hand: row.hand, life: row.life, pos: [row.pos.x, row.pos.y, row.pos.z], block: row.to, usedForCorrection: true, at: row.at });
+    expect(row.at).toMatch(/^\d{4}-\d\d-\d\dT/u);
     expect(verticalEvidenceOp({ kind: 'forced_move', at: '2026-10-28T12:00:01.000Z', command: 'skill:q9', life: 2, pos: { x: 1, y: 2, z: 3 } })).toMatchObject({ op: 'forced_move', pos: [1, 2, 3] });
     // The old spread (an `at` that is the cell, a time in `t`) is not read any more.
     expect(verticalEvidenceOp({ kind: 'block_update', at: { x: 1, y: 2, z: 3 }, t: 1, command: 'skill:q9' })).toBeNull();

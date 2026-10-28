@@ -84,11 +84,17 @@ describe('measures: the shield against the operation record (a claim is not a pa
   const state = (command: string, point: string, second: number, up: boolean, extra: Record<string, unknown> = {}): TraceLine => ({ kind: 'motor_state', at: t(second, 400), command, point, shield: up, ...extra }) as TraceLine;
   /** A hand-over onto the same target: the result's claim, the shield's states the body recorded, and the case's marks. */
   function handover(claim: 'kept' | 'dropped' | 'none' | 'lowered', states: TraceLine[], mark: Record<string, unknown> = {}, lines?: HandLineLike[]): Input {
-    const a = act(1, { at: 10, hands: [{ do: 'fight', target: '#2601' }], endSecond: 20, starts: [{ second: 11, hp: 11.3 }], lines: lines ?? [{ i: 1, do: 'fight', status: 'done', goal: 'done', end: 'finished' }],
+    const a = act(1, { at: 10, hands: [{ do: 'fight', target: '#2601' }], endSecond: 20, starts: [{ second: 11 }], lines: lines ?? [{ i: 1, do: 'fight', status: 'done', goal: 'done', end: 'finished' }],
       handover: { from: 'floor-melee', target: 2601, waitedMs: 80, reflexSettledAt: t(10, 300), confirmed: true, shield: claim },
       ops: [{ kind: 'op', at: t(12), hand: 1, op: 'attack' }, { kind: 'op', at: t(16), hand: 1, op: 'consume' }] });
-    return folder('boundary-4', [a], { injections: [{ kind: 'handover_case', case: 'same_target', command: 'q1', at: t(10), shieldUp: true, ...mark }] },
-      { trace: [...states, { kind: 'hurt', at: t(12), hp: 9.1 }, { kind: 'hurt', at: t(14), hp: 7 }, { kind: 'hurt', at: t(40), hp: 3 }] });
+    const input = folder('boundary-4', [a], { injections: [{ kind: 'handover_case', case: 'same_target', command: 'q1', at: t(10), shieldUp: true, ...mark }] }, { trace: states });
+    // the blows and her health come from the observation only (state.combat.recentHits, state.world.health): the same two blows are in two frames and are two; one is after the act
+    const blow = (second: number, damage: number) => ({ at: t(second), attackerId: 2601, attackerType: 'zombie', damage, life: 1 });
+    input.observations = [{ sequence: 1, stateAt: t(9), state: { world: { health: 11.3 }, life: { life: 1 }, combat: { recentHits: [] } } },
+      { sequence: 2, stateAt: t(13), state: { world: { health: 9.1 }, life: { life: 1 }, combat: { recentHits: [blow(12, 2.2)] } } },
+      { sequence: 3, stateAt: t(15), state: { world: { health: 7 }, life: { life: 1 }, combat: { recentHits: [blow(12, 2.2), blow(14, 2.1)] } } },
+      { sequence: 4, stateAt: t(41), state: { world: { health: 3 }, life: { life: 1 }, combat: { recentHits: [blow(40, 4)] } } }];
+    return input;
   }
   const upAt = (): TraceLine[] => [state('skill:q1', 'reservation', 10, true), state('skill:q1', 'stop', 10, true), state('skill:q1', 'acquire', 10, true), state('skill:q1', 'first_op', 10, true)];
   const check = (input: Input) => judge(input, fixtures).checks.find(item => item.id === 'same_target q1')!;
@@ -204,9 +210,83 @@ describe('measures: the events delivered against the ledger (a non-empty page, b
     const model = buildModel({ ...base, meta: { ...base.meta, scene: 'b8-body-restart' } }, fixtures);
     expect(ledgerMeasure(model, []).measure.lost).toContain('skill:q70');
   });
-  it('KNOWN GAP OF THE BODY (A-6 9): the produced split delivery still puts a number where the events were, so there is no non-empty page to read; the pages above are made from the fixture', () => {
-    const made = JSON.parse(readFileSync(join(fixtures.dir, 'produced', 'promise--events-split-delivery.json'), 'utf8')) as { output: { replies: { events: unknown }[] } };
-    expect(made.output.replies.map(reply => typeof reply.events)).toEqual(['number', 'number', 'number']);   // when the body keeps the arrays this becomes 'object' and the line below is the test to write
-    expect(eventsReplies(buildModel({ meta: { run: 'p', scene: 'seam-5', benches: ['A'], headRev: 'h', bodyRev: 'b' }, rows: made.output.replies.map((reply, index) => ({ ev: 'events', at: t(index), command: 'skill:q70', ...reply }) as Row), receipts: [], trace: [], probes: [] }, fixtures))).toEqual([]);
+  it('A-6 9 CLOSED: the produced split delivery of the body holds the events (eventCount is a separate field): the pages go through the judge and the readers of the head, and with the first 120 of the receipt every id is booked', () => {
+    const made = JSON.parse(readFileSync(join(fixtures.dir, 'produced', 'promise--events-split-delivery.json'), 'utf8')) as { output: { replies: ({ events: InventoryEvent[]; eventCount: number } & Record<string, unknown>)[] } };
+    expect(made.output.replies.map(reply => Array.isArray(reply.events))).toEqual([true, true, true]);
+    const rows = made.output.replies.map((reply, index): Row => ({ ev: 'events', at: t(index), ids: ids(70), ...reply }));
+    const model = buildModel({ meta: { run: 'p', scene: 'seam-5', benches: ['A'], headRev: 'h', bodyRev: 'b' }, rows, receipts: [], trace: [], probes: [] }, fixtures);
+    const replies = eventsReplies(model);
+    expect(replies.map(reply => reply.events.length)).toEqual([120, 100, 120]);
+    for (const reply of made.output.replies) {
+      const { eventCount: _count, ...plain } = reply;
+      expect(readEventsReply(JSON.stringify(plain))?.events.map(item => item.id)).toEqual(reply.events.map(item => item.id));   // the head reads the page as it is
+    }
+    // the receipt carries deliverySeq 0 to 119 (not in the file: made as the fixture says), the pages 120 to 339: every id once, in order, with a reason that fits
+    const first = made.output.replies[0].events[0];
+    const inline = range(0, nextSeq).map(item => ({ ...item, id: item.id.replace('1:1', '1:0') }));
+    const a = act(70, { at: 10, hands: [], endSecond: 12, starts: [{ second: 11 }], lines: [{ i: 1, do: 'repeat', status: 'done', goal: 'done', end: 'finished', delta: inline } as never] });
+    a.receipts[0].eventsMore = { command: 'skill:q70', nextSeq, total };
+    const booked = [...inline, ...made.output.replies[0].events, ...made.output.replies[1].events].map(item => item.id);
+    const whole = folder('seam-5', [a], {}, { rows: [...rows, { ev: 'ledger', at: t(20), ids: ids(70), applied: booked, have: {}, observed: {} }] });
+    const verdict = judge(whole, fixtures);
+    expect(verdict.measures.ledger).toMatchObject({ delivered: total, byVia: { receipt: nextSeq, page: 220 }, booked: total, notBooked: [], seqProblems: [], reasonProblems: [], silentLoss: [] });
+    expect(first.id).toMatch(/^skill:q70:\d+:\d+:\d+$/u);
+    // one id of the second page left unbooked is told
+    const unbooked = folder('seam-5', [a], {}, { rows: [...rows, { ev: 'ledger', at: t(20), ids: ids(70), applied: booked.slice(0, -1), have: {}, observed: {} }] });
+    expect(judge(unbooked, fixtures).measures.ledger.notBooked).toEqual([booked[booked.length - 1]]);
+  });
+});
+
+describe('measures: the shield judged on the body\'s own rows (produced measure--handover-shield-up and measure--handover-last-stand)', () => {
+  type Note = Record<string, unknown> & { command: string; at: string; point: string };
+  const load = (name: string) => JSON.parse(readFileSync(join(fixtures.dir, 'produced', name), 'utf8')) as { output: Record<string, any> };
+  /** One trial of the body's lab as the judge reads it: the act's receipt with its handover, the four rows of the shield, and the mark of the case. */
+  function trial(notes: Note[], handover: Record<string, unknown>, outcome: string, unit: Record<string, unknown>, mark: Record<string, unknown>): Input {
+    const command = notes[0].command, first = Date.parse(notes[0].at), last = Date.parse(notes[notes.length - 1].at);
+    const at = (ms: number) => new Date(ms).toISOString();
+    const receipt: ReceiptRecord = { id: command, outcome: outcome as never, unit: unit as never, handover: handover as never, lines: [{ i: 1, do: 'fight', status: 'done', goal: 'done', end: 'finished' }],
+      bodyTimes: { acceptedAt: at(first - 30), startedAt: at(first - 2), lockAt: at(first), firstMotorAt: at(last), motorOps: 2, endedAt: at(last + 500) } };
+    return { meta: { run: 'lab', scene: 'boundary-4', benches: ['B'], headRev: 'h', bodyRev: 'b', requireSent: false, requireDecision: false,
+      injections: [{ kind: 'handover_case', case: 'same_target', command, at: at(first), ...mark }] }, rows: [], receipts: [receipt], probes: [],
+    trace: [{ kind: 'trace_open', at: at(first - 100), source: 'continuous' } as TraceLine, ...notes.map(note => note as unknown as TraceLine)] };
+  }
+  const checkOf = (input: Input) => judge(input, fixtures).checks.find(item => item.id.startsWith('same_target'))!;
+
+  it('the six hand-overs of the lab with the shield up: kept, and the body\'s rows show the shield up at all four points with no deactivateItem: every one a pass', () => {
+    const { trials } = load('measure--handover-shield-up.json').output as { trials: { reflex: { shieldUp: boolean }; handover: Record<string, unknown>; notes: Record<string, Note>; outcome: string; unit: Record<string, unknown> }[] };
+    expect(trials).toHaveLength(6);
+    for (const [index, one] of trials.entries()) {
+      const rows = [one.notes.reserve, one.notes.stop, one.notes.claim, one.notes.first_op];
+      expect(rows.map(row => row.point), `trial ${index + 1}`).toEqual(['reservation', 'stop', 'acquire', 'first_op']);
+      const input = trial(rows, one.handover, one.outcome, one.unit, { shieldUp: one.reflex.shieldUp });
+      const verdict = judge(input, fixtures);
+      const check = verdict.checks.find(item => item.id.startsWith('same_target'))!;
+      expect(check.ok, `trial ${index + 1}: ${check.detail}`).toBe(true);
+      expect(verdict.measures.shield[0]).toMatchObject({ claim: 'kept', record: 'up', verdict: 'kept_verified', stance: 'melee', shieldUpAtStart: true });
+    }
+  });
+  it('the same rows with a deactivateItem counted since the reservation: the claim kept is not a pass', () => {
+    const { trials } = load('measure--handover-shield-up.json').output as { trials: { reflex: { shieldUp: boolean }; handover: Record<string, unknown>; notes: Record<string, Note>; outcome: string; unit: Record<string, unknown> }[] };
+    const one = trials[0], rows = [one.notes.reserve, one.notes.stop, { ...one.notes.claim, deactivatedSince: 1 }, { ...one.notes.first_op, deactivatedSince: 1 }];
+    const check = checkOf(trial(rows, one.handover, one.outcome, one.unit, { shieldUp: true }));
+    expect(check.ok).toBe(false);
+    expect(check.detail).toContain('claim_mismatch');
+    const lowered = [one.notes.reserve, { ...one.notes.stop, loweredSince: 1, shield: false }, { ...one.notes.claim, shield: false }, { ...one.notes.first_op, shield: false }];
+    expect(checkOf(trial(lowered, { ...one.handover, shield: 'dropped' }, one.outcome, one.unit, { shieldUp: true })).detail).toContain('dropped_fact');
+  });
+  it('the last-stand hand-over: no shield in play, none and the rows agree; it is told as last stand', () => {
+    const made = load('measure--handover-last-stand.json').output as { handover: Record<string, unknown>; notes: Note[]; outcome: string; unit: Record<string, unknown> };
+    const input = trial(made.notes, made.handover, made.outcome, made.unit, { shieldUp: false });
+    const verdict = judge(input, fixtures);
+    expect(verdict.checks.find(item => item.id.startsWith('same_target'))?.ok).toBe(true);
+    expect(verdict.measures.shield[0]).toMatchObject({ stance: 'last_stand', claim: 'none', record: 'down', verdict: 'none_consistent', group: 'last_stand/plain/no-shield' });
+  });
+  it('the blows and her health come from the observation only: no observation, no number (a hurt line is not read, and the hand start\'s hp is not borrowed)', () => {
+    const made = load('measure--handover-last-stand.json').output as { handover: Record<string, unknown>; notes: Note[]; outcome: string; unit: Record<string, unknown> };
+    const input = trial(made.notes, made.handover, made.outcome, made.unit, { shieldUp: false });
+    input.trace.push({ kind: 'hurt', at: made.notes[0].at, hp: 3 } as unknown as TraceLine);
+    expect(judge(input, fixtures).measures.shield[0]).toMatchObject({ hits: null, hpAtStart: null });
+    input.observations = [{ sequence: 1, stateAt: new Date(Date.parse(made.notes[0].at) - 200).toISOString(), state: { world: { health: 14 }, combat: { recentHits: [] } } }];
+    expect(judge(input, fixtures).measures.shield[0]).toMatchObject({ hits: 0, hpAtStart: 14 });
   });
 });

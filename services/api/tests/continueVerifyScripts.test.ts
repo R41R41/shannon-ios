@@ -72,6 +72,15 @@ describe.skipIf(!bash)('the shell scripts', () => {
     // an empty folder of a run is not a pass
     expect(judge(loaded, fixtures).pass).toBe(false);
   });
+  it('collect.sh copies the observation frames too (the blows and her health of the shield measure are read from them), and the judge loads them', () => {
+    const { dir, base } = localInputs(), out = join(dir, 'out');
+    writeFileSync(join(dir, 'obs.jsonl'), '{"sequence":1,"stateAt":"2026-10-28T04:00:00.000Z","state":{"world":{"health":14},"combat":{"recentHits":[]}}}\n');
+    const result = collect(...base, '--observations', join(dir, 'obs.jsonl'), '--out', out);
+    expect(result.status, result.stderr).toBe(0);
+    expect(readdirSync(out)).toContain('observations.jsonl');
+    expect(loadFolder(out).observations).toHaveLength(1);
+    expect(collect(...base, '--observations', join(dir, 'nope.jsonl'), '--out', join(dir, 'out2')).stderr).toContain('--observations');
+  });
   it('collect.sh refuses a bad scene, a bad revision, a branch for a revision, a non-empty folder and a missing file', () => {
     const { dir, base } = localInputs(), out = join(dir, 'out');
     const swap = (flag: string, value: string) => { const copy = [...base]; copy[copy.indexOf(flag) + 1] = value; return copy; };

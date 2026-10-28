@@ -23,6 +23,7 @@
  *                        the body's own continuous file, appended from the bench's start to its end (never the 90-second ring):
  *                        TraceLine below (`trace_open` first, then `hand_start`, `op`, `death`, `life`, ...).
  *   marks.json           (optional) the lab's own marks: {deaths, injections, moments, resumes, excludeCommands}, merged into meta.
+ *   observations.jsonl   (optional) the body's observation frames the head read ({sequence, stateAt, state}); the blows and her health of the shield measure come from here
  *   probes.jsonl         (optional; boundaries 9 and 10) what the head's bench writes where there is no command: ProbeLine below.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -129,10 +130,13 @@ export type TraceLine =
   | { kind: 'life'; at: string; life: number; alive: boolean; dimension: string; advancedBy?: 'death' | 'file_unreadable' }
   | { kind: 'death'; at: string; life: number }
   | { kind: 'motor_refused'; at: string; command: string; call: string; holder?: string }
-  /** The state of the body's motor port. `shield` is whether the shield is up. `point` and `deactivateItem` are PROVISIONAL (A-6 9: the body's new rows have no form yet): the shield's state at the reservation, the stop, the acquire and the first operation of a hand-over, and whether `deactivateItem` was called there. */
-  | { kind: 'motor_state'; at: string; command: string; forward?: boolean; shield?: boolean; pathGoal?: 'kept' | 'cleared'; point?: 'reservation' | 'stop' | 'acquire' | 'first_op'; deactivateItem?: boolean }
-  /** PROVISIONAL: a blow taken (the black box's `hurt` note) with her health after it. */
-  | { kind: 'hurt'; at: string; hp?: number | null; damage?: number | null }
+  /**
+   * The state of the body's motor port. `shield` is whether the shield is up. The body's shield rows (A-6 9) are these lines with `point` (reservation | stop | acquire | first_op),
+   * `deactivateItem` (called at that point), and `using` (the item is in use), `hasDeactivate`, `loweredSince` and `deactivatedSince` (how many times the shield was lowered or
+   * `deactivateItem` was called since the reservation), `reserved`, `reflex`, `confirmed`, `result`, `op`.
+   */
+  | { kind: 'motor_state'; at: string; command: string; forward?: boolean; shield?: boolean; pathGoal?: 'kept' | 'cleared'; point?: 'reservation' | 'stop' | 'acquire' | 'first_op'; deactivateItem?: boolean;
+      using?: boolean; hasDeactivate?: boolean; loweredSince?: number; deactivatedSince?: number; reserved?: boolean; reflex?: string; confirmed?: boolean; result?: string; op?: string }
   | { kind: 'reflex_hand'; at: string; reflex: string; target?: number }
   | { kind: 'reflex_end'; at: string; reflex: string }
   /** A-5 3: the vertical's evidence rows (`verticalEvidenceOp` reads them as operations). */
@@ -173,7 +177,12 @@ export interface CommandView {
   handStarts: HandStartLine[]; ops: OpLine[];
 }
 export interface DecisionView { id: string; request?: Row; response?: Row; sent: Row[]; discarded: Row[] }
-export interface Input { dir?: string; meta: RunMeta; rows: Row[]; receipts: ReceiptRecord[]; trace: TraceLine[]; probes: ProbeLine[] }
+/**
+ * A frame of the body's observation, the only source of the blows taken (`state.combat.recentHits`, A-4) and of her health (`state.world.health`): the body writes no `hurt` row and the
+ * judge reads none. Only the fields it reads are named.
+ */
+export interface ObservationLine { sequence?: number; stateAt?: string; receivedAt?: string; state?: Record<string, unknown> }
+export interface Input { dir?: string; meta: RunMeta; rows: Row[]; receipts: ReceiptRecord[]; trace: TraceLine[]; probes: ProbeLine[]; observations?: ObservationLine[] }
 export interface Model extends Input {
   fixtures: Fixtures; commands: Map<string, CommandView>; decisions: Map<string, DecisionView>;
   requireSent: boolean; requireDecision: boolean;
@@ -435,7 +444,7 @@ export function loadFolder(dir: string): Input {
   const receiptsJson = join(dir, 'receipts.json');
   const receipts = existsSync(receiptsJson) ? JSON.parse(readFileSync(receiptsJson, 'utf8')) as ReceiptRecord[] : jsonLines<ReceiptRecord>(join(dir, 'receipts.jsonl'));
   return { dir, meta, rows: jsonLines<Row>(join(dir, 'events.jsonl')), receipts, trace: jsonLines<TraceLine>(join(dir, 'body-trace.jsonl')),
-    probes: jsonLines<ProbeLine>(join(dir, 'probes.jsonl')) };
+    probes: jsonLines<ProbeLine>(join(dir, 'probes.jsonl')), observations: jsonLines<ObservationLine>(join(dir, 'observations.jsonl')) };
 }
 
 /** Every scene the contract names, as a folder name under the root: boundary-1..10, seam-1..8, the boundary-8 scenes. A missing folder is a fail ("not run"). */
