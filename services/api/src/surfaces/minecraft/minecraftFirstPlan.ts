@@ -402,7 +402,7 @@ export function carryDone(held: PlanTree, next: PlanTree): PlanTree {
   };
   const open = orderedPlan(nodes).find(item => item.state !== 'done' && !nodes.some(child => child.parentId === item.id && child.state !== 'done')
     && !doneAbove(item));
-  return { ...next, revision: held.revision + 1, nodes, current: open?.id ?? null };
+  return { ...next, revision: held.revision + 1, nodes, current: open?.id ?? null, promises: held.promises.length ? held.promises : next.promises };
 }
 
 /** The plans handed to tasks from outside their decisions: a seed at the first read, the strong model's answer when it comes. */
