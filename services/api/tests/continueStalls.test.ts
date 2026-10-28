@@ -143,11 +143,51 @@ describe('same_spot_stops: go or vertical stopped short twice within 3 blocks', 
     expect(noteRan(TASK, { hands: [{ do: 'vertical' }], result: result([stopAt(6, 41, 5, { do: 'vertical', goal: 'failed', end: 'finished' })]) })).toMatchObject({ kind: 'same_spot_stops' });
     forgetStalls();
     // `where` when there is no progress.at; the act's own end when neither.
-    expect(ranGo([line({ goal: 'not_started', where: { x: 7, y: 64, z: 7 } })])).toBeNull();
-    expect(ranGo([line({ goal: 'failed', where: { x: 8, y: 64, z: 7 } })])).toMatchObject({ kind: 'same_spot_stops', at: { x: 7, y: 64, z: 7 } });
+    const moved = { progress: { unit: 'meter', done: 1, left: 4 } };   // a stop counts when it spent a step (A-13)
+    expect(ranGo([line({ goal: 'not_started', where: { x: 7, y: 64, z: 7 }, ...moved })])).toBeNull();
+    expect(ranGo([line({ goal: 'failed', where: { x: 8, y: 64, z: 7 }, ...moved })])).toMatchObject({ kind: 'same_spot_stops', at: { x: 7, y: 64, z: 7 } });
     forgetStalls();
-    expect(ranGo([line({ goal: 'failed' })])).toBeNull();
-    expect(ranGo([line({ goal: 'failed' })])).toMatchObject({ kind: 'same_spot_stops', at: { x: 1, y: 64, z: 1 } });
+    expect(ranGo([line({ goal: 'failed', ...moved })])).toBeNull();
+    expect(ranGo([line({ goal: 'failed', ...moved })])).toMatchObject({ kind: 'same_spot_stops', at: { x: 1, y: 64, z: 1 } });
+  });
+
+  it('A-13 (run 46): the quick refusals with their mend are not stops in one place; the real ones are', () => {
+    const quick = (code: string, goal: string, x: number) => ranGo([line({ goal, code, where: { x, y: 28, z: 212 }, progress: { unit: 'meter', done: 0, left: 3, at: { x, y: 28, z: 212 } }, motorOps: 0 })]);
+    // dead_end (no path, 0 steps, 1 s) then, after other work, no_floor (0 steps): neither is a stop that spent anything
+    expect(quick('dead_end', 'partial', 187)).toBeNull();
+    expect(quick('no_floor', 'not_started', 186)).toBeNull();
+    expect(stallQuiet(TASK)).toBe(false);
+    // the same place twice with time spent (3 s and more in the only hand that ran) is held
+    const slow = (x: number) => noteRan(TASK, { hands: [{ do: 'go' }], result: JSON.stringify({ v: 1, ok: false, done: 0, of: 1, ms: 5_000, at: { x, y: 28, z: 212 }, hp: 20, food: 20,
+      lines: [{ i: 1, ...line({ goal: 'partial', end: 'cut', code: 'search_timeout', progress: { unit: 'meter', done: 0, left: 9, at: { x, y: 28, z: 212 } } }) }] }) });
+    expect(slow(187)).toBeNull();
+    expect(slow(186)).toMatchObject({ kind: 'same_spot_stops' });
+    // a step, a dig or a placing counts without the seconds
+    forgetStalls();
+    const dug = (x: number) => ranGo([line({ goal: 'partial', progress: { unit: 'step', done: 0, left: 2, at: { x, y: 28, z: 212 }, work: { dug: 1 } } })]);
+    expect(dug(187)).toBeNull();
+    expect(dug(186)).toMatchObject({ kind: 'same_spot_stops' });
+  });
+
+  it('A-13 (run 46): other work done between the two stops (it dug, placed, made, smelted) counts the stops again', () => {
+    const slowStop = (x: number) => ranGo([stopAt(x, 28, 212)]);
+    expect(slowStop(187)).toBeNull();
+    // iron dug, a table and a furnace placed, iron smelted: done hands that changed the pack and the world
+    expect(noteRan(TASK, { hands: [{ do: 'dig' }, { do: 'place' }, { do: 'smelt' }], result: result([line({ do: 'dig', status: 'done', goal: 'done', end: 'finished' }),
+      line({ do: 'place', status: 'done', goal: 'done', end: 'finished' }), line({ do: 'smelt', status: 'done', goal: 'done', end: 'finished' })]) })).toBeNull();
+    expect(slowStop(186)).toBeNull();   // the first stop of a new count
+    expect(slowStop(186)).toMatchObject({ kind: 'same_spot_stops' });
+    // the run 46 order: a dead end of 0 steps, other work, a no_floor of 0 steps: no hold
+    forgetStalls();
+    const quick = (code: string, x: number) => ranGo([line({ goal: 'partial', code, progress: { unit: 'meter', done: 0, left: 3, at: { x, y: 28, z: 212 } }, motorOps: 0 })]);
+    expect(quick('dead_end', 187)).toBeNull();
+    expect(noteRan(TASK, { hands: [{ do: 'dig' }], result: result([line({ do: 'dig', status: 'done', goal: 'done', end: 'finished' })]) })).toBeNull();
+    expect(quick('no_floor', 186)).toBeNull();
+    // a hand that was 'already' (nothing changed) does not count the stops again
+    forgetStalls();
+    expect(slowStop(187)).toBeNull();
+    expect(noteRan(TASK, { hands: [{ do: 'dig' }], result: result([line({ do: 'dig', status: 'done', goal: 'already', end: 'finished' })]) })).toBeNull();
+    expect(slowStop(186)).toMatchObject({ kind: 'same_spot_stops' });
   });
 
   it('a hand that was not run, and a result that does not read, are not stops', () => {

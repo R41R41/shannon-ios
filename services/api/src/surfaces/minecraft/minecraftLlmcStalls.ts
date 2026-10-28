@@ -36,6 +36,15 @@ export interface Stall {
 }
 
 /** The hands that move the body or change the world around it: an act with one of them is not a wait. The others (look, equip, eat, craft, furnace, chest, …) are neither. */
+/** A-13: the hands whose being done changes the pack or the world (they set the count of stops in one place afresh). */
+const WORKED: ReadonlySet<string> = new Set(['dig', 'mine', 'place', 'pickup', 'make', 'craft', 'smelt', 'furnace', 'chest', 'pillarUp', 'obsidian', 'portal', 'attack', 'fight']);
+/** A-13: a hand that stopped short spent time or work when it moved (a step or a meter), dug or placed, or ran 3 s and more (the act's whole time when it was the only hand that ran). */
+const SPENT_MS = 3_000;
+function spentTime(line: { progress?: { done?: number; work?: { dug?: number; placed?: number; placeAttempts?: number } }; motorOps?: number }, actMs: number, running: number): boolean {
+  const progress = line.progress, work = progress?.work;
+  if ((progress?.done ?? 0) > 0 || (work?.dug ?? 0) > 0 || (work?.placed ?? 0) > 0 || (work?.placeAttempts ?? 0) > 0) return true;
+  return actMs >= SPENT_MS && (running <= 1 || (line.motorOps ?? 0) > 0);
+}
 export const MOVING: ReadonlySet<string> = new Set(['walk', 'go', 'vertical', 'pillarUp', 'jump', 'dig', 'mine', 'place', 'pickup', 'attack', 'fight', 'shoot', 'portal', 'obsidian']);
 
 // ---- progress --------------------------------------------------------------------------------------------------------------------------------------
@@ -132,8 +141,16 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
     else if (kinds.some(kind => MOVING.has(kind))) state.waits = 0;
     if (state.waits >= STALL.waits) return found(state, { kind: 'wait_loop', key: `${state.waits}`, why: `wait だけの act が ${state.waits} 回続いた（間に体を動かす手が無い）` });
   }
+  // A-13: a stop counts only when the hand really spent time or work (3 s and more, a step, a dig, a placing): the quick refusal with its mend (dead_end, no_floor, not_started: no path, 0 steps)
+  // is not a stop in the same place. A hand of other work that was done in between (it dug, placed, made, smelted, picked up: the pack or the world changed) counts the stops again.
+  const running = act.lines.filter(line => line.status !== 'skipped' && line.end !== 'not_run');
   for (const line of act.lines) {
+    if (line.end !== 'not_run' && line.end !== 'unknown' && line.goal === 'done' && WORKED.has(String(line.do))) {
+      state.spot = null;
+      continue;
+    }
     if ((line.do !== 'go' && line.do !== 'vertical') || line.end === 'not_run' || line.end === 'unknown' || line.goal === 'unknown') continue;
+    if (line.goal !== 'done' && line.goal !== 'already' && !spentTime(line, act.ms, running.length)) continue;
     if (line.goal === 'done' || line.goal === 'already') {
       state.spot = null;
       continue;
