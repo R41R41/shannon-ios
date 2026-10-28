@@ -118,6 +118,49 @@
    }
   },
   {
+   "op": "send",
+   "command": "q3",
+   "act": {
+    "hands": [
+     {
+      "$ref": "vertical/stop-cases.json#input.cases",
+      "value": [
+       {
+        "next": "unloaded"
+       },
+       {
+        "toY": -70,
+        "dir": "down"
+       },
+       {
+        "during": "knocked_back_2"
+       },
+       {
+        "next": "bedrock"
+       },
+       {
+        "below": "cave_6_deep",
+        "dir": "down"
+       },
+       {
+        "dir": "up",
+        "shape": "stairs",
+        "canPlace": []
+       },
+       {
+        "placeNotSeen": 2
+       },
+       {
+        "gravelFalls": 5,
+        "maxDig": 4
+       }
+      ]
+     }
+    ]
+   },
+   "why": "one scene for each stop code of vertical/stop-cases.json (expected.codes)"
+  },
+  {
    "op": "stop-trace"
   }
  ],

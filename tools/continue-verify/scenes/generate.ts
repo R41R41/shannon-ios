@@ -67,7 +67,7 @@ export const PLANS: Record<string, Plan> = {
     title: '途中の成果',
     lab: [{ op: 'start-trace' }, { op: 'send', command: 'q1', act: { hands: [ref('vertical/r45-hold5-shaft-down.json#input.hand')], from: ref('vertical/r45-hold5-shaft-down.json#input.from') } },
       { op: 'mark', kind: 'resume', from: 'q1', to: 'q2' }, { op: 'send', command: 'q2', act: { hands: [ref('vertical/r45-hold7-pillar-up.json#input.hand')], from: ref('vertical/r45-hold7-pillar-up.json#input.from') } },
-      { op: 'stop-trace' }],
+      { op: 'send', command: 'q3', act: { hands: [ref('vertical/stop-cases.json#input.cases')] }, why: 'one scene for each stop code of vertical/stop-cases.json (expected.codes)' }, { op: 'stop-trace' }],
     marks: ['meta.resumes: the pair (a hand ended, the command that resumed it)', 'the evidence table: vertical/boundary2-evidence.json'],
   },
   'boundary-3': {
@@ -84,6 +84,7 @@ export const PLANS: Record<string, Plan> = {
       { op: 'send', command: 'q1', act: ref('control/r45-attack-waited-6-4s.json#input.act') }, { op: 'mark', kind: 'handover_case', case: 'same_target', command: 'q1' },
       { op: 'summon', entity: 'zombie', near: 'bot', tag: '3000' }, { op: 'send', command: 'q2', act: ref('control/different-target.json#input.act') }, { op: 'mark', kind: 'handover_case', case: 'different_target', command: 'q2' },
       { op: 'rcon', cmd: 'lava / breath / eat / low-hp flee, one at a time' }, { op: 'send', command: 'q3', act: ref('control/high-priority-not-taken.json#input.act') }, { op: 'mark', kind: 'handover_case', case: 'safety', command: 'q3' },
+      { op: 'send', command: 'q4', act: ref('result/fight-target-escaped.json#input.cases'), why: 'a fight ends by the target killed, escaped (alive, out of range), left, or lost (A-2): result/fight-target-escaped.json' },
       { op: 'stop-trace' }],
     head: [{ op: 'answer', turn: 1, reads: [], tool: 'act', args: ref('control/r45-attack-waited-6-4s.json#input.act') }],
     marks: ['handover_case: same_target | different_target | safety'],
