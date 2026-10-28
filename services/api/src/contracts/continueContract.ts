@@ -139,7 +139,8 @@ export function handDependsProblem(index: number, dependsOn: readonly number[] |
 // ---- 3. promises' events (written by the body) ------------------------------------------------------------------------------------------------
 export interface InventoryEvent {
   id: string; obsSeq: number; item: string; count: number;
-  reason: 'ingredient' | 'fuel' | 'food' | 'placed' | 'thrown' | 'tool_broke' | 'crafted' | 'picked' | 'mined' | 'smelted' | 'reflex_eat' | 'reflex_armor' | 'death' | 'unexplained';
+  reason: 'ingredient' | 'fuel' | 'food' | 'placed' | 'thrown' | 'tool_broke' | 'crafted' | 'picked' | 'mined' | 'smelted' | 'reflex_eat' | 'reflex_armor' | 'death' | 'unexplained'
+    | 'stored' | 'retrieved';   // amendment A-1 4: a chest hand puts into / takes out of a box (the item changed place; a promise's ledger says so, not 'consumed')
   intermediate?: boolean;
   /** The order the body gave it within its command (0 up, across passes and hands). */
   deliverySeq?: number;

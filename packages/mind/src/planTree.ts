@@ -35,8 +35,14 @@ export interface PlanPrep { state: PrepState; why?: string; at?: string }
 /** A condition as the plan keeps it: alternatives of conjunctions of clauses (the head's `ActCondition`; this package reads none of it). */
 export type PlanCondition = ReadonlyArray<ReadonlyArray<Readonly<Record<string, unknown>>>>;
 export interface PromiseEvent {
-  id: string; at: string; kind: 'made' | 'revised' | 'consumed' | 'gained' | 'lost_death' | 'unexplained' | 'released' | 'closed';
+  /**
+   * `moved` (amendment A-1 4, 2026-10-28): the item changed place, not owner (put in a chest, taken out: `reason` `stored` / `retrieved`); not a consumption.
+   * `count` is what moved (always positive; `unexplained` alone is signed: negative is less than the events explain).
+   */
+  id: string; at: string; kind: 'made' | 'revised' | 'consumed' | 'gained' | 'moved' | 'lost_death' | 'unexplained' | 'released' | 'closed';
   count: number; have: number; declared?: boolean; reason?: string; promiseRev?: number;
+  /** The item of the definition the event was put to (the definition the command was sent with: `planks` for an `oak_planks` taken). */
+  item?: string;
   by?: { command?: string; item?: string; pass?: number; hand?: number };
 }
 /** A promise (chapter 3): what to keep, for what, until when, and the ledger of what happened to it. Written by the model; the ledger by the head. */
@@ -45,6 +51,8 @@ export interface PlanPromise {
   until?: { node?: string; condition?: PlanCondition }; instead?: PlanCondition;
   state: 'open' | 'kept_by_instead' | 'closed'; closedBy?: 'until' | 'released';
   ledger: PromiseEvent[]; dropped?: number;
+  /** What she carried of `item` at the last observation the ledger took (the head's; the model never writes it). Absent until the first one. */
+  have?: number;
 }
 
 export interface PlanNode {
@@ -132,6 +140,7 @@ function promisesProblem(promises: unknown): string | null {
     ids.add(item.id);
     if (!promiseItemFits(item.item) || !Number.isSafeInteger(item.count) || item.count < 1 || !isText(item.use, PLAN_LIMITS.promiseUse)) return 'fields';
     if (!['open', 'kept_by_instead', 'closed'].includes(item.state) || !Array.isArray(item.ledger)) return 'state';
+    if (item.have !== undefined && !(typeof item.have === 'number' && Number.isFinite(item.have) && item.have >= 0)) return 'have';
   }
   return null;
 }
@@ -320,8 +329,11 @@ class PlanEdit {
     const index = this.promises.findIndex(item => item.id === op.id);
     if (index < 0) return `約束 #${op.id} が無い`;
     const old = this.promises[index]!, rev = old.rev + 1;
-    const { until: _u, instead: _i, closedBy: _c, ...kept } = old;
-    this.promises[index] = { ...kept, ...base, rev, state: 'open', ledger: [...old.ledger, { id: `plan:${rev}`, at, kind: 'revised', count: op.count, have: 0 }] };
+    // The count the ledger took is of the old item: a revision to another item starts it again.
+    const { until: _u, instead: _i, closedBy: _c, ...keptAll } = old;
+    const { have: _h, ...kept } = keptAll;
+    const carry = old.item === op.item && old.have !== undefined ? { have: old.have } : {};
+    this.promises[index] = { ...kept, ...carry, ...base, rev, state: 'open', ledger: [...old.ledger, { id: `plan:${rev}`, at, kind: 'revised', count: op.count, have: 0 }] };
     return null;
   }
   /** A promise let go: closed by the release. */
