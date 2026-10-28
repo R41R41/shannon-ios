@@ -1,5 +1,5 @@
 import type { CutBy, Handover, ItemOutcome, Progress } from '../../contracts/continueContract.js';
-import type { ActHandLine, ActResult } from '../../contracts/minecraftActContract.js';
+import { readActResult, type ActHandLine, type ActResult } from '../../contracts/minecraftActContract.js';
 
 /**
  * The words of a result that the contract's two axes make possible (continue contract 1 and 2; chapter 8's 再開): what a hand aimed at and how its run ended, how far it
@@ -163,4 +163,23 @@ export const skipWords = (held: { item: string; hand?: string; code?: string }):
 export function heldAgainWords(record: { replayCode: string; dropped: readonly { item: string; why: string }[] }): string {
   const dropped = record.dropped.map(entry => `${entry.item}（${entry.why}）`).join('・');
   return `保留した act の出し直しは ${record.replayCode} で再び保留になった${dropped ? `。その間の ${dropped} は捨てた` : ''}`;
+}
+
+/**
+ * The steps a vertical hand counted and then found gone (`progress.corrected`, A-5 3), one fact each, said once (`placement_corrected`): where it was, what it holds now, and that the valid
+ * steps (`progress.done`) were counted again; the attempts, the confirmed placements and the stock used stay as they were. `id` is the occasion (item, hand, cell, step).
+ */
+export function placementCorrections(item: string, result: string | undefined): { id: string; text: string }[] {
+  const act = readActResult(result);
+  if (!act) return [];
+  const facts: { id: string; text: string }[] = [];
+  for (const line of act.lines) {
+    const progress = (line as { progress?: { done?: number; corrected?: { at: { x: number; y: number; z: number }; was?: string; now: string; step: number }[] } }).progress;
+    for (const gone of progress?.corrected ?? []) {
+      const cell = `(${gone.at.x},${gone.at.y},${gone.at.z})`;
+      facts.push({ id: `${item}:${line.i}:${gone.at.x},${gone.at.y},${gone.at.z}:${gone.step}`,
+        text: `${item} 手 ${line.i} (${line.do}): 置いた ${cell} が無くなった（${gone.was ? `${gone.was} → ` : ''}今 ${gone.now}・段 ${gone.step}）。有効な段数を数え直した${typeof progress?.done === 'number' ? `（今 ${progress.done} 段）` : ''}` });
+    }
+  }
+  return facts.slice(0, 8);
 }

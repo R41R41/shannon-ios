@@ -13,6 +13,7 @@ import type { MinecraftControl, ReleasedEvent, SettledEvent } from './minecraftC
 import { cleaningNow } from './minecraftControlRecovery.js';
 import { eventsOfReceipt, ledgerInputFor, storedPages } from './minecraftControlEvents.js';
 import { offer as offerOnceFact } from './minecraftLlmcOnceFacts.js';
+import { placementCorrections } from './minecraftLlmcResultWords.js';
 import { feetOf, urgentWatch } from './minecraftLlmc.js';
 import { noteItemStart } from './minecraftLlmcNode.js';
 import { itemLabel, itemResult, neverRan, queueLines, QUEUE_MAX, unitOfReceipt, unknownResult } from './minecraftLlmcQueueWords.js';
@@ -258,6 +259,8 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     item.unit = unitOfReceipt(receipt);
     const taken = neverRan(receipt, item) || item.because !== null;
     const result = itemResult(item, receipt, item.fixes);
+    // A placement the body counted and then found gone (A-5 3): a fact said once, delivered when the request's bytes carry it.
+    for (const fact of placementCorrections(item.item, receipt.result)) offerOnceFact(deps.taskId, `placement_corrected:${fact.id}`, fact.text);
     const ms = item.startedAt === null ? 0 : now() - item.startedAt;
     news.push({ kind: taken ? 'dropped' : 'ran', item: item.item, call: item.call, operationId: item.operationId, result, ms, label: itemLabel(item) });
     // The head reads what the body decided; it takes nothing off because an item stopped. A drop the body made changes the queue a decision followed (`stale`).

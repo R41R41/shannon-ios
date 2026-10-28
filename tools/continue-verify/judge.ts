@@ -105,6 +105,21 @@ export interface OpLine {
   /** The motor port refused it: it did not act and is not counted. */
   refused?: boolean;
 }
+/**
+ * The vertical's evidence rows the body writes beside the operations (A-5 3: `{ kind: 'block_update' | 'forced_move', at, command, hand, life, ... }`, boundary 2's proof of a
+ * correction): read into the operation list as an op of the same name. The body's `note()` spreads the evidence after its own `at`, so a block_update's `at` can be the cell itself
+ * (`{x,y,z}`) and its time the evidence's `t` (ms): both are read.
+ */
+export function verticalEvidenceOp(line: Record<string, unknown>): OpLine | null {
+  const cellOf = (value: unknown): Cell | undefined => Array.isArray(value) && value.length === 3 ? value as Cell
+    : value && typeof value === 'object' && typeof (value as { x?: unknown }).x === 'number' ? [(value as { x: number }).x, (value as { y: number }).y, (value as { z: number }).z] : undefined;
+  if (typeof line.command !== 'string') return null;
+  const at = typeof line.at === 'string' ? line.at : typeof line.t === 'number' ? new Date(line.t).toISOString() : '';
+  const base = { kind: 'op' as const, at, command: line.command, ...(typeof line.hand === 'number' ? { hand: line.hand } : {}), life: Number(line.life ?? -1) };
+  if (line.kind === 'forced_move') { const pos = cellOf(line.pos); return { ...base, op: 'forced_move', ...(pos ? { pos } : {}) }; }
+  const pos = cellOf(line.at) ?? cellOf(line.cell);
+  return { ...base, op: 'block_update', ...(pos ? { pos } : {}), ...(typeof line.to === 'string' ? { block: line.to } : {}), usedForCorrection: line.usedFor === 'steps_valid' };
+}
 export type HandStartLine = { kind: 'hand_start' } & Omit<HandStart, 'ids'> & { ids: Ids };
 export type TraceLine =
   | { kind: 'trace_open'; at: string; source: 'continuous' | 'ring'; bodyBoot?: string }
@@ -116,6 +131,8 @@ export type TraceLine =
   | { kind: 'motor_state'; at: string; command: string; forward?: boolean; shield?: boolean; pathGoal?: 'kept' | 'cleared' }
   | { kind: 'reflex_hand'; at: string; reflex: string; target?: number }
   | { kind: 'reflex_end'; at: string; reflex: string }
+  /** A-5 3: the vertical's evidence rows (`verticalEvidenceOp` reads them as operations). */
+  | { kind: 'block_update' | 'forced_move'; at?: string; t?: number; command?: string; hand?: number; life?: number }
   | { kind: 'poll'; at: string; connectionId: string; first?: boolean };
 
 export type ProbeLine =
@@ -244,6 +261,7 @@ export function buildModel(input: Input, fixtures: Fixtures): Model {
   for (const line of trace) {
     if (line.kind === 'hand_start' && line.ids?.command) { const view = command(line.ids.command); view.handStarts.push(line); if (line.ids.item) view.item = line.ids.item; }
     else if (line.kind === 'op') command(line.command).ops.push(line);
+    else if (line.kind === 'block_update' || line.kind === 'forced_move') { const op = verticalEvidenceOp(line as unknown as Record<string, unknown>); if (op) command(op.command).ops.push(op); }
   }
   for (const key of excluded) commands.delete(key);
   // the internal events command (observation only, id events:<hash>:<fromSeq>) is the body's own read, not a command the judgement counts

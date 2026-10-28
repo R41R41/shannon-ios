@@ -5,7 +5,7 @@
 #
 #   <body rev>     a git revision of the body (hex, 7 to 40 digits). A branch name is refused: the copy must name one commit. It is either the commit that
 #                  holds the produced files, or the revision of the CODE they were made from: with the second, the produced files are read from the first later
-#                  commit that holds them and whose code is the same as <body rev>'s (nothing differs under CODE_PATHS: backend/src, backend/package.json).
+#                  commit that holds them and whose code is the same as <body rev>'s (nothing differs under CODE_PATHS: backend/src, common/src, backend/package.json, the two produce scripts of backend/scripts/lab).
 #   --body-repo    the body's clone (default $BODY_REPO, else /mnt/c/Shannon/Shannon-continue as WSL sees it, /c/Shannon/Shannon-continue in Git Bash).
 #   --head-repo    the head's clone to write into (default: the clone this script is in).
 #
@@ -57,7 +57,7 @@ gitb() { git -c safe.directory='*' --git-dir="$BODY_GIT" "$@"; }
 
 FULL=$(gitb rev-parse --verify --quiet "$REV^{commit}") || die "revision $REV is not in $BODY_REPO"
 PRODUCED_DIR=backend/contracts/continue/produced
-CODE_PATHS=(backend/src backend/package.json)   # what builds the body: a produced file is current while these are the same as at the rev named
+CODE_PATHS=(backend/src common/src backend/package.json backend/scripts/lab/continue-produce.ts backend/scripts/minecraft-continue-lab-probe.ts)   # what builds the body: a produced file is current while these are the same as at the rev named
 
 DEST="$HEAD_REPO/$FIX/produced"
 mkdir -p "$(dirname "$DEST")"

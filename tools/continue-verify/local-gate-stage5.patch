@@ -50,7 +50,7 @@ What it adds:
 +PRODUCED_BODY=backend/contracts/continue/produced
 +PRODUCED_HEAD=services/api/tests/fixtures/continue/produced
 +PRODUCE_SCRIPT=backend/scripts/lab/continue-produce.ts
-+CODE_PATHS=(backend/src backend/package.json)   # what builds the body: a produced file is current while these are the same as at the rev it names
++CODE_PATHS=(backend/src common/src backend/package.json backend/scripts/lab/continue-produce.ts backend/scripts/minecraft-continue-lab-probe.ts)   # what builds the body: a produced file is current while these are the same as at the rev it names
  VALIDATION=services/api/src/surfaces/minecraft/minecraftControlValidation.ts
  FAKE_ENV=(SHANNON_ISOLATED_MINEBOT_PROBE=true OPENAI_API_KEY=offline-test-not-used MONGODB_URI=mongodb://127.0.0.1:1/offline-not-used CI=true TZ=Etc/UTC LANG=C.UTF-8)
  T0=$(date +%s); FAIL=0

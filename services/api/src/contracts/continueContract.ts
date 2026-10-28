@@ -25,6 +25,8 @@ export interface Progress {
   done: number; left: number | null; at?: ActPos; msPerUnit?: number;
   work?: { dug: number; placed?: number; placeAttempts?: number; stockUsed?: number; placedConfirmed?: number };
   fromStopM?: number; searchEndM?: number;
+  /** vertical (A-5 3): the steps found gone after they were counted (at most 8); `done` (stepsValid) fell by them, the other counts and the budget did not. */
+  corrected?: { at: ActPos; was?: string; now: string; step: number }[];
   /** vertical (amendment A-1 6): the ore the hand saw on the way, a kind and a place each, at most 8. Told, never followed. */
   seen?: { block: string; at: ActPos }[];
   lastSearch?: { status: 'success' | 'partial' | 'timeout' | 'no_path'; len: number; nodes: number; ms: number; endM?: number;

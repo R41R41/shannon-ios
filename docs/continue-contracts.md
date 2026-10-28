@@ -1232,3 +1232,17 @@ interface LedgerSeen {
 5. **体の `handReasons` に `equip`**：act の `equip` で防具を着けた時の理由が `unexplained` になる。体が `equip` を足し、帳簿は A-2 の 3（身に着けた）で出す。
 6. **local-gate の段 5**：頭のパッチ（`tools/continue-verify/local-gate-stage5.patch`）を体の担当が読み、OK なら取りまとめ役が Syzygy に当てる（main への合流の時に一緒に）。
 7. **`PREP_DESCENT_RULE` の「省けない」**：「未達の必須は、reason や why に書いても省けない」も契約 7 章と食い違う。「省く時は prep に skipped と理由を書く。省いた節は達成に数えない」の形に直す（トークン数を増やさない）。
+
+#### A-5 の 3 の型（体の実装の形。体が書く）
+```ts
+/** 6 章の Progress への足し（vertical）。置きが ok の後で世界が違っていた時の訂正の事実。 */
+interface Progress {
+  /** 数えた後で「もう無い」と分かった段（ブロックの更新・押し戻し・手の終わりの見直しで見つけた物。最大 8 件）。`done`（stepsValid）はこれで減る。 */
+  corrected?: { at: ActPos; was?: string; now: string; step: number }[];
+}
+```
+- 載る所は、vertical の手の行の `progress.corrected` と、成功の行の文（「置いた (191,59,188) が無くなった（今 air）（有効な段数を直した）」。失敗で止まった行は構造だけ。160 字を越えるため）。
+- 訂正で減るのは `progress.done`（stepsValid）だけで、`work.placeAttempts`・`placedConfirmed`・`stockUsed`・予算は戻らない。
+- 同じ訂正の元の証拠（block の更新・押し戻し）は、操作の連続記録に `{ kind: 'block_update' | 'forced_move', at, command, hand, life, ... }` の行で残る（境界 2 の照らし方）。
+- 手が終わった後で起きた訂正（手の途中でも終わりの見直しでも見ていない変化）は、体は載せない（観測の持ち物・地図で LLM が見る）。
+- act の `equip`（防具の欄・オフハンド）で持ち物から減った分は、理由 `reflex_armor` の出来事で出す（頭は「身に着けた」として扱う。名前に反射と付いているが、手の equip でも同じ）。

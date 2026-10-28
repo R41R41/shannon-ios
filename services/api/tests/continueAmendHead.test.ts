@@ -167,3 +167,17 @@ describe('the ledger tells armour put on as worn, not as used (amendment A-2 3)'
     expect(again.added).toEqual([]);
   });
 });
+
+describe('A-5 3: a placement the body counted and then found gone is a fact said once', () => {
+  it('reads progress.corrected of a vertical hand into one fact each, and says the valid steps were counted again', async () => {
+    const { placementCorrections } = await import('../src/surfaces/minecraft/minecraftLlmcResultWords.js');
+    const result = JSON.stringify({ v: 1, ok: true, done: 1, of: 1, ms: 1000, at: { x: 191, y: 58, z: 188 }, hp: 20, food: 20,
+      lines: [{ i: 1, do: 'vertical', status: 'done', line: '', progress: { unit: 'step', done: 6, left: 0, corrected: [{ at: { x: 191, y: 59, z: 188 }, was: 'cobblestone', now: 'air', step: 7 }] } }] });
+    const facts = placementCorrections('q90', result);
+    expect(facts).toHaveLength(1);
+    expect(facts[0]!.text).toContain('置いた (191,59,188) が無くなった');
+    expect(facts[0]!.text).toContain('今 air');
+    expect(facts[0]!.text).toContain('今 6 段');
+    expect(placementCorrections('q90', undefined)).toEqual([]);
+  });
+});

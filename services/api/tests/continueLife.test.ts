@@ -49,7 +49,7 @@ const FIXTURES = join(import.meta.dirname, 'fixtures');
 const CONTINUE = join(FIXTURES, 'continue');
 const PRODUCED = join(CONTINUE, 'produced');
 /** The body revision the copies in `continue-life-produced/` were made at (the body's `contracts/continue/produced/`, copied read-only). */
-const BODY_REVISION = 'e30443dc2ca2';
+const BODY_REVISION = 'cae3ed03a067';
 const sha256 = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
 const fixture = (path: string) => JSON.parse(readFileSync(join(CONTINUE, path), 'utf8')) as { input: any; expected: any; checks: string[] };
 const produced = (name: string) => {
