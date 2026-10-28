@@ -12,6 +12,7 @@ import type { ActionLease } from '../../contracts/actionThreadContract.js';
 import type { MinecraftControl, ReleasedEvent, SettledEvent } from './minecraftControl.js';
 import { cleaningNow } from './minecraftControlRecovery.js';
 import { eventsOfReceipt, ledgerInputFor, storedPages } from './minecraftControlEvents.js';
+import { offer as offerOnceFact } from './minecraftLlmcOnceFacts.js';
 import { feetOf, urgentWatch } from './minecraftLlmc.js';
 import { noteItemStart } from './minecraftLlmcNode.js';
 import { itemLabel, itemResult, neverRan, queueLines, QUEUE_MAX, unitOfReceipt, unknownResult } from './minecraftLlmcQueueWords.js';
@@ -310,11 +311,25 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   };
   const bygoneContext = (old: NonNullable<ReturnType<typeof bygone>>): RowContext => ({ run: deps.taskId, queue: old.queueName, item: old.item, command: old.id, headBoot, observation: deps.observe(), at: iso() });
   /** The control told us a command of this queue was released without a receipt of its own (the cleanup, or the new connection). */
-  const onReleased = ({ row }: ReleasedEvent) => {
+  /**
+   * A command the body never answered because the body restarted (the new connection's first poll proved the release): its result stays unknown (`settled_unknown`), and its events
+   * are lost - a restarted body keeps no record of them, so none is asked for. The ledger takes the difference as `unexplained` (`lost`), the record says so, and the model is told once.
+   */
+  const lostWithTheBody = (command: { id: string; item: string; uses?: readonly UsesSnapshot[] }, label: string, at: RowContext): void => {
+    record(eventsRow(at, true));
+    const connectionId = deps.control.store.command(command.id)?.connectionId ?? '';
+    try { void deps.applyLedger?.(ledgerInputFor({ id: command.id, item: command.item, uses: command.uses ?? [], connectionId, events: [], observation: deps.observe(), lost: true })); }
+    catch (cause) { log(`Shannon Minecraft ledger failed task=${deps.taskId} item=${command.item} ${String(cause).slice(0, 120)}`); }
+    offerOnceFact(deps.taskId, `body_restart:${command.id}`, `${label}: 体が再起動したため、この命令の結果と出来事は分からない。観測で確かめる`);
+  };
+  const onReleased = ({ row, by }: ReleasedEvent) => {
     const item = items.find(entry => entry.id === row.id);
     if (!item) {
       const old = bygone(row.id);
-      if (old) record(releasedRow(bygoneContext(old), 'cleanup', true));
+      if (old) {
+        record(releasedRow(bygoneContext(old), 'cleanup', true));
+        if (by === 'reconnect') lostWithTheBody(old, itemLabel(old), bygoneContext(old));
+      }
       return;
     }
     item.state = 'released';
@@ -322,6 +337,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     if (item.ended) noteLines.push(releasedWords(itemLabel(item)));
     // The new connection's first poll proves the release as the cleanup does (`releasedRow`): both are the head's proof, not the command's own receipt.
     record(releasedRow(rowContext(item), 'cleanup', true));
+    if (by === 'reconnect') lostWithTheBody(item, itemLabel(item), rowContext(item));
     settleFlag();
   };
   const onHeld = ({ row, why }: { row: { id: string }; why: string }) => {

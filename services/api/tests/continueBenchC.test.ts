@@ -11,6 +11,7 @@ import { foodLeads, preparationShortage, preparationStage } from '../src/surface
 import { nearNeeds } from '../src/surfaces/minecraft/minecraftLlmcReachWords.js';
 import { meterLine, roadLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { stagesFor } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { onceFor } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 import { prepUnmetFacts } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { nowKinds, planFactsOf } from '../src/surfaces/minecraft/minecraftPlanFacts.js';
 import { BenchC, benchC, fixture, iso, produced, until } from './helpers/benchC.js';
@@ -590,15 +591,17 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
     await bench.settle(150);
     const unexplained = bench.plan.tree().promises[0]!.ledger.filter(line => line.kind === 'unexplained');
     expect(unexplained).toHaveLength(1);
-    expect(unexplained[0]).toMatchObject({ count: -4, reason: 'unexplained' });
+    expect(unexplained[0]).toMatchObject({ count: -4, reason: 'events_lost' });   // written when the first poll of the new body proved the release, not at the next command
     expect(rowsOf(bench, 'ledger_unexplained')).toHaveLength(1);
     expect(rowsOf(bench, 'corrected')).toHaveLength(0);
     const { verdict } = bench.judged();
     noted(verdict);
     expect(verdict.commands.linked).toBe(verdict.commands.judged);
-    // The one thing the scene asks that the head has no way to produce: an `events` row with lost (it asks the body for events only of a command whose receipt said some were left).
-    expect(verdict.checks.filter(check => !check.ok).map(check => check.id)).toEqual(['released, goal unknown, events lost, an unexplained difference only']);
-    expect(verdict.checks.find(check => !check.ok)!.detail).toContain('events lost false');
+    // A5 2: the command the body never answered stays unknown, its events are written lost without asking the restarted body, and the model is told once.
+    const lost = rowsOf(bench, 'events').filter(row => row.lost === true && row.ids.command === q2.id);
+    expect(lost).toHaveLength(1);
+    expect(onceFor(bench.run, 'normal').map(fact => fact.text)).toEqual([expect.stringContaining('体が再起動したため、この命令の結果と出来事は分からない。観測で確かめる')]);
+    expect(verdict.checks.filter(check => !check.ok)).toEqual([]);
   });
 
   it('b8-lease-swap: q2 waits while the lease is renewed: the head cancels what the old lease sent, the body answers lease_expired for q2 and q2 never moved', SLOW, async () => {

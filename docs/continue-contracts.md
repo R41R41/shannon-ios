@@ -1220,3 +1220,14 @@ interface LedgerSeen {
   ahead?: { promise: number; delta: number; connection: string; obsSeq: number | null }[];   // 観測より先に届いた出来事の効き（次の観測で「説明できない差」にしない）
 }
 ```
+
+### A-5（10/28、頭の最終報告から）
+
+1. **docs の末尾**：頭が足した「A-4 の 8 の型」の文を、体の docs にも同じ字で入れる。両側の docs を同じにする。
+2. **受け取りの無いまま体が再起動した命令（境界 8 の `b8-body-restart`）**：頭は、その命令の結果を `settled_unknown` のまま、出来事について `lost: true` を記録し、LLM に「体が再起動したため、この命令の結果と出来事は分からない。観測で確かめる」と 1 度出す。
+   - 体が再起動すると出来事の記録は残らないので、events を取りに行っても返らない。取りに行かずに lost と書くのが正しい。
+   - 境界 8 の 7 場面がすべて通ることを確かめる。
+3. **置きが ok の後で世界が違っていた時の訂正**（`result/r45-hold3-place-ok-then-world-differs`）：体が実際に何を載せているか（欄と形）を 14 章に書く。頭はそれを `offerOnce` につなぐ。
+4. **`V2_ALWAYS` の PLAN 節**：「準備の必須は、reason を書いても省けない」は契約 7 章（`prep: skipped` と理由を書ける）と食い違う。契約が正。同じトークン数以内で「準備を省く時は skipped と理由を書く」の形に直す（8,800 以内を守る）。
+5. **体の `handReasons` に `equip`**：act の `equip` で防具を着けた時の理由が `unexplained` になる。体が `equip` を足し、帳簿は A-2 の 3（身に着けた）で出す。
+6. **local-gate の段 5**：頭のパッチ（`tools/continue-verify/local-gate-stage5.patch`）を体の担当が読み、OK なら取りまとめ役が Syzygy に当てる（main への合流の時に一緒に）。
