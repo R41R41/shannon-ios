@@ -1,20 +1,20 @@
 {
  "producedBy": "backend/scripts/minecraft-continue-lab-probe.ts",
  "bench": "B",
- "bodyRevision": "09e1cb33f8c4",
- "madeAt": "2026-10-28T15:59:35.940Z",
+ "bodyRevision": "dbb8770b4b01",
+ "madeAt": "2026-10-28T17:01:10.471Z",
  "answers": null,
  "fixtureSha256": null,
  "output": {
   "seen": {
    "capability": "floor-last-stand",
-   "target": 131
+   "target": 120
   },
   "handover": {
    "from": "floor-last-stand",
-   "target": 131,
-   "waitedMs": 2,
-   "reflexSettledAt": "2026-10-28T15:59:30.402Z",
+   "target": 120,
+   "waitedMs": 3,
+   "reflexSettledAt": "2026-10-28T17:01:04.932Z",
    "confirmed": true,
    "shield": "none"
   },
@@ -23,6 +23,7 @@
     "command": "lab:q16",
     "point": "reservation",
     "shield": false,
+    "flagUp": false,
     "deactivateItem": false,
     "using": false,
     "hasDeactivate": true,
@@ -31,12 +32,13 @@
     "reserved": false,
     "reflex": "floor-last-stand",
     "kind": "motor_state",
-    "at": "2026-10-28T15:59:30.401Z"
+    "at": "2026-10-28T17:01:04.931Z"
    },
    {
     "command": "lab:q16",
     "point": "stop",
     "shield": false,
+    "flagUp": false,
     "deactivateItem": false,
     "using": false,
     "hasDeactivate": true,
@@ -44,12 +46,13 @@
     "deactivatedSince": 0,
     "reflex": "floor-last-stand",
     "kind": "motor_state",
-    "at": "2026-10-28T15:59:30.401Z"
+    "at": "2026-10-28T17:01:04.932Z"
    },
    {
     "command": "lab:q16",
     "point": "acquire",
     "shield": false,
+    "flagUp": false,
     "deactivateItem": false,
     "using": false,
     "hasDeactivate": true,
@@ -58,12 +61,13 @@
     "confirmed": true,
     "result": "none",
     "kind": "motor_state",
-    "at": "2026-10-28T15:59:30.403Z"
+    "at": "2026-10-28T17:01:04.934Z"
    },
    {
     "command": "lab:q16",
     "point": "first_op",
     "shield": false,
+    "flagUp": false,
     "deactivateItem": false,
     "using": false,
     "hasDeactivate": true,
@@ -71,7 +75,7 @@
     "deactivatedSince": 0,
     "op": "setMovements",
     "kind": "motor_state",
-    "at": "2026-10-28T15:59:30.407Z"
+    "at": "2026-10-28T17:01:04.938Z"
    }
   ],
   "outcome": "failed",
@@ -80,8 +84,8 @@
    "end": "finished",
    "released": true,
    "code": "limit_time",
-   "startedAt": "2026-10-28T15:59:30.401Z"
+   "startedAt": "2026-10-28T17:01:04.931Z"
   },
-  "sentToLockMs": 10
+  "sentToLockMs": 29
  }
 }

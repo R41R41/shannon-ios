@@ -476,10 +476,9 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(validLifeView(dead.lifeAfter)).toBe(true);
     expect(dead.lifeAfter.life).toBe(dead.lifeBefore + 1);
     expect(dead.result.outcome).toMatchObject({ goal: 'not_started', end: 'cut', cutBy: 'death' });
-    // KNOWN GAP OF THE BODY (A-6 5): the contract says `outcome.life` is the life the act began in (here `lifeBefore`, 1); the body's lab wrote 0. Neither the death's life nor the
-    // start's. When the body writes the life the act began in, this line becomes `toBe(dead.lifeBefore)`.
-    expect(dead.result.outcome.life).toBe(0);
-    expect(dead.result.outcome.life).not.toBe(dead.lifeBefore);
+    // A-6 5: the life the act began in (the body fixed it: dbb8770b4b01).
+    expect(dead.result.outcome.life).toBe(dead.lifeBefore);
+    expect(dead.result.outcome.life).not.toBe(dead.lifeAfter.life);
   });
   it('life--r45-death-then-old-attack: the old attack the death cut says so in the words the model reads, and is not a failed hand', () => {
     const file = get('life--r45-death-then-old-attack.json');
