@@ -151,7 +151,7 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(system).toContain('## 目的と物差し');
     expect(system).toContain('ネザーへ入るまでを 30 分以内に');
     expect(system).toContain('死ぬと持ち物と時間を失い');
-    expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない。準備も省かない');
+    expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(system).toContain(milestoneWords());
     expect(milestoneWords()).toBe('ベッド 150・地下の準備 300・鉄のツルハシ 350・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 1,800');
     expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 1_800]);
@@ -193,7 +193,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   });
   it('says in the instructions: beds explode in the Nether and the End, shortage is not skipped for speed, the cell to open is away from her feet, and the urgent live\'s fields', () => {
     expect(V2_ALWAYS).toContain('ネザー・エンドのベッドは爆発する: そこでは寝ない');
-    expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。準備も省かない');
+    expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(V2_ALWAYS).toContain('優先の順: 差し迫った危険を避ける → 準備の必須を満たす → 目的へ早く進める');
     expect(V2_STAGES.prep).toContain('足元・立っているマスからは離れたマスを開ける');
     expect(V2_ALWAYS).toContain('mode「急ぎの版」は急ぎの時の短い live の印');

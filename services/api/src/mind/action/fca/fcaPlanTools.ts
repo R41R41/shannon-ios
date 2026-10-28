@@ -53,7 +53,7 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
     '計画が変わった時・節が済んだ時・止まった時に出す（毎回は要らない）。体の手と同じ応答で出してよい。',
     '約束（残す物と用途）: promise（item・count・use。期間は until、代わりに足りる条件は instead。id を書けば改訂）、release（id・why）。約束を書くのは自分だけ。',
     '頭は使われた量と理由を帳簿にして live に出すだけで、約束を理由に手は断らない。条件の文は have:crafting_table>=1 の形。',
-    '節には kind（種類）と prep（準備の節の状態 met|skipped|unmet_now と why）を add・split・set で付けられる。準備を省いたと決めた時の skipped は自分で書く。',
+    '節には kind（種類）と prep（準備の節の状態 met|skipped|unmet_now と why）を add・split・set で付けられる。準備を省くと決めた時は、skipped と why（理由）を自分で書く。',
   ].join(''),
   nativeInputSchema: { type: 'object', additionalProperties: false, required: [], properties: {
     ops: { type: 'array', maxItems: PLAN_LIMITS.ops, items: { type: 'object', additionalProperties: false, required: ['op'], properties: {

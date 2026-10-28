@@ -115,7 +115,7 @@ describe('the reason is in real numbers, and the rule is plain', () => {
   });
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
     expect(V2_ALWAYS).toContain('ネザーへ入るまでを 30 分以内に');
-    expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。準備も省かない');
+    expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(V2_ALWAYS).toContain('足りなくなると地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）。死ぬこともある');
     expect(V2_ALWAYS).not.toContain('鉄の夜');
     expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
@@ -141,7 +141,7 @@ describe('the first plan is asked for the preparation in the descent\'s caution,
 describe('the body\'s new stops and names are in the contract', () => {
   it('names search_timeout (「時間切れ」, not a road that is not there), low_floor (「足場が無い」) and falling_above (「上から落ちる」) with what to do next', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('search_timeout（時間切れ: 道探しが持ち時間で終わり、道があるかは分からない。');
-    expect(SHORT_ACT_DESCRIPTION).toContain('近い中継点を行き先に go を出し直すか、dig と walk の階段・縦穴で進む');
+    expect(SHORT_ACT_DESCRIPTION).toContain('近い中継点を行き先に go を出し直す。高さの差が大きい道は vertical で進む');
     expect(SHORT_ACT_DESCRIPTION).toContain('low_floor（足場が無い: 立つ所が丸ごとのブロックでない。隣の丸ごとの床へずれる）');
     expect(SHORT_ACT_DESCRIPTION).toContain('dead_end（許した手では道が無い）');
     expect(SHORT_ACT_DESCRIPTION).toContain('「上から落ちる」で止まる）: 横へ 1 マスずれて掘るか、先に横から砂利を落とす');

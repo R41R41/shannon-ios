@@ -86,10 +86,10 @@ function itemLine(item: QueueWordsItem, index: number, frame: BodyObservation | 
   return `${index === 0 ? '▶' : '・'} ${itemLabel(item)} ${index === 0 ? '実行中' : '待ち'}${parts.length ? `: ${parts.join('・')}` : ''}`;
 }
 
-/** The lines of the live state: each open item, then how many more may be added; an empty queue says the body stands still. */
+/** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it has no item (the reflexes and the hands that no item runs are not said to stop). */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
   running: { progress: MinecraftQueueProgress | null; leftMs: number }): string[] {
-  if (!items.length) return ['空（体は止まっている）'];
+  if (!items.length) return ['列に項目なし'];
   const room = QUEUE_MAX - items.length;
   const last = items[items.length - 1]!.item;
   return [...items.map((item, index) => itemLine(item, index, frame, running)),
