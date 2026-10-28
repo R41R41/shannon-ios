@@ -1,0 +1,85 @@
+{
+ "scene": "seam-7",
+ "kind": "seam",
+ "title": "同じ life でポータルを移った後の、前の次元の待ち",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "同じ life でポータルを移った後に、前の次元の別の項目が待っている"
+ },
+ "judge": {
+  "scene": "seam-7",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-7/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "hands": {
+     "$ref": "life/portal-pending-other-dimension.json#input.running.hands",
+     "value": [
+      {
+       "do": "portal",
+       "at": {
+        "x": 10,
+        "y": 64,
+        "z": 0
+       },
+       "axis": "x"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "enqueue",
+   "items": {
+    "$ref": "life/portal-pending-other-dimension.json#input.waiting",
+    "value": [
+     {
+      "item": "q2",
+      "dependsOn": [],
+      "madeIn": {
+       "life": 4,
+       "dim": "overworld"
+      },
+      "hands": [
+       {
+        "do": "go",
+        "to": {
+         "x": 200,
+         "y": 64,
+         "z": 50
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "portal",
+   "from": "overworld",
+   "to": "the_nether"
+  },
+  {
+   "op": "mark",
+   "kind": "portal_pending",
+   "command": "q2"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [],
+ "marks": []
+}

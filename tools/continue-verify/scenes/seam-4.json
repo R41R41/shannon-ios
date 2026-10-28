@@ -1,0 +1,83 @@
+{
+ "scene": "seam-4",
+ "kind": "seam",
+ "title": "約束の改訂と、古い版で送った act の結果",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "約束の改訂・解除と、古い rev で送った act の結果が前後する"
+ },
+ "judge": {
+  "scene": "seam-4",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-4/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q90",
+   "act": {
+    "$ref": "promise/revised-after-send.json#input.sequence.0",
+    "value": {
+     "send": "q90",
+     "uses": [
+      3
+     ],
+     "snapshot": [
+      {
+       "id": 3,
+       "rev": 1,
+       "item": "planks",
+       "count": 4,
+       "use": "作業台"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "hold-receipt",
+   "command": "q90",
+   "until": "promise 3 revised"
+  },
+  {
+   "op": "release-receipt",
+   "command": "q90"
+  },
+  {
+   "op": "mark",
+   "kind": "old_rev_result",
+   "command": "q90",
+   "rev": 1
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "plan.update",
+   "args": {
+    "$ref": "promise/revised-after-send.json#input.sequence.1.planUpdate",
+    "value": {
+     "op": "promise",
+     "id": 3,
+     "item": "oak_log",
+     "count": 2,
+     "use": "作業台（原木で）"
+    }
+   }
+  }
+ ],
+ "marks": []
+}

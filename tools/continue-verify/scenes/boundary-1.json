@@ -1,0 +1,238 @@
+{
+ "scene": "boundary-1",
+ "kind": "boundary",
+ "title": "結果と列",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "result/r43-reflex-ate-first.json",
+  "continue/queue-item-depends.json"
+ ],
+ "contract": {
+  "n": 1,
+  "name": "結果と列",
+  "pass": [
+   "eat の手の goal が already",
+   "dependsOn [] の項目に startedAt がある",
+   "頼る項目だけ droppedBecause depends_failed",
+   "頭が体の始めた項目を取り消さない"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-1",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-1/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "set-body",
+   "hp": 6.2,
+   "food": 20
+  },
+  {
+   "op": "summon",
+   "entity": "zombie",
+   "near": "bot",
+   "tag": "e1"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "$ref": "result/r43-reflex-ate-first.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "pillarUp",
+       "n": 2,
+       "block": "cobblestone"
+      },
+      {
+       "do": "eat",
+       "item": "bread"
+      }
+     ],
+     "why": "[急ぎ] 柱で逃げて食べる"
+    }
+   }
+  },
+  {
+   "op": "wait-until",
+   "until": "command-running q1"
+  },
+  {
+   "op": "send",
+   "command": "q12",
+   "act": "lab:unreachable-dig"
+  },
+  {
+   "op": "enqueue",
+   "items": {
+    "$ref": "continue/queue-item-depends.json#input.waiting",
+    "value": [
+     {
+      "item": "q13",
+      "after": "q12",
+      "dependsOn": [],
+      "pre": [
+       [
+        {
+         "k": "have",
+         "item": "raw_iron",
+         "n": 1
+        }
+       ]
+      ]
+     },
+     {
+      "item": "q13b",
+      "after": "q13",
+      "dependsOn": [],
+      "pre": [
+       [
+        {
+         "k": "food",
+         "n": 40
+        }
+       ]
+      ]
+     },
+     {
+      "item": "q13c",
+      "after": "q13b",
+      "dependsOn": [],
+      "pre": [
+       [
+        {
+         "k": "furnace",
+         "x": 157,
+         "y": 23,
+         "z": 213
+        }
+       ]
+      ]
+     },
+     {
+      "item": "q14",
+      "after": "q13c"
+     },
+     {
+      "item": "q15",
+      "after": "q14",
+      "dependsOn": [
+       "q12"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "wait-until",
+   "until": "receipt-held q12"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": {
+    "$ref": "result/r43-reflex-ate-first.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "pillarUp",
+       "n": 2,
+       "block": "cobblestone"
+      },
+      {
+       "do": "eat",
+       "item": "bread"
+      }
+     ],
+     "why": "[急ぎ] 柱で逃げて食べる"
+    }
+   }
+  },
+  {
+   "op": "answer",
+   "turn": 2,
+   "reads": [
+    "q12"
+   ],
+   "tool": "enqueue",
+   "args": {
+    "$ref": "continue/queue-item-depends.json#input.waiting",
+    "value": [
+     {
+      "item": "q13",
+      "after": "q12",
+      "dependsOn": [],
+      "pre": [
+       [
+        {
+         "k": "have",
+         "item": "raw_iron",
+         "n": 1
+        }
+       ]
+      ]
+     },
+     {
+      "item": "q13b",
+      "after": "q13",
+      "dependsOn": [],
+      "pre": [
+       [
+        {
+         "k": "food",
+         "n": 40
+        }
+       ]
+      ]
+     },
+     {
+      "item": "q13c",
+      "after": "q13b",
+      "dependsOn": [],
+      "pre": [
+       [
+        {
+         "k": "furnace",
+         "x": 157,
+         "y": 23,
+         "z": 213
+        }
+       ]
+      ]
+     },
+     {
+      "item": "q14",
+      "after": "q13c"
+     },
+     {
+      "item": "q15",
+      "after": "q14",
+      "dependsOn": [
+       "q12"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "marks": [
+  "the reflex ate first: eat is already",
+  "the dependsOn [] item has startedAt"
+ ]
+}

@@ -1,0 +1,151 @@
+{
+ "scene": "boundary-4",
+ "kind": "boundary",
+ "title": "すぐの引き継ぎ",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "control/r45-attack-waited-6-4s.json",
+  "control/different-target.json",
+  "control/high-priority-not-taken.json",
+  "control/shield-kept-on-handover.json"
+ ],
+ "contract": {
+  "n": 4,
+  "name": "すぐの引き継ぎ",
+  "pass": [
+   "同じ相手: handover.confirmed かつ shield kept",
+   "別の相手: melee が次の手を始めない",
+   "溶岩・息・食事・低体力の逃げ: 奪わない"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-4",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-4/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "summon",
+   "entity": "zombie",
+   "near": "bot",
+   "tag": "2601"
+  },
+  {
+   "op": "rcon",
+   "cmd": "reflex floor-melee on #2601"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "$ref": "control/r45-attack-waited-6-4s.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "attack",
+       "target": "#1954"
+      },
+      {
+       "do": "attack",
+       "target": "#2601"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "mark",
+   "kind": "handover_case",
+   "case": "same_target",
+   "command": "q1"
+  },
+  {
+   "op": "summon",
+   "entity": "zombie",
+   "near": "bot",
+   "tag": "3000"
+  },
+  {
+   "op": "send",
+   "command": "q2",
+   "act": {
+    "$ref": "control/different-target.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "fight",
+       "target": "#3000"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "mark",
+   "kind": "handover_case",
+   "case": "different_target",
+   "command": "q2"
+  },
+  {
+   "op": "rcon",
+   "cmd": "lava / breath / eat / low-hp flee, one at a time"
+  },
+  {
+   "op": "send",
+   "command": "q3",
+   "act": {
+    "$ref": "control/high-priority-not-taken.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "fight",
+       "target": "#77"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "mark",
+   "kind": "handover_case",
+   "case": "safety",
+   "command": "q3"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": {
+    "$ref": "control/r45-attack-waited-6-4s.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "attack",
+       "target": "#1954"
+      },
+      {
+       "do": "attack",
+       "target": "#2601"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "marks": [
+  "handover_case: same_target | different_target | safety"
+ ]
+}

@@ -1,0 +1,156 @@
+{
+ "scene": "boundary-3",
+ "kind": "boundary",
+ "title": "約束と消費",
+ "benches": [
+  "A",
+  "C"
+ ],
+ "benchesText": "A,C",
+ "fixtures": [
+  "promise/r43-planks-burned-as-fuel.json",
+  "promise/table-crafted-placed-picked.json",
+  "promise/food-for-underground.json",
+  "promise/make-intermediate-and-reflex.json"
+ ],
+ "contract": {
+  "n": 3,
+  "name": "約束と消費",
+  "pass": [
+   "受け取りのたびに帳簿の have と観測の持ち物が合う",
+   "同じ出来事の id が 2 度反映されない"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-3",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-3/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "$ref": "promise/r43-planks-burned-as-fuel.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "smelt",
+       "items": [
+        {
+         "item": "raw_iron",
+         "count": 15
+        }
+       ],
+       "fuel": "spruce_planks",
+       "fuelCount": 2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "send",
+   "command": "q2",
+   "act": {
+    "$ref": "promise/make-intermediate-and-reflex.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "make",
+       "item": "wooden_pickaxe",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "send",
+   "command": "q3",
+   "act": {
+    "$ref": "promise/food-for-underground.json#input.steps.0.act",
+    "value": {
+     "hands": [
+      {
+       "do": "eat",
+       "item": "bread"
+      }
+     ],
+     "uses": [
+      4
+     ]
+    }
+   }
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "plan.update",
+   "args": {
+    "$ref": "promise/table-crafted-placed-picked.json#input.promises",
+    "value": [
+     {
+      "id": 3,
+      "rev": 1,
+      "item": "planks",
+      "count": 4,
+      "use": "作業台",
+      "instead": [
+       [
+        {
+         "k": "have",
+         "item": "crafting_table",
+         "n": 1
+        }
+       ],
+       [
+        {
+         "k": "near",
+         "block": "crafting_table",
+         "r": 8
+        }
+       ]
+      ],
+      "state": "open",
+      "ledger": []
+     }
+    ]
+   }
+  },
+  {
+   "op": "answer",
+   "turn": 2,
+   "reads": [
+    "q1"
+   ],
+   "tool": "act",
+   "args": {
+    "$ref": "promise/table-crafted-placed-picked.json#input.steps.0.act",
+    "value": {
+     "hands": [
+      {
+       "do": "craft",
+       "item": "crafting_table"
+      }
+     ],
+     "uses": [
+      3
+     ]
+    }
+   }
+  }
+ ],
+ "marks": [
+  "one ledger row at every receipt: {applied, have, observed}"
+ ]
+}

@@ -1,0 +1,64 @@
+{
+ "scene": "seam-6",
+ "kind": "seam",
+ "title": "引き継ぎの判定の間に、死・低体力・別の安全の反射が取る",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "引き継ぎの判定の間に、死・低体力・別の安全の反射が取る"
+ },
+ "judge": {
+  "scene": "seam-6",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-6/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "summon",
+   "entity": "zombie",
+   "near": "bot",
+   "tag": "2601"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "$ref": "control/r45-attack-waited-6-4s.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "attack",
+       "target": "#1954"
+      },
+      {
+       "do": "attack",
+       "target": "#2601"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "rcon",
+   "cmd": "low-hp flee takes the body inside the 300 ms reservation"
+  },
+  {
+   "op": "mark",
+   "kind": "handover_case",
+   "case": "safety",
+   "command": "q1"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [],
+ "marks": []
+}

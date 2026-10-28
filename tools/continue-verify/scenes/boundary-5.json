@@ -1,0 +1,115 @@
+{
+ "scene": "boundary-5",
+ "kind": "boundary",
+ "title": "死と非同期",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "life/death-at-each-moment.json",
+  "life/r45-death-then-old-attack.json"
+ ],
+ "contract": {
+  "n": 5,
+  "name": "死と非同期",
+  "pass": [
+   "死の時刻より後に、古い life の命令の motorOps が 0",
+   "待っていた古い命令は 1 つも始まらない",
+   "awaiting_model の返事は discarded life_changed",
+   "操作の記録は輪ではなく、台の始めから続けて取った物で判定する"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-5",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-5/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q11",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "wait-until",
+   "until": "command-running q11"
+  },
+  {
+   "op": "kill-bot",
+   "moment": "running_hand"
+  },
+  {
+   "op": "send",
+   "command": "q12",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "send",
+   "command": "q13",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "summon",
+   "entity": "zombie",
+   "near": "bot",
+   "tag": "reflex"
+  },
+  {
+   "op": "wait-until",
+   "until": "reflex-running"
+  },
+  {
+   "op": "kill-bot",
+   "moment": "waiting_for_reflex"
+  },
+  {
+   "op": "send",
+   "command": "q14",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "enqueue",
+   "items": [
+    {
+     "item": "q15",
+     "after": "q14"
+    }
+   ]
+  },
+  {
+   "op": "kill-bot",
+   "moment": "queued"
+  },
+  {
+   "op": "wait-until",
+   "until": "decision-in-flight"
+  },
+  {
+   "op": "kill-bot",
+   "moment": "awaiting_model"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk",
+   "delayMs": 8000
+  }
+ ],
+ "marks": [
+  "deaths: {at, lifeBefore, lifeAfter, moment, waiting, decision}",
+  "the log is the continuous file, not the ring",
+  "life/r45-death-then-old-attack.json: the old act is refused stale_life"
+ ]
+}

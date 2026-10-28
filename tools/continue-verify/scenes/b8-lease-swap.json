@@ -1,0 +1,71 @@
+{
+ "scene": "b8-lease-swap",
+ "kind": "boundary8",
+ "title": "待ちの間に lease を新しくする",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "result/unknown-receipt-cleanup.json",
+  "result/unknown-state-machine.json",
+  "result/held-two-axes.json",
+  "result/head-restart-sent.json",
+  "promise/same-receipt-twice.json",
+  "promise/seen-after-32-and-restart.json",
+  "promise/receipt-box-then-ack.json"
+ ],
+ "contract": {
+  "inject": "q2 の待ちの間に lease を新しくする",
+  "command": "q2",
+  "corrections": 0,
+  "deadline": null,
+  "records": [
+   "q2 lease_expired"
+  ],
+  "pass": [
+   "boundary8Scenes の 6 場面それぞれで: 同じ命令の操作が 2 回の実行に分かれない・不明の項目が自動で出し直されない・帳簿に同じ出来事が 2 度入らない・訂正の回数が表どおり"
+  ]
+ },
+ "judge": {
+  "scene": "b8-lease-swap",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/b8-lease-swap/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "enqueue",
+   "items": [
+    {
+     "item": "q2",
+     "after": "q1"
+    }
+   ]
+  },
+  {
+   "op": "swap-lease"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk"
+  }
+ ],
+ "marks": []
+}

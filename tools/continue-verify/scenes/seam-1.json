@@ -1,0 +1,73 @@
+{
+ "scene": "seam-1",
+ "kind": "seam",
+ "title": "独立な項目が動いた後に、前の失敗が届く",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "体が独立な q2 を始めた後に、頭へ q1 の失敗が届く（頭が q2 を取り消さない）"
+ },
+ "judge": {
+  "scene": "seam-1",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-1/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": "lab:unreachable-dig"
+  },
+  {
+   "op": "enqueue",
+   "items": [
+    {
+     "item": "q2",
+     "after": "q1",
+     "dependsOn": []
+    }
+   ]
+  },
+  {
+   "op": "hold-receipt",
+   "command": "q1",
+   "until": "q2 started"
+  },
+  {
+   "op": "wait-until",
+   "until": "command-running q2"
+  },
+  {
+   "op": "release-receipt",
+   "command": "q1"
+  },
+  {
+   "op": "mark",
+   "kind": "independent_started",
+   "started": "q2",
+   "failed": "q1"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [
+    "q1"
+   ],
+   "tool": "wait",
+   "args": {}
+  }
+ ],
+ "marks": []
+}

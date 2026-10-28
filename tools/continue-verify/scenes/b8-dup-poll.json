@@ -1,0 +1,80 @@
+{
+ "scene": "b8-dup-poll",
+ "kind": "boundary8",
+ "title": "同じ受け取りの poll を 2 度送る",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "result/unknown-receipt-cleanup.json",
+  "result/unknown-state-machine.json",
+  "result/held-two-axes.json",
+  "result/head-restart-sent.json",
+  "promise/same-receipt-twice.json",
+  "promise/seen-after-32-and-restart.json",
+  "promise/receipt-box-then-ack.json"
+ ],
+ "contract": {
+  "inject": "q1 の受け取りを載せた poll を 2 度送る",
+  "command": "q1",
+  "corrections": 0,
+  "deadline": null,
+  "records": [
+   "one applied receipt",
+   "ledger event once"
+  ],
+  "pass": [
+   "boundary8Scenes の 6 場面それぞれで: 同じ命令の操作が 2 回の実行に分かれない・不明の項目が自動で出し直されない・帳簿に同じ出来事が 2 度入らない・訂正の回数が表どおり"
+  ]
+ },
+ "judge": {
+  "scene": "b8-dup-poll",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/b8-dup-poll/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "$ref": "promise/same-receipt-twice.json#input",
+    "value": {
+     "receipts": [
+      "q69",
+      "q69"
+     ],
+     "events": [
+      {
+       "id": "skill:q69:1:1:2",
+       "item": "spruce_planks",
+       "count": -2,
+       "reason": "fuel"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "dup-poll",
+   "command": "q1"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk"
+  }
+ ],
+ "marks": []
+}

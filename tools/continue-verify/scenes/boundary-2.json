@@ -1,0 +1,129 @@
+{
+ "scene": "boundary-2",
+ "kind": "boundary",
+ "title": "途中の成果",
+ "benches": [
+  "A"
+ ],
+ "benchesText": "A",
+ "fixtures": [
+  "vertical/r45-hold5-shaft-down.json",
+  "vertical/r45-hold7-pillar-up.json",
+  "vertical/boundary2-evidence.json"
+ ],
+ "contract": {
+  "n": 2,
+  "name": "途中の成果",
+  "pass": [
+   "4 つの数と掘りの数を、vertical/boundary2-evidence.json の証拠の表のとおりに別々に照らす（移動の実績と stepsValid を等しいと見ない）",
+   "次の手が progress.at から始まり、掘った段を掘り直さない"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-2",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-2/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "hands": [
+     {
+      "$ref": "vertical/r45-hold5-shaft-down.json#input.hand",
+      "value": {
+       "do": "vertical",
+       "dir": "down",
+       "shape": "shaft",
+       "toY": -50,
+       "canDig": [
+        "stone",
+        "andesite",
+        "diorite",
+        "granite",
+        "deepslate",
+        "tuff",
+        "dirt"
+       ],
+       "canPlace": [
+        "cobblestone"
+       ],
+       "maxPlace": 30,
+       "liquid": "seal",
+       "range": 1,
+       "seconds": 120
+      }
+     }
+    ],
+    "from": {
+     "$ref": "vertical/r45-hold5-shaft-down.json#input.from",
+     "value": {
+      "x": 183,
+      "y": 63,
+      "z": 195
+     }
+    }
+   }
+  },
+  {
+   "op": "mark",
+   "kind": "resume",
+   "from": "q1",
+   "to": "q2"
+  },
+  {
+   "op": "send",
+   "command": "q2",
+   "act": {
+    "hands": [
+     {
+      "$ref": "vertical/r45-hold7-pillar-up.json#input.hand",
+      "value": {
+       "do": "vertical",
+       "dir": "up",
+       "shape": "pillar",
+       "toY": 63,
+       "canDig": [
+        "stone",
+        "dirt",
+        "tuff",
+        "andesite",
+        "diorite",
+        "granite",
+        "gravel"
+       ],
+       "canPlace": [
+        "cobbled_deepslate",
+        "cobblestone",
+        "dirt"
+       ],
+       "maxPlace": 60,
+       "liquid": "seal_water",
+       "seconds": 120
+      }
+     }
+    ],
+    "from": {
+     "$ref": "vertical/r45-hold7-pillar-up.json#input.from",
+     "value": {
+      "x": 179,
+      "y": 7,
+      "z": 198
+     }
+    }
+   }
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [],
+ "marks": [
+  "meta.resumes: the pair (a hand ended, the command that resumed it)",
+  "the evidence table: vertical/boundary2-evidence.json"
+ ]
+}

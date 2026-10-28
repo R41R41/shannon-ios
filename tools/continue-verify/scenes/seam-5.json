@@ -1,0 +1,65 @@
+{
+ "scene": "seam-5",
+ "kind": "seam",
+ "title": "act の外の食事・途中材・手の中断と反射の食事・repeat の周回",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "act の外の食事、途中材の作りと消費、手の中断と反射の食事、repeat の複数の周回"
+ },
+ "judge": {
+  "scene": "seam-5",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-5/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q80",
+   "act": {
+    "$ref": "promise/food-for-underground.json#input.steps.0.act",
+    "value": {
+     "hands": [
+      {
+       "do": "eat",
+       "item": "bread"
+      }
+     ],
+     "uses": [
+      4
+     ]
+    }
+   }
+  },
+  {
+   "op": "send",
+   "command": "q91",
+   "act": {
+    "$ref": "promise/make-intermediate-and-reflex.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "make",
+       "item": "wooden_pickaxe",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [],
+ "marks": [
+  "a ledger row at every receipt, each pass of a repeat"
+ ]
+}

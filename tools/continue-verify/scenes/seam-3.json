@@ -1,0 +1,63 @@
+{
+ "scene": "seam-3",
+ "kind": "seam",
+ "title": "不明を見せた後の片付け・遅れた結果・同じ結果の再受信",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "不明を LLM へ見せた後に、片付けの成功・失敗、遅れた結果、同じ結果の再受信"
+ },
+ "judge": {
+  "scene": "seam-3",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-3/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q40",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "hold-receipt",
+   "command": "q40",
+   "until": "head-notified-unknown q40"
+  },
+  {
+   "op": "wait-until",
+   "until": "head-notified-unknown q40"
+  },
+  {
+   "op": "release-receipt",
+   "command": "q40"
+  },
+  {
+   "op": "dup-poll",
+   "command": "q40"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [
+    "q40"
+   ],
+   "tool": "wait",
+   "args": {}
+  }
+ ],
+ "marks": [
+  "cases: result/unknown-receipt-cleanup.json#input.cases"
+ ]
+}

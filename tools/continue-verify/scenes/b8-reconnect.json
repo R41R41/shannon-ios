@@ -1,0 +1,84 @@
+{
+ "scene": "b8-reconnect",
+ "kind": "boundary8",
+ "title": "実行中に体の接続を切ってつなぎ直す",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "result/unknown-receipt-cleanup.json",
+  "result/unknown-state-machine.json",
+  "result/held-two-axes.json",
+  "result/head-restart-sent.json",
+  "promise/same-receipt-twice.json",
+  "promise/seen-after-32-and-restart.json",
+  "promise/receipt-box-then-ack.json"
+ ],
+ "contract": {
+  "inject": "q2 の実行中に体の接続を切ってつなぎ直す",
+  "command": "q2,q3",
+  "corrections": 0,
+  "deadline": "first poll of the new connection",
+  "records": [
+   "first poll",
+   "q3 connection_changed"
+  ],
+  "pass": [
+   "boundary8Scenes の 6 場面それぞれで: 同じ命令の操作が 2 回の実行に分かれない・不明の項目が自動で出し直されない・帳簿に同じ出来事が 2 度入らない・訂正の回数が表どおり"
+  ]
+ },
+ "judge": {
+  "scene": "b8-reconnect",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/b8-reconnect/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q2",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "enqueue",
+   "items": [
+    {
+     "item": "q3",
+     "after": "q2"
+    }
+   ]
+  },
+  {
+   "op": "wait-until",
+   "until": "command-running q2"
+  },
+  {
+   "op": "mark",
+   "kind": "reconnect"
+  },
+  {
+   "op": "disconnect-body"
+  },
+  {
+   "op": "wait-until",
+   "until": "poll-first new-connection"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk"
+  }
+ ],
+ "marks": []
+}

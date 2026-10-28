@@ -1,0 +1,86 @@
+{
+ "scene": "seam-2",
+ "kind": "seam",
+ "title": "onFail continue の失敗へ後続が頼る・間接の依存",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "onFail continue の失敗へ後続が明示で頼る。3 つの項目の間接の依存"
+ },
+ "judge": {
+  "scene": "seam-2",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-2/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "$ref": "continue/onfail-continue-does-not-exempt.json#input.act",
+    "value": {
+     "hands": [
+      {
+       "do": "craft",
+       "item": "stone_pickaxe",
+       "onFail": "continue"
+      },
+      {
+       "do": "mine",
+       "block": "iron_ore",
+       "count": 2,
+       "dependsOn": [
+        1
+       ]
+      },
+      {
+       "do": "eat",
+       "item": "bread"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "enqueue",
+   "items": {
+    "$ref": "continue/indirect-depends.json#input.queue.waiting",
+    "value": [
+     {
+      "item": "q2",
+      "dependsOn": [
+       "q1"
+      ]
+     },
+     {
+      "item": "q3",
+      "dependsOn": [
+       "q2"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "mark",
+   "kind": "chain",
+   "items": [
+    "q1",
+    "q2",
+    "q3"
+   ]
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [],
+ "marks": []
+}

@@ -1,0 +1,213 @@
+{
+ "scene": "boundary-9",
+ "kind": "boundary",
+ "title": "計画",
+ "benches": [
+  "C"
+ ],
+ "benchesText": "C",
+ "fixtures": [
+  "plan/first-plan-with-kind.json",
+  "plan/title-renamed-same-decisions.json",
+  "plan/descended-without-prep-fact.json",
+  "plan/migrate-v1-to-v2.json"
+ ],
+ "contract": {
+  "n": 9,
+  "name": "計画",
+  "pass": [
+   "kind と prep が保存・頭の再起動・読み戻しで残る",
+   "題名の言い換えの前後で判定の値が同じ（表示の文は別に照らす）",
+   "頭が prep を書かない"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-9",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-9/"
+ },
+ "lab": [],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "first-plan",
+   "args": {
+    "$ref": "plan/first-plan-with-kind.json#input.firstPlanAnswer",
+    "value": {
+     "nodes": [
+      {
+       "id": "p1",
+       "parent": "",
+       "title": "木と石の道具",
+       "kind": "stone_tools",
+       "where": "",
+       "doneWhen": "have:stone_pickaxe>=1"
+      },
+      {
+       "id": "p3",
+       "parent": "",
+       "title": "食料40点と下る準備",
+       "kind": "prep_descent",
+       "where": "",
+       "doneWhen": "food>=40&作業台か板 4"
+      },
+      {
+       "id": "p5",
+       "parent": "",
+       "title": "ダイヤ（y=-58）",
+       "kind": "diamond",
+       "where": "y=-58",
+       "doneWhen": "have:diamond>=3"
+      },
+      {
+       "id": "p9",
+       "parent": "",
+       "title": "村を見る",
+       "where": "",
+       "doneWhen": ""
+      }
+     ],
+     "promises": [
+      {
+       "item": "planks",
+       "count": 4,
+       "use": "作業台"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "probe",
+   "kind": "plan_snapshot",
+   "stage": "first_plan"
+  },
+  {
+   "op": "answer",
+   "turn": 2,
+   "reads": [],
+   "tool": "plan.update",
+   "args": {
+    "op": "set",
+    "id": "p3",
+    "prep": {
+     "state": "skipped",
+     "why": "鉄を先に取る"
+    }
+   }
+  },
+  {
+   "op": "probe",
+   "kind": "plan_write",
+   "by": "llm"
+  },
+  {
+   "op": "probe",
+   "kind": "plan_snapshot",
+   "stage": "plan_update"
+  },
+  {
+   "op": "probe",
+   "kind": "plan_snapshot",
+   "stage": "saved"
+  },
+  {
+   "op": "restart"
+  },
+  {
+   "op": "probe",
+   "kind": "plan_snapshot",
+   "stage": "head_restart"
+  },
+  {
+   "op": "probe",
+   "kind": "plan_snapshot",
+   "stage": "read_back"
+  },
+  {
+   "op": "probe",
+   "kind": "plan_decisions",
+   "variant": "original",
+   "tree": {
+    "$ref": "plan/title-renamed-same-decisions.json#input.tree",
+    "value": {
+     "schema": "shannon.plan-tree.v2",
+     "revision": 12,
+     "current": "p5",
+     "nodes": [
+      {
+       "id": "p1",
+       "parentId": null,
+       "order": 0,
+       "title": "木と石の道具",
+       "state": "done",
+       "kind": "stone_tools"
+      },
+      {
+       "id": "p3",
+       "parentId": null,
+       "order": 1,
+       "title": "食料40点と下る準備",
+       "state": "continue",
+       "kind": "prep_descent",
+       "doneWhen": "food>=40&作業台か板 4"
+      },
+      {
+       "id": "p4",
+       "parentId": null,
+       "order": 2,
+       "title": "鉄（24〜36）",
+       "state": "continue",
+       "kind": "iron",
+       "where": "y=16"
+      },
+      {
+       "id": "p5",
+       "parentId": null,
+       "order": 3,
+       "title": "ダイヤ（y=-58）",
+       "state": "wait",
+       "kind": "diamond"
+      },
+      {
+       "id": "p6",
+       "parentId": null,
+       "order": 4,
+       "title": "黒曜石10",
+       "state": "wait",
+       "kind": "obsidian"
+      },
+      {
+       "id": "p7",
+       "parentId": null,
+       "order": 5,
+       "title": "ネザーへのゲート",
+       "state": "wait",
+       "kind": "portal",
+       "where": "@ (150,64,210)"
+      }
+     ],
+     "promises": []
+    }
+   }
+  },
+  {
+   "op": "probe",
+   "kind": "plan_decisions",
+   "variant": "renamed",
+   "rename": {
+    "$ref": "plan/title-renamed-same-decisions.json#input.rename",
+    "value": {
+     "p5": "深い所の青い石を掘る",
+     "p7": "赤い世界への門"
+    }
+   }
+  }
+ ],
+ "marks": [
+  "the head writes no prep: plan_write by head with prep is a fail",
+  "plan/descended-without-prep-fact.json: the fact comes once, skipped is the model's"
+ ]
+}

@@ -1,0 +1,73 @@
+{
+ "scene": "b8-head-restart-unacked",
+ "kind": "boundary8",
+ "title": "頭の再起動：受け取りがまだ ACK されていない",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "result/unknown-receipt-cleanup.json",
+  "result/unknown-state-machine.json",
+  "result/held-two-axes.json",
+  "result/head-restart-sent.json",
+  "promise/same-receipt-twice.json",
+  "promise/seen-after-32-and-restart.json",
+  "promise/receipt-box-then-ack.json"
+ ],
+ "contract": {
+  "inject": "q2 の実行中に頭を止め、q2 の受け取りがまだ ACK されていないうちに起こす（unknown は知らせていない）",
+  "command": "q2",
+  "corrections": 0,
+  "deadline": "cleanup 5 s after start",
+  "records": [
+   "cleanup at start",
+   "headBoot registration",
+   "q2 receipt settled"
+  ],
+  "pass": [
+   "boundary8Scenes の 6 場面それぞれで: 同じ命令の操作が 2 回の実行に分かれない・不明の項目が自動で出し直されない・帳簿に同じ出来事が 2 度入らない・訂正の回数が表どおり"
+  ]
+ },
+ "judge": {
+  "scene": "b8-head-restart-unacked",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/b8-head-restart-unacked/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q2",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "wait-until",
+   "until": "command-running q2"
+  },
+  {
+   "op": "restart-head",
+   "stopAt": "q2 running",
+   "startAt": "before the head acks the receipt"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk"
+  },
+  {
+   "op": "restart"
+  }
+ ],
+ "marks": []
+}

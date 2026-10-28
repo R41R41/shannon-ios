@@ -1,0 +1,113 @@
+{
+ "scene": "boundary-7",
+ "kind": "boundary",
+ "title": "次元と復活",
+ "benches": [
+  "B"
+ ],
+ "benchesText": "B",
+ "fixtures": [
+  "life/portal-is-not-death.json",
+  "life/portal-pending-other-dimension.json"
+ ],
+ "contract": {
+  "n": 7,
+  "name": "次元と復活",
+  "pass": [
+   "ポータルで life が変わらない",
+   "移る前の観測で作った待ちの項目は dimension_changed",
+   "死んで生き返った後は life が 1 増える"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-7",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-7/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": {
+    "hands": {
+     "$ref": "life/portal-pending-other-dimension.json#input.running.hands",
+     "value": [
+      {
+       "do": "portal",
+       "at": {
+        "x": 10,
+        "y": 64,
+        "z": 0
+       },
+       "axis": "x"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "op": "enqueue",
+   "items": {
+    "$ref": "life/portal-pending-other-dimension.json#input.waiting",
+    "value": [
+     {
+      "item": "q2",
+      "dependsOn": [],
+      "madeIn": {
+       "life": 4,
+       "dim": "overworld"
+      },
+      "hands": [
+       {
+        "do": "go",
+        "to": {
+         "x": 200,
+         "y": 64,
+         "z": 50
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "portal",
+   "from": "overworld",
+   "to": "the_nether"
+  },
+  {
+   "op": "mark",
+   "kind": "portal_pending",
+   "command": "q2"
+  },
+  {
+   "op": "kill-bot",
+   "moment": "running_hand"
+  },
+  {
+   "op": "rcon",
+   "cmd": "respawn in overworld"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk",
+   "delayMs": 8000
+  }
+ ],
+ "marks": [
+  "life lines: {life, alive, dimension}",
+  "portal_pending: the awaited decision is discarded dimension_changed"
+ ]
+}

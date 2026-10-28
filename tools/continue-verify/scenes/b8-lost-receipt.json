@@ -1,0 +1,74 @@
+{
+ "scene": "b8-lost-receipt",
+ "kind": "boundary8",
+ "title": "受け取りが届かず、頭が unknown にしてから本当の受け取りが来る",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "result/unknown-receipt-cleanup.json",
+  "result/unknown-state-machine.json",
+  "result/held-two-axes.json",
+  "result/head-restart-sent.json",
+  "promise/same-receipt-twice.json",
+  "promise/seen-after-32-and-restart.json",
+  "promise/receipt-box-then-ack.json"
+ ],
+ "contract": {
+  "inject": "q1 の受け取りを、頭が q1 を settled_unknown にするまで届けるのを止め、その後に本当の受け取りを放す",
+  "command": "q1",
+  "corrections": 1,
+  "deadline": "cleanup 5 s",
+  "records": [
+   "receipt",
+   "cleanup receipt",
+   "corrected row"
+  ],
+  "pass": [
+   "boundary8Scenes の 6 場面それぞれで: 同じ命令の操作が 2 回の実行に分かれない・不明の項目が自動で出し直されない・帳簿に同じ出来事が 2 度入らない・訂正の回数が表どおり"
+  ]
+ },
+ "judge": {
+  "scene": "b8-lost-receipt",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/b8-lost-receipt/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q1",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "hold-receipt",
+   "command": "q1",
+   "until": "head-notified-unknown q1"
+  },
+  {
+   "op": "wait-until",
+   "until": "head-notified-unknown q1"
+  },
+  {
+   "op": "release-receipt",
+   "command": "q1"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk"
+  }
+ ],
+ "marks": []
+}

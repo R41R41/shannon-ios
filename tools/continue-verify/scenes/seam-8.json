@@ -1,0 +1,105 @@
+{
+ "scene": "seam-8",
+ "kind": "seam",
+ "title": "最大の長さの結果・帳簿・急ぎの live",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [],
+ "contract": {
+  "seam": "最大の長さの結果・帳簿・急ぎの live を、本物の受信の検査と最後の要求のバイトまで通す"
+ },
+ "judge": {
+  "scene": "seam-8",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/seam-8/"
+ },
+ "lab": [],
+ "head": [
+  {
+   "op": "probe",
+   "kind": "request_bytes",
+   "variant": "urgent",
+   "state": {
+    "$ref": "measure/urgent-max-input.json#input.state",
+    "value": {
+     "hp": 6.4,
+     "food": 11,
+     "saturation": 0,
+     "foods": [
+      {
+       "item": "bread",
+       "count": 1
+      }
+     ],
+     "hits": [
+      {
+       "t": -9,
+       "amount": 5.3,
+       "by": "zombie #2601"
+      },
+      {
+       "t": -4,
+       "amount": 4.9,
+       "by": "zombie #2601"
+      }
+     ],
+     "holder": {
+      "kind": "reflex",
+      "reflex": "floor-melee",
+      "target": 2601
+     },
+     "life": 3,
+     "promises": [
+      {
+       "id": 3,
+       "line": "約束 #3 作業台用の板 4: 今 2"
+      },
+      {
+       "id": 4,
+       "line": "約束 #4 地下で食べる分の食料 20 点: 今 11 点"
+      },
+      {
+       "id": 5,
+       "line": "約束 #5 はしご用の板 2: 今 0"
+      },
+      {
+       "id": 6,
+       "line": "約束 #6 黒曜石 10: 今 7"
+      }
+     ],
+     "queue": [
+      {
+       "item": "q52",
+       "state": "running",
+       "effect": "attack #2601",
+       "leftS": 20
+      },
+      {
+       "item": "q53",
+       "state": "waiting",
+       "effect": "go (172,-19,236)"
+      }
+     ],
+     "free": 0,
+     "foodCandidates": [
+      {
+       "name": "cod",
+       "id": 501,
+       "distance": 18.2
+      }
+     ],
+     "filler": {
+      "resultChars": 16000,
+      "liveLines": 400,
+      "nearMobs": 20
+     },
+     "recovery": "bread 1 で +11 点"
+    }
+   }
+  }
+ ],
+ "marks": []
+}

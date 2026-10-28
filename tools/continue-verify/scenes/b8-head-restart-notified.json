@@ -1,0 +1,81 @@
+{
+ "scene": "b8-head-restart-notified",
+ "kind": "boundary8",
+ "title": "頭の再起動：unknown を LLM へ知らせた後",
+ "benches": [
+  "B",
+  "C"
+ ],
+ "benchesText": "B,C",
+ "fixtures": [
+  "result/unknown-receipt-cleanup.json",
+  "result/unknown-state-machine.json",
+  "result/held-two-axes.json",
+  "result/head-restart-sent.json",
+  "promise/same-receipt-twice.json",
+  "promise/seen-after-32-and-restart.json",
+  "promise/receipt-box-then-ack.json"
+ ],
+ "contract": {
+  "inject": "q2 を settled_unknown にして LLM へ知らせた後に頭を止め、本当の受け取りを放してから起こす",
+  "command": "q2",
+  "corrections": 1,
+  "deadline": "cleanup 5 s after start",
+  "records": [
+   "notified row",
+   "corrected row after start"
+  ],
+  "pass": [
+   "boundary8Scenes の 6 場面それぞれで: 同じ命令の操作が 2 回の実行に分かれない・不明の項目が自動で出し直されない・帳簿に同じ出来事が 2 度入らない・訂正の回数が表どおり"
+  ]
+ },
+ "judge": {
+  "scene": "b8-head-restart-notified",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/b8-head-restart-notified/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "send",
+   "command": "q2",
+   "act": "lab:slow-walk"
+  },
+  {
+   "op": "hold-receipt",
+   "command": "q2",
+   "until": "head-notified-unknown q2"
+  },
+  {
+   "op": "wait-until",
+   "until": "head-notified-unknown q2"
+  },
+  {
+   "op": "restart-head",
+   "stopAt": "after the model was told",
+   "startAt": "after the real receipt was released"
+  },
+  {
+   "op": "release-receipt",
+   "command": "q2"
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [
+  {
+   "op": "answer",
+   "turn": 1,
+   "reads": [],
+   "tool": "act",
+   "args": "lab:slow-walk"
+  },
+  {
+   "op": "restart"
+  }
+ ],
+ "marks": []
+}

@@ -1,0 +1,142 @@
+This patch adds (5) to the head mode of Syzygy/tools/shannon-release/local-gate.sh (continue contract 3.1, chapter 9; made in the shannon-ios worktree
+codex/shannon/continue-judge, tools/continue-verify/). It does not change the file by itself. To apply it, from the root of the Syzygy clone:
+
+    patch -p1 --dry-run < <path to this file>      # then without --dry-run
+    bash -n tools/shannon-release/local-gate.sh
+
+What it adds:
+  - head mode: after (4), (5) = produced_stage: (a) the body's backend/contracts/continue/produced/ exists at the body rev (CONTINUE_PRODUCED=absent fails),
+    (b) every produced file names (continueProduced.bodyRev) the body rev or a rev with the same backend/src and backend/package.json, and was made from
+    the head's own copy of its fixture (inputSha256), (c) the head's services/api/tests/fixtures/continue/produced/ is byte for byte the body's,
+    (d) docs/continue-contracts.md and tests/fixtures/continue/manifest.json are the same file on both sides.
+  - a mode "produced <head-repo> <rev> <body-rev>" that runs (5) alone, without the body's build (for the work in between, and for the tests).
+  - GATE_BODY_REPO picks the body clone (the default is unchanged). The continue work is in /mnt/c/Shannon/Shannon-continue, not in the default clone.
+  - TEMPORARY EXCEPTION: while backend/scripts/lab/continue-produce.ts is not in the body at that rev, a missing produced/ is
+    CONTINUE_PRODUCED=unimplemented and a WARNING, not a failure. Delete that branch (so that it fails like CONTINUE_PRODUCED=absent) when the script has landed in
+    the body's main (contract 3.1, chapter 11, step 3). The branch says so in a comment.
+  - a produced file of another version is a failure, never a warning (chapter 9). 'Another version' = the code under CODE_PATHS (backend/src,
+    backend/package.json) differs from the rev the file names. The body's agreement on CODE_PATHS is needed (see the report).
+
+--- a/tools/shannon-release/local-gate.sh
++++ b/tools/shannon-release/local-gate.sh
+@@ -4,6 +4,7 @@
+ #
+ #   wsl -d Ubuntu-24.04 -u ghrunner -- bash /mnt/c/Shannon/Syzygy/tools/shannon-release/local-gate.sh body <body-repo> <rev> [base] [head-rev]
+ #   wsl -d Ubuntu-24.04 -u ghrunner -- bash /mnt/c/Shannon/Syzygy/tools/shannon-release/local-gate.sh head <head-repo> <rev> [body-rev]
++#   wsl -d Ubuntu-24.04 -u ghrunner -- bash /mnt/c/Shannon/Syzygy/tools/shannon-release/local-gate.sh produced <head-repo> <rev> <body-rev>   # (5) alone: no build
+ #     <body-repo> / <head-repo>: a clone on the PC as WSL sees it (/mnt/c/Shannon/...); base defaults to origin/main (what production
+ #     runs); head-rev / body-rev: the other side for the catalog contract (default origin/main of /mnt/c/Shannon/shannon-ios or
+ #     /mnt/c/Shannon/Shannon-mc-run40-fixes).
+@@ -11,7 +12,10 @@
+ # body: (1) the tsc --noCheck build (what the VM builds), (2) the strict check the VM gate used to run (tsconfig.minecraft-execution.json,
+ #       with its two known errors), (3) `vitest related` for the changed backend files (8 workers, one run at a time: flock),
+ #       (4) the catalog of the build against the head's poll validation.
+-# head: (4) only — the head's own tsc and related tests run on the VM before the stop (deploy-head.sh prepare: deploy-check.mjs).
++# head: (4) and (5) — the head's own tsc and related tests run on the VM before the stop (deploy-head.sh prepare: deploy-check.mjs).
++# (5) "continue" contract 3.1, chapter 9: the body's real outputs (backend/contracts/continue/produced/) are not stale, the head's copy is the body's, and
++#     the two copies of the contract (docs/continue-contracts.md, tests/fixtures/continue/manifest.json) are the same. <body-rev> is a revision of the body
++#     clone named by GATE_BODY_REPO (default below). A produced file of another version FAILS (it is not a warning).
+ set -euo pipefail
+ MODE=${1:?body or head}; REPO=${2:?repository}; REV=${3:?revision}
+ NODE=${GATE_NODE:-/home/ghrunner/actions-runner/_work/_tool/node/24.20.0/x64/bin/node}
+@@ -19,7 +23,12 @@
+ WORK=${GATE_WORK:-$HOME/release-gate}
+ HERE=$(cd "$(dirname "$0")" && pwd)
+ HEAD_REPO_DEFAULT=/mnt/c/Shannon/shannon-ios
+-BODY_REPO_DEFAULT=/mnt/c/Shannon/Shannon-mc-run40-fixes
++BODY_REPO_DEFAULT=${GATE_BODY_REPO:-/mnt/c/Shannon/Shannon-mc-run40-fixes}
++# (5) where the "continue" contract's files are, on each side
++PRODUCED_BODY=backend/contracts/continue/produced
++PRODUCED_HEAD=services/api/tests/fixtures/continue/produced
++PRODUCE_SCRIPT=backend/scripts/lab/continue-produce.ts
++CODE_PATHS=(backend/src backend/package.json)   # what builds the body: a produced file is current while these are the same as at the rev it names
+ VALIDATION=services/api/src/surfaces/minecraft/minecraftControlValidation.ts
+ FAKE_ENV=(SHANNON_ISOLATED_MINEBOT_PROBE=true OPENAI_API_KEY=offline-test-not-used MONGODB_URI=mongodb://127.0.0.1:1/offline-not-used CI=true TZ=Etc/UTC LANG=C.UTF-8)
+ T0=$(date +%s); FAIL=0
+@@ -54,6 +63,68 @@
+   case "$out" in 'CONTRACT ok '*) ;; *) FAIL=1;; esac
+ }
+ 
++field() {   # field <file> <key>: the first string value of "key" in a JSON file
++  grep -a -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$1" | head -1 | sed -E 's/^[^:]*:[[:space:]]*"(.*)"$/\1/' || true
++}
++same_code() {   # same_code <body repo> <rev a> <rev b>: nothing under CODE_PATHS differs
++  gitr "$1" diff --quiet "$2" "$3" -- "${CODE_PATHS[@]}"
++}
++# (5) produced is not stale (continue contract 3.1, chapter 9). Prints CONTINUE_PRODUCED=<ok|absent|unimplemented|stale>.
++produced_stage() {   # produced_stage <head repo> <head rev> <body repo> <body rev>
++  local hrepo=$1 hrev=$2 brepo=$3 brev=$4 bfull t; local -a names=()
++  bfull=$(gitr "$brepo" rev-parse --verify "$brev^{commit}") || { echo "   !! the body revision $brev is not in $brepo"; FAIL=1; return; }
++  t=$(mktemp -d /tmp/gate-produced-XXXXXX)
++  # (d) the two copies of the contract, and of the fixtures' manifest, are the same file
++  local pair hpath bpath hsha bsha hh bb
++  for pair in "docs/continue-contracts.md:docs/continue-contracts.md" "services/api/tests/fixtures/continue/manifest.json:backend/tests/fixtures/continue/manifest.json"; do
++    hpath=${pair%%:*}; bpath=${pair#*:}
++    hh=0; bb=0; gitr "$hrepo" cat-file -e "$hrev:$hpath" 2>/dev/null && hh=1; gitr "$brepo" cat-file -e "$bfull:$bpath" 2>/dev/null && bb=1
++    if [ "$hh" = 0 ] && [ "$bb" = 0 ]; then echo "   (5d) $hpath: on neither side at these revisions (the contract has not landed): skipped"; continue; fi
++    if [ "$hh" = 0 ] || [ "$bb" = 0 ]; then echo "   !! (5d) only one side has the contract file ($hpath in the head: $hh, $bpath in the body: $bb)"; FAIL=1; continue; fi
++    hsha=$(gitr "$hrepo" show "$hrev:$hpath" | sha256sum | cut -d' ' -f1); bsha=$(gitr "$brepo" show "$bfull:$bpath" | sha256sum | cut -d' ' -f1)
++    if [ "$hsha" != "$bsha" ]; then echo "   !! (5d) $hpath (head) and $bpath (body) differ: change the contract on both sides at once and raise the manifest's version"; FAIL=1
++    else echo "   (5d) $hpath = $bpath"; fi
++  done
++  # (a) the body's produced/ at that revision
++  mapfile -t names < <(gitr "$brepo" ls-tree -r --name-only "$bfull" -- "$PRODUCED_BODY/" | sed "s#^$PRODUCED_BODY/##")
++  if [ "${#names[@]}" = 0 ]; then
++    if gitr "$brepo" cat-file -e "$bfull:$PRODUCE_SCRIPT" 2>/dev/null; then
++      echo "   !! (5a) CONTINUE_PRODUCED=absent: the body has $PRODUCE_SCRIPT but no $PRODUCED_BODY/ at $bfull (run it and commit the files)"; FAIL=1
++    else
++      # TEMPORARY: while the body's continue-produce.ts has not landed, a missing produced/ is a warning so that this gate can run for the work in between.
++      # DELETE this branch (make it the failure above) when $PRODUCE_SCRIPT is in the body's main (contract 3.1, chapter 11, step 3).
++      echo "   (5a) CONTINUE_PRODUCED=unimplemented  WARNING (temporary): $PRODUCE_SCRIPT is not in the body at $bfull yet"
++    fi
++    rm -rf "$t"; return
++  fi
++  local name made madefull fixture want have madeby="" ok=1
++  for name in "${names[@]}"; do
++    [[ "$name" =~ ^[A-Za-z0-9._-]+\.json$ ]] || { echo "   !! (5a) unexpected file $PRODUCED_BODY/$name"; ok=0; continue; }
++    gitr "$brepo" show "$bfull:$PRODUCED_BODY/$name" > "$t/$name"
++    # (b) the body that made the file is the revision named, or has the same code
++    made=$(field "$t/$name" bodyRev)
++    madefull=""; [ -z "$made" ] || madefull=$(gitr "$brepo" rev-parse --verify --quiet "$made^{commit}" || true)
++    if [ -z "$madefull" ]; then echo "   !! (5b) $name does not name a body revision of this clone (continueProduced.bodyRev '$made')"; ok=0; continue; fi
++    if [ "$madefull" != "$bfull" ] && ! same_code "$brepo" "$madefull" "$bfull"; then echo "   !! (5b) $name was made by $made, whose code differs from $brev: stale"; ok=0; fi
++    if [ -z "$madeby" ]; then madeby=$madefull; elif [ "$madeby" != "$madefull" ]; then echo "   !! (5b) $name was made by $made, other files by $madeby"; ok=0; fi
++    # (c) the head's file is the same file
++    if ! gitr "$hrepo" cat-file -e "$hrev:$PRODUCED_HEAD/$name" 2>/dev/null; then echo "   !! (5c) $PRODUCED_HEAD/$name is not in the head: run scripts/sync-body-produced.sh $bfull"; ok=0
++    elif [ "$(gitr "$hrepo" show "$hrev:$PRODUCED_HEAD/$name" | sha256sum | cut -d' ' -f1)" != "$(sha256sum < "$t/$name" | cut -d' ' -f1)" ]; then echo "   !! (5c) $PRODUCED_HEAD/$name differs from the body's: run scripts/sync-body-produced.sh $bfull"; ok=0; fi
++    fixture=$(field "$t/$name" inputFixture); want=$(field "$t/$name" inputSha256)
++    if [ -n "$fixture" ]; then
++      have=$(gitr "$hrepo" show "$hrev:services/api/tests/fixtures/continue/$fixture" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)
++      [ -n "$want" ] && [ "$want" = "$have" ] || { echo "   !! (5b) $name was made from another $fixture than the head's"; ok=0; }
++    fi
++  done
++  # a file the head has and the body does not
++  while IFS= read -r name; do
++    [ "$name" = PRODUCED.json ] && continue
++    printf '%s\n' "${names[@]}" | grep -qx -- "$name" || { echo "   !! (5c) the head has $name, which the body does not: run scripts/sync-body-produced.sh $bfull"; ok=0; }
++  done < <(gitr "$hrepo" ls-tree -r --name-only "$hrev" -- "$PRODUCED_HEAD/" | sed "s#^$PRODUCED_HEAD/##")
++  if [ "$ok" = 1 ]; then echo "   (5) CONTINUE_PRODUCED=ok: ${#names[@]} file(s), made by ${madeby:0:10}, the head's copy is the body's"; else echo "   (5) CONTINUE_PRODUCED=stale"; FAIL=1; fi
++  rm -rf "$t"
++}
++
+ case "$MODE" in
+ body)
+   BASE=${4:-origin/main}; HREPO=$HEAD_REPO_DEFAULT; HREV=${5:-origin/main}
+@@ -84,8 +155,16 @@
+   say "head gate: the catalog of body $(gitr "$BREPO" rev-parse --short "$BREV") against head $(gitr "$REPO" rev-parse --short "$REV")"
+   T=$WORK/body-for-head; body_tree "$BREPO" "$BREV" "$T"
+   contract "$T" "$REPO" "$REV"
++
++  say "(5) the body's produced outputs are not stale; the contract's two copies are the same"
++  produced_stage "$REPO" "$REV" "$BREPO" "$BREV"
++  ;;
++produced)
++  [ -n "${4:-}" ] || die "usage: local-gate.sh produced <head-repo> <rev> <body-rev>"
++  say "(5) produced: head $(gitr "$REPO" rev-parse --short "$REV") against body $4 in $BODY_REPO_DEFAULT"
++  produced_stage "$REPO" "$REV" "$BODY_REPO_DEFAULT" "$4"
+   ;;
+-*) die "mode must be body or head" ;;
++*) die "mode must be body, head or produced" ;;
+ esac
+ say "$( [ "$FAIL" = 0 ] && echo 'GATE PASSED' || echo 'GATE FAILED' ) in $(( $(date +%s) - T0 )) s"
+ exit "$FAIL"

@@ -1,0 +1,80 @@
+{
+ "scene": "boundary-6",
+ "kind": "boundary",
+ "title": "古い持ち主",
+ "benches": [
+  "B"
+ ],
+ "benchesText": "B",
+ "fixtures": [
+  "control/stale-owner-cleanup.json"
+ ],
+ "contract": {
+  "n": 6,
+  "name": "古い持ち主",
+  "pass": [
+   "新しい持ち主の後の古い片付けの操作は motor port が断る（効いた操作 0）"
+  ]
+ },
+ "judge": {
+  "scene": "boundary-6",
+  "evidence": "measure/evidence-by-command-kind.json",
+  "folder": "<root>/boundary-6/"
+ },
+ "lab": [
+  {
+   "op": "start-trace"
+  },
+  {
+   "op": "start-owner",
+   "name": "A",
+   "command": "q1"
+  },
+  {
+   "op": "start-owner",
+   "name": "B",
+   "command": "q2",
+   "controls": {
+    "forward": true,
+    "shield": true
+   }
+  },
+  {
+   "op": "mark",
+   "kind": "new_owner",
+   "command": "q2"
+  },
+  {
+   "op": "late-cleanup",
+   "owner": "q1",
+   "calls": {
+    "$ref": "control/stale-owner-cleanup.json#input.sequence.2.calls",
+    "value": [
+     "clearControlStates",
+     "deactivateItem",
+     "pathfinder.setGoal(null)"
+    ]
+   }
+  },
+  {
+   "op": "mark",
+   "kind": "late_cleanup",
+   "command": "q1",
+   "calls": {
+    "$ref": "control/stale-owner-cleanup.json#input.sequence.2.calls",
+    "value": [
+     "clearControlStates",
+     "deactivateItem",
+     "pathfinder.setGoal(null)"
+    ]
+   }
+  },
+  {
+   "op": "stop-trace"
+  }
+ ],
+ "head": [],
+ "marks": [
+  "the motor port's refusals: motor_refused lines"
+ ]
+}
