@@ -26,7 +26,8 @@ export async function waitForQueue(parts: { ports: FcaStepPorts; signal: AbortSi
   if (queue.open() && parts.tools && !parts.stale) wake = await queue.ready({ signal: parts.signal, drain, messages, alert });
   // Words from the owner: what waits is taken off, the running item goes on, and the step ends once it has (the message is the next step's).
   if (wake === 'message') queue.dropWaiting();
-  const continuing = wake === 'remaining' || wake === 'alert';
+  // Continue contract 4: a reflex that hit its cap is a reason to decide now, with items still open (the decision may replace them).
+  const continuing = wake === 'remaining' || wake === 'alert' || wake === 'reflex_capped';
   // Not deciding again: whatever is still open runs out first (a step is committed with no item unsettled).
   if (!continuing && queue.open()) await queue.ready({ signal: parts.signal, drain: true });
   return { continuing, wake };

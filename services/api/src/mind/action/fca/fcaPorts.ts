@@ -1,4 +1,5 @@
 import type { FcaWaitFact } from './fcaWaitGate.js';
+import type { MadeIn } from '../../../contracts/continueContract.js';
 import type { ShannonToolDefinition, ToolResult } from '../../tools/toolRegistryPorts.js';
 import type { FcaActionExpectation, FcaAffectAppraisal, FcaAuxiliaryResult, FcaSharedContext } from './fcaEvidencePorts.js';
 import type { BodyRecallCues, TaskRecallPacket } from '../../recall/taskRecallPorts.js';
@@ -54,6 +55,8 @@ export interface FcaModelInput {
   plan?: Readonly<Record<string, unknown>>;
 }
 /** Task-owned short control may interrupt body work while ordinary inference is awaiting a response. */
+/** Why a decision's answer is discarded before it is used (continue contract 5): the body died, the dimension's generation or the connection changed since it read. */
+export type FcaDecisionDrift = 'life_changed' | 'dimension_changed' | 'connection_changed';
 /** What a body's investigation did (`FcaBodyLifecycle.investigate`): closed codes and counts only, for the metrics line. */
 export interface FcaBodyInvestigation { surprises: readonly string[]; probes: number; answered: number; ms: number }
 /** Why a step that has items open decides again, or ends (`FcaBodyQueue.ready`). */
@@ -93,6 +96,21 @@ export interface FcaBodyLifecycle {
   start(signal: AbortSignal): void;
   revision(): number;
   context(): { revision: number; observation: BodyObservation | null };
+  /**
+   * Continue contract 5: the identity (life, the dimension's generation, the body's boot and connection) of the observation the last `context()` read, or null when it had
+   * none to name. The step keeps it with the request it built, and checks the answer against the newest frame just before it is used (`drifted`).
+   */
+  readOf?(): MadeIn | null;
+  /**
+   * Why an answer to a request made on `read` no longer follows the body (`life_changed`: it died or the life file was made again; `dimension_changed`: another
+   * generation of the dimension; `connection_changed`: the body's boot or connection), or null. The answer is then discarded and the step decides again on a new frame.
+   */
+  drifted?(read: MadeIn): FcaDecisionDrift | null;
+  /**
+   * Awaited once, before the step's first request is built: a step that sends an act again (a resume after a hold, chapter 8's 再開の契約) waits here until that act
+   * has ended or been held again, so its result is what the first decision reads. Resolves (never throws) when the step is aborted or the wait is over.
+   */
+  beforeDecision?(signal: AbortSignal): Promise<void>;
   /** Drain active reflex work and refuse a decision made against an older physical generation. Unknown throws. */
   guard(revision: number): Promise<boolean>;
   /**

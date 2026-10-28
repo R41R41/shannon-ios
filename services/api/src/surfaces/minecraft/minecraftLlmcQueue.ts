@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import type { ActCondition } from '../../contracts/minecraftActCondition.js';
 import { actRemainingMilliseconds, readActResult, type ActInput, type ActPos } from '../../contracts/minecraftActContract.js';
-import { dependStateOf, queueName, unitView, type BodyRun, type DependState, type ItemOutcome, type LifeView, type MadeIn, type OperationState, type StageRow, type TraceIds } from '../../contracts/continueContract.js';
+import { dependStateOf, queueName, unitView, type DependState, type ItemOutcome, type MadeIn, type OperationState, type StageRow, type TraceIds } from '../../contracts/continueContract.js';
 import type { MinecraftControlReceipt, MinecraftQueueEnvelope, MinecraftQueueProgress } from '../../contracts/minecraftControlContract.js';
 import type { FcaBodyQueue, FcaQueueNews, FcaQueueWake, FcaToolCall } from '../../mind/action/fca/fcaPorts.js';
 import type { LedgerInput, UsesSnapshot } from './minecraftLlmcPromises.js';
@@ -17,6 +17,8 @@ import { noteItemStart } from './minecraftLlmcNode.js';
 import { itemLabel, itemResult, neverRan, queueLines, QUEUE_MAX, unitOfReceipt, unknownResult } from './minecraftLlmcQueueWords.js';
 import { correctionWords, heldWords, releasedWords } from './minecraftLlmcResultWords.js';
 import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
+import { madeInOf, withMadeIn } from './minecraftMadeIn.js';
+import { watchBodyEvents, type ReflexCapped } from './minecraftLlmcBodyEvents.js';
 import { readingOf } from './store/minecraftOperationState.js';
 import { receivedRow, releasedRow, correctedRow, unknownNotifiedRow, wokeRow, type RowContext } from './minecraftOperationRows.js';
 
@@ -65,17 +67,10 @@ function keep<T>(map: Map<string, T>, key: string, value: T): void {
 }
 
 /**
- * The observation a decision read, as the envelope names it (continue contract 2's `madeIn`): the life, the dimension and its generation, the body's boot and the
- * connection, the head's boot and the observation's number. Null when the observation has no `state.life` (a body before the contract): the envelope then carries none.
+ * The observation a decision read, as the envelope names it (continue contract 2's `madeIn`): see `minecraftMadeIn.ts`, where the head's commands, the reflex adapter's and
+ * a decision's answer all read it from.
  */
-export function madeInOf(observation: BodyObservation | null, headBoot: string): MadeIn | null {
-  const state = observation?.state as { life?: Partial<LifeView>; bodyRun?: Partial<BodyRun> } | undefined;
-  const life = state?.life, run = state?.bodyRun;
-  if (!observation || !life || !Number.isSafeInteger(life.life) || typeof life.dimension !== 'string' || typeof life.dimensionSince !== 'string') return null;
-  if (!run || typeof run.bodyBoot !== 'string' || typeof run.connectionId !== 'string') return null;
-  return { life: life.life as number, dim: life.dimension, dimSince: life.dimensionSince, bodyBoot: run.bodyBoot, connectionId: run.connectionId, headBoot,
-    obsSeq: observation.sequence };
-}
+export { madeInOf };
 
 interface QueueItem {
   item: string; id: string; operationId: string; call: FcaToolCall; node: string | null; current: string | null; why: string; input: ActInput;
@@ -96,6 +91,8 @@ export interface QueueAdd {
   node: string | null; why: string; fixes: readonly string[]; maxMs: number;
   /** Run 45's resume: this item sends a held one again (the item's mark and its command's id). Its result says so. */
   resumeOf?: { item: string; command: string };
+  /** Continue contract 5: the observation the decision read (`madeIn`). Absent (a resumed act, a test): the newest frame at the moment of adding. */
+  madeIn?: MadeIn | null;
 }
 /** The ledger's input the plan's owner takes (`FcaPlanPort.applyLedger`). */
 export type QueueLedgerInput = Omit<LedgerInput, 'nodes' | 'at'> & { at?: string };
@@ -114,6 +111,8 @@ export interface QueueDeps {
   onHeld?(info: { item: string; command: string; why: string }): void;
   /** The decision record's rows (continue contract 8; the records' owner connects it). Never throws into the queue. */
   record?(row: QueueRecordRow): void;
+  /** A reflex hit its cap (the body's `reflex.capped` event, continue contract 4): told to the live state, beside the queue's own `reflex_capped` wake. */
+  onReflexCapped?(info: ReflexCapped): void;
 }
 type AddResult = { ok: true; item: string; after: string | null; startInMs: number } | { ok: false; text: string };
 
@@ -148,8 +147,10 @@ export interface LlmcQueue extends FcaBodyQueue {
   notes(): string[];
   /** The items the body dropped or the head took off since `since` (a ms clock): their marks and why, for a held act's record (chapter 8's 再開). */
   droppedSince(since: number): { item: string; why: string }[];
-  /** A reflex hit its cap (`reflex_capped`): the next `ready` says so once. The life's and the live state's owners call it. */
+  /** A reflex hit its cap (`reflex_capped`): the next `ready` says so once. The queue calls it itself when the body's `reflex.capped` event comes. */
   noteReflexCapped(): void;
+  /** The items still open (their marks and labels): the ones a hold is about to take off (chapter 8's 再開: the record of a hold that came again). */
+  openItems(): { item: string; why: string }[];
   stop(): void;
   /** Waits (at most `waitMs`) until every item the body was given has answered, and the cleanup after an unknown result has ended: a step that ends is closed only after them. */
   settled(waitMs?: number): Promise<void>;
@@ -331,6 +332,13 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   deps.control.releasedListeners.add(onReleased);
   deps.control.heldListeners.add(onHeld);
   deps.control.settledListeners.add(onSettled);
+  // Continue contract 3 and 4: what the body tells beside its receipts (a reflex's cap, a reflex's use of the pack outside any act).
+  const unwatch = watchBodyEvents({ control: deps.control, bodyId: deps.bodyId, observe: deps.observe, log,
+    ...(deps.applyLedger ? { applyLedger: deps.applyLedger } : {}),
+    onReflexCapped: info => {
+      capped = true;
+      try { deps.onReflexCapped?.(info); } catch { /* the live view never fails a step */ }
+    } });
 
   /** What the item `ref` is to one that relies on it, by the contract's order (`dependStateOf`): a mark this queue does not remember is unknown. */
   const dependStateOfRef = (ref: string): DependState => {
@@ -434,6 +442,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     notes: () => noteLines.splice(0),
     droppedSince: since => dropLog.filter(entry => entry.at >= since).map(({ item, why }) => ({ item, why })),
     noteReflexCapped() { capped = true; },
+    openItems: () => open().map(item => ({ item: item.item, why: itemLabel(item) })),
     mark() { marked = version; },
     stale: () => version !== marked,
     // Once the items are taken off (a stop, the close of the step) an unsettled one is unsafe again: the guard must not look past it.
@@ -453,7 +462,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       const maxMs = Math.max(1_000, Math.min(180_000, spec.maxMs)), startInMs = Math.min(START_CAP_MS, ahead + START_MARGIN_MS);
       const item = makeItem(spec, label, maxMs, startInMs);
       item.uses = deps.snapshotUses?.(spec.input.uses ?? []) ?? [];
-      const madeIn = madeInOf(deps.observe(), headBoot);
+      const madeIn = spec.madeIn === undefined ? madeInOf(deps.observe(), headBoot) : spec.madeIn;
       const envelope: MinecraftQueueEnvelope = { item: label, after, node: spec.node, ...(spec.pre ? { pre: spec.pre } : {}), maxMs,
         startBy: new Date(item.startBy).toISOString(), queue: name, ...(spec.input.dependsOn !== undefined ? { dependsOn: [...spec.input.dependsOn] } : {}),
         ...(madeIn ? { madeIn } : {}) };
@@ -461,7 +470,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       if (items.length > 16) items.splice(0, items.length - 16);
       execution ??= currentActionExecution();
       if (execution) execution.stepOutcome = 'unknown';
-      const handle = deps.control.enqueue({ id: item.id, context: deps.context(), lease: deps.lease, kind: 'skill', skill: spec.skill,
+      const handle = deps.control.enqueue({ id: item.id, context: withMadeIn(deps.context(), madeIn), lease: deps.lease, kind: 'skill', skill: spec.skill,
         arguments: spec.arguments, milliseconds: Math.min(DEADLINE_CAP_MS, ahead + maxMs + DEADLINE_MARGIN_MS), queue: envelope,
         ...(item.uses.length ? { uses: item.uses } : {}), ...(spec.resumeOf ? { resumeOf: spec.resumeOf.command } : {}) }, item.abort.signal);
       handle.receipt.then(receipt => settle(item, receipt), cause => fail(item, cause));
@@ -533,6 +542,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       deps.control.releasedListeners.delete(onReleased);
       deps.control.heldListeners.delete(onHeld);
       deps.control.settledListeners.delete(onSettled);
+      unwatch();
       if (pumpTimer) clearInterval(pumpTimer);
       pumpTimer = null;
       for (const item of items) item.watch?.stop();
@@ -549,6 +559,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
           droppedSeen = droppedNow;
           failedSeen = failedNow;
           troubleAt = null;
+          capped = false;
           if (wasDropped) record(wokeRow(rowContext(null), 'failure'));
           return wasDropped ? 'dropped' : 'empty';
         }

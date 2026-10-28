@@ -1,3 +1,5 @@
+import type { MadeIn } from './continueContract.js';
+
 /** Additive body-control protocol. Existing body/Minecraft message contracts retain their meaning. */
 export const BODY_CONTROL_VERSION = 1 as const;
 export type BodyValue = null | boolean | number | string | readonly BodyValue[] | { readonly [key: string]: BodyValue };
@@ -31,6 +33,13 @@ export interface BodyTaskContext {
    * that does not know it ignores it.
    */
   incident?: { hold?: boolean; resume?: string; cancel?: string };
+  /**
+   * Continue contract 5 (the life): the life the command was made for, the head's start that made it, and the observation the decision read (`madeIn`: the life,
+   * the dimension's generation, the body's boot and connection, the head's boot and the observation's number). They are those of **the observation the decision
+   * read**, never the newest at the moment of sending. A command that moves the body carries all three (the body refuses one without a life as `life_missing`);
+   * `madeIn` of a queue item is in its envelope too. A body that does not know them ignores them.
+   */
+  life?: number; headBoot?: string; madeIn?: MadeIn;
 }
 /** A plan node as the body shows it. `state`: done → completed, the current node → in_progress, continue and wait → pending, blocked → error. */
 export interface BodyPlanNode {

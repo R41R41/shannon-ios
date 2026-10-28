@@ -19,6 +19,8 @@ import { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { validSkillInput } from '../surfaces/minecraft/minecraftControlValidation.js';
 import { armourCrafted, fightRefusal, minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
 import type { MinecraftFeelingPort } from '../mind/emotion/minecraftFeeling.js';
+import type { MadeIn } from '../contracts/continueContract.js';
+import { madeInOf, withMadeIn } from '../surfaces/minecraft/minecraftMadeIn.js';
 
 const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId = step.id, plan?: BodyPlanView): BodyTaskContext {
@@ -58,7 +60,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     /** Whether the decision now running was an urgent one (its act is held to three hands). */
     urgent?(): boolean;
     /** The task queue (`minecraftLlmcQueue.ts`): an `mc.act` is an item put in it, and the tool returns when the body has the item. */
-    queue: LlmcQueue };
+    queue: LlmcQueue;
+    /** Continue contract 5: the observation the decision now running read (`madeIn`); null when it had no life to name. The acts it chooses carry it. */
+    madeIn?(): MadeIn | null };
   /**
    * Owner 2026-10-26: each finished act is handed to her feeling beside the decisions (`minecraftFeeling.ts`), synchronously and
    * without waiting for anything; nothing comes back to the decision. Absent: nothing is felt from her acts.
@@ -135,14 +139,17 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       noteActNode(step.taskId, node?.mark ?? null, line => console.info(line));
       if (guards) {
         const sent = await sendItem({ queue: parts.llmc.queue, control, bodyId, call, skill: current!.name, fixes: prepared?.fixes ?? [],
-          node: node?.mark?.node ?? null, current: node?.mark?.current ?? null, frame: control.observe(bodyId) });
+          node: node?.mark?.node ?? null, current: node?.mark?.current ?? null, frame: control.observe(bodyId),
+          ...(parts.llmc.madeIn ? { madeIn: parts.llmc.madeIn() } : {}) });
         const said = guards.hold?.tail ?? guards.hold?.note;
         return guards.led(said && sent.ok ? withNote(sent, said) : sent);
       }
       return await runLlmcCall({ control, step, bodyId, id, call, skill: current!.name, active, plan: parts.llmc.plan(), fixes: prepared?.fixes ?? [] });
     }
     active.stepOutcome = 'unknown';
-    const receipt = await control.command({ id, context: minecraftTaskContext(step, bodyId), lease: step.lease, kind: 'skill',
+    // Continue contract 5: a body skill of the old path has no decision's frame to name; the newest frame is the nearest (the body refuses a motor command with no life).
+    const context = current!.readOnly ? minecraftTaskContext(step, bodyId) : withMadeIn(minecraftTaskContext(step, bodyId), madeInOf(control.observe(bodyId), control.headBoot()));
+    const receipt = await control.command({ id, context, lease: step.lease, kind: 'skill',
       skill: current!.name, arguments: call.input as Record<string, unknown>, milliseconds: minecraftSkillMilliseconds(current!) }, call.signal);
     active.stepOutcome = 'acknowledged';
     if (receipt.outcome === 'completed' && current!.name === 'goal-evidence') {

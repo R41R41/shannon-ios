@@ -42,6 +42,9 @@ import { driftWords, incidentHoldPort, incidentOfResult } from './minecraftIncid
 import { randomUUID } from 'node:crypto';
 import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
 import type { BodyTaskContext } from '../contracts/bodyControlContract.js';
+import type { MadeIn } from '../contracts/continueContract.js';
+import { reflexCappedWords } from '../surfaces/minecraft/minecraftLlmcBodyEvents.js';
+import { heldAgainRecord, resendLimitMs, stopLineOf, waitForResend } from './minecraftResumeOrder.js';
 
 /**
  * The models of a Minecraft body task's decisions (design mb-llm-centric; owner 2026-10-21: the main model is chosen after replaying scenes with
@@ -211,17 +214,26 @@ export function bodyHoldOf(result: string | undefined): { incident: string; why:
   const found = /保留中（([^:：）]+)[:：]\s*([^）]*)）/u.exec(result ?? '');
   return found ? { incident: found[1]!.trim(), why: found[2]!.trim() } : null;
 }
-/** Run 44: the held act sent again once the step has begun (inside its execution, where its lease may take the body), then the step as ever. */
-function withResend(lifecycle: FcaBodyLifecycle, resend: ((signal: AbortSignal) => Promise<void>) | null, log: (line: string) => void, taskId: string): FcaBodyLifecycle {
+/**
+ * Run 44: the held act sent again once the step has begun (inside its execution, where its lease may take the body), then the step as ever. Chapter 8's 再開の契約: the
+ * first decision is not asked until that act has ended or been held again (`beforeDecision`), so its result is what the decision reads first.
+ */
+export function withResend(lifecycle: FcaBodyLifecycle, resend: ((signal: AbortSignal) => Promise<void>) | null, log: (line: string) => void, taskId: string,
+  wait: { open(): boolean; limitMs(): number }): FcaBodyLifecycle {
   if (!resend) return lifecycle;
   const start = lifecycle.start.bind(lifecycle);
-  let sent = false;
-  return Object.assign(lifecycle, { start(signal: AbortSignal) {
-    start(signal);
-    if (sent) return;
-    sent = true;
-    void resend(signal).catch(error => log(`Shannon Minecraft incident resend failed task=${taskId} ${String(error)}`));
-  } });
+  let sent: Promise<void> | null = null;
+  return Object.assign(lifecycle, {
+    start(signal: AbortSignal) {
+      start(signal);
+      if (sent) return;
+      sent = resend(signal).catch(error => log(`Shannon Minecraft incident resend failed task=${taskId} ${String(error)}`));
+    },
+    async beforeDecision(signal: AbortSignal) {
+      const how = await waitForResend({ sent, open: wait.open, signal, limitMs: wait.limitMs() });
+      if (how !== 'ended') log(`Shannon Minecraft resume wait task=${taskId} how=${how}`);
+    },
+  });
 }
 
 /** The command context with the fix run's incident fields (`minecraftIncidentHold.ts`): unchanged when there is nothing to say. */
@@ -265,21 +277,31 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const holds = incidentHoldPort();
   const holdOn = holds?.holdRequested(step.taskId) === true;
   let resumeOf: string | null = null;
+  // Continue contract 5: the observation the decision now running read (its life, dimension, body and connection): the acts it chooses carry it, not the newest frame's.
+  let read: MadeIn | null = null;
+  const events = createLlmcEvents(step.taskId);
   // Continue contract 2 and 3: the queue is named by the step; the events of a result go to the plan's one way into the ledger, and the promises an act says it uses
   // are kept as they are now with the command. A cleanup that did not prove the release asks the operator's hold (the incident port) for the task.
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId, step: step.id,
     context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log,
     applyLedger: input => plan.port.applyLedger(input), snapshotUses: ids => snapshotUses(plan.port.tree().promises, ids),
+    onReflexCapped: info => events.note(reflexCappedWords(info)),
     onHeld: info => { void holds?.hold(step.taskId, { id: `cleanup:${info.command}`, heavy: true, why: `結果が不明で、解放を確かめられなかった（${info.why}）`, held: true, frozen: null, command: info.command })
       .catch(error => log(`Shannon Minecraft cleanup hold failed task=${step.taskId} ${String(error)}`)); } });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
   // Run 45: the call id of the act a resume sends again (the body says when it failed for the reason it was held for: `incident.repeated`).
   let resent: string | null = null;
-  // Run 45: a resume with --skip-replay: the act is not sent again, and the next decision reads so as a fact.
+  // Chapter 8's 再開の契約: what a resume leaves for the first decision, in this order and as the first of the results it reads: the hold that came again (the act sent
+  // again was held again; `heldAgainWords`), then the held act itself (run 45: a resume with --skip-replay does not send it again and the decision reads so as a fact; a
+  // second try's result is added when it ends, below). The decision itself is asked after them (`beforeDecision`).
+  const again = holds?.heldAgainNote?.(step.taskId) ?? null;
+  if (again) events.keep(again);
   const skipped = holds?.skipNote?.(step.taskId) ?? null;
-  if (skipped) createLlmcEvents(step.taskId).note(skipped);
+  if (skipped) events.keep(skipped);
+  // The second try: its mark in the queue, when it was added, its longest run, and whether it was held again (then its result is the hold's record, not a line).
+  const replay = { item: null as string | null, at: 0, maxMs: 60_000, heldAgain: false };
   if (holds && holdOn) {
-    queue.onRan((item, _result, receipt) => {
+    queue.onRan((item, result, receipt) => {
       const incident = incidentOfResult(receipt?.result);
       if (incident?.repeated && !incident.held && receipt && resent !== null && item.call.id === resent) {
         // Run 45 (holds 3 to 5): the body did not hold again; the next decision reads the result (its receipt) and this fact.
@@ -304,7 +326,12 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       }
       if (!incident?.held || !receipt) return;
       log(`Shannon Minecraft incident hold task=${step.taskId} incident=${incident.id} frozen=${String(incident.frozen)} why=${incident.why.slice(0, 80)}`);
-      void holds.hold(step.taskId, { ...incident, command: receipt.id }).catch(error => log(`Shannon Minecraft incident hold failed task=${step.taskId} ${String(error)}`));
+      // Chapter 8's 再開 9 → 保留 10: the act a resume sent again was held again; the record says how it ended and what the queue lost meanwhile.
+      const second = resent !== null && item.call.id === resent;
+      if (second) replay.heldAgain = true;
+      const record = second ? heldAgainRecord({ resultText: stopLineOf(receipt.result) || result.text, why: incident.why, replayItem: replay.item, dropped: queue.droppedSince(replay.at), open: queue.openItems() }) : null;
+      void holds.hold(step.taskId, { ...incident, command: receipt.id, ...(record ? { replay: record } : {}) })
+        .catch(error => log(`Shannon Minecraft incident hold failed task=${step.taskId} ${String(error)}`));
     });
     const pending = holds.resumePending(step.taskId);
     // Run 44, resume 1: the act was sent while the step's ports were made, outside the step's execution and before its lease held the body: the
@@ -327,6 +354,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     {
       const args = sent.arguments as Record<string, unknown>;
       resent = `resume:${sent.id}`;
+      replay.at = Date.now();
+      replay.maxMs = Number(sent.queue?.maxMs ?? 60_000);
       resumeOf = pending.incident;
       const added = queue.add({ call: { id: `resume:${sent.id}`, name: MC_ACT_TOOL, input: args }, operationId: `resume:${randomUUID()}`, input: args as never,
         arguments: args, skill: 'act', node: sent.queue?.node ?? null, current: null, why: String(args.why ?? ''), fixes: [],
@@ -341,9 +370,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       queue.onRan((item, result) => {
         if (first.done || item.call.id !== `resume:${sent.id}`) return;
         first.done = true;
+        // The second try's result is the first line the decision reads (after the hold that came again), unless it was held again: then the hold's record has it.
+        if (!replay.heldAgain) events.keep(result.text);
         holds.resumeChecked(step.taskId, `再開の確かめ（${drift}）: 同じ act を出し直した → ${result.ok ? '成功' : '失敗'}: ${result.text.replace(/\s+/gu, ' ').slice(0, 380)}`);
       });
-      await added.then(answer => { if (!answer.ok) { first.done = true; holds.resumeChecked(step.taskId, `再送を列が断った: ${answer.text.slice(0, 200)}`); } },
+      await added.then(answer => { if (answer.ok) replay.item = answer.item; if (!answer.ok) { first.done = true; holds.resumeChecked(step.taskId, `再送を列が断った: ${answer.text.slice(0, 200)}`); } },
         error => { first.done = true; holds.resumeChecked(step.taskId, `再送できなかった: ${String(error).slice(0, 200)}`); });
     }
     };
@@ -357,14 +388,17 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   return {
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null, openIds: () => queue.openIds() },
-    tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue } },
+    tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
       observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
+      // Continue contract 5: each decision's context names the frame it read; the acts it chooses carry it, and its answer is checked against the newest frame.
+      headBoot: () => control.headBoot(), onRead: value => { read = value; },
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       r4: { probe: llmcProbeRunner(control, step), planWhere,
-        caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }), resend, log, step.taskId),
+        caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }), resend, log, step.taskId,
+      { open: () => queue.open(), limitMs: () => resendLimitMs(replay.maxMs) }),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the

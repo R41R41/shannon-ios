@@ -13,7 +13,8 @@ import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import { runSkillImport, type SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
-import { driftWords, feet, type Feet } from './minecraftIncidentHold.js';
+import { driftWords, feet, type Feet, type HeldAgain } from './minecraftIncidentHold.js';
+import { heldAgainWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 
 /** What the activity record (「したことの記録」, shown in 自律活動 › 記録) keeps of an operator invocation. */
@@ -39,12 +40,31 @@ export interface OperatorMinecraftParts {
 
 const FINISHED = ['stopped', 'completed', 'failed', 'stopping'];
 /** A hold row's detail (`hold` below): the incident, the held act's command and where it began and ended. */
-function holdDetail(detail: string | null): { incident?: string; command?: string; start?: Feet | null; end?: Feet | null; mismatch?: string } {
+function holdDetail(detail: string | null): { incident?: string; command?: string; start?: Feet | null; end?: Feet | null; mismatch?: string; replay?: HeldAgain } {
   try {
     const value = JSON.parse(detail ?? '{}') as Record<string, unknown>;
     return { ...(typeof value.incident === 'string' ? { incident: value.incident } : {}), ...(typeof value.command === 'string' ? { command: value.command } : {}),
-      start: feet(value.start), end: feet(value.end), ...(typeof value.mismatch === 'string' ? { mismatch: value.mismatch } : {}) };
+      start: feet(value.start), end: feet(value.end), ...(typeof value.mismatch === 'string' ? { mismatch: value.mismatch } : {}),
+      ...(heldAgainOf(value.replay) ? { replay: heldAgainOf(value.replay)! } : {}) };
   } catch { return {}; }
+}
+/** A hold row's `replay` (the second try of a held act, held again), or null when it does not read. */
+function heldAgainOf(value: unknown): HeldAgain | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as { code?: unknown; dropped?: unknown };
+  if (typeof record.code !== 'string') return null;
+  const dropped = (Array.isArray(record.dropped) ? record.dropped : []).flatMap(entry =>
+    entry && typeof entry === 'object' && typeof (entry as { item?: unknown }).item === 'string' ? [{ item: (entry as { item: string }).item, why: String((entry as { why?: unknown }).why ?? '') }] : []);
+  return { code: record.code, dropped };
+}
+/** The hold row's detail text (at most 600 characters, still whole JSON): the second try's record loses its dropped items one by one before anything else is cut. */
+function holdDetailText(base: Record<string, unknown>, replay: HeldAgain | undefined): string {
+  const dropped = [...(replay?.dropped ?? [])];
+  for (;;) {
+    const text = JSON.stringify({ ...base, ...(replay ? { replay: { code: replay.code.slice(0, 40), dropped } } : {}) });
+    if (text.length <= 600 || !dropped.length) return text.slice(0, 600);
+    dropped.pop();
+  }
 }
 /** The reason a hold row names (its detail's `why`), or ''. */
 function holdWhy(detail: string | null): string {
@@ -230,6 +250,8 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       const detail = holdDetail(held.detail);
       const moved = detail.incident ? await (requests.incident?.('cancel', detail.incident, detail.command ?? '', found.id) ?? Promise.resolve({ ok: false, words: 'no_port' }))
         : { ok: false, words: 'no_incident' };
+      // Continue contract 1: the held commands of a cancelled task are ended on the hold axis (their result is left as it is).
+      requests.resolveHolds?.(found.id, 'cancel');
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'stopped', code: 'stopped',
         argsJson: c.argsJson, taskId: found.id, detail: `held ${task.phase} body_hold_ended=${moved.ok} ${moved.words}`.slice(0, 600) });
       parts.activity(c.at, { summary: `運用者（${c.operator}）が、保留していたマイクラの依頼を止めました。`, tool: 'operator.minecraft.cancel',
@@ -312,8 +334,13 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     // goes to the next decision as a fact (set before the task is queued again: its step reads it when made), and the resume's check is written now.
     const skipLine = input.skipReplay ? requests.heldActWords?.(detail.command ?? '', holdWhy(hold.detail)) ?? '保留した act は出し直さなかった' : null;
     if (skipLine) skipNotes.set(found.id, skipLine);
+    // Chapter 8's 再開 9 → 保留 10: the hold being resumed was a held act's second try, held again: the first decision after this resume reads that first.
+    const againLine = detail.replay ? heldAgainWords({ replayCode: detail.replay.code, dropped: detail.replay.dropped }) : null;
+    if (againLine) againNotes.set(found.id, againLine);
     const resumed = requests.resume(found.id);
-    if (!resumed) skipNotes.delete(found.id);
+    if (!resumed) { skipNotes.delete(found.id); againNotes.delete(found.id); }
+    // Continue contract 1: the commands a cleanup left held (their result unknown, the release not proved) move on the hold axis only; nothing is sent again.
+    else requests.resolveHolds?.(found.id, 'resume');
     if (resumed && skipLine) {
       const line = skipLine;
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'skipped', argsJson: c.argsJson,
@@ -338,14 +365,15 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
    * is audited (why, the incident's id: its box and scene have it, whether the world stopped, the act's command id) and the task is stopped through the
    * owner's stop path (the plan, the pack and the task stay; no decision, no model). False when the task is not the operator's or asked for no hold.
    */
-  async function hold(taskId: string, incident: { id: string; why: string; frozen: boolean | null; freeze?: string; command: string; start?: Feet | null; end?: Feet | null }): Promise<boolean> {
+  async function hold(taskId: string, incident: { id: string; why: string; frozen: boolean | null; freeze?: string; command: string; start?: Feet | null; end?: Feet | null;
+    replay?: HeldAgain }): Promise<boolean> {
     const requests = parts.requests;
     const request = parts.audit.requestOf(parts.scopeKey, taskId);
     if (!requests || !request || !parts.audit.holdOnFailure(taskId) || parts.audit.heldOf(taskId)) return false;
-    const detail = JSON.stringify({ incident: incident.id, why: incident.why.slice(0, 160), frozen: incident.frozen, ...(incident.freeze ? { freeze: incident.freeze.slice(0, 80) } : {}),
-      command: incident.command, ...(incident.start ? { start: incident.start } : {}), ...(incident.end ? { end: incident.end } : {}) });
+    const detail = holdDetailText({ incident: incident.id, why: incident.why.slice(0, 160), frozen: incident.frozen, ...(incident.freeze ? { freeze: incident.freeze.slice(0, 80) } : {}),
+      command: incident.command, ...(incident.start ? { start: incident.start } : {}), ...(incident.end ? { end: incident.end } : {}) }, incident.replay);
     audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold', event: 'settled', code: 'held', argsJson: request.argsJson,
-      taskId, detail: detail.slice(0, 600) });
+      taskId, detail });
     parts.activity(parts.now(), { summary: '運用者が代わりに始めたマイクラの依頼を、重い失敗で保留しました（世界を止め、記録を取りました）。', tool: 'operator.minecraft.hold',
       outcome: 'done', reasonCode: 'operator_hold', detail: `task=${taskId} incident=${incident.id}` });
     await requests.stop(taskId, 'operator_hold').catch(() => []);
@@ -392,6 +420,13 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
   }
   /** Run 45: the lines a resume with --skip-replay left for each task's next decision (taken once). */
   const skipNotes = new Map<string, string>();
+  /** Chapter 8: the lines a resume left for each task's first decision when the hold it resumed was a held act's second try, held again (taken once). */
+  const againNotes = new Map<string, string>();
+  function heldAgainNote(taskId: string): string | null {
+    const line = againNotes.get(taskId) ?? null;
+    againNotes.delete(taskId);
+    return line;
+  }
   function skipNote(taskId: string): string | null {
     const line = skipNotes.get(taskId) ?? null;
     skipNotes.delete(taskId);
@@ -562,6 +597,6 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       }, () => undefined);
   }
 
-  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked, skipNote, repeated };
+  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked, skipNote, heldAgainNote, repeated };
 }
 export type OperatorMinecraft = ReturnType<typeof createOperatorMinecraft>;

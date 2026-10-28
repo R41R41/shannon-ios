@@ -32,8 +32,12 @@ import { planInput, type FcaPlanPort } from './fcaPlanTools.js';
 import { permitDue } from './fcaStepCost.js';
 import { beginDecisionRound, setDecisionStepIndex, withDecisionScope } from '../../../infra/decisionRecords/decisionRecordScope.js';
 import { noteDecisionOutcome } from '../../../infra/decisionRecords/decisionRecordNotes.js';
+import type { MadeIn } from '../../../contracts/continueContract.js';
 import type { FcaHistoryAheadOptions, FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
+
+/** How many answers of one step may be discarded for a changed life, dimension or connection and asked again; the next one goes through as stale (no call is run). */
+export const FCA_REDECIDE_MAX = 3;
 
 export interface FcaStepPorts {
   runtime: TaskRuntime; model: FcaModel;
@@ -155,6 +159,11 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
   }, () => ({ allowed: true })));
   await checked();
+  // Chapter 8's 再開の契約: a step that sent an act again (a resume after a hold) waits for it first, so its result is the first thing the decision reads.
+  if (ports.body?.beforeDecision) {
+    await ports.body.beforeDecision(signal);
+    await checked('fresh');
+  }
   // A body task's decision carries no recall packet, in either shape (run 15, 2026-10-19: 2.3–7.3k characters of past episodes in every
   // stored decision, and 2.7 s of each step): what she did before is one `memory.search` away (offered to every task) when it matters.
   const bodyTask = ports.keepBodyTools?.() === true;
@@ -228,6 +237,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const waitGate = fcaWaitGate(step, runtime, ports.waitCounterpart, prior);
   const waiting = waitGate.fact();
   await checked();
+  /** Continue contract 5: what the body's context was read on, for the request in hand (the answer is checked against the newest frame before it is used). */
+  let read: MadeIn | null = null;
   const request: FcaModelInput = metrics.timedSync('contextMs', () => ({ ...input,
     ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
     ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}), ...(skillIndex ? { skillIndex } : {}),
@@ -237,6 +248,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ...(selection?.obsMode === 'transient' && selection.core ? { coreTools: selection.core.tools,
       ...(transient ? { replayTokenLimit: transient.policy.maximumReplayTokens } : {}),
       ...(ports.body?.transient ? { transient: ports.body.transient() } : {}) } : {}) }));
+  read = ports.body?.readOf?.() ?? null;
   // A body task's recall (`bodyTaskRecall.ts`): a few memories for the situation the body was just read in (`recallCues`), none when
   // nothing fits; its sources are pinned like the recall packet's before anything is sent.
   if (bodyTask && ports.bodyRecall && !urgent && ports.body?.recallWanted?.() !== false) {
@@ -263,11 +275,13 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     for (const observation of ports.observations ?? []) await observation.guard(observation.revision());
     observationRevisions = (ports.observations ?? []).map(observation => observation.revision());
     bodyRevision = ports.body?.revision() ?? 0;
-    return { ...asked,
+    const rebuilt = { ...asked,
       ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
       ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}),
       ...(ports.body ? { body: ports.body.context() } : {}), ...planInput(ports.plan),
       ...(asked.transient !== undefined && ports.body?.transient ? { transient: ports.body.transient() } : {}) };
+    read = ports.body?.readOf?.() ?? null;
+    return rebuilt;
   };
   /** The request in hand (the one last sent, rebuilt by every `freshen`) and when it was built: a fallback starts from this, never from the first one. */
   let latest = { asked: request, at: Date.now() };
@@ -328,6 +342,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const queue = bodyTask ? ports.body?.queue : undefined;
   let output!: FcaModelOutput, decision!: FcaDecision, rounds = 0;
   let asked: FcaModelInput | null = request;
+  let redecided = 0;
   /** The last round's results and where its message stands in `history`: a decision thrown away puts the news of the items that ended after it there (run 41). */
   let lastRound: { results: Array<{ id: string; text: string; ok: boolean }>; at: number } | null = null;
   while (asked) {
@@ -374,11 +389,27 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       }
       break;
     }
+    // Continue contract 5: an answer made on a frame that is no longer the body's (it died, the dimension's generation changed, the connection changed) is not used.
+    // The step asks again on a new frame (the history is as it was: the answer's was not added); after `FCA_REDECIDE_MAX` of them in a step the answer goes through
+    // as a stale one, so no call of it is run.
+    const drift = read && ports.body?.drifted ? ports.body.drifted(read) : null;
+    if (drift) {
+      noteDecisionOutcome('discarded', { reason: drift });
+      progress({ operationId, tool: 'fca.decide', status: 'failed' });
+      redecided += 1;
+      if (redecided <= FCA_REDECIDE_MAX) {
+        await checked('fresh');
+        asked = await freshen(latest.asked);
+        await checked('fresh');
+        continue;
+      }
+      state.bodyStale = true;
+    }
     output = answer;
     queue?.noteDecision(performance.now() - decidedAt);
     progress({ operationId, tool: 'fca.decide', status: 'received' });
     await checked('local');
-    state.bodyStale = !await stillFreshFor(output.decision.kind === 'tools' ? output.decision.calls[0] : undefined);
+    state.bodyStale = state.bodyStale || !await stillFreshFor(output.decision.kind === 'tools' ? output.decision.calls[0] : undefined);
     noteDecisionOutcome('applied', { decision: output.decision.kind, stale: state.bodyStale,
       calls: output.decision.kind === 'tools' ? output.decision.calls.map(call => ({ id: call.id, name: call.name })) : [],
       ...(output.decision.kind === 'tools' ? {} : { summary: output.decision.summary.slice(0, 2_000) }) });

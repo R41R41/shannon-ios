@@ -29,6 +29,8 @@ import { reflexLines } from './minecraftLlmcReflexHold.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
 import { queueLifecycle, type LlmcQueue } from './minecraftLlmcQueueBody.js';
+import { driftOf, madeInOf } from './minecraftMadeIn.js';
+import type { MadeIn } from '../../contracts/continueContract.js';
 
 /** The first index of the hostiles' sight probes in a step (the surprises' are 0 and 1), and of the footing's column probes (r8). */
 const THREAT_SIGHT_INDEX = 10, FOOTING_INDEX = 20;
@@ -334,10 +336,18 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
    */
   seen?(): { observation: BodyObservation; ageMs: number; current: boolean } | null;
   /** r4: surprises probed before the decision, and the body's scan in the live state. */
-  r4: LlmcProbeParts }): FcaBodyLifecycle {
+  r4: LlmcProbeParts;
+  /**
+   * Continue contract 5: this start of the head (`MinecraftControl.headBoot`), and who is told which observation each decision's context was read on
+   * (`madeIn`: the commands that decision makes carry it). Absent: no decision names its frame (a test), and no answer is checked against the newest one.
+   */
+  headBoot?(): string;
+  onRead?(madeIn: MadeIn | null): void }): FcaBodyLifecycle {
   const r4 = parts.r4, watch = createSurpriseWatch(parts.taskId);
   const events = createLlmcEvents(parts.taskId), now = parts.now ?? Date.now, began = Date.parse(parts.createdAt);
   let observation: BodyObservation | null = null, bodyAge: string | null = null, reasons: string[] = [];
+  /** Continue contract 5: the frame the last context read, as the commands name it (null: it had no life to name). */
+  let read: MadeIn | null = null;
   let investigation: string[] = [], scan: string[] = [];
   // r7: what the body's sight found of the near hostiles this step (by id), the line said first after a stopIf stop, and the walled-off.
   let sights = new Map<number, ThreatSight>(), inSight: string | null = null, unreachable: string[] = [];
@@ -425,6 +435,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       const sight = parts.seen?.() ?? null;
       observation = parts.seen ? sight?.observation ?? null : parts.observe();
       bodyAge = sight && !sight.current ? staleBodyLine(sight.ageMs) : null;
+      read = parts.headBoot ? madeInOf(observation, parts.headBoot()) : null;
+      try { parts.onRead?.(read); } catch { /* naming a frame never fails a decision */ }
       // A decision that finds no body is noted: its task, if it waits for that, is woken when a frame is there (`fcaMinecraftBodyWake.ts`).
       noteBodySeen(parts.taskId, observation !== null, now());
       const arrival = parts.arrival();
@@ -459,6 +471,9 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       return interrupted;
     },
     rebuilding: () => { rebuild = true; },
+    /** Continue contract 5: the frame the last context read, and whether the body has left it (died, another generation of the dimension, another connection) since. */
+    readOf: () => read,
+    drifted: (value: MadeIn) => driftOf(value, parts.observe()),
     ...queueLifecycle({ queue: parts.queue, observe: parts.observe, arrival: () => parts.arrival().at, peek: () => watch.peek(),
       keep: text => events.keep(text) }, body),
     decided: ({ ms, aborted, thrownMs }: { ms: number; aborted: boolean; thrownMs: number }) => {

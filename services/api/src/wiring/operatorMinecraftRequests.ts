@@ -54,6 +54,8 @@ export function operatorMinecraftRequests(parts: {
     stop: (id: string, reason: string) => parts.stop(id, reason),
     /** A stopped task queued again (the runtime's explicit resume, as the owner's resume route does): a held request's `resume`. */
     resume: (id: string) => parts.runtime.resume(parts.ownerScope, id),
+    /** Continue contract 1: the commands a cleanup left held for this task are resumed or cancelled on the hold axis only (their results are left as they are; nothing is sent). */
+    resolveHolds: (id: string, how: 'resume' | 'cancel') => parts.control.resolveHolds(id, how),
     /** The body's feet now (the newest frame), or null: a held request's status and resume say how far it is from where the act began. */
     position: (): [number, number, number] | null => {
       const id = body();

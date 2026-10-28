@@ -327,9 +327,16 @@ describe('how the body arrived (run 24: 12 s after the server cut it in the Neth
     f.send({ connected: false });
     f.send();
     expect(f.control.arrivalKind(BODY)).toBe('reconnect');
-    f.send({ facts: { alive: false, dimension: 'overworld' } });
-    f.send();
+    // Continue contract 5: a death is a rise of the death counter (`state.life`'s deathSeq within one deathEpoch), told when the body is seen dead; coming up alive again is the same death.
+    const life = (deathSeq: number, alive: boolean) => ({ life: deathSeq + 1, deathEpoch: 'de-1', deathSeq, since: new Date().toISOString(), alive, dimension: 'overworld', dimensionSince: new Date().toISOString() });
+    f.send({ state: { health: 20, life: life(0, true) } });
+    expect(f.control.arrivalKind(BODY)).toBe('reconnect');
+    f.send({ facts: { alive: false, dimension: 'overworld' }, state: { health: 0, life: life(1, false) } });
     expect(f.control.arrivalKind(BODY)).toBe('death');
+    const died = f.control.arrivedAt(BODY);
+    f.send({ state: { health: 20, life: life(1, true) } });
+    expect(f.control.arrivalKind(BODY)).toBe('death');
+    expect(f.control.arrivedAt(BODY)).toBeGreaterThan(died!);
     f.send({}, 'newer');
     expect(f.control.arrivalKind(BODY)).toBe('reconnect');
     const before = f.control.arrivedAt(BODY);

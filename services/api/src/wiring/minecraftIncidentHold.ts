@@ -14,9 +14,16 @@
 /** `start`: the feet when the held act began; `end`: when it ended (where the body was held). */
 export type Feet = [number, number, number];
 /** `notHeld`: a hold was asked for and not made, because the world could not be stopped (the body's freeze words; run 44, hold 1). */
+/**
+ * Chapter 8's 再開 9 → 保留 10: a held act that a resume sent again was held again, for another reason. The record of it: how the second try ended (the code of its stop) and
+ * the items that were in the queue meanwhile and were taken off (their marks and why). The next resume's first decision reads it before anything else.
+ */
+export interface HeldAgain { code: string; dropped: { item: string; why: string }[] }
 export interface IncidentNote { id: string; heavy: boolean; why: string; held: boolean; frozen: boolean | null; freeze?: string; notHeld?: string; start?: Feet | null; end?: Feet | null;
   /** Run 45: the act a resume sent again failed for the reason it was held for, and the body did not hold again (the hold it was sent again for). */
-  repeated?: string }
+  repeated?: string;
+  /** Chapter 8's 再開 9 → 保留 10: this hold is the second try of a held act, held again (see `HeldAgain`). */
+  replay?: HeldAgain }
 export interface IncidentHoldPort {
   /** Whether this task's request asked to be held on a heavy failure. */
   holdRequested(taskId: string): boolean;
@@ -36,6 +43,8 @@ export interface IncidentHoldPort {
   resumePending(taskId: string): { incident: string; command: string; start?: Feet | null } | null;
   /** Run 45: the line a resume with --skip-replay left for the task's next decision (the act not sent again and its result), once; else null. */
   skipNote?(taskId: string): string | null;
+  /** Chapter 8: the line a resume left for the task's first decision when the hold it resumes was a held act's second try, held again (`heldAgainWords`), once; else null. */
+  heldAgainNote?(taskId: string): string | null;
   /**
    * Run 45 (holds 3 to 5): the act sent again by a resume failed for the same reason it was held for, and the body did not hold again (its
    * receipt's `incident.repeated`): the decisions go on with the result; written down.

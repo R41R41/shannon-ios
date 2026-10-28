@@ -126,6 +126,7 @@ export function validControlPoll(value: unknown, now: number): value is Minecraf
     || !timestamp(o.stateAt) || !timestamp(o.receivedAt) || Math.abs(now - Date.parse(o.stateAt)) > 30_000
     || typeof o.connected !== 'boolean' || !record(o.state) || !record(o.facts) || !boundedJSON(o, 100_000)) return false;
   if (Object.entries(o.facts).some(([key,v]) => key.length > 160 || v !== null && (!['boolean', 'number', 'string'].includes(typeof v) || typeof v === 'number' && !Number.isFinite(v) || typeof v === 'string' && v.length > 2000))) return false;
+  if (!validObservationState(o.state, o.facts)) return false;
   if (!Array.isArray(value.candidates) || value.candidates.length > 64 || !boundedJSON(value.candidates, 100_000)) return false;
   if (value.candidates.some(c => !record(c) || !['action', 'observe', 'return', 'stop'].includes(String(c.kind)) || typeof c.label !== 'string'
     || c.label.length > 500 || !record(c.arguments) || !Array.isArray(c.preconditions) || c.preconditions.length > 32
@@ -145,4 +146,54 @@ export function validControlPoll(value: unknown, now: number): value is Minecraf
     && (r.unit === undefined || validUnit(r.unit)) && (r.bodyTimes === undefined || validBodyTimes(r.bodyTimes)) && (r.eventsMore === undefined || validEventsMore(r.eventsMore))
     && (r.image === undefined || record(r.image) && timestamp(r.image.capturedAt) && typeof r.image.dataUrl === 'string'
       && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.image.dataUrl) && r.image.dataUrl.length <= 700_000));
+}
+
+// ---- continue contract 4 and 5 (and 3's scan): the observation's life, run, control and utilities ---------------------------------------------------------------
+const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
+const whole = (v: unknown, low = 0): v is number => Number.isSafeInteger(v) && Number(v) >= low;
+const DIMENSIONS = ['overworld', 'the_nether', 'the_end'];
+/** `state.life` (a `LifeView`): the life number, why it moved on, the death counter (epoch and sequence come together), the time, whether alive, the dimension and its generation. */
+export function validLifeView(v: unknown): boolean {
+  if (!record(v) || !whole(v.life, 1) || typeof v.alive !== 'boolean' || !timestamp(v.since) || !timestamp(v.dimensionSince) || !DIMENSIONS.includes(String(v.dimension))) return false;
+  if (v.advancedBy !== undefined && v.advancedBy !== 'death' && v.advancedBy !== 'file_unreadable') return false;
+  if ((v.deathEpoch === undefined) !== (v.deathSeq === undefined) || (v.deathEpoch !== undefined && (!text(v.deathEpoch, 80) || !whole(v.deathSeq)))) return false;
+  return (v.diedAt === undefined || timestamp(v.diedAt)) && (v.deathCause === undefined || typeof v.deathCause === 'string' && v.deathCause.length <= 200);
+}
+/** `state.bodyRun`: the body's boot and the connection it runs in. */
+export const validBodyRun = (v: unknown): boolean => record(v) && text(v.bodyBoot, 80) && text(v.connectionId, 160);
+/** `state.control` (a `ControlView`): who holds the body, the reflex's episode, the combat mark, and the commands waiting behind a reflex. */
+export function validControlView(v: unknown): boolean {
+  if (!record(v) || !record(v.holder) || !Array.isArray(v.waiting) || v.waiting.length > 16) return false;
+  const holder = v.holder;
+  const holderOk = holder.kind === 'idle'
+    || holder.kind === 'command' && text(holder.actionId, 160) && text(holder.command, 160) && (holder.item === undefined || text(holder.item, 40)) && whole(holder.life) && timestamp(holder.since)
+    || holder.kind === 'reflex' && text(holder.actionId, 160) && text(holder.reflex, 80) && whole(holder.priority) && (holder.target === undefined || whole(holder.target)) && timestamp(holder.since)
+      && (holder.episode === undefined || typeof holder.episode === 'boolean')
+    || holder.kind === 'bridge' && text(holder.after, 80) && (holder.hold === 'shield' || holder.hold === 'step_back') && (holder.target === undefined || whole(holder.target))
+      && timestamp(holder.since) && timestamp(holder.until)
+    || holder.kind === 'cleanup' && text(holder.command, 160) && timestamp(holder.since);
+  if (!holderOk) return false;
+  const episode = v.reflexEpisode, mark = v.combatMark;
+  if (episode !== undefined && !(record(episode) && text(episode.reflex, 80) && (episode.target === undefined || whole(episode.target)) && whole(episode.hands) && whole(episode.hits)
+    && timestamp(episode.since))) return false;
+  if (mark !== undefined && !(record(mark) && text(mark.skill, 80) && (mark.target === undefined || whole(mark.target)) && timestamp(mark.until))) return false;
+  return v.waiting.every(entry => record(entry) && text(entry.command, 160) && timestamp(entry.since) && text(entry.behind, 160));
+}
+/** `state.world.utilities` (chapter 3): the radius scanned, whether a scan was made at all, and what it found (block and distance). */
+export function validUtilities(v: unknown): boolean {
+  return record(v) && typeof v.radius === 'number' && Number.isFinite(v.radius) && v.radius > 0 && typeof v.scanned === 'boolean'
+    && (v.dim === undefined || typeof v.dim === 'string' && v.dim.length <= 40) && (v.obsSeq === undefined || whole(v.obsSeq))
+    && Array.isArray(v.found) && v.found.length <= 64 && v.found.every(item => record(item) && text(item.block, 80) && typeof item.distance === 'number' && Number.isFinite(item.distance));
+}
+/**
+ * The new fields of an observation, each optional (a body before the contract sends none): `facts.life`, `state.life`, `state.bodyRun`, `state.control`,
+ * `state.world.utilities`. Only the shape is read here; what the life means (a rise of the death counter) is `deathBetween`'s.
+ */
+export function validObservationState(state: Record<string, unknown>, facts: Record<string, unknown>): boolean {
+  if (facts.life !== undefined && !whole(facts.life, 1)) return false;
+  if (state.life !== undefined && !validLifeView(state.life)) return false;
+  if (state.bodyRun !== undefined && !validBodyRun(state.bodyRun)) return false;
+  if (state.control !== undefined && !validControlView(state.control)) return false;
+  const world = state.world;
+  return !(record(world) && world.utilities !== undefined && !validUtilities(world.utilities));
 }

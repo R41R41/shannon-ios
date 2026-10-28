@@ -23,6 +23,7 @@ import { createBodyRevisions, createFightOwner, fightCall } from './minecraftFig
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
+import { madeInOf, withMadeIn } from './minecraftMadeIn.js';
 import { stepMetrics } from './minecraftTaskMetrics.js';
 import { createPaceLedger } from './minecraftPaceLedger.js';
 import { withFailureReview } from './minecraftFailureReview.js';
@@ -118,6 +119,8 @@ export function createMinecraftTaskBody(parts: {
   /** What the last context() read, for the decision that follows: its transient live state and its recall cues (built only if asked). */
   let latest: { transient(): Record<string, unknown>; cues(): ReturnType<typeof minecraftRecallCues> } | null = null;
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
+  /** The frame the last decision's context read (continue contract 5): her own `minecraft.reflex` call is made on it. */
+  let decisionFrame: BodyObservation | null = null;
   let started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity, stopped = false;
   // mb-r21 (run 21): the body's revision moves for every touch of the body, her tool being cut off ("hard") or only a reflex acting
   // beside it ("soft"); a fight she chose goes on past soft touches (`guardFor`) and the fast judgment leaves it to her (`fightOwned`).
@@ -150,11 +153,13 @@ export function createMinecraftTaskBody(parts: {
   const live = () => leaseMatches() && parts.ownerAlone() && parts.sourcesVisible() && !monitorAbort.signal.aborted
     && runtime.get(step.scopeKey, step.taskId)?.phase === 'executing';
   const bound = () => control.store.body(step.taskId), availableBody = () => bound() ?? (control.available().length === 1 ? control.available()[0]! : null);
-  const context = (bodyId: string, sessionId: string): BodyTaskContext => ({ scopeKey: step.scopeKey, taskId: step.taskId,
+  const context = (bodyId: string, sessionId: string, read?: BodyObservation | null): BodyTaskContext => withMadeIn({ scopeKey: step.scopeKey, taskId: step.taskId,
     taskRevision: step.revision, bodyId, sessionId, generation: step.lease.generation,
     goal: step.snapshot.task.goal, completionCondition: step.snapshot.task.completionCriteria,
     taskState: { phase: runtime.get(step.scopeKey, step.taskId)?.phase ?? 'unknown', progress: step.snapshot.task.summary.slice(0, 2000),
-      ...(activeAction ? { activeAction } : {}), recentResults }, ...(parts.llmc ? { plan: parts.llmc.plan() } : {}) });
+      ...(activeAction ? { activeAction } : {}), recentResults }, ...(parts.llmc ? { plan: parts.llmc.plan() } : {}) },
+    // Continue contract 5: the life the session is made for is that of the frame it read (the one that started it, or the decision's for her own call), not the newest at sending.
+    madeInOf(read === undefined ? control.observe(bodyId) : read, control.headBoot()));
   const permit = async (signal?: AbortSignal) => !signal?.aborted && live()
     && Boolean(await execution!.permit([actionResource(control.configuration.deviceId, 'minecraft-body')], signal)) && !signal?.aborted && live();
   const ackUnknown = (request: BodyStopRequest): BodyStopAcknowledgement => ({ bodyId: request.context.bodyId, sessionId: request.context.sessionId,
@@ -336,7 +341,7 @@ export function createMinecraftTaskBody(parts: {
       ...(admission.escalated ? { escalated: true } : {}),
       ...(evidence ? { evidence: evidence.kind, value: evidence.value, frames: dangerFrames } : {}), danger: facts.danger === true,
       stuck: facts.stuck === true, visual: facts.visualRequired === true });
-    const ctx = context(bodyId!, `${step.id}:reflex:${attempts}`), request = { context: ctx, limits };
+    const ctx = context(bodyId!, `${step.id}:reflex:${attempts}`, observation), request = { context: ctx, limits };
     if (await evaluateReflexEntry(request, { context: ctx, observation, trigger: 'observation', recent: [] }, parts.entry, ports, monitorAbort.signal)
       && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal, entryFacts);
   };
@@ -381,9 +386,13 @@ export function createMinecraftTaskBody(parts: {
     settling: () => !!availableBody() && control.settling(availableBody()!, spawnGrace),
     // A bounded summary: each decision's message stays in the task's history; `minecraft.observe` reads the whole frame.
     context: () => {
-      if (parts.llmc) return llmcBodyContext({ observation: bound() ? control.observe(bound()!) : null, step, recentResults, now: now(), milestones, idleWaitMs,
-        revision: revisions.revision, keep: value => { latest = value; } });
+      if (parts.llmc) {
+        decisionFrame = bound() ? control.observe(bound()!) : null;
+        return llmcBodyContext({ observation: decisionFrame, step, recentResults, now: now(), milestones, idleWaitMs,
+          revision: revisions.revision, keep: value => { latest = value; } });
+      }
       const observation = live() && bound() ? control.observe(bound()!) : null;
+      decisionFrame = observation;
       // From three failed steps in a row the decision looks back before it acts, and before the task may stop (`minecraftFailureReview.ts`).
       const pace = withFailureReview(minecraftPace(step, recentResults, now(), milestones, idleWaitMs), recentResults);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
@@ -489,7 +498,7 @@ export function createMinecraftTaskBody(parts: {
     if (!call.input || typeof call.input !== 'object' || Array.isArray(call.input) || Object.keys(call.input).length) return toolFailure('invalid_input', '引数は空のオブジェクトです。');
     const bodyId = availableBody(); if (!bodyId || !control.frame(bodyId) || !control.store.bind(step.taskId, bodyId)) return toolFailure('unavailable', '操作できる体が接続されていません。');
     if (control.imagesUnavailable(bodyId)) return toolFailure('unavailable', '一人称画像が今は得られないため、短い視覚操作は使えません。minecraft.observe と mc.* の道具で進めます。');
-    const ctx = context(bodyId, `${step.id}:reflex:${hash(call.operationId).slice(0, 16)}`);
+    const ctx = context(bodyId, `${step.id}:reflex:${hash(call.operationId).slice(0, 16)}`, decisionFrame);
     if (active) await active;
     const receipt = await startSession({ context: ctx, limits, requiresImage: true }, 'explicit', call.signal);
     if (!receipt || receipt.control === 'held' || !safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');

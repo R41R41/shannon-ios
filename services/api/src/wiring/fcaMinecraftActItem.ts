@@ -1,4 +1,5 @@
 import type { BodyObservation } from '../contracts/bodyControlContract.js';
+import type { MadeIn } from '../contracts/continueContract.js';
 import { actMilliseconds, type ActInput } from '../contracts/minecraftActContract.js';
 import { replaceOnly } from '../contracts/minecraftActShortContract.js';
 import type { FcaExternalTools } from '../mind/action/fca/fcaPorts.js';
@@ -21,7 +22,9 @@ import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js
 type Call = Parameters<FcaExternalTools['execute']>[0];
 
 export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftControl; bodyId: string; call: Call; skill: string;
-  fixes: readonly string[]; node: string | null; current?: string | null; frame: BodyObservation | null }): Promise<ToolResult> {
+  fixes: readonly string[]; node: string | null; current?: string | null; frame: BodyObservation | null;
+  /** Continue contract 5: the observation the decision that chose this act read (its life, dimension, body and connection): the item carries it, not the newest frame's. */
+  madeIn?: MadeIn | null }): Promise<ToolResult> {
   const { queue, call } = parts, input = call.input as ActInput;
   // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope) and `uses` (kept with the command, never sent to the body).
   const { pre, replace: _replace, dependsOn: _dependsOn, uses: _uses, ...args } = input;
@@ -34,7 +37,7 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const node = parts.node && parts.node !== URGENT_TAG ? parts.node : null;
   const added = await queue.add({ call: { id: call.operationId, name: call.name, input: call.input }, operationId: call.operationId, input,
     arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, current: parts.current ?? null,
-    why: String(input.why ?? ''), fixes: [],
+    why: String(input.why ?? ''), fixes: [], ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
     maxMs: actMilliseconds(input, feetOf(parts.control.observe(parts.bodyId))) });
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';

@@ -5,7 +5,7 @@ import type { MinecraftBodyConfiguration } from '../../contracts/minecraftBodyCo
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt, MinecraftControlReply, MinecraftLiveRoom, MinecraftLiveSpeech,
   MinecraftLiveSpeechReceipt, MinecraftQueueEnvelope, MinecraftQueueProgress } from '../../contracts/minecraftControlContract.js';
-import { unitFromOutcome, type OperationState } from '../../contracts/continueContract.js';
+import { deathBetween, unitFromOutcome, type DeathCounter, type OperationState } from '../../contracts/continueContract.js';
 import type { UsesSnapshot } from './minecraftLlmcPromises.js';
 import { MinecraftControlStore, type OperationRow } from './store/minecraftControlStore.js';
 import { validControlPoll } from './minecraftControlValidation.js';
@@ -20,11 +20,19 @@ const dimensionOf = (observation: BodyObservation) => {
   const value = observation.facts.dimension ?? world?.dimension;
   return typeof value === 'string' ? value.replace(/^minecraft:/u, '') : null;
 };
-/** Whether a frame is an arrival after `old` (null: the first), and of what kind; null when the body is where it was. */
-function arrivalOf(old: BodyObservation | undefined, now: BodyObservation, newConnection: boolean): ArrivalKind | null {
+/** The observation's death counter (`state.life`'s `deathEpoch` and `deathSeq`), or an empty one when it has none (`deathBetween` then reads no death). */
+const deathCounterOf = (observation: BodyObservation): { deathEpoch?: unknown; deathSeq?: unknown } =>
+  (observation.state as { life?: { deathEpoch?: unknown; deathSeq?: unknown } } | undefined)?.life ?? {};
+/**
+ * Whether a frame is an arrival after `old` (null: the first), and of what kind; null when the body is where it was. Continue contract 5: a death is a rise of `deathSeq` within
+ * one `deathEpoch` (`death`, from `deathBetween`), never the life number alone nor a change of epoch (the file made again: the pack is whole); the body coming up alive again after
+ * it is the same death, and a dimension it comes up in is the death's, not a portal's.
+ */
+export function arrivalOf(old: BodyObservation | undefined, now: BodyObservation, newConnection: boolean, death: boolean): ArrivalKind | null {
   if (!old) return 'login';
-  if (old.facts.alive === false && now.facts.alive !== false) return 'death';
+  if (death) return 'death';
   if (newConnection || (!old.connected && now.connected)) return 'reconnect';
+  if (old.facts.alive === false) return null;
   const [before, after] = [dimensionOf(old), dimensionOf(now)];
   return before !== null && after !== null && before !== after ? 'dimension' : null;
 }
@@ -98,6 +106,8 @@ export class MinecraftControl {
   /** When each body last arrived: a new connection, connected again, or alive again (`settling`). */
   private readonly arrivals = new Map<string, number>();
   private readonly arrivalKinds = new Map<string, ArrivalKind>();
+  /** The head's memory of each body's death counter (continue contract 5): a death is only a rise of `deathSeq` within one `deathEpoch`. */
+  private readonly deaths = new Map<string, DeathCounter>();
   /** Told when a body on the same connection is seen alive and then dead (its facts' `alive` turns false). Listeners never throw. */
   readonly deathListeners = new Set<(bodyId: string) => void>();
   /** Told each frame, and each batch of the body's events as they are taken (MinecraftLive, session dc-live). Never throw into a poll. */
@@ -345,8 +355,14 @@ export class MinecraftControl {
   cancelQueued(ids: readonly string[]): void { for (const id of ids) this.store.cancel(id); }
   /** A poll that is an arrival (a login, a new connection, connected again, alive again, another dimension) keeps when and how. */
   private noteArrival(bodyId: string, old: MinecraftControlPoll | undefined, input: MinecraftControlPoll): void {
-    const arrival = arrivalOf(old?.observation, input.observation, old ? old.connectionId !== input.connectionId : false);
-    if (!arrival) return;
+    const counted = deathBetween(this.deaths.get(bodyId) ?? null, deathCounterOf(input.observation));
+    if (counted.counter) this.deaths.set(bodyId, counted.counter);
+    const arrival = arrivalOf(old?.observation, input.observation, old ? old.connectionId !== input.connectionId : false, counted.death);
+    if (!arrival) {
+      // Alive again after the death that was told: the body's first frames settle from now (`settling`), the arrival stays the death.
+      if (old?.observation.facts.alive === false && input.observation.facts.alive !== false && this.arrivalKinds.get(bodyId) === 'death') this.arrivals.set(bodyId, this.options.now());
+      return;
+    }
     this.arrivals.set(bodyId, this.options.now());
     this.arrivalKinds.set(bodyId, arrival);
   }
