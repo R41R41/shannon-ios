@@ -362,7 +362,7 @@ describe('forbid and caution on the plan\'s nodes (shared note 4; arch-check 23:
     const tools = createFcaPlanTools({ taskId: 't', checkpoint: null, rules: true });
     expect(tools.tools.definitions).toEqual([PLAN_UPDATE_RULES_DEFINITION]);
     const schema = PLAN_UPDATE_RULES_DEFINITION.nativeInputSchema as { properties: { ops: { items: { properties: Record<string, { enum?: string[] }> } } } };
-    expect(schema.properties.ops.items.properties.op!.enum).toEqual(['add', 'split', 'set', 'move', 'drop', 'forbid', 'caution', 'lift']);
+    expect(schema.properties.ops.items.properties.op!.enum).toEqual(['add', 'split', 'set', 'move', 'drop', 'promise', 'release', 'forbid', 'caution', 'lift']);
     expect(PLAN_UPDATE_RULES_DEFINITION.description).toContain(PLAN_UPDATE_DEFINITION.description);
     expect(PLAN_UPDATE_RULES_DEFINITION.description).toMatch(/plan\.rules/u);
     const signal = new AbortController().signal;

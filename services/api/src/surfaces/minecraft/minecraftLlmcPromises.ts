@@ -1,0 +1,367 @@
+import type { PlanPromise, PromiseEvent } from '@shannon/mind';
+import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import type { ActClause, ActCondition } from '../../contracts/minecraftActCondition.js';
+import { deathBetween, type DeathCounter, type InventoryEvent } from '../../contracts/continueContract.js';
+import { carried, clauseHolds, clauseLack, clauseText, conditionHolds, doneFacts, validCondition, type DoneFacts } from './minecraftConditions.js';
+import { carriedFood } from './minecraftLlmcLive.js';
+import type { OnceFact } from './minecraftLlmcOnceFacts.js';
+
+/**
+ * The promises' ledger, the head's half (the continue contract, chapter 3; amendment A-1 4). Pure: the plan tool's owner (`fcaPlanTools.ts`) holds the tree and the
+ * `LedgerSeen`, calls `applyLedger` and keeps what comes back; `promiseLines` makes the live state's line of each open promise.
+ *
+ * What the ledger does, and does not:
+ * - The model writes the promises (`plan.update`); the ledger is the head's. Nothing here stops a hand or a use because of a promise.
+ * - **What she has is what the observation says.** `have` is counted again from the newest observation, never added up from the events. An event is only
+ *   the explanation of a change: a difference the events of the command do not explain stays `unexplained` and is not shared out by a guess.
+ * - **An event is put to the ledger once**, by its id (`LedgerSeen.eventIds`, kept beyond the 32 lines a promise shows).
+ * - **Whose use it was** is told by the definition the command was sent with (`UsesSnapshot`), not by the promise as it is now.
+ */
+
+/** A promise's definition as the command was sent with it (kept with the command; a later revision does not change the attribution of its events). */
+export interface UsesSnapshot { id: number; rev: number; item: string; count: number; use: string }
+/** The newest observation the ledger took: only a newer one (same connection: a larger `obsSeq`; a new connection) rewrites `have`. */
+export interface LedgerObs { bodyBoot: string; connectionId: string; obsSeq: number }
+/** An event applied whose observation the ledger has not taken yet: the next newer observation must find its effect (it is not an unexplained difference). */
+export interface LedgerAhead { promise: number; delta: number; connection: string; obsSeq: number | null }
+/**
+ * The ledger's memory beside the tree (the checkpoint's `fcaPlanLedgerSeen`; gone when the task ends). `eventIds` and `lastObs` are the contract's; the rest are
+ * the same memory kept for the same reason (`death`: the death counter last read, for `deathBetween`; `connections`: the connections replaced, so a late
+ * observation of one is not taken for a new one; `ahead`: see `LedgerAhead`).
+ */
+export interface LedgerSeen { eventIds: string[]; lastObs: LedgerObs | null; death?: DeathCounter | null; connections?: string[]; ahead?: LedgerAhead[] }
+export const emptyLedgerSeen = (): LedgerSeen => ({ eventIds: [], lastObs: null });
+
+/** Where the events came from (the command the act was sent as; `do` is the hand's verb, which tells a smelt's ingredient from a craft's). */
+export interface LedgerBy { command?: string; item?: string; pass?: number; hand?: number; do?: string }
+export interface LedgerInput {
+  /** The body's inventory events (a receipt's `delta`s and pages, or an act-less reflex's WorkingEvent `inventory.changed`). */
+  events: readonly InventoryEvent[];
+  by?: LedgerBy;
+  /** The definitions the command was sent with (`snapshotUses`). Absent: the act declared no use. */
+  uses?: readonly UsesSnapshot[];
+  /** The newest observation the caller has (an older one than the ledger took does not rewrite `have`). Call at each new observation too, with no events. */
+  observation: BodyObservation | null;
+  at: string;
+  /** The connection the events were made on, when it is not the observation's (a receipt that came after a reconnect). Absent: the observation's. A reflex event names its own. */
+  from?: { bodyBoot: string; connectionId: string };
+  /** The body's `events` reply said `lost: true` (it lost its record in a restart): what the events do not explain is that, not a mystery. */
+  lost?: boolean;
+  /** The plan's nodes (`until.node` closes a promise when the node is done). */
+  nodes?: ReadonlyArray<{ id: string; state: string }>;
+}
+export type LedgerAdded = PromiseEvent & { promise: number };
+export interface LedgerResult {
+  promises: PlanPromise[]; ledgerSeen: LedgerSeen;
+  /** What was put to the ledgers by this call (a promise's number with each). */
+  added: LedgerAdded[];
+  /** Facts to say once (an `instead` that stopped holding), and the keys of ones that no longer hold (take them back if they are not delivered). */
+  facts: OnceFact[]; withdrawn: string[];
+  /** Whether a promise or the memory changed at all. */
+  changed: boolean;
+}
+
+const LEDGER_LINES = 32, AHEAD_LIMIT = 128, CONNECTIONS_LIMIT = 8;
+const round1 = (value: number) => Math.round(value * 10) / 10;
+const key = (run: { bodyBoot: string; connectionId: string }) => `${run.bodyBoot}/${run.connectionId}`;
+
+/** The reasons the body gives (`InventoryEvent.reason`) as the ledger names them. `ingredient` of a smelt is told by the hand's verb. */
+const REASONS: Readonly<Record<string, string>> = { ingredient: 'craft_ingredient', fuel: 'smelt_fuel', food: 'eat', placed: 'place', thrown: 'thrown', tool_broke: 'tool_broke',
+  crafted: 'crafted', picked: 'picked', mined: 'mined', smelted: 'smelted', reflex_eat: 'reflex_eat', reflex_armor: 'reflex_armor', death: 'death', unexplained: 'unexplained',
+  stored: 'stored', retrieved: 'retrieved' };
+function reasonOf(event: InventoryEvent, by: LedgerBy | undefined): string {
+  const reason = event.reason as string;
+  return reason === 'ingredient' && by?.do === 'smelt' ? 'smelt_ingredient' : REASONS[reason] ?? 'unexplained';
+}
+
+/** What an observation gives the ledger: the connection it belongs to, its number, the counts, and the death counter it shows. */
+interface Seen { run: { bodyBoot: string; connectionId: string }; obsSeq: number; facts: DoneFacts; frame: BodyObservation; life: { deathEpoch?: unknown; deathSeq?: unknown } }
+function seenOf(observation: BodyObservation | null): Seen | null {
+  const facts = doneFacts(observation);
+  if (!observation || !facts || !Number.isFinite(observation.sequence)) return null;
+  const run = observation.state.bodyRun as { bodyBoot?: unknown; connectionId?: unknown } | undefined;
+  const life = observation.state.life as { deathEpoch?: unknown; deathSeq?: unknown } | undefined;
+  return { run: { bodyBoot: typeof run?.bodyBoot === 'string' ? run.bodyBoot : '', connectionId: typeof run?.connectionId === 'string' ? run.connectionId : '' },
+    obsSeq: observation.sequence, facts, frame: observation, life: life && typeof life === 'object' ? life : {} };
+}
+/** What she carries of a promise's item in a frame: the food points for `food`, else the count the conditions' `have` reads. */
+const haveIn = (item: string, facts: DoneFacts): number => item === 'food' ? facts.food : carried(facts.counts, item);
+/** The food points of `count` of an item (0 when it is not food: `food` is counted as the live state counts it). */
+const foodOf = (item: string, count: number): number => carriedFood({ inventory: [{ name: item, count: 1 }] }, {}).points * count;
+/** The change an event makes to what a promise of `item` counts (in food points for `food`), 0 when it is not that. */
+function deltaFor(item: string, event: InventoryEvent): number {
+  if (item === 'food') return round1(foodOf(event.item, event.count));
+  return carried(new Map([[event.item, 1]]), item) > 0 ? event.count : 0;
+}
+
+type Relation = 'newer' | 'same' | 'older';
+function relationOf(seen: LedgerSeen, now: Seen): Relation {
+  const last = seen.lastObs;
+  if (!last) return 'newer';
+  if (last.bodyBoot === now.run.bodyBoot && last.connectionId === now.run.connectionId) return now.obsSeq > last.obsSeq ? 'newer' : now.obsSeq === last.obsSeq ? 'same' : 'older';
+  return (seen.connections ?? []).includes(key(now.run)) ? 'older' : 'newer';
+}
+
+interface Entry { event: InventoryEvent; delta: number; declared: boolean; rev: number; item: string; connection: string; old: boolean }
+
+/** Where an event came from: the call's `by`, and what its id says (`${command}:${pass}:${hand}:${seq}`) where the call does not. */
+function byOf(by: LedgerBy | undefined, id: string): PromiseEvent['by'] | undefined {
+  const { do: _do, ...given } = by ?? {};
+  const match = id.startsWith('reflex:') ? null : /^(.+):(\d+):(\d+):\d+$/u.exec(id);
+  const value = match ? { command: match[1]!, pass: Number(match[2]), hand: Number(match[3]), ...given } : given;
+  return Object.keys(value).length ? value : undefined;
+}
+/** A promise with lines added to its ledger: the oldest go past 32, and how many went is kept. */
+function appended(promise: PlanPromise, lines: readonly PromiseEvent[]): PlanPromise {
+  if (!lines.length) return promise;
+  let ledger = [...promise.ledger, ...lines], dropped = promise.dropped ?? 0;
+  if (ledger.length > LEDGER_LINES) { dropped += ledger.length - LEDGER_LINES; ledger = ledger.slice(-LEDGER_LINES); }
+  return { ...promise, ledger, ...(dropped ? { dropped } : {}) };
+}
+
+/**
+ * The promises with the events and the observation put to their ledgers. Chapter 3's rules, in this order: the events (once each, by id, put to the promise by the
+ * definition the command was sent with), `have` from the observation (only a newer one), what the events do not explain (`unexplained`, or `lost_death` when the body
+ * died), `instead` and `until` asked again of the observation. Nothing is refused.
+ */
+export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: LedgerSeen, input: LedgerInput): LedgerResult {
+  const seenIds = new Set(ledgerSeen.eventIds);
+  const fresh: InventoryEvent[] = [];
+  for (const event of input.events) {
+    if (!event || typeof event.id !== 'string' || seenIds.has(event.id)) continue;
+    seenIds.add(event.id);
+    fresh.push(event);
+  }
+  const now = seenOf(input.observation), last = ledgerSeen.lastObs;
+  const relation = now ? relationOf(ledgerSeen, now) : null, newer = relation === 'newer';
+  const callConnection = input.from?.connectionId ?? now?.run.connectionId ?? last?.connectionId ?? '', bootOf = input.from?.bodyBoot ?? now?.run.bodyBoot ?? last?.bodyBoot ?? '';
+  const connectionOf = (event: InventoryEvent) => event.id.startsWith('reflex:') ? event.id.split(':')[1] ?? callConnection : callConnection;
+  const obsOf = (event: InventoryEvent): number | null => typeof event.obsSeq === 'number' && Number.isFinite(event.obsSeq) ? event.obsSeq : null;
+  const replaced = new Set(ledgerSeen.connections ?? []);
+  /** An event the ledger's newest observation already shows: its effect is in `have` already. */
+  const isOld = (event: InventoryEvent): boolean => {
+    if (!last) return false;
+    const connection = connectionOf(event), at = obsOf(event);
+    return replaced.has(`${bootOf}/${connection}`) || (bootOf === last.bodyBoot && connection === last.connectionId && at !== null && at <= last.obsSeq);
+  };
+  /** Whether the new observation shows the effect of something that happened on `connection` at `obsSeq`. */
+  const coveredBy = (connection: string, obsSeq: number | null): boolean => !now || connection !== now.run.connectionId || obsSeq === null || obsSeq <= now.obsSeq;
+  const deathNow = !!now && newer && typeof now.life.deathEpoch === 'string' && deathBetween(ledgerSeen.death ?? null, now.life).death;
+
+  const added: LedgerAdded[] = [], facts: OnceFact[] = [], withdrawn: string[] = [], out: PlanPromise[] = [], aheadNext: LedgerAhead[] = [];
+  let changed = fresh.length > 0 || newer;
+  const sum = (list: ReadonlyArray<{ delta: number }>) => round1(list.reduce((total, item) => total + item.delta, 0));
+
+  for (const promise of promises) {
+    if (promise.state === 'closed') { out.push(promise); continue; }
+    const snapshot = input.uses?.find(item => item.id === promise.id);
+    // The events that are this promise's: by the definition the command was sent with when the item is that, else by the promise as it is.
+    const entries: Entry[] = [];
+    for (const event of fresh) {
+      const viaSnapshot = snapshot ? deltaFor(snapshot.item, event) : 0;
+      const delta = viaSnapshot !== 0 ? viaSnapshot : deltaFor(promise.item, event);
+      if (delta === 0) continue;
+      entries.push({ event, delta, declared: viaSnapshot !== 0, rev: viaSnapshot !== 0 ? snapshot!.rev : promise.rev,
+        item: viaSnapshot !== 0 ? snapshot!.item : promise.item, connection: connectionOf(event), old: isOld(event) });
+    }
+    const pending = (ledgerSeen.ahead ?? []).filter(item => item.promise === promise.id);
+    const live = entries.filter(entry => !entry.old);
+    const newAhead = (list: Entry[]): LedgerAhead[] => list.map(entry => ({ promise: promise.id, delta: entry.delta, connection: entry.connection, obsSeq: obsOf(entry.event) }));
+    // What the new observation shows of the events not seen before, and what it does not show yet.
+    const coveredPending = newer ? pending.filter(item => coveredBy(item.connection, item.obsSeq)) : [];
+    const coveredLive = newer ? live.filter(entry => coveredBy(entry.connection, obsOf(entry.event))) : [];
+    const observed = newer && now ? haveIn(promise.item, now.facts) : null;
+    const expected = observed !== null && promise.have !== undefined ? round1(promise.have + sum(coveredPending) + sum(coveredLive)) : null;
+    const diff = observed !== null && expected !== null ? round1(observed - expected) : 0;
+    const carriedOn = newer ? [...pending.filter(item => !coveredPending.includes(item)), ...newAhead(live.filter(entry => !coveredLive.includes(entry)))]
+      : [...pending, ...newAhead(live)];
+    aheadNext.push(...carriedOn);
+
+    // The count each line shows as `have`: the count before, plus the events one by one (with no earlier look, the observation put back before them).
+    let cur = round1((promise.have ?? (observed !== null ? round1(observed - sum(coveredPending) - sum(coveredLive)) : 0)) + sum(pending));
+    // make's middle materials are put together: what was made and used within one hand is the net of it, one line.
+    const lines: Array<{ entries: Entry[]; net: boolean }> = [], middles = new Map<string, Entry[]>();
+    for (const entry of entries) {
+      if (!entry.event.intermediate) { lines.push({ entries: [entry], net: false }); continue; }
+      const name = `${entry.event.item}|${entry.item}`, group = middles.get(name);
+      if (group) group.push(entry);
+      else { const created = [entry]; middles.set(name, created); lines.push({ entries: created, net: true }); }
+    }
+    const written: PromiseEvent[] = [];
+    for (const line of lines) {
+      const first = line.entries[0]!, net = sum(line.entries);
+      cur = round1(cur + sum(line.entries.filter(entry => !entry.old)));
+      if (net === 0) continue;
+      const reason = line.net ? (net > 0 ? 'crafted' : 'craft_ingredient') : reasonOf(first.event, input.by);
+      const moved = first.event.reason === 'stored' || first.event.reason === 'retrieved';
+      const kind: PromiseEvent['kind'] = first.event.reason === 'death' ? 'lost_death' : first.event.reason === 'unexplained' ? 'unexplained' : moved ? 'moved' : net < 0 ? 'consumed' : 'gained';
+      const source = byOf(input.by, first.event.id);
+      written.push({ id: first.event.id, at: input.at, kind, count: kind === 'unexplained' ? net : Math.abs(net), have: Math.max(0, cur), declared: first.declared, reason,
+        promiseRev: first.rev, item: first.item, ...(source ? { by: source } : {}) });
+    }
+    if (observed !== null && diff !== 0) {
+      // What the events do not explain is said as it is, not shared out. Under a death the loss is the death's; a body that lost its record says so.
+      const dead = deathNow && diff < 0;
+      written.push({ id: dead ? `death:${String(now!.life.deathEpoch)}:${String(now!.life.deathSeq)}` : `unexplained:${key(now!.run)}:${now!.obsSeq}`, at: input.at,
+        kind: dead ? 'lost_death' : 'unexplained', count: dead ? -diff : diff, have: round1(observed + sum(carriedOn)), reason: dead ? 'death' : input.lost ? 'events_lost' : 'unexplained' });
+    }
+    for (const line of written) added.push({ ...line, promise: promise.id });
+    let next = appended(promise, written);
+    if (observed !== null) next = { ...next, have: observed };
+
+    // `instead` and `until` are asked again at each observation (not of an older one).
+    if (now && relation !== 'older') {
+      const instead = promise.instead && validCondition(promise.instead) ? promise.instead as ActCondition : null;
+      if (instead) {
+        const holds = conditionHolds(instead, now.frame), factKey = `promise_instead_lost:${promise.id}:r${promise.rev}`;
+        if (holds === true) {
+          withdrawn.push(factKey);
+          if (next.state === 'open') { next = { ...next, state: 'kept_by_instead' }; changed = true; }
+        } else if (holds === false && next.state === 'kept_by_instead') {
+          next = { ...next, state: 'open' };
+          changed = true;
+          facts.push({ key: factKey, text: `約束 #${promise.id} の代わりの条件が成り立たなくなった（${insteadLack(instead, now.facts) ?? 'もう満たしていない'}）` });
+        }
+      }
+      const why = closedWhy(promise, now, input.nodes);
+      if (why) {
+        const line: PromiseEvent = { id: `plan:closed:${promise.rev}`, at: input.at, kind: 'closed', count: 0, have: next.have ?? 0, reason: why };
+        next = { ...appended(next, [line]), state: 'closed', closedBy: 'until' };
+        added.push({ ...line, promise: promise.id });
+        changed = true;
+      }
+    }
+    out.push(next);
+  }
+
+  const seen: LedgerSeen = { eventIds: fresh.length ? [...ledgerSeen.eventIds, ...fresh.map(event => event.id)] : ledgerSeen.eventIds,
+    lastObs: newer && now ? { bodyBoot: now.run.bodyBoot, connectionId: now.run.connectionId, obsSeq: now.obsSeq } : last };
+  const counter = newer && now && typeof now.life.deathEpoch === 'string' ? deathBetween(ledgerSeen.death ?? null, now.life).counter : ledgerSeen.death ?? null;
+  if (counter) seen.death = counter;
+  const connections = newer && now && last && key(last) !== key(now.run) ? [...(ledgerSeen.connections ?? []), key(last)].slice(-CONNECTIONS_LIMIT) : ledgerSeen.connections;
+  if (connections?.length) seen.connections = connections;
+  if (aheadNext.length) seen.ahead = aheadNext.slice(-AHEAD_LIMIT);
+  return { promises: out, ledgerSeen: seen, added, facts, withdrawn, changed: changed || added.length > 0 };
+}
+
+/** Why a promise's period is over: its node is done, or its condition holds (the words for the ledger line), or null. */
+function closedWhy(promise: PlanPromise, now: Seen, nodes: LedgerInput['nodes']): string | null {
+  const until = promise.until;
+  if (!until) return null;
+  if (until.node && nodes?.find(node => node.id === until.node)?.state === 'done') return `節 ${until.node} が済んだ`;
+  if (until.condition && validCondition(until.condition) && conditionHolds(until.condition as ActCondition, now.frame) === true) return '期限の条件を満たした';
+  return null;
+}
+
+/** What the `instead` lacks, in words (the alternative nearest to holding): the clauses the frame shows unmet. */
+function insteadLack(condition: ActCondition, facts: DoneFacts): string | null {
+  const rank = (clauses: ActClause[]) => clauses.filter(clause => clauseHolds(clause, facts) === true).length / clauses.length;
+  const best = [...condition].sort((left, right) => rank(right) - rank(left))[0];
+  const lacking = (best ?? []).filter(clause => clauseHolds(clause, facts) === false)
+    .map(clause => clause.k === 'near' ? `${itemWord(clause.block)}が ${clause.r}m 内に無い` : clauseLack(clause, facts));
+  return lacking.length ? lacking.join('・') : null;
+}
+
+/** The definitions of `ids` as they stand, to send with a command (an unknown or closed one is left out). */
+export function snapshotUses(promises: readonly PlanPromise[], usesIds: readonly number[] | undefined): UsesSnapshot[] {
+  const out: UsesSnapshot[] = [];
+  for (const id of usesIds ?? []) {
+    const promise = promises.find(item => item.id === id);
+    if (promise && promise.state !== 'closed' && !out.some(item => item.id === id)) out.push({ id, rev: promise.rev, item: promise.item, count: promise.count, use: promise.use });
+  }
+  return out;
+}
+
+/** A `LedgerSeen` read back from a checkpoint (anything that does not read is empty). */
+export function readLedgerSeen(value: unknown): LedgerSeen {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  if (!raw || !Array.isArray(raw.eventIds)) return emptyLedgerSeen();
+  const last = raw.lastObs as Record<string, unknown> | null | undefined;
+  const lastObs = last && typeof last.bodyBoot === 'string' && typeof last.connectionId === 'string' && Number.isFinite(last.obsSeq)
+    ? { bodyBoot: last.bodyBoot, connectionId: last.connectionId, obsSeq: last.obsSeq as number } : null;
+  const death = raw.death as Record<string, unknown> | null | undefined;
+  const ahead = Array.isArray(raw.ahead) ? raw.ahead.filter((item): item is LedgerAhead => !!item && typeof item === 'object' && Number.isSafeInteger((item as LedgerAhead).promise)
+    && Number.isFinite((item as LedgerAhead).delta) && typeof (item as LedgerAhead).connection === 'string') : [];
+  return { eventIds: raw.eventIds.filter((id): id is string => typeof id === 'string'), lastObs,
+    ...(death && typeof death.deathEpoch === 'string' && Number.isSafeInteger(death.deathSeq) ? { death: { deathEpoch: death.deathEpoch, deathSeq: death.deathSeq as number } } : {}),
+    ...(Array.isArray(raw.connections) ? { connections: raw.connections.filter((item): item is string => typeof item === 'string').slice(-CONNECTIONS_LIMIT) } : {}),
+    ...(ahead.length ? { ahead: ahead.slice(-AHEAD_LIMIT) } : {}) };
+}
+
+// ---- the live state's line --------------------------------------------------------------------------------------------------------------------
+
+/** The names of the few items a promise or a condition says in words; any other is said by its id. */
+const WORDS: Readonly<Record<string, string>> = { planks: '板', food: '食料', crafting_table: '作業台', furnace: 'かまど', chest: 'チェスト', bed: 'ベッド', coal: '石炭',
+  cobblestone: '丸石', stick: '棒', torch: '松明', water_bucket: '水入りバケツ', bucket: 'バケツ', flint_and_steel: '火打石と打ち金', obsidian: '黒曜石', shield: '盾' };
+export const itemWord = (item: string): string => WORDS[item] ?? item;
+const REASON_WORDS: Readonly<Record<string, string>> = { smelt_fuel: 'かまどの燃料', craft_ingredient: '作る材料', smelt_ingredient: '焼く材料', eat: '食事', reflex_eat: '反射の食事',
+  place: '置いた', thrown: '捨てた', tool_broke: '道具が壊れた', reflex_armor: '反射で防具を着た', death: '死', stored: '箱へ入れた', retrieved: '箱から出した', crafted: '作った',
+  picked: '拾った', mined: '掘った', smelted: '焼けた', unexplained: '出来事に無い増減', events_lost: '体の記録が失われた' };
+const reasonWords = (reason: string | undefined): string => REASON_WORDS[reason ?? ''] ?? reason ?? '';
+
+export interface PromiseLineContext {
+  /** The time of the previous decision (ISO): 「直前に」 is what happened after it. Absent: no line says what happened just now. */
+  since?: string;
+  /** The observation the line's 「今」 is read from (absent: the count the ledger last took). */
+  observation?: BodyObservation | null;
+  /** How many lines at most (4). */
+  limit?: number;
+}
+/** The live state's lines for the open promises: by number, four at most. Facts only; a line asks nothing. */
+export function promiseLines(promises: readonly PlanPromise[], context: PromiseLineContext = {}): string[] {
+  const facts = doneFacts(context.observation ?? null);
+  return [...promises].filter(promise => promise.state === 'open' || promise.state === 'kept_by_instead').sort((left, right) => left.id - right.id)
+    .slice(0, context.limit ?? 4).map(promise => lineOf(promise, facts, context));
+}
+
+function lineOf(promise: PlanPromise, facts: DoneFacts | null, context: PromiseLineContext): string {
+  const food = promise.item === 'food', unit = food ? ' 点' : '';
+  const link = /[用分]$/u.test(promise.use) ? 'の' : '用の';
+  const head = `約束 #${promise.id} ${promise.use}${link}${itemWord(promise.item)} ${promise.count}${unit}`;
+  const have = facts ? haveIn(promise.item, facts) : promise.have;
+  const parts = [have === undefined ? '今 不明' : `今 ${round1(have)}${unit}`];
+  if (promise.state === 'kept_by_instead') {
+    const words = facts && promise.instead && validCondition(promise.instead) ? holdWords(promise.instead as ActCondition, facts) : null;
+    return `${head}: ${[...parts, `代わりの条件を満たす${words ? `（${words}）` : ''}`].join('・')}`;
+  }
+  const recent = context.since === undefined ? [] : promise.ledger.filter(event => event.at > context.since!);
+  const died = recent.filter(event => event.kind === 'lost_death');
+  const changes = changesWords(recent.filter(event => event.kind !== 'lost_death'), unit);
+  if (changes) parts.push(changes);
+  if (died.length) parts.push(`死んで ${round1(died.reduce((total, event) => total + event.count, 0))}${unit || ' '}失った`);
+  const short = have === undefined ? 0 : round1(promise.count - have);
+  return `${head}: ${parts.join('・')}${short > 0 && !died.length ? `（足りない ${short}）` : ''}`;
+}
+
+/** 「直前に 2 減った（理由: …）」: what the events after the last decision took from the promise's item and gave to it. */
+function changesWords(events: readonly PromiseEvent[], unit: string): string {
+  const signed = (event: PromiseEvent): number => event.kind === 'consumed' ? -event.count : event.kind === 'gained' ? event.count
+    : event.kind === 'moved' ? (event.reason === 'stored' ? -event.count : event.count) : event.kind === 'unexplained' ? event.count : 0;
+  const part = (list: PromiseEvent[], word: string): string | null => {
+    if (!list.length) return null;
+    const total = round1(list.reduce((sum, event) => sum + Math.abs(signed(event)), 0));
+    const reasons = [...new Set(list.map(event => reasonWords(event.reason)))].filter(Boolean).join('・');
+    const act = list.filter(event => event.kind === 'consumed' && !(event.reason ?? '').startsWith('reflex_'));
+    const declaredWords = act.length ? (act.every(event => event.declared) ? '申告の用途' : act.some(event => event.declared) ? '一部は申告の用途' : '申告の用途ではない') : '';
+    const placeOnly = list.every(event => event.kind === 'moved') ? '置き場所が変わっただけ' : '';
+    const note = [declaredWords, placeOnly].filter(Boolean).join('。');
+    return `${total}${unit || ' '}${word}${reasons ? `（理由: ${reasons}${note ? `。${note}` : ''}）` : ''}`;
+  };
+  const lessList = events.filter(event => signed(event) < 0), moreList = events.filter(event => signed(event) > 0);
+  const pieces = [part(lessList, '減った'), part(moreList, '増えた')].filter((item): item is string => !!item);
+  return pieces.length ? `直前に ${pieces.join('・')}` : '';
+}
+
+/** What makes the first alternative that holds hold, in words (`作業台 1`, `近くに作業台 2m`). */
+function holdWords(condition: ActCondition, facts: DoneFacts): string | null {
+  const alternative = condition.find(clauses => clauses.every(clause => clauseHolds(clause, facts) === true));
+  if (!alternative) return null;
+  return alternative.map(clause => {
+    if (clause.k === 'have') return `${itemWord(clause.item)} ${carried(facts.counts, clause.item)}`;
+    if (clause.k === 'near') {
+      const found = facts.utilities?.found.filter(item => item.block === clause.block).sort((left, right) => left.distance - right.distance)[0];
+      return `近くに${itemWord(clause.block)}${found ? ` ${round1(found.distance)}m` : ''}`;
+    }
+    return clauseText(clause);
+  }).join('・');
+}

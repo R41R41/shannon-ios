@@ -1,9 +1,12 @@
 import {
-  applyPlanUpdate, emptyPlanTree, flatPlan, orderedPlan, planDisplay, planPath, planText, readPlanTree, PLAN_LIMITS,
+  applyPlanUpdate, emptyPlanTree, flatPlan, orderedPlan, planDisplay, planPath, planText, readPlanTreeWith, PLAN_KINDS, PLAN_LIMITS, PREP_STATES,
   type PlanPathView, type PlanTree, type PlanUpdate,
 } from '@shannon/mind';
 import type { FcaExternalTools, FcaToolDefinition } from './fcaPorts.js';
 import { toolFailure, toolOk } from '../../tools/toolRegistryPorts.js';
+import { parseCondition } from '../../../contracts/minecraftActCondition.js';
+import { applyLedger, readLedgerSeen, type LedgerAdded, type LedgerInput, type LedgerSeen } from '../../../surfaces/minecraft/minecraftLlmcPromises.js';
+import { offer, withdraw } from '../../../surfaces/minecraft/minecraftLlmcOnceFacts.js';
 
 /**
  * `plan.update` (design mb-llm-centric 2.7): a core tool of the FCA, for a task that keeps a plan tree (`@shannon/mind` planTree). The
@@ -12,11 +15,32 @@ import { toolFailure, toolOk } from '../../tools/toolRegistryPorts.js';
  * the path to the current node (`FcaModelInput.plan`); the whole tree only in this tool's result.
  */
 export const PLAN_UPDATE_TOOL = 'plan.update';
+/**
+ * The continue contract (chapters 3 and 7): a node's `kind` and `prep` (what the model says of the node; the head's code reads these and never the title), and the ops
+ * `promise` and `release` (what to keep, for what). A kind outside the list is taken as `other`. `until.condition` and `instead` are texts (`have:crafting_table>=1`) the
+ * tool reads into conditions; one that does not read is said, not guessed.
+ */
+const kindField = { type: 'string', enum: [...PLAN_KINDS], description: '節の種類（頭のコードは題でなくこれで見る）' };
+const prepField = { type: 'object', additionalProperties: false, required: ['state'], properties: {
+  state: { type: 'string', enum: [...PREP_STATES] }, why: { type: 'string', maxLength: PLAN_LIMITS.text } },
+  description: '準備の節の状態: met（満たした）・skipped（承知で省いた）・unmet_now（今は足りない）' };
+const promiseFields = {
+  item: { type: 'string', maxLength: 64, description: 'promise: 物の名前（oak_planks。planks は全部の板）か food（食料の点）' },
+  count: { type: 'integer', minimum: 1, maximum: PLAN_LIMITS.promiseCount },
+  use: { type: 'string', maxLength: PLAN_LIMITS.promiseUse, description: 'promise: 用途' },
+  until: { type: 'object', additionalProperties: false, properties: { node: { type: 'string', maxLength: 32 }, condition: { type: 'string', maxLength: 160 } },
+    description: 'promise の期間: 節が済むまで・条件を満たすまで' },
+  instead: { type: 'string', maxLength: 160, description: 'promise: 代わりにこれを満たせば足りる条件（have:crafting_table>=1）' },
+  why: { type: 'string', maxLength: PLAN_LIMITS.reason, description: 'release の理由' },
+};
 const nodeDraft = { type: 'object', additionalProperties: false, required: ['title'], properties: {
   id: { type: 'string', maxLength: 32 }, title: { type: 'string', minLength: 1, maxLength: PLAN_LIMITS.title },
   where: { type: 'string', maxLength: PLAN_LIMITS.text }, doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text },
   note: { type: 'string', maxLength: PLAN_LIMITS.text }, state: { type: 'string', enum: ['done', 'blocked', 'continue', 'wait'] },
+  kind: kindField, prep: prepField,
 } };
+/** The id of an op: a node's (a word) or a promise's (its number). */
+const opId = { type: ['string', 'integer'] };
 export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
   name: PLAN_UPDATE_TOOL, domain: 'task_runtime', effect: 'write', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'],
   input: { type: 'object', properties: {}, required: [], additionalProperties: false },
@@ -26,15 +50,19 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
     'set（id の state=done|blocked|continue|wait・title・where・doneWhen・note・reason）、move（id を parent・after へ）、drop（id とその下を消す）。',
     'current で今の節を決める。今の節を done にして current を書かなければ、次の済んでいない節が今になる。子が全部 done の親は done になる。',
     '計画が変わった時・節が済んだ時・止まった時に出す（毎回は要らない）。体の手と同じ応答で出してよい。',
+    '約束（残す物と用途）: promise（item・count・use。期間は until、代わりに足りる条件は instead。id を書けば改訂）、release（id・why）。約束を書くのは自分だけ。',
+    '頭は使われた量と理由を帳簿にして live に出すだけで、約束を理由に手は断らない。条件の文は have:crafting_table>=1 の形。',
+    '節には kind（種類）と prep（準備の節の状態 met|skipped|unmet_now と why）を add・split・set で付けられる。準備を省いたと決めた時の skipped は自分で書く。',
   ].join(''),
   nativeInputSchema: { type: 'object', additionalProperties: false, required: [], properties: {
     ops: { type: 'array', maxItems: PLAN_LIMITS.ops, items: { type: 'object', additionalProperties: false, required: ['op'], properties: {
-      op: { type: 'string', enum: ['add', 'split', 'set', 'move', 'drop'] }, id: { type: 'string', maxLength: 32 },
+      op: { type: 'string', enum: ['add', 'split', 'set', 'move', 'drop', 'promise', 'release'] }, id: opId,
       parent: { type: ['string', 'null'], maxLength: 32 }, after: { type: ['string', 'null'], maxLength: 32 },
       title: { type: 'string', maxLength: PLAN_LIMITS.title }, where: { type: 'string', maxLength: PLAN_LIMITS.text },
       doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text }, note: { type: 'string', maxLength: PLAN_LIMITS.text },
       reason: { type: 'string', maxLength: PLAN_LIMITS.reason }, state: { type: 'string', enum: ['done', 'blocked', 'continue', 'wait'] },
       into: { type: 'array', minItems: 1, maxItems: PLAN_LIMITS.split, items: nodeDraft },
+      kind: kindField, prep: prepField, ...promiseFields,
     } } },
     current: { type: ['string', 'null'], maxLength: 32 },
   } },
@@ -59,12 +87,13 @@ export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
   ].join(''),
   nativeInputSchema: { type: 'object', additionalProperties: false, required: [], properties: {
     ops: { type: 'array', maxItems: PLAN_LIMITS.ops, items: { type: 'object', additionalProperties: false, required: ['op'], properties: {
-      op: { type: 'string', enum: ['add', 'split', 'set', 'move', 'drop', 'forbid', 'caution', 'lift'] }, id: { type: 'string', maxLength: 32 },
+      op: { type: 'string', enum: ['add', 'split', 'set', 'move', 'drop', 'promise', 'release', 'forbid', 'caution', 'lift'] }, id: opId,
       parent: { type: ['string', 'null'], maxLength: 32 }, after: { type: ['string', 'null'], maxLength: 32 },
       title: { type: 'string', maxLength: PLAN_LIMITS.title }, where: { type: 'string', maxLength: PLAN_LIMITS.text },
       doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text }, note: { type: 'string', maxLength: PLAN_LIMITS.text },
       reason: { type: 'string', maxLength: PLAN_LIMITS.reason }, state: { type: 'string', enum: ['done', 'blocked', 'continue', 'wait'] },
       into: { type: 'array', minItems: 1, maxItems: PLAN_LIMITS.split, items: nodeDraftWithRules },
+      kind: kindField, prep: prepField, ...promiseFields,
       text: { type: 'string', maxLength: PLAN_LIMITS.rule, description: 'forbid・caution・lift の 1 行' },
       forbid: rules, caution: rules,
     } } },
@@ -94,6 +123,41 @@ export interface FcaPlanPort {
    * `why` (closed words). True when the tree changed. Absent: only the model changes the plan.
    */
   amend?(update: PlanUpdate, why: string): boolean;
+  /**
+   * The continue contract, chapter 3, **the one way into the ledger**: the body's inventory events and the newest observation are put to the tree's promises
+   * (`minecraftLlmcPromises.ts`, `applyLedger`) and the memory that keeps an event from being put twice (`ledgerSeen`, saved with the tree in the checkpoint).
+   * The plan's revision does not move and `committed()` does not change (the flat copy has no ledger); the checkpoint carries it. An `instead` that stopped
+   * holding is offered as a fact said once (`minecraftLlmcOnceFacts`). Returns the lines put to the ledgers.
+   */
+  applyLedger(input: Omit<LedgerInput, 'nodes' | 'at'> & { at?: string }): LedgerAdded[];
+  /** The ledger's memory (for a test and for the size measure). */
+  ledgerSeen(): LedgerSeen;
+}
+
+/**
+ * The ops of a `plan.update` as the model wrote them, in the form `applyPlanUpdate` takes: a promise's `until.condition` and `instead` are texts read by
+ * `parseCondition` (one that does not read is said, with the form to write: nothing is guessed), and the number of a promise or a release may be written as
+ * `3` or `#3`.
+ */
+function readOps(input: PlanUpdate): { update: PlanUpdate } | { problem: string } {
+  if (!Array.isArray(input.ops)) return { update: input };
+  const ops: unknown[] = [];
+  for (const [index, raw] of input.ops.entries()) {
+    const op = raw && typeof raw === 'object' ? { ...raw as Record<string, unknown> } : null;
+    if (!op || (op.op !== 'promise' && op.op !== 'release')) { ops.push(raw); continue; }
+    if (typeof op.id === 'string' && /^#?\d{1,6}$/u.test(op.id)) op.id = Number(op.id.replace('#', ''));
+    const until = op.until && typeof op.until === 'object' && !Array.isArray(op.until) ? { ...op.until as Record<string, unknown> } : undefined;
+    for (const [field, text, label] of [['condition', until?.condition, 'until.condition'], ['instead', op.instead, 'instead']] as const) {
+      if (text === undefined) continue;
+      const parsed = typeof text === 'string' ? parseCondition(text, label) : { ok: false as const, problem: `${label} は条件の文` };
+      if (!parsed.ok) return { problem: `ops[${index}]: ${parsed.problem}` };
+      if (field === 'condition') until!.condition = parsed.condition;
+      else op.instead = parsed.condition;
+    }
+    if (until) op.until = until;
+    ops.push(op);
+  }
+  return { update: { ...input, ops: ops as PlanUpdate['ops'] } };
 }
 
 /** The plan part of a decision's input (`FcaModelInput.plan`), when the task keeps a plan. */
@@ -108,6 +172,8 @@ const heldSaid = new Map<string, string>();
 export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown; inbox?: FcaPlanInbox; log?(line: string): void;
   /** mb-llmc r4: offer the tool with forbid and caution (`PLAN_UPDATE_RULES_DEFINITION`). Absent: as before. */
   rules?: boolean;
+  /** The clock (ISO) for the times a promise and a preparation state keep. Absent: now. */
+  now?(): string;
   /** mb-llmc r8: the live state shows the plan without the path and the now that the body's `planNow` says (`FcaPlanPort.liveView`). Absent: whole. */
   compact?: boolean;
   /**
@@ -123,12 +189,17 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
    */
   follow?(tree: PlanTree): { to: string; from: string | null; acts: number; words?: string } | null }):
   { tools: FcaExternalTools; port: FcaPlanPort } {
-  const kept = readPlanTree((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
+  const held = readPlanTreeWith((parts.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
+  const kept = held?.tree ?? null;
   let tree = kept ?? emptyPlanTree(), changed = false, note: string | undefined;
+  let ledgerSeen = readLedgerSeen((parts.checkpoint as { fcaPlanLedgerSeen?: unknown } | null)?.fcaPlanLedgerSeen);
   const say = (line: string) => { try { parts.log?.(line); } catch { /* logging never fails a step */ } };
+  // A v1 tree read back is moved to v2 once (chapter 7); the checkpoint of this step then holds v2, so the line is said once.
+  if (held?.migrated) say(`Shannon FCA plan migrated task=${parts.taskId} from=v1 revision=${tree.revision}`);
+  const stamp = () => (parts.now ?? (() => new Date().toISOString()))();
   /** r5: a change of the head's own, all or nothing; logged with what is done now and the current node. */
   const amend = (update: PlanUpdate, why: string, detail = ''): boolean => {
-    const result = applyPlanUpdate(tree, update);
+    const result = applyPlanUpdate(tree, update, { at: stamp() });
     if (result.problem || !result.changed) return false;
     tree = result.tree;
     changed = true;
@@ -192,10 +263,25 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       adopt();
       return amend(update, why);
     },
+    applyLedger(input) {
+      adopt();
+      const result = applyLedger(tree.promises, ledgerSeen, { ...input, at: input.at ?? stamp(), nodes: tree.nodes });
+      if (result.promises.some((item, index) => item !== tree.promises[index])) tree = { ...tree, promises: result.promises };
+      ledgerSeen = result.ledgerSeen;
+      for (const fact of result.facts) offer(parts.taskId, fact.key, fact.text);
+      for (const key of result.withdrawn) withdraw(parts.taskId, key);
+      if (result.added.length) {
+        say(`Shannon FCA plan ledger task=${parts.taskId} added=${result.added.length} kinds=${[...new Set(result.added.map(item => item.kind))].join(',')} `
+          + `open=${tree.promises.filter(item => item.state !== 'closed').length}`);
+      }
+      return result.added;
+    },
+    ledgerSeen: () => ledgerSeen,
   };
   const tools: FcaExternalTools = {
     definitions: [parts.rules ? PLAN_UPDATE_RULES_DEFINITION : PLAN_UPDATE_DEFINITION],
-    checkpoint: () => tree.nodes.length || kept ? { fcaPlanTree: tree } : {},
+    checkpoint: () => tree.nodes.length || kept
+      ? { fcaPlanTree: tree, ...(ledgerSeen.eventIds.length || ledgerSeen.lastObs ? { fcaPlanLedgerSeen: ledgerSeen } : {}) } : {},
     async execute(call) {
       call.signal.throwIfAborted();
       if (call.name !== PLAN_UPDATE_TOOL) throw new Error('FCA_TOOL_NOT_OFFERED');
@@ -204,7 +290,9 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
         return toolFailure('invalid_input', 'plan.update は ops と current だけを取る。', { retryable: false });
       }
       adopt();
-      const result = applyPlanUpdate(tree, input);
+      const read = readOps(input);
+      if ('problem' in read) return toolFailure('invalid_input', `計画は変えていない: ${read.problem}\n${planText(tree)}`, { retryable: false });
+      const result = applyPlanUpdate(tree, read.update, { at: stamp() });
       if (result.problem) return toolFailure('invalid_input', `計画は変えていない: ${result.problem}\n${planText(tree)}`, { retryable: false });
       if (result.changed) {
         tree = result.tree;
