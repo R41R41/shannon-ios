@@ -5,6 +5,7 @@ import { deathBetween, type DeathCounter, type InventoryEvent } from '../../cont
 import { carried, clauseHolds, clauseLack, clauseText, conditionHolds, doneFacts, validCondition, type DoneFacts } from './minecraftConditions.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import type { OnceFact } from './minecraftLlmcOnceFacts.js';
+import { materialsOf } from './minecraftLlmcRecipes.js';
 
 /**
  * The promises' ledger, the head's half (the continue contract, chapter 3; amendment A-1 4). Pure: the plan tool's owner (`fcaPlanTools.ts`) holds the tree and the
@@ -409,11 +410,12 @@ function holdWords(condition: ActCondition, facts: DoneFacts): string | null {
 
 /**
  * What an act's hands spend that the head can count from their arguments (A-8 2): a smelt's fuel and what it smelts, what a drop throws and a chest takes in, the blocks of a place
- * (one a cell) and of a pillar (`n`, with its block named). A make's or a craft's materials need a recipe: not counted here.
+ * (one a cell) and of a pillar (`n`, with its block named), and (A-10 2) the materials of a make and a craft, from the table of recipes (`minecraftLlmcRecipes.ts`; a make walks the chain
+ * of planks, sticks and the rest, taking what she carries first). `uncounted`: the make or craft whose item the table does not have: nothing is counted for it, and it is said so.
  */
-export function actSpends(hands: readonly { do?: string; item?: string; items?: readonly { item: string; count?: number }[]; fuel?: string; fuelCount?: number;
-  block?: string; at?: readonly unknown[]; n?: number; op?: string; count?: number }[]): { item: string; count: number }[] {
-  const out: { item: string; count: number }[] = [];
+export function spendsOf(hands: readonly { do?: string; item?: string; items?: readonly { item: string; count?: number }[]; fuel?: string; fuelCount?: number;
+  block?: string; at?: readonly unknown[]; n?: number; op?: string; count?: number }[], pack?: ReadonlyMap<string, number>): { spends: { item: string; count: number }[]; uncounted: string[] } {
+  const out: { item: string; count: number }[] = [], uncounted: string[] = [];
   for (const hand of hands) {
     if (hand.do === 'smelt') {
       if (hand.fuel && hand.fuelCount) out.push({ item: hand.fuel, count: hand.fuelCount });
@@ -422,21 +424,31 @@ export function actSpends(hands: readonly { do?: string; item?: string; items?: 
     else if (hand.do === 'chest' && (hand.op === 'put')) for (const entry of hand.items ?? []) { if (entry.count) out.push({ item: entry.item, count: entry.count }); }
     else if (hand.do === 'place' && hand.block && hand.at?.length) out.push({ item: hand.block, count: hand.at.length });
     else if (hand.do === 'pillarUp' && hand.block && hand.n) out.push({ item: hand.block, count: hand.n });
+    else if ((hand.do === 'make' || hand.do === 'craft') && hand.item) {
+      const made = materialsOf(hand.item, hand.count ?? 1, { chain: hand.do === 'make', ...(pack ? { pack } : {}) });
+      if (made.uncounted) uncounted.push(`${hand.do} ${hand.item}`); else out.push(...made.spends);
+    }
   }
-  return out;
+  return { spends: out, uncounted };
 }
+export const actSpends = (hands: Parameters<typeof spendsOf>[0], pack?: ReadonlyMap<string, number>): { item: string; count: number }[] => spendsOf(hands, pack).spends;
 /** Whether a name in the pack is the item of a promise (the same match the conditions use: the name, or a kind ending in it: `spruce_planks` is `planks`). */
 const isItemOf = (name: string, item: string): boolean => name === item || name.endsWith(`_${item}`);
+/** A spend counts against a promise when either names the other's kind (a spend of `planks` from a recipe may be any kind of planks, so it counts against `spruce_planks` too). */
+const touches = (spend: string, promised: string): boolean => isItemOf(spend, promised) || isItemOf(promised, spend);
 /**
  * A-8 2: when the act's spending is more than what the open promises of an item leave free, one line (said once, after the act is sent; nothing is refused):
- * 「この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 6 を使い、残り 1）」. Facts the head counts; the choice stays the model's.
+ * 「この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 6 を使い、残り 1）」. Facts the head counts; the choice stays the model's. `uncounted` (A-10 2): the makes and crafts it
+ * could not count, for the decision's record.
  */
-export function breakingWords(promises: readonly PlanPromise[], hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): string[] {
-  const facts = doneFacts(observation), spends = actSpends(hands);
-  if (!facts || !spends.length) return [];
+export function breakingOf(promises: readonly PlanPromise[], hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): { lines: string[]; uncounted: string[] } {
+  const facts = doneFacts(observation);
+  if (!facts) return { lines: [], uncounted: [] };
+  const { spends, uncounted } = spendsOf(hands, facts.counts);
+  if (!spends.length) return { lines: [], uncounted };
   const lines: string[] = [];
   for (const promise of promises.filter(item => item.state === 'open').sort((a, b) => a.id - b.id)) {
-    const used = spends.filter(spend => isItemOf(spend.item, promise.item)).reduce((total, spend) => total + spend.count, 0);
+    const used = spends.filter(spend => touches(spend.item, promise.item)).reduce((total, spend) => total + spend.count, 0);
     if (!used) continue;
     const have = haveIn(promise.item, facts);
     if (used <= freeOutside(promises, promise.item, have)) continue;
@@ -444,8 +456,10 @@ export function breakingWords(promises: readonly PlanPromise[], hands: Parameter
     const link = /[用分]$/u.test(promise.use) ? 'の' : '用の';
     lines.push(`この act は約束 #${promise.id}（${promise.use}${link}${itemWord(promise.item)} ${promise.count}${unit}）を割る見込み（${itemWord(promise.item)} ${round1(used)}${unit} を使い、残り ${Math.max(0, round1(have - used))}${unit}）`);
   }
-  return lines;
+  return { lines, uncounted };
 }
+export const breakingWords = (promises: readonly PlanPromise[], hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): string[] =>
+  breakingOf(promises, hands, observation).lines;
 
 /**
  * A-9: the pack's lines with the open promises' shares written where the model counts what it can spend: `spruce_planks×7（約束 #1 地下の作業台に 4・外 3）`. A promise of

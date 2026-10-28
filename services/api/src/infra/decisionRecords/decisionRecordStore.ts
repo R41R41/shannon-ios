@@ -87,7 +87,7 @@ export class RunWriter {
   private told = false;
   private readonly known = new Set<string>();
   /** The ids already given to the requests of this run, by kind, so that a restart goes on counting. */
-  readonly counters = { d: 0, s: 0, p: 0 };
+  readonly counters = { d: 0, s: 0, p: 0, r: 0 };
   /** The id each message object had in this run: the same object (a replay message) is not stringified and hashed again. */
   readonly messageIds = new WeakMap<object, { id: string; chars: number }>();
 
@@ -102,8 +102,8 @@ export class RunWriter {
       const events = join(this.directory, EVENTS_FILE);
       if (!existsSync(events)) return;
       this.bytes += statSync(events).size;
-      for (const found of readFileSync(events, 'utf8').matchAll(/"id":"([dsp])(\d+)"/gu)) {
-        const kind = found[1] as 'd' | 's' | 'p';
+      for (const found of readFileSync(events, 'utf8').matchAll(/"id":"([dspr])(\d+)"/gu)) {
+        const kind = found[1] as 'd' | 's' | 'p' | 'r';
         this.counters[kind] = Math.max(this.counters[kind], Number(found[2]));
       }
     });

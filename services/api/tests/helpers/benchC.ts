@@ -460,6 +460,8 @@ export interface BenchOptions {
   life?: number;
   /** The body polls on its own every `pollEveryMs` (default 4); `false`: the script polls by hand. */
   autoPoll?: boolean | number;
+  /** Amendment A-10: the model that decides the step (a real `AnthropicFcaModel` over a scripted client asks Opus again) and its name; absent: a model that cannot be asked again. */
+  model?: { model: unknown; name: string };
 }
 export interface Head { headBoot: string; control: MinecraftControl; parts: ReturnType<typeof llmcStepParts>; queue: LlmcQueue; stepId: string; step?: ReturnType<typeof fakeStep>; lease: { id: string; generation: number; holder: string }; lines: string[];
   /** The head's process is gone: whatever of it is still running (a wait for a receipt) finds the database closed to it and ends. */
@@ -527,7 +529,7 @@ export class BenchC {
     if (this.heads.length > 0) this.body.poll();
     const step = fakeStep(this.run, this.current.stepId, lease, this.checkpoint, this.options.goal ?? 'エンドラを倒して');
     control.store.bind(this.run, RUN_BODY);
-    const llmc = { names: { main: 'm', escalate: null, plan: 'p' }, models: { main: {} as never, escalate: null }, summarizer: null, policy: {}, historyAhead: createFcaHistoryAhead(),
+    const llmc = { names: { main: this.options.model?.name ?? 'm', escalate: null, plan: 'p' }, models: { main: (this.options.model?.model ?? {}) as never, escalate: null }, summarizer: null, policy: {}, historyAhead: createFcaHistoryAhead(),
       ...(this.options.planner ? { planner: this.options.planner } : {}) };
     const parts = llmcStepParts(llmc as never, step as never, control, line => this.current.lines.push(line));
     this.current.parts = parts;
@@ -599,9 +601,11 @@ export class BenchC {
    * The model's `mc.act` through the real tool: `fcaMinecraftTools` over the head's own step parts (`llmcStepParts`'s `tools`, as the server wires them), as a decision of the scripted model.
    * What it answers is what the model reads of the call (the line of the queue and the facts beside it).
    */
-  async actThroughTools(input: Record<string, unknown>): Promise<ToolResult> {
+  async actThroughTools(input: Record<string, unknown>, options: { urgent?: boolean } = {}): Promise<ToolResult> {
     const head = this.current;
-    const tools = fcaMinecraftTools({ control: head.control, step: head.step as never, ownerAlone: () => true, sourcesVisible: () => true, ...head.parts.tools } as never);
+    // `urgent`: the decision was an urgent one (the lifecycle's flag, `urgentDecision`, is the step's own).
+    const llmc = options.urgent ? { ...head.parts.tools.llmc, urgent: () => true } : head.parts.tools.llmc;
+    const tools = fcaMinecraftTools({ control: head.control, step: head.step as never, ownerAlone: () => true, sourcesVisible: () => true, ...head.parts.tools, llmc } as never);
     const controller = new AbortController();
     return this.decide('act', () => inActionExecution({ lease: head.step!.lease, signal: controller.signal, permit: async () => true } as never,
       () => tools.execute({ scopeKey: 'owner', taskId: this.run, operationId: `op-act-${++this.opCount}`, name: 'mc.act', input, signal: controller.signal } as never) as never)) as Promise<ToolResult>;

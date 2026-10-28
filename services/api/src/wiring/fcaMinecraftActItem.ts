@@ -32,7 +32,9 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   /** Amendment A-7 1: an entry of the act's `keep` put to the plan as a promise (`FcaPlanPort.keepPromise`). Absent: the plan cannot take it, and the result says so. */
   keep?(entry: ActKeep): KeptPromise | { problem: string };
   /** Amendment A-8 2: the plan's promises now (what an act that would spend them is told once, nothing refused). */
-  promises?(): readonly PlanPromise[] }): Promise<ToolResult> {
+  promises?(): readonly PlanPromise[];
+  /** Amendment A-10: what was said of the act being decided again (Opus's answer), after the line of the queue and before the rest. */
+  lead?: readonly string[] }): Promise<ToolResult> {
   const { queue, call } = parts, input = call.input as ActInput;
   // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope), `uses` (kept with the command, never sent to the body) and `keep`
   // (made into promises of the plan below, once the queue has the act).
@@ -54,7 +56,7 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const kept = (keep ?? []).map(entry => promiseKeptWords(entry, parts.keep ? parts.keep(entry) : { problem: 'この判断の計画には約束を書けない' }));
   // Amendment A-8 2: what the act would spend of the promised is said once, after the line of the queue (nothing is refused).
   const breaking = parts.promises ? breakingWords(parts.promises(), input.hands, parts.frame) : [];
-  return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...kept, ...breaking].join('\n'));
+  return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...(parts.lead ?? []), ...kept, ...breaking].join('\n'));
 }
 
 /** An input of nothing but `replace`: the items are taken off and that is the whole answer; null for any other input. */

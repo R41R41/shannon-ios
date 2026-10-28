@@ -872,6 +872,8 @@
     "surfaces/minecraft/minecraftLlmcRangeGuard.ts",
     "surfaces/minecraft/minecraftLlmcReachWords.ts",
     "surfaces/minecraft/minecraftLlmcReadiness.ts",
+    "surfaces/minecraft/minecraftLlmcRecipes.ts",
+    "surfaces/minecraft/minecraftLlmcRedecide.ts",
     "surfaces/minecraft/minecraftLlmcReflexHold.ts",
     "surfaces/minecraft/minecraftLlmcRepeat.ts",
     "surfaces/minecraft/minecraftLlmcResultWords.ts",

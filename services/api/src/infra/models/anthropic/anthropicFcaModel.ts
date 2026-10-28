@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { shannonIdentityPrompt, SHANNON_FCA_TASK_CAPABILITY, SHANNON_FCA_PROGRESS_CAPABILITY } from '@shannon/cognition';
-import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput } from '../../../mind/action/fca/fcaPorts.js';
+import type { FcaDecision, FcaModel, FcaModelInput, FcaModelOutput, FcaRedecided } from '../../../mind/action/fca/fcaPorts.js';
 import type { TaskRecallPacket } from '../../../mind/recall/taskRecallPorts.js';
 import { providerToolName } from '../../../mind/tools/toolRegistryPorts.js';
 import { FCA_WAIT_RULE as WAIT_RULE } from './anthropicFcaControl.js';
@@ -10,7 +10,7 @@ import { sendClaudeOnce } from '../claude/claudeOnce.js';
 import { claudeToolLoop } from '../claude/claudeToolLoop.js';
 import type { ClaudeSend } from '../claude/claudeTransport.js';
 import { AnthropicUsageEvidenceError, cacheHaikuRequest, cacheOneShotRequest, validateHaikuCacheUsage } from './haikuCache.js';
-import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, usesOneHourAnthropicCache } from './haikuConfig.js';
+import { DEFAULT_HAIKU_MODEL, isAppendOnlyAnthropicModel, OPUS_MODEL, usesOneHourAnthropicCache } from './haikuConfig.js';
 import { observeSync } from '../../observer/observerContext.js';
 import { observedAnthropicResponse, observedToolName } from './observerProjection.js';
 import { FCA_MENU_INSTRUCTIONS, isFcaToolChangeMessage, nativeFcaTools } from './anthropicFcaTools.js';
@@ -31,7 +31,7 @@ import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransient
 import { MINECRAFT_V2_TOOLS, minecraftProfile, V2_CONTROL_WORDS, type MinecraftProfile, type MinecraftV2Hooks }
   from './anthropicFcaMinecraftSystem.js';
 import { FCA_TRANSIENT_BETAS, FCA_TRANSIENT_BODY_RULE, FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING, inputTransformations, isFcaClearAtMessage,
-  appendixOf, planField, renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
+  appendixOf, notedMessages, planField, renderedRequest, transientBetaRefused } from './anthropicFcaTransient.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -110,6 +110,11 @@ const MENUS: Readonly<Record<string, { controls: Anthropic.Tool[]; names: readon
   false: { controls: CONTROL_TOOLS, names: undefined },
 };
 const ONE_HOUR = { type: 'ephemeral' as const, ttl: '1h' as const };
+/** Amendment A-10: a request as it went out, kept so that one of its calls can be asked again (`AnthropicFcaModel.redecide`). */
+interface SentRequest { body: Anthropic.MessageCreateParamsNonStreaming; headers: Record<string, string> | undefined; names: Map<string, string>;
+  history: readonly Anthropic.MessageParam[]; requestTokens: number }
+/** How many tasks' last requests a model keeps. */
+const SENT_KEPT = 8;
 
 /** One native Messages request per decision. Scheduling, execution and authority stay with the caller. */
 export class AnthropicFcaModel implements FcaModel {
@@ -123,6 +128,10 @@ export class AnthropicFcaModel implements FcaModel {
   private readonly compactAboveTokens: number;
   /** the own prompt: a body task's own instructions and transport block; null for a model that serves no body task. */
   private readonly minecraft: MinecraftProfile | null;
+  /** Amendment A-10: the same provider client for a decision asked again (its requests are written to the decision records as `redecide`). */
+  private readonly redecideClient: AnthropicFcaClient;
+  /** Amendment A-10: each task's last request as it went out (the newest eight tasks), so that one call of its decision can be asked again. */
+  private readonly sent = new Map<string, SentRequest>();
 
   constructor(private readonly options: AnthropicFcaOptions) {
     this.model = options.model ?? DEFAULT_HAIKU_MODEL;
@@ -136,6 +145,7 @@ export class AnthropicFcaModel implements FcaModel {
     // The request that goes out and its answer are written first to the decision records (a body task's steps only; `decisionRecordClient.ts`).
     const provider = options.client ?? claudeClient({ apiKey: options.apiKey!, timeoutMilliseconds: this.timeoutMilliseconds, fetch: options.fetcher });
     this.client = recordedClient(provider, options.continued === false ? 'summary' : 'decision');
+    this.redecideClient = recordedClient(provider, 'redecide');
     this.system = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n${STEP_INSTRUCTIONS}`;
     this.transientSystem = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n`
       + `${stepInstructions(FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING)}\n\nownerClock: ${OWNER_CLOCK_RULE}\nwaiting: ${WAIT_RULE}\nbody: ${BODY_RULE}\n`
@@ -208,6 +218,7 @@ export class AnthropicFcaModel implements FcaModel {
     const transport = grace ? AbortSignal.any([timeout, grace.signal]) : combined;
     try {
       // The one tool loop, one request: the runner executes the calls and returns their results in the next decision.
+      const headers = transient ? { 'anthropic-beta': FCA_TRANSIENT_BETAS } : input.catalog ? { 'anthropic-beta': 'inline-tools-2026-09-15' } : undefined;
       const send: ClaudeSend = request => sendClaudeOnce({
         body: request, receipt: 'fca', message: value => value,
         span: { handoff: { model: this.model }, input: observedFcaRequest(request), project: observedFcaResponse, model: this.model },
@@ -215,15 +226,14 @@ export class AnthropicFcaModel implements FcaModel {
           // The runner just rechecked audience, sources and its awaited lease permit. Keep dispatch synchronous.
           combined.throwIfAborted();
           dispatched = true;
+          this.remember(input.task.id, { body: request, headers, names: menu.names, history, requestTokens });
           // Chapter 8: the facts said once whose words this request's last message holds are delivered with it.
           try { this.v2()?.requestSent?.(input.task.id, request); } catch { /* a record of delivery never fails a request */ }
           if (!execution) return;
           execution.modelOutcome = 'unknown';
           delete execution.modelUsage;
         },
-        dispatch: () => this.client.messages.create(request, { signal: transport, maxRetries: 0,
-          ...(transient ? { headers: { 'anthropic-beta': FCA_TRANSIENT_BETAS } }
-            : input.catalog ? { headers: { 'anthropic-beta': 'inline-tools-2026-09-15' } } : {}) }),
+        dispatch: () => this.client.messages.create(request, { signal: transport, maxRetries: 0, ...(headers ? { headers } : {}) }),
       });
       message = (await claudeToolLoop(body, { session: undefined, send, isAnswer: () => true, refusal: 'final', maxRounds: 1 })).final!;
     } catch (error) {
@@ -280,6 +290,48 @@ export class AnthropicFcaModel implements FcaModel {
     return { decision, history: appended, ...context, ...((built as RequestBuilt).sent ? { stateCut: (built as RequestBuilt).sent!.cut } : {}) };
   }
 
+  private remember(taskId: string, sent: SentRequest): void {
+    this.sent.delete(taskId);
+    this.sent.set(taskId, sent);
+    if (this.sent.size > SENT_KEPT) this.sent.delete(this.sent.keys().next().value as string);
+  }
+
+  /**
+   * Amendment A-10: the task's last request sent again to Opus, once, with the note after its live state and nothing else changed (the same system, tools, history, settings and
+   * thinking: only `model`), and answered like a decision. The answer is decoded and shaped by the mode's hooks as a decision's is, but it is not the task's history: the caller uses it
+   * for the one call it was asked about. Its cost is booked like a decision's (`recordUsage`, the budget's). Null: this model is Opus already. Throws: nothing remembered, a request the note
+   * cannot be added to, a request that failed or timed out (booked at its upper bound when it may have been charged), an answer that cannot be read.
+   */
+  async redecide(parts: { taskId: string; note: string; signal: AbortSignal; timeoutMs: number }): Promise<FcaRedecided | null> {
+    if (this.model === OPUS_MODEL) return null;
+    const sent = this.sent.get(parts.taskId);
+    if (!sent) throw new Error('FCA_REDECIDE_NO_REQUEST');
+    const messages = notedMessages(sent.body.messages, parts.note);
+    if (!messages) throw new Error('FCA_REDECIDE_NOT_EXTENDABLE');
+    const timeout = AbortSignal.timeout(parts.timeoutMs), combined = AbortSignal.any([parts.signal, timeout]);
+    combined.throwIfAborted();
+    const body = { ...sent.body, model: OPUS_MODEL, messages } as Anthropic.MessageCreateParamsNonStreaming;
+    const began = Date.now();
+    let message: Anthropic.Message;
+    try {
+      message = await this.redecideClient.messages.create(body, { signal: combined, maxRetries: 0, ...(sent.headers ? { headers: sent.headers } : {}) });
+    } catch (error) {
+      const failure = classifyDispatchFailure(error, { stopped: parts.signal.aborted, deadline: timeout.aborted });
+      if (failureMayHaveBeenCharged(failure)) await this.options.recordUsage(this.usage(undefined, sent.requestTokens, OPUS_MODEL));
+      throw new Error(`FCA_REDECIDE_${timeout.aborted ? 'TIMEOUT' : parts.signal.aborted ? 'ABORTED' : 'FAILED'}: ${String((error as Error | undefined)?.message ?? error).slice(0, 160)}`);
+    }
+    const usage = this.usage(message.usage, undefined, OPUS_MODEL);
+    await this.options.recordUsage(usage);
+    const spent = { complete: usage.usageComplete, inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens,
+      cacheCreationInputTokens: usage.cacheCreationInputTokens, outputTokens: usage.outputTokens, costUsd: usage.estimatedCostUsd };
+    const answered = { model: OPUS_MODEL, ms: Date.now() - began, stopReason: message.stop_reason ?? null, usage: spent };
+    if (message.stop_reason !== 'tool_use') throw new Error(`FCA_REDECIDE_NO_CALL: stop_reason=${String(message.stop_reason)}`);
+    const { decision } = decodeDecision(message.content, sent.names, sent.history, FCA_CONTEXT_NAME);
+    if (decision.kind !== 'tools') return { ...answered, calls: [], control: decision.kind };
+    const hooks = this.v2();
+    return { ...answered, calls: decision.calls.map(call => ({ name: call.name, input: hooks ? hooks.callInput(call.name, call.input) : call.input })) };
+  }
+
   /** A transient body task's request: see `transientRequest` (`anthropicFcaTransientRequest.ts`). */
   private transientRequest(input: FcaModelInput, history: readonly Anthropic.MessageParam[], menu: ReturnType<typeof transientFcaTools>,
     ownerClock: Record<string, unknown> | undefined) {
@@ -314,7 +366,7 @@ export class AnthropicFcaModel implements FcaModel {
    * `requestTokens`: with no usage at all (a request whose bill is unknown), the estimate of the request's input tokens bounds what it
    * may have cost: the whole request written to the one-hour cache, with a quarter more for the estimate's error, and its output ceiling.
    */
-  private usage(native: Anthropic.Message['usage'] | undefined, requestTokens?: number): AnthropicFcaUsage {
+  private usage(native: Anthropic.Message['usage'] | undefined, requestTokens?: number, model: string = this.model): AnthropicFcaUsage {
     const counts = {
       input: knownCount(native?.input_tokens), output: knownCount(native?.output_tokens),
       cacheWrite: knownCount(native?.cache_creation_input_tokens), cacheRead: knownCount(native?.cache_read_input_tokens), searches: 0,
@@ -325,10 +377,10 @@ export class AnthropicFcaModel implements FcaModel {
     const complete = [native?.input_tokens, native?.output_tokens, native?.cache_creation_input_tokens, native?.cache_read_input_tokens].every(tokenCount)
       && Number.isSafeInteger(total);
     const sized = !native && requestTokens !== undefined ? { input: 0, cacheWrite: Math.ceil(requestTokens * 1.25), cacheRead: 0 } : null;
-    const bound = complete ? 0 : unknownCostUpperBound(this.model, this.maximumOutputTokens, 0, sized ?? knownInput(native));
-    return { model: this.model, usageComplete: complete, inputTokens: input, cachedInputTokens: counts.cacheRead,
+    const bound = complete ? 0 : unknownCostUpperBound(model, this.maximumOutputTokens, 0, sized ?? knownInput(native));
+    return { model, usageComplete: complete, inputTokens: input, cachedInputTokens: counts.cacheRead,
       cacheCreationInputTokens: counts.cacheWrite, outputTokens: counts.output, totalTokens: total,
-      estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(this.model, counts), bound),
+      estimatedCostUsd: Math.max(estimatedAnthropicCostUsd(model, counts), bound),
     };
   }
 }

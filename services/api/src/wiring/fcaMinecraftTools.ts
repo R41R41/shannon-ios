@@ -17,12 +17,15 @@ import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
+import type { ToolResult } from '../mind/tools/toolRegistryPorts.js';
 import { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { validSkillInput } from '../surfaces/minecraft/minecraftControlValidation.js';
 import { armourCrafted, fightRefusal, minecraftSkillMilliseconds, minecraftSkillResult } from '../surfaces/minecraft/minecraftOutcome.js';
 import type { MinecraftFeelingPort } from '../mind/emotion/minecraftFeeling.js';
 import type { MadeIn } from '../contracts/continueContract.js';
 import { madeInOf, withMadeIn } from '../surfaces/minecraft/minecraftMadeIn.js';
+import { breakingOf } from '../surfaces/minecraft/minecraftLlmcPromises.js';
+import { redecideAct, type RedecidePort } from '../surfaces/minecraft/minecraftLlmcRedecide.js';
 
 const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
 export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId = step.id, plan?: BodyPlanView): BodyTaskContext {
@@ -31,6 +34,9 @@ export function minecraftTaskContext(step: TaskStep, bodyId: string, sessionId =
     ...(plan ? { plan } : {}) };
 }
 type Skill = { name: string; description: string; inputSchema: unknown; readOnly: boolean };
+type Call = Parameters<FcaExternalTools['execute']>[0];
+/** What the checks before an act is sent come to: the result that ends the call, or the call as it will go (with what shaped it and the guards' words). */
+type Passed = { stop: ToolResult } | { call: Call; prepared: ReturnType<typeof llmcPrepare> | null; node: ReturnType<typeof nodeTagged>; guards: Awaited<ReturnType<typeof actGuards>> | null };
 const short = (id: string | undefined) => (id ?? '-').slice(0, 12);
 
 /**
@@ -68,7 +74,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     /** Amendment A-7 1: an entry of an act's `keep` put to the plan as a promise (`FcaPlanPort.keepPromise`). */
     keep?(entry: ActKeep): KeptPromise | { problem: string };
     /** Amendment A-8 2: the plan's promises now. */
-    promises?(): readonly PlanPromise[] };
+    promises?(): readonly PlanPromise[];
+    /** Amendment A-10: an act that would break an open promise is decided again once by Opus before it is queued (`minecraftLlmcRedecide.ts`). Absent: no model to ask. */
+    redecide?: RedecidePort };
   /**
    * Owner 2026-10-26: each finished act is handed to her feeling beside the decisions (`minecraftFeeling.ts`), synchronously and
    * without waiting for anything; nothing comes back to the decision. Absent: nothing is felt from her acts.
@@ -98,32 +106,63 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     const queue = parts.llmc?.queue;
     const only = queue && call.name === MC_ACT_TOOL ? await replacedOnly(queue, call.input) : null;
     if (only) return only;
-    // The mode's own tools: put into shape where the model's meaning is plain, then checked field by field (r2: one line says where).
-    const prepared = parts.llmc && llmcSchema(call.name) ? llmcPrepare(call.name, call.input, call.name === MC_PROBE_TOOL
-      ? { feet: feetOf(control.observe(bodyId)), creatures: frameCreatures(control.observe(bodyId)) } : undefined) : null;
-    if (prepared?.problem) return toolFailure('invalid_input', prepared.problem, { retryable: false });
-    if (prepared) call = { ...call, input: prepared.input as typeof call.input };
-    // r9: the act's stopIf against the frame (an hpBelow at or above her health stops it before its first hand; a wait with no hostileWithin).
-    if (prepared && call.name === MC_ACT_TOOL) {
-      const checked = checkedStopIf(call.input, control.observe(bodyId));
-      if (checked.fixes.length) {
-        call = { ...call, input: checked.input as typeof call.input };
-        prepared.fixes.push(...checked.fixes);
+    // The mode's own tools: put into shape where the model's meaning is plain, then checked field by field (r2: one line says where); an act then goes through the
+    // guards (`passChecks`). Amendment A-10: the same checks are made again for the act Opus chose in place of one that would break a promise.
+    const passChecks = async (start: Call): Promise<Passed> => {
+      let call = start;
+      const prepared = parts.llmc && llmcSchema(call.name) ? llmcPrepare(call.name, call.input, call.name === MC_PROBE_TOOL
+        ? { feet: feetOf(control.observe(bodyId)), creatures: frameCreatures(control.observe(bodyId)) } : undefined) : null;
+      if (prepared?.problem) return { stop: toolFailure('invalid_input', prepared.problem, { retryable: false }) };
+      if (prepared) call = { ...call, input: prepared.input as typeof call.input };
+      // r9: the act's stopIf against the frame (an hpBelow at or above her health stops it before its first hand; a wait with no hostileWithin).
+      if (prepared && call.name === MC_ACT_TOOL) {
+        const checked = checkedStopIf(call.input, control.observe(bodyId));
+        if (checked.fixes.length) {
+          call = { ...call, input: checked.input as typeof call.input };
+          prepared.fixes.push(...checked.fixes);
+        }
+      }
+      const node = parts.llmc && prepared ? nodeTagged(call, parts.llmc.plan(), prepared.fixes) : null;
+      if (node) call = node.call;
+      const schema = call.name === 'minecraft.observe' ? EMPTY
+        : (parts.llmc ? llmcSchema(call.name) : undefined) ?? skills.find(skill => `mc.${skill.name}` === call.name)?.inputSchema;
+      if (!schema || !validSkillInput(call.input, schema)) return { stop: toolFailure('invalid_input', '道具の引数が登録された形式に合わない。', { retryable: false }) };
+      const refused = fightRefusal(call.name, call.input, () => control.observe(bodyId));
+      if (refused) return { stop: refused };
+      // Task queue: the items it replaces go first; the guards and the new item follow the world they leave.
+      const guards = parts.llmc && call.name === MC_ACT_TOOL
+        ? await actGuards({ queue: parts.llmc.queue, urgent: parts.llmc.urgent?.() === true, input: call.input as ActInput,
+          frame: control.observe(bodyId), taskId: step.taskId }) : null;
+      if (guards?.hold?.result) return { stop: guards.led(guards.hold.result) };
+      if (guards?.hold?.input) call = { ...call, input: guards.hold.input as typeof call.input };
+      return { call, prepared, node, guards };
+    };
+    const first = await passChecks(call);
+    if ('stop' in first) return first.stop;
+    let { prepared, node, guards } = first;
+    call = first.call;
+    // Amendment A-10: an act that would break an open promise (the head counts: `breakingOf`) is decided again once by Opus; its answer takes the place of the first model's.
+    let redecided: string[] = [];
+    if (parts.llmc?.redecide && parts.llmc.promises && guards && call.name === MC_ACT_TOOL) {
+      const act = call.input as ActInput, already = new Set(act.replace ?? []), same = call;
+      const counted = breakingOf(parts.llmc.promises(), act.hands, control.observe(bodyId));
+      const again = await redecideAct({ port: parts.llmc.redecide, operationId: call.operationId, input: act, breaking: counted.lines, uncounted: counted.uncounted,
+        urgent: parts.llmc.urgent?.() === true, signal: call.signal,
+        recheck: async input => {
+          // The items the first act replaced are off the queue already: only the ones Opus names beyond them are taken off now.
+          const replace = (input.replace ?? []).filter(id => !already.has(id));
+          const { replace: _taken, ...rest } = input;
+          const second = await passChecks({ ...same, input: (replace.length ? { ...rest, replace } : rest) as typeof same.input });
+          return 'stop' in second ? { ok: false, why: second.stop.text } : { ok: true, value: second };
+        } });
+      redecided = again.lead;
+      if (again.replaced) {
+        const earlier = guards;
+        ({ prepared, node } = again.replaced);
+        call = again.replaced.call;
+        guards = again.replaced.guards ? { hold: again.replaced.guards.hold, led: result => earlier.led(again.replaced!.guards!.led(result)) } : earlier;
       }
     }
-    const node = parts.llmc && prepared ? nodeTagged(call, parts.llmc.plan(), prepared.fixes) : null;
-    if (node) call = node.call;
-    const schema = call.name === 'minecraft.observe' ? EMPTY
-      : (parts.llmc ? llmcSchema(call.name) : undefined) ?? skills.find(skill => `mc.${skill.name}` === call.name)?.inputSchema;
-    if (!schema || !validSkillInput(call.input, schema)) return toolFailure('invalid_input', '道具の引数が登録された形式に合わない。', { retryable: false });
-    const refused = fightRefusal(call.name, call.input, () => control.observe(bodyId));
-    if (refused) return refused;
-    // Task queue: the items it replaces go first; the guards and the new item follow the world they leave.
-    const guards = parts.llmc && call.name === MC_ACT_TOOL
-      ? await actGuards({ queue: parts.llmc.queue, urgent: parts.llmc.urgent?.() === true, input: call.input as ActInput,
-        frame: control.observe(bodyId), taskId: step.taskId }) : null;
-    if (guards?.hold?.result) return guards.led(guards.hold.result);
-    if (guards?.hold?.input) call = { ...call, input: guards.hold.input as typeof call.input };
     if (!control.store.bind(step.taskId, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     if (call.name === 'minecraft.observe') return toolOk(JSON.stringify(control.observe(bodyId)));
     const active = currentActionExecution();
@@ -147,7 +186,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
         const sent = await sendItem({ queue: parts.llmc.queue, control, bodyId, call, skill: current!.name, fixes: prepared?.fixes ?? [],
           node: node?.mark?.node ?? null, current: node?.mark?.current ?? null, frame: control.observe(bodyId),
           ...(parts.llmc.madeIn ? { madeIn: parts.llmc.madeIn() } : {}), ...(parts.llmc.keep ? { keep: parts.llmc.keep } : {}),
-          ...(parts.llmc.promises ? { promises: parts.llmc.promises } : {}) });
+          ...(parts.llmc.promises ? { promises: parts.llmc.promises } : {}), ...(redecided.length ? { lead: redecided } : {}) });
         const said = guards.hold?.tail ?? guards.hold?.note;
         return guards.led(said && sent.ok ? withNote(sent, said) : sent);
       }

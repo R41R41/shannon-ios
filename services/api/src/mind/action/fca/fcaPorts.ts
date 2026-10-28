@@ -191,9 +191,26 @@ export interface FcaModelOutput {
    */
   stateCut?: boolean;
 }
+/**
+ * Amendment A-10: the answer of one decision asked again (`FcaModel.redecide`): the calls the stronger model chose (their inputs as the mode's hooks make them), what the request cost
+ * (in the budget's USD) and how long it took. Nothing of it joins the task's history.
+ */
+export interface FcaRedecided {
+  model: string; ms: number; stopReason: string | null;
+  calls: readonly { name: string; input: unknown }[];
+  /** The model answered with a wait or a completion instead of calls. */
+  control?: 'wait' | 'complete';
+  usage: { complete: boolean; inputTokens: number; cachedInputTokens: number; cacheCreationInputTokens: number; outputTokens: number; costUsd: number };
+}
 export interface FcaModel {
   decide(input: FcaModelInput, signal: AbortSignal): Promise<FcaModelOutput>;
   toolResults(results: readonly { id: string; text: string; ok: boolean }[]): unknown;
+  /**
+   * Amendment A-10: the task's last request sent again to the stronger model with a note after the live state (facts only) and answered by it, once, for one call of the decision
+   * that request made. Null when there is nothing to ask (this model is that model). Throws when it could not be asked or did not answer (the caller keeps the first model's call).
+   * Absent: the model cannot be asked again.
+   */
+  redecide?(request: { taskId: string; note: string; signal: AbortSignal; timeoutMs: number }): Promise<FcaRedecided | null>;
 }
 
 export interface FcaExternalTools {

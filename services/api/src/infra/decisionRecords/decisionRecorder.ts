@@ -5,8 +5,9 @@ import type { DecisionScopeState } from './decisionRecordScope.js';
 import { DECISION_RECORD_LIMITS, pruneRuns, RunWriter, runName, type DecisionRecordLimits } from './decisionRecordStore.js';
 import { headVersion, partHash, promptVersion, type HeadVersion } from './decisionRecordVersion.js';
 
-export type RequestKind = 'decision' | 'summary' | 'plan';
-const PREFIX: Record<RequestKind, 'd' | 's' | 'p'> = { decision: 'd', summary: 's', plan: 'p' };
+/** `redecide`: a decision asked again of a stronger model for one call (amendment A-10); it is a request of its own, never the step's decision (its calls and outcome are the decision's). */
+export type RequestKind = 'decision' | 'summary' | 'plan' | 'redecide';
+const PREFIX: Record<RequestKind, 'd' | 's' | 'p' | 'r'> = { decision: 'd', summary: 's', plan: 'p', redecide: 'r' };
 const WRITERS_KEPT = 16;
 type Json = Record<string, unknown>;
 

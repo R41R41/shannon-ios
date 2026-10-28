@@ -32,10 +32,10 @@ describe('A-8 2: an act that would break a promise is told once, and not refused
     expect(breakingWords(open, [{ do: 'smelt', fuel: 'coal', fuelCount: 6 }], frame({ spruce_planks: 7, coal: 6 }))).toEqual([]);
     expect(breakingWords([], [{ do: 'smelt', fuel: 'spruce_planks', fuelCount: 6 }], frame({ spruce_planks: 7 }))).toEqual([]);
   });
-  it('counts what the hands name: a smelt, a drop, a chest put, the cells of a place, the n of a pillar', () => {
+  it('counts what the hands name: a smelt, a drop, a chest put, the cells of a place, the n of a pillar, and (A-10) the planks of a make of sticks', () => {
     expect(actSpends([{ do: 'drop', items: [{ item: 'cobblestone', count: 3 }] }, { do: 'chest', op: 'put', items: [{ item: 'oak_planks', count: 2 }] },
       { do: 'place', block: 'cobblestone', at: [{}, {}] }, { do: 'pillarUp', block: 'dirt', n: 4 }, { do: 'make', item: 'stick', count: 4 }]))
-      .toEqual([{ item: 'cobblestone', count: 3 }, { item: 'oak_planks', count: 2 }, { item: 'cobblestone', count: 2 }, { item: 'dirt', count: 4 }]);
+      .toEqual([{ item: 'cobblestone', count: 3 }, { item: 'oak_planks', count: 2 }, { item: 'cobblestone', count: 2 }, { item: 'dirt', count: 4 }, { item: 'planks', count: 2 }]);
   });
 });
 

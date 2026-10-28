@@ -11,7 +11,9 @@ import type { FcaHistoryAhead, FcaHistoryPolicy } from '../mind/action/fca/fcaHi
 import { createFcaHistoryAhead } from '../mind/action/fca/fcaHistory.js';
 import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
-import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
+import { createFcaPlanTools, PLAN_UPDATE_TOOL } from '../mind/action/fca/fcaPlanTools.js';
+import { toolOk } from '../mind/tools/shannonTools.js';
+import { REDECIDE_GIVE_UP_MS, type RedecidePort } from '../surfaces/minecraft/minecraftLlmcRedecide.js';
 import { firstPlanInbox, planGoal, startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { COMPLETION_WAY, observedCompletion, withCompletionRule, type LlmcCompletion } from '../surfaces/minecraft/minecraftLlmcCompletion.js';
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
@@ -98,6 +100,8 @@ const known = (value: string | undefined, fallback: string) => {
   const model = value?.trim();
   return model && MODELS.has(model) ? model : fallback;
 };
+/** The name of a model as the note to the stronger one says it (`redecideNote`). */
+const redecideLabel = (name: string): string => /sonnet/iu.test(name) ? 'Sonnet' : /haiku/iu.test(name) ? 'Haiku' : '前の判断';
 const nextUp = (model: string) => isHaikuModel(model) ? 'claude-sonnet-5-5' : model === 'claude-sonnet-5-5' ? OPUS_MODEL : null;
 
 export interface LlmcModelNames { main: string; escalate: string | null; plan: string }
@@ -385,6 +389,24 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     };
   }
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
+  // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an act of it that would break a promise is decided again by Opus
+  // (`FcaModel.redecide`: the step's last request with the act and the promise line added). Opus's plan.update goes through the plan's own tool, and one the model already
+  // made in this step (the same input) is not made twice.
+  const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId);
+  const planned = new Set<string>();
+  const planTools: typeof plan.tools = { ...plan.tools, execute: call => {
+    if (call.name === PLAN_UPDATE_TOOL) planned.add(JSON.stringify(call.input));
+    return plan.tools.execute(call);
+  } };
+  const redecide: RedecidePort | undefined = model.redecide ? { label: redecideLabel(model === llmc.models.escalate && llmc.names.escalate ? llmc.names.escalate : llmc.names.main),
+    ask: (note, signal) => model.redecide!({ taskId: step.taskId, note, signal, timeoutMs: REDECIDE_GIVE_UP_MS }),
+    planUpdate: async (input, signal, operationId) => {
+      const key = JSON.stringify(input);
+      if (planned.has(key)) return toolOk('同じ plan.update はこの段で通してある');
+      planned.add(key);
+      return plan.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: PLAN_UPDATE_TOOL, input, signal });
+    },
+    log } : undefined;
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {
     const tree = plan.port.tree();
@@ -396,8 +418,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read,
       // Amendment A-7 1: an act's `keep` becomes promises of the plan, by the plan's own handling (the same as `plan.update`'s promise op).
       keep: (entry: ActKeep) => plan.port.keepPromise?.(entry) ?? { problem: 'この計画には約束を書けない' },
-      promises: () => plan.port.tree().promises } },
-    planTools: plan.tools,
+      promises: () => plan.port.tree().promises, ...(redecide ? { redecide } : {}) } },
+    planTools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
       observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
@@ -412,7 +434,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the
       // API's thread must not turn a done task back.
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
-    ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
+    ports: { model, plan: plan.port,
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
       versions: () => minecraftBodyVersion(control, bodyId(), read),
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),

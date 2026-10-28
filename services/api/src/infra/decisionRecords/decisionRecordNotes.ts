@@ -45,6 +45,17 @@ export function noteDecisionCall(call: { toolUseId: string; name: string; input:
       ...(result.bodyReflex ? { bodyReflex: true } : {}), ...(result.progressed ? { progressed: true } : {}) } });
 }
 
+/**
+ * Amendment A-10: the row of a call of the decision that was asked again (or could have been: `asked: false` says only what the head could not count). Beside the `redecide`
+ * request and its answer, which are written as any request is; the row says what came of them. The decision and call are those the step is in.
+ */
+export function noteRedecide(detail: Readonly<Record<string, unknown>>): void {
+  const scope = currentDecisionScope(), state = scope?.state;
+  if (!installed || !state?.record) return;
+  installed.append(state.taskId, { ev: 'redecide', decisionId: state.lastDecisionId, stepId: state.stepId, operationId: scope?.call?.operationId ?? state.operationId,
+    toolUseId: scope?.call?.toolUseId ?? null, ids: { run: state.taskId, ...(state.lastDecisionId ? { decision: state.lastDecisionId } : {}) }, ...detail });
+}
+
 /** A command that went to the body (the form the head sent after its checks and rewrites), with the decision and call it came from when it came from one. */
 export function noteBodyCommand(command: MinecraftControlCommand, extra: { resumeOf?: string } = {}): void {
   if (!installed || command.kind !== 'skill') return;

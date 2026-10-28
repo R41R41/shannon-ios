@@ -157,3 +157,19 @@ export function transientBetaRefused(status: number | undefined, message: string
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
+
+/**
+ * Amendment A-10: a request's messages with a note added after the live state, for a decision asked again. A transient request ends with the turn-scoped system message
+ * (`clearAtMessage`) that a later user message would clear, so the note goes into that message's text; a request that ends with a user turn gets the note in that turn.
+ * Null when the last message is neither (the note cannot be added without changing what the request means). The messages before the last are the same objects.
+ */
+export function notedMessages(messages: readonly Anthropic.MessageParam[], note: string): Anthropic.MessageParam[] | null {
+  const last = messages.at(-1);
+  if (!last) return null;
+  const head = messages.slice(0, -1);
+  if (isFcaClearAtMessage(last)) return [...head, { ...last, content: `${last.content as string}\n\n${note}` } as unknown as Anthropic.MessageParam];
+  if (last.role !== 'user') return null;
+  if (typeof last.content === 'string') return [...head, { ...last, content: `${last.content}\n\n${note}` }];
+  if (!Array.isArray(last.content)) return null;
+  return [...head, { ...last, content: [...last.content, { type: 'text' as const, text: note }] }];
+}
