@@ -499,7 +499,9 @@ describe('what the body produced goes through the head\'s readers (chapter 9; th
   const files = ['life--death-epoch-pair', 'life--life-file-unreadable', 'life--portal-is-not-death', 'life--r45-death-then-old-attack', 'control--different-target',
     'control--handover-reservation', 'control--r45-attack-waited-6-4s', 'control--stale-owner-cleanup', 'measure--hand-start'];
   it('has every copy, made by the body for the fixture of this head (the sha256 of the fixture it answers), at one revision', () => {
-    expect(readdirSync(PRODUCED).sort()).toEqual(files.map(name => `${name}.json`).sort());
+    // the body now makes every fixture's file (23 and the catalog), and the sync writes PRODUCED.json beside them: the nine of the life and control contracts are among them
+    expect(readdirSync(PRODUCED)).toEqual(expect.arrayContaining(files.map(name => `${name}.json`)));
+    expect(readdirSync(PRODUCED)).toContain('PRODUCED.json');
     const revisions = new Set<string>();
     for (const name of files) {
       const made = produced(name);
@@ -526,7 +528,8 @@ describe('what the body produced goes through the head\'s readers (chapter 9; th
     const result = readActResult(receipt.result)!;
     expect(result.outcome).toMatchObject({ goal: 'not_started', end: 'cut', cutBy: 'death', life: 2 });
     expect(result.lines.map(line => line.status)).toEqual(['stopped', 'skipped']);
-    expect(result.lines[0]).toMatchObject({ cutBy: 'death', code: 'died', motorOps: 0 });
+    expect(result.lines[0]).toMatchObject({ cutBy: 'death', code: 'cancelled', motorOps: 0 });   // A-4: the closed code of the hand that was cut from outside is 'cancelled'; the unit says it too
+    expect(receipt.unit).toMatchObject({ goal: 'not_started', end: 'cut', code: 'cancelled' });
     expect(made.output.lifeAfter.life).toBe(made.output.lifeBefore + 1);
   });
 

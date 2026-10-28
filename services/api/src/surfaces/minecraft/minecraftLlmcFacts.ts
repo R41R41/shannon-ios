@@ -20,7 +20,7 @@ import { round1 } from './minecraftTransientObservation.js';
  * | fact | lines |
  * |---|---|
  * | health, hunger, the food she carries and what eating it gives | `vitalsLine` |
- * | the blows taken in the last 10 s (a count and an amount) | `createHitWatch` (the body's frames carry no log of blows: the watch reads her health frame to frame) |
+ * | the blows taken in the last 10 s (a count and an amount) | `createHitWatch`: the body's own record `state.combat.recentHits` when the frame has it (the count is a fact, the amounts are the body's estimate); else her health read frame to frame |
  * | who holds the body now and her life's number | `holderLine` (`state.control`, `state.life`) |
  * | the promises | `promiseLines` (four at most) |
  * | the pack's free slots, what the queue's next hands add, what fills it | `packLines` |
@@ -99,19 +99,60 @@ export function holderLine(observation: BodyObservation | null): string | null {
 // ---- the blows of the last ten seconds --------------------------------------------------------------------------------------------------------
 
 export interface Hit { at: number; amount: number; by: string | null }
+
 /**
- * The health lost from frame to frame, kept for `FACT_WINDOW_MS`. The body's frame carries her health and no log of blows, so a drop between two frames is one blow here (two
- * blows between two frames are one: the amount is right, the count may be short). It does not say what hit her; the hostile that stood near when it fell is said beside it.
+ * The blows of the last `FACT_WINDOW_MS`.
+ *
+ * - **The body's record, when the frame has one.** From A-4 the body puts `state.combat.recentHits` in its frame: `{at, attackerId, attackerType, damage, life}`, the last 10 s, 20 at the
+ *   most, oldest first. The count is what happened; `damage` is the body's estimate (the health lost after a blow, shared among the blows that waited for the same update). A frame that has
+ *   this record replaces whatever the watch estimated: it is the fact, and the line says the amounts are an estimate. The blows of another life than the frame's own are not told.
+ * - **The estimate from her health, only when the frame has no `state.combat.recentHits`** (a body before A-4, or a frame the body did not fill): the health lost from frame to frame is one
+ *   blow each (two blows between two frames are one: the amount is right, the count may be short). It does not say what hit her; the hostile that stood near when it fell is said beside it.
+ *   This is the head filling in what the body does not tell; it is not kept beside the body's record.
+ *
  * Fed by every frame the step reads (`note`), whatever reads it.
  */
 export function createHitWatch(now: () => number = Date.now) {
   let last: { health: number; at: number } | null = null, lastSeq: number | null = null, lastRun: string | null = null;
   const hits: Hit[] = [];
+  let fromBody: Hit[] | null = null;
+  const within = (at: number): Hit[] => (fromBody ?? hits).filter(hit => at - hit.at <= FACT_WINDOW_MS);
   const keep = (at: number) => { while (hits.length && at - hits[0]!.at > FACT_WINDOW_MS) hits.shift(); while (hits.length > HITS_KEPT) hits.shift(); };
+  const bodyRecord = (observation: BodyObservation): Hit[] | null => {
+    const combat = rec(observation.state.combat);
+    if (!combat || !Array.isArray(combat.recentHits)) return null;
+    const life = lifeOf(observation)?.life;
+    return combat.recentHits.flatMap((item): Hit[] => {
+      const entry = rec(item), damage = finite(entry?.damage), at = typeof entry?.at === 'string' ? Date.parse(entry.at) : finite(entry?.at);
+      if (!entry || damage === null || at === null || Number.isNaN(at)) return [];
+      if (life !== undefined && Number.isSafeInteger(entry.life) && entry.life !== life) return [];
+      const kind = typeof entry.attackerType === 'string' && entry.attackerType ? entry.attackerType : null, id = Number.isInteger(entry.attackerId) ? entry.attackerId as number : null;
+      return [{ at, amount: damage, by: kind ? `${kind}${id !== null ? ` #${id}` : ''}` : id !== null ? `#${id}` : null }];
+    });
+  };
+  const sameFrameOrder = (observation: BodyObservation): boolean => {
+    // A frame of another connection starts again; an older frame of the same connection is not read (a late frame would be read twice).
+    const run = rec(observation.state.bodyRun), key = `${String(run?.bodyBoot ?? '')}/${String(run?.connectionId ?? '')}`;
+    if (lastRun !== null && key !== lastRun) { last = null; fromBody = null; }
+    else if (lastSeq !== null && observation.sequence < lastSeq) return false;
+    lastRun = key;
+    return true;
+  };
   return {
     note(observation: BodyObservation | null, at: number = now()): void {
+      if (!observation) return;
+      const reported = bodyRecord(observation);
+      if (reported) {
+        if (!sameFrameOrder(observation)) return;
+        lastSeq = observation.sequence;
+        fromBody = reported;
+        last = null;   // when a frame comes without the record, the estimate starts from that frame: no blow is read across the gap
+        hits.length = 0;
+        return;
+      }
       const health = finite(world(observation).health);
-      if (!observation || health === null) return;
+      if (health === null) return;
+      fromBody = null;
       // A frame of another connection starts the count again (no blow is read across it); an older frame of the same connection is not read (a late frame would read as health lost twice).
       const run = rec(observation.state.bodyRun), key = `${String(run?.bodyBoot ?? '')}/${String(run?.connectionId ?? '')}`;
       if (lastRun !== null && key !== lastRun) last = null;
@@ -125,15 +166,22 @@ export function createHitWatch(now: () => number = Date.now) {
       last = { health, at };
       keep(at);
     },
-    /** The blows still in the window at `at`, oldest first. */
-    recent(at: number = now()): Hit[] { return hits.filter(hit => at - hit.at <= FACT_WINDOW_MS); },
-    /** 「直近 10 秒で 2 回ダメージを受けた（合計 10.2: 5.3（9 秒前）・4.9（4 秒前））。その時近くにいた敵: zombie #2601 2.1m」, or null when there was none. */
+    /** The blows still in the window at `at`, oldest first (the body's record when the last frame had one, else the estimate). */
+    recent(at: number = now()): Hit[] { return within(at); },
+    /** Whether the blows are the body's record (the amounts an estimate of the body's) or the head's own reading of her health. */
+    source(): 'body' | 'health' { return fromBody ? 'body' : 'health'; },
+    /**
+     * 「直近 10 秒で 2 回ダメージを受けた（合計 10.2: 5.3（9 秒前）・4.9（4 秒前））。その時近くにいた敵: zombie #2601 2.1m」 from her health; from the body's record
+     * 「直近 10 秒で 2 回ダメージを受けた（体の記録。量は体力の落ちからの推定: 合計 10.2: 5.3（9 秒前）・4.9（4 秒前））。打った相手: zombie #2601」. Null when there was none.
+     */
     line(at: number = now()): string | null {
-      const list = hits.filter(hit => at - hit.at <= FACT_WINDOW_MS);
+      const list = within(at);
       if (!list.length) return null;
       const total = list.reduce((sum, hit) => sum + hit.amount, 0);
+      const each = list.map(hit => `${one(hit.amount)}（${Math.max(0, Math.round((at - hit.at) / 1000))} 秒前）`).join('・');
       const by = [...new Set(list.flatMap(hit => hit.by ? [hit.by] : []))].slice(0, 3);
-      return `直近 ${FACT_WINDOW_MS / 1000} 秒で ${list.length} 回ダメージを受けた（合計 ${one(total)}: ${list.map(hit => `${one(hit.amount)}（${Math.max(0, Math.round((at - hit.at) / 1000))} 秒前）`).join('・')}）`
+      if (fromBody) return `直近 ${FACT_WINDOW_MS / 1000} 秒で ${list.length} 回ダメージを受けた（体の記録。量は体力の落ちからの推定: 合計 ${one(total)}: ${each}）${by.length ? `。打った相手: ${by.join('・')}` : ''}`;
+      return `直近 ${FACT_WINDOW_MS / 1000} 秒で ${list.length} 回ダメージを受けた（合計 ${one(total)}: ${each}）`
         + `${by.length ? `。その時近くにいた敵: ${by.join('・')}` : ''}`;
     },
   };

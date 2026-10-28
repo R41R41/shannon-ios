@@ -208,9 +208,14 @@ describe('the judge: an unknown needs the cleanup\'s release (b8-lost-receipt)',
     const verdict = judge(lost(), fixtures);
     expect(verdict.pass, verdict.text).toBe(true);
   });
-  it('fails (the command does not join) without the cleanup\'s released row', () => {
+  it('the real receipt that came first proves the release too: a corrected row whose result is released stands for the cleanup row (nothing was left to clean up)', () => {
     const input = lost();
     input.rows = input.rows.filter(row => row.ev !== 'released');
+    expect(judge(input, fixtures).commands.unlinked).toEqual([]);
+  });
+  it('fails (the command does not join) when nothing proves the release: no cleanup row and no real receipt', () => {
+    const input = lost();
+    input.rows = input.rows.filter(row => row.ev !== 'released' && row.ev !== 'corrected');
     const verdict = judge(input, fixtures);
     expect(verdict.commands.unlinked).toEqual([{ command: 'skill:q1', reasons: ['missing:released(cleanup)'] }]);
     expect(verdict.pass).toBe(false);
@@ -436,37 +441,119 @@ describe('the judge against the body\'s produced files (the body\'s known gaps a
   const load = (name: string) => JSON.parse(readFileSync(join(PRODUCED, name), 'utf8')) as { output: Record<string, any> };
   const meta = { run: 'bench-a', scene: 'boundary-2', benches: ['A' as const], headRev: 'h', bodyRev: 'b' };
 
-  it('KNOWN GAP OF THE BODY (A-4): the body\'s opLog writes {k, t} where the contract says {kind, at}; the judge reads the contract\'s form only, so the body\'s hand_start line is not read', () => {
+  it('A-4 CLOSED: the body\'s hand_start line is the contract\'s {kind, at} and the judge reads it as it is (no k/t branch)', () => {
     const line = load('measure--hand-start.json').output.handStart;
-    expect(line.k).toBe('hand_start');
-    expect(line.kind).toBeUndefined();
+    expect(line.kind).toBe('hand_start');
+    expect(line.k).toBeUndefined();
     const model = buildModel({ meta, rows: [], receipts: [], trace: [line as TraceLine], probes: [] }, fixtures);
-    expect(model.commands.size).toBe(0);                                  // when the body writes `kind`, this becomes 1: change this test then
-    const fixed = buildModel({ meta, rows: [], receipts: [], trace: [{ ...line, kind: 'hand_start' } as TraceLine], probes: [] }, fixtures);
-    expect(fixed.commands.get('lab:q2')?.handStarts).toHaveLength(1);
+    expect(model.commands.get('lab:q2')?.handStarts).toHaveLength(1);
+    expect(model.commands.get('lab:q2')?.handStarts[0].ids).toMatchObject({ obsSeq: expect.any(Number), obsAt: expect.any(String) });
+  });
+  it('the judge still reads only the contract\'s form: a line with k instead of kind is not read', () => {
+    const { kind: _kind, ...rest } = load('measure--hand-start.json').output.handStart;
+    const model = buildModel({ meta, rows: [], receipts: [], trace: [{ ...rest, k: 'hand_start' } as unknown as TraceLine], probes: [] }, fixtures);
+    expect(model.commands.size).toBe(0);
   });
 
-  it('KNOWN GAP OF THE BODY (A-4): no produced bodyTimes has acceptedAt (the contract keeps it required); these are the files, and the head\'s validBodyTimes refuses each', () => {
-    const missing: string[] = [];
+  it('A-4 CLOSED: every produced bodyTimes has acceptedAt and endedAt and the head\'s validBodyTimes takes each (every receipt goes through the control loop); failedAt is only on failures', () => {
+    const seen: string[] = [], failed: string[] = [];
     for (const name of readdirSync(PRODUCED).filter(item => item.endsWith('.json') && item !== 'PRODUCED.json').sort()) {
       const output = load(name).output ?? {};
-      const times = output.bodyTimes ?? output.receipt?.bodyTimes;
+      const times = output.bodyTimes ?? output.receipt?.bodyTimes ?? output.trial?.bodyTimes;
       if (!times) continue;
-      expect(validBodyTimes(times), name).toBe(Boolean(times.acceptedAt));
-      if (!times.acceptedAt) missing.push(name);
+      seen.push(name);
+      expect(validBodyTimes(times), name).toBe(true);
+      expect(times.acceptedAt, name).toEqual(expect.any(String));
+      if (times.failedAt) failed.push(name);
     }
-    expect(missing).toEqual(['control--different-target.json', 'life--r45-death-then-old-attack.json', 'measure--hand-start.json', 'vertical--r45-hold1-stairs-down.json',
-      'vertical--r45-hold5-shaft-down.json', 'vertical--r45-hold7-pillar-up.json']);   // when the body adds acceptedAt, this list shrinks: change it then
+    expect(seen.length).toBeGreaterThanOrEqual(5);
+    expect(failed).toContain('life--r45-death-then-old-attack.json');
+    expect(failed).not.toContain('measure--hand-start.json');
   });
 
-  it('the evidence the contract asks of a normal command (receipt, lockAt, firstMotorAt, motorOps, hand_start) is in the body\'s hand-start file; acceptedAt is asked only by stages 5 and 6', () => {
+  it('the evidence the contract asks of a normal command (receipt, lockAt, firstMotorAt, motorOps, hand_start) is all in the body\'s hand-start file, and the verdict has no gap', () => {
     const { handStart, bodyTimes, unit } = load('measure--hand-start.json').output;
     const receipt: ReceiptRecord = { id: handStart.ids.command, outcome: 'completed', unit, bodyTimes, ids: handStart.ids };
-    const model = buildModel({ meta, rows: [], receipts: [receipt], trace: [{ ...handStart, kind: 'hand_start' } as TraceLine], probes: [] }, fixtures);
-    const joined = joinCommands(model);
-    expect(joined.unlinked).toEqual([]);
-    expect(joined.kinds['lab:q2']).toBe('normal');
-    // a stage that needs acceptedAt says so instead of inventing a time
-    expect(stageChain(model, model.commands.get('lab:q2')!).linked).toBe(false);
+    const input = { meta, rows: [], receipts: [receipt], trace: [handStart as TraceLine], probes: [] };
+    const verdict = judge(input, fixtures);
+    expect(verdict.commands.unlinked).toEqual([]);
+    expect(verdict.gaps).toEqual([]);
+    expect(joinCommands(buildModel(input, fixtures)).kinds['lab:q2']).toBe('normal');
+  });
+});
+
+// ---- the judge's rules after the bench C's report ---------------------------------------------------------------------------------------------------------
+describe('the judge: what an item that writes no dependsOn may be dropped for (chapter 2)', () => {
+  /** An independent item that ran (q1, dependsOn []) and a dropped one (q2, refused), whose queue envelopes say what they rely on. */
+  function queue(dropped: { dependsOn?: string[]; because?: string }): Input {
+    const first = ran(1, 1, { at: 1 }), second = refused(2, 1, t(3), 2);
+    for (const row of first.rows) if (row.ev === 'sent') row.queue = { item: 'q1', dependsOn: [] };
+    for (const row of second.rows) if (row.ev === 'sent') row.queue = { item: 'q2', ...(dropped.dependsOn ? { dependsOn: dropped.dependsOn } : {}) };
+    second.receipts[0].unit = { goal: 'not_started', end: 'not_run', released: true, droppedBecause: { code: 'depends_failed', item: { queue: 'tq', item: dropped.because ?? 'q9' } } };
+    const made = merge(first, second);
+    return { meta: { run: RUN, scene: 'boundary-1', benches: ['B', 'C'], headRev: 'a1b2c3d', bodyRev: 'e4f5a6b' }, ...made, probes: [] };
+  }
+  const only = (input: Input) => judge(input, fixtures).checks.find(item => item.id === 'only the dependents are dropped')!;
+  it('an item that writes no dependsOn is dropped depends_failed as today: that is no fault (the q14 of continue/queue-item-depends.json)', () => {
+    const check = only(queue({}));
+    expect(check.ok, check.detail).toBe(true);
+    expect(check.detail).toContain('1 of them wrote no dependsOn');
+  });
+  it('an item that writes the item it relies on is dropped for it', () => expect(only(queue({ dependsOn: ['q9'], because: 'q9' })).ok).toBe(true));
+  it('an item that writes dependsOn [] is never dropped for what is behind it: that fails', () => {
+    const check = only(queue({ dependsOn: [] }));
+    expect(check.ok).toBe(false);
+    expect(check.detail).toContain('a dependsOn [] item dropped: true');
+  });
+  it('an item that writes dependsOn and is dropped for another item than it relies on fails', () => expect(only(queue({ dependsOn: ['q4'], because: 'q9' })).ok).toBe(false));
+});
+
+describe('the judge: a scene names a command by its queue item (the head\'s command id is skill:<sha256>)', () => {
+  /** b8-dup-poll with the command renamed to the head's kind of id; its records keep the item q1 in ids.item. */
+  function renamed(): Input {
+    const made = ran(1, 1, { at: 5 });
+    made.receipts.push({ ...made.receipts[0], delivery: { pollId: 'poll-2', at: t(9) } });
+    made.rows.push({ ev: 'ledger', at: t(8, 100), ids: { run: RUN, command: 'skill:q1', life: 1 }, applied: ['skill:q1:1:1:1'], have: { oak_planks: 2 }, observed: { oak_planks: 2 } });
+    const text = JSON.stringify({ rows: made.rows, receipts: made.receipts, trace: [{ kind: 'trace_open', at: t(0), source: 'continuous' }, ...made.trace] }).split('skill:q1').join(`skill:${'9f2c'.repeat(16)}`);
+    const parsed = JSON.parse(text) as { rows: Row[]; receipts: ReceiptRecord[]; trace: TraceLine[] };
+    return { meta: { run: RUN, scene: 'b8-dup-poll', benches: ['B', 'C'], headRev: 'a1b2c3d', bodyRev: 'e4f5a6b' }, ...parsed, probes: [] };
+  }
+  it('the scene\'s q1 is found by ids.item, and the scene passes as it does with a command called skill:q1', () => {
+    const input = renamed();
+    expect(JSON.stringify(input)).not.toContain('skill:q1"');
+    const verdict = judge(input, fixtures);
+    expect(verdict.pass, verdict.text).toBe(true);
+    expect(verdict.checks.find(item => item.id === 'the receipt came twice and was applied once')?.detail).toContain('2 delivery(ies), 1 applied');
+  });
+  it('a name that is no command id and no item of a command stays unresolved, and the scene fails', () => {
+    const input = renamed();
+    input.rows = input.rows.map(row => (row.ids?.item ? { ...row, ids: { ...row.ids, item: 'q77' } } : row));
+    input.trace = input.trace.map(line => (line.kind === 'hand_start' ? { ...line, ids: { ...line.ids, item: 'q77' } } : line));
+    expect(judge(input, fixtures).pass).toBe(false);
+  });
+});
+
+describe('the judge: b8-body-restart reads "events lost" as the body\'s events command answering lost', () => {
+  function restart(lost: 'row' | 'receipt' | 'none'): Input {
+    const ids = { run: RUN, command: 'skill:q2', item: 'q2', life: 1, ...obs };
+    const unit = { goal: 'unknown' as const, end: 'unknown' as const, released: true };
+    const rows: Row[] = [
+      { ev: 'received', at: t(10), ids, receipt: { outcome: 'unknown', unit }, bodyTimes: { acceptedAt: t(5), endedAt: t(10) } },
+      { ev: 'released', at: t(11), ids, by: 'cleanup', ok: true },
+      { ev: 'ledger_unexplained', at: t(12), ids, count: 4 }];
+    if (lost === 'row') rows.push({ ev: 'events', at: t(12), ids, lost: true });
+    if (lost === 'receipt') rows.push({ ev: 'received', at: t(12), ids: { run: RUN, command: 'events:abc:0', life: 1, ...obs }, receipt: { outcome: 'completed', result: JSON.stringify({ command: 'skill:q2', from: 0, to: 0, total: 0, nextSeq: 0, done: false, lost: true, events: [] }) } });
+    return { meta: { run: RUN, scene: 'b8-body-restart', benches: ['B', 'C'], headRev: 'a1b2c3d', bodyRev: 'e4f5a6b', requireSent: false, requireDecision: false, injections: [{ kind: 'body_restart', at: t(9) }] },
+      rows, receipts: [{ id: 'skill:q2', outcome: 'unknown', ids, unit }], trace: [{ kind: 'trace_open', at: t(0), source: 'continuous' }, { kind: 'poll', at: t(10), connectionId: 'c2', first: true }], probes: [] };
+  }
+  const check = (input: Input) => judge(input, fixtures).checks.find(item => item.id.startsWith('released, goal unknown, events lost'))!;
+  it('passes with the head\'s events row that says lost, and with the receipt of the body\'s events command that carries a lost reply', () => {
+    expect(check(restart('row')).ok).toBe(true);
+    expect(check(restart('receipt')).ok).toBe(true);
+  });
+  it('fails when no record says the events came back lost (the head asks the body for events only of a command whose receipt said some were left)', () => {
+    const missing = check(restart('none'));
+    expect(missing.ok).toBe(false);
+    expect(missing.detail).toContain('events lost false');
   });
 });

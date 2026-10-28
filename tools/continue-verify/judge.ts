@@ -19,7 +19,7 @@
  *                        this judge asks the head to add (see HeadRow: `head_boot` `unknown_notified` `ledger` `events` `plan_write`).
  *   receipts.jsonl       (or receipts.json, an array) one line for each delivery of a receipt: a MinecraftControlReceipt with `unit`
  *                        (ItemOutcome), `bodyTimes` (BodyTimes), `ids` (TraceIds), `lines` (the act result's hand lines), `handover`.
- *   body-trace.jsonl     (lines are read as {kind, at}, the contract's form, and no other: the body's opLog writes {k, t} today, a known gap the body fixes)
+ *   body-trace.jsonl     (lines are read as {kind, at}, the contract's form, and no other; the body's opLog writes it since A-4)
  *                        the body's own continuous file, appended from the bench's start to its end (never the 90-second ring):
  *                        TraceLine below (`trace_open` first, then `hand_start`, `op`, `death`, `life`, ...).
  *   marks.json           (optional) the lab's own marks: {deaths, injections, moments, resumes, excludeCommands}, merged into meta.
@@ -161,6 +161,16 @@ export interface Model extends Input {
 /** `q12` and `skill:q12` are one command. */
 export const cmdKey = (id: string): string => (/^q\d+[a-z]*$/u.test(id) ? `skill:${id}` : id);
 export const itemOf = (id: string): string => id.replace(/^skill:/u, '');
+/**
+ * The command a scene names. A scene says `q1` (the queue item); the head's command id is `skill:<sha256>` and its records carry the item in `ids.item` (and the queue envelope).
+ * So the name is looked up as a command id first, then as the item of a command; a name that matches neither stays what it was (`skill:q1`).
+ */
+export function commandNamed(model: { commands: Map<string, CommandView> }, name: string): CommandView | undefined {
+  const direct = model.commands.get(cmdKey(name));
+  if (direct) return direct;
+  const wanted = itemOf(name);
+  return [...model.commands.values()].find(command => command.item === wanted);
+}
 export const ms = (iso: unknown): number | undefined => {
   if (typeof iso !== 'string') return undefined;
   const value = Date.parse(iso);
@@ -217,6 +227,7 @@ export function buildModel(input: Input, fixtures: Fixtures): Model {
   };
   for (const row of rows) {
     const ids = idsOf(row, meta);
+    if (ids.command && ids.item) command(ids.command).item = ids.item;
     if (row.ev === 'request' && ids.decision) decision(ids.decision).request = row;
     else if (row.ev === 'response' && ids.decision) decision(ids.decision).response = row;
     else if (row.ev === 'discarded' && ids.decision) decision(ids.decision).discarded.push(row);
@@ -231,10 +242,12 @@ export function buildModel(input: Input, fixtures: Fixtures): Model {
   }
   for (const receipt of receipts) command(receipt.id).receipts.push(receipt);
   for (const line of trace) {
-    if (line.kind === 'hand_start' && line.ids?.command) command(line.ids.command).handStarts.push(line);
+    if (line.kind === 'hand_start' && line.ids?.command) { const view = command(line.ids.command); view.handStarts.push(line); if (line.ids.item) view.item = line.ids.item; }
     else if (line.kind === 'op') command(line.command).ops.push(line);
   }
   for (const key of excluded) commands.delete(key);
+  // the internal events command (observation only, id events:<hash>:<fromSeq>) is the body's own read, not a command the judgement counts
+  for (const key of [...commands.keys()]) if (key.startsWith('events:')) commands.delete(key);
   const benches = meta.benches ?? [];
   return { ...input, fixtures, commands, decisions,
     requireSent: meta.requireSent ?? benches.includes('C'), requireDecision: meta.requireDecision ?? benches.includes('C') };
@@ -286,7 +299,9 @@ function hasEvidence(name: string, command: CommandView): string | null {
     case 'bodyTimes.firstMotorAt': return (times?.motorOps ?? 0) === 0 || times?.firstMotorAt ? null : 'bodyTimes.firstMotorAt';
     case 'bodyTimes.motorOps': return typeof times?.motorOps === 'number' ? null : 'bodyTimes.motorOps';
     case 'hand_start': return handStartsCover(command) ? null : 'hand_start';
-    case 'released(cleanup)': return command.released.some(row => row.by === 'cleanup' && row.ok === true) ? null : 'released(cleanup)';
+    // The release of an unknown command is proven by the cleanup's receipt (a `released` row) or, when the real receipt comes first and settles it, by that receipt
+    // (a `released` row by 'receipt', or the `corrected` row whose result is released): either way nothing is left held. Contract chapter 8 names the cleanup's receipt.
+    case 'released(cleanup)': return command.released.some(row => row.ok === true) || command.corrected.some(row => (row.now as { released?: boolean } | undefined)?.released === true) ? null : 'released(cleanup)';
     default: throw new Error(`the judge does not know the evidence "${name}" (measure/evidence-by-command-kind.json)`);
   }
 };

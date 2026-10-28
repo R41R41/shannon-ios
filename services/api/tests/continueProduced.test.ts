@@ -358,6 +358,25 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     const index = JSON.parse(readFileSync(join(PRODUCED, 'PRODUCED.json'), 'utf8')) as { madeBy: string };
     for (const file of files.values()) expect(index.madeBy.startsWith(file.bodyRevision!)).toBe(true);
   });
+  it('A-4: every unit the body made is a unit the head reads (code included), and every bodyTimes has acceptedAt and endedAt (all receipts go through the control loop)', () => {
+    const units: string[] = [], times: string[] = [];
+    const walk = (value: unknown, where: string): void => {
+      if (!value || typeof value !== 'object') return;
+      for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+        if (key === 'unit' && inner && typeof inner === 'object') units.push(`${where}.unit`), expect(validUnit(inner), `${where}.unit`).toBe(true);
+        if (key === 'bodyTimes' && inner && typeof inner === 'object') times.push(`${where}.bodyTimes`), expect(validBodyTimes(inner), `${where}.bodyTimes`).toBe(true);
+        walk(inner, `${where}.${key}`);
+      }
+    };
+    for (const [name, file] of files) walk(file.output, name);
+    expect(units.length).toBeGreaterThan(4);
+    expect(times.length).toBeGreaterThan(3);
+    // the closed codes the amendment names are there as the head reads them
+    const codes = new Set<string>();
+    const collect = (value: unknown): void => { if (value && typeof value === 'object') for (const [key, inner] of Object.entries(value)) { if (key === 'unit' && inner && typeof (inner as { code?: unknown }).code === 'string') codes.add((inner as { code: string }).code); collect(inner); } };
+    for (const file of files.values()) collect(file.output);
+    expect([...codes].length).toBeGreaterThan(0);
+  });
   it('are the 23 files the body made at that revision', () => {
     expect(names).toHaveLength(23);
   });
@@ -472,7 +491,7 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(handover).toMatchObject({ from: 'floor-melee', confirmed: true });
     expect(['kept', 'lowered', 'none']).toContain(handover.shield);
     expect(actFacts(readActResult(JSON.stringify(trial.result))!).join('\n')).toContain('反射 floor-melee から引き継いだ');
-    expect(trial.trial.unit).toEqual({ goal: 'done', end: 'finished', released: true });
+    expect(trial.trial.unit).toMatchObject({ goal: 'done', end: 'finished', released: true });   // startedAt is there too (the body's own)
     const reservation = out('control--handover-reservation.json') as { cases: Array<{ name: string; handover: any; shieldLowered: boolean; reservationRemoved: boolean }> };
     expect(reservation.cases.map(entry => entry.name)).toEqual(['ok', 'timeout', 'other_holder']);
     for (const entry of reservation.cases) { expect(entry.reservationRemoved).toBe(true); if (entry.handover) expect(['kept', 'lowered', 'none']).toContain(entry.handover.shield); }
@@ -488,7 +507,8 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
 
   it('measure--*: the hand\'s first look has the ids and the holder the head\'s stage rows read; the server tick is a number', () => {
     const start = out('measure--hand-start.json').handStart as Record<string, any>;
-    expect(start.k).toBe('hand_start');
+    expect(start.kind).toBe('hand_start');   // the contract's {kind, at} (the body's opLog wrote {k, t} before A-4)
+    expect(start.k).toBeUndefined();
     expect(start.ids).toMatchObject({ command: expect.any(String), hand: expect.any(Number), life: expect.any(Number), obsSeq: expect.any(Number), obsAt: expect.any(String) });
     expect(['idle', 'command', 'reflex', 'bridge', 'cleanup']).toContain(start.holder.kind);
     expect(start.lastOps).toEqual(expect.any(Array));
@@ -511,14 +531,16 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(made.sameEventsAsFirst).toBe(true);
     expect(made.lostAfterRestart).toBe(true);
   });
-  it('promise--table-crafted-placed-picked: the page of events is an EventsReply the head reads, and its events are the ones the lines carry', () => {
+  it('promise--table-crafted-placed-picked: the events the lines carry; fetched again by  they are gone (lost), and the page is an EventsReply the head reads', () => {
     const made = out('promise--table-crafted-placed-picked.json') as { result: any; page: any };
     const reply = readEventsReply(JSON.stringify(made.page));
     expect(reply).not.toBeNull();
-    expect(reply!.done).toBe(true);
     expect(reply!.events).toHaveLength(reply!.to - reply!.from);
     const carried = readActResult(JSON.stringify(made.result))!.lines.flatMap(line => line.delta ?? []).map(entry => entry.id);
-    expect(carried).toEqual(reply!.events.map(entry => entry.id));
+    expect(carried.length).toBeGreaterThan(0);
+    // A4: the events the receipt already carried were acknowledged; fetching them again by `events` finds the body's record gone (`lost`), and the page says so (it is
+    // what the receipt of the `events` command carries in its `result`, as the head reads it: minecraftControlRecovery.ts). Nothing is invented for them.
+    expect(reply).toMatchObject({ lost: true, events: [], from: 0, to: 0, total: 0, done: false });
   });
 
   it('vertical--*: every stop is one of the 14 closed codes with words; the four numbers of work are there; the time of the next one is estimated from the body\'s msPerUnit', () => {
