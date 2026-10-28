@@ -41,6 +41,8 @@ export interface ItemOutcome {
   goal: GoalOutcome; end: RunEnd; released: boolean;
   droppedBecause?: { code: CutBy | 'depends_failed' | 'depends_unknown'; item?: QueueRef };
   keptDespite?: { item: QueueRef; code: string };
+  /** The closed code of the hand that decided the end (A-4 f: `cleanup_stop`, `cancelled`, `stuck`…); the head reads it from here, not from a hand. */
+  code?: string;
   startedAt?: string;
 }
 

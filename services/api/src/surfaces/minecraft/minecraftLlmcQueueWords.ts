@@ -54,7 +54,7 @@ function behind(because: string | null): string {
 export function itemResult(item: QueueWordsItem, receipt: MinecraftControlReceipt, fixes: readonly string[]): ToolResult {
   const unit = unitOfReceipt(receipt);
   if (neverRan(receipt, item)) {
-    const cause = unit.droppedBecause ? droppedWords(unit.droppedBecause) : receipt.failureType === 'cleanup_stop' ? '片付けの stop で捨てた（結果として確定。さっきの不明が後で分かっても戻らない）' : behind(item.because);
+    const cause = unit.droppedBecause ? droppedWords(unit.droppedBecause) : (receipt.failureType === 'cleanup_stop' || unit.code === 'cleanup_stop') ? '片付けの stop で捨てた（結果として確定。さっきの不明が後で分かっても戻らない）' : behind(item.because);
     const why = receipt.result ?? `捨てた: ${cause}。手は動いていない`;
     const told = why.startsWith('捨てた') || why.startsWith('断られた') ? why : `断られた: ${why}（手は動いていない）`;
     return toolFailure('failed', told, { retryable: true });
