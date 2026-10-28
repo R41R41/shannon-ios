@@ -215,6 +215,8 @@ export class AnthropicFcaModel implements FcaModel {
           // The runner just rechecked audience, sources and its awaited lease permit. Keep dispatch synchronous.
           combined.throwIfAborted();
           dispatched = true;
+          // Chapter 8: the facts said once whose words this request's last message holds are delivered with it.
+          try { this.v2()?.requestSent?.(input.task.id, request); } catch { /* a record of delivery never fails a request */ }
           if (!execution) return;
           execution.modelOutcome = 'unknown';
           delete execution.modelUsage;

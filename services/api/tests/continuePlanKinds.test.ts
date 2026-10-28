@@ -106,7 +106,8 @@ describe('plan/title-renamed-same-decisions.json: the values the code decides by
     expect(decisions(before, 'p7').gateBack).toContain('帰りのゲート (150,64,210)');
     expect(decisions(before, 'p6').obsidianWays).toHaveLength(1);
     expect(decisions(before, 'p4').obsidianWays).toHaveLength(0);
-    expect(decisions(before, 'p3').nearNeeds.food).toBe(false);
+    // Chapter 8: p3 is the preparation before the descent (food 40 points and a table): a node of the kind prep_descent wants food animals near, as a food node does.
+    expect(decisions(before, 'p3').nearNeeds.food).toBe(true);
   });
   it('what is shown follows the title: the road\'s label and the title line of an urgent decision differ', () => {
     const labelBefore = roadLine(withCurrent(before, 'p5'))!, labelAfter = roadLine(withCurrent(after, 'p5'))!;

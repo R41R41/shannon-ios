@@ -174,6 +174,11 @@ export interface MinecraftV2Hooks {
   callInput(name: string, input: unknown): unknown;
   /** mb-llmc-cand 10: the task's progress as the model reads it (a plain sentence of what proves completion beside the machine's conditions). */
   progress?(progress: unknown): unknown;
+  /**
+   * The continue contract, chapter 8 (「1 度出す事実の届け方」): the request is going out, right before it is dispatched. The facts said once whose words are in its last message are
+   * delivered (`deliverOnceFacts`); the others are offered again with the next input. Never fails the request.
+   */
+  requestSent?(taskId: string, request: unknown): void;
 }
 /**
  * mb-llmc-cand 10 (D3): the controls in the mode's one language (the shared `CONTROL_TOOLS` of `anthropicFcaModel.ts` keep their words for every

@@ -141,7 +141,8 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     shaft.context();
     const live = shaft.transient!() as Record<string, unknown>;
     const keys = Object.keys(live);
-    expect(keys.slice(0, 4)).toEqual(['planNow', 'shortage', 'recovery', 'map']);
+    // Chapter 8: the facts of the input (`facts`) come after the readiness lines and just before the map, counted in the bound and never cut.
+    expect(keys.slice(0, 5)).toEqual(['planNow', 'shortage', 'recovery', 'facts', 'map']);
     expect(live.planNow).toBe('[p1.1] 作業台と板を作る＠(296,66,70)（済み: have:crafting_table）（道: 出発の点検（ネザーの奥へ））');
     expect(live.shortage).toBe('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具が無い。食料 0 点（目安 100）');
     expect(live.recovery).toEqual([NO_RECOVERY_LIVE,

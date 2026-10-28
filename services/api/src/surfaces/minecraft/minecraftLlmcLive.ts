@@ -151,7 +151,7 @@ function seen(value: unknown, limit: number, mode: SeenMode): string[] {
 const taken = (threats: readonly string[], line: string): boolean =>
   /^#\d+ /u.test(line) && threats.some(threat => threat.startsWith(`${line.split(' ')[0]} `));
 
-function stacks(value: unknown): string[] {
+export function stacks(value: unknown): string[] {
   return (Array.isArray(value) ? value : []).flatMap(item => {
     if (typeof item === 'string') return [clean(item)];
     const stack = record(item);
@@ -236,6 +236,17 @@ export interface LlmcLiveParts {
   /** mb-llmc-cand 11 (a dragon task): the stage road and the pace against the milestones' targets (`minecraftLlmcRoad.ts`), after the plan's now. */
   road?: string | null;
   meter?: string | null;
+  /**
+   * The continue contract, chapter 8 (「判断に届ける事実」): the facts a decision is given whatever version of the input it reads (`minecraftLlmcFacts.ts`), one line each,
+   * before the map, counted in the bound and never cut. `compressed` is the same facts as the shortened version keeps them (the pack in one line, three food candidates):
+   * the live state takes it in place of `lines` when it has to be shortened. Absent: no key.
+   */
+  facts?: { lines: readonly string[]; compressed?: readonly string[] };
+  /**
+   * The facts said once that the normal input takes (`onceFor`, the words of each), put first in `events`. A live state that has to be shortened says none of them and so
+   * does not deliver them (the request's bytes decide: `deliverOnceFacts`); they are offered again with the next input.
+   */
+  once?: readonly string[];
 }
 
 /** The longest the shown results may be together (characters; a view's map is about 2,500). */
@@ -278,6 +289,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
     ...bodyAgeField(parts.bodyAge),
     ...readinessFields(parts),
+    ...(parts.facts?.lines.length ? { facts: [...parts.facts.lines] } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc_view で見られる）',
     landmarks: landmarkLines(world, observation.facts),
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
@@ -290,13 +302,13 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     threats,
     near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
     ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
-    ...(parts.events.length ? { events: parts.events.slice(-EVENTS) } : {}),
+    ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-EVENTS)] } : {}),
   };
   // r3: outside the bound (never cut, at most `LAST_RESULTS_CHARS`): the results shown this once.
   const shown = shownResults(parts.lastResults ?? []);
   // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`). r7 (run 31: stopped by its health stop in the
   // blaze's line, the next decision read the surprise first): the urgent lines before it (counted in the bound as before, never cut).
-  const { urgent, ...rest } = fitLive(live, planTokens);
+  const { urgent, ...rest } = fitLive(live, planTokens, parts);
   return { ...(urgent ? { urgent } : {}), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}), ...rest,
     ...(shown.length ? { lastResults: shown } : {}) };
 }
@@ -310,7 +322,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing' | 'bodyAge' | 'queue' | 'recovery'> & { planNowTitle: string | null; mode: string }): Record<string, unknown> {
+  | 'footing' | 'bodyAge' | 'queue' | 'recovery' | 'once'> & { planNowTitle: string | null; mode: string; /** The chapter 8 facts of the urgent version (`inputFacts(…, true)`). */ facts?: readonly string[] }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
   if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), mode: parts.mode };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
@@ -318,12 +330,13 @@ export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation'
   return { ...urgent, ...bodyAgeField(parts.bodyAge), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
     ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}),
     ...(parts.queue?.length ? { queue: [...parts.queue] } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
+    ...(parts.facts?.length ? { facts: [...parts.facts] } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc_view で見られる）',
     state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     foodPoints: { total: food.points, items: food.items },
     ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
     threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: shortStacks(world.inventory),
-    ...(parts.events.length ? { events: parts.events.slice(-URGENT_EVENTS) } : {}), ...(results.length ? { lastResults: results } : {}),
+    ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-URGENT_EVENTS)] } : {}), ...(results.length ? { lastResults: results } : {}),
     mode: parts.mode };
 }
 
@@ -380,10 +393,30 @@ const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['invento
   // A map of water (three tokens a cell) leaves little beside it: the last of the rest, the plan's path and her state kept.
   ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
 
+/**
+ * The live state when it has to be shortened (chapter 8's table, 「圧縮の後」): the facts in their shortened form (the pack in one line, three food candidates), and the facts said
+ * once left out (the table's 「—」: not in this version, so not delivered; they are offered again with the next input).
+ */
+function shortened(live: Record<string, unknown>, parts: Pick<LlmcLiveParts, 'facts' | 'once'>): Record<string, unknown> {
+  const out = { ...live };
+  if (parts.facts?.compressed) {
+    if (parts.facts.compressed.length) out.facts = [...parts.facts.compressed];
+    else delete out.facts;
+  }
+  const once = parts.once?.length ?? 0;
+  if (once && Array.isArray(live.events)) {
+    const rest = live.events.slice(once);
+    if (rest.length) out.events = rest;
+    else delete out.events;
+  }
+  return out;
+}
+
 /** Leaves out the parts that matter least until the live body fits beside the plan. */
-function fitLive(live: Record<string, unknown>, planTokens: number): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...live };
+function fitLive(input: Record<string, unknown>, planTokens: number, parts: Pick<LlmcLiveParts, 'facts' | 'once'> = {}): Record<string, unknown> {
   const budget = LLMC_LIVE_TOKENS - planTokens;
+  const live = llmcLiveTokens(input) > budget ? shortened(input, parts) : input;
+  const out: Record<string, unknown> = { ...live };
   for (const [key, keep] of SHRINK) {
     if (llmcLiveTokens(out) <= budget) break;
     if (key === 'foodPoints.items') {
