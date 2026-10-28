@@ -131,11 +131,11 @@ describe('vertical: the rules of one hand (handProblem)', () => {
     expect(problem({ toward: 'up' })).toContain('toward は north・east・south・west');
   });
   it('needs dir, shape, toY, canDig and liquid', () => {
-    for (const key of ['dir', 'shape', 'toY', 'canDig', 'liquid']) expect([key, problem({ [key]: undefined })]).toEqual([key, `${key} が要る`]);
+    for (const key of ['dir', 'shape', 'toY', 'canDig', 'liquid']) expect([key, problem({ [key]: undefined })?.split('（')[0]]).toEqual([key, `${key} が要る`]);
     expect(problem({ canDig: [] })).toContain('canDig が要る');
     expect(problem({ dir: 'sideways' })).toBe('dir は down か up');
     expect(problem({ shape: 'ladder' })).toBe('shape は stairs・shaft・pillar');
-    expect(problem({ liquid: 'ignore' })).toBe('liquid は stop・seal・seal_water');
+    expect(problem({ liquid: 'ignore' })).toContain('liquid は stop・seal・seal_water（liquid=stop|seal|seal_water のどれかを書く）');
   });
   it('keeps the ranges: toY -64..320, maxDig 0..200, maxPlace 0..100, range 1..2, seconds 5..120, block ids', () => {
     expect(problem({ toY: -64 })).toBeNull();
@@ -178,8 +178,8 @@ describe('vertical: the rules of one hand (handProblem)', () => {
     expect(handProblem({ ...stairs, seconds: 4 })).toBe('seconds は 5〜120');
     expect(handProblem({ ...stairs, seconds: 121 })).toBe('seconds は 5〜120');
     expect(handProblem({ ...stairs, maxDig: 200, maxPlace: 100 })).toBeNull();
-    expect(handProblem({ ...stairs, maxDig: 201 })).toBe('maxDig は 0〜200 の整数');
-    expect(handProblem({ ...stairs, maxPlace: 101 })).toBe('maxPlace は 0〜100 の整数');
+    expect(handProblem({ ...stairs, maxDig: 201 })).toContain('maxDig は 0〜200 の整数（200 まで');
+    expect(handProblem({ ...stairs, maxPlace: 101 })).toContain('maxPlace は 0〜100 の整数（100 まで');
   });
 });
 

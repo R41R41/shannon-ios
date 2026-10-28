@@ -13,6 +13,7 @@
  * `actProblem` before the body sees it; the body's own schema must accept every input these accept. The body's result is the JSON of
  * `ActResult` / `ViewResult` in the receipt's `result` (at most 16,000 characters, the receipt's bound).
  */
+import { PLAN_LIMITS, promiseItemFits } from '@shannon/mind';
 import type { WorldScan } from './minecraftProbeContract.js';
 import { CONDITION_SCHEMA, validCondition, type ActCondition } from './minecraftActCondition.js';
 import { dependsProblem, handProblem } from './minecraftActHandRules.js';
@@ -181,6 +182,16 @@ export interface ActStopIf {
  * exposed dig, or stop on `stopIf.hostileWithin`; the shield's guard and a fireball's deflection still act without stopping the act.
  * The reflexes of section 6 of the shared note stay (lava, drowning, falling, a lit creeper, and the low-health flight at health 8).
  */
+/**
+ * A thing the act says to keep for later (amendment A-7 1; written `keep=spruce_planks:4:作業台`, item:count:use): the head turns each into a promise of the plan when it
+ * sends the act (`FcaPlanPort.keepPromise`). It is the head's: it is not in the arguments sent to the body, and it does not put the promise in the act's `uses` (`uses` is
+ * what the act says it spends; `keep` says what is left aside).
+ */
+export interface ActKeep { item: string; count: number; use: string }
+/** At most this many `keep` entries in one act; a count is a promise's (1 up to `PLAN_LIMITS.promiseCount`) and a use is at most `PLAN_LIMITS.promiseUse` characters. */
+export const KEEP_MAX = 4;
+export const KEEP_FORM = `keep=spruce_planks:4:作業台（品目:数:用途。複数はコンマで keep=spruce_planks:4:作業台,cobblestone:8:かまど。品目は物の名前か food、数は 1〜${PLAN_LIMITS.promiseCount}、`
+  + `用途は ${PLAN_LIMITS.promiseUse} 字まで、${KEEP_MAX} つまで）`;
 export interface ActInput {
   hands: readonly ActHand[]; stopIf?: ActStopIf; why?: string; accept?: readonly string[];
   /**
@@ -195,6 +206,8 @@ export interface ActInput {
    * `uses` the numbers of the promises of the plan this act says it uses (the head keeps the promises' definitions as they are when it sends the act).
    */
   dependsOn?: readonly string[]; uses?: readonly number[];
+  /** Amendment A-7 1: what to keep for later (the head only; see `ActKeep`). */
+  keep?: readonly ActKeep[];
 }
 
 /** The older passes of a repeating act whose lines were folded into counts (amendment A-6 11; the body's form, one entry a pass): how many hand lines it had, how many hands were done and how many stopped. */
@@ -470,6 +483,9 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目' },
     dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目。[] は何にも頼らない' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
+    keep: { type: 'array', maxItems: KEEP_MAX, description: '後で使うために残す物（約束になる）', items: { type: 'object', additionalProperties: false, required: ['item', 'count', 'use'],
+      properties: { item: { type: 'string', maxLength: 64 }, count: { type: 'integer', minimum: 1, maximum: PLAN_LIMITS.promiseCount },
+        use: { type: 'string', maxLength: PLAN_LIMITS.promiseUse } } } },
   },
 });
 
@@ -503,6 +519,19 @@ function queueFieldProblem(input: ActInput): string | null {
   if (input.dependsOn?.every(id => /^q[0-9]{1,6}$/u.test(id)) === false) return 'dependsOn は列の項目（q12）の並び。何にも頼らないなら []';
   if (input.dependsOn !== undefined && new Set(input.dependsOn).size !== input.dependsOn.length) return 'dependsOn に同じ項目が 2 度ある';
   if (input.uses?.every(id => Number.isInteger(id) && id >= 1) === false) return 'uses は約束の番号（1 から）の並び';
+  return keepProblem(input.keep);
+}
+/** `keep` (amendment A-7 1): up to `KEEP_MAX` entries, each an item (a name or `food`), a whole count and a use of a few words; a refusal shows the form to write. */
+export function keepProblem(keep: ActInput['keep']): string | null {
+  if (keep === undefined) return null;
+  if (!Array.isArray(keep) || keep.length > KEEP_MAX) return `keep は ${KEEP_MAX} つまで: ${KEEP_FORM}`;
+  for (const entry of keep) {
+    const given = entry as Partial<ActKeep> | null;
+    if (!given || typeof given !== 'object') return `keep の中身が 品目:数:用途 の形ではない: ${KEEP_FORM}`;
+    if (!promiseItemFits(given.item)) return `keep の品目は物の名前（oak_planks・cobblestone）か food（今は ${JSON.stringify(given.item)?.slice(0, 30)}）: ${KEEP_FORM}`;
+    if (!Number.isInteger(given.count) || given.count! < 1 || given.count! > PLAN_LIMITS.promiseCount) return `keep の数は 1〜${PLAN_LIMITS.promiseCount} の整数: ${KEEP_FORM}`;
+    if (typeof given.use !== 'string' || !given.use.trim() || given.use.length > PLAN_LIMITS.promiseUse) return `keep の用途は ${PLAN_LIMITS.promiseUse} 字までの言葉: ${KEEP_FORM}`;
+  }
   return null;
 }
 /** A repeated hand that names cells must count them from her feet: the same absolute cells asked again are the same cells. */

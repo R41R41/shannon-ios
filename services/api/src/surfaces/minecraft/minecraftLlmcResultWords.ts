@@ -188,3 +188,16 @@ export function placementCorrections(item: string, result: string | undefined): 
   }
   return facts.slice(0, 8);
 }
+
+/**
+ * Amendment A-7 1: what an act's `keep` did to the plan's promises, one fact a line (facts only: what was made, revised or already there, and what the plan refused).
+ * `made` 約束 #3 を作った: spruce_planks 4（作業台）/ `revised` the count it was / `same` it was already so / a problem the plan said.
+ */
+export function promiseKeptWords(entry: { item: string; count: number; use: string },
+  kept: { how: 'made' | 'revised' | 'same'; id: number; rev: number; was?: number } | { problem: string }): string {
+  if ('problem' in kept) return `約束にできなかった（keep ${entry.item} ${entry.count}（${entry.use}））: ${kept.problem}`;
+  const thing = `${entry.item} ${entry.count}（${entry.use}）`;
+  return kept.how === 'made' ? `約束 #${kept.id} を作った: ${thing}`
+    : kept.how === 'revised' ? `約束 #${kept.id} を改訂した（rev ${kept.rev}）: ${thing}。前は ${kept.was ?? '?'}`
+      : `約束 #${kept.id} は既に同じ数である: ${thing}`;
+}

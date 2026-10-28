@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import type { FcaExternalTools, FcaToolDefinition } from '../mind/action/fca/fcaPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { BodyPlanView, BodyTaskContext } from '../contracts/bodyControlContract.js';
-import { MC_ACT_TOOL, type ActInput } from '../contracts/minecraftActContract.js';
+import { MC_ACT_TOOL, type ActInput, type ActKeep } from '../contracts/minecraftActContract.js';
+import type { KeptPromise } from '../mind/action/fca/fcaPlanTools.js';
 import { MC_PROBE_TOOL } from '../contracts/minecraftProbeContract.js';
 import { feetOf, llmcBodyDefinitions, llmcMilliseconds, llmcPrepare, llmcResult, llmcSchema } from '../surfaces/minecraft/minecraftLlmc.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
@@ -62,7 +63,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     /** The task queue (`minecraftLlmcQueue.ts`): an `mc.act` is an item put in it, and the tool returns when the body has the item. */
     queue: LlmcQueue;
     /** Continue contract 5: the observation the decision now running read (`madeIn`); null when it had no life to name. The acts it chooses carry it. */
-    madeIn?(): MadeIn | null };
+    madeIn?(): MadeIn | null;
+    /** Amendment A-7 1: an entry of an act's `keep` put to the plan as a promise (`FcaPlanPort.keepPromise`). */
+    keep?(entry: ActKeep): KeptPromise | { problem: string } };
   /**
    * Owner 2026-10-26: each finished act is handed to her feeling beside the decisions (`minecraftFeeling.ts`), synchronously and
    * without waiting for anything; nothing comes back to the decision. Absent: nothing is felt from her acts.
@@ -140,7 +143,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       if (guards) {
         const sent = await sendItem({ queue: parts.llmc.queue, control, bodyId, call, skill: current!.name, fixes: prepared?.fixes ?? [],
           node: node?.mark?.node ?? null, current: node?.mark?.current ?? null, frame: control.observe(bodyId),
-          ...(parts.llmc.madeIn ? { madeIn: parts.llmc.madeIn() } : {}) });
+          ...(parts.llmc.madeIn ? { madeIn: parts.llmc.madeIn() } : {}), ...(parts.llmc.keep ? { keep: parts.llmc.keep } : {}) });
         const said = guards.hold?.tail ?? guards.hold?.note;
         return guards.led(said && sent.ok ? withNote(sent, said) : sent);
       }

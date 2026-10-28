@@ -1,8 +1,9 @@
 import type { BodyObservation } from '../contracts/bodyControlContract.js';
 import type { MadeIn } from '../contracts/continueContract.js';
-import { actMilliseconds, type ActInput } from '../contracts/minecraftActContract.js';
+import { actMilliseconds, type ActInput, type ActKeep } from '../contracts/minecraftActContract.js';
 import { replaceOnly } from '../contracts/minecraftActShortContract.js';
 import type { FcaExternalTools } from '../mind/action/fca/fcaPorts.js';
+import type { KeptPromise } from '../mind/action/fca/fcaPlanTools.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { toolFailure, toolOk, type ToolResult } from '../mind/tools/toolRegistryPorts.js';
 import type { MinecraftFeelingPort } from '../mind/emotion/minecraftFeeling.js';
@@ -10,6 +11,7 @@ import { conditionHolds, conditionText, conditionWords } from '../surfaces/minec
 import { feetOf } from '../surfaces/minecraft/minecraftLlmc.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -24,10 +26,13 @@ type Call = Parameters<FcaExternalTools['execute']>[0];
 export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftControl; bodyId: string; call: Call; skill: string;
   fixes: readonly string[]; node: string | null; current?: string | null; frame: BodyObservation | null;
   /** Continue contract 5: the observation the decision that chose this act read (its life, dimension, body and connection): the item carries it, not the newest frame's. */
-  madeIn?: MadeIn | null }): Promise<ToolResult> {
+  madeIn?: MadeIn | null;
+  /** Amendment A-7 1: an entry of the act's `keep` put to the plan as a promise (`FcaPlanPort.keepPromise`). Absent: the plan cannot take it, and the result says so. */
+  keep?(entry: ActKeep): KeptPromise | { problem: string } }): Promise<ToolResult> {
   const { queue, call } = parts, input = call.input as ActInput;
-  // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope) and `uses` (kept with the command, never sent to the body).
-  const { pre, replace: _replace, dependsOn: _dependsOn, uses: _uses, ...args } = input;
+  // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope), `uses` (kept with the command, never sent to the body) and `keep`
+  // (made into promises of the plan below, once the queue has the act).
+  const { pre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, ...args } = input;
   const fixes = parts.fixes.length ? `（頭が形を直して送った: ${parts.fixes.join('、')}）\n` : '';
   if (pre && !queue.open() && conditionHolds(pre, parts.frame) === false) {
     const words = conditionWords(pre, parts.frame);
@@ -41,7 +46,9 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
     maxMs: actMilliseconds(input, feetOf(parts.control.observe(parts.bodyId))) });
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';
-  return toolOk(`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`);
+  // Amendment A-7 1: the act is in the queue; what it said to keep becomes promises (an open one of the same item and use is revised). Not put into the act's `uses`.
+  const kept = (keep ?? []).map(entry => promiseKeptWords(entry, parts.keep ? parts.keep(entry) : { problem: 'この判断の計画には約束を書けない' }));
+  return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...kept].join('\n'));
 }
 
 /** An input of nothing but `replace`: the items are taken off and that is the whole answer; null for any other input. */

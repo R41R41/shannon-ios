@@ -105,6 +105,9 @@ export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
 /** A tree handed to the task from outside its decisions (the first plan, `minecraftFirstPlan.ts`): taken at the next read, once. */
 export interface FcaPlanInbox { take(taskId: string, tree: PlanTree): { tree: PlanTree; note: string } | null }
 
+/** What `FcaPlanPort.keepPromise` did: a promise `made`, `revised` (from `was`, the count before) or `same` (already so, nothing changed). */
+export interface KeptPromise { how: 'made' | 'revised' | 'same'; id: number; rev: number; item: string; count: number; use: string; was?: number }
+
 /** One step's plan: the tool, what a decision and a body read of it, and what the step commits. */
 export interface FcaPlanPort {
   /** The path to the current node (live), or null when the task holds no plan yet. */
@@ -124,6 +127,12 @@ export interface FcaPlanPort {
    * `why` (closed words). True when the tree changed. Absent: only the model changes the plan.
    */
   amend?(update: PlanUpdate, why: string): boolean;
+  /**
+   * Amendment A-7 1: an act's `keep` (item, count, use) put to the plan as a promise, by the same handling as `plan.update`'s `promise` op (`applyPlanUpdate`). An open promise
+   * (not closed) of the same item and use is revised to the new count (its id, its rev up one, its `until` and `instead` kept); with the same count nothing changes. None
+   * of that item and use: a new promise. The act's `uses` is not touched. `problem` when the plan refuses it (the promises are full), the tree then unchanged.
+   */
+  keepPromise?(entry: { item: string; count: number; use: string }): KeptPromise | { problem: string };
   /**
    * The continue contract, chapter 3, **the one way into the ledger**: the body's inventory events and the newest observation are put to the tree's promises
    * (`minecraftLlmcPromises.ts`, `applyLedger`) and the memory that keeps an event from being put twice (`ledgerSeen`, saved with the tree in the checkpoint).
@@ -274,6 +283,23 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       adopt();
       return amend(update, why);
     },
+    keepPromise(entry) {
+      adopt();
+      const use = String(entry.use).trim();
+      const old = tree.promises.find(item => item.state !== 'closed' && item.item === entry.item && item.use === use);
+      if (old && old.count === entry.count) return { how: 'same', id: old.id, rev: old.rev, item: old.item, count: old.count, use: old.use };
+      // A revision writes the promise whole: its `until` and `instead` are carried (the act's keep says only the count).
+      const op = { op: 'promise' as const, ...(old ? { id: old.id, ...(old.until ? { until: old.until } : {}), ...(old.instead ? { instead: old.instead } : {}) } : {}),
+        item: entry.item, count: entry.count, use };
+      const result = applyPlanUpdate(tree, { ops: [op] }, { at: stamp() });
+      if (result.problem) return { problem: result.problem };
+      tree = result.tree;
+      changed = true;
+      const made = old ? tree.promises.find(item => item.id === old.id) : tree.promises.filter(item => item.item === entry.item && item.use === use).at(-1);
+      if (!made) return { problem: '約束を作れなかった' };
+      say(`Shannon FCA plan kept task=${parts.taskId} revision=${tree.revision} promise=${made.id} rev=${made.rev} how=${old ? 'revised' : 'made'} item=${made.item} count=${made.count}`);
+      return { how: old ? 'revised' : 'made', id: made.id, rev: made.rev, item: made.item, count: made.count, use: made.use, ...(old ? { was: old.count } : {}) };
+    },
     applyLedger(input) {
       adopt();
       const result = applyLedger(tree.promises, ledgerSeen, { ...input, at: input.at ?? stamp(), nodes: tree.nodes });
@@ -294,7 +320,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
     definitions: [parts.rules ? PLAN_UPDATE_RULES_DEFINITION : PLAN_UPDATE_DEFINITION],
     checkpoint: () => {
       parts.onCheckpoint?.();
-      return tree.nodes.length || kept
+      return tree.nodes.length || tree.promises.length || kept
         ? { fcaPlanTree: tree, ...(ledgerSeen.eventIds.length || ledgerSeen.lastObs ? { fcaPlanLedgerSeen: ledgerSeen } : {}) } : {};
     },
     async execute(call) {

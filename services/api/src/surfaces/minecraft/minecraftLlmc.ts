@@ -4,8 +4,9 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import {
   ACT_INPUT_SCHEMA, actMilliseconds, actProblem, MC_ACT_SKILL, MC_ACT_TOOL,
-  MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
+  MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActHand, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
+import { verticalLimitProblem } from '../../contracts/minecraftActHandRules.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
 import { MC_PROBE_SKILL, MC_PROBE_TOOL, PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../../contracts/minecraftProbeContract.js';
 import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
@@ -56,6 +57,14 @@ export function llmcInputProblem(name: string, input: unknown): string | null {
   if (!schema) return null;
   const unread = name === MC_ACT_TOOL ? shortHandProblem(input) : null;
   if (unread) return unread;
+  // Amendment A-7 2: a vertical's maxDig / maxPlace above its top is refused with the mend, before the schema (whose bounds are the widest of any kind) says only the range.
+  const hands = name === MC_ACT_TOOL && input && typeof input === 'object' ? (input as { hands?: unknown }).hands : undefined;
+  if (Array.isArray(hands)) {
+    for (const [index, hand] of hands.entries()) {
+      const limit = hand && typeof hand === 'object' && (hand as ActHand).do === 'vertical' ? verticalLimitProblem(hand as ActHand) : null;
+      if (limit) return `手${index + 1}（vertical）: ${limit}`;
+    }
+  }
   if (!validSkillInput(input, schema)) return `引数が ${name} の形に合わない: ${schemaProblem(input, schema) ?? '形が違う'}`;
   return name === MC_ACT_TOOL ? actProblem(input as ActInput) : null;
 }

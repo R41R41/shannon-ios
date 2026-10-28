@@ -43,7 +43,7 @@ import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { driftWords, incidentHoldPort, incidentOfResult } from './minecraftIncidentHold.js';
 import { randomUUID } from 'node:crypto';
-import { MC_ACT_TOOL } from '../contracts/minecraftActContract.js';
+import { MC_ACT_TOOL, type ActKeep } from '../contracts/minecraftActContract.js';
 import type { BodyTaskContext } from '../contracts/bodyControlContract.js';
 import type { MadeIn } from '../contracts/continueContract.js';
 import { reflexCappedWords } from '../surfaces/minecraft/minecraftLlmcBodyEvents.js';
@@ -393,7 +393,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   return {
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null, openIds: () => queue.openIds() },
-    tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read } },
+    tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read,
+      // Amendment A-7 1: an act's `keep` becomes promises of the plan, by the plan's own handling (the same as `plan.update`'s promise op).
+      keep: (entry: ActKeep) => plan.port.keepPromise?.(entry) ?? { problem: 'この計画には約束を書けない' } } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,

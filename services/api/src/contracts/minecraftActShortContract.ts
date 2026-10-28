@@ -1,4 +1,4 @@
-import { ACT_MAX_HANDS, type ActHand, type ActInput, type ActPos } from './minecraftActContract.js';
+import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
 import { handToLine, lineToHand, pos, readPos } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -65,7 +65,9 @@ const SHORT_LINES = [
   '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
     + 'shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物、place= は足場・塞ぎに置く物。'
     + 'liquid: 溶岩・水が見えたら stop=止まる / seal=塞いで続ける / seal_water=水だけ塞ぎ溶岩で止まる（range は塞ぐ半径 1〜2、既定 1）。'
-    + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（既定 ${VERTICAL_DEFAULTS.seconds}）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}。見えた鉱石は結果で知らされる。`,
+    + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（既定 ${VERTICAL_DEFAULTS.seconds}）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}`
+    + `（maxDig は ${VERTICAL_DEFAULTS.maxDig}・maxPlace は ${VERTICAL_DEFAULTS.maxPlace} まで）。見えた鉱石は結果で知らされる。`,
+  '  例（liquid= は必ず書く）: vertical down stairs south y=10 dig=stone,dirt liquid=stop   vertical up pillar y=70 dig=dirt place=cobblestone liquid=seal_water',
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
   '  近くの数歩を、掘らず置かずに歩く手（段差1と泳ぎだけ。点を空白で続けると path。32点まで）。range は的から何 m で着いたことにするか。',
   '  地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる（64m ごとに区切って歩く）。遠くへ・壁や穴や崖のある道は go（道を体が引く）、高さの差が大きい上り下りは vertical。',
@@ -128,6 +130,7 @@ const SHORT_LINES = [
   '  足の位置から数えるので、トンネルは 1 組を rel で書いて repeat にする。1 回まわしても何も変わらなければ体が止める。 done と一緒に使うと「〜まで続ける」になる。',
   '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目に頼る項目と、dependsOn を書いていない後ろの項目も捨てる）。新しい act は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。',
   '- 欄 dependsOn（["q12"]）: この項目が頼る今の列の項目（前の段の項目は書けない。[] は何にも頼らない）。欄 uses（[3]）: 使う約束の番号。',
+  '- 欄 keep（["spruce_planks:4:作業台"]）: 後で使うために残す物を 品目:数:用途 で（約束になって帳簿に載る。同じ品目・用途は数の改訂）。',
   '- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・'
     + 'dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。',
   '- 例: pre "have:iron_ore>=3&near:furnace~4"。下りる act の pre "food>=40&have:crafting_table|food>=40&have:planks>=4"（満たさない時は始めずに捨てる）。'
@@ -155,11 +158,13 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目（例 ["q15"]、全部は ["all"]）' },
     dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目（例 ["q12"]、何にも頼らないなら []）' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
+    keep: { type: 'array', maxItems: KEEP_MAX, items: { type: 'string', maxLength: 120 }, description: '後で使うために残す物（品目:数:用途。例 "spruce_planks:4:作業台"）' },
   },
 });
 
 export interface ShortAct {
   why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[]; dependsOn?: string[]; uses?: number[];
+  keep?: string[];
 }
 
 const STOP_KEYS = ['hostileWithin', 'hpBelow', 'hungerBelow'] as const;
@@ -174,12 +179,23 @@ export function actToShort(input: ActInput): ShortAct {
     ...(input.stopIf ? { stopIf: stopIfText(input.stopIf) } : {}), ...(input.accept?.length ? { accept: [...input.accept] } : {}),
     ...(input.pre ? { pre: conditionText(input.pre) } : {}), ...(input.done ? { done: conditionText(input.done) } : {}),
     ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}),
-    ...(input.dependsOn !== undefined ? { dependsOn: [...input.dependsOn] } : {}), ...(input.uses?.length ? { uses: [...input.uses] } : {}) };
+    ...(input.dependsOn !== undefined ? { dependsOn: [...input.dependsOn] } : {}), ...(input.uses?.length ? { uses: [...input.uses] } : {}),
+    ...(input.keep?.length ? { keep: input.keep.map(entry => `${entry.item}:${entry.count}:${entry.use}`) } : {}) };
+}
+
+/**
+ * One layer of quotes put around a written value is taken off (amendment A-7 3: 3 of 45 answers wrote stopIf as `"hostileWithin=8 hpBelow=10"` with the quotes inside the
+ * string, or with the inner quotes escaped, `\"…\"`, and every token of it failed). The quote may be `"` or `'`, escaped or not.
+ */
+function unquoted(text: string): string {
+  const value = text.trim();
+  const wrapped = /^\\?["']([\s\S]*?)\\?["']$/u.exec(value);
+  return wrapped ? wrapped[1]!.trim() : value;
 }
 
 function stopIfOf(text: string, errors: string[]): Record<string, unknown> {
   const stopIf: Record<string, unknown> = {};
-  for (const token of text.trim().split(/\s+/u).filter(Boolean)) {
+  for (const token of unquoted(text).split(/\s+/u).filter(Boolean)) {
     const [key = '', raw = ''] = token.split(/=(.*)/su);
     if (key === 'blockChanged') {
       const cells = raw.split('/').map(readPos);
@@ -219,7 +235,7 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
  * The task queue's fields of a model's input: `pre` and `done` as text into the body's JSON (an unreadable one is an error naming the forms to
  * write), `repeat` a whole number of 2–8, `replace` item ids (a bare id too). A field that is already JSON (a condition array) is kept as it is.
  */
-function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace' | 'dependsOn' | 'uses'> {
+function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace' | 'dependsOn' | 'uses' | 'keep'> {
   const value = (input ?? {}) as Record<string, unknown>, out: Record<string, unknown> = {};
   for (const key of ['pre', 'done'] as const) {
     const field = value[key];
@@ -244,6 +260,30 @@ function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' |
   const uses = typeof value.uses === 'number' ? [value.uses] : typeof value.uses === 'string' ? value.uses.split(',').map(Number) : value.uses;
   if (Array.isArray(uses)) {
     if (uses.every(item => Number.isInteger(item) && item >= 1)) out.uses = uses; else errors.push('uses の書き方の誤り: 約束の番号（1 から）の並び（[3]）');
+  }
+  const keep = keepOf(value.keep, errors);
+  if (keep?.length) out.keep = keep;
+  return out;
+}
+/**
+ * `keep` (amendment A-7 1): "品目:数:用途" (the use may hold colons), several as a list or one string joined by commas or new lines; an entry already of the JSON form
+ * {item, count, use} is kept as it is (`keepProblem` then checks it). One that does not read is an error naming the form.
+ */
+function keepOf(raw: unknown, errors: string[]): ActKeep[] | undefined {
+  if (raw === undefined) return undefined;
+  const list = typeof raw === 'string' ? raw.split(/[,\n]/u) : Array.isArray(raw) ? raw : null;
+  if (!list) {
+    errors.push(`keep の書き方の誤り: 品目:数:用途 の並び。${KEEP_FORM}`);
+    return undefined;
+  }
+  const out: ActKeep[] = [];
+  for (const entry of list) {
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) { out.push(entry as ActKeep); continue; }
+    const text = typeof entry === 'string' ? unquoted(entry) : '';
+    if (!text) { if (typeof entry !== 'string') errors.push(`keep の書き方の誤り: 品目:数:用途 の並び。${KEEP_FORM}`); continue; }
+    const read = /^([^:\s]+)\s*:\s*(\d+)\s*:\s*(\S[\s\S]*)$/u.exec(text);
+    if (!read) { errors.push(`keep の書き方の誤り: 「${text.slice(0, 50)}」は 品目:数:用途 の形ではない。${KEEP_FORM}`); continue; }
+    out.push({ item: read[1]!, count: Number(read[2]), use: read[3]!.trim() });
   }
   return out;
 }
@@ -280,5 +320,8 @@ function json(input: unknown): { input: unknown; errors: string[] } {
 export function shortHandProblem(input: unknown): string | null {
   const text = input && typeof input === 'object' ? (input as Record<string, unknown>)[SHORT_HAND_ERROR_KEY] : undefined;
   if (typeof text !== 'string') return null;
-  return /^(?:pre|done|repeat|dependsOn|uses) の書き方の誤り/u.test(text) ? text : `手の書き方が読めない: ${text}`;
+  if (/^(?:pre|done|repeat|dependsOn|uses|keep) の書き方の誤り/u.test(text)) return text;
+  // Amendment A-7 3: a stopIf that does not read is shown the form (no quotes round it, space between the parts).
+  return text.includes('stopIf が読めない') ? `${text}。stopIf の書き方: stopIf=hostileWithin=8 hpBelow=10（引用符で包まない。hostileWithin・hpBelow・hungerBelow は数、blockChanged=X,Y,Z/X,Y,Z）`
+    : `手の書き方が読めない: ${text}`;
 }
