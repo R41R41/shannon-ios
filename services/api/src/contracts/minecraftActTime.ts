@@ -11,7 +11,7 @@ import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract
  *   expected time is obsidian 20 s and 8 s each, fight half its seconds, mine 1.5 s a block, make 1 s and 0.5 s each, portal 25 s, smelt 6 s and 2 s a kind;
  * - vertical (continue contract 6): the steps (|toY − the feet's y when the hand begins|, her feet then each hand's end; 32 when where she stands is not known) times
  *   the time of a step, from a first guess (stairs 1.6 s, shaft 1.0 s, pillar 0.9 s; a hypothesis, not a promise) or from the `msPerUnit` the body returned for that
- *   form (`ActTimeTuning`); the ceiling is its `seconds` (default 120) and 2 s, for the body stops the hand at `seconds`;
+ *   form (`ActTimeTuning`); the ceiling is its `seconds` (default 60) and 2 s, for the body stops the hand at `seconds`;
  * - dig, place: by the cells; pillarUp, jump, shoot: by `n`; attack and wait: by `seconds`; craft: by `count`; the rest fixed.
  * Task queue: an act that repeats its hands (`repeat`) takes that many times as long; the ceiling is still the body's one bound,
  * the expected time is not capped.
@@ -35,7 +35,13 @@ const blocksOf = (hand: ActHand) => Math.max(1, hand.count ?? 1);
  */
 export const VERTICAL_MS_PER_STEP: Readonly<Record<'stairs' | 'shaft' | 'pillar', number>> = { stairs: 1_600, shaft: 1_000, pillar: 900 };
 export const VERTICAL_UNKNOWN_STEPS = 32;
-export const VERTICAL_DEFAULT_SECONDS = 120;
+/**
+ * Amendment A-1 6: what a vertical hand means when it names no limit (the body's `VERTICAL_DEFAULTS`: 200 digs, 100 places, 60 seconds, a seal radius of 1) and the range
+ * of its `seconds` (5 to 120, go's own). The short grammar shows both to the model and `verticalProblem` checks the same range.
+ */
+export const VERTICAL_DEFAULTS = { maxDig: 200, maxPlace: 100, seconds: 60, range: 1 } as const;
+export const VERTICAL_SECONDS_RANGE = [5, 120] as const;
+export const VERTICAL_DEFAULT_SECONDS = VERTICAL_DEFAULTS.seconds;
 /** What the body measured: `progress.msPerUnit` of a vertical hand's result (ms a step), by the form that ran. Used in place of the first guess. */
 export type ActTimeTuning = Partial<Record<keyof typeof VERTICAL_MS_PER_STEP, number>>;
 /** A measured ms a step the estimate may take: a finite number of 100 ms to 20 s, else the first guess is kept. */

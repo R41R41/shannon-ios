@@ -1,6 +1,7 @@
 import { ACT_MAX_HANDS, type ActHand, type ActInput, type ActPos } from './minecraftActContract.js';
 import { handToLine, lineToHand, pos, readPos } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
+import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 
 export { handToLine, lineToHand };
 
@@ -63,7 +64,8 @@ const SHORT_LINES = [
 'vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water [maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [seconds=N]',
   '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
     + 'shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物、place= は足場・塞ぎに置く物。'
-    + 'liquid: 溶岩・水が見えたら stop=止まる / seal=塞いで続ける / seal_water=水だけ塞ぎ溶岩で止まる（range は塞ぐ範囲）。',
+    + 'liquid: 溶岩・水が見えたら stop=止まる / seal=塞いで続ける / seal_water=水だけ塞ぎ溶岩で止まる（range は塞ぐ半径 1〜2、既定 1）。'
+    + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（既定 ${VERTICAL_DEFAULTS.seconds}）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}。見えた鉱石は結果で知らされる。`,
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
   '  近くの数歩を、掘らず置かずに歩く手（段差1と泳ぎだけ。点を空白で続けると path。32点まで）。range は的から何 m で着いたことにするか。',
   '  地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる（64m ごとに区切って歩く）。遠くへ・壁や穴や崖のある道・上り下りは go（道を体が引く）。',

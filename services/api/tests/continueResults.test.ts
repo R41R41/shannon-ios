@@ -765,6 +765,33 @@ describe('the queue: the head reads what the body decided and takes nothing off 
     expect(news[1]!.kind).toBe('dropped');
     expect(news[1]!.result.text).toContain('捨てた: 死んだ（命が変わった）。手は動いていない');
   });
+  it('an item dropped behind a cancelled one (the body\'s `code` cancelled, its sentence "（cancelled）") is told dropped, is not counted a failure of its own hands, and does not read as a failed hand (amendment A-2 2)', async () => {
+    const { f, queue, spec, take } = setup();
+    await queue.add(spec(wait1));
+    await queue.add(spec(dig(1)));
+    take();
+    const q2 = idOf(f, 'q2');
+    f.running.shift();
+    f.queued.splice(0, 1);
+    f.receipts.push(completed(idOf(f, 'q1'), { outcome: 'cancelled', unit: { goal: 'partial', end: 'cut', released: true, startedAt: AT },
+      result: actResult([{ status: 'stopped', do: 'wait', goal: 'partial', end: 'cut', cutBy: 'cancelled', motorOps: 1 }], { ok: false, stoppedBy: 'cancelled' }) }));
+    f.receipts.push(completed(q2, { outcome: 'cancelled', failureType: 'queue_dropped', result: '捨てた: 頼る項目 q1 が済んでいない（cancelled）。手は動いていない',
+      unit: { goal: 'not_started', end: 'not_run', released: true, droppedBecause: { code: 'depends_failed', item: { queue: 't1:hb-1:41', item: 'q1' } } } satisfies ItemOutcome }));
+    f.poll();
+    await settle();
+    const news = queue.take();
+    const dropped = news.find(item => item.item === 'q2')!;
+    expect(dropped.kind).toBe('dropped');
+    expect(dropped.result.text).toBe('捨てた: 頼る項目 q1 が済んでいない（cancelled）。手は動いていない');
+    expect(dropped.result.text).not.toMatch(/failed|失敗/u);
+    // a dropped item is "taken": nothing of its own is counted, and a hand that never moved is not a failed hand
+    expect(f.control.store.unitOf(q2)).toMatchObject({ goal: 'not_started', end: 'not_run' });
+    expect(dependStateOf(unitView(f.control.store.unitOf(q2)!))).toBe('failed');
+    // the item the cancel stopped says it was cut from outside
+    const cut = news.find(item => item.item === 'q1')!;
+    expect(cut.result.text).toContain('取り消しで止められた');
+    expect(cut.result.text).not.toMatch(/失敗|進んでいない/u);
+  });
   it('replace-keeps-explicit-independent: the named item and the ones behind it that do not say they are independent go; the independent one stays (the ones that relied on a gone one go too)', async () => {
     const sample = fixture('continue/replace-keeps-explicit-independent.json');
     const { f, queue, spec, take } = setup();

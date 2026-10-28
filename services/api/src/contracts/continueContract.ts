@@ -25,6 +25,8 @@ export interface Progress {
   done: number; left: number | null; at?: ActPos; msPerUnit?: number;
   work?: { dug: number; placed?: number; placeAttempts?: number; stockUsed?: number; placedConfirmed?: number };
   fromStopM?: number; searchEndM?: number;
+  /** vertical (amendment A-1 6): the ore the hand saw on the way, a kind and a place each, at most 8. Told, never followed. */
+  seen?: { block: string; at: ActPos }[];
   lastSearch?: { status: 'success' | 'partial' | 'timeout' | 'no_path'; len: number; nodes: number; ms: number; endM?: number;
     blockedAround?: { at: ActPos; block: string; diggable: boolean }[] };
 }

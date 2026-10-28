@@ -11,8 +11,17 @@ import { skillSchema, validControlPoll, validSkillInput, validSkills } from '../
  * production VM from `minecraftrel55…/dist`), unchanged: when the body's catalog changes, the fixture is made again from its build and these tests say whether the
  * head takes it.
  */
-const FIXTURES = ['rel55', 'rel56'] as const;
-const catalogOf = (release: string) => JSON.parse(readFileSync(new URL(`./fixtures/minecraft-body-act-catalog-${release}.json`, import.meta.url), 'utf8')) as MinecraftSkillDefinition[];
+/**
+ * rel55 and rel56 are the `act` definitions of those releases, unchanged. `produced` is the act of the body's own catalog of the continue version (`fixtures/continue/produced/catalog.json`,
+ * made by the body's `continue-produce.ts` and copied by `scripts/sync-body-produced.sh`): it has the `vertical` hand and `dependsOn`, 49 properties in the hand. The comparison with the head's
+ * hand (kind for kind, field for field) is made against that one, since the head's hand has moved on from rel56.
+ */
+const FIXTURES = ['rel55', 'rel56', 'produced'] as const;
+const catalogOf = (release: string): MinecraftSkillDefinition[] => release === 'produced'
+  ? (JSON.parse(readFileSync(new URL('./fixtures/continue/produced/catalog.json', import.meta.url), 'utf8')) as { offered: MinecraftSkillDefinition[] }).offered.filter(skill => skill.name === 'act')
+  : JSON.parse(readFileSync(new URL(`./fixtures/minecraft-body-act-catalog-${release}.json`, import.meta.url), 'utf8')) as MinecraftSkillDefinition[];
+/** The most properties a hand had in each: 48 was the head's limit for rel55 and rel56; the continue version's hand has 49 and the limit is 56. */
+const HAND_PROPERTIES: Readonly<Record<(typeof FIXTURES)[number], number>> = { rel55: 48, rel56: 48, produced: 56 };
 
 const NOW = Date.parse('2026-10-26T07:00:00.000Z');
 function poll(skills: unknown): unknown {
@@ -42,8 +51,8 @@ describe.each(FIXTURES)('the body\'s actual act catalog (%s) is taken by the hea
     kinds.anyOf = [...kinds.anyOf, ...kinds.anyOf].slice(0, 17);
     expect(validControlPoll(poll(cut), NOW)).toBe(false);
   });
-  it('keeps the limits the catalog sits near: the hand\'s 48 properties, the schema\'s 16,000 characters, the poll\'s 1 MiB', () => {
-    expect(Object.keys((properties.hands as any).items.properties).length).toBeLessThanOrEqual(48);
+  it('keeps the limits the catalog sits near: the hand\'s properties, the schema\'s 16,000 characters, the poll\'s 1 MiB', () => {
+    expect(Object.keys((properties.hands as any).items.properties).length).toBeLessThanOrEqual(HAND_PROPERTIES[release]);
     expect(JSON.stringify(act.inputSchema).length).toBeLessThanOrEqual(16_000);
     expect(JSON.stringify(poll(catalog)).length).toBeLessThan(1024 * 1024);
   });
@@ -61,13 +70,18 @@ describe.each(FIXTURES)('the body\'s actual act catalog (%s) is taken by the hea
   });
 });
 
-describe('the body\'s act catalog of run 39 (rel56): the hands that take a range', () => {
-  const catalog = catalogOf('rel56');
+describe('the body\'s act catalog of the continue version (produced): the hands that take a range, and vertical', () => {
+  const catalog = catalogOf('produced');
   const act = catalog.find(skill => skill.name === 'act')!;
   const hands = (act.inputSchema as any).properties.hands.items.properties;
   const takes = (hand: Record<string, unknown>) => validSkillInput({ hands: [hand], why: '[p1] x' }, act.inputSchema);
   it('names every kind of hand the head sends', () => {
-    expect(hands.do.enum).toEqual(expect.arrayContaining(['go', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt']));
+    expect(hands.do.enum).toEqual(expect.arrayContaining(['go', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt', 'vertical']));
+  });
+  it('has 49 properties in the hand, within the head\'s 56 (the head\'s own hand has the same 49)', () => {
+    expect(Object.keys(hands)).toHaveLength(49);
+    expect(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties)).toHaveLength(49);
+    expect(Object.keys(hands).length).toBeLessThanOrEqual(56);
   });
   it('is the head\'s hand, kind for kind and field for field (a drift between the two is the way rel55 was refused)', () => {
     const theirs = ACT_INPUT_SCHEMA.properties.hands.items.properties as Record<string, any>;
@@ -95,11 +109,19 @@ describe('the body\'s act catalog of run 39 (rel56): the hands that take a range
     expect(takes({ do: 'make', item: 'wooden_pickaxe', count: 1 })).toBe(true);
     expect(takes({ do: 'portal', at: [{ x: 1, y: 2, z: 3 }], axis: 'x', block: 'obsidian', enter: true, canPlace: ['cobblestone'], maxPlace: 6, seconds: 60 })).toBe(true);
     expect(takes({ do: 'smelt', items: [{ item: 'raw_iron', count: 16 }], fuel: 'coal', fuelCount: 2, furnaces: 2, at: [{ x: 1, y: 2, z: 3 }], seconds: 30 })).toBe(true);
+    // the continue version: vertical in each of its three forms, dependsOn on any hand
+    expect(takes({ do: 'vertical', dir: 'down', shape: 'stairs', toward: 'south', toY: 10, canDig: ['stone', 'dirt'], liquid: 'stop', maxDig: 200, maxPlace: 100, range: 2, seconds: 120 })).toBe(true);
+    expect(takes({ do: 'vertical', dir: 'down', shape: 'shaft', toY: -50, canDig: ['stone'], canPlace: ['cobblestone'], maxPlace: 30, liquid: 'seal' })).toBe(true);
+    expect(takes({ do: 'vertical', dir: 'up', shape: 'pillar', toY: 63, canDig: ['stone'], canPlace: ['cobblestone'], liquid: 'seal_water', seconds: 60 })).toBe(true);
+    expect(takes({ do: 'wait', seconds: 1, dependsOn: [] })).toBe(true);
   });
   it('refuses a field of the wrong type or range', () => {
     expect(takes({ do: 'fight', target: '#12', stance: 'hide' })).toBe(false);
     expect(takes({ do: 'portal', at: [{ x: 1, y: 2, z: 3 }], axis: 'y' })).toBe(false);
     expect(takes({ do: 'go', to: { x: 1, y: 2, z: 3 }, maxDrop: 11 })).toBe(false);
     expect(takes({ do: 'smelt', items: [{ item: 'raw_iron', count: 16 }], furnaces: 5 })).toBe(false);
+    expect(takes({ do: 'vertical', dir: 'sideways', shape: 'stairs', toY: 10, canDig: ['stone'], liquid: 'stop' })).toBe(false);
+    expect(takes({ do: 'vertical', dir: 'down', shape: 'diagonal', toY: 10, canDig: ['stone'], liquid: 'stop' })).toBe(false);
+    expect(takes({ do: 'vertical', dir: 'down', shape: 'stairs', toY: 10, canDig: ['stone'], liquid: 'stop', maxDig: 201 })).toBe(false);
   });
 });
