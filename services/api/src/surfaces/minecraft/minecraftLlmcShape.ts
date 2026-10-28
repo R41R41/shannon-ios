@@ -1,4 +1,4 @@
-import { handFieldNames, type HandKind } from '../../contracts/minecraftActContract.js';
+import { handFieldNames, slotWordOf, type HandKind } from '../../contracts/minecraftActContract.js';
 
 /**
  * The act as the model writes it, made ready for the body (r2, 2026-10-22; contract `minecraftActContract.ts`): put into the contract's
@@ -65,6 +65,7 @@ export function normalizeActInput(input: unknown): { input: unknown; fixes: stri
   const act = plainRecord(input);
   if (!act) return { input, fixes: [] };
   const fixes: string[] = [];
+  let spelled = false;
   const out = applyFixes(act, ACT_FIXES, fixes, '');
   const stopIf = plainRecord(out.stopIf);
   if (stopIf) out.stopIf = applyFixes(stopIf, [listOf('blockChanged', isPos)], fixes, 'stopIf');
@@ -73,11 +74,13 @@ export function normalizeActInput(input: unknown): { input: unknown; fixes: stri
       const hand = plainRecord(value);
       if (!hand) return value;
       const fixed = { ...hand };
+      // A-11 3: a plain variation of a hand word in `slot` (off-hand, main_hand…) is the body's word; not said (it is a spelling, not a change of meaning).
+      if (typeof fixed.slot === 'string' && slotWordOf(fixed.slot) !== fixed.slot) { fixed.slot = slotWordOf(fixed.slot); spelled = true; }
       moveWhy(out, fixed, `手${index + 1}`, fixes);
       return applyFixes(fixed, HAND_FIXES, fixes, `手${index + 1}`);
     });
   }
-  return { input: fixes.length ? out : input, fixes };
+  return { input: fixes.length || spelled ? out : input, fixes };
 }
 
 type Schema = Readonly<Record<string, unknown>>;

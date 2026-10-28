@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { planPath, type PlanPromise } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import type { ActInput } from '../src/contracts/minecraftActContract.js';
+import { slotWordOf, type ActInput } from '../src/contracts/minecraftActContract.js';
+import { expandShortAct } from '../src/contracts/minecraftActShortContract.js';
+import { llmcInputProblem, llmcPrepare } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { createAnthropicFcaModel, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { notedMessages } from '../src/infra/models/anthropic/anthropicFcaTransient.js';
 import { estimatedAnthropicCostUsd } from '../src/infra/models/claude/claudeUsage.js';
@@ -17,6 +19,7 @@ import { candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/
 import { BenchC, benchC, iso, until } from './helpers/benchC.js';
 import { message } from './support/anthropicFixtures.js';
 import { LLMC_TOOLS } from './support/minecraftBodyRequests.js';
+import { layersMap } from './support/minecraftMaps.js';
 
 /**
  * Amendment A-10 (owner's decision 2026-10-29): an act that would break an open promise is decided again once by Opus before it is queued. Nothing here calls a model: the client is a
@@ -82,14 +85,14 @@ describe('A-10 2: the materials of a make and a craft come from a small table of
     const open = [promise(1, 'planks', 4, '地下の作業台')];
     const pack = frame({ spruce_planks: 7 });
     expect(breakingOf(open, [{ do: 'make', item: 'wooden_pickaxe' }], pack)).toEqual({
-      lines: ['この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 5 を使い、残り 2）'], uncounted: [] });
+      lines: ['この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 5 を使い、残り 2）'], keptBy: [], uncounted: [] });
     expect(breakingOf(open, [{ do: 'make', item: 'crafting_table' }], pack).lines).toHaveLength(1);
     expect(breakingOf(open, [{ do: 'make', item: 'stick' }], pack).lines).toEqual([]);
     expect(breakingOf(open, [{ do: 'craft', item: 'stone_pickaxe', count: 1 }], frame({ spruce_planks: 7, cobblestone: 3, stick: 2 })).lines).toEqual([]);
     // a spend of "planks" (a recipe does not say which kind) counts against a promise of one kind
     expect(breakingOf([promise(1, 'spruce_planks', 4, '作業台')], [{ do: 'make', item: 'wooden_pickaxe' }], pack).lines).toHaveLength(1);
     expect(breakingOf(open, [{ do: 'make', item: 'piston' }, { do: 'craft', item: 'wooden_pickaxe' }], pack).uncounted).toEqual(['make piston']);
-    expect(breakingOf(open, [{ do: 'make', item: 'piston' }], pack)).toEqual({ lines: [], uncounted: ['make piston'] });
+    expect(breakingOf(open, [{ do: 'make', item: 'piston' }], pack)).toEqual({ lines: [], keptBy: [], uncounted: ['make piston'] });
   });
 });
 
@@ -243,7 +246,7 @@ beforeEach(() => { vi.spyOn(console, 'info').mockImplementation(() => {}); vi.sp
 const SLOW = { timeout: 60_000 };
 
 /** A step of the real head with an open promise of 4 planks and `inventory`, whose first model is a scripted Sonnet that chose `sonnet` and whose Opus answers as scripted. */
-async function scene(options: { sonnet: Record<string, unknown>; opus: Answer[]; inventory: Record<string, number>; promise?: boolean; budget?: boolean }) {
+async function scene(options: { sonnet: Record<string, unknown>; opus: Answer[]; inventory: Record<string, number>; promise?: boolean; budget?: boolean; instead?: string }) {
   const { client, sent } = scriptedClient(sonnetSays(options.sonnet), options.opus);
   const usages: AnthropicFcaUsage[] = [];
   const booked: number[] = [];
@@ -253,7 +256,7 @@ async function scene(options: { sonnet: Record<string, unknown>; opus: Answer[];
   const bench = benchC({ scene: 'a10-redecide', model: { model, name: SONNET } });
   benches.push(bench);
   await bench.begin();
-  if (options.promise !== false) expect((await bench.planUpdate('promise', { ops: [{ op: 'promise', item: 'planks', count: 4, use: '地下の作業台' }] })).ok).toBe(true);
+  if (options.promise !== false) expect((await bench.planUpdate('promise', { ops: [{ op: 'promise', item: 'planks', count: 4, use: '地下の作業台', ...(options.instead ? { instead: options.instead } : {}) }] })).ok).toBe(true);
   bench.body.inventory = options.inventory;
   await bench.spin(3);
   const chosen = await firstDecides(model, bench.run, options.inventory);
@@ -442,5 +445,170 @@ describe('A-10 through the real tool: an act that would break an open promise is
     await act();
     await settle();
     expect(booked).toEqual([]);
+  });
+});
+
+// ---- A-11 ------------------------------------------------------------------------------------------------------------------------------------
+/** A map as the contract draws it (`layersMap`), with the symbol of one cell changed. */
+function mapWith(symbol: string, cell: { x: number; y: number; z: number }): string {
+  const lines = layersMap({ x: 0, y: 64, z: 0 }).split('\n');
+  const at = lines.findIndex(line => line === `y=${cell.y}`);
+  const row = lines[at + 2 + (cell.z + 7)]!.split(' ');
+  row[1 + (cell.x + 7)] = symbol;
+  lines[at + 2 + (cell.z + 7)] = row.join(' ');
+  return lines.join('\n');
+}
+const seen = (items: Record<string, number>, extra: Record<string, unknown> = {}): BodyObservation => {
+  const base = frame(items);
+  return { ...base, state: { ...base.state, world: { ...(base.state.world as object), ...extra } } } as BodyObservation;
+};
+const INSTEAD = [[{ k: 'have', item: 'crafting_table', n: 1 }], [{ k: 'near', block: 'crafting_table', r: 8 }]] as never;
+const withInstead = (instead: unknown, state: PlanPromise['state'] = 'open'): PlanPromise => ({ ...promise(1, 'planks', 4, '地下の作業台'), state, instead: instead as never });
+const KEPT = '約束 #1 は代わりの条件（作業台 1）で満たす見込み';
+const BURN = { do: 'smelt', items: [{ item: 'raw_iron', count: 6 }], fuel: 'spruce_planks', fuelCount: 6 };
+
+describe('A-11 1: an act whose hands make the promise\'s instead hold is not one that breaks it', () => {
+  const pack = seen({ spruce_planks: 7, raw_iron: 6 });
+  it('a craft of the table gives it (the table\'s own number), so the promise is kept by its instead and not broken', () => {
+    expect(breakingOf([withInstead(INSTEAD)], [{ do: 'craft', item: 'crafting_table' }], seen({ spruce_planks: 7 }))).toEqual({ lines: [], keptBy: [KEPT], uncounted: [] });
+    // the same act with no instead on the promise is a breaking one, as in A-10
+    expect(breakingOf([promise(1, 'planks', 4, '地下の作業台')], [{ do: 'craft', item: 'crafting_table' }], seen({ spruce_planks: 7 })).lines).toHaveLength(1);
+  });
+  it('a dig of a cell the map draws as a work table gives one (collect not false); the map must show the cell', () => {
+    const map = mapWith('T', { x: 2, y: 64, z: 1 });
+    const hands = (extra: object = {}, at = { x: 2, y: 64, z: 1 }) => [{ do: 'dig', at: [at], ...extra }, BURN];
+    expect(breakingOf([withInstead(INSTEAD)], hands(), seen({ spruce_planks: 7, raw_iron: 6 }, { localMap: map }))).toEqual({ lines: [], keptBy: [KEPT], uncounted: [] });
+    // collect false: nothing is picked up; a cell that is not the table; a cell the map does not show; a relative cell; no map: the promise is broken as before
+    for (const [label, handsOf, world] of [['collect false', hands({ collect: false }), { localMap: map }], ['another cell', hands({}, { x: 3, y: 64, z: 1 }), { localMap: map }],
+      ['off the map', hands({}, { x: 40, y: 64, z: 1 }), { localMap: map }], ['relative', hands({ rel: true }), { localMap: map }], ['no map', hands(), {}]] as const) {
+      const got = breakingOf([withInstead(INSTEAD)], handsOf, seen({ spruce_planks: 7, raw_iron: 6 }, world));
+      expect([label, got.lines.length, got.keptBy]).toEqual([label, 1, []]);
+    }
+  });
+  it('a near clause holds when the scan shows it now (the words carry the distance) or when a hand places the block; else it does not', () => {
+    const near = [[{ k: 'near', block: 'crafting_table', r: 8 }]] as never;
+    const scanned = (found: unknown[]) => seen({ spruce_planks: 7, raw_iron: 6 }, { utilities: { radius: 16, dim: 'overworld', scanned: true, found } });
+    expect(breakingOf([withInstead(near)], [BURN], scanned([{ block: 'crafting_table', distance: 2 }])).keptBy).toEqual(['約束 #1 は代わりの条件（近くに作業台 2m）で満たす見込み']);
+    expect(breakingOf([withInstead(near)], [{ do: 'place', block: 'crafting_table', at: [{ x: 1, y: 64, z: 1 }] }, BURN], scanned([])).keptBy)
+      .toEqual(['約束 #1 は代わりの条件（近くに作業台）で満たす見込み']);
+    expect(breakingOf([withInstead(near)], [BURN], scanned([{ block: 'crafting_table', distance: 20 }])).lines).toHaveLength(1);
+    // not scanned is not "none": it cannot be told, so the promise is still broken
+    expect(breakingOf([withInstead(near)], [BURN], seen({ spruce_planks: 7, raw_iron: 6 })).lines).toHaveLength(1);
+  });
+  it('one alternative whose clauses all hold is enough; a clause that does not hold (or one the head cannot tell) spoils its alternative only', () => {
+    const table = [{ k: 'have', item: 'crafting_table', n: 1 }];
+    const both = [[...table, { k: 'have', item: 'furnace', n: 1 }]] as never;
+    expect(breakingOf([withInstead(both)], [{ do: 'craft', item: 'crafting_table' }], seen({ spruce_planks: 7 })).lines).toHaveLength(1);
+    expect(breakingOf([withInstead([[{ k: 'hp', n: 10 }], table])], [{ do: 'craft', item: 'crafting_table' }], seen({ spruce_planks: 7 })).keptBy).toEqual([KEPT]);
+    expect(breakingOf([withInstead([[...table, { k: 'dim', dim: 'the_nether' }]])], [{ do: 'craft', item: 'crafting_table' }], seen({ spruce_planks: 7 })).lines).toHaveLength(1);
+    // what the pack holds counts too, less what the act spends of it
+    expect(breakingOf([withInstead(INSTEAD)], [BURN], seen({ spruce_planks: 7, raw_iron: 6, crafting_table: 1 })).keptBy).toEqual([KEPT]);
+    expect(breakingOf([withInstead([[{ k: 'have', item: 'planks', n: 5 }]])], [BURN], pack).lines).toHaveLength(1);
+  });
+  it('a thing the table does not have is not said to be gained; a promise already held by its instead is not counted at all', () => {
+    expect(breakingOf([withInstead([[{ k: 'have', item: 'piston', n: 1 }]])], [{ do: 'craft', item: 'piston' }, BURN], pack).lines).toHaveLength(1);
+    expect(breakingOf([withInstead([[{ k: 'have', item: 'crafting_table', n: 1 }]])], [{ do: 'make', item: 'piston' }, BURN], pack).lines).toHaveLength(1);
+    expect(breakingOf([withInstead(INSTEAD, 'kept_by_instead')], [BURN], pack)).toEqual({ lines: [], keptBy: [], uncounted: [] });
+    // a pickup that names the item takes at least one
+    expect(breakingOf([withInstead(INSTEAD)], [{ do: 'pickup', target: 'crafting_table' }, BURN], pack).keptBy).toEqual([KEPT]);
+  });
+});
+
+describe('A-11 3: the plain variations of the hand words are the body\'s words', () => {
+  const problem = (input: unknown) => llmcInputProblem('mc.act', expandShortAct(input).input);
+  it('equip with slot=off-hand, off_hand, offhand, main-hand, main_hand, mainhand, hand: read, and no problem', () => {
+    for (const [word, slot] of [['off-hand', 'offhand'], ['off_hand', 'offhand'], ['offhand', 'offhand'], ['main-hand', 'hand'], ['main_hand', 'hand'], ['mainhand', 'hand'], ['hand', 'hand']] as const) {
+      for (const line of [`equip shield slot=${word}`, `equip shield ${word}`, `json {"do":"equip","item":"shield","slot":"${word}"}`]) {
+        const expanded = expandShortAct({ hands: [line], why: '盾を持つ' });
+        expect([line, (expanded.input as ActInput).hands[0]!.slot]).toEqual([line, slot]);
+        expect(problem({ hands: [line], why: '盾を持つ' })).toBeNull();
+      }
+      // a hand written as an object (no line among them) is read the same way, and so is the head's own shaping of a raw input
+      expect(problem({ hands: [{ do: 'equip', item: 'shield', slot: word }], why: '盾を持つ' })).toBeNull();
+      expect(((llmcPrepare('mc.act', { hands: [{ do: 'equip', item: 'shield', slot: word }], why: '盾' }).input) as ActInput).hands[0]!.slot).toBe(slot);
+    }
+  });
+  it('a word that is no variation of a slot is still refused', () => {
+    expect(problem({ hands: ['equip shield slot=pocket'], why: 'x' })).not.toBeNull();
+    expect(slotWordOf('knee')).toBe('knee');
+  });
+});
+
+describe('A-11 2: an act of Opus that the checks before sending refuse is mended once', () => {
+  const BAD = { hands: ['go'], why: '[p1] どこかへ' };
+  it('the mend is the same request with the act and the refusal added; the mended act goes in; the record says repairs 1 with the refusal, and both requests are paid', SLOW, async () => {
+    const { bench, sent, usages, act, queued, rows, booked, settle } = await scene({ sonnet: PICKAXE, inventory: { spruce_planks: 7 }, budget: true,
+      opus: [opusSays({ name: 'mc_act', input: BAD }), opusSays({ name: 'mc_act', input: { hands: ['wait 5'], why: '[p1] 約束の板を残す' } })] });
+    const result = await act();
+    expect(result.ok).toBe(true);
+    await settle();
+    expect(opusSent(sent)).toHaveLength(2);
+    const live = (body: Record<string, any>) => (body.messages as Array<Record<string, any>>).at(-1)!.content as string;
+    const [first, again] = opusSent(sent);
+    // the mend: the first ask's request with the repair note after the first note (the act as written, what refused it, one line)
+    expect(live(again!.body).startsWith(live(first!.body))).toBe(true);
+    const added = live(again!.body).slice(live(first!.body).length);
+    expect(added).toMatch(/^\n\nOpus の次の act: \{.*"書き方の誤り":".*go.*\}。送る前の確認が断った: 手の書き方が読めない.+。書き方を直してください$/u);
+    expect(again!.body.system).toEqual(first!.body.system);
+    await until(() => queued().length > 0);
+    expect(queuedHands(queued)).toEqual([[{ do: 'wait', seconds: 5 }]]);
+    expect(result.text).toContain('決め直し（Opus）: 手を替えた');
+    const [row] = rows();
+    expect(rows()).toHaveLength(1);
+    expect(row).toMatchObject({ outcome: 'used', count: 1, repairs: 1 });
+    expect(String(row!.refusedBy).length).toBeGreaterThan(0);
+    expect(row!.repairRefusedBy).toBeUndefined();
+    // both requests are in the record, as requests of their own, and in the budget's count
+    expect(bench.events().filter(item => item.ev === 'request' && item.kind === 'redecide').map(item => item.id)).toEqual(['r0001', 'r0002']);
+    const opus = usages.filter(usage => usage.model === OPUS);
+    expect(opus).toHaveLength(2);
+    const total = opus[0]!.estimatedCostUsd + opus[1]!.estimatedCostUsd;
+    expect(row!.costUsd).toBeCloseTo(total, 10);
+    expect(booked).toEqual([Math.ceil(total * 160)]);
+  });
+
+  it('a mended act that is refused too: the first model\'s act goes in as it was, once more is not asked, and the record has both refusals', SLOW, async () => {
+    const { sent, act, queued, rows } = await scene({ sonnet: PICKAXE, inventory: { spruce_planks: 7 },
+      opus: [opusSays({ name: 'mc_act', input: BAD }), opusSays({ name: 'mc_act', input: { hands: ['walk'], why: '[p1] まだ' } }), opusSays({ name: 'mc_act', input: { hands: ['wait 1'] } })] });
+    const result = await act();
+    expect(result.ok).toBe(true);
+    expect(opusSent(sent)).toHaveLength(2);
+    await until(() => queued().length > 0);
+    expect(queuedHands(queued)).toEqual([[{ do: 'make', item: 'wooden_pickaxe' }]]);
+    expect(result.text).not.toContain('決め直し');
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ outcome: 'kept_first', why: 'refused', repairs: 1 });
+    expect(String(rows()[0]!.refusedBy).length).toBeGreaterThan(0);
+    expect(String(rows()[0]!.repairRefusedBy).length).toBeGreaterThan(0);
+  });
+
+  it('an act that passes the checks is not mended; an act the mend asks for and does not get (no act, an error) leaves the first act and says so', SLOW, async () => {
+    const fine = await scene({ sonnet: PICKAXE, inventory: { spruce_planks: 7 }, opus: [opusSays({ name: 'mc_act', input: { hands: ['wait 5'], why: '[p1] 待つ' } })] });
+    await fine.act();
+    expect(opusSent(fine.sent)).toHaveLength(1);
+    expect(fine.rows()[0]!.repairs).toBeUndefined();
+    const lost = await scene({ sonnet: PICKAXE, inventory: { spruce_planks: 7 }, opus: [opusSays({ name: 'mc_act', input: BAD }), new Error('connection reset')] });
+    expect((await lost.act()).ok).toBe(true);
+    await until(() => lost.queued().length > 0);
+    expect(queuedHands(lost.queued)).toEqual([[{ do: 'make', item: 'wooden_pickaxe' }]]);
+    expect(lost.rows()[0]).toMatchObject({ outcome: 'kept_first', why: 'refused', repairs: 1 });
+    expect(String(lost.rows()[0]!.repairFailed)).toContain('FCA_REDECIDE_FAILED');
+  });
+});
+
+describe('A-11 1 through the real tool: a promise kept by its instead is said so and Opus is not asked', () => {
+  it('a craft of the work table with 7 planks and a promise of 4 that names the table as its instead: the answer says kept, the act is queued, no request to Opus', SLOW, async () => {
+    const { bench, sent, chosen, act, queued, rows } = await scene({ sonnet: { hands: ['craft crafting_table'], why: '[p1] 作業台を作る' }, inventory: { spruce_planks: 7 }, opus: [],
+      instead: 'have:crafting_table>=1|near:crafting_table~8' });
+    expect(chosen.hands).toEqual([{ do: 'craft', item: 'crafting_table' }]);
+    expect(bench.plan.tree().promises[0]!.instead).toBeDefined();
+    const result = await act();
+    expect(result.ok).toBe(true);
+    expect(opusSent(sent)).toHaveLength(0);
+    await until(() => queued().length > 0);
+    const lines = result.text.split(/\r?\n/u);
+    expect(lines).toContain(KEPT);
+    expect(lines.some(line => line.includes('割る見込み'))).toBe(false);
+    expect(rows()).toEqual([expect.objectContaining({ asked: false, count: 0, satisfied: [KEPT], breaking: [] })]);
   });
 });

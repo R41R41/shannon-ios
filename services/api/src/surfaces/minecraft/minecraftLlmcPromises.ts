@@ -5,7 +5,8 @@ import { deathBetween, type DeathCounter, type InventoryEvent } from '../../cont
 import { carried, clauseHolds, clauseLack, clauseText, conditionHolds, doneFacts, validCondition, type DoneFacts } from './minecraftConditions.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import type { OnceFact } from './minecraftLlmcOnceFacts.js';
-import { materialsOf } from './minecraftLlmcRecipes.js';
+import { materialsOf, recipeOf } from './minecraftLlmcRecipes.js';
+import { readLayers } from './minecraftLlmcPreflightMap.js';
 
 /**
  * The promises' ledger, the head's half (the continue contract, chapter 3; amendment A-1 4). Pure: the plan tool's owner (`fcaPlanTools.ts`) holds the tree and the
@@ -414,7 +415,7 @@ function holdWords(condition: ActCondition, facts: DoneFacts): string | null {
  * of planks, sticks and the rest, taking what she carries first). `uncounted`: the make or craft whose item the table does not have: nothing is counted for it, and it is said so.
  */
 export function spendsOf(hands: readonly { do?: string; item?: string; items?: readonly { item: string; count?: number }[]; fuel?: string; fuelCount?: number;
-  block?: string; at?: readonly unknown[]; n?: number; op?: string; count?: number }[], pack?: ReadonlyMap<string, number>): { spends: { item: string; count: number }[]; uncounted: string[] } {
+  block?: string; at?: readonly unknown[]; n?: number; op?: string; count?: number; collect?: boolean; rel?: boolean; target?: string }[], pack?: ReadonlyMap<string, number>): { spends: { item: string; count: number }[]; uncounted: string[] } {
   const out: { item: string; count: number }[] = [], uncounted: string[] = [];
   for (const hand of hands) {
     if (hand.do === 'smelt') {
@@ -441,25 +442,87 @@ const touches = (spend: string, promised: string): boolean => isItemOf(spend, pr
  * 「この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 6 を使い、残り 1）」. Facts the head counts; the choice stays the model's. `uncounted` (A-10 2): the makes and crafts it
  * could not count, for the decision's record.
  */
-export function breakingOf(promises: readonly PlanPromise[], hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): { lines: string[]; uncounted: string[] } {
+export function breakingOf(promises: readonly PlanPromise[], hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): { lines: string[]; keptBy: string[]; uncounted: string[] } {
   const facts = doneFacts(observation);
-  if (!facts) return { lines: [], uncounted: [] };
+  if (!facts) return { lines: [], keptBy: [], uncounted: [] };
   const { spends, uncounted } = spendsOf(hands, facts.counts);
-  if (!spends.length) return { lines: [], uncounted };
-  const lines: string[] = [];
+  if (!spends.length) return { lines: [], keptBy: [], uncounted };
+  const lines: string[] = [], keptBy: string[] = [];
   for (const promise of promises.filter(item => item.state === 'open').sort((a, b) => a.id - b.id)) {
     const used = spends.filter(spend => touches(spend.item, promise.item)).reduce((total, spend) => total + spend.count, 0);
     if (!used) continue;
     const have = haveIn(promise.item, facts);
     if (used <= freeOutside(promises, promise.item, have)) continue;
+    // A-11 1: an act whose hands make the promise's `instead` hold (a work table picked up or made) keeps the promise; it is not one that breaks it.
+    const instead = promise.instead && validCondition(promise.instead) ? insteadAfter(promise.instead as ActCondition, hands, facts, spends, observation) : null;
+    if (instead) {
+      keptBy.push(`約束 #${promise.id} は代わりの条件（${instead}）で満たす見込み`);
+      continue;
+    }
     const unit = promise.item === 'food' ? ' 点' : '';
     const link = /[用分]$/u.test(promise.use) ? 'の' : '用の';
     lines.push(`この act は約束 #${promise.id}（${promise.use}${link}${itemWord(promise.item)} ${promise.count}${unit}）を割る見込み（${itemWord(promise.item)} ${round1(used)}${unit} を使い、残り ${Math.max(0, round1(have - used))}${unit}）`);
   }
-  return { lines, uncounted };
+  return { lines, keptBy, uncounted };
 }
 export const breakingWords = (promises: readonly PlanPromise[], hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): string[] =>
   breakingOf(promises, hands, observation).lines;
+
+/**
+ * What the act's hands bring in, as far as the head can tell from their arguments and the frame (A-11 1): a craft or a make gives what the table says (a craft gives whole batches), a dig of
+ * a cell the map draws as a work table (`T`) or a bed (`B`) picks it up unless it says `collect: false`, and a pickup that names an item takes at least one. A cell the map does not
+ * show, a relative one, or an item the table does not have brings in nothing here (never a guess).
+ */
+function gainsOf(hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): { item: string; count: number }[] {
+  const out: { item: string; count: number }[] = [];
+  const world = observation?.state.world;
+  const map = world && typeof world === 'object' && !Array.isArray(world) && typeof (world as { localMap?: unknown }).localMap === 'string' ? readLayers((world as { localMap: string }).localMap) : null;
+  for (const hand of hands) {
+    if ((hand.do === 'craft' || hand.do === 'make') && hand.item) {
+      const recipe = recipeOf(hand.item);
+      if (recipe) out.push({ item: hand.item.replace(/^minecraft:/u, ''), count: Math.ceil(Math.max(1, hand.count ?? 1) / recipe.yields) * recipe.yields });
+    } else if (hand.do === 'dig' && hand.collect !== false && hand.rel !== true && map) {
+      for (const cell of hand.at ?? []) {
+        const at = cell as { x?: unknown; y?: unknown; z?: unknown };
+        if (![at.x, at.y, at.z].every(value => typeof value === 'number' && Number.isInteger(value))) continue;
+        const symbol = map.layers.get(at.y as number)?.get(`${at.x as number},${at.z as number}`);
+        if (symbol === 'T') out.push({ item: 'crafting_table', count: 1 });
+        else if (symbol === 'B') out.push({ item: 'bed', count: 1 });
+      }
+    } else if (hand.do === 'pickup' && typeof hand.target === 'string' && /^[a-z][a-z0-9_]*$/u.test(hand.target)) out.push({ item: hand.target, count: 1 });
+  }
+  return out;
+}
+
+/**
+ * Whether the act leaves the promise's `instead` holding, and in what words (A-11 1): one alternative of the condition whose clauses all hold by this rule, written as `holdWords` writes them
+ * (「作業台 1」「近くに作業台 2m」). A `have` clause (item n) holds when what she carries, plus what the hands bring in, less what they spend of it, is n or more; a `near` clause (block r)
+ * holds when it holds now, or when a hand places that block. Every other kind of clause, and a `have` that asks for fewer, is not something the head can tell, and the alternative then does not hold.
+ */
+function insteadAfter(condition: ActCondition, hands: Parameters<typeof actSpends>[0], facts: DoneFacts, spends: ReadonlyArray<{ item: string; count: number }>,
+  observation: BodyObservation | null): string | null {
+  const gains = gainsOf(hands, observation);
+  for (const alternative of condition) {
+    const words: string[] = [];
+    for (const clause of alternative) {
+      if (clause.k === 'have' && (clause.op ?? '>=') === '>=') {
+        const brought = gains.filter(gain => touches(gain.item, clause.item)).reduce((total, gain) => total + gain.count, 0);
+        const used = spends.filter(spend => touches(spend.item, clause.item)).reduce((total, spend) => total + spend.count, 0);
+        const after = carried(facts.counts, clause.item) + brought - used;
+        if (after < clause.n) break;
+        words.push(`${itemWord(clause.item)} ${round1(after)}`);
+      } else if (clause.k === 'near') {
+        if (clauseHolds(clause, facts) === true) {
+          const found = facts.utilities?.found.filter(item => item.block === clause.block).sort((left, right) => left.distance - right.distance)[0];
+          words.push(`近くに${itemWord(clause.block)}${found ? ` ${round1(found.distance)}m` : ''}`);
+        } else if (hands.some(hand => hand.do === 'place' && hand.block !== undefined && hand.at?.length && touches(hand.block, clause.block))) words.push(`近くに${itemWord(clause.block)}`);
+        else break;
+      } else break;
+      if (words.length === alternative.length) return words.join('・');
+    }
+  }
+  return null;
+}
 
 /**
  * A-9: the pack's lines with the open promises' shares written where the model counts what it can spend: `spruce_planks×7（約束 #1 地下の作業台に 4・外 3）`. A promise of

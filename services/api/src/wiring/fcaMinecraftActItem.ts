@@ -13,7 +13,7 @@ import { feetOf } from '../surfaces/minecraft/minecraftLlmc.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
-import { breakingWords } from '../surfaces/minecraft/minecraftLlmcPromises.js';
+import { breakingOf } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -55,7 +55,9 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   // Amendment A-7 1: the act is in the queue; what it said to keep becomes promises (an open one of the same item and use is revised). Not put into the act's `uses`.
   const kept = (keep ?? []).map(entry => promiseKeptWords(entry, parts.keep ? parts.keep(entry) : { problem: 'この判断の計画には約束を書けない' }));
   // Amendment A-8 2: what the act would spend of the promised is said once, after the line of the queue (nothing is refused).
-  const breaking = parts.promises ? breakingWords(parts.promises(), input.hands, parts.frame) : [];
+  const counted = parts.promises ? breakingOf(parts.promises(), input.hands, parts.frame) : null;
+  // A-11 1: a promise the act keeps by its `instead` is said beside the ones it would break.
+  const breaking = counted ? [...counted.lines, ...counted.keptBy] : [];
   return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...(parts.lead ?? []), ...kept, ...breaking].join('\n'));
 }
 

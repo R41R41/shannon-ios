@@ -38,6 +38,16 @@ export const VERTICAL_SHAPES = ['stairs', 'shaft', 'pillar'] as const;
 export const VERTICAL_TOWARDS = ['north', 'east', 'south', 'west'] as const;
 export const VERTICAL_LIQUIDS = ['stop', 'seal', 'seal_water'] as const;
 export const EQUIP_SLOTS = ['hand', 'offhand', 'head', 'chest', 'legs', 'feet'] as const;
+/**
+ * The slot words of `equip` the body takes are hand, offhand, head, chest, legs and feet. Bench 2026-10-24 (run 38 d127, the iron armour made and put on): 2 answers of 3 wrote
+ * `equip iron_chestplate torso` (the live state's worn line says 頭・胴・脚・足・左手), and the act was refused. Amendment A-11 3 (a real run: `equip shield slot=off-hand` was refused
+ * and the act that broke the promise was sent): the plain variations of the hand words (`off-hand`, `main_hand`…) are read as the body's. Only what is plainly the same word.
+ */
+const SLOT_WORDS: Readonly<Record<string, string>> = { torso: 'chest', body: 'chest', chestplate: 'chest', helmet: 'head', leg: 'legs', leggings: 'legs',
+  boots: 'feet', foot: 'feet', mainhand: 'hand', main: 'hand', main_hand: 'hand', 'main-hand': 'hand', off: 'offhand', off_hand: 'offhand', 'off-hand': 'offhand',
+  頭: 'head', 胴: 'chest', 脚: 'legs', 足: 'feet', 右手: 'hand', 左手: 'offhand' };
+/** The body's slot word for a word the model wrote (the word itself when it is not one of the variations). */
+export const slotWordOf = (word: string): string => SLOT_WORDS[word.trim().toLowerCase()] ?? word;
 
 /**
  * One hand. Flat (the wire's schema subset allows `anyOf` of at most 4): `do` names the kind and `actProblem` says which fields each kind

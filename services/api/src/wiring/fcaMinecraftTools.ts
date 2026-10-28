@@ -146,7 +146,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     if (parts.llmc?.redecide && parts.llmc.promises && guards && call.name === MC_ACT_TOOL) {
       const act = call.input as ActInput, already = new Set(act.replace ?? []), same = call;
       const counted = breakingOf(parts.llmc.promises(), act.hands, control.observe(bodyId));
-      const again = await redecideAct({ port: parts.llmc.redecide, operationId: call.operationId, input: act, breaking: counted.lines, uncounted: counted.uncounted,
+      const again = await redecideAct({ port: parts.llmc.redecide, operationId: call.operationId, input: act, breaking: counted.lines, uncounted: counted.uncounted, satisfied: counted.keptBy,
         urgent: parts.llmc.urgent?.() === true, signal: call.signal,
         recheck: async input => {
           // The items the first act replaced are off the queue already: only the ones Opus names beyond them are taken off now.

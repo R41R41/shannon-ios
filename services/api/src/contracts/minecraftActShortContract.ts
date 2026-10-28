@@ -1,5 +1,5 @@
 import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
-import { handToLine, lineToHand, pos, readPos } from './minecraftActShortHands.js';
+import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 
@@ -210,7 +210,7 @@ function handsOf(value: unknown, errors: string[], replacing = false): ActHand[]
   if (!items.length && !replacing) errors.push('hands が無い');
   const hands: ActHand[] = [];
   for (const item of items) {
-    if (item && typeof item === 'object' && !Array.isArray(item)) hands.push(item as ActHand);
+    if (item && typeof item === 'object' && !Array.isArray(item)) hands.push(withSlotWord(item as ActHand));
     else if (typeof item === 'string' && item.trim()) {
       const hand = lineToHand(item);
       if ('error' in hand) errors.push(hand.error); else hands.push(hand);
@@ -311,8 +311,12 @@ export function expandShortAct(input: unknown): { input: unknown; errors: string
 function json(input: unknown): { input: unknown; errors: string[] } {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return { input, errors: [] };
   const errors: string[] = [], queued = queueFieldsOf(input, errors);
-  if (!Object.keys(queued).length && !errors.length) return { input, errors };
-  const next = { ...(input as Record<string, unknown>), ...queued };
+  // A-11 3: a hand that names its slot with a variation of a hand word (json hands).
+  const given = (input as { hands?: unknown }).hands;
+  const slotted = Array.isArray(given) ? given.map(item => item && typeof item === 'object' && !Array.isArray(item) ? withSlotWord(item as ActHand) : item) : given;
+  const fixedSlots = Array.isArray(given) && slotted !== given && (slotted as unknown[]).some((item, index) => item !== given[index]);
+  if (!Object.keys(queued).length && !errors.length && !fixedSlots) return { input, errors };
+  const next = { ...(input as Record<string, unknown>), ...(fixedSlots ? { hands: slotted } : {}), ...queued };
   return { input: errors.length ? { ...next, [SHORT_HAND_ERROR_KEY]: errors.join(' / ').slice(0, 700) } : next, errors };
 }
 

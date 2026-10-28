@@ -1,4 +1,4 @@
-import type { ActHand } from './minecraftActContract.js';
+import { slotWordOf, type ActHand } from './minecraftActContract.js';
 
 /**
  * 手の短い書き方（mb-llmc-cand、再現台 v8d/v9c の `shortHands.ts` を本番の形にした物）。手 1 つが 1 行の文字列で、頭のコードが体へ送る前に
@@ -37,13 +37,6 @@ function sorted(value: unknown): unknown {
 const same = (a: unknown, b: unknown) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
 /* ------------------------------------------------------------------ 手 → 1 行 */
-/**
- * The slot words of `equip` the body takes are hand, offhand, head, chest, legs and feet. Bench 2026-10-24 (run 38 d127, the iron armour made and put on):
- * 2 answers of 3 wrote `equip iron_chestplate torso` (the live state's worn line says 頭・胴・脚・足・左手), and the act was refused. Those words are read as the body's.
- */
-const SLOT_WORDS: Readonly<Record<string, string>> = { torso: 'chest', body: 'chest', chestplate: 'chest', helmet: 'head', leg: 'legs', leggings: 'legs',
-  boots: 'feet', foot: 'feet', mainhand: 'hand', main: 'hand', off: 'offhand', off_hand: 'offhand', 頭: 'head', 胴: 'chest', 脚: 'legs', 足: 'feet',
-  右手: 'hand', 左手: 'offhand' };
 type Words = string[] | null;
 const flag = (on: boolean | undefined, word: string): string[] => on === true ? [word] : [];
 const given = (key: string, value: unknown): string[] => value === undefined ? [] : [`${key}=${String(value)}`];
@@ -245,7 +238,7 @@ const READERS: Record<string, Reader> = {
   jump: ({ words, hand }) => done(isCount(words[0]) ? { ...hand, n: Number(words[0]) } : hand),
   eat: ({ words, hand }) => done(words[0] ? { ...hand, item: words[0] } : hand),
   equip: ({ words, hand }) => words[0]
-    ? done({ ...hand, item: words[0], ...(words[1] ? { slot: SLOT_WORDS[words[1]] ?? words[1] } : {}) }) : bad('equip', '物の名前が要る'),
+    ? done({ ...hand, item: words[0], ...(words[1] ? { slot: slotWordOf(words[1]) } : {}) }) : bad('equip', '物の名前が要る'),
   craft: ({ words, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('craft', '物の名前が要る'),
   pickup: ({ hand }) => done(hand),
@@ -277,16 +270,22 @@ function readTokens(tokens: readonly string[], verb: string): Read | { error: st
       const numbers = key[2] === '' || key[2] === 'none' ? [] : key[2]!.split(',').map(Number);
       if (numbers.some(number => !Number.isInteger(number))) return bad(verb, 'dependsOn= は前の手の番号をコンマで（dependsOn=1,3）。何にも頼らないなら dependsOn=none');
       out.hand.dependsOn = numbers;
-    } else if (key) out.hand[key[1]!] = valueOf(key[2]!);
+    } else if (key && key[1] === 'slot') out.hand.slot = slotWordOf(key[2]!);
+    else if (key) out.hand[key[1]!] = valueOf(key[2]!);
     else out.words.push(token);
   }
   return out;
+}
+/** A hand that names its slot with a variation of a hand word (A-11 3) has the body's word. */
+export function withSlotWord<T extends object>(hand: T): T {
+  const slot = (hand as { slot?: unknown } | null)?.slot;
+  return typeof slot === 'string' && slotWordOf(slot) !== slot ? { ...hand, slot: slotWordOf(slot) } : hand;
 }
 /** 1 行 → 手。読めない行は { error }。 */
 export function lineToHand(line: string): ActHand | { error: string } {
   const text = line.trim();
   if (text.startsWith('json ')) {
-    try { return JSON.parse(text.slice(5)) as ActHand; } catch { return { error: `json の行が読めない: ${text.slice(0, 40)}` }; }
+    try { return withSlotWord(JSON.parse(text.slice(5)) as ActHand); } catch { return { error: `json の行が読めない: ${text.slice(0, 40)}` }; }
   }
   const note = NOTE.exec(text);
   let noteText: string | undefined;
