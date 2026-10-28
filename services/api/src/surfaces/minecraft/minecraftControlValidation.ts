@@ -101,7 +101,8 @@ export function validUnit(v: unknown): boolean {
   return record(v) && GOAL_OUTCOMES.includes(v.goal as never) && RUN_ENDS.includes(v.end as never) && typeof v.released === 'boolean'
     && (v.droppedBecause === undefined || record(v.droppedBecause) && DROPPED_CODES.includes(String(v.droppedBecause.code)) && (v.droppedBecause.item === undefined || queueRef(v.droppedBecause.item)))
     && (v.keptDespite === undefined || record(v.keptDespite) && queueRef(v.keptDespite.item) && typeof v.keptDespite.code === 'string' && v.keptDespite.code.length <= 80)
-    && (v.startedAt === undefined || timestamp(v.startedAt));
+    && (v.startedAt === undefined || timestamp(v.startedAt))
+    && (v.code === undefined || typeof v.code === 'string' && v.code.length > 0 && v.code.length <= 80);   // the closed code of the hand that decided the end (A-4 f)
 }
 /** A receipt's `bodyTimes`: the times of the stages, in ISO strings (`acceptedAt` and `endedAt` are always there). */
 export function validBodyTimes(v: unknown): boolean {

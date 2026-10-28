@@ -135,10 +135,11 @@ describe('boundary 1 (results and the queue): the reflex ate first; the body dec
     const { verdict } = await boundary1('boundary-1', false);
     expect(verdict.pass).toBe(true);
   });
-  it('the q14 of the fixture (no dependsOn, dropped depends_failed) is flagged by the judge check "only the dependents are dropped", and by nothing else', SLOW, async () => {
+  it('the q14 of the fixture (no dependsOn, dropped depends_failed) passes: chapter 2 says an item that writes no dependsOn is dropped as today; a dependsOn [] item dropped would not', SLOW, async () => {
     const { verdict } = await boundary1('boundary-1', true, 'boundary-1-implicit');
-    expect(verdict.checks.filter(check => !check.ok).map(check => check.id)).toEqual(['only the dependents are dropped']);
-    expect(verdict.checks.find(check => !check.ok)!.detail).toContain('1 of them name something their dependsOn does not hold');
+    expect(verdict.checks.filter(check => !check.ok).map(check => check.id)).toEqual([]);
+    expect(verdict.checks.find(check => check.id === 'only the dependents are dropped')!.detail).toContain('1 of them wrote no dependsOn');
+    expect(verdict.pass, verdict.text).toBe(true);
   });
 });
 
@@ -473,7 +474,7 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
     const { verdict } = bench.judged();
     noted({ ...verdict, scene: 'b8-head-restart-unacked-receipt-first' });
     expect(verdict.commands.linked).toBe(verdict.commands.judged);
-    expect(verdict.checks.filter(check => !check.ok).map(check => check.id)).toEqual(['the cleanup at start released within 5 s']);
+    expect(verdict.pass, verdict.text).toBe(true);   // no cleanup row: nothing was left to clean up, and the judge asks for a cleanup only when there was one
   });
 
   it('b8-head-restart-notified: q2 is unknown and the model was told; the head stops; after the start the stop proves the release and the real receipt corrects q2, once', SLOW, async () => {
@@ -506,7 +507,7 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
     expect(verdict.pass, verdict.text).toBe(true);
   });
 
-  it('b8-head-restart-notified, the order of the table (the real receipt is let go before the head wakes): q2 is corrected by it on the first poll, once; nothing is left to clean up, so only the judge check "cleanup released" is not met', SLOW, async () => {
+  it('b8-head-restart-notified, the order of the table (the real receipt is let go before the head wakes): q2 is corrected by it on the first poll, once; nothing is left to clean up, the judge passes it (no cleanup row, the correction is the release)', SLOW, async () => {
     const bench = await scene8('b8-head-restart-notified', { folder: 'b8-head-restart-notified-receipt-first' });
     const q1 = await send(bench, place());
     bench.body.begin(q1.id);
@@ -530,9 +531,9 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
     expect(rowsOf(bench, 'released')).toHaveLength(0);
     const { verdict } = bench.judged();
     noted({ ...verdict, scene: 'b8-head-restart-notified-receipt-first' });
-    // Nothing was left to clean up, so q2 has no released(cleanup) row, which the judge asks of a command that was ever unknown: it is not joined, and the check of the scene is not met.
-    expect(verdict.commands.unlinked).toEqual([{ command: 'skill:q2', reasons: ['missing:released(cleanup)'] }]);
-    expect(verdict.checks.filter(check => !check.ok).map(check => check.id)).toEqual(['the cleanup after start released within 5 s']);
+    // Nothing was left to clean up, so q2 has no cleanup row; the real receipt corrected it and released it (the correction's result), which is the evidence of its release.
+    expect(verdict.commands.unlinked).toEqual([]);
+    expect(verdict.pass, verdict.text).toBe(true);
   });
 
   it('events the restarted body lost: a receipt that carried only part of its events, the body restarts before the head asks for the rest: the page is told lost and the difference is unexplained (events_lost)', SLOW, async () => {

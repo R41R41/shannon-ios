@@ -203,6 +203,81 @@ describe('control/fight-damage-facts.json: the blows of the last ten seconds, he
   });
 });
 
+describe('state.combat.recentHits (A-4): the body\'s record of the blows is the fact; the head\'s estimate from her health is only for a frame without it', () => {
+  const sample = fixture('control/fight-damage-facts');
+  const BASE = 1_000_000;
+  const iso = (t: number) => new Date(BASE + t * 1000).toISOString();
+  const blows = (sample.input.hits as { t: number; amount: number }[]).map(hit => ({ at: iso(hit.t), attackerId: 2601, attackerType: 'zombie', damage: hit.amount, life: 2 }));
+  const body = (recentHits: unknown[], extra: Record<string, unknown> = {}, health = 6.4) => frame({ health }, { combat: { recentHits }, life: { life: 2 }, ...extra });
+
+  it('three blows the body recorded are told as a count (fact) and a sum (an estimate, said so), with whom they came from; the sample\'s words are all there', () => {
+    const watch = createHitWatch(() => BASE);
+    watch.note(body(blows));
+    const line = watch.line()!;
+    for (const word of sample.expected.urgentMustContain as string[]) expect([line, vitalsLine(frame({ health: 6.4, food: 11, inventory: [{ name: 'bread', count: 1 }] }))].join('\n')).toContain(word);
+    expect(line).toBe('直近 10 秒で 3 回ダメージを受けた（体の記録。量は体力の落ちからの推定: 合計 15.2: 5.3（9 秒前）・4.9（6 秒前）・5.0（3 秒前））。打った相手: zombie #2601');
+    expect(watch.source()).toBe('body');
+  });
+
+  it('two blows inside one frame are two blows (the estimate from her health would have counted one); her health need not have fallen', () => {
+    const both = [{ at: iso(-1), attackerId: 7, attackerType: 'skeleton', damage: 2.5, life: 2 }, { at: iso(-1), attackerId: 7, attackerType: 'skeleton', damage: 2.5, life: 2 }];
+    const watch = createHitWatch(() => BASE);
+    watch.note({ ...body([], {}, 20), sequence: 1 });
+    watch.note({ ...body(both, {}, 15), sequence: 2 });
+    expect(watch.recent()).toHaveLength(2);
+    const estimated = createHitWatch(() => BASE);
+    estimated.note({ ...frame({ health: 20 }), sequence: 1 });
+    estimated.note({ ...frame({ health: 15 }), sequence: 2 });
+    expect(estimated.recent()).toHaveLength(1);
+    expect(estimated.source()).toBe('health');
+  });
+
+  it('the body\'s record replaces the estimate (nothing is added on top), and an empty record is the body saying there was no blow', () => {
+    const watch = createHitWatch(() => BASE);
+    watch.note({ ...frame({ health: 20 }), sequence: 1 });
+    watch.note({ ...frame({ health: 17 }), sequence: 2 });
+    expect(watch.recent()).toHaveLength(1);                       // the estimate, until the body speaks
+    watch.note({ ...body([]), sequence: 3 });
+    expect(watch.recent()).toEqual([]);
+    expect(watch.line()).toBeNull();
+    watch.note({ ...body(blows), sequence: 4 });
+    expect(watch.recent()).toHaveLength(3);
+  });
+
+  it('a frame without the record goes back to the estimate from her health, and reads no blow across the gap', () => {
+    const watch = createHitWatch(() => BASE);
+    watch.note({ ...body(blows, {}, 10), sequence: 1 });
+    watch.note({ ...frame({ health: 4 }), sequence: 2 });          // the first frame without the record only sets the starting health
+    expect(watch.source()).toBe('health');
+    expect(watch.recent()).toEqual([]);
+    watch.note({ ...frame({ health: 2 }), sequence: 3 });
+    expect(watch.recent()).toHaveLength(1);
+  });
+
+  it('the blows of another life, an older frame of the connection and a record that is not a list are not told', () => {
+    const watch = createHitWatch(() => BASE);
+    watch.note({ ...body([...blows, { at: iso(-2), attackerId: 3, attackerType: 'creeper', damage: 9, life: 1 }]), sequence: 5 });
+    expect(watch.recent().map(hit => hit.amount)).toEqual([5.3, 4.9, 5]);
+    watch.note({ ...body([]), sequence: 4 });                      // a late frame
+    expect(watch.recent()).toHaveLength(3);
+    const stray = createHitWatch(() => BASE);
+    stray.note({ ...frame({ health: 20 }, { combat: { recentHits: 'none' } }), sequence: 1 });
+    expect(stray.source()).toBe('health');
+    expect(createHitWatch(() => BASE).line()).toBeNull();
+  });
+
+  it('a blow older than ten seconds is not told, an attacker without an id is told by its kind, and the urgent input still holds the fixture\'s facts', () => {
+    const watch = createHitWatch(() => BASE);
+    watch.note(body([{ at: iso(-12), attackerId: null, attackerType: 'lava', damage: 4, life: 2 }, { at: iso(-1), attackerId: null, attackerType: 'arrow', damage: 3, life: 2 }]));
+    expect(watch.line()).toBe('直近 10 秒で 1 回ダメージを受けた（体の記録。量は体力の落ちからの推定: 合計 3.0: 3.0（1 秒前））。打った相手: arrow');
+    const urgent = fixture('measure/urgent-max-input');
+    const state = urgent.input.state as { hits: { t: number; amount: number; by: string }[] };
+    const told = createHitWatch(() => BASE);
+    told.note(body(state.hits.map(hit => ({ at: iso(hit.t), attackerId: Number(/#(\d+)/u.exec(hit.by)?.[1]), attackerType: hit.by.split(' ')[0], damage: hit.amount, life: 2 }))));
+    for (const word of ['5.3', '4.9', 'zombie #2601']) expect(told.line()).toContain(word);
+  });
+});
+
 describe('the blows watch reads frames in their order', () => {
   it('an older frame of the same connection is not read, so health lost is not counted twice; another connection starts the count again', () => {
     let clock = 0;

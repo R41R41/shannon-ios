@@ -6,10 +6,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Cell, CheckResult, CommandView, Joined, Model, OpLine, ProbeLine, Row, TraceLine } from './judge.js';
-import { bodyTimesOf, cmdKey, commandLife, idsOf, itemOf, kindOf, linesOf, ms, sawUnknown, unitOf } from './judge.js';
+import { bodyTimesOf, cmdKey, commandLife, commandNamed, idsOf, itemOf, kindOf, linesOf, ms, sawUnknown, unitOf } from './judge.js';
 
 const ok = (id: string, pass: boolean, detail: string, commands: string[] = []): CheckResult => ({ id, ok: pass, detail, commands });
-const find = (model: Model, id: string): CommandView | undefined => model.commands.get(cmdKey(id));
+const find = (model: Model, name: string): CommandView | undefined => commandNamed(model, name);
+/** The id the records use for a command a scene names (`q1` -> `skill:<sha256>`); an unknown name stays a name. */
+const idOf = (model: Model, name: string): string => find(model, name)?.id ?? cmdKey(name);
 const rowsOf = (model: Model, ev: string): Row[] => model.rows.filter(row => row.ev === ev);
 const traceOf = <K extends TraceLine['kind']>(model: Model, kind: K): Extract<TraceLine, { kind: K }>[] =>
   model.trace.filter((line): line is Extract<TraceLine, { kind: K }> => line.kind === kind);
@@ -46,14 +48,16 @@ function dependsChecks(model: Model): CheckResult[] {
   const independent = all.filter(command => dependsOf(command)?.length === 0);
   const ran = independent.filter(command => kindOf(command) !== 'refused_before_start');
   const dropped = all.filter(command => unitOf(command)?.droppedBecause?.code === 'depends_failed');
+  // chapter 2: an item that writes no dependsOn is dropped as today (behind a stopped one); one that writes dependsOn is dropped only when what it relies on stopped;
+  // one that writes dependsOn [] relies on nothing and is never dropped for it
   const badDrop = dropped.filter(command => {
-    const because = unitOf(command)?.droppedBecause?.item?.item;
-    return !(dependsOf(command) ?? []).includes(because ? itemOf(because) : '');
+    const because = unitOf(command)?.droppedBecause?.item?.item, listed = dependsOf(command);
+    return listed !== undefined && !listed.includes(because ? itemOf(because) : '');
   });
   return [
     ok('dependsOn[] has startedAt', ran.length > 0 && ran.every(command => Boolean(unitOf(command)?.startedAt)), `${ran.length} independent item(s) that ran; ${ran.filter(command => !unitOf(command)?.startedAt).map(command => command.id).join(',') || 'all have startedAt'}`, ran.map(command => command.id)),
     ok('only the dependents are dropped', dropped.length > 0 && badDrop.length === 0 && !independent.some(command => dropped.includes(command)),
-      `${dropped.length} dropped depends_failed; ${badDrop.length} of them name something their dependsOn does not hold; an independent one dropped: ${independent.some(command => dropped.includes(command))}`, dropped.map(command => command.id)),
+      `${dropped.length} dropped depends_failed (${dropped.filter(command => dependsOf(command) === undefined).length} of them wrote no dependsOn); ${badDrop.length} of them name something their dependsOn does not hold; a dependsOn [] item dropped: ${independent.some(command => dropped.includes(command))}`, dropped.map(command => command.id)),
   ];
 }
 function boundary1(model: Model): CheckResult[] {
@@ -169,7 +173,7 @@ function boundary5(model: Model): CheckResult[] {
     const old = [...model.commands.values()].filter(command => (commandLife(command) ?? death.lifeBefore) <= death.lifeBefore);
     const after = old.flatMap(command => command.ops.filter(op => (ms(op.at) ?? 0) > at && acted(op)).map(op => `${command.id}:${op.op}@${op.at}`));
     out.push(ok(`no old-life operation after death ${label}`, after.length === 0, after.length ? `${after.length} operation(s) after the death: ${after.slice(0, 5).join(' ')}` : 'none after the death', old.map(command => command.id)));
-    const waiting = new Set((death.waiting ?? []).map(cmdKey));
+    const waiting = new Set((death.waiting ?? []).map(name => idOf(model, name)));
     for (const command of old) {
       const times = bodyTimesOf(command), accepted = ms(times?.acceptedAt), began = ms(times?.startedAt ?? times?.lockAt ?? times?.firstMotorAt);
       if (accepted !== undefined && accepted < at && (began === undefined || began > at) && command.receipts.length > 0) waiting.add(command.id);
@@ -195,12 +199,12 @@ function boundary5(model: Model): CheckResult[] {
 function boundary6(model: Model): CheckResult[] {
   const late = injections(model, 'late_cleanup')[0], owner = injections(model, 'new_owner')[0];
   if (!late || !owner) return [ok('injections', false, 'meta.injections needs a new_owner and a late_cleanup')];
-  const oldId = cmdKey(String(late.command)), lateAt = ms(late.at) ?? 0, ownerAt = ms(owner.at) ?? 0;
+  const oldId = idOf(model, String(late.command)), lateAt = ms(late.at) ?? 0, ownerAt = ms(owner.at) ?? 0;
   const acting = (find(model, oldId)?.ops ?? []).filter(op => (ms(op.at) ?? 0) > ownerAt && acted(op));
   const refused = traceOf(model, 'motor_refused').filter(line => cmdKey(line.command) === oldId && (ms(line.at) ?? 0) >= lateAt);
   const calls = (late.calls as string[] | undefined) ?? [];
   const missing = calls.filter(call => !refused.some(line => line.call === call));
-  const state = traceOf(model, 'motor_state').filter(line => cmdKey(line.command) === cmdKey(String(owner.command)) && (ms(line.at) ?? 0) >= lateAt).pop();
+  const state = traceOf(model, 'motor_state').filter(line => cmdKey(line.command) === idOf(model, String(owner.command)) && (ms(line.at) ?? 0) >= lateAt).pop();
   return [ok('the old cleanup acted on nothing', acting.length === 0, `${acting.length} operation(s) of ${oldId} after the new owner started`, [oldId]),
     ok('the motor port refused each call', refused.length > 0 && missing.length === 0, `${refused.length} refusal(s)${missing.length ? `; not refused: ${missing.join(',')}` : ''}`, [oldId]),
     ok('the new owner keeps keys, shield and path goal', state?.forward === true && state.shield === true && state.pathGoal === 'kept', `state after the cleanup: ${JSON.stringify(state ?? null)}`, [cmdKey(String(owner.command))])];
@@ -314,14 +318,14 @@ function seam3(model: Model): CheckResult[] {
 }
 function seam4(model: Model): CheckResult[] {
   const old = injections(model, 'old_rev_result')[0];
-  const rows = ledgerRows(model).filter(row => old && cmdKey(row.ids?.command ?? '') === cmdKey(String(old.command)));
+  const rows = ledgerRows(model).filter(row => old && cmdKey(row.ids?.command ?? '') === idOf(model, String(old.command)));
   return [...boundary3(model), ok('a result of an older revision is booked on the revision it was sent with', Boolean(old) && rows.length > 0 && rows.every(row => row.promiseRev === old!.rev),
     old ? `rows of ${old.command}: ${JSON.stringify(rows.map(row => row.promiseRev))} (want ${old.rev})` : 'meta.injections needs old_rev_result {command, rev}')];
 }
 
 // ---- boundary 8: the scenes ------------------------------------------------------------------------------------------------------------------------------
 export function boundary8(model: Model, scene: Model['fixtures']['boundaries']['boundary8Scenes'][number]): CheckResult[] {
-  const ids = scene.command.split(',').map(cmdKey);
+  const ids = scene.command.split(',').map(name => idOf(model, name));
   const all = [...model.commands.values()];
   const split = all.filter(command => new Set(command.ops.map(op => op.exec).filter(Boolean)).size > 1
     || command.handStarts.some((start, index) => command.handStarts.findIndex(other => other.ids.hand === start.ids.hand && (other.ids.pass ?? 0) === (start.ids.pass ?? 0)) !== index));
@@ -360,26 +364,32 @@ export function boundary8(model: Model, scene: Model['fixtures']['boundaries']['
           `droppedBecause ${JSON.stringify(queued ? unitOf(queued)?.droppedBecause ?? null : null)}`, second ? [second] : []));
       break;
     }
+    // Two orders are both the contract's (chapter 10, the table of boundary 8): the stop's proof of the release comes first and the receipt settles after it, or the receipt comes first and
+    // there is nothing left to clean up. What must hold in both: no correction beyond the table's, one execution, nothing sent again by itself, the ledger once. A cleanup row is a
+    // condition on its own only when there was a cleanup (a `released` row): then it is in 5 s of the boot.
     case 'b8-head-restart-unacked': {
-      const released = boot ? cleanupAfter(boot.at) : undefined, command = q(first);
-      const finalUnit = command ? unitOf(command) : undefined;
+      const command = q(first), finalUnit = command ? unitOf(command) : undefined, cleanups = rowsOf(model, 'released').filter(row => row.by === 'cleanup');
+      const late = boot ? cleanups.filter(row => !within(boot.at, row.at, 5000) && (ms(row.at) ?? 0) >= (ms(boot.at) ?? 0)) : [];
       out.push(ok('the head registered its boot', Boolean(boot), boot ? `head_boot ${String(boot.at)}` : 'no head_boot row'),
-        ok('the cleanup at start released within 5 s', Boolean(released), released ? `released ${String(released.at)}` : 'no released(cleanup) within 5 s of the boot'),
+        ok('a cleanup at start, when there was one, released within 5 s', late.length === 0, cleanups.length ? `${cleanups.length} cleanup release(s); after the 5 s: ${late.length}` : 'no cleanup (the receipt came first: nothing was left to clean up)'),
         ok('the resent receipt settles normally (unknown was never told)', Boolean(command?.receipts.length) && finalUnit?.goal !== 'unknown' && !rowsOf(model, 'unknown_notified').length,
           `final unit ${JSON.stringify(finalUnit ?? null)}; unknown_notified rows ${rowsOf(model, 'unknown_notified').length}`, ids));
       break;
     }
     case 'b8-head-restart-notified': {
       const told = rowsOf(model, 'unknown_notified').find(row => idsOf(row, model.meta).command === first), fixed = q(first)?.corrected[0];
-      const released = boot ? cleanupAfter(boot.at) : undefined;
+      const cleanups = rowsOf(model, 'released').filter(row => row.by === 'cleanup' && idsOf(row, model.meta).command === first);
+      const late = boot ? cleanups.filter(row => !within(boot.at, row.at, 5000) && (ms(row.at) ?? 0) >= (ms(boot.at) ?? 0)) : [];
       out.push(ok('the model was told before the head stopped', Boolean(told && boot) && (ms(told!.at) ?? Infinity) < (ms(boot!.at) ?? 0), `notified ${String(told?.at ?? '-')} boot ${String(boot?.at ?? '-')}`),
-        ok('the cleanup after start released within 5 s', Boolean(released), released ? `released ${String(released.at)}` : 'none'),
+        ok('a cleanup after start, when there was one, released within 5 s', late.length === 0, cleanups.length ? `${cleanups.length} cleanup release(s); after the 5 s: ${late.length}` : 'no cleanup (the real receipt came first: nothing was left to clean up)'),
         ok('the correction came after the start', Boolean(fixed && boot) && (ms(fixed!.at) ?? 0) >= (ms(boot!.at) ?? Infinity), `corrected ${String(fixed?.at ?? '-')}`, ids));
       break;
     }
     case 'b8-body-restart': {
       const at = ms(injections(model, 'body_restart')[0]?.at), poll = traceOf(model, 'poll').find(line => line.first === true && (ms(line.at) ?? 0) >= (at ?? Infinity));
-      const lost = rowsOf(model, 'events').some(row => row.lost === true && idsOf(row, model.meta).command === first);
+      // "events lost" is the body's events command answering lost: the head's `events` row says it, or the receipt of that command carries the reply (its `result` is the reply's JSON)
+      const repliedLost = (row: Row): boolean => { try { const reply = JSON.parse(String((row.receipt as { result?: unknown } | undefined)?.result ?? 'null')) as { lost?: boolean; command?: string } | null; return reply?.lost === true && reply.command === first; } catch { return false; } };
+      const lost = rowsOf(model, 'events').some(row => row.lost === true && idsOf(row, model.meta).command === first) || rowsOf(model, 'received').some(repliedLost);
       out.push(ok('the new body\'s first poll', Boolean(poll), poll ? `first poll ${poll.at}` : 'none'),
         ok('released, goal unknown, events lost, an unexplained difference only', Boolean(q(first)?.released.length) && unitOf(q(first)!)?.goal === 'unknown' && lost && rowsOf(model, 'ledger_unexplained').length > 0,
           `released ${q(first)?.released.length ?? 0}; events lost ${lost}; ledger_unexplained rows ${rowsOf(model, 'ledger_unexplained').length}`, ids));
