@@ -45,6 +45,8 @@ export interface IncidentHoldPort {
   skipNote?(taskId: string): string | null;
   /** Chapter 8: the line a resume left for the task's first decision when the hold it resumes was a held act's second try, held again (`heldAgainWords`), once; else null. */
   heldAgainNote?(taskId: string): string | null;
+  /** Chapter 8 (the meter's clock): how long the task has been held in all, in ms (an operator's hold to its resume). */
+  heldMs?(taskId: string): number;
   /**
    * Run 45 (holds 3 to 5): the act sent again by a resume failed for the same reason it was held for, and the body did not hold again (its
    * receipt's `incident.repeated`): the decisions go on with the result; written down.

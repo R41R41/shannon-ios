@@ -422,6 +422,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
   const skipNotes = new Map<string, string>();
   /** Chapter 8: the lines a resume left for each task's first decision when the hold it resumed was a held act's second try, held again (taken once). */
   const againNotes = new Map<string, string>();
+  const heldMs = (taskId: string): number => { try { return parts.audit.heldMs(taskId, parts.now()); } catch { return 0; } };
   function heldAgainNote(taskId: string): string | null {
     const line = againNotes.get(taskId) ?? null;
     againNotes.delete(taskId);
@@ -597,6 +598,6 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       }, () => undefined);
   }
 
-  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked, skipNote, heldAgainNote, repeated };
+  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked, skipNote, heldAgainNote, heldMs, repeated };
 }
 export type OperatorMinecraft = ReturnType<typeof createOperatorMinecraft>;

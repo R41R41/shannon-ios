@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { onceFor } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -831,14 +832,13 @@ describe('the step\'s parts hand a decision\'s frame to its acts and wait for a 
     holdPort({ heldAgainNote: () => '保留した act の出し直しは search_timeout で再び保留になった。その間の q65（近い鉄を掘る）は捨てた', skipNote: () => '保留した act q60（go (1,2,3)）は出し直さなかった。前の結果: go_stuck' });
     const s = stepParts();
     s.body.context();
-    const live = s.body.transient!() as { lastResults?: string[] };
-    expect(live.lastResults).toHaveLength(2);
-    expect(live.lastResults![0]).toContain('出し直しは search_timeout で再び保留');
-    expect(live.lastResults![0]).toContain('q65');
-    expect(live.lastResults![1]).toContain('出し直さなかった');
-    // Said once: the next context has nothing of them.
-    s.body.context();
-    expect((s.body.transient!() as { lastResults?: string[] }).lastResults).toBeUndefined();
+    s.body.transient!();
+    // They are facts said once: they wait until the request's bytes carry them (), first the hold that came again, then the held act.
+    const facts = onceFor(s.task.id, 'normal').map(fact => fact.text);
+    expect(facts).toHaveLength(2);
+    expect(facts[0]).toContain('出し直しは search_timeout で再び保留');
+    expect(facts[0]).toContain('q65');
+    expect(facts[1]).toContain('出し直さなかった');
   });
 
   it('sends the held act again, keeps the first decision waiting for it, and gives it its result first, with the held act\'s mark in its words', async () => {

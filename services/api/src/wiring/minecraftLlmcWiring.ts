@@ -17,6 +17,7 @@ import { COMPLETION_WAY, observedCompletion, withCompletionRule, type LlmcComple
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { createLlmcEvents, urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
+import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
@@ -297,9 +298,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // again was held again; `heldAgainWords`), then the held act itself (run 45: a resume with --skip-replay does not send it again and the decision reads so as a fact; a
   // second try's result is added when it ends, below). The decision itself is asked after them (`beforeDecision`).
   const again = holds?.heldAgainNote?.(step.taskId) ?? null;
-  if (again) events.keep(again);
+  if (again) offerOnce(step.taskId, 'resume', `again:${again.slice(0, 60)}`, again);
   const skipped = holds?.skipNote?.(step.taskId) ?? null;
-  if (skipped) events.keep(skipped);
+  if (skipped) offerOnce(step.taskId, 'resume', `skipped:${skipped.slice(0, 60)}`, skipped);
   // The second try: its mark in the queue, when it was added, its longest run, and whether it was held again (then its result is the hold's record, not a line).
   const replay = { item: null as string | null, at: 0, maxMs: 60_000, heldAgain: false };
   if (holds && holdOn) {
@@ -398,7 +399,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     wrap: (lifecycle: FcaBodyLifecycle) => withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
       observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
       // Continue contract 5: each decision's context names the frame it read; the acts it chooses carry it, and its answer is checked against the newest frame.
-      headBoot: () => control.headBoot(), onRead: value => { read = value; },
+      headBoot: () => control.headBoot(), onRead: value => { read = value; }, heldMs: () => holds?.heldMs?.(step.taskId) ?? 0,
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       r4: { probe: llmcProbeRunner(control, step), planWhere,
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }), resend, log, step.taskId,
