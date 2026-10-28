@@ -36,6 +36,7 @@ function service() {
     incident: async (op: string, incident: string, command: string, taskId: string) => {
       unfrozen.push(`${op}:${incident}/${command}`); void taskId; return bodyAnswer.next; },
     bodyHold: () => bodyAnswer.hold,
+    heldActWords: (command: string, why: string) => `保留した act q15（go (1,2,3)）は出し直さなかった。前の結果: ${why}`,
     wake: () => undefined,
   } as unknown as OperatorMinecraftRequests & { wake(): void };
   const parts: OperatorMinecraftParts = {
@@ -207,6 +208,42 @@ describe('run 45 (+929): the body held on its own for a death outside an act', (
     expect(s.stopped).toEqual([TASK]);
     expect(s.activity.at(-1)).toMatchObject({ reasonCode: 'operator_hold' });
     expect((await s.operator.handle(envelope('held'))).body).toMatchObject({ held: [{ body: '体も同じ保留。体が act の外（死亡・瀕死）で保留し、頭も保留した' }] });
+  });
+});
+
+describe('run 45, holds 3 to 5: a resume that does not send the act again, and an act sent again that fails the same way', () => {
+  it('reads --skip-replay (a flag, true or absent)', () => {
+    expect(operatorEnvelope(['minecraft', 'resume', '--operator', 'ops', '--latest', '--skip-replay'], {})).toMatchObject({ op: 'resume', args: { latest: true, skipReplay: true } });
+    expect(operatorEnvelope(['minecraft', 'resume', '--operator', 'ops', TASK], {})).toMatchObject({ op: 'resume', args: { taskId: TASK } });
+    expect(parseOperatorEnvelope(envelope('resume', { latest: true, skipReplay: true }))).toMatchObject({ ok: true, input: { command: 'resume', taskId: null, skipReplay: true } });
+    expect(parseOperatorEnvelope(envelope('resume', { latest: true }))).toMatchObject({ ok: true, input: { command: 'resume', skipReplay: false } });
+    expect(parseOperatorEnvelope(envelope('resume', { latest: true, skipReplay: 'yes' }))).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(() => operatorEnvelope(['minecraft', 'resume', '--operator', 'ops', '--latest', '--skip-replay=no'], {})).toThrow();
+  });
+  it('with --skip-replay: the hold of the body ends, nothing is sent again, and the next decision is told the act and its result once', async () => {
+    const s = service();
+    await s.operator.handle(envelope('request', { goal: 'エンドラを討伐して', holdOnFailure: true }));
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    await s.operator.hold(TASK, incident);
+    const reply = await s.operator.handle(envelope('resume', { latest: true, skipReplay: true }));
+    expect(reply.body).toMatchObject({ outcome: 'accepted', code: 'resumed', message: expect.stringContaining('出し直さず') });
+    expect(s.unfrozen).toEqual([`resume:${incident.id}/command-q115`]);
+    expect(s.audit.resumePending(TASK)).toBeNull();
+    expect(s.audit.recent('owner', 5).find(row => row.command === 'resume' && row.code === 'skipped')?.detail).toContain('出し直さなかった（--skip-replay）');
+    expect(s.operator.skipNote(TASK)).toBe('保留した act q15（go (1,2,3)）は出し直さなかった。前の結果: go_stuck');
+    expect(s.operator.skipNote(TASK)).toBeNull();
+  });
+  it('an act sent again that failed for the same reason: written down, no hold again (the body did not hold)', async () => {
+    const s = service();
+    await s.operator.handle(envelope('request', { goal: 'エンドラを討伐して', holdOnFailure: true }));
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    s.operator.repeated(TASK, { id: 'again-1', why: 'go_search_timeout', command: 'resume:command-q115', repeated: incident.id });
+    // The body did not hold again: nothing to release.
+    expect(s.unfrozen).toEqual([]);
+    expect(s.audit.heldOf(TASK)).toBeNull();
+    expect(s.stopped).toEqual([]);
+    expect(s.audit.recent('owner', 5).find(row => row.code === 'replay_failed_same')?.detail).toContain('出し直しは同じ理由で失敗、保留せず判断へ');
+    expect(s.activity.at(-1)).toMatchObject({ reasonCode: 'operator_replay_failed_same' });
   });
 });
 

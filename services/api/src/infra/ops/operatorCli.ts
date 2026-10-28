@@ -14,7 +14,8 @@ export const OPERATOR_CLI_USAGE = [
   '  opsCli.ts minecraft status',
   '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] [--hold-on-failure] <goal...>',
   '      (--hold-on-failure: on a heavy failure the task is held, the world stopped, the box and the scene written; then `resume`)',
-  '  opsCli.ts minecraft resume --operator <label> (<task-id> | --latest)   (a held request goes on: the failed act again, then the plan)',
+  '  opsCli.ts minecraft resume --operator <label> (<task-id> | --latest) [--skip-replay]',
+  '      (a held request goes on: the failed act again, then the plan; --skip-replay: not the act again, the next decision is told so)',
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
   '  opsCli.ts minecraft budget --operator <label> (<task-id> | --latest) <yen>',
   '      (change a running request\'s yen cap, from its next decision on; not below what it has used, not above the request cap)',
@@ -58,7 +59,7 @@ interface Parsed { flags: Map<string, string | true>; positional: string[] }
  */
 function parseArguments(argv: readonly string[]): Parsed {
   const flags = new Map<string, string | true>(), positional: string[] = [];
-  const bare = new Set(['--latest', '--keep-world', '--hold-on-failure']);
+  const bare = new Set(['--latest', '--keep-world', '--hold-on-failure', '--skip-replay']);
   for (let index = 0; index < argv.length; index += 1) {
     const item = argv[index]!;
     if (item === '--') {
@@ -113,6 +114,16 @@ function cancelEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   return { ...base, args: { taskId: parsed.positional[0] } };
 }
 
+/** `resume (<task-id> | --latest) [--skip-replay]` (run 45: the held act is not sent again with --skip-replay). */
+function resumeEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
+  knownFlags(parsed, ['--operator', '--latest', '--skip-replay']);
+  const skip = parsed.flags.get('--skip-replay');
+  if (skip !== undefined && skip !== true) throw new UsageError('--skip-replay takes no value');
+  parsed.flags.delete('--skip-replay');
+  const envelope = cancelEnvelope(base, parsed);
+  return skip === true ? { ...envelope, args: { ...envelope.args, skipReplay: true } } : envelope;
+}
+
 /** `budget <task-id> <yen>` or `budget --latest <yen>`: the yen is a whole number here; the API refuses 0 and anything over the cap, and audits it. */
 function budgetEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   knownFlags(parsed, ['--operator', '--latest']);
@@ -160,7 +171,8 @@ export function operatorEnvelope(argv: readonly string[], env: Readonly<Record<s
   if (domain === 'skills' && op === 'import') return skillImportEnvelope(base, parsed);
   if (domain !== 'minecraft') return { ...base, args: {} };
   if (op === 'request') return requestEnvelope(base, parsed);
-  if (op === 'cancel' || op === 'resume') return cancelEnvelope(base, parsed);
+  if (op === 'resume') return resumeEnvelope(base, parsed);
+  if (op === 'cancel') return cancelEnvelope(base, parsed);
   if (op === 'budget') return budgetEnvelope(base, parsed);
   return lifecycleEnvelope(base, parsed);
 }

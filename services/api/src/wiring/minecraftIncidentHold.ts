@@ -14,7 +14,9 @@
 /** `start`: the feet when the held act began; `end`: when it ended (where the body was held). */
 export type Feet = [number, number, number];
 /** `notHeld`: a hold was asked for and not made, because the world could not be stopped (the body's freeze words; run 44, hold 1). */
-export interface IncidentNote { id: string; heavy: boolean; why: string; held: boolean; frozen: boolean | null; freeze?: string; notHeld?: string; start?: Feet | null; end?: Feet | null }
+export interface IncidentNote { id: string; heavy: boolean; why: string; held: boolean; frozen: boolean | null; freeze?: string; notHeld?: string; start?: Feet | null; end?: Feet | null;
+  /** Run 45: the act a resume sent again failed for the reason it was held for, and the body did not hold again (the hold it was sent again for). */
+  repeated?: string }
 export interface IncidentHoldPort {
   /** Whether this task's request asked to be held on a heavy failure. */
   holdRequested(taskId: string): boolean;
@@ -32,6 +34,13 @@ export interface IncidentHoldPort {
   bodyHeld(taskId: string, body: { incident: string; why: string; seen: 'refused' | 'frame' }): Promise<boolean>;
   /** After a `resume`, the hold whose act is to be sent again: its incident and the act's command id; null when there is none to send. */
   resumePending(taskId: string): { incident: string; command: string; start?: Feet | null } | null;
+  /** Run 45: the line a resume with --skip-replay left for the task's next decision (the act not sent again and its result), once; else null. */
+  skipNote?(taskId: string): string | null;
+  /**
+   * Run 45 (holds 3 to 5): the act sent again by a resume failed for the same reason it was held for, and the body did not hold again (its
+   * receipt's `incident.repeated`): the decisions go on with the result; written down.
+   */
+  repeated?(taskId: string, incident: IncidentNote & { command: string }): void;
   /** The act sent again, and what it did (written once: the next step does not send it again). */
   resumeChecked(taskId: string, line: string): void;
 }
@@ -60,6 +69,7 @@ export function incidentOfResult(result: string | undefined): IncidentNote | nul
     return { id: value.id, heavy: value.heavy === true, why: String(value.why ?? ''), held: value.held === true,
       frozen: typeof value.frozen === 'boolean' ? value.frozen : null, ...(typeof value.freeze === 'string' ? { freeze: value.freeze } : {}),
       ...(typeof value.notHeld === 'string' && value.notHeld ? { notHeld: value.notHeld } : {}),
+      ...(typeof value.repeated === 'string' && value.repeated ? { repeated: value.repeated } : {}),
       ...(feet(value.start) ? { start: feet(value.start) } : {}), ...(feet(value.end) ? { end: feet(value.end) } : {}) };
   } catch { return null; }
 }

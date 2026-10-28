@@ -46,6 +46,10 @@ function holdDetail(detail: string | null): { incident?: string; command?: strin
       start: feet(value.start), end: feet(value.end), ...(typeof value.mismatch === 'string' ? { mismatch: value.mismatch } : {}) };
   } catch { return {}; }
 }
+/** The reason a hold row names (its detail's `why`), or ''. */
+function holdWhy(detail: string | null): string {
+  try { return String((JSON.parse(detail ?? '{}') as { why?: unknown }).why ?? ''); } catch { return ''; }
+}
 /** Phases after which a held request holds nothing any more. */
 const FINISHED_FOR_GOOD = ['completed', 'failed'];
 const HOUR_MS = 3_600_000;
@@ -304,7 +308,17 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     }
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted', argsJson: c.argsJson,
       taskId: found.id, detail: `hold=${hold.sequence} body=${unheld.words}`.slice(0, 600) });
+    // Run 45 (holds 3 to 5: the same go sent again stopped the same way, three times): with --skip-replay the held act is not sent again; its result
+    // goes to the next decision as a fact (set before the task is queued again: its step reads it when made), and the resume's check is written now.
+    const skipLine = input.skipReplay ? requests.heldActWords?.(detail.command ?? '', holdWhy(hold.detail)) ?? '保留した act は出し直さなかった' : null;
+    if (skipLine) skipNotes.set(found.id, skipLine);
     const resumed = requests.resume(found.id);
+    if (!resumed) skipNotes.delete(found.id);
+    if (resumed && skipLine) {
+      const line = skipLine;
+      audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'skipped', argsJson: c.argsJson,
+        taskId: found.id, detail: `出し直さなかった（--skip-replay）: ${line}`.slice(0, 600) });
+    }
     if (!resumed) {
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'refused', argsJson: c.argsJson,
         taskId: found.id, detail: 'runtime_resume_refused' });
@@ -315,7 +329,8 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     requests.wake();
     // 2026-10-28: how far the body is from where the held act began (the act is sent again from here; the body never goes back by itself).
     const position = driftWords(detail.start, requests.position?.() ?? null, detail.end);
-    return c.reply('accepted', 'resumed', `再開しました。まず保留した act を同じ引数で出し直し、その後に計画の続きから判断します。${position}`, { taskId: found.id, position });
+    return c.reply('accepted', 'resumed', input.skipReplay ? `再開しました。保留した act は出し直さず、次の判断にその結果を伝えて、計画の続きから判断します。${position}`
+      : `再開しました。まず保留した act を同じ引数で出し直し、その後に計画の続きから判断します。${position}`, { taskId: found.id, position });
   }
 
   /**
@@ -374,6 +389,26 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: outside ? 'operator_hold' : 'operator_hold_mismatch', detail: `task=${taskId} incident=${body.incident} seen=${body.seen}` });
     await requests.stop(taskId, 'operator_hold').catch(() => []);
     return true;
+  }
+  /** Run 45: the lines a resume with --skip-replay left for each task's next decision (taken once). */
+  const skipNotes = new Map<string, string>();
+  function skipNote(taskId: string): string | null {
+    const line = skipNotes.get(taskId) ?? null;
+    skipNotes.delete(taskId);
+    return line;
+  }
+  /**
+   * Run 45 (holds 3 to 5): the act a resume sent again failed for the reason it was held for, and the body did not hold again. The operator fixed
+   * what was thought the cause and it did not help: that is written down, and the decisions go on with the result.
+   */
+  function repeated(taskId: string, incident: { id: string; why: string; command: string; repeated?: string }): void {
+    const request = parts.audit.requestOf(parts.scopeKey, taskId);
+    if (request) {
+      audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'resume', event: 'settled', code: 'replay_failed_same',
+        argsJson: request.argsJson, taskId, detail: `出し直しは同じ理由で失敗、保留せず判断へ（${incident.why.slice(0, 80)}、incident ${incident.id}、出し直した保留 ${incident.repeated ?? '-'}、act ${incident.command}）`.slice(0, 600) });
+    }
+    parts.activity(parts.now(), { summary: '保留から出し直した act が同じ理由で失敗したので、もう一度は保留せずに判断を続けました。', tool: 'operator.minecraft.resume',
+      outcome: 'done', reasonCode: 'operator_replay_failed_same', detail: `task=${taskId} incident=${incident.id}` });
   }
   /** After a resume: the act that failed, sent again, and what it did (written once). */
   function resumeChecked(taskId: string, line: string): void {
@@ -527,6 +562,6 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       }, () => undefined);
   }
 
-  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked };
+  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked, skipNote, repeated };
 }
 export type OperatorMinecraft = ReturnType<typeof createOperatorMinecraft>;

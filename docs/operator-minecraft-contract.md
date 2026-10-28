@@ -38,7 +38,7 @@ Envelope: `{ "v": 1, "operator": "<label>", "domain": "minecraft", "op": "<op>",
 | --- | --- |
 | `request` | `goal` (1..1000 characters, no control characters), `maxMinutes` (1..120, default 30), `budgetYen` (1..2000, default 2000), `holdOnFailure` (optional `true`: below) |
 | `cancel` | `taskId` (a task UUID) or `latest: true` |
-| `resume` | `taskId` (a task UUID) or `latest: true`: a request held on a heavy failure goes on (below) |
+| `resume` | `taskId` (a task UUID) or `latest: true`, `skipReplay: true` optional: a request held on a heavy failure goes on (below) |
 | `budget` | `taskId` (a task UUID) or `latest: true`, and `budgetYen` (a whole number, 1..2000): see [Changing a running request's budget](#changing-a-running-requests-budget) |
 | `start` | `serverId` (optional when one server is registered), `keepWorld` (optional boolean; `true` only) |
 | `stop`, `login`, `logout`, `set_day` | `serverId` (optional when one server is registered) |
@@ -186,6 +186,17 @@ admission's `minecraft_busy`, `cancel` and the time limit all treat `stopped` as
   that failed once more with the same arguments from the step's start, under the step's lease with the body's resource (the run-44 resend went
   out while the step's ports were made, and the control refused it: `FCA_BODY_LEASE_INVALID`), writes what it did (`command = resume`,
   `event = settled`, `code = replayed`), and the decisions go on from the plan. `not_held` when the task is not held.
+- `resume (<task-id> | --latest) --skip-replay` (run 45, holds 3 to 5: the same go sent again stopped the same way three times; an argument of
+  the operation, not a switch): the body's hold is ended as above, but the held act is not sent again. The audit says so (`command = resume`,
+  `event = settled`, `code = skipped`, `出し直さなかった（--skip-replay）: …`), and the task's next decision reads one line of fact in its
+  events: 「保留した act q12（go (159,20,220)）は出し直さなかった。前の結果: search_timeout（…）」 (the act's queue item, its first hand, the
+  code and the first words in brackets of its stop line). A hold left by a body before a restart (its file) is resumed this way as any.
+- An act sent again by a resume that fails for the reason it was held for (the reason's kind: `go_stuck`, `go_search_timeout`,
+  `go_limit_time_low`, `long`, ...) is not held again: the body (it names the hold in `context.incident.resume`) writes the box and the scene,
+  does not stop the world, and its receipt says `incident.repeated = <the hold>`. The head writes `command = resume`, `event = settled`,
+  `code = replay_failed_same` (`出し直しは同じ理由で失敗、保留せず判断へ（…）`), the next decision reads that it failed the same way, and the
+  decisions go on with the result. A different reason holds as before. A body without this (before 2026-10-28, run 45) holds again, and the
+  head holds as before.
 - A body that refuses an act as held (`failureType = held`) while the head runs the task, or whose frame shows a hold
   (`observation.state.incidentHold`) of a running task the head does not hold: the head goes back to held at once (a hold row with
   `mismatch`, and the owner's stop path), and `resume` or `cancel` treats it as any hold. A body's hold of a task that is gone (a restart with

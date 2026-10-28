@@ -79,6 +79,26 @@ export function operatorMinecraftRequests(parts: {
           : `${receipt.outcome} (体が保留について何も言わなかった: 古い体)` };
       } catch (error) { return { ok: false, words: error instanceof Error ? error.message : 'unknown' }; }
     },
+    /**
+     * Run 45: a held act in words for the next decision when it is not sent again: its item and first hand, and how it ended (the code and the first
+     * words in brackets of its stop line). 「保留した act q12（go (159,20,220)）は出し直さなかった。前の結果: search_timeout（…）」.
+     */
+    heldActWords: (commandId: string, why: string): string => {
+      const sent = commandId ? parts.control.store.command(commandId) : null;
+      const item = String(sent?.queue?.item ?? '');
+      const hand = ((sent?.arguments as { hands?: Array<Record<string, unknown>> } | undefined)?.hands ?? [])[0];
+      const to = hand?.to as { x?: unknown; y?: unknown; z?: unknown } | undefined;
+      const handWords = hand ? `${String(hand.do ?? '?')}${to && typeof to.x === 'number' ? ` (${to.x},${to.y},${to.z})` : ''}` : '';
+      let stop = '';
+      try {
+        const lines = (JSON.parse(commandId ? parts.control.store.receipt(commandId)?.result ?? '' : '') as { lines?: Array<{ status?: string; line?: string }> }).lines ?? [];
+        const line = String(lines.find(entry => entry.status !== 'done' && entry.status !== 'skipped')?.line ?? '');
+        const code = /止まった (\w+)/u.exec(line)?.[1] ?? '';
+        const inside = /（([^（）]{1,120})）/u.exec(line)?.[1] ?? '';
+        stop = code ? `${code}${inside ? `（${inside}）` : ''}` : line.slice(0, 120);
+      } catch { stop = ''; }
+      return `保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop || why}`.slice(0, 200);
+    },
     /** The hold the body says it keeps (its newest frame, `state.incidentHold`, run 44), or null. */
     bodyHold: (): BodyHold | null => {
       const id = body();

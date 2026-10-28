@@ -16,7 +16,7 @@ import { firstPlanInbox, planGoal, startFirstPlan } from '../surfaces/minecraft/
 import { COMPLETION_WAY, observedCompletion, withCompletionRule, type LlmcCompletion } from '../surfaces/minecraft/minecraftLlmcCompletion.js';
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
-import { urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
+import { createLlmcEvents, urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
@@ -267,9 +267,21 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId,
     context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
+  // Run 45: the call id of the act a resume sends again (the body says when it failed for the reason it was held for: `incident.repeated`).
+  let resent: string | null = null;
+  // Run 45: a resume with --skip-replay: the act is not sent again, and the next decision reads so as a fact.
+  const skipped = holds?.skipNote?.(step.taskId) ?? null;
+  if (skipped) createLlmcEvents(step.taskId).note(skipped);
   if (holds && holdOn) {
-    queue.onRan((_item, _result, receipt) => {
+    queue.onRan((item, _result, receipt) => {
       const incident = incidentOfResult(receipt?.result);
+      if (incident?.repeated && !incident.held && receipt && resent !== null && item.call.id === resent) {
+        // Run 45 (holds 3 to 5): the body did not hold again; the next decision reads the result (its receipt) and this fact.
+        log(`Shannon Minecraft incident replay failed the same way task=${step.taskId} incident=${incident.id} why=${incident.why.slice(0, 80)} (no hold again)`);
+        createLlmcEvents(step.taskId).note(`保留から出し直した act は同じ理由（${incident.why.slice(0, 60)}）でまた失敗した。もう保留せず、この結果から判断する`);
+        holds.repeated?.(step.taskId, { ...incident, command: receipt.id });
+        return;
+      }
       if (incident && receipt && !incident.held && incident.notHeld) {
         // Run 44: the world could not be stopped, so the body did not hold; the task goes on and the operator reads why.
         log(`Shannon Minecraft incident not held task=${step.taskId} incident=${incident.id} why=${incident.why.slice(0, 80)} freeze=${incident.notHeld.slice(0, 80)}`);
@@ -306,6 +318,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     }
     {
       const args = sent.arguments as Record<string, unknown>;
+      resent = `resume:${sent.id}`;
       resumeOf = pending.incident;
       const added = queue.add({ call: { id: `resume:${sent.id}`, name: MC_ACT_TOOL, input: args }, operationId: `resume:${randomUUID()}`, input: args as never,
         arguments: args, skill: 'act', node: sent.queue?.node ?? null, current: null, why: String(args.why ?? ''), fixes: [],

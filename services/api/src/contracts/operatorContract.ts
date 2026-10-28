@@ -65,7 +65,8 @@ export type OperatorInput =
    */
   | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number; holdOnFailure?: boolean }
   /** A held request goes on: the act that failed is sent again with the same arguments first, then the decisions from the plan. */
-  | { command: 'resume'; taskId: string | null }
+  /** `skipReplay` (run 45, holds 3 to 5: the held act sent again failed again the same way three times): the held act is not sent again. */
+  | { command: 'resume'; taskId: string | null; skipReplay: boolean }
   /** The held requests with where the body is now against where the held act began (read only; the CLI's status asks it). */
   | { command: 'held' }
   | { command: 'cancel'; taskId: string | null }
@@ -219,7 +220,7 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.domain !== 'minecraft') return otherDomain(operator, value.domain, value.op, args);
   const allowed: Record<string, readonly string[]> = {
-    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest'], held: [], budget: ['taskId', 'latest', 'budgetYen'],
+    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest', 'skipReplay'], held: [], budget: ['taskId', 'latest', 'budgetYen'],
     start: ['serverId', 'keepWorld'],
   };
   const extra = Object.keys(args).find(key => !(allowed[value.op as string] ?? ['serverId']).includes(key));
@@ -230,8 +231,10 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   if (value.op === 'cancel') return cancel(operator, args);
   if (value.op === 'held') return { ok: true, operator, input: { command: 'held' } };
   if (value.op === 'resume') {
-    const parsed = cancel(operator, args);
-    return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId } } : parsed;
+    if (args.skipReplay !== undefined && args.skipReplay !== true) return refuse(operator, 'invalid_input', 'skipReplay is true or absent');
+    const { skipReplay: _skip, ...rest } = args;
+    const parsed = cancel(operator, rest);
+    return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId, skipReplay: args.skipReplay === true } } : parsed;
   }
   if (value.op === 'budget') return budget(operator, args);
   if (value.op === 'release') return release(operator, args);

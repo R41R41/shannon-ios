@@ -145,6 +145,8 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
       catch { return { incident: '', command: '' }; }
     },
     resumeChecked: (id, line) => service.resumeChecked(id, line),
+    skipNote: id => service.skipNote(id),
+    repeated: (id, incident) => service.repeated(id, incident),
   });
   const socket = audit.enabled
     ? directory.then(() => serveOperatorSocket(socketPath, body => service.handle(body), reason => service.socketRefused(reason))).then(served => {

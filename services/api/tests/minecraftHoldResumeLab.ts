@@ -19,6 +19,10 @@
  *   SHANNON_BODY_BUNDLE=<Shannon>/backend/lab-bundle/hold-lab-body.mjs npx tsx tests/minecraftHoldResumeLab.ts
  *   (the body compiled as its own tsconfig does it: class fields set after the constructor's parameters; its packages from its own node_modules)
  *
+ * Run 45 (holds 3 to 5) adds: a resume with `--skip-replay` after a restart of the body (the held act is not sent again, the next decision reads
+ * so as a fact), and an act sent again that fails for the reason it was held for (no hold again: the decisions go on). The lab's `walk` act passes
+ * while the world is broken (only the `gap` needs the place the broken server refuses).
+ *
  * It prints PASS/FAIL lines and `HOLD_LAB_RESULT {...}`; exit 0 when every check passed.
  */
 import { EventEmitter } from 'node:events';
@@ -98,11 +102,18 @@ const control = new MinecraftControl(new MinecraftControlStore(h.db), configurat
   leaseValid: (lease, taskId) => bodyLeaseValid(known(lease, taskId), lease, bodyResource, nowIso()),
   leaseAttempted: (lease, taskId) => known(lease, taskId) !== null });
 
-/** The model: a script of what a decision gives (an act or a look), one decision every 300 ms. */
-const model = { script: [] as Array<'gap' | 'walk'>, decisions: 0, acts: 0, inputs: [] as FcaModelInput[] };
+/**
+ * The model: a script of what a decision gives (an act or a look), one decision every 300 ms. The script's rounds are plain (the legacy shape: no
+ * signed history), so the runner does not put the live state in its input; a decision in production reads it (`transient`, the map-first live
+ * with the events since the last decision). The lab reads it as that decision would, after the runner's `context()` (run 45: the facts a resume
+ * leaves for the next decision are there).
+ */
+const model = { script: [] as Array<'gap' | 'walk'>, decisions: 0, acts: 0, inputs: [] as FcaModelInput[], lives: [] as string[] };
+let liveOf: (() => unknown) | null = null;
 const fake: FcaModel = {
   async decide(input) {
     model.decisions++; model.inputs.push(input);
+    try { model.lives.push(JSON.stringify(liveOf?.() ?? null)); } catch (error) { model.lives.push(`live failed: ${String(error)}`); }
     const last = (input.history as unknown[]).at(-1);
     if (process.env.HOLD_LAB_VERBOSE && last) log(`model: last ${JSON.stringify(last).slice(0, 400)}`);
     if (process.env.HOLD_LAB_VERBOSE && model.decisions === 1) log(`model: tools ${input.tools.map(tool => tool.name).join(',')} kinds ${JSON.stringify((input as { decisions?: unknown }).decisions ?? null)}`);
@@ -136,7 +147,9 @@ const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey:
       if (runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_TASK_STOPPING');
     };
     const binding = minecraftGoalBinding(step.snapshot.task, 'minecraft:lab');
-    const ports = { keepBodyTools: () => true, body: llmcLifecycle(small, taskBody.body), sourcesVisible: () => true, waitCounterpart: () => false,
+    const life = llmcLifecycle(small, taskBody.body);
+    liveOf = life.transient ? () => life.transient!() : null;
+    const ports = { keepBodyTools: () => true, body: life, sourcesVisible: () => true, waitCounterpart: () => false,
       tools: createFcaProgressTools(combineFcaTools(small.planTools, fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true, ...small.tools }), taskBody.tools),
         { checkpoint: step.snapshot.checkpoint, binding, requireConditions: true, permit }),
       // The mode's ports but its history codec (the Anthropic model's rounds): the script's rounds are plain, as the runtime's own tests give them.
@@ -196,7 +209,8 @@ function startBody(name: string): LabBody {
       lab.acts.push(command.id);
       const started = Date.now();
       await delay(400);
-      const ok = !server.broken;
+      const to = (command.arguments as { hands?: Array<{ to?: { x?: number } }> } | undefined)?.hands?.[0]?.to;
+      const ok = !server.broken || to?.x === 11;
       const report = { ok, startedAt: started, done: ok ? 1 : 0, of: 1, stoppedBy: ok ? undefined : 'failure',
         lines: [{ i: 1, do: 'go', status: ok ? 'done' : 'stopped', line: ok ? 'go 着いた (9,100,0) 道 9 歩・掘 0・置 3・引き直し 0 回' : 'go 止まった stuck: 置いたブロックが世界に現れない（サーバーが置きを断った。1 回） (3,100,0) 道 3 歩・掘 0・置 0・引き直し 0 回' }] };
       const incident = await incidents.afterAct(command, report, Date.now() - started).catch(() => null);
@@ -326,6 +340,63 @@ try {
     && await until(() => lab.acts.length > actsBefore, 30_000), resumed4.out);
   await cli('cancel', '--operator', 'lab', '--latest');
   await until(() => ['stopped', 'failed', 'completed'].includes(phase(task4)), 15_000);
+
+  // 7 (run 45, holds 3 to 5). Held, the body restarted (a deploy), and resumed with --skip-replay: the body's hold ends and the world moves, the
+  //    held act is not sent again, the next decision is told which act was not sent and how it ended, and the decisions go on.
+  server.broken = true; model.script = ['gap'];
+  const task5 = taskOf(await cli('request', '--operator', 'lab', '--hold-on-failure', '--max-minutes', '30', 'ラボ: 出し直さない再開'));
+  check('held (skip-replay request)', await until(() => heldFile() && server.frozen && audit.store.heldOf(task5) !== null && phase(task5) === 'stopped', 30_000), `phase=${phase(task5)}`);
+  lab = await restart(lab, 'F');
+  check('after the restart the body is still held (skip-replay)', heldFile() && server.frozen && lab.incidents.held()?.task === task5);
+  await until(() => control.available().length === 1, 10_000);
+  const inputsBefore5 = model.lives.length, actsBefore5 = model.acts;
+  model.script = ['walk'];
+  const skipped5 = await cli('resume', '--operator', 'lab', '--latest', '--skip-replay');
+  check('resume --skip-replay is accepted and says the act is not sent again', skipped5.code === 0 && /resumed/u.test(skipped5.out) && /出し直さず/u.test(skipped5.out), skipped5.out);
+  check('--skip-replay: the hold of the body ended and the world moves', !heldFile() && !server.frozen && lab.incidents.held() === null, `file=${heldFile()} frozen=${server.frozen}`);
+  const skipRow = audit.store.recent('owner', 30).find(row => row.taskId === task5 && row.command === 'resume' && row.code === 'skipped');
+  check('the audit says the act was not sent again, and which', /出し直さなかった（--skip-replay）: 保留した act q\d+（go \(9,100,0\)）は出し直さなかった。前の結果: stuck（サーバーが置きを断った。1 回）/u.test(skipRow?.detail ?? ''), skipRow?.detail ?? 'no skipped row');
+  check('the decisions go on: the act of the next decision runs', await until(() => lab.acts.length >= 1 && model.acts > actsBefore5, 30_000), `acts=${lab.acts.length} model.acts=${model.acts}`);
+  const told = model.lives.slice(inputsBefore5);
+  if (process.env.HOLD_LAB_VERBOSE && !/出し直さなかった/u.test(told[0] ?? '')) log(`first decision after the skip: live ${(told[0] ?? '').slice(0, 1500)}`);
+  check('the next decision reads the fact (the act not sent again and its result)', /出し直さなかった。前の結果: stuck/u.test(told[0] ?? ''),
+    (told[0] ?? 'no decision').match(/保留した act[^"]{0,160}/u)?.[0] ?? 'not in the input of the first decision');
+  const times = (text: string) => text.split('出し直さなかった').length - 1;
+  check('the fact is told once (no new copy in the decision after)', told.length < 2 || times(told[1]!) <= times(told[0]!), `decisions=${told.length} counts=${told.slice(0, 3).map(times).join(',')}`);
+  check('nothing was sent again (no replayed row, no act refused)', !audit.store.recent('owner', 30).some(row => row.taskId === task5 && row.code === 'replayed') && lab.refused === 0,
+    `refused=${lab.refused}`);
+  await cli('cancel', '--operator', 'lab', '--latest');
+  await until(() => ['stopped', 'failed', 'completed'].includes(phase(task5)), 15_000);
+
+  // 8 (run 45, holds 3 to 5). Resumed while the cause is not fixed: the act sent again fails for the same reason. No hold again: the body's new
+  //    hold is ended (the world moves), the audit says so, and the decisions go on with the result.
+  server.broken = true; model.script = ['gap'];
+  const task6 = taskOf(await cli('request', '--operator', 'lab', '--hold-on-failure', '--max-minutes', '30', 'ラボ: 同じ理由で失敗'));
+  check('held (same-reason request)', await until(() => heldFile() && server.frozen && audit.store.heldOf(task6) !== null && phase(task6) === 'stopped', 30_000), `phase=${phase(task6)}`);
+  const firstHold6 = lab.incidents.held()?.id ?? '';
+  const actsBefore6 = lab.acts.length, modelActsBefore6 = model.acts;
+  model.script = ['walk'];
+  const resumed6 = await cli('resume', '--operator', 'lab', '--latest');
+  check('resume (not fixed) is accepted', resumed6.code === 0 && /resumed/u.test(resumed6.out), resumed6.out);
+  const sameRow = () => audit.store.recent('owner', 40).find(row => row.taskId === task6 && row.command === 'resume' && row.code === 'replay_failed_same');
+  const inputsBefore6 = model.lives.length;
+  check('the act sent again fails the same way: the audit says no hold again', await until(() => sameRow() !== undefined, 30_000)
+    && new RegExp(`出し直しは同じ理由で失敗、保留せず判断へ（go_stuck、incident [^、]+、出し直した保留 ${firstHold6}、act \\S+）`, 'u').test(sameRow()?.detail ?? ''), sameRow()?.detail ?? 'no replay_failed_same row');
+  check('the act was sent again (it reached the body)', lab.acts.length > actsBefore6, `acts ${actsBefore6} → ${lab.acts.length}`);
+  check('the body did not hold again: no hold file, the world moves', !heldFile() && !server.frozen && lab.incidents.held() === null,
+    `file=${heldFile()} frozen=${server.frozen} first=${firstHold6}`);
+  // The act the decision queued behind the one sent again was dropped with it (the queue's way after a failure); the next one runs.
+  const actsAfterSame = lab.acts.length;
+  model.script = ['walk'];
+  check('the decisions go on: a later act runs (no hold in the head)', await until(() => lab.acts.length > actsAfterSame, 30_000)
+    && audit.store.heldOf(task6) === null && phase(task6) === 'executing', `phase=${phase(task6)} acts=${lab.acts.length} model.acts=${model.acts} before=${modelActsBefore6}`);
+  check('a decision after it reads that the act sent again failed the same way', model.lives.slice(inputsBefore6).some(live => /保留から出し直した act は同じ理由（go_stuck）でまた失敗した/u.test(live)),
+    `decisions=${model.lives.length - inputsBefore6}`);
+  await delay(2500);
+  check('the head did not go back to held from the frame (2.5 s on)', audit.store.heldOf(task6) === null && phase(task6) !== 'stopped', `phase=${phase(task6)}`);
+  await cli('cancel', '--operator', 'lab', '--latest');
+  await until(() => ['stopped', 'failed', 'completed'].includes(phase(task6)), 15_000);
+  server.broken = false;
 
   // 6. A hold file of a task that is gone (run 44's after the budget stopped it): the body comes up held, the head ends it (its tick).
   fs.writeFileSync(holdFile, JSON.stringify({ id: 'lab-stale-1', task: task1, at: nowIso(), frozen: false, freeze: 'others_present:I_am_Shannon', command: 'none', why: 'go_stuck' }));
