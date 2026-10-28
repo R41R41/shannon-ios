@@ -1,3 +1,5 @@
+import type { PlanPromise } from '@shannon/mind';
+import { shareStacks } from './minecraftLlmcPromises.js';
 import type { BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
 import type { LlmCentricWorld } from '../../contracts/minecraftActContract.js';
 import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
@@ -242,6 +244,8 @@ export interface LlmcLiveParts {
    * the live state takes it in place of `lines` when it has to be shortened. Absent: no key.
    */
   facts?: { lines: readonly string[]; compressed?: readonly string[] };
+  /** A-9: the plan's promises, whose shares are written beside the pack's lines (`shareStacks`). */
+  promises?: readonly PlanPromise[];
   /**
    * The facts said once that the normal input takes (`onceFor`, the words of each), put first in `events`. A live state that has to be shortened says none of them and so
    * does not deliver them (the request's bytes decide: `deliverOnceFacts`); they are offered again with the next input.
@@ -298,7 +302,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     state: { ...state, ...('fullness' in state ? { fullnessLostIn5min: parts.trend.lostIn5min() } : {}),
       ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     foodPoints: { total: food.points, items: food.items },
-    inventory: stacks(world.inventory).slice(0, INVENTORY),
+    inventory: shareStacks(stacks(world.inventory).slice(0, INVENTORY), parts.promises),
     threats,
     near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
     ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
@@ -322,7 +326,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing' | 'bodyAge' | 'queue' | 'recovery' | 'once'> & { planNowTitle: string | null; mode: string; /** The chapter 8 facts of the urgent version (`inputFacts(…, true)`). */ facts?: readonly string[] }): Record<string, unknown> {
+  | 'footing' | 'bodyAge' | 'queue' | 'recovery' | 'once' | 'promises'> & { planNowTitle: string | null; mode: string; /** The chapter 8 facts of the urgent version (`inputFacts(…, true)`). */ facts?: readonly string[] }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
   if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), mode: parts.mode };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
@@ -335,7 +339,7 @@ export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation'
     state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     foodPoints: { total: food.points, items: food.items },
     ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
-    threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: shortStacks(world.inventory),
+    threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: shareStacks(shortStacks(world.inventory), parts.promises),
     ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-URGENT_EVENTS)] } : {}), ...(results.length ? { lastResults: results } : {}),
     mode: parts.mode };
 }

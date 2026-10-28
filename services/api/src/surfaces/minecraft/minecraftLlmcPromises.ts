@@ -446,3 +446,44 @@ export function breakingWords(promises: readonly PlanPromise[], hands: Parameter
   }
   return lines;
 }
+
+/**
+ * A-9: the pack's lines with the open promises' shares written where the model counts what it can spend: `spruce_planks×7（約束 #1 地下の作業台に 4・外 3）`. A promise of
+ * `planks` is beside every kind of planks (their total is said when there are several lines: `板の合計 7`); the lines of an item no open promise names are as they were;
+ * a promise held by its `instead` (`kept_by_instead`) and the food points (not a stack) are not written. The ledger's lines stay as they are.
+ */
+export function shareStacks(lines: readonly string[], promises: readonly PlanPromise[] | undefined): string[] {
+  const open = (promises ?? []).filter(promise => promise.state === 'open' && promise.item !== 'food').sort((left, right) => left.id - right.id);
+  if (!open.length) return [...lines];
+  const items = [...new Set(open.map(promise => promise.item))];
+  const plain = (line: string) => /^([a-z_0-9]+)×(\d+)$/u.exec(line);
+  const nameOf = (line: string) => /^([a-z_0-9]+)×/u.exec(line)?.[1] ?? null;
+  const touched = (line: string) => { const name = nameOf(line); return name !== null && items.some(item => isItemOf(name, item)); };
+  // The stacks of one kind that a promise names are added up first (the rewrite adds up only the lines it can read whole).
+  const sums = new Map<string, number>();
+  const merged: string[] = [];
+  for (const line of lines) {
+    const match = plain(line);
+    if (match && touched(line)) {
+      if (!sums.has(match[1]!)) merged.push(match[1]!);
+      sums.set(match[1]!, (sums.get(match[1]!) ?? 0) + Number(match[2]));
+    } else merged.push(line);
+  }
+  const rows = merged.map(entry => sums.has(entry) ? `${entry}×${sums.get(entry)}` : entry);
+  const first = new Map<string, number>();
+  const total = (item: string) => rows.reduce((sum, row) => sum + (touched(row) && isItemOf(nameOf(row)!, item) ? Number(/×(\d+)/u.exec(row)?.[1] ?? 0) : 0), 0);
+  return rows.map((row, index) => {
+    const name = nameOf(row);
+    if (name === null || !touched(row)) return row;
+    const notes: string[] = [];
+    for (const item of items.filter(candidate => isItemOf(name, candidate))) {
+      const matching = rows.filter(other => nameOf(other) !== null && isItemOf(nameOf(other)!, item));
+      if (matching.length > 1 && first.get(item) !== undefined && first.get(item) !== index) continue;
+      first.set(item, index);
+      const held = open.filter(promise => promise.item === item), all = total(item);
+      const parts = [...held.map((promise, position) => `${position === 0 ? '約束 ' : ''}#${promise.id} ${promise.use}に ${promise.count}`), `外 ${freeOutside(promises!, item, all)}`];
+      notes.push(matching.length > 1 ? `${itemWord(item)}の合計 ${all}: ${parts.join('・')}` : parts.join('・'));
+    }
+    return notes.length ? `${row}（${notes.join('）（')}）` : row;
+  });
+}

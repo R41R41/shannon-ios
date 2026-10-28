@@ -24,6 +24,9 @@ import { MinecraftControlStore } from '../../src/surfaces/minecraft/store/minecr
 import type { ActInput } from '../../src/contracts/minecraftActContract.js';
 import { createFcaHistoryAhead } from '../../src/mind/action/fca/fcaHistory.js';
 import { llmcStepParts } from '../../src/wiring/minecraftLlmcWiring.js';
+import { fcaMinecraftTools } from '../../src/wiring/fcaMinecraftTools.js';
+import { inActionExecution } from '../../src/infra/context/actionExecution.js';
+import type { ToolResult } from '../../src/mind/tools/toolRegistryPorts.js';
 
 /**
  * The bench C of the continue contract (chapter 10): the head is the head's code, the model is a script, the body is a stand-in.
@@ -458,7 +461,7 @@ export interface BenchOptions {
   /** The body polls on its own every `pollEveryMs` (default 4); `false`: the script polls by hand. */
   autoPoll?: boolean | number;
 }
-export interface Head { headBoot: string; control: MinecraftControl; parts: ReturnType<typeof llmcStepParts>; queue: LlmcQueue; stepId: string; lease: { id: string; generation: number; holder: string }; lines: string[];
+export interface Head { headBoot: string; control: MinecraftControl; parts: ReturnType<typeof llmcStepParts>; queue: LlmcQueue; stepId: string; step?: ReturnType<typeof fakeStep>; lease: { id: string; generation: number; holder: string }; lines: string[];
   /** The head's process is gone: whatever of it is still running (a wait for a receipt) finds the database closed to it and ends. */
   kill(): void }
 
@@ -528,6 +531,7 @@ export class BenchC {
       ...(this.options.planner ? { planner: this.options.planner } : {}) };
     const parts = llmcStepParts(llmc as never, step as never, control, line => this.current.lines.push(line));
     this.current.parts = parts;
+    this.current.step = step;
     this.current.queue = parts.tools.llmc.queue as LlmcQueue;
     this.heads.push(this.current);
     return this.current;
@@ -590,6 +594,17 @@ export class BenchC {
         content: [{ type: 'tool_use', id: `toolu_${id}`, name: 'mc_act', input: { why: label } }], usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } });
       return work(news);
     });
+  }
+  /**
+   * The model's `mc.act` through the real tool: `fcaMinecraftTools` over the head's own step parts (`llmcStepParts`'s `tools`, as the server wires them), as a decision of the scripted model.
+   * What it answers is what the model reads of the call (the line of the queue and the facts beside it).
+   */
+  async actThroughTools(input: Record<string, unknown>): Promise<ToolResult> {
+    const head = this.current;
+    const tools = fcaMinecraftTools({ control: head.control, step: head.step as never, ownerAlone: () => true, sourcesVisible: () => true, ...head.parts.tools } as never);
+    const controller = new AbortController();
+    return this.decide('act', () => inActionExecution({ lease: head.step!.lease, signal: controller.signal, permit: async () => true } as never,
+      () => tools.execute({ scopeKey: 'owner', taskId: this.run, operationId: `op-act-${++this.opCount}`, name: 'mc.act', input, signal: controller.signal } as never) as never)) as Promise<ToolResult>;
   }
   /** A queue item for an act, as the model's `mc.act` makes it. */
   spec(hands: ActInput['hands'], extra: Partial<ActInput> = {}, node: string | null = 'p1'): QueueAdd {

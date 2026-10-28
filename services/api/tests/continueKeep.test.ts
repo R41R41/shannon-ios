@@ -16,6 +16,7 @@ import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js
 import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
 import { validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 import { sendItem } from '../src/wiring/fcaMinecraftActItem.js';
+import { lineToHand } from '../src/contracts/minecraftActShortHands.js';
 
 /**
  * Amendment A-7 (the head only), from the short run of Sonnet: 1 `keep` (an act says what to keep, the head makes the promise), 2 vertical's `liquid` and limits told with the
@@ -302,5 +303,15 @@ describe('the system text: keep in the order of what to do, within the size', ()
     expect(V2_ALWAYS).toContain('後で使う物は act の keep に書く（帳簿に載る）');
     expect(V2_ALWAYS.split('act の keep').length).toBe(2);
     expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThanOrEqual(8_800);
+  });
+});
+
+describe('A-8 follow-up: a vertical field written as a word and a value is refused with its form', () => {
+  it('"maxDig 200" says maxDig=200 (the head does not read it as that field)', () => {
+    const read = lineToHand('vertical down stairs south y=10 dig=stone maxDig 200 liquid=stop');
+    expect(read).toHaveProperty('error');
+    expect((read as { error: string }).error).toContain('maxDig 200');
+    expect((read as { error: string }).error).toContain('maxDig=200 の形');
+    expect(lineToHand('vertical down stairs south y=10 dig=stone maxDig=200 liquid=stop')).toMatchObject({ do: 'vertical', maxDig: 200 });
   });
 });

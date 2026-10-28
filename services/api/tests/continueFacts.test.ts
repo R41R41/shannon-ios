@@ -49,6 +49,15 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     expect(got.bytes.length).toBeGreaterThan(30_000);
   });
 
+  it.each(variants)('A-9 %s: the lines of the pack carry the shares of the open promises (where the model counts what it can spend)', async variant => {
+    const got = await extractRequestBytes({ ...options, variant, taskId: `share-${variant}`, ...variant === 'compressed' ? { compactAboveTokens: 16_000 } : {} });
+    expect(got.lastMessage).toContain('oak_planks×2（約束 #3 作業台に 4・外 0）');
+    expect(got.lastMessage).toContain('obsidian×7（約束 #6 黒曜石の枠に 10・外 0）');
+    // a stack no promise names stays as it was
+    expect(got.lastMessage).toContain('dirt×35');
+    expect(got.lastMessage).toContain('"dirt×35"');
+  });
+
   it('is the version it says: the urgent one has the short live state, the shortened one the facts in their shortened form', async () => {
     const [normal, urgent, compressed] = await Promise.all(variants.map(variant => extractRequestBytes({ ...options, variant, taskId: `kind-${variant}`,
       ...variant === 'compressed' ? { compactAboveTokens: 16_000 } : {} })));

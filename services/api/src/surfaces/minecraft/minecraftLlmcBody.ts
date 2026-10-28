@@ -233,6 +233,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
     ...(seen.queue?.length ? { queue: seen.queue } : {}),
     ...bodyAgeField(seen.bodyAge),
     ...(facts?.lines.length ? { facts } : {}), ...(once.length ? { once } : {}),
+    ...(planTreeOf(llmc)?.promises.length ? { promises: planTreeOf(llmc)!.promises } : {}),
     ...readiness, ...roadParts(llmc, observation, elapsedMinutes, seen.heldMs) }, llmcPlanTokens(plan));
   return withPlanFacts(live, planFacts);
 }
@@ -424,6 +425,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing, bodyAge,
       planNowTitle: planNowTitle(currentNodeOf(parts.llmc)), queue: queueNow(observation), mode: URGENT_NOTE,
       recovery: readiness.recovery,
+      ...(planTreeOf(parts.llmc)?.promises.length ? { promises: planTreeOf(parts.llmc)!.promises } : {}),
       ...(observation && observation.connected !== false
         ? { facts: inputFacts(observation, factsContext(parts.llmc, observation, readiness, readiness.planFacts, judge()), true).lines } : {}),
       once: onceFor(parts.taskId, 'urgent').map(fact => fact.text) });

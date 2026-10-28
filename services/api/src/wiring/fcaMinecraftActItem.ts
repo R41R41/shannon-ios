@@ -52,7 +52,9 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';
   // Amendment A-7 1: the act is in the queue; what it said to keep becomes promises (an open one of the same item and use is revised). Not put into the act's `uses`.
   const kept = (keep ?? []).map(entry => promiseKeptWords(entry, parts.keep ? parts.keep(entry) : { problem: 'この判断の計画には約束を書けない' }));
-  return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...kept].join('\n'));
+  // Amendment A-8 2: what the act would spend of the promised is said once, after the line of the queue (nothing is refused).
+  const breaking = parts.promises ? breakingWords(parts.promises(), input.hands, parts.frame) : [];
+  return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...kept, ...breaking].join('\n'));
 }
 
 /** An input of nothing but `replace`: the items are taken off and that is the whole answer; null for any other input. */

@@ -1040,3 +1040,24 @@ describe('what the bench C also shows (outside the judge\'s scenes)', () => {
     console.log('BENCH_C_NOTE seam-5-one-poll ledger kinds:', bench.plan.tree().promises[0]!.ledger.map(line => `${line.kind}:${line.count}:${line.reason ?? ''}`).join(' | '));
   });
 });
+
+describe('A-8 2 through the real tool: an act that would spend the promised says so once after the line of the queue (nothing refused)', () => {
+  it('a smelt of 6 planks as fuel with 7 in the pack and a promise of 4: the answer of mc.act names the promise, the act is in the queue', SLOW, async () => {
+    const bench = make({ scene: 'a8-breaking' });
+    await bench.begin();
+    expect((await bench.planUpdate('promise', { ops: [{ op: 'promise', item: 'planks', count: 4, use: '地下の作業台' }] })).ok).toBe(true);
+    bench.body.inventory = { spruce_planks: 7, raw_iron: 6 };
+    await bench.spin(3);
+    const answer = await bench.actThroughTools({ hands: [{ do: 'smelt', items: [{ item: 'raw_iron', count: 6 }], fuel: 'spruce_planks', fuelCount: 6 }], why: '[p1] 鉄を焼く' });
+    expect(answer.ok).toBe(true);
+    const lines = answer.text.split(/\r?\n/u);
+    expect(lines[0]).toMatch(/^列に入れた q[0-9]+/u);
+    expect(lines).toContain('この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 6 を使い、残り 1）');
+    // the act went on: the line comes after the queue's, once, and the body was handed the command
+    expect(lines.filter(line => line.startsWith('この act は約束'))).toHaveLength(1);
+    expect(await until(() => bench.body.handed.length > 0)).toBe(true);
+    // an act that spends only what is free says nothing
+    const quiet = await bench.actThroughTools({ hands: [{ do: 'smelt', items: [{ item: 'raw_iron', count: 6 }], fuel: 'spruce_planks', fuelCount: 3 }], why: '[p1] もう一度' });
+    expect(quiet.text).not.toContain('割る見込み');
+  });
+});

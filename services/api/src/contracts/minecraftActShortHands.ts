@@ -187,6 +187,8 @@ function furnaceHand({ cells, words, hand }: Read): ActHand | { error: string } 
   if (op === 'put' && (!item || !isCount(count))) return bad('furnace', 'put には 物 と 個数 が要る（furnace X,Y,Z put iron_ore 8 fuel=coal fuelCount=2）');
   return done({ ...hand, at: cells, op, ...(op === 'put' ? { item, count: Number(count) } : {}) });
 }
+/** The names of vertical's fields written with `=` (a word of these in the place of the compass word is a field written without it). */
+const VERTICAL_FIELDS: ReadonlySet<string> = new Set(['maxDig', 'maxPlace', 'seconds', 'range', 'dig', 'place', 'liquid', 'y']);
 const READERS: Record<string, Reader> = {
   chest: chestHand, furnace: furnaceHand,
   obsidian: ({ cells, hand }) => cells.length ? done(blocksOf({ ...hand, at: cells })) : bad('obsidian', '溶岩の源の座標が要る'),
@@ -213,7 +215,11 @@ const READERS: Record<string, Reader> = {
     const [dir, shape, toward, ...extra] = words;
     if (dir !== 'down' && dir !== 'up') return bad('vertical', 'dir（down か up）が要る（vertical down stairs south y=10 dig=stone liquid=stop）');
     if (!shape) return bad('vertical', '形（stairs・shaft・pillar）が要る');
-    if (extra.length) return bad('vertical', `読めない語 ${extra.join(' ')}`);
+    if (extra.length) {
+      // A field written as a word and a value (「maxDig 200」): said with its form, not read as that field (the model writes the form, the head does not guess it).
+      const forms = extra.flatMap((word, index) => VERTICAL_FIELDS.has(word) ? [`${word}=${extra[index + 1] ?? '値'}`] : []);
+      return bad('vertical', `読めない語 ${extra.join(' ')}${forms.length ? `（${forms.join('・')} の形で書く。= で結ぶ）` : ''}`);
+    }
     const { y, toY, ...rest } = blocksOf(hand), target = toY ?? y;
     return done({ ...rest, dir, shape, ...(toward ? { toward } : {}), ...(target !== undefined ? { toY: target } : {}) });
   },

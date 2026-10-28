@@ -38,3 +38,18 @@ describe('A-8 2: an act that would break a promise is told once, and not refused
       .toEqual([{ item: 'cobblestone', count: 3 }, { item: 'oak_planks', count: 2 }, { item: 'cobblestone', count: 2 }, { item: 'dirt', count: 4 }]);
   });
 });
+
+describe('A-9: the pack\'s lines carry the shares of the open promises', () => {
+  it('writes where a promise is and how much is outside it; adds up the stacks of a kind a promise names; leaves the rest and the held-by-instead ones', async () => {
+    const { shareStacks } = await import('../src/surfaces/minecraft/minecraftLlmcPromises.js');
+    const open = [promise(1, 'planks', 4, '地下の作業台')];
+    expect(shareStacks(['spruce_planks×7', 'dirt×35'], open)).toEqual(['spruce_planks×7（約束 #1 地下の作業台に 4・外 3）', 'dirt×35']);
+    // two kinds of planks: the first line carries the total
+    expect(shareStacks(['spruce_planks×4', 'oak_planks×3', 'oak_planks×2'], open)).toEqual(['spruce_planks×4（板の合計 9: 約束 #1 地下の作業台に 4・外 5）', 'oak_planks×5']);
+    // two promises of one item, an exact one beside a kind
+    expect(shareStacks(['spruce_planks×7'], [...open, promise(2, 'spruce_planks', 2, 'はしご')])).toEqual(['spruce_planks×7（約束 #1 地下の作業台に 4・外 3）（約束 #2 はしごに 2・外 5）']);
+    expect(shareStacks(['spruce_planks×7'], [promise(1, 'planks', 4, '作業台', 'kept_by_instead')])).toEqual(['spruce_planks×7']);
+    expect(shareStacks(['spruce_planks×7'], undefined)).toEqual(['spruce_planks×7']);
+    expect(shareStacks(['bread×3'], [promise(4, 'food', 20, '地下で食べる分')])).toEqual(['bread×3']);
+  });
+});
