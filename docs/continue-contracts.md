@@ -1231,3 +1231,4 @@ interface LedgerSeen {
 4. **`V2_ALWAYS` の PLAN 節**：「準備の必須は、reason を書いても省けない」は契約 7 章（`prep: skipped` と理由を書ける）と食い違う。契約が正。同じトークン数以内で「準備を省く時は skipped と理由を書く」の形に直す（8,800 以内を守る）。
 5. **体の `handReasons` に `equip`**：act の `equip` で防具を着けた時の理由が `unexplained` になる。体が `equip` を足し、帳簿は A-2 の 3（身に着けた）で出す。
 6. **local-gate の段 5**：頭のパッチ（`tools/continue-verify/local-gate-stage5.patch`）を体の担当が読み、OK なら取りまとめ役が Syzygy に当てる（main への合流の時に一緒に）。
+7. **`PREP_DESCENT_RULE` の「省けない」**：「未達の必須は、reason や why に書いても省けない」も契約 7 章と食い違う。「省く時は prep に skipped と理由を書く。省いた節は達成に数えない」の形に直す（トークン数を増やさない）。

@@ -47,7 +47,7 @@ describe('the rules are in the instructions', () => {
     expect(PREP_DESCENT_RULE).toContain('必須（未達の間は、下りる act も鉄の採掘もしない。補う手を先に出す）: 食料の点 40 以上');
     expect(PREP_DESCENT_RULE).toContain('石のツルハシと石の斧・作業台 1 つか板 4 以上');
     expect(PREP_DESCENT_RULE).toContain('目標: 食料 40〜60 点・板 8 ほどと棒の余り');
-    expect(PREP_DESCENT_RULE).toContain('未達の必須は、reason や why に書いても省けない（計画の順は変えてよい）');
+    expect(PREP_DESCENT_RULE).toContain('省く時は prep に skipped と理由。省いた節は達成に数えない（順は変えてよい）');
     expect(system).toContain('節を飛ばす・後回しにする時は reason に、準備を省く時は prep に skipped と理由を書く');
     // The fullness does not stand for the food carried; the 30 minutes claim is gone; eating below 40 is not a new shortage.
     expect(PREP_DESCENT_RULE).toContain('満腹では代わりにならない');
