@@ -35,13 +35,13 @@ import { llmcStepParts } from '../../src/wiring/minecraftLlmcWiring.js';
  *   inside it (`queue.add`, `plan.update`) is that decision's calls.
  * - **The body** is `BodyDouble`: it polls the head, takes the commands it is handed, and answers as the test scripts it: receipts it returns, holds back, returns twice,
  *   delays; a connection cut and made again; a restart of the body; a lease that was changed. Its receipts are built from the body's real outputs (`produced/`, made at body
- *   revision cae3ed03a067) or from the fixtures' `input` and `expected`; what the body would decide (which waiting item it drops, which it starts) is the script's, and
+ *   revision bc82c747df82) or from the fixtures' `input` and `expected`; what the body would decide (which waiting item it drops, which it starts) is the script's, and
  *   each scene says which fixture it follows. It writes the body's own records the judge reads (`body-trace.jsonl`: `hand_start`, `op`, `poll`; `receipts.jsonl`).
  * - `collect()` writes the folder `tools/continue-verify/judge.ts` reads, and `judged()` reads it back and judges it.
  */
 export const RUN_BODY = 'minecraft:world';
 /** The body revision the `produced/` files were made at (the body's `contracts/continue/produced/`); the stand-in answers as that body does. */
-export const PRODUCED_REV = 'cae3ed03a067';
+export const PRODUCED_REV = 'bc82c747df82';
 const FIXTURES_DIR = new URL('../fixtures/continue/', import.meta.url);
 export const fixture = (path: string) => JSON.parse(readFileSync(new URL(path, FIXTURES_DIR), 'utf8')) as Record<string, any>;
 export const produced = (name: string) => {

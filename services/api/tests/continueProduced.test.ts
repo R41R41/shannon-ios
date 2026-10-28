@@ -14,7 +14,7 @@ import { eventsOfReceipt, readEventsReply } from '../src/surfaces/minecraft/mine
 import { skillSchema, validBodyTimes, validBodyVersion, validControlPoll, validLifeView, validSkills, validUnit } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 import { applyLedger, emptyLedgerSeen, LEDGER_REASONS } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
 import { itemResult, unitOfReceipt, type QueueWordsItem } from '../src/surfaces/minecraft/minecraftLlmcQueueWords.js';
-import { actFacts, handFacts, VERTICAL_STOP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
+import { actFacts, handFacts, placementCorrections, VERTICAL_STOP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
 import { readingOf } from '../src/surfaces/minecraft/store/minecraftOperationState.js';
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
 
@@ -377,8 +377,8 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     for (const file of files.values()) collect(file.output);
     expect([...codes].length).toBeGreaterThan(0);
   });
-  it('are the 23 files the body made at that revision', () => {
-    expect(names).toHaveLength(23);
+  it('are the 24 files the body made at that revision', () => {
+    expect(names).toHaveLength(24);
   });
 
   it('their receipts go through the head\'s readers, all four: the unit into the store, the unit into the queue\'s sentence, the events into the ledger, the hand lines', () => {
@@ -544,7 +544,8 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
   });
 
   it('vertical--*: every stop is one of the 14 closed codes with words; the four numbers of work are there; the time of the next one is estimated from the body\'s msPerUnit', () => {
-    const verticals = names.filter(name => name.startsWith('vertical--'));
+    // the boundary-2 scene is not a receipt: its own test below
+    const verticals = names.filter(name => name.startsWith('vertical--') && name !== 'vertical--boundary2-evidence.json');
     expect(verticals).toHaveLength(3);
     for (const name of verticals) {
       const result = readActResult(JSON.stringify(out(name).result))!;
@@ -561,6 +562,20 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
       const next: ActInput = { hands: [{ do: 'vertical', dir: shape === 'pillar' ? 'up' : 'down', shape, ...(shape === 'stairs' ? { toward: 'south' as const } : {}), toY: 10, canDig: ['stone'], liquid: 'stop' }], why: 'x' } as ActInput;
       expect(actExpectedMilliseconds(next, { x: 0, y: 30, z: 0 }, { [shape]: hand.progress!.msPerUnit })).toBeGreaterThan(0);
     }
+  });
+  it('vertical--boundary2-evidence: a real block_update row keeps its own ISO at and the cell in pos; the correction it made is the one progress.corrected names (A-5 3)', () => {
+    const output = (get('vertical--boundary2-evidence.json') as unknown as { output: { corrected: { at: { x: number; y: number; z: number }; now: string; step: number }[]; evidenceRows: Record<string, unknown>[]; done: number } }).output;
+    expect(output.evidenceRows.length).toBeGreaterThan(0);
+    for (const row of output.evidenceRows) {
+      expect(typeof row.at).toBe('string');
+      expect(Number.isFinite(Date.parse(String(row.at)))).toBe(true);
+      expect(row.pos).toMatchObject({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) });
+    }
+    expect(output.corrected[0]!.at).toEqual(output.evidenceRows[0]!.pos);
+    const facts = placementCorrections('q16', JSON.stringify({ v: 1, ok: true, done: 1, of: 1, ms: 1, at: { x: 0, y: 98, z: 1 }, hp: 20, food: 20,
+      lines: [{ i: 1, do: 'vertical', status: 'done', line: '', progress: { unit: 'step', done: output.done, left: 0, corrected: output.corrected } }] }));
+    expect(facts).toHaveLength(output.corrected.length);
+    expect(facts[0]!.text).toContain('が無くなった');
   });
   it('vertical--r45-hold7-pillar-up: the four numbers of work agree (A-3: eight placed, eight confirmed, eight of the stock used)', () => {
     const hand = readActResult(JSON.stringify(out('vertical--r45-hold7-pillar-up.json').result))!.lines[0]!;

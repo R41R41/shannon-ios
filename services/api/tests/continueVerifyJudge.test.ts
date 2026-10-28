@@ -559,11 +559,14 @@ describe('the judge: b8-body-restart reads "events lost" as the body\'s events c
 });
 
 describe('A-5 3: the vertical evidence rows of the body (block_update, forced_move) are operations the judge reads', () => {
-  it('reads the cell from the evidence\'s `at` (the body\'s note() spreads it after its own ISO `at`) and its time from `t`', async () => {
+  it('reads the contract form only: `at` is the ISO time and `pos` the cell (a real row of the body from vertical--boundary2-evidence)', async () => {
     const { verticalEvidenceOp } = await import('../../../tools/continue-verify/judge.js');
-    const op = verticalEvidenceOp({ kind: 'block_update', at: { x: 191, y: 59, z: 188 }, t: Date.parse('2026-10-28T12:00:00.000Z'), command: 'skill:q9', hand: 1, life: 2, to: 'air', usedFor: 'steps_valid', step: 7 });
-    expect(op).toMatchObject({ kind: 'op', op: 'block_update', command: 'skill:q9', hand: 1, life: 2, pos: [191, 59, 188], block: 'air', usedForCorrection: true, at: '2026-10-28T12:00:00.000Z' });
+    const real = JSON.parse(readFileSync(new URL('./fixtures/continue/produced/vertical--boundary2-evidence.json', import.meta.url), 'utf8')) as { output: { evidenceRows: Record<string, unknown>[] } };
+    const op = verticalEvidenceOp(real.output.evidenceRows[0]!);
+    expect(op).toMatchObject({ kind: 'op', op: 'block_update', command: 'lab:q16', hand: 1, life: 4, pos: [0, 98, 1], block: 'air', usedForCorrection: true, at: '2026-10-28T15:07:01.236Z' });
     expect(verticalEvidenceOp({ kind: 'forced_move', at: '2026-10-28T12:00:01.000Z', command: 'skill:q9', life: 2, pos: { x: 1, y: 2, z: 3 } })).toMatchObject({ op: 'forced_move', pos: [1, 2, 3] });
+    // The old spread (an `at` that is the cell, a time in `t`) is not read any more.
+    expect(verticalEvidenceOp({ kind: 'block_update', at: { x: 1, y: 2, z: 3 }, t: 1, command: 'skill:q9' })).toBeNull();
     expect(verticalEvidenceOp({ kind: 'forced_move', at: '2026-10-28T12:00:01.000Z' })).toBeNull();
   });
 });

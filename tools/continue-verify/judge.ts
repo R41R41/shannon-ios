@@ -106,18 +106,16 @@ export interface OpLine {
   refused?: boolean;
 }
 /**
- * The vertical's evidence rows the body writes beside the operations (A-5 3: `{ kind: 'block_update' | 'forced_move', at, command, hand, life, ... }`, boundary 2's proof of a
- * correction): read into the operation list as an op of the same name. The body's `note()` spreads the evidence after its own `at`, so a block_update's `at` can be the cell itself
- * (`{x,y,z}`) and its time the evidence's `t` (ms): both are read.
+ * The vertical's evidence rows the body writes beside the operations (A-5 3: `{ kind: 'block_update' | 'forced_move', at (ISO), command, hand, life, pos, from, to, step }`,
+ * boundary 2's proof of a correction): read into the operation list as an op of the same name. The contract's form only: `at` is the time, `pos` the cell.
  */
 export function verticalEvidenceOp(line: Record<string, unknown>): OpLine | null {
-  const cellOf = (value: unknown): Cell | undefined => Array.isArray(value) && value.length === 3 ? value as Cell
-    : value && typeof value === 'object' && typeof (value as { x?: unknown }).x === 'number' ? [(value as { x: number }).x, (value as { y: number }).y, (value as { z: number }).z] : undefined;
-  if (typeof line.command !== 'string') return null;
-  const at = typeof line.at === 'string' ? line.at : typeof line.t === 'number' ? new Date(line.t).toISOString() : '';
-  const base = { kind: 'op' as const, at, command: line.command, ...(typeof line.hand === 'number' ? { hand: line.hand } : {}), life: Number(line.life ?? -1) };
-  if (line.kind === 'forced_move') { const pos = cellOf(line.pos); return { ...base, op: 'forced_move', ...(pos ? { pos } : {}) }; }
-  const pos = cellOf(line.at) ?? cellOf(line.cell);
+  const cellOf = (value: unknown): Cell | undefined => value && typeof value === 'object' && typeof (value as { x?: unknown }).x === 'number'
+    ? [(value as { x: number }).x, (value as { y: number }).y, (value as { z: number }).z] : undefined;
+  if (typeof line.command !== 'string' || typeof line.at !== 'string') return null;
+  const base = { kind: 'op' as const, at: line.at, command: line.command, ...(typeof line.hand === 'number' ? { hand: line.hand } : {}), life: Number(line.life ?? -1) };
+  const pos = cellOf(line.pos);
+  if (line.kind === 'forced_move') return { ...base, op: 'forced_move', ...(pos ? { pos } : {}) };
   return { ...base, op: 'block_update', ...(pos ? { pos } : {}), ...(typeof line.to === 'string' ? { block: line.to } : {}), usedForCorrection: line.usedFor === 'steps_valid' };
 }
 export type HandStartLine = { kind: 'hand_start' } & Omit<HandStart, 'ids'> & { ids: Ids };
@@ -132,7 +130,7 @@ export type TraceLine =
   | { kind: 'reflex_hand'; at: string; reflex: string; target?: number }
   | { kind: 'reflex_end'; at: string; reflex: string }
   /** A-5 3: the vertical's evidence rows (`verticalEvidenceOp` reads them as operations). */
-  | { kind: 'block_update' | 'forced_move'; at: string; t?: number; command?: string; hand?: number; life?: number }
+  | { kind: 'block_update' | 'forced_move'; at: string; command?: string; hand?: number; life?: number; pos?: { x: number; y: number; z: number }; from?: string; to?: string; step?: number }
   | { kind: 'poll'; at: string; connectionId: string; first?: boolean };
 
 export type ProbeLine =
