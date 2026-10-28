@@ -31,6 +31,9 @@ import { LLMC_PROBE } from '../surfaces/minecraft/minecraftLlmcProbe.js';
 import { MC_PROBE_SKILL, type ProbeInput } from '../contracts/minecraftProbeContract.js';
 import { abortedRouteUsage } from './minecraftRouteWiring.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
+import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
+import { recordedClient } from '../infra/decisionRecords/decisionRecordClient.js';
+import { recordedPlanner } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
@@ -249,7 +252,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r6: the first plan begins where she is, with what the place lacks in its input; r7: the check's forbid asked for (`FIRST_PLAN_SYSTEM_R7`);
   // r8: a gap crossed in the rock or by a walled bridge (`FIRST_PLAN_SYSTEM_R8`); r9: the done of a node by its own condition, a place with
   // its dimension, the pearls after the rods, the golden armour in the check (`FIRST_PLAN_SYSTEM_R9`).
-  startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner: llmc.planner, log, world: worldOf(),
+  const planner = recordedPlanner({ taskId: step.taskId, stepId: step.id }, llmc.planner);
+  startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner, log, world: worldOf(),
     r4: { world: worldOf, system: ownFirstPlanSystem(), readiness: true } });
   const display = () => plan.port.display();
   // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step decides again while its items run.
@@ -346,6 +350,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       // API's thread must not turn a done task back.
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
+      // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
+      versions: () => minecraftBodyVersion(control, bodyId()),
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
       permitWindowMs: LLMC_PERMIT_WINDOW_MS, selector: LLMC_CATALOG_SELECTOR,
       history: { codec: anthropicFcaHistoryCodecV2,
@@ -367,7 +373,7 @@ function firstPlanner(values: Readonly<Record<string, string | undefined>>, mode
   log: (line: string) => void, given?: PlanClient, schema: Readonly<Record<string, unknown>> = FIRST_PLAN_SCHEMA_R4): { planner?: LlmcWiring['planner'] } {
   const apiKey = keyFor(values, model);
   if (!apiKey && !given) return {};
-  const client = given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: FIRST_PLAN.giveUpMs });
+  const client = recordedClient(given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: FIRST_PLAN.giveUpMs }), 'plan');
   return { planner: async (system, input, signal) => {
     const body = structuredBody(model, system, input, schema, 'low', FIRST_PLAN.outputTokens);
     const began = Date.now();

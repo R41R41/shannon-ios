@@ -24,6 +24,7 @@
     "testflight:distribute": "tsx --env-file-if-exists=../../.env src/testflightDistributor.ts",
     "auth": "tsx --env-file-if-exists=../../.env src/authCli.ts",
     "ops": "tsx --env-file-if-exists=../../.env src/opsCli.ts",
+    "decision-record": "tsx --env-file-if-exists=../../.env scripts/decision-record.ts",
     "migrate:study-to-aether": "tsx --env-file-if-exists=../../.env scripts/migrate-study-to-aether.ts",
     "memory:drain": "tsx --env-file-if-exists=../../.env scripts/memory-outbox-drain.ts"
   },

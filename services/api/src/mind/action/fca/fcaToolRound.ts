@@ -9,6 +9,8 @@ import type { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { failureRefreshes, openFcaTool, type selectFcaTools } from './fcaToolState.js';
 import { FCA_BODY_TOOL_ABSENT, FCA_EARLIER_ACTION_FAILED } from './fcaRunnerWords.js';
 import type { TaskProgressEvent } from '../taskRuntime/taskProgressPorts.js';
+import { withDecisionCall } from '../../../infra/decisionRecords/decisionRecordScope.js';
+import { noteDecisionCall } from '../../../infra/decisionRecords/decisionRecordNotes.js';
 
 /** What a round of tool calls needs of the step it runs in (`executeFcaStep`'s own gates and state, by reference). */
 export interface RoundContext {
@@ -134,13 +136,17 @@ async function runOne(ctx: RoundContext, call: FcaToolCall, last: boolean, tally
   observerHandoff('llm', 'gate', { ...provenance, operationId, tool });
   ctx.progress({ operationId, tool: call.name, status: 'running' });
   const began = performance.now();
-  const result = await observeAsync('tools', { ...provenance, operationId, tool }, () => runCall(ctx, call, { operationId, skipped, last }),
+  const result = await observeAsync('tools', { ...provenance, operationId, tool }, () => withDecisionCall({ operationId, toolUseId: call.id, name: call.name },
+    () => runCall(ctx, call, { operationId, skipped, last })),
     value => ({ ...provenance, operationId, ok: value.ok, failure: value.failure ?? null }))
     .catch(error => {
       ctx.progress({ operationId, tool: call.name, status: 'unknown' });
       ports.evidence?.unknown(step, call);
+      noteDecisionCall({ toolUseId: call.id, name: call.name, input: call.input, operationId, skipped: false, ms: performance.now() - began,
+        result: { ok: false, failure: 'unknown', text: `threw ${String((error as Error | undefined)?.message ?? error).slice(0, 200)}` } });
       throw error;
     });
+  noteDecisionCall({ toolUseId: call.id, name: call.name, input: call.input, operationId, skipped, ms: performance.now() - began, result });
   if (skipped) metrics.skipped(call.name); else metrics.tool(call.name, performance.now() - began);
   ctx.progress(progressOf(ctx, call, operationId, result));
   if (skipped) ports.evidence?.notRun?.(step, call);

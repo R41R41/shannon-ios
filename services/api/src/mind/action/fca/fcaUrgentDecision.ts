@@ -1,4 +1,5 @@
 import type { FcaBodyLifecycle, FcaModelInput, FcaModelOutput } from './fcaPorts.js';
+import { noteDecisionOutcome } from '../../../infra/decisionRecords/decisionRecordNotes.js';
 
 /**
  * mb-llmc r8 (run 32, 2026-10-22: the decision after a wither skeleton came in sight took 10.3 s; she was hit three times in 2.3 s,
@@ -51,6 +52,7 @@ export async function decideInterruptibly(parts: {
     return winner.output;
   }
   const thrownMs = Math.round(now() - began);
+  noteDecisionOutcome('discarded', { reason: 'urgent_interrupt', thrownMs });
   controller.abort(new Error('FCA_URGENT_INTERRUPT'));
   parts.interrupted?.({ thrownMs });
   const next = await parts.again(parts.request), asked = now();
