@@ -13,7 +13,14 @@
  * The log is per body and per connection: a body that connects again numbers its events from 1 again.
  */
 export const WORKING_EVENTS_V1 = 'working.events.v1';
-export const WORKING_EVENT_KINDS = Object.freeze(['need.appeared', 'need.gone', 'action.progress', 'action.stalled', 'furnace.done'] as const);
+export const WORKING_EVENT_KINDS = Object.freeze(['need.appeared', 'need.gone', 'action.progress', 'action.stalled', 'furnace.done',
+  'reflex.capped', 'server.tick', 'inventory.changed', 'utility.near'] as const);
+/**
+ * `continue` contract v3.1 (2026-10-28): `reflex.capped` (a reflex reached its limit; the head decides at once), `server.tick` (the server's tick
+ * as the body read it), `inventory.changed` (a reflex's use of the pack outside any act, for the promises' ledger), `utility.near` (a table,
+ * furnace, chest or bed came near or went). They are read by their own readers and never folded into a command's progress.
+ */
+const SEPARATE_KINDS: ReadonlySet<string> = new Set(['furnace.done', 'reflex.capped', 'server.tick', 'inventory.changed', 'utility.near']);
 export type WorkingEventKind = typeof WORKING_EVENT_KINDS[number];
 export type WorkingScalar = string | number | boolean | null;
 
@@ -152,7 +159,7 @@ export class WorkingEventLog {
       this.needMap.set(event.subject, { id: event.subject, need: String(d.need ?? ''), name: String(d.name ?? ''), distance: numberOf(d.distance),
         canReach: d.canReach !== false, at: event.at, data: d });
     } else if (event.kind === 'need.gone') this.needMap.delete(event.subject);
-    else if (event.kind !== 'furnace.done') {
+    else if (!SEPARATE_KINDS.has(event.kind)) {
       const before = this.progressMap.get(event.subject);
       const since = numberOf(d.sinceProgressMs) ?? 0;
       // Still stalled while the time since progress keeps growing; progress (it falls back) ends the stall.

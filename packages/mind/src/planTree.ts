@@ -8,18 +8,51 @@
  * Two rules keep the tree honest without asking the model: a parent whose children are all done is done, and when the current node
  * is done and no new current is named, the next node not done (in order, depth first) becomes current.
  */
-export const PLAN_TREE_SCHEMA = 'shannon.plan-tree.v1' as const;
+export const PLAN_TREE_SCHEMA = 'shannon.plan-tree.v2' as const;
+/** The schema before the `continue` contract (v3.1, 2026-10-28): read once and moved to v2 by `migratePlanTree`. */
+export const PLAN_TREE_SCHEMA_V1 = 'shannon.plan-tree.v1' as const;
 /**
  * `rules`: a node's forbid and caution lines each (mb-llmc r4: `forbid`, `caution`), `rule` their length, `shownRules` how many of them the
  * path shows (the current node's and its parents', `planPath`).
  */
 export const PLAN_LIMITS = Object.freeze({ nodes: 64, depth: 4, title: 60, text: 120, reason: 80, ops: 24, split: 8, next: 3, rules: 4, rule: 80,
-  shownRules: 8 });
+  shownRules: 8, promises: 32, promiseUse: 40, ledger: 32, promiseCount: 2304 });
 export type PlanNodeState = 'done' | 'blocked' | 'continue' | 'wait';
 export const PLAN_NODE_STATES: readonly PlanNodeState[] = ['done', 'blocked', 'continue', 'wait'];
 
+/**
+ * The kind of a node (the `continue` contract, chapter 7): chosen by the model, never inferred from the title by the code (only the one move from
+ * v1, `migratePlanTree`, reads titles). A value outside the list is taken as `other` with the written value kept in `kindRaw`.
+ */
+export const PLAN_KINDS = ['wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor', 'diamond', 'water', 'lava', 'obsidian',
+  'portal', 'nether', 'fortress', 'blaze', 'pearl', 'stronghold', 'end', 'dragon', 'chest', 'other'] as const;
+export type PlanKind = typeof PLAN_KINDS[number];
+/** The state of a preparation node (apart from the work's `state`); only the model writes it. */
+export const PREP_STATES = ['met', 'skipped', 'unmet_now'] as const;
+export type PrepState = typeof PREP_STATES[number];
+export interface PlanPrep { state: PrepState; why?: string; at?: string }
+
+/** A condition as the plan keeps it: alternatives of conjunctions of clauses (the head's `ActCondition`; this package reads none of it). */
+export type PlanCondition = ReadonlyArray<ReadonlyArray<Readonly<Record<string, unknown>>>>;
+export interface PromiseEvent {
+  id: string; at: string; kind: 'made' | 'revised' | 'consumed' | 'gained' | 'lost_death' | 'unexplained' | 'released' | 'closed';
+  count: number; have: number; declared?: boolean; reason?: string; promiseRev?: number;
+  by?: { command?: string; item?: string; pass?: number; hand?: number };
+}
+/** A promise (chapter 3): what to keep, for what, until when, and the ledger of what happened to it. Written by the model; the ledger by the head. */
+export interface PlanPromise {
+  id: number; rev: number; item: string; count: number; use: string;
+  until?: { node?: string; condition?: PlanCondition }; instead?: PlanCondition;
+  state: 'open' | 'kept_by_instead' | 'closed'; closedBy?: 'until' | 'released';
+  ledger: PromiseEvent[]; dropped?: number;
+}
+
 export interface PlanNode {
   id: string; parentId: string | null; order: number; title: string; state: PlanNodeState;
+  kind?: PlanKind;
+  /** The kind the model wrote when it is not in `PLAN_KINDS` (the node is `other`). */
+  kindRaw?: string;
+  prep?: PlanPrep;
   /** Where it is done (a coordinate and a few words: `(196,69,237) 村の北`). */
   where?: string;
   /** What shows it done (an observation: `iron_ingot×24 を持つ`, a milestone). */
@@ -34,15 +67,23 @@ export interface PlanNode {
   forbid?: readonly string[];
   caution?: readonly string[];
 }
-export interface PlanTree { schema: typeof PLAN_TREE_SCHEMA; revision: number; current: string | null; nodes: readonly PlanNode[] }
+export interface PlanTree {
+  schema: typeof PLAN_TREE_SCHEMA; revision: number; current: string | null; nodes: readonly PlanNode[];
+  promises: readonly PlanPromise[];
+}
 
 /** A node's fields as an op gives them. */
 export interface PlanNodeDraft { id?: string; title: string; where?: string; doneWhen?: string; note?: string; state?: PlanNodeState;
-  forbid?: readonly string[]; caution?: readonly string[] }
+  forbid?: readonly string[]; caution?: readonly string[]; kind?: string; prep?: PlanPrep }
+export interface PromiseOp { op: 'promise'; id?: number; item: string; count: number; use: string; until?: { node?: string; condition?: PlanCondition };
+  instead?: PlanCondition }
 export type PlanOp =
   | ({ op: 'add'; parent?: string | null; after?: string | null } & PlanNodeDraft)
   | { op: 'split'; id: string; into: readonly PlanNodeDraft[] }
-  | { op: 'set'; id: string; state?: PlanNodeState; title?: string; where?: string; doneWhen?: string; note?: string; reason?: string }
+  | { op: 'set'; id: string; state?: PlanNodeState; title?: string; where?: string; doneWhen?: string; note?: string; reason?: string;
+      kind?: string; prep?: PlanPrep }
+  | PromiseOp
+  | { op: 'release'; id: number; why?: string }
   | { op: 'move'; id: string; parent?: string | null; after?: string | null }
   | { op: 'drop'; id: string }
   /**
@@ -51,6 +92,8 @@ export type PlanOp =
    */
   | { op: 'forbid' | 'caution' | 'lift'; id?: string; text: string };
 export interface PlanUpdate { ops?: readonly PlanOp[]; current?: string | null }
+/** When the update is applied (ISO), for the times a promise and a preparation state keep. */
+export interface PlanUpdateContext { at?: string }
 export interface PlanUpdateResult { tree: PlanTree; changed: boolean; problem: string | null }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/u;
@@ -58,7 +101,7 @@ const isText = (value: unknown, limit: number): value is string =>
   typeof value === 'string' && value.trim().length > 0 && value.length <= limit && !value.includes('\0');
 const optionalText = (value: unknown, limit: number) => value === undefined || isText(value, limit);
 
-export function emptyPlanTree(): PlanTree { return { schema: PLAN_TREE_SCHEMA, revision: 0, current: null, nodes: [] }; }
+export function emptyPlanTree(): PlanTree { return { schema: PLAN_TREE_SCHEMA, revision: 0, current: null, nodes: [], promises: [] }; }
 
 /** What is wrong with a tree (its shape, its links, its bounds), or null. */
 export function planTreeProblem(tree: PlanTree): string | null {
@@ -74,8 +117,26 @@ export function planTreeProblem(tree: PlanTree): string | null {
     if (depthOf(byId, node.id) > PLAN_LIMITS.depth) return 'PLAN_DEPTH';
   }
   if (tree.current !== null && !byId.has(tree.current)) return 'PLAN_CURRENT';
+  return promisesProblem(tree.promises) ? 'PLAN_PROMISES' : null;
+}
+const PROMISE_ITEM = /^[a-z][a-z0-9_]{0,63}$/u;
+const kindFits = (value: unknown) => value === undefined || (PLAN_KINDS as readonly string[]).includes(String(value));
+const prepFits = (value: unknown) => value === undefined || (!!value && typeof value === 'object' && (PREP_STATES as readonly string[]).includes(String((value as PlanPrep).state))
+  && optionalText((value as PlanPrep).why, PLAN_LIMITS.text) && optionalText((value as PlanPrep).at, 40));
+/** What is wrong with the promises of a tree (the shape and bounds of each; the ledger is the head's), or null. */
+function promisesProblem(promises: unknown): string | null {
+  if (!Array.isArray(promises) || promises.length > PLAN_LIMITS.promises) return 'promises';
+  const ids = new Set<number>();
+  for (const item of promises as PlanPromise[]) {
+    if (!item || !Number.isSafeInteger(item.id) || item.id < 1 || ids.has(item.id) || !Number.isSafeInteger(item.rev) || item.rev < 1) return 'id';
+    ids.add(item.id);
+    if (!promiseItemFits(item.item) || !Number.isSafeInteger(item.count) || item.count < 1 || !isText(item.use, PLAN_LIMITS.promiseUse)) return 'fields';
+    if (!['open', 'kept_by_instead', 'closed'].includes(item.state) || !Array.isArray(item.ledger)) return 'state';
+  }
   return null;
 }
+/** A promise's item: `food` (food points) or a concrete item name (`oak_planks`; `planks` counts every kind, as `have` reads it). */
+export const promiseItemFits = (value: unknown): boolean => typeof value === 'string' && PROMISE_ITEM.test(value);
 function treeShaped(tree: PlanTree): boolean {
   return !!tree && tree.schema === PLAN_TREE_SCHEMA && Number.isSafeInteger(tree.revision) && tree.revision >= 0 && Array.isArray(tree.nodes);
 }
@@ -84,7 +145,7 @@ function nodeFits(node: PlanNode): boolean {
   if (!node || !ID.test(String(node.id)) || !isText(node.title, PLAN_LIMITS.title)) return false;
   if (!PLAN_NODE_STATES.includes(node.state) || !Number.isSafeInteger(node.order) || node.order < 0) return false;
   return [node.where, node.doneWhen, node.note].every(value => optionalText(value, PLAN_LIMITS.text)) && optionalText(node.reason, PLAN_LIMITS.reason)
-    && rulesFit(node.forbid) && rulesFit(node.caution);
+    && rulesFit(node.forbid) && rulesFit(node.caution) && kindFits(node.kind) && optionalText(node.kindRaw, 64) && prepFits(node.prep);
 }
 /** A node's forbid or caution: absent, or at most `PLAN_LIMITS.rules` lines, each a text within `PLAN_LIMITS.rule`. */
 function rulesFit(value: unknown): boolean {
@@ -95,11 +156,20 @@ function draftProblem(draft: PlanNodeDraft, id: string): string | null {
   if (!ID.test(id)) return `id ${id} の形が合わない`;
   if (!isText(draft.title, PLAN_LIMITS.title)) return `${id} の title が無いか長すぎる（${PLAN_LIMITS.title}字まで）`;
   if (![draft.where, draft.doneWhen, draft.note].every(value => optionalText(value, PLAN_LIMITS.text))) return `${id} の文が長すぎる`;
-  return draft.state !== undefined && !PLAN_NODE_STATES.includes(draft.state) ? `${id} の state が合わない` : null;
+  if (draft.state !== undefined && !PLAN_NODE_STATES.includes(draft.state)) return `${id} の state が合わない`;
+  if (draft.kind !== undefined && !isText(draft.kind, 64)) return `${id} の kind は 64 字までの語`;
+  return prepFits(draft.prep) ? null : `${id} の prep は state（met・skipped・unmet_now）と why`;
+}
+/** A kind as the model wrote it: one of the list as it is, anything else `other` with the value kept. */
+function kindOf(value: string | undefined): { kind: PlanKind; kindRaw?: string } {
+  if (value === undefined) return { kind: 'other' };
+  const word = value.trim();
+  return (PLAN_KINDS as readonly string[]).includes(word) ? { kind: word as PlanKind } : { kind: 'other', kindRaw: word.slice(0, 64) };
 }
 /** A node from a draft whose fields fit (`draftProblem`), with its forbid and caution as kept (`draftRules`). */
 function draftNode(draft: PlanNodeDraft, id: string, parent: string | null, forbid?: string[], caution?: string[]): PlanNode {
-  return { id, parentId: parent, order: 0, title: draft.title.trim(), state: draft.state ?? 'continue',
+  return { id, parentId: parent, order: 0, title: draft.title.trim(), state: draft.state ?? 'continue', ...kindOf(draft.kind),
+    ...(draft.prep ? { prep: { ...draft.prep } } : {}),
     ...(draft.where ? { where: draft.where } : {}), ...(draft.doneWhen ? { doneWhen: draft.doneWhen } : {}), ...(draft.note ? { note: draft.note } : {}),
     ...(forbid ? { forbid } : {}), ...(caution ? { caution } : {}) };
 }
@@ -150,11 +220,62 @@ export function orderedPlan(nodes: readonly PlanNode[]): PlanNode[] {
   return out;
 }
 
-/** A tree read back from a checkpoint, or null when it is not a valid one. */
-export function readPlanTree(value: unknown): PlanTree | null {
+/** A tree read back from a checkpoint, or null when it is not a valid one. A v1 tree is moved to v2 once (`migratePlanTree`). */
+export function readPlanTree(value: unknown): PlanTree | null { return readPlanTreeWith(value)?.tree ?? null; }
+/** The same, saying whether the tree was moved from v1 (the caller writes the one line of it in the plan's log). */
+export function readPlanTreeWith(value: unknown): { tree: PlanTree; migrated: boolean } | null {
   if (!value || typeof value !== 'object') return null;
-  const tree = value as PlanTree;
-  try { return planTreeProblem(tree) ? null : JSON.parse(JSON.stringify(tree)) as PlanTree; } catch { return null; }
+  try {
+    const copy = JSON.parse(JSON.stringify(value)) as PlanTree | PlanTreeV1;
+    const migrated = (copy as PlanTreeV1).schema === PLAN_TREE_SCHEMA_V1;
+    const tree = migrated ? migratePlanTree(copy as PlanTreeV1) : copy as PlanTree;
+    return planTreeProblem(tree) ? null : { tree, migrated };
+  } catch { return null; }
+}
+
+/** The v1 tree: no kinds, no preparation states, no promises. */
+export interface PlanTreeV1 { schema: typeof PLAN_TREE_SCHEMA_V1; revision: number; current: string | null; nodes: readonly PlanNode[] }
+const OLD_SKIPPED = '準備を省いた';
+/**
+ * The one place where a title is read for its kind: a v1 tree held no kind, so each node gets the kind its title (and `doneWhen`) said to the code that
+ * used to read them (chapter 7, table 1-15). The note `準備を省いた…` that the v1 head wrote becomes `prep.state: skipped`; a done preparation node
+ * becomes `met`. The revision goes up by one. A tree that is already v2 is returned as it is.
+ */
+export function migratePlanTree(tree: PlanTreeV1 | PlanTree): PlanTree {
+  if (tree.schema === PLAN_TREE_SCHEMA) return tree;
+  const nodes = tree.nodes.map(node => {
+    const kind = kindFromV1(node);
+    const skipped = node.state === 'done' && (node.note ?? '').startsWith(OLD_SKIPPED);
+    const prep: PlanPrep | undefined = skipped ? { state: 'skipped' } : kind === 'prep_descent' && node.state === 'done' ? { state: 'met' } : undefined;
+    return { ...node, kind, ...(prep ? { prep } : {}) } as PlanNode;
+  });
+  return { schema: PLAN_TREE_SCHEMA, revision: tree.revision + 1, current: tree.current, nodes, promises: [] };
+}
+function kindFromV1(node: PlanNode): PlanKind {
+  const title = node.title, done = node.doneWhen ?? '';
+  const food = /food>=(\d{1,4})/u.exec(done.replace(/\s+/gu, '').toLowerCase())?.[1];
+  if (/ドラゴン|エンドラ/u.test(title)) return 'dragon';
+  if (/ストロングホールド/u.test(title)) return 'stronghold';
+  if (/パール|アイ/u.test(title)) return 'pearl';
+  if (/エンド(?!ウ)|三角|ポータルの部屋/u.test(title)) return 'end';
+  if (/地下の準備|下る準備|下りる準備/u.test(title) || (food !== undefined && Number(food) >= 40 && Number(food) < 100)) return 'prep_descent';
+  if (/ゲート|ポータル|ネザーに入|金のブーツ/u.test(title)) return 'portal';
+  if (/黒曜石|火打/u.test(title)) return 'obsidian';
+  if (/要塞/u.test(title)) return 'fortress';
+  if (/ブレイズ/u.test(title)) return 'blaze';
+  if (/ネザー/u.test(title)) return 'nether';
+  if (/ダイヤ/u.test(title)) return 'diamond';
+  if (/鉄の防具|鉄装備/u.test(title)) return 'iron_armor';
+  if (/鉄/u.test(title) || /iron_ingot|raw_iron/u.test(done)) return 'iron';
+  if (/食料|食べ物|狩|肉|ホグリン|パン/u.test(title) || food !== undefined) return 'food';
+  if (/箱|樽|チェスト|chest|barrel/iu.test(title)) return 'chest';
+  if (/ベッド/u.test(title)) return 'bed';
+  if (/村/u.test(title)) return 'village';
+  if (/石のツルハシ|石の道具|石器/u.test(title)) return 'stone_tools';
+  if (/溶岩/u.test(title)) return 'lava';
+  if (/水/u.test(title)) return 'water';
+  if (/原木|木/u.test(title)) return 'wood';
+  return 'other';
 }
 
 /** What is wrong with a `set` op's values (an empty text clears that field), or null. */
@@ -163,15 +284,56 @@ function setProblem(op: Extract<PlanOp, { op: 'set' }>): string | null {
   if (op.title !== undefined && !isText(op.title, PLAN_LIMITS.title)) return `${op.id} の title が長すぎる`;
   const fits = (value: string | undefined, limit: number) => value === undefined || value === '' || optionalText(value, limit);
   if (![op.where, op.doneWhen, op.note].every(value => fits(value, PLAN_LIMITS.text))) return `${op.id} の文が長すぎる`;
+  if (op.kind !== undefined && !isText(op.kind, 64)) return `${op.id} の kind は 64 字までの語`;
+  if (!prepFits(op.prep)) return `${op.id} の prep は state（met・skipped・unmet_now）と why`;
   return fits(op.reason, PLAN_LIMITS.reason) ? null : `${op.id} の reason が長すぎる`;
 }
 
 class PlanEdit {
   readonly nodes = new Map<string, PlanNode>();
+  promises: PlanPromise[];
   current: string | null;
-  constructor(tree: PlanTree) {
+  constructor(tree: PlanTree, private readonly context: PlanUpdateContext = {}) {
     for (const node of tree.nodes) this.nodes.set(node.id, { ...node });
+    this.promises = tree.promises.map(item => ({ ...item, ledger: [...item.ledger] }));
     this.current = tree.current;
+  }
+  /** A promise made or revised (the model writes it; the ledger gets `made` or `revised`). */
+  promise(op: PromiseOp): string | null {
+    if (!promiseItemFits(op.item)) return 'promise の item は物の名前（oak_planks・cobblestone）か food';
+    if (!Number.isSafeInteger(op.count) || op.count < 1 || op.count > PLAN_LIMITS.promiseCount) return `promise の count は 1〜${PLAN_LIMITS.promiseCount} の整数`;
+    if (!isText(op.use, PLAN_LIMITS.promiseUse)) return `promise の use は ${PLAN_LIMITS.promiseUse} 字までの言葉`;
+    if (op.until?.node !== undefined && !ID.test(op.until.node)) return 'promise の until.node は節の id';
+    const at = this.context.at ?? new Date(0).toISOString();
+    const base = { item: op.item, count: op.count, use: op.use.trim(), ...(op.until && (op.until.node || op.until.condition) ? { until: { ...op.until } } : {}),
+      ...(op.instead ? { instead: op.instead } : {}) };
+    if (op.id === undefined) {
+      if (this.promises.length >= PLAN_LIMITS.promises) {
+        const closed = this.promises.findIndex(item => item.state === 'closed');
+        if (closed < 0) return `約束は ${PLAN_LIMITS.promises} つまで（release で閉じてから）`;
+        this.promises.splice(closed, 1);
+      }
+      const id = this.promises.reduce((top, item) => Math.max(top, item.id), 0) + 1;
+      this.promises.push({ id, rev: 1, ...base, state: 'open', ledger: [{ id: 'plan:1', at, kind: 'made', count: op.count, have: 0 }] });
+      return null;
+    }
+    const index = this.promises.findIndex(item => item.id === op.id);
+    if (index < 0) return `約束 #${op.id} が無い`;
+    const old = this.promises[index]!, rev = old.rev + 1;
+    const { until: _u, instead: _i, closedBy: _c, ...kept } = old;
+    this.promises[index] = { ...kept, ...base, rev, state: 'open', ledger: [...old.ledger, { id: `plan:${rev}`, at, kind: 'revised', count: op.count, have: 0 }] };
+    return null;
+  }
+  /** A promise let go: closed by the release. */
+  release(op: { id: number; why?: string }): string | null {
+    const index = this.promises.findIndex(item => item.id === op.id);
+    if (index < 0) return `約束 #${op.id} が無い`;
+    const old = this.promises[index]!;
+    if (old.state === 'closed') return null;
+    this.promises[index] = { ...old, state: 'closed', closedBy: 'released',
+      ledger: [...old.ledger, { id: `plan:release:${old.rev}`, at: this.context.at ?? new Date(0).toISOString(), kind: 'released', count: 0, have: 0,
+        ...(op.why ? { reason: String(op.why).slice(0, PLAN_LIMITS.reason) } : {}) }] };
+    return null;
   }
   freshId(): string {
     let top = 0;
@@ -241,6 +403,16 @@ class PlanEdit {
     if (problem) return problem;
     if (op.state) node.state = op.state;
     if (op.title) node.title = op.title.trim();
+    if (op.kind !== undefined) {
+      const kind = kindOf(op.kind);
+      node.kind = kind.kind;
+      if (kind.kindRaw) node.kindRaw = kind.kindRaw;
+      else delete node.kindRaw;
+    }
+    if (op.prep !== undefined) {
+      const at = op.prep.at ?? this.context.at;
+      node.prep = { state: op.prep.state, ...(op.prep.why ? { why: op.prep.why } : {}), ...(at ? { at } : {}) };
+    }
     for (const key of ['where', 'doneWhen', 'note', 'reason'] as const) {
       if (op[key] === '') delete node[key];
       else if (op[key] !== undefined) node[key] = op[key];
@@ -276,7 +448,9 @@ class PlanEdit {
       case 'drop': return this.dropOne(op);
       case 'forbid': case 'caution': return this.rule(op as { op: 'forbid' | 'caution'; id?: string; text: string });
       case 'lift': return this.lift(op);
-      default: return 'op は add・split・set・move・drop・forbid・caution・lift';
+      case 'promise': return this.promise(op);
+      case 'release': return this.release(op);
+      default: return 'op は add・split・set・move・drop・forbid・caution・lift・promise・release';
     }
   }
   /** A parent whose children are all done is done (deepest first). */
@@ -307,10 +481,10 @@ class PlanEdit {
  * The tree after `update`, all or nothing: one op that does not fit leaves the tree as it was and says why (Japanese, closed words).
  * `current`: the node now (null clears it); absent, a done current moves on by itself.
  */
-export function applyPlanUpdate(tree: PlanTree, update: PlanUpdate): PlanUpdateResult {
+export function applyPlanUpdate(tree: PlanTree, update: PlanUpdate, context: PlanUpdateContext = {}): PlanUpdateResult {
   const ops = update.ops ?? [];
   if (!Array.isArray(ops) || ops.length > PLAN_LIMITS.ops) return { tree, changed: false, problem: `ops は ${PLAN_LIMITS.ops} 個まで` };
-  const edit = new PlanEdit(tree);
+  const edit = new PlanEdit(tree, context);
   for (const [index, op] of ops.entries()) {
     const problem = edit.apply(op);
     if (problem) return { tree, changed: false, problem: `ops[${index}]: ${problem}` };
@@ -318,13 +492,14 @@ export function applyPlanUpdate(tree: PlanTree, update: PlanUpdate): PlanUpdateR
   const current = settleCurrent(edit, update.current);
   if (current) return { tree, changed: false, problem: current };
   const nodes = orderedPlan([...edit.nodes.values()]);
-  const next: PlanTree = { schema: PLAN_TREE_SCHEMA, revision: tree.revision + 1, current: edit.current, nodes };
+  const next: PlanTree = { schema: PLAN_TREE_SCHEMA, revision: tree.revision + 1, current: edit.current, nodes, promises: edit.promises };
   const problem = planTreeProblem(next);
   if (problem) return { tree, changed: false, problem: PROBLEM_WORDS[problem] ?? problem };
-  const changed = JSON.stringify({ c: tree.current, n: tree.nodes }) !== JSON.stringify({ c: next.current, n: next.nodes });
+  const changed = JSON.stringify({ c: tree.current, n: tree.nodes, p: tree.promises }) !== JSON.stringify({ c: next.current, n: next.nodes, p: next.promises });
   return { tree: changed ? next : tree, changed, problem: null };
 }
-const PROBLEM_WORDS: Readonly<Record<string, string>> = { PLAN_TOO_MANY: `節は ${PLAN_LIMITS.nodes} 個まで`, PLAN_DEPTH: `深さは ${PLAN_LIMITS.depth} まで` };
+const PROBLEM_WORDS: Readonly<Record<string, string>> = { PLAN_TOO_MANY: `節は ${PLAN_LIMITS.nodes} 個まで`, PLAN_DEPTH: `深さは ${PLAN_LIMITS.depth} まで`,
+  PLAN_PROMISES: '約束の形が合わない' };
 /** The current node after the ops: the one named, or (none named) the next open one when the current is done or gone. A problem, or null. */
 function settleCurrent(edit: PlanEdit, named: string | null | undefined): string | null {
   if (named !== undefined) {
@@ -426,6 +601,6 @@ export function planFromSeeds(seeds: readonly PlanSeed[]): PlanTree | null {
   const edit = new PlanEdit(emptyPlanTree());
   for (const op of ops) if (edit.apply(op)) return null;
   edit.current = edit.nextOpen(null);
-  const tree: PlanTree = { schema: PLAN_TREE_SCHEMA, revision: 1, current: edit.current, nodes: orderedPlan([...edit.nodes.values()]) };
+  const tree: PlanTree = { schema: PLAN_TREE_SCHEMA, revision: 1, current: edit.current, nodes: orderedPlan([...edit.nodes.values()]), promises: [] };
   return planTreeProblem(tree) ? null : tree;
 }
