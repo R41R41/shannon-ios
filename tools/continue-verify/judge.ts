@@ -32,6 +32,7 @@ import type { BodyTimes, Handover, HandStart, ItemOutcome, TraceIds } from '../.
 import type { RecordEvent } from '../../services/api/src/infra/decisionRecords/decisionRecordRead.js';
 import { STAGE_NAMES, stageTimes, type StageChain } from '../../services/api/src/infra/decisionRecords/decisionRecordStages.js';
 import { runChecks } from './judgeChecks.js';
+import { measureAll, measureText, type Measures } from './judgeMeasure.js';
 
 // ---- the shapes of the records ---------------------------------------------------------------------------------------------------------------
 export type Bench = 'A' | 'B' | 'C' | 'D';
@@ -90,6 +91,8 @@ export interface ReceiptRecord {
   result?: string; failureType?: string;
   unit?: ItemOutcome; bodyTimes?: BodyTimes; ids?: Ids; lines?: HandLineLike[]; handover?: Handover;
   delivery?: { pollId: string; at: string };
+  /** Where the events that did not fit are fetched; `lost` (A-6 6, PROVISIONAL) is the body saying that it dropped them and they cannot be fetched. */
+  eventsMore?: { command: string; nextSeq: number; total: number; lost?: boolean };
 }
 
 export type OpKind = 'foot' | 'place' | 'place_held_back' | 'place_confirmed' | 'dig' | 'block_update' | 'attack' | 'eat' | 'key' | 'shield' | string;
@@ -126,7 +129,10 @@ export type TraceLine =
   | { kind: 'life'; at: string; life: number; alive: boolean; dimension: string; advancedBy?: 'death' | 'file_unreadable' }
   | { kind: 'death'; at: string; life: number }
   | { kind: 'motor_refused'; at: string; command: string; call: string; holder?: string }
-  | { kind: 'motor_state'; at: string; command: string; forward?: boolean; shield?: boolean; pathGoal?: 'kept' | 'cleared' }
+  /** The state of the body's motor port. `shield` is whether the shield is up. `point` and `deactivateItem` are PROVISIONAL (A-6 9: the body's new rows have no form yet): the shield's state at the reservation, the stop, the acquire and the first operation of a hand-over, and whether `deactivateItem` was called there. */
+  | { kind: 'motor_state'; at: string; command: string; forward?: boolean; shield?: boolean; pathGoal?: 'kept' | 'cleared'; point?: 'reservation' | 'stop' | 'acquire' | 'first_op'; deactivateItem?: boolean }
+  /** PROVISIONAL: a blow taken (the black box's `hurt` note) with her health after it. */
+  | { kind: 'hurt'; at: string; hp?: number | null; damage?: number | null }
   | { kind: 'reflex_hand'; at: string; reflex: string; target?: number }
   | { kind: 'reflex_end'; at: string; reflex: string }
   /** A-5 3: the vertical's evidence rows (`verticalEvidenceOp` reads them as operations). */
@@ -383,7 +389,10 @@ export interface Verdict {
   commands: { judged: number; linked: number; unlinked: Unlinked[] };
   /** Told, not failed: what the contract requires of the records and they do not have yet. */
   gaps: string[];
-  checks: CheckResult[]; stages: StageChain[]; text: string;
+  checks: CheckResult[]; stages: StageChain[];
+  /** What a pass cannot show (A-6 17): the long vertical moves, the time split, the shield against the operation record, the events delivered against the ledger. */
+  measures: Measures;
+  text: string;
 }
 
 export function judge(input: Input, fixtures: Fixtures = loadFixtures()): Verdict {
@@ -398,7 +407,7 @@ export function judge(input: Input, fixtures: Fixtures = loadFixtures()): Verdic
     .map(command => stageChain(model, command));
   const pass = joined.unlinked.length === 0 && checks.length > 1 && checks.every(check => check.ok);
   const verdict: Verdict = { pass, scene: meta.scene, headRev: meta.headRev, bodyRev: meta.bodyRev, benches: meta.benches,
-    commands: { judged: joined.judged.length, linked: joined.linked.length, unlinked: joined.unlinked }, gaps: joined.gaps, checks, stages, text: '' };
+    commands: { judged: joined.judged.length, linked: joined.linked.length, unlinked: joined.unlinked }, gaps: joined.gaps, checks, stages, measures: measureAll(model), text: '' };
   verdict.text = verdictText(verdict);
   return verdict;
 }
@@ -409,6 +418,7 @@ export function verdictText(verdict: Verdict): string {
   for (const gap of verdict.gaps) lines.push(`  既知の欠け: ${gap}`);
   for (const item of verdict.commands.unlinked) lines.push(`  つながらない: ${item.command}  (${item.reasons.join(', ')})`);
   for (const check of verdict.checks) lines.push(`  ${check.ok ? 'OK ' : 'NG '} ${check.id}: ${check.detail}`);
+  lines.push(...measureText(verdict.measures));
   for (const chain of verdict.stages) {
     lines.push(chain.linked ? `  段 ${chain.failed} -> ${chain.decision} -> ${chain.next}: 合計 ${chain.totalMs} ms ${JSON.stringify(chain.stagesMs)}`
       : `  段 ${chain.failed}: つながらない (${chain.why})`);

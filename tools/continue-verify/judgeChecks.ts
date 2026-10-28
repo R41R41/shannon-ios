@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Cell, CheckResult, CommandView, Joined, Model, OpLine, ProbeLine, Row, TraceLine } from './judge.js';
+import { eventsReplies, ledgerMeasure, ledgerRowsOf, shieldMeasures } from './judgeMeasure.js';
 import { bodyTimesOf, cmdKey, commandLife, commandNamed, idsOf, itemOf, kindOf, linesOf, ms, sawUnknown, unitOf } from './judge.js';
 
 const ok = (id: string, pass: boolean, detail: string, commands: string[] = []): CheckResult => ({ id, ok: pass, detail, commands });
@@ -130,7 +131,12 @@ function boundary3(model: Model): CheckResult[] {
   const rows = ledgerRows(model);
   const apart = rows.filter(row => [...new Set([...Object.keys(row.have ?? {}), ...Object.keys(row.observed ?? {})])].some(item => (row.have?.[item] ?? 0) !== (row.observed?.[item] ?? 0)));
   const orphan = rows.filter(row => row.ids?.command && !find(model, row.ids.command)?.receipts.length && !find(model, row.ids.command)?.received.length);
+  const delivery = ledgerMeasure(model, ledgerRowsOf(model)), measure = delivery.measure;
+  const wrong = [...measure.notBooked.map(id => `${id} was delivered and never booked`), ...measure.seqProblems.map(problem => `${problem.command}: delivery numbers ${problem.got.join(',')}`),
+    ...measure.reasonProblems, ...measure.reasonMismatch, ...measure.silentLoss.map(loss => `${loss.command}: ${loss.arrived} of ${loss.total} events arrived and no loss was told`)];
   return [ok('ledger rows exist', rows.length > 0, `${rows.length} ledger row(s)`),
+    ok('the events delivered are booked once each by id, in order, with a reason that fits, or told lost', measure.delivered > 0 && wrong.length === 0,
+      measure.delivered === 0 ? 'no event was delivered by a receipt or a page: nothing to book' : wrong.length ? wrong.slice(0, 6).join('; ') : `${measure.delivered} event(s) (${Object.entries(measure.byVia).map(([via, count]) => `${via} ${count}`).join(', ')}) booked${measure.lost.length ? `; told lost: ${measure.lost.join(',')}` : ''}`),
     ok('have equals the observation at every receipt', rows.length > 0 && apart.length === 0, apart.length ? `${apart.length} row(s) differ, first at ${apart[0].at}` : 'equal at every row'),
     ok('every ledger row names a command that has a receipt', orphan.length === 0, `${orphan.length} row(s) of no received command`),
     ledgerOnce(model)];
@@ -146,7 +152,10 @@ function boundary4(model: Model): CheckResult[] {
     const label = `${String(item.case)} ${item.command}`;
     if (!command || !receipt) { out.push(ok(label, false, 'no receipt for the command')); continue; }
     if (item.case === 'same_target') {
-      out.push(ok(label, receipt.handover?.confirmed === true && receipt.handover.shield === 'kept', `handover ${JSON.stringify(receipt.handover ?? null)}`, [command.id]));
+      // A claim is not a pass (Codex's final review (5) 3): `shield` in the result is checked against the operation record's own shield state, and a `dropped` is told as a fact.
+      const shield = shieldMeasures(model).find(measure => measure.command === command.id);
+      const pass = receipt.handover?.confirmed === true && (shield?.verdict === 'kept_verified' || shield?.verdict === 'none_consistent');
+      out.push(ok(label, pass, `handover ${JSON.stringify(receipt.handover ?? null)}; shield: ${shield ? `${shield.verdict} (${shield.why})` : 'no measure'}`, [command.id]));
     } else if (item.case === 'different_target') {
       const after = traceOf(model, 'reflex_hand').filter(line => (ms(line.at) ?? 0) > (ms(times?.acceptedAt) ?? Infinity));
       out.push(ok(label, !receipt.handover && after.length === 0, `handover ${JSON.stringify(receipt.handover ?? null)}; reflex hands started after the act was accepted: ${after.length}`, [command.id]));
@@ -389,7 +398,8 @@ export function boundary8(model: Model, scene: Model['fixtures']['boundaries']['
       const at = ms(injections(model, 'body_restart')[0]?.at), poll = traceOf(model, 'poll').find(line => line.first === true && (ms(line.at) ?? 0) >= (at ?? Infinity));
       // "events lost" is the body's events command answering lost: the head's `events` row says it, or the receipt of that command carries the reply (its `result` is the reply's JSON)
       const repliedLost = (row: Row): boolean => { try { const reply = JSON.parse(String((row.receipt as { result?: unknown } | undefined)?.result ?? 'null')) as { lost?: boolean; command?: string } | null; return reply?.lost === true && reply.command === first; } catch { return false; } };
-      const lost = rowsOf(model, 'events').some(row => row.lost === true && idsOf(row, model.meta).command === first) || rowsOf(model, 'received').some(repliedLost);
+      const lost = rowsOf(model, 'events').some(row => row.lost === true && idsOf(row, model.meta).command === first) || rowsOf(model, 'received').some(repliedLost)
+        || ledgerMeasure(model, []).measure.lost.includes(first) || eventsReplies(model).some(reply => reply.lost && reply.command === first);
       out.push(ok('the new body\'s first poll', Boolean(poll), poll ? `first poll ${poll.at}` : 'none'),
         ok('released, goal unknown, events lost, an unexplained difference only', Boolean(q(first)?.released.length) && unitOf(q(first)!)?.goal === 'unknown' && lost && rowsOf(model, 'ledger_unexplained').length > 0,
           `released ${q(first)?.released.length ?? 0}; events lost ${lost}; ledger_unexplained rows ${rowsOf(model, 'ledger_unexplained').length}`, ids));
