@@ -377,8 +377,8 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     for (const file of files.values()) collect(file.output);
     expect([...codes].length).toBeGreaterThan(0);
   });
-  it('are the 26 files the body made at that revision', () => {
-    expect(names).toHaveLength(26);
+  it('are the 27 files the body made at that revision', () => {
+    expect(names).toHaveLength(27);
   });
 
   it('their receipts go through the head\'s readers, all four: the unit into the store, the unit into the queue\'s sentence, the events into the ledger, the hand lines', () => {
