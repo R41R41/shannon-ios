@@ -1,4 +1,5 @@
 import { handDependsProblem } from './continueContract.js';
+import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
 /**
@@ -107,10 +108,10 @@ function verticalProblem(hand: ActHand): string | null {
   if (!Number.isInteger(hand.toY) || hand.toY! < -64 || hand.toY! > 320) return 'toY は -64〜320 の整数';
   if (!hand.canDig?.length || hand.canDig.length > 12) return hand.canDig?.length ? 'canDig は 12 種類まで' : 'canDig が要る（掘ってよい物。pillar でも頭の上を掘るのに使う）';
   if (hand.canPlace !== undefined && (hand.canPlace.length < 1 || hand.canPlace.length > 6)) return 'canPlace は 1〜6 種類';
-  if (hand.maxDig !== undefined && !(Number.isInteger(hand.maxDig) && hand.maxDig >= 0 && hand.maxDig <= 200)) return 'maxDig は 0〜200 の整数';
-  if (hand.maxPlace !== undefined && !(Number.isInteger(hand.maxPlace) && hand.maxPlace >= 0 && hand.maxPlace <= 100)) return 'maxPlace は 0〜100 の整数';
+  if (hand.maxDig !== undefined && !(Number.isInteger(hand.maxDig) && hand.maxDig >= 0 && hand.maxDig <= VERTICAL_DEFAULTS.maxDig)) return `maxDig は 0〜${VERTICAL_DEFAULTS.maxDig} の整数`;
+  if (hand.maxPlace !== undefined && !(Number.isInteger(hand.maxPlace) && hand.maxPlace >= 0 && hand.maxPlace <= VERTICAL_DEFAULTS.maxPlace)) return `maxPlace は 0〜${VERTICAL_DEFAULTS.maxPlace} の整数`;
   if (hand.range !== undefined && !(Number.isInteger(hand.range) && hand.range >= 1 && hand.range <= 2)) return 'range は 1 か 2';
-  return seconds(hand, 5, 120) ?? names(hand);
+  return seconds(hand, VERTICAL_SECONDS_RANGE[0], VERTICAL_SECONDS_RANGE[1]) ?? names(hand);
 }
 /** go's fields against its limits (the schema's ranges are the widest of any kind): where to, the allowed blocks, the time and the counts. */
 function goProblem(hand: ActHand): string | null {

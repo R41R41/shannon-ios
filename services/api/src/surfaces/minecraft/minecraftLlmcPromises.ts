@@ -64,11 +64,14 @@ export interface LedgerResult {
 const LEDGER_LINES = 32, AHEAD_LIMIT = 128, CONNECTIONS_LIMIT = 8;
 const round1 = (value: number) => Math.round(value * 10) / 10;
 const key = (run: { bodyBoot: string; connectionId: string }) => `${run.bodyBoot}/${run.connectionId}`;
+const sumShown = (list: ReadonlyArray<{ shown: number }>) => round1(list.reduce((total, item) => total + item.shown, 0));
 
 /** The reasons the body gives (`InventoryEvent.reason`) as the ledger names them. `ingredient` of a smelt is told by the hand's verb. */
 const REASONS: Readonly<Record<string, string>> = { ingredient: 'craft_ingredient', fuel: 'smelt_fuel', food: 'eat', placed: 'place', thrown: 'thrown', tool_broke: 'tool_broke',
   crafted: 'crafted', picked: 'picked', mined: 'mined', smelted: 'smelted', reflex_eat: 'reflex_eat', reflex_armor: 'reflex_armor', death: 'death', unexplained: 'unexplained',
   stored: 'stored', retrieved: 'retrieved' };
+/** The reasons of the body's events the ledger names (any other is read as `unexplained`). */
+export const LEDGER_REASONS: readonly string[] = Object.keys(REASONS);
 function reasonOf(event: InventoryEvent, by: LedgerBy | undefined): string {
   const reason = event.reason as string;
   return reason === 'ingredient' && by?.do === 'smelt' ? 'smelt_ingredient' : REASONS[reason] ?? 'unexplained';
@@ -102,7 +105,17 @@ function relationOf(seen: LedgerSeen, now: Seen): Relation {
   return (seen.connections ?? []).includes(key(now.run)) ? 'older' : 'newer';
 }
 
-interface Entry { event: InventoryEvent; delta: number; declared: boolean; rev: number; item: string; connection: string; old: boolean }
+/**
+ * Amendment A-2 3: armour put on (the body's `reflex_armor`: the `equip` of a head, torso, legs or feet slot) is the item going from the pack to the armour slot, not a use. The frame
+ * counts what she wears (`carriedItemCounts`: `worn`), so the count of her `have` does not move: the event is told as `moved` and takes nothing off `have`.
+ */
+const WORN_REASONS: ReadonlySet<string> = new Set(['reflex_armor']);
+const isWorn = (event: InventoryEvent): boolean => WORN_REASONS.has(event.reason as string);
+/** `stored` and `retrieved` (a chest) and putting armour on are the item changing place: told as `moved`, never as consumed or gained. */
+const isMoved = (event: InventoryEvent): boolean => event.reason === 'stored' || event.reason === 'retrieved' || isWorn(event);
+
+/** `delta` is what the event does to the count she has (0 for armour put on: worn is counted); `shown` is what the event says (a worn piece is 1). */
+interface Entry { event: InventoryEvent; delta: number; shown: number; declared: boolean; rev: number; item: string; connection: string; old: boolean }
 
 /** Where an event came from: the call's `by`, and what its id says (`${command}:${pass}:${hand}:${seq}`) where the call does not. */
 function byOf(by: LedgerBy | undefined, id: string): PromiseEvent['by'] | undefined {
@@ -159,9 +172,9 @@ export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: Ledger
     const entries: Entry[] = [];
     for (const event of fresh) {
       const viaSnapshot = snapshot ? deltaFor(snapshot.item, event) : 0;
-      const delta = viaSnapshot !== 0 ? viaSnapshot : deltaFor(promise.item, event);
-      if (delta === 0) continue;
-      entries.push({ event, delta, declared: viaSnapshot !== 0, rev: viaSnapshot !== 0 ? snapshot!.rev : promise.rev,
+      const shown = viaSnapshot !== 0 ? viaSnapshot : deltaFor(promise.item, event);
+      if (shown === 0) continue;
+      entries.push({ event, delta: isWorn(event) ? 0 : shown, shown, declared: viaSnapshot !== 0, rev: viaSnapshot !== 0 ? snapshot!.rev : promise.rev,
         item: viaSnapshot !== 0 ? snapshot!.item : promise.item, connection: connectionOf(event), old: isOld(event) });
     }
     const pending = (ledgerSeen.ahead ?? []).filter(item => item.promise === promise.id);
@@ -189,14 +202,13 @@ export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: Ledger
     }
     const written: PromiseEvent[] = [];
     for (const line of lines) {
-      const first = line.entries[0]!, net = sum(line.entries);
+      const first = line.entries[0]!, net = sum(line.entries), worn = !line.net && isWorn(first.event);
       cur = round1(cur + sum(line.entries.filter(entry => !entry.old)));
-      if (net === 0) continue;
+      if (net === 0 && !worn) continue;
       const reason = line.net ? (net > 0 ? 'crafted' : 'craft_ingredient') : reasonOf(first.event, input.by);
-      const moved = first.event.reason === 'stored' || first.event.reason === 'retrieved';
-      const kind: PromiseEvent['kind'] = first.event.reason === 'death' ? 'lost_death' : first.event.reason === 'unexplained' ? 'unexplained' : moved ? 'moved' : net < 0 ? 'consumed' : 'gained';
+      const kind: PromiseEvent['kind'] = first.event.reason === 'death' ? 'lost_death' : first.event.reason === 'unexplained' ? 'unexplained' : !line.net && isMoved(first.event) ? 'moved' : net < 0 ? 'consumed' : 'gained';
       const source = byOf(input.by, first.event.id);
-      written.push({ id: first.event.id, at: input.at, kind, count: kind === 'unexplained' ? net : Math.abs(net), have: Math.max(0, cur), declared: first.declared, reason,
+      written.push({ id: first.event.id, at: input.at, kind, count: kind === 'unexplained' ? net : Math.abs(worn ? sumShown(line.entries) : net), have: Math.max(0, cur), declared: first.declared, reason,
         promiseRev: first.rev, item: first.item, ...(source ? { by: source } : {}) });
     }
     if (observed !== null && diff !== 0) {
@@ -336,19 +348,22 @@ function lineOf(promise: PlanPromise, facts: DoneFacts | null, context: PromiseL
 /** 「直前に 2 減った（理由: …）」: what the events after the last decision took from the promise's item and gave to it. */
 function changesWords(events: readonly PromiseEvent[], unit: string): string {
   const signed = (event: PromiseEvent): number => event.kind === 'consumed' ? -event.count : event.kind === 'gained' ? event.count
-    : event.kind === 'moved' ? (event.reason === 'stored' ? -event.count : event.count) : event.kind === 'unexplained' ? event.count : 0;
+    : event.kind === 'moved' ? (event.reason === 'stored' ? -event.count : event.reason === 'retrieved' ? event.count : 0) : event.kind === 'unexplained' ? event.count : 0;
   const part = (list: PromiseEvent[], word: string): string | null => {
     if (!list.length) return null;
-    const total = round1(list.reduce((sum, event) => sum + Math.abs(signed(event)), 0));
+    const total = round1(list.reduce((sum, event) => sum + (event.reason === 'reflex_armor' && event.kind === 'moved' ? event.count : Math.abs(signed(event))), 0));
     const reasons = [...new Set(list.map(event => reasonWords(event.reason)))].filter(Boolean).join('・');
     const act = list.filter(event => event.kind === 'consumed' && !(event.reason ?? '').startsWith('reflex_'));
     const declaredWords = act.length ? (act.every(event => event.declared) ? '申告の用途' : act.some(event => event.declared) ? '一部は申告の用途' : '申告の用途ではない') : '';
-    const placeOnly = list.every(event => event.kind === 'moved') ? '置き場所が変わっただけ' : '';
+    const placeOnly = list.every(event => event.kind === 'moved') ? (list.every(event => event.reason === 'reflex_armor') ? '持ち物から防具の欄へ移っただけで、持っている数は変わらない' : '置き場所が変わっただけ') : '';
     const note = [declaredWords, placeOnly].filter(Boolean).join('。');
     return `${total}${unit || ' '}${word}${reasons ? `（理由: ${reasons}${note ? `。${note}` : ''}）` : ''}`;
   };
   const lessList = events.filter(event => signed(event) < 0), moreList = events.filter(event => signed(event) > 0);
-  const pieces = [part(lessList, '減った'), part(moreList, '増えた')].filter((item): item is string => !!item);
+  // Armour put on moves nothing in the count she has (worn is counted): it is said as what it is, beside the less and the more.
+  const wornList = events.filter(event => event.kind === 'moved' && event.reason === 'reflex_armor');
+  const worn = wornList.length ? part(wornList, '身に着けた') : null;
+  const pieces = [part(lessList, '減った'), part(moreList, '増えた'), worn].filter((item): item is string => !!item);
   return pieces.length ? `直前に ${pieces.join('・')}` : '';
 }
 

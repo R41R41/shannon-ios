@@ -5,6 +5,7 @@ import {
   type ActHand, type ActInput,
 } from '../src/contracts/minecraftActContract.js';
 import { handProblem } from '../src/contracts/minecraftActHandRules.js';
+import { VERTICAL_DEFAULT_SECONDS, VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from '../src/contracts/minecraftActTime.js';
 import {
   expandShortAct, handToLine, lineToHand, SHORT_ACT_DESCRIPTION, shortHandProblem,
 } from '../src/contracts/minecraftActShortContract.js';
@@ -165,6 +166,21 @@ describe('vertical: the rules of one hand (handProblem)', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water');
     expect(SHORT_ACT_DESCRIPTION).toContain('vertical: dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds');
   });
+  it('shows the model the defaults and the range of the limits (amendment A-1 6: maxDig 200, maxPlace 100, seconds 60 within 5 to 120), the same as the body and the head check', () => {
+    expect(VERTICAL_DEFAULTS).toEqual({ maxDig: 200, maxPlace: 100, seconds: 60, range: 1 });
+    expect([...VERTICAL_SECONDS_RANGE]).toEqual([5, 120]);
+    const line = SHORT_ACT_DESCRIPTION.split('\n').find(entry => entry.includes('上限（書かなければ既定）'))!;
+    expect(line).toContain('seconds 5〜120（既定 60）・maxDig 既定 200・maxPlace 既定 100');
+    expect(line).toContain('range は塞ぐ半径 1〜2、既定 1');
+    // the head's check is the same range
+    expect(handProblem({ ...stairs, seconds: 5 })).toBeNull();
+    expect(handProblem({ ...stairs, seconds: 120 })).toBeNull();
+    expect(handProblem({ ...stairs, seconds: 4 })).toBe('seconds は 5〜120');
+    expect(handProblem({ ...stairs, seconds: 121 })).toBe('seconds は 5〜120');
+    expect(handProblem({ ...stairs, maxDig: 200, maxPlace: 100 })).toBeNull();
+    expect(handProblem({ ...stairs, maxDig: 201 })).toBe('maxDig は 0〜200 の整数');
+    expect(handProblem({ ...stairs, maxPlace: 101 })).toBe('maxPlace は 0〜100 の整数');
+  });
 });
 
 describe('vertical: the time of a hand (first guesses, then the body\'s msPerUnit)', () => {
@@ -180,10 +196,12 @@ describe('vertical: the time of a hand (first guesses, then the body\'s msPerUni
     expect(actExpectedMilliseconds({ hands: [{ ...shaft, toY: 20 }] }, feet)).toBe(1_000 + 20 * 1_000);
     expect(actExpectedMilliseconds({ hands: [{ ...pillar, toY: 50 }] }, feet)).toBe(1_000 + 10 * 900);
   });
-  it('never expects more than the hand\'s seconds, and bounds the act by them and 2 s (default 120)', () => {
+  it('never expects more than the hand\'s seconds, and bounds the act by them and 2 s (default 60, amendment A-1 6)', () => {
     expect(actExpectedMilliseconds({ hands: [{ ...stairs, seconds: 20 }] }, feet)).toBe(20_000);
     expect(actMilliseconds({ hands: [{ ...stairs, seconds: 30 }] }, feet)).toBe(32_000);
-    expect(actMilliseconds({ hands: [stairs] }, feet)).toBe(122_000);
+    expect(actMilliseconds({ hands: [stairs] }, feet)).toBe(62_000);
+    expect(actMilliseconds({ hands: [{ ...stairs, seconds: 120 }] }, feet)).toBe(122_000);
+    expect(VERTICAL_DEFAULT_SECONDS).toBe(60);
   });
   it('starts the next hand where the vertical ended (the y asked for, one cell toward a step for stairs)', () => {
     const from = { x: 0, y: 10, z: 0 }, walk: ActHand = { do: 'walk', to: { x: 10, y: 0, z: 0 } };

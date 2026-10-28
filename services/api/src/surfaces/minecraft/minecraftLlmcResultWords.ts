@@ -55,6 +55,36 @@ function codeWords(line: ActHandLine): string {
   return code;
 }
 
+/**
+ * The words of the codes a vertical hand stops with (amendment A-1 6: 14 closed codes; the fixture `vertical/stop-cases.json` is the master list of the scenes). Each says what the
+ * body saw, no more. `displaced` and `no_foothold` are two things: in the first the body was moved off the planned step (a fall, a push); in the second it was not moved, and could
+ * not step onto the footing the plan called for. The model's next hand is different for the two, which is why the head says them apart.
+ */
+export const VERTICAL_STOP_WORDS: Readonly<Record<string, string>> = {
+  unloaded: '次に掘る・入るマスの周りがまだ読み込まれていない（壁があるとは分かっていない。世界が見えていない）',
+  world_limit: '世界の高さの端に着いた（下は y=-64、上は y=320 の手前）。次の段はその外になる',
+  displaced: '体が予定の段から 1 マス以上ずれた（落ちたか押し戻された。体のほうが動かされた。足場が無かったのではない）',
+  no_foothold: '予定の足場へ踏み出せなかった（体は落ちても押し戻されてもいない。次の段に乗れなかった。displaced とは別）',
+  cannot_dig: '次に掘るマスが canDig に無い物か、今の道具では掘れない物（岩盤・守られた物を含む）',
+  no_floor: '下りる先に立てる床が無い（落ちる段が 1 を超える穴・空洞、足元が空気や液体）',
+  no_place: '足場・柱を置けない（置く物を持っていない・当てる面が無い・届かない・置いても世界に現れない）',
+  place_unconfirmed: '置いたはずのブロックが続けて世界に現れなかった（置けたとは確かめられていない）',
+  limit_dig: '掘る数の上限 maxDig に着いた（砂利・砂の掘り直しも 1 回ずつ数える）',
+  limit_place: '置く数の上限 maxPlace に着いた（置きを送った数で数える）',
+  limit_time: '秒数の上限 seconds に着いた',
+  lava: '次の段のマスかその隣に溶岩がある（liquid=stop なので止まった）',
+  water: '次の段のマスかその隣に水がある（liquid=stop か seal_water なので止まった）',
+  seal_failed: '液体を塞ごうとして塞げなかった（置く物が無い・届かない・予算）',
+};
+/** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the opponent did is said by the code. */
+export const FIGHT_END_WORDS: Readonly<Record<string, string>> = {
+  target_killed: '相手の死を観測した',
+  target_escaped: '相手は生きていて、範囲の外にいる（追っていない。倒していない）',
+  target_left: '相手から離れた（逃げる構えで範囲に着いたか、逃げる間に相手が見えなくなった）。相手は倒していない',
+};
+/** The ore a vertical hand saw on its way, told as what was seen (never followed): `iron_ore(1,2,3)`. At most 8, as the body sends them. */
+export const seenWords = (seen: NonNullable<Progress['seen']>): string => seen.slice(0, 8).map(entry => `${entry.block}${at(entry.at)}`).join('・');
+
 /** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain failure adds none). */
 export function handFacts(line: ActHandLine): string[] {
   const out: string[] = [];
@@ -72,6 +102,11 @@ export function handFacts(line: ActHandLine): string[] {
   }
   if (line.goal !== 'partial' && line.end === 'cut' && cutBy) out.push(`外から止められた（${cutBy}）`);
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
+  const stop = line.do === 'vertical' && line.code ? VERTICAL_STOP_WORDS[line.code] : undefined;
+  if (stop) out.push(`止まった理由 ${line.code}: ${stop}`);
+  const fought = line.do === 'fight' && line.code && line.goal === 'done' ? FIGHT_END_WORDS[line.code] : undefined;
+  if (fought) out.push(fought);
+  if (line.progress?.seen?.length) out.push(`途中で見えた物（追っていない）: ${seenWords(line.progress.seen)}`);
   return out.map(text => `${FACT}${text}`);
 }
 
