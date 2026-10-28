@@ -49,6 +49,7 @@ export function progressWords(progress: Progress): string {
 /** What a code the body names for a hand that did not start or lost its target says when it is a closed one the model may not know. */
 function codeWords(line: ActHandLine): string {
   const code = line.code ?? '';
+  if (code === 'cleanup_stop') return '片付けの stop で止めた・捨てた（結果として確定。さっきの不明が後で分かっても戻らない）';
   const depends = /^depends_(failed|unknown):(\d+)$/u.exec(code);
   if (depends) return depends[1] === 'failed' ? `頼る手 ${depends[2]} が済まなかったので動かさなかった` : `頼る手 ${depends[2]} の結果が分からないので動かさなかった`;
   return code;
@@ -70,6 +71,7 @@ export function handFacts(line: ActHandLine): string[] {
     default: break;
   }
   if (line.goal !== 'partial' && line.end === 'cut' && cutBy) out.push(`外から止められた（${cutBy}）`);
+  if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
   return out.map(text => `${FACT}${text}`);
 }
 

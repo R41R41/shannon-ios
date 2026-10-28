@@ -17,6 +17,7 @@ import { validBodyTimes, validBodyVersion, validControlPoll, validEventsMore, va
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { llmcResult, actResultText } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { createLlmcQueue, forgetLlmcQueues, madeInOf, type QueueAdd, type QueueDeps, type QueueRecordRow } from '../src/surfaces/minecraft/minecraftLlmcQueue.js';
+import { itemResult } from '../src/surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { heldAgainWords, replayWords, skipWords } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
 import { applyLedger, emptyLedgerSeen, type LedgerInput, type LedgerSeen } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
@@ -1141,5 +1142,16 @@ describe('the harness', () => {
       outcome: { goal: 'done', end: 'finished', life: 1 } };
     const hold: HoldState = 'none';
     expect([actOutcomeOf(result).goal, hold]).toEqual(['done', 'none']);
+  });
+});
+
+describe('the cleanup stop\'s cuts are settled results (fixture result/unknown-state-machine.json, cleanup_scope)', () => {
+  it('says that what the stop cut or dropped stands and is not brought back by a later correction', () => {
+    const result = JSON.stringify({ v: 1, ok: false, done: 0, of: 1, stoppedBy: 'cancelled', ms: 900, at: { x: 0, y: 64, z: 0 }, hp: 20, food: 20,
+      lines: [{ i: 1, do: 'dig', status: 'stopped', line: '取り消し', goal: 'partial', end: 'cut', cutBy: 'cancelled', code: 'cleanup_stop', motorOps: 2 }] });
+    expect(actResultText(readActResult(result)!)).toContain('片付けの stop で止めた・捨てた（結果として確定');
+    const item = { item: 'q3', node: null, why: '', input: { hands: [] }, pre: undefined, done: undefined, startedAt: null, because: null, reason: () => null };
+    const dropped = itemResult(item, completed('q3', { outcome: 'cancelled', failureType: 'cleanup_stop', unit: { goal: 'not_started', end: 'not_run', released: true } }), []);
+    expect(dropped.text).toContain('片付けの stop で捨てた');
   });
 });
