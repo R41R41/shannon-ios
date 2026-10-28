@@ -148,6 +148,8 @@ describe('stage 3 switched off in the environment', () => {
     { part: 'evidence decay', on: ['SHANNON_EVIDENCE_DECAY'], reaches: [] },
   ];
 
+  // Every part switched on alone replays all the stage-3 scenarios: about 21 s alone on the production VM (2026-10-28), so with
+  // the deploy check's second worker beside it, the 30 s of vitest.config.ts timed it out. A real hang still fails, at 2 minutes.
   it('reaches, with one part switched on alone, only the surfaces that part is about', async () => {
     const recorded = recordedStage3();
     for (const { part, on, reaches, stateOnly } of ALONE) {
@@ -161,5 +163,5 @@ describe('stage 3 switched off in the environment', () => {
         expect(sent, `${part} alone sends and answers as afb38c28: ${name}`).toEqual(recordedSent);
       }
     }
-  });
+  }, 120_000);
 });
