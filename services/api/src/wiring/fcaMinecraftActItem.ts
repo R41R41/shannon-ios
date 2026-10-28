@@ -23,7 +23,8 @@ type Call = Parameters<FcaExternalTools['execute']>[0];
 export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftControl; bodyId: string; call: Call; skill: string;
   fixes: readonly string[]; node: string | null; current?: string | null; frame: BodyObservation | null }): Promise<ToolResult> {
   const { queue, call } = parts, input = call.input as ActInput;
-  const { pre, replace: _replace, ...args } = input;
+  // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope) and `uses` (kept with the command, never sent to the body).
+  const { pre, replace: _replace, dependsOn: _dependsOn, uses: _uses, ...args } = input;
   const fixes = parts.fixes.length ? `（頭が形を直して送った: ${parts.fixes.join('、')}）\n` : '';
   if (pre && !queue.open() && conditionHolds(pre, parts.frame) === false) {
     const words = conditionWords(pre, parts.frame);

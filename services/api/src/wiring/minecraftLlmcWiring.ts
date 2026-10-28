@@ -19,6 +19,7 @@ import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js
 import { createLlmcEvents, urgentDecision, withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
+import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
@@ -264,8 +265,13 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const holds = incidentHoldPort();
   const holdOn = holds?.holdRequested(step.taskId) === true;
   let resumeOf: string | null = null;
-  const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId,
-    context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log });
+  // Continue contract 2 and 3: the queue is named by the step; the events of a result go to the plan's one way into the ledger, and the promises an act says it uses
+  // are kept as they are now with the command. A cleanup that did not prove the release asks the operator's hold (the incident port) for the task.
+  const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId, step: step.id,
+    context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log,
+    applyLedger: input => plan.port.applyLedger(input), snapshotUses: ids => snapshotUses(plan.port.tree().promises, ids),
+    onHeld: info => { void holds?.hold(step.taskId, { id: `cleanup:${info.command}`, heavy: true, why: `結果が不明で、解放を確かめられなかった（${info.why}）`, held: true, frozen: null, command: info.command })
+      .catch(error => log(`Shannon Minecraft cleanup hold failed task=${step.taskId} ${String(error)}`)); } });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
   // Run 45: the call id of the act a resume sends again (the body says when it failed for the reason it was held for: `incident.repeated`).
   let resent: string | null = null;
@@ -310,6 +316,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       holds.resumeChecked(step.taskId, pending.command ? `再送できなかった: act ${pending.command} が見つからない` : '再送しなかった: 体の断りから戻した保留で、出し直す act が無い。計画の続きから判断する');
       return;
     }
+    // Boundary 8 (continue contract 1): an act whose result is not known is never sent again, by the head or by a resume; the hold is ended and the next decision looks at the world.
+    if (control.store.resultUnknown(sent.id)) { holds.resumeChecked(step.taskId, `再送しなかった: act ${sent.id} の結果が不明（解放を確かめていない、または不明のまま）。不明の項目は出し直さない。世界を見て判断する`); return; }
     const body = bodyId(), active = currentActionExecution();
     if (!body || !control.store.bind(step.taskId, body)) { holds.resumeChecked(step.taskId, '再送できなかった: タスクに体が結び付いていない'); return; }
     if (!active || active.lease.id !== step.lease.id || !await active.permit([actionResource(control.configuration.deviceId, 'minecraft-body')], signal)) {
@@ -322,7 +330,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       resumeOf = pending.incident;
       const added = queue.add({ call: { id: `resume:${sent.id}`, name: MC_ACT_TOOL, input: args }, operationId: `resume:${randomUUID()}`, input: args as never,
         arguments: args, skill: 'act', node: sent.queue?.node ?? null, current: null, why: String(args.why ?? ''), fixes: [],
-        maxMs: Number(sent.queue?.maxMs ?? 60_000) });
+        maxMs: Number(sent.queue?.maxMs ?? 60_000), resumeOf: { item: sent.queue?.item ?? sent.id, command: sent.id } });
       resumeOf = null;
       log(`Shannon Minecraft incident resume task=${step.taskId} incident=${pending.incident} resend=${sent.id}`);
       const first = { done: false };

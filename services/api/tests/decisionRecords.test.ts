@@ -145,7 +145,7 @@ describe('decision records: what is kept of a request', () => {
 
 const COMMAND = (id: string, taskId: string): MinecraftControlCommand => ({ schemaVersion: 1, id, serverId: 'world', connectionId: 'connection-1', kind: 'skill', skill: 'act',
   arguments: { why: '[p1.2] 東へ', hands: [{ do: 'walk', to: { x: 221, y: 56, z: 62 } }] }, deadlineAt: '2026-10-28T03:10:00.000Z',
-  queue: { item: 'q15', after: null, node: 'p1.2', maxMs: 20_000, startBy: '2026-10-28T03:00:30.000Z' },
+  queue: { item: 'q15', after: null, node: 'p1.2', maxMs: 20_000, startBy: '2026-10-28T03:00:30.000Z', queue: `${taskId}:hb-1:1` },
   context: { scopeKey: 'owner', taskId, taskRevision: 4, bodyId: 'minecraft:world', sessionId: 'step-1', generation: 2, goal: 'エンドラを討伐して', completionCondition: '',
     plan: { revision: 1, current: 'p1.2', nodes: [] } },
   lease: { id: 'lease-1', generation: 2 } as never });

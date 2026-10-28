@@ -15,7 +15,7 @@ import type { ActHand } from './minecraftActContract.js';
  *   walk 225,57,63 | walk 1,2,3 4,5,6（path）[sprint] [range=2] | dig x,y,z x,y,z [tool=名] [exposeOk] [takeOk] [collect=false]
  *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物 [slot] | craft 物 [個数]
  *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false] | use 物 [x,y,z] [face=F] [target=T]
- *   どの手にも rel（足からの差）、onFail=continue|stop、note="短い説明" を付けられる。
+ *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
  *   drop 物 [数] [target=#id か x,y,z]
  *   上に無い形（furnace・chest・shoot、use の ほかの欄など）は `json {手の JSON}` の 1 行。
  * 往復（手 → 1 行 → 手）が元と同じにならない手は、必ず json の行に落ちる（欄を黙って失わない）。
@@ -132,8 +132,11 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   use: hand => hand.item && (hand.at?.length ?? 0) <= 1
     ? [hand.item, ...(hand.at?.length ? [pos(hand.at[0]!)] : []), ...given('face', hand.face), ...given('target', hand.target)] : null,
 };
+/** `dependsOn=1,3`; an empty list (relies on no hand) is `dependsOn=none`. */
+const dependsWord = (hand: ActHand): string[] => hand.dependsOn === undefined ? [] : [`dependsOn=${hand.dependsOn.length ? hand.dependsOn.join(',') : 'none'}`];
 function tail(hand: ActHand): string[] {
-  return [...flag(hand.rel, 'rel'), ...given('onFail', hand.onFail), ...(typeof hand.note === 'string' ? [`note=${JSON.stringify(hand.note)}`] : [])];
+  return [...flag(hand.rel, 'rel'), ...given('onFail', hand.onFail), ...dependsWord(hand),
+    ...(typeof hand.note === 'string' ? [`note=${JSON.stringify(hand.note)}`] : [])];
 }
 function shortLine(hand: ActHand): string | null {
   const words = WRITERS[hand.do]?.(hand);
@@ -264,7 +267,11 @@ function readTokens(tokens: readonly string[], verb: string): Read | { error: st
     if (cell) out.cells.push(cell);
     else if (Object.hasOwn(FLAGS, token)) out.hand[FLAGS[token]!] = true;
     else if (key && key[1] === 'do') return bad(verb, 'do= は書けない');
-    else if (key) out.hand[key[1]!] = valueOf(key[2]!);
+    else if (key && key[1] === 'dependsOn') {
+      const numbers = key[2] === '' || key[2] === 'none' ? [] : key[2]!.split(',').map(Number);
+      if (numbers.some(number => !Number.isInteger(number))) return bad(verb, 'dependsOn= は前の手の番号をコンマで（dependsOn=1,3）。何にも頼らないなら dependsOn=none');
+      out.hand.dependsOn = numbers;
+    } else if (key) out.hand[key[1]!] = valueOf(key[2]!);
     else out.words.push(token);
   }
   return out;

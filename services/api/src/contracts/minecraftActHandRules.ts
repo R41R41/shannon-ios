@@ -1,3 +1,4 @@
+import { handDependsProblem } from './continueContract.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
 /**
@@ -32,11 +33,20 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   smelt: { needs: [['items']], may: ['fuel', 'fuelCount', 'furnaces', 'at', 'seconds'] },
   vertical: { needs: [['dir'], ['shape'], ['toY'], ['canDig'], ['liquid']], may: ['toward', 'maxDig', 'canPlace', 'maxPlace', 'range', 'seconds'] },
 };
-const COMMON = new Set(['do', 'rel', 'note', 'onFail']);
+const COMMON = new Set(['do', 'rel', 'note', 'onFail', 'dependsOn']);
 /** The fields a kind of hand takes (needed, then optional, then the common ones), for a refusal that names them. */
 export function handFieldNames(kind: HandKind): string[] {
   const fields = HAND_FIELDS[kind];
   return fields ? [...fields.needs.flat(), ...fields.may, 'rel', 'note', 'onFail'] : [];
+}
+/**
+ * Continue contract 2: a hand's `dependsOn` is a list of the numbers of earlier hands of the same act (1 up). Itself, a later hand, a number out of range and a number
+ * twice are refused before the body sees them (`handDependsProblem`); the list is of whole numbers. `index` is the hand's own number (1 up), `count` the hands in the act.
+ */
+export function dependsProblem(index: number, hand: ActHand, count: number): string | null {
+  if (hand.dependsOn === undefined) return null;
+  if (!Array.isArray(hand.dependsOn)) return 'dependsOn は手の番号の並び（何にも頼らないなら []）';
+  return handDependsProblem(index, hand.dependsOn, count);
 }
 const ONE_AT: ReadonlySet<HandKind> = new Set(['use', 'furnace', 'chest', 'shoot', 'drop']);
 /** The blocks a hand may be given in `canDig` / `canPlace` / `block`: ids in lower case, or the words stone, dirt, sand and wood. */

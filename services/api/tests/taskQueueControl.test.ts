@@ -28,7 +28,7 @@ function fixture(options: { cancelWaitMilliseconds?: number } = {}) {
     receipts: [], activeOperationIds: [], ...patch });
   const context: BodyTaskContext = { scopeKey: 'owner', taskId: 'task', taskRevision: 1, bodyId: 'minecraft:world', sessionId: 'step', generation: 1,
     goal: 'stone', completionCondition: 'inventory' };
-  const envelope = (item: string, after: string | null, patch: Partial<MinecraftQueueEnvelope> = {}): MinecraftQueueEnvelope => ({ item, after, node: null,
+  const envelope = (item: string, after: string | null, patch: Partial<MinecraftQueueEnvelope> = {}): MinecraftQueueEnvelope => ({ item, after, node: null, queue: 'task:hb-1:1',
     maxMs: 60_000, startBy: new Date(Date.now() + 60_000).toISOString(), ...patch });
   const item = (id: string, after: string | null, milliseconds = 60_000) => ({ id, context, lease: { id: 'lease', holder: 'holder', generation: 1 },
     kind: 'skill' as const, skill: 'act', arguments: { hands: [{ do: 'wait', seconds: 1 }] }, milliseconds, queue: envelope(`q${id.slice(1)}`, after) });
@@ -89,7 +89,9 @@ describe('the clock of a command waiting in the body\'s queue', () => {
     expect(state()).toBe('pending'); // 180 ms of waiting against a 40 ms budget
     // It starts: no longer listed as waiting. Its 40 ms count from the last listing; then the body is asked (unknown) as for any command.
     f.control.poll(f.scope, f.poll({ activeOperationIds: ['q2'] }));
-    await expect(receipt).rejects.toThrow('FCA_BODY_OUTCOME_UNKNOWN');
+    // Continue contract 1: a queue item whose wait ran out is not an error, it is an unknown result (a state), and a receipt that comes later corrects it.
+    await expect(receipt).resolves.toMatchObject({ outcome: 'unknown', inputsReleased: false, unit: { goal: 'unknown', end: 'unknown', released: false } });
+    expect(f.control.store.state('q2')).toBe('settled_unknown');
   });
   it('is the old clock for a command no poll lists as waiting', async () => {
     const f = fixture();
@@ -97,7 +99,9 @@ describe('the clock of a command waiting in the body\'s queue', () => {
     f.control.poll(f.scope, f.poll());
     await delay(60);
     f.control.poll(f.scope, f.poll({ activeOperationIds: ['q2'] }));
-    await expect(receipt).rejects.toThrow('FCA_BODY_OUTCOME_UNKNOWN');
+    // Continue contract 1: a queue item whose wait ran out is not an error, it is an unknown result (a state), and a receipt that comes later corrects it.
+    await expect(receipt).resolves.toMatchObject({ outcome: 'unknown', inputsReleased: false, unit: { goal: 'unknown', end: 'unknown', released: false } });
+    expect(f.control.store.state('q2')).toBe('settled_unknown');
   });
   it('counts a queued id as reported: the delivered command is confirmed, not handed again; an unlisted one is handed again', () => {
     const f = fixture();

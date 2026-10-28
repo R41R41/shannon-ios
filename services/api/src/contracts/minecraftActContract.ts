@@ -15,7 +15,8 @@
  */
 import type { WorldScan } from './minecraftProbeContract.js';
 import { CONDITION_SCHEMA, validCondition, type ActCondition } from './minecraftActCondition.js';
-import { handProblem } from './minecraftActHandRules.js';
+import { dependsProblem, handProblem } from './minecraftActHandRules.js';
+import { aggregateGoal, type ActOutcome, type CutBy, type EventsMore, type GoalOutcome, type Handover, type HandOutcome, type InventoryEvent, type RunEnd } from './continueContract.js';
 
 export const MC_ACT_SKILL = 'act' as const;
 export const MC_VIEW_SKILL = 'view' as const;
@@ -149,6 +150,13 @@ export interface ActHand {
   toward?: 'north' | 'east' | 'south' | 'west';
   toY?: number;
   liquid?: 'stop' | 'seal' | 'seal_water';
+  /**
+   * Continue contract 2: the numbers (1 up, `ActHandLine.i`) of the earlier hands of the same act and the same pass that this hand relies on. Absent: as before, an
+   * earlier hand that stops stops this one too. `[]`: it relies on no hand and goes even when an earlier one failed. `[1,3]`: it goes only when hand 1 and hand 3
+   * reached what they aimed at (done or already, finished). A hand that did not run, or that depends on one that did not, is not something to rely on.
+   * `onFail: continue` does not excuse the check. Itself, a later hand, a number out of range and a repeated number are refused before the body sees them.
+   */
+  dependsOn?: readonly number[];
 }
 /** The kinds whose failure does not end the act unless the hand says `onFail: 'stop'` (r3). */
 export const HAND_CONTINUES_BY_DEFAULT: ReadonlySet<HandKind> = new Set(['equip', 'eat', 'look', 'sneak', 'jump']);
@@ -181,6 +189,12 @@ export interface ActInput {
    * travels in the queue envelope, not in the act's arguments); `replace` names the queued items to take off first (the head applies it).
    */
   repeat?: number; done?: ActCondition; pre?: ActCondition; replace?: readonly string[];
+  /**
+   * Continue contract 2 and 3 (the head reads them; they are not in the arguments sent to the body, as `pre` and `replace` are not): `dependsOn` the marks of the
+   * queue items of the same queue that this item relies on (`q12`; `[]` relies on none; absent: it is dropped when the item before it stops, as before) and
+   * `uses` the numbers of the promises of the plan this act says it uses (the head keeps the promises' definitions as they are when it sends the act).
+   */
+  dependsOn?: readonly string[]; uses?: readonly number[];
 }
 
 /** One line a hand, in order: what was done, or where and why it stopped, or that it did not run. */
@@ -201,6 +215,14 @@ export interface ActHandLine {
    * west to east, the middle cell `where` itself: `x=200..202 z=276..278 y=49: #.#/#.#/### y=48: … y=47: …`. At most 120 characters.
    */
   around?: string;
+  /**
+   * Continue contract 1 (flat on the line): what the hand aimed at and how its run ended (`HandOutcome`), and `motorOps`, the number of operations it made the body
+   * carry out (amendment A-1 1: it tells `failed` from `not_started`; a skipped hand has none). The body always sends them; a result without them (an older body,
+   * a test) is read by `readActResult`, which fills `goal` and `end` from `status` (a done hand is done and finished, a skipped one not started and not run, any
+   * other one failed and finished).
+   */
+  goal?: HandOutcome['goal']; end?: HandOutcome['end']; cutBy?: HandOutcome['cutBy']; code?: string; progress?: HandOutcome['progress'];
+  delta?: HandOutcome['delta']; pass?: number; motorOps?: number;
 }
 /** `use` of an ender eye thrown (not put in a frame): which way it flew and how far. */
 export interface EnderEyeFlight {
@@ -241,6 +263,15 @@ export interface ActResult {
   repeat?: { done: number; of: number };
   /** The task queue: the satisfied alternative of `done` with its values (`have:log 10/10`); absent when it was not met. */
   doneMet?: string;
+  /**
+   * Continue contract 1 (the body always sends it; `actOutcomeOf` reads it, or works it out from the lines when an older result lacks it): the act's two axes and the life it ran in.
+   * `handover`: a reflex held the body and let go on the act's own target (chapter 4). `eventsMore`: where the inventory events that did not fit are fetched.
+   * `earlierPasses` and `earlierEvents`: when the older passes' lines were folded into a count to keep the result small, their events are not dropped, they are carried
+   * here (the lines of the newest passes stay in `lines`).
+   */
+  outcome?: ActOutcome; handover?: Handover; eventsMore?: EventsMore;
+  earlierPasses?: { passes: number; lines: number; done: number; failed: number };
+  earlierEvents?: readonly InventoryEvent[];
 }
 
 export interface ViewInput {
@@ -420,6 +451,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         toward: { type: 'string', enum: [...VERTICAL_TOWARDS], description: 'vertical stairs の向き' },
         toY: { type: 'integer', minimum: -64, maximum: 320, description: 'vertical で着く足の y' },
         liquid: { type: 'string', enum: [...VERTICAL_LIQUIDS], description: 'vertical で溶岩・水が見えた時（止める・塞いで続ける・水だけ塞ぐ）' },
+        dependsOn: { type: 'array', maxItems: 11, items: { type: 'integer', minimum: 1, maximum: ACT_MAX_HANDS }, description: '頼る前の手の番号（1 から）。[] は何にも頼らない' },
       } } },
     stopIf: { type: 'object', additionalProperties: false, required: [], properties: {
       hostileWithin: { type: 'number', minimum: 1, maximum: 32 },
@@ -433,6 +465,8 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
     done: { ...CONDITION_SCHEMA, description: '満たした所で済みにする条件' },
     pre: { ...CONDITION_SCHEMA, description: '始める時に確かめる条件' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目' },
+    dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目。[] は何にも頼らない' },
+    uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
   },
 });
 
@@ -452,7 +486,7 @@ export const VIEW_INPUT_SCHEMA = Object.freeze({
 
 export function actProblem(input: ActInput): string | null {
   for (const [index, hand] of input.hands.entries()) {
-    const problem = handProblem(hand) ?? (input.repeat === undefined ? null : repeatProblem(hand));
+    const problem = handProblem(hand) ?? dependsProblem(index + 1, hand, input.hands.length) ?? (input.repeat === undefined ? null : repeatProblem(hand));
     if (problem) return `手${index + 1}（${hand.do}）: ${problem}`;
   }
   return queueFieldProblem(input);
@@ -462,7 +496,11 @@ function queueFieldProblem(input: ActInput): string | null {
   if (input.repeat !== undefined && !(Number.isInteger(input.repeat) && input.repeat >= 2 && input.repeat <= 8)) return 'repeat は 2〜8 の整数';
   if (input.done !== undefined && !validCondition(input.done)) return 'done が条件の形ではない';
   if (input.pre !== undefined && !validCondition(input.pre)) return 'pre が条件の形ではない';
-  return input.replace?.every(id => /^(?:q[0-9]{1,6}|all)$/u.test(id)) === false ? 'replace は列の項目（q15）か all' : null;
+  if (input.replace?.every(id => /^(?:q[0-9]{1,6}|all)$/u.test(id)) === false) return 'replace は列の項目（q15）か all';
+  if (input.dependsOn?.every(id => /^q[0-9]{1,6}$/u.test(id)) === false) return 'dependsOn は列の項目（q12）の並び。何にも頼らないなら []';
+  if (input.dependsOn !== undefined && new Set(input.dependsOn).size !== input.dependsOn.length) return 'dependsOn に同じ項目が 2 度ある';
+  if (input.uses?.every(id => Number.isInteger(id) && id >= 1) === false) return 'uses は約束の番号（1 から）の並び';
+  return null;
 }
 /** A repeated hand that names cells must count them from her feet: the same absolute cells asked again are the same cells. */
 function repeatProblem(hand: ActHand): string | null {
@@ -470,14 +508,40 @@ function repeatProblem(hand: ActHand): string | null {
   return named && !hand.rel ? 'repeat の手は rel:true で書く（絶対座標の手を繰り返すと同じマスをまた掘る・置くことになる）' : null;
 }
 /** One hand's fields against its kind, then the checks a kind adds. */
-/** An act's result as the body sent it (`ActResult`), or null when it is not one. */
+/**
+ * An act's result as the body sent it (`ActResult`), or null when it is not one. A line without `goal` and `end` (a body before the contract, a test) gets them from
+ * its `status` and the act's `stoppedBy` (continue contract 1: the table's `statusMap`): a done hand is done and finished, a skipped one not started and not run, a hand that
+ * stopped on a cut (a reflex, `stopIf`, a full pack, a cancel, the deadline…) partial and cut, any other stopped or failed hand failed and finished.
+ */
 export function readActResult(text: string | undefined): ActResult | null {
   if (!text) return null;
   try {
     const value = JSON.parse(text) as Partial<ActResult>;
-    return value && value.v === ACT_CONTRACT_VERSION && Array.isArray(value.lines) && typeof value.done === 'number' && typeof value.of === 'number'
-      ? value as ActResult : null;
+    if (!(value && value.v === ACT_CONTRACT_VERSION && Array.isArray(value.lines) && typeof value.done === 'number' && typeof value.of === 'number')) return null;
+    const result = value as ActResult;
+    const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure';
+    return { ...result, lines: result.lines.map(line => {
+      if (line.goal !== undefined && line.end !== undefined) return line;
+      const filled = line.status === 'done' ? { goal: 'done' as const, end: 'finished' as const }
+        : line.status === 'skipped' ? { goal: 'not_started' as const, end: 'not_run' as const }
+          : line.status === 'stopped' && cut ? { goal: 'partial' as const, end: 'cut' as const, cutBy: result.stoppedBy as CutBy }
+            : { goal: 'failed' as const, end: 'finished' as const };
+      return { ...filled, ...line, goal: line.goal ?? filled.goal, end: line.end ?? filled.end };
+    }) };
   } catch { return null; }
+}
+/**
+ * The act's goal and end: the body's `outcome` when the result has one, else worked out from the lines by the contract's order (`aggregateGoal`; a line without
+ * `motorOps` counts one operation unless it was skipped). `end` is `cut` when the act stopped on a cut (`stoppedBy` other than `failure`), `not_run` when no hand ran.
+ */
+export function actOutcomeOf(result: ActResult): { goal: GoalOutcome; end: RunEnd; cutBy?: CutBy } {
+  if (result.outcome) return { goal: result.outcome.goal, end: result.outcome.end, ...(result.outcome.cutBy ? { cutBy: result.outcome.cutBy } : {}) };
+  const hands = result.lines.map(line => ({ goal: line.goal ?? (line.status === 'done' ? 'done' : line.status === 'skipped' ? 'not_started' : 'failed'), motorOps: line.motorOps ?? (line.status === 'skipped' ? 0 : 1) }));
+  const goal = aggregateGoal(hands, result.doneMet !== undefined);
+  const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure';
+  const end: RunEnd = hands.length > 0 && hands.every(hand => hand.goal === 'not_started') && !hands.some(hand => hand.motorOps > 0) ? (cut ? 'cut' : 'not_run')
+    : cut ? 'cut' : 'finished';
+  return { goal, end, ...(cut ? { cutBy: result.stoppedBy as CutBy } : {}) };
 }
 /** A view's result (`ViewResult`), or null. */
 export function readViewResult(text: string | undefined): ViewResult | null {

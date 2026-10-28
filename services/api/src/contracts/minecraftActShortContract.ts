@@ -28,7 +28,7 @@ const SHORT_LINES = [
   '- 座標は、rel を付けない限り、すべて世界の絶対座標（live の完全な座標をそのまま写す）。小さな数（-1,0,0 など）を rel 無しで書くと、世界の原点の近くを指す。',
   '- 足からの差で書きたい手は rel を付ける（その手を始める時の足のブロックから。x 東+・z 南+・y 上+）。例（足が 230,-54,197 の時）:',
   '  dig 230,-54,196      ← 絶対座標（足の北隣）。  dig 0,0,-1 rel      ← 同じマスを足からの差で。  walk 3,0,0 rel      ← 足の 3 マス東へ。',
-  '- どの手にも onFail=continue|stop を付けられる。',
+  '- どの手にも onFail=continue|stop を付けられる。dependsOn=1,3 は頼る前の手の番号で、その手が済んでいる時だけ動く（none は何にも頼らない。書かなければ前の手が止まれば止まる）。',
   '- 1 行で書けない形は json {手の JSON} の 1 行。at・items・path は 1 つでも配列。使える欄は手ごとに決まっていて（下の「json の欄」）、'
     + '違う欄の名前を書くとその手は断られる（例: walk に at は使えない。to か path）。',
   '- why は act に 1 つ（手の中には書かない）。',
@@ -120,11 +120,12 @@ const SHORT_LINES = [
   '## 列（やることの列）と「〜まで続ける」',
   '- act は列の 1 項目。項目は体が 1 つずつ順に動かす（実行中を含めて 3 つまで）。実行中の項目の残りが少なくなると次の判断が来る。'
     + '足す項目は、列の最後の項目が成功した後の世界を前提に書く（成功が分かった訳ではない）。列は live の queue に出る。',
-  '- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。',
+  '- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。ただし欄 dependsOn が [] か、止まった項目を含まない配列の項目は動かす。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。',
   '- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる（furnace:x,y,z は始める時に一度見るだけで、焼き上がりまで待たない）。 欄 done（条件の文字列）: 満たした所で、手の途中でも済みにする。',
   '- 欄 repeat（2〜8）: 手の組を最大その回数までまわす。rel の手か、座標の無い手（attack・pickup・eat・craft・wait）だけ（絶対座標の手は断られる）。',
   '  足の位置から数えるので、トンネル・階段・柱は 1 組を rel で書いて repeat にする。1 回まわしても何も変わらなければ体が止める。 done と一緒に使うと「〜まで続ける」になる。',
-  '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目の後ろの項目も捨てる）。新しい act は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。',
+  '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目に頼る項目と、dependsOn を書いていない後ろの項目も捨てる）。新しい act は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。',
+  '- 欄 dependsOn（["q12"]）: この項目が頼る今の列の項目（前の段の項目は書けない。[] は何にも頼らない）。欄 uses（[3]）: 使う約束の番号。',
   '- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・'
     + 'dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。',
   '- 例: pre "have:iron_ore>=3&near:furnace~4"。下りる act の pre "food>=40&have:crafting_table|food>=40&have:planks>=4"（満たさない時は始めずに捨てる）。'
@@ -150,11 +151,13 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     done: { type: 'string', maxLength: 120, description: '満たした所で済みにする条件（例 "have:log>=10"）' },
     repeat: { type: 'integer', minimum: 2, maximum: 8, description: '手の組を最大何回まわすか（rel の手か、座標の無い手だけ）' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目（例 ["q15"]、全部は ["all"]）' },
+    dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目（例 ["q12"]、何にも頼らないなら []）' },
+    uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
   },
 });
 
 export interface ShortAct {
-  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[];
+  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[]; dependsOn?: string[]; uses?: number[];
 }
 
 const STOP_KEYS = ['hostileWithin', 'hpBelow', 'hungerBelow'] as const;
@@ -168,7 +171,8 @@ export function actToShort(input: ActInput): ShortAct {
   return { ...(input.why !== undefined ? { why: input.why } : {}), hands: input.hands.map(handToLine),
     ...(input.stopIf ? { stopIf: stopIfText(input.stopIf) } : {}), ...(input.accept?.length ? { accept: [...input.accept] } : {}),
     ...(input.pre ? { pre: conditionText(input.pre) } : {}), ...(input.done ? { done: conditionText(input.done) } : {}),
-    ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}) };
+    ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}),
+    ...(input.dependsOn !== undefined ? { dependsOn: [...input.dependsOn] } : {}), ...(input.uses?.length ? { uses: [...input.uses] } : {}) };
 }
 
 function stopIfOf(text: string, errors: string[]): Record<string, unknown> {
@@ -213,7 +217,7 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
  * The task queue's fields of a model's input: `pre` and `done` as text into the body's JSON (an unreadable one is an error naming the forms to
  * write), `repeat` a whole number of 2–8, `replace` item ids (a bare id too). A field that is already JSON (a condition array) is kept as it is.
  */
-function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace'> {
+function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace' | 'dependsOn' | 'uses'> {
   const value = (input ?? {}) as Record<string, unknown>, out: Record<string, unknown> = {};
   for (const key of ['pre', 'done'] as const) {
     const field = value[key];
@@ -231,6 +235,14 @@ function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' |
   }
   const replace = typeof value.replace === 'string' ? [value.replace] : value.replace;
   if (Array.isArray(replace)) out.replace = replace.filter(item => typeof item === 'string');
+  // dependsOn: marks ("q12"), a bare mark or marks joined by commas; an empty list (or "none") relies on none. uses: promise numbers, a bare number or numbers joined by commas.
+  const depends = value.dependsOn === 'none' ? [] : typeof value.dependsOn === 'string' ? value.dependsOn.split(',').map(item => item.trim()).filter(Boolean) : value.dependsOn;
+  if (Array.isArray(depends)) out.dependsOn = depends.filter(item => typeof item === 'string');
+  else if (value.dependsOn !== undefined) errors.push('dependsOn の書き方の誤り: 列の項目の並び（["q12"]）。何にも頼らないなら []');
+  const uses = typeof value.uses === 'number' ? [value.uses] : typeof value.uses === 'string' ? value.uses.split(',').map(Number) : value.uses;
+  if (Array.isArray(uses)) {
+    if (uses.every(item => Number.isInteger(item) && item >= 1)) out.uses = uses; else errors.push('uses の書き方の誤り: 約束の番号（1 から）の並び（[3]）');
+  }
   return out;
 }
 /** The items a replace-only input takes off (no hands), or null when the input has hands or no replace. */
@@ -266,5 +278,5 @@ function json(input: unknown): { input: unknown; errors: string[] } {
 export function shortHandProblem(input: unknown): string | null {
   const text = input && typeof input === 'object' ? (input as Record<string, unknown>)[SHORT_HAND_ERROR_KEY] : undefined;
   if (typeof text !== 'string') return null;
-  return /^(?:pre|done|repeat) の書き方の誤り/u.test(text) ? text : `手の書き方が読めない: ${text}`;
+  return /^(?:pre|done|repeat|dependsOn|uses) の書き方の誤り/u.test(text) ? text : `手の書き方が読めない: ${text}`;
 }

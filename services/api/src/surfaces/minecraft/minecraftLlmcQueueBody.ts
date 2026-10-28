@@ -63,7 +63,10 @@ export function queueLifecycle(parts: { queue: LlmcQueue | undefined; observe():
       // A furnace that came due (the body's `furnace.done`) is told to the next decision once, and is a reason to decide now: its take-out is an item.
       const furnaces = queue?.furnaceNews() ?? [];
       for (const line of furnaces) parts.keep(line);
-      return fresh || furnaces.length > 0;
+      // Continue contract 1: a result that came after an item was told (the release proved, the cleanup that failed, a correction) is told to the next decision once too.
+      const notes = queue?.notes() ?? [];
+      for (const line of notes) parts.keep(line);
+      return fresh || furnaces.length > 0 || notes.length > 0;
     },
   };
 }

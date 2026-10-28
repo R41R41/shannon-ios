@@ -49,7 +49,7 @@ describe('vertical: the contract type and the schema', () => {
   });
   it('keeps the hand within the schema limits: 56 properties (the body\'s 49 with dependsOn), 16,000 characters', () => {
     const properties = (ACT_INPUT_SCHEMA.properties.hands.items as { properties: Record<string, unknown> }).properties;
-    expect(Object.keys(properties).length).toBe(48);
+    expect(Object.keys(properties).length).toBe(49);
     expect(skillSchema(ACT_INPUT_SCHEMA)).toBe(true);
     const wide = (count: number) => ({ type: 'object', additionalProperties: false, required: [],
       properties: Object.fromEntries(Array.from({ length: count }, (_, index) => [`field${index}`, { type: 'string' }])) });

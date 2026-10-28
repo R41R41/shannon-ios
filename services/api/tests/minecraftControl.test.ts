@@ -124,7 +124,9 @@ describe('Minecraft common FCA body protocol', () => {
     f.control.poll(f.scope, f.poll());
     expect(f.control.poll(f.scope, f.poll({ receipts: [f.receipt({ action: { schemaVersion: 1, operationId: 'forged', bodyId: 'minecraft:world', sessionId: 'step', generation: 8, outcome: 'completed', inputsReleased: true, observedAt: new Date().toISOString(), evidenceId: 'x' } })] })).acknowledged).toEqual([]);
     expect(f.control.poll(f.scope, f.poll({ connectionId: 'new-connection' })).commands).toEqual([]);
-    expect(f.store.safe('task')).toBe(false); abort.abort(); await outcome;
+    // Continue contract 1: the first poll of a new connection that runs nothing proves the old connection's command released (its result stays unknown), so it is not unresolved any more.
+    expect(f.store.safe('task')).toBe(true);
+    expect(f.store.state(f.command.id)).toBe('released'); abort.abort(); await outcome;
   });
   it('refuses a connection a newer one replaced while the newer one is alive, so a kept process cannot swap the catalog (mb-arch)', () => {
     let now = Date.now();

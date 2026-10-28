@@ -67,7 +67,9 @@ export type FcaQueueWake =
   /** The body saw a surprise: decide now, with items still open (the decision may replace them). */
   | 'alert'
   /** A message came for the task: what waits is dropped, the running item is let finish, the step ends. */
-  | 'message';
+  | 'message'
+  /** A reflex hit its cap (continue contract 4; the life's and the live state's owners say so through `LlmcQueue.noteReflexCapped`): decide now, with items still open. */
+  | 'reflex_capped';
 /** The result of an item that ended, for the decision that reads it. `ran`: the body ran it; `dropped`: it never started (its text says why). */
 export interface FcaQueueNews { kind: 'ran' | 'dropped'; item: string; call: FcaToolCall; operationId: string; result: ToolResult; ms: number; label: string }
 export interface FcaBodyQueue {

@@ -70,9 +70,10 @@ export function reconcileOperations(db: DatabaseSync, lease: ActionLease, scopeK
   for (const row of rowsOf(db, lease, scopeKey, taskId)) {
     const { connection, ...operation } = stateOf(row);
     if (!operationUnresolved(operation)) continue;
+    // Continue contract 1: the operation ends `released` and its result stays unknown (`unit`), so the model is not told a cancellation that did not happen.
     const receipt = { id: operation.id, connectionId: connection, outcome: 'cancelled', inputsReleased: true, observedAt: at,
-      reconciled: RECONCILED_BY_RELEASE, evidenceId, was: operation.outcome ?? operation.phase };
-    db.prepare("UPDATE fca_body_operations SET phase='settled',receipt_json=? WHERE id=?").run(JSON.stringify(receipt), operation.id);
+      reconciled: RECONCILED_BY_RELEASE, evidenceId, was: operation.outcome ?? operation.phase, unit: { goal: 'unknown', end: 'unknown', released: true } };
+    db.prepare("UPDATE fca_body_operations SET phase='settled',receipt_json=?,state='released',released_by='proof' WHERE id=?").run(JSON.stringify(receipt), operation.id);
     closed.push(operation);
   }
   return closed;

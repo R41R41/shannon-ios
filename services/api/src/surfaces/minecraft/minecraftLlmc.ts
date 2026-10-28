@@ -4,7 +4,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import {
   ACT_INPUT_SCHEMA, actMilliseconds, actProblem, MC_ACT_SKILL, MC_ACT_TOOL,
-  MC_VIEW_SKILL, MC_VIEW_TOOL, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
+  MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
 import { MC_PROBE_SKILL, MC_PROBE_TOOL, PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../../contracts/minecraftProbeContract.js';
@@ -13,6 +13,7 @@ import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type
 import { validSkillInput } from './minecraftControlValidation.js';
 import { isShooter } from './minecraftLlmcThreat.js';
 import { urgentRange } from './minecraftLlmcUrgent.js';
+import { actFacts, handFacts } from './minecraftLlmcResultWords.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the tools it offers, how it
@@ -97,11 +98,14 @@ export const AROUND_PREFIX = '  周り（上の層から、北が上・西が左
 export function actResultText(result: ActResult): string {
   // r3: an act whose hands all ran, one or more of them `failed` (onFail continue), did not stop.
   const failed = result.lines.filter(line => line.status === 'failed').length;
-  const head = result.ok ? `act 全部済み（${result.done}/${result.of}、${(result.ms / 1000).toFixed(1)}秒）`
+  // Continue contract 1: every hand already satisfied is not a thing the act did.
+  const outcome = actOutcomeOf(result);
+  const head = result.ok && outcome.goal === 'already' ? `act 既に済み（${result.done}/${result.of}。始める前に全部満たしていた。何も変えていない）`
+    : result.ok ? `act 全部済み（${result.done}/${result.of}、${(result.ms / 1000).toFixed(1)}秒）`
     : !result.stoppedBy && failed ? `act 最後まで動いた（済み ${result.done}/${result.of}、失敗して続けた手 ${failed}、${(result.ms / 1000).toFixed(1)}秒）`
       : `act ${result.done}/${result.of} 済みで止まった（${result.stoppedBy ?? 'failure'}${result.stoppedWhy ? `: ${result.stoppedWhy}` : ''}）`;
   const mark = { done: '済', stopped: '止', failed: '失', skipped: '未' } as const;
-  const lines = result.lines.flatMap(line => [`${line.i} ${line.do} ${mark[line.status] ?? '未'} ${line.line}`,
+  const lines = result.lines.flatMap(line => [`${line.i} ${line.do} ${mark[line.status] ?? '未'} ${line.line}`, ...handFacts(line),
     ...((line.status === 'stopped' || line.status === 'failed') && line.around ? [`${AROUND_PREFIX}${line.around.slice(0, 160)}`] : [])]);
   const extras = [
     `今 (${result.at.x},${result.at.y},${result.at.z}) 体力${result.hp} 満腹${result.food}`,
@@ -113,7 +117,7 @@ export function actResultText(result: ActResult): string {
   ];
   // r10 (body): the act began after a reflex that held the body let go.
   const after = typeof result.afterReflex === 'string' && result.afterReflex ? [`（${result.afterReflex.slice(0, 200)}）`] : [];
-  return [head, ...after, ...lines, ...extras].join('\n');
+  return [head, ...after, ...lines, ...actFacts(result), ...extras].join('\n');
 }
 
 /** A result longer than this is kept in the history by its first line; the whole text is shown once, in the next live state (r3). */
@@ -172,7 +176,7 @@ function actResult(receipt: MinecraftControlReceipt, urgent: string | null): Too
   // A reflex or an urgent cut is no fault of the decision (`bodyReflex`); an act that did some of its hands moved (`progressed`).
   const failed = toolFailure('failed', text, { retryable: true });
   return { ...failed, ...(act.stoppedBy === 'reflex' || urgent ? { bodyReflex: true as const } : {}),
-    ...(act.done > 0 ? { progressed: true as const } : {}) };
+    ...(act.done > 0 || actOutcomeOf(act).goal === 'partial' ? { progressed: true as const } : {}) };
 }
 
 /** The hostiles of a frame, nearest first (with the body's own `canSee`, when the frame says it). */

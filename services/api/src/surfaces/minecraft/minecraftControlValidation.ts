@@ -1,3 +1,4 @@
+import { GOAL_OUTCOMES, RUN_ENDS } from '../../contracts/continueContract.js';
 import type { MinecraftControlPoll, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/;
 const SKILL = /^[a-z][a-z0-9-]{0,59}$/;
@@ -87,6 +88,37 @@ export function validQueueFields(value: Record<string, unknown>): boolean {
     && whole(progress.iteration, 100_000) && whole(progress.repeat, 8));
   return idsOk && progressOk;
 }
+/** The cuts a unit may name (`CutBy`) and the two codes a dropped one may add. */
+const DROPPED_CODES = ['reflex', 'stopIf', 'inventoryFull', 'cancelled', 'deadline', 'noProgress', 'damage', 'fall', 'death', 'stale_life', 'dimension_changed', 'lease_expired',
+  'connection_changed', 'operator_stop', 'handover', 'depends_failed', 'depends_unknown'];
+/** A queue mark of the body (`{ queue, item }`, continue contract 2). */
+const queueRef = (v: unknown): boolean => record(v) && typeof v.queue === 'string' && v.queue.length > 0 && v.queue.length <= 200 && controlId(v.item);
+/**
+ * A receipt's `unit` (continue contract 1): both axes in their closed words, `released`, and the optional marks of why it was dropped or kept and when it started.
+ * Only the shape is read here; which pairs of words are allowed is the contract's table, kept by the body that writes them.
+ */
+export function validUnit(v: unknown): boolean {
+  return record(v) && GOAL_OUTCOMES.includes(v.goal as never) && RUN_ENDS.includes(v.end as never) && typeof v.released === 'boolean'
+    && (v.droppedBecause === undefined || record(v.droppedBecause) && DROPPED_CODES.includes(String(v.droppedBecause.code)) && (v.droppedBecause.item === undefined || queueRef(v.droppedBecause.item)))
+    && (v.keptDespite === undefined || record(v.keptDespite) && queueRef(v.keptDespite.item) && typeof v.keptDespite.code === 'string' && v.keptDespite.code.length <= 80)
+    && (v.startedAt === undefined || timestamp(v.startedAt));
+}
+/** A receipt's `bodyTimes`: the times of the stages, in ISO strings (`acceptedAt` and `endedAt` are always there). */
+export function validBodyTimes(v: unknown): boolean {
+  if (!record(v) || !timestamp(v.acceptedAt) || !timestamp(v.endedAt)) return false;
+  return ['startedAt', 'lockAt', 'firstMotorAt', 'failedAt'].every(key => v[key] === undefined || timestamp(v[key]))
+    && (v.reflexWaitMs === undefined || typeof v.reflexWaitMs === 'number' && Number.isFinite(v.reflexWaitMs) && v.reflexWaitMs >= 0)
+    && (v.motorOps === undefined || Number.isSafeInteger(v.motorOps) && Number(v.motorOps) >= 0);
+}
+/** A receipt's `eventsMore`: where the events that did not fit are fetched (the command, the next `deliverySeq`, how many there are in all). */
+export function validEventsMore(v: unknown): boolean {
+  return record(v) && controlId(v.command) && Number.isSafeInteger(v.nextSeq) && Number(v.nextSeq) >= 0 && Number.isSafeInteger(v.total) && Number(v.total) >= Number(v.nextSeq)
+    && Number(v.total) <= 100_000;
+}
+/** The poll's `bodyVersion` (continue contract 8): the body's revision and the hash of its catalog. */
+export function validBodyVersion(v: unknown): boolean {
+  return record(v) && typeof v.revision === 'string' && v.revision.length > 0 && v.revision.length <= 80 && typeof v.catalogHash === 'string' && v.catalogHash.length > 0 && v.catalogHash.length <= 160;
+}
 export function validControlPoll(value: unknown, now: number): value is MinecraftControlPoll {
   if (!record(value) || value.schemaVersion !== 1 || !controlId(value.serverId) || !controlId(value.connectionId)) return false;
   const o = value.observation;
@@ -106,9 +138,11 @@ export function validControlPoll(value: unknown, now: number): value is Minecraf
   // Each event is checked when it is taken (`WorkingEventLog`, the first 32 only); a malformed one is skipped, never the whole poll.
   if (value.events !== undefined && !Array.isArray(value.events)) return false;
   if (!validLiveSpeech(value) || !validQueueFields(value)) return false;
+  if (value.bodyVersion !== undefined && !validBodyVersion(value.bodyVersion)) return false;
   return Array.isArray(value.receipts) && value.receipts.length <= 16 && value.receipts.every(r => record(r) && controlId(r.id)
     && r.connectionId === value.connectionId && ['completed', 'failed', 'cancelled', 'unknown'].includes(String(r.outcome))
     && typeof r.inputsReleased === 'boolean' && timestamp(r.observedAt) && (r.result === undefined || typeof r.result === 'string' && r.result.length <= 16_000)
+    && (r.unit === undefined || validUnit(r.unit)) && (r.bodyTimes === undefined || validBodyTimes(r.bodyTimes)) && (r.eventsMore === undefined || validEventsMore(r.eventsMore))
     && (r.image === undefined || record(r.image) && timestamp(r.image.capturedAt) && typeof r.image.dataUrl === 'string'
       && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.image.dataUrl) && r.image.dataUrl.length <= 700_000));
 }

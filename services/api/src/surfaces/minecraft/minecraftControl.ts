@@ -5,8 +5,12 @@ import type { MinecraftBodyConfiguration } from '../../contracts/minecraftBodyCo
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt, MinecraftControlReply, MinecraftLiveRoom, MinecraftLiveSpeech,
   MinecraftLiveSpeechReceipt, MinecraftQueueEnvelope, MinecraftQueueProgress } from '../../contracts/minecraftControlContract.js';
-import { MinecraftControlStore } from './store/minecraftControlStore.js';
+import { unitFromOutcome, type OperationState } from '../../contracts/continueContract.js';
+import type { UsesSnapshot } from './minecraftLlmcPromises.js';
+import { MinecraftControlStore, type OperationRow } from './store/minecraftControlStore.js';
 import { validControlPoll } from './minecraftControlValidation.js';
+import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
+import { cleanupOperations, fetchEventPages, type CleanupOutcome, type RecoveryPort } from './minecraftControlRecovery.js';
 import { noteBodyCommand } from '../../infra/decisionRecords/decisionRecordNotes.js';
 
 interface Frame { poll: MinecraftControlPoll; received: number }
@@ -41,7 +45,15 @@ const QUEUE_COMMANDS_PER_REPLY = 3;
 /** What a command is made from (`command`, `enqueue`). */
 export interface ControlCommandInput { id: string; context: BodyTaskContext; lease: ActionLease; kind: MinecraftControlCommand['kind'];
   skill?: string; arguments?: Readonly<Record<string, unknown>>; operation?: MinecraftControlCommand['operation']; stop?: MinecraftControlCommand['stop'];
-  milliseconds?: number; queue?: MinecraftQueueEnvelope }
+  milliseconds?: number; queue?: MinecraftQueueEnvelope;
+  /** Continue contract 3: the definitions of the promises the act says it uses, as they are when it is sent; kept with the command. */
+  uses?: readonly UsesSnapshot[];
+  /** Run 45's resume: the command this one sends again (kept with the command, so a result can say it is that one's second try). */
+  resumeOf?: string }
+/** What a receipt did to a command's result state, told to the listeners (the queue reads its items' results from the store, not from the order they came in). */
+export interface SettledEvent { id: string; command: MinecraftControlCommand; receipt: MinecraftControlReceipt; from: OperationState | null; to: OperationState }
+/** A command released without a receipt of its own (the cleanup or the new connection proved it), or held for the operator. */
+export interface ReleasedEvent { row: OperationRow; by: 'cleanup' | 'reconnect' }
 const ioTurn = () => new Promise<void>(resolve => setImmediate(resolve));
 /** A paired body supplies observations and executes exact commands; the shared FCA owns all long-term decisions. */
 /** A release that names a hold to end (`context.incident.resume` or `cancel`, run 44). */
@@ -91,6 +103,14 @@ export class MinecraftControl {
   /** Told each frame, and each batch of the body's events as they are taken (MinecraftLive, session dc-live). Never throw into a poll. */
   readonly frameListeners = new Set<(bodyId: string, observation: BodyObservation, arrival: { newConnection: boolean }) => void>();
   readonly eventListeners = new Set<(bodyId: string, events: readonly WorkingEvent[]) => void>();
+  /** Told when a receipt moves a command's result state (a first receipt, an unknown one, a correction), after the store has it and before it is acknowledged. */
+  readonly settledListeners = new Set<(event: SettledEvent) => void>();
+  /** Told when a command is released without a receipt of its own, and when a cleanup leaves one held (continue contract 1). Listeners never throw. */
+  readonly releasedListeners = new Set<(event: ReleasedEvent) => void>();
+  readonly heldListeners = new Set<(event: { row: OperationRow; why: string }) => void>();
+  /** Told once for each connection of a body when this start of the head first answers it (the body registers the head's boot from that reply). */
+  readonly headBootListeners = new Set<(event: { bodyId: string; connectionId: string; headBoot: string }) => void>();
+  private readonly headBootTold = new Map<string, string>();
   /** Her lines for the room (LiveSpeechOutbox, session dc-live): the reply carries the one due, a poll brings the body's answers. */
   speech: { take(): MinecraftLiveSpeech[]; receive(receipts: readonly MinecraftLiveSpeechReceipt[], room: MinecraftLiveRoom | null): void } | null = null;
   /** The commands this process waits for, and when each was last handed to the body (`command`). */
@@ -111,7 +131,30 @@ export class MinecraftControl {
        */
       leaseAttempted?(lease: ActionLease, taskId: string): boolean;
       /** How long a frame stays current (3 s); tests shorten it. */
-      frameMilliseconds?: number }) {}
+      frameMilliseconds?: number;
+      /** This start of the head (continue contract 2); the process's own by default. */
+      headBoot?: string }) {}
+  /** This start of the head. */
+  headBoot(): string { return this.options.headBoot ?? thisHeadBoot(); }
+  /**
+   * The command that makes a new command which moves the body wait (continue contract 1): one whose result is unknown and whose release is not proved, one of an earlier
+   * start of the head still open, a hold the operator has not ended. Null: a motor command may be sent. Observation commands are never held back.
+   */
+  motorBlocked(taskId: string): OperationRow | null { return this.store.motorBlock(taskId, this.headBoot()); }
+  private recoveryPort(): RecoveryPort {
+    return { store: this.store, command: (input, signal) => this.command(input, signal), now: () => this.options.now(),
+      released: row => { for (const listener of this.releasedListeners) try { listener({ row, by: 'cleanup' }); } catch { /* learning never fails a cleanup */ } },
+      held: (row, why) => { for (const listener of this.heldListeners) try { listener({ row, why }); } catch { /* learning never fails a cleanup */ } } };
+  }
+  /** A stop at once for commands whose result is unknown (or that an earlier start of the head left open): see `cleanupOperations`. */
+  cleanup(input: { taskId: string; context: BodyTaskContext; lease: ActionLease; ids?: readonly string[]; limitMs?: number; signal?: AbortSignal }): Promise<CleanupOutcome> {
+    const ids = input.ids ?? this.store.uncleaned(input.taskId, this.headBoot()).map(row => row.id);
+    return cleanupOperations(this.recoveryPort(), { ...input, ids });
+  }
+  /** The pages of a command's events its receipt did not carry: see `fetchEventPages`. */
+  fetchEvents(input: { command: string; context: BodyTaskContext; lease: ActionLease; fromSeq: number; total: number; max?: number; signal?: AbortSignal }) {
+    return fetchEventPages(this.recoveryPort(), input);
+  }
   private allowed(command: Pick<MinecraftControlCommand, 'kind' | 'lease' | 'context'>): boolean {
     if (command.kind === 'release' && namesHold(command.context) && this.options.leaseAttempted?.(command.lease, command.context.taskId)) return true;
     if (command.kind === 'stop' || command.kind === 'release') return this.options.leaseKnown?.(command.lease, command.context.taskId) ?? this.options.leaseValid(command.lease, command.context.taskId);
@@ -207,7 +250,9 @@ export class MinecraftControl {
       if (receipt.stop && (receipt.stop.requestId !== command.stop?.requestId || receipt.stop.bodyId !== bodyId
         || receipt.stop.sessionId !== command.context.sessionId || receipt.stop.generation !== command.context.generation)) continue;
       if (receipt.image && command.kind !== 'capture') continue;
-      if (!this.store.settle(receipt)) continue;
+      const change = this.store.settleWith(receipt);
+      if (!change.acked) continue;
+      if (change.to && change.to !== change.from) for (const listener of this.settledListeners) try { listener({ id: receipt.id, command, receipt, from: change.from, to: change.to }); } catch { /* learning never fails a poll */ }
       this.deliveries.delete(receipt.id);
       acknowledged.push(receipt.id);
       let pictured = false;
@@ -233,6 +278,7 @@ export class MinecraftControl {
       if (reported.has(row.command.id)) this.store.confirm(row.command.id);
       else if (input.receipts.length < RECEIPTS_PER_POLL) this.store.undelivered(row.command.id);
     }
+    if (old && old.poll.connectionId !== input.connectionId) this.proveReleasedAfterReconnect(bodyId, input);
     const commands: MinecraftControlCommand[] = [], cancel: string[] = [];
     for (const row of this.store.pending(bodyId)) {
       const c = row.command;
@@ -246,8 +292,27 @@ export class MinecraftControl {
       }
     }
     const speech = this.speech ? this.liveSpeech(this.speech, input) : [];
-    return { schemaVersion: 1, mode: 'common-fca', commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}),
+    if (this.headBootTold.get(bodyId) !== input.connectionId) {
+      this.headBootTold.set(bodyId, input.connectionId);
+      // TODO(records): decisionRecorder — the `head_boot` row (`headBootRow` in `minecraftOperationRows.ts`) for the first reply of this start on this connection.
+      for (const listener of this.headBootListeners) try { listener({ bodyId, connectionId: input.connectionId, headBoot: this.headBoot() }); } catch { /* learning never fails a poll */ }
+    }
+    return { schemaVersion: 1, mode: 'common-fca', headBoot: this.headBoot(), commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}),
       ...(speech.length ? { speech } : {}) };
+  }
+  /**
+   * The first poll of a new connection that shows the body running nothing and not held proves what the old connection's commands left is released (continue
+   * contract 1: a body that restarted has no inputs held). Each such command ends `released` and its result stays unknown; a real receipt that comes later is read
+   * as the correction it is (the new connection does not accept it: the receipt of an old connection is never acknowledged, so none comes).
+   */
+  private proveReleasedAfterReconnect(bodyId: string, input: MinecraftControlPoll): void {
+    const facts = input.observation.facts;
+    if (input.activeOperationIds.length > 0 || facts.held === true || facts.incidentHeld === true) return;
+    for (const id of this.store.openBeforeConnection(bodyId, input.connectionId)) {
+      if (!this.store.release(id, 'reconnect', new Date(this.options.now()).toISOString(), `reconnect:${input.connectionId}`)) continue;
+      const row = this.store.row(id);
+      if (row) for (const listener of this.releasedListeners) try { listener({ row, by: 'reconnect' }); } catch { /* learning never fails a poll */ }
+    }
   }
   /** One command a reply hands over: the first of any kind, then up to `QUEUE_COMMANDS_PER_REPLY` in all while every one of them is a queue item. */
   private mayDeliver(handing: readonly MinecraftControlCommand[], next: MinecraftControlCommand): boolean {
@@ -304,16 +369,19 @@ export class MinecraftControl {
    * errors) once the body answers, however long the item waits in the body's queue. It never leaves an unhandled rejection: whoever awaits it gets the error.
    */
   enqueue(input: ControlCommandInput & { queue: MinecraftQueueEnvelope }, signal?: AbortSignal): { id: string; receipt: Promise<MinecraftControlReceipt> } {
-    const receipt = this.command(input, signal);
+    // A queue item's unknown result is a state (`settled_unknown`) the queue handles, not an error that ends the step.
+    const receipt = this.command(input, signal, true);
     receipt.catch(() => undefined);
     return { id: input.id, receipt };
   }
-  async command(input: ControlCommandInput, signal?: AbortSignal): Promise<MinecraftControlReceipt> {
+  async command(input: ControlCommandInput, signal?: AbortSignal, lenient = false): Promise<MinecraftControlReceipt> {
     // After a stall the body's queued polls are handled in the next I/O turn: a frame is judged gone only after it.
     if (!this.frame(input.context.bodyId)) await ioTurn();
     const frame = this.frame(input.context.bodyId); if (!frame) throw new Error('FCA_BODY_UNAVAILABLE');
     if (!this.allowed(input)) throw new Error('FCA_BODY_LEASE_INVALID');
     signal?.throwIfAborted();
+    // Continue contract 1: nothing that moves the body is sent while a result is unknown and the release is not proved (a reflex, a stop, a release and a read are not held back).
+    if (input.kind === 'skill' && !this.observationOnly(input) && this.motorBlocked(input.context.taskId)) throw new Error('FCA_BODY_MOTOR_BLOCKED');
     const command: MinecraftControlCommand = { schemaVersion: 1, id: input.id, serverId: frame.poll.serverId, connectionId: frame.poll.connectionId,
       kind: input.kind, context: input.context, lease: input.lease, deadlineAt: new Date(this.options.now() + (input.milliseconds ?? 30_000)).toISOString(),
       ...(input.skill ? { skill: input.skill } : {}), ...(input.arguments ? { arguments: input.arguments } : {}),
@@ -325,6 +393,7 @@ export class MinecraftControl {
       if (JSON.stringify(original) !== JSON.stringify(retry)) throw new Error('FCA_BODY_OPERATION_CONFLICT');
       const receipt = this.store.receipt(command.id);
       if (receipt && receipt.outcome !== 'unknown' && receipt.inputsReleased) return receipt;
+      if (lenient) return receipt ? this.withUnit(receipt) : this.unknownReceipt(command);
       throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
     }
     const waiting: Waiting = { expired: false };
@@ -333,9 +402,9 @@ export class MinecraftControl {
       this.store.insert(command, new Date(this.options.now()).toISOString(), () => {
         signal?.throwIfAborted();
         return this.allowed(command) && this.frame(command.context.bodyId)?.poll.connectionId === command.connectionId;
-      });
+      }, { headBoot: this.headBoot(), ...(input.uses?.length ? { uses: input.uses } : {}), ...(input.resumeOf ? { resumeOf: input.resumeOf } : {}) });
       noteBodyCommand(command);
-      return await this.receiptOf(command, input, waiting, signal);
+      return await this.receiptOf(command, input, waiting, signal, lenient);
     } finally { this.waiting.delete(command.id); this.deliveries.delete(command.id); this.queuedAt.delete(command.id); }
   }
   /**
@@ -346,14 +415,17 @@ export class MinecraftControl {
    * one fresh poll, which still lists the command when it is running (one more wait) or does not (unknown).
    */
   private async receiptOf(command: MinecraftControlCommand, input: { context: BodyTaskContext; lease: ActionLease; kind: MinecraftControlCommand['kind']; milliseconds?: number },
-    waiting: Waiting, signal?: AbortSignal): Promise<MinecraftControlReceipt> {
+    waiting: Waiting, signal?: AbortSignal, lenient = false): Promise<MinecraftControlReceipt> {
     const step = this.options.pollMilliseconds ?? 25, budget = input.milliseconds ?? 30_000, inserted = this.options.now();
     const cancelWait = this.options.cancelWaitMilliseconds ?? 5000, bodyId = input.context.bodyId;
     let cancellingAt: number | null = null, lag = 0, last = this.options.now(), asked: number | null = null, extended = false;
     for (;;) {
       const result = this.store.receipt(command.id);
       if (result) {
-        if (result.outcome === 'unknown' || !result.inputsReleased) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+        if (result.outcome === 'unknown' || !result.inputsReleased) {
+          if (lenient) return this.withUnit(result);
+          throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+        }
         return result;
       }
       const now = this.options.now(), behind = now - last - step;
@@ -378,10 +450,31 @@ export class MinecraftControl {
           extended = true;
           cancellingAt = now;
           asked = null;
-        } else if (asked === null || (latest && latest.received > asked) || now - asked >= cancelWait) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+        } else if (asked === null || (latest && latest.received > asked) || now - asked >= cancelWait) {
+          if (!lenient) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+          // A queue item: the result is unknown, and a receipt that comes later corrects it (the store reads it against this state).
+          this.store.markUnknown(command.id);
+          return this.unknownReceipt(command);
+        }
       }
       await delay(step);
     }
+  }
+  /** A receipt as the queue reads it: with its `unit` (the old words read as one when the body sent none). */
+  private withUnit(receipt: MinecraftControlReceipt): MinecraftControlReceipt {
+    return receipt.unit ? receipt : { ...receipt, unit: unitFromOutcome(receipt.outcome, receipt.inputsReleased) };
+  }
+  /** The receipt a queue item gets when its wait ran out: unknown, inputs not confirmed released. Not stored (the store has the state). */
+  private unknownReceipt(command: MinecraftControlCommand): MinecraftControlReceipt {
+    return { id: command.id, connectionId: command.connectionId, outcome: 'unknown', inputsReleased: false, observedAt: new Date(this.options.now()).toISOString(),
+      unit: { goal: 'unknown', end: 'unknown', released: false } };
+  }
+  /** A command that only looks (a skill the body lists as read-only, the internal `events`): never held back by an unknown result. */
+  private observationOnly(input: ControlCommandInput): boolean {
+    if (input.skill === undefined) return false;
+    if (input.skill === 'events' || input.skill === 'probe' || input.skill === 'view') return true;
+    const frame = this.frames.get(input.context.bodyId);
+    return frame?.poll.skills?.find(skill => skill.name === input.skill)?.readOnly === true;
   }
   /**
    * Cancels the task's pending body commands, except a stop or a release: those only let go of the body's inputs, and a cancel must
