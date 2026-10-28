@@ -177,7 +177,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   };
   const log = (line: string) => { try { deps.log(line); } catch { /* a log never fails a step */ } };
   const iso = () => new Date(now()).toISOString();
-  const rowContext = (item: QueueItem | null): RowContext => ({ run: deps.taskId, queue: name, ...(item ? { item: item.item, command: item.id } : {}), headBoot,
+  const rowContext = (item: Pick<QueueItem, 'item' | 'id'> | null): RowContext => ({ run: deps.taskId, queue: name, ...(item ? { item: item.item, command: item.id } : {}), headBoot,
     observation: deps.observe(), at: iso() });
   /** The record's row (continue contract 8): to the decision record's recorder unless the caller gives its own; a failure of the recorder is the recorder's. */
   const record = (row: QueueRecordRow) => { try { (deps.record ?? noteStageRow)(row); } catch { /* a record never fails a step */ } };
@@ -228,7 +228,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   const noteDropped = (item: QueueItem, why: string) => { dropLog.push({ item: item.item, why: `${itemLabel(item)}${why ? `（${why}）` : ''}`.slice(0, 120), at: now() }); if (dropLog.length > 32) dropLog.shift(); };
 
   /** What the ledger is given of a command that ended with a real result (chapter 3): its events once each, the rest by pages, the definitions it was sent with. */
-  function book(item: QueueItem, receipt: MinecraftControlReceipt): void {
+  function book(item: Pick<QueueItem, 'id' | 'item' | 'uses'>, receipt: MinecraftControlReceipt): void {
     if (!deps.applyLedger || readActResult(receipt.result) === null) return;
     const { events, more } = eventsOfReceipt(receipt);
     const apply = (input: ReturnType<typeof ledgerInputFor>) => { try { void deps.applyLedger!(input); } catch (cause) { log(`Shannon Minecraft ledger failed task=${deps.taskId} item=${item.item} ${String(cause).slice(0, 120)}`); } };
@@ -297,10 +297,26 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       void work.finally(() => pending.delete(work));
     } catch (cause) { log(`Shannon Minecraft queue cleanup failed task=${deps.taskId} item=${label} ${String(cause).slice(0, 120)}`); }
   }
+  /**
+   * A command an EARLIER start of the head sent is not among this queue's items (the memory went with the process), but the store has it and the cleanup of this start is about it:
+   * what the listeners need of it (its mark, its words, the definitions it was sent with) is read from there. Only the task's acts; null for anything else.
+   */
+  const bygone = (id: string) => {
+    const command = deps.control.store.command(id);
+    if (!command || command.kind !== 'skill' || command.skill !== 'act' || command.context.taskId !== deps.taskId) return null;
+    const input = (command.arguments ?? {}) as Partial<ActInput>;
+    return { id, item: command.queue?.item ?? id.slice(0, 18), node: command.queue?.node ?? null, why: String(input.why ?? ''), queueName: command.queue?.queue ?? name, input: input as ActInput,
+      uses: deps.control.store.row(id)?.uses ?? [], startedAt: null, because: null, resume: undefined, pre: undefined, done: undefined, reason: () => null };
+  };
+  const bygoneContext = (old: NonNullable<ReturnType<typeof bygone>>): RowContext => ({ run: deps.taskId, queue: old.queueName, item: old.item, command: old.id, headBoot, observation: deps.observe(), at: iso() });
   /** The control told us a command of this queue was released without a receipt of its own (the cleanup, or the new connection). */
   const onReleased = ({ row }: ReleasedEvent) => {
     const item = items.find(entry => entry.id === row.id);
-    if (!item) return;
+    if (!item) {
+      const old = bygone(row.id);
+      if (old) record(releasedRow(bygoneContext(old), 'cleanup', true));
+      return;
+    }
     item.state = 'released';
     // An item still waiting for its receipt is told when that comes (as a released one); one already told as unknown gets the note.
     if (item.ended) noteLines.push(releasedWords(itemLabel(item)));
@@ -310,7 +326,14 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   };
   const onHeld = ({ row, why }: { row: { id: string }; why: string }) => {
     const item = items.find(entry => entry.id === row.id);
-    if (!item) return;
+    if (!item) {
+      const old = bygone(row.id);
+      if (!old) return;
+      noteLines.push(heldWords(itemLabel(old)));
+      log(`Shannon Minecraft queue held task=${deps.taskId} item=${old.item} why=${why} (an earlier start's)`);
+      try { deps.onHeld?.({ item: old.item, command: old.id, why }); } catch { /* the operator's hold never fails the queue */ }
+      return;
+    }
     noteLines.push(heldWords(itemLabel(item)));
     log(`Shannon Minecraft queue held task=${deps.taskId} item=${item.item} why=${why}`);
     try { deps.onHeld?.({ item: item.item, command: item.id, why }); } catch { /* the operator's hold never fails the queue */ }
@@ -318,7 +341,23 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   /** A real result after an unknown one the model was told: the correction is said once and the events are booked once. */
   const onSettled = (event: SettledEvent) => {
     const item = items.find(entry => entry.id === event.id);
-    if (!item || event.to !== 'corrected') return;
+    if (!item) {
+      // The receipt of a command the earlier start sent: the row of its arrival, and, when the model was told it was unknown, the correction (said once, in the record and to the
+      // model) and its events in the ledger once (continue contract 1, the head's restart).
+      const old = bygone(event.id);
+      if (!old) return;
+      record(receivedRow(bygoneContext(old), event.receipt));
+      if (event.to === 'corrected') {
+        const unit = unitOfReceipt(event.receipt);
+        const text = itemResult(old, event.receipt, []).text.split('\n').find(line => line.trim() !== '' && !line.startsWith('（頭が形を直して')) ?? event.receipt.outcome;
+        noteLines.push(correctionWords(itemLabel(old), text));
+        deps.control.store.markCorrectionSaid(old.id);
+        record(correctedRow(bygoneContext(old), unit));
+        book(old, event.receipt);
+      }
+      return;
+    }
+    if (event.to !== 'corrected') return;
     item.state = 'corrected';
     item.unit = unitOfReceipt(event.receipt);
     const text = itemResult(item, event.receipt, []).text.split('\n').find(line => line.trim() !== '' && !line.startsWith('（頭が形を直して')) ?? event.receipt.outcome;
@@ -408,6 +447,9 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       for (const row of deps.control.store.unsaidCorrections(deps.taskId)) {
         noteLines.push(correctionWords(row.id.slice(0, 18), (row.receipt?.result ?? row.receipt?.outcome ?? '').split('\n')[0]?.slice(0, 120) ?? ''));
         deps.control.store.markCorrectionSaid(row.id);
+        // A correction that came before this start's queue existed (the real receipt on the first poll of the new head) has its row here, once.
+        const old = bygone(row.id);
+        if (old && row.receipt) record(correctedRow(bygoneContext(old), unitOfReceipt(row.receipt)));
       }
       if (!deps.applyLedger) return;
       const done: string[] = [];
