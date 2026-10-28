@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { BLOBS_DIRECTORY, EVENTS_FILE } from './decisionRecordStore.js';
@@ -143,4 +143,29 @@ export function decisionDocument(run: RunRecord, request: RecordEvent, options: 
     request: requestOf(run, request, options), response,
     outcome: run.events.filter(event => ['applied', 'discarded', 'failed'].includes(event.ev) && event.id === request.id),
     calls: callsOf(run, request, response?.content) };
+}
+
+/**
+ * The last `count` rows of a run's `events.jsonl` (amendment A-12: the head's box of a stall it found holds the rows the decision record ended with), read from the end of the file
+ * (at most `maxBytes` of it), so a run of hundreds of megabytes costs the same as a small one. A row cut short, at the start of the window or at the end by a crash, is left out.
+ */
+export function tailRun(directory: string, count: number, maxBytes = 1024 * 1024): RecordEvent[] {
+  const file = join(directory, EVENTS_FILE);
+  let descriptor: number | null = null;
+  try {
+    if (!existsSync(file) || count <= 0) return [];
+    const size = statSync(file).size, from = Math.max(0, size - maxBytes), buffer = Buffer.alloc(size - from);
+    descriptor = openSync(file, 'r');
+    readSync(descriptor, buffer, 0, buffer.length, from);
+    const lines = buffer.toString('utf8').split('\n');
+    if (from > 0) lines.shift();
+    const rows: RecordEvent[] = [];
+    for (const line of lines) {
+      if (!line) continue;
+      try { rows.push(JSON.parse(line) as RecordEvent); } catch { /* a cut line */ }
+    }
+    return rows.slice(-count);
+  } catch { return []; } finally {
+    if (descriptor !== null) try { closeSync(descriptor); } catch { /* closed */ }
+  }
 }

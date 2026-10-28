@@ -6,13 +6,13 @@ import { DEFAULT_HAIKU_MODEL, isHaikuModel, OPUS_MODEL } from '../infra/models/a
 import { claudeClient } from '../infra/models/claude/claudeClient.js';
 import { structuredBody } from '../infra/models/claude/claudeStructured.js';
 import { closedUsage, estimatedAnthropicCostUsd, knownCount, unknownCostUpperBound } from '../infra/models/claude/claudeUsage.js';
-import type { FcaExternalTools, FcaModel } from '../mind/action/fca/fcaPorts.js';
+import type { FcaExternalTools, FcaModel, FcaToolCall } from '../mind/action/fca/fcaPorts.js';
 import type { FcaHistoryAhead, FcaHistoryPolicy } from '../mind/action/fca/fcaHistoryPorts.js';
 import { createFcaHistoryAhead } from '../mind/action/fca/fcaHistory.js';
 import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { createFcaPlanTools, PLAN_UPDATE_TOOL } from '../mind/action/fca/fcaPlanTools.js';
-import { toolOk } from '../mind/tools/shannonTools.js';
+import { toolOk, type ToolResult } from '../mind/tools/shannonTools.js';
 import { REDECIDE_GIVE_UP_MS, type RedecidePort } from '../surfaces/minecraft/minecraftLlmcRedecide.js';
 import { firstPlanInbox, planGoal, startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { COMPLETION_WAY, observedCompletion, withCompletionRule, type LlmcCompletion } from '../surfaces/minecraft/minecraftLlmcCompletion.js';
@@ -23,6 +23,8 @@ import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
+import { meterParts } from '../surfaces/minecraft/minecraftLlmcRoad.js';
+import { deathCounterOf, noteDeath, noteProgress, noteRan, noteRefusal, resumeStalls, stallIncidentId, watchStalls, type Stall } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
@@ -37,13 +39,13 @@ import { abortedRouteUsage } from './minecraftRouteWiring.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
 import { recordedLedger } from '../surfaces/minecraft/minecraftLedgerRows.js';
-import { noteHistoryChange, noteStageRow } from '../infra/decisionRecords/decisionRecordNotes.js';
+import { noteHeadHold, noteHistoryChange, noteStageRow } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { recordedClient } from '../infra/decisionRecords/decisionRecordClient.js';
 import { recordedPlanner } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
-import { driftWords, incidentHoldPort, incidentOfResult } from './minecraftIncidentHold.js';
+import { driftWords, feet, headIncidentKind, incidentHoldPort, incidentOfResult, type Feet, type IncidentNote } from './minecraftIncidentHold.js';
 import { randomUUID } from 'node:crypto';
 import { MC_ACT_TOOL, type ActKeep } from '../contracts/minecraftActContract.js';
 import type { BodyTaskContext } from '../contracts/bodyControlContract.js';
@@ -250,6 +252,33 @@ export function withIncident(context: BodyTaskContext, hold: boolean, resume: st
 }
 
 /**
+ * Amendment A-12: the lifecycle of a task that asked to be held, looking for the stalls the head finds itself (`minecraftLlmcStalls.ts`): at each decision's start and after each
+ * result of a tool (`look`), and `mc.act` answers for the refusals before sending (`refused`). A stall found at a decision's start stops the decision: the hold is being made
+ * (`HOLD_SETTLE_MS`), and the step's next permit check ends it once the task is stopped.
+ */
+export const HOLD_SETTLE_MS = 1_500;
+export function withStalls(lifecycle: FcaBodyLifecycle, watch: { look(): boolean; refused(call: FcaToolCall, result: ToolResult): boolean } | null): FcaBodyLifecycle {
+  if (!watch) return lifecycle;
+  const before = lifecycle.beforeDecision?.bind(lifecycle), noted = lifecycle.noteResult?.bind(lifecycle);
+  return Object.assign(lifecycle, {
+    async beforeDecision(signal: AbortSignal) {
+      await before?.(signal);
+      if (!watch.look()) return;
+      if (signal.aborted) return;
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, HOLD_SETTLE_MS);
+        timer.unref?.();
+        signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
+    },
+    noteResult(call: FcaToolCall, result: ToolResult, durationMilliseconds?: number) {
+      noted?.(call, result, durationMilliseconds);
+      if (!watch.refused(call, result)) watch.look();
+    },
+  });
+}
+
+/**
  * One body task's parts in the mode: its plan (the tool, the port, the first plan asked at its first decision), the body's and the body
  * tools' options, and the step ports that make its steps small (the model router, the plan, the lease window, the
  * fixed menu, the history policy).
@@ -341,6 +370,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
         .catch(error => log(`Shannon Minecraft incident hold failed task=${step.taskId} ${String(error)}`));
     });
     const pending = holds.resumePending(step.taskId);
+    // Amendment A-12: a task resumed from a hold counts its stalls again from nothing.
+    if (pending) resumeStalls(step.taskId);
     // Continue contract 8: the history of this step's first decision comes from a hold's resume (the record says so, apart from the experiment's own changes).
     if (pending) noteHistoryChange(step.taskId, 'resume');
     // Run 44, resume 1: the act was sent while the step's ports were made, outside the step's execution and before its lease held the body: the
@@ -349,7 +380,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     if (pending) resend = async signal => {
     const sent = pending.command ? control.store.command(pending.command) : null;
     if (!sent || sent.skill !== 'act' || !sent.arguments) {
-      holds.resumeChecked(step.taskId, pending.command ? `再送できなかった: act ${pending.command} が見つからない` : '再送しなかった: 体の断りから戻した保留で、出し直す act が無い。計画の続きから判断する');
+      holds.resumeChecked(step.taskId, pending.command ? `再送できなかった: act ${pending.command} が見つからない`
+        : headIncidentKind(pending.incident) ? `再送しなかった: 頭が見つけた詰まり（${headIncidentKind(pending.incident)}）の保留で、出し直す act が無い。計画の続きから判断する`
+          : '再送しなかった: 体の断りから戻した保留で、出し直す act が無い。計画の続きから判断する');
       return;
     }
     // Boundary 8 (continue contract 1): an act whose result is not known is never sent again, by the head or by a resume; the hold is ended and the next decision looks at the world.
@@ -388,6 +421,64 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     }
     };
   }
+  // Amendment A-12: the stalls the head finds itself hold a request that asked to be held, as the body's heavy failures do (`minecraftLlmcStalls.ts`). The body holds nothing for them
+  // (its box and scene are not taken and the world is not stopped): the head writes its own box (the reason and the last rows of the decision record) and the hold's audit line names it.
+  const stalls = holds && holdOn ? (() => {
+    const feetNow = (): Feet | null => {
+      const at = (observe()?.state.world as { position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined)?.position;
+      return feet([at?.x, at?.y, at?.z]);
+    };
+    const headHold = (stall: Stall, byBody: IncidentNote | null = null): void => {
+      // The body decided about this very result (it holds, or it did not hold on purpose, or the same act failed the same way again): its incident is the one.
+      if (byBody && (byBody.held || byBody.notHeld || byBody.repeated)) {
+        log(`Shannon Minecraft head stall left to the body task=${step.taskId} kind=${stall.kind} incident=${byBody.id}`);
+        if (!byBody.held) resumeStalls(step.taskId);
+        return;
+      }
+      // The body's frame shows a hold of its own: the head follows it (`bodyHeld`); two holds would disagree at the resume.
+      if ((observe()?.state as { incidentHold?: unknown } | undefined)?.incidentHold) {
+        log(`Shannon Minecraft head stall left to the body's hold task=${step.taskId} kind=${stall.kind}`);
+        return;
+      }
+      const id = stallIncidentId(stall, Date.now()), at = feetNow(), tree = plan.port.tree();
+      const record = noteHeadHold(step.taskId, { id, kind: stall.kind, why: stall.why, detail: { current: tree.current, ...(at ? { feet: at } : {}), ...(stall.at ? { stoppedAt: stall.at } : {}),
+        ...(stall.command ? { command: stall.command } : {}) } });
+      log(`Shannon Minecraft head stall task=${step.taskId} kind=${stall.kind} incident=${id} why=${stall.why.slice(0, 100)} record=${record ?? '-'}`);
+      void holds.hold(step.taskId, { id, heavy: true, why: stall.why, held: true, frozen: false, command: stall.command ?? '', ...(record ? { record } : {}),
+        ...(at ? { start: at, end: at } : {}) }).catch(error => log(`Shannon Minecraft head stall hold failed task=${step.taskId} ${String(error)}`));
+    };
+    const look = (): boolean => {
+      try {
+        const frame = observe(), tree = plan.port.tree(), node = tree.nodes.find(item => item.id === tree.current);
+        const counts = doneFacts(frame)?.counts;
+        const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: tree.current, state: node?.state ?? null,
+          milestone: meterParts(tree, frame, 0)?.next ?? null, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) : 0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
+        if (stall) headHold(stall);
+        return stall !== null;
+      } catch (error) {
+        log(`Shannon Minecraft head stall look failed task=${step.taskId} ${String(error)}`);
+        return false;
+      }
+    };
+    queue.onRan((item, _result, receipt) => {
+      try {
+        const input = item.call.input as { hands?: unknown } | null;
+        const stall = noteRan(step.taskId, { hands: Array.isArray(input?.hands) ? input.hands : [], result: receipt?.result, ...(receipt?.id ? { command: receipt.id } : {}) });
+        if (stall) headHold(stall, incidentOfResult(receipt?.result));
+        else look();
+      } catch (error) { log(`Shannon Minecraft head stall ran failed task=${step.taskId} ${String(error)}`); }
+    });
+    // The `redecide` rows of the decision record (a failure, a refusal) come from inside the tools: they reach this step by the task.
+    watchStalls(step.taskId, stall => headHold(stall));
+    // `mc.act` refused before sending, `STALL.refusals` times in a row (`noteRefusal`); true when the answer was about a stall (nothing more to look at).
+    const refused = (call: FcaToolCall, result: ToolResult): boolean => {
+      if (call.name !== MC_ACT_TOOL || (!result.ok && result.failure !== 'refused' && result.failure !== 'invalid_input')) return false;
+      const stall = noteRefusal(step.taskId, result.ok ? { accepted: true } : { accepted: false, why: result.text.split('\n').find(line => line.trim()) ?? result.text });
+      if (stall) headHold(stall);
+      return stall !== null;
+    };
+    return { look, refused };
+  })() : null;
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an act of it that would break a promise is decided again by Opus
   // (`FcaModel.redecide`: the step's last request with the act and the promise line added). Opus's plan.update goes through the plan's own tool, and one the model already
@@ -421,14 +512,14 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       promises: () => plan.port.tree().promises, ...(redecide ? { redecide } : {}) } },
     planTools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
-    wrap: (lifecycle: FcaBodyLifecycle) => withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
+    wrap: (lifecycle: FcaBodyLifecycle) => withStalls(withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
       observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
       // Continue contract 5: each decision's context names the frame it read; the acts it chooses carry it, and its answer is checked against the newest frame.
       headBoot: () => control.headBoot(), onRead: value => { read = value; }, heldMs: () => holds?.heldMs?.(step.taskId) ?? 0,
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       r4: { probe: llmcProbeRunner(control, step), planWhere,
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }), resend, log, step.taskId,
-      { open: () => queue.open(), limitMs: () => resendLimitMs(replay.maxMs) }),
+      { open: () => queue.open(), limitMs: () => resendLimitMs(replay.maxMs) }), stalls),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the

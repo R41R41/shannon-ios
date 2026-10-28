@@ -1,3 +1,4 @@
+import { HEAD_INCIDENT_PREFIX } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 /**
  * The fix run's hold, as the Minecraft step sees it (2026-10-28, owner: 「止めて直す実走（保留と再開、世界を止める、台で再現→直す→その場で確かめる）」).
  *
@@ -23,7 +24,20 @@ export interface IncidentNote { id: string; heavy: boolean; why: string; held: b
   /** Run 45: the act a resume sent again failed for the reason it was held for, and the body did not hold again (the hold it was sent again for). */
   repeated?: string;
   /** Chapter 8's 再開 9 → 保留 10: this hold is the second try of a held act, held again (see `HeldAgain`). */
-  replay?: HeldAgain }
+  replay?: HeldAgain;
+  /** Amendment A-12: a hold the head found itself (`head:<kind>:…`, `headIncidentKind`): where the head wrote its box (the reason and the last rows of the decision record), relative to the records' root. */
+  record?: string }
+/**
+ * Amendment A-12: the incident ids of a stall the head found itself start with `head:` and name the kind (`head:node_stalled:p3:…`). The body knows none of them (it holds nothing for
+ * such an incident: its box and scene were not taken and the world was not stopped); the operator's reads of a hold say so, and a release naming one is answered `done` by a body that holds nothing.
+ */
+export function headIncidentKind(id: string | undefined): string | null {
+  return id?.startsWith(HEAD_INCIDENT_PREFIX) ? id.slice(HEAD_INCIDENT_PREFIX.length).split(':')[0] || null : null;
+}
+/** The words the operator reads for each kind the head finds (in the activity record and in `held`). */
+export const HEAD_INCIDENT_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  node_stalled: '節が進まない', same_spot_stops: '同じ所で止まり続ける', wait_loop: 'wait だけが続く', decide_error: '判断の誤りが続く', death: '死んだ',
+});
 export interface IncidentHoldPort {
   /** Whether this task's request asked to be held on a heavy failure. */
   holdRequested(taskId: string): boolean;
