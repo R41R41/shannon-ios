@@ -124,6 +124,21 @@ export class BodyDouble {
   /** What the body answers a stop with: `prove` (a receipt that proves the release), `late` (when `answerStop()` is called), `never`. */
   stopMode: 'prove' | 'late' | 'never' = 'prove';
   private lateStops: MinecraftControlCommand[] = [];
+  /**
+   * Amendment A-12 (the stand-in of the body's `utils/incidents.ts` and of its control loop, at body revision d70dc012bb96): the hold it keeps (the head's id for a take, a failure's for its own), the sessions a
+   * release closed (a release closes the session it names; a later act of it is refused as `BODY_COMMAND_REFUSED`), what the world allows (`canFreeze`: false is a server with someone else on it), and what
+   * the head asked (`takes`) and was refused (`refused`).
+   */
+  incidentHold: { id: string; task: string; why: string; frozen: boolean } | null = null;
+  canFreeze = true;
+  /** A body before the take (or before incidents): a release naming one is answered with no `incident` in its result. */
+  incidentsSupported = true;
+  readonly closedSessions = new Set<string>();
+  readonly takes: Array<{ id: string; why: string; notes: string[] | undefined; session: string; command: string }> = [];
+  readonly releases: Array<{ command: string; session: string; incident: unknown }> = [];
+  readonly refused: Array<{ command: string; session: string; because: 'held' | 'closed_session' }> = [];
+  /** The world's clock: stands still while a hold has frozen it. */
+  frozenNow(): boolean { return this.incidentHold?.frozen === true; }
   /** Whether the body answers the head's internal `events` command (`silent`: it gets it and says nothing). */
   eventsMode: 'answer' | 'silent' = 'answer';
   /** Receipts the head did not take for another connection's command are told once to the log and then dropped. */
@@ -146,6 +161,7 @@ export class BodyDouble {
     const at = iso();
     return { schemaVersion: 1, bodyId: RUN_BODY, sequence: this.sequence, stateAt: at, receivedAt: at, connected: true,
       state: { world: { position, health: hp, food: hunger, dimension, inventory: { ...this.inventory }, ...(utilities !== undefined ? { utilities } : {}), ...(scan !== undefined ? { scan } : {}) },
+        ...(this.incidentHold ? { incidentHold: { id: this.incidentHold.id, task: this.incidentHold.task, why: this.incidentHold.why } } : {}),
         life: { life, alive: true, since: at, dimension, dimensionSince: this.bench.dimensionSince, deathEpoch: 'de-bench', deathSeq: 0 },
         bodyRun: { bodyBoot: this.bodyBoot, connectionId: this.connectionId } },
       facts: { alive: true, dimension, life } } as unknown as BodyObservation;
@@ -223,15 +239,59 @@ export class BodyDouble {
     if (this.handed.some(item => item.id === command.id)) return;
     this.handed.push(command);
     if (command.kind === 'stop') { this.stopped(command); return; }
+    if (command.kind === 'release') { this.releasedBy(command); return; }
     if (command.kind !== 'skill') return;
     if (command.skill === 'events') { if (this.eventsMode === 'answer') this.answerEvents(command); return; }
     if (command.skill !== 'act') return;
+    if (this.refuses(command)) return;
     this.entries.set(command.id, { command, acceptedAt: iso(), state: 'waiting', exec: 0, life: lifeOf(command), headBoot: command.queue?.madeIn?.headBoot ?? command.context.headBoot, events: [] });
   }
   private stopped(command: MinecraftControlCommand): void {
     if (this.stopMode === 'never') return;
     if (this.stopMode === 'late') { this.lateStops.push(command); return; }
     this.proveStop(command);
+  }
+  // ---- amendment A-12: releases, the head's take, the hold ------------------------------------------------------------------------------------
+  private sessionKey(command: MinecraftControlCommand): string { return `${command.lease.id}:${command.context.taskId}:${command.context.sessionId}`; }
+  /** A release: what runs is cut (unless its session was closed already), the session is closed, and the incident it names is answered in the receipt's result. */
+  private releasedBy(command: MinecraftControlCommand): void {
+    const key = this.sessionKey(command);
+    if (!this.closedSessions.has(key)) this.cleanupStop();
+    this.closedSessions.add(key);
+    const named = (command.context as { incident?: { take?: { id?: string; why?: string; notes?: string[] }; resume?: string; cancel?: string } }).incident;
+    const incident = named && this.incidentsSupported ? this.incidentAnswer(command, named) : null;
+    this.releases.push({ command: command.id, session: command.context.sessionId, incident });
+    this.outbox.push({ receipt: { id: command.id, connectionId: this.connectionId, outcome: 'completed', inputsReleased: true, observedAt: iso(), ...(incident ? { result: JSON.stringify({ incident }) } : {}),
+      ...(command.stop ? { stop: { bodyId: RUN_BODY, sessionId: command.stop.context.sessionId, generation: command.stop.context.generation, requestId: command.stop.requestId, state: 'stopped', inputsReleased: true, observedAt: iso() } } : {}) },
+      hold: false, log: false, tries: 0 });
+  }
+  /** The body's answer to a release that names an incident (`takeIncident`, `resumeIncident`, `cancelIncident` of the body): the shapes of the docs' `IncidentTakeResult`. */
+  private incidentAnswer(command: MinecraftControlCommand, named: { take?: { id?: string; why?: string; notes?: string[] }; resume?: string; cancel?: string }): Record<string, unknown> | null {
+    if (named.take) {
+      const id = String(named.take.id ?? '');
+      this.takes.push({ id, why: String(named.take.why ?? ''), notes: named.take.notes, session: command.context.sessionId, command: command.id });
+      const box = `/body/blackbox/${command.context.taskId}/${id.replace(/[^A-Za-z0-9._-]/gu, '_')}.json.gz`, scene = `/body/scenes/${id.replace(/[^A-Za-z0-9._-]/gu, '_')}`;
+      if (this.incidentHold?.id === id) return { op: 'take', id, done: true, hold: id, unfreeze: null, held: true, frozen: this.incidentHold.frozen, freeze: 'The game is frozen', box, scene, again: true };
+      if (this.incidentHold) return { op: 'take', id, done: false, hold: this.incidentHold.id, unfreeze: null };
+      if (!this.canFreeze) return { op: 'take', id, done: true, hold: null, unfreeze: null, held: false, frozen: false, notHeld: 'players are on the server', box, scene };
+      this.incidentHold = { id, task: command.context.taskId, why: String(named.take.why ?? ''), frozen: true };
+      return { op: 'take', id, done: true, hold: id, unfreeze: null, held: true, frozen: true, freeze: 'The game is frozen', box, scene };
+    }
+    const op = named.resume ? 'resume' : named.cancel ? 'cancel' : null, id = String(named.resume ?? named.cancel ?? '');
+    if (!op) return null;
+    if (this.incidentHold && this.incidentHold.id !== id) return { op, id, done: false, hold: this.incidentHold.id, unfreeze: null };
+    this.incidentHold = null;
+    return { op, id, done: true, hold: null, unfreeze: 'The game is running normally' };
+  }
+  /** An act the body refuses before it has an entry: its session was closed by a release, or the body is held. */
+  private refuses(command: MinecraftControlCommand): boolean {
+    const because = this.closedSessions.has(this.sessionKey(command)) ? 'closed_session' as const : this.incidentHold ? 'held' as const : null;
+    if (!because) return false;
+    this.refused.push({ command: command.id, session: command.context.sessionId, because });
+    this.outbox.push({ receipt: { id: command.id, connectionId: this.connectionId, outcome: 'failed', inputsReleased: true, observedAt: iso(), failureType: because === 'held' ? 'held' : undefined,
+      result: because === 'held' ? JSON.stringify({ held: `保留中（${this.incidentHold!.id}: ${this.incidentHold!.why}）。再開の命令（resume）が来るまで動かない` }) : 'BODY_COMMAND_REFUSED',
+      unit: { goal: 'not_started', end: 'not_run', released: true }, bodyTimes: { acceptedAt: iso(), endedAt: iso() } } as MinecraftControlReceipt, hold: false, log: false, tries: 0 });
+    return true;
   }
   /** The stop's receipt proves the release; what waited is dropped and what ran is cut, each with the receipt of its own (`cleanup_stop`). */
   private proveStop(command: MinecraftControlCommand): void {

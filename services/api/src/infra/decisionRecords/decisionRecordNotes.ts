@@ -54,6 +54,11 @@ export function onRedecideNote(listener: RedecideListener): () => void {
   return () => { redecideListeners.delete(listener); };
 }
 
+/** Amendment A-12: the last rows of a task's record as lines of at most 400 characters (the notes of a take); none when no recorder is installed. */
+export function noteHeadTail(taskId: string, rows = 20): string[] {
+  return (installed?.tail(taskId, rows) ?? []).map(row => JSON.stringify(row).slice(0, 400));
+}
+
 /**
  * Amendment A-12: the box of a stall the head found itself (the reason and the last rows of the task's record), written beside its `events.jsonl`; its path below the records' root,
  * or null when no recorder is installed or nothing could be written.

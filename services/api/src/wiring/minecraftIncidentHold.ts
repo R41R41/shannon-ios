@@ -26,7 +26,11 @@ export interface IncidentNote { id: string; heavy: boolean; why: string; held: b
   /** Chapter 8's 再開 9 → 保留 10: this hold is the second try of a held act, held again (see `HeldAgain`). */
   replay?: HeldAgain;
   /** Amendment A-12: a hold the head found itself (`head:<kind>:…`, `headIncidentKind`): where the head wrote its box (the reason and the last rows of the decision record), relative to the records' root. */
-  record?: string }
+  record?: string;
+  /** Amendment A-12: what the body said of the hold the head asked for (`headTake`): its box and scene (files on the body's side), the hold it keeps instead (`bodyHold`: another id, the head's was not taken), a take it had already (`again`), and how the asking ended (`take`). */
+  box?: string | null; scene?: string | null; bodyHold?: string; again?: boolean; take?: TakeEnd }
+/** How the head's asking for a hold ended: `held` (the body holds and stopped the world), `not_held` (a box and a scene only: the world could not be stopped), `other_hold` (the body keeps another hold and changed nothing), `failed` (nothing came back). */
+export type TakeEnd = 'held' | 'not_held' | 'other_hold' | 'failed';
 /**
  * Amendment A-12: the incident ids of a stall the head found itself start with `head:` and name the kind (`head:node_stalled:p3:…`). The body knows none of them (it holds nothing for
  * such an incident: its box and scene were not taken and the world was not stopped); the operator's reads of a hold say so, and a release naming one is answered `done` by a body that holds nothing.
@@ -95,6 +99,30 @@ export function incidentOfResult(result: string | undefined): IncidentNote | nul
       frozen: typeof value.frozen === 'boolean' ? value.frozen : null, ...(typeof value.freeze === 'string' ? { freeze: value.freeze } : {}),
       ...(typeof value.notHeld === 'string' && value.notHeld ? { notHeld: value.notHeld } : {}),
       ...(typeof value.repeated === 'string' && value.repeated ? { repeated: value.repeated } : {}),
+      ...(typeof value.box === 'string' && value.box ? { box: value.box } : {}), ...(typeof value.scene === 'string' && value.scene ? { scene: value.scene } : {}),
       ...(feet(value.start) ? { start: feet(value.start) } : {}), ...(feet(value.end) ? { end: feet(value.end) } : {}) };
   } catch { return null; }
+}
+
+/**
+ * Amendment A-12 (the body's type, `IncidentTakeResult`): what a release carrying `incident.take` answers in its result, `{"incident": {"op": "take", ...}}`. `done`: the body holds the hold or has taken the box
+ * without holding; false when it keeps another hold and changed nothing (`hold` is that one). Null when the result is not a take's answer.
+ */
+export interface IncidentTake { id: string; done: boolean; hold: string | null; held: boolean; frozen: boolean | null; freeze?: string; notHeld?: string; box: string | null; scene: string | null; again: boolean; unfreeze?: string }
+export function takeOfResult(result: string | undefined): IncidentTake | null {
+  if (!result || !result.startsWith('{')) return null;
+  try {
+    const value = (JSON.parse(result) as { incident?: Record<string, unknown> }).incident;
+    if (!value || value.op !== 'take' || typeof value.id !== 'string' || typeof value.done !== 'boolean') return null;
+    const hold = typeof value.hold === 'string' ? value.hold : null;
+    return { id: value.id, done: value.done, hold, held: typeof value.held === 'boolean' ? value.held : hold !== null, frozen: typeof value.frozen === 'boolean' ? value.frozen : null,
+      ...(typeof value.freeze === 'string' ? { freeze: value.freeze } : {}), ...(typeof value.notHeld === 'string' && value.notHeld ? { notHeld: value.notHeld } : {}),
+      box: typeof value.box === 'string' ? value.box : null, scene: typeof value.scene === 'string' ? value.scene : null, again: value.again === true,
+      ...(typeof value.unfreeze === 'string' ? { unfreeze: value.unfreeze } : {}) };
+  } catch { return null; }
+}
+/** How the body's answer to a take reads: it holds (`held`), it took the box only (`not_held`), it keeps another hold (`other_hold`), or it did not do it (`failed`: a body without incidents, a take it could not make). */
+export function takeEnd(take: IncidentTake): TakeEnd {
+  if (!take.done) return take.hold !== null ? 'other_hold' : 'failed';
+  return take.held ? 'held' : 'not_held';
 }

@@ -220,6 +220,11 @@ export class DecisionRecorder {
     try { this.run(taskId).line({ ...event, at: this.iso() }); } catch (error) { this.told(error); }
   }
 
+  /** Amendment A-12: the last `rows` rows of a task's record (what a take sends the body as notes), without opening a run that has none. */
+  tail(taskId: string, rows = HEAD_HOLD_ROWS): ReturnType<typeof tailRun> {
+    try { return tailRun(join(this.root, runName(taskId)), rows); } catch { return []; }
+  }
+
   /**
    * Amendment A-12: the box of a stall the head found itself (the body cannot be asked to write one: `HEAD_INCIDENT_PREFIX`). The reason and the last `rows` rows of the task's
    * `events.jsonl` (read before this row is written) go to `<run>/head-holds/<id>.json`, and one `head_hold` row names the file in the run's record. Returns the file's path below

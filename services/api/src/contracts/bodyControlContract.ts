@@ -32,7 +32,9 @@ export interface BodyTaskContext {
    * world again and runs it); `cancel`, on a release: the operator cancelled the held task (the body ends the hold and moves the world again). A body
    * that does not know it ignores it.
    */
-  incident?: { hold?: boolean; resume?: string; cancel?: string };
+  incident?: { hold?: boolean; resume?: string; cancel?: string;
+    /** Amendment A-12 (the body's type): a stall the head found. The body holds as it does for a heavy failure (the world stopped, the scene, the box with `notes`, the hold under this id); a release that carries it answers with `incident.op = 'take'` (`takeOfResult`). `id` is the head's (`head:<kind>:…`, 1 to 150 characters); `notes` the last rows of the decision record (at most 20, 400 characters each). */
+    take?: { id: string; why: string; notes?: string[] } };
   /**
    * Continue contract 5 (the life): the life the command was made for, the head's start that made it, and the observation the decision read (`madeIn`: the life,
    * the dimension's generation, the body's boot and connection, the head's boot and the observation's number). They are those of **the observation the decision

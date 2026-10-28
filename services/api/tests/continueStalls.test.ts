@@ -16,6 +16,7 @@ import {
   forgetStalls, MOVING, movedOn, noteDeath, noteProgress, noteRan, noteRedecide, noteRefusal, resumeStalls, stallIncidentId, stallQuiet, STALL, watchStalls, type ProgressSnapshot, type Stall,
 } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import { headIncidentKind, setIncidentHoldPort, type IncidentHoldPort, type IncidentNote } from '../src/wiring/minecraftIncidentHold.js';
+import { controlId } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 import { createOperatorMinecraft, type OperatorActivity, type OperatorMinecraftParts } from '../src/wiring/operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from '../src/wiring/operatorMinecraftRequests.js';
 import { benchC, until, type BenchC } from './helpers/benchC.js';
@@ -298,11 +299,18 @@ describe('a task that found a stall counts nothing more until it is resumed', ()
 
   it('the incident id names the kind, the key and the time, and is plain text', () => {
     const id = stallIncidentId({ kind: 'same_spot_stops', key: '10,64,10', why: 'x' }, 1_700_000_000_000);
-    expect(id).toMatch(/^head:same_spot_stops:10,64,10:[0-9a-z]+$/u);
+    expect(id).toMatch(/^head:same_spot_stops:10_64_10:[0-9a-z]+$/u);
     expect(headIncidentKind(id)).toBe('same_spot_stops');
     expect(headIncidentKind('20261028T000000-act-ab12')).toBeNull();
     expect(headIncidentKind(undefined)).toBeNull();
     expect(stallIncidentId({ kind: 'node_stalled', key: 'p1 /../x', why: 'x' }, 1)).toMatch(/^head:node_stalled:p1__\.\._x:1$/u);
+    // The commands that name an incident carry its id (`unhold:<id>:…`), and the control takes only ids of letters, digits and `_.:-`: a key with commas or spaces would make every poll invalid.
+    for (const key of ['10,64,10', 'p1.1 鉄', 'a/b\\c', 'x'.repeat(100)]) {
+      const made = stallIncidentId({ kind: 'same_spot_stops', key, why: 'x' }, 1_793_216_247_116);
+      expect(controlId(`unhold:${made}:1793216247116`.slice(0, 150))).toBe(true);
+      expect(controlId(`take:${made}`)).toBe(true);
+      expect(made.length).toBeLessThanOrEqual(75);
+    }
   });
 });
 
@@ -388,7 +396,7 @@ describe('the operator reads a hold the head found', () => {
     const envelope = (op: string, args: Record<string, unknown> = {}) => ({ v: 1, operator: 'ops.ryo', domain: 'minecraft', op, args });
     return { operator: createOperatorMinecraft(parts), audit, tasks, activity, released, envelope };
   }
-  const note: IncidentNote & { command: string } = { id: 'head:same_spot_stops:10,64,10:abc', heavy: true, why: 'go が同じ所 (10,64,10) の 3 マス以内で 2 回止まった', held: true, frozen: false,
+  const note: IncidentNote & { command: string } = { id: 'head:same_spot_stops:10_64_10:abc', heavy: true, why: 'go が同じ所 (10,64,10) の 3 マス以内で 2 回止まった', held: true, frozen: false,
     command: 'skill:c2', record: 'task-x/head-holds/head_same_spot_stops_10,64,10_abc.json', start: [10.5, 64, 10.5], end: [10.5, 64, 10.5] };
   async function held() {
     const s = service();
@@ -407,7 +415,7 @@ describe('the operator reads a hold the head found', () => {
     expect(entry.reasonCode).toBe('operator_hold_head');
     expect(entry.summary).toContain('頭が見つけた詰まり');
     expect(entry.summary).toContain('同じ所で止まり続ける');
-    expect(entry.summary).toContain('世界は止めていません');
+    expect(entry.summary).toContain('世界は止めていない');
     expect(entry.detail).toContain(note.id);
     expect(entry.detail).toContain('2 回止まった');
   });
@@ -495,7 +503,7 @@ describe('the step parts hold a request that asked to be held, for what the head
     expect(await until(() => port.calls.length > 0)).toBe(true);
     expect(port.calls).toHaveLength(1);
     const incident = port.calls[0]!;
-    expect(incident).toMatchObject({ heavy: true, held: true, frozen: false, command: '' });
+    expect(incident).toMatchObject({ heavy: true, held: true, frozen: true, take: 'held', command: '' });
     expect(incident.id).toMatch(/^head:wait_loop:3:/u);
     expect(incident.why).toContain('wait だけの act が 3 回続いた');
     expect(incident.record).toMatch(/^stalls-wait-loop\/head-holds\/head_wait_loop_3_[0-9a-z]+\.json$/u);
@@ -506,8 +514,11 @@ describe('the step parts hold a request that asked to be held, for what the head
     // The rows are the decision record's: the acts sent, the decisions.
     expect(box.tail.map((row: { ev: string }) => row.ev)).toEqual(expect.arrayContaining(['sent', 'request']));
     expect(bench.events().filter(row => row.ev === 'head_hold')).toMatchObject([{ id: incident.id, file: incident.record, kind: 'wait_loop' }]);
-    // Held once: a fourth wait is not found again.
-    await runAct(bench, waitHands, { hands: [{ do: 'wait', goal: 'done', line: 'wait 1 秒' }] }, 'q4');
+    // Held once: the body (held and frozen under the head's id) refuses a fourth act, and nothing is found again.
+    await bench.decide('次', () => bench.add(waitHands));
+    expect(await until(() => bench.body.refused.length > 0)).toBe(true);
+    expect(bench.body.refused[0]).toMatchObject({ because: 'held' });
+    await bench.settle(60);
     expect(port.calls).toHaveLength(1);
   }, 30_000);
 
@@ -535,7 +546,7 @@ describe('the step parts hold a request that asked to be held, for what the head
     await runAct(bench, [{ do: 'go', to: { x: 50, y: 64, z: 10 } }], stop(12), 'q2');
     expect(await until(() => port.calls.length > 0)).toBe(true);
     const incident = port.calls[0]!;
-    expect(incident.id).toMatch(/^head:same_spot_stops:10,64,10:/u);
+    expect(incident.id).toMatch(/^head:same_spot_stops:10_64_10:/u);
     expect(incident.command).toBe(bench.body.idOf('q2'));
     expect(incident.start).toEqual([0.5, 64, 0.5]);
     expect(incident.why).toContain('go_stuck');
@@ -578,12 +589,13 @@ describe('the step parts hold a request that asked to be held, for what the head
     await body.beforeDecision!(controller.signal);
     expect(port.calls).toHaveLength(0);
     clock(740, 600);
-    setTimeout(() => controller.abort(), 20);
+    // Not aborted: the decision's start waits for the body to be asked and the hold to be asked for (at once with the stand-in body), not for the stop.
     const began = Date.now();
     await body.beforeDecision!(controller.signal);
-    expect(Date.now() - began).toBeLessThan(1_400);
-    expect(await until(() => port.calls.length > 0)).toBe(true);
-    expect(port.calls[0]).toMatchObject({ heavy: true, held: true, frozen: false });
+    expect(Date.now() - began).toBeLessThan(2_000);
+    expect(port.calls).toHaveLength(1);
+    expect(port.calls[0]).toMatchObject({ heavy: true, held: true, frozen: true, take: 'held' });
+    expect(bench.body.takes).toHaveLength(1);
     expect(port.calls[0]!.id.startsWith(`head:node_stalled:${node}:`)).toBe(true);
     expect(port.calls[0]!.why).toContain(node);
     expect(port.calls[0]!.why).toContain('秒、進みが無い');
@@ -638,7 +650,7 @@ describe('the step parts hold a request that asked to be held, for what the head
     await bench.settle(30);
     await body.beforeDecision!(controller.signal);
     expect(await until(() => port.calls.length > 0)).toBe(true);
-    expect(port.calls[0]).toMatchObject({ heavy: true, held: true, frozen: false, command: '' });
+    expect(port.calls[0]).toMatchObject({ heavy: true, held: true, frozen: true, take: 'held', command: '' });
     expect(port.calls[0]!.id).toMatch(/^head:death:de-bench-1:/u);
     await body.beforeDecision!(controller.signal);
     expect(port.calls).toHaveLength(1);

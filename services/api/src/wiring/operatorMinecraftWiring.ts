@@ -40,11 +40,14 @@ export interface OperatorMinecraftParts {
 
 const FINISHED = ['stopped', 'completed', 'failed', 'stopping'];
 /** A hold row's detail (`hold` below): the incident, the held act's command and where it began and ended. */
-function holdDetail(detail: string | null): { incident?: string; command?: string; start?: Feet | null; end?: Feet | null; mismatch?: string; replay?: HeldAgain } {
+function holdDetail(detail: string | null): { incident?: string; command?: string; start?: Feet | null; end?: Feet | null; mismatch?: string; replay?: HeldAgain; take?: string; notHeld?: string; bodyHold?: string;
+  frozen?: boolean | null; box?: string; scene?: string } {
   try {
     const value = JSON.parse(detail ?? '{}') as Record<string, unknown>;
     return { ...(typeof value.incident === 'string' ? { incident: value.incident } : {}), ...(typeof value.command === 'string' ? { command: value.command } : {}),
       start: feet(value.start), end: feet(value.end), ...(typeof value.mismatch === 'string' ? { mismatch: value.mismatch } : {}),
+      ...(typeof value.take === 'string' ? { take: value.take } : {}), ...(typeof value.notHeld === 'string' ? { notHeld: value.notHeld } : {}), ...(typeof value.bodyHold === 'string' ? { bodyHold: value.bodyHold } : {}),
+      ...(typeof value.frozen === 'boolean' || value.frozen === null ? { frozen: value.frozen as boolean | null } : {}), ...(typeof value.box === 'string' ? { box: value.box } : {}), ...(typeof value.scene === 'string' ? { scene: value.scene } : {}),
       ...(heldAgainOf(value.replay) ? { replay: heldAgainOf(value.replay)! } : {}) };
   } catch { return {}; }
 }
@@ -57,14 +60,29 @@ function heldAgainOf(value: unknown): HeldAgain | null {
     entry && typeof entry === 'object' && typeof (entry as { item?: unknown }).item === 'string' ? [{ item: (entry as { item: string }).item, why: String((entry as { why?: unknown }).why ?? '') }] : []);
   return { code: record.code, dropped };
 }
-/** The hold row's detail text (at most 600 characters, still whole JSON): the second try's record loses its dropped items one by one before anything else is cut. */
+/**
+ * The hold row's detail text (at most 600 characters, still whole JSON): the second try's record loses its dropped items one by one before anything else is cut. Amendment A-12: a hold the
+ * head found carries the body's answer to its take as well (its box and scene are long paths); when that does not fit, the head's own box path, then the freeze's words, then the scene
+ * and the box go, in that order (the head's box file has all of it).
+ */
 function holdDetailText(base: Record<string, unknown>, replay: HeldAgain | undefined): string {
-  const dropped = [...(replay?.dropped ?? [])];
+  const dropped = [...(replay?.dropped ?? [])], kept = { ...base };
   for (;;) {
-    const text = JSON.stringify({ ...base, ...(replay ? { replay: { code: replay.code.slice(0, 40), dropped } } : {}) });
-    if (text.length <= 600 || !dropped.length) return text.slice(0, 600);
-    dropped.pop();
+    const text = JSON.stringify({ ...kept, ...(replay ? { replay: { code: replay.code.slice(0, 40), dropped } } : {}) });
+    if (text.length <= 600) return text;
+    if (dropped.length) { dropped.pop(); continue; }
+    const droppable = ['record', 'freeze', 'scene', 'box'].find(key => key in kept);
+    if (!droppable) return text.slice(0, 600);
+    delete kept[droppable];
   }
+}
+/** What the body said of the hold the head asked for, in the operator's words (the activity record, `held`). */
+function takeWords(take: string | undefined, d: { notHeld?: string; bodyHold?: string; frozen?: boolean | null }): string {
+  if (take === 'held') return d.frozen === false ? '体も保留したが世界は止まっていない' : '体も同じ id で保留し、世界を止め、黒箱と現場を取った';
+  if (take === 'not_held') return `体は世界を止められず保留していない（${(d.notHeld ?? '理由不明').slice(0, 60)}）。黒箱と現場だけ取った。世界は動いている`;
+  if (take === 'other_hold') return `体は別の保留 ${d.bodyHold ?? '?'} を持っていて、頭の保留は取っていない。世界はその保留のまま`;
+  if (take === 'failed') return '体へ頼めなかった（答えが無かった）。世界は止まっていない';
+  return '世界は止めていない（体は保留していない）';
 }
 /** The reason a hold row names (its detail's `why`), or ''. */
 function holdWhy(detail: string | null): string {
@@ -372,20 +390,24 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
    * owner's stop path (the plan, the pack and the task stay; no decision, no model). False when the task is not the operator's or asked for no hold.
    */
   async function hold(taskId: string, incident: { id: string; why: string; frozen: boolean | null; freeze?: string; command: string; start?: Feet | null; end?: Feet | null;
-    replay?: HeldAgain; record?: string }): Promise<boolean> {
+    replay?: HeldAgain; record?: string; take?: string; box?: string | null; scene?: string | null; notHeld?: string; bodyHold?: string; again?: boolean }): Promise<boolean> {
     const requests = parts.requests;
     const request = parts.audit.requestOf(parts.scopeKey, taskId);
     if (!requests || !request || !parts.audit.holdOnFailure(taskId) || parts.audit.heldOf(taskId)) return false;
     const detail = holdDetailText({ incident: incident.id, why: incident.why.slice(0, 160), frozen: incident.frozen, ...(incident.freeze ? { freeze: incident.freeze.slice(0, 80) } : {}),
-      command: incident.command, ...(incident.record ? { record: incident.record.slice(0, 120) } : {}),
+      command: incident.command, ...(incident.take ? { take: incident.take } : {}), ...(incident.notHeld ? { notHeld: incident.notHeld.slice(0, 80) } : {}),
+      ...(incident.bodyHold ? { bodyHold: incident.bodyHold.slice(0, 150) } : {}), ...(incident.again ? { again: true } : {}),
+      ...(incident.box ? { box: incident.box.slice(0, 200) } : {}), ...(incident.scene ? { scene: incident.scene.slice(0, 200) } : {}),
+      ...(incident.record ? { record: incident.record.slice(0, 120) } : {}),
       ...(incident.start ? { start: incident.start } : {}), ...(incident.end ? { end: incident.end } : {}) }, incident.replay);
     audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold', event: 'settled', code: 'held', argsJson: request.argsJson,
       taskId, detail });
     // Amendment A-12: a stall the head found itself says what it found and that the world was not stopped (the body holds nothing for it); the reason is in the audit's detail too.
     const kind = headIncidentKind(incident.id);
     parts.activity(parts.now(), kind
-      ? { summary: `運用者が代わりに始めたマイクラの依頼を、頭が見つけた詰まり（${HEAD_INCIDENT_WORDS[kind] ?? kind}）で保留しました（世界は止めていません。理由と判断の記録の直近の行を残しました）。`,
-        tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: 'operator_hold_head', detail: `task=${taskId} incident=${incident.id} why=${incident.why.slice(0, 120)}` }
+      ? { summary: `運用者が代わりに始めたマイクラの依頼を、頭が見つけた詰まり（${HEAD_INCIDENT_WORDS[kind] ?? kind}）で保留しました（${takeWords(incident.take, { frozen: incident.frozen, ...(incident.notHeld ? { notHeld: incident.notHeld } : {}), ...(incident.bodyHold ? { bodyHold: incident.bodyHold } : {}) })}。理由と判断の記録の直近の行は頭の黒箱にあります）。`,
+        tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: 'operator_hold_head',
+        detail: `task=${taskId} incident=${incident.id} take=${incident.take ?? '-'} why=${incident.why.slice(0, 120)}${incident.box ? ` box=${incident.box}` : ''}${incident.scene ? ` scene=${incident.scene}` : ''}${incident.record ? ` record=${incident.record}` : ''}` }
       : { summary: '運用者が代わりに始めたマイクラの依頼を、重い失敗で保留しました（世界を止め、記録を取りました）。', tool: 'operator.minecraft.hold',
         outcome: 'done', reasonCode: 'operator_hold', detail: `task=${taskId} incident=${incident.id}` });
     await requests.stop(taskId, 'operator_hold').catch(() => []);
@@ -466,6 +488,14 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       taskId, detail: line.slice(0, 600) });
   }
 
+  /** Amendment A-12: how a hold the head found stands against the body's own (its frame): the body's answer to the take, and a disagreement only when it keeps a hold the head's take did not make. */
+  function headAgree(detail: ReturnType<typeof holdDetail>, body: { id: string; task: string } | null): string {
+    const words = takeWords(detail.take, { ...(detail.frozen !== undefined ? { frozen: detail.frozen } : {}), ...(detail.notHeld ? { notHeld: detail.notHeld } : {}), ...(detail.bodyHold ? { bodyHold: detail.bodyHold } : {}) });
+    if (!body) return `頭が見つけた詰まりの保留（${words}）`;
+    if (body.id === detail.incident) return `頭が見つけた詰まりの保留。体も同じ保留（${words}）`;
+    if (body.id === detail.bodyHold) return `頭が見つけた詰まりの保留。体は別の保留 ${body.id} を持つ（頭の take は取られていない。resume で両方解く）`;
+    return `食い違い: 頭が見つけた保留の他に、体の保留 ${body.id}（task ${body.task}）がある`;
+  }
   /** `held` (read only, the CLI's status): the held requests, each with where the body is now against where the held act began. */
   function heldNow(c: Context) {
     const now = parts.requests?.position?.() ?? null;
@@ -474,7 +504,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       const detail = holdDetail(row.detail);
       // Run 44: the body's own hold beside the head's, so that a disagreement shows.
       // Amendment A-12: a stall the head found is the head's alone (the body holds nothing for it); only a body hold beside it is a disagreement.
-      const agree = headIncidentKind(detail.incident) ? (!body ? '頭が見つけた詰まりの保留（体は保留していない。世界は止めていない）' : `食い違い: 頭が見つけた保留の他に、体の保留 ${body.id}（task ${body.task}）がある`)
+      const agree = headIncidentKind(detail.incident) ? headAgree(detail, body)
         : !body ? '体は保留していない（食い違い: 頭だけ保留）' : body.id === detail.incident ? '体も同じ保留' : `食い違い: 体の保留は ${body.id}（task ${body.task}）`;
       return { taskId: row.taskId!, detail: row.detail ?? '', position: driftWords(detail.start, now, detail.end),
         body: `${agree}${detail.mismatch?.startsWith('outside_act') ? '。体が act の外（死亡・瀕死）で保留し、頭も保留した' : detail.mismatch ? '。体が act を断ったので頭が保留に戻した' : ''}` };
