@@ -236,6 +236,12 @@ function lowestReach(hands: unknown, feetY: number): number {
   let lowest = feetY;
   for (const raw of Array.isArray(hands) ? hands : []) {
     const hand = record(raw);
+    // vertical down (continue contract 6): `toY` is the feet's y it goes down to (absolute), a descent like a go's.
+    if (hand?.do === 'vertical') {
+      const toY = hand.dir === 'down' ? finite(hand.toY) : null;
+      if (toY !== null) lowest = Math.min(lowest, toY);
+      continue;
+    }
     if (hand?.do !== 'walk' && hand?.do !== 'go' && hand?.do !== 'dig') continue;
     const points = [record(hand.to), ...(Array.isArray(hand.path) ? hand.path.map(record) : []), ...(Array.isArray(hand.goals) ? hand.goals.map(record) : []),
       ...(Array.isArray(hand.at) ? hand.at.map(record) : [])];

@@ -60,6 +60,10 @@ const SHORT_LINES = [
   'smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [seconds=N] [X,Y,Z ...]',
   '  かまどに入れる（取り出さない・焼き上がりを待たない）。furnaces 基に分けて入れ、燃料を足す（X,Y,Z は使うかまど。無ければ持っているかまどを置く）。焼き上がると出来事で知らされる。取り出しは furnace op=take を列に足す。'
     + '種類が 2 つ以上は json（items）。理由: no_furnace・fuel_short・missing・unreachable・limit_time。',
+'vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water [maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [seconds=N]',
+  '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
+    + 'shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物、place= は足場・塞ぎに置く物。'
+    + 'liquid: 溶岩・水が見えたら stop=止まる / seal=塞いで続ける / seal_water=水だけ塞ぎ溶岩で止まる（range は塞ぐ範囲）。',
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
   '  近くの数歩を、掘らず置かずに歩く手（段差1と泳ぎだけ。点を空白で続けると path。32点まで）。range は的から何 m で着いたことにするか。',
   '  地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる（64m ごとに区切って歩く）。遠くへ・壁や穴や崖のある道・上り下りは go（道を体が引く）。',
@@ -91,7 +95,7 @@ const SHORT_LINES = [
   '- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: at・count・seconds・canPlace・maxPlace / '
     + 'fight: target・stance(fight|flee)・item・retreatHp・range・seconds / '
     + 'mine: block・at・count・tool・collect・seconds・canDig・maxDig / make: item・count / portal: at・axis(x|z)・block・enter・canPlace・maxPlace・seconds / '
-    + 'smelt: items・fuel・fuelCount・furnaces・at・seconds / walk: to か path・sprint・range / '
+    + 'smelt: items・fuel・fuelCount・furnaces・at・seconds / vertical: dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds / walk: to か path・sprint・range / '
     + 'dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: item・at（1つ）・face・target',
   '- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: target・untilDead・seconds・hold / eat: item',
   '- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: at（1つ）・op・items',

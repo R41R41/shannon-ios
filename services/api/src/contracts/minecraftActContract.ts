@@ -28,8 +28,13 @@ export const ACT_MAX_HANDS = 12;
 export interface ActPos { x: number; y: number; z: number }
 export type ActFace = 'up' | 'down' | 'north' | 'south' | 'east' | 'west';
 export const HAND_KINDS = ['walk', 'go', 'dig', 'place', 'pillarUp', 'use', 'look', 'jump', 'sneak', 'equip', 'craft', 'furnace', 'chest',
-  'attack', 'shoot', 'eat', 'drop', 'pickup', 'wait', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt'] as const;
+  'attack', 'shoot', 'eat', 'drop', 'pickup', 'wait', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt', 'vertical'] as const;
 export type HandKind = typeof HAND_KINDS[number];
+/** vertical (continue contract 6): the way down or up, the form of the climb or descent, the compass words of `toward`, and what to do at a liquid. */
+export const VERTICAL_DIRS = ['down', 'up'] as const;
+export const VERTICAL_SHAPES = ['stairs', 'shaft', 'pillar'] as const;
+export const VERTICAL_TOWARDS = ['north', 'east', 'south', 'west'] as const;
+export const VERTICAL_LIQUIDS = ['stop', 'seal', 'seal_water'] as const;
 export const EQUIP_SLOTS = ['hand', 'offhand', 'head', 'chest', 'legs', 'feet'] as const;
 
 /**
@@ -132,6 +137,18 @@ export interface ActHand {
    * that leave the world as it was (equip, eat, look, sneak, jump), stop for every other kind.
    */
   onFail?: 'continue' | 'stop';
+  /**
+   * vertical (continue contract 6: a hand of `mc.act` that digs, places and walks one step at a time, with no path search; `canDig`, `canPlace`, `maxDig`,
+   * `maxPlace`, `range` and `seconds` are the fields above, shared). The model decides the way, the form and how far; the body never changes them.
+   * `dir`: down | up, always written (not read from where she stands). `shape`: stairs | shaft (straight down, `dir` down only) | pillar (straight up on a block put under
+   * her feet, `dir` up only). `toward`: stairs only (required there), the compass way the stairs lead. `toY`: the feet's y to reach (−64 … 320).
+   * `liquid`: lava or water seen — stop | seal and go on | seal_water (seal water, stop at lava); `range` (1–2) is how far round the cell a seal reaches.
+   */
+  dir?: 'down' | 'up';
+  shape?: 'stairs' | 'shaft' | 'pillar';
+  toward?: 'north' | 'east' | 'south' | 'west';
+  toY?: number;
+  liquid?: 'stop' | 'seal' | 'seal_water';
 }
 /** The kinds whose failure does not end the act unless the hand says `onFail: 'stop'` (r3). */
 export const HAND_CONTINUES_BY_DEFAULT: ReadonlySet<HandKind> = new Set(['equip', 'eat', 'look', 'sneak', 'jump']);
@@ -398,6 +415,11 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         rel: { type: 'boolean' },
         note: { type: 'string', maxLength: 40 },
         onFail: { type: 'string', enum: ['continue', 'stop'] },
+        dir: { type: 'string', enum: [...VERTICAL_DIRS], description: 'vertical の向き（down か up）' },
+        shape: { type: 'string', enum: [...VERTICAL_SHAPES], description: 'vertical の形（stairs・shaft は down だけ・pillar は up だけ）' },
+        toward: { type: 'string', enum: [...VERTICAL_TOWARDS], description: 'vertical stairs の向き' },
+        toY: { type: 'integer', minimum: -64, maximum: 320, description: 'vertical で着く足の y' },
+        liquid: { type: 'string', enum: [...VERTICAL_LIQUIDS], description: 'vertical で溶岩・水が見えた時（止める・塞いで続ける・水だけ塞ぐ）' },
       } } },
     stopIf: { type: 'object', additionalProperties: false, required: [], properties: {
       hostileWithin: { type: 'number', minimum: 1, maximum: 32 },
@@ -467,4 +489,5 @@ export function readViewResult(text: string | undefined): ViewResult | null {
 }
 
 export { handFieldNames } from './minecraftActHandRules.js';
-export { ACT_MAX_MS, actMilliseconds, actExpectedMilliseconds, actRemainingMilliseconds } from './minecraftActTime.js';
+export { ACT_MAX_MS, actMilliseconds, actExpectedMilliseconds, actRemainingMilliseconds, VERTICAL_MS_PER_STEP, verticalSteps } from './minecraftActTime.js';
+export type { ActTimeTuning } from './minecraftActTime.js';

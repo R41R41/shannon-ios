@@ -10,6 +10,8 @@ import type { ActHand } from './minecraftActContract.js';
  *   chest X,Y,Z look|takeAll | chest X,Y,Z take|put 物 [数] [物 [数] ...]   furnace X,Y,Z take | furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]
  *   make 物 [個数]   portal X,Y,Z x|z [block=名] [place=a,b] [maxPlace=N] [seconds=N] [noEnter]
  *   smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [X,Y,Z ...] [seconds=N]
+ *   vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=a,b liquid=stop|seal|seal_water [maxDig=N] [place=a,b] [maxPlace=N] [range=1|2] [seconds=N]
+ *     （縦の長い移動。y= は toY、stairs だけ向き。dir・形・向き・liquid・dig= は書く。組み合わせの断りは handProblem）
  *   walk 225,57,63 | walk 1,2,3 4,5,6（path）[sprint] [range=2] | dig x,y,z x,y,z [tool=名] [exposeOk] [takeOk] [collect=false]
  *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物 [slot] | craft 物 [個数]
  *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false] | use 物 [x,y,z] [face=F] [target=T]
@@ -83,6 +85,13 @@ function smeltWords(hand: ActHand): Words {
     ...given('seconds', hand.seconds), ...(hand.at ?? []).map(pos)];
 }
 const listWord = (key: string, list: readonly string[] | undefined): string[] => list?.length ? [`${key}=${list.join(',')}`] : [];
+/** vertical: the way, the form (and `toward` for stairs), then `y=` and the blocks it may dig and place, and its limits, in the order of the grammar above. */
+function verticalWords(hand: ActHand): Words {
+  if (!hand.dir || !hand.shape || typeof hand.toY !== 'number') return null;
+  return [hand.dir, hand.shape, ...(hand.toward ? [hand.toward] : []), `y=${hand.toY}`, ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig),
+    ...listWord('place', hand.canPlace), ...given('maxPlace', hand.maxPlace), ...given('liquid', hand.liquid), ...given('range', hand.range),
+    ...given('seconds', hand.seconds)];
+}
 /** chest: the box's cell, the op, and the items with their counts (a list that does not read back is a json line). */
 function chestWords(hand: ActHand): Words {
   if (hand.at?.length !== 1 || !hand.op || hand.target !== undefined) return null;
@@ -97,7 +106,7 @@ function furnaceWords(hand: ActHand): Words {
 }
 const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   chest: chestWords, furnace: furnaceWords,
-  go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords,
+  go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords, vertical: verticalWords,
   make: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   walk: hand => (hand.path && hand.to) || hand.path?.length === 1 || !points(hand).length
     ? null : [...points(hand).map(pos), ...flag(hand.sprint, 'sprint'), ...given('range', hand.range)],
@@ -194,6 +203,16 @@ const READERS: Record<string, Reader> = {
   smelt: ({ cells, words, hand }) => {
     if (!words[0] || !isCount(words[1])) return bad('smelt', '入れる物と個数が要る（種類が 2 つ以上なら json）');
     return done({ ...hand, items: [{ item: words[0], count: Number(words[1]) }], ...(cells.length ? { at: cells } : {}) });
+  },
+  // `vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=.. liquid=..`: the words are only the way, the form and the compass word; whether they fit
+  // each other is `handProblem`'s (the same refusal for a json hand).
+  vertical: ({ words, hand }) => {
+    const [dir, shape, toward, ...extra] = words;
+    if (dir !== 'down' && dir !== 'up') return bad('vertical', 'dir（down か up）が要る（vertical down stairs south y=10 dig=stone liquid=stop）');
+    if (!shape) return bad('vertical', '形（stairs・shaft・pillar）が要る');
+    if (extra.length) return bad('vertical', `読めない語 ${extra.join(' ')}`);
+    const { y, toY, ...rest } = blocksOf(hand), target = toY ?? y;
+    return done({ ...rest, dir, shape, ...(toward ? { toward } : {}), ...(target !== undefined ? { toY: target } : {}) });
   },
   go: ({ cells, hand }) => {
     if (!cells.length) return bad('go', '座標が無い');

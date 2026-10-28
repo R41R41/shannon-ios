@@ -14,8 +14,11 @@ const SKILL_SCHEMA_DEPTH = 8;
  * body's whole catalog: every poll was a 400 FCA_BODY_POLL_INVALID, so the head never saw the body. 16 leaves room for the kinds still to come.
  */
 const SKILL_SCHEMA_ANY_OF = 16;
-/** The most properties an object schema may have. run 39 (2026-10-26): the act's hand has 43 with the new hands' fields (it had 31); 48 leaves room. */
-const SKILL_SCHEMA_PROPERTIES = 48;
+/**
+ * The most properties an object schema may have. run 39 (2026-10-26): the act's hand has 43 with the new hands' fields (it had 31); 48 left room.
+ * Continue contract 2 (the 欄の数): `dependsOn` and vertical's `dir`, `shape`, `toward`, `toY` and `liquid` make the hand's 49; 56 leaves room.
+ */
+const SKILL_SCHEMA_PROPERTIES = 56;
 /** Bounded JSON-schema subset; native skill validation remains authoritative at the actuator. */
 export function skillSchema(value: unknown, depth = 0): value is Readonly<Record<string, unknown>> {
   if (!record(value) || depth > SKILL_SCHEMA_DEPTH) return false;
