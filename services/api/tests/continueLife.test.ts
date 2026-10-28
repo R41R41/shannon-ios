@@ -49,7 +49,7 @@ const FIXTURES = join(import.meta.dirname, 'fixtures');
 const CONTINUE = join(FIXTURES, 'continue');
 const PRODUCED = join(CONTINUE, 'produced');
 /** The body revision the copies in `continue-life-produced/` were made at (the body's `contracts/continue/produced/`, copied read-only). */
-const BODY_REVISION = 'dbb8770b4b01';
+const BODY_REVISION = 'd70dc012bb96';
 const sha256 = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
 const fixture = (path: string) => JSON.parse(readFileSync(join(CONTINUE, path), 'utf8')) as { input: any; expected: any; checks: string[] };
 const produced = (name: string) => {
@@ -527,7 +527,7 @@ describe('what the body produced goes through the head\'s readers (chapter 9; th
     expect(validControlPoll(pollWith(receipt), Date.parse(AT))).toBe(true);
     const result = readActResult(receipt.result)!;
     expect(result.outcome).toMatchObject({ goal: 'not_started', end: 'cut', cutBy: 'death' });
-    // A-6 5: the life the act began in (the body fixed it: dbb8770b4b01), not the life after the death.
+    // A-6 5: the life the act began in (the body fixed it: d70dc012bb96), not the life after the death.
     expect(result.outcome?.life).toBe(made.output.lifeBefore);
     expect(result.outcome?.life).not.toBe(made.output.lifeAfter.life);
     expect(result.lines.map(line => line.status)).toEqual(['stopped', 'skipped']);

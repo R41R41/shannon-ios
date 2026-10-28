@@ -1361,3 +1361,35 @@ interface Handover { shield: 'kept' | 'lowered' | 'dropped' | 'none' }
 4. `decide_error`：決め直し（A-10）の失敗・時間切れ、Opus の act の 2 度目の断り、送る前の確認の断りが同じ判断で 2 回。
 5. `death`：死んだ（死の直後に保留。全ロスでも同じ）。
 各保留は黒箱と現場の保存（既存）を使い、保留の理由と、判断の記録の直近の行を黒箱に入れる。スイッチは付けない（`--hold-on-failure` の時だけ働く、は今と同じ）。
+
+#### A-12 の体の型（体の実装の形。体が書く。頭が保留を体に伝える入口）
+頭が見つけた保留（`head:<kind>:…` の id）は、体の黒箱・現場・世界の停止を伴う。頭は、保留したい時に体へ `incident.take` を送る。
+```ts
+/** 命令の context への足し（release でも act でもよい）。 */
+interface BodyTaskContext {
+  incident?: {
+    hold?: boolean; resume?: string; cancel?: string;
+    /** 頭が見つけた詰まり。体は今の重い失敗の保留と同じに保留する。id は頭の id（resume・cancel が同じ id を書く。1〜150 字）。notes は頭の判断の記録の末尾（20 行まで、1 行 400 字で切る）。 */
+    take?: { id: string; why: string; notes?: string[] };
+  };
+}
+/** release の受け取りの result は `{"incident": {...}}`。take の時の中身（resume・cancel の `done`・`hold`・`unfreeze` と同じ形に足したもの）。 */
+interface IncidentTakeResult {
+  op: 'take'; id: string;
+  /** 体が保留を持っている（今回作った・同じ take をもう一度受けた）か、保留しないまま記録だけ取った時に true。別の保留を持っていて何も変えなかった時は false。 */
+  done: boolean;
+  /** 体が今持っている保留の id。保留しなかった時は null。別の保留を持っている時は、その id。 */
+  hold: string | null;
+  held?: boolean; frozen?: boolean | null;
+  /** 世界を止められなかった時の理由（誰かが入っている・RCON 無し等）。この時は保留せず、黒箱と現場だけ取った。 */
+  notHeld?: string; freeze?: string;
+  /** 黒箱のファイルの場所と、現場の保存の場所（体の PC／VM 上の絶対の場所）。無い時は null。 */
+  box?: string | null; scene?: string | null;
+  /** 同じ take をもう一度受けた（既に持っている）。 */
+  again?: boolean;
+}
+```
+- 順序：世界を止める（`/tick freeze`。他の人が居れば止めない）→ 現場の保存 → 黒箱（kind は `head`。`reason` は `why`、`head: { id, why, notes }`）→ 保留の記録（`incident-hold.json`、`id` は頭の id、`task` は context の taskId、`why` は `why`）。黒箱のファイル名と現場の場所の名前は、id の英数字と `._-` 以外を `_` にしたもの（保留そのものは頭の id のまま）。
+- act に付いた時：体はまず take をし、保留した場合その act は「保留中」で断る（`failureType: held`。result は `{"held": "...", "incident": {...}}`。`incident` の欄は重い失敗の保留と同じ：`id・heavy・why・held・frozen・freeze・notHeld・box・scene`）。保留しなかった場合は act をそのまま走らせ、その受け取りに `incident`（`held: false`・`notHeld`）を付ける。release に付いた時は上の `IncidentTakeResult`。
+- 再開：頭の保留の `resume`（release に `incident.resume = <頭の id>`）で、体は世界を戻し（`/tick unfreeze`）、保留の記録を消す（`done: true`）。別の id の resume は何もしない（`done: false`・`hold` に今の保留）。体が何も保留していない時の resume・cancel は、世界だけ動かして `done: true`。
+- 体は `take` を頭が自分で見つけた詰まりの時にだけ受ける。`--hold-on-failure` の判断は頭がする（体は context の `hold` を見ない）。

@@ -476,7 +476,7 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(validLifeView(dead.lifeAfter)).toBe(true);
     expect(dead.lifeAfter.life).toBe(dead.lifeBefore + 1);
     expect(dead.result.outcome).toMatchObject({ goal: 'not_started', end: 'cut', cutBy: 'death' });
-    // A-6 5: the life the act began in (the body fixed it: dbb8770b4b01).
+    // A-6 5: the life the act began in (the body fixed it: d70dc012bb96).
     expect(dead.result.outcome.life).toBe(dead.lifeBefore);
     expect(dead.result.outcome.life).not.toBe(dead.lifeAfter.life);
   });
