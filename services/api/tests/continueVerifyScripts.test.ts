@@ -134,7 +134,19 @@ describe.skipIf(!bash)('the shell scripts', () => {
 
 // ---- the patch to Syzygy's local-gate.sh (stage 5) ----------------------------------------------------------------------------------------------------
 const GATE = ['/mnt/c/Shannon/Syzygy/tools/shannon-release/local-gate.sh', 'C:/Shannon/Syzygy/tools/shannon-release/local-gate.sh', process.env.SYZYGY_GATE ?? ''].find(path => path && existsSync(path));
-describe.skipIf(!bash || !GATE)('local-gate-stage5.patch (applied to a copy of Syzygy\'s local-gate.sh; skipped where that file is not on this machine)', () => {
+// Once the patch is applied to Syzygy's gate (stage 5 is in it), the patch no longer applies to that file: the tests below run only on a gate without it, and the test after them holds the two equal.
+const GATE_HAS_STAGE5 = !!GATE && readFileSync(GATE, 'utf8').includes('CONTINUE_PRODUCED');
+describe.skipIf(!GATE || !GATE_HAS_STAGE5)('local-gate-stage5.patch (already applied to the local-gate.sh of Syzygy)', () => {
+  it('the gate holds the CODE_PATHS line of the patch, word for word', () => {
+    const patch = readFileSync(new URL('../../../tools/continue-verify/local-gate-stage5.patch', import.meta.url), 'utf8');
+    const gate = readFileSync(GATE!, 'utf8');
+    const added = patch.split(/\r?\n/u).filter(line => line.startsWith('+') && !line.startsWith('+++')).map(line => line.slice(1));
+    const codePaths = added.find(line => line.startsWith('CODE_PATHS='));
+    expect(codePaths).toBeTruthy();
+    expect(gate).toContain(codePaths!);
+  });
+});
+describe.skipIf(!bash || !GATE || GATE_HAS_STAGE5)('local-gate-stage5.patch (applied to a copy of Syzygy\'s local-gate.sh; skipped where that file is not on this machine)', () => {
   const patchPath = join(verify, 'local-gate-stage5.patch');
   const FIX = 'services/api/tests/fixtures/continue';
   const git = (cwd: string, ...args: string[]) => {
