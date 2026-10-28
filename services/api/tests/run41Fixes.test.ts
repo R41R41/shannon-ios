@@ -100,7 +100,8 @@ describe('the reason is in real numbers, and the rule is plain', () => {
     expect(PREP_DESCENT_RULE).toContain('持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない');
     expect(PREP_DESCENT_RULE).not.toContain('満腹は 30 分もつ');
     expect(PREP_DESCENT_RULE).toContain('地下には食べ物も木も見つかりにくく');
-    expect(PREP_DESCENT_RULE).toContain('地上へ戻るのに約 500 秒かかり');
+    expect(PREP_DESCENT_RULE).toContain('地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）');
+    expect(PREP_DESCENT_RULE).not.toContain('約 500 秒');
     expect(PREP_RULES_WORDS).toContain('372 秒止まって上りの途中で死んだ');
     expect(PREP_RULES_WORDS).toContain('以前の実走の記録。今回の所要時間ではない');
     expect(PREP_RULES_WORDS).not.toContain('戻りが長い');
@@ -115,7 +116,7 @@ describe('the reason is in real numbers, and the rule is plain', () => {
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
     expect(V2_ALWAYS).toContain('ネザーへ入るまでを 30 分以内に');
     expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。準備も省かない');
-    expect(V2_ALWAYS).toContain('足りなくなると地上へ戻るのに約 500 秒かかり、死ぬこともある');
+    expect(V2_ALWAYS).toContain('足りなくなると地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）。死ぬこともある');
     expect(V2_ALWAYS).not.toContain('鉄の夜');
     expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
   });

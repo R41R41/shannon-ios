@@ -122,7 +122,7 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(roadLine(notDragon)).toBeNull();
     expect(roadLine(null)).toBeNull();
   });
-  const have = (items: Array<[string, number]>, dimension = 'overworld') => frame({ position: { x: 0, y: 0, z: 0 }, dimension,
+  const have = (items: Array<[string, number]>, dimension = 'overworld') => frame({ position: { x: 0, y: 64, z: 0 }, dimension,
     inventory: items.map(([name, count]) => ({ name, count })) });
   it('says the seconds and the next milestone with its target, ahead and behind', () => {
     const kit = have([['blue_bed', 1], ['iron_pickaxe', 1], ['bucket', 1], ['crafting_table', 1], ['cooked_beef', 2]]);
@@ -163,7 +163,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   const tree = seedPlan('エンドラを倒して')!;
   const done = (ids: string[], current: string | null = null, extra: Record<string, string> = {}) => ({ ...tree, current,
     nodes: tree.nodes.map(node => ({ ...node, state: ids.includes(node.id) ? 'done' as const : extra[node.id] === 'blocked' ? 'blocked' as const : node.state })) });
-  const bare = frame({ position: { x: 0, y: 0, z: 0 }, dimension: 'overworld', inventory: [] });
+  const bare = frame({ position: { x: 0, y: 64, z: 0 }, dimension: 'overworld', inventory: [] });
   it('keeps a milestone reached when its item is used up and she is back in the overworld (the plan holds the node done)', () => {
     // The obsidian went into the gate, she went through and came back: the pack holds nothing, the dimension is the overworld.
     expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6', 'p7.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 1,800 秒（あと 150 秒）・まだの節目: ベッド（目安 150 秒）');

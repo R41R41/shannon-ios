@@ -42,8 +42,8 @@ export function furnaceWaitNote(input: unknown, frame: BodyObservation | null): 
  * the result every time and the next act was wait only, four times of four; one of them wrote 「焼き上がりまで待ちつつ、足元の鉄を掘る」 and sent wait 30 + wait 30):
  * an act whose hands are only waits (and the furnace's own, equip, look, eat) that add up to `STAND_REFUSE_SECONDS` while a furnace works is not sent the first
  * time, and the fact comes back at once. The same act again, straight after, is sent: waiting may be the best there is. Not in an urgent decision.
- * GPT's review 2026-10-28: the result says the fact only (not sent, the furnace's seconds); it no longer tells that the same act sent again goes (a mechanism that is
- * unchanged), and the rule for a wait is in the instructions (「体を止めない」).
+ * GPT's review 2026-10-28: the result says the fact only (not sent, the furnace's seconds); it no longer tells that the same act sent again goes
+ * (a mechanism that is unchanged), and the rule for a wait is in the instructions (「体を止めない」).
  * Pieces to smelt are split over more furnaces (a furnace takes 10 s a piece): the fact says so when one furnace holds `SPLIT_PIECES` or more.
  */
 export const STAND_REFUSE_SECONDS = 20;

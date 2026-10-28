@@ -252,8 +252,7 @@ export interface LlmcProbeParts {
   caution?(text: string): boolean;
 }
 /**
- * r5: the facts of the surprises met again this step (`cautionFact`), each from its own probes' answers, noted through `note`; how many
- * the plan took.
+ * r5: the facts of the surprises met again this step (`cautionFact`), each from its own probes' answers, noted through `note`; how many the plan took.
  */
 export function noteCautions(surprises: readonly Surprise[], probes: readonly ProbeInput[], answers: ReadonlyArray<string | null | undefined>,
   note: ((text: string) => boolean) | undefined): number {

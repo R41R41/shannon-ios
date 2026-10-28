@@ -1,6 +1,6 @@
 import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
-import { doneFacts, doneStatusWords } from './minecraftPlanDone.js';
+import { doneFacts, doneStatusWords, undergroundInOverworld } from './minecraftPlanDone.js';
 
 /**
  * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes from the first act;
@@ -132,9 +132,11 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   const node = tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
   const shown = view as { now?: unknown; path?: unknown } | null;
   if (!node) return planNowLine(shown);
-  const status = doneStatusWords(node.doneWhen, doneFacts(observation));
-  // A preparation node that is not met says so beside its condition (the work for another node does not move it).
-  const held = node.state !== 'done' && isPrepNode(node) && status !== '満たしている' ? { ...node, note: node.note ? `${PREP_NOTE} ${node.note}` : PREP_NOTE } : node;
+  const facts = doneFacts(observation), status = doneStatusWords(node.doneWhen, facts);
+  // A preparation node that is not met says so beside its condition (the work for another node does not move it);
+  // below the surface it is one not to be met now.
+  const word = facts && undergroundInOverworld(facts) ? PREP_NOT_NOW : PREP_NOTE;
+  const held = node.state !== 'done' && isPrepNode(node) && status !== '満たしている' ? { ...node, note: node.note ? `${word} ${node.note}` : word } : node;
   return currentNodeLine(held, shown?.path, status);
 }
 
@@ -162,6 +164,8 @@ export const isPrepNode = (node: { title: string; doneWhen?: string | undefined 
   /food>=/u.test(node.doneWhen ?? '') || PREP_TITLE.test(node.title);
 /** The words beside the current node's line while it is a preparation node that is not done: the work may go on elsewhere, the node stays. */
 export const PREP_NOTE = '※下りる前の準備の節・未達';
+/** The same node once she is below the surface (GPT's review 2026-10-28): not to be met now; the now does not stay on it (`followNode`). */
+export const PREP_NOT_NOW = '※下りる前の準備の節・地下なので今は満たせない';
 /**
  * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: plan.update 0 and no 「理由:」 in 125 decisions, 85 of 104 acts tagged for another node than the current
  * one; the plan's now said 原木を集める for 471 s while she smelted iron, and 動物を狩り焼く / 地下のベッドを取る while she did the iron again): the node the
@@ -172,7 +176,7 @@ export const PREP_NOTE = '※下りる前の準備の節・未達';
  * the current node (or one the head tagged) breaks a run.
  * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the tags do not agree.
  */
-export function followNode(taskId: string, tree: PlanTree): { to: string; from: string | null; acts: number; words: string } | null {
+export function followNode(taskId: string, tree: PlanTree, underground = false): { to: string; from: string | null; acts: number; words: string } | null {
   const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), { under, open } = questions;
   // Run 42 (Sonnet tagged p4.1 and p5.1 to p5.3, which the plan never had: every run of them was null and the now stayed on p1.2 for 700 s): a tag
   // for a node the plan does not have is for its nearest ancestor that it has (p4.1 → p4).
@@ -184,10 +188,10 @@ export function followNode(taskId: string, tree: PlanTree): { to: string; from: 
   const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
   if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
   // Run 40: an open preparation node holds the current node (the work for another node may go on; the node that asks for the food stays the now).
-  if (heldByPreparation(tree, leaf.id, questions)) return null;
+  if (!underground && heldByPreparation(tree, leaf.id, questions)) return null;
   // Run 41 (the current node went p2.3 → p4.1 over p1.3 and p3, so no preparation node was ever the now and `heldByPreparation` never held): the work for a node that
   // is no preparation, with a preparation node open before it, puts the current node on that preparation node (the tags stay, no hand is held).
-  const owed = openPreparation(order, leaf, questions);
+  const owed = underground ? undefined : openPreparation(order, leaf, questions);
   if (owed) {
     if (tree.current !== null && questions.under(tree.current, owed.id)) return null;
     const to = order.find(node => questions.open(node.id) && questions.under(node.id, owed.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))) ?? owed;

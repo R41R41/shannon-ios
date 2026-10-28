@@ -38,8 +38,8 @@ export const IRON_BEFORE_NETHER = 30;
 export const GOLD_FOR_BOOTS = 4;
 
 /**
- * Run 42: what leaving the preparation out cost, measured (the descent rule and the meter say it). It was 「約 150 秒」, about a hunt's
- * time, and she went down three times short: run 42 took 540 s to climb back to the surface, run 41 stood 372 s without a table and died climbing.
+ * The 500 of this constant came from run 42's one trip back to the surface (540 s, with the go's fault in it): it is not a loss in general, and no sentence
+ * says it as one. The instructions say it as a fact of that one example (`PREP_DESCENT_LINES`); the value is kept for the records that read it.
  */
 export const PREP_SKIP_SECONDS = 500;
 /**
@@ -52,12 +52,12 @@ export const PREP_DESCENT_LINES: readonly string[] = [
   '- 必須（未達の間は、下りる act も鉄の採掘もしない。補う手を先に出す）: 食料の点 40 以上（foodPoints.total。満腹 fullness では数えない）・石のツルハシと石の斧・作業台 1 つか板 4 以上（持つ）。',
   '- 目標: 食料 40〜60 点・板 8 ほどと棒の余り（ツルハシの作り直し分）。',
   '- 未達の必須は、reason や why に書いても省けない（計画の順は変えてよい）。下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）。',
-  `- 理由: 持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない。地下には食べ物も木も見つかりにくく、足りなくなると地上へ戻るのに約 ${PREP_SKIP_SECONDS} 秒かかり、死ぬこともある。`,
+  '- 理由: 持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない。地下には食べ物も木も見つかりにくく、足りなくなると地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）。死ぬこともある。',
   '- 下りた後に食べて 40 点を切るのは未達ではない。未達のまま下りていたら、奥へ進む前に補う（近くで補えるか調べ、無ければ上で）。「もう地下にいる」は続ける理由にならない。',
 ];
 export const PREP_DESCENT_RULE: string = ['## 準備の決まり（鉄を掘りに地下へ下りる前）', ...PREP_DESCENT_LINES].join('\n');
 /** An earlier run's measure, as a reference (not this run's time). */
-export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の所要時間ではない）: 実走 42 は地上へ戻るのに 540 秒かかり、実走 41 は作業台が無いまま 372 秒止まって上りの途中で死んだ。';
+export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の所要時間ではない）: 実走 42 は地上へ戻るのに 540 秒かかり（移動の不具合込みの 1 回の例）、実走 41 は作業台が無いまま 372 秒止まって上りの途中で死んだ。';
 /**
  * The knowledge of the stages as the first plan and the stage knowledge say it (one text, so the plan and the decision read the same numbers): materials and
  * procedures; the descent's rule is `PREP_DESCENT_RULE`. Knowledge, not an order.

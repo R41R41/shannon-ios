@@ -50,7 +50,8 @@ export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolD
  * needed (`closedUnder`), and 「体の手と同じ応答で出してよい」 with no order: the order of the response is the order the calls run.
  */
 const PLAN_WORDS: ReadonlyArray<readonly [string, string]> = [
-  // GPT's review 2026-10-28: where a note and the forbid and caution lines show up, said from the code (`planPath`): the note is on the node's line, the rules are the lines.
+  // GPT's review 2026-10-28: where a note and the forbid and caution lines show up, said from the code (`planPath`): the note is on the node's line,
+  // the rules are the lines.
   ['live の plan.rules に、今の節と親の道の禁止・注意が出る（その節を離れると出ない）。',
     'forbid・caution は live の plan.rules に（今の節と親の道の分。その節を離れると出ない）。note は節の補足の文で、live の plan の now・next の行に付く（rules には出ない）。'],
   ['済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。',

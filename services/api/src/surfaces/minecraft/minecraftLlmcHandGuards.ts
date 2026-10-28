@@ -22,7 +22,10 @@ const handsOf = (input: unknown): Rec[] => {
   return Array.isArray(hands) ? hands.map(rec).filter((hand): hand is Rec => hand !== null) : [];
 };
 
-/** Whether a live state belongs to an urgent decision: its `body.mode` is the urgent mode (「急ぎの版」); a recorded live of the earlier form says it in its `body.answer` (「手は 3 つまで」). */
+/**
+ * Whether a live state belongs to an urgent decision: its `body.mode` is the urgent mode (「急ぎの版」); a recorded live of the earlier form says it in its
+ * `body.answer` (「手は 3 つまで」).
+ */
 export function isUrgentLive(live: Rec): boolean {
   const body = rec(live.body);
   const mode = body?.mode, answer = body?.answer;

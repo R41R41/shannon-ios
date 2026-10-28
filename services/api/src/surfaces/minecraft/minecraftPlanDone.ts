@@ -248,6 +248,16 @@ export const isPrepMilestoneNode = (node: PlanNode): boolean => {
   const points = FOOD_CLAUSE.exec((node.doneWhen ?? '').replace(/\s+/gu, '').toLowerCase())?.[1];
   return /地下の準備/u.test(node.title) || (points !== undefined && Number(points) >= 40 && Number(points) < 100);
 };
+/**
+ * The preparation before the descent has three ends (GPT's review 2026-10-28: 「済ませた」 and 「省いて下りた」 were both `done`): met (the frame showed its
+ * condition), skipped (she went down with it unmet: closed as done, only to let the now move on, with `PREP_SKIPPED` first in its note and what she had), and
+ * not to be met now (she is below the surface, the node is open, and nothing down there fills it). Only the first is a milestone reached.
+ */
+export const PREP_SKIPPED = '準備を省いた';
+export const prepSkipped = (node: Pick<PlanNode, 'state' | 'note'>): boolean => node.state === 'done' && (node.note ?? '').startsWith(PREP_SKIPPED);
+/** What she has of the preparation's three things: the food points, the table, the planks (the meter's "now" and the note of a skip). */
+export const prepNowWords = (facts: DoneFacts): string =>
+  `${foodPointsWords(facts.food, 40)}・作業台 ${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}・板 ${carried(facts.counts, 'planks')}`;
 /** A node of the work down there (the iron and what comes after it): the preparation before the descent comes before the first one. */
 const UNDERGROUND_WORK = /raw_iron|iron_ingot|iron_(?:pickaxe|chestplate|leggings|helmet|boots)|diamond|obsidian|dim:the_nether/u;
 /** Below this y in the overworld the body is underground (the descent's own line, `minecraftLlmcReadiness.ts`). */
@@ -258,6 +268,8 @@ export function belowTheSurface(facts: DoneFacts): boolean {
   if (dimension === 'the_nether' || dimension === 'the_end') return true;
   return dimension === 'overworld' && facts.feet !== null && facts.feet.y < DESCENT_SURFACE_Y;
 }
+/** Underground in the overworld: where a preparation before the descent cannot be filled any more (the Nether and the End have their own). */
+export const undergroundInOverworld = (facts: DoneFacts): boolean => belowTheSurface(facts) && (facts.dimension ?? 'overworld') === 'overworld';
 /**
  * Run 44 (p2.2 「箱と畑で食料」 `food>=40`, the now from +154 for about 609 s) and run 43 (p3 「食料40点と下る準備」, 2,126 s): a node of the preparation
  * before the descent is for being met before going down. Down there her food points only go down (she eats), so its condition can no longer be met:
@@ -271,12 +283,21 @@ export function descentClosed(tree: PlanTree, facts: DoneFacts, seen: readonly s
   // Only the preparation before the first work down there (the iron): the End's preparation (run 44's p11 `food>=80&…`) is not closed by the Nether.
   const order = orderedPlan(tree.nodes), down = order.findIndex(node => UNDERGROUND_WORK.test(node.doneWhen ?? ''));
   if (down < 0) return [];
-  return order.slice(0, down).filter(node => node.state !== 'done' && node.state !== 'blocked' && !seen.includes(node.id) && isPrepMilestoneNode(node))
-    .map(node => {
-      const lack = doneStatusWords(node.doneWhen, facts)?.replace(/^未: /u, '') ?? null;
-      const why = `下りる前の準備の節: ${where} へ下りたので閉じた（下りた時に足りなかった物: ${lack && !/確かめられない/u.test(lack) ? lack : '無し'}）`;
-      return { id: node.id, note: (node.note ? `${why} ${node.note}` : why).slice(0, PLAN_LIMITS.text) };
-    });
+  const closing = order.slice(0, down)
+    .filter(node => node.state !== 'done' && node.state !== 'blocked' && !seen.includes(node.id) && isPrepMilestoneNode(node));
+  const lackOf = (node: PlanNode): string | null => {
+    const lack = doneStatusWords(node.doneWhen, facts)?.replace(/^未: /u, '') ?? null;
+    return lack && !/確かめられない/u.test(lack) ? lack : null;
+  };
+  // Skipped: one of them was unmet when she went down (what she had is said); a node above it with no condition of its own goes with it,
+  // a condition the frame cannot read is closed without the word.
+  const skipped = closing.some(node => lackOf(node) !== null);
+  return closing.map(node => {
+    const lack = lackOf(node);
+    const why = lack ? `${PREP_SKIPPED}（${prepNowWords(facts)}）: ${where} へ下りたので閉じた（足りなかった物: ${lack}）`
+      : skipped && !node.doneWhen?.trim() ? `${PREP_SKIPPED}（${prepNowWords(facts)}）: ${where} へ下りたので閉じた` : `下りる前の準備の節: ${where} へ下りたので閉じた`;
+    return { id: node.id, note: (node.note ? `${why} ${node.note}` : why).slice(0, PLAN_LIMITS.text) };
+  });
 }
 
 /**

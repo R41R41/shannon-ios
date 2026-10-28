@@ -44,7 +44,10 @@ const DECIDE = [
   '- 自分で書いた注意（plan.rules）に反して節を飛ばさない。次元が変わったら scan と landmarks を見て計画を見直す。',
 ].join('\n');
 
-/** An urgent decision (GPT's review 2026-10-28: the rule was in the live state's 「answer」, a live that is data; it is here, the live state says only that it is the short one). */
+/**
+ * An urgent decision (GPT's review 2026-10-28: the rule was in the live state's 「answer」, a live that is data; it is here, the live state says only
+ * that it is the short one).
+ */
 const URGENT = [
   '## 急ぎの時',
   '- live の mode が「急ぎの版」の判断: 考えは 2〜3 文、mc_act は 1 つ・手は合わせて 3 つまで、why は 20 字まで（「[急ぎ] …」）。'
@@ -73,7 +76,8 @@ const LIVE = [
   '- repeat・look・investigation: 同じ止まりが 2 回以上の事実・調べる事実（落ちた・溺れかけた・大きく打たれた）・驚きの後に頭が調べた probe の答え。stops・jobs・events: 最近の止まり・かまどなど外の仕事と残り秒・前の判断の後の出来事。',
   '- map: 層ごとの地図（around と route の元。記号は下の凡例）。landmarks: 目印（[overworld] 付きは別の次元。方角・上下は今の足から）。scan: 体の走査（次元変化などの後に 1 回）。'
     + 'lastResults: 履歴に無い前の結果を 1 回だけ（止まった手の周りの 3×3×3・view の地図・probe の続き）。',
-  '- state: 位置 at・inside（今いる構造物）・worn（防具の耐久 残り/最大）・health（0〜20。ハート 1 個 = 2）・fullness（満腹 0〜20）・fullnessLostIn5min・saturation（隠れた満腹）・oxygen（息 n/20）・minutes（課題の経過分）。'
+  '- state: 位置 at・inside（今いる構造物）・worn（防具の耐久 残り/最大）・health（0〜20。ハート 1 個 = 2）・fullness（満腹 0〜20）・'
+    + 'fullnessLostIn5min・saturation（隠れた満腹）・oxygen（息 n/20）・minutes（課題の経過分）。'
     + 'inventory: 持ち物（品目×数）。「ほか N 件は略」= 省いた分（省いた物は無いとは限らない）。',
   '- foodPoints: total（食料の点＝持ち物の食べ物の合計。満腹 fullness とは別）・items。',
   '- threats: 敵 1 体 1 行（#id 名前 距離 (座標) 方角・見え方）。行になるのは 24m 内（クリーパー・エンダーマン 32m、飛び道具の種類 48m）。'
@@ -126,7 +130,8 @@ export const STAGE_IDS: readonly StageId[] = ['prep', 'nether', 'blaze', 'pearl'
 export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   prep: [
     '## 材料と手順',
-    '- 準備の必須と目標は system の「準備の決まり」。ここは材料と手順の知識。食料の点（live の foodPoints.total。満腹 fullness とは別）は、ネザーの奥へ 100、エンドへ 80 以上。かまどの燃料は石炭 1 で 8 個・木材 1 で 1.5 個、鉄と一緒に肉も焼く。食べ物の当てが近ければ、取るのは数十秒〜2 分。',
+    '- 準備の必須と目標は system の「準備の決まり」。ここは材料と手順の知識。食料の点（live の foodPoints.total。満腹 fullness とは別）は、ネザーの奥へ 100、エンドへ 80 以上。'
+      + 'かまどの燃料は石炭 1 で 8 個・木材 1 で 1.5 個、鉄と一緒に肉も焼く。食べ物の当てが近ければ、取るのは数十秒〜2 分。',
     '- 生の鉄が 5 個以上ならかまどを 2〜3 基に分けて焼く（1 個 10 秒）。焼く間は掘る・狩る。',
     '- 木は、足の高さから幹に届く木か、走査の近い原木を選ぶ。崖の上・高い所の木へ土で登る手が 2 回止まったら、その木はやめて別の木へ。',
     '- 木が無い時: 地表の木（mc_probe kind=scan で原木の方角・mc_view mode=top で上から）→村の木の物（扉・柵・ベッド・作業台・板、takeOk）→難破船→廃坑（階段で下りる）。',

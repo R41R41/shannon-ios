@@ -55,7 +55,9 @@ describe('the rules are in the instructions', () => {
     expect(PREP_DESCENT_RULE).toContain('下りた後に食べて 40 点を切るのは未達ではない');
     // One number for the requirement in the instructions: the example of a why is a met one, and the stories of runs are one reference sentence of the stage knowledge.
     expect(system).toContain('（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）');
-    expect(system).not.toMatch(/実走|run ?\d|540|372/u);
+    // The one run named in the instructions is run 42's single example, as a fact of it (the other story is the stage knowledge's reference sentence).
+    expect(system.match(/実走/gu)).toHaveLength(1);
+    expect(system).not.toMatch(/run ?\d|372/u);
     expect(PREP_RULES_WORDS).toContain('以前の実走の記録。今回の所要時間ではない');
     expect(V2_STAGES.prep).toContain('準備の必須と目標は system の「準備の決まり」');
   });

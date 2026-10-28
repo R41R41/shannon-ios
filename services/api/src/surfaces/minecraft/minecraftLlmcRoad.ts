@@ -1,8 +1,7 @@
 import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, type DoneFacts } from './minecraftPlanDone.js';
+import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, prepNowWords, prepSkipped, undergroundInOverworld, type DoneFacts } from './minecraftPlanDone.js';
 import { carried } from './minecraftConditions.js';
-import { foodPointsWords } from './minecraftFoodWords.js';
 
 /**
  * mb-llmc v2 (mb-llmc-cand 11, chapter 4 A: the goal's yardstick and the stage road): for a task that goes for the dragon, two lines of the live
@@ -20,7 +19,10 @@ export interface Milestone {
   kept?: boolean;
   /** Run 41: the plan's node for it, beside its own condition (a node open that names it points the meter at it; one done holds it reached). */
   node?: (node: PlanNode) => boolean;
-  /** A word beside the milestone while it is the one pointed at or passed over (a fact). The meter says no cost and no order: the rule and its reason are in the instructions' 「準備の決まり」. */
+  /**
+   * A word beside the milestone while it is the one pointed at or passed over (a fact). The meter says no cost and no order: the rule and its
+   * reason are in the instructions' 「準備の決まり」.
+   */
   cost?: string;
   /**
    * Whether the frame meets it, for a milestone whose condition the plan's predicates read wrongly (`have:planks>=4` also holds once a bed is carried, which the planks were
@@ -39,11 +41,12 @@ export const PREP_MILESTONE_NAME = '地下の準備（食料 40 点・作業台�
 /** A plan node for the preparation before the descent (`minecraftPlanDone.ts`, where a descent also closes it). */
 export { isPrepMilestoneNode } from './minecraftPlanDone.js';
 const prepHolds = (facts: DoneFacts): boolean => facts.food >= 40 && (carried(facts.counts, 'crafting_table') > 0 || carried(facts.counts, 'planks') >= 4);
-const prepNow = (facts: DoneFacts): string => `${foodPointsWords(facts.food, 40)}・作業台 ${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}・板 ${carried(facts.counts, 'planks')}`;
+const prepNow = prepNowWords;
 export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ベッド', seconds: 150, doneWhen: 'have:bed' },
   // 300 s: the quickest preparation of runs 39-41 (run 40: two village chests, 39.6 points at +298; the table or planks 4 at +45 to +94).
-  { name: PREP_MILESTONE_NAME, seconds: 300, doneWhen: 'food>=40&have:crafting_table|food>=40&have:planks>=4', short: '地下の準備', kept: true, holds: prepHolds, node: isPrepMilestoneNode, now: prepNow },
+  { name: PREP_MILESTONE_NAME, seconds: 300, doneWhen: 'food>=40&have:crafting_table|food>=40&have:planks>=4', short: '地下の準備', kept: true, holds: prepHolds,
+    node: isPrepMilestoneNode, now: prepNow },
   // 350 s, after the preparation (it was 250, before a preparation that takes 300): run 38 had it at +342 from a village chest.
   { name: '鉄のツルハシ', seconds: 350, doneWhen: 'have:iron_pickaxe' },
   { name: 'バケツ', seconds: 600, doneWhen: 'have:bucket' },
@@ -98,10 +101,25 @@ export function roadLine(tree: PlanTree | null | undefined): string | null {
 const doneInPlan = (tree: PlanTree, item: Milestone): boolean => tree.nodes.some(node => {
   const text = (node.doneWhen ?? '').replace(/\s+/gu, '').toLowerCase(), clause = item.doneWhen;
   if (node.state !== 'done') return false;
+  // GPT's review 2026-10-28: a preparation skipped (closed to let the now move on) is not a milestone reached.
+  if (prepSkipped(node)) return false;
   if (item.node?.(node)) return true;
   // A dimension in an alternative (「have:obsidian>=10|dim:the_nether」) is not what the node being done says: only a node that names it alone counts.
   return text.split(/[|&]/u).includes(clause) && (!clause.startsWith('dim:') || !text.includes('|'));
 });
+/**
+ * GPT's review 2026-10-28: the preparation before the descent skipped, or not to be met now (she is below the surface and the node is open), is not the next
+ * milestone and not a late one; it is said as the fact it is, and it is not counted as reached (`reached` is the meter's own list).
+ */
+function prepEnd(tree: PlanTree, facts: DoneFacts, reached: readonly boolean[]): { index: number; over: boolean; fact: string } {
+  const index = DRAGON_MILESTONES.findIndex(item => item.node !== undefined), item = DRAGON_MILESTONES[index];
+  const skippedNode = item ? tree.nodes.find(node => prepSkipped(node) && item.node!(node)) : undefined;
+  const open = !!item && tree.nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && item.node!(node));
+  const over = !!item && !reached[index] && (!!skippedNode || (undergroundInOverworld(facts) && open));
+  if (!over) return { index, over, fact: '' };
+  const note = skippedNode?.note ?? '';
+  return { index, over, fact: skippedNode ? `・${note.slice(0, note.indexOf('）: ') + 1)}` : `・準備は今は満たせない（地下。今 ${item!.now!(facts)}）` };
+}
 /**
  * `body.meter`: the seconds since the task began, and the next milestone (the first after the last one reached) with its target and how far ahead or
  * behind. A milestone is reached when the frame shows it or when the plan holds a node done by that very condition, so it stays reached when the
@@ -126,17 +144,19 @@ export function meterLine(tree: PlanTree | null | undefined, observation: BodyOb
   const current = tree.nodes.find(node => node.id === tree.current);
   const throughTheGate = reached[reached.length - 1];
   const named = throughTheGate ? -1 : DRAGON_MILESTONES.findIndex((item, index) => !reached[index] && !!current && names(current, item));
-  const nextIndex = named >= 0 ? named : last + 1;
+  const { index: prepIndex, over: prepOver, fact: prepFact } = prepEnd(tree, facts, reached);
+  let nextIndex = named >= 0 ? named : last + 1;
+  if (prepOver && nextIndex === prepIndex) nextIndex += 1;
   const next = DRAGON_MILESTONES[nextIndex];
   // The milestones kept in the pack (not the obsidian or the water that are used up), and not once she is through the gate.
   const skippedIndex = throughTheGate ? -1 : reached.findIndex((yes, index) => !yes && index !== nextIndex && index < (next ? nextIndex : reached.length)
-    && isKept(DRAGON_MILESTONES[index]!)
+    && !(prepOver && index === prepIndex) && isKept(DRAGON_MILESTONES[index]!)
     && tree.nodes.some(node => node.state !== 'done' && names(node, DRAGON_MILESTONES[index]!)));
   const passed = DRAGON_MILESTONES[skippedIndex];
   const detail = (item: Milestone): string => [item.now ? `今 ${item.now(facts)}` : '', item.cost ?? ''].filter(Boolean).join('。');
   const skipped = passed ? `・まだの節目: ${passed.name}（目安 ${grouped(passed.seconds)} 秒${detail(passed) ? `。${detail(passed)}` : ''}）` : '';
-  if (!next) return `目安: 今 ${grouped(now)} 秒（節目は全部済んだ）${skipped}`;
+  if (!next) return `目安: 今 ${grouped(now)} 秒（節目は全部済んだ）${skipped}${prepFact}`;
   const gap = next.seconds - now;
   const state = gap >= 0 ? `あと ${grouped(gap)} 秒` : `${grouped(-gap)} 秒遅れ`;
-  return `目安: 今 ${grouped(now)} 秒・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${detail(next) ? `・${detail(next)}` : ''}${skipped}`;
+  return `目安: 今 ${grouped(now)} 秒・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${detail(next) ? `・${detail(next)}` : ''}${skipped}${prepFact}`;
 }

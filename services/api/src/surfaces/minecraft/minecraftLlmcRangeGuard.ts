@@ -76,7 +76,8 @@ function fightProblem(hand: Rec, world: Rec): Found {
   if (!target.startsWith('#') && NOT_ENEMIES.test(target)) return reason('not_enemy', `target の「${target}」は敵ではない（村人・ゴーレム・商人・人・飼える動物とは戦わない）`);
   const health = typeof world.health === 'number' ? world.health : null;
   if (typeof hand.retreatHp === 'number' && health !== null && hand.retreatHp >= health && hand.stance !== 'flee') {
-    // GPT's review 2026-10-28: a fact only. It no longer tells to lower retreatHp (at health 8 or under that would push a fight through; system: 「体力 8 以下では戦わない」).
+    // GPT's review 2026-10-28: a fact only. It no longer tells to lower retreatHp (at health 8 or under that would push a fight through;
+    // system: 「体力 8 以下では戦わない」).
     return reason('retreat_on', health <= 8
       ? `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。体力 ${Math.round(health)} は 8 以下で、fight は送っていない`
       : `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。fight は送っていない`);

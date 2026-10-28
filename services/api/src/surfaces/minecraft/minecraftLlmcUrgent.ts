@@ -10,7 +10,10 @@ import { isShooter, nearThreats, type NearThreat } from './minecraftLlmcThreat.j
  * decision's, in the instructions' words (「急ぎの時」).
  */
 export const URGENT_MODE = '急ぎの版';
-/** GPT's review 2026-10-28: the live state is data; how to answer an urgent decision (a short thought, one act of three hands at most, the order of the hands) is in the instructions (「急ぎの時」), and the live state only says that it is the short one. */
+/**
+ * GPT's review 2026-10-28: the live state is data; how to answer an urgent decision (a short thought, one act of three hands at most, the order of the
+ * hands) is in the instructions (「急ぎの時」), and the live state only says that it is the short one.
+ */
 export const URGENT_NOTE = `${URGENT_MODE}（決まりは system の「急ぎの時」）`;
 
 /**

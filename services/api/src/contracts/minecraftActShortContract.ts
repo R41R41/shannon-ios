@@ -123,7 +123,8 @@ const SHORT_LINES = [
   '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目の後ろの項目も捨てる）。新しい act は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。',
   '- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・'
     + 'dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。',
-  '- 例: pre "have:iron_ore>=3&near:furnace~4"。下りる act の pre "food>=40&have:crafting_table|food>=40&have:planks>=4"（満たさない時は始めずに捨てる）。done "have:log>=10"。repeat 8 と done "at:26,51,7~2"（手は rel で書いたトンネルの 1 組）。',
+  '- 例: pre "have:iron_ore>=3&near:furnace~4"。下りる act の pre "food>=40&have:crafting_table|food>=40&have:planks>=4"（満たさない時は始めずに捨てる）。'
+    + 'done "have:log>=10"。repeat 8 と done "at:26,51,7~2"（手は rel で書いたトンネルの 1 組）。',
   '',
   '## 返る行',
   '- 行は「番号 手 済|止|失|未 本文」。止まった手の周りの 3×3×3 は、次の判断の live の lastResults に一度だけ出る。',

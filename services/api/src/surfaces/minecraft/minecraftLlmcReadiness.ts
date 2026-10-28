@@ -93,9 +93,9 @@ export const FULLNESS: Readonly<Record<string, number>> = Object.freeze({
   rabbit: 3, mutton: 2, cod: 2, salmon: 2, melon_slice: 2, sweet_berries: 2, glow_berries: 2, cookie: 2, potato: 1, beetroot: 1, dried_kelp: 1,
 });
 /**
- * GPT's review 2026-10-28 (the live state is data; a rule and a story of a run said at every decision are not facts): the recovery line says the fact, what in the pack
- * takes the fullness to 18 and how long health then takes; that health that does not come back is to be eaten for before a descent or a fight, even with an enemy
- * near, and what going on without it costs, is a rule of the instructions (「敵と体力」).
+ * GPT's review 2026-10-28 (the live state is data; a rule and a story of a run said at every decision are not facts): the recovery line says the fact,
+ * what in the pack takes the fullness to 18 and how long health then takes; that health that does not come back is to be eaten for before a descent
+ * or a fight, even with an enemy near, and what going on without it costs, is a rule of the instructions (「敵と体力」).
  */
 
 /**
