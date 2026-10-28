@@ -30,6 +30,8 @@ import { failureSinceCheckpoint, failureSinceOf, failureStops, nextFailureSince 
 import type { FcaObservationLifecycle } from './fcaObservation.js';
 import { planInput, type FcaPlanPort } from './fcaPlanTools.js';
 import { permitDue } from './fcaStepCost.js';
+import { beginDecisionRound, setDecisionStepIndex, withDecisionScope } from '../../../infra/decisionRecords/decisionRecordScope.js';
+import { noteDecisionOutcome } from '../../../infra/decisionRecords/decisionRecordNotes.js';
 import type { FcaHistoryAheadOptions, FcaHistoryCodec, FcaHistoryPolicy, FcaHistorySummarizer } from './fcaHistoryPorts.js';
 
 
@@ -84,9 +86,17 @@ export interface FcaStepPorts {
   /** Design mb-llm-centric 2.3: how long one lease grant serves every check of the step (`permitDue`, `fcaPlanTools.ts`). */
   permitWindowMs?: number;
   completionMistake?: FcaCompletionMistake; // mb-llmc r5: a turned-back completion, told in one line, counted only in a row
+  /** What the parts this step stands on say of their versions (the body's connection and catalog), for the decision records. Absent: none. */
+  versions?(): Readonly<Record<string, unknown>>;
 }
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
+  // The decision records (`decisionRecords/`) keep a body task's steps: what each request, call and command is part of is told by this scope.
+  const versions = ports.versions ? { versions: () => ports.versions!() } : {};
+  const scope = { taskId: step.taskId, stepId: step.id, record: ports.keepBodyTools?.() === true, ...versions };
+  return withDecisionScope(scope, () => runObservedStep(step, ports, signal));
+}
+async function runObservedStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   return withObserverTask({ taskId: step.taskId, parentTaskId: step.snapshot.task.parentId, stepId: step.id, actionId: step.lease.id }, () =>
     observeAsync('fca', { phase: 'step', kind: step.snapshot.task.kind, revision: step.revision }, async () => {
       const enteredAt = performance.now();
@@ -99,6 +109,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object'
     ? step.snapshot.checkpoint as Record<string, unknown> : {};
   const metrics = fcaDecisionMetrics(step.taskId, step.snapshot.task.createdAt, prior, enteredAt === undefined ? {} : { enteredAt });
+  setDecisionStepIndex(metrics.index);
   const maintenance = step.snapshot.task.origin === 'maintenance' && step.snapshot.task.kind === 'sleep';
   const progress = (event: TaskProgressEvent) => {
     if (maintenance) return;
@@ -323,6 +334,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     rounds += 1;
     const operationId = rounds === 1 ? `${step.id}:decision` : `${step.id}:decision${rounds}`;
     const askedVersion = queue?.version() ?? 0;
+    beginDecisionRound(operationId, rounds);
     progress({ operationId, tool: 'fca.decide', status: 'running' });
     if (rounds === 1) await checked('fresh');
     // A decision asked while items run is thrown away when one of them ends badly or is taken off: what it chose followed the queue it saw.
@@ -336,6 +348,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       answer = rounds === 1 ? await decideFirst(asked) : await decide(asked, AbortSignal.any([signal, cancel.signal]));
     } catch (error) {
       if (!thrownAway || signal.aborted) {
+        noteDecisionOutcome('failed', { code: String((error as Error | undefined)?.message ?? error).slice(0, 120) });
         progress({ operationId, tool: 'fca.decide', status: 'unknown' });
         // Run 41: a step that ends on an error with items still running in the body leaves nobody to watch them and its outcome unknown until they end (1.5 minutes
         // of a refused request, minecraft_busy). The items are taken off here, so that their answers settle the step within a moment (`queueLifecycle.close`).
@@ -344,6 +357,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       }
     } finally { if (watch) clearInterval(watch); }
     if (!answer) {
+      noteDecisionOutcome('discarded', { reason: 'queue_changed' });
       progress({ operationId, tool: 'fca.decide', status: 'failed' });
       metrics.stretch(rounds, true);
       // Run 41 (q103 and q143: the reason of a failed mine, 「…は deepslate_diamond_ore」, was in no later input): the item whose bad end threw this decision away
@@ -365,6 +379,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     progress({ operationId, tool: 'fca.decide', status: 'received' });
     await checked('local');
     state.bodyStale = !await stillFreshFor(output.decision.kind === 'tools' ? output.decision.calls[0] : undefined);
+    noteDecisionOutcome('applied', { decision: output.decision.kind, stale: state.bodyStale,
+      calls: output.decision.kind === 'tools' ? output.decision.calls.map(call => ({ id: call.id, name: call.name })) : [],
+      ...(output.decision.kind === 'tools' ? {} : { summary: output.decision.summary.slice(0, 2_000) }) });
     if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0, appraisalCount: output.appraisals?.length ?? 0 },
       () => ports.evidence!.beforeActions(step, state.bodyStale ? { ...output, expectations: [], appraisals: [] } : output), value => ({ accepted: value }))) throw new Error('FCA_EVIDENCE_FENCED');
     history.push(...output.history);

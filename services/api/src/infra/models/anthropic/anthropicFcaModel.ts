@@ -19,6 +19,7 @@ import { FCA_CORE_MENU_INSTRUCTIONS, transientFcaTools } from './anthropicFcaCor
 import { bodyRecallView, bodySharedContext, decodeFcaContext, FCA_CONTEXT_INSTRUCTIONS, FCA_CONTEXT_NAME, FCA_CONTEXT_TOOL, fcaContextNotProvided }
   from './anthropicFcaContext.js';
 import { currentActionExecution } from '../../context/actionExecution.js';
+import { recordedClient } from '../../decisionRecords/decisionRecordClient.js';
 import { elidedDecision, estimatedAnthropicTokens, restatedKnowledge, unchangedParts } from './anthropicFcaHistory.js';
 import { BODY_RULE, OWNER_CLOCK_RULE, STEP_INSTRUCTIONS, stepInstructions } from './anthropicFcaInstructions.js';
 import { reportDispatchFailure, reportRejection } from './anthropicRejection.js';
@@ -132,7 +133,9 @@ export class AnthropicFcaModel implements FcaModel {
       || !positiveInteger(this.timeoutMilliseconds) || !positiveInteger(this.compactAboveTokens)
       || typeof options.recordUsage !== 'function') throw new Error('FCA_MODEL_CONFIG_INVALID');
     if (!options.client && !options.apiKey?.trim()) throw new Error('ANTHROPIC_API_KEY_REQUIRED');
-    this.client = options.client ?? claudeClient({ apiKey: options.apiKey!, timeoutMilliseconds: this.timeoutMilliseconds, fetch: options.fetcher });
+    // The request that goes out and its answer are written first to the decision records (a body task's steps only; `decisionRecordClient.ts`).
+    const provider = options.client ?? claudeClient({ apiKey: options.apiKey!, timeoutMilliseconds: this.timeoutMilliseconds, fetch: options.fetcher });
+    this.client = recordedClient(provider, options.continued === false ? 'summary' : 'decision');
     this.system = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n${STEP_INSTRUCTIONS}`;
     this.transientSystem = `${shannonIdentityPrompt()}\n\n${SHANNON_FCA_TASK_CAPABILITY.text}\n\n`
       + `${stepInstructions(FCA_TRANSIENT_CURRENT, FCA_TRANSIENT_READING)}\n\nownerClock: ${OWNER_CLOCK_RULE}\nwaiting: ${WAIT_RULE}\nbody: ${BODY_RULE}\n`

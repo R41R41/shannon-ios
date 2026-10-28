@@ -34,6 +34,8 @@ import type { TurnMemoryRecall } from '../mind/recall/turnMemoryRecall.js';
 import { anthropicApiKey } from '../infra/models/anthropic/anthropicConfig.js';
 import { minecraftRoutePlannerPart } from './minecraftRouteWiring.js';
 import { configuredMinecraftLlmc, llmcLifecycle, llmcStepParts } from './minecraftLlmcWiring.js';
+import { configuredDecisionRecorder } from '../infra/decisionRecords/decisionRecorder.js';
+import { installDecisionRecorder } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
 import { configuredFcaSummaries } from './fcaSummaryWiring.js';
@@ -108,8 +110,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   // start, and a missing part stops the API at once with what to set.
   if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED: the common task runtime needs the mind worker; set SHANNON_ADR8_STAGE4=on');
   const modelName = replacementModel(values.SHANNON_FCA_MODEL);
-  const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null;
-  const provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
+  const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null,
+    provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
   if (!provider) throw new Error(`FCA_PROVIDER_REQUIRED: no key for the task model ${modelName}; set ${fcaKeyNames(modelName)}`);
   // Sleep always takes the common runtime (S9 retired `SHANNON_FCA_SLEEP`); the API hands its store, the worker its owner night.
   const sleepEnabled = Boolean(parts.sleepStore);
@@ -125,6 +127,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const budget = fcaBudget({ actions: actionThreadsClient(client.call), store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget,
       minecraftRequest: task => admittedMinecraftRequest(task, task.parentId ? runtime.runtime.get(task.scopeKey, task.parentId) : null,
         Boolean(minecraft?.control.store.body(task.id))), ...(operatorAudit ? { taskCapYen: (id: string) => operatorAudit.store.budgetYen(id) } : {}) });
+    // Decision records (`docs/decision-records-2026-10.md`): a body task's every request, answer, call and command to the body, in files beside the database.
+    installDecisionRecorder(configuredDecisionRecorder(parts.path));
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
       // A charge nobody confirmed (a lost request, an answer without usable usage) is an upper bound: booked apart (`fcaBudgetWiring.ts`).
       budget.recordUsage(usage.estimatedCostUsd, !usage.usageComplete);

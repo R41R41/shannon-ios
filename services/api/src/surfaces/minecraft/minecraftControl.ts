@@ -7,6 +7,7 @@ import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlRec
   MinecraftLiveSpeechReceipt, MinecraftQueueEnvelope, MinecraftQueueProgress } from '../../contracts/minecraftControlContract.js';
 import { MinecraftControlStore } from './store/minecraftControlStore.js';
 import { validControlPoll } from './minecraftControlValidation.js';
+import { noteBodyCommand } from '../../infra/decisionRecords/decisionRecordNotes.js';
 
 interface Frame { poll: MinecraftControlPoll; received: number }
 export type ArrivalKind = 'login' | 'death' | 'reconnect' | 'dimension';
@@ -333,6 +334,7 @@ export class MinecraftControl {
         signal?.throwIfAborted();
         return this.allowed(command) && this.frame(command.context.bodyId)?.poll.connectionId === command.connectionId;
       });
+      noteBodyCommand(command);
       return await this.receiptOf(command, input, waiting, signal);
     } finally { this.waiting.delete(command.id); this.deliveries.delete(command.id); this.queuedAt.delete(command.id); }
   }
