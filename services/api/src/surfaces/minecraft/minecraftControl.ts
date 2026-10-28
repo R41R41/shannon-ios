@@ -11,7 +11,8 @@ import { MinecraftControlStore, type OperationRow } from './store/minecraftContr
 import { validControlPoll } from './minecraftControlValidation.js';
 import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
 import { cleanupOperations, fetchEventPages, type CleanupOutcome, type RecoveryPort } from './minecraftControlRecovery.js';
-import { noteBodyCommand } from '../../infra/decisionRecords/decisionRecordNotes.js';
+import { noteBodyCommand, noteHeadBoot } from '../../infra/decisionRecords/decisionRecordNotes.js';
+import { headBootRow } from './minecraftOperationRows.js';
 
 interface Frame { poll: MinecraftControlPoll; received: number }
 export type ArrivalKind = 'login' | 'death' | 'reconnect' | 'dimension';
@@ -315,7 +316,8 @@ export class MinecraftControl {
     const speech = this.speech ? this.liveSpeech(this.speech, input) : [];
     if (this.headBootTold.get(bodyId) !== input.connectionId) {
       this.headBootTold.set(bodyId, input.connectionId);
-      // TODO(records): decisionRecorder — the `head_boot` row (`headBootRow` in `minecraftOperationRows.ts`) for the first reply of this start on this connection.
+      // Continue contract 8: the decision records' `head_boot` row (the judge reads when this start of the head first answered the connection), in every run they keep.
+      noteHeadBoot(bodyId, run => headBootRow({ run, observation: input.observation, at: new Date(this.options.now()).toISOString() }, this.headBoot()));
       for (const listener of this.headBootListeners) try { listener({ bodyId, connectionId: input.connectionId, headBoot: this.headBoot() }); } catch { /* learning never fails a poll */ }
     }
     return { schemaVersion: 1, mode: 'common-fca', headBoot: this.headBoot(), commands, cancel, acknowledged, ...(eventsThrough !== undefined ? { eventsThrough } : {}),
@@ -430,7 +432,7 @@ export class MinecraftControl {
         signal?.throwIfAborted();
         return this.allowed(command) && this.frame(command.context.bodyId)?.poll.connectionId === command.connectionId;
       }, { headBoot: this.headBoot(), ...(input.uses?.length ? { uses: input.uses } : {}), ...(input.resumeOf ? { resumeOf: input.resumeOf } : {}) });
-      noteBodyCommand(command);
+      noteBodyCommand(command, input.resumeOf ? { resumeOf: input.resumeOf } : {});
       return await this.receiptOf(command, input, waiting, signal, lenient);
     } finally { this.waiting.delete(command.id); this.deliveries.delete(command.id); this.queuedAt.delete(command.id); }
   }

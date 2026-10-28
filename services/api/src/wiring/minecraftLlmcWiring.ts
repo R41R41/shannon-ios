@@ -33,6 +33,8 @@ import { MC_PROBE_SKILL, type ProbeInput } from '../contracts/minecraftProbeCont
 import { abortedRouteUsage } from './minecraftRouteWiring.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
+import { recordedLedger } from '../surfaces/minecraft/minecraftLedgerRows.js';
+import { noteHistoryChange, noteStageRow } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { recordedClient } from '../infra/decisionRecords/decisionRecordClient.js';
 import { recordedPlanner } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { createHash } from 'node:crypto';
@@ -284,7 +286,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // are kept as they are now with the command. A cleanup that did not prove the release asks the operator's hold (the incident port) for the task.
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId, step: step.id,
     context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log,
-    applyLedger: input => plan.port.applyLedger(input), snapshotUses: ids => snapshotUses(plan.port.tree().promises, ids),
+    applyLedger: input => recordedLedger(plan.port, input, { run: step.taskId, headBoot: control.headBoot(), record: row => noteStageRow(row) }), snapshotUses: ids => snapshotUses(plan.port.tree().promises, ids),
     onReflexCapped: info => events.note(reflexCappedWords(info)),
     onHeld: info => { void holds?.hold(step.taskId, { id: `cleanup:${info.command}`, heavy: true, why: `結果が不明で、解放を確かめられなかった（${info.why}）`, held: true, frozen: null, command: info.command })
       .catch(error => log(`Shannon Minecraft cleanup hold failed task=${step.taskId} ${String(error)}`)); } });
@@ -334,6 +336,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
         .catch(error => log(`Shannon Minecraft incident hold failed task=${step.taskId} ${String(error)}`));
     });
     const pending = holds.resumePending(step.taskId);
+    // Continue contract 8: the history of this step's first decision comes from a hold's resume (the record says so, apart from the experiment's own changes).
+    if (pending) noteHistoryChange(step.taskId, 'resume');
     // Run 44, resume 1: the act was sent while the step's ports were made, outside the step's execution and before its lease held the body: the
     // control refused it (FCA_BODY_LEASE_INVALID) and it never reached the body. It goes from the step's start now (`wrap` below), as a tool's does:
     // the task bound to the body, the body's resource permitted to the step's lease, then the queue.
@@ -406,7 +410,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
     ports: { model: llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId), plan: plan.port,
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
-      versions: () => minecraftBodyVersion(control, bodyId()),
+      versions: () => minecraftBodyVersion(control, bodyId(), read),
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
       permitWindowMs: LLMC_PERMIT_WINDOW_MS, selector: LLMC_CATALOG_SELECTOR,
       history: { codec: anthropicFcaHistoryCodecV2,

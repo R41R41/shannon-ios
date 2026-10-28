@@ -19,14 +19,23 @@ export interface DecisionScopeState {
   attempt: number;
   /** The newest decision request of the step (a summary's is never this): what the step's outcome notes are about. */
   lastDecisionId: string | null;
+  /**
+   * The results of commands the step put in front of the model (continue contract 8, `decision.reads`): the command and the words that stand in the history for it.
+   * A request keeps the ones whose words are in its input (a result the history dropped is not read).
+   */
+  results: ResultMark[];
+  /** The live state of the request being built (`raw` before the rewrite, `shown` after, what the rewrite left out): the next decision request completes the `live` row. */
+  liveNote?: LiveNote;
 }
+export interface ResultMark { command: string; probe: string }
+export interface LiveNote { raw: string; shown: string; dropped: { field: string; count: number; why: string }[] }
 export interface DecisionCall { operationId: string; toolUseId: string; name: string }
 interface Scope { state: DecisionScopeState; call?: DecisionCall }
 const scopes = new AsyncLocalStorage<Scope>();
 
 type ScopeInit = Pick<DecisionScopeState, 'taskId' | 'stepId' | 'record'> & { versions?: DecisionScopeState['versions'] };
 export function withDecisionScope<T>(init: ScopeInit, work: () => T): T {
-  const state: DecisionScopeState = { stepIndex: null, operationId: null, round: 0, attempt: 0, lastDecisionId: null, ...init };
+  const state: DecisionScopeState = { stepIndex: null, operationId: null, round: 0, attempt: 0, lastDecisionId: null, results: [], ...init };
   return scopes.run({ state }, work);
 }
 /** The calls of a decision's tools run inside this: a body command sent meanwhile is that call's. */

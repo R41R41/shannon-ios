@@ -1,6 +1,7 @@
+import type { TraceIds } from '../../contracts/continueContract.js';
 import type { MinecraftControlCommand } from '../../contracts/minecraftControlContract.js';
 import type { DecisionRecorder, RequestKind, ResponseNote } from './decisionRecorder.js';
-import { currentDecisionScope, withDecisionScope } from './decisionRecordScope.js';
+import { currentDecisionScope, withDecisionScope, type LiveNote, type ResultMark } from './decisionRecordScope.js';
 
 /**
  * The places that write a decision's record (`decisionRecorder.ts`) reach it through these functions. There is one recorder for the API's process,
@@ -45,14 +46,20 @@ export function noteDecisionCall(call: { toolUseId: string; name: string; input:
 }
 
 /** A command that went to the body (the form the head sent after its checks and rewrites), with the decision and call it came from when it came from one. */
-export function noteBodyCommand(command: MinecraftControlCommand): void {
+export function noteBodyCommand(command: MinecraftControlCommand, extra: { resumeOf?: string } = {}): void {
   if (!installed || command.kind !== 'skill') return;
   const scope = currentDecisionScope(), state = scope?.state, own = state && state.taskId === command.context.taskId ? scope : undefined;
-  const { context } = command;
-  installed.append(context.taskId, { ev: 'sent', commandId: command.id, decisionId: own?.state.lastDecisionId ?? null, stepId: own?.state.stepId ?? null,
+  const { context } = command, made = command.queue?.madeIn ?? context.madeIn, decision = own?.state.lastDecisionId ?? undefined;
+  // Continue contract 8: the numbers that join this command to the decision that made it, to its receipt and to the body's own record (`ids`; the old fields stay).
+  const ids: TraceIds = { run: context.taskId, ...(decision ? { decision } : {}), command: command.id, ...(command.queue?.queue ? { queue: command.queue.queue } : {}),
+    ...(command.queue?.item ? { item: command.queue.item } : {}), life: made?.life ?? context.life ?? -1, ...(made?.bodyBoot ? { bodyBoot: made.bodyBoot } : {}),
+    ...(made?.headBoot ?? context.headBoot ? { headBoot: (made?.headBoot ?? context.headBoot)! } : {}), obsSeq: made?.obsSeq ?? -1, obsAt: new Date().toISOString() };
+  installed.append(context.taskId, { ev: 'sent', ids, commandId: command.id, decisionId: own?.state.lastDecisionId ?? null, stepId: own?.state.stepId ?? null,
     operationId: own?.call?.operationId ?? null, toolUseId: own?.call?.toolUseId ?? null, skill: command.skill ?? null, arguments: command.arguments ?? null,
     queue: command.queue ?? null, deadlineAt: command.deadlineAt, serverId: command.serverId, connectionId: command.connectionId, leaseId: command.lease.id,
+    ...(extra.resumeOf ? { resumeOf: extra.resumeOf } : {}),
     context: { bodyId: context.bodyId, taskRevision: context.taskRevision, sessionId: context.sessionId, generation: context.generation,
+      ...(context.life !== undefined ? { life: context.life } : {}), ...(context.headBoot ? { headBoot: context.headBoot } : {}),
       ...(context.incident ? { incident: context.incident } : {}) } });
 }
 
@@ -61,3 +68,42 @@ export function recordedPlanner<A extends unknown[], R>(task: { taskId: string; 
   ((...args: A) => Promise<R>) | undefined {
   return planner ? (...args: A) => withDecisionScope({ ...task, record: true }, () => planner(...args)) : undefined;
 }
+
+// ---- continue contract 8: the rows of the measure -----------------------------------------------------------------------------------------------------
+
+/** A row of the measure (`received`, `released`, `corrected`, `woke`, `unknown_notified`, `ledger`, …): in the record of the run its `ids` name. */
+export function noteStageRow(row: Readonly<{ ev: string; ids?: { run?: string } }>): void {
+  const run = row.ids?.run;
+  if (installed && run) installed.row(run, row as Readonly<Record<string, unknown>>);
+}
+
+/**
+ * The results of commands the step has just put in front of the model (`decision.reads`): each command with the words that stand for it in the history. The next
+ * requests of the step name the ones whose words they hold. Called where the queue's news is taken for the step.
+ */
+export function noteResultsRead(marks: readonly ResultMark[]): void {
+  const state = currentDecisionScope()?.state;
+  if (!installed || !state?.record || !marks.length) return;
+  state.results.push(...marks);
+  if (state.results.length > 512) state.results.splice(0, state.results.length - 512);
+}
+
+/** The live state of the request being built (before the rewrite, after, and what the rewrite left out): the request that follows writes the `live` row with its size. */
+export function noteLiveState(note: LiveNote): void {
+  const state = currentDecisionScope()?.state;
+  if (installed && state?.record) state.liveNote = note;
+}
+
+/** The node kinds a plan.update turned into `other` (the model wrote a word outside the list): the word as written is kept in the decision's record (`kindRaw`). */
+export function noteKindRaw(nodes: readonly { node: string; kindRaw: string }[]): void {
+  const state = currentDecisionScope()?.state;
+  if (!installed || !state?.record || !nodes.length) return;
+  installed.append(state.taskId, { ev: 'kind_raw', decisionId: state.lastDecisionId, stepId: state.stepId, ids: { run: state.taskId, ...(state.lastDecisionId ? { decision: state.lastDecisionId } : {}) },
+    nodes: nodes.map(item => ({ node: item.node, kind: 'other', kindRaw: cut(item.kindRaw, 64) })) });
+}
+
+/** The task's history was made again before its next decision (`resume`: a step that begins from an operator's hold). */
+export function noteHistoryChange(taskId: string, change: 'resume' | 'summary'): void { installed?.noteHistory(taskId, change); }
+
+/** The head answered a body's connection for the first time in this start: `row(run)` is the `head_boot` row of one run. */
+export function noteHeadBoot(bodyId: string, row: (run: string) => Record<string, unknown>): void { installed?.headBooted(bodyId, row); }

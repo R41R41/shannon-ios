@@ -1,7 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { decisionDocument, listRuns, readRun, selectRequests, type Selector } from '../src/infra/decisionRecords/decisionRecordRead.js';
-import { renderDecisions } from '../src/infra/decisionRecords/decisionRecordMarkdown.js';
+import { renderDecisions, renderStages } from '../src/infra/decisionRecords/decisionRecordMarkdown.js';
+import { prefetchErrors, stageTimes } from '../src/infra/decisionRecords/decisionRecordStages.js';
 import { DECISION_RECORD_LIMITS, pruneRuns, runName } from '../src/infra/decisionRecords/decisionRecordStore.js';
 import { decisionRecordsRoot } from '../src/infra/decisionRecords/decisionRecorder.js';
 
@@ -11,8 +12,10 @@ import { decisionRecordsRoot } from '../src/infra/decisionRecords/decisionRecord
  *   pnpm --filter @shannon/api decision-record list    [--dir <decision-records>]
  *   pnpm --filter @shannon/api decision-record show    --task <task id> (--no N | --id d0015 | --step N | --at <時刻> | --item q15) [--format md|json] [--out <file>]
  *                                                     [--last <直近 N 件のメッセージだけ>] [--signatures] [--dir <decision-records>]
+ *   pnpm --filter @shannon/api decision-record stages  --task <task id> [--command q12] [--format md|json] [--out <file>] [--dir <decision-records>]
  *   pnpm --filter @shannon/api decision-record prune   [--dir <decision-records>] [--max-runs N] [--max-bytes N]
  *
+ * stages は失敗した命令ごとに、時間の段（失敗→知らせ→判断→返事→送信→体の受け取り→ロック→最初の操作。契約 8 章）と、先読み（woke の remaining）の見積もりの差を出す。
  * --dir を省くと SHANNON_DATABASE_PATH の隣の decision-records を使う。show は 1 つの判断（--step は 1 つの step の全 round）の入力の全部・出力・
  * 頭が体へ送った形・版を 1 つのファイルにする（--out を省くと標準出力）。メッセージ中の thinking の署名は長さだけにする（--signatures で残す）。
  */
@@ -57,16 +60,35 @@ function show(): void {
   console.log(`wrote ${out} (${found.map(request => request.id).join(', ')}; ${text.length} chars)`);
 }
 
+function stages(): void {
+  const task = option('task');
+  if (!task) fail('--task <task id> が要ります（list で名前を見られます）');
+  const run = readRun(join(root!, runName(task))), chains = stageTimes(run.events, { run: task, ...(option('command') ? { only: option('command')! } : {}) });
+  const prefetch = prefetchErrors(run.events, { run: task });
+  const text = option('format') === 'json' ? `${JSON.stringify({ stages: chains, prefetch }, null, 2)}
+` : `${renderStages(chains, prefetch)}
+`;
+  const out = option('out');
+  if (!out) {
+    process.stdout.write(text);
+    return;
+  }
+  mkdirSync(dirname(resolve(out)), { recursive: true });
+  writeFileSync(out, text);
+  console.log(`wrote ${out} (${chains.length} chains, ${prefetch.length} prefetch; ${text.length} chars)`);
+}
+
 async function main(): Promise<void> {
   if (command === 'list') {
     for (const run of listRuns(root!)) {
       console.log(`${run.name}\t${run.startedAt}\t${run.lastAt}\tdecisions=${run.decisions} summaries=${run.summaries} plans=${run.plans} sent=${run.sent}\t${(run.bytes / 1024 / 1024).toFixed(1)} MB`);
     }
   } else if (command === 'show') show();
+  else if (command === 'stages') stages();
   else if (command === 'prune') {
     const removed = await pruneRuns(root!, { ...DECISION_RECORD_LIMITS, ...(number('max-runs') !== undefined ? { maxRuns: number('max-runs')! } : {}),
       ...(number('max-bytes') !== undefined ? { maxTotalBytes: number('max-bytes')! } : {}) });
     console.log(removed.length ? `removed: ${removed.join(', ')}` : 'nothing to remove');
-  } else fail('使い方: decision-record list | show | prune（先頭のコメントを見てください）');
+  } else fail('使い方: decision-record list | show | stages | prune（先頭のコメントを見てください）');
 }
 await main();

@@ -28,6 +28,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { BodyTimes, Handover, HandStart, ItemOutcome, TraceIds } from '../../services/api/src/contracts/continueContract.js';
+import type { RecordEvent } from '../../services/api/src/infra/decisionRecords/decisionRecordRead.js';
+import { STAGE_NAMES, stageTimes, type StageChain } from '../../services/api/src/infra/decisionRecords/decisionRecordStages.js';
 import { runChecks } from './judgeChecks.js';
 
 // ---- the shapes of the records ---------------------------------------------------------------------------------------------------------------
@@ -326,42 +328,15 @@ export function joinCommands(model: Model): Joined {
 }
 
 // ---- the stages of time (chapter 8, "時間の段") ------------------------------------------------------------------------------------------------
-export const STAGE_NAMES = ['1_failed_to_notice', '2_notice_to_decision', '3_decision', '4_reply_to_send', '5_send_to_accept', '6_accept_to_lock', '7_lock_to_first_motor'] as const;
-export interface StageChain {
-  failed: string; decision?: string; next?: string; linked: boolean; why?: string;
-  stagesMs?: Record<(typeof STAGE_NAMES)[number], number>; totalMs?: number; overlapMs?: number;
-}
+// The computation is the head's own (`decisionRecordStages.ts`, the one `scripts/decision-record.ts stages` shows): the judge joins the same rows by the same numbers and
+// adds the receipts the bench collected as a second source of the body's times.
+export { STAGE_NAMES, type StageChain };
 
-/**
- * For a failed command: the decision that read it (`reads`, in the same run and life), that decision's reply, the command it sent, and the times of that command.
- * The join is run + life + decision, never `command` alone. A stage that runs backwards (a prefetch sent before the failure ended) is 0 and its overlap is told;
- * the total counts every moment of the wall clock once.
- */
+/** For a failed command: the decision that read it (same run and life), its reply, the command it sent and that command's times; see `stageTimes`. */
 export function stageChain(model: Model, failed: CommandView): StageChain {
-  const base: StageChain = { failed: failed.id, linked: false };
-  const notice = failed.received.find(row => (row.bodyTimes as BodyTimes | undefined)?.failedAt) ?? failed.received[0];
-  const failedAt = ms((notice?.bodyTimes as BodyTimes | undefined)?.failedAt), noticeAt = ms(notice?.at);
-  if (!notice || failedAt === undefined || noticeAt === undefined) return { ...base, why: 'no received row with failedAt' };
-  const life = idsOf(notice, model.meta).life;
-  const read = [...model.decisions.values()].find(view => view.request
-    && readsOf(view.request).includes(failed.id) && idsOf(view.request, model.meta).life === life);
-  if (!read?.request) return { ...base, why: 'no decision read it (same run and life)' };
-  const sent = read.sent[0], reply = ms(read.response?.at);
-  if (!sent || reply === undefined) return { ...base, decision: read.id, why: 'the decision sent no command or has no reply' };
-  const next = model.commands.get(idsOf(sent, model.meta).command ?? '');
-  const times = next ? bodyTimesOf(next) : undefined;
-  const points = [failedAt, noticeAt, ms(read.request.at), reply, ms(sent.at), ms(times?.acceptedAt), ms(times?.startedAt ?? times?.acceptedAt), ms(times?.lockAt), ms(times?.firstMotorAt)];
-  if (!next || points.some(point => point === undefined)) return { ...base, decision: read.id, next: next?.id, why: 'the next command lacks a time (acceptedAt/lockAt/firstMotorAt)' };
-  const at = points as number[];
-  const edges: [number, number][] = [[at[0], at[1]], [at[1], at[2]], [at[2], at[3]], [at[3], at[4]], [at[4], at[5]], [at[6], at[7]], [at[7], at[8]]];
-  const stagesMs = {} as Record<(typeof STAGE_NAMES)[number], number>;
-  let overlapMs = 0;
-  edges.forEach(([from, to], index) => { stagesMs[STAGE_NAMES[index]] = Math.max(0, to - from); if (to < from) overlapMs += from - to; });
-  // wall clock once: the union of the intervals
-  const spans = edges.filter(([from, to]) => to > from).sort((left, right) => left[0] - right[0]);
-  let totalMs = 0, end = -Infinity;
-  for (const [from, to] of spans) { totalMs += to - Math.max(from, end); end = Math.max(end, to); }
-  return { ...base, decision: read.id, next: next.id, linked: true, stagesMs, totalMs, overlapMs };
+  const times = (command: string) => { const view = model.commands.get(command); return view ? bodyTimesOf(view) : undefined; };
+  return stageTimes(model.rows as RecordEvent[], { run: model.meta.run, only: failed.id, bodyTimesOf: times })[0]
+    ?? { failed: failed.id, linked: false, why: 'no received row with failedAt' };
 }
 
 // ---- the verdict --------------------------------------------------------------------------------------------------------------------------------------

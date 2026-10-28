@@ -6,6 +6,7 @@ import { llmcPrepare } from './minecraftLlmc.js';
 import { heldBeforeSend } from './minecraftLlmcPartial.js';
 import { checkedStopIf } from './minecraftLlmcStopIf.js';
 import { deliverOnceFacts } from './minecraftLlmcFacts.js';
+import { noteLiveState } from '../../infra/decisionRecords/decisionRecordNotes.js';
 import { rewriteLlmcLive, type RewriteNotes } from './minecraftLlmcLiveRewrite.js';
 import { stageKnowledge, V2_ALWAYS } from './minecraftLlmcV2Knowledge.js';
 
@@ -30,6 +31,21 @@ export function candidateLive(live: Record<string, unknown>): { live: Record<str
   const { live: rewritten, notes } = rewriteLlmcLive(live);
   return { live: rewritten, notes, stage: stageKnowledge(live) };
 }
+/**
+ * What the rewrite left out of the live state, as the decision record's `live` row names it (continue contract 8): the field (the note's words), how many (the first number
+ * the note gives, else 1) and why (it was left out, or merged into another line; the lines the body itself cut are one entry).
+ */
+export function droppedFields(notes: RewriteNotes): { field: string; count: number; why: string }[] {
+  const entry = (text: string, why: string) => ({ field: text.slice(0, 80), count: Number(/\d+/u.exec(text)?.[0] ?? 1), why });
+  return [...notes.dropped.map(text => entry(text, 'left_out')), ...notes.merged.map(text => entry(text, 'merged')),
+    ...(notes.omitted ? [{ field: 'body_omitted_lines', count: notes.omitted, why: 'omitted_by_body' }] : [])];
+}
+/** The live state of a request, kept for the decision record: what the model's request builds from, what the rewrite made of it and what it left out. */
+function liveNoted(live: Record<string, unknown>, shown: Record<string, unknown>, notes: RewriteNotes): Record<string, unknown> {
+  try { noteLiveState({ raw: JSON.stringify(live), shown: JSON.stringify(shown), dropped: droppedFields(notes) }); } catch { /* a record never fails a request */ }
+  return shown;
+}
+
 /** The knowledge of the stages the live state calls for (a part of the stored state, stated again only when it changes), or undefined. */
 export const candidateStage = (live: Record<string, unknown>): string | undefined => stageKnowledge(live) ?? undefined;
 
@@ -94,7 +110,7 @@ export const candidateInstructions = (): string => V2_ALWAYS;
 export function minecraftV2Hooks(): { knowledge: string; rewriteLive(live: Record<string, unknown>): Record<string, unknown>;
   stageKnowledge(live: Record<string, unknown>): string | undefined; callInput(name: string, input: unknown): unknown;
   progress(progress: unknown): unknown; requestSent(taskId: string, request: unknown): void } {
-  return { knowledge: V2_ALWAYS, rewriteLive: live => candidateLive(live).live, stageKnowledge: candidateStage, callInput: candidateInput,
+  return { knowledge: V2_ALWAYS, rewriteLive: live => { const made = candidateLive(live); return liveNoted(live, made.live, made.notes); }, stageKnowledge: candidateStage, callInput: candidateInput,
     progress: progressWithPlain, requestSent: (taskId, request) => { deliverOnceFacts(taskId, request); } };
 }
 

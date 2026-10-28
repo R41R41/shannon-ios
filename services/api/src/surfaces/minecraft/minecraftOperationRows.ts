@@ -7,7 +7,7 @@ import type { MinecraftControlReceipt } from '../../contracts/minecraftControlCo
  * The rows the head writes into the decision record for a command's result (continue contract 8: `received`, `released`, `corrected`) and the rows the judge asks for
  * beside them (`tools/continue-verify/judge.ts`: `head_boot`, `unknown_notified`, `events`, `ledger`). **Pure**: they build the row from what the queue knows; the
  * records' owner connects them to the recorder (`decisionRecorder`), which writes them in `events.jsonl`. The queue calls `deps.record(row)` at each place marked
- * `TODO(records)`.
+ * the places the queue records.
  */
 export interface RowContext {
   /** The run (the task's id, which is also the decision record's folder name). */
@@ -49,5 +49,7 @@ export const headBootRow = (context: RowContext, headBoot: string) => ({ ev: 'he
 /** The internal `events` command answered (`lost`: the body lost its record). */
 export const eventsRow = (context: RowContext, lost: boolean) => ({ ev: 'events' as const, at: context.at, ids: idsOf(context), lost });
 /** The ledger took these events: their ids, the promises' counts it holds and the counts the observation shows. */
-export const ledgerRow = (context: RowContext, parts: { applied: string[]; have: Record<string, number>; observed: Record<string, number>; rev?: number }) =>
+export const ledgerRow = (context: RowContext, parts: { applied: string[]; have: Record<string, number>; observed: Record<string, number>; promiseRev?: number }) =>
   ({ ev: 'ledger' as const, at: context.at, ids: idsOf(context), ...parts });
+/** What the ledger shows no event explains (the sum of its lines of kind `unexplained`): the judge's boundary 8 asks for it after a body that lost its record. */
+export const ledgerUnexplainedRow = (context: RowContext, count: number) => ({ ev: 'ledger_unexplained' as const, at: context.at, ids: idsOf(context), count });

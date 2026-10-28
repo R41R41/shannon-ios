@@ -826,6 +826,7 @@
     "surfaces/minecraft/minecraftItems.ts",
     "surfaces/minecraft/minecraftKnowledge.ts",
     "surfaces/minecraft/minecraftLavaPools.ts",
+    "surfaces/minecraft/minecraftLedgerRows.ts",
     "surfaces/minecraft/minecraftLifecycle.ts",
     "surfaces/minecraft/minecraftLive.ts",
     "surfaces/minecraft/minecraftLiveBlock.ts",

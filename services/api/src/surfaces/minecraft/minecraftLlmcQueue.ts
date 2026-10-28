@@ -20,7 +20,8 @@ import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
 import { madeInOf, withMadeIn } from './minecraftMadeIn.js';
 import { watchBodyEvents, type ReflexCapped } from './minecraftLlmcBodyEvents.js';
 import { readingOf } from './store/minecraftOperationState.js';
-import { receivedRow, releasedRow, correctedRow, unknownNotifiedRow, wokeRow, type RowContext } from './minecraftOperationRows.js';
+import { noteResultsRead, noteStageRow } from '../../infra/decisionRecords/decisionRecordNotes.js';
+import { eventsRow, receivedRow, releasedRow, correctedRow, unknownNotifiedRow, wokeRow, type RowContext } from './minecraftOperationRows.js';
 
 /**
  * The head's mirror of the body's item queue (design minebot-task-queue, 2026-10-26). Every `mc.act` is an item: it goes to the body at once
@@ -109,7 +110,7 @@ export interface QueueDeps {
   snapshotUses?(ids: readonly number[]): UsesSnapshot[];
   /** A cleanup that did not prove the release in time: the operator's hold (the incident port) is asked for. */
   onHeld?(info: { item: string; command: string; why: string }): void;
-  /** The decision record's rows (continue contract 8; the records' owner connects it). Never throws into the queue. */
+  /** The decision record's rows (continue contract 8). Absent: the installed recorder's (`noteStageRow`). Never throws into the queue. */
   record?(row: QueueRecordRow): void;
   /** A reflex hit its cap (the body's `reflex.capped` event, continue contract 4): told to the live state, beside the queue's own `reflex_capped` wake. */
   onReflexCapped?(info: ReflexCapped): void;
@@ -178,8 +179,8 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   const iso = () => new Date(now()).toISOString();
   const rowContext = (item: QueueItem | null): RowContext => ({ run: deps.taskId, queue: name, ...(item ? { item: item.item, command: item.id } : {}), headBoot,
     observation: deps.observe(), at: iso() });
-  /** The record's row (continue contract 8); a failure of the recorder is the recorder's. */
-  const record = (row: QueueRecordRow) => { try { deps.record?.(row); } catch { /* a record never fails a step */ } };
+  /** The record's row (continue contract 8): to the decision record's recorder unless the caller gives its own; a failure of the recorder is the recorder's. */
+  const record = (row: QueueRecordRow) => { try { (deps.record ?? noteStageRow)(row); } catch { /* a record never fails a step */ } };
 
   /** The body's progress of an item, when it is the one running. */
   const progressOf = (item: QueueItem): MinecraftQueueProgress | null => {
@@ -238,6 +239,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       const row = deps.control.store.row(item.id);
       const got = await deps.control.fetchEvents({ command: item.id, context: deps.context(), lease: deps.lease, fromSeq: Math.max(more.nextSeq, row?.fetchSeq ?? 0), total: more.total,
         signal: stopCleanup.signal });
+      record(eventsRow(rowContext(item), got.lost));
       if (got.events.length || got.lost) apply(ledgerInputFor({ ...base, events: got.events, observation: deps.observe(), lost: got.lost }));
     })().catch(() => undefined);
     pending.add(fetch);
@@ -261,7 +263,6 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     if (taken) { bump(); noteDropped(item, item.unit.droppedBecause?.code ?? item.because ?? ''); }
     else if (!result.ok) { failedNow += 1; troubleAt ??= now(); }
     if (!taken) { book(item, receipt); for (const listener of listeners) tell(listener, item, result, receipt); }
-    // TODO(records): decisionRecorder — the rows below are built by `minecraftOperationRows.ts`; the recorder's owner connects `deps.record`.
     record(receivedRow(rowContext(item), receipt));
     settleFlag();
     pump();
@@ -281,7 +282,6 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     failedNow += 1;
     troubleAt ??= now();
     deps.control.store.markTold(item.id);
-    // TODO(records): decisionRecorder — `unknown_notified` (the model was told), `received` with the unit unknown.
     record(unknownNotifiedRow(rowContext(item)));
     record(receivedRow(rowContext(item), receipt));
     settleFlag();
@@ -298,14 +298,14 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     } catch (cause) { log(`Shannon Minecraft queue cleanup failed task=${deps.taskId} item=${label} ${String(cause).slice(0, 120)}`); }
   }
   /** The control told us a command of this queue was released without a receipt of its own (the cleanup, or the new connection). */
-  const onReleased = ({ row, by }: ReleasedEvent) => {
+  const onReleased = ({ row }: ReleasedEvent) => {
     const item = items.find(entry => entry.id === row.id);
     if (!item) return;
     item.state = 'released';
     // An item still waiting for its receipt is told when that comes (as a released one); one already told as unknown gets the note.
     if (item.ended) noteLines.push(releasedWords(itemLabel(item)));
-    // TODO(records): decisionRecorder — `released` by `cleanup` or `receipt`.
-    record(releasedRow(rowContext(item), by === 'cleanup' ? 'cleanup' : 'receipt', true));
+    // The new connection's first poll proves the release as the cleanup does (`releasedRow`): both are the head's proof, not the command's own receipt.
+    record(releasedRow(rowContext(item), 'cleanup', true));
     settleFlag();
   };
   const onHeld = ({ row, why }: { row: { id: string }; why: string }) => {
@@ -324,7 +324,6 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     const text = itemResult(item, event.receipt, []).text.split('\n').find(line => line.trim() !== '' && !line.startsWith('（頭が形を直して')) ?? event.receipt.outcome;
     noteLines.push(correctionWords(itemLabel(item), text));
     deps.control.store.markCorrectionSaid(item.id);
-    // TODO(records): decisionRecorder — `corrected` (was unknown, now the unit).
     record(correctedRow(rowContext(item), item.unit));
     book(item, event.receipt);
     settleFlag();
@@ -420,6 +419,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
         deps.applyLedger(ledgerInputFor({ ...base, events: [...events, ...(tail?.events ?? [])], observation: deps.observe(), ...(tail?.lost ? { lost: true } : {}) }));
         if (more && tail && !tail.complete) {
           const got = await deps.control.fetchEvents({ command: row.id, context: deps.context(), lease: deps.lease, fromSeq: tail.nextSeq, total: more.total, signal: stopCleanup.signal });
+          record(eventsRow({ ...rowContext(null), command: row.id }, got.lost));
           if (got.events.length || got.lost) deps.applyLedger(ledgerInputFor({ ...base, events: got.events, observation: deps.observe(), ...(got.lost ? { lost: true } : {}) }));
           if (!got.complete && !got.lost) continue;
         }
@@ -518,7 +518,12 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       return unknown.length ? `${named}。もう列に無い: ${unknown.join('・')}` : named;
     },
     // In the queue's order, whichever receipt came first.
-    take() { return news.splice(0).sort((left, right) => Number(left.item.slice(1)) - Number(right.item.slice(1))); },
+    take() {
+      const taken = news.splice(0).sort((left, right) => Number(left.item.slice(1)) - Number(right.item.slice(1)));
+      // Continue contract 8: these results go to the step's history now; the decision records name them in the `reads` of the requests that still hold them.
+      noteResultsRead(taken.flatMap(entry => { const found = items.find(item => item.item === entry.item); return found ? [{ command: found.id, probe: `${entry.label}: ` }] : []; }));
+      return taken;
+    },
     dropWaiting() {
       const waiting = open().slice(1);
       for (const item of waiting) {
@@ -565,7 +570,6 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
         }
         if (!drain && capped) {
           capped = false;
-          // TODO(records): decisionRecorder — the `woke` row (`wokeRow`).
           record(wokeRow(rowContext(null), 'reflex_capped'));
           return 'reflex_capped';
         }

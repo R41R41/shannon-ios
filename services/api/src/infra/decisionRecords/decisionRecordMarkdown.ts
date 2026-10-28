@@ -1,4 +1,5 @@
 import type { CallRecord, DecisionDocument } from './decisionRecordRead.js';
+import { STAGE_NAMES, type PrefetchError, type StageChain } from './decisionRecordStages.js';
 
 const json = (value: unknown) => JSON.stringify(value, null, 2) ?? 'null';
 const fence = (text: string, language = '') => `\`\`\`${language}\n${text.replace(/```/gu, '` ` `')}\n\`\`\``;
@@ -98,3 +99,18 @@ export function renderDecision(document: DecisionDocument): string {
     ...(document.calls.length ? document.calls.map(callText) : ['（呼びなし）'])].join('\n');
 }
 export function renderDecisions(documents: readonly DecisionDocument[]): string { return documents.map(renderDecision).join('\n\n---\n\n'); }
+
+/** The stages of time of each failed command (continue contract 8) and the prefetch's error, as a table a reader follows. */
+export function renderStages(chains: readonly StageChain[], prefetch: readonly PrefetchError[] = []): string {
+  const names = STAGE_NAMES, head = `| 失敗した命令 | 判断 | 次の命令 | ${names.map(name => name.replace(/^\d+_/u, '').replace(/_/gu, ' ')).join(' | ')} | 合計 ms | 重なり ms |`;
+  const rows = chains.map(chain => chain.linked && chain.stagesMs
+    ? `| ${chain.failed} | ${chain.decision} | ${chain.next} | ${names.map(name => chain.stagesMs![name]).join(' | ')} | ${chain.totalMs} | ${chain.overlapMs} |`
+    : `| ${chain.failed} | ${chain.decision ?? '-'} | ${chain.next ?? '-'} | つながらない: ${chain.why ?? '-'} |${' |'.repeat(names.length + 1)}`);
+  const lines = ['# 時間の段（失敗 → 知らせ → 判断 → 送信 → 受け取り → ロック → 最初の操作）', '',
+    chains.length ? [head, `|${' --- |'.repeat(names.length + 5)}`, ...rows].join('\n') : '失敗した命令（`received` の `bodyTimes.failedAt`）の行が無い。'];
+  if (prefetch.length) {
+    lines.push('', '## 先読み（`woke` の `remaining`: 見積もった終わりと実際の終わりの差）', '',
+      ...prefetch.map(item => `- ${item.command}: 見積もり ${item.predictedRemainingMs} ms（${item.wokeAt}）、実際の終わり ${item.endedAt}、差 ${item.errorMs} ms`));
+  }
+  return lines.join('\n');
+}

@@ -7,6 +7,7 @@ import { toolFailure, toolOk } from '../../tools/toolRegistryPorts.js';
 import { parseCondition } from '../../../contracts/minecraftActCondition.js';
 import { applyLedger, readLedgerSeen, type LedgerAdded, type LedgerInput, type LedgerSeen } from '../../../surfaces/minecraft/minecraftLlmcPromises.js';
 import { offer, withdraw } from '../../../surfaces/minecraft/minecraftLlmcOnceFacts.js';
+import { noteKindRaw } from '../../../infra/decisionRecords/decisionRecordNotes.js';
 
 /**
  * `plan.update` (design mb-llm-centric 2.7): a core tool of the FCA, for a task that keeps a plan tree (`@shannon/mind` planTree). The
@@ -295,6 +296,9 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       const result = applyPlanUpdate(tree, read.update, { at: stamp() });
       if (result.problem) return toolFailure('invalid_input', `計画は変えていない: ${result.problem}\n${planText(tree)}`, { retryable: false });
       if (result.changed) {
+        // Continue contract 7 and 8: a kind outside the list was taken as `other`; the word the model wrote goes into the decision's record (`kindRaw`).
+        const written = new Map(tree.nodes.map(node => [node.id, node.kindRaw]));
+        noteKindRaw(result.tree.nodes.filter(node => node.kindRaw && written.get(node.id) !== node.kindRaw).map(node => ({ node: node.id, kindRaw: node.kindRaw! })));
         tree = result.tree;
         changed = true;
         note = undefined;

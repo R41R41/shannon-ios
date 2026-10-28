@@ -189,8 +189,8 @@ describe('decision records through a body task\'s steps', () => {
     await driver.tick();
     for (let i = 0; i < 200 && !asked.length; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
     expect(asked).toEqual(['big']);
-    // Nothing has come back, and the request is already on disk.
-    expect(readRun(directory).events.map(event => event.ev)).toEqual(['run', 'request']);
+    // Nothing has come back, and the request is already on disk (with the live state it stood on, and the head's boot the run opened after: continue contract 8).
+    expect(readRun(directory).events.map(event => event.ev)).toEqual(['run', 'head_boot', 'request', 'live']);
     // The owner's stop: the step's signal is aborted while the provider has not answered.
     await driver.close();
     for (let i = 0; i < 1200 && !['failed', 'response'].every(name => readRun(directory).events.some(event => event.ev === name)); i += 1) await new Promise(resolve => setTimeout(resolve, 5));
