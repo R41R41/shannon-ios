@@ -6,7 +6,7 @@ import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMin
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { createFoodTrend, llmcTokens, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { fixLandmarks } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
-import { PLAN_PREP_WORDS, PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { PLAN_PREP_WORDS, PREP_DESCENT_RULE, PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { DRAGON_MILESTONES, isPrepMilestoneNode, meterLine, milestoneWords, PREP_MILESTONE_NAME, roadLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
@@ -26,7 +26,7 @@ const withState = (done: string[], current: string | null, base: PlanTree = tree
 describe('the preparation is a milestone of the meter, with its seconds and its lateness', () => {
   it('is the next milestone after the bed, with the target, how late, what she has now and what leaving it out costs', () => {
     const line = meterLine(tree, have([['blue_bed', 1], ['spruce_planks', 2]]), 260 / 60)!;
-    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（あと 40 秒）・今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 2。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある');
+    expect(line).toBe('目安: 今 260 秒・次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（あと 40 秒）・今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 2');
     expect(meterLine(tree, have([['blue_bed', 1]]), 150 / 60)).toContain('目安 300 秒（あと 150 秒）');
   });
   it('is met by 40 food points with a table or 4 planks; a table alone or the food alone is not', () => {
@@ -42,7 +42,7 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     const kit = have([['blue_bed', 1], ['iron_pickaxe', 1]]);
     const open = meterLine(tree, kit, 400 / 60)!;
     expect(open).toContain('次の節目 バケツ');
-    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 0。省くと地上へ戻るのに約 500 秒かかり、死ぬこともある。飛ばしたなら plan.update に書く）');
+    expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 0）');
     expect(meterLine(withState(['p2'], null), kit, 400 / 60)).not.toContain('まだの節目');
   });
   it('points the meter at the preparation while the plan\'s current node is one, though a later milestone is met', () => {
@@ -95,22 +95,27 @@ describe('the live says the hunger bar and the food she carries in two words', (
 });
 
 describe('the reason is in real numbers, and the rule is plain', () => {
-  it('says the fullness lasts 30 minutes, that there is no food or wood underground, 150 s of climbs, and the 372 s without a table', () => {
-    expect(PREP_RULES_WORDS).toContain('満腹は 30 分もつので、飢えのためではない');
-    expect(PREP_RULES_WORDS).toContain('地下には食べ物も木も無く');
-    expect(PREP_RULES_WORDS).toContain('地上へ戻るのに約 500 秒かかる');
-    expect(PREP_RULES_WORDS).toContain('372 秒止まり');
+  it('says what the food carried is for (the fullness does not stand for it), that food and wood are hard to find underground, the 500 s, and keeps the runs 41 and 42 as one reference sentence', () => {
+    // GPT's review 2026-10-28: the claim that the fullness lasts 30 minutes is gone; the carried food is for eating below.
+    expect(PREP_DESCENT_RULE).toContain('持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない');
+    expect(PREP_DESCENT_RULE).not.toContain('満腹は 30 分もつ');
+    expect(PREP_DESCENT_RULE).toContain('地下には食べ物も木も見つかりにくく');
+    expect(PREP_DESCENT_RULE).toContain('地上へ戻るのに約 500 秒かかり');
+    expect(PREP_RULES_WORDS).toContain('372 秒止まって上りの途中で死んだ');
+    expect(PREP_RULES_WORDS).toContain('以前の実走の記録。今回の所要時間ではない');
     expect(PREP_RULES_WORDS).not.toContain('戻りが長い');
     expect(PREP_RULES_WORDS).not.toContain('鉄の夜');
     expect(PREP_RULES_WORDS).not.toContain('の時だけ');
   });
   it('asks for the numbers in the why of a hand that goes down, as a check (run 42: the example of a pack that lacks all, as a way through, went)', () => {
-    expect(PREP_RULES_WORDS).toContain('「[p4.1] 鉄へ下りる（食料 40/40・作業台 有・板 6）」）。数は確かめで、足りない物は下りる前に埋める。');
-    expect(V2_STAGES.prep).toContain('「[p4.1] 鉄へ下りる（食料 40/40・作業台 有・板 6）」');
+    expect(PREP_DESCENT_RULE).toContain('下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）');
+    expect(V2_ALWAYS).toContain(PREP_DESCENT_RULE);
+    expect(V2_STAGES.prep).not.toContain('鉄へ下りる（食料 40/40');
   });
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
     expect(V2_ALWAYS).toContain('ネザーへ入るまでを 30 分以内に');
-    expect(V2_ALWAYS).toContain('準備（meter の地下の準備・shortage）は速さのために省かない。足りないと地上へ戻るのに約 500 秒かかり、死ぬこともある。30 分は準備を含む。');
+    expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。準備も省かない');
+    expect(V2_ALWAYS).toContain('足りなくなると地上へ戻るのに約 500 秒かかり、死ぬこともある');
     expect(V2_ALWAYS).not.toContain('鉄の夜');
     expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
   });
@@ -144,7 +149,7 @@ describe('the body\'s new stops and names are in the contract', () => {
   });
   it('says in mine and in the map\'s legend that an ore below y=0 is named with deepslate_, and which name to write', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine に書く名前');
-    expect(V2_ALWAYS).toContain('mine には landmarks の [ ] の中の id を書く（y<0 は deepslate_iron_ore など）。');
+    expect(SHORT_ACT_DESCRIPTION).toContain('landmarks の [ ] の中が mine に書く名前');
   });
   it('reads a landmark line that carries the ore\'s id in brackets, as it reads one without', () => {
     const self = { x: 150, y: -6, z: 208 };

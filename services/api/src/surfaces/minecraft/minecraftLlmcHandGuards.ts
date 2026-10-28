@@ -1,10 +1,11 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { URGENT_MODE } from './minecraftLlmcUrgent.js';
 
 /**
  * mb-llmc-cand 送る前の守りの足し 2 つ（mb-llmc v2、再現台 candidate-fix-20261023 の A: live に事実があるのに反した答え）。部分送りと同じ形:
  * 止める手の前までは体へ送り、止めた手から先は送らず事実を返す。手は直さず足さない。
  *
- * 1. `urgentLimitStop`: 急ぎの判断（live の答え方の行 `URGENT_ANSWER` が「手は 3 つまで」と言った判断）の act が 4 手以上なら、手 4 から先は送らない（s12・s34）。
+ * 1. `urgentLimitStop`: 急ぎの判断（live の mode が `URGENT_MODE`「急ぎの版」で、system の「急ぎの時」が「手は 3 つまで」と言った判断）の act が 4 手以上なら、手 4 から先は送らない（s12・s34）。
  * 2. `seenReopenStop`: 直前に「見られる」で止まったマス（体の `recentStops`、90 秒以内）を exposeOk なしで dig する手は送らない（s30・s02）。
  *    exposeOk 付きの dig は止めない（見られると分かって開ける手）。
  */
@@ -21,10 +22,11 @@ const handsOf = (input: unknown): Rec[] => {
   return Array.isArray(hands) ? hands.map(rec).filter((hand): hand is Rec => hand !== null) : [];
 };
 
-/** Whether a live state belongs to an urgent decision: its `body.answer` is the urgent answer line (「手は 3 つまで」). */
+/** Whether a live state belongs to an urgent decision: its `body.mode` is the urgent mode (「急ぎの版」); a recorded live of the earlier form says it in its `body.answer` (「手は 3 つまで」). */
 export function isUrgentLive(live: Rec): boolean {
-  const answer = rec(live.body)?.answer;
-  return typeof answer === 'string' && answer.includes(`手は ${URGENT_HANDS} つまで`);
+  const body = rec(live.body);
+  const mode = body?.mode, answer = body?.answer;
+  return (typeof mode === 'string' && mode.includes(URGENT_MODE)) || (typeof answer === 'string' && answer.includes(`手は ${URGENT_HANDS} つまで`));
 }
 
 /** The fourth hand of an urgent decision's act, when it has more than three. */
@@ -33,7 +35,7 @@ export function urgentLimitStop(input: unknown, urgent: boolean): HandStop | nul
   if (!urgent || hands.length <= URGENT_HANDS) return null;
   const kind = String(hands[URGENT_HANDS]!.do ?? '?');
   return { hand: URGENT_HANDS + 1, kind, code: 'urgent_limit',
-    line: `急ぎの判断は ${URGENT_HANDS} 手まで（live の答え方の行）。${URGENT_HANDS + 1} 手目（${kind}）から先は送っていない。続きは次の判断で出せる` };
+    line: `急ぎの判断は ${URGENT_HANDS} 手まで（system の「急ぎの時」）。${URGENT_HANDS + 1} 手目（${kind}）から先は送っていない。続きは次の判断で出せる` };
 }
 
 /** The cells the body's recent stops say stopped for 「見られる」 within `SEEN_REOPEN_SECONDS`: `x,y,z` → seconds ago. */

@@ -5,7 +5,7 @@ import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { chestNodesDone, followNode, forgetActNodes, noteChestsOpened, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
-import { PREP_RULES_WORDS, PREP_SKIP_SECONDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { PREP_DESCENT_RULE, PREP_RULES_WORDS, PREP_SKIP_SECONDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { descentNote, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { DRAGON_MILESTONES } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
@@ -129,13 +129,12 @@ describe('health that does not come back says what to eat, how long it then take
   it('says run 42\'s +1,563 (health 11.3, fullness 16, potatoes, mutton and berries in the pack)', () => {
     const line = recoveryLine(16, 11.3, 28.8, counts([['potato', 5], ['mutton', 2], ['sweet_berries', 6]]))!;
     expect(line).toBe('体力 11.3/20 は自然に戻らない（満腹 16＜18、食料 28.8 点）。mutton×2 を食べると満腹 20 になり、満腹 18 以上の間は体力が 4 秒に 1 戻る'
-      + '（20 まで約 35 秒。満腹が 18 を切ったらまた食べる）。戻らないまま下りたり戦ったりすると、落下や矢 2〜3 発で死ぬ'
-      + '（実走 42 は体力 11 のまま下りて落ち、矢で死んで持ち物を全部失い、立て直しに約 520 秒かかった）');
+      + '（20 まで約 35 秒。満腹が 18 を切ったらまた食べる）');
   });
   it('picks the fuller food first and says when the pack does not reach 18', () => {
     expect(recoveryLine(8, 14, 13, counts([['bread', 3], ['cooked_beef', 1]]))).toContain('cooked_beef×1・bread×1 を食べると満腹 20 になり');
-    expect(recoveryLine(10, 14, 2, counts([['sweet_berries', 1]]))).toContain('持ち物の食べ物（sweet_berries×1）では満腹 12 までで 18 に届かない。食料の当てで足す');
-    expect(recoveryLine(10, 14, 0, counts([]))).toContain('持ち物に食べ物が無い。食料の当てで取る');
+    expect(recoveryLine(10, 14, 2, counts([['sweet_berries', 1]]))).toContain('持ち物の食べ物（sweet_berries×1）では満腹 12 までで 18 に届かない');
+    expect(recoveryLine(10, 14, 0, counts([]))).toContain('持ち物に食べ物が無い');
   });
   it('is null at full health or a fullness of 18', () => {
     expect(recoveryLine(16, 20, 10, counts([]))).toBeNull();
@@ -153,8 +152,11 @@ const descent = (health: number, hunger: number) => {
 describe('the descent\'s note has no way past it, the measured loss, and the health', () => {
   it('says run 42\'s +294 without 「このまま行くなら」 and with about 500 s', () => {
     const note = descent(20, 20)!;
-    expect(note).toContain('のまま地下 y=14 へ下りる手');
-    expect(note).toContain('地上へ戻るのに約 500 秒かかる（実走 42 は 540 秒かけて地上へ戻った。');
+    expect(note).toContain('準備の状態（この act は地下 y=14 へ下りる手）: 未達 — 食料');
+    expect(note).toContain('この受付は、準備が満たされたことを表さない');
+    // GPT's review 2026-10-28: the result says the state, not the rule or the story of a run.
+    expect(note).not.toContain('実走');
+    expect(note).not.toContain('下りる前に狩る');
     expect(note).not.toContain('このまま行くなら');
     expect(note).not.toContain('150 秒');
   });
@@ -167,9 +169,10 @@ describe('the descent\'s note has no way past it, the measured loss, and the hea
 describe('the cost of leaving the preparation out is one number everywhere', () => {
   it('is 500 s in the meter, the rules and the always text, and no 150 s is left', () => {
     expect(PREP_SKIP_SECONDS).toBe(500);
-    expect(DRAGON_MILESTONES.find(item => item.kept)!.cost).toBe('省くと地上へ戻るのに約 500 秒かかり、死ぬこともある');
-    expect(PREP_RULES_WORDS).toContain('地上へ戻るのに約 500 秒かかる');
-    expect(V2_ALWAYS).toContain('足りないと地上へ戻るのに約 500 秒かかり');
+    // The meter says the state of the preparation only; the 500 s and its reason are said once, in the rule of the instructions.
+    expect(DRAGON_MILESTONES.find(item => item.kept)!.cost).toBeUndefined();
+    expect(PREP_DESCENT_RULE).toContain('地上へ戻るのに約 500 秒かかり');
+    expect(V2_ALWAYS.split('約 500 秒').length - 1).toBe(1);
     expect(`${V2_ALWAYS}\n${PREP_RULES_WORDS}`).not.toMatch(/150 秒/u);
   });
   it('keeps the always text within 8,800', () => {

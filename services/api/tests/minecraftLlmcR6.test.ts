@@ -9,10 +9,10 @@ import { seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import {
   carryDone, FIRST_PLAN_SYSTEM_R5, FIRST_PLAN_SYSTEM_R6, firstPlanInbox, firstPlanInput, forgetFirstPlans, planFromAnswer, seedPlan, startFirstPlan,
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { foodLeads, LOW_HEALTH_COST, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { foodLeads, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 /** Run 42: the fact, what to eat from the pack (none here) and what going on without it cost. */
 const NO_RECOVERY = '体力 3.7/20 は自然に戻らない（満腹 17＜18、食料 0 点）';
-const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い。食料の当てで取る。${LOW_HEALTH_COST}`;
+const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い`;
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 
@@ -104,7 +104,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
   });
 
   it('health does not come back under hunger 18: said as the fact, never at 18 or at full health', () => {
-    expect(recoveryLine(17, 3.7, 0)).toBe(`${NO_RECOVERY}。${LOW_HEALTH_COST}`);
+    expect(recoveryLine(17, 3.7, 0)).toBe(NO_RECOVERY);
     expect(recoveryLine(18, 3.7, 0)).toBeNull();
     expect(recoveryLine(17, 20, 0)).toBeNull();
   });

@@ -19,9 +19,9 @@ export const SHORT_HAND_ERROR_KEY = '書き方の誤り';
  * place, dig and use, how a stop is read. Ends with the cut-offs (stopIf, accept, onFail). `ACT_DESCRIPTION` (the json hands, for the old modes) is untouched.
  */
 const SHORT_LINES = [
-  '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、外れたら（失敗・反射・stopIf・満杯）そこで止めて、'
-    + '手ごとの1行と止まった所の周りを返す。',
-  '体は自分で決めない: 回り道・置き場所・道具作り・片づけ・睡眠・戦うかどうかは、あなたが地図と状態を見て手で出す。',
+  '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、手ごとの1行と止まった所の周りを返す。'
+    + '手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める。',
+  'あなたが決める: 目的・対象・行き先・許す掘る/置く・済む条件、食事・睡眠・片づけ、戦うか逃げるか（地図と状態を見て手で出す）。体に任せる細部: 歩く道（go）・途中の板や棒と作業台を置く所（make）・戦い方（fight の狙い・間合い・盾）。',
   '',
   '## 書き方',
   '- hands は手の文字列の配列（1 手 1 行）。座標は x,y,z の整数。複数の座標・点は空白で続ける。行末に note="40字までの説明" を付けられる。',
@@ -47,10 +47,10 @@ const SHORT_LINES = [
   '  黒曜石づくり。X,Y,Z は溶岩の源のマス（地図の L、8 つまで。体は探さない）。持ち物の水入りバケツで水を注ぎ、固まったらダイヤのツルハシで掘って拾い、水を汲み戻す。count（既定 1）まで。'
     + '立てない時の立ち直しは体。足場は place= の物。理由: no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_time・stuck。',
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
-  '  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp は今の体力より低く。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。'
+  '  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。'
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
   'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [seconds=N]',
-  '  鉱脈を掘る。ブロック名は id そのまま（iron_ore）。y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine に書く名前。X,Y,Z はその鉱脈のマス（4 つまで）。同じ種類のつながったマスだけを近い順にたどって掘り、拾い、道具を持ち替える（ほかの鉱石は探さない）。count（既定 8）まで。道が岩に塞がれている時だけ dig= の物を掘って届く。'
+  '  鉱脈を掘る。ブロック名は id そのまま（iron_ore）。y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine に書く名前。X,Y,Z はその鉱脈のマス（4 つまで。種類が分かるマスだけ: 地図の o は鉄ではない）。同じ種類のつながったマスだけを近い順にたどって掘り、拾い、道具を持ち替える（ほかの鉱石は探さない）。count（既定 8）まで。道が岩に塞がれている時だけ dig= の物を掘って届く。'
     + 'トンネル・階段は repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。',
   'make 物 [個数]',
   '  作る（途中の物の板・棒なども持ち物の材料から作る。3×3 で作業台が近くに無ければ持っているものを置く）。材料が足りなければ何も作らず足りない物の一覧を返す。材料は集めに行かない。理由: missing・no_table・no_recipe・full。',
@@ -98,7 +98,7 @@ const SHORT_LINES = [
   '- drop: items・target か at / shoot: target か at・item・charge・n',
   'json {"do":"walk","to":{"x":1,"y":64,"z":2},"range":1,"sprint":true,"note":"村へ"}',
   'json {"do":"furnace","at":[{"x":1,"y":2,"z":3}],"op":"put","item":"iron_ore","count":8,"fuel":"coal","fuelCount":2}（op=take で出来上がりを取る。溶鉱炉・燻製器も）',
-  'json {"do":"chest","at":[{"x":1,"y":2,"z":3}],"op":"look|take|put|takeAll","items":[{"item":"coal","count":4}]}（箱・樽だけ）',
+  'json {"do":"chest","at":[{"x":1,"y":2,"z":3}],"op":"take","items":[{"item":"coal","count":4}]}（箱・樽だけ。op は look・take・put・takeAll のどれか 1 つ）',
   'json {"do":"drop","items":[{"item":"gold_ingot","count":1}],"target":"#12"}（その方へ投げる）',
   'json {"do":"shoot","target":"#12","item":"bow","charge":1,"n":3}（target の代わりに at も可）',
   '',
@@ -106,23 +106,24 @@ const SHORT_LINES = [
   '- stopIf は文字列 "hostileWithin=8 hpBelow=10"（hostileWithin は敵までの m、hpBelow は体力 0〜20、hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たしたら全体を止めて返す。'
     + 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。待つ手の act には hostileWithin。',
   '- accept は、この act で戦うと決めた敵の種類の配列（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
-    + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
+    + 'accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ。'
+    + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射と hpBelow は残る。早めに引くなら stopIf の hpBelow を高めに。',
   '- onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、'
     + 'ほかは stop。急ぐ手（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',
-  '- 同じ種類の手が続く場面（採掘・作る）は、10〜12 手を 1 つの act に入れる（dig の at は16マスまで1手に）。トンネル・階段・橋・柱で行く道は go 1 手に任せる。'
-    + '止まりは反射・stopIf・onFail が守る。',
+  '- 同じ種類の手が続く場面（採掘・作る）は 1 つの act にまとめる（dig の at は16マスまで1手に）。トンネル・階段・橋・柱で行く道は go 1 手に任せる。'
+    + '止まった時は反射・stopIf・onFail が act を止めるが、止まっても安全な所へ動いたことにはならない: 敵で止まった次の判断では、同じ所の作業に戻る前に、敵との距離と回復を見る。',
   '',
   '## 列（やることの列）と「〜まで続ける」',
-  '- act は列の 1 項目。項目は体が 1 つずつ順に動かす（実行中を含めて 3 つまで）。実行中の項目の残りが少なくなると次の判断が来る。1 つの判断で足すのは 1〜2 項目。'
-    + '足す項目は、列の最後の項目が済んだ後の世界を前提に書く。列は live の「列」に出る。',
-  '- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。前提を書かなくても列は安全に動く。',
-  '- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる。 欄 done（条件の文字列）: 満たした所で、手の途中でも済みにする。',
+  '- act は列の 1 項目。項目は体が 1 つずつ順に動かす（実行中を含めて 3 つまで）。実行中の項目の残りが少なくなると次の判断が来る。'
+    + '足す項目は、列の最後の項目が成功した後の世界を前提に書く（成功が分かった訳ではない）。列は live の queue に出る。',
+  '- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。',
+  '- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる（furnace:x,y,z は始める時に一度見るだけで、焼き上がりまで待たない）。 欄 done（条件の文字列）: 満たした所で、手の途中でも済みにする。',
   '- 欄 repeat（2〜8）: 手の組を最大その回数までまわす。rel の手か、座標の無い手（attack・pickup・eat・craft・wait）だけ（絶対座標の手は断られる）。',
   '  足の位置から数えるので、トンネル・階段・柱は 1 組を rel で書いて repeat にする。1 回まわしても何も変わらなければ体が止める。 done と一緒に使うと「〜まで続ける」になる。',
-  '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる）。差し替える時に使う。',
+  '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目の後ろの項目も捨てる）。新しい act は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。',
   '- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・'
     + 'dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。',
-  '- 例: pre "have:iron_ore>=3&near:furnace~4"。done "have:log>=10"。repeat 8 と done "at:26,51,7~2"（手は rel で書いたトンネルの 1 組）。',
+  '- 例: pre "have:iron_ore>=3&near:furnace~4"。下りる act の pre "food>=40&have:crafting_table|food>=40&have:planks>=4"（満たさない時は始めずに捨てる）。done "have:log>=10"。repeat 8 と done "at:26,51,7~2"（手は rel で書いたトンネルの 1 組）。',
   '',
   '## 返る行',
   '- 行は「番号 手 済|止|失|未 本文」。止まった手の周りの 3×3×3 は、次の判断の live の lastResults に一度だけ出る。',
@@ -142,7 +143,7 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     accept: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'この act で戦うと決めた敵の種類（体はそれから逃げない）' },
     pre: { type: 'string', maxLength: 120, description: '始める直前に確かめる条件（例 "have:raw_iron>=3&near:furnace~4"）' },
     done: { type: 'string', maxLength: 120, description: '満たした所で済みにする条件（例 "have:log>=10"）' },
-    repeat: { type: 'integer', minimum: 2, maximum: 8, description: '手の組を最大何回まわすか（rel の手だけ）' },
+    repeat: { type: 'integer', minimum: 2, maximum: 8, description: '手の組を最大何回まわすか（rel の手か、座標の無い手だけ）' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目（例 ["q15"]、全部は ["all"]）' },
   },
 });

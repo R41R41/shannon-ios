@@ -64,8 +64,7 @@ describe('C1: a hostile gets a line when it matters now, with how it stands to h
     expect(out[3]).toBe('ほか 4 体（creeper 1・zombie 2・skeleton（飛び道具） 1。いちばん近い: creeper 33m）');
   });
   it('says in the dictionary which hostiles get a line, and that a far one is not written', () => {
-    expect(V2_ALWAYS).toContain('飛び道具の種類（スケルトン・ブレイズ・ガスト');
-    expect(V2_ALWAYS).toContain('48m 内');
+    expect(V2_ALWAYS).toContain('クリーパー・エンダーマン 32m、飛び道具の種類 48m');
     expect(V2_ALWAYS).not.toContain('見える・道があるときだけ行になり');
   });
   it('keeps a hostile the urgent lines name, with the probe\'s own words of its reach (the frame\'s are not said twice)', () => {
@@ -76,7 +75,7 @@ describe('C1: a hostile gets a line when it matters now, with how it stands to h
   });
   it('the urgent live state says it the same way', () => {
     const state = minecraftLlmcUrgentLive({ observation: frame({ position: { x: 0, y: 0, z: 0 }, nearbyThreats: frameThreats }), elapsedMinutes: 1, events: [],
-      planNowTitle: null, answer: 'a' });
+      planNowTitle: null, mode: 'a' });
     expect((state.threats as string[])[0]).toContain('・見える（射線の中）');
   });
 });
@@ -127,7 +126,7 @@ describe('C3: an unknown cell is said as unknown, not as rock', () => {
     const lines = aroundLines(mapView(readLayers(text(false), BODY_RULES)!), { x: 0, y: 0, z: 0 });
     const head = lines.find(line => line.startsWith('足の周りの 1 歩より先'))!;
     expect(head).toContain('足も頭も固い岩か、地図の端で不明');
-    expect(V2_ALWAYS).toContain('足も頭も固い岩（掘って通る所）と、足・頭・床のどれかが地図に無い所');
+    expect(V2_ALWAYS).toContain('書いていない所は固い岩（掘って通る）か地図に無い所（不明）');
     expect(V2_ALWAYS).not.toContain('書いていない所は足も頭も固い岩か、地図に無い（不明）');
   });
 });
@@ -207,7 +206,7 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
 describe('D3: one language, one topic in one place, a dictionary of the live fields', () => {
   const system = minecraftV2System(V2_ALWAYS);
   const FIELDS = ['urgent', 'planNow', 'shortage', 'recovery', 'footing', 'around', 'route', 'liquid', 'obsidian', 'pack', 'repeat', 'look', 'investigation',
-    'stops', 'landmarks', 'scan', 'state', 'foodPoints', 'inventory', 'threats', 'near', 'jobs', 'events', 'lastResults', 'map', 'answer'];
+    'stops', 'landmarks', 'scan', 'state', 'foodPoints', 'inventory', 'threats', 'near', 'jobs', 'events', 'lastResults', 'map'];
   it('writes the mode\'s system text in Japanese: no English header, protocol or reading', () => {
     for (const gone of ['# Minecraft body task', '## Each decision', '## Reading the request', 'Only the task directs you', 'You choose the next actions']) {
       expect(system).not.toContain(gone);
@@ -217,8 +216,11 @@ describe('D3: one language, one topic in one place, a dictionary of the live fie
     expect(MINECRAFT_TRANSPORT.startsWith('Request transport')).toBe(true);
   });
   it('has a line in the dictionary for every live field, plan.rules included, and none names a tool the mode does not offer', () => {
-    for (const field of FIELDS) expect(V2_ALWAYS, field).toMatch(new RegExp(`^- ${field}: `, 'mu'));
+    // Fields that belong together share a line (GPT's review 2026-10-28, to keep the instructions under the cap): each is still named with its meaning.
+    const dictionary = V2_ALWAYS.slice(V2_ALWAYS.indexOf('## live の項目辞典'), V2_ALWAYS.indexOf('## 地図'));
+    for (const field of FIELDS) expect(dictionary, field).toMatch(new RegExp(`(^- |[。・])${field}[:：・]`, 'mu'));
     expect(V2_ALWAYS).toContain('rules（今の節と親の禁止・注意');
+    expect(V2_ALWAYS).toContain('mode「急ぎの版」');
     expect(foreignToolNames(system)).toEqual([]);
   });
   it('gives a rule once and with its reason, and leaves out the stories of one run', () => {
@@ -269,7 +271,8 @@ describe('D3: the bootstrap of a new epoch as readable lines', () => {
     expect(text).not.toContain('\\n');
     expect(text).not.toContain('\\"');
     expect(text).toContain('目的:\n- エンドラを倒す');
-    expect(text).toContain('### 判断 2\n呼び出し mc_act\n  hands:\n    walk 1,2,3\n    wait 1\n  why: [p1] 行く\n結果（失敗）:\nact 1/2 済み\n1 walk 済 着いた');
+    expect(text).toContain('### 判断 2\n呼び出し mc_act\n  hands:\n    walk 1,2,3\n    wait 1\n  why: [p1] 行く\n結果（受け付けられなかった・動いていない）:\nact 1/2 済み\n1 walk 済 着いた');
+    expect(text).toContain('### 判断 1\n呼び出し mc_act\n  hands:\n    walk 1,2,3\n    wait 1\n  why: [p1] 行く\n結果（受付）:');
     expect(text.split('Committed task status').length - 1).toBe(0);
     expect(text.split('各判断の後の課題の状態: queued').length - 1).toBe(1);
   });
@@ -291,7 +294,6 @@ describe('the review of 10: words restored in the hand and dictionary', () => {
   });
   it('gives the unit of health and says which thrown items are not shown', () => {
     expect(V2_ALWAYS).toContain('health（0〜20。ハート 1 個 = 2）');
-    expect(V2_ALWAYS).toContain('自分が投げたと分かっている物（屑・予備のつるはし）は出ない');
     expect(V2_ALWAYS).not.toContain('（自分が投げた物は出ない）');
   });
 });

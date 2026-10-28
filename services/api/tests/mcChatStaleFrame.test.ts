@@ -129,10 +129,10 @@ describe('a decision reads the body a few seconds old, and is told how old', () 
     poll(f, 2, { world: { ...world, nearbyThreats: [{ name: 'zombie', id: 7, distance: 4, position: { x: 3, y: 64, z: 2 } }] } });
     f.advance(6_000);
     const live = minecraftLlmcUrgentLive({ observation: f.control.seen('minecraft:world', LLMC_STALE_FRAME_MS)!.observation, elapsedMinutes: 1, events: [],
-      urgent: ['zombie 4m'], bodyAge: '体の様子は 6 秒前のもの', planNowTitle: null, answer: 'a' });
+      urgent: ['zombie 4m'], bodyAge: '体の様子は 6 秒前のもの', planNowTitle: null, mode: 'a' });
     expect(live.bodyAge).toBe('体の様子は 6 秒前のもの');
     expect(live).toHaveProperty('map');
-    expect(minecraftLlmcUrgentLive({ observation: null, elapsedMinutes: 1, events: [], answer: 'a', planNowTitle: null })).toMatchObject({ connected: false });
+    expect(minecraftLlmcUrgentLive({ observation: null, elapsedMinutes: 1, events: [], mode: 'a', planNowTitle: null })).toMatchObject({ connected: false });
     expect(f.control.observe('minecraft:world')).toBeNull();
   });
 

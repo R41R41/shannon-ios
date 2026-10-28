@@ -22,7 +22,15 @@ function inputLines(input: unknown): string[] {
   return Object.entries(row).flatMap(([key, value]) => Array.isArray(value) && value.every(item => typeof item === 'string')
     ? [`  ${key}:`, ...value.map(item => `    ${item}`)] : [`  ${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`]);
 }
-function messageLines(message: Rec): string[] {
+/**
+ * GPT's review 2026-10-28 (「結果（成功）」 over a result that only said the act was taken into the queue, and the act then stopped): a result of `mc_act` is told by
+ * what it is, 「受付」 (the body's run comes after, in the 「（列の知らせ）」 lines); a failed one was not taken or did not run.
+ */
+function resultLabel(ok: boolean, call: string): string {
+  const act = call === 'mc_act' || call === 'mc.act';
+  return ok ? (act ? '受付' : '応答') : (act ? '受け付けられなかった・動いていない' : '失敗');
+}
+function messageLines(message: Rec, call = ''): string[] {
   const content = typeof message.content === 'string' ? message.content : '';
   if (message.role === 'tool_call') {
     const call = (() => { try { return rec(JSON.parse(content)); } catch { return null; } })();
@@ -30,7 +38,7 @@ function messageLines(message: Rec): string[] {
   }
   if (message.role === 'tool_result') {
     const result = (() => { try { return rec(JSON.parse(content)); } catch { return null; } })();
-    return result && typeof result.result === 'string' ? [`結果（${result.ok === false ? '失敗' : '成功'}）:`, result.result] : [`結果: ${content}`];
+    return result && typeof result.result === 'string' ? [`結果（${resultLabel(result.ok !== false, call)}）:`, result.result] : [`結果: ${content}`];
   }
   return [`（${String(message.role)}）${content}`];
 }
@@ -44,6 +52,7 @@ export function readableBootstrap(text: string): string | null {
   const statuses: string[] = [];
   const rounds = value.rounds.map(item => {
     const round = rec(item) ?? {};
+    let call = '';
     const messages = (Array.isArray(round.messages) ? round.messages : []).flatMap(entry => {
       const message = rec(entry);
       if (!message) return [];
@@ -52,7 +61,8 @@ export function readableBootstrap(text: string): string | null {
         statuses.push(status);
         return [];
       }
-      return [messageLines(message).join('\n')];
+      if (message.role === 'tool_call') call = (() => { try { return String(rec(JSON.parse(String(message.content)))?.name ?? ''); } catch { return ''; } })();
+      return [messageLines(message, call).join('\n')];
     });
     return [`### 判断 ${String(round.sequence ?? '?')}`, ...messages].join('\n');
   });

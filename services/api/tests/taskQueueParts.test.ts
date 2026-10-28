@@ -20,7 +20,7 @@ const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVers
   state: { world: world as never }, facts: {} });
 
 describe('the queue in the live state', () => {
-  const lines = ['▶ q1 [p7] 鉄へ 実行中: 手 2/3・残り約 4 秒', '・ q2 [p7] 掘る 待ち: 前提 near:furnace~4（前の項目の後で体が確かめる）', '足せるのは あと 1 つ（q2 の後）。差し替えは replace'];
+  const lines = ['▶ q1 [p7] 鉄へ 実行中: 手 2/3・残り約 4 秒', '・ q2 [p7] 掘る 待ち: 前提 near:furnace~4（前の項目の後で体が確かめる）', 'あと 1 つ足せる（足した項目は q2 の後ろに付く）'];
   const world = { position: { x: 0.5, y: 64, z: 0.5 }, health: 20, food: 20, localMap: '地図 v1 足=(0,64,0) x=-1..1 z=-1..1 方式=layers 上=北\ny=64\n -1 . . .\n  0 . @ .\n  1 . . .' };
   it('goes in the live of a decision, after the plan\'s now and before the map, and through the rewrite untouched', () => {
     const live = minecraftLlmcLive({ observation: frame(world), elapsedMinutes: 1, trend: createFoodTrend(), events: [], queue: lines, planNow: '[p7] 鉄を掘る' });
@@ -31,15 +31,15 @@ describe('the queue in the live state', () => {
     expect(carriedFood(world, {}).points).toBe(0);
   });
   it('is in the urgent live too, and absent when there are no lines (a lifecycle without a queue)', () => {
-    const urgent = minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: 1, events: [], queue: lines, planNowTitle: '鉄を掘る', answer: 'a' });
+    const urgent = minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: 1, events: [], queue: lines, planNowTitle: '鉄を掘る', mode: 'a' });
     expect(urgent.queue).toEqual(lines);
     expect(minecraftLlmcLive({ observation: frame(world), elapsedMinutes: 1, trend: createFoodTrend(), events: [] })).not.toHaveProperty('queue');
-    expect(minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: 1, events: [], planNowTitle: null, answer: 'a' })).not.toHaveProperty('queue');
+    expect(minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: 1, events: [], planNowTitle: null, mode: 'a' })).not.toHaveProperty('queue');
   });
-  it('words: an empty queue says the body stands still; a full one says to replace', () => {
-    expect(queueLines([], null, { progress: null, leftMs: 0 })).toEqual(['空（体は止まっている）。mc.act を足すと体が動く']);
+  it('words: an empty queue says the body stands still; a full one says it is full', () => {
+    expect(queueLines([], null, { progress: null, leftMs: 0 })).toEqual(['空（体は止まっている）']);
     const item = (name: string) => ({ item: name, node: null, why: name, input: { hands: [] } as ActInput, pre: undefined, done: undefined, startedAt: 0, because: null, reason: () => null });
-    expect(queueLines([item('q1'), item('q2'), item('q3')], null, { progress: null, leftMs: 3000 }).at(-1)).toBe('列はいっぱい。足すなら replace で消す');
+    expect(queueLines([item('q1'), item('q2'), item('q3')], null, { progress: null, leftMs: 3000 }).at(-1)).toBe('列はいっぱい（3/3）');
   });
   it('the events of a task still keep their one-time words (forgetLlmcEvents is the test hook)', () => {
     forgetLlmcEvents();

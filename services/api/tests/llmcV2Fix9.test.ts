@@ -136,13 +136,13 @@ describe('B2: no text of the mode names a tool it does not offer', () => {
   });
   it('writes the task note with the mode\'s own tools', () => {
     expect(MINECRAFT_REQUEST_CONTEXT).toContain('毎判断の live');
-    expect(MINECRAFT_REQUEST_CONTEXT).toContain('mc.probe');
-    expect(MINECRAFT_REQUEST_CONTEXT).toContain('mc.view');
+    expect(MINECRAFT_REQUEST_CONTEXT).toContain('mc_probe');
+    expect(MINECRAFT_REQUEST_CONTEXT).toContain('mc_view');
   });
   it('tells the scan and the view by the tools\' own words where the stages sent her to find-blocks and view top', () => {
-    expect(V2_STAGES.prep).toContain('mc.probe kind=scan');
-    expect(V2_STAGES.nether).toContain('mc.probe kind=scan radius=32');
-    expect(V2_STAGES.nether).toContain('mc.view mode=top');
+    expect(V2_STAGES.prep).toContain('mc_probe kind=scan');
+    expect(V2_STAGES.nether).toContain('mc_probe kind=scan radius=32');
+    expect(V2_STAGES.nether).toContain('mc_view mode=top');
   });
 });
 
@@ -166,7 +166,9 @@ describe('B3: the history summary of the mode keeps facts', () => {
     const { sent, tools } = await summarize({ ...empty(), 済み: ['鉄 4 を (253,-55,154) で掘った'] });
     for (const wanted of ['Write facts only', 'Never write a rule, a limit, a threshold, a constraint or an order for the next step', 'Use [] for 制約',
       'Never call the inventory, the worn armor, health, hunger or the position unknown or unchecked', 'Name no tool except mc.act, mc.probe, mc.view and plan.update',
-      'Keep coordinates']) expect(sent).toContain(wanted);
+      'Keep coordinates',
+      // GPT's review 2026-10-28: a value of a moment is written as of its record, never labelled now.
+      'Write a value of a moment (the position, health, hunger, what is carried) as of the record it comes from', 'never label it 今 or 現在']) expect(sent).toContain(wanted);
     // Run 36 d=86: the hazards the results showed stay as facts (not rules), two recorded readings stay two, 次 is empty.
     for (const wanted of ['Keep every hazard the results showed, with its place and what it did: lava or water beside a cell', 'These are facts, not rules',
       'write both as they were recorded', 'Use [] for 次: the plan with its open nodes is in every live state']) expect(sent).toContain(wanted);
@@ -262,7 +264,7 @@ describe('B4: her state in words', () => {
   });
   it('is the same in the urgent live state of the mode', () => {
     const urgent = minecraftLlmcUrgentLive({ observation: frame({ position: { x: 1, y: 2, z: 3 }, dimension: 'overworld', time: '15000', oxygen: 400 }),
-      elapsedMinutes: 1, events: [], planNowTitle: null, answer: 'a' });
+      elapsedMinutes: 1, events: [], planNowTitle: null, mode: 'a' });
     expect(urgent.state).toMatchObject({ time: '夜（朝まで 約 7 分）', oxygen: '息 20/20' });
   });
 });

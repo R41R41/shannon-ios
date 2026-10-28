@@ -21,7 +21,7 @@ export interface PlanCompletion { ok: boolean; reason: string }
 
 /** What a refusal says about the way to a completion (the mistake's line carries it after the reason). */
 export const COMPLETION_WAY = '完了にするには、計画の全ての節が済み、観測の形の済む条件（have:・dim:・at:・food>=）を持つ節の 1 つが今の観測で満たされていること。'
-  + '足りない節は plan.update で足して進める。';
+  + '足りない節は plan_update で足せる。';
 
 const OPEN_LISTED = 3;
 const words = (nodes: readonly PlanNode[]) => nodes.slice(0, OPEN_LISTED).map(node => `${node.id} ${node.title}`).join('・')

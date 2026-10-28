@@ -292,14 +292,14 @@ describe('replace', () => {
 describe('the lines of the live state', () => {
   it('say the running item with its left time, the waiting one with its pre, how many may be added, and an empty queue as stopped', async () => {
     const f = setup();
-    expect(f.queue.lines(null)).toEqual(['空（体は止まっている）。mc.act を足すと体が動く']);
+    expect(f.queue.lines(null)).toEqual(['空（体は止まっている）']);
     await f.queue.add(f.spec(wait1, { done: [[{ k: 'have', item: 'log', n: 10 }]] }));
     await f.queue.add({ ...f.spec(dig(1), {}, 'p7'), pre: [[{ k: 'near', block: 'furnace', r: 5 }]] });
     f.take();
     const lines = f.queue.lines(null);
     expect(lines[0]).toMatch(/^▶ q1 \[p1\] 項目1 実行中: 済む: have:log>=10・残り約 \d+ 秒$/u);
     expect(lines[1]).toBe('・ q2 [p7] 項目2 待ち: 前提 near:furnace~5（前の項目の後で体が確かめる）');
-    expect(lines[2]).toBe('足せるのは あと 1 つ（q2 の後）。差し替えは replace');
+    expect(lines[2]).toBe('あと 1 つ足せる（足した項目は q2 の後ろに付く）');
   });
 });
 

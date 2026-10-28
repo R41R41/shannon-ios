@@ -94,7 +94,7 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
   const waits = (...seconds: number[]) => ({ hands: seconds.map(value => ({ do: 'wait', seconds: value })) });
   it('adds the seconds left to an act that waits ten seconds or more, and says the wait can hold other hands', () => {
     const note = furnaceWaitNote(waits(30, 30), world(151_000))!;
-    expect(note).toBe('手 1 wait（合わせて 60 秒）: かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒。立って待たず、その間に掘る・集める・作る項目を列に足せる（焼き上がりを取る項目は pre に furnace:x,y,z）');
+    expect(note).toBe('手 1 wait（合わせて 60 秒）: かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
   });
   it('says nothing for a short wait, for no furnace, or for a furnace that is done or in another dimension', () => {
     expect(furnaceWaitNote(waits(3), world(151_000))).toBeNull();
@@ -106,8 +106,11 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     forgetFurnaceStands();
     const first = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand');
     expect(first.guard?.stopped).toBe(true);
-    expect(first.guard?.text).toContain('立って待つだけの手（合わせて 60 秒）は送らない。かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
-    expect(first.guard?.text).toContain('2〜3基に分けて同時に焼く');
+    expect(first.guard?.text).toContain('立って待つだけの手（合わせて 60 秒）は送っていない（手は動いていない）。かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
+    expect(first.guard?.text).toContain('基数に分けると並んで焼ける');
+    // GPT's review 2026-10-28: the result no longer tells that the same act sent again goes.
+    expect(first.guard?.text).not.toContain('もう一度出せば送る');
+    expect(first.guard?.text).not.toContain('足して出し直す');
     const entry = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand');
     expect(entry.note).toContain('かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
     expect(entry.guard).toBeUndefined();
@@ -116,7 +119,7 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     expect(candidateAct({ hands: ['dig 1,0,0 rel', 'wait 30'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand', { urgent: true }).guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 5'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
-    expect(V2_ALWAYS).toContain('かまどに入れたら焼ける間（jobs の残り秒）は掘る・集める・作る手を入れる（wait は他に手が無い時だけ）');
+    expect(V2_ALWAYS).toContain('かまどに入れたら、焼ける間（jobs の残り秒）は別の作業（準備の補い・装備作り・資材集め・移動）を列に足す。wait だけの act は、有用な手を選べない時だけで、why に待つ対象と理由を書く');
   });
 });
 

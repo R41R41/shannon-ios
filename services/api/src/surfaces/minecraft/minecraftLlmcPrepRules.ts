@@ -38,27 +38,40 @@ export const IRON_BEFORE_NETHER = 30;
 export const GOLD_FOR_BOOTS = 4;
 
 /**
- * Run 42: what leaving the preparation out cost, measured (the descent note, the meter and the rules say it). It was 「約 150 秒」, about a hunt's
+ * Run 42: what leaving the preparation out cost, measured (the descent rule and the meter say it). It was 「約 150 秒」, about a hunt's
  * time, and she went down three times short: run 42 took 540 s to climb back to the surface, run 41 stood 372 s without a table and died climbing.
  */
 export const PREP_SKIP_SECONDS = 500;
-export const PREP_SKIP_COST = `約 ${PREP_SKIP_SECONDS} 秒かかる（実走 42 は 540 秒かけて地上へ戻った。実走 41 は作業台が無いまま 372 秒止まり、上りの途中で死んだ）`;
 /**
- * The rules as the first plan and the stage knowledge say them (one text, so the plan and the decision read the same numbers). Knowledge, not an order.
+ * GPT's blind review of the prompt (2026-10-28, owner approved): the descent's preparation as a rule for choosing the action, in one place, in the instructions
+ * (`V2_ALWAYS`) and for the first plan. What must hold before the descent (必須) apart from what is wanted (目標); that a reason written in a plan update or a why
+ * does not skip an unmet requirement; that the food carried is for eating below (the fullness does not stand for it); and that eating below the 40 is not a new
+ * shortage. The live state and the results only say the state (`preparationState`); the story of runs 41 and 42 is one reference sentence (`PREP_REFERENCE`).
+ */
+export const PREP_DESCENT_LINES: readonly string[] = [
+  '- 必須（未達の間は、下りる act も鉄の採掘もしない。補う手を先に出す）: 食料の点 40 以上（foodPoints.total。満腹 fullness では数えない）・石のツルハシと石の斧・作業台 1 つか板 4 以上（持つ）。',
+  '- 目標: 食料 40〜60 点・板 8 ほどと棒の余り（ツルハシの作り直し分）。',
+  '- 未達の必須は、reason や why に書いても省けない（計画の順は変えてよい）。下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）。',
+  `- 理由: 持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない。地下には食べ物も木も見つかりにくく、足りなくなると地上へ戻るのに約 ${PREP_SKIP_SECONDS} 秒かかり、死ぬこともある。`,
+  '- 下りた後に食べて 40 点を切るのは未達ではない。未達のまま下りていたら、奥へ進む前に補う（近くで補えるか調べ、無ければ上で）。「もう地下にいる」は続ける理由にならない。',
+];
+export const PREP_DESCENT_RULE: string = ['## 準備の決まり（鉄を掘りに地下へ下りる前）', ...PREP_DESCENT_LINES].join('\n');
+/** An earlier run's measure, as a reference (not this run's time). */
+export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の所要時間ではない）: 実走 42 は地上へ戻るのに 540 秒かかり、実走 41 は作業台が無いまま 372 秒止まって上りの途中で死んだ。';
+/**
+ * The knowledge of the stages as the first plan and the stage knowledge say it (one text, so the plan and the decision read the same numbers): materials and
+ * procedures; the descent's rule is `PREP_DESCENT_RULE`. Knowledge, not an order.
  */
 export const PREP_RULES_WORDS = [
-  '- 鉄を掘りに地下（洞窟・竪穴）へ下りる前: 食料の点 40（狩る・村の畑や箱。満腹は 30 分もつので、飢えのためではない）・石のツルハシと石の斧・'
-    + '作業台 1 つか板 4 以上（置いたままにせず持つ。地下で置き直せる）・板 8 ほどと棒の余り（ツルハシを作り直す分）。',
-  `- 準備の理由: 地下には食べ物も木も無く、足りなくなると地上へ戻るのに${PREP_SKIP_COST}。食べ物の当てが近ければ、取るのは数十秒〜2 分。`
-    + '下りる手の why には今の数を括弧に書く（「[p4.1] 鉄へ下りる（食料 40/40・作業台 有・板 6）」）。数は確かめで、足りない物は下りる前に埋める。',
   `- ダイヤを掘りに下りる前: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
     + '（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）。作ったらすぐ equip で着る（持っているだけでは守らない）。',
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱や廃坑の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
   '- ゲート（ネザーに入る）の前: 上の 4 つの防具・盾・剣・鉄以上のツルハシ・水入りバケツ・黒曜石 10・火打ち金・足場のブロック 64・食料 40 点ほど。',
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
-  '- ベッドは村の家で 1〜2 つ（ベッドの節の doneWhen は have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan.update に書く）。'
+  '- ベッドは村の家で 1〜2 つ（ベッドの節の doneWhen は have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan_update に書く）。'
     + '羊は見かけたら羊毛 3 を取り、エンドの前に板 3 と作って 4〜6 にする。',
+  PREP_REFERENCE,
 ].join('\n');
 
 /**

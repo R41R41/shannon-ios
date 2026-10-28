@@ -5,12 +5,13 @@ import { isShooter, nearThreats, type NearThreat } from './minecraftLlmcThreat.j
  * mb-llmc r8 (run 32, 2026-10-22: the decision after 「wither_skeleton #696 は見える・6m」 took 10.3 s, and in that time she was hit three
  * times in 2.3 s and thrown off the bridge; the model's answer reached the body 0.1 s after her death): a decision being waited for is
  * thrown away when a hostile she must act on comes (`newApproach`, polled while the model is awaited: `FcaBodyLifecycle.interrupt`), and the
- * decision is asked again at once on a short live state (`minecraftLlmcUrgentLive`: the urgent lines, the footing, the map, her state,
- * the hostiles, what she holds, the plan's now by its title). An urgent step uses the same short state. Facts only: what to do is the
- * decision's, in the words below and the knowledge's.
+ * decision is asked again at once on a short live state (`minecraftLlmcUrgentLive`: the urgent lines, the footing, the map, her state, her food
+ * and recovery, the hostiles, what she holds, the plan's now by its title). An urgent step uses the same short state. Facts only: what to do is the
+ * decision's, in the instructions' words (「急ぎの時」).
  */
-export const URGENT_ANSWER = '急ぎの答え方: 考えは 2〜3 文まで。mc.act は 1 つ、手は 3 つまで、why は 20 字まで。'
-  + '離れる・敵との間にブロックを置く・囲う・食べるを先に（足場が「押されたら落ちる」なら、空所から離れるのが先）。';
+export const URGENT_MODE = '急ぎの版';
+/** GPT's review 2026-10-28: the live state is data; how to answer an urgent decision (a short thought, one act of three hands at most, the order of the hands) is in the instructions (「急ぎの時」), and the live state only says that it is the short one. */
+export const URGENT_NOTE = `${URGENT_MODE}（決まりは system の「急ぎの時」）`;
 
 /**
  * run 26 (2026-10-26, 「エンドラを討伐して」: for 170 s the acts were cut 18 times by a creeper and zombies 5.6〜7.6 m away behind 4〜7 blocks of stone, 4 up, whose lines

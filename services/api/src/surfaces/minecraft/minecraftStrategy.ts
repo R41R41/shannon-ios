@@ -2,7 +2,7 @@ import {
   DRAGON_KNOWLEDGE_R7, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE,
 } from './minecraftKnowledge.js';
 import { FIRST_PLAN_SYSTEM_R9 } from './minecraftFirstPlan.js';
-import { PLAN_PREP_WORDS, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
+import { PLAN_PREP_WORDS, PREP_DESCENT_LINES, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 
 /**
  * the own prompt, the first plan (owner answers of 2026-10-22 by form: 「同じ方針で絞る」「要塞とエンドは作戦へ」, and ADR-0014
@@ -56,6 +56,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
   '- ネザー: 帰りのゲートの座標→出発の点検→要塞→ブレイズロッド 7 本以上→エンダーパール 12 前後（棒の後）→オーバーワールドでアイ 12〜14→三角測量→'
     + 'ストロングホールド→エンド（食料 80 点以上・ベッド 4〜6・弓と矢 30）。',
   '### 段ごとの準備（この数がすべて。後の訂正は無い）',
+  ...PREP_DESCENT_LINES,
   PREP_RULES_WORDS,
   '### 手順の要点',
   '- 原木: 6〜10 本。原木 1 → 板 4（作業台は要らない）。崖の上など届かない木は選ばない（足の高さから幹に届く木か、走査の近い原木）。',

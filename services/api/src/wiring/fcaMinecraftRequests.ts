@@ -20,7 +20,7 @@ export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワール�
  * The working note every admitted Minecraft request is handed as its first inbox line (mb-llmc-cand 9, run 37: an earlier note told of
  * `minecraft.observe` and `minecraft.reflex`, tools the menu does not have; the menu is mc.act, mc.probe, mc.view, plan.update and the two controls).
  */
-export const MINECRAFT_REQUEST_CONTEXT = '体の今の状態は毎判断の live に出る。もっと見たい時は mc.probe（周りの事実）か mc.view（地図を広く・別の向きで）で調べ、手は mc.act で出す。';
+export const MINECRAFT_REQUEST_CONTEXT = '体の今の状態は毎判断の live に出る。もっと見たい時は mc_probe（周りの事実）か mc_view（地図を広く・別の向きで）で調べ、手は mc_act で出す。';
 
 /**
  * Whether a task is a Minecraft request the owner made, as admitted: bound to a body at creation, with the admission's criteria,

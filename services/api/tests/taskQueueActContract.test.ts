@@ -119,6 +119,6 @@ describe('the model\'s short form of the queue fields', () => {
   });
   it('is explained in the description', () => {
     for (const word of ['## 列（やることの列）と「〜まで続ける」', '欄 pre', '欄 done', '欄 repeat', '欄 replace', 'rel の手か、座標の無い手', '後ろの項目を動かさずに捨てる',
-      '実行中を含めて 3 つまで', 'live の「列」', 'near:ブロック~r', 'have:物>=n', 'safe~r']) expect(SHORT_ACT_DESCRIPTION, word).toContain(word);
+      '実行中を含めて 3 つまで', 'live の queue に出る', 'near:ブロック~r', 'have:物>=n', 'safe~r']) expect(SHORT_ACT_DESCRIPTION, word).toContain(word);
   });
 });

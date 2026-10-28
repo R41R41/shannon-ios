@@ -2,7 +2,7 @@ import { orderedPlan, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
-import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, PREP_SKIP_COST, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 
 /**
@@ -92,26 +92,24 @@ export const FULLNESS: Readonly<Record<string, number>> = Object.freeze({
   mushroom_stew: 6, beetroot_soup: 6, bread: 5, baked_potato: 5, cooked_cod: 5, cooked_rabbit: 5, apple: 4, carrot: 3, beef: 3, porkchop: 3,
   rabbit: 3, mutton: 2, cod: 2, salmon: 2, melon_slice: 2, sweet_berries: 2, glow_berries: 2, cookie: 2, potato: 1, beetroot: 1, dried_kelp: 1,
 });
-/** Run 42: what the losses of going on with health that does not come back were (the line says them beside the fact). */
-export const LOW_HEALTH_COST = '戻らないまま下りたり戦ったりすると、落下や矢 2〜3 発で死ぬ（実走 42 は体力 11 のまま下りて落ち、矢で死んで持ち物を全部失い、立て直しに約 520 秒かかった）';
+/**
+ * GPT's review 2026-10-28 (the live state is data; a rule and a story of a run said at every decision are not facts): the recovery line says the fact, what in the pack
+ * takes the fullness to 18 and how long health then takes; that health that does not come back is to be eaten for before a descent or a fight, even with an enemy
+ * near, and what going on without it costs, is a rule of the instructions (「敵と体力」).
+ */
 
 /**
  * Health that does not come back by itself (hunger under 18, health under full): the fact, what in the pack takes the fullness to 18 and how long
  * health then takes to come back, and what going on without it cost (run 42: the line said the fact alone, 7 decisions in a row, and she went down at
  * 11.3 and died); null otherwise.
  */
-/**
- * Run 43 (+2,095 to +2,117: health 14 to 10 under two or three drowned, she chose 「ドラウンドを倒し作業台」 over eating, and was at 0.3 when the body's
- * reflex ate): the line says to eat before a fight too, with why and what it cost, while an enemy is near.
- */
-export const EAT_UNDER_ATTACK = '敵が近い・打たれている時も、戦う前に 1 個食べる（食べるのは 1.6 秒。満腹 18 以上の間だけ打たれた分が戻る。実走 43 は体力 10 で食べずに戦い、0.3 まで減った）';
-/** A hostile within this many blocks makes the recovery line say to eat before a fight. */
+/** A hostile within this many blocks counts as an enemy near (`enemyNear`). */
 const ATTACK_NEAR = 8;
 export function enemyNear(world: Record<string, unknown>): boolean {
   const threats = Array.isArray(world.nearbyThreats) ? world.nearbyThreats : [];
   return threats.some(raw => { const distance = finite(record(raw)?.distance); return distance !== null && distance <= ATTACK_NEAR; });
 }
-export function recoveryLine(hunger: number | null, health: number | null, food: number, counts?: ItemCounts, attacked = false): string | null {
+export function recoveryLine(hunger: number | null, health: number | null, food: number, counts?: ItemCounts): string | null {
   if (hunger === null || health === null || health >= 20 || hunger >= 18) return null;
   const fact = `体力 ${round1(health)}/20 は自然に戻らない（満腹 ${round1(hunger)}＜18、${foodPointsWords(food)}）`;
   // Fill to 20, not 18: health coming back uses the fullness up (about 1.5 per point), so 18 gives a point or two and stops again.
@@ -129,8 +127,8 @@ export function recoveryLine(hunger: number | null, health: number | null, food:
     got += take * each;
   }
   const plan = !counts ? '' : now + got >= 18 ? `。${eat.join('・')} を食べると満腹 ${Math.min(20, now + got)} になり、${back}`
-    : eat.length ? `。持ち物の食べ物（${eat.join('・')}）では満腹 ${now + got} までで 18 に届かない。食料の当てで足す` : '。持ち物に食べ物が無い。食料の当てで取る';
-  return `${fact}${plan}。${attacked ? `${EAT_UNDER_ATTACK}。` : ''}${LOW_HEALTH_COST}`;
+    : eat.length ? `。持ち物の食べ物（${eat.join('・')}）では満腹 ${now + got} までで 18 に届かない` : '。持ち物に食べ物が無い';
+  return `${fact}${plan}`;
 }
 
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value)
@@ -258,9 +256,8 @@ function deepDescentNote(input: unknown, facts: NonNullable<ReturnType<typeof re
   if (countMatching(facts.counts, /^crafting_table$/u) > 0 || planks >= TABLE_PLANKS) return null;
   const lowest = lowestReach(record(input)?.hands, feet.y);
   if (feet.y - lowest < DESCENT) return null;
-  const make = logs > 0 ? `原木 ${logs} がある。make crafting_table（原木 1 で板 4）を持ってから下りる` : '地上か坑道の木（柵・板）で板 4 を持ってから下りる';
-  return `作業台 無・板 ${planks} のまま y=${Math.round(lowest)} へ下りる手。下には木が無く、ダイヤのツルハシ・鉄の道具など作業台の要る物を作れない`
-    + `（実走 43 はダイヤの後に作業台へ戻る往復で約 270 秒）。${make}。かまどの燃料に最後の板を使わない`;
+  const have = logs > 0 ? `原木 ${logs} を持っている（原木 1 で板 4。作業台は板 4）` : '原木は持っていない';
+  return `作業台 無・板 ${planks}: y=${Math.round(lowest)} へ下りる手を受け付けた。下では木が見つかりにくく、作業台の要る物（ダイヤのツルハシ・鉄の道具）は作れない。${have}`;
 }
 
 /** Items a furnace makes something of that the route needs: the ores (raw) and raw meat. */
@@ -309,7 +306,5 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
   const hurt = health !== null && hunger !== null && health < 20 && hunger < 18 ? `。体力 ${round1(health)}/20 は戻らない（満腹 ${round1(hunger)}＜18）` : '';
   // Run 42 (the note ended 「このまま行くなら why に…書く」 and she wrote the numbers and went down, as if that were the way through): the cost in
   // what the runs measured, and what to do first; nothing that reads as a way past it.
-  return `${lacks.join('・')} のまま地下 y=${Math.round(lowest)} へ下りる手${hurt}${near}。`
-    + `地下には食べ物も木も無く、足りなくなると地上へ戻るのに${PREP_SKIP_COST}。`
-    + '下りる前に狩る・焼く・作業台か板 4 を持つ（食べ物の当てが近ければ、取るのは数十秒〜2 分）';
+  return `準備の状態（この act は地下 y=${Math.round(lowest)} へ下りる手）: 未達 — ${lacks.join('・')}${hurt}${near}。この受付は、準備が満たされたことを表さない`;
 }

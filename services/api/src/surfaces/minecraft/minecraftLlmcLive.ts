@@ -1,6 +1,7 @@
 import type { BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
 import type { LlmCentricWorld } from '../../contracts/minecraftActContract.js';
 import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
+import { BLOCKS } from './minecraftLlmcPrepRules.js';
 import { itemWords, reachSuffix } from './minecraftLlmcReachWords.js';
 import { breathWords, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
@@ -245,10 +246,10 @@ const LAST_RESULTS_CHARS = 8_000;
  */
 export function lookHint(world: Record<string, unknown>, healthLost = 0): string | null {
   const repeated = strings(world.recentStops, STOPS).some(line => Number(/×(\d+)/u.exec(line)?.[1] ?? 1) >= 2);
-  if (repeated) return '同じ所で同じ止まりが続いている: 次の act の前に mc.view（slice で縦の断面か layers、radius 6〜10）で周りを広く見て、別の道・別の手を決める';
+  if (repeated) return '同じ所で同じ止まりが続いている（原因は見えていない。mc_view の slice で縦の断面、layers で周りが見られる）';
   const oxygen = finite(world.oxygen);
   if ((oxygen !== null && oxygen < 10) || healthLost >= 6) {
-    return '落ちた・溺れかけた・大きく打たれた: 動く前に mc.view（slice で上下、layers で周り）で今いる所を見る（地図の外の空洞・水・敵）';
+    return '落ちた・溺れかけた・大きく打たれた（地図の外の空洞・水・敵があるかもしれない。mc_view の slice で上下、layers で周りが見られる）';
   }
   return null;
 }
@@ -277,7 +278,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
     ...bodyAgeField(parts.bodyAge),
     ...readinessFields(parts),
-    map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
+    map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc_view で見られる）',
     landmarks: landmarkLines(world, observation.facts),
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
     stops: strings(world.recentStops, STOPS),
@@ -309,19 +310,42 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing' | 'bodyAge' | 'queue'> & { planNowTitle: string | null; answer: string }): Record<string, unknown> {
+  | 'footing' | 'bodyAge' | 'queue' | 'recovery'> & { planNowTitle: string | null; mode: string }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
-  if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), answer: parts.answer };
+  if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), mode: parts.mode };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
-  const results = shownResults(parts.lastResults ?? [], URGENT_RESULTS_CHARS);
+  const results = shownResults(parts.lastResults ?? [], URGENT_RESULTS_CHARS), food = carriedFood(world, observation.facts);
   return { ...urgent, ...bodyAgeField(parts.bodyAge), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
     ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}),
     ...(parts.queue?.length ? { queue: [...parts.queue] } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
-    map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc.view で見る）',
+    map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc_view で見られる）',
     state: { ...stateOf(world, observation), ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
-    threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: stacks(world.inventory).slice(0, URGENT_STACKS),
+    foodPoints: { total: food.points, items: food.items },
+    ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
+    threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: shortStacks(world.inventory),
     ...(parts.events.length ? { events: parts.events.slice(-URGENT_EVENTS) } : {}), ...(results.length ? { lastResults: results } : {}),
-    answer: parts.answer };
+    mode: parts.mode };
+}
+
+/**
+ * GPT's review 2026-10-28 (the urgent live showed the first 14 stacks in the alphabet, with the iron sword of run 43 not among them, and the pack said 使用 14/36
+ * while 31 were used): the stacks an urgent decision uses come first (what fights, what is eaten, what walls: `urgentRank`), the rest in their order, cut to
+ * `URGENT_STACKS`; the stacks left out are said as a number, in the line the pack's count and the live's other readers take (`ほか N 件（長いため略）`).
+ */
+const WEAPON_OR_SHIELD = /^(?:shield|bow|crossbow|trident|mace|[a-z_]*(?:sword|axe|spear))$/u;
+export function urgentRank(stack: string): number {
+  const name = /^[a-z_0-9]+/u.exec(stack)?.[0] ?? '';
+  if (WEAPON_OR_SHIELD.test(name)) return 0;
+  if (EDIBLE_FOOD.test(name) || name in FOOD_POINTS) return 1;
+  if (BLOCKS.test(name)) return 2;
+  return 3;
+}
+export function shortStacks(value: unknown): string[] {
+  const all = stacks(value);
+  if (all.length <= URGENT_STACKS) return all;
+  const shown = all.map((stack, index) => ({ stack, index, rank: urgentRank(stack) })).sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .slice(0, URGENT_STACKS).sort((a, b) => a.index - b.index).map(item => item.stack);
+  return [...shown, `ほか${all.length - URGENT_STACKS}件（長いため略）`];
 }
 
 /** The results shown this once, together at most `room` characters (the last one cut). */

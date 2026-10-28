@@ -222,8 +222,8 @@ describe('the short live state of an urgent decision (run 32: 696 tokens of answ
   it('keeps the urgent lines, the footing, the map, her state, the hostiles and what she holds; the rest waits for the next decision', () => {
     const short = minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: 5.4, events: ['反射が mc.act を止めた'], lastResults: ['act 1/2 済みで止まった'],
       urgent: ['wither_skeleton #696 6.1m・上 6・見える（射線の中）'], investigation: [], footing: '足場: 幅 1 の橋（落差 28、下は溶岩）。押されたら落ちる',
-      planNowTitle: '[p1.2] 橋を西へ', answer: '急ぎの答え方: 短く' });
-    expect(Object.keys(short)).toEqual(['urgent', 'planNow', 'footing', 'map', 'state', 'threats', 'inventory', 'events', 'lastResults', 'answer']);
+      planNowTitle: '[p1.2] 橋を西へ', mode: '急ぎの版' });
+    expect(Object.keys(short)).toEqual(['urgent', 'planNow', 'footing', 'map', 'state', 'foodPoints', 'threats', 'inventory', 'events', 'lastResults', 'mode']);
     expect(short.threats).toHaveLength(1);
     expect((short.threats as string[])[0]).toMatch(/^#696 wither_skeleton 6\.1m \(256,61,76\)/u);
     expect(short.inventory).toEqual(['cobblestone×64', 'netherrack×40', 'cooked_mutton×1']);
@@ -239,10 +239,10 @@ describe('the short live state of an urgent decision (run 32: 696 tokens of answ
   it('the results shown this once are kept, to 2,400 characters, since they are not shown again', () => {
     const long = 'あ'.repeat(5_000);
     const short = minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: null, events: [], lastResults: [long], urgent: ['x'], investigation: [], footing: null,
-      planNowTitle: null, answer: 'a' });
+      planNowTitle: null, mode: 'a' });
     expect(JSON.stringify(short.lastResults).length).toBeLessThan(2_500 + 40);
     expect(minecraftLlmcUrgentLive({ observation: null, elapsedMinutes: null, events: ['a', 'b', 'c', 'd'], urgent: ['x'], investigation: [], footing: null,
-      planNowTitle: null, answer: 'a' })).toEqual({ connected: false, urgent: ['x'], events: ['b', 'c', 'd'], answer: 'a' });
+      planNowTitle: null, mode: 'a' })).toEqual({ connected: false, urgent: ['x'], events: ['b', 'c', 'd'], mode: 'a' });
   });
 });
 
@@ -293,12 +293,12 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
     expect(body.interrupt!()).toBeNull();
     body.rebuilding!();
     body.context();
-    const short = body.transient!() as { urgent: string[]; footing: string; planNow: string; answer: string };
+    const short = body.transient!() as { urgent: string[]; footing: string; planNow: string; mode: string };
     expect(Object.keys(short).slice(0, 3)).toEqual(['urgent', 'planNow', 'footing']);
     expect(short.urgent[0]).toBe('急ぎ: 判断を待つ間に wither_skeleton #696 6.1m・上 6・見える（射線の中）');
     expect(short.planNow).toBe('[p1.2] 橋を西へ');
     expect(short.footing).toContain('押されたら落ちる');
-    expect(short.answer).toContain('急ぎの答え方');
+    expect(short.mode).toContain('急ぎの版');
     expect(short).not.toHaveProperty('landmarks');
     body.decided!({ ms: 4_200, aborted: true, thrownMs: 2_600 });
     expect(lines.find(line => line.startsWith('Shannon Minecraft urgent decision')))
@@ -334,7 +334,7 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
     body.context();
     const state = body.transient!() as Record<string, unknown>;
     expect(Object.keys(state)[0]).toBe('urgent');
-    expect(state).toHaveProperty('answer');
+    expect(state).toHaveProperty('mode');
     body.decided!({ ms: 4_900, aborted: false, thrownMs: 0 });
     expect(lines.find(line => line.startsWith('Shannon Minecraft urgent decision'))).toMatch(/ms=4900 aborted=0 ctxTokens=\d+$/u);
     // A decision that was not urgent logs nothing.

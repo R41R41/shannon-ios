@@ -7,7 +7,7 @@ import { foodFill, foodPointsWords } from '../src/surfaces/minecraft/minecraftFo
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { planNowOf } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
-import { descentNote, EAT_UNDER_ATTACK, enemyNear, fuelShortage, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { descentNote, enemyNear, fuelShortage, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { meterLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneFacts, doneStatusWords, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
@@ -97,9 +97,8 @@ describe('run 43: the descent to the diamonds checks the table too', () => {
   const down = { hands: [{ do: 'go', to: { x: 156, y: -56, z: 208 } }] };
   it('says it with no table and no planks, and what to do first', () => {
     const note = descentNote(down, deep([['iron_pickaxe', 1], ['bread', 2]]))!;
-    expect(note).toBe('作業台 無・板 0 のまま y=-56 へ下りる手。下には木が無く、ダイヤのツルハシ・鉄の道具など作業台の要る物を作れない'
-      + '（実走 43 はダイヤの後に作業台へ戻る往復で約 270 秒）。地上か坑道の木（柵・板）で板 4 を持ってから下りる。かまどの燃料に最後の板を使わない');
-    expect(descentNote(down, deep([['oak_log', 2]]))).toContain('原木 2 がある。make crafting_table（原木 1 で板 4）を持ってから下りる');
+    expect(note).toBe('作業台 無・板 0: y=-56 へ下りる手を受け付けた。下では木が見つかりにくく、作業台の要る物（ダイヤのツルハシ・鉄の道具）は作れない。原木は持っていない');
+    expect(descentNote(down, deep([['oak_log', 2]]))).toContain('原木 2 を持っている（原木 1 で板 4。作業台は板 4）');
   });
   it('is not said with a table or 4 planks, or for a short step', () => {
     expect(descentNote(down, deep([['crafting_table', 1]]))).toBeNull();
@@ -128,12 +127,14 @@ describe('run 43: the pack says what to drop before it is full', () => {
 
 describe('run 43: eat before a fight', () => {
   const near = { nearbyThreats: [{ name: 'drowned', distance: 2.1 }] };
-  it('says to eat before fighting while an enemy is near, with why and what it cost', () => {
+  it('is a rule of the instructions (GPT review 2026-10-28), not a line of the recovery fact; the recovery line says the fact only', () => {
     expect(enemyNear(near)).toBe(true);
     expect(enemyNear({ nearbyThreats: [{ name: 'zombie', distance: 14 }] })).toBe(false);
     const counts = carriedItemCounts({ inventory: pack([['bread', 1]]) }, {});
-    expect(recoveryLine(16, 10, 11, counts, true)).toContain(`${EAT_UNDER_ATTACK}。戻らないまま`);
-    expect(recoveryLine(16, 10, 11, counts, false)).not.toContain('戦う前に');
+    expect(recoveryLine(16, 10, 11, counts)).not.toContain('戦う前に');
+    expect(recoveryLine(16, 10, 11, counts)).not.toContain('実走 42');
+    expect(V2_ALWAYS).toContain('敵が近くても 1 個食べてから');
+    expect(V2_ALWAYS).toContain('落下や矢 2〜3 発で死ぬ');
   });
 });
 

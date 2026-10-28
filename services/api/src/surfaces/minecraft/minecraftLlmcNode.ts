@@ -161,7 +161,7 @@ const PREP_TITLE = /食料|食べ物|狩|動物|準備/u;
 export const isPrepNode = (node: { title: string; doneWhen?: string | undefined }): boolean =>
   /food>=/u.test(node.doneWhen ?? '') || PREP_TITLE.test(node.title);
 /** The words beside the current node's line while it is a preparation node that is not done: the work may go on elsewhere, the node stays. */
-export const PREP_NOTE = '※準備の節（済むまで今の節は移らない。済ませてから下りる）';
+export const PREP_NOTE = '※下りる前の準備の節・未達';
 /**
  * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: plan.update 0 and no 「理由:」 in 125 decisions, 85 of 104 acts tagged for another node than the current
  * one; the plan's now said 原木を集める for 471 s while she smelted iron, and 動物を狩り焼く / 地下のベッドを取る while she did the iron again): the node the
@@ -192,13 +192,12 @@ export function followNode(taskId: string, tree: PlanTree): { to: string; from: 
     if (tree.current !== null && questions.under(tree.current, owed.id)) return null;
     const to = order.find(node => questions.open(node.id) && questions.under(node.id, owed.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))) ?? owed;
     return { to: to.id, from: tree.current, acts: tags.length, words: `今の節を [${to.id}] ${to.title.slice(0, 24)} に置いた（体が [${leaf.id}] の項目を続けて始めたが、先に済ませる準備の節 [${owed.id}] `
-      + `${owed.title.slice(0, 24)} が開いているため。札は [${leaf.id}] のまま、手は止めていない。準備は速さのために省かない。飛ばすなら plan.update で `
-      + 'その節を set state=done か blocked にして reason を書く）' };
+      + `${owed.title.slice(0, 24)} が開いているため。札は [${leaf.id}] のまま、手は止めていない）` };
   }
   const skipped = order.slice(tree.current === null ? 0 : order.findIndex(node => node.id === tree.current) + 1, order.indexOf(leaf))
     .filter(node => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !questions.under(leaf.id, node.id)).slice(0, 3);
-  return { to: leaf.id, from: tree.current, acts: tags.length, words: `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため。順を変えるなら plan.update の current で戻す。`
-    + `飛ばした節は順のまま残っている${skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : ''}）` };
+  return { to: leaf.id, from: tree.current, acts: tags.length, words: `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）。`
+    + `飛ばした節は順のまま残っている${skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : ''}` };
 }
 
 /** The node itself when the plan has it, else its nearest ancestor by the id's dots that it has (`p4.1` → `p4`), else the id as it was. */

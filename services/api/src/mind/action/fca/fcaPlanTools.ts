@@ -158,7 +158,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
     try { to = tree.nodes.length ? parts.follow?.(tree) ?? null : null; } catch { to = null; }
     if (!to || !amend({ ops: [], current: to.to }, 'followed', ` from=${to.from ?? '-'} to=${to.to} acts=${to.acts}`)) return;
     // Run 41: the words are the follower's when it has them (a move to a preparation node says which and why; a move on names the nodes it passed).
-    const words = to.words ?? `今の節を [${to.to}] に進めた（体が [${to.to}] の項目を始めたため。順を変えるなら plan.update の current で戻す。飛ばした節は順のまま残っている）`;
+    const words = to.words ?? `今の節を [${to.to}] に進めた（体が [${to.to}] の項目を始めたため）。飛ばした節は順のまま残っている`;
     note = note ? `${note} ${words}` : words;
   };
   /** A tree handed in (the first plan) replaces the one held, its done nodes carried over (`inbox.take`). */

@@ -283,7 +283,7 @@ export function stepProbes(surprises: readonly Surprise[]): ProbeInput[] {
 }
 
 /** The last line of an investigation (the knowledge says the rest). */
-export const INVESTIGATION_TAIL = '→ 調べた事実で前提（道・高さ・届く所・材料の所）を見直してから手を変える。原因が分かったら plan.update で forbid・caution に書く';
+export const INVESTIGATION_TAIL = '（以上は、頭が止まった時に調べた事実）';
 
 /**
  * The investigation of a step: the surprises, then each probe's answer that came within `budgetMs` (all sent at once through `run`, which
@@ -308,7 +308,7 @@ export async function runInvestigation(parts: { surprises: readonly Surprise[]; 
   const lines = parts.probes.map((probe, index) => {
     const answer = answers[index], label = `調べ ${probeLabel(probe, parts.feet)}`;
     if (!parts.run) return null;
-    if (answer === undefined) return `${label}: 時間切れ（添えずに進めた。要るなら mc.probe で）`;
+    if (answer === undefined) return `${label}: 時間切れ（添えずに進めた。要るなら mc_probe で調べられる）`;
     return answer === null ? `${label}: 答えが無かった` : `${label}: ${probeAnswerText(answer, true)}`;
   }).filter((line): line is string => line !== null);
   return { lines: fitInvestigation([...head, ...lines, ...(head.length ? [INVESTIGATION_TAIL] : [])], tokens), answered, ms: Math.round(now() - began),
@@ -341,7 +341,7 @@ export function scanLines(scan: unknown, shownAt: string | null): { lines: strin
   const words = { login: 'ログイン', reconnect: '再接続', respawn: 'リスポーン', portal: '次元の移動' } as Record<string, string>;
   return { at: value.at, lines: [`走査（${words[value.trigger ?? ''] ?? '体'}の後${value.dimension ? `・${String(value.dimension).replace(/^minecraft:/u, '')}` : ''}`
     + `${typeof value.reach === 'number' ? `・${Math.round(value.reach)}m 内` : ''}）: ${value.text.slice(0, 300)}`, ...rows,
-    ...(portal ? ['次元が変わった: この走査で、計画の次の節（材料・場所・順番）を plan.update で見直す'] : [])] };
+    ...(portal ? ['次元が変わった（この走査は新しい次元のもの）'] : [])] };
 }
 /** The scan as the first plan reads it: its words and every row. */
 export function scanForPlan(scan: unknown): string | null {

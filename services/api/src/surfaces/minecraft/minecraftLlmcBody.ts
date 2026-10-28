@@ -7,7 +7,7 @@ import {
 } from './minecraftLlmcLive.js';
 import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
-import { approachingIds, newApproach, planNowTitle, urgentRange, URGENT_ANSWER } from './minecraftLlmcUrgent.js';
+import { approachingIds, newApproach, planNowTitle, urgentRange, URGENT_NOTE } from './minecraftLlmcUrgent.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
 import {
   createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise, type SurpriseFrame,
@@ -15,7 +15,7 @@ import {
 import { cautionFact } from './minecraftLlmcCaution.js';
 import type { PlanTree } from '@shannon/mind';
 import { meterLine, roadLine } from './minecraftLlmcRoad.js';
-import { enemyNear, feetIn, foodFirstLine, foodLeads, fuelShortage, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { feetIn, foodFirstLine, foodLeads, fuelShortage, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 import { wornItems } from './minecraftItems.js';
 import {
   inSightLine, keepThreatSight, keptThreatSight, nearThreats, readThreatSight, sightProbe, THREAT_SIGHT, threatLine, threatSightKey,
@@ -224,7 +224,7 @@ export function readinessParts(llmc: LlmcBodyParts, view: object | null, observa
   // Run 43: the fuel for what she carries to smelt is a lack of its own, beside the stage's.
   const shortage = [preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle,
     worn: wornItems(facts.world.worn) }), fuelShortage(facts.world, facts.counts)].filter(Boolean).join('。') || null;
-  const recovery = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts, enemyNear(facts.world));
+  const recovery = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts);
   // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the plan is not changed).
   const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? null, feetIn(facts.world)) : null;
   return { ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}), ...(shortage ? { shortage } : {}),
@@ -326,7 +326,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     const nowLine = planNowLine(parts.llmc.planView() as { now?: unknown; path?: unknown } | null);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing, bodyAge,
-      planNowTitle: planNowTitle(nowLine), queue: parts.queue?.lines(observation) ?? [], answer: URGENT_ANSWER });
+      planNowTitle: planNowTitle(nowLine), queue: parts.queue?.lines(observation) ?? [], mode: URGENT_NOTE,
+      recovery: readinessParts(parts.llmc, parts.llmc.planView() as object | null, observation).recovery });
     urgentTokens = llmcTokens(JSON.stringify(live));
     return live;
   };

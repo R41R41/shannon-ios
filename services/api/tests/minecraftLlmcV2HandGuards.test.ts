@@ -4,7 +4,7 @@ import { forgetLlmcEvents, urgentDecision, withLlmcBody } from '../src/surfaces/
 import { isUrgentLive, seenReopenStop, seenStops, urgentLimitStop } from '../src/surfaces/minecraft/minecraftLlmcHandGuards.js';
 import { heldBeforeSend } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { candidateAct } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
-import { URGENT_ANSWER } from '../src/surfaces/minecraft/minecraftLlmcUrgent.js';
+import { URGENT_NOTE } from '../src/surfaces/minecraft/minecraftLlmcUrgent.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2, two more guards before an act is sent (the decision replay's A: the live state had the fact and the answer went
@@ -26,8 +26,9 @@ describe('the urgent limit', () => {
     expect(urgentLimitStop({ hands: [walk(1), walk(2), walk(3)] }, true)).toBeNull();
     expect(urgentLimitStop(null, true)).toBeNull();
   });
-  it('knows an urgent decision by the answer line of its live state', () => {
-    expect(isUrgentLive({ body: { answer: URGENT_ANSWER } })).toBe(true);
+  it('knows an urgent decision by the mode line of its live state (and by the answer line of a recorded live of the earlier form)', () => {
+    expect(isUrgentLive({ body: { mode: URGENT_NOTE } })).toBe(true);
+    expect(isUrgentLive({ body: { answer: '急ぎの答え方: 考えは 2〜3 文まで。mc.act は 1 つ、手は 3 つまで、why は 20 字まで。' } })).toBe(true);
     expect(isUrgentLive({ body: { map: 'x' } })).toBe(false);
     expect(isUrgentLive({})).toBe(false);
   });

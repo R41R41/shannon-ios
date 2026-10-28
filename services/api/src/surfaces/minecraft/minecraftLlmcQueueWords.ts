@@ -62,9 +62,9 @@ function itemLine(item: QueueWordsItem, index: number, frame: BodyObservation | 
 /** The lines of the live state: each open item, then how many more may be added; an empty queue says the body stands still. */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
   running: { progress: MinecraftQueueProgress | null; leftMs: number }): string[] {
-  if (!items.length) return ['空（体は止まっている）。mc.act を足すと体が動く'];
+  if (!items.length) return ['空（体は止まっている）'];
   const room = QUEUE_MAX - items.length;
   const last = items[items.length - 1]!.item;
   return [...items.map((item, index) => itemLine(item, index, frame, running)),
-    room > 0 ? `足せるのは あと ${room} つ（${last} の後）。差し替えは replace` : '列はいっぱい。足すなら replace で消す'];
+    room > 0 ? `あと ${room} つ足せる（足した項目は ${last} の後ろに付く）` : `列はいっぱい（${QUEUE_MAX}/${QUEUE_MAX}）`];
 }

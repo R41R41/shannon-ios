@@ -34,7 +34,7 @@ export function furnaceWaitNote(input: unknown, frame: BodyObservation | null): 
   const furnaces = working(frame);
   if (total < LONG_WAIT_SECONDS || !furnaces.length) return null;
   const shown = furnaces.slice(0, 2).map(item => `${item.at} の ${item.what} はあと約 ${item.left} 秒`).join('、');
-  return `手 ${waits[0]!.hand} wait（合わせて ${Math.round(total)} 秒）: かまどの焼き上がりまで ${shown}。立って待たず、その間に掘る・集める・作る項目を列に足せる（焼き上がりを取る項目は pre に furnace:x,y,z）`;
+  return `手 ${waits[0]!.hand} wait（合わせて ${Math.round(total)} 秒）: かまどの焼き上がりまで ${shown}`;
 }
 
 /**
@@ -42,6 +42,8 @@ export function furnaceWaitNote(input: unknown, frame: BodyObservation | null): 
  * the result every time and the next act was wait only, four times of four; one of them wrote 「焼き上がりまで待ちつつ、足元の鉄を掘る」 and sent wait 30 + wait 30):
  * an act whose hands are only waits (and the furnace's own, equip, look, eat) that add up to `STAND_REFUSE_SECONDS` while a furnace works is not sent the first
  * time, and the fact comes back at once. The same act again, straight after, is sent: waiting may be the best there is. Not in an urgent decision.
+ * GPT's review 2026-10-28: the result says the fact only (not sent, the furnace's seconds); it no longer tells that the same act sent again goes (a mechanism that is
+ * unchanged), and the rule for a wait is in the instructions (「体を止めない」).
  * Pieces to smelt are split over more furnaces (a furnace takes 10 s a piece): the fact says so when one furnace holds `SPLIT_PIECES` or more.
  */
 export const STAND_REFUSE_SECONDS = 20;
@@ -66,10 +68,9 @@ export function furnaceStandStop(input: unknown, frame: BodyObservation | null, 
   const first = hands.findIndex(hand => hand?.do === 'wait') + 1;
   const shown = furnaces.slice(0, 2).map(item => `${item.at} の ${item.what} はあと約 ${item.left} 秒`).join('、');
   const many = furnaces.find(item => item.count >= SPLIT_PIECES);
-  const split = many ? `。${many.what} は1基で ${many.count * 10} 秒かかる: 次は2〜3基に分けて同時に焼くと待ちが半分以下になる` : '';
+  const split = many ? `。${many.what} を1基で焼くと ${many.count * 10} 秒かかる（1個 10 秒。基数に分けると並んで焼ける）` : '';
   return { hand: Math.max(1, first), kind: 'wait', code: 'furnace_stand',
-    line: `立って待つだけの手（合わせて ${Math.round(total)} 秒）は送らない。かまどの焼き上がりまで ${shown}${split}。`
-      + 'その間に掘る・集める・作る・狩る項目を足して出し直す（焼き上がりを取る項目は pre に furnace:x,y,z）。待つのが本当に最善なら、同じ act をもう一度出せば送る' };
+    line: `立って待つだけの手（合わせて ${Math.round(total)} 秒）は送っていない（手は動いていない）。かまどの焼き上がりまで ${shown}${split}` };
 }
 /** For tests: no task has been refused a stand. */
 export function forgetFurnaceStands(): void { refused.clear(); }

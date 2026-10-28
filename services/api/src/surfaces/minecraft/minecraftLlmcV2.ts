@@ -50,13 +50,16 @@ export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolD
  * needed (`closedUnder`), and 「体の手と同じ応答で出してよい」 with no order: the order of the response is the order the calls run.
  */
 const PLAN_WORDS: ReadonlyArray<readonly [string, string]> = [
+  // GPT's review 2026-10-28: where a note and the forbid and caution lines show up, said from the code (`planPath`): the note is on the node's line, the rules are the lines.
+  ['live の plan.rules に、今の節と親の道の禁止・注意が出る（その節を離れると出ない）。',
+    'forbid・caution は live の plan.rules に（今の節と親の道の分。その節を離れると出ない）。note は節の補足の文で、live の plan の now・next の行に付く（rules には出ない）。'],
   ['済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。',
     '済む条件: doneWhen が観測の形（have:・dim:・at:・food>=）の節は、live では「（済む条件: …）」と出る。頭のコードがその条件が満たされた時に済みにする。'],
   ['親が済みでも子は済みにならない（子は自分の条件か set state=done で）。',
     '親が済むと、その下の開いた子（blocked を除く）は「不要になった」として閉じる（成果を得て済んだのではない）。'],
   ['済み扱いの子（消費して無くなった板・棒など）は set state=done で自分で閉じる。',
     '消費して無くなる物（板・棒など）の子は、作った時に set state=done で自分で閉じる。'],
-  ['体の手と同じ応答で出してよい。', '同じ応答で mc.act を続けてよい（plan.update を先に書く。書いた順に実行される）。'],
+  ['体の手と同じ応答で出してよい。', '同じ応答で mc_act を続けてよい（plan_update を先に書く。書いた順に実行される）。'],
 ];
 function planWords(tool: FcaToolDefinition): FcaToolDefinition {
   if (tool.name !== 'plan.update') return tool;

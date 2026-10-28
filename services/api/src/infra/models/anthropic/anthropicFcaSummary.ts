@@ -134,6 +134,8 @@ function v2FactsGoal(): string {
     + '(a number such as hpBelow or a count of items only when a result or the task gave it): '
     + 'the forbid and caution lines of the plan carry cautions, not this summary. '
     + 'Use [] for 制約 unless the task itself states a condition. Use [] for 次: the plan with its open nodes is in every live state. '
+    + 'Write a value of a moment (the position, health, hunger, what is carried) as of the record it comes from ("q163 の時点: 位置 …、体力 …"); '
+    + 'never label it 今 or 現在, because the newest live state has the present and a past value called now competes with it. '
     + 'Never call the inventory, the worn armor, health, hunger or the position unknown or unchecked, '
     + 'and never tell to check them: the live state shows them at every step. '
     + 'Name no tool except mc.act, mc.probe, mc.view and plan.update. Call fca_history_summary once and nothing else. '

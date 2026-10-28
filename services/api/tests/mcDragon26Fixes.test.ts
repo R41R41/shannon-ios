@@ -144,18 +144,18 @@ describe('fix 3: a descent with too little food says so', () => {
   const down = { hands: [{ do: 'walk', to: { x: 3, y: 36, z: 4 } }] };
   it('is said for a hand that goes 10 or more down with food under 40, with the cows in sight', () => {
     const note = descentNote(down, surface([['cooked_beef', 1]], { nearbyEntities: [{ name: 'cow', distance: 14, id: 5 }] }))!;
-    expect(note).toContain('食料 20.8/40 点（あと 19.2 点: cooked_beef 1 個）・作業台 無・板 0 のまま地下 y=36 へ下りる手');
+    expect(note).toContain('準備の状態（この act は地下 y=36 へ下りる手）: 未達 — 食料 20.8/40 点（あと 19.2 点: cooked_beef 1 個）・作業台 無・板 0');
     expect(note).toContain('cow 14m');
     // Run 42: no way past it (「このまま行くなら why に…書く」 was read as one); the loss as the runs measured it.
     expect(note).not.toContain('このまま行くなら');
     expect(note).not.toContain('鉄の夜');
-    // Run 41: the reason in real numbers, not the fullness (it is 20) that the live shows beside it.
-    expect(note).toContain('地上へ戻るのに約 500 秒かかる');
-    expect(note).toContain('372 秒止まり');
+    // GPT's review 2026-10-28: the reason and the story of a run are the instructions' (「準備の決まり」), not said again in every result.
+    expect(note).not.toContain('地上へ戻るのに');
+    expect(note).not.toContain('372 秒止まり');
   });
   it('names the table when the food is enough but no table and fewer than 4 planks are carried (run 41: 372 s without one)', () => {
     const noTable = descentNote(down, surface([['cooked_beef', 2], ['spruce_planks', 2]]))!;
-    expect(noTable).toContain('作業台 無・板 2 のまま地下 y=36 へ下りる手');
+    expect(noTable).toContain('未達 — 作業台 無・板 2');
     expect(noTable).not.toMatch(/^食料/u);
     expect(descentNote(down, surface([['cooked_beef', 2], ['crafting_table', 1]]))).toBeNull();
     expect(descentNote(down, surface([['cooked_beef', 2], ['spruce_planks', 4]]))).toBeNull();
@@ -215,7 +215,7 @@ describe('fix 6: the meter keeps a milestone that was passed over', () => {
     const line = meterLine(dragon, kit(['iron_pickaxe', 1], ['bucket', 1]), 862 / 60)!;
     expect(line).toBe('目安: 今 862 秒・次の節目 ベッド 目安 150 秒（712 秒遅れ）');
     const later = meterLine({ ...dragon, current: 'p7' }, kit(['iron_pickaxe', 1], ['bucket', 1]), 862 / 60)!;
-    expect(later).toBe('目安: 今 862 秒・次の節目 ダイヤのツルハシ 目安 1,000 秒（あと 138 秒）・まだの節目: ベッド（目安 150 秒。飛ばしたなら plan.update に書く）');
+    expect(later).toBe('目安: 今 862 秒・次の節目 ダイヤのツルハシ 目安 1,000 秒（あと 138 秒）・まだの節目: ベッド（目安 150 秒）');
   });
   it('says nothing of it once the bed is in the pack, and keeps the used-up milestones out of it', () => {
     expect(meterLine({ ...dragon, current: 'p7' }, kit(['iron_pickaxe', 1], ['bucket', 1], ['white_bed', 1]), 862 / 60)).not.toContain('まだの節目');

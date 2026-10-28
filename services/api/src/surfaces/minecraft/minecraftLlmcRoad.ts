@@ -2,7 +2,6 @@ import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, type DoneFacts } from './minecraftPlanDone.js';
 import { carried } from './minecraftConditions.js';
-import { PREP_SKIP_SECONDS } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 
 /**
@@ -21,7 +20,7 @@ export interface Milestone {
   kept?: boolean;
   /** Run 41: the plan's node for it, beside its own condition (a node open that names it points the meter at it; one done holds it reached). */
   node?: (node: PlanNode) => boolean;
-  /** A word beside the milestone while it is the one pointed at or passed over: what skipping it costs, in real numbers. */
+  /** A word beside the milestone while it is the one pointed at or passed over (a fact). The meter says no cost and no order: the rule and its reason are in the instructions' 「準備の決まり」. */
   cost?: string;
   /**
    * Whether the frame meets it, for a milestone whose condition the plan's predicates read wrongly (`have:planks>=4` also holds once a bed is carried, which the planks were
@@ -44,8 +43,7 @@ const prepNow = (facts: DoneFacts): string => `${foodPointsWords(facts.food, 40)
 export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ベッド', seconds: 150, doneWhen: 'have:bed' },
   // 300 s: the quickest preparation of runs 39-41 (run 40: two village chests, 39.6 points at +298; the table or planks 4 at +45 to +94).
-  { name: PREP_MILESTONE_NAME, seconds: 300, doneWhen: 'food>=40&have:crafting_table|food>=40&have:planks>=4', short: '地下の準備', kept: true, holds: prepHolds, node: isPrepMilestoneNode,
-    cost: `省くと地上へ戻るのに約 ${PREP_SKIP_SECONDS} 秒かかり、死ぬこともある`, now: prepNow },
+  { name: PREP_MILESTONE_NAME, seconds: 300, doneWhen: 'food>=40&have:crafting_table|food>=40&have:planks>=4', short: '地下の準備', kept: true, holds: prepHolds, node: isPrepMilestoneNode, now: prepNow },
   // 350 s, after the preparation (it was 250, before a preparation that takes 300): run 38 had it at +342 from a village chest.
   { name: '鉄のツルハシ', seconds: 350, doneWhen: 'have:iron_pickaxe' },
   { name: 'バケツ', seconds: 600, doneWhen: 'have:bucket' },
@@ -136,7 +134,7 @@ export function meterLine(tree: PlanTree | null | undefined, observation: BodyOb
     && tree.nodes.some(node => node.state !== 'done' && names(node, DRAGON_MILESTONES[index]!)));
   const passed = DRAGON_MILESTONES[skippedIndex];
   const detail = (item: Milestone): string => [item.now ? `今 ${item.now(facts)}` : '', item.cost ?? ''].filter(Boolean).join('。');
-  const skipped = passed ? `・まだの節目: ${passed.name}（目安 ${grouped(passed.seconds)} 秒。${detail(passed) ? `${detail(passed)}。` : ''}飛ばしたなら plan.update に書く）` : '';
+  const skipped = passed ? `・まだの節目: ${passed.name}（目安 ${grouped(passed.seconds)} 秒${detail(passed) ? `。${detail(passed)}` : ''}）` : '';
   if (!next) return `目安: 今 ${grouped(now)} 秒（節目は全部済んだ）${skipped}`;
   const gap = next.seconds - now;
   const state = gap >= 0 ? `あと ${grouped(gap)} 秒` : `${grouped(-gap)} 秒遅れ`;

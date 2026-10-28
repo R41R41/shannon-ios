@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanTree } from '@shannon/mind';
-import { expandShortAct } from '../src/contracts/minecraftActShortContract.js';
+import { expandShortAct, SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
 import { PLAN_UPDATE_RULES_DEFINITION } from '../src/mind/action/fca/fcaPlanTools.js';
 import { gateFirst, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -68,13 +68,13 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
 describe('Notion 09-1c: the rules said as the code keeps them', () => {
   const system = minecraftV2System(V2_ALWAYS);
   it('one act a decision, plan.update first in the same response, a probe\'s answer before the hand that needs it', () => {
-    expect(system).toContain('mc.act は 1 判断に 2 つまで（列の項目。体は順に動かす）。plan.update は mc.act の前に置けば同じ応答でよい（書いた順に実行）');
+    expect(system).toContain('mc_act を 1〜2 つ（列に足す）。plan_update は mc_act の前に置けば同じ応答で、書いた順に実行');
     expect(system).not.toContain('のどれか。');
-    expect(system).toContain('act の中の手は順に動き、失敗は onFail に従う（反射・stopIf・満杯・時間切れは act 全体を止める）');
+    expect(SHORT_ACT_DESCRIPTION).toContain('手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める');
   });
   it('one health line: no fight at 8 or less, strike back over 8', () => {
     expect(V2_ALWAYS).toContain('体力 8 以下では戦わない');
-    expect(V2_ALWAYS).toContain('体力 8 超なら打ち返す');
+    expect(V2_ALWAYS).toContain('鉄以上の剣があり体力 8 超で遮れない時は打ち返す');
     expect(V2_ALWAYS).not.toContain('体力 6 超');
   });
   it('an absent field is not an absent fact, the plan\'s done is not the goal\'s progress, next is the order', () => {
@@ -82,13 +82,13 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
     expect(V2_ALWAYS).toContain('出ていない項目は「無い」とは限らない');
     expect(V2_ALWAYS).toContain('done（済み扱いの節/全体。達成率ではない）');
     expect(V2_ALWAYS).toContain('next（予定の次 3 節。すぐできるとは限らない）');
-    expect(V2_ALWAYS).toContain('親が済むと開いた子（止めた子以外）は「不要」で閉じる');
+    expect(candidateMenuTools([PLAN_UPDATE_RULES_DEFINITION])[0]!.description).toContain('親が済むと、その下の開いた子（blocked を除く）は「不要になった」として閉じる');
   });
   it('the plan tool says the children of a done node are closed, and plan.update goes before the act', () => {
     const [plan] = candidateMenuTools([PLAN_UPDATE_RULES_DEFINITION]);
     expect(plan!.description).not.toContain('親が済みでも子は済みにならない');
     expect(plan!.description).toContain('親が済むと、その下の開いた子（blocked を除く）は「不要になった」として閉じる');
-    expect(plan!.description).toContain('同じ応答で mc.act を続けてよい（plan.update を先に書く。書いた順に実行される）');
+    expect(plan!.description).toContain('同じ応答で mc_act を続けてよい（plan_update を先に書く。書いた順に実行される）');
     expect(PLAN_UPDATE_RULES_DEFINITION.description).toContain('親が済みでも子は済みにならない');
   });
   it('the first plan reads the scan as not found there, and the closing of the children under a done node', () => {

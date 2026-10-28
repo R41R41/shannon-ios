@@ -29,7 +29,7 @@ export function normalizeMap(map: string | undefined): string | undefined {
   // The surface form's top grid (symbol and height, two characters a cell) stays as it is, up to the first layer.
   const firstLayer = lines.findIndex((line, i) => i > 0 && /^y=-?\d+/u.test(line));
   const out: string[] = [lines[0]!, ...(layers.mode === 'surface' ? lines.slice(1, firstLayer) : [])];
-  out.push(`（以下の層は全部 x=${x0}..${x1} z=${z0}..${z1} の同じ範囲（全層が持つ範囲。外は around か mc.view）。^ の列が足の x=${feet.x}。列の見出しは x の下 1 桁）`);
+  out.push(`（以下の層は全部 x=${x0}..${x1} z=${z0}..${z1} の同じ範囲（全層が持つ範囲。外は around か mc_view）。^ の列が足の x=${feet.x}。列の見出しは x の下 1 桁）`);
   const ticks = Array.from({ length: x1 - x0 + 1 }, (_, i) => String(Math.abs(x0 + i) % 10));
   out.push(`z\\x ${ticks.join(' ')}`);
   const caret = `${' '.repeat(4 + 2 * (feet.x - x0))}^`;
