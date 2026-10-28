@@ -1096,3 +1096,58 @@ Codex の 3 回目の見直しで「実装の途中で直してよい」とさ�
 | 持ち物を確かめてから置きを送るまでを、同じ motor の持ち主で通す試験（保留 9） | 体 | `result/r45-hold9-hand-at-send.json` を、本物の motor port の下で通す試験にする |
 | meter の時計を、保留・再開・再起動をまたいで試す | 頭 | `measure/meter-clock-excludes-holds.json` を、再開と頭の再起動を挟む場面へ広げる |
 | README（Codex の材料の `00-README.md`）の古い説明（実走 45「進行中」） | 取りまとめ役 | 実走 45 は終わった（45 分・黒曜石 7・ネザー無し） |
+
+---
+
+## 14. 追記（実装の途中で、取りまとめ役が決めた物）
+体と頭の担当は、ここを正本として読む。それぞれ自分のリポジトリの本文と見本へ同じ文で入れた。番号は「A-n」。本文の該当の所（1 章の `ActHandLine`・判定表・3 章の `InventoryEvent`・6 章の `Progress`）は、この追記で読み替える。
+
+### A-1（10/28、体の担当の質問 1〜7 から）
+
+1. **手の行の `motorOps`**：`ActHandLine` に `motorOps`（その手が効かせた操作の数）を足す。
+   - skipped の手には付けない。
+   - 頭の読み手も、この欄を読む。not_started と failed の境目は、この数で決める。
+2. **(goal `not_started`, end `cut`)**：外から止められ、操作が 0 の手。依存の判定表の `outcomes` に、この 1 行を足す。
+   - 扱いは、既にある not_started の行と同じ（成功ではないので、頼る項目は始めない。操作 0 なので failed にはしない）。
+   - released は、ふつうの決まりのとおり。
+3. **欄の名前**：体の担当の名前で決める。頭も同じ名前を使う。
+   - 受け取り（`MinecraftControlReceipt`）：`unit`、`bodyTimes`
+   - `ActResult`：
+     - `outcome`（ActOutcome）
+     - `handover`
+     - `eventsMore`：受け取りに載らなかった出来事を取りに行く先
+     - `earlierPasses`・`earlierEvents`：古い周回の行を数にまとめた時でも、出来事は落とさず、この欄で運ぶ
+   - poll：`bodyVersion`
+   - 返事：`headBoot`
+   - 観測：`facts.life`・`state.life`・`state.bodyRun`・`state.control`・`state.world.utilities`
+4. **箱の出し入れ**：`InventoryEvent.reason` に `stored`（箱へ入れた）と `retrieved`（箱から出した）を足す。
+   - chest の手も、持ち物の出来事を作る。
+   - 約束の帳簿では、`stored` は消費ではなく「置き場所が変わった」として出す（残りの量の正本は持ち物の観測なので、手元の残りは減る）。
+5. **`fightsFirst` の直し**（既にある不具合）：args は配列なので、0 番を読む。今までは、fight で始まる act が melee を止める経路が一度も効いていなかった。
+   - 直すと、実走 45 の +929 の形で、ふるまいが変わる。最後の報告に書き、測りの実走で見る。
+6. **vertical**
+   - `range` は、塞ぐ半径。
+   - 既定：`maxDig` 200・`maxPlace` 100・`seconds` 60。`seconds` の範囲は 5〜120（go と同じ上限）。
+   - LLM への短い書き方では、この既定と範囲を見せる。頭は同じ範囲で検査する。
+   - `seen`（途中で見た物）は、`StepOutcome.data` ではなく、構造の `Progress.seen` に載せる。頭はそこを読む。
+   - 予定の足場へ踏み出せない時は、止まりの code に `no_foothold` を足して返す（`displaced` とは分ける。押し戻しと、足場が無いのとでは、LLM の次の手が違うため）。止まりの code は 14 個になる。
+   - pillar の置きの時機は、`bodyOverlap`＋余白 0.2 にする（mayLayAt は同じ柱の真上の空中では必ず false になるため）。0.2 は仮説のまま。隔離ラボで確かめる。
+7. **引き継ぎ**：`SkillExecutor.acquire` の `onGranted` で、ロックを取った瞬間に予約を確かめる形でよい。300 ms は初めの値のまま、隔離ラボで測る。
+
+### A-2（10/28、体の担当の段 2〜3 の報告 a〜e から）
+
+1. **見本の項目名**（a）：`continue/queue-item-depends.json` の `q13b`・`q13c` は見本の誤り。列の ID 規則（`q`＋数字）はそのまま。見本を `q131`・`q132` に直す。
+   - 体が形の誤りで断るのは正しい。
+   - 両側で見本を同じに直し、manifest の sha256 を合わせる。
+2. **cancelled の後ろを捨てた時の文**（b）：体で `code='cancelled'` を入れる。文は「（cancelled）」にする。
+   - LLM が読むのは文なので、「failed」と出すと「自分の手が失敗した」と読み違える。`unit.end` の cut は構造としては残すが、文も正しくする。
+   - 頭は、捨てた項目の結果が cancelled の時に「失敗」と数えない（依存の判定表のとおり）。
+3. **armor の装着の出来事**（c）：`equip`（head/torso/legs/feet）の tap で出す形でよい。
+   - 帳簿では消費ではなく「身に着けた」として出す（持ち物から防具の欄へ移っただけ）。
+4. **vertical と LAYING_HANDS**（d）：vertical を入れる。
+   - 理由：vertical は柱・塞ぎで置きを続ける手で、置きの途中に反射の note で止まると、実走 45 の止め 8・9 と同じ形の失敗になる。入れない理由は契約に無い。
+   - 入れた時に、他のふるまいが変わる所（例：落下・溺れの反射が抑えられる等）があれば、報告に書く。隔離ラボで「置きの途中で止まらない」ことと「命に関わる反射は効く」ことを 1 回ずつ確かめる。
+5. **fight の「逃げた」**（e）：成功の軸は ok のまま。終わり方を構造で返す。
+   - `fight` の結果に、相手の終わり方（倒した／範囲の外へ出た・生きている／見失った）を入れる。形と名前は `attack-target-lost` の見本と揃える（体の担当が決め、頭へ知らせる）。
+   - 頭は、逃げた時に「相手は生きていて、範囲の外にいる」と文で見せる。倒したと同じ文にしない（次の手が違うため）。
+   - 見本は 1 つ足す（`result/fight-target-escaped`）。両側に同じ物を置く。
