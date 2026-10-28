@@ -303,6 +303,30 @@ try {
   await cli('cancel', '--operator', 'lab', '--latest');
   await until(() => ['stopped', 'failed', 'completed'].includes(phase(task3)), 15_000);
 
+  // 5b (run 45, +929). A death between two acts of a task that asked to be held: the body holds it and stops the world, the head follows (the
+  //    frame, or the next act's refusal), the operator resumes it, and the decisions go on.
+  server.broken = false; model.script = ['walk'];
+  const fourth = await cli('request', '--operator', 'lab', '--hold-on-failure', '--max-minutes', '30', 'ラボ: 死んでも保留');
+  const task4 = taskOf(fourth);
+  check('a request runs its act (before the death)', await until(() => lab.acts.length >= 2, 30_000), `acts=${lab.acts.length}`);
+  await until(() => control.store.safe(task4), 15_000);
+  await delay(1000);
+  lab.bot.emit('death');
+  check('a death outside an act: the body holds the task and stops the world', await until(() => heldFile() && server.frozen && lab.incidents.held()?.why === 'death', 10_000),
+    JSON.stringify(lab.incidents.held()));
+  model.script = ['walk'];
+  check('the head holds it too (the frame, or the next act refused), and decides no more', await until(() => audit.store.heldOf(task4) !== null && phase(task4) === 'stopped', 40_000),
+    `phase=${phase(task4)}`);
+  const shownDeath = await cli('status');
+  check('status says the body held outside an act', /体が act の外（死亡・瀕死）で保留し、頭も保留した/u.test(shownDeath.out), shownDeath.out.slice(-300));
+  const actsBefore = lab.acts.length;
+  model.script = ['walk'];
+  const resumed4 = await cli('resume', '--operator', 'lab', '--latest');
+  check('resume after the death: the world moves and the decisions go on', resumed4.code === 0 && !heldFile() && !server.frozen
+    && await until(() => lab.acts.length > actsBefore, 30_000), resumed4.out);
+  await cli('cancel', '--operator', 'lab', '--latest');
+  await until(() => ['stopped', 'failed', 'completed'].includes(phase(task4)), 15_000);
+
   // 6. A hold file of a task that is gone (run 44's after the budget stopped it): the body comes up held, the head ends it (its tick).
   fs.writeFileSync(holdFile, JSON.stringify({ id: 'lab-stale-1', task: task1, at: nowIso(), frozen: false, freeze: 'others_present:I_am_Shannon', command: 'none', why: 'go_stuck' }));
   server.frozen = true;

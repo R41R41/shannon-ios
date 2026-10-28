@@ -196,6 +196,20 @@ describe('run 44, resume 1: the head and the body hold together', () => {
   });
 });
 
+describe('run 45 (+929): the body held on its own for a death outside an act', () => {
+  it('is followed as a hold (not a disagreement), and status says so', async () => {
+    const s = service();
+    await s.operator.handle(envelope('request', { goal: 'エンドラを討伐して', holdOnFailure: true }));
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    s.bodyAnswer.hold = { id: '20261028T020938-death-cdagk', task: TASK, why: 'death' };
+    s.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(JSON.parse(s.audit.heldOf(TASK)!.detail!)).toMatchObject({ incident: '20261028T020938-death-cdagk', why: 'death', mismatch: 'outside_act:frame' });
+    expect(s.stopped).toEqual([TASK]);
+    expect(s.activity.at(-1)).toMatchObject({ reasonCode: 'operator_hold' });
+    expect((await s.operator.handle(envelope('held'))).body).toMatchObject({ held: [{ body: '体も同じ保留。体が act の外（死亡・瀕死）で保留し、頭も保留した' }] });
+  });
+});
+
 describe('run 44, hold 1: a world the body could not stop', () => {
   it('is not held: the request goes on, nothing waits for a resume, and the audit and the activity say why', async () => {
     const s = service();

@@ -362,12 +362,16 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!requests || !request || parts.audit.heldOf(taskId)) return false;
     const before = holdDetail(parts.audit.lastHoldOf(taskId)?.detail ?? null);
     const same = before.incident === body.incident;
+    // Run 45 (+929): the body holds on its own for a death or near death outside an act: not a disagreement, the head follows it.
+    const outside = /^(?:death|near_death)/u.test(body.why);
     const detail = JSON.stringify({ incident: body.incident, why: body.why.slice(0, 160), frozen: null, command: same ? before.command ?? '' : '',
-      ...(same && before.start ? { start: before.start } : {}), ...(same && before.end ? { end: before.end } : {}), mismatch: `body_held:${body.seen}` });
+      ...(same && before.start ? { start: before.start } : {}), ...(same && before.end ? { end: before.end } : {}),
+      mismatch: outside ? `outside_act:${body.seen}` : `body_held:${body.seen}` });
     audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold', event: 'settled', code: 'held', argsJson: request.argsJson,
       taskId, detail: detail.slice(0, 600) });
-    parts.activity(parts.now(), { summary: '体がまだ保留していたので（頭との食い違い）、運用者が代わりに始めたマイクラの依頼を保留に戻しました。判断は止めています。',
-      tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: 'operator_hold_mismatch', detail: `task=${taskId} incident=${body.incident} seen=${body.seen}` });
+    parts.activity(parts.now(), { summary: outside ? `体が act の外の${body.why.startsWith('death') ? '死亡' : '瀕死'}で保留したので、運用者が代わりに始めたマイクラの依頼も保留しました。判断は止めています。`
+      : '体がまだ保留していたので（頭との食い違い）、運用者が代わりに始めたマイクラの依頼を保留に戻しました。判断は止めています。',
+      tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: outside ? 'operator_hold' : 'operator_hold_mismatch', detail: `task=${taskId} incident=${body.incident} seen=${body.seen}` });
     await requests.stop(taskId, 'operator_hold').catch(() => []);
     return true;
   }
@@ -388,7 +392,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       // Run 44: the body's own hold beside the head's, so that a disagreement shows.
       const agree = !body ? '体は保留していない（食い違い: 頭だけ保留）' : body.id === detail.incident ? '体も同じ保留' : `食い違い: 体の保留は ${body.id}（task ${body.task}）`;
       return { taskId: row.taskId!, detail: row.detail ?? '', position: driftWords(detail.start, now, detail.end),
-        body: `${agree}${detail.mismatch ? '。体が act を断ったので頭が保留に戻した' : ''}` };
+        body: `${agree}${detail.mismatch?.startsWith('outside_act') ? '。体が act の外（死亡・瀕死）で保留し、頭も保留した' : detail.mismatch ? '。体が act を断ったので頭が保留に戻した' : ''}` };
     });
     const loose = body && !held.some(entry => holdDetail(entry.detail).incident === body.id)
       ? `食い違い: 体は保留 ${body.id}（task ${body.task}、${body.why}）を持つが、頭には開いた保留が無い` : null;
