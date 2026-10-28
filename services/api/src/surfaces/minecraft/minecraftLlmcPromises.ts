@@ -332,15 +332,22 @@ export interface PromiseLineContext {
 export function promiseLines(promises: readonly PlanPromise[], context: PromiseLineContext = {}): string[] {
   const facts = doneFacts(context.observation ?? null);
   return [...promises].filter(promise => promise.state === 'open' || promise.state === 'kept_by_instead').sort((left, right) => left.id - right.id)
-    .slice(0, context.limit ?? 4).map(promise => lineOf(promise, facts, context));
+    .slice(0, context.limit ?? 4).map(promise => lineOf(promise, facts, context, promises));
 }
 
-function lineOf(promise: PlanPromise, facts: DoneFacts | null, context: PromiseLineContext): string {
+/** What the open promises of an item hold back in all (their counts added): what is not free to spend (A-8 1). */
+export const heldBack = (promises: readonly PlanPromise[], item: string): number =>
+  promises.filter(promise => promise.state === 'open' && promise.item === item).reduce((total, promise) => total + promise.count, 0);
+/** What she has beyond the open promises of the item: what she has less what they hold back, never below 0 (A-8 1). */
+export const freeOutside = (promises: readonly PlanPromise[], item: string, have: number): number => Math.max(0, round1(have - heldBack(promises, item)));
+
+function lineOf(promise: PlanPromise, facts: DoneFacts | null, context: PromiseLineContext, all: readonly PlanPromise[] = []): string {
   const food = promise.item === 'food', unit = food ? ' 点' : '';
   const link = /[用分]$/u.test(promise.use) ? 'の' : '用の';
   const head = `約束 #${promise.id} ${promise.use}${link}${itemWord(promise.item)} ${promise.count}${unit}`;
   const have = facts ? haveIn(promise.item, facts) : promise.have;
-  const parts = [have === undefined ? '今 不明' : `今 ${round1(have)}${unit}`];
+  const outside = have === undefined || promise.state !== 'open' ? '' : `（約束の外で使えるのは ${freeOutside(all.length ? all : [promise], promise.item, have)}${unit}）`;
+  const parts = [have === undefined ? '今 不明' : `今 ${round1(have)}${unit}${outside}`];
   if (promise.state === 'kept_by_instead') {
     const words = facts && promise.instead && validCondition(promise.instead) ? holdWords(promise.instead as ActCondition, facts) : null;
     return `${head}: ${[...parts, `代わりの条件を満たす${words ? `（${words}）` : ''}`].join('・')}`;
@@ -398,4 +405,44 @@ function holdWords(condition: ActCondition, facts: DoneFacts): string | null {
     }
     return clauseText(clause);
   }).join('・');
+}
+
+/**
+ * What an act's hands spend that the head can count from their arguments (A-8 2): a smelt's fuel and what it smelts, what a drop throws and a chest takes in, the blocks of a place
+ * (one a cell) and of a pillar (`n`, with its block named). A make's or a craft's materials need a recipe: not counted here.
+ */
+export function actSpends(hands: readonly { do?: string; item?: string; items?: readonly { item: string; count?: number }[]; fuel?: string; fuelCount?: number;
+  block?: string; at?: readonly unknown[]; n?: number; op?: string; count?: number }[]): { item: string; count: number }[] {
+  const out: { item: string; count: number }[] = [];
+  for (const hand of hands) {
+    if (hand.do === 'smelt') {
+      if (hand.fuel && hand.fuelCount) out.push({ item: hand.fuel, count: hand.fuelCount });
+      for (const entry of hand.items ?? []) if (entry.count) out.push({ item: entry.item, count: entry.count });
+    } else if (hand.do === 'drop') for (const entry of hand.items ?? []) { if (entry.count) out.push({ item: entry.item, count: entry.count }); }
+    else if (hand.do === 'chest' && (hand.op === 'put')) for (const entry of hand.items ?? []) { if (entry.count) out.push({ item: entry.item, count: entry.count }); }
+    else if (hand.do === 'place' && hand.block && hand.at?.length) out.push({ item: hand.block, count: hand.at.length });
+    else if (hand.do === 'pillarUp' && hand.block && hand.n) out.push({ item: hand.block, count: hand.n });
+  }
+  return out;
+}
+/** Whether a name in the pack is the item of a promise (the same match the conditions use: the name, or a kind ending in it: `spruce_planks` is `planks`). */
+const isItemOf = (name: string, item: string): boolean => name === item || name.endsWith(`_${item}`);
+/**
+ * A-8 2: when the act's spending is more than what the open promises of an item leave free, one line (said once, after the act is sent; nothing is refused):
+ * 「この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 6 を使い、残り 1）」. Facts the head counts; the choice stays the model's.
+ */
+export function breakingWords(promises: readonly PlanPromise[], hands: Parameters<typeof actSpends>[0], observation: BodyObservation | null): string[] {
+  const facts = doneFacts(observation), spends = actSpends(hands);
+  if (!facts || !spends.length) return [];
+  const lines: string[] = [];
+  for (const promise of promises.filter(item => item.state === 'open').sort((a, b) => a.id - b.id)) {
+    const used = spends.filter(spend => isItemOf(spend.item, promise.item)).reduce((total, spend) => total + spend.count, 0);
+    if (!used) continue;
+    const have = haveIn(promise.item, facts);
+    if (used <= freeOutside(promises, promise.item, have)) continue;
+    const unit = promise.item === 'food' ? ' 点' : '';
+    const link = /[用分]$/u.test(promise.use) ? 'の' : '用の';
+    lines.push(`この act は約束 #${promise.id}（${promise.use}${link}${itemWord(promise.item)} ${promise.count}${unit}）を割る見込み（${itemWord(promise.item)} ${round1(used)}${unit} を使い、残り ${Math.max(0, round1(have - used))}${unit}）`);
+  }
+  return lines;
 }

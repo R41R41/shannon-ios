@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { withoutOutside } from './helpers/promiseLine.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyPlanUpdate, emptyPlanTree, PLAN_KINDS, readPlanTree, type PlanPromise, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
@@ -44,7 +45,7 @@ function driver(promises: PlanPromise[]) {
   };
 }
 const promiseOf = (value: unknown): PlanPromise => JSON.parse(JSON.stringify(value)) as PlanPromise;
-const lineOf = (promises: readonly PlanPromise[], at: number, shot: Shot, since: number) => promiseLines(promises, { since: iso(since), observation: frame(shot) });
+const lineOf = (promises: readonly PlanPromise[], at: number, shot: Shot, since: number) => promiseLines(promises, { since: iso(since), observation: frame(shot) }).map(withoutOutside);
 
 describe('promise/r43-planks-burned-as-fuel.json: planks promised for the table were put in the furnace', () => {
   const sample = fixture('r43-planks-burned-as-fuel');
@@ -332,7 +333,7 @@ describe('the rest of chapter 3: stored is not consumed, an event ahead of the o
 
   it('lines: by number, open ones only, four at most; facts only', () => {
     const promises = [5, 2, 9, 1, 7, 3].map(id => ({ id, rev: 1, item: 'coal', count: 3, use: '燃料', state: id === 9 ? 'closed' as const : 'open' as const, ledger: [] }));
-    const lines = promiseLines(promises, { observation: frame({ seq: 1, items: { coal: 1 } }) });
+    const lines = promiseLines(promises, { observation: frame({ seq: 1, items: { coal: 1 } }) }).map(withoutOutside);
     expect(lines).toEqual([1, 2, 3, 5].map(id => `約束 #${id} 燃料用の石炭 3: 今 1（足りない 2）`));
     for (const line of lines) expect(line).not.toMatch(/べき|しろ|こと$|ください/u);
   });

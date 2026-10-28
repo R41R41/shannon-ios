@@ -1,3 +1,4 @@
+import type { PlanPromise } from '@shannon/mind';
 import { createHash } from 'node:crypto';
 import type { FcaExternalTools, FcaToolDefinition } from '../mind/action/fca/fcaPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
@@ -65,7 +66,9 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     /** Continue contract 5: the observation the decision now running read (`madeIn`); null when it had no life to name. The acts it chooses carry it. */
     madeIn?(): MadeIn | null;
     /** Amendment A-7 1: an entry of an act's `keep` put to the plan as a promise (`FcaPlanPort.keepPromise`). */
-    keep?(entry: ActKeep): KeptPromise | { problem: string } };
+    keep?(entry: ActKeep): KeptPromise | { problem: string };
+    /** Amendment A-8 2: the plan's promises now. */
+    promises?(): readonly PlanPromise[] };
   /**
    * Owner 2026-10-26: each finished act is handed to her feeling beside the decisions (`minecraftFeeling.ts`), synchronously and
    * without waiting for anything; nothing comes back to the decision. Absent: nothing is felt from her acts.
@@ -143,7 +146,8 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       if (guards) {
         const sent = await sendItem({ queue: parts.llmc.queue, control, bodyId, call, skill: current!.name, fixes: prepared?.fixes ?? [],
           node: node?.mark?.node ?? null, current: node?.mark?.current ?? null, frame: control.observe(bodyId),
-          ...(parts.llmc.madeIn ? { madeIn: parts.llmc.madeIn() } : {}), ...(parts.llmc.keep ? { keep: parts.llmc.keep } : {}) });
+          ...(parts.llmc.madeIn ? { madeIn: parts.llmc.madeIn() } : {}), ...(parts.llmc.keep ? { keep: parts.llmc.keep } : {}),
+          ...(parts.llmc.promises ? { promises: parts.llmc.promises } : {}) });
         const said = guards.hold?.tail ?? guards.hold?.note;
         return guards.led(said && sent.ok ? withNote(sent, said) : sent);
       }

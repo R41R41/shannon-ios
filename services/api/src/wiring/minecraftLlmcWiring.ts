@@ -395,7 +395,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null, openIds: () => queue.openIds() },
     tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read,
       // Amendment A-7 1: an act's `keep` becomes promises of the plan, by the plan's own handling (the same as `plan.update`'s promise op).
-      keep: (entry: ActKeep) => plan.port.keepPromise?.(entry) ?? { problem: 'この計画には約束を書けない' } } },
+      keep: (entry: ActKeep) => plan.port.keepPromise?.(entry) ?? { problem: 'この計画には約束を書けない' },
+      promises: () => plan.port.tree().promises } },
     planTools: plan.tools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
     wrap: (lifecycle: FcaBodyLifecycle) => withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,

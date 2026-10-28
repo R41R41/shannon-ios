@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { withoutOutside } from './helpers/promiseLine.js';
 import { describe, expect, it } from 'vitest';
 import type { PlanPromise } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
@@ -153,7 +154,7 @@ describe('the ledger tells armour put on as worn, not as used (amendment A-2 3)'
     const first = apply([promise()], emptyLedgerSeen(), 0, frame(1, { iron_chestplate: 1 }, WORN_NONE), []);
     const shot = frame(2, {}, '頭: なし、胴: iron_chestplate(残り 240)、脚: なし、足: なし');
     const wearing = apply(first.promises, first.ledgerSeen, 5, shot, [event('reflex:c-1:1', 'iron_chestplate', -1, 'reflex_armor', 2)]);
-    const lines = promiseLines(wearing.promises, { since: iso(1), observation: shot });
+    const lines = promiseLines(wearing.promises, { since: iso(1), observation: shot }).map(withoutOutside);
     expect(lines).toEqual(['約束 #2 防具用のiron_chestplate 1: 今 1・直前に 1 身に着けた（理由: 反射で防具を着た。持ち物から防具の欄へ移っただけで、持っている数は変わらない）']);
     expect(lines[0]).not.toContain('減った');
     expect(lines[0]).not.toContain('足りない');

@@ -1,3 +1,4 @@
+import type { PlanPromise } from '@shannon/mind';
 import type { BodyObservation } from '../contracts/bodyControlContract.js';
 import type { MadeIn } from '../contracts/continueContract.js';
 import { actMilliseconds, type ActInput, type ActKeep } from '../contracts/minecraftActContract.js';
@@ -12,6 +13,7 @@ import { feetOf } from '../surfaces/minecraft/minecraftLlmc.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
+import { breakingWords } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -28,7 +30,9 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   /** Continue contract 5: the observation the decision that chose this act read (its life, dimension, body and connection): the item carries it, not the newest frame's. */
   madeIn?: MadeIn | null;
   /** Amendment A-7 1: an entry of the act's `keep` put to the plan as a promise (`FcaPlanPort.keepPromise`). Absent: the plan cannot take it, and the result says so. */
-  keep?(entry: ActKeep): KeptPromise | { problem: string } }): Promise<ToolResult> {
+  keep?(entry: ActKeep): KeptPromise | { problem: string };
+  /** Amendment A-8 2: the plan's promises now (what an act that would spend them is told once, nothing refused). */
+  promises?(): readonly PlanPromise[] }): Promise<ToolResult> {
   const { queue, call } = parts, input = call.input as ActInput;
   // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope), `uses` (kept with the command, never sent to the body) and `keep`
   // (made into promises of the plan below, once the queue has the act).
