@@ -3,8 +3,8 @@
  * pictures. Each reply asks which picture fits; Jev picks one from the closest few, or says none fits, and then a new one is drawn
  * (gpt-image-2.5), inspected and kept, so the library grows with use and fewer replies wait for a drawing.
  *
- * A pose is one picture in four variants (the base, mouth open, eyes closed, both) that differ only in the face. A walk has four more
- * pictures, the frames of its walk cycle (`step1` to `step4`), that the desktop plays while she walks. `contact` is how she touches the surface; the desktop's engine decides where she is, the library what she does.
+ * A pose is one picture in four variants (the base, mouth open, eyes closed, both) that differ only in the face. A walk has more
+ * pictures, the frames of its walk cycle (`step1` to `step8`: eight, a full cycle of two steps; older walks have `step1` to `step4`), that the desktop plays while she walks. `contact` is how she touches the surface; the desktop's engine decides where she is, the library what she does.
  */
 /** `wall`: clinging to the side of a window while she climbs it. */
 export const MINI_CONTACTS = ['stand', 'sit', 'lie', 'hang', 'air', 'wall'] as const;
@@ -14,7 +14,7 @@ export type MiniContact = typeof MINI_CONTACTS[number];
 export const MINI_GRIPS = ['arm', 'leg', 'head', 'scruff', 'torso'] as const;
 export type MiniGrip = typeof MINI_GRIPS[number];
 
-export const MINI_VARIANTS = ['base', 'talk', 'blink', 'talkBlink', 'step1', 'step2', 'step3', 'step4'] as const;
+export const MINI_VARIANTS = ['base', 'talk', 'blink', 'talkBlink', 'step1', 'step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8'] as const;
 export type MiniVariant = typeof MINI_VARIANTS[number];
 
 /** The 22 faces every reply carries (`messageEmotion.expression`); the seed library has each of them in each everyday contact. */
@@ -30,7 +30,11 @@ export const MINI_SEED_EXPRESSIONS = [
  * own task running), ask (Shannon waiting for the owner).
  */
 export type MiniActivity = 'rest' | 'walk' | 'jump' | 'fall' | 'carried' | 'sleep' | 'watch' | 'climb' | 'peek' | 'dizzy'
-  | 'watchVideo' | 'type' | 'dance' | 'point' | 'work' | 'ask';
+  | 'watchVideo' | 'type' | 'dance' | 'point' | 'work' | 'ask'
+  // Her own moves between and around the others (owner 2026-10-28): poke (crouched, prodding something by her feet), startle,
+  // rummage (head first into a box: only above the waist is in the air, the anchor is the waist), found (holding up a sheet of
+  // paper), getup (halfway up from lying), stretch (after waking), crouch (before a jump, and landing).
+  | 'poke' | 'startle' | 'rummage' | 'found' | 'getup' | 'stretch' | 'crouch';
 
 export interface MiniPoseEntry {
   id: string;

@@ -23,6 +23,15 @@ export interface MiniPoseSpec {
   variants: 'face' | 'still';
   /** A carried picture: where she is held. The hold is measured on the drawing and becomes its anchor. */
   grip?: MiniGrip;
+  /**
+   * Drawn on an empty canvas with no board, her anchor a point read off the drawing (like a carried picture's hold) but not a
+   * hold: `waist`, the centre of her waist, for a dive head first into a box. Diving into a board drawn as a stand-in for a window
+   * went wrong (she is drawn in front of it or beside it), so she hangs in the air upside down and the desktop, which clips all
+   * that is below the waist line, takes her in at that point: the entry's contact is `stand`, its anchor the waist.
+   */
+  anchorAt?: 'waist';
+  /** How she touches the board instead of the contact's usual words (crouching, on hands and knees). */
+  resting?: string;
 }
 
 export interface DrawOutcome { entry: MiniPoseEntry | null; reason: string | null; seconds: Record<string, number>; costUsd: number; attempts: number;
@@ -39,20 +48,25 @@ const CONTACT_WORDS: Record<MiniContact, string> = {
   wall: 'climbing UP the right-hand side of the green rectangle (the side of a window): seen from the side, facing left toward it, both hands and both feet gripping its right edge, her body beside it to the right',
 };
 
+/** What touches the board, for the drawing prompt and the inspector: the spec's own words, or none for a picture drawn in the air. */
+function contactWords(spec: Pick<MiniPoseSpec, 'contact' | 'resting' | 'anchorAt'>): string {
+  return spec.anchorAt ? CONTACT_WORDS.air : spec.resting ?? CONTACT_WORDS[spec.contact];
+}
+
 export function drawPrompt(spec: MiniPoseSpec): string {
   const guide = spec.contact === 'wall'
     ? 'The FIRST image is a layout guide: the tall bright green rectangle on the left is the side of an application window on a computer desktop; its RIGHT edge is the window\'s side.'
-    : boardless(spec.contact)
+    : boardless(spec.contact) || spec.anchorAt
     ? 'The FIRST image is an empty transparent canvas: draw her in the middle of it, whole body visible with margin on every side.'
     : 'The FIRST image is a layout guide: the bright green rectangle is the top of an application window on a computer desktop; its top edge is the window\'s edge.';
   return [
     guide,
-    `Draw the mini (chibi) girl from the character sheet (the SECOND image; the THIRD image is her full-size original, for details) ${CONTACT_WORDS[spec.contact]}.`,
+    `Draw the mini (chibi) girl from the character sheet (the SECOND image; the THIRD image is her full-size original, for details) ${contactWords(spec)}.`,
     `What she is doing: ${spec.description}.`,
     'Draw her eyes open and her mouth closed unless what she is doing says otherwise.',
-    ...(boardless(spec.contact) ? [] : ['Keep the green rectangle exactly where it is, the same size and the same flat pure green, untouched except where she overlaps it.']),
+    ...(boardless(spec.contact) || spec.anchorAt ? [] : ['Keep the green rectangle exactly where it is, the same size and the same flat pure green, untouched except where she overlaps it.']),
     'Keep the character exactly the same design, outfit, colors and chibi proportions (about 3 heads tall) as the character sheet, at the same scale as one figure on the sheet.',
-    'Only her and small things she holds (and small swirls or sparkles right by her head when she is dizzy). Transparent background everywhere else. No text, no letters, no speech bubbles, no shadow on the background, no other characters.',
+    'Only her and small things she holds (and small swirls, sparkles, sweat drops or surprise marks right by her head when what she is doing says so). Transparent background everywhere else. No text, no letters, no speech bubbles, no shadow on the background, no other characters.',
   ].join('\n');
 }
 
@@ -63,41 +77,66 @@ const BLINK_PROMPT = 'Edit this image. Change ONLY her eyes: if they are open, c
   + 'visible); if they are closed, open them. Do not change anything else at all: same pose, same position, same size, same hair, same mouth, same colors, '
   + 'same line art, same framing, transparent background.';
 
-// A walk is drawn as one sheet of four frames, like the character sheet: drawn together, the frames keep one face, one outfit and
-// one size. Redrawing only the legs of the walking picture did not work (2026-10-28): a natural step swings the arms too, so every
-// redraw changed the upper body, and asked to swap the legs the model gave the same legs back.
-const WALK_FRAMES = 4;
-const WALK_SHEET = { width: 2560, height: 1024 };
-const DANCE_PROMPT = [
-  'The FIRST image is the girl dancing (one frame). The SECOND image is her character sheet.',
-  'Draw a 4-frame DANCE LOOP animation sprite sheet of this exact chibi girl dancing happily in place, front view, a simple cute beat dance.',
-  'Four frames side by side in ONE row, left to right, evenly spaced, each frame the same size as the girl in the first image, all standing on the same horizontal ground line, nothing overlapping:',
-  '1. arms up to the left, hips to the right, one foot lifted',
-  '2. arms crossed in front, both feet down, knees bent a little',
-  '3. arms up to the right, hips to the left, the other foot lifted',
-  '4. arms crossed in front again, both feet down, knees bent a little',
-  'The same face as the first image, same hair, same outfit, same colors and the same size in every frame; the hair and skirt swing with the beat.',
-  'Flat pure green background (#00FF00) everywhere. No text, no numbers, no music notes, no frame borders, no shadows.',
-].join('\n');
+// A walk is drawn as one sheet of frames, like the character sheet: drawn together, the frames keep one face, one outfit and one
+// size. Redrawing only the legs of the walking picture did not work (2026-10-28): a natural step swings the arms too, so every
+// redraw changed the upper body, and asked to swap the legs the model gave the same legs back. Eight frames (a full cycle, two
+// steps, owner 2026-10-28: smoother) are one sheet of two rows of four, drawn in one call; older entries have the four frames.
+export interface CycleSheet { frames: number; columns: number; rows: number; width: number; height: number }
+export const SHEET_4: CycleSheet = { frames: 4, columns: 4, rows: 1, width: 2560, height: 1024 };
+export const SHEET_8: CycleSheet = { frames: 8, columns: 4, rows: 2, width: 2560, height: 2048 };
 
-const WALK_PROMPT = [
-  'The FIRST image is the girl walking (one frame). The SECOND image is her character sheet.',
-  'Draw a 4-frame WALK CYCLE animation sprite sheet of this exact chibi girl walking to the LEFT, in the same three-quarter view as the first image.',
-  'Four frames side by side in ONE row, left to right, evenly spaced, each frame the same size as the girl in the first image, all standing on the same horizontal ground line, nothing overlapping:',
-  '1. contact: front leg forward, heel touching the ground, back leg behind, arms swinging opposite to the legs',
-  '2. passing: legs passing each other under her body, back foot lifted, body slightly higher',
-  '3. contact: the OTHER leg forward, heel touching the ground, arms swung the other way',
-  '4. passing: legs passing each other again, the other foot lifted, body slightly higher',
-  'The same face as the first image, same hair, same outfit, same colors and the same size in every frame; only the legs, arms and the hair and skirt sway change.',
-  'Flat pure green background (#00FF00) everywhere. No text, no numbers, no frame borders, no shadows.',
-].join('\n');
+const SHEET_TAIL = 'Flat pure green background (#00FF00) everywhere. No text, no numbers, no frame borders, no shadows.';
+const sheetWords = (sheet: CycleSheet) => sheet.rows === 1
+  ? `${sheet.frames} frames side by side in ONE row, left to right`
+  : `${sheet.frames} frames in ${sheet.rows} rows of ${sheet.columns}, each row left to right, the first row then the second`;
+const cycleLines = (lines: readonly string[]) => lines.map((line, index) => `${index + 1}. ${line}`);
 
-const GRIP_WORDS: Record<MiniGrip, string> = {
+export function dancePrompt(sheet: CycleSheet): string {
+  const four = ['arms up to the left, hips to the right, one foot lifted', 'arms crossed in front, both feet down, knees bent a little',
+    'arms up to the right, hips to the left, the other foot lifted', 'arms crossed in front again, both feet down, knees bent a little'];
+  const eight = ['arms up to the left, hips to the right, one foot lifted', 'arms coming down in front, hips centred, the lifted foot landing',
+    'arms crossed in front, both feet down, knees bent a little', 'arms swinging up to the right, hips going to the left, weight on the left foot',
+    'arms up to the right, hips to the left, the other foot lifted', 'arms coming down in front, hips centred, the lifted foot landing',
+    'arms crossed in front, both feet down, knees bent a little', 'arms swinging up to the left, hips going to the right, weight on the right foot'];
+  return [
+    'The FIRST image is the girl dancing (one frame). The SECOND image is her character sheet.',
+    `Draw a ${sheet.frames}-frame DANCE LOOP animation sprite sheet of this exact chibi girl dancing happily in place, front view, a simple cute beat dance that loops smoothly from the last frame back to the first.`,
+    `${sheetWords(sheet)}, evenly spaced, each frame the same size as the girl in the first image, all standing on the same horizontal ground line (one ground line per row), nothing overlapping:`,
+    ...cycleLines(sheet.frames === 8 ? eight : four),
+    'The same face as the first image, same hair, same outfit, same colors and the same size in every frame; the hair and skirt swing with the beat.',
+    SHEET_TAIL,
+  ].join('\n');
+}
+
+export function walkPrompt(sheet: CycleSheet): string {
+  const four = ['contact: front leg forward, heel touching the ground, back leg behind, arms swinging opposite to the legs',
+    'passing: legs passing each other under her body, back foot lifted, body slightly higher', 'contact: the OTHER leg forward, heel touching the ground, arms swung the other way',
+    'passing: legs passing each other again, the other foot lifted, body slightly higher'];
+  const eight = ['contact: front leg forward, heel touching the ground, back leg behind, arms swinging opposite to the legs, body at its normal height',
+    'down: the front foot flat on the ground taking her weight, knee bent a little, body at its lowest, the back heel lifting',
+    'passing: the back leg swinging forward under her body, the back foot lifted off the ground, body rising',
+    'up: the swinging leg reaching forward, the standing leg straight on its toes, body at its highest',
+    'contact: the OTHER leg forward, heel touching the ground, arms swung the other way, body at its normal height',
+    'down: the new front foot flat on the ground taking her weight, knee bent a little, body at its lowest, the back heel lifting',
+    'passing: the other back leg swinging forward under her body, that foot lifted off the ground, body rising',
+    'up: the swinging leg reaching forward, the standing leg straight on its toes, body at its highest, ready to start again at frame 1'];
+  return [
+    'The FIRST image is the girl walking (one frame). The SECOND image is her character sheet.',
+    `Draw a ${sheet.frames}-frame WALK CYCLE animation sprite sheet of this exact chibi girl walking to the LEFT, in the same three-quarter view as the first image; the frames are evenly spaced in time through ONE full cycle (two steps) and loop smoothly from the last back to the first.`,
+    `${sheetWords(sheet)}, evenly spaced, each frame the same size as the girl in the first image, all standing on the same horizontal ground line (one ground line per row), nothing overlapping:`,
+    ...cycleLines(sheet.frames === 8 ? eight : four),
+    'The same face as the first image, same hair, same outfit, same colors and the same size in every frame; only the legs, arms and the hair and skirt sway change.',
+    SHEET_TAIL,
+  ].join('\n');
+}
+
+const GRIP_WORDS: Record<MiniGrip | 'waist', string> = {
   arm: 'the wrist of her raised arm, where a hand holds her up',
   leg: 'the ankle of her raised leg, where a hand holds her up upside down',
   head: 'the top of her head, where a hand holds her up',
   scruff: 'the back of her collar at the nape of her neck, where a hand holds her up',
   torso: 'the middle of her waist, where a hand holds her up',
+  waist: 'the centre of her waist, the narrowest point of her body between her chest and her hips',
 };
 const MEASURE_INSTRUCTIONS = 'The image is 512x512 pixels and shows one chibi girl. Give the bounding box of her HEAD ONLY: from the top of her hair on '
   + 'the skull (NOT the ahoge antenna, NOT the two hair buns) down to the bottom of her chin, and from one side of her skull to the other (NOT the long '
@@ -200,20 +239,20 @@ export class MiniPoseGenerator {
     const add = (stage: string, value: number) => { seconds[stage] = (seconds[stage] ?? 0) + value; };
     const sheet = this.options.library.reference('sheet'), original = this.options.library.reference('original');
     for (attempts = 1; attempts <= MINI_LIMITS.attempts; attempts++) {
-      const drawn = await this.options.models.draw({ prompt: drawPrompt(spec), images: [encodePng(guideFor(spec.contact)), sheet, original], quality: 'high' });
+      const drawn = await this.options.models.draw({ prompt: drawPrompt(spec), images: [encodePng(guideFor(spec.anchorAt ? 'air' : spec.contact)), sheet, original], quality: 'high' });
       add('base', drawn.seconds); costUsd += drawn.costUsd;
-      const shaped = shapeBase(decodePng(drawn.value), spec.contact, spec.activity === 'watch');
+      const shaped = shapeBase(decodePng(drawn.value), spec.contact, spec.activity === 'watch', spec.anchorAt !== undefined);
       if ('reason' in shaped) { reason = shaped.reason; this.options.library.reject(drawn.value, `${origin.id ?? 'reply'}-${shaped.reason}`); continue; }
       const variants = await this.variants(shaped.image, spec.variants, add, notes);
       costUsd += variants.costUsd;
       const walk = spec.activity === 'walk' || spec.activity === 'dance'
-        ? await this.walkCycle(shaped.image, add, notes, spec.activity === 'dance' ? DANCE_PROMPT : WALK_PROMPT) : null;
+        ? await this.walkCycle(shaped.image, add, notes, spec.activity, SHEET_8) : null;
       if (walk) { costUsd += walk.costUsd; for (const [name, image] of walk.images ?? []) variants.images.set(name, image); }
       const inspectStarted = performance.now();
-      const edge = spec.contact === 'air' ? null : shaped.anchor.y;
+      const edge = spec.contact === 'air' || spec.anchorAt ? null : shaped.anchor.y;
       const panels = [shaped.image, ...[...variants.images].filter(([name]) => name !== 'talkBlink').map(([, image]) => image)].map(image => onWindow(image, edge));
       const inspection = await this.options.models.read({ instructions: INSPECT_INSTRUCTIONS,
-        text: JSON.stringify({ described: spec.description, contact: CONTACT_WORDS[spec.contact],
+        text: JSON.stringify({ described: spec.description, contact: contactWords(spec),
           variants: [...variants.images.keys()].filter(name => name !== 'talkBlink').map(name => VARIANT_WORDS[name.startsWith('step') ? 'step' : name] ?? name) }),
         images: [halve(decodePng(sheet)), halve(strip(panels, [236, 238, 242]))] });
       add('inspect', (performance.now() - inspectStarted) / 1000); costUsd += inspection.costUsd;
@@ -222,9 +261,9 @@ export class MiniPoseGenerator {
       if (failed.length) { this.options.library.reject(encodePng(shaped.image), `${origin.id ?? 'reply'}-inspection`); reason = `inspection:${failed.join(',')}${typeof verdict.problems === 'string' && verdict.problems ? `:${verdict.problems.slice(0, 80)}` : ''}`; continue; }
       // A variant the inspector doubts is dropped, not the pose: she still has her base picture.
       if (verdict.variants_ok !== true) { if (variants.images.size) notes.push(`variants_doubted:${String(verdict.problems ?? '').slice(0, 80)}`); for (const name of [...variants.images.keys()]) variants.images.delete(name); }
-      const [embedded, measured] = await Promise.all([this.options.models.embed([embedText(spec)]), this.measure(shaped.image, spec.grip ?? null)]);
+      const [embedded, measured] = await Promise.all([this.options.models.embed([embedText(spec)]), this.measure(shaped.image, spec.grip ?? spec.anchorAt ?? null)]);
       add('embed', embedded.seconds); costUsd += embedded.costUsd + measured.costUsd; add('measure', measured.seconds);
-      if (spec.grip && !measured.grip) { reason = 'grip_not_found'; continue; }
+      if ((spec.grip || spec.anchorAt) && !measured.grip) { reason = 'grip_not_found'; continue; }
       const id = origin.id ?? `p${this.now().slice(0, 10).replace(/-/g, '')}_${randomBytes(3).toString('hex')}`;
       const entry: MiniPoseEntry = {
         id, contact: spec.contact, expression: spec.expression, description: spec.description, label: spec.label, activity: spec.activity,
@@ -241,38 +280,40 @@ export class MiniPoseGenerator {
   }
 
   /**
-   * A walk's four frames: one sheet drawn from the walking picture and the character sheet, cut in four, each frame keyed, scaled to
-   * her height in the walking picture and placed with its feet on the same ground and its head over the same point (the head does not
-   * swing; centring on the whole figure would make her slide with her legs). A sheet whose frames touch their column's sides (an
-   * overlapping figure) or whose sizes differ by more than a fifth is drawn again once.
+   * A walk's (or a dance's) frames: one sheet drawn from the walking picture and the character sheet, cut into its frames, each
+   * keyed, scaled to her height in the walking picture and placed with its feet on the same ground and its head over the same point
+   * (the head does not swing; centring on the whole figure would make her slide with her legs). A sheet whose frames touch their
+   * column's sides (an overlapping figure) or whose sizes differ by more than a fifth is drawn again once.
    */
-  private async walkCycle(base: RgbaImage, add: (stage: string, value: number) => void, notes: string[], prompt = WALK_PROMPT): Promise<{ images: Map<Exclude<MiniVariant, 'base'>, RgbaImage> | null; costUsd: number }> {
+  private async walkCycle(base: RgbaImage, add: (stage: string, value: number) => void, notes: string[], activity: 'walk' | 'dance' = 'walk',
+    layout: CycleSheet = SHEET_8): Promise<{ images: Map<Exclude<MiniVariant, 'base'>, RgbaImage> | null; costUsd: number }> {
     const box = solidBounds(base);
     let costUsd = 0;
     if (!box) return { images: null, costUsd };
     const height = box.bottom - box.top, head = headCentre(base, box);
     for (let attempt = 0; attempt < 2; attempt++) {
-      const drawn = await this.options.models.draw({ prompt, images: [encodePng(flatten(base, [0, 255, 0])), this.options.library.reference('sheet')],
-        quality: 'high', size: `${WALK_SHEET.width}x${WALK_SHEET.height}` });
+      const drawn = await this.options.models.draw({ prompt: (activity === 'dance' ? dancePrompt : walkPrompt)(layout),
+        images: [encodePng(flatten(base, [0, 255, 0])), this.options.library.reference('sheet')], quality: 'high', size: `${layout.width}x${layout.height}` });
       costUsd += drawn.costUsd;
       add('walk', drawn.seconds);
       const sheet = clearHaze(keyGreen(decodePng(drawn.value)).image);
-      const spans = figureSpans(sheet, WALK_FRAMES);
-      if (!spans) { notes.push('walk:not_four_figures'); continue; }
-      const cells = spans.map(([left, right]) => crop(sheet, { left, top: 0, right, bottom: sheet.height - 1 }));
+      const grid = figureGrid(sheet, layout.columns, layout.rows);
+      if (!grid) { notes.push(`walk:not_${layout.frames}_figures`); continue; }
+      const cells = grid.map(item => crop(sheet, { left: item.left, top: item.top, right: item.right, bottom: item.bottom }));
       const boxes = cells.map(cell => solidBounds(cell)!);
       const heights = boxes.map(item => item.bottom - item.top);
       // The frames must agree with each other (the passing frames stand a little higher: up to a sixth).
       if (Math.max(...heights) / Math.min(...heights) > 1.16) { notes.push(`walk:sizes(${heights.join(',')})`); continue; }
       const frames = new Map<Exclude<MiniVariant, 'base'>, RgbaImage>();
-      // One scale for the four, from the contact frames' height (the tallest), so the passing frames keep their lift.
-      const scale = height / Math.max(...heights), ground = Math.max(...boxes.map(item => item.bottom));
+      // One scale for all, from the contact frames' height (the tallest), so the passing frames keep their lift; each row has its own ground.
+      const scale = height / Math.max(...heights);
+      const grounds = Array.from({ length: layout.rows }, (_, row) => Math.max(...boxes.filter((_b, index) => Math.floor(index / layout.columns) === row).map(item => item.bottom)));
       cells.forEach((cell, index) => {
         const their = boxes[index]!;
         const figure = scaled(crop(cell, their), Math.max(1, Math.round((their.right - their.left + 1) * scale)), Math.max(1, Math.round((their.bottom - their.top + 1) * scale)));
         const fitted = solidBounds(figure)!, centre = headCentre(figure, fitted);
         // Feet on the sheet's ground line map to her ground; a frame drawn higher (passing) stays higher by the same scaled amount.
-        const top = box.bottom - Math.round((ground - their.top) * scale);
+        const top = box.bottom - Math.round((grounds[Math.floor(index / layout.columns)]! - their.top) * scale);
         frames.set(`step${index + 1}` as Exclude<MiniVariant, 'base'>, placed(figure, MINI_CANVAS, MINI_CANVAS, Math.round(head - centre), top));
       });
       return { images: frames, costUsd };
@@ -280,20 +321,20 @@ export class MiniPoseGenerator {
     return { images: null, costUsd };
   }
 
-  /** A kept walk's four frames drawn again (its base and face variants stay). */
-  async redoWalk(id: string): Promise<DrawOutcome> {
+  /** A kept walk's (or dance's) frames drawn again, eight by default, `layout` SHEET_4 for the old four (its base and face variants stay). */
+  async redoWalk(id: string, layout: CycleSheet = SHEET_8): Promise<DrawOutcome> {
     const seconds: Record<string, number> = {}, notes: string[] = [];
     const add = (stage: string, value: number) => { seconds[stage] = (seconds[stage] ?? 0) + value; };
     const entry = this.options.library.get(id), vector = this.options.library.vector(id);
     if (!entry || !vector) return { entry: null, reason: 'unknown', seconds, costUsd: 0, attempts: 0, notes };
     const base = decodePng(readFileSync(this.options.library.imagePath(id, 'base')));
-    const walk = await this.walkCycle(base, add, notes);
+    const walk = await this.walkCycle(base, add, notes, entry.activity === 'dance' ? 'dance' : 'walk', layout);
     let costUsd = walk.costUsd;
     if (walk.images) {
       const started = performance.now();
       const panels = [base, ...walk.images.values()].map(image => onWindow(image, entry.anchor.y));
       const inspection = await this.options.models.read({ instructions: INSPECT_INSTRUCTIONS,
-        text: JSON.stringify({ described: entry.description, contact: CONTACT_WORDS[entry.contact], variants: [...walk.images.keys()].map(() => VARIANT_WORDS.step) }),
+        text: JSON.stringify({ described: entry.description, contact: contactWords({ contact: entry.contact, anchorAt: entry.activity === 'rummage' ? 'waist' : undefined }), variants: [...walk.images.keys()].map(() => VARIANT_WORDS.step) }),
         images: [halve(decodePng(this.options.library.reference('sheet'))), halve(strip(panels, [236, 238, 242]))] });
       add('inspect', (performance.now() - started) / 1000); costUsd += inspection.costUsd;
       if ((inspection.value as Record<string, unknown>).variants_ok !== true) { notes.push(`walk_doubted:${String((inspection.value as { problems?: unknown }).problems ?? '').slice(0, 80)}`); walk.images.clear(); }
@@ -312,7 +353,7 @@ export class MiniPoseGenerator {
    * vision model on the picture at half size. Two readings of the same picture agreed within 8 px (2026-10-28); a reading outside
    * her figure is dropped.
    */
-  async measure(image: RgbaImage, grip: MiniGrip | null): Promise<{ head: MiniPoseEntry['head'] | null; grip: { x: number; y: number } | null; seconds: number; costUsd: number }> {
+  async measure(image: RgbaImage, grip: MiniGrip | 'waist' | null): Promise<{ head: MiniPoseEntry['head'] | null; grip: { x: number; y: number } | null; seconds: number; costUsd: number }> {
     const box = solidBounds(image);
     try {
       const read = await this.options.models.read({ instructions: MEASURE_INSTRUCTIONS, model: MINI_MEASURE_MODEL,
@@ -335,9 +376,10 @@ export class MiniPoseGenerator {
     const entry = this.options.library.get(id), vector = this.options.library.vector(id);
     if (!entry || !vector) return null;
     const base = decodePng(readFileSync(this.options.library.imagePath(id, 'base')));
-    const measured = await this.measure(base, entry.grip ?? null);
+    const hold = entry.grip ?? (entry.activity === 'rummage' ? 'waist' : null);
+    const measured = await this.measure(base, hold);
     if (!measured.head) return null;
-    const kept: MiniPoseEntry = { ...entry, head: measured.head, ...(entry.grip && measured.grip ? { anchor: measured.grip } : {}) };
+    const kept: MiniPoseEntry = { ...entry, head: measured.head, ...(hold && measured.grip ? { anchor: measured.grip } : {}) };
     const files = new Map<MiniVariant, Uint8Array>();
     for (const variant of entry.variants) files.set(variant, readFileSync(this.options.library.imagePath(id, variant)));
     this.options.library.add(kept, files, vector);
@@ -357,7 +399,7 @@ export class MiniPoseGenerator {
       const started = performance.now(), edge = entry.contact === 'air' ? null : entry.anchor.y;
       const panels = [base, ...[...variants.images].filter(([name]) => name !== 'talkBlink').map(([, image]) => image)].map(image => onWindow(image, edge));
       const inspection = await this.options.models.read({ instructions: INSPECT_INSTRUCTIONS,
-        text: JSON.stringify({ described: entry.description, contact: CONTACT_WORDS[entry.contact],
+        text: JSON.stringify({ described: entry.description, contact: contactWords({ contact: entry.contact, anchorAt: entry.activity === 'rummage' ? 'waist' : undefined }),
           variants: [...variants.images.keys()].filter(name => name !== 'talkBlink').map(name => VARIANT_WORDS[name] ?? name) }),
         images: [halve(decodePng(this.options.library.reference('sheet'))), halve(strip(panels, [236, 238, 242]))] });
       add('inspect', (performance.now() - started) / 1000); costUsd += inspection.costUsd;
@@ -408,22 +450,24 @@ export function embedText(spec: Pick<MiniPoseSpec, 'contact' | 'expression' | 'd
 }
 
 /** The base picture keyed and measured; a picture whose board or figure cannot be read is refused. */
-export function shapeBase(raw: RgbaImage, contact: MiniContact, backView = false):
+export function shapeBase(raw: RgbaImage, contact: MiniContact, backView = false, inAir = false):
   { image: RgbaImage; anchor: { x: number; y: number }; bounds: MiniPoseEntry['bounds'] } | { reason: string } {
   if (raw.width !== MINI_CANVAS || raw.height !== MINI_CANVAS) return { reason: 'size' };
-  const keyed = boardless(contact) ? { image: clearHaze(raw), edge: null } : keyGreen(raw);
+  const keyed = boardless(contact) || inAir ? { image: clearHaze(raw), edge: null } : keyGreen(raw);
   const bounds = solidBounds(keyed.image);
   if (!bounds) return { reason: 'empty' };
   const share = solidShare(keyed.image);
   if (share < 0.04 || share > 0.5) return { reason: `share:${share.toFixed(3)}` };
   // Climbing, she may touch the top or the bottom of the canvas (the side board runs its full height); never the right side.
-  if (contact === 'wall' ? bounds.right > MINI_CANVAS - 5 : bounds.left < 4 || bounds.top < 4 || bounds.right > MINI_CANVAS - 5 || (boardless(contact) && bounds.bottom > MINI_CANVAS - 5)) return { reason: 'cut_off' };
+  if (contact === 'wall' ? bounds.right > MINI_CANVAS - 5 : bounds.left < 4 || bounds.top < 4 || bounds.right > MINI_CANVAS - 5 || ((boardless(contact) || inAir) && bounds.bottom > MINI_CANVAS - 5)) return { reason: 'cut_off' };
   if (contact === 'wall') {
     const side = (keyed as { side?: number | null }).side ?? null;
     if (side === null) return { reason: 'no_side' };
     if (bounds.right <= side) return { reason: 'not_on_side' };
     return { image: keyed.image, anchor: { x: side, y: bounds.bottom }, bounds };
   }
+  // Drawn in the air: its anchor is read off the drawing afterwards; the middle of her stands in for it.
+  if (inAir) return { image: keyed.image, anchor: { x: Math.round((bounds.left + bounds.right) / 2), y: Math.round((bounds.top + bounds.bottom) / 2) }, bounds };
   if (!boardless(contact)) {
     if (keyed.edge === null) return { reason: 'no_edge' };
     // Her figure must actually meet the edge: something of her above it.
@@ -463,6 +507,34 @@ export function figureSpans(sheet: RgbaImage, count: number): [number, number][]
     spans.splice(narrowest - 1, 2, [spans[narrowest - 1]![0], spans[narrowest]![1]]);
   }
   return spans.length === count ? spans.map(([from, to]) => [Math.max(0, from - 4), Math.min(sheet.width - 1, to + 4)]) : null;
+}
+
+/**
+ * The cells of a sheet of `rows` rows of `columns` figures, row by row: the sheet is cut across at the emptiest line near each
+ * row boundary, then each row's figures are found as in `figureSpans`. Null when any row lacks its figures.
+ */
+export function figureGrid(sheet: RgbaImage, columns: number, rows: number): { left: number; top: number; right: number; bottom: number }[] | null {
+  const solidInRow = (y: number) => { let n = 0; for (let x = 0; x < sheet.width; x++) if (sheet.data[(y * sheet.width + x) * 4 + 3]! > 128) n++; return n; };
+  const cuts = [0];
+  for (let row = 1; row < rows; row++) {
+    const centre = Math.round(sheet.height * row / rows), reach = Math.round(sheet.height * 0.12);
+    // The middle of the emptiest stretch: each row keeps the same room around its figures.
+    const counts: number[] = [];
+    for (let y = centre - reach; y <= centre + reach; y++) counts.push(solidInRow(y));
+    const least = Math.min(...counts), emptiest = counts.flatMap((n, i) => (n === least ? [centre - reach + i] : []));
+    cuts.push(emptiest[Math.floor(emptiest.length / 2)]!);
+  }
+  cuts.push(sheet.height);
+  const cells: { left: number; top: number; right: number; bottom: number }[] = [];
+  for (let row = 0; row < rows; row++) {
+    const top = cuts[row]!, bottom = cuts[row + 1]! - 1;
+    const band = crop(sheet, { left: 0, top, right: sheet.width - 1, bottom });
+    const spans = figureSpans(band, columns);
+    if (!spans) return null;
+    // The row's top and bottom are the band's own; a cell holds one figure.
+    for (const [left, right] of spans) cells.push({ left, top, right, bottom });
+  }
+  return cells;
 }
 
 /** The least share of a sitting figure below the edge: her dangling legs. */

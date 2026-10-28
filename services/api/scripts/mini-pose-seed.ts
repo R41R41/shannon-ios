@@ -6,7 +6,7 @@
  */
 import { copyFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniPoseGenerator } from '../src/surfaces/mini/miniPoseGenerator.js';
+import { MiniPoseGenerator, SHEET_4, SHEET_8 } from '../src/surfaces/mini/miniPoseGenerator.js';
 import { MiniPoseLibrary, miniStats } from '../src/surfaces/mini/miniPoseLibrary.js';
 import { OpenAIMiniModels } from '../src/surfaces/mini/miniPoseModels.js';
 import { MINI_SEED_SPECS } from '../src/surfaces/mini/miniPoseSeeds.js';
@@ -21,6 +21,8 @@ const redo = flag('--redo-variants')?.split(',');
 const measure = flag('--measure');
 /** `--redo-walk id,id`: draw the walk cycle of these kept walks again. */
 const redoWalk = flag('--redo-walk')?.split(',');
+/** `--walk-frames 4`: draw the old four-frame cycle (eight by default). */
+const walkLayout = flag('--walk-frames') === '4' ? SHEET_4 : SHEET_8;
 const concurrency = Number(flag('--concurrency') ?? 4);
 
 const library = new MiniPoseLibrary(root);
@@ -40,7 +42,7 @@ if (measure) {
 }
 if (redoWalk) {
   for (const id of redoWalk) {
-    const outcome = await generator.redoWalk(id);
+    const outcome = await generator.redoWalk(id, walkLayout);
     library.record({ kind: 'draw', at: new Date().toISOString(), requestKey: null, poseId: outcome.entry?.id ?? null, ok: outcome.entry !== null,
       attempts: outcome.attempts, reason: outcome.reason, notes: outcome.notes, seconds: outcome.seconds, costUsd: outcome.costUsd });
     console.log(`${id} ${outcome.entry ? `ok ${outcome.entry.variants.join('+')}` : `FAILED ${outcome.reason}`} $${outcome.costUsd.toFixed(3)} ${JSON.stringify(outcome.seconds)} ${outcome.notes.join(';')}`);

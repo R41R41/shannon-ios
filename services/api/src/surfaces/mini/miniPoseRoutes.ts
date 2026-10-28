@@ -16,7 +16,7 @@ import { miniStats, type MiniPoseLibrary } from './miniPoseLibrary.js';
  */
 export const MINI_PATH_PREFIX = '/v1/mini/';
 const ID = /^[A-Za-z0-9_]{1,64}$/u;
-const ACTIVITIES: readonly MiniPoseEntry['activity'][] = ['rest', 'walk', 'jump', 'fall', 'carried', 'sleep'];
+const ACTIVITIES: readonly MiniPoseEntry['activity'][] = ['rest', 'walk', 'jump', 'fall', 'carried', 'sleep', 'poke', 'startle', 'rummage', 'found', 'getup', 'stretch', 'crouch'];
 
 export function parsedChooseRequest(raw: unknown): MiniChooseRequest | null {
   const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;

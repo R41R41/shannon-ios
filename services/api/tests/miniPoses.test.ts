@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { JevChoiceClient, JevChooser, type JevChoiceTrace } from '../src/infra/models/jev/jevChoice.js';
 import { changedRegion, GUIDE_EDGE, guideFor, keyGreen, MINI_CANVAS, onWindow, takeRegions } from '../src/surfaces/mini/miniImage.js';
 import { MiniPoseChooser, miniPoseQuestions } from '../src/surfaces/mini/miniPoseChooser.js';
-import type { MiniPoseEntry } from '../src/surfaces/mini/miniPoseContract.js';
-import { drawPrompt, figureSpans, MiniPoseGenerator, shapeBase } from '../src/surfaces/mini/miniPoseGenerator.js';
+import { MINI_VARIANTS, type MiniPoseEntry } from '../src/surfaces/mini/miniPoseContract.js';
+import { drawPrompt, figureGrid, figureSpans, MiniPoseGenerator, SHEET_4, SHEET_8, shapeBase, walkPrompt } from '../src/surfaces/mini/miniPoseGenerator.js';
 import { MiniPoseLibrary, miniStats } from '../src/surfaces/mini/miniPoseLibrary.js';
 import type { MiniModels } from '../src/surfaces/mini/miniPoseModels.js';
 import { MINI_SEED_SPECS } from '../src/surfaces/mini/miniPoseSeeds.js';
@@ -116,6 +116,100 @@ describe('the walk sheet', () => {
     paint(image, [118, 580, 906, MINI_CANVAS - 1], [0, 250, 10, 255]);
     paint(image, [400, 150, 620, 578], [120, 170, 240, 255]);
     expect(shapeBase(image, 'sit')).toEqual({ reason: 'legs_hidden' });
+  });
+});
+
+/** A sheet of `rows` rows of `columns` figures: each standing on its row's ground, the second row's figures a little taller when `lift`. */
+function figureSheet(columns: number, rows: number, width: number, height: number): RgbaImage {
+  const sheet = blankImage(width, height), cellW = width / columns, cellH = height / rows;
+  for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
+    const left = Math.round(column * cellW + cellW * 0.3), right = Math.round(column * cellW + cellW * 0.7);
+    paint(sheet, [left, Math.round(row * cellH + cellH * 0.15), right, Math.round(row * cellH + cellH * 0.85)], [120, 170, 240, 255]);
+  }
+  return sheet;
+}
+
+describe('the eight-frame sheet', () => {
+  it('finds two rows of four figures, cutting across at the emptiest line', () => {
+    const cells = figureGrid(figureSheet(4, 2, 2560, 2048), 4, 2)!;
+    expect(cells).toHaveLength(8);
+    // The first row's cells are above the second's, left to right within a row.
+    expect(cells.slice(0, 4).every(cell => cell.bottom < 1100)).toBe(true);
+    expect(cells.slice(4).every(cell => cell.top > 900)).toBe(true);
+    expect(cells[1]!.left).toBeGreaterThan(cells[0]!.right);
+    expect(figureGrid(figureSheet(3, 2, 2560, 2048), 4, 2)).toBeNull();
+    expect(figureGrid(figureSheet(4, 1, 2560, 1024), 4, 1)).toHaveLength(4);
+  });
+
+  it('asks for eight frames in two rows, or the old four in one', () => {
+    expect(SHEET_8).toMatchObject({ frames: 8, columns: 4, rows: 2 });
+    expect(walkPrompt(SHEET_8)).toContain('8-frame');
+    expect(walkPrompt(SHEET_8)).toContain('2 rows of 4');
+    expect(walkPrompt(SHEET_8)).toContain('8. up');
+    expect(walkPrompt(SHEET_4)).toContain('4-frame');
+    expect(walkPrompt(SHEET_4)).toContain('ONE row');
+    expect(walkPrompt(SHEET_4)).not.toContain('5. ');
+    expect(MINI_VARIANTS).toEqual(expect.arrayContaining(['step5', 'step6', 'step7', 'step8']));
+  });
+
+  it('redraws a walk as eight frames, all one size on one ground, and as four for the old layout', async () => {
+    const library = libraryWithReferences();
+    const sizes: string[] = [];
+    const models: MiniModels = {
+      async draw(request) {
+        sizes.push(request.size ?? '');
+        const [width, height] = (request.size ?? '').split('x').map(Number) as [number, number];
+        return { value: encodePng(figureSheet(4, height === 2048 ? 2 : 1, width, height)), seconds: 1, costUsd: 0.1 };
+      },
+      async read() { return { value: { variants_ok: true }, seconds: 0.1, costUsd: 0 }; },
+      async embed() { return { value: [[1]], seconds: 0, costUsd: 0 }; },
+    };
+    const walker = { ...entry('seed_walk_calm', 'walking', 'calm', 'stand'), activity: 'walk' as const, variants: ['base' as const, 'step1' as const, 'step2' as const, 'step3' as const, 'step4' as const] };
+    const base = blankImage(MINI_CANVAS, MINI_CANVAS);
+    paint(base, [450, 300, 570, 800], [120, 170, 240, 255]);
+    library.add(walker, new Map([['base', encodePng(base)]]), [1]);
+    const generator = new MiniPoseGenerator({ library, models });
+    const eight = await generator.redoWalk('seed_walk_calm');
+    expect(eight.entry?.variants).toEqual(['base', 'step1', 'step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8']);
+    expect(sizes[0]).toBe('2560x2048');
+    const tops = ['step1', 'step5'].map(name => solidBox(library.imagePath('seed_walk_calm', name as 'step1')));
+    expect(tops[0]!.bottom).toBe(tops[1]!.bottom);
+    const four = await generator.redoWalk('seed_walk_calm', SHEET_4);
+    expect(four.entry?.variants).toEqual(['base', 'step1', 'step2', 'step3', 'step4']);
+    expect(sizes[1]).toBe('2560x1024');
+  });
+});
+
+function solidBox(path: string) {
+  const image = decodePng(readFileSync(path));
+  let bottom = 0;
+  for (let p = 0; p < image.width * image.height; p++) if (image.data[p * 4 + 3]! > 128) bottom = Math.max(bottom, Math.floor(p / image.width));
+  return { bottom };
+}
+
+describe('the new poses', () => {
+  it('has the seven reactions, the rummage drawn in the air with its waist as the anchor', () => {
+    for (const [id, activity] of [['seed_poke', 'poke'], ['seed_startle', 'startle'], ['seed_rummage', 'rummage'], ['seed_found', 'found'],
+      ['seed_getup', 'getup'], ['seed_stretch', 'stretch'], ['seed_crouch', 'crouch']] as const) {
+      const spec = MINI_SEED_SPECS.find(item => item.id === id)!;
+      expect(spec.activity).toBe(activity);
+      expect(spec.contact).toBe('stand');
+      expect(spec.label).toMatch(/\S/u);
+    }
+    const rummage = MINI_SEED_SPECS.find(spec => spec.id === 'seed_rummage')!;
+    expect(rummage.anchorAt).toBe('waist');
+    expect(drawPrompt(rummage)).not.toContain('green rectangle');
+    expect(drawPrompt(rummage)).toContain('in mid-air');
+    expect(drawPrompt(MINI_SEED_SPECS.find(spec => spec.id === 'seed_getup')!)).toContain('palms');
+    expect(drawPrompt(MINI_SEED_SPECS.find(spec => spec.id === 'seed_crouch')!)).toContain('green rectangle');
+  });
+
+  it('shapes a picture drawn in the air with no board, the middle of her standing in until the waist is read', () => {
+    const upside = blankImage(MINI_CANVAS, MINI_CANVAS);
+    paint(upside, [430, 150, 600, 850], [120, 170, 240, 255]);
+    const shaped = shapeBase(upside, 'stand', false, true);
+    expect('anchor' in shaped && shaped.anchor).toEqual({ x: 515, y: 500 });
+    expect(shapeBase(upside, 'stand')).toEqual({ reason: 'no_edge' });
   });
 });
 

@@ -91,6 +91,27 @@ export const MINI_SEED_SPECS: readonly (MiniPoseSpec & { id: string })[] = Objec
     description: 'dancing happily in place, front view, arms up to one side, hips swaying, one foot lifted' },
   { id: 'seed_land', contact: 'stand', expression: 'relieved', activity: 'rest', variants: 'face', label: '着地',
     description: 'just landed, knees bent and arms out for balance, a relieved smile' },
+  // What she does around her own moves (owner 2026-10-28): the in-betweens and reactions the desktop plays. Side views face left like the walk.
+  { id: 'seed_poke', contact: 'stand', expression: 'curious', activity: 'poke', variants: 'face', label: 'つつく',
+    resting: 'crouching ON that top edge: the soles of her boots rest exactly on the top edge of the green rectangle, her knees bent deeply and her bottom low, all of her above it',
+    description: 'seen from the side facing left, crouched low and poking down at something by her feet with one index finger, her other hand on her knee, a curious playful face' },
+  { id: 'seed_startle', contact: 'stand', expression: 'surprised', activity: 'startle', variants: 'face', label: 'びっくり',
+    description: 'startled, leaning back with both hands raised in front of her, eyes wide and a small open mouth, a little sweat drop and tiny surprise marks by her head, hair and skirt jumping up' },
+  // Head first into a box: the desktop clips everything below her waist (her upper body is "inside" a folder window). A board for her
+  // hips to rest on was tried in the guide first, which the image model draws wrong (in front of it, beside it); drawn in the air
+  // with no board, upside down, the waist is read off the picture (`anchorAt`) and becomes the anchor; the entry's contact is stand.
+  { id: 'seed_rummage', contact: 'stand', expression: 'curious', activity: 'rummage', variants: 'still', label: '箱に頭を突っ込む', anchorAt: 'waist',
+    description: 'upside down in mid-air as if diving head first into a box far below her, in the same chibi style: her head and both arms down at the bottom reaching for something, her hips and both legs up in the air kicking, her skirt and long hair falling downward, her boots at the top; any viewpoint is fine' },
+  { id: 'seed_found', contact: 'stand', expression: 'joyful', activity: 'found', variants: 'face', label: 'みつけた',
+    description: 'proudly holding up one small blank sheet of paper (no writing on it) above her head with both hands, standing tall on tiptoe, a bright happy smile' },
+  { id: 'seed_getup', contact: 'stand', expression: 'sleepy', activity: 'getup', variants: 'face', label: '起き上がる',
+    resting: 'waking up and rising ON that top edge: her palms and her knees rest exactly on the top edge of the green rectangle, all of her above it',
+    description: 'seen from the side facing left, sleepily waking up and pushing herself up from the ground with both arms, her knees still down, her upper body rising, drowsy half-closed eyes and a small yawn' },
+  { id: 'seed_stretch', contact: 'stand', expression: 'sleepy', activity: 'stretch', variants: 'still', label: 'のびをする',
+    description: 'stretching both arms high straight up overhead with her fingers laced, her back arched a little, eyes closed and a small yawn with her mouth open, a tiny tear at the corner of her eye' },
+  { id: 'seed_crouch', contact: 'stand', expression: 'determined', activity: 'crouch', variants: 'face', label: 'かがむ',
+    resting: 'crouching ON that top edge: the soles of her boots rest exactly on the top edge of the green rectangle, her knees bent deeply, all of her above it',
+    description: 'seen from the side facing left, crouched with her knees bent deeply and her arms swung back, about to jump, leaning forward with a determined look and a firm small smile' },
   { id: 'seed_sleep_lie', contact: 'lie', expression: 'sleepy', activity: 'sleep', variants: 'still', label: '寝そべって眠る',
     description: 'fast asleep lying on her front with her cheek on her folded arms, eyes closed, mouth slightly open, peaceful' },
   { id: 'seed_sleep_sit', contact: 'sit', expression: 'sleepy', activity: 'sleep', variants: 'still', label: '座って居眠り',
