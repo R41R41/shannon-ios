@@ -16,6 +16,7 @@ const have = (command: string) => spawnSync('bash', ['-c', `command -v ${command
 const available = have('git') && have('sha256sum') && have('grep');
 
 const FIXTURE = 'result/r43-reflex-ate-first.json';
+const ANSWERS = 'result/r43-reflex-ate-first';   // what the body writes in "answers": the fixture without .json
 const FIX = 'services/api/tests/fixtures/continue';
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 const git = (cwd: string, ...args: string[]) => {
@@ -25,8 +26,10 @@ const git = (cwd: string, ...args: string[]) => {
 };
 const put = (dir: string, path: string, text: string) => { mkdirSync(dirname(join(dir, path)), { recursive: true }); writeFileSync(join(dir, path), text); };
 
-function produced(bodyRev: string, inputSha256: string | null, extra: Record<string, unknown> = {}): string {
-  return JSON.stringify({ continueProduced: { bodyRev, script: 'backend/scripts/lab/continue-produce.ts', bench: 'build', inputFixture: inputSha256 ? FIXTURE : undefined, inputSha256: inputSha256 ?? undefined }, receipt: { id: 'skill:q1' }, ...extra }, null, 1);
+/** A produced file the way the body writes it: the header (producedBy, bench, bodyRevision, madeAt, answers, fixtureSha256), then output. */
+function produced(bodyRevision: string, fixtureSha256: string | null, extra: Record<string, unknown> = {}): string {
+  return JSON.stringify({ producedBy: 'backend/scripts/lab/continue-produce.ts', bench: 'offline', bodyRevision: bodyRevision.slice(0, 12), madeAt: '2026-10-28T12:00:00.000Z',
+    answers: fixtureSha256 ? ANSWERS : null, fixtureSha256, output: { receipt: { id: 'skill:q1' } }, ...extra }, null, 1);
 }
 
 interface Repos { head: string; body: string; fixtureSha: string; first: string }
@@ -57,12 +60,34 @@ describe.skipIf(!available)('scripts/sync-body-produced.sh', () => {
     const second = commitProduced(r.body, { 'r43.json': produced(r.first, r.fixtureSha), 'catalog.json': produced(r.first, null) });   // the files cannot name their own commit: they name the code commit
     const result = run(r, second.slice(0, 10));                                                                                            // a short rev is read
     expect(result.status, result.stderr).toBe(0);
-    expect(readFileSync(join(destDir(r), 'r43.json'), 'utf8')).toContain(r.first);
+    expect(readFileSync(join(destDir(r), 'r43.json'), 'utf8')).toContain(r.first.slice(0, 12));
     const index = JSON.parse(readFileSync(join(destDir(r), 'PRODUCED.json'), 'utf8')) as { bodyRev: string; madeBy: string; files: Record<string, string> };
     expect(index.bodyRev).toBe(second);
     expect(index.madeBy).toBe(r.first);
     expect(Object.keys(index.files)).toEqual(['catalog.json', 'r43.json']);
     expect(index.files['r43.json']).toBe(sha(readFileSync(join(destDir(r), 'r43.json'), 'utf8')));
+  });
+
+  it('takes the revision of the CODE as well: the files are read from the first later commit that holds them and has the same code', () => {
+    const r = repos();
+    const second = commitProduced(r.body, { 'r43.json': produced(r.first, r.fixtureSha) });
+    const result = run(r, r.first);                                    // the code commit, which holds no produced/ itself
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(join(destDir(r), 'PRODUCED.json'), 'utf8'))).toMatchObject({ bodyRev: second, madeBy: r.first });
+  });
+
+  it('does not take a later commit of other code for the code revision, and does not take produced files left from older code', () => {
+    const r = repos();
+    commitProduced(r.body, { 'r43.json': produced(r.first, r.fixtureSha) });                         // produced for the first code
+    put(r.body, 'backend/src/code.ts', 'export const a = 2;\n'); git(r.body, 'add', '-A'); git(r.body, 'commit', '-q', '-m', 'newer code');
+    const newer = git(r.body, 'rev-parse', 'HEAD');
+    const result = run(r, newer);                                                                     // the produced/ at this commit is the old code's
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('another version is a fail');
+    expect(existsSync(destDir(r))).toBe(false);
+    const fresh = commitProduced(r.body, { 'r43.json': produced(newer, r.fixtureSha) });
+    expect(run(r, newer).status).toBe(0);                                                             // once produced for the newer code is committed, the code revision reads it
+    expect(JSON.parse(readFileSync(join(destDir(r), 'PRODUCED.json'), 'utf8')).bodyRev).toBe(fresh);
   });
 
   it('is a fail, and copies nothing, when a file was made by a body whose code differs', () => {
@@ -100,9 +125,9 @@ describe.skipIf(!available)('scripts/sync-body-produced.sh', () => {
   it('is a fail when the body has no produced files, names no body, or lists a fixture without its sha256', () => {
     const r = repos();
     expect(run(r, r.first).stderr).toContain('has no backend/contracts/continue/produced/');
-    const noRev = commitProduced(r.body, { 'x.json': JSON.stringify({ receipt: {} }) });
+    const noRev = commitProduced(r.body, { 'x.json': JSON.stringify({ producedBy: 'x', output: {} }) });
     expect(run(r, noRev).stderr).toContain('does not say which body made it');
-    const noSha = commitProduced(r.body, { 'x.json': JSON.stringify({ continueProduced: { bodyRev: r.first, inputFixture: FIXTURE } }) });
+    const noSha = commitProduced(r.body, { 'x.json': JSON.stringify({ bodyRevision: r.first.slice(0, 12), answers: ANSWERS, fixtureSha256: null, output: {} }) });
     expect(run(r, noSha).stderr).toContain('not its sha256');
     expect(existsSync(destDir(r))).toBe(false);
   });
@@ -111,7 +136,7 @@ describe.skipIf(!available)('scripts/sync-body-produced.sh', () => {
     const r = repos();
     expect(run(r, 'main').stderr).toContain('not a hex git revision');
     expect(run(r, 'deadbeef').status).toBe(1);
-    const climb = commitProduced(r.body, { 'x.json': JSON.stringify({ continueProduced: { bodyRev: r.first, inputFixture: '../../x.json', inputSha256: 'a' } }) });
+    const climb = commitProduced(r.body, { 'x.json': JSON.stringify({ bodyRevision: r.first.slice(0, 12), answers: '../../x', fixtureSha256: 'a', output: {} }) });
     expect(run(r, climb).stderr).toContain('not a plain relative path');
   });
 

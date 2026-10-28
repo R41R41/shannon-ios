@@ -6,9 +6,10 @@ codex/shannon/continue-judge, tools/continue-verify/). It does not change the fi
 
 What it adds:
   - head mode: after (4), (5) = produced_stage: (a) the body's backend/contracts/continue/produced/ exists at the body rev (CONTINUE_PRODUCED=absent fails),
-    (b) every produced file names (continueProduced.bodyRev) the body rev or a rev with the same backend/src and backend/package.json, and was made from
-    the head's own copy of its fixture (inputSha256), (c) the head's services/api/tests/fixtures/continue/produced/ is byte for byte the body's,
+    (b) every produced file names (bodyRevision) the body rev or a rev with the same backend/src and backend/package.json, and was made from
+    the head's own copy of its fixture (answers, fixtureSha256), (c) the head's services/api/tests/fixtures/continue/produced/ is byte for byte the body's,
     (d) docs/continue-contracts.md and tests/fixtures/continue/manifest.json are the same file on both sides.
+  - <body-rev> may be the commit that holds the produced files or the revision of the code they were made from (then they are read from the first later commit of the same code whose files are current).
   - a mode "produced <head-repo> <rev> <body-rev>" that runs (5) alone, without the body's build (for the work in between, and for the tests).
   - GATE_BODY_REPO picks the body clone (the default is unchanged). The continue work is in /mnt/c/Shannon/Shannon-continue, not in the default clone.
   - TEMPORARY EXCEPTION: while backend/scripts/lab/continue-produce.ts is not in the body at that rev, a missing produced/ is
@@ -53,19 +54,34 @@ What it adds:
  VALIDATION=services/api/src/surfaces/minecraft/minecraftControlValidation.ts
  FAKE_ENV=(SHANNON_ISOLATED_MINEBOT_PROBE=true OPENAI_API_KEY=offline-test-not-used MONGODB_URI=mongodb://127.0.0.1:1/offline-not-used CI=true TZ=Etc/UTC LANG=C.UTF-8)
  T0=$(date +%s); FAIL=0
-@@ -54,6 +63,68 @@
+@@ -54,6 +63,93 @@
    case "$out" in 'CONTRACT ok '*) ;; *) FAIL=1;; esac
  }
  
-+field() {   # field <file> <key>: the first string value of "key" in a JSON file
-+  grep -a -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$1" | head -1 | sed -E 's/^[^:]*:[[:space:]]*"(.*)"$/\1/' || true
++field() {   # field <file|-> <key>: the first string value of "key" in the top of a produced file (the body's header: producedBy, bench, bodyRevision, madeAt, answers, fixtureSha256)
++  head -c 2000 "$1" | grep -a -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | sed -E 's/^[^:]*:[[:space:]]*"(.*)"$/\1/' || true
 +}
 +same_code() {   # same_code <body repo> <rev a> <rev b>: nothing under CODE_PATHS differs
 +  gitr "$1" diff --quiet "$2" "$3" -- "${CODE_PATHS[@]}"
 +}
++# produced_current <body repo> <body rev> <commit>: <commit> holds produced files and every one was made by code the same as <body rev>'s and <commit>'s
++produced_current() {
++  local brepo=$1 bfull=$2 commit=$3 name made madefull any=0
++  while IFS= read -r name; do
++    any=1
++    made=$(gitr "$brepo" show "$commit:$PRODUCED_BODY/$name" | field - bodyRevision)
++    [ -n "$made" ] || return 1
++    madefull=$(gitr "$brepo" rev-parse --verify --quiet "$made^{commit}") || return 1
++    { [ "$madefull" = "$bfull" ] || same_code "$brepo" "$madefull" "$bfull"; } || return 1
++    { [ "$madefull" = "$commit" ] || same_code "$brepo" "$madefull" "$commit"; } || return 1
++  done < <(gitr "$brepo" ls-tree -r --name-only "$commit" -- "$PRODUCED_BODY/" | sed "s#^$PRODUCED_BODY/##")
++  [ "$any" = 1 ]
++}
 +# (5) produced is not stale (continue contract 3.1, chapter 9). Prints CONTINUE_PRODUCED=<ok|absent|unimplemented|stale>.
++# <body rev> is the commit that holds the produced files, or the revision of the CODE they were made from: then they are read from the first later commit of the
++# same code whose files are current (the body's files cannot name the commit they are committed in).
 +produced_stage() {   # produced_stage <head repo> <head rev> <body repo> <body rev>
-+  local hrepo=$1 hrev=$2 brepo=$3 brev=$4 bfull t; local -a names=()
++  local hrepo=$1 hrev=$2 brepo=$3 brev=$4 bfull t rd c; local -a names=()
 +  bfull=$(gitr "$brepo" rev-parse --verify "$brev^{commit}") || { echo "   !! the body revision $brev is not in $brepo"; FAIL=1; return; }
 +  t=$(mktemp -d /tmp/gate-produced-XXXXXX)
 +  # (d) the two copies of the contract, and of the fixtures' manifest, are the same file
@@ -79,8 +95,15 @@ What it adds:
 +    if [ "$hsha" != "$bsha" ]; then echo "   !! (5d) $hpath (head) and $bpath (body) differ: change the contract on both sides at once and raise the manifest's version"; FAIL=1
 +    else echo "   (5d) $hpath = $bpath"; fi
 +  done
-+  # (a) the body's produced/ at that revision
-+  mapfile -t names < <(gitr "$brepo" ls-tree -r --name-only "$bfull" -- "$PRODUCED_BODY/" | sed "s#^$PRODUCED_BODY/##")
++  # (a) the body's produced/: at the revision, or (the revision is the code's) at the first later commit of the same code whose files are current
++  rd=$bfull
++  if ! produced_current "$brepo" "$bfull" "$bfull"; then
++    while IFS= read -r c; do
++      same_code "$brepo" "$bfull" "$c" || continue
++      if produced_current "$brepo" "$bfull" "$c"; then rd=$c; break; fi
++    done < <(gitr "$brepo" rev-list --reverse --topo-order --ancestry-path --all "^$bfull" -- "$PRODUCED_BODY")
++  fi
++  mapfile -t names < <(gitr "$brepo" ls-tree -r --name-only "$rd" -- "$PRODUCED_BODY/" | sed "s#^$PRODUCED_BODY/##")
 +  if [ "${#names[@]}" = 0 ]; then
 +    if gitr "$brepo" cat-file -e "$bfull:$PRODUCE_SCRIPT" 2>/dev/null; then
 +      echo "   !! (5a) CONTINUE_PRODUCED=absent: the body has $PRODUCE_SCRIPT but no $PRODUCED_BODY/ at $bfull (run it and commit the files)"; FAIL=1
@@ -94,20 +117,23 @@ What it adds:
 +  local name made madefull fixture want have madeby="" ok=1
 +  for name in "${names[@]}"; do
 +    [[ "$name" =~ ^[A-Za-z0-9._-]+\.json$ ]] || { echo "   !! (5a) unexpected file $PRODUCED_BODY/$name"; ok=0; continue; }
-+    gitr "$brepo" show "$bfull:$PRODUCED_BODY/$name" > "$t/$name"
-+    # (b) the body that made the file is the revision named, or has the same code
-+    made=$(field "$t/$name" bodyRev)
++    gitr "$brepo" show "$rd:$PRODUCED_BODY/$name" > "$t/$name"
++    # (b) the body that made the file is the revision named, or has the same code (bodyRevision)
++    made=$(field "$t/$name" bodyRevision)
 +    madefull=""; [ -z "$made" ] || madefull=$(gitr "$brepo" rev-parse --verify --quiet "$made^{commit}" || true)
-+    if [ -z "$madefull" ]; then echo "   !! (5b) $name does not name a body revision of this clone (continueProduced.bodyRev '$made')"; ok=0; continue; fi
-+    if [ "$madefull" != "$bfull" ] && ! same_code "$brepo" "$madefull" "$bfull"; then echo "   !! (5b) $name was made by $made, whose code differs from $brev: stale"; ok=0; fi
++    if [ -z "$madefull" ]; then echo "   !! (5b) $name does not name a body revision of this clone (bodyRevision '$made')"; ok=0; continue; fi
++    for c in "$bfull" "$rd"; do
++      if [ "$madefull" != "$c" ] && ! same_code "$brepo" "$madefull" "$c"; then echo "   !! (5b) $name was made by $made, whose code differs from ${c:0:12}: stale"; ok=0; fi
++    done
 +    if [ -z "$madeby" ]; then madeby=$madefull; elif [ "$madeby" != "$madefull" ]; then echo "   !! (5b) $name was made by $made, other files by $madeby"; ok=0; fi
 +    # (c) the head's file is the same file
 +    if ! gitr "$hrepo" cat-file -e "$hrev:$PRODUCED_HEAD/$name" 2>/dev/null; then echo "   !! (5c) $PRODUCED_HEAD/$name is not in the head: run scripts/sync-body-produced.sh $bfull"; ok=0
 +    elif [ "$(gitr "$hrepo" show "$hrev:$PRODUCED_HEAD/$name" | sha256sum | cut -d' ' -f1)" != "$(sha256sum < "$t/$name" | cut -d' ' -f1)" ]; then echo "   !! (5c) $PRODUCED_HEAD/$name differs from the body's: run scripts/sync-body-produced.sh $bfull"; ok=0; fi
-+    fixture=$(field "$t/$name" inputFixture); want=$(field "$t/$name" inputSha256)
++    # the file was made from the head's own copy of its fixture (answers: the fixture without .json; fixtureSha256)
++    fixture=$(field "$t/$name" answers); want=$(field "$t/$name" fixtureSha256)
 +    if [ -n "$fixture" ]; then
-+      have=$(gitr "$hrepo" show "$hrev:services/api/tests/fixtures/continue/$fixture" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)
-+      [ -n "$want" ] && [ "$want" = "$have" ] || { echo "   !! (5b) $name was made from another $fixture than the head's"; ok=0; }
++      have=$(gitr "$hrepo" show "$hrev:services/api/tests/fixtures/continue/$fixture.json" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)
++      [ -n "$want" ] && [ "$want" = "$have" ] || { echo "   !! (5b) $name was made from another $fixture.json than the head's"; ok=0; }
 +    fi
 +  done
 +  # a file the head has and the body does not
@@ -115,14 +141,14 @@ What it adds:
 +    [ "$name" = PRODUCED.json ] && continue
 +    printf '%s\n' "${names[@]}" | grep -qx -- "$name" || { echo "   !! (5c) the head has $name, which the body does not: run scripts/sync-body-produced.sh $bfull"; ok=0; }
 +  done < <(gitr "$hrepo" ls-tree -r --name-only "$hrev" -- "$PRODUCED_HEAD/" | sed "s#^$PRODUCED_HEAD/##")
-+  if [ "$ok" = 1 ]; then echo "   (5) CONTINUE_PRODUCED=ok: ${#names[@]} file(s), made by ${madeby:0:10}, the head's copy is the body's"; else echo "   (5) CONTINUE_PRODUCED=stale"; FAIL=1; fi
++  if [ "$ok" = 1 ]; then echo "   (5) CONTINUE_PRODUCED=ok: ${#names[@]} file(s) at ${rd:0:10}, made by ${madeby:0:10}, the head's copy is the body's"; else echo "   (5) CONTINUE_PRODUCED=stale"; FAIL=1; fi
 +  rm -rf "$t"
 +}
 +
  case "$MODE" in
  body)
    BASE=${4:-origin/main}; HREPO=$HEAD_REPO_DEFAULT; HREV=${5:-origin/main}
-@@ -84,8 +155,16 @@
+@@ -84,8 +180,16 @@
    say "head gate: the catalog of body $(gitr "$BREPO" rev-parse --short "$BREV") against head $(gitr "$REPO" rev-parse --short "$REV")"
    T=$WORK/body-for-head; body_tree "$BREPO" "$BREV" "$T"
    contract "$T" "$REPO" "$REV"

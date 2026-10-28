@@ -119,6 +119,34 @@
    "command": "q3"
   },
   {
+   "op": "send",
+   "command": "q4",
+   "act": {
+    "$ref": "result/fight-target-escaped.json#input.cases",
+    "value": [
+     {
+      "stance": "fight",
+      "during": "death_seen"
+     },
+     {
+      "stance": "fight",
+      "during": "target_leaves_range_alive",
+      "range": 6
+     },
+     {
+      "stance": "flee",
+      "during": "range_reached",
+      "range": 12
+     },
+     {
+      "stance": "fight",
+      "during": "lost_from_sight"
+     }
+    ]
+   },
+   "why": "a fight ends by the target killed, escaped (alive, out of range), left, or lost (A-2): result/fight-target-escaped.json"
+  },
+  {
    "op": "stop-trace"
   }
  ],

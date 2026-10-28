@@ -159,10 +159,10 @@ describe.skipIf(!bash || !GATE)('local-gate-stage5.patch (applied to a copy of S
     const code = git(body, 'rev-parse', 'HEAD');
     if (options.made === 'code-changed') { put(body, 'backend/src/code.ts', 'export const a = 2;\n'); git(body, 'add', '-A'); git(body, 'commit', '-q', '-m', 'newer code'); }
     const sha = (text: string) => spawnSync('sha256sum', { input: text, encoding: 'utf8' }).stdout.split(' ')[0];
-    const producedText = JSON.stringify({ continueProduced: { bodyRev: code, inputFixture: 'result/a.json', inputSha256: sha(fixtureText) }, receipt: {} });
+    const producedText = JSON.stringify({ producedBy: 'x', bench: 'offline', bodyRevision: code.slice(0, 12), madeAt: '2026-10-28T12:00:00.000Z', answers: 'result/a', fixtureSha256: sha(fixtureText), output: {} });
     if (options.produced) { put(body, 'backend/contracts/continue/produced/a.json', producedText); git(body, 'add', '-A'); git(body, 'commit', '-q', '-m', 'produced'); }
     if (options.headCopy && options.headCopy !== 'none') { put(head, `${FIX}/produced/a.json`, options.headCopy === 'same' ? producedText : `${producedText} `); git(head, 'add', '-A'); git(head, 'commit', '-q', '-m', 'sync'); }
-    return { head, body, headRev: git(head, 'rev-parse', 'HEAD'), bodyRev: git(body, 'rev-parse', 'HEAD') };
+    return { head, body, code, headRev: git(head, 'rev-parse', 'HEAD'), bodyRev: git(body, 'rev-parse', 'HEAD') };
   }
   const gate = (script: string, repos: { head: string; body: string; headRev: string; bodyRev: string }) =>
     spawnSync('bash', [script, 'produced', repos.head, repos.headRev, repos.bodyRev], { encoding: 'utf8', env: { ...process.env, GATE_BODY_REPO: repos.body } });
@@ -184,6 +184,12 @@ describe.skipIf(!bash || !GATE)('local-gate-stage5.patch (applied to a copy of S
   });
   it('passes when the produced files are current and the head has the same copy', () => {
     const result = gate(patchedGate(), pair({ produce: true, produced: true, headCopy: 'same' }));
+    expect(result.stdout).toContain('CONTINUE_PRODUCED=ok');
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+  });
+  it('takes the revision of the code too: the files are read from the later commit of the same code', () => {
+    const repos = pair({ produce: true, produced: true, headCopy: 'same' });
+    const result = gate(patchedGate(), { ...repos, bodyRev: repos.code });
     expect(result.stdout).toContain('CONTINUE_PRODUCED=ok');
     expect(result.status, result.stdout + result.stderr).toBe(0);
   });

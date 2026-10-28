@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildModel, judge, judgeAll, loadFixtures, loadFolder, sceneIds, stageChain, type DeathMark, type Input, type ProbeLine, type ReceiptRecord, type Row, type TraceLine } from '../../../tools/continue-verify/judge.js';
+import { validBodyTimes } from '../src/surfaces/minecraft/minecraftControlValidation.js';
+import { buildModel, joinCommands, judge, judgeAll, loadFixtures, loadFolder, sceneIds, stageChain, type DeathMark, type Input, type ProbeLine, type ReceiptRecord, type Row, type TraceLine } from '../../../tools/continue-verify/judge.js';
 
 /**
  * The judge of the end-to-end checks (tools/continue-verify/judge.ts) against HAND-MADE records. Each folder here is built from the contract's
@@ -13,6 +14,8 @@ import { buildModel, judge, judgeAll, loadFixtures, loadFolder, sceneIds, stageC
 const fixtures = loadFixtures();
 const RUN = 'd468250d';
 const t = (second: number, milli = 0) => new Date(Date.UTC(2026, 9, 28, 4, 0, second, milli)).toISOString();
+/** TraceIds keep obsSeq and obsAt required: every record of a command carries them. */
+const obs = { obsSeq: 1, obsAt: t(0) };
 
 interface Made { rows: Row[]; receipts: ReceiptRecord[]; trace: TraceLine[] }
 const none = (): Made => ({ rows: [], receipts: [], trace: [] });
@@ -20,7 +23,7 @@ const merge = (...parts: Made[]): Made => ({ rows: parts.flatMap(p => p.rows), r
 
 /** A command the head decided and sent, the body ran (lock, first motor, one hand), with the operations it did. */
 function ran(n: number, life: number, opts: { at: number; ops?: { at: string; op?: string }[]; decision?: string } ): Made {
-  const id = `skill:q${n}`, decision = opts.decision ?? `d${String(n).padStart(4, '0')}`, ids = { run: RUN, command: id, item: `q${n}`, life };
+  const id = `skill:q${n}`, decision = opts.decision ?? `d${String(n).padStart(4, '0')}`, ids = { run: RUN, command: id, item: `q${n}`, life, ...obs };
   return {
     rows: [
       { ev: 'request', at: t(opts.at), ids: { run: RUN, decision, life }, reads: [] },
@@ -38,7 +41,7 @@ function ran(n: number, life: number, opts: { at: number; ops?: { at: string; op
 }
 /** A command that was queued behind another and was refused before it started (death, stale life): the receipt alone is its evidence. */
 function refused(n: number, life: number, acceptedAt: string, at: number): Made {
-  const id = `skill:q${n}`, decision = `d${String(n).padStart(4, '0')}`, ids = { run: RUN, command: id, item: `q${n}`, life };
+  const id = `skill:q${n}`, decision = `d${String(n).padStart(4, '0')}`, ids = { run: RUN, command: id, item: `q${n}`, life, ...obs };
   return {
     rows: [
       { ev: 'request', at: t(at), ids: { run: RUN, decision, life }, reads: [] }, { ev: 'response', at: t(at, 500), ids: { run: RUN, decision, life } },
@@ -128,7 +131,7 @@ describe('the judge: boundary 5 (death and the async moments)', () => {
     const q12 = input.receipts.find(receipt => receipt.id === 'skill:q12')!;
     q12.unit = { goal: 'done', end: 'finished', released: true, startedAt: t(20, 400) };
     q12.bodyTimes = { ...q12.bodyTimes!, startedAt: t(20, 400), lockAt: t(20, 410), firstMotorAt: t(20, 420), motorOps: 2 };
-    input.trace.push({ kind: 'hand_start', ids: { run: RUN, command: 'skill:q12', hand: 1, life: 2 }, at: t(20, 415), pos: { x: 0, y: 64, z: 0 }, hp: 20, food: 20, saturation: 5, inventory: '', holder: { kind: 'idle' }, lastOps: [] });
+    input.trace.push({ kind: 'hand_start', ids: { run: RUN, command: 'skill:q12', hand: 1, life: 2, ...obs }, at: t(20, 415), pos: { x: 0, y: 64, z: 0 }, hp: 20, food: 20, saturation: 5, inventory: '', holder: { kind: 'idle' }, lastOps: [] });
     const verdict = judge(input, fixtures);
     expect(verdict.checks.find(item => item.id.startsWith('waiting old commands never start waiting_for_reflex'))?.ok).toBe(false);
   });
@@ -183,7 +186,7 @@ describe('the judge: boundary 8 scene b8-dup-poll', () => {
   });
   it('(d) fails when a correction was made where none is expected', () => {
     const input = dupPoll();
-    input.rows.push({ ev: 'corrected', at: t(10), ids: { run: RUN, command: 'skill:q1', life: 1 }, was: 'unknown', now: { goal: 'done', end: 'finished', released: true } });
+    input.rows.push({ ev: 'corrected', at: t(10), ids: { run: RUN, command: 'skill:q1', life: 1, ...obs }, was: 'unknown', now: { goal: 'done', end: 'finished', released: true } });
     expect(judge(input, fixtures).checks.find(item => item.id === 'corrections = 0')?.ok).toBe(false);
   });
 });
@@ -193,7 +196,7 @@ describe('the judge: an unknown needs the cleanup\'s release (b8-lost-receipt)',
     const made = ran(1, 1, { at: 5 });
     made.rows = made.rows.filter(row => row.ev !== 'received');
     made.receipts = [];
-    const ids = { run: RUN, command: 'skill:q1', item: 'q1', life: 1 };
+    const ids = { run: RUN, command: 'skill:q1', item: 'q1', life: 1, ...obs };
     const unit = { goal: 'unknown' as const, end: 'unknown' as const, released: false };
     made.rows.push({ ev: 'received', at: t(10), ids, receipt: { outcome: 'unknown', unit }, bodyTimes: { acceptedAt: t(5, 700), lockAt: t(5, 710), firstMotorAt: t(5, 720), endedAt: t(10), motorOps: 4 } },
       { ev: 'released', at: t(12), ids, by: 'cleanup', ok: true },
@@ -404,5 +407,66 @@ describe.skipIf(!existsSync(tsx))('the judge as a command', () => {
     expect(bad.status).toBe(1);
     expect(bad.stdout).toContain('つながらない: skill:q11');
     expect(spawnSync(process.execPath, [tsx, cli, join(dir, 'nowhere')], { encoding: 'utf8' }).status).toBe(2);
+  });
+});
+
+// ---- TraceIds stay whole; (not_started, cut) ---------------------------------------------------------------------------------------------------------------
+describe('the judge: the contract\'s form only', () => {
+  it('a record whose ids lack obsSeq or obsAt (required in TraceIds) is told as a known gap in the verdict, never passed over silently; it is still joined by run, life, decision and command', () => {
+    const input = boundary5();
+    input.rows = input.rows.map(row => (row.ev === 'received' && row.ids?.command === 'skill:q11' ? { ...row, ids: { run: RUN, command: 'skill:q11', item: 'q11', life: 1 } } : row));
+    const verdict = judge(input, fixtures);
+    expect(verdict.gaps).toEqual(['skill:q11: ids without obsSeq/obsAt']);
+    expect(verdict.text).toContain('既知の欠け: skill:q11');
+    expect(judge(boundary5(), fixtures).gaps).toEqual([]);
+  });
+  it('a hand cut from outside with no operation (not_started, cut; chapter 14 A-1) needs no hand_start, like a command refused before it began', () => {
+    const input = boundary5();
+    for (const receipt of input.receipts) if (receipt.id === 'skill:q12') receipt.unit = { goal: 'not_started', end: 'cut', released: true };
+    input.rows = input.rows.map(row => (row.ev === 'received' && row.ids?.command === 'skill:q12' ? { ...row, receipt: { outcome: 'cancelled', unit: { goal: 'not_started', end: 'cut', released: true } } } : row));
+    const verdict = judge(input, fixtures);
+    expect(verdict.commands.unlinked).toEqual([]);
+    expect(verdict.pass, verdict.text).toBe(true);
+  });
+});
+
+// ---- the body's real produced files: what the judge reads, and what the body still has to fix --------------------------------------------------------------------
+describe('the judge against the body\'s produced files (the body\'s known gaps are written down, never passed over)', () => {
+  const PRODUCED = join(fixtures.dir, 'produced');
+  const load = (name: string) => JSON.parse(readFileSync(join(PRODUCED, name), 'utf8')) as { output: Record<string, any> };
+  const meta = { run: 'bench-a', scene: 'boundary-2', benches: ['A' as const], headRev: 'h', bodyRev: 'b' };
+
+  it('KNOWN GAP OF THE BODY (A-4): the body\'s opLog writes {k, t} where the contract says {kind, at}; the judge reads the contract\'s form only, so the body\'s hand_start line is not read', () => {
+    const line = load('measure--hand-start.json').output.handStart;
+    expect(line.k).toBe('hand_start');
+    expect(line.kind).toBeUndefined();
+    const model = buildModel({ meta, rows: [], receipts: [], trace: [line as TraceLine], probes: [] }, fixtures);
+    expect(model.commands.size).toBe(0);                                  // when the body writes `kind`, this becomes 1: change this test then
+    const fixed = buildModel({ meta, rows: [], receipts: [], trace: [{ ...line, kind: 'hand_start' } as TraceLine], probes: [] }, fixtures);
+    expect(fixed.commands.get('lab:q2')?.handStarts).toHaveLength(1);
+  });
+
+  it('KNOWN GAP OF THE BODY (A-4): no produced bodyTimes has acceptedAt (the contract keeps it required); these are the files, and the head\'s validBodyTimes refuses each', () => {
+    const missing: string[] = [];
+    for (const name of readdirSync(PRODUCED).filter(item => item.endsWith('.json') && item !== 'PRODUCED.json').sort()) {
+      const output = load(name).output ?? {};
+      const times = output.bodyTimes ?? output.receipt?.bodyTimes;
+      if (!times) continue;
+      expect(validBodyTimes(times), name).toBe(Boolean(times.acceptedAt));
+      if (!times.acceptedAt) missing.push(name);
+    }
+    expect(missing).toEqual(['control--different-target.json', 'life--r45-death-then-old-attack.json', 'measure--hand-start.json', 'vertical--r45-hold1-stairs-down.json',
+      'vertical--r45-hold5-shaft-down.json', 'vertical--r45-hold7-pillar-up.json']);   // when the body adds acceptedAt, this list shrinks: change it then
+  });
+
+  it('the evidence the contract asks of a normal command (receipt, lockAt, firstMotorAt, motorOps, hand_start) is in the body\'s hand-start file; acceptedAt is asked only by stages 5 and 6', () => {
+    const { handStart, bodyTimes, unit } = load('measure--hand-start.json').output;
+    const receipt: ReceiptRecord = { id: handStart.ids.command, outcome: 'completed', unit, bodyTimes, ids: handStart.ids };
+    const model = buildModel({ meta, rows: [], receipts: [receipt], trace: [{ ...handStart, kind: 'hand_start' } as TraceLine], probes: [] }, fixtures);
+    const joined = joinCommands(model);
+    expect(joined.unlinked).toEqual([]);
+    expect(joined.kinds['lab:q2']).toBe('normal');
+    // a stage that needs acceptedAt says so instead of inventing a time
+    expect(stageChain(model, model.commands.get('lab:q2')!).linked).toBe(false);
   });
 });

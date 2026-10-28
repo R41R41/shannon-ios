@@ -19,7 +19,8 @@
  *                        this judge asks the head to add (see HeadRow: `head_boot` `unknown_notified` `ledger` `events` `plan_write`).
  *   receipts.jsonl       (or receipts.json, an array) one line for each delivery of a receipt: a MinecraftControlReceipt with `unit`
  *                        (ItemOutcome), `bodyTimes` (BodyTimes), `ids` (TraceIds), `lines` (the act result's hand lines), `handover`.
- *   body-trace.jsonl     the body's own continuous file, appended from the bench's start to its end (never the 90-second ring):
+ *   body-trace.jsonl     (lines are read as {kind, at}, the contract's form, and no other: the body's opLog writes {k, t} today, a known gap the body fixes)
+ *                        the body's own continuous file, appended from the bench's start to its end (never the 90-second ring):
  *                        TraceLine below (`trace_open` first, then `hand_start`, `op`, `death`, `life`, ...).
  *   marks.json           (optional) the lab's own marks: {deaths, injections, moments, resumes, excludeCommands}, merged into meta.
  *   probes.jsonl         (optional; boundaries 9 and 10) what the head's bench writes where there is no command: ProbeLine below.
@@ -34,7 +35,7 @@ import { runChecks } from './judgeChecks.js';
 
 // ---- the shapes of the records ---------------------------------------------------------------------------------------------------------------
 export type Bench = 'A' | 'B' | 'C' | 'D';
-/** The numbers that join the records. The contract makes `obsSeq` and `obsAt` required; the contract's own fixtures leave them out, so they are optional here. */
+/** The numbers that join the records. Partial because a row of the old decision record has only some of them; but a record of a command that carries `ids` must have `obsSeq` and `obsAt` as the contract says (the join fails it otherwise). */
 export type Ids = Partial<TraceIds>;
 
 export interface DeathMark {
@@ -258,7 +259,8 @@ export function kindOf(command: CommandView): CommandKind | undefined {
   if (command.receipts.length === 0 && command.received.length === 0) return undefined;
   if (sawUnknown(command)) return 'unknown';
   const unit = unitOf(command);
-  if (unit?.end === 'not_run') return 'refused_before_start';
+  // (not_started, cut) is a hand cut from outside with no operation (chapter 14, A-1): nothing was done, so it is read as a command refused before it began
+  if (unit?.end === 'not_run' || (unit?.goal === 'not_started' && unit.end === 'cut')) return 'refused_before_start';
   if (unit?.goal === 'already') return 'already';
   return 'normal';
 }
@@ -277,7 +279,7 @@ function hasEvidence(name: string, command: CommandView): string | null {
   const unit = unitOf(command), times = bodyTimesOf(command);
   switch (name) {
     case 'receipt': return command.receipts.length + command.received.length > 0 ? null : 'receipt';
-    case 'receipt.unit(not_run)': return unit?.end === 'not_run' ? null : 'receipt.unit(not_run)';
+    case 'receipt.unit(not_run)': return unit?.end === 'not_run' || (unit?.goal === 'not_started' && unit.end === 'cut') ? null : 'receipt.unit(not_run)';
     case 'handLine': return linesOf(command).some(line => line.goal === 'already') ? null : 'handLine';
     case 'bodyTimes.lockAt': return times?.lockAt ? null : 'bodyTimes.lockAt';
     // A command that never moved (motorOps 0) has no first motor time: the contract does not say so (reported), the judge asks for it only when motorOps > 0.
@@ -297,11 +299,12 @@ function handStartsCover(command: CommandView): boolean {
 
 // ---- the join: which commands are joined, and what is missing for the others ------------------------------------------------------------------------
 export interface Unlinked { command: string; reasons: string[] }
-export interface Joined { judged: string[]; linked: string[]; unlinked: Unlinked[]; kinds: Record<string, CommandKind | undefined> }
+/** `gaps`: what the contract requires and the records do not yet have (TraceIds' obsSeq and obsAt). Told in every verdict, never counted as a pass; they do not fail a folder (a record is still joined by run, life, decision and command). */
+export interface Joined { judged: string[]; linked: string[]; unlinked: Unlinked[]; kinds: Record<string, CommandKind | undefined>; gaps: string[] }
 
 export function joinCommands(model: Model): Joined {
   const { meta, fixtures } = model;
-  const judged: string[] = [], linked: string[] = [], unlinked: Unlinked[] = [], kinds: Joined['kinds'] = {};
+  const judged: string[] = [], linked: string[] = [], unlinked: Unlinked[] = [], kinds: Joined['kinds'] = {}, gaps: string[] = [];
   for (const command of model.commands.values()) {
     const reasons: string[] = [];
     judged.push(command.id);
@@ -320,11 +323,14 @@ export function joinCommands(model: Model): Joined {
     const runs = [...command.received, ...command.released, ...command.corrected].map(row => idsOf(row, meta).run)
       .concat(command.receipts.map(receipt => receipt.ids?.run ?? meta.run), command.handStarts.map(start => start.ids.run));
     if (runs.some(run => run !== undefined && run !== meta.run)) reasons.push('run_mismatch');
+    // TraceIds keep obsSeq and obsAt required (the contract's form is the only one read); a record that lacks them is a told gap, not a silent pass
+    const idsOfRecords = [...command.sent, ...command.received, ...command.released, ...command.corrected].map(row => row.ids).concat(command.receipts.map(receipt => receipt.ids), command.handStarts.map(start => start.ids));
+    if (idsOfRecords.some(ids => ids && (typeof ids.obsSeq !== 'number' || typeof ids.obsAt !== 'string'))) gaps.push(`${command.id}: ids without obsSeq/obsAt`);
     if (!kind) reasons.push('no_receipt');
     else for (const name of fixtures.evidence[kind]) { const missing = hasEvidence(name, command); if (missing) reasons.push(`missing:${missing}`); }
     if (reasons.length === 0) linked.push(command.id); else unlinked.push({ command: command.id, reasons });
   }
-  return { judged, linked, unlinked, kinds };
+  return { judged, linked, unlinked, kinds, gaps };
 }
 
 // ---- the stages of time (chapter 8, "時間の段") ------------------------------------------------------------------------------------------------
@@ -344,6 +350,8 @@ export interface CheckResult { id: string; ok: boolean; detail: string; commands
 export interface Verdict {
   pass: boolean; scene: string; headRev: string; bodyRev: string; benches: Bench[];
   commands: { judged: number; linked: number; unlinked: Unlinked[] };
+  /** Told, not failed: what the contract requires of the records and they do not have yet. */
+  gaps: string[];
   checks: CheckResult[]; stages: StageChain[]; text: string;
 }
 
@@ -359,7 +367,7 @@ export function judge(input: Input, fixtures: Fixtures = loadFixtures()): Verdic
     .map(command => stageChain(model, command));
   const pass = joined.unlinked.length === 0 && checks.length > 1 && checks.every(check => check.ok);
   const verdict: Verdict = { pass, scene: meta.scene, headRev: meta.headRev, bodyRev: meta.bodyRev, benches: meta.benches,
-    commands: { judged: joined.judged.length, linked: joined.linked.length, unlinked: joined.unlinked }, checks, stages, text: '' };
+    commands: { judged: joined.judged.length, linked: joined.linked.length, unlinked: joined.unlinked }, gaps: joined.gaps, checks, stages, text: '' };
   verdict.text = verdictText(verdict);
   return verdict;
 }
@@ -367,6 +375,7 @@ export function judge(input: Input, fixtures: Fixtures = loadFixtures()): Verdic
 export function verdictText(verdict: Verdict): string {
   const lines = [`${verdict.pass ? '合格' : '不合格'}  ${verdict.scene}  頭 ${verdict.headRev}  体 ${verdict.bodyRev}  台 ${verdict.benches.join('+')}`,
     `つながった命令 ${verdict.commands.linked}/${verdict.commands.judged}`];
+  for (const gap of verdict.gaps) lines.push(`  既知の欠け: ${gap}`);
   for (const item of verdict.commands.unlinked) lines.push(`  つながらない: ${item.command}  (${item.reasons.join(', ')})`);
   for (const check of verdict.checks) lines.push(`  ${check.ok ? 'OK ' : 'NG '} ${check.id}: ${check.detail}`);
   for (const chain of verdict.stages) {
