@@ -20,6 +20,7 @@ import { createLlmcQueue, forgetLlmcQueues, madeInOf, type QueueAdd, type QueueD
 import { heldAgainWords, replayWords, skipWords } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
 import { applyLedger, emptyLedgerSeen, type LedgerInput, type LedgerSeen } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
+import { candidateAct } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { isSafeState, readingOf, stepAxes, type OperationAxes, type OperationEvent } from '../src/surfaces/minecraft/store/minecraftOperationState.js';
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
 import { reconcileOperations } from '../src/surfaces/minecraft/store/minecraftOperationReconcile.js';
@@ -1110,6 +1111,17 @@ describe('dependsOn and uses in the short writing and the checks before sending 
     expect(actProblem({ hands: [{ do: 'wait', seconds: 1 }], dependsOn: ['q12'], uses: [3] })).toBeNull();
     expect(actProblem({ hands: [{ do: 'wait', seconds: 1 }], dependsOn: ['x'] })).toContain('dependsOn は列の項目');
     expect(actProblem({ hands: [{ do: 'wait', seconds: 1 }], dependsOn: ['q1', 'q1'] })).toContain('2 度');
+  });
+  it('goes through the model\'s whole path to the body: the short lines, the act\'s dependsOn and uses, the checks; the hands keep their dependsOn', () => {
+    const act = candidateAct({ hands: ['go 40,64,0 seconds=30', 'eat bread dependsOn=none', 'craft crafting_table dependsOn=1'], why: '[p1] 食べて作る', dependsOn: ['q3'], uses: [2] }, null);
+    expect(act.problem).toBeNull();
+    const input = act.input as ActInput;
+    expect(input.hands.map(hand => hand.dependsOn)).toEqual([undefined, [], [1]]);
+    expect(input).toMatchObject({ dependsOn: ['q3'], uses: [2] });
+    const wrong = candidateAct({ hands: ['go 40,64,0', 'eat bread dependsOn=2'], why: 'x' }, null);
+    expect(wrong.problem).toContain('手2（eat）: 手 2 が自分に頼っている');
+    const later = candidateAct({ hands: ['go 40,64,0 dependsOn=2', 'eat bread'], why: 'x' }, null);
+    expect(later.problem).toContain('まだ先の手 2 に頼っている');
   });
   it('the tool description names dependsOn and uses, and the line that dropped what waits says what stays (the tokens added are measured)', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('dependsOn=1,3');
