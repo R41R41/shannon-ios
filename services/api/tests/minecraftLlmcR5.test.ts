@@ -13,6 +13,7 @@ import {
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R5_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { llmcCompletionMistake } from '../src/wiring/minecraftLlmcWiring.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * mb-llmc r5 (production run 28, 2026-10-22, owner 「止めて直す」): the plan's nodes marked done from the frame, a fact noted as a caution at the
@@ -77,10 +78,10 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
   });
 
   it('a dimension, a place and food; a blocked node is left to the model', () => {
-    const tree: PlanTree = { schema: 'shannon.plan-tree.v1', revision: 1, current: 'a', nodes: [
+    const tree: PlanTree = v2tree({ revision: 1, current: 'a', nodes: [
       { id: 'a', parentId: null, order: 0, title: 'ゲート', state: 'continue', doneWhen: 'dim:the_nether' },
       { id: 'b', parentId: null, order: 1, title: '村', state: 'continue', doneWhen: 'at:10,64,-3~3' },
-      { id: 'c', parentId: null, order: 2, title: '箱', state: 'blocked', reason: 'x', doneWhen: 'at:10,64,-3' }] };
+      { id: 'c', parentId: null, order: 2, title: '箱', state: 'blocked', reason: 'x', doneWhen: 'at:10,64,-3' }] });
     const nether = doneFacts(frame({ position: at(10, 64, -3), dimension: 'minecraft:the_nether' }))!;
     expect(nodesSeenDone(tree, nether)).toEqual(['a', 'b']);
     expect(nodesSeenDone(tree, { ...nether, dimension: 'overworld', feet: at(30, 64, -3) })).toEqual([]);
@@ -108,7 +109,7 @@ describe('the first plan writes its doneWhen as predicates (r5)', () => {
     expect(FIRST_PLAN_SYSTEM_R5.startsWith(FIRST_PLAN_SYSTEM_R4)).toBe(true);
     for (const words of ['have:', 'dim:the_nether', 'at:x,y,z~', 'food>=', '& で全部', '| でどれか']) expect(FIRST_PLAN_SYSTEM_R5).toContain(words);
     const asked: string[] = [];
-    startFirstPlan({ taskId: 'fp-r5', goal: 'エンドラを討伐して', held: { schema: 'shannon.plan-tree.v1', revision: 0, current: null, nodes: [] },
+    startFirstPlan({ taskId: 'fp-r5', goal: 'エンドラを討伐して', held: v2tree({ revision: 0, current: null, nodes: [] }),
       world: { scan: { at: 't', text: '走査', rows: [] } }, planner: async system => { asked.push(system); return { nodes: [] }; }, log: () => {},
       r4: { world: () => ({ scan: { at: 't', text: '走査', rows: [] } }), system: FIRST_PLAN_SYSTEM_R5 } });
     await new Promise(resolve => setTimeout(resolve, 10));

@@ -1,6 +1,8 @@
 import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
 import { milestoneWords } from './minecraftLlmcRoad.js';
 import { PREP_DESCENT_RULE, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
+import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
+import type { PlanKind } from '@shannon/mind';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -179,25 +181,35 @@ const rec = (value: unknown): Rec | null => value && typeof value === 'object' &
 const text = (value: unknown): string => Array.isArray(value) ? value.map(text).join(' ') : typeof value === 'string' ? value : '';
 
 /**
- * The stages the decision needs, from the live state alone: the plan's current node and the next one, the dimension, the structure she is in,
- * what she carries, and what is near (a blaze, a spawner, a fortress). Always at least one: the dimension's.
+ * The stages the decision needs, from the live state alone: the kinds of the plan's current node and the next ones (the body's `planFacts`, chapter 7: never
+ * the words of `planNow` or the plan's next lines), the dimension, the structure she is in, what she carries, and what is near (a blaze, a spawner, a
+ * fortress). Always at least one: the dimension's. A live state without `planFacts` picks no stage by a node.
  */
 export function stagesFor(live: Rec): StageId[] {
   const body = rec(live.body) ?? {}, state = rec(body.state) ?? {};
   const dimension = String(state.dimension ?? '');
-  const where = { node: `${text(body.planNow)} ${text(rec(live.plan)?.next)}`, inside: String(state.inside ?? ''), inventory: text(body.inventory),
+  const where = { kinds: nearKinds(factsIn(body)), inside: String(state.inside ?? ''), inventory: text(body.inventory),
     near: `${text(body.landmarks)} ${text(body.scan)}` };
   const found = STAGE_IDS.filter(id => STAGE_WHEN[id](dimension, where));
   return found.length ? found : [dimension === 'the_nether' ? 'nether' : 'prep'];
 }
-interface Where { node: string; inside: string; inventory: string; near: string }
-/** When each stage is needed: the dimension, the plan's node, the structure she is in, what she carries and what is near. */
+interface Where { kinds: readonly PlanKind[]; inside: string; inventory: string; near: string }
+const kindsOf = (...kinds: PlanKind[]): ReadonlySet<PlanKind> => new Set(kinds);
+/** The kinds of node each stage's knowledge goes with (chapter 7, table 12). */
+const STAGE_KINDS: Readonly<Record<StageId, ReadonlySet<PlanKind>>> = {
+  prep: kindsOf('wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor', 'diamond', 'obsidian', 'portal', 'chest'),
+  nether: kindsOf('nether', 'fortress', 'portal'),
+  blaze: kindsOf('blaze'),
+  pearl: kindsOf('pearl', 'stronghold'),
+  end: kindsOf('end', 'dragon'),
+};
+/** When each stage is needed: the dimension, the kinds of the plan's nodes, the structure she is in, what she carries and what is near. */
 const STAGE_WHEN: Readonly<Record<StageId, (dimension: string, where: Where) => boolean>> = {
-  prep: (dimension, where) => dimension === 'overworld' || /作業台|ハーフブロック|盾|食料|鉄|ダイヤ|黒曜石|ゲート|ベッド|村|原木|木|かまど|ツルハシ|金/u.test(where.node),
-  nether: (dimension, where) => dimension === 'the_nether' || /ネザー|要塞|ポータル|ピグリン|砦/u.test(where.node) || /要塞|砦/u.test(where.inside),
-  blaze: (_dimension, where) => /ブレイズ|ロッド|スポナー/u.test(where.node) || /blaze|スポナー/u.test(where.near),
-  pearl: (_dimension, where) => /パール|アイ|エンダー|ストロング/u.test(where.node) || /ender_(pearl|eye)/u.test(where.inventory) || /enderman/u.test(where.near),
-  end: (dimension, where) => dimension === 'the_end' || /ドラゴン|エンドへ|エンドの/u.test(where.node),
+  prep: (dimension, where) => dimension === 'overworld' || hasKind(where.kinds, STAGE_KINDS.prep),
+  nether: (dimension, where) => dimension === 'the_nether' || hasKind(where.kinds, STAGE_KINDS.nether) || /要塞|砦/u.test(where.inside),
+  blaze: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.blaze) || /blaze|スポナー/u.test(where.near),
+  pearl: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.pearl) || /ender_(pearl|eye)/u.test(where.inventory) || /enderman/u.test(where.near),
+  end: (dimension, where) => dimension === 'the_end' || hasKind(where.kinds, STAGE_KINDS.end),
 };
 
 /** The message before the live state: the stages' knowledge, headed by which stages (null when there is no live body to pick from). */

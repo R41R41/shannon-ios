@@ -11,6 +11,7 @@ import { urgentFacts } from '../src/surfaces/minecraft/minecraftLlmcBody.js';
 import { urgentWatch } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { nearThreats } from '../src/surfaces/minecraft/minecraftLlmcThreat.js';
 import { PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * 「エンドラを討伐して」 of 2026-10-26 (rel49, Sonnet; the dragon check's fixes 1, 3, 5 and 6): the plan's current node follows the node the model keeps working
@@ -27,7 +28,7 @@ function treeOf(rows: readonly Row[], current: string | null): PlanTree {
     order.set(parent, next + 1);
     return { id, parentId: parent, order: next, title, state: 'continue', ...(doneWhen ? { doneWhen } : {}) };
   });
-  return { schema: 'shannon.plan-tree.v1', revision: 1, current, nodes };
+  return v2tree({ revision: 1, current, nodes });
 }
 
 const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,

@@ -16,6 +16,7 @@ import { BODY_RULES, mapView, readLayers } from '../src/surfaces/minecraft/minec
 import { candidateMenuTools, minecraftV2Hooks, progressWithPlain } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
+import { planFacts } from './helpers/planTreeV2.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2, the tenth round (mb-llmc-cand 10; the request of run 37 read as a person given only that request would): which hostiles
@@ -89,9 +90,9 @@ describe('C2: 「済む条件」, not 「済み」, for a node\'s done-condition
     expect(out.plan.now).toBe('p9 別の節（済む条件: dim:the_nether）');
     expect(JSON.stringify(out)).not.toContain('（済み:');
   });
-  it('keeps the route\'s goal (it reads the planNow as the body wrote it)', () => {
+  it('keeps the route\'s goal (it reads the current node\'s own where and done-condition, not the shown line)', () => {
     const map = ['地図 v1 足=(0,0,0) x=-1..1 z=-1..1 方式=layers 上=北', 'y=0', ' -1 # # #', '  0 # @ #', '  1 # # #'].join('\n');
-    const out = rewritten({ planNow: '[p1] 行く＠1,0,0（済み: at:1,0,0~1）', map });
+    const out = rewritten({ planNow: '[p1] 行く＠1,0,0（済み: at:1,0,0~1）', planFacts: planFacts('other', { where: '1,0,0', doneWhen: 'at:1,0,0~1' }), map });
     expect(JSON.stringify(out.body.route)).toContain('(1,0,0)');
   });
   it('is the word of the plan tool and of the instructions as well', () => {
@@ -169,10 +170,10 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
     expect(near.join('\n')).not.toContain('#2 ');
     expect(near.join('\n')).not.toContain('zombie');
   });
-  it('drops the bat, the far villager and the cow unless the plan wants food; keeps the near villager', () => {
+  it('drops the bat, the far villager and the cow unless a node of the plan (by its kind) wants food; keeps the near villager', () => {
     const out = rewritten(live({ nearbyEntities: entities, inventory: [{ name: 'bread', count: 10 }] })).body;
     expect(out.near).toEqual(['#1 item cobblestone×4 0.7m (0,0,1)', '#3 item 1.6m (1,0,2)', '#6 villager 9m (9,0,0)']);
-    const food = rewritten({ ...live({ nearbyEntities: entities, inventory: [{ name: 'bread', count: 10 }] }), planNow: '[p2.4] 食料を集める' }).body;
+    const food = rewritten({ ...live({ nearbyEntities: entities, inventory: [{ name: 'bread', count: 10 }] }), planNow: '[p2.4] 食料を集める', planFacts: planFacts('food') }).body;
     expect(food.near).toContain('#7 cow 14m (14,0,0)');
     expect(JSON.stringify(food.near)).not.toContain('bat');
   });
@@ -191,12 +192,14 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
     expect(nearOf({}, { shortage: '食料が足りない' }).near.join('\n')).toContain('cow');
     expect(nearOf({}, { recovery: ['体力が戻らない'] }).near.join('\n')).toContain('cow');
   });
-  it('shows the sheep when the plan or the shortage names a bed or wool, and the villager at 20 m when the plan trades or names a village', () => {
-    expect(nearOf({}, { planNow: '[p3.1] 羊毛を取る' }).near.join('\n')).toContain('sheep');
-    expect(nearOf({}, { planNow: '[p3.1] 羊毛を取る' }).near.join('\n')).not.toContain('cow');
+  it('shows the sheep when a node is of the kind bed or the shortage names a bed, and the villager at 20 m when a node is of the kind village', () => {
+    expect(nearOf({}, { planFacts: planFacts('bed') }).near.join('\n')).toContain('sheep');
+    expect(nearOf({}, { planFacts: planFacts('bed') }).near.join('\n')).not.toContain('cow');
     expect(nearOf({}, { shortage: 'ベッドが足りない' }).near.join('\n')).toContain('sheep');
-    expect(nearOf({}, { planNow: '[p2.3] 村人と交易する' }).near.join('\n')).toContain('#10 villager');
-    expect(nearOf({}, {}, { next: ['p2 村を回る'] }).near.join('\n')).toContain('#10 villager');
+    expect(nearOf({}, { planFacts: planFacts('village') }).near.join('\n')).toContain('#10 villager');
+    expect(nearOf({}, { planFacts: planFacts('other', { next: ['village'] }) }).near.join('\n')).toContain('#10 villager');
+    // A title says nothing (chapter 7): a node named for a village that has no kind wants no villager.
+    expect(nearOf({}, { planNow: '[p2.3] 村人と交易する', planFacts: planFacts('other') }).near.join('\n')).not.toContain('#10 villager');
   });
   it('writes a stack the body did not name as just 「item」', () => {
     expect(live({ nearbyEntities: [{ id: 3, name: 'item', kind: 'passive', distance: 1, position: { x: 0, y: 0, z: 1 } }] }).near[0]).toBe('#3 item 1m (0,0,1)');

@@ -9,6 +9,7 @@ import { stepOptions } from '../src/surfaces/minecraft/minecraftLlmcWalkRules.js
 import { stagesFor, stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { candidateLive } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import lives from './fixtures/minecraft-v2-lives-v1.json' with { type: 'json' };
+import { planFacts } from './helpers/planTreeV2.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2: the live state as the decision reads it (improvement plan 2.2). Small maps for the walk's rules, then seven
@@ -73,11 +74,15 @@ describe('v2 around: the walk\'s rules on the map', () => {
 });
 
 describe('v2 route: the way to the plan\'s current node', () => {
-  it('reads the goal from the coordinates right after ＠ only', () => {
-    expect(goalOf('[p1.1] 湧き場から離れる＠293,67,72（道: 出発の点検）')).toEqual({ at: { x: 293, y: 67, z: 72 }, range: 1 });
-    expect(goalOf('[p1.3] 箱を開ける＠chest 1,2,3。ベッド(9,9,9)')).toBeNull();
-    expect(goalOf('[p1.2] 幹を取る（済み: at:195,66,60~3）')).toBeNull();
-    expect(goalOf('[p1.2] 幹を取る＠195,66,60（済み: at:195,66,60~3&have:原木>=1）')).toEqual({ at: { x: 195, y: 66, z: 60 }, range: 3 });
+  it('reads the goal from the node own where (the place it begins with) and the range of its done-condition, never from the shown line', () => {
+    expect(goalOf({ where: '293,67,72' })).toEqual({ at: { x: 293, y: 67, z: 72 }, range: 1 });
+    expect(goalOf({ where: 'chest 1,2,3。ベッド(9,9,9)' })).toBeNull();
+    expect(goalOf({ doneWhen: 'at:195,66,60~3' })).toBeNull();
+    expect(goalOf({ where: '195,66,60', doneWhen: 'at:195,66,60~3&have:原木>=1' })).toEqual({ at: { x: 195, y: 66, z: 60 }, range: 3 });
+    // The shapes a model writes a place in: bracketed with words after it, with an @ before it.
+    expect(goalOf({ where: '(196,69,237) 村の北' })).toEqual({ at: { x: 196, y: 69, z: 237 }, range: 1 });
+    expect(goalOf({ where: '@ (150,64,210)' })).toEqual({ at: { x: 150, y: 64, z: 210 }, range: 1 });
+    expect(goalOf(null)).toBeNull();
   });
   it('finds the places she reaches without digging and with digs, the fewest digs first', () => {
     const reach = reachable(view(), feet, 4);
@@ -86,7 +91,7 @@ describe('v2 route: the way to the plan\'s current node', () => {
     expect([...reach.values()].some(item => item.digs > 0)).toBe(true);
   });
   it('writes the lines of the way and decides no hand', () => {
-    const lines = routeLines(view(), feet, goalOf('[p1.1] 隅へ＠8,5,19')!, 'p1.1');
+    const lines = routeLines(view(), feet, goalOf({ where: '8,5,19' })!, 'p1.1');
     expect(lines[0]).toContain('目的地 (8,5,19)');
     expect(lines.join('\n')).toContain('目的地に最も近い立ち位置');
     expect(lines.join('\n')).not.toMatch(/dig して|掘れ。|歩け。/u);
@@ -138,11 +143,17 @@ describe('v2 live: the pieces', () => {
 });
 
 describe('v2 stages of knowledge', () => {
-  it('picks the stages from the node, the dimension and what is near, and always one', () => {
+  it('picks the stages from the kinds of the nodes, the dimension and what is near, and always one (chapter 7: never from the words of a node)', () => {
     const body = (extra: Record<string, unknown>) => ({ body: { state: { dimension: 'the_nether' }, ...extra } });
-    expect(stagesFor(body({ planNow: '[p1.1] 湧き場から離れる＠293,67,72' }))).toEqual(['nether']);
-    expect(stagesFor(body({ planNow: '[p2.2] ブレイズの棒を 7 本' }))).toEqual(['nether', 'blaze']);
-    expect(stagesFor({ body: { state: { dimension: 'overworld' }, planNow: '[p1] 黒曜石 10 個', inventory: ['ender_eye×3'] } })).toEqual(['prep', 'pearl']);
+    expect(stagesFor(body({ planNow: '[p1.1] 湧き場から離れる＠293,67,72', planFacts: planFacts('other', { id: 'p1.1' }) }))).toEqual(['nether']);
+    expect(stagesFor(body({ planNow: '[p2.2] ブレイズの棒を 7 本', planFacts: planFacts('blaze', { id: 'p2.2' }) }))).toEqual(['nether', 'blaze']);
+    // The next node's kind counts too: the pearls come after the rods.
+    expect(stagesFor(body({ planFacts: planFacts('blaze', { next: ['pearl'] }) }))).toEqual(['nether', 'blaze', 'pearl']);
+    expect(stagesFor({ body: { state: { dimension: 'overworld' }, planFacts: planFacts('obsidian'), inventory: ['ender_eye×3'] } })).toEqual(['prep', 'pearl']);
+    expect(stagesFor({ body: { state: { dimension: 'the_end' } } })).toEqual(['end']);
+    expect(stagesFor({ body: { state: { dimension: 'overworld' }, planFacts: planFacts('dragon') } })).toEqual(['prep', 'end']);
+    // Without the facts, a line that says the blazes picks nothing: no kind is inferred from `planNow`.
+    expect(stagesFor(body({ planNow: '[p2.2] ブレイズの棒を 7 本' }))).toEqual(['nether']);
     expect(stagesFor({ body: { state: { dimension: 'the_end' } } })).toEqual(['end']);
     expect(stageKnowledge({})).toBeNull();
   });
@@ -172,7 +183,8 @@ describe('v2 live: the recorded live states of runs 32–34', () => {
   });
   it('s01: one line to a blaze, the pack added up, the biome the Nether has not left out, the surroundings with whole coordinates', () => {
     const [[, live]] = entries.filter(([id]) => id.startsWith('s01'));
-    const { live: out } = candidateLive(live!);
+    // The recorded live state is of run 32, before the plan facts: the current node p1.1 held the place 293,67,72 (its shown line said so).
+    const { live: out } = candidateLive({ ...live!, body: { ...live!.body, planFacts: planFacts('other', { id: 'p1.1', where: '293,67,72' }) } });
     const body = out.body as Record<string, any>;
     const hostiles = [...body.urgent ?? [], ...body.threats ?? []].join('\n');
     expect((hostiles.match(/#5 /gu) ?? []).length).toBe(1);

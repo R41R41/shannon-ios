@@ -14,6 +14,7 @@ import { stagesFor } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js
 import { doneFacts, nodesSeenDone, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 import { LLMC_TOOLS } from './support/minecraftBodyRequests.js';
+import { planFacts, v2tree } from './helpers/planTreeV2.js';
 import lives from './fixtures/minecraft-v2-lives-v1.json' with { type: 'json' };
 
 /**
@@ -106,16 +107,16 @@ describe('a place with onFail continue the map faults', () => {
 describe('a target that is a wall', () => {
   const map = mapOf(corridor(2));
   it('route: the goal\'s own solid cell is not the aim; the standing place beside it is, and the line says the cell is solid', () => {
-    const lines = routeLines(mapView(readLayers(map)!), feet, goalOf('[p1.1] 幹を取る＠3,0,0')!, 'p1.1');
+    const lines = routeLines(mapView(readLayers(map)!), feet, goalOf({ where: '3,0,0' })!, 'p1.1');
     expect(lines.join('\n')).toContain('目的地のマス (3,0,0) は固い（# 石の類）。隣の立てるマス (2,0,0) を行き先にする（行ける）');
     expect(lines.join('\n')).toContain('(2,0,0)');
   });
   it('route: a goal she can stand in is the aim as it was, and no line is added', () => {
-    const lines = routeLines(mapView(readLayers(map)!), feet, goalOf('[p1.1] 歩く＠2,0,0')!, 'p1.1');
+    const lines = routeLines(mapView(readLayers(map)!), feet, goalOf({ where: '2,0,0' })!, 'p1.1');
     expect(lines.join('\n')).not.toContain('は固い');
   });
   it('route: no standing place beside it is said as the fact it is', () => {
-    const lines = routeLines(mapView(readLayers(map)!), feet, goalOf('[p1.1] 岩の奥＠6,0,-5')!, 'p1.1');
+    const lines = routeLines(mapView(readLayers(map)!), feet, goalOf({ where: '6,0,-5' })!, 'p1.1');
     expect(lines.join('\n')).toContain('隣の立てるマスは地図に無い');
   });
   it('guard: a walk to a wall says the standing place beside it in the mode, and the text as before without', () => {
@@ -137,7 +138,7 @@ describe('a plan\'s places are passed through on the way to work not yet done', 
       order.set(parent, next + 1);
       return { id, parentId: parent, order: next, title, state: state ?? 'continue', ...(doneWhen ? { doneWhen } : {}) };
     });
-    return { schema: 'shannon.plan-tree.v1', revision: 1, current: null, nodes };
+    return v2tree({ revision: 1, current: null, nodes });
   }
   /** Run 35's plan in its shape: p1 the check (open), p2 the place in the Nether, p3 the rods, p5 the overworld. */
   const RUN35: readonly Row[] = [
@@ -177,7 +178,7 @@ describe('a plan\'s places are passed through on the way to work not yet done', 
 describe('a run from the start of a new world (the overworld, nothing carried)', () => {
   const OPEN = [...corridor(4), ...corridor(4).map(cell => at(cell.x, cell.y, 1))];
   const body = () => ({
-    planNow: '[p1.1] 原木を集める＠5,0,0', shortage: [], unreachable: [], landmarks: [], stops: [], inventory: [], threats: [], lastResults: [],
+    planNow: '[p1.1] 原木を集める＠5,0,0', planFacts: planFacts('wood', { id: 'p1.1', where: '5,0,0' }), shortage: [], unreachable: [], landmarks: [], stops: [], inventory: [], threats: [], lastResults: [],
     state: { at: '(0,0,0)', dimension: 'overworld', biome: 'plains', time: '1000', weather: 'clear', heldItem: 'なし', worn: '', health: 20, food: 20, saturation: 5, oxygen: 20, minutes: 0.1 },
     map: mapOf(OPEN),
   });

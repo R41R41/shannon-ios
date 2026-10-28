@@ -15,6 +15,7 @@ const NO_RECOVERY = '体力 3.7/20 は自然に戻らない（満腹 17＜18、�
 const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い`;
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * mb-llmc r6 (production run 29, 2026-10-22, Sonnet main, r5: begun inside a Nether fortress, the blazes at 10 s past the plan's "now",
@@ -54,7 +55,7 @@ describe('the seed begins where she is (run 29: begun in the Nether, "now" was �
   });
 
   it('the first decision\'s seed is the Nether\'s when the body is there', () => {
-    const held: PlanTree = { schema: 'shannon.plan-tree.v1', revision: 0, current: null, nodes: [] };
+    const held: PlanTree = v2tree({ revision: 0, current: null, nodes: [] });
     startFirstPlan({ taskId: 'r6-seed', goal: GOAL, held, world: START, log: () => {} });
     const seeded = firstPlanInbox.take('r6-seed', held)!;
     expect(seeded.tree.nodes[0]!.title).toBe('出発の点検（ネザーの奥へ）');
@@ -72,7 +73,7 @@ describe('the first plan is told the place and what it lacks (run 29: 28 nodes, 
     expect(FIRST_PLAN_SYSTEM_R6.startsWith(FIRST_PLAN_SYSTEM_R5)).toBe(true);
     for (const words of ['今いる所から始める', '準備の不足', '出発の点検', '食料を含む', 'ホグリン']) expect(FIRST_PLAN_SYSTEM_R6).toContain(words);
     const asked: Array<[string, string]> = [];
-    startFirstPlan({ taskId: 'r6-plan', goal: GOAL, held: { schema: 'shannon.plan-tree.v1', revision: 0, current: null, nodes: [] },
+    startFirstPlan({ taskId: 'r6-plan', goal: GOAL, held: v2tree({ revision: 0, current: null, nodes: [] }),
       world: { ...START, scan: { at: 't', text: '走査', rows: [] } }, log: () => {},
       planner: async (system, text) => { asked.push([system, text]); return { nodes: [] }; },
       r4: { world: () => ({ ...START, scan: { at: 't', text: '走査', rows: [] } }), system: FIRST_PLAN_SYSTEM_R6, readiness: true } });
@@ -87,20 +88,20 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
 
   it('the Nether\'s check against the pack, in one line: none, short, food', () => {
     const shaft = counts(SHAFT);
-    expect(preparationShortage({ ...shaft, nowTitle: null })).toBe('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具が無い。食料 0 点（目安 100）');
+    expect(preparationShortage({ ...shaft, nowKinds: null })).toBe('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具が無い。食料 0 点（目安 100）');
     const some = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'crafting_table', count: 1 }, { name: 'cobbled_deepslate_slab', count: 6 },
       { name: 'shield', count: 1 }, { name: 'cooked_porkchop', count: 5 }] });
-    expect(preparationShortage({ ...some, nowTitle: null })).toBe('準備の不足（ネザーの奥へ）: 金の防具が無い。ハーフブロック 6/12');
+    expect(preparationShortage({ ...some, nowKinds: null })).toBe('準備の不足（ネザーの奥へ）: 金の防具が無い。ハーフブロック 6/12');
     const ready = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'blaze_rod', count: 6 }, { name: 'ender_pearl', count: 12 }] });
-    expect(preparationShortage({ ...ready, nowTitle: null })).toBeNull();
+    expect(preparationShortage({ ...ready, nowKinds: null })).toBeNull();
   });
 
   it('in the overworld only by the current node: the gate\'s check before the Nether, the End\'s with eyes', () => {
     const home = counts({ ...START, dimension: 'overworld' });
-    expect(preparationShortage({ ...home, nowTitle: '原木を集める' })).toBeNull();
-    expect(preparationShortage({ ...home, nowTitle: 'ゲートを組んで火をつける' }))
+    expect(preparationShortage({ ...home, nowKinds: ['wood' as const] })).toBeNull();
+    expect(preparationShortage({ ...home, nowKinds: ['portal' as const] }))
       .toBe('準備の不足（ネザーに入る前）: 盾・金のブーツ・足場のブロックが無い。食料 15.6 点（目安 40）');
-    expect(preparationShortage({ ...home, nowTitle: '2地点で投げて三角測量' })).toMatch(/^準備の不足（エンドへ）: ベッド・弓・矢・エンダーアイ・足場のブロックが無い/u);
+    expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const] })).toMatch(/^準備の不足（エンドへ）: ベッド・弓・矢・エンダーアイ・足場のブロックが無い/u);
   });
 
   it('health does not come back under hunger 18: said as the fact, never at 18 or at full health', () => {
@@ -110,7 +111,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
   });
 
   it('where food is: animals near, the scan\'s village and crimson rows, the gate back from the plan\'s where', () => {
-    const nodes = [{ id: 'p4', parentId: null, order: 3, title: '帰りのゲートでオーバーワールドへ', state: 'continue' as const, where: '(5,35,12)' }];
+    const nodes = [{ id: 'p4', parentId: null, order: 3, title: '帰りのゲートでオーバーワールドへ', state: 'continue' as const, kind: 'portal' as const, where: '(5,35,12)' }];
     expect(foodLeads(SHAFT, 'the_nether', nodes))
       .toBe('食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）');
     const near = { ...SHAFT, nearbyEntities: [{ id: 31, name: 'hoglin', distance: 24.2, position: at(330, 52, 80) }],
@@ -130,7 +131,7 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     { id: 'p1.1', parentId: 'p1', title: '作業台と板を作る', state: 'continue' as const }] };
   const body = (world: Record<string, unknown>) => withLlmcBody({ start() {}, revision: () => 0,
     context: () => ({ revision: 0, observation: null }), async guard() { return true; }, toolSignal: (_name, parent) => parent, async close() {} },
-  { llmc: { plan: () => display as never, planView: () => view, planTree: () => ({ schema: 'shannon.plan-tree.v1', revision: 3, current: 'p1.1', nodes: [
+  { llmc: { plan: () => display as never, planView: () => view, planTree: () => v2tree({ revision: 3, current: 'p1.1', nodes: [
     { id: 'p4', parentId: null, order: 3, title: 'ゲートでオーバーワールドへ', state: 'continue', where: '(5,35,12)' }] }) },
   taskId: 'r6-live', createdAt: '2026-10-22T00:00:00Z', observe: () => frame({ ...world, localMap: '地図' }),
   arrival: () => ({ at: 1, kind: 'login' }), log: () => {}, r4: { probe: () => null, planWhere: () => null } });
@@ -158,7 +159,7 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
 });
 
 describe('the first plan\'s done nodes are carried by the frame (run 29: 「動物を狩り肉を焼く」 food>=100 came in done at 15.6 points)', () => {
-  it('a predicate node is never carried by its words; a node in free words is, by its title', () => {
+  it('a predicate node is never carried by its words; a node in free words is, by its kind and its words (a title says nothing)', () => {
     const held = seedPlan(GOAL)!;
     // Run 29: the parent 「黒曜石10とゲート」 seen done in the Nether closed its child 「食料100点以上に足す」 (food>=100) with it. r9: it does not
     // (a node is done by its own predicate); the model's own `done` on that child is what the plan then carries over, as below.
@@ -175,11 +176,14 @@ describe('the first plan\'s done nodes are carried by the frame (run 29: 「動�
       { id: 'p1.1', parent: 'p1', title: '作業台と板を作る', where: '', doneWhen: 'have:crafting_table' },
       { id: 'p5', parent: '', title: 'オーバーワールドで準備', where: '', doneWhen: '' },
       { id: 'p5.1', parent: 'p5', title: '動物を狩り肉を焼く', where: '', doneWhen: 'food>=100' },
-      { id: 'p5.2', parent: 'p5', title: '村を回る（ベッド1〜2・干し草・畑・箱）', where: '', doneWhen: '' }] })!;
-    const freeDone = { ...settled, nodes: settled.nodes.map(node => /村を回る/u.test(node.title) ? { ...node, state: 'done' as const } : node) };
+      { id: 'p5.2', parent: 'p5', title: '砦のレンガを探す', kind: 'fortress', where: '', doneWhen: 'ネザーレンガ（N）が見える' },
+      { id: 'p5.3', parent: 'p5', title: 'ネザー要塞を探す', kind: 'other', where: '', doneWhen: 'ネザーレンガ（N）が見える' }] })!;
+    const freeDone = { ...settled, nodes: settled.nodes.map(node => node.kind === 'fortress' ? { ...node, state: 'done' as const } : node) };
     const carried = carryDone(freeDone, answer);
     expect(carried.nodes.find(node => node.id === 'p5.1')!.state).toBe('continue');
     expect(carried.nodes.find(node => node.id === 'p5.2')!.state).toBe('done');
+    // The same title with another kind is not the node that was done.
+    expect(carried.nodes.find(node => node.id === 'p5.3')!.state).toBe('continue');
     // Read with the frame: food 15.6 points, so 「動物を狩り肉を焼く」 stays open.
     const next = createFcaPlanTools({ taskId: 'r6-carry-next', checkpoint: { fcaPlanTree: carried }, seen: tree => seenDoneUpdate(tree, nether) });
     next.port.view();

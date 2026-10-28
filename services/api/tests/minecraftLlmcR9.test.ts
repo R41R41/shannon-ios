@@ -7,6 +7,7 @@ import { forgetFirstPlans, FIRST_PLAN_SYSTEM_R8, FIRST_PLAN_SYSTEM_R9, carryDone
 import { LLMC_SYSTEM_APPENDIX_R8, LLMC_SYSTEM_APPENDIX_R9, R9_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { doneFacts, nodesHeldOpen, nodesSeenDone, parseDoneWhen, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { checkedStopIf } from '../src/surfaces/minecraft/minecraftLlmcStopIf.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * mb-llmc r9 (run 33): the plan's done by the code (H1), the stopIf looked at against the frame (H2), and the words (H3, H4). The H1 tree is the
@@ -27,7 +28,7 @@ function treeOf(rows: readonly Row[], current: string | null = null): PlanTree {
     order.set(parent, next + 1);
     return { id, parentId: parent, order: next, title, state: state ?? 'continue', ...(doneWhen ? { doneWhen } : {}) };
   });
-  return { schema: 'shannon.plan-tree.v1', revision: 1, current, nodes };
+  return v2tree({ revision: 1, current, nodes });
 }
 /** Run 33's plan: p1 the check, p2 back to the Nether (the blaze rods), p3 the pearls, p4 the eyes thrown on the surface, p5 the portal, p6 the dragon. */
 const RUN33: readonly Row[] = [
@@ -151,8 +152,8 @@ describe('the plan\'s done is each node\'s own (run 33: p2.3 with 0 rods, p4 aft
   });
 
   it('the first plan\'s arrival does not make a node under a done one the open one', () => {
-    const held = treeOf([['p1', null, '一'], ['p1.1', 'p1', '子']]);
-    const answer = planFromAnswer({ nodes: [{ id: 'p1', parent: '', title: '一', where: '', doneWhen: '' }, { id: 'p1.1', parent: 'p1', title: '子', where: '', doneWhen: '' },
+    const held = treeOf([['p1', null, '一', '一が済んだ'], ['p1.1', 'p1', '子']]);
+    const answer = planFromAnswer({ nodes: [{ id: 'p1', parent: '', title: '一', where: '', doneWhen: '一が済んだ' }, { id: 'p1.1', parent: 'p1', title: '子', where: '', doneWhen: '' },
       { id: 'p2', parent: '', title: '二', where: '', doneWhen: '' }] })!;
     const doneParent = { ...held, nodes: held.nodes.map(node => node.id === 'p1' ? { ...node, state: 'done' as const } : node) };
     expect(carryDone(doneParent, answer).current).toBe('p2');

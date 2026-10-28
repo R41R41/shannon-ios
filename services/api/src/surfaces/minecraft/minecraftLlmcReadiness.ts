@@ -1,9 +1,10 @@
-import { orderedPlan, type PlanNode } from '@shannon/mind';
+import { orderedPlan, type PlanKind, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { kindOf, readWhere } from './minecraftPlanFacts.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first, written by the code
@@ -35,23 +36,30 @@ const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: numb
  * Owner 2026-10-24 (after run 38: only iron boots from a chest, no golden piece at the gate): the gate and the diamonds read the one table of
  * `minecraftLlmcPrepRules.ts` (the iron helmet, chestplate and leggings worn before the diamonds, the golden boots before the gate).
  */
-const END_NODE = /ストロングホールド|エンド(?!ウ)|三角|ポータルの部屋|アイ/u;
-const GATE_NODE = /ゲート|ネザーに入|黒曜石|火打|金のブーツ/u;
-const DIAMOND_NODE = /ダイヤ/u;
+/**
+ * Chapter 7 (the continue contract): the stage a node's kind belongs to, read from the kind the model wrote and never from a title. The end's check: the
+ * stronghold, the pearls and the End; the gate's: the obsidian, the portal and the Nether; the diamonds'.
+ */
+const STAGE_OF_KIND: Readonly<Partial<Record<PlanKind, Stage>>> = { end: 'end', stronghold: 'end', pearl: 'end', portal: 'nether_entry',
+  obsidian: 'nether_entry', nether: 'nether_entry', diamond: 'diamonds' };
 
 /**
- * The stage whose check holds now: by the dimension, and in the overworld by the current node's title (and eyes carried); a node of the
- * diamonds is checked against `BEFORE_DIAMONDS`.
+ * The stage whose check holds now: by the dimension, and in the overworld by the kind of the current node (the nearest node, itself or above it, whose
+ * kind has a stage) and eyes carried; a node of the diamonds is checked against `BEFORE_DIAMONDS`. `kinds`: the current node's kind, then those above it
+ * (`nowKinds`); absent or empty: none is known and no stage is chosen by a node.
  */
-export function preparationStage(dimension: string | null, counts: ItemCounts, nowTitle: string | null): Stage | null {
+export function preparationStage(dimension: string | null, counts: ItemCounts, kinds: readonly PlanKind[] | null): Stage | null {
   if (dimension === 'the_nether') {
     const rods = countMatching(counts, /^blaze_rod$/u), pearls = countMatching(counts, /^(?:ender_pearl|ender_eye)$/u);
     return rods >= 7 && pearls >= 12 ? null : 'nether_deep';
   }
   if (dimension !== 'overworld') return null;
-  if (countMatching(counts, /^ender_eye$/u) > 0 || (nowTitle && END_NODE.test(nowTitle))) return 'end';
-  if (nowTitle && GATE_NODE.test(nowTitle)) return 'nether_entry';
-  return nowTitle && DIAMOND_NODE.test(nowTitle) ? 'diamonds' : null;
+  if (countMatching(counts, /^ender_eye$/u) > 0) return 'end';
+  for (const kind of kinds ?? []) {
+    const stage = STAGE_OF_KIND[kind];
+    if (stage) return stage;
+  }
+  return null;
 }
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
@@ -66,9 +74,9 @@ function held(counts: ItemCounts, need: Need): number {
  * The one line of what is missing for the stage, or null (no stage, nothing missing). `worn` (the frame's worn ids, `wornItems`): a piece of a need
  * that is to be worn and is only carried is said as such (「着ていない: iron_helmet」), since armour in the pack does not protect.
  */
-export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowTitle: string | null;
+export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
   worn?: readonly string[] }): string | null {
-  const stage = preparationStage(parts.dimension, parts.counts, parts.nowTitle);
+  const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return null;
   const table: PrepStage = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
   const none: string[] = [], short: string[] = [], unworn: string[] = [];
@@ -146,16 +154,13 @@ const VILLAGE_ROW = /^(?:村の鐘|干し草|畑|作物)/u;
  * The first `(x,y,z)` of a text, or its first bare `x,y,z`. r7 (run 30: the plan's 「ゲートから戻り狩って焼く」 had where `5,35,12`, with no
  * brackets, so the gate back was never said): both, as `planDone`'s `at:` reads it.
  */
-export const firstPos = (text: string): Feet | null => {
-  const match = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u.exec(text) ?? /(?<![\d.])(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)(?![\d.])/u.exec(text);
-  return match ? { x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) } : null;
-};
+export const firstPos = (text: string): Feet | null => readWhere(text, 'any');
 
-/** The gate back from the Nether: the scan's portal row, else a plan node about the gate with a place (its distance from her feet). */
+/** The gate back from the Nether: the scan's portal row, else a plan node of the portal's kind with a place (its distance from her feet). */
 function gateBack(world: Record<string, unknown>, rows: readonly string[], nodes: readonly PlanNode[], feet: Feet | null): string | null {
   const row = rows.find(line => /ネザーポータル|nether_portal/u.test(line));
   if (row) return `帰りのゲート（走査）${row.replace(/^[^(（]*/u, '').slice(0, 50)}`;
-  const node = nodes.find(item => /ゲート|ポータル/u.test(item.title) && item.where && firstPos(item.where));
+  const node = nodes.find(item => kindOf(item) === 'portal' && item.where && firstPos(item.where));
   if (!node) return null;
   const at = firstPos(node.where!)!;
   const far = feet ? ` 約 ${Math.round(Math.hypot(at.x - feet.x, at.z - feet.z))}m` : '';
@@ -183,8 +188,8 @@ export function foodLeads(world: Record<string, unknown>, dimension: string | nu
   return `食料の当て: ${near.length ? near.join('・') : `近くに動物・村・畑は見えていない${scan ? '（走査の範囲）' : ''}`}${nether}${gate ? `・${gate}` : ''}`;
 }
 
-/** A plan node about food: its doneWhen asks food points, or its title is about getting or cooking food. */
-const FOOD_NODE = /食料|食べ物|狩|肉|ホグリン|パン/u;
+/** A plan node about food: its kind is `food` (chapter 7: the kind the model wrote, not the title's words or the condition's). */
+const isFoodNode = (node: PlanNode): boolean => kindOf(node) === 'food';
 /**
  * r7 (runs 29, 30: hunger 17 and no food, health that did not come back, and the plan's food node 「ゲートから戻り狩って焼く」 (p1.5) stayed
  * behind 「歪んだ幹で作業台」 (p1.1), 118 m the other way; Sonnet never went for food in 1,338 s): while health does not come back and she
@@ -192,9 +197,10 @@ const FOOD_NODE = /食料|食べ物|狩|肉|ホグリン|パン/u;
  * 戻り狩って焼く＠5,35,12（約 313m）」. Null when there is none, or the current node is one (or under one).
  */
 export function foodFirstLine(nodes: readonly PlanNode[], current: string | null, feet: Feet | null): string | null {
-  const open = (node: PlanNode) => node.state !== 'done';
+  // A node the model wrote `prep: skipped` on is one it chose to go without: it is not said as the node to go for.
+  const open = (node: PlanNode) => node.state !== 'done' && node.prep?.state !== 'skipped';
   const leaf = (node: PlanNode) => !nodes.some(child => child.parentId === node.id && open(child));
-  const isFood = (node: PlanNode) => /food>=/u.test(node.doneWhen ?? '') || FOOD_NODE.test(node.title);
+  const isFood = isFoodNode;
   const parent = new Map(nodes.map(node => [node.id, node.parentId]));
   for (let at: string | null = current, guard = 0; at && guard < 16; at = parent.get(at) ?? null, guard += 1) {
     const node = nodes.find(item => item.id === at);

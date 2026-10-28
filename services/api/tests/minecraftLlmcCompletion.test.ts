@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { PLAN_TREE_SCHEMA, type PlanNode, type PlanTree } from '@shannon/mind';
+import { type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { MC_ACT_TOOL } from '../src/contracts/minecraftActContract.js';
 import { leaseOf } from '../src/contracts/actionThreadContract.js';
@@ -14,6 +14,7 @@ import { createFcaProgressTools } from '../src/mind/action/fca/fcaProgressTools.
 import { combineFcaTools } from '../src/wiring/fcaMinecraftTools.js';
 import { llmcCompletionMistake, llmcTools } from '../src/wiring/minecraftLlmcWiring.js';
 import { COMPLETION_WAY, planCompletion, type LlmcCompletion } from '../src/surfaces/minecraft/minecraftLlmcCompletion.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * Production 2026-10-26 04:43 and 04:49 (Sonnet 5.5): 「木を3本集めて」 and 「原木を10本集めて、作業台と木のツルハシを作って」 had their plans done by the
@@ -32,7 +33,7 @@ const pack = (...items: Array<[string, number]>) => frame({ position: { x: -337,
   inventory: items.map(([name, count]) => ({ name, count })) });
 const node = (id: string, title: string, doneWhen: string | undefined, state: PlanNode['state'] = 'done', extra: Partial<PlanNode> = {}): PlanNode =>
   ({ id, parentId: null, order: Number(id.replace(/\D/gu, '')), title, state, ...(doneWhen ? { doneWhen } : {}), ...extra });
-const tree = (...nodes: PlanNode[]): PlanTree => ({ schema: PLAN_TREE_SCHEMA, revision: 4, current: null, nodes });
+const tree = (...nodes: PlanNode[]): PlanTree => v2tree({ revision: 4, current: null, nodes });
 
 /** The plans the two tasks ended with (fca_task checkpoints of production, 2026-10-26). */
 const WOOD = tree(node('p1', '近くのオークを3本切る', 'have:log>=11'), node('n1', '木を3本集める', 'have:oak_log>=3'));

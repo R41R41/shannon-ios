@@ -1,4 +1,5 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
+import { doneRange, readWhere, type PlanFactsNode } from './minecraftPlanFacts.js';
 import { bestStep, cornerOk, digWords, DIRS, isHard, isHarm, isOpen, keyOf, NAME, nameOf, nearestStand, ptText } from './minecraftLlmcWalkRules.js';
 import { standNeighbours, stepOptions, type P } from './minecraftLlmcWalkRules.js';
 
@@ -7,7 +8,7 @@ import { standNeighbours, stepOptions, type P } from './minecraftLlmcWalkRules.j
  * Facts only: where she can get to without digging, and with up to k cells dug, the nearest standing place to the goal, the points of the way
  * and the cells to dig. The walk's rules are the preflight's and the body's `probe path` (`minecraftLlmcWalkRules.ts`, plus the run over a
  * gap of up to three cells with the arc clear, as `minecraftLlmcPreflightRoute.ts`). Whether an enemy sees the way, and her health, are not
- * in it. The goal is read from the node's `＠x,y,z` only (`goalOf`): the replay took a bed named in another sentence of the node once.
+ * in it. The goal is read from the node's own `where`, the place it begins with (`goalOf`, `readWhere`): the replay took a bed named in another sentence of the node once.
  */
 export interface Reach { cell: P; digs: number; steps: number; prev: string | null; dig: P[] }
 const MAX_JUMP = 4;
@@ -87,19 +88,14 @@ export function pointsText(points: readonly P[]): string {
 }
 
 export interface Goal { at: P; range: number }
-const TRIPLE = /^\s*(-?\d+),(-?\d+),(-?\d+)/u;
 /**
- * The goal of the plan's current node: the coordinates right after its `＠` (`[p1.2] 歪んだ幹を取る＠195,66,60（済み: …）`), and the range of a
- * done-condition `at:x,y,z~N` of the same node. Nothing after `（` is read (the done-condition and the path), nor a coordinate that is not
- * right after the `＠`. Null when the node names no place by coordinates.
+ * The goal of the plan's current node, from the node's own fields (chapter 7: the live's shown line is not read): the place its `where` begins with
+ * (`readWhere`: `195,66,60`, `(196,69,237) 村の北`; a coordinate that is not first in the text is not the node's place), and the range of a done-condition
+ * `at:x,y,z~N` of the same node (1 when it has none). Null when the node names no place by coordinates.
  */
-export function goalOf(planNow: string): Goal | null {
-  const head = planNow.split('（')[0] ?? '';
-  const at = head.indexOf('＠');
-  const found = at < 0 ? null : TRIPLE.exec(head.slice(at + 1));
-  if (!found) return null;
-  const range = /at:-?\d+,-?\d+,-?\d+~(\d+)/u.exec(planNow);
-  return { at: { x: +found[1]!, y: +found[2]!, z: +found[3]! }, range: range ? Number(range[1]) : 1 };
+export function goalOf(node: Pick<PlanFactsNode, 'where' | 'doneWhen'> | null | undefined): Goal | null {
+  const at = readWhere(node?.where, 'goal');
+  return at ? { at, range: doneRange(node?.doneWhen) ?? 1 } : null;
 }
 
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);

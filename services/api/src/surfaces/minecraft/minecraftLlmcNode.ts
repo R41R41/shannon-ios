@@ -1,6 +1,7 @@
-import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
+import { orderedPlan, type PlanKind, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { doneFacts, doneStatusWords, undergroundInOverworld } from './minecraftPlanDone.js';
+import { kindOf, readWhere } from './minecraftPlanFacts.js';
 
 /**
  * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes from the first act;
@@ -136,7 +137,7 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   // A preparation node that is not met says so beside its condition (the work for another node does not move it);
   // below the surface it is one not to be met now.
   const word = facts && undergroundInOverworld(facts) ? PREP_NOT_NOW : PREP_NOTE;
-  const held = node.state !== 'done' && isPrepNode(node) && status !== '満たしている' ? { ...node, note: node.note ? `${word} ${node.note}` : word } : node;
+  const held = node.state !== 'done' && holdsNow(node) && status !== '満たしている' ? { ...node, note: node.note ? `${word} ${node.note}` : word } : node;
   return currentNodeLine(held, shown?.path, status);
 }
 
@@ -155,13 +156,17 @@ export function noteItemStart(taskId: string, node: string | null, current: stri
 }
 /**
  * The nodes of the preparation before the descent (run 40: p3 「食料を集める（狩り）」 and p4 「地下の準備」 were never the current node, the plan's now followed the
- * acts to the iron at 265 s, and she went down with 17.6 of 40 food points, no gold and no food hunted): a node that asks for food (its doneWhen has
- * `food>=`) or
- * whose title says food, hunting or preparing. The current node is not moved away from one that is open (`followNode`), and the live says so (`prepNote`).
+ * acts to the iron at 265 s, and she went down with 17.6 of 40 food points, no gold and no food hunted): a node of the kind `prep_descent` or `food` (chapter 7:
+ * the kind the model wrote; a title or a condition says nothing of it). The current node is not moved away from one that is open (`followNode`), and the live
+ * says so (`prepNote`).
  */
-const PREP_TITLE = /食料|食べ物|狩|動物|準備/u;
-export const isPrepNode = (node: { title: string; doneWhen?: string | undefined }): boolean =>
-  /food>=/u.test(node.doneWhen ?? '') || PREP_TITLE.test(node.title);
+const PREP_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['prep_descent', 'food']);
+export const isPrepNode = (node: Pick<PlanNode, 'kind'>): boolean => PREP_KINDS.has(kindOf(node));
+/**
+ * A preparation node that is still to be met: the model has not written `prep: skipped` (left out) or `unmet_now` (not to be met now) on it. Only such a node
+ * holds the current node and carries the note; the code writes neither word (chapter 7).
+ */
+const holdsNow = (node: Pick<PlanNode, 'kind' | 'prep'>): boolean => isPrepNode(node) && node.prep?.state !== 'skipped' && node.prep?.state !== 'unmet_now';
 /** The words beside the current node's line while it is a preparation node that is not done: the work may go on elsewhere, the node stays. */
 export const PREP_NOTE = '※下りる前の準備の節・未達';
 /** The same node once she is below the surface (GPT's review 2026-10-28): not to be met now; the now does not stay on it (`followNode`). */
@@ -213,9 +218,8 @@ function existingNode(id: string, byId: ReadonlyMap<string, PlanNode>): string {
 /**
  * Run 42 (p1.2 「村の箱を開ける」 where 157,67,200: the chest there was emptied at +62, the node had no doneWhen and Sonnet never set it done; it
  * stayed the current node for 700 s, and under its preparation parent p1 the now never moved to p3 「食料を集める」): a node for opening a chest or
- * barrel is done when an act opened one at its place. The chests opened, per task, from the act's result (`chest (x,y,z): …` and the hand's line).
+ * barrel (the kind `chest`) is done when an act opened one at its place. The chests opened, per task, from the act's result (`chest (x,y,z): …` and the hand's line).
  */
-const CHEST_NODE = /箱|樽|チェスト|chest|barrel/iu;
 const CHEST_SEEN = /^(?:chest|trapped_chest|barrel) \((-?\d+),(-?\d+),(-?\d+)\): |\((-?\d+),(-?\d+),(-?\d+)\) の (?:chest|trapped_chest|barrel) の中身/gmu;
 const CHEST_KEPT = 16;
 interface Opened { x: number; y: number; z: number; node: string | null }
@@ -245,17 +249,14 @@ export function chestNodesDone(taskId: string, tree: PlanTree): { update: { ops:
   const { open } = treeQuestions(tree);
   const ops: { op: 'set'; id: string; state: 'done'; reason: string }[] = [];
   for (const node of tree.nodes) {
-    if (!open(node.id) || !CHEST_NODE.test(node.title) || node.doneWhen?.trim() || tree.nodes.some(kid => kid.parentId === node.id && open(kid.id))) continue;
+    if (!open(node.id) || kindOf(node) !== 'chest' || node.doneWhen?.trim() || tree.nodes.some(kid => kid.parentId === node.id && open(kid.id))) continue;
     const at = node.where ? firstPoint(node.where) : null;
     const chest = list.find(item => at ? Math.max(Math.abs(item.x - at.x), Math.abs(item.y - at.y), Math.abs(item.z - at.z)) <= 2 : item.node === node.id);
     if (chest) ops.push({ op: 'set', id: node.id, state: 'done', reason: `箱 (${chest.x},${chest.y},${chest.z}) を開けた（頭が閉じた）` });
   }
   return ops.length ? { update: { ops: ops.slice(0, 8) }, ids: ops.slice(0, 8).map(op => op.id) } : null;
 }
-const firstPoint = (text: string): { x: number; y: number; z: number } | null => {
-  const match = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u.exec(text) ?? /(?<![\d.])(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)(?![\d.])/u.exec(text);
-  return match ? { x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) } : null;
-};
+const firstPoint = (text: string): { x: number; y: number; z: number } | null => readWhere(text, 'any');
 
 /**
  * The first node before `leaf` in the plan's order that is open and a preparation node, and that the work for `leaf` is not under (a preparation of its own).
@@ -265,13 +266,13 @@ function openPreparation(order: readonly PlanNode[], leaf: PlanNode, questions: 
   if (isPrepNode(leaf)) return undefined;
   const before = order.indexOf(leaf);
   const pending = (node: PlanNode) => !order.some(kid => kid.parentId === node.id) || order.some(kid => kid.parentId === node.id && questions.open(kid.id));
-  return order.find((node, index) => index < before && questions.open(node.id) && isPrepNode(node) && pending(node) && !questions.under(leaf.id, node.id));
+  return order.find((node, index) => index < before && questions.open(node.id) && holdsNow(node) && pending(node) && !questions.under(leaf.id, node.id));
 }
 
 /** Whether the current node is an open preparation node that the work for `leaf` would move the now away from (not for the node itself or one under it). */
 function heldByPreparation(tree: PlanTree, leaf: string, questions: ReturnType<typeof treeQuestions>): boolean {
   const now = tree.current ? questions.byId.get(tree.current) : undefined;
-  if (!now || !questions.open(now.id) || !isPrepNode(now)) return false;
+  if (!now || !questions.open(now.id) || !holdsNow(now)) return false;
   const next = questions.byId.get(leaf);
   return !!next && !isPrepNode(next) && !questions.under(leaf, now.id);
 }

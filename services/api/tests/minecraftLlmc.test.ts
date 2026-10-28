@@ -21,6 +21,7 @@ import type { FcaModel, FcaToolDefinition } from '../src/mind/action/fca/fcaPort
 import { applyPlanUpdate, planPath } from '@shannon/mind';
 import { estimatedAnthropicTokens } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
 import { layersMap } from './support/minecraftMaps.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /** Design mb-llm-centric (2026-10-21): the head's side of mc.act / mc.view, the map-first live state, the first plan and the models. */
 afterEach(() => { forgetFirstPlans(); forgetLlmcEvents(); vi.useRealTimers(); });
@@ -251,15 +252,18 @@ describe('the first plan (design 2.5, 2.6; owner: the whole game in the same sha
   it('seeds at once, takes the answer when it comes, and carries the nodes already done', async () => {
     let answer: (value: unknown) => void = () => {};
     const lines: string[] = [];
-    const held0 = { schema: 'shannon.plan-tree.v1' as const, revision: 0, current: null, nodes: [] };
+    const held0 = v2tree({ revision: 0, current: null, nodes: [] });
     startFirstPlan({ taskId: 't', goal: 'エンドラを倒して', held: held0, world: { position: { x: 1, y: 2, z: 3 } }, log: line => lines.push(line),
       planner: () => new Promise(resolve => { answer = resolve; }) });
     const seeded = firstPlanInbox.take('t', held0)!;
     expect(seeded.tree.nodes.length).toBeGreaterThan(30);
-    const done = applyPlanUpdate(seeded.tree, { ops: [{ op: 'set', id: 'p1.1', state: 'done' }] }).tree;
+    // Chapter 7: a node is carried by its kind and its words (a title says nothing): the seed's fortress node, whose condition is in free words.
+    const fortress = seeded.tree.nodes.find(node => node.kind === 'fortress')!;
+    const done = applyPlanUpdate(seeded.tree, { ops: [{ op: 'set', id: fortress.id, state: 'done' }] }).tree;
     expect(firstPlanInbox.take('t', done)).toBeNull();
-    answer({ nodes: [{ id: 'q1', parent: '', title: '木と石の道具', where: '', doneWhen: '' }, { id: 'q2', parent: 'q1', title: '原木を集める', where: '', doneWhen: '' },
-      { id: 'q3', parent: '', title: '村を回る', where: '(196,69,237)', doneWhen: '' }] });
+    answer({ nodes: [{ id: 'q1', parent: '', title: '木と石の道具', kind: 'stone_tools', where: '', doneWhen: '' },
+      { id: 'q2', parent: 'q1', title: '砦のレンガを見つける', kind: 'fortress', where: '', doneWhen: fortress.doneWhen },
+      { id: 'q3', parent: '', title: '村を回る', kind: 'village', where: '(196,69,237)', doneWhen: '' }] });
     await new Promise(resolve => setTimeout(resolve, 0));
     const taken = firstPlanInbox.take('t', done)!;
     expect(taken.tree.nodes.find(node => node.id === 'q2')!.state).toBe('done');

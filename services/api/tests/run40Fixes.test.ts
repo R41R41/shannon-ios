@@ -4,6 +4,7 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { forgetActNodes, followNode, noteItemStart, planNowOf, PREP_NOTE, isPrepNode } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { createFcaPlanTools } from '../src/mind/action/fca/fcaPlanTools.js';
 import { descentNote, foodLeads } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * Run 40 (2026-10-27, rel56, Sonnet): the preparation (food hunted, the descent's things) was never the plan's current node, because two items for the iron moved the now at
@@ -18,7 +19,7 @@ function treeOf(rows: readonly Row[], current: string | null): PlanTree {
     order.set(parent, next + 1);
     return { id, parentId: parent, order: next, title, state: 'continue', ...(doneWhen ? { doneWhen } : {}) };
   });
-  return { schema: 'shannon.plan-tree.v1', revision: 1, current, nodes };
+  return v2tree({ revision: 1, current, nodes });
 }
 const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,
   state: { world: world as never }, facts: {} });
@@ -27,11 +28,12 @@ const ROWS: Row[] = [['p1', null, '村を回る'], ['p3', null, '食料を集め
   ['p5', null, '鉄の装備'], ['p5.1', 'p5', '洞窟で鉄を掘る', 'have:iron_ingot>=24'], ['p6', null, 'ダイヤ', 'have:diamond>=3']];
 
 describe('a preparation node holds the current node', () => {
-  it('knows the nodes of food, hunting and preparing, and a doneWhen of food points', () => {
-    expect(isPrepNode({ title: '食料を集める（狩り）' })).toBe(true);
-    expect(isPrepNode({ title: '地下の準備' })).toBe(true);
-    expect(isPrepNode({ title: '村のかまどで肉を焼く', doneWhen: 'food>=40' })).toBe(true);
-    expect(isPrepNode({ title: '洞窟で鉄を掘る', doneWhen: 'have:iron_ingot>=24' })).toBe(false);
+  it('knows the nodes of the kinds food and prep_descent, and nothing that a title or a doneWhen says (chapter 7)', () => {
+    expect(isPrepNode({ kind: 'food' })).toBe(true);
+    expect(isPrepNode({ kind: 'prep_descent' })).toBe(true);
+    expect(isPrepNode({ kind: 'iron' })).toBe(false);
+    expect(isPrepNode({ kind: 'village' })).toBe(false);
+    expect(isPrepNode({})).toBe(false);
   });
   it('does not follow two items for the iron while the food node is the current one (run 40: p3 and p4 were never the now)', () => {
     const tree = treeOf(ROWS, 'p3.1');

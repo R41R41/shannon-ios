@@ -8,6 +8,9 @@ import {
 import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
 import { approachingIds, newApproach, planNowTitle, urgentRange, URGENT_NOTE } from './minecraftLlmcUrgent.js';
+import { doneFacts, prepUnmetFacts } from './minecraftPlanDone.js';
+import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
+import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
 import {
   createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise, type SurpriseFrame,
@@ -21,7 +24,7 @@ import {
   inSightLine, keepThreatSight, keptThreatSight, nearThreats, readThreatSight, sightProbe, THREAT_SIGHT, threatLine, threatSightKey,
   threatSightMeters, threatSightTargets, walledOff, type NearThreat, type ThreatSight,
 } from './minecraftLlmcThreat.js';
-import { planNowLine, planNowOf } from './minecraftLlmcNode.js';
+import { planNowOf } from './minecraftLlmcNode.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
@@ -192,18 +195,28 @@ export type LlmcEvents = ReturnType<typeof createLlmcEvents>;
 export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observation: BodyObservation | null,
   elapsedMinutes: number | null, urgent: readonly string[] = [],
   seen: { investigation?: readonly string[]; scan?: readonly string[]; unreachable?: readonly string[]; footing?: string | null;
-    bodyAge?: string | null; queue?: readonly string[] } = {})
+    bodyAge?: string | null; queue?: readonly string[] } = {}, taskId?: string)
   : Record<string, unknown> {
   const plan = llmc.planView();
   const world = observation?.state.world as Record<string, unknown> | undefined;
   const jobs = world && (world.jobs ?? world.activeFurnaces) as BodyValue | undefined;
-  return minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
+  // Chapter 7: `planFacts` is the machine's reading of the plan's kinds (outside the live state's bound: the rewrite takes it out, the model is not shown it); `onceFacts` the
+  // facts to say once (`minecraftLlmcOnceFacts.ts`).
+  // TODO(once-facts): `onceFacts` is to be put in the input's events by the live state's owner, and `markDelivered` called when the last request's bytes hold them.
+  const { planFacts, onceFacts: _onceFacts, ...readiness } = readinessParts(llmc, plan, observation, taskId);
+  const live = minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(seen.investigation?.length ? { investigation: seen.investigation } : {}), ...(seen.scan?.length ? { scan: seen.scan } : {}),
     ...(seen.unreachable?.length ? { unreachable: seen.unreachable } : {}), ...(seen.footing ? { footing: seen.footing } : {}),
     ...(seen.queue?.length ? { queue: seen.queue } : {}),
     ...bodyAgeField(seen.bodyAge),
-    ...readinessParts(llmc, plan, observation), ...roadParts(llmc, observation, elapsedMinutes) }, llmcPlanTokens(plan));
+    ...readiness, ...roadParts(llmc, observation, elapsedMinutes) }, llmcPlanTokens(plan));
+  return withPlanFacts(live, planFacts);
+}
+
+/** The live body with the plan's facts as its internal field (none: as it is; a body that is not connected has no plan to read). */
+function withPlanFacts(live: Record<string, unknown>, facts: PlanFacts | undefined): Record<string, unknown> {
+  return facts && live.connected !== false ? { ...live, [PLAN_FACTS_KEY]: facts } : live;
 }
 
 /** The plan's tree, or null (none, or it could not be read). */
@@ -213,22 +226,51 @@ function planTreeOf(llmc: LlmcBodyParts): PlanTree | null {
 /**
  * r6 (with the probe, as r4's parts): the current node before the map, what its stage lacks, and health that does not come back with
  * where food is (`minecraftLlmcReadiness.ts`). Facts only: what to do with them is the decision's.
+ * The continue contract (chapter 7): `planFacts`, the plan's kinds as the code reads them (the stage that is checked, the knowledge of a stage, the near creatures a plan needs
+ * all come from it, never from a title); `onceFacts`, the facts to say once (with a `taskId`: the preparation node she went down without meeting, offered when it
+ * holds and taken back when the model has written `prep` on it). The code writes no `skipped`.
  */
-export function readinessParts(llmc: LlmcBodyParts, view: object | null, observation: BodyObservation | null)
-  : { planNow?: string; shortage?: string; recovery?: string[] } {
+export function readinessParts(llmc: LlmcBodyParts, view: object | null, observation: BodyObservation | null, taskId?: string)
+  : { planNow?: string; shortage?: string; recovery?: string[]; planFacts?: PlanFacts; onceFacts?: OnceFact[] } {
   const facts = readinessOf(observation);
   const tree = planTreeOf(llmc), nodes = tree?.nodes ?? [], planNow = planNowOf(tree, view, observation);
-  const out = planNow ? { planNow } : {};
+  const planFacts = planFactsOf(tree) ?? undefined;
+  const out = { ...(planNow ? { planNow } : {}), ...(planFacts ? { planFacts } : {}) };
   if (!facts) return out;
-  const display = llmc.plan(), nowTitle = display?.nodes.find(item => item.id === display.current)?.title ?? null;
+  const display = llmc.plan();
   // Run 43: the fuel for what she carries to smelt is a lack of its own, beside the stage's.
-  const shortage = [preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowTitle,
+  const shortage = [preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowKinds: nowKinds(planFacts),
     worn: wornItems(facts.world.worn) }), fuelShortage(facts.world, facts.counts)].filter(Boolean).join('。') || null;
   const recovery = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts);
   // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the plan is not changed).
-  const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? null, feetIn(facts.world)) : null;
+  const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? tree?.current ?? null, feetIn(facts.world)) : null;
+  const onceFacts = taskId ? preparationFacts(taskId, tree, observation) : undefined;
   return { ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}), ...(shortage ? { shortage } : {}),
-    ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}) };
+    ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}), ...(planFacts ? { planFacts } : {}),
+    ...(onceFacts?.length ? { onceFacts } : {}) };
+}
+
+const PREP_FACT_KEY = 'prep_unmet:';
+/**
+ * Chapter 7 / chapter 8: she is below the surface with a preparation node unmet (the old `descentClosed` closed it and wrote that it was skipped). The head says the fact,
+ * once (`minecraftLlmcOnceFacts.ts`); the node's `state` and `prep` are the model's. A fact still pending when the node no longer fits (done, or the model wrote `prep` on it) is taken
+ * back; with no frame nothing is taken back (no frame says nothing). Returns the facts now pending for the task.
+ */
+function preparationFacts(taskId: string, tree: PlanTree | null, observation: BodyObservation | null): OnceFact[] {
+  const frame = doneFacts(observation);
+  if (!tree || !frame) return pending(taskId);
+  const now = prepUnmetFacts(tree, frame);
+  for (const fact of now) offer(taskId, fact.key, fact.text);
+  for (const old of pending(taskId)) if (old.key.startsWith(PREP_FACT_KEY) && !now.some(fact => fact.key === old.key)) withdraw(taskId, old.key);
+  return pending(taskId);
+}
+
+/** The current node (its id and title), from the tree; else from the display the body was given. */
+function currentNodeOf(llmc: LlmcBodyParts): { id: string; title: string } | null {
+  const tree = planTreeOf(llmc), node = tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
+  if (node) return node;
+  const display = llmc.plan();
+  return display?.nodes.find(item => item.id === display.current) ?? null;
 }
 
 /** r6: an act with a wait hand, stored with the fact that health does not come back now (the same words as the live state's). */
@@ -322,13 +364,14 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   /** r8: the live state of an urgent decision (`minecraftLlmcUrgentLive`), made on the frame now; its tokens are kept for the log of its seconds. */
   const urgentState = (minutes: number | null): Record<string, unknown> => {
     const facts = urgentFacts(observation, events.cut(), sights, inSight);
-    const nowLine = planNowLine(parts.llmc.planView() as { now?: unknown; path?: unknown } | null);
+    const readiness = readinessParts(parts.llmc, parts.llmc.planView() as object | null, observation);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing, bodyAge,
-      planNowTitle: planNowTitle(nowLine), queue: parts.queue?.lines(observation) ?? [], mode: URGENT_NOTE,
-      recovery: readinessParts(parts.llmc, parts.llmc.planView() as object | null, observation).recovery });
+      planNowTitle: planNowTitle(currentNodeOf(parts.llmc)), queue: parts.queue?.lines(observation) ?? [], mode: URGENT_NOTE,
+      recovery: readiness.recovery });
     urgentTokens = llmcTokens(JSON.stringify(live));
-    return live;
+    // The knowledge of a stage is picked from the plan's kinds in the raw live state, urgent or not (the rewrite takes `planFacts` out).
+    return withPlanFacts(live, readiness.planFacts);
   };
   /**
    * r7: the near hostiles (`threatSightTargets`) looked at with the body's sight, at once, beside the surprises' probes, waited
@@ -407,7 +450,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       noteUrgentDecision(parts.taskId, urgentNow);
       if (urgentNow) return urgentState(minutes);
       return llmcTransient(parts.llmc, events, observation, minutes, reasons, { investigation, scan, unreachable, footing, bodyAge,
-        queue: parts.queue?.lines(observation) ?? [] });
+        queue: parts.queue?.lines(observation) ?? [] }, parts.taskId);
     },
     /** r8: a hostile she must act on that has come since the request was built (once a decision), see `FcaBodyLifecycle.interrupt`. */
     interrupt: (): string | null => {

@@ -1,3 +1,6 @@
+import type { PlanKind } from '@shannon/mind';
+import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
+
 /**
  * mb-llmc-cand 10 (mb-llmc v2, run 37): what the live state says of how a creature stands to her, in one set of words.
  * The model's instructions promised, for every hostile, 「見える（射線の中）／見えない…道はある／壁の向こうで届かない」, and the lines of
@@ -50,9 +53,10 @@ const IRRELEVANT = new Set(['bat', 'cod', 'salmon', 'tropical_fish', 'pufferfish
 const VILLAGE_FOLK = new Set(['villager', 'wandering_trader', 'iron_golem']);
 /** How far a dropped item, a villager and anything else is worth a line; food animals and sheep only when the plan needs them. */
 export const NEAR_METERS = Object.freeze({ item: 16, folk: 12, tradeFolk: 24, other: 16, food: 24 });
-const FOOD_PLAN = /食料|食べ物|食べる|肉|動物|牧場|畑|food/u;
-const BED_PLAN = /ベッド|羊毛|bed|wool/u;
-const TRADE_PLAN = /交易|取引|村|trade/u;
+/** The kinds of the plan's nodes that need food animals, sheep (wool for a bed) and villagers (chapter 7: the kind the model wrote, not the plan's words). */
+const FOOD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['food']);
+const BED_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['bed']);
+const VILLAGE_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['village']);
 /** Food below this many points is short for the first night's iron (the instructions' stage knowledge: 40〜60 before it). */
 const FOOD_SHORT_POINTS = 40;
 const FOOD_SHORT_LEVEL = 14;
@@ -61,18 +65,18 @@ const FOOD_SHORT_LEVEL = 14;
 export interface NearNeeds { food: boolean; sheep: boolean; folk: boolean }
 const text = (value: unknown): string => typeof value === 'string' ? value : Array.isArray(value) ? value.map(text).join(' ') : '';
 /**
- * From the body of the live state and the plan's text: food animals when the plan names food, her food level is 14 or less, her food points are below
- * 40, the shortage names food or the recovery says health does not come back; sheep too when the plan or the shortage names a bed or wool;
- * villagers within 24 m (not 12) when the plan names a trade or a village.
+ * From the body of the live state: food animals when the current node or one of the next is of the kind food, her food level is 14 or less, her food points
+ * are below 40, the shortage names food or the recovery says health does not come back; sheep too when a node is of the kind bed or the shortage names a bed;
+ * villagers within 24 m (not 12) when a node is of the kind village. The kinds are the body's `planFacts` (none: only the pack and her food decide).
  */
-export function nearNeeds(body: Rec, planText: string): NearNeeds {
+export function nearNeeds(body: Rec): NearNeeds {
   const state = (body.state && typeof body.state === 'object' ? body.state : {}) as Rec;
   const food = (body.foodPoints && typeof body.foodPoints === 'object' ? body.foodPoints : {}) as Rec;
   const level = typeof state.fullness === 'number' ? state.fullness : 20, points = typeof food.total === 'number' ? food.total : Infinity;
-  const plan = `${planText} ${text(body.planNow)}`, shortage = text(body.shortage);
+  const kinds = nearKinds(factsIn(body)), shortage = text(body.shortage);
   const hungry = level <= FOOD_SHORT_LEVEL || points < FOOD_SHORT_POINTS || /食料/u.test(shortage) || text(body.recovery) !== '';
-  const wantsFood = FOOD_PLAN.test(plan) || hungry;
-  return { food: wantsFood, sheep: wantsFood || BED_PLAN.test(plan) || /ベッド/u.test(shortage), folk: TRADE_PLAN.test(plan) };
+  const wantsFood = hasKind(kinds, FOOD_KINDS) || hungry;
+  return { food: wantsFood, sheep: wantsFood || hasKind(kinds, BED_KINDS) || /ベッド/u.test(shortage), folk: hasKind(kinds, VILLAGE_KINDS) };
 }
 
 /**

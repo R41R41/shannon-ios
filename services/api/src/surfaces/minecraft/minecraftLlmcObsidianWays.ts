@@ -1,5 +1,7 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
 import { isHard, NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
+import { factsIn, hasKind, nowAndNextKinds } from './minecraftPlanFacts.js';
+import type { PlanKind } from '@shannon/mind';
 
 /**
  * mb-llmc v2 (実走37: 10 m 先に覆い 1 枚の溶岩 (173,-16,147) があったのに、走査で見えた 85 m 先の自然の黒曜石 (253,-55,154) へ階段で向かい、約 260 秒かかった。
@@ -117,9 +119,11 @@ function poolsLine(pools: Array<Found & { sources: number }>, lava: Found | null
   const small = near && near.sources < POOL_SOURCES ? `（いちばん近い源の溜まりは源 ${near.sources}: 黒曜石も ${near.sources} 個まで）` : '';
   return `。源が ${POOL_SOURCES} 以上の溜まり ${big ? `${show(big, '')}・源 ${big.sources}` : '見えていない'}${small}`;
 }
-/** `body.obsidian`: the nearest lava and the nearest obsidian beside each other, when the plan's node is the obsidian. Empty otherwise. */
+/** The kinds of node whose distances to lava and to obsidian are shown: the obsidian and the portal (chapter 7). */
+const OBSIDIAN_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['obsidian', 'portal']);
+/** `body.obsidian`: the nearest lava and the nearest obsidian beside each other, when the current node or the next is of the kind obsidian or portal. Empty otherwise. */
 export function obsidianWays(body: Rec, self: P, view: MapView | null): string[] {
-  if (!/黒曜石/u.test(String(body.planNow ?? ''))) return [];
+  if (!hasKind(nowAndNextKinds(factsIn(body)), OBSIDIAN_KINDS)) return [];
   const landmarks = strings(body.landmarks), scan = strings(body.scan);
   const lava = nearest([...view ? inMap(view, self, 'L') : [], ...inLines(landmarks, /^L |溶岩/u, self, '目印'), ...inLines(scan, /溶岩/u, self, '走査')]);
   const obsidian = nearest([...view ? inMap(view, self, 'O') : [], ...inLines(landmarks, /^O |黒曜石/u, self, '目印'), ...inLines(scan, /黒曜石/u, self, '走査')]);

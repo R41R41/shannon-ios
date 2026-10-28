@@ -19,6 +19,7 @@ import {
 import { startGcWatch } from '../src/infra/observer/eventLoopWatch.js';
 import { createBodyTaskRecall } from '../src/mind/recall/bodyTaskRecall.js';
 import type { TaskMemory } from '../src/mind/memory/taskMemoryPorts.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * mb-llmc r7 (production runs 29–31, 2026-10-22: Sonnet twice and Opus once, from the same start under the blaze spawner, went for the
@@ -48,7 +49,8 @@ const VIEW = { revision: 3, done: '0/26', path: ['出発の点検（ネザーの
 const NODES: PlanNode[] = [
   { id: 'p1', parentId: null, order: 0, title: '出発の点検（ネザーの奥へ）', state: 'continue' },
   { id: 'p1.1', parentId: 'p1', order: 0, title: '歪んだ幹で作業台と棒', state: 'continue', where: '195,66,60' },
-  { id: 'p1.5', parentId: 'p1', order: 4, title: 'ゲートから戻り狩って焼く', state: 'continue', where: '5,35,12', doneWhen: 'food>=100' },
+  { id: 'p1.5', parentId: 'p1', order: 4, title: 'ゲートから戻り狩って焼く', state: 'continue', kind: 'food', where: '5,35,12', doneWhen: 'food>=100' },
+  { id: 'p1.6', parentId: 'p1', order: 5, title: '帰りのゲート', state: 'continue', kind: 'portal', where: '5,35,12' },
   { id: 'p2', parentId: null, order: 1, title: 'ブレイズ', state: 'continue' },
 ];
 function lifecycle(world: () => Record<string, unknown>, answer: (input: ProbeInput) => string | null, taskId = 'r7-life') {
@@ -56,7 +58,7 @@ function lifecycle(world: () => Record<string, unknown>, answer: (input: ProbeIn
   const body = withLlmcBody({ start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
     toolSignal: (_name, parent) => parent, async close() {} },
   { llmc: { plan: () => ({ revision: 3, current: 'p1.1', nodes: NODES }) as never, planView: () => VIEW,
-    planTree: () => ({ schema: 'shannon.plan-tree.v1', revision: 3, current: 'p1.1', nodes: NODES }) },
+    planTree: () => v2tree({ revision: 3, current: 'p1.1', nodes: NODES }) },
   taskId, createdAt: '2026-10-22T00:00:00Z', observe: () => frame(world()), arrival: () => ({ at: 1, kind: 'login' }), log: line => lines.push(line),
   r4: { probe: () => async input => { sent.push(input); return answer(input); }, planWhere: () => '195,66,60' } });
   return { body, sent, lines };
@@ -195,7 +197,7 @@ describe('the gate back from a bare where, and the food node said first (run 30:
   const shaft = { position: at(310.67, 58, 73.5), dimension: 'the_nether', health: 10.1, food: 17, inventory: [{ name: 'netherrack', count: 40 }] };
 
   it('the gate back is read from 「5,35,12」 as from 「(5,35,12)」', () => {
-    expect(foodLeads(shaft, 'the_nether', NODES)).toContain('帰りのゲート (5,35,12) 約 312m（計画 p1.5 の where）');
+    expect(foodLeads(shaft, 'the_nether', NODES)).toContain('帰りのゲート (5,35,12) 約 312m（計画 p1.6 の where）');
   });
 
   it('no food and health that does not come back: the plan\'s food node before its now; none when the food node is the current one', () => {

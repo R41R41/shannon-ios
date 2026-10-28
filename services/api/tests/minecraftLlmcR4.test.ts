@@ -20,6 +20,7 @@ import {
   startFirstPlan,
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import type { FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * mb-llmc r4 (owner 2026-10-22, shared note r4-contract.md): a surprise is probed by the code before the decision and said first in its live
@@ -400,7 +401,7 @@ describe('the body\'s scan to the first plan (shared note 3; arch-check 6: run 2
     let world: Record<string, unknown> = { position: at(0, 64, 0) };
     const asked: Array<{ system: string; input: string }> = [];
     const planner = async (system: string, input: string) => { asked.push({ system, input }); return { nodes: [] }; };
-    startFirstPlan({ taskId: 'fp-r4', goal: 'ネザーへ', held: { schema: 'shannon.plan-tree.v1', revision: 0, current: null, nodes: [] }, world, planner,
+    startFirstPlan({ taskId: 'fp-r4', goal: 'ネザーへ', held: v2tree({ revision: 0, current: null, nodes: [] }), world, planner,
       log: () => {}, r4: { world: () => world, everyMs: 10, waitMs: 1_000 } });
     await new Promise(resolve => setTimeout(resolve, 40));
     expect(asked).toHaveLength(0);
@@ -413,7 +414,7 @@ describe('the body\'s scan to the first plan (shared note 3; arch-check 6: run 2
 
   it('without r4 the plan is asked at once with r3\'s words', () => {
     const asked: string[] = [];
-    startFirstPlan({ taskId: 'fp-r3', goal: 'ネザーへ', held: { schema: 'shannon.plan-tree.v1', revision: 0, current: null, nodes: [] },
+    startFirstPlan({ taskId: 'fp-r3', goal: 'ネザーへ', held: v2tree({ revision: 0, current: null, nodes: [] }),
       world: { scan }, planner: async system => { asked.push(system); return { nodes: [] }; }, log: () => {} });
     expect(asked).toEqual([FIRST_PLAN_SYSTEM]);
   });

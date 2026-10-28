@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PlanTree } from '@shannon/mind';
+import type { PlanKind, PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { forgetFurnaceStands, furnaceWaitNote } from '../src/surfaces/minecraft/minecraftLlmcFurnaceWait.js';
@@ -12,6 +12,7 @@ import { candidateAct } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { planFacts } from './helpers/planTreeV2.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2, the seventh round (run 37, rel41: the first time from nothing into the Nether, in 2,335 s; 535 s over the pass mark): the iron before
@@ -61,9 +62,9 @@ describe('the beds: enough with two (runs 36 and 37: 85–90 s fetching beds wit
     expect(packLines(BEDS, { forEnd: true }).join('\n')).not.toContain('ベッドは足りている');
   });
   it('is in the rewritten live state, and not when the plan\'s node is the End\'s', () => {
-    const live = (planNow: string) => rewriteLlmcLive({ body: { map: undefined, state: { dimension: 'overworld' }, planNow, inventory: BEDS }, plan: {} }).live.body as Record<string, unknown>;
-    expect((live('[p2.1] 村を回る').pack as string[]).join('\n')).toContain('ベッドは足りている（3）');
-    expect((live('[p17] エンドへ: アイをはめる').pack as string[]).join('\n')).not.toContain('ベッドは足りている');
+    const live = (planNow: string, kind: PlanKind) => rewriteLlmcLive({ body: { map: undefined, state: { dimension: 'overworld' }, planNow, planFacts: planFacts(kind), inventory: BEDS }, plan: {} }).live.body as Record<string, unknown>;
+    expect((live('[p2.1] 村を回る', 'village').pack as string[]).join('\n')).toContain('ベッドは足りている（3）');
+    expect((live('[p17] エンドへ: アイをはめる', 'stronghold').pack as string[]).join('\n')).not.toContain('ベッドは足りている');
   });
 });
 
@@ -127,18 +128,21 @@ describe('the near lava beside the far obsidian (run 37, 1,349–1,611 s: 85 m o
   const SELF = at(170, -14, 150);
   const LANDMARKS = ['L 溶岩源 (173,-16,147) 東3・北3・下2 溜まりの源 4', 'O 黒曜石 (253,-55,154) 東83・南4・下41 ×6', 'ほか2件（長いため略）'];
   it('puts both distances side by side with where each was read, and says the lava is the nearer', () => {
-    const [line] = obsidianWays({ planNow: '[p6.2] 溶岩に水を注ぎ黒曜石10', landmarks: LANDMARKS }, SELF, null);
+    const [line] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p6.2' }), landmarks: LANDMARKS }, SELF, null);
     expect(line).toContain('溶岩の源 (173,-16,147) まで 5m（目印）');
     expect(line).toContain('自然の黒曜石 (253,-55,154) まで 93m（目印）（溶岩の方が近い）');
     expect(line).toContain('階段掘りは 0.5〜0.9 マス/秒');
   });
   it('reads the scan\'s rows too, and says what is not in sight', () => {
-    expect(obsidianWays({ planNow: '[p6.2] 黒曜石', landmarks: [], scan: ['溶岩の溜まり 1か所: 10m 東 (173,-16,147)'] }, SELF, null)[0])
+    expect(obsidianWays({ planFacts: planFacts('obsidian', { id: 'p6.2' }), landmarks: [], scan: ['溶岩の溜まり 1か所: 10m 東 (173,-16,147)'] }, SELF, null)[0])
       .toContain('溶岩の源 (173,-16,147) まで 5m（走査） / 自然の黒曜石 見えていない');
-    expect(obsidianWays({ planNow: '[p6.2] 黒曜石', landmarks: [] }, SELF, null)).toEqual([]);
+    expect(obsidianWays({ planFacts: planFacts('obsidian', { id: 'p6.2' }), landmarks: [] }, SELF, null)).toEqual([]);
   });
   it('is only for the obsidian\'s node, and is `body.obsidian` in the rewritten live state', () => {
-    expect(obsidianWays({ planNow: '[p5.1] 鉄のツルハシ', landmarks: LANDMARKS }, SELF, null)).toEqual([]);
+    expect(obsidianWays({ planFacts: planFacts('iron', { id: 'p5.1', next: ['diamond'] }), landmarks: LANDMARKS }, SELF, null)).toEqual([]);
+    // The next node being the obsidian or the gate is enough too (chapter 7); a title that says 黒曜石 with no kind is not.
+    expect(obsidianWays({ planFacts: planFacts('iron', { next: ['portal'] }), landmarks: LANDMARKS }, SELF, null)).toHaveLength(1);
+    expect(obsidianWays({ planNow: '[p6.2] 黒曜石', planFacts: planFacts('other'), landmarks: LANDMARKS }, SELF, null)).toEqual([]);
     const body = { map: undefined, state: { at: '(170,-14,150)', dimension: 'overworld' }, planNow: '[p6.2] 黒曜石', landmarks: LANDMARKS };
     expect((rewriteLlmcLive({ body, plan: {} }).live.body as Record<string, unknown>).obsidian).toBeUndefined();
   });

@@ -1,7 +1,8 @@
 import { orderedPlan, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, prepNowWords, prepSkipped, undergroundInOverworld, type DoneFacts } from './minecraftPlanDone.js';
-import { carried } from './minecraftConditions.js';
+import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, prepHolds, prepNowWords, prepSkipped, PREP_SKIPPED, prepUnmetNow, undergroundInOverworld,
+  type DoneFacts } from './minecraftPlanDone.js';
+import { kindOf } from './minecraftPlanFacts.js';
 
 /**
  * mb-llmc v2 (mb-llmc-cand 11, chapter 4 A: the goal's yardstick and the stage road): for a task that goes for the dragon, two lines of the live
@@ -38,9 +39,8 @@ export interface Milestone {
  * meter like the speed's, with its target and its seconds behind. Its target is inside the iron pickaxe's 250 s, which the descent begins after.
  */
 export const PREP_MILESTONE_NAME = '地下の準備（食料 40 点・作業台か板 4）';
-/** A plan node for the preparation before the descent (`minecraftPlanDone.ts`, where a descent also closes it). */
+/** A plan node for the preparation before the descent (the kind `prep_descent`, `minecraftPlanDone.ts`, where the fact of a descent without it is made). */
 export { isPrepMilestoneNode } from './minecraftPlanDone.js';
-const prepHolds = (facts: DoneFacts): boolean => facts.food >= 40 && (carried(facts.counts, 'crafting_table') > 0 || carried(facts.counts, 'planks') >= 4);
 const prepNow = prepNowWords;
 export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ベッド', seconds: 150, doneWhen: 'have:bed' },
@@ -62,8 +62,8 @@ const grouped = (seconds: number): string => seconds.toLocaleString('en-US');
 /** The targets as the instructions say them: 「ベッド 150・地下の準備 300・鉄のツルハシ 350・…・ネザー 1,800」. */
 export const milestoneWords = (): string => DRAGON_MILESTONES.map(item => `${item.short ?? item.name} ${grouped(item.seconds)}`).join('・');
 
-/** Whether the plan is the dragon's: a node of it names the dragon (the seeded plan's last node, 「エンドでドラゴン」). */
-export const isDragonPlan = (tree: PlanTree | null | undefined): boolean => !!tree && tree.nodes.some(node => /ドラゴン|エンドラ/u.test(node.title));
+/** Whether the plan is the dragon's: a node of it has the kind `dragon` (chapter 7: the kind the model wrote, not the title's words; the seeded plan's last node, 「エンドでドラゴン」). */
+export const isDragonPlan = (tree: PlanTree | null | undefined): boolean => !!tree && tree.nodes.some(node => kindOf(node) === 'dragon');
 
 const SHOWN_AFTER = 5, SHOWN_DONE = 3;
 const MARKS: Readonly<Record<string, string>> = { blocked: '（止）', done: '✓' };
@@ -101,24 +101,31 @@ export function roadLine(tree: PlanTree | null | undefined): string | null {
 const doneInPlan = (tree: PlanTree, item: Milestone): boolean => tree.nodes.some(node => {
   const text = (node.doneWhen ?? '').replace(/\s+/gu, '').toLowerCase(), clause = item.doneWhen;
   if (node.state !== 'done') return false;
-  // GPT's review 2026-10-28: a preparation skipped (closed to let the now move on) is not a milestone reached.
-  if (prepSkipped(node)) return false;
+  // GPT's review 2026-10-28: a preparation skipped (or not to be met now: the model wrote `prep`) is not a milestone reached.
+  if (prepSkipped(node) || prepUnmetNow(node)) return false;
   if (item.node?.(node)) return true;
   // A dimension in an alternative (「have:obsidian>=10|dim:the_nether」) is not what the node being done says: only a node that names it alone counts.
   return text.split(/[|&]/u).includes(clause) && (!clause.startsWith('dim:') || !text.includes('|'));
 });
 /**
- * GPT's review 2026-10-28: the preparation before the descent skipped, or not to be met now (she is below the surface and the node is open), is not the next
- * milestone and not a late one; it is said as the fact it is, and it is not counted as reached (`reached` is the meter's own list).
+ * GPT's review 2026-10-28: the preparation before the descent skipped (the model wrote `prep: skipped`), or open with she below the surface, is not the next
+ * milestone and not a late one; it is said as the fact it is, and it is not counted as reached (`reached` is the meter's own list). Chapter 7 (decision 9): a
+ * node the model wrote `prep: unmet_now` on is counted late like any other (the meter points at it with its seconds behind) and says why it cannot be met now.
  */
 function prepEnd(tree: PlanTree, facts: DoneFacts, reached: readonly boolean[]): { index: number; over: boolean; fact: string } {
   const index = DRAGON_MILESTONES.findIndex(item => item.node !== undefined), item = DRAGON_MILESTONES[index];
   const skippedNode = item ? tree.nodes.find(node => prepSkipped(node) && item.node!(node)) : undefined;
-  const open = !!item && tree.nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && item.node!(node));
+  const isOpen = (node: PlanNode) => node.state !== 'done' && node.state !== 'blocked';
+  const unmetNode = item && !reached[index] ? tree.nodes.find(node => prepUnmetNow(node) && isOpen(node) && item.node!(node)) : undefined;
+  const open = !!item && tree.nodes.some(node => isOpen(node) && item.node!(node) && !prepUnmetNow(node));
   const over = !!item && !reached[index] && (!!skippedNode || (undergroundInOverworld(facts) && open));
+  if (unmetNode && !over) {
+    const why = unmetNode.prep?.why;
+    return { index, over, fact: `・準備は今は満たせない（${why ? `理由: ${why.slice(0, 60)}` : `今 ${item!.now!(facts)}`}）` };
+  }
   if (!over) return { index, over, fact: '' };
-  const note = skippedNode?.note ?? '';
-  return { index, over, fact: skippedNode ? `・${note.slice(0, note.indexOf('）: ') + 1)}` : `・準備は今は満たせない（地下。今 ${item!.now!(facts)}）` };
+  const said = skippedNode?.prep?.why;
+  return { index, over, fact: skippedNode ? `・${PREP_SKIPPED}${said ? `（${said.slice(0, 60)}）` : ''}` : `・準備は今は満たせない（地下。今 ${item!.now!(facts)}）` };
 }
 /**
  * `body.meter`: the seconds since the task began, and the next milestone (the first after the last one reached) with its target and how far ahead or

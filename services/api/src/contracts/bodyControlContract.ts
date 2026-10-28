@@ -44,6 +44,11 @@ export interface BodyPlanNode {
    */
   where?: string; doneWhen?: string; note?: string;
   forbid?: readonly string[]; caution?: readonly string[];
+  /**
+   * The node's kind (the continue contract, chapter 7: one of the plan tree's kinds, or `other`). A word for the display only; it moves nothing. Given only
+   * when the node has one.
+   */
+  kind?: string;
 }
 /** At most 64 nodes, parents before their children, siblings in order; at most 4 deep. `current` is a node's id or null. */
 export interface BodyPlanView { revision: number; current: string | null; nodes: readonly BodyPlanNode[] }

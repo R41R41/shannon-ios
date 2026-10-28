@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyPlanUpdate, PLAN_TREE_SCHEMA, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
+import { applyPlanUpdate, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
@@ -10,6 +10,7 @@ import { descentNote, recoveryLine } from '../src/surfaces/minecraft/minecraftLl
 import { DRAGON_MILESTONES } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { withChestsDone } from '../src/surfaces/minecraft/minecraftPlanDone.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * Run 42 (2026-10-27, Sonnet, rel59): she went down at health 11.3 that did not come back (the live said the fact alone, 7 decisions in a row) and was shot dead;
@@ -24,7 +25,7 @@ const node = (id: string, title: string, extra: Partial<PlanNode> = {}): PlanNod
   const parentId = id.includes('.') ? id.slice(0, id.lastIndexOf('.')) : null;
   return { id, parentId, order: Number(id.slice(id.lastIndexOf(id.includes('.') ? '.' : 'p') + 1)) - 1, title, state: 'continue', ...extra };
 };
-const run42Tree = (): PlanTree => ({ schema: PLAN_TREE_SCHEMA, revision: 5, current: 'p1.2', nodes: [
+const run42Tree = (): PlanTree => v2tree({ revision: 5, current: 'p1.2', nodes: [
   node('p1', '村を回る', { where: '141,75,204', doneWhen: 'have:bed>=1&food>=20' }),
   node('p1.1', 'ベッドを取る', { where: '141,75,204', doneWhen: 'have:bed>=1', state: 'done' }),
   node('p1.2', '村の箱を開ける', { where: '157,67,200' }),

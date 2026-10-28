@@ -14,6 +14,7 @@ import { candidateFixed } from '../src/wiring/minecraftLlmcV2Request.js';
 import { message, scriptedAnthropic } from './support/anthropicFixtures.js';
 import { llmcRequests, LLMC_TOOLS } from './support/minecraftBodyRequests.js';
 import lives from './fixtures/minecraft-v2-lives-v1.json' with { type: 'json' };
+import { planFacts } from './helpers/planTreeV2.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2 (improvement plan 2.1–2.3), the model's request: six fixed tools in a fixed order, the mode's instructions, the stages'
@@ -23,7 +24,9 @@ import lives from './fixtures/minecraft-v2-lives-v1.json' with { type: 'json' };
 const PROBE: FcaToolDefinition = { name: 'mc.probe', description: PROBE_DESCRIPTION, input: { type: 'object', properties: {}, required: [], additionalProperties: false },
   nativeInputSchema: PROBE_INPUT_SCHEMA, domain: 'minecraft_body', effect: 'read', cost: 'none', audiences: ['owner_alone'], surfaces: ['text'] };
 const CORE = [...LLMC_TOOLS, PROBE];
-const live = (lives as Record<string, Record<string, any>>)['s01-r32-1321-head-cell']!;
+// The recorded live state of run 32 has no plan facts (they came with the continue contract): the current node p1.1 held the place 293,67,72.
+const recorded = (lives as Record<string, Record<string, any>>)['s01-r32-1321-head-cell']!;
+const live: Record<string, any> = { ...recorded, body: { ...recorded.body, planFacts: planFacts('other', { id: 'p1.1', where: '293,67,72' }) } };
 type Body = Record<string, any> & { system: Array<{ text: string }>; messages: Array<Record<string, any>>; tools: Array<{ name: string }> };
 
 async function decide(options: Partial<AnthropicFcaOptions>, tools: FcaToolDefinition[], answer: unknown, laterBody?: Record<string, unknown>) {

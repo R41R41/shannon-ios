@@ -8,6 +8,7 @@ import { WOOD_MARK, minecraftLlmcLive, createFoodTrend, planksHeld } from '../sr
 import { doneFacts, nodesSeenDone } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { heldBeforeSend } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { queueWakeMs, QUEUE_T } from '../src/surfaces/minecraft/minecraftLlmcQueue.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * Run 39 (2026-10-26, rel55b, Sonnet): the `go` hand (the model decides where to, what may be dug and placed, what to avoid; the body walks the way), the
@@ -155,7 +156,7 @@ describe('a parent seen done and a child whose gear is not made (run 39)', () =>
       order.set(parent, next + 1);
       return { id, parentId: parent, order: next, title, state: 'continue', ...(doneWhen ? { doneWhen } : {}) };
     });
-    return { schema: 'shannon.plan-tree.v1', revision: 1, current, nodes };
+    return v2tree({ revision: 1, current, nodes });
   };
   const facts = (...items: Array<[string, number]>) => doneFacts(frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: pack(...items) }))!;
   it('p3 (chestplate and pickaxe) waits for p3.4 (helmet, chestplate, leggings): the legs are made first', () => {

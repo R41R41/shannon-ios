@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlanUpdate, PLAN_TREE_SCHEMA, type PlanNode, type PlanTree } from '@shannon/mind';
+import { applyPlanUpdate, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMinecraftSystem.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
@@ -11,6 +11,7 @@ import { descentNote, enemyNear, fuelShortage, recoveryLine } from '../src/surfa
 import { meterLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneFacts, doneStatusWords, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * Run 43 (2026-10-27, Sonnet, rel60): 39.6 food points said 「40/40」 while `food>=40` judged them short (p3 the now for 2,126 s); a furnace out of
@@ -25,7 +26,7 @@ const node = (id: string, title: string, doneWhen: string, state: PlanNode['stat
   return { id, parentId, order: Number(id.slice(id.lastIndexOf(id.includes('.') ? '.' : 'p') + 1)) - 1, title, state, ...(doneWhen ? { doneWhen } : {}) };
 };
 /** Run 43's plan at +283 (revision 6, from its commands): the village and the tools done, p3 the now. */
-const run43Tree = (): PlanTree => ({ schema: PLAN_TREE_SCHEMA, revision: 6, current: 'p3', nodes: [
+const run43Tree = (): PlanTree => v2tree({ revision: 6, current: 'p3', nodes: [
   node('p1', '村を回る', 'have:bed>=1&food>=20', 'done'),
   node('p2', '木と石の道具', 'have:stone_pickaxe&have:stone_axe&have:stone_sword', 'done'),
   node('p3', '食料40点と下る準備', 'food>=40&have:crafting_table|food>=40&have:planks>=4'),

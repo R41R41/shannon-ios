@@ -14,6 +14,7 @@ import { candidateMenuTools } from '../src/surfaces/minecraft/minecraftLlmcV2.js
 import { stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneStatusWords, type DoneFacts } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { planFacts } from './helpers/planTreeV2.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2, the twelfth round (2026-10-24, after run 38):
@@ -38,7 +39,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     expect(gateFirst([]).length).toBe(0);
   });
   it('asks the three pieces worn at the diamonds\' node, and says one carried and not worn', () => {
-    const base = { dimension: 'overworld', food: 50, nowTitle: 'ダイヤ3以上を掘る' };
+    const base = { dimension: 'overworld', food: 50, nowKinds: ['diamond' as const] };
     const kit: Array<[string, number]> = [['iron_pickaxe', 1], ['bucket', 1], ['shield', 1]];
     expect(preparationShortage({ ...base, counts: owned(kit), worn: [] })).toBe('準備の不足（ダイヤを掘る前）: 鉄の兜・胸当て・脚が無い');
     const armour: Array<[string, number]> = [...kit, ['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]];
@@ -49,7 +50,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
   it('asks the golden boots at the gate, iron boots do not stand for them', () => {
     const gate: Array<[string, number]> = [['iron_pickaxe', 1], ['shield', 1], ['iron_sword', 1], ['cobblestone', 64], ['iron_helmet', 1],
       ['iron_chestplate', 1], ['iron_leggings', 1], ['iron_boots', 1]];
-    const parts = { dimension: 'overworld', food: 50, nowTitle: 'ゲートを組んで火をつける', v2: true };
+    const parts = { dimension: 'overworld', food: 50, nowKinds: ['portal' as const], v2: true };
     expect(preparationShortage({ ...parts, counts: owned(gate) })).toBe('準備の不足（ネザーに入る前）: 金のブーツが無い');
     expect(preparationShortage({ ...parts, counts: owned([...gate, ['golden_boots', 1]]) })).toBeNull();
     // Worn counts: the worn line of the frame is read as carried.
@@ -144,12 +145,12 @@ describe('run 38: the size of the lava pools (1,090–1,310 s on single sources 
     expect(pools.map(pool => [pool.sources, pool.at])).toEqual([[1, { x: 1, y: 0, z: 0 }], [3, { x: -2, y: 0, z: -2 }]]);
   });
   it('says the nearest pool of ten or more beside the nearest source, and that a small one makes only so many', () => {
-    const [line] = obsidianWays({ planNow: '[p5.2] 黒曜石を作る', landmarks: ['L 溶岩源 (1,0,0) 東1 溜まりの源 2'],
+    const [line] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p5.2' }), landmarks: ['L 溶岩源 (1,0,0) 東1 溜まりの源 2'],
       scan: ['溶岩の溜まり 3 つ以上（最寄り 東 40m・源 64） (40,0,0)'] }, SELF, null);
     expect(line).toContain('溶岩の源 (1,0,0) まで 1m（目印）');
     expect(line).toContain('源が 10 以上の溜まり (40,0,0) まで 40m（走査）・源 64');
     expect(line).toContain('（いちばん近い源の溜まりは源 2: 黒曜石も 2 個まで）');
-    const [none] = obsidianWays({ planNow: '[p5.2] 黒曜石を作る', landmarks: ['L 溶岩源 (1,0,0) 東1'] }, SELF, null);
+    const [none] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p5.2' }), landmarks: ['L 溶岩源 (1,0,0) 東1'] }, SELF, null);
     expect(none).toContain('源が 10 以上の溜まり 見えていない');
   });
   it('tells the stage knowledge to go to a pool, and to leave a tree that cannot be reached', () => {

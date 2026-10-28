@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlanUpdate, orderedPlan, planPath, type PlanNode, type PlanTree } from '@shannon/mind';
+import { applyPlanUpdate, orderedPlan, planPath, readPlanTree, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { gateFirst, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -121,7 +121,7 @@ describe('the pack: free slots and the filler that fills them (run 36, y=76 → 
 });
 
 describe('the plan tree of run 36 (task 40bd0b3e, revision 21): children left open under a parent done by the pack', () => {
-  const tree = run36Plan as unknown as PlanTree;
+  const tree = readPlanTree(run36Plan)!;
   /** The tree at the start: only what run 36 had done by the first minute is done (p1.1); the rest open, as the first plan wrote it. */
   const start = (): PlanTree => ({ ...tree, current: 'p1.1', nodes: tree.nodes.map(node => ({ ...node, state: node.id === 'p1.1' ? 'done' as const : 'continue' as const })) });
   const pack = (items: Array<[string, number]>) => frame({ dimension: 'overworld', position: at(141, 75, 204), food: 20, inventory: items.map(([name, count]) => ({ name, count })) });
@@ -164,14 +164,14 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
   const GEAR: Array<[string, number]> = [['shield', 1], ['stone_sword', 1], ['iron_pickaxe', 1], ['cobblestone', 64], ['iron_helmet', 1],
     ['iron_chestplate', 1], ['iron_leggings', 1], ['golden_boots', 1]];
   it('the entry\'s shortage asks 40 points of food, a pickaxe, a shield, a sword, blocks and the armour; not 100 points or the water bucket', () => {
-    const parts = { dimension: 'overworld', counts: owned(GEAR), food: 48, nowTitle: '黒曜石を作る' };
+    const parts = { dimension: 'overworld', counts: owned(GEAR), food: 48, nowKinds: ['obsidian' as const] };
     expect(preparationShortage(parts)).toBeNull();
     expect(preparationShortage({ ...parts, food: 24 })).toBe('準備の不足（ネザーに入る前）: 食料 24 点（目安 40）');
     expect(preparationShortage({ ...parts, counts: owned([['stone_sword', 1]]) }))
       .toContain('鉄以上のツルハシ・盾・鉄の兜・胸当て・脚・金のブーツ・足場のブロックが無い');
   });
   it('the check inside the Nether is as it was (the table, slabs, gold armour and food 100 before the fortress)', () => {
-    const nether = { dimension: 'the_nether', counts: owned([['shield', 1]]), food: 48, nowTitle: '要塞を探す' };
+    const nether = { dimension: 'the_nether', counts: owned([['shield', 1]]), food: 48, nowKinds: ['fortress' as const] };
     expect(preparationShortage(nether)).toContain('食料 48 点（目安 100）');
   });
   it('the seed plan has no food 100 before the gate and one or two beds from the village', () => {

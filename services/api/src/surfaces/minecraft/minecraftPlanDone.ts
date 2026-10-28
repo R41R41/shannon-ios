@@ -1,8 +1,9 @@
-import { orderedPlan, PLAN_LIMITS, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
+import { orderedPlan, PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, clauseHolds, clauseLack, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { newerClause, type ActClause } from '../../contracts/minecraftActCondition.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { kindOf } from './minecraftPlanFacts.js';
 
 export { doneFacts, type DoneFacts };
 
@@ -240,26 +241,35 @@ export function nodesHeldOpen(tree: PlanTree, facts: DoneFacts, inOrder = false)
   });
 }
 
-export interface SeenDone { update: PlanUpdate; ids: string[]; held?: string[]; closed?: string[]; descended?: string[] }
+export interface SeenDone { update: PlanUpdate; ids: string[]; held?: string[]; closed?: string[] }
 
-const FOOD_CLAUSE = /food>=(\d{1,4})/u;
-/** A plan node for the preparation before the descent: its title says so, or its condition asks 40 to 99 food points (not the 100 of the gate). */
-export const isPrepMilestoneNode = (node: PlanNode): boolean => {
-  const points = FOOD_CLAUSE.exec((node.doneWhen ?? '').replace(/\s+/gu, '').toLowerCase())?.[1];
-  return /地下の準備/u.test(node.title) || (points !== undefined && Number(points) >= 40 && Number(points) < 100);
-};
 /**
- * The preparation before the descent has three ends (GPT's review 2026-10-28: 「済ませた」 and 「省いて下りた」 were both `done`): met (the frame showed its
- * condition), skipped (she went down with it unmet: closed as done, only to let the now move on, with `PREP_SKIPPED` first in its note and what she had), and
- * not to be met now (she is below the surface, the node is open, and nothing down there fills it). Only the first is a milestone reached.
+ * A plan node for the preparation before the descent: its kind is `prep_descent` (chapter 7: the kind the model wrote; no title or condition decides it).
+ * The meter's preparation milestone points at it.
+ */
+export const isPrepMilestoneNode = (node: Pick<PlanNode, 'kind'>): boolean => kindOf(node) === 'prep_descent';
+/**
+ * The preparation before the descent has three ends (GPT's review 2026-10-28: 「済ませた」 and 「省いて下りた」 were both `done`): met, skipped (she went down
+ * with it unmet and the model wrote `prep: skipped`), and not to be met now (`unmet_now`, written by the model too). Only the first is a milestone reached.
+ * The code writes none of the words (chapter 7); it reads them, and says the fact when she goes down with the node unmet (`prepUnmetFacts`).
  */
 export const PREP_SKIPPED = '準備を省いた';
-export const prepSkipped = (node: Pick<PlanNode, 'state' | 'note'>): boolean => node.state === 'done' && (node.note ?? '').startsWith(PREP_SKIPPED);
-/** What she has of the preparation's three things: the food points, the table, the planks (the meter's "now" and the note of a skip). */
+export const prepSkipped = (node: Pick<PlanNode, 'prep'>): boolean => node.prep?.state === 'skipped';
+/** The preparation that the model said is not to be met now (written by it: `prep: unmet_now`). */
+export const prepUnmetNow = (node: Pick<PlanNode, 'prep'>): boolean => node.prep?.state === 'unmet_now';
+/** What she has of the preparation's three things: the food points, the table, the planks (the meter's "now" and the fact of a descent). */
 export const prepNowWords = (facts: DoneFacts): string =>
   `${foodPointsWords(facts.food, 40)}・作業台 ${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}・板 ${carried(facts.counts, 'planks')}`;
-/** A node of the work down there (the iron and what comes after it): the preparation before the descent comes before the first one. */
-const UNDERGROUND_WORK = /raw_iron|iron_ingot|iron_(?:pickaxe|chestplate|leggings|helmet|boots)|diamond|obsidian|dim:the_nether/u;
+/** Whether the frame meets the preparation before the descent: 40 food points and a table or 4 planks (the meter's milestone). */
+export const prepHolds = (facts: DoneFacts): boolean => facts.food >= 40 && (carried(facts.counts, 'crafting_table') > 0 || carried(facts.counts, 'planks') >= 4);
+/** What of the preparation is missing, as the fact says it (「食料 17.6 点・作業台 無・板 0」), or null when it is met. */
+function prepLack(facts: DoneFacts): string | null {
+  const food = facts.food < 40 ? [`食料 ${Math.round(facts.food * 10) / 10} 点`] : [];
+  const table = carried(facts.counts, 'crafting_table') > 0 || carried(facts.counts, 'planks') >= 4 ? [] : [`作業台 無・板 ${carried(facts.counts, 'planks')}`];
+  return [...food, ...table].join('・') || null;
+}
+/** The kinds of the work down there (the iron and what comes after it): the preparation before the descent comes before the first node of one. */
+const UNDERGROUND_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['iron', 'iron_armor', 'diamond', 'obsidian', 'nether']);
 /** Below this y in the overworld the body is underground (the descent's own line, `minecraftLlmcReadiness.ts`). */
 export const DESCENT_SURFACE_Y = 45;
 /** Whether the body has gone down from the surface: underground in the overworld, or in the Nether or the End. */
@@ -270,33 +280,30 @@ export function belowTheSurface(facts: DoneFacts): boolean {
 }
 /** Underground in the overworld: where a preparation before the descent cannot be filled any more (the Nether and the End have their own). */
 export const undergroundInOverworld = (facts: DoneFacts): boolean => belowTheSurface(facts) && (facts.dimension ?? 'overworld') === 'overworld';
+/** A fact for the model that the head says once (`minecraftLlmcOnceFacts.ts`): its key (one per fact) and its words. */
+export interface OnceFactDraft { key: string; text: string }
 /**
- * Run 44 (p2.2 「箱と畑で食料」 `food>=40`, the now from +154 for about 609 s) and run 43 (p3 「食料40点と下る準備」, 2,126 s): a node of the preparation
- * before the descent is for being met before going down. Down there her food points only go down (she eats), so its condition can no longer be met:
- * the node held the now, the meter's 「地下の準備 … 遅れ」 stayed, and she went back up for food (131 s and more). Once the body is below the surface
- * the node has done its part: it is closed, with what was lacking when she went down in its note (a body short of food is told so apart, by the
- * health that does not come back). Never a blocked node; once closed it stays closed.
+ * Run 44 (p2.2 「箱と畑で食料」 `food>=40`, the now from +154 for about 609 s) and run 43 (p3 「食料40点と下る準備」, 2,126 s): a node of the preparation before the
+ * descent is for being met before going down; down there her food points only go down, so its condition can no longer be met, the node held the now and the
+ * meter's 「地下の準備 … 遅れ」 stayed. The code closed it and wrote 「準備を省いた」 in its note (the old `descentClosed`). The continue contract (chapter 7, the plan's
+ * kinds): the head does not decide that a preparation is skipped. Once she is below the surface with such a node (kind `prep_descent`, before the first node
+ * of the work down there, still open, and with no `prep` written on it) the head says the fact, once: 「準備の節 p3（…）は満たしていない（食料 17.6 点）が、y=16 まで
+ * 下りている」. Whether to write `prep: skipped`, to go back or to go on is the model's (`plan.update`); the node's state is not touched. Never a blocked node.
+ * An unmet node it cannot judge (a condition in free words that is not the standard one) is told only when the standard preparation is unmet.
  */
-export function descentClosed(tree: PlanTree, facts: DoneFacts, seen: readonly string[]): Array<{ id: string; note: string }> {
+export function prepUnmetFacts(tree: PlanTree, facts: DoneFacts): OnceFactDraft[] {
   if (!belowTheSurface(facts)) return [];
-  const where = (facts.dimension ?? 'overworld') === 'overworld' && facts.feet ? `地下 y=${Math.round(facts.feet.y)}` : String(facts.dimension);
-  // Only the preparation before the first work down there (the iron): the End's preparation (run 44's p11 `food>=80&…`) is not closed by the Nether.
-  const order = orderedPlan(tree.nodes), down = order.findIndex(node => UNDERGROUND_WORK.test(node.doneWhen ?? ''));
+  const order = orderedPlan(tree.nodes), down = order.findIndex(node => UNDERGROUND_KINDS.has(kindOf(node)));
   if (down < 0) return [];
-  const closing = order.slice(0, down)
-    .filter(node => node.state !== 'done' && node.state !== 'blocked' && !seen.includes(node.id) && isPrepMilestoneNode(node));
-  const lackOf = (node: PlanNode): string | null => {
-    const lack = doneStatusWords(node.doneWhen, facts)?.replace(/^未: /u, '') ?? null;
-    return lack && !/確かめられない/u.test(lack) ? lack : null;
-  };
-  // Skipped: one of them was unmet when she went down (what she had is said); a node above it with no condition of its own goes with it,
-  // a condition the frame cannot read is closed without the word.
-  const skipped = closing.some(node => lackOf(node) !== null);
-  return closing.map(node => {
-    const lack = lackOf(node);
-    const why = lack ? `${PREP_SKIPPED}（${prepNowWords(facts)}）: ${where} へ下りたので閉じた（足りなかった物: ${lack}）`
-      : skipped && !node.doneWhen?.trim() ? `${PREP_SKIPPED}（${prepNowWords(facts)}）: ${where} へ下りたので閉じた` : `下りる前の準備の節: ${where} へ下りたので閉じた`;
-    return { id: node.id, note: (node.note ? `${why} ${node.note}` : why).slice(0, PLAN_LIMITS.text) };
+  const seen = nodesSeenDone(tree, facts, true);
+  const where = (facts.dimension ?? 'overworld') === 'overworld' && facts.feet ? `y=${Math.round(facts.feet.y)}` : String(facts.dimension);
+  return order.slice(0, down).flatMap(node => {
+    if (node.state === 'done' || node.state === 'blocked' || seen.includes(node.id) || !isPrepMilestoneNode(node) || node.prep !== undefined) return [];
+    const parsed = parseDoneWhen(node.doneWhen);
+    const lack = parsed ? doneStatusWords(node.doneWhen, facts)?.replace(/^未: /u, '') ?? null : prepLack(facts);
+    if (!lack || (parsed && predicateHolds(parsed, facts))) return [];
+    const need = node.doneWhen ? `済む条件: ${node.doneWhen}` : '食料 40・作業台か板 4';
+    return [{ key: `prep_unmet:${node.id}`, text: `準備の節 ${node.id}（${need}）は満たしていない（${lack}）が、${where} まで下りている` }];
   });
 }
 
@@ -328,17 +335,14 @@ export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | nu
   const facts = doneFacts(observation);
   if (!facts || !tree.nodes.length) return null;
   const seen = nodesSeenDone(tree, facts, true).slice(0, 24);
-  // Run 44: the preparation before the descent, closed once she is down (`descentClosed`); what is under it closes with it.
-  const descended = descentClosed(tree, facts, seen);
-  const under = closedUnder(tree, [...seen, ...descended.map(item => item.id)]).filter(item => !descended.some(down => down.id === item.id));
+  // The preparation before the descent is not closed here (chapter 7): the head says the fact once (`prepUnmetFacts`) and the model decides.
+  const under = closedUnder(tree, seen);
   const held = nodesHeldOpen(tree, facts, true).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
-  if (!seen.length && !under.length && !held.length && !descended.length) return null;
+  if (!seen.length && !under.length && !held.length) return null;
   const ops = [...seen.map(id => ({ op: 'set' as const, id, state: 'done' as const })),
-    ...descended.map(item => ({ op: 'set' as const, id: item.id, state: 'done' as const, note: item.note })),
     ...under.map(item => ({ op: 'set' as const, id: item.id, state: 'done' as const, note: item.note }))].slice(0, PLAN_LIMITS.ops);
-  return { update: { ops }, ids: [...seen, ...descended.map(item => item.id), ...under.map(item => item.id)].slice(0, PLAN_LIMITS.ops),
-    ...(held.length ? { held } : {}), ...(under.length ? { closed: under.map(item => `${item.id}←${item.by}`).slice(0, 8) } : {}),
-    ...(descended.length ? { descended: descended.map(item => item.id) } : {}) };
+  return { update: { ops }, ids: [...seen, ...under.map(item => item.id)].slice(0, PLAN_LIMITS.ops),
+    ...(held.length ? { held } : {}), ...(under.length ? { closed: under.map(item => `${item.id}←${item.by}`).slice(0, 8) } : {}) };
 }
 
 /** Run 42: the chest nodes an opened chest closes (`chestNodesDone`), after the nodes the frame shows done (each id once, within the ops' bound). */

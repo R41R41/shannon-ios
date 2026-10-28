@@ -1,4 +1,5 @@
-import { orderedPlan, planFromSeeds, PLAN_LIMITS, type PlanSeed, type PlanTree } from '@shannon/mind';
+import { applyPlanUpdate, orderedPlan, planFromSeeds, PLAN_KINDS, PLAN_LIMITS, promiseItemFits, type PlanCondition, type PlanOp, type PlanSeed, type PlanTree }
+  from '@shannon/mind';
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
 import {
   DRAGON_KNOWLEDGE, DRAGON_KNOWLEDGE_R7, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE,
@@ -7,7 +8,9 @@ import { scanForPlan } from './minecraftLlmcProbe.js';
 import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { preparationShortage, recoveryLine } from './minecraftLlmcReadiness.js';
+import { parseCondition } from '../../contracts/minecraftActCondition.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
+import { kindOf } from './minecraftPlanFacts.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 
 /**
@@ -37,46 +40,57 @@ export function planGoal(goal: string): Goal {
 const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => ({ title, ...extra });
 /** r7: the check's forbid (the seed's, and the words the first plan is asked to write: `FIRST_PLAN_SYSTEM_R7`). */
 export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
-/** r5: each `doneWhen` that an observation can show is written as one (`minecraftPlanDone.ts`): the head marks the node done when it holds. */
+/**
+ * r5: each `doneWhen` that an observation can show is written as one (`minecraftPlanDone.ts`): the head marks the node done when it holds.
+ * The continue contract (chapter 7): every node of a seed has its `kind`, the word the code reads (the stage whose check holds, the gate back, the knowledge of a
+ * stage, what holds the now…); the code never reads a seed's title for it. The first plan's strong model writes the kinds of its own nodes the same way.
+ */
 const TO_NETHER: readonly PlanSeed[] = [
-  node('木と石の道具', { doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
-    node('原木を集める', { doneWhen: 'have:log>=8|have:planks>=24', note: '作業台・木のツルハシ・斧と石の道具の棒の分（ツルハシ 1 つで済みにしない）' }),
-    node('作業台と木のツルハシ', { doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
-    node('丸石で石のツルハシ・斧・剣', { doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
-  node('食料とベッド（最初の夜の前・鉄より前）', { doneWhen: 'food>=40&have:bed', children: [
-    node('村を回る（ベッド全部・干し草・畑・箱）', { note: '村が見えなければ飛ばす' }),
-    node('無ければ動物を4〜6体狩る'), node('かまどで肉を焼く・パンを作る', { doneWhen: 'food>=40' })] }),
-  node('鉄（24〜36）', { doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる'],
-    children: [node('鉄を掘る（y=16前後・洞窟）'),
-    node('焼いて鉄のツルハシ・バケツ・盾', { doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' }),
-    node('鉄の全身の防具', { doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings&have:iron_boots' })] }),
-  node('水入りバケツ', { doneWhen: 'have:water_bucket' }),
-  node('ダイヤ（y=-58）', { doneWhen: 'have:diamond_pickaxe', children: [node('ダイヤ3以上を掘る', { doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
-    node('ダイヤのツルハシ（剣も）', { doneWhen: 'have:diamond_pickaxe' })] }),
-  node('黒曜石10とゲート', { doneWhen: 'dim:the_nether', children: [node('溶岩源に水で黒曜石10', { doneWhen: 'have:obsidian>=10|dim:the_nether' }),
-    node('火打ち金（火打石は砂利）', { doneWhen: 'have:flint_and_steel|dim:the_nether' }),
-    node('食料100点以上に足す', { doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { doneWhen: 'dim:the_nether' })] }),
+  node('木と石の道具', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
+    node('原木を集める', { kind: 'wood', doneWhen: 'have:log>=8|have:planks>=24', note: '作業台・木のツルハシ・斧と石の道具の棒の分（ツルハシ 1 つで済みにしない）' }),
+    node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
+    node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
+  node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'food>=40&have:bed', children: [
+    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', note: '村が見えなければ飛ばす' }),
+    node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
+  node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる'],
+    children: [node('鉄を掘る（y=16前後・洞窟）', { kind: 'iron' }),
+    node('焼いて鉄のツルハシ・バケツ・盾', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' }),
+    node('鉄の全身の防具', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings&have:iron_boots' })] }),
+  node('水入りバケツ', { kind: 'water', doneWhen: 'have:water_bucket' }),
+  node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe', children: [
+    node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
+    node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
+  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', children: [
+    node('溶岩源に水で黒曜石10', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|dim:the_nether' }),
+    node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether' }),
+    node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether' })] }),
 ];
 /**
  * Run 26 (owner 2026-10-21): she went on to the fortress with no table, slabs, shield or food; each stage past the gate starts with a check.
  * r7 (runs 29–31): the check forbids the fight before it is done (`CHECK_FORBID`, as the first plan is asked to write it).
+ * The checks are of the kind `prep_descent` (the preparation before going on: the stage's food and the table); the eyes' are `pearl`, the End's `dragon`.
  */
 const BEYOND: readonly PlanSeed[] = [
-  node('出発の点検（ネザーの奥へ）', { doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12&have:gold_armor', note: '足りない物はゲートのそばで作る',
+  node('出発の点検（ネザーの奥へ）', { kind: 'prep_descent', doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12&have:gold_armor', note: '足りない物はゲートのそばで作る',
     forbid: [CHECK_FORBID],
-    children: [node('ネザーの幹で作業台（持ち歩く）', { doneWhen: 'have:crafting_table' }), node('深層岩の丸石でハーフブロック12', { doneWhen: 'have:slab>=12' }),
-      node('かまどで鉄を焼き盾', { doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { doneWhen: 'food>=100' }),
-      node('金の防具を1つ着る（ピグリンが襲わない）', { doneWhen: 'have:gold_armor' })] }),
-  node('ネザー要塞を探す', { note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'ネザーレンガ（N）が見える' }),
-  node('ブレイズロッド7以上', { doneWhen: 'have:blaze_rod>=7', children: [node('スポナーから3〜5マスに隙間つきの待ち場'),
-    node('accept blaze で14体ほど倒す'), node('棒を拾う（ブレイズがいない時）')] }),
-  node('エンダーパール12前後', { doneWhen: 'have:ender_pearl>=12|have:ender_eye>=12',
-    children: [node('歪んだ森のエンダーマン（天井2）'), node('金で交換（金塊→延べ棒・砦の遺跡）')] }),
-  node('エンダーアイ12〜14', { doneWhen: 'have:ender_eye>=12', children: [node('粉と真珠で作る'), node('オーバーワールドへ戻る')] }),
-  node('出発の点検（エンドへ）', { doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12',
-    children: [node('ベッドを作る（羊毛3と板3）', { doneWhen: 'have:bed>=4' }), node('弓と矢（糸・棒・火打石・羽根）', { doneWhen: 'have:bow&have:arrow>=30' })] }),
-  node('ストロングホールド', { children: [node('2地点で投げて三角測量'), node('交点で地下へ'), node('ポータルの部屋で枠に12個')] }),
-  node('エンドでドラゴン', { children: [node('クリスタルを弓で壊す'), node('止まり木で剣・ベッドの爆発'), node('奈落に落ちない')] }),
+    children: [node('ネザーの幹で作業台（持ち歩く）', { kind: 'other', doneWhen: 'have:crafting_table' }),
+      node('深層岩の丸石でハーフブロック12', { kind: 'other', doneWhen: 'have:slab>=12' }),
+      node('かまどで鉄を焼き盾', { kind: 'other', doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { kind: 'food', doneWhen: 'food>=100' }),
+      node('金の防具を1つ着る（ピグリンが襲わない）', { kind: 'other', doneWhen: 'have:gold_armor' })] }),
+  node('ネザー要塞を探す', { kind: 'fortress', note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'ネザーレンガ（N）が見える' }),
+  node('ブレイズロッド7以上', { kind: 'blaze', doneWhen: 'have:blaze_rod>=7', children: [node('スポナーから3〜5マスに隙間つきの待ち場', { kind: 'blaze' }),
+    node('accept blaze で14体ほど倒す', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
+  node('エンダーパール12前後', { kind: 'pearl', doneWhen: 'have:ender_pearl>=12|have:ender_eye>=12',
+    children: [node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金で交換（金塊→延べ棒・砦の遺跡）', { kind: 'pearl' })] }),
+  node('エンダーアイ12〜14', { kind: 'pearl', doneWhen: 'have:ender_eye>=12', children: [node('粉と真珠で作る', { kind: 'pearl' }), node('オーバーワールドへ戻る', { kind: 'other' })] }),
+  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12',
+    children: [node('ベッドを作る（羊毛3と板3）', { kind: 'bed', doneWhen: 'have:bed>=4' }),
+      node('弓と矢（糸・棒・火打石・羽根）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30' })] }),
+  node('ストロングホールド', { kind: 'stronghold', children: [node('2地点で投げて三角測量', { kind: 'stronghold' }), node('交点で地下へ', { kind: 'stronghold' }),
+    node('ポータルの部屋で枠に12個', { kind: 'stronghold' })] }),
+  node('エンドでドラゴン', { kind: 'dragon', children: [node('クリスタルを弓で壊す', { kind: 'dragon' }), node('止まり木で剣・ベッドの爆発', { kind: 'dragon' }),
+    node('奈落に落ちない', { kind: 'dragon' })] }),
 ];
 /**
  * mb-llmc v2 (run 36, the pass mark: the Nether within 30 minutes): before the gate only what the gate needs. The gate's food 100 is
@@ -84,32 +98,39 @@ const BEYOND: readonly PlanSeed[] = [
  * End needs are made from wool before it, `出発の点検（エンドへ）`; runs 36 and 37 spent 85–90 s fetching beds more with three in the pack). Run 37: the
  * iron before the Nether is about ten (pickaxe 3, bucket 3, shield 1, flint and steel 1), not the 24–36 with the armour (660 s of digging and smelting).
  */
-const DROPPED_BEFORE_GATE = (seed: PlanSeed): boolean => seed.doneWhen === 'food>=100';
+const DROPPED_BEFORE_GATE = (seed: PlanSeed): boolean => seed.kind === 'food' && seed.doneWhen === 'food>=100';
 /**
  * Owner 2026-10-24 (after run 38, whose only armour was iron boots from a chest and who went into the Nether with no golden piece): the iron helmet,
  * chestplate and leggings are made and worn before the diamonds, and the feet's piece is golden boots before the gate (`minecraftLlmcPrepRules.ts`).
  */
 const IRON_ARMOUR_WORN = 'have:iron_helmet&have:iron_chestplate&have:iron_leggings';
-const GOLDEN_BOOTS_NODE = node('金のブーツ（ネザーの前）', { doneWhen: 'have:golden_boots', children: [
-  node('金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）', { doneWhen: 'have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots' }),
-  node('焼いて金のブーツを作り履く', { doneWhen: 'have:golden_boots' })] });
+// The kind `portal`: the golden boots are the piece of the gate's check (`BEFORE_GATE`); the ore on the way down is `other` (it stands under the boots, whose stage it takes).
+const GOLDEN_BOOTS_NODE = node('金のブーツ（ネザーの前）', { kind: 'portal', doneWhen: 'have:golden_boots', children: [
+  node('金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）', { kind: 'other', doneWhen: 'have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots' }),
+  node('焼いて金のブーツを作り履く', { kind: 'portal', doneWhen: 'have:golden_boots' })] });
 export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
   return seeds.flatMap(seed => [{ ...seed, ...gateFirstFields(seed),
     ...seed.children ? { children: gateFirst(seed.children).filter(child => !DROPPED_BEFORE_GATE(child)).map(ironFirst) } : {} },
   // The golden boots come after the diamonds (the gold ore is met on the way down) and before the obsidian and the gate.
-  ...seed.title === 'ダイヤ（y=-58）' ? [GOLDEN_BOOTS_NODE] : []]);
+  ...seed.kind === 'diamond' && seed.children ? [GOLDEN_BOOTS_NODE] : []]);
 }
-/** The fields of the seed the gate's side changes: the village's beds (one is enough), the food, and the iron before the diamonds (about 30). */
+/**
+ * The fields of the seed the gate's side changes: the village's beds (one is enough), the food, and the iron before the diamonds (about 30). The seed is
+ * picked by its `kind` and its `doneWhen` (chapter 7), never by the sameness of its title: the village node, the preparation of the food and the bed, and the top iron node (the
+ * one with the iron ingots in its condition).
+ */
 function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
-  if (seed.title === '村を回る（ベッド全部・干し草・畑・箱）') return { title: '村を回る（ベッド1〜2・干し草・畑・箱）' };
-  if (seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
-  if (seed.title === '鉄（24〜36）') {
+  if (seed.kind === 'village') return { title: '村を回る（ベッド1〜2・干し草・畑・箱）' };
+  if (seed.kind === 'prep_descent' && seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
+  if (seed.kind === 'iron' && seed.doneWhen === IRON_TOP_DONE) {
     return { title: '鉄（約30・兜・胸・脚まで）', doneWhen: `have:iron_pickaxe&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };
   }
   return {};
 }
-const ironFirst = (seed: PlanSeed): PlanSeed => seed.title === '鉄を掘る（y=16前後・洞窟）' ? { ...seed, title: '鉄を約30個掘る（y=16前後・洞窟）' }
-  : seed.title === '鉄の全身の防具' ? { ...seed, title: '鉄の兜・胸当て・脚を作って着る', doneWhen: IRON_ARMOUR_WORN } : seed;
+/** The condition of the seed's top iron node (the kind `iron` with children): the iron before the gate is about thirty with the armour. */
+const IRON_TOP_DONE = 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield';
+const ironFirst = (seed: PlanSeed): PlanSeed => seed.kind === 'iron' && !seed.doneWhen ? { ...seed, title: '鉄を約30個掘る（y=16前後・洞窟）' }
+  : seed.kind === 'iron_armor' ? { ...seed, title: '鉄の兜・胸当て・脚を作って着る', doneWhen: IRON_ARMOUR_WORN } : seed;
 /**
  * The fixed first plan of a goal (null: none for this goal). r6 (run 29: a task begun in the Nether fortress held the whole seed; only
  * 「黒曜石10とゲート」 was seen done, and 「村を回る」, with no predicate, was "now" until the strong model's plan came): `dimension`, where the
@@ -122,7 +143,7 @@ export function seedPlan(goal: string, dimension: string | null = null): PlanTre
   if (kind === 'dragon' && where === 'the_nether') return planFromSeeds(BEYOND);
   if (kind === 'dragon' && where === 'the_end') return planFromSeeds(BEYOND.slice(-1));
   const first = gateFirst(TO_NETHER);
-  const seeds = kind === 'dragon' ? [...first, ...BEYOND] : [...first, node('ネザーに入る', { doneWhen: 'dim:the_nether' })];
+  const seeds = kind === 'dragon' ? [...first, ...BEYOND] : [...first, node('ネザーに入る', { kind: 'portal', doneWhen: 'dim:the_nether' })];
   return planFromSeeds(seeds);
 }
 
@@ -133,6 +154,14 @@ export const FIRST_PLAN_SCHEMA = Object.freeze({
     properties: { id: { type: 'string' }, parent: { type: 'string' }, title: { type: 'string' }, where: { type: 'string' },
       doneWhen: { type: 'string' } } } } },
 });
+
+/**
+ * The continue contract (chapter 7, 3): each node has a `kind` the head's code reads (the check of a stage, the knowledge of a stage, the gate back, the near creatures a plan needs…), and the
+ * plan may hold `promises` (what to keep, for what). The model writes them; the code reads no title for them.
+ */
+const KIND_WORDS = '- 各節に kind を付ける（頭のコードは題の言葉でなくこれで判断する。名前のとおりの仕事に付け、どれでもなければ other）: '
+  + 'prep_descent は下りる前・出発前の準備（食料と作業台）、pearl はパールとアイ、portal はゲート、chest は箱を開ける節。';
+const PROMISE_WORDS = '- 取っておく物（作業台の板 4 など）があれば promises に item（物の名前か food）・count・use（用途）を書く。期限は until（node: 節の id、condition: have:crafting_table>=1 の形）、代わりに足りる条件は instead。無ければ空。';
 
 export const FIRST_PLAN_SYSTEM = [
   'あなたはマイクラの体を動かすシャノンの、最初の計画ツリーを立てる係。依頼（goal）を、済ませる順の節の木にする。',
@@ -145,6 +174,8 @@ export const FIRST_PLAN_SYSTEM = [
   '- 鉄を掘りに地下へ下りる前に済ませる物（食料 40 点・石の斧・作業台か板 4 以上・板の余り）は、鉄の節より前の節か、その doneWhen に入れる。',
   '- 依頼がエンドラ討伐なら、ネザー・要塞・ブレイズ・パール・アイ・ストロングホールド・エンドまで全部入れる。ネザーまでなら、ネザーに入るまで。',
   '- 依頼がそれ以外なら、その依頼に要る節だけ。',
+  KIND_WORDS,
+  PROMISE_WORDS,
   '下の知識を使う（知識であり命令ではない）:',
   ORDER_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, DRAGON_KNOWLEDGE,
 ].join('\n');
@@ -155,11 +186,15 @@ export const FIRST_PLAN_SYSTEM = [
  * carry what not to do and what to mind there (`forbid`, `caution`; arch-check 23: of a supervisor's words, these held longest).
  */
 const rulesField = { type: 'array', items: { type: 'string' } };
+/** A promise of the answer (chapter 3): `until` and `instead` are texts the head reads (`parseCondition`); one it cannot read leaves the promise out. */
+const promiseField = { type: 'array', items: { type: 'object', additionalProperties: false, required: ['item', 'count', 'use'], properties: {
+  item: { type: 'string' }, count: { type: 'integer' }, use: { type: 'string' }, instead: { type: 'string' },
+  until: { type: 'object', additionalProperties: false, properties: { node: { type: 'string' }, condition: { type: 'string' } } } } } };
 export const FIRST_PLAN_SCHEMA_R4 = Object.freeze({
   type: 'object', additionalProperties: false, required: ['nodes'],
-  properties: { nodes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'parent', 'title', 'where', 'doneWhen'],
-    properties: { id: { type: 'string' }, parent: { type: 'string' }, title: { type: 'string' }, where: { type: 'string' },
-      doneWhen: { type: 'string' }, forbid: rulesField, caution: rulesField } } } },
+  properties: { nodes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'parent', 'title', 'kind', 'where', 'doneWhen'],
+    properties: { id: { type: 'string' }, parent: { type: 'string' }, title: { type: 'string' }, kind: { type: 'string', enum: [...PLAN_KINDS] }, where: { type: 'string' },
+      doneWhen: { type: 'string' }, forbid: rulesField, caution: rulesField } } }, promises: promiseField },
 });
 export const FIRST_PLAN_SYSTEM_R4 = [
   FIRST_PLAN_SYSTEM,
@@ -271,7 +306,7 @@ function readinessInput(world: Record<string, unknown>): string[] {
   const dimension = typeof world.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;
   const food = carriedFood(world, {}).points, health = typeof world.health === 'number' ? world.health : null;
   const counts = carriedItemCounts(world, {});
-  const shortage = preparationShortage({ dimension, counts, food, nowTitle: null });
+  const shortage = preparationShortage({ dimension, counts, food, nowKinds: null });
   const recovery = recoveryLine(typeof world.food === 'number' ? world.food : null, health, food, counts);
   return [foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }
@@ -281,12 +316,50 @@ function seedFields(item: Record<string, unknown>): Omit<PlanSeed, 'title' | 'ch
   const rules = (value: unknown) => [...new Set((Array.isArray(value) ? value : []).map(line => text(line, PLAN_LIMITS.rule)).filter(Boolean))]
     .slice(0, PLAN_LIMITS.rules);
   const forbid = rules(item.forbid), caution = rules(item.caution);
-  return { ...(text(item.where, 120) ? { where: text(item.where, 120) } : {}),
+  // The kind as the model wrote it (`planFromSeeds` takes one outside the list as `other` with the value kept in `kindRaw`); none: `other`.
+  return { ...(text(item.kind, 64) ? { kind: text(item.kind, 64) } : {}), ...(text(item.where, 120) ? { where: text(item.where, 120) } : {}),
     ...(text(item.doneWhen, 120) ? { doneWhen: text(item.doneWhen, 120) } : {}), ...(text(item.note, 120) ? { note: text(item.note, 120) } : {}),
     ...(forbid.length ? { forbid } : {}), ...(caution.length ? { caution } : {}) };
 }
-/** The answer as a tree (null when it does not fit: no node, a parent not before its child, past the bounds). */
-export function planFromAnswer(answer: unknown): PlanTree | null {
+/** The promises of an answer the tree takes in (the tree holds `PLAN_LIMITS.promises`; a first plan has few). */
+const ANSWER_PROMISES = 8;
+/**
+ * The op of one promise of the answer, or null when it cannot be read (chapter 3: the head reads what it can judge). `until.condition` and `instead` are the model's
+ * words (`have:crafting_table>=1`): they go through `parseCondition`, and a promise whose condition does not read is left out (not entered half). `until.node` must be a node of
+ * the tree.
+ */
+function promiseOp(row: unknown, tree: PlanTree): PlanOp | null {
+  const item = record(row), count = item?.count;
+  const name = text(item?.item, 64), use = text(item?.use, PLAN_LIMITS.promiseUse);
+  if (!item || !name || !promiseItemFits(name) || !use || typeof count !== 'number' || !Number.isSafeInteger(count)) return null;
+  const until = record(item.until), node = text(until?.node, 32);
+  if (node && !tree.nodes.some(other => other.id === node)) return null;
+  const read = (words: string, label: string): PlanCondition | null => {
+    const parsed = parseCondition(words, label);
+    return parsed.ok ? parsed.condition : null;
+  };
+  const untilWords = text(until?.condition, 200), insteadWords = text(item.instead, 200);
+  const condition = untilWords ? read(untilWords, 'until') : undefined, instead = insteadWords ? read(insteadWords, 'instead') : undefined;
+  if (condition === null || instead === null) return null;
+  return { op: 'promise', item: name, count, use, ...(node || condition ? { until: { ...(node ? { node } : {}), ...(condition ? { condition } : {}) } } : {}),
+    ...(instead ? { instead } : {}) };
+}
+/** The tree with the answer's promises in it (a first plan's revision stays 1: it is a plan made whole, not edited). */
+function withPromises(tree: PlanTree, rows: unknown, at: string | undefined): PlanTree {
+  if (!Array.isArray(rows)) return tree;
+  let held = tree;
+  for (const row of rows.slice(0, ANSWER_PROMISES)) {
+    const op = promiseOp(row, held);
+    const made = op ? applyPlanUpdate(held, { ops: [op] }, at ? { at } : {}) : null;
+    if (made?.changed) held = made.tree;
+  }
+  return held === tree ? tree : { ...held, revision: tree.revision };
+}
+/**
+ * The answer as a tree (null when it does not fit: no node, a parent not before its child, past the bounds). Each node's `kind` is the model's (outside the list: `other` with the
+ * value kept); `promises` are entered as `plan.update`'s `promise` op does it, at `at`.
+ */
+export function planFromAnswer(answer: unknown, at?: string): PlanTree | null {
   const rows = Array.isArray(record(answer)?.nodes) ? record(answer)!.nodes as unknown[] : [];
   const seeds = new Map<string, PlanSeed & { children: PlanSeed[] }>(), top: PlanSeed[] = [];
   for (const row of rows.slice(0, 64)) {
@@ -298,21 +371,22 @@ export function planFromAnswer(answer: unknown): PlanTree | null {
     seeds.set(id, seed);
     (parent ? seeds.get(parent)!.children : top).push(seed);
   }
-  return top.length ? planFromSeeds(top) : null;
+  const tree = top.length ? planFromSeeds(top) : null;
+  return tree ? withPromises(tree, record(answer)?.promises, at) : tree;
 }
 
 const key = (value: string | undefined) => (value ?? '').replace(/\s+/gu, '').toLowerCase();
 /**
- * `next` with the nodes `held` has done marked done in it too (same title, or same `doneWhen`). r6 (run 29: the strong model's 「動物を狩り
+ * `next` with the nodes `held` has done marked done in it too (same `kind` and same `doneWhen`, chapter 7: a title says nothing of it). r6 (run 29: the strong model's 「動物を狩り
  * 肉を焼く」, doneWhen food>=100, came in done with 15.6 points of food: the seed's node of the same doneWhen had been closed under a parent
  * seen done): a node whose doneWhen is a predicate is never carried by its words; the frame says whether it holds (`minecraftPlanDone.ts`,
- * at the same read). Only a node in free words is carried by its title or doneWhen.
+ * at the same read). Only a node whose doneWhen is in free words (and not empty) is carried, by a done node of the same kind with the same words.
  */
 export function carryDone(held: PlanTree, next: PlanTree): PlanTree {
   const done = held.nodes.filter(item => item.state === 'done');
-  const titles = new Set(done.map(item => key(item.title))), proofs = new Set(done.flatMap(item => item.doneWhen ? [key(item.doneWhen)] : []));
-  const carried = (item: PlanTree['nodes'][number]) => !parseDoneWhen(item.doneWhen)
-    && (titles.has(key(item.title)) || (item.doneWhen !== undefined && proofs.has(key(item.doneWhen))));
+  const proof = (item: PlanTree['nodes'][number]) => `${kindOf(item)}|${key(item.doneWhen)}`;
+  const proofs = new Set(done.flatMap(item => item.doneWhen ? [proof(item)] : []));
+  const carried = (item: PlanTree['nodes'][number]) => !!item.doneWhen && !parseDoneWhen(item.doneWhen) && proofs.has(proof(item));
   const nodes = next.nodes.map(item => carried(item) ? { ...item, state: 'done' as const } : item);
   // A parent whose children are all done is done (deepest first), as `applyPlanUpdate` keeps it.
   for (const item of orderedPlan(nodes).reverse()) {
@@ -397,7 +471,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
       abort.signal);
   }) : planner(FIRST_PLAN_SYSTEM, firstPlanInput(parts.goal, parts.world), abort.signal);
   ask.then(answer => {
-    const tree = abort.signal.aborted ? null : planFromAnswer(answer);
+    const tree = abort.signal.aborted ? null : planFromAnswer(answer, new Date().toISOString());
     if (tree) slot.answer = tree;
     say(`Shannon Minecraft first plan ${tree ? 'planned' : 'missing'} task=${parts.taskId} nodes=${tree?.nodes.length ?? 0} ms=${Date.now() - began}`);
   }, () => say(`Shannon Minecraft first plan failed task=${parts.taskId} ms=${Date.now() - began}`)).finally(() => clearTimeout(timer));

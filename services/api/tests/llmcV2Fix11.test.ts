@@ -11,6 +11,7 @@ import { DRAGON_MILESTONES, isDragonPlan, meterLine, milestoneWords, roadLine } 
 import { routeLines } from '../src/surfaces/minecraft/minecraftLlmcRoute.js';
 import { V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { digWords, lavaNext } from '../src/surfaces/minecraft/minecraftLlmcWalkRules.js';
+import { planFacts } from './helpers/planTreeV2.js';
 
 /**
  * SHANNON_MINECRAFT_LLMC_V2, the eleventh round (mb-llmc-cand 11): the three scenes of the bench the answers went wrong in (s14: where to go away from the
@@ -84,13 +85,13 @@ describe('s67: where the water and the lava meet', () => {
   const cells = { '0,0,1': 'w', '1,0,2': 'L', '0,0,2': '#', '1,0,1': '#' };
   const view = viewOf(mapOf(cells));
   it('names the cell beside both a water source and a lava source, with the two', () => {
-    const lines = obsidianWays({ planNow: '[p7.2] 黒曜石を作る' }, origin, view);
+    const lines = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p7.2' }) }, origin, view);
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('水の源と溶岩の源の両方に隣り合うマス（開けると水と溶岩が出会う）: (1,0,1) 目から 1.4m（石の類）・隣の水の源 (0,0,1)・溶岩の源 (1,0,2) / (0,0,2) 目から 2.0m（石の類）・隣の水の源 (0,0,1)・溶岩の源 (1,0,2)');
     expect(lines[1]).toContain('溶岩の源だけに隣り合う岩を開けると、溶岩が流れ込む');
   });
   it('lists no cell when no cell touches both, and the old line keeps no story of one run', () => {
-    const none = obsidianWays({ planNow: '[p7.2] 黒曜石を作る' }, origin, viewOf(mapOf({ '0,0,1': 'w', '3,0,3': 'L' })));
+    const none = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p7.2' }) }, origin, viewOf(mapOf({ '0,0,1': 'w', '3,0,3': 'L' })));
     expect(none).toHaveLength(1);
     expect(none[0]).not.toContain('実走');
   });
@@ -107,9 +108,9 @@ describe('s67: where the water and the lava meet', () => {
 
 describe('chapter 4 A: the road and the pace', () => {
   const tree = seedPlan('エンドラを倒して')!;
-  const notDragon = { ...tree, nodes: tree.nodes.filter(node => !/ドラゴン|エンドラ/u.test(node.title)) };
+  const notDragon = { ...tree, nodes: tree.nodes.filter(node => node.kind !== 'dragon') };
   const withStates = (done: string[], current: string) => ({ ...tree, current, nodes: tree.nodes.map(node => ({ ...node, state: done.includes(node.id) ? 'done' as const : node.state })) });
-  it('tells the dragon plan from another by a node that names the dragon', () => {
+  it('tells the dragon plan from another by a node of the kind dragon (not by a title)', () => {
     expect(isDragonPlan(tree)).toBe(true);
     expect(isDragonPlan(notDragon)).toBe(false);
     expect(isDragonPlan(null)).toBe(false);
@@ -188,7 +189,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   });
   it('does not name an air cell or an unloaded one as a cell where the water and the lava meet', () => {
     const view = viewOf(mapOf({ '0,0,1': 'w', '1,0,2': 'L', '0,0,2': '.', '1,0,1': '?' }));
-    expect(obsidianWays({ planNow: '[p7.2] 黒曜石を作る' }, origin, view)).toHaveLength(1);
+    expect(obsidianWays({ planFacts: planFacts('obsidian', { id: 'p7.2' }) }, origin, view)).toHaveLength(1);
   });
   it('says in the instructions: beds explode in the Nether and the End, shortage is not skipped for speed, the cell to open is away from her feet, and the urgent live\'s fields', () => {
     expect(V2_ALWAYS).toContain('ネザー・エンドのベッドは爆発する: そこでは寝ない');

@@ -8,6 +8,8 @@ import { expandAround, normalizeMap } from './minecraftLlmcLiveMap.js';
 import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
 import { repeatedFailures } from './minecraftLlmcRepeat.js';
 import { goalOf, routeLines } from './minecraftLlmcRoute.js';
+import { factsIn, hasKind, PLAN_FACTS_KEY, type PlanFacts } from './minecraftPlanFacts.js';
+import type { PlanKind } from '@shannon/mind';
 import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -19,7 +21,8 @@ import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
  *
  * What it does:
  * - leaves out `ownerClock`, `waiting`, `observations` (the generation hash and task id), `recall` (the record of an earlier task and of a
- *   death: the events say the death), `plan.now`/`plan.path` when `body.planNow` says the same node, the plan's repeated rules and a rule
+ *   death: the events say the death), `body.planFacts` (the head's own reading of the plan's kinds, `minecraftPlanFacts.ts`: the model is not shown it),
+ *   `plan.now`/`plan.path` when `body.planNow` says the same node, the plan's repeated rules and a rule
  *   about a cell the map now shows she can stand in, a `biome` the dimension has not, `（undefined マス）`;
  * - joins the enemies by id into one line each (`minecraftLlmcLiveEnemies.ts`), adds up the pack by kind, works out the landmarks' east/west and
  *   north/south from her feet now (the height is the body's as written), writes a stopped hand's surroundings with whole coordinates;
@@ -106,7 +109,7 @@ export function staleStand(rule: string, view: MapView): boolean {
   return at !== undefined && head !== undefined && floor !== undefined && isOpen(at) && isOpen(head) && !noFloor(floor);
 }
 
-function rewritePlan(plan: Rec, planNow: string, view: MapView | null, notes: RewriteNotes): Rec {
+function rewritePlan(plan: Rec, planNow: string, view: MapView | null, notes: RewriteNotes, facts: PlanFacts | null): Rec {
   const out: Rec = { ...plan };
   if (Array.isArray(out.rules)) {
     const seen = new Set<string>();
@@ -124,8 +127,9 @@ function rewritePlan(plan: Rec, planNow: string, view: MapView | null, notes: Re
       return true;
     });
   }
-  const id = /^(p\d+(?:\.\d+)*|r\d+)\s/u.exec(String(out.now ?? ''))?.[1];
-  if (id && planNow.startsWith(`[${id}]`)) {
+  // Chapter 7: the node's id, as the plan holds it, is compared (not an id's shape read from the shown line: a node the model added is `n3`, not `p3`).
+  const id = facts?.now?.id;
+  if (id && String(out.now ?? '').startsWith(`${id} `) && planNow.startsWith(`[${id}]`)) {
     delete out.now;
     delete out.path;
     notes.dropped.push('plan.now・plan.path（body.planNow と同じ）');
@@ -199,7 +203,7 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Wa
   const layers = readLayers(map, BODY_RULES);
   const out: Rec = {};
   if (layers) {
-    const view = mapView(layers), planNow = String(bodyIn.planNow ?? '');
+    const view = mapView(layers);
     out.around = aroundLines(view, layers.feet);
     const away = awayLines(view, layers.feet, watched);
     if (away.length) out.away = away;
@@ -214,9 +218,9 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Wa
       out.obsidian = ways;
       notes.added.push('obsidian');
     }
-    const goal = goalOf(planNow);
+    const now = factsIn(bodyIn)?.now ?? null, goal = goalOf(now);
     if (goal) {
-      out.route = routeLines(view, layers.feet, goal, /^\[([^\]]+)\]/u.exec(planNow)?.[1] ?? '今の節');
+      out.route = routeLines(view, layers.feet, goal, now?.id ?? '今の節');
       notes.added.push('route');
     }
   }
@@ -225,8 +229,10 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Wa
 }
 
 /** `body.pack`: the free slots of the pack, from the inventory lines as the body wrote them (one line a stack). */
+const END_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['end', 'stronghold', 'pearl', 'dragon']);
 function addPack(body: Rec, inventory: unknown, notes: RewriteNotes, bodyIn: Rec): void {
-  const forEnd = /エンド|ストロング|ドラゴン|アイ/u.test(String(bodyIn.planNow ?? '')) || rec(bodyIn.state)?.dimension === 'the_end';
+  const now = factsIn(bodyIn)?.now;
+  const forEnd = (!!now && hasKind([now.kind], END_KINDS)) || rec(bodyIn.state)?.dimension === 'the_end';
   const lines = packLines(strings(inventory), { forEnd });
   if (!lines.length) return;
   body.pack = lines;
@@ -238,7 +244,7 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes, needs: NearNeeds = NO_NEE
   if (enemies.merged) notes.merged.push(`敵の行 ${enemies.merged} 減らした`);
   const body: Rec = {}, repeated = repeatedFailures(bodyIn);
   for (const [key, value] of Object.entries(bodyIn)) {
-    if (key === 'unreachable') continue;
+    if (key === 'unreachable' || key === PLAN_FACTS_KEY) continue;
     if (key === 'urgent' || key === 'threats') {
       if (enemies[key]) body[key] = enemies[key];
       continue;
@@ -268,11 +274,12 @@ export function rewriteLlmcLive(live: Rec): { live: Rec; notes: RewriteNotes } {
   if (!bodyIn) return { live: out, notes };
   const layers = typeof bodyIn.map === 'string' ? readLayers(bodyIn.map, BODY_RULES) : null;
   const plan = rec(live.plan);
-  if (plan) out.plan = rewritePlan(plan, String(bodyIn.planNow ?? ''), layers ? mapView(layers) : null, notes);
+  if (plan) out.plan = rewritePlan(plan, String(bodyIn.planNow ?? ''), layers ? mapView(layers) : null, notes, factsIn(bodyIn));
   try {
-    out.body = rewriteBody(bodyIn, notes, nearNeeds(bodyIn, JSON.stringify(plan?.next ?? '')));
+    out.body = rewriteBody(bodyIn, notes, nearNeeds(bodyIn));
   } catch {
-    out.body = bodyIn;
+    const { [PLAN_FACTS_KEY]: _facts, ...shown } = bodyIn;
+    out.body = shown;
   }
   return { live: out, notes };
 }

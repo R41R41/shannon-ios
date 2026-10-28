@@ -46,15 +46,15 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     expect(meterLine(withState(['p2'], null), kit, 400 / 60)).not.toContain('まだの節目');
   });
   it('points the meter at the preparation while the plan\'s current node is one, though a later milestone is met', () => {
-    const food = tree.nodes.find(node => node.title.includes('肉を焼く'))!;
+    const food = tree.nodes.find(node => node.kind === 'prep_descent')!;
     expect(isPrepMilestoneNode(food)).toBe(true);
     const line = meterLine(withState([], food.id), have([['blue_bed', 1], ['iron_pickaxe', 1]]), 400 / 60)!;
     expect(line).toContain('次の節目 地下の準備（食料 40 点・作業台か板 4） 目安 300 秒（100 秒遅れ）');
   });
-  it('names the preparation by its title or by 40 to 99 food points, not by the 100 of the gate', () => {
-    expect(isPrepMilestoneNode({ id: 'p3', parentId: null, order: 0, title: '地下の準備', state: 'continue' })).toBe(true);
-    expect(isPrepMilestoneNode({ id: 'p3', parentId: null, order: 0, title: 'x', state: 'continue', doneWhen: 'have:crafting_table&food>=40' })).toBe(true);
-    expect(isPrepMilestoneNode({ id: 'p3', parentId: null, order: 0, title: '食料100点以上に足す', state: 'continue', doneWhen: 'food>=100' })).toBe(false);
+  it('names the preparation by its kind prep_descent, not by a title or by food points (chapter 7)', () => {
+    expect(isPrepMilestoneNode({ kind: 'prep_descent' })).toBe(true);
+    expect(isPrepMilestoneNode({ kind: 'food' })).toBe(false);
+    expect(isPrepMilestoneNode({})).toBe(false);
   });
   it('has its place between the bed and the iron pickaxe, in the one constant that the instructions read', () => {
     expect(DRAGON_MILESTONES.map(item => item.name).slice(0, 3)).toEqual(['ベッド', PREP_MILESTONE_NAME, '鉄のツルハシ']);

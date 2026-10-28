@@ -16,6 +16,7 @@ import { createFoodTrend, llmcTokens, minecraftLlmcLive, minecraftLlmcUrgentLive
 import { nearThreats } from '../src/surfaces/minecraft/minecraftLlmcThreat.js';
 import { createFcaPlanTools, planInput } from '../src/mind/action/fca/fcaPlanTools.js';
 import { bridgeAt, layersMap, surfaceMap } from './support/minecraftFootingMaps.js';
+import { v2tree } from './helpers/planTreeV2.js';
 
 /**
  * mb-llmc r8, the head (production run 32, 2026-10-22: a one-wide bridge without walls over the Nether's lava sea, a wither skeleton on the
@@ -206,9 +207,10 @@ describe('a hostile she must act on (run 32: 「wither_skeleton #696 は見え�
   });
 
   it('the plan\'s now by its title only', () => {
-    expect(planNowTitle('[p1.2] 作業台と木のツルハシ＠195,66,60（済み: 板）（道: 出発の点検）')).toBe('[p1.2] 作業台と木のツルハシ');
+    expect(planNowTitle({ id: 'p1.2', title: '作業台と木のツルハシ' })).toBe('[p1.2] 作業台と木のツルハシ');
+    expect(planNowTitle({ id: 'p4', title: '鉄（約30・兜・胸・脚まで）' })).toBe('[p4] 鉄（約30・兜・胸・脚まで）');
     expect(planNowTitle(null)).toBeNull();
-    expect(planNowTitle('p1.2 だけ')).toBeNull();
+    expect(planNowTitle({ id: 'p1', title: '  ' })).toBeNull();
   });
 });
 
@@ -256,7 +258,7 @@ function lifecycle(world: () => Record<string, unknown>, answer: (input: ProbeIn
   const body = withLlmcBody({ start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
     toolSignal: (_name, parent) => parent, async close() {} },
   { llmc: { plan: () => ({ revision: 3, current: 'p1.2', nodes: NODES }) as never, planView: () => VIEW,
-    planTree: () => ({ schema: 'shannon.plan-tree.v1', revision: 3, current: 'p1.2', nodes: NODES }) },
+    planTree: () => v2tree({ revision: 3, current: 'p1.2', nodes: NODES }) },
   taskId, createdAt: '2026-10-22T00:00:00Z', observe: () => frame(world()), arrival: () => ({ at: 1, kind: 'login' }), log: line => lines.push(line),
   r4: { probe: () => async input => { sent.push(input); return answer(input); }, planWhere: () => '225,55,76' } });
   return { body, sent, lines };

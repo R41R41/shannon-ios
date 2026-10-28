@@ -60,8 +60,11 @@ export function newApproach(observation: BodyObservation | null, baseline: Reado
   return found ? frameThreatLine(found) : null;
 }
 
-/** The plan's now by its title only: `[p1.2] 作業台と木のツルハシ` from `[p1.2] 作業台と木のツルハシ＠…（済み: …）（道: …）`. */
-export function planNowTitle(planNow: string | null | undefined): string | null {
-  const match = planNow ? /^(\[[^\]]+\]\s*[^＠（(]+)/u.exec(planNow) : null;
-  return match ? match[1]!.trim().slice(0, 60) : null;
+/**
+ * The plan's now by its title only: `[p1.2] 作業台と木のツルハシ`, from the node itself (chapter 7: its id and its title are read, not cut out of the shown
+ * line, so a title with a （ in it is whole).
+ */
+export function planNowTitle(node: { id: string; title: string } | null | undefined): string | null {
+  const title = node?.title.trim();
+  return node && title ? `[${node.id}] ${title}`.slice(0, 80) : null;
 }
