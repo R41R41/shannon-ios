@@ -36,13 +36,13 @@ const SHORT_LINES = [
   '',
   '## 手',
 'go X,Y,Z [X,Y,Z ...] [dig=stone,dirt] [place=cobblestone,dirt] [range=N] [seconds=N] [maxDrop=N] [maxDig=N] [maxPlace=N] [waterOk]',
-  '  行き先へ行く手。移動の基本はこれ: 道は体が引いて歩き切る（1 マスずつ座標で書かない）。座標 1 つが行き先、2〜8 個は候補（どれか 1 つに着けば済み。候補はあなたが並べる。体は物を探さない）。',
+  '  行き先へ行く手。横の移動と短い段差はこれ（高さの差が大きい上り下りは vertical）: 道は体が引いて歩き切る（1 マスずつ座標で書かない）。座標 1 つが行き先、2〜8 個は候補（どれか 1 つに着けば済み。候補はあなたが並べる。体は物を探さない）。',
   '  dig= は掘ってよい物（stone・dirt・sand・wood か id）、place= は置いてよい物（足場・橋・柱・穴埋め。持っている物だけ使う）。書かない物は掘らない・置かない。'
     + '溶岩・火・マグマは必ず避ける。水は waterOk を付けない限り避ける。maxDrop は一度に落ちてよい段（既定 3）。',
-  '  seconds（5〜120、既定 60）・maxDig（既定 40。掘って下りるなら 1 段に 2 前後: 50 段下りは maxDig 100 以上）・maxPlace（既定 24）が上限。着けない時だけ「go 止まった 理由」で返る: lava・no_tool（掘る道具が無い）・no_blocks（置く物が無い）・'
+  '  seconds（5〜120、既定 60）・maxDig（既定 40）・maxPlace（既定 24）が上限。着けない時だけ「go 止まった 理由」で返る: lava・no_tool（掘る道具が無い）・no_blocks（置く物が無い）・'
     + 'limit_time・limit_dig・limit_place・dead_end（許した手では道が無い）・'
-    + 'search_timeout（時間切れ: 道探しが持ち時間で終わり、道があるかは分からない。調べたマスと、いちばん近づけた所があと何 m かが付く。近い中継点を行き先に go を出し直すか、dig と walk の階段・縦穴で進む）・'
-    + 'stuck・low_floor（足場が無い: 立つ所が丸ごとのブロックでない。隣の丸ごとの床へずれる）・no_floor（行き先の足元が作物・草花、または place= 無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す。着いた行に道の長さ・掘った数・置いた数が出る。',
+    + 'search_timeout（時間切れ: 道探しが持ち時間で終わり、道があるかは分からない。調べたマスと、いちばん近づけた所があと何 m かが付く。近い中継点を行き先に go を出し直す。高さの差が大きい道は vertical で進む）・'
+    + 'stuck・low_floor（足場が無い: 立つ所が丸ごとのブロックでない。隣の丸ごとの床へずれる）・no_floor（行き先の足元が作物・草花、または place= 無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す。',
   '範囲を挙げて体に任せる手（go と同じ形: 何を・どこで・どこまでをあなたが決め、体は細かい動きだけ。挙げた範囲の外は探さない。上限 seconds が必ずあり、止まる時は「<手> 止まった 理由」）:',
   'obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N]',
   '  黒曜石づくり。X,Y,Z は溶岩の源のマス（地図の L、8 つまで。体は探さない）。持ち物の水入りバケツで水を注ぎ、固まったらダイヤのツルハシで掘って拾い、水を汲み戻す。count（既定 1）まで。'
@@ -52,7 +52,7 @@ const SHORT_LINES = [
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
   'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [seconds=N]',
   '  鉱脈を掘る。ブロック名は id そのまま（iron_ore）。y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine に書く名前。X,Y,Z はその鉱脈のマス（4 つまで。種類が分かるマスだけ: 地図の o は鉄ではない）。同じ種類のつながったマスだけを近い順にたどって掘り、拾い、道具を持ち替える（ほかの鉱石は探さない）。count（既定 8）まで。道が岩に塞がれている時だけ dig= の物を掘って届く。'
-    + 'トンネル・階段は repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。',
+    + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。',
   'make 物 [個数]',
   '  作る（途中の物の板・棒なども持ち物の材料から作る。3×3 で作業台が近くに無ければ持っているものを置く）。材料が足りなければ何も作らず足りない物の一覧を返す。材料は集めに行かない。理由: missing・no_table・no_recipe・full。',
   'portal X,Y,Z x|z [block=obsidian] [place=名,名] [maxPlace=N] [seconds=N] [noEnter]',
@@ -68,7 +68,7 @@ const SHORT_LINES = [
     + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（既定 ${VERTICAL_DEFAULTS.seconds}）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}。見えた鉱石は結果で知らされる。`,
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
   '  近くの数歩を、掘らず置かずに歩く手（段差1と泳ぎだけ。点を空白で続けると path。32点まで）。range は的から何 m で着いたことにするか。',
-  '  地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる（64m ごとに区切って歩く）。遠くへ・壁や穴や崖のある道・上り下りは go（道を体が引く）。',
+  '  地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる（64m ごとに区切って歩く）。遠くへ・壁や穴や崖のある道は go（道を体が引く）、高さの差が大きい上り下りは vertical。',
   '  ポータル（p・e）へは、そのマスを最後の点にして range=0 で入る。',
   'dig X,Y,Z ... [tool=名] [exposeOk] [takeOk] [collect=false]',
   '  順に掘る（1 手に16マスまで書ける）。素手は tool=hand。around が「掘る (x,y,z)」と名指ししたマスは全部 dig してから walk する（頭のマスを掘り残すと着かない）。',
@@ -116,7 +116,7 @@ const SHORT_LINES = [
     + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射と hpBelow は残る。早めに引くなら stopIf の hpBelow を高めに。',
   '- onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、'
     + 'ほかは stop。急ぐ手（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',
-  '- 同じ種類の手が続く場面（採掘・作る）は 1 つの act にまとめる（dig の at は16マスまで1手に）。トンネル・階段・橋・柱で行く道は go 1 手に任せる。'
+  '- 同じ種類の手が続く場面（採掘・作る）は 1 つの act にまとめる（dig の at は16マスまで1手に）。トンネル・橋の道は go 1 手、階段・柱・縦穴は vertical 1 手。'
     + '止まった時は反射・stopIf・onFail が act を止めるが、止まっても安全な所へ動いたことにはならない: 敵で止まった次の判断では、同じ所の作業に戻る前に、敵との距離と回復を見る。',
   '',
   '## 列（やることの列）と「〜まで続ける」',
@@ -125,7 +125,7 @@ const SHORT_LINES = [
   '- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。ただし欄 dependsOn が [] か、止まった項目を含まない配列の項目は動かす。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。',
   '- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる（furnace:x,y,z は始める時に一度見るだけで、焼き上がりまで待たない）。 欄 done（条件の文字列）: 満たした所で、手の途中でも済みにする。',
   '- 欄 repeat（2〜8）: 手の組を最大その回数までまわす。rel の手か、座標の無い手（attack・pickup・eat・craft・wait）だけ（絶対座標の手は断られる）。',
-  '  足の位置から数えるので、トンネル・階段・柱は 1 組を rel で書いて repeat にする。1 回まわしても何も変わらなければ体が止める。 done と一緒に使うと「〜まで続ける」になる。',
+  '  足の位置から数えるので、トンネルは 1 組を rel で書いて repeat にする。1 回まわしても何も変わらなければ体が止める。 done と一緒に使うと「〜まで続ける」になる。',
   '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目に頼る項目と、dependsOn を書いていない後ろの項目も捨てる）。新しい act は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。',
   '- 欄 dependsOn（["q12"]）: この項目が頼る今の列の項目（前の段の項目は書けない。[] は何にも頼らない）。欄 uses（[3]）: 使う約束の番号。',
   '- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・'

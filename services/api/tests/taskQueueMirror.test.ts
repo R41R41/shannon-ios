@@ -292,7 +292,7 @@ describe('replace', () => {
 describe('the lines of the live state', () => {
   it('say the running item with its left time, the waiting one with its pre, how many may be added, and an empty queue as stopped', async () => {
     const f = setup();
-    expect(f.queue.lines(null)).toEqual(['空（体は止まっている）']);
+    expect(f.queue.lines(null)).toEqual(['列に項目なし']);
     await f.queue.add(f.spec(wait1, { done: [[{ k: 'have', item: 'log', n: 10 }]] }));
     await f.queue.add({ ...f.spec(dig(1), {}, 'p7'), pre: [[{ k: 'near', block: 'furnace', r: 5 }]] });
     f.take();

@@ -44,7 +44,7 @@ function withForbid(live: Record<string, any>): Record<string, any> {
 }
 /**
  * 10/26 mc-task-queue: 列の版（queueLines がある木）の live は、planNow・road・meter の次に `queue`（列の行）を持つ。台は 1 判断ずつなので、
- * 列は「空（体は止まっている）」の 1 行だけを足す（実行中の項目を作り出さない: 記録の判断は前の act の結果が出た後で、その時の列は空だった）。
+ * 列は「列に項目なし」の 1 行だけを足す（実行中の項目を作り出さない: 記録の判断は前の act の結果が出た後で、その時の列は空だった）。
  * 基準の木（queueLines が無い）は何もしない。
  */
 const dynamicQueue = (path: string): Promise<Record<string, any> | null> => import(path).catch(() => null);

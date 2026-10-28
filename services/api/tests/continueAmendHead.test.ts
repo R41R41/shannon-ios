@@ -41,6 +41,14 @@ describe('vertical: the 14 stop codes are told in words, and `displaced` and `no
     expect(foothold).toContain('displaced とは別');
     expect(displaced).not.toEqual(foothold);
   });
+  it('says of lava and water only what the body saw and which liquid values stop on it: seal_water does not stop on water (it seals it), and is not said to have stopped there (fixtures vertical/lava-seal-and-stop.json)', () => {
+    const water = VERTICAL_STOP_WORDS.water!, lava = VERTICAL_STOP_WORDS.lava!;
+    expect(water).toContain('水で止まるのは liquid=stop');
+    expect(water).toContain('seal と seal_water は水を塞いで進む');
+    expect(water).not.toMatch(/seal_water なので止まった|seal_water.*止まった/u);
+    expect(lava).toContain('溶岩で止まるのは liquid=stop と seal_water');
+    expect(lava).not.toContain('liquid=stop なので止まった');
+  });
   it('is the same facts-only kind as the rest: no word of any of the 14 tells the model what to do', () => {
     for (const [code, words] of Object.entries(VERTICAL_STOP_WORDS)) expect(words, code).not.toMatch(/すること|しなさい|してください|べき|出し直|試す|増や(して|す)|変え(て|る)/u);
   });

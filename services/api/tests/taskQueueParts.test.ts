@@ -37,7 +37,7 @@ describe('the queue in the live state', () => {
     expect(minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: 1, events: [], planNowTitle: null, mode: 'a' })).not.toHaveProperty('queue');
   });
   it('words: an empty queue says the body stands still; a full one says it is full', () => {
-    expect(queueLines([], null, { progress: null, leftMs: 0 })).toEqual(['空（体は止まっている）']);
+    expect(queueLines([], null, { progress: null, leftMs: 0 })).toEqual(['列に項目なし']);
     const item = (name: string) => ({ item: name, node: null, why: name, input: { hands: [] } as ActInput, pre: undefined, done: undefined, startedAt: 0, because: null, reason: () => null });
     expect(queueLines([item('q1'), item('q2'), item('q3')], null, { progress: null, leftMs: 3000 }).at(-1)).toBe('列はいっぱい（3/3）');
   });

@@ -72,8 +72,8 @@ export const VERTICAL_STOP_WORDS: Readonly<Record<string, string>> = {
   limit_dig: '掘る数の上限 maxDig に着いた（砂利・砂の掘り直しも 1 回ずつ数える）',
   limit_place: '置く数の上限 maxPlace に着いた（置きを送った数で数える）',
   limit_time: '秒数の上限 seconds に着いた',
-  lava: '次の段のマスかその隣に溶岩がある（liquid=stop なので止まった）',
-  water: '次の段のマスかその隣に水がある（liquid=stop か seal_water なので止まった）',
+  lava: '次の段のマスかその隣に溶岩があった（溶岩で止まるのは liquid=stop と seal_water。seal は塞いで進む）',
+  water: '次の段のマスかその隣に水があった（水で止まるのは liquid=stop。seal と seal_water は水を塞いで進む）',
   seal_failed: '液体を塞ごうとして塞げなかった（置く物が無い・届かない・予算）',
 };
 /** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the opponent did is said by the code. */
