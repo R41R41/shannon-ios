@@ -128,15 +128,24 @@ function prepEnd(tree: PlanTree, facts: DoneFacts, reached: readonly boolean[]):
   return { index, over, fact: skippedNode ? `・${PREP_SKIPPED}${said ? `（${said.slice(0, 60)}）` : ''}` : `・準備は今は満たせない（地下。今 ${item!.now!(facts)}）` };
 }
 /**
+ * Chapter 8 (the meter's clock): the minutes the task has run, without the time it was held (`heldMs`, the operator's hold to its resume: the same count the time limit leaves out,
+ * `operatorAuditStore.heldMs`). The wall clock since the task began also counts the hold (run 45: 「今 5,693 秒」 at +944 s of running).
+ */
+export function activeMinutes(elapsedMinutes: number | null, heldMs = 0): number | null {
+  return elapsedMinutes === null ? null : Math.max(0, elapsedMinutes - Math.max(0, heldMs) / 60_000);
+}
+/**
  * `body.meter`: the seconds since the task began, and the next milestone (the first after the last one reached) with its target and how far ahead or
  * behind. A milestone is reached when the frame shows it or when the plan holds a node done by that very condition, so it stays reached when the
  * obsidian is used up or she is back in the overworld: the plan carries it, nothing else is kept. After the last one only the seconds are said.
  * Null when the plan is not the dragon's or the time is not known.
  */
-export function meterLine(tree: PlanTree | null | undefined, observation: BodyObservation | null, elapsedMinutes: number | null): string | null {
+export function meterLine(tree: PlanTree | null | undefined, observation: BodyObservation | null, elapsedMinutes: number | null, heldMs = 0): string | null {
   const facts = doneFacts(observation);
   if (!tree || !isDragonPlan(tree) || elapsedMinutes === null || !facts) return null;
-  const now = Math.round(elapsedMinutes * 60);
+  // The seconds are the task's running seconds (`activeMinutes`: the wall clock less the time it was held); a task that was held says how many seconds the clock leaves out, so that the state's own minutes are not read against it.
+  const now = Math.round((activeMinutes(elapsedMinutes, heldMs) ?? 0) * 60);
+  const clock = `今 ${grouped(now)} 秒${heldMs >= 1_000 ? `（保留の ${grouped(Math.round(heldMs / 1_000))} 秒を除く）` : ''}`;
   let last = -1;
   const reached = DRAGON_MILESTONES.map((item, index) => {
     const predicate = parseDoneWhen(item.doneWhen);
@@ -162,8 +171,8 @@ export function meterLine(tree: PlanTree | null | undefined, observation: BodyOb
   const passed = DRAGON_MILESTONES[skippedIndex];
   const detail = (item: Milestone): string => [item.now ? `今 ${item.now(facts)}` : '', item.cost ?? ''].filter(Boolean).join('。');
   const skipped = passed ? `・まだの節目: ${passed.name}（目安 ${grouped(passed.seconds)} 秒${detail(passed) ? `。${detail(passed)}` : ''}）` : '';
-  if (!next) return `目安: 今 ${grouped(now)} 秒（節目は全部済んだ）${skipped}${prepFact}`;
+  if (!next) return `目安: ${clock}（節目は全部済んだ）${skipped}${prepFact}`;
   const gap = next.seconds - now;
   const state = gap >= 0 ? `あと ${grouped(gap)} 秒` : `${grouped(-gap)} 秒遅れ`;
-  return `目安: 今 ${grouped(now)} 秒・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${detail(next) ? `・${detail(next)}` : ''}${skipped}${prepFact}`;
+  return `目安: ${clock}・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${detail(next) ? `・${detail(next)}` : ''}${skipped}${prepFact}`;
 }

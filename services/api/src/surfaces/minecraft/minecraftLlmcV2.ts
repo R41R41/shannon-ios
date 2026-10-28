@@ -5,6 +5,7 @@ import type { FcaToolDefinition } from '../../mind/action/fca/fcaPorts.js';
 import { llmcPrepare } from './minecraftLlmc.js';
 import { heldBeforeSend } from './minecraftLlmcPartial.js';
 import { checkedStopIf } from './minecraftLlmcStopIf.js';
+import { deliverOnceFacts } from './minecraftLlmcFacts.js';
 import { rewriteLlmcLive, type RewriteNotes } from './minecraftLlmcLiveRewrite.js';
 import { stageKnowledge, V2_ALWAYS } from './minecraftLlmcV2Knowledge.js';
 
@@ -92,9 +93,9 @@ export const candidateInstructions = (): string => V2_ALWAYS;
 /** The hooks the model's options take (`createAnthropicFcaModel`, `minecraftV2`). */
 export function minecraftV2Hooks(): { knowledge: string; rewriteLive(live: Record<string, unknown>): Record<string, unknown>;
   stageKnowledge(live: Record<string, unknown>): string | undefined; callInput(name: string, input: unknown): unknown;
-  progress(progress: unknown): unknown } {
+  progress(progress: unknown): unknown; requestSent(taskId: string, request: unknown): void } {
   return { knowledge: V2_ALWAYS, rewriteLive: live => candidateLive(live).live, stageKnowledge: candidateStage, callInput: candidateInput,
-    progress: progressWithPlain };
+    progress: progressWithPlain, requestSent: (taskId, request) => { deliverOnceFacts(taskId, request); } };
 }
 
 /** What the head does to a model's `mc.act` before the body sees it, for the replay: the same order as `fcaMinecraftTools.ts`. */

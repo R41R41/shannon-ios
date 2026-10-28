@@ -3,7 +3,7 @@ import type { FcaBodyInvestigation, FcaBodyLifecycle } from '../../mind/action/f
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import type { ProbeInput } from '../../contracts/minecraftProbeContract.js';
 import {
-  bodyAgeField, createFoodTrend, llmcPlanTokens, llmcTokens, minecraftLlmcLive, minecraftLlmcUrgentLive, staleBodyLine, type FoodTrend,
+  bodyAgeField, carriedFood, createFoodTrend, llmcPlanTokens, llmcTokens, minecraftLlmcLive, minecraftLlmcUrgentLive, staleBodyLine, type FoodTrend,
 } from './minecraftLlmcLive.js';
 import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
@@ -11,6 +11,7 @@ import { approachingIds, newApproach, planNowTitle, urgentRange, URGENT_NOTE } f
 import { doneFacts, prepUnmetFacts } from './minecraftPlanDone.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
+import { createHitWatch, inputFacts, onceFor, queueNowLines, stopFactsOf, wantsFood, type FactsContext, type HitWatch } from './minecraftLlmcFacts.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
 import {
   createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise, type SurpriseFrame,
@@ -58,13 +59,16 @@ interface TaskEvents {
   health: number | null;
   /** r7: the last act was stopped by its own stopIf (where it stopped is looked at from the shooters near). */
   stopIf: boolean;
+  /** Chapter 8: when the last decision read its context (ms), for the promises' 「直前に」; the stops of the results since (`stopFactsOf`), until the next decision shows them. */
+  lastAt: number | null;
+  stops: string[];
 }
 const tasks = new Map<string, TaskEvents>();
 function eventsOf(taskId: string): TaskEvents {
   let state = tasks.get(taskId);
   if (!state) {
     state = { lines: [], seq: 0, read: 0, arrival: null, failed: false, trend: createFoodTrend(), pending: [], cut: null, health: null,
-      stopIf: false };
+      stopIf: false, lastAt: null, stops: [] };
     tasks.set(taskId, state);
     if (tasks.size > 32) tasks.delete(tasks.keys().next().value as string);
   }
@@ -137,9 +141,9 @@ function cutOf(text: string, bodyReflex: boolean): string | null {
  * What happened to the body since the task's last decision that no tool result says (a reflex that took the body, a death, a login, a new
  * dimension): told in the live state (`events`) once, and the reason a recall runs (design 2.3: recall only on an event).
  */
-export function createLlmcEvents(taskId: string) {
+export function createLlmcEvents(taskId: string, now: () => number = Date.now) {
   const state = eventsOf(taskId);
-  let shown: string[] = [], results: string[] = [], healthLost = 0;
+  let shown: string[] = [], results: string[] = [], healthLost = 0, stops: string[] = [], since: string | undefined;
   const note = (line: string) => {
     state.seq += 1;
     state.lines.push({ seq: state.seq, line: line.slice(0, 200) });
@@ -179,12 +183,23 @@ export function createLlmcEvents(taskId: string) {
       shown = state.lines.filter(item => item.seq > state.read).map(item => item.line);
       state.read = state.seq;
       results = state.pending.splice(0);
+      stops = state.stops.splice(0);
+      since = state.lastAt === null ? undefined : new Date(state.lastAt).toISOString();
+      state.lastAt = now();
       healthLost = health !== null && state.health !== null ? Math.max(0, state.health - health) : 0;
       if (health !== null) state.health = health;
       return shown;
     },
     shown: () => shown,
     results: () => results,
+    /** Chapter 8: where a go or a vertical of the results shown this once stopped (`stopFactsOf`); and the time of the decision before this one (ISO), or undefined. */
+    stops: () => stops,
+    since: () => since,
+    /** An act's result (the receipt's JSON) that came after the last decision: its stops are told with the next one. */
+    noteStops(resultJson: string | undefined) {
+      for (const line of stopFactsOf(resultJson)) state.stops.push(line);
+      if (state.stops.length > 4) state.stops.splice(0, state.stops.length - 4);
+    },
     healthLost: () => healthLost,
     /** Why the last result makes the next step urgent, or null. */
     cut: () => state.cut,
@@ -197,23 +212,41 @@ export type LlmcEvents = ReturnType<typeof createLlmcEvents>;
 export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observation: BodyObservation | null,
   elapsedMinutes: number | null, urgent: readonly string[] = [],
   seen: { investigation?: readonly string[]; scan?: readonly string[]; unreachable?: readonly string[]; footing?: string | null;
-    bodyAge?: string | null; queue?: readonly string[] } = {}, taskId?: string)
+    bodyAge?: string | null; queue?: readonly string[];
+    /** Chapter 8: what the facts need beyond the frame (`JudgeParts`); the held time of the task (ms), which the meter's clock leaves out. */
+    judge?: JudgeParts; heldMs?: number } = {}, taskId?: string)
   : Record<string, unknown> {
   const plan = llmc.planView();
   const world = observation?.state.world as Record<string, unknown> | undefined;
   const jobs = world && (world.jobs ?? world.activeFurnaces) as BodyValue | undefined;
   // Chapter 7: `planFacts` is the machine's reading of the plan's kinds (outside the live state's bound: the rewrite takes it out, the model is not shown it); `onceFacts` the
   // facts to say once (`minecraftLlmcOnceFacts.ts`).
-  // TODO(once-facts): `onceFacts` is to be put in the input's events by the live state's owner, and `markDelivered` called when the last request's bytes hold them.
+  // Chapter 8: the facts said once go first in the input's `events` (`onceFor`: those this version takes); `deliverOnceFacts` marks them delivered when the request's bytes hold them.
   const { planFacts, onceFacts: _onceFacts, ...readiness } = readinessParts(llmc, plan, observation, taskId);
+  const facts = observation && observation.connected !== false
+    ? inputFacts(observation, factsContext(llmc, observation, readiness, planFacts, seen.judge), false) : null;
+  const once = taskId ? onceFor(taskId, 'normal').map(fact => fact.text) : [];
   const live = minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(seen.investigation?.length ? { investigation: seen.investigation } : {}), ...(seen.scan?.length ? { scan: seen.scan } : {}),
     ...(seen.unreachable?.length ? { unreachable: seen.unreachable } : {}), ...(seen.footing ? { footing: seen.footing } : {}),
     ...(seen.queue?.length ? { queue: seen.queue } : {}),
     ...bodyAgeField(seen.bodyAge),
-    ...readiness, ...roadParts(llmc, observation, elapsedMinutes) }, llmcPlanTokens(plan));
+    ...(facts?.lines.length ? { facts } : {}), ...(once.length ? { once } : {}),
+    ...readiness, ...roadParts(llmc, observation, elapsedMinutes, seen.heldMs) }, llmcPlanTokens(plan));
   return withPlanFacts(live, planFacts);
+}
+
+/** What the chapter 8 facts need beyond the frame: the blows line (`HitWatch.line`), the time of the previous decision (ISO), the queue's inputs, the last results' stops. */
+export interface JudgeParts { hits?: string | null; since?: string | undefined; ahead?: readonly ActInput[]; stops?: readonly string[] }
+/** The facts' context from the plan's promises (the tree), and whether food is what she is short of (the near words' own reading). */
+function factsContext(llmc: LlmcBodyParts, observation: BodyObservation | null, readiness: { shortage?: string; recovery?: string[] }, planFacts: PlanFacts | undefined,
+  judge: JudgeParts = {}): FactsContext {
+  const tree = planTreeOf(llmc), world = (observation?.state.world ?? {}) as Record<string, unknown>;
+  const food = carriedFood(world, observation?.facts ?? {}), hunger = typeof world.food === 'number' && Number.isFinite(world.food) ? world.food : null;
+  return { ...(judge.hits ? { hits: judge.hits } : {}), ...(tree?.promises.length ? { promises: tree.promises } : {}), ...(judge.since ? { since: judge.since } : {}),
+    ...(judge.ahead?.length ? { ahead: judge.ahead } : {}), ...(judge.stops?.length ? { stops: judge.stops } : {}),
+    wantsFood: wantsFood({ fullness: hunger, points: food.points, shortage: readiness.shortage ?? null, recovery: readiness.recovery ?? null, planFacts: planFacts ?? null }) };
 }
 
 /** The live body with the plan's facts as its internal field (none: as it is; a body that is not connected has no plan to read). */
@@ -335,6 +368,11 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
    * the decision reads `observe`.
    */
   seen?(): { observation: BodyObservation; ageMs: number; current: boolean } | null;
+  /**
+   * Chapter 8 (the meter's clock): the time the task has been held in all, in ms (an operator's hold to its resume: `operatorAuditStore.heldMs`). The meter counts the seconds
+   * without it, as the time limit does. Absent: none held.
+   */
+  heldMs?(): number;
   /** r4: surprises probed before the decision, and the body's scan in the live state. */
   r4: LlmcProbeParts;
   /**
@@ -344,7 +382,14 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   headBoot?(): string;
   onRead?(madeIn: MadeIn | null): void }): FcaBodyLifecycle {
   const r4 = parts.r4, watch = createSurpriseWatch(parts.taskId);
-  const events = createLlmcEvents(parts.taskId), now = parts.now ?? Date.now, began = Date.parse(parts.createdAt);
+  const now = parts.now ?? Date.now, events = createLlmcEvents(parts.taskId, now), began = Date.parse(parts.createdAt);
+  // Chapter 8: every frame this step reads goes through the blows' watch (`createHitWatch`: the body's frames carry her health and no log of blows).
+  const hitWatch: HitWatch = createHitWatch(now);
+  const observeNoted = (): BodyObservation | null => { const frame = parts.observe(); hitWatch.note(frame); return frame; };
+  const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops() });
+  const queueNow = (frame: BodyObservation | null): string[] => parts.queue ? queueNowLines(parts.queue.lines(frame), parts.queue.ahead()) : [];
+  // The stops of the acts that ended (a go's or a vertical's distance left) are told with the next decision, from the receipt's result and not from its words.
+  parts.queue?.onRan((_item, _result, receipt) => events.noteStops(receipt?.result));
   let observation: BodyObservation | null = null, bodyAge: string | null = null, reasons: string[] = [];
   /** Continue contract 5: the frame the last context read, as the commands name it (null: it had no life to name). */
   let read: MadeIn | null = null;
@@ -377,8 +422,11 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     const readiness = readinessParts(parts.llmc, parts.llmc.planView() as object | null, observation);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing, bodyAge,
-      planNowTitle: planNowTitle(currentNodeOf(parts.llmc)), queue: parts.queue?.lines(observation) ?? [], mode: URGENT_NOTE,
-      recovery: readiness.recovery });
+      planNowTitle: planNowTitle(currentNodeOf(parts.llmc)), queue: queueNow(observation), mode: URGENT_NOTE,
+      recovery: readiness.recovery,
+      ...(observation && observation.connected !== false
+        ? { facts: inputFacts(observation, factsContext(parts.llmc, observation, readiness, readiness.planFacts, judge()), true).lines } : {}),
+      once: onceFor(parts.taskId, 'urgent').map(fact => fact.text) });
     urgentTokens = llmcTokens(JSON.stringify(live));
     // The knowledge of a stage is picked from the plan's kinds in the raw live state, urgent or not (the rewrite takes `planFacts` out).
     return withPlanFacts(live, readiness.planFacts);
@@ -433,7 +481,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       const value = body.context();
       // The body as a decision reads it: the current frame, or an older one (said how old in the live); none only past `LLMC_STALE_FRAME_MS`.
       const sight = parts.seen?.() ?? null;
-      observation = parts.seen ? sight?.observation ?? null : parts.observe();
+      observation = parts.seen ? sight?.observation ?? null : observeNoted();
+      if (parts.seen && observation) hitWatch.note(observation);
       bodyAge = sight && !sight.current ? staleBodyLine(sight.ageMs) : null;
       read = parts.headBoot ? madeInOf(observation, parts.headBoot()) : null;
       try { parts.onRead?.(read); } catch { /* naming a frame never fails a decision */ }
@@ -462,19 +511,19 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       noteUrgentDecision(parts.taskId, urgentNow);
       if (urgentNow) return urgentState(minutes);
       return llmcTransient(parts.llmc, events, observation, minutes, reasons, { investigation, scan, unreachable, footing, bodyAge,
-        queue: parts.queue?.lines(observation) ?? [] }, parts.taskId);
+        queue: queueNow(observation), judge: judge(), ...(parts.heldMs ? { heldMs: parts.heldMs() } : {}) }, parts.taskId);
     },
     /** r8: a hostile she must act on that has come since the request was built (once a decision), see `FcaBodyLifecycle.interrupt`. */
     interrupt: (): string | null => {
       if (interrupted !== null) return null;
-      interrupted = newApproach(parts.observe(), baseline, urgentMeters);
+      interrupted = newApproach(observeNoted(), baseline, urgentMeters);
       return interrupted;
     },
     rebuilding: () => { rebuild = true; },
     /** Continue contract 5: the frame the last context read, and whether the body has left it (died, another generation of the dimension, another connection) since. */
     readOf: () => read,
     drifted: (value: MadeIn) => driftOf(value, parts.observe()),
-    ...queueLifecycle({ queue: parts.queue, observe: parts.observe, arrival: () => parts.arrival().at, peek: () => watch.peek(),
+    ...queueLifecycle({ queue: parts.queue, observe: observeNoted, arrival: () => parts.arrival().at, peek: () => watch.peek(),
       keep: text => events.keep(text) }, body),
     decided: ({ ms, aborted, thrownMs }: { ms: number; aborted: boolean; thrownMs: number }) => {
       if (urgentTokens !== null) {
@@ -490,7 +539,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
      * r7: beside them, the near hostiles looked at with the body's sight (`lookAtThreats`), for whether the step is urgent and its line.
      */
     async investigate(): Promise<FcaBodyInvestigation | null> {
-      const seen = parts.observe();
+      const seen = observeNoted();
       const frame = surpriseFrame(seen, parts.arrival().at);
       let where: string | null = null;
       try { where = r4.planWhere(); } catch { where = null; }
@@ -520,7 +569,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     // r5 (run 28: a plan row of run 27's task, in another world, was recalled with its coordinates): what was before this task is marked.
     recallCues: () => ({ ...(body.recallCues?.() ?? { words: [], tags: [] }), since: parts.createdAt }),
     urgent() {
-      const facts = urgentFacts(parts.observe(), events.cut(), sights, inSight);
+      const facts = urgentFacts(observeNoted(), events.cut(), sights, inSight);
       reasons = facts.reasons;
       unreachable = facts.unreachable;
       if (reasons.length) {
@@ -551,9 +600,10 @@ export function forgetLlmcEvents(): void {
 }
 
 /** mb-llmc-cand 11: the road and meter lines of a dragon task (`minecraftLlmcRoad.ts`); none for another task. */
-function roadParts(llmc: LlmcBodyParts, observation: BodyObservation | null, minutes: number | null): { road?: string; meter?: string } {
+function roadParts(llmc: LlmcBodyParts, observation: BodyObservation | null, minutes: number | null, heldMs = 0): { road?: string; meter?: string } {
   let tree: PlanTree | null = null;
   try { tree = llmc.planTree?.() ?? null; } catch { tree = null; }
-  const road = roadLine(tree), meter = meterLine(tree, observation, minutes);
+  // Chapter 8: the meter's seconds are the seconds the task ran, without the time it was held (the time limit counts the same).
+  const road = roadLine(tree), meter = meterLine(tree, observation, minutes, heldMs);
   return { ...(road ? { road } : {}), ...(meter ? { meter } : {}) };
 }

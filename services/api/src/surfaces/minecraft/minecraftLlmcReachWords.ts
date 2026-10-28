@@ -50,11 +50,13 @@ export function itemWords(entity: Rec): string {
 const FOOD_ANIMALS = new Set(['cow', 'pig', 'chicken', 'rabbit', 'mooshroom']);
 const IRRELEVANT = new Set(['bat', 'cod', 'salmon', 'tropical_fish', 'pufferfish', 'squid', 'glow_squid', 'axolotl', 'parrot', 'bee', 'tadpole',
   'frog', 'turtle', 'dolphin']);
+/** Fish she can eat (chapter 8: when food is what she is short of they are food candidates, not creatures to leave out; a pufferfish is not food). */
+export const FOOD_FISH: ReadonlySet<string> = new Set(['cod', 'salmon', 'tropical_fish']);
 const VILLAGE_FOLK = new Set(['villager', 'wandering_trader', 'iron_golem']);
 /** How far a dropped item, a villager and anything else is worth a line; food animals and sheep only when the plan needs them. */
 export const NEAR_METERS = Object.freeze({ item: 16, folk: 12, tradeFolk: 24, other: 16, food: 24 });
 /** The kinds of the plan's nodes that need food animals, sheep (wool for a bed) and villagers (chapter 7: the kind the model wrote, not the plan's words). */
-const FOOD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['food']);
+const FOOD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['food', 'prep_descent']);
 const BED_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['bed']);
 const VILLAGE_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['village']);
 /** Food below this many points is short for the first night's iron (the instructions' stage knowledge: 40〜60 before it). */
@@ -86,6 +88,7 @@ export function nearNeeds(body: Rec): NearNeeds {
 export function nearWorthy(name: string, distance: number, needs: NearNeeds): boolean {
   const kind = name.replace(/^item .*/u, 'item');
   if (kind === 'item') return distance <= NEAR_METERS.item;
+  if (FOOD_FISH.has(kind)) return needs.food && distance <= NEAR_METERS.food;
   if (IRRELEVANT.has(kind)) return false;
   if (FOOD_ANIMALS.has(kind)) return needs.food && distance <= NEAR_METERS.food;
   if (kind === 'sheep') return needs.sheep && distance <= NEAR_METERS.food;

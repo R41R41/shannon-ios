@@ -189,7 +189,7 @@ export function foodLeads(world: Record<string, unknown>, dimension: string | nu
 }
 
 /** A plan node about food: its kind is `food` (chapter 7: the kind the model wrote, not the title's words or the condition's). */
-const isFoodNode = (node: PlanNode): boolean => kindOf(node) === 'food';
+const isFoodNode = (node: PlanNode): boolean => kindOf(node) === 'food' || kindOf(node) === 'prep_descent';
 /**
  * r7 (runs 29, 30: hunger 17 and no food, health that did not come back, and the plan's food node 「ゲートから戻り狩って焼く」 (p1.5) stayed
  * behind 「歪んだ幹で作業台」 (p1.1), 118 m the other way; Sonnet never went for food in 1,338 s): while health does not come back and she

@@ -10,9 +10,9 @@
  * - `withdraw(taskId, key)`: the fact no longer holds before it was delivered (the model wrote the answer on the plan itself); it is dropped, and a later offer of
  *   the same key may come (it was not delivered).
  *
- * TODO(once-facts): the live state's side is another owner's (`minecraftLlmcLive.ts`, `minecraftLlmcUrgent.ts`, the request): it puts
- * `pending(taskId)` in the input's events, and calls `markDelivered` when the request's bytes hold the words. The offers are made in
- * `readinessParts` (`minecraftLlmcBody.ts`), which returns `onceFacts`.
+ * The live state's side (`minecraftLlmcFacts.ts`, `minecraftLlmcBody.ts`): `onceFor(taskId, version)` puts the facts of a version in the input's `events` (the normal input all; the urgent one all but `prep_unmet:`;
+ * the shortened one none), and `deliverOnceFacts` is called by the model with the request right before it is dispatched (`MinecraftV2Hooks.requestSent`) and calls `markDelivered` for
+ * the facts whose words the last message holds. The offers are made in `readinessParts` (`minecraftLlmcBody.ts`) and by the ledger (`fcaPlanTools.ts`).
  */
 export interface OnceFact { key: string; text: string }
 
