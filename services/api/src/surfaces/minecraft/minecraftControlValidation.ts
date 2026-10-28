@@ -1,5 +1,10 @@
-import { GOAL_OUTCOMES, RUN_ENDS } from '../../contracts/continueContract.js';
 import type { MinecraftControlPoll, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
+/**
+ * The closed words of a unit's two axes (`continueContract.ts`: `GOAL_OUTCOMES`, `RUN_ENDS`), written here as well: the catalog contract check loads this file alone, so it imports types only.
+ * `tests/continueContractCopies.test.ts` holds the two copies equal.
+ */
+const GOAL_OUTCOMES = ['done', 'already', 'partial', 'not_started', 'failed', 'unknown'] as const;
+const RUN_ENDS = ['finished', 'cut', 'not_run', 'unknown'] as const;
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/;
 const SKILL = /^[a-z][a-z0-9-]{0,59}$/;
 const forbidden = /(?:campaign|planner|agent|command|chat|constant|script|code|background|schedule)/;
