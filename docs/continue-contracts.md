@@ -1201,3 +1201,22 @@ interface ActResultOverflow {
 - `unit.code`（ItemOutcome）は、その項目の終わりを決めた手の code（行の `code`）か、列で捨てた時はその理由（`cleanup_stop`・`precondition`・`queue_dropped` など）。
 - 観測の `state.combat.recentHits` は `{ at: ISO, attackerId: number | null, attackerType: string, damage: number, life: number }[]`（直近 10 秒・最大 20 件・古い順）。`damage` はその 1 打の後の体力の落ちを、同じ更新を待っていた打ちの数で割った値（鎧や盾で落ちなければ 0）。
 - 操作の連続記録（`oplog`）の 1 行は `{ kind: 'hand_start', ...HandStart }` か `{ kind: 'op', at, command, hand, pass, life, op, detail?, by, action }`（`at` は ISO）。
+
+#### A-4 の 8 の型（頭の実装の形。頭が書き、体は読み物として同じ文を入れる）
+```ts
+/** 3 章の PromiseEvent への足し。 */
+interface PromiseEvent {
+  kind: 'made' | 'revised' | 'consumed' | 'gained' | 'moved' | 'lost_death' | 'unexplained' | 'released' | 'closed';
+  /** moved：持ち物の場所が変わった（箱へ入れた stored・箱から出した retrieved・防具の装着）。消費ではない。count は動いた量（いつも正。unexplained だけ符号つきで、負は「出来事が説明する量より少ない」）。 */
+  item?: string;                // 帰属先の定義（送った時の写し）の item
+}
+/** 3 章の PlanPromise への足し。 */
+interface PlanPromise { have?: number }   // 前の観測の値（have を足し引きせず数え直すための物。item が変わる改訂では捨てる）
+/** 3 章の LedgerSeen（頭が計画のチェックポイントの `fcaPlanLedgerSeen` に保存）。eventIds・lastObs が契約の 2 欄で、残りは任意。 */
+interface LedgerSeen {
+  eventIds: string[]; lastObs: { bodyBoot: string; connectionId: string; obsSeq: number } | null;
+  death?: { deathEpoch: string; deathSeq: number } | null;   // 前に読んだ死の数え方（deathBetween に渡す）
+  connections?: string[];                                    // 置き換わった接続（遅れて届いた古い接続の観測で have を戻さない）
+  ahead?: { promise: number; delta: number; connection: string; obsSeq: number | null }[];   // 観測より先に届いた出来事の効き（次の観測で「説明できない差」にしない）
+}
+```
