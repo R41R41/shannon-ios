@@ -1,14 +1,18 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { TraceIds } from '../../contracts/continueContract.js';
 import { estimatedAnthropicCostUsd, knownCount, tokenCount } from '../models/claude/claudeUsage.js';
 import type { DecisionScopeState } from './decisionRecordScope.js';
-import { DECISION_RECORD_LIMITS, pruneRuns, RunWriter, runName, type DecisionRecordLimits } from './decisionRecordStore.js';
+import { tailRun } from './decisionRecordRead.js';
+import { DECISION_RECORD_LIMITS, pruneRuns, RunWriter, runName, scrubSecrets, type DecisionRecordLimits } from './decisionRecordStore.js';
 import { headVersion, partHash, promptVersion, type HeadVersion } from './decisionRecordVersion.js';
 
 /** `redecide`: a decision asked again of a stronger model for one call (amendment A-10); it is a request of its own, never the step's decision (its calls and outcome are the decision's). */
 export type RequestKind = 'decision' | 'summary' | 'plan' | 'redecide';
 const PREFIX: Record<RequestKind, 'd' | 's' | 'p' | 'r'> = { decision: 'd', summary: 's', plan: 'p', redecide: 'r' };
 const WRITERS_KEPT = 16;
+/** Amendment A-12: how many of the last rows of a run a head-found hold keeps in its box. */
+export const HEAD_HOLD_ROWS = 20;
 type Json = Record<string, unknown>;
 
 export interface RequestNote {
@@ -214,6 +218,27 @@ export class DecisionRecorder {
   /** Any other line of a task's record (what the step did with a decision, a call, a command sent to the body). Never throws. */
   append(taskId: string, event: Readonly<Json>): void {
     try { this.run(taskId).line({ ...event, at: this.iso() }); } catch (error) { this.told(error); }
+  }
+
+  /**
+   * Amendment A-12: the box of a stall the head found itself (the body cannot be asked to write one: `HEAD_INCIDENT_PREFIX`). The reason and the last `rows` rows of the task's
+   * `events.jsonl` (read before this row is written) go to `<run>/head-holds/<id>.json`, and one `head_hold` row names the file in the run's record. Returns the file's path below
+   * the records' root (what the hold's audit line carries), or null when nothing could be written. Never throws.
+   */
+  headHold(taskId: string, hold: { id: string; kind: string; why: string; detail?: Readonly<Json> }, rows = HEAD_HOLD_ROWS): string | null {
+    try {
+      const writer = this.run(taskId), name = writer.name;
+      const file = `${hold.id.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 120)}.json`, relative = `${name}/head-holds/${file}`;
+      const tail = tailRun(writer.directory, rows), at = this.iso();
+      const box = { v: 1, id: hold.id, kind: hold.kind, why: hold.why, at, taskId, ...(hold.detail ? { detail: hold.detail } : {}), rows: tail.length, tail };
+      mkdirSync(join(writer.directory, 'head-holds'), { recursive: true });
+      writeFileSync(join(writer.directory, 'head-holds', file), scrubSecrets(JSON.stringify(box)));
+      writer.line({ ev: 'head_hold', at, id: hold.id, kind: hold.kind, why: hold.why, file: relative, rows: tail.length });
+      return relative;
+    } catch (error) {
+      this.told(error);
+      return null;
+    }
   }
 
   /** Takes the oldest runs away when there are too many or they are too big (never one written by this process). */

@@ -13,7 +13,7 @@ import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import { runSkillImport, type SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
-import { driftWords, feet, type Feet, type HeldAgain } from './minecraftIncidentHold.js';
+import { driftWords, feet, headIncidentKind, HEAD_INCIDENT_WORDS, type Feet, type HeldAgain } from './minecraftIncidentHold.js';
 import { heldAgainWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 
@@ -320,8 +320,14 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     // the body says so. Once a body restarted in between kept refusing every act (its hold was to end with the act sent again, and that act never
     // reached it): the head ran, the body held, and decisions were paid for nothing. Neither goes on without the other.
     const detail = holdDetail(hold.detail);
-    const unheld = detail.incident ? await (requests.incident?.('resume', detail.incident, detail.command ?? '', found.id) ?? Promise.resolve({ ok: false, words: 'no_port' }))
+    let unheld = detail.incident ? await (requests.incident?.('resume', detail.incident, detail.command ?? '', found.id) ?? Promise.resolve({ ok: false, words: 'no_port' }))
       : { ok: false, words: 'no_incident' };
+    // Amendment A-12: a hold the head found itself is not the body's, and a body that holds nothing answers `done` to a release naming it. One that holds another hold of this task
+    // (it died or failed on its own meanwhile) says so and keeps it: that hold is ended too, so that neither side goes on without the other.
+    if (!unheld.ok && headIncidentKind(detail.incident)) {
+      const other = requests.bodyHold?.();
+      if (other && other.task === found.id && other.id !== detail.incident) unheld = await (requests.incident?.('resume', other.id, '', found.id) ?? Promise.resolve(unheld));
+    }
     if (!unheld.ok) {
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'refused', code: 'not_held', argsJson: c.argsJson,
         taskId: found.id, detail: `body_hold_kept ${unheld.words}`.slice(0, 600) });
@@ -366,16 +372,22 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
    * owner's stop path (the plan, the pack and the task stay; no decision, no model). False when the task is not the operator's or asked for no hold.
    */
   async function hold(taskId: string, incident: { id: string; why: string; frozen: boolean | null; freeze?: string; command: string; start?: Feet | null; end?: Feet | null;
-    replay?: HeldAgain }): Promise<boolean> {
+    replay?: HeldAgain; record?: string }): Promise<boolean> {
     const requests = parts.requests;
     const request = parts.audit.requestOf(parts.scopeKey, taskId);
     if (!requests || !request || !parts.audit.holdOnFailure(taskId) || parts.audit.heldOf(taskId)) return false;
     const detail = holdDetailText({ incident: incident.id, why: incident.why.slice(0, 160), frozen: incident.frozen, ...(incident.freeze ? { freeze: incident.freeze.slice(0, 80) } : {}),
-      command: incident.command, ...(incident.start ? { start: incident.start } : {}), ...(incident.end ? { end: incident.end } : {}) }, incident.replay);
+      command: incident.command, ...(incident.record ? { record: incident.record.slice(0, 120) } : {}),
+      ...(incident.start ? { start: incident.start } : {}), ...(incident.end ? { end: incident.end } : {}) }, incident.replay);
     audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold', event: 'settled', code: 'held', argsJson: request.argsJson,
       taskId, detail });
-    parts.activity(parts.now(), { summary: '運用者が代わりに始めたマイクラの依頼を、重い失敗で保留しました（世界を止め、記録を取りました）。', tool: 'operator.minecraft.hold',
-      outcome: 'done', reasonCode: 'operator_hold', detail: `task=${taskId} incident=${incident.id}` });
+    // Amendment A-12: a stall the head found itself says what it found and that the world was not stopped (the body holds nothing for it); the reason is in the audit's detail too.
+    const kind = headIncidentKind(incident.id);
+    parts.activity(parts.now(), kind
+      ? { summary: `運用者が代わりに始めたマイクラの依頼を、頭が見つけた詰まり（${HEAD_INCIDENT_WORDS[kind] ?? kind}）で保留しました（世界は止めていません。理由と判断の記録の直近の行を残しました）。`,
+        tool: 'operator.minecraft.hold', outcome: 'done', reasonCode: 'operator_hold_head', detail: `task=${taskId} incident=${incident.id} why=${incident.why.slice(0, 120)}` }
+      : { summary: '運用者が代わりに始めたマイクラの依頼を、重い失敗で保留しました（世界を止め、記録を取りました）。', tool: 'operator.minecraft.hold',
+        outcome: 'done', reasonCode: 'operator_hold', detail: `task=${taskId} incident=${incident.id}` });
     await requests.stop(taskId, 'operator_hold').catch(() => []);
     return true;
   }
@@ -461,7 +473,9 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     const held = parts.audit.heldTasks(parts.scopeKey).filter(row => row.taskId).map(row => {
       const detail = holdDetail(row.detail);
       // Run 44: the body's own hold beside the head's, so that a disagreement shows.
-      const agree = !body ? '体は保留していない（食い違い: 頭だけ保留）' : body.id === detail.incident ? '体も同じ保留' : `食い違い: 体の保留は ${body.id}（task ${body.task}）`;
+      // Amendment A-12: a stall the head found is the head's alone (the body holds nothing for it); only a body hold beside it is a disagreement.
+      const agree = headIncidentKind(detail.incident) ? (!body ? '頭が見つけた詰まりの保留（体は保留していない。世界は止めていない）' : `食い違い: 頭が見つけた保留の他に、体の保留 ${body.id}（task ${body.task}）がある`)
+        : !body ? '体は保留していない（食い違い: 頭だけ保留）' : body.id === detail.incident ? '体も同じ保留' : `食い違い: 体の保留は ${body.id}（task ${body.task}）`;
       return { taskId: row.taskId!, detail: row.detail ?? '', position: driftWords(detail.start, now, detail.end),
         body: `${agree}${detail.mismatch?.startsWith('outside_act') ? '。体が act の外（死亡・瀕死）で保留し、頭も保留した' : detail.mismatch ? '。体が act を断ったので頭が保留に戻した' : ''}` };
     });

@@ -141,6 +141,13 @@ export function activeMinutes(elapsedMinutes: number | null, heldMs = 0): number
  * Null when the plan is not the dragon's or the time is not known.
  */
 export function meterLine(tree: PlanTree | null | undefined, observation: BodyObservation | null, elapsedMinutes: number | null, heldMs = 0): string | null {
+  return meterParts(tree, observation, elapsedMinutes, heldMs)?.line ?? null;
+}
+/**
+ * The meter's line and the name of the milestone it points at (`next`, null after the last one). The seconds do not change the milestone, so a reader that only wants to know
+ * whether the task moved on to another one (amendment A-12's `node_stalled`) asks with any time.
+ */
+export function meterParts(tree: PlanTree | null | undefined, observation: BodyObservation | null, elapsedMinutes: number | null, heldMs = 0): { line: string; next: string | null } | null {
   const facts = doneFacts(observation);
   if (!tree || !isDragonPlan(tree) || elapsedMinutes === null || !facts) return null;
   // The seconds are the task's running seconds (`activeMinutes`: the wall clock less the time it was held); a task that was held says how many seconds the clock leaves out, so that the state's own minutes are not read against it.
@@ -171,8 +178,8 @@ export function meterLine(tree: PlanTree | null | undefined, observation: BodyOb
   const passed = DRAGON_MILESTONES[skippedIndex];
   const detail = (item: Milestone): string => [item.now ? `今 ${item.now(facts)}` : '', item.cost ?? ''].filter(Boolean).join('。');
   const skipped = passed ? `・まだの節目: ${passed.name}（目安 ${grouped(passed.seconds)} 秒${detail(passed) ? `。${detail(passed)}` : ''}）` : '';
-  if (!next) return `目安: ${clock}（節目は全部済んだ）${skipped}${prepFact}`;
+  if (!next) return { line: `目安: ${clock}（節目は全部済んだ）${skipped}${prepFact}`, next: null };
   const gap = next.seconds - now;
   const state = gap >= 0 ? `あと ${grouped(gap)} 秒` : `${grouped(-gap)} 秒遅れ`;
-  return `目安: ${clock}・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${detail(next) ? `・${detail(next)}` : ''}${skipped}${prepFact}`;
+  return { line: `目安: ${clock}・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${detail(next) ? `・${detail(next)}` : ''}${skipped}${prepFact}`, next: next.name };
 }
