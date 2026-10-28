@@ -39,13 +39,14 @@ import { abortedRouteUsage } from './minecraftRouteWiring.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
 import { recordedLedger } from '../surfaces/minecraft/minecraftLedgerRows.js';
-import { noteHeadHold, noteHistoryChange, noteStageRow } from '../infra/decisionRecords/decisionRecordNotes.js';
+import { noteHeadHold, noteHeadTail, noteHistoryChange, noteStageRow } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { recordedClient } from '../infra/decisionRecords/decisionRecordClient.js';
 import { recordedPlanner } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { createHash } from 'node:crypto';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
-import { driftWords, feet, headIncidentKind, incidentHoldPort, incidentOfResult, type Feet, type IncidentNote } from './minecraftIncidentHold.js';
+import { driftWords, feet, headIncidentKind, incidentHoldPort, incidentOfResult, takeEnd, type Feet, type IncidentNote } from './minecraftIncidentHold.js';
+import { headTake, TAKE_MS } from './minecraftHeadTake.js';
 import { randomUUID } from 'node:crypto';
 import { MC_ACT_TOOL, type ActKeep } from '../contracts/minecraftActContract.js';
 import type { BodyTaskContext } from '../contracts/bodyControlContract.js';
@@ -254,10 +255,10 @@ export function withIncident(context: BodyTaskContext, hold: boolean, resume: st
 /**
  * Amendment A-12: the lifecycle of a task that asked to be held, looking for the stalls the head finds itself (`minecraftLlmcStalls.ts`): at each decision's start and after each
  * result of a tool (`look`), and `mc.act` answers for the refusals before sending (`refused`). A stall found at a decision's start stops the decision: the hold is being made
- * (`HOLD_SETTLE_MS`), and the step's next permit check ends it once the task is stopped.
+ * (`watch.settled`: the body asked to hold and the task's stop begun; `HOLD_SETTLE_MS` at most), and the step's next permit check ends it once the task is stopped.
  */
-export const HOLD_SETTLE_MS = 1_500;
-export function withStalls(lifecycle: FcaBodyLifecycle, watch: { look(): boolean; refused(call: FcaToolCall, result: ToolResult): boolean } | null): FcaBodyLifecycle {
+export const HOLD_SETTLE_MS = TAKE_MS + 2_000;
+export function withStalls(lifecycle: FcaBodyLifecycle, watch: { look(): boolean; refused(call: FcaToolCall, result: ToolResult): boolean; settled?(): Promise<void> } | null): FcaBodyLifecycle {
   if (!watch) return lifecycle;
   const before = lifecycle.beforeDecision?.bind(lifecycle), noted = lifecycle.noteResult?.bind(lifecycle);
   return Object.assign(lifecycle, {
@@ -268,7 +269,9 @@ export function withStalls(lifecycle: FcaBodyLifecycle, watch: { look(): boolean
       await new Promise<void>(resolve => {
         const timer = setTimeout(resolve, HOLD_SETTLE_MS);
         timer.unref?.();
-        signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+        const done = () => { clearTimeout(timer); resolve(); };
+        signal.addEventListener('abort', done, { once: true });
+        void (watch.settled?.() ?? Promise.resolve()).then(done, done);
       });
     },
     noteResult(call: FcaToolCall, result: ToolResult, durationMilliseconds?: number) {
@@ -428,6 +431,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       const at = (observe()?.state.world as { position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined)?.position;
       return feet([at?.x, at?.y, at?.z]);
     };
+    let holding: Promise<void> | null = null;
     const headHold = (stall: Stall, byBody: IncidentNote | null = null): void => {
       // The body decided about this very result (it holds, or it did not hold on purpose, or the same act failed the same way again): its incident is the one.
       if (byBody && (byBody.held || byBody.notHeld || byBody.repeated)) {
@@ -441,11 +445,20 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
         return;
       }
       const id = stallIncidentId(stall, Date.now()), at = feetNow(), tree = plan.port.tree();
-      const record = noteHeadHold(step.taskId, { id, kind: stall.kind, why: stall.why, detail: { current: tree.current, ...(at ? { feet: at } : {}), ...(stall.at ? { stoppedAt: stall.at } : {}),
-        ...(stall.command ? { command: stall.command } : {}) } });
-      log(`Shannon Minecraft head stall task=${step.taskId} kind=${stall.kind} incident=${id} why=${stall.why.slice(0, 100)} record=${record ?? '-'}`);
-      void holds.hold(step.taskId, { id, heavy: true, why: stall.why, held: true, frozen: false, command: stall.command ?? '', ...(record ? { record } : {}),
-        ...(at ? { start: at, end: at } : {}) }).catch(error => log(`Shannon Minecraft head stall hold failed task=${step.taskId} ${String(error)}`));
+      // Amendment A-12: the body is asked to hold too (a release carrying `incident.take`: the world stopped, the scene, a box with the last rows of the decision record as notes); what it
+      // answers is in the head's box and in the hold's audit line. Whatever it answers, the head holds: a world it did not stop (`notHeld`), another hold it keeps, no answer at all are told.
+      // The hold itself is asked for, not waited for (its stop waits for this step).
+      holding = (async () => {
+        const asked = await headTake({ control, step, bodyId: bodyId(), id, why: stall.why, notes: noteHeadTail(step.taskId) });
+        const take = asked.sent ? asked.take : null, end = take ? takeEnd(take) : 'failed';
+        const record = noteHeadHold(step.taskId, { id, kind: stall.kind, why: stall.why, detail: { current: tree.current, ...(at ? { feet: at } : {}), ...(stall.at ? { stoppedAt: stall.at } : {}),
+          ...(stall.command ? { command: stall.command } : {}), take: end, body: take ?? { unanswered: asked.sent ? '' : asked.why } } });
+        log(`Shannon Minecraft head stall task=${step.taskId} kind=${stall.kind} incident=${id} why=${stall.why.slice(0, 100)} take=${end}${take?.notHeld ? ` notHeld=${take.notHeld.slice(0, 60)}` : ''}${take && end === 'other_hold' ? ` bodyHold=${take.hold}` : ''}${asked.sent ? '' : ` unanswered=${asked.why}`} record=${record ?? '-'}`);
+        void holds.hold(step.taskId, { id, heavy: true, why: stall.why, held: true, frozen: end === 'held' ? take?.frozen ?? true : false, command: stall.command ?? '', take: end,
+          ...(take?.freeze ? { freeze: take.freeze } : {}), ...(take?.notHeld ? { notHeld: take.notHeld } : {}), ...(take?.box ? { box: take.box } : {}), ...(take?.scene ? { scene: take.scene } : {}),
+          ...(end === 'other_hold' && take?.hold ? { bodyHold: take.hold } : {}), ...(take?.again ? { again: true } : {}), ...(record ? { record } : {}), ...(at ? { start: at, end: at } : {}) })
+          .catch(error => log(`Shannon Minecraft head stall hold failed task=${step.taskId} ${String(error)}`));
+      })().catch(error => log(`Shannon Minecraft head stall take failed task=${step.taskId} ${String(error)}`));
     };
     const look = (): boolean => {
       try {
@@ -477,7 +490,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       if (stall) headHold(stall);
       return stall !== null;
     };
-    return { look, refused };
+    return { look, refused, settled: () => holding ?? Promise.resolve() };
   })() : null;
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an act of it that would break a promise is decided again by Opus

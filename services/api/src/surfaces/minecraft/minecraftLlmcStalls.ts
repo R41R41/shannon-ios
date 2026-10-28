@@ -223,7 +223,10 @@ export function watchStalls(taskId: string, sink: Sink): () => void {
   return () => { if (sinks.get(taskId) === sink) sinks.delete(taskId); };
 }
 
-/** The id of the incident a stall makes (`head:<kind>:<key>:<time>`): the hold's name in the audit, the box's file and the release the resume sends. */
+/**
+ * The id of the incident a stall makes (`head:<kind>:<key>:<time>`): the hold's name in the audit, the box's file and the release the resume sends. It is also part of the ids of the commands
+ * that name it (`unhold:<id>:…`), and the control refuses a receipt whose command id has anything but letters, digits and `_.:-` (`FCA_BODY_POLL_INVALID`): so no comma, no space.
+ */
 export function stallIncidentId(stall: Stall, atMs: number): string {
-  return `${HEAD_INCIDENT_PREFIX}${stall.kind}:${stall.key.replace(/[^A-Za-z0-9._,-]/gu, '_').slice(0, 40)}:${Math.max(0, Math.floor(atMs)).toString(36)}`;
+  return `${HEAD_INCIDENT_PREFIX}${stall.kind}:${stall.key.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 40)}:${Math.max(0, Math.floor(atMs)).toString(36)}`;
 }
