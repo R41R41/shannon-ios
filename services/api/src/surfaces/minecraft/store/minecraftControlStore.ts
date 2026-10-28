@@ -208,6 +208,10 @@ export class MinecraftControlStore {
     if (next.hold !== row.hold) this.db.prepare('UPDATE fca_body_operations SET hold=? WHERE id=?').run(next.hold, id);
     return next.hold;
   }
+  /** The commands of the task a cleanup left held, oldest first (the operator's resume or cancel ends them). */
+  heldOfTask(taskId: string): OperationRow[] {
+    return this.db.prepare(`SELECT ${ROW_COLUMNS} FROM fca_body_operations WHERE task_id=? AND hold='held' ORDER BY rowid`).all(taskId).map(rowOf);
+  }
   /** The next `deliverySeq` of the command's events to fetch (chapter 3), kept with the command so a restarted head goes on from there. */
   setFetchSeq(id: string, next: number): void { this.db.prepare('UPDATE fca_body_operations SET fetch_seq=? WHERE id=? AND fetch_seq<?').run(next, id, next); }
   /**
@@ -221,14 +225,15 @@ export class MinecraftControlStore {
   markProcessed(ids: readonly string[]): void { for (const id of ids) this.db.prepare('UPDATE fca_body_operations SET ledger_done=1 WHERE id=?').run(id); }
   /**
    * The first command that makes a new command which moves the body wait (continue contract 1: no new motor command until the release is proved; commands that
-   * only observe go): a command whose result is unknown and whose release is not proved, a command of an earlier start of the head still `sent`, a hold the
-   * operator has not ended. `headBoot` is this start's.
+   * only observe go): a command whose result is unknown and whose release is not proved, a command of an earlier start of the head still `sent`. A hold the operator
+   * has not ended stops the task through the incident port; once the release is proved the gate is open whatever the hold says (resuming moves nothing without it).
+   * `headBoot` is this start's.
    */
   motorBlock(taskId: string, headBoot: string): OperationRow | null {
     const marks = NOT_MOTOR_SKILLS.map(() => '?').join(',');
     const row = this.db.prepare(`SELECT ${ROW_COLUMNS} FROM fca_body_operations WHERE task_id=? AND json_extract(command_json,'$.kind') IN ('skill','reflex')
       AND COALESCE(json_extract(command_json,'$.skill'),'') NOT IN (${marks})
-      AND (state='settled_unknown' OR hold='held' OR (state='sent' AND COALESCE(head_boot,'')!=?)) ORDER BY rowid LIMIT 1`).get(taskId, ...NOT_MOTOR_SKILLS, headBoot);
+      AND (state='settled_unknown' OR (state='sent' AND COALESCE(head_boot,'')!=?)) ORDER BY rowid LIMIT 1`).get(taskId, ...NOT_MOTOR_SKILLS, headBoot);
     return row ? rowOf(row) : null;
   }
   /** The commands the head must clean up when it starts (or a step starts): `settled_unknown`, and `sent` ones of an earlier start of the head. */

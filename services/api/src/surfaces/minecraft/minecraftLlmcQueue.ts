@@ -18,7 +18,7 @@ import { itemLabel, itemResult, neverRan, queueLines, QUEUE_MAX, unitOfReceipt, 
 import { correctionWords, heldWords, releasedWords } from './minecraftLlmcResultWords.js';
 import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
 import { readingOf } from './store/minecraftOperationState.js';
-import { receivedRow, releasedRow, correctedRow, unknownNotifiedRow, type RowContext } from './minecraftOperationRows.js';
+import { receivedRow, releasedRow, correctedRow, unknownNotifiedRow, wokeRow, type RowContext } from './minecraftOperationRows.js';
 
 /**
  * The head's mirror of the body's item queue (design minebot-task-queue, 2026-10-26). Every `mc.act` is an item: it goes to the body at once
@@ -549,10 +549,13 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
           droppedSeen = droppedNow;
           failedSeen = failedNow;
           troubleAt = null;
+          if (wasDropped) record(wokeRow(rowContext(null), 'failure'));
           return wasDropped ? 'dropped' : 'empty';
         }
         if (!drain && capped) {
           capped = false;
+          // TODO(records): decisionRecorder — the `woke` row (`wokeRow`).
+          record(wokeRow(rowContext(null), 'reflex_capped'));
           return 'reflex_capped';
         }
         if (!drain && (droppedNow > droppedSeen || failedNow > failedSeen)) {
@@ -564,12 +567,15 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
             failedSeen = failedNow;
             troubleAt = null;
             log(`Shannon Minecraft queue wake task=${deps.taskId} reason=alert(trouble) open=${queue.length} T=${wake}`);
+            record(wokeRow(rowContext(null), 'failure'));
             return 'alert';
           }
         }
         const woken = drain ? null : wakeNow(queue, { ...(messages ? { messages } : {}), ...(alert ? { alert } : {}) }, wake);
         if (woken) {
           log(`Shannon Minecraft queue wake task=${deps.taskId} reason=${woken} open=${queue.length} T=${wake}`);
+          record(wokeRow(rowContext(queue.length === 1 ? queue[0]! : null), woken === 'remaining' || woken === 'alert' || woken === 'message' ? woken : 'alert',
+            woken === 'remaining' ? remainingMs(queue[0]!) : undefined));
           return woken;
         }
         await sleep(drain ? 50 : 100);

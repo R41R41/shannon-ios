@@ -39,6 +39,9 @@ export const releasedRow = (context: RowContext, by: 'receipt' | 'cleanup', ok: 
 export const correctedRow = (context: RowContext, now: ItemOutcome): Extract<StageRow, { ev: 'corrected' }> =>
   ({ ev: 'corrected', at: context.at, ids: idsOf(context), was: 'unknown', now });
 
+/** The queue asked the model to decide: why (`remaining`: the running item has about `predictedRemainingMs` left; the others are the wake's own reasons). */
+export const wokeRow = (context: RowContext, why: Extract<StageRow, { ev: 'woke' }>['why'], predictedRemainingMs?: number): Extract<StageRow, { ev: 'woke' }> =>
+  ({ ev: 'woke', at: context.at, ids: idsOf(context), why, ...(predictedRemainingMs !== undefined ? { predictedRemainingMs: Math.round(predictedRemainingMs) } : {}) });
 /** The model was told that the command's result is unknown (the judge reads it to tell a correction from an ordinary result after a head restart). */
 export const unknownNotifiedRow = (context: RowContext) => ({ ev: 'unknown_notified' as const, at: context.at, ids: idsOf(context) });
 /** The head registered its start with the body (the first reply of a poll carried `headBoot`). */

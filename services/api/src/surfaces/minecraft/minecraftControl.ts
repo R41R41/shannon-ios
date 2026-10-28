@@ -151,6 +151,17 @@ export class MinecraftControl {
     const ids = input.ids ?? this.store.uncleaned(input.taskId, this.headBoot()).map(row => row.id);
     return cleanupOperations(this.recoveryPort(), { ...input, ids });
   }
+  /**
+   * The operator's resume or cancel of a task: every command a cleanup left held moves on the hold axis only (the result axis is left as it is: an unknown result is not
+   * made known, and nothing is sent again). Returns the commands it changed.
+   */
+  resolveHolds(taskId: string, how: 'resume' | 'cancel'): string[] {
+    const changed: string[] = [];
+    for (const row of this.store.heldOfTask(taskId)) {
+      if (this.store.holdEvent(row.id, { kind: how === 'resume' ? 'operator_resume' : 'operator_cancel' }) !== row.hold) changed.push(row.id);
+    }
+    return changed;
+  }
   /** The pages of a command's events its receipt did not carry: see `fetchEventPages`. */
   fetchEvents(input: { command: string; context: BodyTaskContext; lease: ActionLease; fromSeq: number; total: number; max?: number; signal?: AbortSignal }) {
     return fetchEventPages(this.recoveryPort(), input);

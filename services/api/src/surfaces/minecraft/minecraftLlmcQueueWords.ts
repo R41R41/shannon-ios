@@ -37,7 +37,7 @@ export const unitOfReceipt = (receipt: Pick<MinecraftControlReceipt, 'unit' | 'o
 
 /** Whether the receipt says the item never ran (the body dropped or refused it, or it was cancelled before it started, or its unit says it did not run). */
 export const neverRan = (receipt: MinecraftControlReceipt, item: Pick<QueueWordsItem, 'startedAt'>): boolean =>
-  NEVER_RAN.has(receipt.failureType ?? '') || (receipt.outcome === 'cancelled' && item.startedAt === null && receipt.unit?.end !== 'unknown')
+  NEVER_RAN.has(receipt.failureType ?? '') || (receipt.outcome === 'cancelled' && item.startedAt === null && receipt.unit?.startedAt === undefined && receipt.unit?.end !== 'unknown')
   || (receipt.unit?.end === 'not_run' && receipt.unit.goal === 'not_started');
 
 /** Why an item behind a bad end is told dropped: the item before it (`q14`), or the words of whoever took it off. */

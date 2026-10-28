@@ -935,6 +935,45 @@ describe('the queue: the head reads what the body decided and takes nothing off 
     await queue.add(spec(dig(3)));
     expect(await queue.ready({ signal: new AbortController().signal, drain: false })).toBe('reflex_capped');
   });
+  it('b8-reconnect: the body reconnects while q1 runs and q2 waits: q1 is released and its result stays unknown, nothing is resent, nothing is corrected', async () => {
+    const { f, queue, spec, take, rows } = setup();
+    await queue.add(spec(wait1));
+    await queue.add(spec(dig(1)));
+    take();
+    const q1 = idOf(f, 'q1'), q2 = idOf(f, 'q2');
+    f.running.length = 0;
+    f.queued.length = 0;
+    f.setConnection('connection-2');
+    f.poll();
+    await delay(60);
+    expect([f.store.state(q1), f.store.state(q2)]).toEqual(['released', 'released']);
+    const news = queue.take();
+    expect(news.map(entry => [entry.item, entry.kind])).toEqual([['q1', 'ran'], ['q2', 'ran']]);
+    expect(news[0]!.result.text).toContain('解放を確かめた（結果は不明のまま）');
+    expect(news[0]!.result.text).not.toContain('出し直した');
+    expect(f.handed.filter(command => command.id === q1)).toHaveLength(1);
+    expect(f.handed.filter(command => command.kind === 'stop')).toHaveLength(0);
+    expect(rows.filter(row => row.ev === 'corrected')).toEqual([]);
+    expect(queue.open()).toBe(false);
+  });
+  it('the operator\'s resume or cancel moves the hold axis only: an unknown result stays unknown and nothing is sent again', async () => {
+    const f = rig();
+    insert(f, 'rh1');
+    f.store.settle(unknownReceipt('rh1'));
+    f.store.holdEvent('rh1', { kind: 'cleanup_failed' });
+    expect(f.control.resolveHolds('t1', 'resume')).toEqual(['rh1']);
+    expect([f.store.state('rh1'), f.store.holdOf('rh1')]).toEqual(['settled_unknown', 'resumed']);
+    expect(f.control.resolveHolds('t1', 'resume')).toEqual([]);
+    expect(f.control.motorBlocked('t1')?.id).toBe('rh1');
+    f.store.release('rh1', 'cleanup', AT, 's');
+    expect(f.control.motorBlocked('t1')).toBeNull();
+    insert(f, 'rh2');
+    f.store.settle(unknownReceipt('rh2'));
+    f.store.holdEvent('rh2', { kind: 'cleanup_failed' });
+    expect(f.control.resolveHolds('t1', 'cancel')).toEqual(['rh2']);
+    expect(f.store.holdOf('rh2')).toBe('cancelled');
+    expect(f.handed.filter(command => command.id === 'rh1' || command.id === 'rh2')).toHaveLength(0);
+  });
   it('the live lines show what an item relies on, and what each of those is now', async () => {
     const { f, queue, spec, take } = setup();
     await queue.add(spec(wait1));
