@@ -132,7 +132,7 @@ export type TraceLine =
   | { kind: 'reflex_hand'; at: string; reflex: string; target?: number }
   | { kind: 'reflex_end'; at: string; reflex: string }
   /** A-5 3: the vertical's evidence rows (`verticalEvidenceOp` reads them as operations). */
-  | { kind: 'block_update' | 'forced_move'; at?: string; t?: number; command?: string; hand?: number; life?: number }
+  | { kind: 'block_update' | 'forced_move'; at: string; t?: number; command?: string; hand?: number; life?: number }
   | { kind: 'poll'; at: string; connectionId: string; first?: boolean };
 
 export type ProbeLine =
