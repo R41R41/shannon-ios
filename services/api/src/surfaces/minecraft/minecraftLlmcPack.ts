@@ -37,6 +37,24 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
 export function bedsIn(lines: readonly string[]): number {
   return lines.reduce((sum, line) => sum + Number(/^[a-z_]*_bed×(\d+)/u.exec(line)?.[1] ?? 0), 0);
 }
+/** What a full pack costs, said as a fact in the first words of the pack's lines (run 46: 36 of 36 with tuff 65, cobbled deepslate 230 and cobblestone 147, no drop was made; a go stopped full, and the obsidian hand ended "cannot pick up the drop"). */
+export const FULL_COST = 'これ以上拾えない（黒曜石・鉱石・落とし物も。dig・pickup・make の物も入らず止まる）';
+/**
+ * What of the filler can be dropped: each kind less what the plan's promises hold back of it (`held`), the most carried kind also less one stack kept for pillars and bridges. The kinds
+ * are in the order of `packFacts` (the most carried first); a kind with nothing to spare is left out.
+ */
+export function dropCandidates(filler: ReadonlyArray<[string, number]>, held: (item: string) => number = () => 0): Array<[string, number]> {
+  const out: Array<[string, number]> = [];
+  let kept = false;
+  for (const [name, n] of filler) {
+    const spare = Math.max(0, n - held(name) - (!kept ? KEEP_STACK : 0));
+    if (n - held(name) > 0) kept = true;
+    if (spare > 0) out.push([name, spare]);
+  }
+  return out;
+}
+/** The candidates in words: 「cobbled_deepslate×166（3 マス）・cobblestone×147（3 マス）」, four at most; empty when there are none. */
+export const dropWords = (drops: ReadonlyArray<readonly [string, number]>): string => drops.slice(0, 4).map(([name, n]) => `${name}×${n}（${Math.ceil(n / 64)} マス）`).join('・');
 /** Free slots at or under this, the pack says what to drop before it is full. */
 export const FULL_SOON = 3;
 /** Stacks of a filler kind kept for pillars and bridges (the first kind, the most carried). */
@@ -47,6 +65,12 @@ const KEEP_STACK = 64;
  */
 function fullSoon(free: number, filler: ReadonlyArray<[string, number]>): string | null {
   if (free > FULL_SOON) return null;
+  if (free === 0) {
+    // Full now: said as what is so and what it costs, not as what will happen (run 46).
+    const spare = dropWords(dropCandidates(filler));
+    return spare ? `満杯: ${FULL_COST}。drop で空けられる物: ${spare}（${filler[0]![0]} 1 スタックは柱と橋用に数えていない）`
+      : `満杯: ${FULL_COST}。空けるのは drop`;
+  }
   const drops = filler.map(([name, n], index) => [name, index === 0 ? Math.max(0, n - KEEP_STACK) : n] as const).filter(([, n]) => n > 0);
   const kinds = drops.slice(0, 4).map(([name, n]) => `${name}×${n}（${Math.ceil(n / 64)} マス）`).join('・');
   const keep = filler.length ? `${filler[0]![0]} 1 スタックは柱と橋に残す` : '';
@@ -61,7 +85,8 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean 
   if (!lines.length) return [];
   const { used, filler } = packFacts(lines);
   const free = Math.max(0, PACK_SLOTS - used);
-  const out = [`持ち物の空き ${free} マス（使用 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}。満杯だと dig・pickup が「満杯」で止まる）`];
+  const out = [free === 0 ? `持ち物 満杯 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}（空き 0 マス）`
+    : `持ち物の空き ${free} マス（使用 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}。満杯だと dig・pickup が「満杯」で止まる）`];
   const before = fullSoon(free, filler);
   if (before) out.push(before);
   const total = filler.reduce((sum, [, n]) => sum + n, 0);

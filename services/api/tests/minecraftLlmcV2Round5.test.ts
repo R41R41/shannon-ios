@@ -5,7 +5,7 @@ import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { gateFirst, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { heldBeforeSend } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { liquidLines, useReachStop } from '../src/surfaces/minecraft/minecraftLlmcLiquid.js';
-import { packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
+import { FULL_COST, packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { rewriteLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
@@ -117,6 +117,18 @@ describe('the pack: free slots and the filler that fills them (run 36, y=76 → 
     expect(second.indexOf('cobbled_deepslate×154')).toBeLessThan(second.indexOf('cobblestone×121'));
     expect(second).toContain('collect=false');
     expect(packLines(['cobblestone×64', 'dirt×10'])).toHaveLength(1);
+  });
+});
+
+describe('the pack when it is full (run 46)', () => {
+  it('says full and what it costs in the first words of body.pack, then the candidates to drop with one stack kept; the free-slot wording is unchanged below it', () => {
+    const FULL36 = ['cobbled_deepslate×64', 'cobbled_deepslate×64', 'cobbled_deepslate×64', 'cobbled_deepslate×38', 'cobblestone×64', 'cobblestone×64', 'cobblestone×19', 'tuff×64', 'tuff×1',
+      ...Array.from({ length: 27 }, (_, index) => `junk_${index}×1`)];
+    const lines = packLines(FULL36);
+    expect(lines[0]).toBe('持ち物 満杯 36/36（空き 0 マス）');
+    expect(lines[1]).toBe(`満杯: ${FULL_COST}。drop で空けられる物: cobbled_deepslate×166（3 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）（cobbled_deepslate 1 スタックは柱と橋用に数えていない）`);
+    expect(lines[1]).toContain('黒曜石');
+    expect(packLines(Array.from({ length: 36 }, (_, index) => `junk_${index}×1`))[1]).toBe(`満杯: ${FULL_COST}。空けるのは drop`);
   });
 });
 

@@ -7,8 +7,8 @@ import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
 import { FOOD_POINTS, stacks } from './minecraftLlmcLive.js';
 import { nearThreats } from './minecraftLlmcThreat.js';
 import { markDelivered, offer, pending, type OnceFact } from './minecraftLlmcOnceFacts.js';
-import { packFacts, PACK_SLOTS } from './minecraftLlmcPack.js';
-import { promiseLines } from './minecraftLlmcPromises.js';
+import { dropCandidates, dropWords, FULL_COST, packFacts, PACK_SLOTS } from './minecraftLlmcPack.js';
+import { heldBack, promiseLines } from './minecraftLlmcPromises.js';
 import { FOOD_FISH, nearNeeds } from './minecraftLlmcReachWords.js';
 import { PLAN_FACTS_KEY, type PlanFacts } from './minecraftPlanFacts.js';
 import { round1 } from './minecraftTransientObservation.js';
@@ -312,12 +312,18 @@ const NEAR_FULL = 3;
  * The pack's free slots, what the next hands add, and (nearly full) what takes the slots. Normal: the free slots with the gains, and the takers on a line of their own.
  * Shortened: one line. The count is the body's own inventory lines (`packFacts`), the omitted ones (「ほか N件」) counted.
  */
-export function packLines(observation: BodyObservation | null, ahead: readonly ActInput[], short: boolean): string[] {
+export function packLines(observation: BodyObservation | null, ahead: readonly ActInput[], short: boolean, promises: readonly PlanPromise[] = []): string[] {
   const inventory = world(observation).inventory;
   if (!Array.isArray(inventory)) return [];
-  const lines = stacks(inventory), free = Math.max(0, PACK_SLOTS - packFacts(lines).used);
+  const lines = stacks(inventory), packed = packFacts(lines), free = Math.max(0, PACK_SLOTS - packed.used);
   const gains = nextGains(ahead);
-  const head = `持ち物の空き ${free}/${PACK_SLOTS}${free === 0 ? '（満杯）' : free <= NEAR_FULL ? '（もうすぐ満杯）' : ''}${gains.length ? `・次の手で増える見込み: ${gains.join('・')}` : ''}`;
+  // Full (run 46): what it means comes in the line's first words, and what can be dropped is counted from the plan's promises (what they hold back is not offered), in the short line too.
+  const head = `持ち物の空き ${free}/${PACK_SLOTS}${free === 0 ? `（満杯）：${FULL_COST}` : free <= NEAR_FULL ? '（もうすぐ満杯）' : ''}${gains.length ? `・次の手で増える見込み: ${gains.join('・')}` : ''}`;
+  if (free === 0) {
+    const spare = dropWords(dropCandidates(packed.filler, item => heldBack(promises, item)));
+    const drop = spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）';
+    return [head, drop];
+  }
   if (short || free > NEAR_FULL) return [head];
   const fills = takers(lines);
   return fills.length ? [head, `場所を取っている物: ${fills.join('・')}`] : [head];
@@ -373,7 +379,7 @@ export function inputFacts(observation: BodyObservation | null, context: FactsCo
   const promises = promiseLines(context.promises ?? [], { ...context.since ? { since: context.since } : {}, observation, limit: 4 });
   const stops = [...context.stops ?? []];
   const food = (shown: number) => context.wantsFood ? [foodLine(observation, shown)] : [];
-  const make = (short: boolean) => [...head, ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short), ...promises, ...stops]
+  const make = (short: boolean) => [...head, ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short, context.promises ?? []), ...promises, ...stops]
     .filter((line): line is string => !!line);
   return { lines: make(false), compressed: make(true) };
 }

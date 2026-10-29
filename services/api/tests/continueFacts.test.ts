@@ -8,6 +8,7 @@ import { activeMinutes, meterLine } from '../src/surfaces/minecraft/minecraftLlm
 import { createHitWatch, deliverOnceFacts, foodCandidates, foodLine, handEffect, holderLine, inputFacts, lifeOf, controlOf, nextGains, onceFor, packLines,
   queueNowLines, stopFactsOf, vitalsLine } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
+import { FULL_COST } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { nearWorthy } from '../src/surfaces/minecraft/minecraftLlmcReachWords.js';
 import { foodFirstLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
@@ -64,14 +65,15 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     expect(JSON.stringify(urgent!.live.body.mode)).toContain('急ぎの版');
     expect(normal!.live.body.mode).toBeUndefined();
     expect(compressed!.live.body.mode).toBeUndefined();
-    const pack = (live: Record<string, any>) => (live.body.facts as string[]).filter(line => line.startsWith('持ち物の空き') || line.startsWith('場所を取っている物'));
+    const pack = (live: Record<string, any>) => (live.body.facts as string[]).filter(line => line.startsWith('持ち物の空き') || line.startsWith('場所を取っている物') || line.startsWith('drop で空けられる物'));
     // The pack: the normal and urgent versions say what takes the slots on a line of its own; the shortened version has one line.
     expect(pack(normal!.live)).toHaveLength(2);
     expect(pack(urgent!.live)).toHaveLength(2);
-    expect(pack(compressed!.live)).toHaveLength(1);
+    expect(pack(compressed!.live)).toHaveLength(2);
     expect(pack(compressed!.live)[0]).toContain('空き 0');
+    expect(pack(compressed!.live)[0]).toContain('これ以上拾えない');
     expect(pack(compressed!.live)[0]).toContain('満杯');
-    expect(pack(normal!.live)[1]).toMatch(/場所を取っている物: .*（\d マス）/u);
+    expect(pack(normal!.live)[1]).toMatch(/^drop で空けられる物（約束に回していない分）: .*（\d マス）/u);
   });
 
   it('says the facts in values, and none of them asks for anything: 命令の文が無い', async () => {
@@ -340,14 +342,32 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
   it('a full pack with a make ahead says 空き 0, the item the hand makes, and 満杯', () => {
     const lines = packLines(observation, make, false);
     for (const word of sample.expected.liveMustContain as string[]) expect(lines.join('\n')).toContain(word);
-    expect(lines).toEqual(['持ち物の空き 0/36（満杯）・次の手で増える見込み: make diamond_pickaxe で +1 個', '場所を取っている物: cobbled_deepslate×105（2 マス）・dirt×35（1 マス）']);
+    expect(lines).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み: make diamond_pickaxe で +1 個`,
+      'drop で空けられる物（約束に回していない分）: cobbled_deepslate×41（1 マス）・dirt×35（1 マス）']);
     expect(sample.expected.bodyDropsNothing).toBe(true);
   });
   it('shortened, it is one line; with room it says only the free slots', () => {
-    expect(packLines(observation, make, true)).toEqual(['持ち物の空き 0/36（満杯）・次の手で増える見込み: make diamond_pickaxe で +1 個']);
+    expect(packLines(observation, make, true)).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み: make diamond_pickaxe で +1 個`,
+      'drop で空けられる物（約束に回していない分）: cobbled_deepslate×41（1 マス）・dirt×35（1 マス）']);
     expect(packLines(frame({ inventory: stacks.slice(0, 10) }), [], false)).toEqual(['持ち物の空き 26/36']);
     expect(packLines(frame({ inventory: stacks.slice(0, 34) }), [], false)[0]).toBe('持ち物の空き 2/36（もうすぐ満杯）');
     expect(packLines(frame({}), make, false)).toEqual([]);
+  });
+  it('run 46: 36 of 36 with tuff 65, cobbled deepslate 230 and cobblestone 147 says what it costs in the first words and what can be dropped; the promised is not offered', () => {
+    const run46 = frame({ inventory: [...[64, 64, 64, 38].map(count => ({ name: 'cobbled_deepslate', count })), ...[64, 64, 19].map(count => ({ name: 'cobblestone', count })),
+      ...[64, 1].map(count => ({ name: 'tuff', count })), ...Array.from({ length: 27 }, (_, index) => ({ name: `junk_${index}`, count: 1 }))] });
+    const lines = packLines(run46, [], false);
+    expect(lines[0]).toBe(`持ち物の空き 0/36（満杯）：${FULL_COST}`);
+    expect(lines[0]).toContain('黒曜石');
+    // the most carried kind keeps one stack for pillars and bridges; the rest of every kind is offered
+    expect(lines[1]).toBe('drop で空けられる物（約束に回していない分）: cobbled_deepslate×166（3 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
+    // what a promise holds back is not offered
+    const promise = { id: 1, rev: 1, state: 'open', item: 'cobblestone', count: 100, use: '足場', have: 0 } as unknown as PlanPromise;
+    expect(packLines(run46, [], false, [promise])[1]).toBe('drop で空けられる物（約束に回していない分）: cobbled_deepslate×166（3 マス）・cobblestone×47（1 マス）・tuff×65（2 マス）');
+    // nothing to spare: still said as an action
+    expect(packLines(frame({ inventory: Array.from({ length: 36 }, (_, index) => ({ name: `junk_${index}`, count: 1 })) }), [], false)[1]).toBe('約束に回していない石・土の余りは無い（空けるのは drop）');
+    // not full: as before
+    expect(packLines(frame({ inventory: [] }), [], false)).toEqual(['持ち物の空き 36/36']);
   });
   it('the gains are what the hands add, and a go adds nothing', () => {
     expect(nextGains([{ hands: [{ do: 'go', to: { x: 1, y: 2, z: 3 } }, { do: 'craft', item: 'bread', count: 3 }, { do: 'mine', item: 'iron_ore', count: 4 }] }]))
