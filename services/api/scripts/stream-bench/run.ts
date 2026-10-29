@@ -16,6 +16,7 @@ import { buildReport, markdown, type BenchReport } from './report.js';
  *
  *   npx tsx scripts/stream-bench/run.ts --models=fake --ear=inline --speed=60
  *   npx tsx scripts/stream-bench/run.ts --models=fake --ear=external --ear-cmd="npx tsx src/services/youtube/ear/cli.ts" --ear-cwd=C:/Shannon/Shannon-vtuber/backend
+ *   npx tsx scripts/stream-bench/run.ts --models=fake --ear=external --ear-cmd="…" --no-stream-list      (the fake has no streamList: the ear must poll)
  *   SHANNON_ANTHROPIC_API_KEY=… TYPESAFE_API_KEY=… npx tsx scripts/stream-bench/run.ts --models=real --speed=10 --max-calls=60
  *
  * The keys are read from the environment and never printed or written.
@@ -32,6 +33,8 @@ export interface BenchOptions {
   maxModelCalls?: number;
   minecraft: boolean;
   chatWrites: boolean;
+  /** false: the fake YouTube has no liveChatMessages.streamList (404), so an ear has to poll. Default true. */
+  streamList?: boolean;
   outDir?: string;
   log?: (line: string) => void;
 }
@@ -77,7 +80,7 @@ export async function runBench(options: BenchOptions): Promise<BenchReport> {
   const head = await startBenchHead({ clock, models: options.models, fakeLatencyMilliseconds: options.fakeLatencyMilliseconds,
     ...(options.maxModelCalls ? { maxModelCalls: options.maxModelCalls } : {}), ...(options.log ? { log: options.log } : {}),
     ...(game ? { live: () => game.live as never } : {}) });
-  const youtube = new FakeYoutube({ chat, speed: options.speed, now: () => clock.now(), epochMs });
+  const youtube = new FakeYoutube({ chat, speed: options.speed, now: () => clock.now(), epochMs, ...(options.streamList === false ? { streamList: false } : {}) });
   const youtubeBase = await youtube.start();
   const mouth = new BenchMouth({ base: head.url, clock });
   const ear: Ear = options.ear === 'external' && options.earCommand
@@ -125,7 +128,7 @@ function parse(argv: readonly string[]): BenchOptions {
   return {
     models, ear, speed: Number.isFinite(speed) && speed >= 1 ? speed : 60, fakeLatencyMilliseconds: Number(value('fake-latency') ?? 2500),
     ...(value('ear-cmd') ? { earCommand: value('ear-cmd')! } : {}), ...(value('ear-cwd') ? { earCwd: value('ear-cwd')! } : {}),
-    ...(Number.isFinite(maxModelCalls) && maxModelCalls > 0 ? { maxModelCalls } : {}), minecraft: argv.includes('--minecraft'), chatWrites: argv.includes('--chat-writes'),
+    ...(Number.isFinite(maxModelCalls) && maxModelCalls > 0 ? { maxModelCalls } : {}), minecraft: argv.includes('--minecraft'), chatWrites: argv.includes('--chat-writes'), streamList: !argv.includes('--no-stream-list'),
     outDir: resolve(value('out') ?? join(here, 'out')), log: argv.includes('--verbose') ? line => console.error(line) : () => undefined,
   };
 }
