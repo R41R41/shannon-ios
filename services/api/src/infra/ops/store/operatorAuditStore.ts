@@ -152,17 +152,31 @@ export class OperatorAuditStore {
       .get(taskId, Number(resume.sequence));
     return hold ? row(hold as Record<string, unknown>) : null;
   }
-  /** How long the task has been held in all (each hold to its resume or stop, the open one to `now`): the time limit does not count it. */
+  /**
+   * How long the task has been held in all (each hold to its resume or stop, the open one to `now`): the time limit does not count it. Amendment A-15: nor does the time the body
+   * could not move - a pause the body's recovery made (`command='paused'`, written by the operator's tick when it finds the task so; its time is when the task was paused) counts
+   * as a hold - and the minutes an operator names on a resume (`deduct=<ms>` in the accepted row's detail: a time the head could not measure, such as the VM being stopped).
+   */
   heldMs(taskId: string, now: string): number {
-    const rows = this.db.prepare(`SELECT command, event, occurred_at FROM operator_audit WHERE task_id=? AND ((command='hold' AND event='settled')
-      OR (command='resume' AND event='accepted') OR event='stopped') ORDER BY sequence`).all(taskId) as Array<{ command: string; event: string; occurred_at: string }>;
+    const rows = this.db.prepare(`SELECT command, event, occurred_at, detail FROM operator_audit WHERE task_id=? AND ((command='hold' AND event='settled')
+      OR (command='paused' AND event='settled') OR (command='resume' AND event='accepted') OR event='stopped') ORDER BY sequence`).all(taskId) as Array<{ command: string; event: string; occurred_at: string; detail: string | null }>;
     let total = 0, since: number | null = null;
     for (const entry of rows) {
-      if (entry.command === 'hold') since ??= Date.parse(entry.occurred_at);
-      else if (since !== null) { total += Date.parse(entry.occurred_at) - since; since = null; }
+      if (entry.command === 'hold' || entry.command === 'paused') since ??= Date.parse(entry.occurred_at);
+      else {
+        if (since !== null) { total += Date.parse(entry.occurred_at) - since; since = null; }
+        const deducted = entry.command === 'resume' ? Number(/(?:^|[ ;])deduct=([0-9]+)/u.exec(entry.detail ?? '')?.[1] ?? 0) : 0;
+        if (Number.isFinite(deducted)) total += deducted;
+      }
     }
     if (since !== null) total += Date.parse(now) - since;
     return Math.max(0, total);
+  }
+  /** Amendment A-15: whether the task has a pause of the recovery that no resume or stop has followed (written once per pause). */
+  pausedOpen(taskId: string): boolean {
+    const found = this.db.prepare(`SELECT p.sequence FROM operator_audit p WHERE p.task_id=? AND p.command='paused' AND p.event='settled'
+      AND NOT EXISTS (SELECT 1 FROM operator_audit r WHERE r.task_id=p.task_id AND ((r.command='resume' AND r.event='accepted') OR r.event='stopped') AND r.sequence>p.sequence) LIMIT 1`).get(taskId);
+    return !!found;
   }
 
   /** Accepted invocations of the last hour (the rate limit counts the record, so a restart does not reset it). */

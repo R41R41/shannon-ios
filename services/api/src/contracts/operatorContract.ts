@@ -66,7 +66,7 @@ export type OperatorInput =
   | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number; holdOnFailure?: boolean }
   /** A held request goes on: the act that failed is sent again with the same arguments first, then the decisions from the plan. */
   /** `skipReplay` (run 45, holds 3 to 5: the held act sent again failed again the same way three times): the held act is not sent again. */
-  | { command: 'resume'; taskId: string | null; skipReplay: boolean }
+  | { command: 'resume'; taskId: string | null; skipReplay: boolean; deductMinutes?: number }
   /** The held requests with where the body is now against where the held act began (read only; the CLI's status asks it). */
   | { command: 'held' }
   | { command: 'cancel'; taskId: string | null }
@@ -220,7 +220,7 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.domain !== 'minecraft') return otherDomain(operator, value.domain, value.op, args);
   const allowed: Record<string, readonly string[]> = {
-    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest', 'skipReplay'], held: [], budget: ['taskId', 'latest', 'budgetYen'],
+    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest', 'skipReplay', 'deductMinutes'], held: [], budget: ['taskId', 'latest', 'budgetYen'],
     start: ['serverId', 'keepWorld'],
   };
   const extra = Object.keys(args).find(key => !(allowed[value.op as string] ?? ['serverId']).includes(key));
@@ -232,9 +232,14 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   if (value.op === 'held') return { ok: true, operator, input: { command: 'held' } };
   if (value.op === 'resume') {
     if (args.skipReplay !== undefined && args.skipReplay !== true) return refuse(operator, 'invalid_input', 'skipReplay is true or absent');
-    const { skipReplay: _skip, ...rest } = args;
+    // Amendment A-15: the minutes the body could not move that the head could not measure (the VM stopped): taken off the request's time (a whole number, at most a day).
+    if (args.deductMinutes !== undefined && !(Number.isInteger(args.deductMinutes) && (args.deductMinutes as number) >= 1 && (args.deductMinutes as number) <= 1440)) {
+      return refuse(operator, 'invalid_input', 'deductMinutes is a whole number of minutes, 1 to 1440');
+    }
+    const { skipReplay: _skip, deductMinutes: _deduct, ...rest } = args;
     const parsed = cancel(operator, rest);
-    return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId, skipReplay: args.skipReplay === true } } : parsed;
+    return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId, skipReplay: args.skipReplay === true,
+      ...(typeof args.deductMinutes === 'number' ? { deductMinutes: args.deductMinutes } : {}) } } : parsed;
   }
   if (value.op === 'budget') return budget(operator, args);
   if (value.op === 'release') return release(operator, args);

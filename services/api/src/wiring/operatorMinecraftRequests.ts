@@ -101,6 +101,15 @@ export function operatorMinecraftRequests(parts: {
       } catch { stop = ''; }
       return `保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop || why}`.slice(0, 200);
     },
+    /**
+     * Amendment A-15: the act the task's step lost, in words for the first decision after a resume of a task the recovery paused (「q46 の 作業台とかまどを置く…」): its item and first hand.
+     */
+    lostActWords: (taskId: string): string => {
+      const sent = parts.control.store.lastOfTask(taskId);
+      const item = String(sent?.queue?.item ?? '');
+      const hand = ((sent?.arguments as { hands?: Array<Record<string, unknown>> } | undefined)?.hands ?? [])[0];
+      return `${item}${hand ? ` ${String(hand.do ?? '')}` : ''}`.trim();
+    },
     /** The hold the body says it keeps (its newest frame, `state.incidentHold`, run 44), or null. */
     bodyHold: (): BodyHold | null => {
       const id = body();

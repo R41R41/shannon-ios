@@ -14,7 +14,7 @@ export const OPERATOR_CLI_USAGE = [
   '  opsCli.ts minecraft status',
   '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] [--hold-on-failure] <goal...>',
   '      (--hold-on-failure: on a heavy failure the task is held, the world stopped, the box and the scene written; then `resume`)',
-  '  opsCli.ts minecraft resume --operator <label> (<task-id> | --latest) [--skip-replay]',
+  '  opsCli.ts minecraft resume --operator <label> (<task-id> | --latest) [--skip-replay] [--deduct-minutes N]',
   '      (a held request goes on: the failed act again, then the plan; --skip-replay: not the act again, the next decision is told so)',
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
   '  opsCli.ts minecraft budget --operator <label> (<task-id> | --latest) <yen>',
@@ -116,12 +116,14 @@ function cancelEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
 
 /** `resume (<task-id> | --latest) [--skip-replay]` (run 45: the held act is not sent again with --skip-replay). */
 function resumeEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
-  knownFlags(parsed, ['--operator', '--latest', '--skip-replay']);
+  knownFlags(parsed, ['--operator', '--latest', '--skip-replay', '--deduct-minutes']);
+  const deduct = whole(parsed.flags.get('--deduct-minutes'), '--deduct-minutes');   // the minutes the body could not move that the head could not measure (A-15)
+  parsed.flags.delete('--deduct-minutes');
   const skip = parsed.flags.get('--skip-replay');
   if (skip !== undefined && skip !== true) throw new UsageError('--skip-replay takes no value');
   parsed.flags.delete('--skip-replay');
   const envelope = cancelEnvelope(base, parsed);
-  return skip === true ? { ...envelope, args: { ...envelope.args, skipReplay: true } } : envelope;
+  return { ...envelope, args: { ...envelope.args, ...(skip === true ? { skipReplay: true } : {}), ...(deduct !== undefined ? { deductMinutes: deduct } : {}) } };
 }
 
 /** `budget <task-id> <yen>` or `budget --latest <yen>`: the yen is a whole number here; the API refuses 0 and anything over the cap, and audits it. */

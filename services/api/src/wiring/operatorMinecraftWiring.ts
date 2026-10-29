@@ -93,6 +93,9 @@ const FINISHED_FOR_GOOD = ['completed', 'failed'];
 const HOUR_MS = 3_600_000;
 const STATUS: Partial<Record<OperatorCode, number>> = { out_of_scope: 403, rate_limited: 429, flooded: 429 };
 const ago = (at: string, ms: number) => new Date(Date.parse(at) - ms).toISOString();
+/** Amendment A-14/A-15: a task the body's recovery paused (its step was lost): stopped, paused, waiting for the owner's resume. */
+const isRecoveredPause = (task: { phase: string; status?: string; pauseReason?: string | null }): boolean =>
+  task.phase === 'stopped' && task.status === 'paused' && task.pauseReason === 'fca_stopped';
 
 const MESSAGES: Partial<Record<OperatorCode, string>> = {
   disabled: '運用者のマイクラ操作はサーバーで有効になっていません（SHANNON_OPERATOR_MINECRAFT）。',
@@ -321,8 +324,18 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
    * The body is told to move the world (a release naming `recovered:<task>`: a body that holds nothing unfreezes and answers `done`), then the runtime's resume queues the task again; the
    * recovery pays what the task is owed before its first step (the notice of the lost step: its operations may or may not have taken effect, read the observation).
    */
-  async function resumeRecovered(c: Context, taskId: string) {
+  async function resumeRecovered(c: Context, taskId: string, deductMinutes: number) {
     const requests = parts.requests!;
+    // A request the time limit stopped goes on only when its limit, with the time the body could not move taken off (the pauses of the recovery written by the tick, and the minutes the
+    // operator names), is not reached now.
+    if (parts.audit.hasEvent(taskId, 'time_limit')) {
+      const request = parts.audit.requestOf(parts.scopeKey, taskId);
+      const now = parts.now();
+      const deadline = request?.deadlineAt ? Date.parse(request.deadlineAt) + parts.audit.heldMs(taskId, now) + deductMinutes * 60_000 : NaN;
+      if (!(Date.parse(now) < deadline)) {
+        return c.refuse('refused', `時間の上限を過ぎています（止まっていた時間を引いても）。体が動けなかった時間が分かるなら --deduct-minutes <分> で引いて、もう一度 resume してください。`, { taskId });
+      }
+    }
     const unheld = await (requests.incident?.('resume', `recovered:${taskId.slice(0, 12)}`, '', taskId) ?? Promise.resolve({ ok: false, words: 'no_port' }));
     if (!unheld.ok) {
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'refused', code: 'not_held', argsJson: c.argsJson,
@@ -330,9 +343,16 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       return c.refuse('refused', `体の世界を動かせなかったので、再開しませんでした（${unheld.words}）。体がつながっているか確かめて、もう一度 resume してください。`, { taskId });
     }
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted', argsJson: c.argsJson,
-      taskId, detail: `recovered=fca_stopped body=${unheld.words}`.slice(0, 600) });
+      taskId, detail: `recovered=fca_stopped${deductMinutes ? ` deduct=${deductMinutes * 60_000}` : ''} body=${unheld.words}`.slice(0, 600) });
+    // Amendment A-15 1: there is no held act to send again (the hold the earlier resume closed stays closed): the resume's check is written at once, so that no step reads an older hold as pending.
+    audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'skipped', argsJson: c.argsJson,
+      taskId, detail: '取り戻しで止まっていたタスクの再開: 出し直す act は無い' });
+    // Amendment A-15 2: what the lost step leaves is told to the first decision in its live (once, with the results it reads), beside the notice the recovery stores in the inbox.
+    const lost = requests.lostActWords?.(taskId);
+    skipNotes.set(taskId, `体が動けなかった間に失われた操作${lost ? `（${lost}）` : ''}の結果は分からない。観測で確かめる`);
     const resumed = requests.resume(taskId);
     if (!resumed) {
+      skipNotes.delete(taskId);
       audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'refused', argsJson: c.argsJson,
         taskId, detail: 'runtime_resume_refused' });
       return c.refuse('refused', 'タスクを再開できませんでした（実行時の再開が断られた）。体の世界は動いています。もう一度 resume してください。', { taskId });
@@ -354,9 +374,10 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!requests) return c.refuse('body_unavailable');
     // Amendment A-14: a task the body's recovery paused (its step was lost: a restart, a stale gap; `fca_stopped`, resumable, waiting for the owner) has no hold row, and is resumed the
     // same way: `--latest` is the newer of the open hold and such a task, and an id names either.
+    // A request the time limit stopped is one too when the time the body could not move, taken off, leaves it inside its limit (A-15).
     const recovered = (id: string): boolean => {
       const task = requests.get(id);
-      return !!task && task.phase === 'stopped' && task.status === 'paused' && task.pauseReason === 'fca_stopped';
+      return !!task && (isRecoveredPause(task) || (task.phase === 'stopped' && parts.audit.hasEvent(id, 'time_limit')));
     };
     const found = input.taskId ? { id: input.taskId } : (() => {
       const held = parts.audit.heldTasks(parts.scopeKey)[0];
@@ -369,7 +390,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!parts.audit.requestOf(parts.scopeKey, found.id)) return c.refuse(requests.get(found.id) ? 'not_operator_task' : 'not_found', undefined, { taskId: found.id });
     const hold = parts.audit.heldOf(found.id);
     if (!hold && !recovered(found.id)) return c.refuse('not_held', undefined, { taskId: found.id });
-    if (!hold) return resumeRecovered(c, found.id);
+    if (!hold) return resumeRecovered(c, found.id, input.deductMinutes ?? 0);
     const task = requests.get(found.id);
     if (!task || task.phase !== 'stopped') return c.refuse('not_running', '保留した依頼がまだ止まりきっていないか、もう終わっています。', { taskId: found.id });
     // Run 44, resume 1: the body ends its hold first (a release naming it: the hold ends and the world moves), and the task is resumed only when
@@ -645,6 +666,11 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     reconcile(requests, now);
     for (const row of parts.audit.requestsSince(parts.scopeKey, ago(now, 48 * HOUR_MS))) {
       const task = row.taskId ? requests.get(row.taskId) : null;
+      // Amendment A-15: a pause the body's recovery made is a time the body could not move: written once (at the time the task was paused), and not counted like a hold.
+      if (task && isRecoveredPause(task) && !parts.audit.pausedOpen(task.id)) {
+        audit({ operationId: `${row.operationId}:paused:${task.revision}`, at: task.updatedAt, operator: row.operator, command: 'paused', event: 'settled', code: 'paused',
+          argsJson: row.argsJson, taskId: task.id, detail: `recovered=fca_stopped revision=${task.revision}` });
+      }
       // 2026-10-28: the time a request was held does not count: its deadline moves by it.
       const deadline = row.deadlineAt && task ? Date.parse(row.deadlineAt) + parts.audit.heldMs(task.id, now) : NaN;
       if (!task || !row.deadlineAt || Date.parse(now) < deadline || FINISHED.includes(task.phase) || stopping.has(task.id)) continue;
