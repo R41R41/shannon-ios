@@ -225,8 +225,15 @@ describe('the writer\'s answer', () => {
     expect(parseStreamDraft('{"say":"はなし"}', [], 'topic')!.answered).toEqual([]);
   });
 
+  it('reads the line led by its mark, as the reply of the structured answer carries it, and a bare line as her plain feeling', () => {
+    expect(parseStreamDraft('[excited|0.8|energetic] やったね、ダイヤだ！', ['a'])).toEqual({ say: 'やったね、ダイヤだ！', plan: { affect: 'excited', affectIntensity: 0.8, delivery: 'energetic' }, answered: ['a'] });
+    expect(parseStreamDraft('［happy｜0.4］ ありがとう', ['a'])!.plan).toEqual({ affect: 'happy', affectIntensity: 0.4, delivery: 'conversational' });
+    expect(parseStreamDraft('[nope|5|x] それでも話す', [], 'topic')).toEqual({ say: 'それでも話す', plan: { affect: 'neutral', affectIntensity: 1, delivery: 'conversational' }, answered: [] });
+    expect(parseStreamDraft('ただの文章', ['a'])).toEqual({ say: 'ただの文章', plan: { affect: 'neutral', affectIntensity: 0.5, delivery: 'conversational' }, answered: ['a'] });
+  });
+
   it('does not make a line of a broken answer', () => {
-    for (const raw of ['', 'ただの文章', '{"say":', '{"say":123}', '{"say":"  "}', '[1,2]', '{"affect":"happy"}']) expect(parseStreamDraft(raw, ['a'])).toBeNull();
+    for (const raw of ['', '   ', '{"say":', '{"say":123}', '{"say":"  "}', '[1,2]', '{"affect":"happy"}']) expect(parseStreamDraft(raw, ['a'])).toBeNull();
   });
 
   it('keeps a line to 120 characters a voice can say: no marks, emoji or links', () => {

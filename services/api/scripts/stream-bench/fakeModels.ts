@@ -46,7 +46,7 @@ export function listedComments(message: string): { id: string; name: string }[] 
 
 function pick<T>(items: readonly T[], seed: string): T { return items[hash(seed) % items.length]!; }
 
-/** The fake writer's answer for a writer request, as the JSON the real writer is asked for. */
+/** The fake writer's answer for a writer request, as the real writer is asked for it: the mark of her feeling, then the line. */
 export function fakeWriterAnswer(request: ShannonChatModelRequest): string {
   const context = request.turnContext ?? '', message = request.message;
   const comments = listedComments(message);
@@ -59,7 +59,7 @@ export function fakeWriterAnswer(request: ShannonChatModelRequest): string {
   else if (context.includes('配信を終える')) say = '今日は見に来てくれて、ありがとう。またね。';
   else if (context.includes('少しコメントが来ていない')) say = pick(TOPICS, `${seed}${hash(context)}`);
   else say = `${comments[0] ? `${comments[0].name}、` : ''}${pick(REPLIES, seed)}`;
-  return JSON.stringify({ say, affect, affectIntensity: 0.6, delivery: 'conversational', answered: comments.map(comment => comment.id) });
+  return `[${affect}|0.6|conversational] ${say}`;
 }
 
 export function fakeCommentaryAnswer(request: ShannonChatModelRequest): string {
