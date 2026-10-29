@@ -233,7 +233,8 @@ const END_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['end', 'stronghold',
 function addPack(body: Rec, inventory: unknown, notes: RewriteNotes, bodyIn: Rec): void {
   const now = factsIn(bodyIn)?.now;
   const forEnd = (!!now && hasKind([now.kind], END_KINDS)) || rec(bodyIn.state)?.dimension === 'the_end';
-  const lines = packLines(strings(inventory), { forEnd });
+  const reported = rec(bodyIn.state)?.freeSlots;
+  const lines = packLines(strings(inventory), { forEnd, ...(typeof reported === 'number' ? { free: reported } : {}) });
   if (!lines.length) return;
   body.pack = lines;
   notes.added.push('pack');

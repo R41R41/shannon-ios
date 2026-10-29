@@ -13,6 +13,17 @@ const FILLER = new RegExp('^(?:cobblestone|cobbled_deepslate|deepslate|diorite|a
 /** The stacks per filler kind are shown when the filler alone fills this many slots. */
 const FILLER_SLOTS = 3;
 const STACK = /^([a-z_0-9]+)×(\d+)/u;
+/**
+ * Run 46 (the pack said 6 free of 36; the body had none): the body writes ONE LINE A KIND ("cobbled_deepslate×230" is four slots), so a line is not a slot. The free slots are the body's
+ * own number (`world.freeSlots`, the same count as its pickup's: the slots 9 to 44 that are empty); only when the frame has none are they estimated, a line by the stacks its count fills.
+ */
+const ONE_SLOT = /(?:_pickaxe|_axe|_shovel|_hoe|_sword|_helmet|_chestplate|_leggings|_boots|_bed|_boat|_minecart)$|^(?:bow|crossbow|shield|trident|fishing_rod|shears|flint_and_steel|elytra|saddle|minecart|potion|splash_potion|lingering_potion|water_bucket|lava_bucket|milk_bucket|powder_snow_bucket|cod_bucket|salmon_bucket|pufferfish_bucket|tropical_fish_bucket|axolotl_bucket|tadpole_bucket|mushroom_stew|rabbit_stew|beetroot_soup|suspicious_stew|cake|written_book|writable_book|enchanted_book)$/u;
+const SIXTEEN = /(?:_sign|_hanging_sign|_banner)$|^(?:ender_pearl|snowball|egg|bucket|honey_bottle|armor_stand|painting)$/u;
+/** The slots a stack of this many of an item fills (64 a slot unless the item stacks less). */
+export function slotsOf(name: string, count: number): number {
+  const size = ONE_SLOT.test(name) ? 1 : SIXTEEN.test(name) ? 16 : 64;
+  return Math.max(1, Math.ceil(count / size));
+}
 
 /** Stacks used (the lines, and the omitted ones), the filler kinds with their totals, from the inventory lines. */
 export function packFacts(lines: readonly string[]): { used: number; filler: Array<[string, number]> } {
@@ -24,8 +35,8 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
       used += Number(omitted[1]);
       continue;
     }
-    used += 1;
     const stack = STACK.exec(line);
+    used += stack ? slotsOf(stack[1]!, Number(stack[2])) : 1;
     if (stack && FILLER.test(stack[1]!)) {
       filler.set(stack[1]!, (filler.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
@@ -33,6 +44,10 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
   return { used, filler: [...filler].sort((a, b) => b[1] - a[1]) };
 }
 
+/** The body's free slots in a frame (`world.freeSlots`: its own count, the same as its pickup's), or null when it has none or it is not a count of the pack. */
+export function reportedFree(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= PACK_SLOTS ? Math.floor(value) : null;
+}
 /** The beds carried (each stack `x_bed×n`). */
 export function bedsIn(lines: readonly string[]): number {
   return lines.reduce((sum, line) => sum + Number(/^[a-z_]*_bed×(\d+)/u.exec(line)?.[1] ?? 0), 0);
@@ -81,9 +96,12 @@ function fullSoon(free: number, filler: ReadonlyArray<[string, number]>): string
  * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run 36 and 37 (85–90 s each): with two beds or more
  * the beds are enough (the End asks four, made from wool before it: `forEnd`). Empty when the inventory is not a list.
  */
-export function packLines(lines: readonly string[], options: { forEnd?: boolean } = {}): string[] {
+export function packLines(lines: readonly string[], options: { forEnd?: boolean; free?: number } = {}): string[] {
   if (!lines.length) return [];
-  const { used, filler } = packFacts(lines);
+  const { used: counted, filler } = packFacts(lines);
+  // The body's own number when the frame has it (Math.floor, 0 to 36); else the lines' stacks.
+  const reported = typeof options.free === 'number' && Number.isFinite(options.free) && options.free >= 0 && options.free <= PACK_SLOTS ? Math.floor(options.free) : null;
+  const used = reported === null ? counted : PACK_SLOTS - reported;
   const free = Math.max(0, PACK_SLOTS - used);
   const out = [free === 0 ? `持ち物 満杯 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}（空き 0 マス）`
     : `持ち物の空き ${free} マス（使用 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}。満杯だと dig・pickup が「満杯」で止まる）`];

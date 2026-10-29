@@ -121,6 +121,19 @@ describe('the pack: free slots and the filler that fills them (run 36, y=76 → 
 });
 
 describe('the pack when it is full (run 46)', () => {
+  it('uses the body\'s own count of free slots when the live state has it (the inventory is one line a kind), and the stacks of a line when it has not', () => {
+    const merged = ['cobbled_deepslate×230', 'cobblestone×147', 'tuff×65', ...Array.from({ length: 27 }, (_, index) => `junk_${index}×1`)];
+    expect(packLines(merged)[0]).toBe('持ち物 満杯 36/36（空き 0 マス）');
+    expect(packLines(merged, { free: 6 })[0]).toContain('持ち物の空き 6 マス（使用 30/36');
+    expect(packLines(['dirt×3'], { free: 0 })[0]).toBe('持ち物 満杯 36/36（空き 0 マス）');
+    const first = (value: Record<string, unknown>) => ((rewriteLlmcLive(value).live.body as { pack: string[] }).pack)[0]!;
+    const live = { body: { inventory: merged, state: { freeSlots: 0 } } };
+    expect(first(live)).toContain('持ち物 満杯 36/36');
+    const without = { body: { inventory: ['dirt×3'], state: {} } };
+    expect(first(without)).toContain('空き 35 マス');
+    const told = { body: { inventory: ['dirt×3'], state: { freeSlots: 0 } } };
+    expect(first(told)).toContain('持ち物 満杯 36/36');
+  });
   it('says full and what it costs in the first words of body.pack, then the candidates to drop with one stack kept; the free-slot wording is unchanged below it', () => {
     const FULL36 = ['cobbled_deepslate×64', 'cobbled_deepslate×64', 'cobbled_deepslate×64', 'cobbled_deepslate×38', 'cobblestone×64', 'cobblestone×64', 'cobblestone×19', 'tuff×64', 'tuff×1',
       ...Array.from({ length: 27 }, (_, index) => `junk_${index}×1`)];

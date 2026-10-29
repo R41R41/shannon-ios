@@ -7,7 +7,7 @@ import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
 import { FOOD_POINTS, stacks } from './minecraftLlmcLive.js';
 import { nearThreats } from './minecraftLlmcThreat.js';
 import { markDelivered, offer, pending, type OnceFact } from './minecraftLlmcOnceFacts.js';
-import { dropCandidates, dropWords, FULL_COST, packFacts, PACK_SLOTS } from './minecraftLlmcPack.js';
+import { dropCandidates, dropWords, FULL_COST, packFacts, PACK_SLOTS, reportedFree } from './minecraftLlmcPack.js';
 import { heldBack, promiseLines } from './minecraftLlmcPromises.js';
 import { FOOD_FISH, nearNeeds } from './minecraftLlmcReachWords.js';
 import { PLAN_FACTS_KEY, type PlanFacts } from './minecraftPlanFacts.js';
@@ -315,7 +315,7 @@ const NEAR_FULL = 3;
 export function packLines(observation: BodyObservation | null, ahead: readonly ActInput[], short: boolean, promises: readonly PlanPromise[] = []): string[] {
   const inventory = world(observation).inventory;
   if (!Array.isArray(inventory)) return [];
-  const lines = stacks(inventory), packed = packFacts(lines), free = Math.max(0, PACK_SLOTS - packed.used);
+  const lines = stacks(inventory), packed = packFacts(lines), free = reportedFree(world(observation).freeSlots) ?? Math.max(0, PACK_SLOTS - packed.used);
   const gains = nextGains(ahead);
   // Full (run 46): what it means comes in the line's first words, and what can be dropped is counted from the plan's promises (what they hold back is not offered), in the short line too.
   const head = `持ち物の空き ${free}/${PACK_SLOTS}${free === 0 ? `（満杯）：${FULL_COST}` : free <= NEAR_FULL ? '（もうすぐ満杯）' : ''}${gains.length ? `・次の手で増える見込み: ${gains.join('・')}` : ''}`;

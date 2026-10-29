@@ -8,7 +8,7 @@ import { activeMinutes, meterLine } from '../src/surfaces/minecraft/minecraftLlm
 import { createHitWatch, deliverOnceFacts, foodCandidates, foodLine, handEffect, holderLine, inputFacts, lifeOf, controlOf, nextGains, onceFor, packLines,
   queueNowLines, stopFactsOf, vitalsLine } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
-import { FULL_COST } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
+import { FULL_COST, packFacts } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { nearWorthy } from '../src/surfaces/minecraft/minecraftLlmcReachWords.js';
 import { foodFirstLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
@@ -368,6 +368,22 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
     expect(packLines(frame({ inventory: Array.from({ length: 36 }, (_, index) => ({ name: `junk_${index}`, count: 1 })) }), [], false)[1]).toBe('約束に回していない石・土の余りは無い（空けるのは drop）');
     // not full: as before
     expect(packLines(frame({ inventory: [] }), [], false)).toEqual(['持ち物の空き 36/36']);
+  });
+  it('run 46 (d0171): the body writes one line a kind, so a line is not a slot; the free slots are the body\'s own number, and the estimate counts the stacks a line fills', () => {
+    // 30 lines, as the body wrote them: the kinds merged (cobbled_deepslate×230 is four slots, cobblestone×147 three, tuff×65 two): the pack is full
+    const merged = [{ name: 'cobbled_deepslate', count: 230 }, { name: 'cobblestone', count: 147 }, { name: 'tuff', count: 65 },
+      ...Array.from({ length: 27 }, (_, index) => ({ name: `junk_${index}`, count: 1 }))];
+    const lines = (world: Record<string, unknown>) => packLines(frame({ inventory: merged, ...world }), [], false);
+    expect(lines({})[0]).toBe(`持ち物の空き 0/36（満杯）：${FULL_COST}`);
+    // the body's number wins over any count of lines: 6 free says 6; 0 free says full, whatever the lines add up to
+    expect(lines({ freeSlots: 6 })).toEqual(['持ち物の空き 6/36']);
+    expect(lines({ freeSlots: 0 })[0]).toBe(`持ち物の空き 0/36（満杯）：${FULL_COST}`);
+    expect(packLines(frame({ inventory: [{ name: 'dirt', count: 3 }], freeSlots: 0 }), [], false)[0]).toContain('満杯');
+    expect(lines({ freeSlots: 2 })[0]).toBe('持ち物の空き 2/36（もうすぐ満杯）');
+    // a number that is not a count of the pack is not used
+    expect(lines({ freeSlots: -1 })[0]).toContain('満杯');
+    expect(lines({ freeSlots: 99 })[0]).toContain('満杯');
+    expect(packFacts(['cobbled_deepslate×230', 'ender_pearl×17', 'wooden_pickaxe×1(耐久10/59)', 'ほか3件は略']).used).toBe(4 + 2 + 1 + 3);
   });
   it('the gains are what the hands add, and a go adds nothing', () => {
     expect(nextGains([{ hands: [{ do: 'go', to: { x: 1, y: 2, z: 3 } }, { do: 'craft', item: 'bread', count: 3 }, { do: 'mine', item: 'iron_ore', count: 4 }] }]))

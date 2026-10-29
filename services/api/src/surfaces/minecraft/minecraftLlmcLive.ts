@@ -184,6 +184,9 @@ function stateOf(world: Record<string, unknown>, observation: BodyObservation): 
     if (typeof world[key] !== 'string') continue;
     out[key] = (key === 'time' ? timeOf(world, out.dimension) : null) ?? cleanText(world[key] as string);
   }
+  // Run 46: the body's own count of the empty pack slots (`freeSlots`), the pack lines' ground (the inventory is one line a kind).
+  const free = finite(world.freeSlots);
+  if (free !== null && free >= 0 && free <= 36) out.freeSlots = Math.floor(free);
   for (const key of ['health', 'food', 'saturation', 'oxygen', 'armor'] as const) {
     const value = finite(world[key]);
     // Run 37 (oxygen 400 on dry land, 20 later): one scale, 息 n/20.
