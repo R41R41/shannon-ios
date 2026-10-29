@@ -147,7 +147,9 @@ export class ExternalEar implements Ear {
     const status = /\{"ear":"stopped"[^\n]*\}/u.exec(this.output)?.[0];
     let detail: any = null;
     try { detail = status ? JSON.parse(status) : { unparsed: this.output.slice(-400) }; } catch { detail = { unparsed: this.output.slice(-400) }; }
-    const counters = detail?.status ?? {};
-    return { kind: 'external', read: counters.commentsRead ?? counters.read ?? null, sent: counters.commentsSent ?? counters.sent ?? null, posted: counters.chatPosted ?? 0, detail };
+    // The ear's status: its counters sit under `counters` (comments eligible = read and kept, sent = acknowledged by the head).
+    const counters = detail?.status?.counters ?? detail?.status ?? {};
+    return { kind: 'external', read: counters.commentsEligible ?? counters.commentsRead ?? counters.read ?? null, sent: counters.commentsSent ?? counters.sent ?? null,
+      posted: counters.chatPostsPosted ?? counters.chatPosted ?? 0, detail };
   }
 }

@@ -104,6 +104,13 @@ export function buildReport(input: BenchInput) {
 }
 export type BenchReport = ReturnType<typeof buildReport>;
 
+/** The fake API's own count of how its chat was read: stream connections and pushes (`liveChatMessages.streamList`) or polls (`liveChatMessages.list`). */
+function apiReadLine(api: Record<string, number>): string {
+  const stream = (api.streamConnects ?? 0) > 0 ? `streamList ${api.streamConnects} connections (${api.streamCuts ?? 0} cut by the fake), ${api.streamPushes ?? 0} pushes` : '';
+  const polls = (api.chatPolls ?? 0) > 0 ? `list polling ${api.chatPolls} polls` : '';
+  return [stream, polls].filter(Boolean).join('; ') || 'not read';
+}
+
 export function markdown(report: BenchReport): string {
   const l = report.latencyMs;
   type Spread = { n: number; median: number | null; p90: number | null };
@@ -113,6 +120,7 @@ export function markdown(report: BenchReport): string {
     `models=${String(report.options.models)} ear=${String(report.options.ear)} speed=${String(report.options.speed)}x (wall ${report.wallSeconds} s)`, '',
     '## Comments', '', '| recorded | sent by the fake API | taken by the head | lost | ear read | ear sent |', '|---|---|---|---|---|---|',
     `| ${report.comments.recorded} | ${report.comments.sentByApi} | ${report.comments.takenByHead} | ${report.comments.lost} | ${report.comments.earRead ?? '–'} | ${report.comments.earSent ?? '–'} |`, '',
+    `How the chat was read: ${apiReadLine(report.api as Record<string, number>)}`, '',
     '## Answers', '', `answered comments ${report.answered.comments}, ${report.answered.perVirtualMinute} per minute of the stream; lines said ${report.lines.spoken} `
     + `(${Object.entries(report.lines.byKind).map(([kind, count]) => `${kind} ${count}`).join(', ')}); declined ${report.declined}; notices ${report.notices}.`, '',
     '## Latency (the stream\'s clock)', '', '| from | to | n | median | p90 |', '|---|---|---|---|---|',
