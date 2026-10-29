@@ -420,6 +420,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   }
   unknownSince(scopeKey: string, taskId: string): string | null { return this.recovery.unknownSince(scopeKey, taskId); }
   retireUnknown(scopeKey: string, at: string): TaskView[] { return this.authority.transaction(() => this.recovery.retireUnknown(scopeKey, at)); }
+  reopenRetired(scopeKey: string, taskId: string, summary: string): TaskView | null { return this.authority.transaction(() => this.recovery.reopenRetired(scopeKey, taskId, summary)); }
   private initialize(id: string, waitReason: string | null): void {
     this.db.prepare('INSERT INTO fca_task_checkpoints(task_id,wait_reason) VALUES(?,?)').run(id, waitReason);
     this.authority.refresh?.(id, this.now());

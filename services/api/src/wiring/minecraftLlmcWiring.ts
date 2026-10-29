@@ -22,6 +22,7 @@ import { createLlmcEvents, urgentDecision, withLlmcBody } from '../surfaces/mine
 import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
+import { isSameInQueue } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { meterParts } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import { deathCounterOf, noteDeath, noteProgress, noteRan, noteRefusal, resumeStalls, stallIncidentId, watchStalls, type Stall } from '../surfaces/minecraft/minecraftLlmcStalls.js';
@@ -486,7 +487,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     // `mc.act` refused before sending, `STALL.refusals` times in a row (`noteRefusal`); true when the answer was about a stall (nothing more to look at).
     const refused = (call: FcaToolCall, result: ToolResult): boolean => {
       if (call.name !== MC_ACT_TOOL || (!result.ok && result.failure !== 'refused' && result.failure !== 'invalid_input')) return false;
-      const stall = noteRefusal(step.taskId, result.ok ? { accepted: true } : { accepted: false, why: result.text.split('\n').find(line => line.trim()) ?? result.text });
+      // A-16: "the same work is already in the queue" is the answer "already asked", not a mistake of the model (run 46: a wait asked again while its twin ran): it ends the
+      // run of refusals like an accepted act, and is not counted.
+      const stall = noteRefusal(step.taskId, result.ok || isSameInQueue(result.text) ? { accepted: true } : { accepted: false, why: result.text.split('\n').find(line => line.trim()) ?? result.text });
       if (stall) headHold(stall);
       return stall !== null;
     };

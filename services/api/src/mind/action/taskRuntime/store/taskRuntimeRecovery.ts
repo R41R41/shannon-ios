@@ -119,6 +119,21 @@ export class TaskRuntimeRecovery {
     this.parts.wake?.(this.parts.required(task.scopeKey, task.id), reason);
   }
 
+  /**
+   * A-17 (run 46: a request held by the operator was failed by the unknown exit 3 minutes after its hold, with the world still frozen): a task the exit failed
+   * (its last two status events are `fca_unknown_retired` and `fca_recovered_unknown`, the failed state still carrying its unknown time) goes back to stopped, resumable,
+   * by the state machine's own late-report exit. Its checkpoint was cleared by the retirement (no step, no stop request), so nothing is left open. Any other failed task: null.
+   */
+  reopenRetired(scopeKey: string, taskId: string, summary: string): TaskView | null {
+    const task = this.parts.authority.get(scopeKey, taskId);
+    if (!task || task.status !== 'failed') return null;
+    const last = this.db.prepare("SELECT event_type FROM agent_task_events WHERE task_id=? AND event_type IN ('fca_unknown_retired','fca_recovered_unknown','fca_retire_reopened') ORDER BY sequence DESC LIMIT 2").all(taskId)
+      .map(row => String(row.event_type));
+    if (last[0] !== 'fca_recovered_unknown' || last[1] !== 'fca_unknown_retired') return null;
+    this.parts.authority.event(scopeKey, taskId, 'fca_retire_reopened', this.parts.now(), { status: 'paused', pauseReason: 'fca_stopped', proof: true, lateReport: true, summary }, { reason: 'held' });
+    return this.parts.get(scopeKey, taskId);
+  }
+
   /** A retired task's parent hears of it, as after a committed failure, and so does the owner's activity (its report). */
   private tellRetired(task: TaskRecord, stepId: string | null, parent: TaskRecord | null): void {
     if (task.origin === 'maintenance') {

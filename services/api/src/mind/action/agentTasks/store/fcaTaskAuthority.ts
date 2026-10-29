@@ -51,13 +51,13 @@ export class SQLiteFcaTaskAuthority implements TaskAuthority {
     return this.event(input.scopeKey, input.id, 'fca_created', input.createdAt, {}, payload);
   }
   event(scopeKey: string, id: string, type: string, at: string,
-    change: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean } = {},
+    change: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean; lateReport?: boolean } = {},
     payload: Record<string, unknown> = {}): TaskRecord {
     const current = this.get(scopeKey, id);
     if (!current) throw new Error('FCA_TASK_NOT_FOUND');
     const revision = current.revision + 1;
     const pauseReason = change.pauseReason === undefined ? current.pauseReason : change.pauseReason;
-    writeTaskState(this.db, id, { status: change.status ?? current.status, pauseReason, proof: change.proof }, at);
+    writeTaskState(this.db, id, { status: change.status ?? current.status, pauseReason, proof: change.proof, ...(change.lateReport ? { lateReport: true } : {}) }, at);
     this.db.prepare(`UPDATE agent_tasks SET summary=?,latest_sequence=?,updated_at=? WHERE scope_key=? AND task_id=?`)
       .run(change.summary ?? current.summary, revision, at, scopeKey, id);
     this.db.prepare(`INSERT INTO agent_task_events(event_id,task_id,sequence,event_type,title,tone,occurred_at,payload_json)

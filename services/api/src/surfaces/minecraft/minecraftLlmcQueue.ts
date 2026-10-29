@@ -16,7 +16,7 @@ import { offer as offerOnceFact } from './minecraftLlmcOnceFacts.js';
 import { placementCorrections } from './minecraftLlmcResultWords.js';
 import { feetOf, urgentWatch } from './minecraftLlmc.js';
 import { noteItemStart } from './minecraftLlmcNode.js';
-import { itemLabel, itemResult, neverRan, queueLines, QUEUE_MAX, unitOfReceipt, unknownResult } from './minecraftLlmcQueueWords.js';
+import { itemLabel, itemResult, neverRan, queueLines, QUEUE_MAX, SAME_IN_QUEUE_WORDS, unitOfReceipt, unknownResult } from './minecraftLlmcQueueWords.js';
 import { correctionWords, heldWords, releasedWords } from './minecraftLlmcResultWords.js';
 import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
 import { madeInOf, withMadeIn } from './minecraftMadeIn.js';
@@ -463,7 +463,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
       return `送らなかった: 列がいっぱい（実行中を含めて ${QUEUE_MAX} つ）。差し替えるなら replace に ${waiting.at(-1)!.item} などを書く`;
     }
     const same = waiting.find(item => sameWork(item.input, spec.input));
-    if (same) return `送らなかった: ${same.item} と同じ手が列にある（${waiting[0] === same ? '実行中' : '待ち'}）。列は live の queue`;
+    if (same) return `送らなかった: ${same.item} ${SAME_IN_QUEUE_WORDS}（${waiting[0] === same ? '実行中' : '待ち'}）。列は live の queue`;
     // Continue contract 2: a mark of another step's queue cannot be relied on (the marks belong to one queue); said now, not as a drop when it should start.
     const unknown = (spec.input.dependsOn ?? []).filter(ref => !items.some(entry => entry.item === ref));
     if (unknown.length) {

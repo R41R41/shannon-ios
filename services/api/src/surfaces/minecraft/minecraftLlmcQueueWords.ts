@@ -12,6 +12,9 @@ import { droppedWords, keptWords, releasedWords, replayWords, unknownWords } fro
 
 /** The words of the head's mirror of the body's queue (`minecraftLlmcQueue.ts`): what an item's end is told as, and the lines of the live state. */
 export const QUEUE_MAX = 3;
+/** The queue's answer "the same work is already in the queue" (A-16): it says "already asked", not a mistake of the model; the stall watch reads it by these words. */
+export const SAME_IN_QUEUE_WORDS = 'と同じ手が列にある';
+export const isSameInQueue = (text: string): boolean => text.includes(SAME_IN_QUEUE_WORDS);
 /** The body's own words of an item it did not run (`failureType`): the item never started and no hand moved. */
 export const NEVER_RAN: ReadonlySet<string> = new Set(['queue_dropped', 'queue_expired', 'queue_after_gone', 'queue_busy', 'queue_full']);
 

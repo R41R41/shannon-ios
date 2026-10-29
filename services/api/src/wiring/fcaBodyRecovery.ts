@@ -20,7 +20,7 @@ import { storeNotice } from './fcaBodyRecoveryNotice.js';
  */
 export * from './fcaBodyRecoveryPolicy.js';
 import {
-  AWAITING_PROOF_SUMMARY, BODY_ABSENT_SUMMARY, BODY_HELD_HINT, FCA_BODY_RECOVERY_CODE, FCA_BODY_RECOVERY_LIMIT,
+  AWAITING_PROOF_SUMMARY, BODY_ABSENT_SUMMARY, BODY_HELD_HINT, HELD_SUMMARY, FCA_BODY_RECOVERY_CODE, FCA_BODY_RECOVERY_LIMIT,
   FCA_BODY_RELEASE_ATTEMPTS, FCA_BODY_RELEASE_UNPROVEN, FCA_BODY_RETURN_WINDOW_MS, FCA_PAUSED_RELEASE_ATTEMPTS, HOLD_GRACE_MS, heldBackoffMs,
   ownSummary, RECOVERY_LIMIT_SUMMARY, RELEASE_UNPROVEN_SUMMARY, releaseBackoffMs, STALE_SUMMARY,
 } from './fcaBodyRecoveryPolicy.js';
@@ -36,6 +36,11 @@ export interface FcaBodyRecoveryParts {
     connected(bodyId: string): boolean;
     release(step: { actionId: string; scopeKey: string; lease: ActionLease }): Promise<BodyRecheckResult>;
   };
+  /**
+   * A-17: whether a hold of the operator stands for the task (an open row of the audit: the head's own hold or the body's). A held request is the owner's to resume: it is never retired by
+   * the unknown exit, never put back in the queue by itself, and a step lost meanwhile ends in a pause (stopped, resumable), not in a failure.
+   */
+  held?(taskId: string): boolean;
   windowMs?: number;
   limit?: { count: number; withinMs: number };
   /** The least time between two background passes (tests: 0). */
@@ -121,6 +126,7 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
     return steps;
   }
 
+  const isHeld = (task: TaskRecord): boolean => { try { return parts.held?.(task.id) === true; } catch { return false; } };
   function sinceUnknown(task: TaskRecord): number {
     const since = runtime.unknownSince?.(scopeKey, task.id) ?? task.updatedAt;
     const started = Date.parse(since);
@@ -199,7 +205,7 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
 
   function pauseExpiredUnknown(id: string): void {
     const task = authority.get(scopeKey, id);
-    if (!task || !isBodyTask(task) || checkpoints.checkpoint(task.id)?.stopRequested) return;
+    if (!task || !isBodyTask(task) || (checkpoints.checkpoint(task.id)?.stopRequested && !isHeld(task))) return;
     if (sinceUnknown(task) > windowMs) {
       pause(task, 'body_not_returned', BODY_ABSENT_SUMMARY);
       return;
@@ -407,6 +413,9 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
       // A paused task waits for the owner, but its lost step goes on holding the body: that is let go once the body proves it (M-C).
       // One whose stop is still being acknowledged by a step is left to that stop.
       if (!row.stopRequested || row.stepId === null) await freeBody(task, steps);
+    } else if (unknown && isHeld(task)) {
+      // A-17: a held request is the operator's: it does not go on by itself (a stop request or not); once the body proves its lost steps released it is paused, stopped and resumable.
+      if (bodyConnected(task.id) && await closeSteps(task, steps)) pause(task, 'held', HELD_SUMMARY);
     } else if (!row.stopRequested) {
       await (unknown ? recoverUnknown(task, steps, row) : recoverResumed(task, steps));
     }
@@ -474,8 +483,8 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
     return working;
   }
 
-  const holds = (task: TaskRecord) => task.pauseReason === 'fca_unknown' && isBodyTask(task) && !checkpoints.checkpoint(task.id)?.stopRequested
-    && sinceUnknown(task) <= windowMs + HOLD_GRACE_MS;
+  const holds = (task: TaskRecord) => task.pauseReason === 'fca_unknown' && isBodyTask(task)
+    && (isHeld(task) || (!checkpoints.checkpoint(task.id)?.stopRequested && sinceUnknown(task) <= windowMs + HOLD_GRACE_MS));
   return {
     isBodyTask,
     holds,

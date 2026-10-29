@@ -10,6 +10,7 @@ import { withDecisionScope } from '../src/infra/decisionRecords/decisionRecordSc
 import { OperatorAuditStore } from '../src/infra/ops/store/operatorAuditStore.js';
 import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
 import { toolFailure, toolOk } from '../src/mind/tools/shannonTools.js';
+import { SAME_IN_QUEUE_WORDS } from '../src/surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { meterLine, meterParts } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { v2tree } from './helpers/planTreeV2.js';
 import {
@@ -417,7 +418,7 @@ describe('the operator reads a hold the head found', () => {
   const at = '2026-10-29T00:00:00.000Z';
   const view = (phase: TaskView['phase']) => ({ id: OP_TASK, phase, goal: 'エンドラを討伐して' } as unknown as TaskView);
   function service(bodyHold: { id: string; task: string; why: string } | null = null) {
-    const audit = new OperatorAuditStore(new DatabaseSync(':memory:'));
+    const auditDb = new DatabaseSync(':memory:'), audit = new OperatorAuditStore(auditDb);
     const tasks = new Map<string, TaskView>(), activity: OperatorActivity[] = [], released: string[] = [];
     const requests = { body: () => 'minecraft:world', open: () => [], get: (id: string) => tasks.get(id) ?? null,
       admit: () => { tasks.set(OP_TASK, view('ready')); return { ok: true as const, task: tasks.get(OP_TASK)!, bodyId: 'minecraft:world' }; },
@@ -434,7 +435,7 @@ describe('the operator reads a hold the head found', () => {
     const parts: OperatorMinecraftParts = { scopeKey: 'owner', enabled: () => true, ownerAlone: () => true, now: () => at, audit, lifecycle: null, requests,
       actions: { list: async () => [] } as unknown as OperatorMinecraftParts['actions'], lifecycleUnresolved: () => false, activity: (_at, entry) => activity.push(entry), note: () => undefined };
     const envelope = (op: string, args: Record<string, unknown> = {}) => ({ v: 1, operator: 'ops.ryo', domain: 'minecraft', op, args });
-    return { operator: createOperatorMinecraft(parts), audit, tasks, activity, released, envelope };
+    return { operator: createOperatorMinecraft(parts), audit, auditDb, requests: requests as unknown as Record<string, unknown>, tasks, activity, released, envelope };
   }
   const note: IncidentNote & { command: string } = { id: 'head:same_spot_stops:10_64_10:abc', heavy: true, why: 'go が同じ所 (10,64,10) の 3 マス以内で 2 回止まった', held: true, frozen: false,
     command: 'skill:c2', record: 'task-x/head-holds/head_same_spot_stops_10,64,10_abc.json', start: [10.5, 64, 10.5], end: [10.5, 64, 10.5] };
@@ -508,6 +509,39 @@ describe('the operator reads a hold the head found', () => {
     const reply = await s.operator.handle(s.envelope('resume', { taskId: OP_TASK }));
     expect(reply.body).toMatchObject({ outcome: 'refused' });
     expect(s.released).toEqual(['resume:some-other']);
+  });
+
+  it('A-17 (run 46): a hold the unknown exit failed is reopened by the resume (the exit own failure only), then resumed as any hold; a failed task the exit did not fail stays refused', async () => {
+    const s = await held();
+    await s.operator.hold(OP_TASK, note);
+    s.tasks.set(OP_TASK, view('failed'));
+    // Another failure (the stub says the exit did not fail it): refused, nothing is sent to the body.
+    s.requests.reopenRetired = () => null;
+    const refused = await s.operator.handle(s.envelope('resume', { taskId: OP_TASK, skipReplay: true }));
+    expect(refused.body).toMatchObject({ outcome: 'refused', code: 'not_running' });
+    expect(s.released).toEqual([]);
+    expect(s.audit.heldOf(OP_TASK)).not.toBeNull();
+    // The exit failure: stopped again, resumed with --skip-replay by --latest.
+    s.requests.reopenRetired = (id: string) => { s.tasks.set(id, view('stopped')); return s.tasks.get(id); };
+    const reply = await s.operator.handle(s.envelope('resume', { latest: true, skipReplay: true }));
+    expect(reply.body).toMatchObject({ outcome: 'accepted', code: 'resumed' });
+    expect(s.released).toEqual([`resume:${note.id}`]);
+    expect(s.tasks.get(OP_TASK)?.phase).toBe('ready');
+    const rows = s.auditDb.prepare("SELECT detail FROM operator_audit WHERE command='resume' AND event='accepted'").all() as Array<{ detail: string }>;
+    expect(rows.map(row => row.detail).join('|')).toContain('reopened=retire_unknown');
+    expect(s.audit.heldOf(OP_TASK)).toBeNull();
+  });
+
+  it('A-17: a held task still unknown (paused, unknown, fca_unknown) is not resumed: the runtime cannot queue an unknown step, so nothing is sent to the body until the recovery has paused it', async () => {
+    const s = await held();
+    await s.operator.hold(OP_TASK, note);
+    s.tasks.set(OP_TASK, view('unknown'));
+    const reply = await s.operator.handle(s.envelope('resume', { latest: true, skipReplay: true }));
+    expect(reply.body).toMatchObject({ outcome: 'refused', code: 'not_running' });
+    expect(s.released).toEqual([]);
+    s.tasks.set(OP_TASK, view('stopped'));
+    const again = await s.operator.handle(s.envelope('resume', { latest: true, skipReplay: true }));
+    expect(again.body).toMatchObject({ outcome: 'accepted', code: 'resumed' });
   });
 });
 
@@ -738,6 +772,31 @@ describe('the step parts hold a request that asked to be held, for what the head
     body.noteResult!(call, toolFailure('unavailable', 'b'));
     body.noteResult!(call, toolFailure('timeout', 'c'));
     expect(port.calls).toHaveLength(1);
+  }, 30_000);
+
+  it('A-16 (run 46): the same wait asked twice while its twin stands in the queue (a go running) is "already asked", not a stall; two answers of a wrong form still hold', async () => {
+    const port = holdPort();
+    const bench = make('decide-error-same');
+    await bench.begin();
+    const body = bench.lifecycle();
+    const call = { id: 'c1', name: 'mc.act', input: {}, operationId: 'op-1', signal: new AbortController().signal } as never;
+    const same = toolFailure('refused', `送らなかった: q31 ${SAME_IN_QUEUE_WORDS}（待ち）。列は live の queue`, { retryable: true });
+    body.noteResult!(call, same);
+    body.noteResult!(call, same);
+    body.noteResult!(call, same);
+    await bench.settle(50);
+    expect(port.calls).toHaveLength(0);
+    // The run of wrong forms is ended by it: a wrong form, "already asked", a wrong form do not make two in a row.
+    body.noteResult!(call, toolFailure('invalid_input', '手の形が違う', { retryable: false }));
+    body.noteResult!(call, same);
+    body.noteResult!(call, toolFailure('invalid_input', '手の形が違う', { retryable: false }));
+    await bench.settle(50);
+    expect(port.calls).toHaveLength(0);
+    // Two in a row of a wrong form (or value) still hold the request.
+    body.noteResult!(call, toolFailure('invalid_input', '範囲の外', { retryable: false }));
+    expect(await until(() => port.calls.length > 0)).toBe(true);
+    expect(port.calls[0]!.id).toMatch(/^head:decide_error:check_refused:/u);
+    expect(port.calls[0]!.why).toContain('2 回');
   }, 30_000);
 
   it('decide_error: a decision again that failed or ran out of time, told by the record\'s row, holds the request', async () => {

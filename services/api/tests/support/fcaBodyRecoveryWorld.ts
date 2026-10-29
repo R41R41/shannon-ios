@@ -42,7 +42,7 @@ export interface WorldApi {
   recovery: FcaBodyRecovery;
 }
 
-export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyRecoveryParts['limit'];
+export function minecraftWorld(options: { windowMs?: number; /** A-17: the tasks the operator holds (an open hold row); the set can change while the world runs. */ held?: Set<string>; limit?: FcaBodyRecoveryParts['limit'];
   budget?(parts: { db: DatabaseSync; actions: ActionThreads; now(): string }): FcaBudget;
   /** Stands in for the body's release when it answers something else than the real re-check would (`real` is the real one). */
   release?(step: Parameters<FcaBodyRecoveryParts['body']['release']>[0], real: FcaBodyRecoveryParts['body']['release']): ReturnType<FcaBodyRecoveryParts['body']['release']>;
@@ -91,6 +91,7 @@ export function minecraftWorld(options: { windowMs?: number; limit?: FcaBodyReco
     const driver = createTaskRuntimeWiring({ db, actions, model, scopeKey: 'owner', ownerAlone: () => true, now, providerRetryDelayMs: () => 0,
       ...(budget ? { budget } : {}),
       bodyRecovery: parts => (recovery = createFcaBodyRecovery({ ...parts, passMs: 0, log: line => logs.push(line),
+        ...(options.held ? { held: (id: string) => options.held!.has(id) } : {}),
         ...(options.windowMs ? { windowMs: options.windowMs } : {}), ...(options.limit ? { limit: options.limit } : {}),
         body: { bound: id => control.store.body(id), connected: id => control.frame(id) !== null,
           release: step => options.release ? options.release(step, real => recheck.releaseStep(real)) : recheck.releaseStep(step) } })),

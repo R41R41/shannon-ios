@@ -162,6 +162,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       // A Minecraft request left unknown (a restart, a lost answer) goes on once its body has proven its release (`fcaBodyRecovery.ts`).
       ...(minecraft ? { bodyRecovery: recoveryParts => createFcaBodyRecovery({ ...recoveryParts,
         windowMs: fcaBodyReturnWindow(values.SHANNON_FCA_BODY_RETURN_MINUTES),
+        // A-17: a request the operator holds (an open row of the audit) is never retired by the unknown exit nor put back in the queue by itself.
+        ...(operatorAudit ? { held: (id: string) => operatorAudit.store.heldOf(id) !== null } : {}),
         body: { bound: id => minecraft.control.store.body(id), connected: id => minecraft.control.frame(id) !== null,
           release: step => minecraft.recheck.releaseStep(step) } }) } : {}),
       ...(sleep ? { sleepTicket: sleep.jobs.ticket, maintenanceAllowed: sleep.jobs.allowed } : {}),

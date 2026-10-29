@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { HELD_SUMMARY } from './fcaBodyRecoveryPolicy.js';
 import { ACTION_TERMINAL } from '@shannon/mind';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { auditedArguments, operatorLabel, operatorTalkNote, parseOperatorEnvelope, OPERATOR_LIMITS,
@@ -391,6 +392,10 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     const hold = parts.audit.heldOf(found.id);
     if (!hold && !recovered(found.id)) return c.refuse('not_held', undefined, { taskId: found.id });
     if (!hold) return resumeRecovered(c, found.id, input.deductMinutes ?? 0);
+    // A-17 (run 46): the unknown exit failed a request whose hold stood open (the hold is the owner's to resume, the exit did not see it). Only a task that exit failed (its events say so)
+    // is stopped again; any other failed task stays failed and is refused below.
+    let reopened = false;
+    if (requests.get(found.id)?.phase === 'failed') reopened = requests.reopenRetired?.(found.id, HELD_SUMMARY) != null;
     const task = requests.get(found.id);
     if (!task || task.phase !== 'stopped') return c.refuse('not_running', '保留した依頼がまだ止まりきっていないか、もう終わっています。', { taskId: found.id });
     // Run 44, resume 1: the body ends its hold first (a release naming it: the hold ends and the world moves), and the task is resumed only when
@@ -412,7 +417,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
         { taskId: found.id });
     }
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted', argsJson: c.argsJson,
-      taskId: found.id, detail: `hold=${hold.sequence} body=${unheld.words}`.slice(0, 600) });
+      taskId: found.id, detail: `hold=${hold.sequence} body=${unheld.words}${reopened ? ' reopened=retire_unknown' : ''}`.slice(0, 600) });
     // Run 45 (holds 3 to 5: the same go sent again stopped the same way, three times): with --skip-replay the held act is not sent again; its result
     // goes to the next decision as a fact (set before the task is queued again: its step reads it when made), and the resume's check is written now.
     const skipLine = input.skipReplay ? requests.heldActWords?.(detail.command ?? '', holdWhy(hold.detail)) ?? '保留した act は出し直さなかった' : null;

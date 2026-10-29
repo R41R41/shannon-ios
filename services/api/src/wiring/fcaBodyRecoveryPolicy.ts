@@ -70,6 +70,8 @@ export const HOLD_GRACE_MS = 5 * 60_000;
 /** What the owner and `task.get` read of a Minecraft request paused here (its state is `stopped`; resuming it is the owner's). */
 export const BODY_ABSENT_SUMMARY = '体が戻らなかったため一時停止しています。体が戻ってから再開できます。';
 export const RECOVERY_LIMIT_SUMMARY = '同じ依頼が短い間に何度も中断されたため一時停止しています。確認してから再開できます。';
+/** A-17: a request the operator holds (a hold row stands) whose step was lost meanwhile: stopped, waiting for the operator's resume. */
+export const HELD_SUMMARY = '保留中のまま一時停止しています。保留を解く resume で再開できます。';
 export const STALE_SUMMARY = '前回の操作から時間がたちすぎているため一時停止しています。状況を確かめてから再開できます。';
 export const RELEASE_UNPROVEN_SUMMARY = '体が前回の操作の解放を確認できなかったため一時停止しています。体の状態を確かめてから再開できます。';
 /** A resumed request that waits for the body's proof about the step it lost (it is not started until then). */
@@ -79,7 +81,7 @@ export const AWAITING_PROOF_SUMMARY = '前回の操作の結果を体がまだ�
  * proven; the recovery keeps asking, and the operator can ask the body again by hand (`opsCli.ts minecraft release`).
  */
 export const BODY_HELD_HINT = '体は、前回の操作の解放が確認できるまで新しい依頼に使えません。運用者が ops の minecraft release で体に確かめさせることもできます。';
-const OWN_SUMMARIES: readonly string[] = [BODY_ABSENT_SUMMARY, RECOVERY_LIMIT_SUMMARY, STALE_SUMMARY, RELEASE_UNPROVEN_SUMMARY, AWAITING_PROOF_SUMMARY];
+const OWN_SUMMARIES: readonly string[] = [BODY_ABSENT_SUMMARY, HELD_SUMMARY, RECOVERY_LIMIT_SUMMARY, STALE_SUMMARY, RELEASE_UNPROVEN_SUMMARY, AWAITING_PROOF_SUMMARY];
 /** A summary this recovery wrote (with or without the hint): one that a task going on must not keep. */
 export const ownSummary = (summary: string) => OWN_SUMMARIES.includes(summary.endsWith(BODY_HELD_HINT) ? summary.slice(0, -BODY_HELD_HINT.length) : summary);
 

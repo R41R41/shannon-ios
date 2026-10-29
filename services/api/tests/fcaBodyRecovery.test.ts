@@ -892,3 +892,79 @@ describe('the lookup of a task\'s sent notes is indexed (L-9)', () => {
     expect(plan).toContain('fca_task_messages_source');
   });
 });
+
+describe('A-17 (run 46): a request the operator holds is not retired by the unknown exit', () => {
+  /** A request whose first step is lost (the API dies while it decides) and the API started again: unknown, the body not back yet. */
+  async function lost(w: World, heldIds: Set<string>) {
+    const first = w.startApi();
+    const task = w.createTask(first);
+    const body = w.connectBody(first, 'c1', 'complete');
+    w.script.push(w.hangs);
+    await w.until(first, () => w.modelInputs.length === 1, 'the first decision is asked');
+    await w.crash(first, body);
+    const api = w.startApi();
+    await w.until(api, () => w.phase(api) === 'unknown', 'the lost step is unknown');
+    void heldIds;
+    return { task, api };
+  }
+
+  it('a held request that was asked to stop (the hold stops it) is left alone past its exits, and paused as stopped, resumable, once the body proves the step released; no decision is asked', async () => {
+    const held = new Set<string>();
+    const w = world({ held });
+    const { task, api } = await lost(w, held);
+    held.add(task.id);
+    await api.driver.stop(task.id, 'operator_hold');
+    await ticks(w, api, 5);
+    w.advance(11 * MINUTE); // past both unknown exits
+    await ticks(w, api, 15);
+    expect(w.phase(api)).toBe('unknown');
+    expect(w.events()).not.toContain('fca_unknown_retired');
+    w.connectBody(api, 'c2', 'complete');
+    await w.until(api, () => w.phase(api) === 'stopped', 'paused, stopped and resumable');
+    expect(w.inputsOf(task.id)).toHaveLength(1);
+    expect(w.events()).toContain('fca_body_paused');
+    expect(w.events()).not.toContain('fca_body_recovered');
+    expect(api.driver.runtime.get('owner', task.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped' });
+    // The operator\'s resume (the runtime\'s explicit one) queues it again.
+    expect(api.driver.runtime.resume('owner', task.id)?.phase).toBe('ready');
+  });
+
+  it('a held request that nobody asked to stop is not taken back by the recovery either: it is paused, not queued', async () => {
+    const held = new Set<string>();
+    const w = world({ held });
+    const { task, api } = await lost(w, held);
+    held.add(task.id);
+    w.connectBody(api, 'c2', 'complete');
+    await w.until(api, () => w.phase(api) === 'stopped', 'paused');
+    await ticks(w, api, 10);
+    expect(w.phase(api)).toBe('stopped');
+    expect(w.inputsOf(task.id)).toHaveLength(1);
+    expect(w.events()).not.toContain('fca_body_recovered');
+  });
+
+  it('a request that is not held is retired at its exit as before; the one the exit failed is paused again by reopenRetired, and no other failed task is', async () => {
+    const held = new Set<string>();
+    const w = world({ held });
+    const { task, api } = await lost(w, held);
+    await api.driver.stop(task.id, 'owner_stop');
+    w.connectBody(api, 'c2', 'complete');
+    await ticks(w, api, 5);
+    w.advance(4 * MINUTE);
+    await w.until(api, () => w.phase(api) === 'failed', 'retired at its exit (nothing held it)');
+    const reopened = api.driver.runtime.reopenRetired!('owner', task.id, '保留中のまま一時停止しています');
+    expect(reopened).toMatchObject({ phase: 'stopped', status: 'paused' });
+    expect(w.events()).toContain('fca_retire_reopened');
+    expect(api.driver.runtime.resume('owner', task.id)?.phase).toBe('ready');
+    // Only once: a task that is not failed by the exit is refused.
+    expect(api.driver.runtime.reopenRetired!('owner', task.id, 'x')).toBeNull();
+  });
+
+  it('a task that failed for another reason is not reopened', async () => {
+    const w = world();
+    const api = w.startApi();
+    const task = w.createTask(api);
+    w.connectBody(api, 'c1', 'complete');
+    await w.until(api, () => w.phase(api) === 'completed', 'completes');
+    expect(api.driver.runtime.reopenRetired!('owner', task.id, 'x')).toBeNull();
+  });
+});

@@ -66,7 +66,7 @@ export interface TaskAuthority {
   byRequest(scopeKey: string, requestKey: string): TaskRecord | null;
   create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string; capability?: string }): TaskRecord;
   event(scopeKey: string, id: string, type: string, at: string,
-    change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean }, payload?: Record<string, unknown>): TaskRecord;
+    change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean; lateReport?: boolean }, payload?: Record<string, unknown>): TaskRecord;
   /** Writes the state a task's checkpoint now means after a change without an event (ADR-0009 stage 1, S4). */
   refresh?(id: string, at: string): void;
 }
@@ -169,6 +169,11 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
    * replaying anything (root/conversation run again, others fail as `unknown_retired`).
    */
   retireUnknown?(scopeKey: string, at: string): TaskView[];
+  /**
+   * A task that `retireUnknown` failed (`fca_unknown_retired`, then failed with its unknown time kept) is paused again as stopped, resumable, when the one who holds it asks (A-17:
+   * the operator's resume of a hold that was open when the exit came). Null: it is not such a task (any other failed task stays failed).
+   */
+  reopenRetired?(scopeKey: string, taskId: string, summary: string): TaskView | null;
   /**
    * The internal root's step the provider refused before anything ran (deterministic 4xx, history limit): closed as a known
    * failure; the root returns to its inbox and the messages the step saw are delivered once more, then consumed (fix 2026-10-14).
