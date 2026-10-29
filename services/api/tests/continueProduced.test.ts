@@ -377,8 +377,8 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     for (const file of files.values()) collect(file.output);
     expect([...codes].length).toBeGreaterThan(0);
   });
-  it('are the 27 files the body made at that revision', () => {
-    expect(names).toHaveLength(27);
+  it('are the 28 files the body made at that revision', () => {
+    expect(names).toHaveLength(28);
   });
 
   it('their receipts go through the head\'s readers, all four: the unit into the store, the unit into the queue\'s sentence, the events into the ledger, the hand lines', () => {
@@ -476,7 +476,7 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(validLifeView(dead.lifeAfter)).toBe(true);
     expect(dead.lifeAfter.life).toBe(dead.lifeBefore + 1);
     expect(dead.result.outcome).toMatchObject({ goal: 'not_started', end: 'cut', cutBy: 'death' });
-    // A-6 5: the life the act began in (the body fixed it: d70dc012bb96).
+    // A-6 5: the life the act began in (the body fixed it: 100a80f68157).
     expect(dead.result.outcome.life).toBe(dead.lifeBefore);
     expect(dead.result.outcome.life).not.toBe(dead.lifeAfter.life);
   });

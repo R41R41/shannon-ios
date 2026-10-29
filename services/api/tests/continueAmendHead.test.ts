@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest';
 import type { PlanPromise } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { dependStateOf, unitView, type InventoryEvent, type Progress } from '../src/contracts/continueContract.js';
-import type { ActHandLine, ActResult } from '../src/contracts/minecraftActContract.js';
+import type { ActHand, ActHandLine, ActResult } from '../src/contracts/minecraftActContract.js';
 import { actResultText } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { FIGHT_END_WORDS, handFacts, seenWords, VERTICAL_STOP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
 import { applyLedger, emptyLedgerSeen, promiseLines, type LedgerSeen } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
+import { handToLine, lineToHand } from '../src/contracts/minecraftActShortHands.js';
 import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 
 /**
@@ -36,6 +37,11 @@ describe('vertical: the 14 stop codes are told in words, and `displaced` and `no
     expect(facts).toContain('開けていない');
     expect(SHORT_ACT_DESCRIPTION).toContain('stairs・shaft は place= を書かないと、持っている丸石・深層岩の丸石・土を足場に置いてよい');
     expect(SHORT_ACT_DESCRIPTION).toContain('place=none');
+    expect(SHORT_ACT_DESCRIPTION).toContain('vertical の手の中だけ、柵・レール・クモの巣・松明・はしご・つた・糸は書かなくても壊す。go・dig は変わらない');
+    // place=none is the body's refusal of the default footing: canPlace [none]; and no place= leaves the field out (the body then defaults it for stairs and shaft)
+    expect(lineToHand('vertical down stairs south y=10 dig=stone,dirt place=none liquid=stop')).toMatchObject({ do: 'vertical', canPlace: ['none'] });
+    expect(lineToHand('vertical down stairs south y=10 dig=stone,dirt liquid=stop')).not.toHaveProperty('canPlace');
+    expect(handToLine(lineToHand('vertical down shaft y=10 dig=stone place=none liquid=stop') as ActHand)).toContain('place=none');
     expect(SHORT_ACT_DESCRIPTION).toContain('pillar は書いた物で作る');
   });
   it('covers every code of the fixture vertical/stop-cases.json (the master of the scenes)', () => {

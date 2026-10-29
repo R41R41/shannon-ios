@@ -38,13 +38,13 @@ import type { ToolResult } from '../../src/mind/tools/toolRegistryPorts.js';
  *   inside it (`queue.add`, `plan.update`) is that decision's calls.
  * - **The body** is `BodyDouble`: it polls the head, takes the commands it is handed, and answers as the test scripts it: receipts it returns, holds back, returns twice,
  *   delays; a connection cut and made again; a restart of the body; a lease that was changed. Its receipts are built from the body's real outputs (`produced/`, made at body
- *   revision d70dc012bb96) or from the fixtures' `input` and `expected`; what the body would decide (which waiting item it drops, which it starts) is the script's, and
+ *   revision 100a80f68157) or from the fixtures' `input` and `expected`; what the body would decide (which waiting item it drops, which it starts) is the script's, and
  *   each scene says which fixture it follows. It writes the body's own records the judge reads (`body-trace.jsonl`: `hand_start`, `op`, `poll`; `receipts.jsonl`).
  * - `collect()` writes the folder `tools/continue-verify/judge.ts` reads, and `judged()` reads it back and judges it.
  */
 export const RUN_BODY = 'minecraft:world';
 /** The body revision the `produced/` files were made at (the body's `contracts/continue/produced/`); the stand-in answers as that body does. */
-export const PRODUCED_REV = 'd70dc012bb96';
+export const PRODUCED_REV = '100a80f68157';
 const FIXTURES_DIR = new URL('../fixtures/continue/', import.meta.url);
 export const fixture = (path: string) => JSON.parse(readFileSync(new URL(path, FIXTURES_DIR), 'utf8')) as Record<string, any>;
 export const produced = (name: string) => {
@@ -125,7 +125,7 @@ export class BodyDouble {
   stopMode: 'prove' | 'late' | 'never' = 'prove';
   private lateStops: MinecraftControlCommand[] = [];
   /**
-   * Amendment A-12 (the stand-in of the body's `utils/incidents.ts` and of its control loop, at body revision d70dc012bb96): the hold it keeps (the head's id for a take, a failure's for its own), the sessions a
+   * Amendment A-12 (the stand-in of the body's `utils/incidents.ts` and of its control loop, at body revision 100a80f68157): the hold it keeps (the head's id for a take, a failure's for its own), the sessions a
    * release closed (a release closes the session it names; a later act of it is refused as `BODY_COMMAND_REFUSED`), what the world allows (`canFreeze`: false is a server with someone else on it), and what
    * the head asked (`takes`) and was refused (`refused`).
    */

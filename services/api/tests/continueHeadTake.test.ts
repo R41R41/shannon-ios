@@ -12,7 +12,7 @@ import { bodyIncident, operatorMinecraftRequests, type OperatorMinecraftRequests
 import { benchC, RUN_BODY, until, type BenchC } from './helpers/benchC.js';
 
 /**
- * Amendment A-12 (the body's type, produced at body revision d70dc012bb96): the head asks the body to hold what it found. A release carries `context.incident.take = { id, why, notes }`
+ * Amendment A-12 (the body's type, produced at body revision 100a80f68157): the head asks the body to hold what it found. A release carries `context.incident.take = { id, why, notes }`
  * (notes: the last rows of the decision record); the body freezes the world, saves the scene, writes its box with the notes and holds under the head's id; its receipt says what it did
  * (`IncidentTakeResult`). The head's own box and the operator's reads (the audit line, the activity record, `held`) tell what the body answered: that it held, that it could not stop the
  * world (`notHeld`: the hold goes on, the world does not stand still), that it keeps another hold, or that it said nothing. `resume` ends the body's hold with a release naming the head's id,
@@ -29,15 +29,15 @@ afterEach(() => { forgetStalls(); setIncidentHoldPort(null); });
 // ---- 1. the body's answers ----------------------------------------------------------------------------------------------------------------------------
 describe('the head reads what the body produced for a take (fixtures/continue/produced/measure--head-take.json)', () => {
   it('is the body\'s file of the revision the amendment was written for', () => {
-    expect(produced.bodyRevision).toBe('d70dc012bb96');
+    expect(produced.bodyRevision).toBe('100a80f68157');
     expect(Object.keys(produced.output).sort()).toEqual(['actTake', 'resume', 'resumeNothing', 'take']);
   });
 
   it('the release\'s answer to a take: it holds, the world stopped, the box and the scene are on the body\'s side', () => {
     const answer = takeOfResult(JSON.stringify({ incident: produced.output.take.incident }))!;
-    expect(answer).toMatchObject({ id: 'head:node_stalled:lab:1793215174971', done: true, hold: 'head:node_stalled:lab:1793215174971', held: true, frozen: true, freeze: 'The game is frozen', again: false });
-    expect(answer.box).toMatch(/blackbox\/continue-lab-task\/head_node_stalled_lab_1793215174971\.json\.gz$/u);
-    expect(answer.scene).toMatch(/scenes\/head_node_stalled_lab_1793215174971$/u);
+    expect(answer).toMatchObject({ id: 'head:node_stalled:lab:1793254222627', done: true, hold: 'head:node_stalled:lab:1793254222627', held: true, frozen: true, freeze: 'The game is frozen', again: false });
+    expect(answer.box).toMatch(/blackbox\/continue-lab-task\/head_node_stalled_lab_1793254222627\.json\.gz$/u);
+    expect(answer.scene).toMatch(/scenes\/head_node_stalled_lab_1793254222627$/u);
     expect(takeEnd(answer)).toBe('held');
     expect(headIncidentKind(answer.id)).toBe('node_stalled');
   });
@@ -53,7 +53,7 @@ describe('the head reads what the body produced for a take (fixtures/continue/pr
 
   it('the act that carried a take and was held reads as a heavy failure\'s hold (its own `incident` fields)', () => {
     const note = incidentOfResult(JSON.stringify({ held: '保留中', incident: produced.output.actTake }))!;
-    expect(note).toMatchObject({ id: 'head:wait_loop:lab:1793215182798', heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
+    expect(note).toMatchObject({ id: 'head:wait_loop:lab:1793254230527', heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
     expect(headIncidentKind(note.id)).toBe('wait_loop');
   });
 

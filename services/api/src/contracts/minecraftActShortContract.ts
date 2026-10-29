@@ -63,7 +63,7 @@ const SHORT_LINES = [
     + '種類が 2 つ以上は json（items）。理由: no_furnace・fuel_short・missing・unreachable・limit_time。',
 'vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water [maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [seconds=N]',
   '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
-    + 'shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物（柵・レール・クモの巣・松明・はしご・つたは、邪魔なら書かなくても壊す）、place= は足場・塞ぎに置く物。stairs・shaft は place= を書かないと、持っている丸石・深層岩の丸石・土を足場に置いてよいことになる（置かせたくなければ place=none）。pillar は書いた物で作る。'
+    + 'shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物（vertical の手の中だけ、柵・レール・クモの巣・松明・はしご・つた・糸は書かなくても壊す。go・dig は変わらない）、place= は足場・塞ぎに置く物。stairs・shaft は place= を書かないと、持っている丸石・深層岩の丸石・土を足場に置いてよいことになる（置かせたくなければ place=none）。pillar は書いた物で作る。'
     + 'liquid: 溶岩・水が見えたら stop=止まる / seal=塞いで続ける / seal_water=水だけ塞ぎ溶岩で止まる（range は塞ぐ半径 1〜2、既定 1）。'
     + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（既定 ${VERTICAL_DEFAULTS.seconds}）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}`
     + `（maxDig は ${VERTICAL_DEFAULTS.maxDig}・maxPlace は ${VERTICAL_DEFAULTS.maxPlace} まで）。見えた鉱石は結果で知らされる。`,
