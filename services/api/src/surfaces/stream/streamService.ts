@@ -60,7 +60,6 @@ export class StreamService {
   private lastReplyMs = -Infinity;
   private lastLineMs = 0;
   private lastTopicMs = -Infinity;
-  private lastReplyEndedMs: number | null = null;
   private topicCount = 0;
 
   constructor(private readonly parts: StreamServiceParts) {
@@ -140,7 +139,6 @@ export class StreamService {
     Object.assign(this.counters, ZERO_COUNTERS);
     this.lastChooseMs = this.lastReplyMs = this.lastTopicMs = -Infinity;
     this.lastLineMs = now;
-    this.lastReplyEndedMs = null;
     this.topicCount = 0;
   }
 
@@ -451,10 +449,9 @@ export class StreamService {
       base: {
         now: () => this.now(), log: line => this.log(line), identity: this.parts.identity, persona: () => this.parts.persona(session.view.streamId),
         body: () => this.parts.body?.() ?? '', quiet: () => session.view.paused || this.over(session),
-        room: () => ({
-          replying: this.replyJob !== null || this.mouth.holds('reply', 'notice'),
-          sinceHumanMilliseconds: this.lastReplyEndedMs === null ? null : Math.max(0, this.now() - this.lastReplyEndedMs),
-        }),
+        // A stream is a show that talks all the time: a moment waits only while a reply is being written (one model call at a time), not
+        // behind the replies waiting in her mouth or the quiet after one (a busy chat left the game without a word in the bench).
+        room: () => ({ replying: this.replyJob !== null, sinceHumanMilliseconds: null }),
         complete: (system, message) => this.author.call('commentary', this.parts.auxiliary,
           { scopeKey: this.parts.scopeKey, systemPrompt: system, history: [], message, skipThinking: true }, 'low', 12_000),
       },
@@ -473,7 +470,6 @@ export class StreamService {
     }
     this.counters.spoken += 1;
     this.spoken(line.commentIds, line.createdMs, end.receipt);
-    if (line.kind === 'reply' || line.kind === 'notice') this.lastReplyEndedMs = this.now();
     // With `chatWrites`, a reply she has said is written in the chat too (the ear posts it).
     if (line.kind === 'reply' && this.live()?.view.chatWrites) this.chatPosts.add(line.id, line.text, line.answering[0]?.authorName, this.now());
   }

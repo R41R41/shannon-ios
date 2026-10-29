@@ -89,8 +89,9 @@ export class StreamMouth {
   hasRoom(kind: StreamLineKind): boolean {
     if (kind === 'notice' || kind === 'closing') return true;
     if (this.waiting.length < STREAM_LIMITS.waitingLines) return true;
-    return kind === 'reply' ? this.waiting.some(line => line.kind === 'topic' || line.kind === 'commentary')
-      : kind === 'commentary' ? this.waiting.some(line => line.kind === 'topic') : false;
+    // A game moment goes by fast: it may push out a waiting reply (whose comments are chosen again), never the other way round.
+    return kind === 'reply' ? this.waiting.some(line => line.kind === 'topic')
+      : kind === 'commentary' ? this.waiting.some(line => line.kind === 'topic' || line.kind === 'reply') : false;
   }
 
   /**
@@ -112,14 +113,18 @@ export class StreamMouth {
     } else if (input.kind === 'notice') {
       this.waiting.unshift(line);
       this.trim();
-    } else if (this.waiting.length >= STREAM_LIMITS.waitingLines) {
-      const out = this.waiting.findIndex(item => item.kind === 'topic');
-      const fallback = input.kind === 'reply' ? this.waiting.findIndex(item => item.kind === 'commentary') : -1;
-      const index = out >= 0 ? out : fallback;
-      const [pushed] = this.waiting.splice(index, 1);
-      if (pushed) this.end(pushed, 'skipped', 'pushed_out');
-      this.waiting.push(line);
-    } else this.waiting.push(line);
+    } else {
+      if (this.waiting.length >= STREAM_LIMITS.waitingLines) {
+        const out = this.waiting.findIndex(item => item.kind === 'topic');
+        const fallback = input.kind === 'commentary' ? this.waiting.map(item => item.kind).lastIndexOf('reply') : -1;
+        const [pushed] = this.waiting.splice(out >= 0 ? out : fallback, 1);
+        if (pushed) this.end(pushed, 'skipped', 'pushed_out');
+      }
+      // Her word on the game goes ahead of the replies waiting (behind a notice): the moment is now, a comment can wait a few seconds.
+      const ahead = input.kind === 'commentary' ? this.waiting.findIndex(item => item.kind !== 'notice' && item.kind !== 'commentary') : -1;
+      if (ahead >= 0) this.waiting.splice(ahead, 0, line);
+      else this.waiting.push(line);
+    }
     this.pump();
     return line.id;
   }

@@ -164,6 +164,22 @@ describe('the mouth (contract §1)', () => {
     expect(mouth.waitingLines().map(line => line.text)).toEqual(['ちゅうい', 'へんじ１']);
   });
 
+  it('puts her word on the game ahead of the waiting replies, and a full mouth gives way to it, never the other way round', () => {
+    const { mouth } = newMouth();
+    const ended: string[] = [];
+    mouth.onEnd(end => ended.push(`${end.line.text}:${end.reason}`));
+    put(mouth, 'reply', 'いま');
+    put(mouth, 'reply', 'へんじ１', ['c1']);
+    expect(put(mouth, 'commentary', 'ダイヤだ')).not.toBeNull();
+    expect(mouth.waitingLines().map(line => line.text)).toEqual(['ダイヤだ', 'へんじ１']);
+    expect(put(mouth, 'reply', 'へんじ２')).toBeNull();
+    expect(put(mouth, 'commentary', 'よるになった')).not.toBeNull();
+    expect(mouth.waitingLines().map(line => line.text)).toEqual(['ダイヤだ', 'よるになった']);
+    expect(ended).toEqual(['へんじ１:pushed_out']);
+    put(mouth, 'notice', 'ちゅうい');
+    expect(mouth.waitingLines()[0]!.text).toBe('ちゅうい');
+  });
+
   it('frees the mouth after 30 s without a receipt and skips a line that expired while it waited', () => {
     const { mouth, clock } = newMouth();
     const ended: string[] = [];
