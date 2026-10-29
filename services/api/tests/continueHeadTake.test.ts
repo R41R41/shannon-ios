@@ -35,9 +35,9 @@ describe('the head reads what the body produced for a take (fixtures/continue/pr
 
   it('the release\'s answer to a take: it holds, the world stopped, the box and the scene are on the body\'s side', () => {
     const answer = takeOfResult(JSON.stringify({ incident: produced.output.take.incident }))!;
-    expect(answer).toMatchObject({ id: 'head:node_stalled:lab:1793261736013', done: true, hold: 'head:node_stalled:lab:1793261736013', held: true, frozen: true, freeze: 'The game is frozen', again: false });
-    expect(answer.box).toMatch(/blackbox\/continue-lab-task\/head_node_stalled_lab_1793261736013\.json\.gz$/u);
-    expect(answer.scene).toMatch(/scenes\/head_node_stalled_lab_1793261736013$/u);
+    expect(answer).toMatchObject({ id: 'head:node_stalled:lab:1793298931015', done: true, hold: 'head:node_stalled:lab:1793298931015', held: true, frozen: true, freeze: 'The game is frozen', again: false });
+    expect(answer.box).toMatch(/blackbox\/continue-lab-task\/head_node_stalled_lab_1793298931015\.json\.gz$/u);
+    expect(answer.scene).toMatch(/scenes\/head_node_stalled_lab_1793298931015$/u);
     expect(takeEnd(answer)).toBe('held');
     expect(headIncidentKind(answer.id)).toBe('node_stalled');
   });
@@ -53,7 +53,7 @@ describe('the head reads what the body produced for a take (fixtures/continue/pr
 
   it('the act that carried a take and was held reads as a heavy failure\'s hold (its own `incident` fields)', () => {
     const note = incidentOfResult(JSON.stringify({ held: '保留中', incident: produced.output.actTake }))!;
-    expect(note).toMatchObject({ id: 'head:wait_loop:lab:1793261743806', heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
+    expect(note).toMatchObject({ id: 'head:wait_loop:lab:1793298938809', heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
     expect(headIncidentKind(note.id)).toBe('wait_loop');
   });
 

@@ -406,7 +406,8 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(receipts.filter(receipt => receipt.unit).length).toBeGreaterThanOrEqual(9);
     expect(receipts.filter(receipt => receipt.result).length).toBeGreaterThanOrEqual(10);
     const events = receipts.flatMap(receipt => eventsOfReceipt(receipt as unknown as MinecraftControlReceipt).events);
-    expect(events.length).toBeGreaterThanOrEqual(5);
+    // 4: the lab may report two placements as one event of -2 (6225863: the second hand's delta merged into the first's), which is the same truth in fewer events
+    expect(events.length).toBeGreaterThanOrEqual(4);
     expect(new Set(events.map(entry => entry.reason))).toEqual(new Set(['placed', 'picked']));
   });
   it('the hand lines of every produced result keep the contract\'s rules of motorOps (a skipped hand has none; not_started never has operations unless it is not_run)', () => {
