@@ -30,14 +30,18 @@ const NOT_MINED_KIND = new RegExp('(?:_bed|_door|_chest|_barrel|_furnace|_shulke
 /** What a frame can be built of. */
 const FRAME_BLOCKS = new Set(['obsidian', 'crying_obsidian']);
 
-/** The frame's lava: the cells the map shows that are no lava (known and something else), or null when the map does not show them. */
+/**
+ * The frame's lava: the cells the map shows that are no lava (known and something else), or null when the map does not show them. `?` is not something else: it is a cell the map cannot say
+ * (not loaded: run 47, +1,657 after a restart of the VM, the whole map was `?` but the feet, and the lava source the model had checked with view was refused as "no lava on the map"); it goes
+ * to the body, which checks the real block.
+ */
 function notLava(cells: readonly Cell[], world: Rec): Cell | null {
   const layers = typeof world.localMap === 'string' ? readLayers(world.localMap, BODY_RULES) : null;
   if (!layers) return null;
   const view = mapView(layers);
   return cells.find(cell => {
     const symbol = view.symbol(cell.x, cell.y, cell.z);
-    return symbol !== undefined && symbol !== 'L' && symbol !== 'l';
+    return symbol !== undefined && symbol !== '?' && symbol !== 'L' && symbol !== 'l';
   }) ?? null;
 }
 

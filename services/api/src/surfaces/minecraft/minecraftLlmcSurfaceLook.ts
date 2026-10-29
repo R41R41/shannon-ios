@@ -66,7 +66,8 @@ export function lookOf(view: MapView, map: string | undefined, feet: Cell, colum
   const top = readTopGrid(map);
   return (x, y, z) => {
     const symbol = view.symbol(x, y, z);
-    if (symbol !== undefined) return isOpenSymbol(symbol) ? OPEN : { kind: 'closed', symbol };
+    // `?` is a cell the map cannot say (not loaded): it is no wall. It falls through to what the top grid and a kept column answer say, else it is unknown.
+    if (symbol !== undefined && symbol !== '?') return isOpenSymbol(symbol) ? OPEN : { kind: 'closed', symbol };
     const cell = top.get(`${x},${z}`);
     const seen = cell ? topLook(cell, feet.y, y) : UNKNOWN;
     if (seen.kind !== 'unknown') return seen;
