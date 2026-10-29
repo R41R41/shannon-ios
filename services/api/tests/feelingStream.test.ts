@@ -6,6 +6,7 @@ import { composedFeeling } from '../src/wiring/feelingWiring.js';
 import { feelingBody, feelingText, type FeelingPort } from '../src/mind/emotion/feelingPorts.js';
 import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
 import { StreamFeeling, checkStreamReply, streamModelRequest } from '../src/mind/emotion/streamFeeling.js';
+import { makePlace } from './streamHarness.js';
 
 /**
  * Stage 5 (Syzygy ADR-0013 §4.5, §4.7, §4.8; `SHANNON_FEELING_STREAM`), through the port, with the stream's entry still to come
@@ -171,7 +172,25 @@ describe('review V1-V3, V7, V8 at the port', () => {
   });
 });
 
-describe('the stream\'s wiring (to come with the stream entry, ADR-0010/0011)', () => {
-  // Review U2: the wiring commit must show the turn's `check` reaching the model request as `feelingCheck` (checked before sending).
-  it.todo('passes the stream turn\'s check context to the reply model as feelingCheck, before any speech');
+describe('the stream place wiring (surfaces/stream/)', () => {
+  // Review U2: the wiring commit shows the turn's `check` reaching the model request as `feelingCheck` (checked before sending).
+  it('passes the stream turn check context to the reply model as feelingCheck, before any speech', async () => {
+    const { port } = composed();
+    const place = makePlace({ feeling: port, override: request => (request.message.includes('怒ってみせて') && !request.turnContext?.includes('[書き直し]')
+      ? JSON.stringify({ say: 'これでいいですか、見せますね', affect: 'annoyed', affectIntensity: 0.5, delivery: 'conversational', answered: [] }) : null) });
+    const { stream } = place.service.start({});
+    await place.service.settle();
+    await place.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'l', title: '', channelId: '' });
+    place.service.ingest(stream.streamId, [place.comment('怒ってみせて')]);
+    await place.step(100);
+    const requests = place.recorded.filter(item => item.request.message.includes('怒ってみせて')).map(item => item.request);
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.feelingCheck).toMatchObject({ audience: 'stream', order: true, audienceChecks: true, stance: 'not_play_along' });
+      expect(request.tools).toBeUndefined();
+    }
+    // The first draft obeyed the order: it was rewritten and never reached the mouth.
+    expect(requests[1]!.turnContext).toContain('[書き直し]');
+    expect((await place.drain()).join('')).not.toContain('見せますね');
+  });
 });

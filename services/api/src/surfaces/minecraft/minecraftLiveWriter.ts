@@ -22,13 +22,16 @@ export interface LiveWriterInput {
   recent: readonly string[];
   /** The line will be spoken in a voice channel (shorter, no marks), not written. */
   voice: boolean;
+  /** Where the line goes: a public YouTube Live (`surfaces/stream/`) or, by default, Discord with friends. */
+  place?: 'discord' | 'stream';
 }
 
 export function liveWriterPrompt(input: LiveWriterInput): { system: string; message: string } {
   const limit = input.voice ? LIVE_LINE_LIMITS.voiceCharacters : LIVE_LINE_LIMITS.textCharacters;
+  const where = input.place === 'stream' ? 'YouTube で配信している。たくさんの知らない人が見ている。' : `Discord で${SHANNON_OWNER_NAME}や友だちといっしょにいる。`;
   const rules = [
     '[実況の一言]',
-    `いまボクはマイクラの体を動かしながら、Discord で${SHANNON_OWNER_NAME}や友だちといっしょにいる。体に起きたことについて、自分の言葉で一言だけ口に出す。`,
+    `いまボクはマイクラの体を動かしながら、${where}体に起きたことについて、自分の言葉で一言だけ口に出す。`,
     `- ${input.voice ? '声に出す' : '文字で書く'}一言。1文、${limit}字以内。見出し・箇条書き・絵文字・かぎ括弧・顔文字は使わない。`,
     '- 下の「いま起きたこと」を材料に、本当に思ったことを言う。起きていないこと、まだ終わっていないことを、終わったと言わない。',
     '- 数字・座標・道具の名前をそのまま読み上げない。「〜します」のような報告の口調にせず、その場の気持ちで話す。',

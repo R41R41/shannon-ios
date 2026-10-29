@@ -35,15 +35,32 @@ export interface PlatformBridgeRouteDependencies {
   voice?: PlatformVoiceRoutes | null;
   /** The server's switches (one head: `POST /v1/converse` answers 503 while `SHANNON_ONE_HEAD` is off); absent, the process's. */
   environment?: () => SwitchValues;
+  /** `/v1/platform/stream/*` (the YouTube stream's ear, `surfaces/stream/`): behind the bridge token alone, not `SHANNON_PLATFORM_REPLY`. */
+  stream?: { handle(path: string, request: IncomingMessage, response: ServerResponse): Promise<void> } | null;
   close?: () => void;
 }
 
 export const SHANNON_PLATFORM_PLACES_PATH = '/v1/platform/places';
 
+/** The YouTube stream's ear routes (`surfaces/stream/streamRoutes.ts`) share the bridge token. */
+const isStreamBridgePath = (path: string): boolean => path.startsWith('/v1/platform/stream/');
+
 export function isPlatformBridgePath(path: string): boolean {
   return path === SHANNON_PLATFORM_TURN_PATH || path === SHANNON_PLATFORM_CONTEXT_PATH
     || path === SHANNON_PLATFORM_PLACES_PATH || path === SHANNON_PLATFORM_REPLY_PATH || path === SHANNON_PLATFORM_REACTIONS_PATH
-    || isPlatformVoicePath(path) || isConversePath(path);
+    || isPlatformVoicePath(path) || isConversePath(path) || isStreamBridgePath(path);
+}
+
+/** `/v1/platform/stream/*`: the bridge's token, then the stream place (`surfaces/stream/streamRoutes.ts`); 503 where it is not composed. */
+async function handleStreamBridgeRequest(
+  path: string, request: IncomingMessage, response: ServerResponse, dependencies: PlatformBridgeRouteDependencies | null,
+): Promise<void> {
+  if (!dependencies) return sendJson(response, 503, { error: 'PLATFORM_BRIDGE_NOT_CONFIGURED' });
+  if (!bearerAuthorized(request.headers.authorization, dependencies.configuration.token)) {
+    return sendJson(response, 401, { error: 'PLATFORM_BRIDGE_UNAUTHORIZED' });
+  }
+  if (!dependencies.stream) return sendJson(response, 503, { error: 'STREAM_NOT_CONFIGURED' });
+  await dependencies.stream.handle(path, request, response);
 }
 
 export async function handlePlatformBridgeRequest(
@@ -52,6 +69,7 @@ export async function handlePlatformBridgeRequest(
   response: ServerResponse,
   dependencies: PlatformBridgeRouteDependencies | null,
 ): Promise<void> {
+  if (isStreamBridgePath(path)) return handleStreamBridgeRequest(path, request, response, dependencies);
   if (isConversePath(path)) {
     await handleConverseRequest(request, response, dependencies ? {
       token: dependencies.configuration.token, voice: dependencies.voice?.service ?? null, reply: dependencies.reply ?? null,

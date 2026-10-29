@@ -114,6 +114,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   addressed: 'addressed.v2',
   /** Owner 2026-10-28: which kept picture of the mini Shannon fits a reply, and whether the reply shows a gesture none has (`surfaces/mini/miniPoseChooser.ts`). */
   miniPose: 'mini_pose.v2',
+  /** Owner 2026-10-29: whether a YouTube Live comment may be answered aloud on the public stream (`conversationRoute.ts`). */
+  streamGate: 'stream_gate.v1',
 } as const);
 export type JevQuestionSetId = typeof JEV_QUESTION_SETS[keyof typeof JEV_QUESTION_SETS];
 export const JEV_QUESTION_LANGUAGE = 'en';
@@ -223,7 +225,7 @@ export function replayedAnswers(trace: Readonly<Record<string, unknown>>): Recor
 /** What one stage-2 decision writes to the decision traces (`contracts/decisionTraceContract.ts`), as closed values. */
 export interface JevChoiceTrace {
   surface: 'text' | 'voice';
-  decision: 'tool_menu' | 'difficulty' | 'recall_beam' | 'feeling_turn' | 'addressed' | 'mini_pose';
+  decision: 'tool_menu' | 'difficulty' | 'recall_beam' | 'feeling_turn' | 'addressed' | 'mini_pose' | 'stream_gate';
   answers: Readonly<Record<string, string | boolean | number | readonly string[]>>;
   outcome: 'ok' | 'timeout' | 'error' | 'fallback';
   model: string;
