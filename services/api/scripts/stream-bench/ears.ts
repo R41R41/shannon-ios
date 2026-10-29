@@ -137,7 +137,7 @@ export class ExternalEar implements Ear {
   async stop(): Promise<EarReport> {
     const child = this.child;
     if (child && child.exitCode === null) {
-      child.kill('SIGINT');
+      child.kill('SIGTERM');
       await new Promise<void>(resolve => {
         const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 8000);
         child.once('exit', () => { clearTimeout(timer); resolve(); });

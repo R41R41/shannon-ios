@@ -20,6 +20,8 @@ export interface WriterComment {
   amount: string | null;
   first: boolean;
   named: boolean;
+  /** An event the ear described (a membership, a gift, a superchat with no words): told as what happened, not quoted as speech. */
+  event: boolean;
 }
 
 export type WriterPurpose =
@@ -75,7 +77,8 @@ function commentLines(comments: readonly WriterComment[]): string[] {
   return comments.map(comment => {
     const label = [comment.kind === 'text' ? '' : `種別=${comment.kind}${comment.amount ? `(${comment.amount})` : ''}`, comment.first ? '初めてのコメント' : '',
       comment.named ? 'ボクを呼んでいる' : ''].filter(Boolean).join(' ');
-    return `- id=${comment.commentId} 名前=${quote(comment.authorName)}${label ? ` ${label}` : ''}\n  「${quote(comment.text)}」`;
+    const words = comment.event ? (comment.text ? `（出来事: ${quote(comment.text)}）` : '（コメントの文はなし。出来事だけ）') : `「${quote(comment.text)}」`;
+    return `- id=${comment.commentId} 名前=${quote(comment.authorName)}${label ? ` ${label}` : ''}\n  ${words}`;
   });
 }
 

@@ -25,6 +25,8 @@ import type { WriterComment, WriterPurpose } from './streamWriter.js';
  * are injected; `tick()` is what a timer calls, so a test steps it by hand and `settle()` waits for the work in flight.
  */
 interface Session {
+  /** The end in progress: a second ask for it (the ear sends `ended` again while the head answers 5xx) is the same end. */
+  ending?: Promise<{ stream: StreamSessionView; summary: StreamSummary }>;
   view: StreamSessionView;
   startedMs: number;
   endedMs?: number;
@@ -147,6 +149,12 @@ export class StreamService {
   async end(streamId: string): Promise<{ stream: StreamSessionView; summary: StreamSummary }> {
     const session = this.live();
     if (!session || session.view.streamId !== streamId) throw new StreamError(409, 'STREAM_NOT_LIVE');
+    session.ending ??= this.finish(session);
+    return session.ending;
+  }
+
+  private async finish(session: Session): Promise<{ stream: StreamSessionView; summary: StreamSummary }> {
+    const streamId = session.view.streamId;
     // The closing word first (the mouth takes it within 20 s or it is not said), then the stream is over and the words go.
     session.view.paused = true;
     this.commentary?.stop();
@@ -169,6 +177,8 @@ export class StreamService {
 
   /** The ear found the live chat (or says it ended). */
   async broadcast(input: { streamId: string; ended?: boolean } & Partial<StreamBroadcast>): Promise<StreamSessionView> {
+    const ended = this.session?.view.streamId === input.streamId && this.session.view.phase === 'ended';
+    if (input.ended === true && ended) return this.session!.view;
     const session = this.live();
     if (!session || session.view.streamId !== input.streamId) throw new StreamError(409, 'STREAM_NOT_LIVE');
     if (input.ended === true) return (await this.end(input.streamId)).stream;
@@ -195,7 +205,8 @@ export class StreamService {
         continue;
       }
       accepted += 1;
-      // Every comment moves her at once (closed tags and a digest); a reaction of the crowd is the crowd's, not a viewer's.
+      // Every comment moves her at once (closed tags and a digest); a reaction of the crowd is the crowd's, not a viewer's. An event is no speech.
+      if (record.event) continue;
       this.parts.feeling.comment(this.parts.scopeKey, {
         id: record.commentId, streamId, viewer: record.reaction ? null : record.viewer, words: record.text, at: iso(now), sourceId: null,
       });
@@ -310,7 +321,7 @@ export class StreamService {
   private writerComment(record: CommentRecord): WriterComment {
     return {
       commentId: record.commentId, authorName: record.authorName, text: record.text, kind: record.kind, amount: record.amountDisplay,
-      first: record.first, named: record.named,
+      first: record.first, named: record.named, event: record.event,
     };
   }
 
@@ -322,7 +333,7 @@ export class StreamService {
       record.attempts += 1;
     }
     const turn = this.parts.feeling.turn(this.parts.scopeKey, {
-      streamId, viewer: primary.viewer, words: primary.text, at: iso(this.now()), snapshot: this.parts.snapshot(this.parts.scopeKey), path: 'text_pre_send',
+      streamId, viewer: primary.viewer, words: primary.event ? '' : primary.text, at: iso(this.now()), snapshot: this.parts.snapshot(this.parts.scopeKey), path: 'text_pre_send',
     });
     if (!turn) return group.forEach(record => this.give(record, 'skipped'));
     if (turn.notice) {
@@ -330,7 +341,9 @@ export class StreamService {
       this.counters.notices += 1;
     }
     const tellOff = turn.state.viewer?.ladder === 'tell_off' && turn.notice !== null;
-    const gate = await this.parts.gate.before(primary.text, primary.tags, this.recentChat(4).filter(text => text !== primary.text));
+    // An event the ear described is no request: there is nothing to read for what it asks.
+    const gate = primary.event ? { declined: false }
+      : await this.parts.gate.before(primary.text, primary.tags, this.recentChat(4).filter(text => text !== primary.text));
     if (this.over(session)) return;
     const comments = group.map(record => this.writerComment(record));
     const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline: gate.declined };

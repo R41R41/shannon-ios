@@ -64,6 +64,7 @@ export function parseComment(item: unknown): IncomingComment | null {
     id, authorId, authorName: text(comment.authorName, 80) ?? '', text: Array.from(comment.text).slice(0, STREAM_LIMITS.commentCharacters).join(''),
     publishedAt: typeof comment.publishedAt === 'string' ? comment.publishedAt : '',
     kind: KINDS.includes(comment.kind) ? comment.kind as IncomingComment['kind'] : 'text', ...parseAmount(comment.amount),
+    ...(comment.synthetic === true ? { synthetic: true } : {}),
     roles: Array.isArray(comment.roles) ? comment.roles.filter((role): role is IncomingComment['roles'][number] => ROLES.includes(role)) : [],
   };
 }

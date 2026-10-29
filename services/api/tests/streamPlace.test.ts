@@ -454,3 +454,45 @@ describe('the private matters of the owner never reach a model or a line', () =>
     expect(lines.length).toBeGreaterThan(3);
   });
 });
+
+describe('events the ear describes (contract §2)', () => {
+  it('thanks a superchat with no words and tells a synthetic membership as what happened, not as the viewer\'s speech', async () => {
+    const place = await started();
+    place.service.ingest(place.streamId, [
+      place.comment('', { kind: 'superchat', amount: { display: '¥300', micros: 300_000_000, currency: 'JPY' } }),
+      place.comment('メンバーになりました', { kind: 'membership', synthetic: true, roles: ['member'] }),
+    ]);
+    await place.step(100);
+    await place.step(7_000);
+    const messages = writerCalls(place).map(item => item.request.message).join('\n');
+    expect(messages).toContain('コメントの文はなし');
+    expect(messages).toContain('（出来事: メンバーになりました）');
+    expect(messages).not.toContain('「メンバーになりました」');
+    expect(place.service.stats().comments).toBe(2);
+    expect((await said(place)).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('does not answer an empty plain comment, and an event moves no feeling', async () => {
+    const place = await started();
+    place.service.ingest(place.streamId, [place.comment('', { kind: 'text' }), place.comment('お前殺す', { kind: 'membership', synthetic: true })]);
+    await place.step(100);
+    expect(place.service.view().comments.map(item => item.status)).toEqual(['skipped', 'picked']);
+    expect(place.service.view().comments[1]!.tags).toEqual([]);
+    expect(place.service.stats().notices).toBe(0);
+  });
+});
+
+describe('the ear\'s retries (contract §2)', () => {
+  it('takes the same broadcast again, and ended again, as it took them the first time', async () => {
+    const place = await started();
+    const again = await place.service.broadcast({ streamId: place.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch' });
+    expect(again.phase).toBe('live');
+    expect(place.service.bridgeState().stream).toMatchObject({ phase: 'live', startedAt: expect.any(String), broadcast: { videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch' } });
+    const first = place.service.broadcast({ streamId: place.streamId, ended: true });
+    const second = place.service.broadcast({ streamId: place.streamId, ended: true });
+    expect((await first).phase).toBe('ended');
+    expect((await second).phase).toBe('ended');
+    expect((await place.service.broadcast({ streamId: place.streamId, ended: true })).phase).toBe('ended');
+    expect(place.service.stats().lines).toBe(2);
+  });
+});
