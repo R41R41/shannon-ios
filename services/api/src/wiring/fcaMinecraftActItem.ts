@@ -14,6 +14,7 @@ import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { breakingOf } from '../surfaces/minecraft/minecraftLlmcPromises.js';
+import { digPackLine } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -58,7 +59,9 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const counted = parts.promises ? breakingOf(parts.promises(), input.hands, parts.frame) : null;
   // A-11 1: a promise the act keeps by its `instead` is said beside the ones it would break.
   const breaking = counted ? [...counted.lines, ...counted.keptBy] : [];
-  return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...(parts.lead ?? []), ...kept, ...breaking].join('\n'));
+  // Run 47 (hold 5): an act that digs with the pack nearly full is told what that costs (nothing is refused).
+  const full = digPackLine(parts.frame, input.hands, parts.promises?.() ?? [], call.taskId);
+  return toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...(parts.lead ?? []), ...kept, ...breaking, ...(full ? [full] : [])].join('\n'));
 }
 
 /** An input of nothing but `replace`: the items are taken off and that is the whole answer; null for any other input. */

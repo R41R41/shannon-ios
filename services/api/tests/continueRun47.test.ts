@@ -20,7 +20,8 @@ const stuckGo = (at = { x: 156, y: 67, z: 200 }) => JSON.stringify({ v: 1, ok: f
 describe('a stuck go is said as what it is, and the same place is counted', () => {
   it('the facts line of a stuck go says the way is found and the body cannot move on it, with the nth time at the place; no distance that reads as nearly there', () => {
     expect(stopFactsOf(stuckGo(), () => 2)).toEqual(['go の止まり: 止まった位置 (156,67,200) で、道は見つかるが体が進めない（同じ所で 2 回目）']);
-    expect(stopFactsOf(stuckGo())).toEqual(['go の止まり: 止まった位置 (156,67,200) で、道は見つかるが体が進めない（同じ所で 1 回目）']);
+    // a result read without the stall watch's count (after a restart) says no number rather than a wrong one
+    expect(stopFactsOf(stuckGo())).toEqual(['go の止まり: 止まった位置 (156,67,200) で、道は見つかるが体が進めない']);
     expect(stopFactsOf(stuckGo(), () => 2)[0]).not.toContain('行き先まで');
     // another stop keeps the distance (a search that timed out: the tip of the search is information)
     const timeout = JSON.parse(stuckGo()) as { lines: Array<{ code: string }> };
@@ -72,6 +73,13 @@ describe('the held act a resume with --skip-replay does not send again is told w
     expect(words).toContain('保留した act q17（go (155,66,200)）は出し直さなかった。前の結果: go 止まった stuck（今 (156,67,200)）');
     expect(words).toContain('直しを 5 回しても進まない');
     expect(words).toContain('view で周りを見て、別の手を（頭の高さの板があれば dig で外す）');
+  });
+
+  it('run 47 resume 3: the stop fact of a stuck go is made from the receipt of the act held before a restart, with the reason of the hold that carries the count', () => {
+    const words = requests.heldActWords(COMMAND, 'go が同じ所 (156,67,200) の 3 マス以内で 2 回、done にならず止まった（partial・stuck）');
+    expect(words).toContain('go の止まり: 止まった位置 (156,67,200) で、道は見つかるが体が進めない');
+    expect(words).toContain('保留の理由: go が同じ所 (156,67,200) の 3 マス以内で 2 回');
+    expect(words).not.toContain('行き先まで');
   });
 
   it('without a receipt it says the reason the act was held for', () => {

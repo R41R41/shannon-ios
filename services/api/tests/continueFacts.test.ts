@@ -8,6 +8,8 @@ import { activeMinutes, meterLine } from '../src/surfaces/minecraft/minecraftLlm
 import { createHitWatch, deliverOnceFacts, foodCandidates, foodLine, handEffect, holderLine, inputFacts, lifeOf, controlOf, nextGains, onceFor, packLines,
   queueNowLines, stopFactsOf, vitalsLine } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
+import { digPackLine } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
+import type { ActHand } from '../src/contracts/minecraftActContract.js';
 import { FULL_COST, packFacts } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { nearWorthy } from '../src/surfaces/minecraft/minecraftLlmcReachWords.js';
@@ -384,6 +386,29 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
     expect(lines({ freeSlots: -1 })[0]).toContain('満杯');
     expect(lines({ freeSlots: 99 })[0]).toContain('満杯');
     expect(packFacts(['cobbled_deepslate×230', 'ender_pearl×17', 'wooden_pickaxe×1(耐久10/59)', 'ほか3件は略']).used).toBe(4 + 2 + 1 + 3);
+  });
+  it('run 47 hold 5: 2 free slots and a go that digs a lot: the answer says what the pack takes and what can be dropped; said once for a count; nothing without a digging hand or with room', () => {
+    const merged = [{ name: 'cobbled_deepslate', count: 230 }, { name: 'cobblestone', count: 147 }, { name: 'tuff', count: 65 }, ...Array.from({ length: 25 }, (_, index) => ({ name: `junk_${index}`, count: 1 }))];
+    const near = frame({ inventory: merged, freeSlots: 2 });
+    const go = { do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone', 'cobbled_deepslate'], maxDig: 200 } as ActHand;
+    const line = digPackLine(near, [go], [], 'run47-dig')!;
+    expect(line).toBe('空き 2/36：掘って出る石・深層岩・土は 2 マスより多くは拾えない。drop で空けられる物（約束に回していない分）: cobbled_deepslate×166（3 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
+    expect(line).not.toMatch(/しなさい|してください|すること|べき|しろ/u);
+    // the same count is not said again; another count is
+    expect(digPackLine(near, [go], [], 'run47-dig')).toBeNull();
+    expect(digPackLine(frame({ inventory: merged, freeSlots: 1 }), [go], [], 'run47-dig')).toContain('空き 1/36：掘って出る石・深層岩・土は 1 マスより多くは拾えない');
+    expect(digPackLine(frame({ inventory: merged, freeSlots: 0 }), [{ do: 'mine', block: 'iron_ore' } as ActHand], [], 'run47-dig-0')).toContain('1 つも拾えない');
+    // a hand that digs: vertical, mine, dig, a go that may dig; a go that may not (no canDig, or maxDig 0), a walk or a wait do not
+    for (const hand of [{ do: 'vertical' }, { do: 'mine' }, { do: 'dig' }] as ActHand[]) expect(digPackLine(near, [hand], [], `run47-${hand.do}`)).not.toBeNull();
+    expect(digPackLine(near, [{ do: 'go', to: { x: 1, y: 2, z: 3 } } as ActHand], [], 'run47-nodig')).toBeNull();
+    expect(digPackLine(near, [{ ...go, maxDig: 0 } as ActHand], [], 'run47-nodig2')).toBeNull();
+    expect(digPackLine(near, [{ do: 'wait' } as ActHand], [], 'run47-wait')).toBeNull();
+    // room: nothing, and the memory is cleared (the next time it is said again)
+    expect(digPackLine(frame({ inventory: merged, freeSlots: 20 }), [go], [], 'run47-dig')).toBeNull();
+    expect(digPackLine(near, [go], [], 'run47-dig')).not.toBeNull();
+    // what a promise holds back is not offered
+    const promise = { id: 1, rev: 1, state: 'open', item: 'cobblestone', count: 100, use: '足場', have: 0 } as unknown as PlanPromise;
+    expect(digPackLine(near, [go], [promise], 'run47-promise')).toContain('cobblestone×47（1 マス）');
   });
   it('the gains are what the hands add, and a go adds nothing', () => {
     expect(nextGains([{ hands: [{ do: 'go', to: { x: 1, y: 2, z: 3 } }, { do: 'craft', item: 'bread', count: 3 }, { do: 'mine', item: 'iron_ore', count: 4 }] }]))

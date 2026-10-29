@@ -306,6 +306,30 @@ function takers(lines: readonly string[]): string[] {
   }
   return [...kinds].filter(([, kind]) => kind.slots >= 2 || kind.n > 32).sort((a, b) => b[1].slots - a[1].slots || b[1].n - a[1].n).slice(0, 4).map(([name, kind]) => `${name}×${kind.n}（${kind.slots} マス）`);
 }
+/** Does a hand dig (and so pick up what it digs)? A go that may dig (`canDig`, `maxDig` not 0), a vertical, a mine, a dig. */
+const diggingHand = (hand: ActHand): boolean => hand.do === 'vertical' || hand.do === 'mine' || hand.do === 'dig'
+  || (hand.do === 'go' && (hand.canDig?.length ?? 0) > 0 && hand.maxDig !== 0);
+const toldPack = new Map<string, number>();
+/**
+ * Run 47 (hold 5: 2 slots free of 36, a go with a lot of digging was sent, and the cobbled deepslate it dug filled the pack a few blocks short of the goal): with 3 free slots or fewer,
+ * an act that has a digging hand is answered, beside the line of the queue (nothing is refused), with what that means and what can be dropped before the digging, from the pack's
+ * own count (`reportedFree`) and the candidates of the full pack (`dropCandidates`). Said once for a free count: the same count is not said again by the next act.
+ */
+export function digPackLine(observation: BodyObservation | null, hands: readonly ActHand[] | undefined, promises: readonly PlanPromise[], taskId: string): string | null {
+  const inventory = world(observation).inventory;
+  if (!Array.isArray(inventory) || !hands?.some(diggingHand)) return null;
+  const packed = packFacts(stacks(inventory)), free = reportedFree(world(observation).freeSlots) ?? Math.max(0, PACK_SLOTS - packed.used);
+  if (free > NEAR_FULL) {
+    toldPack.delete(taskId);
+    return null;
+  }
+  if (toldPack.get(taskId) === free) return null;
+  toldPack.set(taskId, free);
+  if (toldPack.size > 32) toldPack.delete(toldPack.keys().next().value as string);
+  const spare = dropWords(dropCandidates(packed.filler, item => heldBack(promises, item)));
+  return `空き ${free}/${PACK_SLOTS}：掘って出る石・深層岩・土は ${free === 0 ? '1 つも拾えない' : `${free} マスより多くは拾えない`}。`
+    + (spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）');
+}
 /** Free slots at or under this: the line also says what fills the pack. */
 const NEAR_FULL = 3;
 /**
@@ -354,8 +378,9 @@ export function stopFactLines(resultJson: string | undefined, spotStops?: (at: u
     if (progress.unit === 'meter' && progress.fromStopM !== undefined && (line.do === 'go' || line.do === 'walk') && line.code === 'stuck') {
       const where = progress.at ? `止まった位置 ${cell(progress.at)} で` : '止まった位置で';
       out.push(() => {
-        const times = Math.max(1, spotStops?.(progress.at) ?? 0);
-        return `${line.do} の止まり: ${where}、道は見つかるが体が進めない（同じ所で ${times} 回目）`;
+        // The count is the stall watch's, in this process; without it (a result read after a restart) no number is said rather than a wrong one.
+        const times = spotStops ? Math.max(1, spotStops(progress.at)) : 0;
+        return `${line.do} の止まり: ${where}、道は見つかるが体が進めない${times ? `（同じ所で ${times} 回目）` : ''}`;
       });
     } else if (progress.unit === 'meter' && progress.fromStopM !== undefined && (line.do === 'go' || line.do === 'walk')) {
       out.push(`${line.do} の止まり: ${progress.at ? `止まった位置 ${cell(progress.at)} から` : '止まった位置から'}行き先まで ${num(progress.fromStopM)} m`

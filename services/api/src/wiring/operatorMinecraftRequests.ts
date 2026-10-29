@@ -2,6 +2,7 @@ import type { TaskRecord, TaskRuntime, TaskSpec, TaskView } from '../mind/action
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { OPERATOR_TITLE_PREFIX, operatorRequestContext } from '../contracts/operatorContract.js';
 import { rejectedTaskReport } from './taskRuntimeWiring.js';
+import { stopFactsOf } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 
 /** Phases after which a task no longer holds the body or its Minecraft work. */
 const FINISHED: readonly TaskView['phase'][] = ['stopped', 'completed', 'failed'];
@@ -96,13 +97,17 @@ export function operatorMinecraftRequests(parts: {
       const hand = ((sent?.arguments as { hands?: Array<Record<string, unknown>> } | undefined)?.hands ?? [])[0];
       const to = hand?.to as { x?: unknown; y?: unknown; z?: unknown } | undefined;
       const handWords = hand ? `${String(hand.do ?? '?')}${to && typeof to.x === 'number' ? ` (${to.x},${to.y},${to.z})` : ''}` : '';
-      let stop = '';
+      let stop = '', fact = '';
       try {
         const lines = (JSON.parse(commandId ? parts.control.store.receipt(commandId)?.result ?? '' : '') as { lines?: Array<{ status?: string; line?: string }> }).lines ?? [];
         // Run 47 (hold 3: the decision after a skipped resume sent the same go again): the hand's line as the body wrote it, its fix and hint to the end, not the code alone.
         stop = String(lines.find(entry => entry.status !== 'done' && entry.status !== 'skipped')?.line ?? '').replace(/\s+/gu, ' ').trim().slice(0, 400);
+        // Run 47 (resume 3): the stop's fact lines are made from the results that ran in this process; the held act's ran in the one before the restart. This one is made from its receipt
+        // (a stuck go: the way is found and the body cannot move on it), and the hold's reason carries the count of stops in the same place.
+        fact = stopFactsOf(parts.control.store.receipt(commandId)?.result)[0] ?? '';
       } catch { stop = ''; }
-      return `保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop || why}`.slice(0, 600);
+      const reason = stop && why && !stop.includes(why.slice(0, 40)) ? `。保留の理由: ${why.replace(/\s+/gu, ' ').slice(0, 160)}` : '';
+      return `保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop || why}${fact ? `。${fact}` : ''}${reason}`.slice(0, 900);
     },
     /**
      * Amendment A-15: the act the task's step lost, in words for the first decision after a resume of a task the recovery paused (「q46 の 作業台とかまどを置く…」): its item and first hand.
