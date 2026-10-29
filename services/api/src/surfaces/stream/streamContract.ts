@@ -88,6 +88,8 @@ export interface IncomingComment {
   kind: StreamCommentKind;
   amount?: { display: string; micros: number; currency: string };
   roles: readonly StreamCommentRole[];
+  /** The ear made `text` (a membership, a gift): an event to tell, not words of the viewer to quote. */
+  synthetic?: boolean;
 }
 
 export interface StreamLinePlan { affect: ShannonEmotionKind; affectIntensity: number; delivery: StreamDelivery }

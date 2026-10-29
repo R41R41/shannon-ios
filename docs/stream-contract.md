@@ -119,12 +119,15 @@ Bridge routes take `SHANNON_PLATFORM_BRIDGE_TOKEN` like every `/v1/platform/*` r
 
 `{ "stream": null }` or `{ "stream": { "streamId", "platform": "youtube", "phase", "startedAt", "title", "chatWrites", "broadcast": {…}|null },
 "chatPosts": [ { "id", "text" } ] }`. The ear polls this every 5 s while no stream is live, and reads `chatPosts` (only with `chatWrites`)
-after each comments batch too.
+after each comments batch too. `broadcast` is exactly the `{ videoId, liveChatId, title, channelId }` the ear POSTed (it reads it again after its own
+restart), `null` before; `startedAt` is what the ear drops earlier comments by. Added 2026-10-29.
 
 ### `POST /v1/platform/stream/broadcast`
 
 The ear found the live chat: `{ "streamId", "videoId", "liveChatId", "title", "channelId" }` → 200 `{ "stream": {…phase: "live"} }`.
-`{ "streamId", "ended": true }` when YouTube says the chat has ended: the head ends the stream as `POST /v1/stream/end` does.
+`{ "streamId", "ended": true }` when YouTube says the chat has ended: the head ends the stream as `POST /v1/stream/end` does. Both are idempotent
+(2026-10-29): the same broadcast again is 200 with the stream; `ended: true` again, even while the first is still writing the closing line or after it
+ended (the ear resends it while the head answers 5xx), is 200 with the ended stream and makes no second closing.
 
 ### `POST /v1/platform/stream/comments`
 
@@ -133,10 +136,13 @@ The ear found the live chat: `{ "streamId", "videoId", "liveChatId", "title", "c
   { "id": "<YouTube message id>", "authorId": "<channel id>", "authorName": "…", "text": "…", "publishedAt": "…",
     "kind": "text" | "superchat" | "supersticker" | "membership" | "gift",
     "amount": { "display": "¥500", "micros": 500000000, "currency": "JPY" },
-    "roles": ["owner" | "moderator" | "member" | "verified"] } ] }
+    "roles": ["owner" | "moderator" | "member" | "verified"], "synthetic": true } ] }
 ```
 
-≤ 200 comments, ≤ 128 KB; `text` ≤ 300 chars (longer is cut). Repeated ids are ignored. → 202
+≤ 200 comments, ≤ 128 KB; `text` ≤ 300 chars (longer is cut), and may be empty (added 2026-10-29: a superchat without words, a sticker without
+`altText`). `synthetic: true` (optional) says the ear made `text` (a membership, a gift) and it is not the viewer's speech. A comment with no words or a
+synthetic one is an **event**: the writer is told what happened (「スーパーチャットのお礼」), never handed it as a quote; it is not read for what it asks (no
+gate), moves no feeling and never carries a tag; an empty plain comment is folded away like a reaction. Repeated ids are ignored. → 202
 `{ "accepted": n, "duplicates": n, "chatPosts": [ { "id", "text" } ] }`. 409 `STREAM_NOT_LIVE` when `streamId` is not the live stream.
 A comment whose `publishedAt` is more than 5 minutes old is kept for the console but never answered. More than 200 comments in a batch: 400
 `STREAM_TOO_MANY_COMMENTS` (nothing taken); a comment without an id, an author or words is left out of the batch; a body over 128 KB: 413.

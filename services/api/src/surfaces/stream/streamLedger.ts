@@ -29,6 +29,8 @@ export interface CommentRecord {
   /** Short reactions (「w」「草」「888」) are folded into the crowd and never answered alone. */
   reaction: boolean;
   /** The viewer's first comment of this stream. */
+  /** The ear made the words (a membership, a gift) or there are none (a superchat without a comment): an event, not the viewer's speech. */
+  event: boolean;
   first: boolean;
   /** Times it was taken up for an answer and given back (a writer that failed or left it out). */
   attempts: number;
@@ -102,13 +104,14 @@ export class StreamLedger {
   private read(incoming: IncomingComment, nowMs: number): CommentRecord {
     const text = plain(incoming.text, STREAM_LIMITS.commentCharacters);
     const published = Date.parse(incoming.publishedAt);
-    const tags = commentTags(text);
+    const event = incoming.synthetic === true || (PAID_KINDS.has(incoming.kind) && !text);
+    const tags = event ? [] : commentTags(text);
     return {
       commentId: incoming.id, authorId: incoming.authorId, authorName: plain(incoming.authorName, 40) || 'みなさん',
       viewer: viewerDigest(incoming.authorId, this.salt), text, kind: incoming.kind,
       amountDisplay: incoming.amount ? plain(incoming.amount.display, 20) : null, roles: incoming.roles,
       publishedMs: Number.isFinite(published) ? Math.min(published, nowMs) : nowMs, receivedMs: nowMs, status: 'new', tags, digest: commentDigest(text),
-      question: isQuestion(text), named: isNamed(text), reaction: isReaction(text) && !tags.length && !PAID_KINDS.has(incoming.kind),
+      event, question: !event && isQuestion(text), named: !event && isNamed(text), reaction: isReaction(text) && !tags.length && !PAID_KINDS.has(incoming.kind),
       first: !this.seenViewers.has(incoming.authorId), attempts: 0,
     };
   }
