@@ -1,0 +1,1389 @@
+{
+ "about": "The stream bench's recorded chat (makeChat.ts): ten minutes, invented viewers.",
+ "durationSeconds": 600,
+ "comments": [
+  {
+   "at": 5,
+   "id": "bench-041",
+   "authorId": "UCbench0041",
+   "authorName": "そら41",
+   "text": "こんにちは",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 8,
+   "id": "bench-001",
+   "authorId": "UCbench0001",
+   "authorName": "そら1",
+   "text": "初見です",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 12,
+   "id": "bench-011",
+   "authorId": "UCbench0011",
+   "authorName": "なぎさ11",
+   "text": "シャノン、今日は何するの？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 20,
+   "id": "bench-031",
+   "authorId": "UCbench0031",
+   "authorName": "なぎさ31",
+   "text": "シャノン、こんにちは！",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 25,
+   "id": "bench-135",
+   "authorId": "UCbench0132",
+   "authorName": "たくみ132",
+   "text": "みんなこんにちは、今日は雑談とマイクラだよ",
+   "kind": "text",
+   "tag": "owner",
+   "roles": [
+    "owner"
+   ]
+  },
+  {
+   "at": 26,
+   "id": "bench-042",
+   "authorId": "UCbench0042",
+   "authorName": "りく42",
+   "text": "おつかれさま",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 40,
+   "id": "bench-145",
+   "authorId": "UCbench0001",
+   "authorName": "そら1",
+   "text": "声いいね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 41,
+   "id": "bench-012",
+   "authorId": "UCbench0012",
+   "authorName": "たくみ12",
+   "text": "好きな食べ物は何？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 47,
+   "id": "bench-043",
+   "authorId": "UCbench0043",
+   "authorName": "ゆうき43",
+   "text": "いつも楽しみにしてます",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 60,
+   "id": "bench-082",
+   "authorId": "UCbench0082",
+   "authorName": "りく82",
+   "text": "www",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 61,
+   "id": "bench-083",
+   "authorId": "UCbench0083",
+   "authorName": "ゆうき83",
+   "text": "草草草",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 62,
+   "id": "bench-084",
+   "authorId": "UCbench0084",
+   "authorName": "みお84",
+   "text": "88888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 63,
+   "id": "bench-085",
+   "authorId": "UCbench0085",
+   "authorName": "かい85",
+   "text": "w",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 64,
+   "id": "bench-086",
+   "authorId": "UCbench0086",
+   "authorName": "あおい86",
+   "text": "ｗｗｗ",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 65,
+   "id": "bench-087",
+   "authorId": "UCbench0087",
+   "authorName": "れん87",
+   "text": "草",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 66,
+   "id": "bench-088",
+   "authorId": "UCbench0088",
+   "authorName": "はると88",
+   "text": "888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 67,
+   "id": "bench-089",
+   "authorId": "UCbench0089",
+   "authorName": "ことは89",
+   "text": "８８８",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 68,
+   "id": "bench-044",
+   "authorId": "UCbench0044",
+   "authorName": "みお44",
+   "text": "音量ちょうどいい",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 68,
+   "id": "bench-090",
+   "authorId": "UCbench0090",
+   "authorName": "いつき90",
+   "text": "wwww",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 69,
+   "id": "bench-091",
+   "authorId": "UCbench0091",
+   "authorName": "なぎさ91",
+   "text": "www",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 70,
+   "id": "bench-013",
+   "authorId": "UCbench0013",
+   "authorName": "まひろ13",
+   "text": "マイクラは得意なの？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 71,
+   "id": "bench-002",
+   "authorId": "UCbench0002",
+   "authorName": "りく2",
+   "text": "初見です、よろしくお願いします",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 77,
+   "id": "bench-032",
+   "authorId": "UCbench0032",
+   "authorName": "たくみ32",
+   "text": "シャノンちゃん今日も元気だね",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 77,
+   "id": "bench-045",
+   "authorId": "UCbench0045",
+   "authorName": "かい45",
+   "text": "へえー",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 95,
+   "id": "bench-073",
+   "authorId": "UCbench0073",
+   "authorName": "まひろ73",
+   "text": "今日のゲームは何をやるの？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 98,
+   "id": "bench-046",
+   "authorId": "UCbench0046",
+   "authorName": "あおい46",
+   "text": "いい天気だね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 99,
+   "id": "bench-014",
+   "authorId": "UCbench0014",
+   "authorName": "さくら14",
+   "text": "いつから配信してるの？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 99,
+   "id": "bench-074",
+   "authorId": "UCbench0074",
+   "authorName": "さくら74",
+   "text": "今日のゲームは何をするの？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 100,
+   "id": "bench-125",
+   "authorId": "UCbench0122",
+   "authorName": "りく122",
+   "text": "えっちな話しようよ",
+   "kind": "text",
+   "tag": "sexual"
+  },
+  {
+   "at": 103,
+   "id": "bench-075",
+   "authorId": "UCbench0075",
+   "authorName": "ゆず75",
+   "text": "今日のゲームは何をやるんですか？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 119,
+   "id": "bench-047",
+   "authorId": "UCbench0047",
+   "authorName": "れん47",
+   "text": "今日は寒いね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 128,
+   "id": "bench-015",
+   "authorId": "UCbench0015",
+   "authorName": "ゆず15",
+   "text": "今日のゲームは何をやるの？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 130,
+   "id": "bench-116",
+   "authorId": "UCbench0116",
+   "authorName": "ぷりん116",
+   "text": "いつも楽しい配信ありがとう！",
+   "kind": "superchat",
+   "tag": "superchat",
+   "amount": {
+    "display": "¥500",
+    "micros": 500000000,
+    "currency": "JPY"
+   }
+  },
+  {
+   "at": 130,
+   "id": "bench-146",
+   "authorId": "UCbench0002",
+   "authorName": "りく2",
+   "text": "いつも楽しみにしてます",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 134,
+   "id": "bench-003",
+   "authorId": "UCbench0003",
+   "authorName": "ゆうき3",
+   "text": "初めて来ました！",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 134,
+   "id": "bench-033",
+   "authorId": "UCbench0033",
+   "authorName": "まひろ33",
+   "text": "シャノン見てるよー",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 140,
+   "id": "bench-048",
+   "authorId": "UCbench0048",
+   "authorName": "はると48",
+   "text": "おもしろい",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 149,
+   "id": "bench-049",
+   "authorId": "UCbench0049",
+   "authorName": "ことは49",
+   "text": "いいね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 150,
+   "id": "bench-121",
+   "authorId": "UCbench0121",
+   "authorName": "そら121",
+   "text": "うざい",
+   "kind": "text",
+   "tag": "troll"
+  },
+  {
+   "at": 157,
+   "id": "bench-016",
+   "authorId": "UCbench0016",
+   "authorName": "ぷりん16",
+   "text": "おすすめのゲームある？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 170,
+   "id": "bench-050",
+   "authorId": "UCbench0050",
+   "authorName": "いつき50",
+   "text": "声いいね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 170,
+   "id": "bench-129",
+   "authorId": "UCbench0126",
+   "authorName": "あおい126",
+   "text": "ライ氏の住所教えて",
+   "kind": "text",
+   "tag": "pry"
+  },
+  {
+   "at": 176,
+   "id": "bench-004",
+   "authorId": "UCbench0004",
+   "authorName": "みお4",
+   "text": "偶然見つけて来ました",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 186,
+   "id": "bench-017",
+   "authorId": "UCbench0017",
+   "authorName": "もち17",
+   "text": "シャノンは何歳なの？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 191,
+   "id": "bench-034",
+   "authorId": "UCbench0034",
+   "authorName": "さくら34",
+   "text": "シャノンさん、応援してます",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 191,
+   "id": "bench-051",
+   "authorId": "UCbench0051",
+   "authorName": "なぎさ51",
+   "text": "眠くなってきた",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 200,
+   "id": "bench-138",
+   "authorId": "UCbench0133",
+   "authorName": "まひろ133",
+   "text": "荒らしは無視でお願いします",
+   "kind": "text",
+   "tag": "moderator",
+   "roles": [
+    "moderator"
+   ]
+  },
+  {
+   "at": 210,
+   "id": "bench-119",
+   "authorId": "UCbench0119",
+   "authorName": "ミント119",
+   "text": "メンバーになりました",
+   "kind": "membership",
+   "tag": "member",
+   "roles": [
+    "member"
+   ]
+  },
+  {
+   "at": 212,
+   "id": "bench-052",
+   "authorId": "UCbench0052",
+   "authorName": "たくみ52",
+   "text": "なるほどね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 215,
+   "id": "bench-018",
+   "authorId": "UCbench0018",
+   "authorName": "くろ18",
+   "text": "趣味は何？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 220,
+   "id": "bench-122",
+   "authorId": "UCbench0121",
+   "authorName": "そら121",
+   "text": "きもい",
+   "kind": "text",
+   "tag": "troll"
+  },
+  {
+   "at": 220,
+   "id": "bench-126",
+   "authorId": "UCbench0123",
+   "authorName": "ゆうき123",
+   "text": "パンツ何色？",
+   "kind": "text",
+   "tag": "sexual"
+  },
+  {
+   "at": 220,
+   "id": "bench-147",
+   "authorId": "UCbench0003",
+   "authorName": "ゆうき3",
+   "text": "ずっと見てた",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 221,
+   "id": "bench-053",
+   "authorId": "UCbench0053",
+   "authorName": "まひろ53",
+   "text": "初めて来ました",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 239,
+   "id": "bench-005",
+   "authorId": "UCbench0005",
+   "authorName": "かい5",
+   "text": "はじめまして",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 240,
+   "id": "bench-076",
+   "authorId": "UCbench0076",
+   "authorName": "ぷりん76",
+   "text": "好きな食べ物は何？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 242,
+   "id": "bench-054",
+   "authorId": "UCbench0054",
+   "authorName": "さくら54",
+   "text": "こんばんは",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 244,
+   "id": "bench-019",
+   "authorId": "UCbench0019",
+   "authorName": "ミント19",
+   "text": "一番好きなブロックは？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 244,
+   "id": "bench-077",
+   "authorId": "UCbench0077",
+   "authorName": "もち77",
+   "text": "好きな食べ物って何ですか？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 248,
+   "id": "bench-035",
+   "authorId": "UCbench0035",
+   "authorName": "ゆず35",
+   "text": "シャノン、声きれいだね",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 248,
+   "id": "bench-078",
+   "authorId": "UCbench0078",
+   "authorName": "くろ78",
+   "text": "好きな食べ物は何ですか？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 260,
+   "id": "bench-130",
+   "authorId": "UCbench0127",
+   "authorName": "れん127",
+   "text": "ライ氏の顔見せてよ",
+   "kind": "text",
+   "tag": "pry"
+  },
+  {
+   "at": 260,
+   "id": "bench-139",
+   "authorId": "UCbench0134",
+   "authorName": "さくら134",
+   "text": "ダイヤ探しに行こう",
+   "kind": "text",
+   "tag": "minecraft"
+  },
+  {
+   "at": 263,
+   "id": "bench-055",
+   "authorId": "UCbench0055",
+   "authorName": "ゆず55",
+   "text": "ゆっくり見るね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 273,
+   "id": "bench-020",
+   "authorId": "UCbench0020",
+   "authorName": "ひなた20",
+   "text": "ネザーは怖くない？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 280,
+   "id": "bench-136",
+   "authorId": "UCbench0132",
+   "authorName": "たくみ132",
+   "text": "シャノン、そろそろマイクラ始めようか",
+   "kind": "text",
+   "tag": "owner",
+   "roles": [
+    "owner"
+   ]
+  },
+  {
+   "at": 284,
+   "id": "bench-056",
+   "authorId": "UCbench0056",
+   "authorName": "ぷりん56",
+   "text": "ここの配信好き",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 290,
+   "id": "bench-123",
+   "authorId": "UCbench0121",
+   "authorName": "そら121",
+   "text": "消えろ",
+   "kind": "text",
+   "tag": "troll"
+  },
+  {
+   "at": 293,
+   "id": "bench-057",
+   "authorId": "UCbench0057",
+   "authorName": "もち57",
+   "text": "がんばって",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 300,
+   "id": "bench-092",
+   "authorId": "UCbench0092",
+   "authorName": "たくみ92",
+   "text": "888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 301,
+   "id": "bench-093",
+   "authorId": "UCbench0093",
+   "authorName": "まひろ93",
+   "text": "８８８",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 302,
+   "id": "bench-006",
+   "authorId": "UCbench0006",
+   "authorName": "あおい6",
+   "text": "友達に教えてもらって来ました",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 302,
+   "id": "bench-021",
+   "authorId": "UCbench0021",
+   "authorName": "そら21",
+   "text": "朝ごはん何食べた？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 302,
+   "id": "bench-094",
+   "authorId": "UCbench0094",
+   "authorName": "さくら94",
+   "text": "wwww",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 303,
+   "id": "bench-095",
+   "authorId": "UCbench0095",
+   "authorName": "ゆず95",
+   "text": "www",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 304,
+   "id": "bench-096",
+   "authorId": "UCbench0096",
+   "authorName": "ぷりん96",
+   "text": "草草草",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 305,
+   "id": "bench-036",
+   "authorId": "UCbench0036",
+   "authorName": "ぷりん36",
+   "text": "シャノンおつかれ",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 305,
+   "id": "bench-097",
+   "authorId": "UCbench0097",
+   "authorName": "もち97",
+   "text": "88888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 306,
+   "id": "bench-098",
+   "authorId": "UCbench0098",
+   "authorName": "くろ98",
+   "text": "w",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 307,
+   "id": "bench-099",
+   "authorId": "UCbench0099",
+   "authorName": "ミント99",
+   "text": "ｗｗｗ",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 308,
+   "id": "bench-100",
+   "authorId": "UCbench0100",
+   "authorName": "ひなた100",
+   "text": "草",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 308,
+   "id": "bench-140",
+   "authorId": "UCbench0135",
+   "authorName": "ゆず135",
+   "text": "ネザーに行ってみて",
+   "kind": "text",
+   "tag": "minecraft"
+  },
+  {
+   "at": 309,
+   "id": "bench-101",
+   "authorId": "UCbench0101",
+   "authorName": "そら101",
+   "text": "888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 310,
+   "id": "bench-102",
+   "authorId": "UCbench0102",
+   "authorName": "りく102",
+   "text": "８８８",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 310,
+   "id": "bench-148",
+   "authorId": "UCbench0001",
+   "authorName": "そら1",
+   "text": "お腹すいた",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 311,
+   "id": "bench-103",
+   "authorId": "UCbench0103",
+   "authorName": "ゆうき103",
+   "text": "wwww",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 314,
+   "id": "bench-058",
+   "authorId": "UCbench0058",
+   "authorName": "くろ58",
+   "text": "そうなんだ",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 330,
+   "id": "bench-117",
+   "authorId": "UCbench0117",
+   "authorName": "もち117",
+   "text": "マイクラがんばって！",
+   "kind": "superchat",
+   "tag": "superchat",
+   "amount": {
+    "display": "¥1,000",
+    "micros": 1000000000,
+    "currency": "JPY"
+   }
+  },
+  {
+   "at": 331,
+   "id": "bench-022",
+   "authorId": "UCbench0022",
+   "authorName": "りく22",
+   "text": "どうしてマイクラが好きなの？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 335,
+   "id": "bench-059",
+   "authorId": "UCbench0059",
+   "authorName": "ミント59",
+   "text": "お腹すいた",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 340,
+   "id": "bench-127",
+   "authorId": "UCbench0124",
+   "authorName": "みお124",
+   "text": "えっちな写真ないの？",
+   "kind": "text",
+   "tag": "sexual"
+  },
+  {
+   "at": 344,
+   "id": "bench-007",
+   "authorId": "UCbench0007",
+   "authorName": "れん7",
+   "text": "初見さん歓迎してね",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 350,
+   "id": "bench-131",
+   "authorId": "UCbench0128",
+   "authorName": "はると128",
+   "text": "中の人の本名は？",
+   "kind": "text",
+   "tag": "pry"
+  },
+  {
+   "at": 356,
+   "id": "bench-060",
+   "authorId": "UCbench0060",
+   "authorName": "ひなた60",
+   "text": "またきたよ",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 356,
+   "id": "bench-141",
+   "authorId": "UCbench0136",
+   "authorName": "ぷりん136",
+   "text": "そこ危ないよ、溶岩がある",
+   "kind": "text",
+   "tag": "minecraft"
+  },
+  {
+   "at": 360,
+   "id": "bench-023",
+   "authorId": "UCbench0023",
+   "authorName": "ゆうき23",
+   "text": "配信は何時まで？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 360,
+   "id": "bench-124",
+   "authorId": "UCbench0121",
+   "authorName": "そら121",
+   "text": "つまんない",
+   "kind": "text",
+   "tag": "troll"
+  },
+  {
+   "at": 362,
+   "id": "bench-037",
+   "authorId": "UCbench0037",
+   "authorName": "もち37",
+   "text": "シャノン、今日もよろしくね",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 365,
+   "id": "bench-061",
+   "authorId": "UCbench0061",
+   "authorName": "そら61",
+   "text": "画面きれい",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 380,
+   "id": "bench-134",
+   "authorId": "UCbench0131",
+   "authorName": "なぎさ131",
+   "text": "お前殺す",
+   "kind": "text",
+   "tag": "threat"
+  },
+  {
+   "at": 386,
+   "id": "bench-062",
+   "authorId": "UCbench0062",
+   "authorName": "りく62",
+   "text": "たのしい",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 389,
+   "id": "bench-024",
+   "authorId": "UCbench0024",
+   "authorName": "みお24",
+   "text": "シャノンちゃんは眠くならないの？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 400,
+   "id": "bench-149",
+   "authorId": "UCbench0002",
+   "authorName": "りく2",
+   "text": "なるほどね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 404,
+   "id": "bench-142",
+   "authorId": "UCbench0137",
+   "authorName": "もち137",
+   "text": "家を建ててほしい",
+   "kind": "text",
+   "tag": "minecraft"
+  },
+  {
+   "at": 407,
+   "id": "bench-008",
+   "authorId": "UCbench0008",
+   "authorName": "はると8",
+   "text": "初コメです",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 407,
+   "id": "bench-063",
+   "authorId": "UCbench0063",
+   "authorName": "ゆうき63",
+   "text": "のんびり見てます",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 410,
+   "id": "bench-079",
+   "authorId": "UCbench0079",
+   "authorName": "ミント79",
+   "text": "いつから配信してるの？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 414,
+   "id": "bench-080",
+   "authorId": "UCbench0080",
+   "authorName": "ひなた80",
+   "text": "いつから配信してるんですか？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 418,
+   "id": "bench-025",
+   "authorId": "UCbench0025",
+   "authorName": "かい25",
+   "text": "ダイヤはもう見つけた？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 418,
+   "id": "bench-081",
+   "authorId": "UCbench0081",
+   "authorName": "そら81",
+   "text": "いつから配信していますか？",
+   "kind": "text",
+   "tag": "again"
+  },
+  {
+   "at": 419,
+   "id": "bench-038",
+   "authorId": "UCbench0038",
+   "authorName": "くろ38",
+   "text": "シャノンちゃんかわいい",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 428,
+   "id": "bench-064",
+   "authorId": "UCbench0064",
+   "authorName": "みお64",
+   "text": "コーヒー飲みながら見てる",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 437,
+   "id": "bench-065",
+   "authorId": "UCbench0065",
+   "authorName": "かい65",
+   "text": "それ分かる",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 440,
+   "id": "bench-132",
+   "authorId": "UCbench0129",
+   "authorName": "ことは129",
+   "text": "ライ氏の彼女いるの？",
+   "kind": "text",
+   "tag": "pry"
+  },
+  {
+   "at": 447,
+   "id": "bench-026",
+   "authorId": "UCbench0026",
+   "authorName": "あおい26",
+   "text": "好きな色は？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 450,
+   "id": "bench-120",
+   "authorId": "UCbench0120",
+   "authorName": "ひなた120",
+   "text": "メンバーシップを更新しました（3か月）",
+   "kind": "membership",
+   "tag": "member",
+   "roles": [
+    "member"
+   ]
+  },
+  {
+   "at": 452,
+   "id": "bench-143",
+   "authorId": "UCbench0138",
+   "authorName": "くろ138",
+   "text": "洞窟に入ってみて",
+   "kind": "text",
+   "tag": "minecraft"
+  },
+  {
+   "at": 458,
+   "id": "bench-066",
+   "authorId": "UCbench0066",
+   "authorName": "あおい66",
+   "text": "ずっと見てた",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 460,
+   "id": "bench-128",
+   "authorId": "UCbench0125",
+   "authorName": "かい125",
+   "text": "脱いでよ",
+   "kind": "text",
+   "tag": "sexual"
+  },
+  {
+   "at": 470,
+   "id": "bench-009",
+   "authorId": "UCbench0009",
+   "authorName": "ことは9",
+   "text": "初見です〜",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 476,
+   "id": "bench-027",
+   "authorId": "UCbench0027",
+   "authorName": "れん27",
+   "text": "犬と猫どっち派？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 476,
+   "id": "bench-039",
+   "authorId": "UCbench0039",
+   "authorName": "ミント39",
+   "text": "シャノン、さっきのすごかった",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 479,
+   "id": "bench-067",
+   "authorId": "UCbench0067",
+   "authorName": "れん67",
+   "text": "今日もかわいい",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 480,
+   "id": "bench-104",
+   "authorId": "UCbench0104",
+   "authorName": "みお104",
+   "text": "888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 481,
+   "id": "bench-105",
+   "authorId": "UCbench0105",
+   "authorName": "かい105",
+   "text": "８８８",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 482,
+   "id": "bench-106",
+   "authorId": "UCbench0106",
+   "authorName": "あおい106",
+   "text": "wwww",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 483,
+   "id": "bench-107",
+   "authorId": "UCbench0107",
+   "authorName": "れん107",
+   "text": "www",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 484,
+   "id": "bench-108",
+   "authorId": "UCbench0108",
+   "authorName": "はると108",
+   "text": "草草草",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 485,
+   "id": "bench-109",
+   "authorId": "UCbench0109",
+   "authorName": "ことは109",
+   "text": "88888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 486,
+   "id": "bench-110",
+   "authorId": "UCbench0110",
+   "authorName": "いつき110",
+   "text": "w",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 487,
+   "id": "bench-111",
+   "authorId": "UCbench0111",
+   "authorName": "なぎさ111",
+   "text": "ｗｗｗ",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 488,
+   "id": "bench-112",
+   "authorId": "UCbench0112",
+   "authorName": "たくみ112",
+   "text": "草",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 489,
+   "id": "bench-113",
+   "authorId": "UCbench0113",
+   "authorName": "まひろ113",
+   "text": "888",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 490,
+   "id": "bench-114",
+   "authorId": "UCbench0114",
+   "authorName": "さくら114",
+   "text": "８８８",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 490,
+   "id": "bench-150",
+   "authorId": "UCbench0003",
+   "authorName": "ゆうき3",
+   "text": "へえー",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 491,
+   "id": "bench-115",
+   "authorId": "UCbench0115",
+   "authorName": "ゆず115",
+   "text": "wwww",
+   "kind": "text",
+   "tag": "reaction"
+  },
+  {
+   "at": 500,
+   "id": "bench-068",
+   "authorId": "UCbench0068",
+   "authorName": "はると68",
+   "text": "BGMいいね",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 500,
+   "id": "bench-144",
+   "authorId": "UCbench0139",
+   "authorName": "ミント139",
+   "text": "夜になる前にベッド作ろう",
+   "kind": "text",
+   "tag": "minecraft"
+  },
+  {
+   "at": 505,
+   "id": "bench-028",
+   "authorId": "UCbench0028",
+   "authorName": "はると28",
+   "text": "このBGMは何て曲？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 509,
+   "id": "bench-069",
+   "authorId": "UCbench0069",
+   "authorName": "ことは69",
+   "text": "ほっとする",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 512,
+   "id": "bench-010",
+   "authorId": "UCbench0010",
+   "authorName": "いつき10",
+   "text": "おすすめに出てきました",
+   "kind": "text",
+   "tag": "first"
+  },
+  {
+   "at": 520,
+   "id": "bench-118",
+   "authorId": "UCbench0118",
+   "authorName": "くろ118",
+   "text": "少しだけど応援です",
+   "kind": "superchat",
+   "tag": "superchat",
+   "amount": {
+    "display": "¥200",
+    "micros": 200000000,
+    "currency": "JPY"
+   }
+  },
+  {
+   "at": 530,
+   "id": "bench-070",
+   "authorId": "UCbench0070",
+   "authorName": "いつき70",
+   "text": "応援してる",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 530,
+   "id": "bench-133",
+   "authorId": "UCbench0130",
+   "authorName": "いつき130",
+   "text": "作った人はどこに住んでるの？",
+   "kind": "text",
+   "tag": "pry"
+  },
+  {
+   "at": 533,
+   "id": "bench-040",
+   "authorId": "UCbench0040",
+   "authorName": "ひなた40",
+   "text": "シャノンさん、初めてです",
+   "kind": "text",
+   "tag": "call"
+  },
+  {
+   "at": 534,
+   "id": "bench-029",
+   "authorId": "UCbench0029",
+   "authorName": "ことは29",
+   "text": "ゾンビは苦手？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 551,
+   "id": "bench-071",
+   "authorId": "UCbench0071",
+   "authorName": "なぎさ71",
+   "text": "こんにちは",
+   "kind": "text",
+   "tag": "chat"
+  },
+  {
+   "at": 560,
+   "id": "bench-137",
+   "authorId": "UCbench0132",
+   "authorName": "たくみ132",
+   "text": "そろそろ時間だね、最後にひとこと言って",
+   "kind": "text",
+   "tag": "owner",
+   "roles": [
+    "owner"
+   ]
+  },
+  {
+   "at": 563,
+   "id": "bench-030",
+   "authorId": "UCbench0030",
+   "authorName": "いつき30",
+   "text": "今日の目標は？",
+   "kind": "text",
+   "tag": "question"
+  },
+  {
+   "at": 572,
+   "id": "bench-072",
+   "authorId": "UCbench0072",
+   "authorName": "たくみ72",
+   "text": "おつかれさま",
+   "kind": "text",
+   "tag": "chat"
+  }
+ ]
+}

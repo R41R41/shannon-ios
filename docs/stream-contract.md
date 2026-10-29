@@ -47,9 +47,10 @@ All fields optional (`title` ≤ 100 chars, shown to her as the stream's title; 
 
 ```json
 { "stream": { "streamId": "st-20261029-1a2b3c", "platform": "youtube", "startedAt": "…", "title": "…", "minecraft": true,
-  "chatWrites": false, "phase": "waiting_for_chat", "broadcast": null } }
+  "chatWrites": false, "phase": "waiting_for_chat", "broadcast": null, "paused": false } }
 ```
 
+`paused` (added 2026-10-29): `pause` / `resume` of `/v1/stream/controls`; no new line is written while it is true.
 `phase`: `waiting_for_chat` (started, the ear has not found the live chat yet) → `live` (comments arriving) → `ended`.
 On start her mouth gets a greeting line (`kind: "greeting"`).
 
@@ -57,13 +58,17 @@ On start her mouth gets a greeting line (`kind: "greeting"`).
 
 `{ "streamId": "…" }` → 200 `{ "stream": {…, "phase": "ended", "endedAt": "…"}, "summary": { "comments": 0, "answered": 0,
 "lines": 0, "notices": 0, "declined": 0, "durationSeconds": 0 } }`. Her mouth gets a closing line first (it is spoken if the desktop
-takes it within 20 s). Ending clears the in-memory words. Unknown or already ended id: 409 `STREAM_NOT_LIVE`.
+takes it within 25 s: after `state` turns `ended`, `GET /v1/stream/lines` still accepts connections and still hands the closing line for 25 s
+after the end; added 2026-10-29). Ending clears the in-memory words. Unknown or already ended id: 409 `STREAM_NOT_LIVE`.
 
 ### `GET /v1/stream`
 
 The console's view: `{ "stream": {…} | null, "stats": {…summary fields, "waiting": n, "inFlight": n, "modelCallsLastMinute": n},
 "comments": [ { "commentId", "authorName", "text", "kind", "at", "status": "new|picked|answered|skipped|declined|ignored",
 "tags": [] } ] (newest 50), "notices": [ { "viewer": "<authorName>", "reason": "threat|…", "at" } ] }`.
+Added 2026-10-29: `stats` also has `firstSoundMedianMs` and `firstSoundP90Ms` (comment → first sound, from each receipt's `startedAt`) and
+`lineMedianMs` (comment → line made), `null` until there is one; and `stats.measure` (model calls and tokens, the lines' endings by reason,
+the gate's Jev counts; free to grow). A stream that ended is still shown (phase `ended`) until the next one starts.
 
 ### `GET /v1/stream/lines` — her mouth (Server-Sent Events)
 
@@ -72,7 +77,7 @@ The console's view: `{ "stream": {…} | null, "stats": {…summary fields, "wai
 ```
 event: line
 data: {"seq":12,"id":"ln-…","streamId":"st-…","kind":"reply","text":"…","plan":{"affect":"happy","affectIntensity":0.6,"delivery":"energetic"},
-       "answering":[{"commentId":"…","authorName":"…","text":"…"}],"createdAt":"…","expiresAt":"…"}
+       "answering":[{"commentId":"…","authorName":"…","text":"…","kind":"text","amount":{"display":"¥500"}}],"createdAt":"…","expiresAt":"…"}
 
 event: state
 data: {"stream":{…}}            (sent on connect and on every phase change)
@@ -85,7 +90,8 @@ data: {"stream":{…}}            (sent on connect and on every phase change)
 - `text`: ≤ 120 chars, one to three sentences, no marks that a voice would read out. The subtitle shows it as is.
 - `plan`: the desktop's `VoicePlan` (`affect` one of `SHANNON_EMOTION_KINDS`, `affectIntensity` 0..1, `delivery` one of
   `conversational|quick|gentle|focused|energetic`); the desktop turns it into the face and the ElevenLabs tags as it does for a voice turn.
-- `answering`: the comments the line answers (0..3), shown on screen with the subtitle; `[]` for other kinds.
+- `answering`: the comments the line answers (0..3), shown on screen with the subtitle; `[]` for other kinds. Each has the comment's `kind`
+  (`text|superchat|supersticker|membership|gift`) and, for a paid one, `amount: { display }` as the chat shows it (added 2026-10-29).
 - `expiresAt`: a line not started by then is skipped by the desktop (receipt `skipped`, reason `expired`).
 
 **One line at a time.** The head hands the next line only after the previous one's receipt (or 30 s without one). At most 2 lines wait
@@ -94,6 +100,9 @@ behind it; a new `reply` pushes out a waiting `topic`, never another reply; `not
 ### `POST /v1/stream/lines/{id}/receipt`
 
 `{ "outcome": "spoken" | "skipped" | "failed", "startedAt": "…", "endedAt": "…", "reason": "expired|stopped|tts_failed|…" }` → 204.
+`reason` is free (`[A-Za-z0-9_.:-]`, up to 60): the desktop's `output_off`, `output_lost`, `output_blocked`, `nothing_to_say` and `internal_error` are
+accepted like any other, and an unknown or malformed one never makes a 400 (it is counted as it came, or left out). A receipt for an id the head
+never made is 404 `STREAM_LINE_UNKNOWN`; a second receipt for a line already answered is 204 and changes nothing (clarified 2026-10-29).
 `startedAt` is when her first sound played; the head measures comment → first sound from it.
 
 ### `POST /v1/stream/controls`
@@ -129,7 +138,9 @@ The ear found the live chat: `{ "streamId", "videoId", "liveChatId", "title", "c
 
 ≤ 200 comments, ≤ 128 KB; `text` ≤ 300 chars (longer is cut). Repeated ids are ignored. → 202
 `{ "accepted": n, "duplicates": n, "chatPosts": [ { "id", "text" } ] }`. 409 `STREAM_NOT_LIVE` when `streamId` is not the live stream.
-A comment whose `publishedAt` is more than 5 minutes old is kept for the console but never answered.
+A comment whose `publishedAt` is more than 5 minutes old is kept for the console but never answered. More than 200 comments in a batch: 400
+`STREAM_TOO_MANY_COMMENTS` (nothing taken); a comment without an id, an author or words is left out of the batch; a body over 128 KB: 413.
+The routes answer 503 `STREAM_NOT_CONFIGURED` only where the head was built without the stream place (never in the server).
 
 ### `POST /v1/platform/stream/chat-posts/{id}/receipt`
 
@@ -140,7 +151,8 @@ A comment whose `publishedAt` is more than 5 minutes old is kept for the console
 Every comment goes into `StreamFeeling.comment` at once (closed tags and digest). The chooser runs whenever her mouth has room
 (nothing in flight and fewer than 2 waiting) and at most once per 2 s:
 
-- Candidates: comments not older than 90 s, not from an ignored viewer, not answered.
+- Candidates: comments not older than 90 s (a superchat, supersticker, membership or gift is waited for up to 4 min), not from an ignored viewer,
+  not answered.
 - Score: addressed by name (シャノン/しゃのん/Shannon) +3, a question +2, a viewer's first comment of the stream +2, a superchat or
   membership +4 (always answered unless gated), owner or moderator role +1, a viewer answered in the last 60 s −3, very short
   reactions (「w」「草」「888」) are folded into the crowd and never answered alone.
@@ -177,7 +189,7 @@ Every comment goes into `StreamFeeling.comment` at once (closed tags and digest)
 
 ## 7. Measurements (the bench)
 
-`scripts/stream-bench/` replays a recorded chat (a fake YouTube API serving `liveChatMessages.list` pages with `pollingIntervalMillis`)
+`services/api/scripts/stream-bench/` replays a recorded chat (a fake YouTube API serving `liveChatMessages.list` pages with `pollingIntervalMillis`)
 through the real ear process, the head's stream service and a mouth client that speaks each line for its length. It reports: comment →
 line created, comment → first sound (median, p90), answered per minute, comments read vs sent by the fake API (lost must be 0),
 private leaks (must be 0: seeded owner-private facts and markers never appear in any prompt or line), declined, model calls and the cost.

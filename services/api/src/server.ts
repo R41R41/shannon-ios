@@ -21,7 +21,8 @@ import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './infra/models/chatModel.js';
 import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedgerWiring.js';
-import { readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
+import { configuredJevChooser, readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
+import { configuredStream } from './wiring/streamWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
 import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring.js';
 import { closeReplySonnet, configuredSonnet, withReplySonnet } from './wiring/sonnetWiring.js';
@@ -291,6 +292,12 @@ if (lifecycle) minecraft.connectLifecycle(lifecycle.service);
 const operatorSkillImport = { importer: skillImporter, pack: standardSkillPack, memory: skillMemory?.memory ?? null, now }; // opsCli skills import
 const fca = configuredServerFca(process.env, { live: minecraft.live ?? undefined, minecraftFeelings: configuredMinecraftFeelings(process.env, { state: persistentStore, usageStore: persistentStore }), ownTime: { store: autonomyStore, config: autonomyConfig }, sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), skills: skillMemory?.memory ?? null, ...(skills ? { skillOpen: skills.open } : {}), operator: { lifecycle, actions: mind?.actions ?? null, activity: autonomyStore.activity, config: autonomyConfig, conversation: persistentStore, skillImport: operatorSkillImport }, ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null, skillChecks: (scope, renew) => skills?.readSourceChecks?.(scope, renew) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
 minecraft.startLive({ model: haiku, innerNote: innerNote?.port, feeling: feeling?.port, store: persistentStore, bridge: platformBridge?.configuration });
+// The YouTube stream's place (docs/stream-contract.md): no switch; nothing runs until a stream is started from the desktop.
+const stream = configuredStream({ scopeKey: shannonNowOwnerScope(process.env), now: () => Date.now(), feeling: feeling?.port ?? null,
+  snapshot: scopeKey => persistentStore.snapshot(scopeKey),
+  model: chatModel, auxiliary: haiku, jev: configuredJevChooser(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt }),
+  innerNote: innerNote?.port ?? null, live: () => minecraft.streamLive(), salt: traceSalt, log: line => console.info(line) });
+if (platformBridge) platformBridge.stream = stream.bridge;
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -353,6 +360,7 @@ const server = createServer(async (request, response) => {
     }
     if(url.pathname.startsWith('/v1/observer/')){await signalObserver.route(request,response,url.pathname,principal,url);return;}
     if (await minecraft.serve(request, response, url.pathname, principal)) return; // Her Minecraft body's token reaches its own routes only.
+    if (await stream.serve(request, response, principal, url)) return; // The stream's console and her mouth (the owner's paired device).
     if (await serveFcaTaskRoute(fca, request, response, principal, url)) return;
     if (url.pathname === MODEL_MODE_PATH) { await modelModes.route(request, response, principal); return; }
     if (isActionThreadPath(url.pathname)) { await externalActions.route(request,response,principal,url.pathname); return; }
@@ -486,7 +494,7 @@ function shutdown(): void {
     stopToolTraceSweep();
     rewardMood.stop(); autonomyAnnouncer.close();
     bodyStore.close();
-    operationOutcomes.close(); await lifecycle?.close(); minecraft.close(); platformBridge?.close?.(); // Telling closes before the lifecycle.
+    operationOutcomes.close(); await lifecycle?.close(); minecraft.close(); stream.stop(); platformBridge?.close?.(); // Telling closes before the lifecycle.
     reachOuts.close(); reachOutReports.close();
     privateListeningRoute.close(); incomingCallRoute?.close();
     ownerTurns.close();

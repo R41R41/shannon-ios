@@ -11,7 +11,8 @@ import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
 import { readJson, sendJson } from '../infra/http/serverHttp.js';
 import type { MinecraftBodyRoute } from '../surfaces/minecraft/serverMinecraftBodyRoute.js';
 import { createMinecraftBodyRoute } from './minecraftBodyRouteWiring.js';
-import { configuredMinecraftLive, type CommentaryParts } from './minecraftLiveWiring.js';
+import { configuredMinecraftLive, streamOnlyMinecraftLive, type CommentaryParts } from './minecraftLiveWiring.js';
+import type { MinecraftLive } from '../surfaces/minecraft/minecraftLive.js';
 
 /** Every route of her Minecraft body (`docs/minecraft-body-contract.md`). */
 export const MINECRAFT_BODY_ROUTE_PREFIX = '/v1/body/minecraft/';
@@ -40,6 +41,8 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   const isGameBody = (principal: ShannonDevicePrincipal | null) => Boolean(configuration && principal?.deviceId === configuration.deviceId);
   // SHANNON_MINECRAFT_LIVE (session dc-live): her body's present for the conversations, and (with _SPEECH) her live commentary. Off: null.
   const live = configuredMinecraftLive(environment);
+  // The moments for a YouTube stream, when SHANNON_MINECRAFT_LIVE is off and there is no `live` of the conversations' (`surfaces/stream/`).
+  let streamOnly: MinecraftLive | null = null;
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
@@ -54,7 +57,10 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
     connectControl(value: NonNullable<typeof common>): void {
       common = value;
       live?.connectControl(value.control);
+      if (!live && configuration) streamOnly = streamOnlyMinecraftLive(value.control);
     },
+    /** Her body's moments for a YouTube stream: the conversations' `live` when it is on, else one made for the stream; null without a body. */
+    streamLive: (): MinecraftLive | null => live?.live ?? streamOnly,
     /** Her live commentary, once what writes her line exists (SHANNON_MINECRAFT_LIVE_SPEECH). */
     startLive(parts: Omit<CommentaryParts, 'scopeKey'>): void {
       if (configuration) live?.startCommentary({ ...parts, scopeKey: configuration.ownerScopeKey });

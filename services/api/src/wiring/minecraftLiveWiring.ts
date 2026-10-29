@@ -76,6 +76,18 @@ export function configuredMinecraftLive(values: Environment): MinecraftLiveWirin
   };
 }
 
+/**
+ * A `MinecraftLive` for a YouTube stream when `SHANNON_MINECRAFT_LIVE` is off (`surfaces/stream/`): the same detector over the control's frames
+ * and events, so that the moments exist; it makes no conversation block and says nothing (the stream's commentary does).
+ */
+export function streamOnlyMinecraftLive(control: MinecraftControl): MinecraftLive {
+  const frames = { latest: (id: string, age: number) => control.latest(id, age) ?? null, available: () => control.available() };
+  const live = new MinecraftLive({ frames, log: line => console.info(line) });
+  control.frameListeners.add((bodyId, observation, arrival) => live.frame(bodyId, observation, arrival));
+  control.eventListeners.add((bodyId, events) => live.events(bodyId, events));
+  return live;
+}
+
 function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: CommentaryParts): LiveCommentary {
   const clock = parts.now ?? (() => new Date().toISOString());
   const log = parts.log ?? ((line: string) => console.info(line));
