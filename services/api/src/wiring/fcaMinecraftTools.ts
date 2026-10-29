@@ -153,7 +153,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
           const replace = (input.replace ?? []).filter(id => !already.has(id));
           const { replace: _taken, ...rest } = input;
           const second = await passChecks({ ...same, input: (replace.length ? { ...rest, replace } : rest) as typeof same.input });
-          return 'stop' in second ? { ok: false, why: second.stop.text } : { ok: true, value: second };
+          return 'stop' in second ? { ok: false, why: second.stop.text, form: second.stop.failure === 'invalid_input' } : { ok: true, value: second };
         } });
       redecided = again.lead;
       if (again.replaced) {

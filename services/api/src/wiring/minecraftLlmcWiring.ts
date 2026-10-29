@@ -22,7 +22,6 @@ import { createLlmcEvents, urgentDecision, withLlmcBody } from '../surfaces/mine
 import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
-import { isSameInQueue } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { meterParts } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import { deathCounterOf, noteDeath, noteProgress, noteRan, noteRefusal, resumeStalls, stallIncidentId, watchStalls, type Stall } from '../surfaces/minecraft/minecraftLlmcStalls.js';
@@ -487,9 +486,12 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     // `mc.act` refused before sending, `STALL.refusals` times in a row (`noteRefusal`); true when the answer was about a stall (nothing more to look at).
     const refused = (call: FcaToolCall, result: ToolResult): boolean => {
       if (call.name !== MC_ACT_TOOL || (!result.ok && result.failure !== 'refused' && result.failure !== 'invalid_input')) return false;
-      // A-16: "the same work is already in the queue" is the answer "already asked", not a mistake of the model (run 46: a wait asked again while its twin ran): it ends the
-      // run of refusals like an accepted act, and is not counted.
-      const stall = noteRefusal(step.taskId, result.ok || isSameInQueue(result.text) ? { accepted: true } : { accepted: false, why: result.text.split('\n').find(line => line.trim()) ?? result.text });
+      // A-18 (runs 46: a wait asked again beside its twin; a wait asked past the urgent limit, twice): only an act that could not be sent for its FORM or a VALUE (`invalid_input`: a
+      // word not read, out of range, missing, the wrong type) is the model's mistake and counts. Every `refused` is the world's or the queue's answer (the same work is in the
+      // queue, the urgent limit, the queue is full, the body is stopped, a precondition does not hold, a fight guard): the model reads it and decides again; a request that does
+      // not move for it is found by node_stalled, wait_loop and same_spot_stops. Such an answer ends the run of wrong forms, as an accepted act does.
+      const wrong = !result.ok && result.failure === 'invalid_input';
+      const stall = noteRefusal(step.taskId, wrong ? { accepted: false, why: result.text.split('\n').find(line => line.trim()) ?? result.text } : { accepted: true });
       if (stall) headHold(stall);
       return stall !== null;
     };

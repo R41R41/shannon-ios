@@ -255,6 +255,13 @@ describe('decide_error: the decision again, Opus\'s act, and the checks before s
     expect(noteRedecide(TASK, { asked: true, outcome: 'kept_first', why: 'refused', refusedBy: '手が無い' })).toMatchObject({ key: 'redecide_refused' });
   });
 
+  it('A-18: Opus act that the queue or the world answered (stateAnswer: the same work is queued, a precondition) is not an error; a failed mend still is', () => {
+    expect(noteRedecide(TASK, { asked: true, outcome: 'kept_first', why: 'refused', repairs: 1, refusedBy: '同じ手が列にある', stateAnswer: true })).toBeNull();
+    expect(stallQuiet(TASK)).toBe(false);
+    expect(noteRedecide(TASK, { asked: true, outcome: 'kept_first', why: 'refused', repairs: 1, refusedBy: '同じ手が列にある', stateAnswer: true, repairFailed: 'no_act' }))
+      .toMatchObject({ key: 'redecide_refused' });
+  });
+
   it('the other rows are not errors: used, the same act, no act, urgent, no stronger model, nothing asked', () => {
     for (const row of [{ outcome: 'used' }, { outcome: 'kept_first', why: 'no_act' }, { outcome: 'kept_first', why: 'no_act:max_tokens' }, { skipped: 'urgent', asked: false },
       { skipped: 'no_stronger_model', asked: false }, { asked: false, count: 0 }]) expect(noteRedecide(TASK, row)).toBeNull();
@@ -757,38 +764,42 @@ describe('the step parts hold a request that asked to be held, for what the head
     await bench.begin();
     const body = bench.lifecycle();
     const call = { id: 'c1', name: 'mc.act', input: {}, operationId: 'op-1', signal: new AbortController().signal } as never;
-    body.noteResult!(call, toolFailure('refused', '前提を満たさない', { retryable: true }));
+    body.noteResult!(call, toolFailure('invalid_input', '範囲の外', { retryable: false }));
     body.noteResult!(call, toolOk('列に入れた q1'));
     body.noteResult!(call, toolFailure('invalid_input', '手の形が違う', { retryable: false }));
     expect(port.calls).toHaveLength(0);
-    body.noteResult!(call, toolFailure('refused', '前提を満たさない', { retryable: true }));
+    body.noteResult!(call, toolFailure('invalid_input', '必須が無い', { retryable: false }));
     expect(await until(() => port.calls.length > 0)).toBe(true);
     expect(port.calls[0]!.id).toMatch(/^head:decide_error:check_refused:/u);
     expect(port.calls[0]!.why).toContain('2 回');
     // Another kind of failure of the call (the body away, a timeout) is neither a refusal nor an acceptance.
     forgetStalls();
     resumeStalls(bench.run);
-    body.noteResult!(call, toolFailure('refused', 'a'));
+    body.noteResult!(call, toolFailure('invalid_input', 'a', { retryable: false }));
     body.noteResult!(call, toolFailure('unavailable', 'b'));
     body.noteResult!(call, toolFailure('timeout', 'c'));
     expect(port.calls).toHaveLength(1);
   }, 30_000);
 
-  it('A-16 (run 46): the same wait asked twice while its twin stands in the queue (a go running) is "already asked", not a stall; two answers of a wrong form still hold', async () => {
+  it('A-18 (runs 46): the answers of the queue and the world (the same wait beside its twin, the urgent limit, a full queue, a stopped body, a precondition) are not counted; two of a wrong form or value still hold', async () => {
     const port = holdPort();
-    const bench = make('decide-error-same');
+    const bench = make('decide-error-answers');
     await bench.begin();
     const body = bench.lifecycle();
     const call = { id: 'c1', name: 'mc.act', input: {}, operationId: 'op-1', signal: new AbortController().signal } as never;
-    const same = toolFailure('refused', `送らなかった: q31 ${SAME_IN_QUEUE_WORDS}（待ち）。列は live の queue`, { retryable: true });
-    body.noteResult!(call, same);
-    body.noteResult!(call, same);
-    body.noteResult!(call, same);
+    const answers = [
+      toolFailure('refused', `送らなかった: q31 ${SAME_IN_QUEUE_WORDS}（待ち）。列は live の queue`, { retryable: true }),
+      toolFailure('refused', '手 1 wait: 急ぎの判断は 3 手まで（system の「急ぎの時」）。4 手目から先は送っていない。続きは次の判断で出せる', { retryable: true }),
+      toolFailure('refused', '送らなかった: 列がいっぱい（実行中を含めて 3 つ）', { retryable: true }),
+      toolFailure('refused', '送らなかった: q2 の結果が不明で、体を止めたことをまだ確かめていない', { retryable: true }),
+      toolFailure('refused', '送らなかった: 前提 hp>10 を今は満たさない。体には何も送っていない', { retryable: true }),
+    ];
+    for (let round = 0; round < 3; round++) for (const answer of answers) body.noteResult!(call, answer);
     await bench.settle(50);
     expect(port.calls).toHaveLength(0);
-    // The run of wrong forms is ended by it: a wrong form, "already asked", a wrong form do not make two in a row.
+    // The run of wrong forms is ended by such an answer: a wrong form, an answer, a wrong form do not make two in a row.
     body.noteResult!(call, toolFailure('invalid_input', '手の形が違う', { retryable: false }));
-    body.noteResult!(call, same);
+    body.noteResult!(call, answers[1]!);
     body.noteResult!(call, toolFailure('invalid_input', '手の形が違う', { retryable: false }));
     await bench.settle(50);
     expect(port.calls).toHaveLength(0);

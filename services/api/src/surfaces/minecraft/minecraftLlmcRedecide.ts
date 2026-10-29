@@ -31,7 +31,8 @@ export interface RedecidePort {
   log(line: string): void;
 }
 /** What the caller's checks say of the act Opus chose: the thing the caller goes on with (its checked act), or the line that refused it. */
-export type Rechecked<C> = { ok: true; value: C } | { ok: false; why: string };
+/** `form: false` (A-18): the refusal is the queue's or the world's answer (the same work is queued, a precondition does not hold), not a mistake of the writing; absent: a mistake of the form or a value. */
+export type Rechecked<C> = { ok: true; value: C } | { ok: false; why: string; form?: boolean };
 
 const cut = (text: string, size: number): string => text.length > size ? `${text.slice(0, size)}…` : text;
 const shortOf = (act: ActInput): Record<string, unknown> => actToShort(act) as unknown as Record<string, unknown>;
@@ -107,8 +108,9 @@ export async function redecideAct<C>(parts: { port: RedecidePort; operationId: s
   const chosen = acts[0];
   const ignored = answer.calls.filter(call => call !== chosen && !plans.includes(call)).map(call => call.name);
   const refusals: string[] = [];
-  let repairs = 0;
-  const repairFields = () => repairs ? { repairs, refusedBy: cut(refusals[0] ?? '', 300), ...(refusals[1] ? { repairRefusedBy: cut(refusals[1], 300) } : {}) } : {};
+  let repairs = 0, lastWasAnswer = false;
+  const repairFields = () => repairs ? { repairs, refusedBy: cut(refusals[0] ?? '', 300), ...(refusals[1] ? { repairRefusedBy: cut(refusals[1], 300) } : {}),
+    ...(lastWasAnswer ? { stateAnswer: true } : {}) } : {};
   const kept = (why: string, extra: Record<string, unknown> = {}): { replaced: null; lead: string[] } => {
     noteRedecide({ ...row, ...spent(), outcome: 'kept_first', why, ...(ignored.length ? { ignored } : {}), ...repairFields(), ...extra });
     port.log(`Shannon FCA redecide kept the first act why=${why} model=${model} ms=${ms} costUsd=${costUsd}${repairs ? ' repairs=1' : ''}`);
@@ -154,7 +156,8 @@ export async function redecideAct<C>(parts: { port: RedecidePort; operationId: s
         return { replaced: checked.value, lead: [`決め直し（Opus）: ${said}。列に入れたのは Opus の act: ${cut(JSON.stringify(shortOf(opus)), 600)}`, ...lead] };
       }
       refusal = checked.why;
-    }
+      lastWasAnswer = checked.form === false;
+    } else lastWasAnswer = false;
     refusals.push(refusal);
     const written = unfit(opus) ? {} : shapeOf(opus).shape;
     // A refusal of the second try is final; the first is mended once, in the writing (A-11 2).

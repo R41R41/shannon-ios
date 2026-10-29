@@ -12,8 +12,9 @@ import { onRedecideNote } from '../../infra/decisionRecords/decisionRecordNotes.
  *   It moved on when the node, its state or the meter's next milestone changed, or the pack grew (`movedOn`).
  * - `same_spot_stops`: a `go` or `vertical` stopped short (not done) `STALL.spotStops` times within `STALL.spotRadius` blocks of the first stop, with no done one of the two between.
  * - `wait_loop`: `STALL.waits` acts of nothing but `wait` ran in a row; an act with a hand that moves the body (`MOVING`) ends the run.
- * - `decide_error`: the decision again of an act (A-10) failed or ran out of time, Opus's act was refused after its mend (A-11), or `STALL.refusals` acts in a row were refused by
- *   the checks before sending (no act was accepted between).
+ * - `decide_error`: the decision again of an act (A-10) failed or ran out of time, Opus's act was refused after its mend for its form or a value (A-11, A-18), or `STALL.refusals` acts in a row
+ *   could not be sent for their form or a value (`invalid_input`: not read, out of range, missing, the wrong type; no act was accepted between). The answers of the queue and the world
+ *   (the same work is queued, the urgent limit, a full queue, a stopped body, a precondition) are not mistakes: the model reads them and decides again (A-18).
  * - `death`: the body's death counter rose (`deathBetween`: a rise of `deathSeq` within one `deathEpoch`; a full loss is the same).
  *
  * Each `note…` returns the stall it found, or null. A task that found one is quiet (nothing more is counted: the hold is being made, and the cut-off acts of the stop would count
@@ -171,8 +172,9 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
 
 // ---- decisions that went wrong ---------------------------------------------------------------------------------------------------------------------
 /**
- * A call of `mc.act` came back: refused by the checks before sending (`refused`) or accepted into the queue. `STALL.refusals` refusals in a row, with no act accepted
- * between, are one decision that does not get through (`decide_error`); the model is asked again after each, so "the same decision" is this run of refusals.
+ * A call of `mc.act` came back: refused for its form or a value before sending, or answered otherwise (accepted, or the queue's or the world's answer: the caller passes `accepted: true`
+ * for those, A-18). `STALL.refusals` refusals of form in a row, with no answer between, are one decision that does not get through (`decide_error`); the model is asked again after
+ * each, so "the same decision" is this run.
  */
 export function noteRefusal(taskId: string, answer: { accepted: true } | { accepted: false; why: string }): Stall | null {
   const state = taskOf(taskId);
@@ -195,7 +197,8 @@ export function noteRedecide(taskId: string, row: Readonly<Record<string, unknow
   if (state.quiet || row.outcome !== 'kept_first') return null;
   const words = (value: unknown) => String(value ?? '').replace(/\s+/gu, ' ').slice(0, 100);
   if (row.why === 'failed') return found(state, { kind: 'decide_error', key: 'redecide_failed', why: `決め直し（Opus）が失敗か時間切れになった（${words(row.failed)}）` });
-  if (row.why === 'refused') {
+  // A-18: an act of Opus that the queue or the world answered (the same work is queued, a precondition does not hold) is not a mistake of the writing, and the first act stands: not an error.
+  if (row.why === 'refused' && !(row.stateAnswer === true && !row.repairFailed)) {
     return found(state, { kind: 'decide_error', key: 'redecide_refused',
       why: `決め直し（Opus）の act が送る前の確認に断られた${row.repairs ? '（書き直しも断られた）' : ''}（${words(row.repairRefusedBy ?? row.refusedBy ?? row.repairFailed)}）` });
   }
