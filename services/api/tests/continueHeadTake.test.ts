@@ -9,7 +9,7 @@ import { headTake, takeContext, takeSession, TAKE_NOTE_CHARS, TAKE_NOTES } from 
 import { feet, headIncidentKind, incidentOfResult, setIncidentHoldPort, takeEnd, takeOfResult } from '../src/wiring/minecraftIncidentHold.js';
 import { createOperatorMinecraft, type OperatorActivity, type OperatorMinecraftParts } from '../src/wiring/operatorMinecraftWiring.js';
 import { bodyIncident, operatorMinecraftRequests, type OperatorMinecraftRequests } from '../src/wiring/operatorMinecraftRequests.js';
-import { benchC, RUN_BODY, until, type BenchC } from './helpers/benchC.js';
+import { benchC, PRODUCED_REV, RUN_BODY, until, type BenchC } from './helpers/benchC.js';
 
 /**
  * Amendment A-12 (the body's type, produced at body revision 100a80f68157): the head asks the body to hold what it found. A release carries `context.incident.take = { id, why, notes }`
@@ -29,15 +29,15 @@ afterEach(() => { forgetStalls(); setIncidentHoldPort(null); });
 // ---- 1. the body's answers ----------------------------------------------------------------------------------------------------------------------------
 describe('the head reads what the body produced for a take (fixtures/continue/produced/measure--head-take.json)', () => {
   it('is the body\'s file of the revision the amendment was written for', () => {
-    expect(produced.bodyRevision).toBe('100a80f68157');
+    expect(produced.bodyRevision).toBe(PRODUCED_REV);
     expect(Object.keys(produced.output).sort()).toEqual(['actTake', 'resume', 'resumeNothing', 'take']);
   });
 
   it('the release\'s answer to a take: it holds, the world stopped, the box and the scene are on the body\'s side', () => {
     const answer = takeOfResult(JSON.stringify({ incident: produced.output.take.incident }))!;
-    expect(answer).toMatchObject({ id: 'head:node_stalled:lab:1793254222627', done: true, hold: 'head:node_stalled:lab:1793254222627', held: true, frozen: true, freeze: 'The game is frozen', again: false });
-    expect(answer.box).toMatch(/blackbox\/continue-lab-task\/head_node_stalled_lab_1793254222627\.json\.gz$/u);
-    expect(answer.scene).toMatch(/scenes\/head_node_stalled_lab_1793254222627$/u);
+    expect(answer).toMatchObject({ id: 'head:node_stalled:lab:1793258577284', done: true, hold: 'head:node_stalled:lab:1793258577284', held: true, frozen: true, freeze: 'The game is frozen', again: false });
+    expect(answer.box).toMatch(/blackbox\/continue-lab-task\/head_node_stalled_lab_1793258577284\.json\.gz$/u);
+    expect(answer.scene).toMatch(/scenes\/head_node_stalled_lab_1793258577284$/u);
     expect(takeEnd(answer)).toBe('held');
     expect(headIncidentKind(answer.id)).toBe('node_stalled');
   });
@@ -53,7 +53,7 @@ describe('the head reads what the body produced for a take (fixtures/continue/pr
 
   it('the act that carried a take and was held reads as a heavy failure\'s hold (its own `incident` fields)', () => {
     const note = incidentOfResult(JSON.stringify({ held: '保留中', incident: produced.output.actTake }))!;
-    expect(note).toMatchObject({ id: 'head:wait_loop:lab:1793254230527', heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
+    expect(note).toMatchObject({ id: 'head:wait_loop:lab:1793258585062', heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
     expect(headIncidentKind(note.id)).toBe('wait_loop');
   });
 

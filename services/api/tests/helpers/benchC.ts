@@ -44,7 +44,7 @@ import type { ToolResult } from '../../src/mind/tools/toolRegistryPorts.js';
  */
 export const RUN_BODY = 'minecraft:world';
 /** The body revision the `produced/` files were made at (the body's `contracts/continue/produced/`); the stand-in answers as that body does. */
-export const PRODUCED_REV = '100a80f68157';
+export const PRODUCED_REV = (JSON.parse(readFileSync(new URL('../fixtures/continue/produced/PRODUCED.json', import.meta.url), 'utf8')) as { madeBy: string }).madeBy.slice(0, 12);
 const FIXTURES_DIR = new URL('../fixtures/continue/', import.meta.url);
 export const fixture = (path: string) => JSON.parse(readFileSync(new URL(path, FIXTURES_DIR), 'utf8')) as Record<string, any>;
 export const produced = (name: string) => {
