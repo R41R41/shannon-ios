@@ -75,6 +75,7 @@ export const VERTICAL_STOP_WORDS: Readonly<Record<string, string>> = {
   lava: '次の段のマスかその隣に溶岩があった（溶岩で止まるのは liquid=stop と seal_water。seal は塞いで進む）',
   water: '次の段のマスかその隣に水があった（水で止まるのは liquid=stop。seal と seal_water は水を塞いで進む）',
   seal_failed: '液体を塞ごうとして塞げなかった（置く物が無い・届かない・予算）',
+  threat_exposed: '次に掘るマスを開けると、今は届かない敵から体が見える・届く位置になる（開けていない。掘る前に止まった）',
 };
 /** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the opponent did is said by the code. */
 export const FIGHT_END_WORDS: Readonly<Record<string, string>> = {

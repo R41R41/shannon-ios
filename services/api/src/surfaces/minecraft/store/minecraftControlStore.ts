@@ -262,6 +262,15 @@ export class MinecraftControlStore {
     return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
   }
   /**
+   * Run 46 (resume 3 named q35, the act resume 2 had sent again, instead of the q46 the VM stop had lost): the task's newest skill command that the body's recovery CLOSED
+   * (its receipt is the release proof's closing, `reconciled`), or null. A command sent again after that has a receipt of its own and is not this one.
+   */
+  lastClosedOfTask(taskId: string): MinecraftControlCommand | null {
+    const row = this.db.prepare(`SELECT command_json FROM fca_body_operations WHERE task_id=? AND json_extract(command_json,'$.kind')='skill'
+      AND id NOT LIKE 'recheck:%' AND json_extract(receipt_json,'$.reconciled')=? ORDER BY rowid DESC LIMIT 1`).get(taskId, RECONCILED_BY_RELEASE);
+    return row ? JSON.parse(String(row.command_json)) as MinecraftControlCommand : null;
+  }
+  /**
    * The latest step command of the lease's holder and generation for the same task, under any of its leases: for a step that sent
    * nothing to the body itself (a judgment that stayed unknown). A holder is one runner process for every task it runs, and a
    * re-check's own command is not a step's, so both are left out.

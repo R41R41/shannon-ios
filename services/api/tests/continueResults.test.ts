@@ -221,6 +221,23 @@ describe('the store keeps the states (chapter 1, 「不明の結果」) and what
     expect(['o-open', 'o-known', 'o-unknown', 'o-closed'].map(id => store.state(id))).toEqual(['sent', 'settled_known', 'settled_unknown', 'released']);
     expect(store.holdOf('o-open')).toBe('none');
   });
+  it('lastClosedOfTask: the act the recovery closed, not the newest act (run 46: resume 3 named the q35 sent again, not the q46 the VM stop lost)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ops-')), path = join(dir, 'lost.sqlite');
+    closers.push(() => rmSync(dir, { recursive: true, force: true }));
+    const db = new DatabaseSync(path);
+    closers.push(() => db.close());
+    const store = new MinecraftControlStore(db);
+    const put = (id: string, item: string, receipt: unknown) => db.prepare('INSERT INTO fca_body_operations(id,task_id,body_id,connection_id,command_json,phase,receipt_json,created_at) VALUES(?,?,?,?,?,?,?,?)')
+      .run(id, 't1', 'minecraft:world', 'connection', JSON.stringify({ id, kind: 'skill', skill: 'act', connectionId: 'connection', queue: { item }, arguments: { hands: [{ do: 'go' }] }, context: { taskId: 't1', bodyId: 'minecraft:world' } }),
+        'settled', JSON.stringify(receipt), AT);
+    expect(store.lastClosedOfTask('t1')).toBeNull();
+    put('o-35', 'q35', { id: 'o-35', outcome: 'completed', inputsReleased: true });
+    put('o-46', 'q46', { id: 'o-46', outcome: 'cancelled', inputsReleased: true, reconciled: 'release_proof' });
+    put('o-35b', 'q35', { id: 'o-35b', outcome: 'completed', inputsReleased: true });
+    expect(store.lastOfTask('t1')?.queue?.item).toBe('q35');
+    expect(store.lastClosedOfTask('t1')?.queue?.item).toBe('q46');
+    expect(store.lastClosedOfTask('another')).toBeNull();
+  });
   it('keeps the promises\' definitions and the fetch position with the command, across a restart of the store (the receipt box)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ops-')), path = join(dir, 'box.sqlite');
     closers.push(() => rmSync(dir, { recursive: true, force: true }));

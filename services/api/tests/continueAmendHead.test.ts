@@ -8,6 +8,7 @@ import type { ActHandLine, ActResult } from '../src/contracts/minecraftActContra
 import { actResultText } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { FIGHT_END_WORDS, handFacts, seenWords, VERTICAL_STOP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
 import { applyLedger, emptyLedgerSeen, promiseLines, type LedgerSeen } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
+import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 
 /**
  * The head's side of amendments A-1 6 (vertical's stop words and `Progress.seen`), A-2 2 (a dropped item whose cause is a cancel), A-2 3 (armour put on in the ledger) and
@@ -25,7 +26,17 @@ describe('vertical: the 14 stop codes are told in words, and `displaced` and `no
   const FOURTEEN = ['unloaded', 'world_limit', 'displaced', 'no_foothold', 'cannot_dig', 'no_floor', 'no_place', 'place_unconfirmed', 'limit_dig', 'limit_place', 'limit_time',
     'lava', 'water', 'seal_failed'];
   it('has a word for each of the 14 codes and for nothing else', () => {
-    expect(Object.keys(VERTICAL_STOP_WORDS).sort()).toEqual([...FOURTEEN].sort());
+    expect(Object.keys(VERTICAL_STOP_WORDS).sort()).toEqual([...FOURTEEN, 'threat_exposed'].sort());
+  });
+  it('run 46: threat_exposed (the exposure guard refused the dig) is told with the own sentence of the hand, and the stairs and the shaft default of the footing is in the description', () => {
+    const line = { i: 1, do: 'vertical', status: 'stopped', code: 'threat_exposed', goal: 'partial', end: 'finished', motorOps: 3,
+      line: 'vertical 止まった threat_exposed: stone(1,40,2) を開けると、今は届かない zombie（約8m）から体が見える・届く。敵が離れるのを待つ（wait-time）か、toward を変えるか' } as unknown as ActHandLine;
+    const facts = handFacts(line).join(' ');
+    expect(facts).toContain('止まった理由 threat_exposed:');
+    expect(facts).toContain('開けていない');
+    expect(SHORT_ACT_DESCRIPTION).toContain('stairs・shaft は place= を書かないと、持っている丸石・深層岩の丸石・土を足場に置いてよい');
+    expect(SHORT_ACT_DESCRIPTION).toContain('place=none');
+    expect(SHORT_ACT_DESCRIPTION).toContain('pillar は書いた物で作る');
   });
   it('covers every code of the fixture vertical/stop-cases.json (the master of the scenes)', () => {
     const sample = fixture('vertical/stop-cases');

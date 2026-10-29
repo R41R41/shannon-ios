@@ -107,7 +107,8 @@ export function operatorMinecraftRequests(parts: {
      * Amendment A-15: the act the task's step lost, in words for the first decision after a resume of a task the recovery paused (「q46 の 作業台とかまどを置く…」): its item and first hand.
      */
     lostActWords: (taskId: string): string => {
-      const sent = parts.control.store.lastOfTask(taskId);
+      // The act the recovery closed (the step the VM stop or the restart lost), not the newest one: an act sent again meanwhile is not the lost one (run 46). The newest is the fallback.
+      const sent = parts.control.store.lastClosedOfTask(taskId) ?? parts.control.store.lastOfTask(taskId);
       const item = String(sent?.queue?.item ?? '');
       const hand = ((sent?.arguments as { hands?: Array<Record<string, unknown>> } | undefined)?.hands ?? [])[0];
       return `${item}${hand ? ` ${String(hand.do ?? '')}` : ''}`.trim();
