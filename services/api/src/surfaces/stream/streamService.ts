@@ -350,7 +350,10 @@ export class StreamService {
     // A viewer ignored while the line was written is not answered.
     const chosen = group.filter(record => named.has(record.commentId) && record.status === 'picked');
     for (const record of group) if (!chosen.includes(record)) this.give(record, 'new');
-    if (!chosen.length) return;
+    if (!chosen.length) {
+      this.measure.counts.notChosen += 1;
+      return;
+    }
     const answering: StreamAnswering[] = chosen.map(record => ({
       commentId: record.commentId, authorName: record.authorName, text: record.text, kind: record.kind,
       ...(record.amountDisplay ? { amount: { display: record.amountDisplay } } : {}),

@@ -46,7 +46,7 @@ export class StreamMeasure {
   readonly commentToSoundMs: number[] = [];
   readonly calls: Record<ModelPurpose, number> = { writer: 0, rewrite: 0, topic: 0, greeting: 0, closing: 0, commentary: 0 };
   readonly tokens = { input: 0, cachedInput: 0, output: 0 };
-  counts = { budgetSkips: 0, modelTimeouts: 0, modelErrors: 0, brokenAnswers: 0, rewrites: 0, safeLines: 0, droppedLines: 0, noRoom: 0, speakingSeconds: 0 };
+  counts = { budgetSkips: 0, modelTimeouts: 0, modelErrors: 0, brokenAnswers: 0, rewrites: 0, safeLines: 0, droppedLines: 0, noRoom: 0, notChosen: 0, speakingSeconds: 0 };
 
   /** How lines ended, by outcome and the reason the mouth or the desktop gave (any reason the desktop sends is counted as it came). */
   readonly reasons: Record<string, number> = {};

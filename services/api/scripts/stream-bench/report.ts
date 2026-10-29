@@ -94,6 +94,8 @@ export function buildReport(input: BenchInput) {
       calls: stats.measure.modelCalls, realWaitMs: percentiles(input.calls.map(call => call.realMs)), tokens: stats.measure.tokens, jevCalls: input.jev.calls,
       jevReal: input.jev.real, rewrites: stats.measure.rewrites, safeLines: stats.measure.safeLines, droppedLines: stats.measure.droppedLines,
       brokenAnswers: stats.measure.brokenAnswers, budgetSkips: stats.measure.budgetSkips, perMinuteMax: 10,
+      modelErrors: stats.measure.modelErrors, modelTimeouts: stats.measure.modelTimeouts, noRoom: stats.measure.noRoom, notChosen: stats.measure.notChosen,
+      errors: [...new Set(input.calls.flatMap(call => (call.error ? [call.error] : [])))].slice(0, 5),
     },
     cost: { ...money, yenPerUsd: YEN_PER_USD, prices: PRICES_USD_PER_MTOK, jevUsdPerCall: '要確認（SHANNON_JEV_USD_PER_CALL 未設定）' },
     leaks: { ...privateLeaks(input.calls, input.spoken), markers: PRIVATE_MARKERS.length },
@@ -117,7 +119,7 @@ export function markdown(report: BenchReport): string {
     row('head got the comment', 'line made', l.headCommentToLine), row('head got the comment', 'first sound', l.headCommentToFirstSound),
     row('line made', 'first sound', l.headLineToFirstSound), row('comment published', 'first sound', l.publishedToFirstSound),
     '', '## Models', '', `calls ${JSON.stringify(report.models.calls)}; Jev calls ${report.models.jevCalls}${report.models.jevReal ? '' : ' (fake)'}; rewrites ${report.models.rewrites}, `
-    + `safe lines ${report.models.safeLines}, dropped ${report.models.droppedLines}, broken answers ${report.models.brokenAnswers}, over the allowance ${report.models.budgetSkips}.`,
+    + `safe lines ${report.models.safeLines}, dropped ${report.models.droppedLines}, broken answers ${report.models.brokenAnswers}, over the allowance ${report.models.budgetSkips}; model errors ${report.models.modelErrors}, timeouts ${report.models.modelTimeouts}, no room ${report.models.noRoom}, written for no picked comment ${report.models.notChosen}${report.models.errors.length ? ` (errors: ${report.models.errors.join(" | ")})` : ""}.`,
     `tokens ${JSON.stringify(report.models.tokens)}; the models' real wait median ${ms(report.models.realWaitMs.median)}, p90 ${ms(report.models.realWaitMs.p90)}.`, '',
     '## Cost', '', `${report.cost.usd} USD = ${report.cost.yen} yen (at ${report.cost.yenPerUsd} yen/USD; the repo's own estimate of what was booked). Jev: ${report.cost.jevUsdPerCall}.`,
     `Prices used for checking (per MTok): ${JSON.stringify(report.cost.prices)}.`, '',
