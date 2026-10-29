@@ -165,6 +165,7 @@ Every comment goes into `StreamFeeling.comment` at once (closed tags and digest)
 - A comment that needs the floor (`harassmentLadder` floor: threat, pry_owner, repeated lewd) is answered first, as a `notice` line when
   the ladder says `tell_off`.
 - When several candidates say the same thing (same digest or the same question), they are answered together (`answering` up to 3).
+- Equal scores: the newest comment first (when the chat is faster than her voice the answers stay fresh and the older ones lapse).
 - One reply per 6 s at most; at most 10 model calls per minute for the whole stream (writer, rewrites, topics, commentary).
 
 ## 4. The gates (head)

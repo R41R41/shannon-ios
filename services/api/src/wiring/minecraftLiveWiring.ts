@@ -83,8 +83,8 @@ export function configuredMinecraftLive(values: Environment): MinecraftLiveWirin
 export function streamOnlyMinecraftLive(control: MinecraftControl): MinecraftLive {
   const frames = { latest: (id: string, age: number) => control.latest(id, age) ?? null, available: () => control.available() };
   const live = new MinecraftLive({ frames, log: line => console.info(line) });
-  control.frameListeners.add((bodyId, observation, arrival) => live.frame(bodyId, observation, arrival));
-  control.eventListeners.add((bodyId, events) => live.events(bodyId, events));
+  control.frameListeners?.add((bodyId, observation, arrival) => live.frame(bodyId, observation, arrival));
+  control.eventListeners?.add((bodyId, events) => live.events(bodyId, events));
   return live;
 }
 

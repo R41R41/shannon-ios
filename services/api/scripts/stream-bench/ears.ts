@@ -119,7 +119,7 @@ export class ExternalEar implements Ear {
   async start(): Promise<void> {
     const { clock } = this.options;
     const every = String(Math.max(20, Math.round(clock.real(5000))));
-    this.child = spawn(this.options.command, { shell: true, ...(this.options.cwd ? { cwd: this.options.cwd } : {}), env: {
+    this.child = spawn(this.options.command, { shell: true, detached: process.platform !== 'win32', ...(this.options.cwd ? { cwd: this.options.cwd } : {}), env: {
       ...process.env, SHANNON_CORE_PLATFORM_URL: `${this.options.head}/v1/platform/turns`, SHANNON_CORE_PLATFORM_TOKEN: this.options.token,
       YOUTUBE_API_BASE: this.options.youtube, YOUTUBE_ACCESS_TOKEN: 'bench-token', EAR_STATE_EVERY_MS: every, EAR_DISCOVERY_EVERY_MS: every,
       EAR_MIN_POLL_MS: '20', EAR_MAX_POLL_MS: '10000',
@@ -137,15 +137,16 @@ export class ExternalEar implements Ear {
   async stop(): Promise<EarReport> {
     const child = this.child;
     if (child && child.exitCode === null) {
-      child.kill('SIGTERM');
+      // The shell, npx and the ear itself are one group: the signal reaches the ear, which says how it went.
+      try { if (child.pid && process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM'); else child.kill('SIGTERM'); } catch { child.kill('SIGTERM'); }
       await new Promise<void>(resolve => {
         const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 8000);
-        child.once('exit', () => { clearTimeout(timer); resolve(); });
+        child.once('close', () => { clearTimeout(timer); resolve(); });
       });
     }
     const status = /\{"ear":"stopped"[^\n]*\}/u.exec(this.output)?.[0];
     let detail: any = null;
-    try { detail = status ? JSON.parse(status) : null; } catch { detail = null; }
+    try { detail = status ? JSON.parse(status) : { unparsed: this.output.slice(-400) }; } catch { detail = { unparsed: this.output.slice(-400) }; }
     const counters = detail?.status ?? {};
     return { kind: 'external', read: counters.commentsRead ?? counters.read ?? null, sent: counters.commentsSent ?? counters.sent ?? null, posted: counters.chatPosted ?? 0, detail };
   }
