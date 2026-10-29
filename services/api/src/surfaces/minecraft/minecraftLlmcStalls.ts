@@ -60,12 +60,14 @@ interface TaskStalls {
   quiet: boolean;
   node: { snapshot: ProgressSnapshot; since: number } | null;
   spot: { at: ActPos; stops: number } | null;
+  /** Run 47: the same place's stops told to the model ("the nth time here"): it is not reset by a hold or its resume, only by a hand that got somewhere or did other work. */
+  seen: { at: ActPos; n: number } | null;
   waits: number;
   refusals: number;
   deaths: DeathCounter | null;
 }
 const tasks = new Map<string, TaskStalls>();
-const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, waits: 0, refusals: 0, deaths: null });
+const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, seen: null, waits: 0, refusals: 0, deaths: null });
 function taskOf(taskId: string): TaskStalls {
   let state = tasks.get(taskId);
   if (!state) {
@@ -75,6 +77,11 @@ function taskOf(taskId: string): TaskStalls {
   }
   return state;
 }
+/** Run 47: how many stops of a go or a vertical the task has counted at this place (within `STALL.spotRadius`), or 0: the number the stuck sentence of a go says. */
+export function sameSpotStops(taskId: string, at: unknown): number {
+  const spot = tasks.get(taskId)?.seen, here = posOf(at);
+  return spot && here && distance(spot.at, here) <= STALL.spotRadius ? spot.n : 0;
+}
 /** For tests: no task has anything counted, and nobody is watching. */
 export function forgetStalls(): void {
   tasks.clear();
@@ -82,14 +89,14 @@ export function forgetStalls(): void {
 }
 /** A stall was found: the task counts nothing more (the hold is being made) and starts again from nothing at its resume. */
 function found(state: TaskStalls, stall: Stall): Stall {
-  const { deaths } = state;
-  Object.assign(state, fresh(), { quiet: true, deaths });
+  const { deaths, seen } = state;
+  Object.assign(state, fresh(), { quiet: true, deaths, seen });
   return stall;
 }
 /** The task was resumed from a hold (or has begun again): it counts again, from nothing; the body's death counter it knew stays (the death it held for is not one again). */
 export function resumeStalls(taskId: string): void {
   const state = taskOf(taskId);
-  Object.assign(state, fresh(), { deaths: state.deaths });
+  Object.assign(state, fresh(), { deaths: state.deaths, seen: state.seen });
 }
 /** Whether the task has found a stall and not been resumed since. */
 export function stallQuiet(taskId: string): boolean { return taskOf(taskId).quiet; }
@@ -148,16 +155,20 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
   for (const line of act.lines) {
     if (line.end !== 'not_run' && line.end !== 'unknown' && line.goal === 'done' && WORKED.has(String(line.do))) {
       state.spot = null;
+      state.seen = null;
       continue;
     }
     if ((line.do !== 'go' && line.do !== 'vertical') || line.end === 'not_run' || line.end === 'unknown' || line.goal === 'unknown') continue;
     if (line.goal !== 'done' && line.goal !== 'already' && !spentTime(line, act.ms, running.length)) continue;
     if (line.goal === 'done' || line.goal === 'already') {
       state.spot = null;
+      state.seen = null;
       continue;
     }
     const at = posOf(line.progress?.at) ?? posOf(line.where) ?? posOf(act.at);
     if (!at) continue;
+    if (state.seen && distance(state.seen.at, at) <= STALL.spotRadius) state.seen.n += 1;
+    else state.seen = { at, n: 1 };
     if (state.spot && distance(state.spot.at, at) <= STALL.spotRadius) state.spot.stops += 1;
     else state.spot = { at, stops: 1 };
     if (state.spot.stops >= STALL.spotStops) {

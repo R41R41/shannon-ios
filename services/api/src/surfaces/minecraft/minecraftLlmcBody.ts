@@ -11,7 +11,8 @@ import { approachingIds, newApproach, planNowTitle, urgentRange, URGENT_NOTE } f
 import { doneFacts, prepUnmetFacts } from './minecraftPlanDone.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
-import { createHitWatch, inputFacts, onceFor, queueNowLines, stopFactsOf, wantsFood, type FactsContext, type HitWatch } from './minecraftLlmcFacts.js';
+import { createHitWatch, inputFacts, onceFor, queueNowLines, stopFactLines, wantsFood, type FactsContext, type HitWatch } from './minecraftLlmcFacts.js';
+import { sameSpotStops } from './minecraftLlmcStalls.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
 import {
   createSurpriseWatch, LLMC_PROBE, runInvestigation, scanLines, stepProbes, surpriseFrame, type Surprise, type SurpriseFrame,
@@ -61,7 +62,7 @@ interface TaskEvents {
   stopIf: boolean;
   /** Chapter 8: when the last decision read its context (ms), for the promises' 「直前に」; the stops of the results since (`stopFactsOf`), until the next decision shows them. */
   lastAt: number | null;
-  stops: string[];
+  stops: Array<string | (() => string)>;
 }
 const tasks = new Map<string, TaskEvents>();
 function eventsOf(taskId: string): TaskEvents {
@@ -183,7 +184,8 @@ export function createLlmcEvents(taskId: string, now: () => number = Date.now) {
       shown = state.lines.filter(item => item.seq > state.read).map(item => item.line);
       state.read = state.seq;
       results = state.pending.splice(0);
-      stops = state.stops.splice(0);
+      // The stuck go's sentence counts the stops at its place when it is read, after the stall watch has counted this result; a line said twice is said once.
+      stops = state.stops.splice(0).map(entry => typeof entry === 'function' ? entry() : entry).filter((line, index, all) => all.indexOf(line) === index);
       since = state.lastAt === null ? undefined : new Date(state.lastAt).toISOString();
       state.lastAt = now();
       healthLost = health !== null && state.health !== null ? Math.max(0, state.health - health) : 0;
@@ -197,7 +199,7 @@ export function createLlmcEvents(taskId: string, now: () => number = Date.now) {
     since: () => since,
     /** An act's result (the receipt's JSON) that came after the last decision: its stops are told with the next one. */
     noteStops(resultJson: string | undefined) {
-      for (const line of stopFactsOf(resultJson)) state.stops.push(line);
+      for (const line of stopFactLines(resultJson, at => sameSpotStops(taskId, at))) state.stops.push(line);
       if (state.stops.length > 4) state.stops.splice(0, state.stops.length - 4);
     },
     healthLost: () => healthLost,

@@ -96,12 +96,10 @@ export function operatorMinecraftRequests(parts: {
       let stop = '';
       try {
         const lines = (JSON.parse(commandId ? parts.control.store.receipt(commandId)?.result ?? '' : '') as { lines?: Array<{ status?: string; line?: string }> }).lines ?? [];
-        const line = String(lines.find(entry => entry.status !== 'done' && entry.status !== 'skipped')?.line ?? '');
-        const code = /止まった (\w+)/u.exec(line)?.[1] ?? '';
-        const inside = /（([^（）]{1,120})）/u.exec(line)?.[1] ?? '';
-        stop = code ? `${code}${inside ? `（${inside}）` : ''}` : line.slice(0, 120);
+        // Run 47 (hold 3: the decision after a skipped resume sent the same go again): the hand's line as the body wrote it, its fix and hint to the end, not the code alone.
+        stop = String(lines.find(entry => entry.status !== 'done' && entry.status !== 'skipped')?.line ?? '').replace(/\s+/gu, ' ').trim().slice(0, 400);
       } catch { stop = ''; }
-      return `保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop || why}`.slice(0, 200);
+      return `保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop || why}`.slice(0, 600);
     },
     /**
      * Amendment A-15: the act the task's step lost, in words for the first decision after a resume of a task the recovery paused (「q46 の 作業台とかまどを置く…」): its item and first hand.

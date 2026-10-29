@@ -335,15 +335,29 @@ export function packLines(observation: BodyObservation | null, ahead: readonly A
  * A go's or a vertical's stop, from the act's result (the receipt's `result` JSON, not its words): 「go の止まり: 止まった位置 (x,y,z) から行き先まで 35.9 m（道探しの先端からは 27.5 m）」.
  * Only hands that did not reach what they aimed at. The result's own sentences carry the same, in a text that a long result or a shortened input can cut; this line cannot be.
  */
-export function stopFactsOf(resultJson: string | undefined): string[] {
+export function stopFactsOf(resultJson: string | undefined, spotStops?: (at: unknown) => number): string[] {
+  return stopFactLines(resultJson, spotStops).map(entry => typeof entry === 'function' ? entry() : entry);
+}
+/**
+ * The same, with the sentence of a stuck go left to be said when the decision reads it (a function): the count of stops in the same place is the stall watch's, and it has counted
+ * this result by then. Run 47 (hold 3): 「行き先まで 1.4 m（道探しの先端からは 0 m）」 after a go that was stuck read as nearly there, and the same go was sent again; a stuck go is
+ * said as what it is: the way is found, the body cannot move on it, and the nth time at this place.
+ */
+export function stopFactLines(resultJson: string | undefined, spotStops?: (at: unknown) => number): Array<string | (() => string)> {
   const result = readActResult(resultJson);
   if (!result) return [];
-  const out: string[] = [];
+  const out: Array<string | (() => string)> = [];
   for (const line of result.lines) {
     const progress = line.progress;
     if (!progress || line.goal === 'done' || line.goal === 'already') continue;
     const num = (value: number) => String(Math.round(value * 10) / 10);
-    if (progress.unit === 'meter' && progress.fromStopM !== undefined && (line.do === 'go' || line.do === 'walk')) {
+    if (progress.unit === 'meter' && progress.fromStopM !== undefined && (line.do === 'go' || line.do === 'walk') && line.code === 'stuck') {
+      const where = progress.at ? `止まった位置 ${cell(progress.at)} で` : '止まった位置で';
+      out.push(() => {
+        const times = Math.max(1, spotStops?.(progress.at) ?? 0);
+        return `${line.do} の止まり: ${where}、道は見つかるが体が進めない（同じ所で ${times} 回目）`;
+      });
+    } else if (progress.unit === 'meter' && progress.fromStopM !== undefined && (line.do === 'go' || line.do === 'walk')) {
       out.push(`${line.do} の止まり: ${progress.at ? `止まった位置 ${cell(progress.at)} から` : '止まった位置から'}行き先まで ${num(progress.fromStopM)} m`
         + `${progress.searchEndM !== undefined ? `（道探しの先端からは ${num(progress.searchEndM)} m）` : ''}`);
     } else if (line.do === 'vertical') {
