@@ -539,6 +539,26 @@ describe('the operator reads a hold the head found', () => {
     expect(s.audit.heldOf(OP_TASK)).toBeNull();
   });
 
+  it('A-20 (run 47): a request a refused decision failed (the credit) is reopened by the resume that names it, and resumed as one the recovery paused; a failed task of another kind is refused', async () => {
+    const s = service();
+    await s.operator.handle(s.envelope('request', { goal: 'エンドラを討伐して' }));
+    s.tasks.set(OP_TASK, view('failed'));
+    s.requests.reopenRejected = () => null;
+    const refused = await s.operator.handle(s.envelope('resume', { taskId: OP_TASK }));
+    expect(refused.body).toMatchObject({ outcome: 'refused', code: 'not_held' });
+    expect(s.released).toEqual([]);
+    s.requests.reopenRejected = (id: string) => { s.tasks.set(id, view('stopped')); return s.tasks.get(id); };
+    const reply = await s.operator.handle(s.envelope('resume', { taskId: OP_TASK }));
+    expect(reply.body).toMatchObject({ outcome: 'accepted', code: 'resumed' });
+    expect(s.released).toEqual([`resume:recovered:${OP_TASK.slice(0, 12)}`]);
+    const rows = s.auditDb.prepare("SELECT detail FROM operator_audit WHERE command='resume' AND event='accepted'").all() as Array<{ detail: string }>;
+    expect(rows.map(row => row.detail).join('|')).toContain('reopened=rejected_step');
+    // only by its id: --latest does not look for failed requests
+    s.tasks.set(OP_TASK, view('failed'));
+    s.requests.reopenRejected = () => { throw new Error('must not be asked'); };
+    expect((await s.operator.handle(s.envelope('resume', { latest: true }))).body).toMatchObject({ outcome: 'refused' });
+  });
+
   it('A-17: a held task still unknown (paused, unknown, fca_unknown) is not resumed: the runtime cannot queue an unknown step, so nothing is sent to the body until the recovery has paused it', async () => {
     const s = await held();
     await s.operator.hold(OP_TASK, note);
@@ -808,6 +828,26 @@ describe('the step parts hold a request that asked to be held, for what the head
     expect(await until(() => port.calls.length > 0)).toBe(true);
     expect(port.calls[0]!.id).toMatch(/^head:decide_error:check_refused:/u);
     expect(port.calls[0]!.why).toContain('2 回');
+  }, 30_000);
+
+  it('A-20 (run 47): a decision refused for the credit holds the request (the body asked to hold, the audit hold) with the reason billing, and the error goes on to the runner; any other error does not', async () => {
+    const port = holdPort();
+    let refuse = 'FCA_MODEL_BILLING';
+    const bench = benchC({ scene: 'billing', run: 'stalls-billing', model: { name: 'main', model: { decide: async () => { throw new Error(refuse); }, toolResults: () => '' } } });
+    benches.push(bench);
+    await bench.begin();
+    await expect(bench.model.decide({} as never, new AbortController().signal)).rejects.toThrow('FCA_MODEL_BILLING');
+    expect(await until(() => port.calls.length > 0)).toBe(true);
+    expect(port.calls[0]!.id).toMatch(/^head:decide_error:billing:/u);
+    expect(port.calls[0]!.why).toContain('billing');
+    expect(port.calls[0]).toMatchObject({ heavy: true, held: true });
+    // another error of the model holds nothing
+    forgetStalls();
+    port.calls.length = 0;
+    refuse = 'FCA_MODEL_HTTP_400';
+    await expect(bench.model.decide({} as never, new AbortController().signal)).rejects.toThrow('FCA_MODEL_HTTP_400');
+    await bench.settle(60);
+    expect(port.calls).toHaveLength(0);
   }, 30_000);
 
   it('decide_error: a decision again that failed or ran out of time, told by the record\'s row, holds the request', async () => {

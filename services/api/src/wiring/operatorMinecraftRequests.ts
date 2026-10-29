@@ -1,6 +1,7 @@
 import type { TaskRecord, TaskRuntime, TaskSpec, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { OPERATOR_TITLE_PREFIX, operatorRequestContext } from '../contracts/operatorContract.js';
+import { rejectedTaskReport } from './taskRuntimeWiring.js';
 
 /** Phases after which a task no longer holds the body or its Minecraft work. */
 const FINISHED: readonly TaskView['phase'][] = ['stopped', 'completed', 'failed'];
@@ -55,6 +56,8 @@ export function operatorMinecraftRequests(parts: {
     /** A stopped task queued again (the runtime's explicit resume, as the owner's resume route does): a held request's `resume`. */
     resume: (id: string) => parts.runtime.resume(parts.ownerScope, id),
     /** A-17: a held request the unknown exit failed (its hold row stood open) is stopped again, resumable; null for any other failed task. */
+    /** A-20: a request a refused decision failed (the credit ran out) is stopped again, resumable; null for any other failed task. */
+    reopenRejected: (id: string, summary: string) => parts.runtime.reopenRejected?.(parts.ownerScope, id, summary, rejectedTaskReport(parts.runtime.get(parts.ownerScope, id)?.title ?? '')) ?? null,
     reopenRetired: (id: string, summary: string) => parts.runtime.reopenRetired?.(parts.ownerScope, id, summary) ?? null,
     /** Continue contract 1: the commands a cleanup left held for this task are resumed or cancelled on the hold axis only (their results are left as they are; nothing is sent). */
     resolveHolds: (id: string, how: 'resume' | 'cancel') => parts.control.resolveHolds(id, how),

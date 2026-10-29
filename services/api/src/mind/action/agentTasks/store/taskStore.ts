@@ -26,6 +26,8 @@ export interface TaskStateChange {
   readonly proof?: boolean;
   /** A late Host report: it may reopen a task closed with its outcome unknown (failed with `unknown_since`; `TaskEvent.lateReport`). */
   readonly lateReport?: boolean;
+  /** A failed task reopened as stopped (`TaskEvent.reopen`). */
+  readonly reopen?: boolean;
 }
 
 const refusals = new Map<string, number>();
@@ -79,7 +81,7 @@ export function writeTaskState(db: DatabaseSync, taskId: string, change: TaskSta
   const from = currentExecState(row);
   const closedUnknown = from === 'failed' && typeof row.unknown_since === 'string';
   const event = { to: target.execState, waitReason: target.waitReason, starting: change.status === 'starting', proof: change.proof,
-    lateReport: change.lateReport === true && closedUnknown };
+    lateReport: change.lateReport === true && closedUnknown, reopen: change.reopen === true && from === 'failed' };
   const result = taskTransition(from, kind, event);
   if (!result.ok) refuse(transitionRefusalKey(kind, result), at);
   const asked = legacyStateOf(facts);

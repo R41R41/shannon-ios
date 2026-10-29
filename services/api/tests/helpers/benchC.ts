@@ -575,6 +575,8 @@ export class BenchC {
   get head(): Head { return this.current; }
   get queue(): LlmcQueue { return this.current.queue; }
   get plan() { return this.current.parts.ports.plan; }
+  /** A-20: the model the runner decides with (the step parts' own, with the credit guard). */
+  get model() { return this.current.parts.ports.model; }
   get planTools() { return this.current.parts.planTools; }
 
   /** The head starts (the first time, or after a stop): a control on the shared database, step parts from the plan's checkpoint, the queue. */

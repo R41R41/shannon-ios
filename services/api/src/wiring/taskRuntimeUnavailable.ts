@@ -1,7 +1,7 @@
 import type { ActionExecution } from '../infra/context/actionExecution.js';
-import { FcaDecisionUnavailableError } from '../mind/action/fca/fcaProviderRetry.js';
+import { FCA_MODEL_BILLING, FcaDecisionUnavailableError } from '../mind/action/fca/fcaProviderRetry.js';
 import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
-import { PROVIDER_UNAVAILABLE_SUMMARY, pausedReport } from './taskPauseNotice.js';
+import { BILLING_PAUSED_SUMMARY, PROVIDER_UNAVAILABLE_SUMMARY, pausedReport } from './taskPauseNotice.js';
 
 /**
  * A step whose decision never came back (`FcaDecisionUnavailableError`: the retries of `decideWithRetry` ran out) ran nothing. It is
@@ -94,6 +94,24 @@ export async function settleUnavailableStep(parts: UnavailableParts, step: TaskS
   if (!close(parts, step, { ...prior, fcaProviderRetries: cycles + 1 })) return null;
   parts.log(`Shannon FCA step retried task=${step.taskId} code=${error.message}`);
   return 'continued';
+}
+
+/**
+ * A-20 (run 47: the credit ran out, the provider refused with HTTP 400, and the request was failed with the world running): the decision was refused for the account's credit, so nothing
+ * ran. A Minecraft request is paused (the step closed as `continue`, the request stopped, resumable) at once, not after rounds: nothing is asked again until the balance is filled. False
+ * for any other task (it fails as a refused request does) or when the step cannot be closed.
+ */
+export function pauseForBilling(parts: UnavailableParts, step: TaskStep, execution: ActionExecution): boolean {
+  if (execution.stepOutcome === 'unknown' || !parts.isBodyTask(step.taskId) || parts.runtime.get(parts.scopeKey, step.taskId)?.phase !== 'executing') return false;
+  const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
+  if (!close(parts, step, prior)) return false;
+  parts.runtime.stop(parts.scopeKey, step.taskId, 'fca_billing');
+  parts.note(step.taskId, BILLING_PAUSED_SUMMARY);
+  try {
+    parts.pauseNotice(step.taskId, step.id, pausedReport(parts.runtime.get(parts.scopeKey, step.taskId)?.title ?? '', BILLING_PAUSED_SUMMARY));
+  } catch { /* the task is paused either way; its summary says so */ }
+  parts.log(`Shannon FCA step paused task=${step.taskId} code=${FCA_MODEL_BILLING} reason=billing`);
+  return true;
 }
 
 /** The step committed as `continue` with nothing in it: a refused commit (a lost lease) leaves the step as it was. */

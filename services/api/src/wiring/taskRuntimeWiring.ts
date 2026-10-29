@@ -18,7 +18,8 @@ import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReade
 import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
 import type { FcaBudget } from './fcaBudgetWiring.js';
 import type { FcaBodyRecovery } from './fcaBodyRecovery.js';
-import { settleUnavailableStep, type UnavailableParts } from './taskRuntimeUnavailable.js';
+import { pauseForBilling, settleUnavailableStep, type UnavailableParts } from './taskRuntimeUnavailable.js';
+import { FCA_MODEL_BILLING } from '../mind/action/fca/fcaProviderRetry.js';
 import { pausedSpoken, pausedSummary } from './taskPauseNotice.js';
 import { MINECRAFT_REQUEST_CRITERIA } from './fcaMinecraftRequests.js';
 import { operatorRequestTask } from './operatorMinecraftRequests.js';
@@ -231,6 +232,11 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await flushReceipts();
       return;
     }
+    // A-20: the decision was refused for the account's credit: a Minecraft request is paused, resumable once the balance is filled (it was failed, with the world running).
+    if (step && code === FCA_MODEL_BILLING && pauseForBilling(unavailable, step, execution)) {
+      await flushReceipts();
+      return;
+    }
     if (step && providerServerErrorCode(code, execution) && await retryAfterServerError(step, execution)) {
       // The provider answered 5xx/529: nothing came back, so the step ran nothing. The task runs it once more, then fails.
       console.log(`Shannon FCA step retried task=${taskId} code=${code}`);
@@ -435,7 +441,7 @@ export function providerServerErrorCode(code: string, execution: Pick<ActionExec
  * unknown (a conservative bound), a refusal's as none. The task fails with its report and he can ask again.
  */
 export function rejectedBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
-  const status = /^FCA_MODEL_HTTP_([45]\d\d)$/u.exec(code)?.[1];
+  const status = /^FCA_MODEL_HTTP_([45]\d\d)$/u.exec(code)?.[1] ?? (code === FCA_MODEL_BILLING ? '402' : undefined);
   return !!status && !['408', '409', '429'].includes(status) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown';
 }
 

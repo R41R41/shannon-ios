@@ -7,6 +7,7 @@ import { claudeClient } from '../infra/models/claude/claudeClient.js';
 import { structuredBody } from '../infra/models/claude/claudeStructured.js';
 import { closedUsage, estimatedAnthropicCostUsd, knownCount, unknownCostUpperBound } from '../infra/models/claude/claudeUsage.js';
 import type { FcaExternalTools, FcaModel, FcaToolCall } from '../mind/action/fca/fcaPorts.js';
+import { FCA_MODEL_BILLING } from '../mind/action/fca/fcaProviderRetry.js';
 import type { FcaHistoryAhead, FcaHistoryPolicy } from '../mind/action/fca/fcaHistoryPorts.js';
 import { createFcaHistoryAhead } from '../mind/action/fca/fcaHistory.js';
 import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
@@ -495,7 +496,10 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       if (stall) headHold(stall);
       return stall !== null;
     };
-    return { look, refused, settled: () => holding ?? Promise.resolve() };
+    // A-20 (run 47: the credit ran out): the decision was refused for the account's credit. The request is held (the body is asked to hold, the audit's hold row, the owner's stop path) with
+    // the reason billing, and the runner pauses it (`pauseForBilling`); the operator resumes it when the balance is filled.
+    const billing = (): void => headHold({ kind: 'decide_error', key: 'billing', why: 'Anthropic の利用残高が足りず（課金・残高の誤り）、判断を頼めなかった。理由 billing。補充の後に resume で続ける' });
+    return { look, refused, billing, settled: () => holding ?? Promise.resolve() };
   })() : null;
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an act of it that would break a promise is decided again by Opus
@@ -543,7 +547,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the
       // API's thread must not turn a done task back.
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
-    ports: { model, plan: plan.port,
+    ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port,
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
       versions: () => minecraftBodyVersion(control, bodyId(), read),
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),
@@ -555,6 +559,24 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       // sources 114 times (about 51 s of the API's one thread) and wrote 1,600 characters of shared context into every live state.
       evidence: undefined },
   };
+}
+/** A-20: the model, with a refusal for the account's credit (`FCA_MODEL_BILLING`) told to `onBilling` before it is thrown on; everything else of the model as it is. */
+export function billingGuarded(model: FcaModel, onBilling: () => void): FcaModel {
+  const decide: FcaModel['decide'] = async (input, signal) => {
+    try {
+      return await model.decide(input, signal);
+    } catch (error) {
+      if (error instanceof Error && error.message === FCA_MODEL_BILLING) {
+        try { onBilling(); } catch { /* the hold is asked for; a failure of asking never changes the error */ }
+      }
+      throw error;
+    }
+  };
+  return new Proxy(model, { get(target, property) {
+    if (property === 'decide') return decide;
+    const value = Reflect.get(target, property, target) as unknown;
+    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+  } });
 }
 /** A body task's lifecycle: wrapped for the mode when the task is one of it. */
 export function llmcLifecycle(small: ReturnType<typeof llmcStepParts> | null, lifecycle: FcaBodyLifecycle): FcaBodyLifecycle {

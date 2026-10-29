@@ -66,7 +66,7 @@ export interface TaskAuthority {
   byRequest(scopeKey: string, requestKey: string): TaskRecord | null;
   create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string; capability?: string }): TaskRecord;
   event(scopeKey: string, id: string, type: string, at: string,
-    change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean; lateReport?: boolean }, payload?: Record<string, unknown>): TaskRecord;
+    change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean; lateReport?: boolean; reopen?: boolean }, payload?: Record<string, unknown>): TaskRecord;
   /** Writes the state a task's checkpoint now means after a change without an event (ADR-0009 stage 1, S4). */
   refresh?(id: string, at: string): void;
 }
@@ -174,6 +174,11 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
    * the operator's resume of a hold that was open when the exit came). Null: it is not such a task (any other failed task stays failed).
    */
   reopenRetired?(scopeKey: string, taskId: string, summary: string): TaskView | null;
+  /**
+   * A task a refused decision failed before anything ran (A-20: the step's newest commit is a `fail`, and the task's summary is `failedSummary`, the report such a failure writes) is
+   * paused again as stopped, resumable, when the one who owns it asks (the operator's resume, after the credit was filled). Null: it is not such a task.
+   */
+  reopenRejected?(scopeKey: string, taskId: string, summary: string, failedSummary: string): TaskView | null;
   /**
    * The internal root's step the provider refused before anything ran (deterministic 4xx, history limit): closed as a known
    * failure; the root returns to its inbox and the messages the step saw are delivered once more, then consumed (fix 2026-10-14).

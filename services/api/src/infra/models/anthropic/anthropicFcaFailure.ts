@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { FcaNoDecisionError, FcaNoResponseError } from '../../../mind/action/fca/fcaNoResponse.js';
-import { FcaProviderError, retryableStatus } from '../../../mind/action/fca/fcaProviderRetry.js';
+import { FCA_MODEL_BILLING, FcaProviderError, retryableStatus } from '../../../mind/action/fca/fcaProviderRetry.js';
 import { connectionFailedBeforeResponse, providerFailureFacts, providerServerError } from './anthropicRejection.js';
 
 /**
@@ -47,7 +47,10 @@ export function failureError(failure: DispatchFailure): Error {
 }
 
 /** The error for a provider refusal (4xx): the statuses worth asking again carry `retry-after`, the others stay a plain closed code. */
-export function refusalError(status: number, error: { headers?: unknown }): Error {
+export function refusalError(status: number, error: { headers?: unknown; message?: unknown }): Error {
+  // A-20 (run 47: HTTP 400 「Your credit balance is too low to access the Anthropic API」 failed a running request): a refusal for the account's credit is not an error of the request. Read
+  // only for this closed class; the provider's text goes nowhere.
+  if (status === 402 || (status === 400 && typeof error.message === 'string' && /credit balance is too low/iu.test(error.message))) return new Error(FCA_MODEL_BILLING);
   return retryableStatus(status) ? new FcaProviderError(status, retryAfterMilliseconds(error)) : new Error(`FCA_MODEL_HTTP_${status}`);
 }
 

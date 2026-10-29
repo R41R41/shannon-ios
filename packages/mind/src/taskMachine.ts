@@ -8,7 +8,8 @@ import {
  * machine says whether that move is allowed from where the task is, and gives the old `status` and `pause_reason` that are
  * written with it in the same UPDATE. The invariants it keeps:
  * - a finished task (completed, failed, cancelled) never moves again, except a task closed with its outcome unknown on a late
- *   report of its outside work (`lateReport`: completed, or paused again);
+ *   report of its outside work (`lateReport`: completed, or paused again), and a failed task its owner reopens as stopped (`reopen`: the operator's resume of a request
+ *   a refused decision failed before anything ran, A-20; only the writer that checks that sets it);
  * - nothing becomes `proposed` again;
  * - an unknown task never becomes active: it leaves to a finished state, back to an open state other than active when a proof
  *   about its lost attempt says nothing was sent (`proof`), or, for the internal root and a conversation, by retirement or the
@@ -28,6 +29,8 @@ export interface TaskEvent {
    * wins, so it may become completed, or paused again for the owner (stopped, or waiting for the owner).
    */
   readonly lateReport?: boolean;
+  /** A failed task goes back to stopped (paused for its owner), by a writer that has checked why it failed. Nothing else is reopened. */
+  readonly reopen?: boolean;
 }
 
 export type TaskRefusal = 'illegal' | 'no_projection';
@@ -59,10 +62,10 @@ const LATE_REPORT_EXITS: readonly ExecState[] = ['completed', 'stopped', 'waitin
  * inbox exits of an unknown task to every kind, `lateReport` the late-report exits of a failed one.
  */
 export function transitionAllowed(from: ExecState | null, to: ExecState, kind: TaskKind,
-  event: Pick<TaskEvent, 'proof' | 'lateReport'> = {}): boolean {
+  event: Pick<TaskEvent, 'proof' | 'lateReport' | 'reopen'> = {}): boolean {
   if (from === null || from === to) return true;
   if (TASK_TRANSITIONS[from].includes(to)) return true;
-  if (from === 'failed') return event.lateReport === true && LATE_REPORT_EXITS.includes(to);
+  if (from === 'failed') return (event.lateReport === true && LATE_REPORT_EXITS.includes(to)) || (event.reopen === true && to === 'stopped');
   return from === 'unknown' && (event.proof === true || inboxKind(kind)) && INBOX_EXITS.includes(to);
 }
 

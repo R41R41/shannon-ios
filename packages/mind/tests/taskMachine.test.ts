@@ -49,6 +49,15 @@ describe('the task state machine (ADR-0009 stage 1, S4)', () => {
     expect(taskTransition('unknown', 'work', { to: 'active', proof: true }).ok).toBe(false);
   });
 
+  it('reopens a failed task as stopped only when the writer says so (A-20); nothing else is reopened', () => {
+    expect(taskTransition('failed', 'work', { to: 'stopped', reopen: true })).toMatchObject({ ok: true, legacy: { status: 'paused' } });
+    expect(taskTransition('failed', 'work', { to: 'stopped' }).ok).toBe(false);
+    expect(taskTransition('failed', 'work', { to: 'ready', reopen: true }).ok).toBe(false);
+    expect(taskTransition('failed', 'work', { to: 'completed', reopen: true }).ok).toBe(false);
+    expect(taskTransition('completed', 'work', { to: 'stopped', reopen: true }).ok).toBe(false);
+    expect(taskTransition('cancelled', 'work', { to: 'stopped', reopen: true }).ok).toBe(false);
+  });
+
   it('lets a late report reopen only a task closed with its outcome unknown, to completed or paused', () => {
     expect(taskTransition('failed', 'codex', { to: 'completed', lateReport: true })).toMatchObject({ ok: true, legacy: { status: 'completed' } });
     expect(taskTransition('failed', 'codex', { to: 'stopped', lateReport: true })).toMatchObject({ ok: true, legacy: { status: 'paused', pauseReason: 'owner' } });

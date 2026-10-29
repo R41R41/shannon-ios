@@ -26,6 +26,8 @@ export const FCA_RETRY_POLICY: FcaRetryPolicy = Object.freeze({
 /** The statuses that carry no decision and may pass: request timeout, conflict, throttling, and every server error. */
 export const retryableStatus = (status: number): boolean => status === 408 || status === 409 || status === 429 || (status >= 500 && status < 600);
 
+/** The closed code of a provider refusal about the account's credit (A-20): nothing is wrong with the request, and nothing is asked again until the balance is filled. */
+export const FCA_MODEL_BILLING = 'FCA_MODEL_BILLING';
 /** A provider answer worth asking again. The message stays `FCA_MODEL_HTTP_<status>`, so every closed-code check sees what it saw. */
 export class FcaProviderError extends Error {
   readonly retryAfterMs: number | null;

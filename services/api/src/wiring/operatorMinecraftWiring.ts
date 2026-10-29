@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HELD_SUMMARY } from './fcaBodyRecoveryPolicy.js';
+import { BILLING_PAUSED_SUMMARY } from './taskPauseNotice.js';
 import { ACTION_TERMINAL } from '@shannon/mind';
 import type { ActionThreads } from '../contracts/actionThreadContract.js';
 import { auditedArguments, operatorLabel, operatorTalkNote, parseOperatorEnvelope, OPERATOR_LIMITS,
@@ -325,7 +326,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
    * The body is told to move the world (a release naming `recovered:<task>`: a body that holds nothing unfreezes and answers `done`), then the runtime's resume queues the task again; the
    * recovery pays what the task is owed before its first step (the notice of the lost step: its operations may or may not have taken effect, read the observation).
    */
-  async function resumeRecovered(c: Context, taskId: string, deductMinutes: number) {
+  async function resumeRecovered(c: Context, taskId: string, deductMinutes: number, reopened = '') {
     const requests = parts.requests!;
     // A request the time limit stopped goes on only when its limit, with the time the body could not move taken off (the pauses of the recovery written by the tick, and the minutes the
     // operator names), is not reached now.
@@ -344,7 +345,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       return c.refuse('refused', `体の世界を動かせなかったので、再開しませんでした（${unheld.words}）。体がつながっているか確かめて、もう一度 resume してください。`, { taskId });
     }
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'accepted', code: 'accepted', argsJson: c.argsJson,
-      taskId, detail: `recovered=fca_stopped${deductMinutes ? ` deduct=${deductMinutes * 60_000}` : ''} body=${unheld.words}`.slice(0, 600) });
+      taskId, detail: `recovered=fca_stopped${reopened ? ` reopened=${reopened}` : ''}${deductMinutes ? ` deduct=${deductMinutes * 60_000}` : ''} body=${unheld.words}`.slice(0, 600) });
     // Amendment A-15 1: there is no held act to send again (the hold the earlier resume closed stays closed): the resume's check is written at once, so that no step reads an older hold as pending.
     audit({ operationId: c.operationId, at: parts.now(), operator: c.operator, command: c.command, event: 'settled', code: 'skipped', argsJson: c.argsJson,
       taskId, detail: '取り戻しで止まっていたタスクの再開: 出し直す act は無い' });
@@ -390,6 +391,12 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (!found) return c.refuse('not_held');
     if (!parts.audit.requestOf(parts.scopeKey, found.id)) return c.refuse(requests.get(found.id) ? 'not_operator_task' : 'not_found', undefined, { taskId: found.id });
     const hold = parts.audit.heldOf(found.id);
+    // A-20 (run 47: the credit ran out, a refused decision failed the request with the world running): a request named by its id, failed by its own step's refused decision, is stopped
+    // again (the state machine's `reopen`) and resumed as a request the recovery paused. Any other failed task stays failed.
+    if (!hold && input.taskId && requests.get(found.id)?.phase === 'failed') {
+      if (requests.reopenRejected?.(found.id, BILLING_PAUSED_SUMMARY) == null) return c.refuse('not_held', '失敗した依頼ですが、判断が断られて止まった物ではないので戻せません。', { taskId: found.id });
+      return resumeRecovered(c, found.id, input.deductMinutes ?? 0, 'rejected_step');
+    }
     if (!hold && !recovered(found.id)) return c.refuse('not_held', undefined, { taskId: found.id });
     if (!hold) return resumeRecovered(c, found.id, input.deductMinutes ?? 0);
     // A-17 (run 46): the unknown exit failed a request whose hold stood open (the hold is the owner's to resume, the exit did not see it). Only a task that exit failed (its events say so)

@@ -7,6 +7,8 @@ import { BODY_ABSENT_SUMMARY, ownSummary, RECOVERY_LIMIT_SUMMARY, RELEASE_UNPROV
  * Both are short Japanese reasons that say the task can be resumed, and carry nothing but the owner's own title.
  */
 export const PROVIDER_UNAVAILABLE_SUMMARY = 'モデルの応答が続けて得られなかったため一時停止しています。応答が戻れば再開できます。';
+/** A-20 (run 47): the provider refused the decision for the account's credit; the request is paused (the world stopped when it asked to be held) until the balance is filled. */
+export const BILLING_PAUSED_SUMMARY = 'モデルの利用残高が足りず判断を頼めないため一時停止しています。残高を補充したら再開できます。';
 
 /**
  * The report of a task paused only because of unconfirmed charges (`fcaBudgetWiring.ts`): the task title, the cap in yen. What it is
@@ -22,7 +24,7 @@ export const pausedReport = (title: string, summary: string) => `「${title.slic
 
 /** The short reason of each pause, as a clause that goes before 「ため」 in the sentence a call says. */
 const SPOKEN_REASONS: ReadonlyArray<readonly [string, string]> = [
-  [PROVIDER_UNAVAILABLE_SUMMARY, 'モデルの応答が続けて得られなかった'], [BODY_ABSENT_SUMMARY, '体が戻らなかった'],
+  [PROVIDER_UNAVAILABLE_SUMMARY, 'モデルの応答が続けて得られなかった'], [BILLING_PAUSED_SUMMARY, 'モデルの利用残高が足りなかった'], [BODY_ABSENT_SUMMARY, '体が戻らなかった'],
   [RECOVERY_LIMIT_SUMMARY, '同じ依頼が短い間に何度も中断された'], [STALE_SUMMARY, '前回の操作から時間がたちすぎている'],
   [RELEASE_UNPROVEN_SUMMARY, '体が前回の操作の解放を確認できなかった'],
 ];
@@ -42,4 +44,4 @@ export function pausedSpoken(title: string, report: string): string {
  * must not keep it. Cleared on `resume` and, failing that, at the next commit (`SQLiteTaskRuntimeStore`).
  */
 export const pausedSummary = (summary: string): boolean =>
-  summary === PROVIDER_UNAVAILABLE_SUMMARY || estimatesPaused(summary) || ownSummary(summary);
+  summary === PROVIDER_UNAVAILABLE_SUMMARY || summary === BILLING_PAUSED_SUMMARY || estimatesPaused(summary) || ownSummary(summary);

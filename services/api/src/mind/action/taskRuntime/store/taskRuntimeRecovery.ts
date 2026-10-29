@@ -134,6 +134,22 @@ export class TaskRuntimeRecovery {
     return this.parts.get(scopeKey, taskId);
   }
 
+  /**
+   * A-20 (run 47: the credit ran out and a running request was failed with the world running): a task the step's own `fail` commit closed, with the summary such a failure writes
+   * (`failedSummary`), goes back to stopped, resumable, by the state machine's `reopen`. Its checkpoint was cleared by the commit (no step, no stop request). The failure's code is
+   * not kept; the operator, who names the task, knows why it failed. Any other failed task (a retirement, a cap, a completion): null.
+   */
+  reopenRejected(scopeKey: string, taskId: string, summary: string, failedSummary: string): TaskView | null {
+    const task = this.parts.authority.get(scopeKey, taskId);
+    if (!task || task.status !== 'failed' || task.summary !== failedSummary) return null;
+    const row = this.db.prepare("SELECT payload_json FROM agent_task_events WHERE task_id=? AND event_type='fca_step_committed' ORDER BY sequence DESC LIMIT 1").get(taskId);
+    let disposition: unknown;
+    try { disposition = JSON.parse(String(row?.payload_json ?? '{}')).disposition; } catch { disposition = undefined; }
+    if (disposition !== 'fail') return null;
+    this.parts.authority.event(scopeKey, taskId, 'fca_rejected_reopened', this.parts.now(), { status: 'paused', pauseReason: 'fca_stopped', proof: true, reopen: true, summary }, { reason: 'billing' });
+    return this.parts.get(scopeKey, taskId);
+  }
+
   /** A retired task's parent hears of it, as after a committed failure, and so does the owner's activity (its report). */
   private tellRetired(task: TaskRecord, stepId: string | null, parent: TaskRecord | null): void {
     if (task.origin === 'maintenance') {
