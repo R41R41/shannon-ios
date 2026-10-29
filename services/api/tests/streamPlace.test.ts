@@ -126,7 +126,7 @@ describe('answering', () => {
   });
 
   it('gives the comment back once when the writer\'s answer is broken, and gives it up the second time', async () => {
-    const place = await started({ override: request => (request.message.includes('視聴者のコメント') ? 'すみません、うまく言えません' : null) });
+    const place = await started({ override: request => (request.message.includes('視聴者のコメント') ? '{"say":' : null) });
     place.service.ingest(place.streamId, [place.comment('こんにちは')]);
     await place.step(100);
     expect(place.service.view().comments[0]).toMatchObject({ status: 'new' });
