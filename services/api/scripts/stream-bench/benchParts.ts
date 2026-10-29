@@ -36,7 +36,7 @@ export class ScaledClock {
   }
 }
 
-export interface ModelCall { role: 'writer' | 'auxiliary'; request: ShannonChatModelRequest; reply: string | null; realMs: number }
+export interface ModelCall { role: 'writer' | 'auxiliary'; request: ShannonChatModelRequest; reply: string | null; realMs: number; error?: string }
 
 /** Wraps a model: every request and its answer are kept (the leak check reads them), and the wait is told to the clock. */
 export class RecordingModel implements ShannonChatModel {
@@ -59,6 +59,9 @@ export class RecordingModel implements ShannonChatModel {
       const result = await this.clock.track(() => this.inner.generate(request));
       call.reply = result.reply;
       return result;
+    } catch (error) {
+      call.error = error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160);
+      throw error;
     } finally { call.realMs = Date.now() - started; }
   }
 }
