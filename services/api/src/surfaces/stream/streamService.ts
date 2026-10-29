@@ -25,7 +25,7 @@ import type { WriterComment, WriterPurpose } from './streamWriter.js';
  * are injected; `tick()` is what a timer calls, so a test steps it by hand and `settle()` waits for the work in flight.
  */
 interface Session {
-  /** The end in progress: a second ask for it (the ear sends `ended` again while the head answers 5xx) is the same end. */
+  /** The end in progress: a second ask for it (the ear's retry) is the same end. */
   ending?: Promise<{ stream: StreamSessionView; summary: StreamSummary }>;
   view: StreamSessionView;
   startedMs: number;
@@ -87,7 +87,6 @@ export class StreamService {
     return promise;
   }
 
-  /** Waits for the work in flight (tests, and the server's stop). */
   async settle(): Promise<void> {
     while (this.jobs.size) await Promise.allSettled([...this.jobs]);
   }
@@ -106,7 +105,6 @@ export class StreamService {
 
   private live(): Session | null { return this.session && this.session.view.phase !== 'ended' ? this.session : null; }
 
-  /** The stream while it is live (the ear's and the console's view of it); null otherwise. */
   liveView(): StreamSessionView | null { return this.live()?.view ?? null; }
 
   /** The stream is no longer the live one (it ended, or another began) while some work for it was in flight. */
@@ -155,7 +153,6 @@ export class StreamService {
 
   private async finish(session: Session): Promise<{ stream: StreamSessionView; summary: StreamSummary }> {
     const streamId = session.view.streamId;
-    // The closing word first (the mouth takes it within 20 s or it is not said), then the stream is over and the words go.
     session.view.paused = true;
     this.commentary?.stop();
     await this.closing(session);
@@ -175,7 +172,6 @@ export class StreamService {
     return { stream: session.view, summary };
   }
 
-  /** The ear found the live chat (or says it ended). */
   async broadcast(input: { streamId: string; ended?: boolean } & Partial<StreamBroadcast>): Promise<StreamSessionView> {
     const ended = this.session?.view.streamId === input.streamId && this.session.view.phase === 'ended';
     if (input.ended === true && ended) return this.session!.view;
@@ -191,7 +187,6 @@ export class StreamService {
     return session.view;
   }
 
-  /** The ear's batch. Throws `STREAM_NOT_LIVE` (409) for a stream that is not the live one. */
   ingest(streamId: string, comments: readonly IncomingComment[]): { accepted: number; duplicates: number; chatPosts: { id: string; text: string }[] } {
     const session = this.live();
     if (!session || session.view.streamId !== streamId) throw new StreamError(409, 'STREAM_NOT_LIVE');
@@ -277,7 +272,6 @@ export class StreamService {
     return { stream: this.session ? this.session.view : null, stats: this.stats(), comments: this.ledger.view(), notices: [...this.notices] };
   }
 
-  /** What a timer calls: the mouth moves on, comments that waited too long are given up, and the next thing is started when there is room. */
   tick(): void {
     try {
       this.mouth.tick();
@@ -328,12 +322,11 @@ export class StreamService {
   private async answer(session: Session, pick: ChosenComments): Promise<void> {
     const { primary, group } = pick;
     const streamId = session.view.streamId;
-    for (const record of group) {
-      record.status = 'picked';
-      record.attempts += 1;
-    }
-    const turn = this.parts.feeling.turn(this.parts.scopeKey, {
-      streamId, viewer: primary.viewer, words: primary.event ? '' : primary.text, at: iso(this.now()), snapshot: this.parts.snapshot(this.parts.scopeKey), path: 'text_pre_send',
+    for (const record of group) Object.assign(record, { status: 'picked', attempts: record.attempts + 1 });
+    const { scopeKey } = this.parts;
+    const turn = this.parts.feeling.turn(scopeKey, {
+      streamId, viewer: primary.viewer, words: primary.event ? '' : primary.text, at: iso(this.now()), snapshot: this.parts.snapshot(scopeKey),
+      path: 'text_pre_send',
     });
     if (!turn) return group.forEach(record => this.give(record, 'skipped'));
     if (turn.notice) {
@@ -342,8 +335,8 @@ export class StreamService {
     }
     const tellOff = turn.state.viewer?.ladder === 'tell_off' && turn.notice !== null;
     // An event the ear described is no request: there is nothing to read for what it asks.
-    const gate = primary.event ? { declined: false }
-      : await this.parts.gate.before(primary.text, primary.tags, this.recentChat(4).filter(text => text !== primary.text));
+    const recent = this.recentChat(4).filter(text => text !== primary.text);
+    const gate = primary.event ? { declined: false } : await this.parts.gate.before(primary.text, primary.tags, recent);
     if (this.over(session)) return;
     const comments = group.map(record => this.writerComment(record));
     const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline: gate.declined };
@@ -407,7 +400,7 @@ export class StreamService {
     if (line) this.putOwn(line.reply, line.plan, 'closing');
   }
 
-  /** A line of her own for a purpose, with a fixed line in its place when the model is late, over its allowance or flagged. */
+  /** A line of her own, with a fixed line in its place when the model is late, over its allowance or flagged. */
   private async ownLine(session: Session, purpose: WriterPurpose, kind: 'greeting' | 'closing', fixed: readonly string[])
     : Promise<{ reply: CheckedStreamReply; plan: StreamLinePlan } | null> {
     const turn = this.author.ownTurn(session.view.streamId);

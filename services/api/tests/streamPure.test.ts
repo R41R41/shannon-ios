@@ -262,3 +262,16 @@ describe('the check after writing (contract §4)', () => {
     }
   });
 });
+
+describe('when the chat is faster than her voice', () => {
+  it('answers the newest of equal scores first, so that the answers stay fresh', () => {
+    const ledger = new StreamLedger();
+    ledger.add(comment('old', 'ふるいコメント', {}, T0), T0);
+    ledger.add(comment('mid', 'まんなかのコメント', {}, T0 + 10_000), T0 + 10_000);
+    ledger.add(comment('new', 'あたらしいコメント', {}, T0 + 20_000), T0 + 20_000);
+    ledger.get('old')!.first = false;
+    ledger.get('mid')!.first = false;
+    ledger.get('new')!.first = false;
+    expect(chooseComments(ledger, T0 + 21_000)!.primary.commentId).toBe('new');
+  });
+});
