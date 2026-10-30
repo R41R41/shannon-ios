@@ -1,0 +1,319 @@
+{
+  "schema": "shannon.plan-tree.v2",
+  "revision": 10,
+  "current": "p7",
+  "promises": [],
+  "nodes": [
+    {
+      "id": "p1",
+      "parentId": null,
+      "title": "木と石の道具",
+      "state": "done",
+      "doneWhen": "have:stone_pickaxe&have:stone_axe&have:stone_sword",
+      "kind": "wood",
+      "order": 0
+    },
+    {
+      "id": "p1.1",
+      "parentId": "p1",
+      "title": "原木を8本集める",
+      "state": "done",
+      "where": "-5,68,-3",
+      "doneWhen": "have:log>=8|have:wooden_pickaxe",
+      "kind": "wood",
+      "order": 1
+    },
+    {
+      "id": "p1.2",
+      "parentId": "p1",
+      "title": "作業台と木のツルハシ",
+      "state": "done",
+      "doneWhen": "have:crafting_table&have:wooden_pickaxe",
+      "note": "不要になった（p1 が済んだ: have:stone_pickaxe&have:stone_axe&have:stone_sword）",
+      "kind": "stone_tools",
+      "order": 2
+    },
+    {
+      "id": "p1.3",
+      "parentId": "p1",
+      "title": "石のツルハシ・斧・剣",
+      "state": "done",
+      "where": "11,63,-10",
+      "doneWhen": "have:stone_pickaxe&have:stone_axe&have:stone_sword",
+      "forbid": [
+        "素手で真下を掘らない"
+      ],
+      "kind": "stone_tools",
+      "order": 3
+    },
+    {
+      "id": "p2",
+      "parentId": null,
+      "title": "動物を狩り食料40点",
+      "state": "done",
+      "doneWhen": "food>=40",
+      "kind": "food",
+      "order": 4
+    },
+    {
+      "id": "p3",
+      "parentId": null,
+      "title": "下りる前の準備",
+      "state": "done",
+      "doneWhen": "food>=40&have:crafting_table|food>=40&have:planks>=4",
+      "kind": "prep_descent",
+      "order": 5
+    },
+    {
+      "id": "p4",
+      "parentId": null,
+      "title": "鉄を30掘って焼く",
+      "state": "done",
+      "where": "14,49,-8",
+      "doneWhen": "have:iron_ingot>=30|have:iron_chestplate",
+      "caution": [
+        "食料40点・作業台か板4を持ってから下りる",
+        "溶岩の隣を掘らない"
+      ],
+      "kind": "iron",
+      "order": 6
+    },
+    {
+      "id": "p5",
+      "parentId": null,
+      "title": "鉄の道具と防具を着る",
+      "state": "continue",
+      "doneWhen": "have:iron_pickaxe&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings",
+      "kind": "iron_armor",
+      "order": 7
+    },
+    {
+      "id": "p6",
+      "parentId": null,
+      "title": "火打ち金を作る",
+      "state": "continue",
+      "doneWhen": "have:flint_and_steel",
+      "order": 8
+    },
+    {
+      "id": "p7",
+      "parentId": null,
+      "title": "ダイヤ3と金を掘る",
+      "state": "continue",
+      "where": "14,3,7",
+      "doneWhen": "have:diamond_pickaxe",
+      "caution": [
+        "鉄の防具を着てから下りる"
+      ],
+      "kind": "diamond",
+      "order": 9
+    },
+    {
+      "id": "p8",
+      "parentId": null,
+      "title": "金のブーツを作り履く",
+      "state": "continue",
+      "where": "26,12,42",
+      "doneWhen": "have:golden_boots",
+      "order": 10
+    },
+    {
+      "id": "p9",
+      "parentId": null,
+      "title": "水をバケツに汲む",
+      "state": "continue",
+      "where": "-30,62,-20",
+      "doneWhen": "have:water_bucket",
+      "kind": "water",
+      "order": 11
+    },
+    {
+      "id": "p10",
+      "parentId": null,
+      "title": "黒曜石10個",
+      "state": "continue",
+      "where": "-15,-55,7",
+      "doneWhen": "have:obsidian>=10",
+      "caution": [
+        "溶岩の隣を掘らない"
+      ],
+      "kind": "obsidian",
+      "order": 12
+    },
+    {
+      "id": "p11",
+      "parentId": null,
+      "title": "ゲートを作りネザーへ",
+      "state": "continue",
+      "doneWhen": "dim:the_nether",
+      "kind": "portal",
+      "order": 13
+    },
+    {
+      "id": "p12",
+      "parentId": null,
+      "title": "出発の点検",
+      "state": "continue",
+      "doneWhen": "food>=100&have:shield&have:slab>=12&have:crafting_table",
+      "forbid": [
+        "点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ"
+      ],
+      "kind": "prep_descent",
+      "order": 14
+    },
+    {
+      "id": "p12.1",
+      "parentId": "p12",
+      "title": "帰りのゲートの座標",
+      "state": "continue",
+      "order": 15
+    },
+    {
+      "id": "p12.2",
+      "parentId": "p12",
+      "title": "作業台を作る",
+      "state": "done",
+      "where": "幹から",
+      "doneWhen": "have:crafting_table",
+      "kind": "prep_descent",
+      "order": 16
+    },
+    {
+      "id": "p12.3",
+      "parentId": "p12",
+      "title": "ハーフブロック12",
+      "state": "continue",
+      "where": "丸石6から",
+      "doneWhen": "have:slab>=12",
+      "order": 17
+    },
+    {
+      "id": "p12.4",
+      "parentId": "p12",
+      "title": "食料100点",
+      "state": "continue",
+      "where": "真紅の森のホグリン",
+      "doneWhen": "food>=100",
+      "kind": "food",
+      "order": 18
+    },
+    {
+      "id": "p12.5",
+      "parentId": "p12",
+      "title": "金の防具を着る",
+      "state": "continue",
+      "doneWhen": "have:golden_boots",
+      "order": 19
+    },
+    {
+      "id": "p13",
+      "parentId": null,
+      "title": "要塞を探す",
+      "state": "continue",
+      "caution": [
+        "橋は両脇に壁を置く",
+        "橋の上で立ち止まらない"
+      ],
+      "kind": "fortress",
+      "order": 20
+    },
+    {
+      "id": "p14",
+      "parentId": null,
+      "title": "ブレイズロッド7本",
+      "state": "continue",
+      "doneWhen": "have:blaze_rod>=7",
+      "caution": [
+        "射線の中で止まらない"
+      ],
+      "kind": "blaze",
+      "order": 21
+    },
+    {
+      "id": "p15",
+      "parentId": null,
+      "title": "エンダーパール12",
+      "state": "continue",
+      "doneWhen": "have:ender_pearl>=12|have:ender_eye>=12",
+      "kind": "pearl",
+      "order": 22
+    },
+    {
+      "id": "p16",
+      "parentId": null,
+      "title": "ゲートで地上へ戻る",
+      "state": "continue",
+      "doneWhen": "dim:overworld",
+      "kind": "portal",
+      "order": 23
+    },
+    {
+      "id": "p17",
+      "parentId": null,
+      "title": "アイを12作る",
+      "state": "continue",
+      "doneWhen": "have:ender_eye>=12",
+      "kind": "pearl",
+      "order": 24
+    },
+    {
+      "id": "p18",
+      "parentId": null,
+      "title": "エンドの準備",
+      "state": "continue",
+      "doneWhen": "food>=80&have:bow&have:arrow>=30",
+      "kind": "prep_descent",
+      "order": 25
+    },
+    {
+      "id": "p19",
+      "parentId": null,
+      "title": "ストロングホールド",
+      "state": "continue",
+      "doneWhen": "dim:the_end",
+      "kind": "stronghold",
+      "order": 26
+    },
+    {
+      "id": "p19.1",
+      "parentId": "p19",
+      "title": "アイで三角測量",
+      "state": "continue",
+      "kind": "stronghold",
+      "order": 27
+    },
+    {
+      "id": "p19.2",
+      "parentId": "p19",
+      "title": "ポータルの部屋を探す",
+      "state": "continue",
+      "kind": "stronghold",
+      "order": 28
+    },
+    {
+      "id": "p19.3",
+      "parentId": "p19",
+      "title": "アイをはめて入る",
+      "state": "continue",
+      "doneWhen": "dim:the_end",
+      "kind": "end",
+      "order": 29
+    },
+    {
+      "id": "p20",
+      "parentId": null,
+      "title": "クリスタルを壊す",
+      "state": "continue",
+      "kind": "end",
+      "order": 30
+    },
+    {
+      "id": "p21",
+      "parentId": null,
+      "title": "ドラゴンを倒す",
+      "state": "continue",
+      "kind": "dragon",
+      "order": 31
+    }
+  ]
+}

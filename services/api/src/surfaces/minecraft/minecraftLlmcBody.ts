@@ -282,7 +282,7 @@ export function readinessParts(llmc: LlmcBodyParts, view: object | null, observa
     worn: wornItems(facts.world.worn) }), fuelShortage(facts.world, facts.counts)].filter(Boolean).join('。') || null;
   const recovery = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts);
   // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the plan is not changed).
-  const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? tree?.current ?? null, feetIn(facts.world)) : null;
+  const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? tree?.current ?? null, feetIn(facts.world), facts.dimension) : null;
   const onceFacts = taskId ? (preparationFacts(taskId, tree, observation), staleNodeFacts(taskId, tree, observation)) : undefined;
   return { ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}), ...(shortage ? { shortage } : {}),
     ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}), ...(planFacts ? { planFacts } : {}),

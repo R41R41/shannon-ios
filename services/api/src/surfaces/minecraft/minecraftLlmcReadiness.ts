@@ -5,6 +5,7 @@ import { carriedFood } from './minecraftLlmcLive.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
+import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first, written by the code
@@ -197,7 +198,7 @@ const isFoodNode = (node: PlanNode): boolean => kindOf(node) === 'food' || kindO
  * has no food, the plan's first open food node is said before its now, with its place and how far: 「回復が先: 食料の節 [p1.5] ゲートから
  * 戻り狩って焼く＠5,35,12（約 313m）」. Null when there is none, or the current node is one (or under one).
  */
-export function foodFirstLine(nodes: readonly PlanNode[], current: string | null, feet: Feet | null): string | null {
+export function foodFirstLine(nodes: readonly PlanNode[], current: string | null, feet: Feet | null, dimension: string | null = null): string | null {
   // A node the model wrote `prep: skipped` on is one it chose to go without: it is not said as the node to go for.
   const open = (node: PlanNode) => node.state !== 'done' && node.prep?.state !== 'skipped';
   const leaf = (node: PlanNode) => !nodes.some(child => child.parentId === node.id && open(child));
@@ -207,7 +208,22 @@ export function foodFirstLine(nodes: readonly PlanNode[], current: string | null
     const node = nodes.find(item => item.id === at);
     if (node && isFood(node)) return null;
   }
-  const food = orderedPlan(nodes).find(node => open(node) && leaf(node) && isFood(node) && node.id !== current);
+  const order = orderedPlan(nodes), dimensions = new Map<string, string | null>(), beyondGate = new Set<string>();
+  const here = dimension?.replace(/^minecraft:/u, '') ?? null, from = order.findIndex(node => node.id === current);
+  let blocked = false;
+  let near: string | null = null;
+  // The plan's existing dimension convention: the nearest preceding explicit dim predicate, never a title or free-form place name.
+  for (const [index, node] of order.entries()) {
+    const predicate = parseDoneWhen(node.doneWhen);
+    const own = predicate ? predicateDimension(predicate) : null;
+    near = own ?? near;
+    dimensions.set(node.id, near);
+    if (index > from && here && own && own !== here && node.state !== 'done') blocked = true;
+    if (blocked) beyondGate.add(node.id);
+  }
+  const candidates = order.filter(node => open(node) && leaf(node) && isFood(node) && node.id !== current);
+  const food = candidates.find(node => !here || (!beyondGate.has(node.id) && (!dimensions.get(node.id) || dimensions.get(node.id) === here)));
+  if (!food && here && candidates.length) return `回復が先: 今いる次元（${here}）で向かえる食料の節は未確認。現地の候補か帰れる経路を確かめ、計画を見直す`;
   if (!food) return null;
   const at = food.where ? firstPos(food.where) : null;
   const far = at && feet ? `（約 ${Math.round(Math.hypot(at.x - feet.x, at.z - feet.z))}m）` : '';
