@@ -159,6 +159,8 @@ acknowledgement and is `stopped` at once, body or no body (Minebot lane run 1, 2
 was evicted). `stop_requested = 1` stays on the checkpoint as the mark of that stop. A stopped task counts toward nothing: the
 admission's `minecraft_busy`, `cancel` and the time limit all treat `stopped` as finished, and it holds no lease.
 
+Run53 (2026-10-31): the shared task admission also excludes confirmed `paused/fca_stopped` history with no active step from its 64 live children / 256 live tasks. A new request must not fail forever after stopped trials accumulate under the root. Stopping or unknown tasks still count, the limits stay unchanged, and explicit resume checks the same capacity before changing its checkpoint. Records, sources, prior results and body-release proofs are retained. A genuinely full admission is an audited `minecraft_busy` refusal, not an unhandled socket 500.
+
 ## Hold on a heavy failure and resume (the fix run, 2026-10-28)
 
 `request --hold-on-failure` (`holdOnFailure: true`) asks that a heavy failure of the body hold the request instead of letting it go on

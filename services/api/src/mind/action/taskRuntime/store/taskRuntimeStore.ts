@@ -109,8 +109,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
         if (depth >= limits.depth) throw new Error('FCA_DEPTH_LIMIT');
         ancestor = ancestor.parentId ? this.required(scopeKey, ancestor.parentId) : null;
       }
-      if (this.children(parent).filter(child => !terminal(child)).length >= limits.children) throw new Error('FCA_CHILD_LIMIT');
-      if (this.all(scopeKey).filter(task => !terminal(task)).length >= limits.activeTasks) throw new Error('FCA_ACTIVE_TASK_LIMIT');
+      this.checkAdmissionCapacity(scopeKey, parent);
       const child = this.authority.create({ id: randomUUID(), scopeKey, parentId, kind: spec.kind ?? 'generic', origin: parent.origin,
         title: spec.title, goal: spec.goal, completionCriteria: spec.completionCriteria ?? '', status: 'queued', pauseReason: null,
         summary: '', requestKey, createdAt: this.now() });
@@ -404,6 +403,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       const task = this.get(scopeKey, taskId);
       if (!task || task.phase !== 'stopped' || (task.kind !== 'conversation' && this.sources.hasUnboundOrigin(taskId)) || (task.origin === 'maintenance' && !this.maintenance.resumable(scopeKey, taskId))) return null;
       if (this.ancestors(task).some(parent => ['stopped', 'stopping', 'unknown'].includes(this.view(parent).phase))) return null;
+      this.checkAdmissionCapacity(scopeKey, task.parentId ? this.required(scopeKey, task.parentId) : null);
       this.db.prepare('UPDATE fca_task_checkpoints SET stop_requested=0,wait_reason=NULL WHERE task_id=?').run(taskId);
       this.progressStore.clearPauseNotice(taskId); // what a pause said (its report, its summary) is not what a task that runs again says
       const summary = this.options.pausedSummary?.(task.summary) ? { summary: '' } : {};
@@ -422,6 +422,13 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   retireUnknown(scopeKey: string, at: string): TaskView[] { return this.authority.transaction(() => this.recovery.retireUnknown(scopeKey, at)); }
   reopenRejected(scopeKey: string, taskId: string, summary: string, failedSummary: string): TaskView | null { return this.authority.transaction(() => this.recovery.reopenRejected(scopeKey, taskId, summary, failedSummary)); }
   reopenRetired(scopeKey: string, taskId: string, summary: string): TaskView | null { return this.authority.transaction(() => this.recovery.reopenRetired(scopeKey, taskId, summary)); }
+  /** A confirmed stopped task stays resumable history, but occupies no execution slot. Unknown or an unacknowledged step still counts. */
+  private checkAdmissionCapacity(scope: string, parent: TaskRecord | null): void {
+    const active = (task: TaskRecord) => !terminal(task) && !(task.status === 'paused' && task.pauseReason === 'fca_stopped'
+      && !this.checkpoint(task.id).step_id);
+    if (parent && this.children(parent).filter(active).length >= limits.children) throw new Error('FCA_CHILD_LIMIT');
+    if (this.all(scope).filter(active).length >= limits.activeTasks) throw new Error('FCA_ACTIVE_TASK_LIMIT');
+  }
   private initialize(id: string, waitReason: string | null): void {
     this.db.prepare('INSERT INTO fca_task_checkpoints(task_id,wait_reason) VALUES(?,?)').run(id, waitReason);
     this.authority.refresh?.(id, this.now());

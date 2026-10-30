@@ -12,7 +12,7 @@ import type { LifecycleSettlement } from './minecraftLifecycleRunner.js';
 import { preparedWorldOfReceipt } from './freshWorldWiring.js';
 import type { OperatorSocketRefusal } from '../infra/ops/operatorSocket.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
-import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
+import type { OperatorAdmission, OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import { runSkillImport, type SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
 import { driftWords, feet, headIncidentKind, HEAD_INCIDENT_WORDS, takeEnd, type Feet, type HeldAgain } from './minecraftIncidentHold.js';
@@ -231,8 +231,15 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     if (parts.audit.heldTasks(parts.scopeKey).some(row => row.taskId && !FINISHED_FOR_GOOD.includes(requests.get(row.taskId)?.phase ?? 'completed'))) {
       return c.refuse('minecraft_busy', '保留中の依頼があります。再開（resume）か止める（cancel）までは新しく始めません。');
     }
-    const admitted = observed('operator_minecraft_request', c.operationId,
-      () => requests.admit({ operationId: c.operationId, goal: input.goal, operator: c.operator }));
+    let admitted: OperatorAdmission;
+    try {
+      admitted = observed('operator_minecraft_request', c.operationId,
+        () => requests.admit({ operationId: c.operationId, goal: input.goal, operator: c.operator }));
+    } catch (error) {
+      if (error instanceof Error && ['FCA_CHILD_LIMIT', 'FCA_ACTIVE_TASK_LIMIT'].includes(error.message))
+        return c.refuse('minecraft_busy', '共通タスクの同時実行枠がいっぱいです。停止済みの履歴は残ります。');
+      throw error;
+    }
     if (!admitted.ok) return c.refuse(admitted.code);
     const deadlineAt = new Date(Date.parse(parts.now()) + input.maxMinutes * 60_000).toISOString();
     try {
