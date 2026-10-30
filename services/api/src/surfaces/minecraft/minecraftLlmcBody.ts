@@ -8,8 +8,9 @@ import {
 import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
 import { approachingIds, newApproach, planNowTitle, urgentRange, URGENT_NOTE } from './minecraftLlmcUrgent.js';
-import { doneFacts, prepUnmetFacts } from './minecraftPlanDone.js';
+import { doneFacts, parseDoneWhen, prepUnmetFacts } from './minecraftPlanDone.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
+import { reachedMilestoneNames } from './minecraftLlmcRoad.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
 import { createHitWatch, inputFacts, onceFor, queueNowLines, stopFactLines, wantsFood, type FactsContext, type HitWatch } from './minecraftLlmcFacts.js';
 import { sameSpotStops } from './minecraftLlmcStalls.js';
@@ -282,10 +283,42 @@ export function readinessParts(llmc: LlmcBodyParts, view: object | null, observa
   const recovery = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts);
   // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the plan is not changed).
   const first = recovery && facts.food <= 0 && planNow ? foodFirstLine(nodes, display?.current ?? tree?.current ?? null, feetIn(facts.world)) : null;
-  const onceFacts = taskId ? preparationFacts(taskId, tree, observation) : undefined;
+  const onceFacts = taskId ? (preparationFacts(taskId, tree, observation), staleNodeFacts(taskId, tree, observation)) : undefined;
   return { ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}), ...(shortage ? { shortage } : {}),
     ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}), ...(planFacts ? { planFacts } : {}),
     ...(onceFacts?.length ? { onceFacts } : {}) };
+}
+
+const STALE_FACT_KEY = 'stale_node:';
+/** For each task: the current node and the milestones that were reached when it became the current node. */
+const sinceCurrent = new Map<string, { node: string; reached: ReadonlySet<string> }>();
+/**
+ * Run 48 (the live state's `planNow` said 「[n1] 食料不足のまま鉄へ（地上に動物なし）」 from +190 s to the end; the iron pickaxe, the diamond pickaxe and the obsidian came and went): a node the model
+ * added with no condition the code can read (`doneWhen` empty or in free words) is moved by the model's `plan.update` alone, and the model tags every act with the current node. When milestones
+ * of the plan are reached while such a node is the current one, the fact is said once for each new one: the node has no condition and is not done, and which milestones were reached since it became the
+ * current node. The node's state is the model's; nothing is moved here.
+ */
+export function staleNodeFacts(taskId: string, tree: PlanTree | null, observation: BodyObservation | null): OnceFact[] {
+  const reached = reachedMilestoneNames(tree, observation);
+  const node = tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
+  if (!tree || !reached || !node) return pending(taskId);
+  const kept = sinceCurrent.get(taskId);
+  if (!kept || kept.node !== node.id) {
+    sinceCurrent.delete(taskId);
+    sinceCurrent.set(taskId, { node: node.id, reached: new Set(reached) });
+    if (sinceCurrent.size > 32) sinceCurrent.delete(sinceCurrent.keys().next().value as string);
+    for (const old of pending(taskId)) if (old.key.startsWith(STALE_FACT_KEY)) withdraw(taskId, old.key);
+    return pending(taskId);
+  }
+  const unreadable = node.state !== 'done' && parseDoneWhen(node.doneWhen) === null;
+  const since = reached.filter(name => !kept.reached.has(name));
+  for (const old of pending(taskId)) if (old.key.startsWith(STALE_FACT_KEY) && (!unreadable || !old.key.startsWith(`${STALE_FACT_KEY}${node.id}:`))) withdraw(taskId, old.key);
+  if (unreadable && since.length) {
+    offer(taskId, `${STALE_FACT_KEY}${node.id}:${since.length}`,
+      `今の節 ${node.id}「${node.title.slice(0, 30)}」には、済む条件が書かれておらず（コードが読める形でない）、done にもなっていない。この節が今の節になってから、計画の節目 ${since.join('・')} に着いた`);
+    for (const old of pending(taskId)) if (old.key.startsWith(`${STALE_FACT_KEY}${node.id}:`) && old.key !== `${STALE_FACT_KEY}${node.id}:${since.length}`) withdraw(taskId, old.key);
+  }
+  return pending(taskId);
 }
 
 const PREP_FACT_KEY = 'prep_unmet:';

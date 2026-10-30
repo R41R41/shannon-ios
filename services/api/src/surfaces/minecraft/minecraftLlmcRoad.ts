@@ -128,6 +128,18 @@ function prepEnd(tree: PlanTree, facts: DoneFacts, reached: readonly boolean[]):
   return { index, over, fact: skippedNode ? `・${PREP_SKIPPED}${said ? `（${said.slice(0, 60)}）` : ''}` : `・準備は今は満たせない（地下。今 ${item!.now!(facts)}）` };
 }
 /**
+ * The names of the milestones the frame shows reached, or the plan holds a node done for (the meter's own list; null without a dragon plan or a frame). Said as a list of facts, e.g. beside a current
+ * node that no condition can move (run 48: 「[n1] 食料不足のまま鉄へ」 stayed the current node from +190 s to the end, past the iron pickaxe, the diamond pickaxe and the obsidian).
+ */
+export function reachedMilestoneNames(tree: PlanTree | null | undefined, observation: BodyObservation | null): string[] | null {
+  const facts = doneFacts(observation);
+  if (!tree || !isDragonPlan(tree) || !facts) return null;
+  return DRAGON_MILESTONES.filter(item => {
+    const predicate = parseDoneWhen(item.doneWhen);
+    return (item.holds ? item.holds(facts) : !!predicate && predicateHolds(predicate, facts)) || doneInPlan(tree, item);
+  }).map(item => item.short ?? item.name);
+}
+/**
  * Chapter 8 (the meter's clock): the minutes the task has run, without the time it was held (`heldMs`, the operator's hold to its resume: the same count the time limit leaves out,
  * `operatorAuditStore.heldMs`). The wall clock since the task began also counts the hold (run 45: 「今 5,693 秒」 at +944 s of running).
  */
