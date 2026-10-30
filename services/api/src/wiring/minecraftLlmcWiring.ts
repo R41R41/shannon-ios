@@ -325,6 +325,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // Continue contract 2 and 3: the queue is named by the step; the events of a result go to the plan's one way into the ledger, and the promises an act says it uses
   // are kept as they are now with the command. A cleanup that did not prove the release asks the operator's hold (the incident port) for the task.
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId, step: step.id,
+    holdPending: () => stalls?.look() ?? false,
     context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log,
     applyLedger: input => recordedLedger(plan.port, input, { run: step.taskId, headBoot: control.headBoot(), record: row => noteStageRow(row) }), snapshotUses: ids => snapshotUses(plan.port.tree().promises, ids),
     onReflexCapped: info => events.note(reflexCappedWords(info)),
@@ -464,10 +465,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
           ...(end === 'other_hold' && take?.hold ? { bodyHold: take.hold } : {}), ...(take?.again ? { again: true } : {}), ...(record ? { record } : {}), ...(at ? { start: at, end: at } : {}) })
           .catch(error => { log(`Shannon Minecraft head stall hold failed task=${step.taskId} ${String(error)}`); return false; });
         if (deferStop) commitHold = hold;
-        else void hold();
+        else await hold();
       })().catch(error => log(`Shannon Minecraft head stall take failed task=${step.taskId} ${String(error)}`));
     };
     const look = (): boolean => {
+      if (holding) return true;
       try {
         const frame = observe(), tree = plan.port.tree(), current = workingNode(step.taskId, tree.current) ?? tree.current, node = tree.nodes.find(item => item.id === current);
         const counts = doneFacts(frame)?.counts;

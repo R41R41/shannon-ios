@@ -615,10 +615,10 @@ describe('the step parts hold a request that asked to be held, for what the head
     // The rows are the decision record's: the acts sent, the decisions.
     expect(box.tail.map((row: { ev: string }) => row.ev)).toEqual(expect.arrayContaining(['sent', 'request']));
     expect(bench.events().filter(row => row.ev === 'head_hold')).toMatchObject([{ id: incident.id, file: incident.record, kind: 'wait_loop' }]);
-    // Held once: the body (held and frozen under the head's id) refuses a fourth act, and nothing is found again.
-    await bench.decide('次', () => bench.add(waitHands));
-    expect(await until(() => bench.body.refused.length > 0)).toBe(true);
-    expect(bench.body.refused[0]).toMatchObject({ because: 'held' });
+    // Held once: the head refuses a fourth act before it reaches the frozen body.
+    const late = await bench.decide('次', () => bench.head.queue.add(bench.spec(waitHands)));
+    expect(late).toMatchObject({ ok: false, text: expect.stringContaining('保留の作成・確定中') });
+    expect(bench.body.handed.filter(command => command.kind === 'skill' && command.skill === 'act')).toHaveLength(3);
     await bench.settle(60);
     expect(port.calls).toHaveLength(1);
   }, 30_000);

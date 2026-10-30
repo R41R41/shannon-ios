@@ -20,7 +20,7 @@ import {
 } from './minecraftLlmcProbe.js';
 import { cautionFact } from './minecraftLlmcCaution.js';
 import type { PlanTree } from '@shannon/mind';
-import { meterLine, roadLine } from './minecraftLlmcRoad.js';
+import { activeMinutes, meterLine, roadLine } from './minecraftLlmcRoad.js';
 import { feetIn, foodFirstLine, foodLeads, fuelShortage, preparationShortage, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 import { wornItems } from './minecraftItems.js';
 import {
@@ -229,7 +229,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
   const facts = observation && observation.connected !== false
     ? inputFacts(observation, factsContext(llmc, observation, readiness, planFacts, seen.judge), false) : null;
   const once = taskId ? onceFor(taskId, 'normal').map(fact => fact.text) : [];
-  const live = minecraftLlmcLive({ observation, elapsedMinutes, trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
+  const live = minecraftLlmcLive({ observation, elapsedMinutes: activeMinutes(elapsedMinutes, seen.heldMs), trend: events.trend, events: events.shown(), ...(jobs ? { jobs } : {}),
     lastResults: events.results(), urgent, healthLost: events.healthLost(),
     ...(seen.investigation?.length ? { investigation: seen.investigation } : {}), ...(seen.scan?.length ? { scan: seen.scan } : {}),
     ...(seen.unreachable?.length ? { unreachable: seen.unreachable } : {}), ...(seen.footing ? { footing: seen.footing } : {}),
@@ -459,7 +459,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   const urgentState = (minutes: number | null): Record<string, unknown> => {
     const facts = urgentFacts(observation, events.cut(), sights, inSight);
     const readiness = readinessParts(parts.llmc, parts.llmc.planView() as object | null, observation);
-    const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: minutes, events: events.shown(), lastResults: events.results(),
+    const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: activeMinutes(minutes, parts.heldMs?.()), events: events.shown(), lastResults: events.results(),
       urgent: [...(interrupted ? [`急ぎ: 判断を待つ間に ${interrupted}`] : []), ...facts.reasons], investigation, footing, bodyAge,
       planNowTitle: planNowTitle(currentNodeOf(parts.llmc)), queue: queueNow(observation), mode: URGENT_NOTE,
       recovery: readiness.recovery,

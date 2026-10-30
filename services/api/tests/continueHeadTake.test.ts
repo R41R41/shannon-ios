@@ -218,9 +218,9 @@ describe('take, held, resume, and the next act in a new session, on the bench C'
     const status = (await s.operator.handle(envelope('held'))).body as { held: Array<{ body: string }> };
     expect(status.held[0]!.body).toContain('体も同じ保留');
     expect(status.held[0]!.body).not.toContain('食い違い');
-    await bench.decide('保留中の act', () => bench.add(waitHands));
-    expect(await until(() => bench.body.refused.length > 0)).toBe(true);
-    expect(bench.body.refused[0]).toMatchObject({ because: 'held' });
+    expect(await bench.decide('保留中の act', () => bench.head.queue.add(bench.spec(waitHands))))
+      .toMatchObject({ ok: false, text: expect.stringContaining('保留の作成・確定中') });
+    expect(bench.body.refused).toHaveLength(0);
 
     // The resume: a release naming the head's id ends the body's hold and unfreezes the world; the task is queued again.
     const reply = await s.operator.handle(envelope('resume', { taskId: bench.run }));
@@ -233,11 +233,9 @@ describe('take, held, resume, and the next act in a new session, on the bench C'
     const oldSession = release.session;
     expect(oldSession).toBe(bench.head.stepId);
 
-    // An act of the old step's session is refused: the release closed it. The resumed step is another step, whose session is its own.
-    const refusedBefore = bench.body.refused.length;
-    await bench.decide('古いセッション', () => bench.add(waitHands));
-    expect(await until(() => bench.body.refused.length > refusedBefore)).toBe(true);
-    expect(bench.body.refused.at(-1)).toMatchObject({ because: 'closed_session', session: oldSession });
+    // The old step remains blocked at the head, and the body's release closed its session too. Resume creates a new step.
+    expect(await bench.decide('古いセッション', () => bench.head.queue.add(bench.spec(waitHands)))).toMatchObject({ ok: false });
+    expect(bench.body.closedSessions.has(`${bench.head.lease.id}:${bench.run}:${oldSession}`)).toBe(true);
     const second = bench.startHead();
     expect(second.stepId).not.toBe(oldSession);
     const body = bench.lifecycle();
@@ -253,7 +251,7 @@ describe('take, held, resume, and the next act in a new session, on the bench C'
     expect(next.context.sessionId).toBe(second.stepId);
     expect(next.context.sessionId).not.toBe(oldSession);
     await bench.settle(80);
-    expect(bench.body.refused.at(-1)).toMatchObject({ because: 'closed_session' }); // still the old one: the new session\'s act was not refused
+    expect(bench.body.refused).toHaveLength(0);
     expect(bench.body.refused.filter(item => item.command === next.id)).toEqual([]);
     expect(bench.body.entries.get(next.id)?.state).toBe('waiting');
   }, 60_000);

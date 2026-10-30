@@ -106,6 +106,8 @@ export type QueueLedgerInput = Omit<LedgerInput, 'nodes' | 'at'> & { at?: string
 export type QueueRecordRow = StageRow | { ev: string; at: string; ids: TraceIds; [key: string]: unknown };
 export interface QueueDeps {
   control: MinecraftControl; bodyId(): string; context(): BodyTaskContext; lease: ActionLease; taskId: string;
+  /** A pending incident take prevents new motor commands, including answers from an already running decision. */
+  holdPending?(): boolean;
   observe(): BodyObservation | null; log(line: string): void; now?(): number; sleep?(ms: number): Promise<void>;
   /** This start of the head and this step (the queue's name is `taskId:headBoot:step`). Defaults: the process's boot and the lease's id. */
   headBoot?: string; step?: string | number;
@@ -454,6 +456,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   };
   /** Why a new item is not put in the queue, or null. */
   function refusal(spec: QueueAdd): string | null {
+    if (deps.holdPending?.()) return '送らなかった: 保留の作成・確定中。現場を保全して再開を待つ';
     const blocked = deps.control.motorBlocked(deps.taskId);
     if (blocked) {
       const mine = items.find(entry => entry.id === blocked.id);

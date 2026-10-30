@@ -147,7 +147,7 @@ const feetOf = (world: Record<string, unknown>): Feet | null => {
   const at = record(world.position), x = finite(at?.x), y = finite(at?.y), z = finite(at?.z);
   return x !== null && y !== null && z !== null ? { x, y, z } : null;
 };
-const ANIMALS = /^(?:cow|pig|sheep|chicken|rabbit|mooshroom|goat|hoglin)$/u;
+const ANIMALS = /^(?:cow|pig|sheep|chicken|rabbit|mooshroom|cod|salmon|hoglin)$/u;
 /** The village's rows that are food or lead to it (run 40: the descent note named 「ベッド ×6」 as where food is; a bed is not food). */
 const VILLAGE_ROW = /^(?:村の鐘|干し草|畑|作物)/u;
 /**
@@ -184,8 +184,9 @@ export function foodLeads(world: Record<string, unknown>, dimension: string | nu
     .slice(0, 3).map(row => row.slice(0, 60));
   const gate = dimension === 'the_nether' ? gateBack(world, rows, nodes, feetOf(world)) : null;
   const near = [...animals, ...places];
+  const unexplored = dimension === 'overworld' && !near.length ? '。走査外は未確認。食料0で地下へ進んでも回復食は保証されない。地上の別方向・魚・両色キノコとボウルのシチューも探索候補' : '';
   const nether = dimension === 'the_nether' && !near.some(line => /hoglin|crimson|真紅/u.test(line)) ? '・ホグリン・真紅の森は見えていない' : '';
-  return `食料の当て: ${near.length ? near.join('・') : `近くに動物・村・畑は見えていない${scan ? '（走査の範囲）' : ''}`}${nether}${gate ? `・${gate}` : ''}`;
+  return `食料の当て: ${near.length ? near.join('・') : `近くに動物・村・畑は見えていない${scan ? '（走査の範囲）' : ''}`}${nether}${gate ? `・${gate}` : ''}${unexplored}`;
 }
 
 /** A plan node about food: its kind is `food` (chapter 7: the kind the model wrote, not the title's words or the condition's). */
