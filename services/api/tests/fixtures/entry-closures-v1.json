@@ -907,6 +907,7 @@
     "surfaces/minecraft/minecraftOutcome.ts",
     "surfaces/minecraft/minecraftPace.ts",
     "surfaces/minecraft/minecraftPaceLedger.ts",
+    "surfaces/minecraft/minecraftPlanCompletion.ts",
     "surfaces/minecraft/minecraftPlanDone.ts",
     "surfaces/minecraft/minecraftPlanFacts.ts",
     "surfaces/minecraft/minecraftProcedureCare.ts",
