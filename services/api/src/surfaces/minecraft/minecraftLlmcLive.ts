@@ -9,26 +9,37 @@ import { breathWords, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 
 /**
- * The body part of a decision's live state in the LLM-centric mode (design mb-llm-centric 2.2, 2.3, 2.6): the map first, then what is
- * off it (landmarks), the recent stops, her state, her food in points, the pack, what is near, and what happened since the last decision.
- * Everything else the old live state carried (skill pointers and gists, milestone and route lines, phase facts, the pace ledger) is
- * left out: the plan tree and the map say it. Bounded to `LLMC_LIVE_TOKENS` (the plan's path and this part together), a bound nothing
+ * The body part of a decision's live state in the LLM-centric mode (design mb-llm-centric 2.2, 2.3, 2.6): the
+ * map first, then what is
+ * off it (landmarks), the recent stops, her state, her food in points, the pack, what is near, and what happened
+ * since the last decision.
+ * Everything else the old live state carried (skill pointers and gists, milestone and route lines, phase facts,
+ * the pace ledger) is
+ * left out: the plan tree and the map say it. Bounded to `LLMC_LIVE_TOKENS` (the plan's path and this part
+ * together), a bound nothing
  * reaches (人手の点検: 127 か所の `ほか N 件（長いため略）`, 848 lines unseen): every hostile, the whole pack. The map first and never cut,
  * then the rest cut in the order of `SHRINK` (the farther creatures, the pack's tail, the later landmarks, …).
  *
- * Token count: `llmcTokens`, fitted to the provider's count_tokens (scene replay r2, 2026-10-22: 149 texts of six scenes' live states,
- * maps, layers and parts, and probes of each map symbol; `services/api/scripts/minecraft-llmc-scene.ts --count` measures it again).
- * The first estimate (a map at 1.8 characters a token, the rest by `estimatedAnthropicTokens`) counted 10–48% short: water (`~ `) was
- * three tokens a cell, `; @ ! $` two, a letter one; so the map now writes water `w` and sand and gravel `s` (minecraftActContract.ts).
+ * Token count: `llmcTokens`, fitted to the provider's count_tokens (scene replay r2, 2026-10-22: 149 texts of
+ * six scenes' live states,
+ * maps, layers and parts, and probes of each map symbol; `services/api/scripts/minecraft-llmc-scene.ts --count`
+ * measures it again).
+ * The first estimate (a map at 1.8 characters a token, the rest by `estimatedAnthropicTokens`) counted 10–48%
+ * short: water (`~ `) was
+ * three tokens a cell, `; @ ! $` two, a letter one; so the map now writes water `w` and sand and gravel `s`
+ * (minecraftActContract.ts).
  */
 export const LLMC_LIVE_TOKENS = 12_000;
 /**
- * How old the body's last frame may be for a decision to read it (a command needs a frame of 3 s, `MinecraftControl.frame`). mc-chat-stale-frame
- * (2026-10-26): an 8 s stall of the API's thread left the live saying `connected: false` and the chat request's task waited for a body that
+ * How old the body's last frame may be for a decision to read it (a command needs a frame of 3 s,
+ * `MinecraftControl.frame`). mc-chat-stale-frame
+ * (2026-10-26): an 8 s stall of the API's thread left the live saying `connected: false` and the chat request's
+ * task waited for a body that
  * was there. Past this the body is taken for gone.
  */
 export const LLMC_STALE_FRAME_MS = 15_000;
-/** The live's one line for a body seen `ageMs` ago (older than a command's frame): how old, so the decision does not take it for now. */
+/** The live's one line for a body seen `ageMs` ago (older than a command's frame): how old, so the decision does
+ * not take it for now. */
 export const bodyAgeField = (line: string | null | undefined): { bodyAge?: string } => line ? { bodyAge: line } : {};
 export function staleBodyLine(ageMs: number): string {
   return `体の様子は ${Math.max(1, Math.round(ageMs / 1000))} 秒前のもの（新しい観測がまだ届いていない。位置や敵はもう動いているかもしれない）`;
@@ -37,8 +48,10 @@ const THREATS = 24, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 80, EVENT
 type SeenMode = 'threat' | 'near';
 
 /**
- * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25, `~` 2.45, `; @ ! $`
- * 1.4, a digit 0.67, a space 0.43, a line break (or its JSON escape) 3.2, any other 0.48; with 8% to spare (the fit was within −6%…+4%
+ * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25,
+ * `~` 2.45, `; @ ! $`
+ * 1.4, a digit 0.67, a space 0.43, a line break (or its JSON escape) 3.2, any other 0.48; with 8% to spare (the
+ * fit was within −6%…+4%
  * of the count on the scenes, and −13% on a plan path).
  */
 export function llmcTokens(text: string): number {
@@ -71,7 +84,8 @@ const finite = (value: unknown): number | null => typeof value === 'number' && N
 const strings = (value: unknown, limit: number): string[] => (Array.isArray(value) ? value : []).filter(item => typeof item === 'string')
   .slice(0, limit).map(item => clean(item as string).slice(0, 200));
 
-/** The name of the body's wood mark (the nearest plank or fence within 24 blocks: a mineshaft's supports, a hut), told only while she is short of wood. */
+/** The name of the body's wood mark (the nearest plank or fence within 24 blocks: a mineshaft's supports, a hut),
+ * told only while she is short of wood. */
 export const WOOD_MARK = '木材（板・柵）';
 /** Planks she can make or holds under which wood is short: a table 4, a pickaxe 3, an axe 3 and the sticks 4. */
 export const WOOD_SHORT_PLANKS = 12;
@@ -84,7 +98,8 @@ export function planksHeld(world: Record<string, unknown>, facts: Readonly<Recor
   }
   return planks;
 }
-/** The landmark lines: the body's wood mark only while wood is short (run 39: no table below, 400 s, the mine's planks 30 m off and unsaid). */
+/** The landmark lines: the body's wood mark only while wood is short (run 39: no table below, 400 s, the mine's
+ * planks 30 m off and unsaid). */
 function landmarkLines(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): string[] {
   const lines = strings(world.mapLandmarks, LANDMARKS);
   if (planksHeld(world, facts) < WOOD_SHORT_PLANKS) {
@@ -130,7 +145,8 @@ export type FoodTrend = ReturnType<typeof createFoodTrend>;
 
 interface Seen { line: string; distance: number }
 /**
- * `mode` (mb-llmc-cand 10): `threat` writes how the hostile stands to her after its place (`reachSuffix`); `near` names a dropped item
+ * `mode` (mb-llmc-cand 10): `threat` writes how the hostile stands to her after its place (`reachSuffix`);
+ * `near` names a dropped item
  * (`cobblestone×4`), leaves out an item she threw herself and the hostiles (the threats say them).
  */
 const seenName = (entity: Record<string, unknown>, mode: SeenMode): string => mode === 'near' && entity.name === 'item'
@@ -186,11 +202,13 @@ function stateOf(world: Record<string, unknown>, observation: BodyObservation): 
   }
   // Run 46: the body's own count of the empty pack slots (`freeSlots`), the pack lines' ground (the inventory is one line a kind).
   const free = finite(world.freeSlots);
-  if (free !== null && free >= 0 && free <= 36) out.freeSlots = Math.floor(free);
+  const validFreeSlots = (value: number | null): value is number => (value !== null && value >= 0 && value <= 36);
+  if (validFreeSlots(free)) out.freeSlots = Math.floor(free);
   for (const key of ['health', 'food', 'saturation', 'oxygen', 'armor'] as const) {
     const value = finite(world[key]);
     // Run 37 (oxygen 400 on dry land, 20 later): one scale, 息 n/20.
-    // Run 41: the hunger bar is `fullness` (満腹), apart from the food points she carries (`foodPoints`): both were `food`, and 「満腹 20」 read as the food being fine.
+    // Run 41: the hunger bar is `fullness` (満腹), apart from the food points she carries (`foodPoints`): both were
+// `food`, and 「満腹 20」 read as the food being fine.
     if (value !== null) out[key === 'food' ? 'fullness' : key] = key === 'oxygen' ? breathWords(value)! : round1(value);
   }
   return out;
@@ -211,46 +229,56 @@ export interface LlmcLiveParts {
   /** r3: health lost since the last decision (a fall, a blast), for the hint to look round (`lookHint`). */
   healthLost?: number;
   /**
-   * r4: the surprises of this step and what the head's probes found (`runInvestigation`, at most 600 tokens): first in the live state,
+   * r4: the surprises of this step and what the head's probes found (`runInvestigation`, at most 600 tokens):
+ * first in the live state,
    * outside its bound, never cut here. Absent (and no key) when there was none.
    */
   investigation?: readonly string[];
-  /** r4: the body's scan of the land, shown once when a new one came (`scanLines`, at most 10 lines): counted in the bound, never cut. */
+  /** r4: the body's scan of the land, shown once when a new one came (`scanLines`, at most 10 lines): counted in
+ * the bound, never cut. */
   scan?: readonly string[];
   /**
-   * r6 (run 29): just before the map, counted in the bound and never cut: the current plan node (`planNowLine`), what its stage lacks
+   * r6 (run 29): just before the map, counted in the bound and never cut: the current plan node (`planNowLine`),
+ * what its stage lacks
    * (`preparationShortage`), and health that does not come back with where food is (`recoveryLine`, `foodLeads`). Absent: no key.
    */
   planNow?: string | null;
   shortage?: string | null;
   recovery?: readonly string[];
   /**
-   * r7 (runs 29–31): the near hostiles the body's sight found walled off (`urgentFacts`): after the plan's now, the shortage and the
+   * r7 (runs 29–31): the near hostiles the body's sight found walled off (`urgentFacts`): after the plan's now,
+ * the shortage and the
    * recovery, never before them, and no urgent step for them. Absent: no key.
    */
   unreachable?: readonly string[];
   /**
-   * r8 (run 32: a one-wide bridge over the lava sea, the drop not on the map): the footing round her feet (`footingLine`), after the
+   * r8 (run 32: a one-wide bridge over the lava sea, the drop not on the map): the footing round her feet
+ * (`footingLine`), after the
    * unreachable lines and before the map, counted in the bound and never cut. Absent: no key.
    */
   footing?: string | null;
   /** mc-chat-stale-frame: the body was last seen this long ago (`staleBodyLine`); absent: the frame is the current one. */
   bodyAge?: string | null;
-  /** Task queue (design minebot-task-queue): the items the body runs and waits with, one line each (`minecraftLlmcQueue.ts`), after the plan's now. */
+  /** Task queue (design minebot-task-queue): the items the body runs and waits with, one line each
+ * (`minecraftLlmcQueue.ts`), after the plan's now. */
   queue?: readonly string[];
-  /** mb-llmc-cand 11 (a dragon task): the stage road and the pace against the milestones' targets (`minecraftLlmcRoad.ts`), after the plan's now. */
+  /** mb-llmc-cand 11 (a dragon task): the stage road and the pace against the milestones' targets
+ * (`minecraftLlmcRoad.ts`), after the plan's now. */
   road?: string | null;
   meter?: string | null;
   /**
-   * The continue contract, chapter 8 (「判断に届ける事実」): the facts a decision is given whatever version of the input it reads (`minecraftLlmcFacts.ts`), one line each,
-   * before the map, counted in the bound and never cut. `compressed` is the same facts as the shortened version keeps them (the pack in one line, three food candidates):
+   * The continue contract, chapter 8 (「判断に届ける事実」): the facts a decision is given whatever version of the input it
+ * reads (`minecraftLlmcFacts.ts`), one line each,
+   * before the map, counted in the bound and never cut. `compressed` is the same facts as the shortened version
+ * keeps them (the pack in one line, three food candidates):
    * the live state takes it in place of `lines` when it has to be shortened. Absent: no key.
    */
   facts?: { lines: readonly string[]; compressed?: readonly string[] };
   /** A-9: the plan's promises, whose shares are written beside the pack's lines (`shareStacks`). */
   promises?: readonly PlanPromise[];
   /**
-   * The facts said once that the normal input takes (`onceFor`, the words of each), put first in `events`. A live state that has to be shortened says none of them and so
+   * The facts said once that the normal input takes (`onceFor`, the words of each), put first in `events`. A live
+ * state that has to be shortened says none of them and so
    * does not deliver them (the request's bytes decide: `deliverOnceFacts`); they are offered again with the next input.
    */
   once?: readonly string[];
@@ -259,8 +287,10 @@ export interface LlmcLiveParts {
 /** The longest the shown results may be together (characters; a view's map is about 2,500). */
 const LAST_RESULTS_CHARS = 8_000;
 /**
- * A hint to look round with mc.view before the next act (r3; run 27: mc.view was never used, though she fell 20 blocks into a mine
- * and stopped six times at the same walls): the same stop twice or more at one place, or a fall or water that took her health or air.
+ * A hint to look round with mc.view before the next act (r3; run 27: mc.view was never used, though she fell 20
+ * blocks into a mine
+ * and stopped six times at the same walls): the same stop twice or more at one place, or a fall or water that
+ * took her health or air.
  */
 export function lookHint(world: Record<string, unknown>, healthLost = 0): string | null {
   const repeated = strings(world.recentStops, STOPS).some(line => Number(/×(\d+)/u.exec(line)?.[1] ?? 1) >= 2);
@@ -272,7 +302,8 @@ export function lookHint(world: Record<string, unknown>, healthLost = 0): string
   return null;
 }
 
-/** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off hostiles; r8: then the footing. */
+/** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off
+ * hostiles; r8: then the footing. */
 function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'road' | 'meter' | 'queue' | 'shortage' | 'recovery' | 'unreachable' | 'footing'>)
   : Record<string, unknown> {
   return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.road ? { road: parts.road } : {}), ...(parts.meter ? { meter: parts.meter } : {}),
@@ -292,7 +323,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, THREATS, 'threat');
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
   const look = lookHint(world, parts.healthLost ?? 0);
-  const live: Record<string, unknown> = {
+  const bodyFields = () => ({
     ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
     ...bodyAgeField(parts.bodyAge),
     ...readinessFields(parts),
@@ -310,31 +341,39 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
     ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
     ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-EVENTS)] } : {}),
-  };
+  });
+  const live: Record<string, unknown> = bodyFields();
   // r3: outside the bound (never cut, at most `LAST_RESULTS_CHARS`): the results shown this once.
   const shown = shownResults(parts.lastResults ?? []);
-  // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`). r7 (run 31: stopped by its health stop in the
-  // blaze's line, the next decision read the surprise first): the urgent lines before it (counted in the bound as before, never cut).
+  // r4: the investigation first (outside the bound: it has its own, `LLMC_PROBE.tokens`). r7 (run 31: stopped by
+// its health stop in the
+  // blaze's line, the next decision read the surprise first): the urgent lines before it (counted in the bound as
+// before, never cut).
   const { urgent, ...rest } = fitLive(live, planTokens, parts);
   return { ...(urgent ? { urgent } : {}), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}), ...rest,
     ...(shown.length ? { lastResults: shown } : {}) };
 }
 
 /**
- * r8 (run 32: the decision for a wither skeleton in sight took 10.3 s, 696 tokens of answer): the live state of an urgent decision, short:
- * the urgent lines (and the surprises' facts), the footing, the plan's now by its title, the map, her state, the hostiles, what she holds,
- * the last events and the results shown this once (at most `URGENT_RESULTS_CHARS`), and how to answer (`answer`). No landmarks, stops,
+ * r8 (run 32: the decision for a wither skeleton in sight took 10.3 s, 696 tokens of answer): the live state of
+ * an urgent decision, short:
+ * the urgent lines (and the surprises' facts), the footing, the plan's now by its title, the map, her state, the
+ * hostiles, what she holds,
+ * the last events and the results shown this once (at most `URGENT_RESULTS_CHARS`), and how to answer
+ * (`answer`). No landmarks, stops,
  * scan, food trend, near creatures or jobs: they come back with the next decision that is not urgent.
  */
 export const URGENT_RESULTS_CHARS = 2_400;
 const URGENT_THREATS = 4, URGENT_STACKS = 14, URGENT_EVENTS = 3;
 export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation' | 'elapsedMinutes' | 'events' | 'lastResults' | 'urgent' | 'investigation'
-  | 'footing' | 'bodyAge' | 'queue' | 'recovery' | 'once' | 'promises'> & { planNowTitle: string | null; mode: string; /** The chapter 8 facts of the urgent version (`inputFacts(…, true)`). */ facts?: readonly string[] }): Record<string, unknown> {
+  | 'footing' | 'bodyAge' | 'queue' | 'recovery' | 'once' | 'promises'> & { planNowTitle: string | null; mode: string;
+     /** The chapter 8 facts of the urgent version (`inputFacts(…, true)`). */ facts?: readonly string[] }): Record<string, unknown> {
   const { observation } = parts, urgent = parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {};
   if (!observation) return { connected: false, ...urgent, events: parts.events.slice(-URGENT_EVENTS), mode: parts.mode };
   const world = (record(observation.state.world) ?? {}) as Record<string, unknown> & LlmCentricWorld;
   const results = shownResults(parts.lastResults ?? [], URGENT_RESULTS_CHARS), food = carriedFood(world, observation.facts);
-  return { ...urgent, ...bodyAgeField(parts.bodyAge), ...(parts.investigation?.length ? { investigation: [...parts.investigation] } : {}),
+  const urgentBodyFields = () => ({ ...urgent, ...bodyAgeField(parts.bodyAge), ...(parts.investigation?.length ? { investigation:
+     [...parts.investigation] } : {}),
     ...(parts.planNowTitle ? { planNow: parts.planNowTitle } : {}),
     ...(parts.queue?.length ? { queue: [...parts.queue] } : {}), ...(parts.footing ? { footing: parts.footing } : {}),
     ...(parts.facts?.length ? { facts: [...parts.facts] } : {}),
@@ -343,14 +382,19 @@ export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation'
     foodPoints: { total: food.points, items: food.items },
     ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
     threats: seen(world.nearbyThreats, URGENT_THREATS, 'threat'), inventory: shareStacks(shortStacks(world.inventory), parts.promises),
-    ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-URGENT_EVENTS)] } : {}), ...(results.length ? { lastResults: results } : {}),
-    mode: parts.mode };
+    ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-URGENT_EVENTS)] } : {}), ...(
+      results.length ? { lastResults: results } : {}),
+    mode: parts.mode });
+  return urgentBodyFields();
 }
 
 /**
- * GPT's review 2026-10-28 (the urgent live showed the first 14 stacks in the alphabet, with the iron sword of run 43 not among them, and the pack said 使用 14/36
- * while 31 were used): the stacks an urgent decision uses come first (what fights, what is eaten, what walls: `urgentRank`), the rest in their order, cut to
- * `URGENT_STACKS`; the stacks left out are said as a number, in the line the pack's count and the live's other readers take (`ほか N 件（長いため略）`).
+ * GPT's review 2026-10-28 (the urgent live showed the first 14 stacks in the alphabet, with the iron sword of
+ * run 43 not among them, and the pack said 使用 14/36
+ * while 31 were used): the stacks an urgent decision uses come first (what fights, what is eaten, what walls:
+ * `urgentRank`), the rest in their order, cut to
+ * `URGENT_STACKS`; the stacks left out are said as a number, in the line the pack's count and the live's other
+ * readers take (`ほか N 件（長いため略）`).
  */
 const WEAPON_OR_SHIELD = /^(?:shield|bow|crossbow|trident|mace|[a-z_]*(?:sword|axe|spear))$/u;
 export function urgentRank(stack: string): number {
@@ -390,8 +434,10 @@ export function llmcPlanTokens(plan: unknown): number {
 }
 
 /**
- * What is cut, in order, until the live body fits (the map is never cut; it comes first): a list kept to its first `keep` lines, or
- * (keep -1) a field left out. The farther creatures go first, the landmarks and the pack last: the furnace seven up and the stone to
+ * What is cut, in order, until the live body fits (the map is never cut; it comes first): a list kept to its
+ * first `keep` lines, or
+ * (keep -1) a field left out. The farther creatures go first, the landmarks and the pack last: the furnace seven
+ * up and the stone to
  * craft with are what a decision needs most.
  */
 const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['near', 0], ['stops', 2],
@@ -401,7 +447,8 @@ const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['invento
   ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
 
 /**
- * The live state when it has to be shortened (chapter 8's table, 「圧縮の後」): the facts in their shortened form (the pack in one line, three food candidates), and the facts said
+ * The live state when it has to be shortened (chapter 8's table, 「圧縮の後」): the facts in their shortened form (the
+ * pack in one line, three food candidates), and the facts said
  * once left out (the table's 「—」: not in this version, so not delivered; they are offered again with the next input).
  */
 function shortened(live: Record<string, unknown>, parts: Pick<LlmcLiveParts, 'facts' | 'once'>): Record<string, unknown> {

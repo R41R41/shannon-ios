@@ -3,7 +3,9 @@ import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
 /**
- * What each kind of hand takes and the checks a kind adds (the schema of `mc.act` is the widest of any kind; this is where a kind's own ranges are kept).
+ * What each kind of hand takes and the checks a kind adds (the schema of `mc.act` is the widest of any kind;
+ * this is where a kind's
+ * own ranges are kept).
  */
 /** What each kind takes: required fields, then the optional ones; any other field is a problem. */
 export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly string[])[]; may: readonly string[] }>> = {
@@ -41,22 +43,29 @@ export function handFieldNames(kind: HandKind): string[] {
   return fields ? [...fields.needs.flat(), ...fields.may, 'rel', 'note', 'onFail'] : [];
 }
 /**
- * Continue contract 2: a hand's `dependsOn` is a list of the numbers of earlier hands of the same act (1 up). Itself, a later hand, a number out of range and a number
- * twice are refused before the body sees them (`handDependsProblem`); the list is of whole numbers. `index` is the hand's own number (1 up), `count` the hands in the act.
+ * Continue contract 2: a hand's `dependsOn` is a list of the numbers of earlier hands of the same act (1 up).
+ * Itself, a later hand,
+ * a number out of range and a number
+ * twice are refused before the body sees them (`handDependsProblem`); the list is of whole numbers. `index` is
+ * the hand's own number
+ * (1 up), `count` the hands in the act.
  */
 export function dependsProblem(index: number, hand: ActHand, count: number): string | null {
   if (hand.dependsOn === undefined) return null;
   if (!Array.isArray(hand.dependsOn)) return 'dependsOn は手の番号の並び（何にも頼らないなら []）';
   return handDependsProblem(index, hand.dependsOn, count);
 }
-/** How to mend a field a kind needs and the hand lacks (amendment A-7 2: 2 of 45 answers of the short run wrote a vertical with no `liquid`). */
+/** How to mend a field a kind needs and the hand lacks (amendment A-7 2: 2 of 45 answers of the short run wrote a
+ * vertical with no `liquid`). */
 const missingFix = (kind: HandKind, field: string): string => kind === 'vertical' && field === 'liquid'
   ? `（liquid=${VERTICAL_LIQUIDS.join('|')} のどれかを足す。例: vertical down stairs south y=10 dig=stone,dirt liquid=stop）` : '';
 const ONE_AT: ReadonlySet<HandKind> = new Set(['use', 'furnace', 'chest', 'shoot', 'drop']);
-/** The blocks a hand may be given in `canDig` / `canPlace` / `block`: ids in lower case, or the words stone, dirt, sand and wood. */
+/** The blocks a hand may be given in `canDig` / `canPlace` / `block`: ids in lower case, or the words stone,
+ * dirt, sand and wood. */
 const BLOCK_NAME = /^[a-z][a-z0-9_]{0,39}$/u;
 
-/** What is wrong with an act's hands beyond the schema (a field a kind does not take, a missing one), or null. Closed words, Japanese. */
+/** What is wrong with an act's hands beyond the schema (a field a kind does not take, a missing one), or null.
+ * Closed words, Japanese. */
 
 export function handProblem(hand: ActHand): string | null {
   const fields = HAND_FIELDS[hand.do];
@@ -89,51 +98,62 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
 const seconds = (hand: ActHand, least: number, most: number): string | null =>
   hand.seconds !== undefined && (hand.seconds < least || hand.seconds > most) ? `seconds は ${least}〜${most}` : null;
 const count = (hand: ActHand, most: number): string | null => hand.count !== undefined && hand.count > most ? `count は ${most} まで` : null;
-/** obsidian's `maxDig` (run 47: the hand digs the hardened obsidian and what is in its way; the body's default is 30 and it says the value it needs): a whole number from 1 to 100. */
+/** obsidian's `maxDig` (run 47: the hand digs the hardened obsidian and what is in its way; the body's default is
+ * 30 and it says the value it needs): a whole number from 1 to 100. */
 export const OBSIDIAN_MAX_DIG = 100;
-const obsidianDigProblem = (hand: ActHand): string | null => hand.maxDig === undefined || (Number.isInteger(hand.maxDig) && hand.maxDig >= 1 && hand.maxDig <= OBSIDIAN_MAX_DIG)
+const obsidianDigProblem = (hand: ActHand): string | null => hand.maxDig === undefined || (Number.isInteger(hand.maxDig) &&
+   hand.maxDig >= 1 && hand.maxDig <= OBSIDIAN_MAX_DIG)
   ? null : `obsidian の maxDig は 1〜${OBSIDIAN_MAX_DIG} の整数（今は ${JSON.stringify(hand.maxDig)}。書かなければ体の既定の 30）`;
 /** The names a hand lists (`canDig`, `canPlace`) are block ids. */
 const names = (hand: ActHand): string | null => [...(hand.canDig ?? []), ...(hand.canPlace ?? [])].some(name => !BLOCK_NAME.test(name))
   ? 'canDig・canPlace はブロックの id（小文字の英字と _）か stone・dirt・sand・wood' : null;
 const oneOf = (list: readonly string[], value: unknown): boolean => typeof value === 'string' && list.includes(value);
 /**
- * vertical (continue contract 6): a way and a form that do not fit each other are refused before the body sees them (the head checks the combination, it never
- * mends it): `shaft` goes down only, `pillar` goes up only, `stairs` needs `toward` and the other two take none, `canDig` is written, and the ranges.
+ * vertical (continue contract 6): a way and a form that do not fit each other are refused before the body sees
+ * them (the head checks the combination, it never
+ * mends it): `shaft` goes down only, `pillar` goes up only, `stairs` needs `toward` and the other two take none,
+ * `canDig` is written, and the ranges.
  * `rel` is not taken: `toY` is the feet's own y.
  */
 function verticalProblem(hand: ActHand): string | null {
-  if (hand.rel !== undefined) return 'rel は使えない（toY は足の y そのもの）';
-  if (!oneOf(VERTICAL_DIRS, hand.dir)) return 'dir は down か up';
-  if (!oneOf(VERTICAL_SHAPES, hand.shape)) return 'shape は stairs・shaft・pillar';
-  if (hand.shape === 'shaft' && hand.dir !== 'down') return 'shaft は down だけ（上るなら pillar か stairs）';
-  if (hand.shape === 'pillar' && hand.dir !== 'up') return 'pillar は up だけ（下りるなら shaft か stairs）';
-  if (hand.shape === 'stairs' && hand.toward === undefined) return 'stairs には toward（north・east・south・west）が要る';
-  if (hand.shape !== 'stairs' && hand.toward !== undefined) return `${hand.shape} に toward は使わない（stairs だけ）`;
-  if (hand.toward !== undefined && !oneOf(VERTICAL_TOWARDS, hand.toward)) return 'toward は north・east・south・west';
+  const direction = verticalDirectionProblem(hand);
+  if (direction) return direction;
+  const facing = verticalFacingProblem(hand);
+  if (facing) return facing;
   if (!oneOf(VERTICAL_LIQUIDS, hand.liquid)) return `liquid は ${VERTICAL_LIQUIDS.join('・')}（liquid=${VERTICAL_LIQUIDS.join('|')} のどれかを書く）`;
   if (!Number.isInteger(hand.toY) || hand.toY! < -64 || hand.toY! > 320) return 'toY は -64〜320 の整数';
-  if (!hand.canDig?.length || hand.canDig.length > 12) return hand.canDig?.length ? 'canDig は 12 種類まで' : 'canDig が要る（掘ってよい物。pillar でも頭の上を掘るのに使う）';
-  if (hand.canPlace !== undefined && (hand.canPlace.length < 1 || hand.canPlace.length > 6)) return 'canPlace は 1〜6 種類';
+  const materials = verticalMaterialProblem(hand);
+  if (materials) return materials;
   const limit = verticalLimitProblem(hand);
   if (limit) return limit;
   if (hand.range !== undefined && !(Number.isInteger(hand.range) && hand.range >= 1 && hand.range <= 2)) return 'range は 1 か 2';
   return seconds(hand, VERTICAL_SECONDS_RANGE[0], VERTICAL_SECONDS_RANGE[1]) ?? names(hand);
 }
 /**
- * vertical's `maxDig` and `maxPlace` against their top (the defaults are the tops: 200 and 100, amendment A-1 6), with the mend in the words (A-7 2: 1 of 45 wrote maxDig 250).
+ * vertical's `maxDig` and `maxPlace` against their top (the defaults are the tops: 200 and 100, amendment A-1
+ * 6), with the mend in the words (A-7 2: 1 of 45 wrote maxDig 250).
  * `llmcInputProblem` asks it before the schema, whose own bounds are the widest of any kind and say no mend.
  */
 export function verticalLimitProblem(hand: ActHand): string | null {
   if (hand.maxDig !== undefined && !(Number.isInteger(hand.maxDig) && hand.maxDig >= 0 && hand.maxDig <= VERTICAL_DEFAULTS.maxDig)) {
-    return `maxDig は 0〜${VERTICAL_DEFAULTS.maxDig} の整数（${VERTICAL_DEFAULTS.maxDig} まで。今は ${JSON.stringify(hand.maxDig)}。書かなければ既定の ${VERTICAL_DEFAULTS.maxDig}）`;
+    return ("maxDig は 0〜" +
+`${VERTICAL_DEFAULTS.maxDig}` +
+" の整数（" +
+`${VERTICAL_DEFAULTS.maxDig}` +
+" まで。今は " +
+`${JSON.stringify(hand.maxDig)}` +
+"。書かなければ既定の " +
+`${VERTICAL_DEFAULTS.maxDig}` +
+"）");
   }
   if (hand.maxPlace !== undefined && !(Number.isInteger(hand.maxPlace) && hand.maxPlace >= 0 && hand.maxPlace <= VERTICAL_DEFAULTS.maxPlace)) {
-    return `maxPlace は 0〜${VERTICAL_DEFAULTS.maxPlace} の整数（${VERTICAL_DEFAULTS.maxPlace} まで。今は ${JSON.stringify(hand.maxPlace)}。書かなければ既定の ${VERTICAL_DEFAULTS.maxPlace}）`;
+    return `maxPlace は 0〜${VERTICAL_DEFAULTS.maxPlace} の整数（${VERTICAL_DEFAULTS.maxPlace} まで。今は ${JSON.stringify(
+      hand.maxPlace)}。書かなければ既定の ${VERTICAL_DEFAULTS.maxPlace}）`;
   }
   return null;
 }
-/** go's fields against its limits (the schema's ranges are the widest of any kind): where to, the allowed blocks, the time and the counts. */
+/** go's fields against its limits (the schema's ranges are the widest of any kind): where to, the allowed blocks,
+ * the time and the counts. */
 function goProblem(hand: ActHand): string | null {
   if (hand.to !== undefined && hand.goals !== undefined) return 'to と goals は片方だけ（候補を並べるなら goals）';
   if (hand.goals !== undefined && (hand.goals.length < 2 || hand.goals.length > 8)) return 'goals は 2〜8 マス（1 つなら to）';
@@ -142,3 +162,24 @@ function goProblem(hand: ActHand): string | null {
   return names(hand);
 }
 
+function verticalDirectionProblem(hand: ActHand): string | null {
+  if (hand.rel !== undefined) return 'rel は使えない（toY は足の y そのもの）';
+  if (!oneOf(VERTICAL_DIRS, hand.dir)) return 'dir は down か up';
+  if (!oneOf(VERTICAL_SHAPES, hand.shape)) return 'shape は stairs・shaft・pillar';
+  if (hand.shape === 'shaft' && hand.dir !== 'down') return 'shaft は down だけ（上るなら pillar か stairs）';
+  if (hand.shape === 'pillar' && hand.dir !== 'up') return 'pillar は up だけ（下りるなら shaft か stairs）';
+  return null;
+}
+
+function verticalFacingProblem(hand: ActHand): string | null {
+  if (hand.shape === 'stairs' && hand.toward === undefined) return 'stairs には toward（north・east・south・west）が要る';
+  if (hand.shape !== 'stairs' && hand.toward !== undefined) return `${hand.shape} に toward は使わない（stairs だけ）`;
+  if (hand.toward !== undefined && !oneOf(VERTICAL_TOWARDS, hand.toward)) return 'toward は north・east・south・west';
+  return null;
+}
+
+function verticalMaterialProblem(hand: ActHand): string | null {
+  if (!hand.canDig?.length || hand.canDig.length > 12) return hand.canDig?.length ? 'canDig は 12 種類まで' : 'canDig が要る（掘ってよい物。pillar でも頭の上を掘るのに使う）';
+  if (hand.canPlace !== undefined && (hand.canPlace.length < 1 || hand.canPlace.length > 6)) return 'canPlace は 1〜6 種類';
+  return null;
+}

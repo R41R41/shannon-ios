@@ -13,21 +13,31 @@ import type { PlanKind } from '@shannon/mind';
 import { isOpen, noFloor, type P } from './minecraftLlmcWalkRules.js';
 
 /**
- * mb-llmc v2: the live state as the decision reads it (改修案 2.2; 再現台 v9b の `rewriteLive`, the rules in its `rewriteRules.md`). **A pure
- * function of the live state alone** (the object `liveObject` hands the model: `ownerClock`, `waiting`, `observations`, `recall`, `plan`, `body`
- * with `map`, `state`, `inventory`, `landmarks`, `lastResults`…): the decision replay calls it on a recorded live state, the model's request on
- * the one it builds. Nothing is read from a body, a store or the clock; a thing the live state does not hold (an omitted line, an enemy's
+ * mb-llmc v2: the live state as the decision reads it (改修案 2.2; 再現台 v9b の `rewriteLive`, the rules in its
+ * `rewriteRules.md`). **A pure
+ * function of the live state alone** (the object `liveObject` hands the model: `ownerClock`, `waiting`,
+ * `observations`, `recall`, `plan`, `body`
+ * with `map`, `state`, `inventory`, `landmarks`, `lastResults`…): the decision replay calls it on a recorded
+ * live state, the model's request on
+ * the one it builds. Nothing is read from a body, a store or the clock; a thing the live state does not hold (an
+ * omitted line, an enemy's
  * sight) is not made up. Facts only: nothing here decides a hand.
  *
  * What it does:
- * - leaves out `ownerClock`, `waiting`, `observations` (the generation hash and task id), `recall` (the record of an earlier task and of a
- *   death: the events say the death), `body.planFacts` (the head's own reading of the plan's kinds, `minecraftPlanFacts.ts`: the model is not shown it),
+ * - leaves out `ownerClock`, `waiting`, `observations` (the generation hash and task id), `recall` (the record
+ * of an earlier task and of a
+ *   death: the events say the death), `body.planFacts` (the head's own reading of the plan's kinds,
+ * `minecraftPlanFacts.ts`: the model
+ *   is not shown it),
  *   `plan.now`/`plan.path` when `body.planNow` says the same node, the plan's repeated rules and a rule
  *   about a cell the map now shows she can stand in, a `biome` the dimension has not, `（undefined マス）`;
- * - joins the enemies by id into one line each (`minecraftLlmcLiveEnemies.ts`), adds up the pack by kind, works out the landmarks' east/west and
- *   north/south from her feet now (the height is the body's as written), writes a stopped hand's surroundings with whole coordinates;
+ * - joins the enemies by id into one line each (`minecraftLlmcLiveEnemies.ts`), adds up the pack by kind, works
+ * out the landmarks' east/west and
+ *   north/south from her feet now (the height is the body's as written), writes a stopped hand's surroundings with
+ * whole coordinates;
  * - says what stopped again in `body.repeat` (`minecraftLlmcRepeat.ts`);
- * - adds `body.around` (`minecraftLlmcAround.ts`) and `body.route` (`minecraftLlmcRoute.ts`) from the map text, and puts every layer of the
+ * - adds `body.around` (`minecraftLlmcAround.ts`) and `body.route` (`minecraftLlmcRoute.ts`) from the map text,
+ * and puts every layer of the
  *   map on one range (`minecraftLlmcLiveMap.ts`).
  */
 export interface RewriteNotes { dropped: string[]; fixed: string[]; merged: string[]; omitted: number; added: string[] }
@@ -72,7 +82,8 @@ export function mergeInventory(list: readonly string[], notes: RewriteNotes): st
   return omitted ? [...merged, omitted] : merged;
 }
 
-/** A landmark line's east/west and north/south from her feet now. The height is left as the line has it (the body's feet cell can stand one higher). */
+/** A landmark line's east/west and north/south from her feet now. The height is left as the line has it (the
+ * body's feet cell can stand one higher). */
 export function fixLandmarks(list: readonly string[], self: P, notes: RewriteNotes): string[] {
   let changed = 0;
   const out = list.map(line => {
@@ -127,7 +138,8 @@ function rewritePlan(plan: Rec, planNow: string, view: MapView | null, notes: Re
       return true;
     });
   }
-  // Chapter 7: the node's id, as the plan holds it, is compared (not an id's shape read from the shown line: a node the model added is `n3`, not `p3`).
+  // Chapter 7: the node's id, as the plan holds it, is compared (not an id's shape read from the shown line: a
+// node the model added is `n3`, not `p3`).
   const id = facts?.now?.id;
   if (id && String(out.now ?? '').startsWith(`${id} `) && planNow.startsWith(`[${id}]`)) {
     delete out.now;
@@ -151,7 +163,8 @@ function rewriteState(value: unknown, notes: RewriteNotes): unknown {
 }
 
 /**
- * mb-llmc-cand 10 (D2: 「#6545 item 0.7m」 named no item, bats and far villagers filled `near`): the creatures and dropped items that are worth a line
+ * mb-llmc-cand 10 (D2: 「#6545 item 0.7m」 named no item, bats and far villagers filled `near`): the creatures and
+ * dropped items that are worth a line
  * (`nearWorthy`, with what the situation needs: `nearNeeds`: food animals, sheep for wool, villagers to trade with).
  */
 function nearLines(list: readonly string[], needs: NearNeeds, notes: RewriteNotes): string[] {
@@ -245,7 +258,8 @@ function rewriteBody(bodyIn: Rec, notes: RewriteNotes, needs: NearNeeds = NO_NEE
   if (enemies.merged) notes.merged.push(`敵の行 ${enemies.merged} 減らした`);
   const body: Rec = {}, repeated = repeatedFailures(bodyIn);
   for (const [key, value] of Object.entries(bodyIn)) {
-    if (key === 'unreachable' || key === PLAN_FACTS_KEY) continue;
+    const omittedBodyKey = () => (key === 'unreachable' || key === PLAN_FACTS_KEY);
+    if (omittedBodyKey()) continue;
     if (key === 'urgent' || key === 'threats') {
       if (enemies[key]) body[key] = enemies[key];
       continue;

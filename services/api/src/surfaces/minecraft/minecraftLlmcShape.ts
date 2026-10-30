@@ -1,7 +1,8 @@
 import { handFieldNames, slotWordOf, type HandKind } from '../../contracts/minecraftActContract.js';
 
 /**
- * The act as the model writes it, made ready for the body (r2, 2026-10-22; contract `minecraftActContract.ts`): put into the contract's
+ * The act as the model writes it, made ready for the body (r2, 2026-10-22; contract `minecraftActContract.ts`):
+ * put into the contract's
  * shape where what it meant is plain (`normalizeActInput`), and where it is not, the one line that says where and how it is wrong
  * (`schemaProblem`).
  */
@@ -13,7 +14,8 @@ const isPos = (value: unknown) => {
 };
 const isItem = (value: unknown) => typeof plainRecord(value)?.item === 'string';
 
-/** One plain fix of a field: whether it applies to the value, the value made right, and what to say (`{name}` is the hand or act). */
+/** One plain fix of a field: whether it applies to the value, the value made right, and what to say (`{name}` is
+ * the hand or act). */
 interface Fix { key: string; when(value: unknown): boolean; make(value: unknown): unknown; say: string }
 const listOf = (key: string, when: (value: unknown) => boolean): Fix => ({ key, when, make: value => [value], say: `${key} を配列にした` });
 const ACT_FIXES: readonly Fix[] = [
@@ -54,12 +56,15 @@ function moveWhy(act: Fields, hand: Fields, name: string, said: string[]): void 
 }
 
 /**
- * The act as the model wrote it, put into the contract's shape where what it meant is plain (scene replay 2026-10-21: Haiku wrote `why`
- * in a hand 4 times in 12 and the act was refused whole; Sonnet wrote one `at` as an object). Each fix is said in one line, for the
+ * The act as the model wrote it, put into the contract's shape where what it meant is plain (scene replay
+ * 2026-10-21: Haiku wrote `why`
+ * in a hand 4 times in 12 and the act was refused whole; Sonnet wrote one `at` as an object). Each fix is said
+ * in one line, for the
  * result the model reads. What is not plain is left as written (`llmcInputProblem` then says where it is wrong).
  * - a hand's `why`: taken out (the act's `why` when it has none); `note` past 40 characters: cut;
  * - `at`, `path`, `stopIf.blockChanged`: one {x,y,z} → a list of it; `to`: a list of one {x,y,z} → it;
- * - `items`: one {item} or a name → a list of it; `target`: a number → `#id`; `accept`: one name → a list; `hands`: one hand → a list.
+ * - `items`: one {item} or a name → a list of it; `target`: a number → `#id`; `accept`: one name → a list;
+ * `hands`: one hand → a list.
  */
 export function normalizeActInput(input: unknown): { input: unknown; fixes: string[] } {
   const act = plainRecord(input);
@@ -74,8 +79,10 @@ export function normalizeActInput(input: unknown): { input: unknown; fixes: stri
       const hand = plainRecord(value);
       if (!hand) return value;
       const fixed = { ...hand };
-      // A-11 3: a plain variation of a hand word in `slot` (off-hand, main_hand…) is the body's word; not said (it is a spelling, not a change of meaning).
-      if (typeof fixed.slot === 'string' && slotWordOf(fixed.slot) !== fixed.slot) { fixed.slot = slotWordOf(fixed.slot); spelled = true; }
+      // A-11 3: a plain variation of a hand word in `slot` (off-hand, main_hand…) is the body's word; not said (it is
+// a spelling, not a change of meaning).
+      if (typeof fixed.slot === 'string' && slotWordOf(fixed.slot) !== fixed.slot) { fixed.slot = slotWordOf(fixed.slot);
+        spelled = true; }
       moveWhy(out, fixed, `手${index + 1}`, fixes);
       return applyFixes(fixed, HAND_FIXES, fixes, `手${index + 1}`);
     });

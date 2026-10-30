@@ -12,19 +12,25 @@ import { operatorSocketPath, requestOperatorSocket } from './operatorSocket.js';
 export const OPERATOR_CLI_USAGE = [
   'Usage (as the service user, with SHANNON_DATABASE_PATH set):',
   '  opsCli.ts minecraft status',
-  '  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] [--hold-on-failure] <goal...>',
-  '      (--hold-on-failure: on a heavy failure the task is held, the world stopped, the box and the scene written; then `resume`)',
+  ("  opsCli.ts minecraft request --operator <label> [--max-minutes N] [--budget-yen N] [--hold-on-failure] " +
+"<goal...>"),
+  ("      (--hold-on-failure: on a heavy failure the task is held, the world stopped, the box and the scene " +
+"written; then `resume`)"),
   '  opsCli.ts minecraft resume --operator <label> (<task-id> | --latest) [--skip-replay] [--deduct-minutes N]',
-  '      (a held request goes on: the failed act again, then the plan; --skip-replay: not the act again, the next decision is told so)',
+  ("      (a held request goes on: the failed act again, then the plan; --skip-replay: not the act again, the " +
+"next decision is told so)"),
   '  opsCli.ts minecraft cancel --operator <label> (<task-id> | --latest)',
   '  opsCli.ts minecraft budget --operator <label> (<task-id> | --latest) <yen>',
-  '      (change a running request\'s yen cap, from its next decision on; not below what it has used, not above the request cap)',
+  ("      (change a running request's yen cap, from its next decision on; not below what it has used, not " +
+"above the request cap)"),
   '  opsCli.ts minecraft <start|stop|login|logout|set_day> --operator <label> [--server <id>]',
   '  opsCli.ts minecraft start --operator <label> [--server <id>] [--keep-world]',
   '      (--keep-world: keep the current world even while the owner\'s 新しいワールドで始める switch is on)',
-  '  opsCli.ts minecraft release --operator <label>   (ask the body again whether it is stopped; releases only what it proves)',
+  ("  opsCli.ts minecraft release --operator <label>   (ask the body again whether it is stopped; releases " +
+"only what it proves)"),
   '  opsCli.ts skills import dry-run --operator <label> --pack <id> --revision <rev>',
-  '  opsCli.ts skills import apply --operator <label> --pack <id> --revision <rev> --plan-hash <hash> --approval-reference <ref>',
+  ("  opsCli.ts skills import apply --operator <label> --pack <id> --revision <rev> --plan-hash <hash> " +
+"--approval-reference <ref>"),
 ].join('\n');
 
 export interface OperatorCliIo { out(line: string): void; err(line: string): void }
@@ -53,8 +59,10 @@ class UsageError extends Error {}
 interface Parsed { flags: Map<string, string | true>; positional: string[] }
 
 /**
- * `--name value`, `--name=value`, a bare `--latest` or `--keep-world`; everything after `--` is positional. A bare flag takes no value
- * at all: `--keep-world=false` (or `=0`, `=`) is a usage error, never read as "not given", so a start cannot keep the world by a flag
+ * `--name value`, `--name=value`, a bare `--latest` or `--keep-world`; everything after `--` is positional. A
+ * bare flag takes no value
+ * at all: `--keep-world=false` (or `=0`, `=`) is a usage error, never read as "not given", so a start cannot
+ * keep the world by a flag
  * that looks like it says the opposite.
  */
 function parseArguments(argv: readonly string[]): Parsed {
@@ -117,16 +125,19 @@ function cancelEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
 /** `resume (<task-id> | --latest) [--skip-replay]` (run 45: the held act is not sent again with --skip-replay). */
 function resumeEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   knownFlags(parsed, ['--operator', '--latest', '--skip-replay', '--deduct-minutes']);
-  const deduct = whole(parsed.flags.get('--deduct-minutes'), '--deduct-minutes');   // the minutes the body could not move that the head could not measure (A-15)
+  const deduct = whole(parsed.flags.get('--deduct-minutes'), '--deduct-minutes');
+       // the minutes the body could not move that the head could not measure (A-15)
   parsed.flags.delete('--deduct-minutes');
   const skip = parsed.flags.get('--skip-replay');
   if (skip !== undefined && skip !== true) throw new UsageError('--skip-replay takes no value');
   parsed.flags.delete('--skip-replay');
   const envelope = cancelEnvelope(base, parsed);
-  return { ...envelope, args: { ...envelope.args, ...(skip === true ? { skipReplay: true } : {}), ...(deduct !== undefined ? { deductMinutes: deduct } : {}) } };
+  return { ...envelope, args: { ...envelope.args, ...(skip === true ? { skipReplay: true } : {}), ...(deduct !== undefined ? {
+     deductMinutes: deduct } : {}) } };
 }
 
-/** `budget <task-id> <yen>` or `budget --latest <yen>`: the yen is a whole number here; the API refuses 0 and anything over the cap, and audits it. */
+/** `budget <task-id> <yen>` or `budget --latest <yen>`: the yen is a whole number here; the API refuses 0 and
+ * anything over the cap, and audits it. */
 function budgetEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   knownFlags(parsed, ['--operator', '--latest']);
   const latest = parsed.flags.get('--latest') === true;
@@ -162,7 +173,8 @@ function skillImportEnvelope(base: Base, parsed: Parsed): OperatorEnvelope {
   return { ...base, args: { phase, packId, revision, ...(phase === 'apply' ? { planHash, approvalReference } : {}) } };
 }
 
-/** The envelope one command sends. A domain or operation outside those offered is sent as it is, so the API refuses and audits it. */
+/** The envelope one command sends. A domain or operation outside those offered is sent as it is, so the API
+ * refuses and audits it. */
 export function operatorEnvelope(argv: readonly string[], env: Readonly<Record<string, string | undefined>>): OperatorEnvelope {
   const [domain, op, ...rest] = argv;
   if (!domain || !op) throw new UsageError('a domain and an operation are required');
@@ -199,19 +211,14 @@ async function status(path: string, io: OperatorCliIo, deps: OperatorCliDeps, en
     const changed = row.taskId ? inspection.changedBudgets?.[row.taskId] : undefined;
     io.out(`  ${auditLine(row)}${changed === undefined ? '' : `  yen_now=${changed}`}`);
   }
-  // 2026-10-28: the requests held on a heavy failure, why, the incident (its box and scene have its id) and whether the world is stopped.
+  // 2026-10-28: the requests held on a heavy failure, why, the incident (its box and scene have its id) and
+// whether the world is stopped.
   io.out(`held operator requests: ${inspection.held?.length ?? 0}`);
   for (const row of inspection.held ?? []) io.out(`  ${auditLine(row)}  ${row.detail ?? ''}`);
-  // Where the body is now against where each held act began, and the body's own hold (run 44: a hold only one side keeps shows here): asked of
+  // Where the body is now against where each held act began, and the body's own hold (run 44: a hold only one side
+// keeps shows here): asked of
   // the running API (read only), when its socket is there.
-  if (deps.socketPresent(socket)) {
-    try {
-      const reply = await deps.send(socket, { v: 1, operator: env.SHANNON_OPERATOR?.trim() || 'status', domain: 'minecraft', op: 'held', args: {} });
-      const body = reply.body as { held?: Array<{ taskId: string; position: string; body?: string }>; bodyOnly?: string } | null;
-      for (const entry of body?.held ?? []) io.out(`  task=${entry.taskId}  ${entry.position}${entry.body ? `  ${entry.body}` : ''}`);
-      if (body?.bodyOnly) io.out(`  ${body.bodyOnly}`);
-    } catch { if (inspection.held?.length) io.out('  (今の位置は API に聞けなかった)'); }
-  }
+  await readBodyHeldStatus(socket, io, deps, env, inspection);
   io.out(`recent audit (${inspection.recent.length}):`);
   for (const row of inspection.recent) io.out(`  ${auditLine(row)}`);
   return 0;
@@ -279,5 +286,18 @@ export async function runOperatorCli(argv: readonly string[], env: Readonly<Reco
     }
     io.err(`failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     return 1;
+  }
+}
+
+/** 稼働中の体が保持している操作と現在位置を、読取りで補う。 */
+async function readBodyHeldStatus(socket: string, io: OperatorCliIo, deps: OperatorCliDeps,
+  env: Readonly<Record<string, string | undefined>>, inspection: ReturnType<OperatorCliDeps['inspect']>): Promise<void> {
+  if (deps.socketPresent(socket)) {
+    try {
+      const reply = await deps.send(socket, { v: 1, operator: env.SHANNON_OPERATOR?.trim() || 'status', domain: 'minecraft', op: 'held', args: {} });
+      const body = reply.body as { held?: Array<{ taskId: string; position: string; body?: string }>; bodyOnly?: string } | null;
+      for (const entry of body?.held ?? []) io.out(`  task=${entry.taskId}  ${entry.position}${entry.body ? `  ${entry.body}` : ''}`);
+      if (body?.bodyOnly) io.out(`  ${body.bodyOnly}`);
+    } catch { if (inspection.held?.length) io.out('  (今の位置は API に聞けなかった)'); }
   }
 }

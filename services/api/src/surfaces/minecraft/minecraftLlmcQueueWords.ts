@@ -10,7 +10,8 @@ import { conditionWords } from './minecraftConditions.js';
 import { llmcResult } from './minecraftLlmc.js';
 import { droppedWords, keptWords, releasedWords, replayWords, unknownWords } from './minecraftLlmcResultWords.js';
 
-/** The words of the head's mirror of the body's queue (`minecraftLlmcQueue.ts`): what an item's end is told as, and the lines of the live state. */
+/** The words of the head's mirror of the body's queue (`minecraftLlmcQueue.ts`): what an item's end is told as,
+ * and the lines of the live state. */
 export const QUEUE_MAX = 3;
 /** The queue's answer "the same work is already in the queue": it says "already asked" (A-16: not a mistake of the model). */
 export const SAME_IN_QUEUE_WORDS = 'と同じ手が列にある';
@@ -37,9 +38,11 @@ export const itemLabel = (item: Pick<QueueWordsItem, 'item' | 'node' | 'why'>): 
 export const unitOfReceipt = (receipt: Pick<MinecraftControlReceipt, 'unit' | 'outcome' | 'inputsReleased'>): ItemOutcome =>
   receipt.unit ?? unitFromOutcome(receipt.outcome, receipt.inputsReleased);
 
-/** Whether the receipt says the item never ran (the body dropped or refused it, or it was cancelled before it started, or its unit says it did not run). */
+/** Whether the receipt says the item never ran (the body dropped or refused it, or it was cancelled before it
+ * started, or its unit says it did not run). */
 export const neverRan = (receipt: MinecraftControlReceipt, item: Pick<QueueWordsItem, 'startedAt'>): boolean =>
-  NEVER_RAN.has(receipt.failureType ?? '') || (receipt.outcome === 'cancelled' && item.startedAt === null && receipt.unit?.startedAt === undefined && receipt.unit?.end !== 'unknown')
+  NEVER_RAN.has(receipt.failureType ?? '') || (receipt.outcome === 'cancelled' && item.startedAt === null &&
+     receipt.unit?.startedAt === undefined && receipt.unit?.end !== 'unknown')
   || (receipt.unit?.end === 'not_run' && receipt.unit.goal === 'not_started');
 
 /** Why an item behind a bad end is told dropped: the item before it (`q14`), or the words of whoever took it off. */
@@ -49,19 +52,23 @@ function behind(because: string | null): string {
 }
 
 /**
- * The result of an item that ended, as the model reads it: the body's act result, or the words of why it did not run or start. A unit the body dropped says why from
- * its own `droppedBecause` (a stopped item it relied on, a death, another dimension…); one it kept going says it did not rely on the one that stopped; a second try
+ * The result of an item that ended, as the model reads it: the body's act result, or the words of why it did not
+ * run or start. A unit the body dropped says why from
+ * its own `droppedBecause` (a stopped item it relied on, a death, another dimension…); one it kept going says it
+ * did not rely on the one that stopped; a second try
  * of a held act says whose it is. (A result that is not known is `unknownResult`.)
  */
 export function itemResult(item: QueueWordsItem, receipt: MinecraftControlReceipt, fixes: readonly string[]): ToolResult {
   const unit = unitOfReceipt(receipt);
   if (neverRan(receipt, item)) {
-    const cause = unit.droppedBecause ? droppedWords(unit.droppedBecause) : (receipt.failureType === 'cleanup_stop' || unit.code === 'cleanup_stop') ? '片付けの stop で捨てた（結果として確定。さっきの不明が後で分かっても戻らない）' : behind(item.because);
+    const cause = unit.droppedBecause ? droppedWords(unit.droppedBecause) : (receipt.failureType === 'cleanup_stop' ||
+       unit.code === 'cleanup_stop') ? '片付けの stop で捨てた（結果として確定。さっきの不明が後で分かっても戻らない）' : behind(item.because);
     const why = receipt.result ?? `捨てた: ${cause}。手は動いていない`;
     const told = why.startsWith('捨てた') || why.startsWith('断られた') ? why : `断られた: ${why}（手は動いていない）`;
     return toolFailure('failed', told, { retryable: true });
   }
-  if ((receipt.failureType === 'precondition' || receipt.failureType === 'precondition_unknown') && receipt.result) return toolFailure('failed', receipt.result, { retryable: true });
+  if ((receipt.failureType === 'precondition' || receipt.failureType === 'precondition_unknown') && receipt.result) return toolFailure(
+    'failed', receipt.result, { retryable: true });
   const result = llmcResult(MC_ACT_TOOL, receipt, item.reason(), fixes);
   const lead = [...(item.resume ? [replayWords(item.resume.item)] : []), ...(item.because ? [`${item.because}で止めた（頭が取り除いた）。`] : []),
     ...(unit.keptDespite ? [keptWords(unit.keptDespite).trim()] : [])];
@@ -78,17 +85,21 @@ function itemLine(item: QueueWordsItem, index: number, frame: BodyObservation | 
   running: { progress: MinecraftQueueProgress | null; leftMs: number }): string {
   const mine = index === 0 ? running.progress : null;
   const words = item.done ? conditionWords(item.done, frame) : null;
-  const parts = [
+  const itemDetails = () => ([
     mine ? `手 ${mine.hand}/${mine.of}${mine.repeat > 1 ? `・繰り返し ${mine.iteration}/${mine.repeat} 回目` : ''}` : '',
     item.done ? `済む: ${conditionText(item.done)}${words ? `（今 ${words}）` : ''}` : '',
     index > 0 && item.pre ? `前提 ${conditionText(item.pre)}（前の項目の後で体が確かめる）` : '',
-    item.dependsOn !== undefined ? `頼る: ${item.dependsOn.length ? (item.dependStates ?? item.dependsOn.map(ref => [ref, null] as const)).map(([ref, state]) => `${ref}${state ? `（${DEPEND_WORDS[state]}）` : ''}`).join('・') : 'なし'}` : '',
+    item.dependsOn !== undefined ? `頼る: ${item.dependsOn.length ? (item.dependStates ?? item.dependsOn.map(ref => [ref,
+       null] as const)).map(([ref, state]) => `${ref}${state ? `（${DEPEND_WORDS[state]}）` : ''}`).join('・') : 'なし'}` : '',
     index === 0 ? `残り約 ${Math.max(1, Math.round(running.leftMs / 1000))} 秒` : '',
-  ].filter(Boolean);
+  ].filter(Boolean));
+  const parts = itemDetails();
   return `${index === 0 ? '▶' : '・'} ${itemLabel(item)} ${index === 0 ? '実行中' : '待ち'}${parts.length ? `: ${parts.join('・')}` : ''}`;
 }
 
-/** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it has no item (the reflexes and the hands that no item runs are not said to stop). */
+/** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it
+ * has no item (the
+ * reflexes and the hands that no item runs are not said to stop). */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
   running: { progress: MinecraftQueueProgress | null; leftMs: number }): string[] {
   if (!items.length) return ['列に項目なし'];

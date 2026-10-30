@@ -769,9 +769,11 @@ describe('boundary 9 (the plan): kind and prep from the first plan to a restarte
     // 6. the head writes no prep: nothing of its own code does (the files that assign a state to a prep are the plan's tree and the tool that passes the model's), and the run above shows none.
     // the two places: the v1 move (it reads the old head's note) and the op the model's plan.update gives; nothing of the head's own code (`amend`, `seen`, `follow`) writes one
     const writers = prepWriters();
-    expect(writers.map(line => line.split(':')[0])).toEqual(['/planTree.ts', '/planTree.ts']);
-    expect(writers[0]).toContain('/planTree.ts: const prep: PlanPrep | undefined = skipped');
-    expect(writers[1]).toContain('/planTree.ts: node.prep = { state: op.prep.state');
+    expect(writers.map(line => line.split(':')[0])).toEqual(['/planTree.ts', '/planTreeMigration.ts', '/planTreeMigration.ts']);
+    // 移行の skipped/met の2分岐と、モデル更新の代入だけを許す。
+    expect(writers[2]).toContain("/planTreeMigration.ts: ? { state: 'skipped' }");
+    expect(writers[1]).toContain("/planTreeMigration.ts: ? { state: 'met' }");
+    expect(writers[0]).toContain('/planTree.ts: node.prep = { state: op.prep.state');
     const { verdict } = bench.judged();
     noted(verdict);
     expect(verdict.checks.map(check => check.id)).toEqual(expect.arrayContaining(['every stage of the round trip is recorded', 'kind and prep survive save, head restart and read back',

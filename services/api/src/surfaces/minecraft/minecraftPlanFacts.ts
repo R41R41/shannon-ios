@@ -1,13 +1,23 @@
 import { orderedPlan, PLAN_KINDS, type PlanKind, type PlanNode, type PlanTree, type PrepState } from '@shannon/mind';
 
 /**
- * The continue contract, chapter 7 (2026-10-28): what the head's code knows of the plan as facts of the nodes, never as words of their titles. A node's
- * `kind` is written by the model (the first plan, `plan.update`); a node with none is `other`. The code that used to read a title or the `planNow` line
- * with a regular expression (the stage whose check holds, the gate back, the knowledge of a stage, the near creatures a plan needs…) reads the kinds here.
+ * The continue contract, chapter 7 (2026-10-28): what the head's code knows of the plan as facts of the nodes, never as words of
+ * their titles. A node's
+ * `kind` is written by the model (the first plan, `plan.update`); a node with none is `other`. The code that
+ * used to read a title or
+ * the `planNow` line
+ * with a regular expression (the stage whose check holds, the gate back, the knowledge of a stage, the near
+ * creatures a plan needs…)
+ * reads the kinds here.
  *
- * `planFacts` is an internal field of the live state's `body` (`readinessParts`, `minecraftLlmcBody.ts`): the machine's reading of the current node, the
- * kinds above it and the next nodes. The functions that work from the live state alone (`stagesFor`, `rewriteLlmcLive`) read it; `rewriteLlmcLive` takes
- * it out, so the model does not see it. A live state without one (an old test input) gets no decision that depends on a kind: a kind is never inferred
+ * `planFacts` is an internal field of the live state's `body` (`readinessParts`, `minecraftLlmcBody.ts`): the
+ * machine's reading of
+ * the current node, the
+ * kinds above it and the next nodes. The functions that work from the live state alone (`stagesFor`, `rewriteLlmcLive`) read it;
+ * `rewriteLlmcLive` takes
+ * it out, so the model does not see it. A live state without one (an old test input) gets no decision that
+ * depends on a kind: a kind
+ * is never inferred
  * from `planNow`.
  */
 export const PLAN_FACTS_KEY = 'planFacts';
@@ -17,7 +27,8 @@ export const kindOf = (node: Pick<PlanNode, 'kind'> | null | undefined): PlanKin
 
 export interface PlanFactsNode {
   id: string; kind: PlanKind;
-  /** The node's place and the condition that shows it done, as the plan holds them (read by `readWhere` and `doneRange`, never from a shown line). */
+  /** The node's place and the condition that shows it done, as the plan holds them (read by `readWhere` and
+ * `doneRange`, never from a shown line). */
   where?: string; doneWhen?: string;
   /** The preparation state the model wrote (`plan.update` set `prep`), when it wrote one. */
   prep?: PrepState;
@@ -33,7 +44,8 @@ export interface PlanFacts {
 const NEXT_SHOWN = 3;
 
 /**
- * The facts of a tree. The next nodes are chosen as `planPath` (mind) chooses them: after the current node in order, still to do (continue or wait), with
+ * The facts of a tree. The next nodes are chosen as `planPath` (mind) chooses them: after the current node in order, still to do
+ * (continue or wait), with
  * nothing open under them and no done node above them.
  */
 export function planFactsOf(tree: PlanTree | null | undefined): PlanFacts | null {
@@ -41,12 +53,14 @@ export function planFactsOf(tree: PlanTree | null | undefined): PlanFacts | null
   const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const now = tree.current ? byId.get(tree.current) ?? null : null;
   const above: PlanKind[] = [];
-  for (let up = now?.parentId ? byId.get(now.parentId) : undefined, guard = 0; up && guard < 16; up = up.parentId ? byId.get(up.parentId) : undefined, guard += 1) {
+  for (let up = now?.parentId ? byId.get(now.parentId) : undefined, guard = 0; up && guard < 16; up = up.parentId ? byId.get(up.parentId) :
+     undefined, guard += 1) {
     above.push(kindOf(up));
   }
   const order = orderedPlan(tree.nodes), from = now ? order.findIndex(node => node.id === now.id) + 1 : 0;
   const doneAbove = (node: PlanNode): boolean => {
-    for (let up = node.parentId ? byId.get(node.parentId) : undefined, guard = 0; up && guard < 16; up = up.parentId ? byId.get(up.parentId) : undefined, guard += 1) {
+    for (let up = node.parentId ? byId.get(node.parentId) : undefined, guard = 0; up && guard < 16; up = up.parentId ? byId.get(
+      up.parentId) : undefined, guard += 1) {
       if (up.state === 'done') return true;
     }
     return false;
@@ -68,10 +82,13 @@ export function factsIn(body: Record<string, unknown> | null | undefined): PlanF
   const record = raw as Record<string, unknown>;
   const nowRaw = record.now && typeof record.now === 'object' && !Array.isArray(record.now) ? record.now as Record<string, unknown> : null;
   const nowKind = kindName(nowRaw?.kind), id = text(nowRaw?.id);
-  const now: PlanFactsNode | null = nowRaw && nowKind && id ? { id, kind: nowKind, ...(text(nowRaw.where) ? { where: text(nowRaw.where)! } : {}),
+  const currentPlanFact = (): PlanFactsNode | null => (nowRaw && nowKind && id ? { id, kind: nowKind, ...(text(nowRaw.where) ? { where:
+     text(nowRaw.where)! } : {}),
     ...(text(nowRaw.doneWhen) ? { doneWhen: text(nowRaw.doneWhen)! } : {}),
-    ...(nowRaw.prep === 'met' || nowRaw.prep === 'skipped' || nowRaw.prep === 'unmet_now' ? { prep: nowRaw.prep } : {}) } : null;
-  const above = (Array.isArray(record.above) ? record.above : []).flatMap(item => { const kind = kindName(item); return kind ? [kind] : []; });
+    ...(nowRaw.prep === 'met' || nowRaw.prep === 'skipped' || nowRaw.prep === 'unmet_now' ? { prep: nowRaw.prep } : {}) } : null);
+  const now: PlanFactsNode | null = currentPlanFact();
+  const above = (Array.isArray(record.above) ? record.above : []).flatMap(item => { const kind = kindName(item);
+    return kind ? [kind] : []; });
   const next = (Array.isArray(record.next) ? record.next : []).flatMap(item => {
     const entry = item && typeof item === 'object' ? item as Record<string, unknown> : null, kind = kindName(entry?.kind), nextId = text(entry?.id);
     return kind && nextId ? [{ id: nextId, kind }] : [];
@@ -82,9 +99,11 @@ export function factsIn(body: Record<string, unknown> | null | undefined): PlanF
 /** The kinds of the current node and the nodes above it, the nearest first (empty with no current node). */
 export const nowKinds = (facts: PlanFacts | null | undefined): PlanKind[] => facts?.now ? [facts.now.kind, ...facts.above] : [];
 /** The kinds of the current node and of the next nodes shown. */
-export const nearKinds = (facts: PlanFacts | null | undefined): PlanKind[] => facts ? [...facts.now ? [facts.now.kind] : [], ...facts.next.map(item => item.kind)] : [];
+export const nearKinds = (facts: PlanFacts | null | undefined): PlanKind[] => facts ? [...facts.now ? [facts.now.kind] : [],
+   ...facts.next.map(item => item.kind)] : [];
 /** The kinds of the current node and of the one next node (the first of the next nodes). */
-export const nowAndNextKinds = (facts: PlanFacts | null | undefined): PlanKind[] => facts ? [...facts.now ? [facts.now.kind] : [], ...facts.next.slice(0, 1).map(item => item.kind)] : [];
+export const nowAndNextKinds = (facts: PlanFacts | null | undefined): PlanKind[] => facts ? [...facts.now ? [facts.now.kind] : [],
+   ...facts.next.slice(0, 1).map(item => item.kind)] : [];
 export const hasKind = (kinds: readonly PlanKind[], wanted: ReadonlySet<PlanKind>): boolean => kinds.some(kind => wanted.has(kind));
 
 export interface WherePos { x: number; y: number; z: number }
@@ -94,8 +113,10 @@ const LEADING = new RegExp(`^\\s*[@＠]?\\s*\\(?\\s*${NUMBER}\\s*,\\s*${NUMBER}\
 const BRACKETED = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u;
 const BARE = /(?<![\d.])(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)(?![\d.])/u;
 /**
- * The one reader of a node's `where` (a text: a place and a few words; no structure of its own, chapter 7). `goal` (the default): the place the text begins
- * with, which is the node's place (a bed named in a later sentence is not: the replay took one once). `any`: the first place anywhere in it, bracketed or
+ * The one reader of a node's `where` (a text: a place and a few words; no structure of its own, chapter 7).
+ * `goal` (the default): the place the text begins
+ * with, which is the node's place (a bed named in a later sentence is not: the replay took one once). `any`: the
+ * first place anywhere in it, bracketed or
  * bare (the gate back and the food node's distance: `(5,35,12)` after words).
  */
 export function readWhere(where: string | null | undefined, mode: 'goal' | 'any' = 'goal'): WherePos | null {

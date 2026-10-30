@@ -1,64 +1,60 @@
+import { createApiRequestHandler } from './wiring/serverRequestHandler.js';
 import { configuredMinecraftLifecycle } from './wiring/minecraftLifecycleWiring.js';
 import { configuredSkillImporter } from './wiring/skillImportWiring.js';
 import { standardSkillPack } from './infra/config/standardSkillPack.js';
-import { configuredServerFca, serveFcaTaskRoute } from './wiring/serverFcaWiring.js';
+import { configuredServerFca } from './wiring/serverFcaWiring.js';
 import { configuredMinecraftFeelings } from './mind/emotion/minecraftFeeling.js';
 import { createServer } from 'node:http';
 import { configuredServerObserver } from './wiring/serverObserverWiring.js';
-import { handleDeviceManagement, handlePushRegistration } from './infra/auth/serverDeviceRoutes.js';
-import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readJson, sendJson, VoiceRequestAllowances } from './infra/http/serverHttp.js';
-import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './infra/auth/apiAuth.js';
-import { handleVoiceVisionSnapshot } from './surfaces/voice/serverVoiceVisionRoute.js';
+import { parseHost,parsePort,VoiceRequestAllowances } from './infra/http/serverHttp.js';
+import { bearerAuthorized,configuredApiToken,configuredAuthMode } from './infra/auth/apiAuth.js';
 import { createPairingRoute } from './infra/auth/serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './surfaces/voice/voiceVision.js';
-import { handleRetiredVoiceRoute } from './surfaces/voice/retiredVoiceRoutes.js';
 import { createGeminiSpeechRoute } from './surfaces/voice/serverGeminiSpeechRoute.js';
 import { createGeminiLiveRoute } from './surfaces/voice/serverGeminiLiveRoute.js';
 import { createLiveVoiceStreamRoute } from './surfaces/voice/serverLiveVoiceStreamRoute.js';
-import { configuredOperationOutcomes, createLocalApiKernel } from './wiring/apiKernelWiring.js';
+import { configuredOperationOutcomes,createLocalApiKernel } from './wiring/apiKernelWiring.js';
 import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './infra/models/chatModel.js';
-import { configuredVoiceDecision, startRewardMood } from './wiring/cognitionLedgerWiring.js';
-import { configuredJevChooser, readToolPorts, skillRoutingParts } from './wiring/skillRoutingWiring.js';
+import { configuredVoiceDecision,startRewardMood } from './wiring/cognitionLedgerWiring.js';
+import { configuredJevChooser,readToolPorts,skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredStream } from './wiring/streamWiring.js';
 import { configuredTurnRouting } from './wiring/turnRoutingWiring.js';
-import { configuredWithheldActions, gateRefusals } from './wiring/withheldWiring.js';
-import { closeReplySonnet, configuredSonnet, withReplySonnet } from './wiring/sonnetWiring.js';
+import { configuredWithheldActions,gateRefusals } from './wiring/withheldWiring.js';
+import { closeReplySonnet,configuredSonnet,withReplySonnet } from './wiring/sonnetWiring.js';
 import { createModelModeWiring } from './wiring/modelModeWiring.js';
-import { MODEL_MODE_PATH } from './infra/http/modelModeRoutes.js';
-import { failureTrail } from './infra/http/failureTrail.js';
-import { configuredSkillMemory, skillTurnPorts } from './wiring/skillMemoryWiring.js';
+import { configuredSkillMemory,skillTurnPorts } from './wiring/skillMemoryWiring.js';
 import { noteCopyWrite } from './mind/memory/memoryPorts.js';
 import { installSalt } from './wiring/installSalt.js';
 import { configuredFeeling } from './wiring/feelingWiring.js';
 import { configuredTreeRecall } from './wiring/treeRecallWiring.js';
-import { storyReacted, toolCallChoice, touchLedger } from './wiring/cognitionLedgerTaps.js';
-import { createValuesRoute, isValuesPath, ownerValueRecorder } from './infra/http/learningRoutes.js';
-import { createSkillsRoute, isSkillsPath, ownerSkillRecorder } from './infra/http/skillRoutes.js';
-import { configuredAuthPepper, configuredPreviousAuthPepper, SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
-import { configuredDatabasePath, SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
+import { storyReacted,toolCallChoice,touchLedger } from './wiring/cognitionLedgerTaps.js';
+import { createValuesRoute,ownerValueRecorder } from './infra/http/learningRoutes.js';
+import { createSkillsRoute,ownerSkillRecorder } from './infra/http/skillRoutes.js';
+import { configuredAuthPepper,configuredPreviousAuthPepper,SQLiteDeviceAuthStore } from './infra/auth/deviceAuth.js';
+import { configuredDatabasePath,SQLiteShannonStore } from './infra/sqlite/sqliteStore.js';
 import { ShannonMemoryService } from './mind/memory/memoryService.js';
 import { SQLiteWorldStore } from './integrations/world/store/worldStore.js';
 import { SQLiteInitiativeStore } from './surfaces/outreach/store/initiativeStore.js';
 import { FileAetherContextReader } from './integrations/aether/aetherContext.js';
 import { configuredNotionSource } from './integrations/notion/notionSource.js';
 import { configuredAetherPorts } from './integrations/aether/aetherAccess.js';
-import { SQLitePushNotificationStore, type APNsEnvironment } from './surfaces/outreach/pushNotifications.js';
+import { SQLitePushNotificationStore } from './surfaces/outreach/pushNotifications.js';
 import { configuredServerStage5 } from './wiring/serverStage5Wiring.js';
 import { SQLiteTestFlightDeliveryStore } from './integrations/testflight/store/testflightDeliveryStore.js';
 import { SQLiteDailyMindStore } from './mind/action/respond/dailyMind.js';
-import { SQLiteOrganizeStore, createConfiguredOrganizeExtractor, createConfiguredVoyagerCatalog,
-  createConfiguredVoyagerDestination } from './integrations/voyager/organize.js';
+import {
+SQLiteOrganizeStore,createConfiguredOrganizeExtractor,createConfiguredVoyagerCatalog,
+createConfiguredVoyagerDestination
+} from './integrations/voyager/organize.js';
 import { createConfiguredVoiceTranscriber } from './infra/models/voiceTranscription.js';
 import { createVoiceTranscriptionRoute } from './surfaces/voice/transcriptionRoute.js';
-import { handlePlatformBridgeRequest, isPlatformBridgePath } from './surfaces/platform/serverPlatformBridgeRoute.js';
-import { configuredAddressedVoice, configuredListening, configuredListenRoute, createConfiguredPlatformBridgeRoute } from './wiring/platformBridgeWiring.js';
+import { configuredAddressedVoice,configuredListening,configuredListenRoute,createConfiguredPlatformBridgeRoute } from './wiring/platformBridgeWiring.js';
 import { configuredMiniPoses } from './wiring/miniPoseWiring.js';
 import { SQLitePersonIdentityStore } from './mind/memory/store/personIdentity.js';
 import { SQLitePeopleMemoryStore } from './mind/memory/store/peopleMemoryStore.js';
-import { VOICE_CALL_MEMORY_PATH } from './infra/http/apiPeopleMemoryRoutes.js';
 import { SQLiteCognitiveIntentStore } from './mind/action/respond/cognitiveIntent.js';
 import { SQLiteConversationOrchestrationStore } from './mind/action/respond/store/conversationOrchestrationPersistence.js';
 import { SQLiteAutonomyAnnouncer } from './mind/action/ownTime/autonomyAnnouncer.js';
@@ -66,32 +62,27 @@ import { configuredAutonomy } from './mind/inhibition/autonomyBudget.js';
 import { SQLiteStudyShowing } from './wiring/studyShowingWiring.js';
 import { ShannonAutonomyService } from './mind/action/ownTime/autonomyService.js';
 import { SQLiteAutonomyStore } from './wiring/autonomyStoreWiring.js';
-import { BODY_CAPABILITIES_PATH, isBodyRoute } from './surfaces/body/apiBodyRoutes.js';
-import { mayHaveDesktopBody, requestDeviceId } from './mind/inhibition/desktopBodyIdentity.js';
-import { BODY_LIMITS, bodyIngestEnabled } from './contracts/bodyContract.js';
+import { BODY_LIMITS,bodyIngestEnabled } from './contracts/bodyContract.js';
 import { SQLiteBodyStore } from './surfaces/body/store/bodyStore.js';
 import { isFullBody } from './surfaces/body/bodyTouchOnly.js';
-import { bodyLookRequestBytes, closeBodyLookStores, configuredAppLookOptions, configuredBodyLookOptions } from './wiring/bodyLookWiring.js';
-import { closeBodyReactionStores, configuredBodyReactionOptions, configuredInnerNote } from './wiring/bodyReactionWiring.js';
+import { closeBodyLookStores,configuredAppLookOptions,configuredBodyLookOptions } from './wiring/bodyLookWiring.js';
+import { closeBodyReactionStores,configuredBodyReactionOptions,configuredInnerNote } from './wiring/bodyReactionWiring.js';
 import { opsCommandsEnabled } from './contracts/opsCommandContract.js';
 import { opsIngestEnabled } from './contracts/opsContract.js';
 import { SQLiteOpsStore } from './infra/ops/store/opsStore.js';
 import { freshWorldSettingRecorder } from './wiring/freshWorldWiring.js';
-import { createOpsRoute, isOpsPath } from './infra/ops/serverOpsRoutes.js';
-import { dispatchWithChatSentences } from './surfaces/text/serverChatSentenceStream.js';
-import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './contracts/calendarContract.js';
-import { HOST_STEP_CLAIM_PATH, closedSignal, hostStepRequestBytes } from './infra/http/apiAutonomyHostStepRoutes.js';
+import { createOpsRoute } from './infra/ops/serverOpsRoutes.js';
 import { configuredOwnerUpcoming } from './wiring/ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './surfaces/outreach/reachOutDelivery.js';
 import { SQLiteReachOutReports } from './mind/attention/store/reachOutReports.js';
-import { SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope } from './contracts/shannonNowContract.js';
+import { shannonNowEnabled,shannonNowOwnerScope } from './contracts/shannonNowContract.js';
 import { SQLiteShannonNowReader } from './mind/self/store/shannonNowReader.js';
 import { createShannonNowRoute } from './infra/http/serverShannonNowRoute.js';
-import { MOOD_HISTORY_PATH, moodHistoryEnabled } from './contracts/moodHistoryContract.js';
+import { moodHistoryEnabled } from './contracts/moodHistoryContract.js';
 import { SQLiteMoodHistoryReader } from './mind/emotion/store/moodHistoryReader.js';
 import { createMoodHistoryRoute } from './infra/http/serverMoodHistoryRoute.js';
 import { createPrivateListeningRoute } from './wiring/serverPrivateListeningRoute.js';
-import { createIncomingCallRoute, type IncomingCallRoute } from './wiring/serverIncomingCallRoute.js';
+import { createIncomingCallRoute,type IncomingCallRoute } from './wiring/serverIncomingCallRoute.js';
 import { SQLiteOwnOutreach } from './surfaces/outreach/ownOutreach.js';
 import { ownerCallElsewhereEnabled } from './mind/perception/perceptionPorts.js';
 import { SQLiteOwnerCallFacts } from './mind/perception/store/ownerCallFacts.js';
@@ -100,13 +91,13 @@ import { configuredOpsServer } from './wiring/opsServerWiring.js';
 import { createMinecraftBodyWiring } from './wiring/serverMinecraftBodyWiring.js';
 import { configuredMind } from './wiring/mindWiring.js';
 import { configuredActionRoutes } from './wiring/serverActionThreadsWiring.js';
-import { isActionThreadPath } from './infra/http/actionThreadRoutes.js';
 import { memoryPortsOf } from './wiring/memoryOutboxWiring.js';
 import { peopleFactReaders } from './wiring/peopleFactsWiring.js';
 import { stage5MemoryStoreOptions } from './wiring/stage5MemoryWiring.js';
 import { configuredDeviceActions } from './wiring/deviceActionWiring.js';
 const now = () => new Date().toISOString();
-// ADR-0008 stage 3: the outbox (F5; the worker writes it), compaction (F7), people facts and the inert trust ledger (F6), by switch.
+// ADR-0008 stage 3: the outbox (F5; the worker writes it), compaction (F7), people facts and the inert trust
+// ledger (F6), by switch.
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now, ...stage5MemoryStoreOptions(process.env) });
 const peopleFacts = peopleFactReaders(persistentStore, now);
 const memoryPorts = memoryPortsOf(persistentStore, now);
@@ -130,68 +121,93 @@ const bodyStore = new SQLiteBodyStore(configuredDatabasePath());
 // Bounded autonomy (ADR-0002): the gate, record, budget and stop switch. No activity loop runs in this process.
 const autonomyConfig = configuredAutonomy(process.env, { databasePath: configuredDatabasePath() });
 const ownerTurns = new SQLiteStudyShowing(configuredDatabasePath());
-const haiku = createConfiguredChatModel(process.env, persistentStore), sonnet = configuredSonnet(process.env, { usageStore: persistentStore, now, webSearch: haiku.searchWeb?.bind(haiku) });
+const haiku = createConfiguredChatModel(process.env, persistentStore), sonnet = configuredSonnet(process.env, { usageStore: persistentStore,
+   now, webSearch: haiku.searchWeb?.bind(haiku) });
 const modelModes = createModelModeWiring(process.env, { path: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), haiku, sonnet });
 const minecraft = createMinecraftBodyWiring(process.env, configuredDatabasePath());
 const aetherPorts = configuredAetherPorts(process.env, now); // Aether (Syzygy ADR-0007): unset SHANNON_AETHER_API_URL/_SHANNON_TOKEN, none of it.
 // Syzygy ADR-0008 stage 1 (docs/cognition-ledger-contract.md): the prediction and choice ledgers; each null while switched off.
 const predictionLedger = persistentStore.predictionLedger();
 const choiceLedger = persistentStore.choiceLedger();
-// Syzygy ADR-0008 §14: what a rule stopped, as closed facts (`shannon_withheld_actions`, created here). SHANNON_ADR8_STAGE2=off: none of it.
+// Syzygy ADR-0008 §14: what a rule stopped, as closed facts (`shannon_withheld_actions`, created here).
+// SHANNON_ADR8_STAGE2=off: none of it.
 const withheldActions = configuredWithheldActions(process.env, { databasePath: configuredDatabasePath(), createsSchema: true, log: line => console.log(line) });
 const autonomy = new ShannonAutonomyService({
   store: autonomyStore, config: autonomyConfig, now, ownerFirstActiveAfter: (scopeKey, after) => ownerTurns.ownerFirstActiveAfter(scopeKey, after),
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null, aether: aetherPorts,
-  ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction, at, choiceLedger) } : {}),
+  ...(predictionLedger ? { storyReacted: (scopeKey, pieceId, reaction, at) => storyReacted(predictionLedger, scopeKey, pieceId, reaction,
+     at, choiceLedger) } : {}),
   ...(withheldActions ? { withheld: gateRefusals(withheldActions.withheld, autonomyConfig) } : {}) });
 if (withheldActions) autonomy.tools.observeWithheld(withheldActions.withheld.sink, now);
-// Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created here. SHANNON_SKILLS=off: none of it.
+// Syzygy ADR-0008 stage 2, step 6 (docs/skill-and-routing-contract.md): her skill memory, its tables created
+// here. SHANNON_SKILLS=off: none of it.
 const skillMemory = configuredSkillMemory(process.env, { databasePath: configuredDatabasePath(), createsSchema: true });
 const skills = skillMemory ? skillTurnPorts(skillMemory.memory, scopeKey => persistentStore.snapshot(scopeKey), persistentStore) : null;
-if (skillMemory) autonomy.tools.observeCopyWrites((scopeKey, documentId, write) => noteCopyWrite(skillMemory.memory, scopeKey, documentId, write, now())); // Her copy edits are hers (M2).
-// Step 8: tree recall over her notes, and with the owner alone her skills and her Aether folder. SHANNON_TREE_RECALL=off: recall as it was.
+if (skillMemory) autonomy.tools.observeCopyWrites((scopeKey, documentId, write) => noteCopyWrite(skillMemory.memory, scopeKey, documentId,
+   write, now())); // Her copy edits are hers (M2).
+// Step 8: tree recall over her notes, and with the owner alone her skills and her Aether folder.
+// SHANNON_TREE_RECALL=off: recall as it was.
 const traceSalt = installSalt(configuredDatabasePath()); // The salt of Jev's input digests in the traces (never in the repository).
-const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, skills: skillMemory?.memory ?? null,
-  snapshot: scopeKey => persistentStore.snapshot(scopeKey), aether: { access: aetherPorts.access, covers: scopeKey => scopeKey === aetherPorts.studyScopeKey } });
-// ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): tier inputs, verifier, learning of her choices and skill uses. STAGE2=off: none.
-const turnRouting = configuredTurnRouting(process.env, { databasePath: configuredDatabasePath(), choices: choiceLedger, usageStore: persistentStore, now, sonnet, skills, feedback:stage5.feedback?.ports });
-// Her tool calls in conversations are choices too: stage 1's data only, unless stage 2's conversation reward scores them (owner answer I-3).
+const treeRecall = configuredTreeRecall(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, skills:
+   skillMemory?.memory ?? null,
+  snapshot: scopeKey => persistentStore.snapshot(scopeKey), aether: { access: aetherPorts.access, covers:
+     scopeKey => scopeKey === aetherPorts.studyScopeKey } });
+// ADR-0008 stage 2, step 4 (docs/skill-and-routing-contract.md): tier inputs, verifier, learning of her choices
+// and skill uses. STAGE2=off: none.
+const turnRouting = configuredTurnRouting(process.env, { databasePath: configuredDatabasePath(), choices: choiceLedger, usageStore:
+   persistentStore, now, sonnet, skills, feedback:stage5.feedback?.ports });
+// Her tool calls in conversations are choices too: stage 1's data only, unless stage 2's conversation reward
+// scores them (owner answer I-3).
 if (choiceLedger && !turnRouting?.routing.switches.conversationReward) autonomy.tools.observeChoices(toolCallChoice(choiceLedger), now);
 // Step 7b (SHANNON_REWARD_MOOD): settled choices of hers move her mood once each, here only, within the hourly safeguard.
 const rewardMood = startRewardMood(process.env, { choices: choiceLedger, shadow: persistentStore.predictionShadow(), state: persistentStore }, now);
-// Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no device or tool calls.
+// Her folder's operations (docs/host-folder-contract.md): stale ones are closed and results pruned also when no
+// device or tool calls.
 const stopFolderMaintenance = autonomy.folderOperations.startMaintenance();
 const stopToolTraceSweep = startToolTraceSweep(persistentStore, now);
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
-// The owner's upcoming items (docs/calendar-contract.md): calendar snapshots from the apps, promises, dated Voyager tasks when configured.
-const ownerUpcoming = configuredOwnerUpcoming(process.env, configuredDatabasePath(), { snapshot: scopeKey => persistentStore.snapshot(scopeKey), now, tasks: voyagerCatalog });
+// The owner's upcoming items (docs/calendar-contract.md): calendar snapshots from the apps, promises, dated
+// Voyager tasks when configured.
+const ownerUpcoming = configuredOwnerUpcoming(process.env, configuredDatabasePath(), { snapshot: scopeKey => persistentStore.snapshot(
+  scopeKey), now, tasks: voyagerCatalog });
 const reachOuts = new SQLiteReachOutSpeaker(configuredDatabasePath());
 const reachOutReports = new SQLiteReachOutReports(configuredDatabasePath());
-// Who can hear his apps and which surface says her own messages (docs/private-listening-contract.md). SHANNON_PRIVATE_LISTENING=off refuses it.
+// Who can hear his apps and which surface says her own messages (docs/private-listening-contract.md).
+// SHANNON_PRIVATE_LISTENING=off refuses it.
 const privateListeningRoute = createPrivateListeningRoute(process.env, configuredDatabasePath(), now, {
   reports: reachOutReports, reportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0,
   isBody: (scopeKey, deviceId) => isFullBody(bodyStore.capabilities(scopeKey, deviceId)),
   calls: () => incomingCallRoute?.calls ?? null,
 });
-// A call from her own time rings his iPhone (docs/incoming-call-contract.md); SHANNON_INCOMING_CALLS=off, or no APNs key, rings nothing.
+// A call from her own time rings his iPhone (docs/incoming-call-contract.md); SHANNON_INCOMING_CALLS=off, or no
+// APNs key, rings nothing.
 const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(process.env, configuredDatabasePath(), now, {
   isPaired: (scopeKey, deviceId) => deviceAuth?.listActiveDevicesForScope(scopeKey).some(device => device.deviceId === deviceId) ?? false,
 });
-// What she did on her own to reach the owner (ownOutreach.ts), and which app a device is (ownerCallElsewhere.ts): read-only connections.
+// What she did on her own to reach the owner (ownOutreach.ts), and which app a device is
+// (ownerCallElsewhere.ts): read-only connections.
 const ownOutreach = new SQLiteOwnOutreach(configuredDatabasePath());
 const ownerCallFacts = new SQLiteOwnerCallFacts(configuredDatabasePath());
 const chatModel = withReplySonnet(process.env, modelModes.chatModel, { timeZone: autonomyConfig.timeZone, now, usageStore: persistentStore, haiku });
-const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null); // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
+const voiceDecision = configuredVoiceDecision(process.env, persistentStore, persistentStore.decisionTraces()?.writer ?? null);
+   // ADR-0008: traced; SHANNON_DECISION_TRACES=off: as it was.
 // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
 const notion = configuredNotionSource(process.env, { log: line => console.log(line) });
-minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel: haiku, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) }, memory: memoryPorts?.proposals ?? null, peopleFacts });
-const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel: haiku }); // Read-tool helpers remain auxiliary regardless of primary mode.
-// ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none). docs/mind-workspace-contract.md.
-const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone, log: line => console.log(line),
-  notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks: scopeKey => agentTaskStore.list(scopeKey) } });
-const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,shannonNowOwnerScope(process.env),now,()=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
+minecraft.connect({ stateStore: persistentStore, conversationStore: persistentStore, background: backgroundDispatcher, now, chatModel:
+   haiku, peopleStore: peopleMemoryStore, conversation: { textTurn: input => kernel.textTurn(input) }, memory: memoryPorts?.proposals ?? null, peopleFacts });
+const readTools = readToolPorts(process.env, { notion, voyagerCatalog, upcoming: ownerUpcoming.upcoming, chatModel: haiku });
+   // Read-tool helpers remain auxiliary regardless of primary mode.
+// ADR-0008 stage 3: what every surface perceived, and the notices of promises and tasks (off: none).
+// docs/mind-workspace-contract.md.
+const mind = configuredMind(process.env, { databasePath: configuredDatabasePath(), now, ticking: true, timeZone: autonomyConfig.timeZone,
+   log: line => console.log(line),
+  notices: { ownerScopeKey: shannonNowOwnerScope(process.env), snapshot: scopeKey => persistentStore.snapshot(scopeKey), tasks:
+     scopeKey => agentTaskStore.list(scopeKey) } });
+const externalActions=configuredActionRoutes(mind?.actions ?? null,agentTaskStore,shannonNowOwnerScope(process.env),now,(
+  )=>bodyStore.othersPresent(shannonNowOwnerScope(process.env),now(),BODY_LIMITS.audienceFreshMilliseconds,
+    BODY_LIMITS.audienceEventWindowMilliseconds),async target=>{await fca?.stopActions(target);});
 const aetherContext = process.env.SHANNON_AETHER_CONTEXT_FILE?.trim() ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim()) : undefined;
 const deviceActions = configuredDeviceActions(process.env, configuredDatabasePath(), now, autonomy.tools, ownerUpcoming.upcoming);
 const memoryRecall = createConfiguredTurnMemoryRecall(persistentStore, process.env, undefined, treeRecall);
@@ -233,9 +249,16 @@ const kernel = createLocalApiKernel(now, {
   conversationOrchestration: conversationOrchestrationStore, memoryRecall, ...(innerNote ? { innerNote: innerNote.port } : {}),
   ...(feeling ? { feeling: feeling.port } : {}), autonomy, ...(minecraft.live ? { minecraftLive: minecraft.live } : {}),
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { fcaTouch: () => fca?.touch ?? null, store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),
-    // The owner in a call on another of his apps: the presence field and the 409 for her body. SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
-    ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(scopeKey, deviceId); } catch { return undefined; } },
+  body: { fcaTouch: () => fca?.touch ?? null, store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look:
+     configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env,
+        configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(
+          scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled:
+             autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env,
+                configuredDatabasePath(), persistentStore, persistentStore.predictionShadow(), predictionLedger ? touchLedger(predictionLedger) : null),
+    // The owner in a call on another of his apps: the presence field and the 409 for her body.
+// SHANNON_OWNER_CALL_ELSEWHERE=off switches both off.
+    ownerCalls: { enabled: ownerCallElsewhereEnabled(process.env), surface: (scopeKey, deviceId) => { try { return ownerCallFacts.surface(
+      scopeKey, deviceId); } catch { return undefined; } },
       answered: (scopeKey, since) => { try { return ownerCallFacts.answered(scopeKey, since); } catch { return []; } } }, game: minecraft.game },
   notion, minecraftRequests: deviceActions.reports(), // Reminders, timers, events and music (docs/device-actions-contract.md).
   // Syzygy ADR-0008 stage 2 (docs/skill-and-routing-contract.md): the turn's Jev call. SHANNON_ADR8_STAGE2=off: none of it.
@@ -243,12 +266,23 @@ const kernel = createLocalApiKernel(now, {
   ...(readTools ? { readTools } : {}), ...(turnRouting ? { turnRouting: turnRouting.routing } : {}), ...(skills ? { skills } : {}),
   ...(mind ? { mind: mind.mind } : {}), operationOutcomes: operationOutcomes.read,
 });
-stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
-const listening = configuredListening(process.env, configuredDatabasePath()), bodyRunning = () => (fca?.minecraft?.voice?.state().running ?? null) !== null, addressed = configuredAddressedVoice(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt, bodyRunning }), platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: () => fca?.minecraft?.voice ?? null, listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge), serveListen = configuredListenRoute(listening, addressed.judge, bodyRunning);
+stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),
+  presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
+const listening = configuredListening(process.env, configuredDatabasePath()), bodyRunning = () => (fca?.minecraft?.voice?.state(
+  ).running ?? null) !== null, addressed = configuredAddressedVoice(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null,
+     salt: traceSalt, bodyRunning }), platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore,
+        backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (
+          turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: (
+            ) => fca?.minecraft?.voice ?? null, listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge), serveListen =
+               configuredListenRoute(listening, addressed.judge, bodyRunning);
 // The mini Shannon's pictures (owner 2026-10-28): `/v1/mini/*` for the residents.
-const miniPoses = configuredMiniPoses(process.env, { databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env), trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt });
-// What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision, integrations as booleans. Owner only.
-const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation: voiceTranscriber, vision: voiceVisionGateway, voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled, preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
+const miniPoses = configuredMiniPoses(process.env, { databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
+   trace: persistentStore.decisionTraces()?.writer ?? null, salt: traceSalt });
+// What this server resolved (docs/ops-contract.md, `server`): model names, persona hash, tools, revision,
+// integrations as booleans. Owner only.
+const selfDiagnosis = createServerSelfDiagnosis({ environment: process.env, startedAt: now(), chatModel, voiceDecision, dictation:
+   voiceTranscriber, vision: voiceVisionGateway, voyagerCatalog, notion, platformBridge, autonomy: { enabled: autonomyConfig.enabled,
+      preferences: scopeKey => autonomyStore.modelPreferences(scopeKey) } });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
 const authMode = configuredAuthMode(host);
@@ -280,17 +314,41 @@ const moodHistoryReader = new SQLiteMoodHistoryReader(configuredDatabasePath());
 const moodHistoryRoute = createMoodHistoryRoute({
   reader: moodHistoryReader, now, enabled: () => moodHistoryEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
-// Her value table for the owner (docs/cognition-ledger-contract.md): view, rollback and resume, each control in the activity record.
-const skillImporter = configuredSkillImporter(skillMemory?.memory ?? null, { ownerScopeKey: shannonNowOwnerScope(process.env), state: persistentStore, conversations: persistentStore });
-const skillsRoute = createSkillsRoute({ importer: skillImporter, pack: standardSkillPack, memory: skillMemory?.memory ?? null, record: ownerSkillRecorder(autonomyStore.activity, autonomyConfig), now, ownerScopeKey: shannonNowOwnerScope(process.env) });
+// Her value table for the owner (docs/cognition-ledger-contract.md): view, rollback and resume, each control in
+// the activity record.
+const skillImporter = configuredSkillImporter(skillMemory?.memory ?? null, { ownerScopeKey: shannonNowOwnerScope(process.env), state:
+   persistentStore, conversations: persistentStore });
+const skillsRoute = createSkillsRoute({ importer: skillImporter, pack: standardSkillPack, memory: skillMemory?.memory ?? null, record:
+   ownerSkillRecorder(autonomyStore.activity, autonomyConfig), now, ownerScopeKey: shannonNowOwnerScope(process.env) });
 const valuesRoute = createValuesRoute({
-  values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey: shannonNowOwnerScope(process.env),
+  values: persistentStore.valueVersions(), calibration: scopeKey => predictionLedger?.calibration(scopeKey) ?? null, now, ownerScopeKey:
+     shannonNowOwnerScope(process.env),
   choices: scopeKey => choiceLedger?.store.counts(scopeKey) ?? {}, record: ownerValueRecorder(autonomyStore.activity, autonomyConfig),
 });
-const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now, freshWorld: { policy: opsStore.worldPolicy, activity: autonomyStore.activity, config: autonomyConfig, bodyTasksOpen: () => fca?.minecraftTasksOpen() ?? null },...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
+const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now,
+   freshWorld: { policy: opsStore.worldPolicy, activity: autonomyStore.activity, config: autonomyConfig, bodyTasksOpen: (
+     ) => fca?.minecraftTasksOpen() ?? null },...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? {
+        commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: (
+          ) => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(
+            executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });
 if (lifecycle) minecraft.connectLifecycle(lifecycle.service);
 const operatorSkillImport = { importer: skillImporter, pack: standardSkillPack, memory: skillMemory?.memory ?? null, now }; // opsCli skills import
-const fca = configuredServerFca(process.env, { live: minecraft.live ?? undefined, minecraftFeelings: configuredMinecraftFeelings(process.env, { state: persistentStore, usageStore: persistentStore }), ownTime: { store: autonomyStore, config: autonomyConfig }, sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), skills: skillMemory?.memory ?? null, ...(skills ? { skillOpen: skills.open } : {}), operator: { lifecycle, actions: mind?.actions ?? null, activity: autonomyStore.activity, config: autonomyConfig, conversation: persistentStore, skillImport: operatorSkillImport }, ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall, state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces()?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming: ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: () => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope, host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id, revision) => skills?.readSource?.(scope, id, revision) ?? null, skillChecks: (scope, renew) => skills?.readSourceChecks?.(scope, renew) ?? null } }); if (fca?.minecraft) minecraft.connectControl(fca.minecraft);
+const fca = configuredServerFca(process.env, { live: minecraft.live ?? undefined, minecraftFeelings: configuredMinecraftFeelings(
+  process.env, { state: persistentStore, usageStore: persistentStore }), ownTime: { store: autonomyStore, config: autonomyConfig },
+     sleepStore: persistentStore, minecraftLifecycle: lifecycle?.service, minecraftConfiguration: minecraft.configuration, touchAllowed: (
+       scope, device, gesture) => kernel.touchReflexAllowed(scope, device, gesture), path: configuredDatabasePath(), skills:
+          skillMemory?.memory ?? null, ...(skills ? { skillOpen: skills.open } : {}), operator: { lifecycle, actions: mind?.actions ?? null,
+             activity: autonomyStore.activity, config: autonomyConfig, conversation: persistentStore, skillImport: operatorSkillImport },
+                ownerScope: shannonNowOwnerScope(process.env), ownerAlone: () => kernel.ownerAloneForFeedback(shannonNowOwnerScope(
+                  process.env)), usage: persistentStore, affect: persistentStore, memory: memoryPorts?.proposals, enrich: memoryRecall,
+                     state: persistentStore, conversations: persistentStore, tools: autonomy.tools, trace: persistentStore.decisionTraces(
+                       )?.writer ?? null, traceSalt, readSources: { aetherContext, study: autonomyStore.study, upcoming:
+                          ownerUpcoming.upcoming, aetherAvailable: () => Boolean(aetherPorts.access), notionAvailable: (
+                            ) => notion.connected, voyagerAvailable: () => Boolean(voyagerCatalog.upcomingTasks), folderAvailable: (_scope,
+                               host) => autonomy.folderOperations.boundHosts().includes(host), skill: (scope, id,
+                                  revision) => skills?.readSource?.(scope, id, revision) ?? null, skillChecks: (scope,
+                                     renew) => skills?.readSourceChecks?.(scope, renew) ?? null } }); if (
+                                       fca?.minecraft) minecraft.connectControl(fca.minecraft);
 minecraft.startLive({ model: haiku, innerNote: innerNote?.port, feeling: feeling?.port, store: persistentStore, bridge: platformBridge?.configuration });
 // The YouTube stream's place (docs/stream-contract.md): no switch; nothing runs until a stream is started from the desktop.
 const stream = configuredStream({ scopeKey: shannonNowOwnerScope(process.env), now: () => Date.now(), feeling: feeling?.port ?? null,
@@ -306,162 +364,16 @@ const handleVoiceTranscription = createVoiceTranscriptionRoute({ transcriber: vo
 const geminiSpeechRoute = createGeminiSpeechRoute(process.env, persistentStore, (deviceId) => voiceAllowances.consumeSpeech(deviceId));
 const geminiLiveRoute = createGeminiLiveRoute(process.env, kernel, (deviceId) => voiceAllowances.consumeControl(deviceId));
 const liveVoiceStreamRoute = createLiveVoiceStreamRoute(kernel, (deviceId) => voiceAllowances.consumeControl(deviceId));
-const server = createServer(async (request, response) => {
-  try {
-    if (request.method !== 'GET' && request.method !== 'POST' && request.method !== 'PUT' && request.method !== 'DELETE') {
-      sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-      return;
-    }
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (signalObserver.asset(request,response,url.pathname)) return;
-    const calendarDelete = request.method === 'DELETE';
-    if ((calendarDelete && url.pathname !== CALENDAR_UPCOMING_PATH)
-      || (request.method === 'PUT' && url.pathname !== BODY_CAPABILITIES_PATH && url.pathname !== CALENDAR_UPCOMING_PATH && url.pathname !== MODEL_MODE_PATH)) {
-      sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-      return;
-    }
-    if (url.pathname === '/v1/pair') {
-      await pairingRoute(request, response);
-      return;
-    }
-    if (url.pathname.startsWith('/v1/agent/host/')) {
-      const hostToken = process.env.SHANNON_AGENT_HOST_TOKEN?.trim();
-      if (!hostToken || hostToken.length < 32) {
-        sendJson(response, 503, { error: 'AGENT_HOST_NOT_CONFIGURED' });
-        return;
-      }
-      if (!bearerAuthorized(request.headers.authorization, hostToken)) {
-        sendJson(response, 401, { error: 'AGENT_HOST_UNAUTHORIZED' });
-        return;
-      }
-      const hostBody = request.method === 'POST' ? await readJson(request, 256 * 1024) : undefined;
-      const hostRequest=await externalActions.filterHostEvents({method:request.method,path:url.pathname,query:url.searchParams,body:hostBody});
-      const result=await externalActions.beforeHost(hostRequest) ?? await kernel.dispatch(hostRequest);
-      await externalActions.afterHost(hostRequest,result);
-      await stage5.afterHost();
-      sendJson(response, result.status, result.body);
-      return;
-    }
-    if (isOpsPath(url.pathname)) {
-      if (!minecraft.refusesConsole(request, response, deviceAuth)) await opsRoute(url.pathname, request, response, url.searchParams); // Never her Minecraft body's token.
-      return;
-    }
-    if (isPlatformBridgePath(url.pathname)) {
-      await handlePlatformBridgeRequest(url.pathname, request, response, platformBridge);
-      return;
-    }
-    const principal = deviceAuth ? deviceAuth.authenticate(request.headers.authorization) : null;
-    const authorized = authMode === 'paired'
-      ? principal !== null
-      : bearerAuthorized(request.headers.authorization, apiToken);
-    if (!authorized) {
-      sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
-      return;
-    }
-    if(url.pathname.startsWith('/v1/observer/')){await signalObserver.route(request,response,url.pathname,principal,url);return;}
-    if (await minecraft.serve(request, response, url.pathname, principal)) return; // Her Minecraft body's token reaches its own routes only.
-    if (await stream.serve(request, response, principal, url)) return; // The stream's console and her mouth (the owner's paired device).
-    if (await serveFcaTaskRoute(fca, request, response, principal, url)) return;
-    if (url.pathname === MODEL_MODE_PATH) { await modelModes.route(request, response, principal); return; }
-    if (isActionThreadPath(url.pathname)) { await externalActions.route(request,response,principal,url.pathname); return; }
-    if (url.pathname === SHANNON_NOW_PATH) {
-      shannonNowRoute(request, response, principal);
-      return;
-    }
-    if (url.pathname === MOOD_HISTORY_PATH) {
-      moodHistoryRoute(request, response, principal);
-      return;
-    }
-    if (isValuesPath(url.pathname)) {
-      await valuesRoute(request, response, principal, url.pathname);
-      return;
-    }
-    if (isSkillsPath(url.pathname)) { await skillsRoute(request, response, principal, url.pathname); return; }
-    if (await deviceActions.serve(request, response, principal, url) || innerNote?.serve(request, response, principal, url)
-      || await addressed.serve(request, response, principal, url) || await serveListen(request, response, principal, url)
-      || await miniPoses.serve(request, response, principal, url)) return;
-    if (await stage5.serve(request,response,principal,url)) return;
-    if (handleRetiredVoiceRoute(url.pathname,response)) return;
-    if (url.pathname === '/v1/voice/transcriptions') {
-      await handleVoiceTranscription(request, response, principal);
-      return;
-    }
-    if (url.pathname === '/v1/voice/gemini/speech' ||
-        url.pathname === '/v1/voice/gemini/speech/stream' ||
-        url.pathname === '/v1/voice/speech/stream') {
-      await signalObserver.speech(principal,()=>geminiSpeechRoute(request,response,principal,url.pathname.endsWith('/stream')?'stream':'unary'),request.headers['x-shannon-observer-run']);
-      return;
-    }
-    if (url.pathname === '/v1/voice/gemini/cascade/sessions') {
-      await geminiLiveRoute(request, response, principal);
-      return;
-    }
-    if (url.pathname === '/v1/voice/gemini/cascade/delegations/stream') {
-      await liveVoiceStreamRoute(request, response, principal);
-      return;
-    }
-    if (url.pathname === '/v1/voice/vision/snapshots') {
-      await handleVoiceVisionSnapshot(request, response, principal, { gateway: voiceVisionGateway, kernel });
-      return;
-    }
-    const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? hostStepRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
-    const query = new URLSearchParams(url.searchParams);
-    if (principal) query.set('scopeKey', principal.scopeKey);
-    const deviceId = principal ? requestDeviceId(principal.deviceId, request.headers['x-shannon-body'], request.method, url.pathname, () => mayHaveDesktopBody({ isGame: minecraft.isGameDevice(principal), registration: () => bodyStore.capabilities(principal.scopeKey, principal.deviceId), appSurface: () => ownerCallFacts.surface(principal.scopeKey, principal.deviceId) })) : undefined; // Her desktop body in an app speaks for a device of its own (desktopBodyIdentity.ts).
-    if (principal && deviceId !== principal.deviceId) response.setHeader('x-shannon-body', 'desktop'); // Says to the app that its body was heard as one.
-    if (url.pathname === '/v1/devices') {
-      handleDeviceManagement(request, response, body, principal, { deviceAuth, pushStore, revoked: deviceId => incomingCallRoute?.invalidateDevice(deviceId) });
-      return;
-    }
-    if (url.pathname === '/v1/push/register') {
-      handlePushRegistration(request, response, body, principal, { deviceAuth, pushStore });
-      return;
-    }
-    if (privateListeningRoute.handle(request, response, url, body, principal)) return;
-    if (incomingCallRoute?.handle(request, response, url, body, principal)) return;
-    const isPairedChat = principal !== null && url.pathname === '/v1/chat';
-    if (isPairedChat && !consumeDeviceAllowance(deviceUsage, principal.deviceId, 20)) {
-      sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
-      return;
-    }
-    if (isPairedChat && activeChats >= 2) { sendJson(response, 429, { error: 'BUSY', message: 'いま少し混み合っています。' }); return; }
-    // The body polls presence and reports touches; this keeps one device from flooding either.
-    if (deviceId && isBodyRoute(url.pathname) && !consumeDeviceAllowance(bodyUsage, deviceId, 120)) {
-      sendJson(response, 429, { error: 'RATE_LIMITED', message: 'Too many body requests; retry after a minute.' });
-      return;
-    }
-    if (isPairedChat) activeChats += 1;
-    try {
-      const result = await dispatchWithChatSentences(kernel, response, {
-        method: request.method,
-        path: url.pathname,
-        query,
-        body: principal ? bindScope(body, principal.scopeKey) : body,
-        ...(deviceId ? { deviceId } : {}),
-        // A held long-poll claim of her folder's device ends when the device goes away, so no step is handed to nobody.
-        ...(url.pathname === HOST_STEP_CLAIM_PATH ? { signal: closedSignal(response) } : {}),
-      });
-      const forBody = result && principal && deviceId && request.method === 'GET' && url.pathname === '/v1/initiatives'; // Her body is not handed a message an app says through his earphones.
-      if (result) sendJson(response, result.status, forBody ? privateListeningRoute.reachOuts.bodyInitiatives(principal.scopeKey, deviceId, result.body) : result.body);
-    } finally {
-      if (isPairedChat) activeChats -= 1;
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message === 'request body too large') {
-      sendJson(response, 413, { error: 'REQUEST_TOO_LARGE', message: 'リクエストが大きすぎます。' });
-      return;
-    }
-    if (error instanceof SyntaxError) {
-      sendJson(response, 400, { error: 'INVALID_REQUEST', message: error.message });
-      return;
-    }
-    console.error('Shannon request failed', failureTrail(error));
-    sendJson(response, 502, {
-      error: 'MODEL_UNAVAILABLE',
-      message: 'Shannonの言語モデルに接続できませんでした。',
-    });
-  }
-});
+const server = createServer(createApiRequestHandler({
+  pushStore, stage5, voiceVisionGateway, bodyStore, modelModes,
+  minecraft, reachOuts, privateListeningRoute, incomingCallRoute, ownerCallFacts,
+  externalActions, deviceActions, innerNote, kernel, addressed,
+  platformBridge, serveListen, miniPoses, authMode, apiToken,
+  deviceAuth, pairingRoute, signalObserver, opsRoute, shannonNowRoute,
+  moodHistoryRoute, skillsRoute, valuesRoute, fca, stream,
+  deviceUsage, bodyUsage, get activeChats() { return activeChats; }, set activeChats(value) { activeChats = value; }, handleVoiceTranscription, geminiSpeechRoute,
+  geminiLiveRoute, liveVoiceStreamRoute
+}));
 server.requestTimeout = 30_000;
 server.headersTimeout = 15_000;
 server.setTimeout(120_000);
@@ -478,10 +390,14 @@ function shutdown(): void {
   shuttingDown = true;
   server.close(async () => {
     await fca?.close();
-    signalObserver?.close(); deviceAuth?.close();
-    pushStore.close(); worldStore.close(); initiativeStore.close();
+    signalObserver?.close();
+      deviceAuth?.close();
+    pushStore.close();
+      worldStore.close();
+      initiativeStore.close();
     stage5.close();
-    testFlightDeliveryStore.close(); dailyMindStore.close();
+    testFlightDeliveryStore.close();
+      dailyMindStore.close();
     organizeStore.close();
     turnRouting?.close();
     mind?.close();
@@ -492,21 +408,77 @@ function shutdown(): void {
     peopleMemoryStore.close();
     stopFolderMaintenance();
     stopToolTraceSweep();
-    rewardMood.stop(); autonomyAnnouncer.close();
+    rewardMood.stop();
+      autonomyAnnouncer.close();
     bodyStore.close();
-    operationOutcomes.close(); await lifecycle?.close(); minecraft.close(); stream.stop(); platformBridge?.close?.(); // Telling closes before the lifecycle.
-    reachOuts.close(); reachOutReports.close();
-    privateListeningRoute.close(); incomingCallRoute?.close();
+    operationOutcomes.close();
+      await lifecycle?.close();
+      minecraft.close();
+      stream.stop();
+      platformBridge?.close?.(); // Telling closes before the lifecycle.
+    reachOuts.close();
+      reachOutReports.close();
+    privateListeningRoute.close();
+      incomingCallRoute?.close();
     ownerTurns.close();
     ownerUpcoming.close();
-    closeBodyLookStores(); closeBodyReactionStores(); await innerNote?.close(); feeling?.close(); closeReplySonnet();
+    closeBodyLookStores();
+      closeBodyReactionStores();
+      await innerNote?.close();
+      feeling?.close();
+      closeReplySonnet();
     opsStore.close();
-    shannonNowReader.close(); moodHistoryReader.close(); opsServer.close();
-    ownOutreach.close(); ownerCallFacts.close(); deviceActions.close();
-    autonomyStore.close(); modelModes.close();
+    shannonNowReader.close();
+      moodHistoryReader.close();
+      opsServer.close();
+    ownOutreach.close();
+      ownerCallFacts.close();
+      deviceActions.close();
+    autonomyStore.close();
+      modelModes.close();
     persistentStore.close();
     process.exitCode = 0;
   });
 }
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
+
+export type ApiRequestPorts = {
+  pushStore: typeof pushStore;
+  stage5: typeof stage5;
+  voiceVisionGateway: typeof voiceVisionGateway;
+  bodyStore: typeof bodyStore;
+  modelModes: typeof modelModes;
+  minecraft: typeof minecraft;
+  reachOuts: typeof reachOuts;
+  privateListeningRoute: typeof privateListeningRoute;
+  incomingCallRoute: typeof incomingCallRoute;
+  ownerCallFacts: typeof ownerCallFacts;
+  externalActions: typeof externalActions;
+  deviceActions: typeof deviceActions;
+  innerNote: typeof innerNote;
+  kernel: typeof kernel;
+  addressed: typeof addressed;
+  platformBridge: typeof platformBridge;
+  serveListen: typeof serveListen;
+  miniPoses: typeof miniPoses;
+  authMode: typeof authMode;
+  apiToken: typeof apiToken;
+  deviceAuth: typeof deviceAuth;
+  pairingRoute: typeof pairingRoute;
+  signalObserver: typeof signalObserver;
+  opsRoute: typeof opsRoute;
+  shannonNowRoute: typeof shannonNowRoute;
+  moodHistoryRoute: typeof moodHistoryRoute;
+  skillsRoute: typeof skillsRoute;
+  valuesRoute: typeof valuesRoute;
+  fca: typeof fca;
+  stream: typeof stream;
+  deviceUsage: typeof deviceUsage;
+  bodyUsage: typeof bodyUsage;
+  activeChats: typeof activeChats;
+  handleVoiceTranscription: typeof handleVoiceTranscription;
+  geminiSpeechRoute: typeof geminiSpeechRoute;
+  geminiLiveRoute: typeof geminiLiveRoute;
+  liveVoiceStreamRoute: typeof liveVoiceStreamRoute;
+};

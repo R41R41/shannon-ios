@@ -49,8 +49,10 @@ export function createOperatorLifecycle(parts: {
   freshWorld?: FreshWorldAdmission;
   /**
    * Whether the body is held only by steps whose outcome was lost, with the body itself out of the server (mb-r20): then a start,
-   * login, logout or stop goes on without the body resource, since it is the way to bring the body back for the re-check that frees
-   * it (`minecraftLifecycleWiring.ts` answers from the lease records and the operator's own state). Absent: the body is taken as before.
+   * login, logout or stop goes on without the body resource, since it is the way to bring the body back for the
+ * re-check that frees
+   * it (`minecraftLifecycleWiring.ts` answers from the lease records and the operator's own state). Absent: the
+ * body is taken as before.
    */
   onlyLostSteps?(serverId: string, ownActionId: string): boolean;
   log?(line: string): void;
@@ -75,7 +77,8 @@ export function createOperatorLifecycle(parts: {
     },
     async execute(request: { id: string; serverId: string; action: MinecraftLifecycleAction; keepWorld?: boolean },
       settled: (settlement: LifecycleSettlement) => void): Promise<OperatorLifecycleAdmission> {
-      if (!OPERATOR_LIFECYCLE_SOURCE.test(request.id) || !parts.serverIds.includes(request.serverId)) return refused('invalid_input', '登録されたサーバーではありません。');
+      const invalidLifecycleTarget = () => (!OPERATOR_LIFECYCLE_SOURCE.test(request.id) || !parts.serverIds.includes(request.serverId));
+      if (invalidLifecycleTarget()) return refused('invalid_input', '登録されたサーバーではありません。');
       if (!parts.runner || !parts.service.available(parts.scopeKey)) return refused('lifecycle_unavailable', 'マイクラ管理の新しい状態が届いていません。');
       if (request.action === 'set_day' && !parts.ownerAlone()) return refused('owner_not_alone', '時刻の変更はライ氏と二人の時だけ行います。');
       if (request.action === 'set_day') {

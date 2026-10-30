@@ -1,4 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
+import { openDatabase } from '../../../infra/sqlite/sqliteOpen.js';
+import { ensureBodyLookSchema } from '../../../infra/sqlite/migrations/bodyLookSchema.js';
 import type { BodyLookCode, BodyLookSource } from '../../../contracts/bodyLookContract.js';
 import { secureDatabaseFiles } from '../../../infra/sqlite/sqliteStoreContext.js';
 
@@ -48,51 +50,22 @@ export class SQLiteBodyLookStore {
   private readonly database: DatabaseSync;
 
   constructor(path: string) {
-    this.database = new DatabaseSync(path);
-    this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS body_looks (
-        look_id TEXT PRIMARY KEY,
-        scope_key TEXT NOT NULL,
-        device_id TEXT NOT NULL,
-        thread_id TEXT NOT NULL,
-        requested_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        day_key TEXT NOT NULL,
-        owner_asked INTEGER NOT NULL DEFAULT 0 CHECK (owner_asked IN (0, 1)),
-        outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'seeing', 'seen', 'refused', 'discarded', 'expired', 'failed')),
-        code TEXT,
-        frame_received_at TEXT,
-        completed_at TEXT,
-        source TEXT NOT NULL DEFAULT 'camera' CHECK (source IN ('camera', 'screen'))
-      );
-      CREATE INDEX IF NOT EXISTS body_looks_scope_time ON body_looks (scope_key, requested_at DESC);
-      CREATE INDEX IF NOT EXISTS body_looks_scope_day ON body_looks (scope_key, day_key);
-    `);
-    // A table made before looks had a source gets the column (the API and the activity loop both open this table).
-    const columns = this.database.prepare("PRAGMA table_info('body_looks')").all() as unknown as Array<{ name: string }>;
-    if (!columns.some(column => column.name === 'source')) {
-      try {
-        this.database.exec("ALTER TABLE body_looks ADD COLUMN source TEXT NOT NULL DEFAULT 'camera' CHECK (source IN ('camera', 'screen'))");
-      } catch (error) {
-        // The other process added it first.
-        const again = this.database.prepare("PRAGMA table_info('body_looks')").all() as unknown as Array<{ name: string }>;
-        if (!again.some(column => column.name === 'source')) throw error;
-      }
-    }
+    this.database = openDatabase(path, 'bodyLooks');
+    ensureBodyLookSchema(this.database);
     secureDatabaseFiles(path);
   }
 
   /** Opens a look unless one is already open for the scope. Returns whether it was opened. */
-  open(look: Pick<StoredBodyLook, 'id' | 'scopeKey' | 'deviceId' | 'threadId' | 'requestedAt' | 'expiresAt' | 'ownerAsked'> & { source?: BodyLookSource }, dayKey: string): boolean {
+  open(look: Pick<StoredBodyLook, 'id' | 'scopeKey' | 'deviceId' | 'threadId' | 'requestedAt' | 'expiresAt' | 'ownerAsked'> & { source?:
+     BodyLookSource }, dayKey: string): boolean {
     this.database.exec('BEGIN IMMEDIATE');
     try {
-      const busy = this.database.prepare(`SELECT 1 AS found FROM body_looks WHERE scope_key = ? AND outcome IN ('pending', 'seeing') LIMIT 1`).get(look.scopeKey);
+      const busy = this.database.prepare(
+        `SELECT 1 AS found FROM body_looks WHERE scope_key = ? AND outcome IN ('pending', 'seeing') LIMIT 1`).get(look.scopeKey);
       if (!busy) {
-        this.database.prepare(`
-          INSERT INTO body_looks (look_id, scope_key, device_id, thread_id, requested_at, expires_at, day_key, owner_asked, outcome, source)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-        `).run(look.id, look.scopeKey, look.deviceId, look.threadId, look.requestedAt, look.expiresAt, dayKey, look.ownerAsked ? 1 : 0, look.source ?? 'camera');
+        this.database.prepare(("\n          INSERT INTO body_looks (look_id, scope_key, device_id, thread_id, requested_at, expires_at, " +
+"day_key, owner_asked, outcome, source)\n          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)\n        ")).run(look.id, look.scopeKey,
+   look.deviceId, look.threadId, look.requestedAt, look.expiresAt, dayKey, look.ownerAsked ? 1 : 0, look.source ?? 'camera');
       }
       this.database.exec('COMMIT');
       return !busy;
@@ -118,30 +91,25 @@ export class SQLiteBodyLookStore {
    * Moves a look from one state to the next, once. Returns false when it was no longer in
    * `from`, which is how a repeated answer loses to the first one.
    */
-  advance(scopeKey: string, id: string, from: BodyLookOutcome, to: BodyLookOutcome, at: string, change: { code?: BodyLookCode; frameReceived?: boolean } = {}): boolean {
+  advance(scopeKey: string, id: string, from: BodyLookOutcome, to: BodyLookOutcome, at: string, change: { code?: BodyLookCode;
+     frameReceived?: boolean } = {}): boolean {
     const finished = to !== 'seeing';
-    const result = this.database.prepare(`
-      UPDATE body_looks SET outcome = ?, code = COALESCE(?, code),
-        frame_received_at = COALESCE(frame_received_at, ?), completed_at = COALESCE(completed_at, ?)
-      WHERE scope_key = ? AND look_id = ? AND outcome = ?
-    `).run(to, change.code ?? null, change.frameReceived ? at : null, finished ? at : null, scopeKey, id, from);
+    const result = this.database.prepare(("\n      UPDATE body_looks SET outcome = ?, code = COALESCE(?, code),\n        frame_received_at = " +
+"COALESCE(frame_received_at, ?), completed_at = COALESCE(completed_at, ?)\n      WHERE scope_key = ? AND " +
+"look_id = ? AND outcome = ?\n    ")).run(to, change.code ?? null, change.frameReceived ? at : null, finished ? at : null, scopeKey, id, from);
     return Number(result.changes) > 0;
   }
 
   /** Looks that used the camera (a frame arrived) or may still use it (waiting), since an instant. */
   usedSince(scopeKey: string, since: string): number {
-    const row = this.database.prepare(`
-      SELECT COUNT(*) AS count FROM body_looks
-      WHERE scope_key = ? AND requested_at >= ? AND (frame_received_at IS NOT NULL OR outcome IN ('pending', 'seeing'))
-    `).get(scopeKey, since) as unknown as { count: number };
+    const row = this.database.prepare(("\n      SELECT COUNT(*) AS count FROM body_looks\n      WHERE scope_key = ? AND requested_at >= ? AND " +
+"(frame_received_at IS NOT NULL OR outcome IN ('pending', 'seeing'))\n    ")).get(scopeKey, since) as unknown as { count: number };
     return Number(row.count);
   }
 
   usedOnDay(scopeKey: string, dayKey: string): number {
-    const row = this.database.prepare(`
-      SELECT COUNT(*) AS count FROM body_looks
-      WHERE scope_key = ? AND day_key = ? AND (frame_received_at IS NOT NULL OR outcome IN ('pending', 'seeing'))
-    `).get(scopeKey, dayKey) as unknown as { count: number };
+    const row = this.database.prepare(("\n      SELECT COUNT(*) AS count FROM body_looks\n      WHERE scope_key = ? AND day_key = ? AND " +
+"(frame_received_at IS NOT NULL OR outcome IN ('pending', 'seeing'))\n    ")).get(scopeKey, dayKey) as unknown as { count: number };
     return Number(row.count);
   }
 

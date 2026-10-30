@@ -53,65 +53,96 @@ export const MINI_SEED_SPECS: readonly (MiniPoseSpec & { id: string })[] = Objec
     description: 'falling with arms and legs flailing, hair streaming upward, a startled face' },
   { id: 'seed_carried', contact: 'air', expression: 'embarrassed', activity: 'carried', variants: 'face', label: 'つままれる',
     // Not "held by the collar": that wording was refused by the image model's moderation (2026-10-28).
-    description: 'lifted gently into the air, floating with both arms spread out for balance and legs dangling, a flustered surprised pout' },
+    description: ("lifted gently into the air, floating with both arms spread out for balance and legs dangling, a flustered " +
+"surprised pout") },
   // Held by the owner's cursor: the hold is the anchor, so she hangs from wherever she was picked up. "Do not draw the hand": the
   // cursor is the hand. Gentle wording: "held by the collar like a kitten" was refused by the image model's moderation.
   ...([
-    ['arm', 'held up by one wrist so she dangles below her raised arm, her other arm and both legs hanging down, her long hair hanging straight down, a flustered pout', 'ぶら下げ・腕'],
-    ['leg', 'held up upside down by one ankle so she dangles head down below her raised leg, both hands holding her skirt in place, her long hair hanging straight down toward the ground, an embarrassed angry face', 'ぶら下げ・脚'],
-    ['head', 'held up by the top of her head so she dangles straight down below it, arms and legs limp, her long hair hanging down, a sulky face', 'ぶら下げ・頭'],
-    ['scruff', 'held up by the back of her blouse at the nape so she dangles below it like a lifted cat, arms and legs limp, her long hair hanging down, a resigned pout', 'ぶら下げ・首根っこ'],
-    ['torso', 'held up around her middle so her upper body droops forward on one side and her legs dangle on the other, arms and long hair hanging down, a surprised face', 'ぶら下げ・胴'],
-  ] as const).map(([grip, description, label]) => ({ id: `seed_carried_${grip}`, contact: 'air' as const, expression: 'embarrassed', activity: 'carried' as const,
+    ['arm', ("held up by one wrist so she dangles below her raised arm, her other arm and both legs hanging down, her " +
+"long hair hanging straight down, a flustered pout"), 'ぶら下げ・腕'],
+    ['leg', ("held up upside down by one ankle so she dangles head down below her raised leg, both hands holding her " +
+"skirt in place, her long hair hanging straight down toward the ground, an embarrassed angry face"), 'ぶら下げ・脚'],
+    ['head', ("held up by the top of her head so she dangles straight down below it, arms and legs limp, her long hair " +
+"hanging down, a sulky face"), 'ぶら下げ・頭'],
+    ['scruff', ("held up by the back of her blouse at the nape so she dangles below it like a lifted cat, arms and legs " +
+"limp, her long hair hanging down, a resigned pout"), 'ぶら下げ・首根っこ'],
+    ['torso', ("held up around her middle so her upper body droops forward on one side and her legs dangle on the other, " +
+"arms and long hair hanging down, a surprised face"), 'ぶら下げ・胴'],
+  ] as const).map(([grip, description, label]) => ({ id: `seed_carried_${grip}`, contact: 'air' as const, expression: 'embarrassed',
+     activity: 'carried' as const,
     variants: 'face' as const, grip, label, description: `${description}; do not draw any hand holding her` })),
   // Watching the window she is on, her back to the viewer (owner 2026-10-28: 「後ろを向いて画面の表示を見てる仕草」). Sitting, her legs
   // hang down the far side of the edge, out of sight.
   { id: 'seed_watch_stand', contact: 'stand', expression: 'curious', activity: 'watch', variants: 'still', label: '画面を見る・立つ',
-    description: 'seen from BEHIND, her back to the viewer: standing on the edge, hands clasped behind her back, head tilted down as she looks at the window below her as if reading its screen, her long hair down her back' },
+    description: ("seen from BEHIND, her back to the viewer: standing on the edge, hands clasped behind her back, head " +
+"tilted down as she looks at the window below her as if reading its screen, her long hair down her back") },
   { id: 'seed_watch_sit', contact: 'sit', expression: 'curious', activity: 'watch', variants: 'still', label: '画面を見る・座る',
-    description: 'seen from BEHIND, her back to the viewer: sitting on the edge facing away, leaning forward with her hands on the edge, looking down at the window below as if watching its screen, her long hair down her back, her legs on the far side out of sight' },
+    description: ("seen from BEHIND, her back to the viewer: sitting on the edge facing away, leaning forward with her hands " +
+"on the edge, looking down at the window below as if watching its screen, her long hair down her back, her " +
+"legs on the far side out of sight") },
   // What she does for what is on the owner's screen and for her own moves (owner 2026-10-28: 「提案してくれた動きや反応を実装して」).
   { id: 'seed_climb', contact: 'wall', expression: 'determined', activity: 'climb', variants: 'still', label: '登る',
     description: 'climbing up energetically, one hand reaching higher, one knee raised, a determined little smile' },
   { id: 'seed_peek', contact: 'stand', expression: 'curious', activity: 'peek', variants: 'face', label: '覗く',
-    description: 'leaning her upper body far to the left as if peeking around a corner, one hand raised by her face, her long hair hanging sideways, a curious mischievous look' },
+    description: ("leaning her upper body far to the left as if peeking around a corner, one hand raised by her face, her " +
+"long hair hanging sideways, a curious mischievous look") },
   { id: 'seed_dizzy', contact: 'stand', expression: 'confused', activity: 'dizzy', variants: 'still', label: '目を回す',
     description: 'dizzy and wobbling, swirly spiral eyes, both hands on her head, knees bent and unsteady' },
   { id: 'seed_type', contact: 'sit', expression: 'determined', activity: 'type', variants: 'face', label: 'タイピング',
-    description: 'typing fast on a tiny laptop resting on her lap, focused eyes on its screen, little motion lines by her fingers' },
+    description: ("typing fast on a tiny laptop resting on her lap, focused eyes on its screen, little motion lines by her " +
+"fingers") },
   { id: 'seed_watch_video', contact: 'sit', expression: 'joyful', activity: 'watchVideo', variants: 'still', label: '動画を観る',
-    description: 'seen from BEHIND, her back to the viewer: sitting on the edge facing away holding a bucket of popcorn on her lap, one hand reaching into it, watching the window below like a movie screen, her long hair down her back' },
+    description: ("seen from BEHIND, her back to the viewer: sitting on the edge facing away holding a bucket of popcorn on " +
+"her lap, one hand reaching into it, watching the window below like a movie screen, her long hair down her " +
+"back") },
   { id: 'seed_point', contact: 'stand', expression: 'excited', activity: 'point', variants: 'face', label: '指さす',
-    description: 'pointing up and to the side excitedly with one arm stretched out, the other hand on her hip, as if saying look at that' },
+    description: ("pointing up and to the side excitedly with one arm stretched out, the other hand on her hip, as if saying " +
+"look at that") },
   { id: 'seed_work', contact: 'sit', expression: 'determined', activity: 'work', variants: 'face', label: '作業中',
-    description: 'working busily with a small wrench in one hand and a screwdriver in the other, a little open toolbox beside her, a hard-working look' },
+    description: ("working busily with a small wrench in one hand and a screwdriver in the other, a little open toolbox " +
+"beside her, a hard-working look") },
   { id: 'seed_ask', contact: 'stand', expression: 'curious', activity: 'ask', variants: 'face', label: '手を挙げる',
-    description: 'raising one hand high and straight up as if waiting to be called on, the other hand at her side, looking up expectantly' },
+    description: ("raising one hand high and straight up as if waiting to be called on, the other hand at her side, looking " +
+"up expectantly") },
   { id: 'seed_dance', contact: 'stand', expression: 'joyful', activity: 'dance', variants: 'face', label: '踊る',
     description: 'dancing happily in place, front view, arms up to one side, hips swaying, one foot lifted' },
   { id: 'seed_land', contact: 'stand', expression: 'relieved', activity: 'rest', variants: 'face', label: '着地',
     description: 'just landed, knees bent and arms out for balance, a relieved smile' },
-  // What she does around her own moves (owner 2026-10-28): the in-betweens and reactions the desktop plays. Side views face left like the walk.
+  // What she does around her own moves (owner 2026-10-28): the in-betweens and reactions the desktop plays. Side
+// views face left like the walk.
   { id: 'seed_poke', contact: 'stand', expression: 'curious', activity: 'poke', variants: 'face', label: 'つつく',
-    resting: 'crouching ON that top edge: the soles of her boots rest exactly on the top edge of the green rectangle, her knees bent deeply and her bottom low, all of her above it',
-    description: 'seen from the side facing left, crouched low and poking down at something by her feet with one index finger, her other hand on her knee, a curious playful face' },
+    resting: ("crouching ON that top edge: the soles of her boots rest exactly on the top edge of the green rectangle, " +
+"her knees bent deeply and her bottom low, all of her above it"),
+    description: ("seen from the side facing left, crouched low and poking down at something by her feet with one index " +
+"finger, her other hand on her knee, a curious playful face") },
   { id: 'seed_startle', contact: 'stand', expression: 'surprised', activity: 'startle', variants: 'face', label: 'びっくり',
-    description: 'startled, leaning back with both hands raised in front of her, eyes wide and a small open mouth, a little sweat drop and tiny surprise marks by her head, hair and skirt jumping up' },
-  // Head first into a box: the desktop clips everything below her waist (her upper body is "inside" a folder window). A board for her
+    description: ("startled, leaning back with both hands raised in front of her, eyes wide and a small open mouth, a little " +
+"sweat drop and tiny surprise marks by her head, hair and skirt jumping up") },
+  // Head first into a box: the desktop clips everything below her waist (her upper body is "inside" a folder
+// window). A board for her
   // hips to rest on was tried in the guide first, which the image model draws wrong (in front of it, beside it); drawn in the air
-  // with no board, upside down, the waist is read off the picture (`anchorAt`) and becomes the anchor; the entry's contact is stand.
+  // with no board, upside down, the waist is read off the picture (`anchorAt`) and becomes the anchor; the entry's
+// contact is stand.
   { id: 'seed_rummage', contact: 'stand', expression: 'curious', activity: 'rummage', variants: 'still', label: '箱に頭を突っ込む', anchorAt: 'waist',
-    description: 'upside down in mid-air as if diving head first into a box far below her, in the same chibi style: her head and both arms down at the bottom reaching for something, her hips and both legs up in the air kicking, her skirt and long hair falling downward, her boots at the top; any viewpoint is fine' },
+    description: ("upside down in mid-air as if diving head first into a box far below her, in the same chibi style: her " +
+"head and both arms down at the bottom reaching for something, her hips and both legs up in the air " +
+"kicking, her skirt and long hair falling downward, her boots at the top; any viewpoint is fine") },
   { id: 'seed_found', contact: 'stand', expression: 'joyful', activity: 'found', variants: 'face', label: 'みつけた',
-    description: 'proudly holding up one small blank sheet of paper (no writing on it) above her head with both hands, standing tall on tiptoe, a bright happy smile' },
+    description: ("proudly holding up one small blank sheet of paper (no writing on it) above her head with both hands, " +
+"standing tall on tiptoe, a bright happy smile") },
   { id: 'seed_getup', contact: 'stand', expression: 'sleepy', activity: 'getup', variants: 'face', label: '起き上がる',
-    resting: 'waking up and rising ON that top edge: her palms and her knees rest exactly on the top edge of the green rectangle, all of her above it',
-    description: 'seen from the side facing left, sleepily waking up and pushing herself up from the ground with both arms, her knees still down, her upper body rising, drowsy half-closed eyes and a small yawn' },
+    resting: ("waking up and rising ON that top edge: her palms and her knees rest exactly on the top edge of the green " +
+"rectangle, all of her above it"),
+    description: ("seen from the side facing left, sleepily waking up and pushing herself up from the ground with both arms, " +
+"her knees still down, her upper body rising, drowsy half-closed eyes and a small yawn") },
   { id: 'seed_stretch', contact: 'stand', expression: 'sleepy', activity: 'stretch', variants: 'still', label: 'のびをする',
-    description: 'stretching both arms high straight up overhead with her fingers laced, her back arched a little, eyes closed and a small yawn with her mouth open, a tiny tear at the corner of her eye' },
+    description: ("stretching both arms high straight up overhead with her fingers laced, her back arched a little, eyes " +
+"closed and a small yawn with her mouth open, a tiny tear at the corner of her eye") },
   { id: 'seed_crouch', contact: 'stand', expression: 'determined', activity: 'crouch', variants: 'face', label: 'かがむ',
-    resting: 'crouching ON that top edge: the soles of her boots rest exactly on the top edge of the green rectangle, her knees bent deeply, all of her above it',
-    description: 'seen from the side facing left, crouched with her knees bent deeply and her arms swung back, about to jump, leaning forward with a determined look and a firm small smile' },
+    resting: ("crouching ON that top edge: the soles of her boots rest exactly on the top edge of the green rectangle, " +
+"her knees bent deeply, all of her above it"),
+    description: ("seen from the side facing left, crouched with her knees bent deeply and her arms swung back, about to " +
+"jump, leaning forward with a determined look and a firm small smile") },
   { id: 'seed_sleep_lie', contact: 'lie', expression: 'sleepy', activity: 'sleep', variants: 'still', label: '寝そべって眠る',
     description: 'fast asleep lying on her front with her cheek on her folded arms, eyes closed, mouth slightly open, peaceful' },
   { id: 'seed_sleep_sit', contact: 'sit', expression: 'sleepy', activity: 'sleep', variants: 'still', label: '座って居眠り',

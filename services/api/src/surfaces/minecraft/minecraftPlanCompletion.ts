@@ -8,7 +8,9 @@ export function preparationCompletionProblem(before: PlanTree, after: PlanTree, 
   const world = observation?.state.world as Record<string, unknown> | undefined;
   const inventory = world?.inventory;
   // Missing or explicitly shortened stock is unknown, never proof of an empty pack.
-  if (!inventory || typeof inventory !== 'object' || (Array.isArray(inventory) && inventory.some(item => typeof item === 'string' && /^ほか/u.test(item)))) return null;
+  const inventoryUnknown = () => (!inventory || typeof inventory !== 'object' || (Array.isArray(inventory) && inventory.some(item => typeof item === 'string' &&
+     /^ほか/u.test(item))));
+  if (inventoryUnknown()) return null;
   const facts = doneFacts(observation);
   if (!facts) return null;
   const prior = new Map(before.nodes.map(node => [node.id, node]));
@@ -21,7 +23,13 @@ export function preparationCompletionProblem(before: PlanTree, after: PlanTree, 
     if (!completing && !claimingMet) continue;
     const predicate = parseDoneWhen(node.doneWhen);
     if (!predicate || predicate.flat().some(clause => clause.kind !== 'food' && clause.kind !== 'have') || predicateHolds(predicate, facts)) continue;
-    return `${node.id} は観測で未達（${doneStatusWords(node.doneWhen, facts)}）。未達を state=done や prep.state=met にはできない。後回しは state=continue/blocked と reason、省いて進む選択は prep:{state:"skipped",why:"理由"} と書く。省略は達成には数えない`;
+    return ("" +
+`${node.id}` +
+" は観測で未達（" +
+`${doneStatusWords(node.doneWhen,
+       facts)}` +
+"）。未達を state=done や prep.state=met にはできない。後回しは state=continue/blocked と reason、省いて進む選択は " +
+"prep:{state:\"skipped\",why:\"理由\"} と書く。省略は達成には数えない");
   }
   return null;
 }

@@ -28,14 +28,16 @@ export function classifyDispatchFailure(error: unknown, signals: { stopped: bool
   return { kind: 'no_response', possiblyBilled: !(cause !== null && NEVER_SENT_CAUSES.has(cause)) };
 }
 
-/** Whether the provider may have processed (and charged) a request that failed this way: its unknown upper bound is then booked. */
+/** Whether the provider may have processed (and charged) a request that failed this way: its unknown upper bound
+ * is then booked. */
 export function failureMayHaveBeenCharged(failure: DispatchFailure): boolean {
   if (failure.kind === 'server') return false;
   return failure.kind === 'no_response' ? failure.possiblyBilled : true;
 }
 
 /**
- * The error the adapter throws for a dispatched request that failed: a typed one for a failure that carried no decision and is asked
+ * The error the adapter throws for a dispatched request that failed: a typed one for a failure that carried no
+ * decision and is asked
  * again by the runner (`retryVerdict`), the closed code it always threw for a stop or an unclassified failure.
  */
 export function failureError(failure: DispatchFailure): Error {
@@ -46,17 +48,23 @@ export function failureError(failure: DispatchFailure): Error {
   return new Error(failure.kind === 'stopped' ? 'FCA_MODEL_ABORTED' : 'FCA_MODEL_RESPONSE_UNKNOWN');
 }
 
-/** The error for a provider refusal (4xx): the statuses worth asking again carry `retry-after`, the others stay a plain closed code. */
+/** The error for a provider refusal (4xx): the statuses worth asking again carry `retry-after`, the others stay a
+ * plain closed code. */
 export function refusalError(status: number, error: { headers?: unknown; message?: unknown }): Error {
-  // A-20 (run 47: HTTP 400 「Your credit balance is too low to access the Anthropic API」 failed a running request): a refusal for the account's credit is not an error of the request. Read
+  // A-20 (run 47: HTTP 400 「Your credit balance is too low to access the Anthropic API」 failed a running request):
+// a refusal for the
+// account's credit is not an error of the request. Read
   // only for this closed class; the provider's text goes nowhere.
-  if (status === 402 || (status === 400 && typeof error.message === 'string' && /credit balance is too low/iu.test(error.message))) return new Error(FCA_MODEL_BILLING);
+  if (status === 402 || (status === 400 && typeof error.message === 'string' && /credit balance is too low/iu.test(
+    error.message))) return new Error(FCA_MODEL_BILLING);
   return retryableStatus(status) ? new FcaProviderError(status, retryAfterMilliseconds(error)) : new Error(`FCA_MODEL_HTTP_${status}`);
 }
 
 /**
- * The error for a finished answer that called no tool (`stop_reason` other than `tool_use`, `max_tokens` and `refusal` having been told
- * apart): asked again once by the runner (`retryVerdict`). Content-free line: what the answer held, so that the next one tells whether it
+ * The error for a finished answer that called no tool (`stop_reason` other than `tool_use`, `max_tokens` and
+ * `refusal` having been told
+ * apart): asked again once by the runner (`retryVerdict`). Content-free line: what the answer held, so that the
+ * next one tells whether it
  * was words only, or thinking only (2026-10-26 04:50, Sonnet 5.5: `end_turn`, 371 output tokens, the line did not exist yet).
  */
 export function missingDecision(message: Pick<Anthropic.Message, 'stop_reason' | 'content' | 'usage' | 'model'>, taskId: string): Error {

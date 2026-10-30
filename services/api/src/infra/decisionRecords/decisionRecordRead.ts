@@ -48,7 +48,8 @@ export function listRuns(root: string): RunSummary[] {
 }
 
 /**
- * Which decision: its id (`d0015`), its number in the task, the step it was made in (`d` of the metrics line), a time, or the queue item an act
+ * Which decision: its id (`d0015`), its number in the task, the step it was made in (`d` of the metrics line), a
+ * time, or the queue item an act
  * became (`q15`). `kind` picks the requests to count from (default: decisions; `summary` for the history summaries).
  */
 export interface Selector { id?: string; no?: number; step?: number; at?: string; item?: string; kind?: string }
@@ -92,7 +93,8 @@ export interface DecisionDocument {
 export interface DocumentOptions { keepSignatures?: boolean; lastMessages?: number }
 
 const SIGNED = new Set(['signature', 'data']);
-/** A thinking block's signature (and a redacted block's data) is base64 of no use to a reader: told by its length unless asked for. */
+/** A thinking block's signature (and a redacted block's data) is base64 of no use to a reader: told by its length
+ * unless asked for. */
 function withoutSignatures(value: unknown, keep: boolean): unknown {
   if (keep || !value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(item => withoutSignatures(item, keep));
@@ -133,7 +135,8 @@ function requestOf(run: RunRecord, request: RecordEvent, options: DocumentOption
     tools: readBlob(run.directory, String(request.tools)), toolNames: request.toolNames ?? [], messages, omittedMessages: first };
 }
 
-/** One request with everything recorded around it: its parts read back, its answer, what the step did with it, its calls and the commands they sent. */
+/** One request with everything recorded around it: its parts read back, its answer, what the step did with it,
+ * its calls and the commands they sent. */
 export function decisionDocument(run: RunRecord, request: RecordEvent, options: DocumentOptions = {}): DecisionDocument {
   const response = responseOf(run, request, options.keepSignatures === true);
   return { id: String(request.id), kind: String(request.kind), no: Number(request.no), taskId: String(request.taskId), stepId: String(request.stepId),
@@ -146,8 +149,10 @@ export function decisionDocument(run: RunRecord, request: RecordEvent, options: 
 }
 
 /**
- * The last `count` rows of a run's `events.jsonl` (amendment A-12: the head's box of a stall it found holds the rows the decision record ended with), read from the end of the file
- * (at most `maxBytes` of it), so a run of hundreds of megabytes costs the same as a small one. A row cut short, at the start of the window or at the end by a crash, is left out.
+ * The last `count` rows of a run's `events.jsonl` (amendment A-12: the head's box of a stall it found holds the
+ * rows the decision record ended with), read from the end of the file
+ * (at most `maxBytes` of it), so a run of hundreds of megabytes costs the same as a small one. A row cut short,
+ * at the start of the window or at the end by a crash, is left out.
  */
 export function tailRun(directory: string, count: number, maxBytes = 1024 * 1024): RecordEvent[] {
   const file = join(directory, EVENTS_FILE);

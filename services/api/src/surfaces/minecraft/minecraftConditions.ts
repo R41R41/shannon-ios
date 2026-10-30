@@ -8,21 +8,29 @@ export { parseCondition, conditionText, validCondition, parseClause, newerClause
   type ActClause, type ActCondition, type Dim, type ParsedCondition } from '../../contracts/minecraftActCondition.js';
 
 /**
- * The task queue's conditions read on the head's frame (design section 4). `pre` and `done` are checked by the body on the body itself; the
- * head checks the same JSON on the newest frame only where the frame shows it (the pack, health, hunger, the dimension, the place, the time):
- * `furnace` and `safe` need the world around her and are unknown here (null; `near` is told from the body's scan, `state.world.utilities`), and so is anything the frame does not carry. Unknown is
+ * The task queue's conditions read on the head's frame (design section 4). `pre` and `done` are checked by the
+ * body on the body itself; the
+ * head checks the same JSON on the newest frame only where the frame shows it (the pack, health, hunger, the
+ * dimension, the place, the time):
+ * `furnace` and `safe` need the world around her and are unknown here (null; `near` is told from the body's scan,
+ * `state.world.utilities`), and so is anything the frame does not carry. Unknown is
  * never taken for no: a `pre` the head cannot tell is sent, and the body says.
  */
 
-/** What a predicate is checked against: the frame's counts (worn included), dimension, feet and food points, and the facts a frame may lack (null). */
+/** What a predicate is checked against: the frame's counts (worn included), dimension, feet and food points, and
+ * the facts a frame
+ * may lack (null). */
 export interface DoneFacts { counts: ReadonlyMap<string, number>; dimension: string | null; feet: { x: number; y: number; z: number } | null;
   food: number; hp?: number | null; hunger?: number | null; free?: number | null; night?: boolean | null;
-  /** The body's scan of the utilities around her (`state.world.utilities`, the continue contract chapter 3): what it found within `radius`; null when the frame has none. */
+  /** The body's scan of the utilities around her (`state.world.utilities`, the continue contract chapter 3): what it found within
+ * `radius`; null when the frame has none. */
   utilities?: UtilitiesScan | null }
-/** What the body scanned for a work table, a furnace, a chest or a bed near her: `scanned` false is "not looked", never "none". */
+/** What the body scanned for a work table, a furnace, a chest or a bed near her: `scanned` false is "not looked",
+ * never "none". */
 export interface UtilitiesScan { radius: number; dim: string | null; scanned: boolean; found: ReadonlyArray<{ block: string; distance: number }> }
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
-/** The body's `state.world.utilities` as the head reads it (the shape of chapter 3), or null when the frame has none or it does not read. */
+/** The body's `state.world.utilities` as the head reads it (the shape of chapter 3), or null when the frame has
+ * none or it does not read. */
 function utilitiesOf(world: Record<string, unknown>): UtilitiesScan | null {
   const raw = world.utilities;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -34,7 +42,8 @@ function utilitiesOf(world: Record<string, unknown>): UtilitiesScan | null {
   });
   return { radius, dim: typeof scan.dim === 'string' ? scan.dim.replace(/^minecraft:/u, '') : null, scanned: scan.scanned, found };
 }
-/** Night as a bed counts it (ticks 12542–23459 of an overworld day, or a thunderstorm); null where the frame has no time (the Nether, the End). */
+/** Night as a bed counts it (ticks 12542–23459 of an overworld day, or a thunderstorm); null where the frame has
+ * no time (the Nether, the End). */
 function nightOf(world: Record<string, unknown>, dimension: string | null): boolean | null {
   const tick = finite(world.timeOfDay);
   if (tick === null || (dimension !== null && dimension !== 'overworld')) return null;
@@ -54,7 +63,8 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
     hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame) };
 }
 
-/** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a piglin does not attack her in it). */
+/** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a
+ * piglin does not attack her in it). */
 const GOLD_ARMOUR = /^golden_(?:helmet|chestplate|leggings|boots)$/u;
 /** How many of `item` she has: the id itself, or every id that ends in `_<item>`. */
 export function carried(counts: ReadonlyMap<string, number>, item: string): number {
@@ -79,7 +89,8 @@ const JUDGES: Judges = {
   },
   free: (c, facts) => atLeast(facts.free, c.n),
   time: (c, facts) => facts.night === null || facts.night === undefined ? null : facts.night === (c.t === 'night'),
-  // The body's scan, only where it looked (`scanned`), looked as far as the clause asks (`radius`), and looked in the dimension she is in; else it cannot be told.
+  // The body's scan, only where it looked (`scanned`), looked as far as the clause asks (`radius`), and looked in
+// the dimension she is in; else it cannot be told.
   near: (c, facts) => {
     const scan = facts.utilities;
     if (!scan || !scan.scanned || c.r > scan.radius || scan.dim === null || facts.dimension === null || scan.dim !== facts.dimension) return null;
@@ -119,7 +130,8 @@ export function clauseLack(clause: ActClause, facts: DoneFacts): string {
 }
 
 /**
- * Whether the condition holds on the frame: true when some alternative's clauses all hold, false only when every alternative has a clause the
+ * Whether the condition holds on the frame: true when some alternative's clauses all hold, false only when every
+ * alternative has a clause the
  * frame shows unmet, else null (a clause the frame cannot show, or no frame).
  */
 export function conditionHolds(condition: ActCondition, frame: BodyObservation | null): boolean | null {
@@ -130,7 +142,8 @@ export function conditionHolds(condition: ActCondition, frame: BodyObservation |
   return verdicts.every(alternative => alternative.some(item => item === false)) ? false : null;
 }
 
-/** What is unmet, in words, of the alternative nearest to holding (the clauses the frame shows unmet, joined by `・`); null when there is nothing to say. */
+/** What is unmet, in words, of the alternative nearest to holding (the clauses the frame shows unmet, joined by
+ * `・`); null when there is nothing to say. */
 export function conditionWords(condition: ActCondition, frame: BodyObservation | null): string | null {
   const facts = doneFacts(frame);
   if (!facts) return null;

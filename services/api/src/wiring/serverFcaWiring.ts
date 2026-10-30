@@ -89,7 +89,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   path: string; ownerScope: string; ownerAlone(): boolean; now?(): string; usage: LlmUsageStore; sleepStore?: SQLiteShannonStore;
   state?: Pick<CompanionStateStore, 'snapshot'>; conversations?: ConversationStore; tools?: ShannonToolRunner;
   affect?: FcaAffectWriter; memory?: MemoryProposals | null; enrich?: TurnMemoryRecall | null;
-  minecraftLifecycle?: MinecraftLifecycle | null; minecraftConfiguration?: MinecraftBodyConfiguration | null; touchAllowed?(scope: string, device: string, gesture?: string): boolean;
+  minecraftLifecycle?: MinecraftLifecycle | null; minecraftConfiguration?: MinecraftBodyConfiguration | null; touchAllowed?(scope: string,
+     device: string, gesture?: string): boolean;
   trace?: DecisionTraceWriter | null; traceSalt?: string;
   readSources?: Omit<FcaReadSourcesOptions, 'ownerScope' | 'ownerAlone' | 'state' | 'conversations'>;
   /** Her own time's store and settings: own-time tasks and their budget (ADR-0009 stage 2, E3/E4); absent, none run. */
@@ -105,19 +106,25 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
   /** Owner 2026-10-26: her feeling from her own acts in a body task, beside the decisions (`minecraftFeeling.ts`). */
   minecraftFeelings?: MinecraftFeelingPort;
 }) {
-  const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now: parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
+  const readSourceVisible = parts.state && parts.conversations ? createFcaReadSources({ ...parts.readSources, ...(parts.now ? { now:
+     parts.now } : {}), ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, state: parts.state, conversations: parts.conversations }) : undefined;
   if (parts.conversations) parts.conversations.readSourceVisible = readSourceVisible;
   // Syzygy ADR-0009 S9: the common runtime is always on (`SHANNON_FCA_RUNTIME` is retired). What it needs is checked here, at
   // start, and a missing part stops the API at once with what to set.
   if (!stage4Enabled(values)) throw new Error('FCA_ACTION_THREADS_REQUIRED: the common task runtime needs the mind worker; set SHANNON_ADR8_STAGE4=on');
-  const modelName = replacementModel(values.SHANNON_FCA_MODEL);
+  const configureTaskProvider = () => {
+const modelName = replacementModel(values.SHANNON_FCA_MODEL);
   const nativeKey = modelName === 'claude-sonnet-5-5' ? anthropicApiKey(values) : null,
-    provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(values, 'SHANNON_FCA_MODEL');
+    provider = modelName === 'claude-sonnet-5-5' ? nativeKey ? { model: modelName, apiKey: nativeKey } : null : configuredResponseModel(
+      values, 'SHANNON_FCA_MODEL');
   if (!provider) throw new Error(`FCA_PROVIDER_REQUIRED: no key for the task model ${modelName}; set ${fcaKeyNames(modelName)}`);
   // Sleep always takes the common runtime (S9 retired `SHANNON_FCA_SLEEP`); the API hands its store, the worker its owner night.
   const sleepEnabled = Boolean(parts.sleepStore);
   const borrowed = sleepEnabled ? parts.sleepStore!.fcaDatabase() : null;
   const db = borrowed ? configureDatabase(borrowed, 'taskRuntime') : openDatabase(parts.path, 'taskRuntime');
+return { provider, sleepEnabled, borrowed, db };
+};
+const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
   const client = new MindSocketClient(mindSocketPath(values, parts.path));
   let sleep: ReturnType<typeof createFcaSleepWiring> | null = null;
   const operatorAudit = parts.operator ? configuredOperatorAudit(values, parts.path) : null;
@@ -128,10 +135,12 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const budget = fcaBudget({ actions: actionThreadsClient(client.call), store: budgetStore, now: () => new Date().toISOString(), ownTime: ownTimeBudget,
       minecraftRequest: task => admittedMinecraftRequest(task, task.parentId ? runtime.runtime.get(task.scopeKey, task.parentId) : null,
         Boolean(minecraft?.control.store.body(task.id))), ...(operatorAudit ? { taskCapYen: (id: string) => operatorAudit.store.budgetYen(id) } : {}) });
-    // Decision records (`docs/decision-records-2026-10.md`): a body task's every request, answer, call and command to the body, in files beside the database.
+    // Decision records (`docs/decision-records-2026-10.md`): a body task's every request, answer, call and command
+// to the body, in files beside the database.
     installDecisionRecorder(configuredDecisionRecorder(parts.path));
     const recordUsage: Parameters<typeof createAnthropicFcaModel>[0]['recordUsage'] = usage => {
-      // A charge nobody confirmed (a lost request, an answer without usable usage) is an upper bound: booked apart (`fcaBudgetWiring.ts`).
+      // A charge nobody confirmed (a lost request, an answer without usable usage) is an upper bound: booked apart
+// (`fcaBudgetWiring.ts`).
       budget.recordUsage(usage.estimatedCostUsd, !usage.usageComplete);
       parts.usage.recordLlmUsage({ scopeKey: parts.ownerScope, lane: 'chat', model: usage.model,
         inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens, outputTokens: usage.outputTokens,
@@ -146,7 +155,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     const summaries = configuredFcaSummaries(values, createAnthropicFcaSummarizer({ ...provider, recordUsage }), recordUsage);
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
-    const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted(); return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
+    const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted();
+       return { names: request.tools.map(tool => tool.name), source: 'catalog' }; } };
     // A Minecraft task's skill reads, settled by what the task then does (`fcaSkillOutcomes.ts`).
     // SHANNON_MINECRAFT_AGENDA (mb-arch): the next decision asked while the body works, and the executor around its tools.
     // A body task decides in small steps from a map (design mb-llm-centric); no agenda, procedure or fast judgment.
@@ -160,32 +170,40 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
     const runtime = createTaskRuntimeWiring({ db, actions, model, provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'), continueAtOnce: true,
-      scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone, budget, publicTaskAllowed: id => gameOnly(id), ownTimeAllowed: ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
-      // A Minecraft request left unknown (a restart, a lost answer) goes on once its body has proven its release (`fcaBodyRecovery.ts`).
+      scopeKey: parts.ownerScope, ownerAlone: parts.ownerAlone, budget, publicTaskAllowed: id => gameOnly(id), ownTimeAllowed:
+         ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
+      // A Minecraft request left unknown (a restart, a lost answer) goes on once its body has proven its release
+// (`fcaBodyRecovery.ts`).
       ...(minecraft ? { bodyRecovery: recoveryParts => createFcaBodyRecovery({ ...recoveryParts,
         windowMs: fcaBodyReturnWindow(values.SHANNON_FCA_BODY_RETURN_MINUTES),
-        // A-17: a request the operator holds (an open row of the audit) is never retired by the unknown exit nor put back in the queue by itself.
+        // A-17: a request the operator holds (an open row of the audit) is never retired by the unknown exit nor put
+// back in the queue by itself.
         ...(operatorAudit ? { held: (id: string) => operatorAudit.store.heldOf(id) !== null } : {}),
         body: { bound: id => minecraft.control.store.body(id), connected: id => minecraft.control.frame(id) !== null,
           release: step => minecraft.recheck.releaseStep(step) } }) } : {}),
       ...(sleep ? { sleepTicket: sleep.jobs.ticket, maintenanceAllowed: sleep.jobs.allowed } : {}),
       ...taskGates({ ownerScope: parts.ownerScope, guard: () => visible, sleepVisible: (rt, task) => Boolean(sleep?.visible(rt, task)) }),
       stepPorts: (_runtime, step) => {
-        if (step.snapshot.task.kind === 'sleep') { if (!sleep) throw new Error('FCA_SLEEP_DISABLED'); return sleep.step(_runtime, step); }
+        if (step.snapshot.task.kind === 'sleep') { if (!sleep) throw new Error('FCA_SLEEP_DISABLED');
+          return sleep.step(_runtime, step); }
         const history = { codec: anthropicFcaHistoryCodec, summarizer: summaries.decision };
         if (step.snapshot.task.origin === 'own_time') return ownTimeStepPorts(step, { ...parts, runtime: _runtime, selector, history });
         // Her readable skills for the body's situational pointers (`minecraftSkillPointers.ts`): only while `skill.read` is offered.
-        const skillNames = () => gameOnly(step.taskId) ? new Set<string>() : parts.tools?.offered('text', 'owner_alone', step.scopeKey).some(tool => tool.name === 'skill.read')
+        const skillNames = () => gameOnly(step.taskId) ? new Set<string>() : parts.tools?.offered('text', 'owner_alone',
+           step.scopeKey).some(tool => tool.name === 'skill.read')
           ? skillNamesOfIndex(parts.tools.skillIndex(step.scopeKey)) : new Set<string>();
-        // `check.whole` names its caller for the slow-walk line; `check.peek` is the observation monitor's, which walks nothing (`fcaPeekGates.ts`).
+        // `check.whole` names its caller for the slow-walk line; `check.peek` is the observation monitor's, which walks
+// nothing (`fcaPeekGates.ts`).
         const check = stepVisibility(() => visible, step);
         // A body task of the LLM-centric mode (`minecraftLlmcWiring.ts`): its plan, its small steps and its own menu.
         const small = llmc && minecraft && (minecraft.control.store.body(step.taskId) || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA)
           ? llmcStepParts(llmc, step, minecraft.control) : null;
         const gameOnlyStep = !!small && gameOnly(step.taskId), gameplayAllowed = () => gameOnly(step.taskId);
         const audienceAllowed = () => parts.ownerAlone() || gameplayAllowed();
-        // SHANNON_MINECRAFT_WORKING_EVENTS (mb-arch stage 1): what the body tells while it works can cut a stalled command (`minecraftWorkingBody.ts`).
-        const body = minecraft ? withMinecraftWorking(createMinecraftTaskBody({ ...minecraft, evidence: gameOnlyStep ? undefined : shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, gameplayAllowed, skillNames,
+        // SHANNON_MINECRAFT_WORKING_EVENTS (mb-arch stage 1): what the body tells while it works can cut a stalled
+// command (`minecraftWorkingBody.ts`).
+        const body = minecraft ? withMinecraftWorking(createMinecraftTaskBody({ ...minecraft, evidence: gameOnlyStep ? undefined :
+           shared?.evidence, runtime: _runtime, step, ownerAlone: parts.ownerAlone, gameplayAllowed, skillNames,
           // SHANNON_FCA_SKILL_GIST (owner 2026-10-15): each pointer with its skill's first steps, pinned as a read (`fcaSkillGists.ts`).
           ...(switchOn(values, 'SHANNON_FCA_SKILL_GIST') && !small ? bodySkillGists(step, parts.skillOpen,
             fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
@@ -199,8 +217,11 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
             ...(minecraft.agenda.on
               ? minecraftAgendaBodyParts(step.taskId, () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '')) : {}) }) : null;
         const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
-        const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child_monitor') ?? _runtime.taskSources(step.scopeKey, id).length === 0;
-        const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return sourcesVisible(); };
+        const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined,
+           'child_monitor') ?? _runtime.taskSources(step.scopeKey, id).length === 0;
+        const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false;
+           step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
+             return sourcesVisible(); };
         const permitProgress = async () => {
           await actionPermit();
           const active = currentActionExecution();
@@ -212,20 +233,30 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           ?? (minecraft?.control.available().length === 1 ? minecraft.control.available()[0] : null)
           ?? (parts.minecraftConfiguration?.servers.size === 1 ? `minecraft:${[...parts.minecraftConfiguration.servers.keys()][0]}` : 'minecraft:unbound');
         const binding = minecraftGoalBinding(step.snapshot.task, goalBodyId);
-        const observations = [createFcaTaskObservationMonitor({ runtime: _runtime, step, allowed: audienceAllowed, sourcesVisible: check.peek, taskVisible, observeTasks })];
+        const observations = [createFcaTaskObservationMonitor({ runtime: _runtime, step, allowed: audienceAllowed, sourcesVisible:
+           check.peek, taskVisible, observeTasks })];
         // The operator's CLI can only start and stop a request: nobody can answer a task it handed over (Minebot lane run 1).
         const waitCounterpart = () => operatorRequester(operatorAudit, parts.ownerScope)(step.snapshot.task) !== 'operator';
         // A body task (review of 0efd5acb): its body bound to it, or made from a Minecraft request; never any other task.
         const keepBodyTools = () => Boolean(minecraft && (minecraft.control.store.body(step.taskId)
           || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA));
         // A body task of the LLM-centric mode has the mode's menu (`llmcTools`, r3).
-        const stepParts = ({ selector, observations, waitCounterpart, keepBodyTools, audienceAllowed, obsMode: fcaObsMode(values.SHANNON_FCA_OBS_MODE), ...(body ? { body: llmcLifecycle(small, withMinecraftLive(body, { live: parts.live, control: minecraft!.control, step }).body) } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false && parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall: shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemoryInTurns(step, ids) } : {}),
+        const stepParts = ({ selector, observations, waitCounterpart, keepBodyTools, audienceAllowed, obsMode: fcaObsMode(
+          values.SHANNON_FCA_OBS_MODE), ...(body ? { body: llmcLifecycle(small, withMinecraftLive(body, { live: parts.live, control:
+             minecraft!.control, step }).body) } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false &&
+                parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall:
+                   shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemoryInTurns(step, ids) } : {}),
         sourcesVisible,
-        taskVisible: (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined, 'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
-        observeTasks: (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false; step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
+        taskVisible: (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined,
+           'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
+        observeTasks: (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false;
+          step.snapshot.sources =
+           _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
         history: { codec: anthropicFcaHistoryCodec, ...(keepBodyTools() ? summaries.body : { summarizer: summaries.decision }) },
-        ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(...(gameOnlyStep ? [] : [fcaResearchTools({ tools: parts.tools,
-          state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids: readonly string[]) => shared!.observeMemory(step, ids) } : {}),
+        ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(...(gameOnlyStep ? [] :
+           [fcaResearchTools({ tools: parts.tools,
+          state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids:
+             readonly string[]) => shared!.observeMemory(step, ids) } : {}),
           task: { id: step.taskId, origin: step.snapshot.task.origin, leaseId: step.lease.id },
           checkpoint: step.snapshot.checkpoint, placeSearch: _runtime.placeContext?.(step.scopeKey, step.taskId),
           observeRead: fcaStepReads({ step, runtime: _runtime, ownerAlone: parts.ownerAlone, readSourceVisible, visible: () => visible }),
@@ -233,7 +264,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
           sourcesVisible: () => check.whole('tool') ?? step.snapshot.sources.length === 0,
           ...(minecraft?.skillOutcomes ? { skillRead: (name: string) => minecraft.skillOutcomes?.read(step.scopeKey, step.taskId, name) } : {}) })]),
           ...(small ? [small.planTools] : []),
-          ...(minecraft ? [withMinecraftProgress(withMinecraftAgenda(fcaMinecraftTools({ control: minecraft.control, step, ownerAlone: parts.ownerAlone, gameplayAllowed,
+          ...(minecraft ? [withMinecraftProgress(withMinecraftAgenda(fcaMinecraftTools({ control: minecraft.control, step, ownerAlone:
+             parts.ownerAlone, gameplayAllowed,
             sourcesVisible: () => check.whole('tool') ?? false, ...(small ? small.tools : {}),
             ...(small && parts.minecraftFeelings ? { feelings: parts.minecraftFeelings } : {}),
             ...(minecraft.skillOutcomes ? { evidence: (result?: string) => minecraft.skillOutcomes?.evidence(step.scopeKey, step.taskId, result) } : {}) }),
@@ -242,12 +274,16 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
               arrivedAt: () => minecraft.control.arrivedAt(minecraft.control.store.body(step.taskId) ?? '') }),
             // A failed call that made something is not a failed step (`minecraftProgress.ts`, mb-r23).
             { observe: () => minecraft.control.observe(minecraft.control.store.body(step.taskId) ?? '') }),
-            ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools: createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
+            ...(body ? [body.tools] : [])] : [])), { checkpoint: step.snapshot.checkpoint, binding, requireConditions: keepBodyTools(),
+               permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) } : { tools:
+                  createFcaProgressTools(combineFcaTools(), { checkpoint: step.snapshot.checkpoint, binding, requireConditions:
+                     keepBodyTools(), permit: permitProgress, observationSignal: (name, signal) => body?.body.toolSignal(name, signal) ?? signal }) }),
         ...small?.ports,
       });
         const offered = small ? small.menu(stepParts) : stepParts;
         return gameOnlyStep ? gameOnlyStepPorts(offered, step.taskId) : offered; } });
-    gameOnly = id => !!llmc && !!minecraft && gameOnlyMinecraftTask(id, { scopeKey: parts.ownerScope, runtime: runtime.runtime, audit: operatorAudit?.store ?? null, bound: taskId => minecraft.control.store.body(taskId) });
+    gameOnly = id => !!llmc && !!minecraft && gameOnlyMinecraftTask(id, { scopeKey: parts.ownerScope, runtime: runtime.runtime, audit:
+       operatorAudit?.store ?? null, bound: taskId => minecraft.control.store.body(taskId) });
     visible = parts.state && parts.conversations ? createFcaSourceGuard({ runtime: runtime.runtime, state: parts.state,
       conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, sourceFreeTaskAllowed: id => gameOnly(id),
       readSourceVisible, ...(readSourceVisible?.fingerprint ? { readFingerprint: readSourceVisible.fingerprint } : {}) }) : undefined;
@@ -255,7 +291,8 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       const foregroundVisible = visible;
       visible = Object.assign((scope: string, id: string, pending?: string, via?: FcaWalkCaller) => {
         const task = runtime.runtime.get(scope, id);
-        return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) : foregroundVisible(scope, id, pending, via);
+        return task?.kind === 'sleep' ? scope === parts.ownerScope && parts.ownerAlone() && sleep!.visible(runtime.runtime, task) :
+           foregroundVisible(scope, id, pending, via);
       }, { sources: foregroundVisible.sources, progress: foregroundVisible.progress, content: foregroundVisible.content,
         // `peek` too: without it the evidence store and the monitor below never saw the foreground guard's verdicts while sleep was on.
         peek: foregroundVisible.peek, withheld: foregroundVisible.withheld,
@@ -263,11 +300,14 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
         covers: foregroundVisible.covers, residual: foregroundVisible.residual, walks: foregroundVisible.walks });
     }
     const conversation = visible ? createFcaConversationBridge({ runtime: runtime.runtime, ownerScope: parts.ownerScope, visible, selector }) : null;
-    if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime: runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible,
+    if (visible && parts.state && parts.conversations && readSourceVisible) shared = createFcaSharedWiring({ ...parts, db, runtime:
+       runtime.runtime, state: parts.state, conversations: parts.conversations, visible, readSourceVisible,
       segmentStaleMinutes: fcaSegmentStaleMinutes(values.SHANNON_FCA_SEGMENT_STALE_MINUTES),
       provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'), bodyRecallJev: switchOn(values, 'SHANNON_FCA_BODY_RECALL_JEV') ? jev : null });
-    if (conversation && shared && parts.tools) connectFcaMemoryTools({ tools: parts.tools, memory: shared.memory, conversation, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone });
-    const voice = conversation && parts.conversations ? createFcaVoiceBridge({ conversation, runtime: runtime.runtime, conversations: parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, ...(parts.now ? { now: parts.now } : {}) }) : null;
+    if (conversation && shared && parts.tools) connectFcaMemoryTools({ tools: parts.tools, memory: shared.memory, conversation, ownerScope:
+       parts.ownerScope, ownerAlone: parts.ownerAlone });
+    const voice = conversation && parts.conversations ? createFcaVoiceBridge({ conversation, runtime: runtime.runtime, conversations:
+       parts.conversations, ownerScope: parts.ownerScope, ownerAlone: parts.ownerAlone, ...(parts.now ? { now: parts.now } : {}) }) : null;
     if (conversation && parts.tools) parts.tools.useTaskRuntime({ available: scope => conversation.taskToolsAvailable(scope),
       execute: (name, input, context) => conversation.executeTaskTool(name, input, context),
       observeRead: (scope, receipt) => conversation.observeRead(scope, receipt) });
@@ -285,12 +325,22 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       atomic: work => underWriteLock(db, null, '', work, 'fca_minecraft_admission') }) : null;
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);
-    // `requests.bodyWake`: a task that slept for a body that was not there is woken when its frame is (mc-chat-stale-frame, 2026-10-26).
-    const wake = () => { requests?.bodyWake.tick(); minecraft?.skillOutcomes?.tick((scope, id) => runtime.runtime.get(scope, id)?.phase ?? null); try { sleep?.jobs.reconcile(runtime.runtime); sleep?.jobs.admit(runtime.runtime); } catch { /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {}); if (!parts.ownerAlone()) void shared?.recall.cancelAll(); void shared?.evidence?.drain({ segments: true }).catch(() => { /* Durable evidence remains for retry. */ }); void runtime.tick().catch(() => {}); };
-    const timer = setInterval(() => timedTick('fca_wake', wake), 1000); timer.unref();
+    // `requests.bodyWake`: a task that slept for a body that was not there is woken when its frame is
+// (mc-chat-stale-frame, 2026-10-26).
+    const wake = () => { requests?.bodyWake.tick();
+      minecraft?.skillOutcomes?.tick((scope, id) => runtime.runtime.get(scope,
+       id)?.phase ?? null); try { sleep?.jobs.reconcile(runtime.runtime);
+         sleep?.jobs.admit(runtime.runtime); } catch {
+          /* Atomic admission retries; unknown task outcomes remain held. */ } void touch?.tick().catch(() => {});
+            if (!parts.ownerAlone(
+            )) void shared?.recall.cancelAll(); void shared?.evidence?.drain({ segments: true }).catch(() => {
+               /* Durable evidence remains for retry. */ }); void runtime.tick().catch(() => {}); };
+    const timer = setInterval(() => timedTick('fca_wake', wake), 1000);
+      timer.unref();
     const operator = parts.operator ? startOperatorMinecraft({ ...parts.operator, audit: operatorAudit, path: parts.path, scopeKey: parts.ownerScope,
       now: parts.now ?? (() => new Date().toISOString()), ownerAlone: parts.ownerAlone, log: line => console.log(line),
-      gameOnlyAvailable: () => !!llmc && !!minecraft, requests: minecraft && requests ? { ...requests.operator, wake } : null, bodyRecheck: minecraft?.recheck ?? null,
+      gameOnlyAvailable: () => !!llmc && !!minecraft, requests: minecraft && requests ? { ...requests.operator, wake } : null, bodyRecheck:
+         minecraft?.recheck ?? null,
       spentYen: id => budgetStore.usedYen(id),
       talkNotes: operatorTalkNotes(values) }) : null;
     const spoken = createSpokenReports({ speaker: createConfiguredSpokenReportModel(values, parts.usage),
@@ -315,18 +365,34 @@ export function configuredServerFca(values: Readonly<Record<string, string | und
       ...(source.experienceId ? [`experience:${source.experienceId}`] : []),
       ...source.recalledMemoryIds.map(id => `memory:${id}`), ...(source.readSourceIds ?? []).map(id => `read:${id}`),
     ]);
-    return { route, conversation, voice, touch, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope, taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
-      lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId); return ids ? [...new Set(ids)].sort() : null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent, admission: requests.admission, voice: requests.voice, stop: requests.ownerStop } : null,
+    return { route, conversation, voice, touch, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope,
+       taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
+      lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId);
+        return ids ? [...new Set(ids)].sort() :
+         null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent, admission: requests.admission,
+            voice: requests.voice, stop: requests.ownerStop } : null,
       // Whether a Minecraft-bound task is running, stopping or unknown (the phases that are not final); null when that cannot be read.
       // 「新しいワールドで始める」 (`freshWorldWiring.ts`) makes a new world only when this is exactly false.
       minecraftTasksOpen: (): boolean | null => { try { return requests ? requests.operator.open().length > 0 : null; } catch { return null; } },
       async stopActions(target: string | null) {
-      if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all'); return; }
+      if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all');
+        return; }
       const action = await actions.get(parts.ownerScope, target);
       const taskId = action?.kind === 'agentTask' ? fcaTaskIdOf(action.sourceId) : null;
       if (taskId) await runtime.stop(taskId, 'owner_stop');
-    }, async close() { await operator?.close(); await minecraft?.recheck?.close(); clearInterval(timer); if (cardTimer) clearInterval(cardTimer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]); sleep?.close(); client.close(); if (!borrowed) db.close(); } };
-  } catch (error) { operatorAudit?.close(); sleep?.close(); client.close(); if (!borrowed) db.close(); throw error; }
+    }, async close() { await operator?.close();
+      await minecraft?.recheck?.close();
+      clearInterval(timer);
+      if (cardTimer) clearInterval(
+      cardTimer); await Promise.all([runtime.close(), shared?.recall.cancelAll(), touch?.close(), spoken.close()]);
+        sleep?.close();
+         client.close();
+           if (!borrowed) db.close(); } };
+  } catch (error) { operatorAudit?.close();
+    sleep?.close();
+    client.close();
+    if (!borrowed) db.close();
+    throw error; }
 }
 export async function serveFcaTaskRoute(service: ReturnType<typeof configuredServerFca>, request: IncomingMessage,
   response: ServerResponse, principal: { scopeKey: string } | null, url: URL): Promise<boolean> {

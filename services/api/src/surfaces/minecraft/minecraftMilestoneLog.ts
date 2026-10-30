@@ -5,7 +5,8 @@ import { BED_ITEM, countMatching, type ItemCounts } from './minecraftItems.js';
  * each early-game item (or enters the Nether), and the closed `stage` of her progress from what she carries. Content-free: names
  * from a closed list, seconds and a game tick.
  */
-// Run 48: the diamond pickaxe was made at +1,000 s and no line was written, because the closed list below did not name it (the meter's milestones are the plan's; this list is the journal's): every item
+// Run 48: the diamond pickaxe was made at +1,000 s and no line was written, because the closed list below did not name it (the
+// meter's milestones are the plan's; this list is the journal's): every item
 // the meter points at is here, in the order of the road (the water bucket as well).
 export const MILESTONE_NAMES = Object.freeze(['wooden_pickaxe', 'stone_pickaxe', 'stone_axe', 'bed', 'iron_pickaxe', 'bucket', 'iron_armor',
   'diamond_pickaxe', 'water_bucket', 'obsidian', 'nether_portal', 'blaze_rod'] as const);

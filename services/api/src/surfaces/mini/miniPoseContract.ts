@@ -1,10 +1,14 @@
 /**
  * Mini poses (owner 2026-10-28): the small Shannon who lives on the edges of the owner's windows is drawn from a library of still
- * pictures. Each reply asks which picture fits; Jev picks one from the closest few, or says none fits, and then a new one is drawn
+ * pictures. Each reply asks which picture fits; Jev picks one from the closest few, or says none fits, and then
+ * a new one is drawn
  * (gpt-image-2.5), inspected and kept, so the library grows with use and fewer replies wait for a drawing.
  *
  * A pose is one picture in four variants (the base, mouth open, eyes closed, both) that differ only in the face. A walk has more
- * pictures, the frames of its walk cycle (`step1` to `step8`: eight, a full cycle of two steps; older walks have `step1` to `step4`), that the desktop plays while she walks. `contact` is how she touches the surface; the desktop's engine decides where she is, the library what she does.
+ * pictures, the frames of its walk cycle (`step1` to `step8`: eight, a full cycle of two steps; older walks have `step1` to
+ * `step4`), that the desktop plays while she walks. `contact` is how she touches the surface; the desktop's
+ * engine decides where she
+ * is, the library what she does.
  */
 /** `wall`: clinging to the side of a window while she climbs it. */
 export const MINI_CONTACTS = ['stand', 'sit', 'lie', 'hang', 'air', 'wall'] as const;
@@ -24,9 +28,12 @@ export const MINI_SEED_EXPRESSIONS = [
 ] as const;
 
 /**
- * What a picture is for. The engine's own: rest, walk, jump, fall, carried, sleep, climb, peek (from a screen edge), dizzy. Shown by
- * the desktop for what the owner's screen is doing: watch (her back to the viewer, the window under her), watchVideo (the same with
- * popcorn, a video in full screen), type (a tiny laptop, the owner typing), dance (music playing), point (a notice), work (Shannon's
+ * What a picture is for. The engine's own: rest, walk, jump, fall, carried, sleep, climb, peek (from a screen
+ * edge), dizzy. Shown by
+ * the desktop for what the owner's screen is doing: watch (her back to the viewer, the window under her),
+ * watchVideo (the same with
+ * popcorn, a video in full screen), type (a tiny laptop, the owner typing), dance (music playing), point (a
+ * notice), work (Shannon's
  * own task running), ask (Shannon waiting for the owner).
  */
 export type MiniActivity = 'rest' | 'walk' | 'jump' | 'fall' | 'carried' | 'sleep' | 'watch' | 'climb' | 'peek' | 'dizzy'

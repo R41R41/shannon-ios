@@ -2,9 +2,12 @@ import { FcaNoDecisionError, FcaNoResponseError } from './fcaNoResponse.js';
 import type { FcaModelOutput } from './fcaPorts.js';
 
 /**
- * The retry policy of one FCA decision (Minebot parity audit C-20, 2026-10-19). A provider that answered 429, 408, 409, 5xx or 529,
- * or a request that got no answer (reset, timed out), produced no decision: nothing was executed, so the same request is asked again,
- * visibly, a bounded number of times with exponential backoff and jitter, and the provider's `retry-after` is honoured. The history
+ * The retry policy of one FCA decision (Minebot parity audit C-20, 2026-10-19). A provider that answered 429,
+ * 408, 409, 5xx or 529,
+ * or a request that got no answer (reset, timed out), produced no decision: nothing was executed, so the same
+ * request is asked again,
+ * visibly, a bounded number of times with exponential backoff and jitter, and the provider's `retry-after` is
+ * honoured. The history
  * is never touched by a failed attempt: only a complete answer adds a round, so a retry cannot duplicate one.
  */
 export interface FcaRetryPolicy {
@@ -26,9 +29,12 @@ export const FCA_RETRY_POLICY: FcaRetryPolicy = Object.freeze({
 /** The statuses that carry no decision and may pass: request timeout, conflict, throttling, and every server error. */
 export const retryableStatus = (status: number): boolean => status === 408 || status === 409 || status === 429 || (status >= 500 && status < 600);
 
-/** The closed code of a provider refusal about the account's credit (A-20): nothing is wrong with the request, and nothing is asked again until the balance is filled. */
+/** The closed code of a provider refusal about the account's credit (A-20): nothing is wrong with the request,
+ * and nothing is asked
+ * again until the balance is filled. */
 export const FCA_MODEL_BILLING = 'FCA_MODEL_BILLING';
-/** A provider answer worth asking again. The message stays `FCA_MODEL_HTTP_<status>`, so every closed-code check sees what it saw. */
+/** A provider answer worth asking again. The message stays `FCA_MODEL_HTTP_<status>`, so every closed-code check
+ * sees what it saw. */
 export class FcaProviderError extends Error {
   readonly retryAfterMs: number | null;
   constructor(readonly status: number, retryAfterMs: number | null = null) {
@@ -44,7 +50,8 @@ export class FcaProviderError extends Error {
  */
 export class FcaDecisionUnavailableError extends Error {
   /**
-   * `retryAfterMs`: the provider's own `retry-after` of the failure that ended the retries, when it sent one (even a longer one than is
+   * `retryAfterMs`: the provider's own `retry-after` of the failure that ended the retries, when it sent one (even
+ * a longer one than is
    * waited for here): the step-level wait that follows is never shorter than it (`taskRuntimeUnavailable.ts`).
    */
   constructor(code: string, readonly reason: string, readonly attempts: number, readonly possiblyBilled: boolean,
@@ -56,7 +63,8 @@ export class FcaDecisionUnavailableError extends Error {
 
 /** `attempts`: the requests this kind of failure is asked for, the first included (absent: the policy's `maxAttempts`). */
 export interface RetryVerdict { reason: string; possiblyBilled: boolean; retryAfterMs: number | null; attempts?: number }
-/** An answer that called no tool is asked again once: a second one that is the same is not luck (it goes on as an unavailable decision). */
+/** An answer that called no tool is asked again once: a second one that is the same is not luck (it goes on as an
+ * unavailable decision). */
 const NO_DECISION_ATTEMPTS = 2;
 
 /** Whether a failed attempt may be asked again, and why (a closed reason for the log). */
@@ -69,7 +77,8 @@ export function retryVerdict(error: unknown): RetryVerdict | null {
   return null;
 }
 
-/** The wait before attempt `failed + 1`: exponential from `baseMs` to `capMs`, jittered by +-25%, never shorter than `retry-after`. */
+/** The wait before attempt `failed + 1`: exponential from `baseMs` to `capMs`, jittered by +-25%, never shorter
+ * than `retry-after`. */
 export function retryWaitMs(failed: number, retryAfterMs: number | null, policy: FcaRetryPolicy = FCA_RETRY_POLICY,
   random: () => number = Math.random): number {
   const ceiling = Math.min(policy.capMs, policy.baseMs * 2 ** (failed - 1));
@@ -80,7 +89,8 @@ export function retryWaitMs(failed: number, retryAfterMs: number | null, policy:
 export interface FcaRetryParts {
   signal: AbortSignal;
   /**
-   * The caller's own gate (audience, sources, lease permit), run again before every further request exactly as before the first: after
+   * The caller's own gate (audience, sources, lease permit), run again before every further request exactly as
+ * before the first: after
    * the wait, and once more after a `refresh` (which can take time), so that the last thing before a request is the gate.
    */
   recheck(): Promise<void>;
@@ -91,8 +101,10 @@ export interface FcaRetryParts {
   /** A failed attempt that carried no decision: its outcome is known (nothing to apply), its spend is recorded by the adapter. */
   failed?(verdict: RetryVerdict): void;
   /**
-   * Called before a further request when the request in hand is `FCA_RETRY_REFRESH_MS` old or older (after the wait and the gate): the
-   * caller takes the body's observation again and rebuilds what depends on it, so that the decision it gets back is not discarded as
+   * Called before a further request when the request in hand is `FCA_RETRY_REFRESH_MS` old or older (after the
+ * wait and the gate): the
+   * caller takes the body's observation again and rebuilds what depends on it, so that the decision it gets back
+ * is not discarded as
    * stale. A failure here ends the decision as it would have before the first request.
    */
   refresh?(): Promise<void> | void;
@@ -101,7 +113,8 @@ export interface FcaRetryParts {
   now?(): number;
   random?(): number;
 }
-/** A request this old (a wait of 10 s or more has passed since it was built) is rebuilt from a fresh observation before it is sent again. */
+/** A request this old (a wait of 10 s or more has passed since it was built) is rebuilt from a fresh observation
+ * before it is sent again. */
 export const FCA_RETRY_REFRESH_MS = 10_000;
 
 function wait(milliseconds: number, signal: AbortSignal): Promise<boolean> {
@@ -135,7 +148,8 @@ function nextWait(verdict: RetryVerdict, state: { failed: number; billed: number
 }
 
 /**
- * Asks for one decision, again after a failure that carried none (`retryVerdict`). Every other failure, and a stop, passes through
+ * Asks for one decision, again after a failure that carried none (`retryVerdict`). Every other failure, and a
+ * stop, passes through
  * unchanged. When the attempts or the time run out it throws `FcaDecisionUnavailableError` with the last failure's closed code.
  */
 export async function decideWithRetry(attempt: () => Promise<FcaModelOutput>, parts: FcaRetryParts): Promise<FcaModelOutput> {

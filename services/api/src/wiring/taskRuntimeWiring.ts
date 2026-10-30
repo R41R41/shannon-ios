@@ -1,28 +1,30 @@
+import { fcaErrorCode,PROVIDER_RETRY_DELAY,providerServerErrorCode,failsBeforeAnyEffect,HELD_RETRIES,heldBeforeAnyEffect,rejectedTaskReport } from './taskRuntimeFailures.js';
 import { observedTaskRuntime } from '../infra/observer/observerTaskRuntime.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { actionResource, type ActionThreads, type ActionLease } from '../contracts/actionThreadContract.js';
+import { actionResource,type ActionThreads,type ActionLease } from '../contracts/actionThreadContract.js';
 import { SQLiteFcaTaskAuthority } from '../mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { migrateAgentTasks } from '../mind/action/agentTasks/store/agentTaskPersistence.js';
 import { SQLiteTaskRuntimeStore } from '../mind/action/taskRuntime/store/taskRuntimeStore.js';
-import type { TaskStep, TaskRuntime, TaskView, TaskSleepTicket, TaskAuthority } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { TaskStep,TaskRuntime,TaskView,TaskSleepTicket,TaskAuthority } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { FcaModel } from '../mind/action/fca/fcaPorts.js';
-import { runFcaStep, type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
-import { inActionExecution, type ActionExecution } from '../infra/context/actionExecution.js';
-import { observeAsync, observeSync, observerHandoff, withObserverRun } from '../infra/observer/observerContext.js';
+import { runFcaStep,type FcaStepPorts } from '../mind/action/fca/fcaRunner.js';
+import { inActionExecution,type ActionExecution } from '../infra/context/actionExecution.js';
+import { observeAsync,observeSync,observerHandoff,withObserverRun } from '../infra/observer/observerContext.js';
 import { acquireAction } from './actionExecutionWiring.js';
 import {
-  UNKNOWN_EXIT_MODEL_ONLY_MS, classifyLease, deriveTaskKind, leaseOutcome, leaseUnsent, slotAdmissible, slotClassOf, type SlotClass,
+UNKNOWN_EXIT_MODEL_ONLY_MS,classifyLease,deriveTaskKind,leaseOutcome,leaseUnsent,slotAdmissible,slotClassOf,type SlotClass,
 } from '@shannon/mind';
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
-import { conversationLeaseValid, fcaTaskLeaseValid, lostAdmissionExpired } from './actionLeaseRules.js';
+import { conversationLeaseValid,fcaTaskLeaseValid,lostAdmissionExpired } from './actionLeaseRules.js';
 import type { FcaBudget } from './fcaBudgetWiring.js';
 import type { FcaBodyRecovery } from './fcaBodyRecovery.js';
-import { pauseForBilling, settleUnavailableStep, type UnavailableParts } from './taskRuntimeUnavailable.js';
+import { pauseForBilling,settleUnavailableStep,type UnavailableParts } from './taskRuntimeUnavailable.js';
 import { FCA_MODEL_BILLING } from '../mind/action/fca/fcaProviderRetry.js';
-import { pausedSpoken, pausedSummary } from './taskPauseNotice.js';
+import { pausedSpoken,pausedSummary } from './taskPauseNotice.js';
 import { MINECRAFT_REQUEST_CRITERIA } from './fcaMinecraftRequests.js';
 import { operatorRequestTask } from './operatorMinecraftRequests.js';
+export { fcaErrorCode, PROVIDER_RETRY_DELAY, providerServerErrorCode, rejectedBeforeAnyEffect, failsBeforeAnyEffect, heldBeforeAnyEffect, rejectedTaskReport } from './taskRuntimeFailures.js';
 
 /** The gate the once-a-second tick asks for a ready task: the walk-free `canScheduleTask`, else `canRunTask`. */
 const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask' | 'canRunTask'>) => options.canScheduleTask ?? options.canRunTask;
@@ -36,7 +38,8 @@ export interface TaskRuntimeWiringOptions {
   maintenanceAllowed?(runtime: TaskRuntime, task: TaskView): boolean;
   canRunTask?(runtime: TaskRuntime, taskId: string): boolean;
   /**
-   * The once-a-second scheduler's gate only: false skips a ready task for now; it must never walk provenance (a task about to run is
+   * The once-a-second scheduler's gate only: false skips a ready task for now; it must never walk provenance (a
+ * task about to run is
    * judged in full by `canRunTask` in `execute`, before it is admitted). `canRunTask` when absent.
    */
   canScheduleTask?(runtime: TaskRuntime, taskId: string): boolean;
@@ -47,7 +50,8 @@ export interface TaskRuntimeWiringOptions {
   /** `SHANNON_FCA_PROVENANCE_REFS` (`TaskRuntimeOptions.provenanceRefs`). */
   provenanceRefs?: boolean;
   /**
-   * The wait before a step the provider answered with a server error is run again (`PROVIDER_RETRY_DELAY`), and between the retries
+   * The wait before a step the provider answered with a server error is run again (`PROVIDER_RETRY_DELAY`), and
+ * between the retries
    * of one decision (`decideWithRetry`, which otherwise backs off exponentially); tests give 0.
    */
   providerRetryDelayMs?(): number;
@@ -59,10 +63,13 @@ export interface TaskRuntimeWiringOptions {
     now(): string; running(taskId: string): boolean }): FcaBodyRecovery;
   /** Tests: the wait between the rounds of a Minecraft request whose decision was unavailable (`taskRuntimeUnavailable.ts`). */
   bodyUnavailableCooldownMs?(cycles: number): number;
-  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'audienceAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'bodyRecall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
+  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'audienceAllowed' |
+     'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' |
+        'bodyRecall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
     | 'waitCounterpart' | 'keepBodyTools' | 'obsMode' | 'decisionRetryDelayMs' | 'retryAllowed' | 'plan' | 'permitWindowMs'>>;
   /**
-   * A step that ran asks for the next tick at once instead of waiting for the once-a-second one (production run 15, 2026-10-19: 1.9 s
+   * A step that ran asks for the next tick at once instead of waiting for the once-a-second one (production run
+ * 15, 2026-10-19: 1.9 s
    * between one decision's commit and the next one's start, half a second of it this wait on average). Only a step that ran: an
    * execution that returned before its step (not ready, not admitted) never asks, so a task that cannot run never spins the loop.
    * Absent (tests that tick by hand): the interval alone.
@@ -83,7 +90,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     const originMatches = !!task && action?.origin === task.origin && (task.origin === 'owner_request' || task.origin === 'own_time' || sleepTicketed());
     return originMatches && fcaTaskLeaseValid(action, scope, taskId, lease, at);
   };
-  /** Set below, once the runtime and the table of running tasks exist; `retireUnknown` asks it which unknown tasks to leave alone. */
+  /** Set below, once the runtime and the table of running tasks exist; `retireUnknown` asks it which unknown tasks
+ * to leave alone. */
   let recovery: FcaBodyRecovery | undefined;
   const runtime: TaskRuntime = observedTaskRuntime(new SQLiteTaskRuntimeStore(db, { authority, now, sleepTicket: options.sleepTicket, leaseValid,
     holdUnknown: task => recovery?.holds(task) ?? false, pausedSummary, reportsToParent: task => !operatorRequestTask(task, MINECRAFT_REQUEST_CRITERIA),
@@ -133,8 +141,9 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
         if (!action || action.scopeKey !== scopeKey || action.lastHolder !== receipt.lease.holder) continue;
         const confirmed = action.state === receipt.state && action.result === result
           && [receipt.lease.generation, receipt.lease.generation + 1].includes(action.generation);
-        const expiredUnsentStop = receipt.state === 'cancelled' && action.state === 'cancelled' && !action.sent
-          && action.result === 'lease_expired' && action.generation === receipt.lease.generation + 1;
+        const expiredStopMatches = () => (receipt.state === 'cancelled' && action.state === 'cancelled' && !action.sent
+          && action.result === 'lease_expired' && action.generation === receipt.lease.generation + 1);
+        const expiredUnsentStop = expiredStopMatches();
         if (confirmed || expiredUnsentStop) runtime.acknowledgeReceipt(scopeKey, receipt.id);
       } catch { /* Durable receipt remains; retry the acknowledgement, never the completed model or tool call. */ }
     }
@@ -154,7 +163,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       return task;
     });
   }
-  /** When each task's last step here finished (epoch ms): the start of the next one's wait, `ActionExecution.admission`. Read once. */
+  /** When each task's last step here finished (epoch ms): the start of the next one's wait,
+ * `ActionExecution.admission`. Read once. */
   const finishedAt = new Map<string, number>();
   /** Whether `execute` ran a step (`continueAtOnce`). */
   async function execute(taskId: string, controller: AbortController): Promise<boolean> {
@@ -162,12 +172,17 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     finishedAt.delete(taskId);
     const task = recoverAdmission(taskId);
     if (!task || task.phase !== 'ready' || !executionAllowed(task) || options.canRunTask?.(runtime, taskId) === false || recovery?.blocks(taskId)) return false;
-    return withObserverRun({ scopeKey, surface: 'fca', runId: randomUUID(), audience: options.ownerAlone() ? 'owner' : 'others', taskId, parentTaskId: task.parentId }, async () => {
+    return withObserverRun({ scopeKey, surface: 'fca', runId: randomUUID(), audience: options.ownerAlone() ? 'owner' : 'others', taskId,
+       parentTaskId: task.parentId }, async () => {
     observerHandoff('taskHub', 'queue', { phase: 'admission' });
     let mark = performance.now();
-    const lap = () => { const at = performance.now(), spent = at - mark; mark = at; return spent; };
-    const active = await observeAsync('queue', { phase: 'admission', revision: task.revision }, () => acquireAction(actions, { scopeKey, kind: 'agentTask', origin: task.origin,
-      sourceId: `fca:${taskId}:${task.revision}`, resources: [actionResource(scopeKey, `fca:${taskId}`)] }, controller.signal), value => ({ admitted: value !== null }));
+    const lap = () => { const at = performance.now(), spent = at - mark;
+      mark = at;
+      return spent; };
+    const active = await observeAsync('queue', { phase: 'admission', revision: task.revision }, () => acquireAction(actions, { scopeKey,
+       kind: 'agentTask', origin: task.origin,
+      sourceId: `fca:${taskId}:${task.revision}`, resources: [actionResource(scopeKey, `fca:${taskId}`)] }, controller.signal), value => ({
+         admitted: value !== null }));
     if (!active) return false;
     const acquireMs = lap();
     const job = running.get(taskId);
@@ -175,12 +190,15 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     let step: TaskStep | null = null;
     let stepPorts: ReturnType<NonNullable<TaskRuntimeWiringOptions['stepPorts']>> | undefined;
     try {
-      step = observeSync('taskHub', { phase: 'begin_step', actionId: active.execution.lease.id }, () => runtime.beginStep(scopeKey, taskId, active.execution.lease, task.revision), value => ({ admitted: value !== null, stepId: value?.id ?? null }));
-      if (!step) { await active.finish('cancelled', 'fca_not_ready'); return false; }
+      step = observeSync('taskHub', { phase: 'begin_step', actionId: active.execution.lease.id }, () => runtime.beginStep(scopeKey, taskId,
+         active.execution.lease, task.revision), value => ({ admitted: value !== null, stepId: value?.id ?? null }));
+      if (!step) { await active.finish('cancelled', 'fca_not_ready');
+        return false; }
       const admitted = step, beginMs = lap();
       const budgeted = await options.budget?.before(task, active.execution.lease) ?? { ok: true as const };
       if (!budgeted.ok) {
-        // At its cap or without her budget: the task ends here with a report, before any paid call (E3). A throw goes to settleFailedStep.
+        // At its cap or without her budget: the task ends here with a report, before any paid call (E3). A throw goes to
+// settleFailedStep.
         await stopForBudget(admitted, budgeted.report, budgeted.code === 'task_estimates');
         await flushReceipts();
         return false;
@@ -195,7 +213,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
             ...(options.providerRetryDelayMs ? { decisionRetryDelayMs: () => options.providerRetryDelayMs!() } : {}),
             retryAllowed: () => options.budget?.room?.(task, active.execution.lease) ?? true,
             ...stepPorts, ...(task.origin === 'maintenance' ? { taskTools: false } : {}), ownerAlone: options.ownerAlone,
-            executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: () => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal));
+            executionAllowed: () => executionAllowed(task) && (stepPorts?.executionAllowed?.() ?? true), permit: (
+              ) => active.execution.permit([actionResource(scopeKey, `fca:${taskId}`)]) }, active.execution.signal));
       } finally {
         // The step's cost, and the release or settlement of its reservation (also when its ports could not be built): never its outcome.
         await settleBudget(task, active.execution.lease, budgeted.reservationId);
@@ -234,7 +253,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await flushReceipts();
       return;
     }
-    // A-20: the decision was refused for the account's credit: a Minecraft request is paused, resumable once the balance is filled (it was failed, with the world running).
+    // A-20: the decision was refused for the account's credit: a Minecraft request is paused, resumable once the
+// balance is filled (it was failed, with the world running).
     if (step && code === FCA_MODEL_BILLING && pauseForBilling(unavailable, step, execution)) {
       await flushReceipts();
       return;
@@ -249,7 +269,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     // compaction, the task was paused as unknown and retired): the step is closed as `continue` and the task goes on. See below.
     if (await retriedHeldStep(code, taskId, step, execution)) return;
     // The provider refused the request itself (nothing ran, nothing was charged, an identical retry is refused again), or her history
-    // could not be made to fit before the step's model call (a replay holds the same way; owner test 2026-10-13: FCA_HISTORY_RECENT_LIMIT
+    // could not be made to fit before the step's model call (a replay holds the same way; owner test 2026-10-13:
+// FCA_HISTORY_RECENT_LIMIT
     // left a research unknown until it was retired). A known failure with its notice.
     if (step && failsBeforeAnyEffect(code, execution) && failRejectedStep(step)) {
       console.log(`Shannon FCA step failed task=${taskId} code=${code}`);
@@ -308,7 +329,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
    * children cannot fail while they run, so it and its children are stopped instead and this step closes as stopped. Any
    * refusal is thrown to the caller, which closes the step through settleFailedStep.
    *
-   * `pausing` (only unconfirmed charges would take the task over its cap, `fcaBudgetWiring.ts`): the task is never failed. It is stopped
+   * `pausing` (only unconfirmed charges would take the task over its cap, `fcaBudgetWiring.ts`): the task is never
+ * failed. It is stopped
    * (resumable by the owner) with the report as its summary, whether or not it has children.
    */
   async function stopForBudget(step: TaskStep, report: string, pausing = false): Promise<void> {
@@ -323,7 +345,8 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       }
       if (!runtime.recordStoppedStep(step)) throw new Error('FCA_BUDGET_STOP_UNRECORDED');
       if (pausing) {
-        // The failure this replaced left a report (`fca.result`); the pause leaves its own, once (the step id is its key). `recordProgress`
+        // The failure this replaced left a report (`fca.result`); the pause leaves its own, once (the step id is its
+// key). `recordProgress`
         // is not used: the task is stopping now, so no step may record.
         unavailable.note(step.taskId, report);
         try { unavailable.pauseNotice(step.taskId, step.id, report); } catch { /* the task is paused either way; its summary says so */ }
@@ -419,63 +442,4 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       await recovery?.idle();
     },
   };
-}
-
-/** A closed error code for logs: FCA codes are content-free; anything else is reported only by its class. */
-export function fcaErrorCode(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  if (/^[A-Z][A-Z0-9_]{2,80}$/u.test(message)) return message;
-  return error instanceof Error && /^[A-Za-z]{1,40}$/u.test(error.name) ? error.name : 'unknown';
-}
-
-/** 3-5 s: one short wait with jitter before a step the provider answered 5xx/529 is run again. */
-export const PROVIDER_RETRY_DELAY = () => 3_000 + Math.floor(Math.random() * 2_000);
-
-/** A decision request the provider answered with a server error (5xx, 529), with no tool outcome in doubt. */
-export function providerServerErrorCode(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
-  return /^FCA_MODEL_HTTP_5\d\d$/u.test(code) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown';
-}
-
-/**
- * Definitive provider answers to the decision request with no tool outcome in doubt: a refusal (4xx, not throttling or timeouts)
- * or a server error (5xx, 529, after its one retry; 2026-10-13: a research step's server error sat unknown for ten minutes
- * holding a slot while the owner waited). No decision came back, so nothing ran; a server error's spend stays booked as
- * unknown (a conservative bound), a refusal's as none. The task fails with its report and he can ask again.
- */
-export function rejectedBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
-  const status = /^FCA_MODEL_HTTP_([45]\d\d)$/u.exec(code)?.[1] ?? (code === FCA_MODEL_BILLING ? '402' : undefined);
-  return !!status && !['408', '409', '429'].includes(status) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown';
-}
-
-/** The history limits `prepareFcaHistory` throws before the step's model call (`fcaHistory.ts`): deterministic, so a replay holds too. */
-const HISTORY_LIMITS: ReadonlySet<string> = new Set(['FCA_HISTORY_RECENT_LIMIT', 'FCA_HISTORY_ROUND_LIMIT', 'FCA_HISTORY_COMPACTION_LIMIT']);
-/**
- * The closed checks of the shared-context call (`anthropicFcaContext.ts`, `fcaEvidenceStore.beforeActions`): a complete, paid answer
- * refused before any of its actions ran. The decoder answers an invalid item as a correction, so these remain only as a guard; one
- * that still reaches here is a known failure, never an unknown step (Minecraft operator run 5, 2026-10-14: FCA_EXPECTATION_INVALID).
- */
-const CONTEXT_REJECTIONS: ReadonlySet<string> = new Set(['FCA_CONTEXT_INVALID', 'FCA_EXPECTATION_INVALID', 'FCA_APPRAISAL_INVALID']);
-export function failsBeforeAnyEffect(code: string, execution: Pick<ActionExecution, 'modelOutcome' | 'stepOutcome'>): boolean {
-  return rejectedBeforeAnyEffect(code, execution) || (HISTORY_LIMITS.has(code) && execution.stepOutcome !== 'unknown')
-    || (CONTEXT_REJECTIONS.has(code) && execution.modelOutcome === 'acknowledged' && execution.stepOutcome !== 'unknown');
-}
-
-/** Holds of a step's execution (`fcaRunner.ts` `checked`, and its history's own check in `prepareFcaHistory`). */
-const HELD_CODES: ReadonlySet<string> = new Set(['FCA_EXECUTION_HELD', 'FCA_HISTORY_HELD']);
-const HELD_RETRIES = 3;
-/**
- * A hold before the step asked for its decision, with no bounded executor started in it (a body skill, a reflex or a Minecraft
- * lifecycle operation sets `stepOutcome`), no model call in doubt and no write in flight. Before its decision a step has only run
- * internal work and model calls whose results it keeps (a committed history summary among them), so nothing outside can be done
- * twice by running the next step. Any other hold keeps today's unknown.
- */
-export function heldBeforeAnyEffect(code: string,
-  execution: Pick<ActionExecution, 'decisionRequested' | 'modelOutcome' | 'stepOutcome' | 'writeInFlight'>): boolean {
-  return HELD_CODES.has(code) && execution.decisionRequested !== true && execution.stepOutcome === undefined
-    && execution.modelOutcome !== 'unknown' && execution.writeInFlight !== true;
-}
-
-/** Owner 2026-10-19 (item 10): a failure says why, and what comes next. */
-export function rejectedTaskReport(title: string): string {
-  return `「${title.slice(0, 80)}」は処理中にエラーが起きて、最後まで進められませんでした。もう一度頼んでもらえたら、最初からやり直します。`;
 }

@@ -5,9 +5,12 @@ import { ledgerRow, ledgerUnexplainedRow, type RowContext } from './minecraftOpe
 import type { QueueRecordRow } from './minecraftLlmcQueue.js';
 
 /**
- * The decision record's `ledger` and `ledger_unexplained` rows (continue contract 8; the judge's boundary 3 reads them): what the ledger took of one call (the ids of the
- * events it applied, once each), the counts of the promises it holds and the counts the observation shows, and the difference no event explains. The ledger is the plan's
- * (`FcaPlanPort.applyLedger`, the one way in); this only looks at what it did, before and after, and says so in the record. It changes nothing the ledger returns.
+ * The decision record's `ledger` and `ledger_unexplained` rows (continue contract 8; the judge's boundary 3 reads them): what the
+ * ledger took of one call (the ids of the
+ * events it applied, once each), the counts of the promises it holds and the counts the observation shows, and the difference no
+ * event explains. The ledger is the plan's
+ * (`FcaPlanPort.applyLedger`, the one way in); this only looks at what it did, before and after, and says so in the record. It
+ * changes nothing the ledger returns.
  */
 export interface LedgerRecording {
   /** The run (the task's id), the head's boot and the queue's name (a call from a reflex has no command). */
@@ -25,19 +28,23 @@ function observedHave(item: string, observation: BodyObservation | null): number
 }
 
 /** `port.applyLedger(input)`, with its rows written to the record. A recorder that fails never fails the ledger. */
-export function recordedLedger(port: Pick<FcaPlanPort, 'applyLedger' | 'ledgerSeen' | 'tree'>, input: Input, recording: LedgerRecording): ReturnType<FcaPlanPort['applyLedger']> {
+export function recordedLedger(port: Pick<FcaPlanPort, 'applyLedger' | 'ledgerSeen' | 'tree'>, input: Input, recording: LedgerRecording):
+   ReturnType<FcaPlanPort['applyLedger']> {
   let before: Set<string> | null = null;
   try { before = new Set(port.ledgerSeen().eventIds); } catch { /* the row is left out */ }
   const added = port.applyLedger(input);
   try {
     if (!before) return added;
     const command = input.by?.command, item = input.by?.item;
-    const context: RowContext = { run: recording.run, ...(recording.queue ? { queue: recording.queue } : {}), ...(command ? { command } : {}), ...(item ? { item } : {}),
+    const context: RowContext = { run: recording.run, ...(recording.queue ? { queue: recording.queue } : {}), ...(command ? { command } : {
+      }), ...(item ? { item } : {}),
       headBoot: recording.headBoot, observation: input.observation, at: new Date((recording.now ?? Date.now)()).toISOString() };
     const applied = [...new Set(input.events.map(event => event?.id).filter((id): id is string => typeof id === 'string' && !before!.has(id)))];
-    // The counts are told only when the ledger took this very observation (an older one leaves `have` where it was: there is nothing to compare it with).
+    // The counts are told only when the ledger took this very observation (an older one leaves `have` where it was:
+// there is nothing to compare it with).
     const seen = port.ledgerSeen().lastObs, took = !!input.observation && !!seen && seen.obsSeq === input.observation.sequence;
     const have: Record<string, number> = {}, observed: Record<string, number> = {};
+    const collectObservedCounts = () => {
     if (took) {
       for (const promise of port.tree().promises) {
         const now = observedHave(promise.item, input.observation);
@@ -46,6 +53,8 @@ export function recordedLedger(port: Pick<FcaPlanPort, 'applyLedger' | 'ledgerSe
         observed[promise.item] = now;
       }
     }
+    };
+    collectObservedCounts();
     const declared = added.find(line => line.declared);
     if (applied.length || added.length || Object.keys(have).length) {
       recording.record(ledgerRow(context, { applied, have, observed, ...(declared ? { promiseRev: declared.promiseRev } : {}) }));

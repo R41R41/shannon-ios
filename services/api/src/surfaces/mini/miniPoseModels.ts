@@ -1,8 +1,10 @@
 import { encodePng, type RgbaImage } from './png.js';
 
 /**
- * The three OpenAI calls of a mini pose: drawing (images/edits with reference pictures), reading (a small vision model that writes
- * a pose's description or inspects a drawing) and embedding (to find the closest pictures). Each reports its seconds and its cost.
+ * The three OpenAI calls of a mini pose: drawing (images/edits with reference pictures), reading (a small vision
+ * model that writes
+ * a pose's description or inspects a drawing) and embedding (to find the closest pictures). Each reports its
+ * seconds and its cost.
  */
 export const MINI_IMAGE_MODEL = 'gpt-image-2.5-flare';
 export const MINI_READ_MODEL = 'gpt-5.6-luna';
@@ -65,7 +67,8 @@ Answer in JSON.` }];
     const started = performance.now();
     const response = await retried(() => this.fetcher('https://api.openai.com/v1/responses', {
       method: 'POST', headers: { Authorization: `Bearer ${this.options.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: request.model ?? this.options.readModel ?? MINI_READ_MODEL, instructions: request.instructions, input: [{ role: 'user', content }],
+      body: JSON.stringify({ model: request.model ?? this.options.readModel ?? MINI_READ_MODEL, instructions: request.instructions, input:
+         [{ role: 'user', content }],
         text: { format: { type: 'json_object' } }, store: false }),
       signal: AbortSignal.timeout(60_000),
     }));
@@ -139,6 +142,8 @@ function extractOutputText(value: unknown): string {
 
 export function cosine(a: readonly number[], b: readonly number[]): number {
   let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < Math.min(a.length, b.length); i++) { dot += a[i]! * b[i]!; na += a[i]! ** 2; nb += b[i]! ** 2; }
+  for (let i = 0; i < Math.min(a.length, b.length); i++) { dot += a[i]! * b[i]!;
+    na += a[i]! ** 2;
+    nb += b[i]! ** 2; }
   return na && nb ? dot / Math.sqrt(na * nb) : 0;
 }

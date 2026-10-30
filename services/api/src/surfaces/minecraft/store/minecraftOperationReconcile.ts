@@ -3,8 +3,10 @@ import type { ActionLease } from '../../../contracts/actionThreadContract.js';
 import { reconciledReceipt, RECONCILED_BY_RELEASE } from './minecraftControlStore.js';
 
 /**
- * The body operations of one unknown step, read and reconciled once the body itself has proven its inputs released (Minebot parity
- * audit C-20/C-21, 2026-10-19). An operation whose receipt never came (the body restarted, the API restarted, the wait ran out) is
+ * The body operations of one unknown step, read and reconciled once the body itself has proven its inputs
+ * released (Minebot parity
+ * audit C-20/C-21, 2026-10-19). An operation whose receipt never came (the body restarted, the API restarted,
+ * the wait ran out) is
  * never sent again: its row is closed here, as a cancellation the body's own release confirmed, so that the task can look at the
  * world again and decide. A real receipt that arrives late replaces the closed one (`MinecraftControlStore.settle`).
  */
@@ -24,7 +26,8 @@ export function operationUnresolved(operation: BodyOperationState): boolean {
 }
 
 /**
- * With the task's id (every caller in the recovery has it) the rows are found by `task_id` (`fca_body_operations_task`) before the
+ * With the task's id (every caller in the recovery has it) the rows are found by `task_id`
+ * (`fca_body_operations_task`) before the
  * lease's JSON is read, not by reading the JSON of every operation the body ever ran (L-1).
  */
 const operations = (byTask: boolean) => `SELECT id,json_extract(command_json,'$.kind') AS kind,json_extract(command_json,'$.skill') AS skill,
@@ -70,10 +73,13 @@ export function reconcileOperations(db: DatabaseSync, lease: ActionLease, scopeK
   for (const row of rowsOf(db, lease, scopeKey, taskId)) {
     const { connection, ...operation } = stateOf(row);
     if (!operationUnresolved(operation)) continue;
-    // Continue contract 1: the operation ends `released` and its result stays unknown (`unit`), so the model is not told a cancellation that did not happen.
+    // Continue contract 1: the operation ends `released` and its result stays unknown (`unit`), so the model is not
+// told a cancellation that did not happen.
     const receipt = { id: operation.id, connectionId: connection, outcome: 'cancelled', inputsReleased: true, observedAt: at,
       reconciled: RECONCILED_BY_RELEASE, evidenceId, was: operation.outcome ?? operation.phase, unit: { goal: 'unknown', end: 'unknown', released: true } };
-    db.prepare("UPDATE fca_body_operations SET phase='settled',receipt_json=?,state='released',released_by='proof' WHERE id=?").run(JSON.stringify(receipt), operation.id);
+    db.prepare(("UPDATE fca_body_operations SET phase='settled',receipt_json=?,state='released',released_by='proof' WHERE " +
+"id=?")).run(
+      JSON.stringify(receipt), operation.id);
     closed.push(operation);
   }
   return closed;

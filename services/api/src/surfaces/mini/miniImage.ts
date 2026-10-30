@@ -17,20 +17,24 @@ export interface Box { left: number; top: number; right: number; bottom: number 
 export const GUIDE_SIDE = 420;
 
 /**
- * The layout guide: a flat pure-green board that stands for the top of a window. `air` and `hang` have none (a transparent canvas);
+ * The layout guide: a flat pure-green board that stands for the top of a window. `air` and `hang` have none (a
+ * transparent canvas);
  * `wall` has a tall board on the left whose right edge is the window's side.
  */
 export function guideFor(contact: MiniContact): RgbaImage {
   const image = blankImage(MINI_CANVAS, MINI_CANVAS);
   if (contact === 'air' || contact === 'hang') return image;
   if (contact === 'wall') {
-    for (let y = 0; y < MINI_CANVAS; y++) for (let x = 60; x <= GUIDE_SIDE; x++) { const i = (y * MINI_CANVAS + x) * 4; image.data[i + 1] = 255; image.data[i + 3] = 255; }
+    for (let y = 0; y < MINI_CANVAS; y++) for (let x = 60; x <= GUIDE_SIDE; x++) { const i = (y * MINI_CANVAS + x) * 4;
+      image.data[i + 1] =
+       255; image.data[i + 3] = 255; }
     return image;
   }
   for (let y = GUIDE_EDGE; y < MINI_CANVAS; y++) {
     for (let x = GUIDE_LEFT; x <= GUIDE_RIGHT; x++) {
       const i = (y * MINI_CANVAS + x) * 4;
-      image.data[i + 1] = 255; image.data[i + 3] = 255;
+      image.data[i + 1] = 255;
+        image.data[i + 3] = 255;
     }
   }
   return image;
@@ -44,15 +48,7 @@ const greenness = (d: Uint8ClampedArray, i: number) => d[i + 1]! - Math.max(d[i]
  */
 export function keyGreen(source: RgbaImage): { image: RgbaImage; edge: number | null; board: [number, number] | null; side: number | null } {
   const { width, height } = source, d = source.data, out = new Uint8ClampedArray(d);
-  let edge: number | null = null, left = width, right = -1;
-  for (let y = 0; y < height; y++) {
-    let count = 0;
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      if (greenness(d, i) > 90 && d[i + 3]! > 128) { count++; if (x < left) left = x; if (x > right) right = x; }
-    }
-    if (edge === null && count > width * 0.25) edge = y;
-  }
+  const { edge, left, right } = greenBoardBounds(source);
   for (let i = 0; i < d.length; i += 4) {
     const g = greenness(d, i);
     let alpha = d[i + 3]!;
@@ -65,7 +61,8 @@ export function keyGreen(source: RgbaImage): { image: RgbaImage; edge: number | 
   let side: number | null = null;
   for (let x = width - 1; x >= 0 && side === null; x--) {
     let count = 0;
-    for (let y = 0; y < height; y++) { const i = (y * width + x) * 4; if (greenness(d, i) > 90 && d[i + 3]! > 128) count++; }
+    for (let y = 0; y < height; y++) { const i = (y * width + x) * 4;
+      if (greenness(d, i) > 90 && d[i + 3]! > 128) count++; }
     if (count > height * 0.25) side = x;
   }
   return { image: { width, height, data: out }, edge, board: right >= 0 ? [left, right] : null, side };
@@ -84,7 +81,10 @@ export function solidBounds(image: RgbaImage, alphaAbove = 128): Box | null {
   for (let y = 0; y < image.height; y++) {
     for (let x = 0; x < image.width; x++) {
       if (image.data[(y * image.width + x) * 4 + 3]! <= alphaAbove) continue;
-      if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y;
+      if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
     }
   }
   return right < 0 ? null : { left, top, right, bottom };
@@ -156,8 +156,7 @@ export function changedRegion(base: RgbaImage, edited: RgbaImage): ChangedRegion
     if (diff > 40) changed[p] = 1;
   }
   const density = boxBlur(changed, width, height, 9);
-  let peak = 0, peakAt = -1;
-  for (let p = 0; p < density.length; p++) if (density[p]! > peak) { peak = density[p]!; peakAt = p; }
+  const { peak, peakAt } = densityPeak(density);
   if (peak < 0.2 || peakAt < 0) return null;
   const solidBox = solidBounds(base, 200);
   const reach = solidBox ? (solidBox.bottom - solidBox.top) * 0.22 : height * 0.2;
@@ -169,16 +168,7 @@ export function changedRegion(base: RgbaImage, edited: RgbaImage): ChangedRegion
     if (Math.hypot(x - px, y - py) <= reach) keep[p] = 1;
   }
   const grown = boxBlur(keep, width, height, 6);
-  const weight = new Float32Array(width * height);
-  let left = width, top = height, right = -1, bottom = -1, area = 0;
-  for (let p = 0; p < grown.length; p++) {
-    if (grown[p]! <= 0.01) continue;
-    const w = Math.min(1, grown[p]! * 2.2);
-    weight[p] = w;
-    if (w > 0.5) area++;
-    const x = p % width, y = Math.floor(p / width);
-    if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y;
-  }
+  const { weight, left, top, right, bottom, area } = changedWeight(grown, width, height);
   if (right < 0) return null;
   return { weight, box: { left, top, right, bottom }, share: solid ? area / solid : 1 };
 }
@@ -207,10 +197,15 @@ export function scaled(image: RgbaImage, width: number, height: number): RgbaIma
       let r = 0, g = 0, b = 0, a = 0;
       for (const [px, py, w] of [[x0, y0, (1 - wx) * (1 - wy)], [x1, y0, wx * (1 - wy)], [x0, y1, (1 - wx) * wy], [x1, y1, wx * wy]] as const) {
         const i = (py * image.width + px) * 4, alpha = d[i + 3]! * w;
-        r += d[i]! * alpha; g += d[i + 1]! * alpha; b += d[i + 2]! * alpha; a += alpha;
+        r += d[i]! * alpha;
+          g += d[i + 1]! * alpha;
+          b += d[i + 2]! * alpha;
+          a += alpha;
       }
       const o = (y * width + x) * 4;
-      if (a > 0) { out.data[o] = r / a; out.data[o + 1] = g / a; out.data[o + 2] = b / a; }
+      if (a > 0) { out.data[o] = r / a;
+        out.data[o + 1] = g / a;
+        out.data[o + 2] = b / a; }
       out.data[o + 3] = a;
     }
   }
@@ -232,12 +227,14 @@ export function placed(image: RgbaImage, width: number, height: number, x: numbe
   return out;
 }
 
-/** The mean x of her solid pixels in the top `share` of her height: where her head is, which a walk's swinging limbs do not move. */
+/** The mean x of her solid pixels in the top `share` of her height: where her head is, which a walk's swinging
+ * limbs do not move. */
 export function headCentre(image: RgbaImage, box: Box, share = 0.3): number {
   let sum = 0, count = 0;
   const until = box.top + (box.bottom - box.top) * share;
   for (let y = box.top; y <= until; y++) {
-    for (let x = box.left; x <= box.right; x++) if (image.data[(y * image.width + x) * 4 + 3]! > 128) { sum += x; count++; }
+    for (let x = box.left; x <= box.right; x++) if (image.data[(y * image.width + x) * 4 + 3]! > 128) { sum += x;
+      count++; }
   }
   return count ? sum / count : (box.left + box.right) / 2;
 }
@@ -250,10 +247,15 @@ export function halve(image: RgbaImage): RgbaImage {
       let r = 0, g = 0, b = 0, a = 0;
       for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
         const i = ((y * 2 + dy) * image.width + x * 2 + dx) * 4, alpha = d[i + 3]!;
-        r += d[i]! * alpha; g += d[i + 1]! * alpha; b += d[i + 2]! * alpha; a += alpha;
+        r += d[i]! * alpha;
+          g += d[i + 1]! * alpha;
+          b += d[i + 2]! * alpha;
+          a += alpha;
       }
       const o = (y * width + x) * 4;
-      if (a > 0) { out.data[o] = r / a; out.data[o + 1] = g / a; out.data[o + 2] = b / a; }
+      if (a > 0) { out.data[o] = r / a;
+        out.data[o + 1] = g / a;
+        out.data[o + 2] = b / a; }
       out.data[o + 3] = a / 4;
     }
   }
@@ -294,6 +296,50 @@ export function onWindow(image: RgbaImage, edge: number | null): RgbaImage {
 export function crop(image: RgbaImage, box: Box): RgbaImage {
   const left = Math.max(0, box.left), top = Math.max(0, box.top), right = Math.min(image.width - 1, box.right), bottom = Math.min(image.height - 1, box.bottom);
   const out = blankImage(right - left + 1, bottom - top + 1);
-  for (let y = top; y <= bottom; y++) out.data.set(image.data.subarray((y * image.width + left) * 4, (y * image.width + right + 1) * 4), (y - top) * out.width * 4);
+  for (let y = top; y <= bottom; y++) out.data.set(image.data.subarray((y * image.width + left) * 4, (y * image.width + right + 1) * 4), (
+    y - top) * out.width * 4);
   return out;
+}
+
+/** 緑の足場が占める最初の行と水平範囲。 */
+function greenBoardBounds(source: RgbaImage) {
+  const { width, height, data: d } = source;
+  let edge: number | null = null, left = width, right = -1;
+  for (let y = 0; y < height; y++) {
+    let count = 0;
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (greenness(d, i) > 90 && d[i + 3]! > 128) { count++;
+        if (x < left) left = x;
+        if (x > right) right = x; }
+    }
+    if (edge === null && count > width * 0.25) edge = y;
+  }
+  return { edge, left, right };
+}
+
+/** 変化の重みと、その重みが広がる矩形をまとめる。 */
+function changedWeight(grown: Float32Array, width: number, height: number) {
+  const weight = new Float32Array(width * height);
+  let left = width, top = height, right = -1, bottom = -1, area = 0;
+  for (let p = 0; p < grown.length; p++) {
+    if (grown[p]! <= 0.01) continue;
+    const w = Math.min(1, grown[p]! * 2.2);
+    weight[p] = w;
+    if (w > 0.5) area++;
+    const x = p % width, y = Math.floor(p / width);
+    if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+  }
+  return { weight, left, top, right, bottom, area };
+}
+
+/** 変化の密度が最大になる画素。 */
+function densityPeak(density: Float32Array) {
+  let peak = 0, peakAt = -1;
+  for (let p = 0; p < density.length; p++) if (density[p]! > peak) { peak = density[p]!;
+    peakAt = p; }
+  return { peak, peakAt };
 }

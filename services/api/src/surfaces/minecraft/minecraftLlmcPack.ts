@@ -2,8 +2,10 @@ import { OMIT } from './minecraftLlmcLiveEnemies.js';
 
 /**
  * mb-llmc v2 (実走36: 階段掘りで丸石 121・閃緑岩 65・深層岩の丸石 154 を拾い続けて満杯になり、dig が 0/12 で止まる・drop だけの act が 4 回・
- * 形式違反の drop 1 回で約 100 秒): the pack's free slots and what fills it, from the live state's inventory lines alone (`body.pack`). The body's
- * pack is the slots 9–44, 36 stacks; each line of the inventory is one stack (a kind in two stacks is two lines), and 「ほか N件」 stands for N more.
+ * 形式違反の drop 1 回で約 100 秒): the pack's free slots and what fills it, from the live state's inventory lines alone
+ * (`body.pack`). The body's
+ * pack is the slots 9–44, 36 stacks; each line of the inventory is one stack (a kind in two stacks is two
+ * lines), and 「ほか N件」 stands for N more.
  * Facts only: the dig hand's own `collect: false` (do not walk to and pick up what dropped) is in the act's description.
  */
 export const PACK_SLOTS = 36;
@@ -14,10 +16,20 @@ const FILLER = new RegExp('^(?:cobblestone|cobbled_deepslate|deepslate|diorite|a
 const FILLER_SLOTS = 3;
 const STACK = /^([a-z_0-9]+)×(\d+)/u;
 /**
- * Run 46 (the pack said 6 free of 36; the body had none): the body writes ONE LINE A KIND ("cobbled_deepslate×230" is four slots), so a line is not a slot. The free slots are the body's
- * own number (`world.freeSlots`, the same count as its pickup's: the slots 9 to 44 that are empty); only when the frame has none are they estimated, a line by the stacks its count fills.
+ * Run 46 (the pack said 6 free of 36; the body had none): the body writes ONE LINE A KIND
+ * ("cobbled_deepslate×230" is four slots),
+ * so a line is not a slot. The free slots are the body's
+ * own number (`world.freeSlots`, the same count as its pickup's: the slots 9 to 44 that are empty); only when
+ * the frame has none are
+ * they estimated, a line by the stacks its count fills.
  */
-const ONE_SLOT = /(?:_pickaxe|_axe|_shovel|_hoe|_sword|_helmet|_chestplate|_leggings|_boots|_bed|_boat|_minecart)$|^(?:bow|crossbow|shield|trident|fishing_rod|shears|flint_and_steel|elytra|saddle|minecart|potion|splash_potion|lingering_potion|water_bucket|lava_bucket|milk_bucket|powder_snow_bucket|cod_bucket|salmon_bucket|pufferfish_bucket|tropical_fish_bucket|axolotl_bucket|tadpole_bucket|mushroom_stew|rabbit_stew|beetroot_soup|suspicious_stew|cake|written_book|writable_book|enchanted_book)$/u;
+const ONE_SLOT = new RegExp([
+  "(?:_pickaxe|_axe|_shovel|_hoe|_sword|_helmet|_chestplate|_leggings|_boots|_bed|_boat|_minecart)$|^(?:bow|",
+  "crossbow|shield|trident|fishing_rod|shears|flint_and_steel|elytra|saddle|minecart|potion|splash_potion|",
+  "lingering_potion|water_bucket|lava_bucket|milk_bucket|powder_snow_bucket|cod_bucket|salmon_bucket|",
+  "pufferfish_bucket|tropical_fish_bucket|axolotl_bucket|tadpole_bucket|mushroom_stew|rabbit_stew|",
+  "beetroot_soup|suspicious_stew|cake|written_book|writable_book|enchanted_book)$",
+].join(''), 'u');
 const SIXTEEN = /(?:_sign|_hanging_sign|_banner)$|^(?:ender_pearl|snowball|egg|bucket|honey_bottle|armor_stand|painting)$/u;
 /** The slots a stack of this many of an item fills (64 a slot unless the item stacks less). */
 export function slotsOf(name: string, count: number): number {
@@ -44,7 +56,9 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
   return { used, filler: [...filler].sort((a, b) => b[1] - a[1]) };
 }
 
-/** The body's free slots in a frame (`world.freeSlots`: its own count, the same as its pickup's), or null when it has none or it is not a count of the pack. */
+/** The body's free slots in a frame (`world.freeSlots`: its own count, the same as its pickup's), or null when it
+ * has none or it is
+ * not a count of the pack. */
 export function reportedFree(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= PACK_SLOTS ? Math.floor(value) : null;
 }
@@ -52,10 +66,13 @@ export function reportedFree(value: unknown): number | null {
 export function bedsIn(lines: readonly string[]): number {
   return lines.reduce((sum, line) => sum + Number(/^[a-z_]*_bed×(\d+)/u.exec(line)?.[1] ?? 0), 0);
 }
-/** What a full pack costs, said as a fact in the first words of the pack's lines (run 46: 36 of 36 with tuff 65, cobbled deepslate 230 and cobblestone 147, no drop was made; a go stopped full, and the obsidian hand ended "cannot pick up the drop"). */
+/** What a full pack costs, said as a fact in the first words of the pack's lines (run 46: 36 of 36 with tuff 65,
+ * cobbled deepslate
+ * 230 and cobblestone 147, no drop was made; a go stopped full, and the obsidian hand ended "cannot pick up the drop"). */
 export const FULL_COST = 'これ以上拾えない（黒曜石・鉱石・落とし物も。dig・pickup・make の物も入らず止まる）';
 /**
- * What of the filler can be dropped: each kind less what the plan's promises hold back of it (`held`), the most carried kind also less one stack kept for pillars and bridges. The kinds
+ * What of the filler can be dropped: each kind less what the plan's promises hold back of it (`held`), the most carried kind also
+ * less one stack kept for pillars and bridges. The kinds
  * are in the order of `packFacts` (the most carried first); a kind with nothing to spare is left out.
  */
 export function dropCandidates(filler: ReadonlyArray<[string, number]>, held: (item: string) => number = () => 0): Array<[string, number]> {
@@ -69,14 +86,17 @@ export function dropCandidates(filler: ReadonlyArray<[string, number]>, held: (i
   return out;
 }
 /** The candidates in words: 「cobbled_deepslate×166（3 マス）・cobblestone×147（3 マス）」, four at most; empty when there are none. */
-export const dropWords = (drops: ReadonlyArray<readonly [string, number]>): string => drops.slice(0, 4).map(([name, n]) => `${name}×${n}（${Math.ceil(n / 64)} マス）`).join('・');
+export const dropWords = (drops: ReadonlyArray<readonly [string, number]>): string => drops.slice(0, 4).map(([name,
+   n]) => `${name}×${n}（${Math.ceil(n / 64)} マス）`).join('・');
 /** Free slots at or under this, the pack says what to drop before it is full. */
 export const FULL_SOON = 3;
 /** Stacks of a filler kind kept for pillars and bridges (the first kind, the most carried). */
 const KEEP_STACK = 64;
 /**
- * Run 43 (the 36 slots filled with about 270 cobblestone and cobbled deepslate: bread could not be made, about 60 s at +2,343 to +2,402, and a go
- * stopped full at +2,427; the pack's line said the free slots only after they were 0): at 3 free slots or fewer, what to drop, before it is full.
+ * Run 43 (the 36 slots filled with about 270 cobblestone and cobbled deepslate: bread could not be made, about
+ * 60 s at +2,343 to +2,402, and a go
+ * stopped full at +2,427; the pack's line said the free slots only after they were 0): at 3 free slots or fewer,
+ * what to drop, before it is full.
  */
 function fullSoon(free: number, filler: ReadonlyArray<[string, number]>): string | null {
   if (free > FULL_SOON) return null;
@@ -93,14 +113,16 @@ function fullSoon(free: number, filler: ReadonlyArray<[string, number]>): string
     + (kinds ? `捨てる物の候補: ${kinds}。${keep}。drop で捨てる` : '要らない物を drop で捨てる');
 }
 /**
- * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run 36 and 37 (85–90 s each): with two beds or more
+ * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run
+ * 36 and 37 (85–90 s each): with two beds or more
  * the beds are enough (the End asks four, made from wool before it: `forEnd`). Empty when the inventory is not a list.
  */
 export function packLines(lines: readonly string[], options: { forEnd?: boolean; free?: number } = {}): string[] {
   if (!lines.length) return [];
   const { used: counted, filler } = packFacts(lines);
   // The body's own number when the frame has it (Math.floor, 0 to 36); else the lines' stacks.
-  const reported = typeof options.free === 'number' && Number.isFinite(options.free) && options.free >= 0 && options.free <= PACK_SLOTS ? Math.floor(options.free) : null;
+  const reported = typeof options.free === 'number' && Number.isFinite(options.free) && options.free >= 0 &&
+     options.free <= PACK_SLOTS ? Math.floor(options.free) : null;
   const used = reported === null ? counted : PACK_SLOTS - reported;
   const free = Math.max(0, PACK_SLOTS - used);
   const out = [free === 0 ? `持ち物 満杯 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}（空き 0 マス）`

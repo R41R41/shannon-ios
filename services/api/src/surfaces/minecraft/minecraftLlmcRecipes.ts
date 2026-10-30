@@ -1,19 +1,27 @@
 import { carried } from './minecraftConditions.js';
 
 /**
- * A small table of recipes (amendment A-10 2): what a `make` or a `craft` hand uses up, so that an act that would spend what a promise holds back can be told before it is
- * sent. Only the things the plan works with are here (planks, sticks, the table, the furnace, the tools of the four materials, the armour, the bucket, the shield, torches,
- * a chest, flint and steel, slabs, a ladder, a bed, the eye of ender…). **A thing that is not here is not counted** (`materialsOf` says so, and the decision's record keeps the
+ * A small table of recipes (amendment A-10 2): what a `make` or a `craft` hand uses up, so that an act that would spend what a
+ * promise holds back can be told before it is
+ * sent. Only the things the plan works with are here (planks, sticks, the table, the furnace, the tools of the
+ * four materials, the
+ * armour, the bucket, the shield, torches,
+ * a chest, flint and steel, slabs, a ladder, a bed, the eye of ender…). **A thing that is not here is not
+ * counted** (`materialsOf`
+ * says so, and the decision's record keeps the
  * item), never guessed: the head does not decide for the model, it only says what it can count.
  *
- * Names are the game's, except that a kind is written by its end: `planks` is any `*_planks`, `log` any `*_log`, `wool` any `*_wool` (the same match the conditions use:
+ * Names are the game's, except that a kind is written by its end: `planks` is any `*_planks`, `log` any `*_log`,
+ * `wool` any `*_wool`
+ * (the same match the conditions use:
  * `carried`). Numbers are the game's own (Java 1.21): `yields` is how many a single craft gives.
  */
 export interface Material { item: string; count: number }
 interface Recipe { yields: number; needs: readonly Material[] }
 
 const HEAD: Readonly<Record<string, string>> = { wooden: 'planks', stone: 'cobblestone', iron: 'iron_ingot', golden: 'gold_ingot', diamond: 'diamond' };
-const TOOLS: Readonly<Record<string, { head: number; sticks: number }>> = { pickaxe: { head: 3, sticks: 2 }, axe: { head: 3, sticks: 2 }, sword: { head: 2, sticks: 1 },
+const TOOLS: Readonly<Record<string, { head: number; sticks: number }>> = { pickaxe: { head: 3, sticks: 2 }, axe: { head: 3, sticks: 2 },
+   sword: { head: 2, sticks: 1 },
   shovel: { head: 1, sticks: 2 }, hoe: { head: 2, sticks: 2 } };
 const ARMOUR: Readonly<Record<string, number>> = { helmet: 5, chestplate: 8, leggings: 7, boots: 4 };
 const ARMOUR_OF: Readonly<Record<string, string>> = { iron: 'iron_ingot', golden: 'gold_ingot', diamond: 'diamond', leather: 'leather' };
@@ -38,12 +46,14 @@ const FIXED: Readonly<Record<string, Recipe>> = {
   bowl: { yields: 4, needs: [{ item: 'planks', count: 3 }] },
   cobblestone_slab: { yields: 6, needs: [{ item: 'cobblestone', count: 3 }] },
 };
-/** What a `make` makes from its own recipe when she lacks it (the chain the body walks: planks from logs, sticks from planks, powder from rods). */
+/** What a `make` makes from its own recipe when she lacks it (the chain the body walks: planks from logs, sticks
+ * from planks, powder from rods). */
 const CHAIN: ReadonlySet<string> = new Set(['planks', 'stick', 'blaze_powder']);
 
 /** The game's id without the namespace. */
 const idOf = (item: string): string => item.replace(/^minecraft:/u, '');
-/** The recipe of an item, or null when the table does not have it. A kind of planks is made from logs; a slab of wood from planks. */
+/** The recipe of an item, or null when the table does not have it. A kind of planks is made from logs; a slab of
+ * wood from planks. */
 export function recipeOf(item: string): Recipe | null {
   const id = idOf(item);
   if (id === 'planks' || id.endsWith('_planks')) return { yields: 4, needs: [{ item: 'log', count: 1 }] };
@@ -58,7 +68,8 @@ export function recipeOf(item: string): Recipe | null {
   const armour = /^(iron|golden|diamond|leather)_(helmet|chestplate|leggings|boots)$/u.exec(id);
   if (armour) return { yields: 1, needs: [{ item: ARMOUR_OF[armour[1]!]!, count: ARMOUR[armour[2]!]! }] };
   // A slab of wood: three planks make six.
-  if (/^(oak|spruce|birch|jungle|acacia|dark_oak|mangrove|cherry|bamboo|crimson|warped)_slab$/u.test(id)) return { yields: 6, needs: [{ item: 'planks', count: 3 }] };
+  if (/^(oak|spruce|birch|jungle|acacia|dark_oak|mangrove|cherry|bamboo|crimson|warped)_slab$/u.test(id)) return { yields: 6, needs: [{
+     item: 'planks', count: 3 }] };
   return null;
 }
 
@@ -66,11 +77,15 @@ export function recipeOf(item: string): Recipe | null {
 const kindOf = (item: string): string => item === 'planks' || item.endsWith('_planks') ? 'planks' : item;
 
 /**
- * What one hand makes uses up, in the table's names. `chain` (a `make`): a part she does not hold is made from its own recipe where the table has one (`planks`, `stick`,
- * `blaze_powder`); a part she holds is taken first. Without `chain` (a `craft`) a part she lacks is counted as it is (the craft would stop on it). `pack` is what she carries
+ * What one hand makes uses up, in the table's names. `chain` (a `make`): a part she does not hold is made from
+ * its own recipe where
+ * the table has one (`planks`, `stick`,
+ * `blaze_powder`); a part she holds is taken first. Without `chain` (a `craft`) a part she lacks is counted as it is (the craft
+ * would stop on it). `pack` is what she carries
  * (`carried`'s counts); absent: nothing. `uncounted`: the item is not in the table, so nothing is counted for it.
  */
-export function materialsOf(item: string, count: number, options: { chain: boolean; pack?: ReadonlyMap<string, number> }): { spends: Material[]; uncounted: boolean } {
+export function materialsOf(item: string, count: number, options: { chain: boolean; pack?: ReadonlyMap<string, number> }): { spends:
+   Material[]; uncounted: boolean } {
   const target = recipeOf(item);
   if (!target || !Number.isFinite(count) || count < 1) return { spends: [], uncounted: !target };
   const left = new Map<string, number>();
@@ -80,14 +95,18 @@ export function materialsOf(item: string, count: number, options: { chain: boole
   const take = (needed: Material, depth: number): void => {
     const kind = kindOf(needed.item);
     const held = Math.min(remaining(kind), needed.count);
-    if (held > 0) { left.set(kind, remaining(kind) - held); add(kind, held); }
+    if (held > 0) { left.set(kind, remaining(kind) - held);
+      add(kind, held); }
     const deficit = needed.count - held;
     if (deficit <= 0) return;
     const own = options.chain && depth < 4 && CHAIN.has(kind) ? recipeOf(kind) : null;
-    if (!own) { add(kind, deficit); return; }
+    if (!own) { add(kind, deficit);
+      return; }
     let batches = Math.ceil(deficit / own.yields), rest = 0;
-    // Planks are made from the logs she holds, as many batches as she has logs; the rest of what is lacking is planks she is expected to hold.
-    if (kind === 'planks' && batches > remaining('log')) { batches = remaining('log'); rest = deficit - batches * own.yields; }
+    // Planks are made from the logs she holds, as many batches as she has logs; the rest of what is lacking is
+// planks she is expected to hold.
+    if (kind === 'planks' && batches > remaining('log')) { batches = remaining('log');
+      rest = deficit - batches * own.yields; }
     if (batches > 0) for (const part of own.needs) take({ item: part.item, count: part.count * batches }, depth + 1);
     if (rest > 0) add(kind, rest);
   };

@@ -2,16 +2,21 @@ import { pausedReportLine } from '../mind/action/fca/fcaSpokenReport.js';
 import { BODY_ABSENT_SUMMARY, ownSummary, RECOVERY_LIMIT_SUMMARY, RELEASE_UNPROVEN_SUMMARY, STALE_SUMMARY } from './fcaBodyRecoveryPolicy.js';
 
 /**
- * The words of a PAUSE the FCA runtime makes by itself (a Minecraft request stopped, resumable, not failed): the summary the owner and
- * `task.get` read, and the report the owner's activity and call speak (the same kind of notice a failure leaves, `rejectedTaskReport`).
+ * The words of a PAUSE the FCA runtime makes by itself (a Minecraft request stopped, resumable, not failed): the
+ * summary the owner and
+ * `task.get` read, and the report the owner's activity and call speak (the same kind of notice a failure leaves,
+ * `rejectedTaskReport`).
  * Both are short Japanese reasons that say the task can be resumed, and carry nothing but the owner's own title.
  */
 export const PROVIDER_UNAVAILABLE_SUMMARY = 'モデルの応答が続けて得られなかったため一時停止しています。応答が戻れば再開できます。';
-/** A-20 (run 47): the provider refused the decision for the account's credit; the request is paused (the world stopped when it asked to be held) until the balance is filled. */
+/** A-20 (run 47): the provider refused the decision for the account's credit; the request is paused (the world
+ * stopped when it asked
+ * to be held) until the balance is filled. */
 export const BILLING_PAUSED_SUMMARY = 'モデルの利用残高が足りず判断を頼めないため一時停止しています。残高を補充したら再開できます。';
 
 /**
- * The report of a task paused only because of unconfirmed charges (`fcaBudgetWiring.ts`): the task title, the cap in yen. What it is
+ * The report of a task paused only because of unconfirmed charges (`fcaBudgetWiring.ts`): the task title, the
+ * cap in yen. What it is
  * recognised by is its marker and its tail, never the cap's formatting (L-4): the number between them may be written any way.
  */
 const ESTIMATES_MARK = '」は、確定していない利用料の見積りを含めると上限';
@@ -31,7 +36,8 @@ const SPOKEN_REASONS: ReadonlyArray<readonly [string, string]> = [
 
 /**
  * What a call says of a pause report: a fixed, accurate sentence (「『題名』は<理由>ため一時停止しています。再開できます。」), made
- * from the title and the reason the report's words carry. No model words it (it could not tell a pause from a failure), and a pause
+ * from the title and the reason the report's words carry. No model words it (it could not tell a pause from a
+ * failure), and a pause
  * whose reason is not known says only that it is paused and can be resumed.
  */
 export function pausedSpoken(title: string, report: string): string {
@@ -40,7 +46,8 @@ export function pausedSpoken(title: string, report: string): string {
 }
 
 /**
- * A summary a pause wrote (this recovery's, the provider's, the estimates'): it says the task is paused, so a task the owner resumed
+ * A summary a pause wrote (this recovery's, the provider's, the estimates'): it says the task is paused, so a
+ * task the owner resumed
  * must not keep it. Cleared on `resume` and, failing that, at the next commit (`SQLiteTaskRuntimeStore`).
  */
 export const pausedSummary = (summary: string): boolean =>

@@ -7,7 +7,9 @@ import { tailRun } from './decisionRecordRead.js';
 import { DECISION_RECORD_LIMITS, pruneRuns, RunWriter, runName, scrubSecrets, type DecisionRecordLimits } from './decisionRecordStore.js';
 import { headVersion, partHash, promptVersion, type HeadVersion } from './decisionRecordVersion.js';
 
-/** `redecide`: a decision asked again of a stronger model for one call (amendment A-10); it is a request of its own, never the step's decision (its calls and outcome are the decision's). */
+/** `redecide`: a decision asked again of a stronger model for one call (amendment A-10); it is a request of its
+ * own, never the step's
+ * decision (its calls and outcome are the decision's). */
 export type RequestKind = 'decision' | 'summary' | 'plan' | 'redecide';
 const PREFIX: Record<RequestKind, 'd' | 's' | 'p' | 'r'> = { decision: 'd', summary: 's', plan: 'p', redecide: 'r' };
 const WRITERS_KEPT = 16;
@@ -30,7 +32,8 @@ export interface ResponseNote {
   signal?: AbortSignal | undefined;
 }
 
-/** The tokens of an answer and what they cost at the prices the budget uses (null when the provider's counts are not all there). */
+/** The tokens of an answer and what they cost at the prices the budget uses (null when the provider's counts are
+ * not all there). */
 function spent(model: string, usage: Json | null): Json {
   if (!usage) return { usage: null, tokens: null, costUsd: null };
   const ttl = usage.cache_creation as { ephemeral_5m_input_tokens?: number; ephemeral_1h_input_tokens?: number } | null | undefined;
@@ -42,13 +45,17 @@ function spent(model: string, usage: Json | null): Json {
     costUsd: complete ? estimatedAnthropicCostUsd(model, counts) : null };
 }
 
-/** The longest text a row of the contract (`live`'s `raw` and `shown`) keeps inline; the request itself keeps the whole text as a part. */
+/** The longest text a row of the contract (`live`'s `raw` and `shown`) keeps inline; the request itself keeps the
+ * whole text as a part. */
 const ROW_TEXT_CHARS = 40_000;
-/** The most commands a request's `reads` names (the newest): the history that holds more is long past what a stage is measured on. */
+/** The most commands a request's `reads` names (the newest): the history that holds more is long past what a
+ * stage is measured on. */
 const READS_KEPT = 200;
-const cutText = (text: unknown, size = ROW_TEXT_CHARS): string => { const value = String(text ?? ''); return value.length > size ? `${value.slice(0, size)}…(cut)` : value; };
+const cutText = (text: unknown, size = ROW_TEXT_CHARS): string => { const value = String(text ?? '');
+   return value.length > size ? `${value.slice(0, size)}…(cut)` : value; };
 
-/** What the provider says it did to the input (`input_transformations`): the thinking blocks it dropped, with the closed reason that most of them have. Null when none. */
+/** What the provider says it did to the input (`input_transformations`): the thinking blocks it dropped, with the
+ * closed reason that most of them have. Null when none. */
 export function thinkingDroppedOf(message: Readonly<Json> | undefined): { reason: string; count: number } | null {
   const list = message?.input_transformations;
   if (!Array.isArray(list)) return null;
@@ -64,7 +71,8 @@ export function thinkingDroppedOf(message: Readonly<Json> | undefined): { reason
   return top ? { reason: top[0], count } : null;
 }
 
-/** What the body reads the request stands on (the newest frame's life and number), from the versions the step reports (`minecraftBodyVersion`'s `observed`). */
+/** What the body reads the request stands on (the newest frame's life and number), from the versions the step
+ * reports (`minecraftBodyVersion`'s `observed`). */
 interface Observed { life?: number; obsSeq?: number; obsAt?: string; bodyBoot?: string; headBoot?: string }
 
 /** What a failed call says of itself: its class, status and provider error type, a short message; an abort also says why. */
@@ -79,7 +87,8 @@ function failureOf(error: unknown, signal: AbortSignal | undefined): Json {
 }
 
 /**
- * The recorder (decision records): writes a request's whole input before it goes out, and the answer (or what became of the call) when it ends, so
+ * The recorder (decision records): writes a request's whole input before it goes out, and the answer (or what
+ * became of the call) when it ends, so
  * that a decision cancelled or held in flight still has its input. Every method is safe to call at any time and never throws.
  */
 export class DecisionRecorder {
@@ -92,7 +101,8 @@ export class DecisionRecorder {
   private readonly pending = new Map<string, { task: string; at: number; model: string; kind: RequestKind; ids: TraceIds; promptHash: string }>();
   /** Each run's name -> its task id, for the rows the recorder writes to every run (a head boot). */
   private readonly tasks = new Map<string, string>();
-  /** The prompt each task's last decision was asked with (to tell a change of prompt), and the change of history the next decision was asked after. */
+  /** The prompt each task's last decision was asked with (to tell a change of prompt), and the change of history
+ * the next decision was asked after. */
   private readonly prompts = new Map<string, string>();
   private readonly histories = new Map<string, 'resume' | 'summary'>();
   /** The rows of the head's boot for each body: made again for a run that opens after the boot. */
@@ -114,7 +124,8 @@ export class DecisionRecorder {
       const number = writer.counters[kind], id = `${kind}${String(number).padStart(4, '0')}`;
       const prompt = promptVersion(body.system, body.tools), versions = this.versions(scope), { observed, ...bodyVersion } = versions ?? {};
       const ids = this.ids(scope.taskId, id, observed as Observed | undefined);
-      this.pending.set(id, { task: scope.taskId, at: this.now(), model: String(body.model ?? ''), kind: note.kind, ids, promptHash: partHash(JSON.stringify(prompt)) });
+      this.pending.set(id, { task: scope.taskId, at: this.now(), model: String(body.model ?? ''), kind: note.kind, ids, promptHash:
+         partHash(JSON.stringify(prompt)) });
       if (this.pending.size > 256) this.pending.delete(this.pending.keys().next().value as string);
       if (note.kind === 'decision') {
         scope.attempt += 1;
@@ -150,9 +161,12 @@ export class DecisionRecorder {
   }
 
   /**
-   * What changed in the input beside what the experiment changes (continue contract 8, `input_change`), written after a decision's answer when there is something to
-   * say: the prompt differs from the task's last decision's, the provider dropped thinking blocks (run 45's `prefix_binding_mismatch`), or the history was made again
-   * (a resume, a summary). The first decision of a task has nothing to differ from: its prompt's hashes are in its request's version.
+   * What changed in the input beside what the experiment changes (continue contract 8, `input_change`), written
+ * after a decision's answer when there is something to
+   * say: the prompt differs from the task's last decision's, the provider dropped thinking blocks (run 45's
+ * `prefix_binding_mismatch`), or the history was made again
+   * (a resume, a summary). The first decision of a task has nothing to differ from: its prompt's hashes are in its
+ * request's version.
    */
   private inputChange(writer: RunWriter, started: { task: string; ids: TraceIds; promptHash: string }, message: Readonly<Json> | undefined): void {
     const before = this.prompts.get(started.task), history = this.histories.get(started.task) ?? 'none', thinking = thinkingDroppedOf(message);
@@ -160,17 +174,20 @@ export class DecisionRecorder {
     this.histories.delete(started.task);
     if (this.prompts.size > 256) this.prompts.delete(this.prompts.keys().next().value as string);
     if ((before === undefined || before === started.promptHash) && !thinking && history === 'none') return;
-    writer.line({ ev: 'input_change', at: this.iso(), ids: started.ids, promptHash: started.promptHash, ...(thinking ? { thinkingDropped: thinking } : {}), historyChanged: history });
+    writer.line({ ev: 'input_change', at: this.iso(), ids: started.ids, promptHash: started.promptHash, ...(thinking ? { thinkingDropped:
+       thinking } : {}), historyChanged: history });
   }
 
-  /** The history of the task's next decision was made again (`resume`: the step began from a hold; a summary request marks `summary` itself). */
+  /** The history of the task's next decision was made again (`resume`: the step began from a hold; a summary
+ * request marks `summary` itself). */
   noteHistory(taskId: string, change: 'resume' | 'summary'): void {
     this.histories.set(taskId, change === 'resume' ? 'resume' : this.histories.get(taskId) ?? 'summary');
     if (this.histories.size > 256) this.histories.delete(this.histories.keys().next().value as string);
   }
 
   /**
-   * A row of the contract's measure (`received`, `released`, `corrected`, `woke`, `live`, `input_change`, the judge's `head_boot`, `unknown_notified`, `ledger`, …) in a task's
+   * A row of the contract's measure (`received`, `released`, `corrected`, `woke`, `live`, `input_change`, the
+ * judge's `head_boot`, `unknown_notified`, `ledger`, …) in a task's
    * record, with the time it carries (the other `append`s stamp their own). Never throws and never waits.
    */
   row(taskId: string, row: Readonly<Json>): void {
@@ -181,8 +198,10 @@ export class DecisionRecorder {
   }
 
   /**
-   * The head answered a body's connection for the first time in this start: the judge reads `head_boot` in the record of the run it judges, and a head boot belongs to no
-   * single task, so the row goes to every run the recorder has open, and to a run opened after it (`row` builds the row for the run).
+   * The head answered a body's connection for the first time in this start: the judge reads `head_boot` in the
+ * record of the run it judges, and a head boot belongs to no
+   * single task, so the row goes to every run the recorder has open, and to a run opened after it (`row` builds
+ * the row for the run).
    */
   headBooted(bodyId: string, row: (run: string) => Json): void {
     try {
@@ -195,7 +214,8 @@ export class DecisionRecorder {
     } catch (error) { this.told(error); }
   }
 
-  /** The numbers that join this record to the body's and to the other rows (`TraceIds`); the life and the frame's number are -1 when no frame was read. */
+  /** The numbers that join this record to the body's and to the other rows (`TraceIds`); the life and the frame's
+ * number are -1 when no frame was read. */
   private ids(taskId: string, decision: string | undefined, seen: Observed | undefined): TraceIds {
     const at = this.iso();
     return { run: taskId, ...(decision ? { decision } : {}), life: Number.isSafeInteger(seen?.life) ? seen!.life! : -1,
@@ -203,7 +223,8 @@ export class DecisionRecorder {
       obsSeq: Number.isSafeInteger(seen?.obsSeq) ? seen!.obsSeq! : -1, obsAt: seen?.obsAt ?? at };
   }
 
-  /** The commands whose results are in the request's input, in the order they were put there; the ones the history no longer holds are not (continue contract 8). */
+  /** The commands whose results are in the request's input, in the order they were put there; the ones the history
+ * no longer holds are not (continue contract 8). */
   private readsOf(scope: DecisionScopeState, body: Readonly<Json>): string[] {
     if (!scope.results.length) return [];
     const text = JSON.stringify(body.messages ?? []), seen = new Set<string>(), found: string[] = [];
@@ -220,14 +241,17 @@ export class DecisionRecorder {
     try { this.run(taskId).line({ ...event, at: this.iso() }); } catch (error) { this.told(error); }
   }
 
-  /** Amendment A-12: the last `rows` rows of a task's record (what a take sends the body as notes), without opening a run that has none. */
+  /** Amendment A-12: the last `rows` rows of a task's record (what a take sends the body as notes), without opening
+ * a run that has none. */
   tail(taskId: string, rows = HEAD_HOLD_ROWS): ReturnType<typeof tailRun> {
     try { return tailRun(join(this.root, runName(taskId)), rows); } catch { return []; }
   }
 
   /**
-   * Amendment A-12: the box of a stall the head found itself (the body cannot be asked to write one: `HEAD_INCIDENT_PREFIX`). The reason and the last `rows` rows of the task's
-   * `events.jsonl` (read before this row is written) go to `<run>/head-holds/<id>.json`, and one `head_hold` row names the file in the run's record. Returns the file's path below
+   * Amendment A-12: the box of a stall the head found itself (the body cannot be asked to write one:
+ * `HEAD_INCIDENT_PREFIX`). The reason and the last `rows` rows of the task's
+   * `events.jsonl` (read before this row is written) go to `<run>/head-holds/<id>.json`, and one `head_hold` row
+ * names the file in the run's record. Returns the file's path below
    * the records' root (what the hold's audit line carries), or null when nothing could be written. Never throws.
    */
   headHold(taskId: string, hold: { id: string; kind: string; why: string; detail?: Readonly<Json> }, rows = HEAD_HOLD_ROWS): string | null {
@@ -265,7 +289,8 @@ export class DecisionRecorder {
     void this.prune();
     return writer;
   }
-  /** The request's parts written (each once) and named: the settings inline, the system, the tools and every message by reference. */
+  /** The request's parts written (each once) and named: the settings inline, the system, the tools and every
+ * message by reference. */
   private input(writer: RunWriter, body: Readonly<Json>): Json {
     const { system, tools, messages, ...config } = body as { system?: unknown; tools?: unknown; messages?: unknown[] } & Json;
     const list = Array.isArray(messages) ? messages : [], parts = list.map(message => this.message(writer, message));
@@ -297,7 +322,8 @@ export class DecisionRecorder {
   }
 }
 
-/** The directory of the records: beside the runtime database (`<dir of the database>/decision-records`); null for a database that is not a file. */
+/** The directory of the records: beside the runtime database (`<dir of the database>/decision-records`); null for
+ * a database that is not a file. */
 export function decisionRecordsRoot(databasePath: string | undefined): string | null {
   const path = databasePath?.trim();
   return path && path !== ':memory:' && !path.startsWith('file::memory:') ? join(dirname(path), 'decision-records') : null;

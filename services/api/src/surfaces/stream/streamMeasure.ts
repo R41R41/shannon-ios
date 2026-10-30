@@ -1,12 +1,14 @@
 import { STREAM_LIMITS } from './streamContract.js';
 
 /**
- * The stream's own numbers (`docs/stream-contract.md` §7, plan item 10): how long from a comment to its line and to her first sound, how
+ * The stream's own numbers (`docs/stream-contract.md` §7, plan item 10): how long from a comment to its line and
+ * to her first sound, how
  * many model calls and tokens, and the model-call allowance of the minute. Counts and times only; no word of the chat.
  */
 export type ModelPurpose = 'writer' | 'rewrite' | 'topic' | 'greeting' | 'closing' | 'commentary';
 
-/** The model calls of the last minute: at most `modelCallsPerMinute` for the whole stream; topics and commentary leave some for replies. */
+/** The model calls of the last minute: at most `modelCallsPerMinute` for the whole stream; topics and commentary
+ * leave some for replies. */
 export class ModelBudget {
   private readonly taken: number[] = [];
 
@@ -46,9 +48,11 @@ export class StreamMeasure {
   readonly commentToSoundMs: number[] = [];
   readonly calls: Record<ModelPurpose, number> = { writer: 0, rewrite: 0, topic: 0, greeting: 0, closing: 0, commentary: 0 };
   readonly tokens = { input: 0, cachedInput: 0, output: 0 };
-  counts = { budgetSkips: 0, modelTimeouts: 0, modelErrors: 0, brokenAnswers: 0, rewrites: 0, safeLines: 0, droppedLines: 0, noRoom: 0, notChosen: 0, speakingSeconds: 0 };
+  counts = { budgetSkips: 0, modelTimeouts: 0, modelErrors: 0, brokenAnswers: 0, rewrites: 0, safeLines: 0, droppedLines: 0, noRoom: 0,
+     notChosen: 0, speakingSeconds: 0 };
 
-  /** How lines ended, by outcome and the reason the mouth or the desktop gave (any reason the desktop sends is counted as it came). */
+  /** How lines ended, by outcome and the reason the mouth or the desktop gave (any reason the desktop sends is
+ * counted as it came). */
   readonly reasons: Record<string, number> = {};
 
   reason(key: string): void {

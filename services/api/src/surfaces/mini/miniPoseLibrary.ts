@@ -146,8 +146,10 @@ export function miniStats(library: MiniPoseLibrary, since?: string): MiniStats {
   const days = new Map<string, { choices: number; library: number; drawings: number; costUsd: number }>();
   for (const event of [...choices, ...draws]) {
     const day = event.at.slice(0, 10), item = days.get(day) ?? { choices: 0, library: 0, drawings: 0, costUsd: 0 };
-    if (event.kind === 'choose') { item.choices++; if (event.source === 'library') item.library++; }
-    else { item.drawings++; item.costUsd += event.costUsd; }
+    if (event.kind === 'choose') { item.choices++;
+      if (event.source === 'library') item.library++; }
+    else { item.drawings++;
+      item.costUsd += event.costUsd; }
     days.set(day, item);
   }
   const all = library.view().entries;

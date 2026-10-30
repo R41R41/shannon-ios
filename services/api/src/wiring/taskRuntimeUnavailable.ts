@@ -4,13 +4,15 @@ import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRunti
 import { BILLING_PAUSED_SUMMARY, PROVIDER_UNAVAILABLE_SUMMARY, pausedReport } from './taskPauseNotice.js';
 
 /**
- * A step whose decision never came back (`FcaDecisionUnavailableError`: the retries of `decideWithRetry` ran out) ran nothing. It is
+ * A step whose decision never came back (`FcaDecisionUnavailableError`: the retries of `decideWithRetry` ran
+ * out) ran nothing. It is
  * closed as `continue` with nothing added (no history round, no message consumed, so nothing is duplicated) and the task runs the
  * decision again from a fresh observation, after a longer wait each time. Minebot parity audit C-20, 2026-10-19: before, this
  * happened once in a task's lifetime and the second failure ended the run.
  *
  * A Minecraft request goes on through `BODY_UNAVAILABLE_CYCLES` such rounds (about a quarter of an hour of a provider's outage in
- * all) and is then paused as stopped, not failed: the owner may resume it. Any other task keeps its one round and then fails with its
+ * all) and is then paused as stopped, not failed: the owner may resume it. Any other task keeps its one round
+ * and then fails with its
  * report, as before. The count (`fcaProviderRetries`) is reset by the next decision that comes back (`fcaRunner.ts`).
  */
 export const BODY_UNAVAILABLE_CYCLES = 4;
@@ -23,12 +25,15 @@ export function unavailableCooldownMs(cycles: number, random: () => number = Mat
   return Math.round(Math.min(BODY_COOLDOWN_CAP_MS, BODY_COOLDOWN_BASE_MS * 2 ** cycles) * (0.8 + random() * 0.4));
 }
 
-/** The longest wait before another round, whatever the provider asks for (the lease is renewed meanwhile; a stop ends the wait). */
+/** The longest wait before another round, whatever the provider asks for (the lease is renewed meanwhile; a stop
+ * ends the wait). */
 export const UNAVAILABLE_WAIT_CAP_MS = 300_000;
 
 /**
- * The wait before the next round: the round's own cooldown, never shorter than the `retry-after` the provider sent with the failure that
- * ended the retries (one longer than `decideWithRetry` waits for), and never longer than `UNAVAILABLE_WAIT_CAP_MS`. Before, a retry-after
+ * The wait before the next round: the round's own cooldown, never shorter than the `retry-after` the provider
+ * sent with the failure that
+ * ended the retries (one longer than `decideWithRetry` waits for), and never longer than
+ * `UNAVAILABLE_WAIT_CAP_MS`. Before, a retry-after
  * above a minute ended the round and the next one asked again after about twenty seconds, into the provider's own wait.
  */
 export function unavailableWaitMs(cooldownMs: number, retryAfterMs: number | null): number {
@@ -36,7 +41,8 @@ export function unavailableWaitMs(cooldownMs: number, retryAfterMs: number | nul
 }
 
 /**
- * `continued`: the step is closed and the task runs again. `paused`: the Minecraft request is stopped, resumable. `failed`: the task
+ * `continued`: the step is closed and the task runs again. `paused`: the Minecraft request is stopped,
+ * resumable. `failed`: the task
  * failed with its report.
  */
 export type UnavailableOutcome = 'continued' | 'paused' | 'failed';
@@ -57,7 +63,8 @@ export interface UnavailableParts {
   log(line: string): void;
 }
 
-/** True when the time passed; false when the step was stopped, including a stop that came before the wait began (it waits for nothing). */
+/** True when the time passed; false when the step was stopped, including a stop that came before the wait began
+ * (it waits for nothing). */
 export function sleep(milliseconds: number, signal: AbortSignal): Promise<boolean> {
   if (signal.aborted) return Promise.resolve(false);
   return new Promise<boolean>(resolve => {
@@ -77,7 +84,8 @@ export function sleep(milliseconds: number, signal: AbortSignal): Promise<boolea
 export { PROVIDER_UNAVAILABLE_SUMMARY };
 
 /**
- * Settles a step that threw `FcaDecisionUnavailableError`, logging the closed code. Null: this is not an unavailable decision (or a
+ * Settles a step that threw `FcaDecisionUnavailableError`, logging the closed code. Null: this is not an
+ * unavailable decision (or a
  * tool is in doubt, or the task is being stopped), and the caller judges the failure as before.
  */
 export async function settleUnavailableStep(parts: UnavailableParts, step: TaskStep, error: unknown, execution: ActionExecution):
@@ -97,12 +105,15 @@ export async function settleUnavailableStep(parts: UnavailableParts, step: TaskS
 }
 
 /**
- * A-20 (run 47: the credit ran out, the provider refused with HTTP 400, and the request was failed with the world running): the decision was refused for the account's credit, so nothing
- * ran. A Minecraft request is paused (the step closed as `continue`, the request stopped, resumable) at once, not after rounds: nothing is asked again until the balance is filled. False
+ * A-20 (run 47: the credit ran out, the provider refused with HTTP 400, and the request was failed with the
+ * world running): the decision was refused for the account's credit, so nothing
+ * ran. A Minecraft request is paused (the step closed as `continue`, the request stopped, resumable) at once,
+ * not after rounds: nothing is asked again until the balance is filled. False
  * for any other task (it fails as a refused request does) or when the step cannot be closed.
  */
 export function pauseForBilling(parts: UnavailableParts, step: TaskStep, execution: ActionExecution): boolean {
-  if (execution.stepOutcome === 'unknown' || !parts.isBodyTask(step.taskId) || parts.runtime.get(parts.scopeKey, step.taskId)?.phase !== 'executing') return false;
+  if (execution.stepOutcome === 'unknown' || !parts.isBodyTask(step.taskId) || parts.runtime.get(parts.scopeKey,
+     step.taskId)?.phase !== 'executing') return false;
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
   if (!close(parts, step, prior)) return false;
   parts.runtime.stop(parts.scopeKey, step.taskId, 'fca_billing');

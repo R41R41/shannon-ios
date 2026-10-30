@@ -4,10 +4,14 @@ import type { HandStop } from './minecraftLlmcHandGuards.js';
 import { BODY_RULES, mapView, readLayers, type Cell } from './minecraftLlmcPreflightMap.js';
 
 /**
- * The guards of the hands that take a range from the model (run 39, 2026-10-26: `obsidian`, `fight`, `mine`, `make`, `portal`, `smelt`;
+ * The guards of the hands that take a range from the model (run 39, 2026-10-26: `obsidian`, `fight`, `mine`,
+ * `make`, `portal`, `smelt`;
  * `go` is `minecraftLlmcGoGuard.ts`).
- * They read what the model decided, never what the body will do: whether the range and the allowed hands go against the rules (a block that may not be dug or
- * placed, a target that is no enemy, a lava cell the map shows is none, a retreat that is already on, a batch that cannot be split as asked). The body's small
+ * They read what the model decided, never what the body will do: whether the range and the allowed hands go against the rules (a
+ * block that may not be dug or
+ * placed, a target that is no enemy, a lava cell the map shows is none, a retreat that is already on, a batch
+ * that cannot be split
+ * as asked). The body's small
  * moves are not looked at. A hand held here is held whole, as any other (the hands before it go, the ones from it on do not).
  */
 type Rec = Record<string, unknown>;
@@ -19,11 +23,15 @@ const cellOf = (value: unknown): Cell | null => {
 };
 const list = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
-/** What a fight is never asked against: the villagers, the golem that keeps them, the trader, other players, the animals that are kept. */
-const NOT_ENEMIES = new RegExp('^(?:villager|wandering_trader|iron_golem|snow_golem|player|cat|horse|donkey|mule|llama|parrot|allay|axolotl|fox|sniffer'
+/** What a fight is never asked against: the villagers, the golem that keeps them, the trader, other players, the
+ * animals that are kept. */
+const NOT_ENEMIES = new RegExp(("^(?:villager|wandering_trader|iron_golem|snow_golem|player|cat|horse|donkey|mule|llama|parrot|allay|axolo" +
+"tl|fox|sniffer")
   + '|camel|armadillo)$', 'u');
-/** What `mine` never digs: what is kept or ends the world (the village's, containers, beds, the spawner, bedrock, liquids). Ore is what it is for. */
-const NOT_MINED = new RegExp('^(?:bedrock|barrier|end_portal_frame|end_portal|nether_portal|spawner|hay_block|farmland|tnt|beacon|lava|water|command_block'
+/** What `mine` never digs: what is kept or ends the world (the village's, containers, beds, the spawner, bedrock,
+ * liquids). Ore is what it is for. */
+const NOT_MINED = new RegExp(("^(?:bedrock|barrier|end_portal_frame|end_portal|nether_portal|spawner|hay_block|farmland|tnt|beacon|lava|" +
+"water|command_block")
   + '|ender_chest|obsidian)$', 'u');
 const NOT_MINED_KIND = new RegExp('(?:_bed|_door|_chest|_barrel|_furnace|_shulker_box|_sign|_banner|_portal)$'
   + '|^(?:chest|barrel|furnace|bed|crafting_table|smoker|blast_furnace)$', 'u');
@@ -31,8 +39,10 @@ const NOT_MINED_KIND = new RegExp('(?:_bed|_door|_chest|_barrel|_furnace|_shulke
 const FRAME_BLOCKS = new Set(['obsidian', 'crying_obsidian']);
 
 /**
- * The frame's lava: the cells the map shows that are no lava (known and something else), or null when the map does not show them. `?` is not something else: it is a cell the map cannot say
- * (not loaded: run 47, +1,657 after a restart of the VM, the whole map was `?` but the feet, and the lava source the model had checked with view was refused as "no lava on the map"); it goes
+ * The frame's lava: the cells the map shows that are no lava (known and something else), or null when the map does not show them.
+ * `?` is not something else: it is a cell the map cannot say
+ * (not loaded: run 47, +1,657 after a restart of the VM, the whole map was `?` but the feet, and the lava source the model had
+ * checked with view was refused as "no lava on the map"); it goes
  * to the body, which checks the real block.
  */
 function notLava(cells: readonly Cell[], world: Rec): Cell | null {
@@ -80,7 +90,8 @@ function fightProblem(hand: Rec, world: Rec): Found {
   if (!target.startsWith('#') && NOT_ENEMIES.test(target)) return reason('not_enemy', `target の「${target}」は敵ではない（村人・ゴーレム・商人・人・飼える動物とは戦わない）`);
   const health = typeof world.health === 'number' ? world.health : null;
   if (typeof hand.retreatHp === 'number' && health !== null && hand.retreatHp >= health && hand.stance !== 'flee') {
-    // GPT's review 2026-10-28: a fact only. It no longer tells to lower retreatHp (at health 8 or under that would push a fight through;
+    // GPT's review 2026-10-28: a fact only. It no longer tells to lower retreatHp (at health 8 or under that would
+// push a fight through;
     // system: 「体力 8 以下では戦わない」).
     return reason('retreat_on', health <= 8
       ? `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。体力 ${Math.round(health)} は 8 以下で、fight は送っていない`
@@ -103,7 +114,8 @@ function problemOf(hand: Rec, world: Rec, here: Cell | null): Found {
   }
 }
 
-/** The first of the hands (obsidian, fight, mine, make, portal, smelt) that goes against the rules, as a stop in the guards' list. */
+/** The first of the hands (obsidian, fight, mine, make, portal, smelt) that goes against the rules, as a stop in
+ * the guards' list. */
 export function rangeStop(input: unknown, frame: BodyObservation | null): HandStop | null {
   const hands = Array.isArray(rec(input)?.hands) ? (rec(input)!.hands as unknown[]).map(rec) : [];
   const world = rec(frame?.state.world) ?? {};

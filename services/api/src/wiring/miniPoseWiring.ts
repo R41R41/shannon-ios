@@ -12,8 +12,10 @@ import { configuredJevChooser } from './skillRoutingWiring.js';
 
 /**
  * The mini poses (owner 2026-10-28) for the server: the library beside the database (`SHANNON_MINI_POSE_DIR`, default
- * `<database folder>/mini-poses`), drawn and read with `OPENAI_API_KEY`, chosen by Jev with `TYPESAFE_API_KEY` (without it the closest
- * picture stands in and nothing is drawn). `SHANNON_MINI_POSE_DAILY_LIMIT` (default 30) caps the drawings a day; `SHANNON_MINI_POSE_TIMEOUT_MS` (default 900) is how long Jev has. Without
+ * `<database folder>/mini-poses`), drawn and read with `OPENAI_API_KEY`, chosen by Jev with `TYPESAFE_API_KEY`
+ * (without it the closest
+ * picture stands in and nothing is drawn). `SHANNON_MINI_POSE_DAILY_LIMIT` (default 30) caps the drawings a day;
+ * `SHANNON_MINI_POSE_TIMEOUT_MS` (default 900) is how long Jev has. Without
  * `OPENAI_API_KEY` there is no route: the residents keep the pictures they have.
  */
 export function configuredMiniPoses(

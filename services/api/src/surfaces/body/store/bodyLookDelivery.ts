@@ -23,7 +23,8 @@ export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
   }
 
-  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen'; source?: 'camera' | 'screen' }, text: string, at: string): BodyLookMessage | null {
+  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen'; source?: 'camera' | 'screen' }, text: string,
+     at: string): BodyLookMessage | null {
     // The conversation and initiative tables belong to other stores; without them there is nowhere to speak.
     for (const table of ['initiative_messages', 'conversation_messages', 'conversation_threads']) {
       if (!this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table)) return null;
@@ -35,22 +36,18 @@ export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
     try {
       const thread = this.thread(scopeKey, threadId, at);
       // One message per look: the unique source reference refuses a second one.
-      const inserted = this.database.prepare(`
-        INSERT OR IGNORE INTO initiative_messages
-          (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url,
-           content, expression, day_key, created_at)
-        VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)
-      `).run(initiativeId, scopeKey, thread, sourceItemId, look.source === 'screen' ? BODY_SCREEN_LOOK_SOURCE_TITLE : BODY_LOOK_SOURCE_TITLE, text,
+      const inserted = this.database.prepare(("\n        INSERT OR IGNORE INTO initiative_messages\n          (initiative_id, scope_key, thread_id, " +
+"source_item_id, source_title, source_url,\n           content, expression, day_key, created_at)\n        " +
+"VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)\n      ")).run(initiativeId, scopeKey, thread, sourceItemId,
+   look.source === 'screen' ? BODY_SCREEN_LOOK_SOURCE_TITLE : BODY_LOOK_SOURCE_TITLE, text,
         look.outcome === 'seen' ? 'curious' : 'thinking', sourceItemId, at);
       if (!inserted.changes) {
         this.database.exec('ROLLBACK');
         return null;
       }
-      this.database.prepare(`
-        INSERT INTO conversation_messages
-          (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
-        VALUES (?, ?, ?, ?, 1, 'assistant', ?, ?, ?)
-      `).run(messageId, scopeKey, thread, `initiative:${initiativeId}`, text, at, JSON.stringify({
+      this.database.prepare(("\n        INSERT INTO conversation_messages\n          (message_id, scope_key, thread_id, turn_id, ordinal, " +
+"role, content, observed_at, metadata_json)\n        VALUES (?, ?, ?, ?, 1, 'assistant', ?, ?, ?)\n      ")).run(messageId, scopeKey,
+   thread, `initiative:${initiativeId}`, text, at, JSON.stringify({
         initiativeId, sourceItemId, bodyLook: { id: look.id, outcome: look.outcome, ...(look.source === 'screen' ? { source: 'screen' } : {}) },
       }));
       this.database.prepare('UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?').run(at, scopeKey, thread);
@@ -70,15 +67,15 @@ export class SQLiteBodyLookSpeaker implements BodyLookSpeaker {
   private thread(scopeKey: string, threadId: string, at: string): string {
     const columns = this.database.prepare(`PRAGMA table_info('conversation_threads')`).all() as unknown as Array<{ name: string }>;
     const open = columns.some(column => column.name === 'archived_at') ? 'AND archived_at IS NULL' : '';
-    if (this.database.prepare(`SELECT 1 AS found FROM conversation_threads WHERE scope_key = ? AND thread_id = ? ${open}`).get(scopeKey, threadId)) return threadId;
+    if (this.database.prepare(`SELECT 1 AS found FROM conversation_threads WHERE scope_key = ? AND thread_id = ? ${open}`).get(scopeKey,
+       threadId)) return threadId;
     const latest = this.database.prepare(`
       SELECT thread_id FROM conversation_threads WHERE scope_key = ? ${open} ORDER BY updated_at DESC LIMIT 1
     `).get(scopeKey) as unknown as { thread_id: string } | undefined;
     if (latest) return latest.thread_id;
     const created = randomUUID();
-    this.database.prepare(`
-      INSERT INTO conversation_threads (thread_id, scope_key, title, created_at, updated_at) VALUES (?, ?, 'シャノンから', ?, ?)
-    `).run(created, scopeKey, at, at);
+    this.database.prepare(("\n      INSERT INTO conversation_threads (thread_id, scope_key, title, created_at, updated_at) VALUES (?, " +
+"?, 'シャノンから', ?, ?)\n    ")).run(created, scopeKey, at, at);
     return created;
   }
 }

@@ -10,15 +10,21 @@ import { offer, withdraw } from '../../../surfaces/minecraft/minecraftLlmcOnceFa
 import { noteKindRaw } from '../../../infra/decisionRecords/decisionRecordNotes.js';
 
 /**
- * `plan.update` (design mb-llm-centric 2.7): a core tool of the FCA, for a task that keeps a plan tree (`@shannon/mind` planTree). The
+ * `plan.update` (design mb-llm-centric 2.7): a core tool of the FCA, for a task that keeps a plan tree
+ * (`@shannon/mind` planTree). The
  * tree is the task's, in its checkpoint (`fcaPlanTree`), written in the same transaction as the step; the flat copy goes to
- * `agent_tasks.plan_json` and the change is an event (`fca_plan_updated`) when the step commits (`TaskCommit.plan`). Each decision reads
+ * `agent_tasks.plan_json` and the change is an event (`fca_plan_updated`) when the step commits
+ * (`TaskCommit.plan`). Each decision reads
  * the path to the current node (`FcaModelInput.plan`); the whole tree only in this tool's result.
  */
 export const PLAN_UPDATE_TOOL = 'plan.update';
 /**
- * The continue contract (chapters 3 and 7): a node's `kind` and `prep` (what the model says of the node; the head's code reads these and never the title), and the ops
- * `promise` and `release` (what to keep, for what). A kind outside the list is taken as `other`. `until.condition` and `instead` are texts (`have:crafting_table>=1`) the
+ * The continue contract (chapters 3 and 7): a node's `kind` and `prep` (what the model says of the node; the
+ * head's code reads these
+ * and never the title), and the ops
+ * `promise` and `release` (what to keep, for what). A kind outside the list is taken as `other`.
+ * `until.condition` and `instead` are
+ * texts (`have:crafting_table>=1`) the
  * tool reads into conditions; one that does not read is said, not guessed.
  */
 const kindField = { type: 'string', enum: [...PLAN_KINDS], description: '節の種類（頭のコードは題でなくこれで見る）' };
@@ -48,12 +54,14 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
   description: [
     '自分の計画ツリーを直す（節は64まで・深さ4まで）。毎判断の live の plan に、今の節までの道・今・次の3つ・止まっている節が出る。結果は木の全体。',
     'ops は順に全部当てるか、1つでも合わなければ何も変えない: add（parent・after・title・where・doneWhen・note）、split（id の下に into の節を足す）、',
-    'set（id の state=done|blocked|continue|wait・title・where・doneWhen・note・reason）、move（id を parent・after へ）、drop（id とその下を消す）。',
+    ("set（id の state=done|blocked|continue|wait・title・where・doneWhen・note・reason）、move（id を parent・after " +
+"へ）、drop（id とその下を消す）。"),
     'current で今の節を決める。今の節を done にして current を書かなければ、次の済んでいない節が今になる。子が全部 done の親は done になる。',
     '計画が変わった時・節が済んだ時・止まった時に出す（毎回は要らない）。体の手と同じ応答で出してよい。',
     '約束（残す物と用途）: promise（item・count・use。期間は until、代わりに足りる条件は instead。id を書けば改訂）、release（id・why）。約束を書くのは自分だけ。',
     '頭は使われた量と理由を帳簿にして live に出す。条件の文は have:crafting_table>=1 の形。',
-    '節には kind（種類）と prep（準備の節の状態 met|skipped|unmet_now と why）を add・split・set で付けられる。準備を省くと決めた時は、skipped と why（理由）を自分で書く。',
+    ("節には kind（種類）と prep（準備の節の状態 met|skipped|unmet_now と why）を add・split・set で付けられる。準備を省くと決めた時は、skipped と " +
+"why（理由）を自分で書く。"),
   ].join(''),
   nativeInputSchema: { type: 'object', additionalProperties: false, required: [], properties: {
     ops: { type: 'array', maxItems: PLAN_LIMITS.ops, items: { type: 'object', additionalProperties: false, required: ['op'], properties: {
@@ -71,7 +79,8 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
 
 /**
  * mb-llmc r4 (mb-llmc r4; owner 2026-10-22): the same tool with each node's forbid and caution (arch-check 23: of what a
- * supervisor wrote, those held longest and worked). The ops `forbid` / `caution` add a line to a node (the current one when `id` is absent),
+ * supervisor wrote, those held longest and worked). The ops `forbid` / `caution` add a line to a node (the
+ * current one when `id` is absent),
  * `lift` takes one off; `add` and `split` may carry them. The words and the schema are fixed (part of the cached prefix).
  */
 const rules = { type: 'array', maxItems: PLAN_LIMITS.rules, items: { type: 'string', maxLength: PLAN_LIMITS.rule } };
@@ -102,10 +111,12 @@ export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
   } },
 };
 
-/** A tree handed to the task from outside its decisions (the first plan, `minecraftFirstPlan.ts`): taken at the next read, once. */
+/** A tree handed to the task from outside its decisions (the first plan, `minecraftFirstPlan.ts`): taken at the
+ * next read, once. */
 export interface FcaPlanInbox { take(taskId: string, tree: PlanTree): { tree: PlanTree; note: string } | null }
 
-/** What `FcaPlanPort.keepPromise` did: a promise `made`, `revised` (from `was`, the count before) or `same` (already so, nothing changed). */
+/** What `FcaPlanPort.keepPromise` did: a promise `made`, `revised` (from `was`, the count before) or `same`
+ * (already so, nothing changed). */
 export interface KeptPromise { how: 'made' | 'revised' | 'same'; id: number; rev: number; item: string; count: number; use: string; was?: number }
 
 /** One step's plan: the tool, what a decision and a body read of it, and what the step commits. */
@@ -113,7 +124,8 @@ export interface FcaPlanPort {
   /** The path to the current node (live), or null when the task holds no plan yet. */
   view(): (PlanPathView & { revision: number; note?: string }) | null;
   /**
-   * mb-llmc r8: what a decision's live state shows of the plan when the body says the current node itself (`planNow`, with the path above
+   * mb-llmc r8: what a decision's live state shows of the plan when the body says the current node itself
+ * (`planNow`, with the path above
    * it): the view without its `path` and `now`, which `planNow` repeats. Absent: `view()`.
    */
   liveView?(): Record<string, unknown> | null;
@@ -123,35 +135,45 @@ export interface FcaPlanPort {
   committed(): ReturnType<typeof flatPlan> | null;
   tree(): PlanTree;
   /**
-   * mb-llmc r5: a change the head's code makes to the plan (a node seen done, a fact noted as a caution), all or nothing, said in the log by
+   * mb-llmc r5: a change the head's code makes to the plan (a node seen done, a fact noted as a caution), all or
+ * nothing, said in the log by
    * `why` (closed words). True when the tree changed. Absent: only the model changes the plan.
    */
   amend?(update: PlanUpdate, why: string): boolean;
   /**
-   * Amendment A-7 1: an act's `keep` (item, count, use) put to the plan as a promise, by the same handling as `plan.update`'s `promise` op (`applyPlanUpdate`). An open promise
-   * (not closed) of the same item and use is revised to the new count (its id, its rev up one, its `until` and `instead` kept); with the same count nothing changes. None
-   * of that item and use: a new promise. The act's `uses` is not touched. `problem` when the plan refuses it (the promises are full), the tree then unchanged.
+   * Amendment A-7 1: an act's `keep` (item, count, use) put to the plan as a promise, by the same handling as
+ * `plan.update`'s `promise` op (`applyPlanUpdate`). An open promise
+   * (not closed) of the same item and use is revised to the new count (its id, its rev up one, its `until` and
+ * `instead` kept); with the same count nothing changes. None
+   * of that item and use: a new promise. The act's `uses` is not touched. `problem` when the plan refuses it (the
+ * promises are full), the tree then unchanged.
    */
   keepPromise?(entry: { item: string; count: number; use: string }): KeptPromise | { problem: string };
   /**
-   * The continue contract, chapter 3, **the one way into the ledger**: the body's inventory events and the newest observation are put to the tree's promises
-   * (`minecraftLlmcPromises.ts`, `applyLedger`) and the memory that keeps an event from being put twice (`ledgerSeen`, saved with the tree in the checkpoint).
-   * The plan's revision does not move and `committed()` does not change (the flat copy has no ledger); the checkpoint carries it. An `instead` that stopped
+   * The continue contract, chapter 3, **the one way into the ledger**: the body's inventory events and the newest
+ * observation are put to the tree's promises
+   * (`minecraftLlmcPromises.ts`, `applyLedger`) and the memory that keeps an event from being put twice
+ * (`ledgerSeen`, saved with the tree in the checkpoint).
+   * The plan's revision does not move and `committed()` does not change (the flat copy has no ledger); the
+ * checkpoint carries it. An `instead` that stopped
    * holding is offered as a fact said once (`minecraftLlmcOnceFacts`). Returns the lines put to the ledgers.
    */
   applyLedger(input: Omit<LedgerInput, 'nodes' | 'at'> & { at?: string }): LedgerAdded[];
   /** The ledger's memory (for a test and for the size measure). */
   ledgerSeen(): LedgerSeen;
   /**
-   * The step's commit succeeded: what the checkpoint of this step held (the tree and the ledger's memory) is saved. The runner calls it right after the commit; the owner of the
+   * The step's commit succeeded: what the checkpoint of this step held (the tree and the ledger's memory) is
+ * saved. The runner calls it right after the commit; the owner of the
    * ledger's inputs then marks the receipts that checkpoint holds as processed (amendment A-6 12). Absent: nothing is told.
    */
   afterCommit?(): void;
 }
 
 /**
- * The ops of a `plan.update` as the model wrote them, in the form `applyPlanUpdate` takes: a promise's `until.condition` and `instead` are texts read by
- * `parseCondition` (one that does not read is said, with the form to write: nothing is guessed), and the number of a promise or a release may be written as
+ * The ops of a `plan.update` as the model wrote them, in the form `applyPlanUpdate` takes: a promise's
+ * `until.condition` and `instead` are texts read by
+ * `parseCondition` (one that does not read is said, with the form to write: nothing is guessed), and the number
+ * of a promise or a release may be written as
  * `3` or `#3`.
  */
 function readOps(input: PlanUpdate): { update: PlanUpdate } | { problem: string } {
@@ -159,16 +181,12 @@ function readOps(input: PlanUpdate): { update: PlanUpdate } | { problem: string 
   const ops: unknown[] = [];
   for (const [index, raw] of input.ops.entries()) {
     const op = raw && typeof raw === 'object' ? { ...raw as Record<string, unknown> } : null;
-    if (!op || (op.op !== 'promise' && op.op !== 'release')) { ops.push(raw); continue; }
+    if (!op || (op.op !== 'promise' && op.op !== 'release')) { ops.push(raw);
+      continue; }
     if (typeof op.id === 'string' && /^#?\d{1,6}$/u.test(op.id)) op.id = Number(op.id.replace('#', ''));
     const until = op.until && typeof op.until === 'object' && !Array.isArray(op.until) ? { ...op.until as Record<string, unknown> } : undefined;
-    for (const [field, text, label] of [['condition', until?.condition, 'until.condition'], ['instead', op.instead, 'instead']] as const) {
-      if (text === undefined) continue;
-      const parsed = typeof text === 'string' ? parseCondition(text, label) : { ok: false as const, problem: `${label} は条件の文` };
-      if (!parsed.ok) return { problem: `ops[${index}]: ${parsed.problem}` };
-      if (field === 'condition') until!.condition = parsed.condition;
-      else op.instead = parsed.condition;
-    }
+    const problem = readPromiseConditions(op, until, index);
+    if (problem) return problem;
     if (until) op.until = until;
     ops.push(op);
   }
@@ -189,24 +207,30 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   rules?: boolean;
   /** The clock (ISO) for the times a promise and a preparation state keep. Absent: now. */
   now?(): string;
-  /** mb-llmc r8: the live state shows the plan without the path and the now that the body's `planNow` says (`FcaPlanPort.liveView`). Absent: whole. */
+  /** mb-llmc r8: the live state shows the plan without the path and the now that the body's `planNow` says
+ * (`FcaPlanPort.liveView`). Absent: whole. */
   compact?: boolean;
   /** A surface may reject an explicit model update before any of its operations are committed. */
   validateUpdate?(before: PlanTree, after: PlanTree): string | null;
   /**
-   * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done, `minecraftPlanDone.ts`), applied before
+   * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done,
+ * `minecraftPlanDone.ts`), applied before
    * the decision reads the path. Absent: none.
    */
   seen?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[]; closed?: readonly string[]; descended?: readonly string[];
-    /** r9: nodes whose place or dimension holds while a child is open, so are not done (`p2←p2.1,p2.3`): said in the log when the set changes. */
+    /** r9: nodes whose place or dimension holds while a child is open, so are not done (`p2←p2.1,p2.3`): said in the
+ * log when the set changes. */
     held?: readonly string[] } | null;
   /**
-   * run 26: after the nodes seen done, the node the model's last acts were tagged for, when it is not the current one: the current node moves to it
-   * (`followNode`, `minecraftLlmcNode.ts`) and the plan's note says so once. Absent: the current node moves only by the model's plan.update and by done.
+   * run 26: after the nodes seen done, the node the model's last acts were tagged for, when it is not the current
+ * one: the current node moves to it
+   * (`followNode`, `minecraftLlmcNode.ts`) and the plan's note says so once. Absent: the current node moves only
+ * by the model's plan.update and by done.
    */
   follow?(tree: PlanTree): { to: string; from: string | null; acts: number; words?: string } | null;
   /**
-   * Amendment A-6 12: the checkpoint is being taken (the ledger's memory is read into it now), and the commit that saves it succeeded (`FcaPlanPort.afterCommit`). The owner of the
+   * Amendment A-6 12: the checkpoint is being taken (the ledger's memory is read into it now), and the commit that
+ * saves it succeeded (`FcaPlanPort.afterCommit`). The owner of the
    * receipts the ledger takes marks them processed only after the second, and only the ones it had taken at the first.
    */
   onCheckpoint?(): void; onCommitted?(): void }):
@@ -226,7 +250,17 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
     tree = result.tree;
     changed = true;
     const done = orderedPlan(tree.nodes).filter(node => node.state === 'done').length;
-    say(`Shannon FCA plan ${/^[a-z_]{1,16}$/u.test(why) ? why : 'amended'} task=${parts.taskId} revision=${tree.revision} done=${done}${detail} `
+    say(("Shannon FCA plan " +
+`${/^[a-z_]{1,16}$/u.test(why) ? why : 'amended'}` +
+" task=" +
+`${parts.taskId}` +
+" revision=" +
+`${tree.revision}` +
+" done=" +
+`${done}` +
+"" +
+`${detail}` +
+" ")
       + `current=${tree.current ?? '-'}`);
     return true;
   };
@@ -245,12 +279,14 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       if (held) say(`Shannon FCA plan held task=${parts.taskId} revision=${tree.revision} held=${held}`);
     }
   };
-  /** run 26: the current node follows the node the model keeps working on (a change of the head's own, said in the log and once in the plan's note). */
+  /** run 26: the current node follows the node the model keeps working on (a change of the head's own, said in the
+ * log and once in the plan's note). */
   const followed = () => {
     let to: ReturnType<NonNullable<typeof parts.follow>> = null;
     try { to = tree.nodes.length ? parts.follow?.(tree) ?? null : null; } catch { to = null; }
     if (!to || !amend({ ops: [], current: to.to }, 'followed', ` from=${to.from ?? '-'} to=${to.to} acts=${to.acts}`)) return;
-    // Run 41: the words are the follower's when it has them (a move to a preparation node says which and why; a move on names the nodes it passed).
+    // Run 41: the words are the follower's when it has them (a move to a preparation node says which and why; a move
+// on names the nodes it passed).
     const words = to.words ?? `今の節を [${to.to}] に進めた（体が [${to.to}] の項目を始めたため）。飛ばした節は順のまま残っている`;
     note = note ? `${note} ${words}` : words;
   };
@@ -291,7 +327,8 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       const old = tree.promises.find(item => item.state !== 'closed' && item.item === entry.item && item.use === use);
       if (old && old.count === entry.count) return { how: 'same', id: old.id, rev: old.rev, item: old.item, count: old.count, use: old.use };
       // A revision writes the promise whole: its `until` and `instead` are carried (the act's keep says only the count).
-      const op = { op: 'promise' as const, ...(old ? { id: old.id, ...(old.until ? { until: old.until } : {}), ...(old.instead ? { instead: old.instead } : {}) } : {}),
+      const op = { op: 'promise' as const, ...(old ? { id: old.id, ...(old.until ? { until: old.until } : {}), ...(old.instead ? { instead:
+         old.instead } : {}) } : {}),
         item: entry.item, count: entry.count, use };
       const result = applyPlanUpdate(tree, { ops: [op] }, { at: stamp() });
       if (result.problem) return { problem: result.problem };
@@ -299,8 +336,10 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       changed = true;
       const made = old ? tree.promises.find(item => item.id === old.id) : tree.promises.filter(item => item.item === entry.item && item.use === use).at(-1);
       if (!made) return { problem: '約束を作れなかった' };
-      say(`Shannon FCA plan kept task=${parts.taskId} revision=${tree.revision} promise=${made.id} rev=${made.rev} how=${old ? 'revised' : 'made'} item=${made.item} count=${made.count}`);
-      return { how: old ? 'revised' : 'made', id: made.id, rev: made.rev, item: made.item, count: made.count, use: made.use, ...(old ? { was: old.count } : {}) };
+      say(`Shannon FCA plan kept task=${parts.taskId} revision=${tree.revision} promise=${made.id} rev=${made.rev} how=${old ? 'revised' :
+         'made'} item=${made.item} count=${made.count}`);
+      return { how: old ? 'revised' : 'made', id: made.id, rev: made.rev, item: made.item, count: made.count, use: made.use, ...(old ? {
+         was: old.count } : {}) };
     },
     applyLedger(input) {
       adopt();
@@ -310,7 +349,13 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       for (const fact of result.facts) offer(parts.taskId, fact.key, fact.text);
       for (const key of result.withdrawn) withdraw(parts.taskId, key);
       if (result.added.length) {
-        say(`Shannon FCA plan ledger task=${parts.taskId} added=${result.added.length} kinds=${[...new Set(result.added.map(item => item.kind))].join(',')} `
+        say(("Shannon FCA plan ledger task=" +
+`${parts.taskId}` +
+" added=" +
+`${result.added.length}` +
+" kinds=" +
+`${[...new Set(result.added.map(item => item.kind))].join(',')}` +
+" ")
           + `open=${tree.promises.filter(item => item.state !== 'closed').length}`);
       }
       return result.added;
@@ -340,17 +385,41 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       const problem = parts.validateUpdate?.(tree, result.tree);
       if (problem) return toolFailure('invalid_input', `計画は変えていない: ${problem}\n${planText(tree)}`, { retryable: false });
       if (result.changed) {
-        // Continue contract 7 and 8: a kind outside the list was taken as `other`; the word the model wrote goes into the decision's record (`kindRaw`).
+        // Continue contract 7 and 8: a kind outside the list was taken as `other`; the word the model wrote goes into
+// the decision's record (`kindRaw`).
         const written = new Map(tree.nodes.map(node => [node.id, node.kindRaw]));
-        noteKindRaw(result.tree.nodes.filter(node => node.kindRaw && written.get(node.id) !== node.kindRaw).map(node => ({ node: node.id, kindRaw: node.kindRaw! })));
+        noteKindRaw(result.tree.nodes.filter(node => node.kindRaw && written.get(node.id) !== node.kindRaw).map(node => ({ node: node.id,
+           kindRaw: node.kindRaw! })));
         tree = result.tree;
         changed = true;
         note = undefined;
         const done = orderedPlan(tree.nodes).filter(node => node.state === 'done').length;
-        say(`Shannon FCA plan updated task=${parts.taskId} revision=${tree.revision} nodes=${tree.nodes.length} done=${done} current=${tree.current ?? '-'}`);
+        say(("Shannon FCA plan updated task=" +
+`${parts.taskId}` +
+" revision=" +
+`${tree.revision}` +
+" nodes=" +
+`${tree.nodes.length}` +
+" done=" +
+`${done}` +
+" current=" +
+`${tree.current ?? '-'}` +
+""));
       }
       return toolOk(result.changed ? planText(tree) : `変化なし\n${planText(tree)}`);
     },
   };
   return { tools, port };
+}
+
+/** 約束の期限条件と代替条件を、同じ条件パーサーで読む。 */
+function readPromiseConditions(op: Record<string, unknown>, until: Record<string, unknown> | undefined, index: number): { problem: string } | null {
+    for (const [field, text, label] of [['condition', until?.condition, 'until.condition'], ['instead', op.instead, 'instead']] as const) {
+      if (text === undefined) continue;
+      const parsed = typeof text === 'string' ? parseCondition(text, label) : { ok: false as const, problem: `${label} は条件の文` };
+      if (!parsed.ok) return { problem: `ops[${index}]: ${parsed.problem}` };
+      if (field === 'condition') until!.condition = parsed.condition;
+      else op.instead = parsed.condition;
+    }
+  return null;
 }

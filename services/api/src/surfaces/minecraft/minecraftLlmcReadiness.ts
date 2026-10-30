@@ -8,11 +8,15 @@ import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 
 /**
- * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first, written by the code
- * and decided by the model. Run 29 began inside a Nether fortress with one cooked mutton and no table, slabs or shield; at 10 s she opened
- * the blaze spawner's shaft, at 418 s her health was 3.7 with no food and hunger 17, and she waited 325 s for health that never came.
+ * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
+ * written by the code
+ * and decided by the model. Run 29 began inside a Nether fortress with one cooked mutton and no table, slabs or
+ * shield; at 10 s she opened
+ * the blaze spawner's shaft, at 418 s her health was 3.7 with no food and hunger 17, and she waited 325 s for
+ * health that never came.
  *
- * - `preparationShortage`: what the current plan node and the dimension need (the knowledge's 「出発の点検」, as a table) set against the
+ * - `preparationShortage`: what the current plan node and the dimension need (the knowledge's 「出発の点検」, as a
+ * table) set against the
  *   pack: 「準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾が無い。食料 15.6 点（目安 100）」. Null when nothing is missing.
  * - `recoveryLine`: health below full and hunger under 18, where health does not come back by itself; `foodLeads`: where food is
  *   (animals near, the scan's village rows, a hoglin and a crimson forest in the Nether, the gate back with its distance).
@@ -31,22 +35,32 @@ const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: numb
 };
 /**
  * The gate (run 36: the entry's shortage said 食料 100 点・鉄の防具 4・水入りバケツ while the node was the obsidian, and the plan put
- * 金の防具・ハーフブロック・食料 100 点 before the gate; the pass mark is the Nether within 30 minutes): what the gate needs is a pickaxe, a shield, a
- * sword, blocks to stand on and food for the first stretch (40 points). The rest (the table, slabs, gold armour, food 100) is the check after
+ * 金の防具・ハーフブロック・食料 100 点 before the gate; the pass mark is the Nether within 30 minutes): what the gate needs is
+ * a pickaxe, a shield, a
+ * sword, blocks to stand on and food for the first stretch (40 points). The rest (the table, slabs, gold armour,
+ * food 100) is the check after
  * she is in (`nether_deep`), which still holds before the fortress.
- * Owner 2026-10-24 (after run 38: only iron boots from a chest, no golden piece at the gate): the gate and the diamonds read the one table of
- * `minecraftLlmcPrepRules.ts` (the iron helmet, chestplate and leggings worn before the diamonds, the golden boots before the gate).
+ * Owner 2026-10-24 (after run 38: only iron boots from a chest, no golden piece at the gate): the gate and the
+ * diamonds read the one table of
+ * `minecraftLlmcPrepRules.ts` (the iron helmet, chestplate and leggings worn before the diamonds, the golden
+ * boots before the gate).
  */
 /**
- * Chapter 7 (the continue contract): the stage a node's kind belongs to, read from the kind the model wrote and never from a title. The end's check: the
+ * Chapter 7 (the continue contract): the stage a node's kind belongs to, read from the kind the model wrote and
+ * never from a title.
+ * The end's check: the
  * stronghold, the pearls and the End; the gate's: the obsidian, the portal and the Nether; the diamonds'.
  */
 const STAGE_OF_KIND: Readonly<Partial<Record<PlanKind, Stage>>> = { end: 'end', stronghold: 'end', pearl: 'end', portal: 'nether_entry',
   obsidian: 'nether_entry', nether: 'nether_entry', diamond: 'diamonds' };
 
 /**
- * The stage whose check holds now: by the dimension, and in the overworld by the kind of the current node (the nearest node, itself or above it, whose
- * kind has a stage) and eyes carried; a node of the diamonds is checked against `BEFORE_DIAMONDS`. `kinds`: the current node's kind, then those above it
+ * The stage whose check holds now: by the dimension, and in the overworld by the kind of the current node (the
+ * nearest node, itself
+ * or above it, whose
+ * kind has a stage) and eyes carried; a node of the diamonds is checked against `BEFORE_DIAMONDS`. `kinds`: the
+ * current node's kind,
+ * then those above it
  * (`nowKinds`); absent or empty: none is known and no stage is chosen by a node.
  */
 export function preparationStage(dimension: string | null, counts: ItemCounts, kinds: readonly PlanKind[] | null): Stage | null {
@@ -72,7 +86,8 @@ function held(counts: ItemCounts, need: Need): number {
 }
 
 /**
- * The one line of what is missing for the stage, or null (no stage, nothing missing). `worn` (the frame's worn ids, `wornItems`): a piece of a need
+ * The one line of what is missing for the stage, or null (no stage, nothing missing). `worn` (the frame's worn
+ * ids, `wornItems`): a piece of a need
  * that is to be worn and is only carried is said as such (「着ていない: iron_helmet」), since armour in the pack does not protect.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
@@ -95,28 +110,34 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
 }
 
-/** The fullness each food gives (the game's own hunger points), for what to eat to reach 18. Raw chicken, spider eyes and the like are left out. */
+/** The fullness each food gives (the game's own hunger points), for what to eat to reach 18. Raw chicken, spider
+ * eyes and the like are left out. */
 export const FULLNESS: Readonly<Record<string, number>> = Object.freeze({
   rabbit_stew: 10, cooked_beef: 8, cooked_porkchop: 8, pumpkin_pie: 8, cooked_mutton: 6, cooked_salmon: 6, cooked_chicken: 6, golden_carrot: 6,
   mushroom_stew: 6, beetroot_soup: 6, bread: 5, baked_potato: 5, cooked_cod: 5, cooked_rabbit: 5, apple: 4, carrot: 3, beef: 3, porkchop: 3,
   rabbit: 3, mutton: 2, cod: 2, salmon: 2, melon_slice: 2, sweet_berries: 2, glow_berries: 2, cookie: 2, potato: 1, beetroot: 1, dried_kelp: 1,
 });
 /**
- * GPT's review 2026-10-28 (the live state is data; a rule and a story of a run said at every decision are not facts): the recovery line says the fact,
- * what in the pack takes the fullness to 18 and how long health then takes; that health that does not come back is to be eaten for before a descent
+ * GPT's review 2026-10-28 (the live state is data; a rule and a story of a run said at every decision are not
+ * facts): the recovery line says the fact,
+ * what in the pack takes the fullness to 18 and how long health then takes; that health that does not come back
+ * is to be eaten for before a descent
  * or a fight, even with an enemy near, and what going on without it costs, is a rule of the instructions (「敵と体力」).
  */
 
 /**
- * Health that does not come back by itself (hunger under 18, health under full): the fact, what in the pack takes the fullness to 18 and how long
- * health then takes to come back, and what going on without it cost (run 42: the line said the fact alone, 7 decisions in a row, and she went down at
+ * Health that does not come back by itself (hunger under 18, health under full): the fact, what in the pack
+ * takes the fullness to 18 and how long
+ * health then takes to come back, and what going on without it cost (run 42: the line said the fact alone, 7
+ * decisions in a row, and she went down at
  * 11.3 and died); null otherwise.
  */
 /** A hostile within this many blocks counts as an enemy near (`enemyNear`). */
 const ATTACK_NEAR = 8;
 export function enemyNear(world: Record<string, unknown>): boolean {
   const threats = Array.isArray(world.nearbyThreats) ? world.nearbyThreats : [];
-  return threats.some(raw => { const distance = finite(record(raw)?.distance); return distance !== null && distance <= ATTACK_NEAR; });
+  return threats.some(raw => { const distance = finite(record(raw)?.distance);
+    return distance !== null && distance <= ATTACK_NEAR; });
 }
 export function recoveryLine(hunger: number | null, health: number | null, food: number, counts?: ItemCounts): string | null {
   if (hunger === null || health === null || health >= 20 || hunger >= 18) return null;
@@ -149,7 +170,8 @@ const feetOf = (world: Record<string, unknown>): Feet | null => {
   return x !== null && y !== null && z !== null ? { x, y, z } : null;
 };
 const ANIMALS = /^(?:cow|pig|sheep|chicken|rabbit|mooshroom|cod|salmon|hoglin)$/u;
-/** The village's rows that are food or lead to it (run 40: the descent note named 「ベッド ×6」 as where food is; a bed is not food). */
+/** The village's rows that are food or lead to it (run 40: the descent note named 「ベッド ×6」 as where food is; a
+ * bed is not food). */
 const VILLAGE_ROW = /^(?:村の鐘|干し草|畑|作物)/u;
 /**
  * The first `(x,y,z)` of a text, or its first bare `x,y,z`. r7 (run 30: the plan's 「ゲートから戻り狩って焼く」 had where `5,35,12`, with no
@@ -157,7 +179,8 @@ const VILLAGE_ROW = /^(?:村の鐘|干し草|畑|作物)/u;
  */
 export const firstPos = (text: string): Feet | null => readWhere(text, 'any');
 
-/** The gate back from the Nether: the scan's portal row, else a plan node of the portal's kind with a place (its distance from her feet). */
+/** The gate back from the Nether: the scan's portal row, else a plan node of the portal's kind with a place (its
+ * distance from her feet). */
 function gateBack(world: Record<string, unknown>, rows: readonly string[], nodes: readonly PlanNode[], feet: Feet | null): string | null {
   const row = rows.find(line => /ネザーポータル|nether_portal/u.test(line));
   if (row) return `帰りのゲート（走査）${row.replace(/^[^(（]*/u, '').slice(0, 50)}`;
@@ -169,7 +192,8 @@ function gateBack(world: Record<string, unknown>, rows: readonly string[], nodes
 }
 
 /**
- * Where food is, from the frame alone: the animals near (nearest three), the scan's village, field and crop rows, in the Nether a hoglin
+ * Where food is, from the frame alone: the animals near (nearest three), the scan's village, field and crop
+ * rows, in the Nether a hoglin
  * and the crimson forest's stems, and the gate back. One line, or the fact that none is near.
  */
 export function foodLeads(world: Record<string, unknown>, dimension: string | null, nodes: readonly PlanNode[] = []): string {
@@ -214,16 +238,22 @@ export function foodFirstLine(nodes: readonly PlanNode[], current: string | null
   let near: string | null = null;
   // The plan's existing dimension convention: the nearest preceding explicit dim predicate, never a title or free-form place name.
   for (const [index, node] of order.entries()) {
+const notePlanDimension = () => {
     const predicate = parseDoneWhen(node.doneWhen);
     const own = predicate ? predicateDimension(predicate) : null;
     near = own ?? near;
     dimensions.set(node.id, near);
-    if (index > from && here && own && own !== here && node.state !== 'done') blocked = true;
+    const crossesDimension = () => (index > from && here && own && own !== here && node.state !== 'done');
+    if (crossesDimension()) blocked = true;
     if (blocked) beyondGate.add(node.id);
-  }
+
+};
+notePlanDimension();
+}
   const candidates = order.filter(node => open(node) && leaf(node) && isFood(node) && node.id !== current);
   const food = candidates.find(node => !here || (!beyondGate.has(node.id) && (!dimensions.get(node.id) || dimensions.get(node.id) === here)));
-  if (!food && here && candidates.length) return `回復が先: 今いる次元（${here}）で向かえる食料の節は未確認。現地の候補か帰れる経路を確かめ、計画を見直す`;
+  const foodBeyondDimension = () => (!food && here && candidates.length);
+  if (foodBeyondDimension()) return `回復が先: 今いる次元（${here}）で向かえる食料の節は未確認。現地の候補か帰れる経路を確かめ、計画を見直す`;
   if (!food) return null;
   const at = food.where ? firstPos(food.where) : null;
   const far = at && feet ? `（約 ${Math.round(Math.hypot(at.x - feet.x, at.z - feet.z))}m）` : '';
@@ -244,17 +274,22 @@ export function readinessOf(observation: BodyObservation | null): { world: Recor
 }
 
 /**
- * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: the plan said 食料 before the iron, she went down to the iron at 166 s with 5 of 40 food points, came up the
- * shaft for cows at 311 s (114 s, the pillar failing four times), went down again at 484 s, up at 705 s and down at 875 s; about 300 s on the stairs):
- * an act that takes her 10 or more blocks down from the surface while the food she carries is under what the iron night needs says so in its result,
+ * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: the plan said 食料 before the iron, she went down to the iron at 166 s
+ * with 5 of 40 food points, came up the
+ * shaft for cows at 311 s (114 s, the pillar failing four times), went down again at 484 s, up at 705 s and down
+ * at 875 s; about 300 s on the stairs):
+ * an act that takes her 10 or more blocks down from the surface while the food she carries is under what the
+ * iron night needs says so in its result,
  * with the cows in sight.
- * A fact beside the act, which goes as it is; the food points are the stage knowledge's (`FOOD_BEFORE_DESCENT`, 40 before the iron).
+ * A fact beside the act, which goes as it is; the food points are the stage knowledge's (`FOOD_BEFORE_DESCENT`,
+ * 40 before the iron).
  */
 export const FOOD_BEFORE_DESCENT = 40;
 /** Planks that make a table (4), when the pack holds no table. */
 const TABLE_PLANKS = 4;
 const SURFACE_Y = 45, DESCENT = 10;
-/** The lowest y the walks and digs of an act reach (a `rel` hand counts from her feet), or the feet's own when none goes lower. */
+/** The lowest y the walks and digs of an act reach (a `rel` hand counts from her feet), or the feet's own when
+ * none goes lower. */
 function lowestReach(hands: unknown, feetY: number): number {
   let lowest = feetY;
   for (const raw of Array.isArray(hands) ? hands : []) {
@@ -276,9 +311,12 @@ function lowestReach(hands: unknown, feetY: number): number {
   return lowest;
 }
 /**
- * Run 43 (+1,291 q95, 「[p5.1] ダイヤへ下りる」 from y≈14 to y=-56 with no table and no planks: the planks had gone into the furnace; at the diamonds
- * 「作業台へ戻りダイヤのツルハシ」 took 270 s up and back, +1,351 to +1,623): the descent's check was the first one's only (from the surface). A hand
- * that goes 10 or more further down underground without a table or 4 planks says so too: what cannot be made down there, and what it cost.
+ * Run 43 (+1,291 q95, 「[p5.1] ダイヤへ下りる」 from y≈14 to y=-56 with no table and no planks: the planks had gone into
+ * the furnace; at the diamonds
+ * 「作業台へ戻りダイヤのツルハシ」 took 270 s up and back, +1,351 to +1,623): the descent's check was the first one's only (from
+ * the surface). A hand
+ * that goes 10 or more further down underground without a table or 4 planks says so too: what cannot be made
+ * down there, and what it cost.
  */
 function deepDescentNote(input: unknown, facts: NonNullable<ReturnType<typeof readinessOf>>, feet: Feet): string | null {
   const planks = countMatching(facts.counts, /_planks$/u), logs = countMatching(facts.counts, /_(?:log|stem|wood|hyphae)$/u);
@@ -295,8 +333,10 @@ const TO_SMELT = /^(?:raw_iron|raw_gold|iron_ore|deepslate_iron_ore|gold_ore|dee
 const FUELS: ReadonlyArray<readonly [RegExp, number]> = [[/^(?:coal|charcoal)$/u, 8], [/^coal_block$/u, 80], [/^lava_bucket$/u, 100]];
 const COAL_MARK = /石炭\[(?:deepslate_)?coal_ore\] \((-?\d+),(-?\d+),(-?\d+)\)[^×]*×(\d+)/u;
 /**
- * Run 43 (+720 to +1,766, about 600 s: raw_iron ×15 with one plank, five waits before a furnace out of fuel, a climb to the surface for wood; the
- * coal ore ×10 on the map at y=44 was passed on the way down): what she carries to smelt against the fuel she carries, with the nearest coal on the map.
+ * Run 43 (+720 to +1,766, about 600 s: raw_iron ×15 with one plank, five waits before a furnace out of fuel, a
+ * climb to the surface for wood; the
+ * coal ore ×10 on the map at y=44 was passed on the way down): what she carries to smelt against the fuel she
+ * carries, with the nearest coal on the map.
  * Null when the fuel is enough or there is nothing to smelt.
  */
 export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts): string | null {
@@ -321,7 +361,8 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
   const feet = facts ? feetOf(facts.world) : null;
   if (!facts || !feet || facts.dimension !== 'overworld') return null;
   if (feet.y < SURFACE_Y) return deepDescentNote(input, facts, feet);
-  // Run 41 (the table was missing as well: 372 s with none, and she died on the way up): the food and the table (or planks to make one) are the descent's.
+  // Run 41 (the table was missing as well: 372 s with none, and she died on the way up): the food and the table
+// (or planks to make one) are the descent's.
   const lacks = [facts.food < FOOD_BEFORE_DESCENT ? foodPointsWords(facts.food, FOOD_BEFORE_DESCENT) : '',
     countMatching(facts.counts, /^crafting_table$/u) < 1 && countMatching(facts.counts, /_planks$/u) < TABLE_PLANKS
       ? `作業台 無・板 ${countMatching(facts.counts, /_planks$/u)}` : ''].filter(Boolean);
@@ -332,8 +373,11 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
   const near = /m/u.test(cows) && !cows.startsWith('近くに動物') ? `。近くに ${cows} が見えている` : '';
   // Run 42: she went down at health 11.3 that did not come back, fell and was shot dead; the health is the descent's too.
   const health = finite(facts.world.health), hunger = finite(facts.world.food);
-  const hurt = health !== null && hunger !== null && health < 20 && hunger < 18 ? `。体力 ${round1(health)}/20 は戻らない（満腹 ${round1(hunger)}＜18）` : '';
-  // Run 42 (the note ended 「このまま行くなら why に…書く」 and she wrote the numbers and went down, as if that were the way through): the cost in
+  const recoveryWords = () => (health !== null && hunger !== null && health < 20 && hunger < 18 ? `。体力 ${round1(
+    health)}/20 は戻らない（満腹 ${round1(hunger)}＜18）` : '');
+  const hurt = recoveryWords();
+  // Run 42 (the note ended 「このまま行くなら why に…書く」 and she wrote the numbers and went down, as if that were the way
+// through): the cost in
   // what the runs measured, and what to do first; nothing that reads as a way past it.
   return `準備の状態（この act は地下 y=${Math.round(lowest)} へ下りる手）: 未達 — ${lacks.join('・')}${hurt}${near}。この受付は、準備が満たされたことを表さない`;
 }

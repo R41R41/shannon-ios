@@ -11,7 +11,8 @@ import { takeOfResult, type IncidentTake } from './minecraftIncidentHold.js';
 const FINISHED: readonly TaskView['phase'][] = ['stopped', 'completed', 'failed'];
 
 /**
- * A task made by `admit` below: its title carries the operator's prefix and it has the Minecraft request's criteria (closed facts of the
+ * A task made by `admit` below: its title carries the operator's prefix and it has the Minecraft request's
+ * criteria (closed facts of the
  * record, as `admit` writes them). Its result is not sent to the root's inbox (`TaskRuntimeStoreOptions.reportsToParent`).
  */
 export function operatorRequestTask(task: Pick<TaskRecord, 'title' | 'completionCriteria' | 'origin'>, criteria: string): boolean {
@@ -22,7 +23,8 @@ export type OperatorAdmission = { ok: true; task: TaskView; bodyId: string } | {
 
 /**
  * The common-task side of an operator's Minecraft request (owner decision 2026-10-14). It makes the same task as
- * `minecraft.request` and the in-game intent (a `generic` child of origin `owner_request`, the request criteria and working note, bound to the one
+ * `minecraft.request` and the in-game intent (a `generic` child of origin `owner_request`, the request criteria
+ * and working note, bound to the one
  * connected body), under the root because no conversation turn is its source, inside the same write lock as the conversation's
  * admission. Who handed it over is in its title and its first inbox line, never in the owner's words.
  */
@@ -59,21 +61,27 @@ export function operatorMinecraftRequests(parts: {
     stop: (id: string, reason: string) => parts.stop(id, reason),
     /** A stopped task queued again (the runtime's explicit resume, as the owner's resume route does): a held request's `resume`. */
     resume: (id: string) => parts.runtime.resume(parts.ownerScope, id),
-    /** A-17: a held request the unknown exit failed (its hold row stood open) is stopped again, resumable; null for any other failed task. */
+    /** A-17: a held request the unknown exit failed (its hold row stood open) is stopped again, resumable; null for
+ * any other failed task. */
     /** A-20: a request a refused decision failed (the credit ran out) is stopped again, resumable; null for any other failed task. */
-    reopenRejected: (id: string, summary: string) => parts.runtime.reopenRejected?.(parts.ownerScope, id, summary, rejectedTaskReport(parts.runtime.get(parts.ownerScope, id)?.title ?? '')) ?? null,
+    reopenRejected: (id: string, summary: string) => parts.runtime.reopenRejected?.(parts.ownerScope, id, summary, rejectedTaskReport(
+      parts.runtime.get(parts.ownerScope, id)?.title ?? '')) ?? null,
     reopenRetired: (id: string, summary: string) => parts.runtime.reopenRetired?.(parts.ownerScope, id, summary) ?? null,
-    /** Continue contract 1: the commands a cleanup left held for this task are resumed or cancelled on the hold axis only (their results are left as they are; nothing is sent). */
+    /** Continue contract 1: the commands a cleanup left held for this task are resumed or cancelled on the hold axis
+ * only (their results are left as they are; nothing is sent). */
     resolveHolds: (id: string, how: 'resume' | 'cancel') => parts.control.resolveHolds(id, how),
-    /** The body's feet now (the newest frame), or null: a held request's status and resume say how far it is from where the act began. */
+    /** The body's feet now (the newest frame), or null: a held request's status and resume say how far it is from
+ * where the act began. */
     position: (): [number, number, number] | null => {
       const id = body();
       const at = (id ? parts.control.observe(id)?.state.world as { position?: { x?: unknown; y?: unknown; z?: unknown } } | undefined : undefined)?.position;
       return at && [at.x, at.y, at.z].every(n => typeof n === 'number') ? [at.x as number, at.y as number, at.z as number] : null;
     },
     /**
-     * A held request's hold ended on the body (2026-10-28 cancel; run 44 resume): a release of its held act's lease and session, naming the hold
-     * (`context.incident.cancel` or `resume`): the body ends the hold and moves the world again (`/tick unfreeze`), and says so in the receipt.
+     * A held request's hold ended on the body (2026-10-28 cancel; run 44 resume): a release of its held act's lease
+ * and session, naming the hold
+     * (`context.incident.cancel` or `resume`): the body ends the hold and moves the world again (`/tick unfreeze`),
+ * and says so in the receipt.
      * `ok` only when the body says it holds nothing of it any more; `words` what came back (or why nothing did).
      */
     incident: async (op: 'resume' | 'cancel', incident: string, commandId: string, taskId: string): Promise<IncidentAnswer> => {
@@ -83,7 +91,8 @@ export function operatorMinecraftRequests(parts: {
       const id = `${op === 'resume' ? 'unhold' : 'unfreeze'}:${incident}:${Date.now()}`.slice(0, 150);
       const context = { ...sent.context, incident: { [op]: incident } };
       try {
-        const receipt = await parts.control.command({ id, context, lease: sent.lease, kind: 'release', stop: { context, requestId: id, reason: 'cancel' }, milliseconds: 8_000 });
+        const receipt = await parts.control.command({ id, context, lease: sent.lease, kind: 'release', stop: { context, requestId: id,
+           reason: 'cancel' }, milliseconds: 8_000 });
         const said = bodyIncident(receipt.result);
         const ok = receipt.outcome === 'completed' && said?.done === true;
         return { ok, words: said ? `${receipt.outcome} done=${said.done} hold=${said.hold ?? '-'} unfreeze=${String(said.unfreeze ?? '-').slice(0, 60)}`
@@ -91,8 +100,10 @@ export function operatorMinecraftRequests(parts: {
       } catch (error) { return { ok: false, words: error instanceof Error ? error.message : 'unknown' }; }
     },
     /**
-     * Run 47 (resume 9): the head goes back to held, and the body is asked to hold too (a release carrying `incident.take` of the hold's id, in a session of its own, as the head's own holds are asked
-     * for), so that the world stops: once the head held and the world moved on for four and a half minutes. What the body answers is the receipt's take (`takeOfResult`), or null when it
+     * Run 47 (resume 9): the head goes back to held, and the body is asked to hold too (a release carrying
+ * `incident.take` of the hold's id, in a session of its own, as the head's own holds are asked
+     * for), so that the world stops: once the head held and the world moved on for four and a half minutes. What the
+ * body answers is the receipt's take (`takeOfResult`), or null when it
      * could not be asked (no command of the task to take the lease from, the body away, no answer).
      */
     take: async (taskId: string, incident: string, why: string): Promise<IncidentTake | null> => {
@@ -101,12 +112,14 @@ export function operatorMinecraftRequests(parts: {
       const id = `take:${createHash('sha256').update(incident).digest('hex').slice(0, 16)}`;
       const context = { ...sent.context, sessionId: takeSession(incident), incident: { take: { id: incident.slice(0, 150), why: why.slice(0, 300) } } };
       try {
-        const receipt = await parts.control.command({ id: `${id}:${Date.now()}`.slice(0, 150), context, lease: sent.lease, kind: 'release', stop: { context, requestId: id, reason: 'cancel' }, milliseconds: TAKE_MS });
+        const receipt = await parts.control.command({ id: `${id}:${Date.now()}`.slice(0, 150), context, lease: sent.lease, kind: 'release',
+           stop: { context, requestId: id, reason: 'cancel' }, milliseconds: TAKE_MS });
         return takeOfResult(receipt.result);
       } catch { return null; }
     },
     /**
-     * Run 45: a held act in words for the next decision when it is not sent again: its item and first hand, and how it ended (the code and the first
+     * Run 45: a held act in words for the next decision when it is not sent again: its item and first hand, and how
+ * it ended (the code and the first
      * words in brackets of its stop line). 「保留した act q12（go (159,20,220)）は出し直さなかった。前の結果: search_timeout（…）」.
      */
     heldActWords: (commandId: string, why: string): string => {
@@ -114,24 +127,35 @@ export function operatorMinecraftRequests(parts: {
       const item = String(sent?.queue?.item ?? '');
       const hand = ((sent?.arguments as { hands?: Array<Record<string, unknown>> } | undefined)?.hands ?? [])[0];
       const to = hand?.to as { x?: unknown; y?: unknown; z?: unknown } | undefined;
-      const handWords = hand ? `${String(hand.do ?? '?')}${to && typeof to.x === 'number' ? ` (${to.x},${to.y},${to.z})` : ''}` : '';
+      const heldHandWords = () => (hand ? `${String(hand.do ?? '?')}${to && typeof to.x === 'number' ? ` (${to.x},${to.y},${to.z})` : ''}` : '');
+      const handWords = heldHandWords();
       let stop = '', fact = '';
       try {
-        const lines = (JSON.parse(commandId ? parts.control.store.receipt(commandId)?.result ?? '' : '') as { lines?: Array<{ status?: string; line?: string }> }).lines ?? [];
-        // Run 47 (hold 3: the decision after a skipped resume sent the same go again): the hand's line as the body wrote it, its fix and hint to the end, not the code alone.
+        const lines = (JSON.parse(commandId ? parts.control.store.receipt(commandId)?.result ?? '' : '') as { lines?: Array<{ status?:
+           string; line?: string }> }).lines ?? [];
+        // Run 47 (hold 3: the decision after a skipped resume sent the same go again): the hand's line as the body wrote it, its fix and
+// hint to the end, not the code alone.
         stop = String(lines.find(entry => entry.status !== 'done' && entry.status !== 'skipped')?.line ?? '').replace(/\s+/gu, ' ').trim().slice(0, 400);
-        // Run 47 (resume 3): the stop's fact lines are made from the results that ran in this process; the held act's ran in the one before the restart. This one is made from its receipt
-        // (a stuck go: the way is found and the body cannot move on it), and the hold's reason carries the count of stops in the same place.
+        // Run 47 (resume 3): the stop's fact lines are made from the results that ran in this process; the held act's
+// ran in the one before
+// the restart. This one is made from its receipt
+        // (a stuck go: the way is found and the body cannot move on it), and the hold's reason carries the count of
+// stops in the same place.
         fact = stopFactsOf(parts.control.store.receipt(commandId)?.result)[0] ?? '';
       } catch { stop = ''; }
       const reason = stop && why && !stop.includes(why.slice(0, 40)) ? `。保留の理由: ${why.replace(/\s+/gu, ' ').slice(0, 160)}` : '';
-      return `保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop || why}${fact ? `。${fact}` : ''}${reason}`.slice(0, 900);
+      const heldRequestSummary = () => (`保留した act${item ? ` ${item}` : ''}${handWords ? `（${handWords}）` : ''}は出し直さなかった。前の結果: ${stop ||
+         why}${fact ? `。${fact}` :
+         ''}${reason}`.slice(0, 900));
+      return heldRequestSummary();
     },
     /**
-     * Amendment A-15: the act the task's step lost, in words for the first decision after a resume of a task the recovery paused (「q46 の 作業台とかまどを置く…」): its item and first hand.
+     * Amendment A-15: the act the task's step lost, in words for the first decision after a resume of a task the
+ * recovery paused (「q46 の 作業台とかまどを置く…」): its item and first hand.
      */
     lostActWords: (taskId: string): string => {
-      // The act the recovery closed (the step the VM stop or the restart lost), not the newest one: an act sent again meanwhile is not the lost one (run 46). The newest is the fallback.
+      // The act the recovery closed (the step the VM stop or the restart lost), not the newest one: an act sent again
+// meanwhile is not the lost one (run 46). The newest is the fallback.
       const sent = parts.control.store.lastClosedOfTask(taskId) ?? parts.control.store.lastOfTask(taskId);
       const item = String(sent?.queue?.item ?? '');
       const hand = ((sent?.arguments as { hands?: Array<Record<string, unknown>> } | undefined)?.hands ?? [])[0];

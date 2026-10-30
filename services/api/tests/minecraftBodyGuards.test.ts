@@ -131,7 +131,8 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
   });
 
   it('is applied by the server right after authentication, before every other device route, and before the operations console', () => {
-    const server = readApiSource('server.ts');
+    expect(readApiSource('server.ts')).toContain('createApiRequestHandler({');
+    const server = readApiSource('serverRequestHandler.ts').replace(/\s+/gu, ' ').replace(/\(\s*\)/gu, '()');
     const gate = server.indexOf('await minecraft.serve(request, response, url.pathname, principal)');
     expect(gate).toBeGreaterThan(server.indexOf("error: 'PAIRING_REQUIRED'"));
     expect(gate).toBeLessThan(server.indexOf('url.pathname === SHANNON_NOW_PATH'));

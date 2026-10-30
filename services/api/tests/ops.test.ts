@@ -1,3 +1,4 @@
+import ts from 'typescript';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -129,8 +130,9 @@ describe('authentication', () => {
 
   it('is hooked before device authentication with the device store as the only reader credential', () => {
     const server = readApiSource('server.ts');
-    expect(server.indexOf('if (isOpsPath(url.pathname))')).toBeGreaterThan(0);
-    expect(server.indexOf('if (isOpsPath(url.pathname))')).toBeLessThan(server.indexOf('const principal = deviceAuth'));
+    const handler = readApiSource('serverRequestHandler.ts');
+    expect(handler.indexOf('if (isOpsPath(url.pathname))')).toBeGreaterThan(0);
+    expect(handler.indexOf('if (isOpsPath(url.pathname))')).toBeLessThan(handler.indexOf('const principal = deviceAuth'));
     expect(server).toContain('device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)');
     expect(server).toContain('bridge: platformBridge?.configuration ?? null');
   });
@@ -456,8 +458,8 @@ describe('the snapshot stays out of every prompt', () => {
     const files = apiSourceFiles();
     expect(files.length).toBeGreaterThanOrEqual(300);
     const referencing = files.filter(path => !owners.has(basename(path)) && markers.test(readFileSync(path, 'utf8'))).map(path => basename(path));
-    expect(referencing.sort()).toEqual(['minecraftLifecycleWiring.ts', 'opsMinecraftLifecycleWiring.ts', 'server.ts']);
-    for (const file of ['minecraftLifecycleWiring.ts', 'opsMinecraftLifecycleWiring.ts', 'opsLifecycleAuthority.ts']) {
+    expect(referencing.sort()).toEqual(['minecraftLifecycleWiring.ts', 'opsMinecraftLifecycleWiring.ts', 'server.ts', 'serverRequestHandler.ts']);
+    for (const file of ['minecraftLifecycleWiring.ts', 'opsMinecraftLifecycleWiring.ts', 'opsLifecycleAuthority.ts', 'serverRequestHandler.ts']) {
       expect(readApiSource(file)).not.toMatch(/ops_snapshots|OpsSnapshot|SQLiteOpsStore|opsReadResponse/u);
     }
     for (const name of owners) expect(apiSourceFile(name), name).toBeTruthy();
@@ -467,24 +469,54 @@ describe('the snapshot stays out of every prompt', () => {
 
   it('is never handed to the kernel, a worker or the platform bridge by the server', () => {
     const server = readApiSource('server.ts');
-    const uses = server.split('\n').filter(line => /\bopsStore\b/u.test(line) && !line.startsWith('import ')).map(line => line.trim());
-    const commandBridge = uses.find(line => line.startsWith('const lifecycle = configuredMinecraftLifecycle('));
+    const source = ts.createSourceFile('server.ts', server, ts.ScriptTarget.Latest, true);
+    const commandBridge = source.statements.find(statement => statement.getText(source).startsWith('const lifecycle ='))!
+      .getText(source).replace(/\s+/gu, ' ').replace(/\(\s*\)/gu, '()');
     expect(commandBridge).toContain('ops: mind?.actions ? { commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined');
-    // 「新しいワールドで始める」: besides the command journal, only the setting's own store (opsWorldPolicyStore.ts), never the snapshot.
     expect(commandBridge).toContain('freshWorld: { policy: opsStore.worldPolicy,');
-    expect(commandBridge!.replace('opsStore.commands', '').replace('opsStore.worldPolicy', '')).not.toMatch(/\bopsStore\b/u);
-    expect(uses.filter(line => line !== commandBridge)).toEqual([
-      'const opsStore = new SQLiteOpsStore(configuredDatabasePath());',
-      'store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,',
-      'opsStore.close();',
-    ]);
-    expect(server.split('\n').filter(line => /\bopsRoute\b/u.test(line))).toHaveLength(2);
-    // The lifecycle bridge receives only the command journal, never the operational snapshot.
-    // The import is compared without its specifier, which names a folder; where it leads is checked as a resolved path.
-    expect(server.split('\n').filter(line => /opsCommand/iu.test(line) && line.trim() !== commandBridge).map(line => line.trim().replace(/ from '[^']+';$/u, " from '…';"))).toEqual([
-      "import { opsCommandsEnabled } from '…';",
-      'commandsEnabled: () => opsCommandsEnabled(process.env), minecraftLifecycle: () => lifecycle?.ops ?? null,',
-    ]);
+    const fields: string[] = [];
+    let storeNames = 0;
+    const inspect = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && node.text === 'opsStore') storeNames += 1;
+      if (ts.isPropertyAccessExpression(node) && node.expression.getText(source) === 'opsStore') fields.push(node.name.text);
+      ts.forEachChild(node, inspect);
+    };
+    inspect(source);
+    // 束縛、コンソールへの引渡し、3つの限定したメンバーの計5箇所だけ。プロンプトへ状態を渡さない。
+    expect(storeNames).toBe(5);
+    expect(fields.sort()).toEqual(['close', 'commands', 'worldPolicy']);
+    const consoleRoute = source.statements.find(statement => statement.getText(source).startsWith('const opsRoute ='))!.getText(source);
+    expect(consoleRoute).toContain('store: opsStore');
+    expect(consoleRoute).toContain('commandsEnabled: () => opsCommandsEnabled(process.env)');
+    const handler = readApiSource('serverRequestHandler.ts');
+    expect(handler).not.toMatch(/\bopsStore\b/u);
+    expect(resolvedImports('server.ts')).toContain(apiSourcePath('serverRequestHandler.ts'));
+    // 経路そのものの引渡しも元と同じ用途に限定する。型だけの参照は実行されない。
+    const routeUses = (text: string): string[] => {
+      const file = ts.createSourceFile('source.ts', text, ts.ScriptTarget.Latest, true);
+      const found: string[] = [];
+      const visit = (node: ts.Node): void => {
+        if (ts.isTypeNode(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) return;
+        if (ts.isIdentifier(node) && node.text === 'opsRoute') {
+          const parent = node.parent;
+          if (ts.isVariableDeclaration(parent) && parent.name === node && parent.initializer && ts.isCallExpression(parent.initializer))
+            found.push(`定義:${parent.initializer.expression.getText(file)}`);
+          else if (ts.isBindingElement(parent) && parent.name === node)
+            found.push('portsから束縛');
+          else if (ts.isCallExpression(parent) && parent.expression === node)
+            found.push('呼出し');
+          else if (ts.isShorthandPropertyAssignment(parent) && ts.isCallExpression(parent.parent.parent))
+            found.push(`引渡し:${parent.parent.parent.expression.getText(file)}`);
+          else found.push(`想定外:${ts.SyntaxKind[parent.kind]}`);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(file);
+      return found.sort();
+    };
+    expect(routeUses(server)).toEqual(['定義:createOpsRoute', '引渡し:createApiRequestHandler']);
+    expect(routeUses(handler)).toEqual(['portsから束縛', '呼出し']);
+
     expect(resolvedImports('server.ts')).toContain(apiSourcePath('opsCommandContract.ts'));
   });
 

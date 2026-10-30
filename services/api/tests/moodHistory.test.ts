@@ -614,7 +614,8 @@ describe('structure', () => {
     for (const name of names.filter(name => /^autonomyLoop/u.test(name) || ['apiKernel.ts', 'apiPromptProjection.ts', 'worker.ts'].includes(name))) {
       expect(source(name), name).not.toMatch(/moodHistory|MoodHistory|mood-history/u);
     }
-    const server = source('server.ts');
+    expect(source('server.ts')).toContain('createApiRequestHandler({');
+    const server = source('serverRequestHandler.ts');
     expect(server.indexOf('moodHistoryRoute(request, response, principal)')).toBeGreaterThan(server.indexOf("error: 'PAIRING_REQUIRED'"));
     // The point is made from the state alone: no cause, no target, no conversation.
     expect(source('moodHistory.ts')).not.toMatch(/\.cause|\.target|conversation_|ConversationStore/u);

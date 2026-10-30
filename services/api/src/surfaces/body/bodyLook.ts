@@ -1,15 +1,21 @@
-import { asksToLook, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
-export { asksToLook, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
+import { BODY_LOOK_SEEN_SUMMARY,bodyLookNotSeenSummary,BODY_SCREEN_LOOK_SEEN_SUMMARY,bodyScreenLookNotSeenSummary,bodyScreenLookNotSeenLine,ROOM_LOOK_OFFER_PROMPT,roomLookUnavailablePrompt } from './bodyLookWords.js';
+import type { ScreenLookUnavailable,Unavailable } from './bodyLookWords.js';
+import { asksToLook,type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
 import { randomUUID } from 'node:crypto';
-import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import {
-  BODY_LOOK_ACTIVITY_THREAD, BODY_LOOK_LIMITS, configuredBodyLook, roomLookChoice,
-  type BodyLookCode, type BodyLookConfig, type BodyLookResult, type BodyLookSource, type RoomLookChoice,
+BODY_LOOK_ACTIVITY_THREAD,BODY_LOOK_LIMITS,configuredBodyLook,roomLookChoice,
+type BodyLookCode,type BodyLookConfig,type BodyLookResult,type BodyLookSource
 } from '../../contracts/bodyLookContract.js';
-import { BODY_LOOK_CUT_OFF_LINE, ROOM_LOOK_UNAVAILABLE_REASON, UNOPENED_LINE, bodyLookNotSeenLine, type BodyLookUnavailable } from '../../mind/perception/bodyLookLines.js';
-import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
-import { SQLiteBodyLookStore, type BodyLookOutcome, type StoredBodyLook } from './store/bodyLookStore.js';
-import type { RoomLookContextLine, RoomLookViewer } from './bodyLookVision.js';
+import {
+BODY_LOOK_CUT_OFF_LINE,ROOM_LOOK_UNAVAILABLE_REASON,UNOPENED_LINE,bodyLookNotSeenLine,
+type BodyLookUnavailable
+} from '../../mind/perception/bodyLookLines.js';
+import { VoiceTurnWaits,type TurnWait } from './bodyLookTurnWait.js';
+import { SQLiteBodyLookStore,type BodyLookOutcome,type StoredBodyLook } from './store/bodyLookStore.js';
+import type { RoomLookContextLine,RoomLookViewer } from './bodyLookVision.js';
+export { BODY_LOOK_TOOL, BODY_LOOK_SEEN_SUMMARY, bodyLookNotSeenSummary, BODY_SCREEN_LOOK_SEEN_SUMMARY, bodyScreenLookNotSeenSummary, bodyScreenLookNotSeenLine, ROOM_LOOK_OFFER_PROMPT, roomLookUnavailablePrompt } from './bodyLookWords.js';
+export type { ScreenLookUnavailable } from './bodyLookWords.js';
+export { asksToLook, type BodyLookVoiceTurn } from '../../mind/perception/lookPorts.js';
 
 /**
  * One look at the room, from the offer in an owner turn to her next message.
@@ -40,7 +46,8 @@ export interface BodyLookMessage {
 
 /** How her message about a look reaches the Talk. It receives text only, never a frame. */
 export interface BodyLookSpeaker {
-  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen'; source?: BodyLookSource }, text: string, at: string): BodyLookMessage | null;
+  say(scopeKey: string, threadId: string, look: { id: string; outcome: 'seen' | 'not_seen'; source?: BodyLookSource }, text: string, at:
+     string): BodyLookMessage | null;
 }
 
 /** The API side of a look she takes in her own time. It is handed her text and token counts, never a frame. */
@@ -97,57 +104,13 @@ export interface BodyLookTurn {
   decide(choice: unknown, threadId: string): void;
 }
 
-/** Why a screen look the owner started was not taken at all (nothing was opened, and no model saw the frame). */
-export type ScreenLookUnavailable = 'no_viewer' | 'busy' | 'limit_hour' | 'limit_day';
-
 export type BodyLookAnswer =
   | { kind: 'disabled' | 'not_found' | 'wrong_device' | 'answered' | 'expired' | 'wrong_source' }
   | { kind: 'unavailable'; reason: ScreenLookUnavailable }
   | { kind: 'done'; id: string; status: 'seen' | 'refused' | 'discarded' | 'failed'; message: BodyLookMessage | null };
 
 export { ROOM_LOOK_UNAVAILABLE_REASON, type BodyLookUnavailable };
-type Unavailable = BodyLookUnavailable;
 const VOICE_TURN_WAIT_MILLISECONDS = 8_000;
-
-/** Neutral wording for the activity record. */
-const NOT_SEEN_REASON: Readonly<Record<BodyLookCode, string>> = Object.freeze({
-  camera_off: 'カメラが切ってあった',
-  window_hidden: '体の窓が隠れていた',
-  busy: '体が別のことをしていた',
-  no_camera: 'カメラがなかった',
-  denied: 'カメラを使う許可がなかった',
-  failed: '写せなかった',
-  timeout: '体から返事がなかった',
-  others_present: 'ほかの人がいるかもしれなかった',
-  rate_limited: '体の側の回数の上限に達していた',
-  model_failed: '届いた1枚を見られなかった',
-});
-
-export const BODY_LOOK_TOOL = 'body.look';
-export const BODY_LOOK_SEEN_SUMMARY = '部屋を一度見ました。';
-export const bodyLookNotSeenSummary = (code: BodyLookCode, frameDiscarded = false) =>
-  `部屋を見ませんでした（${NOT_SEEN_REASON[code]}${frameDiscarded ? '。届いた1枚は見ずに捨てた' : ''}）。`;
-
-/** The screen look in the activity record. The frame is not part of it, only that she looked and how it ended. */
-export const BODY_SCREEN_LOOK_SEEN_SUMMARY = '画面を一度見ました。';
-const SCREEN_NOT_SEEN_REASON: Readonly<Partial<Record<BodyLookCode, string>>> = Object.freeze({
-  others_present: 'ほかの人がいるかもしれなかった', timeout: '体から返事がなかった', rate_limited: '回数の上限に達していた', model_failed: '届いた1枚を見られなかった',
-});
-export const bodyScreenLookNotSeenSummary = (code: BodyLookCode, frameDiscarded = false) =>
-  `画面を見ませんでした（${SCREEN_NOT_SEEN_REASON[code] ?? '画面を取れなかった'}${frameDiscarded ? '。届いた1枚は見ずに捨てた' : ''}）。`;
-/** What she says when the owner asked her to look at his screen and she could not: the room's lines speak of the room and the camera. */
-const SCREEN_NOT_SEEN_LINE: Readonly<Partial<Record<BodyLookCode, string>>> = Object.freeze({
-  others_present: 'ほかの人がいるかもしれないので、いまは見ないでおきます。',
-  model_failed: '画面を見せてもらったのですが、うまく見られませんでした。',
-});
-export const bodyScreenLookNotSeenLine = (code: BodyLookCode) => SCREEN_NOT_SEEN_LINE[code] ?? 'うまく画面を見られませんでした。';
-
-export const ROOM_LOOK_OFFER_PROMPT = `[部屋を見る]（いまは体のカメラで部屋を一度だけ見られる。${SHANNON_OWNER_NAME}に見てと言われた時か、自分が見たい時だけ、返答のroomLookで選ぶ。`
-  + '見えたものはこの返事のあとで届く。この返事では見てみると伝えるだけにして、まだ見ていないものを語らない）';
-export const roomLookUnavailablePrompt = (reason: Unavailable) =>
-  `[部屋を見る]（体のカメラで部屋を見てほしいという頼みなら、いまは見られない: ${ROOM_LOOK_UNAVAILABLE_REASON[reason]}。見たふりをせず、見られないと正直に伝える）`;
-
-
 
 const NO_TURN: BodyLookTurn = Object.freeze({ prompt: '', request: Object.freeze({}), decide: () => undefined });
 /** A look the model is seeing is given up this long after its expiry (the process stopped mid-call). */
@@ -204,7 +167,8 @@ export class BodyLooks {
         prompt: ROOM_LOOK_OFFER_PROMPT,
         request: { offerRoomLook: true },
         // A turn other people could hear that arrived while the reply was written stops the look.
-        decide: (choice, threadId) => { try { if (this.othersTurns.get(scopeKey) === others) this.open(scopeKey, threadId, choice); } catch { /* the reply is already written */ } }, // No wait: a text turn is stored before this runs.
+        decide: (choice, threadId) => { try { if (this.othersTurns.get(scopeKey) === others) this.open(scopeKey, threadId, choice);
+           } catch { /* the reply is already written */ } }, // No wait: a text turn is stored before this runs.
       };
     } catch { return NO_TURN; }
   }
@@ -244,21 +208,24 @@ export class BodyLooks {
             }
             const state = this.availability(scopeKey, this.dependencies.now(), 'owner');
             const line = typeof state === 'string' ? UNOPENED_LINE[state] : UNOPENED_LINE.busy;
-            if (line) this.unopened(scopeKey, threadId, wait, alone, line.code, line.line, typeof state === 'string' ? ROOM_LOOK_UNAVAILABLE_REASON[state] : ROOM_LOOK_UNAVAILABLE_REASON.busy);
+            if (line) this.unopened(scopeKey, threadId, wait, alone, line.code, line.line,
+               typeof state === 'string' ? ROOM_LOOK_UNAVAILABLE_REASON[state] : ROOM_LOOK_UNAVAILABLE_REASON.busy);
             else wait?.done();
           } catch { /* the reply is already spoken */ }
           return false;
         },
         cutOff: (threadId, said, turnId) => {
           try {
-            if (alone()) this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since, turnId), alone, 'failed', BODY_LOOK_CUT_OFF_LINE, '話が途中で切れた');
+            if (alone()) this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since, turnId), alone, 'failed',
+               BODY_LOOK_CUT_OFF_LINE, '話が途中で切れた');
           } catch { /* nothing more to do */ }
         },
       };
     } catch { return { unavailable: 'no_viewer', open: () => false, cutOff: () => undefined }; }
   }
 
-  /** What every conversation turn does first: note the turn, close what is overdue, and end a look other people would hear about. */
+  /** What every conversation turn does first: note the turn, close what is overdue, and end a look other people
+ * would hear about. */
   private begin(scopeKey: string, at: string, audience: unknown): { deviceId: string } | Unavailable {
     this.lastTurns.set(scopeKey, Date.parse(at));
     this.sweep(scopeKey, at);
@@ -457,7 +424,8 @@ export class BodyLooks {
       try {
         if (!alone()) return;
         const at = this.dependencies.now();
-        try { this.dependencies.record(scopeKey, { summary: `部屋を見ませんでした（${reason}）。`, outcome: 'failed', reasonCode: code }); } catch { /* her line still says it */ }
+        try { this.dependencies.record(scopeKey, { summary: `部屋を見ませんでした（${reason}）。`, outcome: 'failed', reasonCode: code }); } catch {
+           /* her line still says it */ }
         this.dependencies.speaker.say(scopeKey, threadId, { id: randomUUID(), outcome: 'not_seen' }, line, at);
       } catch { /* nothing more to do */ }
     };
@@ -480,7 +448,8 @@ export class BodyLooks {
   }
 
   /** Ends a look that did not become a message about the room: one activity entry, and one honest line if the owner had asked. */
-  private close(look: StoredBodyLook, from: BodyLookOutcome, to: BodyLookOutcome, code: BodyLookCode, at: string, frameReceived = false): { message: BodyLookMessage | null } | null {
+  private close(look: StoredBodyLook, from: BodyLookOutcome, to: BodyLookOutcome, code: BodyLookCode, at: string, frameReceived = false): {
+     message: BodyLookMessage | null } | null {
     if (!this.store.advance(look.scopeKey, look.id, from, to, at, { code, frameReceived })) return null;
     this.spoken.delete(look.id);
     this.lookWaits.delete(look.id);
@@ -489,10 +458,12 @@ export class BodyLooks {
     try {
       const screen = look.source === 'screen';
       this.dependencies.record(look.scopeKey, {
-        summary: screen ? bodyScreenLookNotSeenSummary(code, to === 'discarded') : bodyLookNotSeenSummary(code, to === 'discarded'), outcome: 'failed', reasonCode: code,
+        summary: screen ? bodyScreenLookNotSeenSummary(code, to === 'discarded') : bodyLookNotSeenSummary(code, to === 'discarded'),
+           outcome: 'failed', reasonCode: code,
       });
     } catch { /* her line below still tells the owner */ }
-    return { message: look.ownerAsked ? this.say(look, 'not_seen', look.source === 'screen' ? bodyScreenLookNotSeenLine(code) : bodyLookNotSeenLine(code), at) : null };
+    return { message: look.ownerAsked ? this.say(look, 'not_seen', look.source === 'screen' ? bodyScreenLookNotSeenLine(code) :
+       bodyLookNotSeenLine(code), at) : null };
   }
 
   /**
@@ -515,6 +486,7 @@ export class BodyLooks {
   }
 
   private say(look: StoredBodyLook, outcome: 'seen' | 'not_seen', text: string, at: string): BodyLookMessage | null {
-    try { return this.dependencies.speaker.say(look.scopeKey, look.threadId, { id: look.id, outcome, ...(look.source === 'screen' ? { source: 'screen' as const } : {}) }, text, at); } catch { return null; }
+    try { return this.dependencies.speaker.say(look.scopeKey, look.threadId, { id: look.id, outcome, ...(look.source === 'screen' ? {
+       source: 'screen' as const } : {}) }, text, at); } catch { return null; }
   }
 }

@@ -3,8 +3,11 @@ import type { ControlHolder, ControlView } from '../../contracts/continueContrac
 import { validControlView } from './minecraftControlValidation.js';
 
 /**
- * Who holds the body, as the head reads it (continue contract 4): the observation's `state.control` (a `ControlView`, the body's own account of its root action), and
- * the words the live state shows for it. **Facts only**: who holds the body and since when, never what to do about it. The live state's owner places the line (it stays
+ * Who holds the body, as the head reads it (continue contract 4): the observation's `state.control` (a
+ * `ControlView`, the body's own
+ * account of its root action), and
+ * the words the live state shows for it. **Facts only**: who holds the body and since when, never what to do about it. The live
+ * state's owner places the line (it stays
  * in every version of the input, chapter 8's table); this file reads and words it.
  */
 
@@ -28,14 +31,23 @@ export function holderPhrase(holder: ControlHolder): string {
     case 'reflex': return `反射 ${holder.reflex}${target(holder.target)}`;
     case 'bridge': {
       const left = seconds(holder.since, holder.until);
-      return `つなぎ（${holder.after} の後、${holder.hold === 'shield' ? '盾を構えている' : '一歩下がっている'}${target(holder.target)}${left !== null ? `・${left} 秒まで` : ''}）`;
+      return ("つなぎ（" +
+`${holder.after}` +
+" の後、" +
+`${holder.hold === 'shield' ? '盾を構えている' : '一歩下がっている'}` +
+"" +
+`${target(holder.target)}` +
+"" +
+`${left !== null ? `・${left} 秒まで` : ''}` +
+"）");
     }
     case 'cleanup': return `片付け（${holder.command} の停止）`;
   }
 }
 
 /**
- * 「今の持ち主: 反射 floor-melee（相手 #2601）」, then the parts that are separate facts and not copies of the holder: the reflex's episode that goes on (its hands and
+ * 「今の持ち主: 反射 floor-melee（相手 #2601）」, then the parts that are separate facts and not copies of the holder: the
+ * reflex's episode that goes on (its hands and
  * hits), the combat mark that stays, and the commands waiting behind a reflex. Each part only when the view has it.
  */
 export function holderWords(view: ControlView): string {

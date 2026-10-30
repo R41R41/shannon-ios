@@ -2,38 +2,60 @@ import { HEAD_INCIDENT_PREFIX } from '../surfaces/minecraft/minecraftLlmcStalls.
 /**
  * The fix run's hold, as the Minecraft step sees it (2026-10-28, owner: 「止めて直す実走（保留と再開、世界を止める、台で再現→直す→その場で確かめる）」).
  *
- * - An operator's request made with `--hold-on-failure` sends its acts with `context.incident.hold`: on a heavy failure the body writes its black box
- *   and the scene, stops the world (`/tick freeze`, never with anyone else on the server) and says so in the act's receipt (`incident`). A world
- *   it cannot stop is not held (run 44): the receipt says why (`notHeld`), the step writes it down (`notHeld`) and the task goes on.
- * - The step reads that receipt (`noteReceipt`) and asks the operator's service to hold the task (`hold`): audited, and stopped through the owner's
- *   stop path, so no decision is made, no model is called and nothing is counted while it waits; the plan, the pack and the task stay as they are.
+ * - An operator's request made with `--hold-on-failure` sends its acts with `context.incident.hold`: on a heavy
+ * failure the body writes its black box
+ *   and the scene, stops the world (`/tick freeze`, never with anyone else on the server) and says so in the act's
+ * receipt (`incident`). A world
+ *   it cannot stop is not held (run 44): the receipt says why (`notHeld`), the step writes it down (`notHeld`) and
+ * the task goes on.
+ * - The step reads that receipt (`noteReceipt`) and asks the operator's service to hold the task (`hold`):
+ * audited, and stopped through the owner's
+ *   stop path, so no decision is made, no model is called and nothing is counted while it waits; the plan, the
+ * pack and the task stay as they are.
  * - The operator's `resume` queues the task again. Its first step sends the act that failed once more with the same arguments and
- *   `context.incident.resume` (the body moves the world again and runs it), writes what it did, and the decisions go on from the plan.
+ *   `context.incident.resume` (the body moves the world again and runs it), writes what it did, and the decisions
+ * go on from the plan.
  *
- * The operator's service (`operatorMinecraftWiring.ts`) registers the port at start; without it (the switch off, a test), nothing is held.
+ * The operator's service (`operatorMinecraftWiring.ts`) registers the port at start; without it (the switch off,
+ * a test), nothing is held.
  */
 /** `start`: the feet when the held act began; `end`: when it ended (where the body was held). */
 export type Feet = [number, number, number];
-/** `notHeld`: a hold was asked for and not made, because the world could not be stopped (the body's freeze words; run 44, hold 1). */
+/** `notHeld`: a hold was asked for and not made, because the world could not be stopped (the body's freeze words;
+ * run 44, hold 1). */
 /**
- * Chapter 8's 再開 9 → 保留 10: a held act that a resume sent again was held again, for another reason. The record of it: how the second try ended (the code of its stop) and
- * the items that were in the queue meanwhile and were taken off (their marks and why). The next resume's first decision reads it before anything else.
+ * Chapter 8's 再開 9 → 保留 10: a held act that a resume sent again was held again, for another reason. The record
+ * of it: how the second
+ * try ended (the code of its stop) and
+ * the items that were in the queue meanwhile and were taken off (their marks and why). The next resume's first decision reads it
+ * before anything else.
  */
 export interface HeldAgain { code: string; dropped: { item: string; why: string }[] }
-export interface IncidentNote { id: string; heavy: boolean; why: string; held: boolean; frozen: boolean | null; freeze?: string; notHeld?: string; start?: Feet | null; end?: Feet | null;
-  /** Run 45: the act a resume sent again failed for the reason it was held for, and the body did not hold again (the hold it was sent again for). */
+export interface IncidentNote { id: string; heavy: boolean; why: string; held: boolean; frozen: boolean | null; freeze?: string; notHeld?:
+   string; start?: Feet | null; end?: Feet | null;
+  /** Run 45: the act a resume sent again failed for the reason it was held for, and the body did not hold again
+ * (the hold it was sent again for). */
   repeated?: string;
   /** Chapter 8's 再開 9 → 保留 10: this hold is the second try of a held act, held again (see `HeldAgain`). */
   replay?: HeldAgain;
-  /** Amendment A-12: a hold the head found itself (`head:<kind>:…`, `headIncidentKind`): where the head wrote its box (the reason and the last rows of the decision record), relative to the records' root. */
+  /** Amendment A-12: a hold the head found itself (`head:<kind>:…`, `headIncidentKind`): where the head wrote its
+ * box (the reason and
+ * the last rows of the decision record), relative to the records' root. */
   record?: string;
-  /** Amendment A-12: what the body said of the hold the head asked for (`headTake`): its box and scene (files on the body's side), the hold it keeps instead (`bodyHold`: another id, the head's was not taken), a take it had already (`again`), and how the asking ended (`take`). */
+  /** Amendment A-12: what the body said of the hold the head asked for (`headTake`): its box and scene (files on
+ * the body's side), the
+ * hold it keeps instead (`bodyHold`: another id, the head's was not taken), a take it had already (`again`), and how the asking
+ * ended (`take`). */
   box?: string | null; scene?: string | null; bodyHold?: string; again?: boolean; take?: TakeEnd }
-/** How the head's asking for a hold ended: `held` (the body holds and stopped the world), `not_held` (a box and a scene only: the world could not be stopped), `other_hold` (the body keeps another hold and changed nothing), `failed` (nothing came back). */
+/** How the head's asking for a hold ended: `held` (the body holds and stopped the world), `not_held` (a box and a scene only: the
+ * world could not be stopped), `other_hold` (the body keeps another hold and changed nothing), `failed` (nothing came back). */
 export type TakeEnd = 'held' | 'not_held' | 'other_hold' | 'failed';
 /**
- * Amendment A-12: the incident ids of a stall the head found itself start with `head:` and name the kind (`head:node_stalled:p3:…`). The body knows none of them (it holds nothing for
- * such an incident: its box and scene were not taken and the world was not stopped); the operator's reads of a hold say so, and a release naming one is answered `done` by a body that holds nothing.
+ * Amendment A-12: the incident ids of a stall the head found itself start with `head:` and name the kind
+ * (`head:node_stalled:p3:…`).
+ * The body knows none of them (it holds nothing for
+ * such an incident: its box and scene were not taken and the world was not stopped); the operator's reads of a hold say so, and a
+ * release naming one is answered `done` by a body that holds nothing.
  */
 export function headIncidentKind(id: string | undefined): string | null {
   return id?.startsWith(HEAD_INCIDENT_PREFIX) ? id.slice(HEAD_INCIDENT_PREFIX.length).split(':')[0] || null : null;
@@ -48,25 +70,32 @@ export interface IncidentHoldPort {
   /** Holds the task (audit and stop); false when it is not one to hold or is held already. */
   hold(taskId: string, incident: IncidentNote & { command: string }): Promise<boolean>;
   /**
-   * A heavy failure the body did not hold because it could not stop the world (someone else on the server; the coordinator's choice of
+   * A heavy failure the body did not hold because it could not stop the world (someone else on the server; the
+ * coordinator's choice of
    * 2026-10-28, run 44): written down (audit and activity), and the task goes on.
    */
   notHeld(taskId: string, incident: IncidentNote & { command: string }): void;
   /**
-   * Run 44, resume 1: the body refused an act as held (or its frame shows a hold) while the head had none: the head goes back to held. False when
+   * Run 44, resume 1: the body refused an act as held (or its frame shows a hold) while the head had none: the
+ * head goes back to held. False when
    * there was nothing to do (held already, not the operator's).
    */
   bodyHeld(taskId: string, body: { incident: string; why: string; seen: 'refused' | 'frame' }): Promise<boolean>;
-  /** After a `resume`, the hold whose act is to be sent again: its incident and the act's command id; null when there is none to send. */
+  /** After a `resume`, the hold whose act is to be sent again: its incident and the act's command id; null when
+ * there is none to send. */
   resumePending(taskId: string): { incident: string; command: string; start?: Feet | null } | null;
-  /** Run 45: the line a resume with --skip-replay left for the task's next decision (the act not sent again and its result), once; else null. */
+  /** Run 45: the line a resume with --skip-replay left for the task's next decision (the act not sent again and its
+ * result), once; else null. */
   skipNote?(taskId: string): string | null;
-  /** Chapter 8: the line a resume left for the task's first decision when the hold it resumes was a held act's second try, held again (`heldAgainWords`), once; else null. */
+  /** Chapter 8: the line a resume left for the task's first decision when the hold it resumes was a held act's
+ * second try, held again
+ * (`heldAgainWords`), once; else null. */
   heldAgainNote?(taskId: string): string | null;
   /** Chapter 8 (the meter's clock): how long the task has been held in all, in ms (an operator's hold to its resume). */
   heldMs?(taskId: string): number;
   /**
-   * Run 45 (holds 3 to 5): the act sent again by a resume failed for the same reason it was held for, and the body did not hold again (its
+   * Run 45 (holds 3 to 5): the act sent again by a resume failed for the same reason it was held for, and the body
+ * did not hold again (its
    * receipt's `incident.repeated`): the decisions go on with the result; written down.
    */
   repeated?(taskId: string, incident: IncidentNote & { command: string }): void;
@@ -95,33 +124,44 @@ export function incidentOfResult(result: string | undefined): IncidentNote | nul
   try {
     const value = (JSON.parse(result) as { incident?: Record<string, unknown> }).incident;
     if (!value || typeof value.id !== 'string') return null;
-    return { id: value.id, heavy: value.heavy === true, why: String(value.why ?? ''), held: value.held === true,
+    const incidentFields = (id: string): IncidentNote => ({ id, heavy: value.heavy === true, why: String(value.why ?? ''), held: value.held === true,
       frozen: typeof value.frozen === 'boolean' ? value.frozen : null, ...(typeof value.freeze === 'string' ? { freeze: value.freeze } : {}),
       ...(typeof value.notHeld === 'string' && value.notHeld ? { notHeld: value.notHeld } : {}),
       ...(typeof value.repeated === 'string' && value.repeated ? { repeated: value.repeated } : {}),
-      ...(typeof value.box === 'string' && value.box ? { box: value.box } : {}), ...(typeof value.scene === 'string' && value.scene ? { scene: value.scene } : {}),
-      ...(feet(value.start) ? { start: feet(value.start) } : {}), ...(feet(value.end) ? { end: feet(value.end) } : {}) };
+      ...(typeof value.box === 'string' && value.box ? { box: value.box } : {}), ...(typeof value.scene === 'string' && value.scene ? {
+         scene: value.scene } : {}),
+      ...(feet(value.start) ? { start: feet(value.start) } : {}), ...(feet(value.end) ? { end: feet(value.end) } : {}) });
+    return incidentFields(value.id);
   } catch { return null; }
 }
 
 /**
- * Amendment A-12 (the body's type, `IncidentTakeResult`): what a release carrying `incident.take` answers in its result, `{"incident": {"op": "take", ...}}`. `done`: the body holds the hold or has taken the box
- * without holding; false when it keeps another hold and changed nothing (`hold` is that one). Null when the result is not a take's answer.
+ * Amendment A-12 (the body's type, `IncidentTakeResult`): what a release carrying `incident.take` answers in its result,
+ * `{"incident": {"op": "take", ...}}`. `done`: the body holds the hold or has taken the box
+ * without holding; false when it keeps another hold and changed nothing (`hold` is that one). Null when the
+ * result is not a take's answer.
  */
-export interface IncidentTake { id: string; done: boolean; hold: string | null; held: boolean; frozen: boolean | null; freeze?: string; notHeld?: string; box: string | null; scene: string | null; again: boolean; unfreeze?: string }
+export interface IncidentTake { id: string; done: boolean; hold: string | null; held: boolean; frozen: boolean | null; freeze?: string;
+   notHeld?: string; box: string | null; scene: string | null; again: boolean; unfreeze?: string }
 export function takeOfResult(result: string | undefined): IncidentTake | null {
   if (!result || !result.startsWith('{')) return null;
   try {
     const value = (JSON.parse(result) as { incident?: Record<string, unknown> }).incident;
     if (!value || value.op !== 'take' || typeof value.id !== 'string' || typeof value.done !== 'boolean') return null;
     const hold = typeof value.hold === 'string' ? value.hold : null;
-    return { id: value.id, done: value.done, hold, held: typeof value.held === 'boolean' ? value.held : hold !== null, frozen: typeof value.frozen === 'boolean' ? value.frozen : null,
-      ...(typeof value.freeze === 'string' ? { freeze: value.freeze } : {}), ...(typeof value.notHeld === 'string' && value.notHeld ? { notHeld: value.notHeld } : {}),
+    const incidentTakeFields = (id: string, done: boolean): IncidentTake => ({ id, done, hold, held:
+       typeof value.held === 'boolean' ? value.held : hold !== null, frozen:
+       typeof value.frozen === 'boolean' ? value.frozen : null,
+      ...(typeof value.freeze === 'string' ? { freeze: value.freeze } : {}), ...(typeof value.notHeld === 'string' && value.notHeld ? {
+         notHeld: value.notHeld } : {}),
       box: typeof value.box === 'string' ? value.box : null, scene: typeof value.scene === 'string' ? value.scene : null, again: value.again === true,
-      ...(typeof value.unfreeze === 'string' ? { unfreeze: value.unfreeze } : {}) };
+      ...(typeof value.unfreeze === 'string' ? { unfreeze: value.unfreeze } : {}) });
+    return incidentTakeFields(value.id, value.done);
   } catch { return null; }
 }
-/** How the body's answer to a take reads: it holds (`held`), it took the box only (`not_held`), it keeps another hold (`other_hold`), or it did not do it (`failed`: a body without incidents, a take it could not make). */
+/** How the body's answer to a take reads: it holds (`held`), it took the box only (`not_held`), it keeps another
+ * hold (`other_hold`),
+ * or it did not do it (`failed`: a body without incidents, a take it could not make). */
 export function takeEnd(take: IncidentTake): TakeEnd {
   if (!take.done) return take.hold !== null ? 'other_hold' : 'failed';
   return take.held ? 'held' : 'not_held';

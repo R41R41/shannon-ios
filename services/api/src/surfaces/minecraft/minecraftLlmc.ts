@@ -4,7 +4,8 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../contracts/minecraftControlContract.js';
 import {
   ACT_INPUT_SCHEMA, actMilliseconds, actProblem, MC_ACT_SKILL, MC_ACT_TOOL,
-  MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActHand, type ActInput, type ActPos, type ActResult,
+  MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActHand,
+     type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
 import { verticalLimitProblem } from '../../contracts/minecraftActHandRules.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
@@ -17,8 +18,10 @@ import { urgentRange } from './minecraftLlmcUrgent.js';
 import { actFacts, handFacts } from './minecraftLlmcResultWords.js';
 
 /**
- * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the tools it offers, how it
- * runs `mc.view` and `mc.probe` on the body, how a result reads to the model, and when an act is cut for a hostile come near (an urgent step).
+ * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the
+ * tools it offers, how it
+ * runs `mc.view` and `mc.probe` on the body, how a result reads to the model, and when an act is cut for a
+ * hostile come near (an urgent step).
  * (`mc.act` is an item of the task queue: `minecraftLlmcQueue.ts`.)
  */
 /** A hostile this near, not near when the act began and not watched by its own `stopIf`, cuts the act (an urgent step). */
@@ -28,7 +31,8 @@ const COMMAND_MARGIN_MS = 5_000;
 const VIEW_MS = 15_000;
 
 /**
- * The tools of the mode, from the body's catalog: `mc.act` (the hands written one to a line, `minecraftActShortContract.ts`), `mc.view` and
+ * The tools of the mode, from the body's catalog: `mc.act` (the hands written one to a line,
+ * `minecraftActShortContract.ts`), `mc.view` and
  * `mc.probe`, each in the head's own words, when the body offers it.
  */
 export function llmcBodyDefinitions(skills: readonly MinecraftSkillDefinition[],
@@ -41,7 +45,8 @@ export function llmcBodyDefinitions(skills: readonly MinecraftSkillDefinition[],
   ];
 }
 /**
- * The head's schema of a mode tool (`mc.act`, `mc.view`; r4 `mc.probe` in the body's form, `PROBE_WIRE_SCHEMA`), or undefined for a body
+ * The head's schema of a mode tool (`mc.act`, `mc.view`; r4 `mc.probe` in the body's form, `PROBE_WIRE_SCHEMA`),
+ * or undefined for a body
  * skill whose schema is the body's.
  */
 export function llmcSchema(name: string): Readonly<Record<string, unknown>> | undefined {
@@ -49,7 +54,8 @@ export function llmcSchema(name: string): Readonly<Record<string, unknown>> | un
 }
 
 /**
- * Why an input is refused before the body sees it, or null: where it leaves the schema (`schemaProblem`: the field, what it must be,
+ * Why an input is refused before the body sees it, or null: where it leaves the schema (`schemaProblem`: the
+ * field, what it must be,
  * what it is), then each hand's fields (`actProblem`). One line, so the next decision can mend exactly that.
  */
 export function llmcInputProblem(name: string, input: unknown): string | null {
@@ -57,11 +63,14 @@ export function llmcInputProblem(name: string, input: unknown): string | null {
   if (!schema) return null;
   const unread = name === MC_ACT_TOOL ? shortHandProblem(input) : null;
   if (unread) return unread;
-  // Amendment A-7 2: a vertical's maxDig / maxPlace above its top is refused with the mend, before the schema (whose bounds are the widest of any kind) says only the range.
+  // Amendment A-7 2: a vertical's maxDig / maxPlace above its top is refused with the mend, before the schema (whose bounds are the
+// widest of any kind) says only the range.
   const hands = name === MC_ACT_TOOL && input && typeof input === 'object' ? (input as { hands?: unknown }).hands : undefined;
   if (Array.isArray(hands)) {
     for (const [index, hand] of hands.entries()) {
-      const limit = hand && typeof hand === 'object' && (hand as ActHand).do === 'vertical' ? verticalLimitProblem(hand as ActHand) : null;
+      const verticalHandProblem = () => (hand && typeof hand === 'object' && (hand as ActHand).do === 'vertical' ? verticalLimitProblem(
+        hand as ActHand) : null);
+      const limit = verticalHandProblem();
       if (limit) return `手${index + 1}（vertical）: ${limit}`;
     }
   }
@@ -70,7 +79,8 @@ export function llmcInputProblem(name: string, input: unknown): string | null {
 }
 
 /**
- * An input made ready for the body: put into the contract's shape where what the model meant is plain (`normalizeActInput`; a view's
+ * An input made ready for the body: put into the contract's shape where what the model meant is plain
+ * (`normalizeActInput`; a view's
  * `only` as a list), then checked. `fixes` are said in the result the model reads.
  */
 export function llmcPrepare(name: string, input: unknown, context: ProbeContext = { feet: null, creatures: [] })
@@ -101,7 +111,8 @@ export function feetOf(observation: BodyObservation | null): ActPos | null {
     ? { x: at.x as number, y: at.y as number, z: at.z as number } : null;
 }
 
-/** How a stopped hand's 3×3×3 starts in a result (r3: it is shown once, in the next decision's live state, not kept in the history). */
+/** How a stopped hand's 3×3×3 starts in a result (r3: it is shown once, in the next decision's live state, not
+ * kept in the history). */
 export const AROUND_PREFIX = '  周り（上の層から、北が上・西が左）';
 /** An act's result in the lines the model reads (no map: the live state carries the newest one). */
 export function actResultText(result: ActResult): string {
@@ -129,20 +140,25 @@ export function actResultText(result: ActResult): string {
   return [head, ...after, ...lines, ...actFacts(result), ...extras].join('\n');
 }
 
-/** A result longer than this is kept in the history by its first line; the whole text is shown once, in the next live state (r3). */
+/** A result longer than this is kept in the history by its first line; the whole text is shown once, in the next
+ * live state (r3). */
 export const LLMC_KEPT_RESULT_CHARS = 400;
 const SHOWN_RESULT_CHARS = 6_000;
 /**
- * What the history keeps of one result in the mode, and what the next decision's live state shows once (`lastResults`): r3, run 27
- * (2026-10-22): every round's results stayed in the replay to the end of its epoch (an observation 5,066 characters, a plan 2,842, a
+ * What the history keeps of one result in the mode, and what the next decision's live state shows once
+ * (`lastResults`): r3, run 27
+ * (2026-10-22): every round's results stayed in the replay to the end of its epoch (an observation 5,066
+ * characters, a plan 2,842, a
  * view's map about 2,500), read again by every later decision. An act's result is kept whole but for its stopped hands' 3×3×3
- * (`around`, for the next decision only); any other result past `LLMC_KEPT_RESULT_CHARS` is kept as its first line and says where the
+ * (`around`, for the next decision only); any other result past `LLMC_KEPT_RESULT_CHARS` is kept as its first
+ * line and says where the
  * whole was. The stored text never changes afterwards (the replay stays byte for byte the same: the cache holds).
  */
 export function llmcStoredResult(name: string, text: string): { stored: string; shown: string | null } {
   if (name === MC_ACT_TOOL) {
     const lines = text.split('\n'), kept = lines.filter(line => !line.startsWith(AROUND_PREFIX));
-    // mb-llmc-cand 10 (D1): the mode shows only what the history does not have, the stopped hands' surroundings, not the act's lines again.
+    // mb-llmc-cand 10 (D1): the mode shows only what the history does not have, the stopped hands' surroundings, not
+// the act's lines again.
     const shown = lines.filter(line => line.startsWith(AROUND_PREFIX)).join('\n');
     return kept.length === lines.length ? { stored: text, shown: null }
       : { stored: [...kept, '（止まった手の周りは、この次の判断の live.lastResults に一度だけ出した）'].join('\n'), shown: shown.slice(0, SHOWN_RESULT_CHARS) };
@@ -151,14 +167,16 @@ export function llmcStoredResult(name: string, text: string): { stored: string; 
   const first = (text.split('\n')[0] ?? '').slice(0, 200);
   return keptAndRest(text, first);
 }
-/** The mode's long result (a view's map, a probe's answer, a plan): the history keeps the first line, the next decision shows the lines after it once. */
+/** The mode's long result (a view's map, a probe's answer, a plan): the history keeps the first line, the next
+ * decision shows the lines after it once. */
 function keptAndRest(text: string, first: string): { stored: string; shown: string | null } {
   const whole = (text.split('\n')[0] ?? '').length <= first.length;
   const rest = whole ? text.slice(first.length).replace(/^\n/u, '') : text;
   return { stored: `${first}…（続き ${rest.length}字は、この次の判断の live.lastResults に一度だけ出した）`, shown: rest.slice(0, SHOWN_RESULT_CHARS) };
 }
 
-/** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before sending (said first). */
+/** The tool result of an act or a view from the body's receipt; `fixes`: what the head put into shape before
+ * sending (said first). */
 export function llmcResult(name: string, receipt: MinecraftControlReceipt, urgent: string | null, fixes: readonly string[] = []): ToolResult {
   const result = name === MC_VIEW_TOOL ? viewResult(receipt) : name === MC_PROBE_TOOL ? probeResult(receipt) : actResult(receipt, urgent);
   return fixes.length ? { ...result, text: `（頭が形を直して送った: ${fixes.join('、')}）\n${result.text}` } : result;
@@ -200,9 +218,12 @@ function hostiles(observation: BodyObservation | null): Array<{ name: string; di
 }
 
 /**
- * Watches the frames while an act runs: a hostile within `LLMC_URGENT_METERS` that was not that near when the act began, where the act's
- * own `stopIf.hostileWithin` does not already watch that distance, aborts it (the decision runs again at once). Returns the signal for the
- * command and what cut it (or null), and a stop for the watch. r7 (`walled`, with the probe; run 30: a blaze 5.6 m above the tunnel in the
+ * Watches the frames while an act runs: a hostile within `LLMC_URGENT_METERS` that was not that near when the
+ * act began, where the act's
+ * own `stopIf.hostileWithin` does not already watch that distance, aborts it (the decision runs again at once).
+ * Returns the signal for the
+ * command and what cut it (or null), and a stop for the watch. r7 (`walled`, with the probe; run 30: a blaze 5.6
+ * m above the tunnel in the
  * rock cut its digging): a shooter the frame says cannot see her (the body's own check at every frame) does not cut it.
  */
 export function urgentWatch(input: unknown, observe: () => BodyObservation | null, parent: AbortSignal, everyMs = 250,

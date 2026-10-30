@@ -3,18 +3,25 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
 /**
  * 手の短い書き方（mb-llmc-cand、再現台 v8d/v9c の `shortHands.ts` を本番の形にした物）。手 1 つが 1 行の文字列で、頭のコードが体へ送る前に
  * 今の JSON（`ActHand`）に直す。
- *   go X,Y,Z [X,Y,Z ...] [dig=stone,dirt] [place=cobblestone] [range=N] [seconds=N] [maxDrop=N] [maxDig=N] [maxPlace=N] [waterOk] [sprint]
+ *   go X,Y,Z [X,Y,Z ...] [dig=stone,dirt] [place=cobblestone] [range=N] [seconds=N] [maxDrop=N] [maxDig=N]
+ * [maxPlace=N] [waterOk] [sprint]
  *     （座標 1 つが to、2〜8 個が goals。dig= は canDig、place= は canPlace）
  *   obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=a,b] [maxPlace=N]   （溶岩の源のマス。水を注いで黒曜石にして掘る）
- *   fight 相手 [flee] [item=名] [retreatHp=N] [range=N] [seconds=N]   mine ブロック名 X,Y,Z ... [count=N] [tool=名] [dig=a,b] [maxDig=N] [collect=false] [seconds=N]
- *   chest X,Y,Z look|takeAll | chest X,Y,Z take|put 物 [数] [物 [数] ...]   furnace X,Y,Z take | furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]
+ *   fight 相手 [flee] [item=名] [retreatHp=N] [range=N] [seconds=N]   mine ブロック名 X,Y,Z ... [count=N] [tool=名] [dig=a,b] [maxDig=N]
+ *   [collect=false] [seconds=N]
+ *   chest X,Y,Z look|takeAll | chest X,Y,Z take|put 物 [数] [物 [数] ...]   furnace X,Y,Z take | furnace X,Y,Z put 物
+ * 個数 [fuel=名] [fuelCount=N]
  *   make 物 [個数]   portal X,Y,Z x|z [block=名] [place=a,b] [maxPlace=N] [seconds=N] [noEnter]
  *   smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [X,Y,Z ...] [seconds=N]
- *   vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=a,b liquid=stop|seal|seal_water [maxDig=N] [place=a,b] [maxPlace=N] [range=1|2] [seconds=N]
+ *   vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=a,b liquid=stop|seal|seal_water [maxDig=N] [place=a,b]
+ *   [maxPlace=N] [range=1|2] [seconds=N]
  *     （縦の長い移動。y= は toY、stairs だけ向き。dir・形・向き・liquid・dig= は書く。組み合わせの断りは handProblem）
  *   walk 225,57,63 | walk 1,2,3 4,5,6（path）[sprint] [range=2] | dig x,y,z x,y,z [tool=名] [exposeOk] [takeOk] [collect=false]
- *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物 [slot] | craft 物 [個数]
- *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false] | use 物 [x,y,z] [face=F] [target=T]
+ *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物
+ * [slot] | craft 物 [個数]
+ *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false]
+ * | use 物 [x,y,z]
+ *   [face=F] [target=T]
  *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
  *   drop 物 [数] [target=#id か x,y,z]
  *   上に無い形（furnace・chest・shoot、use の ほかの欄など）は `json {手の JSON}` の 1 行。
@@ -42,7 +49,8 @@ const flag = (on: boolean | undefined, word: string): string[] => on === true ? 
 const given = (key: string, value: unknown): string[] => value === undefined ? [] : [`${key}=${String(value)}`];
 const points = (hand: ActHand): readonly Cell[] => hand.path?.length ? hand.path : hand.to ? [hand.to] : [];
 
-/** go: where (one cell is `to`, 2–8 are `goals`), the blocks it may dig and place, and its limits. A hand with both `to` and `goals` is a json line. */
+/** go: where (one cell is `to`, 2–8 are `goals`), the blocks it may dig and place, and its limits. A hand with
+ * both `to` and `goals` is a json line. */
 function goWords(hand: ActHand): Words {
   if (hand.to && hand.goals?.length) return null;
   const cells = hand.to ? [hand.to] : hand.goals ?? [];
@@ -78,7 +86,8 @@ function smeltWords(hand: ActHand): Words {
     ...given('seconds', hand.seconds), ...(hand.at ?? []).map(pos)];
 }
 const listWord = (key: string, list: readonly string[] | undefined): string[] => list?.length ? [`${key}=${list.join(',')}`] : [];
-/** vertical: the way, the form (and `toward` for stairs), then `y=` and the blocks it may dig and place, and its limits, in the order of the grammar above. */
+/** vertical: the way, the form (and `toward` for stairs), then `y=` and the blocks it may dig and place, and its
+ * limits, in the order of the grammar above. */
 function verticalWords(hand: ActHand): Words {
   if (!hand.dir || !hand.shape || typeof hand.toY !== 'number') return null;
   return [hand.dir, hand.shape, ...(hand.toward ? [hand.toward] : []), `y=${hand.toY}`, ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig),
@@ -180,7 +189,8 @@ function furnaceHand({ cells, words, hand }: Read): ActHand | { error: string } 
   if (op === 'put' && (!item || !isCount(count))) return bad('furnace', 'put には 物 と 個数 が要る（furnace X,Y,Z put iron_ore 8 fuel=coal fuelCount=2）');
   return done({ ...hand, at: cells, op, ...(op === 'put' ? { item, count: Number(count) } : {}) });
 }
-/** The names of vertical's fields written with `=` (a word of these in the place of the compass word is a field written without it). */
+/** The names of vertical's fields written with `=` (a word of these in the place of the compass word is a field
+ * written without it). */
 const VERTICAL_FIELDS: ReadonlySet<string> = new Set(['maxDig', 'maxPlace', 'seconds', 'range', 'dig', 'place', 'liquid', 'y']);
 const READERS: Record<string, Reader> = {
   chest: chestHand, furnace: furnaceHand,
@@ -202,14 +212,16 @@ const READERS: Record<string, Reader> = {
     if (!words[0] || !isCount(words[1])) return bad('smelt', '入れる物と個数が要る（種類が 2 つ以上なら json）');
     return done({ ...hand, items: [{ item: words[0], count: Number(words[1]) }], ...(cells.length ? { at: cells } : {}) });
   },
-  // `vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=.. liquid=..`: the words are only the way, the form and the compass word; whether they fit
+  // `vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=.. liquid=..`: the words are only the
+// way, the form and the compass word; whether they fit
   // each other is `handProblem`'s (the same refusal for a json hand).
   vertical: ({ words, hand }) => {
     const [dir, shape, toward, ...extra] = words;
     if (dir !== 'down' && dir !== 'up') return bad('vertical', 'dir（down か up）が要る（vertical down stairs south y=10 dig=stone liquid=stop）');
     if (!shape) return bad('vertical', '形（stairs・shaft・pillar）が要る');
     if (extra.length) {
-      // A field written as a word and a value (「maxDig 200」): said with its form, not read as that field (the model writes the form, the head does not guess it).
+      // A field written as a word and a value (「maxDig 200」): said with its form, not read as that field (the model
+// writes the form, the head does not guess it).
       const forms = extra.flatMap((word, index) => VERTICAL_FIELDS.has(word) ? [`${word}=${extra[index + 1] ?? '値'}`] : []);
       return bad('vertical', `読めない語 ${extra.join(' ')}${forms.length ? `（${forms.join('・')} の形で書く。= で結ぶ）` : ''}`);
     }

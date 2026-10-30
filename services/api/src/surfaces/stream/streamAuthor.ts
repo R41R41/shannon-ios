@@ -8,9 +8,13 @@ import type { ModelBudget, ModelPurpose, StreamMeasure } from './streamMeasure.j
 import { parseStreamDraft, streamWriterPrompt, type StreamDraft, type WriterInput, type WriterPurpose } from './streamWriter.js';
 
 /**
- * The part of the stream that asks a model: one call at a time against the minute's allowance, and the line for a purpose written from a
- * stream turn. The request is built from `streamModelRequest(turn)` and from nothing of the owner's (no profile, recall, person memory, task
- * or tool); the answer (the line led by its mark, in the reply of the structured answer) is read, checked (`checkedLine`), rewritten once with the note of what was off, and at last dropped or
+ * The part of the stream that asks a model: one call at a time against the minute's allowance, and the line for
+ * a purpose written from a
+ * stream turn. The request is built from `streamModelRequest(turn)` and from nothing of the owner's (no profile,
+ * recall, person memory, task
+ * or tool); the answer (the line led by its mark, in the reply of the structured answer) is read, checked
+ * (`checkedLine`), rewritten
+ * once with the note of what was off, and at last dropped or
  * replaced by the ladder's safe line. Only a `CheckedStreamReply` comes out.
  */
 export interface AuthorParts {
@@ -34,7 +38,8 @@ export interface AuthorParts {
 export interface AuthorSession { streamId: string; title: string; minecraft: boolean }
 export interface WrittenLine { reply: CheckedStreamReply; draft: StreamDraft }
 
-/** The model's request, built from the stream turn's own request (`streamModelRequest`): its check goes along as `feelingCheck`. */
+/** The model's request, built from the stream turn's own request (`streamModelRequest`): its check goes along as
+ * `feelingCheck`. */
 export function writerRequest(
   request: StreamModelRequest, layers: { systemPrompt: string; turnContext: string; message: string }, scopeKey: string,
 ): ShannonChatModelRequest {
@@ -62,7 +67,8 @@ const WAIT_MILLISECONDS: Readonly<Partial<Record<StreamLineKind, number>>> = { c
 export class StreamAuthor {
   constructor(private readonly parts: AuthorParts) {}
 
-  /** Her turn when no viewer is being answered (a greeting, a topic, a closing, commentary): the stream's block and a check, from the crowd. */
+  /** Her turn when no viewer is being answered (a greeting, a topic, a closing, commentary): the stream's block and
+ * a check, from the crowd. */
   ownTurn(streamId: string): StreamTurn | null {
     const { parts } = this;
     return parts.feeling.turn(parts.scopeKey, {

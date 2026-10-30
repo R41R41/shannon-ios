@@ -1,6 +1,8 @@
 /**
- * The contract "continue" (version 3.1, `docs/continue-contracts.md`), the head's copy: the types both sides share and the pure rules both
- * sides read from the same table (`tests/fixtures/continue/continue/dependency-table.json` is the master; this file implements it and the
+ * The contract "continue" (version 3.1, `docs/continue-contracts.md`), the head's copy: the types both sides
+ * share and the pure rules both
+ * sides read from the same table (`tests/fixtures/continue/continue/dependency-table.json` is the master; this
+ * file implements it and the
  * tests read the table). The body has the same names in `backend/src/services/minebot/integration/commonFca/continueContract.ts`.
  *
  * Nothing here decides for the model: the rules below only say what a stopped item means for the ones that wait behind it.
@@ -10,7 +12,8 @@ import type { ActPos } from './minecraftActContract.js';
 
 export const CONTINUE_CONTRACT_VERSION = '3.2' as const;
 
-// ---- 1. results (goal x end) ----------------------------------------------------------------------------------------------------------------
+// ---- 1. results (goal x end)
+// ----------------------------------------------------------------------------------------------------------------
 /** What the unit aimed at, and how it stands now. */
 export type GoalOutcome = 'done' | 'already' | 'partial' | 'not_started' | 'failed' | 'unknown';
 /** How the unit's run ended. */
@@ -25,7 +28,9 @@ export interface Progress {
   done: number; left: number | null; at?: ActPos; msPerUnit?: number;
   work?: { dug: number; placed?: number; placeAttempts?: number; stockUsed?: number; placedConfirmed?: number };
   fromStopM?: number; searchEndM?: number;
-  /** vertical (A-5 3): the steps found gone after they were counted (at most 8); `done` (stepsValid) fell by them, the other counts and the budget did not. */
+  /** vertical (A-5 3): the steps found gone after they were counted (at most 8); `done` (stepsValid) fell by them,
+ * the other counts and
+ * the budget did not. */
   corrected?: { at: ActPos; was?: string; now: string; step: number }[];
   /** vertical (amendment A-1 6): the ore the hand saw on the way, a kind and a place each, at most 8. Told, never followed. */
   seen?: { block: string; at: ActPos }[];
@@ -43,7 +48,8 @@ export interface ItemOutcome {
   goal: GoalOutcome; end: RunEnd; released: boolean;
   droppedBecause?: { code: CutBy | 'depends_failed' | 'depends_unknown'; item?: QueueRef };
   keptDespite?: { item: QueueRef; code: string };
-  /** The closed code of the hand that decided the end (A-4 f: `cleanup_stop`, `cancelled`, `stuck`…); the head reads it from here, not from a hand. */
+  /** The closed code of the hand that decided the end (A-4 f: `cleanup_stop`, `cancelled`, `stuck`…); the head
+ * reads it from here, not from a hand. */
   code?: string;
   startedAt?: string;
 }
@@ -56,7 +62,8 @@ export const HOLD_STATES: readonly HoldState[] = ['none', 'held', 'resumed', 'ca
 /** The cleanup after an unknown receipt may take this long from the stop being handed in (provisional; not a guarantee). */
 export const CLEANUP_LIMIT_MS = 5_000;
 
-// ---- 2. continuing: the invalidation order, the dependency table -----------------------------------------------------------------------------
+// ---- 2. continuing: the invalidation order, the dependency table
+// -----------------------------------------------------------------------------
 export interface MadeIn { life: number; dim: Dim; dimSince: string; bodyBoot: string; connectionId: string; headBoot: string; obsSeq: number }
 export type DependState = 'succeeded' | 'failed' | 'pending' | 'unknown';
 
@@ -70,7 +77,8 @@ export interface UnitView {
 }
 
 /**
- * The state of what a unit depends on, by the first rule that holds (the table's `dependStatePriority`): not remembered, unknown; not ended,
+ * The state of what a unit depends on, by the first rule that holds (the table's `dependStatePriority`): not
+ * remembered, unknown; not ended,
  * pending; release not confirmed, unknown; end unknown, unknown; done or already and finished, succeeded; else failed.
  */
 export function dependStateOf(view: UnitView): DependState {
@@ -83,7 +91,9 @@ export function dependStateOf(view: UnitView): DependState {
 }
 
 export type KeepDecision = 'keep' | 'drop:depends_failed' | 'drop:depends_unknown';
-/** Whether a waiting item stays in the queue: every dependency succeeded or pending keeps it; a failed one drops it; an unknown one drops it (unknown first when both). */
+/** Whether a waiting item stays in the queue: every dependency succeeded or pending keeps it; a failed one drops
+ * it; an unknown one
+ * drops it (unknown first when both). */
 export function keepDecision(states: readonly DependState[]): KeepDecision {
   if (states.includes('failed')) return 'drop:depends_failed';
   if (states.includes('unknown')) return 'drop:depends_unknown';
@@ -111,7 +121,8 @@ export function aggregateGoal(hands: readonly HandFacts[], doneMet: boolean): Go
   return 'not_started';
 }
 
-/** The old words of a receipt for a unit (the table's `outcomes`), to read what is written by a body or a test that has no `unit`. */
+/** The old words of a receipt for a unit (the table's `outcomes`), to read what is written by a body or a test
+ * that has no `unit`. */
 export function unitFromOutcome(outcome: 'completed' | 'failed' | 'cancelled' | 'unknown', inputsReleased: boolean): ItemOutcome {
   if (outcome === 'unknown') return { goal: 'unknown', end: 'unknown', released: inputsReleased };
   if (outcome === 'completed') return inputsReleased ? { goal: 'done', end: 'finished', released: true } : { goal: 'done', end: 'finished', released: false };
@@ -128,7 +139,8 @@ export function unitView(unit: ItemOutcome | undefined, remembered = true): Unit
 const NOT_ALLOWED: readonly [GoalOutcome, RunEnd][] = [['already', 'cut'], ['done', 'not_run'], ['partial', 'not_run'], ['failed', 'not_run']];
 export const allowedOutcome = (goal: GoalOutcome, end: RunEnd): boolean => !NOT_ALLOWED.some(([g, e]) => g === goal && e === end);
 
-/** Why a hand's `dependsOn` list is wrong (self, a later hand, out of range, duplicate), or null. `index` is the hand's own number (1 up). */
+/** Why a hand's `dependsOn` list is wrong (self, a later hand, out of range, duplicate), or null. `index` is the
+ * hand's own number (1 up). */
 export function handDependsProblem(index: number, dependsOn: readonly number[] | undefined, count: number): string | null {
   if (dependsOn === undefined) return null;
   const seen = new Set<number>();
@@ -142,11 +154,15 @@ export function handDependsProblem(index: number, dependsOn: readonly number[] |
   return null;
 }
 
-// ---- 3. promises' events (written by the body) ------------------------------------------------------------------------------------------------
+// ---- 3. promises' events (written by the body)
+// ------------------------------------------------------------------------------------------------
 export interface InventoryEvent {
   id: string; obsSeq: number; item: string; count: number;
-  reason: 'ingredient' | 'fuel' | 'food' | 'placed' | 'thrown' | 'tool_broke' | 'crafted' | 'picked' | 'mined' | 'smelted' | 'reflex_eat' | 'reflex_armor' | 'death' | 'unexplained'
-    | 'stored' | 'retrieved';   // amendment A-1 4: a chest hand puts into / takes out of a box (the item changed place; a promise's ledger says so, not 'consumed')
+  reason: 'ingredient' | 'fuel' | 'food' | 'placed' | 'thrown' | 'tool_broke' | 'crafted' | 'picked' | 'mined' | 'smelted' | 'reflex_eat' |
+     'reflex_armor' | 'death' | 'unexplained'
+    | 'stored' | 'retrieved';
+         // amendment A-1 4: a chest hand puts into / takes out of a box (the item changed place; a promise's ledger says
+// so, not 'consumed')
   intermediate?: boolean;
   /** The order the body gave it within its command (0 up, across passes and hands). */
   deliverySeq?: number;
@@ -155,9 +171,12 @@ export interface EventsMore { command: string; nextSeq: number; total: number }
 /** The internal read-only command `events` and its reply. */
 export const EVENTS_SKILL = 'events' as const;
 export interface EventsRequest { command: string; fromSeq: number; max: number }
-export interface EventsReply { command: string; from: number; to: number; total: number; nextSeq: number; done: boolean; lost: boolean; events: InventoryEvent[] }
+export interface EventsReply { command: string; from: number; to: number; total: number; nextSeq: number; done: boolean; lost: boolean;
+   events: InventoryEvent[] }
 
-// ---- 4. control ------------------------------------------------------------------------------------------------------------------------------
+// ---- 4. control
+// --------------------------------------------------------------------------------------------------------------
+// ----------------
 export type ControlHolder =
   | { kind: 'idle' }
   | { kind: 'command'; actionId: string; command: string; item?: string; life: number; since: string }
@@ -170,10 +189,13 @@ export interface ControlView {
   combatMark?: { skill: string; target?: number; until: string };
   waiting: { command: string; since: string; behind: string }[];
 }
-export interface Handover { from: string; target: number; waitedMs: number; reflexSettledAt: string; confirmed: boolean; shield: 'kept' | 'lowered' | 'dropped' | 'none' }
-export interface ReflexCappedData { limit: 'melee_hands' | 'melee_hits' | 'budget_arrow' | 'budget_eat' | 'budget_armor'; count: number; bridge: 'shield' | 'step_back' | 'none'; until: string | null }
+export interface Handover { from: string; target: number; waitedMs: number; reflexSettledAt: string; confirmed: boolean; shield: 'kept' |
+   'lowered' | 'dropped' | 'none' }
+export interface ReflexCappedData { limit: 'melee_hands' | 'melee_hits' | 'budget_arrow' | 'budget_eat' | 'budget_armor'; count: number;
+   bridge: 'shield' | 'step_back' | 'none'; until: string | null }
 
-// ---- 5. life ---------------------------------------------------------------------------------------------------------------------------------
+// ---- 5. life -------------------------------------------------------------------------------------------------
+// --------------------------------
 export interface LifeView {
   life: number; advancedBy?: 'death' | 'file_unreadable'; deathEpoch?: string; deathSeq?: number; since: string; alive: boolean;
   diedAt?: string; deathCause?: string; dimension: Dim; dimensionSince: string;
@@ -183,8 +205,10 @@ export interface BodyRun { bodyBoot: string; connectionId: string }
 /** The head's memory of the body's death counter (one per body), and what a new observation does to it. */
 export interface DeathCounter { deathEpoch: string; deathSeq: number }
 /**
- * Whether the body died between the two readings: only a rise of `deathSeq` within one `deathEpoch`. A new epoch starts at 0 whatever the head
- * saw, so the first reading of an epoch that is above 0 is a death too; the change of epoch itself is not (the file was made again; the pack
+ * Whether the body died between the two readings: only a rise of `deathSeq` within one `deathEpoch`. A new epoch
+ * starts at 0 whatever the head
+ * saw, so the first reading of an epoch that is above 0 is a death too; the change of epoch itself is not (the
+ * file was made again; the pack
  * is whole). Returns the counter to remember.
  */
 export function deathBetween(known: DeathCounter | null, now: { deathEpoch?: unknown; deathSeq?: unknown }): { death: boolean; counter: DeathCounter | null } {
@@ -195,7 +219,9 @@ export function deathBetween(known: DeathCounter | null, now: { deathEpoch?: unk
   return { death: counter.deathSeq > base, counter };
 }
 
-// ---- 8. measurement --------------------------------------------------------------------------------------------------------------------------
+// ---- 8. measurement
+// --------------------------------------------------------------------------------------------------------------
+// ------------
 export interface TraceIds {
   run: string; decision?: string; reads?: string[]; command?: string; queue?: string; item?: string; hand?: number; pass?: number;
   life: number; bodyBoot?: string; headBoot?: string; obsSeq: number; obsAt: string;
@@ -214,7 +240,8 @@ export type StageRow =
   | { ev: 'corrected'; at: string; ids: TraceIds; was: 'unknown'; now: ItemOutcome }
   | { ev: 'woke'; at: string; ids: TraceIds; why: 'failure' | 'remaining' | 'message' | 'alert' | 'furnace' | 'reflex_capped'; predictedRemainingMs?: number }
   | { ev: 'live'; at: string; ids: TraceIds; raw: string; shown: string; dropped: { field: string; count: number; why: string }[]; bytes: number }
-  | { ev: 'input_change'; at: string; ids: TraceIds; promptHash: string; thinkingDropped?: { reason: string; count: number }; historyChanged?: 'resume' | 'summary' | 'none' };
+  | { ev: 'input_change'; at: string; ids: TraceIds; promptHash: string; thinkingDropped?: { reason: string; count: number };
+     historyChanged?: 'resume' | 'summary' | 'none' };
 
 /** The version of a command's context the head writes (a queue's name is per task, per head start, per step). */
 export const queueName = (taskId: string, headBoot: string, step: number | string): string => `${taskId}:${headBoot}:${step}`;

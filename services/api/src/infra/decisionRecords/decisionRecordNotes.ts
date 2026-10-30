@@ -4,10 +4,14 @@ import type { DecisionRecorder, RequestKind, ResponseNote } from './decisionReco
 import { currentDecisionScope, withDecisionScope, type LiveNote, type ResultMark } from './decisionRecordScope.js';
 
 /**
- * The places that write a decision's record (`decisionRecorder.ts`) reach it through these functions. There is one recorder for the API's process,
- * installed by wiring (this module imports the recorder as a type only, so that the places that call it load almost nothing); with none
- * installed (a test, a tool) every function does nothing, so no caller needs to ask. What is recorded is what a step of a body task (Minebot)
- * does: a request and its answer (`decisionRecordClient.ts`), what the step did with the decision, each call of its tools, and each command sent
+ * The places that write a decision's record (`decisionRecorder.ts`) reach it through these functions. There is
+ * one recorder for the API's process,
+ * installed by wiring (this module imports the recorder as a type only, so that the places that call it load
+ * almost nothing); with none
+ * installed (a test, a tool) every function does nothing, so no caller needs to ask. What is recorded is what a
+ * step of a body task (Minebot)
+ * does: a request and its answer (`decisionRecordClient.ts`), what the step did with the decision, each call of
+ * its tools, and each command sent
  * to the body. See `docs/decision-records-2026-10.md`.
  */
 let installed: DecisionRecorder | null = null;
@@ -26,7 +30,8 @@ export function recordResponse(id: string, note: ResponseNote): void { installed
 
 const cut = (text: unknown, size: number) => String(text ?? '').slice(0, size);
 
-/** What the step did with the decision it asked last (`applied`, `discarded` with a closed reason, or `failed` with a closed code). */
+/** What the step did with the decision it asked last (`applied`, `discarded` with a closed reason, or `failed`
+ * with a closed code). */
 export function noteDecisionOutcome(ev: 'applied' | 'discarded' | 'failed', detail: Readonly<Record<string, unknown>> = {}): void {
   const state = currentDecisionScope()?.state;
   if (!installed || !state?.record || !state.lastDecisionId) return;
@@ -54,13 +59,16 @@ export function onRedecideNote(listener: RedecideListener): () => void {
   return () => { redecideListeners.delete(listener); };
 }
 
-/** Amendment A-12: the last rows of a task's record as lines of at most 400 characters (the notes of a take); none when no recorder is installed. */
+/** Amendment A-12: the last rows of a task's record as lines of at most 400 characters (the notes of a take);
+ * none when no recorder is installed. */
 export function noteHeadTail(taskId: string, rows = 20): string[] {
   return (installed?.tail(taskId, rows) ?? []).map(row => JSON.stringify(row).slice(0, 400));
 }
 
 /**
- * Amendment A-12: the box of a stall the head found itself (the reason and the last rows of the task's record), written beside its `events.jsonl`; its path below the records' root,
+ * Amendment A-12: the box of a stall the head found itself (the reason and the last rows of the task's record),
+ * written beside its
+ * `events.jsonl`; its path below the records' root,
  * or null when no recorder is installed or nothing could be written.
  */
 export function noteHeadHold(taskId: string, hold: { id: string; kind: string; why: string; detail?: Readonly<Record<string, unknown>> }): string | null {
@@ -68,34 +76,48 @@ export function noteHeadHold(taskId: string, hold: { id: string; kind: string; w
 }
 
 /**
- * Amendment A-10: the row of a call of the decision that was asked again (or could have been: `asked: false` says only what the head could not count). Beside the `redecide`
- * request and its answer, which are written as any request is; the row says what came of them. The decision and call are those the step is in.
+ * Amendment A-10: the row of a call of the decision that was asked again (or could have been: `asked: false`
+ * says only what the head
+ * could not count). Beside the `redecide`
+ * request and its answer, which are written as any request is; the row says what came of them. The decision and
+ * call are those the step is in.
  */
 export function noteRedecide(detail: Readonly<Record<string, unknown>>): void {
   const scope = currentDecisionScope(), state = scope?.state;
   if (!state?.record) return;
-  installed?.append(state.taskId, { ev: 'redecide', decisionId: state.lastDecisionId, stepId: state.stepId, operationId: scope?.call?.operationId ?? state.operationId,
+  installed?.append(state.taskId, { ev: 'redecide', decisionId: state.lastDecisionId, stepId: state.stepId, operationId:
+     scope?.call?.operationId ?? state.operationId,
     toolUseId: scope?.call?.toolUseId ?? null, ids: { run: state.taskId, ...(state.lastDecisionId ? { decision: state.lastDecisionId } : {}) }, ...detail });
-  // Amendment A-12: the row is also told, once written (a box made for it holds it), to whoever watches the decision's errors (a record installed or not), with the task it belongs to.
+  // Amendment A-12: the row is also told, once written (a box made for it holds it), to whoever watches the decision's errors (a
+// record installed or not), with the task it belongs to.
   for (const listener of redecideListeners) try { listener(state.taskId, detail); } catch { /* a watcher never fails a decision */ }
 }
 
-/** A command that went to the body (the form the head sent after its checks and rewrites), with the decision and call it came from when it came from one. */
+/** A command that went to the body (the form the head sent after its checks and rewrites), with the decision and
+ * call it came from
+ * when it came from one. */
 export function noteBodyCommand(command: MinecraftControlCommand, extra: { resumeOf?: string } = {}): void {
   if (!installed || command.kind !== 'skill') return;
   const scope = currentDecisionScope(), state = scope?.state, own = state && state.taskId === command.context.taskId ? scope : undefined;
   const { context } = command, made = command.queue?.madeIn ?? context.madeIn, decision = own?.state.lastDecisionId ?? undefined;
-  // Continue contract 8: the numbers that join this command to the decision that made it, to its receipt and to the body's own record (`ids`; the old fields stay).
-  const ids: TraceIds = { run: context.taskId, ...(decision ? { decision } : {}), command: command.id, ...(command.queue?.queue ? { queue: command.queue.queue } : {}),
-    ...(command.queue?.item ? { item: command.queue.item } : {}), life: made?.life ?? context.life ?? -1, ...(made?.bodyBoot ? { bodyBoot: made.bodyBoot } : {}),
-    ...(made?.headBoot ?? context.headBoot ? { headBoot: (made?.headBoot ?? context.headBoot)! } : {}), obsSeq: made?.obsSeq ?? -1, obsAt: new Date().toISOString() };
+  // Continue contract 8: the numbers that join this command to the decision that made it, to its receipt and to
+// the body's own record
+// (`ids`; the old fields stay).
+  const commandTraceIds = (): TraceIds => ({ run: context.taskId, ...(decision ? { decision } : {}), command: command.id, ...(command.queue?.queue ? { queue:
+     command.queue.queue } : {}),
+    ...(command.queue?.item ? { item: command.queue.item } : {}), life: made?.life ?? context.life ?? -1, ...(made?.bodyBoot ? { bodyBoot:
+       made.bodyBoot } : {}),
+    ...(made?.headBoot ?? context.headBoot ? { headBoot: (made?.headBoot ?? context.headBoot)! } : {}), obsSeq: made?.obsSeq ?? -1, obsAt:
+       new Date().toISOString() });
+  const ids = commandTraceIds();
+  const commandContext = () => ({ bodyId: context.bodyId, taskRevision: context.taskRevision, sessionId: context.sessionId, generation: context.generation,
+      ...(context.life !== undefined ? { life: context.life } : {}), ...(context.headBoot ? { headBoot: context.headBoot } : {}),
+      ...(context.incident ? { incident: context.incident } : {}) });
   installed.append(context.taskId, { ev: 'sent', ids, commandId: command.id, decisionId: own?.state.lastDecisionId ?? null, stepId: own?.state.stepId ?? null,
     operationId: own?.call?.operationId ?? null, toolUseId: own?.call?.toolUseId ?? null, skill: command.skill ?? null, arguments: command.arguments ?? null,
     queue: command.queue ?? null, deadlineAt: command.deadlineAt, serverId: command.serverId, connectionId: command.connectionId, leaseId: command.lease.id,
     ...(extra.resumeOf ? { resumeOf: extra.resumeOf } : {}),
-    context: { bodyId: context.bodyId, taskRevision: context.taskRevision, sessionId: context.sessionId, generation: context.generation,
-      ...(context.life !== undefined ? { life: context.life } : {}), ...(context.headBoot ? { headBoot: context.headBoot } : {}),
-      ...(context.incident ? { incident: context.incident } : {}) } });
+    context: commandContext() });
 }
 
 /** The first plan's one request (`minecraftFirstPlan.ts`) is recorded as the task's: it runs outside any step. */
@@ -104,16 +126,20 @@ export function recordedPlanner<A extends unknown[], R>(task: { taskId: string; 
   return planner ? (...args: A) => withDecisionScope({ ...task, record: true }, () => planner(...args)) : undefined;
 }
 
-// ---- continue contract 8: the rows of the measure -----------------------------------------------------------------------------------------------------
+// ---- continue contract 8: the rows of the measure
+// -----------------------------------------------------------------------------------------------------
 
-/** A row of the measure (`received`, `released`, `corrected`, `woke`, `unknown_notified`, `ledger`, …): in the record of the run its `ids` name. */
+/** A row of the measure (`received`, `released`, `corrected`, `woke`, `unknown_notified`, `ledger`, …): in the
+ * record of the run its `ids` name. */
 export function noteStageRow(row: Readonly<{ ev: string; ids?: { run?: string } }>): void {
   const run = row.ids?.run;
   if (installed && run) installed.row(run, row as Readonly<Record<string, unknown>>);
 }
 
 /**
- * The results of commands the step has just put in front of the model (`decision.reads`): each command with the words that stand for it in the history. The next
+ * The results of commands the step has just put in front of the model (`decision.reads`): each command with the
+ * words that stand for
+ * it in the history. The next
  * requests of the step name the ones whose words they hold. Called where the queue's news is taken for the step.
  */
 export function noteResultsRead(marks: readonly ResultMark[]): void {
@@ -123,17 +149,20 @@ export function noteResultsRead(marks: readonly ResultMark[]): void {
   if (state.results.length > 512) state.results.splice(0, state.results.length - 512);
 }
 
-/** The live state of the request being built (before the rewrite, after, and what the rewrite left out): the request that follows writes the `live` row with its size. */
+/** The live state of the request being built (before the rewrite, after, and what the rewrite left out): the request that follows
+ * writes the `live` row with its size. */
 export function noteLiveState(note: LiveNote): void {
   const state = currentDecisionScope()?.state;
   if (installed && state?.record) state.liveNote = note;
 }
 
-/** The node kinds a plan.update turned into `other` (the model wrote a word outside the list): the word as written is kept in the decision's record (`kindRaw`). */
+/** The node kinds a plan.update turned into `other` (the model wrote a word outside the list): the word as written is kept in the
+ * decision's record (`kindRaw`). */
 export function noteKindRaw(nodes: readonly { node: string; kindRaw: string }[]): void {
   const state = currentDecisionScope()?.state;
   if (!installed || !state?.record || !nodes.length) return;
-  installed.append(state.taskId, { ev: 'kind_raw', decisionId: state.lastDecisionId, stepId: state.stepId, ids: { run: state.taskId, ...(state.lastDecisionId ? { decision: state.lastDecisionId } : {}) },
+  installed.append(state.taskId, { ev: 'kind_raw', decisionId: state.lastDecisionId, stepId: state.stepId, ids: { run: state.taskId, ...(
+    state.lastDecisionId ? { decision: state.lastDecisionId } : {}) },
     nodes: nodes.map(item => ({ node: item.node, kind: 'other', kindRaw: cut(item.kindRaw, 64) })) });
 }
 

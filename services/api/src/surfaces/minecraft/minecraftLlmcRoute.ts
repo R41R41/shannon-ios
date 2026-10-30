@@ -5,16 +5,22 @@ import { standNeighbours, stepOptions, type P } from './minecraftLlmcWalkRules.j
 
 /**
  * mb-llmc v2 `route` (改修案 2.2; 再現台 v9b の `body.route`): the way to the place the plan's current node names, from the map alone.
- * Facts only: where she can get to without digging, and with up to k cells dug, the nearest standing place to the goal, the points of the way
- * and the cells to dig. The walk's rules are the preflight's and the body's `probe path` (`minecraftLlmcWalkRules.ts`, plus the run over a
- * gap of up to three cells with the arc clear, as `minecraftLlmcPreflightRoute.ts`). Whether an enemy sees the way, and her health, are not
- * in it. The goal is read from the node's own `where`, the place it begins with (`goalOf`, `readWhere`): the replay took a bed named in another sentence of the node once.
+ * Facts only: where she can get to without digging, and with up to k cells dug, the nearest standing place to
+ * the goal, the points of the way
+ * and the cells to dig. The walk's rules are the preflight's and the body's `probe path`
+ * (`minecraftLlmcWalkRules.ts`, plus the run over a
+ * gap of up to three cells with the arc clear, as `minecraftLlmcPreflightRoute.ts`). Whether an enemy sees the
+ * way, and her health, are not
+ * in it. The goal is read from the node's own `where`, the place it begins with (`goalOf`, `readWhere`): the
+ * replay took a bed named
+ * in another sentence of the node once.
  */
 export interface Reach { cell: P; digs: number; steps: number; prev: string | null; dig: P[] }
 const MAX_JUMP = 4;
 const DIG_LIMIT = 6;
 
-/** Every standing place she can get to from `feet` with at most `maxDigs` cells dug, the fewest digs first (the map's cells only). */
+/** Every standing place she can get to from `feet` with at most `maxDigs` cells dug, the fewest digs first (the
+ * map's cells only). */
 export function reachable(view: MapView, feet: P, maxDigs = DIG_LIMIT): Map<string, Reach> {
   const best = new Map<string, Reach>();
   const start: Reach = { cell: feet, digs: 0, steps: 0, prev: null, dig: [] };
@@ -47,7 +53,8 @@ function movesFrom(view: MapView, at: Reach): Reach[] {
   }
   return out;
 }
-/** A run over a gap: a line of two to four cells, the three cells over each clear, landing on a floor on the level (no digging). */
+/** A run over a gap: a line of two to four cells, the three cells over each clear, landing on a floor on the
+ * level (no digging). */
 function jumpsFrom(view: MapView, at: Reach, dir: { dx: number; dz: number }): Reach[] {
   const out: Reach[] = [];
   const { x, y, z } = at.cell;
@@ -89,8 +96,11 @@ export function pointsText(points: readonly P[]): string {
 
 export interface Goal { at: P; range: number }
 /**
- * The goal of the plan's current node, from the node's own fields (chapter 7: the live's shown line is not read): the place its `where` begins with
- * (`readWhere`: `195,66,60`, `(196,69,237) 村の北`; a coordinate that is not first in the text is not the node's place), and the range of a done-condition
+ * The goal of the plan's current node, from the node's own fields (chapter 7: the live's shown line is not
+ * read): the place its `where` begins with
+ * (`readWhere`: `195,66,60`, `(196,69,237) 村の北`; a coordinate that is not first in the text is not the node's
+ * place), and the range
+ * of a done-condition
  * `at:x,y,z~N` of the same node (1 when it has none). Null when the node names no place by coordinates.
  */
 export function goalOf(node: Pick<PlanFactsNode, 'where' | 'doneWhen'> | null | undefined): Goal | null {
@@ -123,8 +133,10 @@ function candidateLine(view: MapView, reach: Map<string, Reach>, top: Reach, goa
   return `${k === 0 ? '掘らずに行ける範囲の、' : `掘り ${route.dig.length} マスまで許した時の、`}目的地に最も近い立ち位置 ${arrived ? '（目的地に着く）' : ''}${where}。${walk}${dig}`;
 }
 /**
- * Where to walk to: the goal's own cell when she can stand there (or the map does not show it), else a standing place beside it. A trunk, a rock or
- * a wall as the node's place cannot be stood in (the body stops 「一歩ではない」: 11 times in run 35). The reached place with the fewest digs
+ * Where to walk to: the goal's own cell when she can stand there (or the map does not show it), else a standing
+ * place beside it. A trunk, a rock or
+ * a wall as the node's place cannot be stood in (the body stops 「一歩ではない」: 11 times in run 35). The reached place
+ * with the fewest digs
  * first, else the nearest to her feet; none beside it: the goal as it was and a line that says so.
  */
 function aimOf(view: MapView, goal: Goal, reach: Map<string, Reach>, feet: P): { aim: Goal; words: string | null } {
@@ -139,12 +151,15 @@ function aimOf(view: MapView, goal: Goal, reach: Map<string, Reach>, feet: P): {
   return { aim: { at: stand, range: 1 }, words: `${solid}。隣の立てるマス ${ptText(stand)} を行き先にする（${reached[0] ? '行ける' : '今の道では行けない'}）` };
 }
 /**
- * mb-llmc-cand 11 (s47: a node's place 115 m away, the lines below it written as for a place near; the answer ended with a walk of 115 m that stopped at the
- * first wall): when the goal is outside the map, what is not known: the way out there is not on the map, and a walk neither digs nor lays a block.
+ * mb-llmc-cand 11 (s47: a node's place 115 m away, the lines below it written as for a place near; the answer
+ * ended with a walk of 115 m that stopped at the
+ * first wall): when the goal is outside the map, what is not known: the way out there is not on the map, and a
+ * walk neither digs nor lays a block.
  */
 const outsideWords = (meters: number): string => `目的地は地図の外（水平 ${meters.toFixed(0)}m）: そこまでの道は地図に無く、不明。`
   + 'walk は掘らず置かないので、遠い点を渡しても途中の壁で止まる。下の立ち位置までが地図で分かる所（そこへの dig と walk までが、今この地図で言える手）';
-/** The way to the goal: where she gets to without digging, then with more cells dug while that brings her at least a block nearer (four lines at most). */
+/** The way to the goal: where she gets to without digging, then with more cells dug while that brings her at
+ * least a block nearer (four lines at most). */
 export function routeLines(view: MapView, feet: P, goal: Goal, label: string): string[] {
   const reach = reachable(view, feet, DIG_LIMIT);
   const { aim, words } = aimOf(view, goal, reach, feet);

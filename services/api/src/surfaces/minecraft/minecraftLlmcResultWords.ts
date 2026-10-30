@@ -2,12 +2,17 @@ import type { CutBy, Handover, ItemOutcome, Progress } from '../../contracts/con
 import { readActResult, type ActHandLine, type ActResult } from '../../contracts/minecraftActContract.js';
 
 /**
- * The words of a result that the contract's two axes make possible (continue contract 1 and 2; chapter 8's 再開): what a hand aimed at and how its run ended, how far it
- * got, where it stopped, what a reflex handed over, and what a unit whose result is not known (or corrected) is told as. **Facts only**: every sentence says what is
- * (or what the body could not see) and none says what to do; what to do next is the model's. Each line starts with `  事実:` so the history keeps it with the hand's line.
+ * The words of a result that the contract's two axes make possible (continue contract 1 and 2; chapter 8's 再開):
+ * what a hand aimed at
+ * and how its run ended, how far it
+ * got, where it stopped, what a reflex handed over, and what a unit whose result is not known (or corrected) is told as. **Facts
+ * only**: every sentence says what is
+ * (or what the body could not see) and none says what to do; what to do next is the model's. Each line starts with `  事実:` so the
+ * history keeps it with the hand's line.
  */
 const FACT = '  事実: ';
-const CUT_WORDS: Readonly<Record<CutBy, string>> = { reflex: '反射', stopIf: 'stopIf', inventoryFull: '持ち物が満杯', cancelled: '取り消し', deadline: '期限', noProgress: '進みなし',
+const CUT_WORDS: Readonly<Record<CutBy, string>> = { reflex: '反射', stopIf: 'stopIf', inventoryFull: '持ち物が満杯', cancelled: '取り消し', deadline:
+   '期限', noProgress: '進みなし',
   damage: 'ダメージ', fall: '落下', death: '死んだ', stale_life: '前の命の命令', dimension_changed: '次元が変わった', lease_expired: 'lease が切れた', connection_changed: '体のつなぎ直し',
   operator_stop: '操作者の止め', handover: '引き継ぎ' };
 const UNIT_WORDS: Readonly<Record<Progress['unit'], string>> = { step: '段', block: 'マス', item: '個', meter: ' m', blow: '打', second: '秒' };
@@ -15,7 +20,8 @@ const UNIT_WORDS: Readonly<Record<Progress['unit'], string>> = { step: '段', bl
 const num = (value: number): string => String(Math.round(value * 10) / 10);
 const at = (cell: { x: number; y: number; z: number }) => cell && typeof cell === 'object' ? `(${cell.x},${cell.y},${cell.z})` : String(cell);
 
-/** The last path search of a go, as the model reads it: found, partial, timed out (with the cells round the goal that nothing can pass), none. */
+/** The last path search of a go, as the model reads it: found, partial, timed out (with the cells round the goal
+ * that nothing can pass), none. */
 function searchWords(search: NonNullable<Progress['lastSearch']>): string {
   const base = search.status === 'success' ? `道は見つかっていた（${search.len} 歩）`
     : search.status === 'partial' ? `道は途中まで見つかった（${search.len} 歩）`
@@ -39,14 +45,16 @@ export function progressWords(progress: Progress): string {
   const work = progress.work;
   if (work) {
     const made = [`掘 ${work.dug}`, ...(work.placed !== undefined ? [`置 ${work.placed}`] : []),
-      ...(work.placeAttempts !== undefined ? [`置きの送り ${work.placeAttempts}`] : []), ...(work.placedConfirmed !== undefined ? [`確かめた置き ${work.placedConfirmed}`] : []),
+      ...(work.placeAttempts !== undefined ? [`置きの送り ${work.placeAttempts}`] : []), ...(
+        work.placedConfirmed !== undefined ? [`確かめた置き ${work.placedConfirmed}`] : []),
       ...(work.stockUsed !== undefined ? [`使った在庫 ${work.stockUsed}`] : [])];
     parts.push(made.join(' '));
   }
   if (progress.lastSearch) parts.push(searchWords(progress.lastSearch));
   return parts.join('・');
 }
-/** What a code the body names for a hand that did not start or lost its target says when it is a closed one the model may not know. */
+/** What a code the body names for a hand that did not start or lost its target says when it is a closed one the
+ * model may not know. */
 function codeWords(line: ActHandLine): string {
   const code = line.code ?? '';
   if (code === 'cleanup_stop') return '片付けの stop で止めた・捨てた（結果として確定。さっきの不明が後で分かっても戻らない）';
@@ -56,9 +64,12 @@ function codeWords(line: ActHandLine): string {
 }
 
 /**
- * The words of the codes a vertical hand stops with (amendment A-1 6: 14 closed codes; the fixture `vertical/stop-cases.json` is the master list of the scenes). Each says what the
- * body saw, no more. `displaced` and `no_foothold` are two things: in the first the body was moved off the planned step (a fall, a push); in the second it was not moved, and could
- * not step onto the footing the plan called for. The model's next hand is different for the two, which is why the head says them apart.
+ * The words of the codes a vertical hand stops with (amendment A-1 6: 14 closed codes; the fixture
+ * `vertical/stop-cases.json` is the master list of the scenes). Each says what the
+ * body saw, no more. `displaced` and `no_foothold` are two things: in the first the body was moved off the
+ * planned step (a fall, a push); in the second it was not moved, and could
+ * not step onto the footing the plan called for. The model's next hand is different for the two, which is why
+ * the head says them apart.
  */
 export const VERTICAL_STOP_WORDS: Readonly<Record<string, string>> = {
   unloaded: '次に掘る・入るマスの周りがまだ読み込まれていない（壁があるとは分かっていない。世界が見えていない）',
@@ -77,30 +88,42 @@ export const VERTICAL_STOP_WORDS: Readonly<Record<string, string>> = {
   seal_failed: '液体を塞ごうとして塞げなかった（置く物が無い・届かない・予算）',
   threat_exposed: '次に掘るマスを開けると、今は届かない敵から体が見える・届く位置になる（開けていない。掘る前に止まった）',
 };
-/** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the opponent did is said by the code. */
+/** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the
+ * opponent did is said by the code. */
 export const FIGHT_END_WORDS: Readonly<Record<string, string>> = {
   target_killed: '相手の死を観測した',
   target_escaped: '相手は生きていて、範囲の外にいる（追っていない。倒していない）',
   target_left: '相手から離れた（逃げる構えで範囲に着いたか、逃げる間に相手が見えなくなった）。相手は倒していない',
 };
-/** The ore a vertical hand saw on its way, told as what was seen (never followed): `iron_ore(1,2,3)`. At most 8, as the body sends them. */
+/** The ore a vertical hand saw on its way, told as what was seen (never followed): `iron_ore(1,2,3)`. At most 8,
+ * as the body sends them. */
 export const seenWords = (seen: NonNullable<Progress['seen']>): string => seen.slice(0, 8).map(entry => `${entry.block}${at(entry.at)}`).join('・');
 
-/** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain failure adds none). */
+/** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain
+ * failure adds none). */
 export function handFacts(line: ActHandLine): string[] {
   const out: string[] = [];
   const cutBy = line.cutBy ? CUT_WORDS[line.cutBy] : '';
-  switch (line.goal) {
-    case 'already': out.push(`既に済${line.code ? `（${line.code}）` : ''}: この手を始めた時にはもうねらいを満たしていた。何も変えていない`); break;
-    case 'partial': out.push(`途中まで${line.progress ? `: ${progressWords(line.progress)}` : ''}${line.end === 'cut' && cutBy ? `（${cutBy}で止められた）` : ''}`); break;
-    case 'not_started':
-      out.push(line.end === 'not_run' ? `始めていない${codeWords(line) ? `（${codeWords(line)}）` : ''}`
+  const noteGoal = () => {
+const notStartedWords = () => (line.end === 'not_run' ? `始めていない${codeWords(line) ? `（${codeWords(line)}）` : ''}`
         : `始めていない（手は呼んだが体を動かす操作は 0）${line.code ? `。理由: ${line.code}` : ''}${line.progress ? `。${progressWords(line.progress)}` : ''}`);
+switch (line.goal) {
+    case 'already': out.push(`既に済${line.code ? `（${line.code}）` : ''}: この手を始めた時にはもうねらいを満たしていた。何も変えていない`);
       break;
-    case 'unknown': out.push(`結果は不明${line.code === 'target_lost' ? '（相手を見失った。倒したかは見ていない）' : line.code ? `（${line.code}）` : ''}`); break;
-    case 'failed': if (line.progress) out.push(`進んでいない: ${progressWords(line.progress)}`); break;
+    case 'partial': out.push(`途中まで${line.progress ? `: ${progressWords(line.progress)}` : ''}${line.end === 'cut' && cutBy ? `（${cutBy}で止められた）` : ''}`);
+      break;
+    case 'not_started':
+      out.push(notStartedWords());
+      break;
+    case 'unknown': out.push(`結果は不明${line.code === 'target_lost' ? '（相手を見失った。倒したかは見ていない）' : line.code ? `（${line.code}）` : ''}`);
+      break;
+    case 'failed': if (line.progress) out.push(`進んでいない: ${progressWords(line.progress)}`);
+      break;
     default: break;
   }
+
+};
+noteGoal();
   if (line.goal !== 'partial' && line.end === 'cut' && cutBy) out.push(`外から止められた（${cutBy}）`);
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
   const stop = line.do === 'vertical' && line.code ? VERTICAL_STOP_WORDS[line.code] : undefined;
@@ -111,7 +134,8 @@ export function handFacts(line: ActHandLine): string[] {
   return out.map(text => `${FACT}${text}`);
 }
 
-/** `dropped` (amendment A-6, the body's new value): the shield's hold broke off on the way to the act. Said as a fact only. A value this head does not know is said as that. */
+/** `dropped` (amendment A-6, the body's new value): the shield's hold broke off on the way to the act. Said as a
+ * fact only. A value this head does not know is said as that. */
 const SHIELD_WORDS: Readonly<Record<Handover['shield'], string>> = { kept: '盾は下げなかった', lowered: '盾が下がった', dropped: '盾が途切れた', none: '盾は構えていなかった' };
 const shieldWords = (shield: string): string => (SHIELD_WORDS as Readonly<Record<string, string>>)[shield] ?? '盾の状態は読めなかった';
 /** The fact lines of the act as a whole: what a reflex handed over. */
@@ -122,8 +146,10 @@ export function actFacts(result: ActResult): string[] {
     out.push(`${FACT}反射 ${handover.from} から引き継いだ: 相手 #${handover.target} を ${num(handover.waitedMs / 1000)} 秒待った後、`
       + `${handover.confirmed ? '同じ相手と確かめて続けた' : '同じ相手とは確かめられなかった'}・${shieldWords(handover.shield)}`);
   }
-  // The body's list of the passes folded into counts (one entry a pass): how many there are and the sums of their lines, done hands and stopped hands.
-  const earlier = Array.isArray(result.earlierPasses) ? result.earlierPasses.filter(pass => pass && [pass.lines, pass.done, pass.stopped].every(number => Number.isFinite(number))) : [];
+  // The body's list of the passes folded into counts (one entry a pass): how many there are and the sums of their
+// lines, done hands and stopped hands.
+  const earlier = Array.isArray(result.earlierPasses) ? result.earlierPasses.filter(pass => pass && [pass.lines, pass.done,
+     pass.stopped].every(number => Number.isFinite(number))) : [];
   if (earlier.length) {
     const sum = (key: 'lines' | 'done' | 'stopped') => earlier.reduce((total, pass) => total + pass[key], 0);
     out.push(`${FACT}古い周回 ${earlier.length} 回分（手の行 ${sum('lines')}、済 ${sum('done')}、止 ${sum('stopped')}）は数だけにまとめた`);
@@ -150,7 +176,8 @@ export function droppedWords(because: NonNullable<ItemOutcome['droppedBecause']>
 export const keptWords = (kept: NonNullable<ItemOutcome['keptDespite']>): string =>
   `${FACT}${kept.item.item} が止まった（${kept.code}）が、この項目は頼っていなかったので動かした`;
 
-/** What a unit whose result is not known is told as, while the body is being stopped (the model must not take it for done or for failed). */
+/** What a unit whose result is not known is told as, while the body is being stopped (the model must not take it
+ * for done or for failed). */
 export const unknownWords = (label?: string): string =>
   `${label ? `${label}: ` : ''}結果は不明（解放を確かめていない）。自動では出し直さない。体を止める片付けを送った。世界は見て確かめる`;
 /** The unit's release was proved by the cleanup (or the new connection) and its result is still not known. */
@@ -172,26 +199,33 @@ export function heldAgainWords(record: { replayCode: string; dropped: readonly {
 }
 
 /**
- * The steps a vertical hand counted and then found gone (`progress.corrected`, A-5 3), one fact each, said once (`placement_corrected`): where it was, what it holds now, and that the valid
- * steps (`progress.done`) were counted again; the attempts, the confirmed placements and the stock used stay as they were. `id` is the occasion (item, hand, cell, step).
+ * The steps a vertical hand counted and then found gone (`progress.corrected`, A-5 3), one fact each, said once
+ * (`placement_corrected`): where it was, what it holds now, and that the valid
+ * steps (`progress.done`) were counted again; the attempts, the confirmed placements and the stock used stay as
+ * they were. `id` is
+ * the occasion (item, hand, cell, step).
  */
 export function placementCorrections(item: string, result: string | undefined): { id: string; text: string }[] {
   const act = readActResult(result);
   if (!act) return [];
   const facts: { id: string; text: string }[] = [];
   for (const line of act.lines) {
-    const progress = (line as { progress?: { done?: number; corrected?: { at: { x: number; y: number; z: number }; was?: string; now: string; step: number }[] } }).progress;
+    const progress = (line as { progress?: { done?: number; corrected?: { at: { x: number; y: number; z: number }; was?: string; now:
+       string; step: number }[] } }).progress;
     for (const gone of progress?.corrected ?? []) {
       const cell = `(${gone.at.x},${gone.at.y},${gone.at.z})`;
       facts.push({ id: `${item}:${line.i}:${gone.at.x},${gone.at.y},${gone.at.z}:${gone.step}`,
-        text: `${item} 手 ${line.i} (${line.do}): 置いた ${cell} が無くなった（${gone.was ? `${gone.was} → ` : ''}今 ${gone.now}・段 ${gone.step}）。有効な段数を数え直した${typeof progress?.done === 'number' ? `（今 ${progress.done} 段）` : ''}` });
+        text: `${item} 手 ${line.i} (${line.do}): 置いた ${cell} が無くなった（${gone.was ? `${gone.was} → ` :
+           ''}今 ${gone.now}・段 ${gone.step}）。有効な段数を数え直した${typeof progress?.done === 'number' ? `（今 ${progress.done} 段）` : ''}` });
     }
   }
   return facts.slice(0, 8);
 }
 
 /**
- * Amendment A-7 1: what an act's `keep` did to the plan's promises, one fact a line (facts only: what was made, revised or already there, and what the plan refused).
+ * Amendment A-7 1: what an act's `keep` did to the plan's promises, one fact a line (facts only: what was made,
+ * revised or already
+ * there, and what the plan refused).
  * `made` 約束 #3 を作った: spruce_planks 4（作業台）/ `revised` the count it was / `same` it was already so / a problem the plan said.
  */
 export function promiseKeptWords(entry: { item: string; count: number; use: string },

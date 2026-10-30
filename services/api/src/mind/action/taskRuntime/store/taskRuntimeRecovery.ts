@@ -52,7 +52,8 @@ export class TaskRuntimeRecovery {
     const receipted = new Set(parts.pendingReceipts(scopeKey).map(receipt => receipt.taskId));
     for (const { taskId, lease } of parts.activeSteps(scopeKey)) {
       if (receipted.has(taskId)) continue; // The original durable receipt owns reconciliation, even during IPC failure.
-      const outcome = actionState(lease); if (outcome === 'live') continue;
+      const outcome = actionState(lease);
+        if (outcome === 'live') continue;
       const task = parts.required(scopeKey, taskId), row = parts.checkpoint(taskId);
       if (outcome === 'unknown') {
         if (task.pauseReason !== 'fca_unknown') authority.event(scopeKey, taskId, 'fca_recovery_unknown', parts.now(),
@@ -110,43 +111,56 @@ export class TaskRuntimeRecovery {
   revive(task: TaskRecord, reason: 'owner_turn' | 'sleep_admission'): void {
     if (task.kind !== 'root' && task.kind !== 'conversation') return;
     const phase = this.parts.view(task).phase;
-    if (phase === 'unknown') { this.retire(task, `fca_unknown_${reason}`); return; }
+    if (phase === 'unknown') { this.retire(task, `fca_unknown_${reason}`);
+      return; }
     if (phase !== 'stopped' && !(phase === 'stopping' && task.kind === 'root')) return;
     // A stopping root only waits for its children; they keep their own stop requests.
-    this.db.prepare("UPDATE fca_task_checkpoints SET stop_requested=0,wait_reason=CASE WHEN step_id IS NULL THEN 'message' ELSE wait_reason END WHERE task_id=?").run(task.id);
+    this.db.prepare(("UPDATE fca_task_checkpoints SET stop_requested=0,wait_reason=CASE WHEN step_id IS NULL THEN 'message' " +
+"ELSE wait_reason END WHERE task_id=?")).run(task.id);
     this.parts.authority.event(task.scopeKey, task.id, 'fca_resumed', this.parts.now(), { status: 'running', pauseReason: null }, { reason });
     // Messages that arrived while it was stopped did not wake it: they do now.
     this.parts.wake?.(this.parts.required(task.scopeKey, task.id), reason);
   }
 
   /**
-   * A-17 (run 46: a request held by the operator was failed by the unknown exit 3 minutes after its hold, with the world still frozen): a task the exit failed
-   * (its last two status events are `fca_unknown_retired` and `fca_recovered_unknown`, the failed state still carrying its unknown time) goes back to stopped, resumable,
-   * by the state machine's own late-report exit. Its checkpoint was cleared by the retirement (no step, no stop request), so nothing is left open. Any other failed task: null.
+   * A-17 (run 46: a request held by the operator was failed by the unknown exit 3 minutes after its hold, with the
+ * world still frozen): a task the exit failed
+   * (its last two status events are `fca_unknown_retired` and `fca_recovered_unknown`, the failed state still
+ * carrying its unknown time) goes back to stopped, resumable,
+   * by the state machine's own late-report exit. Its checkpoint was cleared by the retirement (no step, no stop
+ * request), so nothing is left open. Any other failed task: null.
    */
   reopenRetired(scopeKey: string, taskId: string, summary: string): TaskView | null {
     const task = this.parts.authority.get(scopeKey, taskId);
     if (!task || task.status !== 'failed') return null;
-    const last = this.db.prepare("SELECT event_type FROM agent_task_events WHERE task_id=? AND event_type IN ('fca_unknown_retired','fca_recovered_unknown','fca_retire_reopened') ORDER BY sequence DESC LIMIT 2").all(taskId)
+    const last = this.db.prepare(("SELECT event_type FROM agent_task_events WHERE task_id=? AND event_type IN " +
+"('fca_unknown_retired','fca_recovered_unknown','fca_retire_reopened') ORDER BY sequence DESC LIMIT 2")).all(taskId)
       .map(row => String(row.event_type));
     if (last[0] !== 'fca_recovered_unknown' || last[1] !== 'fca_unknown_retired') return null;
-    this.parts.authority.event(scopeKey, taskId, 'fca_retire_reopened', this.parts.now(), { status: 'paused', pauseReason: 'fca_stopped', proof: true, lateReport: true, summary }, { reason: 'held' });
+    this.parts.authority.event(scopeKey, taskId, 'fca_retire_reopened', this.parts.now(), { status: 'paused', pauseReason: 'fca_stopped',
+       proof: true, lateReport: true, summary }, { reason: 'held' });
     return this.parts.get(scopeKey, taskId);
   }
 
   /**
-   * A-20 (run 47: the credit ran out and a running request was failed with the world running): a task the step's own `fail` commit closed, with the summary such a failure writes
-   * (`failedSummary`), goes back to stopped, resumable, by the state machine's `reopen`. Its checkpoint was cleared by the commit (no step, no stop request). The failure's code is
-   * not kept; the operator, who names the task, knows why it failed. Any other failed task (a retirement, a cap, a completion): null.
+   * A-20 (run 47: the credit ran out and a running request was failed with the world running): a task the step's
+ * own `fail` commit closed, with the summary such a failure writes
+   * (`failedSummary`), goes back to stopped, resumable, by the state machine's `reopen`. Its checkpoint was
+ * cleared by the commit (no step, no stop request). The failure's code is
+   * not kept; the operator, who names the task, knows why it failed. Any other failed task (a retirement, a cap, a
+ * completion): null.
    */
   reopenRejected(scopeKey: string, taskId: string, summary: string, failedSummary: string): TaskView | null {
     const task = this.parts.authority.get(scopeKey, taskId);
     if (!task || task.status !== 'failed' || task.summary !== failedSummary) return null;
-    const row = this.db.prepare("SELECT payload_json FROM agent_task_events WHERE task_id=? AND event_type='fca_step_committed' ORDER BY sequence DESC LIMIT 1").get(taskId);
+    const row = this.db.prepare(
+      ("SELECT payload_json FROM agent_task_events WHERE task_id=? AND event_type='fca_step_committed' ORDER BY " +
+"sequence DESC LIMIT 1")).get(taskId);
     let disposition: unknown;
     try { disposition = JSON.parse(String(row?.payload_json ?? '{}')).disposition; } catch { disposition = undefined; }
     if (disposition !== 'fail') return null;
-    this.parts.authority.event(scopeKey, taskId, 'fca_rejected_reopened', this.parts.now(), { status: 'paused', pauseReason: 'fca_stopped', proof: true, reopen: true, summary }, { reason: 'billing' });
+    this.parts.authority.event(scopeKey, taskId, 'fca_rejected_reopened', this.parts.now(), { status: 'paused', pauseReason: 'fca_stopped',
+       proof: true, reopen: true, summary }, { reason: 'billing' });
     return this.parts.get(scopeKey, taskId);
   }
 
@@ -181,7 +195,8 @@ export class TaskRuntimeRecovery {
       else if (task.kind === 'root') this.parts.wake?.(this.parts.required(task.scopeKey, task.id), reason);
       return;
     }
-    this.db.prepare('UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason=NULL,stop_requested=0 WHERE task_id=?').run(task.id);
+    this.db.prepare(("UPDATE fca_task_checkpoints SET step_id=NULL,lease_json=NULL,wait_reason=NULL,stop_requested=0 WHERE " +
+"task_id=?")).run(task.id);
     authority.event(task.scopeKey, task.id, 'fca_recovered_unknown', now(), { status: 'failed', pauseReason: null }, { reason });
     const parent = task.parentId ? this.parts.required(task.scopeKey, task.parentId) : null;
     this.tellRetired(task, row.step_id, parent);

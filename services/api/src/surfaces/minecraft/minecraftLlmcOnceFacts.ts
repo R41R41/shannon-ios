@@ -1,18 +1,29 @@
 /**
- * The facts the head says once (the continue contract, chapter 8, 「判断に届ける事実」 and 「1 度出す事実の届け方」): a fact that is said one time is one the decision's
- * **last request** (the bytes `recordedClient` sends) took in. Until then the head keeps it and offers it again with the next decision's input: it is not given up
- * because a live state was made without it (an urgent version, a compression that dropped it), and it is not counted as delivered by being built.
+ * The facts the head says once (the continue contract, chapter 8, 「判断に届ける事実」 and 「1 度出す事実の届け方」): a fact that is
+ * said one time is one the decision's
+ * **last request** (the bytes `recordedClient` sends) took in. Until then the head keeps it and offers it again with the next
+ * decision's input: it is not given up
+ * because a live state was made without it (an urgent version, a compression that dropped it), and it is not
+ * counted as delivered by being built.
  *
- * - `offer(taskId, key, text)`: a fact, one per key (a second offer of the same key replaces its words while it is not delivered, and keeps its place).
+ * - `offer(taskId, key, text)`: a fact, one per key (a second offer of the same key replaces its words while it is not delivered,
+ * and keeps its place).
  *   A key already delivered is not offered again.
  * - `pending(taskId)`: the facts to put in the next input, oldest first.
  * - `markDelivered(taskId, keys)`: the caller has seen these keys in the last request's bytes; they are not offered again.
- * - `withdraw(taskId, key)`: the fact no longer holds before it was delivered (the model wrote the answer on the plan itself); it is dropped, and a later offer of
+ * - `withdraw(taskId, key)`: the fact no longer holds before it was delivered (the model wrote the answer on the
+ * plan itself); it is
+ * dropped, and a later offer of
  *   the same key may come (it was not delivered).
  *
- * The live state's side (`minecraftLlmcFacts.ts`, `minecraftLlmcBody.ts`): `onceFor(taskId, version)` puts the facts of a version in the input's `events` (the normal input all; the urgent one all but `prep_unmet:`;
- * the shortened one none), and `deliverOnceFacts` is called by the model with the request right before it is dispatched (`MinecraftV2Hooks.requestSent`) and calls `markDelivered` for
- * the facts whose words the last message holds. The offers are made in `readinessParts` (`minecraftLlmcBody.ts`) and by the ledger (`fcaPlanTools.ts`).
+ * The live state's side (`minecraftLlmcFacts.ts`, `minecraftLlmcBody.ts`): `onceFor(taskId, version)` puts the
+ * facts of a version in
+ * the input's `events` (the normal input all; the urgent one all but `prep_unmet:`;
+ * the shortened one none), and `deliverOnceFacts` is called by the model with the request right before it is dispatched
+ * (`MinecraftV2Hooks.requestSent`) and calls `markDelivered` for
+ * the facts whose words the last message holds. The offers are made in `readinessParts` (`minecraftLlmcBody.ts`)
+ * and by the ledger
+ * (`fcaPlanTools.ts`).
  */
 export interface OnceFact { key: string; text: string }
 

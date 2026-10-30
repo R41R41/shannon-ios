@@ -690,26 +690,28 @@ describe('the frame is never kept', () => {
 
   it('has a table with identifiers, timestamps, an outcome and a code, and modules that reach no other store', () => {
     const source = (name: string) => readApiSource(name);
-    const table = source('bodyLookStore.ts').match(/CREATE TABLE IF NOT EXISTS body_looks \(([\s\S]*?)\n\s*\);/u)![1]!;
+    const table = source('bodyLookSchema.ts').match(/CREATE TABLE IF NOT EXISTS body_looks \(([\s\S]*?)\n\s*\);/u)![1]!;
     const columns = table.split('\n').map(line => line.trim().split(/\s+/u)[0]!).filter(Boolean);
     expect(columns).toEqual(['look_id', 'scope_key', 'device_id', 'thread_id', 'requested_at', 'expires_at', 'day_key', 'owner_asked',
       'outcome', 'code', 'frame_received_at', 'completed_at', 'source']);
     expect(table).not.toMatch(/BLOB|image|base64|content|text_|summary|description/iu);
-    expect(source('bodyLookStore.ts').match(/CREATE TABLE/gu)).toHaveLength(1);
+    expect(source('bodyLookSchema.ts').match(/CREATE TABLE/gu)).toHaveLength(1);
+    expect(source('bodyLookStore.ts')).not.toMatch(/CREATE TABLE/u);
 
     // Modules a frame passes through: what they import, and that none of them opens a file, a database, or a log.
     const imports = (name: string) => importedModules(name);
     // The one reader of the environment (Syzygy ADR-0008 §10), which opens nothing.
     expect(imports('bodyLookContract.ts')).toEqual(['serverEnvironment.ts']);
     expect(imports('serverEnvironment.ts')).toEqual([]);
-    expect(imports('bodyLook.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'bodyLookLines.ts', 'bodyLookStore.ts', 'bodyLookTurnWait.ts', 'bodyLookVision.ts', 'lookPorts.ts', 'lookPorts.ts', 'node:crypto']);
+    expect(imports('bodyLook.ts').sort()).toEqual(['bodyLookContract.ts', 'bodyLookLines.ts', 'bodyLookStore.ts', 'bodyLookTurnWait.ts', 'bodyLookVision.ts', 'bodyLookWords.ts', 'bodyLookWords.ts', 'bodyLookWords.ts', 'bodyLookWords.ts', 'lookPorts.ts', 'lookPorts.ts', 'node:crypto']);
+    expect(imports('bodyLookWords.ts').sort()).toEqual(['@shannon/cognition', 'bodyLookContract.ts', 'bodyLookLines.ts']);
     // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
     // `@shannon/switches`: her one-line voice is her character core's while SHANNON_INNER_NOTE is on (Syzygy ADR-0012); a pure package.
     expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', '@shannon/switches', 'bodyLookContract.ts', 'chatModelSupport.ts', 'claudeStructured.ts', 'haikuConfig.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
     expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
-    for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
+    for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookWords.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);
     }
     // The store and the speaker are handed identifiers and her words: neither signature has room for a frame.

@@ -15,59 +15,87 @@ export { handToLine, lineToHand };
 export const SHORT_HAND_ERROR_KEY = '書き方の誤り';
 
 /**
- * mb-llmc-cand 10 (D3, 「一つの話題は一か所」): the hands' grammar and what each hand needs are here, and only here (the instructions keep the principles of
- * deciding): the line forms, the json fields of each hand (run 37: `walk` written with `at` was refused, the field is `to` or `path`), the rules of
- * place, dig and use, how a stop is read. Ends with the cut-offs (stopIf, accept, onFail). `ACT_DESCRIPTION` (the json hands, for the old modes) is untouched.
+ * mb-llmc-cand 10 (D3, 「一つの話題は一か所」): the hands' grammar and what each hand needs are here, and only here (the
+ * instructions keep the principles of
+ * deciding): the line forms, the json fields of each hand (run 37: `walk` written with `at` was refused, the
+ * field is `to` or `path`), the rules of
+ * place, dig and use, how a stop is read. Ends with the cut-offs (stopIf, accept, onFail). `ACT_DESCRIPTION` (the json hands, for
+ * the old modes) is untouched.
  */
 const SHORT_LINES = [
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、手ごとの1行と止まった所の周りを返す。'
     + '手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める。',
-  'あなたが決める: 目的・対象・行き先・許す掘る/置く・済む条件、食事・睡眠・片づけ、戦うか逃げるか（地図と状態を見て手で出す）。体に任せる細部: 歩く道（go）・途中の板や棒と作業台を置く所（make）・戦い方（fight の狙い・間合い・盾）。',
+  ("あなたが決める: 目的・対象・行き先・許す掘る/置く・済む条件、食事・睡眠・片づけ、戦うか逃げるか（地図と状態を見て手で出す）。体に任せる細部: " +
+"歩く道（go）・途中の板や棒と作業台を置く所（make）・戦い方（fight の狙い・間合い・盾）。"),
   '',
   '## 書き方',
   '- hands は手の文字列の配列（1 手 1 行）。座標は x,y,z の整数。複数の座標・点は空白で続ける。行末に note="40字までの説明" を付けられる。',
   '- 座標は、rel を付けない限り、すべて世界の絶対座標（live の完全な座標をそのまま写す）。小さな数（-1,0,0 など）を rel 無しで書くと、世界の原点の近くを指す。',
   '- 足からの差で書きたい手は rel を付ける（その手を始める時の足のブロックから。x 東+・z 南+・y 上+）。例（足が 230,-54,197 の時）:',
   '  dig 230,-54,196      ← 絶対座標（足の北隣）。  dig 0,0,-1 rel      ← 同じマスを足からの差で。  walk 3,0,0 rel      ← 足の 3 マス東へ。',
-  '- どの手にも onFail=continue|stop を付けられる。dependsOn=1,3 は頼る前の手の番号で、その手が済んでいる時だけ動く（none は何にも頼らない。書かなければ前の手が止まれば止まる）。',
+  ("- どの手にも onFail=continue|stop を付けられる。dependsOn=1,3 は頼る前の手の番号で、その手が済んでいる時だけ動く（none " +
+"は何にも頼らない。書かなければ前の手が止まれば止まる）。"),
   '- 1 行で書けない形は json {手の JSON} の 1 行。at・items・path は 1 つでも配列。使える欄は手ごとに決まっていて（下の「json の欄」）、'
     + '違う欄の名前を書くとその手は断られる（例: walk に at は使えない。to か path）。',
   '- why は act に 1 つ（手の中には書かない）。',
   '',
   '## 手',
-'go X,Y,Z [X,Y,Z ...] [dig=stone,dirt] [place=cobblestone,dirt] [range=N] [seconds=N] [maxDrop=N] [maxDig=N] [maxPlace=N] [waterOk]',
-  '  行き先へ行く手。横の移動と短い段差はこれ（高さの差が大きい上り下りは vertical）: 道は体が引いて歩き切る（1 マスずつ座標で書かない）。座標 1 つが行き先、2〜8 個は候補（どれか 1 つに着けば済み。候補はあなたが並べる。体は物を探さない）。',
+("go X,Y,Z [X,Y,Z ...] [dig=stone,dirt] [place=cobblestone,dirt] [range=N] [seconds=N] [maxDrop=N] " +
+"[maxDig=N] [maxPlace=N] [waterOk]"),
+  ("  行き先へ行く手。横の移動と短い段差はこれ（高さの差が大きい上り下りは vertical）: 道は体が引いて歩き切る（1 マスずつ座標で書かない）。座標 1 つが行き先、2〜8 個は候補（どれか 1 " +
+"つに着けば済み。候補はあなたが並べる。体は物を探さない）。"),
   '  dig= は掘ってよい物（stone・dirt・sand・wood か id）、place= は置いてよい物（足場・橋・柱・穴埋め。持っている物だけ使う）。書かない物は掘らない・置かない。'
     + '溶岩・火・マグマは必ず避ける。水は waterOk を付けない限り避ける。maxDrop は一度に落ちてよい段（既定 3）。',
-  '  seconds（5〜120、既定 60）・maxDig（既定 40）・maxPlace（既定 24）が上限。着けない時だけ「go 止まった 理由」で返る: lava・no_tool（掘る道具が無い）・no_blocks（置く物が無い）・'
+  ("  seconds（5〜120、既定 60）・maxDig（既定 40）・maxPlace（既定 24）が上限。着けない時だけ「go 止まった 理由」で返る: " +
+"lava・no_tool（掘る道具が無い）・no_blocks（置く物が無い）・")
     + 'limit_time・limit_dig・limit_place・dead_end（許した手では道が無い）・'
-    + 'search_timeout（時間切れ: 道探しが持ち時間で終わり、道があるかは分からない。調べたマスと、いちばん近づけた所があと何 m かが付く。近い中継点を行き先に go を出し直す。高さの差が大きい道は vertical で進む）・'
-    + 'stuck・low_floor（足場が無い: 立つ所が丸ごとのブロックでない。隣の丸ごとの床へずれる）・no_floor（行き先の足元が作物・草花、または place= 無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す。',
+    + ("search_timeout（時間切れ: 道探しが持ち時間で終わり、道があるかは分からない。調べたマスと、いちばん近づけた所があと何 m かが付く。近い中継点を行き先に go を出し直す。高さの差が大きい道は " +
+"vertical で進む）・")
+    + ("stuck・low_floor（足場が無い: 立つ所が丸ごとのブロックでない。隣の丸ごとの床へずれる）・no_floor（行き先の足元が作物・草花、または place= " +
+"無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す。"),
   '範囲を挙げて体に任せる手（go と同じ形: 何を・どこで・どこまでをあなたが決め、体は細かい動きだけ。挙げた範囲の外は探さない。上限 seconds が必ずあり、止まる時は「<手> 止まった 理由」）:',
   'obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N] [maxDig=N]',
   '  黒曜石づくり。X,Y,Z は溶岩の源のマス（地図の L、8 つまで。体は探さない）。持ち物の水入りバケツで水を注ぎ、固まったらダイヤのツルハシで掘って拾い、水を汲み戻す。count（既定 1）まで。'
-    + '立てない時の立ち直しは体。足場は place= の物。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。',
+    + ("立てない時の立ち直しは体。足場は place= の物。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: " +
+"no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。"),
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
-  '  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。'
+  ("  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp " +
+"は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。")
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
   'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [seconds=N]',
-  '  鉱脈を掘る。ブロック名は id そのまま（iron_ore）。y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine に書く名前。X,Y,Z はその鉱脈のマス（4 つまで。種類が分かるマスだけ: 地図の o は鉄ではない）。同じ種類のつながったマスだけを近い順にたどって掘り、拾い、道具を持ち替える（ほかの鉱石は探さない）。count（既定 8）まで。道が岩に塞がれている時だけ dig= の物を掘って届く。'
+  ("  鉱脈を掘る。ブロック名は id そのまま（iron_ore）。y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine " +
+"に書く名前。X,Y,Z はその鉱脈のマス（4 つまで。種類が分かるマスだけ: 地図の o " +
+"は鉄ではない）。同じ種類のつながったマスだけを近い順にたどって掘り、拾い、道具を持ち替える（ほかの鉱石は探さない）。count（既定 8）まで。道が岩に塞がれている時だけ dig= の物を掘って届く。")
     + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。',
   'make 物 [個数]',
-  '  作る（途中の物の板・棒なども持ち物の材料から作る。3×3 で作業台が近くに無ければ持っているものを置く）。材料が足りなければ何も作らず足りない物の一覧を返す。材料は集めに行かない。理由: missing・no_table・no_recipe・full。',
+  ("  作る（途中の物の板・棒なども持ち物の材料から作る。3×3 で作業台が近くに無ければ持っているものを置く）。材料が足りなければ何も作らず足りない物の一覧を返す。材料は集めに行かない。理由: " +
+"missing・no_table・no_recipe・full。"),
   'portal X,Y,Z x|z [block=obsidian] [place=名,名] [maxPlace=N] [seconds=N] [noEnter]',
   '  ポータルの枠。X,Y,Z は枠の内側の左下のマス、x|z は枠が広がる向き。黒曜石 10 個で 4×5 の枠を組み（足場込み）、火打ち金で点け、入る（noEnter なら入らない）。'
     + '理由: no_obsidian・no_flint・blocked・ignite_failed・limit_time・stuck。',
   'smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [seconds=N] [X,Y,Z ...]',
-  '  かまどに入れる（取り出さない・焼き上がりを待たない）。furnaces 基に分けて入れ、燃料を足す（X,Y,Z は使うかまど。無ければ持っているかまどを置く）。焼き上がると出来事で知らされる。取り出しは furnace op=take を列に足す。'
+  ("  かまどに入れる（取り出さない・焼き上がりを待たない）。furnaces 基に分けて入れ、燃料を足す（X,Y,Z は使うかまど。無ければ持っているかまどを置く）。焼き上がると出来事で知らされる。取り出しは " +
+"furnace op=take を列に足す。")
     + '種類が 2 つ以上は json（items）。理由: no_furnace・fuel_short・missing・unreachable・limit_time。',
-'vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water [maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [seconds=N]',
+("vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water " +
+"[maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [seconds=N]"),
   '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
-    + 'shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物（vertical の手の中だけ、柵・レール・クモの巣・松明・はしご・つた・糸は書かなくても壊す。go・dig は変わらない）、place= は足場・塞ぎに置く物。stairs・shaft は place= を書かないと、持っている丸石・深層岩の丸石・土を足場に置いてよいことになる（置かせたくなければ place=none）。pillar は書いた物で作る。'
+    + ("shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物（vertical " +
+"の手の中だけ、柵・レール・クモの巣・松明・はしご・つた・糸は書かなくても壊す。go・dig は変わらない）、place= は足場・塞ぎに置く物。stairs・shaft は place= " +
+"を書かないと、持っている丸石・深層岩の丸石・土を足場に置いてよいことになる（置かせたくなければ place=none）。pillar は書いた物で作る。")
     + 'liquid: 溶岩・水が見えたら stop=止まる / seal=塞いで続ける / seal_water=水だけ塞ぎ溶岩で止まる（range は塞ぐ半径 1〜2、既定 1）。'
-    + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（書かなければ高さから見積もる: 高さの差 × 1 段の時間 × 1.5。長い上り下りも足りる）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}`
+    + ("上限（書かなければ既定）: seconds " +
+`${VERTICAL_SECONDS_RANGE[0]}` +
+"〜" +
+`${VERTICAL_SECONDS_RANGE[1]}` +
+"（書かなければ高さから見積もる: 高さの差 × 1 段の時間 × 1.5。長い上り下りも足りる）・maxDig 既定 " +
+`${VERTICAL_DEFAULTS.maxDig}` +
+"・maxPlace 既定 " +
+`${VERTICAL_DEFAULTS.maxPlace}` +
+"")
     + `（maxDig は ${VERTICAL_DEFAULTS.maxDig}・maxPlace は ${VERTICAL_DEFAULTS.maxPlace} まで）。見えた鉱石は結果で知らされる。`,
-  '  例（liquid= は必ず書く）: vertical down stairs south y=10 dig=stone,dirt liquid=stop   vertical up pillar y=70 dig=dirt place=cobblestone liquid=seal_water',
+  ("  例（liquid= は必ず書く）: vertical down stairs south y=10 dig=stone,dirt liquid=stop   vertical up pillar y=70 " +
+"dig=dirt place=cobblestone liquid=seal_water"),
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
   '  近くの数歩を、掘らず置かずに歩く手（段差1と泳ぎだけ。点を空白で続けると path。32点まで）。range は的から何 m で着いたことにするか。',
   '  地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる（64m ごとに区切って歩く）。遠くへ・壁や穴や崖のある道は go（道を体が引く）、高さの差が大きい上り下りは vertical。',
@@ -82,7 +110,8 @@ const SHORT_LINES = [
   '  place は空気（. か *）で、6面のどれかが固いマスへ。足と頭のマス・草花（,）・水・レール・ポータル・周りが全部空気の宙には置けない。',
   '  pillarUp は真下に置きながら N 段登る（縦穴を上る）。足元が丸ごとのブロックでない（芽・雪・ハーフブロックの上）と「足場が無い」で止まる: 隣の丸ごとの床へずれる。',
   'use 物 [X,Y,Z] [face=..] [target=#id]',
-  '  バケツで汲む・注ぐ、火打ち金、ベッドで寝る（夜か雷雨の時だけ。昼は寝られない。ネザー・エンドでは爆発する）、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と face）。',
+  ("  バケツで汲む・注ぐ、火打ち金、ベッドで寝る（夜か雷雨の時だけ。昼は寝られない。ネザー・エンドでは爆発する）、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と " +
+"face）。"),
   '  use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石1枚の向こうの水は、その石を dig してから use bucket）。',
   'craft 物 [個数]',
   '  2×2 で作れる物（板・棒・作業台・松明・火打ち金など）は作業台が要らない。3×3 の物（ツルハシ・剣・盾・かまど・バケツ・ハーフブロックなど）は作業台が5m内に要る。',
@@ -90,28 +119,40 @@ const SHORT_LINES = [
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
   'pickup [range=N] [target=..]',
-  'chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 iron_ingot）',
-  'furnace X,Y,Z take   furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]   （かまど・溶鉱炉・燻製器。例: furnace 12,64,-3 put raw_iron 8 fuel=coal fuelCount=2。'
+  ("chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 " +
+"iron_ingot）"),
+  ("furnace X,Y,Z take   furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]   （かまど・溶鉱炉・燻製器。例: furnace 12,64,-3 put " +
+"raw_iron 8 fuel=coal fuelCount=2。")
     + '裸で furnace/chest と書いても座標と op が無いと断られる）',
   'shoot は json の形で書く。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。',
   '',
   '## json の欄（手ごとに決まっている。ほかの欄は断られる。どの手にも rel・note・onFail）',
-  '- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: at・count・seconds・canPlace・maxPlace・maxDig / '
+  ("- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: " +
+"at・count・seconds・canPlace・maxPlace・maxDig / ")
     + 'fight: target・stance(fight|flee)・item・retreatHp・range・seconds / '
-    + 'mine: block・at・count・tool・collect・seconds・canDig・maxDig / make: item・count / portal: at・axis(x|z)・block・enter・canPlace・maxPlace・seconds / '
-    + 'smelt: items・fuel・fuelCount・furnaces・at・seconds / vertical: dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds / walk: to か path・sprint・range / '
-    + 'dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: item・at（1つ）・face・target',
-  '- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: target・untilDead・seconds・hold / eat: item',
-  '- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: at（1つ）・op・items',
+    + ("mine: block・at・count・tool・collect・seconds・canDig・maxDig / make: item・count / portal: " +
+"at・axis(x|z)・block・enter・canPlace・maxPlace・seconds / ")
+    + ("smelt: items・fuel・fuelCount・furnaces・at・seconds / vertical: " +
+"dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds / walk: to か path・sprint・range " +
+"/ ")
+    + ("dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: " +
+"item・at（1つ）・face・target"),
+  ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
+"target・untilDead・seconds・hold / eat: item"),
+  ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +
+"at（1つ）・op・items"),
   '- drop: items・target か at / shoot: target か at・item・charge・n',
   'json {"do":"walk","to":{"x":1,"y":64,"z":2},"range":1,"sprint":true,"note":"村へ"}',
-  'json {"do":"furnace","at":[{"x":1,"y":2,"z":3}],"op":"put","item":"iron_ore","count":8,"fuel":"coal","fuelCount":2}（op=take で出来上がりを取る。溶鉱炉・燻製器も）',
-  'json {"do":"chest","at":[{"x":1,"y":2,"z":3}],"op":"take","items":[{"item":"coal","count":4}]}（箱・樽だけ。op は look・take・put・takeAll のどれか 1 つ）',
+  ("json {\"do\":\"furnace\",\"at\":[{\"x\":1,\"y\":2,\"z\":3}],\"op\":\"put\",\"item\":\"iron_ore\",\"count\":8,\"fuel\":\"coal\",\"fue" +
+"lCount\":2}（op=take で出来上がりを取る。溶鉱炉・燻製器も）"),
+  ("json {\"do\":\"chest\",\"at\":[{\"x\":1,\"y\":2,\"z\":3}],\"op\":\"take\",\"items\":[{\"item\":\"coal\",\"count\":4}]}（箱・樽だけ。op は " +
+"look・take・put・takeAll のどれか 1 つ）"),
   'json {"do":"drop","items":[{"item":"gold_ingot","count":1}],"target":"#12"}（その方へ投げる）',
   'json {"do":"shoot","target":"#12","item":"bow","charge":1,"n":3}（target の代わりに at も可）',
   '',
   '## 止める・守る',
-  '- stopIf は文字列 "hostileWithin=8 hpBelow=10"（hostileWithin は敵までの m、hpBelow は体力 0〜20、hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たしたら全体を止めて返す。'
+  ("- stopIf は文字列 \"hostileWithin=8 hpBelow=10\"（hostileWithin は敵までの m、hpBelow は体力 " +
+"0〜20、hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たしたら全体を止めて返す。")
     + 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。待つ手の act には hostileWithin。',
   '- accept は、この act で戦うと決めた敵の種類の配列（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
     + 'accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ。'
@@ -124,21 +165,28 @@ const SHORT_LINES = [
   '## 列（やることの列）と「〜まで続ける」',
   '- act は列の 1 項目。項目は体が 1 つずつ順に動かす（実行中を含めて 3 つまで）。実行中の項目の残りが少なくなると次の判断が来る。'
     + '足す項目は、列の最後の項目が成功した後の世界を前提に書く（成功が分かった訳ではない）。列は live の queue に出る。',
-  '- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。ただし欄 dependsOn が [] か、止まった項目を含まない配列の項目は動かす。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。',
-  '- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる（furnace:x,y,z は始める時に一度見るだけで、焼き上がりまで待たない）。 欄 done（条件の文字列）: 満たした所で、手の途中でも済みにする。',
+  ("- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。ただし欄 dependsOn が [] " +
+"か、止まった項目を含まない配列の項目は動かす。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。"),
+  ("- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる（furnace:x,y,z は始める時に一度見るだけで、焼き上がりまで待たない）。 欄 " +
+"done（条件の文字列）: 満たした所で、手の途中でも済みにする。"),
   '- 欄 repeat（2〜8）: 手の組を最大その回数までまわす。rel の手か、座標の無い手（attack・pickup・eat・craft・wait）だけ（絶対座標の手は断られる）。',
   '  足の位置から数えるので、トンネルは 1 組を rel で書いて repeat にする。1 回まわしても何も変わらなければ体が止める。 done と一緒に使うと「〜まで続ける」になる。',
-  '- 欄 replace（["q15"] か ["all"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目に頼る項目と、dependsOn を書いていない後ろの項目も捨てる）。新しい act は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。',
+  ("- 欄 replace（[\"q15\"] か [\"all\"]）: 先に消す項目（実行中の項目は手の途中で止まる。消した項目に頼る項目と、dependsOn を書いていない後ろの項目も捨てる）。新しい act " +
+"は列の最後の後ろに付くので、今の列より先に動かしたい時・差し替える時に使う。"),
   '- 欄 dependsOn（["q12"]）: この項目が頼る今の列の項目（前の段の項目は書けない。[] は何にも頼らない）。欄 uses（[3]）: 使う約束の番号。',
   '- 欄 keep（["spruce_planks:4:作業台"]）: 後で使うために残す物を 品目:数:用途 で（約束になって帳簿に載る。同じ品目・用途は数の改訂）。',
-  '- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・'
-    + 'dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。',
-  '- 例: pre "have:iron_ore>=3&near:furnace~4"。下りる act の pre "food>=40&have:crafting_table|food>=40&have:planks>=4"（満たさない時は始めずに捨てる）。'
+  ("- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log " +
+"は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・")
+    + ("dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 " +
+"まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。"),
+  ("- 例: pre \"have:iron_ore>=3&near:furnace~4\"。下りる act の pre " +
+"\"food>=40&have:crafting_table|food>=40&have:planks>=4\"（満たさない時は始めずに捨てる）。")
     + 'done "have:log>=10"。repeat 8 と done "at:26,51,7~2"（手は rel で書いたトンネルの 1 組）。',
   '',
   '## 返る行',
   '- 行は「番号 手 済|止|失|未 本文」。止まった手の周りの 3×3×3 は、次の判断の live の lastResults に一度だけ出る。',
-  '- 止まりの読み方: 「go 止まった 理由」は上の go の理由の語 / 「一歩ではない」は段差2以上か着いていない（walk。遠い・段差のある道は go に） / 「届かない」は5m内へ寄る / 「掘れない」は道具か岩盤（X）/ '
+  ("- 止まりの読み方: 「go 止まった 理由」は上の go の理由の語 / 「一歩ではない」は段差2以上か着いていない（walk。遠い・段差のある道は go に） / 「届かない」は5m内へ寄る / " +
+"「掘れない」は道具か岩盤（X）/ ")
     + '「見えない：間に (x,y,z)」はその間を先に掘る / 「そのものには立てない」は続く「立てる隣」へ / 「時間切れ」は秒の上限か道探しの持ち時間（go の search_timeout は道が無いとは限らない）。',
 ];
 export const SHORT_ACT_DESCRIPTION: string = SHORT_LINES.join('\n');
@@ -163,7 +211,8 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
 });
 
 export interface ShortAct {
-  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[]; dependsOn?: string[]; uses?: number[];
+  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[];
+     dependsOn?: string[]; uses?: number[];
   keep?: string[];
 }
 
@@ -184,7 +233,8 @@ export function actToShort(input: ActInput): ShortAct {
 }
 
 /**
- * One layer of quotes put around a written value is taken off (amendment A-7 3: 3 of 45 answers wrote stopIf as `"hostileWithin=8 hpBelow=10"` with the quotes inside the
+ * One layer of quotes put around a written value is taken off (amendment A-7 3: 3 of 45 answers wrote stopIf as
+ * `"hostileWithin=8 hpBelow=10"` with the quotes inside the
  * string, or with the inner quotes escaped, `\"…\"`, and every token of it failed). The quote may be `"` or `'`, escaped or not.
  */
 function unquoted(text: string): string {
@@ -232,29 +282,21 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
 }
 
 /**
- * The task queue's fields of a model's input: `pre` and `done` as text into the body's JSON (an unreadable one is an error naming the forms to
- * write), `repeat` a whole number of 2–8, `replace` item ids (a bare id too). A field that is already JSON (a condition array) is kept as it is.
+ * The task queue's fields of a model's input: `pre` and `done` as text into the body's JSON (an unreadable one
+ * is an error naming the forms to
+ * write), `repeat` a whole number of 2–8, `replace` item ids (a bare id too). A field that is already JSON (a
+ * condition array) is kept as it is.
  */
 function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace' | 'dependsOn' | 'uses' | 'keep'> {
   const value = (input ?? {}) as Record<string, unknown>, out: Record<string, unknown> = {};
-  for (const key of ['pre', 'done'] as const) {
-    const field = value[key];
-    if (field === undefined) continue;
-    if (typeof field !== 'string') {
-      out[key] = field;
-      continue;
-    }
-    const parsed = parseCondition(field, key);
-    if (parsed.ok) out[key] = parsed.condition; else errors.push(parsed.problem);
-  }
-  if (value.repeat !== undefined) {
-    if (Number.isInteger(value.repeat) && Number(value.repeat) >= 2 && Number(value.repeat) <= 8) out.repeat = value.repeat;
-    else errors.push('repeat の書き方の誤り: 2〜8 の整数で書く');
-  }
+  readQueueConditions(value, out, errors);
+  readQueueRepeat(value, out, errors);
   const replace = typeof value.replace === 'string' ? [value.replace] : value.replace;
   if (Array.isArray(replace)) out.replace = replace.filter(item => typeof item === 'string');
-  // dependsOn: marks ("q12"), a bare mark or marks joined by commas; an empty list (or "none") relies on none. uses: promise numbers, a bare number or numbers joined by commas.
-  const depends = value.dependsOn === 'none' ? [] : typeof value.dependsOn === 'string' ? value.dependsOn.split(',').map(item => item.trim()).filter(Boolean) : value.dependsOn;
+  // dependsOn: marks ("q12"), a bare mark or marks joined by commas; an empty list (or "none") relies on none.
+// uses: promise numbers, a bare number or numbers joined by commas.
+  const depends = value.dependsOn === 'none' ? [] : typeof value.dependsOn === 'string' ? value.dependsOn.split(',').map(item => item.trim(
+    )).filter(Boolean) : value.dependsOn;
   if (Array.isArray(depends)) out.dependsOn = depends.filter(item => typeof item === 'string');
   else if (value.dependsOn !== undefined) errors.push('dependsOn の書き方の誤り: 列の項目の並び（["q12"]）。何にも頼らないなら []');
   const uses = typeof value.uses === 'number' ? [value.uses] : typeof value.uses === 'string' ? value.uses.split(',').map(Number) : value.uses;
@@ -266,7 +308,8 @@ function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' |
   return out;
 }
 /**
- * `keep` (amendment A-7 1): "品目:数:用途" (the use may hold colons), several as a list or one string joined by commas or new lines; an entry already of the JSON form
+ * `keep` (amendment A-7 1): "品目:数:用途" (the use may hold colons), several as a list or one string joined by
+ * commas or new lines; an entry already of the JSON form
  * {item, count, use} is kept as it is (`keepProblem` then checks it). One that does not read is an error naming the form.
  */
 function keepOf(raw: unknown, errors: string[]): ActKeep[] | undefined {
@@ -278,11 +321,14 @@ function keepOf(raw: unknown, errors: string[]): ActKeep[] | undefined {
   }
   const out: ActKeep[] = [];
   for (const entry of list) {
-    if (entry && typeof entry === 'object' && !Array.isArray(entry)) { out.push(entry as ActKeep); continue; }
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) { out.push(entry as ActKeep);
+      continue; }
     const text = typeof entry === 'string' ? unquoted(entry) : '';
-    if (!text) { if (typeof entry !== 'string') errors.push(`keep の書き方の誤り: 品目:数:用途 の並び。${KEEP_FORM}`); continue; }
+    if (!text) { if (typeof entry !== 'string') errors.push(`keep の書き方の誤り: 品目:数:用途 の並び。${KEEP_FORM}`);
+      continue; }
     const read = /^([^:\s]+)\s*:\s*(\d+)\s*:\s*(\S[\s\S]*)$/u.exec(text);
-    if (!read) { errors.push(`keep の書き方の誤り: 「${text.slice(0, 50)}」は 品目:数:用途 の形ではない。${KEEP_FORM}`); continue; }
+    if (!read) { errors.push(`keep の書き方の誤り: 「${text.slice(0, 50)}」は 品目:数:用途 の形ではない。${KEEP_FORM}`);
+      continue; }
     out.push({ item: read[1]!, count: Number(read[2]), use: read[3]!.trim() });
   }
   return out;
@@ -313,7 +359,8 @@ function json(input: unknown): { input: unknown; errors: string[] } {
   const errors: string[] = [], queued = queueFieldsOf(input, errors);
   // A-11 3: a hand that names its slot with a variation of a hand word (json hands).
   const given = (input as { hands?: unknown }).hands;
-  const slotted = Array.isArray(given) ? given.map(item => item && typeof item === 'object' && !Array.isArray(item) ? withSlotWord(item as ActHand) : item) : given;
+  const slotted = Array.isArray(given) ? given.map(item => item && typeof item === 'object' && !Array.isArray(item) ? withSlotWord(
+    item as ActHand) : item) : given;
   const fixedSlots = Array.isArray(given) && slotted !== given && (slotted as unknown[]).some((item, index) => item !== given[index]);
   if (!Object.keys(queued).length && !errors.length && !fixedSlots) return { input, errors };
   const next = { ...(input as Record<string, unknown>), ...(fixedSlots ? { hands: slotted } : {}), ...queued };
@@ -326,6 +373,27 @@ export function shortHandProblem(input: unknown): string | null {
   if (typeof text !== 'string') return null;
   if (/^(?:pre|done|repeat|dependsOn|uses|keep) の書き方の誤り/u.test(text)) return text;
   // Amendment A-7 3: a stopIf that does not read is shown the form (no quotes round it, space between the parts).
-  return text.includes('stopIf が読めない') ? `${text}。stopIf の書き方: stopIf=hostileWithin=8 hpBelow=10（引用符で包まない。hostileWithin・hpBelow・hungerBelow は数、blockChanged=X,Y,Z/X,Y,Z）`
+  return text.includes(
+    'stopIf が読めない') ? `${text}。stopIf の書き方: stopIf=hostileWithin=8 hpBelow=10（引用符で包まない。hostileWithin・hpBelow・hungerBelow は数、blockChanged=X,Y,Z/X,Y,Z）`
     : `手の書き方が読めない: ${text}`;
+}
+
+function readQueueConditions(value: Record<string, unknown>, out: Record<string, unknown>, errors: string[]): void {
+  for (const key of ['pre', 'done'] as const) {
+    const field = value[key];
+    if (field === undefined) continue;
+    if (typeof field !== 'string') {
+      out[key] = field;
+      continue;
+    }
+    const parsed = parseCondition(field, key);
+    if (parsed.ok) out[key] = parsed.condition; else errors.push(parsed.problem);
+  }
+}
+
+function readQueueRepeat(value: Record<string, unknown>, out: Record<string, unknown>, errors: string[]): void {
+  if (value.repeat !== undefined) {
+    if (Number.isInteger(value.repeat) && Number(value.repeat) >= 2 && Number(value.repeat) <= 8) out.repeat = value.repeat;
+    else errors.push('repeat の書き方の誤り: 2〜8 の整数で書く');
+  }
 }

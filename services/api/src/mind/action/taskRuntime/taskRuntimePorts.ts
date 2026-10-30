@@ -35,7 +35,8 @@ export type TaskSource = (Omit<TaskConversationSource, 'experienceId'> & {
   kind?: 'conversation'; stepId: string; experienceId: string | null;
   /** The turn of this source is still in progress (not bound, not failed) and the task is conversation work, which runs on it. */
   pending?: true;
-}) | { kind: 'memory'; stepId: string; experienceId: null; threadId: null; observedAt: string; recalledMemoryIds: readonly string[]; readSourceIds?: readonly string[] };
+}) | { kind: 'memory'; stepId: string; experienceId: null; threadId: null; observedAt: string; recalledMemoryIds: readonly string[];
+   readSourceIds?: readonly string[] };
 export interface TaskSourceObservation { observationId: string; recalledMemoryIds: readonly string[]; readSourceIds?: readonly string[] }
 export interface TaskSnapshot {
   task: TaskView; messages: TaskMessage[]; sources: TaskSource[]; history: unknown[]; checkpoint: unknown | null; revision: number;
@@ -49,7 +50,8 @@ export interface TaskCommit {
   disposition: 'continue' | 'wait' | 'complete' | 'fail'; summary?: string;
   consumedMessageIds?: readonly string[];
   /**
-   * The task's plan tree changed in this step (`fcaPlanTools.ts`): its flat copy for the app's task list (`agent_tasks.plan_json`),
+   * The task's plan tree changed in this step (`fcaPlanTools.ts`): its flat copy for the app's task list
+ * (`agent_tasks.plan_json`),
    * written with the step, and an event `fca_plan_updated`. Absent: the plan is as it was.
    */
   plan?: readonly { id: string; title: string; status: 'pending' | 'running' | 'completed' }[];
@@ -66,7 +68,8 @@ export interface TaskAuthority {
   byRequest(scopeKey: string, requestKey: string): TaskRecord | null;
   create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string; capability?: string }): TaskRecord;
   event(scopeKey: string, id: string, type: string, at: string,
-    change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean; lateReport?: boolean; reopen?: boolean }, payload?: Record<string, unknown>): TaskRecord;
+    change?: { status?: TaskStatus; pauseReason?: string | null; summary?: string; proof?: boolean; lateReport?: boolean; reopen?:
+       boolean }, payload?: Record<string, unknown>): TaskRecord;
   /** Writes the state a task's checkpoint now means after a change without an event (ADR-0009 stage 1, S4). */
   refresh?(id: string, at: string): void;
 }
@@ -85,20 +88,25 @@ export interface TaskRuntimeOptions {
    */
   holdUnknown?(task: TaskRecord): boolean;
   /**
-   * Whether a task's summary is one a pause wrote ("paused, can be resumed"): `resume` clears it, and so does the first commit of a task
+   * Whether a task's summary is one a pause wrote ("paused, can be resumed"): `resume` clears it, and so does the
+ * first commit of a task
    * that is running again, so that a task that goes on does not keep saying it is paused. Absent: no summary is cleared.
    */
   pausedSummary?(summary: string): boolean;
   /**
-   * Whether a child's result is sent to its parent's inbox when it ends. Minecraft run 17 (2026-10-19): an operator's request ended,
-   * its result woke the root's common task, and that one decision read 117k tokens ($0.47) and blocked the event loop for 22.7 s to
+   * Whether a child's result is sent to its parent's inbox when it ends. Minecraft run 17 (2026-10-19): an
+ * operator's request ended,
+   * its result woke the root's common task, and that one decision read 117k tokens ($0.47) and blocked the event
+ * loop for 22.7 s to
    * answer nobody: the operator reads the result from the audit. Absent: every child reports, as before.
    */
   reportsToParent?(task: TaskRecord): boolean;
   /**
-   * `SHANNON_FCA_PROVENANCE_REFS` (owner decision 2026-10-15): a body task asked for with `{ sources: 'asking' }` inherits only the
+   * `SHANNON_FCA_PROVENANCE_REFS` (owner decision 2026-10-15): a body task asked for with `{ sources: 'asking' }`
+ * inherits only the
    * asking conversation's sources, and step records store their sources by reference (`infra/sqlite/fcaProvenanceSets.ts`).
-   * Absent or false: the parent's whole source set and a copy in each record, as before. Records by reference are read either way.
+   * Absent or false: the parent's whole source set and a copy in each record, as before. Records by reference are
+ * read either way.
    */
   provenanceRefs?: boolean;
 }
@@ -115,14 +123,18 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
   progress?(scopeKey: string, taskId: string): TaskProgress | null;
   recordProgress?(step: TaskStep, event: TaskProgressEvent): boolean;
   /**
-   * The owner-visible report that the runtime paused a task by itself (resumable, not failed), written once per `key` (a step or a
-   * pause): false when there is no such task or this report is already there. It needs no step, so it also serves a pause made while
-   * the task is stopping or has no step. Resuming the task takes the report away again and puts back the one it replaced. `spoken` is
+   * The owner-visible report that the runtime paused a task by itself (resumable, not failed), written once per
+ * `key` (a step or a
+   * pause): false when there is no such task or this report is already there. It needs no step, so it also serves
+ * a pause made while
+   * the task is stopping or has no step. Resuming the task takes the report away again and puts back the one it
+ * replaced. `spoken` is
    * the fixed sentence a call says for it (no model words a pause).
    */
   recordPauseNotice?(scopeKey: string, taskId: string, key: string, text: string, spoken?: string): boolean;
   /** Writes the spoken form of the task's current report; false once that report was replaced or already has one. */
-  /** `heard`: the report was said in the voice turn that asked for it (`TaskProgressStore.hear`), so it is never said again (its card stays). */
+  /** `heard`: the report was said in the voice turn that asked for it (`TaskProgressStore.hear`), so it is never
+ * said again (its card stays). */
   recordSpokenReport?(scopeKey: string, taskId: string, reportId: string, spoken: string, heard?: true): boolean;
   observeExternal(scopeKey: string, targetTaskId: string, event: TaskExternalEvent): { accepted: true; duplicate: boolean; task: TaskView };
   admitSleep(scopeKey: string, jobId: string): TaskView | null;
@@ -170,13 +182,19 @@ export interface TaskRuntime extends TaskConversationDeliveryRuntime {
    */
   retireUnknown?(scopeKey: string, at: string): TaskView[];
   /**
-   * A task that `retireUnknown` failed (`fca_unknown_retired`, then failed with its unknown time kept) is paused again as stopped, resumable, when the one who holds it asks (A-17:
-   * the operator's resume of a hold that was open when the exit came). Null: it is not such a task (any other failed task stays failed).
+   * A task that `retireUnknown` failed (`fca_unknown_retired`, then failed with its unknown time kept) is paused
+ * again as stopped,
+   * resumable, when the one who holds it asks (A-17:
+   * the operator's resume of a hold that was open when the exit came). Null: it is not such a task (any other
+ * failed task stays failed).
    */
   reopenRetired?(scopeKey: string, taskId: string, summary: string): TaskView | null;
   /**
-   * A task a refused decision failed before anything ran (A-20: the step's newest commit is a `fail`, and the task's summary is `failedSummary`, the report such a failure writes) is
-   * paused again as stopped, resumable, when the one who owns it asks (the operator's resume, after the credit was filled). Null: it is not such a task.
+   * A task a refused decision failed before anything ran (A-20: the step's newest commit is a `fail`, and the task's summary is
+   * `failedSummary`, the report such a failure writes) is
+   * paused again as stopped, resumable, when the one who owns it asks (the operator's resume, after the credit was
+ * filled). Null: it
+   * is not such a task.
    */
   reopenRejected?(scopeKey: string, taskId: string, summary: string, failedSummary: string): TaskView | null;
   /**

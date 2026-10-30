@@ -79,7 +79,8 @@ export const JEV_QUESTION_SETS = Object.freeze({
   voiceRoute: 'voice_route.v1',
   /** The voice route that also asks about the weather (`routerSkills`, 2026-10-13 daily evals E2/E3). */
   voiceRouteWeather: 'voice_route.v2',
-  /** Syzygy ADR-0012: the voice route that also reads `shannon_inner` and chooses her performance from it (either set above, plus that). */
+  /** Syzygy ADR-0012: the voice route that also reads `shannon_inner` and chooses her performance from it (either
+ * set above, plus that). */
   voiceRouteInner: 'voice_route.v3',
   toolMenu: 'tool_menu.v2',
   fcaToolMenu: 'fca_tool_menu.v1',
@@ -93,26 +94,34 @@ export const JEV_QUESTION_SETS = Object.freeze({
   fcaBodyRecall: 'fca_body_recall.v1',
   /** Whether she would want to say something at a moment she perceived (owner decision 2026-10-14, `proactiveMoments.ts`). */
   proactiveMoment: 'proactive_moment.v2',
-  /** Syzygy ADR-0013 stage 1: her stance, its strength and her comeback drawer before a text reply (`mind/emotion/feelingTurn.ts`). */
+  /** Syzygy ADR-0013 stage 1: her stance, its strength and her comeback drawer before a text reply
+ * (`mind/emotion/feelingTurn.ts`). */
   /** v2 (owner 2026-10-19): the stance's instructions name her dere side and when it is due (`warm_due`, `this_turn.tender`). */
   feelingTurn: 'feeling_turn.v2',
   /** Owner 2026-10-20 (`SHANNON_CHARACTER_SPACE`): v2 with the region she is in and its lean (`CharacterRegion.lean`). */
   feelingTurnStaged: 'feeling_turn.v3',
-  /** Owner 2026-10-20 (`SHANNON_NATURAL_TALK`, the owner alone): v3 with play joined, the playful stances and no run of one stance. */
+  /** Owner 2026-10-20 (`SHANNON_NATURAL_TALK`, the owner alone): v3 with play joined, the playful stances and no
+ * run of one stance. */
   feelingTurnNatural: 'feeling_turn.v4',
-  /** The voice route that also asks the feeling turn's questions (either route set above, plus those); v6 with the stance's v2 wording. */
+  /** The voice route that also asks the feeling turn's questions (either route set above, plus those); v6 with the
+ * stance's v2 wording. */
   voiceRouteFeeling: 'voice_route.v6',
-  /** Syzygy ADR-0013 stage 2 (`SHANNON_CORE_AFFECT`): the meaning questions of her appraisal on the feeling turn's call (text and voice). */
+  /** Syzygy ADR-0013 stage 2 (`SHANNON_CORE_AFFECT`): the meaning questions of her appraisal on the feeling turn's
+ * call (text and voice). */
   feelingMeaning: 'feeling_meaning.v1',
   /** v7: v5 with the stance's v2 wording. */
   voiceRouteFeelingMeaning: 'voice_route.v7',
-  /** Owner 2026-10-19: whether his words apologise or make amends, by meaning, asked while she holds something against him (text and voice). */
+  /** Owner 2026-10-19: whether his words apologise or make amends, by meaning, asked while she holds something
+ * against him (text and voice). */
   feelingAmends: 'feeling_amends.v1',
-  /** Session mb-arch (`SHANNON_MINECRAFT_AGENDA`): whether a Minecraft body takes a thing in reach now, between the calls asked of it. */
+  /** Session mb-arch (`SHANNON_MINECRAFT_AGENDA`): whether a Minecraft body takes a thing in reach now, between the
+ * calls asked of it. */
   minecraftOpportunity: 'mc_opportunity.v1',
-  /** Owner 2026-10-21 (`SHANNON_ADDRESSED`): whether words in a voice conversation were said to her (`mind/perception/addressed.ts`). */
+  /** Owner 2026-10-21 (`SHANNON_ADDRESSED`): whether words in a voice conversation were said to her
+ * (`mind/perception/addressed.ts`). */
   addressed: 'addressed.v3',
-  /** Owner 2026-10-28: which kept picture of the mini Shannon fits a reply, and whether the reply shows a gesture none has (`surfaces/mini/miniPoseChooser.ts`). */
+  /** Owner 2026-10-28: which kept picture of the mini Shannon fits a reply, and whether the reply shows a gesture none has
+ * (`surfaces/mini/miniPoseChooser.ts`). */
   miniPose: 'mini_pose.v2',
   /** Owner 2026-10-29: whether a YouTube Live comment may be answered aloud on the public stream (`conversationRoute.ts`). */
   streamGate: 'stream_gate.v1',
@@ -212,7 +221,8 @@ export function rawTraceAnswers(answers: Readonly<Record<string, unknown>>, ques
   return raw;
 }
 
-/** The answers as Jev sent them, rebuilt from a trace's raw answers: `parse(replayedAnswers(trace.answers))` replays a decision. */
+/** The answers as Jev sent them, rebuilt from a trace's raw answers: `parse(replayedAnswers(trace.answers))`
+ * replays a decision. */
 export function replayedAnswers(trace: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const answers: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(trace)) {

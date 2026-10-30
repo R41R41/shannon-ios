@@ -1,130 +1,57 @@
-import {
-  bedSearchMemory, createRoutePlanning, followedGists, gistFollowLine, milestoneFollowMemory, minecraftSituation, minecraftSkillContext, routeWatcher,
-  type SkillGistsPort,
-} from './minecraftSkillPointers.js';
+import { createMinecraftCheckpoint } from './minecraftTaskCheckpoint.js';
+import { hash,toolOk,EMPTY,DEFAULT_LIMITS,REFLEX_DANGER_FRAMES,concreteDanger } from './minecraftReflexAdapterParts.js';
+import type { MinecraftTaskBodyParts } from './minecraftReflexAdapterParts.js';
+export { REFLEX_DANGER_FRAMES, concreteDanger } from './minecraftReflexAdapterParts.js';
+export type { MinecraftTaskBodyParts } from './minecraftReflexAdapterParts.js';
+
+import { followedGists,gistFollowLine,minecraftSituation,minecraftSkillContext,routeWatcher } from './minecraftSkillPointers.js';
 import { adoptionTags } from './minecraftStage.js';
-import { createHash } from 'node:crypto';
 import { actionResource } from '../../contracts/actionThreadContract.js';
-import { currentActionExecution, type ActionExecution } from '../../infra/context/actionExecution.js';
-import type { TaskRuntime, TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js';
-import type { FcaBodyLifecycle, FcaExternalTools, FcaToolCall } from '../../mind/action/fca/fcaPorts.js';
-import type { FcaEvidence } from '../../mind/action/fca/fcaEvidencePorts.js';
+import { currentActionExecution,type ActionExecution } from '../../infra/context/actionExecution.js';
+import type { FcaBodyLifecycle,FcaExternalTools,FcaToolCall } from '../../mind/action/fca/fcaPorts.js';
 import { authorizeToolCall } from '../../mind/inhibition/toolGatePorts.js';
-import { toolFailure, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
+import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import {
-  createReflexController, evaluateReflexEntry, reflexSnapshot, ReflexHandoffNotSent, returnReflexControl, type BodyStopAcknowledgement,
-  type BodyStopRequest, type BodyTaskContext, type ReflexEntrySelector, type ReflexEvent, type ReflexLimits,
-  type ReflexPorts, type ReflexSelector, type ReflexSessionReceipt, type ReflexSessionRequest,
+createReflexController,evaluateReflexEntry,reflexSnapshot,ReflexHandoffNotSent,returnReflexControl,type BodyStopAcknowledgement,
+type BodyStopRequest,type BodyTaskContext,type ReflexEvent,type ReflexPorts,type ReflexSessionReceipt,type ReflexSessionRequest
 } from '../../mind/action/reflex/reflexPorts.js';
-import { createReflexGovernor, reflexPlace, type ReflexEntryFacts, type ReflexGovernor } from '../../mind/action/reflex/reflexGovernor.js';
+import { createReflexGovernor,reflexPlace,type ReflexEntryFacts } from '../../mind/action/reflex/reflexGovernor.js';
 import { observerHandoff } from '../../infra/observer/observerContext.js';
 import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
-import { createBodyRevisions, createFightOwner, fightCall } from './minecraftFightOwner.js';
-import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
-import { MINECRAFT_SPAWN_GRACE_MILLISECONDS, type MinecraftControl } from './minecraftControl.js';
+import { createBodyRevisions,createFightOwner,fightCall } from './minecraftFightOwner.js';
+import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { MINECRAFT_SPAWN_GRACE_MILLISECONDS } from './minecraftControl.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
-import { madeInOf, withMadeIn } from './minecraftMadeIn.js';
+import { madeInOf,withMadeIn } from './minecraftMadeIn.js';
 import { stepMetrics } from './minecraftTaskMetrics.js';
-import { createPaceLedger } from './minecraftPaceLedger.js';
 import { withFailureReview } from './minecraftFailureReview.js';
 import { bedDeferredNow } from './minecraftProcedureTool.js';
 import { minecraftTransientBody } from './minecraftTransientBody.js';
 import { storedBodyResult } from './minecraftStoredResult.js';
 import { minecraftRecallCues } from './minecraftRecallCues.js';
 import { llmcBodyContext } from './minecraftLlmcContext.js';
-import { minecraftMilestones, minecraftPace, waitTimeMilliseconds, withNetherCare } from './minecraftPace.js';
+import { minecraftMilestones,minecraftPace,waitTimeMilliseconds,withNetherCare } from './minecraftPace.js';
 export { minecraftMilestones, minecraftPace, waitTimeMilliseconds, type PaceMilestones } from './minecraftPace.js';
 
-const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-const toolOk = (text: string): ToolResult => ({ ok: true, text, retryable: false });
-const EMPTY = { type: 'object' as const, properties: {}, required: [], additionalProperties: false as const };
-const DEFAULT_LIMITS: ReflexLimits = { maxDurationMs: 20_000, maxDecisions: 6, maxActions: 4, maxActionMs: 5_000, maxStateAgeMs: 3_000, maxImageAgeMs: 3_000 };
-/** Frames in a row that must show concrete danger before a reflex starts on its own ahead of the task's first decision. */
-export const REFLEX_DANGER_FRAMES = 2;
-
-/**
- * The concrete evidence behind a body's `danger` fact (Minebot: health at most 8, oxygen at most 6, or a hostile within 5 blocks
- * that can reach it), read from the frame's world state; null when the frame shows none of it. Minecraft run 6 (2026-10-14): the
- * flag was true at spawn into a fresh world, before health had arrived (an unknown health reads as 0 there), and a reflex started
- * ahead of the task's first decision.
- */
-export function concreteDanger(observation: BodyObservation): { kind: 'health' | 'oxygen' | 'threat'; value: number } | null {
-  const world = observation.state.world as { health?: unknown; oxygen?: unknown; nearbyThreats?: unknown } | undefined;
-  if (observation.facts.alive !== true || !world || typeof world !== 'object') return null;
-  const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-  if (finite(world.health) && world.health > 0 && world.health <= 8) return { kind: 'health', value: world.health };
-  if (finite(world.oxygen) && world.oxygen >= 0 && world.oxygen <= 6) return { kind: 'oxygen', value: world.oxygen };
-  const threats = Array.isArray(world.nearbyThreats) ? world.nearbyThreats as Array<{ distance?: unknown; canReachMe?: unknown }> : [];
-  const near = threats.filter(threat => finite(threat?.distance) && threat.distance <= 5 && threat.canReachMe !== false)
-    .map(threat => threat.distance as number);
-  return near.length ? { kind: 'threat', value: Math.min(...near) } : null;
-}
-
 /** One task's adapter/monitor. No extra planner, executor lease, memory writer or emotional state. */
-export function createMinecraftTaskBody(parts: {
-  control: MinecraftControl; runtime: TaskRuntime; step: TaskStep; entry: ReflexEntrySelector | null; selector: ReflexSelector | null;
-  ownerAlone(): boolean; sourcesVisible(): boolean; now?: () => number; pollMilliseconds?: number;
-  gameplayAllowed?(): boolean;
-  limits?: Partial<ReflexLimits>; evidence?: FcaEvidence;
-  /** How long after a body's login, reconnection or respawn no reflex starts on its own (`MinecraftControl.settling`). */
-  spawnGraceMilliseconds?: number;
-  /** The skills she can open with `skill.read` now (`minecraftSkillPointers`); none when absent. */
-  skillNames?(): ReadonlySet<string>;
-  /** With `SHANNON_FCA_SKILL_GIST`: the gists of pointed skills (`fcaSkillGists.ts`); pointers alone when absent. */
-  skillGists?: SkillGistsPort;
-  /** A pointed skill whose shown gist this decision followed (a body tool it names, not read-only): a use of kind `gist`. */
-  gistFollowed?(name: string): void;
-  /** The task's automatic reflex entries across its steps (`reflexGovernor.ts`); one for this step alone when absent. */
-  governor?: ReflexGovernor;
-  /** Syzygy ADR-0011 stage 2 (`SHANNON_MINECRAFT_FAST_JUDGMENT`): danger is judged without an image (`minecraftFastJudgment.ts`). */
-  fastJudgment?: boolean;
-  /** The strong model's route plan (`minecraftRouteWiring.ts`, `SHANNON_MINECRAFT_ROUTE_PLAN`): the answer's JSON, or a throw; none when absent. */
-  routePlanner?(system: string, input: string, signal: AbortSignal): Promise<unknown>;
-  log?(line: string): void;
-  /** Where the content-free measurement lines (`minecraftTaskMetrics`: milestones, stage, adoption, gaps) go; the journal when absent. */
-  metricsLog?(line: string): void;
-  /**
-   * the LLM-centric mode (design mb-llm-centric): a reflex session's context carries the plan. The live state and the recall's
-   * events are the wrapper's (`withLlmcBody`, `minecraftLlmcBody.ts`). Absent: as before.
-   */
-  llmc?: { plan(): BodyPlanView | undefined };
-  /** The task queue's open items (the command ids the step itself still waits for): not an unsettled operation for the guard (`MinecraftControlStore.safe`). */
-  openIds?(): ReadonlySet<string>;
-}): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
+export function createMinecraftTaskBody(parts: MinecraftTaskBodyParts): { body: FcaBodyLifecycle; tools: FcaExternalTools; safeToAcknowledgeStop(): boolean } {
   const { control, runtime, step } = parts, now = parts.now ?? Date.now, limits = { ...DEFAULT_LIMITS, ...parts.limits };
   const governor = parts.governor ?? createReflexGovernor(), monitorAbort = new AbortController(), toolAborts = new Set<AbortController>(),
     claims = new Set<string>();
   const releasedSessions = new Set<string>(), captures = new Map<string, number>(), modes = new Map<string, 'explicit' | 'danger' | 'stuck' | 'visual'>();
   const cleanupListeners = new Set<() => void>();
-  const prior = step.snapshot.checkpoint as { fcaToolSelection?: { recentResults?: Array<{ name: string; ok: boolean; summary: string }> } } | null;
-  let recentResults = (prior?.fcaToolSelection?.recentResults ?? []).slice(-6).map(value => ({ name: value.name.slice(0, 160), ok: value.ok, summary: value.summary.slice(0, 1000) }));
-  // The latest milestones, kept in the task's checkpoint across steps (`minecraftMilestones` key, through this port's `checkpoint`).
-  const kept = (step.snapshot.checkpoint as { minecraftMilestones?: unknown } | null)?.minecraftMilestones;
-  let milestones = minecraftMilestones({ milestones: kept });
-  // Her idle waits in this task, kept in the checkpoint as the milestones are (`minecraftIdleWaitMs`).
-  const keptWait = Number((step.snapshot.checkpoint as { minecraftIdleWaitMs?: unknown } | null)?.minecraftIdleWaitMs ?? 0);
-  let idleWaitMs = Number.isSafeInteger(keptWait) && keptWait > 0 ? keptWait : 0, pendingWaitMs = 0;
-  // Her sheep search that found none, kept in the checkpoint for the rest of that day (`minecraftNoSheepDarkIn`, `bedSearchMemory`).
-  const marks = step.snapshot.checkpoint as { minecraftNoSheepDarkIn?: unknown; minecraftVillageSearched?: unknown; minecraftRoute?: unknown;
-    minecraftRouteAsks?: unknown } | null,
-    bedSearch = bedSearchMemory(marks?.minecraftNoSheepDarkIn, marks?.minecraftVillageSearched),
-    // Daytime decisions in a row that went elsewhere than the step now (`minecraftMilestoneFollow.ts`), kept as the marks are.
-    follow = milestoneFollowMemory((step.snapshot.checkpoint as { minecraftMilestoneDrift?: unknown } | null)?.minecraftMilestoneDrift,
-    decisions => log(`Shannon Minecraft milestone steps task=${step.taskId} decisions=${decisions}`)),
-    // Her route to the Nether, planned by a strong model at the task's start and when a step is late (`minecraftRoutePlanner.ts`).
-    routePlan = createRoutePlanning({ kept: marks?.minecraftRoute, keptAsks: marks?.minecraftRouteAsks, planner: parts.routePlanner,
-      log: line => log(line), taskId: step.taskId });
-  // A transient decision's pace beyond `minecraftPace` (`minecraftPaceLedger.ts`), kept in the checkpoint as the above are, and its body state.
-  const paceLedger = createPaceLedger({ kept: (step.snapshot.checkpoint as { minecraftPaceLedger?: unknown } | null)?.minecraftPaceLedger,
-    began: Date.parse(step.snapshot.task.createdAt), now });
-  /** What the last context() read, for the decision that follows: its transient live state and its recall cues (built only if asked). */
+let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitMs, marks, bedSearch, follow, routePlan, paceLedger } = createMinecraftCheckpoint(parts, now, line => log(line));
+
+  /** What the last context() read, for the decision that follows: its transient live state and its recall cues
+ * (built only if asked). */
   let latest: { transient(): Record<string, unknown>; cues(): ReturnType<typeof minecraftRecallCues> } | null = null;
   let activeAction: NonNullable<BodyTaskContext['taskState']>['activeAction'];
   /** The frame the last decision's context read (continue contract 5): her own `minecraft.reflex` call is made on it. */
   let decisionFrame: BodyObservation | null = null;
   let started = false, closed = false, unknown = false, attempts = 0, lastEntryAt = -Infinity, stopped = false;
   // mb-r21 (run 21): the body's revision moves for every touch of the body, her tool being cut off ("hard") or only a reflex acting
-  // beside it ("soft"); a fight she chose goes on past soft touches (`guardFor`) and the fast judgment leaves it to her (`fightOwned`).
+  // beside it ("soft"); a fight she chose goes on past soft touches (`guardFor`) and the fast judgment leaves it
+// to her (`fightOwned`).
   const revisions = createBodyRevisions(), fightOwner = createFightOwner(now), fightOwned = () => fightOwner.owned();
   let execution: ActionExecution | undefined, timer: ReturnType<typeof setInterval> | undefined;
   let monitoring: Promise<void> | null = null, active: Promise<ReflexSessionReceipt | null> | null = null, fault: unknown;
@@ -141,8 +68,10 @@ export function createMinecraftTaskBody(parts: {
   // mb-r25: every frame also tells the route whether its step is late now (`minecraftRouteWatch.ts`), not only the decisions.
   const metrics = stepMetrics(step, now, parts.metricsLog, routeWatcher({ plan: routePlan, createdAt: step.snapshot.task.createdAt, now }));
   const measured = (work: () => void) => { try { work(); } catch { /* measuring never fails a step */ } };
-  // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal too: the Minebot lane
-  // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written (main, unchanged).
+  // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal
+// too: the Minebot lane
+  // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written
+// (main, unchanged).
   const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
     if (held !== reason) {
       observerHandoff('bodyObserve', 'reflex', { phase: 'entry_held', reason, ...detail });
@@ -150,16 +79,19 @@ export function createMinecraftTaskBody(parts: {
     }
     held = reason;
   };
-  const leaseMatches = () => !!execution && execution.lease.id === step.lease.id && execution.lease.holder === step.lease.holder && execution.lease.generation === step.lease.generation;
+  const leaseMatches = () => !!execution && execution.lease.id === step.lease.id && execution.lease.holder === step.lease.holder &&
+     execution.lease.generation === step.lease.generation;
   const live = () => leaseMatches() && (parts.ownerAlone() || parts.gameplayAllowed?.() === true) && parts.sourcesVisible() && !monitorAbort.signal.aborted
     && runtime.get(step.scopeKey, step.taskId)?.phase === 'executing';
   const bound = () => control.store.body(step.taskId), availableBody = () => bound() ?? (control.available().length === 1 ? control.available()[0]! : null);
-  const context = (bodyId: string, sessionId: string, read?: BodyObservation | null): BodyTaskContext => withMadeIn({ scopeKey: step.scopeKey, taskId: step.taskId,
+  const context = (bodyId: string, sessionId: string, read?: BodyObservation | null): BodyTaskContext => withMadeIn({ scopeKey:
+     step.scopeKey, taskId: step.taskId,
     taskRevision: step.revision, bodyId, sessionId, generation: step.lease.generation,
     goal: step.snapshot.task.goal, completionCondition: step.snapshot.task.completionCriteria,
     taskState: { phase: runtime.get(step.scopeKey, step.taskId)?.phase ?? 'unknown', progress: step.snapshot.task.summary.slice(0, 2000),
       ...(activeAction ? { activeAction } : {}), recentResults }, ...(parts.llmc ? { plan: parts.llmc.plan() } : {}) },
-    // Continue contract 5: the life the session is made for is that of the frame it read (the one that started it, or the decision's for her own call), not the newest at sending.
+    // Continue contract 5: the life the session is made for is that of the frame it read (the one that started it,
+// or the decision's for her own call), not the newest at sending.
     madeInOf(read === undefined ? control.observe(bodyId) : read, control.headBoot()));
   const permit = async (signal?: AbortSignal) => !signal?.aborted && live()
     && Boolean(await execution!.permit([actionResource(control.configuration.deviceId, 'minecraft-body')], signal)) && !signal?.aborted && live();
@@ -171,7 +103,9 @@ export function createMinecraftTaskBody(parts: {
       const receipt = await control.command({ id, context: request.context, lease: step.lease, kind, stop: request, milliseconds: 5_000 }, signal);
       if (kind === 'release' && receipt.stop?.state === 'stopped' && receipt.stop.inputsReleased) releasedSessions.add(request.context.sessionId);
       return receipt.stop ?? ackUnknown(request);
-    } catch { if (kind === 'stop' && !control.store.command(id)) throw new ReflexHandoffNotSent(); unknown = true; return ackUnknown(request); }
+    } catch { if (kind === 'stop' && !control.store.command(id)) throw new ReflexHandoffNotSent();
+      unknown = true;
+      return ackUnknown(request); }
   };
   const actionCall = (operationId: string, operation: string, arguments_: unknown): FcaToolCall => {
     const eventId = operationId.replace(/:operation:(\d+)$/, ':action:$1');
@@ -186,9 +120,12 @@ export function createMinecraftTaskBody(parts: {
   };
   const ports: ReflexPorts = {
     now, current: ctx => live() && ctx.taskId === step.taskId && ctx.taskRevision === step.revision && ctx.generation === step.lease.generation,
-    selector: { async choose(input, signal) { if (!parts.selector || !await permit(signal)) return null; signal.throwIfAborted(); return parts.selector.choose(input, signal); } }, event,
+    selector: { async choose(input, signal) { if (!parts.selector || !await permit(signal)) return null;
+      signal.throwIfAborted();
+       return parts.selector.choose(input, signal); } }, event,
     handoff: {
-      async inspect(ctx) { const old = control.store.session(ctx.sessionId); return old ? old.receipt ? 'duplicate' : 'unknown' : 'new'; },
+      async inspect(ctx) { const old = control.store.session(ctx.sessionId);
+        return old ? old.receipt ? 'duplicate' : 'unknown' : 'new'; },
       prepare: (_ctx, signal) => permit(signal),
       async stopNormal(request, signal) {
         if (!await permit(signal)) throw new ReflexHandoffNotSent();
@@ -199,7 +136,8 @@ export function createMinecraftTaskBody(parts: {
       async acquire(ctx, _ack, signal) { return claims.has(ctx.sessionId) && await permit(signal) ? step.lease : null; },
       async returnStopped(request, receipt) {
         const release = await physicalStop(request, 'release');
-        return returnReflexControl(ports, step.lease, { ...receipt, latestObservation: control.observe(request.context.bodyId) }, Promise.resolve(release), request);
+        return returnReflexControl(ports, step.lease, { ...receipt, latestObservation: control.observe(request.context.bodyId) },
+           Promise.resolve(release), request);
       },
       valid: async (ctx, _lease, signal) => claims.has(ctx.sessionId) && await permit(signal),
       async finish(_lease, receipt) {
@@ -212,19 +150,23 @@ export function createMinecraftTaskBody(parts: {
       async observe(ctx, signal) {
         if (releasedSessions.has(ctx.sessionId)) return control.observe(ctx.bodyId);
         if (!await permit(signal)) return control.observe(ctx.bodyId);
-        const count = (captures.get(ctx.sessionId) ?? 0) + 1; captures.set(ctx.sessionId, count);
-        await control.command({ id: `capture:${hash(`${ctx.sessionId}:${count}`)}`, context: ctx, lease: step.lease, kind: 'capture', milliseconds: 3_000 }, signal);
+        const count = (captures.get(ctx.sessionId) ?? 0) + 1;
+          captures.set(ctx.sessionId, count);
+        await control.command({ id: `capture:${hash(`${ctx.sessionId}:${count}`)}`, context: ctx, lease: step.lease, kind: 'capture',
+           milliseconds: 3_000 }, signal);
         return control.observe(ctx.bodyId);
       },
       candidates: (_ctx, observation) => control.frame(observation.bodyId)?.poll.candidates ?? [],
       validate: (ctx, candidate, observation) => live() && observation.bodyId === ctx.bodyId && (control.frame(ctx.bodyId)?.poll.candidates ?? []).some(draft =>
-        draft.kind === candidate.kind && draft.operation === candidate.operation && JSON.stringify(reflexSnapshot(draft.arguments)) === JSON.stringify(candidate.arguments)
+        draft.kind === candidate.kind && draft.operation === candidate.operation && JSON.stringify(reflexSnapshot(
+          draft.arguments)) === JSON.stringify(candidate.arguments)
         && draft.preconditions.every(condition => observation.facts[condition.key] === condition.value)),
       async execute(operation, lease, signal) {
         if (!await permit(signal)) throw new Error('FCA_BODY_LEASE_INVALID');
         signal.throwIfAborted();
         const call = actionCall(operation.operationId, operation.candidate.operation!, operation.candidate.arguments);
-        if (parts.evidence && !parts.evidence.beforeActions(step, { decision: { kind: 'tools', calls: [call] }, history: [] })) throw new Error('FCA_EVIDENCE_FENCED');
+        if (parts.evidence && !parts.evidence.beforeActions(step, { decision: { kind: 'tools', calls: [call] }, history:
+           [] })) throw new Error('FCA_EVIDENCE_FENCED');
         execution!.stepOutcome = 'unknown';
         try {
           const receipt = await control.command({ id: `reflex:${hash(operation.operationId)}`, context: operation.context, lease, kind: 'reflex', operation,
@@ -232,31 +174,38 @@ export function createMinecraftTaskBody(parts: {
           const action = receipt.action;
           if (!action) throw new Error('FCA_BODY_ACTION_ACK_REQUIRED');
           execution!.stepOutcome = 'acknowledged';
-          const text = JSON.stringify({ outcome: action.outcome, evidenceId: action.evidenceId, inputsReleased: action.inputsReleased, operationId: action.operationId });
+          const text = JSON.stringify({ outcome: action.outcome, evidenceId: action.evidenceId, inputsReleased: action.inputsReleased,
+             operationId: action.operationId });
           parts.evidence?.observed(step, call, action.outcome === 'completed' ? toolOk(text) : toolFailure('failed', text, { retryable: false }));
           return action;
-        } catch (error) { unknown = true; parts.evidence?.unknown(step, call); throw error; }
+        } catch (error) { unknown = true;
+          parts.evidence?.unknown(step, call);
+          throw error; }
       },
       releaseInputs: request => physicalStop(request, 'release'),
       termination: (ctx, observation, recent) => {
         if (observation.facts.targetLost === true) return { reason: 'target_lost', evidenceIds: [] };
         if (observation.facts.progressStopped === true) return { reason: 'no_progress', evidenceIds: [] };
-        if (modes.get(ctx.sessionId) === 'danger' && observation.facts.danger === false && recent.length) return { reason: 'hazard_cleared', evidenceIds: [recent.at(-1)!.evidenceId] };
+        if (modes.get(ctx.sessionId) === 'danger' && observation.facts.danger === false && recent.length) return { reason: 'hazard_cleared',
+           evidenceIds: [recent.at(-1)!.evidenceId] };
         return null;
       },
     },
   };
   const controller = createReflexController(ports);
   /**
-   * RUNNER SEMANTICS (Minecraft run 10, 2026-10-14): a session makes the step's decision stale (`revision`, read by `guard`) only when
+   * RUNNER SEMANTICS (Minecraft run 10, 2026-10-14): a session makes the step's decision stale (`revision`, read
+ * by `guard`) only when
    * it interrupted a body tool in flight (or is her own `minecraft.reflex` call), or when it touched the body: it sent a body
-   * action, its control is held, or it failed. One that only observed and returned leaves the decision made meanwhile valid; in run
+   * action, its control is held, or it failed. One that only observed and returned leaves the decision made
+ * meanwhile valid; in run
    * 10 such sessions discarded the FCA's last 20 decisions (every tool result 「身体の状態が変わりました」).
    */
   const startSession = (request: ReflexSessionRequest, mode: 'explicit' | 'danger' | 'stuck' | 'visual', signal: AbortSignal, entry?: ReflexEntryFacts) => {
     const interrupting = mode === 'explicit' || activeAction !== undefined;
     if (interrupting) revisions.hard();
-    modes.set(request.context.sessionId, mode); toolAborts.forEach(abort => abort.abort());
+    modes.set(request.context.sessionId, mode);
+      toolAborts.forEach(abort => abort.abort());
     const job = controller.run(request, signal);
     if (entry) governor.began(step.taskId, now(), entry);
     // Effective: a body action completed in it. A session that only observed and returned is followed by its mode's cooldown.
@@ -269,7 +218,8 @@ export function createMinecraftTaskBody(parts: {
       ended(!!receipt?.actions.some(action => action.outcome === 'completed'));
       return receipt;
     }, error => {
-      fault = error; unknown = true;
+      fault = error;
+        unknown = true;
       touched();
       ended(false);
       return null;
@@ -284,7 +234,8 @@ export function createMinecraftTaskBody(parts: {
     send: (text, id) => runtime.send(step.scopeKey, step.taskId, step.taskId, text, id), hold, log }) : null;
   const startFast = (job: Promise<void>) => {
     const settled = job.then(() => null, error => {
-      fault = error; unknown = true;
+      fault = error;
+        unknown = true;
       return null;
     });
     active = settled;
@@ -302,7 +253,8 @@ export function createMinecraftTaskBody(parts: {
       const job = fast.consider(bodyId, observation, live, monitorAbort.signal);
       if (job) return startFast(job);
     }
-    // The LLM-centric mode has no reflex session of the head (design mb-llm-centric 2.4, contract 6: the body's own reflexes stay, the
+    // The LLM-centric mode has no reflex session of the head (design mb-llm-centric 2.4, contract 6: the body's own
+// reflexes stay, the
     // head's fast judgment and image reflex go). Run 27 (2026-10-22): with the fast judgment off, a `stuck` or `danger` frame still
     // entered this image reflex: a stop that cut her act, captures, gpt-6-luna-decisions three times with no answer, and a release.
     if (parts.llmc || !parts.entry || !parts.selector || attempts >= 4) return;
@@ -323,7 +275,8 @@ export function createMinecraftTaskBody(parts: {
       if (!evidence) return hold('danger_without_evidence', { sequence: observation.sequence });
       if (dangerFrames < REFLEX_DANGER_FRAMES) return hold('danger_not_persistent', { kind: evidence.kind, value: evidence.value, frames: dangerFrames });
     }
-    // A body skill in flight owns its own stalls (Minebot's pathfinding has its stuck count and timeout) and reports its result to the
+    // A body skill in flight owns its own stalls (Minebot's pathfinding has its stuck count and timeout) and reports
+// its result to the
     // task; only an immediate hazard preempts it. Minecraft operator run 5 (2026-10-14, task 68395576): `stuck` (controls held, no
     // movement for 1.5 s) 1.5 s into an mc.move-to entered a session that cancelled the skill ("Action interrupted"), then could not
     // get a picture and returned with no decision.
@@ -336,7 +289,10 @@ export function createMinecraftTaskBody(parts: {
     const admission = governor.admit(step.taskId, now(), entryFacts);
     if (!admission.admit) return hold(admission.reason, { mode, sequence: observation.sequence });
     if (!leaseMatches() || !await execution!.permit([], monitorAbort.signal) || !live()) return;
-    lastSignature = signature; lastEntryAt = now(); attempts += 1; held = '';
+    lastSignature = signature;
+      lastEntryAt = now();
+      attempts += 1;
+      held = '';
     // The fact that started it, for the Observer (Minecraft run 6: an entry at spawn left no trace of why).
     observerHandoff('bodyObserve', 'reflex', { phase: 'entry', trigger: 'observation', mode, sequence: observation.sequence, decided,
       ...(admission.escalated ? { escalated: true } : {}),
@@ -347,9 +303,11 @@ export function createMinecraftTaskBody(parts: {
       && !closed && live()) await startSession({ ...request, requiresImage: true }, mode, monitorAbort.signal, entryFacts);
   };
   const poll = () => {
-    if (!closed) measured(() => { const id = bound(), frame = id ? control.observe(id) : null; if (frame) metrics.sample(frame); });
+    if (!closed) measured(() => { const id = bound(), frame = id ? control.observe(id) : null;
+      if (frame) metrics.sample(frame); });
     if (monitoring || closed) return;
-    const job = tick(); monitoring = job;
+    const job = tick();
+      monitoring = job;
     void job.catch(error => { if (!monitorAbort.signal.aborted) fault = error; }).finally(() => { if (monitoring === job) monitoring = null; });
   };
   const safe = () => !unknown && control.store.safe(step.taskId, parts.openIds?.());
@@ -367,7 +325,8 @@ export function createMinecraftTaskBody(parts: {
       try { parts.gistFollowed!(gist); } catch { /* learning never fails a step */ }
     }
   };
-  // A call that matches what a pointed skill is about (a tool and an argument, `ADOPTIONS`): a closed tag, never her content. Measuring only.
+  // A call that matches what a pointed skill is about (a tool and an argument, `ADOPTIONS`): a closed tag, never
+// her content. Measuring only.
   const noteStageAdoption = (call: { name: string; input: unknown }) => {
     if (!pointedSkills.length) return;
     for (const { skill, tag } of adoptionTags(pointedSkills, call)) {
@@ -377,11 +336,21 @@ export function createMinecraftTaskBody(parts: {
   };
   const body: FcaBodyLifecycle = {
     start(signal) {
-      if (started) return; started = true; execution = currentActionExecution();
-      const cancel = () => { stopped = true; monitorAbort.abort(); toolAborts.forEach(abort => abort.abort()); const id = bound(); if (id) controller.cancel(step.scopeKey, id); control.cancelTask(step.taskId); };
-      signal.addEventListener('abort', cancel, { once: true }); if (signal.aborted) cancel();
+      if (started) return;
+        started = true;
+        execution = currentActionExecution();
+      const cancel = () => { stopped = true;
+        monitorAbort.abort();
+        toolAborts.forEach(abort => abort.abort());
+        const id = bound();
+        if (
+        id) controller.cancel(step.scopeKey, id); control.cancelTask(step.taskId); };
+      signal.addEventListener('abort', cancel, { once: true });
+        if (signal.aborted) cancel();
       cleanupListeners.add(() => signal.removeEventListener('abort', cancel));
-      timer = setInterval(poll, parts.pollMilliseconds ?? 250); timer.unref(); poll();
+      timer = setInterval(poll, parts.pollMilliseconds ?? 250);
+        timer.unref();
+        poll();
     },
     revision: () => revisions.revision,
     settling: () => !!availableBody() && control.settling(availableBody()!, spawnGrace),
@@ -394,7 +363,8 @@ export function createMinecraftTaskBody(parts: {
       }
       const observation = live() && bound() ? control.observe(bound()!) : null;
       decisionFrame = observation;
-      // From three failed steps in a row the decision looks back before it acts, and before the task may stop (`minecraftFailureReview.ts`).
+      // From three failed steps in a row the decision looks back before it acts, and before the task may stop
+// (`minecraftFailureReview.ts`).
       const pace = withFailureReview(minecraftPace(step, recentResults, now(), milestones, idleWaitMs), recentResults);
       const recentIdleWaits = recentResults.filter(result => result.name === 'mc.wait-time' && result.ok).length;
       // mb-r24: with the Nether's first seconds and the digs that keep failing there among the lines every decision carries.
@@ -416,8 +386,12 @@ export function createMinecraftTaskBody(parts: {
     transient: () => latest?.transient() ?? {},
     recallCues: () => latest?.cues() ?? { words: [], tags: [] },
     storedResult: (call, text) => storedBodyResult(call.name, text),
-    async guard(version) { if (active) await active; if (fault) throw fault; if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN'); return revisions.current(version); },
-    /** A fight she chose goes on when only reflexes touched the body since the decision (not when her own tool was cut off): the fight is hers. */
+    async guard(version) { if (active) await active;
+      if (fault) throw fault;
+      if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+       return revisions.current(version); },
+    /** A fight she chose goes on when only reflexes touched the body since the decision (not when her own tool was
+ * cut off): the fight is hers. */
     async guardFor(version, call) {
       if (active) await active;
       if (fault) throw fault;
@@ -433,9 +407,12 @@ export function createMinecraftTaskBody(parts: {
     },
     toolSignal(name, parent) {
       if (!name.startsWith('mc.')) return parent;
-      const id = availableBody(); if (id && live()) control.store.bind(step.taskId, id);
-      const abort = new AbortController(); toolAborts.add(abort);
-      const cancel = () => abort.abort(); parent.addEventListener('abort', cancel, { once: true });
+      const id = availableBody();
+        if (id && live()) control.store.bind(step.taskId, id);
+      const abort = new AbortController();
+        toolAborts.add(abort);
+      const cancel = () => abort.abort();
+        parent.addEventListener('abort', cancel, { once: true });
       cleanupListeners.add(() => parent.removeEventListener('abort', cancel));
       // A tool cut off by a session in progress leaves the decision stale even when the session itself touches nothing.
       if (active) revisions.hard();
@@ -476,8 +453,14 @@ export function createMinecraftTaskBody(parts: {
       // three of four requests aborted at the step's end, the first plan came at 34 s, the late one never).
       const route = routePlan.close(stopped).catch(() => {});
       measured(() => log(`Shannon Minecraft route close task=${step.taskId} stopped=${stopped} first=${!closed}`));
-      if (!closed) { closed = true; if (timer) clearInterval(timer); cleanupListeners.forEach(remove => remove()); cleanupListeners.clear(); monitorAbort.abort(); await controller.close(); }
-      if (monitoring) await monitoring.catch(() => {}); if (active) await active;
+      if (!closed) { closed = true;
+        if (timer) clearInterval(timer);
+        cleanupListeners.forEach(remove => remove());
+        cleanupListeners.clear();
+         monitorAbort.abort();
+           await controller.close(); }
+      if (monitoring) await monitoring.catch(() => {});
+        if (active) await active;
       await route;
       if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
     },
@@ -493,11 +476,15 @@ export function createMinecraftTaskBody(parts: {
       ...(() => { try { return metrics.checkpoint(); } catch { return {}; } })(),
       ...(() => { try { return paceLedger.checkpoint(); } catch { return {}; } })() }),
     async execute(call) {
-    const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text', audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
+    const denied = authorizeToolCall(call.name === definition.name ? definition : null, { scopeKey: call.scopeKey, surface: 'text',
+       audience: parts.ownerAlone() ? 'owner_alone' : 'others' });
     if (denied) return denied;
     if (!parts.selector || call.taskId !== step.taskId || call.scopeKey !== step.scopeKey || !live()) throw new Error('FCA_BODY_LEASE_INVALID');
-    if (!call.input || typeof call.input !== 'object' || Array.isArray(call.input) || Object.keys(call.input).length) return toolFailure('invalid_input', '引数は空のオブジェクトです。');
-    const bodyId = availableBody(); if (!bodyId || !control.frame(bodyId) || !control.store.bind(step.taskId, bodyId)) return toolFailure('unavailable', '操作できる体が接続されていません。');
+    if (!call.input || typeof call.input !== 'object' || Array.isArray(call.input) || Object.keys(call.input).length) return toolFailure(
+      'invalid_input', '引数は空のオブジェクトです。');
+    const bodyId = availableBody();
+      if (!bodyId || !control.frame(bodyId) || !control.store.bind(step.taskId, bodyId)) return toolFailure(
+      'unavailable', '操作できる体が接続されていません。');
     if (control.imagesUnavailable(bodyId)) return toolFailure('unavailable', '一人称画像が今は得られないため、短い視覚操作は使えません。minecraft.observe と mc.* の道具で進めます。');
     const ctx = context(bodyId, `${step.id}:reflex:${hash(call.operationId).slice(0, 16)}`, decisionFrame);
     if (active) await active;

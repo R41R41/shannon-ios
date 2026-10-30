@@ -28,7 +28,8 @@ export const OPERATOR_LIMITS = Object.freeze({
   defaultMinutes: 30,
   maxMinutes: 120,
   /**
-   * The cap of an admitted Minecraft request (`MINECRAFT_TASK_CAP.yen`, owner answer of 2026-10-13); a lower cap may be asked. A running
+   * The cap of an admitted Minecraft request (`MINECRAFT_TASK_CAP.yen`, owner answer of 2026-10-13); a lower cap
+ * may be asked. A running
    * request's cap may be changed (`budget`) anywhere up to this, never above it.
    */
   maxBudgetYen: 2000,
@@ -59,8 +60,10 @@ export type OperatorInput =
   /** keepWorld (--keep-world, start only): this start keeps the current world even while 「新しいワールドで始める」 is on. */
   | { command: 'lifecycle'; action: MinecraftLifecycleAction; serverId: string | null; keepWorld: boolean }
   /**
-   * holdOnFailure (2026-10-28, the fix run): on a heavy failure of the body (a go stuck or out of search time, an act that lost a minute, near death),
-   * the task is held instead of going on: no decision, the plan, the pack and the task kept, the world stopped (`/tick freeze`, never with anyone else
+   * holdOnFailure (2026-10-28, the fix run): on a heavy failure of the body (a go stuck or out of search time, an act that lost a
+   * minute, near death),
+   * the task is held instead of going on: no decision, the plan, the pack and the task kept, the world stopped (`/tick freeze`, never
+   * with anyone else
    * on), the box and the scene written. `resume` goes on from there.
    */
   | { command: 'request'; goal: string; maxMinutes: number; budgetYen: number; holdOnFailure?: boolean }
@@ -118,9 +121,11 @@ function lifecycle(operator: string, op: string, args: Record<string, unknown>):
 }
 
 /**
- * Why a request's text looks garbled, or null (Minecraft run 17, 2026-10-19: a request written as UTF-8 and read back as CP932 came
+ * Why a request's text looks garbled, or null (Minecraft run 17, 2026-10-19: a request written as UTF-8 and read
+ * back as CP932 came
  * in as `繧ｨ繝ｳ繝峨Λ繧定ｨ惹ｼ舌＠縺ｦ縺上□縺輔＞`, was accepted, and was closed after 8 decisions as done). Closed signs only:
- * the replacement character, a kanji followed at once by half-width katakana twice or more (UTF-8 bytes read as CP932: `繧ｨ`, `繝ｳ`),
+ * the replacement character, a kanji followed at once by half-width katakana twice or more (UTF-8 bytes read as
+ * CP932: `繧ｨ`, `繝ｳ`),
  * the lead kanji such text is made of, or UTF-8 read as Latin-1. Half-width katakana written beside hiragana or apart from kanji
  * (`ﾀﾞｲﾔを3個掘って`, `｢鉄｣を集めて`) is not refused.
  */
@@ -135,7 +140,7 @@ export function garbledRequest(text: string): string | null {
 
 function request(operator: string, args: Record<string, unknown>): OperatorParse {
   const goal = typeof args.goal === 'string' ? args.goal.trim() : '';
-  if (!goal || goal.length > OPERATOR_LIMITS.goalCharacters || /\p{Cc}/u.test(goal)) {
+  if (!validRequestGoal(goal)) {
     return refuse(operator, 'invalid_input', `the request must be 1..${OPERATOR_LIMITS.goalCharacters} characters without control characters`);
   }
   const garbled = garbledRequest(goal);
@@ -160,7 +165,8 @@ function cancel(operator: string, args: Record<string, unknown>): OperatorParse 
   return { ok: true, operator, input: { command: 'cancel', taskId: args.taskId } };
 }
 
-/** `budget`: a task id or `latest`, and a whole yen amount of 1..the request cap (anything else is refused, and audited as such). */
+/** `budget`: a task id or `latest`, and a whole yen amount of 1..the request cap (anything else is refused, and
+ * audited as such). */
 function budget(operator: string, args: Record<string, unknown>): OperatorParse {
   const taskId = args.latest === true && args.taskId === undefined ? null : args.taskId;
   if (taskId !== null && (typeof taskId !== 'string' || !TASK_ID.test(taskId))) return refuse(operator, 'invalid_input', 'budget takes a task id or --latest');
@@ -207,7 +213,8 @@ function otherDomain(operator: string, domain: string, op: string, args: Record<
   return refuse(operator, 'out_of_scope', 'only minecraft operations and skills import are offered to an operator');
 }
 
-/** Reads one envelope. Anything outside the Minecraft operations and the skill import is `out_of_scope`, and the audit says so. */
+/** Reads one envelope. Anything outside the Minecraft operations and the skill import is `out_of_scope`, and the
+ * audit says so. */
 export function parseOperatorEnvelope(value: unknown): OperatorParse {
   if (!record(value)) return refuse('unknown', 'invalid_input', 'a JSON object is required');
   const operator = operatorLabel(value.operator);
@@ -220,30 +227,15 @@ export function parseOperatorEnvelope(value: unknown): OperatorParse {
   }
   if (value.domain !== 'minecraft') return otherDomain(operator, value.domain, value.op, args);
   const allowed: Record<string, readonly string[]> = {
-    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest', 'skipReplay', 'deductMinutes'], held: [], budget: ['taskId', 'latest', 'budgetYen'],
+    request: ['goal', 'maxMinutes', 'budgetYen', 'holdOnFailure'], cancel: ['taskId', 'latest'], resume: ['taskId', 'latest', 'skipReplay',
+       'deductMinutes'], held: [], budget: ['taskId', 'latest', 'budgetYen'],
     start: ['serverId', 'keepWorld'],
   };
   const extra = Object.keys(args).find(key => !(allowed[value.op as string] ?? ['serverId']).includes(key));
   if (extra !== undefined) {
     return refuse(operator, 'invalid_input', `${extra.slice(0, 40).replace(/[^\x20-\x7e]/gu, '?')} is not an argument of this operation`);
   }
-  if (value.op === 'request') return request(operator, args);
-  if (value.op === 'cancel') return cancel(operator, args);
-  if (value.op === 'held') return { ok: true, operator, input: { command: 'held' } };
-  if (value.op === 'resume') {
-    if (args.skipReplay !== undefined && args.skipReplay !== true) return refuse(operator, 'invalid_input', 'skipReplay is true or absent');
-    // Amendment A-15: the minutes the body could not move that the head could not measure (the VM stopped): taken off the request's time (a whole number, at most a day).
-    if (args.deductMinutes !== undefined && !(Number.isInteger(args.deductMinutes) && (args.deductMinutes as number) >= 1 && (args.deductMinutes as number) <= 1440)) {
-      return refuse(operator, 'invalid_input', 'deductMinutes is a whole number of minutes, 1 to 1440');
-    }
-    const { skipReplay: _skip, deductMinutes: _deduct, ...rest } = args;
-    const parsed = cancel(operator, rest);
-    return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId, skipReplay: args.skipReplay === true,
-      ...(typeof args.deductMinutes === 'number' ? { deductMinutes: args.deductMinutes } : {}) } } : parsed;
-  }
-  if (value.op === 'budget') return budget(operator, args);
-  if (value.op === 'release') return release(operator, args);
-  return lifecycle(operator, value.op, args);
+  return dispatchMinecraftOperation(operator, value.op, args);
 }
 
 /** What the audit keeps of the arguments: the envelope's own fields, bounded, never anything else of the process. */
@@ -254,7 +246,8 @@ export function auditedArguments(value: unknown): string {
   return (text ?? '{}').slice(0, 4000);
 }
 
-/** The Talk note when the operator starts or stops something for the owner: plain, attributed to the operator, never his words. */
+/** The Talk note when the operator starts or stops something for the owner: plain, attributed to the operator,
+ * never his words. */
 /**
  * The Talk notes are notices, not her words: the conversation store keeps only `user` and `assistant` messages (a CHECK of
  * `conversation_messages`), so a note is stored as `assistant` with note kind `operator-note`, and its words are a neutral,
@@ -279,4 +272,39 @@ export const OPERATOR_TITLE_PREFIX = '（運用者経由）';
 
 export function operatorRequestContext(operator: string): string {
   return `この依頼は運用者（${operator}）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。`;
+}
+
+function validRequestGoal(goal: string): boolean {
+  return !(!goal || goal.length > OPERATOR_LIMITS.goalCharacters || /\p{Cc}/u.test(goal));
+}
+
+/** 再開要求の追加パラメータと、元の取消対象を確認する。 */
+function resumeRequest(operator: string, args: Record<string, unknown>): OperatorParse {
+
+    if (args.skipReplay !== undefined && args.skipReplay !== true) return refuse(operator, 'invalid_input', 'skipReplay is true or absent');
+    // Amendment A-15: the minutes the body could not move that the head could not measure (the VM stopped): taken
+// off the request's time (a whole number, at most a day).
+    if (args.deductMinutes !== undefined && !validDeductMinutes(args.deductMinutes)) {
+      return refuse(operator, 'invalid_input', 'deductMinutes is a whole number of minutes, 1 to 1440');
+    }
+    const { skipReplay: _skip, deductMinutes: _deduct, ...rest } = args;
+    const parsed = cancel(operator, rest);
+    return parsed.ok ? { ok: true, operator, input: { command: 'resume', taskId: (parsed.input as { taskId: string | null }).taskId,
+       skipReplay: args.skipReplay === true,
+      ...(typeof args.deductMinutes === 'number' ? { deductMinutes: args.deductMinutes } : {}) } } : parsed;
+  }
+
+function validDeductMinutes(value: unknown): boolean {
+  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 1440;
+}
+
+/** 封筒と引数名を確認した後の、操作ごとの読取り。 */
+function dispatchMinecraftOperation(operator: string, operation: string, args: Record<string, unknown>): OperatorParse {
+  if (operation === 'request') return request(operator, args);
+  if (operation === 'cancel') return cancel(operator, args);
+  if (operation === 'held') return { ok: true, operator, input: { command: 'held' } };
+  if (operation === 'resume') return resumeRequest(operator, args);
+  if (operation === 'budget') return budget(operator, args);
+  if (operation === 'release') return release(operator, args);
+  return lifecycle(operator, operation, args);
 }

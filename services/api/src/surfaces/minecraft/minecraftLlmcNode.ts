@@ -4,13 +4,17 @@ import { doneFacts, doneStatusWords, undergroundInOverworld } from './minecraftP
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 
 /**
- * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes from the first act;
+ * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes
+ * from the first act;
  * plan.update 0). A hypothesis, measured by comparing Sonnet and Opus from the same start: an act says which plan node it is for.
  *
  * - The model writes the node first in the act's `why` (`[p1.2] …`; another node than the current one with 「理由: …」; `[急ぎ]` for an
- *   urgent hand). A why without a tag gets the current node's put first by the head (`tagActWhy`), said in the result as a form fixed.
- * - Each act sent is counted per task (`noteActNode`): how many were for the current node (or one under it; r7: not a parent's tag, nor a
- *   why with 「理由:」), how many for a parent (`parent`), how many for another, how many of those said why, how many urgent, how many the
+ *   urgent hand). A why without a tag gets the current node's put first by the head (`tagActWhy`), said in the
+ * result as a form fixed.
+ * - Each act sent is counted per task (`noteActNode`): how many were for the current node (or one under it; r7:
+ * not a parent's tag, nor a
+ *   why with 「理由:」), how many for a parent (`parent`), how many for another, how many of those said why, how many
+ * urgent, how many the
  *   head tagged. The log line carries the share on the plan.
  */
 export const URGENT_TAG = '急ぎ';
@@ -24,7 +28,8 @@ export interface ActNodeMark {
   current: string | null;
   by: 'model' | 'head';
   /**
-   * For the current node or one under it, with no reason of another node's. r7 (runs 30, 31: 「[p1] ブレイズを打つ」 under the current p1.1,
+   * For the current node or one under it, with no reason of another node's. r7 (runs 30, 31: 「[p1] ブレイズを打つ」 under
+ * the current p1.1,
    * and 「[p1.1] 理由: … ゲートへ戻り食料」, were both counted on): a parent's tag is not on (`parent`), nor a why with 「理由:」.
    */
   on: boolean;
@@ -66,7 +71,8 @@ export function tagActWhy(input: unknown, plan: BodyPlanView | undefined): { inp
 
 interface Tally { acts: number; on: number; off: number; offReason: number; urgent: number; head: number; parent: number }
 const tallies = new Map<string, Tally>();
-/** Counts one act sent for the task and says it in the log (its node, the current one, and the task's share on the plan so far). */
+/** Counts one act sent for the task and says it in the log (its node, the current one, and the task's share on
+ * the plan so far). */
 export function noteActNode(taskId: string, mark: ActNodeMark | null, log: (line: string) => void): Tally | null {
   if (!mark) return null;
   let tally = tallies.get(taskId);
@@ -87,7 +93,19 @@ export function noteActNode(taskId: string, mark: ActNodeMark | null, log: (line
   const share = (tally.on / tally.acts).toFixed(2);
   try {
     log(`Shannon Minecraft act node task=${taskId} node=${mark.node} current=${mark.current ?? '-'} by=${mark.by} on=${mark.on ? 1 : 0}`
-      + ` reason=${mark.reason ? 1 : 0} acts=${tally.acts} onPlan=${tally.on} off=${tally.off} offReason=${tally.offReason} urgent=${tally.urgent}`
+      + (" reason=" +
+`${mark.reason ? 1 : 0}` +
+" acts=" +
+`${tally.acts}` +
+" onPlan=" +
+`${tally.on}` +
+" off=" +
+`${tally.off}` +
+" offReason=" +
+`${tally.offReason}` +
+" urgent=" +
+`${tally.urgent}` +
+"")
       + ` head=${tally.head} parent=${tally.parent} share=${share}`);
   } catch { /* a log never fails a step */ }
   return { ...tally };
@@ -104,10 +122,15 @@ export function planNowLine(view: { now?: unknown; path?: unknown } | null): str
 
 const NOW_LIMIT = 200;
 /**
- * Notion 09-1c 2-5 (the current node was one string cut at 200 characters from its end, so a long where or path could cut its done-condition; and the
- * condition was not read beside it): the current node from its own fields, with how far the frame meets its condition (`doneStatusWords`), in the order
- * the decision needs them: id and title, the condition and its status, the place, the note, the path. Past the bound the path goes first, then the note,
- * then the place is shortened; the condition is kept. 「[p4.3] 鉄の兜・胸当て・脚を着る（済む条件: have:iron_helmet&…／今: 未: iron_leggings 0/1）＠… （道: 鉄 › …）」.
+ * Notion 09-1c 2-5 (the current node was one string cut at 200 characters from its end, so a long where or path
+ * could cut its done-condition; and the
+ * condition was not read beside it): the current node from its own fields, with how far the frame meets its condition
+ * (`doneStatusWords`), in the order
+ * the decision needs them: id and title, the condition and its status, the place, the note, the path. Past the
+ * bound the path goes
+ * first, then the note,
+ * then the place is shortened; the condition is kept. 「[p4.3] 鉄の兜・胸当て・脚を着る（済む条件: have:iron_helmet&…／今: 未:
+ * iron_leggings 0/1）＠… （道: 鉄 › …）」.
  */
 export function currentNodeLine(node: { id: string; title: string; where?: string | undefined; doneWhen?: string | undefined; note?: string | undefined },
   pathOf: unknown, status: string | null): string {
@@ -126,7 +149,8 @@ export function currentNodeLine(node: { id: string; title: string; where?: strin
 }
 
 /**
- * `body.planNow`: the current node from its fields with its condition read against the frame (`currentNodeLine`); with no current node in
+ * `body.planNow`: the current node from its fields with its condition read against the frame
+ * (`currentNodeLine`); with no current node in
  * the tree, the plan view's line (`planNowLine`).
  */
 export function planNowOf(tree: PlanTree | null, view: unknown, observation: BodyObservation | null): string | null {
@@ -141,7 +165,8 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   return currentNodeLine(held, shown?.path, status);
 }
 
-/** The items in a row, started for the one same node that is not the current one, after which the head moves the current node to it. */
+/** The items in a row, started for the one same node that is not the current one, after which the head moves the
+ * current node to it. */
 export const FOLLOW_AFTER = 2;
 const FOLLOW_KEPT = 8;
 interface Started { node: string; current: string | null }
@@ -156,7 +181,8 @@ export function workingNode(taskId: string, current?: string | null): string | n
 export function missingNodeFact(taskId: string, tree: PlanTree): string | null {
   const tag = workingNode(taskId, tree.current);
   if (!tag || tree.nodes.some(node => node.id === existingNode(tag, new Map(tree.nodes.map(node => [node.id, node]))))) return null;
-  return `体が始めた節 [${tag}] は計画に存在しないため、今の節 [${tree.current ?? '-'}] を移せない。存在する節: ${tree.nodes.map(node => node.id).join('・')}。plan_update で節と済む条件を追加して current を移すか、存在する節を why に書く`;
+  return `体が始めた節 [${tag}] は計画に存在しないため、今の節 [${tree.current ?? '-'}] を移せない。存在する節: ${tree.nodes.map(node => node.id).join(
+    '・')}。plan_update で節と済む条件を追加して current を移すか、存在する節を why に書く`;
 }
 export function noteItemStart(taskId: string, node: string | null, current: string | null = null): void {
   if (!node) return;
@@ -166,76 +192,104 @@ export function noteItemStart(taskId: string, node: string | null, current: stri
   if (started.size > 32) started.delete(started.keys().next().value as string);
 }
 /**
- * The nodes of the preparation before the descent (run 40: p3 「食料を集める（狩り）」 and p4 「地下の準備」 were never the current node, the plan's now followed the
- * acts to the iron at 265 s, and she went down with 17.6 of 40 food points, no gold and no food hunted): a node of the kind `prep_descent` or `food` (chapter 7:
- * the kind the model wrote; a title or a condition says nothing of it). The current node is not moved away from one that is open (`followNode`), and the live
+ * The nodes of the preparation before the descent (run 40: p3 「食料を集める（狩り）」 and p4 「地下の準備」 were never the current
+ * node, the plan's now followed the
+ * acts to the iron at 265 s, and she went down with 17.6 of 40 food points, no gold and no food hunted): a node
+ * of the kind `prep_descent` or `food` (chapter 7:
+ * the kind the model wrote; a title or a condition says nothing of it). The current node is not moved away from
+ * one that is open (`followNode`), and the live
  * says so (`prepNote`).
  */
 const PREP_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['prep_descent', 'food']);
 export const isPrepNode = (node: Pick<PlanNode, 'kind'>): boolean => PREP_KINDS.has(kindOf(node));
 /**
- * A preparation node that is still to be met: the model has not written `prep: skipped` (left out) or `unmet_now` (not to be met now) on it. Only such a node
+ * A preparation node that is still to be met: the model has not written `prep: skipped` (left out) or
+ * `unmet_now` (not to be met now) on it. Only such a node
  * holds the current node and carries the note; the code writes neither word (chapter 7).
  */
 const holdsNow = (node: Pick<PlanNode, 'kind' | 'prep'>): boolean => isPrepNode(node) && node.prep?.state !== 'skipped' && node.prep?.state !== 'unmet_now';
-/** The words beside the current node's line while it is a preparation node that is not done: the work may go on elsewhere, the node stays. */
+/** The words beside the current node's line while it is a preparation node that is not done: the work may go on
+ * elsewhere, the node stays. */
 export const PREP_NOTE = '※下りる前の準備の節・未達';
-/** The same node once she is below the surface (GPT's review 2026-10-28): not to be met now; the now does not stay on it (`followNode`). */
+/** The same node once she is below the surface (GPT's review 2026-10-28): not to be met now; the now does not
+ * stay on it (`followNode`). */
 export const PREP_NOT_NOW = '※下りる前の準備の節・地下なので今は満たせない';
 /**
- * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: plan.update 0 and no 「理由:」 in 125 decisions, 85 of 104 acts tagged for another node than the current
- * one; the plan's now said 原木を集める for 471 s while she smelted iron, and 動物を狩り焼く / 地下のベッドを取る while she did the iron again): the node the
- * body works on is the plan's current node. Run 39 (2026-10-26: the queue's first version moved the node at each item that started, 7 moves in 34 minutes, and
- * the nodes for food, legs, the shield and gold boots never became the current one): back to rel52's rule. When the last `FOLLOW_AFTER` items to start were
- * for the same node (not the current one, not an urgent hand, not a node above the current one) and were sent under the current node the plan has now, the
- * head moves the current node to that node's first open leaf: the plan, its display (the mod's task tab) and the live's now say what she does. An item for
+ * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: plan.update 0 and no 「理由:」 in 125 decisions, 85 of 104 acts tagged
+ * for another node than the current
+ * one; the plan's now said 原木を集める for 471 s while she smelted iron, and 動物を狩り焼く / 地下のベッドを取る while she did the
+ * iron again): the node the
+ * body works on is the plan's current node. Run 39 (2026-10-26: the queue's first version moved the node at each
+ * item that started, 7 moves in 34 minutes, and
+ * the nodes for food, legs, the shield and gold boots never became the current one): back to rel52's rule. When
+ * the last `FOLLOW_AFTER` items to start were
+ * for the same node (not the current one, not an urgent hand, not a node above the current one) and were sent
+ * under the current node the plan has now, the
+ * head moves the current node to that node's first open leaf: the plan, its display (the mod's task tab) and the
+ * live's now say what she does. An item for
  * the current node (or one the head tagged) breaks a run.
- * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is done). Null when the tags do not agree.
+ * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is
+ * done). Null when the tags do not agree.
  */
 export function followNode(taskId: string, tree: PlanTree, underground = false): { to: string; from: string | null; acts: number; words: string } | null {
   const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), { under, open } = questions;
-  // Run 42 (Sonnet tagged p4.1 and p5.1 to p5.3, which the plan never had: every run of them was null and the now stayed on p1.2 for 700 s): a tag
+  // Run 42 (Sonnet tagged p4.1 and p5.1 to p5.3, which the plan never had: every run of them was null and the now
+// stayed on p1.2 for 700 s): a tag
   // for a node the plan does not have is for its nearest ancestor that it has (p4.1 → p4).
   const known = (started.get(taskId) ?? []).map(tag => ({ ...tag, node: existingNode(tag.node, questions.byId) }));
   // A parent's tag says nothing of the work under it: it is not counted, and it does not break a run.
   const counted = known.filter(tag => !(tag.current && tag.node !== tag.current && under(tag.current, tag.node)));
   const tags = counted.slice(-FOLLOW_AFTER), target = tags[0]?.node;
-  if (tags.length < FOLLOW_AFTER || !target || tags.some(tag => tag.node !== target || tag.current !== tree.current) || !open(target)) return null;
+  const unstableFollowTarget = () => (tags.length < FOLLOW_AFTER || !target || tags.some(tag => tag.node !== target ||
+     tag.current !== tree.current) || !open(target));
+  if (unstableFollowTarget()) return null;
   const leaf = order.find(node => open(node.id) && under(node.id, target) && !order.some(kid => kid.parentId === node.id && open(kid.id)));
-  if (!leaf || leaf.id === tree.current || (tree.current !== null && under(tree.current, target))) return null;
-  // Run 40: an open preparation node holds the current node (the work for another node may go on; the node that asks for the food stays the now).
+  const alreadyInTarget = () => ((tree.current !== null && under(tree.current, target)));
+  if (!leaf || leaf.id === tree.current || alreadyInTarget()) return null;
+  // Run 40: an open preparation node holds the current node (the work for another node may go on; the node that
+// asks for the food stays the now).
   if (!underground && heldByPreparation(tree, leaf.id, questions)) return null;
-  // Run 41 (the current node went p2.3 → p4.1 over p1.3 and p3, so no preparation node was ever the now and `heldByPreparation` never held): the work for a node that
-  // is no preparation, with a preparation node open before it, puts the current node on that preparation node (the tags stay, no hand is held).
+  // Run 41 (the current node went p2.3 → p4.1 over p1.3 and p3, so no preparation node was ever the now and
+// `heldByPreparation` never held): the work for a node that
+  // is no preparation, with a preparation node open before it, puts the current node on that preparation node (the
+// tags stay, no hand is held).
   const owed = underground ? undefined : openPreparation(order, leaf, questions);
   if (owed) {
     if (tree.current !== null && questions.under(tree.current, owed.id)) return null;
-    const to = order.find(node => questions.open(node.id) && questions.under(node.id, owed.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))) ?? owed;
-    return { to: to.id, from: tree.current, acts: tags.length, words: `今の節を [${to.id}] ${to.title.slice(0, 24)} に置いた（体が [${leaf.id}] の項目を続けて始めたが、先に済ませる準備の節 [${owed.id}] `
+    const to = order.find(node => questions.open(node.id) && questions.under(node.id, owed.id) && !order.some(
+      kid => kid.parentId === node.id && questions.open(kid.id))) ?? owed;
+    return { to: to.id, from: tree.current, acts: tags.length, words: `今の節を [${to.id}] ${to.title.slice(0,
+       24)} に置いた（体が [${leaf.id}] の項目を続けて始めたが、先に済ませる準備の節 [${owed.id}] `
       + `${owed.title.slice(0, 24)} が開いているため。札は [${leaf.id}] のまま、手は止めていない）` };
   }
   const skipped = order.slice(tree.current === null ? 0 : order.findIndex(node => node.id === tree.current) + 1, order.indexOf(leaf))
-    .filter(node => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !questions.under(leaf.id, node.id)).slice(0, 3);
+    .filter(node => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !questions.under(
+      leaf.id, node.id)).slice(0, 3);
   return { to: leaf.id, from: tree.current, acts: tags.length, words: `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）。`
     + `飛ばした節は順のまま残っている${skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : ''}` };
 }
 
-/** The node itself when the plan has it, else its nearest ancestor by the id's dots that it has (`p4.1` → `p4`), else the id as it was. */
+/** The node itself when the plan has it, else its nearest ancestor by the id's dots that it has (`p4.1` → `p4`),
+ * else the id as it was. */
 function existingNode(id: string, byId: ReadonlyMap<string, unknown>): string {
   for (let at = id; at; at = at.includes('.') ? at.slice(0, at.lastIndexOf('.')) : '') if (byId.has(at)) return at;
   return id;
 }
 
 /**
- * Run 42 (p1.2 「村の箱を開ける」 where 157,67,200: the chest there was emptied at +62, the node had no doneWhen and Sonnet never set it done; it
- * stayed the current node for 700 s, and under its preparation parent p1 the now never moved to p3 「食料を集める」): a node for opening a chest or
- * barrel (the kind `chest`) is done when an act opened one at its place. The chests opened, per task, from the act's result (`chest (x,y,z): …` and the hand's line).
+ * Run 42 (p1.2 「村の箱を開ける」 where 157,67,200: the chest there was emptied at +62, the node had no doneWhen and
+ * Sonnet never set it done; it
+ * stayed the current node for 700 s, and under its preparation parent p1 the now never moved to p3 「食料を集める」): a
+ * node for opening a chest or
+ * barrel (the kind `chest`) is done when an act opened one at its place. The chests opened, per task, from the
+ * act's result (`chest (x,y,z): …` and the hand's line).
  */
 const CHEST_SEEN = /^(?:chest|trapped_chest|barrel) \((-?\d+),(-?\d+),(-?\d+)\): |\((-?\d+),(-?\d+),(-?\d+)\) の (?:chest|trapped_chest|barrel) の中身/gmu;
 const CHEST_KEPT = 16;
 interface Opened { x: number; y: number; z: number; node: string | null }
 const opened = new Map<string, Opened[]>();
-/** The chests an act's result says it opened (a hand `chest … 済` and the container's line), with the node its why was tagged for. */
+/** The chests an act's result says it opened (a hand `chest … 済` and the container's line), with the node its why
+ * was tagged for. */
 export function noteChestsOpened(taskId: string, text: string, why: string): void {
   if (!/^\d+ chest 済/mu.test(text)) return;
   const node = TAG.exec(why)?.[1] ?? null;
@@ -251,10 +305,13 @@ export function noteChestsOpened(taskId: string, text: string, why: string): voi
   if (opened.size > 32) opened.delete(opened.keys().next().value as string);
 }
 /**
- * The open chest nodes an opened chest closes: a node that says a chest or barrel, with no doneWhen of its own (one that has it is the frame's to
- * close) and no open child, whose where is within 2 blocks of a chest opened, or with no where and the act tagged for it. Null when none.
+ * The open chest nodes an opened chest closes: a node that says a chest or barrel, with no doneWhen of its own
+ * (one that has it is the frame's to
+ * close) and no open child, whose where is within 2 blocks of a chest opened, or with no where and the act
+ * tagged for it. Null when none.
  */
-export function chestNodesDone(taskId: string, tree: PlanTree): { update: { ops: { op: 'set'; id: string; state: 'done'; reason: string }[] }; ids: string[] } | null {
+export function chestNodesDone(taskId: string, tree: PlanTree): { update: { ops: { op: 'set'; id: string; state: 'done'; reason:
+   string }[] }; ids: string[] } | null {
   const list = opened.get(taskId);
   if (!list?.length || !tree.nodes.length) return null;
   const { open } = treeQuestions(tree);
@@ -270,8 +327,10 @@ export function chestNodesDone(taskId: string, tree: PlanTree): { update: { ops:
 const firstPoint = (text: string): { x: number; y: number; z: number } | null => readWhere(text, 'any');
 
 /**
- * The first node before `leaf` in the plan's order that is open and a preparation node, and that the work for `leaf` is not under (a preparation of its own).
- * A node whose children are all done or blocked has nothing left to do under it: it is not one (its own condition may be one only the model can mark).
+ * The first node before `leaf` in the plan's order that is open and a preparation node, and that the work for
+ * `leaf` is not under (a preparation of its own).
+ * A node whose children are all done or blocked has nothing left to do under it: it is not one (its own
+ * condition may be one only the model can mark).
  */
 function openPreparation(order: readonly PlanNode[], leaf: PlanNode, questions: ReturnType<typeof treeQuestions>): PlanNode | undefined {
   if (isPrepNode(leaf)) return undefined;
@@ -280,7 +339,8 @@ function openPreparation(order: readonly PlanNode[], leaf: PlanNode, questions: 
   return order.find((node, index) => index < before && questions.open(node.id) && holdsNow(node) && pending(node) && !questions.under(leaf.id, node.id));
 }
 
-/** Whether the current node is an open preparation node that the work for `leaf` would move the now away from (not for the node itself or one under it). */
+/** Whether the current node is an open preparation node that the work for `leaf` would move the now away from
+ * (not for the node itself or one under it). */
 function heldByPreparation(tree: PlanTree, leaf: string, questions: ReturnType<typeof treeQuestions>): boolean {
   const now = tree.current ? questions.byId.get(tree.current) : undefined;
   if (!now || !questions.open(now.id) || !holdsNow(now)) return false;

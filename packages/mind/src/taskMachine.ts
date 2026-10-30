@@ -8,7 +8,9 @@ import {
  * machine says whether that move is allowed from where the task is, and gives the old `status` and `pause_reason` that are
  * written with it in the same UPDATE. The invariants it keeps:
  * - a finished task (completed, failed, cancelled) never moves again, except a task closed with its outcome unknown on a late
- *   report of its outside work (`lateReport`: completed, or paused again), and a failed task its owner reopens as stopped (`reopen`: the operator's resume of a request
+ *   report of its outside work (`lateReport`: completed, or paused again), and a failed task its owner reopens as
+ * stopped (`reopen`:
+ *   the operator's resume of a request
  *   a refused decision failed before anything ran, A-20; only the writer that checks that sets it);
  * - nothing becomes `proposed` again;
  * - an unknown task never becomes active: it leaves to a finished state, back to an open state other than active when a proof
@@ -29,7 +31,8 @@ export interface TaskEvent {
    * wins, so it may become completed, or paused again for the owner (stopped, or waiting for the owner).
    */
   readonly lateReport?: boolean;
-  /** A failed task goes back to stopped (paused for its owner), by a writer that has checked why it failed. Nothing else is reopened. */
+  /** A failed task goes back to stopped (paused for its owner), by a writer that has checked why it failed. Nothing
+ * else is reopened. */
   readonly reopen?: boolean;
 }
 

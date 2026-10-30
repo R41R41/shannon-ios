@@ -38,13 +38,14 @@ export class SQLiteFcaTaskAuthority implements TaskAuthority {
     const parentClause = query.parentId === undefined ? '' : ' AND fca_parent_id IS ?';
     const args = query.parentId === undefined ? [scopeKey] : [scopeKey, query.parentId];
     return this.db.prepare(`SELECT * FROM agent_tasks WHERE scope_key=? AND ${COMMON_TASK}${parentClause}
-      ORDER BY ${query.order === 'recent' ? 'updated_at DESC' : 'created_at'},task_id LIMIT ? OFFSET ?`).all(...args, query.limit ?? 100, query.offset ?? 0).map(record);
+      ORDER BY ${query.order === 'recent' ? 'updated_at DESC' : 'created_at'},task_id LIMIT ? OFFSET ?`).all(...args, query.limit ?? 100,
+         query.offset ?? 0).map(record);
   }
   /** `capability`: the Executive's capability an own-time task carries out (ADR-0009 stage 2, E4; column of step 008). */
   create(input: Omit<TaskRecord, 'revision' | 'updatedAt'> & { requestKey: string; capability?: string }): TaskRecord {
-    this.db.prepare(`INSERT INTO agent_tasks(task_id,scope_key,conversation_thread_id,start_idempotency_key,title,goal,status,summary,
-      created_at,updated_at,pause_reason,fca_kind,fca_parent_id,fca_origin,fca_completion_criteria,capability,task_kind)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(input.id, input.scopeKey, `fca:${input.id}`, input.requestKey,
+    this.db.prepare(("INSERT INTO agent_tasks(task_id,scope_key,conversation_thread_id,start_idempotency_key,title,goal,status," +
+"summary,\n      created_at,updated_at,pause_reason,fca_kind,fca_parent_id,fca_origin,fca_completion_criter" +
+"ia,capability,task_kind)\n      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")).run(input.id, input.scopeKey, `fca:${input.id}`, input.requestKey,
         input.title, input.goal, input.status, input.summary, input.createdAt, input.createdAt, input.pauseReason,
         input.kind, input.parentId, input.origin, input.completionCriteria, input.capability ?? null, commonTaskKind(input.kind));
     const payload = { parentId: input.parentId, origin: input.origin, ...(input.capability ? { capability: input.capability } : {}) };
@@ -57,11 +58,12 @@ export class SQLiteFcaTaskAuthority implements TaskAuthority {
     if (!current) throw new Error('FCA_TASK_NOT_FOUND');
     const revision = current.revision + 1;
     const pauseReason = change.pauseReason === undefined ? current.pauseReason : change.pauseReason;
-    writeTaskState(this.db, id, { status: change.status ?? current.status, pauseReason, proof: change.proof, ...(change.lateReport ? { lateReport: true } : {}), ...(change.reopen ? { reopen: true } : {}) }, at);
+    writeTaskState(this.db, id, { status: change.status ?? current.status, pauseReason, proof: change.proof, ...(change.lateReport ? {
+       lateReport: true } : {}), ...(change.reopen ? { reopen: true } : {}) }, at);
     this.db.prepare(`UPDATE agent_tasks SET summary=?,latest_sequence=?,updated_at=? WHERE scope_key=? AND task_id=?`)
       .run(change.summary ?? current.summary, revision, at, scopeKey, id);
-    this.db.prepare(`INSERT INTO agent_task_events(event_id,task_id,sequence,event_type,title,tone,occurred_at,payload_json)
-      VALUES(?,?,?,?,?,'neutral',?,?)`).run(randomUUID(), id, revision, type, type, at,
+    this.db.prepare(("INSERT INTO agent_task_events(event_id,task_id,sequence,event_type,title,tone,occurred_at,payload_json)\n  " +
+"    VALUES(?,?,?,?,?,'neutral',?,?)")).run(randomUUID(), id, revision, type, type, at,
         JSON.stringify({ ...payload, taskId: id, parentId: current.parentId, revision }));
     return this.get(scopeKey, id)!;
   }

@@ -91,7 +91,8 @@ function headerText(document: DecisionDocument): string[] {
     fence(json({ head: version.head, body: version.body, prompt: version.prompt, runStartedAt: version.runStartedAt }), 'json')];
 }
 
-/** One decision as a markdown page: its input, its answer, what the step did, each call and the act sent to the body, and the versions. */
+/** One decision as a markdown page: its input, its answer, what the step did, each call and the act sent to the
+ * body, and the versions. */
 export function renderDecision(document: DecisionDocument): string {
   return [...headerText(document), '', '## 入力', '', '### system', '', systemText(document.request.system), '', '### tools', '',
     toolsText(document.request.tools), '', '### messages', '', messagesText(document), '', '## 出力', '', responseText(document), '',
@@ -102,9 +103,11 @@ export function renderDecisions(documents: readonly DecisionDocument[]): string 
 
 /** The stages of time of each failed command (continue contract 8) and the prefetch's error, as a table a reader follows. */
 export function renderStages(chains: readonly StageChain[], prefetch: readonly PrefetchError[] = []): string {
-  const names = STAGE_NAMES, head = `| 失敗した命令 | 判断 | 次の命令 | ${names.map(name => name.replace(/^\d+_/u, '').replace(/_/gu, ' ')).join(' | ')} | 合計 ms | 重なり ms |`;
+  const names = STAGE_NAMES, head = `| 失敗した命令 | 判断 | 次の命令 | ${names.map(name => name.replace(/^\d+_/u, '').replace(/_/gu, ' ')).join(
+    ' | ')} | 合計 ms | 重なり ms |`;
   const rows = chains.map(chain => chain.linked && chain.stagesMs
-    ? `| ${chain.failed} | ${chain.decision} | ${chain.next} | ${names.map(name => chain.stagesMs![name]).join(' | ')} | ${chain.totalMs} | ${chain.overlapMs} |`
+    ? `| ${chain.failed} | ${chain.decision} | ${chain.next} | ${names.map(name => chain.stagesMs![name]).join(
+      ' | ')} | ${chain.totalMs} | ${chain.overlapMs} |`
     : `| ${chain.failed} | ${chain.decision ?? '-'} | ${chain.next ?? '-'} | つながらない: ${chain.why ?? '-'} |${' |'.repeat(names.length + 1)}`);
   const lines = ['# 時間の段（失敗 → 知らせ → 判断 → 送信 → 受け取り → ロック → 最初の操作）', '',
     chains.length ? [head, `|${' --- |'.repeat(names.length + 5)}`, ...rows].join('\n') : '失敗した命令（`received` の `bodyTimes.failedAt`）の行が無い。'];

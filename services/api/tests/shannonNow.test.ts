@@ -433,7 +433,8 @@ describe('GET /v1/shannon/now: structure', () => {
     for (const name of ['apiKernel.ts', 'autonomyLoop.ts', 'autonomyWorker.ts', 'worker.ts', 'apiPromptProjection.ts', 'serverPlatformBridgeRoute.ts']) {
       expect(source(name)).not.toMatch(/shannonNow/iu);
     }
-    const server = source('server.ts');
+    expect(source('server.ts')).toContain('createApiRequestHandler({');
+    const server = source('serverRequestHandler.ts');
     // The route is reached only after the device was authenticated.
     expect(server.indexOf('shannonNowRoute(request, response, principal)')).toBeGreaterThan(server.indexOf("error: 'PAIRING_REQUIRED'"));
   });

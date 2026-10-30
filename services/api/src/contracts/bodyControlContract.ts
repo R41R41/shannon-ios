@@ -21,42 +21,60 @@ export interface BodyTaskContext {
   taskState?: { phase: string; progress: string; activeAction?: { name: string; operationId: string; input: BodyValue };
     recentResults: readonly { name: string; ok: boolean; summary: string }[] };
   /**
-   * The task's plan tree (`@shannon/mind` planTree, design mb-llm-centric 2.7), for display only: the body shows it (ShannonUI mod v2's
+   * The task's plan tree (`@shannon/mind` planTree, design mb-llm-centric 2.7), for display only: the body shows
+ * it (ShannonUI mod v2's
    * nested task tree) and never acts on it. Present only on a task that holds a plan (the LLM-centric mode); absent, the body
    * shows what it showed before. A body that does not know it ignores it.
    */
   plan?: BodyPlanView;
   /**
-   * The fix run (2026-10-28): `hold`, an operator's request asked to be held on a heavy failure (the body then writes its box and the scene, stops
-   * the world and holds the task's next acts); `resume`, the hold's id that the act sent again after the operator's resume names (the body moves the
-   * world again and runs it); `cancel`, on a release: the operator cancelled the held task (the body ends the hold and moves the world again). A body
+   * The fix run (2026-10-28): `hold`, an operator's request asked to be held on a heavy failure (the body then
+ * writes its box and the scene, stops
+   * the world and holds the task's next acts); `resume`, the hold's id that the act sent again after the
+ * operator's resume names (the body moves the
+   * world again and runs it); `cancel`, on a release: the operator cancelled the held task (the body ends the hold
+ * and moves the world again). A body
    * that does not know it ignores it.
    */
   incident?: { hold?: boolean; resume?: string; cancel?: string;
-    /** Amendment A-12 (the body's type): a stall the head found. The body holds as it does for a heavy failure (the world stopped, the scene, the box with `notes`, the hold under this id); a release that carries it answers with `incident.op = 'take'` (`takeOfResult`). `id` is the head's (`head:<kind>:…`, 1 to 150 characters); `notes` the last rows of the decision record (at most 20, 400 characters each). */
+    /** Amendment A-12 (the body's type): a stall the head found. The body holds as it does for a heavy failure (the
+ * world stopped, the
+ * scene, the box with `notes`, the hold under this id); a release that carries it answers with `incident.op = 'take'`
+ * (`takeOfResult`). `id` is the head's (`head:<kind>:…`, 1 to 150 characters); `notes` the last rows of the
+ * decision record (at most
+ * 20, 400 characters each). */
     take?: { id: string; why: string; notes?: string[] } };
   /**
-   * Continue contract 5 (the life): the life the command was made for, the head's start that made it, and the observation the decision read (`madeIn`: the life,
-   * the dimension's generation, the body's boot and connection, the head's boot and the observation's number). They are those of **the observation the decision
-   * read**, never the newest at the moment of sending. A command that moves the body carries all three (the body refuses one without a life as `life_missing`);
+   * Continue contract 5 (the life): the life the command was made for, the head's start that made it, and the
+ * observation the decision
+   * read (`madeIn`: the life,
+   * the dimension's generation, the body's boot and connection, the head's boot and the observation's number).
+ * They are those of **the
+   * observation the decision
+   * read**, never the newest at the moment of sending. A command that moves the body carries all three (the body
+ * refuses one without a
+   * life as `life_missing`);
    * `madeIn` of a queue item is in its envelope too. A body that does not know them ignores them.
    */
   life?: number; headBoot?: string; madeIn?: MadeIn;
 }
-/** A plan node as the body shows it. `state`: done → completed, the current node → in_progress, continue and wait → pending, blocked → error. */
+/** A plan node as the body shows it. `state`: done → completed, the current node → in_progress, continue and wait
+ * → pending, blocked → error. */
 export interface BodyPlanNode {
   id: string; parentId: string | null; title: string;
   state: 'done' | 'continue' | 'wait' | 'blocked';
   /** Why a blocked node is blocked (at most 80 characters). */
   reason?: string;
   /**
-   * Display only (the ShannonUI mod's tooltips on the plan section; the head sends them, no model reads them). Each is given only when the node
+   * Display only (the ShannonUI mod's tooltips on the plan section; the head sends them, no model reads them).
+ * Each is given only when the node
    * has it: where it is done, what shows it done, a note, and what not to do / what to mind (at most 4 lines each).
    */
   where?: string; doneWhen?: string; note?: string;
   forbid?: readonly string[]; caution?: readonly string[];
   /**
-   * The node's kind (the continue contract, chapter 7: one of the plan tree's kinds, or `other`). A word for the display only; it moves nothing. Given only
+   * The node's kind (the continue contract, chapter 7: one of the plan tree's kinds, or `other`). A word for the display only; it
+   * moves nothing. Given only
    * when the node has one.
    */
   kind?: string;
