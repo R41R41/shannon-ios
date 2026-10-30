@@ -71,8 +71,9 @@ describe('the rules are in the instructions', () => {
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('準備の必須と目標は system の「準備の決まり」');
   });
   it('splits what she decides from what the body is left, and says which of accept and hostileWithin counts (as the body does)', () => {
-    expect(system).toContain('あなたが決めるのは、目的・対象・行き先・許す掘る/置く・済む条件、食事・睡眠・片づけ、戦うか逃げるか');
-    expect(system).toContain('体に任せるのは、歩く道・途中の板や棒・作業台を置く所・戦い方の細部');
+    expect(system).toContain('目的・対象・行き先・掘る/置く許可・済む条件を選ぶ');
+    expect(system).toContain('食事・睡眠・片づけ・戦うか逃げるかもあなたが決める');
+    expect(system).toContain('経路・工作・設置・戦闘の細部は体に任せる');
     expect(system).toContain('accept に入れた種類は hostileWithin に数えない（fight の相手もその手の間は同じ）。hpBelow と反射は accept でも効く');
     expect(SHORT_ACT_DESCRIPTION).toContain('accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('体は自分で決めない');
