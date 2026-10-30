@@ -49,7 +49,7 @@ export interface PromiseEvent {
 export interface PlanPromise {
   id: number; rev: number; item: string; count: number; use: string;
   until?: { node?: string; condition?: PlanCondition }; instead?: PlanCondition;
-  state: 'open' | 'kept_by_instead' | 'closed'; closedBy?: 'until' | 'released';
+  state: 'open' | 'kept_by_instead' | 'closed'; closedBy?: 'until' | 'released' | 'used';
   ledger: PromiseEvent[]; dropped?: number;
   /** What she carried of `item` at the last observation the ledger took (the head's; the model never writes it). Absent until the first one. */
   have?: number;

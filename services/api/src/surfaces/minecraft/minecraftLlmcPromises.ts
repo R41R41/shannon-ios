@@ -31,7 +31,9 @@ export interface LedgerAhead { promise: number; delta: number; connection: strin
  * the same memory kept for the same reason (`death`: the death counter last read, for `deathBetween`; `connections`: the connections replaced, so a late
  * observation of one is not taken for a new one; `ahead`: see `LedgerAhead`).
  */
-export interface LedgerSeen { eventIds: string[]; lastObs: LedgerObs | null; death?: DeathCounter | null; connections?: string[]; ahead?: LedgerAhead[] }
+export interface LedgerSeen { eventIds: string[]; lastObs: LedgerObs | null; death?: DeathCounter | null; connections?: string[]; ahead?: LedgerAhead[];
+  /** Recipe outputs whose ingredient may arrive on another receipt page, retained across checkpoints. */
+  products?: Array<{ id: string; item: string }> }
 export const emptyLedgerSeen = (): LedgerSeen => ({ eventIds: [], lastObs: null });
 
 /** Where the events came from (the command the act was sent as; `do` is the hand's verb, which tells a smelt's ingredient from a craft's). */
@@ -172,6 +174,8 @@ export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: Ledger
   const deathNow = !!now && newer && typeof now.life.deathEpoch === 'string' && deathBetween(ledgerSeen.death ?? null, now.life).death;
 
   const added: LedgerAdded[] = [], facts: OnceFact[] = [], withdrawn: string[] = [], out: PlanPromise[] = [], aheadNext: LedgerAhead[] = [];
+  const products = [...(ledgerSeen.products ?? []), ...fresh.filter(event => event.reason === 'crafted' && event.count > 0
+    && promises.some(promise => promise.state !== 'closed' && purposeProduct(promise.use) === event.item)).map(event => ({ id: event.id, item: event.item }))].slice(-AHEAD_LIMIT);
   let changed = fresh.length > 0 || newer;
   const sum = (list: ReadonlyArray<{ delta: number }>) => round1(list.reduce((total, item) => total + item.delta, 0));
 
@@ -232,8 +236,21 @@ export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: Ledger
     let next = appended(promise, written);
     if (observed !== null) next = { ...next, have: observed };
 
+    // Run 48: actually crafting the named product uses the reservation for its purpose. Require the body's
+    // ingredient and crafted events from the SAME command/pass/hand, never an unexplained inventory loss.
+    const product = !promise.instead && !promise.until ? purposeProduct(promise.use) : null;
+    const usedForProduct = product && products.some(gain => gain.item === product
+      && next.ledger.filter(line => line.kind === 'consumed' && line.item === promise.item && line.promiseRev === promise.rev && line.reason === 'craft_ingredient'
+        && sameHand(line.id, gain.id)).reduce((total, line) => total + line.count, 0) >= promise.count);
+    if (usedForProduct) {
+      const line: PromiseEvent = { id: `plan:used:${promise.rev}`, at: input.at, kind: 'closed', count: 0, have: next.have ?? 0, reason: `用途 ${product} に使った` };
+      next = { ...appended(next, [line]), state: 'closed', closedBy: 'used' };
+      added.push({ ...line, promise: promise.id });
+      changed = true;
+    }
+
     // `instead` and `until` are asked again at each observation (not of an older one).
-    if (now && relation !== 'older') {
+    if (next.state !== 'closed' && now && relation !== 'older') {
       const instead = promise.instead && validCondition(promise.instead) ? promise.instead as ActCondition : null;
       if (instead) {
         const holds = conditionHolds(instead, now.frame), factKey = `promise_instead_lost:${promise.id}:r${promise.rev}`;
@@ -264,6 +281,7 @@ export function applyLedger(promises: readonly PlanPromise[], ledgerSeen: Ledger
   const connections = newer && now && last && key(last) !== key(now.run) ? [...(ledgerSeen.connections ?? []), key(last)].slice(-CONNECTIONS_LIMIT) : ledgerSeen.connections;
   if (connections?.length) seen.connections = connections;
   if (aheadNext.length) seen.ahead = aheadNext.slice(-AHEAD_LIMIT);
+  if (products.length) seen.products = products;
   return { promises: out, ledgerSeen: seen, added, facts, withdrawn, changed: changed || added.length > 0 };
 }
 
@@ -308,6 +326,8 @@ export function readLedgerSeen(value: unknown): LedgerSeen {
   return { eventIds: raw.eventIds.filter((id): id is string => typeof id === 'string'), lastObs,
     ...(death && typeof death.deathEpoch === 'string' && Number.isSafeInteger(death.deathSeq) ? { death: { deathEpoch: death.deathEpoch, deathSeq: death.deathSeq as number } } : {}),
     ...(Array.isArray(raw.connections) ? { connections: raw.connections.filter((item): item is string => typeof item === 'string').slice(-CONNECTIONS_LIMIT) } : {}),
+    ...(Array.isArray(raw.products) ? { products: raw.products.filter((item): item is { id: string; item: string } => !!item && typeof item === 'object'
+      && typeof item.id === 'string' && typeof item.item === 'string').slice(-AHEAD_LIMIT) } : {}),
     ...(ahead.length ? { ahead: ahead.slice(-AHEAD_LIMIT) } : {}) };
 }
 
@@ -437,6 +457,18 @@ export const actSpends = (hands: Parameters<typeof spendsOf>[0], pack?: Readonly
 const isItemOf = (name: string, item: string): boolean => name === item || name.endsWith(`_${item}`);
 /** A spend counts against a promise when either names the other's kind (a spend of `planks` from a recipe may be any kind of planks, so it counts against `spruce_planks` too). */
 const touches = (spend: string, promised: string): boolean => isItemOf(spend, promised) || isItemOf(promised, spend);
+/** Only literal recipe item names and unambiguous product labels, not an inference from a free-form purpose. */
+function purposeProduct(use: string): string | null {
+  const literal = use.trim().replace(/(?:用|を作る)$/u, '');
+  const aliases: Readonly<Record<string, string>> = { 火打ち金: 'flint_and_steel', 火打石と打ち金: 'flint_and_steel', 作業台: 'crafting_table', かまど: 'furnace', バケツ: 'bucket', 盾: 'shield', 松明: 'torch' };
+  const item = aliases[literal] ?? literal.replace(/^minecraft:/u, '');
+  return recipeOf(item) ? item : null;
+}
+function sameHand(left: string, right: string): boolean {
+  const hand = (id: string) => /^(.+:\d+:\d+):\d+$/u.exec(id)?.[1];
+  const a = hand(left), b = hand(right);
+  return a !== undefined && a === b;
+}
 /**
  * A-8 2: when the act's spending is more than what the open promises of an item leave free, one line (said once, after the act is sent; nothing is refused):
  * 「この act は約束 #1（地下の作業台用の板 4）を割る見込み（板 6 を使い、残り 1）」. Facts the head counts; the choice stays the model's. `uncounted` (A-10 2): the makes and crafts it
@@ -448,11 +480,21 @@ export function breakingOf(promises: readonly PlanPromise[], hands: Parameters<t
   const { spends, uncounted } = spendsOf(hands, facts.counts);
   if (!spends.length) return { lines: [], keptBy: [], uncounted };
   const lines: string[] = [], keptBy: string[] = [];
+  const forPurpose = new Set(promises.filter(promise => {
+    const product = !promise.instead && !promise.until ? purposeProduct(promise.use) : null;
+    return product && hands.some(hand => (hand.do === 'make' || hand.do === 'craft') && hand.item?.replace(/^minecraft:/u, '') === product
+      && spends.filter(spend => touches(spend.item, promise.item)).reduce((total, spend) => total + spend.count, 0) >= promise.count);
+  }).map(promise => promise.id));
+  const stillReserved = promises.filter(promise => !forPurpose.has(promise.id));
   for (const promise of promises.filter(item => item.state === 'open').sort((a, b) => a.id - b.id)) {
     const used = spends.filter(spend => touches(spend.item, promise.item)).reduce((total, spend) => total + spend.count, 0);
     if (!used) continue;
+    if (forPurpose.has(promise.id)) {
+      keptBy.push(`約束 #${promise.id} は申告の用途（${promise.use}）に使う見込み`);
+      continue;
+    }
     const have = haveIn(promise.item, facts);
-    if (used <= freeOutside(promises, promise.item, have)) continue;
+    if (used <= freeOutside(stillReserved, promise.item, have)) continue;
     // A-11 1: an act whose hands make the promise's `instead` hold (a work table picked up or made) keeps the promise; it is not one that breaks it.
     const instead = promise.instead && validCondition(promise.instead) ? insteadAfter(promise.instead as ActCondition, hands, facts, spends, observation) : null;
     if (instead) {

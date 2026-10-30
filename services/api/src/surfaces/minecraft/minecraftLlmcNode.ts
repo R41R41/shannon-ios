@@ -147,6 +147,17 @@ const FOLLOW_KEPT = 8;
 interface Started { node: string; current: string | null }
 /** The nodes of the items the body started, newest last, each with the current node the plan had when the model sent the item. */
 const started = new Map<string, Started[]>();
+/** The model's most recent work, including a tag not yet added to the plan (run 48: n2–n4 never existed). */
+export function workingNode(taskId: string, current?: string | null): string | null {
+  const last = started.get(taskId)?.at(-1);
+  return last && (current === undefined || last.current === current || last.node === current) ? last.node : null;
+}
+/** A tag alone does not add a node: say why following it could not move the plan, for the model to repair. */
+export function missingNodeFact(taskId: string, tree: PlanTree): string | null {
+  const tag = workingNode(taskId, tree.current);
+  if (!tag || tree.nodes.some(node => node.id === existingNode(tag, new Map(tree.nodes.map(node => [node.id, node]))))) return null;
+  return `体が始めた節 [${tag}] は計画に存在しないため、今の節 [${tree.current ?? '-'}] を移せない。存在する節: ${tree.nodes.map(node => node.id).join('・')}。plan_update で節と済む条件を追加して current を移すか、存在する節を why に書く`;
+}
 export function noteItemStart(taskId: string, node: string | null, current: string | null = null): void {
   if (!node) return;
   const list = [...(started.get(taskId) ?? []), { node, current }].slice(-FOLLOW_KEPT);
@@ -210,7 +221,7 @@ export function followNode(taskId: string, tree: PlanTree, underground = false):
 }
 
 /** The node itself when the plan has it, else its nearest ancestor by the id's dots that it has (`p4.1` → `p4`), else the id as it was. */
-function existingNode(id: string, byId: ReadonlyMap<string, PlanNode>): string {
+function existingNode(id: string, byId: ReadonlyMap<string, unknown>): string {
   for (let at = id; at; at = at.includes('.') ? at.slice(0, at.lastIndexOf('.')) : '') if (byId.has(at)) return at;
   return id;
 }

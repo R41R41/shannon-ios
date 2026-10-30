@@ -50,16 +50,19 @@ export const MOVING: ReadonlySet<string> = new Set(['walk', 'go', 'vertical', 'p
 
 // ---- progress --------------------------------------------------------------------------------------------------------------------------------------
 /** What the progress of the current node is read from, at one moment. `node` is null when the plan has no current node (nothing is counted then). */
-export interface ProgressSnapshot { node: string | null; state: string | null; milestone: string | null; items: number }
+export interface ProgressSnapshot { node: string | null; state: string | null; milestone: string | null; items: number; inventory?: Readonly<Record<string, number>>; reached?: readonly string[] }
 /** Whether the task moved on between two moments: another node, another state of it, another next milestone, or more things carried. Pure. */
 export function movedOn(before: ProgressSnapshot, after: ProgressSnapshot): boolean {
-  return before.node !== after.node || before.state !== after.state || before.milestone !== after.milestone || after.items > before.items;
+  return before.node !== after.node || before.state !== after.state || before.milestone !== after.milestone || after.items > before.items
+    || (after.reached ?? []).some(name => !(before.reached ?? []).includes(name))
+    || Object.entries(after.inventory ?? {}).some(([name, count]) => count > (before.inventory?.[name] ?? 0));
 }
 
 interface TaskStalls {
   quiet: boolean;
   node: { snapshot: ProgressSnapshot; since: number } | null;
   spot: { at: ActPos; stops: number } | null;
+  explained: { at: ActPos; code: string } | null;
   /** Run 47: the same place's stops told to the model ("the nth time here"): it is not reset by a hold or its resume, only by a hand that got somewhere or did other work. */
   seen: { at: ActPos; n: number } | null;
   waits: number;
@@ -67,7 +70,7 @@ interface TaskStalls {
   deaths: DeathCounter | null;
 }
 const tasks = new Map<string, TaskStalls>();
-const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, seen: null, waits: 0, refusals: 0, deaths: null });
+const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, explained: null, seen: null, waits: 0, refusals: 0, deaths: null });
 function taskOf(taskId: string): TaskStalls {
   let state = tasks.get(taskId);
   if (!state) {
@@ -155,6 +158,7 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
   for (const line of act.lines) {
     if (line.end !== 'not_run' && line.end !== 'unknown' && line.goal === 'done' && WORKED.has(String(line.do))) {
       state.spot = null;
+      state.explained = null;
       state.seen = null;
       continue;
     }
@@ -162,11 +166,24 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
     if (line.goal !== 'done' && line.goal !== 'already' && !spentTime(line, act.ms, running.length)) continue;
     if (line.goal === 'done' || line.goal === 'already') {
       state.spot = null;
+      state.explained = null;
       state.seen = null;
       continue;
     }
     const at = posOf(line.progress?.at) ?? posOf(line.where) ?? posOf(act.at);
     if (!at) continue;
+    // A reflex's interruption is not a failed attempt at this path. Give each explained cause back to the model once;
+    // a different cause must not be the second attempt of the first (run 48: wall_escape then threat_exposed).
+    if (line.end === 'cut' && (line.cutBy === 'reflex' || line.cutBy === 'cancelled' || line.cutBy === 'operator_stop' || /反射|wall_escape/u.test(line.line))) continue;
+    const explained = line.code === 'threat_exposed' || line.code === 'falling_above' || (line.code === 'cannot_dig' && /canDig に \S+ を足/u.test(line.line))
+      || (line.do === 'go' && /流れる水の中|置いたブロックが世界に現れない|掘ると流れ込む|掘ると落ちてくる|canDig に無い|道は流れる水を天井/u.test(line.line));
+    if (explained) {
+      const previous = state.explained;
+      state.explained = { at, code: line.code ?? '' };
+      state.spot = null;
+      if (!previous || previous.code !== line.code || distance(previous.at, at) > STALL.spotRadius) continue;
+      state.spot = { at, stops: 1 };
+    } else state.explained = null;
     if (state.seen && distance(state.seen.at, at) <= STALL.spotRadius) state.seen.n += 1;
     else state.seen = { at, n: 1 };
     if (state.spot && distance(state.spot.at, at) <= STALL.spotRadius) state.spot.stops += 1;

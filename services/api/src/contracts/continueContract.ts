@@ -8,7 +8,7 @@
 import type { ActCondition, Dim } from './minecraftActCondition.js';
 import type { ActPos } from './minecraftActContract.js';
 
-export const CONTINUE_CONTRACT_VERSION = '3.1' as const;
+export const CONTINUE_CONTRACT_VERSION = '3.2' as const;
 
 // ---- 1. results (goal x end) ----------------------------------------------------------------------------------------------------------------
 /** What the unit aimed at, and how it stands now. */

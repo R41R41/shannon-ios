@@ -27,7 +27,7 @@ import {
   inSightLine, keepThreatSight, keptThreatSight, nearThreats, readThreatSight, sightProbe, THREAT_SIGHT, threatLine, threatSightKey,
   threatSightMeters, threatSightTargets, walledOff, type NearThreat, type ThreatSight,
 } from './minecraftLlmcThreat.js';
-import { planNowOf } from './minecraftLlmcNode.js';
+import { missingNodeFact, planNowOf } from './minecraftLlmcNode.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
@@ -299,6 +299,9 @@ const sinceCurrent = new Map<string, { node: string; reached: ReadonlySet<string
  * current node. The node's state is the model's; nothing is moved here.
  */
 export function staleNodeFacts(taskId: string, tree: PlanTree | null, observation: BodyObservation | null): OnceFact[] {
+  const missing = tree ? missingNodeFact(taskId, tree) : null;
+  if (missing) offer(taskId, 'missing_node', missing);
+  else if (tree) withdraw(taskId, 'missing_node');
   const reached = reachedMilestoneNames(tree, observation);
   const node = tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
   if (!tree || !reached || !node) return pending(taskId);

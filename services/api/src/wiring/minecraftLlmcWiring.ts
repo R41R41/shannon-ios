@@ -24,14 +24,14 @@ import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
-import { meterParts } from '../surfaces/minecraft/minecraftLlmcRoad.js';
+import { meterParts, reachedMilestoneNames } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import { deathCounterOf, noteDeath, noteProgress, noteRan, noteRefusal, resumeStalls, stallIncidentId, watchStalls, type Stall } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { doneFacts, seenDoneUpdate, undergroundInOverworld, withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
-import { chestNodesDone, followNode, noteChestsOpened } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { chestNodesDone, followNode, noteChestsOpened, workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
 import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
 import { LLMC_PROBE } from '../surfaces/minecraft/minecraftLlmcProbe.js';
@@ -463,10 +463,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     };
     const look = (): boolean => {
       try {
-        const frame = observe(), tree = plan.port.tree(), node = tree.nodes.find(item => item.id === tree.current);
+        const frame = observe(), tree = plan.port.tree(), current = workingNode(step.taskId, tree.current) ?? tree.current, node = tree.nodes.find(item => item.id === current);
         const counts = doneFacts(frame)?.counts;
-        const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: tree.current, state: node?.state ?? null,
-          milestone: meterParts(tree, frame, 0)?.next ?? null, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) : 0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
+        const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
+          milestone: meterParts(tree, frame, 0)?.next ?? null, reached: reachedMilestoneNames(tree, frame) ?? [],
+          inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) : 0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
         if (stall) headHold(stall);
         return stall !== null;
       } catch (error) {
