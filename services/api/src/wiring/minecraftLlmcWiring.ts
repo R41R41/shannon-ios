@@ -31,6 +31,7 @@ import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlm
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { doneFacts, seenDoneUpdate, undergroundInOverworld, withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
+import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { chestNodesDone, followNode, noteChestsOpened, workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
 import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
@@ -296,6 +297,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   // Run 42: a chest node is done when an act opened the chest at its place (`chestNodesDone`), with the nodes the frame shows done.
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
+    validateUpdate: (before, after) => preparationCompletionProblem(before, after, observe()),
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen: tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
     follow: tree => followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(doneFacts(observe()))) });
   const worldOf = () => {

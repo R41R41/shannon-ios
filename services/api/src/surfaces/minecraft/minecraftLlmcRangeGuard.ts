@@ -86,6 +86,9 @@ function fightProblem(hand: Rec, world: Rec): Found {
       ? `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。体力 ${Math.round(health)} は 8 以下で、fight は送っていない`
       : `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。fight は送っていない`);
   }
+  if (health !== null && health <= 8 && hand.stance !== 'flee') {
+    return reason('retreat_on', `体力 ${Math.round(health)} は 8 以下。retreatHp を低くしても fight は送っていない。退避・遮蔽・回復を選ぶ`);
+  }
   return null;
 }
 /** One hand's problem as a sentence, or null. */

@@ -191,6 +191,8 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   now?(): string;
   /** mb-llmc r8: the live state shows the plan without the path and the now that the body's `planNow` says (`FcaPlanPort.liveView`). Absent: whole. */
   compact?: boolean;
+  /** A surface may reject an explicit model update before any of its operations are committed. */
+  validateUpdate?(before: PlanTree, after: PlanTree): string | null;
   /**
    * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done, `minecraftPlanDone.ts`), applied before
    * the decision reads the path. Absent: none.
@@ -335,6 +337,8 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       if ('problem' in read) return toolFailure('invalid_input', `計画は変えていない: ${read.problem}\n${planText(tree)}`, { retryable: false });
       const result = applyPlanUpdate(tree, read.update, { at: stamp() });
       if (result.problem) return toolFailure('invalid_input', `計画は変えていない: ${result.problem}\n${planText(tree)}`, { retryable: false });
+      const problem = parts.validateUpdate?.(tree, result.tree);
+      if (problem) return toolFailure('invalid_input', `計画は変えていない: ${problem}\n${planText(tree)}`, { retryable: false });
       if (result.changed) {
         // Continue contract 7 and 8: a kind outside the list was taken as `other`; the word the model wrote goes into the decision's record (`kindRaw`).
         const written = new Map(tree.nodes.map(node => [node.id, node.kindRaw]));

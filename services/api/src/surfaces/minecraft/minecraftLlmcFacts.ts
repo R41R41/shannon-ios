@@ -206,8 +206,10 @@ export function vitalsLine(observation: BodyObservation | null): string | null {
   const w = world(observation), health = finite(w.health), hunger = finite(w.food);
   if (health === null && hunger === null) return null;
   const food = foodItems(observation), listed = Array.isArray(w.inventory) || rec(w.inventory) !== null;
+  const flesh = carriedItemCounts(w, observation?.facts).get('rotten_flesh') ?? 0;
   return [...health !== null ? [`体力 ${round1(health)}/20`] : [], ...hunger !== null ? [`満腹 ${round1(hunger)}/20`] : [],
-    ...food.length ? [`食べ物 ${food.slice(0, 5).map(item => item.text).join('・')}`] : listed ? ['食べ物 無し'] : []].join('・');
+    ...food.length ? [`食べ物 ${food.slice(0, 5).map(item => item.text).join('・')}`] : listed ? [flesh ? '通常の食べ物 無し' : '食べ物 無し'] : [],
+    ...flesh ? [`非常食 rotten_flesh×${flesh}（1個で満腹+4、空腹の効果の恐れ。通常の食料点には含めない）`] : []].join('・');
 }
 
 const FOOD_ANIMAL = new Set(['cow', 'pig', 'chicken', 'rabbit', 'mooshroom', 'sheep']);
