@@ -17,6 +17,9 @@ import { heldAgainWords } from '../surfaces/minecraft/minecraftLlmcResultWords.j
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 export type { OperatorActivity, OperatorMinecraftParts } from './operatorMinecraftWords.js';
 
+const stopControl = (input: OperatorInput): boolean => input.command === 'cancel'
+  || (input.command === 'lifecycle' && (input.action === 'logout' || input.action === 'stop'));
+
 /**
  * The operator's Minecraft service in the API (owner decision 2026-10-14; `docs/operator-minecraft-contract.md`). Every
  * invocation is audited before anything else (`operator_audit`), refused unless it is one of the Minecraft operations, and
@@ -381,10 +384,12 @@ const resumed = resumeHeldTask();
       ...(input?.command === 'lifecycle' ? { action: input.action, serverId } : {}) });
     if (!c.parsed.ok) return c.refuse(c.parsed.code, c.parsed.message);
     if (!parts.enabled()) return c.refuse('disabled');
-    if (parts.audit.acceptedSince(parts.scopeKey, new Date(Date.parse(c.at) - 3600_000).toISOString()) >= OPERATOR_LIMITS.requestsPerHour) {
+    const parsed = c.parsed.input;
+    // Run53: repeated holds filled the admission quota; stopping an existing run must still use its normal checks and audit.
+    if (!stopControl(parsed)
+      && parts.audit.acceptedSince(parts.scopeKey, new Date(Date.parse(c.at) - 3600_000).toISOString()) >= OPERATOR_LIMITS.requestsPerHour) {
       return c.refuse('rate_limited');
     }
-    const parsed = c.parsed.input;
     if (parsed.command === 'lifecycle') return lifecycle(c, parsed, serverId);
     if (parsed.command === 'request') return request(c, parsed);
     if (parsed.command === 'budget') return budget(c, parsed);

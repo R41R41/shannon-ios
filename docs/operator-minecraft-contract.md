@@ -55,7 +55,7 @@ Every invocation is audited before anything else, then refused when:
 
 - it is outside the operations above (`out_of_scope`) or malformed (`invalid_input`);
 - the switch is off (`disabled`);
-- 20 invocations were accepted in the last hour (`rate_limited`; counted from the audit, so a restart does not reset it);
+- 20 invocations were accepted in the last hour (`rate_limited`; counted from the audit, so a restart does not reset it). Run53: `cancel`, `logout`, and server `stop` still pass through their normal ownership/lifecycle checks and audit at this limit, so a full admission quota cannot prevent ending an existing run. Starts, logins, requests, resumes and budget changes stay limited; the invocation flood guard, enabled switch, source, lease and native other-player guards remain;
 - 120 invocations were made in the last hour, refused ones and socket refusals included (`flooded`, `429`). A flood is not
   audited one by one: one coalesced audit row a minute (`code = flooded`, `detail = suppressed=N`), nothing in the activity record.
 

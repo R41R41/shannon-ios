@@ -236,7 +236,7 @@ describe('the operator service', () => {
     expect(s.notes).toEqual([]);
   });
 
-  it(`accepts at most ${OPERATOR_LIMITS.requestsPerHour} invocations an hour`, async () => {
+  it(`limits new starts after ${OPERATOR_LIMITS.requestsPerHour} accepted invocations an hour`, async () => {
     const s = service();
     for (let index = 0; index < OPERATOR_LIMITS.requestsPerHour; index += 1) {
       s.audit.append({ operationId: `operator:${index}`, scopeKey: 'owner', at, operator: 'ops', command: 'lifecycle', event: 'accepted',
@@ -245,6 +245,51 @@ describe('the operator service', () => {
     expect((await s.operator.handle(envelope('start'))).body).toMatchObject({ code: 'rate_limited' });
     s.advance(61);
     expect((await s.operator.handle(envelope('start'))).body).toMatchObject({ outcome: 'accepted' });
+  });
+
+  describe('run53 stop controls at the hourly acceptance limit', () => {
+    const fill = (s: ReturnType<typeof service>, count: number) => {
+      for (let index = 0; index < count; index += 1) s.audit.append({ operationId: `operator:cap-${index}`, scopeKey: 'owner', at,
+        operator: 'ops', command: 'lifecycle', event: 'accepted', code: 'accepted', argsJson: '{}' });
+    };
+    it('can cancel its existing request while ownership checks and the admission cap still apply', async () => {
+      const s = service(); await s.operator.handle(envelope('request', { goal: 'run53' })); fill(s, OPERATOR_LIMITS.requestsPerHour - 1);
+      expect((await s.operator.handle(envelope('cancel', { taskId: OTHER }))).body).toMatchObject({ code: 'not_operator_task' });
+      expect(s.stopped).toEqual([]);
+      expect((await s.operator.handle(envelope('cancel', { taskId: TASK }))).body).toMatchObject({ outcome: 'accepted', code: 'stopped' });
+      expect(s.stopped).toEqual([TASK]);
+      expect(events(s.audit)).toContain('cancel/stopped/stopped');
+      expect((await s.operator.handle(envelope('request', { goal: 'another' }))).body).toMatchObject({ code: 'rate_limited' });
+      expect(s.admitted).toHaveLength(1);
+    });
+    it.each(['logout', 'stop'])('sends %s through the usual lifecycle path at the cap and audits it', async action => {
+      const s = service(); fill(s, OPERATOR_LIMITS.requestsPerHour);
+      expect((await s.operator.handle(envelope(action))).body).toMatchObject({ outcome: 'accepted' });
+      expect(s.lifecycleCalls).toMatchObject([{ action, serverId: 'shannon-home' }]);
+      expect(s.audit.recent('owner', 1)[0]).toMatchObject({ event: 'accepted', action });
+      expect((await s.operator.handle(envelope('login'))).body).toMatchObject({ code: 'rate_limited' });
+      expect(s.lifecycleCalls).toHaveLength(1);
+    });
+    it('keeps starts, resumes and budget changes limited', async () => {
+      const s = service(); fill(s, OPERATOR_LIMITS.requestsPerHour);
+      for (const input of [envelope('start'), envelope('login'), envelope('request', { goal: 'new' }),
+        envelope('resume', { taskId: TASK }), envelope('budget', { taskId: TASK, budgetYen: 1000 })]) {
+        expect((await s.operator.handle(input)).body).toMatchObject({ code: 'rate_limited' });
+      }
+      expect(s.lifecycleCalls).toEqual([]); expect(s.admitted).toEqual([]); expect(s.stopped).toEqual([]);
+    });
+    it('keeps the enabled switch ahead of the stop exception', async () => {
+      const s = service({ enabled: false }); fill(s, OPERATOR_LIMITS.requestsPerHour);
+      expect((await s.operator.handle(envelope('logout'))).body).toMatchObject({ code: 'disabled' });
+      expect(s.lifecycleCalls).toEqual([]);
+    });
+    it('keeps the invocation flood guard for stop commands', async () => {
+      const s = service();
+      for (let index = 0; index < OPERATOR_LIMITS.invocationsPerHour; index += 1) s.audit.append({ operationId: `operator:flood-${index}`,
+        scopeKey: 'owner', at, operator: 'ops', command: 'cancel', event: 'invoked', code: 'invoked', argsJson: '{}' });
+      expect((await s.operator.handle(envelope('cancel', { taskId: TASK }))).body).toMatchObject({ code: 'flooded' });
+      expect(s.stopped).toEqual([]);
+    });
   });
 
   it('cancels only a request it started; the owner\'s task and an unknown id are refused', async () => {
