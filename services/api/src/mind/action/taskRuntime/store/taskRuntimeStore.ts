@@ -349,6 +349,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
       if (!task || task.phase !== 'stopped' || (task.kind !== 'conversation' && this.sources.hasUnboundOrigin(taskId)) || (
         task.origin === 'maintenance' && !this.maintenance.resumable(scopeKey, taskId))) return null;
       if (this.ancestors(task).some(parent => ['stopped', 'stopping', 'unknown'].includes(this.view(parent).phase))) return null;
+      this.checkAdmissionCapacity(scopeKey, task.parentId ? this.required(scopeKey, task.parentId) : null);
       this.db.prepare('UPDATE fca_task_checkpoints SET stop_requested=0,wait_reason=NULL WHERE task_id=?').run(taskId);
       this.progressStore.clearPauseNotice(taskId); // what a pause said (its report, its summary) is not what a task that runs again says
       const summary = this.options.pausedSummary?.(task.summary) ? { summary: '' } : {};
@@ -370,6 +371,13 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
      return this.authority.transaction(() => this.recovery.reopenRejected(scopeKey, taskId, summary, failedSummary)); }
   reopenRetired(scopeKey: string, taskId: string, summary: string): TaskView | null { return this.authority.transaction((
     ) => this.recovery.reopenRetired(scopeKey, taskId, summary)); }
+  /** A confirmed stopped task stays resumable history, but occupies no execution slot. Unknown or an unacknowledged step still counts. */
+  private checkAdmissionCapacity(scope: string, parent: TaskRecord | null): void {
+    const active = (task: TaskRecord) => !terminal(task) && !(task.status === 'paused' && task.pauseReason === 'fca_stopped'
+      && !this.checkpoint(task.id).step_id);
+    if (parent && this.children(parent).filter(active).length >= limits.children) throw new Error('FCA_CHILD_LIMIT');
+    if (this.all(scope).filter(active).length >= limits.activeTasks) throw new Error('FCA_ACTIVE_TASK_LIMIT');
+  }
   private initialize(id: string, waitReason: string | null): void {
     this.db.prepare('INSERT INTO fca_task_checkpoints(task_id,wait_reason) VALUES(?,?)').run(id, waitReason);
     this.authority.refresh?.(id, this.now());
@@ -474,6 +482,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
    db: this.db,
    children: this.children.bind(this),
    all: this.all.bind(this),
+   checkAdmissionCapacity: this.checkAdmissionCapacity.bind(this),
    options: this.options,
    sources: this.sources,
    checkpoint: this.checkpoint.bind(this),

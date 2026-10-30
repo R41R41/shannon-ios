@@ -1,3 +1,4 @@
+import type { OperatorAdmission } from './operatorMinecraftRequests.js';
 import { createOperatorContext } from './operatorMinecraftContext.js';
 import { FINISHED, holdDetail, FINISHED_FOR_GOOD, HOUR_MS, ago, BUDGET_NOT_RUNNING } from './operatorMinecraftWords.js';
 import type { OperatorMinecraftParts } from './operatorMinecraftWords.js';
@@ -84,9 +85,16 @@ export function createOperatorRequests(
     ) {
       return c.refuse('minecraft_busy', '保留中の依頼があります。再開（resume）か止める（cancel）までは新しく始めません。');
     }
-    const admitted = observed('operator_minecraft_request', c.operationId, () =>
+    let admitted: OperatorAdmission;
+try {
+admitted = observed('operator_minecraft_request', c.operationId, () =>
       requests.admit({ operationId: c.operationId, goal: input.goal, operator: c.operator }),
     );
+} catch (error) {
+if (error instanceof Error && ['FCA_CHILD_LIMIT', 'FCA_ACTIVE_TASK_LIMIT'].includes(error.message))
+ return c.refuse('minecraft_busy', '共通タスクの同時実行枠がいっぱいです。停止済みの履歴は残ります。');
+throw error;
+}
     if (!admitted.ok) return c.refuse(admitted.code);
     const deadlineAt = new Date(Date.parse(parts.now()) + input.maxMinutes * 60_000).toISOString();
     try {

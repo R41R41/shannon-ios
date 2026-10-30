@@ -26,6 +26,7 @@ export interface RuntimeAdmissionPorts {
   db: DatabaseSync;
   children(task: TaskRecord): TaskRecord[];
   all(scope: string): TaskRecord[];
+  checkAdmissionCapacity(scopeKey: string, parent: TaskRecord | null): void;
   options: TaskRuntimeOptions;
   sources: TaskSourceStore;
   checkpoint(id: string): Checkpoint;
@@ -113,8 +114,8 @@ export function admitRuntimeCreateChild(
         if (depth >= limits.depth) throw new Error('FCA_DEPTH_LIMIT');
         ancestor = ancestor.parentId ? ports.required(scopeKey, ancestor.parentId) : null;
       }
-      if (ports.children(parent).filter((child) => !terminal(child)).length >= limits.children) throw new Error('FCA_CHILD_LIMIT');
-      if (ports.all(scopeKey).filter((task) => !terminal(task)).length >= limits.activeTasks) throw new Error('FCA_ACTIVE_TASK_LIMIT');
+      ports.checkAdmissionCapacity(scopeKey, parent);
+
     };
     checkChildCapacity();
     const child = ports.authority.create({
