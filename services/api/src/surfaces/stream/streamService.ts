@@ -1,4 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import { stopStreamLine, ignoreStreamViewer } from './streamControls.js';
+import { StreamProgramRunner } from './streamProgramRunner.js';
+import { streamStats, recordSpoken } from './streamStats.js';
+import { StreamProgram } from './streamProgram.js';
+import { StreamConversation } from './streamConversation.js';
 import type { CheckedStreamReply } from '../../mind/emotion/streamFeeling.js';
 import {
   STREAM_LIMITS, STREAM_PLATFORM, StreamError, type IncomingComment, type StreamAnswering,
@@ -8,35 +13,32 @@ import {
 import type { StreamServiceParts } from './streamServiceParts.js';
 import { StreamAuthor, type WrittenLine } from './streamAuthor.js';
 import { chooseComments, type ChosenComments } from './streamChooser.js';
-import { checkedLine } from './streamGate.js';
 import { StreamChatPosts } from './streamChatPosts.js';
 import { StreamGameTalk } from './streamGameTalk.js';
 import { StreamLedger, type CommentRecord } from './streamLedger.js';
-import { ModelBudget, StreamMeasure, percentiles } from './streamMeasure.js';
+import { ModelBudget, StreamMeasure } from './streamMeasure.js';
 import { StreamMouth, type MouthEnd } from './streamMouth.js';
-import { STREAM_CLOSINGS, STREAM_GREETINGS, nextTopicSubject } from './streamTopics.js';
+import { nextTopicSubject } from './streamTopics.js';
 import type { WriterComment, WriterPurpose } from './streamWriter.js';
 
-/**
- * The stream's place in the head (owner 2026-10-29, `docs/stream-contract.md`): a started stream, the chat the ear brings, the choice of what
- * to answer, the gates, the writer, her commentary on the game and her own talk, all ending in one mouth (`StreamMouth`). Nothing here is
- * behind a switch: with no stream started nothing runs. Her feeling is `StreamFeeling`; every line is written from a stream turn
- * (`StreamAuthor`) and given nothing of the owner's private life. The chat's words live in memory until the stream ends. Time and every model
- * are injected; `tick()` is what a timer calls, so a test steps it by hand and `settle()` waits for the work in flight.
+/** 配信セッションの調停役。耳のコメント・番組進行・公開会話・既存の書き手を、一つの口へつなぐ。
+ * 時刻とモデルは注入し、tickとsettleで無料の決定的テストを行う。持ち主の私的な情報は取り込まない。
  */
 interface Session {
   /** The end in progress: a second ask for it (the ear's retry) is the same end. */
   ending?: Promise<{ stream: StreamSessionView; summary: StreamSummary }>;
   view: StreamSessionView;
+  program: StreamProgram;
   startedMs: number;
   endedMs?: number;
+  summary?: StreamSummary;
 }
 
 const iso = (ms: number): string => new Date(ms).toISOString();
 const TTL: Readonly<Record<StreamLineKind, number>> = {
   reply: 60_000, notice: 60_000, commentary: 30_000, topic: 40_000, greeting: 60_000, closing: STREAM_LIMITS.closingMilliseconds,
 };
-/** The recent lines of hers handed to the writer, so that she does not say them again. */
+/** 再生済みの発言だけを書き手に渡す。 */
 const RECENT_LINES = 8;
 const ZERO_COUNTERS = { lines: 0, notices: 0, declined: 0, answered: 0, spoken: 0 };
 
@@ -49,6 +51,8 @@ export class StreamService {
   private readonly author: StreamAuthor;
   private readonly jobs = new Set<Promise<unknown>>();
   private replyJob: Promise<void> | null = null;
+  private readonly programRunner: StreamProgramRunner;
+  private readonly conversation = new StreamConversation();
   private topicJob: Promise<void> | null = null;
   private commentary: StreamGameTalk | null = null;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -68,7 +72,13 @@ export class StreamService {
     this.author = new StreamAuthor({
       scopeKey: parts.scopeKey, now: parts.now, model: parts.model, feeling: parts.feeling, snapshot: parts.snapshot, budget: this.budget,
       measure: () => this.measure, identity: parts.identity, persona: parts.persona, body: () => parts.body?.() ?? null,
+      context: () => [this.session?.program.block() ?? '', this.conversation.block()].filter(Boolean).join('\n\n'),
       recent: () => [...this.ownLines], crowd: () => this.crowdLine(), log: line => this.log(line),
+    });
+    this.programRunner = new StreamProgramRunner({
+      author: this.author, mouth: this.mouth, now: () => this.now(), occupied: () => Boolean(this.replyJob || this.topicJob),
+      stale: (session, epoch) => this.stale(session as Session, epoch), track: job => this.track(job),
+      put: (reply, plan, kind) => this.putOwn(reply, plan, kind),
     });
     this.mouth.provideState(() => ({ stream: this.session ? this.session.view : null }));
     this.mouth.onEnd(end => this.lineEnded(end));
@@ -115,17 +125,19 @@ export class StreamService {
     const now = this.now();
     const day = iso(now).slice(0, 10).replace(/-/gu, '');
     const title = Array.from((input.title ?? '').replace(/\s+/gu, ' ').trim()).slice(0, STREAM_LIMITS.titleCharacters).join('');
+    const program = new StreamProgram(input.program, title);
     const view: StreamSessionView = {
       streamId: `st-${day}-${randomBytes(3).toString('hex')}`, platform: STREAM_PLATFORM, startedAt: iso(now), title,
-      minecraft: input.minecraft === true, chatWrites: input.chatWrites === true, phase: 'waiting_for_chat', broadcast: null, paused: false,
+      minecraft: input.minecraft === true, chatWrites: input.chatWrites === true, phase: 'waiting_for_chat', broadcast: null,
+      paused: false, program: program.view,
+      ...(input.targetVideoId ? { targetVideoId: input.targetVideoId } : {}),
     };
-    const session: Session = { view, startedMs: now };
+    const session: Session = { view, program, startedMs: now };
     this.session = session;
     this.reset(now);
     this.mouth.begin(view.streamId);
     this.startCommentary(session);
     this.mouth.announceState();
-    this.track(this.greet(session));
     this.log(`Shannon stream started id=${view.streamId} minecraft=${view.minecraft} chatWrites=${view.chatWrites}`);
     return { created: true, stream: view };
   }
@@ -134,6 +146,7 @@ export class StreamService {
     this.ledger = new StreamLedger(this.parts.salt);
     this.measure = new StreamMeasure();
     this.ownLines = [];
+    this.conversation.clear();
     this.notices.length = 0;
     this.chatPosts.reset();
     Object.assign(this.counters, ZERO_COUNTERS);
@@ -153,7 +166,19 @@ export class StreamService {
     const streamId = session.view.streamId;
     session.view.paused = true;
     this.commentary?.stop();
-    await this.closing(session);
+    const closingInMouth = this.mouth.holds('closing');
+    const finished = session.program.view.finished;
+    session.program.move('closing', this.now());
+    session.program.view.layout = 'ending';
+    session.program.view.finished = finished;
+    if (!closingInMouth) {
+      this.mouth.clearWaiting();
+      if (session.program.view.ready && !finished) await this.programRunner.closing(session, {
+        comments: this.ledger.count(), answered: this.counters.answered,
+        minutes: Math.max(1, Math.round((this.now() - session.startedMs) / 60_000)),
+      });
+    }
+    session.program.clear();
     session.view.phase = 'ended';
     session.view.endedAt = iso(this.now());
     session.endedMs = this.now();
@@ -161,6 +186,7 @@ export class StreamService {
       comments: this.ledger.count(), answered: this.counters.answered, lines: this.counters.lines, notices: this.counters.notices,
       declined: this.counters.declined, durationSeconds: Math.max(0, Math.round((this.now() - session.startedMs) / 1000)),
     };
+    session.summary = summary;
     this.commentary = null;
     this.ledger.clear();
     this.ownLines = [];
@@ -176,11 +202,15 @@ export class StreamService {
     const session = this.live();
     if (!session || session.view.streamId !== input.streamId) throw new StreamError(409, 'STREAM_NOT_LIVE');
     if (input.ended === true) return (await this.end(input.streamId)).stream;
-    session.view.broadcast = { videoId: input.videoId ?? '', liveChatId: input.liveChatId ?? '', title: input.title ?? '', channelId: input.channelId ?? '' };
-    if (session.view.phase === 'waiting_for_chat') {
+    if (session.view.targetVideoId && input.videoId !== session.view.targetVideoId) throw new StreamError(409, 'STREAM_VIDEO_MISMATCH');
+    session.view.broadcast = { onAir: input.onAir === true, videoId: input.videoId ?? '', liveChatId: input.liveChatId ?? '', title: input.title ?? '',
+      channelId: input.channelId ?? '' };
+    if (input.onAir === true && session.view.phase === 'waiting_for_chat') {
+      session.program.ready();
       session.view.phase = 'live';
       this.lastLineMs = Math.max(this.lastLineMs, this.now());
       this.mouth.announceState();
+      this.programRunner.schedule(session);
     }
     return session.view;
   }
@@ -198,6 +228,7 @@ export class StreamService {
         continue;
       }
       accepted += 1;
+      this.measure.note(this.measure.transportMs, now - Date.parse(incoming.publishedAt));
       // Every comment moves her at once (closed tags and a digest); a reaction of the crowd is the crowd's, not a viewer's. An event is no speech.
       if (record.event) continue;
       this.parts.feeling.comment(this.parts.scopeKey, {
@@ -211,21 +242,10 @@ export class StreamService {
     const session = this.live();
     if (!session) throw new StreamError(409, 'STREAM_NOT_LIVE');
     if (control.action === 'pause' || control.action === 'resume') session.view.paused = control.action === 'pause';
-    else if (control.action === 'stop_line') this.stopLine();
-    else this.ignoreViewer(control.commentId);
-  }
-
-  private stopLine(): void {
-    const current = this.mouth.currentLine();
-    if (!current) return;
-    this.mouth.dropAnswering(current.commentIds);
-    for (const id of current.commentIds) this.give(this.ledger.get(id), 'skipped');
-  }
-
-  private ignoreViewer(commentId: string): void {
-    const record = this.ledger.get(commentId);
-    if (!record) throw new StreamError(404, 'STREAM_COMMENT_UNKNOWN');
-    this.mouth.dropAnswering(this.ledger.ignore(record.authorId).map(item => item.commentId));
+    else if (control.action === 'stop_line') stopStreamLine(this.mouth, this.ledger, (record, status) => this.give(record, status));
+    else if (control.action === 'ignore') ignoreStreamViewer(this.mouth, this.ledger, control.commentId);
+    else this.programRunner.control(session, control);
+    this.mouth.announceState();
   }
 
   receipt(lineId: string, receipt: StreamReceipt): 'ok' | 'repeat' | 'unknown' { return this.mouth.receipt(lineId, receipt); }
@@ -240,30 +260,21 @@ export class StreamService {
   bridgeState() {
     const session = this.live();
     if (!session) return { stream: null, chatPosts: [] };
-    const { streamId, platform, phase, startedAt, title, chatWrites, broadcast } = session.view;
-    return { stream: { streamId, platform, phase, startedAt, title, chatWrites, broadcast }, chatPosts: this.pendingPosts() };
+    const { streamId, platform, phase, startedAt, title, chatWrites, broadcast, targetVideoId } = session.view;
+    return { stream: { streamId, platform, phase, startedAt, title, chatWrites, broadcast, ...(targetVideoId ? { targetVideoId } : {}) },
+      chatPosts: this.pendingPosts() };
   }
 
   stats() {
     const session = this.session;
-    const duration = session ? Math.max(0, Math.round(((session.endedMs ?? this.now()) - session.startedMs) / 1000)) : 0;
-    const minutes = Math.max(1 / 60, duration / 60);
-    return {
-      comments: this.ledger.count(), answered: this.counters.answered, lines: this.counters.lines, notices: this.counters.notices,
-      declined: this.counters.declined, durationSeconds: duration, waiting: this.mouth.waitingCount(), ...this.latencies(),
-      inFlight: (this.replyJob ? 1 : 0) + (this.topicJob ? 1 : 0), modelCallsLastMinute: this.budget.used(),
-      measure: {
-        ...this.measure.summary(), answeredPerMinute: Math.round(this.counters.answered / minutes * 100) / 100, spoken: this.counters.spoken,
-        duplicates: this.ledger.duplicateCount(), chatPosts: { posted: this.chatPosts.posted, failed: this.chatPosts.failed },
-        gate: this.parts.gate.stats, commentary: this.commentary?.stats() ?? null,
-      },
-    };
-  }
-
-  /** Comment to first sound and comment to line, in milliseconds (the receipt's `startedAt`), for the console. */
-  private latencies() {
-    const sound = percentiles(this.measure.commentToSoundMs);
-    return { firstSoundMedianMs: sound.median, firstSoundP90Ms: sound.p90, lineMedianMs: percentiles(this.measure.commentToLineMs).median };
+    return streamStats({
+      ...this.counters, comments: session?.summary?.comments ?? this.ledger.count(),
+      durationSeconds: session ? Math.max(0, Math.round(((session.endedMs ?? this.now()) - session.startedMs) / 1000)) : 0,
+      waiting: this.mouth.waitingCount(), inFlight: Number(Boolean(this.replyJob)) + Number(Boolean(this.topicJob)) + Number(this.programRunner.busy()),
+      modelCallsLastMinute: this.budget.used(), measure: this.measure, duplicates: this.ledger.duplicateCount(),
+      chatPosts: { posted: this.chatPosts.posted, failed: this.chatPosts.failed },
+      gate: this.parts.gate.stats, commentary: this.commentary?.stats() ?? null,
+    });
   }
 
   view() {
@@ -277,7 +288,11 @@ export class StreamService {
       if (!session) return;
       const now = this.now();
       this.ledger.expire(now);
-      if (session.view.paused) return;
+      if (session.view.paused || !session.program.view.ready || session.program.view.finished) return;
+      if (session.program.view.stage !== 'activity') {
+        this.programRunner.schedule(session);
+        return;
+      }
       this.maybeAnswer(session, now);
       this.maybeTalk(session, now);
     } catch (error) {
@@ -286,7 +301,7 @@ export class StreamService {
   }
 
   private maybeAnswer(session: Session, now: number): void {
-    if (this.replyJob || this.mouth.waitingCount() >= STREAM_LIMITS.waitingLines) return;
+    if (this.programRunner.busy() || this.replyJob || this.mouth.waitingCount() >= STREAM_LIMITS.waitingLines) return;
     if (now - this.lastChooseMs < STREAM_LIMITS.chooseEveryMilliseconds || !this.budget.available('reply')) return;
     const pick = chooseComments(this.ledger, now);
     if (!pick) return;
@@ -318,7 +333,9 @@ export class StreamService {
   }
 
   private async answer(session: Session, pick: ChosenComments): Promise<void> {
+    const epoch = session.program.epoch;
     const { primary, group } = pick;
+    this.measure.note(this.measure.selectionMs, this.now() - primary.receivedMs);
     const streamId = session.view.streamId;
     for (const record of group) Object.assign(record, { status: 'picked', attempts: record.attempts + 1 });
     const { scopeKey } = this.parts;
@@ -334,13 +351,23 @@ export class StreamService {
     const tellOff = turn.state.viewer?.ladder === 'tell_off' && turn.notice !== null;
     // An event the ear described is no request: there is nothing to read for what it asks.
     const recent = this.recentChat(4).filter(text => text !== primary.text);
+    const gateAt = this.now();
     const gate = primary.event ? { declined: false } : await this.parts.gate.before(primary.text, primary.tags, recent);
-    if (this.over(session)) return;
+    this.measure.note(this.measure.gateMs, this.now() - gateAt);
+    if (this.stale(session, epoch)) {
+      group.forEach(record => this.give(record, 'new'));
+      return;
+    }
     const comments = group.map(record => this.writerComment(record));
     const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline: gate.declined };
     const kind: StreamLineKind = tellOff ? 'notice' : 'reply';
+    const writerAt = this.now();
     const written = await this.author.write(this.authorSession(session), turn, purpose, group.map(record => record.commentId), kind);
-    if (this.over(session)) return;
+    this.measure.note(this.measure.writerMs, this.now() - writerAt);
+    if (this.stale(session, epoch)) {
+      group.forEach(record => this.give(record, 'new'));
+      return;
+    }
     if (!written) return group.forEach(record => this.give(record, 'new'));
     this.enqueueReply(group, written, kind, gate.declined);
   }
@@ -355,7 +382,7 @@ export class StreamService {
       return;
     }
     const answering: StreamAnswering[] = chosen.map(record => ({
-      commentId: record.commentId, authorName: record.authorName, text: record.text, kind: record.kind,
+      commentId: record.commentId, authorName: record.authorName, text: declined ? '配信ではお答えできない内容' : record.text, kind: record.kind,
       ...(record.amountDisplay ? { amount: { display: record.amountDisplay } } : {}),
     }));
     const lineId = this.mouth.enqueue({
@@ -366,7 +393,7 @@ export class StreamService {
       return chosen.forEach(record => this.give(record, 'new'));
     }
     const now = this.now();
-    this.noteLine(written.reply.text, now);
+    this.noteLine(now);
     if (kind === 'reply') this.lastReplyMs = now;
     for (const record of chosen) {
       record.lineAtMs = now;
@@ -382,39 +409,18 @@ export class StreamService {
     return { streamId: session.view.streamId, title: session.view.title, minecraft: session.view.minecraft };
   }
 
-  private noteLine(text: string, now: number): void {
+  private noteLine(now: number): void {
     this.counters.lines += 1;
     this.lastLineMs = now;
-    this.ownLines.push(text);
-    if (this.ownLines.length > RECENT_LINES) this.ownLines.shift();
   }
 
-  private async greet(session: Session): Promise<void> {
-    const line = await this.ownLine(session, { kind: 'greeting' }, 'greeting', STREAM_GREETINGS);
-    if (line && !this.over(session)) this.putOwn(line.reply, line.plan, 'greeting');
-  }
-
-  private async closing(session: Session): Promise<void> {
-    const minutes = Math.max(1, Math.round((this.now() - session.startedMs) / 60_000));
-    const purpose: WriterPurpose = { kind: 'closing', summary: { comments: this.ledger.count(), answered: this.counters.answered, minutes } };
-    const line = await this.ownLine(session, purpose, 'closing', STREAM_CLOSINGS);
-    if (line) this.putOwn(line.reply, line.plan, 'closing');
-  }
-
-  /** A line of her own, with a fixed line in its place when the model is late, over its allowance or flagged. */
-  private async ownLine(session: Session, purpose: WriterPurpose, kind: 'greeting' | 'closing', fixed: readonly string[])
-    : Promise<{ reply: CheckedStreamReply; plan: StreamLinePlan } | null> {
-    const turn = this.author.ownTurn(session.view.streamId);
-    if (!turn) return null;
-    const written = await this.author.write(this.authorSession(session), turn, purpose, [], kind);
-    if (written) return { reply: written.reply, plan: written.draft.plan };
-    const verdict = checkedLine(turn, fixed[Math.floor(this.now() / 1000) % fixed.length]!);
-    return verdict.ok ? { reply: verdict.reply, plan: { affect: 'happy', affectIntensity: 0.5, delivery: 'gentle' } } : null;
+  private stale(session: Session, epoch: number): boolean {
+    return this.over(session) || session.program.epoch !== epoch || session.view.paused;
   }
 
   private putOwn(reply: CheckedStreamReply, plan: StreamLinePlan, kind: StreamLineKind): string | null {
     const lineId = this.mouth.enqueue({ kind, reply, plan, ttlMilliseconds: TTL[kind] });
-    if (lineId !== null) this.noteLine(reply.text, this.now());
+    if (lineId !== null) this.noteLine(this.now());
     return lineId;
   }
 
@@ -433,13 +439,15 @@ export class StreamService {
   }
 
   private async talk(session: Session): Promise<void> {
+    const epoch = session.program.epoch;
     const turn = this.author.ownTurn(session.view.streamId);
     if (!turn) return;
     const minecraft = session.view.minecraft && this.parts.body?.() != null;
     const subject = nextTopicSubject(this.topicCount, { minecraft, chatSpeaks: this.recentChat().length > 0 });
     this.topicCount += 1;
     const written = await this.author.write(this.authorSession(session), turn, { kind: 'topic', subject }, [], 'topic');
-    if (!written || this.over(session) || session.view.phase !== 'live') return;
+    if (!written || this.over(session) || session.view.phase !== 'live' || session.view.paused
+      || session.program.epoch !== epoch) return;
     if (!this.mouth.hasCurrent() && this.mouth.waitingCount() === 0) this.putOwn(written.reply, written.draft.plan, 'topic');
   }
 
@@ -451,7 +459,8 @@ export class StreamService {
       put: reply => this.putOwn(reply, { affect: 'excited', affectIntensity: 0.5, delivery: 'quick' }, 'commentary'),
       base: {
         now: () => this.now(), log: line => this.log(line), identity: this.parts.identity, persona: () => this.parts.persona(session.view.streamId),
-        body: () => this.parts.body?.() ?? '', quiet: () => session.view.paused || this.over(session),
+        body: () => this.parts.body?.() ?? '', quiet: () => session.view.paused || this.over(session) || !session.program.view.ready
+          || session.program.view.stage !== 'activity',
         // A stream is a show that talks all the time: a moment waits only while a reply is being written (one model call at a time), not
         // behind the replies waiting in her mouth or the quiet after one (a busy chat left the game without a word in the bench).
         room: () => ({ replying: this.replyJob !== null, sinceHumanMilliseconds: null }),
@@ -467,32 +476,21 @@ export class StreamService {
     const { line } = end;
     this.measure.reason(`${end.outcome}:${String(end.reason)}`);
     if (end.outcome !== 'spoken') {
+      this.session?.program.ended(line.id, false, this.now());
       const stopped = end.reason === 'stopped' || end.reason === 'dropped';
       for (const id of line.commentIds) this.give(this.ledger.get(id), stopped ? 'skipped' : 'new');
       return;
     }
+    if (this.session?.view.phase !== 'ended') {
+      const declined = line.commentIds.some(id => this.ledger.get(id)?.status === 'declined');
+      this.conversation.spoken(line, declined);
+      this.ownLines.push(line.text);
+      if (this.ownLines.length > RECENT_LINES) this.ownLines.shift();
+    }
+    if (this.session?.program.ended(line.id, true, this.now())) this.mouth.announceState();
     this.counters.spoken += 1;
-    this.spoken(line.commentIds, line.createdMs, end.receipt);
+    recordSpoken(this.ledger, this.measure, this.counters, line.commentIds, line.createdMs, end.receipt);
     // With `chatWrites`, a reply she has said is written in the chat too (the ear posts it).
     if (line.kind === 'reply' && this.live()?.view.chatWrites) this.chatPosts.add(line.id, line.text, line.answering[0]?.authorName, this.now());
   }
-
-  private spoken(commentIds: readonly string[], createdMs: number, receipt: StreamReceipt | undefined): void {
-    const startedAt = receipt?.startedAt ? Date.parse(receipt.startedAt) : Number.NaN;
-    const endedAt = receipt?.endedAt ? Date.parse(receipt.endedAt) : Number.NaN;
-    if (Number.isFinite(startedAt)) this.measure.note(this.measure.lineToSoundMs, startedAt - createdMs);
-    if (Number.isFinite(startedAt) && Number.isFinite(endedAt)) this.measure.counts.speakingSeconds += Math.max(0, (endedAt - startedAt) / 1000);
-    for (const id of commentIds) {
-      const record = this.ledger.get(id);
-      if (!record) continue;
-      if (record.status === 'picked') {
-        record.status = 'answered';
-        this.counters.answered += 1;
-      }
-      if (!Number.isFinite(startedAt)) continue;
-      record.soundAtMs = startedAt;
-      this.measure.note(this.measure.commentToSoundMs, startedAt - record.receivedMs);
-    }
-  }
-
 }

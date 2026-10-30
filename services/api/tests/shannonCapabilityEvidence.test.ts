@@ -355,3 +355,16 @@ describe('Shannon capability description', () => {
       StudyStore.prototype.revise, SQLiteStudyShowing.prototype.tell, ShannonAutonomyService.prototype.identityProjection)).toBe(true);
   });
 });
+
+// 通常会話の能力一覧は変えず、配信の入力経路と再生完了の実装で裏付ける。
+it('配信の番組進行は配信内の公開会話と再生報告を根拠にする', async () => {
+  const { SHANNON_STREAM_PROGRAM_CAPABILITY } = await import('@shannon/cognition');
+  const { StreamProgram } = await import('../src/surfaces/stream/streamProgram.js');
+  const { StreamConversation } = await import('../src/surfaces/stream/streamConversation.js');
+  expect(SHANNON_STREAM_PROGRAM_CAPABILITY.text).toContain('実際に声で話した公開会話');
+  const program = new StreamProgram({ topic: '雑談' });
+  program.ready(); program.expect('line-1', program.epoch);
+  program.ended('line-1', false, 0);
+  expect(program.view.completed).toEqual([]);
+  expect(new StreamConversation().block()).toBe('');
+});

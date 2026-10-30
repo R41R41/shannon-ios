@@ -12,7 +12,11 @@ const started = async (options: Parameters<typeof makePlace>[0] = {}, input = { 
   const place = makePlace(options);
   const { stream } = place.service.start(input);
   await place.service.settle();
-  await place.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch' });
+  await place.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch', onAir: true });
+  await place.service.settle();
+  // 個々の返答を検証するテストでは、配信主の操作で説明を飛ばして雑談へ。自動進行はstreamProgram.test.tsで検証。
+  place.service.control({ action: 'program_next' });
+  place.service.control({ action: 'program_next' });
   return { ...place, streamId: stream.streamId };
 };
 
@@ -27,9 +31,9 @@ describe('a stream started: nothing is behind a switch', () => {
     expect(stream).toMatchObject({ phase: 'waiting_for_chat', platform: 'youtube', title: 'テスト配信', broadcast: null, paused: false });
     expect(stream.streamId).toMatch(/^st-20261029-[0-9a-f]{6}$/u);
     await place.service.settle();
-    expect(place.service.mouth.currentLine()).toMatchObject({ kind: 'greeting' });
+    expect(place.service.mouth.currentLine()).toBeNull();
     expect(place.service.start({}).created).toBe(false);
-    const live = await place.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'c' });
+    const live = await place.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'c', onAir: true });
     expect(live.phase).toBe('live');
     expect(live.broadcast).toMatchObject({ liveChatId: 'lc' });
   });
@@ -234,7 +238,7 @@ describe('harassment', () => {
     await place.step(100);
     const line = place.service.mouth.waitingLines()[0]!;
     expect(line.kind).toBe('notice');
-    expect(line.answering[0]!.text).toBe('お前殺す');
+    expect(line.answering[0]!.text).toBe('配信ではお答えできない内容');
     expect(writerCalls(place)[0]!.request.turnContext).toContain('言い渡す');
     const view = place.service.view();
     expect(view.notices).toEqual([{ viewer: '視聴者2', reason: 'threat', at: expect.any(String) }]);
@@ -485,7 +489,7 @@ describe('events the ear describes (contract §2)', () => {
 describe('the ear\'s retries (contract §2)', () => {
   it('takes the same broadcast again, and ended again, as it took them the first time', async () => {
     const place = await started();
-    const again = await place.service.broadcast({ streamId: place.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch' });
+    const again = await place.service.broadcast({ streamId: place.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch', onAir: true });
     expect(again.phase).toBe('live');
     expect(place.service.bridgeState().stream).toMatchObject({ phase: 'live', startedAt: expect.any(String), broadcast: { videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch' } });
     const first = place.service.broadcast({ streamId: place.streamId, ended: true });

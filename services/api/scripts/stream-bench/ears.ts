@@ -78,7 +78,7 @@ export class InlineEar implements Ear {
     }
     const found = (await this.youtube('/liveBroadcasts?part=snippet&broadcastStatus=active&broadcastType=all'))?.items?.[0];
     if (!found || this.stopped) return;
-    const broadcast = { streamId, videoId: found.id, liveChatId: found.snippet.liveChatId, title: found.snippet.title, channelId: found.snippet.channelId };
+    const broadcast = { streamId, onAir: Boolean(found.snippet.actualStartTime), videoId: found.id, liveChatId: found.snippet.liveChatId, title: found.snippet.title, channelId: found.snippet.channelId };
     await this.head('/v1/platform/stream/broadcast', broadcast);
     let token = '', polling = 3000;
     while (!this.stopped) {

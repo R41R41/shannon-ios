@@ -10,7 +10,9 @@ import { parseStreamDraft, streamWriterPrompt, type StreamDraft, type WriterInpu
 /**
  * The part of the stream that asks a model: one call at a time against the minute's allowance, and the line for a purpose written from a
  * stream turn. The request is built from `streamModelRequest(turn)` and from nothing of the owner's (no profile, recall, person memory, task
- * or tool); the answer (the line led by its mark, in the reply of the structured answer) is read, checked (`checkedLine`), rewritten once with the note of what was off, and at last dropped or
+ * or tool); the answer (the line led by its mark, in the reply of the structured answer) is read, checked (`checkedLine`),
+ * rewritten once with the note of what was off,
+ * and at last dropped or
  * replaced by the ladder's safe line. Only a `CheckedStreamReply` comes out.
  */
 export interface AuthorParts {
@@ -28,6 +30,7 @@ export interface AuthorParts {
   /** Her last lines on this stream, and how the chat feels now. */
   recent: () => string[];
   crowd: () => string;
+  context: () => string;
   log: (line: string) => void;
 }
 
@@ -98,7 +101,7 @@ export class StreamAuthor {
     const { parts } = this;
     return {
       identity: parts.identity(), persona: parts.persona(session.streamId), streamBlock: request.block, title: session.title,
-      body: session.minecraft ? parts.body() ?? '' : '', recent: parts.recent(), crowd: parts.crowd(), purpose,
+      body: session.minecraft ? parts.body() ?? '' : '', recent: parts.recent(), crowd: parts.crowd(), context: parts.context(), purpose,
       ...(rewriteNote ? { rewriteNote } : {}),
     };
   }

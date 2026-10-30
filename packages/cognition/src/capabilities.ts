@@ -304,6 +304,12 @@ export function withMinecraftBodyCapability(prompt: string): string {
   return at < 0 ? prompt : `${prompt.slice(0, at + anchor.length)}${line}${prompt.slice(at + anchor.length)}`;
 }
 
+/** 配信セッションの中でだけ使う能力。通常会話の道具や私的記憶を追加しない。 */
+export const SHANNON_STREAM_PROGRAM_CAPABILITY = Object.freeze({
+  id: 'stream_program', audience: 'owner',
+  text: '配信中は、挨拶・企画説明・雑談・終わりの挨拶に沿って話す。実際に声で話した公開会話と、配信主が公開を許した話題だけを引き継ぐ。場面と画面の変更は管理画面で行う。',
+} as const);
+
 /** Things the code has no path for. Keep in sync with the capability evidence test. */
 export const SHANNON_LIMITATIONS = Object.freeze([
   { id: 'calendar_mail', text: 'カレンダーへの登録・変更、メールやメッセージの送信、ほかの人への電話、予約、購入。' },

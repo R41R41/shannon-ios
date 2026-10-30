@@ -180,7 +180,10 @@ describe('the stream place wiring (surfaces/stream/)', () => {
       ? JSON.stringify({ say: 'これでいいですか、見せますね', affect: 'annoyed', affectIntensity: 0.5, delivery: 'conversational', answered: [] }) : null) });
     const { stream } = place.service.start({});
     await place.service.settle();
-    await place.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'l', title: '', channelId: '' });
+    await place.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'l', title: '', channelId: '', onAir: true });
+    await place.service.settle();
+    place.service.control({ action: 'program_next' });
+    place.service.control({ action: 'program_next' });
     place.service.ingest(stream.streamId, [place.comment('怒ってみせて')]);
     await place.step(100);
     const requests = place.recorded.filter(item => item.request.message.includes('怒ってみせて')).map(item => item.request);

@@ -1,4 +1,4 @@
-import { SHANNON_EMOTION_KINDS, SHANNON_OWNER_NAME, type ShannonEmotionKind } from '@shannon/cognition';
+import { SHANNON_EMOTION_KINDS, SHANNON_OWNER_NAME, SHANNON_STREAM_PROGRAM_CAPABILITY, type ShannonEmotionKind } from '@shannon/cognition';
 import {
   STREAM_DELIVERIES, STREAM_LIMITS, type StreamDelivery, type StreamLineKind, type StreamLinePlan,
 } from './streamContract.js';
@@ -30,6 +30,7 @@ export type WriterPurpose =
   | { kind: 'reply'; comments: readonly WriterComment[]; decline: boolean }
   | { kind: 'notice'; comments: readonly WriterComment[] }
   | { kind: 'topic'; subject: TopicSubject }
+  | { kind: 'program'; instruction: string }
   | { kind: 'greeting' }
   | { kind: 'closing'; summary: { comments: number; answered: number; minutes: number } };
 
@@ -50,6 +51,7 @@ export interface WriterInput {
   /** How the chat feels now (a run of 「草」), or ''. */
   crowd: string;
   purpose: WriterPurpose;
+  context?: string;
   /** The note of a rewrite (`rewriteNote`), after everything else. */
   rewriteNote?: string;
 }
@@ -62,6 +64,7 @@ const quote = (value: string): string => value.replace(/\s+/gu, ' ').trim();
 function rules(): string {
   return [
     '[配信のルール]',
+    SHANNON_STREAM_PROGRAM_CAPABILITY.text,
     'いまボクは YouTube Live で配信している。知らない人がたくさん見ていて、ボクの声と字幕が流れる。ここは公の場。',
     '- 返事（reply）には、先頭に気持ちのしるしを1つ付けて、そのあとに声に出す一言だけを書く。形: [気持ち|強さ|話し方] 一言（例: [happy|0.6|energetic] ありがとう、うれしい！）。',
     `- 一言: 声に出す返事。1〜3文で、全体で${STREAM_LIMITS.lineCharacters}字以内。読み上げて不自然な記号・絵文字・URL・かぎ括弧・顔文字・「w」は使わない。名前を呼びかけてよい（「さん」は付けなくてよい）。`,
@@ -107,6 +110,8 @@ function purposeLines(purpose: WriterPurpose): { context: string[]; message: str
     case 'topic':
       return { context: ['[この一言の方針]', '- 少しコメントが来ていない。ボクから一言、自分の話をする。呼びかけすぎない。', SUBJECT_LINES[purpose.subject]],
         message: '（しるしと一言だけで）' };
+    case 'program':
+      return { context: ['[番組でいま伝えること]', purpose.instruction], message: '（しるしと一言だけで）' };
     case 'greeting':
       return { context: ['[この一言の方針]', '- 配信が始まった。最初のあいさつを一言。名乗って、今日は何をするかに軽く触れる。'], message: '（しるしと一言だけで）' };
     case 'closing':
@@ -122,9 +127,9 @@ export function streamWriterPrompt(input: WriterInput): WriterLayers {
   // The stable layers first (identity, the rules, the title): they are the same for the whole stream. What changes each turn comes after.
   const systemPrompt = [input.identity, rules(), input.title ? `[この配信のタイトル]\n${quote(input.title)}` : ''].filter(Boolean).join('\n\n');
   const turnContext = [
-    input.persona, input.streamBlock, input.body,
+    input.persona, input.streamBlock, input.body, input.context ?? '',
     input.crowd ? `[チャットの空気]\n- ${input.crowd}` : '',
-    input.recent.length ? ['[さっき言ったこと]（同じ言い回し・同じ話題を繰り返さない）', ...input.recent.map(line => `- ${line}`)].join('\n') : '',
+    input.recent.length ? ['[さっき言ったこと]（同じ言い回しを繰り返さず、話題のつながりは保つ）', ...input.recent.map(line => `- ${line}`)].join('\n') : '',
     context.join('\n'),
     input.rewriteNote ?? '',
   ].filter(Boolean).join('\n\n');

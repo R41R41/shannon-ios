@@ -1,3 +1,4 @@
+import { PROGRAM_LAYOUTS, type ProgramInput, type ProgramLayout } from './streamProgram.js';
 import {
   COMMENT_KINDS, COMMENT_ROLES, STREAM_LIMITS, StreamError, type IncomingComment, type StreamBroadcast, type StreamControl, type StreamReceipt,
   type StreamStartInput,
@@ -24,6 +25,26 @@ export function parseStartInput(raw: unknown): StreamStartInput {
     if (typeof body[key] !== 'boolean') bad('STREAM_INPUT_INVALID');
     out[key] = body[key] as boolean;
   }
+  if (body.targetVideoId !== undefined) {
+    if (typeof body.targetVideoId !== 'string' || !/^[A-Za-z0-9_-]{11}$/u.test(body.targetVideoId)) bad('STREAM_INPUT_INVALID');
+    out.targetVideoId = body.targetVideoId;
+  }
+  if (body.program !== undefined) out.program = parseProgram(body.program);
+  return out;
+}
+
+function parseProgram(value: unknown): ProgramInput {
+  const row = record(value) ?? bad('STREAM_INPUT_INVALID');
+  const out: ProgramInput = {};
+  for (const [key, max] of [['topic', 100], ['participation', 200], ['publicNotes', 1200]] as const) {
+    if (row[key] === undefined) continue;
+    if (typeof row[key] !== 'string') bad('STREAM_INPUT_INVALID');
+    out[key] = Array.from(row[key] as string).slice(0, max).join('');
+  }
+  if (row.minutes !== undefined) {
+    if (!Number.isInteger(row.minutes) || Number(row.minutes) < 1 || Number(row.minutes) > 180) bad('STREAM_INPUT_INVALID');
+    out.minutes = Number(row.minutes);
+  }
   return out;
 }
 
@@ -42,7 +63,7 @@ export function parseControlInput(raw: unknown): StreamControl {
   const body = record(raw) ?? bad('STREAM_INPUT_INVALID');
   if (body.action === 'stop_line' || body.action === 'pause' || body.action === 'resume') return { action: body.action };
   const commentId = body.action === 'ignore' ? text(body.commentId, 200) : null;
-  return commentId ? { action: 'ignore', commentId } : bad('STREAM_INPUT_INVALID');
+  return commentId ? { action: 'ignore', commentId } : parseProgramControl(body);
 }
 
 const KINDS: readonly unknown[] = COMMENT_KINDS;
@@ -87,5 +108,16 @@ export function parseBroadcast(raw: unknown): { streamId: string; ended?: boolea
   const videoId = text(body.videoId, 80);
   const liveChatId = text(body.liveChatId, 200);
   if (!videoId || !liveChatId) bad('STREAM_INPUT_INVALID');
-  return { streamId, videoId, liveChatId, title: text(body.title, 200) ?? '', channelId: text(body.channelId, 80) ?? '' };
+  return { streamId, videoId, liveChatId, title: text(body.title, 200) ?? '', channelId: text(body.channelId, 80) ?? '', onAir: body.onAir === true };
+}
+
+function parseProgramControl(body: Record<string, unknown>): StreamControl {
+  if (body.action === 'program_next' || body.action === 'program_previous' || body.action === 'program_close') return { action: body.action };
+  if (body.action === 'program_extend' && Number.isInteger(body.minutes) && Number(body.minutes) >= 1 && Number(body.minutes) <= 30) {
+    return { action: 'program_extend', minutes: Number(body.minutes) };
+  }
+  if (body.action === 'program_layout' && PROGRAM_LAYOUTS.includes(body.layout as ProgramLayout)) {
+    return { action: 'program_layout', layout: body.layout as ProgramLayout };
+  }
+  return bad('STREAM_INPUT_INVALID');
 }
