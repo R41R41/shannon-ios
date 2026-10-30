@@ -520,6 +520,8 @@ export interface BenchOptions {
   life?: number;
   /** The body polls on its own every `pollEveryMs` (default 4); `false`: the script polls by hand. */
   autoPoll?: boolean | number;
+  ownerAlone?(): boolean;
+  gameplayAllowed?(): boolean;
   /** Amendment A-10: the model that decides the step (a real `AnthropicFcaModel` over a scripted client asks Opus again) and its name; absent: a model that cannot be asked again. */
   model?: { model: unknown; name: string };
 }
@@ -584,7 +586,8 @@ export class BenchC {
     const gate = deadable(this.db);
     const store = new MinecraftControlStore(gate.db);
     const lease = { id: this.validLease, generation: this.leaseSerial, holder: 'bench-c' };
-    const control = new MinecraftControl(store, this.configuration, { now: () => Date.now(), ownerAlone: () => true,
+    const control = new MinecraftControl(store, this.configuration, { now: () => Date.now(), ownerAlone: this.options.ownerAlone ?? (() => true),
+      taskAudienceAllowed: () => this.options.gameplayAllowed?.() === true,
       leaseValid: candidate => candidate.id === this.validLease, leaseKnown: () => true, pollMilliseconds: 1, cancelWaitMilliseconds: 50, frameMilliseconds: 600_000, headBoot });
     this.current = { headBoot, control, lease, lines: [], stepId: `step-${this.bootNumber}`, parts: null as never, queue: null as never, kill: gate.kill };
     // A frame first, as in production (the body is polling before the step begins): the queue's start cleans up with a stop, which needs a body to send to.
@@ -667,7 +670,7 @@ export class BenchC {
     const head = this.current;
     // `urgent`: the decision was an urgent one (the lifecycle's flag, `urgentDecision`, is the step's own).
     const llmc = options.urgent ? { ...head.parts.tools.llmc, urgent: () => true } : head.parts.tools.llmc;
-    const tools = fcaMinecraftTools({ control: head.control, step: head.step as never, ownerAlone: () => true, sourcesVisible: () => true, ...head.parts.tools, llmc } as never);
+    const tools = fcaMinecraftTools({ control: head.control, step: head.step as never, ownerAlone: this.options.ownerAlone ?? (() => true), gameplayAllowed: this.options.gameplayAllowed, sourcesVisible: () => true, ...head.parts.tools, llmc } as never);
     const controller = new AbortController();
     return this.decide('act', () => inActionExecution({ lease: head.step!.lease, signal: controller.signal, permit: async () => true } as never,
       () => tools.execute({ scopeKey: 'owner', taskId: this.run, operationId: `op-act-${++this.opCount}`, name: 'mc.act', input, signal: controller.signal } as never) as never)) as Promise<ToolResult>;

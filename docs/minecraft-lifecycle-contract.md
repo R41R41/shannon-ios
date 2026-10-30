@@ -1,5 +1,7 @@
 # Minecraft lifecycle
 
+Owner addition, 2026-10-30: [Minecraft streaming](minecraft-streaming-contract.md) permits audited operator start/stop/login/logout during streaming. This exception belongs to the exact operator action and never turns ordinary conversation or own-time authority into public authority. set_day remains owner-alone. Native stop admission closure, other-player checks, original leases and receipt proof are unchanged. Production rollout is recorded separately.
+
 Candidate implementation only; no live server, world or bot was operated for this change.
 
 The common tool registry exposes `minecraft.lifecycle_status`, `minecraft.start`, `minecraft.stop`, `minecraft.login` and `minecraft.logout` from owner-private text/voice and the existing own-time worker, and `minecraft.set_day` from owner-private text/voice only. Server start and bot login are separate. Fresh operator status is available even when the world body is absent. Unconfigured or stale operator status offers no lifecycle operation.

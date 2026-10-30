@@ -24,6 +24,8 @@ export interface OperatorActivity { summary: string; tool: string; outcome: 'don
 
 export interface OperatorMinecraftParts {
   scopeKey: string; enabled(): boolean; ownerAlone(): boolean; now(): string;
+  /** Admission is standalone under the root, with the fixed game-only menu and no private sources. */
+  gameOnlyAvailable?(): boolean;
   audit: OperatorAuditStore;
   lifecycle: OperatorLifecycle | null;
   requests: (OperatorMinecraftRequests & { wake(): void }) | null;
@@ -221,7 +223,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
   async function request(c: Context, input: Extract<OperatorInput, { command: 'request' }>) {
     const requests = parts.requests;
     if (!requests) return c.refuse('body_unavailable');
-    if (!parts.ownerAlone()) return c.refuse('owner_not_alone');
+    if (!parts.ownerAlone() && parts.gameOnlyAvailable?.() !== true) return c.refuse('owner_not_alone');
     if (!requests.body()) return c.refuse('body_unavailable');
     if (parts.lifecycleUnresolved()) return c.refuse('unresolved_operation');
     if (await minecraftActionLive()) return c.refuse('lease_conflict');

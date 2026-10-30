@@ -135,7 +135,7 @@ export class MinecraftControl {
    */
   private readonly workingLogs = new Map<string, WorkingEventLog>();
   constructor(readonly store: MinecraftControlStore, readonly configuration: MinecraftBodyConfiguration,
-    private readonly options: { now(): number; leaseValid(lease: ActionLease, taskId: string): boolean; ownerAlone(): boolean; leaseKnown?(lease: ActionLease, taskId: string): boolean; pollMilliseconds?: number; cancelWaitMilliseconds?: number;
+    private readonly options: { now(): number; leaseValid(lease: ActionLease, taskId: string): boolean; ownerAlone(): boolean; taskAudienceAllowed?(taskId: string): boolean; leaseKnown?(lease: ActionLease, taskId: string): boolean; pollMilliseconds?: number; cancelWaitMilliseconds?: number;
       /**
        * Run 44, resume 1: whether the lease is one the task's step ever held (any state). A release naming a hold (`context.incident.resume` or
        * `cancel`) is sent with the held act's lease, whose step the hold stopped: it ends the hold and releases, and moves nothing else.
@@ -180,7 +180,8 @@ export class MinecraftControl {
   private allowed(command: Pick<MinecraftControlCommand, 'kind' | 'lease' | 'context'>): boolean {
     if (command.kind === 'release' && namesHold(command.context) && this.options.leaseAttempted?.(command.lease, command.context.taskId)) return true;
     if (command.kind === 'stop' || command.kind === 'release') return this.options.leaseKnown?.(command.lease, command.context.taskId) ?? this.options.leaseValid(command.lease, command.context.taskId);
-    return this.options.ownerAlone() && this.options.leaseValid(command.lease, command.context.taskId);
+    return (this.options.ownerAlone() || this.options.taskAudienceAllowed?.(command.context.taskId) === true)
+      && this.options.leaseValid(command.lease, command.context.taskId);
   }
   bodyId(serverId: string): string { return `minecraft:${serverId}`; }
   frame(bodyId: string): Frame | null {

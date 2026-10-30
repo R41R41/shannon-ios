@@ -114,7 +114,8 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
   };
   function operatorOperation(row: { kind: string; origin: string; sourceId: string }, authority: MinecraftLifecycleAuthority,
     command: Pick<MinecraftLifecycleCommand, 'id' | 'serverId' | 'action'> | undefined, opsSource: boolean): boolean {
-    return !opsSource && row.kind === 'minecraft' && row.origin === 'owner_request' && parts.ownerAlone() && command?.id === row.sourceId
+    return !opsSource && row.kind === 'minecraft' && row.origin === 'owner_request'
+      && (command?.action !== 'set_day' || parts.ownerAlone()) && command?.id === row.sourceId
       && authority.sourceIds.length === 1 && authority.sourceIds[0] === row.sourceId
       && operatorLifecycleAllowed(db, authority.scopeKey, row.sourceId, command);
   }

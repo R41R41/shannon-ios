@@ -42,6 +42,8 @@ export const FCA_REDECIDE_MAX = 3;
 export interface FcaStepPorts {
   runtime: TaskRuntime; model: FcaModel;
   ownerAlone(): boolean;
+  /** The real audience or a verified game-only task; private reads still use ownerAlone. */
+  audienceAllowed?(): boolean;
   /** Trusted policy for internal maintenance; never changes disclosure or tool audience. */
   executionAllowed?(): boolean;
   taskTools?: boolean;
@@ -127,7 +129,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   /** Why the step may not go on now, as a closed reason, or null. */
   const heldReason = (): 'owner_not_alone' | 'execution_disallowed' | null => {
     if (maintenance || ownTime) return ports.executionAllowed?.() === true ? null : 'execution_disallowed';
-    if (!ports.ownerAlone()) return 'owner_not_alone';
+    if (!(ports.audienceAllowed?.() ?? ports.ownerAlone())) return 'owner_not_alone';
     return ports.executionAllowed?.() ?? true ? null : 'execution_disallowed';
   };
   // Minecraft run 8 (2026-10-14): a step was held right after a compaction and nothing said which check held it. Content-free.

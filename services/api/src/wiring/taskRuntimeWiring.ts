@@ -30,6 +30,8 @@ const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask
 export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
   ownerAlone(): boolean; now?: () => string;
+  /** A code-owned, source-isolated public task; never changes the real disclosure audience. */
+  publicTaskAllowed?(taskId: string): boolean;
   sleepTicket?(scopeKey: string, jobId: string): TaskSleepTicket | null;
   maintenanceAllowed?(runtime: TaskRuntime, task: TaskView): boolean;
   canRunTask?(runtime: TaskRuntime, taskId: string): boolean;
@@ -57,7 +59,7 @@ export interface TaskRuntimeWiringOptions {
     now(): string; running(taskId: string): boolean }): FcaBodyRecovery;
   /** Tests: the wait between the rounds of a Minecraft request whose decision was unavailable (`taskRuntimeUnavailable.ts`). */
   bodyUnavailableCooldownMs?(cycles: number): number;
-  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'bodyRecall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
+  stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'audienceAllowed' | 'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' | 'bodyRecall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
     | 'waitCounterpart' | 'keepBodyTools' | 'obsMode' | 'decisionRetryDelayMs' | 'retryAllowed' | 'plan' | 'permitWindowMs'>>;
   /**
    * A step that ran asks for the next tick at once instead of waiting for the once-a-second one (production run 15, 2026-10-19: 1.9 s
@@ -88,7 +90,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     ...(options.provenanceRefs ? { provenanceRefs: true } : {}),
     conversationLeaseValid: (scope, lease, at) => conversationLeaseValid(leases.get(lease.id), scope, lease, at) }), options.ownerAlone);
   function executionAllowed(task: TaskView): boolean {
-    if (task.origin === 'owner_request') return options.ownerAlone();
+    if (task.origin === 'owner_request') return options.ownerAlone() || options.publicTaskAllowed?.(task.id) === true;
     if (task.origin === 'own_time') return options.ownTimeAllowed?.(task) === true;
     if (task.origin !== 'maintenance' || task.kind !== 'sleep' || !options.maintenanceAllowed?.(runtime, task)) return false;
     const saved = runtime.sleepTicketForTask(scopeKey, task.id), current = saved && options.sleepTicket?.(scopeKey, saved.jobId);

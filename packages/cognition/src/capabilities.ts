@@ -93,7 +93,7 @@ export type ShannonCapabilityId = typeof SHANNON_CAPABILITIES[number]['id'];
  */
 export const SHANNON_MINECRAFT_BODY_CAPABILITY = Object.freeze({
   id: 'minecraft_body', audience: 'owner',
-  text: 'マイクラの体: ボクのもう一つの体がワールドに入っている時、ゲームの中のこと（木材集めなど）を道具で頼み、結果を体の報告で知る。',
+  text: 'マイクラの体: ボクのもう一つの体がワールドに入っている時、ゲームの中のこと（木材集めなど）を道具で頼み、結果を体の報告で知る。配信中も、運用者から始めたゲーム専用の依頼は、個人的な会話や記憶を使わず続けられます。',
 } as const satisfies ShannonCapability);
 
 /**

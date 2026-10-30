@@ -77,7 +77,7 @@ export function createOperatorLifecycle(parts: {
       settled: (settlement: LifecycleSettlement) => void): Promise<OperatorLifecycleAdmission> {
       if (!OPERATOR_LIFECYCLE_SOURCE.test(request.id) || !parts.serverIds.includes(request.serverId)) return refused('invalid_input', '登録されたサーバーではありません。');
       if (!parts.runner || !parts.service.available(parts.scopeKey)) return refused('lifecycle_unavailable', 'マイクラ管理の新しい状態が届いていません。');
-      if (!parts.ownerAlone()) return refused('owner_not_alone', 'ライ氏以外の人がいる間は操作しません。');
+      if (request.action === 'set_day' && !parts.ownerAlone()) return refused('owner_not_alone', '時刻の変更はライ氏と二人の時だけ行います。');
       if (request.action === 'set_day') {
         const readiness = await settledForDay(request.serverId);
         if (readiness !== 'ready') return refused(SET_DAY_REFUSALS[readiness].code, SET_DAY_REFUSALS[readiness].message);

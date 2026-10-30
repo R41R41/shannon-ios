@@ -99,6 +99,8 @@ export type FcaSourceGuardParts = Parameters<typeof createFcaSourceGuard>[0];
 export function createFcaSourceGuard(parts: {
   runtime: TaskRuntime; state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore;
   ownerScope: string; ownerAlone(): boolean;
+  /** Only a canonical standalone game request with no inherited sources may execute in public. */
+  sourceFreeTaskAllowed?(taskId: string): boolean;
   readSourceVisible?(scopeKey: string, id: string, observedAt: string, shared?: TaskMemoryReadSnapshot): boolean;
   /**
    * r9: the inputs every answer of `readSourceVisible` is made from, as one string, at this moment (`readSourceFingerprint`), or null where
@@ -316,7 +318,7 @@ export function createFcaSourceGuard(parts: {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
-      if (!parts.ownerAlone()) return false;
+      if (!parts.ownerAlone() && !(rows.length === 0 && parts.sourceFreeTaskAllowed?.(task.id) === true)) return false;
       if (task.scopeKey !== scopeKey) return false;
       if (!rows.length) return true; // Direct owner API tasks have no inherited conversation source.
       // The same verdict over fewer sources: every memory id once, at the earliest time it was observed (`foldFcaProvenance`).

@@ -1,5 +1,7 @@
 # Operator Minecraft requests
 
+Owner addition, 2026-10-30: the [Minecraft streaming contract](minecraft-streaming-contract.md) allows standalone, source-free operator game requests in the LLM-centric mode to execute with OBS enabled. Their private readers and task-to-task tools are absent on every step. The real audience stays `others`. Audited start/stop/login/logout also work in public; set_day stays owner-alone. The original scope, lease, budget, audit, unknown-result and native other-player guards remain. Source is prepared; production rollout is recorded separately.
+
 Status: implemented behind `SHANNON_OPERATOR_MINECRAFT` (default **off**). Owner decision 2026-10-14: 「Minecraft だけに限って作る」.
 
 An operator on the production VM, as the service user, may ask the running API to do one of four things for the owner:

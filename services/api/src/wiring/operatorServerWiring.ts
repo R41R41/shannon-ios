@@ -74,6 +74,7 @@ export interface OperatorHostParts {
 
 export interface OperatorServerParts extends OperatorHostParts {
   audit: OperatorServerAudit | null; path: string; scopeKey: string; now(): string; ownerAlone(): boolean;
+  gameOnlyAvailable?(): boolean;
   /** The common runtime's side of a request (`fcaMinecraftRequests(...).operator` and the runtime's wake), when Minecraft is on. */
   requests: (OperatorMinecraftRequests & { wake(): void }) | null;
   /** The body re-check (`minecraftBodyRecheckWiring.ts`), when Minecraft is on: `minecraft release` asks it to check again now. */
@@ -113,6 +114,7 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
   if (!audit) return { close: async () => { await directory; } };
   const service = createOperatorMinecraft({
     scopeKey: parts.scopeKey, enabled: () => audit.enabled, ownerAlone: parts.ownerAlone, now: parts.now, audit: audit.store,
+    gameOnlyAvailable: parts.gameOnlyAvailable,
     lifecycle: parts.lifecycle?.operator ?? null, requests: parts.requests, actions: parts.actions, bodyRecheck: parts.bodyRecheck ?? null,
     lifecycleUnresolved: () => parts.lifecycle?.service.store.unresolved() ?? false, skillImport: parts.skillImport ?? null,
     ...(parts.spentYen ? { spentYen: parts.spentYen } : {}),

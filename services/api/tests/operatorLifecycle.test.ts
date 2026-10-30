@@ -79,19 +79,34 @@ describe('an operator lifecycle operation', () => {
     expect(settled[0]).toMatchObject({ issued: true, receipt: { outcome: 'completed' } });
   });
 
-  it('is refused without the audit row, for another action than invoked, and while someone else is present', async () => {
+  it('is refused without the audit row or for another action than invoked', async () => {
     const f = fixture(), id = `operator:${randomUUID()}`;
+    f.alone(false);
     expect(await f.configured.operator.execute({ id, serverId: 'home', action: 'login' }, () => {})).toMatchObject({ ok: false, code: 'refused' });
     const changed = `operator:${randomUUID()}`;
     f.invoke(changed, 'logout');
     expect(await f.configured.operator.execute({ id: changed, serverId: 'home', action: 'login' }, () => {}))
       .toMatchObject({ ok: false, code: 'refused' });
-    const other = `operator:${randomUUID()}`;
-    f.invoke(other);
-    f.alone(false);
-    expect(await f.configured.operator.execute({ id: other, serverId: 'home', action: 'login' }, () => {})).toMatchObject({ ok: false, code: 'owner_not_alone' });
     expect(await f.configured.operator.execute({ id: 'operator:not-a-uuid', serverId: 'home', action: 'login' }, () => {}))
       .toMatchObject({ ok: false, code: 'invalid_input' });
     expect(f.configured.service.store.pending()).toEqual([]);
+  });
+
+  it('logs in and logs out under the original audited lease while streaming, without changing the audience', async () => {
+    const f = fixture(); f.alone(false);
+    for (const action of ['login', 'logout'] as const) {
+      const id = `operator:${randomUUID()}`, settled: LifecycleSettlement[] = [];
+      f.invoke(id, action);
+      expect(await f.configured.operator.execute({ id, serverId: 'home', action }, value => { settled.push(value); })).toMatchObject({ ok: true });
+      await until(() => f.configured.service.store.pending().length === 1);
+      const command = f.poll().commands[0]!;
+      expect(command.authority.sourceIds).toEqual([id]);
+      f.poll([{ id, connectionId: command.connectionId, serverId: 'home', action, outcome: 'completed', code: 'changed',
+        observedAt: f.at(), inputsReleased: true, state: { serverId: 'home', observedAt: f.at(), running: 'running', bot: action === 'login' ? 'joined' : 'absent', otherPlayers: 0 } }] as never);
+      await until(() => settled.length === 1);
+      expect(settled[0]!.receipt?.outcome).toBe('completed');
+    }
+    const day = `operator:${randomUUID()}`; f.invoke(day, 'set_day');
+    expect(await f.configured.operator.execute({ id: day, serverId: 'home', action: 'set_day' }, () => {})).toMatchObject({ ok: false, code: 'owner_not_alone' });
   });
 });

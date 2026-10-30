@@ -64,6 +64,7 @@ export function concreteDanger(observation: BodyObservation): { kind: 'health' |
 export function createMinecraftTaskBody(parts: {
   control: MinecraftControl; runtime: TaskRuntime; step: TaskStep; entry: ReflexEntrySelector | null; selector: ReflexSelector | null;
   ownerAlone(): boolean; sourcesVisible(): boolean; now?: () => number; pollMilliseconds?: number;
+  gameplayAllowed?(): boolean;
   limits?: Partial<ReflexLimits>; evidence?: FcaEvidence;
   /** How long after a body's login, reconnection or respawn no reflex starts on its own (`MinecraftControl.settling`). */
   spawnGraceMilliseconds?: number;
@@ -150,7 +151,7 @@ export function createMinecraftTaskBody(parts: {
     held = reason;
   };
   const leaseMatches = () => !!execution && execution.lease.id === step.lease.id && execution.lease.holder === step.lease.holder && execution.lease.generation === step.lease.generation;
-  const live = () => leaseMatches() && parts.ownerAlone() && parts.sourcesVisible() && !monitorAbort.signal.aborted
+  const live = () => leaseMatches() && (parts.ownerAlone() || parts.gameplayAllowed?.() === true) && parts.sourcesVisible() && !monitorAbort.signal.aborted
     && runtime.get(step.scopeKey, step.taskId)?.phase === 'executing';
   const bound = () => control.store.body(step.taskId), availableBody = () => bound() ?? (control.available().length === 1 ? control.available()[0]! : null);
   const context = (bodyId: string, sessionId: string, read?: BodyObservation | null): BodyTaskContext => withMadeIn({ scopeKey: step.scopeKey, taskId: step.taskId,

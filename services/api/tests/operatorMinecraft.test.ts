@@ -143,7 +143,7 @@ function task(id: string, phase: TaskView['phase'], goal = '石を集めて'): T
   return { id, phase, goal, title: goal, childIds: [] } as unknown as TaskView;
 }
 
-type ServiceOptions = { enabled?: boolean; alone?: boolean; body?: string | null; busy?: boolean; unresolved?: boolean; liveAction?: boolean;
+type ServiceOptions = { enabled?: boolean; alone?: boolean; gameOnly?: boolean; body?: string | null; busy?: boolean; unresolved?: boolean; liveAction?: boolean;
   /** false: a stop is asked for but does not take (the body never acknowledges, the task keeps running). */
   stopTakes?: boolean };
 function service(options: ServiceOptions = {}) {
@@ -170,6 +170,7 @@ function service(options: ServiceOptions = {}) {
   const lifecycleCalls: unknown[] = [];
   const parts: OperatorMinecraftParts = {
     scopeKey: 'owner', enabled: () => options.enabled ?? true, ownerAlone: () => options.alone ?? true, now: () => clock, audit,
+    gameOnlyAvailable: () => options.gameOnly === true,
     lifecycle: {
       servers: ['shannon-home'], server: (requested: string | null) => requested ?? 'shannon-home',
       execute: async (request: { id: string }) => {
@@ -217,6 +218,12 @@ describe('the operator service', () => {
     expect(s.activity[0]!.summary).toContain('運用者（ops.ryo）');
     expect(s.notes[0]!.text).toBe(`${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の依頼「石を集めて」を始めました。`);
     expect(s.wakes()).toBe(1);
+  });
+
+  it('admits the standalone game-only request while the real audience is others', async () => {
+    const s = service({ alone: false, gameOnly: true });
+    expect((await s.operator.handle(envelope('request', { goal: '石を集めて' }))).body).toMatchObject({ outcome: 'accepted' });
+    expect(s.audit.requestOf('owner', TASK)).not.toBeNull();
   });
 
   it.each([

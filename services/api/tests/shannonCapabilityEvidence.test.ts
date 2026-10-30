@@ -1,5 +1,6 @@
 import { HttpVoyagerCatalog } from '../src/integrations/voyager/organize.js';
 import { configuredMinecraftLifecycle } from '../src/wiring/minecraftLifecycleWiring.js';
+import { gameOnlyMinecraftTask, gameOnlyStepPorts } from '../src/wiring/minecraftGameOnly.js';
 import { createFcaProgressTools, FCA_PROGRESS_TOOLS } from '../src/mind/action/fca/fcaProgressTools.js';
 import { createFcaTaskObservationMonitor } from '../src/wiring/fcaTaskObservationWiring.js';
 import { configuredSkillImporter } from '../src/wiring/skillImportWiring.js';
@@ -206,7 +207,7 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
   // result reaches her through the task tree (Syzygy ADR-0009 S9: the phase-4 request queue is retired). Only in a conversation
   // with the owner alone (never in her own time, never with others), and the runner offers it only while the turn's task context
   // is open. The line itself is conditional: it is in the owner's description only when the turn offers the tool (`withMinecraftToolLine`).
-  minecraft_body: () => exists(fcaMinecraftRequests, ShannonToolRunner.prototype.useMinecraftTasks, withMinecraftToolLine)
+  minecraft_body: () => exists(fcaMinecraftRequests, gameOnlyMinecraftTask, gameOnlyStepPorts, ShannonToolRunner.prototype.useMinecraftTasks, withMinecraftToolLine)
     && offeredTools('text', 'owner_alone').some(tool => tool.name === 'minecraft.request')
     && !offeredTools('autonomy', 'owner_alone').some(tool => tool.domain === 'minecraft_body') && offeredTools('text', 'others').every(tool => tool.domain !== 'minecraft_body')
     && createInMemoryAutonomyService(() => '2026-10-05T00:00:00.000Z').tools.offered('text', 'owner_alone', 'owner').every(tool => tool.domain !== 'minecraft_body'),

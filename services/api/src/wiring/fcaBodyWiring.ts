@@ -14,6 +14,7 @@ import { bodyLeaseAttempt, bodyLeaseKnown, bodyLeaseValid } from './actionLeaseR
 /** Separate body wire contract: pixels and coordinates never enter the historical game-chat DTO. */
 export function configuredFcaMinecraft(values: Readonly<Record<string, string | undefined>>, parts: {
   db: DatabaseSync; configuration?: MinecraftBodyConfiguration | null; ownerScope: string; ownerAlone(): boolean;
+  taskAudienceAllowed?(taskId: string): boolean;
   jev: JevChooser | null; usage: LlmUsageStore;
   /** For the body re-check's domain proof (`minecraftBodyRecheckWiring.ts`). */
   actions: Pick<ActionThreads, 'reconcileResource'>;
@@ -25,6 +26,7 @@ export function configuredFcaMinecraft(values: Readonly<Record<string, string | 
   const body = actionResource(parts.configuration.deviceId, 'minecraft-body');
   const known = (lease: ActionLease, taskId: string) => bodyLeaseAttempt(leases.get(lease.id), parts.ownerScope, lease, taskId);
   const control = new MinecraftControl(new MinecraftControlStore(parts.db), parts.configuration, { now: Date.now, ownerAlone: parts.ownerAlone,
+    taskAudienceAllowed: parts.taskAudienceAllowed,
     leaseKnown: (lease, taskId) => bodyLeaseKnown(known(lease, taskId), body),
     // Run 44, resume 1: a release naming a hold goes with the held act's lease, whose step the hold stopped.
     leaseAttempted: (lease, taskId) => known(lease, taskId) !== null,
