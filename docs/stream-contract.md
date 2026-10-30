@@ -200,3 +200,16 @@ Every comment goes into `StreamFeeling.comment` at once (closed tags and digest)
 through the real ear process, the head's stream service and a mouth client that speaks each line for its length. It reports: comment →
 line created, comment → first sound (median, p90), answered per minute, comments read vs sent by the fake API (lost must be 0),
 private leaks (must be 0: seeded owner-private facts and markers never appear in any prompt or line), declined, model calls and the cost.
+
+
+## 番組進行と実ライブ確認（2026-10-30）
+
+設計と受け入れ手順は [stream-program-design-20261030.md](stream-program-design-20261030.md)。この追記は従来の行の感情マーク・音声・receiptの形を変えない。
+
+- POST /v1/stream/start に targetVideoId（YouTube動画ID11文字）、program { topic（100字）, participation（200字）, publicNotes（1200字）, minutes（1〜180、既定20）} を追加。省略しても番組進行は常に作られる。JSON本文の上限は8KiB。
+- セッションの program は { stage: opening|explanation|activity|closing, layout: talk|board|game|ending, topic, participation, completed, ready, finished, activityUntil }。publicNotesは返さない。targetVideoIdは耳のstateにも渡す。別動画でのbroadcastは409 STREAM_VIDEO_MISMATCH。
+- 耳の POST broadcast は onAir: true を実ライブ開始を確認できたときだけ付ける。actualStartTimeがありactualEndTimeが無いことを根拠にする。liveChatIdの存在だけではphaseをliveにしない。onAirが省略・falseなら待機のままで、挨拶・返答・実況を始めない。
+- 配信主の既存controlsへ program_next / program_previous / program_close、program_extend { minutes: 1〜30 }、program_layout { layout } を追加。ペア済み配信主だけが使う。耳・視聴者へ操作権限を渡さない。
+- 挨拶はgreeting、企画説明はtopic、締めはclosingとして既存の口を通る。説明済みはspoken receiptで確定し、失敗では確定しない。自動進行は挨拶→説明→企画まで。企画の期限では配信主へ判断を促し、YouTubeの開始終了は実行しない。
+- stats.measure に transportMs / selectionMs / gateMs / writerMs / publishedToSoundMs の n・median・p90・max を追加。従来のcommentToSoundMsは頭の受信起点、publishedToSoundMsはYouTubeのpublishedAt起点。単位はms、対象外・無効時刻は集計しない。
+- デスクトップ→OBSの /events に名前付きevent: programを追加。公開用programだけを送り、再接続時に現在値を再送。無名のframeと /audio は従来どおり。本文を含む公開資料は送らない。

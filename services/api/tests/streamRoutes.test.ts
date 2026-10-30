@@ -72,7 +72,7 @@ describe('the ear\'s routes (contract §2)', () => {
     const { json: started } = await call('POST', '/v1/stream/start', { title: 'テスト', minecraft: false });
     const streamId = started!.stream.streamId as string;
     expect(await call('GET', '/v1/platform/stream/state')).toMatchObject({ json: { stream: { streamId, phase: 'waiting_for_chat', chatWrites: false, broadcast: null } } });
-    const broadcast = await call('POST', '/v1/platform/stream/broadcast', { streamId, videoId: 'vid', liveChatId: 'lc', title: 'T', channelId: 'ch' });
+    const broadcast = await call('POST', '/v1/platform/stream/broadcast', { streamId, videoId: 'vid', liveChatId: 'lc', title: 'T', channelId: 'ch', onAir: true });
     expect(broadcast).toMatchObject({ status: 200, json: { stream: { phase: 'live', broadcast: { videoId: 'vid', liveChatId: 'lc' } } } });
     const body = { streamId, comments: [place.comment('こんにちは'), place.comment('シャノン、元気？'), place.comment('こんにちは', { id: 'c1' })] };
     const first = await call('POST', '/v1/platform/stream/comments', body);
@@ -96,7 +96,7 @@ describe('the ear\'s routes (contract §2)', () => {
   it('ends the stream when the ear says the chat ended, and posts chat replies only with chatWrites', async () => {
     const { place, call } = await ready();
     const streamId = (await call('POST', '/v1/stream/start', { chatWrites: true })).json!.stream.streamId as string;
-    await place.service.settle();
+    await onAir(place);
     await call('POST', '/v1/platform/stream/comments', { streamId, comments: [place.comment('こんにちは')] });
     await place.step(100);
     await place.drain();
@@ -121,13 +121,13 @@ describe('the desktop\'s routes (contract §1)', () => {
     await call('POST', '/v1/platform/stream/comments', { streamId, comments: [place.comment('ふつうのコメント')] });
     const view = (await call('GET', '/v1/stream')).json!;
     expect(view).toMatchObject({ stream: { streamId }, notices: [], comments: [{ authorName: '視聴者1', status: 'new', tags: [] }] });
-    expect(view.stats).toMatchObject({ comments: 1, answered: 0, waiting: 0, inFlight: 0, modelCallsLastMinute: 1, firstSoundMedianMs: null, lineMedianMs: null });
+    expect(view.stats).toMatchObject({ comments: 1, answered: 0, waiting: 0, inFlight: 0, modelCallsLastMinute: 0, firstSoundMedianMs: null, lineMedianMs: null });
     expect(await call('POST', '/v1/stream/controls', { action: 'pause' })).toMatchObject({ status: 200, json: { ok: true } });
     expect((await call('GET', '/v1/stream')).json!.stream.paused).toBe(true);
     expect((await call('POST', '/v1/stream/controls', { action: 'dance' })).status).toBe(400);
     expect((await call('POST', '/v1/stream/controls', { action: 'ignore' })).status).toBe(400);
     const end = await call('POST', '/v1/stream/end', { streamId });
-    expect(end).toMatchObject({ status: 200, json: { stream: { phase: 'ended' }, summary: { comments: 1, answered: 0, lines: 2, notices: 0, declined: 0 } } });
+    expect(end).toMatchObject({ status: 200, json: { stream: { phase: 'ended' }, summary: { comments: 1, answered: 0, lines: 0, notices: 0, declined: 0 } } });
     expect(await call('POST', '/v1/stream/end', { streamId })).toMatchObject({ status: 409, json: { error: 'STREAM_NOT_LIVE' } });
     expect((await call('GET', '/v1/stream')).json!).toMatchObject({ stream: { phase: 'ended' }, comments: [] });
   });
@@ -146,7 +146,7 @@ describe('the desktop\'s routes (contract §1)', () => {
   it('takes the receipt of a line, any reason the desktop gives, and answers 404 for a line it never made', async () => {
     const { place, call } = await ready();
     await call('POST', '/v1/stream/start', {});
-    await place.service.settle();
+    await onAir(place);
     const line = place.service.mouth.currentLine()!;
     expect((await call('POST', `/v1/stream/lines/${line.id}/receipt`, { outcome: 'maybe' })).status).toBe(400);
     expect(await call('POST', `/v1/stream/lines/${line.id}/receipt`, { outcome: 'failed', reason: 'output_blocked' })).toMatchObject({ status: 204 });
@@ -167,10 +167,10 @@ describe('her mouth as Server-Sent Events (contract §1)', () => {
   it('sends the state on connect and then the greeting line, one at a time, the next after the receipt', async () => {
     const { place, base, call } = await ready();
     await call('POST', '/v1/stream/start', { title: 'T' });
-    await place.service.settle();
+    await onAir(place);
     const { events } = await readSse(base, '/v1/stream/lines', list => lineEvents(list).length >= 1);
     expect(events[0]!.event).toBe('state');
-    expect(JSON.parse(events[0]!.data)).toMatchObject({ stream: { phase: 'waiting_for_chat', title: 'T' } });
+    expect(JSON.parse(events[0]!.data)).toMatchObject({ stream: { phase: 'live', title: 'T' } });
     const [greeting] = lineEvents(events);
     expect(greeting).toMatchObject({ seq: 1, kind: 'greeting', streamId: expect.any(String), answering: [], plan: { affect: expect.any(String), delivery: expect.any(String) } });
     expect(greeting!.text.length).toBeLessThanOrEqual(120);
@@ -191,7 +191,7 @@ describe('her mouth as Server-Sent Events (contract §1)', () => {
     const streamId = (await call('POST', '/v1/stream/start', {})).json!.stream.streamId as string;
     const reading = readSse(base, '/v1/stream/lines', (events, raw) => raw.includes(': keepalive') && events.filter(item => item.event === 'state').length >= 2, 2000);
     await new Promise(resolve => setTimeout(resolve, 100));
-    await place.service.broadcast({ streamId, videoId: 'v', liveChatId: 'l', title: '', channelId: '' });
+    await place.service.broadcast({ streamId, videoId: 'v', liveChatId: 'l', title: '', channelId: '', onAir: true });
     const { events, raw } = await reading;
     expect(raw).toContain(': keepalive');
     expect(events.filter(item => item.event === 'state').map(item => JSON.parse(item.data).stream.phase)).toEqual(['waiting_for_chat', 'live']);
@@ -200,7 +200,7 @@ describe('her mouth as Server-Sent Events (contract §1)', () => {
   it('keeps taking connections after the end, and hands the closing line for 25 s', async () => {
     const { place, base, call } = await ready();
     const streamId = (await call('POST', '/v1/stream/start', {})).json!.stream.streamId as string;
-    await place.service.settle();
+    await onAir(place);
     await place.drain();
     expect(await call('POST', '/v1/stream/end', { streamId })).toMatchObject({ status: 200 });
     place.clock.t += 20_000;
@@ -209,3 +209,11 @@ describe('her mouth as Server-Sent Events (contract §1)', () => {
     expect(lineEvents(events)[0]).toMatchObject({ kind: 'closing' });
   });
 });
+
+async function onAir(place: Place): Promise<void> {
+  const streamId = place.service.liveView()!.streamId;
+  await place.service.broadcast({ streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch', onAir: true });
+  await place.service.settle();
+  place.service.control({ action: 'program_next' });
+  place.service.control({ action: 'program_next' });
+}

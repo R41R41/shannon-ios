@@ -32,6 +32,7 @@ export interface AuthorParts {
   /** Her last lines on this stream, and how the chat feels now. */
   recent: () => string[];
   crowd: () => string;
+  context: () => string;
   log: (line: string) => void;
 }
 
@@ -104,7 +105,7 @@ export class StreamAuthor {
     const { parts } = this;
     return {
       identity: parts.identity(), persona: parts.persona(session.streamId), streamBlock: request.block, title: session.title,
-      body: session.minecraft ? parts.body() ?? '' : '', recent: parts.recent(), crowd: parts.crowd(), purpose,
+      body: session.minecraft ? parts.body() ?? '' : '', recent: parts.recent(), crowd: parts.crowd(), context: parts.context(), purpose,
       ...(rewriteNote ? { rewriteNote } : {}),
     };
   }

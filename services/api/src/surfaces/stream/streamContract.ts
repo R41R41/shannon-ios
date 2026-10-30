@@ -1,3 +1,4 @@
+import type { ProgramInput, ProgramLayout, ProgramView } from './streamProgram.js';
 import type { ShannonEmotionKind } from '@shannon/cognition';
 
 /**
@@ -26,7 +27,7 @@ export const STREAM_LIMITS = Object.freeze({
   commentCharacters: 300,
   commentsPerBatch: 200,
   bridgeBodyBytes: 128 * 1024,
-  controlBodyBytes: 4 * 1024,
+  controlBodyBytes: 8 * 1024,
   /** A comment older than this (by its `publishedAt`) is kept for the console and never answered. */
   staleCommentMilliseconds: 5 * 60_000,
   /** A candidate for an answer is not older than this; paid ones (superchat, membership) are waited for as long as a stale one is not. */
@@ -60,7 +61,7 @@ export const STREAM_LIMITS = Object.freeze({
   chatPostsKept: 20,
 } as const);
 
-export interface StreamBroadcast { videoId: string; liveChatId: string; title: string; channelId: string }
+export interface StreamBroadcast { videoId: string; liveChatId: string; title: string; channelId: string; onAir?: boolean }
 
 export interface StreamSessionView {
   streamId: string;
@@ -71,12 +72,14 @@ export interface StreamSessionView {
   chatWrites: boolean;
   phase: StreamPhase;
   broadcast: StreamBroadcast | null;
+  targetVideoId?: string;
+  program: ProgramView;
   endedAt?: string;
   /** No new line is written while paused (`pause` / `resume`). */
   paused: boolean;
 }
 
-export interface StreamStartInput { title?: string; minecraft?: boolean; chatWrites?: boolean }
+export interface StreamStartInput { title?: string; minecraft?: boolean; chatWrites?: boolean; targetVideoId?: string; program?: ProgramInput }
 
 /** What the ear sends of one chat message (`POST /v1/platform/stream/comments`). */
 export interface IncomingComment {
@@ -122,7 +125,10 @@ export type StreamControl =
   | { action: 'stop_line' }
   | { action: 'ignore'; commentId: string }
   | { action: 'pause' }
-  | { action: 'resume' };
+  | { action: 'resume' }
+  | { action: 'program_next' | 'program_previous' | 'program_close' }
+  | { action: 'program_extend'; minutes: number }
+  | { action: 'program_layout'; layout: ProgramLayout };
 
 export interface StreamSummary { comments: number; answered: number; lines: number; notices: number; declined: number; durationSeconds: number }
 

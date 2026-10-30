@@ -43,6 +43,11 @@ export function percentiles(values: readonly number[]): Percentiles {
 }
 
 export class StreamMeasure {
+  readonly transportMs: number[] = [];
+  readonly selectionMs: number[] = [];
+  readonly gateMs: number[] = [];
+  readonly writerMs: number[] = [];
+  readonly publishedToSoundMs: number[] = [];
   readonly commentToLineMs: number[] = [];
   readonly lineToSoundMs: number[] = [];
   readonly commentToSoundMs: number[] = [];
@@ -60,7 +65,8 @@ export class StreamMeasure {
   }
 
   note(list: number[], value: number): void {
-    if (Number.isFinite(value) && value >= 0) list.push(value);
+    if (Number.isFinite(value) && value >= 0) { list.push(value);
+      if (list.length > 2000) list.shift(); }
   }
 
   usage(result: unknown): void {
@@ -77,6 +83,8 @@ export class StreamMeasure {
   summary() {
     return {
       commentToLineMs: percentiles(this.commentToLineMs), lineToSoundMs: percentiles(this.lineToSoundMs), commentToSoundMs: percentiles(this.commentToSoundMs),
+      transportMs: percentiles(this.transportMs), selectionMs: percentiles(this.selectionMs), gateMs: percentiles(this.gateMs),
+      writerMs: percentiles(this.writerMs), publishedToSoundMs: percentiles(this.publishedToSoundMs),
       modelCalls: { ...this.calls, total: this.totalCalls() }, tokens: { ...this.tokens }, lineEnds: { ...this.reasons }, ...this.counts,
     };
   }
