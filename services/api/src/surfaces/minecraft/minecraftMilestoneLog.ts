@@ -5,8 +5,10 @@ import { BED_ITEM, countMatching, type ItemCounts } from './minecraftItems.js';
  * each early-game item (or enters the Nether), and the closed `stage` of her progress from what she carries. Content-free: names
  * from a closed list, seconds and a game tick.
  */
+// Run 48: the diamond pickaxe was made at +1,000 s and no line was written, because the closed list below did not name it (the meter's milestones are the plan's; this list is the journal's): every item
+// the meter points at is here, in the order of the road (the water bucket as well).
 export const MILESTONE_NAMES = Object.freeze(['wooden_pickaxe', 'stone_pickaxe', 'stone_axe', 'bed', 'iron_pickaxe', 'bucket', 'iron_armor',
-  'obsidian', 'nether_portal', 'blaze_rod'] as const);
+  'diamond_pickaxe', 'water_bucket', 'obsidian', 'nether_portal', 'blaze_rod'] as const);
 export type MilestoneName = typeof MILESTONE_NAMES[number];
 
 const REACHED: Readonly<Record<Exclude<MilestoneName, 'nether_portal'>, (counts: ItemCounts) => boolean>> = {
@@ -17,6 +19,8 @@ const REACHED: Readonly<Record<Exclude<MilestoneName, 'nether_portal'>, (counts:
   iron_pickaxe: counts => (counts.get('iron_pickaxe') ?? 0) > 0,
   bucket: counts => countMatching(counts, /^(?:water_|lava_|milk_|powder_snow_)?bucket$/u) > 0,
   iron_armor: counts => countMatching(counts, /^iron_(?:helmet|chestplate|leggings|boots)$/u) > 0,
+  diamond_pickaxe: counts => (counts.get('diamond_pickaxe') ?? 0) > 0,
+  water_bucket: counts => (counts.get('water_bucket') ?? 0) > 0,
   obsidian: counts => (counts.get('obsidian') ?? 0) > 0,
   blaze_rod: counts => (counts.get('blaze_rod') ?? 0) > 0,
 };

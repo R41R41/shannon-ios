@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
-import { milestoneLine, milestonesShown, minecraftStage, newlyReached, stageLine } from '../src/surfaces/minecraft/minecraftMilestoneLog.js';
+import { MILESTONE_NAMES, milestoneLine, milestonesShown, minecraftStage, newlyReached, stageLine } from '../src/surfaces/minecraft/minecraftMilestoneLog.js';
 import { callTags, craftedOrderedTool, earlyGameLine, isFirstLook, minesIronOre, toolOrderOk, villageDistance } from '../src/surfaces/minecraft/minecraftAdoptionTags.js';
 import { closeGistDecision, emptyGistAdoption, gistAdoptionLine, noteGistCall, observeGistOutcomes, showGists } from '../src/surfaces/minecraft/minecraftGistAdoption.js';
 import { createMinecraftTaskMetrics } from '../src/surfaces/minecraft/minecraftTaskMetrics.js';
@@ -22,11 +22,20 @@ describe('carried item counts', () => {
 describe('milestones', () => {
   it('shows each early item, any bed, iron armour and the Nether, and reports each first-reach once', () => {
     const shown = milestonesShown(counts(['wooden_pickaxe×1', 'red_bed×1', 'iron_boots×1', 'water_bucket×1']), 'the_nether');
-    expect(shown).toEqual(['wooden_pickaxe', 'bed', 'bucket', 'iron_armor', 'nether_portal']);
-    expect(newlyReached(shown, new Set())).toEqual(['wooden_pickaxe', 'bed', 'bucket', 'iron_armor', 'nether_portal']);
+    expect(shown).toEqual(['wooden_pickaxe', 'bed', 'bucket', 'iron_armor', 'water_bucket', 'nether_portal']);
+    expect(newlyReached(shown, new Set())).toEqual(['wooden_pickaxe', 'bed', 'bucket', 'iron_armor', 'water_bucket', 'nether_portal']);
     // Losing and re-acquiring an item is no new first reach.
-    expect(newlyReached(shown, new Set(['wooden_pickaxe', 'bed']))).toEqual(['bucket', 'iron_armor', 'nether_portal']);
+    expect(newlyReached(shown, new Set(['wooden_pickaxe', 'bed']))).toEqual(['bucket', 'iron_armor', 'water_bucket', 'nether_portal']);
     expect(milestonesShown(counts(['bedrock×1']), 'overworld')).toEqual([]);
+  });
+  it('run 48: the diamond pickaxe is a milestone of the journal, once, in the order of the road, whether made or found', () => {
+    const shown = milestonesShown(counts(['iron_pickaxe×1', 'diamond_pickaxe×1', 'diamond×1']), 'overworld');
+    expect(shown).toEqual(['iron_pickaxe', 'diamond_pickaxe']);
+    expect(newlyReached(shown, new Set(['iron_pickaxe']))).toEqual(['diamond_pickaxe']);
+    expect(newlyReached(shown, new Set(['iron_pickaxe', 'diamond_pickaxe']))).toEqual([]);
+    expect(milestoneLine('t1', 'diamond_pickaxe', 1_000_900, 31000, 57)).toBe('Shannon Minecraft milestone task=t1 name=diamond_pickaxe t=1001 tick=31000 d=57');
+    // every item the meter points at has its line in the journal
+    for (const item of ['iron_pickaxe', 'bucket', 'diamond_pickaxe', 'water_bucket', 'obsidian']) expect(MILESTONE_NAMES).toContain(item);
   });
   it('writes a content-free line', () => {
     expect(milestoneLine('t1', 'iron_pickaxe', 414_400, 7000, 12)).toBe('Shannon Minecraft milestone task=t1 name=iron_pickaxe t=414 tick=7000 d=12');
@@ -140,6 +149,17 @@ describe('the task metrics across decisions', () => {
     expect(first.lines.some(line => line.includes('name=nether_portal'))).toBe(true);
     const again = run(first.kept, { dimension: 'the_nether', inventory: [] }, []);
     expect(again.lines.some(line => line.includes('name=nether_portal'))).toBe(false);
+  });
+  it('run 48: the decision that first sees the diamond pickaxe writes its line, once, and a kept state from before the list had it does not repeat the iron pickaxe', () => {
+    const world = { dimension: 'overworld', time: '31000', inventory: ['iron_pickaxe×1', 'diamond_pickaxe×1', 'water_bucket×1'], biome: '', landmarks: [], nearbyEntities: [], health: 20 };
+    const before = run(undefined, { ...world, inventory: ['iron_pickaxe×1'] }, []);
+    expect(before.lines.some(line => line.includes('name=diamond_pickaxe'))).toBe(false);
+    const made = run(before.kept, world, []);
+    expect(made.lines).toContain('Shannon Minecraft milestone task=t1 name=diamond_pickaxe t=300 tick=31000 d=2');
+    expect(made.lines).toContain('Shannon Minecraft milestone task=t1 name=water_bucket t=300 tick=31000 d=2');
+    expect(made.lines.some(line => line.includes('name=iron_pickaxe'))).toBe(false);
+    const again = run(made.kept, world, []);
+    expect(again.lines.some(line => line.includes('milestone task=t1 name=diamond_pickaxe'))).toBe(false);
   });
   it('flags a hungry decision with food carried and no meal, and tracks health and death from samples', () => {
     const lines: string[] = [];
