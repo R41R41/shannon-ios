@@ -307,7 +307,8 @@ export function withMinecraftBodyCapability(prompt: string): string {
 /** 配信セッションの中でだけ使う能力。通常会話の道具や私的記憶を追加しない。 */
 export const SHANNON_STREAM_PROGRAM_CAPABILITY = Object.freeze({
   id: 'stream_program', audience: 'owner',
-  text: '配信中は、挨拶・企画説明・雑談・終わりの挨拶に沿って話す。実際に声で話した公開会話と、配信主が公開を許した話題だけを引き継ぐ。場面と画面の変更は管理画面で行う。',
+  text: '配信中は、挨拶・企画説明・雑談・終わりの挨拶に沿って話す。実際に声で話した公開会話と、配信主が公開を許した話題だけを引き継ぐ。'
+    + '管理画面で初配信・雑談・ゲームなどの画面を選べる。場面の進行と画面の変更は独立しており、配信主が操作する。',
 } as const);
 
 /** Things the code has no path for. Keep in sync with the capability evidence test. */

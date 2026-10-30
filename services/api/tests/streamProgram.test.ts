@@ -149,3 +149,16 @@ it('締めの音声が再生中でも、終了操作で二重に生成しない'
   expect(p.recorded).toHaveLength(calls);
   expect(p.service.mouth.currentLine()?.id).toBe(line.id);
 });
+
+it('初配信の画面で開始し、場面を進めても選んだ構図を保つ。未知の画面は拒否する', async () => {
+  const p = makePlace();
+  const input = parseStartInput({ program: { layout: 'debut' } });
+  const { stream } = p.service.start(input);
+  expect(stream.program.layout).toBe('debut');
+  await p.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'l', onAir: true });
+  await p.service.settle(); await p.drain();
+  expect(stream.program).toMatchObject({ stage: 'explanation', layout: 'debut' });
+  p.service.control(parseControlInput({ action: 'program_layout', layout: 'game' }));
+  expect(stream.program).toMatchObject({ stage: 'explanation', layout: 'game' });
+  expect(() => parseStartInput({ program: { layout: 'anything' } })).toThrow();
+});

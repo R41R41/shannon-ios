@@ -362,7 +362,10 @@ it('配信の番組進行は配信内の公開会話と再生報告を根拠に�
   const { StreamProgram } = await import('../src/surfaces/stream/streamProgram.js');
   const { StreamConversation } = await import('../src/surfaces/stream/streamConversation.js');
   expect(SHANNON_STREAM_PROGRAM_CAPABILITY.text).toContain('実際に声で話した公開会話');
-  const program = new StreamProgram({ topic: '雑談' });
+  expect(SHANNON_STREAM_PROGRAM_CAPABILITY.text).toContain('初配信・雑談・ゲーム');
+  const program = new StreamProgram({ topic: '雑談', layout: 'debut' });
+  program.move('explanation', 0);
+  expect(program.view.layout).toBe('debut');
   program.ready(); program.expect('line-1', program.epoch);
   program.ended('line-1', false, 0);
   expect(program.view.completed).toEqual([]);

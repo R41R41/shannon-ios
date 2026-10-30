@@ -45,6 +45,10 @@ function parseProgram(value: unknown): ProgramInput {
     if (!Number.isInteger(row.minutes) || Number(row.minutes) < 1 || Number(row.minutes) > 180) bad('STREAM_INPUT_INVALID');
     out.minutes = Number(row.minutes);
   }
+  if (row.layout !== undefined) {
+    if (!PROGRAM_LAYOUTS.includes(row.layout as ProgramLayout)) bad('STREAM_INPUT_INVALID');
+    out.layout = row.layout as ProgramLayout;
+  }
   return out;
 }
 
