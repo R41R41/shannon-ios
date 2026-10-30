@@ -9,7 +9,7 @@ import { foodLeads } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 const benches: BenchC[] = [];
 afterEach(() => { for (const bench of benches.splice(0)) bench.close(); setIncidentHoldPort(null); forgetStalls(); });
 describe('run51: a pending hold is a barrier to further motor commands', () => {
-  it('blocks a late model answer and waits for the operator hold publication on every look', async () => {
+  it('blocks a late model answer on every look, without waiting on its own step stop', async () => {
     let publish!: () => void, published = false;
     const publishing = new Promise<void>(r => { publish = r; });
     setIncidentHoldPort({ holdRequested: () => true, async hold() { published = true; await publishing; return true; },
@@ -24,10 +24,13 @@ describe('run51: a pending hold is a barrier to further motor commands', () => {
     let firstDone = false, secondDone = false;
     const first = lifecycle.beforeDecision!(signal).then(() => { firstDone = true; });
     const second = lifecycle.beforeDecision!(signal).then(() => { secondDone = true; });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(firstDone).toBe(false); expect(secondDone).toBe(false);
     await b.spin(5);
     expect(await until(() => published)).toBe(true);
-    expect(firstDone).toBe(false); expect(secondDone).toBe(false);
-    publish(); await Promise.all([first, second]);
+    // The hold port writes its audit and starts the stop before its first await. That stop may need this step to exit.
+    await Promise.all([first, second]);
+    publish();
     expect(b.body.handed.filter(c => c.kind === 'skill' && c.skill === 'act')).toHaveLength(0);
     expect(await b.head.queue.add(spec)).toMatchObject({ ok: false });
   });

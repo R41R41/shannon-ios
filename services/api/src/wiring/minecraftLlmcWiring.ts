@@ -465,7 +465,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
           ...(end === 'other_hold' && take?.hold ? { bodyHold: take.hold } : {}), ...(take?.again ? { again: true } : {}), ...(record ? { record } : {}), ...(at ? { start: at, end: at } : {}) })
           .catch(error => { log(`Shannon Minecraft head stall hold failed task=${step.taskId} ${String(error)}`); return false; });
         if (deferStop) commitHold = hold;
-        else await hold();
+        else void hold(); // stop waits for this step to close; the audit and stop request are published synchronously.
       })().catch(error => log(`Shannon Minecraft head stall take failed task=${step.taskId} ${String(error)}`));
     };
     const look = (): boolean => {
