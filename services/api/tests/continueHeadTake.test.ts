@@ -24,6 +24,10 @@ import { benchC, PRODUCED_REV, RUN_BODY, until, type BenchC } from './helpers/be
 const PRODUCED_FILE = new URL('./fixtures/continue/produced/measure--head-take.json', import.meta.url);
 const produced = JSON.parse(readFileSync(PRODUCED_FILE, 'utf8')) as { bodyRevision: string; output: Record<string, any> };
 
+// The ids the lab made (a clock in them): read from the produced file itself, so that a new copy of the body's files changes no line here.
+const PRODUCED_TEXT = readFileSync(PRODUCED_FILE, 'utf8');
+const TAKE_ID = /head:node_stalled:lab:[0-9]+/u.exec(PRODUCED_TEXT)![0], ACT_TAKE_ID = /head:wait_loop:lab:[0-9]+/u.exec(PRODUCED_TEXT)![0];
+
 afterEach(() => { forgetStalls(); setIncidentHoldPort(null); });
 
 // ---- 1. the body's answers ----------------------------------------------------------------------------------------------------------------------------
@@ -35,9 +39,10 @@ describe('the head reads what the body produced for a take (fixtures/continue/pr
 
   it('the release\'s answer to a take: it holds, the world stopped, the box and the scene are on the body\'s side', () => {
     const answer = takeOfResult(JSON.stringify({ incident: produced.output.take.incident }))!;
-    expect(answer).toMatchObject({ id: 'head:node_stalled:lab:1793298931015', done: true, hold: 'head:node_stalled:lab:1793298931015', held: true, frozen: true, freeze: 'The game is frozen', again: false });
-    expect(answer.box).toMatch(/blackbox\/continue-lab-task\/head_node_stalled_lab_1793298931015\.json\.gz$/u);
-    expect(answer.scene).toMatch(/scenes\/head_node_stalled_lab_1793298931015$/u);
+    expect(answer).toMatchObject({ id: TAKE_ID, done: true, hold: TAKE_ID, held: true, frozen: true, freeze: 'The game is frozen', again: false });
+    const stem = TAKE_ID.replaceAll(':', '_');
+    expect((answer.box as string).endsWith(`blackbox/continue-lab-task/${stem}.json.gz`)).toBe(true);
+    expect((answer.scene as string).endsWith(`scenes/${stem}`)).toBe(true);
     expect(takeEnd(answer)).toBe('held');
     expect(headIncidentKind(answer.id)).toBe('node_stalled');
   });
@@ -53,7 +58,7 @@ describe('the head reads what the body produced for a take (fixtures/continue/pr
 
   it('the act that carried a take and was held reads as a heavy failure\'s hold (its own `incident` fields)', () => {
     const note = incidentOfResult(JSON.stringify({ held: '保留中', incident: produced.output.actTake }))!;
-    expect(note).toMatchObject({ id: 'head:wait_loop:lab:1793298938809', heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
+    expect(note).toMatchObject({ id: ACT_TAKE_ID, heavy: true, held: true, frozen: true, freeze: 'The game is frozen', end: [0.5, 100, 0.5] });
     expect(headIncidentKind(note.id)).toBe('wait_loop');
   });
 
