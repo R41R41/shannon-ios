@@ -1,9 +1,9 @@
 /** 配信中だけの番組進行。時刻と再生完了だけで進み、モデルや持ち主の記憶には依存しない。 */
 export const PROGRAM_STAGES = ['opening', 'explanation', 'activity', 'closing'] as const;
-export const PROGRAM_LAYOUTS = ['talk', 'board', 'game', 'ending'] as const;
+export const PROGRAM_LAYOUTS = ['debut', 'talk', 'board', 'game', 'ending'] as const;
 export type ProgramStage = typeof PROGRAM_STAGES[number];
 export type ProgramLayout = typeof PROGRAM_LAYOUTS[number];
-export interface ProgramInput { topic?: string; participation?: string; publicNotes?: string; minutes?: number }
+export interface ProgramInput { topic?: string; participation?: string; publicNotes?: string; minutes?: number; layout?: ProgramLayout }
 export interface ProgramView {
   stage: ProgramStage; layout: ProgramLayout; topic: string; participation: string;
   completed: ProgramStage[]; ready: boolean; finished: boolean; activityUntil: string | null;
@@ -19,7 +19,8 @@ export class StreamProgram {
   private pending: { id: string; epoch: number; stage: ProgramStage } | null = null;
   private retryAt = 0;
   constructor(input: ProgramInput = {}, title = '') {
-    this.view = { stage: 'opening', layout: 'talk', topic: clean(input.topic, 100) || clean(title, 100) || '今日の小さな発見',
+    this.view = { stage: 'opening', layout: input.layout ?? 'talk',
+      topic: clean(input.topic, 100) || clean(title, 100) || '今日の小さな発見',
       participation: clean(input.participation, 200) || '今日のお題について、みんなの話もコメントで教えてね。',
       completed: [], ready: false, finished: false, activityUntil: null };
     this.notes = clean(input.publicNotes, 1200);
