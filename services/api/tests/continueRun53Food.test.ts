@@ -4,8 +4,9 @@ import { carriedFood, createFoodTrend, FOOD_POINTS, minecraftLlmcLive, minecraft
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { BEFORE_GATE } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
-import { FOOD_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { candidateLive } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
+import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { PLAN_PREP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import captured from './fixtures/run52-food-wait.json' with { type: 'json' };
 
@@ -45,7 +46,7 @@ describe('run53: show preparation without crediting unmade food', () => {
     expect(live.foodPoints).toMatchObject({ total: 6.4 });
   });
   it('gives the first planner the same entry food threshold as the preparation verifier', () => {
-    expect(Number(/ネザーに入る前に (\d+) 点/u.exec(FOOD_KNOWLEDGE)?.[1])).toBe(BEFORE_GATE.food);
-    expect(FOOD_KNOWLEDGE).toContain('入った後の奥への出発は 100');
+    expect(BEFORE_GATE.food).toBe(40);
+    expect(ownFirstPlanSystem()).toContain(PLAN_PREP_WORDS);
   });
 });
