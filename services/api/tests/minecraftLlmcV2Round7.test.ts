@@ -146,7 +146,10 @@ describe('the near lava beside the far obsidian (run 37, 1,349–1,611 s: 85 m o
     const body = { map: undefined, state: { at: '(170,-14,150)', dimension: 'overworld' }, planNow: '[p6.2] 黒曜石', landmarks: LANDMARKS };
     expect((rewriteLlmcLive({ body, plan: {} }).live.body as Record<string, unknown>).obsidian).toBeUndefined();
   });
-  it('is said in the knowledge of the obsidian: 20 m', () => {
-    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('溶岩が 20m 内にあれば、既存の黒曜石へ行くより水で固めて作る方が早い');
+  it('does not turn a shorter resource distance into a claim of faster access', () => {
+    const knowledge = stageKnowledge({ body: { state: { dimension: 'overworld' } } });
+    expect(knowledge).not.toContain('溶岩が 20m 内にあれば');
+    expect(knowledge).toContain('資源のマスと作業の立ち位置は別');
+    expect(knowledge).toContain('道が未確認なら早いとは限らない');
   });
 });
