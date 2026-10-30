@@ -433,7 +433,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       return feet([at?.x, at?.y, at?.z]);
     };
     let holding: Promise<void> | null = null;
-    const headHold = (stall: Stall, byBody: IncidentNote | null = null): void => {
+    let commitHold: (() => Promise<boolean>) | null = null;
+    const headHold = (stall: Stall, byBody: IncidentNote | null = null, deferStop = false): void => {
+      if (holding) return;
       // The body decided about this very result (it holds, or it did not hold on purpose, or the same act failed the same way again): its incident is the one.
       if (byBody && (byBody.held || byBody.notHeld || byBody.repeated)) {
         log(`Shannon Minecraft head stall left to the body task=${step.taskId} kind=${stall.kind} incident=${byBody.id}`);
@@ -455,10 +457,12 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
         const record = noteHeadHold(step.taskId, { id, kind: stall.kind, why: stall.why, detail: { current: tree.current, ...(at ? { feet: at } : {}), ...(stall.at ? { stoppedAt: stall.at } : {}),
           ...(stall.command ? { command: stall.command } : {}), take: end, body: take ?? { unanswered: asked.sent ? '' : asked.why } } });
         log(`Shannon Minecraft head stall task=${step.taskId} kind=${stall.kind} incident=${id} why=${stall.why.slice(0, 100)} take=${end}${take?.notHeld ? ` notHeld=${take.notHeld.slice(0, 60)}` : ''}${take && end === 'other_hold' ? ` bodyHold=${take.hold}` : ''}${asked.sent ? '' : ` unanswered=${asked.why}`} record=${record ?? '-'}`);
-        void holds.hold(step.taskId, { id, heavy: true, why: stall.why, held: true, frozen: end === 'held' ? take?.frozen ?? true : false, command: stall.command ?? '', take: end,
+        const hold = () => holds.hold(step.taskId, { id, heavy: true, why: stall.why, held: true, frozen: end === 'held' ? take?.frozen ?? true : false, command: stall.command ?? '', take: end,
           ...(take?.freeze ? { freeze: take.freeze } : {}), ...(take?.notHeld ? { notHeld: take.notHeld } : {}), ...(take?.box ? { box: take.box } : {}), ...(take?.scene ? { scene: take.scene } : {}),
           ...(end === 'other_hold' && take?.hold ? { bodyHold: take.hold } : {}), ...(take?.again ? { again: true } : {}), ...(record ? { record } : {}), ...(at ? { start: at, end: at } : {}) })
-          .catch(error => log(`Shannon Minecraft head stall hold failed task=${step.taskId} ${String(error)}`));
+          .catch(error => { log(`Shannon Minecraft head stall hold failed task=${step.taskId} ${String(error)}`); return false; });
+        if (deferStop) commitHold = hold;
+        else void hold();
       })().catch(error => log(`Shannon Minecraft head stall take failed task=${step.taskId} ${String(error)}`));
     };
     const look = (): boolean => {
@@ -500,7 +504,12 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     // A-20 (run 47: the credit ran out): the decision was refused for the account's credit. The request is held (the body is asked to hold, the audit's hold row, the owner's stop path) with
     // the reason billing, and the runner pauses it (`pauseForBilling`); the operator resumes it when the balance is filled.
     const billing = (): void => headHold({ kind: 'decide_error', key: 'billing', why: 'Anthropic の利用残高が足りず（課金・残高の誤り）、判断を頼めなかった。理由 billing。補充の後に resume で続ける' });
-    return { look, refused, billing, settled: () => holding ?? Promise.resolve() };
+    return { look, refused, billing, settled: () => holding ?? Promise.resolve(),
+      prepareStop: async (reason: string) => {
+        headHold({ kind: 'decide_error', key: reason, why: `判断の失敗停止（${reason}）。世界と現場を保全して、修正後の resume を待つ` }, null, true);
+        await holding;
+        return { committed: async () => { await commitHold?.(); } };
+      } };
   })() : null;
   const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
   // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an act of it that would break a promise is decided again by Opus
@@ -549,6 +558,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       // API's thread must not turn a done task back.
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
     ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port,
+      ...(stalls ? { prepareStop: stalls.prepareStop } : {}),
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
       versions: () => minecraftBodyVersion(control, bodyId(), read),
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),

@@ -236,15 +236,16 @@ describe('the guards of the hands that take a range', () => {
     expect(held({ do: 'fight', target: '#12', retreatHp: 12, stance: 'flee' }, { health: 8 })).toBeNull();
     expect(refused({ do: 'smelt', items: [{ item: 'raw_iron', count: 8 }, { item: 'raw_gold', count: 4 }], furnaces: 1 })).toContain('種類数（2）以上');
   });
-  it('hold an obsidian whose cell the map shows as no lava, and let one through that it shows as lava or does not show', () => {
+  it('holds a cell that is neither lava nor obsidian, and accepts lava, existing obsidian or an unmapped cell', () => {
     const rows = ['地図 v1 足=(10,10,10) x=3..17 z=3..17 方式=layers 上=北'];
     for (const dy of [1, 0, -1]) {
       rows.push(`y=${10 + dy}`);
-      for (let z = 3; z <= 17; z += 1) rows.push(` ${z} ${Array.from({ length: 15 }, (_, i) => dy === 0 && z === 10 && i + 3 === 14 ? 'L' : dy === 0 && z === 10 && i + 3 === 10 ? '@' : dy === 0 ? '.' : '#').join(' ')}`);
+      for (let z = 3; z <= 17; z += 1) rows.push(` ${z} ${Array.from({ length: 15 }, (_, i) => dy === 0 && z === 10 && i + 3 === 14 ? 'L' : dy === 0 && z === 10 && i + 3 === 15 ? 'O' : dy === 0 && z === 10 && i + 3 === 10 ? '@' : dy === 0 ? '.' : '#').join(' ')}`);
     }
     const world = { localMap: rows.join('\n') };
-    expect(refused({ do: 'obsidian', at: [{ x: 12, y: 10, z: 10 }] }, world)).toContain('溶岩のマスではない');
+    expect(refused({ do: 'obsidian', at: [{ x: 12, y: 10, z: 10 }] }, world)).toContain('溶岩でも黒曜石でもない');
     expect(held({ do: 'obsidian', at: [{ x: 14, y: 10, z: 10 }] }, world)).toBeNull();
+    expect(held({ do: 'obsidian', at: [{ x: 15, y: 10, z: 10 }] }, world)).toBeNull();
     expect(held({ do: 'obsidian', at: [{ x: 99, y: 10, z: 10 }] }, world)).toBeNull();
     expect(held({ do: 'obsidian', at: [{ x: 4, y: 0, z: 0 }], rel: true }, world)).toBeNull();
   });

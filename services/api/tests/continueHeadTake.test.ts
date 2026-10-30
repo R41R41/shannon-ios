@@ -319,6 +319,20 @@ describe('take, held, resume, and the next act in a new session, on the bench C'
     expect(bench.body.takes).toHaveLength(0);
   }, 60_000);
 
+  it('run 49: a failure stop freezes with the live lease, then publishes the hold after the result is committed', async () => {
+    const bench = make('failure-stop');
+    const s = await setup(bench);
+    const prepared = await bench.head.parts.ports.prepareStop!('repeated_tool_failure');
+    expect(bench.body.takes).toHaveLength(1);
+    expect(bench.body.frozenNow()).toBe(true);
+    expect(s.audit.heldOf(bench.run)).toBeNull();
+    expect(s.stopped).toEqual([]);
+    await prepared.committed();
+    expect(s.audit.heldOf(bench.run)).not.toBeNull();
+    expect(s.stopped).toEqual([bench.run]);
+    expect(heldDetail(s, bench.run)).toMatchObject({ take: 'held', frozen: true });
+  }, 30_000);
+
   it('the hold\'s detail stays whole JSON within 600 characters with long paths, dropping the head\'s box path before the body\'s', async () => {
     const bench = make('long');
     const s = await setup(bench);

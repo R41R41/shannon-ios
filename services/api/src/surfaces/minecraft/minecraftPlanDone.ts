@@ -152,7 +152,7 @@ function holdsByThePack(predicate: DonePredicate, facts: DoneFacts): boolean {
 }
 
 /** What she wears and carries to use again, which the work does not use up: a pickaxe, a sword, armour, a shield. */
-const GEAR = /^(?:[a-z]+_)?(?:helmet|chestplate|leggings|boots|shield|sword|pickaxe|axe|shovel|hoe)$/u;
+const GEAR = /^(?:(?:[a-z]+_)?(?:helmet|chestplate|leggings|boots|shield|sword|pickaxe|axe|shovel|hoe|bucket)|flint_and_steel|shears|fishing_rod|brush)$/u;
 /**
  * run 39 (2026-10-26: p3 `have:iron_chestplate&have:iron_pickaxe` was seen done with the pickaxe and the chestplate, and p3.3 (a shield) and p3.4 (the helmet,
  * the legs) closed with it; the legs and the shield were never made): whether a node's own predicate is unmet for want of gear only. Such a child holds its

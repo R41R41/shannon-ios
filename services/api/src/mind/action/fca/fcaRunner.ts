@@ -71,6 +71,8 @@ export interface FcaStepPorts {
   observeTasks?(taskIds: readonly string[]): boolean;
   /** Actual remote-body acknowledgement, independently of local promises having unwound. */
   safeToAcknowledgeStop?(): boolean;
+  /** Preserve the owning surface while this step still holds its lease; publish its hold only after the last result is durably committed. Never runs a model. */
+  prepareStop?(reason: string): Promise<{ committed(): Promise<void> }>;
   body?: FcaBodyLifecycle;
   observations?: readonly FcaObservationLifecycle[];
   /**
@@ -479,6 +481,16 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     disposition = 'continue'; consecutiveToolFailures = priorToolFailures; reflexRun = priorReflexRun; failedByCuts = false; failureSince = priorFailureSince;
   }
   await checked('local');
+  const toolFailuresStop = failureStops({ body: bodyTask, failures: consecutiveToolFailures, priorFailures: priorToolFailures,
+    since: failureSince, now: Date.now() });
+  const stopReason = gated.stop && disposition === 'wait' ? FCA_WAIT_WITHOUT_COUNTERPART
+    : toolFailuresStop || completionVerificationFailures >= FCA_COMPLETION_MISTAKES_STOP
+      ? (toolFailuresStop ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure') : null;
+  let preparedStop: { committed(): Promise<void> } | undefined;
+  if (stopReason) {
+    try { preparedStop = await ports.prepareStop?.(stopReason); } catch (error) { console.warn('Shannon FCA stop preparation failed', String(error)); }
+    await checked('local');
+  }
   observerHandoff(decision.kind === 'tools' ? 'tools' : 'llm', 'store', provenance);
   const planCommit = ports.plan?.committed();
   const saved = metrics.timedSync('commitMs', () => observeSync('store', provenance, () => runtime.commitStep(step, {
@@ -498,15 +510,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ports.recall?.cancel(step.scopeKey, step.taskId);
     ports.bodyRecall?.cancel(step.scopeKey, step.taskId);
   }
-  if (gated.stop && saved.task.phase === 'waiting') {
-    runtime.stop(step.scopeKey, step.taskId, FCA_WAIT_WITHOUT_COUNTERPART);
-    return runtime.snapshot(step.scopeKey, step.taskId)!;
-  }
-  // A body task stops on a failure after the fifth was read, and when nothing has moved for a while (`failureStops`).
-  const toolFailuresStop = failureStops({ body: bodyTask, failures: consecutiveToolFailures, priorFailures: priorToolFailures,
-    since: failureSince, now: Date.now() });
-  if (toolFailuresStop || completionVerificationFailures >= FCA_COMPLETION_MISTAKES_STOP) {
-    runtime.stop(step.scopeKey, step.taskId, toolFailuresStop ? repeatedFailureReason(failedByCuts) : 'repeated_tool_failure');
+  if (stopReason) {
+    try { await preparedStop?.committed(); } finally { runtime.stop(step.scopeKey, step.taskId, stopReason); }
     return runtime.snapshot(step.scopeKey, step.taskId)!;
   }
   return saved;

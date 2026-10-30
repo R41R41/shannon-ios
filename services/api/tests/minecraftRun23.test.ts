@@ -82,7 +82,7 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
   const cleanups: Array<() => Promise<void>> = [];
   afterEach(async () => { vi.restoreAllMocks(); for (const close of cleanups.splice(0).reverse()) await close(); });
   /** One round per answer, in a body task (`keepBodyTools`): the model calls `mc.use-item-on-block` and the body answers as told. `jumps`: ms the clock moves before a round. */
-  async function rounds(answers: readonly Answer[], jumps: Record<number, number> = {}) {
+  async function rounds(answers: readonly Answer[], jumps: Record<number, number> = {}, prepareThrows = false) {
     const harness = actionHarness(() => '2026-10-09T00:00:00.000Z');
     const calls: string[] = [];
     const driver0 = createTaskRuntimeWiring({ db: harness.db, actions: harness.actions, scopeKey: 'owner', ownerAlone: () => true, now: () => '2026-10-09T00:00:00.000Z',
@@ -95,13 +95,21 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
     const real = Date.now.bind(Date);
     vi.spyOn(Date, 'now').mockImplementation(() => real() + offset);
     const stops: string[] = [];
+    const preservation: Array<{ stage: string; phase: string | undefined; failures?: unknown }> = [];
     const driver = createTaskRuntimeWiring({ db: harness.db, actions: harness.actions, scopeKey: 'owner', ownerAlone: () => true, now: () => '2026-10-09T00:00:00.000Z',
       model: { async decide() {
         count++;
         calls.push(`d${count}`);
         return { decision: { kind: 'tools', calls: [{ id: `call-${count}`, name: 'mc.use-item-on-block', input: {} }] }, history: [{ role: 'assistant', native: 'x' }] };
       }, toolResults: results => ({ results }) },
-      stepPorts: () => ({ keepBodyTools: () => true, tools: { definitions: [{ ...definition('mc.use-item-on-block', 'minecraft_body'),
+      stepPorts: () => ({ keepBodyTools: () => true, prepareStop: async () => {
+        preservation.push({ stage: 'prepare', phase: driver.runtime.get('owner', task.id)?.phase });
+        if (prepareThrows) throw new Error('body unavailable');
+        return { committed: async () => {
+          preservation.push({ stage: 'committed', phase: driver.runtime.get('owner', task.id)?.phase,
+            failures: (driver.runtime.snapshot('owner', task.id)?.checkpoint as Record<string, unknown>).consecutiveToolFailures });
+        } };
+      }, tools: { definitions: [{ ...definition('mc.use-item-on-block', 'minecraft_body'),
         input: { type: 'object', properties: {}, required: [], additionalProperties: false } }],
       async execute(): Promise<ToolResult> {
         const answer = answers[count - 1]!;
@@ -115,7 +123,7 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
       offset += jumps[round] ?? 0;
       await driver.tick(); await driver.drain();
     }
-    return { count, stops, phase: driver.runtime.get('owner', task.id)?.phase, checkpoint: driver.runtime.snapshot('owner', task.id)?.checkpoint as Record<string, unknown> };
+    return { count, stops, preservation, phase: driver.runtime.get('owner', task.id)?.phase, checkpoint: driver.runtime.snapshot('owner', task.id)?.checkpoint as Record<string, unknown> };
   }
 
   it('does not count a failed call that made something: twelve such calls in a row stop nothing and the count stays at none', async () => {
@@ -145,6 +153,15 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
     expect(slow.phase).toBe('stopped');
     expect(slow.stops).toEqual(['repeated_tool_failure']);
     expect(slow.count).toBe(6);
+    expect(slow.preservation).toEqual([{ stage: 'prepare', phase: 'executing' }, { stage: 'committed', phase: 'ready', failures: 6 }]);
+    expect(quick.preservation).toEqual([]);
+  });
+
+  it('still stops and keeps the final failure if physical preservation is unavailable', async () => {
+    const run = await rounds(Array.from({ length: 6 }, () => 'fail' as const), { 5: FAILURE_STALL_MS }, true);
+    expect(run.stops).toEqual(['repeated_tool_failure']);
+    expect(run.phase).toBe('stopped');
+    expect(run.checkpoint).toMatchObject({ consecutiveToolFailures: 6 });
   });
 
   it('stops at ten in a row whatever the time', async () => {
