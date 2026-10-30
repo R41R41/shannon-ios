@@ -41,21 +41,21 @@ function notLava(cells: readonly Cell[], world: Rec): Cell | null {
   const view = mapView(layers);
   return cells.find(cell => {
     const symbol = view.symbol(cell.x, cell.y, cell.z);
-    return symbol !== undefined && symbol !== '?' && symbol !== 'L' && symbol !== 'l';
+    return symbol !== undefined && symbol !== '?' && symbol !== 'L' && symbol !== 'l' && symbol !== 'O';
   }) ?? null;
 }
 
 type Found = { code: string; line: string } | null;
 const reason = (code: string, line: string): Found => ({ code, line });
 
-/** An obsidian hand: the blocks it may place, and the cells it names must be lava on the map (when the map shows them). */
+/** An obsidian hand also mines existing obsidian, including a source a previous pour set (the body's mineOnly path). */
 function obsidianProblem(hand: Rec, world: Rec, here: Cell | null): Found {
   const blocks = goBlocksProblem({ canPlace: list(hand.canPlace) });
   if (blocks) return reason('range_blocks', blocks);
   const cells = (Array.isArray(hand.at) ? hand.at : []).map(cellOf).filter((cell): cell is Cell => cell !== null);
   const base = hand.rel === true ? here : { x: 0, y: 0, z: 0 };
   const found = base ? notLava(cells.map(cell => ({ x: cell.x + base.x, y: cell.y + base.y, z: cell.z + base.z })), world) : null;
-  return found ? reason('not_lava', `at の (${found.x},${found.y},${found.z}) は地図で溶岩のマスではない。溶岩の源のマス（地図の L）を挙げる`) : null;
+  return found ? reason('not_lava', `at の (${found.x},${found.y},${found.z}) は地図で溶岩でも黒曜石でもない。溶岩の源（L）か既存の黒曜石（O）のマスを挙げる`) : null;
 }
 function portalProblem(hand: Rec): Found {
   const blocks = goBlocksProblem({ canPlace: list(hand.canPlace) });

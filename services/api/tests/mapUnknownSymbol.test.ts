@@ -35,6 +35,11 @@ describe('obsidian: a cell the map cannot say is not refused as no lava', () => 
     expect(rangeStop(obsidian, frame(map((x, y, z) => x === AT.x && y === AT.y && z === AT.z ? 'L' : '?')))).toBeNull();
     expect(rangeStop(obsidian, frame(map((x, y, z) => x === AT.x && y === AT.y && z === AT.z ? 'l' : '?')))).toBeNull();
   });
+  it('run 49: existing obsidian (O) goes to the body for its mineOnly path, including relative targets', () => {
+    const scene = frame(map((x, y, z) => x === AT.x && y === AT.y && z === AT.z ? 'O' : '?'));
+    expect(rangeStop(obsidian, scene)).toBeNull();
+    expect(rangeStop({ hands: [{ do: 'obsidian', rel: true, at: [{ x: 0, y: -1, z: -1 }] }] }, scene)).toBeNull();
+  });
   it('the cell is something else that the map shows for certain (rock, air, water): refused, as before', () => {
     for (const symbol of ['#', '.', 'w']) {
       expect(rangeStop(obsidian, frame(map((x, y, z) => x === AT.x && y === AT.y && z === AT.z ? symbol : '?'))), symbol).toMatchObject({ hand: 1, kind: 'obsidian', code: 'not_lava' });
