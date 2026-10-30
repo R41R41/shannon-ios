@@ -115,7 +115,7 @@ describe('configuredAddressedJudge', () => {
     const judge = configuredAddressedJudge({ SHANNON_ADDRESSED: 'on' }, { trace: null })!;
     expect(judge.timeoutMilliseconds).toBe(400);
     expect(judge.windowMilliseconds).toBe(20_000);
-    expect(await judge.judge({ scopeKey: 'owner', transcript: 'シャノン、いる？', speaker: { id: 'a', name: 'ア' }, humans: 1 })).toMatchObject({ addressed: true, source: 'fallback' });
+    expect(await judge.judge({ scopeKey: 'owner', transcript: 'シャノン、いる？', speaker: { id: 'a', name: 'ア' }, humans: 1 })).toMatchObject({ addressed: false, source: 'fallback' });
     const tuned = configuredAddressedJudge({ SHANNON_ADDRESSED: 'on', SHANNON_ADDRESSED_TIMEOUT_MS: '300', SHANNON_ADDRESSED_WINDOW_SECONDS: '15', TYPESAFE_API_KEY: 'k' }, { trace: null })!;
     expect([tuned.timeoutMilliseconds, tuned.windowMilliseconds]).toEqual([300, 15_000]);
     const bad = configuredAddressedJudge({ SHANNON_ADDRESSED: 'on', SHANNON_ADDRESSED_TIMEOUT_MS: '5', SHANNON_ADDRESSED_WINDOW_SECONDS: '9999' }, { trace: null })!;
@@ -138,7 +138,7 @@ describe('configuredAddressedVoice (what server.ts holds)', () => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const mine = await fetch(`${base}${ADDRESSED_PATH}`, { method: 'POST', body: JSON.stringify({ text: 'シャノン、いる？' }) });
     expect(mine.status).toBe(200);
-    expect(await mine.json()).toMatchObject({ addressed: true, source: 'fallback' });
+    expect(await mine.json()).toMatchObject({ addressed: false, source: 'fallback' });
     expect((await fetch(`${base}/v1/voice/speech/stream`, { method: 'POST', body: '{}' })).status).toBe(404);
   });
 });

@@ -36,6 +36,7 @@ function standInJev(options: { calls?: { count: number; bodies: unknown[] }; del
     const target = to ? 'shannon' : item?.group === 'about' ? 'about_shannon' : item?.group === 'self' ? 'self' : 'other_person';
     return new Response(JSON.stringify({ answers: {
       addressed_to_shannon: { type: 'noul', noul: to ? 0.93 : 0.06 }, target: { type: 'choice', choice: target },
+      reply_needed: { type: 'noul', noul: to ? 0.95 : 0.05 },
     } }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as unknown as typeof fetch;
   return fetcher;
@@ -106,7 +107,7 @@ describe('when Jev is asked at all', () => {
     expect(state.recent_talk).toEqual([{ who: 'ミキ', text: 'さっきのボスやばかった', seconds_ago: 30 }, { who: 'シャノン', text: '次はネザーだね。', seconds_ago: 7 }]);
     expect(JSON.stringify(state)).not.toContain('u1');
     const questions = addressedQuestions();
-    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target']);
+    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'reply_needed']);
     expect(Object.keys(questions.target!.criteria)).toEqual(['shannon', 'about_shannon', 'other_person', 'self', 'unclear']);
   });
 });
@@ -143,20 +144,43 @@ describe('the judgement over the cases (Jev stood in for by the label)', () => {
     const body = calls.bodies[0] as { model: string; state: Record<string, unknown>; questions: Record<string, { type: string }> };
     expect(body.model).toBe('jev-latest');
     expect(body.state).toMatchObject({ utterance: item.transcript, alone_with_shannon: true, shannon_spoke_seconds_ago: 5, follows_her_last_words: true });
-    expect(Object.fromEntries(Object.entries(body.questions).map(([key, question]) => [key, question.type]))).toEqual({ addressed_to_shannon: 'noul', target: 'choice' });
+    expect(Object.fromEntries(Object.entries(body.questions).map(([key, question]) => [key, question.type])))
+      .toEqual({ addressed_to_shannon: 'noul', target: 'choice', reply_needed: 'noul' });
   });
 
   it('needs both answers to agree for a yes: the choice says her and the probability backs it', async () => {
-    const answer = (noul: number, choice: string) => (async () => new Response(JSON.stringify({ answers: {
+    const answer = (noul: number, choice: string, needsReply = 0.95) => (async () => new Response(JSON.stringify({ answers: {
       addressed_to_shannon: { type: 'noul', noul }, target: { type: 'choice', choice },
+      reply_needed: { type: 'noul', noul: needsReply },
     } }))) as unknown as typeof fetch;
     const item = ADDRESSED_CASES.find(candidate => candidate.id === 'call-weather')!;
     expect((await judgeWith(answer(0.9, 'shannon')).judge(inputOf(item))).addressed).toBe(true);
     expect((await judgeWith(answer(0.2, 'shannon')).judge(inputOf(item))).addressed).toBe(false);
     expect((await judgeWith(answer(0.95, 'about_shannon')).judge(inputOf(item)))).toMatchObject({ addressed: false, reason: 'about_her', source: 'jev' });
     expect((await judgeWith(answer(0.95, 'other_person')).judge(inputOf(item)))).toMatchObject({ addressed: false, reason: 'not_to_her' });
-    expect((await judgeWith(answer(0.8, 'unclear')).judge(inputOf(item))).addressed).toBe(true);
+    expect((await judgeWith(answer(0.8, 'unclear')).judge(inputOf(item))).addressed).toBe(false);
     expect((await judgeWith(answer(0.5, 'unclear')).judge(inputOf(item))).addressed).toBe(false);
+    expect(await judgeWith(answer(0.95, 'shannon', 0.2)).judge(inputOf(item)))
+      .toMatchObject({ addressed: false, reason: 'no_reply_needed' });
+    expect((await judgeWith(answer(0.6, 'shannon')).judge(inputOf(item))).addressed).toBe(false);
+  });
+
+  it('名前なしの質問も残し、返事不要・不明な相手・弱い確信では会話中も黙る', async () => {
+    const input: AddressedInput = { scopeKey: 'owner', speaker: { id: 'owner', name: 'ライ氏' }, humans: 1,
+      owner: true, transcript: '明日の予定を教えてもらえる？' };
+    const answer = (target: string, directed: number, needed: number) => (async () => new Response(JSON.stringify({ answers: {
+      addressed_to_shannon: { type: 'noul', noul: directed }, target: { type: 'choice', choice: target },
+      reply_needed: { type: 'noul', noul: needed },
+    } }))) as unknown as typeof fetch;
+    expect(await judgeWith(answer('shannon', 0.95, 0.95)).judge(input))
+      .toMatchObject({ addressed: true, reason: 'asked_alone', source: 'jev' });
+    expect((await judgeWith(answer('shannon', 0.7, 0.95)).judge(input)).addressed).toBe(false);
+    const following = { ...input, transcript: '今日は何の日だっけ、いや違うか。',
+      shannon: { spokeAgoMs: 1000, toSpeaker: true, line: 'ほかに聞きたいことはありますか？' } };
+    expect(await judgeWith(answer('shannon', 0.95, 0.1)).judge(following))
+      .toMatchObject({ addressed: false, reason: 'no_reply_needed' });
+    expect((await judgeWith(answer('unclear', 0.99, 0.99)).judge(following)).addressed).toBe(false);
+    expect((await judgeWith(null).judge(following)).addressed).toBe(false);
   });
 });
 
@@ -168,7 +192,7 @@ describe('when Jev does not answer', () => {
     const started = performance.now();
     const verdict = await judge.judge(inputOf(item('call-weather')));
     const elapsed = performance.now() - started;
-    expect(verdict).toMatchObject({ addressed: true, reason: 'named', source: 'fallback', asked: true });
+    expect(verdict).toMatchObject({ addressed: false, reason: 'unconfirmed', source: 'fallback', asked: true });
     expect(elapsed).toBeLessThan(400);
     const about = await judge.judge(inputOf(item('about-topic')));
     expect(about).toMatchObject({ addressed: false, source: 'fallback' });
@@ -179,40 +203,27 @@ describe('when Jev does not answer', () => {
     const empty = (async () => new Response(JSON.stringify({ answers: {} }))) as unknown as typeof fetch;
     for (const fetcher of [broken, empty, null]) {
       const judge = judgeWith(fetcher);
-      expect(await judge.judge(inputOf(item('call-weather')))).toMatchObject({ addressed: true, source: 'fallback' });
+      expect(await judge.judge(inputOf(item('call-weather')))).toMatchObject({ addressed: false, source: 'fallback' });
       expect(await judge.judge(inputOf(item('about-voice')))).toMatchObject({ addressed: false, source: 'fallback' });
     }
     expect((await judgeWith(null).judge(inputOf(item('call-weather')))).asked).toBe(false);
   });
 
-  it('lets a call through by its form and not a name in the middle of a sentence', () => {
-    const base = { scopeKey: 'owner', speaker: { id: 'a', name: 'ア' }, humans: 3 };
-    const decide = (transcript: string, humans = 3) => {
-      const input = { ...base, humans, transcript };
-      return fallbackAddressed(input, nameMatch(transcript), false).addressed;
-    };
-    expect(decide('シャノン、おはよう')).toBe(true);
-    expect(decide('ねえシャノン今日の天気')).toBe(true);
-    expect(decide('お願いシャノン')).toBe(true);
-    expect(decide('昨日シャノンがさ')).toBe(false);
-    expect(decide('あとでシャノンに聞こう')).toBe(false);
-    expect(decide('シャノンはまだ寝てるのかな')).toBe(false);
-    expect(decide('シャノンは何が好きなの？', 1)).toBe(true);
-    // A likely mishearing is a call only in the form of one: at the head, then a pause or a mark.
-    expect(decide('シャノ、おはよう')).toBe(true);
-    expect(decide('社の、これ見て')).toBe(true);
-    expect(decide('シャノおはよう')).toBe(false);
-    expect(decide('昨日シャノ、ってなんだっけって話した')).toBe(false);
-    expect(decide('シャノワールっていうカフェ、いいよね')).toBe(false);
+  it('Jevが使えない間は、名前があっても未確認の発話を通さない', () => {
+    const base = { scopeKey: 'owner', speaker: { id: 'a', name: 'ア' }, humans: 1 };
+    for (const transcript of ['シャノン、おはよう', '昨日シャノンがさ', '社の、これ見て', '今って何の日だっけ、違うか']) {
+      const input = { ...base, transcript };
+      expect(fallbackAddressed(input, nameMatch(transcript), true)).toEqual({ addressed: false, reason: 'unconfirmed' });
+    }
   });
 
-  it('answers the follow-up of a lone speaker, and in a room only a question, a request, a thanks or a short reaction', () => {
+  it('モデルが使えない間は、一人の続き・質問・短い反応でも名前なしでは返事しない', () => {
     const base = { scopeKey: 'owner', speaker: { id: 'a', name: 'ア' } };
     const decide = (transcript: string, humans: number) => fallbackAddressed({ ...base, humans, transcript }, null, true).addressed;
-    expect(decide('あー疲れた、今日は早く寝よう', 1)).toBe(true);
-    expect(decide('それってどういう意味？', 3)).toBe(true);
-    expect(decide('ありがとう、助かった', 3)).toBe(true);
-    expect(decide('なるほどね', 3)).toBe(true);
+    expect(decide('あー疲れた、今日は早く寝よう', 1)).toBe(false);
+    expect(decide('それってどういう意味？', 3)).toBe(false);
+    expect(decide('ありがとう、助かった', 3)).toBe(false);
+    expect(decide('なるほどね', 3)).toBe(false);
     expect(decide('昨日の夜にさ、みんなで集まってマイクラをやっていたときに急にサーバーが落ちてしまって大変だったんだよね', 3)).toBe(false);
   });
 });
@@ -229,7 +240,8 @@ describe('the local rules alone over the cases', () => {
     const accuracy = (ADDRESSED_CASES.length - wrong.length) / ADDRESSED_CASES.length;
     // eslint-disable-next-line no-console
     console.log(`addressed local rules only: ${ADDRESSED_CASES.length - wrong.length}/${ADDRESSED_CASES.length} right (${Math.round(accuracy * 100)}%); misses: ${wrong.join(', ')}`);
-    expect(accuracy).toBeGreaterThanOrEqual(0.7);
+    expect(ADDRESSED_CASES.filter(item => !item.to && !item.ask).every(item => !wrong.includes(item.id))).toBe(true);
+    expect(ADDRESSED_CASES.filter(item => item.ask).every(item => wrong.includes(item.id) === item.to)).toBe(true);
   });
 });
 

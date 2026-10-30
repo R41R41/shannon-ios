@@ -672,7 +672,7 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     await close();
   });
 
-  it('reads how long ago the body says she spoke, and falls back on the local rules when there is no Jev', async () => {
+  it('直前の発話時刻を使い、Jevで判定できなければ応答しない', async () => {
     const { asked, judge: j } = judge();
     const { say, close } = harness(ADDRESSED, undefined, j);
     expect((await say('それってどういう意味？', { shannonSpokeMsAgo: 3_000 }))[0]).toMatchObject({ respond: true, reason: 'continuation' });
@@ -680,8 +680,8 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     expect(asked).toHaveLength(1);
     await close();
     const silent = harness(ADDRESSED, undefined, new AddressedJudge({ chooser: null }));
-    expect((await silent.say('シャノン、今日の予定を教えて'))[0]).toMatchObject({ respond: true, reason: 'named' });
-    expect((await silent.say('昨日シャノンがさ、変なこと言っててさ', { participants: [OWNER, FRIEND] }))[0]).toMatchObject({ respond: false, reason: 'about_her' });
+    expect((await silent.say('シャノン、今日の予定を教えて'))[0]).toMatchObject({ respond: false, reason: 'unconfirmed' });
+    expect((await silent.say('昨日シャノンがさ、変なこと言っててさ', { participants: [OWNER, FRIEND] }))[0]).toMatchObject({ respond: false, reason: 'unconfirmed' });
     await silent.close();
   });
 

@@ -1,72 +1,31 @@
-# Was it said to her? (`SHANNON_ADDRESSED`, owner decision 2026-10-21)
+# 声の発話に返事が必要か（2026-10-31、反映前）
 
-In a voice conversation she answers only two things, also with the owner alone with her:
+持ち主の指定: 音声会話中も発話ごとに「返事する必要があるか」を判定する。名前なしの会話を残して誤反応を減らす。会話が開いていることや、直前に返事したことだけで次の発話を通さない。
 
-1. Words that call her by name **and** are said to her. Friends talking about her (「シャノンってさ、昨日…」) and a person talking to
-   themselves with her name in it do not count.
-2. The same person's words right after she spoke to them (about twenty seconds), with or without her name, when they are said to her.
+判定は `services/api/src/mind/perception/addressed.ts` に集約する。Discord音声、Windowsの `/v1/voice/listen`、`/v1/voice/addressed` が共通に使うため、この変更は全ての入口に適用される。
 
-Everything else is "not said to her": no reply, no cost. What she hears and does not answer is kept for three minutes as context
-(`voiceRoom.ts`), never in her memory.
+## 判定
 
-The judgement is one piece of the head (`services/api/src/mind/perception/addressed.ts`, `addressedName.ts`), used by every voice entry
-("one head; the entries only hear and speak"): the Discord voice channel (`PlatformVoiceService`, both `/v1/platform/voice/turn` and
-`/v1/converse`) and the Windows resident (`POST /v1/voice/addressed`).
+1. 名前の表記揺れを正規化する。名前だけの明確な呼びかけは規則で通す。持ち主が停止を求め、シャノンが話しているか体のタスクが動いている場合も、名前なしで停止を受け付ける。
+2. 名前がある発話・同じ話者への返事から20秒以内の続きはJevに問い合わせる。持ち主ひとりの場合は、その外でも名前なしの質問・依頼を判定する。同席者がいる場では、名前も続きの文脈もない発話を通さない。
+3. 質問セットは `addressed.v3`、既定400ms。1回の問い合わせで `addressed_to_shannon`、`target`、`reply_needed` の3問を聞く。宛先は `shannon` が必須（`unclear` は通さない）。宛先の確信値は通常0.7以上、名前なしで窓の外なら0.8以上。返事の必要性は0.8以上を要する。
+4. 独り言、読み上げ、実況、発言者自身が答えたり撤回したりした質問、会話を閉じる相づちには返事しない。明確にシャノンへの質問・依頼なら名前なしでも通す。
+5. 鍵なし・失敗・期限切れ・使用できない答えでは `addressed: false`。名前や直近の会話だけを根拠に通す控えは廃止した。`source: fallback` は許可ではない。`no_reply_needed` は宛先が合っても返事不要、`unconfirmed` は判定不能を表す（名前なしの新規発話は既存の `no_name`）。
 
-## Stop words (owner 2026-10-21)
+20秒は `SHANNON_ADDRESSED_WINDOW_SECONDS`。端末が伝えた読み上げ終了からの経過、または頭の直前の返事と読み上げ時間の見込みを文脈に使う。窓の内側も自動許可にはしない。
 
-止めて・待って・ストップ・やめて・静かに・黙って (the same row as the resident's `echoGuard.ts` STOP_WORDS) are heard **without her name**, in the Discord voice
-channel and in the Windows call alike, but only when both hold: the speaker is the owner (not a friend, not a guest call), and she is speaking or her
-Minecraft body has a task running. Then `respond: true`, `reason: stop`, no question to Jev; the owner's spoken stop for the body goes on through
-the existing `minecraftIntent` (`stop`). Anything else without her name stays "not said to her".
+## 送信と保持
 
-## What is sent, and what is kept
+Windowsからは判定する発話本文、経過時間、直前の返事、同席者・発話中の情報を送る。本文は判定だけに使い、判定経路では会話・記憶・本文つきログへ保存しない。Jevのキャッシュは秘密値でソルトを付けた要約値を鍵にする。判断の記録も宛先・確信値・名前の有無・続きかどうかなど、本文を持たない。Discordの直近3分の会話文脈はサーバーのメモリ内だけに保持し、再起動で失われる。応答することになった発話の通常の会話保存とは別の経路である。
 
-The words judged are used for that one judgement only. From the Windows resident only one sentence is sent, the one in which her name was heard
-(and, inside a call, the utterance being asked about); the head does not write it to the conversation, to her memory, or to a trace (a trace holds the
-target, the probability, a salted digest of the state and whether the name was exact, never the words), and Jev's cache is keyed by the digest. The
-Discord channel's talk of the last three minutes (`voiceRoom.ts`) stays in the server's memory only and is lost on a restart.
+## Windowsの受け口
 
-## How it decides
+`POST /v1/voice/addressed` は端末のトークンを要する。本文は `{ text, shannonSpokeMsAgo?, lastLine?, guest?, speaking? }`。textは1〜1,000文字。
 
-1. **The name.** The transcript is normalised (NFKC, lower case, katakana to hiragana, no spaces, marks or long-vowel marks) and searched
-   for her name: `strong` (しゃのん, shannon) or `weak`, a likely mishearing (しゃの, シャノ, じゃのん, ちゃのん, シャロン, 社の when no
-   kanji comes before it, so not 会社の).
-2. **The gate** (no model). No name and not inside the follow-up window (or the window is for someone else: she last spoke to another
-   person) is "not said to her" at once. Only a strong name and nothing else (「シャノン」「ねえシャノンちゃん」) is "said to her" at once.
-   Fragments (breath, a lone 「うん」 outside the window) never reach it.
-3. **Jev**, asked once in the other cases (`addressed.v1`, 400 ms; `SHANNON_ADDRESSED_TIMEOUT_MS`): two questions over the state, which
-   holds the words, the speaker's name, how many people are there, how long ago she spoke and whether to this speaker, her last line and the
-   last six lines of talk. `addressed_to_shannon` (a probability) and `target` (`shannon`, `about_shannon`, `other_person`, `self`,
-   `unclear`). A yes needs `target = shannon` with a probability of 0.4 or more, or `unclear` with 0.7 or more.
-4. **When Jev does not answer** (late, an error, an unusable answer, or no `TYPESAFE_API_KEY`): the local rules. A strong name at the head
-   of the utterance (after ねえ, あの, ちょっと...), at its end (a vocative), or followed by a pause goes through; a name in the middle of a
-   sentence does not; a name that is the topic of the sentence (シャノンは, シャノンってさ) goes through only with the owner alone and
-   a question or request; a weak name only at the head followed by a pause. Inside the window: the owner alone, yes; with several people, a
-   question, a request, a greeting or a short reaction (28 characters).
+200の答えは `{ addressed, reason, source, asked, ms }`。sourceは `rule` / `jev` / `fallback`。無効なら503 `ADDRESSED_DISABLED`、認証不可403、不正な本文400、端末ごと毎分30回を超えると429。新しいWindows候補は、無効・未対応・失敗時に会話を始めず、会話中も返事を生成しない。古いWindowsは控えの扱いが異なるため、PCと頭の双方を更新する。
 
-The window is `SHANNON_ADDRESSED_WINDOW_SECONDS` (default 20). The head counts it from the end of her words as the body reports it
-(`shannonSpokeMsAgo`), else from its own record of her last reply plus the time it takes to say it (about 130 ms a character), else from
-`followsShannonTurn` (8 s). Her own mouth lines (`said` with `source: mouth`) open the window too, for nobody in particular.
+`SHANNON_ADDRESSED` の既定は切。既存の本番では入を読み取り確認済み。環境変数・鍵はこの変更では書き換えない。
 
-Each judgement writes one content-free decision trace (`decision: addressed`, the target and probability, whether the name was exact,
-whether it was inside the window; never the words) and one log line (`Shannon platform voice addressed=… source=… ms=…`).
+## 検証の範囲
 
-## `POST /v1/voice/addressed` (the Windows resident)
-
-The device's token, like the other `/v1/voice/*` routes. Request: `{ "text": "…", "shannonSpokeMsAgo": 4000, "lastLine": "…", "guest": false, "speaking": false }`
-(`text` 1-1,000 characters; the others optional; `guest` means others are listening, `speaking` that she is speaking now). Answer 200:
-`{ "addressed": true, "reason": "named", "source": "jev", "asked": true, "ms": 210 }`. `source` is `rule`, `jev` or `fallback`.
-503 `ADDRESSED_DISABLED` while the switch is off (the resident then goes on as it did, by the name match alone); 403 without a device; 400 for a bad
-body; 429 over 30 a minute per device. The words are judged and dropped.
-
-## Switches
-
-`SHANNON_ADDRESSED` (off; needs nothing, uses Jev when `TYPESAFE_API_KEY` is set). `SHANNON_DC_VOICE_FILLER` is off by default since the same
-decision: the recorded fillers are the old voice, and with this judgement a filler would also play before a silent decision.
-
-## Measuring it
-
-`tests/addressed.test.ts` runs 44 cases (`tests/support/addressedCases.ts`: calls, talk about her, self-talk, mishearings, follow-ups, someone
-else's follow-up, the owner alone) through the judge with a stand-in for Jev, and the local rules alone. `pnpm --filter @shannon/api
-test:llm-addressed` runs the same cases against the real Jev (billable) and prints the accuracy by group, the misses and the latency.
+通常のテストはJevの代役を使い、質問の内容・閾値・毎回の判定・失敗時の沈黙を確かめる。合格率は実モデルの精度ではない。`test:llm-addressed` は実モデルを呼んで費用が出るため今回実施しない。実際の誤反応率と取りこぼし率は未測定。厳しくしたことで、曖昧な話しかけを拾わない可能性がある。
