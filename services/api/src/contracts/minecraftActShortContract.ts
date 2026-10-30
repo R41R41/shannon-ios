@@ -44,9 +44,9 @@ const SHORT_LINES = [
     + 'search_timeout（時間切れ: 道探しが持ち時間で終わり、道があるかは分からない。調べたマスと、いちばん近づけた所があと何 m かが付く。近い中継点を行き先に go を出し直す。高さの差が大きい道は vertical で進む）・'
     + 'stuck・low_floor（足場が無い: 立つ所が丸ごとのブロックでない。隣の丸ごとの床へずれる）・no_floor（行き先の足元が作物・草花、または place= 無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す。',
   '範囲を挙げて体に任せる手（go と同じ形: 何を・どこで・どこまでをあなたが決め、体は細かい動きだけ。挙げた範囲の外は探さない。上限 seconds が必ずあり、止まる時は「<手> 止まった 理由」）:',
-  'obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N]',
+  'obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N] [maxDig=N]',
   '  黒曜石づくり。X,Y,Z は溶岩の源のマス（地図の L、8 つまで。体は探さない）。持ち物の水入りバケツで水を注ぎ、固まったらダイヤのツルハシで掘って拾い、水を汲み戻す。count（既定 1）まで。'
-    + '立てない時の立ち直しは体。足場は place= の物。理由: no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_time・stuck。',
+    + '立てない時の立ち直しは体。足場は place= の物。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。',
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
   '  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。'
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
@@ -65,7 +65,7 @@ const SHORT_LINES = [
   '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
     + 'shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物（vertical の手の中だけ、柵・レール・クモの巣・松明・はしご・つた・糸は書かなくても壊す。go・dig は変わらない）、place= は足場・塞ぎに置く物。stairs・shaft は place= を書かないと、持っている丸石・深層岩の丸石・土を足場に置いてよいことになる（置かせたくなければ place=none）。pillar は書いた物で作る。'
     + 'liquid: 溶岩・水が見えたら stop=止まる / seal=塞いで続ける / seal_water=水だけ塞ぎ溶岩で止まる（range は塞ぐ半径 1〜2、既定 1）。'
-    + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（既定 ${VERTICAL_DEFAULTS.seconds}）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}`
+    + `上限（書かなければ既定）: seconds ${VERTICAL_SECONDS_RANGE[0]}〜${VERTICAL_SECONDS_RANGE[1]}（書かなければ高さから見積もる: 高さの差 × 1 段の時間 × 1.5。長い上り下りも足りる）・maxDig 既定 ${VERTICAL_DEFAULTS.maxDig}・maxPlace 既定 ${VERTICAL_DEFAULTS.maxPlace}`
     + `（maxDig は ${VERTICAL_DEFAULTS.maxDig}・maxPlace は ${VERTICAL_DEFAULTS.maxPlace} まで）。見えた鉱石は結果で知らされる。`,
   '  例（liquid= は必ず書く）: vertical down stairs south y=10 dig=stone,dirt liquid=stop   vertical up pillar y=70 dig=dirt place=cobblestone liquid=seal_water',
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
@@ -96,7 +96,7 @@ const SHORT_LINES = [
   'shoot は json の形で書く。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。',
   '',
   '## json の欄（手ごとに決まっている。ほかの欄は断られる。どの手にも rel・note・onFail）',
-  '- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: at・count・seconds・canPlace・maxPlace / '
+  '- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: at・count・seconds・canPlace・maxPlace・maxDig / '
     + 'fight: target・stance(fight|flee)・item・retreatHp・range・seconds / '
     + 'mine: block・at・count・tool・collect・seconds・canDig・maxDig / make: item・count / portal: at・axis(x|z)・block・enter・canPlace・maxPlace・seconds / '
     + 'smelt: items・fuel・fuelCount・furnaces・at・seconds / vertical: dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds / walk: to か path・sprint・range / '

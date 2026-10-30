@@ -595,5 +595,5 @@ export function readViewResult(text: string | undefined): ViewResult | null {
 }
 
 export { handFieldNames } from './minecraftActHandRules.js';
-export { ACT_MAX_MS, actMilliseconds, actExpectedMilliseconds, actRemainingMilliseconds, tunedBy, VERTICAL_MS_PER_STEP, verticalSteps } from './minecraftActTime.js';
+export { ACT_MAX_MS, actMilliseconds, actExpectedMilliseconds, actRemainingMilliseconds, tunedBy, VERTICAL_MS_PER_STEP, verticalSteps, withVerticalSeconds } from './minecraftActTime.js';
 export type { ActTimeTuning } from './minecraftActTime.js';

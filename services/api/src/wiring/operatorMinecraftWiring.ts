@@ -15,7 +15,7 @@ import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import { runSkillImport, type SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
-import { driftWords, feet, headIncidentKind, HEAD_INCIDENT_WORDS, type Feet, type HeldAgain } from './minecraftIncidentHold.js';
+import { driftWords, feet, headIncidentKind, HEAD_INCIDENT_WORDS, takeEnd, type Feet, type HeldAgain } from './minecraftIncidentHold.js';
 import { heldAgainWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 
@@ -360,6 +360,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
       return c.refuse('refused', 'タスクを再開できませんでした（実行時の再開が断られた）。体の世界は動いています。もう一度 resume してください。', { taskId });
     }
     requests.resolveHolds?.(taskId, 'resume');
+    afterResume.set(taskId, Date.parse(parts.now()));
     parts.activity(c.at, { summary: `運用者（${c.operator}）が、体の取り戻しで止まっていたマイクラの依頼を再開しました。`, tool: 'operator.minecraft.resume',
       outcome: 'done', reasonCode: 'operator_cli', detail: `operation=${c.operationId} task=${taskId} recovered=fca_stopped` });
     requests.wake();
@@ -446,6 +447,7 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
         taskId: found.id, detail: 'runtime_resume_refused' });
       return c.refuse('refused', 'タスクを再開できませんでした（実行時の再開が断られた）。体の保留は解け、世界は動いています。cancel するか、もう一度 resume してください。', { taskId: found.id });
     }
+    afterResume.set(found.id, Date.parse(parts.now()));
     parts.activity(c.at, { summary: `運用者（${c.operator}）が、保留していたマイクラの依頼を再開しました。`, tool: 'operator.minecraft.resume',
       outcome: 'done', reasonCode: 'operator_cli', detail: `operation=${c.operationId} task=${found.id}` });
     requests.wake();
@@ -512,7 +514,9 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
     const same = before.incident === body.incident;
     // Run 45 (+929): the body holds on its own for a death or near death outside an act: not a disagreement, the head follows it.
     const outside = /^(?:death|near_death)/u.test(body.why);
-    const detail = JSON.stringify({ incident: body.incident, why: body.why.slice(0, 160), frozen: null, command: same ? before.command ?? '' : '',
+    // Run 47 (resume 9: the head went back to held and the world moved on for four and a half minutes): the body is asked to hold as well, so that the world stops. What it answers is in the row.
+    const taken = await (requests.take?.(taskId, body.incident, `頭が保留に戻した（${body.seen}）: ${body.why}`.slice(0, 280)) ?? Promise.resolve(null)).catch(() => null);
+    const detail = JSON.stringify({ incident: body.incident, why: body.why.slice(0, 160), frozen: taken ? taken.frozen : null, ...(taken ? { take: takeEnd(taken), ...(taken.freeze ? { freeze: taken.freeze.slice(0, 80) } : {}) } : {}), command: same ? before.command ?? '' : '',
       ...(same && before.start ? { start: before.start } : {}), ...(same && before.end ? { end: before.end } : {}),
       mismatch: outside ? `outside_act:${body.seen}` : `body_held:${body.seen}` });
     audit({ operationId: request.operationId, at: parts.now(), operator: request.operator, command: 'hold', event: 'settled', code: 'held', argsJson: request.argsJson,
@@ -699,9 +703,20 @@ export function createOperatorMinecraft(parts: OperatorMinecraftParts) {
    * (a body restarted with the file of a task that ended). At most once a minute for the same hold; what was done is in the audit.
    */
   const reconciled = new Map<string, number>();
+  /** When each task was resumed (ms): the frame the body's hold is judged on must be one after the body had its release (see `reconcile`). Cleared when a frame shows no hold. */
+  const afterResume = new Map<string, number>();
+  const RESUME_FRAME_WAIT_MS = 20_000;
   function reconcile(requests: NonNullable<OperatorMinecraftParts['requests']>, now: string): void {
     const body = requests.bodyHold?.();
-    if (!body || parts.audit.heldOf(body.task)) return;
+    // Run 47 (resume 9): after a resume the first frame may still show the hold the resume is ending (the body had not read the release yet): the head waits for a frame that has lost it
+    // (`incidentHold` gone) before it judges a disagreement, at most `RESUME_FRAME_WAIT_MS`. A body that still holds after that is a real disagreement.
+    if (!body) {
+      afterResume.clear();
+      return;
+    }
+    const resumedAt = afterResume.get(body.task);
+    if (resumedAt !== undefined && Date.parse(now) - resumedAt < RESUME_FRAME_WAIT_MS) return;
+    if (parts.audit.heldOf(body.task)) return;
     if (Date.parse(now) - (reconciled.get(body.id) ?? 0) < 60_000) return;
     reconciled.set(body.id, Date.parse(now));
     const task = requests.get(body.task);

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, actRemainingMilliseconds, HAND_KINDS, VERTICAL_MS_PER_STEP, verticalSteps,
+  ACT_INPUT_SCHEMA, actExpectedMilliseconds, actMilliseconds, actProblem, actRemainingMilliseconds, HAND_KINDS, VERTICAL_MS_PER_STEP, verticalSteps, withVerticalSeconds,
   type ActHand, type ActInput,
 } from '../src/contracts/minecraftActContract.js';
 import { handProblem } from '../src/contracts/minecraftActHandRules.js';
@@ -170,7 +170,7 @@ describe('vertical: the rules of one hand (handProblem)', () => {
     expect(VERTICAL_DEFAULTS).toEqual({ maxDig: 200, maxPlace: 100, seconds: 60, range: 1 });
     expect([...VERTICAL_SECONDS_RANGE]).toEqual([5, 120]);
     const line = SHORT_ACT_DESCRIPTION.split('\n').find(entry => entry.includes('上限（書かなければ既定）'))!;
-    expect(line).toContain('seconds 5〜120（既定 60）・maxDig 既定 200・maxPlace 既定 100');
+    expect(line).toContain('seconds 5〜120（書かなければ高さから見積もる: 高さの差 × 1 段の時間 × 1.5。長い上り下りも足りる）・maxDig 既定 200・maxPlace 既定 100');
     expect(line).toContain('range は塞ぐ半径 1〜2、既定 1');
     // the head's check is the same range
     expect(handProblem({ ...stairs, seconds: 5 })).toBeNull();
@@ -202,6 +202,44 @@ describe('vertical: the time of a hand (first guesses, then the body\'s msPerUni
     expect(actMilliseconds({ hands: [stairs] }, feet)).toBe(62_000);
     expect(actMilliseconds({ hands: [{ ...stairs, seconds: 120 }] }, feet)).toBe(122_000);
     expect(VERTICAL_DEFAULT_SECONDS).toBe(60);
+  });
+  it('run 47 hold 4: a vertical hand that names no seconds gets the time its height needs, (1 s + steps x the time of a step) x 1.5 within 5 and 120; named seconds stay; a measured step replaces the first guess', () => {
+    const timed = (hand: ActHand, tune = {}) => (withVerticalSeconds({ hands: [hand] }, feet, tune).hands[0] as ActHand).seconds;
+    // 33 levels of stairs: (1 + 33 x 1.6) x 1.5 = 80.7 -> 81 (the body's 60 stopped it at 23)
+    expect(timed({ ...stairs, toY: feet.y - 33 })).toBe(Math.ceil((1_000 + 33 * 1_600) * 1.5 / 1_000));
+    expect(timed({ ...stairs, toY: feet.y - 33 })).toBeGreaterThan(60);
+    // a long one is cut at 120, a short one is not under 5
+    expect(timed({ ...stairs, toY: feet.y - 100 })).toBe(120);
+    expect(timed({ ...shaft, toY: feet.y - 1 })).toBeGreaterThanOrEqual(5);
+    // the form's time of a step: shaft 1.0 s, pillar 0.9 s
+    expect(timed({ ...shaft, toY: feet.y - 20 })).toBe(Math.ceil((1_000 + 20 * 1_000) * 1.5 / 1_000));
+    // what the body measured (msPerUnit) is used in place of the first guess
+    expect(timed({ ...stairs, toY: feet.y - 20 }, { stairs: 3_000 })).toBe(Math.ceil((1_000 + 20 * 3_000) * 1.5 / 1_000));
+    // seconds that are named stay; an act with no vertical hand is the same object
+    expect(timed({ ...stairs, toY: feet.y - 33, seconds: 40 })).toBe(40);
+    const plain = { hands: [{ do: 'wait', seconds: 1 } as ActHand] };
+    expect(withVerticalSeconds(plain, feet)).toBe(plain);
+    // the act's time follows the hands' seconds
+    expect(actMilliseconds(withVerticalSeconds({ hands: [{ ...stairs, toY: feet.y - 33 }] }, feet), feet)).toBe(1_000 * Math.ceil((1_000 + 33 * 1_600) * 1.5 / 1_000) + 2_000);
+    // the time is counted from where she stands when the hand begins: after a walk the feet are the walk's end
+    const act = { hands: [{ do: 'vertical', dir: 'down', shape: 'shaft', toY: 0, canDig: ['stone'], liquid: 'stop' } as ActHand] };
+    expect((withVerticalSeconds(act, { x: 0, y: 10, z: 0 }).hands[0] as ActHand).seconds).toBe(Math.ceil((1_000 + 10 * 1_000) * 1.5 / 1_000));
+    // an unknown place: 32 steps
+    expect((withVerticalSeconds(act, null).hands[0] as ActHand).seconds).toBe(Math.ceil((1_000 + 32 * 1_000) * 1.5 / 1_000));
+  });
+  it('obsidian may name maxDig, 1 to 100, in the short line and in json (run 47)', () => {
+    const base = { do: 'obsidian', at: [{ x: 1, y: 2, z: 3 }] } as ActHand;
+    expect(handProblem({ ...base, maxDig: 50 })).toBeNull();
+    expect(handProblem({ ...base, maxDig: 1 })).toBeNull();
+    expect(handProblem({ ...base, maxDig: 100 })).toBeNull();
+    for (const bad of [0, 101, 2.5, -1]) expect(handProblem({ ...base, maxDig: bad })).toContain('obsidian の maxDig は 1〜100 の整数');
+    expect(handProblem(base)).toBeNull();
+    // maxDig is still no field of a hand that digs nothing
+    expect(handProblem({ do: 'fight', target: '#1', maxDig: 5 } as ActHand)).not.toBeNull();
+    expect(handToLine({ ...base, maxDig: 50 })).toBe('obsidian 1,2,3 maxDig=50');
+    expect(lineToHand('obsidian 1,2,3 count=2 maxDig=50')).toMatchObject({ do: 'obsidian', count: 2, maxDig: 50 });
+    expect(SHORT_ACT_DESCRIPTION).toContain('obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N] [maxDig=N]');
+    expect(SHORT_ACT_DESCRIPTION).toContain('掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）');
   });
   it('starts the next hand where the vertical ended (the y asked for, one cell toward a step for stairs)', () => {
     const from = { x: 0, y: 10, z: 0 }, walk: ActHand = { do: 'walk', to: { x: 10, y: 0, z: 0 } };

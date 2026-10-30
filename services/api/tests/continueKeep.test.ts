@@ -292,7 +292,7 @@ describe('vertical: the refusal says how to mend it, and the examples all write 
     expect(examples.length).toBeGreaterThanOrEqual(2);
     for (const example of examples) expect(example, example).toContain('liquid=');
     expect(SHORT_ACT_DESCRIPTION).toContain('maxDig は 200・maxPlace は 100 まで');
-    expect(SHORT_ACT_DESCRIPTION).toContain('seconds 5〜120（既定 60）');
+    expect(SHORT_ACT_DESCRIPTION).toContain('seconds 5〜120（書かなければ高さから見積もる');
     expect(SHORT_ACT_DESCRIPTION).toContain('keep（["spruce_planks:4:作業台"]）');
     expect(SHORT_ACT_DESCRIPTION).toContain('品目:数:用途');
   });

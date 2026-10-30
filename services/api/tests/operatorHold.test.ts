@@ -26,6 +26,8 @@ function service() {
   // What the body answers a release naming a hold, and the hold its frame shows (run 44).
   const bodyAnswer: { next: { ok: boolean; words: string }; hold: { id: string; task: string; why: string } | null } = {
     next: { ok: true, words: 'completed done=true hold=- unfreeze=ok' }, hold: null };
+  const taken: string[] = [];
+  const takeAnswer: { next: unknown } = { next: { id: 'body-hold-1', done: true, hold: 'body-hold-1', held: true, frozen: true, box: null, scene: null, again: true } };
   let clock = at;
   const requests = {
     body: () => 'minecraft:world', open: () => [], get: (id: string) => tasks.get(id) ?? null,
@@ -36,6 +38,7 @@ function service() {
     incident: async (op: string, incident: string, command: string, taskId: string) => {
       unfrozen.push(`${op}:${incident}/${command}`); void taskId; return bodyAnswer.next; },
     bodyHold: () => bodyAnswer.hold,
+    take: async (taskId: string, incidentId: string, why: string) => { taken.push(`${taskId}|${incidentId}|${why}`); return takeAnswer.next; },
     heldActWords: (command: string, why: string) => `保留した act q15（go (1,2,3)）は出し直さなかった。前の結果: ${why}`,
     wake: () => undefined,
   } as unknown as OperatorMinecraftRequests & { wake(): void };
@@ -44,7 +47,7 @@ function service() {
     actions: { list: async () => [] } as unknown as OperatorMinecraftParts['actions'], lifecycleUnresolved: () => false,
     activity: (_at, entry) => activity.push(entry), note: () => undefined,
   };
-  return { operator: createOperatorMinecraft(parts), audit, tasks, activity, stopped, resumed, unfrozen, bodyAnswer,
+  return { operator: createOperatorMinecraft(parts), audit, tasks, activity, stopped, resumed, unfrozen, bodyAnswer, taken, takeAnswer,
     advance: (minutes: number) => { clock = new Date(Date.parse(clock) + minutes * 60_000).toISOString(); }, now: () => clock };
 }
 const incident = { id: '20261028T000000-act-ab12', why: 'go_stuck', frozen: true, freeze: 'The game is frozen', command: 'command-q115',
@@ -194,6 +197,52 @@ describe('run 44, resume 1: the head and the body hold together', () => {
     r.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
     expect(JSON.parse(r.audit.heldOf(TASK)!.detail!)).toMatchObject({ incident: 'body-hold-1', command: '', mismatch: 'body_held:frame' });
     expect(r.stopped).toEqual([TASK]);
+  });
+});
+
+describe('run 47, resume 9: the body that started held is not a disagreement the moment after the resume', () => {
+  async function resumedOnce() {
+    const s = service();
+    await s.operator.handle(envelope('request', { goal: 'エンドラを討伐して', holdOnFailure: true }));
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    await s.operator.hold(TASK, incident);
+    s.bodyAnswer.hold = { id: incident.id, task: TASK, why: 'go_stuck' };
+    expect((await s.operator.handle(envelope('resume', { taskId: TASK }))).body).toMatchObject({ outcome: 'accepted' });
+    s.tasks.set(TASK, task(TASK, 'executing'));
+    return s;
+  }
+  it('the first frame after the resume still shows the hold: the head waits for a frame that has lost it, and does not hold again', async () => {
+    const s = await resumedOnce();
+    s.advance(0.1);   // 6 s later
+    s.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(s.audit.heldOf(TASK)).toBeNull();
+    expect(s.taken).toEqual([]);
+    // the body lets go: a frame without the hold ends the waiting
+    s.bodyAnswer.hold = null;
+    s.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    // a hold of the body that comes later is judged as before
+    s.advance(2);
+    s.bodyAnswer.hold = { id: 'body-hold-2', task: TASK, why: 'go_stuck' };
+    s.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(JSON.parse(s.audit.heldOf(TASK)!.detail!)).toMatchObject({ incident: 'body-hold-2', mismatch: 'body_held:frame' });
+  });
+  it('a body that still holds after the wait is a real disagreement: the head holds again and asks the body to hold, and the row says what it answered', async () => {
+    const s = await resumedOnce();
+    s.advance(0.5);   // 30 s
+    s.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(JSON.parse(s.audit.heldOf(TASK)!.detail!)).toMatchObject({ incident: incident.id, mismatch: 'body_held:frame', take: 'held', frozen: true });
+    expect(s.taken).toHaveLength(1);
+    expect(s.taken[0]).toContain(`${TASK}|${incident.id}|`);
+    expect(s.stopped).toContain(TASK);
+  });
+  it('the body that cannot be asked is not a reason not to hold: the row has no take', async () => {
+    const s = await resumedOnce();
+    s.takeAnswer.next = null;
+    s.advance(0.5);
+    s.operator.tick(); await new Promise(resolve => setTimeout(resolve, 0));
+    const detail = JSON.parse(s.audit.heldOf(TASK)!.detail!) as Record<string, unknown>;
+    expect(detail.mismatch).toBe('body_held:frame');
+    expect(detail.take).toBeUndefined();
   });
 });
 

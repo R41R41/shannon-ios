@@ -1,7 +1,7 @@
 import type { PlanPromise } from '@shannon/mind';
 import type { BodyObservation } from '../contracts/bodyControlContract.js';
 import type { MadeIn } from '../contracts/continueContract.js';
-import { actMilliseconds, type ActInput, type ActKeep } from '../contracts/minecraftActContract.js';
+import { actMilliseconds, withVerticalSeconds, type ActInput, type ActKeep } from '../contracts/minecraftActContract.js';
 import { replaceOnly } from '../contracts/minecraftActShortContract.js';
 import type { FcaExternalTools } from '../mind/action/fca/fcaPorts.js';
 import type { KeptPromise } from '../mind/action/fca/fcaPlanTools.js';
@@ -39,7 +39,11 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const { queue, call } = parts, input = call.input as ActInput;
   // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope), `uses` (kept with the command, never sent to the body) and `keep`
   // (made into promises of the plan below, once the queue has the act).
-  const { pre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, ...args } = input;
+  const { pre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, ...rawArgs } = input;
+  // Run 47: a vertical hand that names no seconds gets the time its height needs (not the body's 60 s); the time of the act follows it.
+  const feet = feetOf(parts.control.observe(parts.bodyId));
+  const timed = withVerticalSeconds(input, feet, queue.tuning?.() ?? {});
+  const args = timed === input ? rawArgs : { ...rawArgs, hands: timed.hands };
   const fixes = parts.fixes.length ? `（頭が形を直して送った: ${parts.fixes.join('、')}）\n` : '';
   if (pre && !queue.open() && conditionHolds(pre, parts.frame) === false) {
     const words = conditionWords(pre, parts.frame);
@@ -47,10 +51,10 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
       { retryable: true });
   }
   const node = parts.node && parts.node !== URGENT_TAG ? parts.node : null;
-  const added = await queue.add({ call: { id: call.operationId, name: call.name, input: call.input }, operationId: call.operationId, input,
+  const added = await queue.add({ call: { id: call.operationId, name: call.name, input: call.input }, operationId: call.operationId, input: timed,
     arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, current: parts.current ?? null,
     why: String(input.why ?? ''), fixes: [], ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
-    maxMs: actMilliseconds(input, feetOf(parts.control.observe(parts.bodyId))) });
+    maxMs: actMilliseconds(timed, feet) });
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';
   // Amendment A-7 1: the act is in the queue; what it said to keep becomes promises (an open one of the same item and use is revised). Not put into the act's `uses`.

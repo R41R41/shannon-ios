@@ -139,6 +139,8 @@ export interface LlmcQueue extends FcaBodyQueue {
   lines(frame: BodyObservation | null): string[];
   /** The input of the items ahead of a new one, in order (the act preflight reads them as the hands that come first). */
   ahead(): ActInput[];
+  /** What the body measured of a step of each vertical form in this task (`progress.msPerUnit`), for the time a vertical hand that names none is given. */
+  tuning(): ActTimeTuning;
   /** A decision's request is built now: a drop after this makes it stale (`stale`). */
   mark(): void;
   stale(): boolean;
@@ -553,6 +555,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     version: () => version,
     tail: () => open().at(-1)?.item ?? null,
     ahead: () => open().map(item => item.input),
+    tuning: () => verticalSpeeds.get(deps.taskId) ?? {},
     noteDecision(milliseconds) {
       if (!Number.isFinite(milliseconds) || milliseconds < 0) return;
       keep(decisionTimes, deps.taskId, [...(decisionTimes.get(deps.taskId) ?? []), milliseconds].slice(-QUEUE_T.kept));

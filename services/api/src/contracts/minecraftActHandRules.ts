@@ -26,7 +26,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   drop: { needs: [['items']], may: ['target', 'at'] },
   pickup: { needs: [], may: ['target', 'range'] },
   wait: { needs: [['seconds']], may: [] },
-  obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace'] },
+  obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace', 'maxDig'] },
   fight: { needs: [['target']], may: ['stance', 'item', 'retreatHp', 'range', 'seconds'] },
   mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig'] },
   make: { needs: [['item']], may: ['count'] },
@@ -75,7 +75,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
   attack: hand => hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null,
   go: goProblem,
-  obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? names(hand),
+  obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
   fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null),
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
     ?? (BLOCK_NAME.test(hand.block!) ? null : 'block はブロックの id（例 iron_ore）') ?? names(hand),
@@ -89,6 +89,10 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
 const seconds = (hand: ActHand, least: number, most: number): string | null =>
   hand.seconds !== undefined && (hand.seconds < least || hand.seconds > most) ? `seconds は ${least}〜${most}` : null;
 const count = (hand: ActHand, most: number): string | null => hand.count !== undefined && hand.count > most ? `count は ${most} まで` : null;
+/** obsidian's `maxDig` (run 47: the hand digs the hardened obsidian and what is in its way; the body's default is 30 and it says the value it needs): a whole number from 1 to 100. */
+export const OBSIDIAN_MAX_DIG = 100;
+const obsidianDigProblem = (hand: ActHand): string | null => hand.maxDig === undefined || (Number.isInteger(hand.maxDig) && hand.maxDig >= 1 && hand.maxDig <= OBSIDIAN_MAX_DIG)
+  ? null : `obsidian の maxDig は 1〜${OBSIDIAN_MAX_DIG} の整数（今は ${JSON.stringify(hand.maxDig)}。書かなければ体の既定の 30）`;
 /** The names a hand lists (`canDig`, `canPlace`) are block ids. */
 const names = (hand: ActHand): string | null => [...(hand.canDig ?? []), ...(hand.canPlace ?? [])].some(name => !BLOCK_NAME.test(name))
   ? 'canDig・canPlace はブロックの id（小文字の英字と _）か stone・dirt・sand・wood' : null;

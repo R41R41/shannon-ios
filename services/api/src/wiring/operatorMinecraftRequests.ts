@@ -3,6 +3,9 @@ import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js
 import { OPERATOR_TITLE_PREFIX, operatorRequestContext } from '../contracts/operatorContract.js';
 import { rejectedTaskReport } from './taskRuntimeWiring.js';
 import { stopFactsOf } from '../surfaces/minecraft/minecraftLlmcFacts.js';
+import { createHash } from 'node:crypto';
+import { TAKE_MS, takeSession } from './minecraftHeadTake.js';
+import { takeOfResult, type IncidentTake } from './minecraftIncidentHold.js';
 
 /** Phases after which a task no longer holds the body or its Minecraft work. */
 const FINISHED: readonly TaskView['phase'][] = ['stopped', 'completed', 'failed'];
@@ -86,6 +89,21 @@ export function operatorMinecraftRequests(parts: {
         return { ok, words: said ? `${receipt.outcome} done=${said.done} hold=${said.hold ?? '-'} unfreeze=${String(said.unfreeze ?? '-').slice(0, 60)}`
           : `${receipt.outcome} (体が保留について何も言わなかった: 古い体)` };
       } catch (error) { return { ok: false, words: error instanceof Error ? error.message : 'unknown' }; }
+    },
+    /**
+     * Run 47 (resume 9): the head goes back to held, and the body is asked to hold too (a release carrying `incident.take` of the hold's id, in a session of its own, as the head's own holds are asked
+     * for), so that the world stops: once the head held and the world moved on for four and a half minutes. What the body answers is the receipt's take (`takeOfResult`), or null when it
+     * could not be asked (no command of the task to take the lease from, the body away, no answer).
+     */
+    take: async (taskId: string, incident: string, why: string): Promise<IncidentTake | null> => {
+      const sent = parts.control.store.lastOfTask(taskId);
+      if (!sent) return null;
+      const id = `take:${createHash('sha256').update(incident).digest('hex').slice(0, 16)}`;
+      const context = { ...sent.context, sessionId: takeSession(incident), incident: { take: { id: incident.slice(0, 150), why: why.slice(0, 300) } } };
+      try {
+        const receipt = await parts.control.command({ id: `${id}:${Date.now()}`.slice(0, 150), context, lease: sent.lease, kind: 'release', stop: { context, requestId: id, reason: 'cancel' }, milliseconds: TAKE_MS });
+        return takeOfResult(receipt.result);
+      } catch { return null; }
     },
     /**
      * Run 45: a held act in words for the next decision when it is not sent again: its item and first hand, and how it ended (the code and the first

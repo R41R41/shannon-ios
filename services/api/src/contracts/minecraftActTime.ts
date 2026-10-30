@@ -121,6 +121,20 @@ function handMetres(input: ActInput, from: ActPos | null): Array<{ hand: ActHand
     return { hand, metres };
   });
 }
+/**
+ * Run 47 (hold 4: a stairs of 33 levels stopped at 23 for the 60 s of the body's default): a vertical hand that names no `seconds` gets the time its height needs: (1 s + the steps times the
+ * time of a step, the body's measured `msPerUnit` of that form or the first guess) times 1.5, within 5 and 120 s. A hand that names its seconds is as it was. The steps are counted from where
+ * she will stand when the hand begins (`from`; 32 when that is not known).
+ */
+export function withVerticalSeconds(input: ActInput, from: ActPos | null, tune: ActTimeTuning = {}): ActInput {
+  if (!input.hands.some(hand => hand.do === 'vertical' && hand.seconds === undefined)) return input;
+  const metres = handMetres(input, from);
+  return { ...input, hands: input.hands.map((hand, index) => {
+    if (hand.do !== 'vertical' || hand.seconds !== undefined) return hand;
+    const seconds = Math.ceil((1_000 + (metres[index]?.steps ?? VERTICAL_UNKNOWN_STEPS) * verticalStepMs(hand, tune)) * 1.5 / 1_000);
+    return { ...hand, seconds: Math.max(VERTICAL_SECONDS_RANGE[0], Math.min(VERTICAL_SECONDS_RANGE[1], seconds)) };
+  }) };
+}
 /** How many times the hands run: the act's `repeat` (2–8), else once. */
 const passes = (input: ActInput): number => Number.isInteger(input.repeat) && input.repeat! >= 2 ? Math.min(8, input.repeat!) : 1;
 /** How long an act may run on the body: the sum of each hand's ceiling times its passes, within 5 s and `ACT_MAX_MS` (the command adds its own margin). */

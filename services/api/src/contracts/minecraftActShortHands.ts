@@ -54,7 +54,7 @@ function goWords(hand: ActHand): Words {
 /** obsidian, mine, portal: the cells, then the blocks the hand may place or dig, and its limits. */
 function obsidianWords(hand: ActHand): Words {
   return hand.at?.length ? [...hand.at.map(pos), ...given('count', hand.count), ...given('seconds', hand.seconds), ...listWord('place', hand.canPlace),
-    ...given('maxPlace', hand.maxPlace)] : null;
+    ...given('maxPlace', hand.maxPlace), ...(hand.do === 'obsidian' ? given('maxDig', hand.maxDig) : [])] : null;
 }
 function mineWords(hand: ActHand): Words {
   return hand.block && hand.at?.length ? [hand.block, ...hand.at.map(pos), ...given('count', hand.count), ...given('tool', hand.tool),
