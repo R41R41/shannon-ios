@@ -4,6 +4,7 @@ import type { BodyObservation, BodyValue } from '../../contracts/bodyControlCont
 import type { LlmCentricWorld } from '../../contracts/minecraftActContract.js';
 import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
 import { BLOCKS } from './minecraftLlmcPrepRules.js';
+import { foodPreparation } from './minecraftFoodPreparation.js';
 import { itemWords, reachSuffix } from './minecraftLlmcReachWords.js';
 import { breathWords, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
@@ -290,6 +291,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   const state = stateOf(world, observation);
   parts.trend.note(finite(world.food), finite(world.saturation));
   const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, THREATS, 'threat');
+  const preparation = foodPreparation(carriedItemCounts(world, observation.facts), food.points, FOOD_POINTS);
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
   const look = lookHint(world, parts.healthLost ?? 0);
   const live: Record<string, unknown> = {
@@ -305,6 +307,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     state: { ...state, ...('fullness' in state ? { fullnessLostIn5min: parts.trend.lostIn5min() } : {}),
       ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
     foodPoints: { total: food.points, items: food.items },
+    ...(preparation ? { foodPreparation: preparation } : {}),
     inventory: shareStacks(stacks(world.inventory).slice(0, INVENTORY), parts.promises),
     threats,
     near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
@@ -394,7 +397,7 @@ export function llmcPlanTokens(plan: unknown): number {
  * (keep -1) a field left out. The farther creatures go first, the landmarks and the pack last: the furnace seven up and the stone to
  * craft with are what a decision needs most.
  */
-const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['near', 0], ['stops', 2],
+const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['near', 0], ['stops', 2], ['foodPreparation', -1],
   ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['foodPoints.items', -1], ['jobs', -1], ['inventory', 10], ['landmarks', 3],
   ['threats', 2], ['stops', 1], ['events', 1],
   // A map of water (three tokens a cell) leaves little beside it: the last of the rest, the plan's path and her state kept.

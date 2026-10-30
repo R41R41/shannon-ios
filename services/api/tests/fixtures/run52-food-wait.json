@@ -1,0 +1,111 @@
+{
+  "source": "run52 hold5 blackbox 20261030T164621-act-q97ju, inventory and body state only",
+  "world": {
+    "health": 20,
+    "food": 20,
+    "dimension": "overworld",
+    "position": {
+      "x": -501.501,
+      "y": 54,
+      "z": -178.5
+    },
+    "inventory": [
+      {
+        "name": "oak_log",
+        "count": 1
+      },
+      {
+        "name": "iron_ingot",
+        "count": 1
+      },
+      {
+        "name": "granite",
+        "count": 11
+      },
+      {
+        "name": "oak_planks",
+        "count": 3
+      },
+      {
+        "name": "leaf_litter",
+        "count": 20
+      },
+      {
+        "name": "rotten_flesh",
+        "count": 2
+      },
+      {
+        "name": "dirt",
+        "count": 39
+      },
+      {
+        "name": "bucket",
+        "count": 1
+      },
+      {
+        "name": "bone",
+        "count": 2
+      },
+      {
+        "name": "andesite",
+        "count": 21
+      },
+      {
+        "name": "oak_sapling",
+        "count": 2
+      },
+      {
+        "name": "stone_pickaxe",
+        "count": 1
+      },
+      {
+        "name": "egg",
+        "count": 3
+      },
+      {
+        "name": "feather",
+        "count": 3
+      },
+      {
+        "name": "cobblestone",
+        "count": 17
+      },
+      {
+        "name": "chicken",
+        "count": 2
+      },
+      {
+        "name": "cobblestone",
+        "count": 64
+      },
+      {
+        "name": "cobblestone",
+        "count": 64
+      },
+      {
+        "name": "wooden_pickaxe",
+        "count": 1
+      },
+      {
+        "name": "stone_sword",
+        "count": 1
+      },
+      {
+        "name": "stone_axe",
+        "count": 1
+      },
+      {
+        "name": "iron_pickaxe",
+        "count": 1
+      },
+      {
+        "name": "cobblestone",
+        "count": 64
+      },
+      {
+        "name": "shield",
+        "count": 1
+      }
+    ]
+  }
+}
