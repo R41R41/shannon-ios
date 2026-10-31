@@ -32,6 +32,7 @@ it('does not renew from the same positive event replayed after a resume', () => 
 });
 it('keeps the reconnect rule in the instructions without treating estimates as inventory', () => {
   expect(V2_ALWAYS).toContain('jobs は見込み');
-  expect(V2_ALWAYS).toContain('古い残り秒で wait をやり直さず');
+  expect(V2_ALWAYS).toContain('残り秒で待ち直さず');
+  expect(V2_ALWAYS).toContain('安全な前提作業・帰路を先に進める');
   expect(V2_ALWAYS).toContain('furnace op=take');
 });

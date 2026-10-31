@@ -305,11 +305,14 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
     body.decided!({ ms: 4_200, aborted: true, thrownMs: 2_600 });
     expect(lines.find(line => line.startsWith('Shannon Minecraft urgent decision')))
       .toMatch(/^Shannon Minecraft urgent decision task=r8-life ms=4200 aborted=1 ctxTokens=\d+ thrownMs=2600$/u);
-    // The next decision: nothing is urgent, the state is whole again, and a hostile that is already so at the request is no new one.
+    // A still-visible hostile keeps the current context urgent; it is not a new arrival.
     world = { ...quiet, nearbyThreats: [skeleton] };
     body.context();
-    expect(body.transient!()).toHaveProperty('landmarks');
+    expect(body.transient!()).toHaveProperty('mode');
     expect(body.interrupt!()).toBeNull();
+    world = quiet;
+    body.context();
+    expect(body.transient!()).toHaveProperty('landmarks');
   });
 
   it('what the first request showed once (the events, the results) is shown again by the one asked again, not lost', async () => {

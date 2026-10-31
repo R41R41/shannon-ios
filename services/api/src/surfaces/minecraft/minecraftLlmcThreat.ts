@@ -68,7 +68,7 @@ export function readThreatSight(answer: string | null | undefined): ThreatSight 
 
 /** Whether a hostile can neither see her nor come, by the sight's answer and the body's own `canReachMe`. */
 export function walledOff(threat: NearThreat, sight: ThreatSight | null | undefined): boolean {
-  if (!sight || sight.visible || NEVER_WALLED.has(threat.name)) return false;
+  if (!sight || sight.visible || threat.canSee === true || NEVER_WALLED.has(threat.name)) return false;
   return SHOOTERS.has(threat.name) || threat.canReachMe === false;
 }
 
@@ -78,9 +78,10 @@ export function threatLine(threat: NearThreat, sight: ThreatSight | null | undef
   if (!sight) return `${threat.name} ${threat.distance.toFixed(1)}m`;
   const height = threat.dy !== null && threat.dy !== 0 ? `・${threat.dy > 0 ? '上' : '下'} ${Math.abs(threat.dy)}` : '';
   const between = sight.between ? `間に ${posText(sight.between.at)} ${sight.between.name}${sight.more ? ` ほか ${sight.more}` : ''}` : '';
-  if (sight.visible) return `${head}${height}・見える（射線の中）`;
+  if (sight.visible || threat.canSee === true) return `${head}${height}・見える（射線の中）`;
   if (walledOff(threat, sight)) return `${head}${height}・壁の向こうで届かない${between ? `（${between}）` : ''}`;
-  return `${head}${height}・見えない${between ? `（${between}）` : ''}・道はある（回って来る）`;
+  const path = threat.canReachMe === true || threat.reach === 'path_no_sight' ? '道はある（回って来る）' : '道は不明（回り込めるか未確認）';
+  return `${head}${height}・見えない${between ? `（${between}）` : ''}・${path}`;
 }
 
 /** How far a hostile is looked at: the urgent distance, and after a stopIf stop a shooter within `THREAT_SIGHT.shooterMeters`. */

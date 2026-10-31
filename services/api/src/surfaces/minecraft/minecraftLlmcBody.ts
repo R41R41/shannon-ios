@@ -286,6 +286,11 @@ beginContextRead();
     transient() {
       baseline = approachingIds(observation, urgentMeters);
       const minutes = Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null;
+      // Tool rounds read a new frame without asking urgent() again. Classify the
+      // context from that frame, rather than keeping the first round's mode.
+      const facts = urgentFacts(observation, events.cut(), sights, inSight);
+      reasons = facts.reasons;
+      unreachable = facts.unreachable;
       // r8: an urgent step, or a decision asked again after an interrupt, reads the short state.
       const urgentNow = reasons.length > 0 || interrupted !== null;
       noteUrgentDecision(parts.taskId, urgentNow);
