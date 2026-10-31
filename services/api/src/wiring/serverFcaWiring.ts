@@ -3,6 +3,7 @@ import { timedTick } from '../infra/observer/eventLoopWatch.js';
 import { minecraftGoalBinding } from './fcaMinecraftGoalBinding.js';
 import { createFcaProgressTools } from '../mind/action/fca/fcaProgressTools.js';
 import { createFcaTaskObservationMonitor } from './fcaTaskObservationWiring.js';
+import { inheritObservedTaskSources } from './fcaTaskSourcesWiring.js';
 import { actionPermit, currentActionExecution } from '../infra/context/actionExecution.js';
 import { createFcaSleepWiring } from './fcaSleepWiring.js';
 import type { SQLiteShannonStore } from '../infra/sqlite/sqliteStore.js';
@@ -219,9 +220,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
         const sourcesVisible = () => check.whole('step') ?? step.snapshot.sources.length === 0;
         const taskVisible = (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined,
            'child_monitor') ?? _runtime.taskSources(step.scopeKey, id).length === 0;
-        const observeTasks = (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false;
-           step.snapshot.sources = _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds);
-             return sourcesVisible(); };
+        const observeTasks = (ids: readonly string[]) => inheritObservedTaskSources(_runtime, step, ids) && sourcesVisible();
         const permitProgress = async () => {
           await actionPermit();
           const active = currentActionExecution();
@@ -249,9 +248,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
         sourcesVisible,
         taskVisible: (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined,
            'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
-        observeTasks: (ids: readonly string[]) => { if (!_runtime.inheritTaskSources(step, ids)) return false;
-          step.snapshot.sources =
-           _runtime.taskSources(step.scopeKey, step.taskId, step.messageIds); return true; },
+        observeTasks: (ids: readonly string[]) => inheritObservedTaskSources(_runtime, step, ids),
         history: { codec: anthropicFcaHistoryCodec, ...(keepBodyTools() ? summaries.body : { summarizer: summaries.decision }) },
         ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(...(gameOnlyStep ? [] :
            [fcaResearchTools({ tools: parts.tools,
