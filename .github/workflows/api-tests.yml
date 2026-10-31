@@ -110,7 +110,12 @@ jobs:
             rm -f "$probe"
           fi
           echo "TMPDIR=${TMPDIR:-/tmp} ($(findmnt -no FSTYPE --target "${TMPDIR:-/tmp}" 2>/dev/null)), workers=$MAX_WORKERS, open files=$(ulimit -n), cpus=$(nproc)"
-          node node_modules/vitest/vitest.mjs run services packages --maxWorkers="$MAX_WORKERS"
+          # The accelerated stream bench uses real timers. Run every check, but keep its clock away from competing test workers.
+          status=0
+          node node_modules/vitest/vitest.mjs run services packages --maxWorkers="$MAX_WORKERS" \
+            --exclude services/api/tests/streamBench.test.ts || status=$?
+          node node_modules/vitest/vitest.mjs run services/api/tests/streamBench.test.ts --maxWorkers=1 --minWorkers=1 || status=$?
+          exit "$status"
       # tmpfs is memory: free it even when the run failed or was cancelled by a newer push.
       - name: Remove the temporary directory
         if: always()
