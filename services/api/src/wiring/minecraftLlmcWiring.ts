@@ -123,7 +123,13 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const again = holds?.heldAgainNote?.(step.taskId) ?? null;
   if (again) offerOnce(step.taskId, 'resume', `again:${again.slice(0, 60)}`, again);
   const skipped = holds?.skipNote?.(step.taskId) ?? null;
-  if (skipped) offerOnce(step.taskId, 'resume', `skipped:${skipped.slice(0, 60)}`, skipped);
+  if (skipped) {
+    // A skip-replay resume is already settled in the audit, so resumePending
+    // below is null. It still starts a new observation window for stalls.
+    resumeStalls(step.taskId);
+    noteHistoryChange(step.taskId, 'resume');
+    offerOnce(step.taskId, 'resume', `skipped:${skipped.slice(0, 60)}`, skipped);
+  }
   // The second try: its mark in the queue, when it was added, its longest run, and whether it was held again (then
 // its result is the hold's record, not a line).
   const replay = { item: null as string | null, at: 0, maxMs: 60_000, heldAgain: false };

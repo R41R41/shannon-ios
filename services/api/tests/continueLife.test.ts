@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { onceFor } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
+import { forgetStalls, noteProgress } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -68,7 +69,7 @@ interface Frame { life?: LifeView | null; run?: { bodyBoot: string; connectionId
   receipts?: MinecraftControlReceipt[]; active?: string[]; queued?: string[]; facts?: Record<string, unknown>; utilities?: unknown; headBoot?: string }
 
 const closers: Array<() => void> = [];
-afterEach(() => { for (const close of closers.splice(0)) close(); forgetLlmcQueues(); forgetLlmcEvents(); setIncidentHoldPort(null); });
+afterEach(() => { for (const close of closers.splice(0)) close(); forgetLlmcQueues(); forgetLlmcEvents(); forgetStalls(); setIncidentHoldPort(null); });
 
 function rig(options: { headBoot?: string } = {}) {
   const db = new DatabaseSync(':memory:'), store = new MinecraftControlStore(db);
@@ -772,7 +773,7 @@ describe('what a resume leaves for the first decision, and the record of a hold 
 // ---- 7. the step parts: the frame a decision read reaches its acts; a resume end to end ------------------------------------------------------------------------
 describe('the step\'s parts hand a decision\'s frame to its acts and wait for a resume\'s second try', () => {
   const lease = { id: 'lease-1', generation: 1, holder: 'test' };
-  function stepParts() {
+  function stepParts(before?: (taskId: string) => void) {
     const r = rig();
     r.send({ life: lifeView({ life: 2 }) });
     const db = r.db;
@@ -784,6 +785,7 @@ describe('the step\'s parts hand a decision\'s frame to its acts and wait for a 
     r.control.store.bind(task.id, BODY);
     const llmc = { names: { main: 'm', escalate: null, plan: 'p' }, models: { main: {} as never, escalate: null }, summarizer: null, policy: {}, historyAhead: createFcaHistoryAhead() };
     const logs: string[] = [];
+    before?.(task.id);
     const parts = llmcStepParts(llmc as never, step, r.control, line => logs.push(line));
     const inner = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; }, toolSignal: (_name: string, parent: AbortSignal) => parent, async close() {} };
     return { r, parts, task, step, logs, body: parts.wrap(inner as never) };
@@ -833,6 +835,16 @@ describe('the step\'s parts hand a decision\'s frame to its acts and wait for a 
   };
   const actResult = (lines: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}) => JSON.stringify({ v: 1, ok: false, done: 0, of: lines.length, ms: 1000, at: { x: 1, y: 64, z: 1 }, hp: 20, food: 20,
     lines: lines.map((line, index) => ({ i: index + 1, do: 'go', line: '', ...line })), ...extra });
+
+  it('starts a fresh stall window on a settled skip-replay resume, while keeping the 120 second limit', () => {
+    holdPort({ skipNote: () => '保留した act は出し直さなかった' });
+    const snapshot = { node: 'p2', state: 'blocked', milestone: 'obsidian', items: 134 };
+    const s = stepParts(taskId => expect(noteProgress(taskId, snapshot, 1_000)).toBeNull());
+    // Run55 hold8: 124 active seconds since the old progress snapshot, but
+    // only eight since the latest skip-replay resume. No replay is pending.
+    expect(noteProgress(s.task.id, snapshot, 125_000)).toBeNull();
+    expect(noteProgress(s.task.id, snapshot, 245_000)?.kind).toBe('node_stalled');
+  });
 
   it('a resume\'s lines are the first results the first decision reads, in the order: the hold that came again, the held act', () => {
     holdPort({ heldAgainNote: () => '保留した act の出し直しは search_timeout で再び保留になった。その間の q65（近い鉄を掘る）は捨てた', skipNote: () => '保留した act q60（go (1,2,3)）は出し直さなかった。前の結果: go_stuck' });
