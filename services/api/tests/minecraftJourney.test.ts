@@ -78,3 +78,13 @@ it('does not count missing entity observations or underground observations as a 
   underground.state = { ...underground.state, world: { ...(underground.state.world as Record<string, never>), localMap: '地図 v1 方式=layers' } };
   j.read(underground); expect(j.checkpoint().minecraftJourney?.surveys).toEqual([]);
 });
+it('distinguishes unobserved descent food from eating after an observed supply, including checkpoint restore', () => {
+  let j = createMinecraftJourney(null); j.read(frame(0, 66, 1, true));
+  expect(j.read(frame(0, 30, 2)).join('\n')).toContain('この記録の範囲では未確認');
+  j.read(frame(0, 66, 3, true, 100));
+  j = createMinecraftJourney(JSON.parse(JSON.stringify(j.checkpoint())).minecraftJourney);
+  expect(j.read(frame(0, 30, 4)).join('\n')).not.toContain('食料40点以上を未観測');
+  const next = frame(0, 66, 5, true); next.state = { ...next.state, life: { life: 2, dimension: 'overworld', dimensionSince: 'next' } };
+  j.read(next); const below = frame(0, 30, 6); below.state = { ...below.state, life: next.state.life };
+  expect(j.read(below).join('\n')).toContain('食料40点以上を未観測');
+});

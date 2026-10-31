@@ -4,7 +4,7 @@ import { readinessOf, feetIn, foodLeads } from './minecraftLlmcReadiness.js';
 
 type Point = { x: number; y: number; z: number };
 interface Survey { cell: string; point: Point; at: number; lead: string }
-interface Journey { bodyId: string; life: number; dimension: string; at: number; open: Point | null; points: Point[]; surveys: Survey[] }
+interface Journey { bodyId: string; life: number; dimension: string; at: number; open: Point | null; points: Point[]; surveys: Survey[]; maxFood: number }
 const point = (v: unknown): Point | null => {
   if (!v || typeof v !== 'object') return null;
   const p = v as Point;
@@ -45,6 +45,7 @@ function journeyNotes(state: Journey, feet: Point, facts: { dimension: string | 
   return [
     `帰還の観測記録: 地図がsurfaceだった地点 ${at(open)}（今より上${open.y - feet.y}、水平${horizontal}m）。現在の地上・水面・帰路の安全は未確認`,
     ...(higher.length ? [`以前に通過した高い位置（近い順）: ${higher.map(at).join(' → ')}。間の道と逆向きの通行可否は未確認`] : []),
+    ...(state.maxFood < 40 ? [`下降前の食料確保は、この記録の範囲では未確認: 携帯食料40点以上を未観測（観測最大${state.maxFood}点・現在${facts.food}点）。計画の省略記録と、食料を確保した観測は別`] : []),
   ];
 }
 
@@ -58,7 +59,8 @@ export function createMinecraftJourney(saved: unknown) {
       && Array.isArray(v.points) && v.points.length <= 12 && v.points.every(p => point(p))) {
       const surveys = Array.isArray(v.surveys) ? v.surveys.filter(s => s && typeof s.cell === 'string' && point(s.point)
         && Number.isFinite(s.at) && typeof s.lead === 'string' && s.lead.length <= 220).slice(-12) : [];
-      state = { bodyId: v.bodyId, life: v.life, dimension: v.dimension, at: v.at, open: point(v.open), points: v.points.map(p => point(p)!), surveys };
+      const maxFood = Number.isFinite(v.maxFood) && v.maxFood >= 0 ? v.maxFood : 0;
+      state = { bodyId: v.bodyId, life: v.life, dimension: v.dimension, at: v.at, open: point(v.open), points: v.points.map(p => point(p)!), surveys, maxFood };
     }
   }
   return {
@@ -67,10 +69,11 @@ export function createMinecraftJourney(saved: unknown) {
       if (!frame) return [];
       const { facts, life, feet, time, bodyId } = frame;
       if (!state || state.bodyId !== bodyId || state.life !== life.life || state.dimension !== life.dimension) {
-        state = { bodyId, life: life.life, dimension: life.dimension, at: time, open: null, points: [], surveys: [] };
+        state = { bodyId, life: life.life, dimension: life.dimension, at: time, open: null, points: [], surveys: [], maxFood: 0 };
       }
       if (time < state.at) return []; // a stale observation must not move the trail backwards
       state.at = time;
+      state.maxFood = Math.max(state.maxFood, facts.food);
       const last = state.points.at(-1);
       if (!last || distance(last, feet) >= 8 || Math.abs(last.y - feet.y) >= 4) {
         state.points = [...state.points, point(feet)!].slice(-12);
