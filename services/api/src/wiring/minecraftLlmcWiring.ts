@@ -19,7 +19,7 @@ import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { meterParts,reachedMilestoneNames } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import {
-deathCounterOf,noteDeath,noteProgress,noteRan,noteRefusal,resumeStalls,stallIncidentId,watchStalls,
+deathCounterOf,noteDeath,noteProgress,noteRan,noteRefusal,resumeStalls,stallIncidentId,watchStalls,externalWorkMilestones,
 type Stall
 } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
@@ -322,6 +322,7 @@ queue.onRan(noteIncidentResult);
         const counts = doneFacts(frame)?.counts;
         const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
           milestone: meterParts(tree, frame, 0)?.next ?? null, reached: reachedMilestoneNames(tree, frame) ?? [],
+          externalWork: externalWorkMilestones(frame),
           inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) :
              0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
         if (stall) headHold(stall);

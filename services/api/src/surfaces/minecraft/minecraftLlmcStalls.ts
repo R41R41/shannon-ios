@@ -1,6 +1,7 @@
 import { readActResult, type ActPos } from '../../contracts/minecraftActContract.js';
 import { deathBetween, type DeathCounter } from '../../contracts/continueContract.js';
 import { onRedecideNote } from '../../infra/decisionRecords/decisionRecordNotes.js';
+import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 
 /**
  * Amendment A-12 (owner's decision 2026-10-29: 「新しい版だけ・詰まったら止めて直す」): the stalls the head finds itself, beside the ones the body
@@ -15,7 +16,7 @@ import { onRedecideNote } from '../../infra/decisionRecords/decisionRecordNotes.
  * - `node_stalled`: the plan's current node has not moved on for `STALL.nodeMs` of the task's running time (the
  * time it was held is
  * left out, as the meter's clock leaves it out).
- *   It moved on when the node, its state or the meter's next milestone changed, or the pack grew (`movedOn`).
+ *   It moved on when the node, its state or the meter's next milestone changed, the pack grew, or a new external-work phase was observed.
  * - `same_spot_stops`: a `go` or `vertical` stopped short (not done) `STALL.spotStops` times within
  * `STALL.spotRadius` blocks of the
  * first stop, with no done one of the two between.
@@ -80,12 +81,29 @@ export const MOVING: ReadonlySet<string> = new Set(['walk', 'go', 'vertical', 'p
 /** What the progress of the current node is read from, at one moment. `node` is null when the plan has no current
  * node (nothing is counted then). */
 export interface ProgressSnapshot { node: string | null; state: string | null; milestone: string | null; items: number; inventory?:
-   Readonly<Record<string, number>>; reached?: readonly string[] }
+   Readonly<Record<string, number>>; reached?: readonly string[]; externalWork?: readonly string[] }
+/** Observed external-work phases, not a prediction that the output exists. A countdown alone is not progress. */
+export function externalWorkMilestones(frame: BodyObservation | null): string[] {
+  const world = frame?.state.world as { jobs?: unknown; dimension?: unknown } | undefined;
+  const jobs = world?.jobs;
+  if (!Array.isArray(jobs)) return [];
+  return jobs.flatMap(raw => {
+    if (!raw || typeof raw !== 'object') return [];
+    const job = raw as Record<string, unknown>, at = posOf(job.position);
+    if (!at || typeof job.input !== 'string' || !job.input || !finite(job.count) || !Number.isInteger(job.count) || job.count <= 0
+      || !finite(job.remainingEstimateMs)) return [];
+    const key = JSON.stringify([frame?.bodyId, world?.dimension, at.x, at.y, at.z, job.input, job.count]);
+    if (job.status === 'waiting_external' && job.remainingEstimateMs > 0) return [`${key}:started`];
+    if (job.status === 'verification_due' && job.remainingEstimateMs === 0) return [`${key}:started`, `${key}:verification_due`];
+    return [];
+  });
+}
 /** Whether the task moved on between two moments: another node, another state of it, another next milestone, or
  * more things carried. Pure. */
 export function movedOn(before: ProgressSnapshot, after: ProgressSnapshot): boolean {
   return before.node !== after.node || before.state !== after.state || before.milestone !== after.milestone || after.items > before.items
     || (after.reached ?? []).some(name => !(before.reached ?? []).includes(name))
+    || (after.externalWork ?? []).some(name => !(before.externalWork ?? []).includes(name))
     || Object.entries(after.inventory ?? {}).some(([name, count]) => count > (before.inventory?.[name] ?? 0));
 }
 
@@ -158,10 +176,15 @@ const posOf = (value: unknown): ActPos | null => {
 export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeMs: number): Stall | null {
   const state = taskOf(taskId);
   if (state.quiet) return null;
-  if (!snapshot.node) {
+  const node = snapshot.node;
+  if (!node) {
     state.node = null;
     return null;
   }
+  // A partial/urgent observation can omit jobs. Remember phases within this node,
+  // so a missing row, a stale countdown or a phase seen again cannot renew the clock.
+  if (state.node?.snapshot.node === snapshot.node) snapshot = { ...snapshot,
+    externalWork: [...new Set([...(state.node.snapshot.externalWork ?? []), ...(snapshot.externalWork ?? [])])] };
   if (!state.node || movedOn(state.node.snapshot, snapshot)) {
     state.node = { snapshot, since: activeMs };
     return null;
@@ -169,7 +192,7 @@ export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeM
   state.node.snapshot = snapshot;
   const idle = activeMs - state.node.since;
   if (idle < STALL.nodeMs) return null;
-  return found(state, { kind: 'node_stalled', key: snapshot.node,
+  return found(state, { kind: 'node_stalled', key: node,
     why: ("節 " +
 `${snapshot.node}` +
 " が " +
