@@ -1,4 +1,5 @@
 import { bodyHoldOf,withResend,withIncident,withStalls } from './minecraftLlmcLifecycle.js';
+import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import {
 LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,redecideLabel,llmcModelRouter,llmcCompletionMistake,LLMC_CATALOG_SELECTOR,
 llmcProbeRunner,billingGuarded
@@ -54,6 +55,7 @@ export type { LlmcModelNames, LlmcWiring } from './minecraftLlmcConfiguration.js
  * fixed menu, the history policy).
  */
 export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: MinecraftControl, log: (line: string) => void = line => console.info(line)) {
+  const journey = createMinecraftJourney((step.snapshot.checkpoint as { minecraftJourney?: unknown } | null)?.minecraftJourney);
   const bodyId = () => control.store.body(step.taskId) ?? '';
   const observe = () => control.observe(bodyId());
   // What a decision reads: the current frame, or one up to `LLMC_STALE_FRAME_MS` old (mc-chat-stale-frame).
@@ -373,7 +375,7 @@ queue.onRan(noteQueueResult);
         return { committed: async () => { await commitHold?.(); } };
       } };
   })() : null;
-  const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree() };
+  const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(), returnRoute: journey.read };
   // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an
 // act of it that would break a promise is decided again by Opus
   // (`FcaModel.redecide`: the step's last request with the act and the promise line added). Opus's plan.update
@@ -425,7 +427,7 @@ queue.onRan(noteQueueResult);
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the
       // API's thread must not turn a done task back.
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
-    ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port,
+    ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port, checkpoint: journey.checkpoint,
       ...(stalls ? { prepareStop: stalls.prepareStop } : {}),
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
       versions: () => minecraftBodyVersion(control, bodyId(), read),

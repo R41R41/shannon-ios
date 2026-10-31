@@ -35,6 +35,7 @@ export interface LlmcBodyParts {
   planView(): object | null;
   /** r6: the whole tree (the places of its nodes: the gate back, for where food is). Absent: none read. */
   planTree?(): PlanTree;
+  returnRoute?(observation: BodyObservation | null): readonly string[];
 }
 
 /** What the chapter 8 facts need beyond the frame: the blows line (`HitWatch.line`), the time of the previous
@@ -133,6 +134,7 @@ export function readinessParts(
       .filter(Boolean)
       .join('。') || null;
   const recovery = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts);
+  const route = llmc.returnRoute?.(observation) ?? [];
   // r7 (runs 29, 30): no food and health that does not come back: the plan's food node is said before its now (the
   // plan is not changed).
   const foodRecoveryFirstStep = () =>
@@ -144,13 +146,18 @@ export function readinessParts(
   return {
     ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}),
     ...(shortage ? { shortage } : {}),
-    ...(recovery ? { recovery: [recovery, foodLeads(facts.world, facts.dimension, nodes)] } : {}),
+    ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes), route),
     ...(planFacts ? { planFacts } : {}),
     ...(onceFacts?.length ? { onceFacts } : {}),
   };
 }
 
 export const STALE_FACT_KEY = 'stale_node:';
+
+function recoveryParts(health: string | null, leads: () => string, route: readonly string[]): { recovery?: string[] } {
+  const lines = [...(health ? [health, leads()] : []), ...route];
+  return lines.length ? { recovery: lines } : {};
+}
 
 /** For each task: the current node and the milestones that were reached when it became the current node. */
 export const sinceCurrent = new Map<string, { node: string; reached: ReadonlySet<string> }>();

@@ -177,18 +177,27 @@ export class OperatorAuditStore {
 "event='settled')\n      OR (command='paused' AND event='settled') OR (command='resume' AND " +
 "event='accepted') OR event='stopped') ORDER BY sequence")).all(taskId) as Array<{ command: string; event: string; occurred_at: string;
    detail: string | null }>;
-    let total = 0, since: number | null = null;
+    let deductedTotal = 0, since: number | null = null;
+    const intervals: Array<[number, number]> = [];
     for (const entry of rows) {
       if (entry.command === 'hold' || entry.command === 'paused') since ??= Date.parse(entry.occurred_at);
       else {
-        if (since !== null) { total += Date.parse(entry.occurred_at) - since;
+        if (since !== null) { intervals.push([since, Date.parse(entry.occurred_at)]);
           since = null; }
         const deducted = entry.command === 'resume' ? Number(/(?:^|[ ;])deduct=([0-9]+)/u.exec(entry.detail ?? '')?.[1] ?? 0) : 0;
-        if (Number.isFinite(deducted)) total += deducted;
+        if (Number.isFinite(deducted)) deductedTotal += deducted;
       }
     }
-    if (since !== null) total += Date.parse(now) - since;
-    return Math.max(0, total);
+    if (since !== null) intervals.push([since, Date.parse(now)]);
+    // A refused resume may be followed by the same old pause timestamp. Count the
+    // union of proven pause intervals, so replaying that fact never grants time twice.
+    let total = 0, end = -Infinity;
+    for (const [from, to] of intervals.sort((a, b) => a[0] - b[0])) {
+      if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) continue;
+      total += Math.max(0, to - Math.max(from, end));
+      end = Math.max(end, to);
+    }
+    return Math.max(0, total + deductedTotal);
   }
   /** Amendment A-15: whether the task has a pause of the recovery that no resume or stop has followed (written once per pause). */
   pausedOpen(taskId: string): boolean {
