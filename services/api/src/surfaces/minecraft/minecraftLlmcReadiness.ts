@@ -85,15 +85,23 @@ function held(counts: ItemCounts, need: Need): number {
   return slots.size;
 }
 
+function obsidianToolShortage(counts: ItemCounts, kinds: readonly PlanKind[] | null): string | null {
+  // A past acquisition node is history; the current pack establishes mining capability.
+  // This is a mining fact, not a requirement on chest loot, casting a portal, or an ancestor node.
+  return kinds?.[0] === 'obsidian' && countMatching(counts, /^(?:diamond|netherite)_pickaxe$/u) === 0
+    ? '黒曜石の採掘に使えるツルハシ（ダイヤ・ネザライト）が現在無い' : null;
+}
+
 /**
- * The one line of what is missing for the stage, or null (no stage, nothing missing). `worn` (the frame's worn
+ * The one line of what is missing for the stage or current mining operation, or null. `worn` (the frame's worn
  * ids, `wornItems`): a piece of a need
  * that is to be worn and is only carried is said as such (「着ていない: iron_helmet」), since armour in the pack does not protect.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
   worn?: readonly string[] }): string | null {
+  const mining = obsidianToolShortage(parts.counts, parts.nowKinds);
   const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
-  if (!stage) return null;
+  if (!stage) return mining;
   const table: PrepStage = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
   const none: string[] = [], short: string[] = [], unworn: string[] = [];
   for (const need of table.needs) {
@@ -105,7 +113,7 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
     }
   }
   const food = parts.food < table.food ? `${foodPointsWords(parts.food)}（目安 ${table.food}）` : '';
-  const said = [none.length ? `${none.join('・')}が無い` : '', short.join('・'), unworn.length ? `持っているが着ていない: ${unworn.join('・')}` : '', food]
+  const said = [none.length ? `${none.join('・')}が無い` : '', short.join('・'), unworn.length ? `持っているが着ていない: ${unworn.join('・')}` : '', food, mining]
     .filter(Boolean);
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
 }

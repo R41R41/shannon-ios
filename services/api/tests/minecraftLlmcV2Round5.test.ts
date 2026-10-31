@@ -189,8 +189,10 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
   const GEAR: Array<[string, number]> = [['shield', 1], ['stone_sword', 1], ['iron_pickaxe', 1], ['cobblestone', 64], ['iron_helmet', 1],
     ['iron_chestplate', 1], ['iron_leggings', 1], ['golden_boots', 1]];
   it('the entry\'s shortage asks 40 points of food, a pickaxe, a shield, a sword, blocks and the armour; not 100 points or the water bucket', () => {
-    const parts = { dimension: 'overworld', counts: owned(GEAR), food: 48, nowKinds: ['obsidian' as const] };
+    const parts = { dimension: 'overworld', counts: owned(GEAR), food: 48, nowKinds: ['portal' as const] };
     expect(preparationShortage(parts)).toBeNull();
+    // The entry table stays modest; actually mining obsidian needs a currently carried harvesting tool.
+    expect(preparationShortage({ ...parts, nowKinds: ['obsidian'] })).toContain('黒曜石の採掘に使えるツルハシ');
     expect(preparationShortage({ ...parts, food: 24 })).toBe('準備の不足（ネザーに入る前）: 食料 24 点（目安 40）');
     expect(preparationShortage({ ...parts, counts: owned([['stone_sword', 1]]) }))
       .toContain('鉄以上のツルハシ・盾・鉄の兜・胸当て・脚・金のブーツ・足場のブロックが無い');
