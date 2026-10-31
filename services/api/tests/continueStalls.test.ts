@@ -30,6 +30,27 @@ import { benchC, until, type BenchC } from './helpers/benchC.js';
  */
 const TASK = 'task-stalls';
 
+describe('different missing dig permissions after progress', () => {
+  const permission = (material: string, y: number) => stopAt(85, y, 51, {
+    do: 'vertical', code: 'cannot_dig',
+    line: `${material}(86,${y},51) は canDig に無い。canDig に ${material} を足せば進む`,
+  });
+  it('returns the newly exposed material, then holds its unrepaired repeat', () => {
+    expect(ranGo([permission('sand', 60)])).toBeNull();
+    expect(ranGo([permission('coal_ore', 58)])).toBeNull();
+    expect(ranGo([permission('coal_ore', 57)])).toMatchObject({ kind: 'same_spot_stops' });
+  });
+  it('does not give the same material another attempt just because its coordinates changed', () => {
+    expect(ranGo([permission('sand', 60)])).toBeNull();
+    expect(ranGo([permission('sand', 58)])).toMatchObject({ kind: 'same_spot_stops' });
+  });
+  it('keeps conservative counting without an explicit repairable material', () => {
+    const stopped = () => stopAt(85, 58, 51, { do: 'vertical', code: 'cannot_dig', line: '岩盤は壊せない' });
+    expect(ranGo([stopped()])).toBeNull();
+    expect(ranGo([stopped()])).toMatchObject({ kind: 'same_spot_stops' });
+  });
+});
+
 describe('run54: a repaired dig permission is distinct from falling gravel', () => {
   const ceiling = () => stopAt(20, 40, 22, { code: 'dead_end', line: '頭の上 (20,42,22) が copper_ore で登れない（掘ってよい物に無い）。canDig に足すか、別の場所から' });
   const gravel = () => stopAt(20, 43, 22, { do: 'vertical', code: 'displaced', line: '跳んでいる間に足のマス (20,42,22) が gravel になった' });

@@ -136,6 +136,8 @@ export const STAGE_IDS: readonly StageId[] = ['prep', 'nether', 'blaze', 'pearl'
 export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   prep: [
     '## 材料と手順',
+    '- 掘る経路は地図・columnで通路と頭上の材質を調べ、今の道具で掘れる岩・鉱石・土砂を用途に合わせてcanDigに選ぶ。'
+      + 'stoneの許可に鉱石は含まれない。cannot_digは具体的な材質と道具・重力・液体を確認して許可か経路を直し、短く進んで再観測する。秒数や向きだけ変えない。',
     '- 高所から下りる前は column で通過空間と着地の床・水を確かめる。つたの途中は着地ではない。階段・足場と実在する着地点へのgoを比べ、水に入るならwaterOk・許す落差maxDrop、葉等を通るならdigを指定。つたが切れた所から着地までの落差も数える。',
     FOOD_ACQUISITION_KNOWLEDGE,
     '- foodPreparation は加工の見込み。炉・作業台・燃料・設置場所と加工後の持ち物を観測で確かめる。',

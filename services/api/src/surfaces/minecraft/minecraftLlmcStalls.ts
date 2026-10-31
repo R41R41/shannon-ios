@@ -67,6 +67,11 @@ const WORKED: ReadonlySet<string> = new Set(['dig', 'mine', 'place', 'pickup', '
 /** A-13: a hand that stopped short spent time or work when it moved (a step or a meter), dug or placed, or ran 3 s and more (the
  * act's whole time when it was the only hand that ran). */
 const SPENT_MS = 3_000;
+/** A changed coordinate is still the same missing permission; a new material is not. */
+function explainedCause(line: { code?: string; line: string }): string {
+  const missingDig = line.code === 'cannot_dig' ? /canDig に ([a-z][a-z0-9_]*) を足/u.exec(line.line)?.[1] : undefined;
+  return missingDig ? `${line.code}:${missingDig}` : line.code ?? '';
+}
 function spentTime(line: { progress?: { done?: number; work?: { dug?: number; placed?: number; placeAttempts?: number } }; motorOps?:
    number }, actMs: number, running: number): boolean {
   const progress = line.progress, work = progress?.work;
@@ -285,9 +290,12 @@ const noteStoppedLine = () => {
     const explained = explainedMovement();
     if (explained) {
       const previous = state.explained;
-      state.explained = { at, code: line.code ?? '' };
+      // A repaired permission can expose a different material (sand -> coal ore).
+      // Coordinates alone must not make the same missing permission a new cause.
+      const cause = explainedCause(line);
+      state.explained = { at, code: cause };
       state.spot = null;
-      if (!previous || previous.code !== line.code || distance(previous.at, at) > STALL.spotRadius) return null;
+      if (!previous || previous.code !== cause || distance(previous.at, at) > STALL.spotRadius) return null;
       state.spot = { at, stops: 1 };
     } else state.explained = null;
     const countStop = (): Stall | null => {
