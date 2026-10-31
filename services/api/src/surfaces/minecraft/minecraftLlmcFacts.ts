@@ -11,6 +11,7 @@ import { heldBack,promiseLines } from './minecraftLlmcPromises.js';
 import { FOOD_FISH,nearNeeds } from './minecraftLlmcReachWords.js';
 import { PLAN_FACTS_KEY,type PlanFacts } from './minecraftPlanFacts.js';
 import { round1 } from './minecraftTransientObservation.js';
+import { foodChoices, foodYieldWords } from './minecraftFoodAcquisition.js';
 export { FACT_WINDOW_MS, controlOf, lifeOf, holderWords, holderLine, createHitWatch } from './minecraftLlmcHealth.js';
 export type { Hit, HitWatch } from './minecraftLlmcHealth.js';
 /** The creatures that are food are listed within this many metres (the near words' own reach for food animals). */
@@ -70,10 +71,11 @@ export function wantsFood(parts: { fullness: number | null; points: number; shor
     ...parts.recovery?.length ? { recovery: [...parts.recovery] } : {}, ...parts.planFacts ? { [PLAN_FACTS_KEY]: parts.planFacts } : {} }).food;
 }
 export function foodLine(observation: BodyObservation | null, shown: number): string | null {
-  const list = foodCandidates(observation).slice(0, shown);
+  const list = foodChoices(foodCandidates(observation), shown, FOOD_FISH);
   if (!list.length) return null;
-  return `近くの食べ物の候補（${FOOD_NEAR_METERS} m 以内の動物と魚）: ${list.map(item => `${item.name}${item.id !== null ? ` #${item.id}` : ''} ${one(
-    item.distance)}m${item.at ? ` ${cell(item.at)}` : ''}`).join('・')}`;
+  return `近くの食べ物の候補（${FOOD_NEAR_METERS} m 以内・1個の食料点、経路/回収/個数は未確認）: ${list.map(item =>
+    `[${FOOD_FISH.has(item.name) ? '魚' : '陸'}]${item.name}${item.id !== null ? ` #${item.id}` : ''} ${one(item.distance)}m`
+      + `${item.at ? ` ${cell(item.at)}` : ''}${foodYieldWords(item.name, FOOD_POINTS)}`).join('・')}`;
 }
 
 // ---- the pack, and the queue

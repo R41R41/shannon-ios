@@ -3,6 +3,7 @@ import {
 } from './minecraftKnowledge.js';
 import { FIRST_PLAN_SYSTEM_R9 } from './minecraftFirstPlan.js';
 import { PLAN_PREP_WORDS, PREP_DESCENT_LINES, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
+import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 
 /**
  * the own prompt, the first plan (owner answers of 2026-10-22 by form: 「同じ方針で絞る」「要塞とエンドは作戦へ」, and ADR-0014
@@ -59,6 +60,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
   ...PREP_DESCENT_LINES,
   PREP_RULES_WORDS,
   '### 手順の要点',
+  FOOD_ACQUISITION_KNOWLEDGE,
   '- 原木: 6〜10 本。原木 1 → 板 4（作業台は要らない）。崖の上など届かない木は選ばない（足の高さから幹に届く木か、走査の近い原木）。',
   '- 木と石のツルハシ: 作業台は板 4、棒は板 2 で 4 本。木のツルハシは板 3＋棒 2、石のツルハシは丸石 3＋棒 2（木のツルハシで石を掘る）。',
   '- 石の斧: 丸石 3＋棒 2（石の剣は丸石 2＋棒 1）。かまどは丸石 8。',

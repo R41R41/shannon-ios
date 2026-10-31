@@ -1,0 +1,17 @@
+{
+  "source": "Run56 final recorded live facts at owner stop; reconstructed from the six displayed entities, not the original raw body frame. No land animal was observed in this snapshot.",
+  "world": {
+    "health": 20,
+    "food": 19,
+    "position": { "x": 232, "y": 61, "z": -48 },
+    "inventory": [],
+    "nearbyEntities": [
+      { "name": "tropical_fish", "id": 1255, "distance": 6.9, "position": { "x": 225, "y": 62, "z": -49 } },
+      { "name": "tropical_fish", "id": 1258, "distance": 7.2, "position": { "x": 225, "y": 60, "z": -49 } },
+      { "name": "tropical_fish", "id": 1256, "distance": 8, "position": { "x": 224, "y": 61, "z": -49 } },
+      { "name": "tropical_fish", "id": 1257, "distance": 8.2, "position": { "x": 224, "y": 61, "z": -49 } },
+      { "name": "tropical_fish", "id": 1427, "distance": 8.3, "position": { "x": 224, "y": 60, "z": -49 } },
+      { "name": "tropical_fish", "id": 1211, "distance": 9, "position": { "x": 226, "y": 55, "z": -49 } }
+    ]
+  }
+}

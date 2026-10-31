@@ -3,6 +3,7 @@ import { milestoneWords } from './minecraftLlmcRoad.js';
 import { PREP_DESCENT_RULE, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
+import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -136,7 +137,8 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   prep: [
     '## 材料と手順',
     '- 高所から下りる前は column で通過空間と着地の床・水を確かめる。つたの途中は着地ではない。階段・足場と実在する着地点へのgoを比べ、水に入るならwaterOk・許す落差maxDrop、葉等を通るならdigを指定。つたが切れた所から着地までの落差も数える。',
-    '- 食料は foodPreparation の加工見込みと狩りの時間・危険を比べる。見込みは達成に数えない。炉・作業台・燃料・設置場所と、加工の終了は観測で確かめる。瀕死・飢えは逃走と今ある食事を先に。',
+    FOOD_ACQUISITION_KNOWLEDGE,
+    '- foodPreparation は加工の見込み。炉・作業台・燃料・設置場所と加工後の持ち物を観測で確かめる。',
     '- 安全な囲いでは、射線・敵の到達・足場を確かめ、朝待ちと調理・工作を比べる。',
     '- 死んだ後は最新の持ち物・着ている物・敵から計画を組み直す。危険な死亡地点へ裸で直行しない。まず安全な所で道具・食料・盾や防具を作り直す選択と回収を比べる。'
       + '回収するなら実際に落とした高さ・道・敵と射線を確かめる。最後に通過した地表は落とし物の位置とは限らない。回収の時間切れを避けるために同じ死に方を繰り返さない。',
@@ -150,7 +152,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 地下で食料を補えない時は、帰還の観測記録と以前の通過点から戻る道を比べ、pathやcolumnで短い区間ずつ確認する。'
       + '通過記録は逆向きの安全を保証しない。新しい穴を掘り続ける前に既存の階段・通路を調べる。水や鉱石の座標は地上の出口ではない。'
       + '魚は見えた個体と岸・水面の出入口を確かめて狙う。魚を探すためだけに地下から水の天井を開けない。',
-    '- 魚を打つ場所と魚の座標は別。岸から届くかsightで調べ、狙う個体を選んでfightへ追従と武器の持替えを任せる。attackを選ぶなら先に手の武器を確認する（食後は食べ物や空手のことがある）。動く魚の過去座標へgoしてから複数個体を攻撃する列にはしない。'
+    '- 補助の魚を取ると選んだ時だけ、岸から届くかsightで調べ、狙う個体を選んでfightへ追従と武器の持替えを任せる。attackを選ぶなら先に手の武器を確認する（食後は食べ物や空手のことがある）。動く魚の過去座標へgoしてから複数個体を攻撃する列にはしない。'
       + '潜るなら先に氷などの出入口を開け、水へ入れたことと戻る穴・息を確認する。goの水中の上下移動は、体の幅と高さが通る既知の静水の通路だけで、氷や壁を越えない。'
       + '1個体の結果後に持ち物と落ちた食料を確かめ、回収・加工・補給の成果で続行を決める。呼吸の反射後は水面への復帰を先にし、深い魚の追跡と届く別個体・地上の食料を比べる。',
     '- 準備の必須と目標は system の「準備の決まり」。ここは材料と手順の知識。食料の点（live の foodPoints.total。満腹 fullness とは別）は、ネザーの奥へ 100、エンドへ 80 以上。'

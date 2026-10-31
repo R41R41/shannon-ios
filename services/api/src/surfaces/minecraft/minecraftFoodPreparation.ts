@@ -1,5 +1,5 @@
 /** Facts about food made from carried ingredients. These are possibilities, never current food or a command to cook. */
-const COOKED: Readonly<Record<string, string>> = {
+export const COOKED_FOOD: Readonly<Record<string, string>> = {
   beef: 'cooked_beef', porkchop: 'cooked_porkchop', mutton: 'cooked_mutton', chicken: 'cooked_chicken',
   rabbit: 'cooked_rabbit', cod: 'cooked_cod', salmon: 'cooked_salmon', potato: 'baked_potato',
 };
@@ -9,7 +9,7 @@ export function foodPreparation(counts: ReadonlyMap<string, number>, currentPoin
     const value = counts.get(name) ?? 0;
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
   };
-  const raw = Object.entries(COOKED).flatMap(([item, cooked]) => {
+  const raw = Object.entries(COOKED_FOOD).flatMap(([item, cooked]) => {
     const count = countOf(item), before = values[item], after = values[cooked];
     return count && Number.isFinite(before) && Number.isFinite(after) ? [{ item, count, cooked,
       pointsNow: Math.round(before * count * 10) / 10, pointsIfCooked: Math.round(after * count * 10) / 10 }] : [];

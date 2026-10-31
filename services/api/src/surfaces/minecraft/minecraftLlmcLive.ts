@@ -76,7 +76,7 @@ export const FOOD_POINTS: Readonly<Record<string, number>> = Object.freeze({
   cooked_beef: 20.8, cooked_porkchop: 20.8, steak: 20.8, cooked_mutton: 15.6, cooked_salmon: 15.6, cooked_chicken: 13.2, bread: 11,
   baked_potato: 11, cooked_cod: 11, cooked_rabbit: 11, golden_carrot: 20.4, pumpkin_pie: 12.8, mushroom_stew: 13.2, rabbit_stew: 22,
   beetroot_soup: 13.2, apple: 6.4, carrot: 6.6, potato: 1.6, beef: 4.8, porkchop: 4.8, mutton: 3.2, chicken: 3.2, rabbit: 4.8,
-  cod: 2.4, salmon: 2.4, melon_slice: 3.2, sweet_berries: 2.4, dried_kelp: 1.6, beetroot: 2.2, cookie: 2.4,
+  cod: 2.4, salmon: 2.4, tropical_fish: 1.2, melon_slice: 3.2, sweet_berries: 2.4, dried_kelp: 1.6, beetroot: 2.2, cookie: 2.4,
 });
 
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value)
