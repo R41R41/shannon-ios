@@ -120,7 +120,8 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     expect(candidateAct({ hands: ['dig 1,0,0 rel', 'wait 30'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand', { urgent: true }).guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 5'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
-    expect(V2_ALWAYS).toContain('かまどに入れたら、焼ける間（jobs の残り秒）は別の作業（準備の補い・装備作り・資材集め・移動）を列に足す。wait だけの act は、有用な手を選べない時だけで、why に待つ対象と理由を書く');
+    expect(V2_ALWAYS).toContain('焼く間は別の前提作業を進める');
+    expect(V2_ALWAYS).toContain('wait だけの act は、有用な手を選べない時だけで、why に待つ対象と理由を書く');
   });
 });
 

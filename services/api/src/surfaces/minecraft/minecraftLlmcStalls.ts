@@ -21,7 +21,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
  * `STALL.spotRadius` blocks of the
  * first stop, with no done one of the two between.
  * - `wait_loop`: `STALL.waits` acts of nothing but `wait` ran in a row; an act with a hand that moves the body
- * (`MOVING`) ends the run.
+ * (`MOVING`) or a newly observed material gain ends the run.
  * - `decide_error`: the decision again of an act (A-10) failed or ran out of time, Opus's act was refused after its mend for its
  * form or a value (A-11, A-18), or `STALL.refusals` acts in a row
  *   could not be sent for their form or a value (`invalid_input`: not read, out of range, missing, the wrong type;
@@ -117,11 +117,13 @@ interface TaskStalls {
  * that got somewhere or did other work. */
   seen: { at: ActPos; n: number } | null;
   waits: number;
+  gains: Set<string>;
   refusals: number;
   deaths: DeathCounter | null;
 }
 const tasks = new Map<string, TaskStalls>();
-const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, explained: null, seen: null, waits: 0, refusals: 0, deaths: null });
+const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, explained: null, seen: null, waits: 0,
+  gains: new Set(), refusals: 0, deaths: null });
 function taskOf(taskId: string): TaskStalls {
   let state = tasks.get(taskId);
   if (!state) {
@@ -145,8 +147,8 @@ export function forgetStalls(): void {
 }
 /** A stall was found: the task counts nothing more (the hold is being made) and starts again from nothing at its resume. */
 function found(state: TaskStalls, stall: Stall): Stall {
-  const { deaths, seen } = state;
-  Object.assign(state, fresh(), { quiet: true, deaths, seen });
+  const { deaths, seen, gains } = state;
+  Object.assign(state, fresh(), { quiet: true, deaths, seen, gains });
   return stall;
 }
 /** The task was resumed from a hold (or has begun again): it counts again, from nothing; the body's death counter
@@ -154,7 +156,7 @@ function found(state: TaskStalls, stall: Stall): Stall {
  * death it held for is not one again). */
 export function resumeStalls(taskId: string): void {
   const state = taskOf(taskId);
-  Object.assign(state, fresh(), { deaths: state.deaths, seen: state.seen });
+  Object.assign(state, fresh(), { deaths: state.deaths, seen: state.seen, gains: state.gains });
 }
 /** Whether the task has found a stall and not been resumed since. */
 export function stallQuiet(taskId: string): boolean { return taskOf(taskId).quiet; }
@@ -209,6 +211,21 @@ export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeM
 // ---- acts that ended
 // --------------------------------------------------------------------------------------------------------------
 // -----------------
+const GAIN_REASONS: ReadonlySet<string> = new Set(['crafted', 'smelted', 'mined', 'picked', 'retrieved']);
+/** A receipt's observed material gains, once per event. Naming a craft or opening an empty furnace is not progress. */
+function newGains(act: NonNullable<ReturnType<typeof readActResult>>, seen: Set<string>): boolean {
+  let gained = false;
+  for (const line of act.lines) {
+    if (line.end === 'not_run' || line.end === 'unknown') continue;
+    for (const event of line.delta ?? []) {
+      if (!GAIN_REASONS.has(event.reason) || !finite(event.count) || event.count <= 0
+        || typeof event.id !== 'string' || !event.id || seen.has(event.id)) continue;
+      seen.add(event.id);
+      gained = true;
+    }
+  }
+  return gained;
+}
 /**
  * An act of the task ended: its hands (`hands[].do`), the receipt's result (the ActResult JSON) and the command
  * that ran it. Finds `wait_loop` and `same_spot_stops`.
@@ -222,11 +239,13 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
   // An act that did not run (taken off, dropped behind a stop, its result unknown) is neither a wait nor a move.
   const act = readActResult(ran.result);
   if (!act) return null;
+  const gained = newGains(act, state.gains);
   if (act.lines.some(line => line.end !== 'not_run' && line.end !== 'unknown')) {
     const kinds = ran.hands.map(hand => String(hand?.do ?? ''));
-    if (kinds.length > 0 && kinds.every(kind => kind === 'wait')) state.waits += 1;
-    else if (kinds.some(kind => MOVING.has(kind))) state.waits = 0;
-    if (state.waits >= STALL.waits) return found(state, { kind: 'wait_loop', key: `${state.waits}`, why: `wait だけの act が ${state.waits} 回続いた（間に体を動かす手が無い）` });
+    if (gained || kinds.some(kind => MOVING.has(kind))) state.waits = 0;
+    else if (kinds.length > 0 && kinds.every(kind => kind === 'wait')) state.waits += 1;
+    if (state.waits >= STALL.waits) return found(state, { kind: 'wait_loop', key: `${state.waits}`,
+      why: `wait だけの act が ${state.waits} 回続いた（間に移動や新しい成果が無い）` });
   }
   // A-13: a stop counts only when the hand really spent time or work (3 s and more, a step, a dig, a placing): the
 // quick refusal with its mend (dead_end, no_floor, not_started: no path, 0 steps)

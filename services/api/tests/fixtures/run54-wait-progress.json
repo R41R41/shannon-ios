@@ -1,0 +1,131 @@
+[
+  {
+    "at": "2026-10-31T02:25:51.783Z",
+    "hands": [
+      {
+        "do": "walk",
+        "to": {
+          "x": 22,
+          "y": 5,
+          "z": 2
+        }
+      },
+      {
+        "do": "attack",
+        "hold": true,
+        "seconds": 15,
+        "target": "zombie"
+      }
+    ],
+    "result": "{\"v\": 1, \"ok\": false, \"done\": 1, \"of\": 2, \"ms\": 8705, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"hp\": 16.4, \"food\": 17, \"stoppedBy\": \"failure\", \"lines\": [{\"i\": 1, \"do\": \"walk\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"progress\": {\"unit\": \"meter\", \"done\": 1.4, \"left\": 0, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"fromStopM\": 0.2}, \"motorOps\": 3}, {\"i\": 2, \"do\": \"attack\", \"status\": \"stopped\", \"goal\": \"not_started\", \"end\": \"finished\", \"code\": \"out_of_reach\", \"progress\": {\"unit\": \"blow\", \"done\": 0, \"left\": null}, \"motorOps\": 0}]}",
+    "command": "skill:6dff2f2d5cff6a1e5c06b4818fc1d7033630b8811dd96922a30ce972c5e453e0"
+  },
+  {
+    "at": "2026-10-31T02:26:05.687Z",
+    "hands": [
+      {
+        "do": "wait",
+        "seconds": 30
+      },
+      {
+        "do": "wait",
+        "seconds": 30
+      },
+      {
+        "do": "wait",
+        "seconds": 20
+      }
+    ],
+    "result": "{\"v\": 1, \"ok\": true, \"done\": 3, \"of\": 3, \"ms\": 80005, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"hp\": 16.4, \"food\": 17, \"lines\": [{\"i\": 1, \"do\": \"wait\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"progress\": {\"unit\": \"second\", \"done\": 30, \"left\": 0}, \"motorOps\": 0}, {\"i\": 2, \"do\": \"wait\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"progress\": {\"unit\": \"second\", \"done\": 30, \"left\": 0}, \"motorOps\": 0}, {\"i\": 3, \"do\": \"wait\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"progress\": {\"unit\": \"second\", \"done\": 20, \"left\": 0}, \"motorOps\": 0}]}",
+    "command": "skill:ec599ea9249e4e55ce777f649c38df9cd1a211444cf9aa714e1ae5cfd766975e"
+  },
+  {
+    "at": "2026-10-31T02:27:26.581Z",
+    "hands": [
+      {
+        "do": "wait",
+        "seconds": 30
+      },
+      {
+        "do": "furnace",
+        "at": [
+          {
+            "x": 22,
+            "y": 5,
+            "z": 1
+          }
+        ],
+        "op": "take"
+      },
+      {
+        "do": "make",
+        "item": "iron_leggings"
+      }
+    ],
+    "result": "{\"v\": 1, \"ok\": false, \"done\": 0, \"of\": 3, \"ms\": 7426, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"hp\": 16.4, \"food\": 17, \"stoppedBy\": \"stopIf\", \"lines\": [{\"i\": 1, \"do\": \"wait\", \"status\": \"stopped\", \"goal\": \"not_started\", \"end\": \"cut\", \"cutBy\": \"stopIf\", \"code\": \"stop_if_hostile\", \"motorOps\": 0}, {\"i\": 2, \"do\": \"furnace\", \"status\": \"skipped\", \"goal\": \"not_started\", \"end\": \"not_run\", \"cutBy\": \"stopIf\"}, {\"i\": 3, \"do\": \"make\", \"status\": \"skipped\", \"goal\": \"not_started\", \"end\": \"not_run\", \"cutBy\": \"stopIf\"}]}",
+    "command": "skill:1b2577605d87d4b382bd332aedc78056db917445524297e53d07a95338ea46d8"
+  },
+  {
+    "at": "2026-10-31T02:27:38.033Z",
+    "hands": [
+      {
+        "do": "furnace",
+        "at": [
+          {
+            "x": 22,
+            "y": 5,
+            "z": 1
+          }
+        ],
+        "op": "take"
+      },
+      {
+        "do": "make",
+        "item": "iron_leggings"
+      },
+      {
+        "do": "equip",
+        "item": "iron_leggings"
+      }
+    ],
+    "result": "{\"v\": 1, \"ok\": true, \"done\": 3, \"of\": 3, \"ms\": 1916, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"hp\": 16.4, \"food\": 17, \"lines\": [{\"i\": 1, \"do\": \"furnace\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"delta\": [{\"item\": \"iron_ingot\", \"count\": 9, \"reason\": \"smelted\", \"id\": \"skill:33f48f0f062ff290b3be26ac835c9c4b47c37458d76bc4a3fc860380010500e3:1:1:0\", \"obsSeq\": 1620, \"deliverySeq\": 0}], \"progress\": {\"unit\": \"item\", \"done\": 9, \"left\": null}, \"motorOps\": 1}, {\"i\": 2, \"do\": \"make\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"delta\": [{\"item\": \"iron_ingot\", \"count\": -7, \"reason\": \"ingredient\", \"id\": \"skill:33f48f0f062ff290b3be26ac835c9c4b47c37458d76bc4a3fc860380010500e3:1:2:0\", \"obsSeq\": 1636, \"deliverySeq\": 1}, {\"item\": \"iron_leggings\", \"count\": 1, \"reason\": \"crafted\", \"id\": \"skill:33f48f0f062ff290b3be26ac835c9c4b47c37458d76bc4a3fc860380010500e3:1:2:1\", \"obsSeq\": 1636, \"deliverySeq\": 2}], \"progress\": {\"unit\": \"item\", \"done\": 1, \"left\": 0}, \"motorOps\": 0}, {\"i\": 3, \"do\": \"equip\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"delta\": [{\"item\": \"iron_leggings\", \"count\": -1, \"reason\": \"unexplained\", \"id\": \"skill:33f48f0f062ff290b3be26ac835c9c4b47c37458d76bc4a3fc860380010500e3:1:3:0\", \"obsSeq\": 1636, \"deliverySeq\": 3}], \"motorOps\": 1}]}",
+    "command": "skill:33f48f0f062ff290b3be26ac835c9c4b47c37458d76bc4a3fc860380010500e3"
+  },
+  {
+    "at": "2026-10-31T02:27:40.774Z",
+    "hands": [
+      {
+        "do": "wait",
+        "seconds": 4
+      }
+    ],
+    "result": "{\"v\": 1, \"ok\": true, \"done\": 1, \"of\": 1, \"ms\": 4002, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"hp\": 16.4, \"food\": 17, \"lines\": [{\"i\": 1, \"do\": \"wait\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"progress\": {\"unit\": \"second\", \"done\": 4, \"left\": 0}, \"motorOps\": 0}]}",
+    "command": "skill:43daaa992f4f6d555e133d5433362c2f56976c235177867c6c660cb90ec88580"
+  },
+  {
+    "at": "2026-10-31T02:27:45.885Z",
+    "hands": [
+      {
+        "do": "make",
+        "item": "iron_sword"
+      },
+      {
+        "do": "equip",
+        "item": "iron_sword"
+      }
+    ],
+    "result": "{\"v\": 1, \"ok\": true, \"done\": 2, \"of\": 2, \"ms\": 308, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"hp\": 16.4, \"food\": 17, \"lines\": [{\"i\": 1, \"do\": \"make\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"delta\": [{\"item\": \"iron_ingot\", \"count\": -2, \"reason\": \"ingredient\", \"id\": \"skill:d06330d3e21f795390d4ab464cd128f7918dc9016d34219f800df22c8dbd4f00:1:1:0\", \"obsSeq\": 1715, \"deliverySeq\": 0}, {\"item\": \"stick\", \"count\": -1, \"reason\": \"ingredient\", \"id\": \"skill:d06330d3e21f795390d4ab464cd128f7918dc9016d34219f800df22c8dbd4f00:1:1:1\", \"obsSeq\": 1715, \"deliverySeq\": 1}, {\"item\": \"iron_sword\", \"count\": 1, \"reason\": \"crafted\", \"id\": \"skill:d06330d3e21f795390d4ab464cd128f7918dc9016d34219f800df22c8dbd4f00:1:1:2\", \"obsSeq\": 1715, \"deliverySeq\": 2}], \"progress\": {\"unit\": \"item\", \"done\": 1, \"left\": 0}, \"motorOps\": 0}, {\"i\": 2, \"do\": \"equip\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"motorOps\": 1}]}",
+    "command": "skill:d06330d3e21f795390d4ab464cd128f7918dc9016d34219f800df22c8dbd4f00"
+  },
+  {
+    "at": "2026-10-31T02:27:48.044Z",
+    "hands": [
+      {
+        "do": "wait",
+        "seconds": 3
+      }
+    ],
+    "result": "{\"v\": 1, \"ok\": true, \"done\": 1, \"of\": 1, \"ms\": 3003, \"at\": {\"x\": 22, \"y\": 5, \"z\": 2}, \"hp\": 16.4, \"food\": 17, \"lines\": [{\"i\": 1, \"do\": \"wait\", \"status\": \"done\", \"goal\": \"done\", \"end\": \"finished\", \"progress\": {\"unit\": \"second\", \"done\": 3, \"left\": 0}, \"motorOps\": 0}]}",
+    "command": "skill:90a35b8a1acea738114ea0f603600d34b0c4e788f51967a90d4ef6673417ba9b"
+  }
+]
