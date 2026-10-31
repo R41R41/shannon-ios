@@ -500,7 +500,13 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(reservation.cases.map(entry => entry.name)).toEqual(['ok', 'timeout', 'other_holder']);
     for (const entry of reservation.cases) { expect(entry.reservationRemoved).toBe(true); if (entry.handover) expect(['kept', 'lowered', 'none']).toContain(entry.handover.shield); }
     expect(reservation.cases[0]!.handover).toMatchObject({ confirmed: true, shield: 'kept' });
-    expect(reservation.cases[1]!.handover).toMatchObject({ confirmed: false, shield: 'lowered' });
+    // Expiry may remove the reservation before acquisition (no handover), or
+    // acquisition may consume the expired reservation before its cleanup timer
+    // (an explicitly unconfirmed handover). Neither may keep the shield or
+    // claim a confirmed transfer. Both orders occur in the real producer.
+    const timeout = reservation.cases[1]!;
+    expect(timeout.shieldLowered).toBe(true);
+    if (timeout.handover !== null) expect(timeout.handover).toMatchObject({ confirmed: false, shield: 'lowered' });
     expect(reservation.cases[2]!.handover).toBeNull();
     const stale = out('control--stale-owner-cleanup.json') as { oldRefused: boolean; newKeysKept: boolean };
     expect(stale).toEqual({ oldRefused: true, newKeysKept: true });
