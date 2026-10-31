@@ -1130,6 +1130,7 @@
     "wiring/fcaSummaryWiring.ts",
     "wiring/fcaTaskEvidenceReads.ts",
     "wiring/fcaTaskObservationWiring.ts",
+    "wiring/fcaTaskSourcesWiring.ts",
     "wiring/fcaTouchSources.ts",
     "wiring/fcaTouchWiring.ts",
     "wiring/feedbackSourceWiring.ts",
