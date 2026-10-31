@@ -1,9 +1,10 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { lifeViewOf } from './minecraftMadeIn.js';
-import { readinessOf, feetIn } from './minecraftLlmcReadiness.js';
+import { readinessOf, feetIn, foodLeads } from './minecraftLlmcReadiness.js';
 
 type Point = { x: number; y: number; z: number };
-interface Journey { bodyId: string; life: number; dimension: string; at: number; open: Point | null; points: Point[] }
+interface Survey { cell: string; point: Point; at: number; lead: string }
+interface Journey { bodyId: string; life: number; dimension: string; at: number; open: Point | null; points: Point[]; surveys: Survey[] }
 const point = (v: unknown): Point | null => {
   if (!v || typeof v !== 'object') return null;
   const p = v as Point;
@@ -12,6 +13,21 @@ const point = (v: unknown): Point | null => {
 };
 const at = (p: Point) => `(${p.x},${p.y},${p.z})`;
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+const cell = (p: Point) => `${Math.floor(p.x / 24)}:${Math.floor(p.z / 24)}`;
+const surface = (world: Record<string, unknown>) => typeof world.localMap === 'string' && /^地図 v1[^\n]*方式=surface/u.test(world.localMap);
+
+function surveyNotes(state: Journey, feet: Point): string[] {
+  const old = state.surveys.filter(s => s.cell !== cell(feet)).sort((a, b) => distance(a.point, feet) - distance(b.point, feet)).slice(0, 3);
+  return old.length ? ['食料探索の過去観測（当時の範囲だけ。動物の現在地・未走査の範囲は未確認）:',
+    ...old.map(s => `${at(s.point)}・${Math.max(0, Math.round((state.at - s.at) / 1000))}秒前: ${s.lead}`)] : [];
+}
+
+function recordSurvey(state: Journey, feet: Point, world: Record<string, unknown>) {
+  if (!surface(world) || !Array.isArray(world.nearbyEntities)) return;
+  const here = cell(feet);
+  state.surveys = [...state.surveys.filter(s => s.cell !== here),
+    { cell: here, point: point(feet)!, at: state.at, lead: foodLeads(world, 'overworld').slice(0, 220) }].slice(-12);
+}
 
 function journeyFrame(observation: BodyObservation | null) {
   const facts = readinessOf(observation), life = lifeViewOf(observation), feet = facts ? feetIn(facts.world) : null;
@@ -40,7 +56,9 @@ export function createMinecraftJourney(saved: unknown) {
     if (typeof v.bodyId === 'string' && Number.isSafeInteger(v.life)
       && typeof v.dimension === 'string' && Number.isFinite(v.at)
       && Array.isArray(v.points) && v.points.length <= 12 && v.points.every(p => point(p))) {
-      state = { bodyId: v.bodyId, life: v.life, dimension: v.dimension, at: v.at, open: point(v.open), points: v.points.map(p => point(p)!) };
+      const surveys = Array.isArray(v.surveys) ? v.surveys.filter(s => s && typeof s.cell === 'string' && point(s.point)
+        && Number.isFinite(s.at) && typeof s.lead === 'string' && s.lead.length <= 220).slice(-12) : [];
+      state = { bodyId: v.bodyId, life: v.life, dimension: v.dimension, at: v.at, open: point(v.open), points: v.points.map(p => point(p)!), surveys };
     }
   }
   return {
@@ -49,7 +67,7 @@ export function createMinecraftJourney(saved: unknown) {
       if (!frame) return [];
       const { facts, life, feet, time, bodyId } = frame;
       if (!state || state.bodyId !== bodyId || state.life !== life.life || state.dimension !== life.dimension) {
-        state = { bodyId, life: life.life, dimension: life.dimension, at: time, open: null, points: [] };
+        state = { bodyId, life: life.life, dimension: life.dimension, at: time, open: null, points: [], surveys: [] };
       }
       if (time < state.at) return []; // a stale observation must not move the trail backwards
       state.at = time;
@@ -57,8 +75,9 @@ export function createMinecraftJourney(saved: unknown) {
       if (!last || distance(last, feet) >= 8 || Math.abs(last.y - feet.y) >= 4) {
         state.points = [...state.points, point(feet)!].slice(-12);
       }
-      if (typeof facts.world.localMap === 'string' && /^地図 v1[^\n]*方式=surface/u.test(facts.world.localMap)) state.open = point(feet);
-      return journeyNotes(state, feet, facts);
+      if (surface(facts.world)) state.open = point(feet);
+      if (facts.dimension === 'overworld') recordSurvey(state, feet, facts.world);
+      return [...journeyNotes(state, feet, facts), ...(facts.dimension === 'overworld' && facts.food < 40 ? surveyNotes(state, feet) : [])];
     },
     checkpoint: () => ({ minecraftJourney: state ? JSON.parse(JSON.stringify(state)) as Journey : null }),
   };

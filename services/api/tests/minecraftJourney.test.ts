@@ -48,3 +48,33 @@ it('bounds the retained observations and hides food-return notes when food is al
   expect(j.checkpoint().minecraftJourney?.points.length).toBeLessThanOrEqual(12);
   expect(j.read(frame(30, -40, 30, false, 100))).toEqual([]);
 });
+const surveyed = (x: number, n: number, entities: unknown[] = []): BodyObservation => {
+  const v = frame(x, 66, n, true);
+  v.state = { ...v.state, world: { ...(v.state.world as Record<string, never>), nearbyEntities: entities as never } };
+  return v;
+};
+it('keeps bounded food-search observations through a checkpoint without claiming old animals still exist', () => {
+  let j = createMinecraftJourney(null);
+  j.read(surveyed(0, 1, [{ id: 7, name: 'chicken', distance: 3 }]));
+  j = createMinecraftJourney(JSON.parse(JSON.stringify(j.checkpoint())).minecraftJourney);
+  const notes = j.read(surveyed(30, 31)).join('\n');
+  expect(notes).toContain('(0,66,0)・30秒前'); expect(notes).toContain('#7 chicken');
+  expect(notes).toContain('動物の現在地・未走査の範囲は未確認');
+  for (let n = 32; n < 60; n++) j.read(surveyed(n * 24, n));
+  expect(j.checkpoint().minecraftJourney?.surveys.length).toBe(12);
+});
+it('updates the same survey cell, accepts an old checkpoint, and clears surveys across lives', () => {
+  let j = createMinecraftJourney(null); j.read(surveyed(0, 1)); j.read(surveyed(2, 2));
+  expect(j.checkpoint().minecraftJourney?.surveys.length).toBe(1);
+  const old = JSON.parse(JSON.stringify(j.checkpoint())).minecraftJourney; delete old.surveys;
+  j = createMinecraftJourney(old); expect(j.checkpoint().minecraftJourney?.surveys).toEqual([]);
+  j.read(surveyed(30, 3));
+  const next = frame(40, 20, 4); next.state = { ...next.state, life: { life: 2, dimension: 'overworld', dimensionSince: 'next' } };
+  expect(j.read(next)).toEqual([]); expect(j.checkpoint().minecraftJourney?.surveys).toEqual([]);
+});
+it('does not count missing entity observations or underground observations as a surface food survey', () => {
+  const j = createMinecraftJourney(null); j.read(frame(0, 66, 1, true));
+  const underground = surveyed(30, 2);
+  underground.state = { ...underground.state, world: { ...(underground.state.world as Record<string, never>), localMap: '地図 v1 方式=layers' } };
+  j.read(underground); expect(j.checkpoint().minecraftJourney?.surveys).toEqual([]);
+});
