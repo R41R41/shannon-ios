@@ -29,6 +29,20 @@ import { benchC, until, type BenchC } from './helpers/benchC.js';
  * bench C (the hold port is played by the test; no model is called).
  */
 const TASK = 'task-stalls';
+
+describe('run54: a repaired dig permission is distinct from falling gravel', () => {
+  const ceiling = () => stopAt(20, 40, 22, { code: 'dead_end', line: '頭の上 (20,42,22) が copper_ore で登れない（掘ってよい物に無い）。canDig に足すか、別の場所から' });
+  const gravel = () => stopAt(20, 43, 22, { do: 'vertical', code: 'displaced', line: '跳んでいる間に足のマス (20,42,22) が gravel になった' });
+  it('gives the new physical cause one attempt, retaining a repeat of that cause', () => {
+    expect(ranGo([ceiling()])).toBeNull();
+    expect(ranGo([gravel()])).toBeNull();
+    expect(ranGo([gravel()])).toMatchObject({ kind: 'same_spot_stops' });
+  });
+  it('still holds the same unrepaired ceiling permission twice', () => {
+    expect(ranGo([ceiling()])).toBeNull();
+    expect(ranGo([ceiling()])).toMatchObject({ kind: 'same_spot_stops' });
+  });
+});
 afterEach(() => { forgetStalls(); setIncidentHoldPort(null); });
 
 // ---- 1. the detection ---------------------------------------------------------------------------------------------------------------------------------

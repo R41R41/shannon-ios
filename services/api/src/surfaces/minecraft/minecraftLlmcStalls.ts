@@ -239,7 +239,7 @@ const noteStoppedLine = () => {
     if (interruptedMovement()) return null;
     const explainedMovement = () => (line.code === 'threat_exposed' || line.code === 'falling_above' || (line.code === 'cannot_dig' &&
        /canDig に \S+ を足/u.test(line.line))
-      || (line.do === 'go' && /流れる水の中|置いたブロックが世界に現れない|掘ると流れ込む|掘ると落ちてくる|canDig に無い|道は流れる水を天井/u.test(line.line)));
+      || (line.do === 'go' && /流れる水の中|置いたブロックが世界に現れない|掘ると流れ込む|掘ると落ちてくる|canDig に無い|掘ってよい物に無い|道は流れる水を天井/u.test(line.line)));
     const explained = explainedMovement();
     if (explained) {
       const previous = state.explained;
