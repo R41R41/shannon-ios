@@ -125,12 +125,19 @@ function nearest(reach: Map<string, Reach>, goal: P, k: number): Reach | null {
   return top;
 }
 /** One candidate's line. */
+function waterOnRoute(view: MapView, points: readonly P[]): string {
+  const wet = points.filter(p => ['w', '-'].includes(view.symbol(p.x, p.y + 1, p.z) ?? ''));
+  if (!wet.length) return '';
+  return `。頭のマスが水の道の点（足の座標）: ${wet.slice(0, 4).map(ptText).join('・')}${wet.length > 4 ? ' ほか' : ''}`
+    + `（${wet.length}地点。呼吸地点への退路・往復時間は未検証）`;
+}
 function candidateLine(view: MapView, reach: Map<string, Reach>, top: Reach, goal: Goal, k: number, arrived: boolean): string {
   const route = pathTo(reach, top.cell);
   const where = `${ptText(top.cell)}（目的地まで 水平 ${horizontal(top.cell, goal.at).toFixed(1)}m・高さ ${sign(goal.at.y - top.cell.y)}）`;
   const walk = top.steps ? `道の点 ${pointsText(route.points)}` : '足のマスのまま（掘らずに歩ける隣が無い）';
   const dig = route.dig.length ? `。掘るマス（${route.dig.length}）: ${digText(view, route.dig)}` : '';
-  return `${k === 0 ? '掘らずに行ける範囲の、' : `掘り ${route.dig.length} マスまで許した時の、`}目的地に最も近い立ち位置 ${arrived ? '（目的地に着く）' : ''}${where}。${walk}${dig}`;
+  return `${k === 0 ? '掘らずに行ける範囲の、' : `掘り ${route.dig.length} マスまで許した時の、`}目的地に最も近い立ち位置 ${arrived ? '（目的地に着く）' : ''}${where}。${walk}${dig}`
+    + waterOnRoute(view, route.points);
 }
 /**
  * Where to walk to: the goal's own cell when she can stand there (or the map does not show it), else a standing
