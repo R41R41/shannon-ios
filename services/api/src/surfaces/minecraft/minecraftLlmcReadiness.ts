@@ -85,11 +85,18 @@ function held(counts: ItemCounts, need: Need): number {
   return slots.size;
 }
 
-function obsidianToolShortage(counts: ItemCounts, kinds: readonly PlanKind[] | null): string | null {
+// Harvest tiers checked against the production body's 1.21.11 block registry.
+const MINING_TOOLS: Readonly<Partial<Record<PlanKind, { label: string; tools: RegExp }>>> = {
+  stone_tools: { label: '丸石の採掘に使えるツルハシ', tools: /^(?:wooden|copper|stone|golden|iron|diamond|netherite)_pickaxe$/u },
+  iron: { label: '鉄鉱石の採掘に使えるツルハシ（銅・石・鉄・ダイヤ・ネザライト）', tools: /^(?:copper|stone|iron|diamond|netherite)_pickaxe$/u },
+  diamond: { label: 'ダイヤ鉱石の採掘に使えるツルハシ（鉄・ダイヤ・ネザライト）', tools: /^(?:iron|diamond|netherite)_pickaxe$/u },
+  obsidian: { label: '黒曜石の採掘に使えるツルハシ（ダイヤ・ネザライト）', tools: /^(?:diamond|netherite)_pickaxe$/u },
+};
+function miningToolShortage(counts: ItemCounts, kinds: readonly PlanKind[] | null): string | null {
   // A past acquisition node is history; the current pack establishes mining capability.
   // This is a mining fact, not a requirement on chest loot, casting a portal, or an ancestor node.
-  return kinds?.[0] === 'obsidian' && countMatching(counts, /^(?:diamond|netherite)_pickaxe$/u) === 0
-    ? '黒曜石の採掘に使えるツルハシ（ダイヤ・ネザライト）が現在無い' : null;
+  const requirement = kinds?.[0] ? MINING_TOOLS[kinds[0]] : undefined;
+  return requirement && countMatching(counts, requirement.tools) === 0 ? `${requirement.label}が現在無い` : null;
 }
 
 /**
@@ -99,7 +106,7 @@ function obsidianToolShortage(counts: ItemCounts, kinds: readonly PlanKind[] | n
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
   worn?: readonly string[] }): string | null {
-  const mining = obsidianToolShortage(parts.counts, parts.nowKinds);
+  const mining = miningToolShortage(parts.counts, parts.nowKinds);
   const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
   const table: PrepStage = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];

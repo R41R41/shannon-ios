@@ -46,3 +46,30 @@ describe('run55: past tool acquisition does not establish current mining capabil
     expect(readinessParts(parts, null, null).shortage).toBeUndefined();
   });
 });
+
+describe('run57: current mining capability after losing the pack', () => {
+  it('exposes the iron tool gap from the recorded recovery inventory without reopening completed nodes', () => {
+    const plan: PlanTree = { ...tree, current: 'p4.1', nodes: [
+      { id: 'p1', parentId: null, order: 1, title: '石の道具', kind: 'stone_tools', state: 'done', doneWhen: 'have:stone_pickaxe' },
+      { id: 'p4.1', parentId: null, order: 4, title: '鉄を掘る', kind: 'iron', state: 'continue', doneWhen: 'have:iron_ingot>=30' },
+    ] };
+    const frame = observation();
+    (frame.state.world as Record<string, unknown>).inventory = [{ name: 'cobblestone', count: 1 }];
+    const before = JSON.stringify(plan);
+    expect(readinessParts({ ...parts, planTree: () => plan }, null, frame).shortage).toContain('鉄鉱石の採掘に使えるツルハシ');
+    expect(JSON.stringify(plan)).toBe(before);
+  });
+  it.each([
+    ['stone_tools', 'wooden_pickaxe', false], ['stone_tools', 'golden_pickaxe', false], ['stone_tools', 'stone_axe', true],
+    ['iron', 'wooden_pickaxe', true], ['iron', 'golden_pickaxe', true], ['iron', 'stone_pickaxe', false],
+    ['iron', 'iron_pickaxe', false], ['iron', 'copper_pickaxe', false], ['diamond', 'stone_pickaxe', true], ['diamond', 'golden_pickaxe', true],
+    ['diamond', 'iron_pickaxe', false], ['diamond', 'netherite_pickaxe', false],
+  ] as const)('%s with %s: mining gap is %s', (kind, pick, missing) => {
+    const shortage = preparationShortage({ dimension: 'overworld', counts: new Map([[pick, 1]]), food: 100, nowKinds: [kind] });
+    expect(Boolean(shortage?.includes('採掘に使えるツルハシ'))).toBe(missing);
+  });
+  it.each(['chest', 'iron_armor', 'portal', 'other'] as const)('does not turn %s or an iron ancestor into an iron-mining obligation', kind => {
+    expect(preparationShortage({ dimension: 'overworld', counts: new Map(), food: 100, nowKinds: [kind, 'iron'] }) ?? '')
+      .not.toContain('鉄鉱石の採掘に使えるツルハシ');
+  });
+});
