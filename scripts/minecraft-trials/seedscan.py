@@ -1187,7 +1187,9 @@ def cmd_publish(args):
     if os.path.exists(dest): shutil.rmtree(dest)
     os.makedirs(dest)
     ignore = shutil.ignore_patterns('session.lock', 'playerdata', 'stats', 'advancements')
-    shutil.copytree(deep['world'], os.path.join(dest, 'world'), ignore=ignore)
+    source = args.world_from or deep.get('world')       # --world-from: a staged copy (worlds/<key>) when the working directory of the read is already gone
+    if not source or not os.path.isfile(os.path.join(source, 'level.dat')): raise SystemExit(f'no world to publish: {source} (use --world-from <dir with level.dat>)')
+    shutil.copytree(source, os.path.join(dest, 'world'), ignore=ignore)
     spawn_stage = deep['stages'].get('spawn') or {}
     raw = spawn_stage.get('raw') or {}
     def loc(hit): return None if not hit else {'distance': hit['d'], 'at': hit['at']}
@@ -1254,6 +1256,7 @@ def main(argv):
     p.add_argument('--key', required=True, help='the deep-<key>.json to publish')
     p.add_argument('--dest', help='default <out>/pristine; the trials directory on the VM is ~/minecraft/shannon-home/trials/pristine')
     p.add_argument('--labworld', action='store_true', help='also stage the ground under ~/.cache/minebot-lab/worlds/<key> for MINECRAFT_LAB_WORLD_FROM')
+    p.add_argument('--world-from', help='take the world from this directory (a staged worlds/<key>) instead of the kept working directory of the read')
     p.add_argument('--note')
     args = parser.parse_args(argv)
     if args.cmd == 'scan': cmd_scan(args)

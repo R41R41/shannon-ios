@@ -122,6 +122,12 @@ python3 -I seedscan.py publish --key c1 --labworld         # pristine/c1/{world,
 結果は `~/.cache/minebot-lab/seedscan-out/`（`phaseA-<tag>.jsonl` に 1 本 1 行、`deep-<名前>.json`、`sites.json` を含む `pristine/<名前>/`）。WSL と VM と本番で /locate の答えは同じになる
 （サーバーの jar が同じ：`versions/1.21.11/server-1.21.11.jar` の sha256 先頭 `ec47239a8de24633` が WSL・VM のラボの雛形・本番 shannon-home で一致、Fabric の起動 jar も `437be1fb0db0cec0` で一致）。
 
+**決まったシード（取りまとめ、2026-11-02）：本命 c1（-1687609181642700084）、予備 c6（3528818900495331395）**。c1 の弱点はストロングホールドの部屋の地下 170（区間の試しで重いと分かったら c6 に替える）。
+VM の `trials/pristine/` に c1・c6 を置いた（各 33〜35MB）。
+
+- **実走（`shannon_home`）で c1 の新しいワールドを用意する（1 行）**：shannon-home を止めたまま `ssh azure-constant-server 'flock ~/.cache/minebot-lab/prod.lock bash -c "cd ~/minecraft/shannon-home && ./new-world.sh --seed -1687609181642700084"'`
+  （古いワールドは `shannon_home.before-regen-…` に残り、次の起動で c1 の世界が作られる。支給・tp なしのゼロから。c6 は `--seed 3528818900495331395`。起動はいつもの `./start.sh` か運用 CLI）。
+
 ---
 
 # S6〜S11（ネザー要塞からエンドの竜まで）— 2026-11-02 追加
