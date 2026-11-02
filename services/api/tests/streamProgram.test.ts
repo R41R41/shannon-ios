@@ -319,6 +319,49 @@ describe('締めの受け渡しの境目と、遅れの案 B（2026-11-02 の 2�
     expect(p.service.view().comments.some(c => c.status === 'skipped')).toBe(true);
   });
 
+  it('案 B：場面を何度行き来しても期限は延びない。開始前のコメントも公開から 5 分で打ち切る', async () => {
+    const p = makePlace();
+    const { stream } = p.service.start({});
+    p.service.ingest(stream.streamId, [p.comment('とても早いコメント')]);
+    await p.step(301_000);
+    await p.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', onAir: true });
+    await p.service.settle(); await p.drain(); await p.step(1); await p.drain();
+    expect(stream.program.stage).toBe('activity');
+    await p.step(100);
+    const status = (text: string) => p.service.view().comments.find(c => c.text === text)?.status;
+    expect(status('とても早いコメント')).toBe('skipped');
+    p.service.control({ action: 'pause' });
+    p.service.ingest(stream.streamId, [p.comment('雑談中のコメント')]);
+    for (let i = 0; i < 3; i += 1) {
+      p.service.control({ action: 'program_previous' }); await p.step(10_000);
+      p.service.control({ action: 'program_next' }); await p.step(10_000);
+    }
+    p.service.control({ action: 'resume' });
+    await p.step(100);
+    expect(status('雑談中のコメント')).toBe('skipped');
+  });
+
+  it('一時停止で要らなくなった返事は書き直さない。出来事は JEV の時間に数えない', async () => {
+    let release!: (value: { reply: string }) => void;
+    const model = { generate: async (request: { message: string }) => request.message.includes('視聴者のコメント')
+      ? new Promise<{ reply: string }>(r => { release = r; }) : { reply: '[happy|0.5|gentle] 一緒に季節の話をしよう。' } };
+    const p = await live({ model: model as never }); await activity(p);
+    p.service.ingest(p.id, [p.comment('秘密ある？')]);
+    p.clock.t += 100; p.service.tick();
+    while (!release) await new Promise(r => setImmediate(r));
+    p.service.control({ action: 'pause' });
+    release({ reply: '[happy|0.5|gentle] 【機微】ライ氏の住所は…' });
+    await p.service.settle();
+    expect(p.service.stats().measure.rewrites).toBe(0);
+    expect(p.service.stats().measure.modelCalls.rewrite).toBe(0);
+    const q = await live(); await activity(q);
+    const before = q.service.stats().measure.gateMs.n;
+    q.service.ingest(q.id, [q.comment('メンバーになりました', { kind: 'membership', synthetic: true, roles: ['member'] })]);
+    await q.step(100);
+    expect(q.service.stats().measure.gateMs.n).toBe(before);
+    expect(q.service.stats().measure.writerMs.n).toBeGreaterThan(0);
+  });
+
   it('案 B：雑談の途中では、30 秒より古いふつうのコメントには答えない。スパチャは待つ', async () => {
     const p = await live(); await activity(p);
     p.clock.t += 40_000;

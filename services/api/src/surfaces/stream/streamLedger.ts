@@ -160,7 +160,8 @@ export class StreamLedger {
     for (const record of this.records.values()) {
       if (record.status !== 'new') continue;
       const window = PAID_KINDS.has(record.kind) ? STREAM_LIMITS.paidCandidateMilliseconds : STREAM_LIMITS.candidateMilliseconds;
-      if (nowMs - Math.max(record.publishedMs, sinceMs) > window) {
+      const age = nowMs - Math.max(record.publishedMs, sinceMs);
+      if (age > window || nowMs - record.publishedMs > STREAM_LIMITS.staleCommentMilliseconds) {
         record.status = 'skipped';
         gone.push(record);
       }

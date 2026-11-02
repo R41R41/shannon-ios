@@ -343,7 +343,8 @@ export class StreamService {
   private async answer(session: Session, pick: ChosenComments): Promise<void> {
     const epoch = session.program.epoch;
     const { primary, group } = pick;
-    this.measure.note(this.measure.selectionMs, this.now() - primary.receivedMs);
+    const measure = this.measure;
+    measure.note(measure.selectionMs, this.now() - primary.receivedMs);
     const streamId = session.view.streamId;
     for (const record of group) Object.assign(record, { status: 'picked', attempts: record.attempts + 1 });
     const { scopeKey } = this.parts;
@@ -361,16 +362,16 @@ export class StreamService {
     const recent = this.recentChat(4).filter(text => text !== primary.text);
     const gateAt = this.now();
     const gate = primary.event ? { declined: false } : await this.parts.gate.before(primary.text, primary.tags, recent);
-    this.measure.note(this.measure.gateMs, this.now() - gateAt);
+    if (!primary.event) measure.note(measure.gateMs, this.now() - gateAt);
     if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
     const comments = group.map(record => this.writerComment(record));
     const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline: gate.declined };
     const kind: StreamLineKind = tellOff ? 'notice' : 'reply';
     const writerAt = this.now();
-    const written = await this.author.write(this.authorSession(session), turn, purpose, group.map(record => record.commentId), kind);
-    this.measure.note(this.measure.writerMs, this.now() - writerAt);
-    if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
-    if (!written) return group.forEach(record => this.give(record, 'new'));
+    const writing = { ...this.authorSession(session), current: () => !this.stale(session, epoch) };
+    const written = await this.author.write(writing, turn, purpose, group.map(record => record.commentId), kind);
+    measure.note(measure.writerMs, this.now() - writerAt);
+    if (this.stale(session, epoch) || !written) return group.forEach(record => this.give(record, 'new'));
     this.enqueueReply(group, written, kind, gate.declined);
   }
 

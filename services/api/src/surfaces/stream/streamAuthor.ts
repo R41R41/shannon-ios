@@ -36,7 +36,8 @@ export interface AuthorParts {
   log: (line: string) => void;
 }
 
-export interface AuthorSession { streamId: string; title: string; minecraft: boolean }
+/** `current`: false once the line is no longer wanted (paused, the program moved, the stream over); no rewrite is asked for then. */
+export interface AuthorSession { streamId: string; title: string; minecraft: boolean; current?: () => boolean }
 export interface WrittenLine { reply: CheckedStreamReply; draft: StreamDraft }
 
 /** The model's request, built from the stream turn's own request (`streamModelRequest`): its check goes along as
@@ -132,6 +133,7 @@ export class StreamAuthor {
     if (!first) return null;
     const verdict = checkedLine(turn, first.say);
     if (verdict.ok) return { reply: verdict.reply, draft: first };
+    if (session.current && !session.current()) return null;
     this.parts.measure().counts.rewrites += 1;
     const second = await this.ask(session, turn, purpose, allowed, kind, { name: 'rewrite', note: verdict.note });
     const again = second ? checkedLine(turn, second.say) : null;

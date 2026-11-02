@@ -57,7 +57,8 @@ export function chooseComments(ledger: StreamLedger, nowMs: number, sinceMs = -I
   const candidates = ledger.all().filter(record => {
     if (record.status !== 'new' || record.reaction || ledger.isIgnored(record.authorId)) return false;
     const window = PAID_KINDS.has(record.kind) ? STREAM_LIMITS.paidCandidateMilliseconds : STREAM_LIMITS.candidateMilliseconds;
-    return nowMs - Math.max(record.publishedMs, sinceMs) <= window;
+    const age = nowMs - Math.max(record.publishedMs, sinceMs);
+    return age <= window && nowMs - record.publishedMs <= STREAM_LIMITS.staleCommentMilliseconds;
   });
   if (!candidates.length) return null;
   const scored = candidates.map(record => ({ record, score: commentScore(record, ledger, nowMs) }));
