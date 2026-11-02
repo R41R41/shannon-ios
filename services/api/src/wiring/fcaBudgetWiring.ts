@@ -11,7 +11,7 @@ import { estimatesPausedReport } from './taskPauseNotice.js';
  * - an own-time task (E4) reserves each step from her day's budget (2000 yen) before it runs and settles the actual yen after,
  *   through the same reservations as her other own-time steps, and stops when the reservation is refused or its own cap is hit.
  * - a Minecraft request the owner made, as admitted (not a child it starts, nor another task that touched the body), has a larger
- *   cap, 15,000 yen and 2,000 steps (owner answers of 2026-10-13 and 2026-11-02: a run to the dragon takes 4 to 5 hours; the mode decides
+ *   cap, 10,000 yen and 2,000 steps (owner answers of 2026-10-13 and 2026-11-02: a run to the dragon takes 4 to 5 hours; the mode decides
  *   about 4 times a minute, 1,400 in 6 hours, and a step is a stretch of decisions, so 2,000 is never the limit that ends a run); its steps
  *   are bounded loosely so that the yen and the owner's stop end a run.
  *
@@ -24,7 +24,7 @@ import { estimatesPausedReport } from './taskPauseNotice.js';
  * (`TaskBudgetStore.settleEstimate`).
  */
 export const OWNER_TASK_CAP = Object.freeze({ yen: 300, steps: 40 });
-export const MINECRAFT_TASK_CAP = Object.freeze({ yen: 15_000, steps: 2_000 });
+export const MINECRAFT_TASK_CAP = Object.freeze({ yen: 10_000, steps: 2_000 });
 export const OWN_TIME_TASK_CAP = Object.freeze({ yen: 150, steps: 10 });
 /** Steps counted at once (each is removed when it settles; an abandoned one gives way to the newest). */
 const IN_FLIGHT = 32;

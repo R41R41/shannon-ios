@@ -92,7 +92,7 @@ describe('one budget for FCA steps (E3)', () => {
     expect(await budget.before(mc, lease)).toEqual({ ok: true });
     expect(await budget.before(other, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('300円・40歩') });
     store.add('t-mc', 'owner', 'owner_request', MINECRAFT_TASK_CAP.yen, now());
-    expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('15000円・2000歩') });
+    expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('10000円・2000歩') });
     expect(store.spent('t-mc').cappedAt).toBe(now());
     expect(calls).toEqual([]);
   });

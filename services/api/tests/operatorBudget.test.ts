@@ -149,7 +149,7 @@ describe('what the envelope accepts', () => {
     expect(parseOperatorEnvelope(envelope('budget', { budgetYen: 1600 }))).toMatchObject({ ok: false, code: 'invalid_input' });
     expect(parseOperatorEnvelope(envelope('budget', { taskId: 'nope', budgetYen: 1600 }))).toMatchObject({ ok: false, code: 'invalid_input' });
     expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 1600, goal: 'x' }))).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 15_001 }))).toMatchObject({ ok: false, code: 'budget_above_cap' });
+    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: OPERATOR_LIMITS.maxBudgetYen + 1 }))).toMatchObject({ ok: false, code: 'budget_above_cap' });
     expect(parseOperatorEnvelope(envelope('budget', { latest: true, budgetYen: 1600 })))
       .toMatchObject({ ok: true, input: { command: 'budget', taskId: null, budgetYen: 1600 } });
     expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 15_000 })))
