@@ -82,7 +82,8 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンダーアイ12個', { kind: 'pearl', target: { item: 'ender_eye', count: 12 }, doneWhen: 'have:ender_eye>=12',
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
   node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: '帰りのゲートから。ポータルの対は live の控え' }),
-  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12',
+  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
+    note: '水入りバケツ（水を汲んだ物）も持つ: 柱から落ちた時に体が水で止める',
     children: [node('ベッドを作る（羊毛3と板3）', { kind: 'bed', doneWhen: 'have:bed>=4' }),
       node('弓と矢（糸・棒・火打石・羽根）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [

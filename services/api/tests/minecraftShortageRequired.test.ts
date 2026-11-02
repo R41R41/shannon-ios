@@ -195,6 +195,18 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(cautions('エンドでドラゴン')).toContain('水入りバケツ');
     expect(cautions('エンドでドラゴン')).toContain('縁から5マス以上内側');
   });
+  it('asks the water bucket before the End: the stage\'s shortage line and the check node\'s condition', () => {
+    const base = { dimension: 'overworld', food: 90, nowKinds: ['stronghold' as const] };
+    const kit: Array<[string, number]> = [['white_bed', 4], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64]];
+    expect(preparationShortage({ ...base, counts: owned(kit) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
+    expect(preparationShortage({ ...base, counts: owned([...kit, ['water_bucket', 1]]) })).toBeNull();
+    expect(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
+    const plan = seedPlan('エンドラを倒して')!;
+    const check = plan.nodes.find(node => node.title === '出発の点検（エンドへ）')!;
+    expect(check.doneWhen).toBe('food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12&have:water_bucket');
+    expect(check.note).toContain('水入りバケツ');
+    expect(STRATEGY_KNOWLEDGE_V2).toContain('弓と矢 30・水入りバケツ');
+  });
 });
 
 describe('the first plan and the knowledge say the required list where the model reads it', () => {
