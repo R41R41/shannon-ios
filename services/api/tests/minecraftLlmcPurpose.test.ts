@@ -215,7 +215,7 @@ describe('a stopped purpose is not continued or re-enqueued by the head', () => 
       const db = new DatabaseSync(':memory:'), store = new MinecraftControlStore(db);
       const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot',
         servers: [{ serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
-      const control = new MinecraftControl(store, configuration, { ownerAlone: () => true, leaseValid: () => true,
+      const control = new MinecraftControl(store, configuration, { now: Date.now, ownerAlone: () => true, leaseValid: () => true,
         pollMilliseconds: 1, frameMilliseconds: 60_000 });
       const lease = { id: 'lease-purpose', generation: 1, holder: 'test' };
       const context = { scopeKey: 'owner', taskId: 'task-purpose', taskRevision: 1, bodyId: 'minecraft:world', sessionId: 'purpose-session',
