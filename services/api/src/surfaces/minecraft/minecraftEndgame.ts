@@ -3,6 +3,7 @@ import { carried, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { createEyeLedger, type EyeLedger } from './minecraftEyeLedger.js';
 import { crystalLine, deathLine, dragonApproachLine, dragonLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
+import { pearlLine } from './minecraftPearlFacts.js';
 
 /**
  * What a task that goes for the dragon keeps and says of the way after the Nether, as facts for the live state (one object a task, made
@@ -33,9 +34,10 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye')));
   const death = some(deathLine(world));
   const places = some(placeLine(world));
+  const pearls = some(pearlLine(facts.counts, facts.dimension));
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true))];
-  return { lines: [...fight, ...eyeLines, ...frames, ...death, ...places], short: [...urgent, ...frames, ...death] };
+  return { lines: [...fight, ...eyeLines, ...pearls, ...frames, ...death, ...places], short: [...urgent, ...frames, ...death] };
 }
 
 /** The ledger's lines while the stronghold is still to be found: in the overworld, before the portal room's frames are in view. */
