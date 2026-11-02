@@ -74,6 +74,8 @@ describe('short hands: lines the model got wrong', () => {
     expect(lineToHand('sneak maybe')).toEqual({ error: 'sneak: on か off' });
     expect(lineToHand('craft')).toEqual({ error: 'craft: 物の名前が要る' });
     expect(lineToHand('attack')).toEqual({ error: 'attack: 相手が要る' });
+    expect(lineToHand('shoot')).toEqual({ error: 'shoot: 相手（#id か名前）か座標 1 つの、どちらか 1 つが要る' });
+    expect(lineToHand('shoot #12 1,2,3')).toEqual({ error: 'shoot: 相手（#id か名前）か座標 1 つの、どちらか 1 つが要る' });
     expect(lineToHand('walk 1,2,3 do=dig')).toEqual({ error: 'walk: do= は書けない' });
     expect('error' in lineToHand('json {oops')).toBe(true);
     expect('error' in lineToHand('dig 1,2,3 note="開いたまま')).toBe(false);
@@ -170,5 +172,15 @@ describe('short hands: the tool', () => {
     // The cut-offs of the old text are still said, now in the description's own sections.
     for (const word of ['stopIf は文字列', 'accept は', 'onFail:', 'hpBelow は今の体力より低い値', '石1枚の向こうの水は、その石を dig してから use bucket',
       'chest は', '箱・樽だけ']) expect(SHORT_ACT_DESCRIPTION, word).toContain(word);
+  });
+});
+
+describe('shoot as a line (2026-11-02, the first real replay: a model wrote it as a line, as it writes attack, and was turned away)', () => {
+  it('reads the target as a word or as target=, or one cell, with the bow\'s fields', () => {
+    expect(lineToHand('shoot #12')).toEqual({ do: 'shoot', target: '#12' });
+    expect(lineToHand('shoot #12 item=bow charge=1 n=3')).toEqual({ do: 'shoot', target: '#12', item: 'bow', charge: 1, n: 3 });
+    expect(lineToHand('shoot target=#12 n=2')).toEqual({ do: 'shoot', target: '#12', n: 2 });
+    expect(lineToHand('shoot ender_dragon')).toEqual({ do: 'shoot', target: 'ender_dragon' });
+    expect(lineToHand('shoot 40,90,5 item=bow')).toEqual({ do: 'shoot', at: [{ x: 40, y: 90, z: 5 }], item: 'bow' });
   });
 });

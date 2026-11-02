@@ -86,8 +86,25 @@ export function settledAttempt(ledger: ReplanLedger, record: ReplanRecord): Repl
 
 /** The ops the strong model may write: the plan's own, without the promises (a new plan does not move what was set aside). */
 const ALLOWED_OPS: ReadonlySet<string> = new Set(['add', 'split', 'set', 'move', 'drop', 'forbid', 'caution', 'lift']);
-const BASE = PLAN_UPDATE_RULES_DEFINITION.nativeInputSchema as { properties: { ops: { items: { properties: Record<string, unknown> } }; current: unknown } };
+type Fields = Record<string, { items?: { properties: Fields } } & Record<string, unknown>>;
+const BASE = PLAN_UPDATE_RULES_DEFINITION.nativeInputSchema as { properties: { ops: { items: { properties: Fields } }; current: unknown } };
 const ITEM = BASE.properties.ops.items;
+const pick = (from: Fields, keys: readonly string[]): Fields => Object.fromEntries(keys.filter(key => key in from).map(key => [key, from[key]!]));
+
+/**
+ * The op of the answer: the fields the allowed ops use, and split's children with five of them. The API refuses a strict schema with more than 24
+ * optional parameters (2026-11-02, the first real replay: the plan tool's whole op, with the promises' fields and the children's, has 37, and
+ * every new plan was turned away with a 400).
+ */
+const REPLAN_ITEM = {
+  ...ITEM,
+  properties: {
+    op: { type: 'string', enum: [...ALLOWED_OPS] },
+    ...pick(ITEM.properties, ['id', 'parent', 'after', 'title', 'kind', 'where', 'doneWhen', 'note', 'target', 'state', 'reason', 'text', 'prep']),
+    into: { ...ITEM.properties.into, items: { ...ITEM.properties.into?.items, properties: pick(ITEM.properties.into?.items?.properties ?? {},
+      ['title', 'kind', 'where', 'doneWhen', 'note']) } },
+  },
+};
 
 /** The answer's schema: the plan tool's ops and current node, and a line saying what was changed and why. */
 export const REPLAN_SCHEMA = Object.freeze({
@@ -95,7 +112,7 @@ export const REPLAN_SCHEMA = Object.freeze({
   additionalProperties: false,
   required: ['ops', 'why'],
   properties: {
-    ops: { type: 'array', maxItems: 12, items: { ...ITEM, properties: { ...ITEM.properties, op: { type: 'string', enum: [...ALLOWED_OPS] } } } },
+    ops: { type: 'array', maxItems: 12, items: REPLAN_ITEM },
     current: BASE.properties.current,
     why: { type: 'string', maxLength: 120, description: '何を直したか、またはなぜ直さないか（120 字まで）' },
   },
