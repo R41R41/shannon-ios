@@ -237,6 +237,35 @@
       ],
       "failIf": [ { "name": "エンドを出た", "dimensionIsNot": "minecraft:the_end", "holdSeconds": 20 } ],
       "seeds": []
+    },
+    {
+      "id": "Z",
+      "name": "ゼロ→ネザー入り（c1・保留なし・通し。隔離台で無人の立て直しを測る）",
+      "targetSeconds": 2820,
+      "limitMinutes": 60,
+      "capYen": 1500,
+      "anySeed": true,
+      "failure": "死亡・60 分・¥1,500・タスクの終わり。ネザーに入った（dimension）が成功。人の手は入れない（保留なし）",
+      "start": { "time": 0, "give": {} },
+      "milestones": [
+        { "name": "原木", "any": ["#minecraft:logs"] },
+        { "name": "作業台", "any": ["minecraft:crafting_table"] },
+        { "name": "木のツルハシ", "any": ["minecraft:wooden_pickaxe"] },
+        { "name": "石のツルハシ", "any": ["minecraft:stone_pickaxe"] },
+        { "name": "石炭", "any": ["minecraft:coal", "minecraft:charcoal"] },
+        { "name": "かまど", "any": ["minecraft:furnace"] },
+        { "name": "鉄のツルハシ", "any": ["minecraft:iron_pickaxe"] },
+        { "name": "バケツ", "any": ["minecraft:bucket", "minecraft:water_bucket", "minecraft:lava_bucket"] },
+        { "name": "鉄の全身", "all": ["minecraft:iron_helmet", "minecraft:iron_chestplate", "minecraft:iron_leggings", "minecraft:iron_boots"] },
+        { "name": "ベッド", "any": ["#minecraft:beds"], "orRespawn": true },
+        { "name": "予備のツルハシ", "any": ["minecraft:iron_pickaxe", "minecraft:diamond_pickaxe"], "count": 2 },
+        { "name": "ダイヤのツルハシ", "any": ["minecraft:diamond_pickaxe"] },
+        { "name": "黒曜石 10", "any": ["minecraft:obsidian"], "count": 10 },
+        { "name": "火打石と打ち金", "any": ["minecraft:flint_and_steel"] },
+        { "name": "ゲート（黒曜石を 8 以上置いた）", "dropFrom": "minecraft:obsidian", "after": 10, "drop": 8 },
+        { "name": "ネザー", "dimension": "minecraft:the_nether", "end": true }
+      ],
+      "seeds": []
     }
   ]
 }
