@@ -114,8 +114,14 @@ export interface EndView {
 
 const rec = (value: unknown): Rec | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Rec : null;
 const num = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
-const nonnegative = (value: unknown): number | null => { const n = num(value); return n !== null && n >= 0 ? n : null; };
-const indexOf = (value: unknown): number | null => { const n = nonnegative(value); return n !== null && Number.isInteger(n) ? n : null; };
+const nonnegative = (value: unknown): number | null => {
+  const n = num(value);
+  return n !== null && n >= 0 ? n : null;
+};
+const indexOf = (value: unknown): number | null => {
+  const n = nonnegative(value);
+  return n !== null && Number.isInteger(n) ? n : null;
+};
 const bool = (value: unknown): boolean | null => typeof value === 'boolean' ? value : null;
 const point = (value: unknown): Point | null => {
   const item = rec(value);
@@ -147,17 +153,20 @@ function openingsOf(raw: unknown): EndCrystalOpenings[] {
 function shootSetOf(raw: unknown): EndShootSet[] {
   const item = rec(raw), at = point(item?.at);
   if (!item || !at) return [];
-  const crystals = [...new Set(array(item.crystals).flatMap(value => { const id = indexOf(value); return id === null ? [] : [id]; }))].slice(0, 10);
+  const ids = array(item.crystals).flatMap(value => indexOf(value) ?? []);
+  const crystals = [...new Set(ids)].slice(0, 10);
   return crystals.length >= 2 ? [{ at, crystals, walkMeters: nonnegative(item.walkMeters) }] : [];
 }
 function statsOf(raw: unknown): EndCrystalStats | undefined {
   const item = rec(raw);
-  return item ? { ms: nonnegative(item.ms), examinedCells: indexOf(item.examinedCells), gridStep: nonnegative(item.gridStep), truncated: bool(item.truncated) } : undefined;
+  return item ? { ms: nonnegative(item.ms), examinedCells: indexOf(item.examinedCells), gridStep: nonnegative(item.gridStep),
+    truncated: bool(item.truncated) } : undefined;
 }
 function windowsOf(raw: unknown): EndDragonWindows | undefined {
   const item = rec(raw);
   return item ? { source: item.source === 'shannon-lab-2026-11-02' ? item.source : null, open: bool(item.open),
-    secondsUntil: secondsRange(item.secondsUntil), lengthSeconds: secondsRange(item.lengthSeconds), remainingSeconds: secondsRange(item.remainingSeconds) } : undefined;
+    secondsUntil: secondsRange(item.secondsUntil), lengthSeconds: secondsRange(item.lengthSeconds),
+    remainingSeconds: secondsRange(item.remainingSeconds) } : undefined;
 }
 function approachOf(raw: unknown): EndDragonApproach | undefined {
   const item = rec(raw);
@@ -168,7 +177,8 @@ function approachOf(raw: unknown): EndDragonApproach | undefined {
   });
   const stage = array(item.stage).flatMap((raw): EndStagePoint[] => {
     const entry = rec(raw), at = point(entry);
-    return entry && at ? [{ ...at, toStrikeMeters: nonnegative(entry.toStrikeMeters), walkMeters: nonnegative(entry.walkMeters), strikeIndex: indexOf(entry.strikeIndex) }] : [];
+    return entry && at ? [{ ...at, toStrikeMeters: nonnegative(entry.toStrikeMeters), walkMeters: nonnegative(entry.walkMeters),
+      strikeIndex: indexOf(entry.strikeIndex) }] : [];
   }).slice(0, 3);
   const retreat = array(item.retreat).flatMap(raw => {
     const entry = rec(raw), at = point(entry);
@@ -228,7 +238,8 @@ function fromMarks(world: Rec | null): EndView | null {
   const perch = marks.find(mark => mark.label === '止まり木');
   if (!dragon && !crystals.length && !perch) return null;
   const health = dragon ? /体力\s*([\d.]+)\/200/u.exec(dragon.rest) : null;
-  return { feet: point(world?.position), dragon: dragon ? { id: null, health: health ? Number(health[1]) : null, phase: null, phaseName: null, phaseFor: null, perched: false,
+  return { feet: point(world?.position), dragon: dragon ? { id: null, health: health ? Number(health[1]) : null, phase: null, phaseName: null,
+      phaseFor: null, perched: false,
       position: { x: dragon.x, y: dragon.y, z: dragon.z }, headPosition: null, distance: null, headReach: null, strike: null } : null,
     perch: perch ? { x: perch.x, y: perch.y, z: perch.z } : null,
     crystals: { remaining: null, gone: null, caged: null, unseen: null, visible: crystals.length, list: [] }, breath: [], fireballs: 0 };
