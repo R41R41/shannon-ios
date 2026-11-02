@@ -52,7 +52,13 @@ export function travelEvidence(input: ActInput | null, frame: BodyObservation | 
   const facts = doneFacts(frame), values: Record<string, number> = {};
   if (!facts?.feet || !facts.dimension) return values;
   for (const hand of input?.hands ?? []) {
-    const h = hand as unknown as { do: string; to?: { x: number; y: number; z: number }; path?: { x: number; y: number; z: number }[] };
+    const h = hand as unknown as { do: string; to?: { x: number; y: number; z: number }; path?: { x: number; y: number; z: number }[]; toY?: number };
+    // Run 59 leg 2, hold 1: a vertical down to the iron's height (y=41 to y=16, 66 s, 40 steps) was no travel at all, and the node was held
+    // as stalled 54 s after the stairs arrived. A vertical's goal is its height: how near the feet are to `toY` is its approach.
+    if (h.do === 'vertical' && typeof h.toY === 'number' && Number.isFinite(h.toY)) {
+      values[`travel:${facts.dimension}:y${h.toY}`] = -Math.ceil(Math.abs(facts.feet.y - h.toY) / 2);
+      continue;
+    }
     const to = h.do === 'go' ? h.to : h.do === 'walk' ? h.path?.at(-1) ?? h.to : null;
     if (!to || ![to.x, to.y, to.z].every(Number.isFinite)) continue;
     values[`travel:${facts.dimension}:${to.x},${to.y},${to.z}`] = -Math.ceil(Math.hypot(
