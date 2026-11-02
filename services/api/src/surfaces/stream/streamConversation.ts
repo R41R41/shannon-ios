@@ -1,9 +1,10 @@
 import type { MouthLine } from './streamMouth.js';
-/** 再生済みの公開会話だけを最大8往復保存する。拒否した原文は次の生成へ渡さない。 */
+/** 再生済みの公開会話だけを最大8往復保存する。拒否した原文は次の生成へ渡さない。
+ * マイクラ実況の一言は「さっき言ったこと」に残るので、ここには入れない（頻繁な実況で視聴者との会話が押し出されないように）。 */
 export class StreamConversation {
   private turns: { comments: string[]; reply: string }[] = [];
   spoken(line: MouthLine, declined: boolean): void {
-    if (line.kind === 'notice' || line.kind === 'closing') return;
+    if (line.kind === 'notice' || line.kind === 'closing' || line.kind === 'commentary') return;
     const comments = declined ? ['公の配信で答えられない依頼を断った（原文は保持しない）']
       : line.answering.map(c => JSON.stringify({ name: c.authorName, text: c.text }));
     this.turns.push({ comments, reply: line.text });

@@ -112,7 +112,8 @@ export function parseBroadcast(raw: unknown): { streamId: string; ended?: boolea
   const videoId = text(body.videoId, 80);
   const liveChatId = text(body.liveChatId, 200);
   if (!videoId || !liveChatId) bad('STREAM_INPUT_INVALID');
-  return { streamId, videoId, liveChatId, title: text(body.title, 200) ?? '', channelId: text(body.channelId, 80) ?? '', onAir: body.onAir === true };
+  return { streamId, videoId, liveChatId, title: text(body.title, 200) ?? '', channelId: text(body.channelId, 80) ?? '',
+    ...(typeof body.onAir === 'boolean' ? { onAir: body.onAir } : {}) };
 }
 
 function parseProgramControl(body: Record<string, unknown>): StreamControl {

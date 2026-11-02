@@ -213,7 +213,7 @@ private leaks (must be 0: seeded owner-private facts and markers never appear in
 - POST /v1/stream/start に targetVideoId（YouTube動画ID11文字）、program { topic（100字）, participation（200字）, publicNotes（1200字）, minutes（1〜180、既定20）} を追加。省略しても番組進行は常に作られる。JSON本文の上限は8KiB。
 - 開始時の program.layout は任意で debut|talk|board|game|ending。省略時はtalk。画面と番組の進行段は独立し、画面だけでMinecraft実況は有効にならない。
 - セッションの program は { stage: opening|explanation|activity|closing, layout: debut|talk|board|game|ending, topic, participation, completed, ready, finished, activityUntil }。publicNotesは返さない。targetVideoIdは耳のstateにも渡す。別動画でのbroadcastは409 STREAM_VIDEO_MISMATCH。
-- 耳の POST broadcast は onAir: true を実ライブ開始を確認できたときだけ付ける。actualStartTimeがありactualEndTimeが無いことを根拠にする。liveChatIdの存在だけではphaseをliveにしない。onAirが省略・falseなら待機のままで、挨拶・返答・実況を始めない。
+- 耳の POST broadcast は onAir: true を実ライブ開始を確認できたときだけ付ける。actualStartTimeがありactualEndTimeが無いことを根拠にする。onAir: false なら待機のままで、挨拶・返答・実況を始めない。onAir を一切送らない旧い耳（体の main、031cd99a より前）は従来どおり結んだ時点で live にする（2026-11-02、反映順に依存しないため）。新しい耳は常に真偽値を送る。
 - 配信主の既存controlsへ program_next / program_previous / program_close、program_extend { minutes: 1〜30 }、program_layout { layout } を追加。ペア済み配信主だけが使う。耳・視聴者へ操作権限を渡さない。
 - 挨拶はgreeting、企画説明はtopic、締めはclosingとして既存の口を通る。説明済みはspoken receiptで確定し、失敗では確定しない。自動進行は挨拶→説明→企画まで。企画の期限では配信主へ判断を促し、YouTubeの開始終了は実行しない。
 - stats.measure に transportMs / selectionMs / gateMs / writerMs / publishedToSoundMs の n・median・p90・max を追加。従来のcommentToSoundMsは頭の受信起点、publishedToSoundMsはYouTubeのpublishedAt起点。単位はms、対象外・無効時刻は集計しない。

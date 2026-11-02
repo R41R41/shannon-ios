@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { makePlace, stamp } from './streamHarness.js';
-import { parseStartInput, parseControlInput } from '../src/surfaces/stream/streamParse.js';
+import { parseBroadcast, parseStartInput, parseControlInput } from '../src/surfaces/stream/streamParse.js';
+import { StreamConversation } from '../src/surfaces/stream/streamConversation.js';
+import type { MouthLine } from '../src/surfaces/stream/streamMouth.js';
 
 const live = async (options: Parameters<typeof makePlace>[0] = {}) => {
   const p = makePlace(options);
@@ -161,4 +163,27 @@ it('初配信の画面で開始し、場面を進めても選んだ構図を保�
   p.service.control(parseControlInput({ action: 'program_layout', layout: 'game' }));
   expect(stream.program).toMatchObject({ stage: 'explanation', layout: 'game' });
   expect(() => parseStartInput({ program: { layout: 'anything' } })).toThrow();
+});
+
+it('onAir を送らない旧い耳（体の main）でも、従来どおり結んだ時点で配信を始める。false は待つ', async () => {
+  const p = makePlace();
+  const { stream } = p.service.start();
+  const legacy = parseBroadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch' });
+  expect(legacy).not.toHaveProperty('onAir');
+  expect(parseBroadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', onAir: false })).toMatchObject({ onAir: false });
+  const view = await p.service.broadcast(legacy);
+  await p.service.settle();
+  expect(view).toMatchObject({ phase: 'live', broadcast: { onAir: true }, program: { ready: true, stage: 'opening' } });
+  expect(p.service.mouth.currentLine()?.kind).toBe('greeting');
+});
+
+it('公開会話の記録に実況の一言を入れず、視聴者との往復を押し出さない', () => {
+  const line = (kind: MouthLine['kind'], text: string, answering: MouthLine['answering'] = []): MouthLine => ({
+    id: text, kind, text, plan: { affect: 'happy', affectIntensity: 0.5, delivery: 'gentle' }, answering, commentIds: [], createdMs: 0, expiresMs: 1 });
+  const conversation = new StreamConversation();
+  conversation.spoken(line('reply', '秋が好き', [{ commentId: 'c1', authorName: '視聴者1', text: '好きな季節は？', kind: 'text' }]), false);
+  for (let i = 0; i < 10; i += 1) conversation.spoken(line('commentary', `実況${i}`), false);
+  const block = conversation.block();
+  expect(block).toContain('好きな季節は？');
+  expect(block).not.toContain('実況');
 });

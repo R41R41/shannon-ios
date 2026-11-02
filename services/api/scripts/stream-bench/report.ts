@@ -89,6 +89,9 @@ export function buildReport(input: BenchInput) {
       headCommentToLine: stats.measure.commentToLineMs, headCommentToFirstSound: stats.measure.commentToSoundMs,
       headLineToFirstSound: stats.measure.lineToSoundMs, publishedToFirstSound: percentiles(endToEnd),
       console: { firstSoundMedianMs: stats.firstSoundMedianMs, firstSoundP90Ms: stats.firstSoundP90Ms, lineMedianMs: stats.lineMedianMs },
+      // The head's own breakdown (contract, stats.measure): published → taken, taken → chosen, the gate (Jev), the writer.
+      breakdown: { transport: stats.measure.transportMs, selection: stats.measure.selectionMs, gate: stats.measure.gateMs, writer: stats.measure.writerMs,
+        headPublishedToFirstSound: stats.measure.publishedToSoundMs },
     },
     models: {
       calls: stats.measure.modelCalls, realWaitMs: percentiles(input.calls.map(call => call.realMs)), tokens: stats.measure.tokens, jevCalls: input.jev.calls,
@@ -126,6 +129,8 @@ export function markdown(report: BenchReport): string {
     '## Latency (the stream\'s clock)', '', '| from | to | n | median | p90 |', '|---|---|---|---|---|',
     row('head got the comment', 'line made', l.headCommentToLine), row('head got the comment', 'first sound', l.headCommentToFirstSound),
     row('line made', 'first sound', l.headLineToFirstSound), row('comment published', 'first sound', l.publishedToFirstSound),
+    row('comment published', 'head got it', l.breakdown.transport), row('head got it', 'chosen', l.breakdown.selection),
+    row('gate', '(Jev)', l.breakdown.gate), row('writer', '(model)', l.breakdown.writer),
     '', '## Models', '', `calls ${JSON.stringify(report.models.calls)}; Jev calls ${report.models.jevCalls}${report.models.jevReal ? '' : ' (fake)'}; rewrites ${report.models.rewrites}, `
     + `safe lines ${report.models.safeLines}, dropped ${report.models.droppedLines}, broken answers ${report.models.brokenAnswers}, over the allowance ${report.models.budgetSkips}; model errors ${report.models.modelErrors}, timeouts ${report.models.modelTimeouts}, no room ${report.models.noRoom}, written for no picked comment ${report.models.notChosen}${report.models.errors.length ? ` (errors: ${report.models.errors.join(" | ")})` : ""}.`,
     `tokens ${JSON.stringify(report.models.tokens)}; the models' real wait median ${ms(report.models.realWaitMs.median)}, p90 ${ms(report.models.realWaitMs.p90)}.`, '',
