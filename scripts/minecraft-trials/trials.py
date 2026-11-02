@@ -1201,7 +1201,8 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     r.cmd(f'time set {section["start"].get("time", 0)}')
     r.close()
     if dry_run:
-        result['reason'] = 'dry_run'; return result
+        result.update({'reason': 'dry_run', 'supplied': False, 'supplyKinds': []})       # nothing was given, moved or built: the world was only swapped
+        return result
     wait_rate(4)
     login = ops('login')
     if login.get('outcome') != 'accepted' or not wait_body_online():

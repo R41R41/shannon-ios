@@ -133,6 +133,7 @@ def main(argv):
     finally:
         if bot and bot.poll() is None: bot.terminate()
         lab.stop(remove=not args.keep)
+    os.makedirs(s.OUT, exist_ok=True)
     out = os.path.join(s.OUT, f'sections-smoke-{args.key}.json')
     with open(out, 'w', encoding='utf-8') as handle: json.dump(rows, handle, ensure_ascii=False, indent=1)
     print(f'\n{sum(1 for x in rows if x["ok"])}/{len(rows)} sections start where they should, do not end by themselves, and end when their success is made true -> {out}')
