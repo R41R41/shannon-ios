@@ -10,7 +10,7 @@ import { lackOfTable, readinessOf } from './minecraftLlmcReadiness.js';
  * goes in is held, as the portal hand is, while what the place needs is missing, and the line names what is missing and what going on costs. How
  * to gather it is the decision's. Two places:
  * - the blaze spawner (the Nether): a fight or an attack on a blaze when none is within 16 m (the hand that begins it), and a go or a walk that ends
- *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, 150 food points carried, two shields.
+ *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, 150 food points carried, a shield (the loads S2 measured carried one).
  * - the End: a walk that ends in an end portal cell (`e`): blocks to stand and cover on, the water bucket, four beds, 80 food points
  *   (`BEFORE_END`).
  * The body's own version (S2's) is not read: the frame has no field for it.
@@ -31,12 +31,13 @@ const liveLines = (world: Record<string, unknown>): string[] => [world.threats, 
 const blazesWithin = (world: Record<string, unknown>, meters: number): number => liveLines(world)
   .filter(line => Number(/^#\d+ blaze ([\d.]+)m/u.exec(line)?.[1] ?? Infinity) <= meters).length;
 
-/** What the blaze spawner needs and the body does not have, in words, or null. */
+/** What the blaze spawner needs and the body does not have, in words (each with the way it is usually made up), or null. */
 export function blazeLack(facts: Facts): string | null {
   const shields = [...facts.counts].reduce((sum, [name, count]) => sum + (name === 'shield' ? count : 0), 0);
-  const lacks = [facts.health !== null && facts.health < 20 ? `体力 ${facts.health}/20` : '',
-    facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18` : '',
-    facts.food < 150 ? `持ち物の食料 ${foodPointsWords(facts.food, 150)}` : '', shields < 2 ? `盾 ${shields}/2` : ''].filter(Boolean);
+  const lacks = [facts.health !== null && facts.health < 20 ? `体力 ${facts.health}/20（食べて回復を待つ）` : '',
+    facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18（食べる）` : '',
+    facts.food < 150 ? `持ち物の食料 ${foodPointsWords(facts.food, 150)}（焼く・狩る・拾う）` : '',
+    shields < 1 ? '盾 0/1（板 6 と鉄 1 で作業台で作る。作れない時は missing の行を読んで材料を取る）' : ''].filter(Boolean);
   return lacks.length ? `未達の必須（ブレイズの湧き場に入る前に必ず）— ${lacks.join('・')}。欠けたまま進むと: ${BLAZE_RISK}` : null;
 }
 

@@ -13,22 +13,22 @@ const frame = (items: ReadonlyArray<readonly [string, number]>, world: Record<st
   stateAt: 't', receivedAt: 't', connected: true, facts: {},
   state: { world: { dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, health: 20, food: 20, inventory: pack(items), worn: '', ...world } as never } });
 
-const READY: Array<[string, number]> = [['shield', 2], ['cooked_beef', 20], ['iron_sword', 1]];
+const READY: Array<[string, number]> = [['shield', 1], ['cooked_beef', 20], ['iron_sword', 1]];
 const fight = { hands: [{ do: 'wait', seconds: 1 }, { do: 'fight', target: 'blaze', seconds: 20 }] };
 
 describe('the blaze spawner', () => {
   it('names what is missing: health, hunger, the food carried and the shields', () => {
-    const lack = blazeLack(readinessOf(frame([['shield', 1], ['cooked_beef', 2]], { health: 14, food: 12 }))!)!;
-    for (const word of ['体力 14/20', '満腹度 12/18', '持ち物の食料', '盾 1/2', '未達の必須（ブレイズの湧き場に入る前に必ず）', '欠けたまま進むと']) expect(lack, word).toContain(word);
+    const lack = blazeLack(readinessOf(frame([['cooked_beef', 2]], { health: 14, food: 12 }))!)!;
+    for (const word of ['体力 14/20', '満腹度 12/18', '持ち物の食料', '盾 0/1', '未達の必須（ブレイズの湧き場に入る前に必ず）', '欠けたまま進むと']) expect(lack, word).toContain(word);
     expect(blazeLack(readinessOf(frame(READY))!)).toBeNull();
   });
   it('holds the hand that begins the fight when none is near, and says that the way of gathering is the decision\'s', () => {
-    const held = deadlyGateHold(fight, frame([['shield', 1], ['cooked_beef', 20]]));
+    const held = deadlyGateHold(fight, frame([['cooked_beef', 20]]));
     expect(held).toMatchObject({ hand: 2, kind: 'fight' });
     expect(held!.line).toContain('ブレイズの湧き場へ入る手は送らない');
-    expect(held!.line).toContain('盾 1/2');
+    expect(held!.line).toContain('盾 0/1');
     expect(held!.line).toContain('どう取るかは自分で決める');
-    expect(heldOfFrame(fight, frame([['shield', 1], ['cooked_beef', 20]]), 'dg')).toMatchObject({ hand: 2, code: 'gate_required' });
+    expect(heldOfFrame(fight, frame([['cooked_beef', 20]]), 'dg')).toMatchObject({ hand: 2, code: 'gate_required' });
   });
   it('holds a fight on a blaze given by its id, and a go that ends beside a spawner from far away', () => {
     const live = { threats: ['#41 blaze 30.0m (5,70,5)'] };
