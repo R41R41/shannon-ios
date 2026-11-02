@@ -35,9 +35,10 @@ PC側の詳細・録画・月曜引き継ぎ：`C:/Shannon/shannon-desktop-vtube
 |---|---|---|
 | main `6f952d25` | 基点 | 成功（run 41392174259） |
 | 枝 `db6e10b` | Codex の統合 | 成功（run 41399777733） |
-| 枝 `ca35134` 以降 | 下の直し | 下の「CI」節に記録 |
+| 枝 `ca35134` | 下の直し | fast lane の行数の上限で失敗（`streamService.ts` 502 行）→ 34b90ee で直した |
+| 枝 `34b90ee` | 行数の直し | 1 回目は vitest で 2 件失敗。同じ WSL で偽モデル台を同時に回していたため。空いた状態ではどちらも 2 回続けて通り、再実行で成功（run 41405114692、attempt 2） |
 
-全体のテスト（型検査・fast lane・vitest 全部）は main も枝も失敗 0 件で、main と比べて増えた失敗は 0 件。Windows で出た 142 件の失敗は、Linux では再現しない（POSIX 由来）。
+全体のテスト（型検査・fast lane・vitest 全部）は、main（6f952d25）も枝の最新のコード（34b90ee、その後は文書だけ）も失敗 0 件で、main と比べて増えた失敗は 0 件。Windows で出た 142 件の失敗は、Linux では再現しない（POSIX 由来）。
 
 ### レビューと直し
 
