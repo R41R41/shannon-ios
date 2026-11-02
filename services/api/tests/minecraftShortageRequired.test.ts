@@ -183,8 +183,14 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(lines('stronghold')).toContain('cover_none');
     const end = lines('end');
     for (const word of ['go to=島の上のマス canPlace=["cobblestone"] maxPlace=100 seconds=120', 'go 止まった dead_end: 道の先が竜の息の雲の中で', 'dragonBreath が空になる',
-      '高い足場で待つか、別の側から', '表彰台から 5〜12m', '水の入ったバケツ（鉄 3）', 'バケツ無しの 20 ブロックは被害 17']) expect(end, word).toContain(word);
-    expect(STRATEGY_KNOWLEDGE_V2).toContain('鉄格子の檻つきは、水の入ったバケツ（鉄 3）を持って登る');
+      '高い足場で待つか、別の側から', '表彰台から 5〜12m', '水の入ったバケツ（鉄 3）', 'バケツ無しの 20 ブロックは被害 17', '体の落下止め（床の反射、エンドだけ）が働けば',
+      '144 秒で死んだ', '3 回積んで上がり（96→99）被害 0', '積める物（黒曜石かエンドストーンが先、丸石も可）を 3 個以上残し', '柱の上に居る時間を短くする']) expect(end, word).toContain(word);
+    expect(STRATEGY_KNOWLEDGE_V2).toContain('鉄格子の檻つきは、水の入ったバケツ（鉄 3）と積める物 3 個以上を持って登る。落ちる時は体の落下止めが働けば水で止まる');
+  });
+  it('tells the blaze platform\'s rule: accept on every act there, or the floor reflex digs the platform (S2, c1 hold trial)', () => {
+    const blaze = lines('blaze');
+    for (const word of ['全部の act に accept: ["blaze"] を付ける', 'dig で火を消す・go・eat・pickup・place だけの act にも', '足元を掘って下がる', '体力が低くなった時だけ',
+      '荷の丸石で go（canPlace=[cobblestone]）か place で床を戻す']) expect(blaze, word).toContain(word);
   });
   it('puts them in the cautions of the plan\'s nodes: the fortress\'s go, the End\'s entry, the dragon\'s pillars', () => {
     const plan = seedPlan('エンドラを倒して')!;
@@ -192,8 +198,20 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(cautions('ネザー要塞を探す')).toContain('canDig[netherrack,basalt,blackstone] canPlace[cobblestone,netherrack]');
     expect(cautions('ネザー要塞を探す')).toContain('maxDig 200・maxPlace 100');
     expect(cautions('エンドに入る')).toContain('丸石か黒曜石を3個以上持って入る');
-    expect(cautions('エンドでドラゴン')).toContain('水入りバケツ');
+    expect(cautions('エンドでドラゴン')).toContain('水入りバケツと積める物3個以上を持って登り、上に長居しない');
     expect(cautions('エンドでドラゴン')).toContain('縁から5マス以上内側');
+  });
+  it('asks the water bucket before the End: the stage\'s shortage line and the check node\'s condition', () => {
+    const base = { dimension: 'overworld', food: 90, nowKinds: ['stronghold' as const] };
+    const kit: Array<[string, number]> = [['white_bed', 4], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64]];
+    expect(preparationShortage({ ...base, counts: owned(kit) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
+    expect(preparationShortage({ ...base, counts: owned([...kit, ['water_bucket', 1]]) })).toBeNull();
+    expect(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
+    const plan = seedPlan('エンドラを倒して')!;
+    const check = plan.nodes.find(node => node.title === '出発の点検（エンドへ）')!;
+    expect(check.doneWhen).toBe('food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12&have:water_bucket');
+    expect(check.note).toContain('水入りバケツ');
+    expect(STRATEGY_KNOWLEDGE_V2).toContain('弓と矢 30・水入りバケツ');
   });
 });
 

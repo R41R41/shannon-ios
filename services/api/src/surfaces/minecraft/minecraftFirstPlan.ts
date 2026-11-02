@@ -82,7 +82,8 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンダーアイ12個', { kind: 'pearl', target: { item: 'ender_eye', count: 12 }, doneWhen: 'have:ender_eye>=12',
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
   node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: '帰りのゲートから。ポータルの対は live の控え' }),
-  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12',
+  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
+    note: '水入りバケツ（水を汲んだ物）も持つ: 柱から落ちる時に備える（体の落下止めが働けば水で止まる）',
     children: [node('ベッドを作る（羊毛3と板3）', { kind: 'bed', doneWhen: 'have:bed>=4' }),
       node('弓と矢（糸・棒・火打石・羽根）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
@@ -91,7 +92,7 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ',
     caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）'] }),
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
-    caution: ['縁から5マス以上内側で戦う。縁では sneak', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱を登る時は水入りバケツを持つ（落ちたら体が水で止める）'],
+    caution: ['縁から5マス以上内側で戦う。縁では sneak', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は水入りバケツと積める物3個以上を持って登り、上に長居しない'],
     children: [node('クリスタルを弓で壊す', { kind: 'dragon', doneWhen: 'crystals<=0' }), node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
 ];
 /**
