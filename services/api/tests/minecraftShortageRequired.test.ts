@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { PlanKind, PlanNode, PlanTree } from '@shannon/mind';
+import { PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { forgetActNodes, followNode, lackBefore, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { heldOfFrame, heldTail, holdV2, sentPart } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
-import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, SAFETY_FIRST } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { gateHold, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
@@ -260,5 +260,23 @@ describe('the first plan and the knowledge say the required list where the model
     expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）');
     expect(PREP_RULES_WORDS).toContain('目標: 金のブーツ（金 4 がそろう時）・剣・水入りバケツ・黒曜石 10・火打ち金');
     expect(PREP_RULES_WORDS).toContain('死ねばダイヤのツルハシと黒曜石を失う');
+  });
+});
+
+describe('a death is out (the owner, 2026-11-02): not dying stands above being fast, in the stages\' knowledge and the plan\'s cautions', () => {
+  it('says it in every stage, in the numbers the live state shows', () => {
+    expect(SAFETY_FIRST).toContain('死なないことを速さより上に置く');
+    expect(SAFETY_FIRST).toContain('体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満');
+    for (const id of ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'] as const) expect(V2_STAGES[id], id).toContain(SAFETY_FIRST);
+  });
+  it('puts it in the cautions of the diamonds and the blaze rods, within the plan\'s bounds', () => {
+    const plan = seedPlan('エンドラを倒して')!;
+    const cautions = (title: string) => plan.nodes.find(node => node.title === title)?.caution ?? [];
+    expect(cautions('ダイヤ（y=-58）').join(' ')).toContain('死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う');
+    expect(cautions('ブレイズロッド7以上').join(' ')).toContain('死んだらアウト。体力12未満・盾の耐久2割未満なら戦わず退いて補う');
+    for (const node of plan.nodes) {
+      expect((node.caution ?? []).length, node.title).toBeLessThanOrEqual(PLAN_LIMITS.rules);
+      for (const line of node.caution ?? []) expect(line.length, `${node.title}: ${line}`).toBeLessThanOrEqual(PLAN_LIMITS.rule);
+    }
   });
 });

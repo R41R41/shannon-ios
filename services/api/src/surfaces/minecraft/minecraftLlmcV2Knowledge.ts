@@ -1,6 +1,6 @@
 import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
 import { milestoneWords } from './minecraftLlmcRoad.js';
-import { PREP_DESCENT_RULE, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
+import { PREP_DESCENT_RULE, PREP_RULES_WORDS, SAFETY_FIRST } from './minecraftLlmcPrepRules.js';
 import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
 import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
@@ -170,6 +170,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 木が無い時: 地表の木（mc_probe kind=scan で原木の方角・mc_view mode=top で上から）→村の木の物（扉・柵・ベッド・作業台・板、takeOk）→難破船→廃坑（vertical の stairs で下りる）。',
     '- 村は鉄より前に 128m 内を回る（takeOk: true。鉄ゴーレムと村人は打たない）: ベッド（下の決まり）、干し草（1 個でパン 3）、育った畑、箱は chest op=look→take。',
     PREP_RULES_WORDS,
+    SAFETY_FIRST,
     '- 鉄は y=16 前後（i）。ダイヤは y=-58 前後（d、鉄のツルハシ）。水バケツは水源（w）の隣から use（流れ - からは汲めない）。',
     '- 資源のマスと作業の立ち位置は別。距離や数より、通れる道・高低差・掘る/置く許可・視線と足場を比べる。'
       + '今届く操作に移動は不要。不明な経路は path、操作の届き方は sight、上下は column で確かめる。'
@@ -190,6 +191,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   nether: [
     '## ネザーと要塞',
+    SAFETY_FIRST,
     '- ネザーの x・z はオーバーワールドの 1/8。帰りのゲートの座標を where に書く（帰りも p のマスの中へ walk して約 4 秒待つ）。y=31 より下は溶岩の海、マグマ（M）は燃える。',
     '- ピグリンは金の防具を 1 つ着るまで襲う（着るまでピグリンの群れ・砦の遺跡の 8m 内に長居しない）。金を掘る・箱を開けると怒る。',
     '- 要塞（N）は帯に並ぶ: ゲートから 1 方向へ 100〜300 進み、無ければ直角へ（mc_probe kind=scan radius=32 で要塞・ネザーレンガの方角、高い所から mc_view mode=top）。',
@@ -213,6 +215,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   blaze: [
     '## ブレイズ',
+    SAFETY_FIRST,
     '- ブレイズは準備（shortage が空）の後。準備の前に近くにいる・撃たれた時は戦わず、射線の外の岩へ離れて塞ぐ。',
     '- 戦い方: mc_probe kind=camp が、湧き場と、その 3m 以内の縁・火の無い立てる足場を教える。その足場へ go で着いてから fight target=blaze（種類名か #id）。'
       + '体は追わず、キーも押さず、盾の下で待つ（盾が荷にあれば左手に移す）。目より 3 マス以上上に浮いた相手は降りるまで待ち、届く所に来た相手を打つ。'
@@ -232,6 +235,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   pearl: [
     '## パールとアイ',
+    SAFETY_FIRST,
     '- パールの当て: ①歪んだ森（青い森）のエンダーマン ②ピグリンに金の延べ棒を渡す（当たりは約 2.1%、当たると 2〜4 個。金 16 個で平均 1 個、12 個には 190 個前後。ばらつきが大きい）'
       + '③夜のオーバーワールドのエンダーマン（少ない）。近い当て・金がある当てを並べて選ぶ。',
     '- ピグリンとの交換: use item=gold_ingot target=piglin が金 1 個の交換をまるごと行う（渡す→6 秒見る→投げ返した物を拾う）。先に金の防具を 1 つ着ける'
@@ -245,6 +249,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   stronghold: [
     '## ストロングホールド',
+    SAFETY_FIRST,
     '- アイは use item=ender_eye（at 無し）で投げる。体が目玉の飛びを最大 10 秒追い、結果の eye に 向き（bearingDeg 0 北・90 東）・飛んだ距離・終わり方'
       + '（落ちた＝pickup で拾える／割れた）を返す。頭が帳簿に書き、live の「目玉の帳簿」に 交点・誤差の見積り・次に投げる場所の案 を出す。'
       + '交点が出るまでは、最後の線の横へ 200m 以上動いて投げる（2 本の線が離れて交わるほど誤差が小さい）。',
@@ -265,6 +270,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   end: [
     '## エンド',
+    SAFETY_FIRST,
     '- 着くのは黒曜石の台（100,49,0）。主島までは虚空のことが多い: 足元と両脇に壁を置く橋（go の canPlace）で渡る。縁では sneak。落ちたら戻れない。'
       + '足場から島へは go to=島の上のマス canPlace=["cobblestone"] maxPlace=100 seconds=120（ラボで 30 ブロックを 30 秒・置 14・被害 0。竜は島の上に止めて測定）。',
     '- 息の雲が地面に残る間、go は雲の中を通る道を引かない。他に道が無いと「go 止まった dead_end: 道の先が竜の息の雲の中で、避けると道が無い（雲は約 30 秒で消える）」を返す。'
