@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planFromSeeds } from '@shannon/mind';
-import type { FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
+import type { FcaBodyLifecycle, FcaModelOutput } from '../src/mind/action/fca/fcaPorts.js';
 import { TaskBodyRecoveryStore } from '../src/mind/action/taskRuntime/store/taskBodyRecoveryStore.js';
 import { forgetReplans, REPLAN, type ReplanLedger } from '../src/surfaces/minecraft/minecraftLlmcReplan.js';
 import { createReplanFlow, type ReplanSources } from '../src/surfaces/minecraft/minecraftLlmcReplanFlow.js';
@@ -20,9 +20,12 @@ afterEach(async () => {
   forgetStalls();
   for (const world of worlds.splice(0).reverse()) await world.close();
 });
-function world() {
-  for (const method of ['log', 'warn', 'info'] as const) vi.spyOn(console, method).mockImplementation(() => {});
-  const made = minecraftWorld();
+const logged: string[] = [];
+function world(options: Parameters<typeof minecraftWorld>[0] = {}) {
+  logged.length = 0;
+  vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => { logged.push(args.join(' ')); });
+  for (const method of ['warn', 'info'] as const) vi.spyOn(console, method).mockImplementation(() => {});
+  const made = minecraftWorld(options);
   worlds.push(made);
   return made;
 }
@@ -180,5 +183,42 @@ describe('the flow keeps the ledger before it asks', () => {
     await flow.run(signal);
     expect(asks).toHaveLength(1);
     expect(flow.ledger().total).toBe(1);
+  });
+});
+
+
+describe('a step held before its decision, after the ask, keeps the ask counted (Codex, 7th review)', () => {
+  /** A lifecycle that only runs the flow before the decision (`beforeDecision`, as `withReplan` does) and has nothing else to say. */
+  const lifecycle = (before: (signal: AbortSignal) => Promise<void>): FcaBodyLifecycle => ({ start() {}, revision: () => 1, context: () => ({ revision: 1, observation: null }),
+    guard: async () => true, toolSignal: (_name, parent) => parent, close: async () => {}, beforeDecision: before });
+
+  it('retries the held step from the counts its ports hold, not from the checkpoint it began with: the next step is held by the gap, nothing is asked again', async () => {
+    const asks: string[] = [];
+    const began: Array<ReplanLedger | null> = [];
+    let steps = 0;
+    const w: World = world({ ports: step => {
+      const first = steps++ === 0;
+      const saved = step.snapshot.checkpoint as { minecraftReplans?: unknown; minecraftReplanPending?: unknown } | null;
+      began.push((saved?.minecraftReplans as ReplanLedger | undefined) ?? null);
+      const keeper = new TaskBodyRecoveryStore(w.db);
+      const flow = createReplanFlow({ taskId: step.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending,
+        replanner: async () => { asks.push(`step ${steps}`); return { ops: [], why: '' }; }, clock: () => 1_000, sources, check: () => null, log: () => undefined,
+        persist: keys => keeper.saveKeys(step.taskId, step.id, keys) });
+      let ran = false;
+      return { checkpoint: () => flow.checkpoint(), executionAllowed: () => !(first && ran),
+        body: lifecycle(async signal => {
+          flow.note(stall);
+          await flow.run(signal);
+          ran = true;
+        }) };
+    } });
+    const api = w.startApi();
+    w.createTask(api);
+    w.connectBody(api, 'c1', 'complete');
+    await w.until(api, () => w.phase(api) === 'completed', 'the held step is retried and the task completes');
+    expect(logged.some(line => line.includes('held_retried'))).toBe(true);
+    expect(asks).toEqual(['step 1']);
+    expect(began[0]).toBeNull();
+    expect(began[1]).toMatchObject({ total: 1, nodes: { p1: 1 } });
   });
 });

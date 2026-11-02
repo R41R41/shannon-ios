@@ -269,7 +269,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     }
     // Held before its decision with nothing sent to the body or any outside tool (Minecraft run 8, 2026-10-14: held right after a
     // compaction, the task was paused as unknown and retired): the step is closed as `continue` and the task goes on. See below.
-    if (await retriedHeldStep(code, taskId, step, execution)) return;
+    if (await retriedHeldStep(code, taskId, step, execution, fresh)) return;
     // The provider refused the request itself (nothing ran, nothing was charged, an identical retry is refused again), or her history
     // could not be made to fit before the step's model call (a replay holds the same way; owner test 2026-10-13:
 // FCA_HISTORY_RECENT_LIMIT
@@ -311,18 +311,23 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
    * consumed, under its own lease (a lost lease cannot commit, and the step stays unknown as before). The compaction it committed
    * stays; the next step starts from it. At most `HELD_RETRIES` in a row: a normal commit resets the count (`fcaRunner.ts`).
    */
-  async function retriedHeldStep(code: string, taskId: string, step: TaskStep | null, execution: ActionExecution): Promise<boolean> {
-    if (!step || !heldBeforeAnyEffect(code, execution) || !retryHeldStep(step)) return false;
+  async function retriedHeldStep(code: string, taskId: string, step: TaskStep | null, execution: ActionExecution, fresh: () => Record<string, unknown>):
+    Promise<boolean> {
+    if (!step || !heldBeforeAnyEffect(code, execution) || !retryHeldStep(step, fresh)) return false;
     console.log(`Shannon FCA step held_retried task=${taskId} code=${code}`);
     await flushReceipts();
     return true;
   }
-  function retryHeldStep(step: TaskStep): boolean {
+  /**
+   * `fresh`: what the step's ports hold by now (a new plan asked for, a wait) stays with the retry, as for a provider's error: the step ran
+   * nothing outside, but its counts are made (Codex, 2026-11-03: the retry gave the ask for a new plan back to the limits).
+   */
+  function retryHeldStep(step: TaskStep, fresh: () => Record<string, unknown>): boolean {
     const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
     const retries = typeof prior.fcaHeldRetries === 'number' ? prior.fcaHeldRetries : 0;
     if (retries >= HELD_RETRIES || runtime.get(scopeKey, step.taskId)?.phase !== 'executing') return false;
     try {
-      const checkpoint = { ...prior, fcaHeldRetries: retries + 1 };
+      const checkpoint = { ...prior, ...fresh(), fcaHeldRetries: retries + 1 };
       return runtime.commitStep(step, { disposition: 'continue', history: [], consumedMessageIds: [], checkpoint }) !== null;
     } catch { return false; }
   }
