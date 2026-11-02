@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { makePlace, stamp } from './streamHarness.js';
 import { parseBroadcast, parseStartInput, parseControlInput } from '../src/surfaces/stream/streamParse.js';
 import { StreamConversation } from '../src/surfaces/stream/streamConversation.js';
+import { fakeJev } from '../scripts/stream-bench/fakeModels.js';
 import type { MouthLine } from '../src/surfaces/stream/streamMouth.js';
 
 const live = async (options: Parameters<typeof makePlace>[0] = {}) => {
@@ -185,4 +186,83 @@ it('公開会話の記録に実況の一言を入れず、視聴者との往復�
   const block = conversation.block();
   expect(block).toContain('好きな季節は？');
   expect(block).not.toContain('実況');
+});
+
+describe('終了と締めの受け渡し（2026-11-02 のレビュー）', () => {
+  const conversationOf = (p: { service: unknown }) => (p.service as { conversation: StreamConversation }).conversation;
+
+  it('締めが口にある間に終了しても、その再生完了で番組を終える。終了で公開会話も消す', async () => {
+    const p = await live(); await activity(p);
+    p.service.control({ action: 'program_close' });
+    await p.step(1);
+    expect(p.service.mouth.currentLine()?.kind).toBe('closing');
+    await p.service.end(p.id);
+    expect(conversationOf(p).block()).toBe('');
+    await p.drain();
+    expect(p.service.view().stream!.program).toMatchObject({ stage: 'closing', layout: 'ending', finished: true });
+    expect(p.service.view().stream!.program.completed).toContain('closing');
+  });
+
+  it('雑談の途中で終了したときの締めも、再生完了で番組を終える', async () => {
+    const p = await live(); await activity(p);
+    await p.service.end(p.id);
+    expect(p.service.mouth.currentLine()?.kind).toBe('closing');
+    await p.drain();
+    expect(p.service.view().stream!.program).toMatchObject({ finished: true, completed: ['opening', 'explanation', 'closing'] });
+  });
+
+  it('終了の締めを書いている間は再開も場面の移動も受けず、締めを二重に作らない', async () => {
+    let hold = false;
+    let release!: () => void;
+    const model = { generate: async () => {
+      if (hold) await new Promise<void>(r => { release = r; });
+      return { reply: '[happy|0.5|gentle] 今日はありがとう。' };
+    } };
+    const p = await live({ model: model as never }); await activity(p);
+    hold = true;
+    const ending = p.service.end(p.id);
+    while (!release) await new Promise(r => setImmediate(r));
+    expect(() => p.service.control({ action: 'resume' })).toThrow(expect.objectContaining({ code: 'STREAM_ENDING' }));
+    expect(() => p.service.control({ action: 'program_close' })).toThrow(expect.objectContaining({ code: 'STREAM_ENDING' }));
+    for (let i = 0; i < 5; i += 1) { p.clock.t += 6000; p.service.tick(); }
+    release();
+    await ending;
+    const lines = [p.service.mouth.currentLine(), ...p.service.mouth.waitingLines()].filter(line => line?.kind === 'closing');
+    expect(lines).toHaveLength(1);
+  });
+
+  it('答えた合成イベントは、次の生成でも視聴者の発言ではなく出来事として渡す', async () => {
+    const p = await live(); await activity(p);
+    p.service.ingest(p.id, [p.comment('メンバーになりました', { kind: 'membership', synthetic: true, roles: ['member'] })]);
+    await p.step(100); await p.drain();
+    p.service.ingest(p.id, [p.comment('今日はなにするの？')]);
+    await p.step(7000);
+    const context = p.recorded.at(-1)!.request.turnContext ?? '';
+    // Each comment is a JSON string inside the turn's JSON, so its quotes are escaped once.
+    expect(context).toContain('{\\"event\\":\\"メンバーになりました\\"}');
+    expect(context).not.toContain('\\"text\\":\\"メンバーになりました\\"');
+  });
+
+  it('断ったコメントの原文を、次の安全確認（Jev）へ再び送らない', async () => {
+    const states: string[] = [];
+    const inner = fakeJev();
+    const jev = { decide: (request: { state: unknown }) => { states.push(JSON.stringify(request.state)); return inner.decide(request as never); } };
+    const p = await live({ jev: jev as never }); await activity(p);
+    p.service.ingest(p.id, [p.comment('えっちな写真ないの？')]);
+    await p.step(100); await p.drain();
+    expect(p.service.view().comments.some(c => c.status === 'declined')).toBe(true);
+    p.service.ingest(p.id, [p.comment('今日はなにするの？')]);
+    await p.step(7000);
+    expect(states.at(-1)).toContain('今日はなにするの');
+    expect(states.at(-1)).not.toContain('えっちな写真');
+  });
+
+  it('YouTube の時刻が無い・未来のコメントは、公開時刻からの遅れに数えない', async () => {
+    const p = await live(); await activity(p);
+    p.service.ingest(p.id, [p.comment('好きな食べ物は？', { publishedAt: 'invalid' })]);
+    await p.step(100); await p.drain();
+    const measure = p.service.stats().measure;
+    expect(measure.commentToSoundMs.n).toBe(1);
+    expect(measure.publishedToSoundMs.n).toBe(0);
+  });
 });

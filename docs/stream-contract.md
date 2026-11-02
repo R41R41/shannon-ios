@@ -218,3 +218,5 @@ private leaks (must be 0: seeded owner-private facts and markers never appear in
 - 挨拶はgreeting、企画説明はtopic、締めはclosingとして既存の口を通る。説明済みはspoken receiptで確定し、失敗では確定しない。自動進行は挨拶→説明→企画まで。企画の期限では配信主へ判断を促し、YouTubeの開始終了は実行しない。
 - stats.measure に transportMs / selectionMs / gateMs / writerMs / publishedToSoundMs の n・median・p90・max を追加。従来のcommentToSoundMsは頭の受信起点、publishedToSoundMsはYouTubeのpublishedAt起点。単位はms、対象外・無効時刻は集計しない。
 - デスクトップ→OBSの /events に名前付きevent: programを追加。公開用programだけを送り、再接続時に現在値を再送。無名のframeと /audio は従来どおり。本文を含む公開資料は送らない。
+- 終了（`/end` または耳の `ended: true`）の締めを書いている間、`pause`・`resume`・`program_*` は 409 `STREAM_ENDING`（`stop_line`・`ignore` は従来どおり）。締めが既に口にあるときはその行の spoken receipt で、終了から書いた締めもその receipt で `program.finished` と `completed: closing` が立つ（2026-11-02）。
+- 公開会話の記録では、耳が作った出来事（`synthetic`、言葉の無い有料）を `{ "event": … }` として視聴者の発言と分ける。断ったコメントの原文は次の Jev の `recent` にも入れない。公開会話は終了で消す。YouTube の `publishedAt` が無い・未来のコメントは `publishedToSoundMs` に数えない。

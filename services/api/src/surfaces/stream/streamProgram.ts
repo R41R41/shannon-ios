@@ -73,8 +73,6 @@ export class StreamProgram {
       '挨拶では短く名乗る。企画説明では今日のお題と参加方法を伝える。雑談では同じお題を掘り下げる。締めでは話したことを振り返り、お礼を言う。',
     ].filter(Boolean).join('\n');
   }
-  clear(): void {
-    this.notes = '';
-    this.pending = null;
-  }
+  /** The public notes go with the end; a closing still in the mouth keeps its pending receipt. */
+  clear(): void { this.notes = ''; }
 }

@@ -168,7 +168,8 @@ export class StreamService {
     this.commentary?.stop();
     const closingInMouth = this.mouth.holds('closing');
     const finished = session.program.view.finished;
-    session.program.move('closing', this.now());
+    // A closing already in her mouth keeps its pending receipt, so that its spoken receipt still finishes the program after the end.
+    if (!closingInMouth) session.program.move('closing', this.now());
     session.program.view.layout = 'ending';
     session.program.view.finished = finished;
     if (!closingInMouth) {
@@ -179,6 +180,7 @@ export class StreamService {
       });
     }
     session.program.clear();
+    this.conversation.clear();
     session.view.phase = 'ended';
     session.view.endedAt = iso(this.now());
     session.endedMs = this.now();
@@ -241,6 +243,8 @@ export class StreamService {
   control(control: StreamControl): void {
     const session = this.live();
     if (!session) throw new StreamError(409, 'STREAM_NOT_LIVE');
+    // While the end is in progress nothing resumes her or moves the program (its closing is the end's); stopping a line still works.
+    if (session.ending && control.action !== 'stop_line' && control.action !== 'ignore') throw new StreamError(409, 'STREAM_ENDING');
     if (control.action === 'pause' || control.action === 'resume') session.view.paused = control.action === 'pause';
     else if (control.action === 'stop_line') stopStreamLine(this.mouth, this.ledger, (record, status) => this.give(record, status));
     else if (control.action === 'ignore') ignoreStreamViewer(this.mouth, this.ledger, control.commentId);
@@ -286,7 +290,7 @@ export class StreamService {
     try {
       this.mouth.tick();
       const session = this.live();
-      if (!session) return;
+      if (!session || session.ending) return;
       const now = this.now();
       this.ledger.expire(now);
       if (session.view.paused || !session.program.view.ready || session.program.view.finished) return;
@@ -317,7 +321,8 @@ export class StreamService {
   }
 
   private recentChat(count = 3): string[] {
-    return this.ledger.all().filter(record => !record.reaction && record.status !== 'ignored').slice(-count).map(record => record.text);
+    return this.ledger.all().filter(record => !record.reaction && record.status !== 'ignored' && record.status !== 'declined')
+      .slice(-count).map(record => record.text);
   }
 
   /** Comments taken up and given up: back to waiting once (the writer failed or left them out), else skipped. */
@@ -484,7 +489,7 @@ export class StreamService {
     }
     if (this.session?.view.phase !== 'ended') {
       const declined = line.commentIds.some(id => this.ledger.get(id)?.status === 'declined');
-      this.conversation.spoken(line, declined);
+      this.conversation.spoken(line, declined, new Set(line.commentIds.filter(id => this.ledger.get(id)?.event)));
       this.ownLines.push(line.text);
       if (this.ownLines.length > RECENT_LINES) this.ownLines.shift();
     }

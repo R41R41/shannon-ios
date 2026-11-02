@@ -57,8 +57,10 @@ export class StreamProgramRunner {
     if (id) program.expect(id, epoch);
   }
   async closing(session: Session, summary: { comments: number; answered: number; minutes: number }): Promise<void> {
+    const epoch = session.program.epoch;
     const line = await this.write(session, { kind: 'closing', summary }, 'closing', STREAM_CLOSINGS);
-    if (line) this.parts.put(line.reply, line.plan, 'closing');
+    const id = line ? this.parts.put(line.reply, line.plan, 'closing') : null;
+    if (id) session.program.expect(id, epoch);
   }
   private async write(session: Session, purpose: WriterPurpose, kind: StreamLineKind, fixed: readonly string[])
     : Promise<{ reply: CheckedStreamReply; plan: StreamLinePlan } | null> {

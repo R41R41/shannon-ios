@@ -19,7 +19,7 @@ export function recordSpoken(ledger: StreamLedger, measure: StreamMeasure, count
       }
       if (!Number.isFinite(startedAt)) continue;
       record.soundAtMs = startedAt;
-      measure.note(measure.publishedToSoundMs, startedAt - record.publishedMs);
+      if (record.publishedKnown) measure.note(measure.publishedToSoundMs, startedAt - record.publishedMs);
       measure.note(measure.commentToSoundMs, startedAt - record.receivedMs);
     }
 }
