@@ -34,6 +34,22 @@ function foodItems(observation: BodyObservation | null): { text: string; points:
   }
   return out.sort((a, b) => b.points - a.points);
 }
+/**
+ * The effects the body reports on itself (`world.effects`: a name, and the time left in seconds or ticks), as 「weakness 残り 23 秒」, five at most, and
+ * 「燃えている」 when it is on fire: weakness takes the damage of the sword and a burning body loses health (the coordinator's list for 11/4, item 6).
+ * Nothing when the frame has none.
+ */
+export function effectWords(w: Record<string, unknown>): string[] {
+  const list = Array.isArray(w.effects) ? w.effects : [];
+  const named = list.flatMap(raw => {
+    const effect = rec(raw), name = typeof effect?.name === 'string' ? effect.name : typeof effect?.id === 'string' ? effect.id : null;
+    if (!effect || !name) return [];
+    const ticks = finite(effect.remainingTicks) ?? finite(effect.durationTicks), seconds = finite(effect.seconds) ?? (ticks === null ? null : ticks / 20);
+    return [seconds === null ? name.replace(/^minecraft:/u, '') : `${name.replace(/^minecraft:/u, '')} 残り ${Math.round(seconds)} 秒`];
+  });
+  return [...named.slice(0, 5), ...w.onFire === true ? ['燃えている'] : []];
+}
+
 /** 「体力 6.4/20・満腹 11/20・食べ物 bread×1（+11 点）」. A part the frame does not say is left out; no food is said (「食べ物 無し」)
  * only when the frame lists a pack. */
 export function vitalsLine(observation: BodyObservation | null): string | null {
@@ -43,7 +59,8 @@ export function vitalsLine(observation: BodyObservation | null): string | null {
   const flesh = carriedItemCounts(w, observation?.facts).get('rotten_flesh') ?? 0;
   return [...health !== null ? [`体力 ${round1(health)}/20`] : [], ...hunger !== null ? [`満腹 ${round1(hunger)}/20`] : [],
     ...food.length ? [`食べ物 ${food.slice(0, 5).map(item => item.text).join('・')}`] : listed ? [flesh ? '通常の食べ物 無し' : '食べ物 無し'] : [],
-    ...flesh ? [`非常食 rotten_flesh×${flesh}（1個で満腹+4、空腹の効果の恐れ。通常の食料点には含めない）`] : []].join('・');
+    ...flesh ? [`非常食 rotten_flesh×${flesh}（1個で満腹+4、空腹の効果の恐れ。通常の食料点には含めない）`] : [],
+    ...effectWords(w).length ? [`効果 ${effectWords(w).join('・')}`] : []].join('・');
 }
 
 const FOOD_ANIMAL = new Set(['cow', 'pig', 'chicken', 'rabbit', 'mooshroom', 'sheep']);
