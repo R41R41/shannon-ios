@@ -1,4 +1,5 @@
 import { carried } from './minecraftConditions.js';
+import { BODY_SMELTING_INPUT } from './minecraftSmelting.generated.js';
 
 /**
  * A small table of recipes (amendment A-10 2): what a `make` or a `craft` hand uses up, so that an act that would spend what a
@@ -58,7 +59,8 @@ export function recipeOf(item: string): Recipe | null {
   const id = idOf(item);
   if (id === 'planks' || id.endsWith('_planks')) return { yields: 4, needs: [{ item: 'log', count: 1 }] };
   if (id === 'bed' || id.endsWith('_bed')) return FIXED.bed!;
-  const fixed = FIXED[id];
+  // The name is the model's: only the table's own entries, never `constructor` or another inherited property.
+  const fixed = Object.hasOwn(FIXED, id) ? FIXED[id] : undefined;
   if (fixed) return fixed;
   const tool = /^(wooden|stone|iron|golden|diamond)_(pickaxe|axe|sword|shovel|hoe)$/u.exec(id);
   if (tool) {
@@ -72,6 +74,9 @@ export function recipeOf(item: string): Recipe | null {
      item: 'planks', count: 3 }] };
   return null;
 }
+
+/** What the body smelts `item` from (`iron_ingot` from `raw_iron`), or undefined: a name the model wrote is read as the table's own entry only. */
+export const smeltingInputOf = (item: string): string | undefined => Object.hasOwn(BODY_SMELTING_INPUT, item) ? BODY_SMELTING_INPUT[item] : undefined;
 
 /** The kind a name stands for in the table (`oak_planks` is `planks`), for the pack's counts and the chain. */
 const kindOf = (item: string): string => item === 'planks' || item.endsWith('_planks') ? 'planks' : item;

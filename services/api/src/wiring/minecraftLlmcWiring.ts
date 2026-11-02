@@ -1,5 +1,7 @@
 import { createWorksiteMemory } from '../surfaces/minecraft/minecraftWorksiteMemory.js';
-import { purposeEvidence, travelEvidence, explorationEvidence, observedWait, createWaitLedger } from '../surfaces/minecraft/minecraftPurposeProgress.js';
+import {
+  purposeEvidence, travelEvidence, explorationEvidence, observedWait, createWaitLedger, readActiveWait,
+} from '../surfaces/minecraft/minecraftPurposeProgress.js';
 import { bodyHoldOf,withResend,withIncident,withStalls } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
@@ -66,9 +68,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const journey = createMinecraftJourney((step.snapshot.checkpoint as { minecraftJourney?: unknown } | null)?.minecraftJourney);
   const endgame = createEndgame(step.snapshot.checkpoint);
   const waits = createWaitLedger((step.snapshot.checkpoint as { minecraftWaitDeadlines?: unknown } | null)?.minecraftWaitDeadlines);
-  const savedStalls = step.snapshot.checkpoint as { minecraftStalls?: unknown; minecraftActiveWait?: { node: string; until: number } } | null;
+  const savedStalls = step.snapshot.checkpoint as { minecraftStalls?: unknown; minecraftActiveWait?: unknown } | null;
   restoreStalls(step.taskId, savedStalls?.minecraftStalls);
-  let activeWait = savedStalls?.minecraftActiveWait;
+  let activeWait = readActiveWait(savedStalls?.minecraftActiveWait);
   let waitUntil: number | undefined;
   const activeClock = () => Date.now() - (holds?.heldMs?.(step.taskId) ?? 0);
   const bodyId = () => control.store.body(step.taskId) ?? '';

@@ -2,8 +2,7 @@ import type { PlanNode, PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { acquired, carried, doneFacts } from './minecraftConditions.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
-import { materialsOf } from './minecraftLlmcRecipes.js';
-import { BODY_SMELTING_INPUT } from './minecraftSmelting.generated.js';
+import { materialsOf, smeltingInputOf } from './minecraftLlmcRecipes.js';
 
 export const PLAN_TARGET_SCHEMA = { type: 'object', additionalProperties: false, required: ['item', 'count'], properties: {
   item: { type: 'string', pattern: '^[a-z][a-z0-9_]{0,63}$' }, count: { type: 'integer', minimum: 1, maximum: 99999 } },
@@ -65,7 +64,7 @@ export function targetRequirements(node: PlanNode | undefined, counts: ReadonlyM
   for (const part of recipe.spends) {
     const shortage = Math.max(0, part.count - carried(free, part.item));
     if (!shortage) continue;
-    const input = BODY_SMELTING_INPUT[part.item];
+    const input = smeltingInputOf(part.item);
     const smelt = input ? Math.min(shortage, carried(free, input)) : 0;
     if (smelt) needs.push(`${input}×${smelt}を精錬→${part.item}（炉と燃料の確認が必要）`);
     if (shortage > smelt) needs.push(`${part.item} あと${shortage - smelt}`);

@@ -2,6 +2,7 @@ import { readActResult, type ActPos } from '../../contracts/minecraftActContract
 import { deathBetween, type DeathCounter } from '../../contracts/continueContract.js';
 import { onRedecideNote } from '../../infra/decisionRecords/decisionRecordNotes.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { EXPLORE_KEYS, GAINS_KEPT, LIST_KEPT, TRAVEL_KEYS, readSavedStalls } from './minecraftLlmcStallsSaved.js';
 
 /**
  * Amendment A-12 (owner's decision 2026-10-29: 「新しい版だけ・詰まったら止めて直す」): the stalls the head finds itself, beside the ones the body
@@ -120,7 +121,7 @@ export function movedOn(before: ProgressSnapshot, after: ProgressSnapshot): bool
     || Object.entries(after.inventory ?? {}).some(([name, count]) => count > (before.inventory?.[name] ?? 0));
 }
 
-interface TaskStalls {
+export interface TaskStalls {
   quiet: boolean;
   node: { snapshot: ProgressSnapshot; since: number } | null;
   spot: { at: ActPos; stops: number } | null;
@@ -138,17 +139,12 @@ const tasks = new Map<string, TaskStalls>();
 /** The task checkpoint survives a worker restart; it does not grant another retry window. */
 export function stallsCheckpoint(taskId: string): { minecraftStalls: unknown } {
   const state = tasks.get(taskId);
-  return { minecraftStalls: state ? { ...state, gains: [...state.gains], version: 1 } : null };
+  return { minecraftStalls: state ? { ...state, gains: [...state.gains].slice(-GAINS_KEPT), version: 1 } : null };
 }
 export function restoreStalls(taskId: string, saved: unknown): void {
-  if (tasks.has(taskId) || !saved || typeof saved !== 'object') return;
-  const value = saved as TaskStalls & { version?: number; gains: string[] };
-  if (value.version !== 1 || typeof value.quiet !== 'boolean' || !Array.isArray(value.gains)
-    || !value.gains.every(id => typeof id === 'string') || !Number.isSafeInteger(value.waits)
-    || !Number.isSafeInteger(value.refusals)) return;
-  if (value.node && (!Number.isFinite(value.node.since) || !value.node.snapshot || typeof value.node.snapshot.node !== 'string')) return;
-  const { version: _, ...state } = value;
-  tasks.set(taskId, { ...state, gains: new Set(value.gains) });
+  if (tasks.has(taskId)) return;
+  const state = readSavedStalls(saved);
+  if (state) tasks.set(taskId, state);
 }
 const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, explained: null, seen: null, waits: 0,
   gains: new Set(), refusals: 0, deaths: null });
@@ -203,12 +199,29 @@ const posOf = (value: unknown): ActPos | null => {
  * task's running time that stands still while it is held (the wall clock
  * less the time held in all, `IncidentHoldPort.heldMs`); the node must not have moved on for `STALL.nodeMs` of it.
  */
+/** The evidence of the objective a node has shown, each value only rising. The cells the body looked in (`explore:`) and the destinations it
+ * went to (`travel:`) are remembered up to `EXPLORE_KEYS` and `TRAVEL_KEYS`, each kind on its own so that neither starves the other, the oldest
+ * forgotten first; what the body saw again is the newest. The newest always counts. The keys of the objective itself (`have:`, `material:`,
+ * `approach:`, `food`) are never forgotten. */
+function mergedPurpose(before: Readonly<Record<string, number>> | undefined, after: Readonly<Record<string, number>>): Record<string, number> {
+  const merged: Record<string, number> = {};
+  for (const [key, value] of Object.entries(before ?? {})) {
+    if (!(key in after)) merged[key] = value;
+  }
+  for (const [key, value] of Object.entries(after)) {
+    merged[key] = Math.max(value, before?.[key] ?? value);
+  }
+  for (const [kind, limit] of [['explore:', EXPLORE_KEYS], ['travel:', TRAVEL_KEYS]] as const) {
+    const kept = Object.keys(merged).filter(key => key.startsWith(kind));
+    for (const key of kept.slice(0, Math.max(0, kept.length - limit))) delete merged[key];
+  }
+  return merged;
+}
 function mergeProgress(before: ProgressSnapshot | undefined, snapshot: ProgressSnapshot): ProgressSnapshot {
   if (!before || before.node !== snapshot.node) return snapshot;
-  const purpose = snapshot.purpose ? Object.fromEntries(Object.entries({ ...before.purpose, ...snapshot.purpose })
-    .slice(0, 256).map(([key, value]) => [key, Math.max(value, before.purpose?.[key] ?? value)])) : undefined;
-  return { ...snapshot, ...(purpose ? { purpose } : {}),
-    externalWork: [...new Set([...(before.externalWork ?? []), ...(snapshot.externalWork ?? [])])] };
+  const purpose = snapshot.purpose ? mergedPurpose(before.purpose, snapshot.purpose) : undefined;
+  const work = [...new Set([...(before.externalWork ?? []), ...(snapshot.externalWork ?? [])])];
+  return { ...snapshot, ...(purpose ? { purpose } : {}), externalWork: work.slice(-LIST_KEPT) };
 }
 export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeMs: number): Stall | null {
   const state = taskOf(taskId);
@@ -223,7 +236,11 @@ export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeM
     state.node = { snapshot, since: activeMs };
     return null;
   }
+  const waitedUntil = state.node.snapshot.waitUntil;
   state.node.snapshot = snapshot;
+  // An observed wait that is over before its deadline did what it was for (the day came, the furnace finished): the time it took is not
+  // idle time, and the node's window starts again from here. A wait that ran past its deadline did not: it is held.
+  if (waitedUntil !== undefined && snapshot.waitUntil === undefined && activeMs < waitedUntil) state.node.since = activeMs;
   if (snapshot.waitUntil !== undefined && activeMs < snapshot.waitUntil) return null;
   const idle = activeMs - state.node.since;
   if (idle < STALL.nodeMs) return null;
