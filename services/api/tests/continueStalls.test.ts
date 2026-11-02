@@ -356,6 +356,14 @@ describe('death: a rise of the body\'s death counter', () => {
     expect(noteDeath(TASK, counter(2))).toBeNull();
     expect(noteDeath(TASK, counter(3))).toMatchObject({ kind: 'death' });
   });
+
+  it('run 59 leg 2: a count told from another entry across a hold (0, then 3 in the same epoch) is the baseline after the resume, not a death', () => {
+    noteDeath(TASK, counter(0, 'de-x'));
+    resumeStalls(TASK);
+    expect(noteDeath(TASK, counter(3, 'de-x'))).toBeNull();
+    expect(noteDeath(TASK, counter(3, 'de-x'))).toBeNull();
+    expect(noteDeath(TASK, counter(4, 'de-x'))).toMatchObject({ kind: 'death', key: 'de-x-4' });
+  });
 });
 
 describe('a task that found a stall counts nothing more until it is resumed', () => {

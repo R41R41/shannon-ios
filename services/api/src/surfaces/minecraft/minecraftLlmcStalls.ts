@@ -175,12 +175,14 @@ function found(state: TaskStalls, stall: Stall): Stall {
   Object.assign(state, fresh(), { quiet: true, deaths, seen, gains });
   return stall;
 }
-/** The task was resumed from a hold (or has begun again): it counts again, from nothing; the body's death counter
- * it knew stays (the
- * death it held for is not one again). */
+/** The task was resumed from a hold (or has begun again): it counts again, from nothing. The body's death counter is
+ * taken again from its first reading after the resume (the death it held for is in that reading, so it is not one again).
+ * Run 59 leg 2: across the hold the body logged in again and told its count from another entry of its life file (0, then 3 in
+ * the same epoch); the head kept the 0 and held the task for a death that never happened. Nothing dies while a hold keeps the
+ * world frozen and the body logged out, so no rise across a hold is a death. */
 export function resumeStalls(taskId: string): void {
   const state = taskOf(taskId);
-  Object.assign(state, fresh(), { deaths: state.deaths, seen: state.seen, gains: state.gains });
+  Object.assign(state, fresh(), { deaths: null, seen: state.seen, gains: state.gains });
 }
 /** Whether the task has found a stall and not been resumed since. */
 export function stallQuiet(taskId: string): boolean { return taskOf(taskId).quiet; }
