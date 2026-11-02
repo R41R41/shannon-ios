@@ -120,8 +120,8 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     expect(candidateAct({ hands: ['dig 1,0,0 rel', 'wait 30'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand', { urgent: true }).guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 5'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
-    expect(V2_ALWAYS).toContain('夜待ち・焼き待ちより、安全な前提作業・帰路を先に進める');
-    expect(V2_ALWAYS).toContain('wait だけの act は、有用な手を選べない時だけで、why に待つ対象と理由を書く');
+    expect(V2_ALWAYS).toContain('焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める');
+    expect(V2_ALWAYS).toContain('wait だけの act は夜・回復の待ちで他に手が無い時だけ、why に待つ対象と理由');
   });
 });
 
