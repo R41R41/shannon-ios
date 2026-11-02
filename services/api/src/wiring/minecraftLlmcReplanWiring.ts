@@ -1,9 +1,10 @@
-import { applyPlanUpdate, type PlanTree, type PlanUpdate } from '@shannon/mind';
+import { applyPlanUpdate, type PlanKind, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../contracts/bodyControlContract.js';
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import { failureStops, unattendedFailureStops } from '../mind/action/fca/fcaFailureLadder.js';
 import type { FcaStepPorts } from '../mind/action/fca/fcaStepPorts.js';
 import { readinessParts, type LlmcBodyParts } from '../surfaces/minecraft/minecraftLlmcBodyFacts.js';
+import { strongStage } from './minecraftLlmcConfiguration.js';
 import { stageTextsForKind } from '../surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneFacts, doneStatusWords, parseDoneWhen, predicateHolds } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
@@ -92,6 +93,10 @@ export interface Unheld {
   flow: ReplanFlow;
   /** The plan's current node now (what a decision's start reads to tell that the body got out of a stalled node). */
   current(): string | null;
+  /** The strong model's stage of the plan now (`end`, `dragon`), or null. */
+  stage(): PlanKind | null;
+  /** R3-1 (3): the step is to close (a stall, a stronger stage): the reserve is taken off and the step ends when its decided items have run. */
+  close(reason: string): void;
   checkpoint(): Record<string, unknown>;
 }
 
@@ -117,15 +122,19 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
     } });
   const watch = createStallWatch({ taskId: parts.taskId, observe: parts.observe, tree: parts.plan.tree, running: () => parts.queue.runningInput?.() ?? null,
     activeClock: parts.activeClock, waits: parts.waits, ...(saved?.minecraftActiveWait ? { savedWait: saved.minecraftActiveWait } : {}),
-    raise: stall => flow.note(stall), log: parts.log });
+    raise: stall => { flow.note(stall);
+      parts.queue.closeStep?.('stall'); }, log: parts.log });
   parts.queue.onRan(watch.noteQueueResult);
   const current = (): string | null => workingNode(parts.taskId, parts.plan.tree().current) ?? parts.plan.tree().current ?? null;
-  return { watch, flow, current, checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
+  const stage = (): PlanKind | null => strongStage({ fcaPlanTree: parts.plan.tree() });
+  return { watch, flow, current, stage, close: reason => parts.queue.closeStep?.(reason), checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
 }
 
 /** The lifecycle of an unheld task: the look at each result and before each decision, and the plan made again at a decision's start. */
-export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'watch' | 'flow' | 'current'> | null): FcaBodyLifecycle {
+export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'watch' | 'flow' | 'current'> & Partial<Pick<Unheld, 'stage' | 'close'>> | null): FcaBodyLifecycle {
   if (!unheld) return lifecycle;
+  // The step's model was chosen from the stage it began in: a stronger stage than that closes the step, and the next begins with the strong model.
+  const began = unheld.stage?.() ?? null;
   const before = lifecycle.beforeDecision?.bind(lifecycle);
   const noted = lifecycle.noteResult?.bind(lifecycle);
   return Object.assign(lifecycle, {
@@ -133,6 +142,8 @@ export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'wa
       await before?.(signal);
       unheld.watch.look();
       unheld.flow.escaped(unheld.current());
+      const stage = unheld.stage?.() ?? null;
+      if (stage && stage !== began) unheld.close?.('stage');
       await unheld.flow.run(signal);
     },
     noteResult(...args: Parameters<NonNullable<FcaBodyLifecycle['noteResult']>>) {

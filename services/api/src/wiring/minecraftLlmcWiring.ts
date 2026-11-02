@@ -124,6 +124,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
 // (the incident port) for the task.
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId, step: step.id,
     holdPending: () => stalls?.look() ?? false,
+    // R3-1 (4): a reserve item only for a request nobody watches (no hold on failure, no stall watch of a held task).
+    reserveAllowed: () => !holdOn && stalls === null,
     context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log,
     applyLedger: input => recordedLedger(plan.port, input, { run: step.taskId, headBoot: control.headBoot(), record: row => noteStageRow(
       row) }), snapshotUses: ids => snapshotUses(plan.port.tree().promises, ids),
