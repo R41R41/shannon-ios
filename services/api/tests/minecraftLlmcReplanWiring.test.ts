@@ -1,0 +1,104 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
+import type { FcaBodyLifecycle } from '../src/mind/action/fca/fcaPorts.js';
+import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
+import { forgetReplans, withReplanInbox } from '../src/surfaces/minecraft/minecraftLlmcReplan.js';
+import { forgetStalls } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
+import type { LlmcQueue, RanListener } from '../src/surfaces/minecraft/minecraftLlmcQueueState.js';
+import { createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
+import { doneClaimProblem, unheldReplan, withReplan } from '../src/wiring/minecraftLlmcReplanWiring.js';
+
+afterEach(() => {
+  forgetReplans();
+  forgetStalls();
+});
+
+const frame = (world: object): BodyObservation => ({ connected: true, state: { world }, facts: {}, bodyId: 'b', sequence: 1, stateAt: new Date(0).toISOString() }) as unknown as BodyObservation;
+const idle = frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, health: 20, food: 20, inventory: [{ name: 'oak_log', count: 2 }] });
+const dragon = seedPlan('エンドラを討伐して')!;
+const tree = { ...dragon, current: 'p1.1' };
+const signal = new AbortController().signal;
+
+function setup(over: { held?: boolean; reply?: () => Promise<unknown> } = {}) {
+  const clock = { now: 0 };
+  const listeners: RanListener[] = [];
+  const briefs: string[] = [];
+  const lines: string[] = [];
+  const queue = { onRan: (listener: RanListener) => { listeners.push(listener); }, lines: () => ['▶ q1: go'], runningInput: () => null } as unknown as LlmcQueue;
+  const unheld = unheldReplan({ held: over.held ?? false, taskId: 'uw', goal: 'エンドラを討伐して', createdAt: new Date(0).toISOString(), checkpoint: null,
+    replanner: async (_system, brief) => {
+      briefs.push(brief);
+      return over.reply ? over.reply() : { ops: [{ op: 'caution', text: '木の近くの敵に気をつける' }], why: '木の節に注意を足した' };
+    },
+    observe: () => idle, plan: { tree: () => tree, view: () => null }, bodyParts: { plan: () => undefined, planView: () => null, planTree: () => tree, endgame: createEndgame(null) },
+    queue, waits: createWaitLedger(null), activeClock: () => clock.now, heldMs: () => 0, validate: () => null, log: line => lines.push(line) });
+  return { clock, listeners, briefs, lines, unheld };
+}
+
+describe('the look and the plan made again for a task that is not held, wired', () => {
+  it('is not made for a task held on a failure (it has its own look)', () => {
+    expect(setup({ held: true }).unheld).toBeNull();
+  });
+
+  it('finds a stall by the clock, asks once with a brief that names the node and the pack, and hands the answer to the plan\'s next read', async () => {
+    const { clock, briefs, lines, unheld } = setup();
+    unheld!.watch.look();
+    clock.now = 130_000;
+    expect(unheld!.watch.look()).toBe(true);
+    await unheld!.flow.run(signal);
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0]).toContain('止まった節: p1.1');
+    expect(briefs[0]).toContain('持ち物: oak_log×2');
+    expect(briefs[0]).toContain('▶p1.1');
+    expect(lines.some(line => line.includes('replan task=uw node=p1.1 kind=node_stalled outcome=changed ops=1'))).toBe(true);
+    const taken = withReplanInbox({ take: () => null }).take('uw', tree)!;
+    expect(taken.tree.nodes.find(node => node.id === 'p1.1')!.caution).toEqual(['木の近くの敵に気をつける']);
+    expect(taken.note).toContain('木の節に注意を足した');
+    expect(unheld!.checkpoint()).toMatchObject({ minecraftReplans: { v: 1, total: 1, nodes: { 'p1.1': 1 } } });
+  });
+
+  it('watches the queue\'s results too (a result is a look), and puts the wait it saved into the checkpoint', () => {
+    const { clock, listeners, unheld } = setup();
+    expect(listeners).toHaveLength(2);
+    clock.now = 10_000;
+    listeners[1]!({ call: { id: 'c1', name: 'mc.act', input: { hands: [{ do: 'wait' }] } }, why: 'x' } as never, { ok: true, text: 'x' } as never, undefined);
+    expect(unheld!.checkpoint()).toHaveProperty('minecraftActiveWait');
+  });
+
+  it('works inside the lifecycle: a look at each decision\'s start and result, and the plan made again before the decision', async () => {
+    const { clock, briefs, unheld } = setup();
+    const calls: string[] = [];
+    const base = { async beforeDecision() { calls.push('before'); }, noteResult() { calls.push('noted'); } } as unknown as FcaBodyLifecycle;
+    const wrapped = withReplan(base, unheld);
+    clock.now = 1_000;
+    wrapped.noteResult!({ name: 'mc.act', input: {} } as never, { ok: true, text: '' } as never, 10);
+    clock.now = 140_000;
+    await wrapped.beforeDecision!(signal);
+    expect(calls).toEqual(['noted', 'before']);
+    expect(briefs).toHaveLength(1);
+    expect(withReplan(base, null)).toBe(base);
+  });
+
+  it('says nothing when the strong model\'s answer cannot be used, and counts the attempt', async () => {
+    const { clock, unheld } = setup({ reply: async () => 'not an answer' });
+    unheld!.watch.look();
+    clock.now = 130_000;
+    unheld!.watch.look();
+    await unheld!.flow.run(signal);
+    expect(unheld!.flow.ledger().total).toBe(1);
+    expect(unheld!.flow.ledger().last[0]).toMatchObject({ outcome: 'refused' });
+    expect(withReplanInbox({ take: () => null }).take('uw', tree)).toBeNull();
+  });
+});
+
+describe('what the strong model may not close', () => {
+  it('refuses a node given as done whose own observed condition does not hold, and lets one that holds (or has none) through', () => {
+    const before = tree;
+    const claim = (id: string) => ({ ...before, nodes: before.nodes.map(node => node.id === id ? { ...node, state: 'done' as const } : node) });
+    const world = frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: [{ name: 'oak_log', count: 9 }] });
+    expect(doneClaimProblem(before, claim('p1.1'), world)).toBeNull();
+    expect(doneClaimProblem(before, claim('p1.3'), world)).toContain('p1.3');
+    expect(doneClaimProblem(before, claim('p1.3'), null)).toBeNull();
+  });
+});
