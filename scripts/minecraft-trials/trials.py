@@ -54,7 +54,8 @@ SCOUT = 'trial_scout'
 MARK = '.shannon-trial-world'
 BODY = 'I_am_Shannon'
 IOS = os.path.join(HOME, 'shannon-ios')
-DB = os.path.join(HOME, 'shannon-ios-data', 'shannon.sqlite')
+BODY_DIR = os.path.join(HOME, 'Shannon-current')
+DB =os.path.join(HOME, 'shannon-ios-data', 'shannon.sqlite')
 NODE = os.path.join(HOME, 'shannon-ios-runtime', 'bin', 'node')
 API_ENV = os.path.join(HOME, '.config', 'shannon-ios', 'api.env')
 ENV_BACKUPS = os.path.join(HOME, 'shannon-ios-data', 'deploy-backups')
@@ -69,6 +70,8 @@ PREFLIGHT_POLL = 3
 DIMENSION_NAMES = {'overworld': 'minecraft:overworld', 'nether': 'minecraft:the_nether', 'end': 'minecraft:the_end'}
 PROD_LOCK = os.path.join(HOME, '.cache', 'minebot-lab', 'prod.lock')     # `flock` it for as long as shannon-home is yours (deploy restarts, real runs, this)
 PARTIAL_EVERY = 20           # seconds between the saves of a running trial: the VM is a Spot machine and may stop under it
+STOP_FILE = os.path.join(HOME, '.cache', 'minebot-lab', 'trials.stop')   # `touch` it and the running trial ends at its next poll (cancel, logout, restore); `run` refuses to start while it exists
+MAX_SECTION_YEN = None       # --max-section-yen: a ceiling over every section's capYen (the coordinator's window rule: at most ¥500 a section)
 
 
 def settled(row):
@@ -1144,7 +1147,55 @@ def step_unknown_codes(task_id, since_iso):
 
 
 def section_cap(section, cfg):
-    return section.get('capYen', cfg['trialCapYen'])
+    cap = section.get('capYen', cfg['trialCapYen'])
+    return min(cap, MAX_SECTION_YEN) if MAX_SECTION_YEN else cap
+
+
+def stop_requested():
+    return os.path.exists(STOP_FILE)
+
+
+def deployed_builds():
+    """The short revisions the production services run now: the head (~/shannon-ios) and the body (~/Shannon-current). A trial tests exactly these; a deploy between trials shows."""
+    out = {}
+    for key, folder in (('head', IOS), ('body', BODY_DIR)):
+        try: out[key] = subprocess.run(['git', '-C', folder, 'rev-parse', '--short=7', 'HEAD'], capture_output=True, text=True, timeout=10).stdout.strip() or None
+        except (OSError, subprocess.SubprocessError): out[key] = None
+    return out
+
+
+def stall_tail(task_id, keep=8):
+    """What the task was doing when it stopped: the last steps of its history (the head's tool call with its `why`, and what came back, errors marked), the plan's
+    progress from the last system message that carries one. For the owners of the body and the head: where it stuck, in the words the head itself read."""
+    with db() as c:
+        rows = c.execute('SELECT entries_json FROM fca_task_history WHERE task_id=? ORDER BY sequence DESC LIMIT 6', (task_id,)).fetchall()
+    steps, plan = [], None
+    for (entries,) in rows:                                   # newest first; each row's items are in order
+        try: items = json.loads(entries)
+        except ValueError: continue
+        part_steps = []
+        for item in items:
+            content = item.get('content')
+            if isinstance(content, str):
+                if plan is None and content.startswith('{"plan"'):
+                    try:
+                        p = json.loads(content).get('plan') or {}
+                        plan = {'done': p.get('done'), 'next': (p.get('next') or [None])[0]}
+                    except ValueError: pass
+                continue
+            for part in content or []:
+                if not isinstance(part, dict): continue
+                kind = part.get('type')
+                if item.get('role') == 'assistant' and kind == 'tool_use':
+                    args = part.get('input') or {}
+                    part_steps.append({'use': part.get('name'), 'hands': args.get('hands'), 'why': str(args.get('why', ''))[:120]})
+                elif kind == 'tool_result':
+                    body = part.get('content')
+                    text = body if isinstance(body, str) else ' '.join(str(b.get('text', '')) for b in (body or []) if isinstance(b, dict))
+                    part_steps.append({'result': ('ERR ' if part.get('is_error') else '') + re.sub(r'\s+', ' ', text)[:320]})
+        steps = part_steps + steps
+        if len(steps) >= keep: break
+    return {'plan': plan, 'last': steps[-keep:]}
 
 
 def needs_sites(section):
@@ -1178,7 +1229,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     kinds = supply_kinds(section)
     result = {'trial': trial_id, 'batch': batch, 'section': section['id'], 'sectionName': section['name'], 'seedKey': seed_key,
               'seed': facts.get('seed'), 'targetSeconds': section['targetSeconds'], 'limitMinutes': section['limitMinutes'],
-              'capYen': cap, 'startedAt': now_iso(), 'ok': False, 'reason': None, 'seconds': None, 'milestones': {},
+              'capYen': cap, 'startedAt': now_iso(), 'builds': deployed_builds(), 'ok': False, 'reason': None, 'seconds': None, 'milestones': {},
               'supplied': bool(section.get('supplied', kinds)), 'supplyKinds': kinds, 'ownerOk': owner_ok,
               'prediction': section.get('prediction')}
     if not os.path.exists(pristine):
@@ -1274,6 +1325,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
             paused_since = None
         if row.get('yen', 0) >= cap - 1: reason = 'budget'; break
         if elapsed >= section['limitMinutes'] * 60: reason = 'time_limit'; break
+        if stop_requested(): reason = 'stopped_by_file'; break
         time.sleep(cfg['pollSeconds'])
     elapsed = time.monotonic() - t0
     log(f'trial {trial_id}: {reason} at {elapsed:.0f} s; milestones {latched}')
@@ -1298,6 +1350,9 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     cleanup.append(f'settled={settled(row)} status={row.get("status")}/{row.get("execState")}')
     result['cleanup'] = cleanup
     result['stepUnknown'] = step_unknown_codes(task_id, result['startedAt'])
+    try: result['stall'] = stall_tail(task_id)
+    except Exception as error:   # noqa: BLE001 - a history we cannot read must not lose the trial's result
+        result['stall'] = {'error': f'{type(error).__name__}: {error}'[:160]}
     result.update({'ok': reason == 'reached', 'reason': reason, 'seconds': end_seconds(section, latched) if reason == 'reached' else None,
                    'elapsed': round(elapsed, 1), 'milestones': latched, 'firstSeen': first_seen, 'maxCounts': maxima,
                    'missing': [m['name'] for m in section['milestones'] if m.get('end') and m['name'] not in latched],
@@ -1363,10 +1418,12 @@ def resolve_model(asked, sections):
 
 
 def cmd_run(args):
+    global MAX_SECTION_YEN
     cfg = config()
     problems = validate_sections(cfg)
     if problems: raise Stop('sections.json: ' + '; '.join(problems))
     sections = {str(s['id']): s for s in cfg['sections']}
+    if stop_requested(): raise Stop(f'{STOP_FILE} exists (someone asked the trials to stop, or one did): remove it when the way is free again')
     if args.resume:       # the plan, the model, the cap and the owner's word come from the batch that was cut off (a Spot VM may stop under a batch)
         batch = args.resume
         doc = load_json(os.path.join(RESULTS, batch, 'plan.json'))
@@ -1375,6 +1432,7 @@ def cmd_run(args):
         args.model = args.model or doc.get('model')
         args.owner_ok_supply = args.owner_ok_supply or doc.get('ownerOk')
         args.batch_cap_yen = args.batch_cap_yen or doc.get('batchCapYen')
+        args.max_section_yen = getattr(args, 'max_section_yen', None) or doc.get('maxSectionYen')
         args.dry_run = args.dry_run or bool(doc.get('dryRun'))
     else:
         chosen = [sections[k] for k in (args.sections.split(',') if args.sections else sections)]
@@ -1388,6 +1446,8 @@ def cmd_run(args):
     log(f'batch {batch}{" (resumed)" if args.resume else ""}: {len(plan)} trials: {", ".join(f"S{s["id"]}/{k}" for s, k in plan)}')
     model = resolve_model(args.model, [s for s, _ in plan])
     batch_cap = args.batch_cap_yen or cfg['batchCapYen']
+    MAX_SECTION_YEN = getattr(args, 'max_section_yen', None) or None
+    if MAX_SECTION_YEN: log(f'batch: no section may spend more than ¥{MAX_SECTION_YEN} (the cap of each section is the smaller of this and its own)')
     asking = [s for s, _ in plan if s.get('requiresOwnerOk')]
     if asking and not args.dry_run and not args.owner_ok_supply:
         raise Stop(f'S{", S".join(sorted({str(s["id"]) for s in asking}))} give items, teleport or build on trial_live ({", ".join(sorted({k for s in asking for k in supply_kinds(s)}))}); '
@@ -1404,14 +1464,15 @@ def cmd_run(args):
         spent = sum((r.get('yen') or 0) for r in finished + interrupted)
         log(f'resume: {len(done)} trials already have a result, ¥{spent:.0f} spent so far')
     else:
-        write_plan(batch, {'batch': batch, 'createdAt': now_iso(), 'model': model, 'batchCapYen': batch_cap, 'ownerOk': args.owner_ok_supply, 'dryRun': bool(args.dry_run),
-                           'plan': [{'section': s['id'], 'seed': k} for s, k in plan]})
+        write_plan(batch, {'batch': batch, 'createdAt': now_iso(), 'model': model, 'batchCapYen': batch_cap, 'maxSectionYen': MAX_SECTION_YEN, 'ownerOk': args.owner_ok_supply,
+                           'dryRun': bool(args.dry_run), 'plan': [{'section': s['id'], 'seed': k} for s, k in plan]})
     save_production_state()
     try:
         if model == 'sonnet' and not args.dry_run:
             env_on(); env_changed = True
         for section, seed_key in plan:
             if f'{batch}-s{section["id"]}-{seed_key}' in done: continue
+            if stop_requested(): log(f'batch: {STOP_FILE} exists: stopping before S{section["id"]}'); break
             if spent + section_cap(section, cfg) > batch_cap:
                 log(f'batch: {spent:.0f} yen spent; S{section["id"]} could take {section_cap(section, cfg)} more and pass {batch_cap} yen: stopping'); break
             result = run_trial(section, seed_key, batch, cfg, args.dry_run, args.owner_ok_supply)
@@ -1426,6 +1487,7 @@ def cmd_run(args):
                 f'decisions={result.get("decisions")} yen={result.get("yen")} (batch {spent:.0f})')
             if result['reason'] and result['reason'].startswith(('login_failed', 'request_refused', 'no_pristine', 'no_sites', 'setup_failed')) and not args.keep_going:
                 log('batch: stopping after a setup failure'); break
+            if result['reason'] == 'stopped_by_file': log('batch: the stop file ended this trial; no more trials'); break
     except Stop as error:
         log(f'batch: stopped: {error}')
     finally:
@@ -1460,7 +1522,8 @@ def write_report(batch):
     folder = os.path.join(RESULTS, batch)
     rows = [load_json(os.path.join(folder, n)) for n in sorted(os.listdir(folder)) if n.endswith('.json') and n.startswith(batch)]
     prev = previous_results(batch)
-    lines = [f'# 区間タイムアタック {batch}', '',
+    builds = sorted({f'頭 {(r.get("builds") or {}).get("head")}・体 {(r.get("builds") or {}).get("body")}' for r in rows if r.get('builds')})
+    lines = [f'# 区間タイムアタック {batch}', '', *([f'試した版：{" / ".join(builds)}', ''] if builds else []),
              '| 区間 | 種 | 支給 | 予測（成功） | 結果 | 秒（予測 / 目標） | 前回 | 差 | 判断 | 費用（予測） | 理由・足りない物 |', '|---|---|---|---|---|---|---|---|---|---|---|']
     table = []
     expected_ok = 0.0
@@ -1481,7 +1544,7 @@ def write_report(batch):
                      f'| {fmt_s(p.get("seconds")) if p else "—"} | {"" if delta is None else f"{delta:+.0f} {verdict}"} | {r.get("decisions", "—")} '
                      f'| ¥{r.get("yen") or 0:.0f}（{"—" if pred.get("yen") is None else f"¥{pred['yen']:.0f}"}） | {why} |')
         table.append({**{k: r.get(k) for k in ('trial', 'section', 'sectionName', 'seedKey', 'ok', 'seconds', 'targetSeconds', 'decisions', 'yen', 'reason', 'missing', 'milestones',
-                                                 'supplied', 'supplyKinds', 'ownerOk', 'prediction', 'model')},
+                                                 'supplied', 'supplyKinds', 'ownerOk', 'prediction', 'model', 'stall', 'builds')},
                       'previous': {k: p.get(k) for k in ('trial', 'seconds', 'decisions', 'yen', 'reason')} if p else None, 'deltaSeconds': delta, 'verdict': verdict})
     lines += ['', f'合計 ¥{sum((r.get("yen") or 0) for r in rows):.0f}・{len(rows)} 区間・達成 {sum(1 for r in rows if r.get("ok"))}', '']
     if predicted_rows:
@@ -1492,6 +1555,15 @@ def write_report(batch):
     for r in rows:
         ms = '、'.join(f'{k} {v:.0f}' for k, v in sorted((r.get('milestones') or {}).items(), key=lambda kv: kv[1]))
         lines.append(f'- S{r["section"]}/{r["seedKey"]}: {ms or "なし"}；道具 {r.get("toolCalls", "—")} 回・失敗 {r.get("failedToolResults", "—")}')
+    stalls = [r for r in rows if not r.get('ok') and (r.get('stall') or {}).get('last')]
+    if stalls:
+        lines += ['', '## 止まりの様子（未達の区間：頭の最後の手と、体から返った言葉）']
+        for r in stalls:
+            st = r['stall']; plan = st.get('plan') or {}
+            lines.append(f'- S{r["section"]}/{r["seedKey"]} {r.get("reason")}：計画 {plan.get("done", "—")}・次 {str(plan.get("next") or "—")[:80]}')
+            for step in st['last'][-6:]:
+                if 'use' in step: lines.append(f'  - 頭: {step["use"]} {json.dumps(step.get("hands"), ensure_ascii=False)[:150]} — {step.get("why", "")}')
+                else: lines.append(f'  - 体: {step.get("result", "")[:260]}')
     text = '\n'.join(lines) + '\n'
     with open(os.path.join(folder, 'report.md'), 'w', encoding='utf-8') as handle: handle.write(text)
     save_json(os.path.join(folder, 'report.json'), {'batch': batch, 'rows': table})
@@ -1523,6 +1595,7 @@ def main(argv):
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--limit', type=int); p.add_argument('--keep-going', action='store_true')
     p.add_argument('--batch-cap-yen', type=int, help='replaces sections.json batchCapYen for this batch (the sum of the per-section caps of S6-S11 is above it)')
+    p.add_argument('--max-section-yen', type=int, help='a ceiling over the cap of every section of this batch (a section keeps its own cap when that is lower)')
     p.add_argument('--owner-ok-supply', help='who confirmed, and when, that sections marked requiresOwnerOk may give items / teleport / build on trial_live')
     p.add_argument('--resume', metavar='BATCH', help='go on with a batch that a stop cut off: the finished trials stay, a cut-off one is kept as `interrupted` and run again')
     p = sub.add_parser('report'); p.add_argument('--batch')

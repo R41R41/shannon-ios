@@ -194,6 +194,25 @@ End の到着点（足場は世界生成で既にある）、竜の事前確認�
 wsl -d Ubuntu-24.04 -u ghrunner -- tar -C /home/azureuser/.cache/minebot-lab/seedscan-out/pristine -cf - c1 | ssh azure-constant-server 'tar -C ~/minecraft/shannon-home/trials/pristine -xf -'
 ```
 
+### 窓の試し（run59 の実走の保留中だけ。本物の頭、VM の上、2026-11-02 夜に追加）
+取りまとめの決め（ライ氏 11/2 19:55「巻けるところは巻く」）：S6〜S10 を run59 の道の順（要塞→ブレイズ→パール→目玉→ストロングホールド→枠の部屋）に先回りして試し、止まりを見つけて持ち主へ送る。
+**回してよい時**：run59 が保留で、shannon-home が止まっていて、Minecraft のタスクが動いていない間だけ。1 区間 ¥500、合計 ¥3,000 まで。API の鍵は VM の外に出さない（試しは VM の本番のサービスの上で動くので、鍵は触らない）。
+- **試すのは今本番に入っている版**です（体 `Shannon-current`・頭 `~/shannon-ios`）。S2・S3 の枝が本番に入る（S0 の反映）までは、その版で S6〜S10 が止まる所を見るだけで、後半の部品の確かめにはなりません。
+  結果の JSON の `builds` に、試した時の頭と体の版を残します。
+- **run59 に道を譲る**：`touch ~/.cache/minebot-lab/trials.stop` — 走っている区間が次の確認（5 秒）で `stopped_by_file` で終わり、タスクの取り消し・ログアウト・本番の設定の戻しをして止まる（約 1 分）。
+  ファイルが残っている間は `run` が始まらない（始めてよくなったら消す）。区間と区間の間でも見る。`prod.lock` は終われば放される。
+- 回し方（S6〜S10、c1。1 区間の上限は `--max-section-yen` で ¥500 に抑える＝S9 の ¥600 だけが下がる。合計の見込みは ¥2,150）：
+
+```bash
+cd ~/minecraft/shannon-home/trials
+nohup python3 -I trials.py --wait-lock 600 run --sections 6,7,8a,8b,9,10 --seeds c1 --model current --max-section-yen 500 --batch-cap-yen 3000 \
+  --owner-ok-supply "ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）" > results/run.log 2>&1 &
+python3 -I trials.py report          # 表と「止まりの様子」（頭の最後の手と、体から返った言葉）
+```
+- 止まった区間の様子：結果の JSON の `stall` に、タスクの計画の進み（`done`・次の行き先）と、最後の 4 手（頭の `mc_act` とその `why`、体から返った言葉。失敗は `ERR`）が入り、`report.md` の「止まりの様子」に出ます。
+  体の止まりは S2（`local_d59198d3-234c-40f6-b62c-473188ed5c1c`）、頭の止まりは S3（`local_0300d99d-07c3-440c-9229-1883531caeca`）へ送ります。
+- 体だけの確かめは PC の WSL で LLM なし：`backend/scripts/lab/s4-section-probe.sh`（S2 の hunt の場面に、c1 の道の場面 `route_fortress`・`route_stronghold`・`dig_to_room`・`frames_enter` を足したもの）。
+
 ### 未確認のこと（分かっていること／仮説／不明）
 - 分かっている：`execute if entity @a[name=...,advancements={...}]`・`distance`・`[eye=true]` の書き方、`/locate` の答え、End へ tp すると竜が 4.7〜7.3 秒で現れること（ラボで実測。体の観測はまだ）。
 - 仮説：`trial_live` の `server.properties`（難易度 normal、view-distance 10、simulation-distance 8）では、ブレイズのスポナー・エンダーマン・ピグリンの `summon` が期待どおり動く。S7・S8 は実機で初めて確かめる。

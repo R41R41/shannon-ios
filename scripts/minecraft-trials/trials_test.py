@@ -214,6 +214,92 @@ class ModelAndCapTest(unittest.TestCase):
         self.assertEqual(trials.section_cap({'id': 11, 'capYen': 800}, cfg), 800)
 
 
+class WindowRunTest(unittest.TestCase):
+    def test_a_ceiling_lowers_a_section_cap_and_never_raises_one(self):
+        cfg = {'trialCapYen': 300}
+        old = trials.MAX_SECTION_YEN
+        trials.MAX_SECTION_YEN = 500
+        try:
+            self.assertEqual(trials.section_cap({'id': 11, 'capYen': 800}, cfg), 500)
+            self.assertEqual(trials.section_cap({'id': 9, 'capYen': 600}, cfg), 500)
+            self.assertEqual(trials.section_cap({'id': 10, 'capYen': 250}, cfg), 250)
+            self.assertEqual(trials.section_cap({'id': 1}, cfg), 300)
+        finally:
+            trials.MAX_SECTION_YEN = old
+
+    def test_the_stop_file_is_seen_when_it_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = trials.STOP_FILE
+            trials.STOP_FILE = os.path.join(tmp, 'trials.stop')
+            try:
+                self.assertFalse(trials.stop_requested())
+                open(trials.STOP_FILE, 'w').close()
+                self.assertTrue(trials.stop_requested())
+            finally:
+                trials.STOP_FILE = old
+
+    def test_the_deployed_builds_are_read_from_git_and_a_missing_checkout_is_none(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = os.path.join(tmp, 'head')
+            os.makedirs(repo)
+            subprocess.run(['git', 'init', '-q', repo], check=True)
+            subprocess.run(['git', '-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '--allow-empty', '-m', 'x'], check=True)
+            old_ios, old_body = trials.IOS, trials.BODY_DIR
+            trials.IOS, trials.BODY_DIR = repo, os.path.join(tmp, 'missing')
+            try:
+                builds = trials.deployed_builds()
+            finally:
+                trials.IOS, trials.BODY_DIR = old_ios, old_body
+            self.assertRegex(builds['head'], r'^[0-9a-f]{7}$')
+            self.assertIsNone(builds['body'])
+
+    def test_the_stall_tail_keeps_the_last_steps_and_the_plan(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'x.sqlite')
+            conn = sqlite3.connect(path)
+            conn.execute('CREATE TABLE fca_task_history (task_id TEXT, sequence INTEGER, entries_json TEXT, committed_at TEXT, committed_status TEXT)')
+            plan = json.dumps({'plan': {'revision': 2, 'done': '3/22', 'next': ['p2 blaze at (140,77,75)']}})
+            first = [{'role': 'system', 'content': plan},
+                     {'role': 'assistant', 'content': [{'type': 'tool_use', 'name': 'mc_act', 'input': {'hands': ['go 140,77,75'], 'why': 'to the spawner'}}]},
+                     {'role': 'user', 'content': [{'type': 'tool_result', 'content': 'q1 go stopped limit_dig: raise maxDig', 'is_error': False}]}]
+            second = [{'role': 'assistant', 'content': [{'type': 'tool_use', 'name': 'mc_act', 'input': {'hands': ['go 140,77,75 maxDig=120'], 'why': 'again'}}]},
+                      {'role': 'user', 'content': [{'type': 'tool_result', 'content': [{'type': 'text', 'text': 'q2 fight lost: no blaze within 32 m'}], 'is_error': True}]}]
+            conn.execute('INSERT INTO fca_task_history VALUES (?,?,?,?,?)', ('t1', 1, json.dumps(first), 'x', 'queued'))
+            conn.execute('INSERT INTO fca_task_history VALUES (?,?,?,?,?)', ('t1', 2, json.dumps(second), 'x', 'queued'))
+            conn.commit(); conn.close()
+            old = trials.DB
+            trials.DB = path
+            try:
+                tail = trials.stall_tail('t1', keep=4)
+            finally:
+                trials.DB = old
+            self.assertEqual(tail['plan'], {'done': '3/22', 'next': 'p2 blaze at (140,77,75)'})
+            self.assertEqual(len(tail['last']), 4)
+            self.assertEqual(tail['last'][-1]['result'], 'ERR q2 fight lost: no blaze within 32 m')
+            self.assertEqual(tail['last'][-2]['use'], 'mc_act')
+            self.assertEqual(tail['last'][-4]['hands'], ['go 140,77,75'])
+
+    def test_the_report_tells_where_an_unreached_trial_stuck(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = trials.RESULTS
+            trials.RESULTS = tmp
+            try:
+                row = {'trial': 'B2-s7-c1', 'batch': 'B2', 'section': 7, 'sectionName': 'blaze', 'seedKey': 'c1', 'targetSeconds': 720, 'ok': False, 'reason': 'time_limit', 'seconds': None,
+                       'decisions': 40, 'yen': 390, 'stall': {'plan': {'done': '0/3', 'next': 'p1 rods'}, 'last': [
+                           {'use': 'mc_act', 'hands': ['fight blaze'], 'why': 'rods'}, {'result': 'ERR fight unreachable: wall between'}]}}
+                os.makedirs(os.path.join(tmp, 'B2'))
+                trials.save_json(os.path.join(tmp, 'B2', row['trial'] + '.json'), row)
+                trials.write_report('B2')
+                text = open(os.path.join(tmp, 'B2', 'report.md'), encoding='utf-8').read()
+                self.assertIn('止まりの様子', text)
+                self.assertIn('fight unreachable: wall between', text)
+                self.assertIn('計画 0/3', text)
+            finally:
+                trials.RESULTS = old
+
+
 class FakeRcon:
     """Records the commands; answers like a server that is happy (passed / loaded)."""
     def __init__(self): self.log = []
