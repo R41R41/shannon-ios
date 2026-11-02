@@ -240,9 +240,11 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   /** Closes a step that threw: a confirmed stop, a known refusal, or else an unknown outcome. Logs only the closed code. */
   async function settleFailedStep(error: unknown, taskId: string, step: TaskStep | null, stepPorts: StepPorts, execution: ActionExecution): Promise<void> {
     const code = fcaErrorCode(error);
+    // What the step's ports hold by now (the plan, the new plans asked for, the waits) stays when a step that ran nothing is closed: a bound counted in the step is not dealt again.
+    const fresh = () => ({ ...stepPorts?.checkpoint?.(), ...stepPorts?.tools?.checkpoint?.() });
     // A decision that never came back ran nothing (`taskRuntimeUnavailable.ts`): a further round, a pause of a Minecraft request, or
     // a known failure with its report. A task being stopped is left to the stop.
-    if (step && await settleUnavailableStep(unavailable, step, error, execution)) {
+    if (step && await settleUnavailableStep(unavailable, step, error, execution, fresh)) {
       await flushReceipts();
       return;
     }
@@ -255,11 +257,11 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     }
     // A-20: the decision was refused for the account's credit: a Minecraft request is paused, resumable once the
 // balance is filled (it was failed, with the world running).
-    if (step && code === FCA_MODEL_BILLING && pauseForBilling(unavailable, step, execution)) {
+    if (step && code === FCA_MODEL_BILLING && pauseForBilling(unavailable, step, execution, fresh)) {
       await flushReceipts();
       return;
     }
-    if (step && providerServerErrorCode(code, execution) && await retryAfterServerError(step, execution)) {
+    if (step && providerServerErrorCode(code, execution) && await retryAfterServerError(step, execution, fresh)) {
       // The provider answered 5xx/529: nothing came back, so the step ran nothing. The task runs it once more, then fails.
       console.log(`Shannon FCA step retried task=${taskId} code=${code}`);
       await flushReceipts();
@@ -289,7 +291,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
    * with nothing added, so the scheduler runs the same decision again under a new action. A stop during the wait, or a second
    * server error, leaves it to the known failure.
    */
-  async function retryAfterServerError(step: TaskStep, execution: ActionExecution): Promise<boolean> {
+  async function retryAfterServerError(step: TaskStep, execution: ActionExecution, fresh: () => Record<string, unknown>): Promise<boolean> {
     const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
     const retries = typeof prior.fcaProviderRetries === 'number' ? prior.fcaProviderRetries : 0;
     if (retries >= 1) return false;
@@ -300,7 +302,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     if (!waited || runtime.get(scopeKey, step.taskId)?.phase !== 'executing') return false;
     try {
       // Nothing ran, so the messages the step saw stay pending for the retry (before 2026-10-14 they were consumed and lost).
-      const checkpoint = { ...prior, fcaProviderRetries: retries + 1 };
+      const checkpoint = { ...prior, ...fresh(), fcaProviderRetries: retries + 1 };
       return runtime.commitStep(step, { disposition: 'continue', history: [], consumedMessageIds: [], checkpoint }) !== null;
     } catch { return false; }
   }

@@ -217,6 +217,14 @@ describe('the ledger of the thrown eyes', () => {
     expect(flightOf(undefined)).toBeNull();
   });
 
+  it('finds a result noted again even when its command id is long (the key is cut to what is stored)', () => {
+    const ledger = createEyeLedger(null);
+    const id = `command-${'c'.repeat(120)}`;
+    expect(ledger.note(id, eye(0, 0), 'overworld', 1000)).toBe(true);
+    expect(ledger.note(id, eye(0, 0), 'overworld', 2000)).toBe(false);
+    expect(ledger.throws()).toHaveLength(1);
+  });
+
   it('keeps each throw once, only in the overworld, gives the point from two, and survives a checkpoint', () => {
     const ledger = createEyeLedger(null);
     expect(ledger.note('c1', eye(0, 0), 'the_nether', 1000)).toBe(false);

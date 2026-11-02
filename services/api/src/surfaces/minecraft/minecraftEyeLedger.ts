@@ -153,9 +153,10 @@ export function createEyeLedger(saved: unknown) {
     note(id: string | undefined, resultJson: string | undefined, dimension: string | null, now: number): boolean {
       const flight = dimension === 'overworld' ? flightOf(resultJson) : null;
       if (!flight) return false;
-      const key = `${id ?? 'none'}:${Math.round(flight.x)}:${Math.round(flight.z)}:${flight.bearingDeg}`;
+      // The key is cut to what is stored, so the same result noted again (a long command id) is found.
+      const key = `${id ?? 'none'}:${Math.round(flight.x)}:${Math.round(flight.z)}:${flight.bearingDeg}`.slice(0, 80);
       if (state.throws.some(item => item.id === key)) return false;
-      const newest: StoredThrow = { ...flight, id: key.slice(0, 80), at: now };
+      const newest: StoredThrow = { ...flight, id: key, at: now };
       const kept = alive(state.throws, now).filter(item => Math.hypot(item.x - flight.x, item.z - flight.z) <= NEAR_BLOCKS);
       state = { v: 1, throws: [...kept, newest].slice(-KEEP_THROWS) };
       return true;

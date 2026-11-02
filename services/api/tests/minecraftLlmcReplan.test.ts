@@ -168,7 +168,7 @@ describe('the brief', () => {
   it('stays within 8k tokens however much the task has to say, dropping the knowledge and shortening the facts first', () => {
     const long = (word: string) => Array.from({ length: 40 }, (_, index) => `${word}${index} ${'あ'.repeat(120)}`);
     const text = replanBrief(input({ facts: long('事実'), results: long('結果'), now: long('持ち物'), knowledge: 'あ'.repeat(20_000) }));
-    expect(llmcTokens(text)).toBeLessThanOrEqual(REPLAN.briefTokens * 1.6);
+    expect(llmcTokens(text)).toBeLessThanOrEqual(REPLAN.briefTokens);
     expect(text).not.toContain('## この段の知識');
     expect(text).toContain('## 止まり');
     expect(replanBrief(input({ earlier: [{ at: 1, node: 'p10.1', kind: 'node_stalled', outcome: 'changed', why: '待ち場を割った' }] }))).toContain('節 p10.1（node_stalled）: 計画を直した。待ち場を割った');

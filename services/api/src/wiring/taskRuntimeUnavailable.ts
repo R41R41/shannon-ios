@@ -95,6 +95,19 @@ export function sleep(milliseconds: number, signal: AbortSignal): Promise<boolea
 
 export { PROVIDER_UNAVAILABLE_SUMMARY };
 
+/**
+ * What the step's ports hold of their own state by now (the plan, the new plans asked for, the waits). A step that ran nothing is closed with it, not with the
+ * state it began with: a bound counted in the step (a new plan asked of the strong model) is not dealt again by a decision that failed (Codex, 2026-11-02).
+ */
+export type FreshCheckpoint = () => Record<string, unknown>;
+function kept(fresh?: FreshCheckpoint): Record<string, unknown> {
+  try {
+    return fresh?.() ?? {};
+  } catch {
+    return {};
+  }
+}
+
 /** How many rounds a request goes through before it is paused (a Minecraft request whose body is not there: `BODY_ABSENT_CYCLES`). */
 const roundLimit = (body: boolean, absent: boolean): number => absent ? BODY_ABSENT_CYCLES : body ? BODY_UNAVAILABLE_CYCLES : OTHER_UNAVAILABLE_CYCLES;
 
@@ -110,7 +123,7 @@ function roundWaitMs(parts: UnavailableParts, round: { body: boolean; absent: bo
  * unavailable decision (or a
  * tool is in doubt, or the task is being stopped), and the caller judges the failure as before.
  */
-export async function settleUnavailableStep(parts: UnavailableParts, step: TaskStep, error: unknown, execution: ActionExecution):
+export async function settleUnavailableStep(parts: UnavailableParts, step: TaskStep, error: unknown, execution: ActionExecution, fresh?: FreshCheckpoint):
   Promise<UnavailableOutcome | null> {
   if (!(error instanceof FcaDecisionUnavailableError) || execution.stepOutcome === 'unknown') return null;
   // A task that is being stopped is the stop's to settle (the caller's `stoppedSafely`), however long this decision waited.
@@ -119,10 +132,10 @@ export async function settleUnavailableStep(parts: UnavailableParts, step: TaskS
   const cycles = typeof prior.fcaProviderRetries === 'number' ? prior.fcaProviderRetries : 0;
   const body = parts.isBodyTask(step.taskId);
   const absent = body && error.reason === BODY_ABSENT_REASON;
-  if (cycles >= roundLimit(body, absent)) return finish(parts, step, error, body, prior, cycles);
+  if (cycles >= roundLimit(body, absent)) return finish(parts, step, error, body, { ...prior, ...kept(fresh) }, cycles);
   const milliseconds = roundWaitMs(parts, { body, absent, cycles, retryAfterMs: error.retryAfterMs });
   if (!await sleep(milliseconds, execution.signal) || parts.runtime.get(parts.scopeKey, step.taskId)?.phase !== 'executing') return null;
-  if (!close(parts, step, { ...prior, fcaProviderRetries: cycles + 1 })) return null;
+  if (!close(parts, step, { ...prior, ...kept(fresh), fcaProviderRetries: cycles + 1 })) return null;
   parts.log(`Shannon FCA step retried task=${step.taskId} code=${error.message}`);
   return 'continued';
 }
@@ -134,11 +147,11 @@ export async function settleUnavailableStep(parts: UnavailableParts, step: TaskS
  * not after rounds: nothing is asked again until the balance is filled. False
  * for any other task (it fails as a refused request does) or when the step cannot be closed.
  */
-export function pauseForBilling(parts: UnavailableParts, step: TaskStep, execution: ActionExecution): boolean {
+export function pauseForBilling(parts: UnavailableParts, step: TaskStep, execution: ActionExecution, fresh?: FreshCheckpoint): boolean {
   if (execution.stepOutcome === 'unknown' || !parts.isBodyTask(step.taskId) || parts.runtime.get(parts.scopeKey,
      step.taskId)?.phase !== 'executing') return false;
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
-  if (!close(parts, step, prior)) return false;
+  if (!close(parts, step, { ...prior, ...kept(fresh) })) return false;
   parts.runtime.stop(parts.scopeKey, step.taskId, 'fca_billing');
   parts.note(step.taskId, BILLING_PAUSED_SUMMARY);
   try {
