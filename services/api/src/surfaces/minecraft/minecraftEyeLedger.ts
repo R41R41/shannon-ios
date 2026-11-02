@@ -118,7 +118,10 @@ function noFixLine(throws: readonly StoredThrow[], last: StoredThrow): string {
   const places = nextThrowPlaces(last, throws.length - 1);
   if (!places.length) return `交点はまだ無い（${why}）`;
   const where = places.map(item => place(item.x, item.z)).join(' か ');
-  return `交点はまだ無い（${why}）。次に投げる場所の案: 最後の線の横 ${places[0]!.from}m の ${where}（2 本の線が離れて交わるほど誤差が小さい）`;
+  const north = Math.abs(Math.cos(last.bearingDeg * Math.PI / 180)) >= Math.SQRT1_2;
+  const along = north ? '南北' : '東西', across = north ? '東西' : '南北';
+  return `交点はまだ無い（${why}）。最後の線は${along}に走る: 線に沿って進んでも同じ線になる。`
+    + `次に投げる場所の案: 最後の線の横（${across}）${places[0]!.from}m の ${where}（2 本の線が離れて交わるほど誤差が小さい）`;
 }
 
 /** A sunk or a stopped eye: the place itself, with no lines. */
