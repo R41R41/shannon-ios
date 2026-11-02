@@ -41,7 +41,8 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
     node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
   node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'food>=40&have:bed', children: [
-    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', note: '村が見えなければ飛ばす' }),
+    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', note: '村が見えなければ飛ばす。ベッドは 3〜4 台（エンドの前に要る）を今のうちに。羊毛が手に入るなら羊毛 3＋板 3 で作る',
+    caution: ['通りがかりに糸・火打石（砂利を掘る）・羽（ニワトリ）を見かけたら拾う（エンドの弓と矢 30 の分。取りに戻らない）'] }),
     node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
   node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる'],
     children: [node('鉄を掘る（y=16前後・洞窟）', { kind: 'iron' }),
