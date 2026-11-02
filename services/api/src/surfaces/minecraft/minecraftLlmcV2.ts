@@ -9,6 +9,7 @@ import { deliverOnceFacts } from './minecraftLlmcFacts.js';
 import { noteLiveState } from '../../infra/decisionRecords/decisionRecordNotes.js';
 import { rewriteLlmcLive, type RewriteNotes } from './minecraftLlmcLiveRewrite.js';
 import { stageKnowledge, V2_ALWAYS } from './minecraftLlmcV2Knowledge.js';
+import { MC_MAKE_AT_TOOL } from './minecraftLlmcPurpose.js';
 
 /**
  * mb-llmc v2 (改修案 2.1〜2.3, ADR-0014): the mode's entry points. Every function here is a pure function of the recorded
@@ -66,8 +67,9 @@ export const candidateStage = (live: Record<string, unknown>): string | undefine
 export function shortActDefinition(base: FcaToolDefinition): FcaToolDefinition {
   return { ...base, description: SHORT_ACT_DESCRIPTION, nativeInputSchema: SHORT_ACT_INPUT_SCHEMA };
 }
-const MENU_ORDER = ['mc.act', 'mc.probe', 'mc.view', 'plan.update'];
-/** Whether a tool is one of the mode's four (the controls are not definitions of the catalog). */
+// The purpose entry is head-only. Historical catalogs without it retain their exact order and bytes.
+const MENU_ORDER = ['mc.act', MC_MAKE_AT_TOOL, 'mc.probe', 'mc.view', 'plan.update'];
+/** Whether a tool belongs to the mode, including its optional head-only purpose entry. */
 export const v2MenuTool = (tool: Pick<FcaToolDefinition, 'name'>): boolean => MENU_ORDER.includes(tool.name);
 
 export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolDefinition[] {

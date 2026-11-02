@@ -37,6 +37,8 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
  * connection): the item
  * carries it, not the newest frame's. */
   madeIn?: MadeIn | null;
+  /** A head-expanded purpose's whole execution ceiling, carried by the existing queue envelope. */
+  maxMs?: number;
   /** Amendment A-7 1: an entry of the act's `keep` put to the plan as a promise (`FcaPlanPort.keepPromise`).
  * Absent: the plan cannot
  * take it, and the result says so. */
@@ -73,7 +75,7 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
      operationId: call.operationId, input: timed,
     arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, current: parts.current ?? null,
     why: String(input.why ?? ''), fixes: [], ...(reserving ? { reserve: true } : {}), ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
-    maxMs: actMilliseconds(timed, feet) });
+    maxMs: parts.maxMs ?? actMilliseconds(timed, feet) });
   const added = await queue.add(queueItemFields());
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';
