@@ -58,6 +58,15 @@ export function travelEvidence(input: ActInput | null, frame: BodyObservation | 
   }
   return values;
 }
+/**
+ * Run 59, hold 1: the travel evidence of one look. The movement running now, and the movement whose result this look reads: it was
+ * accepted and ran, and where it ended is how near it brought her. A go cut by its time after 120 s of digging toward its goal is no
+ * longer running when its result is read, so without it the approach it made was never counted and the node was held as stalled.
+ * A destination seen for the first time earns nothing (no earlier value), so an ended move only counts against its own earlier sample.
+ */
+export function lookTravelEvidence(running: ActInput | null, ended: ActInput | null, frame: BodyObservation | null): Record<string, number> {
+  return { ...travelEvidence(ended, frame), ...travelEvidence(running, frame) };
+}
 const SEARCH_KINDS = new Set(['wood', 'food', 'village', 'iron', 'diamond', 'water', 'lava', 'obsidian', 'fortress', 'stronghold', 'chest']);
 export function explorationEvidence(node: PlanNode | undefined, input: ActInput | null, frame: BodyObservation | null): Record<string, number> {
   if (!node?.kind || !SEARCH_KINDS.has(node.kind) || !input?.hands.some(h => h.do === 'go' || h.do === 'walk' || h.do === 'vertical')) return {};
