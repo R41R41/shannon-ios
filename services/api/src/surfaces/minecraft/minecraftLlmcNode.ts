@@ -167,19 +167,22 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
 }
 
 /** The work of the overworld, which is not what a body in the Nether or the End does now. */
-const OVERWORLD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor', 'diamond',
-  'water', 'lava', 'obsidian', 'portal', 'stronghold', 'chest']);
+const OVERWORLD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor',
+  'diamond', 'water', 'lava', 'obsidian', 'portal', 'stronghold', 'chest']);
 /** The kinds of the work that belongs to a dimension besides the overworld. */
-const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = { the_nether: new Set<PlanKind>(['nether', 'fortress', 'blaze', 'pearl']),
-  the_end: new Set<PlanKind>(['end', 'dragon']) };
+const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = {
+  the_nether: new Set<PlanKind>(['nether', 'fortress', 'blaze', 'pearl']),
+  the_end: new Set<PlanKind>(['end', 'dragon']),
+};
 /**
- * The current node follows the body's dimension (run59, 00:50, the owner's three-hour plan: the body was in the Nether and the plan's now stayed on 「村のベッド集め」,
- * the road said 地上の準備◀今: the node of the gate, `dim:the_nether`, is held open by the beds and the golden boots before it, so the now never left them).
- * In the Nether or the End, a current node of the overworld's work (or, in the End, of the Nether's) moves to the first open leaf of that dimension's work whose
- * own condition does not already hold. The nodes it passes stay open in their order, as for `followNode`. Null: no body, the overworld, a current node that
- * is of the dimension or of no kind (`other`), or no such leaf.
+ * The current node follows the body's dimension (run59, 00:50, the owner's three-hour plan: the body was in the Nether and the plan's now stayed on
+ * 「村のベッド集め」, the road said 地上の準備◀今: the node of the gate, `dim:the_nether`, is held open by the beds and the golden boots before it, so the now
+ * never left them). In the Nether or the End, a current node of the overworld's work (or, in the End, of the Nether's) moves to the first open leaf of that
+ * dimension's work whose own condition does not already hold. The nodes it passes stay open in their order, as for `followNode`. Null: no body, the
+ * overworld, a current node that is of the dimension or of no kind (`other`), or no such leaf.
  */
-export function followDimension(tree: PlanTree, facts: DoneFacts | null): { to: string; from: string | null; acts: number; words: string } | null {
+export function followDimension(tree: PlanTree, facts: DoneFacts | null):
+  { to: string; from: string | null; acts: number; words: string } | null {
   const wanted = facts?.dimension ? DIMENSION_KINDS[facts.dimension] : undefined;
   const order = orderedPlan(tree.nodes), current = order.find(node => node.id === tree.current);
   if (!facts || !wanted || !current) return null;

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { planFromAnswer, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { ACT_DESCRIPTION } from '../src/contracts/minecraftActContract.js';
+import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { forgetActNodes, followDimension, followNode, lackBefore, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { doneFacts } from '../src/surfaces/minecraft/minecraftPlanDone.js';
@@ -431,5 +433,18 @@ describe('the current node follows the body\'s dimension, and the strong model d
     expect(llmcModelRouter({ main, escalate: null, strong }, checkpoint)).toBe(main);
     expect(llmcModelRouter({ main, escalate: null }, checkpoint, undefined, 't', () => 'the_end')).toBe(main);
     expect(llmcModelRouter({ main, escalate, strong }, { ...checkpoint, consecutiveToolFailures: 2 }, undefined, 't', () => 'the_end')).toBe(escalate);
+  });
+});
+
+describe('the words that were wrong (the coordinator, 2026-11-03): go makes no walls, obsidian is not made in the Nether, stopIf is the head\'s line', () => {
+  it('says what go\'s canPlace does, and that the body steps to a safe place outside the line of fire before it stops', () => {
+    const end = V2_STAGES.end;
+    expect(end).toContain('足元に橋を置いて渡る（go の canPlace は足元の床だけで、壁は作らない');
+    expect(end).not.toContain('足元と両脇に壁を置く橋（go の canPlace）');
+    for (const stage of Object.values(V2_STAGES)) expect(stage).not.toContain('ネザーの溶岩と水で作る');
+    for (const words of [SHORT_ACT_DESCRIPTION, ACT_DESCRIPTION]) {
+      expect(words).toContain('満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）');
+      expect(words).not.toContain('満たしたら全体を止めて返す');
+    }
   });
 });
