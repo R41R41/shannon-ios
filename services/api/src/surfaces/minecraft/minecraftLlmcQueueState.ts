@@ -99,6 +99,8 @@ export interface QueueAdd {
   arguments: Record<string, unknown>;
   skill: string;
   pre?: ActCondition;
+  /** R3-1 (4): the head's reserve item (see minecraftLlmcReserve.ts); set by the act's `reserve` mark. */
+  reserve?: boolean;
   /** The plan's current node when the model sent it (the plan follows the work only under the same one). */
   current?: string | null;
   node: string | null;
@@ -125,6 +127,8 @@ export interface QueueDeps {
   context(): BodyTaskContext;
   lease: ActionLease;
   taskId: string;
+  /** R3-1 (4): whether this task takes reserve items (an unattended task only: a held or watched one does not). Absent: no reserve. */
+  reserveAllowed?(): boolean;
   /** A pending incident take prevents new motor commands, including answers from an already running decision. */
   holdPending?(): boolean;
   observe(): BodyObservation | null;

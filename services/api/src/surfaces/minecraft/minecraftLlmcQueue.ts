@@ -170,7 +170,8 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     news.push({ kind: taken ? 'dropped' : 'ran', item: item.item, call: item.call, operationId: item.operationId, result, ms, label: itemLabel(item) });
     // The head reads what the body decided; it takes nothing off because an item stopped. A drop the body made
 // changes the queue a decision followed (`stale`).
-    if (taken) { bump();
+    // A reserve that did not run (its `pre` failed, it was replaced, the step closed) changes nothing a decision rested on: no stale decision, only the wake that the queue is empty.
+    if (taken) { if (item.reserve) droppedNow += 1; else bump();
       noteDropped(item, item.unit.droppedBecause?.code ?? item.because ?? ''); }
     else if (!result.ok) { failedNow += 1;
       troubleAt ??= now();
@@ -289,7 +290,7 @@ if (remaining) await remaining;
   };
 void restoreReceipts();
 
-  return {
+  const api: LlmcQueue = {
     onRan(listener) { listeners.push(listener); },
     furnaceNews() {
       const log = deps.control.working(deps.bodyId());
@@ -329,13 +330,18 @@ void restoreReceipts();
     async add(spec) {
       const refused = refusal(spec);
       if (refused) return { ok: false, text: refused };
+      // R3-1 (4): the decided item that comes while a reserve is open takes the reserve off first (the reserve is the head's own, and never what a decision rests on).
+      if (!(spec.reserve === true || spec.input.reserve === true)) {
+        const standIn = open().find(entry => entry.reserve === true);
+        if (standIn) { await api.replace([standIn.item]); }
+      }
       const label = `q${nextNumber()}`, after = open().at(-1)?.item ?? null, ahead = aheadMs();
       const maxMs = Math.max(1_000, Math.min(180_000, spec.maxMs)), startInMs = Math.min(START_CAP_MS, ahead + START_MARGIN_MS);
       const item = makeItem(spec, label, maxMs, startInMs);
       item.uses = deps.snapshotUses?.(spec.input.uses ?? []) ?? [];
       const madeIn = spec.madeIn === undefined ? madeInOf(deps.observe(), headBoot) : spec.madeIn;
       const queueEnvelope = (): MinecraftQueueEnvelope => ({ item: label, after, node: spec.node, ...(spec.pre ? { pre: spec.pre } : {}), maxMs,
-        startBy: new Date(item.startBy).toISOString(), queue: name, ...(spec.input.dependsOn !== undefined ? { dependsOn: [...spec.input.dependsOn] } : {}),
+        startBy: new Date(item.startBy).toISOString(), queue: name, ...(item.reserve ? { dependsOn: [] } : spec.input.dependsOn !== undefined ? { dependsOn: [...spec.input.dependsOn] } : {}),
         ...(madeIn ? { madeIn } : {}) });
       const envelope: MinecraftQueueEnvelope = queueEnvelope();
       items.push(item);
@@ -513,4 +519,5 @@ void restoreReceipts();
          reason: item.reason })), frame, { progress: first ? progressOf(first) : null, leftMs: first ? remainingMs(first) : 0 });
     },
   };
+  return api;
 }

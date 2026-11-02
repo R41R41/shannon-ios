@@ -19,7 +19,7 @@ const lease = { id: 'lease-1', generation: 1, holder: 'test' };
 const cleanups: Array<() => void> = [];
 afterEach(() => { for (const close of cleanups.splice(0)) close(); forgetLlmcQueues(); forgetActNodes(); });
 
-function setup() {
+function setup(options: { reserveAllowed?: boolean } = {}) {
   const db = new DatabaseSync(':memory:'), store = new MinecraftControlStore(db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world',
     onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
@@ -45,7 +45,7 @@ function setup() {
   };
   poll();
   const lines: string[] = [];
-  const queue = createLlmcQueue({ control, taskId: 't1', lease, bodyId: () => 'minecraft:world', observe: () => control.observe('minecraft:world'), log: line => lines.push(line),
+  const queue = createLlmcQueue({ control, taskId: 't1', lease, bodyId: () => 'minecraft:world', observe: () => control.observe('minecraft:world'), log: line => lines.push(line), ...(options.reserveAllowed ? { reserveAllowed: () => true } : {}),
     context: () => ({ scopeKey: 'owner', taskId: 't1', taskRevision: 1, bodyId: 'minecraft:world', sessionId: 'session-1', generation: 1, goal: 'g', completionCondition: 'c' }) });
   cleanups.push(() => { queue.stop(); db.close(); });
   let counter = 0;
@@ -157,6 +157,40 @@ describe('the results as news, and the version', () => {
     expect(f.queue.stale()).toBe(true);
     expect(f.queue.open()).toBe(false);
     expect(await f.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('dropped');
+  });
+
+  it('R3-1 (4): a reserve goes behind a decided item with dependsOn [] in its envelope, only where the task takes reserves; the decided item that comes takes it off; the reserve changes no version', async () => {
+    const no = setup();
+    await no.queue.add(no.spec(wait1));
+    expect(await no.queue.add(no.spec([{ do: 'pickup' }] as never, { reserve: true }))).toMatchObject({ ok: false });
+    const f = setup({ reserveAllowed: true });
+    await f.queue.add(f.spec(wait1));
+    expect(await f.queue.add(f.spec([{ do: 'pickup' }] as never, { reserve: true }))).toMatchObject({ ok: true, item: 'q2', after: 'q1' });
+    expect(await f.queue.add(f.spec([{ do: 'pickup' }, { do: 'jump' }] as never, { reserve: true }))).toMatchObject({ ok: false });
+    f.take();
+    const sent = f.handed.find(command => command.queue?.item === 'q2')!;
+    expect(sent.queue?.dependsOn).toEqual([]);
+    f.queue.mark();
+    // the decided item comes: the reserve is taken off first (the body answers for it), the new item follows the running one
+    const adding = f.queue.add(f.spec(dig(2)));
+    await delay(100);
+    f.poll();
+    f.dropRest('捨てた: 取り消された。手は動いていない');
+    f.poll();
+    expect(await adding).toMatchObject({ ok: true, item: 'q3', after: 'q1' });
+    expect(f.queue.stale()).toBe(false);
+  });
+
+  it('R3-1 (4): a reserve that ends or is dropped does not make a decision stale, a decided one does', async () => {
+    const f = setup({ reserveAllowed: true });
+    await f.queue.add(f.spec(wait1));
+    await f.queue.add(f.spec([{ do: 'pickup' }] as never, { reserve: true }));
+    f.take();
+    f.queue.mark();
+    f.dropRest('捨てた: 前の項目 q1 が危険で止まった（reflex）。安全のため始めていない（手は動いていない）');
+    f.poll();
+    await settle();
+    expect(f.queue.stale()).toBe(false); // the reserve never ran: nothing a decision rested on changed
   });
 
   it('R3-1 (6): a wait-only act behind a running item is refused at admission, with the words; one with another hand, or onto an empty queue, is not', async () => {

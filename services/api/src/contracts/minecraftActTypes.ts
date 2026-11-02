@@ -316,6 +316,11 @@ export interface ActInput {
   pre?: ActCondition;
   replace?: readonly string[];
   /**
+   * R3-1 (4): this act is a reserve (the stand-in the head puts last in the queue while it thinks): a head-only mark, never sent to the body. The head gives it `dependsOn: []`, a default `pre` and
+   * `stopIf`, takes it off when the decided item comes, and refuses it for a watched task or, in the Nether and the End, when it has a hand that moves the body.
+   */
+  reserve?: boolean;
+  /**
    * Continue contract 2 and 3 (the head reads them; they are not in the arguments sent to the body, as `pre` and
    * `replace` are not): `dependsOn` the marks of the
    * queue items of the same queue that this item relies on (`q12`; `[]` relies on none; absent: it is dropped when
