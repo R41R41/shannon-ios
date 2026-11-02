@@ -23,10 +23,11 @@ import sys
 import threading
 import time
 
-import trials
-import seedscan
-
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)        # `python3 -I` leaves the script's own directory out of the path
+import trials  # noqa: E402
+import seedscan  # noqa: E402
+
 HOME = os.path.expanduser('~')
 RIG_ROOT = os.path.join(HOME, '.cache', 'minebot-lab', 'rig')
 BODY_BUNDLE_SOURCE = """// The body parts S4's isolated head + body rig loads (rig.py writes this file into the body pin; the same text is backend/scripts/lab/rig-body.ts).
@@ -135,6 +136,34 @@ class Rig:
             shutil.rmtree(self.dir, ignore_errors=True)
 
 
+class LoadWatch:
+    """The coordinator's rule for a rig beside a real run: when the machine's 1-minute load stays above the limit (default 3.5 on the 4-vCPU VM) for `minutes`,
+    the rig gives way: it makes the stop file, which ends the running trial at its next poll and keeps the next one from starting (trials.stop_requested)."""
+
+    def __init__(self, limit, minutes, every=30):
+        self.limit, self.every, self.need = limit, every, max(1, int(minutes * 60 / every))
+        self.over, self.stop, self.tripped = 0, threading.Event(), None
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self.stop.wait(self.every):
+            load = os.getloadavg()[0]
+            self.over = self.over + 1 if load > self.limit else 0
+            if self.over >= self.need and not os.path.exists(trials.STOP_FILE):
+                self.tripped = f'load {load:.1f} above {self.limit} for {self.over * self.every} s'
+                os.makedirs(os.path.dirname(trials.STOP_FILE), exist_ok=True)
+                with open(trials.STOP_FILE, 'w', encoding='utf-8') as handle: handle.write(f'rig.py: {self.tripped} at {trials.now_iso()}\n')
+                trials.log(f'load watch: {self.tripped}: the stop file is made (remove {trials.STOP_FILE} when the machine is free again)')
+
+    def __enter__(self):
+        if self.limit > 0: self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stop.set()
+        return False
+
+
 def cmd_run(args):
     cfg = trials.config()
     problems = trials.validate_sections(cfg)
@@ -158,6 +187,16 @@ def cmd_run(args):
                                                           'plan': [{'section': s['id'], 'seed': k} for s, k in plan], 'rig': True})
     trials.log(f'rig batch {batch}: {len(plan)} trials: {", ".join(f"S{s["id"]}/{k}" for s, k in plan)}; model {args.model}; ceiling ¥{trials.MAX_SECTION_YEN}, batch ¥{batch_cap}')
     spent = 0.0
+    watch = LoadWatch(args.load_limit if args.load_limit is not None else (3.5 if (os.cpu_count() or 2) <= 4 else 0), args.load_minutes).__enter__()
+    try:
+        spent = run_plan(args, cfg, plan, batch, folder, batch_cap, spent)
+    finally:
+        watch.__exit__(None, None, None)
+    trials.write_report(batch)
+    return 0
+
+
+def run_plan(args, cfg, plan, batch, folder, batch_cap, spent):
     for section, seed_key in plan:
         if trials.stop_requested(): trials.log(f'batch: {trials.STOP_FILE} exists: stopping before S{section["id"]}'); break
         if spent + trials.section_cap(section, cfg) > batch_cap:
@@ -189,8 +228,7 @@ def cmd_run(args):
         trials.log(f'trial {result["trial"]}: ok={result["ok"]} reason={result["reason"]} s={result.get("seconds")} decisions={result.get("decisions")} yen={result.get("yen")} (batch {spent:.0f})')
         if result['reason'] == 'stopped_by_file': trials.log('batch: the stop file ended this trial; no more trials'); break
         if str(result['reason']).startswith('rig_failed') and not args.keep_going: trials.log('batch: stopping after a rig failure'); break
-    trials.write_report(batch)
-    return 0
+    return spent
 
 
 def main(argv):
@@ -206,6 +244,8 @@ def main(argv):
     p.add_argument('--smoke', action='store_true', help='cut every trial to one minute (the plumbing test)')
     p.add_argument('--slot-offset', type=int, default=0, help='added to the lab slot (game port 25570 + slot)')
     p.add_argument('--heap', default='2G'); p.add_argument('--cores', type=int, default=3); p.add_argument('--ready-seconds', type=int, default=150)
+    p.add_argument('--load-limit', type=float, help='give way (make the stop file) when the 1-minute load stays above this (default 3.5 on a machine of 4 cores or fewer, off otherwise; 0 = off)')
+    p.add_argument('--load-minutes', type=float, default=3.0)
     p.add_argument('--keep', action='store_true', help='keep the rig directory (database, log) after a trial')
     p.add_argument('--keep-going', action='store_true')
     p = sub.add_parser('report'); p.add_argument('--batch')
