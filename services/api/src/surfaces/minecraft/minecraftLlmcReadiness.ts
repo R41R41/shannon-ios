@@ -1,6 +1,6 @@
 import { orderedPlan, type PlanKind, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { BED_ITEM, carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
+import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
@@ -80,6 +80,7 @@ export function preparationStage(dimension: string | null, counts: ItemCounts, k
 const round1 = (value: number) => Math.round(value * 10) / 10;
 /** How many of a need she has: each matching id (armour: each slot once). */
 function held(counts: ItemCounts, need: Need): number {
+  if (need.weight) return [...counts].reduce((sum, [name, count]) => sum + (need.pattern.test(name) ? count * need.weight!(name) : 0), 0);
   if (!need.slots) return countMatching(counts, need.pattern);
   const slots = new Set([...counts.keys()].filter(name => need.pattern.test(name)).map(name => name.split('_').at(-1)));
   return slots.size;
@@ -115,10 +116,36 @@ export function currentUsableCounts(counts: ItemCounts, inventory?: unknown): Ma
   return usable;
 }
 
+/** What the pack lacks of some needs: none at all, some but not enough, and armour carried but not worn. */
+interface Gaps { none: string[]; short: string[]; unworn: string[] }
+function gapsOf(needs: readonly Need[], parts: { counts: ItemCounts; worn?: readonly string[] }): Gaps {
+  const gaps: Gaps = { none: [], short: [], unworn: [] };
+  for (const need of needs) {
+    const have = held(parts.counts, need);
+    if (have <= 0) gaps.none.push(need.label);
+    else if (have < need.count) gaps.short.push(`${need.label} ${have}/${need.count}`);
+    if (need.worn && parts.worn && have > 0) {
+      gaps.unworn.push(...[...parts.counts.keys()].filter(name => need.pattern.test(name) && !parts.worn!.includes(name)));
+    }
+  }
+  return gaps;
+}
+const gapWords = (gaps: Gaps): string[] => [gaps.none.length ? `${gaps.none.join('・')}が無い` : '', gaps.short.join('・'),
+  gaps.unworn.length ? `持っているが着ていない: ${gaps.unworn.join('・')}` : ''].filter(Boolean);
+
+const foodLack = (table: PrepStage, food: number): string => food < table.food ? `${foodPointsWords(food)}（目安 ${table.food}）` : '';
+/** The required needs of a stage that are not met (the food counts as one). */
+function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; worn?: readonly string[] }): string[] {
+  return [...gapWords(gapsOf(table.needs.filter(need => !need.goal), parts)), foodLack(table, parts.food)].filter(Boolean);
+}
+
 /**
  * The one line of what is missing for the stage or current mining operation, or null. `worn` (the frame's worn
  * ids, `wornItems`): a piece of a need
  * that is to be worn and is only carried is said as such (「着ていない: iron_helmet」), since armour in the pack does not protect.
+ * A stage that says what its lack costs (`PrepStage.risk`: the diamonds', the gate's; run59 leg 1 went on to both with no shield and no
+ * armour, the lack said in one line with the golden boots, which only a goal) says it in two parts: the required needs, with the cost of going on
+ * without them, and the goals; the other stages keep the one line.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
   worn?: readonly string[]; inventory?: unknown }): string | null {
@@ -126,18 +153,14 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
   const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
   const table: PrepStage = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
-  const none: string[] = [], short: string[] = [], unworn: string[] = [];
-  for (const need of table.needs) {
-    const have = held(parts.counts, need);
-    if (have <= 0) none.push(need.label);
-    else if (have < need.count) short.push(`${need.label} ${have}/${need.count}`);
-    if (need.worn && parts.worn && have > 0) {
-      unworn.push(...[...parts.counts.keys()].filter(name => need.pattern.test(name) && !parts.worn!.includes(name)));
-    }
+  if (!table.risk) {
+    const said = [...gapWords(gapsOf(table.needs, parts)), foodLack(table, parts.food), mining].filter(Boolean);
+    return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
   }
-  const food = parts.food < table.food ? `${foodPointsWords(parts.food)}（目安 ${table.food}）` : '';
-  const said = [none.length ? `${none.join('・')}が無い` : '', short.join('・'), unworn.length ? `持っているが着ていない: ${unworn.join('・')}` : '', food, mining]
-    .filter(Boolean);
+  const must = mustWords(table, parts);
+  const wanted = gapWords(gapsOf(table.needs.filter(need => need.goal), parts));
+  const said = [must.length ? `必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : '',
+    wanted.length ? `目標（そろえば。必須ではない）— ${wanted.join('。')}` : '', mining].filter(Boolean);
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
 }
 
@@ -411,4 +434,33 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
 // through): the cost in
   // what the runs measured, and what to do first; nothing that reads as a way past it.
   return `準備の状態（この act は地下 y=${Math.round(lowest)} へ下りる手）: 未達 — ${lacks.join('・')}${hurt}${near}。この受付は、準備が満たされたことを表さない`;
+}
+
+/**
+ * The required needs of the stage a node of these kinds belongs to that are not met, with what going on without them costs, or null (a stage that does
+ * not say what its lack costs, or every required need met). Beside a hand that goes on to that stage and beside the current node's step on to a node
+ * of it: run59 leg 1 (2026-11-02) went down to the diamonds with no shield and into the gate with no armour, the lack said in a line and no answer
+ * saying what going on was.
+ */
+export function requiredLack(facts: NonNullable<ReturnType<typeof readinessOf>>, kinds: readonly PlanKind[]): string | null {
+  const stage = preparationStage(facts.dimension, facts.counts, kinds);
+  const table = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : null;
+  if (!table?.risk) return null;
+  const must = mustWords(table, { counts: facts.counts, food: facts.food, worn: wornItems(facts.world.worn) });
+  return must.length ? `未達の必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : null;
+}
+
+/** A hand that goes into the Nether: the portal hand (it enters unless `enter` is false). */
+const entersNether = (hands: unknown): boolean => (Array.isArray(hands) ? hands : []).some(raw => record(raw)?.do === 'portal' && record(raw)?.enter !== false);
+
+/**
+ * Run59 leg 1: the portal hand went out five seconds after the obsidian with the shield and the armour still missing in the shortage line, and nothing
+ * in the hand's answer said that going in was what the lack costs. A hand that enters the Nether while a required need of the gate is missing says so
+ * in its result, as the descent's does: the lack, what it costs, and that its acceptance does not mean the need was met.
+ */
+export function gateNote(input: unknown, frame: BodyObservation | null): string | null {
+  const facts = readinessOf(frame);
+  if (!facts || facts.dimension !== 'overworld' || !entersNether(record(input)?.hands)) return null;
+  const lack = requiredLack(facts, ['portal']);
+  return lack ? `準備の状態（この act はネザーへ入る手）: ${lack}。この受付は、準備が満たされたことを表さない` : null;
 }

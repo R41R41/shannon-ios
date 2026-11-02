@@ -2,6 +2,7 @@ import { orderedPlan, type PlanKind, type PlanNode, type PlanTree } from '@shann
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { doneFacts, doneStatusWords, undergroundInOverworld } from './minecraftPlanDone.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
+import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 
 /**
  * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes
@@ -231,7 +232,8 @@ export const PREP_NOT_NOW = '※下りる前の準備の節・地下なので今
  * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is
  * done). Null when the tags do not agree.
  */
-export function followNode(taskId: string, tree: PlanTree, underground = false): { to: string; from: string | null; acts: number; words: string } | null {
+export function followNode(taskId: string, tree: PlanTree, underground = false, lackOf?: (leaf: PlanNode) => string | null):
+  { to: string; from: string | null; acts: number; words: string } | null {
   const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), { under, open } = questions;
   // Run 42 (Sonnet tagged p4.1 and p5.1 to p5.3, which the plan never had: every run of them was null and the now
 // stayed on p1.2 for 700 s): a tag
@@ -265,8 +267,30 @@ export function followNode(taskId: string, tree: PlanTree, underground = false):
   const skipped = order.slice(tree.current === null ? 0 : order.findIndex(node => node.id === tree.current) + 1, order.indexOf(leaf))
     .filter(node => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !questions.under(
       leaf.id, node.id)).slice(0, 3);
-  return { to: leaf.id, from: tree.current, acts: tags.length, words: `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）。`
-    + `飛ばした節は順のまま残っている${skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : ''}` };
+  return { to: leaf.id, from: tree.current, acts: tags.length, words: stepWords(leaf, skipped, lackOf) };
+}
+
+/**
+ * The words of the step on to `leaf`. Run59 leg 1 (2026-11-02): the step on past an open shield node was a tag and a fact, with the shield and the
+ * armour missing and not said; the required needs of the stage the node belongs to that are not met are said beside it (`lackOf`).
+ */
+function stepWords(leaf: PlanNode, skipped: readonly PlanNode[], lackOf?: (leaf: PlanNode) => string | null): string {
+  const lack = lackOf?.(leaf) ?? null;
+  const passed = skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : '';
+  return `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）。飛ばした節は順のまま残っている${passed}${lack ? `。${lack}` : ''}`;
+}
+
+/**
+ * The required needs not met for the stage a plan node belongs to (the kinds of the node and of those above it), said beside a step on to it
+ * (`followNode`), or null.
+ */
+export function lackBefore(frame: BodyObservation | null, tree: PlanTree, leaf: PlanNode): string | null {
+  const facts = readinessOf(frame);
+  if (!facts) return null;
+  const byId = new Map(tree.nodes.map(node => [node.id, node]));
+  const kinds: PlanKind[] = [];
+  for (let at: PlanNode | undefined = leaf, guard = 0; at && guard < 8; at = byId.get(at.parentId ?? ''), guard += 1) kinds.push(kindOf(at));
+  return requiredLack(facts, kinds);
 }
 
 /** The node itself when the plan has it, else its nearest ancestor by the id's dots that it has (`p4.1` → `p4`),

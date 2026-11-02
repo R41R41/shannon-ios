@@ -15,8 +15,13 @@
  *   cheapest, 4 ingots, and lose the least protection), a sword, blocks to stand on and the first stretch's food;
  * - before the Nether's depth and the End: as they were (the check after she is in, and the End's beds, bow and eyes).
  */
-export interface PrepNeed { label: string; count: number; pattern: RegExp; slots?: boolean; worn?: boolean }
-export interface PrepStage { title: string; food: number; needs: readonly PrepNeed[] }
+/**
+ * `goal`: wanted when it can be had, not required (the golden boots, when 4 gold is found). `weight`: what one stack of a matching item is worth in the count
+ * (a diamond pickaxe stands for three iron ones).
+ */
+export interface PrepNeed { label: string; count: number; pattern: RegExp; slots?: boolean; worn?: boolean; goal?: boolean; weight?: (name: string) => number }
+/** `risk`: what going on without the required needs costs, said beside the lack (a stage that has one says its lack as a required part and a goal part). */
+export interface PrepStage { title: string; food: number; needs: readonly PrepNeed[]; risk?: string }
 
 /** Blocks to stand on and to wall with (the knowledge's 足場のブロック 64). */
 export const BLOCKS = new RegExp('^(?:cobblestone|cobbled_deepslate|netherrack|blackstone|stone|deepslate|dirt|andesite|diorite|granite|tuff'
@@ -29,12 +34,18 @@ const PICKAXE: PrepNeed = { label: '鉄以上のツルハシ', count: 1, pattern
 const BUCKET: PrepNeed = { label: 'バケツ', count: 1, pattern: /^(?:bucket|water_bucket|lava_bucket)$/u };
 const SHIELD: PrepNeed = { label: '盾', count: 1, pattern: /^shield$/u };
 const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て・脚', count: 3, pattern: UPPER_ARMOUR, slots: true, worn: true };
-const BOOTS: PrepNeed = { label: '金のブーツ', count: 1, pattern: GOLDEN_BOOTS, worn: true };
+// The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots are a goal,
+// the rest of the gate's list is required.
+const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true };
+/** The Nether's rock wears a pickaxe out (an iron one is 250 uses: S2's lab, one broke): three iron ones, or one diamond one (which counts for three). */
+const TRIP_PICKAXE: PrepNeed = { label: 'ツルハシ（ダイヤ 1 か鉄 3）', count: 3, pattern: PICKAXE.pattern, weight: name => /^(?:diamond|netherite)_/u.test(name) ? 3 : 1 };
 const SWORD: PrepNeed = { label: '剣', count: 1, pattern: /^(?:stone|iron|diamond|netherite)_sword$/u };
 const FOOTING: PrepNeed = { label: '足場のブロック', count: 64, pattern: BLOCKS };
 
-export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food: 40, needs: [PICKAXE, BUCKET, SHIELD, ARMOUR] };
-export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [PICKAXE, SHIELD, SWORD, ARMOUR, BOOTS, FOOTING] };
+export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food: 40, needs: [PICKAXE, BUCKET, SHIELD, ARMOUR],
+  risk: 'ダイヤの層（y=-58）は溶岩と深い所の敵の中。死ねば鉄の道具と防具を失い、取りに戻れないことが多い' };
+export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SHIELD, SWORD, ARMOUR, FOOTING, BOOTS],
+  risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い' };
 
 /** The iron the way to the Nether takes: pickaxe 3, bucket 3, shield 1, helmet 5, chestplate 8, leggings 7, flint
  * and steel 1, sword 2. */
@@ -81,12 +92,14 @@ export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の�
  * procedures; the descent's rule is `PREP_DESCENT_RULE`. Knowledge, not an order.
  */
 export const PREP_RULES_WORDS = [
-  `- ダイヤを掘りに下りる前: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
+  `- ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
     + ("（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）。火打ち金は鉄のある高さで先に作る。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱や廃坑の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
-  '- ゲート（ネザーに入る）の前: 上の 4 つの防具・盾・剣・鉄以上のツルハシ・水入りバケツ・黒曜石 10・火打ち金・足場のブロック 64・食料 40 点ほど。',
+  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）・足場のブロック 64（丸石 128 あると橋で尽きない）・食料 40 点。'
+    + '鉄のツルハシは 1 本が耐久 250 で、ネザーの岩を掘り続けると壊れて止まった（鉄はネザーに無い）。'
+    + '目標: 金のブーツ（金 4 がそろう時）・剣・水入りバケツ・黒曜石 10・火打ち金。必須が欠けたまま入ると、ブレイズ・ガスト・ウィザースケルトンの傷が重なり、死ねばダイヤのツルハシと黒曜石を失う。',
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
   ("- ベッドは村の家で 1〜2 つ（ベッドの節の doneWhen は " +
 "have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan_update に書く）。")

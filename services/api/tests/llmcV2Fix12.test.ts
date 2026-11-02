@@ -8,7 +8,7 @@ import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { currentNodeLine } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { lavaPools, obsidianWays } from '../src/surfaces/minecraft/minecraftLlmcObsidianWays.js';
 import { BODY_RULES, mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
-import { PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, type PrepStage } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { candidateMenuTools } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
@@ -27,6 +27,9 @@ import { planFacts } from './helpers/planTreeV2.js';
 const owned = (items: Array<[string, number]>, worn = '') => carriedItemCounts({ inventory: items.map(([name, count]) => ({ name, count })), worn }, {});
 const rows = (tree: PlanTree) => tree.nodes.map(node => `${node.id} ${node.title}|${node.doneWhen ?? ''}`);
 
+/** A stage's lack as the line says it: the required part, what going on without it costs (run59 leg 1, 2026-11-02). */
+const lack = (stage: PrepStage, words: string) => `準備の不足（${stage.title}）: 必須（${stage.title}に必ず）— ${words}。欠けたまま進むと: ${stage.risk}`;
+
 describe('the armour: iron helmet, chestplate and leggings before the diamonds, golden boots before the gate', () => {
   const on = seedPlan('エンドラを倒して')!;
   it('puts the three iron pieces under the iron, and the golden boots between the diamonds and the obsidian', () => {
@@ -41,23 +44,23 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
   it('asks the three pieces worn at the diamonds\' node, and says one carried and not worn', () => {
     const base = { dimension: 'overworld', food: 50, nowKinds: ['diamond' as const] };
     const kit: Array<[string, number]> = [['iron_pickaxe', 1], ['bucket', 1], ['shield', 1]];
-    expect(preparationShortage({ ...base, counts: owned(kit), worn: [] })).toBe('準備の不足（ダイヤを掘る前）: 鉄の兜・胸当て・脚が無い');
+    expect(preparationShortage({ ...base, counts: owned(kit), worn: [] })).toBe(lack(BEFORE_DIAMONDS, '鉄の兜・胸当て・脚が無い'));
     const armour: Array<[string, number]> = [...kit, ['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]];
     expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate'] }))
-      .toBe('準備の不足（ダイヤを掘る前）: 持っているが着ていない: iron_leggings');
+      .toBe(lack(BEFORE_DIAMONDS, '持っているが着ていない: iron_leggings'));
     expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate', 'iron_leggings'] })).toBeNull();
   });
   it('asks the golden boots at the gate, iron boots do not stand for them', () => {
-    const gate: Array<[string, number]> = [['iron_pickaxe', 1], ['shield', 1], ['iron_sword', 1], ['cobblestone', 64], ['iron_helmet', 1],
+    const gate: Array<[string, number]> = [['iron_pickaxe', 3], ['shield', 1], ['iron_sword', 1], ['cobblestone', 64], ['iron_helmet', 1],
       ['iron_chestplate', 1], ['iron_leggings', 1], ['iron_boots', 1]];
     const parts = { dimension: 'overworld', food: 50, nowKinds: ['portal' as const], v2: true };
-    expect(preparationShortage({ ...parts, counts: owned(gate) })).toBe('準備の不足（ネザーに入る前）: 金のブーツが無い');
+    expect(preparationShortage({ ...parts, counts: owned(gate) })).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い');
     expect(preparationShortage({ ...parts, counts: owned([...gate, ['golden_boots', 1]]) })).toBeNull();
     // Worn counts: the worn line of the frame is read as carried.
     expect(owned([], '頭: iron_helmet(残り 160/165)、足: golden_boots(残り 91/91)').get('golden_boots')).toBe(1);
   });
   it('says the rules once, the same words in the first plan and the stage knowledge, with no old numbers', () => {
-    expect(PREP_RULES_WORDS).toContain('ダイヤを掘りに下りる前: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）');
+    expect(PREP_RULES_WORDS).toContain('ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点');
     expect(PREP_RULES_WORDS).toContain('靴は鉄でなく金のブーツ（金の延べ棒 4）');
     const plan = ownFirstPlanSystem();
     expect(plan).toContain(PREP_RULES_WORDS);
