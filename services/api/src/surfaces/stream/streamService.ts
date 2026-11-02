@@ -278,7 +278,8 @@ export class StreamService {
   }
 
   view() {
-    return { stream: this.session ? this.session.view : null, stats: this.stats(), comments: this.ledger.view(), notices: [...this.notices] };
+    return { stream: this.session ? this.session.view : null, stats: this.stats(), comments: this.ledger.view(),
+      notices: [...this.notices], capabilities: { program: true } };
   }
 
   tick(): void {
