@@ -15,6 +15,9 @@ export const FOOD_ACQUISITION_KNOWLEDGE = [
   '- 短い試行で食料在庫が増えなければ、続ける費用と他の食料源を評価し直す。'
     + '届かない・接近できない時は、射程や秒数だけを増やさず、経路や回収が成立する条件の変化が無ければ別候補や地表探索へ切り替える。',
   '- 瀕死・飢えでは、今ある食事と安全な退避を先にする。加工見込み・攻撃回数を確保済みの食料には数えない。',
+  // Run 58 (hold 3): food 0 after a death, and the night began; she sealed a mine and waited for dawn (the owner, 2026-11-02: 「夜の狩りを許す」).
+  '- 夜でも、食料が足りず、盾・石以上の剣か斧・防具 1 つ以上があり体力 16 以上なら、囲いや坑道の入口から 16m 以内で見えている陸上動物を狩ってよい。'
+    + 'stopIf は hostileWithin 10・hpBelow 12。敵 2 体以上・クリーパーが近い・体力が戻らない時は囲いへ戻る。条件を満たさない時は、朝を待つ間に調理・工作など安全な作業を進める。',
 ].join('\n');
 
 /** A food item's value, not a claim about how many drops this creature will give. */

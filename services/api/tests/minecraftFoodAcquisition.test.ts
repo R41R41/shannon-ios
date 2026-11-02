@@ -55,6 +55,15 @@ describe('food acquisition: compare return and access, not a nearby school of fi
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(FOOD_ACQUISITION_KNOWLEDGE);
   });
 
+  it('run 58: allows a near night hunt with shield, weapon and armour, and keeps the way back to the shelter (the owner, 2026-11-02)', () => {
+    expect(FOOD_ACQUISITION_KNOWLEDGE).toContain('夜でも、食料が足りず、盾・石以上の剣か斧・防具 1 つ以上があり体力 16 以上なら');
+    expect(FOOD_ACQUISITION_KNOWLEDGE).toContain('16m 以内');
+    expect(FOOD_ACQUISITION_KNOWLEDGE).toContain('hostileWithin 10・hpBelow 12');
+    expect(FOOD_ACQUISITION_KNOWLEDGE).toContain('囲いへ戻る');
+    const prep = stageKnowledge({ body: { state: { dimension: 'overworld' } } })!;
+    expect(prep).toContain('朝待ちと調理・工作・近くの夜の狩り');
+  });
+
   for (const variant of ['normal', 'urgent', 'compressed'] as Variant[]) {
     it(`${variant}: the real request builder retains nutrition and land alternatives without a live model or body`, async () => {
       const state: MaxState = { hp: 20, food: 19, saturation: 5, foods: [], hits: [], holder: {}, life: 2, promises: [], queue: [], free: 30,
