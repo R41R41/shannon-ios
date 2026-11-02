@@ -49,6 +49,15 @@ export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food
 export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SHIELD, SWORD, ARMOUR, FOOTING, BOOTS],
   risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い' };
 
+/**
+ * The coordinator, 2026-11-02 (the owner: dragon within three hours, an hour and a half at best; a death after the iron gear puts the time in doubt, so a
+ * death is out): from the iron gear on, not dying stands above being fast. Knowledge of the stages, in the numbers the live state shows (the health, the food
+ * points, the wear of a piece in the pack's line).
+ */
+export const SAFETY_FIRST = '- 死なないことを速さより上に置く（鉄の装備を手に入れた後は特に。死ぬと装備と時間を失い、この通しは死んだらアウト）。'
+  + '体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満（持ち物の行の耐久）のまま、深い所・ネザー・戦いへ進まない: 食べる・回復を待つ・作り直す・退くを先にする。'
+  + '溶岩の縁・落下の上・火の玉の線では、足元と両脇を確かめて 1 マスずつ。';
+
 /** The iron the way to the Nether takes: pickaxe 3, bucket 3, shield 1, helmet 5, chestplate 8, leggings 7, flint
  * and steel 1, sword 2. */
 export const IRON_BEFORE_NETHER = 30;

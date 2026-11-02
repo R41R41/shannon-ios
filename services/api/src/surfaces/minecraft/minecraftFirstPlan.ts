@@ -48,7 +48,8 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('焼いて鉄のツルハシ・バケツ・盾', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' }),
     node('鉄の全身の防具', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings&have:iron_boots' })] }),
   node('水入りバケツ', { kind: 'water', doneWhen: 'have:water_bucket' }),
-  node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe', caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・バケツ・食料40点）が欠けたら下りない'], children: [
+  node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe',
+    caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・バケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
   node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', caution: ['必須（盾・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点）が欠けたら入らない'], children: [
@@ -75,6 +76,7 @@ const BEYOND: readonly PlanSeed[] = [
     caution: ['橋の下は溶岩のことがある。足元と両脇を確かめて渡る', '遠い go に canDig[netherrack,basalt,blackstone] canPlace[cobblestone,netherrack]',
       'maxDig 200・maxPlace 100・seconds 100〜120。止まったら行の通りに直して同じ go'] }),
   node('ブレイズロッド7以上', { kind: 'blaze', target: { item: 'blaze_rod', count: 7 }, doneWhen: 'have:blaze_rod>=7', note: '粉にするのは7本そろってから',
+    caution: ['死んだらアウト。体力12未満・盾の耐久2割未満なら戦わず退いて補う'],
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('fight でブレイズを14体ほど倒す（傷が深ければ attack hold）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
   node('エンダーパール12以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 12 }, doneWhen: 'have:ender_pearl>=12', note: '14あると目玉の投げに足りる',
