@@ -213,6 +213,23 @@ python3 -I trials.py report          # 表と「止まりの様子」（頭の�
   体の止まりは S2（`local_d59198d3-234c-40f6-b62c-473188ed5c1c`）、頭の止まりは S3（`local_0300d99d-07c3-440c-9229-1883531caeca`）へ送ります。
 - 体だけの確かめは PC の WSL で LLM なし：`backend/scripts/lab/s4-section-probe.sh`（S2 の hunt の場面に、c1 の道の場面 `route_fortress`・`route_stronghold`・`dig_to_room`・`frames_enter` を足したもの）。
 
+### 隔離台（`rig.py`、本物の頭＋本物の体＋ラボの世界。run59 と並べて回せる。2026-11-02 夜に追加）
+取りまとめの決め：窓を待たずに、本番の実走と並べて S6〜S10 を本物の頭で繰り返し試す場。**本番の shannon-home・体の口座・頭のサービス・DB には触らない**（別のポート・口座・DB）。API の鍵は VM の中だけで使う。
+- 仕組み：1 つの Node プロセス `services/api/scripts/minecraft-rig.ts` に、頭の本物のコード（運用 CLI とソケット・タスクの実行・FCA の歩・LLM 中心の歩の部品・制御・予算）と、体の本物（`NativeCommonFcaBody` の mineflayer ボット＋`CommonFcaControlLoop`。poll は HTTP でなく制御へ直接）を入れ、
+  ラボのサーバー（`seedscan.Lab`：pristine の世界の写し・難易度 normal・view 10・simulation 8・モブあり）につなぐ。頭の hold ラボ（`tests/minecraftHoldResumeLab.ts`）のモデルと体の代役を、本番のモデル（`configuredMinecraftLlmc`）と本物の体に替えたもの。
+  予算は本番と同じ `fcaBudget`（運用 CLI の `--budget-yen` がその依頼の上限）。`rig.py` が 1 試しごとにラボのサーバーと rig を立て、`trials.run_trial` をそのまま回し（開始の状態・節目・上限・止まりの様子・報告は同じ）、終わったら両方を止めて消す。
+- 木：**頭の木**＝試す版の `git archive`（+ node_modules を本番の checkout からハードリンク。rig の台本は上書きで置く）、**体の木**＝試す版（src・scripts・package）+ `~/Shannon-dev` の node_modules。固定して使う（その後の枝の動きに左右されない）。体側の束は pin ごとに 1 回 esbuild で作る。
+- 回し方（lab-slot の決まり：`bash lab-slot.sh --allow-run --label rig -- ...`。`--allow-run` は取りまとめの判断。VM は 4 vCPU になってから＝`nproc` が 4。負荷（1 分）が 3.5 を超え続けたら `touch ~/.cache/minebot-lab/trials.stop`）：
+
+```bash
+cd ~/minecraft/shannon-home/trials
+python3 -I rig.py run --head-pin ~/s4-pins/head-<sha> --body-pin ~/s4-pins/body-<sha> --sections 6,7,9,8a,8b,10 --seeds c1 --model real \
+  --max-section-yen 500 --batch-cap-yen 3000 --owner-ok-supply "ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）"
+python3 -I rig.py run ... --model script --smoke      # 鍵なし・1 分に切った配線の試験（頭の台本のモデル）
+python3 -I rig.py report
+```
+- 結果は `results/<バッチ>/`（試しごとの JSON・`rig-<試し>.log`＝rig の出力・`report.md`）。rig の出力の `RIG_USAGE` は有料の呼出し 1 回ごとの費用（USD）。`builds` は試した頭と体の版。
+
 ### 未確認のこと（分かっていること／仮説／不明）
 - 分かっている：`execute if entity @a[name=...,advancements={...}]`・`distance`・`[eye=true]` の書き方、`/locate` の答え、End へ tp すると竜が 4.7〜7.3 秒で現れること（ラボで実測。体の観測はまだ）。
 - 仮説：`trial_live` の `server.properties`（難易度 normal、view-distance 10、simulation-distance 8）では、ブレイズのスポナー・エンダーマン・ピグリンの `summon` が期待どおり動く。S7・S8 は実機で初めて確かめる。

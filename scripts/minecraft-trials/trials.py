@@ -72,6 +72,7 @@ PROD_LOCK = os.path.join(HOME, '.cache', 'minebot-lab', 'prod.lock')     # `floc
 PARTIAL_EVERY = 20           # seconds between the saves of a running trial: the VM is a Spot machine and may stop under it
 STOP_FILE = os.path.join(HOME, '.cache', 'minebot-lab', 'trials.stop')   # `touch` it and the running trial ends at its next poll (cancel, logout, restore); `run` refuses to start while it exists
 MAX_SECTION_YEN = None       # --max-section-yen: a ceiling over every section's capYen (the coordinator's window rule: at most ¥500 a section)
+RCON_TARGET = None           # (host, port, password) of an isolated rig's lab server while rig.py runs a trial; None = shannon-home (server.properties)
 
 
 def settled(row):
@@ -400,11 +401,15 @@ def remove_property(key):
 
 class Rcon:
     def __init__(self, timeout=60):
-        props = properties()
         self.timeout = timeout
-        self.conn = socket.create_connection(('127.0.0.1', int(props.get('rcon.port', '25575'))), timeout=timeout)
+        if RCON_TARGET:       # an isolated rig's lab server (rig.py); shannon-home's own settings are not read
+            host, port, password = RCON_TARGET
+        else:
+            props = properties()
+            host, port, password = '127.0.0.1', int(props.get('rcon.port', '25575')), props.get('rcon.password', '')
+        self.conn = socket.create_connection((host, port), timeout=timeout)
         self.next_id = 10
-        if self._packet(3, props.get('rcon.password', ''))[0] == -1:
+        if self._packet(3, password)[0] == -1:
             raise Stop('rcon authentication failed')
 
     def _recv(self, size):
@@ -610,6 +615,14 @@ def ops(*args, timeout=240):
     if out.returncode and not reply.get('outcome'): reply['stderr'] = out.stderr.strip()[-300:]
     log(f'ops {args[0]}: {reply.get("outcome")} {reply.get("code")} {reply.get("message", "")[:80]}')
     return reply
+
+
+def body_logout():
+    """The operator CLI logs the production body out (True when it did). An isolated rig's body belongs to the rig process, which rig.py stops."""
+    if RCON_TARGET: return False
+    wait_rate(1)
+    ops('logout')
+    return True
 
 
 def task_row(task_id):
@@ -1136,6 +1149,7 @@ def wait_body_online(seconds=90):
 
 def step_unknown_codes(task_id, since_iso):
     """`Shannon FCA step unknown task=<id> code=<code>` lines of the trial (the journal is readable by the service user)."""
+    if RCON_TARGET: return []         # an isolated rig has no service journal
     since = dt.datetime.strptime(since_iso[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=dt.timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M:%S')
     out = subprocess.run(['journalctl', '-u', 'shannon-ios', '--since', since, '--no-pager', '-o', 'short-iso'], capture_output=True, text=True, timeout=60).stdout
     codes = []
@@ -1237,16 +1251,20 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     missing_sites = sorted(k for k in site_refs(section) if k not in sites)
     if missing_sites:
         result['reason'] = 'no_sites:' + ','.join(missing_sites); return result
-    stop_server()
-    target = clear_trial_dir(LIVE)
-    shutil.copytree(pristine, target)
-    open(os.path.join(target, MARK), 'w').close()
-    set_property('level-name', LIVE)
-    set_property('pause-when-empty-seconds', '-1')   # the clock must run between logout and the next login too
-    world_id = f'trial-{seed_key}-s{section["id"]}-{jst_stamp(True)}'
-    write_world_id(world_id)
+    rig = bool(RCON_TARGET)      # the isolated rig (rig.py) has started its own lab server on a copy of the pristine world, with its body logged in
+    if not rig:
+        stop_server()
+        target = clear_trial_dir(LIVE)
+        shutil.copytree(pristine, target)
+        open(os.path.join(target, MARK), 'w').close()
+        set_property('level-name', LIVE)
+        set_property('pause-when-empty-seconds', '-1')   # the clock must run between logout and the next login too
+        world_id = f'trial-{seed_key}-s{section["id"]}-{jst_stamp(True)}'
+        write_world_id(world_id)
+        start_server()
+    else:
+        world_id = f'rig-{seed_key}-s{section["id"]}-{jst_stamp(True)}'
     result['worldId'] = world_id
-    start_server()
     r = Rcon()
     r.cmd('scoreboard objectives add trial_deaths deathCount')
     r.cmd(f'time set {section["start"].get("time", 0)}')
@@ -1254,8 +1272,11 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     if dry_run:
         result.update({'reason': 'dry_run', 'supplied': False, 'supplyKinds': []})       # nothing was given, moved or built: the world was only swapped
         return result
-    wait_rate(4)
-    login = ops('login')
+    if rig:
+        login = {'outcome': 'accepted'}
+    else:
+        wait_rate(4)
+        login = ops('login')
     if login.get('outcome') != 'accepted' or not wait_body_online():
         result['reason'] = f'login_failed:{login.get("code")}'; return result
     time.sleep(8)
@@ -1265,7 +1286,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     except Stop as error:
         r.close()
         result['reason'] = f'setup_failed:{error}'[:200]
-        wait_rate(1); ops('logout'); return result
+        body_logout(); return result
     time.sleep(4)
     result['startState'] = body_state(r)
     result['startAt'] = start_at or (site_ref(sites, section['start']['at']) if section['start'].get('at') else 'spawn')
@@ -1273,12 +1294,12 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     r.close()
     if failed_check:
         result['reason'] = f'setup_failed:preflight:{failed_check}'
-        wait_rate(1); ops('logout'); return result
+        body_logout(); return result
     request = ops('request', '--max-minutes', str(section['limitMinutes'] + 2), '--budget-yen', str(cap), GOAL)
     task_id = request.get('taskId')
     if request.get('outcome') != 'accepted' or not task_id:
         result['reason'] = f'request_refused:{request.get("code")}'
-        ops('logout'); return result
+        body_logout(); return result
     t0 = time.monotonic()
     result['taskId'] = task_id
     row = task_row(task_id)
@@ -1339,7 +1360,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
             if settled(row): break
             time.sleep(2)
         if not settled(row):
-            wait_rate(2)
+            if not RCON_TARGET: wait_rate(2)
             cleanup.append('release:' + str(ops('release').get('code')))
             for _ in range(30):
                 row = task_row(task_id) or {}
@@ -1358,11 +1379,10 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
                    'missing': [m['name'] for m in section['milestones'] if m.get('end') and m['name'] not in latched],
                    'final': last.get('state'), 'yen': row.get('yen'), 'budgetSteps': row.get('steps'),
                    'taskStatus': row.get('status'), 'pauseReason': row.get('pauseReason'), **decisions(task_id)})
-    wait_rate(1)
-    ops('logout')
-    for _ in range(20):
-        if BODY not in (online_players() or []): break
-        time.sleep(3)
+    if body_logout():
+        for _ in range(20):
+            if BODY not in (online_players() or []): break
+            time.sleep(3)
     with contextlib.suppress(FileNotFoundError): os.remove(partial_path(batch, trial_id))      # the result is saved by the caller from here
     return result
 
