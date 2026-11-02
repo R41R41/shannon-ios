@@ -252,7 +252,7 @@ describe('the head facts at decision time', () => {
     expect(normal.facts.join('\n')).toContain('同じ候補はもう試した');
     expect(normal.facts.join('\n')).toContain('未確認');
     observation = frame({ inventory: ['birch_planks×4'], nearbyThreats: [{ id: 7, name: 'zombie', kind: 'hostile',
-      distance: 4, position: where, canSee: true }] }, AT + 1);
+      distance: 4, position: where, canSee: true }] }, AT + 31_000);
     body.context();
     const urgent = body.transient!() as { facts: string[] };
     expect(urgent).toHaveProperty('mode');
