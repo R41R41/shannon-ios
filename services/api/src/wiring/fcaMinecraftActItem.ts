@@ -51,11 +51,16 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
 // command, never sent to the body) and `keep`
   // (made into promises of the plan below, once the queue has the act).
   const { pre: modelPre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, reserve: _reserve, ...rawArgs } = input;
-  // R3-1 (4): a reserve carries the head's safety defaults: its `pre` (safe, health, near here) and its `stopIf` (the body gets the stopIf in its arguments, the pre in the envelope).
-  const reserving = input.reserve === true;
-  const feetNow = feetOf(parts.control.observe(parts.bodyId));
-  const pre = reserving ? reserveCondition(modelPre, feetNow, parts.frame ? dimensionOf(parts.frame) : null) : modelPre;
-  if (reserving) (rawArgs as { stopIf?: unknown }).stopIf = reserveStopIf(rawArgs.stopIf as ActInput['stopIf']);
+  // R3-1 (4): a reserve carries the head's safety defaults: its `pre` (safe, health, near here) and its `stopIf`
+  // (the body gets the stopIf in its arguments, the pre in the envelope).
+  function reserveDefaults() {
+    const reserving = input.reserve === true;
+    const feetNow = feetOf(parts.control.observe(parts.bodyId));
+    const pre = reserving ? reserveCondition(modelPre, feetNow, parts.frame ? dimensionOf(parts.frame) : null) : modelPre;
+    if (reserving) (rawArgs as { stopIf?: unknown }).stopIf = reserveStopIf(rawArgs.stopIf as ActInput['stopIf']);
+    return { reserving, pre };
+  }
+  const { reserving, pre } = reserveDefaults();
   // Run 47: a vertical hand that names no seconds gets the time its height needs (not the body's 60 s); the time
 // of the act follows it.
   const feet = feetOf(parts.control.observe(parts.bodyId));
