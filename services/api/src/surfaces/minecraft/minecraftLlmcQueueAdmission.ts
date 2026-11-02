@@ -25,19 +25,27 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
       return `送らなかった: 列がいっぱい（実行中を含めて ${QUEUE_MAX} つ）。差し替えるなら replace に ${waiting.at(-1)!.item} などを書く`;
     }
     // R3-1 (6): nothing is put behind a running item that only waits.
-    if (waiting.length && spec.input.hands.length > 0 && spec.input.hands.every((hand) => hand.do === 'wait')) return waitBehindWords(waiting.at(-1)!.item);
+    const waitProblem = waitBehindProblem(spec, waiting);
+    if (waitProblem) return waitProblem;
     const reserveProblem = reserveAdmissionProblem(spec, waiting);
     if (reserveProblem) return reserveProblem;
     const same = waiting.find((item) => sameWork(item.input, spec.input));
     if (same) return `送らなかった: ${same.item} ${SAME_IN_QUEUE_WORDS}（${waiting[0] === same ? '実行中' : '待ち'}）。列は live の queue`;
     // Continue contract 2: a mark of another step's queue cannot be relied on (the marks belong to one queue); said
     // now, not as a drop when it should start.
+    return unknownDependsProblem(spec, waiting);
+  }
+
+  function waitBehindProblem(spec: QueueAdd, waiting: QueueItem[]): string | null {
+    const waitOnly = spec.input.hands.length > 0 && spec.input.hands.every((hand) => hand.do === 'wait');
+    return waiting.length && waitOnly ? waitBehindWords(waiting.at(-1)!.item) : null;
+  }
+
+  function unknownDependsProblem(spec: QueueAdd, waiting: QueueItem[]): string | null {
     const unknown = (spec.input.dependsOn ?? []).filter((ref) => !items.some((entry) => entry.item === ref));
-    if (unknown.length) {
-      const usable = (waiting.length ? waiting : items.slice(-3)).map((entry) => entry.item);
-      return `送らなかった: dependsOn の ${unknown.join('・')} は前の段の列（今の列で頼れるのは ${usable.length ? usable.join('・') : 'まだ無い'}）`;
-    }
-    return null;
+    if (!unknown.length) return null;
+    const usable = (waiting.length ? waiting : items.slice(-3)).map((entry) => entry.item);
+    return `送らなかった: dependsOn の ${unknown.join('・')} は前の段の列（今の列で頼れるのは ${usable.length ? usable.join('・') : 'まだ無い'}）`;
   }
 
   function reserveAdmissionProblem(spec: QueueAdd, waiting: QueueItem[]): string | null {
