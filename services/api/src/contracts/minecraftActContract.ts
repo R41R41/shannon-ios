@@ -5,7 +5,7 @@ export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VE
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
       KEEP_FORM } from './minecraftActTypes.js';
 export type { ActPos, ActFace, HandKind, ActHand, ActStopIf, ActKeep, ActInput, EarlierPass, ActHandLine, EnderEyeFlight, ActResult,
-   ViewInput, ViewResult, LlmCentricWorld } from './minecraftActTypes.js';
+   ViewInput, ViewResult, LlmCentricWorld, ShieldRushStatus, ShieldRushCode, ShieldRushProgress } from './minecraftActTypes.js';
 /**
  * The LLM-centric Minecraft body (design mb-llm-centric, 2026-10-21; head switch the LLM-centric mode, body MINEBOT_LLM_CENTRIC):
  * the head owns this contract, the body follows it (shared note `mb-llm-centric-contract.md`). Four parts:
@@ -26,7 +26,7 @@ export type { ActPos, ActFace, HandKind, ActHand, ActStopIf, ActKeep, ActInput, 
  */
 import { PLAN_LIMITS,promiseItemFits } from '@shannon/mind';
 import { CONDITION_SCHEMA,validCondition } from './minecraftActCondition.js';
-import { dependsProblem,handProblem } from './minecraftActHandRules.js';
+import { dependsProblem,handProblem,shieldRushActProblem } from './minecraftActHandRules.js';
 import { aggregateGoal,type CutBy,type GoalOutcome,type RunEnd } from './continueContract.js';
 
 /**
@@ -143,6 +143,15 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         target: { type: 'string', maxLength: 64, description: '生き物（#id か名前）' },
         untilDead: { type: 'boolean' },
         hold: { type: 'boolean' },
+        style: { type: 'string', enum: ['shield_rush'], description: 'attack: ブレイズ1体へ盾突進' },
+        retreatTo: pos('shield_rush の退避先（必須）'),
+        area: { type: 'object', additionalProperties: false, required: ['center', 'radius', 'maxDrop'],
+          description: 'shield_rush の範囲（既定: 足場・半径4・段差0）', properties: {
+            center: pos('中心'), radius: { type: 'number', minimum: 0 }, maxDrop: { type: 'integer', minimum: 0 },
+          } },
+        shieldReserve: { type: 'integer', minimum: 0, maximum: 336, description: '盾の残りの下限（既定36）' },
+        onCrossfire: { type: 'string', enum: ['retreat', 'continue'], description: '交差射撃時（既定retreat）' },
+        pickup: { type: 'string', enum: ['target_drops', 'none'], description: '拾う物（既定target_drops）' },
         goals: { type: 'array', minItems: 2, maxItems: 8, items: pos('行き先の候補'), description: 'go の行き先の候補（どれか 1 つに着けば済み）' },
         canDig: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'string', maxLength: 40 }, description: 'go で掘ってよい物（id か stone・dirt・sand・wood）' },
         canPlace: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'go で置いてよい物（足場・橋・柱）' },
@@ -217,6 +226,8 @@ export const VIEW_INPUT_SCHEMA = Object.freeze({
 });
 
 export function actProblem(input: ActInput): string | null {
+  const rush = shieldRushActProblem(input);
+  if (rush) return rush;
   for (const [index, hand] of input.hands.entries()) {
     const problem = handProblem(hand) ?? dependsProblem(index + 1, hand, input.hands.length) ?? (input.repeat === undefined ? null : repeatProblem(hand));
     if (problem) return `手${index + 1}（${hand.do}）: ${problem}`;
@@ -281,9 +292,10 @@ export function readActResult(text: string | undefined): ActResult | null {
     const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure';
     return { ...result, lines: result.lines.map(line => {
       if (line.goal !== undefined && line.end !== undefined) return line;
-      const filled = line.status === 'done' ? { goal: 'done' as const, end: 'finished' as const }
+      const filled = line.status === 'done' || line.status === 'killed' ? { goal: 'done' as const, end: 'finished' as const }
         : line.status === 'skipped' ? { goal: 'not_started' as const, end: 'not_run' as const }
-          : line.status === 'stopped' && cut ? { goal: 'partial' as const, end: 'cut' as const, cutBy: result.stoppedBy as CutBy }
+          : line.status === 'cut' || line.status === 'stopped' && cut ? { goal: 'partial' as const, end: 'cut' as const,
+            ...(cut ? { cutBy: result.stoppedBy as CutBy } : {}) }
             : { goal: 'failed' as const, end: 'finished' as const };
       return { ...filled, ...line, goal: line.goal ?? filled.goal, end: line.end ?? filled.end };
     }) };
@@ -297,13 +309,13 @@ export function readActResult(text: string | undefined): ActResult | null {
  */
 export function actOutcomeOf(result: ActResult): { goal: GoalOutcome; end: RunEnd; cutBy?: CutBy } {
   if (result.outcome) return { goal: result.outcome.goal, end: result.outcome.end, ...(result.outcome.cutBy ? { cutBy: result.outcome.cutBy } : {}) };
-  const hands = result.lines.map(line => ({ goal: line.goal ?? (line.status === 'done' ? 'done' :
+  const hands = result.lines.map(line => ({ goal: line.goal ?? (line.status === 'done' || line.status === 'killed' ? 'done' : line.status === 'cut' ? 'partial' :
      line.status === 'skipped' ? 'not_started' : 'failed'), motorOps: line.motorOps ?? (line.status === 'skipped' ? 0 : 1) }));
   const goal = aggregateGoal(hands, result.doneMet !== undefined);
-  const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure';
+  const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure' || result.lines.some(line => line.status === 'cut');
   const end: RunEnd = hands.length > 0 && hands.every(hand => hand.goal === 'not_started') && !hands.some(hand => hand.motorOps > 0) ? (cut ? 'cut' : 'not_run')
     : cut ? 'cut' : 'finished';
-  return { goal, end, ...(cut ? { cutBy: result.stoppedBy as CutBy } : {}) };
+  return { goal, end, ...(result.stoppedBy && result.stoppedBy !== 'failure' ? { cutBy: result.stoppedBy as CutBy } : {}) };
 }
 /** A view's result (`ViewResult`), or null. */
 export function readViewResult(text: string | undefined): ViewResult | null {
