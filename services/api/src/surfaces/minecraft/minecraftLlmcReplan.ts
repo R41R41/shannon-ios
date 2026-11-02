@@ -97,7 +97,11 @@ export const REPLAN_SCHEMA = Object.freeze({
   additionalProperties: false,
   required: ['ops', 'why'],
   properties: {
-    ops: { type: 'array', items: { type: 'string' }, description: 'plan.update の op を 1 つずつ JSON の文字列で（12 個まで。例 {"op":"add","parent":"p10","title":"…","kind":"blaze"}）' },
+    ops: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'plan.update の op を 1 つずつ JSON の文字列で（12 個まで。例 {"op":"add","parent":"p10","title":"…","kind":"blaze"}）',
+    },
     current: { type: 'string', description: '今の節にしたい id。変えないなら書かない' },
     why: { type: 'string', description: '何を直したか、またはなぜ直さないか（120 字まで）' },
   },
@@ -113,7 +117,8 @@ function opOf(item: unknown): Record<string, unknown> | null {
       return null;
     }
   }
-  return value && typeof value === 'object' && !Array.isArray(value) && ALLOWED_OPS.has(String((value as { op?: unknown }).op)) ? value as Record<string, unknown> : null;
+  const isObject = !!value && typeof value === 'object' && !Array.isArray(value);
+  return isObject && ALLOWED_OPS.has(String((value as { op?: unknown }).op)) ? value as Record<string, unknown> : null;
 }
 
 /** The ops and the line of an answer; null when it is not one. An empty list of ops is an answer: the strong model found nothing to change. */
