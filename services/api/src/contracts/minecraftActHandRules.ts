@@ -108,7 +108,7 @@ const rushWhole = (hand: ActHand, key: 'retreatHp' | 'shieldReserve', low: numbe
 const rushChoice = (value: unknown, choices: readonly string[]): boolean => value === undefined || choices.includes(String(value));
 const rushArea = (value: unknown): boolean => {
   const area = objectOf(value);
-  return !area || (Object.keys(area).length === 3 && rushPos(area.center) && finite(area.radius) && area.radius > 0
+  return !!area && (Object.keys(area).length === 3 && rushPos(area.center) && finite(area.radius) && area.radius > 0
     && Number.isInteger(area.maxDrop) && (area.maxDrop as number) >= 0);
 };
 const RUSH_FORMS: ReadonlyArray<readonly [(hand: ActHand) => boolean, string]> = [
