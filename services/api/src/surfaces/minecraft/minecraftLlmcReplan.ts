@@ -84,49 +84,75 @@ export function settledAttempt(ledger: ReplanLedger, record: ReplanRecord): Repl
   return { ...ledger, last: [...ledger.last.slice(0, -1), record] };
 }
 
-/** The ops the strong model may write: the plan's own, without the promises (a new plan does not move what was set aside). */
-const ALLOWED_OPS: ReadonlySet<string> = new Set(['add', 'split', 'set', 'move', 'drop', 'forbid', 'caution', 'lift']);
-type Fields = Record<string, { items?: { properties: Fields } } & Record<string, unknown>>;
-const BASE = PLAN_UPDATE_RULES_DEFINITION.nativeInputSchema as { properties: { ops: { items: { properties: Fields } }; current: unknown } };
-const ITEM = BASE.properties.ops.items;
-const pick = (from: Fields, keys: readonly string[]): Fields => Object.fromEntries(keys.filter(key => key in from).map(key => [key, from[key]!]));
+/**
+ * The ops the strong model may write: the plan's own, without the promises (a new plan does not move what was set aside). A node is split by
+ * adding its parts under it (`add` with `parent`): the schema has no nested list.
+ */
+const ALLOWED_OPS: ReadonlySet<string> = new Set(['add', 'set', 'move', 'drop', 'forbid', 'caution', 'lift']);
+type Fields = Record<string, Record<string, unknown>>;
+const BASE = PLAN_UPDATE_RULES_DEFINITION.nativeInputSchema as { properties: { ops: { items: { properties: Fields } } } };
+const FIELDS = BASE.properties.ops.items.properties;
 
 /**
- * The op of the answer: the fields the allowed ops use, and split's children with five of them. The API refuses a strict schema with more than 24
- * optional parameters (2026-11-02, the first real replay: the plan tool's whole op, with the promises' fields and the children's, has 37, and
- * every new plan was turned away with a 400).
+ * The op of the answer, flat. The API compiles a strict schema into a grammar and refuses one that is too much for it: first for more than 24
+ * optional parameters (2026-11-02, the first real replay: the plan tool's whole op has 37), then, with 20, for being "too complex" (the nested
+ * target, prep and children, the nullable fields that become `anyOf`). So: strings, integers and two enums, 15 optional fields, nothing
+ * nested; `replanOf` puts the target and the preparation state back into the plan tool's shape.
  */
 const REPLAN_ITEM = {
-  ...ITEM,
+  type: 'object',
+  additionalProperties: false,
+  required: ['op'],
   properties: {
     op: { type: 'string', enum: [...ALLOWED_OPS] },
-    ...pick(ITEM.properties, ['id', 'parent', 'after', 'title', 'kind', 'where', 'doneWhen', 'note', 'target', 'state', 'reason', 'text', 'prep']),
-    into: { ...ITEM.properties.into, items: { ...ITEM.properties.into?.items, properties: pick(ITEM.properties.into?.items?.properties ?? {},
-      ['title', 'kind', 'where', 'doneWhen', 'note']) } },
+    id: { type: 'string', description: '直す節の id（入力の計画に出ている物）。add では書かない' },
+    parent: { type: 'string', description: 'add の親（節を割る時は割る節の id）。move の移し先' },
+    after: { type: 'string', description: 'add・move で、この節の次に置く時のその節の id' },
+    title: { type: 'string', description: '節の題（60 字まで）' },
+    kind: FIELDS.kind ?? { type: 'string' },
+    where: { type: 'string', description: '場所（座標は入力にある物だけ）' },
+    doneWhen: { type: 'string', description: '済む条件。観測の形で書く' },
+    note: { type: 'string', description: '補足（120 字まで）' },
+    state: FIELDS.state ?? { type: 'string' },
+    reason: { type: 'string', description: 'set の理由（80 字まで）' },
+    text: { type: 'string', description: 'forbid・caution・lift の 1 行（80 字まで）' },
+    targetItem: { type: 'string', description: '完成品を取る節の物の名前（例 blaze_rod）。targetCount とそろえる' },
+    targetCount: { type: 'integer', description: 'その個数' },
+    prepState: { type: 'string', enum: ['met', 'skipped', 'unmet_now'], description: '準備の節の状態' },
+    prepWhy: { type: 'string', description: 'prepState の理由' },
   },
 };
 
-/** The answer's schema: the plan tool's ops and current node, and a line saying what was changed and why. */
+/** The answer's schema: the ops, the node that is current now, and a line saying what was changed and why. */
 export const REPLAN_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
   required: ['ops', 'why'],
   properties: {
-    ops: { type: 'array', maxItems: 12, items: REPLAN_ITEM },
-    current: BASE.properties.current,
-    why: { type: 'string', maxLength: 120, description: '何を直したか、またはなぜ直さないか（120 字まで）' },
+    ops: { type: 'array', items: REPLAN_ITEM, description: '12 個まで' },
+    current: { type: 'string', description: '今の節にしたい id。変えないなら書かない' },
+    why: { type: 'string', description: '何を直したか、またはなぜ直さないか（120 字まで）' },
   },
 });
+
+/** The plan tool's op for one flat op of the answer: the target and the preparation state in their own shapes, an empty field left out. */
+function planOpOf(raw: Record<string, unknown>): PlanOp {
+  const { targetItem, targetCount, prepState, prepWhy, ...rest } = raw;
+  const op: Record<string, unknown> = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== '' && value !== null && value !== undefined));
+  if (typeof targetItem === 'string' && targetItem && Number.isInteger(targetCount) && (targetCount as number) > 0) op.target = { item: targetItem, count: targetCount };
+  if (typeof prepState === 'string' && prepState) op.prep = { state: prepState, ...(typeof prepWhy === 'string' && prepWhy ? { why: prepWhy } : {}) };
+  return op as unknown as PlanOp;
+}
 
 /** The ops and the line of an answer; null when it is not one. An empty list of ops is an answer: the strong model found nothing to change. */
 export function replanOf(answer: unknown): { update: PlanUpdate; why: string } | null {
   const value = answer && typeof answer === 'object' ? answer as Record<string, unknown> : null;
   if (!value || !Array.isArray(value.ops) || value.ops.length > 12) return null;
-  const ops = value.ops.filter((item): item is PlanOp => !!item && typeof item === 'object' && ALLOWED_OPS.has(String((item as { op?: unknown }).op)));
-  if (ops.length !== value.ops.length) return null;
+  const raw = value.ops.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && ALLOWED_OPS.has(String((item as { op?: unknown }).op)));
+  if (raw.length !== value.ops.length) return null;
   const current = typeof value.current === 'string' && value.current ? value.current : undefined;
   const why = typeof value.why === 'string' ? value.why.replace(/\s+/gu, ' ').trim().slice(0, 120) : '';
-  return { update: { ops, ...(current ? { current } : {}) }, why };
+  return { update: { ops: raw.map(planOpOf), ...(current ? { current } : {}) }, why };
 }
 
 // ---- the plans waiting to be taken, by task
@@ -213,14 +239,14 @@ export function forgetReplans(): void {
 export const REPLAN_SYSTEM = [
   'あなたはマイクラの体を動かすシャノンの、計画の立て直し係。毎歩の判断は別のモデルがしていて、今、体が止まっている（止まりの理由が入力にある）。',
   '原因を事実から考え、計画だけを直す。出すのは plan.update の ops（12 個まで）と、今の節にしたい id（current。変えないなら省く）と、何を直したかの一行（why）。体の手は出さない。',
-  '- ops の書き方（plan.update と同じ）: add（parent・after・title・where・doneWhen・target・note・kind。id は書かない）、split（id の下に into の節を足す）、'
-    + 'set（id の state=done|blocked|continue|wait・title・where・doneWhen・target・note・reason・kind）、move（id を parent・after へ）、drop（id とその下を消す）、'
+  '- ops の書き方（plan.update と同じ形を平らに書く）: add（parent・after・title・where・doneWhen・targetItem と targetCount・note・kind。id は書かない。節を割る時は、割る節の id を parent にして部分の節を足す）、'
+    + 'set（id の state=done|blocked|continue|wait・title・where・doneWhen・targetItem と targetCount・note・reason・kind）、move（id を parent・after へ）、drop（id とその下を消す）、'
     + 'forbid / caution（id の節に text を 1 行足す）、lift（text の行を消す）。id は入力の計画に出ている物。節は 64 まで・深さ 4 まで・title 60 字まで。',
   '- 止まりの原因が「見えていない事実」か「足りない前提」かを考える。計画を、観測で確かめられる小さな節に割る・前提の節を足す・順を変える・別の手段の節に替える・できない節を blocked にして理由と代わりの道を書く。',
   '- doneWhen は観測の形で書く: have:物>=数・food>=点・dim:the_nether|the_end|overworld・at:x,y,z~半径@次元・'
-    + 'see:fortress / see:end_portal_frame / see:end_portal・crystals<=n。& が全部、| がどれか。target は完成品を取る節にだけ。',
+    + 'see:fortress / see:end_portal_frame / see:end_portal・crystals<=n。& が全部、| がどれか。targetItem・targetCount は完成品を取る節にだけ。',
   '- 座標は入力にある物だけを使う。無い場所を作らない。時間や許可を増やすだけの直しはしない。同じ直しを繰り返さない（前の立て直しが入力にある）。',
-  '- 準備の節（prep_descent）を黙って飛ばさない。省くなら prep skipped と why を書く。済んでいない節を done にしない。',
+  '- 準備の節（prep_descent）を黙って飛ばさない。省くなら set で prepState=skipped と prepWhy を書く。済んでいない節を done にしない。',
   '- 原因が分かったら、今の節に forbid（してはいけない事）か caution（気をつける事）を 1 行足すと、次の判断が読む。',
   '- 止まりに見えて本当は進行中の待ち（夜待ち・かまど・ブレイズの湧き待ち・竜の止まり待ち）なら、ops を空にして、why にそう書く。',
 ].join('\n');

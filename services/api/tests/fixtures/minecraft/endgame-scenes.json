@@ -342,14 +342,14 @@
     "goal": "エンドラを討伐して",
     "current": "p15.2",
     "elapsedMinutes": 224,
-    "expect": "枠に use item=ender_eye at=枠 face=up を 1 つずつ。9 個で足りる。入る前にベッドでリスポーン地点にすることを考える。",
+    "expect": "目の無い枠ごとに go range=3 → use item=ender_eye at=[枠の座標]（at は配列で 1 つ）。9 個で足りる。入る前にベッドでリスポーン地点にすることを考える。",
     "check": {
       "anyHand": [
         "use"
       ],
       "match": [
         "\"item\":\"ender_eye\"",
-        "\"face\":\"up\""
+        "\"at\":\\[\\{"
       ]
     },
     "world": {
@@ -403,7 +403,10 @@
       "rememberedPlaces": {
         "stronghold": "8m 北 (703,26,-1899)"
       }
-    }
+    },
+    "events": [
+      "mc_probe kind=frames: 枠 12 個（アイ入り 3）。近い順 (703,26,-1899) 入り・(701,26,-1899) 空・(699,26,-1899) 空・(697,26,-1899) 入り・(695,26,-1899) 空・(695,26,-1901) 空・(697,26,-1901) 入り・(699,26,-1901) 空・(701,26,-1901) 空・(703,26,-1901) 空・(705,26,-1900) 空・(693,26,-1900) 空"
+    ]
   },
   {
     "name": "end-crystals",
@@ -690,6 +693,271 @@
         "stronghold": "1830m 北北東 (703,26,-1899)",
         "end_portal_frame": "1830m 北北東 (703,26,-1899)",
         "nether_portal": "180m 北東 (260,72,-160)"
+      }
+    }
+  },
+  {
+    "name": "nether-blaze-low-health",
+    "goal": "エンドラを討伐して",
+    "current": "p10.2",
+    "elapsedMinutes": 96,
+    "events": [
+      "fight blaze: 60 秒で体力 20→2.04 まで減った（1 回の act で 19.7）。撃破 1。盾 −220（残り 116）",
+      "足場 (-305,66,190) の岩の陰に戻った"
+    ],
+    "expect": "体力 9 で fight をまた始めない。岩の陰で食べて回復する（eat）か、動かず盾で待つ attack hold に替える。続けるなら stopIf hpBelow を 12 以上にして短く。",
+    "check": {
+      "noHand": [
+        "fight"
+      ],
+      "anyHand": [
+        "eat",
+        "attack",
+        "wait",
+        "go",
+        "equip"
+      ]
+    },
+    "world": {
+      "dimension": "the_nether",
+      "position": {
+        "x": -305.5,
+        "y": 66,
+        "z": 190.5
+      },
+      "health": 9,
+      "food": 14,
+      "saturation": 3,
+      "inside": "ネザー要塞の中",
+      "heldItem": "iron_sword",
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 30
+        },
+        {
+          "name": "cobblestone",
+          "count": 64
+        },
+        {
+          "name": "cooked_beef",
+          "count": 12
+        },
+        {
+          "name": "blaze_rod",
+          "count": 3
+        },
+        {
+          "name": "crafting_table",
+          "count": 1
+        },
+        {
+          "name": "oak_slab",
+          "count": 12
+        },
+        {
+          "name": "shield",
+          "count": 1
+        }
+      ],
+      "mapLandmarks": [
+        "N ネザー要塞 (-312,64,188) 足元 レンガ×40",
+        "S スポナー (-306,66,191) 東1m・上0 湧く: blaze",
+        "[overworld] P ネザーポータル (-39,70,23) 拠点"
+      ],
+      "rememberedPlaces": {
+        "nether_portal": "350m 南 (-39,70,23) ↔overworld(-312,68,184)"
+      },
+      "nearbyThreats": [
+        {
+          "id": 301,
+          "name": "blaze",
+          "kind": "hostile",
+          "distance": 6.2,
+          "position": {
+            "x": -300,
+            "y": 69,
+            "z": 193
+          }
+        },
+        {
+          "id": 302,
+          "name": "blaze",
+          "kind": "hostile",
+          "distance": 8.8,
+          "position": {
+            "x": -303,
+            "y": 73,
+            "z": 197
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "nether-far-fortress",
+    "goal": "エンドラを討伐して",
+    "current": "p9",
+    "elapsedMinutes": 70,
+    "events": [
+      "ネザーに着いた (-39,70,23)",
+      "mc_probe kind=scan で北東 144m に要塞（ネザーレンガ）が見えた"
+    ],
+    "expect": "要塞 (105,70,120) まで 144m の go を、最初から maxDig 150 以上・maxPlace 40 以上で出す（既定の 40・20 では 3 回止まる）。帰りのゲートの座標を控える。",
+    "check": {
+      "anyHand": [
+        "go"
+      ],
+      "match": [
+        "\"maxDig\":(1[5-9][0-9]|[2-9][0-9]{2})",
+        "\"maxPlace\":([4-9][0-9]|[1-9][0-9]{2})"
+      ]
+    },
+    "world": {
+      "dimension": "the_nether",
+      "position": {
+        "x": -39.5,
+        "y": 70,
+        "z": 23.5
+      },
+      "health": 20,
+      "food": 20,
+      "saturation": 5,
+      "heldItem": "iron_sword",
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "iron_pickaxe",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 30
+        },
+        {
+          "name": "cobblestone",
+          "count": 64
+        },
+        {
+          "name": "cooked_beef",
+          "count": 20
+        },
+        {
+          "name": "crafting_table",
+          "count": 1
+        },
+        {
+          "name": "oak_slab",
+          "count": 12
+        },
+        {
+          "name": "shield",
+          "count": 1
+        },
+        {
+          "name": "golden_boots",
+          "count": 1
+        }
+      ],
+      "mapLandmarks": [
+        "N ネザー要塞 (105,70,120) 北東144m レンガ×60",
+        "[overworld] P ネザーポータル (-312,68,184) 拠点"
+      ],
+      "rememberedPlaces": {
+        "nether_portal": "0m (-39,70,23) ↔overworld(-312,68,184)"
+      },
+      "nearbyThreats": []
+    }
+  },
+  {
+    "name": "enter-end-portal",
+    "goal": "エンドラを討伐して",
+    "current": "p16",
+    "elapsedMinutes": 230,
+    "events": [
+      "枠 12/12。エンドポータルが開いた",
+      "ベッドは近くで置いて使い、リスポーン地点にしてある"
+    ],
+    "expect": "中の e のマスへ walk（go ではない）で入る。入る前の点検（食料・矢・剣・弓）が足りていれば迷わず入る。",
+    "check": {
+      "anyHand": [
+        "walk"
+      ],
+      "noHand": [
+        "go"
+      ]
+    },
+    "world": {
+      "dimension": "overworld",
+      "position": {
+        "x": 701.5,
+        "y": 27,
+        "z": -1895.5
+      },
+      "inside": "ストロングホールドの中",
+      "health": 20,
+      "food": 18,
+      "saturation": 5,
+      "heldItem": "iron_sword",
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 40
+        },
+        {
+          "name": "cobblestone",
+          "count": 40
+        },
+        {
+          "name": "cooked_beef",
+          "count": 18
+        },
+        {
+          "name": "white_bed",
+          "count": 4
+        },
+        {
+          "name": "water_bucket",
+          "count": 1
+        },
+        {
+          "name": "shield",
+          "count": 1
+        }
+      ],
+      "mapLandmarks": [
+        "Q エンドポータルの枠 (703,26,-1899) 北4m ×12 アイ入り 12",
+        "e エンドポータル (703,26,-1903) 北8m"
+      ],
+      "rememberedPlaces": {
+        "stronghold": "8m 北 (703,26,-1899)",
+        "respawn": "6m 南 (701,27,-1889) respawn"
       }
     }
   }
