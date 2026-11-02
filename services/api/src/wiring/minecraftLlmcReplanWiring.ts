@@ -1,6 +1,8 @@
 import { applyPlanUpdate, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../contracts/bodyControlContract.js';
 import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
+import { failureStops, unattendedFailureStops } from '../mind/action/fca/fcaFailureLadder.js';
+import type { FcaStepPorts } from '../mind/action/fca/fcaStepPorts.js';
 import { readinessParts, type LlmcBodyParts } from '../surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { stageTextsForKind } from '../surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneFacts, doneStatusWords, parseDoneWhen, predicateHolds } from '../surfaces/minecraft/minecraftPlanDone.js';
@@ -129,4 +131,24 @@ export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'wa
       unheld.watch.look();
     },
   });
+}
+
+/** The run of failures (by when it began) each task has asked a new plan for, across its steps (a step is made anew, a run of failures is not). */
+const failureAsked = new Map<string, number>();
+
+/**
+ * The stop of failed steps in a row for a request nobody is watching: where the ladder's stop would have come (`failureStops`), the strong
+ * model is asked for a new plan (once for each run of failures), and the stop is the much longer one (`unattendedFailureStops`). None for a
+ * request held on a failure: its own look holds it, and the ladder stays as it was.
+ */
+export function unattendedFailureStop(taskId: string, unheld: Pick<Unheld, 'flow'> | null, node: () => string): FcaStepPorts['failureStop'] | undefined {
+  if (!unheld) return undefined;
+  return input => {
+    if (input.since !== null && failureAsked.get(taskId) !== input.since && failureStops(input)) {
+      failureAsked.set(taskId, input.since);
+      if (failureAsked.size > 64) failureAsked.delete(failureAsked.keys().next().value as string);
+      unheld.flow.note({ kind: 'node_stalled', key: node(), why: `失敗した歩が続けて ${input.failures} 回（${Math.round((input.now - input.since) / 1000)} 秒、動きなし）` });
+    }
+    return unattendedFailureStops(input);
+  };
 }

@@ -3,11 +3,12 @@ import { marksOf } from './minecraftSeenMarks.js';
 
 /**
  * What the body says of the End fight, read into one shape. The body (2026-11-02, `dragonState.ts` `endObservation`) puts it in the frame's
- * `state.end`, only in the End: `dragon` (id, health /200, phase 0..10 and its name, `phaseFor` seconds, `perched`, `at`, `head`, `headReach`
- * metres from the eye to the head's box, `strike` whether a blow is in reach), `fountain` (the perch), `crystals` (`remaining` of ten: standing or
- * not seen yet; `gone`; `caged`; `list` nearest first with `healing` and `blast`; `unseen`), `clouds` (the breath, x y z r) and `fireballs`.
- * A body that sends no `state.end` still marks the dragon, the crystals and the perch on the map (`mapLandmarks`): that is read instead, with
- * what the marks can say (the dragon's health; the crystals in view, not how many are left).
+ * `state.end` (to be moved to `state.world.end`; both are read), only in the End: `dragon` (id, health /200, phase 0..10 and its name,
+ * `phaseFor` seconds, `perched`, `at`, `head`, `headReach` metres from the eye to the head's box, `strike` whether a blow is in reach),
+ * `fountain` (the perch), `crystals` (`remaining` of ten: standing or not seen yet; `gone`; `caged`; `list` nearest first with `healing`
+ * and `blast`; `unseen`), `clouds` (the breath, x y z r) and `fireballs`. A body that sends neither still marks the dragon, the crystals
+ * and the perch on the map (`mapLandmarks`): that is read instead, with what the marks can say (the dragon's health; the crystals in
+ * view, not how many are left).
  */
 type Rec = Record<string, unknown>;
 export interface Point {
@@ -102,10 +103,14 @@ function fromMarks(world: Rec | null): EndView | null {
     crystals: { remaining: null, gone: null, caged: null, unseen: null, visible: crystals.length, list: [] }, clouds: [], fireballs: 0 };
 }
 
-/** The End fight as the frame says it: from `state.end`, else from the map marks; null outside the End or with nothing to say. */
+/**
+ * The End fight as the frame says it: from `state.world.end` (the one place the fight is kept in, decided 2026-11-02) or `state.end` (where the
+ * body's first form put it), else from the map marks; null outside the End or with nothing to say. The inside is the same in both places.
+ */
 export function endViewOf(observation: BodyObservation | null): EndView | null {
-  const end = rec(observation?.state.end);
-  return end ? fromBody(end) : fromMarks(rec(observation?.state.world));
+  const world = rec(observation?.state.world);
+  const end = rec(world?.end) ?? rec(observation?.state.end);
+  return end ? fromBody(end) : fromMarks(world);
 }
 
 /** The end crystals left on the island, as the body counts them (`state.end.crystals.remaining`, of ten); null when it does not count. */

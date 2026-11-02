@@ -4,7 +4,7 @@ import { bodyHoldOf,withResend,withIncident,withStalls } from './minecraftLlmcLi
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
 import { withReplanInbox } from '../surfaces/minecraft/minecraftLlmcReplan.js';
-import { adoptProblem, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
+import { adoptProblem, unattendedFailureStop, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
 import {
 LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,redecideLabel,llmcModelRouter,llmcCompletionMistake,LLMC_CATALOG_SELECTOR,
 llmcProbeRunner,billingGuarded
@@ -445,6 +445,7 @@ queue.onRan(noteQueueResult);
       return plan.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: PLAN_UPDATE_TOOL, input, signal });
     },
     log } : undefined;
+  const currentNode = () => workingNode(step.taskId, plan.port.tree().current) ?? plan.port.tree().current ?? '-';
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {
     const tree = plan.port.tree();
@@ -479,7 +480,7 @@ queue.onRan(noteQueueResult);
     ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port, checkpoint: () => ({
       ...journey.checkpoint(), ...waits.checkpoint(), ...stallsCheckpoint(step.taskId), ...endgame.checkpoint(),
       ...worksite.checkpoint(), minecraftActiveWait: activeWait, ...unheld?.checkpoint() }),
-      ...(stalls ? { prepareStop: stalls.prepareStop } : {}),
+      ...(stalls ? { prepareStop: stalls.prepareStop } : {}), ...(unheld ? { failureStop: unattendedFailureStop(step.taskId, unheld, currentNode) } : {}),
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
       versions: () => minecraftBodyVersion(control, bodyId(), read),
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),

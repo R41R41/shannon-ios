@@ -38,10 +38,10 @@ Envelope: `{ "v": 1, "operator": "<label>", "domain": "minecraft", "op": "<op>",
 
 | `op` | `args` |
 | --- | --- |
-| `request` | `goal` (1..1000 characters, no control characters), `maxMinutes` (1..120, default 30), `budgetYen` (1..2000, default 2000), `holdOnFailure` (optional `true`: below) |
+| `request` | `goal` (1..1000 characters, no control characters), `maxMinutes` (1..360, default 30), `budgetYen` (1..15000, default 15000), `holdOnFailure` (optional `true`: below) |
 | `cancel` | `taskId` (a task UUID) or `latest: true` |
 | `resume` | `taskId` (a task UUID) or `latest: true`, `skipReplay: true` optional: a request held on a heavy failure goes on (below) |
-| `budget` | `taskId` (a task UUID) or `latest: true`, and `budgetYen` (a whole number, 1..2000): see [Changing a running request's budget](#changing-a-running-requests-budget) |
+| `budget` | `taskId` (a task UUID) or `latest: true`, and `budgetYen` (a whole number, 1..15000): see [Changing a running request's budget](#changing-a-running-requests-budget) |
 | `start` | `serverId` (optional when one server is registered), `keepWorld` (optional boolean; `true` only) |
 | `stop`, `login`, `logout`, `set_day` | `serverId` (optional when one server is registered) |
 | `release` | none (`serverId` accepted and ignored: there is one configured body) |
@@ -114,8 +114,8 @@ released. That original receipt, with nothing of the lease sent after it left un
   bound to the body in the same write lock as the owner's admission. It is therefore an admitted Minecraft request
   (`admittedMinecraftRequest`): the same budget, the same gates, the same body binding. The origin is not new: a new origin would
   either silently pass the owner's gates or be silently refused by them.
-- `budgetYen` only lowers the Minecraft request cap (2000 yen) for that one task (`fcaBudget` `taskCapYen`); it never raises it
-  above that cap (`minecraft budget` below changes it later, within 1..2000).
+- `budgetYen` only lowers the Minecraft request cap (15000 yen) for that one task (`fcaBudget` `taskCapYen`); it never raises it
+  above that cap (`minecraft budget` below changes it later, within 1..15000).
   It caps the request itself, the root of its work: a child the request starts has its own cap, as for the owner's requests.
 - `maxMinutes` is the operator's time limit. Past it the API stops the task through the owner's stop path (`runtime.stop`, which
   waits for the body's stop acknowledgement). It is enforced until the task's phase is terminal, not until a stop was audited: a
@@ -220,7 +220,7 @@ Run53 (2026-10-31): the shared task admission also excludes confirmed `paused/fc
 accepted `budget` row of the task's audit, else the request's own `budget_yen` (`OperatorAuditStore.budgetYen`, the one resolution the
 budget check reads at every decision, so a change holds from the task's next decision, with no restart). The request's row is never
 written over: a change appends a row (`command = budget`, `event = accepted`, `budget_yen` = the new cap, `detail = from=… to=… spent=…`,
-the operator, the time and the task). Raising is free up to the request cap, 2000 yen (`budget_above_cap` above it); lowering is allowed
+the operator, the time and the task). Raising is free up to the request cap, 15000 yen (`budget_above_cap` above it); lowering is allowed
 down to what the task has used, confirmed plus estimated (`budget_below_spent` below it). Zero, negative, fractional and non-numeric
 yen are `invalid_input`; a task the operator did not start is `not_operator_task`, an unknown one (or `--latest` with none running)
 `not_found`. A task that has already stopped or finished (also one stopped by its budget) is `not_running`: the answer says the budget

@@ -80,7 +80,7 @@ describe('one budget for FCA steps (E3)', () => {
     expect(calls).toEqual([]);
   });
 
-  it('gives an admitted Minecraft request a 2000 yen cap, and leaves every other owner request at 300 yen', async () => {
+  it('gives an admitted Minecraft request a 15000 yen cap, and leaves every other owner request at 300 yen', async () => {
     const { db } = world();
     const store = new TaskBudgetStore(db);
     const { actions, calls } = fakeActions(true);
@@ -92,7 +92,7 @@ describe('one budget for FCA steps (E3)', () => {
     expect(await budget.before(mc, lease)).toEqual({ ok: true });
     expect(await budget.before(other, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('300円・40歩') });
     store.add('t-mc', 'owner', 'owner_request', MINECRAFT_TASK_CAP.yen, now());
-    expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('2000円・300歩') });
+    expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('15000円・2000歩') });
     expect(store.spent('t-mc').cappedAt).toBe(now());
     expect(calls).toEqual([]);
   });
@@ -105,7 +105,7 @@ describe('one budget for FCA steps (E3)', () => {
     const budget = fcaBudget({ actions, store, now, minecraftRequest: () => true, taskCapYen: id => caps[id] ?? null });
     const of = (id: string) => ({ ...(task('owner_request') as object), id, kind: 'generic' }) as never;
     for (const id of ['t-op', 't-high', 't-owner']) store.add(id, 'owner', 'owner_request', 600, now());
-    expect(await budget.before(of('t-op'), lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('500円・300歩') });
+    expect(await budget.before(of('t-op'), lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('500円・2000歩') });
     expect(await budget.before(of('t-high'), lease)).toEqual({ ok: true });
     expect(await budget.before(of('t-owner'), lease)).toEqual({ ok: true });
   });

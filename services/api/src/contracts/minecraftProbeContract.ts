@@ -8,7 +8,7 @@ import { ACT_CONTRACT_VERSION, type ActPos } from './minecraftActContract.js';
  */
 export const MC_PROBE_SKILL = 'probe' as const;
 export const MC_PROBE_TOOL = `mc.${MC_PROBE_SKILL}` as const;
-export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan', 'worksite'] as const;
+export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp'] as const;
 export type ProbeKind = typeof PROBE_KINDS[number];
 export interface ProbeInput {
   kind: ProbeKind;
@@ -20,11 +20,12 @@ export interface ProbeInput {
   from?: ActPos;
   /** sight: a block, or a creature (`#12`). */
   target?: ActPos | string;
-  /** column: the column (default her feet's) and its y bounds, top to bottom. */
+  /** column: the column (default her feet's) and its y bounds, top to bottom; frames: the centre of the search (default her feet). */
   x?: number; z?: number; yFrom?: number; yTo?: number;
   /** history: the place (default her feet). */
   at?: ActPos;
-  /** around: blocks (1–16, default 8); history: blocks (1–32, default 4); scan: chunks (1–16, default the view distance). */
+  /** around: blocks (1–16, default 8); history: blocks (1–32, default 4); scan: chunks (1–16, default the view distance);
+   * frames: blocks (16–128, default 64). */
   radius?: number;
 }
 /**
@@ -62,7 +63,9 @@ export const PROBE_DESCRIPTION = [
     + 'walk の path に使える点・的の近くに立てる場所) / sight(target: 座標か "#id"、from: 見えるか・4.5m で届くか・間のブロック) / '
     + 'column(x, z, yFrom, yTo: 縦の列の連なり。落差・水・溶岩・砂利) / '
     + 'around(radius: 生き物（敵か・狙っているか・見えるか・高さの差）と危ないブロック) / history(at, radius: その場所の最近の手と止まり) / '
-    + 'scan(radius: 読み込み済みの範囲の目印。木・村・水・溶岩・構造物・ネザーの幹・要塞・スポナー・ポータル)。',
+    + 'scan(radius: 読み込み済みの範囲の目印。木・村・水・溶岩・構造物・ネザーの幹・要塞・スポナー・ポータル) / '
+    + 'frames(x, z: 探す中心（省くと足）、radius: ブロック 16〜128（既定 64）。要塞のエンドポータルの枠を近い順に。無ければ 16 ブロック刻みの輪の次に歩く点) / '
+    + 'camp(ネザーのブレイズの湧き場と、その 3m 以内で縁・火の無い立てる足場)。',
   'worksite(target または at: 目的物、to: 作業する立ち位置、省略なら届く現在地か隣接候補、retreat: 帰還先): 接近・作業の射程/呼吸/道具・逆向きの帰路を別々に調べる。結果は観測時点の短区間だけ。施工後は再確認。',
   '省いた座標は足から。column の yFrom・yTo を省くと足の上下。',
 ].join('\n');
@@ -82,6 +85,6 @@ export const PROBE_INPUT_SCHEMA = Object.freeze({
     at: pos('sight の的のブロック、history の場所'),
     x: intField(-30_000_000, 30_000_000), z: intField(-30_000_000, 30_000_000),
     yFrom: intField(-64, 320), yTo: intField(-64, 320),
-    radius: intField(1, 32),
+    radius: intField(1, 128),
   },
 });

@@ -261,7 +261,7 @@ describe('a pass that does not pause says nothing of it, and one task\'s failure
       return typeof value === 'function' ? value.bind(target) as unknown : value;
     } }) as unknown as TaskAuthority;
     const recovery = createFcaBodyRecovery({ db: w.db, authority, runtime, actions: w.actions, scopeKey: 'owner', now: w.now, running: () => false,
-      passMs: 0, log: line => logs.push(line),
+      passMs: 0, windowMs: 30 * 60_000, log: line => logs.push(line),
       body: { bound: () => BODY_ID, connected: () => false, release: async () => ({ code: 'recheck_busy', actionIds: [], detail: '' }) } });
     const unknown = (id: string) => real.event('owner', id, 'fca_recovery_unknown', w.now(), { status: 'paused', pauseReason: 'fca_unknown' }, {});
     return { logs, control, recovery, unknown };

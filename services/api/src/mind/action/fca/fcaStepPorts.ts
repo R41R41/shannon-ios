@@ -51,6 +51,12 @@ export interface FcaStepPorts {
   /** Preserve the owning surface while this step still holds its lease; publish its hold only after the last result is durably
    * committed. Never runs a model. */
   prepareStop?(reason: string): Promise<{ committed(): Promise<void> }>;
+  /**
+   * Whether the failed steps in a row stop the task now (`fcaFailureLadder.ts` is the rule when this is absent). A Minecraft request nobody
+   * is watching (not held on a failure) goes on instead and has its plan made again by the strong model, and stops only on a much longer
+   * run of failures (`unattendedFailureStops`).
+   */
+  failureStop?(input: { body: boolean; failures: number; priorFailures: number; since: number | null; now: number }): boolean;
   body?: FcaBodyLifecycle;
   observations?: readonly FcaObservationLifecycle[];
   /**

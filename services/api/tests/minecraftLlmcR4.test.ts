@@ -11,7 +11,7 @@ import {
   createSurpriseWatch, fitInvestigation, forgetSurpriseWatches, INVESTIGATION_TAIL, LLMC_PROBE, runInvestigation, scanForPlan, scanLines, stepProbes,
   surpriseFrame, type Surprise,
 } from '../src/surfaces/minecraft/minecraftLlmcProbe.js';
-import { prepareProbeInput, probeAnswerText } from '../src/surfaces/minecraft/minecraftLlmcProbeInput.js';
+import { prepareProbeInput, probeAnswerText, probeLabel } from '../src/surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { INVESTIGATE_KNOWLEDGE, LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R4, LLMC_SYSTEM_APPENDIX_R5, NETHER_ENTRY_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { createFcaPlanTools, PLAN_UPDATE_DEFINITION, PLAN_UPDATE_RULES_DEFINITION } from '../src/mind/action/fca/fcaPlanTools.js';
@@ -286,6 +286,20 @@ describe('mc.probe: offered in the head\'s words, put into the body\'s form (the
       fixes: ['radius を 16 にした', 'around に使わない欄 to を外した'] });
     expect(prepareProbeInput({ kind: 'path', to: { x: '5', y: 64, z: 9.7 } }, context).input).toEqual({ kind: 'path', to: at(5, 64, 9) });
     expect(prepareProbeInput({ kind: 'scan' }, context).input).toEqual({ kind: 'scan' });
+  });
+
+  it('frames and camp (the stronghold\'s portal frames and the blaze spawner\'s standing cells, S2): the centre whole or her feet\'s, a radius of 16 to 128', () => {
+    expect(prepareProbeInput({ kind: 'frames' }, context)).toEqual({ input: { kind: 'frames', radius: 64 }, fixes: [], problem: null });
+    expect(prepareProbeInput({ kind: 'frames', x: 700.6, z: -1890.2, radius: 500 }, context)).toEqual({ input: { kind: 'frames', x: 700, z: -1891, radius: 128 },
+      fixes: ['radius を 128 にした'], problem: null });
+    expect(prepareProbeInput({ kind: 'stronghold', x: 5 }, context).input).toEqual({ kind: 'frames', x: 5, z: -4, radius: 64 });
+    expect(prepareProbeInput({ kind: 'frames', x: 5 }, { feet: null, creatures: [] }).problem).toMatch(/x・z は両方要る/u);
+    expect(prepareProbeInput({ kind: 'frames', radius: 3 }, context).input).toEqual({ kind: 'frames', radius: 16 });
+    expect(prepareProbeInput({ kind: 'camp', radius: 8, x: 1 }, context)).toMatchObject({ input: { kind: 'camp' }, fixes: ['camp に使わない欄 radius・x を外した'] });
+    expect(validSkillInput({ kind: 'frames', x: 700, z: -1891, radius: 128 }, PROBE_INPUT_SCHEMA)).toBe(true);
+    expect(validSkillInput({ kind: 'camp' }, PROBE_INPUT_SCHEMA)).toBe(true);
+    expect(probeLabel({ kind: 'frames', x: 700, z: -1891, radius: 128 })).toBe('frames (700,-1891) 128m');
+    expect(probeLabel({ kind: 'frames' })).toBe('frames 足 64m');
   });
 
   it('what cannot be sent says why in one line, and nothing goes to the body', () => {

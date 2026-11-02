@@ -28,8 +28,8 @@ export interface EyeThrow {
   /** It sank almost straight down: the stronghold is under or beside that place. */
   down?: boolean;
   /**
-   * The eye stopped short of the 12 blocks it flies toward a stronghold farther than that. The body's reading of the game: an eye
-   * sent to a stronghold within 12 blocks goes to its own x and z, so the end of the flight is the stronghold (not yet measured).
+   * The eye stopped short of the 12 blocks it flies toward a stronghold farther than that: sent to a stronghold within 12 blocks (11.9) it goes
+   * to its entrance, so the end of the flight is the stronghold's (measured in the isolated lab: six of six within 0.3 blocks).
    */
   arrived?: boolean;
   /** The flight's horizontal direction as a unit vector (x east, z south) when the body reads it from the eye's own positions. */
@@ -57,8 +57,8 @@ export const MAX_ERROR_BLOCKS = 600;
 const POSITION_NOISE_BLOCKS = 0.2;
 const MIN_BEARING_ERROR_DEGREES = 0.5;
 const MAX_BEARING_ERROR_DEGREES = 6;
-/** A line read from the eye's own positions (the body says it is good to a hundredth of a degree; kept ten times wider until measured). */
-const PRECISE_BEARING_ERROR_DEGREES = 0.1;
+/** A line read from the eye's own positions (measured in the isolated lab, 2026-11-02: ten throws, at most 0.003 degrees off; kept seven times wider). */
+const PRECISE_BEARING_ERROR_DEGREES = 0.02;
 /** A flight shorter than this does not fix its direction well, whatever the unit vector says. */
 const PRECISE_MIN_FLEW = 4;
 /** What a place given by one eye says of itself: a sunk eye is within a block or two of the stronghold's x and z; a stopped one, of where it stopped. */

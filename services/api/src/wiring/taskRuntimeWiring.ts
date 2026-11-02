@@ -66,7 +66,7 @@ export interface TaskRuntimeWiringOptions {
   stepPorts?(runtime: TaskRuntime, step: TaskStep): Partial<Pick<FcaStepPorts, 'model' | 'executionAllowed' | 'audienceAllowed' |
      'taskTools' | 'checkpoint' | 'selector' | 'tools' | 'sourcesVisible' | 'taskVisible' | 'history' | 'observeTasks' | 'recall' |
         'bodyRecall' | 'observeMemory' | 'evidence' | 'safeToAcknowledgeStop' | 'body'
-    | 'waitCounterpart' | 'keepBodyTools' | 'obsMode' | 'decisionRetryDelayMs' | 'retryAllowed' | 'plan' | 'permitWindowMs'>>;
+    | 'waitCounterpart' | 'keepBodyTools' | 'obsMode' | 'decisionRetryDelayMs' | 'retryAllowed' | 'plan' | 'permitWindowMs' | 'failureStop'>>;
   /**
    * A step that ran asks for the next tick at once instead of waiting for the once-a-second one (production run
  * 15, 2026-10-19: 1.9 s

@@ -25,11 +25,14 @@ import { createLlmcEvents } from '../src/surfaces/minecraft/minecraftLlmcEvents.
 import { llmcLiveTokens, llmcPlanTokens, llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { SCENE_TOOLS, type LlmcScene } from '../src/surfaces/minecraft/minecraftLlmcScene.js';
 import { stagesFor } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { sceneVerdict, type SceneCheck } from '../src/surfaces/minecraft/minecraftLlmcSceneCheck.js';
 import { candidateLive, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 
 type EndScene = LlmcScene & { eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }>;
   /** The body's `state.end` of the scene (the End fight; S1's `endObservation`). */
-  end?: object };
+  end?: object;
+  /** What the hands of a good decision hold (`minecraftLlmcSceneCheck.ts`); the replay counts the decisions that meet it. */
+  check?: SceneCheck };
 const MODELS: Record<string, string> = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' };
 const args = process.argv.slice(2);
 const flag = (name: string) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -89,6 +92,7 @@ async function replay(): Promise<void> {
   const out = flag('out');
   let spent = Number(flag('spent') ?? 0);
   const answers: unknown[] = [];
+  const tally = new Map<string, { pass: number; of: number; ms: number; usd: number }>();
   for (const name of names) {
     const usage: AnthropicFcaUsage[] = [];
     const model = createAnthropicFcaModel({ model: name, apiKey: apiKey!, recordUsage: value => { usage.push(value); }, minecraftOwnPrompt: true, minecraftV2: minecraftV2Hooks() });
@@ -104,15 +108,27 @@ async function replay(): Promise<void> {
           const calls = output.decision.kind === 'tools' ? output.decision.calls.map(call => ({ name: call.name, input: call.input })) : [];
           const act = calls.find(call => call.name === MC_ACT_TOOL);
           const prepared = act ? llmcPrepare(MC_ACT_TOOL, act.input) : null;
-          const hands = ((prepared?.input as { hands?: ActHand[] } | undefined)?.hands ?? []).map(hand => String(hand.do));
-          answers.push({ model: name, round, scene: scene.name, ms: Math.round(performance.now() - began), calls, hands, costUsd: cost, expect: scene.expect });
-          console.log(`${scene.name}\t${name}\tr${round}\t${Math.round(performance.now() - began)}ms\thands=${hands.join(',') || '-'}\t$${cost.toFixed(4)}\t${JSON.stringify(calls)}`);
+          const full = ((prepared?.input as { hands?: ActHand[] } | undefined)?.hands ?? []) as unknown as Array<Record<string, unknown>>;
+          const hands = full.map(hand => String(hand.do));
+          const ms = Math.round(performance.now() - began);
+          const verdict = sceneVerdict(scene.check, full);
+          const mine = usage.slice(before);
+          const tokens = { input: mine.reduce((sum, item) => sum + item.inputTokens, 0), cached: mine.reduce((sum, item) => sum + item.cachedInputTokens, 0),
+            output: mine.reduce((sum, item) => sum + item.outputTokens, 0) };
+          const total = tally.get(name) ?? { pass: 0, of: 0, ms: 0, usd: 0 };
+          tally.set(name, { pass: total.pass + (verdict.pass ? 1 : 0), of: total.of + 1, ms: total.ms + ms, usd: total.usd + cost });
+          answers.push({ model: name, round, scene: scene.name, ms, calls, hands: full, pass: verdict.pass, why: verdict.why, tokens, costUsd: cost, expect: scene.expect });
+          console.log(`${scene.name}\t${name}\tr${round}\t${ms}ms\t${verdict.pass ? 'PASS' : `FAIL(${verdict.why.join(' / ')})`}\thands=${hands.join(',') || '-'}\t`
+            + `$${cost.toFixed(4)}\tin=${tokens.input} cached=${tokens.cached} out=${tokens.output}\t${JSON.stringify(calls)}`);
         } catch (error) {
           console.log(`${scene.name}\t${name}\tr${round}\terror ${String(error)}`);
         }
         if (out) writeFileSync(out, JSON.stringify(answers, null, 1));
       }
     }
+  }
+  for (const [model, total] of tally) {
+    console.log(`SUMMARY ${model}: ${total.pass}/${total.of} meet the checks, ${Math.round(total.ms / total.of)} ms a decision, $${(total.usd / total.of).toFixed(4)} a decision`);
   }
   console.log(`TOTAL spent (with --spent) $${spent.toFixed(4)}`);
 }

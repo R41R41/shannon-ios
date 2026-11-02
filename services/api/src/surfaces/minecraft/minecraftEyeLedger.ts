@@ -85,7 +85,7 @@ export function flightOf(resultJson: string | undefined): Omit<StoredThrow, 'id'
 const place = (x: number, z: number): string => `(${Math.round(x)},${Math.round(z)})`;
 const grouped = (value: number): string => Math.round(value).toLocaleString('en-US');
 const tenth = (value: number): string => String(Math.round(value * 10) / 10);
-const FRAME_SEARCH = '枠は下りて石レンガの廊下を歩き、印（Q）と mc_probe kind=scan で探す';
+const FRAME_SEARCH = '枠は mc_probe kind=frames（x z にその所・radius 128）で探す。部屋は入口から 7〜72 ブロック離れていた（隔離ラボの 5 世界）';
 
 function pickWords(item: StoredThrow, now: number): string {
   if (item.broke) return '（割れた）';
@@ -125,7 +125,7 @@ function directLine(direct: DirectPoint, feet: { x: number; z: number } | null):
   const spot = place(direct.x, direct.z);
   const there = feet ? `あなたから ${compassWord(bearingBetween(feet, direct))} ${grouped(Math.hypot(direct.x - feet.x, direct.z - feet.z))}m。` : '';
   if (direct.kind === 'down') return `目玉が真下へ沈んだ ${spot}: 要塞はその真下かすぐ近く（地下）。${there}${FRAME_SEARCH}`;
-  return `目玉が ${Math.round(direct.from.flew)}m で止まった: 要塞は止まった先 ${spot} の近く（要塞が 12m 以内だと目玉はその x・z まで行って止まる、という見込み。実測で未確認）。`
+  return `目玉が ${Math.round(direct.from.flew)}m で止まった: 要塞の入口は止まった先 ${spot}（12m 以内だと目玉は入口まで行って止まる。隔離ラボで 6/6）。`
     + `${there}${FRAME_SEARCH}`;
 }
 

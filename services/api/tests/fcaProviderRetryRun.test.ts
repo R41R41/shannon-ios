@@ -4,7 +4,7 @@ import { anthropicFcaHistoryCodec } from '../src/infra/models/anthropic/anthropi
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { createFcaBodyRecovery } from '../src/wiring/fcaBodyRecovery.js';
 import { fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
-import { PROVIDER_UNAVAILABLE_SUMMARY } from '../src/wiring/taskRuntimeUnavailable.js';
+import { BODY_UNAVAILABLE_CYCLES, PROVIDER_UNAVAILABLE_SUMMARY } from '../src/wiring/taskRuntimeUnavailable.js';
 import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudgetStore.js';
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -23,6 +23,8 @@ const answered = (status: number, headers: Record<string, string> = {}) => new R
   { status, headers: { 'content-type': 'application/json', ...headers } });
 type Answer = Response | Array<Record<string, unknown>> | 'ETIMEDOUT' | 'ECONNRESET' | 'ECONNREFUSED';
 const repeat = (count: number, make: () => Answer): Answer[] => Array.from({ length: count }, make);
+/** The requests of an outage a Minecraft request goes through before it is paused: its rounds, and five attempts in each. */
+const OUTAGE = (BODY_UNAVAILABLE_CYCLES + 1) * 5;
 
 function fixture(script: Answer[], options: { body?: boolean; cap?: number; suggested?: number[]; delay?: number; bodyCooldown?: number } = {}) {
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -179,13 +181,13 @@ describe('a decision is asked again inside its step after a provider error (C-20
 });
 
 describe('a Minecraft request goes on through an outage of the provider and is paused, never failed', () => {
-  it('runs five rounds of five attempts with a longer wait each time, then stops as paused with a summary and the closed reason', async () => {
-    const f = fixture(repeat(40, () => answered(503)), { body: true });
+  it('runs its rounds of five attempts with a longer wait each time, then stops as paused with a summary and the closed reason', async () => {
+    const f = fixture(repeat(OUTAGE + 15, () => answered(503)), { body: true });
     await f.run();
     expect(f.phase()).toBe('stopped');
     expect(f.driver.runtime.get('owner', f.child.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped', summary: PROVIDER_UNAVAILABLE_SUMMARY });
-    expect(f.provider.bodies).toHaveLength(25); // five rounds
-    expect(f.logs()).toEqual([...Array(4).fill(`Shannon FCA step retried task=${f.child.id} code=FCA_MODEL_HTTP_503`),
+    expect(f.provider.bodies).toHaveLength(OUTAGE);
+    expect(f.logs()).toEqual([...Array(BODY_UNAVAILABLE_CYCLES).fill(`Shannon FCA step retried task=${f.child.id} code=FCA_MODEL_HTTP_503`),
       `Shannon FCA step paused task=${f.child.id} code=FCA_MODEL_HTTP_503 reason=provider_unavailable`]);
     expect(f.events()).not.toContain('fca_recovery_unknown');
     expect(f.rounds()).toEqual([]); // nothing of it was stored: no round, no empty one
@@ -193,7 +195,7 @@ describe('a Minecraft request goes on through an outage of the provider and is p
   });
 
   it('is resumed by the owner, runs again from a fresh decision when the provider is back, and the count starts afresh', async () => {
-    const f = fixture([...repeat(25, () => answered(503)), [call('task_list', 'list-1')]], { body: true });
+    const f = fixture([...repeat(OUTAGE, () => answered(503)), [call('task_list', 'list-1')]], { body: true });
     await f.run();
     expect(f.phase()).toBe('stopped');
     expect(f.driver.runtime.resume('owner', f.child.id)).not.toBeNull();
@@ -204,7 +206,7 @@ describe('a Minecraft request goes on through an outage of the provider and is p
   });
 
   it('tells the owner once that it was paused (M-2), and takes the summary and the notice away when he resumes it, so the result is reported (M-1)', async () => {
-    const f = fixture([...repeat(25, () => answered(503)), [call('task_list', 'list-1')]], { body: true });
+    const f = fixture([...repeat(OUTAGE, () => answered(503)), [call('task_list', 'list-1')]], { body: true });
     await f.run();
     expect(f.phase()).toBe('stopped');
     const notice = f.driver.runtime.progress!('owner', f.child.id);

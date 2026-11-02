@@ -100,6 +100,15 @@ describe('facts of the way to the dragon', () => {
     expect(endFightLines(view)).toHaveLength(5);
   });
 
+  it('reads the same fight from state.world.end (the one place it is to be kept in), and prefers it to state.end', () => {
+    const inWorld = frame({ dimension: 'the_end', end });
+    expect(dragonLine(endViewOf(inWorld))).toContain('体力 142.4/200');
+    expect(crystalsLeft(inWorld)).toBe(4);
+    const both = frame({ dimension: 'the_end', end: { ...end, crystals: { ...end.crystals, remaining: 2 } } }, end);
+    expect(crystalsLeft(both)).toBe(2);
+    expect(crystalsLeft(frame({ dimension: 'the_end', end: { crystals: { remaining: 0 } } }))).toBe(0);
+  });
+
   it('says how far the head is when a blow does not reach yet, and where a dragon in flight is', () => {
     const far = endViewOf(frame({}, { ...end, dragon: { ...end.dragon, headReach: 7.4, strike: false } }));
     expect(dragonLine(far)).toContain('頭の箱まで 7.4m（剣は 5m 以内で届く）');
@@ -227,7 +236,7 @@ describe('the ledger reads the body\'s full flight report (S2)', () => {
       from: { x: 300, y: 64, z: -401 }, to: { x: 300, y: 50, z: -401 } }), 'overworld', 1000);
     const text = ledger.lines({ x: 280, z: -380 }, 2000).join('\n');
     expect(text).toContain('目玉が真下へ沈んだ (301,-400)');
-    expect(text).toContain('mc_probe kind=scan');
+    expect(text).toContain('mc_probe kind=frames');
     expect(text).not.toContain('次に投げる場所の案');
     expect(text).not.toContain('交点はまだ無い');
     expect(ledger.fix()).toMatchObject({ x: 301, z: -400, errorBlocks: 4, throws: 1 });
@@ -240,7 +249,7 @@ describe('the ledger reads the body\'s full flight report (S2)', () => {
     expect(ledger.fix()).toMatchObject({ x: 7, z: 0, errorBlocks: 8, throws: 1 });
     const text = ledger.lines(null, 2000).join('\n');
     expect(text).toContain('目玉が 7m で止まった');
-    expect(text).toContain('実測で未確認');
+    expect(text).toContain('隔離ラボで 6/6');
   });
 });
 

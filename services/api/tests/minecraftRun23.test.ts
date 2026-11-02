@@ -5,8 +5,9 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import type { FcaExternalTools } from '../src/mind/action/fca/fcaPorts.js';
 import type { ToolResult } from '../src/mind/tools/shannonTools.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
-import { FAILURE_HARD_LIMIT, FAILURE_REVIEW_AT, FAILURE_STALL_MS, FAILURE_STOP_AFTER, failureSinceCheckpoint, failureStops, nextFailureSince }
-  from '../src/mind/action/fca/fcaFailureLadder.js';
+import { FAILURE_HARD_LIMIT, FAILURE_REVIEW_AT, FAILURE_STALL_MS, FAILURE_STOP_AFTER, UNATTENDED_HARD_LIMIT, UNATTENDED_STALL_MS, failureSinceCheckpoint, failureStops,
+  nextFailureSince, unattendedFailureStops } from '../src/mind/action/fca/fcaFailureLadder.js';
+import { unattendedFailureStop } from '../src/wiring/minecraftLlmcReplanWiring.js';
 import { fcaTransientHistory, onlyLost } from '../src/mind/action/fca/fcaCoreHistory.js';
 import { pinFcaCoreTools } from '../src/mind/action/fca/fcaCoreTools.js';
 import type { MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
@@ -82,7 +83,7 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
   const cleanups: Array<() => Promise<void>> = [];
   afterEach(async () => { vi.restoreAllMocks(); for (const close of cleanups.splice(0).reverse()) await close(); });
   /** One round per answer, in a body task (`keepBodyTools`): the model calls `mc.use-item-on-block` and the body answers as told. `jumps`: ms the clock moves before a round. */
-  async function rounds(answers: readonly Answer[], jumps: Record<number, number> = {}, prepareThrows = false) {
+  async function rounds(answers: readonly Answer[], jumps: Record<number, number> = {}, prepareThrows = false, extra: Record<string, unknown> = {}) {
     const harness = actionHarness(() => '2026-10-09T00:00:00.000Z');
     const calls: string[] = [];
     const driver0 = createTaskRuntimeWiring({ db: harness.db, actions: harness.actions, scopeKey: 'owner', ownerAlone: () => true, now: () => '2026-10-09T00:00:00.000Z',
@@ -102,7 +103,7 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
         calls.push(`d${count}`);
         return { decision: { kind: 'tools', calls: [{ id: `call-${count}`, name: 'mc.use-item-on-block', input: {} }] }, history: [{ role: 'assistant', native: 'x' }] };
       }, toolResults: results => ({ results }) },
-      stepPorts: () => ({ keepBodyTools: () => true, prepareStop: async () => {
+      stepPorts: () => ({ keepBodyTools: () => true, ...extra, prepareStop: async () => {
         preservation.push({ stage: 'prepare', phase: driver.runtime.get('owner', task.id)?.phase });
         if (prepareThrows) throw new Error('body unavailable');
         return { committed: async () => {
@@ -155,6 +156,38 @@ describe('the ladder of failed steps in a row (run 23: stopped at the fifth, wit
     expect(slow.count).toBe(6);
     expect(slow.preservation).toEqual([{ stage: 'prepare', phase: 'executing' }, { stage: 'committed', phase: 'ready', failures: 6 }]);
     expect(quick.preservation).toEqual([]);
+  });
+
+  it('lets a request nobody watches go on where the ladder stops (and asks for a new plan once), and stops it only after half an hour of failures', async () => {
+    const watch = (id: string) => {
+      const noted: string[] = [];
+      return { noted, ports: { failureStop: unattendedFailureStop(id, { flow: { note: (stall: { kind: string; key: string }) => { noted.push(`${stall.kind}:${stall.key}`); } } } as never, () => 'p3') } };
+    };
+    const six = { 5: FAILURE_STALL_MS + 1_000 };
+    const slow = watch('ladder-slow');
+    const after2 = await rounds(Array.from({ length: 6 }, () => 'fail' as const), six, false, slow.ports);
+    expect(after2.phase).not.toBe('stopped');
+    expect(after2.stops).toEqual([]);
+    expect(slow.noted).toEqual(['node_stalled:p3']);
+    const ten = watch('ladder-ten');
+    const many = await rounds(Array.from({ length: 12 }, () => 'fail' as const), {}, false, ten.ports);
+    expect(many.phase).not.toBe('stopped');
+    expect(many.count).toBe(12);
+    expect(ten.noted).toEqual(['node_stalled:p3']);
+    const long = await rounds(Array.from({ length: 6 }, () => 'fail' as const), { 5: UNATTENDED_STALL_MS + 1_000 }, false, watch('ladder-long').ports);
+    expect(long.phase).toBe('stopped');
+    expect(long.stops).toEqual(['repeated_tool_failure']);
+    expect(unattendedFailureStop('ladder', null, () => 'p1')).toBeUndefined();
+  });
+
+  it('is the same ladder to the fifth failure for a request nobody watches, and its stops are the long ones', () => {
+    const base = { body: true, since: 1_000, now: 1_000 + UNATTENDED_STALL_MS - 1 };
+    expect(unattendedFailureStops({ ...base, failures: FAILURE_STOP_AFTER, priorFailures: FAILURE_STOP_AFTER - 1 })).toBe(false);
+    expect(unattendedFailureStops({ ...base, failures: FAILURE_HARD_LIMIT, priorFailures: FAILURE_HARD_LIMIT - 1 })).toBe(false);
+    expect(unattendedFailureStops({ ...base, now: 1_000 + UNATTENDED_STALL_MS, failures: FAILURE_STOP_AFTER + 1, priorFailures: FAILURE_STOP_AFTER })).toBe(true);
+    expect(unattendedFailureStops({ ...base, since: null, failures: UNATTENDED_HARD_LIMIT, priorFailures: UNATTENDED_HARD_LIMIT - 1 })).toBe(true);
+    expect(unattendedFailureStops({ ...base, since: null, now: 9e12, failures: UNATTENDED_HARD_LIMIT - 1, priorFailures: UNATTENDED_HARD_LIMIT - 2 })).toBe(false);
+    expect(unattendedFailureStops({ body: false, failures: 5, priorFailures: 4, since: null, now: 0 })).toBe(true);
   });
 
   it('still stops and keeps the final failure if physical preservation is unavailable', async () => {

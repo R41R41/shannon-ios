@@ -92,7 +92,7 @@ export function minecraftWorld(options: { windowMs?: number; /** A-17: the tasks
       ...(budget ? { budget } : {}),
       bodyRecovery: parts => (recovery = createFcaBodyRecovery({ ...parts, passMs: 0, log: line => logs.push(line),
         ...(options.held ? { held: (id: string) => options.held!.has(id) } : {}),
-        ...(options.windowMs ? { windowMs: options.windowMs } : {}), ...(options.limit ? { limit: options.limit } : {}),
+        windowMs: options.windowMs ?? 30 * 60_000, ...(options.limit ? { limit: options.limit } : {}),
         body: { bound: id => control.store.body(id), connected: id => control.frame(id) !== null,
           release: step => options.release ? options.release(step, real => recheck.releaseStep(real)) : recheck.releaseStep(step) } })),
       stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true }) }) });
