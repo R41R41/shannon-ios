@@ -113,6 +113,14 @@ export const FIGHT_END_WORDS: Readonly<Record<string, string>> = {
  * as the body sends them. */
 export const seenWords = (seen: NonNullable<Progress['seen']>): string => seen.slice(0, 8).map(entry => `${entry.block}${at(entry.at)}`).join('・');
 
+/** What the stop code of a vertical hand means, with (for a falling block the body asked to be added) why adding it is safe and quick;
+ * '' for any other hand or code. */
+export function verticalStopWords(line: ActHandLine): string {
+  const stop = line.do === 'vertical' && line.code ? VERTICAL_STOP_WORDS[line.code] : undefined;
+  if (!stop) return '';
+  const falling = fallingDigWords(line);
+  return `止まった理由 ${line.code}: ${stop}${falling ? `。${falling}` : ''}`;
+}
 /** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain
  * failure adds none). */
 export function handFacts(line: ActHandLine): string[] {
@@ -140,9 +148,8 @@ switch (line.goal) {
 noteGoal();
   if (line.goal !== 'partial' && line.end === 'cut' && cutBy) out.push(`外から止められた（${cutBy}）`);
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
-  const stop = line.do === 'vertical' && line.code ? VERTICAL_STOP_WORDS[line.code] : undefined;
-  const falling = line.do === 'vertical' ? fallingDigWords(line) : '';
-  if (stop) out.push(`止まった理由 ${line.code}: ${stop}${falling ? `。${falling}` : ''}`);
+  const stopped = verticalStopWords(line);
+  if (stopped) out.push(stopped);
   const fought = line.do === 'fight' && line.code && line.goal === 'done' ? FIGHT_END_WORDS[line.code] : undefined;
   if (fought) out.push(fought);
   if (line.progress?.seen?.length) out.push(`途中で見えた物（追っていない）: ${seenWords(line.progress.seen)}`);
