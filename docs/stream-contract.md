@@ -51,8 +51,10 @@ All fields optional (`title` ≤ 100 chars, shown to her as the stream's title; 
 ```
 
 `paused` (added 2026-10-29): `pause` / `resume` of `/v1/stream/controls`; no new line is written while it is true.
-`phase`: `waiting_for_chat` (started, the ear has not found the live chat yet) → `live` (comments arriving) → `ended`.
-On start her mouth gets a greeting line (`kind: "greeting"`).
+`phase`: `waiting_for_chat` (started, waiting for the ear to confirm the real live start) → `live` → `ended`.
+Since 2026-11-02 nothing is said on start: the program (`program`) begins with its greeting line (`kind: "greeting"`) only after the ear's
+broadcast carries `onAir: true` (see "番組進行と実ライブ確認" below). `targetVideoId` is fixed at start and never changes for the same `streamId`
+(the ear relies on it; no route changes it mid-stream).
 
 ### `POST /v1/stream/end`
 
@@ -121,14 +123,16 @@ Bridge routes take `SHANNON_PLATFORM_BRIDGE_TOKEN` like every `/v1/platform/*` r
 
 ### `GET /v1/platform/stream/state`
 
-`{ "stream": null }` or `{ "stream": { "streamId", "platform": "youtube", "phase", "startedAt", "title", "chatWrites", "broadcast": {…}|null },
+`{ "stream": null }` or `{ "stream": { "streamId", "platform": "youtube", "phase", "startedAt", "title", "chatWrites", "targetVideoId"?, "broadcast": {…}|null },
 "chatPosts": [ { "id", "text" } ] }`. The ear polls this every 5 s while no stream is live, and reads `chatPosts` (only with `chatWrites`)
-after each comments batch too. `broadcast` is exactly the `{ videoId, liveChatId, title, channelId }` the ear POSTed (it reads it again after its own
+after each comments batch too. `broadcast` is the `{ onAir, videoId, liveChatId, title, channelId }` the ear POSTed (`onAir` added 2026-11-02) (it reads it again after its own
 restart), `null` before; `startedAt` is what the ear drops earlier comments by. Added 2026-10-29.
 
 ### `POST /v1/platform/stream/broadcast`
 
-The ear found the live chat: `{ "streamId", "videoId", "liveChatId", "title", "channelId" }` → 200 `{ "stream": {…phase: "live"} }`.
+The ear found the live chat: `{ "streamId", "videoId", "liveChatId", "title", "channelId", "onAir" }` → 200 `{ "stream": {…} }`. The phase turns
+`live` only with `onAir: true` (the real start confirmed); without it the stream keeps waiting (2026-11-02). A `videoId` other than the session's
+`targetVideoId` is 409 `STREAM_VIDEO_MISMATCH`; an unknown or ended `streamId` is 409 `STREAM_NOT_LIVE` (the only two 409 codes of the ear's routes).
 `{ "streamId", "ended": true }` when YouTube says the chat has ended: the head ends the stream as `POST /v1/stream/end` does. Both are idempotent
 (2026-10-29): the same broadcast again is 200 with the stream; `ended: true` again, even while the first is still writing the closing line or after it
 ended (the ear resends it while the head answers 5xx), is 200 with the ended stream and makes no second closing.
