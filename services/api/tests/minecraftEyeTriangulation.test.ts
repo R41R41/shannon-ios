@@ -125,7 +125,7 @@ describe('stronghold from thrown eyes', () => {
 
   it('takes a sunk eye as the place itself and never as a line, and suggests no throw from it', () => {
     const sunk: EyeThrow = { x: 100, z: 200, bearingDeg: 0, flew: 0, broke: false, down: true };
-    expect(stronghold([sunk])).toEqual({ x: 100, z: 200, errorBlocks: 4, throws: 1, ahead: [0] });
+    expect(stronghold([sunk])).toEqual({ x: 100, z: 200, errorBlocks: 1, throws: 1, ahead: [0] });
     expect(nextThrowPlaces(sunk, 0)).toEqual([]);
     expect(directPoint([sunk, throwFrom(0, 0, { x: 1000, z: -2000 })])).toMatchObject({ kind: 'down', x: 100, z: 200 });
     expect(directPoint([throwFrom(0, 0, { x: 1000, z: -2000 })])).toBeNull();
@@ -133,7 +133,7 @@ describe('stronghold from thrown eyes', () => {
 
   it('takes a stopped eye as the stronghold where it stopped, along its own direction', () => {
     const stopped: EyeThrow = { x: 0, z: 0, bearingDeg: 90, flew: 7, broke: false, arrived: true };
-    expect(stronghold([stopped])).toMatchObject({ x: 7, z: 0, errorBlocks: 8, throws: 1 });
+    expect(stronghold([stopped])).toMatchObject({ x: 7, z: 0, errorBlocks: 1, throws: 1 });
     expect(nextThrowPlaces(stopped, 0)).toEqual([]);
   });
 

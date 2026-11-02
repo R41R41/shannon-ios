@@ -61,9 +61,12 @@ const MAX_BEARING_ERROR_DEGREES = 6;
 const PRECISE_BEARING_ERROR_DEGREES = 0.02;
 /** A flight shorter than this does not fix its direction well, whatever the unit vector says. */
 const PRECISE_MIN_FLEW = 4;
-/** What a place given by one eye says of itself: a sunk eye is within a block or two of the stronghold's x and z; a stopped one, of where it stopped. */
-const DOWN_ERROR_BLOCKS = 4;
-const ARRIVED_ERROR_BLOCKS = 8;
+/**
+ * What a place given by one eye says of itself. S2's lab (2026-11-02, six stopped eyes and a sunk one): the end of a stopped eye is within 0.3 blocks of
+ * the stronghold's x and z (five of six exactly), a sunk one's too; one block is kept, since the point is rounded to a block.
+ */
+const DOWN_ERROR_BLOCKS = 1;
+const ARRIVED_ERROR_BLOCKS = 1;
 const RAD = Math.PI / 180;
 
 interface Ray {
