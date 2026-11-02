@@ -63,6 +63,10 @@ after the end; added 2026-10-29). Ending clears the in-memory words. Unknown or 
 
 ### `GET /v1/stream`
 
+Added 2026-11-02: the response also advertises `capabilities: { "program": true }`, even before a session starts.
+The PC show controller requires this explicit capability before starting its OP/head sequence. Older readers may ignore it;
+an older head without it remains readable, but the new show controller does not start that head.
+
 The console's view: `{ "stream": {…} | null, "stats": {…summary fields, "waiting": n, "inFlight": n, "modelCallsLastMinute": n},
 "comments": [ { "commentId", "authorName", "text", "kind", "at", "status": "new|picked|answered|skipped|declined|ignored",
 "tags": [] } ] (newest 50), "notices": [ { "viewer": "<authorName>", "reason": "threat|…", "at" } ] }`.
