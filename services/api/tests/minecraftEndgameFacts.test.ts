@@ -254,7 +254,7 @@ describe('the ledger of the thrown eyes', () => {
     expect(ledger.throws()).toHaveLength(1);
     ledger.note('c', eye(9100, 40, { down: true }), 'overworld', 20_000);
     expect(ledger.lines({ x: 9100, z: 40 }, 21_000).join('\n')).toContain('真下へ沈んだ');
-    ledger.note('d', eye(9100, 60), 'overworld', 46 * 60_000);
+    ledger.note('d', eye(9100, 60), 'overworld', 4 * 3_600_000 + 60_000);
     expect(ledger.throws().map(item => item.id.split(':')[0])).toEqual(['d']);
   });
 
@@ -263,12 +263,20 @@ describe('the ledger of the thrown eyes', () => {
     ledger.note('a', eye(0, 0), 'overworld', 1000);
     ledger.note('b', eye(800, 0), 'overworld', 2000);
     expect(ledger.fix(3000)).not.toBeNull();
-    const later = 2000 + 46 * 60_000;
+    const later = 2000 + 4 * 3_600_000 + 60_000;
     expect(ledger.fix(later)).toBeNull();
     expect(ledger.throws(later)).toEqual([]);
     expect(ledger.lines({ x: 0, z: 0 }, later)).toEqual([]);
     expect(createEyeLedger(ledger.checkpoint().minecraftEyes).lines({ x: 0, z: 0 }, later)).toEqual([]);
     expect(createEyeLedger(ledger.checkpoint().minecraftEyes).fix(3000)).toEqual(ledger.fix(3000));
+  });
+
+  it('keeps a throw through the whole run (the stronghold does not move), and notes a flight when no frame is there', () => {
+    const ledger = createEyeLedger(null);
+    expect(ledger.note('a', eye(0, 0), null, 1000)).toBe(true);
+    ledger.note('b', eye(800, 0), 'overworld', 2000);
+    expect(ledger.fix(2000 + 3 * 3_600_000)).not.toBeNull();
+    expect(ledger.note('c', eye(0, 0), 'the_end', 3000)).toBe(false);
   });
 });
 

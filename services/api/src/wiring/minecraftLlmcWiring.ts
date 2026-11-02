@@ -1,3 +1,4 @@
+import { tapEyes } from '../surfaces/minecraft/minecraftEyeTap.js';
 import { createWorksiteMemory } from '../surfaces/minecraft/minecraftWorksiteMemory.js';
 import {
   lookPurpose, lookTravelEvidence, observedWait, createWaitLedger, readActiveWait,
@@ -132,6 +133,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       .catch(error => log(`Shannon Minecraft cleanup hold failed task=${step.taskId} ${String(error)}`)); } });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
   queue.onRan((_item, _result, receipt) => endgame.noteResult(receipt?.id, receipt?.result, observe()));
+  tapEyes(control, step.taskId, (id, result) => endgame.noteResult(id, result, observe()));
   // Run 45: the call id of the act a resume sends again (the body says when it failed for the reason it was held
 // for: `incident.repeated`).
   let resent: string | null = null;

@@ -25,7 +25,8 @@ import {
  * ledger holds the newest `KEEP_THROWS` of them near the newest one (the stronghold of an earlier trek is not this one).
  */
 export const KEEP_THROWS = 8;
-const KEEP_MS = 45 * 60_000;
+/** The stronghold does not move: a throw of the trek stays for longer than a whole run's budget (3 hours); a far newer one still forgets it (`NEAR_BLOCKS`). */
+const KEEP_MS = 4 * 3_600_000;
 const NEAR_BLOCKS = 4_000;
 /** Eyes that dropped can be picked up for this long. */
 const DROP_MS = 5 * 60_000;
@@ -151,7 +152,8 @@ export function createEyeLedger(saved: unknown) {
   return {
     /** An act's result came back: its thrown eye (if it threw one in the overworld) goes in the ledger once. True when it was added. */
     note(id: string | undefined, resultJson: string | undefined, dimension: string | null, now: number): boolean {
-      const flight = dimension === 'overworld' ? flightOf(resultJson) : null;
+      // A frame that is not there (null: a reflex, a respawn) does not forget a flight the body saw; only another dimension does.
+      const flight = dimension === 'overworld' || dimension === null ? flightOf(resultJson) : null;
       if (!flight) return false;
       // The key is cut to what is stored, so the same result noted again (a long command id) is found.
       const key = `${id ?? 'none'}:${Math.round(flight.x)}:${Math.round(flight.z)}:${flight.bearingDeg}`.slice(0, 80);
