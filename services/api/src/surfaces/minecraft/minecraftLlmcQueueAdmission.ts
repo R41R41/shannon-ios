@@ -2,7 +2,7 @@ import { sameWork } from './minecraftLlmcQueueState.js';
 import type { QueueItem, QueueAdd, QueueDeps } from './minecraftLlmcQueueState.js';
 import { createHash } from 'node:crypto';
 import { feetOf } from './minecraftLlmc.js';
-import { QUEUE_MAX, SAME_IN_QUEUE_WORDS } from './minecraftLlmcQueueWords.js';
+import { QUEUE_MAX, SAME_IN_QUEUE_WORDS, waitBehindWords } from './minecraftLlmcQueueWords.js';
 
 export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem[]; open(): QueueItem[]; now(): number }) {
   const { items, open, now } = shared;
@@ -22,6 +22,8 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
     if (waiting.length >= QUEUE_MAX) {
       return `送らなかった: 列がいっぱい（実行中を含めて ${QUEUE_MAX} つ）。差し替えるなら replace に ${waiting.at(-1)!.item} などを書く`;
     }
+    // R3-1 (6): nothing is put behind a running item that only waits.
+    if (waiting.length && spec.input.hands.length > 0 && spec.input.hands.every((hand) => hand.do === 'wait')) return waitBehindWords(waiting.at(-1)!.item);
     const same = waiting.find((item) => sameWork(item.input, spec.input));
     if (same) return `送らなかった: ${same.item} ${SAME_IN_QUEUE_WORDS}（${waiting[0] === same ? '実行中' : '待ち'}）。列は live の queue`;
     // Continue contract 2: a mark of another step's queue cannot be relied on (the marks belong to one queue); said
