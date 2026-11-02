@@ -80,7 +80,8 @@ while [ $(( $(date +%s) - started )) -le "$MAXWAIT" ]; do
   sleep 20; closed=$(why_closed); [ -n "$closed" ] && continue         # open for 20 s: not a moment between S5's release and its next take
   read -r HEADPIN BODYPIN < <(pins) || { echo "[$(date +%T)] rig-window: the pins could not be made"; sleep 60; continue; }
   echo "[$(date +%T)] rig-window: the window is open; one section with head $(basename "$HEADPIN") body $(basename "$BODYPIN")"
-  if [ "$BESIDE" = 1 ]; then SLOT_ARGS=(--allow-run); LOAD_ARGS=(--load-limit 3.5 --load-minutes 3); NICE=(nice -n 10); else SLOT_ARGS=(); LOAD_ARGS=(--load-limit 0); NICE=(); fi
+  # (the slot may be S2's for a while: wait for it up to 30 minutes instead of being refused, which would count as a failure)
+  if [ "$BESIDE" = 1 ]; then SLOT_ARGS=(--allow-run --wait 1800); LOAD_ARGS=(--load-limit 3.5 --load-minutes 3); NICE=(nice -n 10); else SLOT_ARGS=(--wait 1800); LOAD_ARGS=(--load-limit 0); NICE=(nice -n 10); fi
   bash "$SLOT" "${SLOT_ARGS[@]}" --label rig -- "${NICE[@]}" python3 -I "$HERE/rig.py" run --head-pin "$HEADPIN" --body-pin "$BODYPIN" --sections "$SECTIONS" --seeds "$SEEDS" --batch "$BATCH" --limit 1 \
     --model real --max-section-yen 500 --batch-cap-yen 3000 --owner-ok-supply "$OWNER_OK" --cores 2 "${LOAD_ARGS[@]}" "${EXTRA[@]}"
   rc=$?
