@@ -365,3 +365,11 @@ describe('what the lab\'s walk through the Nether showed (S4, run59 leg 2, 2026-
       '金の防具を 1 つ着ていないとピグリンは敵になる']) expect(nether, word).toContain(word);
   });
 });
+
+describe('the lab\'s walk through the crimson forest (S4, 2026-11-03)', () => {
+  it('says that a repeated search_timeout is cut into relay points, what limit_place is, and to heal before leaving the fortress\'s platform', () => {
+    const nether = V2_STAGES.nether;
+    for (const word of ['search_timeout（道探しが終わらない）が続く所は、出し直しても同じ所で止まる', '10m 以内の立てる中継点を行き先にして区切る', 'limit_place は置く物の上限',
+      '要塞）から出る前に体力を戻す', '30 秒に体力 20→0.9']) expect(nether, word).toContain(word);
+  });
+});
