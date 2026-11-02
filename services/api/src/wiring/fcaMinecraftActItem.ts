@@ -79,12 +79,7 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const breaking = counted ? [...counted.lines, ...counted.keptBy] : [];
   // Run 47 (hold 5): an act that digs with the pack nearly full is told what that costs (nothing is refused).
   const full = digPackLine(parts.frame, input.hands, parts.promises?.() ?? [], call.taskId);
-  // Run 59 leg 2: "wait 30" queued to wait for the stairs ahead of it ran after them, idle for 30 s, and held the next decision back by as
-  // much (leg 1 had a dozen such waits). The queue's order and when the next decision comes were not said where the wait was queued.
-  const behind = added.after && input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait') && !(input as { done?: unknown }).done
-    ? (`wait は ${added.after} が終わってから動く（並行には待たない）。列に手が 1 つだけなら、その手の残りが数秒になった時に次の判断が来る。`
-      + `前の手が終わるのを待つための wait は、その秒数だけ次の判断を遅らせる（焼き上がり・夜明け・回復を待つ wait とは別）`)
-    : null;
+  const behind = waitBehindWords(input, added.after);
   const addedItemWords = () => (toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...(behind ? [behind] : []),
      ...(parts.lead ?? []), ...kept, ...breaking, ...(full ? [full] : [])].join('\n')));
   return addedItemWords();
@@ -113,4 +108,16 @@ export function feelWhenItsDone(queue: LlmcQueue, feelings: MinecraftFeelingPort
   queue.onRan(({ call, why }, result) => feelings.noted({ scopeKey: step.scopeKey, taskId: step.taskId, goal: step.snapshot.task.goal,
     why: String((call.input as { why?: unknown } | null)?.why ?? why), ok: result.ok, reflex: result.bodyReflex === true,
     progressed: result.progressed === true, outcome: result.text.split('\n').find(text => !text.startsWith('（頭が形を直して')) ?? '' }));
+}
+
+/**
+ * Run 59 leg 2: "wait 30" queued to wait for the stairs ahead of it ran after them, idle for 30 s, and held the next decision back by as much
+ * (leg 1 had a dozen such waits). The queue's order and when the next decision comes are said where a wait-only act is queued behind another
+ * item; a wait with its own condition (a furnace, the day, health) is not told.
+ */
+function waitBehindWords(input: ActInput, after: string | null | undefined): string | null {
+  const onlyWaits = input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait');
+  if (!after || !onlyWaits || (input as { done?: unknown }).done) return null;
+  return (`wait は ${after} が終わってから動く（並行には待たない）。列に手が 1 つだけなら、その手の残りが数秒になった時に次の判断が来る。`
+    + '前の手が終わるのを待つための wait は、その秒数だけ次の判断を遅らせる（焼き上がり・夜明け・回復を待つ wait とは別）');
 }
