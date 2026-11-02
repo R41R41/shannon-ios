@@ -16,9 +16,11 @@ export interface CautionSource {
   nth: number;
   /** The stopped hand as the act's result said it: its kind, where it went or aimed, and its line. */
   hand?: { do: string; aim: ActPos | null; line: string } | null;
+  /** Where she stood (the air's surprise). */
+  at?: ActPos | null;
 }
 /** Surprises whose fact is noted at their second coming. */
-export const CAUTION_CODES: ReadonlySet<string> = new Set(['repeat', 'dig', 'miss', 'found']);
+export const CAUTION_CODES: ReadonlySet<string> = new Set(['repeat', 'dig', 'miss', 'found', 'oxygen']);
 
 const cut = (text: string) => {
   const flat = text.replace(/\s+/gu, ' ').trim();
@@ -59,6 +61,7 @@ function pathFact(fields: Record<string, unknown>, probe: ProbeInput): string | 
  */
 export function cautionFact(source: CautionSource, probes: readonly ProbeInput[], answers: ReadonlyArray<string | null | undefined>): string | null {
   if (source.nth < 2 || !CAUTION_CODES.has(source.code)) return null;
+  if (source.code === 'oxygen') return source.at ? cut(`${posText(source.at)} の近くで息が 10 未満になったのは ${source.nth} 回目`) : null;
   for (const [index, probe] of probes.entries()) {
     const read = readProbeResult(answers[index] ?? undefined);
     if (!read || read.kind === undefined) continue;
