@@ -334,12 +334,18 @@ class RigHooksTest(unittest.TestCase):
         thread.join(5)
         self.assertEqual(seen.get('password'), 'rig-password')
 
-    def test_the_body_bundle_needs_esbuild_and_writes_its_source_first(self):
+    def test_the_body_pin_gets_its_runner_and_its_packages(self):
         import rig
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(trials.Stop) as caught: rig.ensure_bundle(tmp, '/bin/true', dev=os.path.join(tmp, 'no-dev'))
-            self.assertIn('esbuild', str(caught.exception))
-            self.assertEqual(open(os.path.join(tmp, 'backend', 'scripts', 'lab', 'rig-body.ts'), encoding='utf-8').read(), rig.BODY_BUNDLE_SOURCE)
+            pin, dev = os.path.join(tmp, 'body-x'), os.path.join(tmp, 'dev')
+            os.makedirs(pin); os.makedirs(os.path.join(dev, 'node_modules', 'ts-node'))
+            open(os.path.join(dev, '.nvmrc'), 'w').write('22.21.1\n')
+            with self.assertRaises(trials.Stop) as caught: rig.ensure_body(pin, dev=os.path.join(tmp, 'no-dev'))       # no packages to link: it says so
+            self.assertIn('node_modules', str(caught.exception))
+            backend = rig.ensure_body(pin, dev=dev)
+            self.assertEqual(open(os.path.join(backend, rig.BODY_RUN_RELATIVE), encoding='utf-8').read(), rig.BODY_RUN_SOURCE)
+            self.assertTrue(os.path.isdir(os.path.join(pin, 'node_modules', 'ts-node')))
+            self.assertEqual(open(os.path.join(pin, '.nvmrc')).read().strip(), '22.21.1')
 
 
 class FakeRcon:

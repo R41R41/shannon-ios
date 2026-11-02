@@ -1,18 +1,21 @@
-// S4's isolated head + body rig (2026-11-02, dragon sprint): the head's own code and the body's own code in ONE process, over a lab Minecraft server, for the
-// section trials (scripts/minecraft-trials/rig.py) beside a real run. It touches nothing of production: its own database file, its own operator socket (beside
-// that file), its own lab server and body account; the production shannon-home, body account, services and database are not opened. The model keys are read
-// from the env file given (on the VM only) into this process's memory and never printed.
+// S4's isolated head + body rig (2026-11-02, dragon sprint): the head's own code over a lab Minecraft server, for the section trials (scripts/minecraft-trials/rig.py)
+// beside a real run. It touches nothing of production: its own database file, its own operator socket (beside that file), its own loopback port for the body's poll,
+// its own lab server and body account; the production shannon-home, body account, services and database are not opened. The model keys are read from the env file
+// given (on the VM only) into this process's memory and never printed.
 //
 // It is the head's hold-and-resume lab (tests/minecraftHoldResumeLab.ts: the operator's CLI and socket, the task runtime and its FCA steps, the LLM-centric
-// step parts, the control and its lease rules) with the two stand-ins replaced: the model by the production's (`configuredMinecraftLlmc`, or a script for the
-// plumbing test without a key) and the body by the real one (`NativeCommonFcaBody` over a mineflayer bot, run by `CommonFcaControlLoop` whose HTTP poll goes to the
-// control in-process). The budget is the production's (`fcaBudget`, the operator's `--budget-yen` lowers a request's cap).
+// step parts, the control and its lease rules) with the model replaced by the production's (`configuredMinecraftLlmc`, or a script for the plumbing test without
+// a key). The body is the real one in a process of its own (rig.py runs the body tree's scripts/lab/rig-body-run.ts as the lab probes run: its own compiler
+// settings, its own packages) and polls this process's loopback door as it polls the API in production. The budget is the production's (`fcaBudget`; the
+// operator's `--budget-yen` lowers a request's cap).
 //
 //   cd <head tree>/services/api && node --import tsx scripts/minecraft-rig.ts
-//   env: RIG_DIR (work dir, made if missing)  RIG_PORT (the lab server's game port)  RIG_BODY_BUNDLE (rig-body.mjs, bundled from the body tree)  RIG_BODY_NAME (default I_am_Shannon)
+//   env: RIG_DIR (work dir, made if missing)  RIG_PORT (the lab server's game port, for the record)  RIG_BODY_NAME (default I_am_Shannon)
 //        RIG_MODEL=real|script  RIG_ENV_FILE (api.env, for real)  RIG_STOP_FILE (the file whose existence ends the rig; default <RIG_DIR>/rig.stop)
-// It prints `RIG_READY {...}` when the operator socket and the body are up, `RIG_USAGE {...}` for every paid call, `RIG_LOG ...` lines of the head, and exits 0 on SIGTERM.
+// It prints `RIG_HTTP {port,url}` when the body's door is open, `RIG_READY {...}` when the operator socket is served and the body has polled, `RIG_USAGE {...}` for
+// every paid call, `RIG_LOG ...` lines of the head, and exits 0 on SIGTERM.
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { actionHarness } from '../tests/support/actionThreadHarness.js';
@@ -38,11 +41,12 @@ import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudget
 import { fcaCompactAboveTokens } from '../src/infra/models/anthropic/anthropicFcaCompaction.js';
 import { ownerLocalClock, ownerTimeZone } from '../src/infra/time/localDate.js';
 import { MC_ACT_TOOL } from '../src/contracts/minecraftActContract.js';
+import { MINECRAFT_CONTROL_PATH } from '../src/contracts/minecraftControlContract.js';
 import type { FcaModel } from '../src/mind/action/fca/fcaPorts.js';
 
 const env = process.env;
-const DIR = env.RIG_DIR ?? '', PORT = Number(env.RIG_PORT), BUNDLE = env.RIG_BODY_BUNDLE ?? '', NAME = env.RIG_BODY_NAME ?? 'I_am_Shannon', MODE = env.RIG_MODEL ?? 'script';
-if (!DIR || !Number.isInteger(PORT) || !BUNDLE || !fs.existsSync(BUNDLE)) throw new Error('RIG_DIR, RIG_PORT and RIG_BODY_BUNDLE (an existing rig-body.mjs) are required');
+const DIR = env.RIG_DIR ?? '', PORT = Number(env.RIG_PORT), NAME = env.RIG_BODY_NAME ?? 'I_am_Shannon', MODE = env.RIG_MODEL ?? 'script';
+if (!DIR || !Number.isInteger(PORT)) throw new Error('RIG_DIR and RIG_PORT (the lab server\'s game port, for the record) are required');
 fs.mkdirSync(DIR, { recursive: true });
 const STOP_FILE = env.RIG_STOP_FILE ?? path.join(DIR, 'rig.stop');
 const log = (line: string) => console.log(`RIG_LOG [${new Date().toISOString().slice(11, 19)}] ${line}`);
@@ -61,11 +65,6 @@ function readValues(file: string): Record<string, string> {
   return out;
 }
 const values: Record<string, string> = MODE === 'real' ? readValues(env.RIG_ENV_FILE ?? '') : {};
-// The body's modules read these at load (it never connects to either here) and its probe floor is the default one.
-env.MONGODB_URI ??= 'mongodb://127.0.0.1:1/rig-not-used';
-env.OPENAI_API_KEY ??= 'offline-test-not-used';
-Object.assign(env, { SHANNON_ISOLATED_MINEBOT_PROBE: 'true', MINECRAFT_COGNITION_MODE: 'off', MINECRAFT_OUTAGE_NO_LLM: 'true', MINECRAFT_HUNT_NO_LLM: 'true', MINECRAFT_PROBE_FLOOR: 'default' });
-const body = await import(BUNDLE) as any;
 
 // ---- the head (the hold lab's wiring, with the production's budget and models) ------------------------------------------------------------------
 const dbPath = path.join(DIR, 'head', 'shannon.db');
@@ -105,7 +104,7 @@ const scriptModel = (): FcaModel => {
     async decide() {
       decisions++;
       await delay(300);
-      const hands = [{ do: 'look' }];
+      const hands = [{ do: 'wait', seconds: 2 }];
       return decisions === 2 ? { decision: { kind: 'tools', calls: [{ id: `rig-${decisions}`, name: MC_ACT_TOOL, input: { hands, why: '[rig] script' } }] }, history: [{ role: 'assistant', content: 'act' }] }
         : { decision: { kind: 'tools', calls: [{ id: `look-${decisions}`, name: 'task.list', input: {} }] }, history: [{ role: 'assistant', content: 'look' }] };
     },
@@ -123,6 +122,7 @@ const llmc: LlmcWiring = real ?? { names: { main: 'rig-script', escalate: null, 
   policy: LLMC_HISTORY_POLICY, historyAhead: createFcaHistoryAhead() };
 if (real) emit('RIG_MODELS', { main: real.names.main, escalate: real.names.escalate, plan: real.names.plan });
 
+function withoutHistory<T extends { history?: unknown }>(ports: T): Omit<T, 'history'> { const { history: _history, ...rest } = ports; return rest; }
 driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: nowIso, model: llmc.models.main, budget, continueAtOnce: true,
   stepPorts: (runtime, step) => {
     const small = llmcStepParts(llmc, step, control, line => log(`head: ${line}`));
@@ -139,7 +139,8 @@ driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owne
     const ports = { keepBodyTools: () => true, body: life, sourcesVisible: () => true, waitCounterpart: () => false,
       tools: createFcaProgressTools(combineFcaTools(small.planTools, fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true, ...small.tools }), taskBody.tools),
         { checkpoint: step.snapshot.checkpoint, binding, requireConditions: true, permit }),
-      ...small.ports };
+      // The script's rounds are plain (not the Anthropic model's signed rounds): without a key the mode's history codec is left out, as the hold lab does.
+      ...(MODE === 'real' ? small.ports : withoutHistory(small.ports)) };
     return small.menu(ports as never);
   } } as never);
 const wakeTimer = setInterval(() => { void driver.tick().catch(() => undefined); }, 200);
@@ -152,27 +153,30 @@ const operator = startOperatorMinecraft({ audit, path: dbPath, scopeKey: 'owner'
   activity: { append: () => undefined } as never, config: { timeZone } as never,
   conversation: { threadId: () => 'thread', appendNoteOnce: () => null } } as never);
 
-// ---- the body: the real one, over the lab server ---------------------------------------------------------------------------------------------------
-const actor: any = await body.createProbeBot(PORT, NAME);
-actor.on('error', (error: Error) => log(`body error: ${String(error?.message ?? error).slice(0, 200)}`));
-actor.on('death', () => emit('RIG_EVENT', { event: 'death', at: nowIso() }));
-actor.on('end', (reason: unknown) => { emit('RIG_EVENT', { event: 'body_end', reason: String(reason).slice(0, 120) }); });
-const nativeBody = new body.NativeCommonFcaBody(actor, { serverId: SERVER_ID, capture: async () => { throw new Error('no picture in the rig'); }, rendererConfigured: () => false });
+// ---- the body's door: the control's poll over HTTP on the loopback (production: the API's authenticated route; the body is the rig's other process) ---------
 let pollErrors = 0;
-const fetcher = async (_url: unknown, init: { body: string }) => {
-  try { return new Response(JSON.stringify(control.poll({ scopeKey: 'owner', deviceId: 'minebot' } as never, JSON.parse(init.body)))); }
-  catch (error) {
-    if (!pollErrors++) log(`the body's poll was refused: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
-    return new Response(JSON.stringify({ error: 'FCA_BODY_POLL_INVALID' }), { status: 400 });
-  }
-};
-const loop = new body.CommonFcaControlLoop({ baseUrl: 'http://127.0.0.1:3000', token: 'rig-device-token-0000', serverId: SERVER_ID, actuator: nativeBody, fetcher, pollMilliseconds: 150 });
-loop.start();
+const door = http.createServer((request, response) => {
+  if (request.method !== 'POST' || request.url !== MINECRAFT_CONTROL_PATH) { response.statusCode = 404; response.end('{}'); return; }
+  const chunks: Buffer[] = [];
+  request.on('data', chunk => chunks.push(chunk as Buffer));
+  request.on('end', () => {
+    response.setHeader('content-type', 'application/json');
+    try {
+      response.end(JSON.stringify(control.poll({ scopeKey: 'owner', deviceId: 'minebot' } as never, JSON.parse(Buffer.concat(chunks).toString('utf8')))));
+    } catch (error) {
+      if (!pollErrors++) log(`the body's poll was refused: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+      response.statusCode = 400; response.end(JSON.stringify({ error: 'FCA_BODY_POLL_INVALID' }));
+    }
+  });
+});
+await new Promise<void>(resolve => door.listen(0, '127.0.0.1', resolve));
+const httpPort = (door.address() as { port: number }).port;
+emit('RIG_HTTP', { port: httpPort, url: `http://127.0.0.1:${httpPort}` });
 
 const socketReady = () => fs.existsSync(path.join(path.dirname(dbPath), 'operator-runtime', 'operator.sock'));
-for (let waited = 0; waited < 30_000 && !(socketReady() && control.available().length === 1); waited += 200) await delay(200);
+for (let waited = 0; waited < 150_000 && !(socketReady() && control.available().length === 1); waited += 200) await delay(200);
 if (!(socketReady() && control.available().length === 1)) { emit('RIG_FAILED', { reason: 'the head never saw the body or the operator socket is missing', socket: socketReady(), bodies: control.available().length }); process.exit(3); }
-emit('RIG_READY', { db: dbPath, socket: path.join(path.dirname(dbPath), 'operator-runtime', 'operator.sock'), body: NAME, port: PORT, mode: MODE, pid: process.pid });
+emit('RIG_READY', { db: dbPath, socket: path.join(path.dirname(dbPath), 'operator-runtime', 'operator.sock'), body: NAME, port: PORT, mode: MODE, pid: process.pid, httpPort });
 
 let closing = false;
 async function shutdown(code: number): Promise<never> {
@@ -180,10 +184,9 @@ async function shutdown(code: number): Promise<never> {
     closing = true;
     clearInterval(wakeTimer);
     emit('RIG_STOPPING', { totalUsd: Number(spentUsd.toFixed(4)), calls });
-    await loop.stop().catch(() => undefined);
+    await new Promise<void>(resolve => door.close(() => resolve()));
     await operator.close().catch(() => undefined);
     await driver.close().catch(() => undefined);
-    try { body.closeProbeBot(actor); } catch { /* the lab is closing */ }
   }
   setTimeout(() => process.exit(code), 500).unref();
   return new Promise<never>(() => undefined);

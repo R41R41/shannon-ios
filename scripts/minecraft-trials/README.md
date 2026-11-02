@@ -215,10 +215,10 @@ python3 -I trials.py report          # 表と「止まりの様子」（頭の�
 
 ### 隔離台（`rig.py`、本物の頭＋本物の体＋ラボの世界。run59 と並べて回せる。2026-11-02 夜に追加）
 取りまとめの決め：窓を待たずに、本番の実走と並べて S6〜S10 を本物の頭で繰り返し試す場。**本番の shannon-home・体の口座・頭のサービス・DB には触らない**（別のポート・口座・DB）。API の鍵は VM の中だけで使う。
-- 仕組み：1 つの Node プロセス `services/api/scripts/minecraft-rig.ts` に、頭の本物のコード（運用 CLI とソケット・タスクの実行・FCA の歩・LLM 中心の歩の部品・制御・予算）と、体の本物（`NativeCommonFcaBody` の mineflayer ボット＋`CommonFcaControlLoop`。poll は HTTP でなく制御へ直接）を入れ、
+- 仕組み：頭の Node プロセス `services/api/scripts/minecraft-rig.ts` に、頭の本物のコード（運用 CLI とソケット・タスクの実行・FCA の歩・LLM 中心の歩の部品・制御・予算）を入れ、体の本物（`NativeCommonFcaBody` の mineflayer ボット＋`CommonFcaControlLoop`）は別プロセスで同じラボのサーバーに入り、
   ラボのサーバー（`seedscan.Lab`：pristine の世界の写し・難易度 normal・view 10・simulation 8・モブあり）につなぐ。頭の hold ラボ（`tests/minecraftHoldResumeLab.ts`）のモデルと体の代役を、本番のモデル（`configuredMinecraftLlmc`）と本物の体に替えたもの。
   予算は本番と同じ `fcaBudget`（運用 CLI の `--budget-yen` がその依頼の上限）。`rig.py` が 1 試しごとにラボのサーバーと rig を立て、`trials.run_trial` をそのまま回し（開始の状態・節目・上限・止まりの様子・報告は同じ）、終わったら両方を止めて消す。
-- 木：**頭の木**＝試す版の `git archive`（+ node_modules を本番の checkout からハードリンク。rig の台本は上書きで置く）、**体の木**＝試す版（src・scripts・package）+ `~/Shannon-dev` の node_modules。固定して使う（その後の枝の動きに左右されない）。体側の束は pin ごとに 1 回 esbuild で作る。
+- 木：**頭の木**＝試す版の `git archive`（+ node_modules を本番の checkout からハードリンク。rig の台本は上書きで置く）、**体の木**＝試す版（src・scripts・package）+ `~/Shannon-dev` の node_modules。固定して使う（その後の枝の動きに左右されない）。体は頭とは別のプロセス（本番と同じ形）：体の木の `scripts/lab/rig-body-run.ts`（rig.py が木に書く）を、ラボの probe と同じ `node --loader ts-node/esm`（体の tsconfig・体の packages）で走らせ、頭の rig が開く loopback の戸（`/v1/body/minecraft/control`）を poll する。
 - 回し方（lab-slot の決まり：`bash lab-slot.sh --allow-run --label rig -- ...`。`--allow-run` は取りまとめの判断。VM は 4 vCPU になってから＝`nproc` が 4。負荷（1 分）が 3.5 を超え続けたら `touch ~/.cache/minebot-lab/trials.stop`）：
 
 ```bash
