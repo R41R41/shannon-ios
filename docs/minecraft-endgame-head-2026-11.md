@@ -208,3 +208,19 @@ Three scenes (`tests/fixtures/minecraft/pearl-forest-scenes.json`, Sonnet, the e
 - No forest in view: first 4 of 4 went back to the gate to look for endermen on the surface at night (or crafted powder); none searched the Nether. After the pearl stage was given a line on how to look (scan, then 90 m a go toward the directions not seen and not walked, the gate only after three directions): 4 of 5 went 90 m in a direction (south, west, north-west, west) and the fifth looked first; none went back to the gate. The directions follow the sight of the valley only loosely (three of four went toward the valley's side); no fixed coordinate is in any answer.
 - Few endermen: the model fought on in 3 of 5 and looked first in 2 of 5, before and after; none set the gold's trade (18 gold, about 1.1 pearls) against the wait in its words. A line now gives the numbers beside the choice ("パール 3/14（あと 11 個）: 金 18 個の交換は平均 約 1.1 個"); it did not change the choice here. A time-based comparison needs the minutes spent and the endermen seen, which the body does not report (a field to ask S2 for, not urgent): the number seen in the last N minutes.
 - Eye contact: the old lines stay (look at the feet; no bow); the fights were `fight target=enderman`, which the body makes safe by a roofed hole.
+
+## 11/3 Run59's eight holds: can the head get out alone? (S3, about $0.9 of the $3)
+
+Method: the saved request of the decision that first saw each stop (production decision records, read only), sent again to Sonnet eight times, as it was; where the head has changed since, the new words were added to that request as a fact and sent eight times more. A saved request has the words of that day, so this shows the model's behaviour and what a new fact changes, not the new head's whole path.
+
+| hold | what it was | layer | the head alone, today |
+|---|---|---|---|
+| H1 | go 33 m nearer counted as no progress | A/O | prevented: the approach is counted (`928b254`), kills, frame, ignition, eyes count too (unit tests); no stall to get out of |
+| H2 | vertical at gravel, turned away, met it again | P | 1 decision: gravel put in `canDig` 2 of 10 with the old input, 10 of 10 with the reason (T6) |
+| H3 | rail in her cell, pillarUp could not place, the text lost the rail | S/P | not replayed (the body's result text and `pillarUp` are the cure, `38f361e`); to S0's table |
+| H4 | pack full (inventory_full) while a vertical went on | A/P | 1 decision: 8 of 8 dropped the big stacks (cobblestone 300 to 400, granite, dirt) and mined on; the drops are large, a side effect to watch |
+| H5 | a life key renamed, deaths 0 to 3 read as new | O/A | prevented (`dcc9a45`) |
+| H6 | first go to the fortress, search_timeout | S/A | 0 of 8 changed: 8 of 8 sent the same go again with more `maxDig`/`maxPlace`. With a fact "the same go stays the same; a point 80 m on the line" 5 of 8 went by relay points. Now a typed failure (`search_timeout`) offers that point (unverified) and says when the same go is sent again |
+| H7, H8 | go stuck twice at the same place (placing into her own cell) | S/A | 0 of 8: 8 of 8 sent the same go; with a fact to change the destination 1 of 8. The cause is the body's (the cell she stands in); the head says "tried" now (`go_stuck` typed failure) but cannot place around it |
+
+Count: the head gets out alone, or never gets in, in H1, H2, H4, H5 (4 of 8) and part of H6 (5 of 8 with the fact; the typed failure puts the fact in the run). H3, H7 and H8 need the body (to S0's table). Not shown: that the relay points are walkable, and any multi-turn exit.
