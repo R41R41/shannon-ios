@@ -113,7 +113,8 @@ export function replanBrief(input: BriefInput): string {
     const text = sections(input, cut).join('\n\n');
     if (llmcTokens(text) <= REPLAN.briefTokens) return text;
   }
-  // Still too long (a node's lines alone): the text itself is cut until it fits, by the same count (Japanese is about a token a character, so a cut by characters is no bound).
+  // Still too long (a node's lines alone): the text itself is cut until it fits, by the same count
+  // (Japanese is about a token a character, so a cut by characters is no bound).
   let text = sections(input, 0).join('\n\n');
   while (llmcTokens(text) > REPLAN.briefTokens && text.length > 400) text = text.slice(0, Math.floor(text.length * 0.9));
   return text;
