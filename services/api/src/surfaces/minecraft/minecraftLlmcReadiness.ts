@@ -4,6 +4,7 @@ import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts 
 import { carriedFood } from './minecraftLlmcLive.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 
@@ -465,8 +466,10 @@ const enteringHand = (hands: unknown): number => (Array.isArray(hands) ? hands :
  * not worn is missing, so an act that equips it and enters in one goes in the next. Null: nothing is held.
  */
 export function gateHold(input: unknown, frame: BodyObservation | null): { hand: number; line: string } | null {
-  const facts = readinessOf(frame), at = enteringHand(record(input)?.hands);
-  if (!facts || facts.dimension !== 'overworld' || at < 0) return null;
+  const facts = readinessOf(frame);
+  if (!facts || facts.dimension !== 'overworld') return null;
+  const portalHand = enteringHand(record(input)?.hands), at = portalHand >= 0 ? portalHand : portalCellHand(input, frame);
+  if (at < 0) return null;
   const lack = requiredLack(facts, ['portal']);
   return lack ? { hand: at + 1, line: `ネザーへ入る手は送らない。${lack}。そろえてからもう一度出す（理由を書いても省けない）` } : null;
 }

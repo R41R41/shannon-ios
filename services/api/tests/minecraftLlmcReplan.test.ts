@@ -38,11 +38,11 @@ const stall = (kind: Stall['kind'] = 'node_stalled', key = 'p1'): Stall => ({ ki
 const tree = (): PlanTree => planFromSeeds([{ title: '木', kind: 'wood', doneWhen: 'have:log>=3' }, { title: '石', kind: 'stone_tools', doneWhen: 'have:stone_pickaxe' }])!;
 
 describe('the bounds of the plan made again', () => {
-  it('lets one through at first, then waits 10 minutes, allows 6 in an hour, 30 in a run and 3 for one node', () => {
+  it('lets one through at first, then waits 5 minutes, allows 6 in an hour, 30 in a run and 3 for one node', () => {
     expect(replanVerdict(empty, 'p1', 0)).toEqual({ ok: true });
     const one = withAttempt(empty, record(0));
-    expect(replanVerdict(one, 'p2', 5 * MIN)).toEqual({ ok: false, why: 'gap' });
-    expect(replanVerdict(one, 'p2', 10 * MIN)).toEqual({ ok: true });
+    expect(replanVerdict(one, 'p2', 5 * MIN - 1)).toEqual({ ok: false, why: 'gap' });
+    expect(replanVerdict(one, 'p2', 5 * MIN)).toEqual({ ok: true });
     let six = empty;
     for (let index = 0; index < REPLAN.perHour; index += 1) six = withAttempt(six, record(index * 10 * MIN, `n${index}`));
     expect(replanVerdict(six, 'p9', 50 * MIN + 10 * MIN - 1)).toEqual({ ok: false, why: 'hour' });

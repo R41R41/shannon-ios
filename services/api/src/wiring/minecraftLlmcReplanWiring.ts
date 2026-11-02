@@ -14,6 +14,7 @@ import { createReplanFlow, type ReplanFlow, type Replanner, type ReplanSources }
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueueState.js';
 import { workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import type { Stall } from '../surfaces/minecraft/minecraftLlmcStalls.js';
+import { stallVitals } from '../surfaces/minecraft/minecraftLlmcStallRecord.js';
 import { createStallWatch } from '../surfaces/minecraft/minecraftLlmcWatch.js';
 import type { createWaitLedger } from '../surfaces/minecraft/minecraftPurposeProgress.js';
 
@@ -89,6 +90,8 @@ export const adoptProblem = (parts: Pick<UnheldParts, 'validate' | 'observe'>, b
 export interface Unheld {
   watch: ReturnType<typeof createStallWatch>;
   flow: ReplanFlow;
+  /** The plan's current node now (what a decision's start reads to tell that the body got out of a stalled node). */
+  current(): string | null;
   checkpoint(): Record<string, unknown>;
 }
 
@@ -103,7 +106,7 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
   const saved = parts.checkpoint as { minecraftReplans?: unknown; minecraftReplanPending?: unknown;
     minecraftActiveWait?: { node: string; until: number } } | null;
   const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending, replanner: parts.replanner,
-    clock: parts.activeClock, log: parts.log, sources: stall => sourcesOf(parts, results, stall), bind: update => boundTo(parts.plan.tree(), update),
+    clock: parts.activeClock, log: parts.log, vitals: () => stallVitals(parts.observe()), sources: stall => sourcesOf(parts, results, stall), bind: update => boundTo(parts.plan.tree(), update),
     ...(parts.persist ? { persist: parts.persist } : {}),
     check: (update: PlanUpdate) => {
       const before = parts.plan.tree();
@@ -115,11 +118,12 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
     activeClock: parts.activeClock, waits: parts.waits, ...(saved?.minecraftActiveWait ? { savedWait: saved.minecraftActiveWait } : {}),
     raise: stall => flow.note(stall), log: parts.log });
   parts.queue.onRan(watch.noteQueueResult);
-  return { watch, flow, checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
+  const current = (): string | null => { const tree = parts.plan.tree(); return workingNode(parts.taskId, tree.current) ?? tree.current ?? null; };
+  return { watch, flow, current, checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
 }
 
 /** The lifecycle of an unheld task: the look at each result and before each decision, and the plan made again at a decision's start. */
-export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'watch' | 'flow'> | null): FcaBodyLifecycle {
+export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'watch' | 'flow' | 'current'> | null): FcaBodyLifecycle {
   if (!unheld) return lifecycle;
   const before = lifecycle.beforeDecision?.bind(lifecycle);
   const noted = lifecycle.noteResult?.bind(lifecycle);
@@ -127,6 +131,7 @@ export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'wa
     async beforeDecision(signal: AbortSignal) {
       await before?.(signal);
       unheld.watch.look();
+      unheld.flow.escaped(unheld.current());
       await unheld.flow.run(signal);
     },
     noteResult(...args: Parameters<NonNullable<FcaBodyLifecycle['noteResult']>>) {

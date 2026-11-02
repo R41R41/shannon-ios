@@ -3,6 +3,7 @@ import { deathBetween, type DeathCounter } from '../../contracts/continueContrac
 import { onRedecideNote } from '../../infra/decisionRecords/decisionRecordNotes.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { EXPLORE_KEYS, GAINS_KEPT, LIST_KEPT, TRAVEL_KEYS, readSavedStalls } from './minecraftLlmcStallsSaved.js';
+import { progressEvents } from './minecraftProgressEvents.js';
 
 /**
  * Amendment A-12 (owner's decision 2026-10-29: 「新しい版だけ・詰まったら止めて直す」): the stalls the head finds itself, beside the ones the body
@@ -57,6 +58,8 @@ export interface Stall {
   /** The command that made the stall, when sending it again is what a resume should do (same_spot_stops); absent: a
  * resume sends nothing. */
   command?: string;
+  /** node_stalled: the task's running time (ms) the node did not move on for; the stall record's seconds. */
+  idleMs?: number;
 }
 
 /** The hands that move the body or change the world around it: an act with one of them is not a wait. The others
@@ -244,7 +247,7 @@ export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeM
   if (snapshot.waitUntil !== undefined && activeMs < snapshot.waitUntil) return null;
   const idle = activeMs - state.node.since;
   if (idle < STALL.nodeMs) return null;
-  return found(state, { kind: 'node_stalled', key: node,
+  return found(state, { kind: 'node_stalled', key: node, idleMs: idle,
     why: ("節 " +
 `${snapshot.node}` +
 " が " +
@@ -290,9 +293,12 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
   const act = readActResult(ran.result);
   if (!act) return null;
   const gained = newGains(act, state.gains);
+  // A kill, the gate's frame or its ignition, an eye in the frame is progress the pack does not show: the node's window starts again from it.
+  const worked = progressEvents(ran.hands, act.lines).length > 0;
+  if (worked && state.node && ran.activeMs !== undefined) state.node.since = ran.activeMs;
   if (act.lines.some(line => line.end !== 'not_run' && line.end !== 'unknown')) {
     const kinds = ran.hands.map(hand => String(hand?.do ?? ''));
-    if (gained || kinds.some(kind => MOVING.has(kind))) state.waits = 0;
+    if (gained || worked || kinds.some(kind => MOVING.has(kind))) state.waits = 0;
     else if (kinds.length > 0 && kinds.every(kind => kind === 'wait')) {
       if (ran.waitUntil !== undefined && ran.activeMs !== undefined && ran.activeMs < ran.waitUntil) state.waits = 0;
       else state.waits += 1;

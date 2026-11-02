@@ -134,6 +134,25 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
     expect(gateHold(enter, null)).toBeNull();
     expect(gateHold({ hands: 'portal' }, noShield)).toBeNull();
   });
+  describe('a go or a walk that ends in a lit portal cell enters the Nether too (the hole of 56a6f5b)', () => {
+    const MAP = ['地図 v1 足=(0,70,0) x=-2..2 z=-2..2 方式=cube', 'y=71 x=-2..2 z=-2..2', '-2 . . . . .', '-1 . . . . .', '0 . . . . p', '1 . . . . .', '2 . . . . .',
+      'y=70 x=-2..2 z=-2..2', '-2 . . . . .', '-1 . . . . .', '0 . . . . p', '1 . . . . .', '2 . . . . .'].join('
+');
+    const lit = frame(KIT.filter(([name]) => name !== 'shield'), { localMap: MAP });
+    it('holds a go to the cell, a go with the cell among its goals, a walk to it, and a relative one', () => {
+      expect(gateHold({ hands: [{ do: 'go', to: { x: 2, y: 70, z: 0 } }] }, lit)).toMatchObject({ hand: 1 });
+      expect(gateHold({ hands: [{ do: 'wait', seconds: 1 }, { do: 'go', to: { x: 0, y: 70, z: 1 }, goals: [{ x: 2, y: 70, z: 0 }] }] }, lit)).toMatchObject({ hand: 2 });
+      expect(gateHold({ hands: [{ do: 'walk', path: [{ x: 1, y: 70, z: 0 }, { x: 2, y: 70, z: 0 }] }] }, lit)).toMatchObject({ hand: 1 });
+      expect(gateHold({ hands: [{ do: 'go', rel: true, to: { x: 2, y: 0, z: 0 } }] }, lit)?.line).toContain('盾が無い');
+    });
+    it('holds nothing for a cell that is not a portal, a walk that stops short of it by a range, the needs met, or the Nether', () => {
+      expect(gateHold({ hands: [{ do: 'go', to: { x: 1, y: 70, z: 0 } }] }, lit)).toBeNull();
+      expect(gateHold({ hands: [{ do: 'walk', to: { x: 2, y: 70, z: 0 }, range: 2 }] }, lit)).toBeNull();
+      expect(gateHold({ hands: [{ do: 'go', to: { x: 2, y: 70, z: 0 } }] }, frame(KIT, { localMap: MAP }))).toBeNull();
+      expect(gateHold({ hands: [{ do: 'go', to: { x: 2, y: 70, z: 0 } }] }, frame([], { dimension: 'the_nether', localMap: MAP }))).toBeNull();
+      expect(gateHold({ hands: [{ do: 'go', to: { x: 2, y: 70, z: 0 } }] }, frame(KIT.filter(([name]) => name !== 'shield')))).toBeNull();
+    });
+  });
   it('reads the armour as worn now: carried and not worn is missing, so an act that equips it and enters in one goes in the next', () => {
     const carried = frame([...KIT, ['iron_chestplate', 1]], { worn: '頭: iron_helmet(残り165/165)、胴: なし、脚: iron_leggings(残り225/225)、足: なし' });
     expect(gateHold(enter, carried)?.line).toContain('持っているが着ていない: iron_chestplate');
