@@ -1,4 +1,5 @@
 import { handDependsProblem } from './continueContract.js';
+import { shieldRushProblem } from './minecraftShieldRushContract.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
@@ -68,6 +69,7 @@ const BLOCK_NAME = /^[a-z][a-z0-9_]{0,39}$/u;
  * Closed words, Japanese. */
 
 export function handProblem(hand: ActHand): string | null {
+  if (hand.do === 'attack' && hand.style === 'shield_rush') return shieldRushHandProblem(hand);
   const fields = HAND_FIELDS[hand.do];
   if (!fields) return 'do が分からない';
   const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
@@ -97,43 +99,16 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
 const RUSH_FIELDS = ['retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] as const;
 const objectOf = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-const rushPos = (value: unknown): boolean => {
-  const cell = objectOf(value);
-  return !!cell && Object.keys(cell).length === 3 && ['x', 'y', 'z'].every(key => finite(cell[key]));
-};
-
-const rushWhole = (hand: ActHand, key: 'retreatHp' | 'shieldReserve', low: number, high: number): boolean =>
-  hand[key] === undefined || (Number.isInteger(hand[key]) && hand[key]! >= low && hand[key]! <= high);
-const rushChoice = (value: unknown, choices: readonly string[]): boolean => value === undefined || choices.includes(String(value));
-const rushArea = (value: unknown): boolean => {
-  const area = objectOf(value);
-  return !!area && (Object.keys(area).length === 3 && rushPos(area.center) && finite(area.radius) && area.radius > 0
-    && Number.isInteger(area.maxDrop) && (area.maxDrop as number) >= 0);
-};
-const RUSH_FORMS: ReadonlyArray<readonly [(hand: ActHand) => boolean, string]> = [
-  [hand => hand.seconds === undefined || (finite(hand.seconds) && hand.seconds >= 0.5 && hand.seconds <= 30), 'seconds は 0.5〜30 の数（seconds=20）'],
-  [hand => rushWhole(hand, 'retreatHp', 1, 19), 'retreatHp は 1〜19 の整数（retreatHp=12）'],
-  [hand => rushWhole(hand, 'shieldReserve', 0, 336), 'shieldReserve は 0〜336 の整数（shieldReserve=36）'],
-  [hand => rushChoice(hand.onCrossfire, ['retreat', 'continue']), 'onCrossfire は retreat か continue（onCrossfire=retreat|continue）'],
-  [hand => rushChoice(hand.pickup, ['target_drops', 'none']), 'pickup は target_drops か none（pickup=target_drops|none）'],
-  [hand => hand.area === undefined || rushArea(hand.area),
-    'area は {center:{x,y,z},radius:正の数,maxDrop:0以上の整数}（短い書き方: area=cx,cy,cz,r,maxDrop）'],
-];
 
 /** Shield rush fields are checked before the broad schema too, so each refusal gives the form to write. */
 export function shieldRushHandProblem(hand: ActHand): string | null {
   if (hand.do !== 'attack') return null;
   if (hand.style === undefined) {
     const field = RUSH_FIELDS.find(key => hand[key] !== undefined);
-    return field ? `${field} は style=shield_rush の attack だけ（style=shield_rush retreatTo=x,y,z）` : null;
+    return field ? `${field} は style=shield_rush の attack だけ` : null;
   }
   if (hand.style !== 'shield_rush') return 'style は shield_rush だけ（style=shield_rush）';
-  if (typeof hand.target !== 'string' || !/^#\d+$/u.test(hand.target)) {
-    return 'shield_rush の target はブレイズ1体の #id（target="#123"）。名前だけは使えない';
-  }
-  if (!rushPos(hand.retreatTo)) return 'shield_rush には retreatTo={x,y,z} が要る（短い書き方: retreatTo=x,y,z）';
-  return RUSH_FORMS.find(([holds]) => !holds(hand))?.[1] ?? null;
+  return shieldRushProblem(hand as unknown as Record<string, unknown>);
 }
 
 /** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */

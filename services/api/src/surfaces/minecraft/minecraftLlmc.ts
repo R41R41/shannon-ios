@@ -126,7 +126,7 @@ export function actResultText(result: ActResult): string {
     : result.ok ? `act 全部済み（${result.done}/${result.of}、${(result.ms / 1000).toFixed(1)}秒）`
     : !result.stoppedBy && failed ? `act 最後まで動いた（済み ${result.done}/${result.of}、失敗して続けた手 ${failed}、${(result.ms / 1000).toFixed(1)}秒）`
       : `act ${result.done}/${result.of} 済みで止まった（${result.stoppedBy ?? 'failure'}${result.stoppedWhy ? `: ${result.stoppedWhy}` : ''}）`;
-  const mark = { done: '済', stopped: '止', failed: '失', skipped: '未', killed: '撃破', retreated: '退避', cut: '中断' } as const;
+  const mark = { done: '済', stopped: '止', failed: '失', skipped: '未' } as const;
   const lines = result.lines.flatMap(line => {
     const rush = shieldRushWords(line);
     const words = rush.length ? rush.map((fact, index) => `${index === 0 ? line.i : ''}  事実: ${fact}`)

@@ -1,4 +1,5 @@
 import { PLAN_LIMITS } from '@shannon/mind';
+import type { ShieldRushResult } from './minecraftShieldRushContract.js';
 import type { WorldScan } from './minecraftProbeContract.js';
 import { type ActCondition } from './minecraftActCondition.js';
 import { type ActOutcome, type EventsMore, type Handover, type HandOutcome, type InventoryEvent } from './continueContract.js';
@@ -147,15 +148,15 @@ export interface ActHand {
   style?: 'shield_rush';
   /** attack shield_rush: required retreat destination. */
   retreatTo?: ActPos;
-  /** attack shield_rush: allowed area (default: current footing, radius 4, maxDrop 0). */
+  /** attack shield_rush: required area (radius 1–16, integer maxDrop 0–3; absolute coordinates). */
   area?: { center: ActPos; radius: number; maxDrop: number };
-  /** attack shield_rush: retreat at this remaining shield durability (0–336, default 36). */
+  /** attack shield_rush: required remaining shield durability to retreat at (0–335). */
   shieldReserve?: number;
-  /** attack shield_rush: crossfire response (default retreat). */
+  /** attack shield_rush: required crossfire response. */
   onCrossfire?: 'retreat' | 'continue';
-  /** attack shield_rush: collect only the target's drops, or none (default target_drops). */
+  /** attack shield_rush: required pickup choice (the target's drops, or none). */
   pickup?: 'target_drops' | 'none';
-  /** wait: seconds (0.5–30); attack: the most seconds (default 20); go: the most seconds the hand may take (5–120, default 60). */
+  /** wait: 0.5–30; attack: at most 30 (default 20), shield_rush: required 5–60 including return; go: 5–120 (default 60). */
   seconds?: number;
   /** shoot: seconds to draw (0.2–3, default 1.0: a full bow). */
   charge?: number;
@@ -189,7 +190,7 @@ export interface ActHand {
    * or runs when health falls under it (1–19).
    */
   stance?: 'fight' | 'flee';
-  /** fight / attack shield_rush: retreat health (1–19; shield_rush default 12, at or below). */
+  /** fight / attack shield_rush: retreat health (integer 1–19; required for shield_rush, at or below). */
   retreatHp?: number;
   /** portal: the frame's plane runs along x or z. */
   axis?: 'x' | 'z';
@@ -361,9 +362,9 @@ export interface EarlierPass {
 export interface ActHandLine {
   i: number;
   do: HandKind;
-  /** shield_rush: killed | retreated | failed | cut; `failed` (r3): the hand failed by itself and the act went on past it (`onFail: 'continue'`); its line is
+  /** `failed` (r3): the hand failed by itself and the act went on past it (`onFail: 'continue'`); its line is
    * written as a stop's. */
-  status: 'done' | 'stopped' | 'skipped' | ShieldRushStatus;
+  status: 'done' | 'stopped' | 'skipped' | 'failed';
   /**
    * Japanese, at most 160 characters. done: what changed (`(201,45,277)→(205,45,277) 1.2秒`, `丸石×3 を得た`); stopped:
    * the place and the
@@ -393,26 +394,11 @@ export interface ActHandLine {
   end?: HandOutcome['end'];
   cutBy?: HandOutcome['cutBy'];
   code?: string;
-  progress?: HandOutcome['progress'] & ShieldRushProgress;
+  progress?: HandOutcome['progress'];
+  shieldRush?: ShieldRushResult;
   delta?: HandOutcome['delta'];
   pass?: number;
   motorOps?: number;
-}
-
-export type ShieldRushStatus = 'killed' | 'retreated' | 'failed' | 'cut';
-export type ShieldRushCode = 'TARGET_LOST' | 'HEIGHT_UNREACHABLE' | 'NO_ATTACK_WINDOW' | 'CROSSFIRE' | 'SHIELD_LOW'
-  | 'RETREAT_BLOCKED' | 'PICKUP_UNSAFE' | 'TIME_LIMIT' | 'REFLEX' | 'DEAD';
-
-/** attack shield_rush: facts carried in the existing progress field. */
-export interface ShieldRushProgress {
-  hits?: number;
-  rodsDelta?: number;
-  hpMin?: number;
-  hpEnd?: number;
-  shieldBefore?: number;
-  shieldAfter?: number;
-  elapsedMs?: number;
-  safe?: boolean;
 }
 
 /** `use` of an ender eye thrown (not put in a frame): which way it flew and how far. */

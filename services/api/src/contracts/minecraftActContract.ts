@@ -1,11 +1,13 @@
 import { ACT_CONTRACT_VERSION,ACT_MAX_HANDS,HAND_KINDS,VERTICAL_DIRS,VERTICAL_SHAPES,VERTICAL_TOWARDS,VERTICAL_LIQUIDS,EQUIP_SLOTS,KEEP_MAX,
   KEEP_FORM } from './minecraftActTypes.js';
 import type { ActHand,ActKeep,ActInput,ActResult,ViewResult } from './minecraftActTypes.js';
+import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
       KEEP_FORM } from './minecraftActTypes.js';
 export type { ActPos, ActFace, HandKind, ActHand, ActStopIf, ActKeep, ActInput, EarlierPass, ActHandLine, EnderEyeFlight, ActResult,
-   ViewInput, ViewResult, LlmCentricWorld, ShieldRushStatus, ShieldRushCode, ShieldRushProgress } from './minecraftActTypes.js';
+   ViewInput, ViewResult, LlmCentricWorld } from './minecraftActTypes.js';
+export type { RushCode, RushState, ShieldRushArgs, ShieldRushResult } from './minecraftShieldRushContract.js';
 /**
  * The LLM-centric Minecraft body (design mb-llm-centric, 2026-10-21; head switch the LLM-centric mode, body MINEBOT_LLM_CENTRIC):
  * the head owns this contract, the body follows it (shared note `mb-llm-centric-contract.md`). Four parts:
@@ -80,6 +82,7 @@ export const MAP_LEGEND = [
 
 /** The definition text of `mc.act` the model reads (fixed: part of the cached prefix). */
 export const ACT_DESCRIPTION = [
+  SHIELD_RUSH_DESCRIPTION,
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、外れたら（失敗・反射・stopIf・満杯）そこで止めて、手ごとの1行と新しい地図を返す。',
   '体は自分で決めない: 回り道・置き場所・道具作り・片づけ・夜の睡眠・戦うかどうかは、あなたが地図と状態を見て手で出す。',
   '手（do）と引数: walk(to か path, sprint, range: 掘らない・置かない。段差1と泳ぎだけ。地図の外の遠い点は64mごとに区切って歩き、掘る所で止まる) / '
@@ -144,14 +147,15 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         untilDead: { type: 'boolean' },
         hold: { type: 'boolean' },
         style: { type: 'string', enum: ['shield_rush'], description: 'attack: ブレイズ1体へ盾突進' },
-        retreatTo: pos('shield_rush の退避先（必須）'),
+        retreatTo: pos('shield_rush の退避先（必須・絶対座標）'),
         area: { type: 'object', additionalProperties: false, required: ['center', 'radius', 'maxDrop'],
-          description: 'shield_rush の範囲（既定: 足場・半径4・段差0）', properties: {
-            center: pos('中心'), radius: { type: 'number', minimum: 0 }, maxDrop: { type: 'integer', minimum: 0 },
+          description: 'shield_rush の範囲（必須）', properties: {
+            center: pos('中心（絶対座標）'), radius: { type: 'number', minimum: 1, maximum: 16 },
+            maxDrop: { type: 'integer', minimum: 0, maximum: 3 },
           } },
-        shieldReserve: { type: 'integer', minimum: 0, maximum: 336, description: '盾の残りの下限（既定36）' },
-        onCrossfire: { type: 'string', enum: ['retreat', 'continue'], description: '交差射撃時（既定retreat）' },
-        pickup: { type: 'string', enum: ['target_drops', 'none'], description: '拾う物（既定target_drops）' },
+        shieldReserve: { type: 'number', minimum: 0, maximum: 335, description: '盾の残りの下限（必須）' },
+        onCrossfire: { type: 'string', enum: ['retreat', 'continue'], description: '交差射撃時（必須）' },
+        pickup: { type: 'string', enum: ['target_drops', 'none'], description: '拾う物（必須）' },
         goals: { type: 'array', minItems: 2, maxItems: 8, items: pos('行き先の候補'), description: 'go の行き先の候補（どれか 1 つに着けば済み）' },
         canDig: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'string', maxLength: 40 }, description: 'go で掘ってよい物（id か stone・dirt・sand・wood）' },
         canPlace: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'go で置いてよい物（足場・橋・柱）' },
@@ -292,9 +296,9 @@ export function readActResult(text: string | undefined): ActResult | null {
     const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure';
     return { ...result, lines: result.lines.map(line => {
       if (line.goal !== undefined && line.end !== undefined) return line;
-      const filled = line.status === 'done' || line.status === 'killed' ? { goal: 'done' as const, end: 'finished' as const }
+      const filled = line.status === 'done' ? { goal: 'done' as const, end: 'finished' as const }
         : line.status === 'skipped' ? { goal: 'not_started' as const, end: 'not_run' as const }
-          : line.status === 'cut' || line.status === 'stopped' && cut ? { goal: 'partial' as const, end: 'cut' as const,
+          : line.status === 'stopped' && cut ? { goal: 'partial' as const, end: 'cut' as const,
             ...(cut ? { cutBy: result.stoppedBy as CutBy } : {}) }
             : { goal: 'failed' as const, end: 'finished' as const };
       return { ...filled, ...line, goal: line.goal ?? filled.goal, end: line.end ?? filled.end };
@@ -303,7 +307,7 @@ export function readActResult(text: string | undefined): ActResult | null {
 }
 /** The goal a hand line without one is read as, from its status. */
 const goalOfStatus = (status: string): GoalOutcome =>
-  status === 'done' || status === 'killed' ? 'done' : status === 'cut' ? 'partial' : status === 'skipped' ? 'not_started' : 'failed';
+  status === 'done' ? 'done' : status === 'skipped' ? 'not_started' : 'failed';
 /**
  * The act's goal and end: the body's `outcome` when the result has one, else worked out from the lines by the
  * contract's order (`aggregateGoal`; a line without
@@ -314,7 +318,7 @@ export function actOutcomeOf(result: ActResult): { goal: GoalOutcome; end: RunEn
   if (result.outcome) return { goal: result.outcome.goal, end: result.outcome.end, ...(result.outcome.cutBy ? { cutBy: result.outcome.cutBy } : {}) };
   const hands = result.lines.map(line => ({ goal: line.goal ?? goalOfStatus(line.status), motorOps: line.motorOps ?? (line.status === 'skipped' ? 0 : 1) }));
   const goal = aggregateGoal(hands, result.doneMet !== undefined);
-  const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure' || result.lines.some(line => line.status === 'cut');
+  const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure';
   const end: RunEnd = hands.length > 0 && hands.every(hand => hand.goal === 'not_started') && !hands.some(hand => hand.motorOps > 0) ? (cut ? 'cut' : 'not_run')
     : cut ? 'cut' : 'finished';
   return { goal, end, ...(result.stoppedBy && result.stoppedBy !== 'failure' ? { cutBy: result.stoppedBy as CutBy } : {}) };
