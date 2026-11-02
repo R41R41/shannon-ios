@@ -374,3 +374,11 @@ describe('the lab\'s walk through the crimson forest (S4, 2026-11-03)', () => {
       '要塞）から出る前に体力を戻す', '30 秒に体力 20→0.9']) expect(nether, word).toContain(word);
   });
 });
+
+describe('the stronghold\'s road, as the lab measured it (S4, 2026-11-03)', () => {
+  it('gives the overland walk its numbers and says that the Nether road did not get through the lab twice', () => {
+    const stronghold = V2_STAGES.stronghold;
+    for (const word of ['1,454m を 110m 前後の hop で 600 秒に 1,274m 進み', '歩く前に丸石を 300 前後持つ', 'maxPlace 100・hop は 110m 前後',
+      'ネザーの歩きが 2 回とも通らなかった', '今は勧めない']) expect(stronghold, word).toContain(word);
+  });
+});
