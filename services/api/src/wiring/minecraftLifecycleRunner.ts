@@ -36,10 +36,15 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
   return {
     /** Claims the operation's own action. Null when the Minecraft slot is not free now; a refused new claim is withdrawn. */
     async admit(draft: ActionDraft, withdraw: boolean): Promise<RunningAction | null> {
-      const active = await acquireAction(parts.actions, { ...draft, kind: 'minecraft' }, controller.signal);
+      let active: RunningAction | null;
+      try { active = await acquireAction(parts.actions, { ...draft, kind: 'minecraft' }, controller.signal); } catch (error) {
+        // The claim failed after the action was queued (a missed IPC deadline under load, 2026-11-03 00:56: a queued row with no holder and no
+        // deadline stayed and refused every later request with `lease_conflict`): the queued row is withdrawn before the failure goes on.
+        await withdrawQueued(parts.actions, draft);
+        throw error;
+      }
       if (active || !withdraw) return active;
-      const queued = (await parts.actions.list(draft.scopeKey)).find(view => view.kind === 'minecraft' && view.sourceId === draft.sourceId);
-      if (queued?.state === 'queued') await parts.actions.stop(draft.scopeKey, queued.id, `lifecycle-withdrawn:${queued.id}`).catch(() => []);
+      await withdrawQueued(parts.actions, draft);
       return null;
     },
     /**
@@ -93,6 +98,14 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
   };
 }
 export type LifecycleRunner = ReturnType<typeof lifecycleRunner>;
+
+/** Withdraws the operation's own queued action, if it is still queued; never throws (the failure it follows is the one that matters). */
+async function withdrawQueued(actions: ActionThreads, draft: ActionDraft): Promise<void> {
+  try {
+    const queued = (await actions.list(draft.scopeKey)).find(view => view.kind === 'minecraft' && view.sourceId === draft.sourceId);
+    if (queued?.state === 'queued') await actions.stop(draft.scopeKey, queued.id, `lifecycle-withdrawn:${queued.id}`);
+  } catch { /* the stale row, if any, is the owner's to stop */ }
+}
 
 /** A receipt that settles the operation: known, and the body's inputs released. */
 function accepted(receipt: MinecraftLifecycleReceipt | null): MinecraftLifecycleReceipt | null {
