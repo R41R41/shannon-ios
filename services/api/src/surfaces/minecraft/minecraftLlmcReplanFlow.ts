@@ -10,6 +10,7 @@ import {
   replanVerdict,
   settledAttempt,
   withAttempt,
+  type ReplanLedger,
   type ReplanRecord,
 } from './minecraftLlmcReplan.js';
 import { replanBrief, type BriefInput } from './minecraftLlmcReplanBrief.js';
@@ -50,11 +51,12 @@ export function createReplanFlow(deps: ReplanDeps) {
   };
   const record = (node: string, stall: Stall, outcome: ReplanRecord['outcome'], why: string): ReplanRecord =>
     ({ at: deps.clock(), node, kind: stall.kind, outcome, why });
-  async function answer(stall: Stall, parts: ReplanSources, signal: AbortSignal): Promise<ReplanRecord> {
+  /** `earlier`: the ledger before this attempt (what the brief tells of the plans made before). */
+  async function answer(stall: Stall, parts: ReplanSources, signal: AbortSignal, earlier: ReplanLedger): Promise<ReplanRecord> {
     const node = parts.node ?? '-';
     const { node: _node, ...rest } = parts;
-    const brief = replanBrief({ ...rest, stall: { kind: stall.kind, why: stall.why, node: parts.node }, earlier: ledger.last,
-      sameNode: ledger.nodes[node] ?? 0 });
+    const brief = replanBrief({ ...rest, stall: { kind: stall.kind, why: stall.why, node: parts.node }, earlier: earlier.last,
+      sameNode: earlier.nodes[node] ?? 0 });
     const began = Date.now();
     let reply: unknown;
     try {
@@ -95,8 +97,9 @@ export function createReplanFlow(deps: ReplanDeps) {
         if (verdict.why === 'node') offer(deps.taskId, `replan_node:${node}`, `節 ${node} は、計画を ${REPLAN.perNode} 回立て直しても進まなかった。続けるか、blocked にして別の道を計画するかを決める`);
         return;
       }
+      const earlier = ledger;
       ledger = withAttempt(ledger, record(node, stall, 'failed', '頼んだ（答えを待っている）'));
-      ledger = settledAttempt(ledger, await answer(stall, parts, signal));
+      ledger = settledAttempt(ledger, await answer(stall, parts, signal, earlier));
     },
     ledger: (): typeof ledger => ledger,
     checkpoint: () => ({ minecraftReplans: ledger }),

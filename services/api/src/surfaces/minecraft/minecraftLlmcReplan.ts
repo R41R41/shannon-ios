@@ -12,7 +12,7 @@ import { PLAN_UPDATE_RULES_DEFINITION } from '../../mind/action/fca/fcaPlanTools
  *   the decision chooses; the head blocks nothing by itself.
  * A hold is kept for the results nobody knows and for the body's and the head's disagreement on who holds the body.
  */
-export const REPLAN = Object.freeze({ gapMs: 10 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 90_000, outputTokens: 3_000 });
+export const REPLAN = Object.freeze({ gapMs: 10 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000 });
 
 /** The stalls a new plan answers; a failure of the decision's writing is not one. */
 export const REPLAN_STALLS: ReadonlySet<string> = new Set(['node_stalled', 'same_spot_stops', 'wait_loop', 'death']);
@@ -147,6 +147,9 @@ export function forgetReplans(): void {
 export const REPLAN_SYSTEM = [
   'あなたはマイクラの体を動かすシャノンの、計画の立て直し係。毎歩の判断は別のモデルがしていて、今、体が止まっている（止まりの理由が入力にある）。',
   '原因を事実から考え、計画だけを直す。出すのは plan.update の ops（12 個まで）と、今の節にしたい id（current。変えないなら省く）と、何を直したかの一行（why）。体の手は出さない。',
+  '- ops の書き方（plan.update と同じ）: add（parent・after・title・where・doneWhen・target・note・kind。id は書かない）、split（id の下に into の節を足す）、'
+    + 'set（id の state=done|blocked|continue|wait・title・where・doneWhen・target・note・reason・kind）、move（id を parent・after へ）、drop（id とその下を消す）、'
+    + 'forbid / caution（id の節に text を 1 行足す）、lift（text の行を消す）。id は入力の計画に出ている物。節は 64 まで・深さ 4 まで・title 60 字まで。',
   '- 止まりの原因が「見えていない事実」か「足りない前提」かを考える。計画を、観測で確かめられる小さな節に割る・前提の節を足す・順を変える・別の手段の節に替える・できない節を blocked にして理由と代わりの道を書く。',
   '- doneWhen は観測の形で書く: have:物>=数・food>=点・dim:the_nether|the_end|overworld・at:x,y,z~半径@次元・'
     + 'see:fortress / see:end_portal_frame / see:end_portal・crystals<=n。& が全部、| がどれか。target は完成品を取る節にだけ。',

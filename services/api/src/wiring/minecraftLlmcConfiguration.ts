@@ -341,6 +341,7 @@ interface PlannerLimits {
   outputTokens: number;
   giveUpMs: number;
   label: string;
+  effort: 'low' | 'medium';
 }
 
 export type PlanClient = {
@@ -350,7 +351,7 @@ export type PlanClient = {
 /** The strong model's request for the plan made again: the same route and charge as the first plan's, its own schema and bounds. */
 function replannerPart(values: Readonly<Record<string, string | undefined>>, model: string, recordUsage: (usage: AnthropicFcaUsage) => void | Promise<void>,
   log: (line: string) => void, given?: PlanClient): { replanner?: LlmcWiring['planner'] } {
-  const limits = { outputTokens: REPLAN.outputTokens, giveUpMs: REPLAN.giveUpMs, label: 'replan' };
+  const limits: PlannerLimits = { outputTokens: REPLAN.outputTokens, giveUpMs: REPLAN.giveUpMs, label: 'replan', effort: 'medium' };
   const made = firstPlanner(values, model, recordUsage, log, given, REPLAN_SCHEMA, limits);
   return made.planner ? { replanner: made.planner } : {};
 }
@@ -363,14 +364,14 @@ export function firstPlanner(
   log: (line: string) => void,
   given?: PlanClient,
   schema: Readonly<Record<string, unknown>> = FIRST_PLAN_SCHEMA_R4,
-  limits: PlannerLimits = { outputTokens: FIRST_PLAN.outputTokens, giveUpMs: FIRST_PLAN.giveUpMs, label: 'first plan' },
+  limits: PlannerLimits = { outputTokens: FIRST_PLAN.outputTokens, giveUpMs: FIRST_PLAN.giveUpMs, label: 'first plan', effort: 'low' },
 ): { planner?: LlmcWiring['planner'] } {
   const apiKey = keyFor(values, model);
   if (!apiKey && !given) return {};
   const client = recordedClient(given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: limits.giveUpMs }), 'plan');
   return {
     planner: async (system, input, signal) => {
-      const body = structuredBody(model, system, input, schema, 'low', limits.outputTokens);
+      const body = structuredBody(model, system, input, schema, limits.effort, limits.outputTokens);
       const began = Date.now();
       let message: Anthropic.Message;
       try {

@@ -234,6 +234,21 @@ describe('the flow of one task', () => {
     expect(nearly.lines.at(-1)).toContain('why=gap');
   });
 
+  it('tells the next brief what the plans before it did, and never the attempt it is making', async () => {
+    let now = 0;
+    const { flow, asked } = make(async () => ({ ops: [{ op: 'set', id: 'p1', note: '割った' }], why: '最初の直し' }), { clock: () => now });
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(asked[0]).not.toContain('## 前の立て直し');
+    expect(asked[0]).toContain('この節で立て直しは 0 回目まで済み');
+    now += 11 * MIN;
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(asked[1]).toContain('節 p1（node_stalled）: 計画を直した。最初の直し');
+    expect(asked[1]).toContain('この節で立て直しは 1 回目まで済み');
+    expect(asked[1]).not.toContain('答えが来なかった');
+  });
+
   it('asks nothing without a strong model, a plan or a body to read', async () => {
     const none = createReplanFlow({ taskId: 'x', saved: null, replanner: undefined, clock: () => 0, sources: () => sources(), check: () => null, log: () => undefined });
     none.note(stall());
