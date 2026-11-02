@@ -1,9 +1,10 @@
-import type { EndCrystal, EndDragon, EndView, Point } from './minecraftEndView.js';
+import type { EndCloud, EndCrystal, EndDragon, EndView, Point } from './minecraftEndView.js';
 import { framesOf } from './minecraftSeenMarks.js';
 
 /**
  * The facts of the way to the dragon, as lines for the live state (a pure reading of the body's frame; nothing is kept here).
- * The End fight comes from `minecraftEndView.ts` (the body's `state.end`, else the map marks); her last death, the frames of the portal
+ * The End fight comes from `minecraftEndView.ts` (the body's `dragon`, `crystals`, `perch` ... in `state.world`, else the map marks);
+ * her last death, the frames of the portal
  * room and the places the body remembers come from its world fields (`world.lastDeath`, `world.deaths`, `world.rememberedPlaces`,
  * `world.mapLandmarks`). This only puts them in words the decision can use. A field the body does not send is left out of the lines:
  * an absent field is never an absent fact.
@@ -17,10 +18,10 @@ const metres = (value: number | null): string => value === null ? '' : `${round(
 
 /** The dragon's phases by the game's numbers (the body sends the number and the phase's name). */
 const PHASE_WORDS: readonly string[] = ['島の上を周回', '狙いを定めて火の玉', '止まり木へ降りる途中', '止まり木に着陸中', '飛び立つところ', '止まり木で息を吐いている',
-  '止まり木で見回している', '止まり木で攻撃している', '体当たり', '倒れかけている', 'その場で浮いている'];
+  '止まり木で見回している', '止まり木で吠えている（息の前）', '体当たり', '倒れかけている', 'その場で浮いている'];
 /** The phases in which the dragon sits on the perch: its head can be struck, and arrows do nothing. */
 const SITTING = new Set([5, 6, 7]);
-/** The reach a blow is swung at, from the eye to the head's box (the body's own bound: `state.end.dragon.strike`). */
+/** The reach a blow is swung at, from the eye to the head's box (the body's own bound: `dragon.strike`). */
 export const STRIKE_REACH_METRES = 5;
 
 function stateWords(dragon: EndDragon): string {
@@ -41,7 +42,8 @@ function reachWords(dragon: EndDragon): string {
 export function dragonLine(end: EndView | null): string | null {
   const dragon = end?.dragon;
   if (!dragon) return null;
-  const where = place(dragon.head) ? `頭 ${place(dragon.head)}` : place(dragon.at) ? `位置 ${place(dragon.at)}` : '';
+  const far = dragon.distance === null ? '' : ` 自分から ${metres(dragon.distance)}`;
+  const where = place(dragon.head) ? `頭 ${place(dragon.head)}` : place(dragon.at) ? `位置 ${place(dragon.at)}${far}` : '';
   const parts = [dragon.health === null ? '' : `体力 ${tenth(dragon.health)}/200`, stateWords(dragon), where, reachWords(dragon),
     dragon.id === null ? '' : `#${dragon.id}`].filter(Boolean);
   return parts.length ? `竜: ${parts.join('・')}` : null;
@@ -64,9 +66,15 @@ export function crystalLine(end: EndView | null): string | null {
   return `エンドクリスタル: 残り ${crystals.remaining}/10${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`;
 }
 
-/** The breath clouds the body lists (`state.end.clouds`: x, y, z, radius), at most three. */
+/** A cloud's size in words: the radius the body avoids (it grows with the cloud's age) when it says one, with the cloud's radius now. */
+function cloudWords(cloud: EndCloud): string {
+  const now = cloud.r === null ? '?' : String(round(cloud.r));
+  return cloud.danger === null ? `半径 ${now}` : `避ける半径 ${round(cloud.danger)}（雲の今の半径 ${now}）`;
+}
+
+/** The breath clouds the body lists (`dragonBreath`: x, y, z, radius and the radius it counts as dangerous), at most three. */
 export function breathLine(end: EndView | null): string | null {
-  const clouds = (end?.clouds ?? []).slice(0, 3).map(cloud => `(${Math.floor(cloud.x)},${Math.floor(cloud.z)}) 半径 ${cloud.r === null ? '?' : round(cloud.r)}`);
+  const clouds = (end?.clouds ?? []).slice(0, 3).map(cloud => `(${Math.floor(cloud.x)},${Math.floor(cloud.z)}) ${cloudWords(cloud)}`);
   return clouds.length ? `竜の息の雲: ${clouds.join('・')}（中で立ち止まらない）` : null;
 }
 
@@ -75,7 +83,7 @@ export function fireballLine(end: EndView | null): string | null {
   return end && end.fireballs > 0 ? `火の玉: ${end.fireballs} 個が飛んでいる（体の反射が避ける）` : null;
 }
 
-/** The perch, where the dragon sits (the body's `state.end.fountain`, else its map mark). */
+/** The perch, where the dragon sits (the body's `perch`, else its map mark). */
 export function perchLine(end: EndView | null): string | null {
   const spot = place(end?.fountain ?? null);
   return spot ? `止まり木: ${spot}` : null;

@@ -12,7 +12,9 @@ import type { FcaHistoryAhead, FcaHistoryPolicy } from '../mind/action/fca/fcaHi
 import { createFcaHistoryAhead } from '../mind/action/fca/fcaHistory.js';
 import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import { readPlanTree, type PlanKind } from '@shannon/mind';
 import { planGoal } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
 import {
   COMPLETION_WAY,
   observedCompletion,
@@ -145,28 +147,56 @@ export function keyFor(values: Readonly<Record<string, string | undefined>>, mod
 }
 
 /**
+ * The kinds of the plan's current node in which a decision is made by the strong model (the plan's: `names.plan`, Opus unless the
+ * environment says otherwise) and not by the main one (owner 2026-11-02: Opus where it matters, the late game). It is read from the plan the
+ * last step committed (`fcaPlanTree` of the checkpoint), so a restart picks the same model. No new setting: with the main model the same as the
+ * plan's, nothing is raised. Which stages: provisional until the scene replay of Sonnet against Opus (`docs/minecraft-endgame-head-2026-11.md`,
+ * correct decisions and seconds per decision) says.
+ */
+export const LLMC_STRONG_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['stronghold', 'end', 'dragon']);
+
+/** The strong kind of the plan node the task is on, or of the nearest node above it that has one (a node the strong model's own plan added
+ * under the stage keeps the stage), from the plan in its checkpoint; null in any other stage and without a readable plan. */
+export function strongStage(checkpoint: unknown): PlanKind | null {
+  const tree = readPlanTree((checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
+  const byId = new Map((tree?.nodes ?? []).map(item => [item.id, item]));
+  let node = byId.get(tree?.current ?? '');
+  for (let up = 0; node && up < 8; up += 1) {
+    if (LLMC_STRONG_KINDS.has(kindOf(node))) return kindOf(node);
+    node = byId.get(node.parentId ?? '');
+  }
+  return null;
+}
+
+/**
  * Picks the model of one decision: the escalation model while the task's failed steps in a row
- * (`consecutiveToolFailures` of the step's
- * checkpoint) are `LLMC_ESCALATE_FAILURES` or more, else the main one. Each model keeps its own cache; a raised
- * decision reads the history
- * without the main model's thinking (blocks are bound to their model) and writes its own prefix once.
+ * (`consecutiveToolFailures` of the step's checkpoint) are `LLMC_ESCALATE_FAILURES` or more; else the strong one in a stage of
+ * `LLMC_STRONG_KINDS`; else the main one. Each model keeps its own cache; a raised
+ * decision reads the history without the main model's thinking (blocks are bound to their model) and writes its own prefix once.
  */
 export function llmcModelRouter(
-  models: { main: FcaModel; escalate: FcaModel | null },
+  models: { main: FcaModel; escalate: FcaModel | null; strong?: FcaModel | null },
   checkpoint: unknown,
   log?: (line: string) => void,
   taskId = '',
 ): FcaModel {
   const failures = Number((checkpoint as { consecutiveToolFailures?: unknown } | null)?.consecutiveToolFailures ?? 0);
   const raised = models.escalate && Number.isSafeInteger(failures) && failures >= LLMC_ESCALATE_FAILURES;
-  if (raised) {
+  const stage = raised || !models.strong ? null : strongStage(checkpoint);
+  if (raised || stage) {
     try {
-      log?.(`Shannon Minecraft model raised task=${taskId} failures=${failures}`);
+      log?.(raised ? `Shannon Minecraft model raised task=${taskId} failures=${failures}` : `Shannon Minecraft model strong task=${taskId} stage=${stage}`);
     } catch {
       /* logging never fails a step */
     }
   }
-  return raised ? models.escalate! : models.main;
+  return raised ? models.escalate! : stage ? models.strong! : models.main;
+}
+
+/** The name of the model that decided a step, as the router chose it: the escalation, the strong one, or the main one. */
+export function decidedBy(llmc: Pick<LlmcWiring, 'names' | 'models'>, model: FcaModel): string {
+  if (model === llmc.models.escalate && llmc.names.escalate) return llmc.names.escalate;
+  return model === llmc.models.strong ? llmc.names.plan : llmc.names.main;
 }
 
 /**
@@ -206,7 +236,7 @@ export const LLMC_CATALOG_SELECTOR: FcaToolSelector = {
  */
 export interface LlmcWiring {
   names: LlmcModelNames;
-  models: { main: FcaModel; escalate: FcaModel | null };
+  models: { main: FcaModel; escalate: FcaModel | null; strong?: FcaModel | null };
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
   planner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>;
@@ -247,9 +277,12 @@ export function configuredMinecraftLlmc(
   }
   const haikuKey = keyFor(values, DEFAULT_HAIKU_MODEL);
   log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}`);
+  const escalate = names.escalate ? make(names.escalate) : null;
+  // The plan's model also decides in the stages of `LLMC_STRONG_KINDS`; when it is the main one, or the escalation, no second copy is made.
+  const strong = names.plan === names.main ? null : names.plan === names.escalate ? escalate : make(names.plan);
   return {
     names,
-    models: { main, escalate: names.escalate ? make(names.escalate) : null },
+    models: { main, escalate, strong },
     summarizer:
       haikuKey || base.client
         ? createAnthropicFcaSummarizer({

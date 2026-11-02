@@ -8,7 +8,7 @@ import { endViewOf, type EndView } from './minecraftEndView.js';
  * What a task that goes for the dragon keeps and says of the way after the Nether, as facts for the live state (one object a task, made
  * from its checkpoint like the journey and the worksite memory):
  * - the ledger of the thrown eyes and the stronghold they give (`minecraftEyeLedger.ts`), the one thing here the head keeps itself;
- * - the dragon, the crystals, the breath, the fireballs and the perch in the End (the body's `state.end`, `minecraftEndView.ts`), the frames of
+ * - the dragon, the crystals, the breath, the fireballs and the perch in the End (the body's own fields, `minecraftEndView.ts`), the frames of
  *   the portal room and the eyes they still need, her last death with where it was, and the places the body remembers for the way
  *   (`minecraftEndFacts.ts`), read from the frame each time.
  * It decides nothing and sends nothing; a field the body does not send leaves its line out.

@@ -71,7 +71,7 @@ export function explorationEvidence(node: PlanNode | undefined, input: ActInput 
 }
 /**
  * The fight in the End as progress: the damage done to the dragon and the crystals destroyed (numbers that only go up). The body's own
- * count (`state.end.dragon.health`, `state.end.crystals.remaining`); nothing when it does not say, so a fight the body does not report earns no credit.
+ * count (`dragon.health`, `crystals.remaining` of the body's End fields); nothing when it does not say, so a fight the body does not report earns no credit.
  */
 export function endFightEvidence(frame: BodyObservation | null): Record<string, number> {
   const end = endViewOf(frame), health = end?.dragon?.health ?? null, left = end?.crystals.remaining ?? null;

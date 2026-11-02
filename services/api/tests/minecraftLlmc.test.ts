@@ -17,6 +17,7 @@ import {
 import { LLMC_SYSTEM_APPENDIX } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { storedBodyResult } from '../src/surfaces/minecraft/minecraftStoredResult.js';
 import { llmcModelNames, llmcModelRouter } from '../src/wiring/minecraftLlmcWiring.js';
+import { LLMC_STRONG_KINDS, strongStage } from '../src/wiring/minecraftLlmcConfiguration.js';
 import type { FcaModel, FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 import { applyPlanUpdate, planPath } from '@shannon/mind';
 import { estimatedAnthropicTokens } from '../src/infra/models/anthropic/anthropicFcaHistory.js';
@@ -321,5 +322,42 @@ describe('the models (owner: chosen after the scene replay, each by the environm
     expect(llmcModelRouter({ main, escalate }, { consecutiveToolFailures: 1 })).toBe(main);
     expect(llmcModelRouter({ main, escalate }, { consecutiveToolFailures: 2 })).toBe(escalate);
     expect(llmcModelRouter({ main, escalate: null }, { consecutiveToolFailures: 5 })).toBe(main);
+  });
+
+  it('in a stage of the late game the plan\'s model decides, after a restart too; the raise still comes first', () => {
+    const main = { name: 'main' } as unknown as FcaModel, escalate = { name: 'up' } as unknown as FcaModel, strong = { name: 'strong' } as unknown as FcaModel;
+    const tree = seedPlan('エンドラを討伐して')!, models = { main, escalate: null, strong };
+    const on = (kind: string, extra = {}) => ({ fcaPlanTree: { ...tree, current: tree.nodes.find(node => node.kind === kind)!.id }, ...extra });
+    expect([...LLMC_STRONG_KINDS].sort()).toEqual(['dragon', 'end', 'stronghold']);
+    for (const kind of LLMC_STRONG_KINDS) expect(llmcModelRouter(models, on(kind))).toBe(strong);
+    for (const kind of ['wood', 'iron', 'diamond', 'portal', 'nether', 'fortress', 'blaze', 'pearl', 'bed']) expect(llmcModelRouter(models, on(kind))).toBe(main);
+    // what a restart reads back is the same plan
+    expect(llmcModelRouter(models, JSON.parse(JSON.stringify(on('dragon'))))).toBe(strong);
+    // a stuck task is raised first, whatever the stage
+    expect(llmcModelRouter({ main, escalate, strong }, on('dragon', { consecutiveToolFailures: 2 }))).toBe(escalate);
+    expect(llmcModelRouter({ main, escalate, strong }, on('dragon', { consecutiveToolFailures: 1 }))).toBe(strong);
+    // no strong model (the main one is the plan's): nothing changes
+    expect(llmcModelRouter({ main, escalate: null }, on('dragon'))).toBe(main);
+    expect(llmcModelRouter({ main, escalate: null, strong: null }, on('end'))).toBe(main);
+  });
+
+  it('a node added under a stage keeps the stage; a plan that cannot be read, or has no current node, decides with the main model', () => {
+    const main = { name: 'main' } as unknown as FcaModel, strong = { name: 'strong' } as unknown as FcaModel, models = { main, escalate: null, strong };
+    const tree = seedPlan('エンドラを討伐して')!, parent = tree.nodes.find(node => node.kind === 'dragon' && node.parentId === null)!;
+    const added = { id: 'x1', parentId: parent.id, order: 99, title: '蜘蛛の糸を集める', state: 'continue' as const, kind: 'other' as const };
+    expect(strongStage({ fcaPlanTree: { ...tree, nodes: [...tree.nodes, added], current: 'x1' } })).toBe('dragon');
+    expect(strongStage({ fcaPlanTree: { ...tree, nodes: [...tree.nodes, { ...added, parentId: null }], current: 'x1' } })).toBeNull();
+    for (const checkpoint of [null, {}, { fcaPlanTree: 'x' }, { fcaPlanTree: { ...tree, current: null } }, { fcaPlanTree: { nodes: 7 } }]) {
+      expect(llmcModelRouter(models, checkpoint)).toBe(main);
+    }
+  });
+
+  it('says in the log which stage raised a decision to the strong model, and says nothing in the others', () => {
+    const main = { name: 'main' } as unknown as FcaModel, strong = { name: 'strong' } as unknown as FcaModel, lines: string[] = [];
+    const tree = seedPlan('エンドラを討伐して')!, at = (kind: string) => ({ fcaPlanTree: { ...tree, current: tree.nodes.find(node => node.kind === kind)!.id } });
+    llmcModelRouter({ main, escalate: null, strong }, at('end'), line => lines.push(line), 'task-1');
+    llmcModelRouter({ main, escalate: null, strong }, at('blaze'), line => lines.push(line), 'task-1');
+    expect(lines).toEqual(['Shannon Minecraft model strong task=task-1 stage=end']);
+    expect(() => llmcModelRouter({ main, escalate: null, strong }, at('end'), () => { throw new Error('log failed'); })).not.toThrow();
   });
 });

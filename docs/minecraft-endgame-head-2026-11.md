@@ -12,15 +12,15 @@
 
 | 欄 | 形 | 頭の使い方 |
 |---|---|---|
-| `observation.state.end`（エンドだけ。S1） | `{ dragon: null \| { id, health /200, phase 0〜10, phaseName, phaseFor（その phase の秒）, perched, at, yaw, head, headReach（目から頭の箱の m）, strike }, fountain, crystals: { remaining /10, gone, caged, list:[{ id, x, y, z, caged, dist, healing?, blast? }], unseen:[{ x, z }] }, clouds:[{ x, y, z, r }], fireballs }` | `minecraftEndView.ts`（`endViewOf`）が 1 つの形に読み、live の「竜:」「エンドクリスタル:」「竜の息の雲:」「火の玉:」「止まり木:」行と、済む条件 `crystals<=n`・進みの証拠（与えたダメージ・壊したクリスタル）に使う。`remaining` は「立っている・まだ見ていない台座の数」で、体が壊れたと見たものだけが減る |
-| 旧形式（`world.mapLandmarks` の `! エンダードラゴン … id N 体力 H/200`・`! エンドクリスタル`・`X 止まり木`） | 体が `state.end` を送らない時だけ読む | 竜の体力と「見えている n 個」と止まり木だけ。島全体の残りは言わない（`crystals<=n` は「未」のまま） |
+| `observation.state.world` 直下の `dragon`・`crystals`・`perch`・`dragonBreath`・`dragonFireballs`（エンドだけ。S1 の最終形、`status/S1.json` 11/2 20:10） | `dragon: { id, health /200, phase 0〜10, phaseName, phaseFor（その phase の秒）, perched, position, yaw, distance, headPosition?, headReach（目から頭の箱の m）, strike }`（竜が見えなければ欄ごと無い）、`crystals: { remaining /10, gone, caged, list:[{ id, position:{x,y,z}, caged, distance, healing?, blast? }], unseen:[{ x, z }] }`、`perch: { x, y, z }`、`dragonBreath:[{ x, y, z, radius, dangerRadius }]`、`dragonFireballs`（数） | `minecraftEndView.ts`（`endViewOf`）が 1 つの形に読み、live の「竜:」「エンドクリスタル:」「竜の息の雲:」「火の玉:」「止まり木:」行と、済む条件 `crystals<=n`・進みの証拠（与えたダメージ・壊したクリスタル）に使う。`remaining` は「立っている・まだ見ていない台座の数」で、体が壊れたと見たものだけが減る。同じ部品が `state.world.end`・`state.end` の中にある早い形（`fountain`・`clouds`・`fireballs`・`at`・`head`・`dist`・`r`）も同じ読みで受ける（直下が先） |
+| 旧形式（`world.mapLandmarks` の `! エンダードラゴン … id N 体力 H/200`・`! エンドクリスタル`・`X 止まり木`） | 体が上の欄を 1 つも送らない時だけ読む | 竜の体力と「見えている n 個」と止まり木だけ。島全体の残りは言わない（`crystals<=n` は「未」のまま） |
 | `observation.state.world` の `lastDeath`・`deaths`・`rememberedPlaces`・`mapLandmarks`・`inside` | 体が今出している行と記録・印の行 | 「最後の死:」行（死んだ次元が今と違えば「行くにはポータルを通る」と足す）、「控え（体の記憶、今いる次元）:」行、済む条件 `see:<印>`（`N ネザー要塞`・`inside` の「ネザー要塞」、`Q エンドポータルの枠 … ×12 アイ入り k`、`e エンドポータル` ほか。別の次元の行 `[overworld] …` は読まない） |
 | 結果 `ActResult.eye`（S2） | `{ from, bearingDeg（北0・東90、小数 2 桁）, flew, to, broke, origin（投げた足の位置、小数）, unit:{ x 東, z 南 }（水平の単位ベクトル。沈んだ時は null）, start, end, rise, fate:'dropped'\|'shattered'\|'unknown', drop?:{ id, at }, arrived, samples, ms, down? }` | 目玉の帳簿（5）。`origin` が線の始点、`unit` が向き。`down`（横 1 ブロック未満で沈んだ）は線に使わず「要塞はその真下」の事実にする。`arrived`（飛びが 10.5 ブロック未満で止まった）は「止まった先が要塞の入口の近く」の事実にする（S2 の隔離ラボで 12m 以内の 6 投は終点が入口から 0.3 以内）。`fate:'dropped'` の `drop.id`・`drop.at` は pickup の目印、`broke` は割れる合図を見た時だけ真 |
 
 ## 2. 済む条件の足し（`minecraftPlanDone.ts`）
 
 - `see:<fortress|bastion|spawner|blaze_spawner|nether_portal|end_portal_frame|end_portal|stronghold|village>`: その印が今の frame に見えている。場所の条件なので、子が開いている親は閉じない。
-- `crystals<=n`: 体が数えたエンドクリスタルの残り（`state.end.crystals.remaining`）が n 以下。体が数えていない時は「未」（不明を済みにしない）。壊したクリスタルは戻らないので、`have:` と同じく「手元にある結果」として扱う: 子（弓で撃つ・檻を登る）が開いたままでも、残りが n 以下なら親は閉じる（Codex の指摘）。
+- `crystals<=n`: 体が数えたエンドクリスタルの残り（`crystals.remaining`）が n 以下。体が数えていない時は「未」（不明を済みにしない）。壊したクリスタルは戻らないので、`have:` と同じく「手元にある結果」として扱う: 子（弓で撃つ・檻を登る）が開いたままでも、残りが n 以下なら親は閉じる（Codex の指摘）。
 - ロッド・パールの数え方（`acquired`）: `have:blaze_rod>=7` は「持っている棒 ＋ 粉・目玉になった棒」、`have:ender_pearl>=12` は「持っているパール ＋ 目玉になった分」で数える（早く粉にしても節が閉じなくならない）。`target` の検査・不足の言い方・進みの証拠も同じ数え方。
 - 竜の討伐は節の条件では閉じない（体の `boss.verified`、既存の goal binding）。S1 の定義: 体がこの竜に被害を与え、その後 60 秒以内に同じ竜が死に、同じ接続・同じタスクの時だけ true。再接続すると `unknown` のまま。
 
@@ -71,6 +71,7 @@ S1・S2 の手の言葉に合わせた（`stronghold` 段を足した）:
 - **モデルの応答が得られない**（`taskRuntimeUnavailable.ts`）: 提供者の障害で判断が返らない時の周回を 4 から 24 に（約 45 分。それまでは 15 分ほど）。超えると一時停止（resume が要る）。請求の残高切れはすぐ一時停止（補充が要る）。
 - **履歴の要約**（`fcaHistory.ts`）: 提供者に届かず要約が得られない時（5xx・混雑・切断）、体の依頼は切り詰めた履歴で続ける（`patient`）。元は、続けて 2 回で依頼が失敗した。
 - **体が戻る窓**（`fcaBodyRecoveryPolicy.ts`）: Spot の停止から 30 分で一時停止していたのを 2 時間に（環境の `SHANNON_FCA_BODY_RETURN_MINUTES` で 720 分まで）。回復の回数の上限は 1 時間に 6 から 12。
+- **体が居ない間の判断**（`withBodyPresent`、`minecraftLlmcLifecycle.ts`）: 体の frame が無い（15 秒より古い）か接続していない間は、ステップの始めでモデルを呼ばない。判断が来なかった周回（`FcaDecisionUnavailableError`、理由 `body_absent`、`taskRuntimeUnavailable.ts`）として 30 秒ごとに待ち、2 時間（240 周）まで、費用 0・失敗に数えず待つ。超えると体の言葉（体が戻らなかったため一時停止）で止まる。元は、体だけが落ちると失敗する判断が約 ¥3.5 ずつ続き、失敗の梯子を上り、強いモデルへの引き上げも起こした（S0 の復旧試験）。ステップの途中で体が居なくなった時は、そのステップの判断（最大 1 stretch）までで、次のステップの始めに止まる。
 - **再起動の後の続き**（`minecraftLlmcRestart.test.ts`）: 計画の節・目玉の線・待ちの期限・立て直しの回数と、待っている止まりが、checkpoint から再起動のたびに配り直されずに続く（3 回の再起動を模した試験）。
 - 残る人手: 請求の残高切れ、24 回の周回を超える障害、体が 2 時間戻らない時、30 分動かない失敗の連続、運用の時間の上限（VM の停止中の時間も数える）。取りまとめに伝えた物（環境・運用の側）: 下の 10。
 
@@ -92,7 +93,15 @@ S1・S2 の手の言葉に合わせた（`stronghold` 段を足した）:
 
 既定の予算は上限と同じ（`--budget-yen` を省くと 15,000）。短い依頼は時間の上限（既定 30 分）で止まる。運用 CLI の契約文書（`docs/operator-minecraft-contract.md`）とテストも合わせた。
 
+## 11. 強いモデル（Opus）を使う所（2026-11-02、新しい環境変数なし）
+
+- 最初の計画と立て直し（監督）は、常に計画のモデル（`SHANNON_MINECRAFT_LLMC_PLAN_MODEL`、既定 Opus 5.5）。
+- 判断（1 手ごと）は主モデル（本番の設定。run 55 の記録は Sonnet 5.5）。ただし計画の今の節、またはその上の節の kind が `LLMC_STRONG_KINDS`（今は `stronghold`・`end`・`dragon`）の間は、計画のモデルが決める（`strongStage`、`minecraftLlmcConfiguration.ts`）。計画は checkpoint の `fcaPlanTree` から読むので、再起動の後も同じ。主モデルと計画のモデルが同じ（既定は両方 Opus）なら何も変わらない。失敗が続いた時の引き上げ（`ESCALATE`）が先に効く。
+- 本番が主 Sonnet・計画 Opus のままなら、api.env の変更は要らない。
+- **この集合は暫定**。場面再生（Sonnet と Opus の正しさと 1 判断の秒、費用）で決める。実 LLM を使うので API キーの供給待ち（`scripts/minecraft-llmc-endgame-scene.ts --models=sonnet,opus`、立て直しは `scripts/minecraft-llmc-stall-replay.ts`）。
+- 費用の見込み: 切り替えた節の間は Opus の接頭辞のキャッシュ（1 時間）を使い、節が変わる度に書き込みが 1 回（約 $0.1〜0.2）。判断 1 回の単価は Sonnet の約 2 倍。
+
 ## 9. 確かめたこと・未確認
 
-- 確かめた（単体・結合テスト、型検査、コードの形の検査、関係するテスト）: 済む条件の読みと閉じ方（クリスタルの親を含む）、数え方、フェイクの frame（S1 の `state.end`・S2 の `eye` の形）からの行、目玉の帳簿と交点（真の位置との誤差・残差・沈んだ／止まった目玉・読む時の期限切れ）、checkpoint の往復、立て直しの上限と流れ（フェイクの強いモデル、ステップをまたぐ止まり、取り込み時の束ねと再検査）、brief の大きさ。
+- 確かめた（単体・結合テスト、型検査、コードの形の検査、関係するテスト）: 済む条件の読みと閉じ方（クリスタルの親を含む）、数え方、フェイクの frame（S1 の最終形 = `state.world` 直下・早い形の `state.end` と `world.end`・S2 の `eye` の形）からの行、目玉の帳簿と交点（真の位置との誤差・残差・沈んだ／止まった目玉・読む時の期限切れ）、checkpoint の往復、立て直しの上限と流れ（フェイクの強いモデル、ステップをまたぐ止まり、取り込み時の束ねと再検査）、brief の大きさ。
 - **未確認**: 実機の体が上の欄名で送ってくるか（S1・S2 の枝のコードを読んで合わせたが、頭と体を合わせた通しはまだ）、実機の本番の世界での目玉の方位の精度（S2 の隔離ラボは 0.003° 以内、頭は 0.02° で受ける）、Opus が立て直しで有用な ops を返すか・誤検出の頻度、段の知識の言い回しが Sonnet の判断を良くするか（場面再生は API キーと予算の承認待ち）、2〜4 時間の通しで要約をまたいで事実が効くか、エンダーマンの屋根の穴が本物に効くか（S2 の練習場は模型）。

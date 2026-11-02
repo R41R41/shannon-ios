@@ -29,7 +29,7 @@ import { sceneVerdict, type SceneCheck } from '../src/surfaces/minecraft/minecra
 import { candidateLive, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 
 type EndScene = LlmcScene & { eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }>;
-  /** The body's `state.end` of the scene (the End fight; S1's `endObservation`). */
+  /** The End fight of the scene, in the body's early form (`state.end`; `endViewOf` reads it as it reads the final one in `state.world`). */
   end?: object;
   /** What the hands of a good decision hold (`minecraftLlmcSceneCheck.ts`); the replay counts the decisions that meet it. */
   check?: SceneCheck };
