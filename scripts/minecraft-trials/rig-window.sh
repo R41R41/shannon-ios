@@ -1,7 +1,7 @@
 #!/bin/bash
 # rig-window.sh — the isolated rig (rig.py) in run59's park windows, on the 2-vCPU VM (coordinator 2026-11-02 23:2x: the 4-vCPU change waits for the Spot vCPU quota).
 #
-#   rig-window.sh [--batch NAME] [--sections 6,7,9,8a,8b,10] [--seeds c1] [--max-wait SECONDS] [--check] [-- extra rig.py args]
+#   rig-window.sh [--batch NAME] [--sections 6,7,9,8a,8b,10] [--seeds c1] [--max-wait SECONDS] [--not-before "YYYY-MM-DD HH:MM"] [--check] [-- extra rig.py args]
 #
 # Waits until run59 is parked: ~/.cache/minebot-lab/prod.lock is free (S5 released it), no production Minecraft task is active, and ~/.cache/minebot-lab/trials.stop does not
 # exist. Then it runs ONE section through rig.py (the real model; 1 section at most ¥500, the whole batch ¥3,000; the pins are what is deployed: the head in ~/shannon-ios, the
@@ -9,6 +9,7 @@
 # (S5's signal that run59 resumes) and this script never starts while the file exists: whoever made it removes it when a window is wanted again.
 # It ends when the plan is done or the cap is reached (rig.py exit 10), after 3 rig failures in a row, or after --max-wait seconds (default 12 hours). It takes no lock of
 # shannon-home and touches none of production's processes; it holds the lab slot (slot.lock) while a section runs, as every lab does.
+#   --not-before   do not start a section before this time (the machine's clock); the window is only watched until then.
 #   --check   print whether the window is open now (and why not), the pins that would be used, and stop.
 set -u
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -16,12 +17,12 @@ LAB=${MINEBOT_LAB_SCRATCH:-$HOME/.cache/minebot-lab}
 STOP=$LAB/trials.stop
 PROD_LOCK=$LAB/prod.lock
 SLOT=${RIG_WINDOW_LAB_SLOT:-$LAB/s4-tools/lab-slot.sh}
-BATCH="rigwin-$(date +%Y%m%dT%H%M)"; SECTIONS="6,7,9,8a,8b,10"; SEEDS=c1; MAXWAIT=43200; CHECK=0; EXTRA=()
+BATCH="rigwin-$(date +%Y%m%dT%H%M)"; SECTIONS="6,7,9,8a,8b,10"; SEEDS=c1; MAXWAIT=43200; CHECK=0; NOTBEFORE=0; EXTRA=()
 OWNER_OK="ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）"
 while [ $# -gt 0 ]; do
   case "$1" in
     --batch) BATCH=$2; shift 2 ;; --sections) SECTIONS=$2; shift 2 ;; --seeds) SEEDS=$2; shift 2 ;; --max-wait) MAXWAIT=$2; shift 2 ;;
-    --check) CHECK=1; shift ;; --) shift; EXTRA=("$@"); break ;;
+    --not-before) NOTBEFORE=$(date -d "$2" +%s) || exit 2; shift 2 ;; --check) CHECK=1; shift ;; --) shift; EXTRA=("$@"); break ;;
     *) echo "usage: rig-window.sh [--batch N] [--sections S] [--seeds K] [--max-wait SEC] [--check] [-- rig.py args]" >&2; exit 2 ;;
   esac
 done
@@ -61,10 +62,11 @@ if [ "$CHECK" = 1 ]; then
 fi
 
 started=$(date +%s); failures=0
+echo $$ > "$LAB/rig-window.pid"; trap 'rm -f "$LAB/rig-window.pid"' EXIT
 echo "[$(date +%T)] rig-window: batch $BATCH, sections $SECTIONS, seeds $SEEDS; waiting for a park window (prod.lock free, no production task, no trials.stop)"
 while [ $(( $(date +%s) - started )) -le "$MAXWAIT" ]; do
   closed=$(why_closed)
-  if [ -n "$closed" ]; then sleep 15; continue; fi
+  if [ -n "$closed" ] || [ "$(date +%s)" -lt "$NOTBEFORE" ]; then sleep 15; continue; fi
   sleep 20; closed=$(why_closed); [ -n "$closed" ] && continue         # open for 20 s: not a moment between S5's release and its next take
   read -r HEADPIN BODYPIN < <(pins) || { echo "[$(date +%T)] rig-window: the pins could not be made"; sleep 60; continue; }
   echo "[$(date +%T)] rig-window: the window is open; one section with head $(basename "$HEADPIN") body $(basename "$BODYPIN")"
