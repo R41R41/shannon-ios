@@ -1175,6 +1175,7 @@
     "wiring/minecraftLiveWiring.ts",
     "wiring/minecraftLlmcConfiguration.ts",
     "wiring/minecraftLlmcLifecycle.ts",
+    "wiring/minecraftLlmcRedecideWiring.ts",
     "wiring/minecraftLlmcReplanWiring.ts",
     "wiring/minecraftLlmcWiring.ts",
     "wiring/minecraftResumeOrder.ts",

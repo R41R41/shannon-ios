@@ -80,7 +80,7 @@ describe('one budget for FCA steps (E3)', () => {
     expect(calls).toEqual([]);
   });
 
-  it('gives an admitted Minecraft request a 15000 yen cap, and leaves every other owner request at 300 yen', async () => {
+  it('gives an admitted Minecraft request a 10000 yen cap, and leaves every other owner request at 300 yen', async () => {
     const { db } = world();
     const store = new TaskBudgetStore(db);
     const { actions, calls } = fakeActions(true);

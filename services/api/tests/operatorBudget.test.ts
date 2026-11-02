@@ -152,8 +152,8 @@ describe('what the envelope accepts', () => {
     expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: OPERATOR_LIMITS.maxBudgetYen + 1 }))).toMatchObject({ ok: false, code: 'budget_above_cap' });
     expect(parseOperatorEnvelope(envelope('budget', { latest: true, budgetYen: 1600 })))
       .toMatchObject({ ok: true, input: { command: 'budget', taskId: null, budgetYen: 1600 } });
-    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 15_000 })))
-      .toMatchObject({ ok: true, input: { command: 'budget', taskId: TASK, budgetYen: 15_000 } });
+    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: OPERATOR_LIMITS.maxBudgetYen })))
+      .toMatchObject({ ok: true, input: { command: 'budget', taskId: TASK, budgetYen: 10_000 } });
   });
 
   it('is audited as a refusal (with the arguments, as for any malformed envelope) when the numbers are wrong', async () => {
