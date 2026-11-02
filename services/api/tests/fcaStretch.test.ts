@@ -213,7 +213,7 @@ describe('a queue that changes, and the limits', () => {
     const queue = fakeQueue([{ wake: 'remaining' }]);
     const f = fixture([act('a'), async () => { queue.bump(); await sleep(400); return act('b'); }, complete], queue);
     await f.run();
-    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 3, thrown: true } });
+    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 3, thrown: false } }); // asked again in the step: it does not end on the thrown one
     expect(f.inputs).toHaveLength(3); // the first, the one thrown away, the one asked again
     expect(f.commits()).toBe(1);
     expect(text(f.runtime.snapshot('owner', f.task.id)!.history)).toContain('turn 1');
@@ -224,7 +224,7 @@ describe('a queue that changes, and the limits', () => {
     const reason = 'q1 [p1] x: act 0/1 済みで止まった（mine diamond: diamond は deepslate_diamond_ore）';
     const f = fixture([act('a'), async () => { queue.end('q1', false, reason.slice('q1 [p1] x: '.length)); queue.bump(); await sleep(400); return act('b'); }, complete], queue);
     await f.run();
-    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 3, thrown: true } });
+    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 3, thrown: false } }); // asked again in the step: it does not end on the thrown one
     const history = f.runtime.snapshot('owner', f.task.id)!.history;
     const kept = text(history);
     expect(kept).toContain(`${NEWS_HEAD}\\n${reason}`);
