@@ -241,3 +241,13 @@ Six scenes (`tests/fixtures/minecraft/seam-scenes.json`: each stands just after 
 Found and mended: the model router already chose the strong model in the End whatever the node, but the step did not close for it (`closeStep` looked at the node only), so a step begun in the Nether would have gone on with Sonnet after the portal. The close now uses the same rule (`strongStageNow`), with a test.
 
 Not shown: the real walk between two seams, the pre-End check's content (beds, bow, arrows, water), and anything longer than two decisions. Every seam gives a next move within two decisions here; the looks at the start of three are the only added decision.
+
+## 11/3 Eyes counted after the frames; the cleanup words (a draft) (S3)
+
+**Eyes (rod-methods §4).** The head cannot know P (the eyes already in the frames) before it reaches the room: each frame holds one with a chance of about one in ten, so P averages 1.2, is 2 or more about three times in ten, 4 or more about 3%. The need is 12 − P − held (+ 2 for the throws that break, one in five). Two flows compared in the stronghold stage's words: leaving the Nether with 6 rods pays only when P is 2 or more (about 3 in 10) and costs a return trip to the Nether otherwise; one rod fewer saves minutes, the trip costs more; so seven rods unless the rods come very slowly. Once the frames are in view the frames' line gives the exact count (no reserve is needed then) and, for the missing eyes, what they take, what the pack can make now, and what to bring (pearls, rods). The frames' count is already in the body's observation (`Q エンドポータルの枠 ×12 アイ入り N`), so no new field is needed. The reserve of 2 stays until the throws are measured in the lab.
+
+**Cleanup (draft, not in the code; to be put in after S2's test passes).** For the blaze stage:
+
+> - 湧き場の片付け: 数え箱の中のブレイズが 5 体以上生き残っている時は、床のロッドを先に拾ってから、32 マスより遠くへ 3〜4 分離れて消えるのを待つ。戻ったら数え箱の数を見直し、5 体を切ってから待ち場へ入る。
+
+It needs the box's count of survivors in the observation (the body's `build_lane` check returns it); the head will say the count as a fact when the field exists.
