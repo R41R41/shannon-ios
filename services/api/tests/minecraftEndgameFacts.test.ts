@@ -154,8 +154,8 @@ describe('facts of the way to the dragon', () => {
 
   it('says what the missing eyes take and what is to be brought from the Nether, in numbers', () => {
     const world = { mapLandmarks: ['Q エンドポータルの枠 (10,30,12) 南10m・下2 ×12 アイ入り 3'] };
-    // 9 to put, 5 held: 4 short; from 6 pearls, 2 powders and 1 rod: 3 can be made, so 1 pearl is missing and 1 rod
-    expect(frameLine(world, 5, { pearls: 6, powder: 2, rods: 1 })).toContain('作るには パール 4・粉 4（ロッド 2 本分）。手持ち パール 6・粉 2・ロッド 1 から作れるのは 3 個。ネザーで取る分: パール 0 個・ロッド 1 本');
+    // 9 to put, 5 held: 4 short; from 6 pearls and 2 powders (no rod): 2 can be made, so 1 rod is to be brought
+    expect(frameLine(world, 5, { pearls: 6, powder: 2, rods: 0 })).toContain('作るには パール 4・粉 4（ロッド 2 本分）。手持ち パール 6・粉 2・ロッド 0 から作れるのは 2 個。ネザーで取る分: パール 0 個・ロッド 1 本');
     expect(shortOfEyes(4, { pearls: 4, powder: 4, rods: 0 })).toContain('（手持ちで足りる）');
     expect(shortOfEyes(4, { pearls: 0, powder: 0, rods: 0 })).toContain('ネザーで取る分: パール 4 個・ロッド 2 本');
     expect(frameLine(world, 9, { pearls: 0, powder: 0, rods: 0 })).not.toContain('足りない');
@@ -360,7 +360,7 @@ describe('the endgame of a task', () => {
     const inRoom = { ...world, mapLandmarks: ['Q エンドポータルの枠 (10,30,12) 南10m ×12 アイ入り 2'] };
     const room = restored.lines(frame(inRoom), true);
     expect(room.lines.join('\n')).not.toContain('目玉の帳簿');
-    expect(room.lines.join('\n')).toContain('あと 10 個はめる・手持ちのアイ 9 個（1 個足りない）');
+    expect(room.lines.join('\n')).toContain('あと 10 個はめる・手持ちのアイ 9 個（1 個足りない: 作るには');
     expect(room.short.join('\n')).toContain('ポータルの枠');
     expect(restored.checkpoint().minecraftEyes.throws).toEqual([]);
   });
