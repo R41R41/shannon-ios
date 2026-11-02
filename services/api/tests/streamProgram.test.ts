@@ -165,16 +165,15 @@ it('初配信の画面で開始し、場面を進めても選んだ構図を保�
   expect(() => parseStartInput({ program: { layout: 'anything' } })).toThrow();
 });
 
-it('onAir を送らない旧い耳（体の main）でも、従来どおり結んだ時点で配信を始める。false は待つ', async () => {
+it('onAir を送らない旧い耳（体の main、031cd99a より前）では待機のまま。頭は耳と一緒に反映する（設計 2026-10-30「配備の条件」）', async () => {
   const p = makePlace();
   const { stream } = p.service.start();
   const legacy = parseBroadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', title: 'T', channelId: 'ch' });
-  expect(legacy).not.toHaveProperty('onAir');
-  expect(parseBroadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', onAir: false })).toMatchObject({ onAir: false });
   const view = await p.service.broadcast(legacy);
-  await p.service.settle();
-  expect(view).toMatchObject({ phase: 'live', broadcast: { onAir: true }, program: { ready: true, stage: 'opening' } });
-  expect(p.service.mouth.currentLine()?.kind).toBe('greeting');
+  await p.step(40_000);
+  expect(view).toMatchObject({ phase: 'waiting_for_chat', broadcast: { onAir: false }, program: { ready: false } });
+  expect(p.recorded).toHaveLength(0);
+  expect(p.service.mouth.currentLine()).toBeNull();
 });
 
 it('公開会話の記録に実況の一言を入れず、視聴者との往復を押し出さない', () => {

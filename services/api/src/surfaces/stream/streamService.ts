@@ -203,11 +203,9 @@ export class StreamService {
     if (!session || session.view.streamId !== input.streamId) throw new StreamError(409, 'STREAM_NOT_LIVE');
     if (input.ended === true) return (await this.end(input.streamId)).stream;
     if (session.view.targetVideoId && input.videoId !== session.view.targetVideoId) throw new StreamError(409, 'STREAM_VIDEO_MISMATCH');
-    // An ear that never says onAir (the body's ear before it checked the real start) attaches as it always did; false waits for the start.
-    const onAir = input.onAir ?? true;
-    session.view.broadcast = { onAir, videoId: input.videoId ?? '', liveChatId: input.liveChatId ?? '', title: input.title ?? '',
+    session.view.broadcast = { onAir: input.onAir === true, videoId: input.videoId ?? '', liveChatId: input.liveChatId ?? '', title: input.title ?? '',
       channelId: input.channelId ?? '' };
-    if (onAir && session.view.phase === 'waiting_for_chat') {
+    if (input.onAir === true && session.view.phase === 'waiting_for_chat') {
       session.program.ready();
       session.view.phase = 'live';
       this.lastLineMs = Math.max(this.lastLineMs, this.now());
