@@ -224,3 +224,20 @@ Method: the saved request of the decision that first saw each stop (production d
 | H7, H8 | go stuck twice at the same place (placing into her own cell) | S/A | 0 of 8: 8 of 8 sent the same go; with a fact to change the destination 1 of 8. The cause is the body's (the cell she stands in); the head says "tried" now (`go_stuck` typed failure) but cannot place around it |
 
 Count: the head gets out alone, or never gets in, in H1, H2, H4, H5 (4 of 8) and part of H6 (5 of 8 with the fact; the typed failure puts the fact in the run). H3, H7 and H8 need the body (to S0's table). Not shown: that the relay points are walkable, and any multi-turn exit.
+
+## 11/3 The seams of the second half (S3, about $0.6 of the $3)
+
+Six scenes (`tests/fixtures/minecraft/seam-scenes.json`: each stands just after a node and asks the next decision; Sonnet three calls each, Opus for the End), plus the frames scene of the morning (stronghold-frames: 3 of 3 go to the frame and put the eyes in, six in one act).
+
+| seam | next decision |
+|---|---|
+| 7 rods, to the pearls (Nether, no forest in view) | 3 of 3 `mc.view` first (a look, no hand): one decision more, then the pearl stage's search |
+| 14 pearls, to the eyes | 3 of 3 craft 14 powder and 14 eyes in one act |
+| 14 eyes, back to the gate | 3 of 3 `mc.view` first: one more decision |
+| arrived in the overworld, node behind | 3 of 3 `mc.view` first, with a long thought (the check p14 lacks beds, bow, arrows, water) |
+| portal open, node still at the frames | 3 of 3 walk into the portal (one adds a wait); the gate holds the walk if blocks, water, beds or food are short, and the model knew the 40 of 64 blocks |
+| in the End, node still at the frames (Opus) | 3 of 3 mark the nodes done, set the current to the crystals, equip the bow and shoot #12 at 22 m |
+
+Found and mended: the model router already chose the strong model in the End whatever the node, but the step did not close for it (`closeStep` looked at the node only), so a step begun in the Nether would have gone on with Sonnet after the portal. The close now uses the same rule (`strongStageNow`), with a test.
+
+Not shown: the real walk between two seams, the pre-End check's content (beds, bow, arrows, water), and anything longer than two decisions. Every seam gives a next move within two decisions here; the looks at the start of three are the only added decision.
