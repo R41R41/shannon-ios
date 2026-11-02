@@ -36,17 +36,21 @@ const gateLine = (items: Array<[string, number]>) => preparationShortage({ dimen
 describe('the pickaxe for the Nether: one diamond one or three iron ones', () => {
   const rest = [['shield', 1], ...GATE_REST] as Array<[string, number]>;
   it('asks three iron pickaxes, and says how many are carried', () => {
-    expect(gateLine([...rest, ['iron_pickaxe', 1]])).toBe(`準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3） 1/3。欠けたまま進むと: ${BEFORE_GATE.risk}。`
-      + '目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い');
+    const one = gateLine([...rest, ['iron_pickaxe', 1]])!;
+    expect(one.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3） 1/3・石以上のツルハシ（予備 2 本を含め 3 本） 1/3。')).toBe(true);
+    expect(one).toContain(`欠けたまま進むと: ${BEFORE_GATE.risk}。目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い`);
     expect(gateLine([...rest, ['iron_pickaxe', 2]])).toContain('ツルハシ（ダイヤ 1 か鉄 3） 2/3');
-    expect(gateLine(rest)).toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）が無い');
+    expect(gateLine(rest)).toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）・石以上のツルハシ（予備 2 本を含め 3 本）が無い');
     expect(gateLine([...rest, ['iron_pickaxe', 3]])).toBe(GOAL_ONLY);
   });
   it('counts a diamond or netherite pickaxe for three, and the two kinds together', () => {
-    expect(gateLine([...rest, ['diamond_pickaxe', 1]])).toBe(GOAL_ONLY);
-    expect(gateLine([...rest, ['netherite_pickaxe', 1]])).toBe(GOAL_ONLY);
+    // One diamond pickaxe is the main one's three; the spares are two more of stone or better (run59 leg 2's plan 7.1).
+    expect(gateLine([...rest, ['diamond_pickaxe', 1]])).toContain('必須（ネザーに入る前に必ず）— 石以上のツルハシ（予備 2 本を含め 3 本） 1/3');
+    expect(gateLine([...rest, ['diamond_pickaxe', 1], ['stone_pickaxe', 2]])).toBe(GOAL_ONLY);
+    expect(gateLine([...rest, ['netherite_pickaxe', 1], ['stone_pickaxe', 3]])).toBe(GOAL_ONLY);
     expect(gateLine([...rest, ['iron_pickaxe', 1], ['stone_pickaxe', 4]])).toContain('ツルハシ（ダイヤ 1 か鉄 3） 1/3');
     expect(gateLine([...rest, ['iron_pickaxe', 2], ['diamond_pickaxe', 1]])).toBe(GOAL_ONLY);
+    expect(gateLine([...rest, ['iron_pickaxe', 1], ['stone_pickaxe', 4]])).not.toContain('石以上のツルハシ（予備 2 本を含め 3 本）');
   });
 });
 
@@ -278,5 +282,25 @@ describe('a death is out (the owner, 2026-11-02): not dying stands above being f
       expect((node.caution ?? []).length, node.title).toBeLessThanOrEqual(PLAN_LIMITS.rules);
       for (const line of node.caution ?? []) expect(line.length, `${node.title}: ${line}`).toBeLessThanOrEqual(PLAN_LIMITS.rule);
     }
+  });
+});
+
+describe('the spare pickaxes and a need that cannot be made (the coordinator, 2026-11-03; run59 leg 2, 23:34)', () => {
+  it('says the spares in the stage rules and the Nether\'s knowledge, and the plan\'s gate caution', () => {
+    expect(PREP_RULES_WORDS).toContain('石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）');
+    const nether = V2_STAGES.nether;
+    expect(nether).toContain('ネザーに入る前に石のツルハシを 2〜3 本作って持つ（丸石 3・棒 2 で 1 本）');
+    expect(nether).toContain('ダイヤのツルハシの耐久（持ち物の行）が 300 を切ったら、黒石か丸石と棒で石のツルハシを作って使う');
+    const gate = seedPlan('エンドラを倒して')!.nodes.find(node => node.title === '黒曜石10とゲート')!;
+    expect((gate.caution ?? []).join(' ')).toContain('ツルハシと石の予備2本');
+  });
+  it('says what to do when a required need looks impossible to make: gather, read the line, try another form; in the lines of both stages and the rules', () => {
+    for (const stage of [BEFORE_DIAMONDS, BEFORE_GATE]) {
+      expect(stage.risk).toContain('作れない・材料が無いと見えた時は、後回しにして先へ進まず、材料を取りに行く');
+      expect(stage.risk).toContain('作る手の行の missing: … を読み、別の材料の形を試す');
+    }
+    expect(PREP_RULES_WORDS).toContain('必須が作れない・材料が無いと見えた時は、後回しにして先へ進まない。材料を取りに行く（盾なら木と鉄 1。');
+    const noShield = frame(KIT.filter(([name]) => name !== 'shield'));
+    expect(gateHold({ hands: [{ do: 'portal' }] }, noShield)?.line).toContain('作れない・材料が無いと見えた時は、後回しにして先へ進まず、材料を取りに行く');
   });
 });

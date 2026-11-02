@@ -100,9 +100,10 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
   it('in the overworld only by the current node: the gate\'s check before the Nether, the End\'s with eyes', () => {
     const home = counts({ ...START, dimension: 'overworld' });
     expect(preparationShortage({ ...home, nowKinds: ['wood' as const] })).toBeNull();
-    expect(preparationShortage({ ...home, nowKinds: ['portal' as const] }))
-      .toBe(`準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾・足場のブロックが無い。食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`
-        + '目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い');
+    const gate = preparationShortage({ ...home, nowKinds: ['portal' as const] })!;
+    expect(gate.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾・足場のブロックが無い。')).toBe(true);
+    expect(gate).toContain(`食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`);
+    expect(gate.endsWith('目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い')).toBe(true);
     expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const] })).toMatch(/^準備の不足（エンドへ）: ベッド・弓・矢・エンダーアイ・足場のブロックが無い/u);
   });
 

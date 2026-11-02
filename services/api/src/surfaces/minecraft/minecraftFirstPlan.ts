@@ -52,7 +52,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・バケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
-  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', caution: ['必須（盾・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点）が欠けたら入らない'], children: [
+  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', caution: ['必須（盾・鉄の兜胸当て脚を着る・ツルハシと石の予備2本・足場64・食料40点）が欠けたら入らない'], children: [
     node('溶岩源に水で黒曜石10', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|dim:the_nether' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether' }),
     node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether',
