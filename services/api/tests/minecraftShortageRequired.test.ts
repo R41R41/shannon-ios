@@ -385,7 +385,7 @@ describe('what the lab\'s walk through the Nether showed (S4, run59 leg 2, 2026-
   it('says that the portal hand\'s stop is the way in, the exit is not at the frame\'s height, a go is split to 90 m, and where the piglins are', () => {
     const nether = V2_STAGES.nether;
     for (const word of ['その act は「次元が変わった…（手の途中）」と止まって返る（入れた印で、失敗ではない）', 'ゲートの出口の高さは、地上の枠の高さとは限らない',
-      'go は 1 手 90m 以内に分ける', 'limit_time は、同じ行き先をそのまま出し直せば着く', '真紅の森（crimson_forest）はホグリンとピグリンが湧く所',
+      'go は 1 手 90m 以内に分ける', 'limit_time は、同じ行き先をそのまま出し直せば着く', '真紅の森（crimson_forest）にはピグリンとホグリンが湧く',
       '金の防具を 1 つ着ていないとピグリンは敵になる']) expect(nether, word).toContain(word);
   });
 });
@@ -394,15 +394,22 @@ describe('the lab\'s walk through the crimson forest (S4, 2026-11-03)', () => {
   it('says that a repeated search_timeout is cut into relay points, what limit_place is, and to heal before leaving the fortress\'s platform', () => {
     const nether = V2_STAGES.nether;
     for (const word of ['search_timeout（道探しが終わらない）が続く所は、出し直しても同じ所で止まる', '10m 以内の立てる中継点を行き先にして区切る', 'limit_place は置く物の上限',
-      '要塞）から出る前に体力を戻す', '30 秒に体力 20→0.9']) expect(nether, word).toContain(word);
+      '要塞）から出る前に体力を戻す']) expect(nether, word).toContain(word);
   });
 });
 
-describe('the stronghold\'s road, as the lab measured it (S4, 2026-11-03)', () => {
-  it('gives the overland walk its numbers and says that the Nether road did not get through the lab twice', () => {
+describe('the stronghold's road is chosen on the spot, from the distance measured (S3, the seed-free knowledge of 2026-11-03)', () => {
+  it('names the two roads and what each costs without any seed's numbers, and leaves the choice to the head', () => {
     const stronghold = V2_STAGES.stronghold;
-    for (const word of ['1,454m を 110m 前後の hop で 600 秒に 1,274m 進み', '歩く前に丸石を 300 前後持つ', 'maxPlace 100・hop は 110m 前後',
-      'ネザーの歩きが 2 回とも通らなかった', '今は勧めない']) expect(stronghold, word).toContain(word);
+    for (const word of ['距離に比例して時間と丸石がかかる', '丸石を多めに持つ', 'ネザーの歩きが通らないことがある', 'どちらの道にするかは、アイの交点が出た時に']) {
+      expect(stronghold, word).toContain(word);
+    }
+  });
+  it('holds nothing that one seed measured: no coordinate, distance, height or count of the lab's c1 (the filming is a first sight for both)', () => {
+    const all = Object.values(V2_STAGES).join('
+');
+    for (const word of ['1,454', '1,274', '丸石を 300', '208 秒', '209 秒', '7 ブロック低く', '1.4m 先', '233m', '358 秒', '171 ブロック', 'ゾンビピグリン 120', 'ストライダー 32',
+      '20→0.9', '261 秒', '79 秒', 'シード c1', 'ラボの c1', '今は勧めない', '2 回とも通らなかった']) expect(all, word).not.toContain(word);
   });
 });
 
