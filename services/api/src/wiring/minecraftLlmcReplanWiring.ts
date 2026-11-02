@@ -106,7 +106,8 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
   const saved = parts.checkpoint as { minecraftReplans?: unknown; minecraftReplanPending?: unknown;
     minecraftActiveWait?: { node: string; until: number } } | null;
   const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending, replanner: parts.replanner,
-    clock: parts.activeClock, log: parts.log, vitals: () => stallVitals(parts.observe()), sources: stall => sourcesOf(parts, results, stall), bind: update => boundTo(parts.plan.tree(), update),
+    clock: parts.activeClock, log: parts.log, vitals: () => stallVitals(parts.observe()), sources: stall => sourcesOf(parts, results, stall),
+    bind: update => boundTo(parts.plan.tree(), update),
     ...(parts.persist ? { persist: parts.persist } : {}),
     check: (update: PlanUpdate) => {
       const before = parts.plan.tree();
@@ -118,7 +119,7 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
     activeClock: parts.activeClock, waits: parts.waits, ...(saved?.minecraftActiveWait ? { savedWait: saved.minecraftActiveWait } : {}),
     raise: stall => flow.note(stall), log: parts.log });
   parts.queue.onRan(watch.noteQueueResult);
-  const current = (): string | null => { const tree = parts.plan.tree(); return workingNode(parts.taskId, tree.current) ?? tree.current ?? null; };
+  const current = (): string | null => workingNode(parts.taskId, parts.plan.tree().current) ?? parts.plan.tree().current ?? null;
   return { watch, flow, current, checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
 }
 

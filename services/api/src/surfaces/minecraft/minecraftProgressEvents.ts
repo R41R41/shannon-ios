@@ -11,26 +11,23 @@ export type ProgressEvent = 'kill' | 'frame' | 'ignition' | 'eye';
 /** The mobs whose death is the aim of a node (a blaze for the rods, an enderman for the pearls). */
 const KILLS = /(?:^|:)(?:blaze|enderman)$|^#\d+$/u;
 
-type Hand = { do?: unknown; target?: unknown; item?: unknown; at?: unknown } | null | undefined;
+export type ProgressHand = { do?: unknown; target?: unknown; item?: unknown; at?: unknown } | null | undefined;
 
-/** The hand a result line belongs to: the lines count from 1 in the order the hands were sent. */
-const handOf = (hands: ReadonlyArray<Hand>, line: ActHandLine): Hand => hands[line.i - 1];
+/** The event one result line is, with the hand it belongs to (the lines count from 1 in the order the hands were sent), or null. */
+function eventOf(hand: ProgressHand, line: ActHandLine): ProgressEvent | null {
+  if (line.end === 'not_run' || line.end === 'unknown' || line.goal !== 'done') return null;
+  const target = typeof hand?.target === 'string' ? hand.target : '';
+  if (line.do === 'fight' && line.code === 'target_killed') return KILLS.test(target) || /blaze|enderman/u.test(line.line) ? 'kill' : null;
+  if (line.do === 'attack' && line.status === 'done') return KILLS.test(target) || /blaze|enderman/u.test(line.line) ? 'kill' : null;
+  if (line.do === 'obsidian') return 'frame';
+  if (line.do === 'portal') return 'ignition';
+  return line.do === 'use' && hand?.item === 'ender_eye' && hand.at !== undefined ? 'eye' : null;
+}
 
 /**
  * The events of an act's lines. A hand that did not run, or did not end done, earns nothing; a fight or an attack counts when the body saw the
  * opponent die (`target_killed`) or, for an attack, when it ran until the opponent was dead and ended done.
  */
-export function progressEvents(hands: ReadonlyArray<Hand>, lines: readonly ActHandLine[]): ProgressEvent[] {
-  const events: ProgressEvent[] = [];
-  for (const line of lines) {
-    if (line.end === 'not_run' || line.end === 'unknown' || line.goal !== 'done') continue;
-    const hand = handOf(hands, line);
-    const target = typeof hand?.target === 'string' ? hand.target : '';
-    if ((line.do === 'fight' && line.code === 'target_killed') || (line.do === 'attack' && line.status === 'done')) {
-      if (KILLS.test(target) || /blaze|enderman/u.test(line.line)) events.push('kill');
-    } else if (line.do === 'obsidian') events.push('frame');
-    else if (line.do === 'portal') events.push('ignition');
-    else if (line.do === 'use' && hand?.item === 'ender_eye' && hand.at !== undefined) events.push('eye');
-  }
-  return events;
+export function progressEvents(hands: ReadonlyArray<ProgressHand>, lines: readonly ActHandLine[]): ProgressEvent[] {
+  return lines.flatMap(line => eventOf(hands[line.i - 1], line) ?? []);
 }

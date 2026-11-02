@@ -35,7 +35,8 @@ export function stallVitals(frame: BodyObservation | null): StallVitals {
     const meters = HOSTILE.exec(line)?.[1];
     return meters !== undefined && Number(meters) <= 16 ? [line.split(' ')[0]!] : [];
   }));
-  return { hp: finite(facts?.hp) ? facts.hp : null, hunger: finite(facts?.hunger) ? facts.hunger : null, dimension: facts?.dimension ?? null, enemies16: near.size };
+  return { hp: finite(facts?.hp) ? facts.hp : null, hunger: finite(facts?.hunger) ? facts.hunger : null, dimension: facts?.dimension ?? null,
+    enemies16: near.size };
 }
 
 /** The record as one log line. */
@@ -45,5 +46,6 @@ export function stallRecordLine(taskId: string, record: StallRecord): string {
 
 /** The line written when the node the last record was for is no longer the current one: the body got out of it, and whether that plan did it. */
 export function stallEscapedLine(taskId: string, last: { node: string; outcome: string; at: number }, nowMs: number): string {
-  return `Shannon Minecraft stall escaped task=${taskId} node=${last.node} afterSeconds=${Math.round(Math.max(0, nowMs - last.at) / 1000)} replan=${last.outcome}`;
+  const seconds = Math.round(Math.max(0, nowMs - last.at) / 1000);
+  return `Shannon Minecraft stall escaped task=${taskId} node=${last.node} afterSeconds=${seconds} replan=${last.outcome}`;
 }
