@@ -785,7 +785,7 @@ describe('boundary 9 (the plan): kind and prep from the first plan to a restarte
 // ---- the seams the bench C can show (the head and the body meeting): 1 to 5 ---------------------------------------------------------------------------------------
 /** A body's result lines (a `produced/` file's) as the hands a script gives the stand-in: each line is kept as the body wrote it. */
 const handsOf = (lines: Array<Record<string, any>>) => lines.map(line => ({ do: String(line.do), goal: line.goal, end: line.end, status: line.status, motorOps: line.motorOps, code: line.code, raw: line }));
-const WAIT = (seconds: number) => [{ do: 'wait' as const, seconds }];
+const WAIT = (seconds: number) => [{ do: 'wait' as const, seconds }, { do: 'jump' as const }]; // not wait-only: a wait-only act behind a running item is refused at admission (R3-1 6)
 /** An item with the fields of the act the model chose (`dependsOn`, `uses`, ...): its mark and its command's id once the body has been handed it. */
 async function sendX(bench: BenchC, hands: unknown, extra: Record<string, unknown> = {}, maxMs = 20_000) {
   let item = '';
