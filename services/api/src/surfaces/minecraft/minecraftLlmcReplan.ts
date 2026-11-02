@@ -1,6 +1,5 @@
 import { applyPlanUpdate, type PlanNode, type PlanOp, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
-import { PLAN_UPDATE_RULES_DEFINITION } from '../../mind/action/fca/fcaPlanTools.js';
 
 /**
  * The plan made again when the body stands still (owner 2026-11-02: a run of two to four hours cannot wait for a person at every stop).
@@ -86,47 +85,46 @@ export function settledAttempt(ledger: ReplanLedger, record: ReplanRecord): Repl
 
 /** The ops the strong model may write: the plan's own, without the promises (a new plan does not move what was set aside). */
 const ALLOWED_OPS: ReadonlySet<string> = new Set(['add', 'split', 'set', 'move', 'drop', 'forbid', 'caution', 'lift']);
-type Fields = Record<string, { items?: { properties: Fields } } & Record<string, unknown>>;
-const BASE = PLAN_UPDATE_RULES_DEFINITION.nativeInputSchema as { properties: { ops: { items: { properties: Fields } }; current: unknown } };
-const ITEM = BASE.properties.ops.items;
-const pick = (from: Fields, keys: readonly string[]): Fields => Object.fromEntries(keys.filter(key => key in from).map(key => [key, from[key]!]));
 
 /**
- * The op of the answer: the fields the allowed ops use, and split's children with five of them. The API refuses a strict schema with more than 24
- * optional parameters (2026-11-02, the first real replay: the plan tool's whole op, with the promises' fields and the children's, has 37, and
- * every new plan was turned away with a 400).
+ * The answer's schema: each op is one JSON object of the plan tool, written as a string. The API compiles a strict schema into a grammar and refuses one
+ * that is too much for it (the first real replay, 2026-11-02: the plan tool's whole op has 37 optional parameters, the limit is 24; with 20 it was "too
+ * complex" after 100 seconds; with the op flat and 15 optional fields, the same), and the optional fields of an op are what costs. A list of strings is
+ * the simplest schema there is; `replanOf` reads each string and the plan's own checks (`applyPlanUpdate`) judge the op.
  */
-const REPLAN_ITEM = {
-  ...ITEM,
-  properties: {
-    op: { type: 'string', enum: [...ALLOWED_OPS] },
-    ...pick(ITEM.properties, ['id', 'parent', 'after', 'title', 'kind', 'where', 'doneWhen', 'note', 'target', 'state', 'reason', 'text', 'prep']),
-    into: { ...ITEM.properties.into, items: { ...ITEM.properties.into?.items, properties: pick(ITEM.properties.into?.items?.properties ?? {},
-      ['title', 'kind', 'where', 'doneWhen', 'note']) } },
-  },
-};
-
-/** The answer's schema: the plan tool's ops and current node, and a line saying what was changed and why. */
 export const REPLAN_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
   required: ['ops', 'why'],
   properties: {
-    ops: { type: 'array', maxItems: 12, items: REPLAN_ITEM },
-    current: BASE.properties.current,
-    why: { type: 'string', maxLength: 120, description: '何を直したか、またはなぜ直さないか（120 字まで）' },
+    ops: { type: 'array', items: { type: 'string' }, description: 'plan.update の op を 1 つずつ JSON の文字列で（12 個まで。例 {"op":"add","parent":"p10","title":"…","kind":"blaze"}）' },
+    current: { type: 'string', description: '今の節にしたい id。変えないなら書かない' },
+    why: { type: 'string', description: '何を直したか、またはなぜ直さないか（120 字まで）' },
   },
 });
+
+/** One op of an answer: an object, or a string with one JSON object in it; null when it is neither. */
+function opOf(item: unknown): Record<string, unknown> | null {
+  let value = item;
+  if (typeof item === 'string') {
+    try {
+      value = JSON.parse(item);
+    } catch {
+      return null;
+    }
+  }
+  return value && typeof value === 'object' && !Array.isArray(value) && ALLOWED_OPS.has(String((value as { op?: unknown }).op)) ? value as Record<string, unknown> : null;
+}
 
 /** The ops and the line of an answer; null when it is not one. An empty list of ops is an answer: the strong model found nothing to change. */
 export function replanOf(answer: unknown): { update: PlanUpdate; why: string } | null {
   const value = answer && typeof answer === 'object' ? answer as Record<string, unknown> : null;
   if (!value || !Array.isArray(value.ops) || value.ops.length > 12) return null;
-  const ops = value.ops.filter((item): item is PlanOp => !!item && typeof item === 'object' && ALLOWED_OPS.has(String((item as { op?: unknown }).op)));
-  if (ops.length !== value.ops.length) return null;
+  const ops = value.ops.map(opOf);
+  if (ops.some(op => op === null)) return null;
   const current = typeof value.current === 'string' && value.current ? value.current : undefined;
   const why = typeof value.why === 'string' ? value.why.replace(/\s+/gu, ' ').trim().slice(0, 120) : '';
-  return { update: { ops, ...(current ? { current } : {}) }, why };
+  return { update: { ops: ops as unknown as PlanOp[], ...(current ? { current } : {}) }, why };
 }
 
 // ---- the plans waiting to be taken, by task
@@ -213,14 +211,16 @@ export function forgetReplans(): void {
 export const REPLAN_SYSTEM = [
   'あなたはマイクラの体を動かすシャノンの、計画の立て直し係。毎歩の判断は別のモデルがしていて、今、体が止まっている（止まりの理由が入力にある）。',
   '原因を事実から考え、計画だけを直す。出すのは plan.update の ops（12 個まで）と、今の節にしたい id（current。変えないなら省く）と、何を直したかの一行（why）。体の手は出さない。',
-  '- ops の書き方（plan.update と同じ）: add（parent・after・title・where・doneWhen・target・note・kind。id は書かない）、split（id の下に into の節を足す）、'
-    + 'set（id の state=done|blocked|continue|wait・title・where・doneWhen・target・note・reason・kind）、move（id を parent・after へ）、drop（id とその下を消す）、'
-    + 'forbid / caution（id の節に text を 1 行足す）、lift（text の行を消す）。id は入力の計画に出ている物。節は 64 まで・深さ 4 まで・title 60 字まで。',
+  '- ops は文字列の並びで、1 つが plan.update の op 1 つの JSON（例 {"op":"add","parent":"p10","title":"待ち場を探す","kind":"blaze"}）。op は次のどれか: '
+    + 'add（parent・after・title・where・doneWhen・target {item,count}・note・kind。id は書かない。節を割る時は parent を割る節の id にして部分の節を足す）、'
+    + 'split（id の下に into の節の並びを足す）、set（id の state=done|blocked|continue|wait・title・where・doneWhen・target・note・reason・kind・prep {state,why}）、'
+    + 'move（id を parent・after へ）、drop（id とその下を消す）、forbid / caution（id の節に text を 1 行足す）、lift（text の行を消す）。'
+    + 'id は入力の計画に出ている物。節は 64 まで・深さ 4 まで・title 60 字まで。',
   '- 止まりの原因が「見えていない事実」か「足りない前提」かを考える。計画を、観測で確かめられる小さな節に割る・前提の節を足す・順を変える・別の手段の節に替える・できない節を blocked にして理由と代わりの道を書く。',
   '- doneWhen は観測の形で書く: have:物>=数・food>=点・dim:the_nether|the_end|overworld・at:x,y,z~半径@次元・'
     + 'see:fortress / see:end_portal_frame / see:end_portal・crystals<=n。& が全部、| がどれか。target は完成品を取る節にだけ。',
   '- 座標は入力にある物だけを使う。無い場所を作らない。時間や許可を増やすだけの直しはしない。同じ直しを繰り返さない（前の立て直しが入力にある）。',
-  '- 準備の節（prep_descent）を黙って飛ばさない。省くなら prep skipped と why を書く。済んでいない節を done にしない。',
+  '- 準備の節（prep_descent）を黙って飛ばさない。省くなら set で prep {state:skipped, why} を書く。済んでいない節を done にしない。',
   '- 原因が分かったら、今の節に forbid（してはいけない事）か caution（気をつける事）を 1 行足すと、次の判断が読む。',
   '- 止まりに見えて本当は進行中の待ち（夜待ち・かまど・ブレイズの湧き待ち・竜の止まり待ち）なら、ops を空にして、why にそう書く。',
 ].join('\n');
