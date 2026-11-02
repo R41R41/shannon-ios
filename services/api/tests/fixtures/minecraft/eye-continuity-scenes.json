@@ -331,7 +331,7 @@
     "z": -40,
     "bearingDeg": 5.5,
     "flew": 12,
-    "broke": true,
+    "broke": false,
     "at": 100000,
     "fate": "dropped",
     "dropId": 931,
