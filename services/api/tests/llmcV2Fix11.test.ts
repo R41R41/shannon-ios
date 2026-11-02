@@ -150,7 +150,7 @@ describe('chapter 4 A: the road and the pace', () => {
   it('gives the goal and the yardstick in the instructions, the numbers from the one constant, and each line in the dictionary', () => {
     const system = minecraftV2System(V2_ALWAYS);
     expect(system).toContain('## 目的と物差し');
-    expect(system).toContain('ネザーへ入るまでを 30 分以内に');
+    expect(system).toContain('ネザーへ入るまでは 47 分ほど（準備を含む）');
     expect(system).toContain('死ぬと持ち物と時間を失い');
     expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(system).toContain('節目の目安（開始からの秒）は live の meter が、今と次の節目で言う');
