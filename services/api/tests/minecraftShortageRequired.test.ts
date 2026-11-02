@@ -398,16 +398,15 @@ describe('the lab\'s walk through the crimson forest (S4, 2026-11-03)', () => {
   });
 });
 
-describe('the stronghold's road is chosen on the spot, from the distance measured (S3, the seed-free knowledge of 2026-11-03)', () => {
-  it('names the two roads and what each costs without any seed's numbers, and leaves the choice to the head', () => {
+describe('the road to the stronghold is chosen on the spot, from the distance measured (S3, the seed-free knowledge of 2026-11-03)', () => {
+  it('names the two roads and what each costs without any seed numbers, and leaves the choice to the head', () => {
     const stronghold = V2_STAGES.stronghold;
     for (const word of ['距離に比例して時間と丸石がかかる', '丸石を多めに持つ', 'ネザーの歩きが通らないことがある', 'どちらの道にするかは、アイの交点が出た時に']) {
       expect(stronghold, word).toContain(word);
     }
   });
-  it('holds nothing that one seed measured: no coordinate, distance, height or count of the lab's c1 (the filming is a first sight for both)', () => {
-    const all = Object.values(V2_STAGES).join('
-');
+  it('holds nothing that one seed measured: no coordinate, distance, height or count of the c1 lab world (the filming is a first sight for both)', () => {
+    const all = Object.values(V2_STAGES).join(' ');
     for (const word of ['1,454', '1,274', '丸石を 300', '208 秒', '209 秒', '7 ブロック低く', '1.4m 先', '233m', '358 秒', '171 ブロック', 'ゾンビピグリン 120', 'ストライダー 32',
       '20→0.9', '261 秒', '79 秒', 'シード c1', 'ラボの c1', '今は勧めない', '2 回とも通らなかった']) expect(all, word).not.toContain(word);
   });
