@@ -301,6 +301,9 @@ export function readActResult(text: string | undefined): ActResult | null {
     }) };
   } catch { return null; }
 }
+/** The goal a hand line without one is read as, from its status. */
+const goalOfStatus = (status: string): GoalOutcome =>
+  status === 'done' || status === 'killed' ? 'done' : status === 'cut' ? 'partial' : status === 'skipped' ? 'not_started' : 'failed';
 /**
  * The act's goal and end: the body's `outcome` when the result has one, else worked out from the lines by the
  * contract's order (`aggregateGoal`; a line without
@@ -309,8 +312,7 @@ export function readActResult(text: string | undefined): ActResult | null {
  */
 export function actOutcomeOf(result: ActResult): { goal: GoalOutcome; end: RunEnd; cutBy?: CutBy } {
   if (result.outcome) return { goal: result.outcome.goal, end: result.outcome.end, ...(result.outcome.cutBy ? { cutBy: result.outcome.cutBy } : {}) };
-  const hands = result.lines.map(line => ({ goal: line.goal ?? (line.status === 'done' || line.status === 'killed' ? 'done' : line.status === 'cut' ? 'partial' :
-     line.status === 'skipped' ? 'not_started' : 'failed'), motorOps: line.motorOps ?? (line.status === 'skipped' ? 0 : 1) }));
+  const hands = result.lines.map(line => ({ goal: line.goal ?? goalOfStatus(line.status), motorOps: line.motorOps ?? (line.status === 'skipped' ? 0 : 1) }));
   const goal = aggregateGoal(hands, result.doneMet !== undefined);
   const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure' || result.lines.some(line => line.status === 'cut');
   const end: RunEnd = hands.length > 0 && hands.every(hand => hand.goal === 'not_started') && !hands.some(hand => hand.motorOps > 0) ? (cut ? 'cut' : 'not_run')

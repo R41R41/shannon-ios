@@ -34,6 +34,25 @@ export const SHIELD_RUSH_CODE_WORDS: Readonly<Record<ShieldRushCode, string>> = 
   DEAD: '死んだ',
 };
 
+type RushProgress = { shieldBefore?: unknown; shieldAfter?: unknown; hpMin?: unknown; hpEnd?: unknown; hits?: unknown; rodsDelta?: unknown;
+  elapsedMs?: unknown; at?: { x?: unknown; y?: unknown; z?: unknown }; safe?: unknown };
+const known = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const rushNumber = (label: (value: number) => string, key: keyof RushProgress) => (p: RushProgress): string | null =>
+  known(p[key]) ? label(p[key] as number) : null;
+const RUSH_FACTS: ReadonlyArray<(p: RushProgress) => string | null> = [
+  p => known(p.shieldBefore) && known(p.shieldAfter) ? `盾 ${num(p.shieldBefore)}→${num(p.shieldAfter)}` : null,
+  p => known(p.shieldBefore) && !known(p.shieldAfter) ? `盾の開始時 ${num(p.shieldBefore)}` : null,
+  p => known(p.shieldAfter) && !known(p.shieldBefore) ? `盾の終了時 ${num(p.shieldAfter)}` : null,
+  rushNumber(value => `体力最低 ${num(value)}`, 'hpMin'),
+  rushNumber(value => `終了体力 ${num(value)}`, 'hpEnd'),
+  rushNumber(value => `${num(value)} 回打った`, 'hits'),
+  rushNumber(value => `ロッド増減 ${value >= 0 ? '+' : ''}${num(value)}`, 'rodsDelta'),
+  rushNumber(value => `経過 ${num(value)} ms`, 'elapsedMs'),
+  p => p.at && [p.at.x, p.at.y, p.at.z].every(known) ? `終了地点 ${at(p.at as { x: number; y: number; z: number })}` : null,
+  p => typeof p.safe === 'boolean' ? (p.safe ? '終了地点は安全' : '終了地点は安全ではない') : null,
+];
+const rushFacts = (p: RushProgress | undefined): string[] => p ? RUSH_FACTS.flatMap(fact => fact(p) ?? []) : [];
+
 /** No new line fields: the body names the rush/target in line, its outcome in status/code and its counts in progress. */
 export function shieldRushWords(line: ActHandLine): string[] {
   const code = line.code && Object.hasOwn(SHIELD_RUSH_CODE_WORDS, line.code) ? line.code as ShieldRushCode : null;
@@ -41,20 +60,7 @@ export function shieldRushWords(line: ActHandLine): string[] {
   const target = /#\d+\b/u.exec(line.line)?.[0];
   const first = `shield_rush${target ? ` ${target}` : ''}: ${line.status}${line.code ? `（${line.code}）` : ''}`
     + `${code ? ` ${SHIELD_RUSH_CODE_WORDS[code]}` : line.status === 'killed' ? ' 相手の死を観測した' : ''}`;
-  const p = line.progress, facts: string[] = [];
-  const known = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-  if (known(p?.shieldBefore) && known(p?.shieldAfter)) facts.push(`盾 ${num(p.shieldBefore)}→${num(p.shieldAfter)}`);
-  else {
-    if (known(p?.shieldBefore)) facts.push(`盾の開始時 ${num(p.shieldBefore)}`);
-    if (known(p?.shieldAfter)) facts.push(`盾の終了時 ${num(p.shieldAfter)}`);
-  }
-  if (known(p?.hpMin)) facts.push(`体力最低 ${num(p.hpMin)}`);
-  if (known(p?.hpEnd)) facts.push(`終了体力 ${num(p.hpEnd)}`);
-  if (known(p?.hits)) facts.push(`${num(p.hits)} 回打った`);
-  if (known(p?.rodsDelta)) facts.push(`ロッド増減 ${p.rodsDelta >= 0 ? '+' : ''}${num(p.rodsDelta)}`);
-  if (known(p?.elapsedMs)) facts.push(`経過 ${num(p.elapsedMs)} ms`);
-  if (p?.at && [p.at.x, p.at.y, p.at.z].every(known)) facts.push(`終了地点 ${at(p.at)}`);
-  if (typeof p?.safe === 'boolean') facts.push(p.safe ? '終了地点は安全' : '終了地点は安全ではない');
+  const facts = rushFacts(line.progress as RushProgress | undefined);
   return facts.length ? [first, facts.join('・')] : [first];
 }
 

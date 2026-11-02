@@ -118,7 +118,8 @@ const SHORT_LINES = [
   'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
-  'attack #id style=shield_rush retreatTo=x,y,z [seconds=N] [retreatHp=N] [shieldReserve=N] [onCrossfire=retreat|continue] [pickup=none] [area=cx,cy,cz,r,maxDrop]（ブレイズ専用・act の accept=["blaze"]）',
+  'attack #id style=shield_rush retreatTo=x,y,z [seconds=N] [retreatHp=N] [shieldReserve=N] [onCrossfire=retreat|continue] [pickup=none]'
+    + ' [area=cx,cy,cz,r,maxDrop]（ブレイズ専用・act の accept=["blaze"]）',
   'pickup [range=N] [target=..]',
   ("chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 " +
 "iron_ingot）"),

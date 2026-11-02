@@ -103,6 +103,24 @@ const rushPos = (value: unknown): boolean => {
   return !!cell && Object.keys(cell).length === 3 && ['x', 'y', 'z'].every(key => finite(cell[key]));
 };
 
+const rushWhole = (hand: ActHand, key: 'retreatHp' | 'shieldReserve', low: number, high: number): boolean =>
+  hand[key] === undefined || (Number.isInteger(hand[key]) && hand[key]! >= low && hand[key]! <= high);
+const rushChoice = (value: unknown, choices: readonly string[]): boolean => value === undefined || choices.includes(String(value));
+const rushArea = (value: unknown): boolean => {
+  const area = objectOf(value);
+  return !area || (Object.keys(area).length === 3 && rushPos(area.center) && finite(area.radius) && area.radius > 0
+    && Number.isInteger(area.maxDrop) && (area.maxDrop as number) >= 0);
+};
+const RUSH_FORMS: ReadonlyArray<readonly [(hand: ActHand) => boolean, string]> = [
+  [hand => hand.seconds === undefined || (finite(hand.seconds) && hand.seconds >= 0.5 && hand.seconds <= 30), 'seconds は 0.5〜30 の数（seconds=20）'],
+  [hand => rushWhole(hand, 'retreatHp', 1, 19), 'retreatHp は 1〜19 の整数（retreatHp=12）'],
+  [hand => rushWhole(hand, 'shieldReserve', 0, 336), 'shieldReserve は 0〜336 の整数（shieldReserve=36）'],
+  [hand => rushChoice(hand.onCrossfire, ['retreat', 'continue']), 'onCrossfire は retreat か continue（onCrossfire=retreat|continue）'],
+  [hand => rushChoice(hand.pickup, ['target_drops', 'none']), 'pickup は target_drops か none（pickup=target_drops|none）'],
+  [hand => hand.area === undefined || rushArea(hand.area),
+    'area は {center:{x,y,z},radius:正の数,maxDrop:0以上の整数}（短い書き方: area=cx,cy,cz,r,maxDrop）'],
+];
+
 /** Shield rush fields are checked before the broad schema too, so each refusal gives the form to write. */
 export function shieldRushHandProblem(hand: ActHand): string | null {
   if (hand.do !== 'attack') return null;
@@ -111,21 +129,11 @@ export function shieldRushHandProblem(hand: ActHand): string | null {
     return field ? `${field} は style=shield_rush の attack だけ（style=shield_rush retreatTo=x,y,z）` : null;
   }
   if (hand.style !== 'shield_rush') return 'style は shield_rush だけ（style=shield_rush）';
-  if (typeof hand.target !== 'string' || !/^#\d+$/u.test(hand.target)) return 'shield_rush の target はブレイズ1体の #id（target="#123"）。名前だけは使えない';
-  if (!rushPos(hand.retreatTo)) return 'shield_rush には retreatTo={x,y,z} が要る（短い書き方: retreatTo=x,y,z）';
-  if (hand.seconds !== undefined && !(finite(hand.seconds) && hand.seconds >= 0.5 && hand.seconds <= 30)) return 'seconds は 0.5〜30 の数（seconds=20）';
-  if (hand.retreatHp !== undefined && !(Number.isInteger(hand.retreatHp) && hand.retreatHp >= 1 && hand.retreatHp <= 19)) return 'retreatHp は 1〜19 の整数（retreatHp=12）';
-  if (hand.shieldReserve !== undefined && !(Number.isInteger(hand.shieldReserve) && hand.shieldReserve >= 0 && hand.shieldReserve <= 336)) return 'shieldReserve は 0〜336 の整数（shieldReserve=36）';
-  if (hand.onCrossfire !== undefined && !['retreat', 'continue'].includes(hand.onCrossfire)) return 'onCrossfire は retreat か continue（onCrossfire=retreat|continue）';
-  if (hand.pickup !== undefined && !['target_drops', 'none'].includes(hand.pickup)) return 'pickup は target_drops か none（pickup=target_drops|none）';
-  if (hand.area !== undefined) {
-    const area = objectOf(hand.area);
-    if (!area || Object.keys(area).length !== 3 || !rushPos(area.center) || !finite(area.radius) || area.radius <= 0
-      || !Number.isInteger(area.maxDrop) || (area.maxDrop as number) < 0) {
-      return 'area は {center:{x,y,z},radius:正の数,maxDrop:0以上の整数}（短い書き方: area=cx,cy,cz,r,maxDrop）';
-    }
+  if (typeof hand.target !== 'string' || !/^#\d+$/u.test(hand.target)) {
+    return 'shield_rush の target はブレイズ1体の #id（target="#123"）。名前だけは使えない';
   }
-  return null;
+  if (!rushPos(hand.retreatTo)) return 'shield_rush には retreatTo={x,y,z} が要る（短い書き方: retreatTo=x,y,z）';
+  return RUSH_FORMS.find(([holds]) => !holds(hand))?.[1] ?? null;
 }
 
 /** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */
