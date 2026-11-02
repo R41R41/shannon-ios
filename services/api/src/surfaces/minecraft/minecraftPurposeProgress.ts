@@ -2,9 +2,30 @@ import type { PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, doneFacts, validCondition } from './minecraftConditions.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
-import { materialsOf } from './minecraftLlmcRecipes.js';
-import { BODY_SMELTING_INPUT } from './minecraftSmelting.generated.js';
+import { materialsOf, smeltingInputOf } from './minecraftLlmcRecipes.js';
+import { believableDeadline } from './minecraftLlmcStallsSaved.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
+
+/** How much of a recipe part she holds, counting the rawer form it is made from: planks from logs (4 each), sticks from planks (2 each),
+ * a smelted item from its input. Ore dug for an ingot, logs cut for a table: the work toward the part, before the part exists. */
+function heldAs(part: string, counts: ReadonlyMap<string, number>): number {
+  const own = carried(counts, part);
+  if (part === 'planks') return own + 4 * carried(counts, 'log');
+  if (part === 'stick') return own + 2 * (carried(counts, 'planks') + 4 * carried(counts, 'log'));
+  const raw = smeltingInputOf(part);
+  return own + (raw ? carried(counts, raw) : 0);
+}
+/** What one target gives: the item itself, each material it is made of (bounded by the count it needs, so surplus earns nothing), and,
+ * for an item that is only smelted, the input it is smelted from. The keys depend on the target alone, never on what is held. */
+function targetEvidence(target: { item: string; count: number }, counts: ReadonlyMap<string, number>): Record<string, number> {
+  const evidence: Record<string, number> = { [`have:${target.item}`]: Math.min(target.count, carried(counts, target.item)) };
+  for (const part of materialsOf(target.item, target.count, { chain: true, pack: new Map() }).spends) {
+    evidence[`material:${target.item}:${part.item}`] = Math.min(part.count, heldAs(part.item, counts));
+  }
+  const raw = smeltingInputOf(target.item);
+  if (raw) evidence[`material:${target.item}:${raw}`] = Math.min(target.count, carried(counts, raw));
+  return evidence;
+}
 
 /** Objective evidence, never total inventory or distance travelled. Unknown objectives earn no invented credit. */
 export function purposeEvidence(node: PlanNode | undefined, frame: BodyObservation | null): Record<string, number> {
@@ -12,15 +33,7 @@ export function purposeEvidence(node: PlanNode | undefined, frame: BodyObservati
   if (!node || !facts) return evidence;
   const clauses = parseDoneWhen(node.doneWhen)?.flat() ?? [];
   const targets = node.target ? [node.target] : clauses.flatMap(c => c.kind === 'have' ? [{ item: c.item, count: c.count }] : []);
-  for (const target of targets) {
-    evidence[`have:${target.item}`] = Math.min(target.count, carried(facts.counts, target.item));
-    const recipe = materialsOf(target.item, target.count, { chain: true, pack: new Map() });
-    for (const part of recipe.spends) {
-      const raw = BODY_SMELTING_INPUT[part.item];
-      const amount = carried(facts.counts, part.item) + (raw ? carried(facts.counts, raw) : 0);
-      evidence[`material:${target.item}:${part.item}`] = Math.min(part.count, amount);
-    }
-  }
+  for (const target of targets) Object.assign(evidence, targetEvidence(target, facts.counts));
   for (const c of clauses) {
     if (c.kind === 'food') evidence.food = Math.min(c.points, facts.food);
     if (c.kind === 'at' && facts.feet && c.dimension === facts.dimension) {
@@ -80,11 +93,18 @@ export function observedWait(done: unknown, frame: BodyObservation | null): Obse
     remainingMs: job.remainingEstimateMs + 15000 };
 }
 
-/** Persist the first deadline. Repeated stale estimates and a reconnect never renew it. */
+/** The wait a step was in when its checkpoint was written, if the file still holds a believable one (a node and a deadline within two days). */
+export function readActiveWait(saved: unknown): { node: string; until: number } | undefined {
+  const wait = saved as { node?: unknown; until?: unknown } | null | undefined;
+  if (!wait || typeof wait !== 'object' || typeof wait.node !== 'string' || wait.node.length > 64) return undefined;
+  return believableDeadline(wait.until) ? { node: wait.node, until: wait.until } : undefined;
+}
+
+/** Persist the first deadline. Repeated stale estimates and a reconnect never renew it. A saved deadline is read only when it is believable. */
 export function createWaitLedger(saved: unknown) {
   const deadlines: Record<string, number> = Object.create(null);
-  if (saved && typeof saved === 'object') for (const [key, value] of Object.entries(saved)) {
-    if (key.length <= 256 && typeof value === 'number' && Number.isFinite(value)) deadlines[key] = value;
+  if (saved && typeof saved === 'object') for (const [key, value] of Object.entries(saved).slice(0, 128)) {
+    if (key.length <= 256 && believableDeadline(value)) deadlines[key] = value;
   }
   return {
     observeDay(frame: BodyObservation | null): boolean {

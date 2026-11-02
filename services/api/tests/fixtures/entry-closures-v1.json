@@ -908,6 +908,7 @@
     "surfaces/minecraft/minecraftLlmcRuleGuard.ts",
     "surfaces/minecraft/minecraftLlmcShape.ts",
     "surfaces/minecraft/minecraftLlmcStalls.ts",
+    "surfaces/minecraft/minecraftLlmcStallsSaved.ts",
     "surfaces/minecraft/minecraftLlmcStateWords.ts",
     "surfaces/minecraft/minecraftLlmcStopIf.ts",
     "surfaces/minecraft/minecraftLlmcSurfaceLook.ts",
