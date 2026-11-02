@@ -143,6 +143,18 @@ export interface ActHand {
    * digging: it stops and says so).
    */
   hold?: boolean;
+  /** attack: shielded rush at one blaze (#id), then return to retreatTo. */
+  style?: 'shield_rush';
+  /** attack shield_rush: required retreat destination. */
+  retreatTo?: ActPos;
+  /** attack shield_rush: allowed area (default: current footing, radius 4, maxDrop 0). */
+  area?: { center: ActPos; radius: number; maxDrop: number };
+  /** attack shield_rush: retreat at this remaining shield durability (0–336, default 36). */
+  shieldReserve?: number;
+  /** attack shield_rush: crossfire response (default retreat). */
+  onCrossfire?: 'retreat' | 'continue';
+  /** attack shield_rush: collect only the target's drops, or none (default target_drops). */
+  pickup?: 'target_drops' | 'none';
   /** wait: seconds (0.5–30); attack: the most seconds (default 20); go: the most seconds the hand may take (5–120, default 60). */
   seconds?: number;
   /** shoot: seconds to draw (0.2–3, default 1.0: a full bow). */
@@ -177,6 +189,7 @@ export interface ActHand {
    * or runs when health falls under it (1–19).
    */
   stance?: 'fight' | 'flee';
+  /** fight / attack shield_rush: retreat health (1–19; shield_rush default 12, at or below). */
   retreatHp?: number;
   /** portal: the frame's plane runs along x or z. */
   axis?: 'x' | 'z';
@@ -348,9 +361,9 @@ export interface EarlierPass {
 export interface ActHandLine {
   i: number;
   do: HandKind;
-  /** `failed` (r3): the hand failed by itself and the act went on past it (`onFail: 'continue'`); its line is
+  /** shield_rush: killed | retreated | failed | cut; `failed` (r3): the hand failed by itself and the act went on past it (`onFail: 'continue'`); its line is
    * written as a stop's. */
-  status: 'done' | 'stopped' | 'skipped' | 'failed';
+  status: 'done' | 'stopped' | 'skipped' | ShieldRushStatus;
   /**
    * Japanese, at most 160 characters. done: what changed (`(201,45,277)→(205,45,277) 1.2秒`, `丸石×3 を得た`); stopped:
    * the place and the
@@ -380,10 +393,26 @@ export interface ActHandLine {
   end?: HandOutcome['end'];
   cutBy?: HandOutcome['cutBy'];
   code?: string;
-  progress?: HandOutcome['progress'];
+  progress?: HandOutcome['progress'] & ShieldRushProgress;
   delta?: HandOutcome['delta'];
   pass?: number;
   motorOps?: number;
+}
+
+export type ShieldRushStatus = 'killed' | 'retreated' | 'failed' | 'cut';
+export type ShieldRushCode = 'TARGET_LOST' | 'HEIGHT_UNREACHABLE' | 'NO_ATTACK_WINDOW' | 'CROSSFIRE' | 'SHIELD_LOW'
+  | 'RETREAT_BLOCKED' | 'PICKUP_UNSAFE' | 'TIME_LIMIT' | 'REFLEX' | 'DEAD';
+
+/** attack shield_rush: facts carried in the existing progress field. */
+export interface ShieldRushProgress {
+  hits?: number;
+  rodsDelta?: number;
+  hpMin?: number;
+  hpEnd?: number;
+  shieldBefore?: number;
+  shieldAfter?: number;
+  elapsedMs?: number;
+  safe?: boolean;
 }
 
 /** `use` of an ender eye thrown (not put in a frame): which way it flew and how far. */
