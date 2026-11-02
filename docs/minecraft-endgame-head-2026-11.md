@@ -96,9 +96,9 @@ S1・S2 の手の言葉に合わせた（`stronghold` 段を足した）:
 ## 11. 強いモデル（Opus）を使う所（2026-11-02、新しい環境変数なし）
 
 - 最初の計画と立て直し（監督）は、常に計画のモデル（`SHANNON_MINECRAFT_LLMC_PLAN_MODEL`、既定 Opus 5.5）。
-- 判断（1 手ごと）は主モデル（本番の設定。run 55 の記録は Sonnet 5.5）。ただし計画の今の節、またはその上の節の kind が `LLMC_STRONG_KINDS`（今は `stronghold`・`end`・`dragon`）の間は、計画のモデルが決める（`strongStage`、`minecraftLlmcConfiguration.ts`）。計画は checkpoint の `fcaPlanTree` から読むので、再起動の後も同じ。主モデルと計画のモデルが同じ（既定は両方 Opus）なら何も変わらない。失敗が続いた時の引き上げ（`ESCALATE`）が先に効く。
+- 判断（1 手ごと）は主モデル（本番の設定。run 55 の記録は Sonnet 5.5）。ただし計画の今の節、またはその上の節の kind が `LLMC_STRONG_KINDS`（今は `nether`・`fortress`・`blaze`・`pearl`・`stronghold`・`end`・`dragon` = ネザーの奥からエンドまで）の間は、計画のモデルが決める（`strongStage`、`minecraftLlmcConfiguration.ts`）。計画は checkpoint の `fcaPlanTree` から読むので、再起動の後も同じ。主モデルと計画のモデルが同じ（既定は両方 Opus）なら何も変わらない。失敗が続いた時の引き上げ（`ESCALATE`）が先に効く。
 - 本番が主 Sonnet・計画 Opus のままなら、api.env の変更は要らない。
-- **この集合は暫定**。場面再生（Sonnet と Opus の正しさと 1 判断の秒、費用）で決める。実 LLM を使うので API キーの供給待ち（`scripts/minecraft-llmc-endgame-scene.ts --models=sonnet,opus`、立て直しは `scripts/minecraft-llmc-stall-replay.ts`）。
+- ライ氏の許可（11/2: 迷ったら Opus 側）で、エンドまでの道は全部 Opus に倒した。**この集合は場面再生（Sonnet と Opus の正しさと 1 判断の秒、費用）で絞れる**が、エンドまでを急ぐので比べは後回し。実 LLM を使うので API キーの供給待ち（`scripts/minecraft-llmc-endgame-scene.ts --models=sonnet,opus`、立て直しは `scripts/minecraft-llmc-stall-replay.ts`）。
 - 費用の見込み: 切り替えた節の間は Opus の接頭辞のキャッシュ（1 時間）を使い、節が変わる度に書き込みが 1 回（約 $0.1〜0.2）。判断 1 回の単価は Sonnet の約 2 倍。
 
 ## 9. 確かめたこと・未確認

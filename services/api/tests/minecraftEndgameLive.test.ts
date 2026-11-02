@@ -8,7 +8,8 @@ import { llmcTransient } from '../src/surfaces/minecraft/minecraftLlmcBody.js';
 import { createLlmcEvents } from '../src/surfaces/minecraft/minecraftLlmcEvents.js';
 import { stagesFor } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 
-const frame = (world: object, end?: object): BodyObservation => ({ connected: true, state: { world, ...(end ? { end } : {}) }, facts: {}, bodyId: 'b', sequence: 1,
+/** A frame; the End fight, when given, sits directly in the world as the body sends it. */
+const frame = (world: object, fight?: object): BodyObservation => ({ connected: true, state: { world: { ...world, ...fight } }, facts: {}, bodyId: 'b', sequence: 1,
   stateAt: new Date(0).toISOString() }) as unknown as BodyObservation;
 const dragon = seedPlan('エンドラを討伐して')!;
 const parts = (tree = dragon): LlmcBodyParts => ({ plan: () => undefined, planView: () => null, planTree: () => tree, endgame: createEndgame(null) });
@@ -16,8 +17,8 @@ const parts = (tree = dragon): LlmcBodyParts => ({ plan: () => undefined, planVi
 const fight = frame({ dimension: 'the_end', position: { x: 90, y: 49, z: 0 }, health: 20, food: 20, inventory: [{ name: 'bow', count: 1 }, { name: 'arrow', count: 40 }],
   lastDeath: '2分前 the_end (10,60,10) 「void」 落とした物: iron_sword×1。消えるまで最長約5分→拾いに戻れる', deaths: [{ dimension: 'the_end' }],
   rememberedPlaces: { nether_portal: '3000m 北 (1,2,3)' } },
-{ dragon: { id: 7, health: 188, phase: 0, phaseName: 'holding_pattern', phaseFor: 4, perched: false, at: { x: 10, y: 80, z: 20 }, yaw: 0, head: null, headReach: null,
-  strike: false }, fountain: { x: 0.5, y: 68, z: 0.5 }, crystals: { remaining: 9, gone: 1, caged: 2, unseen: [], list: [] }, clouds: [], fireballs: 0 });
+{ dragon: { id: 7, health: 188, phase: 0, phaseName: 'holding_pattern', phaseFor: 4, perched: false, position: { x: 10, y: 80, z: 20 }, yaw: 0, distance: 52, headReach: null,
+  strike: false }, perch: { x: 0.5, y: 68, z: 0.5 }, crystals: { remaining: 9, gone: 1, caged: 2, unseen: [], list: [] }, dragonBreath: [], dragonFireballs: 0 });
 
 describe('the way to the dragon in the live state', () => {
   it('puts the dragon, the crystals and the last death in the facts of the normal and the urgent version, and the places only in the normal one', () => {

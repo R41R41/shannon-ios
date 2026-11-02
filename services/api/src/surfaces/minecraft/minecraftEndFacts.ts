@@ -43,7 +43,7 @@ export function dragonLine(end: EndView | null): string | null {
   const dragon = end?.dragon;
   if (!dragon) return null;
   const far = dragon.distance === null ? '' : ` 自分から ${metres(dragon.distance)}`;
-  const where = place(dragon.head) ? `頭 ${place(dragon.head)}` : place(dragon.at) ? `位置 ${place(dragon.at)}${far}` : '';
+  const where = place(dragon.headPosition) ? `頭 ${place(dragon.headPosition)}` : place(dragon.position) ? `位置 ${place(dragon.position)}${far}` : '';
   const parts = [dragon.health === null ? '' : `体力 ${tenth(dragon.health)}/200`, stateWords(dragon), where, reachWords(dragon),
     dragon.id === null ? '' : `#${dragon.id}`].filter(Boolean);
   return parts.length ? `竜: ${parts.join('・')}` : null;
@@ -52,7 +52,8 @@ export function dragonLine(end: EndView | null): string | null {
 function crystalWords(crystal: EndCrystal): string {
   const blast = crystal.blast === null ? '' : `壊すと爆発（今の立ち位置で体力 −${round(crystal.blast)} の見込み）`;
   const tags = [crystal.caged === true ? '檻つき' : '', crystal.healing ? '竜を回復中' : '', blast].filter(Boolean);
-  return `${crystal.id === null ? '' : `#${crystal.id} `}${place(crystal.at)} ${metres(crystal.dist)}${tags.length ? ` ${tags.join('・')}` : ''}`.trim();
+  const name = crystal.id === null ? '' : `#${crystal.id} `;
+  return `${name}${place(crystal.position)} ${metres(crystal.distance)}${tags.length ? ` ${tags.join('・')}` : ''}`.trim();
 }
 
 /** 「エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1）。近い順: #12 (x,y,z) 21m・#15 (x,y,z) 34m 檻つき」 from the body's count, else the marks in view. */
@@ -68,13 +69,13 @@ export function crystalLine(end: EndView | null): string | null {
 
 /** A cloud's size in words: the radius the body avoids (it grows with the cloud's age) when it says one, with the cloud's radius now. */
 function cloudWords(cloud: EndCloud): string {
-  const now = cloud.r === null ? '?' : String(round(cloud.r));
-  return cloud.danger === null ? `半径 ${now}` : `避ける半径 ${round(cloud.danger)}（雲の今の半径 ${now}）`;
+  const now = cloud.radius === null ? '?' : String(round(cloud.radius));
+  return cloud.dangerRadius === null ? `半径 ${now}` : `避ける半径 ${round(cloud.dangerRadius)}（雲の今の半径 ${now}）`;
 }
 
 /** The breath clouds the body lists (`dragonBreath`: x, y, z, radius and the radius it counts as dangerous), at most three. */
 export function breathLine(end: EndView | null): string | null {
-  const clouds = (end?.clouds ?? []).slice(0, 3).map(cloud => `(${Math.floor(cloud.x)},${Math.floor(cloud.z)}) ${cloudWords(cloud)}`);
+  const clouds = (end?.breath ?? []).slice(0, 3).map(cloud => `(${Math.floor(cloud.x)},${Math.floor(cloud.z)}) ${cloudWords(cloud)}`);
   return clouds.length ? `竜の息の雲: ${clouds.join('・')}（中で立ち止まらない）` : null;
 }
 
@@ -85,7 +86,7 @@ export function fireballLine(end: EndView | null): string | null {
 
 /** The perch, where the dragon sits (the body's `perch`, else its map mark). */
 export function perchLine(end: EndView | null): string | null {
-  const spot = place(end?.fountain ?? null);
+  const spot = place(end?.perch ?? null);
   return spot ? `止まり木: ${spot}` : null;
 }
 

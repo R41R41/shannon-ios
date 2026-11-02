@@ -328,9 +328,9 @@ describe('the models (owner: chosen after the scene replay, each by the environm
     const main = { name: 'main' } as unknown as FcaModel, escalate = { name: 'up' } as unknown as FcaModel, strong = { name: 'strong' } as unknown as FcaModel;
     const tree = seedPlan('エンドラを討伐して')!, models = { main, escalate: null, strong };
     const on = (kind: string, extra = {}) => ({ fcaPlanTree: { ...tree, current: tree.nodes.find(node => node.kind === kind)!.id }, ...extra });
-    expect([...LLMC_STRONG_KINDS].sort()).toEqual(['dragon', 'end', 'stronghold']);
+    expect([...LLMC_STRONG_KINDS].sort()).toEqual(['blaze', 'dragon', 'end', 'fortress', 'nether', 'pearl', 'stronghold']);
     for (const kind of LLMC_STRONG_KINDS) expect(llmcModelRouter(models, on(kind))).toBe(strong);
-    for (const kind of ['wood', 'iron', 'diamond', 'portal', 'nether', 'fortress', 'blaze', 'pearl', 'bed']) expect(llmcModelRouter(models, on(kind))).toBe(main);
+    for (const kind of ['wood', 'stone_tools', 'iron', 'diamond', 'portal', 'obsidian', 'bed', 'prep_descent']) expect(llmcModelRouter(models, on(kind))).toBe(main);
     // what a restart reads back is the same plan
     expect(llmcModelRouter(models, JSON.parse(JSON.stringify(on('dragon'))))).toBe(strong);
     // a stuck task is raised first, whatever the stage
@@ -356,7 +356,7 @@ describe('the models (owner: chosen after the scene replay, each by the environm
     const main = { name: 'main' } as unknown as FcaModel, strong = { name: 'strong' } as unknown as FcaModel, lines: string[] = [];
     const tree = seedPlan('エンドラを討伐して')!, at = (kind: string) => ({ fcaPlanTree: { ...tree, current: tree.nodes.find(node => node.kind === kind)!.id } });
     llmcModelRouter({ main, escalate: null, strong }, at('end'), line => lines.push(line), 'task-1');
-    llmcModelRouter({ main, escalate: null, strong }, at('blaze'), line => lines.push(line), 'task-1');
+    llmcModelRouter({ main, escalate: null, strong }, at('iron'), line => lines.push(line), 'task-1');
     expect(lines).toEqual(['Shannon Minecraft model strong task=task-1 stage=end']);
     expect(() => llmcModelRouter({ main, escalate: null, strong }, at('end'), () => { throw new Error('log failed'); })).not.toThrow();
   });

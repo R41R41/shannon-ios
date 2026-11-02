@@ -29,8 +29,6 @@ import { sceneVerdict, type SceneCheck } from '../src/surfaces/minecraft/minecra
 import { candidateLive, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 
 type EndScene = LlmcScene & { eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }>;
-  /** The End fight of the scene, in the body's early form (`state.end`; `endViewOf` reads it as it reads the final one in `state.world`). */
-  end?: object;
   /** What the hands of a good decision hold (`minecraftLlmcSceneCheck.ts`); the replay counts the decisions that meet it. */
   check?: SceneCheck };
 const MODELS: Record<string, string> = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' };
@@ -57,7 +55,7 @@ function treeOf(scene: EndScene): PlanTree {
 /** The decision input of a scene on the mode's own path, and the live object the stages are picked from. */
 function inputOf(scene: EndScene): { input: FcaModelInput; live: Record<string, unknown> } {
   const observation = { schemaVersion: 1, bodyId: 'minecraft:scene', sequence: 1, stateAt: new Date(0).toISOString(), receivedAt: new Date(0).toISOString(),
-    connected: true, state: { world: scene.world as never, ...(scene.end ? { end: scene.end } : {}) }, facts: { alive: true } } as unknown as BodyObservation;
+    connected: true, state: { world: scene.world as never }, facts: { alive: true } } as unknown as BodyObservation;
   const tree = treeOf(scene);
   const view = { revision: tree.revision, ...planPath(tree) };
   // The scene's clock is half a minute after its newest throw (the ledger does not read a throw older than 45 minutes).

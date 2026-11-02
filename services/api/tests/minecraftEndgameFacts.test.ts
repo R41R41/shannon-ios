@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { planFromSeeds } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
@@ -9,7 +10,8 @@ import { breathLine, crystalLine, deathLine, dragonLine, endFightLines, fireball
 import { createEyeLedger, flightOf } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 
-const frame = (world: object, end?: object): BodyObservation => ({ connected: true, state: { world, ...(end ? { end } : {}) }, facts: {} }) as unknown as BodyObservation;
+/** A frame; the End fight, when given, sits directly in the world as the body sends it. */
+const frame = (world: object, fight?: object): BodyObservation => ({ connected: true, state: { world: { ...world, ...fight } }, facts: {} }) as unknown as BodyObservation;
 const stack = (name: string, count: number) => ({ name, count });
 const result = (eye: object) => JSON.stringify({ v: 1, ok: true, done: 1, of: 1, lines: [{ i: 1, do: 'use', status: 'done', line: '' }], at: { x: 0, y: 64, z: 0 }, hp: 20,
   food: 20, ms: 100, eye });
@@ -81,76 +83,52 @@ describe('what the work made of the rods and the pearls counts back', () => {
 });
 
 describe('facts of the way to the dragon', () => {
-  /** The shape the body sends (`state.end`, S1's `endObservation`, 2026-11-02). */
-  const end = { dragon: { id: 77, health: 142.4, phase: 6, phaseName: 'sitting_scanning', phaseFor: 2.4, perched: true, at: { x: 2, y: 66, z: 1 }, yaw: 1.2,
-      head: { x: 3, y: 67, z: 6 }, headReach: 4.2, strike: true },
-    fountain: { x: 0.5, y: 68, z: 0.5 },
-    crystals: { remaining: 4, gone: 6, caged: 1, unseen: [{ x: 10, z: 40 }], list: [{ id: 12, x: 40.5, y: 90, z: 5.5, caged: false, dist: 21.2, healing: true, blast: 14.3 },
-      { id: 15, x: -29.5, y: 100, z: 2.5, caged: true, dist: 34 }] },
-    clouds: [{ x: 4.5, y: 65, z: 8.5, r: 6.5 }], fireballs: 2 };
-
-  it('says the dragon, its phase and reach, the crystals, the breath, the fireballs and the perch from state.end', () => {
-    const view = endViewOf(frame({ dimension: 'the_end' }, end));
-    expect(dragonLine(view)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6)・頭の箱まで 4.2m（剣が届く）・#77');
-    expect(crystalLine(view)).toBe('エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
-      + '#12 (40,90,5) 21m 竜を回復中・壊すと爆発（今の立ち位置で体力 −14 の見込み）・#15 (-30,100,2) 34m 檻つき');
-    expect(breathLine(view)).toBe('竜の息の雲: (4,8) 半径 7（中で立ち止まらない）');
-    expect(fireballLine(view)).toBe('火の玉: 2 個が飛んでいる（体の反射が避ける）');
-    expect(perchLine(view)).toBe('止まり木: (0,68,0)');
-    expect(endFightLines(view)).toHaveLength(5);
-  });
-
-  it('reads the same fight from state.world.end (the one place it is to be kept in), and prefers it to state.end', () => {
-    const inWorld = frame({ dimension: 'the_end', end });
-    expect(dragonLine(endViewOf(inWorld))).toContain('体力 142.4/200');
-    expect(crystalsLeft(inWorld)).toBe(4);
-    const both = frame({ dimension: 'the_end', end: { ...end, crystals: { ...end.crystals, remaining: 2 } } }, end);
-    expect(crystalsLeft(both)).toBe(2);
-    expect(crystalsLeft(frame({ dimension: 'the_end', end: { crystals: { remaining: 0 } } }))).toBe(0);
-  });
-
-  /** The body's final form (S1, `status/S1.json` 2026-11-02 20:10): the parts of the fight directly in `state.world`, only in the End. */
-  const direct = { dragon: { id: 77, health: 142.4, phase: 6, phaseName: 'sitting_scanning', phaseFor: 2.4, perched: true, position: { x: 2, y: 66, z: 1 }, yaw: 1.2,
+  /** The shape the body sends (S1's `EndObservation`, the parts of the fight directly in `state.world`; the lab's own captures are in `end-observation.expected.json`). */
+  const end = { dragon: { id: 77, health: 142.4, phase: 6, phaseName: 'sitting_scanning', phaseFor: 2.4, perched: true, position: { x: 2, y: 66, z: 1 }, yaw: 1.2,
       distance: 9.6, headPosition: { x: 3, y: 67, z: 6 }, headReach: 4.2, strike: true },
     crystals: { remaining: 4, gone: 6, caged: 1, unseen: [{ x: 10, z: 40 }], list: [{ id: 12, position: { x: 40.5, y: 90, z: 5.5 }, caged: false, distance: 21.2, healing: true,
       blast: 14.3 }, { id: 15, position: { x: -29.5, y: 100, z: 2.5 }, caged: true, distance: 34 }] },
     perch: { x: 0.5, y: 68, z: 0.5 }, dragonBreath: [{ x: 4.5, y: 65, z: 8.5, radius: 6.5, dangerRadius: 9 }], dragonFireballs: 2 };
 
-  it('reads the final form of the body (the parts directly in state.world) to the same lines, and prefers it to the earlier forms', () => {
-    const view = endViewOf(frame({ dimension: 'the_end', ...direct }));
-    expect(dragonLine(view)).toBe(dragonLine(endViewOf(frame({}, end))));
-    expect(crystalLine(view)).toBe(crystalLine(endViewOf(frame({}, end))));
+  it('says the dragon, its phase and reach, the crystals, the breath, the fireballs and the perch', () => {
+    const view = endViewOf(frame({ dimension: 'the_end' }, end));
+    expect(dragonLine(view)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6)・頭の箱まで 4.2m（剣が届く）・#77');
+    expect(crystalLine(view)).toBe('エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
+      + '#12 (40,90,5) 21m 竜を回復中・壊すと爆発（今の立ち位置で体力 −14 の見込み）・#15 (-30,100,2) 34m 檻つき');
     expect(breathLine(view)).toBe('竜の息の雲: (4,8) 避ける半径 9（雲の今の半径 7）（中で立ち止まらない）');
     expect(fireballLine(view)).toBe('火の玉: 2 個が飛んでいる（体の反射が避ける）');
     expect(perchLine(view)).toBe('止まり木: (0,68,0)');
-    expect(crystalsLeft(frame({ dimension: 'the_end', ...direct }))).toBe(4);
-    expect(crystalsLeft(frame({ dimension: 'the_end', ...direct, crystals: { ...direct.crystals, remaining: 3 }, end }, end))).toBe(3);
+    expect(endFightLines(view)).toHaveLength(5);
+  });
+
+  it('counts the crystals as the body counts them, and reads nothing from the earlier forms of the fight (state.end, state.world.end)', () => {
+    expect(crystalsLeft(frame({ dimension: 'the_end' }, end))).toBe(4);
+    expect(crystalsLeft(frame({ dimension: 'the_end' }, { crystals: { remaining: 0 } }))).toBe(0);
+    expect(crystalsLeft(frame({ dimension: 'the_end', end: { crystals: { remaining: 2 } } }))).toBeNull();
+    expect(crystalsLeft({ connected: true, state: { world: {}, end: { crystals: { remaining: 2 } } }, facts: {} } as unknown as BodyObservation)).toBeNull();
   });
 
   it('says how far a dragon in flight is, and reads a frame whose dragon field is absent (not in view) with the crystals alone', () => {
-    const flying = endViewOf(frame({ dimension: 'the_end', dragon: { id: 77, health: 200, phase: 0, phaseName: 'holding_pattern', phaseFor: 3, perched: false,
+    const flying = endViewOf(frame({ dimension: 'the_end' }, { dragon: { id: 77, health: 200, phase: 0, phaseName: 'holding_pattern', phaseFor: 3, perched: false,
       position: { x: 30.4, y: 90, z: -12.2 }, yaw: 0, distance: 41.6, headReach: null, strike: false }, crystals: { remaining: 10, gone: 0, caged: 0, unseen: [], list: [] },
-    dragonFireballs: 0 }));
+    dragonBreath: [], dragonFireballs: 0 }));
     expect(dragonLine(flying)).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (30,90,-13) 自分から 42m・#77');
-    const unseen = endViewOf(frame({ dimension: 'the_end', crystals: direct.crystals, perch: direct.perch }));
+    expect(crystalLine(flying)).toBe('エンドクリスタル: 残り 10/10');
+    expect(breathLine(flying)).toBeNull();
+    expect(fireballLine(flying)).toBeNull();
+    expect(perchLine(flying)).toBeNull();
+    const unseen = endViewOf(frame({ dimension: 'the_end' }, { crystals: end.crystals, perch: end.perch }));
     expect(dragonLine(unseen)).toBeNull();
     expect(crystalLine(unseen)).toContain('残り 4/10');
     expect(perchLine(unseen)).toBe('止まり木: (0,68,0)');
   });
 
-  it('says how far the head is when a blow does not reach yet, and where a dragon in flight is', () => {
+  it('says how far the head is when a blow does not reach yet', () => {
     const far = endViewOf(frame({}, { ...end, dragon: { ...end.dragon, headReach: 7.4, strike: false } }));
     expect(dragonLine(far)).toContain('頭の箱まで 7.4m（剣は 5m 以内で届く）');
-    const flying = endViewOf(frame({}, { dragon: { id: 77, health: 200, phase: 0, phaseName: 'holding_pattern', phaseFor: 3, perched: false, at: { x: 30.4, y: 90, z: -12.2 },
-      yaw: 0, head: null, headReach: null, strike: false }, fountain: null, crystals: { remaining: 10, gone: 0, caged: 0, unseen: [], list: [] }, clouds: [], fireballs: 0 }));
-    expect(dragonLine(flying)).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (30,90,-13)・#77');
-    expect(crystalLine(flying)).toBe('エンドクリスタル: 残り 10/10');
-    expect(breathLine(flying)).toBeNull();
-    expect(fireballLine(flying)).toBeNull();
-    expect(perchLine(flying)).toBeNull();
   });
 
-  it('reads the older map marks when the body sends no state.end, and says nothing without a dragon', () => {
+  it('reads the older map marks when the body sends no fight fields, and says nothing without a dragon', () => {
     const world = { mapLandmarks: ['! エンダードラゴン (3,80,-4) 北20m・上16 id 77 体力 142/200', '! エンドクリスタル (40,90,5) 東40m id 12',
       'X 止まり木 (0,64,0) 出口ポータルの柱の上'] };
     const view = endViewOf(frame(world));
@@ -172,6 +150,56 @@ describe('facts of the way to the dragon', () => {
     expect(frameLine(world, 5)).toBe('ポータルの枠: 見えている 12 個のうちアイ入り 3・あと 9 個はめる・手持ちのアイ 5 個（4 個足りない）');
     expect(placeLine(world)).toBe('控え（体の記憶、今いる次元）: ポータル 34m 北東 (12,63,-40) ↔nether(1,70,-5)・リスポーン地点 120m 北 (0,64,-120) respawn');
     expect(frameLine({}, 5)).toBeNull();
+  });
+});
+
+/**
+ * The observations the isolated lab made of a real fight (S1, `backend/tests/fixtures/end/observation.expected.json` of the body's branch, copied as it is): the
+ * same file is the body's test of what it sends and the head's test of what it reads. Each is the End fields of `state.world` as `endObservation()` made them.
+ */
+describe('the End fight as the isolated lab made it (S1, 8 situations)', () => {
+  const lab = JSON.parse(readFileSync(new URL('./fixtures/minecraft/end-observation.expected.json', import.meta.url), 'utf8')) as
+    { situations: Array<{ label: string; expected: Record<string, any> }> };
+  const view = (label: string) => endViewOf(frame({ dimension: 'the_end' }, lab.situations.find(situation => situation.label === label)!.expected));
+
+  it('has the eight situations the body\'s test has', () => {
+    expect(lab.situations.map(situation => situation.label)).toEqual(['arrival', 'dragon_flying', 'dragon_perched_out_of_reach', 'dragon_perched_in_reach',
+      'crystals_near_caged_and_open', 'breath_cloud_just_seen', 'breath_cloud_growing', 'fireball_in_flight']);
+  });
+
+  it('reads every situation to a view that keeps the body\'s counts: the crystals, the clouds, the fireballs and whether the dragon is in view', () => {
+    for (const situation of lab.situations) {
+      const seen = endViewOf(frame({ dimension: 'the_end' }, situation.expected));
+      expect(seen, situation.label).not.toBeNull();
+      expect(seen!.crystals.remaining, situation.label).toBe(situation.expected.crystals.remaining);
+      expect(seen!.crystals.list, situation.label).toHaveLength(situation.expected.crystals.list.length);
+      expect(seen!.crystals.unseen, situation.label).toBe(situation.expected.crystals.unseen.length);
+      expect(seen!.breath, situation.label).toHaveLength(situation.expected.dragonBreath.length);
+      expect(seen!.fireballs, situation.label).toBe(situation.expected.dragonFireballs);
+      expect(seen!.dragon !== null, situation.label).toBe('dragon' in situation.expected);
+      expect(crystalsLeft(frame({ dimension: 'the_end' }, situation.expected)), situation.label).toBe(situation.expected.crystals.remaining);
+    }
+  });
+
+  it('says the arrival, the dragon in flight and the dragon on the perch out of reach and in reach', () => {
+    expect(dragonLine(view('arrival'))).toBeNull();
+    expect(crystalLine(view('arrival'))).toBe('エンドクリスタル: 残り 10/10（まだ見ていない台座 10）');
+    expect(perchLine(view('arrival'))).toBeNull();
+    expect(dragonLine(view('dragon_flying'))).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (-39,93,39) 自分から 53m・#53');
+    expect(dragonLine(view('dragon_perched_out_of_reach'))).toBe(
+      '竜: 体力 200/200・止まり木で見回している（phase 6・この phase 0 秒目。矢は効かない）・頭 (-4,67,5)・頭の箱まで 8.4m（剣は 5m 以内で届く）・#53');
+    expect(dragonLine(view('dragon_perched_in_reach'))).toBe(
+      '竜: 体力 200/200・止まり木で見回している（phase 6・この phase 1.4 秒目。矢は効かない）・頭 (-4,67,5)・頭の箱まで 3.4m（剣が届く）・#53');
+    expect(perchLine(view('dragon_perched_in_reach'))).toBe('止まり木: (0,68,0)');
+  });
+
+  it('says the caged and the open crystal with the blast, the breath cloud as it is first seen and as it grows, and the fireball', () => {
+    expect(crystalLine(view('crystals_near_caged_and_open'))).toContain('残り 10/10（檻つき 3）。近い順: #213 (-7,65,6) 8m 檻つき・壊すと爆発（今の立ち位置で体力 −9 の見込み）');
+    expect(breathLine(view('breath_cloud_just_seen'))).toBe('竜の息の雲: (-6,11) 避ける半径 7（雲の今の半径 7）（中で立ち止まらない）');
+    expect(breathLine(view('breath_cloud_growing'))).toBe('竜の息の雲: (-6,11) 避ける半径 7（雲の今の半径 3）（中で立ち止まらない）');
+    expect(breathLine(view('fireball_in_flight'))).toBeNull();
+    expect(fireballLine(view('fireball_in_flight'))).toBe('火の玉: 1 個が飛んでいる（体の反射が避ける）');
+    expect(fireballLine(view('dragon_flying'))).toBeNull();
   });
 });
 
