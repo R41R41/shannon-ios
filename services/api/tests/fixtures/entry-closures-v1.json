@@ -1029,7 +1029,6 @@
     "surfaces/stream/streamConversation.ts",
     "surfaces/stream/streamGameTalk.ts",
     "surfaces/stream/streamGate.ts",
-    "surfaces/stream/streamGatedWrite.ts",
     "surfaces/stream/streamLedger.ts",
     "surfaces/stream/streamMeasure.ts",
     "surfaces/stream/streamMouth.ts",

@@ -159,10 +159,7 @@ describe('the gate before writing (contract §4)', () => {
     place.service.ingest(place.streamId, [place.comment('えっちな写真ないの？')]);
     await place.step(100);
     expect(calls.count).toBe(1);
-    // Her answer is written beside the gate (latency plan D); the decline is written after it, and only the decline is said.
-    expect(writerCalls(place)).toHaveLength(2);
-    expect(writerCalls(place)[0]!.request.turnContext).not.toContain('答えられない内容');
-    expect(writerCalls(place).at(-1)!.request.turnContext).toContain('答えられない内容');
+    expect(writerCalls(place)[0]!.request.turnContext).toContain('答えられない内容');
     expect(place.service.stats().declined).toBe(1);
     await said(place);
     expect(place.service.view().comments[0]).toMatchObject({ status: 'declined' });

@@ -52,11 +52,12 @@ const SAME_QUESTION = 0.5;
 const sameThing = (left: CommentRecord, right: CommentRecord): boolean =>
   left.digest === right.digest || (left.question && right.question && similarity(left.text, right.text) >= SAME_QUESTION);
 
-export function chooseComments(ledger: StreamLedger, nowMs: number): ChosenComments | null {
+/** `sinceMs`: a candidate's time counts from then at the earliest (the start of the activity, `StreamProgram.candidatesSince`). */
+export function chooseComments(ledger: StreamLedger, nowMs: number, sinceMs = -Infinity): ChosenComments | null {
   const candidates = ledger.all().filter(record => {
     if (record.status !== 'new' || record.reaction || ledger.isIgnored(record.authorId)) return false;
     const window = PAID_KINDS.has(record.kind) ? STREAM_LIMITS.paidCandidateMilliseconds : STREAM_LIMITS.candidateMilliseconds;
-    return nowMs - record.publishedMs <= window;
+    return nowMs - Math.max(record.publishedMs, sinceMs) <= window;
   });
   if (!candidates.length) return null;
   const scored = candidates.map(record => ({ record, score: commentScore(record, ledger, nowMs) }));

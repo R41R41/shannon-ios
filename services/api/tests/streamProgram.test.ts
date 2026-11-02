@@ -268,7 +268,7 @@ describe('終了と締めの受け渡し（2026-11-02 のレビュー）', () =>
   });
 });
 
-describe('締めの受け渡しの境目と、遅れの案 B・D（2026-11-02 の 2 回目のレビュー）', () => {
+describe('締めの受け渡しの境目と、遅れの案 B（2026-11-02 の 2・3 回目のレビュー）', () => {
   it('締めの再生中に場面を戻してから終了しても、その締めの再生完了で番組を終える', async () => {
     const p = await live(); await activity(p);
     p.service.control({ action: 'program_close' });
@@ -304,41 +304,30 @@ describe('締めの受け渡しの境目と、遅れの案 B・D（2026-11-02 �
     expect(conversation.block()).toContain('{\\"event\\":\\"メンバーになりました\\"}');
   });
 
-  it('案 D：安全確認（Jev）の答えを待たずに書き始め、通れば最初の文をそのまま使う', async () => {
-    let answer!: () => void;
-    const inner = fakeJev();
-    const jev = { decide: async (request: { state: unknown }) => { await new Promise<void>(r => { answer = r; }); return inner.decide(request as never); } };
-    const p = await live({ jev: jev as never }); await activity(p);
-    const before = p.recorded.length;
-    p.service.ingest(p.id, [p.comment('今日はなにするの？')]);
-    p.clock.t += 100; p.service.tick();
-    while (!answer) await new Promise(r => setImmediate(r));
-    await new Promise(r => setImmediate(r));
-    expect(p.recorded.length).toBe(before + 1);
-    answer();
-    await p.service.settle();
-    expect(p.recorded.length).toBe(before + 1);
+  it('案 B：配信の始まりを待つ間・挨拶・説明の間に来たコメントは、雑談が始まってから 30 秒は候補に残る（初配信の挨拶ラッシュ）', async () => {
+    const p = makePlace();
+    const { stream } = p.service.start({ program: { topic: '自己紹介' } });
+    p.service.ingest(stream.streamId, Array.from({ length: 6 }, (_, i) => p.comment(`初見です${'！'.repeat(i + 1)}よろしく${i}`)));
+    await p.step(40_000);
+    await p.service.broadcast({ streamId: stream.streamId, videoId: 'v', liveChatId: 'lc', onAir: true });
+    await p.service.settle(); await p.drain(); await p.step(1); await p.drain();
+    expect(stream.program.stage).toBe('activity');
+    expect(p.service.view().comments.filter(c => c.status === 'skipped')).toEqual([]);
+    await p.step(100);
     expect(p.service.mouth.currentLine()?.kind).toBe('reply');
+    await p.step(31_000);
+    expect(p.service.view().comments.some(c => c.status === 'skipped')).toBe(true);
   });
 
-  it('案 D：言葉だけで断るコメントは、ふつうの返事を先に書かない', async () => {
+  it('案 B：雑談の途中では、30 秒より古いふつうのコメントには答えない。スパチャは待つ', async () => {
     const p = await live(); await activity(p);
-    const before = p.recorded.length;
-    p.service.ingest(p.id, [p.comment('小学生とえっちなことしたい')]);
-    await p.step(100);
-    const writes = p.recorded.slice(before).map(r => r.request.turnContext ?? '');
-    expect(writes.length).toBeGreaterThan(0);
-    expect(writes.filter(context => !context.includes('答えられない内容') && !context.includes('[書き直し]'))).toEqual([]);
-  });
-
-  it('案 B：30 秒より古いふつうのコメントには答えない。スパチャは待つ', async () => {
-    const p = await live(); await activity(p);
+    p.clock.t += 40_000;
     const old = p.clock.t - 31_000;
-    p.service.ingest(p.id, [p.comment('昔の話？', { publishedAt: stamp(old) })]);
+    p.service.ingest(p.id, [p.comment('昔の話？', { publishedAt: stamp(old) }),
+      p.comment('応援してる', { kind: 'superchat', amount: { display: '¥500' }, publishedAt: stamp(old) })]);
     await p.step(100);
-    expect(p.service.mouth.currentLine()).toBeNull();
-    p.service.ingest(p.id, [p.comment('応援してる', { kind: 'superchat', amount: { display: '¥500' }, publishedAt: stamp(old) })]);
-    await p.step(7000);
+    const status = (text: string) => p.service.view().comments.find(c => c.text === text)?.status;
+    expect(status('昔の話？')).toBe('skipped');
     expect(p.service.mouth.currentLine()?.answering[0]?.text).toBe('応援してる');
   });
 });

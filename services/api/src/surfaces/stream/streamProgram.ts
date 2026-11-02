@@ -18,6 +18,7 @@ export class StreamProgram {
   private readonly minutes: number;
   private pending: { id: string; epoch: number; stage: ProgramStage } | null = null;
   private retryAt = 0;
+  private activitySince = 0;
   constructor(input: ProgramInput = {}, title = '') {
     this.view = { stage: 'opening', layout: input.layout ?? 'talk',
       topic: clean(input.topic, 100) || clean(title, 100) || '今日の小さな発見',
@@ -35,6 +36,7 @@ export class StreamProgram {
     this.view.stage = stage;
     this.view.finished = false;
     this.view.activityUntil = stage === 'activity' ? new Date(now + this.minutes * 60_000).toISOString() : null;
+    if (stage === 'activity') this.activitySince = now;
   }
   step(delta: number, now: number): void {
     const index = PROGRAM_STAGES.indexOf(this.view.stage);
@@ -51,6 +53,8 @@ export class StreamProgram {
   expect(id: string, epoch: number): void {
     this.pending = { id, epoch, stage: this.view.stage };
   }
+  /** A comment ages as a candidate only while she answers: what came during the greeting or the explanation counts from the activity's start. */
+  candidatesSince(now: number): number { return this.view.stage === 'activity' ? this.activitySince : now; }
   /** Whether this line's receipt is the one the program waits for. */
   tracks(id: string): boolean { return this.pending?.id === id && this.pending.epoch === this.epoch; }
   ended(id: string, spoken: boolean, now: number): boolean {

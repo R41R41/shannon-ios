@@ -154,13 +154,13 @@ export class StreamLedger {
   /** Reactions of the crowd in the last `windowMs`, for her to feel the room (「草」が流れている). */
   crowdReactions(nowMs: number, windowMs = 30_000): number { return this.reactionTimes.filter(at => nowMs - at <= windowMs).length; }
 
-  /** Comments waiting past their time are given up (`skipped`); returns them. */
-  expire(nowMs: number): CommentRecord[] {
+  /** Comments waiting past their time are given up (`skipped`); returns them. Their time counts from `sinceMs` at the earliest. */
+  expire(nowMs: number, sinceMs = -Infinity): CommentRecord[] {
     const gone: CommentRecord[] = [];
     for (const record of this.records.values()) {
       if (record.status !== 'new') continue;
       const window = PAID_KINDS.has(record.kind) ? STREAM_LIMITS.paidCandidateMilliseconds : STREAM_LIMITS.candidateMilliseconds;
-      if (nowMs - record.publishedMs > window) {
+      if (nowMs - Math.max(record.publishedMs, sinceMs) > window) {
         record.status = 'skipped';
         gone.push(record);
       }

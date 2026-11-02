@@ -4,7 +4,6 @@ import { StreamProgramRunner } from './streamProgramRunner.js';
 import { streamStats, recordSpoken } from './streamStats.js';
 import { StreamProgram } from './streamProgram.js';
 import { StreamConversation } from './streamConversation.js';
-import { gatedWrite } from './streamGatedWrite.js';
 import type { CheckedStreamReply } from '../../mind/emotion/streamFeeling.js';
 import {
   STREAM_LIMITS, STREAM_PLATFORM, StreamError, type IncomingComment, type StreamAnswering,
@@ -295,7 +294,7 @@ export class StreamService {
       const session = this.live();
       if (!session || session.ending) return;
       const now = this.now();
-      this.ledger.expire(now);
+      this.ledger.expire(now, session.program.candidatesSince(now));
       if (session.view.paused || !session.program.view.ready || session.program.view.finished) return;
       if (session.program.view.stage !== 'activity') {
         this.programRunner.schedule(session);
@@ -311,7 +310,7 @@ export class StreamService {
   private maybeAnswer(session: Session, now: number): void {
     if (this.programRunner.busy() || this.replyJob || this.mouth.waitingCount() >= STREAM_LIMITS.waitingLines) return;
     if (now - this.lastChooseMs < STREAM_LIMITS.chooseEveryMilliseconds || !this.budget.available('reply')) return;
-    const pick = chooseComments(this.ledger, now);
+    const pick = chooseComments(this.ledger, now, session.program.candidatesSince(now));
     if (!pick) return;
     // One reply per 6 s; what the safety floor needs (a tell-off) is not made to wait.
     if (!pick.floor && now - this.lastReplyMs < STREAM_LIMITS.replyEveryMilliseconds) return;
@@ -360,19 +359,19 @@ export class StreamService {
     const tellOff = turn.state.viewer?.ladder === 'tell_off' && turn.notice !== null;
     // An event the ear described is no request: there is nothing to read for what it asks.
     const recent = this.recentChat(4).filter(text => text !== primary.text);
-    const comments = group.map(record => this.writerComment(record));
-    const kind: StreamLineKind = tellOff ? 'notice' : 'reply';
-    const write = (decline: boolean) => {
-      const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline };
-      const at = this.now();
-      return this.author.write(this.authorSession(session), turn, purpose, group.map(record => record.commentId), kind)
-        .finally(() => this.measure.note(this.measure.writerMs, this.now() - at));
-    };
     const gateAt = this.now();
-    const gate = () => this.parts.gate.before(primary.text, primary.tags, recent).finally(() => this.measure.note(this.measure.gateMs, this.now() - gateAt));
-    const { written, declined } = await gatedWrite({ event: primary.event, text: primary.text, tellOff, gate, write, track: job => this.track(job) });
-    if (this.stale(session, epoch) || !written) return group.forEach(record => this.give(record, 'new'));
-    this.enqueueReply(group, written, kind, declined);
+    const gate = primary.event ? { declined: false } : await this.parts.gate.before(primary.text, primary.tags, recent);
+    this.measure.note(this.measure.gateMs, this.now() - gateAt);
+    if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
+    const comments = group.map(record => this.writerComment(record));
+    const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline: gate.declined };
+    const kind: StreamLineKind = tellOff ? 'notice' : 'reply';
+    const writerAt = this.now();
+    const written = await this.author.write(this.authorSession(session), turn, purpose, group.map(record => record.commentId), kind);
+    this.measure.note(this.measure.writerMs, this.now() - writerAt);
+    if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
+    if (!written) return group.forEach(record => this.give(record, 'new'));
+    this.enqueueReply(group, written, kind, gate.declined);
   }
 
   private enqueueReply(group: CommentRecord[], written: WrittenLine, kind: StreamLineKind, declined: boolean): void {
@@ -433,7 +432,7 @@ export class StreamService {
     if (now - this.lastLineMs < STREAM_LIMITS.topicAfterMilliseconds || now - this.lastTopicMs < STREAM_LIMITS.topicAfterMilliseconds) return;
     // Only into a silence: nothing is being said or waits, and a comment that could be answered is answered first.
     if (this.mouth.hasCurrent() || this.mouth.waitingCount() > 0 || !this.budget.available('low')) return;
-    if (chooseComments(this.ledger, now)) return;
+    if (chooseComments(this.ledger, now, session.program.candidatesSince(now))) return;
     this.lastTopicMs = now;
     const job = this.talk(session)
       .catch(error => this.log(`Shannon stream topic failed reason=${error instanceof Error ? error.message.slice(0, 80) : 'unknown'}`))

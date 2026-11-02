@@ -161,7 +161,7 @@ The routes answer 503 `STREAM_NOT_CONFIGURED` only where the head was built with
 Every comment goes into `StreamFeeling.comment` at once (closed tags and digest). The chooser runs whenever her mouth has room
 (nothing in flight and fewer than 2 waiting) and at most once per 2 s:
 
-- Candidates: comments not older than 30 s (90 s until 2026-11-02, latency plan B; a superchat, supersticker, membership or gift is waited for up to 4 min), not from an ignored viewer,
+- Candidates: comments not older than 30 s, counted from the start of the program's activity for what came during the greeting and the explanation (90 s until 2026-11-02, latency plan B; a superchat, supersticker, membership or gift is waited for up to 4 min), not from an ignored viewer,
   not answered.
 - Score: addressed by name (シャノン/しゃのん/Shannon) +3, a question +2, a viewer's first comment of the stream +2, a superchat or
   membership +4 (always answered unless gated), owner or moderator role +1, a viewer answered in the last 60 s −3, very short
@@ -178,9 +178,6 @@ Every comment goes into `StreamFeeling.comment` at once (closed tags and digest)
    category and tier, with the stream's wording) on surface `youtube_stream`. `neverByWords` first. Tier `private_only` or `never`, or category
    `UNSUPPORTED_OR_BLOCKED`: the comment is not answered as asked; the writer is told to decline lightly and change the subject (counted as
    `declined`). Without Jev (`TYPESAFE_API_KEY` unset or a timeout): `fallbackJudgement` plus the writer's own rules.
-   Since 2026-11-02 (latency plan D, `streamGatedWrite.ts`) her answer is written while Jev reads the comment; when the gate declines, the
-   decline is written at once and the first draft is never said (one more writer call for a declined comment). A comment `neverByWords`
-   declines, a tell-off and an event are written once, as before. Only what the gate allowed or the decline becomes a line.
 2. **After writing** — `checkStreamReply(turn, draft)` with the turn's check context (`audience: 'stream'`, `audienceChecks: true`). Flags →
    one rewrite with `rewriteNote`; flags again → a guard flag drops the line, anything else falls back to a short safe line of the ladder's step.
    Only a `CheckedStreamReply` becomes a line.
