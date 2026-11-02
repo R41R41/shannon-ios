@@ -1,5 +1,5 @@
 import type { CutBy, Handover, ItemOutcome, Progress } from '../../contracts/continueContract.js';
-import { readActResult, type ActHandLine, type ActResult, type ShieldRushCode } from '../../contracts/minecraftActContract.js';
+import { readActResult, type ActHandLine, type ActResult } from '../../contracts/minecraftActContract.js';
 
 /**
  * The words of a result that the contract's two axes make possible (continue contract 1 and 2; chapter 8's 再開):
@@ -19,44 +19,6 @@ const UNIT_WORDS: Readonly<Record<Progress['unit'], string>> = { step: '段', bl
 /** A number to one decimal without a trailing `.0` (35.9, 27.5, 10). */
 const num = (value: number): string => String(Math.round(value * 10) / 10);
 const at = (cell: { x: number; y: number; z: number }) => cell && typeof cell === 'object' ? `(${cell.x},${cell.y},${cell.z})` : String(cell);
-
-/** Closed body facts, never a prescription for the next hand. */
-export const SHIELD_RUSH_CODE_WORDS: Readonly<Record<ShieldRushCode, string>> = {
-  TARGET_LOST: '相手を見失った',
-  HEIGHT_UNREACHABLE: '高さの差で届かなかった',
-  NO_ATTACK_WINDOW: '打てる機会が無かった',
-  CROSSFIRE: '複数方向から射撃を受けた',
-  SHIELD_LOW: '盾の耐久の残りが下限以下になった',
-  RETREAT_BLOCKED: '退避先へ戻れなかった',
-  PICKUP_UNSAFE: '安全に拾えなかった',
-  TIME_LIMIT: '秒数の上限に達した',
-  REFLEX: '体の反射が手を止めた',
-  DEAD: '死んだ',
-};
-
-/** No new line fields: the body names the rush/target in line, its outcome in status/code and its counts in progress. */
-export function shieldRushWords(line: ActHandLine): string[] {
-  const code = line.code && Object.hasOwn(SHIELD_RUSH_CODE_WORDS, line.code) ? line.code as ShieldRushCode : null;
-  if (line.do !== 'attack' || !(code || ['killed', 'retreated', 'cut'].includes(line.status) || /\bshield_rush\b/u.test(line.line))) return [];
-  const target = /#\d+\b/u.exec(line.line)?.[0];
-  const first = `shield_rush${target ? ` ${target}` : ''}: ${line.status}${line.code ? `（${line.code}）` : ''}`
-    + `${code ? ` ${SHIELD_RUSH_CODE_WORDS[code]}` : line.status === 'killed' ? ' 相手の死を観測した' : ''}`;
-  const p = line.progress, facts: string[] = [];
-  const known = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-  if (known(p?.shieldBefore) && known(p?.shieldAfter)) facts.push(`盾 ${num(p.shieldBefore)}→${num(p.shieldAfter)}`);
-  else {
-    if (known(p?.shieldBefore)) facts.push(`盾の開始時 ${num(p.shieldBefore)}`);
-    if (known(p?.shieldAfter)) facts.push(`盾の終了時 ${num(p.shieldAfter)}`);
-  }
-  if (known(p?.hpMin)) facts.push(`体力最低 ${num(p.hpMin)}`);
-  if (known(p?.hpEnd)) facts.push(`終了体力 ${num(p.hpEnd)}`);
-  if (known(p?.hits)) facts.push(`${num(p.hits)} 回打った`);
-  if (known(p?.rodsDelta)) facts.push(`ロッド増減 ${p.rodsDelta >= 0 ? '+' : ''}${num(p.rodsDelta)}`);
-  if (known(p?.elapsedMs)) facts.push(`経過 ${num(p.elapsedMs)} ms`);
-  if (p?.at && [p.at.x, p.at.y, p.at.z].every(known)) facts.push(`終了地点 ${at(p.at)}`);
-  if (typeof p?.safe === 'boolean') facts.push(p.safe ? '終了地点は安全' : '終了地点は安全ではない');
-  return facts.length ? [first, facts.join('・')] : [first];
-}
 
 /** The last path search of a go, as the model reads it: found, partial, timed out (with the cells round the goal
  * that nothing can pass), none. */
@@ -162,8 +124,6 @@ export function verticalStopWords(line: ActHandLine): string {
 /** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain
  * failure adds none). */
 export function handFacts(line: ActHandLine): string[] {
-  const rush = shieldRushWords(line);
-  if (rush.length) return rush.map(text => `${FACT}${text}`);
   const out: string[] = [];
   const cutBy = line.cutBy ? CUT_WORDS[line.cutBy] : '';
   const noteGoal = () => {

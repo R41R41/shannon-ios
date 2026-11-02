@@ -79,13 +79,6 @@ function fightWords(hand: ActHand): Words {
   return [hand.target, ...(hand.stance === 'flee' ? ['flee'] : given('stance', hand.stance)), ...given('item', hand.item),
     ...given('retreatHp', hand.retreatHp),    ...given('range', hand.range), ...given('seconds', hand.seconds)];
 }
-function attackWords(hand: ActHand): Words {
-  if (!hand.target) return null;
-  return [hand.target, ...given('style', hand.style), ...(hand.retreatTo ? [`retreatTo=${pos(hand.retreatTo)}`] : []),
-    ...flag(hand.hold, 'hold'), ...given('seconds', hand.seconds), ...given('untilDead', hand.untilDead),
-    ...given('retreatHp', hand.retreatHp), ...given('shieldReserve', hand.shieldReserve), ...given('onCrossfire', hand.onCrossfire),
-    ...given('pickup', hand.pickup), ...(hand.area ? [`area=${pos(hand.area.center)},${hand.area.radius},${hand.area.maxDrop}`] : [])];
-}
 /** smelt: one kind of input in a line (several kinds are a json line). */
 function smeltWords(hand: ActHand): Words {
   const only = hand.items?.length === 1 && hand.items[0]!.count !== undefined ? hand.items[0]! : null;
@@ -137,7 +130,8 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
     ? [hand.items[0]!.item, ...(hand.items[0]!.count !== undefined ? [String(hand.items[0]!.count)] : []), ...given('target', hand.target),
       ...(hand.at?.length ? [pos(hand.at[0]!)] : [])] : null,
   look: hand => hand.to ? [pos(hand.to)] : hand.yaw !== undefined && hand.pitch !== undefined ? [`yaw=${hand.yaw}`, `pitch=${hand.pitch}`] : null,
-  attack: attackWords,
+  attack: hand => hand.target
+    ? [hand.target, ...flag(hand.hold, 'hold'), ...given('seconds', hand.seconds), ...given('untilDead', hand.untilDead)] : null,
   use: hand => hand.item && (hand.at?.length ?? 0) <= 1
     ? [hand.item, ...(hand.at?.length ? [pos(hand.at[0]!)] : []), ...given('face', hand.face), ...given('target', hand.target)] : null,
 };
@@ -199,24 +193,6 @@ function furnaceHand({ cells, words, hand }: Read): ActHand | { error: string } 
 /** The names of vertical's fields written with `=` (a word of these in the place of the compass word is a field
  * written without it). */
 const VERTICAL_FIELDS: ReadonlySet<string> = new Set(['maxDig', 'maxPlace', 'seconds', 'range', 'dig', 'place', 'liquid', 'y']);
-function attackHand({ words, cells, hand }: Read): ActHand | { error: string } {
-  if (!words[0]) return bad('attack', '相手が要る');
-  if (hand.style !== undefined && (words.length !== 1 || cells.length)) return bad('attack', 'attack #id style=shield_rush retreatTo=x,y,z の形で書く');
-  if (hand.retreatTo !== undefined) {
-    const cell = typeof hand.retreatTo === 'string' ? readPos(hand.retreatTo) : null;
-    if (!cell) return bad('attack', 'retreatTo=x,y,z の形で書く');
-    hand.retreatTo = cell;
-  }
-  if (hand.area !== undefined) {
-    const parts = typeof hand.area === 'string' ? hand.area.split(',') : [];
-    const center = readPos(parts.slice(0, 3).join(','));
-    if (parts.length !== 5 || !center || parts.slice(3).some(part => !part.trim() || !Number.isFinite(Number(part)))) {
-      return bad('attack', 'area=cx,cy,cz,r,maxDrop の形で書く');
-    }
-    hand.area = { center, radius: Number(parts[3]), maxDrop: Number(parts[4]) };
-  }
-  return done({ ...hand, target: words[0] });
-}
 const READERS: Record<string, Reader> = {
   chest: chestHand, furnace: furnaceHand,
   obsidian: ({ cells, hand }) => cells.length ? done(blocksOf({ ...hand, at: cells })) : bad('obsidian', '溶岩の源の座標が要る'),
@@ -283,7 +259,7 @@ const READERS: Record<string, Reader> = {
     ? done({ ...hand, items: [{ item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }], ...(cells.length ? { at: [cells[0]] } : {}) })
     : bad('drop', '物の名前が要る（座標は 1 つまで）'),
   look: ({ cells, hand }) => done(cells.length ? { ...hand, to: cells[0] } : hand),
-  attack: attackHand,
+  attack: ({ words, hand }) => words[0] ? done({ ...hand, target: words[0] }) : bad('attack', '相手が要る'),
   // The bow at an entity or at one cell (the crystals of the End; 2026-11-02, the first real replay: Sonnet wrote it as a line and was turned away).
   shoot: ({ cells, words, hand }) => {
     const target = words[0] ?? hand.target;

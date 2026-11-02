@@ -22,7 +22,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   craft: { needs: [['item']], may: ['count'] },
   furnace: { needs: [['at'], ['op']], may: ['item', 'count', 'fuel', 'fuelCount'] },
   chest: { needs: [['at'], ['op']], may: ['items'] },
-  attack: { needs: [['target']], may: ['untilDead', 'seconds', 'hold', 'style', 'retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] },
+  attack: { needs: [['target']], may: ['untilDead', 'seconds', 'hold'] },
   shoot: { needs: [['target', 'at']], may: ['item', 'charge', 'n'] },
   eat: { needs: [], may: ['item'] },
   drop: { needs: [['items']], may: ['target', 'at'] },
@@ -82,7 +82,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : null,
   chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : null,
   wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
-  attack: attackProblem,
+  attack: hand => hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null,
   go: goProblem,
   obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
   fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null),
@@ -94,60 +94,6 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   smelt: hand => seconds(hand, 5, 60) ?? (hand.items!.length < 1 || hand.items!.length > 4 ? 'items は 1〜4 種類' : null)
     ?? (hand.items!.some(entry => entry.count === undefined) ? 'items には個数が要る' : null) ?? (hand.at !== undefined && hand.at.length > 4 ? 'at は 4 つまで' : null),
 };
-const RUSH_FIELDS = ['retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] as const;
-const objectOf = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-const rushPos = (value: unknown): boolean => {
-  const cell = objectOf(value);
-  return !!cell && Object.keys(cell).length === 3 && ['x', 'y', 'z'].every(key => finite(cell[key]));
-};
-
-/** Shield rush fields are checked before the broad schema too, so each refusal gives the form to write. */
-export function shieldRushHandProblem(hand: ActHand): string | null {
-  if (hand.do !== 'attack') return null;
-  if (hand.style === undefined) {
-    const field = RUSH_FIELDS.find(key => hand[key] !== undefined);
-    return field ? `${field} は style=shield_rush の attack だけ（style=shield_rush retreatTo=x,y,z）` : null;
-  }
-  if (hand.style !== 'shield_rush') return 'style は shield_rush だけ（style=shield_rush）';
-  if (typeof hand.target !== 'string' || !/^#\d+$/u.test(hand.target)) return 'shield_rush の target はブレイズ1体の #id（target="#123"）。名前だけは使えない';
-  if (!rushPos(hand.retreatTo)) return 'shield_rush には retreatTo={x,y,z} が要る（短い書き方: retreatTo=x,y,z）';
-  if (hand.seconds !== undefined && !(finite(hand.seconds) && hand.seconds >= 0.5 && hand.seconds <= 30)) return 'seconds は 0.5〜30 の数（seconds=20）';
-  if (hand.retreatHp !== undefined && !(Number.isInteger(hand.retreatHp) && hand.retreatHp >= 1 && hand.retreatHp <= 19)) return 'retreatHp は 1〜19 の整数（retreatHp=12）';
-  if (hand.shieldReserve !== undefined && !(Number.isInteger(hand.shieldReserve) && hand.shieldReserve >= 0 && hand.shieldReserve <= 336)) return 'shieldReserve は 0〜336 の整数（shieldReserve=36）';
-  if (hand.onCrossfire !== undefined && !['retreat', 'continue'].includes(hand.onCrossfire)) return 'onCrossfire は retreat か continue（onCrossfire=retreat|continue）';
-  if (hand.pickup !== undefined && !['target_drops', 'none'].includes(hand.pickup)) return 'pickup は target_drops か none（pickup=target_drops|none）';
-  if (hand.area !== undefined) {
-    const area = objectOf(hand.area);
-    if (!area || Object.keys(area).length !== 3 || !rushPos(area.center) || !finite(area.radius) || area.radius <= 0
-      || !Number.isInteger(area.maxDrop) || (area.maxDrop as number) < 0) {
-      return 'area は {center:{x,y,z},radius:正の数,maxDrop:0以上の整数}（短い書き方: area=cx,cy,cz,r,maxDrop）';
-    }
-  }
-  return null;
-}
-
-/** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */
-export function shieldRushActProblem(input: unknown): string | null {
-  const act = objectOf(input), hands = act?.hands;
-  if (!Array.isArray(hands)) return null;
-  for (const [index, raw] of hands.entries()) {
-    const hand = objectOf(raw);
-    if (!hand) continue;
-    const problem = shieldRushHandProblem(hand as unknown as ActHand);
-    if (problem) return `手${index + 1}（${String(hand.do)}）: ${problem}`;
-  }
-  if (hands.some(raw => objectOf(raw)?.style === 'shield_rush') &&
-    !(Array.isArray(act?.accept) && act.accept.length === 1 && act.accept[0] === 'blaze')) {
-    return 'shield_rush を含む act の accept は ["blaze"] が要る（ほかの種類を含めない）';
-  }
-  return null;
-}
-
-function attackProblem(hand: ActHand): string | null {
-  return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null);
-}
 /** A hand's `seconds` within a kind's own range. */
 const seconds = (hand: ActHand, least: number, most: number): string | null =>
   hand.seconds !== undefined && (hand.seconds < least || hand.seconds > most) ? `seconds は ${least}〜${most}` : null;

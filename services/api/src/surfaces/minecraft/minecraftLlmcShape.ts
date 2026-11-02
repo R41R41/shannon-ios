@@ -71,9 +71,7 @@ export function normalizeActInput(input: unknown): { input: unknown; fixes: stri
   if (!act) return { input, fixes: [] };
   const fixes: string[] = [];
   let spelled = false;
-  const hands = Array.isArray(act.hands) ? act.hands : [act.hands];
-  const rush = hands.some(value => plainRecord(value)?.style === 'shield_rush');
-  const out = applyFixes(act, rush ? ACT_FIXES.filter(fix => fix.key !== 'accept') : ACT_FIXES, fixes, '');
+  const out = applyFixes(act, ACT_FIXES, fixes, '');
   const stopIf = plainRecord(out.stopIf);
   if (stopIf) out.stopIf = applyFixes(stopIf, [listOf('blockChanged', isPos)], fixes, 'stopIf');
   if (Array.isArray(out.hands)) {
@@ -86,7 +84,7 @@ export function normalizeActInput(input: unknown): { input: unknown; fixes: stri
       if (typeof fixed.slot === 'string' && slotWordOf(fixed.slot) !== fixed.slot) { fixed.slot = slotWordOf(fixed.slot);
         spelled = true; }
       moveWhy(out, fixed, `手${index + 1}`, fixes);
-      return applyFixes(fixed, fixed.style === 'shield_rush' ? HAND_FIXES.filter(fix => fix.key !== 'target') : HAND_FIXES, fixes, `手${index + 1}`);
+      return applyFixes(fixed, HAND_FIXES, fixes, `手${index + 1}`);
     });
   }
   return { input: fixes.length || spelled ? out : input, fixes };

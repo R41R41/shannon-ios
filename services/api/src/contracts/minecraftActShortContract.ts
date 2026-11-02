@@ -118,7 +118,6 @@ const SHORT_LINES = [
   'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
-  'attack #id style=shield_rush retreatTo=x,y,z [seconds=N] [retreatHp=N] [shieldReserve=N] [onCrossfire=retreat|continue] [pickup=none] [area=cx,cy,cz,r,maxDrop]（ブレイズ専用・act の accept=["blaze"]）',
   'pickup [range=N] [target=..]',
   ("chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 " +
 "iron_ingot）"),
@@ -139,7 +138,7 @@ const SHORT_LINES = [
     + ("dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: " +
 "item・at（1つ）・face・target"),
   ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
-"target・untilDead・seconds・hold（shield_rush は上の欄も） / eat: item"),
+"target・untilDead・seconds・hold / eat: item"),
   ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +
 "at（1つ）・op・items"),
   '- drop: items・target か at / shoot: target か at・item・charge・n',
@@ -282,8 +281,7 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
   if (typeof value.why === 'string') act.why = value.why;
   if (typeof value.stopIf === 'string') act.stopIf = stopIfOf(value.stopIf, errors);
   else if (value.stopIf && typeof value.stopIf === 'object') act.stopIf = value.stopIf;
-  if (Array.isArray(value.accept)) act.accept = (act.hands as ActHand[]).some(hand => hand.style === 'shield_rush')
-    ? value.accept : value.accept.filter(item => typeof item === 'string');
+  if (Array.isArray(value.accept)) act.accept = value.accept.filter(item => typeof item === 'string');
   return { act: { ...act, ...queued } as unknown as ActInput, errors };
 }
 
