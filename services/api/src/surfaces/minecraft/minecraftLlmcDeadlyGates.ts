@@ -10,7 +10,7 @@ import { lackOfTable, readinessOf } from './minecraftLlmcReadiness.js';
  * goes in is held, as the portal hand is, while what the place needs is missing, and the line names what is missing and what going on costs. How
  * to gather it is the decision's. Two places:
  * - the blaze spawner (the Nether): a fight or an attack on a blaze when none is within 16 m (the hand that begins it), and a go or a walk that ends
- *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, 150 food points carried, a shield (the loads S2 measured carried one).
+ *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, 150 food points carried, a shield (S2's loads carried one).
  * - the End: a walk that ends in an end portal cell (`e`): blocks to stand and cover on, the water bucket, four beds, 80 food points
  *   (`BEFORE_END`).
  * The body's own version (S2's) is not read: the frame has no field for it.
