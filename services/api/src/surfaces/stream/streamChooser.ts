@@ -61,7 +61,7 @@ export function chooseComments(ledger: StreamLedger, nowMs: number): ChosenComme
   if (!candidates.length) return null;
   const scored = candidates.map(record => ({ record, score: commentScore(record, ledger, nowMs) }));
   // Highest first; among equals the newest: when more is said than she can answer, the comments she does answer are the fresh ones, and the
-  // old ones lapse (90 s) instead of every answer coming late.
+  // old ones lapse (30 s) instead of every answer coming late.
   scored.sort((a, b) => b.score - a.score || b.record.publishedMs - a.record.publishedMs);
   const best = scored[0]!;
   const group = [best.record];

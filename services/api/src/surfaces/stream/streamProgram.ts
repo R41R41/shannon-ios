@@ -51,6 +51,8 @@ export class StreamProgram {
   expect(id: string, epoch: number): void {
     this.pending = { id, epoch, stage: this.view.stage };
   }
+  /** Whether this line's receipt is the one the program waits for. */
+  tracks(id: string): boolean { return this.pending?.id === id && this.pending.epoch === this.epoch; }
   ended(id: string, spoken: boolean, now: number): boolean {
     const pending = this.pending;
     if (!pending || pending.id !== id || pending.epoch !== this.epoch) return false;

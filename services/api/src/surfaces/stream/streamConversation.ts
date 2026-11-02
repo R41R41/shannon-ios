@@ -3,7 +3,15 @@ import type { MouthLine } from './streamMouth.js';
  * マイクラ実況の一言は「さっき言ったこと」に残るので、ここには入れない（頻繁な実況で視聴者との会話が押し出されないように）。 */
 export class StreamConversation {
   private turns: { comments: string[]; reply: string }[] = [];
-  spoken(line: MouthLine, declined: boolean, events: ReadonlySet<string> = new Set()): void {
+  /** 行を口に入れた時点の区別（断った・出来事）。記録から消えたコメントでも、話し終えた時に同じ区別で残す。 */
+  private readonly marks = new Map<string, { declined: boolean; events: ReadonlySet<string> }>();
+  mark(lineId: string, declined: boolean, eventIds: readonly string[]): void {
+    this.marks.set(lineId, { declined, events: new Set(eventIds) });
+    if (this.marks.size > 50) this.marks.delete(this.marks.keys().next().value!);
+  }
+  spoken(line: MouthLine): void {
+    const { declined, events } = this.marks.get(line.id) ?? { declined: false, events: new Set<string>() };
+    this.marks.delete(line.id);
     if (line.kind === 'notice' || line.kind === 'closing' || line.kind === 'commentary') return;
     const comments = declined ? ['公の配信で答えられない依頼を断った（原文は保持しない）']
       : line.answering.map(c => JSON.stringify(events.has(c.commentId) ? { event: c.text } : { name: c.authorName, text: c.text }));
@@ -21,5 +29,8 @@ export class StreamConversation {
       '質問を受けただけでは、視聴者自身の好みや体験を聞いたことにはならない。締めの振り返りも、実際に届いたコメントと再生済みの発言だけを根拠にする。',
     ].join('\n');
   }
-  clear(): void { this.turns = []; }
+  clear(): void {
+    this.turns = [];
+    this.marks.clear();
+  }
 }

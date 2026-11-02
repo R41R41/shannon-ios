@@ -4,6 +4,7 @@ import { StreamProgramRunner } from './streamProgramRunner.js';
 import { streamStats, recordSpoken } from './streamStats.js';
 import { StreamProgram } from './streamProgram.js';
 import { StreamConversation } from './streamConversation.js';
+import { gatedWrite } from './streamGatedWrite.js';
 import type { CheckedStreamReply } from '../../mind/emotion/streamFeeling.js';
 import {
   STREAM_LIMITS, STREAM_PLATFORM, StreamError, type IncomingComment, type StreamAnswering,
@@ -166,18 +167,20 @@ export class StreamService {
     const streamId = session.view.streamId;
     session.view.paused = true;
     this.commentary?.stop();
-    const closingInMouth = this.mouth.holds('closing');
+    // A closing already in her mouth is the one that ends the program: its spoken receipt finishes it after the end too, even when the
+    // program was moved back while it was being said.
+    const closing = [this.mouth.currentLine(), ...this.mouth.waitingLines()].find(line => line?.kind === 'closing') ?? null;
     const finished = session.program.view.finished;
-    // A closing already in her mouth keeps its pending receipt, so that its spoken receipt still finishes the program after the end.
-    if (!closingInMouth) session.program.move('closing', this.now());
+    if (!closing || !session.program.tracks(closing.id)) session.program.move('closing', this.now());
+    if (closing) session.program.expect(closing.id, session.program.epoch);
     session.program.view.layout = 'ending';
     session.program.view.finished = finished;
-    if (!closingInMouth) {
+    if (!closing) {
       this.mouth.clearWaiting();
-      if (session.program.view.ready && !finished) await this.programRunner.closing(session, {
-        comments: this.ledger.count(), answered: this.counters.answered,
-        minutes: Math.max(1, Math.round((this.now() - session.startedMs) / 60_000)),
-      });
+      const minutes = Math.max(1, Math.round((this.now() - session.startedMs) / 60_000));
+      // A closing that cannot be written (a failing snapshot) does not keep the stream from ending.
+      if (session.program.view.ready && !finished) await this.programRunner.closing(session, { comments: this.ledger.count(),
+        answered: this.counters.answered, minutes }).catch(error => this.log(`Shannon stream closing failed reason=${String(error).slice(0, 80)}`));
     }
     session.program.clear();
     this.conversation.clear();
@@ -357,19 +360,19 @@ export class StreamService {
     const tellOff = turn.state.viewer?.ladder === 'tell_off' && turn.notice !== null;
     // An event the ear described is no request: there is nothing to read for what it asks.
     const recent = this.recentChat(4).filter(text => text !== primary.text);
-    const gateAt = this.now();
-    const gate = primary.event ? { declined: false } : await this.parts.gate.before(primary.text, primary.tags, recent);
-    this.measure.note(this.measure.gateMs, this.now() - gateAt);
-    if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
     const comments = group.map(record => this.writerComment(record));
-    const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline: gate.declined };
     const kind: StreamLineKind = tellOff ? 'notice' : 'reply';
-    const writerAt = this.now();
-    const written = await this.author.write(this.authorSession(session), turn, purpose, group.map(record => record.commentId), kind);
-    this.measure.note(this.measure.writerMs, this.now() - writerAt);
-    if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
-    if (!written) return group.forEach(record => this.give(record, 'new'));
-    this.enqueueReply(group, written, kind, gate.declined);
+    const write = (decline: boolean) => {
+      const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline };
+      const at = this.now();
+      return this.author.write(this.authorSession(session), turn, purpose, group.map(record => record.commentId), kind)
+        .finally(() => this.measure.note(this.measure.writerMs, this.now() - at));
+    };
+    const gateAt = this.now();
+    const gate = () => this.parts.gate.before(primary.text, primary.tags, recent).finally(() => this.measure.note(this.measure.gateMs, this.now() - gateAt));
+    const { written, declined } = await gatedWrite({ event: primary.event, text: primary.text, tellOff, gate, write, track: job => this.track(job) });
+    if (this.stale(session, epoch) || !written) return group.forEach(record => this.give(record, 'new'));
+    this.enqueueReply(group, written, kind, declined);
   }
 
   private enqueueReply(group: CommentRecord[], written: WrittenLine, kind: StreamLineKind, declined: boolean): void {
@@ -392,6 +395,7 @@ export class StreamService {
       this.measure.counts.noRoom += 1;
       return chosen.forEach(record => this.give(record, 'new'));
     }
+    this.conversation.mark(lineId, declined, chosen.filter(record => record.event).map(record => record.commentId));
     const now = this.now();
     this.noteLine(now);
     if (kind === 'reply') this.lastReplyMs = now;
@@ -482,8 +486,7 @@ export class StreamService {
       return;
     }
     if (this.session?.view.phase !== 'ended') {
-      const declined = line.commentIds.some(id => this.ledger.get(id)?.status === 'declined');
-      this.conversation.spoken(line, declined, new Set(line.commentIds.filter(id => this.ledger.get(id)?.event)));
+      this.conversation.spoken(line);
       this.ownLines.push(line.text);
       if (this.ownLines.length > RECENT_LINES) this.ownLines.shift();
     }

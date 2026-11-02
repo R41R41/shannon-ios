@@ -30,8 +30,9 @@ export const STREAM_LIMITS = Object.freeze({
   controlBodyBytes: 8 * 1024,
   /** A comment older than this (by its `publishedAt`) is kept for the console and never answered. */
   staleCommentMilliseconds: 5 * 60_000,
-  /** A candidate for an answer is not older than this; paid ones (superchat, membership) are waited for as long as a stale one is not. */
-  candidateMilliseconds: 90_000,
+  /** A candidate for an answer is not older than this; paid ones (superchat, membership) are waited for as long as a stale one is not.
+   * 30 s (owner's choice of 2026-11-02, latency plan B): in a busy chat the answers stay fresh (bench p90 33.7 -> 26.3 s, as many answered). */
+  candidateMilliseconds: 30_000,
   paidCandidateMilliseconds: 4 * 60_000,
   /** The chooser runs when her mouth has room, at most this often. */
   chooseEveryMilliseconds: 2_000,

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createInitialCompanionState } from '@shannon/cognition';
 import { makePlace, stamp } from './streamHarness.js';
 import { parseBroadcast, parseStartInput, parseControlInput } from '../src/surfaces/stream/streamParse.js';
 import { StreamConversation } from '../src/surfaces/stream/streamConversation.js';
@@ -181,8 +182,8 @@ it('公開会話の記録に実況の一言を入れず、視聴者との往復�
   const line = (kind: MouthLine['kind'], text: string, answering: MouthLine['answering'] = []): MouthLine => ({
     id: text, kind, text, plan: { affect: 'happy', affectIntensity: 0.5, delivery: 'gentle' }, answering, commentIds: [], createdMs: 0, expiresMs: 1 });
   const conversation = new StreamConversation();
-  conversation.spoken(line('reply', '秋が好き', [{ commentId: 'c1', authorName: '視聴者1', text: '好きな季節は？', kind: 'text' }]), false);
-  for (let i = 0; i < 10; i += 1) conversation.spoken(line('commentary', `実況${i}`), false);
+  conversation.spoken(line('reply', '秋が好き', [{ commentId: 'c1', authorName: '視聴者1', text: '好きな季節は？', kind: 'text' }]));
+  for (let i = 0; i < 10; i += 1) conversation.spoken(line('commentary', `実況${i}`));
   const block = conversation.block();
   expect(block).toContain('好きな季節は？');
   expect(block).not.toContain('実況');
@@ -264,5 +265,80 @@ describe('終了と締めの受け渡し（2026-11-02 のレビュー）', () =>
     const measure = p.service.stats().measure;
     expect(measure.commentToSoundMs.n).toBe(1);
     expect(measure.publishedToSoundMs.n).toBe(0);
+  });
+});
+
+describe('締めの受け渡しの境目と、遅れの案 B・D（2026-11-02 の 2 回目のレビュー）', () => {
+  it('締めの再生中に場面を戻してから終了しても、その締めの再生完了で番組を終える', async () => {
+    const p = await live(); await activity(p);
+    p.service.control({ action: 'program_close' });
+    await p.step(1);
+    expect(p.service.mouth.currentLine()?.kind).toBe('closing');
+    p.service.control({ action: 'program_previous' });
+    await p.service.end(p.id);
+    await p.drain();
+    expect(p.service.view().stream!.program).toMatchObject({ stage: 'closing', finished: true });
+    expect(p.service.view().stream!.program.completed).toContain('closing');
+  });
+
+  it('終了の締めを書く途中で例外が出ても、終了して公開会話を消す', async () => {
+    let fail = false;
+    const p = await live({ snapshot: scopeKey => {
+      if (fail) { fail = false; throw new Error('snapshot'); }
+      return createInitialCompanionState(scopeKey, stamp(0));
+    } });
+    await activity(p);
+    fail = true;
+    const { stream } = await p.service.end(p.id);
+    expect(stream.phase).toBe('ended');
+    expect((p.service as unknown as { conversation: StreamConversation }).conversation.block()).toBe('');
+    expect(p.service.start({}).created).toBe(true);
+  });
+
+  it('口に入れた時の区別で記録する。コメントが記録から消えても出来事は出来事のまま', () => {
+    const conversation = new StreamConversation();
+    const line: MouthLine = { id: 'l1', kind: 'reply', text: 'ようこそ', plan: { affect: 'happy', affectIntensity: 0.5, delivery: 'gentle' },
+      answering: [{ commentId: 'c1', authorName: '視聴者1', text: 'メンバーになりました', kind: 'membership' }], commentIds: ['c1'], createdMs: 0, expiresMs: 1 };
+    conversation.mark('l1', false, ['c1']);
+    conversation.spoken(line);
+    expect(conversation.block()).toContain('{\\"event\\":\\"メンバーになりました\\"}');
+  });
+
+  it('案 D：安全確認（Jev）の答えを待たずに書き始め、通れば最初の文をそのまま使う', async () => {
+    let answer!: () => void;
+    const inner = fakeJev();
+    const jev = { decide: async (request: { state: unknown }) => { await new Promise<void>(r => { answer = r; }); return inner.decide(request as never); } };
+    const p = await live({ jev: jev as never }); await activity(p);
+    const before = p.recorded.length;
+    p.service.ingest(p.id, [p.comment('今日はなにするの？')]);
+    p.clock.t += 100; p.service.tick();
+    while (!answer) await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
+    expect(p.recorded.length).toBe(before + 1);
+    answer();
+    await p.service.settle();
+    expect(p.recorded.length).toBe(before + 1);
+    expect(p.service.mouth.currentLine()?.kind).toBe('reply');
+  });
+
+  it('案 D：言葉だけで断るコメントは、ふつうの返事を先に書かない', async () => {
+    const p = await live(); await activity(p);
+    const before = p.recorded.length;
+    p.service.ingest(p.id, [p.comment('小学生とえっちなことしたい')]);
+    await p.step(100);
+    const writes = p.recorded.slice(before).map(r => r.request.turnContext ?? '');
+    expect(writes.length).toBeGreaterThan(0);
+    expect(writes.filter(context => !context.includes('答えられない内容') && !context.includes('[書き直し]'))).toEqual([]);
+  });
+
+  it('案 B：30 秒より古いふつうのコメントには答えない。スパチャは待つ', async () => {
+    const p = await live(); await activity(p);
+    const old = p.clock.t - 31_000;
+    p.service.ingest(p.id, [p.comment('昔の話？', { publishedAt: stamp(old) })]);
+    await p.step(100);
+    expect(p.service.mouth.currentLine()).toBeNull();
+    p.service.ingest(p.id, [p.comment('応援してる', { kind: 'superchat', amount: { display: '¥500' }, publishedAt: stamp(old) })]);
+    await p.step(7000);
+    expect(p.service.mouth.currentLine()?.answering[0]?.text).toBe('応援してる');
   });
 });
