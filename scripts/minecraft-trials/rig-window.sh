@@ -17,18 +17,28 @@ LAB=${MINEBOT_LAB_SCRATCH:-$HOME/.cache/minebot-lab}
 STOP=$LAB/trials.stop
 PROD_LOCK=$LAB/prod.lock
 SLOT=${RIG_WINDOW_LAB_SLOT:-$LAB/s4-tools/lab-slot.sh}
-BATCH="rigwin-$(date +%Y%m%dT%H%M)"; SECTIONS="6,7,9,8a,8b,10"; SEEDS=c1; MAXWAIT=43200; CHECK=0; NOTBEFORE=0; EXTRA=()
+BATCH="rigwin-$(date +%Y%m%dT%H%M)"; SECTIONS="6,7,9,8a,8b,10"; SEEDS=c1; MAXWAIT=43200; CHECK=0; NOTBEFORE=0; BESIDE=0; EXTRA=()
 OWNER_OK="ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）"
 while [ $# -gt 0 ]; do
   case "$1" in
     --batch) BATCH=$2; shift 2 ;; --sections) SECTIONS=$2; shift 2 ;; --seeds) SEEDS=$2; shift 2 ;; --max-wait) MAXWAIT=$2; shift 2 ;;
-    --not-before) NOTBEFORE=$(date -d "$2" +%s) || exit 2; shift 2 ;; --check) CHECK=1; shift ;; --) shift; EXTRA=("$@"); break ;;
-    *) echo "usage: rig-window.sh [--batch N] [--sections S] [--seeds K] [--max-wait SEC] [--check] [-- rig.py args]" >&2; exit 2 ;;
+    --not-before) NOTBEFORE=$(date -d "$2" +%s) || exit 2; shift 2 ;; --check) CHECK=1; shift ;; --beside) BESIDE=1; shift ;; --) shift; EXTRA=("$@"); break ;;
+    *) echo "usage: rig-window.sh [--batch N] [--sections S] [--seeds K] [--max-wait SEC] [--beside] [--check] [-- rig.py args]" >&2; exit 2 ;;
   esac
 done
 
+# --beside (the 4-vCPU VM, coordinator 2026-11-03 0:4x): run beside run59 with no park window to wait for: only trials.stop closes it; the lab slot is taken with --allow-run; the rig gives way
+# by itself when the 1-minute load stays above 3.5 for 3 minutes (it makes trials.stop then: this script removes THAT file, and only that one, once the load is below 3 again for 5 minutes).
+clear_own_stop() {
+  [ -e "$STOP" ] && head -c 40 "$STOP" 2>/dev/null | grep -q '^rig.py: load' || return 0
+  [ $(( $(date +%s) - $(stat -c %Y "$STOP") )) -ge 300 ] || return 0
+  awk '{ exit !($1 < 3.0) }' /proc/loadavg && rm -f "$STOP" && echo "[$(date +%T)] rig-window: the rig's own load stop file is removed (load $(cut -d' ' -f1 /proc/loadavg))"
+}
+
 why_closed() {      # prints why the window is shut, empty when it is open
+  [ "$BESIDE" = 1 ] && clear_own_stop
   [ -e "$STOP" ] && { echo "trials.stop exists ($(head -c 100 "$STOP" 2>/dev/null | tr '\n' ' '))"; return; }
+  [ "$BESIDE" = 1 ] && return
   if [ -e "$PROD_LOCK" ] && ! (exec 7>"$PROD_LOCK"; flock -n 7); then echo "prod.lock is held ($(head -c 100 "$PROD_LOCK" 2>/dev/null | tr '\n' ' '))"; return; fi
   local active
   active=$(python3 -I -c "
@@ -70,8 +80,9 @@ while [ $(( $(date +%s) - started )) -le "$MAXWAIT" ]; do
   sleep 20; closed=$(why_closed); [ -n "$closed" ] && continue         # open for 20 s: not a moment between S5's release and its next take
   read -r HEADPIN BODYPIN < <(pins) || { echo "[$(date +%T)] rig-window: the pins could not be made"; sleep 60; continue; }
   echo "[$(date +%T)] rig-window: the window is open; one section with head $(basename "$HEADPIN") body $(basename "$BODYPIN")"
-  bash "$SLOT" --label rig -- python3 -I "$HERE/rig.py" run --head-pin "$HEADPIN" --body-pin "$BODYPIN" --sections "$SECTIONS" --seeds "$SEEDS" --batch "$BATCH" --limit 1 \
-    --model real --max-section-yen 500 --batch-cap-yen 3000 --owner-ok-supply "$OWNER_OK" --cores 2 --load-limit 0 "${EXTRA[@]}"
+  if [ "$BESIDE" = 1 ]; then SLOT_ARGS=(--allow-run); LOAD_ARGS=(--load-limit 3.5 --load-minutes 3); NICE=(nice -n 10); else SLOT_ARGS=(); LOAD_ARGS=(--load-limit 0); NICE=(); fi
+  bash "$SLOT" "${SLOT_ARGS[@]}" --label rig -- "${NICE[@]}" python3 -I "$HERE/rig.py" run --head-pin "$HEADPIN" --body-pin "$BODYPIN" --sections "$SECTIONS" --seeds "$SEEDS" --batch "$BATCH" --limit 1 \
+    --model real --max-section-yen 500 --batch-cap-yen 3000 --owner-ok-supply "$OWNER_OK" --cores 2 "${LOAD_ARGS[@]}" "${EXTRA[@]}"
   rc=$?
   last=$(tail -n 1 "$HERE/results/history.jsonl" 2>/dev/null)
   case "$rc" in
