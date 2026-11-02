@@ -2,22 +2,22 @@ import { createWorksiteMemory } from '../surfaces/minecraft/minecraftWorksiteMem
 import {
   purposeEvidence, lookTravelEvidence, explorationEvidence, observedWait, createWaitLedger, readActiveWait,
 } from '../surfaces/minecraft/minecraftPurposeProgress.js';
-import { bodyHoldOf,withResend,withIncident,withStalls } from './minecraftLlmcLifecycle.js';
+import { bodyHoldOf,withResend,withIncident,withStalls,withBodyPresent } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
 import { withReplanInbox } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { adoptProblem, unattendedFailureStop, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
 import {
-LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,redecideLabel,llmcModelRouter,llmcCompletionMistake,LLMC_CATALOG_SELECTOR,
+LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,llmcModelRouter,llmcCompletionMistake,LLMC_CATALOG_SELECTOR,
 llmcProbeRunner,billingGuarded
 } from './minecraftLlmcConfiguration.js';
 import type { LlmcWiring } from './minecraftLlmcConfiguration.js';
 import type { FcaBodyLifecycle,FcaExternalTools,FcaToolCall } from '../mind/action/fca/fcaPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
-import { createFcaPlanTools,PLAN_UPDATE_TOOL } from '../mind/action/fca/fcaPlanTools.js';
+import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
 import type { PlanTree } from '@shannon/mind';
-import { toolOk,type ToolResult } from '../mind/tools/shannonTools.js';
-import { REDECIDE_GIVE_UP_MS,type RedecidePort } from '../surfaces/minecraft/minecraftLlmcRedecide.js';
+import { type ToolResult } from '../mind/tools/shannonTools.js';
+import { redecideParts } from './minecraftLlmcRedecideWiring.js';
 import { firstPlanInbox,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { createLlmcEvents,urgentDecision,withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
@@ -424,27 +424,9 @@ queue.onRan(noteQueueResult);
   const unheld = unheldReplan({ held: stalls !== null, taskId: step.taskId, goal: step.snapshot.task.goal, createdAt: step.snapshot.task.createdAt,
     checkpoint: step.snapshot.checkpoint, replanner: llmc.replanner, observe, plan: plan.port, bodyParts, queue, waits, activeClock,
     heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log });
-  // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an
-// act of it that would break a promise is decided again by Opus
-  // (`FcaModel.redecide`: the step's last request with the act and the promise line added). Opus's plan.update
-// goes through the plan's own tool, and one the model already
-  // made in this step (the same input) is not made twice.
+  // Amendment A-10 (`minecraftLlmcRedecideWiring.ts`): the model of this step, and the port that asks the stronger one again for an act that breaks a promise.
   const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId);
-  const planned = new Set<string>();
-  const planTools: typeof plan.tools = { ...plan.tools, execute: call => {
-    if (call.name === PLAN_UPDATE_TOOL) planned.add(JSON.stringify(call.input));
-    return plan.tools.execute(call);
-  } };
-  const redecide: RedecidePort | undefined = model.redecide ? { label: redecideLabel(model === llmc.models.escalate &&
-     llmc.names.escalate ? llmc.names.escalate : llmc.names.main),
-    ask: (note, signal) => model.redecide!({ taskId: step.taskId, note, signal, timeoutMs: REDECIDE_GIVE_UP_MS }),
-    planUpdate: async (input, signal, operationId) => {
-      const key = JSON.stringify(input);
-      if (planned.has(key)) return toolOk('同じ plan.update はこの段で通してある');
-      planned.add(key);
-      return plan.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: PLAN_UPDATE_TOOL, input, signal });
-    },
-    log } : undefined;
+  const { planTools, redecide } = redecideParts(llmc, model, step, plan, log);
   const currentNode = () => workingNode(step.taskId, plan.port.tree().current) ?? plan.port.tree().current ?? '-';
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {
@@ -462,8 +444,9 @@ queue.onRan(noteQueueResult);
       promises: () => plan.port.tree().promises, ...(redecide ? { redecide } : {}) } },
     planTools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
-    wrap: (lifecycle: FcaBodyLifecycle) => withReplan(withStalls(withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt:
-       step.snapshot.task.createdAt,
+    // No decision is asked while the body is not there (`withBodyPresent`): the step waits for it at no cost.
+    wrap: (lifecycle: FcaBodyLifecycle) => withBodyPresent(
+      withReplan(withStalls(withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt: step.snapshot.task.createdAt,
       observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
       // Continue contract 5: each decision's context names the frame it read; the acts it chooses carry it, and its
 // answer is checked against the newest frame.
@@ -471,7 +454,7 @@ queue.onRan(noteQueueResult);
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       r4: { probe: llmcProbeRunner(control, step), planWhere,
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }), resend, log, step.taskId,
-      { open: () => queue.open(), limitMs: () => resendLimitMs(replay.maxMs) }), stalls), unheld),
+      { open: () => queue.open(), limitMs: () => resendLimitMs(replay.maxMs) }), stalls), unheld), () => decided() !== null, log, step.taskId),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the

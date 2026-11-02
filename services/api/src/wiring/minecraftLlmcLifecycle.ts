@@ -4,6 +4,8 @@ import type { FcaBodyLifecycle } from "../mind/action/fca/fcaPorts.js";
 import { TAKE_MS } from "./minecraftHeadTake.js";
 import type { BodyTaskContext } from "../contracts/bodyControlContract.js";
 import { waitForResend } from "./minecraftResumeOrder.js";
+import { FcaDecisionUnavailableError } from "../mind/action/fca/fcaProviderRetry.js";
+import { BODY_ABSENT_CODE, BODY_ABSENT_REASON } from "./taskRuntimeUnavailable.js";
 
 
 
@@ -78,6 +80,27 @@ export function withStalls(lifecycle: FcaBodyLifecycle, watch: { look(): boolean
     noteResult(call: FcaToolCall, result: ToolResult, durationMilliseconds?: number) {
       noted?.(call, result, durationMilliseconds);
       if (!watch.refused(call, result)) watch.look();
+    },
+  });
+}
+
+/**
+ * No decision is asked while the task has no body (2026-11-02, a run nobody watches: in a recovery test the body alone went down, and each
+ * failed decision cost about ¥3.5 while the failures climbed the ladder and raised the strong model). The step ends as a decision that did
+ * not come (`FcaDecisionUnavailableError`, the reason `BODY_ABSENT_REASON`): nothing was asked or run, and the runtime waits and tries again
+ * from a fresh observation (`settleUnavailableStep`, 2 hours of rounds for this reason). `present` says whether the body's frame is there, current
+ * within `LLMC_STALE_FRAME_MS`, and the body connected. Only at a step's start: a body that goes away inside a step costs that step's
+ * decisions (at most a stretch), not every step after it.
+ */
+export function withBodyPresent(lifecycle: FcaBodyLifecycle, present: () => boolean, log: (line: string) => void, taskId: string): FcaBodyLifecycle {
+  const before = lifecycle.beforeDecision?.bind(lifecycle);
+  return Object.assign(lifecycle, {
+    async beforeDecision(signal: AbortSignal) {
+      if (!signal.aborted && !present()) {
+        log(`Shannon Minecraft body absent task=${taskId}: no decision asked`);
+        throw new FcaDecisionUnavailableError(BODY_ABSENT_CODE, BODY_ABSENT_REASON, 0, false, null);
+      }
+      await before?.(signal);
     },
   });
 }

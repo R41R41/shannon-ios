@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FcaDecisionUnavailableError } from '../src/mind/action/fca/fcaProviderRetry.js';
 import {
-  settleUnavailableStep, sleep, UNAVAILABLE_WAIT_CAP_MS, unavailableCooldownMs, unavailableWaitMs, type UnavailableParts,
+  BODY_ABSENT_CODE, BODY_ABSENT_CYCLES, BODY_ABSENT_REASON, settleUnavailableStep, sleep, UNAVAILABLE_WAIT_CAP_MS, unavailableCooldownMs, unavailableWaitMs,
+  type UnavailableParts,
 } from '../src/wiring/taskRuntimeUnavailable.js';
+import { BODY_ABSENT_SUMMARY } from '../src/wiring/fcaBodyRecoveryPolicy.js';
 
 /**
  * The rounds after a decision that never came back (Minebot parity audit C-20, 2026-10-19), and two things found in review: a wait does
@@ -95,5 +97,45 @@ describe('the provider\'s retry-after is respected between rounds (L-5)', () => 
     expect(outcome).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
     expect(outcome).toBe('continued');
+  });
+});
+
+describe('a body that is not there (2026-11-02: a run nobody watches waits for it, at no cost)', () => {
+  const absent = () => new FcaDecisionUnavailableError(BODY_ABSENT_CODE, BODY_ABSENT_REASON, 0, false, null);
+  const at = (rounds: number, f = fixture()) => {
+    const stops: string[] = [], notes: string[] = [];
+    const parts = { ...f.parts, bodyCooldownMs: undefined, note: (_id: string, text: string) => { notes.push(text); },
+      runtime: { ...f.parts.runtime, stop: (_scope: string, _task: string, reason: string) => { stops.push(reason); return []; } } as never } as UnavailableParts;
+    const step = { id: 's1', taskId: 'task-1', scopeKey: 'owner', snapshot: { checkpoint: { fcaProviderRetries: rounds } } } as never;
+    return { parts, step, stops, notes, commits: f.commits, execution: f.execution };
+  };
+
+  it('goes on for 240 rounds of 30 seconds where a provider\'s outage goes on for 24', async () => {
+    vi.useFakeTimers();
+    const f = at(100);
+    let outcome: string | null | undefined;
+    void settleUnavailableStep(f.parts, f.step, absent(), f.execution(new AbortController().signal)).then(value => { outcome = value; });
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(outcome).toBe('continued');
+    expect(f.commits).toEqual([{ disposition: 'continue', history: [], consumedMessageIds: [], checkpoint: { fcaProviderRetries: 101 } }]);
+    // the same count stops a provider's outage
+    const provider = at(100);
+    expect(await settleUnavailableStep(provider.parts, provider.step, unavailable(), provider.execution(new AbortController().signal))).toBe('paused');
+    expect(provider.stops).toEqual(['fca_provider_unavailable']);
+  });
+
+  it('pauses the request as stopped, with the body\'s words, once the 240 rounds are used', async () => {
+    const f = at(BODY_ABSENT_CYCLES);
+    expect(await settleUnavailableStep(f.parts, f.step, absent(), f.execution(new AbortController().signal))).toBe('paused');
+    expect(f.stops).toEqual(['fca_body_not_returned']);
+    expect(f.notes).toEqual([BODY_ABSENT_SUMMARY]);
+  });
+
+  it('is a body request\'s reason only: another task fails as before', async () => {
+    const f = at(1, fixture({ body: false }));
+    expect(await settleUnavailableStep(f.parts, f.step, absent(), f.execution(new AbortController().signal))).toBe('failed');
+    expect(f.stops).toEqual([]);
   });
 });

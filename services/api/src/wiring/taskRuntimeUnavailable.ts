@@ -2,6 +2,7 @@ import type { ActionExecution } from '../infra/context/actionExecution.js';
 import { FCA_MODEL_BILLING, FcaDecisionUnavailableError } from '../mind/action/fca/fcaProviderRetry.js';
 import type { TaskRuntime, TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { BILLING_PAUSED_SUMMARY, PROVIDER_UNAVAILABLE_SUMMARY, pausedReport } from './taskPauseNotice.js';
+import { BODY_ABSENT_SUMMARY } from './fcaBodyRecoveryPolicy.js';
 
 /**
  * A step whose decision never came back (`FcaDecisionUnavailableError`: the retries of `decideWithRetry` ran
@@ -19,6 +20,17 @@ export const BODY_UNAVAILABLE_CYCLES = 24;
 const OTHER_UNAVAILABLE_CYCLES = 1;
 const BODY_COOLDOWN_BASE_MS = 20_000;
 const BODY_COOLDOWN_CAP_MS = 120_000;
+
+/**
+ * A decision that was not asked because the request's own body is not there (2026-11-02: the body alone went down in a recovery test, and each failing
+ * decision cost about ¥3.5 while the failures climbed the ladder; `withBodyPresent`, `minecraftLlmcLifecycle.ts`) ran nothing and called no
+ * model, so waiting for the body costs nothing: rounds of `BODY_ABSENT_WAIT_MS` for `BODY_ABSENT_CYCLES` of them (2 hours: a Spot VM that comes
+ * back, a body that logs in again), then the request is paused as stopped, not failed. The owner may resume it.
+ */
+export const BODY_ABSENT_CODE = 'MINECRAFT_BODY_ABSENT';
+export const BODY_ABSENT_REASON = 'body_absent';
+export const BODY_ABSENT_CYCLES = 240;
+const BODY_ABSENT_WAIT_MS = 30_000;
 
 /** The wait before the next round of a Minecraft request: 20 s, 40 s, 80 s, 120 s, +-20%. */
 export function unavailableCooldownMs(cycles: number, random: () => number = Math.random): number {
@@ -83,6 +95,16 @@ export function sleep(milliseconds: number, signal: AbortSignal): Promise<boolea
 
 export { PROVIDER_UNAVAILABLE_SUMMARY };
 
+/** How many rounds a request goes through before it is paused (a Minecraft request whose body is not there: `BODY_ABSENT_CYCLES`). */
+const roundLimit = (body: boolean, absent: boolean): number => absent ? BODY_ABSENT_CYCLES : body ? BODY_UNAVAILABLE_CYCLES : OTHER_UNAVAILABLE_CYCLES;
+
+/** The wait before the next round (tests replace a Minecraft request's wait with `bodyCooldownMs`). */
+function roundWaitMs(parts: UnavailableParts, round: { body: boolean; absent: boolean; cycles: number; retryAfterMs: number | null }): number {
+  if (round.absent) return parts.bodyCooldownMs?.(round.cycles) ?? BODY_ABSENT_WAIT_MS;
+  const cooldown = round.body ? parts.bodyCooldownMs?.(round.cycles) ?? unavailableCooldownMs(round.cycles) : parts.otherCooldownMs();
+  return unavailableWaitMs(cooldown, round.retryAfterMs);
+}
+
 /**
  * Settles a step that threw `FcaDecisionUnavailableError`, logging the closed code. Null: this is not an
  * unavailable decision (or a
@@ -96,8 +118,9 @@ export async function settleUnavailableStep(parts: UnavailableParts, step: TaskS
   const prior = step.snapshot.checkpoint && typeof step.snapshot.checkpoint === 'object' ? step.snapshot.checkpoint as Record<string, unknown> : {};
   const cycles = typeof prior.fcaProviderRetries === 'number' ? prior.fcaProviderRetries : 0;
   const body = parts.isBodyTask(step.taskId);
-  if (cycles >= (body ? BODY_UNAVAILABLE_CYCLES : OTHER_UNAVAILABLE_CYCLES)) return finish(parts, step, error, body, prior, cycles);
-  const milliseconds = unavailableWaitMs(body ? parts.bodyCooldownMs?.(cycles) ?? unavailableCooldownMs(cycles) : parts.otherCooldownMs(), error.retryAfterMs);
+  const absent = body && error.reason === BODY_ABSENT_REASON;
+  if (cycles >= roundLimit(body, absent)) return finish(parts, step, error, body, prior, cycles);
+  const milliseconds = roundWaitMs(parts, { body, absent, cycles, retryAfterMs: error.retryAfterMs });
   if (!await sleep(milliseconds, execution.signal) || parts.runtime.get(parts.scopeKey, step.taskId)?.phase !== 'executing') return null;
   if (!close(parts, step, { ...prior, fcaProviderRetries: cycles + 1 })) return null;
   parts.log(`Shannon FCA step retried task=${step.taskId} code=${error.message}`);
@@ -134,6 +157,13 @@ function close(parts: UnavailableParts, step: TaskStep, checkpoint: Record<strin
   }
 }
 
+/** How a Minecraft request whose rounds are used up is paused: the provider's words, or the body's when it was the body that did not come. */
+function pauseWords(error: Error): { reason: string; stop: string; summary: string } {
+  return error instanceof FcaDecisionUnavailableError && error.reason === BODY_ABSENT_REASON
+    ? { reason: 'body_absent', stop: 'fca_body_not_returned', summary: BODY_ABSENT_SUMMARY }
+    : { reason: 'provider_unavailable', stop: 'fca_provider_unavailable', summary: PROVIDER_UNAVAILABLE_SUMMARY };
+}
+
 /** The rounds are used up: a Minecraft request is paused, any other task fails with its report. */
 function finish(parts: UnavailableParts, step: TaskStep, error: Error, body: boolean, prior: Record<string, unknown>, cycles: number):
   UnavailableOutcome | null {
@@ -143,12 +173,13 @@ function finish(parts: UnavailableParts, step: TaskStep, error: Error, body: boo
     return 'failed';
   }
   if (!close(parts, step, { ...prior, fcaProviderRetries: cycles + 1 })) return null;
-  parts.runtime.stop(parts.scopeKey, step.taskId, 'fca_provider_unavailable');
-  parts.note(step.taskId, PROVIDER_UNAVAILABLE_SUMMARY);
+  const words = pauseWords(error);
+  parts.runtime.stop(parts.scopeKey, step.taskId, words.stop);
+  parts.note(step.taskId, words.summary);
   // The owner hears of it as he heard of the failure this replaced; once, whatever the pause then does (the step id is its key).
   try {
-    parts.pauseNotice(step.taskId, step.id, pausedReport(parts.runtime.get(parts.scopeKey, step.taskId)?.title ?? '', PROVIDER_UNAVAILABLE_SUMMARY));
+    parts.pauseNotice(step.taskId, step.id, pausedReport(parts.runtime.get(parts.scopeKey, step.taskId)?.title ?? '', words.summary));
   } catch { /* the task is paused either way; its summary says so */ }
-  parts.log(`Shannon FCA step paused task=${step.taskId} code=${error.message} reason=provider_unavailable`);
+  parts.log(`Shannon FCA step paused task=${step.taskId} code=${error.message} reason=${words.reason}`);
   return 'paused';
 }

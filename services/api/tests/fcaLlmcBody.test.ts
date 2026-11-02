@@ -107,7 +107,19 @@ describe('a task outside the mode: as before', () => {
     const on = configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} }, { log: () => {} })!;
     expect(on.names).toEqual({ main: 'claude-opus-5-5', escalate: null, plan: 'claude-opus-5-5' });
     expect(on.models.escalate).toBeNull();
+    expect(on.models.strong).toBeNull();
     expect(on.planner).toBeTypeOf('function');
     expect(on.summarizer).not.toBeNull();
+  });
+
+  it('the plan\'s model is the strong one of the late game when it is not the main one, and is not made twice when it is the escalation', () => {
+    const made = (extra: Record<string, string>) => configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k', SHANNON_MINECRAFT_LLMC_MODEL: 'claude-sonnet-5-5', ...extra },
+      { recordUsage() {} }, { log: () => {} })!;
+    const sonnet = made({});
+    expect(sonnet.names).toMatchObject({ main: 'claude-sonnet-5-5', plan: 'claude-opus-5-5' });
+    expect(sonnet.models.strong).not.toBeNull();
+    expect(sonnet.models.strong).not.toBe(sonnet.models.main);
+    const raised = made({ SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'next' });
+    expect(raised.models.strong).toBe(raised.models.escalate);
   });
 });

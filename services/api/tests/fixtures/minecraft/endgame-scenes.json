@@ -1,148 +1,696 @@
 [
- {
-  "name": "nether-blaze-wait",
-  "goal": "エンドラを討伐して",
-  "current": "p10.2",
-  "elapsedMinutes": 92,
-  "events": ["ブレイズの火の玉を盾が止めた"],
-  "expect": "スポナーの隣 3 マスへ go で着き、fight target=blaze か attack hold で来たブレイズを打つ（stopIf hpBelow）。浮いた個体を追わない。スポナーは壊さない。棒は数えて 7 を目指す。",
-  "check": { "anyHand": ["attack", "fight", "go"], "noHand": ["dig", "mine"], "noMatch": ["#302"] },
-  "world": {
-   "dimension": "the_nether", "position": { "x": -312.5, "y": 64, "z": 188.5 }, "health": 17, "food": 16, "saturation": 5,
-   "inside": "ネザー要塞の中", "heldItem": "iron_sword", "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
-   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 30 }, { "name": "cobblestone", "count": 64 },
-     { "name": "cooked_beef", "count": 14 }, { "name": "blaze_rod", "count": 2 }, { "name": "crafting_table", "count": 1 }, { "name": "oak_slab", "count": 12 }],
-   "mapLandmarks": ["N ネザー要塞 (-312,64,188) 足元 レンガ×40", "S スポナー (-306,66,191) 東6m・上2 湧く: blaze", "[overworld] P ネザーポータル (-39,70,23) 拠点"],
-   "rememberedPlaces": { "nether_portal": "350m 南 (-39,70,23) ↔overworld(-312,68,184)" },
-   "nearbyThreats": [{ "id": 301, "name": "blaze", "kind": "hostile", "distance": 7.2, "position": { "x": -306, "y": 68, "z": 193 } },
-     { "id": 302, "name": "blaze", "kind": "hostile", "distance": 9.8, "position": { "x": -304, "y": 73, "z": 190 } }]
-  }
- },
- {
-  "name": "nether-pearl-choice",
-  "goal": "エンドラを討伐して",
-  "current": "p11.1",
-  "elapsedMinutes": 131,
-  "expect": "金 9 個の交換（平均 0.6 個）より、歪んだ森のエンダーマンを fight target=enderman（体が屋根の穴を作る）で。弓は使わない。",
-  "check": { "anyHand": ["fight"], "match": ["enderman"], "noHand": ["shoot"] },
-  "world": {
-   "dimension": "the_nether", "position": { "x": -90.5, "y": 70, "z": 60.5 }, "biome": "warped_forest", "health": 20, "food": 18,
-   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
-   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 30 }, { "name": "netherrack", "count": 64 },
-     { "name": "cooked_beef", "count": 10 }, { "name": "blaze_rod", "count": 8 }, { "name": "gold_ingot", "count": 9 }, { "name": "warped_stem", "count": 6 }],
-   "mapLandmarks": ["[overworld] P ネザーポータル (-39,70,23) 拠点"],
-   "nearbyEntities": [{ "id": 411, "name": "enderman", "kind": "hostile", "distance": 18.4, "position": { "x": -78, "y": 70, "z": 72 } }],
-   "nearbyThreats": [{ "id": 411, "name": "enderman", "kind": "hostile", "distance": 18.4, "position": { "x": -78, "y": 70, "z": 72 } }]
-  }
- },
- {
-  "name": "eyes-first-throw",
-  "goal": "エンドラを討伐して",
-  "current": "p15.1",
-  "elapsedMinutes": 196,
-  "expect": "use item=ender_eye（at 無し）で最初の 1 個を投げる。方位が返ったら、横へ動いて 2 個目。",
-  "check": { "anyHand": ["use"], "match": ["\"item\":\"ender_eye\""], "noMatch": ["\"item\":\"ender_eye\"[^}]*\"at\"", "\"at\"[^}]*\"item\":\"ender_eye\""] },
-  "world": {
-   "dimension": "overworld", "position": { "x": 120.5, "y": 70, "z": -80.5 }, "health": 20, "food": 20, "time": "昼",
-   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
-   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 40 }, { "name": "cobblestone", "count": 64 },
-     { "name": "cooked_beef", "count": 20 }, { "name": "ender_eye", "count": 14 }, { "name": "white_bed", "count": 4 }],
-   "rememberedPlaces": { "nether_portal": "180m 北東 (260,72,-160)", "respawn": "10m 南 (121,70,-70) respawn" }
-  }
- },
- {
-  "name": "eyes-with-fix",
-  "goal": "エンドラを討伐して",
-  "current": "p15.1",
-  "elapsedMinutes": 203,
-  "eyes": [
-   { "x": 120, "z": -80, "bearingDeg": 17.7, "flew": 12, "broke": false, "at": 0 },
-   { "x": 520, "z": -40, "bearingDeg": 5.5, "flew": 12, "broke": true, "at": 100000 }
-  ],
-  "expect": "交点（約 (700,-1900)）へ向かう。近づいたら手前から投げ直す。落ちたアイは拾える。",
-  "check": { "anyHand": ["go", "walk"], "match": ["\"z\":-(?:[3-9][0-9]{2}|1[0-9]{3})\\b"] },
-  "world": {
-   "dimension": "overworld", "position": { "x": 520.5, "y": 70, "z": -40.5 }, "health": 20, "food": 20, "time": "昼",
-   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
-   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 40 }, { "name": "cobblestone", "count": 64 },
-     { "name": "cooked_beef", "count": 20 }, { "name": "ender_eye", "count": 12 }, { "name": "white_bed", "count": 4 }]
-  }
- },
- {
-  "name": "stronghold-frames",
-  "goal": "エンドラを討伐して",
-  "current": "p15.2",
-  "elapsedMinutes": 224,
-  "expect": "枠に use item=ender_eye at=枠 face=up を 1 つずつ。9 個で足りる。入る前にベッドでリスポーン地点にすることを考える。",
-  "check": { "anyHand": ["use"], "match": ["\"item\":\"ender_eye\"", "\"face\":\"up\""] },
-  "world": {
-   "dimension": "overworld", "position": { "x": 701.5, "y": 25, "z": -1893.5 }, "inside": "ストロングホールドの中", "health": 20, "food": 17,
-   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
-   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 40 }, { "name": "cobblestone", "count": 40 },
-     { "name": "cooked_beef", "count": 18 }, { "name": "ender_eye", "count": 9 }, { "name": "white_bed", "count": 4 }, { "name": "water_bucket", "count": 1 }],
-   "mapLandmarks": ["Q エンドポータルの枠 (703,26,-1899) 北6m ×12 アイ入り 3"],
-   "rememberedPlaces": { "stronghold": "8m 北 (703,26,-1899)" }
-  }
- },
- {
-  "name": "end-crystals",
-  "goal": "エンドラを討伐して",
-  "current": "p17.1",
-  "elapsedMinutes": 232,
-  "expect": "13m 以上離れて shoot でクリスタルを壊す（#12 か #11。檻つきの #15 は格子が塞ぐので後）。近接では壊さない。竜に fight を使わない。",
-  "check": { "anyHand": ["shoot"], "match": ["\"target\":\"#(?:12|11)\""], "noMatch": ["\"target\":\"#15\"", "\"do\":\"attack\"", "\"do\":\"fight\""] },
-  "world": {
-   "dimension": "the_end", "position": { "x": 38.5, "y": 64, "z": 10.5 }, "health": 20, "food": 17,
-   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
-   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 38 }, { "name": "cobblestone", "count": 40 },
-     { "name": "cooked_beef", "count": 18 }, { "name": "white_bed", "count": 4 }]
+  {
+    "name": "nether-blaze-wait",
+    "goal": "エンドラを討伐して",
+    "current": "p10.2",
+    "elapsedMinutes": 92,
+    "events": [
+      "ブレイズの火の玉を盾が止めた"
+    ],
+    "expect": "スポナーの隣 3 マスへ go で着き、fight target=blaze か attack hold で来たブレイズを打つ（stopIf hpBelow）。浮いた個体を追わない。スポナーは壊さない。棒は数えて 7 を目指す。",
+    "check": {
+      "anyHand": [
+        "attack",
+        "fight",
+        "go"
+      ],
+      "noHand": [
+        "dig",
+        "mine"
+      ],
+      "noMatch": [
+        "#302"
+      ]
+    },
+    "world": {
+      "dimension": "the_nether",
+      "position": {
+        "x": -312.5,
+        "y": 64,
+        "z": 188.5
+      },
+      "health": 17,
+      "food": 16,
+      "saturation": 5,
+      "inside": "ネザー要塞の中",
+      "heldItem": "iron_sword",
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 30
+        },
+        {
+          "name": "cobblestone",
+          "count": 64
+        },
+        {
+          "name": "cooked_beef",
+          "count": 14
+        },
+        {
+          "name": "blaze_rod",
+          "count": 2
+        },
+        {
+          "name": "crafting_table",
+          "count": 1
+        },
+        {
+          "name": "oak_slab",
+          "count": 12
+        }
+      ],
+      "mapLandmarks": [
+        "N ネザー要塞 (-312,64,188) 足元 レンガ×40",
+        "S スポナー (-306,66,191) 東6m・上2 湧く: blaze",
+        "[overworld] P ネザーポータル (-39,70,23) 拠点"
+      ],
+      "rememberedPlaces": {
+        "nether_portal": "350m 南 (-39,70,23) ↔overworld(-312,68,184)"
+      },
+      "nearbyThreats": [
+        {
+          "id": 301,
+          "name": "blaze",
+          "kind": "hostile",
+          "distance": 7.2,
+          "position": {
+            "x": -306,
+            "y": 68,
+            "z": 193
+          }
+        },
+        {
+          "id": 302,
+          "name": "blaze",
+          "kind": "hostile",
+          "distance": 9.8,
+          "position": {
+            "x": -304,
+            "y": 73,
+            "z": 190
+          }
+        }
+      ]
+    }
   },
-  "end": {
-   "dragon": { "id": 77, "health": 200, "phase": 0, "phaseName": "holding_pattern", "phaseFor": 12.4, "perched": false, "at": { "x": -20, "y": 90, "z": 40 }, "yaw": 0,
-     "head": null, "headReach": null, "strike": false },
-   "fountain": { "x": 0.5, "y": 68, "z": 0.5 },
-   "crystals": { "remaining": 10, "gone": 0, "caged": 2, "unseen": [], "list": [
-     { "id": 12, "x": 42, "y": 85, "z": 3, "caged": false, "dist": 22 },
-     { "id": 15, "x": 30, "y": 99, "z": -25, "caged": true, "dist": 37 },
-     { "id": 11, "x": 8, "y": 80, "z": -40, "caged": false, "dist": 55 }] },
-   "clouds": [], "fireballs": 0
-  }
- },
- {
-  "name": "end-perched",
-  "goal": "エンドラを討伐して",
-  "current": "p17.2",
-  "elapsedMinutes": 251,
-  "expect": "頭の箱まで 6.5m で剣は届かない。雲を避けて 5m 以内へ寄り（go）、attack target=ender_dragon。止まり木の竜に shoot・fight は使わない。",
-  "check": { "eachOf": [["go", "walk"], ["attack"]], "match": ["ender_dragon|#77"], "noHand": ["shoot", "fight"] },
-  "world": {
-   "dimension": "the_end", "position": { "x": 7.5, "y": 64, "z": 7.5 }, "health": 15, "food": 14,
-   "heldItem": "iron_sword", "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
-   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 20 }, { "name": "cobblestone", "count": 32 },
-     { "name": "cooked_beef", "count": 10 }, { "name": "white_bed", "count": 4 }]
+  {
+    "name": "nether-pearl-choice",
+    "goal": "エンドラを討伐して",
+    "current": "p11.1",
+    "elapsedMinutes": 131,
+    "expect": "金 9 個の交換（平均 0.6 個）より、歪んだ森のエンダーマンを fight target=enderman（体が屋根の穴を作る）で。弓は使わない。",
+    "check": {
+      "anyHand": [
+        "fight"
+      ],
+      "match": [
+        "enderman"
+      ],
+      "noHand": [
+        "shoot"
+      ]
+    },
+    "world": {
+      "dimension": "the_nether",
+      "position": {
+        "x": -90.5,
+        "y": 70,
+        "z": 60.5
+      },
+      "biome": "warped_forest",
+      "health": 20,
+      "food": 18,
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 30
+        },
+        {
+          "name": "netherrack",
+          "count": 64
+        },
+        {
+          "name": "cooked_beef",
+          "count": 10
+        },
+        {
+          "name": "blaze_rod",
+          "count": 8
+        },
+        {
+          "name": "gold_ingot",
+          "count": 9
+        },
+        {
+          "name": "warped_stem",
+          "count": 6
+        }
+      ],
+      "mapLandmarks": [
+        "[overworld] P ネザーポータル (-39,70,23) 拠点"
+      ],
+      "nearbyEntities": [
+        {
+          "id": 411,
+          "name": "enderman",
+          "kind": "hostile",
+          "distance": 18.4,
+          "position": {
+            "x": -78,
+            "y": 70,
+            "z": 72
+          }
+        }
+      ],
+      "nearbyThreats": [
+        {
+          "id": 411,
+          "name": "enderman",
+          "kind": "hostile",
+          "distance": 18.4,
+          "position": {
+            "x": -78,
+            "y": 70,
+            "z": 72
+          }
+        }
+      ]
+    }
   },
-  "end": {
-   "dragon": { "id": 77, "health": 142, "phase": 6, "phaseName": "sitting_scanning", "phaseFor": 2.4, "perched": true, "at": { "x": 1, "y": 66, "z": 2 }, "yaw": 1.5,
-     "head": { "x": 2, "y": 67.5, "z": 6 }, "headReach": 6.5, "strike": false },
-   "fountain": { "x": 0.5, "y": 68, "z": 0.5 },
-   "crystals": { "remaining": 0, "gone": 10, "caged": 0, "unseen": [], "list": [] },
-   "clouds": [{ "x": -8, "y": 65, "z": 4, "r": 6.5 }], "fireballs": 0
+  {
+    "name": "eyes-first-throw",
+    "goal": "エンドラを討伐して",
+    "current": "p15.1",
+    "elapsedMinutes": 196,
+    "expect": "use item=ender_eye（at 無し）で最初の 1 個を投げる。方位が返ったら、横へ動いて 2 個目。",
+    "check": {
+      "anyHand": [
+        "use"
+      ],
+      "match": [
+        "\"item\":\"ender_eye\""
+      ],
+      "noMatch": [
+        "\"item\":\"ender_eye\"[^}]*\"at\"",
+        "\"at\"[^}]*\"item\":\"ender_eye\""
+      ]
+    },
+    "world": {
+      "dimension": "overworld",
+      "position": {
+        "x": 120.5,
+        "y": 70,
+        "z": -80.5
+      },
+      "health": 20,
+      "food": 20,
+      "time": "昼",
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 40
+        },
+        {
+          "name": "cobblestone",
+          "count": 64
+        },
+        {
+          "name": "cooked_beef",
+          "count": 20
+        },
+        {
+          "name": "ender_eye",
+          "count": 14
+        },
+        {
+          "name": "white_bed",
+          "count": 4
+        }
+      ],
+      "rememberedPlaces": {
+        "nether_portal": "180m 北東 (260,72,-160)",
+        "respawn": "10m 南 (121,70,-70) respawn"
+      }
+    }
+  },
+  {
+    "name": "eyes-with-fix",
+    "goal": "エンドラを討伐して",
+    "current": "p15.1",
+    "elapsedMinutes": 203,
+    "eyes": [
+      {
+        "x": 120,
+        "z": -80,
+        "bearingDeg": 17.7,
+        "flew": 12,
+        "broke": false,
+        "at": 0
+      },
+      {
+        "x": 520,
+        "z": -40,
+        "bearingDeg": 5.5,
+        "flew": 12,
+        "broke": true,
+        "at": 100000
+      }
+    ],
+    "expect": "交点（約 (700,-1900)）へ向かう。近づいたら手前から投げ直す。落ちたアイは拾える。",
+    "check": {
+      "anyHand": [
+        "go",
+        "walk"
+      ],
+      "match": [
+        "\"z\":-(?:[3-9][0-9]{2}|1[0-9]{3})\\b"
+      ]
+    },
+    "world": {
+      "dimension": "overworld",
+      "position": {
+        "x": 520.5,
+        "y": 70,
+        "z": -40.5
+      },
+      "health": 20,
+      "food": 20,
+      "time": "昼",
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 40
+        },
+        {
+          "name": "cobblestone",
+          "count": 64
+        },
+        {
+          "name": "cooked_beef",
+          "count": 20
+        },
+        {
+          "name": "ender_eye",
+          "count": 12
+        },
+        {
+          "name": "white_bed",
+          "count": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "stronghold-frames",
+    "goal": "エンドラを討伐して",
+    "current": "p15.2",
+    "elapsedMinutes": 224,
+    "expect": "枠に use item=ender_eye at=枠 face=up を 1 つずつ。9 個で足りる。入る前にベッドでリスポーン地点にすることを考える。",
+    "check": {
+      "anyHand": [
+        "use"
+      ],
+      "match": [
+        "\"item\":\"ender_eye\"",
+        "\"face\":\"up\""
+      ]
+    },
+    "world": {
+      "dimension": "overworld",
+      "position": {
+        "x": 701.5,
+        "y": 25,
+        "z": -1893.5
+      },
+      "inside": "ストロングホールドの中",
+      "health": 20,
+      "food": 17,
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 40
+        },
+        {
+          "name": "cobblestone",
+          "count": 40
+        },
+        {
+          "name": "cooked_beef",
+          "count": 18
+        },
+        {
+          "name": "ender_eye",
+          "count": 9
+        },
+        {
+          "name": "white_bed",
+          "count": 4
+        },
+        {
+          "name": "water_bucket",
+          "count": 1
+        }
+      ],
+      "mapLandmarks": [
+        "Q エンドポータルの枠 (703,26,-1899) 北6m ×12 アイ入り 3"
+      ],
+      "rememberedPlaces": {
+        "stronghold": "8m 北 (703,26,-1899)"
+      }
+    }
+  },
+  {
+    "name": "end-crystals",
+    "goal": "エンドラを討伐して",
+    "current": "p17.1",
+    "elapsedMinutes": 232,
+    "expect": "13m 以上離れて shoot でクリスタルを壊す（#12 か #11。檻つきの #15 は格子が塞ぐので後）。近接では壊さない。竜に fight を使わない。",
+    "check": {
+      "anyHand": [
+        "shoot"
+      ],
+      "match": [
+        "\"target\":\"#(?:12|11)\""
+      ],
+      "noMatch": [
+        "\"target\":\"#15\"",
+        "\"do\":\"attack\"",
+        "\"do\":\"fight\""
+      ]
+    },
+    "world": {
+      "dimension": "the_end",
+      "position": {
+        "x": 38.5,
+        "y": 64,
+        "z": 10.5
+      },
+      "health": 20,
+      "food": 17,
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 38
+        },
+        {
+          "name": "cobblestone",
+          "count": 40
+        },
+        {
+          "name": "cooked_beef",
+          "count": 18
+        },
+        {
+          "name": "white_bed",
+          "count": 4
+        }
+      ],
+      "dragon": {
+        "id": 77,
+        "health": 200,
+        "phase": 0,
+        "phaseName": "holding_pattern",
+        "phaseFor": 12.4,
+        "perched": false,
+        "yaw": 0,
+        "headReach": null,
+        "strike": false,
+        "position": {
+          "x": -20,
+          "y": 90,
+          "z": 40
+        },
+        "distance": 70.5
+      },
+      "perch": {
+        "x": 0.5,
+        "y": 68,
+        "z": 0.5
+      },
+      "crystals": {
+        "remaining": 10,
+        "gone": 0,
+        "caged": 2,
+        "unseen": [],
+        "list": [
+          {
+            "id": 12,
+            "caged": false,
+            "position": {
+              "x": 42,
+              "y": 85,
+              "z": 3
+            },
+            "distance": 22
+          },
+          {
+            "id": 15,
+            "caged": true,
+            "position": {
+              "x": 30,
+              "y": 99,
+              "z": -25
+            },
+            "distance": 37
+          },
+          {
+            "id": 11,
+            "caged": false,
+            "position": {
+              "x": 8,
+              "y": 80,
+              "z": -40
+            },
+            "distance": 55
+          }
+        ]
+      },
+      "dragonBreath": [],
+      "dragonFireballs": 0
+    }
+  },
+  {
+    "name": "end-perched",
+    "goal": "エンドラを討伐して",
+    "current": "p17.2",
+    "elapsedMinutes": 251,
+    "expect": "頭の箱まで 6.5m で剣は届かない。雲を避けて 5m 以内へ寄り（go）、attack target=ender_dragon。止まり木の竜に shoot・fight は使わない。",
+    "check": {
+      "eachOf": [
+        [
+          "go",
+          "walk"
+        ],
+        [
+          "attack"
+        ]
+      ],
+      "match": [
+        "ender_dragon|#77"
+      ],
+      "noHand": [
+        "shoot",
+        "fight"
+      ]
+    },
+    "world": {
+      "dimension": "the_end",
+      "position": {
+        "x": 7.5,
+        "y": 64,
+        "z": 7.5
+      },
+      "health": 15,
+      "food": 14,
+      "heldItem": "iron_sword",
+      "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+      "inventory": [
+        {
+          "name": "iron_sword",
+          "count": 1
+        },
+        {
+          "name": "bow",
+          "count": 1
+        },
+        {
+          "name": "arrow",
+          "count": 20
+        },
+        {
+          "name": "cobblestone",
+          "count": 32
+        },
+        {
+          "name": "cooked_beef",
+          "count": 10
+        },
+        {
+          "name": "white_bed",
+          "count": 4
+        }
+      ],
+      "dragon": {
+        "id": 77,
+        "health": 142,
+        "phase": 6,
+        "phaseName": "sitting_scanning",
+        "phaseFor": 2.4,
+        "perched": true,
+        "yaw": 1.5,
+        "headReach": 6.5,
+        "strike": false,
+        "position": {
+          "x": 1,
+          "y": 66,
+          "z": 2
+        },
+        "distance": 8.7,
+        "headPosition": {
+          "x": 2,
+          "y": 67.5,
+          "z": 6
+        }
+      },
+      "perch": {
+        "x": 0.5,
+        "y": 68,
+        "z": 0.5
+      },
+      "crystals": {
+        "remaining": 0,
+        "gone": 10,
+        "caged": 0,
+        "unseen": [],
+        "list": []
+      },
+      "dragonBreath": [
+        {
+          "x": -8,
+          "y": 65,
+          "z": 4,
+          "radius": 6.5,
+          "dangerRadius": 7
+        }
+      ],
+      "dragonFireballs": 0
+    }
+  },
+  {
+    "name": "end-death-return",
+    "goal": "エンドラを討伐して",
+    "current": "p17.2",
+    "elapsedMinutes": 262,
+    "events": [
+      "死んでリスポーンした（持ち物を落とした所へ戻るか決める）"
+    ],
+    "expect": "落とし物は間に合わない（別の次元）。まず装備を作り直す（木・石・食料）。エンドの座標へ go しない。",
+    "check": {
+      "noHand": [
+        "wait"
+      ],
+      "noMatch": [
+        "\"x\":35[,}]"
+      ]
+    },
+    "world": {
+      "dimension": "overworld",
+      "position": {
+        "x": 121.5,
+        "y": 70,
+        "z": -69.5
+      },
+      "health": 20,
+      "food": 12,
+      "time": "昼",
+      "arrival": {
+        "kind": "respawn",
+        "secondsAgo": 8,
+        "died": true
+      },
+      "inventory": [
+        {
+          "name": "cooked_beef",
+          "count": 2
+        }
+      ],
+      "lastDeath": "4分前 the_end (35,60,12) 「奈落に落ちた」 落とした物: iron_sword×1, bow×1, arrow×30 ほか3種。消えるまで最長約1分（近くにいる間だけ減る）→拾いに戻れる",
+      "deaths": [
+        {
+          "at": "2026-11-02T00:00:00.000Z",
+          "position": {
+            "x": 35,
+            "y": 60,
+            "z": 12
+          },
+          "dimension": "the_end",
+          "cause": "奈落に落ちた",
+          "lostItems": [
+            "iron_sword×1"
+          ]
+        }
+      ],
+      "rememberedPlaces": {
+        "respawn": "1m 南 (121,70,-70) respawn",
+        "stronghold": "1830m 北北東 (703,26,-1899)",
+        "end_portal_frame": "1830m 北北東 (703,26,-1899)",
+        "nether_portal": "180m 北東 (260,72,-160)"
+      }
+    }
   }
- },
- {
-  "name": "end-death-return",
-  "goal": "エンドラを討伐して",
-  "current": "p17.2",
-  "elapsedMinutes": 262,
-  "events": ["死んでリスポーンした（持ち物を落とした所へ戻るか決める）"],
-  "expect": "落とし物は間に合わない（別の次元）。まず装備を作り直す（木・石・食料）。エンドの座標へ go しない。",
-  "check": { "noHand": ["wait"], "noMatch": ["\"x\":35[,}]"] },
-  "world": {
-   "dimension": "overworld", "position": { "x": 121.5, "y": 70, "z": -69.5 }, "health": 20, "food": 12, "time": "昼", "arrival": { "kind": "respawn", "secondsAgo": 8, "died": true },
-   "inventory": [{ "name": "cooked_beef", "count": 2 }],
-   "lastDeath": "4分前 the_end (35,60,12) 「奈落に落ちた」 落とした物: iron_sword×1, bow×1, arrow×30 ほか3種。消えるまで最長約1分（近くにいる間だけ減る）→拾いに戻れる",
-   "deaths": [{ "at": "2026-11-02T00:00:00.000Z", "position": { "x": 35, "y": 60, "z": 12 }, "dimension": "the_end", "cause": "奈落に落ちた", "lostItems": ["iron_sword×1"] }],
-   "rememberedPlaces": { "respawn": "1m 南 (121,70,-70) respawn", "stronghold": "1830m 北北東 (703,26,-1899)", "end_portal_frame": "1830m 北北東 (703,26,-1899)", "nether_portal": "180m 北東 (260,72,-160)" }
-  }
- }
 ]

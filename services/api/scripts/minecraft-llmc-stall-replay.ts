@@ -23,7 +23,7 @@ import { doneClaimProblem } from '../src/wiring/minecraftLlmcReplanWiring.js';
 interface Stall {
   name: string; goal: string; current?: string; seconds: number; expect: string;
   stall: { kind: string; why: string; node: string | null };
-  plan?: unknown; world: Record<string, unknown>; end?: object; results: string[]; queue: string[]; earlier: never[]; sameNode: number;
+  plan?: unknown; world: Record<string, unknown>; results: string[]; queue: string[]; earlier: never[]; sameNode: number;
   eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }>;
 }
 const MODELS: Record<string, string> = { sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' };
@@ -47,7 +47,7 @@ function treeOf(item: Stall): PlanTree {
 
 function briefOf(item: Stall): { brief: string; tree: PlanTree; observation: BodyObservation } {
   const observation = { schemaVersion: 1, bodyId: 'minecraft:scene', sequence: 1, stateAt: new Date(0).toISOString(), receivedAt: new Date(0).toISOString(),
-    connected: true, state: { world: item.world as never, ...(item.end ? { end: item.end } : {}) }, facts: { alive: true } } as unknown as BodyObservation;
+    connected: true, state: { world: item.world as never }, facts: { alive: true } } as unknown as BodyObservation;
   const tree = treeOf(item);
   const node = tree.nodes.find(candidate => candidate.id === item.stall.node);
   const facts = doneFacts(observation);

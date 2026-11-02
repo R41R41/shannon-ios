@@ -19,6 +19,7 @@ function heldAs(part: string, counts: ReadonlyMap<string, number>): number {
 /** What one target gives: the item itself, each material it is made of (bounded by the count it needs, so surplus earns nothing), and,
  * for an item that is only smelted, the input it is smelted from. The keys depend on the target alone, never on what is held. */
 function targetEvidence(target: { item: string; count: number }, counts: ReadonlyMap<string, number>): Record<string, number> {
+  // The rods and the pearls the work made into powder and eyes still count (`acquired`).
   const evidence: Record<string, number> = { [`have:${target.item}`]: Math.min(target.count, acquired(counts, target.item)) };
   for (const part of materialsOf(target.item, target.count, { chain: true, pack: new Map() }).spends) {
     evidence[`material:${target.item}:${part.item}`] = Math.min(part.count, heldAs(part.item, counts));
@@ -79,7 +80,7 @@ export function explorationEvidence(node: PlanNode | undefined, input: ActInput 
 }
 /**
  * The fight in the End as progress: the damage done to the dragon and the crystals destroyed (numbers that only go up). The body's own
- * count (`state.end.dragon.health`, `state.end.crystals.remaining`); nothing when it does not say, so a fight the body does not report earns no credit.
+ * count (`dragon.health`, `crystals.remaining` of the body's End fields); nothing when it does not say, so a fight the body does not report earns no credit.
  */
 export function endFightEvidence(frame: BodyObservation | null): Record<string, number> {
   const end = endViewOf(frame), health = end?.dragon?.health ?? null, left = end?.crystals.remaining ?? null;

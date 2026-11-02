@@ -22,6 +22,7 @@ import { forgetReplans, REPLAN, type ReplanLedger } from '../src/surfaces/minecr
 import { forgetStalls, noteProgress } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import { createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
 import { actionHarness } from './support/actionThreadHarness.js';
+import { BODY_ABSENT_CODE, BODY_ABSENT_REASON } from '../src/wiring/taskRuntimeUnavailable.js';
 
 /**
  * The run of 4 to 5 hours on a Spot VM that stops and starts (2026-11-02): after a restart, the plan's nodes, the places she remembers (the thrown
@@ -137,5 +138,31 @@ describe('a restart of the API (a Spot VM that stopped and started) in the middl
     expect(third.asked).toHaveLength(0);
     expect(third.checkpoint().minecraftEyes).toEqual(eyes.checkpoint().minecraftEyes);
     expect(third.checkpoint().minecraftWaitDeadlines).toEqual(waits.checkpoint().minecraftWaitDeadlines);
+  });
+});
+
+describe('a body that is not there (the body alone goes down while the head runs)', () => {
+  const signal = new AbortController().signal;
+  const frame = (f: Fixture, sequence: number, connected: boolean) => f.control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, { schemaVersion: 1, serverId: 'world',
+    connectionId: 'connection', observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence, stateAt: at, receivedAt: at, connected, state: { world: world as never },
+      facts: { alive: true } }, skills: [], candidates: [], receipts: [], activeOperationIds: [] });
+
+  it('asks no decision for a step while the body is not connected, and asks again once it is', async () => {
+    const f = fixture(), id = await goal(f);
+    const run = process(f, id);
+    await expect(run.lifecycle.beforeDecision!(signal)).resolves.toBeUndefined();
+    frame(f, 2, false);
+    await expect(run.lifecycle.beforeDecision!(signal)).rejects.toMatchObject({ name: 'FcaDecisionUnavailableError', message: BODY_ABSENT_CODE, reason: BODY_ABSENT_REASON });
+    frame(f, 3, true);
+    await expect(run.lifecycle.beforeDecision!(signal)).resolves.toBeUndefined();
+  });
+
+  it('lets a step that was stopped go: the stop is settled by the caller, not by a wait for the body', async () => {
+    const f = fixture(), id = await goal(f);
+    const run = process(f, id);
+    frame(f, 2, false);
+    const stopped = new AbortController();
+    stopped.abort();
+    await expect(run.lifecycle.beforeDecision!(stopped.signal)).resolves.toBeUndefined();
   });
 });

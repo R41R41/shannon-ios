@@ -11,7 +11,8 @@ import { seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
  * `seen` hook: `seenDoneUpdate`): each node closes by its own condition, in order, and the current node follows without a stall.
  * IDs are those of a dragon task begun in the Nether (the seed of that place).
  */
-const frame = (world: object, end?: object): BodyObservation => ({ connected: true, state: { world, ...(end ? { end } : {}) }, facts: {}, bodyId: 'b', sequence: 1,
+/** A frame; the End fight, when given, sits directly in the world as the body sends it. */
+const frame = (world: object, fight?: object): BodyObservation => ({ connected: true, state: { world: { ...world, ...fight } }, facts: {}, bodyId: 'b', sequence: 1,
   stateAt: new Date(0).toISOString() }) as unknown as BodyObservation;
 const items = (record: Record<string, number>) => Object.entries(record).map(([name, count]) => ({ name, count }));
 
@@ -19,8 +20,8 @@ describe('walking the late-game seed with the frames of a run', () => {
   const seed = seedPlan('エンドラを討伐して', 'the_nether')!;
   let now: BodyObservation = frame({});
   const plan = createFcaPlanTools({ taskId: 'progress', checkpoint: { fcaPlanTree: seed }, rules: true, seen: held => seenDoneUpdate(held, now) });
-  const at = (world: object, end?: object): PlanTree => {
-    now = frame(world, end);
+  const at = (world: object, fight?: object): PlanTree => {
+    now = frame(world, fight);
     plan.port.view();
     return plan.port.tree();
   };
