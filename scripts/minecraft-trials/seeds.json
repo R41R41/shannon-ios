@@ -1,5 +1,5 @@
 {
- "note": "facts from trials.py scout (radius 96 around spawn; locate for structures and biomes). distances in blocks from the world spawn.",
+ "note": "facts from trials.py scout (radius 96 around spawn; locate for structures and biomes). distances in blocks from the world spawn. | c1-c8, n1, n4: seedscan.py (2026-11-02), 470 random seeds screened with vanilla /locate on the 1.21.11 server; \"score\" is the filming profile (README \"種の下調べ\"); c2 and c4 are out: the stronghold an eye points to lies under the sea",
  "seeds": [
   {
    "key": "r16",
@@ -413,6 +413,824 @@
    "nearestSheep": 32.6,
    "plains": 45,
    "snowyPlains": 2652
+  },
+  {
+   "key": "c1",
+   "seed": "-1687609181642700084",
+   "source": "seedscan 2026-11-02（79 点）",
+   "tags": [
+    "plains",
+    "村 80m（plains、ベッド 10・畑 0）",
+    "廃ポータル 71m",
+    "地表の溶岩 67.4m",
+    "要塞 138m・砦 456m・歪んだ森 315m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 1454m（陸、地下 170m）",
+    "足元の水 0.089・海まで 90m・起伏 11"
+   ],
+   "spawn": [
+    128,
+    74,
+    80
+   ],
+   "spawnBiome": "minecraft:plains",
+   "village": 80,
+   "ruinedPortal": 71,
+   "surfaceLava": 67.4,
+   "nearestLog": 18.0,
+   "logsWithin32": 25,
+   "ironOreWithin48": 2215,
+   "coalOreWithin48": 2651,
+   "deepLavaChunks": 68,
+   "animals": {
+    "sheep": 14,
+    "pig": 14,
+    "chicken": 6,
+    "cow": 4
+   },
+   "nearestSheep": 38.1,
+   "score": 79,
+   "scoreParts": {
+    "village": 17,
+    "obsidian": 14,
+    "diamond": 3,
+    "terrain": 12,
+    "fortress": 13,
+    "warped": 5,
+    "bastion": 0,
+    "stronghold": 13,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 138,
+    "bastion": 456,
+    "warpedForest": 315,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 1454,
+    "nearestUsable": true,
+    "portalCenter": [
+     -1052.0,
+     -50,
+     930.0
+    ],
+    "depth": 170,
+    "eyesAlreadyIn": 1,
+    "seaOnTheWay": 2
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.089,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 11,
+    "groundLow": 69,
+    "groundHigh": 80,
+    "biomes": {
+     "plains": 0.95,
+     "ocean": 0.04,
+     "forest": 0.02
+    },
+    "seaNearest": 90
+   }
+  },
+  {
+   "key": "n1",
+   "seed": "293781539757866817",
+   "source": "seedscan 2026-11-02（72 点）",
+   "tags": [
+    "plains",
+    "村 215m（plains、ベッド 16・畑 27）",
+    "廃ポータル 112m",
+    "地表の溶岩 38.3m",
+    "要塞 163m・砦 623m・歪んだ森 243m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 2042m（陸、地下 73m）",
+    "足元の水 0.026・海まで 520m・起伏 19"
+   ],
+   "spawn": [
+    0,
+    68,
+    0
+   ],
+   "spawnBiome": "minecraft:plains",
+   "village": 215,
+   "ruinedPortal": 112,
+   "surfaceLava": 38.3,
+   "nearestLog": 8.5,
+   "logsWithin32": 10,
+   "ironOreWithin48": 3575,
+   "coalOreWithin48": 2346,
+   "deepLavaChunks": 66,
+   "animals": {
+    "sheep": 3,
+    "pig": 8,
+    "chicken": 6
+   },
+   "nearestSheep": 75.7,
+   "score": 72,
+   "scoreParts": {
+    "village": 9,
+    "obsidian": 14,
+    "diamond": 3,
+    "terrain": 15,
+    "fortress": 13,
+    "warped": 5,
+    "bastion": 0,
+    "stronghold": 11,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 163,
+    "bastion": 623,
+    "warpedForest": 243,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 2042,
+    "nearestUsable": true,
+    "portalCenter": [
+     1977.0,
+     16,
+     -513.0
+    ],
+    "depth": 73,
+    "eyesAlreadyIn": 1,
+    "seaOnTheWay": 0
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.026,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 19,
+    "groundLow": 50,
+    "groundHigh": 69,
+    "biomes": {
+     "plains": 0.98,
+     "dripstone_caves": 0.02
+    },
+    "seaNearest": 520
+   }
+  },
+  {
+   "key": "n4",
+   "seed": "-8060094805615405684",
+   "source": "seedscan 2026-11-02（72 点）",
+   "tags": [
+    "old_growth_birch_forest",
+    "村 163m（plains、ベッド 9・畑 135）",
+    "廃ポータル 359m",
+    "地表の溶岩 39.8m",
+    "要塞 111m・砦 323m・歪んだ森 0m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 1741m（陸、地下 63m）",
+    "足元の水 0.27・海まで 497m・起伏 42"
+   ],
+   "spawn": [
+    16,
+    80,
+    0
+   ],
+   "spawnBiome": "minecraft:old_growth_birch_forest",
+   "village": 163,
+   "ruinedPortal": 359,
+   "surfaceLava": 39.8,
+   "nearestLog": 5.1,
+   "logsWithin32": 147,
+   "ironOreWithin48": 2094,
+   "coalOreWithin48": 3603,
+   "deepLavaChunks": 74,
+   "animals": {
+    "sheep": 6,
+    "cow": 8,
+    "rabbit": 4,
+    "chicken": 4
+   },
+   "nearestSheep": 65.1,
+   "score": 72,
+   "scoreParts": {
+    "village": 9,
+    "obsidian": 14,
+    "diamond": 3,
+    "terrain": 9,
+    "fortress": 15,
+    "warped": 10,
+    "bastion": 1,
+    "stronghold": 9,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 111,
+    "bastion": 323,
+    "warpedForest": 0,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 1741,
+    "nearestUsable": true,
+    "portalCenter": [
+     1.0,
+     4,
+     -1741.0
+    ],
+    "depth": 63,
+    "eyesAlreadyIn": 2,
+    "seaOnTheWay": 7
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.27,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.216,
+    "frozenBiomeFrac": 0.0,
+    "relief": 42,
+    "groundLow": 67,
+    "groundHigh": 109,
+    "biomes": {
+     "forest": 0.31,
+     "birch_forest": 0.28,
+     "old_growth_birch_forest": 0.22,
+     "river": 0.2
+    },
+    "seaNearest": 497
+   }
+  },
+  {
+   "key": "c3",
+   "seed": "-857818522191945881",
+   "source": "seedscan 2026-11-02（70 点）",
+   "tags": [
+    "savanna",
+    "村 128m（savanna、ベッド 4・畑 571）",
+    "廃ポータル 144m",
+    "地表の溶岩 なし（96m 内）",
+    "要塞 352m・砦 167m・歪んだ森 271m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 1496m（陸、地下 85m）",
+    "足元の水 0.06・海まで 1402m・起伏 8"
+   ],
+   "spawn": [
+    0,
+    64,
+    0
+   ],
+   "spawnBiome": "minecraft:savanna",
+   "village": 128,
+   "ruinedPortal": 144,
+   "surfaceLava": null,
+   "nearestLog": 8.0,
+   "logsWithin32": 82,
+   "ironOreWithin48": 2241,
+   "coalOreWithin48": 2521,
+   "deepLavaChunks": 25,
+   "animals": {
+    "pig": 8,
+    "cow": 5,
+    "sheep": 12,
+    "chicken": 4
+   },
+   "nearestSheep": 36.7,
+   "score": 70,
+   "scoreParts": {
+    "village": 14,
+    "obsidian": 10,
+    "diamond": 3,
+    "terrain": 13,
+    "fortress": 3,
+    "warped": 5,
+    "bastion": 3,
+    "stronghold": 17,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 352,
+    "bastion": 167,
+    "warpedForest": 271,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 1496,
+    "nearestUsable": true,
+    "portalCenter": [
+     -357.0,
+     -14,
+     -1453.0
+    ],
+    "depth": 85,
+    "eyesAlreadyIn": 0,
+    "seaOnTheWay": 0
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.06,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 8,
+    "groundLow": 61,
+    "groundHigh": 69,
+    "biomes": {
+     "savanna": 1.0
+    },
+    "seaNearest": 1402
+   }
+  },
+  {
+   "key": "c7",
+   "seed": "-5028691536445133111",
+   "source": "seedscan 2026-11-02（69 点）",
+   "tags": [
+    "plains",
+    "村 4m（plains、ベッド 7・畑 54）",
+    "廃ポータル 125m",
+    "地表の溶岩 29.7m",
+    "要塞 290m・砦 891m・歪んだ森 515m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 983m（陸、地下 47m）",
+    "足元の水 0.448・海まで 96m・起伏 13"
+   ],
+   "spawn": [
+    -196,
+    63,
+    -542
+   ],
+   "spawnBiome": "minecraft:plains",
+   "village": 4,
+   "ruinedPortal": 125,
+   "surfaceLava": 29.7,
+   "nearestLog": 8.1,
+   "logsWithin32": 106,
+   "ironOreWithin48": 2004,
+   "coalOreWithin48": 2084,
+   "deepLavaChunks": 64,
+   "animals": {
+    "pig": 6,
+    "sheep": 4,
+    "cow": 1
+   },
+   "nearestSheep": 28.1,
+   "score": 69,
+   "scoreParts": {
+    "village": 18,
+    "obsidian": 14,
+    "diamond": 3,
+    "terrain": 6,
+    "fortress": 6,
+    "warped": 0,
+    "bastion": 0,
+    "stronghold": 20,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 290,
+    "bastion": 891,
+    "warpedForest": 515,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 983,
+    "nearestUsable": true,
+    "portalCenter": [
+     -507.0,
+     22,
+     -1475.0
+    ],
+    "depth": 47,
+    "eyesAlreadyIn": 2,
+    "seaOnTheWay": 0
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.448,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 13,
+    "groundLow": 62,
+    "groundHigh": 75,
+    "biomes": {
+     "plains": 0.63,
+     "windswept_savanna": 0.37
+    },
+    "seaNearest": 96
+   }
+  },
+  {
+   "key": "c6",
+   "seed": "3528818900495331395",
+   "source": "seedscan 2026-11-02（69 点）",
+   "tags": [
+    "old_growth_birch_forest",
+    "村 193m（plains、ベッド 4・畑 27）",
+    "廃ポータル 283m",
+    "地表の溶岩 86.8m",
+    "要塞 147m・砦 346m・歪んだ森 135m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 1508m（陸、地下 70m）",
+    "足元の水 0.0・海まで 346m・起伏 27"
+   ],
+   "spawn": [
+    0,
+    102,
+    0
+   ],
+   "spawnBiome": "minecraft:old_growth_birch_forest",
+   "village": 193,
+   "ruinedPortal": 283,
+   "surfaceLava": 86.8,
+   "nearestLog": 3.2,
+   "logsWithin32": 528,
+   "ironOreWithin48": 2069,
+   "coalOreWithin48": 4144,
+   "deepLavaChunks": 21,
+   "animals": {
+    "chicken": 4,
+    "sheep": 7,
+    "pig": 5
+   },
+   "nearestSheep": 59.1,
+   "score": 69,
+   "scoreParts": {
+    "village": 9,
+    "obsidian": 7,
+    "diamond": 3,
+    "terrain": 8,
+    "fortress": 13,
+    "warped": 8,
+    "bastion": 1,
+    "stronghold": 18,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 147,
+    "bastion": 346,
+    "warpedForest": 135,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 1508,
+    "nearestUsable": true,
+    "portalCenter": [
+     1402.0,
+     16,
+     -556.0
+    ],
+    "depth": 70,
+    "eyesAlreadyIn": 1,
+    "seaOnTheWay": 0
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.0,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.199,
+    "frozenBiomeFrac": 0.0,
+    "relief": 27,
+    "groundLow": 91,
+    "groundHigh": 118,
+    "biomes": {
+     "forest": 0.4,
+     "birch_forest": 0.4,
+     "old_growth_birch_forest": 0.2,
+     "grove": 0.01
+    },
+    "seaNearest": 346
+   }
+  },
+  {
+   "key": "c5",
+   "seed": "-8160755647521839859",
+   "source": "seedscan 2026-11-02（69 点）",
+   "tags": [
+    "savanna",
+    "村 147m（savanna、ベッド 9・畑 289）",
+    "廃ポータル 147m",
+    "地表の溶岩 81.6m",
+    "要塞 306m・砦 285m・歪んだ森 263m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 1584m（陸、地下 91m）",
+    "足元の水 0.187・海まで 352m・起伏 12"
+   ],
+   "spawn": [
+    16,
+    64,
+    0
+   ],
+   "spawnBiome": "minecraft:savanna",
+   "village": 147,
+   "ruinedPortal": 147,
+   "surfaceLava": 81.6,
+   "nearestLog": 5.4,
+   "logsWithin32": 52,
+   "ironOreWithin48": 2229,
+   "coalOreWithin48": 2207,
+   "deepLavaChunks": 62,
+   "animals": {
+    "sheep": 7,
+    "pig": 4,
+    "cow": 16
+   },
+   "nearestSheep": 53.9,
+   "score": 69,
+   "scoreParts": {
+    "village": 14,
+    "obsidian": 10,
+    "diamond": 3,
+    "terrain": 11,
+    "fortress": 6,
+    "warped": 5,
+    "bastion": 1,
+    "stronghold": 17,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 306,
+    "bastion": 285,
+    "warpedForest": 263,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 1584,
+    "nearestUsable": true,
+    "portalCenter": [
+     -1221.0,
+     -21,
+     989.0
+    ],
+    "depth": 91,
+    "eyesAlreadyIn": 1,
+    "seaOnTheWay": 0
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.187,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 12,
+    "groundLow": 62,
+    "groundHigh": 74,
+    "biomes": {
+     "savanna": 0.86,
+     "river": 0.14
+    },
+    "seaNearest": 352
+   }
+  },
+  {
+   "key": "c8",
+   "seed": "153456100718416362",
+   "source": "seedscan 2026-11-02（67 点）",
+   "tags": [
+    "desert",
+    "村 32m（desert、ベッド 17・畑 14）",
+    "廃ポータル 588m",
+    "地表の溶岩 なし（96m 内）",
+    "要塞 174m・砦 78m・歪んだ森 32m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 2305m（陸、地下 104m）",
+    "足元の水 0.225・海まで 45m・起伏 7"
+   ],
+   "spawn": [
+    224,
+    66,
+    64
+   ],
+   "spawnBiome": "minecraft:desert",
+   "village": 32,
+   "ruinedPortal": 588,
+   "surfaceLava": null,
+   "nearestLog": 89.3,
+   "logsWithin32": 0,
+   "ironOreWithin48": 1935,
+   "coalOreWithin48": 1588,
+   "deepLavaChunks": 56,
+   "animals": {
+    "rabbit": 8,
+    "pig": 2
+   },
+   "nearestSheep": null,
+   "score": 67,
+   "scoreParts": {
+    "village": 18,
+    "obsidian": 0,
+    "diamond": 3,
+    "terrain": 8,
+    "fortress": 13,
+    "warped": 10,
+    "bastion": 3,
+    "stronghold": 11,
+    "spawn": 1,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 174,
+    "bastion": 78,
+    "warpedForest": 32,
+    "blazeSpawners": 4
+   },
+   "stronghold": {
+    "fromSpawn": 2305,
+    "nearestUsable": true,
+    "portalCenter": [
+     1799.0,
+     -32,
+     1747.0
+    ],
+    "depth": 104,
+    "eyesAlreadyIn": 2,
+    "seaOnTheWay": 0
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.225,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 7,
+    "groundLow": 63,
+    "groundHigh": 70,
+    "biomes": {
+     "desert": 0.84,
+     "warm_ocean": 0.12,
+     "river": 0.04
+    },
+    "seaNearest": 45
+   }
+  },
+  {
+   "key": "c2",
+   "seed": "24428950187891676",
+   "source": "seedscan 2026-11-02（56 点）",
+   "tags": [
+    "desert",
+    "村 57m（desert、ベッド 3・畑 8）",
+    "廃ポータル 237m",
+    "地表の溶岩 58.8m",
+    "要塞 215m・砦 268m・歪んだ森 135m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 1728m（海の下、地下 44m）",
+    "足元の水 0.4・海まで 45m・起伏 14"
+   ],
+   "spawn": [
+    48,
+    63,
+    160
+   ],
+   "spawnBiome": "minecraft:desert",
+   "village": 57,
+   "ruinedPortal": 237,
+   "surfaceLava": 58.8,
+   "nearestLog": 48.6,
+   "logsWithin32": 0,
+   "ironOreWithin48": 3356,
+   "coalOreWithin48": 1690,
+   "deepLavaChunks": 60,
+   "animals": {
+    "rabbit": 16
+   },
+   "nearestSheep": null,
+   "score": 56,
+   "scoreParts": {
+    "village": 18,
+    "obsidian": 11,
+    "diamond": 3,
+    "terrain": 4,
+    "fortress": 10,
+    "warped": 8,
+    "bastion": 1,
+    "stronghold": 0,
+    "spawn": 1,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 215,
+    "bastion": 268,
+    "warpedForest": 135,
+    "blazeSpawners": 2
+   },
+   "stronghold": {
+    "fromSpawn": 1728,
+    "nearestUsable": false,
+    "portalCenter": [
+     1740.0,
+     32,
+     594.0
+    ],
+    "depth": 44,
+    "eyesAlreadyIn": 3,
+    "seaOnTheWay": 5
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.4,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 14,
+    "groundLow": 56,
+    "groundHigh": 70,
+    "biomes": {
+     "desert": 0.81,
+     "warm_ocean": 0.15,
+     "wooded_badlands": 0.03,
+     "badlands": 0.0
+    },
+    "seaNearest": 45
+   }
+  },
+  {
+   "key": "c4",
+   "seed": "19873745673740643",
+   "source": "seedscan 2026-11-02（65 点）",
+   "tags": [
+    "plains",
+    "村 97m（plains、ベッド 6・畑 54）",
+    "廃ポータル 288m",
+    "地表の溶岩 68.2m",
+    "要塞 180m・砦 264m・歪んだ森 0m（ネザー側、スポーン÷8 から）",
+    "ストロングホールド 1309m（海の下、地下 141m）",
+    "足元の水 0.164・海まで 45m・起伏 24"
+   ],
+   "spawn": [
+    48,
+    74,
+    16
+   ],
+   "spawnBiome": "minecraft:plains",
+   "village": 97,
+   "ruinedPortal": 288,
+   "surfaceLava": 68.2,
+   "nearestLog": 7.1,
+   "logsWithin32": 6,
+   "ironOreWithin48": 1877,
+   "coalOreWithin48": 3826,
+   "deepLavaChunks": 66,
+   "animals": {
+    "cow": 9,
+    "chicken": 6,
+    "sheep": 6,
+    "pig": 2
+   },
+   "nearestSheep": 71.9,
+   "score": 65,
+   "scoreParts": {
+    "village": 17,
+    "obsidian": 11,
+    "diamond": 3,
+    "terrain": 8,
+    "fortress": 13,
+    "warped": 10,
+    "bastion": 1,
+    "stronghold": 0,
+    "spawn": 2,
+    "outpost": 0
+   },
+   "nether": {
+    "fortress": 180,
+    "bastion": 264,
+    "warpedForest": 0,
+    "blazeSpawners": 1
+   },
+   "stronghold": {
+    "fromSpawn": 1309,
+    "nearestUsable": false,
+    "portalCenter": [
+     551.0,
+     -23,
+     1453.0
+    ],
+    "depth": 141,
+    "eyesAlreadyIn": 0,
+    "seaOnTheWay": 0
+   },
+   "spawnHazards": {
+    "radius": 64,
+    "columns": 797,
+    "waterFrac": 0.164,
+    "iceFrac": 0.0,
+    "denseForestFrac": 0.0,
+    "frozenBiomeFrac": 0.0,
+    "relief": 24,
+    "groundLow": 70,
+    "groundHigh": 94,
+    "biomes": {
+     "plains": 0.89,
+     "lukewarm_ocean": 0.11
+    },
+    "seaNearest": 45
+   }
   }
  ],
  "variants": {
