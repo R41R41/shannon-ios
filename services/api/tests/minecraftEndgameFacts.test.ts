@@ -304,14 +304,14 @@ describe('the ledger reads the body\'s full flight report (S2)', () => {
     expect(text).toContain('mc_probe kind=frames');
     expect(text).not.toContain('次に投げる場所の案');
     expect(text).not.toContain('交点はまだ無い');
-    expect(ledger.fix()).toMatchObject({ x: 301, z: -400, errorBlocks: 4, throws: 1 });
+    expect(ledger.fix()).toMatchObject({ x: 301, z: -400, errorBlocks: 1, throws: 1 });
   });
 
   it('takes an eye that stopped short as the stronghold at where it stopped, and says that this is a reading of the game', () => {
     const ledger = createEyeLedger(null);
     ledger.note('s', report({ arrived: true, flew: 7, bearingDeg: 90, unit: { x: 1, z: 0 }, origin: { x: 0, y: 64, z: 0 }, from: { x: 0, y: 64, z: 0 },
       to: { x: 7, y: 60, z: 0 }, drop: undefined }), 'overworld', 1000);
-    expect(ledger.fix()).toMatchObject({ x: 7, z: 0, errorBlocks: 8, throws: 1 });
+    expect(ledger.fix()).toMatchObject({ x: 7, z: 0, errorBlocks: 1, throws: 1 });
     const text = ledger.lines(null, 2000).join('\n');
     expect(text).toContain('目玉が 7m で止まった');
     expect(text).toContain('隔離ラボで 6/6');
