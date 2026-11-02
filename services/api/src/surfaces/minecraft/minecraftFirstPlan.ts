@@ -48,13 +48,14 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('焼いて鉄のツルハシ・バケツ・盾', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' }),
     node('鉄の全身の防具', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings&have:iron_boots' })] }),
   node('水入りバケツ', { kind: 'water', doneWhen: 'have:water_bucket' }),
-  node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe', children: [
+  node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe', caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・バケツ・食料40点）が欠けたら下りない'], children: [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
-  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', children: [
+  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', caution: ['必須（盾・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点）が欠けたら入らない'], children: [
     node('溶岩源に水で黒曜石10', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|dim:the_nether' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether' }),
-    node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether' })] }),
+    node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether',
+      caution: ['火をつける前に必須を確かめる: 盾・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点'] })] }),
 ];
 /**
  * Run 26 (owner 2026-10-21): she went on to the fortress with no table, slabs, shield or food; each stage past
@@ -71,7 +72,8 @@ const BEYOND: readonly PlanSeed[] = [
       node('かまどで鉄を焼き盾', { kind: 'other', doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { kind: 'food', doneWhen: 'food>=100' }),
       node('金の防具を1つ着る（ピグリンが襲わない）', { kind: 'other', doneWhen: 'have:gold_armor' })] }),
   node('ネザー要塞を探す', { kind: 'fortress', note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'see:fortress',
-    caution: ['橋の下は溶岩のことがある。足元と両脇を確かめて渡る'] }),
+    caution: ['橋の下は溶岩のことがある。足元と両脇を確かめて渡る', '遠い go に canDig[netherrack,basalt,blackstone] canPlace[cobblestone,netherrack]',
+      'maxDig 200・maxPlace 100・seconds 100〜120。止まったら行の通りに直して同じ go'] }),
   node('ブレイズロッド7以上', { kind: 'blaze', target: { item: 'blaze_rod', count: 7 }, doneWhen: 'have:blaze_rod>=7', note: '粉にするのは7本そろってから',
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('fight でブレイズを14体ほど倒す（傷が深ければ attack hold）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
@@ -86,9 +88,10 @@ const BEYOND: readonly PlanSeed[] = [
   node('ストロングホールド', { kind: 'stronghold', children: [
     node('目玉の交点へ行き、地下の枠の部屋を見つける', { kind: 'stronghold', doneWhen: 'see:end_portal_frame', note: '交点・誤差・次の投げ位置は live の目玉の帳簿' }),
     node('枠にアイをはめてポータルを開く', { kind: 'stronghold', doneWhen: 'see:end_portal' })] }),
-  node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ' }),
+  node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ',
+    caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）'] }),
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
-    caution: ['縁から5マス以上内側で戦う。縁では sneak', '息の雲・火の玉の線の上で立ち止まらない'],
+    caution: ['縁から5マス以上内側で戦う。縁では sneak', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱を登る時は水入りバケツを持つ（落ちたら体が水で止める）'],
     children: [node('クリスタルを弓で壊す', { kind: 'dragon', doneWhen: 'crystals<=0' }), node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
 ];
 /**
