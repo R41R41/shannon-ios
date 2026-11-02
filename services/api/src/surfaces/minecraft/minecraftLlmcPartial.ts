@@ -4,6 +4,7 @@ import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
+import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
 import { descentNote, gateHold } from './minecraftLlmcReadiness.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
@@ -50,6 +51,8 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
   const gate = gateHold(input, frame);
   if (gate) found.push({ hand: gate.hand, code: 'gate_required', kind: 'portal', line: `手 ${gate.hand} portal: ${gate.line}。` });
+  const deadly = deadlyGateHold(input, frame);
+  if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
     furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });

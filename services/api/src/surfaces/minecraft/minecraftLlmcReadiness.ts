@@ -447,7 +447,11 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
  */
 export function requiredLack(facts: NonNullable<ReturnType<typeof readinessOf>>, kinds: readonly PlanKind[]): string | null {
   const stage = preparationStage(facts.dimension, facts.counts, kinds);
-  const table = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : null;
+  return lackOfTable(facts, stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : null);
+}
+
+/** The required needs of one table that are not met, with what going on without them costs, or null (no table, no risk to say, or all met). */
+export function lackOfTable(facts: NonNullable<ReturnType<typeof readinessOf>>, table: PrepStage | null): string | null {
   if (!table?.risk) return null;
   const must = mustWords(table, { counts: facts.counts, food: facts.food, worn: wornItems(facts.world.worn) });
   return must.length ? `未達の必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : null;

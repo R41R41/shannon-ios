@@ -15,6 +15,7 @@
  *   cheapest, 4 ingots, and lose the least protection), a sword, blocks to stand on and the first stretch's food;
  * - before the Nether's depth and the End: as they were (the check after she is in, and the End's beds, bow and eyes).
  */
+import { BED_ITEM } from './minecraftItems.js';
 /**
  * `goal`: wanted when it can be had, not required (the golden boots, when 4 gold is found). `weight`: what one stack of a matching item is worth in the count
  * (a diamond pickaxe stands for three iron ones).
@@ -60,6 +61,18 @@ export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food
   risk: 'ダイヤの層（y=-58）は溶岩と深い所の敵の中。死ねば鉄の道具と防具を失い、取りに戻れないことが多い。' + MAKE_IT };
 export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SPARE_PICKAXES, SHIELD, SWORD, ARMOUR, FOOTING, BOOTS],
   risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い。' + MAKE_IT };
+
+const BEDS: PrepNeed = { label: 'ベッド', count: 4, pattern: BED_ITEM };
+const WATER_BUCKET: PrepNeed = { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u };
+/** What a pillar, a bridge or a cover is made of in the End: the footing's blocks and obsidian. */
+const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）', count: 64, pattern: new RegExp(`${BLOCKS.source}|^obsidian$`, 'u') };
+/**
+ * The coordinator, 2026-11-03 (the 11/4 list, item 2: the deadly gates in `gateHold`'s form): the hand that walks into the End's portal is held
+ * while the blocks to stand and cover on, the water bucket, the beds or the food are missing. What is missing is said; how to gather it is the
+ * decision's.
+ */
+export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80, needs: [STACKABLE, WATER_BUCKET, BEDS],
+  risk: 'エンドは虚空の島で、戻る道は開いたポータルだけ。積める物・水バケツ・ベッド・食料が無いと、虚空に落ちるか竜に押されて死に、ここまでの装備と時間を失う。' + MAKE_IT };
 
 /**
  * The coordinator, 2026-11-02 (the owner: dragon within three hours, an hour and a half at best; a death after the iron gear puts the time in doubt, so a

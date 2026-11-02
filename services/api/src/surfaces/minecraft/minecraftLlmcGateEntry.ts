@@ -21,13 +21,13 @@ function endsOf(hand: Record<string, unknown>): unknown[] {
   return [];
 }
 
-/** The first hand (0-based) of the act that ends in a lit portal cell of the map, or -1. */
-export function portalCellHand(input: unknown, frame: BodyObservation | null): number {
+/** The first hand (0-based) of the act that ends in a lit portal cell of the map (`p`: the Nether's; `e`: the End's), or -1. */
+export function portalCellHand(input: unknown, frame: BodyObservation | null, symbol: 'p' | 'e' = 'p'): number {
   const hands = (input as { hands?: unknown } | null)?.hands;
   const world = frame?.state.world as { localMap?: unknown; position?: unknown } | undefined;
   const feet = cellOf(world?.position), layers = typeof world?.localMap === 'string' ? readLayers(world.localMap) : null;
   if (!Array.isArray(hands) || !feet || !layers) return -1;
-  const portal = (cell: Cell): boolean => [0, 1].some(dy => layers.layers.get(cell.y + dy)?.get(`${cell.x},${cell.z}`) === 'p');
+  const portal = (cell: Cell): boolean => [0, 1].some(dy => layers.layers.get(cell.y + dy)?.get(`${cell.x},${cell.z}`) === symbol);
   return hands.findIndex(raw => {
     const hand = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
     if (!hand || (hand.do === 'walk' && finite(hand.range) && hand.range >= 1)) return false;
