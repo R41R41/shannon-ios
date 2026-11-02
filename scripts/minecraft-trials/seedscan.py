@@ -194,7 +194,9 @@ class Lab:
                 time.sleep(0.5)
         raise RuntimeError('rcon did not answer')
 
-    def stop(self, remove=True):
+    def stop(self, remove=True, fast=False):
+        if self.proc and self.proc.poll() is None and fast:          # nobody keeps this world (the rig's): no save, no wait
+            self.proc.kill(); self.proc.wait()
         if self.proc and self.proc.poll() is None:
             try:
                 r = Rcon(self.rcon_port, self.password, timeout=60)

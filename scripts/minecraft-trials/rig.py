@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -91,6 +92,14 @@ def free_slot(port_from, port_to):
     raise trials.Stop(f'no free port in {port_from}-{port_to} (and +1000 for RCON)')
 
 
+def kill_group(proc, sig):
+    """Signals the whole process group of a child that was started in its own session."""
+    try: os.killpg(os.getpgid(proc.pid), sig)
+    except (ProcessLookupError, PermissionError, OSError):
+        try: proc.send_signal(sig)
+        except (ProcessLookupError, OSError): pass
+
+
 class Rig:
     """One trial's lab server, head rig and body. start() points trials.py at them (RCON, database, operator CLI); stop() puts everything back."""
 
@@ -117,7 +126,7 @@ class Rig:
                'NODE_ENV': 'production'}
         if a.model == 'real': env['RIG_ENV_FILE'] = a.env_file
         self.head = subprocess.Popen([a.node, '--import', 'tsx', 'scripts/minecraft-rig.ts'], cwd=os.path.join(a.head_pin, 'services', 'api'), env=env, stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
         threading.Thread(target=self._drain, args=(self.head, 'rig.log'), daemon=True).start()
         self._wait(lambda: self.http is not None, 90, 'the head\'s rig did not open its door', self.head)
         node_dir = os.path.dirname(a.body_node)
@@ -125,7 +134,7 @@ class Rig:
                     'SHANNON_ISOLATED_MINEBOT_PROBE': 'true', 'MINECRAFT_COGNITION_MODE': 'off', 'MINECRAFT_OUTAGE_NO_LLM': 'true', 'MINECRAFT_HUNT_NO_LLM': 'true',
                     'MINECRAFT_PROBE_FLOOR': 'default', 'TS_NODE_TRANSPILE_ONLY': 'true', 'RIG_MC_PORT': str(self.lab.port), 'RIG_HEAD_URL': self.http['url'], 'RIG_BODY_NAME': trials.BODY}
         self.body = subprocess.Popen(['nice', '-n', '5', a.body_node, '--loader', 'ts-node/esm', BODY_RUN_RELATIVE], cwd=backend, env=body_env, stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
         threading.Thread(target=self._drain, args=(self.body, 'body.log'), daemon=True).start()
         self._wait(lambda: self.ready is not None, a.ready_seconds, 'the rig did not come up', self.head, self.body)
         self.saved = {'DB': trials.DB, 'IOS': trials.IOS, 'NODE': trials.NODE, 'RCON_TARGET': trials.RCON_TARGET}
@@ -160,13 +169,13 @@ class Rig:
         if self.saved:
             trials.DB, trials.IOS, trials.NODE, trials.RCON_TARGET = (self.saved[k] for k in ('DB', 'IOS', 'NODE', 'RCON_TARGET'))
             self.saved = {}
-        for proc in (self.body, self.head):          # the body first: it polls the head
+        for proc in (self.body, self.head):          # the body first: it polls the head; each is its own process group, ended whole (nothing may stay behind holding the slot or the memory)
             if proc and proc.poll() is None:
-                proc.terminate()
-                try: proc.wait(timeout=25)
+                kill_group(proc, signal.SIGTERM)
+                try: proc.wait(timeout=8)
                 except subprocess.TimeoutExpired:
-                    proc.kill(); proc.wait()
-        if self.lab: self.lab.stop(remove=True)
+                    kill_group(proc, signal.SIGKILL); proc.wait()
+        if self.lab: self.lab.stop(remove=True, fast=True)
         if not self.args.keep and os.path.isdir(self.dir) and os.path.abspath(self.dir).startswith(os.path.abspath(RIG_ROOT) + os.sep):
             os.makedirs(os.path.join(trials.RESULTS, self.batch), exist_ok=True)
             for name in ('rig.log', 'body.log'):
@@ -304,6 +313,8 @@ def main(argv):
     p.add_argument('--keep-going', action='store_true')
     p = sub.add_parser('report'); p.add_argument('--batch')
     args = parser.parse_args(argv)
+    def on_term(signum, frame): raise KeyboardInterrupt()
+    signal.signal(signal.SIGTERM, on_term)      # a kill still runs the finally blocks: the rig's three processes are stopped and the lab slot is let go
     try:
         if args.cmd == 'run': return cmd_run(args)
         trials.cmd_report(args); return 0

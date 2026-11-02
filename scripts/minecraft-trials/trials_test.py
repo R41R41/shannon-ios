@@ -334,6 +334,19 @@ class RigHooksTest(unittest.TestCase):
         thread.join(5)
         self.assertEqual(seen.get('password'), 'rig-password')
 
+    def test_stopping_a_rig_ends_its_process_groups_whole_and_fast(self):
+        import rig, subprocess, time, types
+        r = rig.Rig(types.SimpleNamespace(keep=True), {'id': 6}, 'c1', 'b', '/nowhere', {})
+        r.head = subprocess.Popen(['bash', '-c', 'sleep 61.37 & sleep 61.38'], start_new_session=True)       # a child with a grandchild in its group
+        r.body = subprocess.Popen(['sleep', '61.39'], start_new_session=True)
+        time.sleep(0.5)
+        started = time.monotonic()
+        r.stop()
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertIsNotNone(r.head.poll()); self.assertIsNotNone(r.body.poll())
+        left = subprocess.run(['pgrep', '-f', 'sleep 61.3'], capture_output=True, text=True).stdout.split()
+        self.assertEqual(left, [], 'a process of the rig stayed behind')
+
     def test_the_body_pin_gets_its_runner_and_its_packages(self):
         import rig
         with tempfile.TemporaryDirectory() as tmp:

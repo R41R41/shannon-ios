@@ -1353,20 +1353,22 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     # The body stays logged in until the task holds it no more: a logout under an unknown step leaves the task waiting for the body.
     row = task_row(task_id) or {}
     cleanup = []
-    if not settled(row):
+    if rig and reason == 'stopped_by_file':
+        cleanup.append('no cancel: the stop file asks the rig to give way at once (its processes and database are thrown away)')
+    elif not settled(row):
         cleanup.append('cancel:' + str(ops('cancel', task_id).get('code')))
-        for _ in range(60):
+        for _ in range(5 if rig else 60):          # a rig's processes and database are thrown away right after: it gives way fast (the stop file is asked to be obeyed within a minute)
             row = task_row(task_id) or {}
             if settled(row): break
             time.sleep(2)
-        if not settled(row):
-            if not RCON_TARGET: wait_rate(2)
+        if not settled(row) and not rig:
+            wait_rate(2)
             cleanup.append('release:' + str(ops('release').get('code')))
             for _ in range(30):
                 row = task_row(task_id) or {}
                 if settled(row): break
                 time.sleep(2)
-    time.sleep(3)
+    time.sleep(1 if rig else 3)
     row = task_row(task_id) or {}
     cleanup.append(f'settled={settled(row)} status={row.get("status")}/{row.get("execState")}')
     result['cleanup'] = cleanup
