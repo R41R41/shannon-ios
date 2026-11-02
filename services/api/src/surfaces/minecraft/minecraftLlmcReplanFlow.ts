@@ -38,6 +38,11 @@ export interface ReplanDeps {
   sources(stall: Stall): ReplanSources | null;
   /** The problem the plan would have with an update, or null when it would take it. */
   check(update: PlanUpdate): string | null;
+  /**
+   * Keeps the checkpoint's keys at once, before a new plan is asked for (not at the step's commit): a step that ends with its result unknown, or
+   * dies, after the ask does not give the ask back to the limits. False or a throw: it could not be kept, and the ask is not made.
+   */
+  persist?(checkpoint: { minecraftReplans: ReplanLedger; minecraftReplanPending: Waiting | null }): boolean;
   /** The nodes an update names, as the plan it was checked against has them (`boundTo`): the update is taken only by a plan that still has them so. */
   bind?(update: PlanUpdate): Record<string, string>;
   log(line: string): void;
@@ -72,6 +77,18 @@ export function createReplanFlow(deps: ReplanDeps) {
   };
   const record = (node: string, stall: Stall, outcome: ReplanRecord['outcome'], why: string): ReplanRecord =>
     ({ at: deps.clock(), node, kind: stall.kind, outcome, why });
+  /** The ledger with the ask counted, kept at once when the deps keep it; false: it could not be kept, and nothing is asked (the stall waits). */
+  const keep = (asked: ReplanLedger, stall: Stall): boolean => {
+    if (!deps.persist) return true;
+    try {
+      if (deps.persist({ minecraftReplans: asked, minecraftReplanPending: null })) return true;
+    } catch {
+      /* said below */
+    }
+    if (told !== stall) say(`Shannon Minecraft replan not asked task=${deps.taskId} why=not_kept`);
+    told = stall;
+    return false;
+  };
   /** `earlier`: the ledger before this attempt (what the brief tells of the plans made before). */
   async function answer(stall: Stall, parts: ReplanSources, signal: AbortSignal, earlier: ReplanLedger): Promise<ReplanRecord> {
     const node = parts.node ?? '-';
@@ -125,10 +142,11 @@ export function createReplanFlow(deps: ReplanDeps) {
         if (verdict.why === 'node') offer(deps.taskId, `replan_node:${node}`, `節 ${node} は、計画を ${REPLAN.perNode} 回立て直しても進まなかった。続けるか、blocked にして別の道を計画するかを決める`);
         return;
       }
+      const earlier = ledger, asked = withAttempt(ledger, record(node, stall, 'failed', '頼んだ（答えを待っている）'));
+      // The ask is counted before it is sent: a step that ends unknown, or dies, after it is recovered with the count (Codex, 2026-11-03).
+      if (!keep(asked, stall)) return;
       pending = null;
-      const earlier = ledger;
-      ledger = withAttempt(ledger, record(node, stall, 'failed', '頼んだ（答えを待っている）'));
-      ledger = settledAttempt(ledger, await answer(stall, parts, signal, earlier));
+      ledger = settledAttempt(asked, await answer(stall, parts, signal, earlier));
     },
     ledger: (): typeof ledger => ledger,
     checkpoint: () => ({ minecraftReplans: ledger, minecraftReplanPending: pending }),
