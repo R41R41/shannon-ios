@@ -356,3 +356,12 @@ describe('the full pack names the clutter first and keeps 128 blocks (the coordi
     expect(soon).toContain('cobblestone 128 は柱と橋に残す');
   });
 });
+
+describe('what the lab\'s walk through the Nether showed (S4, run59 leg 2, 2026-11-03)', () => {
+  it('says that the portal hand\'s stop is the way in, the exit is not at the frame\'s height, a go is split to 90 m, and where the piglins are', () => {
+    const nether = V2_STAGES.nether;
+    for (const word of ['その act は「次元が変わった…（手の途中）」と止まって返る（入れた印で、失敗ではない）', 'ゲートの出口の高さは、地上の枠の高さとは限らない',
+      'go は 1 手 90m 以内に分ける', 'limit_time は、同じ行き先をそのまま出し直せば着く', '真紅の森（crimson_forest）はホグリンとピグリンが湧く所',
+      '金の防具を 1 つ着ていないとピグリンは敵になる']) expect(nether, word).toContain(word);
+  });
+});
