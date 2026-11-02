@@ -351,6 +351,29 @@ def phase_a(lab, r, trials, gates):
     return done()
 
 
+def phase_eyes(lab, r, trials, gates):
+    """The eyes already in the portal frames of the nearest first-ring stronghold (and what the screen needs to rank the seed): spawn, village, the strongholds.
+    P >= 4 saves blaze rods (12 - P eyes to make) and is rare (about 1 in 39 seeds), so this is cheaper than phase A + deep: no ruined portal, no Nether side."""
+    t0 = time.monotonic()
+    out = {'seed': lab.seed, 'mode': 'eyes'}
+    sx, sy, sz = read_spawn(lab, trials)
+    out['spawn'] = [sx, sy, sz]
+    spawn_biome = biome_name(r, sx, sy, sz)
+    out['spawnBiome'] = spawn_biome
+    out['village'] = locate(r, 'structure', '#minecraft:village', (sx, sy, sz))
+    holds = []
+    for hit in sorted(first_ring(r), key=lambda h: math.dist((h['at'][0], h['at'][2]), (sx, sz))):
+        x, z = hit['at'][0], hit['at'][2]
+        holds.append({'at': [x, z], 'd': round(math.dist((x, z), (sx, sz)))})
+    out['strongholds'] = holds
+    if holds:
+        facts = stronghold_facts(lab, r, trials, out, holds[0])
+        out['nearest'] = {'d': holds[0]['d'], 'eyesAlreadyIn': facts.get('eyesAlreadyIn'), 'frames': len(facts.get('frames') or []),
+                          'depth': facts.get('depth'), 'seaAbove': facts.get('seaAbove'), 'portalCenter': facts.get('portalCenter')}
+    out['secs'] = round(time.monotonic() - t0, 1)
+    return out
+
+
 def append_line(path, value, lock=threading.Lock()):
     with lock, open(path, 'a', encoding='utf-8') as handle:
         handle.write(json.dumps(value, ensure_ascii=False) + '\n')
@@ -368,7 +391,8 @@ def scan_one(seed, slot, args, trials, out_path, keep_if):
         r = lab.wait_ready()
         result['startSecs'] = round(time.monotonic() - t0, 1)
         try:
-            result = phase_a(lab, r, trials, {'village_max': None if args.no_gates else args.village_max, 'deep_min': args.deep_min})
+            if getattr(args, 'eyes', False): result = phase_eyes(lab, r, trials, {})
+            else: result = phase_a(lab, r, trials, {'village_max': None if args.no_gates else args.village_max, 'deep_min': args.deep_min})
             result['startSecs'] = round(time.monotonic() - t0 - result.get('secs', 0), 1)
         finally:
             r.close()
@@ -396,7 +420,7 @@ def cmd_scan(args):
         seeds = seeds[args.skip:]
     for seed in seeds:
         if not re.match(r'^-?\d{1,20}$', seed): raise SystemExit(f'bad seed {seed}')
-    out_path = os.path.join(OUT, f'phaseA-{args.tag}.jsonl')
+    out_path = os.path.join(OUT, f'eyes-{args.tag}.jsonl' if args.eyes else f'phaseA-{args.tag}.jsonl')
     done = set()
     if os.path.exists(out_path):
         with open(out_path, encoding='utf-8') as handle:
@@ -1235,6 +1259,7 @@ def main(argv):
     p.add_argument('--village-max', type=int, default=350)
     p.add_argument('--deep-min', type=int, default=45, help='provisional score from which phase A2 (sea on the way, monuments) runs')
     p.add_argument('--no-gates', action='store_true', help='measure everything for every seed (slow)')
+    p.add_argument('--eyes', action='store_true', help='only the eyes already in the nearest stronghold frames (phase_eyes; output eyes-<tag>.jsonl)')
     p.add_argument('--heap', default='1G')
     p.add_argument('--cores', type=int, default=2)
     p = sub.add_parser('rank')
