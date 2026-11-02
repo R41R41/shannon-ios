@@ -1,6 +1,6 @@
 import { createWorksiteMemory } from '../surfaces/minecraft/minecraftWorksiteMemory.js';
 import {
-  purposeEvidence, travelEvidence, explorationEvidence, observedWait, createWaitLedger, readActiveWait,
+  purposeEvidence, lookTravelEvidence, explorationEvidence, observedWait, createWaitLedger, readActiveWait,
 } from '../surfaces/minecraft/minecraftPurposeProgress.js';
 import { bodyHoldOf,withResend,withIncident,withStalls,withBodyPresent } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
@@ -52,8 +52,7 @@ import { heldAgainRecord,resendLimitMs,stopLineOf } from './minecraftResumeOrder
 export { bodyHoldOf, withResend, withIncident, HOLD_SETTLE_MS, withStalls } from './minecraftLlmcLifecycle.js';
 export { LLMC_MAIN_MODEL, LLMC_ESCALATE_FAILURES, LLMC_PERMIT_WINDOW_MS, LLMC_HISTORY_POLICY, LLMC_HISTORY_HARD, LLMC_SUMMARY_OUTPUT_TOKENS,
    llmcTools, llmcModelNames, llmcModelRouter, llmcCompletionMistake, LLMC_CATALOG_SELECTOR, configuredMinecraftLlmc, llmcProbeRunner,
-      billingGuarded } from './minecraftLlmcConfiguration.js';
-export type { LlmcModelNames, LlmcWiring } from './minecraftLlmcConfiguration.js';
+      billingGuarded, type LlmcModelNames, type LlmcWiring } from './minecraftLlmcConfiguration.js';
 
 /**
  * One body task's parts in the mode: its plan (the tool, the port, the first plan asked at its first decision),
@@ -349,7 +348,8 @@ queue.onRan(noteIncidentResult);
       } else if (running) activeWait = undefined;
       waitUntil = activeWait?.node === current ? activeWait.until : undefined;
     };
-    const look = (): boolean => {
+    // `ended`: the act whose result this look reads (run 59, hold 1: the approach a go made is counted where it ended).
+    const look = (ended: Parameters<typeof lookTravelEvidence>[1] = null): boolean => {
       if (holding) return true;
       try {
         const frame = observe(), tree = plan.port.tree(), current = workingNode(step.taskId, tree.current) ?? tree.current, node =
@@ -360,7 +360,7 @@ queue.onRan(noteIncidentResult);
         const road = firstStretch(tree, frame);
         const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
           milestone: road.next, reached: road.reached,
-          externalWork: externalWorkMilestones(frame), purpose: { ...purposeEvidence(node, frame), ...travelEvidence(running, frame),
+          externalWork: externalWorkMilestones(frame), purpose: { ...purposeEvidence(node, frame), ...lookTravelEvidence(running, ended, frame),
             ...explorationEvidence(node, running, frame) }, waitUntil,
           inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) :
              0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
@@ -382,7 +382,7 @@ queue.onRan(noteIncidentResult);
           waitUntil, activeMs: activeClock(), ...(
           receipt?.id ? { command: receipt.id } : {}) });
         if (stall) headHold(stall, incidentOfResult(receipt?.result));
-        else look();
+        else look(Array.isArray(input?.hands) ? input as unknown as Parameters<typeof lookTravelEvidence>[1] : null);
       } catch (error) { log(`Shannon Minecraft head stall ran failed task=${step.taskId} ${String(error)}`); }
     };
 queue.onRan(noteQueueResult);

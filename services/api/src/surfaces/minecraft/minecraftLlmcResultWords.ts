@@ -88,6 +88,20 @@ export const VERTICAL_STOP_WORDS: Readonly<Record<string, string>> = {
   seal_failed: '液体を塞ごうとして塞げなかった（置く物が無い・届かない・予算）',
   threat_exposed: '次に掘るマスを開けると、今は届かない敵から体が見える・届く位置になる（開けていない。掘る前に止まった）',
 };
+/**
+ * Run 59, hold 2: a stairs-down vertical stopped at gravel with "canDig に gravel を足せば進む"; the model turned the stairs to the south
+ * instead, and the stairs met the same gravel two steps on. The line said what to do, not why it is safe and quick: a falling block is
+ * dug again as it falls (the body waits for it, `vertical.ts` openAll), and gravel lies in lumps that a turn often meets again. The
+ * reason is said only for a falling block the body asked to be added.
+ */
+const FALLING_BLOCK = /^(?:gravel|sand|red_sand|suspicious_sand|suspicious_gravel|[a-z_]+_concrete_powder)$/u;
+export function fallingDigWords(line: { code?: string; line: string }): string {
+  const name = line.code === 'cannot_dig' ? /canDig に ([a-z][a-z0-9_]*) を足/u.exec(line.line)?.[1] : undefined;
+  if (!name || !FALLING_BLOCK.test(name)) return '';
+  return (`${name} は掘ると上に積もった分が落ちてくるが、vertical は落ちた分を待って掘り直して進む（掘り直しも maxDig に数える）。`
+    + `砂利・砂は塊で埋まっていることが多く、向きを変えても同じ塊に当たることがある。下りる道では canDig に ${name} を足すほうが、`
+    + `向きを変えるより早く進むことが多い（砂利は火打石の元にもなる）`);
+}
 /** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the
  * opponent did is said by the code. */
 export const FIGHT_END_WORDS: Readonly<Record<string, string>> = {
@@ -99,6 +113,14 @@ export const FIGHT_END_WORDS: Readonly<Record<string, string>> = {
  * as the body sends them. */
 export const seenWords = (seen: NonNullable<Progress['seen']>): string => seen.slice(0, 8).map(entry => `${entry.block}${at(entry.at)}`).join('・');
 
+/** What the stop code of a vertical hand means, with (for a falling block the body asked to be added) why adding it is safe and quick;
+ * '' for any other hand or code. */
+export function verticalStopWords(line: ActHandLine): string {
+  const stop = line.do === 'vertical' && line.code ? VERTICAL_STOP_WORDS[line.code] : undefined;
+  if (!stop) return '';
+  const falling = fallingDigWords(line);
+  return `止まった理由 ${line.code}: ${stop}${falling ? `。${falling}` : ''}`;
+}
 /** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain
  * failure adds none). */
 export function handFacts(line: ActHandLine): string[] {
@@ -126,8 +148,8 @@ switch (line.goal) {
 noteGoal();
   if (line.goal !== 'partial' && line.end === 'cut' && cutBy) out.push(`外から止められた（${cutBy}）`);
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
-  const stop = line.do === 'vertical' && line.code ? VERTICAL_STOP_WORDS[line.code] : undefined;
-  if (stop) out.push(`止まった理由 ${line.code}: ${stop}`);
+  const stopped = verticalStopWords(line);
+  if (stopped) out.push(stopped);
   const fought = line.do === 'fight' && line.code && line.goal === 'done' ? FIGHT_END_WORDS[line.code] : undefined;
   if (fought) out.push(fought);
   if (line.progress?.seen?.length) out.push(`途中で見えた物（追っていない）: ${seenWords(line.progress.seen)}`);

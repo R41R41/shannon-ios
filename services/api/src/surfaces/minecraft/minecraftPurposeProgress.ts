@@ -19,6 +19,7 @@ function heldAs(part: string, counts: ReadonlyMap<string, number>): number {
 /** What one target gives: the item itself, each material it is made of (bounded by the count it needs, so surplus earns nothing), and,
  * for an item that is only smelted, the input it is smelted from. The keys depend on the target alone, never on what is held. */
 function targetEvidence(target: { item: string; count: number }, counts: ReadonlyMap<string, number>): Record<string, number> {
+  // The rods and the pearls the work made into powder and eyes still count (`acquired`).
   const evidence: Record<string, number> = { [`have:${target.item}`]: Math.min(target.count, acquired(counts, target.item)) };
   for (const part of materialsOf(target.item, target.count, { chain: true, pack: new Map() }).spends) {
     evidence[`material:${target.item}:${part.item}`] = Math.min(part.count, heldAs(part.item, counts));
@@ -58,6 +59,15 @@ export function travelEvidence(input: ActInput | null, frame: BodyObservation | 
       facts.feet.x - to.x, facts.feet.y - to.y, facts.feet.z - to.z) / 2);
   }
   return values;
+}
+/**
+ * Run 59, hold 1: the travel evidence of one look. The movement running now, and the movement whose result this look reads: it was
+ * accepted and ran, and where it ended is how near it brought her. A go cut by its time after 120 s of digging toward its goal is no
+ * longer running when its result is read, so without it the approach it made was never counted and the node was held as stalled.
+ * A destination seen for the first time earns nothing (no earlier value), so an ended move only counts against its own earlier sample.
+ */
+export function lookTravelEvidence(running: ActInput | null, ended: ActInput | null, frame: BodyObservation | null): Record<string, number> {
+  return { ...travelEvidence(ended, frame), ...travelEvidence(running, frame) };
 }
 const SEARCH_KINDS = new Set(['wood', 'food', 'village', 'iron', 'diamond', 'water', 'lava', 'obsidian', 'fortress', 'stronghold', 'chest', 'pearl', 'blaze']);
 export function explorationEvidence(node: PlanNode | undefined, input: ActInput | null, frame: BodyObservation | null): Record<string, number> {

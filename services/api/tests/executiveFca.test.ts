@@ -80,7 +80,7 @@ describe('one budget for FCA steps (E3)', () => {
     expect(calls).toEqual([]);
   });
 
-  it('gives an admitted Minecraft request a 15000 yen cap, and leaves every other owner request at 300 yen', async () => {
+  it('gives an admitted Minecraft request a 10000 yen cap, and leaves every other owner request at 300 yen', async () => {
     const { db } = world();
     const store = new TaskBudgetStore(db);
     const { actions, calls } = fakeActions(true);
@@ -92,7 +92,7 @@ describe('one budget for FCA steps (E3)', () => {
     expect(await budget.before(mc, lease)).toEqual({ ok: true });
     expect(await budget.before(other, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('300円・40歩') });
     store.add('t-mc', 'owner', 'owner_request', MINECRAFT_TASK_CAP.yen, now());
-    expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('15000円・2000歩') });
+    expect(await budget.before(mc, lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('10000円・2000歩') });
     expect(store.spent('t-mc').cappedAt).toBe(now());
     expect(calls).toEqual([]);
   });

@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { planFromSeeds } from '@shannon/mind';
-import { purposeEvidence, travelEvidence, observedWait, createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
+import { purposeEvidence, travelEvidence, lookTravelEvidence, observedWait, createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
 import { forgetStalls, noteProgress, noteRan, stallsCheckpoint, restoreStalls } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 afterEach(forgetStalls);
@@ -79,4 +79,23 @@ it('permits another night only after observing daylight, and identifies distinct
     jobs: [{ id, position: at, status: 'waiting_external', remainingEstimateMs: 30000, input: 'raw_iron', count: 1 }] }));
   expect(job('one')).not.toBeNull();
   expect(job('one')?.key).not.toBe(job('two')?.key);
+});
+it('run 59 hold 1: a go cut by its time after 120 s of digging toward its goal counts where it ended, at the look that reads its result', () => {
+  // The body dug from the village (158,57,54) toward iron at (128,38,86); the go stopped at (136,37,74) on its 120 s.
+  const go = { hands: [{ do: 'go' as const, to: { x: 128, y: 38, z: 86 } }] };
+  const at = (x: number, y: number, z: number) => frame({ dimension: 'overworld', position: { x, y, z } });
+  const look = (running: typeof go | null, ended: typeof go | null, where: BodyObservation) =>
+    ({ ...snapshot(0, 74), purpose: lookTravelEvidence(running, ended, where) });
+  // The look while it ran (the next act's admission, 3 s in), then the look at its result: nothing runs any more.
+  noteProgress('new', look(go, null, at(157, 56, 55)), 0);
+  expect(noteProgress('new', look(null, go, at(136, 37, 74)), 121_000)).toBeNull();
+  expect(noteProgress('new', look(null, null, at(136, 37, 74)), 125_000)).toBeNull();
+  // Before: the result's look saw no running movement, so the approach was never counted and the node was held.
+  noteProgress('old', look(go, null, at(157, 56, 55)), 0);
+  expect(noteProgress('old', look(null, null, at(136, 37, 74)), 121_000)?.kind).toBe('node_stalled');
+  // An ended move that did not come nearer is no progress; one never sampled before earns nothing either.
+  noteProgress('stuck', look(go, null, at(157, 56, 55)), 0);
+  expect(noteProgress('stuck', look(null, go, at(157, 56, 55)), 121_000)?.kind).toBe('node_stalled');
+  noteProgress('unseen', look(null, null, at(157, 56, 55)), 0);
+  expect(noteProgress('unseen', look(null, go, at(136, 37, 74)), 121_000)?.kind).toBe('node_stalled');
 });

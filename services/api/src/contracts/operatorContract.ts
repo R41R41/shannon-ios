@@ -32,10 +32,13 @@ export const OPERATOR_LIMITS = Object.freeze({
   maxMinutes: 360,
   /**
    * The cap of an admitted Minecraft request (`MINECRAFT_TASK_CAP.yen`, owner answers of 2026-10-13 and 2026-11-02); a lower cap
-   * may be asked. A running request's cap may be changed (`budget`) anywhere up to this, never above it. 15,000 yen: six hours at the
-   * dearest hour measured (1,640 yen, runs 42 to 58) is 9,840, and 30 new plans of the strong model are about 700 more.
+   * may be asked. A running request's cap may be changed (`budget`) anywhere up to this, never above it. 10,000 yen (the coordinator's
+   * decision of 2026-11-02, the API credit being what it is): six hours at the dearest hour measured (1,640 yen, runs 42 to 58) is 9,840.
+   * A run of hours names its budget (`--budget-yen`); a request that does not gets `defaultBudgetYen`, not this.
    */
-  maxBudgetYen: 15_000,
+  maxBudgetYen: 10_000,
+  /** The budget of a request that names none (`--budget-yen` left out): what it was before the long run, 2,000 yen. */
+  defaultBudgetYen: 2_000,
   requestsPerHour: 20,
   /** Invocations an hour (socket refusals included) that are audited one by one; past it they are coalesced (`flooded`). */
   invocationsPerHour: 120,
@@ -152,7 +155,7 @@ function request(operator: string, args: Record<string, unknown>): OperatorParse
   if (maxMinutes === null || maxMinutes < 1 || maxMinutes > OPERATOR_LIMITS.maxMinutes) {
     return refuse(operator, 'invalid_input', `--max-minutes must be 1..${OPERATOR_LIMITS.maxMinutes}`);
   }
-  const budgetYen = integer(args.budgetYen, OPERATOR_LIMITS.maxBudgetYen);
+  const budgetYen = integer(args.budgetYen, OPERATOR_LIMITS.defaultBudgetYen);
   if (budgetYen === null || budgetYen < 1) return refuse(operator, 'invalid_input', '--budget-yen must be a positive integer');
   const holdOnFailure = args.holdOnFailure === undefined ? false : args.holdOnFailure;
   if (holdOnFailure !== true && holdOnFailure !== false) return refuse(operator, 'invalid_input', 'holdOnFailure must be true or false');

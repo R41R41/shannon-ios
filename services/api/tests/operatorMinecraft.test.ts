@@ -52,9 +52,13 @@ describe('the operator envelope', () => {
 
   it('bounds a request: 30 minutes by default, at most 360, and never above the Minecraft request cap', () => {
     expect(parseOperatorEnvelope(envelope('request', { goal: '石を集めて' }))).toMatchObject({ ok: true,
-      input: { command: 'request', goal: '石を集めて', maxMinutes: 30, budgetYen: OPERATOR_LIMITS.maxBudgetYen } });
+      input: { command: 'request', goal: '石を集めて', maxMinutes: 30, budgetYen: OPERATOR_LIMITS.defaultBudgetYen } });
+    expect(OPERATOR_LIMITS.defaultBudgetYen).toBe(2000);      // a request that names no budget is not given the long run's cap
+    expect(OPERATOR_LIMITS.maxBudgetYen).toBe(10_000);
+    expect(parseOperatorEnvelope(envelope('request', { goal: 'x', maxMinutes: 360, budgetYen: OPERATOR_LIMITS.maxBudgetYen }))).toMatchObject({ ok: true,
+      input: { command: 'request', maxMinutes: 360, budgetYen: 10_000 } });
     expect(parseOperatorEnvelope(envelope('request', { goal: 'x', maxMinutes: 361 }))).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(parseOperatorEnvelope(envelope('request', { goal: 'x', budgetYen: 15_001 }))).toMatchObject({ ok: false, code: 'budget_above_cap' });
+    expect(parseOperatorEnvelope(envelope('request', { goal: 'x', budgetYen: OPERATOR_LIMITS.maxBudgetYen + 1 }))).toMatchObject({ ok: false, code: 'budget_above_cap' });
     expect(parseOperatorEnvelope(envelope('request', { goal: 'x', extra: 1 }))).toMatchObject({ ok: false, code: 'invalid_input' });
     expect(parseOperatorEnvelope(envelope('request', { goal: 'a\u0007b' }))).toMatchObject({ ok: false, code: 'invalid_input' });
   });
