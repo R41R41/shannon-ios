@@ -10,6 +10,7 @@ import {
   carryDone, FIRST_PLAN_SYSTEM_R5, FIRST_PLAN_SYSTEM_R6, firstPlanInbox, firstPlanInput, forgetFirstPlans, planFromAnswer, seedPlan, startFirstPlan,
 } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { foodLeads, preparationShortage, readinessOf, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { BEFORE_GATE } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 /** Run 42: the fact, what to eat from the pack (none here) and what going on without it cost. */
 const NO_RECOVERY = '体力 3.7/20 は自然に戻らない（満腹 17＜18、食料 0 点）';
 const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い`;
@@ -100,7 +101,8 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     const home = counts({ ...START, dimension: 'overworld' });
     expect(preparationShortage({ ...home, nowKinds: ['wood' as const] })).toBeNull();
     expect(preparationShortage({ ...home, nowKinds: ['portal' as const] }))
-      .toBe('準備の不足（ネザーに入る前）: 盾・金のブーツ・足場のブロックが無い。食料 15.6 点（目安 40）');
+      .toBe(`準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾・足場のブロックが無い。食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`
+        + '目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い');
     expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const] })).toMatch(/^準備の不足（エンドへ）: ベッド・弓・矢・エンダーアイ・足場のブロックが無い/u);
   });
 
