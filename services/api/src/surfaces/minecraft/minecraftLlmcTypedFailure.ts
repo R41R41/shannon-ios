@@ -5,7 +5,7 @@ import { tableLackFact } from './minecraftLlmcTableNote.js';
 
 /** Head-only facts and suggestions. No executor, permission change or automatic retry. */
 export interface TypedFailure {
-  code: 'no_table' | 'no_permission' | 'lack_material' | 'not_visible';
+  code: 'no_table' | 'no_permission' | 'lack_material' | 'not_visible' | 'search_timeout' | 'go_stuck';
   evidence: string[];
   candidateArgs: Array<{ hand: Record<string, unknown>; verified: boolean; why: string }>;
   cost: { seconds?: number; risk?: 'low' | 'mid' | 'high' };
@@ -45,6 +45,7 @@ const permissionStop = (line: ActHandLine): boolean => PERMISSION_CODE.test(line
 
 function failureCode(line: ActHandLine): TypedFailure['code'] | null {
   if (!settled(line)) return null;
+  if (line.do === 'go' && (line.code === 'search_timeout' || line.code === 'go_stuck')) return line.code;
   if (CREATION.has(line.do)) return line.code === 'no_table' ? 'no_table' : lacksMaterial(line) ? 'lack_material' : null;
   if ((line.do === 'dig' || line.do === 'mine') && (line.code === 'not_visible' || line.code === 'unreachable')) return 'not_visible';
   return PERMISSION_HANDS.has(line.do) && permissionStop(line) ? 'no_permission' : null;
@@ -91,6 +92,23 @@ export function typedFailureOf(line: ActHandLine, observation: BodyObservation |
   return { code, evidence: fact ? [line.line, fact] : [line.line], candidateArgs, cost: {}, checkedAt };
 }
 
+const HOP_METERS = 80;
+const cellOf = (value: unknown): { x: number; y: number; z: number } | null => {
+  const at = record(value);
+  return at && [at.x, at.y, at.z].every(item => typeof item === 'number' && Number.isFinite(item)) ? at as { x: number; y: number; z: number } : null;
+};
+
+/** A go that ran out of search time over a long way: a point on the straight line to where it was going, `HOP_METERS` from her feet, as the one candidate. */
+function withHop(failure: TypedFailure, hand: Record<string, unknown> | null, observation: BodyObservation | null): TypedFailure {
+  const feet = cellOf(record(observation?.state.world)?.position), to = cellOf(hand?.to);
+  const far = feet && to ? Math.hypot(to.x - feet.x, to.z - feet.z) : 0;
+  if (!feet || !to || far <= HOP_METERS + 10) return failure;
+  const along = (from: number, end: number) => Math.round(from + (end - from) * HOP_METERS / far);
+  const at = { x: along(feet.x, to.x), y: Math.round(feet.y), z: along(feet.z, to.z) };
+  const why = `行き先まで 水平 ${Math.round(far)}m。直線で ${HOP_METERS}m の途中の点。通れるかは未確認`;
+  return { ...failure, candidateArgs: [candidate({ do: 'go', to: at }, why)] };
+}
+
 /** Only actual body result lines become attempts. No parsing of a model's explanation or a head guard's prose. */
 export function typedFailureAttemptsOf(resultJson: string | undefined, observation: BodyObservation | null, input: unknown): TypedFailureAttempt[] {
   const act = readActResult(resultJson);
@@ -101,7 +119,8 @@ export function typedFailureAttemptsOf(resultJson: string | undefined, observati
     const failure = typedFailureOf(line, observation);
     if (!failure) return [];
     const hand = Array.isArray(hands) && Number.isInteger(line.i) && line.i >= 1 ? record(hands[line.i - 1]) : null;
-    return [{ failure, hand: hand?.do === line.do ? hand : null }];
+    const sent = hand?.do === line.do ? hand : null;
+    return [{ failure: failure.code === 'search_timeout' ? withHop(failure, sent, observation) : failure, hand: sent }];
   });
 }
 
