@@ -153,7 +153,7 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(system).toContain('ネザーへ入るまでを 30 分以内に');
     expect(system).toContain('死ぬと持ち物と時間を失い');
     expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
-    expect(system).toContain(milestoneWords());
+    expect(system).toContain('節目の目安（開始からの秒）は live の meter が、今と次の節目で言う');
     expect(milestoneWords()).toBe('ベッド 150・地下の準備 300・鉄のツルハシ 350・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 1,800');
     expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 1_800, 2_700, 4_500, 7_800, 8_100, 10_800, 11_200]);
     // The instructions list the targets up to the Nether (the cached text has a cap); the meter says the later ones.

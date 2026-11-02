@@ -1,5 +1,4 @@
 import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
-import { milestoneWords } from './minecraftLlmcRoad.js';
 import { PREP_DESCENT_RULE, PREP_RULES_WORDS, SAFETY_FIRST } from './minecraftLlmcPrepRules.js';
 import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
@@ -25,7 +24,7 @@ const GOAL = [
   '- 目的は課題の goal。持ち主の物差しは速さ: エンドラ討伐なら、ネザーへ入るまでを 30 分以内に（準備を含む）、なめらかに進める。',
   '- 速さと同じだけ、生きていることが大事。死ぬと持ち物と時間を失い、用心より時間がかかる。',
   '- 優先の順: 差し迫った危険を避ける → 準備の必須を満たす → 目的へ早く進める。時間を理由に止めたり、早く完了にしたりしない。目安は物差しで、手を決める物ではない。',
-  `- 節目の目安（開始からの秒）: ${milestoneWords()}。live の meter が、今と次の節目を言う。`,
+  '- 節目の目安（開始からの秒）は live の meter が、今と次の節目で言う（一覧は持たない: 通しの尺は 3 時間）。',
 ].join('\n');
 
 /** The descent's preparation as a rule for choosing the action (one place; the live state and the results say only the state of it). */

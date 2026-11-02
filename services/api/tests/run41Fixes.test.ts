@@ -60,7 +60,7 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     expect(DRAGON_MILESTONES.map(item => item.name).slice(0, 3)).toEqual(['ベッド', PREP_MILESTONE_NAME, '鉄のツルハシ']);
     expect(DRAGON_MILESTONES.find(item => item.name === PREP_MILESTONE_NAME)!.seconds).toBe(300);
     expect(milestoneWords()).toContain('ベッド 150・地下の準備 300・鉄のツルハシ 350');
-    expect(V2_ALWAYS).toContain(milestoneWords());
+    expect(V2_ALWAYS).not.toContain(milestoneWords());
   });
 });
 
