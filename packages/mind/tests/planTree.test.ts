@@ -96,4 +96,15 @@ describe('plan tree', () => {
     expect(nodes.find(node => node.id === 'p3')).toMatchObject({ note: '村の鉄を先に' });
     expect(nodes.find(node => node.id === 'p3')).not.toHaveProperty('forbid');
   });
+
+  it('a parent that names an acquisition of its own is not closed by its children; one that does not is', () => {
+    const child = { id: 'c', title: 'バケツ1個', target: { item: 'bucket', count: 1 }, doneWhen: 'have:bucket' };
+    const named = planFromSeeds([{ id: 'p', title: 'バケツ2個', target: { item: 'bucket', count: 2 }, doneWhen: 'have:bucket>=2', children: [child] }])!;
+    const after = applyPlanUpdate(named, { ops: [{ op: 'set', id: 'c', state: 'done' }] }).tree;
+    expect(after.nodes.find(node => node.id === 'c')?.state).toBe('done');
+    expect(after.nodes.find(node => node.id === 'p')?.state).not.toBe('done');
+    expect(applyPlanUpdate(after, { ops: [{ op: 'set', id: 'p', state: 'done' }] }).tree.nodes.find(node => node.id === 'p')?.state).toBe('done');
+    const plain = planFromSeeds([{ id: 'p', title: '道具', children: [{ id: 'c', title: 'バケツ' }] }])!;
+    expect(applyPlanUpdate(plain, { ops: [{ op: 'set', id: 'c', state: 'done' }] }).tree.nodes.find(node => node.id === 'p')?.state).toBe('done');
+  });
 });

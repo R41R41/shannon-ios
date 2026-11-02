@@ -322,11 +322,12 @@ class PlanEdit {
       default: return 'op は add・split・set・move・drop・forbid・caution・lift・promise・release';
     }
   }
-  /** A parent whose children are all done is done (deepest first). */
+  /** A parent whose children are all done is done (deepest first), unless it names an acquisition of its own (`target`): that is closed by
+   * seeing the pack hold what it names, or by an op the head has checked against the pack, never by its children. */
   settleParents(): void {
     for (const node of orderedPlan([...this.nodes.values()]).reverse()) {
       const kids = this.children(node.id);
-      if (kids.length && kids.every(kid => kid.state === 'done') && node.state !== 'blocked') node.state = 'done';
+      if (kids.length && kids.every(kid => kid.state === 'done') && node.state !== 'blocked' && !node.target) node.state = 'done';
     }
   }
   /** r9: whether a node above `node` is done (a done node leaves nothing under it to do, so none of its open
