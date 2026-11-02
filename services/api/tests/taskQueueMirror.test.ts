@@ -159,6 +159,16 @@ describe('the results as news, and the version', () => {
     expect(await f.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('dropped');
   });
 
+  it('R3-1 (6): a wait-only act behind a running item is refused at admission, with the words; one with another hand, or onto an empty queue, is not', async () => {
+    const f = setup();
+    expect(await f.queue.add(f.spec(wait1))).toMatchObject({ ok: true, item: 'q1' }); // an empty queue: a wait (night, healing, a furnace) may be written
+    const refused = await f.queue.add(f.spec([{ do: 'wait', seconds: 30 }]));
+    expect(refused).toMatchObject({ ok: false });
+    expect((refused as { text: string }).text).toContain('走っている q1 の後ろに wait だけの項目は積めない');
+    expect(await f.queue.add(f.spec([{ do: 'wait', seconds: 5 }, { do: 'jump' }]))).toMatchObject({ ok: true, item: 'q2' });
+    expect(f.queue.tail()).toBe('q2');
+  });
+
   it('R3-1 (2): a lone item that ends badly makes the decision being thought stale (nothing was dropped), and a good end does not', async () => {
     const bad = setup();
     await bad.queue.add(bad.spec(wait1));
