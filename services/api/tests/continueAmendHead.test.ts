@@ -6,7 +6,7 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { dependStateOf, unitView, type InventoryEvent, type Progress } from '../src/contracts/continueContract.js';
 import type { ActHand, ActHandLine, ActResult } from '../src/contracts/minecraftActContract.js';
 import { actResultText } from '../src/surfaces/minecraft/minecraftLlmc.js';
-import { FIGHT_END_WORDS, handFacts, seenWords, VERTICAL_STOP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
+import { FIGHT_END_WORDS, fallingDigWords, handFacts, seenWords, VERTICAL_STOP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
 import { applyLedger, emptyLedgerSeen, promiseLines, type LedgerSeen } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
 import { handToLine, lineToHand } from '../src/contracts/minecraftActShortHands.js';
 import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
@@ -205,5 +205,26 @@ describe('A-5 3: a placement the body counted and then found gone is a fact said
     expect(facts[0]!.text).toContain('今 air');
     expect(facts[0]!.text).toContain('今 6 段');
     expect(placementCorrections('q90', undefined)).toEqual([]);
+  });
+});
+
+describe('run 59 hold 2: a vertical stopped at a falling block it was told to add says why adding it is safe and quick', () => {
+  const stop = (block: string, extra: Partial<ActHandLine> = {}): ActHandLine => ({ i: 0, do: 'vertical', status: 'stopped', goal: 'partial', end: 'finished',
+    code: 'cannot_dig', line: `vertical 止まった cannot_dig: ${block}(130,36,74) は canDig に無い（自分から西1（約1.0m）） (131,36,74) 段 3・掘 9・置 0。canDig に ${block} を足せば進む`,
+    progress: { unit: 'step', done: 3, left: 28, at: { x: 131, y: 36, z: 74 } }, ...extra } as ActHandLine);
+  it('gravel and sand: the fall is dug again by the body, a turn often meets the same lump, adding it is the quicker way down', () => {
+    for (const block of ['gravel', 'sand', 'red_sand']) {
+      const facts = handFacts(stop(block)).join('\n');
+      expect(facts, block).toContain('止まった理由 cannot_dig:');
+      expect(facts, block).toContain('vertical は落ちた分を待って掘り直して進む');
+      expect(facts, block).toContain('向きを変えても同じ塊に当たることがある');
+      expect(facts, block).toContain(`canDig に ${block} を足すほうが`);
+    }
+  });
+  it('a solid block, a block the tool cannot dig, a go, and another code say nothing more', () => {
+    expect(fallingDigWords(stop('stone'))).toBe('');
+    expect(fallingDigWords(stop('gravel', { line: 'vertical 止まった cannot_dig: obsidian(1,2,3) を持っている道具では掘れない' }))).toBe('');
+    expect(handFacts(stop('gravel', { do: 'go' })).join('\n')).not.toContain('掘り直して進む');
+    expect(fallingDigWords(stop('gravel', { code: 'limit_dig' }))).toBe('');
   });
 });
