@@ -31,7 +31,8 @@ interface Step { wake: FcaQueueWake; ends?: Array<{ item: string; ok: boolean; t
 /** A queue the test drives: `put` an item as the tool does; each `ready` takes the next step of the script. */
 function fakeQueue(script: Step[]) {
   const open = new Set<string>(), news: FcaQueueNews[] = [];
-  let version = 0, counter = 0, noted: number[] = [], cancelled = 0, drains = 0, waited = 0;
+  let version = 0, counter = 0, noted: number[] = [], cancelled = 0, drains = 0, waited = 0, closing = false;
+  const closed: string[] = [];
   const call: FcaToolCall = { id: 'c', name: MC_ACT_TOOL, input: {} };
   const end = (item: string, ok: boolean, text: string, kind: 'ran' | 'dropped' = 'ran') => {
     open.delete(item);
@@ -42,6 +43,8 @@ function fakeQueue(script: Step[]) {
     noteDecision: ms => { noted.push(ms); },
     dropWaiting: () => 0,
     cancelAll: () => { cancelled += 1; for (const item of [...open]) end(item, false, '捨てた: 止めた', 'dropped'); },
+    closeStep: (reason: string) => { closed.push(reason); },
+    closing: () => closing,
     take: () => news.splice(0),
     async ready({ drain }) {
       if (drain) {
@@ -57,7 +60,7 @@ function fakeQueue(script: Step[]) {
       return step.wake;
     },
   };
-  return { queue, put: () => { counter += 1; open.add(`q${counter}`); return `q${counter}`; }, bump: () => { version += 1; }, end,
+  return { queue, setClosing: () => { closing = true; }, closed, put: () => { counter += 1; open.add(`q${counter}`); return `q${counter}`; }, bump: () => { version += 1; }, end,
     stats: () => ({ noted, cancelled, drains, waited, open: [...open] }) };
 }
 
@@ -234,6 +237,20 @@ describe('a queue that changes, and the limits', () => {
     expect(kept).not.toContain('turn 2');
     // The failure is counted by the ladder as a news is when the decision is not thrown away.
     expect((f.runtime.snapshot('owner', f.task.id)!.checkpoint as { consecutiveToolFailures?: number }).consecutiveToolFailures).toBe(1);
+  });
+
+  it('R3-1 (3): a step whose queue is closing decides no more and lets what is open run out; the limit closes the step through the same door', async () => {
+    const closing = fakeQueue([{ wake: 'remaining' }]);
+    closing.setClosing();
+    const f = fixture([act('a'), act('b')], closing);
+    await f.run();
+    expect(f.inputs).toHaveLength(1);
+    expect(closing.stats().drains).toBeGreaterThanOrEqual(1);
+    const limited = fakeQueue(Array.from({ length: FCA_STRETCH.maxDecisions + 2 }, () => ({ wake: 'remaining' as const })));
+    const g = fixture(Array.from({ length: 30 }, (_, index) => act(`a${index}`)), limited);
+    await g.run();
+    expect(limited.closed).toContain('step_limit');
+    expect(FCA_STRETCH).toMatchObject({ maxDecisions: 18, maxMs: 300_000 });
   });
 
   it('after the limit of decisions it adds nothing more and waits for the queue to run dry', async () => {

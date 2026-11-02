@@ -166,6 +166,9 @@ export type RanListener = (item: { call: FcaToolCall; why: string }, result: Too
 
 /** The queue as the head's tools and lifecycle use it (`FcaBodyQueue` is what the runner sees of it). */
 export interface LlmcQueue extends FcaBodyQueue {
+  /** (R3-1 3) The step's close, for the head's own callers (the stall detector, the plan's node change): the reserve items go, the decided ones run out, the step ends. */
+  closeStep(reason: string): void;
+  closing(): boolean;
   add(spec: QueueAdd): Promise<AddResult>;
   /** The items asked to be taken off, and the ones behind them that do not say they rely on something else;
    * resolves when the body has

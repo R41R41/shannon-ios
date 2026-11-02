@@ -72,6 +72,7 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
      string; why: string; at: number }[] = [];
   let stopped = false, version = 0, marked = 0, error: unknown = null, pumpTimer: ReturnType<typeof setInterval> | null = null;
   let droppedSeen = 0, droppedNow = 0, failedSeen = 0, failedNow = 0, troubleAt: number | null = null, furnaceCursor: number | null = null, capped = false;
+  let closing = false;
   /** R3-1 (1, A3): the queue (its open items) the last wake for `remaining` was made on: a decision that added nothing (a probe) is not followed by another wake on the same queue. */
   let wokeOn: string | null = null;
   let execution: ReturnType<typeof currentActionExecution>;
@@ -431,6 +432,12 @@ void restoreReceipts();
       stopped = true;
       for (const item of open()) item.abort.abort('stop');
     },
+    closeStep(reason) {
+      closing = true;
+      for (const item of open()) if (item.reserve) { item.because ??= '段を閉じる'; item.abort.abort('closing'); }
+      log(`Shannon Minecraft queue close task=${deps.taskId} reason=${reason} open=${open().length}`);
+    },
+    closing: () => closing,
     async settled(waitMs = 8_000) {
       const until = now() + waitMs;
       while ((open().length || cleaningNow(deps.taskId) || pending.size) && now() < until) await sleep(25);
