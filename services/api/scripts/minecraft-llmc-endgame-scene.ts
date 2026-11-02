@@ -81,6 +81,8 @@ function show(scene: EndScene): void {
   console.log(`## ${scene.name}  stages=${stagesFor(live).join('+')}  stageTokens=${shown.stage ? llmcTokens(shown.stage) : 0}  liveTokens=${llmcLiveTokens(shown.live)}`
     + `  planTokens=${llmcPlanTokens(input.plan)}`);
   console.log(JSON.stringify(facts ?? [], null, 0));
+  const body = shown.live.body as { shortage?: string | null } | undefined;
+  if (body?.shortage) console.log(`   shortage: ${body.shortage}`);
 }
 
 async function replay(): Promise<void> {

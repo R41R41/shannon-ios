@@ -300,6 +300,48 @@ class WindowRunTest(unittest.TestCase):
                 trials.RESULTS = old
 
 
+class RigHooksTest(unittest.TestCase):
+    def test_a_rig_never_logs_the_production_body_out(self):
+        old = trials.RCON_TARGET
+        trials.RCON_TARGET = ('127.0.0.1', 1, 'x')
+        try:
+            self.assertFalse(trials.body_logout())        # no operator call, no rate wait: the rig's body belongs to the rig process
+            self.assertEqual(trials.step_unknown_codes('t', '2026-11-02T00:00:00.000Z'), [])
+        finally:
+            trials.RCON_TARGET = old
+
+    def test_rcon_goes_to_the_rigs_server_and_not_to_shannon_home(self):
+        import socket, struct, threading
+        server = socket.socket()
+        server.bind(('127.0.0.1', 0)); server.listen(1)
+        seen = {}
+        def serve():
+            conn, _ = server.accept()
+            size = struct.unpack('<i', conn.recv(4))[0]
+            payload = conn.recv(size)
+            rid, kind = struct.unpack('<ii', payload[:8])
+            seen['password'] = payload[8:-2].decode()
+            conn.sendall(struct.pack('<i', 10) + struct.pack('<ii', rid, 2) + b'\0\0')       # authenticated: the same id back
+            conn.close()
+        thread = threading.Thread(target=serve, daemon=True); thread.start()
+        old = trials.RCON_TARGET
+        trials.RCON_TARGET = ('127.0.0.1', server.getsockname()[1], 'rig-password')
+        try:
+            trials.Rcon(timeout=5).close()
+        finally:
+            trials.RCON_TARGET = old
+            server.close()
+        thread.join(5)
+        self.assertEqual(seen.get('password'), 'rig-password')
+
+    def test_the_body_bundle_needs_esbuild_and_writes_its_source_first(self):
+        import rig
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(trials.Stop) as caught: rig.ensure_bundle(tmp, '/bin/true', dev=os.path.join(tmp, 'no-dev'))
+            self.assertIn('esbuild', str(caught.exception))
+            self.assertEqual(open(os.path.join(tmp, 'backend', 'scripts', 'lab', 'rig-body.ts'), encoding='utf-8').read(), rig.BODY_BUNDLE_SOURCE)
+
+
 class FakeRcon:
     """Records the commands; answers like a server that is happy (passed / loaded)."""
     def __init__(self): self.log = []

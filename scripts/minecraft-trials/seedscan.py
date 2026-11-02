@@ -135,8 +135,10 @@ def port_free(port):
 class Lab:
     """One lab server directory: links to the template's libraries and server jar, its own .fabric copy, world, RCON."""
 
-    def __init__(self, label, seed, slot, heap='1G', cores=2, root=ROOT, template=TEMPLATE, world_from=None, difficulty='peaceful', monsters=False):
+    def __init__(self, label, seed, slot, heap='1G', cores=2, root=ROOT, template=TEMPLATE, world_from=None, difficulty='peaceful', monsters=False,
+                 view=3, simulation=2, max_players=2):
         self.label, self.seed, self.slot = label, str(seed), slot
+        self.view, self.simulation, self.max_players = view, simulation, max_players       # a scan sees little; the rig's server is the production's (10 and 8)
         self.dir = os.path.join(root, label)
         self.template, self.heap, self.cores, self.world_from = template, heap, cores, world_from
         self.difficulty, self.monsters = difficulty, monsters       # a scan is peaceful and quiet; a smoke test is the production's normal
@@ -159,7 +161,7 @@ class Lab:
             shutil.copytree(self.world_from, os.path.join(self.dir, 'world'), ignore=shutil.ignore_patterns('session.lock'))
         props = ['server-ip=127.0.0.1', 'online-mode=false', f'server-port={self.port}', 'enable-rcon=true', f'rcon.port={self.rcon_port}',
                  f'rcon.password={self.password}', 'broadcast-rcon-to-ops=false', 'enforce-secure-profile=false', 'spawn-protection=0',
-                 'allow-flight=true', 'view-distance=3', 'simulation-distance=2', 'max-players=2', 'level-name=world',
+                 'allow-flight=true', f'view-distance={self.view}', f'simulation-distance={self.simulation}', f'max-players={self.max_players}', 'level-name=world',
                  'level-type=minecraft:normal', f'level-seed={self.seed}', 'generate-structures=true', f'difficulty={self.difficulty}',
                  'gamemode=survival', 'enable-command-block=false', 'max-tick-time=-1', 'sync-chunk-writes=false',
                  'pause-when-empty-seconds=-1', 'motd=seedscan', f'spawn-monsters={"true" if self.monsters else "false"}']
