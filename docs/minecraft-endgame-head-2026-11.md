@@ -167,3 +167,18 @@ The saved request of run59's hold 2 (decision `d0070` of the task `e0bd9155`: th
 | B (reason added) | 10 of 10 | 0 of 10 |
 
 Read: for this scene the input is the cause (P). The model followed the line once it said why; a Sonnet-vs-Opus comparison is not needed here. What is not shown: that the stairs then went down (the real-world step is not replayed), and several turns of it. About $0.8 spent (the first calls write the cache). The script and the rows: `status/codex-s3/t6-replay.py`, `t6-gravel.json`.
+
+### T6/T7 (S3, 11/3): 2 × 2 on the gravel stop, and the water alert (saved requests, replayed as they were)
+
+Gravel (decision `d0070`, ten calls per cell, adaptive thinking, effort low): gravel put in `canDig` —
+
+| | input A (as it was) | input B (the reason added) |
+|---|---|---|
+| Sonnet 5.5 | 2 / 10 | 10 / 10 |
+| Opus 5.5 | 9 / 10 | 10 / 10 |
+
+Both the input (P) and the model (L) move it: with the old input Opus follows the line nine times in ten and Sonnet twice; with the reason added the two are the same. So for the model that decides the descent (Sonnet in the early stages) the input is the cheaper fix, and it is in.
+
+Water alert (run58's task `d43770fb`: the decisions `d0074`, `d0081`, `d0092`, each the "oxygen 9, under 10" alert beside an iron vein in water; six calls per decision and model, the input as it was): all 36 calls rise first (a `go … waterOk`, a `jump`, a `pillarUp`), none keeps mining in the water; Opus sometimes adds a dig or a place behind the rise (`onFail=continue`), Sonnet mostly rises alone. So the single decision at the alert is safe for both models and is not where the run was lost: the records show the same alert three times in 25 minutes (14:29, 14:30, 14:54), each time followed by the model going back to the same vein once the breath was full. That is a failure over several turns, which one saved request cannot show; it needs the lab with the water vein, or the Codex typed failure of "the same place, the same stop" shown as a fact. Not replayed: the shield scene (measured on 11/2 with n=10), the real-world result of any hand.
+
+Spent on 11/3: about $4.4 of the $6 (gravel $0.8 Sonnet and $1.5 Opus, water $2.1). Rows: `status/codex-s3/t6-gravel*.json`, `t7-d00*.json`; script `t7-replay.py`.
