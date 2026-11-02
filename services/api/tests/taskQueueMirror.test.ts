@@ -206,15 +206,33 @@ describe('the results as news, and the version', () => {
 });
 
 describe('when the next decision is due', () => {
-  it('T is the median of the last decisions, within 2 and 8 s; 5 s with none', () => {
+  it('T\x27 is the 90th percentile of the last ten decisions and a second more, within 2 and 8 s; 5 s with none (R3-1 1)', () => {
     const f = setup();
     expect(queueWakeMs('t1')).toBe(QUEUE_T.defaultMs);
-    for (const ms of [3000, 4000, 9000]) f.queue.noteDecision(ms);
+    f.queue.noteDecision(3000);
     expect(queueWakeMs('t1')).toBe(4000);
+    for (const ms of [2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]) f.queue.noteDecision(ms); // ten decisions: 3000, 2000 ... 6000: the 90th is 5500
+    expect(queueWakeMs('t1')).toBe(6500);
     for (const ms of [20_000, 20_000, 20_000, 20_000]) f.queue.noteDecision(ms);
     expect(queueWakeMs('t1')).toBe(QUEUE_T.maxMs);
     for (let index = 0; index < 10; index++) f.queue.noteDecision(100);
     expect(queueWakeMs('t1')).toBe(QUEUE_T.minMs);
+  });
+
+  it('R3-1 (1, A3): a wake for the item that runs is made once; a decision that added nothing is not followed by another wake on the same queue, a new item is', async () => {
+    const f = setup();
+    await f.queue.add(f.spec(wait1));
+    f.take();
+    expect(await f.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('remaining');
+    const again = new AbortController();
+    const pending = f.queue.ready({ signal: again.signal, drain: false });
+    let woke = false;
+    void pending.then(() => { woke = true; }, () => undefined);
+    await delay(300);
+    expect(woke).toBe(false); // the same queue: no second wake
+    again.abort();
+    await expect(pending).rejects.toThrow();
+    await f.queue.add(f.spec([{ do: 'wait', seconds: 3 }, { do: 'jump' }])); // the decision put an item: a new queue, a new wake when it is the one left to wait for
   });
 
   it('with one item left and 5 s or less of it to run, now; with a long one, not yet; with another waiting, not yet', async () => {

@@ -72,6 +72,8 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
      string; why: string; at: number }[] = [];
   let stopped = false, version = 0, marked = 0, error: unknown = null, pumpTimer: ReturnType<typeof setInterval> | null = null;
   let droppedSeen = 0, droppedNow = 0, failedSeen = 0, failedNow = 0, troubleAt: number | null = null, furnaceCursor: number | null = null, capped = false;
+  /** R3-1 (1, A3): the queue (its open items) the last wake for `remaining` was made on: a decision that added nothing (a probe) is not followed by another wake on the same queue. */
+  let wokeOn: string | null = null;
   let execution: ReturnType<typeof currentActionExecution>;
   const pending = new Set<Promise<unknown>>(), stopCleanup = new AbortController();
   /** The commands whose events (and every page of them) the ledger has taken, and the ones of those the plan's last
@@ -458,6 +460,7 @@ void restoreReceipts();
           troubleAt = null;
           capped = false;
           if (wasDropped) record(wokeRow(rowContext(null), 'failure'));
+          wokeOn = null;
           return wasDropped ? 'dropped' : 'empty';
         }
         if (!drain && capped) {
@@ -480,7 +483,11 @@ void restoreReceipts();
           }
         }
         const currentWake = () => (drain ? null : wakeNow(queue, { ...(messages ? { messages } : {}), ...(alert ? { alert } : {}) }, wake));
-        const woken = currentWake();
+        let woken = currentWake();
+        if (woken === 'remaining') {
+          const on = queue.map(item => item.item).join(',');
+          if (on === wokeOn) woken = null; else wokeOn = on;
+        }
         if (woken) {
           log(`Shannon Minecraft queue wake task=${deps.taskId} reason=${woken} open=${queue.length} T=${wake}`);
           const recordWake = () => (record(wokeRow(rowContext(queue.length === 1 ? queue[0]! : null), woken === 'remaining' ||
