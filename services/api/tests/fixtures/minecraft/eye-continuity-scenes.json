@@ -1,0 +1,472 @@
+[
+ {
+  "name": "eyes-parallel",
+  "goal": "エンドラを討伐して",
+  "current": "p15.1",
+  "elapsedMinutes": 203,
+  "eyes": [
+   {
+    "x": 120,
+    "z": -80,
+    "bearingDeg": 90.0,
+    "flew": 12,
+    "broke": false,
+    "at": 0
+   },
+   {
+    "x": 150,
+    "z": -80,
+    "bearingDeg": 90.6,
+    "flew": 12,
+    "broke": false,
+    "at": 60000
+   }
+  ],
+  "expect": "2 本の線がほぼ平行で交点が遠い／出ない。LLM が横へ動く距離を決めて（既に動いた 30m では足りない）、動いてから 3 個目を投げ直す。同じ場所からもう 1 個投げない。",
+  "check": {
+   "eachOf": [
+    [
+     "go",
+     "walk"
+    ],
+    [
+     "use"
+    ]
+   ],
+   "match": [
+    "\"item\":\"ender_eye\""
+   ],
+   "noMatch": [
+    "\"item\":\"ender_eye\"[^}]*\"at\""
+   ]
+  },
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 150.5,
+    "y": 70,
+    "z": -80.5
+   },
+   "health": 20,
+   "food": 20,
+   "time": "昼",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 40
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 20
+    },
+    {
+     "name": "ender_eye",
+     "count": 12
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ]
+  }
+ },
+ {
+  "name": "eyes-sank",
+  "goal": "エンドラを討伐して",
+  "current": "p15.1",
+  "elapsedMinutes": 203,
+  "eyes": [
+   {
+    "x": 520,
+    "z": -40,
+    "bearingDeg": 5.5,
+    "flew": 0,
+    "broke": false,
+    "at": 0,
+    "down": true,
+    "fate": "unknown"
+   }
+  ],
+  "expect": "目玉が真下へ沈んだ＝要塞はこの真下かすぐ近く。枠を mc_probe kind=frames で探すか、下へ降りる（vertical）。もう 1 個投げて確かめる必要は無い。",
+  "check": {
+   "noMatch": [
+    "\"item\":\"ender_eye\""
+   ]
+  },
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 520.5,
+    "y": 70,
+    "z": -40.5
+   },
+   "health": 20,
+   "food": 20,
+   "time": "昼",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 40
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 20
+    },
+    {
+     "name": "ender_eye",
+     "count": 12
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ]
+  }
+ },
+ {
+  "name": "eyes-reflex-cut",
+  "goal": "エンドラを討伐して",
+  "current": "p15.1",
+  "elapsedMinutes": 203,
+  "eyes": [
+   {
+    "x": 120,
+    "z": -80,
+    "bearingDeg": 90.0,
+    "flew": 12,
+    "broke": false,
+    "at": 0
+   }
+  ],
+  "expect": "目玉の帳簿は 1 個（方位 90°）を持っている。まず敵と体力を片づけ（戦う・離れる・食べる）、その後は 2 個目を横へ動いて投げる。最初の 1 個からやり直さない。",
+  "check": {
+   "noMatch": [
+    "\"item\":\"ender_eye\"[^}]*\"at\""
+   ]
+  },
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 122.5,
+    "y": 70,
+    "z": -80.5
+   },
+   "health": 11,
+   "food": 20,
+   "time": "昼",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 40
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 20
+    },
+    {
+     "name": "ender_eye",
+     "count": 12
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ],
+   "nearbyThreats": [
+    {
+     "id": 7,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 5,
+     "position": {
+      "x": 127,
+      "y": 70,
+      "z": -80
+     },
+     "canSee": true
+    }
+   ]
+  },
+  "events": [
+   "act 1/2 済みで止まった（reflex）",
+   "1 use 済 ender_eye を投げた（方位 90.0° に 12 飛んだ）",
+   "2 go 止まった: 反射が手を止めた 体力 11/20（zombie 5m）"
+  ]
+ },
+ {
+  "name": "eyes-ocean",
+  "goal": "エンドラを討伐して",
+  "current": "p15.1",
+  "elapsedMinutes": 203,
+  "eyes": [
+   {
+    "x": 120,
+    "z": -80,
+    "bearingDeg": 17.7,
+    "flew": 12,
+    "broke": false,
+    "at": 0
+   },
+   {
+    "x": 520,
+    "z": -40,
+    "bearingDeg": 5.5,
+    "flew": 12,
+    "broke": true,
+    "at": 100000
+   }
+  ],
+  "expect": "交点（約 (700,-1900)）の真上は海。陸が無い。海底の下に要塞がある見込み: 潜る・海底へ降りる・mc_probe kind=frames で探す。枠が見つかる前に中へ入ったと言わない。",
+  "check": {
+   "anyHand": [
+    "go",
+    "walk"
+   ],
+   "match": [
+    "\"z\":-(?:[3-9][0-9]{2}|1[0-9]{3})\\b"
+   ]
+  },
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 690.5,
+    "y": 63,
+    "z": -1890.5
+   },
+   "health": 20,
+   "food": 20,
+   "time": "昼",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 40
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 20
+    },
+    {
+     "name": "ender_eye",
+     "count": 12
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ],
+   "mapLandmarks": [
+    "海 water 全周（160m 内に陸なし）"
+   ],
+   "inside": "水面"
+  }
+ },
+ {
+  "name": "eyes-few-left",
+  "goal": "エンドラを討伐して",
+  "current": "p15.1",
+  "elapsedMinutes": 203,
+  "eyes": [
+   {
+    "x": 120,
+    "z": -80,
+    "bearingDeg": 17.7,
+    "flew": 12,
+    "broke": true,
+    "at": 0
+   },
+   {
+    "x": 520,
+    "z": -40,
+    "bearingDeg": 5.5,
+    "flew": 12,
+    "broke": true,
+    "at": 100000,
+    "fate": "dropped",
+    "dropId": 931,
+    "toX": 531,
+    "toZ": -37
+   }
+  ],
+  "expect": "アイが 7 個で、2 個割れた。枠 12 に足りなくなりうる。落ちた 1 個（#931）を拾う、粉とパールでアイを作る、足りなければパールを取りに行く判断。先へ進んでアイを無駄にしない。",
+  "check": {
+   "anyHand": [
+    "pickup",
+    "craft",
+    "go",
+    "walk"
+   ]
+  },
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 522.5,
+    "y": 70,
+    "z": -40.5
+   },
+   "health": 20,
+   "food": 20,
+   "time": "昼",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 40
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 20
+    },
+    {
+     "name": "ender_eye",
+     "count": 7
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    },
+    {
+     "name": "ender_pearl",
+     "count": 3
+    },
+    {
+     "name": "blaze_powder",
+     "count": 4
+    }
+   ]
+  }
+ },
+ {
+  "name": "stronghold-stone-bricks",
+  "goal": "エンドラを討伐して",
+  "current": "p15.2",
+  "elapsedMinutes": 224,
+  "expect": "石レンガは要塞の壁で、枠ではない。枠 0 個。枠の部屋を探して歩く・掘る・probe。石レンガの座標に目玉を置かない。「枠を見つけた」と言わない。",
+  "check": {
+   "noMatch": [
+    "\"item\":\"ender_eye\"[^}]*\"at\"",
+    "\"at\"[^}]*\"item\":\"ender_eye\""
+   ]
+  },
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 701.5,
+    "y": 25,
+    "z": -1893.5
+   },
+   "inside": "ストロングホールドの中",
+   "health": 20,
+   "food": 17,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 40
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "cooked_beef",
+     "count": 18
+    },
+    {
+     "name": "ender_eye",
+     "count": 9
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    },
+    {
+     "name": "water_bucket",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [
+    "石レンガ stone_bricks (703,26,-1899) 北6m ×42",
+    "苔むした石レンガ mossy_stone_bricks (698,26,-1897) 北4m ×9",
+    "ひびの入った石レンガ cracked_stone_bricks (705,25,-1895) 北2m ×6"
+   ],
+   "rememberedPlaces": {
+    "stronghold": "8m 北 (703,26,-1899)"
+   }
+  },
+  "events": [
+   "mc_probe kind=frames: 枠 0 個（石レンガ 42・苔むした石レンガ 9・ひびの入った石レンガ 6 は見える）"
+  ]
+ }
+]
