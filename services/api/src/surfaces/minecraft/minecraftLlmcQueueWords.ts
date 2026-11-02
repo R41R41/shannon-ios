@@ -16,7 +16,9 @@ export const QUEUE_MAX = 3;
 /** The queue's answer "the same work is already in the queue": it says "already asked" (A-16: not a mistake of the model). */
 export const SAME_IN_QUEUE_WORDS = 'と同じ手が列にある';
 /** R3-1 (6): a wait-only act behind an item that runs is not put in the queue (run59: 172 s of them, each run in full after the item before it ended). */
-export const waitBehindWords = (running: string) => `送らなかった: 走っている ${running} の後ろに wait だけの項目は積めない（積んだ wait は ${running} が終わってから全長走る）。${running} の結果は終わった時に知らせる。有用な手（拾う・作る・食べる・隣の採掘・安全な前提作業）を同じ項目に入れるか、列が空になってから wait を送る（夜・回復・焼き上がりの待ちは空の列で書ける）`;
+export const waitBehindWords = (running: string) =>
+  `送らなかった: 走っている ${running} の後ろに wait だけの項目は積めない（積んだ wait は ${running} が終わってから全長走る）。${running} の結果は終わった時に知らせる。`
+  + '有用な手（拾う・作る・食べる・隣の採掘・安全な前提作業）を同じ項目に入れるか、列が空になってから wait を送る（夜・回復・焼き上がりの待ちは空の列で書ける）';
 /** The body's own words of an item it did not run (`failureType`): the item never started and no hand moved. */
 export const NEVER_RAN: ReadonlySet<string> = new Set(['queue_dropped', 'queue_expired', 'queue_after_gone', 'queue_busy', 'queue_full']);
 

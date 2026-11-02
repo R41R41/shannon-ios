@@ -2,7 +2,7 @@ import { createQueueProgress } from './minecraftLlmcQueueProgress.js';
 import { createQueueAdmission } from './minecraftLlmcQueueAdmission.js';
 import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS,TROUBLE_SETTLE_MS,decisionTimes,verticalSpeeds,queueWakeMs,
   keep,ioTurn,sleepMs } from './minecraftLlmcQueueState.js';
-import type { QueueItem,QueueRecordRow,QueueDeps,RanListener,LlmcQueue } from './minecraftLlmcQueueState.js';
+import type { QueueItem,QueueAdd,QueueRecordRow,QueueDeps,RanListener,LlmcQueue } from './minecraftLlmcQueueState.js';
 import { createQueueReceiptHandlers } from './minecraftLlmcQueueReceipts.js';
 import { readActResult,tunedBy } from '../../contracts/minecraftActContract.js';
 import { queueName,type OperationState } from '../../contracts/continueContract.js';
@@ -73,7 +73,8 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   let stopped = false, version = 0, marked = 0, error: unknown = null, pumpTimer: ReturnType<typeof setInterval> | null = null;
   let droppedSeen = 0, droppedNow = 0, failedSeen = 0, failedNow = 0, troubleAt: number | null = null, furnaceCursor: number | null = null, capped = false;
   let closing = false;
-  /** R3-1 (1, A3): the queue (its open items) the last wake for `remaining` was made on: a decision that added nothing (a probe) is not followed by another wake on the same queue. */
+  /** R3-1 (1, A3): the queue (its open items) the last wake for `remaining` was made on: a decision that added
+   * nothing (a probe) is not followed by another wake on the same queue. */
   let wokeOn: string | null = null;
   let execution: ReturnType<typeof currentActionExecution>;
   const pending = new Set<Promise<unknown>>(), stopCleanup = new AbortController();
@@ -89,8 +90,9 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   };
   /**
    * R3-1 (2): a decided item that ended badly makes a decision that was being thought meanwhile stale: it followed a queue whose last item did not
-   * do what the decision counted on, and without this its calls ran as hands made for a state that was gone (run59: ten of them). A reserve item's end (a stand-in the head
-   * put last, R3-1 4) is not such a change: it was never what the decision rested on.
+   * do what the decision counted on, and without this its calls ran as hands made for a state that was gone
+   * (run59: ten of them). A reserve item's end (a stand-in the head put last, R3-1 4) is not such a change:
+   * it was never what the decision rested on.
    */
   const staleAfterBadEnd = (item: QueueItem) => { if (!item.reserve) version += 1; };
   /** The step is settled when nothing is open and no result is left unknown (an unknown result is settled only by
@@ -170,18 +172,22 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     news.push({ kind: taken ? 'dropped' : 'ran', item: item.item, call: item.call, operationId: item.operationId, result, ms, label: itemLabel(item) });
     // The head reads what the body decided; it takes nothing off because an item stopped. A drop the body made
 // changes the queue a decision followed (`stale`).
-    // A reserve that did not run (its `pre` failed, it was replaced, the step closed) changes nothing a decision rested on: no stale decision, only the wake that the queue is empty.
-    if (taken) { if (item.reserve) droppedNow += 1; else bump();
-      noteDropped(item, item.unit.droppedBecause?.code ?? item.because ?? ''); }
-    else if (!result.ok) { failedNow += 1;
-      troubleAt ??= now();
-      staleAfterBadEnd(item); }
+    // A reserve that did not run (its `pre` failed, it was replaced, the step closed) changes nothing a decision
+    // rested on: no stale decision, only the wake that the queue is empty.
+    noteBadEnd(item, item.unit, taken, result.ok);
     if (!taken) { book(item, receipt);
       learnSpeed(item, receipt);
       for (const listener of listeners) tell(listener, item, result, receipt); }
     record(receivedRow(rowContext(item), receipt));
     settleFlag();
     pump();
+  }
+  function noteBadEnd(item: QueueItem, unit: ReturnType<typeof unitOfReceipt>, taken: boolean, ok: boolean): void {
+    if (taken) { if (item.reserve) droppedNow += 1; else bump();
+      noteDropped(item, unit.droppedBecause?.code ?? item.because ?? ''); }
+    else if (!ok) { failedNow += 1;
+      troubleAt ??= now();
+      staleAfterBadEnd(item); }
   }
   /**
    * The result is not known (the body's receipt said so, or none came in time): the model is told so, once, as
@@ -236,6 +242,24 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     bump();
   }
 const { refusal, makeItem } = createQueueAdmission(deps, { items, open, now });
+
+  // R3-1 (4): the decided item that comes while a reserve is open takes the reserve off first
+  // (the reserve is the head's own, and never what a decision rests on).
+  function replaceReserveForDecided(spec: QueueAdd): Promise<string> | undefined {
+    if (!(spec.reserve === true || spec.input.reserve === true)) {
+      const standIn = open().find(entry => entry.reserve === true);
+      if (standIn) return api.replace([standIn.item]);
+    }
+  }
+
+  function wakeOnChangedQueue(queue: QueueItem[], woken: FcaQueueWake | null): FcaQueueWake | null {
+    if (woken === 'remaining') {
+      const on = queue.map(item => item.item).join(',');
+      if (on === wokeOn) return null;
+      wokeOn = on;
+    }
+    return woken;
+  }
 
   // The receipt box (chapter 3): what a head that stopped before its plan was committed had not put to the ledger,
 // and the corrections nobody said.
@@ -330,18 +354,16 @@ void restoreReceipts();
     async add(spec) {
       const refused = refusal(spec);
       if (refused) return { ok: false, text: refused };
-      // R3-1 (4): the decided item that comes while a reserve is open takes the reserve off first (the reserve is the head's own, and never what a decision rests on).
-      if (!(spec.reserve === true || spec.input.reserve === true)) {
-        const standIn = open().find(entry => entry.reserve === true);
-        if (standIn) { await api.replace([standIn.item]); }
-      }
+      const replacement = replaceReserveForDecided(spec);
+      if (replacement) await replacement;
       const label = `q${nextNumber()}`, after = open().at(-1)?.item ?? null, ahead = aheadMs();
       const maxMs = Math.max(1_000, Math.min(180_000, spec.maxMs)), startInMs = Math.min(START_CAP_MS, ahead + START_MARGIN_MS);
       const item = makeItem(spec, label, maxMs, startInMs);
       item.uses = deps.snapshotUses?.(spec.input.uses ?? []) ?? [];
       const madeIn = spec.madeIn === undefined ? madeInOf(deps.observe(), headBoot) : spec.madeIn;
       const queueEnvelope = (): MinecraftQueueEnvelope => ({ item: label, after, node: spec.node, ...(spec.pre ? { pre: spec.pre } : {}), maxMs,
-        startBy: new Date(item.startBy).toISOString(), queue: name, ...(item.reserve ? { dependsOn: [] } : spec.input.dependsOn !== undefined ? { dependsOn: [...spec.input.dependsOn] } : {}),
+        startBy: new Date(item.startBy).toISOString(), queue: name,
+        ...(item.reserve ? { dependsOn: [] } : spec.input.dependsOn !== undefined ? { dependsOn: [...spec.input.dependsOn] } : {}),
         ...(madeIn ? { madeIn } : {}) });
       const envelope: MinecraftQueueEnvelope = queueEnvelope();
       items.push(item);
@@ -440,7 +462,10 @@ void restoreReceipts();
     },
     closeStep(reason) {
       closing = true;
-      for (const item of open()) if (item.reserve) { item.because ??= '段を閉じる'; item.abort.abort('closing'); }
+      for (const item of open()) if (item.reserve) {
+        item.because ??= '段を閉じる';
+        item.abort.abort('closing');
+      }
       log(`Shannon Minecraft queue close task=${deps.taskId} reason=${reason} open=${open().length}`);
     },
     closing: () => closing,
@@ -496,11 +521,7 @@ void restoreReceipts();
           }
         }
         const currentWake = () => (drain ? null : wakeNow(queue, { ...(messages ? { messages } : {}), ...(alert ? { alert } : {}) }, wake));
-        let woken = currentWake();
-        if (woken === 'remaining') {
-          const on = queue.map(item => item.item).join(',');
-          if (on === wokeOn) woken = null; else wokeOn = on;
-        }
+        const woken = wakeOnChangedQueue(queue, currentWake());
         if (woken) {
           log(`Shannon Minecraft queue wake task=${deps.taskId} reason=${woken} open=${queue.length} T=${wake}`);
           const recordWake = () => (record(wokeRow(rowContext(queue.length === 1 ? queue[0]! : null), woken === 'remaining' ||

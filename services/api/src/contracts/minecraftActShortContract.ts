@@ -230,7 +230,8 @@ export function actToShort(input: ActInput): ShortAct {
   return { ...(input.why !== undefined ? { why: input.why } : {}), hands: input.hands.map(handToLine),
     ...(input.stopIf ? { stopIf: stopIfText(input.stopIf) } : {}), ...(input.accept?.length ? { accept: [...input.accept] } : {}),
     ...(input.pre ? { pre: conditionText(input.pre) } : {}), ...(input.done ? { done: conditionText(input.done) } : {}),
-    ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}), ...(input.reserve === true ? { reserve: true } : {}),
+    ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}),
+    ...(input.reserve === true ? { reserve: true } : {}),
     ...(input.dependsOn !== undefined ? { dependsOn: [...input.dependsOn] } : {}), ...(input.uses?.length ? { uses: [...input.uses] } : {}),
     ...(input.keep?.length ? { keep: input.keep.map(entry => `${entry.item}:${entry.count}:${entry.use}`) } : {}) };
 }

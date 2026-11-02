@@ -89,7 +89,7 @@ export function noteCautions(surprises: readonly Surprise[], probes: readonly Pr
   for (const surprise of surprises) {
     const own = probes.flatMap((probe, index) => surprise.probes.some(item => JSON.stringify(item) === JSON.stringify(probe))
       ? [{ probe, answer: answers[index] }] : []);
-    const fact = cautionFact({ code: surprise.code, nth: surprise.nth ?? 1, hand: surprise.hand ?? null }, own.map(item => item.probe),
+    const fact = cautionFact({ code: surprise.code, nth: surprise.nth ?? 1, hand: surprise.hand ?? null, at: surprise.at ?? null }, own.map(item => item.probe),
       own.map(item => item.answer));
     try { if (fact && note(fact)) noted += 1; } catch { /* a note never fails a step */ }
   }

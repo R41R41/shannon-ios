@@ -60,7 +60,8 @@ export function createQueueProgress(deps: QueueDeps, shared: { items: QueueItem[
   function wakeNow(queue: readonly QueueItem[], options: { messages?(): boolean; alert?(): boolean }, wake: number): FcaQueueWake | null {
     if (options.messages?.()) return 'message';
     if (options.alert?.()) return 'alert';
-    // R3-1 (1, A2): a reserve item (the stand-in the head put last) is not a decided one: the decision is due when the one decided item left is nearly done (or none is, and only the reserve runs).
+    // R3-1 (1, A2): a reserve item (the stand-in the head put last) is not a decided one: the decision is due when
+    // the one decided item left is nearly done (or none is, and only the reserve runs).
     const decided = queue.filter(item => !item.reserve);
     if (!decided.length) return queue.length ? 'remaining' : null;
     return decided.length === 1 && remainingMs(decided[0]!) <= wake ? 'remaining' : null;
