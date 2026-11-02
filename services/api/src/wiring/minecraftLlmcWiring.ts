@@ -60,7 +60,8 @@ export { LLMC_MAIN_MODEL, LLMC_ESCALATE_FAILURES, LLMC_PERMIT_WINDOW_MS, LLMC_HI
  * tools' options, and the step ports that make its steps small (the model router, the plan, the lease window, the
  * fixed menu, the history policy).
  */
-export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: MinecraftControl, log: (line: string) => void = line => console.info(line)) {
+export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: MinecraftControl, log: (line: string) => void = line => console.info(line),
+  keep?: (keys: Record<string, unknown>) => boolean) {
   const worksite = createWorksiteMemory((step.snapshot.checkpoint as { minecraftWorksite?: unknown } | null)?.minecraftWorksite);
   const journey = createMinecraftJourney((step.snapshot.checkpoint as { minecraftJourney?: unknown } | null)?.minecraftJourney);
   const endgame = createEndgame(step.snapshot.checkpoint);
@@ -424,7 +425,7 @@ queue.onRan(noteQueueResult);
   // A request that is not held on a failure still looks for its stalls and asks for a new plan (`minecraftLlmcReplanWiring.ts`).
   const unheld = unheldReplan({ held: stalls !== null, taskId: step.taskId, goal: step.snapshot.task.goal, createdAt: step.snapshot.task.createdAt,
     checkpoint: step.snapshot.checkpoint, replanner: llmc.replanner, observe, plan: plan.port, bodyParts, queue, waits, activeClock,
-    heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log });
+    heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log, ...(keep ? { persist: keep } : {}) });
   // Amendment A-10 (`minecraftLlmcRedecideWiring.ts`): the model of this step, and the port that asks the stronger one again for an act that breaks a promise.
   const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId);
   const { planTools, redecide } = redecideParts(llmc, model, step, plan, log);

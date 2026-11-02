@@ -57,6 +57,7 @@ import type { SkillTurnPorts } from '../contracts/skillMemoryContract.js';
 import { ownTimeBudgetPort, ownTimeStepPorts, ownTimeTaskAllowed, type OwnTimeFcaParts } from './fcaOwnTimeWiring.js';
 import { fcaBudget } from './fcaBudgetWiring.js';
 import { TaskBudgetStore } from '../mind/action/taskRuntime/store/taskBudgetStore.js';
+import { TaskBodyRecoveryStore } from '../mind/action/taskRuntime/store/taskBodyRecoveryStore.js';
 import { fcaReadReceiptSources } from '../mind/action/fca/fcaConversationSources.js';
 import { configureDatabase, openDatabase } from '../infra/sqlite/sqliteOpen.js';
 import { switchOn } from '@shannon/switches';
@@ -167,6 +168,8 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
       minecraft = withMinecraftAgendaParts(withSkillOutcomes(
       configuredFcaMinecraft(values, { ...parts, db, configuration: parts.minecraftConfiguration, jev, actions, taskAudienceAllowed: id => gameOnly(id) }),
       parts.skills, parts.now), switchOn(values, 'SHANNON_MINECRAFT_AGENDA') && !llmc);
+    // The count of the asks for a new plan is put into the checkpoint before one is sent (`minecraftLlmcReplanFlow.ts`), not at the step's commit.
+    const checkpointKeys = minecraft ? new TaskBodyRecoveryStore(db) : null;
     let shared: ReturnType<typeof createFcaSharedWiring> | undefined;
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
@@ -198,7 +201,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
         const check = stepVisibility(() => visible, step);
         // A body task of the LLM-centric mode (`minecraftLlmcWiring.ts`): its plan, its small steps and its own menu.
         const small = llmc && minecraft && (minecraft.control.store.body(step.taskId) || step.snapshot.task.completionCriteria === MINECRAFT_REQUEST_CRITERIA)
-          ? llmcStepParts(llmc, step, minecraft.control) : null;
+          ? llmcStepParts(llmc, step, minecraft.control, undefined, keys => checkpointKeys?.saveKeys(step.taskId, step.id, keys) === true) : null;
         const gameOnlyStep = !!small && gameOnly(step.taskId), gameplayAllowed = () => gameOnly(step.taskId);
         const audienceAllowed = () => parts.ownerAlone() || gameplayAllowed();
         // SHANNON_MINECRAFT_WORKING_EVENTS (mb-arch stage 1): what the body tells while it works can cut a stalled
