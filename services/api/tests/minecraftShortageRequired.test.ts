@@ -4,9 +4,9 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { forgetActNodes, followNode, lackBefore, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
-import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
+import { heldOfFrame, heldTail, holdV2, sentPart } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
-import { gateNote, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { gateHold, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { v2tree } from './helpers/planTreeV2.js';
@@ -106,29 +106,43 @@ describe('requiredLack: the required needs of the stage a node belongs to that a
   });
 });
 
-describe('gateNote: a hand that enters the Nether says the required lack in its result', () => {
+describe('gateHold: a hand that enters the Nether is held while a required need of the gate is missing (run59 leg 2, 2026-11-02 14:34Z)', () => {
   const enter = { hands: [{ do: 'portal' }] };
   const noShield = frame(KIT.filter(([name]) => name !== 'shield'));
-  it('says the lack, what it costs, and that the acceptance is no sign of the need met', () => {
-    expect(gateNote(enter, noShield)).toBe(`準備の状態（この act はネザーへ入る手）: 未達の必須（ネザーに入る前に必ず）— 盾が無い。欠けたまま進むと: ${BEFORE_GATE.risk}。`
-      + 'この受付は、準備が満たされたことを表さない');
-    expect(gateNote({ hands: [{ do: 'wait', seconds: 1 }, { do: 'portal', enter: true }] }, noShield)).not.toBeNull();
+  const said = (lack: string) => `ネザーへ入る手は送らない。${lack}。そろえてからもう一度出す（理由を書いても省けない）`;
+  it('names the hand, what is missing and what going on costs, and that a reason does not skip it', () => {
+    expect(gateHold(enter, noShield)).toEqual({ hand: 1, line: said(`未達の必須（ネザーに入る前に必ず）— 盾が無い。欠けたまま進むと: ${BEFORE_GATE.risk}`) });
+    expect(gateHold({ hands: [{ do: 'wait', seconds: 1 }, { do: 'equip', item: 'shield' }, { do: 'portal', enter: true }] }, noShield)).toMatchObject({ hand: 3 });
+    expect(gateHold({ hands: [{ do: 'portal', enter: false }, { do: 'portal' }] }, noShield)).toMatchObject({ hand: 2 });
   });
-  it('says nothing when the hand does not enter, the need is met (the golden boots are a goal), or it is not the overworld', () => {
-    expect(gateNote({ hands: [{ do: 'portal', enter: false }] }, noShield)).toBeNull();
-    expect(gateNote({ hands: [{ do: 'go', to: { x: 1, y: 70, z: 1 } }] }, noShield)).toBeNull();
-    expect(gateNote(enter, frame(KIT))).toBeNull();
-    expect(gateNote(enter, frame([], { dimension: 'the_nether' }))).toBeNull();
-    expect(gateNote(enter, null)).toBeNull();
-    expect(gateNote({ hands: 'portal' }, noShield)).toBeNull();
+  it('holds nothing when the hand does not enter, the needs are met (the golden boots and the sword are goals), or it is not the overworld', () => {
+    expect(gateHold({ hands: [{ do: 'portal', enter: false }] }, noShield)).toBeNull();
+    expect(gateHold({ hands: [{ do: 'go', to: { x: 1, y: 70, z: 1 } }] }, noShield)).toBeNull();
+    expect(gateHold(enter, frame(KIT))).toBeNull();
+    expect(gateHold(enter, frame(KIT.filter(([name]) => name !== 'iron_sword')))).toBeNull();
+    expect(gateHold(enter, frame([], { dimension: 'the_nether' }))).toBeNull();
+    expect(gateHold(enter, null)).toBeNull();
+    expect(gateHold({ hands: 'portal' }, noShield)).toBeNull();
   });
-  it('goes into the notes of an act with the other notes, and not into an urgent decision\'s', () => {
-    const notes: string[] = [];
-    heldOfFrame(enter, noShield, 't1', false, notes);
-    expect(notes).toContain(gateNote(enter, noShield));
-    const urgent: string[] = [];
-    heldOfFrame(enter, noShield, 't1', true, urgent);
-    expect(urgent.some(line => line.includes('ネザーへ入る手'))).toBe(false);
+  it('reads the armour as worn now: carried and not worn is missing, so an act that equips it and enters in one goes in the next', () => {
+    const carried = frame([...KIT, ['iron_chestplate', 1]], { worn: '頭: iron_helmet(残り165/165)、胴: なし、脚: iron_leggings(残り225/225)、足: なし' });
+    expect(gateHold(enter, carried)?.line).toContain('持っているが着ていない: iron_chestplate');
+    expect(gateHold({ hands: [{ do: 'equip', item: 'iron_chestplate' }, { do: 'portal' }] }, carried)).toMatchObject({ hand: 2 });
+  });
+  it('turns the act back as the other guards do: the hands before it are sent, the rest comes back as a fact; the whole act when it is the first hand', () => {
+    const act = { hands: [{ do: 'equip', item: 'iron_chestplate' }, { do: 'portal', maxPlace: 20 }], why: '[p5] 胸当てを着てゲートを建て点火（盾は材料なしで後回し）' };
+    const held = heldOfFrame(act, noShield, 't1')!;
+    expect(held).toMatchObject({ hand: 2, kind: 'portal', code: 'gate_required' });
+    expect(held.line.startsWith('手 2 portal: ネザーへ入る手は送らない。未達の必須（ネザーに入る前に必ず）— 盾が無い。')).toBe(true);
+    expect(sentPart(act, held)).toEqual({ ...act, hands: [act.hands[0]] });
+    expect(heldTail(held, 2)).toContain('手 2 から先 1 手（全 2 手のうち）は体へ送っていない');
+    const whole = holdV2(enter, noShield, 't1');
+    expect(whole).toMatchObject({ whole: expect.stringContaining('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 1 portal: ネザーへ入る手は送らない。') });
+    expect(heldOfFrame(enter, noShield, 't1', true)).toMatchObject({ hand: 1, code: 'gate_required' });
+    expect(heldOfFrame(enter, frame(KIT), 't1')).toBeNull();
+  });
+  it('says so to the model before it tries: the stage rules', () => {
+    expect(PREP_RULES_WORDS).toContain('ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る');
   });
 });
 
@@ -195,6 +209,8 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
       '水の入ったバケツ（鉄 3）を hotbar（最初の 9 スロット）に持つ', '水バケツが手か hotbar にある時だけで、荷の中（hotbar の外）にあると起動しない',
       '落下を水バケツで止める途中で操作を取られた（水はあけた：あとで汲み直す／水はあけていない）']) expect(end, word).toContain(word);
     expect(end).not.toContain('荷の中でもよい');
+    expect(end).toContain('attack ender_dragon は今の手持ちで打ち、体は剣を持ち直さない。');
+    expect(end).toContain('打つ前に equip で剣（か斧）を手に持つ');
     expect(STRATEGY_KNOWLEDGE_V2).toContain('鉄格子の檻つきは、水の入ったバケツ（鉄 3。hotbar に）と積める物 3 個以上を持って登る。落ちる時は体の落下止めが働けば水で止まる');
   });
   it('tells the blaze platform\'s rule: accept on every act there, or the floor reflex digs the platform (S2, c1 hold trial)', () => {
@@ -210,6 +226,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(cautions('エンドに入る')).toContain('丸石か黒曜石を3個以上持って入る');
     expect(cautions('エンドでドラゴン')).toContain('水入りバケツ（hotbar に）と積める物3個以上で登り、長居しない');
     expect(cautions('エンドでドラゴン')).toContain('縁から5マス以上内側');
+    expect(cautions('エンドでドラゴン')).toContain('竜を打つ前に剣か斧を equip で手に持つ');
   });
   it('asks the water bucket before the End: the stage\'s shortage line and the check node\'s condition', () => {
     const base = { dimension: 'overworld', food: 90, nowKinds: ['stronghold' as const] };

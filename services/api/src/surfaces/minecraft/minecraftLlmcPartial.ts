@@ -4,7 +4,7 @@ import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
-import { descentNote, gateNote } from './minecraftLlmcReadiness.js';
+import { descentNote, gateHold } from './minecraftLlmcReadiness.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
 import { goStop } from './minecraftLlmcGoGuard.js';
@@ -44,12 +44,12 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   if (wait) notes?.push(wait);
   const dive = urgent ? null : descentNote(input, frame);
   if (dive) notes?.push(dive);
-  const gate = urgent ? null : gateNote(input, frame);
-  if (gate) notes?.push(gate);
   const options = { bodyRules: true, continuePlace: true, ...(notes ? { notes } : {}) };
   const stand = preflightOfFrame(input, frame, taskId, options), rule = ruleGuardOfFrame(input, frame, taskId);
   const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
+  const gate = gateHold(input, frame);
+  if (gate) found.push({ hand: gate.hand, code: 'gate_required', kind: 'portal', line: `手 ${gate.hand} portal: ${gate.line}。` });
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
     furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
