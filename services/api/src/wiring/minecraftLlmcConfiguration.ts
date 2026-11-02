@@ -170,6 +170,11 @@ export function strongStage(checkpoint: unknown): PlanKind | null {
   return null;
 }
 
+/** The strong kind of the stage she is in: the plan's node when it is one, else `end` when the body is in the End (the node may be behind). */
+export function strongStageNow(checkpoint: unknown, dimension: string | null): PlanKind | null {
+  return strongStage(checkpoint) ?? (dimension === 'the_end' ? 'end' : null);
+}
+
 /**
  * Picks the model of one decision: the escalation model while the task's failed steps in a row
  * (`consecutiveToolFailures` of the step's checkpoint) are `LLMC_ESCALATE_FAILURES` or more; else the strong one in a stage of
@@ -186,7 +191,7 @@ export function llmcModelRouter(
   const failures = Number((checkpoint as { consecutiveToolFailures?: unknown } | null)?.consecutiveToolFailures ?? 0);
   const raised = models.escalate && Number.isSafeInteger(failures) && failures >= LLMC_ESCALATE_FAILURES;
   // In the End the strong model decides whatever the plan's current node says (run59, 00:50: the node stayed on the overworld's beds in the Nether).
-  const stage = raised || !models.strong ? null : strongStage(checkpoint) ?? (dimension() === 'the_end' ? 'end' : null);
+  const stage = raised || !models.strong ? null : strongStageNow(checkpoint, dimension());
   if (raised || stage) {
     try {
       log?.(raised ? `Shannon Minecraft model raised task=${taskId} failures=${failures}` : `Shannon Minecraft model strong task=${taskId} stage=${stage}`);
