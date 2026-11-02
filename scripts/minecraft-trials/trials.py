@@ -19,6 +19,7 @@ switches level-name to trial_live, a copy of the pristine world, and switches it
 the body keeps the places of each trial apart. Secrets (RCON password, api.env values) are never printed.
 """
 import argparse
+import contextlib
 import datetime as dt
 import gzip
 import io
@@ -35,6 +36,11 @@ import subprocess
 import sys
 import time
 import zlib
+
+try:
+    import fcntl          # Linux (the VM, the WSL lab); the module is only imported elsewhere for its readers
+except ImportError:
+    fcntl = None
 
 HOME = os.path.expanduser('~')
 MC = os.path.join(HOME, 'minecraft', 'shannon-home')
@@ -61,6 +67,8 @@ FINISHED = {'completed', 'failed', 'cancelled'}
 PAUSE_PATIENCE = 90          # an fca_unknown pause is often resumed by the body recovery within seconds (trial 20261020T1450)
 PREFLIGHT_POLL = 3
 DIMENSION_NAMES = {'overworld': 'minecraft:overworld', 'nether': 'minecraft:the_nether', 'end': 'minecraft:the_end'}
+PROD_LOCK = os.path.join(HOME, '.cache', 'minebot-lab', 'prod.lock')     # `flock` it for as long as shannon-home is yours (deploy restarts, real runs, this)
+PARTIAL_EVERY = 20           # seconds between the saves of a running trial: the VM is a Spot machine and may stop under it
 
 
 def settled(row):
@@ -100,6 +108,41 @@ def save_json(path, value):
 
 class Stop(Exception):
     """The batch cannot go on (the reason is printed and recorded)."""
+
+
+class ProdLock:
+    """`flock ~/.cache/minebot-lab/prod.lock` for as long as this process uses shannon-home. The coordinator takes the same lock for a deploy restart
+    or a real run, and the lab slot script keeps the lab off while it is held, so these never overlap. Whoever finds it taken reads the holder
+    from the file. wait: seconds to wait for it (0 = stop at once)."""
+
+    def __init__(self, what, wait=0):
+        self.what, self.wait, self.fd = what, wait, None
+
+    def __enter__(self):
+        if fcntl is None: raise Stop('no fcntl: prod.lock can only be taken on Linux')
+        os.makedirs(os.path.dirname(PROD_LOCK), exist_ok=True)
+        self.fd = os.open(PROD_LOCK, os.O_CREAT | os.O_RDWR, 0o664)
+        deadline = time.monotonic() + self.wait
+        while True:
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    holder = os.pread(self.fd, 200, 0).decode('utf-8', 'replace').strip() or 'a plain flock of someone else'
+                    os.close(self.fd); self.fd = None
+                    raise Stop(f'prod.lock is held ({holder}): shannon-home is in use by a deploy, a real run or another batch. Wait for it, or --wait-lock N before the command.')
+                time.sleep(5)
+        os.ftruncate(self.fd, 0)
+        os.pwrite(self.fd, f'trials.py {self.what} pid={os.getpid()} since={now_iso()}\n'.encode(), 0)
+        return self
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            os.ftruncate(self.fd, 0)
+            os.close(self.fd)         # closing the descriptor releases the lock
+            self.fd = None
+        return False
 
 
 # ---------------------------------------------------------------- NBT and region files
@@ -1192,7 +1235,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     log(f'trial {trial_id}: task {task_id} goal={result["goalChars"]} chars ok={result["goalOk"]}')
     latched, maxima, first_seen, last, fail_since = {}, {}, {}, {}, {}
     items = tracked_items(section)
-    reason, paused_since = None, None
+    reason, paused_since, last_saved = None, None, -PARTIAL_EVERY
     while True:
         elapsed = time.monotonic() - t0
         try:
@@ -1210,6 +1253,13 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
         done = check_milestones(section, counts, state, latched, maxima, elapsed)
         row = task_row(task_id) or {}
         last = {'counts': counts, 'state': state, 'row': row}
+        if elapsed - last_saved >= PARTIAL_EVERY:          # a stop of the VM leaves what this trial had reached and spent
+            last_saved = elapsed
+            save_json(partial_path(batch, trial_id), {**{k: result.get(k) for k in ('trial', 'batch', 'section', 'sectionName', 'seedKey', 'seed', 'taskId', 'startedAt', 'worldId',
+                                                                                        'capYen', 'targetSeconds', 'limitMinutes', 'supplied', 'supplyKinds', 'ownerOk', 'prediction')},
+                                                      'elapsed': round(elapsed, 1), 'milestones': dict(latched), 'maxCounts': dict(maxima), 'firstSeen': dict(first_seen),
+                                                      'position': {k: state.get(k) for k in ('dimension', 'pos', 'health')}, 'yen': row.get('yen'),
+                                                      'taskStatus': row.get('status'), 'pauseReason': row.get('pauseReason'), 'savedAt': now_iso()})
         if done: reason = 'reached'; break
         if state.get('deaths'): reason = 'died'; break
         rule = fail_rule_hit(section, state, fail_since, elapsed)
@@ -1257,6 +1307,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     for _ in range(20):
         if BODY not in (online_players() or []): break
         time.sleep(3)
+    with contextlib.suppress(FileNotFoundError): os.remove(partial_path(batch, trial_id))      # the result is saved by the caller from here
     return result
 
 
@@ -1264,6 +1315,42 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
 
 def config():
     return load_json(os.path.join(HERE, 'sections.json'))
+
+
+def partial_path(batch, trial_id):
+    return os.path.join(RESULTS, batch, f'partial-{trial_id}.json')
+
+
+def write_plan(batch, doc):
+    save_json(os.path.join(RESULTS, batch, 'plan.json'), doc)
+
+
+def settle_partials(batch):
+    """A trial that a stop cut off (the Spot VM, a crash) left partial-<trial>.json. It becomes a result of its own, `interrupted`, with what it had reached
+    and spent (kept in history.jsonl and in the batch's table); the trial itself is run again from a fresh world. Returns the rows."""
+    folder = os.path.join(RESULTS, batch)
+    rows = []
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if not (name.startswith('partial-') and name.endswith('.json')): continue
+        partial = load_json(os.path.join(folder, name))
+        row = {**partial, 'ok': False, 'reason': 'interrupted', 'seconds': None, 'interrupted': True,
+               'missing': [], 'interruptedAt': partial.get('savedAt')}
+        save_json(os.path.join(folder, f'{partial["trial"]}.interrupted-{jst_stamp(True)}.json'), row)
+        with open(os.path.join(RESULTS, 'history.jsonl'), 'a', encoding='utf-8') as handle: handle.write(json.dumps(row, ensure_ascii=False) + '\n')
+        os.remove(os.path.join(folder, name))
+        rows.append(row)
+    return rows
+
+
+def batch_rows(batch):
+    """(finished results, interrupted results) saved in a batch's folder."""
+    folder = os.path.join(RESULTS, batch)
+    finished, interrupted = [], []
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if not (name.endswith('.json') and name.startswith(batch)): continue
+        row = load_json(os.path.join(folder, name))
+        (interrupted if '.interrupted-' in name else finished).append(row)
+    return finished, interrupted
 
 
 def resolve_model(asked, sections):
@@ -1279,15 +1366,25 @@ def cmd_run(args):
     problems = validate_sections(cfg)
     if problems: raise Stop('sections.json: ' + '; '.join(problems))
     sections = {str(s['id']): s for s in cfg['sections']}
-    chosen = [sections[k] for k in (args.sections.split(',') if args.sections else sections)]
-    only_seeds = set(args.seeds.split(',')) if args.seeds else None
-    # --seeds narrows the seeds a section lists; for the sections that can start in any prepared world (anySeed) it names them
-    plan = [(s, k) for s in chosen for k in (sorted(only_seeds) if only_seeds and s.get('anySeed') else s['seeds']) if not only_seeds or k in only_seeds]
-    if args.limit: plan = plan[:args.limit]
-    batch = args.batch or jst_stamp()
+    if args.resume:       # the plan, the model, the cap and the owner's word come from the batch that was cut off (a Spot VM may stop under a batch)
+        batch = args.resume
+        doc = load_json(os.path.join(RESULTS, batch, 'plan.json'))
+        if not doc: raise Stop(f'no plan.json in results/{batch}: nothing to resume')
+        plan = [(sections[str(e['section'])], e['seed']) for e in doc['plan']]
+        args.model = args.model or doc.get('model')
+        args.owner_ok_supply = args.owner_ok_supply or doc.get('ownerOk')
+        args.batch_cap_yen = args.batch_cap_yen or doc.get('batchCapYen')
+        args.dry_run = args.dry_run or bool(doc.get('dryRun'))
+    else:
+        chosen = [sections[k] for k in (args.sections.split(',') if args.sections else sections)]
+        only_seeds = set(args.seeds.split(',')) if args.seeds else None
+        # --seeds narrows the seeds a section lists; for the sections that can start in any prepared world (anySeed) it names them
+        plan = [(s, k) for s in chosen for k in (sorted(only_seeds) if only_seeds and s.get('anySeed') else s['seeds']) if not only_seeds or k in only_seeds]
+        if args.limit: plan = plan[:args.limit]
+        batch = args.batch or jst_stamp()
     folder = os.path.join(RESULTS, batch)
     os.makedirs(folder, exist_ok=True)
-    log(f'batch {batch}: {len(plan)} trials: {", ".join(f"S{s["id"]}/{k}" for s, k in plan)}')
+    log(f'batch {batch}{" (resumed)" if args.resume else ""}: {len(plan)} trials: {", ".join(f"S{s["id"]}/{k}" for s, k in plan)}')
     model = resolve_model(args.model, [s for s, _ in plan])
     batch_cap = args.batch_cap_yen or cfg['batchCapYen']
     asking = [s for s, _ in plan if s.get('requiresOwnerOk')]
@@ -1298,12 +1395,22 @@ def cmd_run(args):
     if busy: raise Stop(f'a Minecraft task is still active: {busy}')
     if subprocess.run(['pgrep', '-f', 'minecraft-campaign-live-probe'], capture_output=True).returncode == 0: raise Stop('a lab probe is running')
     if online_players(): raise Stop('someone (or the body) is on shannon-home; log out first')
-    spent, results, env_changed = 0.0, [], False
+    spent, results, env_changed, done = 0.0, [], False, set()
+    if args.resume:
+        for row in settle_partials(batch): log(f'resume: {row["trial"]} was cut off at {row.get("elapsed")} s (reached {sorted(row.get("milestones") or {})}, ¥{row.get("yen")}); it runs again from a fresh world')
+        finished, interrupted = batch_rows(batch)
+        done = {r['trial'] for r in finished}
+        spent = sum((r.get('yen') or 0) for r in finished + interrupted)
+        log(f'resume: {len(done)} trials already have a result, ¥{spent:.0f} spent so far')
+    else:
+        write_plan(batch, {'batch': batch, 'createdAt': now_iso(), 'model': model, 'batchCapYen': batch_cap, 'ownerOk': args.owner_ok_supply, 'dryRun': bool(args.dry_run),
+                           'plan': [{'section': s['id'], 'seed': k} for s, k in plan]})
     save_production_state()
     try:
         if model == 'sonnet' and not args.dry_run:
             env_on(); env_changed = True
         for section, seed_key in plan:
+            if f'{batch}-s{section["id"]}-{seed_key}' in done: continue
             if spent + section_cap(section, cfg) > batch_cap:
                 log(f'batch: {spent:.0f} yen spent; S{section["id"]} could take {section_cap(section, cfg)} more and pass {batch_cap} yen: stopping'); break
             result = run_trial(section, seed_key, batch, cfg, args.dry_run, args.owner_ok_supply)
@@ -1403,6 +1510,7 @@ def on_term(signum, frame):
 def main(argv):
     signal.signal(signal.SIGTERM, on_term)   # a kill still runs the restore in the finally blocks
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--wait-lock', type=int, default=0, help='before the command: wait this many seconds for ~/.cache/minebot-lab/prod.lock (default: stop at once if it is held)')
     sub = parser.add_subparsers(dest='cmd', required=True)
     p = sub.add_parser('scout'); p.add_argument('--key', required=True); p.add_argument('--seed', required=True)
     p.add_argument('--radius', type=int, default=96); p.add_argument('--note'); p.add_argument('--replace', action='store_true')
@@ -1415,19 +1523,23 @@ def main(argv):
     p.add_argument('--limit', type=int); p.add_argument('--keep-going', action='store_true')
     p.add_argument('--batch-cap-yen', type=int, help='replaces sections.json batchCapYen for this batch (the sum of the per-section caps of S6-S11 is above it)')
     p.add_argument('--owner-ok-supply', help='who confirmed, and when, that sections marked requiresOwnerOk may give items / teleport / build on trial_live')
+    p.add_argument('--resume', metavar='BATCH', help='go on with a batch that a stop cut off: the finished trials stay, a cut-off one is kept as `interrupted` and run again')
     p = sub.add_parser('report'); p.add_argument('--batch')
     sub.add_parser('restore')
     p = sub.add_parser('env'); p.add_argument('what', choices=['on', 'off', 'status'])
     args = parser.parse_args(argv)
+    uses_shannon_home = args.cmd in ('scout', 'run', 'restore') or (args.cmd == 'env' and args.what != 'status')
     try:
-        if args.cmd == 'scout': cmd_scout(args)
-        elif args.cmd == 'seedof': cmd_seedof(args)
-        elif args.cmd == 'run': cmd_run(args)
-        elif args.cmd == 'report': cmd_report(args)
-        elif args.cmd == 'restore': restore_production()
-        elif args.what == 'on': env_on()
-        elif args.what == 'off': env_off()
-        else: log(f'env: API process SHANNON_FCA_MODEL={api_model_in_process()}')
+        # prod.lock for everything that stops, starts or switches shannon-home or restarts its services (a read-only command needs none)
+        with (ProdLock(args.cmd, args.wait_lock) if uses_shannon_home else contextlib.nullcontext()):
+            if args.cmd == 'scout': cmd_scout(args)
+            elif args.cmd == 'seedof': cmd_seedof(args)
+            elif args.cmd == 'run': cmd_run(args)
+            elif args.cmd == 'report': cmd_report(args)
+            elif args.cmd == 'restore': restore_production()
+            elif args.what == 'on': env_on()
+            elif args.what == 'off': env_off()
+            else: log(f'env: API process SHANNON_FCA_MODEL={api_model_in_process()}')
     except Stop as error:
         log(f'stopped: {error}')
         return 1

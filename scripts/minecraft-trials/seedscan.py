@@ -442,26 +442,84 @@ def pts(value, table):
     return 0
 
 
-def stronghold_points(row, optimistic=False):
+def stronghold_points(row, optimistic=False, profile='film'):
     """(points, the first-ring stronghold that earned them). One under the sea or beside a monument earns nothing. After A2 only the
     strongholds A2 measured count; before it, with optimistic, the sea on the way counts as none."""
     best, which = 0, None
-    for s in row.get('strongholds') or []:
-        if s.get('seaAbove') or (s.get('monument') is not None and s['monument'] < 150): continue
+    holds = row.get('strongholds') or []
+    if profile == 'film' and holds:
+        # an eye of ender points at the NEAREST stronghold from where it is thrown, so that one is the target: if it lies under the sea or by a
+        # monument, a land stronghold farther off does not help the run (she is led to the sea)
+        holds = [min(holds, key=lambda s: s['d'])]
+    for s in holds:
+        if s.get('seaAbove') or (s.get('monument') is not None and s['monument'] < 150):
+            if profile == 'film': which = s
+            continue
         if row.get('deepA') and 'route' not in s: continue
-        p = pts(s['d'], [(1600, 15), (2000, 12), (2400, 8), (2800, 4)])
         if 'route' in s: sea = s['route'].get('sea', 9)
         else: sea = 0 if optimistic else 9
-        p += 10 if sea == 0 else 5 if sea <= 2 else 0
-        if s.get('depth') is not None: p -= 0 if s['depth'] <= 70 else 3 if s['depth'] <= 110 else 8      # digging down from the ground above the room
+        if profile == 'film':       # up to 20: how far she walks to it, whether the way is land, how far down the room is
+            p = pts(s.get('dRoom', s['d']), [(1200, 12), (1600, 10), (2000, 7), (2400, 4), (2800, 2)])
+            p += 6 if sea == 0 else 3 if sea <= 2 else 0
+            depth = s.get('depth')
+            p += 1 if depth is None else 2 if depth <= 70 else 1 if depth <= 110 else 0
+        else:
+            p = pts(s['d'], [(1600, 15), (2000, 12), (2400, 8), (2800, 4)])
+            p += 10 if sea == 0 else 5 if sea <= 2 else 0
+            if s.get('depth') is not None: p -= 0 if s['depth'] <= 70 else 3 if s['depth'] <= 110 else 8      # digging down from the ground above the room
         if p > best: best, which = p, s
     return best, which
 
 
-def score(row, optimistic=False):
-    """A 0-100 judgement of how kind a world is to a body that goes from nothing to the dragon. Weights are ours; every term is
-    printed next to the facts so the owner can weigh them differently. optimistic: what A2 has not measured yet counts as good
-    (the provisional score that decides whether A2 is worth its minutes)."""
+def terrain_points(row, optimistic=False):
+    """Up to 15 for a spawn whose first minutes are safe: no sea or ice underfoot, no dense forest, no steep land, no lava at the door."""
+    h = row.get('hazards')
+    if not h: return 12 if optimistic else 8        # not measured (phase B reads the generated ground)
+    p = 15
+    wf, ice, sea = h.get('waterFrac') or 0, h.get('iceFrac') or 0, h.get('seaNearest')
+    p -= 8 if wf > 0.35 else 4 if wf > 0.15 else 2 if wf > 0.05 else 0
+    if sea is not None: p -= 3 if sea < 60 else 1 if sea < 120 else 0
+    p -= 5 if ice > 0.03 else 0
+    p -= 5 if (h.get('frozenBiomeFrac') or 0) > 0.3 else 0
+    forest = 4 if (h.get('denseForestFrac') or 0) > 0.5 else 0
+    if (row.get('logs32') or 0) > 350: forest = max(forest, 4) + (1 if forest else 3)
+    p -= forest
+    relief = h.get('relief')
+    if relief is not None: p -= 4 if relief > 45 else 2 if relief > 30 else 0
+    lava = row.get('surfaceLava')
+    if lava is not None and lava < 12: p -= 2
+    return max(0, p)
+
+
+def score_film(row, optimistic=False):
+    """The filming run: from nothing, no supply, one go to the dragon. Heavy on how fast she is in the Nether (a village's bed and food,
+    obsidian at hand, a safe spawn), on the fortress, the warped forest and a stronghold under land. 0-100, every term printed."""
+    parts = {}
+    v = row.get('village') or {}
+    route = row.get('villageRoute')
+    village = pts(v.get('d'), [(60, 18), (100, 17), (150, 14), (250, 9), (350, 4)]) - (8 if (route.get('sea', 0) if route else 0) else 0)
+    vf = row.get('villageFacts')
+    if vf:
+        if vf['beds'] < 3: village -= 4
+        if vf['cropTotal'] < 20 and vf['livestock'] < 6: village -= 5
+    parts['village'] = max(0, village)
+    rp = (row.get('ruinedPortal') or {}).get('d')
+    lava = row.get('surfaceLava')
+    parts['obsidian'] = max(pts(rp, [(120, 14), (250, 10), (400, 5)]), pts(lava, [(40, 14), (70, 11), (100, 7)]))
+    parts['diamond'] = pts(row.get('nearestDiamond'), [(48, 3), (96, 1)]) if 'nearestDiamond' in row else 2      # 2 = not measured yet (none within 96 m: 0)
+    parts['terrain'] = terrain_points(row, optimistic)
+    parts['fortress'] = pts((row.get('fortress') or {}).get('d'), [(120, 15), (180, 13), (250, 10), (350, 6), (500, 3)])
+    parts['warped'] = pts((row.get('warped') or {}).get('d'), [(100, 10), (200, 8), (350, 5), (500, 2)])
+    parts['bastion'] = pts((row.get('bastion') or {}).get('d'), [(200, 3), (400, 1)])
+    parts['stronghold'] = stronghold_points(row, optimistic, 'film')[0]
+    parts['spawn'] = {'good': 2, 'ok': 1}.get(row.get('spawnClass'), 0)
+    parts['outpost'] = -5 if (row.get('outpost') or {}).get('d', 9999) < 200 else 0
+    return sum(parts.values()), parts
+
+
+def score(row, optimistic=False, profile='film'):
+    """profile 'film' (default): the filming run, score_film. 'general': the first table of 2026-11-02 (kept to reproduce it)."""
+    if profile == 'film': return score_film(row, optimistic)
     parts = {}
     v = row.get('village') or {}
     route = row.get('villageRoute')
@@ -477,7 +535,7 @@ def score(row, optimistic=False):
     nether = pts((row.get('fortress') or {}).get('d'), [(150, 12), (250, 9), (400, 5)]) \
         + pts((row.get('bastion') or {}).get('d'), [(200, 5), (400, 2)]) + pts((row.get('warped') or {}).get('d'), [(150, 8), (300, 5), (500, 2)])
     parts['nether'] = min(25, nether)
-    parts['stronghold'] = stronghold_points(row, optimistic)[0]
+    parts['stronghold'] = stronghold_points(row, optimistic, 'general')[0]
     parts['spawn'] = {'good': 5, 'ok': 3}.get(row.get('spawnClass'), 0)
     parts['outpost'] = -5 if (row.get('outpost') or {}).get('d', 9999) < 200 else 0
     return sum(parts.values()), parts
@@ -500,27 +558,59 @@ def fmt_d(hit, key='d'):
     return '—' if not hit else str(hit[key])
 
 
+def nearest_stronghold(row):
+    """The first-ring stronghold an eye thrown at spawn points to, and whether it can be used (not under the sea, no monument beside it)."""
+    holds = row.get('strongholds') or []
+    s = min(holds, key=lambda h: h['d']) if holds else None
+    if not s: return None, 'none'
+    if s.get('seaAbove'): return s, 'sea'
+    if s.get('monument') is not None and s['monument'] < 150: return s, 'monument'
+    return s, None
+
+
 def table_line(row, total, parts):
     v = row.get('village') or {}
-    strong = stronghold_points(row)[1] or {}
+    strong, bad = nearest_stronghold(row)
+    strong = strong or {}
+    flag = {'sea': '海の下', 'monument': '海底神殿のそば', None: '陸'}[bad] if bad != 'none' else '—'
     return (f'| {row["seed"]} | {total} | {row.get("spawnBiome")} ({row["spawn"][0]}, {row["spawn"][2]}) | '
             f'{v.get("id", "—").replace("minecraft:village_", "")} {fmt_d(v)} | {fmt_d(row.get("ruinedPortal"))} | '
             f'{fmt_d(row.get("fortress"))} / {fmt_d(row.get("bastion"))} / {fmt_d(row.get("warped"))} | '
-            f'{strong.get("d", "—")} ({strong.get("at", ["—"])[0]}, {strong.get("at", ["", "—"])[1]}) 海{(strong.get("route") or {}).get("sea", "—")} | '
+            f'{strong.get("dRoom", strong.get("d", "—"))} ({strong.get("at", ["—"])[0]}, {strong.get("at", ["", "—"])[1]}) {flag} 道の海{(strong.get("route") or {}).get("sea", "—")} | '
             f'{"・".join(f"{k}{p}" for k, p in parts.items())} |')
 
 
+def deep_results():
+    """{seed: (key, deep result)} of the deep-<key>.json files in the out directory."""
+    out = {}
+    for name in sorted(os.listdir(OUT)):
+        if name.startswith('deep-') and name.endswith('.json'):
+            try:
+                with open(os.path.join(OUT, name), encoding='utf-8') as handle: d = json.load(handle)
+                out[str(d['seed'])] = (name[5:-5], d)
+            except (OSError, ValueError, KeyError):
+                pass
+    return out
+
+
 def cmd_rank(args):
-    paths = args.files or [os.path.join(OUT, n) for n in sorted(os.listdir(OUT)) if n.endswith('.jsonl')]
+    paths = args.files or [os.path.join(OUT, n) for n in sorted(os.listdir(OUT)) if n.startswith('phaseA-') and n.endswith('.jsonl')]
     rows = load_rows(paths)
+    deep = deep_results()
     scanned = [r for r in rows if not r.get('error')]
     kept = [r for r in scanned if not r.get('reject') and r.get('strongholds') is not None]
-    ranked = sorted(((score(r), r) for r in kept), key=lambda t: -t[0][0])
-    print(f'seeds {len(rows)}（失敗 {len(rows) - len(scanned)}、足切り {len(scanned) - len(kept)}、採点 {len(kept)}）')
-    print('| シード | 点 | スポーン | 村（種類 距離） | 廃ポータル | ネザー（要塞/砦/歪んだ森）m | ストロングホールド（距離 陸/海 道の海） | 内訳 |')
+    ranked = []
+    for r in kept:
+        key, d = deep.get(str(r['seed']), (None, None))
+        row = final_row(r, d) if d else r
+        ranked.append((score(row, optimistic=not d, profile=args.profile), row, key))
+    ranked.sort(key=lambda t: -t[0][0])
+    print(f'seeds {len(rows)}（失敗 {len(rows) - len(scanned)}、足切り {len(scanned) - len(kept)}、採点 {len(kept)}、うち世界まで読んだもの {sum(1 for t in ranked if t[2])}）。採点：{args.profile}'
+          f'（世界を読んでいないものは、読んでいない項目を良い方に数える）')
+    print('| シード（名前） | 点 | スポーン | 村（種類 距離） | 廃ポータル | ネザー（要塞/砦/歪んだ森）m | ストロングホールド（距離 陸/海 道の海） | 内訳 |')
     print('|---|---|---|---|---|---|---|---|')
-    for (total, parts), row in ranked[:args.top]:
-        print(table_line(row, total, parts))
+    for (total, parts), row, key in ranked[:args.top]:
+        print(table_line(row, total, parts).replace(f'| {row["seed"]} |', f'| {row["seed"]}{f"（{key}）" if key else ""} |', 1))
 
 
 # ---------------------------------------------------------------- phase B: what the generator really built there
@@ -611,35 +701,95 @@ class Chunks:
             start = ((chunk.get('structures') or {}).get('starts') or {}).get(name)
             if start and start.get('id') != 'INVALID': yield start
 
-    def surface(self, x, z):
-        """(y, block name) of the highest block that is not air at a column."""
+    def surface(self, x, z, skip=None):
+        """(y, block name) of the highest block that is not air at a column; `skip(name)` true passes over leaves, logs, plants (the ground)."""
         chunk = self.map.get((x >> 4, z >> 4))
         if not chunk: return None
-        for sy in sorted(chunk['_sections'], reverse=True):
+        order = chunk.setdefault('_order', sorted(chunk['_sections'], reverse=True))
+        for sy in order:
             section = chunk['_sections'][sy]
             palette, idx = self.unpack(section)
+            if idx is None and (palette[0].get('Name') in AIR if palette else True): continue
             for ly in range(15, -1, -1):
-                p = palette[0 if idx is None else idx[(ly << 8) | ((z & 15) << 4) | (x & 15)]]
-                if p.get('Name') not in AIR: return sy * 16 + ly, p.get('Name')
+                name = palette[0 if idx is None else idx[(ly << 8) | ((z & 15) << 4) | (x & 15)]].get('Name')
+                if name in AIR or (skip and skip(name)): continue
+                return sy * 16 + ly, name
         return None
+
+    def biome(self, x, y, z):
+        """The biome name at a block's 4x4x4 cell, or None."""
+        chunk = self.map.get((x >> 4, z >> 4))
+        section = chunk['_sections'].get(y >> 4) if chunk else None
+        if section is None: return None
+        return self.t.section_biome_at(section, x & 15, y & 15, z & 15)
 
 
 def short(name):
     return (name or '').replace('minecraft:', '')
 
 
+WET = {'minecraft:water', 'minecraft:kelp', 'minecraft:kelp_plant', 'minecraft:seagrass', 'minecraft:tall_seagrass', 'minecraft:bubble_column'}
+ICE = {'minecraft:ice', 'minecraft:packed_ice', 'minecraft:blue_ice', 'minecraft:frosted_ice', 'minecraft:powder_snow'}
+DENSE_FOREST = {'minecraft:dark_forest', 'minecraft:old_growth_birch_forest', 'minecraft:old_growth_pine_taiga', 'minecraft:old_growth_spruce_taiga',
+                'minecraft:jungle', 'minecraft:bamboo_jungle', 'minecraft:sparse_jungle', 'minecraft:mangrove_swamp'}
+
+
+def not_ground(name):
+    """Blocks a body walks through or over without standing on them: the crown of a tree, plants, a layer of snow."""
+    return (name.endswith('_leaves') or name.endswith('_log') or name.endswith('_wood') or name in {
+        'minecraft:vine', 'minecraft:snow', 'minecraft:short_grass', 'minecraft:tall_grass', 'minecraft:fern', 'minecraft:large_fern', 'minecraft:leaf_litter',
+        'minecraft:bush', 'minecraft:dead_bush', 'minecraft:sweet_berry_bush', 'minecraft:cactus', 'minecraft:bamboo', 'minecraft:sugar_cane', 'minecraft:brown_mushroom',
+        'minecraft:red_mushroom', 'minecraft:firefly_bush', 'minecraft:cherry_leaves', 'minecraft:azalea', 'minecraft:flowering_azalea', 'minecraft:moss_carpet',
+        'minecraft:pink_petals', 'minecraft:wildflowers'} or name.endswith('_flower') or name in {'minecraft:dandelion', 'minecraft:poppy', 'minecraft:azure_bluet', 'minecraft:cornflower'})
+
+
+def spawn_hazards(ch, spawn, radius=64, step=4):
+    """What the first minutes at spawn run into, read from the generated ground within `radius` blocks: water and ice underfoot, the biome
+    cells (dense forest, snow and ice), the lie of the land (a hill and a gully)."""
+    sx, sy, sz = spawn
+    total = water = ice = 0
+    ground, biomes = [], {}
+    for x in range(sx - radius, sx + radius + 1, step):
+        for z in range(sz - radius, sz + radius + 1, step):
+            if (x - sx) ** 2 + (z - sz) ** 2 > radius ** 2: continue
+            top = ch.surface(x, z)
+            if not top: continue
+            total += 1
+            if top[1] in WET: water += 1
+            elif top[1] in ICE: ice += 1
+            else:
+                g = ch.surface(x, z, not_ground)
+                if g: ground.append(g[0])
+            b = ch.biome(x, top[0], z)
+            if b: biomes[b] = biomes.get(b, 0) + 1
+    cells = sum(biomes.values()) or 1
+    ground.sort()
+    lo, hi = (ground[int(len(ground) * 0.05)], ground[int(len(ground) * 0.95) - 1]) if len(ground) > 20 else (None, None)
+    return {'radius': radius, 'columns': total, 'waterFrac': round(water / total, 3) if total else None, 'iceFrac': round(ice / total, 3) if total else None,
+            'denseForestFrac': round(sum(n for b, n in biomes.items() if b in DENSE_FOREST) / cells, 3),
+            'frozenBiomeFrac': round(sum(n for b, n in biomes.items() if 'frozen' in b or 'ice' in b or 'snowy' in b) / cells, 3),
+            'relief': (hi - lo) if lo is not None else None, 'groundLow': lo, 'groundHigh': hi,
+            'biomes': {short(b): round(n / cells, 2) for b, n in sorted(biomes.items(), key=lambda kv: -kv[1])[:5]}}
+
+
 def stage_spawn_area(lab, r, trials, row, radius=96):
     sx, sy, sz = row['spawn']
     force_area(r, OVERWORLD, sx - radius - 16, sz - radius - 16, sx + radius + 16, sz + radius + 16)
     r.cmd('save-all flush'); time.sleep(3)
-    scan = trials.scan_world(os.path.join(lab.dir, 'world'), row['spawn'], radius)
+    world = os.path.join(lab.dir, 'world')
+    scan = trials.scan_world(world, row['spawn'], radius)
     near = scan['nearest']
     d = lambda k: near.get(k, {}).get('distance')
+    ch = Chunks(trials, world, OVERWORLD, sx - 80, sz - 80, sx + 80, sz + 80)
+    hazards = spawn_hazards(ch, row['spawn'])
+    sea = locate(r, 'biome', '#minecraft:is_ocean', (sx, sy, sz))
+    hazards['seaNearest'] = sea['d'] if sea else None
     return {'radius': radius, 'surfaceLava': d('surface_lava'), 'surfaceLavaAt': near.get('surface_lava', {}).get('at'),
             'nearestLog': d('log'), 'logs32': scan['counts']['logs_within_32'], 'iron48': scan['counts']['iron_ore_within_48'],
             'coal48': scan['counts']['coal_ore_within_48'], 'deepLavaChunks': scan['counts']['deep_lava_chunks'],
+            'nearestDiamond': d('diamond_ore'),
             'animals': scan['animals'], 'nearestSheep': d('sheep'), 'nearestCow': d('cow'), 'nearestPig': d('pig'),
-            'spawnBiome': scan['spawnBiome'], 'raw': scan}
+            'spawnBiome': scan['spawnBiome'], 'hazards': hazards, 'raw': scan}
 
 
 def stage_village(lab, r, trials, row, half=96):
@@ -831,6 +981,12 @@ def stage_end_note():
 STAGES = ('spawn', 'village', 'portal', 'stronghold', 'nether')
 
 
+def nearest_usable_stronghold(row):
+    s, bad = nearest_stronghold(row)
+    if bad: raise RuntimeError(f'the nearest first-ring stronghold ({bad}) cannot be walked to: an eye thrown at spawn points to it')
+    return s
+
+
 def deep_one(seed, row, slot, args, trials, out_dir, key=None):
     key = key or args.key or f'd{abs(int(seed)) % 10 ** 6}'
     lab = Lab(f'deep-{key}', seed, slot, heap=args.heap, cores=args.cores)
@@ -844,7 +1000,7 @@ def deep_one(seed, row, slot, args, trials, out_dir, key=None):
             wanted = args.stages.split(',')
             for name, func in (('spawn', lambda: stage_spawn_area(lab, r, trials, row)), ('village', lambda: stage_village(lab, r, trials, row)),
                                ('portal', lambda: stage_ruined_portal(lab, r, trials, row)),
-                               ('stronghold', lambda: stronghold_facts(lab, r, trials, row, stronghold_points(row)[1] or row['strongholds'][0])),
+                               ('stronghold', lambda: stronghold_facts(lab, r, trials, row, nearest_usable_stronghold(row))),
                                ('nether', lambda: stage_nether(lab, r, trials, row))):
                 if name not in wanted: continue
                 t1 = time.monotonic()
@@ -858,9 +1014,9 @@ def deep_one(seed, row, slot, args, trials, out_dir, key=None):
         finally:
             r.close()
     finally:
-        lab.stop(remove=False)
+        lab.stop(remove=args.discard)          # --discard: the facts are in the result; the world goes at once (nothing worth keeping is left behind)
     result['totalSecs'] = round(time.monotonic() - t0, 1)
-    result['world'] = os.path.join(lab.dir, 'world')
+    if not args.discard: result['world'] = os.path.join(lab.dir, 'world')
     return result
 
 
@@ -893,7 +1049,8 @@ def cmd_deep(args):
             if args.reuse and os.path.exists(path):
                 with open(path, encoding='utf-8') as handle: old = json.load(handle)
                 old['stages'].update(res['stages'])
-                res = {**old, 'stages': old['stages'], 'totalSecs': res['totalSecs']}
+                res = {**old, **{k: v for k, v in res.items() if k != 'stages'}, 'stages': old['stages']}      # this run's world and time over the old result's
+                if args.discard: res.pop('world', None)
             with open(path, 'w', encoding='utf-8') as handle: json.dump(res, handle, ensure_ascii=False, indent=1)
             log(f'deep {res["key"]}: wrote {path} ({res["totalSecs"]}s)')
 
@@ -904,7 +1061,12 @@ def final_row(a_row, deep):
     """The phase A line with what phase B measured put in its place (surface lava, the stronghold's real portal room)."""
     row = json.loads(json.dumps(a_row))
     st = deep['stages']
-    if (st.get('spawn') or {}).get('surfaceLava') is not None: row['surfaceLava'] = st['spawn']['surfaceLava']
+    sp0 = st.get('spawn') or {}
+    if sp0.get('surfaceLava') is not None: row['surfaceLava'] = sp0['surfaceLava']
+    if 'raw' in sp0:
+        row['nearestDiamond'] = (sp0['raw'].get('nearest') or {}).get('diamond_ore', {}).get('distance')       # measured: None means none within 96 m
+        row['logs32'] = sp0.get('logs32')
+    if sp0.get('hazards'): row['hazards'] = sp0['hazards']
     vi = st.get('village') or {}
     if vi.get('beds') is not None:
         sp_animals = (st.get('spawn') or {}).get('animals') or {}
@@ -912,9 +1074,9 @@ def final_row(a_row, deep):
         row['villageFacts'] = {'beds': vi['beds'], 'cropTotal': vi['cropTotal'], 'livestock': livestock}
     sh = st.get('stronghold') or {}
     if sh.get('portalCenter'):
-        match = next((s for s in row['strongholds'] if s['at'] == sh['start']), None) or {}
-        row['strongholds'] = [{**match, 'at': sh['start'], 'd': sh['fromSpawn'], 'seaAbove': bool(sh.get('seaAbove')), 'depth': sh.get('depth')}]
-        row['deepA'] = True
+        for s in row['strongholds']:        # the list stays whole (the nearest is the target); the one that was read gets its room's facts
+            if s['at'] == sh['start']:
+                s.update({'dRoom': sh['fromSpawn'], 'seaAbove': bool(sh.get('seaAbove')) or bool(s.get('seaAbove')), 'depth': sh.get('depth'), 'portalCenter': sh['portalCenter']})
     return row
 
 
@@ -936,7 +1098,10 @@ def cmd_report(args):
         sp, vi, po, sh, ne = (st.get(k) or {} for k in ('spawn', 'village', 'portal', 'stronghold', 'nether'))
         v = row.get('village') or {}
         print(f'\n### {key}  シード {row["seed"]}  {total} 点')
-        print(f'- スポーン {row["spawn"]} {row.get("spawnBiome")}。地表の溶岩 {sp.get("surfaceLava")}m、原木 {sp.get("nearestLog")}m（32m 内 {sp.get("logs32")} 本）、動物 {sp.get("animals")}、最寄りの羊 {sp.get("nearestSheep")}m')
+        print(f'- スポーン {row["spawn"]} {row.get("spawnBiome")}。地表の溶岩 {sp.get("surfaceLava")}m、原木 {sp.get("nearestLog")}m（32m 内 {sp.get("logs32")} 本）、動物 {sp.get("animals")}、最寄りの羊 {sp.get("nearestSheep")}m、最寄りのダイヤ鉱石 {sp.get("nearestDiamond")}m（水平）')
+        hz = sp.get('hazards') or {}
+        print(f'  - スポーン直後の危険（半径 64m）：足元の水 {hz.get("waterFrac")}・氷 {hz.get("iceFrac")}、海まで {hz.get("seaNearest")}m、凍ったバイオーム {hz.get("frozenBiomeFrac")}・深い森 {hz.get("denseForestFrac")}、'
+              f'起伏（地面の高さの幅）{hz.get("relief")}（{hz.get("groundLow")}〜{hz.get("groundHigh")}）、バイオーム {hz.get("biomes")}')
         print(f'- 村 {short(v.get("id"))} {v.get("d")}m（{v.get("at")}）：ベッド {vi.get("beds")}・畑 {vi.get("cropTotal")}（{vi.get("crops")}）・干し草 {vi.get("hay_block")}・箱 {vi.get("chests")}（{vi.get("chestsByLoot")}）・動物 {vi.get("animals")}')
         rp = row.get('ruinedPortal') or {}
         print(f'- 廃ポータル {short(rp.get("id"))} {rp.get("d")}m：{po.get("blocks")}、最寄りの溶岩 {po.get("nearestLava")}、箱 {po.get("chestLoot")}')
@@ -944,8 +1109,10 @@ def cmd_report(args):
         fo = ne.get('fortress') or {}
         print(f'  - 要塞 {fo.get("at")}：ブレイズのスポナー {fo.get("blazeSpawners")} 基、{[ (s["at"], s.get("standAt"), s.get("fromArrival")) for s in fo.get("spawners", []) if s["mob"] == "blaze" ]}')
         print(f'  - 歪んだ森の立ち位置 {(ne.get("warped") or {}).get("stand")}')
-        s0 = (row.get('strongholds') or [{}])[0]
-        print(f'- 1 輪目のストロングホールド（最寄りの陸）：スポーンから {s0.get("d")}m、枠の部屋 {sh.get("portalCenter")}、地下の深さ {sh.get("depth")}、上の地面 {sh.get("surfaceAbove")}、海の上 {sh.get("seaAbove")}、'
+        s0, bad = nearest_stronghold(row)
+        s0 = s0 or {}
+        print(f'- 1 輪目のストロングホールド（一番近い＝目玉が指す）：スポーンから {s0.get("dRoom", s0.get("d"))}m、{ {"sea": "海の下", "monument": "海底神殿のそば", None: "陸"}.get(bad, "—") }、'
+              f'枠の部屋 {sh.get("portalCenter")}、地下の深さ {sh.get("depth")}、上の地面 {sh.get("surfaceAbove")}、'
               f'目玉が最初から入っている枠 {sh.get("eyesAlreadyIn")}、道の海 {(s0.get("route") or {}).get("sea")}、近くの海底神殿 {s0.get("monument")}m')
         print(f'  - 他の 1 輪目：{[(h["at"], h["d"], h.get("seaAbove"), h.get("monument")) for h in (rows[str(deep["seed"])].get("strongholds") or [])]}')
 
@@ -960,14 +1127,18 @@ def cmd_seeds_json(args):
         total, parts = score(row)
         st = deep['stages']
         sp, vi, sh, ne = (st.get(k) or {} for k in ('spawn', 'village', 'stronghold', 'nether'))
-        v, s0 = row.get('village') or {}, (row.get('strongholds') or [{}])[0]
+        v = row.get('village') or {}
+        s0, bad = nearest_stronghold(row)
+        s0 = s0 or {}
         biome = (row.get('spawnBiome') or '')
         lava = sp.get('surfaceLava')
         d = lambda name: (row.get(name) or {}).get('d')
+        hz = sp.get('hazards') or {}
         tags = [biome, f'村 {v.get("d")}m（{short(v.get("id")).replace("village_", "")}、ベッド {vi.get("beds")}・畑 {vi.get("cropTotal")}）',
                 f'廃ポータル {d("ruinedPortal")}m', f'地表の溶岩 {str(lava) + "m" if lava is not None else "なし（96m 内）"}',
                 f'要塞 {d("fortress")}m・砦 {d("bastion")}m・歪んだ森 {d("warped")}m（ネザー側、スポーン÷8 から）',
-                f'ストロングホールド {s0.get("d")}m（陸、地下 {sh.get("depth")}m）']
+                f'ストロングホールド {s0.get("dRoom", s0.get("d"))}m（{ {"sea": "海の下", "monument": "海底神殿のそば", None: "陸"}.get(bad, "—") }、地下 {sh.get("depth")}m）',
+                f'足元の水 {hz.get("waterFrac")}・海まで {hz.get("seaNearest")}m・起伏 {hz.get("relief")}']
         out.append({'key': key, 'seed': str(deep['seed']), 'source': f'seedscan 2026-11-02（{total} 点）', 'tags': tags, 'spawn': row['spawn'],
                     'spawnBiome': f'minecraft:{biome}', 'village': v.get('d'), 'ruinedPortal': (row.get('ruinedPortal') or {}).get('d'),
                     'surfaceLava': sp.get('surfaceLava'), 'nearestLog': sp.get('nearestLog'), 'logsWithin32': sp.get('logs32'), 'ironOreWithin48': sp.get('iron48'),
@@ -975,8 +1146,9 @@ def cmd_seeds_json(args):
                     'score': total, 'scoreParts': parts,
                     'nether': {'fortress': d('fortress'), 'bastion': d('bastion'), 'warpedForest': d('warped'),
                                'blazeSpawners': (ne.get('fortress') or {}).get('blazeSpawners')},
-                    'stronghold': {'fromSpawn': s0.get('d'), 'portalCenter': sh.get('portalCenter'), 'depth': sh.get('depth'), 'eyesAlreadyIn': sh.get('eyesAlreadyIn'),
-                                   'seaOnTheWay': (s0.get('route') or {}).get('sea')}})
+                    'stronghold': {'fromSpawn': s0.get('dRoom', s0.get('d')), 'nearestUsable': bad is None, 'portalCenter': sh.get('portalCenter'), 'depth': sh.get('depth'),
+                                   'eyesAlreadyIn': sh.get('eyesAlreadyIn'), 'seaOnTheWay': (s0.get('route') or {}).get('sea')},
+                    'spawnHazards': hz or None})
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
 
@@ -1030,7 +1202,12 @@ def cmd_publish(args):
     if args.labworld:       # the same ground for the lab probes: MINECRAFT_LAB_WORLD_FROM=<this> MINECRAFT_LAB_TERRAIN=natural
         lab_dest = os.path.join(HOME, '.cache', 'minebot-lab', 'worlds', args.key)
         if os.path.exists(lab_dest): shutil.rmtree(lab_dest)
-        shutil.copytree(deep['world'], lab_dest, ignore=ignore)
+
+        def link_or_copy(src, dst):          # one copy on the disk: nothing writes into a staged world (a lab copies it into its own directory)
+            try: os.link(src, dst)
+            except OSError: shutil.copy2(src, dst)
+
+        shutil.copytree(os.path.join(dest, 'world'), lab_dest, copy_function=link_or_copy)
         shutil.copyfile(os.path.join(dest, 'sites.json'), lab_dest + '.sites.json')       # the places, beside the world (backend/scripts/lab/lab-world.sh prints them)
         log(f'publish {args.key}: lab world {lab_dest} (+ .sites.json)')
 
@@ -1057,12 +1234,14 @@ def main(argv):
     p = sub.add_parser('rank')
     p.add_argument('files', nargs='*')
     p.add_argument('--top', type=int, default=12)
+    p.add_argument('--profile', choices=['film', 'general'], default='film', help='film: the filming run (default); general: the first table')
     p = sub.add_parser('deep')
     p.add_argument('--seeds', required=True, help='seeds that have a complete phase A line in the out directory')
     p.add_argument('--key', help='name of the world (one seed only); default d<digits of the seed>')
     p.add_argument('--keys', help='one name per seed, comma separated (c1,c2,...)')
     p.add_argument('--stages', default=','.join(STAGES))
     p.add_argument('--reuse', action='store_true', help='start from the world an earlier deep run kept and add/replace only --stages in its result')
+    p.add_argument('--discard', action='store_true', help='remove the world as soon as it is read (a candidate that is not chosen leaves only its facts)')
     p.add_argument('--workers', type=int, default=1)
     p.add_argument('--slot-base', type=int, default=12)
     p.add_argument('--heap', default='2G')

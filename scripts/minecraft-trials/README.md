@@ -92,18 +92,28 @@ python3 -I trials.py restore                                                    
 | A2 | A1 の仮の点が 45 以上のもの：村とストロングホールドまでの直線（96m 刻み）の海（`locate biome #minecraft:is_ocean`）、ストロングホールドの上の海、海底神殿との距離 | +5 秒 | 仮の点が高いもの |
 | B | 実際にチャンクを作らせ、保存して領域ファイル（NBT）を読む：スポーン 96m 内の地表の溶岩・原木・鉱石・動物、村のベッド・畑・箱（戦利品表ごと）・動物、廃ポータルの溶岩・黒曜石・箱、ストロングホールドの枠 12 個（位置・向き・目玉）と部屋・地下の深さ・上の地面、ネザーの到着地点・要塞のブレイズのスポナーと立ち位置・歪んだ森の足場 | 約 4 分 | 上位だけ |
 
-点（0〜100）は私たちの判断で、内訳を表に併記します（ライ氏が別の重みにしてよい）：
-村 30（80m 以内 30・150m 26・250m 20・350m 10。道に海があれば −15。ベッド 3 未満 −6。畑 20 未満かつ家畜 6 未満 −8）／
-黒曜石の元 15（廃ポータル 120m 以内 15・250m 10・400m 5、または地表の溶岩 40m 以内 15・70m 12・100m 8 の高い方）／
-ネザー 25（要塞 150m 以内 12・250m 9・400m 5 ＋ 砦 200m 以内 5・400m 2 ＋ 歪んだ森 150m 以内 8・300m 5・500m 2）／
-ストロングホールド 25（スポーンから 1,600m 以内 15・2,000m 12・2,400m 8・2,800m 4、道に海が無ければ +10・2 マスまで +5。海の上・海底神殿 150m 以内は 0。地下の深さ 70 超 −3・110 超 −8）／
-スポーン 5（良いバイオーム 5・まあまあ 3）／前哨 200m 以内 −5。
+点（0〜100）は **撮影の通し（ゼロから・支給なし・1 回で竜まで）** に合わせた私たちの判断で、内訳を表に併記します（`--profile film`。ライ氏が別の重みにしてよい。最初の表の重みは `--profile general`）：
+- ネザーまでの速さ 50：村 18（60m 以内 18・100m 17・150m 14・250m 9・350m 4。道に海 −8。ベッド 3 未満 −4。畑 20 未満かつ家畜 6 未満 −5）／
+  黒曜石の元 14（廃ポータル 120m 以内 14・250m 10・400m 5、または地表の溶岩 40m 以内 14・70m 11・100m 7 の高い方）／ダイヤ鉱石 3（水平 48m 以内 3・96m 1）／
+  **スポーン直後の安全 15**（半径 64m の地面を読む：足元の水の割合 5%・15%・35% 超で −2・−4・−8、海まで 60m 未満 −3・120m 未満 −1、氷 3% 超 −5、凍ったバイオーム 30% 超 −5、
+  深い森（暗い森・古い森・ジャングル、または 32m 内に原木 350 本超）−4〜−5、起伏（地面の高さの幅）30 超 −2・45 超 −4、地表の溶岩 12m 未満 −2）。
+- ネザー 28：要塞 15（120m 以内 15・180m 13・250m 10・350m 6・500m 3）／歪んだ森 10（100m 以内 10・200m 8・350m 5・500m 2）／砦 3（200m 以内 3・400m 1）。
+- ストロングホールド 20：スポーンから 1,200m 以内 12・1,600m 10・2,000m 7・2,400m 4・2,800m 2、道に海が無ければ +6（2 マスまで +3）、地下 70 以内 +2・110 以内 +1。海の上・海底神殿 150m 以内は 0。
+- スポーン 2（良いバイオーム 2・まあまあ 1）／前哨 200m 以内 −5。
+
+**資源の約束**（ライ氏の指示 2026-11-02：世界を無駄に作らない、圧迫を確かめる、不要な処理とデータは消す）
+- 1 本ずつ（同時に 1 つのラボ）、Java のヒープは 1〜2GB まで。測り終えた世界はその場で消し（`deep --discard`）、事実（JSON）だけ残す。残すのは選ばれた 1〜2 本の必要な範囲だけ。
+- 重い作業の前に空きを見る：PC は Windows の空きメモリ 3GB 以上・C: 10GB 以上、VM は `df -h ~` で 10GB 以上（`lab-slot.sh` が見て、足りなければ終了 6。VM のディスクが 10GB を切ったら取りまとめに知らせて止まる）。
+- 使い終わったらラボを止める。PC の WSL は、止めたあとに root で `sync; echo 3 > /proc/sys/vm/drop_caches` するとページキャッシュ（5GB 台）が返り、Windows の空きが戻る。
+- 「生成を伴わない方法」を先に検討した結果：村・廃ポータル・要塞の **候補の位置** は乱数の式で計算できるが、成否（バイオーム）とスポーンの位置は気候のノイズが要り、サーバー無しには正確に出せない
+  （外から取る計算ライブラリは使わない）。計算だけの足切りは、村で本数を約 3 割しか減らせない見込み（見積もり。測ってはいない）。そのため /locate を 1 本ずつのサーバーで当て、足切りに通らないものは 1〜4 秒で捨てている。
+  上位を決める段階（B）も、スポーン周りだけの軽い読みを先にして、全部作るのは選ばれたものだけにする。
 
 ```bash
 # PC の WSL（24 コア。HOME=/home/azureuser を付けると VM と同じパスになる。ラボ側の準備は backend/scripts/lab/README.md）
 wsl -d Ubuntu-24.04 -u ghrunner -- env HOME=/home/azureuser bash -lc 'cd ~/seedscan-bin && python3 -I seedscan.py scan --tag r1 --random 2000 --master 20261102 --workers 6'
 python3 -I seedscan.py rank --top 14                       # A の点の順位（途中でも見られる。足切りの数も出る）
-python3 -I seedscan.py deep --seeds=<シード>,<シード> --keys c1,c2 --workers 3     # B（負のシードは --seeds=<...> の形）。--reuse --stages nether で一部の段だけやり直し
+python3 -I seedscan.py deep --seeds=<シード>,<シード> --keys c1,c2 --workers 1 --heap 1G   # B（負のシードは --seeds=<...> の形）。--reuse --stages nether で一部の段だけやり直し、--discard で測ったら世界を消す
 python3 -I seedscan.py report --keys c1,c2,...             # A と B をまとめた点と事実（このまま表になる）
 python3 -I seedscan.py publish --key c1 --labworld         # pristine/c1/{world,facts.json,sites.json} と ~/.cache/minebot-lab/worlds/c1
 # VM では先に枠を取る：bash lab-slot.sh --wait 1800 -- python3 -I seedscan.py scan ...   （backend/scripts/lab/lab-slot.sh）
@@ -119,8 +129,18 @@ python3 -I seedscan.py publish --key c1 --labworld         # pristine/c1/{world,
 S1〜S5 の続きです。**S6〜S11 は「支給あり」の診断で、受入には数えません。** 世界の決まった場所（種ごとの `sites.json`）へ体を置き、持ち物を渡し、`setblock`・`fill`・`summon` で
 準備をして、運用 CLI で同じ「エンドラを討伐してください」を頼みます。支給・tp・準備は、種の世界 `trial_live`（shannon-home の別ワールド）の中だけです。本番の `shannon_home` には何もしません。
 
-**ライ氏の確認が来るまで、作るだけで回さない**：`sections.json` の S6〜S11 は `requiresOwnerOk` で、`run` は `--owner-ok-supply "<誰が・いつ>"` が無いと止まります
-（`--dry-run`＝ワールドの入れ替えだけ、は確認なしで可）。付けた文言は結果の JSON と表の `ownerOk` に残ります。
+**ライ氏の確認（2026-11-02、取りまとめ経由、選択肢での回答）**：trial_live での支給・tp・時刻の変更は **診断に限り許可**。結果に「支給あり」の印を付ける。本番ワールド `shannon_home` と、
+撮影の通し（支給・tp なしのゼロから）には使わない。`sections.json` の S6〜S11 は `requiresOwnerOk` で、`run` は `--owner-ok-supply "<誰が・いつ>"` を付けた時だけ回ります
+（例：`ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）`。`--dry-run`＝ワールドの入れ替えだけ、は無くても可）。付けた文言は結果の JSON と表の `ownerOk` に残ります。
+
+**shannon-home を使う時は `prod.lock`**：`trials.py` の `scout`・`run`・`restore`・`env on/off` は、動いている間 `flock ~/.cache/minebot-lab/prod.lock` を持ちます（反映の再起動・実走と重ならないため。
+塞がっていれば持ち主を表示して止まる。待つなら `python3 -I trials.py --wait-lock 600 run ...`）。ラボの枠の台本は、`prod.lock` が塞がっている間ラボを回しません。
+
+**VM は Spot のまま（撮影の週も）— 止まったら途中から再開する**
+- 結果はその都度保存：バッチの始めに `results/<バッチ>/plan.json`（区間×種・モデル・上限・確認の文言）、走っている区間は 20 秒ごとに `partial-<試し>.json`（節目・使った円・位置・タスク）、終わるたびに `<試し>.json` と `history.jsonl`。
+- 止まった後：VM が戻ったら `python3 -I trials.py restore`（本番の設定を戻す）→ 残っている Minecraft のタスクがあれば運用 CLI で `cancel` →
+  `python3 -I trials.py run --resume <バッチ>`。終わった区間は飛ばし、途中で切れた区間は `interrupted`（そこまでの節目と円を残す）として記録して、**新しい世界で最初から** やり直す。使った円はバッチの上限に数える。
+  計画・モデル・上限・確認の文言は plan.json から読むので、付け直さなくてよい。
 
 | 区間 | 開始（次元・場所） | 持ち物・準備（支給） | 成功の事実（サーバーが答える） | 上限 | 失敗の定義 | 予測 |
 |---|---|---|---|---|---|---|
@@ -145,9 +165,9 @@ S1〜S5 の続きです。**S6〜S11 は「支給あり」の診断で、受入�
 ```bash
 cd ~/minecraft/shannon-home/trials
 python3 -I trials.py run --dry-run --sections 6,7 --seeds c1            # 世界の入れ替えだけ（支給なし・費用 0）。種の世界は pristine/c1 が要る
-# ライ氏の確認の後だけ：
+# ライ氏の確認は 2026-11-02 に出ている（診断に限る）。回す時：
 nohup python3 -I trials.py run --sections 6,7 --seeds c1 --model current --batch-cap-yen 1500 \
-  --owner-ok-supply "ライ氏 2026-11-0x 確認" > results/run.log 2>&1 &
+  --owner-ok-supply "ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）" > results/run.log 2>&1 &
 python3 -I trials.py report
 ```
 
@@ -157,7 +177,7 @@ python3 -I trials.py report
 **検出されて区間が終わる** ことと、**開始の時点では終わっていない** ことを確かめる。
 
 ```bash
-wsl -d Ubuntu-24.04 -u ghrunner -- env HOME=/home/azureuser bash -lc 'cd ~/seedscan-bin && python3 -I sections_smoke.py --key c2'     # 約 40 秒。VM では lab-slot.sh の下で
+wsl -d Ubuntu-24.04 -u ghrunner -- env HOME=/home/azureuser bash -lc 'cd ~/seedscan-bin && python3 -I sections_smoke.py --key c1'     # 約 40 秒（pristine/c1 が要る）。VM では lab-slot.sh の下で
 ```
 2026-11-02：c2・c6・c7 の 3 つの世界で 7/7（S6・S7・S8a・S8b・S9・S10・S11）。書き方の誤り（`@a[name=...,advancements={...}]`、`[eye=true]`、`distance=..N`）、準備の `fill`・`summon`・`tp`、
 End の到着点（足場は世界生成で既にある）、竜の事前確認（`execute in minecraft:the_end if entity @e[type=minecraft:ender_dragon]`）が、サーバーで通ることまでは分かった。**体が実際にそこで何をするかは分からない**（それは有料の試験）。

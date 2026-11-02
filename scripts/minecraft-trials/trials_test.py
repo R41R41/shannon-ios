@@ -266,10 +266,70 @@ class OwnerGuardTest(unittest.TestCase):
             old = trials.RESULTS
             trials.RESULTS = tmp
             try:
-                args = argparse.Namespace(sections='6', seeds='c1', batch='B9', limit=None, model=None, batch_cap_yen=None, owner_ok_supply=None, dry_run=False, keep_going=False)
+                args = argparse.Namespace(sections='6', seeds='c1', batch='B9', limit=None, model=None, batch_cap_yen=None, owner_ok_supply=None, dry_run=False, keep_going=False,
+                                          resume=None)
                 with self.assertRaises(trials.Stop) as caught: trials.cmd_run(args)
                 self.assertIn('has not confirmed', str(caught.exception))
                 self.assertIn('--owner-ok-supply', str(caught.exception))
+            finally:
+                trials.RESULTS = old
+
+
+class ProdLockTest(unittest.TestCase):
+    def test_a_second_user_of_shannon_home_is_told_who_has_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = trials.PROD_LOCK
+            trials.PROD_LOCK = os.path.join(tmp, 'minebot-lab', 'prod.lock')
+            try:
+                with trials.ProdLock('run'):
+                    with self.assertRaises(trials.Stop) as caught: trials.ProdLock('scout').__enter__()
+                    self.assertIn('prod.lock is held', str(caught.exception))
+                    self.assertIn('trials.py run', str(caught.exception))
+                with trials.ProdLock('scout'): pass          # released with the first
+            finally:
+                trials.PROD_LOCK = old
+
+    def test_a_plain_flock_of_someone_else_is_respected_too(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as tmp:
+            old = trials.PROD_LOCK
+            trials.PROD_LOCK = os.path.join(tmp, 'prod.lock')
+            try:
+                fd = os.open(trials.PROD_LOCK, os.O_CREAT | os.O_RDWR)          # `flock prod.lock <command>` as the coordinator does it: no content
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                with self.assertRaises(trials.Stop) as caught: trials.ProdLock('run').__enter__()
+                self.assertIn('plain flock', str(caught.exception))
+                os.close(fd)
+            finally:
+                trials.PROD_LOCK = old
+
+
+class ResumeTest(unittest.TestCase):
+    def test_a_cut_off_trial_becomes_an_interrupted_result_and_the_finished_ones_stay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = trials.RESULTS
+            trials.RESULTS = tmp
+            try:
+                folder = os.path.join(tmp, 'B5')
+                os.makedirs(folder)
+                finished = {'trial': 'B5-s6-c1', 'batch': 'B5', 'section': 6, 'sectionName': 'x', 'seedKey': 'c1', 'targetSeconds': 480, 'ok': True, 'seconds': 300.0, 'yen': 100}
+                trials.save_json(os.path.join(folder, 'B5-s6-c1.json'), finished)
+                trials.save_json(os.path.join(folder, 'B5-s7-c1.partial-should-not-count.txt'), {})
+                partial = {'trial': 'B5-s7-c1', 'batch': 'B5', 'section': 7, 'sectionName': 'y', 'seedKey': 'c1', 'targetSeconds': 720, 'elapsed': 410.0,
+                           'milestones': {'ブレイズロッド 1': 200.0}, 'yen': 160, 'savedAt': '2026-11-04T10:00:00.000Z'}
+                trials.save_json(trials.partial_path('B5', 'B5-s7-c1'), partial)
+                rows = trials.settle_partials('B5')
+                self.assertEqual([r['trial'] for r in rows], ['B5-s7-c1'])
+                self.assertEqual(rows[0]['reason'], 'interrupted')
+                self.assertFalse(os.path.exists(trials.partial_path('B5', 'B5-s7-c1')))
+                done, cut = trials.batch_rows('B5')
+                self.assertEqual([r['trial'] for r in done], ['B5-s6-c1'])          # the cut-off one is not done: it runs again
+                self.assertEqual([r['trial'] for r in cut], ['B5-s7-c1'])
+                self.assertEqual(sum(r.get('yen') or 0 for r in done + cut), 260)       # what it cost is still counted against the batch
+                with open(os.path.join(tmp, 'history.jsonl'), encoding='utf-8') as handle: self.assertEqual(len(handle.readlines()), 1)
+                trials.write_report('B5')          # the table shows both
+                text = open(os.path.join(folder, 'report.md'), encoding='utf-8').read()
+                self.assertIn('interrupted', text)
             finally:
                 trials.RESULTS = old
 
