@@ -651,5 +651,156 @@
       ],
       "nearbyThreats": []
     }
+  },
+  {
+    "name": "shortage-at-diamonds",
+    "goal": "エンドラを討伐して",
+    "current": "p5.1",
+    "elapsedMinutes": 16,
+    "events": [
+      "今の節を [p5] に進めた（体が [p5] の項目を始めたため）。飛ばした節は順のまま残っている: [p4.3] 盾・[p4.4] 火打ち金・[p4.5] 鉄の防具（兜・胸当て・脚）を着る"
+    ],
+    "expect": "ダイヤ層（y=-58）へ下りない。盾と鉄の防具（必須）が未達: 鉄を掘って盾（鉄 1・板 6）と兜・胸当て・脚を作ってから下りる。省くなら prep に skipped と理由を書く（書いても必須は要る）。",
+    "check": {
+      "noMatch": [
+        "\"dir\":\"down\"",
+        "\"y\":-\\d"
+      ],
+      "noHand": [
+        "vertical"
+      ]
+    },
+    "plan": [
+      {
+        "title": "木と石の道具",
+        "kind": "stone_tools",
+        "state": "done"
+      },
+      {
+        "title": "食料（最初の夜の前）",
+        "kind": "food",
+        "state": "done"
+      },
+      {
+        "title": "鉄を掘って焼く",
+        "kind": "iron",
+        "state": "done"
+      },
+      {
+        "title": "鉄の装備",
+        "kind": "iron",
+        "children": [
+          {
+            "title": "鉄のツルハシ3・バケツ3",
+            "kind": "iron",
+            "state": "done",
+            "doneWhen": "have:iron_pickaxe&have:bucket"
+          },
+          {
+            "title": "鉄をもう少し掘る",
+            "kind": "iron",
+            "state": "done"
+          },
+          {
+            "title": "盾",
+            "kind": "iron",
+            "target": {
+              "item": "shield",
+              "count": 1
+            },
+            "doneWhen": "have:shield"
+          },
+          {
+            "title": "火打ち金",
+            "kind": "portal",
+            "doneWhen": "have:flint_and_steel"
+          },
+          {
+            "title": "鉄の防具（兜・胸当て・脚）を着る",
+            "kind": "iron_armor",
+            "doneWhen": "have:iron_helmet&have:iron_chestplate&have:iron_leggings"
+          }
+        ]
+      },
+      {
+        "title": "ダイヤ層へ下りる",
+        "kind": "diamond",
+        "doneWhen": "have:diamond>=3|have:diamond_pickaxe",
+        "children": [
+          {
+            "title": "y=-58 へ下りる",
+            "kind": "diamond"
+          },
+          {
+            "title": "ダイヤ3つ以上を掘る",
+            "kind": "diamond",
+            "doneWhen": "have:diamond>=3"
+          }
+        ]
+      },
+      {
+        "title": "金のブーツ",
+        "kind": "other",
+        "doneWhen": "have:golden_boots"
+      },
+      {
+        "title": "黒曜石10",
+        "kind": "obsidian",
+        "doneWhen": "have:obsidian>=10|dim:the_nether"
+      },
+      {
+        "title": "ゲートを組んで火をつける",
+        "kind": "portal",
+        "doneWhen": "dim:the_nether"
+      }
+    ],
+    "world": {
+      "dimension": "overworld",
+      "position": {
+        "x": 158.5,
+        "y": 64,
+        "z": 54.5
+      },
+      "health": 20,
+      "food": 20,
+      "saturation": 5,
+      "heldItem": "iron_pickaxe",
+      "worn": "なし",
+      "inventory": [
+        {
+          "name": "iron_pickaxe",
+          "count": 3
+        },
+        {
+          "name": "bucket",
+          "count": 3
+        },
+        {
+          "name": "stone_axe",
+          "count": 1
+        },
+        {
+          "name": "stone_sword",
+          "count": 1
+        },
+        {
+          "name": "cobblestone",
+          "count": 24
+        },
+        {
+          "name": "cooked_beef",
+          "count": 18
+        },
+        {
+          "name": "coal",
+          "count": 6
+        }
+      ],
+      "mapLandmarks": [
+        "木 oak_log (166,64,60) 東8m ×14",
+        "洞窟の口 (150,62,70) 南16m"
+      ],
+      "nearbyThreats": []
+    }
   }
 ]
