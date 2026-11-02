@@ -209,22 +209,22 @@ describe('a step that ends on an error while items run (run 41: the step was lef
 });
 
 describe('a queue that changes, and the limits', () => {
-  it('a decision asked before a drop is thrown away, the step ends there and commits what it has', async () => {
+  it('a decision asked before a drop is thrown away and asked again in the same step (R3-1 2), which then commits what it has', async () => {
     const queue = fakeQueue([{ wake: 'remaining' }]);
-    const f = fixture([act('a'), async () => { queue.bump(); await sleep(400); return act('b'); }], queue);
+    const f = fixture([act('a'), async () => { queue.bump(); await sleep(400); return act('b'); }, complete], queue);
     await f.run();
-    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 2, thrown: true } });
+    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 3, thrown: true } });
+    expect(f.inputs).toHaveLength(3); // the first, the one thrown away, the one asked again
     expect(f.commits()).toBe(1);
-    expect(text(f.runtime.snapshot('owner', f.task.id)!.history)).not.toContain('turn 2');
     expect(text(f.runtime.snapshot('owner', f.task.id)!.history)).toContain('turn 1');
   });
 
   it('the result of the item that threw the decision away stands in the last tool result of the round before (run 41: the reason of q103 and q143 reached no input)', async () => {
     const queue = fakeQueue([{ wake: 'remaining' }]);
     const reason = 'q1 [p1] x: act 0/1 済みで止まった（mine diamond: diamond は deepslate_diamond_ore）';
-    const f = fixture([act('a'), async () => { queue.end('q1', false, reason.slice('q1 [p1] x: '.length)); queue.bump(); await sleep(400); return act('b'); }], queue);
+    const f = fixture([act('a'), async () => { queue.end('q1', false, reason.slice('q1 [p1] x: '.length)); queue.bump(); await sleep(400); return act('b'); }, complete], queue);
     await f.run();
-    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 2, thrown: true } });
+    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 3, thrown: true } });
     const history = f.runtime.snapshot('owner', f.task.id)!.history;
     const kept = text(history);
     expect(kept).toContain(`${NEWS_HEAD}\\n${reason}`);
