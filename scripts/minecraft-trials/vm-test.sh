@@ -75,6 +75,7 @@ cd "$W/$PKG" || exit 2
 started=$(date +%s)
 case "$MODE" in
   --tsc)
+    [ "$KIND" = body ] && [ -z "${TSC_FORCE:-}" ] && { echo "vm-test: the body's whole-backend tsc took over 14 GB and 16 minutes here (killed): not run; use --related or single tests (TSC_FORCE=1 to run it anyway)" >&2; exit 2; }
     log "tsc ($PKG/tsconfig.json, incremental)"
     nice -n 10 env NODE_OPTIONS=--max-old-space-size=${TSC_HEAP:-$([ "$KIND" = body ] && echo 14336 || echo 6144)} node "$W/node_modules/typescript/bin/tsc" -p tsconfig.json --noEmit --incremental --tsBuildInfoFile "$CACHE/$KIND-$WHO.tsbuildinfo" > "$OUT" 2>&1; rc=$? ;;
   --shape)
