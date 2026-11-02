@@ -220,7 +220,7 @@ describe('fix 6: the meter keeps a milestone that was passed over', () => {
   });
   it('says nothing of it once the bed is in the pack, and keeps the used-up milestones out of it', () => {
     expect(meterLine({ ...dragon, current: 'p7' }, kit(['iron_pickaxe', 1], ['bucket', 1], ['white_bed', 1]), 862 / 60)).not.toContain('まだの節目');
-    expect(meterLine({ ...dragon, current: 'p7' }, frame({ dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, inventory: [] }), 1_700 / 60)).toBe('目安: 今 1,700 秒（節目は全部済んだ）');
+    expect(meterLine({ ...dragon, current: 'p7' }, frame({ dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, inventory: [] }), 1_700 / 60)).toBe('目安: 今 1,700 秒・次の節目 ネザー要塞 目安 2,700 秒（あと 1,000 秒）');
   });
 });
 

@@ -58,15 +58,17 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
   around: 'around', look_creatures: 'around', creatures: 'around', entities: 'around', mobs: 'around', nearby: 'around',
   history: 'history', look_history: 'history', stops: 'history', past: 'history',
   scan: 'scan', landmarks: 'scan', survey: 'scan',
+  frames: 'frames', frame: 'frames', stronghold: 'frames', portal_frames: 'frames', camp: 'camp', blaze_camp: 'camp', spawner: 'camp',
 };
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
   path: ['to', 'from'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
-  scan: ['radius'], worksite: ['target', 'to', 'retreat'],
+  scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [],
 };
 /** The radius each kind takes: its range and default (none: the body's own). */
 const RADIUS: Readonly<Partial<Record<ProbeKind, { low: number; high: number; fallback?: number }>>> = {
   around: { low: 1, high: 16, fallback: 8 }, history: { low: 1, high: 32, fallback: 4 }, scan: { low: 1, high: 16 },
+  frames: { low: 16, high: 128, fallback: 64 },
 };
 /** A column's default bounds from her feet: below her (a fall, a shaft) or above her (air, water over her head). */
 export const COLUMN_DOWN = Object.freeze({ up: 2, down: 14 });
@@ -154,6 +156,7 @@ const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => stri
     return null;
   },
   column: prepareColumn,
+  frames: prepareFrames,
   history(work) {
     const feet = work.context.feet;
     const at = position(work, 'at') ?? (feet ? { x: Math.floor(feet.x), y: Math.floor(feet.y), z: Math.floor(feet.z) } : null);
@@ -163,6 +166,17 @@ const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => stri
     return null;
   },
 };
+/** The frames' centre: both x and z, or neither (the body takes her feet); one alone is completed from her feet. */
+function prepareFrames(work: Preparing): string | null {
+  const x = finite(work.fields.x), z = finite(work.fields.z), feet = work.context.feet;
+  if (x === null && z === null) return null;
+  const cx = x ?? feet?.x ?? null, cz = z ?? feet?.z ?? null;
+  if (cx === null || cz === null) return 'frames の x・z は両方要る（足の位置が分からない）';
+  work.out.x = Math.floor(cx);
+  work.out.z = Math.floor(cz);
+  if (x === null || z === null) work.fixes.push('x・z の足りない方を足の位置にした');
+  return null;
+}
 /** A column's x and z (her feet's when left out) and its y bounds (`COLUMN_DOWN` from her feet when left out), top first, within 96. */
 function prepareColumn(work: Preparing): string | null {
   const { fields, fixes, out } = work, feet = work.context.feet;
@@ -240,6 +254,8 @@ const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null
   around: input => `around ${input.radius ?? 8}m`,
   history: input => `history ${input.at ? posText(input.at) : '足'} ${input.radius ?? 4}m`,
   scan: input => `scan${input.radius ? ` ${input.radius}チャンク` : ''}`,
+  frames: input => `frames ${input.x === undefined ? '足' : `(${input.x},${input.z})`} ${input.radius ?? 64}m`,
+  camp: () => 'camp',
 };
 
 const posList = (value: unknown, limit: number): string[] => (Array.isArray(value) ? value : []).flatMap(item => {

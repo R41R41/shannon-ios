@@ -22,6 +22,7 @@ import {
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { REPLAN, REPLAN_SCHEMA } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { CURRENT_FIRST_PLAN_SCHEMA } from '../surfaces/minecraft/minecraftFirstPlanPrompts.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
 import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
@@ -209,6 +210,8 @@ export interface LlmcWiring {
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
   planner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>;
+  /** The strong model that makes the plan again when the body stands still (`minecraftLlmcReplan.ts`); none without a key. */
+  replanner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>;
   /** r3: the summaries made beside the steps, by task. */
   historyAhead: FcaHistoryAhead;
 }
@@ -262,6 +265,7 @@ export function configuredMinecraftLlmc(
     policy: LLMC_HISTORY_POLICY,
     historyAhead: createFcaHistoryAhead(),
     ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, CURRENT_FIRST_PLAN_SCHEMA),
+    ...replannerPart(values, names.plan, base.recordUsage, log, parts.client),
   };
 }
 
@@ -333,9 +337,24 @@ export function billingGuarded(model: FcaModel, onBilling: () => void): FcaModel
   });
 }
 
+interface PlannerLimits {
+  outputTokens: number;
+  giveUpMs: number;
+  label: string;
+  effort: 'low' | 'medium';
+}
+
 export type PlanClient = {
   messages: { create(body: Anthropic.MessageCreateParamsNonStreaming, options: { signal: AbortSignal }): PromiseLike<Anthropic.Message> };
 };
+
+/** The strong model's request for the plan made again: the same route and charge as the first plan's, its own schema and bounds. */
+function replannerPart(values: Readonly<Record<string, string | undefined>>, model: string, recordUsage: (usage: AnthropicFcaUsage) => void | Promise<void>,
+  log: (line: string) => void, given?: PlanClient): { replanner?: LlmcWiring['planner'] } {
+  const limits: PlannerLimits = { outputTokens: REPLAN.outputTokens, giveUpMs: REPLAN.giveUpMs, label: 'replan', effort: 'medium' };
+  const made = firstPlanner(values, model, recordUsage, log, given, REPLAN_SCHEMA, limits);
+  return made.planner ? { replanner: made.planner } : {};
+}
 
 /** The first plan's one structured request (`minecraftFirstPlan.ts`), charged like a decision; none without a key. */
 export function firstPlanner(
@@ -345,13 +364,14 @@ export function firstPlanner(
   log: (line: string) => void,
   given?: PlanClient,
   schema: Readonly<Record<string, unknown>> = FIRST_PLAN_SCHEMA_R4,
+  limits: PlannerLimits = { outputTokens: FIRST_PLAN.outputTokens, giveUpMs: FIRST_PLAN.giveUpMs, label: 'first plan', effort: 'low' },
 ): { planner?: LlmcWiring['planner'] } {
   const apiKey = keyFor(values, model);
   if (!apiKey && !given) return {};
-  const client = recordedClient(given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: FIRST_PLAN.giveUpMs }), 'plan');
+  const client = recordedClient(given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: limits.giveUpMs }), 'plan');
   return {
     planner: async (system, input, signal) => {
-      const body = structuredBody(model, system, input, schema, 'low', FIRST_PLAN.outputTokens);
+      const body = structuredBody(model, system, input, schema, limits.effort, limits.outputTokens);
       const began = Date.now();
       let message: Anthropic.Message;
       try {
@@ -386,9 +406,9 @@ export function firstPlanner(
         ),
       });
       log(
-        `Shannon Minecraft first plan model model=${model} ms=${Date.now() - began} inputTokens=${inputTokens} outputTokens=${counts.output}`,
+        `Shannon Minecraft ${limits.label} model model=${model} ms=${Date.now() - began} inputTokens=${inputTokens} outputTokens=${counts.output}`,
       );
-      if (message.stop_reason !== 'end_turn') throw new Error('MINECRAFT_FIRST_PLAN_INCOMPLETE');
+      if (message.stop_reason !== 'end_turn') throw new Error(`MINECRAFT_${limits.label.toUpperCase().replace(' ', '_')}_INCOMPLETE`);
       return JSON.parse(
         message.content
           .flatMap((block) => (block.type === 'text' ? [block.text] : []))

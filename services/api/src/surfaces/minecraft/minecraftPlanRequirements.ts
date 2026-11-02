@@ -1,6 +1,6 @@
 import type { PlanNode, PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { carried, doneFacts } from './minecraftConditions.js';
+import { acquired, carried, doneFacts } from './minecraftConditions.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
 import { materialsOf, smeltingInputOf } from './minecraftLlmcRecipes.js';
 
@@ -29,7 +29,7 @@ export function targetUpdateProblem(before: PlanTree, after: PlanTree, observati
     if (problem) return problem;
     const changedGoal = JSON.stringify(old?.target) !== JSON.stringify(node.target) || old?.doneWhen !== node.doneWhen;
     if (node.target && node.state === 'done' && (old?.state !== 'done' || changedGoal)
-      && (!facts || carried(facts.counts, node.target.item) < node.target.count)) return `${node.id}: 取得目標は現在の観測で未達か未確認。達成履歴にする前に現物を確認する`;
+      && (!facts || acquired(facts.counts, node.target.item) < node.target.count)) return `${node.id}: 取得目標は現在の観測で未達か未確認。達成履歴にする前に現物を確認する`;
   }
   return null;
 }
@@ -55,7 +55,7 @@ function unreservedStock(node: PlanNode, counts: ReadonlyMap<string, number>, tr
 /** Current deficit, independent of past done nodes. Existing recipes and the body's smelting export supply conversions. */
 export function targetRequirements(node: PlanNode | undefined, counts: ReadonlyMap<string, number>, tree?: PlanTree): string | null {
   if (!node?.target) return null;
-  const target = node.target, missing = Math.max(0, target.count - carried(counts, target.item));
+  const target = node.target, missing = Math.max(0, target.count - acquired(counts, target.item));
   if (!missing) return `取得目標 ${target.item}×${target.count}: 現在充足`;
   const { free, reserved } = unreservedStock(node, counts, tree);
   const recipe = materialsOf(target.item, missing, { chain: true, pack: free });

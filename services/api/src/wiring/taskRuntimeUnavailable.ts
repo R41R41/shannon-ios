@@ -10,12 +10,12 @@ import { BILLING_PAUSED_SUMMARY, PROVIDER_UNAVAILABLE_SUMMARY, pausedReport } fr
  * decision again from a fresh observation, after a longer wait each time. Minebot parity audit C-20, 2026-10-19: before, this
  * happened once in a task's lifetime and the second failure ended the run.
  *
- * A Minecraft request goes on through `BODY_UNAVAILABLE_CYCLES` such rounds (about a quarter of an hour of a provider's outage in
- * all) and is then paused as stopped, not failed: the owner may resume it. Any other task keeps its one round
- * and then fails with its
- * report, as before. The count (`fcaProviderRetries`) is reset by the next decision that comes back (`fcaRunner.ts`).
+ * A Minecraft request goes on through `BODY_UNAVAILABLE_CYCLES` such rounds (about three quarters of an hour of a provider's outage in all:
+ * a run of 4 to 5 hours nobody watches, 2026-11-02, does not wait for a person for less) and is then paused as stopped, not failed: the owner
+ * may resume it. Any other task keeps its one round and then fails with its report, as before. The count (`fcaProviderRetries`) is reset by
+ * the next decision that comes back (`fcaRunner.ts`).
  */
-export const BODY_UNAVAILABLE_CYCLES = 4;
+export const BODY_UNAVAILABLE_CYCLES = 24;
 const OTHER_UNAVAILABLE_CYCLES = 1;
 const BODY_COOLDOWN_BASE_MS = 20_000;
 const BODY_COOLDOWN_CAP_MS = 120_000;

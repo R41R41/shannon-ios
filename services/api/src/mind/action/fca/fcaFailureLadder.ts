@@ -40,6 +40,23 @@ export function failureSinceCheckpoint(since: number | null, prior: Readonly<Rec
 }
 
 /**
+ * A request nobody is watching (a Minecraft request not held on a failure; the filming run, 4 to 5 hours, 2026-11-02) does not stop at the
+ * ladder's stop: it has its plan made again by the strong model (`minecraftLlmcReplan.ts`: at least 10 minutes apart, 6 an hour, 30 a run)
+ * and goes on. It stops only when failed steps in a row, after the fifth was read, have gone on for this long with nothing moved (the
+ * plans made meanwhile did not help: 3 of them at the 10-minute spacing), or at this many in a row whatever the time.
+ */
+export const UNATTENDED_STALL_MS = 30 * 60_000;
+export const UNATTENDED_HARD_LIMIT = 200;
+
+/** The stop of a request nobody is watching; the review at three failures (`FAILURE_REVIEW_AT`) is the same. */
+export function unattendedFailureStops(input: { body: boolean; failures: number; priorFailures: number; since: number | null; now: number }): boolean {
+  const { body, failures, priorFailures, since, now } = input;
+  if (!body) return failures >= FAILURE_STOP_AFTER;
+  if (failures <= FAILURE_STOP_AFTER || priorFailures < FAILURE_STOP_AFTER) return false;
+  return failures >= UNATTENDED_HARD_LIMIT || (since !== null && now - since >= UNATTENDED_STALL_MS);
+}
+
+/**
  * Whether the failures in a row stop the task now. `priorFailures` is the count the step's decision began with: it was made having read
  * the result of the failure that brought the count to that.
  */

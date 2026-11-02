@@ -117,7 +117,7 @@ describe('chapter 4 A: the road and the pace', () => {
   });
   it('writes the top-level nodes: the done ones with ✓, the one she is in with ◀今, the next five, and how many are left', () => {
     const road = roadLine(withStates(['p1', 'p2', 'p3', 'p4'], 'p5.1'))!;
-    expect(road).toBe('道のり: 済み 1 節 食料とベッド✓ 鉄✓ 水入りバケツ✓ → ダイヤ◀今 → 金のブーツ → 黒曜石10とゲート → 出発の点検 → ネザー要塞を探す → ブレイズロッド7以上 → ほか 5 節');
+    expect(road).toBe('道のり: 済み 1 節 食料とベッド✓ 鉄✓ 水入りバケツ✓ → ダイヤ◀今 → 金のブーツ → 黒曜石10とゲート → 出発の点検 → ネザー要塞を探す → ブレイズロッド7以上 → ほか 7 節');
   });
   it('is absent for a plan that is not the dragon\'s', () => {
     expect(roadLine(notDragon)).toBeNull();
@@ -133,7 +133,8 @@ describe('chapter 4 A: the road and the pace', () => {
   });
   it('takes the last milestone the frame shows as reached (one used up does not hold it back), and ends with the Nether', () => {
     expect(meterLine(tree, have([['diamond_pickaxe', 1], ['water_bucket', 1]]), 1_200 / 60)).toContain('次の節目 黒曜石 10 個 目安 1,500 秒');
-    expect(meterLine(tree, have([['diamond_pickaxe', 1]], 'the_nether'), 1_700 / 60)).toBe('目安: 今 1,700 秒（節目は全部済んだ）');
+    // Past the Nether the pace goes on to the fortress, the rods, the pearls, the eyes, the portal room and the End (2026-11-02).
+    expect(meterLine(tree, have([['diamond_pickaxe', 1]], 'the_nether'), 1_700 / 60)).toBe('目安: 今 1,700 秒・次の節目 ネザー要塞 目安 2,700 秒（あと 1,000 秒）');
   });
   it('is absent for another plan, an unknown time or no frame', () => {
     expect(meterLine(notDragon, have([]), 1)).toBeNull();
@@ -154,7 +155,9 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(system).toContain(milestoneWords());
     expect(milestoneWords()).toBe('ベッド 150・地下の準備 300・鉄のツルハシ 350・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 1,800');
-    expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 1_800]);
+    expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 1_800, 2_700, 4_500, 7_800, 8_100, 10_800, 11_200]);
+    // The instructions list the targets up to the Nether (the cached text has a cap); the meter says the later ones.
+    expect(DRAGON_MILESTONES.filter(item => item.late).map(item => item.name)).toEqual(['ネザー要塞', 'ブレイズロッド 7 本', 'エンダーパール 12 個', 'エンダーアイ 12 個', 'ポータルの枠の部屋', 'エンド']);
     expect(V2_ALWAYS).toContain('road・meter（エンドラ討伐だけ）: road は');
     expect(V2_ALWAYS).toContain('meter は開始からの秒と次の節目の「あと」か「遅れ」');
   });
@@ -168,12 +171,15 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   it('keeps a milestone reached when its item is used up and she is back in the overworld (the plan holds the node done)', () => {
     // The obsidian went into the gate, she went through and came back: the pack holds nothing, the dimension is the overworld.
     expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6', 'p7.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 1,800 秒（あと 150 秒）・まだの節目: ベッド（目安 150 秒）');
-    expect(meterLine(done(['p7', 'p7.1', 'p7.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒（節目は全部済んだ）');
+    expect(meterLine(done(['p7', 'p7.1', 'p7.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒・次の節目 ネザー要塞 目安 2,700 秒（あと 700 秒）');
   });
   it('does not go back to an earlier milestone, and shows no next target after the last', () => {
     const line = meterLine(done(['p7']), bare, 100 / 60)!;
-    expect(line).toBe('目安: 今 100 秒（節目は全部済んだ）');
-    expect(line).not.toContain('次の節目');
+    expect(line).toBe('目安: 今 100 秒・次の節目 ネザー要塞 目安 2,700 秒（あと 2,600 秒）');
+    expect(line).not.toContain('まだの節目');
+    // After the last milestone (the End entered) the seconds alone are said.
+    const every = done(tree.nodes.map(node => node.id));
+    expect(meterLine(every, bare, 12_000 / 60)).toBe('目安: 今 12,000 秒（節目は全部済んだ）');
   });
   it('writes a blocked node before the current one as 止, as the dictionary says', () => {
     const road = roadLine(done(['p1', 'p2'], 'p5.1', { p3: 'blocked' }))!;

@@ -1,10 +1,11 @@
 import type { PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { carried, doneFacts, validCondition } from './minecraftConditions.js';
+import { acquired, carried, doneFacts, validCondition } from './minecraftConditions.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
 import { materialsOf, smeltingInputOf } from './minecraftLlmcRecipes.js';
 import { believableDeadline } from './minecraftLlmcStallsSaved.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
+import { endViewOf } from './minecraftEndView.js';
 
 /** How much of a recipe part she holds, counting the rawer form it is made from: planks from logs (4 each), sticks from planks (2 each),
  * a smelted item from its input. Ore dug for an ingot, logs cut for a table: the work toward the part, before the part exists. */
@@ -18,7 +19,7 @@ function heldAs(part: string, counts: ReadonlyMap<string, number>): number {
 /** What one target gives: the item itself, each material it is made of (bounded by the count it needs, so surplus earns nothing), and,
  * for an item that is only smelted, the input it is smelted from. The keys depend on the target alone, never on what is held. */
 function targetEvidence(target: { item: string; count: number }, counts: ReadonlyMap<string, number>): Record<string, number> {
-  const evidence: Record<string, number> = { [`have:${target.item}`]: Math.min(target.count, carried(counts, target.item)) };
+  const evidence: Record<string, number> = { [`have:${target.item}`]: Math.min(target.count, acquired(counts, target.item)) };
   for (const part of materialsOf(target.item, target.count, { chain: true, pack: new Map() }).spends) {
     evidence[`material:${target.item}:${part.item}`] = Math.min(part.count, heldAs(part.item, counts));
   }
@@ -58,7 +59,7 @@ export function travelEvidence(input: ActInput | null, frame: BodyObservation | 
   }
   return values;
 }
-const SEARCH_KINDS = new Set(['wood', 'food', 'village', 'iron', 'diamond', 'water', 'lava', 'obsidian', 'fortress', 'stronghold', 'chest']);
+const SEARCH_KINDS = new Set(['wood', 'food', 'village', 'iron', 'diamond', 'water', 'lava', 'obsidian', 'fortress', 'stronghold', 'chest', 'pearl', 'blaze']);
 export function explorationEvidence(node: PlanNode | undefined, input: ActInput | null, frame: BodyObservation | null): Record<string, number> {
   if (!node?.kind || !SEARCH_KINDS.has(node.kind) || !input?.hands.some(h => h.do === 'go' || h.do === 'walk' || h.do === 'vertical')) return {};
   const world = frame?.state.world as Record<string, unknown> | undefined, facts = doneFacts(frame);
@@ -66,6 +67,15 @@ export function explorationEvidence(node: PlanNode | undefined, input: ActInput 
   if ((node.kind === 'food' || node.kind === 'village') && !/^地図 v1[^\n]*方式=surface/u.test(world.localMap)) return {};
   const { x, y, z } = facts.feet;
   return { [`explore:${facts.dimension}:${Math.floor(x / 16)},${Math.floor(y / 8)},${Math.floor(z / 16)}`]: 1 };
+}
+/**
+ * The fight in the End as progress: the damage done to the dragon and the crystals destroyed (numbers that only go up). The body's own
+ * count (`state.end.dragon.health`, `state.end.crystals.remaining`); nothing when it does not say, so a fight the body does not report earns no credit.
+ */
+export function endFightEvidence(frame: BodyObservation | null): Record<string, number> {
+  const end = endViewOf(frame), health = end?.dragon?.health ?? null, left = end?.crystals.remaining ?? null;
+  return { ...(health !== null ? { 'dragon:damage': Math.max(0, 200 - health) } : {}),
+    ...(left !== null ? { 'crystals:down': Math.max(0, 10 - left) } : {}) };
 }
 /** A reason string cannot grant more waiting time. Only an explicit predicate and an observed clock/job can. */
 function waitForDay(clauses: import('../../contracts/minecraftActCondition.js').ActClause[], world: Record<string, unknown>): ObservedWait | null {

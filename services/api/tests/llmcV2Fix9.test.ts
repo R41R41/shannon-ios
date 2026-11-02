@@ -104,7 +104,7 @@ describe('B1: a portal is a place she goes into, never lava', () => {
     expect(V2_STAGES.prep).toContain('ポータル（p ネザー・e エンド）の入り方: そのマスの中へ walk（range=0');
     expect(V2_STAGES.prep).toContain('約 4 秒立って待つ。着いた先が次元の変化');
     expect(V2_STAGES.nether).toContain('帰りも p のマスの中へ walk して約 4 秒待つ');
-    expect(V2_STAGES.pearl).toContain('中の e のマスへ walk（range=0）で入る');
+    expect(V2_STAGES.stronghold).toContain('中の e のマスへ walk（range=0）で入り');
     expect(V2_ALWAYS).not.toContain('入り方');
   });
 });

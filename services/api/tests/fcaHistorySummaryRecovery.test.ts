@@ -31,7 +31,7 @@ const summaryCall = (template: unknown): AnthropicMessage =>
   message([{ type: 'tool_use', id: `toolu_summary_${Math.random().toString(36).slice(2, 8)}`, name: 'fca_history_summary', input: { template } }], 'tool_use');
 
 /** Steps 1–3 call mc.find-blocks (each result about 40,000 characters), step 4 waits; `summary` answers every summary request. */
-function run(summary: () => AnthropicMessage) {
+function run(summary: () => AnthropicMessage | Response, options: { body?: boolean } = {}) {
   let time = Date.parse('2026-10-14T00:06:57.000Z');
   const now = () => new Date(time).toISOString();
   const h = actionHarness(now);
@@ -54,7 +54,7 @@ function run(summary: () => AnthropicMessage) {
   let only = '';
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
     canRunTask: (_runtime, id) => id === only,
-    stepPorts: () => ({ tools, selector, history: { codec: anthropicFcaHistoryCodec, summarizer } }) });
+    stepPorts: () => ({ tools, selector, history: { codec: anthropicFcaHistoryCodec, summarizer }, ...(options.body ? { keepBodyTools: () => true } : {}) }) });
   cleanups.push(async () => { await driver.close(); h.close(); });
   const root = driver.runtime.ensureRoot('owner');
   const task = driver.runtime.createChild('owner', root.id, { title: GOAL, goal: GOAL, completionCriteria: CRITERIA }, 'minecraft-request');
@@ -65,6 +65,8 @@ function run(summary: () => AnthropicMessage) {
   return { driver, task, fixture, settle, decisionBodies, summaryBodies };
 }
 const stepLines = (log: ReturnType<typeof vi.spyOn>) => log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA'));
+
+const unreachable = () => new Response(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'synthetic' } }), { status: 503, headers: { 'content-type': 'application/json' } });
 
 describe('a third Minecraft step compacts its first round (Minebot lane run 2, task 94e879f8)', () => {
   it('installs the summary Haiku sent in the shape that was refused: an object, a long item, six items and an extra key', async () => {
@@ -125,5 +127,28 @@ describe('a third Minecraft step compacts its first round (Minebot lane run 2, t
       expect.stringMatching(/code=FCA_SUMMARY_INVALID reason=template fallback=public_epoch/u),
     ]);
     expect(lines.join('\n')).not.toContain(GOAL);
+  });
+
+  it('goes on with a public epoch when the provider cannot be reached for the summary of a body task (nobody is watching a run of hours), and fails nothing', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = run(unreachable, { body: true });
+    await r.settle(() => r.decisionBodies().length >= 4);
+    expect(r.decisionBodies()).toHaveLength(4);
+    expect(r.driver.runtime.get('owner', r.task.id)?.phase).toBe('waiting');
+    const lines = stepLines(log);
+    expect(lines.filter(line => line.startsWith('Shannon FCA step'))).toEqual([]);
+    expect(lines.filter(line => line.startsWith('Shannon FCA history summary unusable'))[0]).toMatch(/code=FCA_MODEL_HTTP_503 reason=provider_unavailable fallback=public_epoch/u);
+    expect(r.driver.runtime.history('owner', r.task.id)!.summary).toBeNull();
+  });
+
+  it('still fails the step of a task that is not a body task when the provider cannot be reached for the summary (as before)', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = run(unreachable);
+    await r.settle(() => r.decisionBodies().length >= 4);
+    expect(r.decisionBodies().length).toBeLessThan(4);
   });
 });

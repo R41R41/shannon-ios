@@ -89,7 +89,8 @@ const PLAN_WORDS: ReadonlyArray<readonly [string, string]> = [
     ("forbid・caution は live の plan.rules に（今の節と親の道の分。その節を離れると出ない）。note は節の補足の文で、live の plan の now・next " +
 "の行に付く（rules には出ない）。")],
   ['済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。',
-    '済む条件: doneWhen が観測の形（have:・dim:・at:・food>=）の節は、live では「（済む条件: …）」と出る。頭のコードがその条件が満たされた時に済みにする。'],
+    '済む条件: doneWhen が観測の形（have:・dim:・at:・food>=・see:fortress / see:end_portal_frame / see:end_portal・crystals<=n）の節は、'
+      + 'live では「（済む条件: …）」と出る。頭のコードがその条件が満たされた時に済みにする。'],
   ['親が済みでも子は済みにならない（子は自分の条件か set state=done で）。',
     '親が済むと、その下の開いた子（blocked を除く）は「不要になった」として閉じる（成果を得て済んだのではない）。'],
   ['済み扱いの子（消費して無くなった板・棒など）は set state=done で自分で閉じる。',

@@ -57,8 +57,10 @@
  * comes, the body stays held,
  * the pause summary says so and names the operator's way to free it (`minecraft release`).
  */
-export const FCA_BODY_RETURN_WINDOW_MS = 30 * 60_000;
-export const FCA_BODY_RECOVERY_LIMIT = Object.freeze({ count: 6, withinMs: 60 * 60_000 });
+/** 2 hours (2026-11-02, a run of hours on a Spot VM that stops and starts: was 30 minutes). */
+export const FCA_BODY_RETURN_WINDOW_MS = 120 * 60_000;
+/** A task recovered this often within the hour is paused (was 6: a Spot VM that comes and goes). */
+export const FCA_BODY_RECOVERY_LIMIT = Object.freeze({ count: 12, withinMs: 60 * 60_000 });
 export const FCA_BODY_RECOVERY_CODE = 'fca_body_reconciled';
 /** The release asked of the body: the first wait, the longest wait, and the attempts after which the task is paused. */
 export const RELEASE_BACKOFF_BASE_MS = 10_000;
@@ -80,7 +82,7 @@ export function heldBackoffMs(asked: number): number {
   return Math.min(HELD_BACKOFF_CAP_MS, HELD_BACKOFF_BASE_MS * 2 ** Math.max(0, asked));
 }
 
-/** `SHANNON_FCA_BODY_RETURN_MINUTES`: how long a Minecraft request waits for its body (1 to 720 minutes; the default is 30). */
+/** `SHANNON_FCA_BODY_RETURN_MINUTES`: how long a Minecraft request waits for its body (1 to 720 minutes; the default is 120). */
 export function fcaBodyReturnWindow(value: string | undefined): number {
   const minutes = Number(value);
   return Number.isInteger(minutes) && minutes >= 1 && minutes <= 720 ? minutes * 60_000 : FCA_BODY_RETURN_WINDOW_MS;

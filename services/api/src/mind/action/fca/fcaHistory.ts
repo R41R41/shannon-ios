@@ -1,6 +1,7 @@
 import { observeAsync, observeSync, observerHandoff } from '../../../infra/observer/observerContext.js';
 import { renderedCompaction, type CompactionMessage } from '@shannon/mind';
 import type { TaskHistoryWindow, TaskStep } from '../taskRuntime/taskRuntimePorts.js';
+import { retryVerdict } from './fcaProviderRetry.js';
 import type { FcaHistoryAhead, FcaHistoryAheadOptions, FcaHistoryCodec, FcaHistoryPlan, FcaHistoryPolicy, FcaHistoryPorts, FcaHistoryPrepared,
   FcaHistoryReplay, FcaHistorySummarizer, FcaHistorySummaryInput } from './fcaHistoryPorts.js';
 
@@ -262,6 +263,16 @@ function unusableSummary(error: unknown): { code: string; reason: string | null 
   return { code: error.message, reason: typeof reason === 'string' && /^[a-z_]{1,32}$/u.test(reason) ? reason : null };
 }
 
+/**
+ * What a summary that could not be had comes to: an unusable answer, and, for a task that goes on whatever happens (`patient`), a provider
+ * that could not be reached (what a decision is asked again for). Null: the error is the step's.
+ */
+function summaryFailure(error: unknown, patient: boolean | undefined): { code: string; reason: string | null } | null {
+  const unusable = unusableSummary(error);
+  if (unusable || !patient || !retryVerdict(error)) return unusable;
+  return { code: error instanceof Error ? error.message : 'FCA_SUMMARY_UNAVAILABLE', reason: 'provider_unavailable' };
+}
+
 /** The oldest eligible rounds that fit the summary input, in order. */
 function summaryInput(eligible: readonly ProjectedRound[], previous: FcaHistorySummaryInput['previous'], maximum: number) {
   const input = { previous, rounds: [] as ProjectedRound[] };
@@ -298,11 +309,13 @@ function summaryFallback(step: TaskStep, ports: FcaHistoryPorts, policy: FcaHist
 /**
  * Uses the current action permit; derived summary writes never enqueue work or retry a model call. `forceEpoch` (asked with the epoch replay,
  * before any compaction) makes the first plan summarize (a real summary, never a clipped replay) so that the replay starts a new epoch: the only
- * way the tools a signed prefix binds can change (`fcaCoreTools.ts`).
+ * way the tools a signed prefix binds can change (`fcaCoreTools.ts`). `patient` (a body task nobody is watching, 4 to 5 hours): a provider
+ * that could not be reached for the summary (a 5xx, a throttle, a reset: what a decision would be asked again for) gives the clipped replay
+ * of an unusable answer and the task goes on, instead of failing it at the second such error in a row.
  */
 export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, signal: AbortSignal,
   overrides: Partial<FcaHistoryPolicy> = {},
-  options: { forceEpoch?: (replay: readonly unknown[]) => boolean; ahead?: FcaHistoryAheadOptions } = {}): Promise<FcaHistoryReplay> {
+  options: { forceEpoch?: (replay: readonly unknown[]) => boolean; ahead?: FcaHistoryAheadOptions; patient?: boolean } = {}): Promise<FcaHistoryReplay> {
   const policy = policyOf(overrides);
   const checked = async () => {
     signal.throwIfAborted();
@@ -334,7 +347,7 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
       template = await observeAsync('compact', { phase: 'summarize', roundCount: plan.input.rounds.length, batch: batches },
         () => ports.summarizer!.summarize(plan.input, signal));
     } catch (error) {
-      const unusable = unusableSummary(error);
+      const unusable = summaryFailure(error, options.patient);
       if (!unusable || signal.aborted) throw error;
       await checked();
       return summaryFallback(step, ports, policy, unusable, batches);

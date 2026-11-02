@@ -115,7 +115,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
     permit: async () => { await checked('fresh');
       return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
-  }, signal, transient?.policy ?? ports.history!.policy, { ...(forceEpoch ? { forceEpoch } : {}), ...(historyAhead ? { ahead: historyAhead } : {}) })) : null;
+  }, signal, transient?.policy ?? ports.history!.policy, { ...(forceEpoch ? { forceEpoch } : {}), ...(historyAhead ? { ahead: historyAhead } : {}), ...(bodyTask ? { patient: true } : {}) })) : null;
   const provenance = { taskId: step.taskId, parentId: step.snapshot.task.parentId, stepId: step.id, revision: step.revision };
   const input = metrics.timedSync('contextMs', () => observeSync('context', provenance, () => {
     const children = step.snapshot.task.childIds.flatMap(id => {
@@ -442,7 +442,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       failureSince = priorFailureSince;
   }
   await checked('local');
-  const toolFailuresStop = failureStops({ body: bodyTask, failures: consecutiveToolFailures, priorFailures: priorToolFailures,
+  const toolFailuresStop = (ports.failureStop ?? failureStops)({ body: bodyTask, failures: consecutiveToolFailures, priorFailures: priorToolFailures,
     since: failureSince, now: Date.now() });
   const stopReason = gated.stop && disposition === 'wait' ? FCA_WAIT_WITHOUT_COUNTERPART
     : toolFailuresStop || completionVerificationFailures >= FCA_COMPLETION_MISTAKES_STOP

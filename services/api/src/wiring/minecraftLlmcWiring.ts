@@ -4,6 +4,9 @@ import {
 } from '../surfaces/minecraft/minecraftPurposeProgress.js';
 import { bodyHoldOf,withResend,withIncident,withStalls } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
+import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
+import { withReplanInbox } from '../surfaces/minecraft/minecraftLlmcReplan.js';
+import { adoptProblem, unattendedFailureStop, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
 import {
 LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,redecideLabel,llmcModelRouter,llmcCompletionMistake,LLMC_CATALOG_SELECTOR,
 llmcProbeRunner,billingGuarded
@@ -12,6 +15,7 @@ import type { LlmcWiring } from './minecraftLlmcConfiguration.js';
 import type { FcaExternalTools,FcaToolCall } from '../mind/action/fca/fcaPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { createFcaPlanTools,PLAN_UPDATE_TOOL } from '../mind/action/fca/fcaPlanTools.js';
+import type { PlanTree } from '@shannon/mind';
 import { toolOk,type ToolResult } from '../mind/tools/shannonTools.js';
 import { REDECIDE_GIVE_UP_MS,type RedecidePort } from '../surfaces/minecraft/minecraftLlmcRedecide.js';
 import { firstPlanInbox,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
@@ -22,7 +26,7 @@ import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
-import { meterParts,reachedMilestoneNames } from '../surfaces/minecraft/minecraftLlmcRoad.js';
+import { firstStretch } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import {
 stallsCheckpoint,restoreStalls,deathCounterOf,noteDeath,noteProgress,noteRan,noteRefusal,resumeStalls,stallIncidentId,watchStalls,externalWorkMilestones,
 type Stall
@@ -62,6 +66,7 @@ export type { LlmcModelNames, LlmcWiring } from './minecraftLlmcConfiguration.js
 export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: MinecraftControl, log: (line: string) => void = line => console.info(line)) {
   const worksite = createWorksiteMemory((step.snapshot.checkpoint as { minecraftWorksite?: unknown } | null)?.minecraftWorksite);
   const journey = createMinecraftJourney((step.snapshot.checkpoint as { minecraftJourney?: unknown } | null)?.minecraftJourney);
+  const endgame = createEndgame(step.snapshot.checkpoint);
   const waits = createWaitLedger((step.snapshot.checkpoint as { minecraftWaitDeadlines?: unknown } | null)?.minecraftWaitDeadlines);
   const savedStalls = step.snapshot.checkpoint as { minecraftStalls?: unknown; minecraftActiveWait?: unknown } | null;
   restoreStalls(step.taskId, savedStalls?.minecraftStalls);
@@ -76,8 +81,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const decided = () => seen()?.observation ?? null;
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   // Run 42: a chest node is done when an act opened the chest at its place (`chestNodesDone`), with the nodes the frame shows done.
-  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    validateUpdate: (before, after) => targetUpdateProblem(before, after, observe()) ?? preparationCompletionProblem(before, after, observe()),
+  const validate = (before: PlanTree, after: PlanTree) =>
+    targetUpdateProblem(before, after, observe()) ?? preparationCompletionProblem(before, after, observe());
+  const adopted = (before: PlanTree, after: PlanTree) => adoptProblem({ validate, observe }, before, after);
+  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withReplanInbox(firstPlanInbox, log, adopted), log,
+    validateUpdate: validate,
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
     follow: tree => followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(doneFacts(observe()))) });
@@ -124,6 +132,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
        held: true, frozen: null, command: info.command })
       .catch(error => log(`Shannon Minecraft cleanup hold failed task=${step.taskId} ${String(error)}`)); } });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
+  queue.onRan((_item, _result, receipt) => endgame.noteResult(receipt?.id, receipt?.result, observe()));
   // Run 45: the call id of the act a resume sends again (the body says when it failed for the reason it was held
 // for: `incident.repeated`).
   let resent: string | null = null;
@@ -350,8 +359,9 @@ queue.onRan(noteIncidentResult);
         const counts = doneFacts(frame)?.counts;
         const running = queue.runningInput?.() ?? null;
         refreshWait(current, frame, running);
+        const road = firstStretch(tree, frame);
         const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
-          milestone: meterParts(tree, frame, 0)?.next ?? null, reached: reachedMilestoneNames(tree, frame) ?? [],
+          milestone: road.next, reached: road.reached,
           externalWork: externalWorkMilestones(frame), purpose: { ...purposeEvidence(node, frame), ...travelEvidence(running, frame),
             ...explorationEvidence(node, running, frame) }, waitUntil,
           inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) :
@@ -410,8 +420,12 @@ queue.onRan(noteQueueResult);
       } };
   })() : null;
   const bodyParts = {
-    plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(),
+    plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(), endgame,
     returnRoute: (observation: ReturnType<typeof observe>) => [...journey.read(observation), ...worksite.read(observation)] };
+  // A request that is not held on a failure still looks for its stalls and asks for a new plan (`minecraftLlmcReplanWiring.ts`).
+  const unheld = unheldReplan({ held: stalls !== null, taskId: step.taskId, goal: step.snapshot.task.goal, createdAt: step.snapshot.task.createdAt,
+    checkpoint: step.snapshot.checkpoint, replanner: llmc.replanner, observe, plan: plan.port, bodyParts, queue, waits, activeClock,
+    heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log });
   // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an
 // act of it that would break a promise is decided again by Opus
   // (`FcaModel.redecide`: the step's last request with the act and the promise line added). Opus's plan.update
@@ -433,6 +447,7 @@ queue.onRan(noteQueueResult);
       return plan.tools.execute({ scopeKey: step.scopeKey, taskId: step.taskId, operationId, name: PLAN_UPDATE_TOOL, input, signal });
     },
     log } : undefined;
+  const currentNode = () => workingNode(step.taskId, plan.port.tree().current) ?? plan.port.tree().current ?? '-';
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.
   const planWhere = () => {
     const tree = plan.port.tree();
@@ -449,7 +464,7 @@ queue.onRan(noteQueueResult);
       promises: () => plan.port.tree().promises, ...(redecide ? { redecide } : {}) } },
     planTools,
     /** The body's lifecycle with the mode's live state and events (`withLlmcBody`). */
-    wrap: (lifecycle: FcaBodyLifecycle) => withStalls(withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt:
+    wrap: (lifecycle: FcaBodyLifecycle) => withReplan(withStalls(withResend(withLlmcBody(lifecycle, { llmc: bodyParts, taskId: step.taskId, createdAt:
        step.snapshot.task.createdAt,
       observe, seen, arrival: () => ({ at: control.arrivedAt(bodyId()), kind: control.arrivalKind(bodyId()) }), log, queue,
       // Continue contract 5: each decision's context names the frame it read; the acts it chooses carry it, and its
@@ -458,16 +473,16 @@ queue.onRan(noteQueueResult);
       // r5: the fact of a surprise met the second time, noted on the current node (at most 4, the oldest goes).
       r4: { probe: llmcProbeRunner(control, step), planWhere,
         caution: (text: string) => plan.port.amend?.({ ops: [{ op: 'caution', text }] }, 'noted') === true } }), resend, log, step.taskId,
-      { open: () => queue.open(), limitMs: () => resendLimitMs(replay.maxMs) }), stalls),
+      { open: () => queue.open(), limitMs: () => resendLimitMs(replay.maxMs) }), stalls), unheld),
     /** The step's ports with the mode's menu (`llmcTools`). */
     menu: <T extends { tools?: FcaExternalTools }>(ports: T): T => ports.tools
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the
       // API's thread must not turn a done task back.
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
     ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port, checkpoint: () => ({
-      ...journey.checkpoint(), ...waits.checkpoint(), ...stallsCheckpoint(step.taskId),
-      ...worksite.checkpoint(), minecraftActiveWait: activeWait }),
-      ...(stalls ? { prepareStop: stalls.prepareStop } : {}),
+      ...journey.checkpoint(), ...waits.checkpoint(), ...stallsCheckpoint(step.taskId), ...endgame.checkpoint(),
+      ...worksite.checkpoint(), minecraftActiveWait: activeWait, ...unheld?.checkpoint() }),
+      ...(stalls ? { prepareStop: stalls.prepareStop } : {}), ...(unheld ? { failureStop: unattendedFailureStop(step.taskId, unheld, currentNode) } : {}),
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
       versions: () => minecraftBodyVersion(control, bodyId(), read),
       completionMistake: llmcCompletionMistake(step.snapshot.task.goal),

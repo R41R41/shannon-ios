@@ -149,16 +149,16 @@ describe('what the envelope accepts', () => {
     expect(parseOperatorEnvelope(envelope('budget', { budgetYen: 1600 }))).toMatchObject({ ok: false, code: 'invalid_input' });
     expect(parseOperatorEnvelope(envelope('budget', { taskId: 'nope', budgetYen: 1600 }))).toMatchObject({ ok: false, code: 'invalid_input' });
     expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 1600, goal: 'x' }))).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 2001 }))).toMatchObject({ ok: false, code: 'budget_above_cap' });
+    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 15_001 }))).toMatchObject({ ok: false, code: 'budget_above_cap' });
     expect(parseOperatorEnvelope(envelope('budget', { latest: true, budgetYen: 1600 })))
       .toMatchObject({ ok: true, input: { command: 'budget', taskId: null, budgetYen: 1600 } });
-    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 2000 })))
-      .toMatchObject({ ok: true, input: { command: 'budget', taskId: TASK, budgetYen: 2000 } });
+    expect(parseOperatorEnvelope(envelope('budget', { taskId: TASK, budgetYen: 15_000 })))
+      .toMatchObject({ ok: true, input: { command: 'budget', taskId: TASK, budgetYen: 15_000 } });
   });
 
   it('is audited as a refusal (with the arguments, as for any malformed envelope) when the numbers are wrong', async () => {
     const w = await started();
-    for (const budgetYen of [0, -5, 1.5, 2001]) await w.ask('budget', { taskId: TASK, budgetYen });
+    for (const budgetYen of [0, -5, 1.5, 15_001]) await w.ask('budget', { taskId: TASK, budgetYen });
     const refused = w.audit.recent('owner', 200).filter(row => row.event === 'refused');
     expect(refused.map(row => row.code).reverse()).toEqual(['invalid_input', 'invalid_input', 'invalid_input', 'budget_above_cap']);
     expect(refused.every(row => row.argsJson.includes('"op":"budget"'))).toBe(true);

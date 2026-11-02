@@ -4,7 +4,7 @@ import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { doneFacts, parseDoneWhen, prepUnmetFacts } from './minecraftPlanDone.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
-import { reachedMilestoneNames } from './minecraftLlmcRoad.js';
+import { isDragonPlan, reachedMilestoneNames } from './minecraftLlmcRoad.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
 import { wantsFood, type FactsContext } from './minecraftLlmcFacts.js';
 import type { PlanTree } from '@shannon/mind';
@@ -22,6 +22,7 @@ import { wornItems } from './minecraftItems.js';
 import { missingNodeFact, planNowOf } from './minecraftLlmcNode.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
+import type { Endgame } from './minecraftEndgame.js';
 
 /**
  * What a Minecraft task's body lifecycle takes in the LLM-centric mode (`createMinecraftTaskBody`, `llmc`): the
@@ -37,6 +38,8 @@ export interface LlmcBodyParts {
   /** r6: the whole tree (the places of its nodes: the gate back, for where food is). Absent: none read. */
   planTree?(): PlanTree;
   returnRoute?(observation: BodyObservation | null): readonly string[];
+  /** The way to the dragon after the Nether: the thrown eyes and the facts of the End (`minecraftEndgame.ts`). Absent: none. */
+  endgame?: Endgame;
 }
 
 /** What the chapter 8 facts need beyond the frame: the blows line (`HitWatch.line`), the time of the previous
@@ -61,8 +64,10 @@ export function factsContext(
     world = (observation?.state.world ?? {}) as Record<string, unknown>;
   const food = carriedFood(world, observation?.facts ?? {}),
     hunger = typeof world.food === 'number' && Number.isFinite(world.food) ? world.food : null;
+  const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree));
   return {
     ...(judge.hits ? { hits: judge.hits } : {}),
+    ...(endgame?.lines.length ? { endgame } : {}),
     ...(tree?.promises.length ? { promises: tree.promises } : {}),
     ...(judge.since
       ? {

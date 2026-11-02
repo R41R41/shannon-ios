@@ -3,6 +3,8 @@ import type { ActClause, ActCondition } from '../../contracts/minecraftActCondit
 import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { crystalsLeft } from './minecraftEndView.js';
+import { seenMarks } from './minecraftSeenMarks.js';
 
 export { parseCondition, conditionText, validCondition, parseClause, newerClause, clauseText, CONDITION_SCHEMA, CONDITION_FORMS,
   type ActClause, type ActCondition, type Dim, type ParsedCondition } from '../../contracts/minecraftActCondition.js';
@@ -24,7 +26,10 @@ export interface DoneFacts { counts: ReadonlyMap<string, number>; dimension: str
   food: number; hp?: number | null; hunger?: number | null; free?: number | null; night?: boolean | null;
   /** The body's scan of the utilities around her (`state.world.utilities`, the continue contract chapter 3): what it found within
  * `radius`; null when the frame has none. */
-  utilities?: UtilitiesScan | null }
+  utilities?: UtilitiesScan | null;
+  /** The marks in view now (`see:fortress`, `minecraftSeenMarks.ts`) and the end crystals left (`crystals<=0`); the frame may say neither. */
+  seen?: ReadonlySet<string>;
+  crystals?: number | null }
 /** What the body scanned for a work table, a furnace, a chest or a bed near her: `scanned` false is "not looked",
  * never "none". */
 export interface UtilitiesScan { radius: number; dim: string | null; scanned: boolean; found: ReadonlyArray<{ block: string; distance: number }> }
@@ -60,7 +65,8 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
   const dimension = frame.dimension ?? observation!.facts.dimension;
   const dim = typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null;
   return { counts: carriedItemCounts(frame, observation!.facts), feet, food: carriedFood(frame, observation!.facts).points, dimension: dim,
-    hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame) };
+    hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame),
+    seen: seenMarks(frame), crystals: crystalsLeft(observation) };
 }
 
 /** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a
@@ -73,7 +79,18 @@ export function carried(counts: ReadonlyMap<string, number>, item: string): numb
   return total;
 }
 
-type Judge<K extends ActClause['k']> = (clause: Extract<ActClause, { k: K }>, facts: DoneFacts) => boolean | null;
+/**
+ * How many of an item she has taken in over the task, for a plan node whose goal is that item: what she carries, and what the work
+ * made of it counted back (a blaze rod becomes two powder, a powder with a pearl becomes an eye). Without this, the rods of 「ブレイズロッド 7」
+ * that were made into eyes before the seventh came would make the node unmeetable. Any other item is what she carries.
+ */
+export function acquired(counts: ReadonlyMap<string, number>, item: string): number {
+  const own = carried(counts, item);
+  if (item === 'blaze_rod') return own + Math.ceil((carried(counts, 'blaze_powder') + carried(counts, 'ender_eye')) / 2);
+  return item === 'ender_pearl' ? own + carried(counts, 'ender_eye') : own;
+}
+
+type Judge<K extends ActClause['k']> =(clause: Extract<ActClause, { k: K }>, facts: DoneFacts) => boolean | null;
 type Judges = { [K in ActClause['k']]: Judge<K> };
 const atLeast = (value: number | null | undefined, n: number): boolean | null => value === null || value === undefined ? null : value >= n;
 const JUDGES: Judges = {

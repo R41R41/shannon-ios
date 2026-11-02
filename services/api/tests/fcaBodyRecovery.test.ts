@@ -4,7 +4,8 @@ import type { ActionLease } from '../src/contracts/actionThreadContract.js';
 import type { MinecraftControlCommand, MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
 import {
   AWAITING_PROOF_SUMMARY, BODY_ABSENT_SUMMARY, BODY_HELD_HINT, FCA_BODY_RECOVERY_CODE, FCA_BODY_RELEASE_ATTEMPTS, FCA_BODY_RELEASE_UNPROVEN,
-  FCA_PAUSED_RELEASE_ATTEMPTS, heldBackoffMs, RECOVERY_LIMIT_SUMMARY, RELEASE_UNPROVEN_SUMMARY, releaseBackoffMs, STALE_SUMMARY,
+  FCA_BODY_RECOVERY_LIMIT, FCA_BODY_RETURN_WINDOW_MS, FCA_PAUSED_RELEASE_ATTEMPTS, fcaBodyReturnWindow, heldBackoffMs, RECOVERY_LIMIT_SUMMARY,
+  RELEASE_UNPROVEN_SUMMARY, releaseBackoffMs, STALE_SUMMARY,
 } from '../src/wiring/fcaBodyRecovery.js';
 import { fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
 import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudgetStore.js';
@@ -966,5 +967,15 @@ describe('A-17 (run 46): a request the operator holds is not retired by the unkn
     w.connectBody(api, 'c1', 'complete');
     await w.until(api, () => w.phase(api) === 'completed', 'completes');
     expect(api.driver.runtime.reopenRetired!('owner', task.id, 'x')).toBeNull();
+  });
+});
+
+describe('how long a run of hours waits for a body that does not come back (a Spot VM that stops and starts, 2026-11-02)', () => {
+  it('waits two hours by default, one setting of the environment can say otherwise, and a recovery that flaps is paused at the twelfth in the hour', () => {
+    expect(fcaBodyReturnWindow(undefined)).toBe(120 * MINUTE);
+    expect(fcaBodyReturnWindow('45')).toBe(45 * MINUTE);
+    expect(fcaBodyReturnWindow('721')).toBe(120 * MINUTE);
+    expect(FCA_BODY_RETURN_WINDOW_MS).toBe(120 * MINUTE);
+    expect(FCA_BODY_RECOVERY_LIMIT).toEqual({ count: 12, withinMs: 60 * MINUTE });
   });
 });

@@ -24,15 +24,18 @@ export const OPERATOR_LIMITS = Object.freeze({
   bodyBytes: 8 * 1024,
   goalCharacters: 1000,
   operatorCharacters: 64,
-  /** The owner's rule for a run (2026-10-14): at most 30 minutes unless the operator asks for less; never above two hours. */
-  defaultMinutes: 30,
-  maxMinutes: 120,
   /**
-   * The cap of an admitted Minecraft request (`MINECRAFT_TASK_CAP.yen`, owner answer of 2026-10-13); a lower cap
- * may be asked. A running
-   * request's cap may be changed (`budget`) anywhere up to this, never above it.
+   * The owner's rule for a run: 30 minutes unless the operator asks for more or less (2026-10-14); never above six hours (2026-11-02, a run
+   * from nothing to the dragon: 4 to 5 hours, and an hour more for a Spot VM that restarts and for the slow stretches).
    */
-  maxBudgetYen: 2000,
+  defaultMinutes: 30,
+  maxMinutes: 360,
+  /**
+   * The cap of an admitted Minecraft request (`MINECRAFT_TASK_CAP.yen`, owner answers of 2026-10-13 and 2026-11-02); a lower cap
+   * may be asked. A running request's cap may be changed (`budget`) anywhere up to this, never above it. 15,000 yen: six hours at the
+   * dearest hour measured (1,640 yen, runs 42 to 58) is 9,840, and 30 new plans of the strong model are about 700 more.
+   */
+  maxBudgetYen: 15_000,
   requestsPerHour: 20,
   /** Invocations an hour (socket refusals included) that are audited one by one; past it they are coalesced (`flooded`). */
   invocationsPerHour: 120,

@@ -1,0 +1,106 @@
+[
+ {
+  "name": "stall-blaze-no-spawner-reach",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "seconds": 6100,
+  "stall": { "kind": "node_stalled", "why": "節 p10.2 が 134 秒、進みが無い（ブレイズロッド 2/7 のまま）", "node": "p10.2" },
+  "results": [
+    "fight blaze: 止まった no_target: 湧き場 (-306,66,191) まで 6m。見える相手がいない（浮いた個体は目より 7 マス上）",
+    "attack blaze hold 25s: 止まった time_up: 25 秒、打てる相手が来なかった。盾 −0（残り 336）",
+    "fight blaze: 止まった no_target: 見える相手がいない"
+  ],
+  "queue": [],
+  "earlier": [],
+  "sameNode": 0,
+  "world": {
+   "dimension": "the_nether", "position": { "x": -312.5, "y": 64, "z": 188.5 }, "health": 20, "food": 17, "inside": "ネザー要塞の中",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 30 }, { "name": "cobblestone", "count": 64 },
+     { "name": "cooked_beef", "count": 14 }, { "name": "blaze_rod", "count": 2 }, { "name": "oak_slab", "count": 12 }],
+   "mapLandmarks": ["N ネザー要塞 (-312,64,188) 足元 レンガ×40", "S スポナー (-306,66,191) 東6m・上2 湧く: blaze"]
+  },
+  "expect": "湧き場の見え方を直す（スポナーの隣 3 マス内、湧き場が見える段へ）か、待ち方を変える。ロッドが増えるまでの道を作る。節を済みにしない。"
+ },
+ {
+  "name": "stall-fortress-not-found",
+  "goal": "エンドラを討伐して",
+  "current": "p9",
+  "seconds": 3300,
+  "stall": { "kind": "node_stalled", "why": "節 p9 が 128 秒、進みが無い（ネザー要塞はまだ見えていない）", "node": "p9" },
+  "results": [
+    "go (400,70,-40) 北東へ: 着いた 道 380 歩・引き直し 2 回",
+    "mc_probe scan radius 16: ネザー要塞の印は無い。溶岩の海が北に広がる",
+    "go (400,70,-200): 止まった lava_edge: 溶岩の縁の手前 (400,31,-190)。橋は無い"
+  ],
+  "queue": [],
+  "earlier": [],
+  "sameNode": 0,
+  "world": {
+   "dimension": "the_nether", "position": { "x": 400.5, "y": 70, "z": -190.5 }, "health": 20, "food": 19,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 30 }, { "name": "cobblestone", "count": 40 },
+     { "name": "netherrack", "count": 64 }, { "name": "cooked_beef", "count": 16 }, { "name": "water_bucket", "count": 1 }],
+   "mapLandmarks": ["[overworld] P ネザーポータル (50,70,-5) 拠点"],
+   "rememberedPlaces": { "nether_portal": "420m 南西 (50,70,-5) ↔overworld(400,68,-40)" }
+  },
+  "expect": "同じ方向へ押さない。別の方角（直角）へ区間を割る、橋を置く道を計画に入れる、帰りのゲートの座標を where に残す。時間や許可を増やすだけにしない。"
+ },
+ {
+  "name": "stall-crystal-caged",
+  "goal": "エンドラを討伐して",
+  "current": "p17.1",
+  "seconds": 12100,
+  "stall": { "kind": "node_stalled", "why": "節 p17.1 が 140 秒、進みが無い（エンドクリスタル 残り 2）", "node": "p17.1" },
+  "results": [
+    "shoot #15: 止まった line_blocked: 矢の道に固い物 (30,92,-25) 鉄格子",
+    "shoot #15: 止まった line_blocked: 矢の道に固い物 (30,92,-25) 鉄格子",
+    "attack end_crystal #15: 止まった too_far: 3m 以内に入っていない（14m）"
+  ],
+  "queue": [],
+  "earlier": [],
+  "sameNode": 0,
+  "world": {
+   "dimension": "the_end", "position": { "x": 38.5, "y": 64, "z": -10.5 }, "health": 18, "food": 14,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 22 }, { "name": "cobblestone", "count": 40 },
+     { "name": "obsidian", "count": 6 }, { "name": "cooked_beef", "count": 8 }, { "name": "white_bed", "count": 4 }, { "name": "iron_pickaxe", "count": 1 }]
+  },
+  "end": {
+   "dragon": { "id": 77, "health": 172, "phase": 0, "phaseName": "holding_pattern", "phaseFor": 20, "perched": false, "at": { "x": -20, "y": 90, "z": 40 }, "yaw": 0,
+     "head": null, "headReach": null, "strike": false },
+   "fountain": { "x": 0.5, "y": 68, "z": 0.5 },
+   "crystals": { "remaining": 2, "gone": 8, "caged": 1, "unseen": [], "list": [
+     { "id": 15, "x": 30, "y": 99, "z": -25, "caged": true, "dist": 37 }, { "id": 11, "x": 8, "y": 80, "z": -40, "caged": false, "dist": 55 }] },
+   "clouds": [], "fireballs": 0
+  },
+  "expect": "line_blocked の文にある格子 (30,92,-25) だけ dig で取ってから撃つ（柱の足場から）。別の無傷のクリスタル #11 を先に撃つ。時間や許可を増やすだけにしない。"
+ },
+ {
+  "name": "stall-eyes-no-fix",
+  "goal": "エンドラを討伐して",
+  "current": "p15.1",
+  "seconds": 9400,
+  "stall": { "kind": "node_stalled", "why": "節 p15.1 が 131 秒、進みが無い（交点がまだ無い）", "node": "p15.1" },
+  "results": [
+    "use ender_eye: 投げた 方位 17.7° に 12 飛んだ。落ちた (124,-91)",
+    "pickup #931: 拾った ender_eye×1",
+    "use ender_eye: 投げた 方位 17.7° に 12 飛んだ。同じ場所から。落ちた (124,-91)"
+  ],
+  "queue": [],
+  "earlier": [],
+  "sameNode": 0,
+  "world": {
+   "dimension": "overworld", "position": { "x": 120.5, "y": 70, "z": -80.5 }, "health": 20, "food": 20, "time": "昼",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 40 }, { "name": "cobblestone", "count": 64 },
+     { "name": "cooked_beef", "count": 20 }, { "name": "ender_eye", "count": 13 }, { "name": "white_bed", "count": 4 }],
+   "rememberedPlaces": { "nether_portal": "180m 北東 (260,72,-160)", "respawn": "10m 南 (121,70,-70) respawn" }
+  },
+  "eyes": [
+   { "x": 120, "z": -80, "bearingDeg": 17.7, "flew": 12, "broke": false, "at": 0 },
+   { "x": 120, "z": -80, "bearingDeg": 17.7, "flew": 12, "broke": false, "at": 60000 }
+  ],
+  "expect": "同じ場所から投げ直さない。線の横 200m 以上動いて 2 本目を投げる（交わる角度が要る）。帳簿の「次に投げる場所の案」に従う。"
+ }
+]
