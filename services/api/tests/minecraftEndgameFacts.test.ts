@@ -154,13 +154,12 @@ describe('the ledger of the thrown eyes', () => {
 });
 
 describe('the endgame of a task', () => {
-  it('says nothing for a task that is not after the dragon, and the places only past the Nether door', () => {
-    const world = { dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: [], rememberedPlaces: { nether_portal: '34m 北東 (12,63,-40)' } };
+  it('says nothing for a task that is not after the dragon, and the remembered places (the bed she respawns at too) for one that is', () => {
+    const world = { dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: [], rememberedPlaces: { respawn: '4m 南 (0,64,4) respawn' } };
     const endgame = createEndgame(null);
     expect(endgame.lines(frame(world), false)).toEqual({ lines: [], short: [] });
-    expect(endgame.lines(frame(world), true).lines).toEqual([]);
-    const past = endgame.lines(frame({ ...world, inventory: [stack('ender_pearl', 2)] }), true);
-    expect(past.lines.join('\n')).toContain('ポータル 34m');
+    expect(endgame.lines(frame(world), true).lines.join('\n')).toContain('リスポーン地点 4m 南 (0,64,4) respawn');
+    expect(endgame.lines(frame({ ...world, rememberedPlaces: {} }), true).lines).toEqual([]);
   });
 
   it('keeps the thrown eyes in its checkpoint and drops them once the portal room is in view', () => {

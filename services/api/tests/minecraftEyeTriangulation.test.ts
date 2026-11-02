@@ -53,6 +53,15 @@ describe('stronghold from thrown eyes', () => {
     expect(stronghold([throwFrom(0, 0, far), throwFrom(60, 0, far)])).toBeNull();
   });
 
+  it('gives a point with a big error as a direction (two lines 12° apart at 1.9 km)', () => {
+    const truth = { x: 700, z: -1900 };
+    const fix = stronghold([throwFrom(120, -80, truth), throwFrom(520, -40, truth)]);
+    expect(fix).not.toBeNull();
+    expect(fix!.errorBlocks).toBeGreaterThan(150);
+    expect(Math.abs(fix!.x - truth.x)).toBeLessThanOrEqual(fix!.errorBlocks);
+    expect(Math.abs(fix!.z - truth.z)).toBeLessThanOrEqual(fix!.errorBlocks);
+  });
+
   it('gives no point when the error is too big to walk to', () => {
     const far = { x: 2800, z: -2800 };
     const short = { flew: 2 };

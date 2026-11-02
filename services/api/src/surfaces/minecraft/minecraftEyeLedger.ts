@@ -76,15 +76,17 @@ export function ledgerLines(throws: readonly StoredThrow[], feet: { x: number; z
 }
 
 function noFixLine(throws: readonly StoredThrow[], last: StoredThrow): string {
-  const why = throws.length < 2 ? '線が 1 本だけ' : '線が近すぎるか、誤差が大きい（交わる角度 8° 未満・誤差 300m 超）';
+  const why = throws.length < 2 ? '線が 1 本だけ' : '線が近すぎるか、誤差が大きい（交わる角度 8° 未満・誤差 600m 超）';
   const next = nextThrowPlaces(last, throws.length - 1).map(item => place(item.x, item.z)).join(' か ');
   return `交点はまだ無い（${why}）。次に投げる場所の案: 最後の線の横 ${nextThrowPlaces(last, throws.length - 1)[0]?.from ?? 100}m の ${next}（2 本の線が離れて交わるほど誤差が小さい）`;
 }
 
 function fixLines(fix: Fix, feet: { x: number; z: number } | null): string[] {
   const ring = Math.round(Math.hypot(fix.x, fix.z));
-  const there = feet ? ` あなたから ${compassWord(bearingBetween(feet, fix))} ${grouped(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m。` : '';
-  const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}原点から ${grouped(ring)}m（最初の 3 つの要塞は 1,280〜2,816m の輪）`;
+  const there = feet ? `あなたから ${compassWord(bearingBetween(feet, fix))} ${grouped(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m。` : '';
+  const far = fix.errorBlocks > 150 ? '誤差が大きい間は方角の目安。近づいてから投げ直す。' : '';
+  const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${far}`
+    + `原点から ${grouped(ring)}m（最初の 3 つの要塞は 1,280〜2,816m の輪）`;
   const near = feet ? nearThrowPlace(feet, fix, Math.max(60, fix.errorBlocks)) : null;
   return near ? [line, `近づいたら、交点の ${Math.max(60, fix.errorBlocks)}m 手前 ${place(near.x, near.z)} から投げ直すと誤差が小さくなる`] : [line];
 }

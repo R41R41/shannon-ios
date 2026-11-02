@@ -39,8 +39,8 @@ export interface Fix {
 
 /** A pair whose lines cross at less than this angle is not used. */
 export const MIN_CROSSING_DEGREES = 8;
-/** A point whose estimated error is above this is not given: it is not worth walking to. */
-export const MAX_ERROR_BLOCKS = 300;
+/** A point whose estimated error is above this is not given: it does not even say which way to walk. */
+export const MAX_ERROR_BLOCKS = 600;
 /** The error of a bearing is about this many blocks of sideways position over the blocks flown. */
 const POSITION_NOISE_BLOCKS = 0.2;
 const MIN_BEARING_ERROR_DEGREES = 0.5;

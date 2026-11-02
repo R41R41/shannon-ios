@@ -17,8 +17,6 @@ export interface EndgameLines {
   short: string[];
 }
 const NONE: EndgameLines = { lines: [], short: [] };
-/** What she carries that shows she is past the Nether's door: rods, powder, pearls or eyes. */
-const BEYOND_ITEMS = ['blaze_rod', 'blaze_powder', 'ender_pearl', 'ender_eye'] as const;
 const FIGHT_HEADS = ['竜:', 'エンドクリスタル:'];
 
 const worldOf = (observation: BodyObservation | null): Record<string, unknown> | null => {
@@ -26,14 +24,13 @@ const worldOf = (observation: BodyObservation | null): Record<string, unknown> |
   return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
 };
 const some = (line: string | null): string[] => line ? [line] : [];
-const pastTheDoor = (facts: DoneFacts): boolean => facts.dimension !== 'overworld' || BEYOND_ITEMS.some(item => carried(facts.counts, item) > 0);
 
 /** The lines of one decision from the frame and the ledger's lines (pure). */
 function compose(world: Record<string, unknown>, facts: DoneFacts, eyeLines: readonly string[]): EndgameLines {
   const fight = endFightLines(world);
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye')));
   const death = some(deathLine(world));
-  const places = pastTheDoor(facts) ? some(placeLine(world)) : [];
+  const places = some(placeLine(world));
   const urgent = fight.filter(line => FIGHT_HEADS.some(head => line.startsWith(head)));
   return { lines: [...fight, ...eyeLines, ...frames, ...death, ...places], short: [...urgent, ...frames, ...death] };
 }

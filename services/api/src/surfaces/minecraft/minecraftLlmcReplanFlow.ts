@@ -82,6 +82,8 @@ export function createReplanFlow(deps: ReplanDeps) {
     },
     /** At a decision's start: the strong model is asked when a stall waits and the bounds allow. */
     async run(signal: AbortSignal): Promise<void> {
+      // A step that is being stopped asks for nothing (and counts nothing: the look finds a stall again in the next one).
+      if (signal.aborted) return;
       const stall = pending;
       pending = null;
       const parts = stall && deps.replanner ? deps.sources(stall) : null;
