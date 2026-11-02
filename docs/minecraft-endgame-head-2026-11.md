@@ -199,3 +199,12 @@ Six scenes (`tests/fixtures/minecraft/eye-continuity-scenes.json`, Sonnet, three
 - Over the sea: 3 of 3 threw again at the fix (the eye sinks over it) — the scene's own check wanted a move, so it reads as a fail; I read it as right.
 - Eyes few: 3 of 3 picked up the dropped one (#931); none made more from the powder and pearls. With one added line in the stronghold stage (the frames take about 10 eyes; make up the count before walking there): 1 of 4 crafted, 4 of 4 picked up.
 - Parallel lines: the ledger offered places across the line (200 m), but 2 of 3 replays went 110 m along it (collinear: no crossing). The ledger now says which way the last line runs and that moving along it gives the same line; of 6 replays after, 3 went across, 2 along, 1 unseen. Still not reliable: a note beside the act when the destination lies on the last line would be the next step (not built; it needs the ledger in the send path).
+
+## 11/3 Pearl forest (S3, about $0.35 of the $2)
+
+Three scenes (`tests/fixtures/minecraft/pearl-forest-scenes.json`, Sonnet, the end-game scene script): no warped forest in view near a fortress (a soul sand valley to the south-west, 6 gold); a warped forest 200 m east; in the forest with few endermen (2 in 10 minutes, 3 of 14 pearls, 18 gold).
+
+- Forest 200 m east: 4 of 4 `go` there with `maxDig`/`maxPlace` raised for the distance.
+- No forest in view: first 4 of 4 went back to the gate to look for endermen on the surface at night (or crafted powder); none searched the Nether. After the pearl stage was given a line on how to look (scan, then 90 m a go toward the directions not seen and not walked, the gate only after three directions): 4 of 5 went 90 m in a direction (south, west, north-west, west) and the fifth looked first; none went back to the gate. The directions follow the sight of the valley only loosely (three of four went toward the valley's side); no fixed coordinate is in any answer.
+- Few endermen: the model fought on in 3 of 5 and looked first in 2 of 5, before and after; none set the gold's trade (18 gold, about 1.1 pearls) against the wait in its words. A line now gives the numbers beside the choice ("パール 3/14（あと 11 個）: 金 18 個の交換は平均 約 1.1 個"); it did not change the choice here. A time-based comparison needs the minutes spent and the endermen seen, which the body does not report (a field to ask S2 for, not urgent): the number seen in the last N minutes.
+- Eye contact: the old lines stay (look at the feet; no bow); the fights were `fight target=enderman`, which the body makes safe by a roofed hole.
