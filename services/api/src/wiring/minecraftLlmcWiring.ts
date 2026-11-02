@@ -4,7 +4,7 @@ import { bodyHoldOf,withResend,withIncident,withStalls } from './minecraftLlmcLi
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
 import { withReplanInbox } from '../surfaces/minecraft/minecraftLlmcReplan.js';
-import { unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
+import { adoptProblem, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
 import {
 LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,redecideLabel,llmcModelRouter,llmcCompletionMistake,LLMC_CATALOG_SELECTOR,
 llmcProbeRunner,billingGuarded
@@ -24,7 +24,7 @@ import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
-import { meterParts,reachedMilestoneNames } from '../surfaces/minecraft/minecraftLlmcRoad.js';
+import { firstStretch } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import {
 stallsCheckpoint,restoreStalls,deathCounterOf,noteDeath,noteProgress,noteRan,noteRefusal,resumeStalls,stallIncidentId,watchStalls,externalWorkMilestones,
 type Stall
@@ -81,7 +81,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // Run 42: a chest node is done when an act opened the chest at its place (`chestNodesDone`), with the nodes the frame shows done.
   const validate = (before: PlanTree, after: PlanTree) =>
     targetUpdateProblem(before, after, observe()) ?? preparationCompletionProblem(before, after, observe());
-  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withReplanInbox(firstPlanInbox, log), log,
+  const adopted = (before: PlanTree, after: PlanTree) => adoptProblem({ validate, observe }, before, after);
+  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withReplanInbox(firstPlanInbox, log, adopted), log,
     validateUpdate: validate,
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
@@ -356,8 +357,9 @@ queue.onRan(noteIncidentResult);
         const counts = doneFacts(frame)?.counts;
         const running = queue.runningInput?.() ?? null;
         refreshWait(current, frame, running);
+        const road = firstStretch(tree, frame);
         const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
-          milestone: meterParts(tree, frame, 0)?.next ?? null, reached: reachedMilestoneNames(tree, frame) ?? [],
+          milestone: road.next, reached: road.reached,
           externalWork: externalWorkMilestones(frame), purpose: { ...purposeEvidence(node, frame), ...travelEvidence(running, frame),
             ...explorationEvidence(node, running, frame) }, waitUntil,
           inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) :

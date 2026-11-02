@@ -3,6 +3,7 @@ import { planFromSeeds, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import {
+  boundTo,
   forgetReplans,
   putReplan,
   readReplanLedger,
@@ -16,7 +17,7 @@ import {
   type ReplanLedger,
 } from '../src/surfaces/minecraft/minecraftLlmcReplan.js';
 import { nodeLine, nowLines, planLines, replanBrief, type BriefInput } from '../src/surfaces/minecraft/minecraftLlmcReplanBrief.js';
-import { createReplanFlow, type ReplanSources } from '../src/surfaces/minecraft/minecraftLlmcReplanFlow.js';
+import { createReplanFlow, readWaiting, type ReplanSources } from '../src/surfaces/minecraft/minecraftLlmcReplanFlow.js';
 import { pending } from '../src/surfaces/minecraft/minecraftLlmcOnceFacts.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { forgetStalls, noteProgress, type Stall } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
@@ -104,6 +105,27 @@ describe('the strong model\'s answer', () => {
     const firstPlan = { tree: held, note: '最初の計画' };
     expect(withReplanInbox({ take: () => firstPlan }).take('v', held)).toBe(firstPlan);
   });
+
+  it('is taken only by a plan that has the nodes it names as they were when it was checked, and is checked again where it is taken', () => {
+    const held = tree();
+    const update = { ops: [{ op: 'set' as const, id: 'p1', note: 'こう直す' }] };
+    expect(boundTo(held, update)).toEqual({ p1: '木|wood' });
+    // the first plan came after the check: p1 now means pearls, and the update is not taken (it would have closed the wrong node)
+    const other = planFromSeeds([{ title: 'パール', kind: 'pearl' }, { title: '石', kind: 'stone_tools' }])!;
+    const lines: string[] = [];
+    putReplan('w', update, 'x', boundTo(held, update));
+    expect(withReplanInbox({ take: () => null }, line => lines.push(line)).take('w', other)).toBeNull();
+    expect(lines[0]).toContain('node p1 is not what it was');
+    // a node done meanwhile, or another node changed, does not matter
+    putReplan('w', update, 'x', boundTo(held, update));
+    const moved = { ...held, nodes: held.nodes.map(node => node.id === 'p2' ? { ...node, state: 'done' as const } : node) };
+    expect(withReplanInbox({ take: () => null }).take('w', moved)).not.toBeNull();
+    // the plan's own checks and the observation's, at the read that takes it
+    putReplan('w', update, 'x', boundTo(held, update));
+    const refusing = withReplanInbox({ take: () => null }, line => lines.push(line), () => '観測の条件を満たさない');
+    expect(refusing.take('w', held)).toBeNull();
+    expect(lines.at(-1)).toContain('観測の条件を満たさない');
+  });
 });
 
 describe('the brief', () => {
@@ -146,10 +168,11 @@ describe('the brief', () => {
 describe('the flow of one task', () => {
   const sources = (extra: Partial<ReplanSources> = {}): ReplanSources => ({ node: 'p1', goal: '木', seconds: 600, tree: tree(), doneStatus: null, now: [], facts: [], results: [], queue: [],
     knowledge: '', ...extra });
-  const make = (reply: () => Promise<unknown>, over: { clock?: () => number; check?: () => string | null; src?: (stall: Stall) => ReplanSources | null; saved?: unknown } = {}) => {
+  const make = (reply: () => Promise<unknown>, over: { clock?: () => number; check?: () => string | null; src?: (stall: Stall) => ReplanSources | null; saved?: unknown;
+    savedPending?: unknown } = {}) => {
     const asked: string[] = [];
     const lines: string[] = [];
-    const flow = createReplanFlow({ taskId: 'flow', saved: over.saved, replanner: async (_system, brief) => {
+    const flow = createReplanFlow({ taskId: 'flow', saved: over.saved, savedPending: over.savedPending, replanner: async (_system, brief) => {
       asked.push(brief);
       return reply();
     }, clock: over.clock ?? (() => 0), sources: over.src ?? (item => sources({ node: item.key })), check: over.check ?? (() => null), log: line => lines.push(line) });
@@ -232,6 +255,38 @@ describe('the flow of one task', () => {
     await nearly.flow.run(signal);
     expect(nearly.asked).toHaveLength(1);
     expect(nearly.lines.at(-1)).toContain('why=gap');
+  });
+
+  it('keeps a stall found at the end of a step for the next step, and one the gap holds back until the gap has passed', async () => {
+    const first = make(async () => ({ ops: [], why: '' }), { clock: () => 5 * MIN });
+    first.flow.note(stall('death', '1-1'));
+    const saved = JSON.parse(JSON.stringify(first.flow.checkpoint()));
+    expect(saved.minecraftReplanPending).toMatchObject({ stall: { kind: 'death', key: '1-1' }, at: 5 * MIN });
+    let now = 6 * MIN;
+    const next = make(async () => ({ ops: [], why: '死んでも計画は変えない' }), { clock: () => now, saved: saved.minecraftReplans, savedPending: saved.minecraftReplanPending });
+    await next.flow.run(signal);
+    expect(next.asked).toHaveLength(1);
+    expect(next.flow.checkpoint().minecraftReplanPending).toBeNull();
+    // the gap holds a stall back: it waits, is told once, and is asked when the gap has passed
+    next.flow.note(stall('wait_loop', '3'));
+    now += 2 * MIN;
+    await next.flow.run(signal);
+    await next.flow.run(signal);
+    expect(next.asked).toHaveLength(1);
+    expect(next.lines.filter(line => line.includes('replan skipped'))).toHaveLength(1);
+    expect(next.flow.checkpoint().minecraftReplanPending).not.toBeNull();
+    now += 9 * MIN;
+    await next.flow.run(signal);
+    expect(next.asked).toHaveLength(2);
+    // one that waited past its time is dropped (the look finds it again if it still stands); one that cannot be read is not kept
+    next.flow.note(stall('death', '2-1'));
+    now += REPLAN.pendingMs + 1;
+    await next.flow.run(signal);
+    expect(next.asked).toHaveLength(2);
+    expect(next.flow.checkpoint().minecraftReplanPending).toBeNull();
+    expect(readWaiting({ stall: { kind: 'decide_error', key: 'x', why: 'y' }, at: 1 })).toBeNull();
+    expect(readWaiting({ stall: { kind: 'death', key: 'x' }, at: 1 })).toBeNull();
+    expect(readWaiting(null)).toBeNull();
   });
 
   it('tells the next brief what the plans before it did, and never the attempt it is making', async () => {

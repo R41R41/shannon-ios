@@ -89,13 +89,17 @@
    "dimension": "the_end", "position": { "x": 38.5, "y": 64, "z": 10.5 }, "health": 20, "food": 17,
    "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
    "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 38 }, { "name": "cobblestone", "count": 40 },
-     { "name": "cooked_beef", "count": 18 }, { "name": "white_bed", "count": 4 }],
-   "dragon": { "id": 77, "health": 200, "phase": 0, "position": { "x": -20, "y": 90, "z": 40 }, "distance": 80 },
-   "crystals": { "remaining": 10, "caged": 2, "list": [
-     { "id": 12, "position": { "x": 42, "y": 85, "z": 3 }, "caged": false, "distance": 22 },
-     { "id": 15, "position": { "x": 30, "y": 99, "z": -25 }, "caged": true, "distance": 37 },
-     { "id": 11, "position": { "x": 8, "y": 80, "z": -40 }, "caged": false, "distance": 55 }] },
-   "perch": { "x": 0, "y": 64, "z": 0 }
+     { "name": "cooked_beef", "count": 18 }, { "name": "white_bed", "count": 4 }]
+  },
+  "end": {
+   "dragon": { "id": 77, "health": 200, "phase": 0, "phaseName": "holding_pattern", "phaseFor": 12.4, "perched": false, "at": { "x": -20, "y": 90, "z": 40 }, "yaw": 0,
+     "head": null, "headReach": null, "strike": false },
+   "fountain": { "x": 0.5, "y": 68, "z": 0.5 },
+   "crystals": { "remaining": 10, "gone": 0, "caged": 2, "unseen": [], "list": [
+     { "id": 12, "x": 42, "y": 85, "z": 3, "caged": false, "dist": 22 },
+     { "id": 15, "x": 30, "y": 99, "z": -25, "caged": true, "dist": 37 },
+     { "id": 11, "x": 8, "y": 80, "z": -40, "caged": false, "dist": 55 }] },
+   "clouds": [], "fireballs": 0
   }
  },
  {
@@ -108,11 +112,14 @@
    "dimension": "the_end", "position": { "x": 7.5, "y": 64, "z": 7.5 }, "health": 15, "food": 14,
    "heldItem": "iron_sword", "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
    "inventory": [{ "name": "iron_sword", "count": 1 }, { "name": "bow", "count": 1 }, { "name": "arrow", "count": 20 }, { "name": "cobblestone", "count": 32 },
-     { "name": "cooked_beef", "count": 10 }, { "name": "white_bed", "count": 4 }],
-   "dragon": { "id": 77, "health": 142, "phase": 6, "position": { "x": 1, "y": 66, "z": 2 }, "headPosition": { "x": 2, "y": 67, "z": 6 }, "distance": 6.5 },
-   "crystals": { "remaining": 0, "caged": 0, "list": [] },
-   "dragonBreath": [{ "x": 5, "z": 8, "radius": 6.5 }],
-   "perch": { "x": 0, "y": 64, "z": 0 }
+     { "name": "cooked_beef", "count": 10 }, { "name": "white_bed", "count": 4 }]
+  },
+  "end": {
+   "dragon": { "id": 77, "health": 142, "phase": 6, "phaseName": "sitting_scanning", "phaseFor": 2.4, "perched": true, "at": { "x": 1, "y": 66, "z": 2 }, "yaw": 1.5,
+     "head": { "x": 2, "y": 67.5, "z": 6 }, "headReach": 6.5, "strike": false },
+   "fountain": { "x": 0.5, "y": 68, "z": 0.5 },
+   "crystals": { "remaining": 0, "gone": 10, "caged": 0, "unseen": [], "list": [] },
+   "clouds": [{ "x": 5, "y": 65, "z": 8, "r": 6.5 }], "fireballs": 0
   }
  },
  {

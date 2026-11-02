@@ -3,7 +3,7 @@ import type { PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { createFcaPlanTools } from '../src/mind/action/fca/fcaPlanTools.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
-import { meterLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
+import { firstStretch, meterLine, reachedMilestoneNames } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 
 /**
@@ -11,15 +11,16 @@ import { seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
  * `seen` hook: `seenDoneUpdate`): each node closes by its own condition, in order, and the current node follows without a stall.
  * IDs are those of a dragon task begun in the Nether (the seed of that place).
  */
-const frame = (world: object): BodyObservation => ({ connected: true, state: { world }, facts: {}, bodyId: 'b', sequence: 1, stateAt: new Date(0).toISOString() }) as unknown as BodyObservation;
+const frame = (world: object, end?: object): BodyObservation => ({ connected: true, state: { world, ...(end ? { end } : {}) }, facts: {}, bodyId: 'b', sequence: 1,
+  stateAt: new Date(0).toISOString() }) as unknown as BodyObservation;
 const items = (record: Record<string, number>) => Object.entries(record).map(([name, count]) => ({ name, count }));
 
 describe('walking the late-game seed with the frames of a run', () => {
   const seed = seedPlan('エンドラを討伐して', 'the_nether')!;
   let now: BodyObservation = frame({});
   const plan = createFcaPlanTools({ taskId: 'progress', checkpoint: { fcaPlanTree: seed }, rules: true, seen: held => seenDoneUpdate(held, now) });
-  const at = (world: object): PlanTree => {
-    now = frame(world);
+  const at = (world: object, end?: object): PlanTree => {
+    now = frame(world, end);
     plan.port.view();
     return plan.port.tree();
   };
@@ -78,12 +79,12 @@ describe('walking the late-game seed with the frames of a run', () => {
     expect(state(tree, 'p8')).toBe('done');
     expect(tree.current).toBe('p9');
     // the End: entering closes its node; the crystals close theirs when the body says none are left; the dragon's node stays open
-    tree = at({ dimension: 'the_end', position: { x: 100, y: 49, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 40 }), mapLandmarks: [], crystals: { remaining: 10 } });
+    tree = at({ dimension: 'the_end', position: { x: 100, y: 49, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 40 }), mapLandmarks: [] }, { crystals: { remaining: 10 } });
     expect(state(tree, 'p9')).toBe('done');
     expect(tree.current).toBe('p10.1');
-    tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 20 }), mapLandmarks: [], crystals: { remaining: 4 } });
+    tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 20 }), mapLandmarks: [] }, { crystals: { remaining: 4 } });
     expect(state(tree, 'p10.1')).toBe('continue');
-    tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [], crystals: { remaining: 0 } });
+    tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [] }, { crystals: { remaining: 0 } });
     expect(state(tree, 'p10.1')).toBe('done');
     expect(state(tree, 'p10')).toBe('continue');
     expect(tree.current).toBe('p10.2');
@@ -95,5 +96,18 @@ describe('walking the late-game seed with the frames of a run', () => {
     expect(meterLine(dragon, nether, 1_900 / 60)).toContain('次の節目 ネザー要塞 目安 2,700 秒');
     const fortress = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: items({ cooked_beef: 4 }), mapLandmarks: ['N ネザー要塞 (10,64,0) 東10m レンガ×30'] });
     expect(meterLine(dragon, fortress, 2_000 / 60)).toContain('次の節目 ブレイズロッド 7 本 目安 4,500 秒');
+  });
+
+  it('gives the held diagnostic run only the first stretch of the road: a fortress coming into view past the Nether is not its progress', () => {
+    const dragon = { ...seedPlan('エンドラを討伐して')!, current: 'p9' };
+    const nether = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: [], mapLandmarks: [] });
+    const fortress = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: items({ cooked_beef: 4 }), mapLandmarks: ['N ネザー要塞 (10,64,0) 東10m レンガ×30'] });
+    expect(firstStretch(dragon, nether).next).toBeNull();
+    expect(firstStretch(dragon, fortress).next).toBeNull();
+    expect(firstStretch(dragon, fortress).reached).toContain('ネザー');
+    expect(firstStretch(dragon, fortress).reached).not.toContain('ネザー要塞');
+    // the unheld look still sees the fortress as the road moving on
+    expect(reachedMilestoneNames(dragon, fortress)).toContain('ネザー要塞');
+    expect(firstStretch(null, fortress)).toEqual({ next: null, reached: [] });
   });
 });

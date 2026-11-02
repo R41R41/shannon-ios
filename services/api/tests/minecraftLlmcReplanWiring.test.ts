@@ -20,13 +20,13 @@ const dragon = seedPlan('エンドラを討伐して')!;
 const tree = { ...dragon, current: 'p1.1' };
 const signal = new AbortController().signal;
 
-function setup(over: { held?: boolean; reply?: () => Promise<unknown> } = {}) {
+function setup(over: { held?: boolean; reply?: () => Promise<unknown>; checkpoint?: unknown } = {}) {
   const clock = { now: 0 };
   const listeners: RanListener[] = [];
   const briefs: string[] = [];
   const lines: string[] = [];
   const queue = { onRan: (listener: RanListener) => { listeners.push(listener); }, lines: () => ['▶ q1: go'], runningInput: () => null } as unknown as LlmcQueue;
-  const unheld = unheldReplan({ held: over.held ?? false, taskId: 'uw', goal: 'エンドラを討伐して', createdAt: new Date(0).toISOString(), checkpoint: null,
+  const unheld = unheldReplan({ held: over.held ?? false, taskId: 'uw', goal: 'エンドラを討伐して', createdAt: new Date(0).toISOString(), checkpoint: over.checkpoint ?? null,
     replanner: async (_system, brief) => {
       briefs.push(brief);
       return over.reply ? over.reply() : { ops: [{ op: 'caution', text: '木の近くの敵に気をつける' }], why: '木の節に注意を足した' };
@@ -80,6 +80,18 @@ describe('the look and the plan made again for a task that is not held, wired', 
     expect(withReplan(base, null)).toBe(base);
   });
 
+  it('keeps a stall found at the end of a step for the next step (a death is seen once)', async () => {
+    const first = setup();
+    first.unheld!.flow.note({ kind: 'death', key: '1-1', why: '死んだ（死の回数 1）' });
+    const saved = JSON.parse(JSON.stringify(first.unheld!.checkpoint()));
+    expect(saved.minecraftReplanPending).toMatchObject({ stall: { kind: 'death', key: '1-1' } });
+    const next = setup({ checkpoint: saved });
+    await next.unheld!.flow.run(signal);
+    expect(next.briefs).toHaveLength(1);
+    expect(next.briefs[0]).toContain('死んだ');
+    expect(next.unheld!.checkpoint().minecraftReplanPending).toBeNull();
+  });
+
   it('says nothing when the strong model\'s answer cannot be used, and counts the attempt', async () => {
     const { clock, unheld } = setup({ reply: async () => 'not an answer' });
     unheld!.watch.look();
@@ -99,6 +111,9 @@ describe('what the strong model may not close', () => {
     const world = frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: [{ name: 'oak_log', count: 9 }] });
     expect(doneClaimProblem(before, claim('p1.1'), world)).toBeNull();
     expect(doneClaimProblem(before, claim('p1.3'), world)).toContain('p1.3');
-    expect(doneClaimProblem(before, claim('p1.3'), null)).toBeNull();
+    // with no frame to read, a node with an observed condition is not closed either; one with none is
+    expect(doneClaimProblem(before, claim('p1.3'), null)).toContain('観測が取れていない');
+    const free = { ...before, nodes: before.nodes.map(node => node.id === 'p1.3' ? { ...node, doneWhen: undefined, state: 'done' as const } : node) };
+    expect(doneClaimProblem(before, free, null)).toBeNull();
   });
 });

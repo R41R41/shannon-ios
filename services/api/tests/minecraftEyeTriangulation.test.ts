@@ -3,6 +3,7 @@ import {
   bearingBetween,
   bearingVector,
   compassWord,
+  directPoint,
   MAX_ERROR_BLOCKS,
   nearThrowPlace,
   nextThrowPlaces,
@@ -18,6 +19,11 @@ const throwFrom = (x: number, z: number, target: { x: number; z: number }, extra
   broke: false,
   ...extra,
 });
+/** A throw whose flight the body read exactly (the unit vector of the eye's own positions). */
+const exactFrom = (x: number, z: number, target: { x: number; z: number }, extra: Partial<EyeThrow> = {}): EyeThrow => {
+  const length = Math.hypot(target.x - x, target.z - z);
+  return { ...throwFrom(x, z, target), unit: { x: (target.x - x) / length, z: (target.z - z) / length }, ...extra };
+};
 const near = (value: number, wanted: number, within: number) => expect(Math.abs(value - wanted)).toBeLessThanOrEqual(within);
 
 describe('stronghold from thrown eyes', () => {
@@ -94,6 +100,47 @@ describe('stronghold from thrown eyes', () => {
     const wider = nextThrowPlaces({ x: 10, z: 20, bearingDeg: 0, flew: 12, broke: false }, 1);
     expect(wider.map(place => place.from)).toEqual([200, 200]);
     expect(nextThrowPlaces({ x: 0, z: 0, bearingDeg: Number.NaN, flew: 12, broke: false }, 0)).toEqual([]);
+  });
+
+  it('places the point from two exactly read lines at a narrower crossing than two bearings may', () => {
+    const truth = { x: 1000, z: -2000 };
+    expect(stronghold([throwFrom(0, 0, truth), throwFrom(200, 0, truth)])).toBeNull();
+    const fix = stronghold([exactFrom(0, 0, truth), exactFrom(200, 0, truth)]);
+    expect(fix).not.toBeNull();
+    near(fix!.x, truth.x, fix!.errorBlocks);
+    near(fix!.z, truth.z, fix!.errorBlocks);
+    expect(fix!.errorBlocks).toBeLessThan(300);
+    // a unit vector that disagrees with the bearing beside it is not trusted: the bearing's wider error applies
+    const odd = { ...exactFrom(0, 0, truth), unit: { x: 0.6, z: 0.8 } };
+    expect(stronghold([odd, { ...exactFrom(200, 0, truth), unit: { x: 0.6, z: 0.8 } }])).toBeNull();
+  });
+
+  it('does not claim more than its lines agree on (two parallel lines 20 m apart and one across)', () => {
+    const lines: EyeThrow[] = [{ x: 0, z: 0, bearingDeg: 90, flew: 12, broke: false }, { x: 30, z: 30, bearingDeg: 0, flew: 12, broke: false },
+      { x: 0, z: 20, bearingDeg: 90, flew: 12, broke: false }];
+    const fix = stronghold(lines);
+    expect(fix).not.toBeNull();
+    expect(fix!.errorBlocks).toBeGreaterThanOrEqual(10);
+  });
+
+  it('takes a sunk eye as the place itself and never as a line, and suggests no throw from it', () => {
+    const sunk: EyeThrow = { x: 100, z: 200, bearingDeg: 0, flew: 0, broke: false, down: true };
+    expect(stronghold([sunk])).toEqual({ x: 100, z: 200, errorBlocks: 4, throws: 1, ahead: [0] });
+    expect(nextThrowPlaces(sunk, 0)).toEqual([]);
+    expect(directPoint([sunk, throwFrom(0, 0, { x: 1000, z: -2000 })])).toMatchObject({ kind: 'down', x: 100, z: 200 });
+    expect(directPoint([throwFrom(0, 0, { x: 1000, z: -2000 })])).toBeNull();
+  });
+
+  it('takes a stopped eye as the stronghold where it stopped, along its own direction', () => {
+    const stopped: EyeThrow = { x: 0, z: 0, bearingDeg: 90, flew: 7, broke: false, arrived: true };
+    expect(stronghold([stopped])).toMatchObject({ x: 7, z: 0, errorBlocks: 8, throws: 1 });
+    expect(nextThrowPlaces(stopped, 0)).toEqual([]);
+  });
+
+  it('suggests wider places to throw from after a line read exactly', () => {
+    const places = nextThrowPlaces(exactFrom(0, 0, { x: 0, z: -2000 }), 0);
+    expect(places.map(place => place.from)).toEqual([200, 200]);
+    expect(nextThrowPlaces(exactFrom(0, 0, { x: 0, z: -2000 }), 2).map(place => place.from)).toEqual([800, 800]);
   });
 
   it('suggests a place on the line toward the point, short of it', () => {

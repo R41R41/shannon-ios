@@ -6,6 +6,7 @@ import { stageTextsForKind } from '../surfaces/minecraft/minecraftLlmcV2Knowledg
 import { doneFacts, doneStatusWords, parseDoneWhen, predicateHolds } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
 import { isDragonPlan } from '../surfaces/minecraft/minecraftLlmcRoad.js';
+import { boundTo } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { nowLines } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { createReplanFlow, type ReplanFlow, type Replanner, type ReplanSources } from '../surfaces/minecraft/minecraftLlmcReplanFlow.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueueState.js';
@@ -41,14 +42,18 @@ export interface UnheldParts {
 const strings = (value: unknown, limit: number): string[] =>
   (Array.isArray(value) ? value : []).filter((item): item is string => typeof item === 'string').slice(0, limit);
 
-/** A node given as done though its own condition (an observation) does not hold now: the strong model does not close what the frame does not show. */
+/**
+ * A node given as done though its own condition (an observation) does not hold now: the strong model does not close what the frame does not
+ * show. With no frame to read, a node with such a condition is not closed either (nothing shows it done).
+ */
 export function doneClaimProblem(before: PlanTree, after: PlanTree, observation: BodyObservation | null): string | null {
   const facts = doneFacts(observation);
-  if (!facts) return null;
   for (const node of after.nodes) {
     const old = before.nodes.find(item => item.id === node.id);
     const predicate = parseDoneWhen(node.doneWhen);
-    if (node.state === 'done' && old?.state !== 'done' && predicate && !predicateHolds(predicate, facts)) {
+    if (node.state !== 'done' || old?.state === 'done' || !predicate) continue;
+    if (!facts) return `${node.id}: 体の観測が取れていないので、観測の条件（${node.doneWhen}）を持つ節は済みにできない`;
+    if (!predicateHolds(predicate, facts)) {
       return `${node.id}: 済む条件（${node.doneWhen}）は今の観測で満たされていない。観測の条件を持つ節は、観測が満たした時にコードが済みにする`;
     }
   }
@@ -73,6 +78,10 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
     knowledge: stageTextsForKind(stalled ? kindOf(stalled) : 'other', facts?.dimension ?? 'overworld') };
 }
 
+/** The problem a plan made from another (a new plan of the strong model) would have, by the plan's own checks and the observation's. */
+export const adoptProblem = (parts: Pick<UnheldParts, 'validate' | 'observe'>, before: PlanTree, after: PlanTree): string | null =>
+  parts.validate(before, after) ?? doneClaimProblem(before, after, parts.observe());
+
 export interface Unheld {
   watch: ReturnType<typeof createStallWatch>;
   flow: ReplanFlow;
@@ -87,14 +96,15 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
     results.push(result.text.replace(/\s+/gu, ' ').slice(0, 320));
     if (results.length > 4) results.shift();
   });
-  const saved = parts.checkpoint as { minecraftReplans?: unknown; minecraftActiveWait?: { node: string; until: number } } | null;
-  const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, replanner: parts.replanner, clock: parts.activeClock, log: parts.log,
-    sources: stall => sourcesOf(parts, results, stall),
+  const saved = parts.checkpoint as { minecraftReplans?: unknown; minecraftReplanPending?: unknown;
+    minecraftActiveWait?: { node: string; until: number } } | null;
+  const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending, replanner: parts.replanner,
+    clock: parts.activeClock, log: parts.log, sources: stall => sourcesOf(parts, results, stall), bind: update => boundTo(parts.plan.tree(), update),
     check: (update: PlanUpdate) => {
       const before = parts.plan.tree();
       const made = applyPlanUpdate(before, update, { at: new Date().toISOString() });
       if (made.problem) return made.problem;
-      return made.changed ? parts.validate(before, made.tree) ?? doneClaimProblem(before, made.tree, parts.observe()) : '変化なし';
+      return made.changed ? adoptProblem(parts, before, made.tree) : '変化なし';
     } });
   const watch = createStallWatch({ taskId: parts.taskId, observe: parts.observe, tree: parts.plan.tree, running: () => parts.queue.runningInput?.() ?? null,
     activeClock: parts.activeClock, waits: parts.waits, ...(saved?.minecraftActiveWait ? { savedWait: saved.minecraftActiveWait } : {}),

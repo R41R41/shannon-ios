@@ -9,7 +9,10 @@
  * - forward only: a meeting point behind a throw is not a stronghold the eye flew toward;
  * - lines that are nearly parallel meet far away and by chance: no point is given;
  * - the error is estimated from how far each eye flew (a short flight fixes its bearing less well) and how far the
- *   point is; a point whose estimated error is too big to walk to is not given either.
+ *   point is, and covers how far the lines miss the point they give; a point whose estimated error is too big to walk to
+ *   is not given either;
+ * - an eye that sank (`down`) or stopped short (`arrived`) says the place itself: no lines are needed for it, and a sunk eye's
+ *   bearing (0, meaningless) is never used as a line.
  * It decides nothing: the model reads the point, the error and the places to throw from next, and chooses.
  */
 export interface EyeThrow {
@@ -24,6 +27,13 @@ export interface EyeThrow {
   broke: boolean;
   /** It sank almost straight down: the stronghold is under or beside that place. */
   down?: boolean;
+  /**
+   * The eye stopped short of the 12 blocks it flies toward a stronghold farther than that. The body's reading of the game: an eye
+   * sent to a stronghold within 12 blocks goes to its own x and z, so the end of the flight is the stronghold (not yet measured).
+   */
+  arrived?: boolean;
+  /** The flight's horizontal direction as a unit vector (x east, z south) when the body reads it from the eye's own positions. */
+  unit?: { x: number; z: number };
 }
 
 export interface Fix {
@@ -39,12 +49,21 @@ export interface Fix {
 
 /** A pair whose lines cross at less than this angle is not used. */
 export const MIN_CROSSING_DEGREES = 8;
+/** The same for two lines the body read exactly (`unit`): their error is small, so a narrower crossing still places the point. */
+export const MIN_PRECISE_CROSSING_DEGREES = 3;
 /** A point whose estimated error is above this is not given: it does not even say which way to walk. */
 export const MAX_ERROR_BLOCKS = 600;
 /** The error of a bearing is about this many blocks of sideways position over the blocks flown. */
 const POSITION_NOISE_BLOCKS = 0.2;
 const MIN_BEARING_ERROR_DEGREES = 0.5;
 const MAX_BEARING_ERROR_DEGREES = 6;
+/** A line read from the eye's own positions (the body says it is good to a hundredth of a degree; kept ten times wider until measured). */
+const PRECISE_BEARING_ERROR_DEGREES = 0.1;
+/** A flight shorter than this does not fix its direction well, whatever the unit vector says. */
+const PRECISE_MIN_FLEW = 4;
+/** What a place given by one eye says of itself: a sunk eye is within a block or two of the stronghold's x and z; a stopped one, of where it stopped. */
+const DOWN_ERROR_BLOCKS = 4;
+const ARRIVED_ERROR_BLOCKS = 8;
 const RAD = Math.PI / 180;
 
 interface Ray {
@@ -53,6 +72,8 @@ interface Ray {
   dx: number;
   dz: number;
   sigma: number;
+  /** Read from the eye's own positions (the body's `unit`) over a flight long enough to fix it. */
+  precise: boolean;
 }
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -80,10 +101,25 @@ function bearingErrorRadians(flew: number): number {
   return Math.min(MAX_BEARING_ERROR_DEGREES * RAD, Math.max(MIN_BEARING_ERROR_DEGREES * RAD, wanted));
 }
 
+/** The unit vector the body sent, when it is one (length 1) and agrees with the bearing it sent beside it (within a degree). */
+function unitDirection(item: EyeThrow): { dx: number; dz: number } | null {
+  const unit = item.unit;
+  if (!unit || !finite(unit.x) || !finite(unit.z) || !finite(item.bearingDeg)) return null;
+  const length = Math.hypot(unit.x, unit.z);
+  if (Math.abs(length - 1) > 0.02) return null;
+  const wanted = bearingVector(item.bearingDeg);
+  const dot = (unit.x * wanted.dx + unit.z * wanted.dz) / length;
+  return dot > Math.cos(RAD) ? { dx: unit.x / length, dz: unit.z / length } : null;
+}
+
+/** The exact direction of a flight long enough to fix it, or null (then the bearing is used, with its wider error). */
+const exactDirection = (item: EyeThrow): { dx: number; dz: number } | null => item.flew >= PRECISE_MIN_FLEW ? unitDirection(item) : null;
+
 function rayOf(item: EyeThrow): Ray | null {
-  if (![item.x, item.z, item.bearingDeg, item.flew].every(finite)) return null;
-  const { dx, dz } = bearingVector(item.bearingDeg);
-  return { x: item.x, z: item.z, dx, dz, sigma: bearingErrorRadians(item.flew) };
+  if (item.down || ![item.x, item.z, item.bearingDeg, item.flew].every(finite)) return null;
+  const exact = exactDirection(item);
+  const { dx, dz } = exact ?? bearingVector(item.bearingDeg);
+  return { x: item.x, z: item.z, dx, dz, sigma: exact ? PRECISE_BEARING_ERROR_DEGREES * RAD : bearingErrorRadians(item.flew), precise: exact !== null };
 }
 
 const cross = (ax: number, az: number, bx: number, bz: number): number => ax * bz - az * bx;
@@ -152,8 +188,32 @@ function agreeing(rays: readonly Ray[], x: number, z: number): number[] {
   return out;
 }
 
+/** The place one eye gives by itself: where a sunk eye sank, or where a stopped one stopped (the newest of them). */
+export interface DirectPoint {
+  kind: 'down' | 'arrived';
+  x: number;
+  z: number;
+  errorBlocks: number;
+  from: EyeThrow;
+}
+export function directPoint(throws: readonly EyeThrow[]): DirectPoint | null {
+  const found = [...throws].reverse().find(item => (item.down === true || item.arrived === true) && [item.x, item.z].every(finite));
+  if (!found) return null;
+  if (found.down === true) return { kind: 'down', x: found.x, z: found.z, errorBlocks: DOWN_ERROR_BLOCKS, from: found };
+  if (![found.bearingDeg, found.flew].every(finite)) return null;
+  const { dx, dz } = unitDirection(found) ?? bearingVector(found.bearingDeg);
+  // `|| 0` turns a rounded -0 (a bearing of exactly east or south leaves a tiny negative) into 0
+  return { kind: 'arrived', x: Math.round(found.x + dx * found.flew) || 0, z: Math.round(found.z + dz * found.flew) || 0, errorBlocks: ARRIVED_ERROR_BLOCKS,
+    from: found };
+}
+
 /** The best point two or more throws give, or null. A broken or fallen eye flew the same; both are used. */
 export function stronghold(throws: readonly EyeThrow[]): Fix | null {
+  const direct = directPoint(throws);
+  if (direct) {
+    const ahead = throws.map(item => finite(item.x) && finite(item.z) ? Math.round(Math.hypot(direct.x - item.x, direct.z - item.z)) : 0);
+    return { x: Math.round(direct.x), z: Math.round(direct.z), errorBlocks: direct.errorBlocks, throws: 1, ahead };
+  }
   const rays = throws.map(rayOf);
   let best: { fix: Fix; score: number } | null = null;
   for (let i = 0; i < rays.length; i += 1) {
@@ -165,17 +225,23 @@ export function stronghold(throws: readonly EyeThrow[]): Fix | null {
   return best?.fix ?? null;
 }
 
+/** The narrowest crossing a pair of lines may have: wider for lines read from a bearing, narrower for two read exactly. */
+const minSine = (a: Ray, b: Ray): number => Math.sin((a.precise && b.precise ? MIN_PRECISE_CROSSING_DEGREES : MIN_CROSSING_DEGREES) * RAD);
+/** How far a point lies off a line, sideways. */
+const offLine = (ray: Ray, x: number, z: number): number => Math.abs(cross(x - ray.x, z - ray.z, ray.dx, ray.dz));
+
 function pairFix(rays: ReadonlyArray<Ray | null>, i: number, j: number): { fix: Fix; score: number } | null {
   const a = rays[i];
   const b = rays[j];
   if (!a || !b) return null;
   const meet = crossing(a, b);
-  if (!meet || meet.ta <= 0 || meet.tb <= 0 || meet.sine < Math.sin(MIN_CROSSING_DEGREES * RAD)) return null;
+  if (!meet || meet.ta <= 0 || meet.tb <= 0 || meet.sine < minSine(a, b)) return null;
   const valid = rays.map((ray, index) => ({ ray, index })).filter((item): item is { ray: Ray; index: number } => item.ray !== null);
   const set = agreeing(valid.map(item => item.ray), meet.x, meet.z).map(index => valid[index]!);
   const point = leastSquares(set.map(item => item.ray), meet);
   if (!point || set.some(item => !isAhead(item.ray, point.x, point.z))) return null;
-  const errorBlocks = errorRadius(point);
+  // The error covers how far the agreeing lines still miss the point: lines that disagree are not a sharper point.
+  const errorBlocks = Math.max(errorRadius(point), ...set.map(item => offLine(item.ray, point.x, point.z)));
   if (errorBlocks > MAX_ERROR_BLOCKS) return null;
   const ahead = rays.map(ray => ray ? Math.round(Math.hypot(point.x - ray.x, point.z - ray.z)) : 0);
   const fix: Fix = { x: Math.round(point.x), z: Math.round(point.z), errorBlocks: Math.max(1, Math.round(errorBlocks)), throws: set.length, ahead };
@@ -192,15 +258,19 @@ export interface ThrowPlace {
 
 /** The distances sideways (blocks) a second throw is suggested at, widening with each pair that did not give a point. */
 export const SIDEWAYS_BLOCKS: readonly number[] = [100, 200, 400];
+/** The same after a line read exactly: the first stronghold is 1,280 m or more away, and 3° of crossing is enough for two such lines. */
+export const PRECISE_SIDEWAYS_BLOCKS: readonly number[] = [200, 400, 800];
 
 /**
  * Where to throw the next eye when there is no point yet: sideways of the last throw's line, on either side, far enough that
  * the two lines cross at an angle the calculation can use. `failed` is how many pairs of throws gave no point so far.
+ * A sunk or a stopped eye needs no next throw (it is the place), and a sunk eye has no line to go sideways of.
  */
 export function nextThrowPlaces(last: EyeThrow, failed: number): ThrowPlace[] {
   const ray = rayOf(last);
-  if (!ray) return [];
-  const distance = SIDEWAYS_BLOCKS[Math.min(Math.max(0, failed), SIDEWAYS_BLOCKS.length - 1)]!;
+  if (!ray || last.arrived === true) return [];
+  const table = ray.precise ? PRECISE_SIDEWAYS_BLOCKS : SIDEWAYS_BLOCKS;
+  const distance = table[Math.min(Math.max(0, failed), table.length - 1)]!;
   const sideX = -ray.dz;
   const sideZ = ray.dx;
   return [1, -1].map(side => ({ x: Math.round(last.x + side * sideX * distance), z: Math.round(last.z + side * sideZ * distance), from: distance }));

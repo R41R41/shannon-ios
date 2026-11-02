@@ -1,4 +1,4 @@
-import { applyPlanUpdate, type PlanOp, type PlanUpdate } from '@shannon/mind';
+import { applyPlanUpdate, type PlanNode, type PlanOp, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
 import { PLAN_UPDATE_RULES_DEFINITION } from '../../mind/action/fca/fcaPlanTools.js';
 
@@ -10,9 +10,12 @@ import { PLAN_UPDATE_RULES_DEFINITION } from '../../mind/action/fca/fcaPlanTools
  * - at least `gapMs` of the task's running time between two, `perHour` in any hour, `perRun` in the whole run;
  * - `perNode` for one plan node: past it the stall is told to the decision as a fact (the node did not move after that many new plans), and
  *   the decision chooses; the head blocks nothing by itself.
+ * A stall found at the end of a step (a death above all, which the look sees only once) waits in the checkpoint for the next step, and for a
+ * free slot, for `pendingMs` of the running clock; after that the look finds it again if it still stands.
  * A hold is kept for the results nobody knows and for the body's and the head's disagreement on who holds the body.
  */
-export const REPLAN = Object.freeze({ gapMs: 10 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000 });
+export const REPLAN = Object.freeze({ gapMs: 10 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000,
+  pendingMs: 15 * 60_000 });
 
 /** The stalls a new plan answers; a failure of the decision's writing is not one. */
 export const REPLAN_STALLS: ReadonlySet<string> = new Set(['node_stalled', 'same_spot_stops', 'wait_loop', 'death']);
@@ -110,17 +113,57 @@ export function replanOf(answer: unknown): { update: PlanUpdate; why: string } |
 }
 
 // ---- the plans waiting to be taken, by task
-const waiting = new Map<string, { update: PlanUpdate; why: string }>();
+interface WaitingPlan {
+  update: PlanUpdate;
+  why: string;
+  /** The nodes the update names, by the title and kind they had in the plan it was checked against. */
+  bound: Readonly<Record<string, string>>;
+}
+const waiting = new Map<string, WaitingPlan>();
 
-/** A new plan for the task, taken at its next read of the plan. */
-export function putReplan(taskId: string, update: PlanUpdate, why: string): void {
+const signatureOf = (node: PlanNode): string => `${node.title}|${node.kind ?? ''}`;
+function namedIds(update: PlanUpdate): string[] {
+  const ids = new Set<string>();
+  for (const op of update.ops ?? []) {
+    for (const key of ['id', 'parent', 'after'] as const) {
+      const value = (op as unknown as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value) ids.add(value);
+    }
+  }
+  if (typeof update.current === 'string' && update.current) ids.add(update.current);
+  return [...ids];
+}
+
+/**
+ * The nodes an update names, as they are in the plan it was checked against. A new plan is taken at a later read, and the plan may have been
+ * replaced by then (the first plan comes after a long wait): an id then names another node, and the update is not taken.
+ */
+export function boundTo(tree: PlanTree, update: PlanUpdate): Record<string, string> {
+  return Object.fromEntries(namedIds(update).flatMap(id => {
+    const node = tree.nodes.find(item => item.id === id);
+    return node ? [[id, signatureOf(node)] as const] : [];
+  }));
+}
+function staleNode(held: PlanTree, bound: Readonly<Record<string, string>>): string | null {
+  for (const [id, signature] of Object.entries(bound)) {
+    const node = held.nodes.find(item => item.id === id);
+    if (!node || signatureOf(node) !== signature) return id;
+  }
+  return null;
+}
+
+/** A new plan for the task, taken at its next read (`bound`: the nodes it names, from `boundTo`). */
+export function putReplan(taskId: string, update: PlanUpdate, why: string, bound: Readonly<Record<string, string>> = {}): void {
   waiting.delete(taskId);
-  waiting.set(taskId, { update, why });
+  waiting.set(taskId, { update, why, bound });
   if (waiting.size > 32) waiting.delete(waiting.keys().next().value as string);
 }
 
+/** The check of the plan a new plan would make, at the read that takes it (the plan's own checks and the observation's): a problem, or null. */
+export type AdoptCheck = (before: PlanTree, after: PlanTree) => string | null;
+
 /** The plan inbox of a task with this one beside the first plan's: the first plan is taken first, a new plan after it. */
-export function withReplanInbox(first: FcaPlanInbox, log: (line: string) => void = () => undefined): FcaPlanInbox {
+export function withReplanInbox(first: FcaPlanInbox, log: (line: string) => void = () => undefined, adopt?: AdoptCheck): FcaPlanInbox {
   return {
     take(taskId, held) {
       const asked = first.take(taskId, held);
@@ -128,9 +171,15 @@ export function withReplanInbox(first: FcaPlanInbox, log: (line: string) => void
       const entry = waiting.get(taskId);
       if (!entry) return null;
       waiting.delete(taskId);
+      const stale = staleNode(held, entry.bound);
+      if (stale) {
+        log(`Shannon Minecraft replan not taken task=${taskId} node ${stale} is not what it was when the plan was checked`);
+        return null;
+      }
       const made = applyPlanUpdate(held, entry.update, { at: new Date().toISOString() });
-      if (made.problem || !made.changed) {
-        log(`Shannon Minecraft replan not taken task=${taskId} ${made.problem ? made.problem.slice(0, 100) : 'no change'}`);
+      const problem = made.problem ?? (made.changed ? adopt?.(held, made.tree) ?? null : null);
+      if (problem || !made.changed) {
+        log(`Shannon Minecraft replan not taken task=${taskId} ${problem ? problem.slice(0, 100) : 'no change'}`);
         return null;
       }
       return { tree: made.tree, note: `計画を立て直した（強いモデル）: ${entry.why || '理由なし'}` };

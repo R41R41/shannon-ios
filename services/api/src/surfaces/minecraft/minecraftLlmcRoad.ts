@@ -185,6 +185,16 @@ export function reachedMilestoneNames(tree: PlanTree | null | undefined, observa
     return (item.holds ? item.holds(facts) : !!predicate && predicateHolds(predicate, facts)) || doneInPlan(tree, item);
   }).map(item => item.short ?? item.name);
 }
+const LATE_NAMES: ReadonlySet<string> = new Set(DRAGON_MILESTONES.filter(item => item.late).flatMap(item => [item.name, item.short ?? item.name]));
+/**
+ * The road as the held diagnostic run reads it: only the stretch to the gate, as it was before the late milestones were added. A fortress
+ * coming into view past the Nether is progress for the unheld look (it moves the meter on) and must not reset the held run's timer.
+ */
+export function firstStretch(tree: PlanTree | null | undefined, observation: BodyObservation | null): { next: string | null; reached: string[] } {
+  const next = meterParts(tree, observation, 0)?.next ?? null;
+  const reached = (reachedMilestoneNames(tree, observation) ?? []).filter(name => !LATE_NAMES.has(name));
+  return { next: next !== null && LATE_NAMES.has(next) ? null : next, reached };
+}
 /**
  * Chapter 8 (the meter's clock): the minutes the task has run, without the time it was held (`heldMs`, the
  * operator's hold to its resume: the same count the time limit leaves out,

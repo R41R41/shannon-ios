@@ -1,114 +1,89 @@
-import { framesOf, marksOf } from './minecraftSeenMarks.js';
+import type { EndCrystal, EndDragon, EndView, Point } from './minecraftEndView.js';
+import { framesOf } from './minecraftSeenMarks.js';
 
 /**
  * The facts of the way to the dragon, as lines for the live state (a pure reading of the body's frame; nothing is kept here).
- * The body says them in its world fields (`world.dragon`, `world.crystals`, `world.perch`, `world.dragonBreath`, `world.lastDeath`,
- * `world.deaths`, `world.rememberedPlaces`, and the marks of `world.mapLandmarks`); this only puts them in words the decision can use.
- * A field the body does not send is left out of the lines: an absent field is never an absent fact. Where the body sends the older
- * form only (the dragon and the crystals as map marks), that is read instead.
+ * The End fight comes from `minecraftEndView.ts` (the body's `state.end`, else the map marks); her last death, the frames of the portal
+ * room and the places the body remembers come from its world fields (`world.lastDeath`, `world.deaths`, `world.rememberedPlaces`,
+ * `world.mapLandmarks`). This only puts them in words the decision can use. A field the body does not send is left out of the lines:
+ * an absent field is never an absent fact.
  */
 type Rec = Record<string, unknown>;
 const rec = (value: unknown): Rec | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Rec : null;
-const num = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const round = (value: number): number => Math.round(value);
-const at = (value: unknown): string | null => {
-  const point = rec(value);
-  const x = num(point?.x);
-  const y = num(point?.y);
-  const z = num(point?.z);
-  return x === null || y === null || z === null ? null : `(${round(x)},${round(y)},${round(z)})`;
-};
-const meters = (value: unknown): string => {
-  const distance = num(value);
-  return distance === null ? '' : `${round(distance)}m`;
-};
+const tenth = (value: number): string => String(Math.round(value * 10) / 10);
+const place = (point: Point | null): string | null => point ? `(${Math.floor(point.x)},${Math.floor(point.y)},${Math.floor(point.z)})` : null;
+const metres = (value: number | null): string => value === null ? '' : `${round(value)}m`;
 
-/** The dragon's phases by the game's numbers (the body sends the number, or the name of the phase). */
-export const DRAGON_PHASES: readonly string[] = ['holding_pattern', 'strafe_player', 'landing_approach', 'landing', 'takeoff', 'sitting_flaming',
-  'sitting_scanning', 'sitting_attacking', 'charging_player', 'dying', 'hovering'];
+/** The dragon's phases by the game's numbers (the body sends the number and the phase's name). */
 const PHASE_WORDS: readonly string[] = ['島の上を周回', '狙いを定めて火の玉', '止まり木へ降りる途中', '止まり木に着陸中', '飛び立つところ', '止まり木で息を吐いている',
   '止まり木で見回している', '止まり木で攻撃している', '体当たり', '倒れかけている', 'その場で浮いている'];
-/** The phases in which the dragon sits on the perch and its head is within a sword's reach. */
+/** The phases in which the dragon sits on the perch: its head can be struck, and arrows do nothing. */
 const SITTING = new Set([5, 6, 7]);
+/** The reach a blow is swung at, from the eye to the head's box (the body's own bound: `state.end.dragon.strike`). */
+export const STRIKE_REACH_METRES = 5;
 
-/** A phase as its number, from the number or the phase's name; null when it is neither. */
-export function phaseNumber(phase: unknown): number | null {
-  if (typeof phase === 'number' && Number.isInteger(phase) && phase >= 0 && phase < DRAGON_PHASES.length) return phase;
-  if (typeof phase !== 'string') return null;
-  const index = DRAGON_PHASES.indexOf(phase.replace(/^minecraft:/u, '').toLowerCase());
-  return index >= 0 ? index : null;
-}
-
-/** The dragon from the body's structured field, else from the older map mark (`! エンダードラゴン (x,y,z) … id 5 体力 142/200`). */
-function dragonOf(world: Rec): { id: number | null; health: number | null; phase: number | null; position: string | null; head: string | null;
-  distance: string; marked: boolean } | null {
-  const dragon = rec(world.dragon);
-  if (dragon) {
-    return { id: num(dragon.id), health: num(dragon.health), phase: phaseNumber(dragon.phase), position: at(dragon.position), head: at(dragon.headPosition),
-      distance: meters(dragon.distance), marked: false };
-  }
-  const mark = marksOf(world.mapLandmarks).find(item => item.label === 'エンダードラゴン');
-  if (!mark) return null;
-  const health = /体力\s*([\d.]+)\/200/u.exec(mark.rest);
-  const id = /id\s*(\d+)/u.exec(mark.rest);
-  return { id: id ? Number(id[1]) : null, health: health ? Number(health[1]) : null, phase: null, position: `(${mark.x},${mark.y},${mark.z})`, head: null,
-    distance: /(\d+)m/u.exec(mark.rest)?.[0] ?? '', marked: true };
-}
-
-/** 「竜: 体力 142/200・止まり木で見回している（phase 6、剣が届く高さ）・頭 (0,66,0)・あなたから 14m」, or null with no dragon in view. */
-export function dragonLine(world: Rec): string | null {
-  const dragon = dragonOf(world);
-  if (!dragon) return null;
+function stateWords(dragon: EndDragon): string {
   const phase = dragon.phase;
-  const state = phase === null ? '' : `${PHASE_WORDS[phase]}（phase ${phase}${SITTING.has(phase) ? '、頭が剣の届く高さ。矢は効かない' : ''}）`;
-  const where = dragon.head ? `頭 ${dragon.head}` : dragon.position ? `位置 ${dragon.position}` : '';
-  const parts = [dragon.health === null ? '' : `体力 ${dragon.health}/200`, state, where, dragon.distance ? `あなたから ${dragon.distance}` : '',
+  if (phase === null) return '';
+  const sitting = SITTING.has(phase);
+  const seconds = sitting && dragon.phaseFor !== null ? `・この phase ${tenth(dragon.phaseFor)} 秒目` : '';
+  return `${PHASE_WORDS[phase]}（phase ${phase}${seconds}${sitting ? '。矢は効かない' : ''}）`;
+}
+
+function reachWords(dragon: EndDragon): string {
+  if (dragon.headReach === null || dragon.phase === null || !SITTING.has(dragon.phase)) return '';
+  const reach = dragon.strike === true ? '剣が届く' : `剣は ${STRIKE_REACH_METRES}m 以内で届く`;
+  return `頭の箱まで ${tenth(dragon.headReach)}m（${reach}）`;
+}
+
+/** 「竜: 体力 142/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6)・頭の箱まで 4.2m（剣が届く）・#77」, or null with no dragon in view. */
+export function dragonLine(end: EndView | null): string | null {
+  const dragon = end?.dragon;
+  if (!dragon) return null;
+  const where = place(dragon.head) ? `頭 ${place(dragon.head)}` : place(dragon.at) ? `位置 ${place(dragon.at)}` : '';
+  const parts = [dragon.health === null ? '' : `体力 ${tenth(dragon.health)}/200`, stateWords(dragon), where, reachWords(dragon),
     dragon.id === null ? '' : `#${dragon.id}`].filter(Boolean);
   return parts.length ? `竜: ${parts.join('・')}` : null;
 }
 
-/** 「エンドクリスタル: 残り 4（檻つき 1）。近い順: #12 (x,y,z) 21m・#15 (x,y,z) 34m 檻つき」 from the body's count, else the marks in view. */
-export function crystalLine(world: Rec): string | null {
-  const crystals = rec(world.crystals);
-  const remaining = num(crystals?.remaining);
-  if (crystals && remaining !== null) {
-    const caged = num(crystals.caged);
-    const list = (Array.isArray(crystals.list) ? crystals.list : []).flatMap(item => {
-      const crystal = rec(item);
-      const place = at(crystal?.position);
-      const tag = num(crystal?.id) === null ? '' : `#${crystal?.id} `;
-      return crystal && place ? [`${tag}${place} ${meters(crystal.distance)}${crystal.caged === true ? ' 檻つき' : ''}`.trim()] : [];
-    }).slice(0, 3);
-    return `エンドクリスタル: 残り ${remaining}${caged === null ? '' : `（檻つき ${caged}）`}${list.length ? `。近い順: ${list.join('・')}` : ''}`;
-  }
-  const seen = marksOf(world.mapLandmarks).filter(item => item.label === 'エンドクリスタル').length;
-  return seen ? `エンドクリスタル: 見えている ${seen} 個（島全体の残りは体がまだ数えていない）` : null;
+function crystalWords(crystal: EndCrystal): string {
+  const blast = crystal.blast === null ? '' : `壊すと爆発（今の立ち位置で体力 −${round(crystal.blast)} の見込み）`;
+  const tags = [crystal.caged === true ? '檻つき' : '', crystal.healing ? '竜を回復中' : '', blast].filter(Boolean);
+  return `${crystal.id === null ? '' : `#${crystal.id} `}${place(crystal.at)} ${metres(crystal.dist)}${tags.length ? ` ${tags.join('・')}` : ''}`.trim();
 }
 
-/** The breath clouds the body lists (`world.dragonBreath`: x, z, radius), nearest first, at most three. */
-export function breathLine(world: Rec): string | null {
-  const clouds = (Array.isArray(world.dragonBreath) ? world.dragonBreath : []).flatMap(item => {
-    const cloud = rec(item);
-    const x = num(cloud?.x);
-    const z = num(cloud?.z);
-    const radius = num(cloud?.radius);
-    return x === null || z === null ? [] : [`(${round(x)},${round(z)}) 半径 ${radius === null ? '?' : round(radius)}`];
-  }).slice(0, 3);
+/** 「エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1）。近い順: #12 (x,y,z) 21m・#15 (x,y,z) 34m 檻つき」 from the body's count, else the marks in view. */
+export function crystalLine(end: EndView | null): string | null {
+  const crystals = end?.crystals;
+  if (!crystals) return null;
+  if (crystals.remaining === null) return crystals.visible ? `エンドクリスタル: 見えている ${crystals.visible} 個（島全体の残りは体がまだ数えていない）` : null;
+  const counts = ([['壊れた', crystals.gone], ['檻つき', crystals.caged], ['まだ見ていない台座', crystals.unseen]] as const)
+    .flatMap(([label, value]) => value !== null && value > 0 ? [`${label} ${value}`] : []);
+  const list = crystals.list.slice(0, 3).map(crystalWords);
+  return `エンドクリスタル: 残り ${crystals.remaining}/10${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`;
+}
+
+/** The breath clouds the body lists (`state.end.clouds`: x, y, z, radius), at most three. */
+export function breathLine(end: EndView | null): string | null {
+  const clouds = (end?.clouds ?? []).slice(0, 3).map(cloud => `(${Math.floor(cloud.x)},${Math.floor(cloud.z)}) 半径 ${cloud.r === null ? '?' : round(cloud.r)}`);
   return clouds.length ? `竜の息の雲: ${clouds.join('・')}（中で立ち止まらない）` : null;
 }
 
-/** The perch, where the dragon sits (the body's `world.perch`, else its map mark). */
-export function perchLine(world: Rec): string | null {
-  const place = at(world.perch) ?? (() => {
-    const mark = marksOf(world.mapLandmarks).find(item => item.label === '止まり木');
-    return mark ? `(${mark.x},${mark.y},${mark.z})` : null;
-  })();
-  return place ? `止まり木: ${place}` : null;
+/** The fireballs in flight (the body's count; where they go is its floor reflex's to read). */
+export function fireballLine(end: EndView | null): string | null {
+  return end && end.fireballs > 0 ? `火の玉: ${end.fireballs} 個が飛んでいる（体の反射が避ける）` : null;
+}
+
+/** The perch, where the dragon sits (the body's `state.end.fountain`, else its map mark). */
+export function perchLine(end: EndView | null): string | null {
+  const spot = place(end?.fountain ?? null);
+  return spot ? `止まり木: ${spot}` : null;
 }
 
 /** All the lines of the fight in the End, the dragon's first. */
-export function endFightLines(world: Rec): string[] {
-  return [dragonLine(world), crystalLine(world), breathLine(world), perchLine(world)].filter((line): line is string => line !== null);
+export function endFightLines(end: EndView | null): string[] {
+  return [dragonLine(end), crystalLine(end), breathLine(end), fireballLine(end), perchLine(end)].filter((line): line is string => line !== null);
 }
 
 /** The dimension a death line or a record names, without `minecraft:`. */

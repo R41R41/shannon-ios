@@ -180,11 +180,12 @@ export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts |
   if (predicateHolds(predicate, facts)) return '満たしている';
   return `未: ${bestAlternative(predicate, facts).filter(clause => !holds(clause, facts)).map(clause => clauseWords(clause, facts)).join('・')}`;
 }
-/** Whether the alternative of the predicate that holds says only what the pack holds (`have:`, `food>=`): what
- * the work made is in hand. */
+/** Whether the alternative of the predicate that holds says only what the pack holds (`have:`, `food>=`) or a count that does not
+ * come back (`crystals<=`: the crystals destroyed stay destroyed): what the work made is in hand. */
 function holdsByThePack(predicate: DonePredicate, facts: DoneFacts): boolean {
   const alternative = predicate.find(clauses => clauses.every(clause => holds(clause, facts)));
-  const pack = (clause: DoneClause) => clause.kind === 'have' || clause.kind === 'food' || (clause.kind === 'act' && clause.clause.k === 'have');
+  const pack = (clause: DoneClause) => clause.kind === 'have' || clause.kind === 'food' || clause.kind === 'crystals'
+    || (clause.kind === 'act' && clause.clause.k === 'have');
   return !!alternative && alternative.every(pack);
 }
 

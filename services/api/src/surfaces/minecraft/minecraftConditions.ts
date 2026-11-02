@@ -3,7 +3,8 @@ import type { ActClause, ActCondition } from '../../contracts/minecraftActCondit
 import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
-import { crystalsLeft, seenMarks } from './minecraftSeenMarks.js';
+import { crystalsLeft } from './minecraftEndView.js';
+import { seenMarks } from './minecraftSeenMarks.js';
 
 export { parseCondition, conditionText, validCondition, parseClause, newerClause, clauseText, CONDITION_SCHEMA, CONDITION_FORMS,
   type ActClause, type ActCondition, type Dim, type ParsedCondition } from '../../contracts/minecraftActCondition.js';
@@ -65,7 +66,7 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
   const dim = typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null;
   return { counts: carriedItemCounts(frame, observation!.facts), feet, food: carriedFood(frame, observation!.facts).points, dimension: dim,
     hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame),
-    seen: seenMarks(frame), crystals: crystalsLeft(frame) };
+    seen: seenMarks(frame), crystals: crystalsLeft(observation) };
 }
 
 /** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a

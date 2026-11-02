@@ -2,13 +2,15 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { createEyeLedger, type EyeLedger } from './minecraftEyeLedger.js';
 import { deathLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
+import { endViewOf, type EndView } from './minecraftEndView.js';
 
 /**
  * What a task that goes for the dragon keeps and says of the way after the Nether, as facts for the live state (one object a task, made
  * from its checkpoint like the journey and the worksite memory):
  * - the ledger of the thrown eyes and the stronghold they give (`minecraftEyeLedger.ts`), the one thing here the head keeps itself;
- * - the dragon, the crystals, the breath and the perch in the End, the frames of the portal room and the eyes they still need, her last
- *   death with where it was, and the places the body remembers for the way (`minecraftEndFacts.ts`), read from the frame each time.
+ * - the dragon, the crystals, the breath, the fireballs and the perch in the End (the body's `state.end`, `minecraftEndView.ts`), the frames of
+ *   the portal room and the eyes they still need, her last death with where it was, and the places the body remembers for the way
+ *   (`minecraftEndFacts.ts`), read from the frame each time.
  * It decides nothing and sends nothing; a field the body does not send leaves its line out.
  */
 export interface EndgameLines {
@@ -17,7 +19,7 @@ export interface EndgameLines {
   short: string[];
 }
 const NONE: EndgameLines = { lines: [], short: [] };
-const FIGHT_HEADS = ['竜:', 'エンドクリスタル:'];
+const FIGHT_HEADS = ['竜:', 'エンドクリスタル:', '竜の息の雲:', '火の玉:'];
 
 const worldOf = (observation: BodyObservation | null): Record<string, unknown> | null => {
   const world = observation?.state.world;
@@ -26,8 +28,8 @@ const worldOf = (observation: BodyObservation | null): Record<string, unknown> |
 const some = (line: string | null): string[] => line ? [line] : [];
 
 /** The lines of one decision from the frame and the ledger's lines (pure). */
-function compose(world: Record<string, unknown>, facts: DoneFacts, eyeLines: readonly string[]): EndgameLines {
-  const fight = endFightLines(world);
+function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[]): EndgameLines {
+  const fight = endFightLines(end);
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye')));
   const death = some(deathLine(world));
   const places = some(placeLine(world));
@@ -55,7 +57,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       const facts = doneFacts(observation);
       if (!dragonTask || !world || !facts) return NONE;
       if (facts.seen?.has('end_portal_frame') || facts.dimension === 'the_end') ledger.clear();
-      return compose(world, facts, eyeLinesOf(ledger, facts, now()));
+      return compose(world, endViewOf(observation), facts, eyeLinesOf(ledger, facts, now()));
     },
     checkpoint: ledger.checkpoint,
   };

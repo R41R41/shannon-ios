@@ -59,13 +59,6 @@ export function seenMarks(world: Record<string, unknown>): ReadonlySet<SeenName>
   return seen;
 }
 
-/** The end crystals left on the End island, when the body counts them (`world.crystals.remaining`); null when it does not say. */
-export function crystalsLeft(world: Record<string, unknown>): number | null {
-  const crystals = world.crystals;
-  const remaining = crystals && typeof crystals === 'object' ? (crystals as { remaining?: unknown }).remaining : undefined;
-  return typeof remaining === 'number' && Number.isInteger(remaining) && remaining >= 0 && remaining <= 99 ? remaining : null;
-}
-
 /** The first mark of a name, nearest first as the body wrote them. */
 export function firstMark(world: Record<string, unknown>, name: SeenName): Mark | null {
   return marksOf(world.mapLandmarks).find(mark => namesOf(mark).includes(name)) ?? null;

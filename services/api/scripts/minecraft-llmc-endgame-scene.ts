@@ -27,7 +27,9 @@ import { SCENE_TOOLS, type LlmcScene } from '../src/surfaces/minecraft/minecraft
 import { stagesFor } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { candidateLive, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 
-type EndScene = LlmcScene & { eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }> };
+type EndScene = LlmcScene & { eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }>;
+  /** The body's `state.end` of the scene (the End fight; S1's `endObservation`). */
+  end?: object };
 const MODELS: Record<string, string> = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' };
 const args = process.argv.slice(2);
 const flag = (name: string) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -52,10 +54,13 @@ function treeOf(scene: EndScene): PlanTree {
 /** The decision input of a scene on the mode's own path, and the live object the stages are picked from. */
 function inputOf(scene: EndScene): { input: FcaModelInput; live: Record<string, unknown> } {
   const observation = { schemaVersion: 1, bodyId: 'minecraft:scene', sequence: 1, stateAt: new Date(0).toISOString(), receivedAt: new Date(0).toISOString(),
-    connected: true, state: { world: scene.world as never }, facts: { alive: true } } as unknown as BodyObservation;
+    connected: true, state: { world: scene.world as never, ...(scene.end ? { end: scene.end } : {}) }, facts: { alive: true } } as unknown as BodyObservation;
   const tree = treeOf(scene);
   const view = { revision: tree.revision, ...planPath(tree) };
-  const endgame = endgameModule?.createEndgame({ minecraftEyes: { v: 1, throws: (scene.eyes ?? []).map((item, index) => ({ id: `scene${index}`, toX: item.x, toZ: item.z, ...item })) } });
+  // The scene's clock is half a minute after its newest throw (the ledger does not read a throw older than 45 minutes).
+  const sceneNow = Math.max(0, ...(scene.eyes ?? []).map(item => item.at)) + 30_000;
+  const throws = (scene.eyes ?? []).map((item, index) => ({ id: `scene${index}`, toX: item.x, toZ: item.z, ...item }));
+  const endgame = endgameModule?.createEndgame({ minecraftEyes: { v: 1, throws } }, () => sceneNow);
   const parts = { plan: () => planDisplay(tree), planView: () => view, planTree: () => tree, ...(endgame ? { endgame } : {}) } as unknown as LlmcBodyParts;
   const events = createLlmcEvents(`scene-${scene.name}`);
   for (const line of scene.events ?? []) events.note(line);

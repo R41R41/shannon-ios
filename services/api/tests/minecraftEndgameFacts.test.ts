@@ -3,12 +3,13 @@ import { planFromSeeds } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { acquired, doneFacts } from '../src/surfaces/minecraft/minecraftConditions.js';
 import { doneStatusWords, nodesSeenDone, parseDoneWhen, predicateHolds } from '../src/surfaces/minecraft/minecraftPlanDone.js';
-import { crystalsLeft, framesOf, marksOf, seenMarks } from '../src/surfaces/minecraft/minecraftSeenMarks.js';
-import { breathLine, crystalLine, deathLine, dragonLine, frameLine, perchLine, phaseNumber, placeLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { framesOf, marksOf, seenMarks } from '../src/surfaces/minecraft/minecraftSeenMarks.js';
+import { crystalsLeft, endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
+import { breathLine, crystalLine, deathLine, dragonLine, endFightLines, fireballLine, frameLine, perchLine, placeLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEyeLedger, flightOf } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 
-const frame = (world: object): BodyObservation => ({ connected: true, state: { world }, facts: {} }) as unknown as BodyObservation;
+const frame = (world: object, end?: object): BodyObservation => ({ connected: true, state: { world, ...(end ? { end } : {}) }, facts: {} }) as unknown as BodyObservation;
 const stack = (name: string, count: number) => ({ name, count });
 const result = (eye: object) => JSON.stringify({ v: 1, ok: true, done: 1, of: 1, lines: [{ i: 1, do: 'use', status: 'done', line: '' }], at: { x: 0, y: 64, z: 0 }, hp: 20,
   food: 20, ms: 100, eye });
@@ -22,9 +23,10 @@ describe('marks in view', () => {
     expect(marksOf(landmarks).map(mark => mark.label)).toEqual(['ネザー要塞', 'スポナー', 'エンドポータルの枠', 'エンドポータル']);
     expect(framesOf({ mapLandmarks: landmarks })).toMatchObject({ frames: 12, eyes: 3 });
     expect([...seenMarks({ inside: 'ストロングホールドの中' })]).toEqual(['stronghold']);
-    expect(crystalsLeft({ crystals: { remaining: 4 } })).toBe(4);
-    expect(crystalsLeft({ crystals: { remaining: -1 } })).toBeNull();
-    expect(crystalsLeft({})).toBeNull();
+    expect(crystalsLeft(frame({}, { crystals: { remaining: 4 } }))).toBe(4);
+    expect(crystalsLeft(frame({}, { crystals: { remaining: -1 } }))).toBeNull();
+    expect(crystalsLeft(frame({}))).toBeNull();
+    expect(crystalsLeft(null)).toBeNull();
   });
 
   it('closes a node by see: and crystals<=, and says what is missing', () => {
@@ -35,12 +37,20 @@ describe('marks in view', () => {
     expect(predicateHolds(fortress, away)).toBe(false);
     expect(doneStatusWords('see:fortress', away)).toContain('ネザー要塞');
     const crystals = parseDoneWhen('crystals<=0')!;
-    expect(predicateHolds(crystals, doneFacts(frame({ dimension: 'the_end', crystals: { remaining: 0 } }))!)).toBe(true);
-    expect(predicateHolds(crystals, doneFacts(frame({ dimension: 'the_end', crystals: { remaining: 3 } }))!)).toBe(false);
+    expect(predicateHolds(crystals, doneFacts(frame({ dimension: 'the_end' }, { crystals: { remaining: 0 } }))!)).toBe(true);
+    expect(predicateHolds(crystals, doneFacts(frame({ dimension: 'the_end' }, { crystals: { remaining: 3 } }))!)).toBe(false);
     // the body does not count them: unknown is never done
     expect(predicateHolds(crystals, doneFacts(frame({ dimension: 'the_end' }))!)).toBe(false);
     expect(doneStatusWords('crystals<=0', doneFacts(frame({ dimension: 'the_end' }))!)).toContain('数えていない');
     expect(parseDoneWhen('see:nothing_known')).toBeNull();
+  });
+
+  it('closes a crystals parent whose children are still open once none are left (what is destroyed stays destroyed)', () => {
+    const tree = planFromSeeds([{ title: 'クリスタル', kind: 'dragon', doneWhen: 'crystals<=0', children: [{ title: '弓で撃つ', kind: 'dragon' }, { title: '檻を登る', kind: 'dragon' }] }])!;
+    const none = doneFacts(frame({ dimension: 'the_end' }, { crystals: { remaining: 0 } }))!;
+    const some = doneFacts(frame({ dimension: 'the_end' }, { crystals: { remaining: 2 } }))!;
+    expect(nodesSeenDone(tree, none)).toEqual([tree.nodes[0]!.id]);
+    expect(nodesSeenDone(tree, some)).toEqual([]);
   });
 
   it('keeps a parent with open children from closing on a place', () => {
@@ -71,27 +81,48 @@ describe('what the work made of the rods and the pearls counts back', () => {
 });
 
 describe('facts of the way to the dragon', () => {
-  it('says the dragon, its phase, the crystals, the breath and the perch from the structured fields', () => {
-    const world = { dragon: { id: 77, health: 142.4, phase: 6, position: { x: 2, y: 66, z: 1 }, headPosition: { x: 3, y: 67, z: 6 }, distance: 14.2 },
-      crystals: { remaining: 4, caged: 1, list: [{ id: 12, position: { x: 40, y: 90, z: 5 }, caged: false, distance: 21 },
-        { id: 15, position: { x: -30, y: 100, z: 2 }, caged: true, distance: 34 }] },
-      dragonBreath: [{ x: 4, z: 8, radius: 6.5 }], perch: { x: 0, y: 64, z: 0 } };
-    expect(dragonLine(world)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6、頭が剣の届く高さ。矢は効かない）・頭 (3,67,6)・あなたから 14m・#77');
-    expect(crystalLine(world)).toBe('エンドクリスタル: 残り 4（檻つき 1）。近い順: #12 (40,90,5) 21m・#15 (-30,100,2) 34m 檻つき');
-    expect(breathLine(world)).toBe('竜の息の雲: (4,8) 半径 7（中で立ち止まらない）');
-    expect(perchLine(world)).toBe('止まり木: (0,64,0)');
-    expect(phaseNumber('sitting_flaming')).toBe(5);
-    expect(phaseNumber(11)).toBeNull();
+  /** The shape the body sends (`state.end`, S1's `endObservation`, 2026-11-02). */
+  const end = { dragon: { id: 77, health: 142.4, phase: 6, phaseName: 'sitting_scanning', phaseFor: 2.4, perched: true, at: { x: 2, y: 66, z: 1 }, yaw: 1.2,
+      head: { x: 3, y: 67, z: 6 }, headReach: 4.2, strike: true },
+    fountain: { x: 0.5, y: 68, z: 0.5 },
+    crystals: { remaining: 4, gone: 6, caged: 1, unseen: [{ x: 10, z: 40 }], list: [{ id: 12, x: 40.5, y: 90, z: 5.5, caged: false, dist: 21.2, healing: true, blast: 14.3 },
+      { id: 15, x: -29.5, y: 100, z: 2.5, caged: true, dist: 34 }] },
+    clouds: [{ x: 4.5, y: 65, z: 8.5, r: 6.5 }], fireballs: 2 };
+
+  it('says the dragon, its phase and reach, the crystals, the breath, the fireballs and the perch from state.end', () => {
+    const view = endViewOf(frame({ dimension: 'the_end' }, end));
+    expect(dragonLine(view)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6)・頭の箱まで 4.2m（剣が届く）・#77');
+    expect(crystalLine(view)).toBe('エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
+      + '#12 (40,90,5) 21m 竜を回復中・壊すと爆発（今の立ち位置で体力 −14 の見込み）・#15 (-30,100,2) 34m 檻つき');
+    expect(breathLine(view)).toBe('竜の息の雲: (4,8) 半径 7（中で立ち止まらない）');
+    expect(fireballLine(view)).toBe('火の玉: 2 個が飛んでいる（体の反射が避ける）');
+    expect(perchLine(view)).toBe('止まり木: (0,68,0)');
+    expect(endFightLines(view)).toHaveLength(5);
   });
 
-  it('reads the older map marks when the body sends no structured field, and says nothing without a dragon', () => {
+  it('says how far the head is when a blow does not reach yet, and where a dragon in flight is', () => {
+    const far = endViewOf(frame({}, { ...end, dragon: { ...end.dragon, headReach: 7.4, strike: false } }));
+    expect(dragonLine(far)).toContain('頭の箱まで 7.4m（剣は 5m 以内で届く）');
+    const flying = endViewOf(frame({}, { dragon: { id: 77, health: 200, phase: 0, phaseName: 'holding_pattern', phaseFor: 3, perched: false, at: { x: 30.4, y: 90, z: -12.2 },
+      yaw: 0, head: null, headReach: null, strike: false }, fountain: null, crystals: { remaining: 10, gone: 0, caged: 0, unseen: [], list: [] }, clouds: [], fireballs: 0 }));
+    expect(dragonLine(flying)).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (30,90,-13)・#77');
+    expect(crystalLine(flying)).toBe('エンドクリスタル: 残り 10/10');
+    expect(breathLine(flying)).toBeNull();
+    expect(fireballLine(flying)).toBeNull();
+    expect(perchLine(flying)).toBeNull();
+  });
+
+  it('reads the older map marks when the body sends no state.end, and says nothing without a dragon', () => {
     const world = { mapLandmarks: ['! エンダードラゴン (3,80,-4) 北20m・上16 id 77 体力 142/200', '! エンドクリスタル (40,90,5) 東40m id 12',
       'X 止まり木 (0,64,0) 出口ポータルの柱の上'] };
-    expect(dragonLine(world)).toContain('体力 142/200');
-    expect(crystalLine(world)).toContain('見えている 1 個');
-    expect(perchLine(world)).toBe('止まり木: (0,64,0)');
-    expect(dragonLine({})).toBeNull();
-    expect(crystalLine({})).toBeNull();
+    const view = endViewOf(frame(world));
+    expect(dragonLine(view)).toContain('体力 142/200');
+    expect(crystalLine(view)).toContain('見えている 1 個');
+    expect(perchLine(view)).toBe('止まり木: (0,64,0)');
+    expect(crystalsLeft(frame(world))).toBeNull();
+    expect(dragonLine(endViewOf(frame({})))).toBeNull();
+    expect(crystalLine(endViewOf(frame({})))).toBeNull();
+    expect(endFightLines(null)).toEqual([]);
   });
 
   it('says the last death and when its dimension is not this one, the frames still to fill, and the places', () => {
@@ -113,7 +144,8 @@ describe('the ledger of the thrown eyes', () => {
     to: { x: x + 3, y: 70, z: z - 11 }, broke: false, ...extra });
 
   it('reads a flight from an act result and nothing from other results', () => {
-    expect(flightOf(eye(0, 0))).toMatchObject({ x: 0, z: 0, flew: 12, broke: false, down: false });
+    expect(flightOf(eye(0, 0))).toMatchObject({ x: 0, z: 0, flew: 12, broke: false });
+    expect(flightOf(eye(0, 0))).not.toHaveProperty('down');
     expect(flightOf(result({ from: { x: 0, y: 0, z: 0 } }))).toBeNull();
     expect(flightOf('not json')).toBeNull();
     expect(flightOf(undefined)).toBeNull();
@@ -150,6 +182,65 @@ describe('the ledger of the thrown eyes', () => {
     expect(ledger.lines({ x: 9100, z: 40 }, 21_000).join('\n')).toContain('真下へ沈んだ');
     ledger.note('d', eye(9100, 60), 'overworld', 46 * 60_000);
     expect(ledger.throws().map(item => item.id.split(':')[0])).toEqual(['d']);
+  });
+
+  it('does not read a throw older than the keep time, whenever it is read and after a restore', () => {
+    const ledger = createEyeLedger(null);
+    ledger.note('a', eye(0, 0), 'overworld', 1000);
+    ledger.note('b', eye(800, 0), 'overworld', 2000);
+    expect(ledger.fix(3000)).not.toBeNull();
+    const later = 2000 + 46 * 60_000;
+    expect(ledger.fix(later)).toBeNull();
+    expect(ledger.throws(later)).toEqual([]);
+    expect(ledger.lines({ x: 0, z: 0 }, later)).toEqual([]);
+    expect(createEyeLedger(ledger.checkpoint().minecraftEyes).lines({ x: 0, z: 0 }, later)).toEqual([]);
+    expect(createEyeLedger(ledger.checkpoint().minecraftEyes).fix(3000)).toEqual(ledger.fix(3000));
+  });
+});
+
+describe('the ledger reads the body\'s full flight report (S2)', () => {
+  const report = (extra: object) => result({ from: { x: 100, y: 64, z: 200 }, bearingDeg: 63.43, flew: 12, to: { x: 110, y: 72, z: 195 }, broke: false,
+    origin: { x: 100.4, y: 64, z: 200.7 }, unit: { x: 0.89443, z: -0.44721 }, start: { x: 100.4, y: 65.6, z: 200.7 }, end: { x: 111.1, y: 73.6, z: 195.3 }, rise: 8,
+    fate: 'dropped', drop: { id: 931, at: { x: 111.5, y: 70, z: 195.2 } }, arrived: false, samples: 40, ms: 3900, ...extra });
+
+  it('reads the exact origin and unit vector, how it ended, and the dropped item', () => {
+    expect(flightOf(report({}))).toMatchObject({ x: 100.4, z: 200.7, bearingDeg: 63.43, flew: 12, broke: false, fate: 'dropped', dropId: 931, toX: 111.5, toZ: 195.2,
+      unit: { x: 0.89443, z: -0.44721 } });
+    expect(flightOf(report({}))).not.toHaveProperty('down');
+    expect(flightOf(report({}))).not.toHaveProperty('arrived');
+    expect(flightOf(report({ fate: 'shattered', broke: false, drop: undefined }))).toMatchObject({ broke: true, fate: 'shattered', toX: 110, toZ: 195 });
+  });
+
+  it('says where an eye that dropped lies, until the time to pick it up has gone, and that an unseen end is unknown', () => {
+    const ledger = createEyeLedger(null);
+    ledger.note('a', report({}), 'overworld', 1000);
+    expect(ledger.lines(null, 2000).join('\n')).toContain('(112,195) で拾える・pickup target=#931');
+    expect(ledger.lines(null, 1000 + 6 * 60_000).join('\n')).toContain('拾える期限が過ぎたかもしれない');
+    const unseen = createEyeLedger(null);
+    unseen.note('b', report({ fate: 'unknown', drop: undefined }), 'overworld', 1000);
+    expect(unseen.lines(null, 2000).join('\n')).toContain('落ちたか割れたか見えなかった');
+  });
+
+  it('takes an eye that sank as the place itself: no line, no next throw, and the frame search to do', () => {
+    const ledger = createEyeLedger(null);
+    ledger.note('d', report({ down: true, bearingDeg: 0, unit: null, flew: 0, arrived: true, origin: { x: 300.5, y: 64, z: -400.5 },
+      from: { x: 300, y: 64, z: -401 }, to: { x: 300, y: 50, z: -401 } }), 'overworld', 1000);
+    const text = ledger.lines({ x: 280, z: -380 }, 2000).join('\n');
+    expect(text).toContain('目玉が真下へ沈んだ (301,-400)');
+    expect(text).toContain('mc_probe kind=scan');
+    expect(text).not.toContain('次に投げる場所の案');
+    expect(text).not.toContain('交点はまだ無い');
+    expect(ledger.fix()).toMatchObject({ x: 301, z: -400, errorBlocks: 4, throws: 1 });
+  });
+
+  it('takes an eye that stopped short as the stronghold at where it stopped, and says that this is a reading of the game', () => {
+    const ledger = createEyeLedger(null);
+    ledger.note('s', report({ arrived: true, flew: 7, bearingDeg: 90, unit: { x: 1, z: 0 }, origin: { x: 0, y: 64, z: 0 }, from: { x: 0, y: 64, z: 0 },
+      to: { x: 7, y: 60, z: 0 }, drop: undefined }), 'overworld', 1000);
+    expect(ledger.fix()).toMatchObject({ x: 7, z: 0, errorBlocks: 8, throws: 1 });
+    const text = ledger.lines(null, 2000).join('\n');
+    expect(text).toContain('目玉が 7m で止まった');
+    expect(text).toContain('実測で未確認');
   });
 });
 
