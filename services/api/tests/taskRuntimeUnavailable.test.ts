@@ -139,3 +139,20 @@ describe('a body that is not there (2026-11-02: a run nobody watches waits for i
     expect(f.stops).toEqual([]);
   });
 });
+
+describe('a step that ran nothing keeps what its ports hold (Codex, 2026-11-02: a new plan asked for in the step was counted again by the next one)', () => {
+  it('is closed with the ports\' state beside the round, and with the state it began with when the ports cannot say theirs', async () => {
+    vi.useFakeTimers();
+    const f = fixture({ cooldown: 1_000 });
+    const round = async (fresh: (() => Record<string, unknown>) | undefined) => {
+      const settled = settleUnavailableStep(f.parts, f.step, unavailable(), f.execution(new AbortController().signal), fresh);
+      await vi.advanceTimersByTimeAsync(1_000);
+      return settled;
+    };
+    expect(await round(() => ({ minecraftReplans: { total: 3 }, fcaPlanTree: { revision: 7 } }))).toBe('continued');
+    expect(f.commits.at(-1)).toMatchObject({ checkpoint: { minecraftReplans: { total: 3 }, fcaPlanTree: { revision: 7 }, fcaProviderRetries: 1 } });
+    expect(await round(() => { throw new Error('ports gone'); })).toBe('continued');
+    expect(f.commits.at(-1)).toEqual({ disposition: 'continue', history: [], consumedMessageIds: [], checkpoint: { fcaProviderRetries: 1 } });
+    expect(await round(undefined)).toBe('continued');
+  });
+});
