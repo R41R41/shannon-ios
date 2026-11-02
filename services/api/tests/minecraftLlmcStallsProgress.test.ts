@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { createWaitLedger, observedWait, readActiveWait } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
-import { forgetStalls, noteProgress, restoreStalls, stallsCheckpoint } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
+import { forgetStalls, noteDeath, noteProgress, restoreStalls, stallsCheckpoint } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 afterEach(forgetStalls);
 const frame = (world: object) => ({ connected: true, state: { world }, facts: {} }) as unknown as BodyObservation;
@@ -49,28 +49,64 @@ it('a saved task comes back as it was, through JSON', () => {
   expect(stallsCheckpoint('t')).toEqual(before);
 });
 
-it('a damaged checkpoint is left behind, never thrown on: the task starts counting afresh', () => {
-  const damaged: Array<[string, Record<string, unknown>]> = [
-    ['external work is a number', { node: { snapshot: snapshot({ externalWork: 7 }), since: 1 } }],
-    ['a wait that ends in the year 10^300', { node: { snapshot: snapshot({ waitUntil: 1e300 }), since: 1 } }],
-    ['the death counter has no epoch', { deaths: { deathSeq: 2 } }],
-    ['the inventory holds a text', { node: { snapshot: snapshot({ inventory: { iron_ingot: 'many' } }), since: 1 } }],
-    ['more evidence than a node keeps', { node: { snapshot: snapshot({ purpose: Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`explore:${i}`, 1])) }), since: 1 } }],
-    ['a spot with no position', { spot: { stops: 1 } }],
-    ['another version', { version: 2 }],
-    ['the node is a text', { node: 'p1' }],
-  ];
-  for (const [name, change] of damaged) {
-    forgetStalls();
-    restoreStalls('t', saved(change));
-    expect(stallsCheckpoint('t').minecraftStalls, name).toBeNull();
-    expect(noteProgress('t', snapshot(), 0), name).toBeNull();
-  }
-  for (const nothing of [null, undefined, 'x', 7, []]) {
+it('a checkpoint that is not of this version is left behind, never thrown on: the task starts counting afresh', () => {
+  for (const nothing of [saved({ version: 2 }), saved({ gains: 'many' }), saved({ waits: 1.5 }), saved({ quiet: 'no' }), null, undefined, 'x', 7, []]) {
     forgetStalls();
     restoreStalls('t', nothing);
     expect(stallsCheckpoint('t').minecraftStalls).toBeNull();
+    expect(noteProgress('t', snapshot(), 0)).toBeNull();
   }
+});
+
+it('a part of a checkpoint that is damaged is counted afresh on its own: the others, the death counter first, are kept', () => {
+  const deaths = { deathEpoch: 'e1', deathSeq: 4 };
+  const damaged: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
+    ['external work is a number', { node: { snapshot: snapshot({ externalWork: 7 }), since: 1 } }, { node: null }],
+    ['the inventory holds a text', { node: { snapshot: snapshot({ inventory: { iron_ingot: 'many' } }), since: 1 } }, { node: null }],
+    ['more evidence than a node can keep', { node: { snapshot: snapshot({ purpose: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`explore:${i}`, 1])) }), since: 1 } }, { node: null }],
+    ['the node started in the year 10^300', { node: { snapshot: snapshot(), since: 1e300 } }, { node: null }],
+    ['the node is a text', { node: 'p1' }, { node: null }],
+    ['a spot with no position', { spot: { stops: 1 } }, { spot: null }],
+    ['a death counter with no epoch', { deaths: { deathSeq: 2 } }, { deaths: null }],
+    ['a death count from the year 10^300', { deaths: { deathEpoch: 'e1', deathSeq: 1e300 } }, { deaths: null }],
+  ];
+  for (const [name, change, expected] of damaged) {
+    forgetStalls();
+    restoreStalls('t', saved({ deaths, ...change }));
+    const kept = stallsCheckpoint('t').minecraftStalls as Record<string, unknown> | null;
+    expect(kept, name).toMatchObject({ version: 1, waits: 0, refusals: 0, ...expected });
+    if (!('deaths' in expected)) expect(kept?.deaths, name).toEqual(deaths);
+    expect(noteProgress('t', snapshot(), 0), name).toBeNull();
+  }
+});
+
+it('a wait that ends in the year 10^300 is dropped from the snapshot, which is kept', () => {
+  restoreStalls('t', saved({ node: { snapshot: snapshot({ waitUntil: 1e300 }), since: 1000 } }));
+  const kept = stallsCheckpoint('t').minecraftStalls as { node: { snapshot: Record<string, unknown>; since: number } };
+  expect(kept.node.since).toBe(1000);
+  expect('waitUntil' in kept.node.snapshot).toBe(false);
+});
+
+it('a node that has seen many furnace phases is restored: its lists are cut to the newest, and the death counter comes with it', () => {
+  const phases = Array.from({ length: 66 }, (_, i) => `furnace:${i}`);
+  restoreStalls('t', saved({ deaths: { deathEpoch: 'e1', deathSeq: 1 }, node: { snapshot: snapshot({ externalWork: phases, reached: phases }), since: 1000 } }));
+  const kept = stallsCheckpoint('t').minecraftStalls as { deaths: unknown; node: { snapshot: { externalWork: string[]; reached: string[] } } };
+  expect(kept.deaths).toEqual({ deathEpoch: 'e1', deathSeq: 1 });
+  expect(kept.node.snapshot.externalWork).toEqual(phases.slice(-64));
+  expect(kept.node.snapshot.reached).toEqual(phases.slice(-64));
+  // the death that happened while the worker was down is found: 1 -> 2 is a death, not a first sight
+  expect(noteDeath('t', { deathEpoch: 'e1', deathSeq: 2 })?.kind).toBe('death');
+});
+
+it('the phases a node accumulates stay within what a checkpoint reads back', () => {
+  noteProgress('t', snapshot({ externalWork: [] }), 0);
+  for (let i = 0; i < 100; i++) noteProgress('t', snapshot({ externalWork: [`furnace:${i}`] }), 1000 + i);
+  const kept = stallsCheckpoint('t').minecraftStalls as { node: { snapshot: { externalWork: string[] } } };
+  expect(kept.node.snapshot.externalWork).toHaveLength(64);
+  const again = JSON.parse(JSON.stringify(stallsCheckpoint('t').minecraftStalls));
+  forgetStalls();
+  restoreStalls('t', again);
+  expect(stallsCheckpoint('t').minecraftStalls).toEqual(again);
 });
 
 it('a task that never saw a death counter is restored with none', () => {
@@ -100,11 +136,36 @@ it('a wait deadline or an active wait is read only when it is believable', () =>
   }
 });
 
-it('past 256 pieces of evidence the oldest observation cells are forgotten: a new cell still counts, a remembered one does not', () => {
+const purposeOf = (taskId: string) => (stallsCheckpoint(taskId).minecraftStalls as { node: { snapshot: { purpose: Record<string, number> } } }).node.snapshot.purpose;
+
+it('past what a node remembers the oldest observation cells are forgotten: a new cell still counts, a remembered one does not', () => {
   const seen = (cell: string, extra: Record<string, number> = {}) => snapshot({ purpose: { 'have:iron_ingot': 0, ...extra, [`explore:${cell}`]: 1 } });
   noteProgress('t', seen('c0'), 0);
   for (let i = 1; i <= 300; i++) expect(noteProgress('t', seen(`c${i}`), i * 130_000), `cell ${i}`).toBeNull();
+  expect(Object.keys(purposeOf('t')).filter(key => key.startsWith('explore:'))).toHaveLength(192);
   expect(noteProgress('t', seen('c300'), 301 * 130_000)?.kind).toBe('node_stalled');
+});
+
+it('a flood of destinations does not starve the cells: each kind is kept on its own, the newest always counts', () => {
+  const seen = (i: number) => snapshot({ purpose: { 'have:iron_ingot': 0, [`travel:overworld:${i},64,0`]: -10, [`explore:c${i}`]: 1 } });
+  noteProgress('t', seen(0), 0);
+  for (let i = 1; i <= 400; i++) expect(noteProgress('t', seen(i), i * 130_000), `step ${i}`).toBeNull();
+  const kept = Object.keys(purposeOf('t'));
+  expect(kept.filter(key => key.startsWith('travel:'))).toHaveLength(48);
+  expect(kept.filter(key => key.startsWith('explore:'))).toHaveLength(192);
+  expect(kept).toContain('have:iron_ingot');
+  expect(kept).toContain('explore:c400');
+  expect(kept).toContain('travel:overworld:400,64,0');
+});
+
+it('a cell the body sees again is the newest, not the next one forgotten', () => {
+  const seen = (cell: string) => snapshot({ purpose: { 'have:iron_ingot': 0, [`explore:${cell}`]: 1 } });
+  noteProgress('t', seen('home'), 0);
+  for (let i = 1; i <= 250; i++) {
+    noteProgress('t', seen(`c${i}`), i * 130_000);
+    noteProgress('t', seen('home'), i * 130_000 + 1);
+  }
+  expect(Object.keys(purposeOf('t'))).toContain('explore:home');
 });
 
 it('the objective\'s own evidence is kept when cells are forgotten', () => {

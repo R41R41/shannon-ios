@@ -2,7 +2,7 @@ import { readActResult, type ActPos } from '../../contracts/minecraftActContract
 import { deathBetween, type DeathCounter } from '../../contracts/continueContract.js';
 import { onRedecideNote } from '../../infra/decisionRecords/decisionRecordNotes.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { GAINS_KEPT, PURPOSE_KEYS, readSavedStalls } from './minecraftLlmcStallsSaved.js';
+import { EXPLORE_KEYS, GAINS_KEPT, LIST_KEPT, TRAVEL_KEYS, readSavedStalls } from './minecraftLlmcStallsSaved.js';
 
 /**
  * Amendment A-12 (owner's decision 2026-10-29: 「新しい版だけ・詰まったら止めて直す」): the stalls the head finds itself, beside the ones the body
@@ -199,24 +199,29 @@ const posOf = (value: unknown): ActPos | null => {
  * task's running time that stands still while it is held (the wall clock
  * less the time held in all, `IncidentHoldPort.heldMs`); the node must not have moved on for `STALL.nodeMs` of it.
  */
-/** The evidence of the objective a node has shown, each value only rising. Past `PURPOSE_KEYS` the oldest observation cells are forgotten
- * first, then the oldest destinations; the keys of the objective itself (`have:`, `material:`, `approach:`, `food`) stay. */
+/** The evidence of the objective a node has shown, each value only rising. The cells the body looked in (`explore:`) and the destinations it
+ * went to (`travel:`) are remembered up to `EXPLORE_KEYS` and `TRAVEL_KEYS`, each kind on its own so that neither starves the other, the oldest
+ * forgotten first; what the body saw again is the newest. The newest always counts. The keys of the objective itself (`have:`, `material:`,
+ * `approach:`, `food`) are never forgotten. */
 function mergedPurpose(before: Readonly<Record<string, number>> | undefined, after: Readonly<Record<string, number>>): Record<string, number> {
   const merged: Record<string, number> = {};
-  for (const [key, value] of Object.entries({ ...before, ...after })) merged[key] = Math.max(value, before?.[key] ?? value);
-  for (const kind of ['explore:', 'travel:']) {
-    for (const key of Object.keys(merged)) {
-      if (Object.keys(merged).length <= PURPOSE_KEYS) return merged;
-      if (key.startsWith(kind)) delete merged[key];
-    }
+  for (const [key, value] of Object.entries(before ?? {})) {
+    if (!(key in after)) merged[key] = value;
+  }
+  for (const [key, value] of Object.entries(after)) {
+    merged[key] = Math.max(value, before?.[key] ?? value);
+  }
+  for (const [kind, limit] of [['explore:', EXPLORE_KEYS], ['travel:', TRAVEL_KEYS]] as const) {
+    const kept = Object.keys(merged).filter(key => key.startsWith(kind));
+    for (const key of kept.slice(0, Math.max(0, kept.length - limit))) delete merged[key];
   }
   return merged;
 }
 function mergeProgress(before: ProgressSnapshot | undefined, snapshot: ProgressSnapshot): ProgressSnapshot {
   if (!before || before.node !== snapshot.node) return snapshot;
   const purpose = snapshot.purpose ? mergedPurpose(before.purpose, snapshot.purpose) : undefined;
-  return { ...snapshot, ...(purpose ? { purpose } : {}),
-    externalWork: [...new Set([...(before.externalWork ?? []), ...(snapshot.externalWork ?? [])])] };
+  const work = [...new Set([...(before.externalWork ?? []), ...(snapshot.externalWork ?? [])])];
+  return { ...snapshot, ...(purpose ? { purpose } : {}), externalWork: work.slice(-LIST_KEPT) };
 }
 export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeMs: number): Stall | null {
   const state = taskOf(taskId);
