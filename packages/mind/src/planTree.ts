@@ -58,6 +58,12 @@ function promisesProblem(promises: unknown): string | null {
 /** A promise's item: `food` (food points) or a concrete item name (`oak_planks`; `planks` counts every kind, as
  * `have` reads it). */
 export const promiseItemFits = (value: unknown): boolean => typeof value === 'string' && PROMISE_ITEM.test(value);
+function targetFits(value: unknown): boolean {
+  if (value === undefined) return true;
+  const target = value as { item?: unknown; count?: number } | null;
+  return !!target && typeof target === 'object' && !Array.isArray(target)
+    && promiseItemFits(target.item) && Number.isSafeInteger(target.count) && target.count! > 0 && target.count! <= 99999;
+}
 function treeShaped(tree: PlanTree): boolean {
   return !!tree && tree.schema === PLAN_TREE_SCHEMA && Number.isSafeInteger(tree.revision) && tree.revision >= 0 && Array.isArray(tree.nodes);
 }
@@ -66,7 +72,12 @@ function nodeFits(node: PlanNode): boolean {
   if (!node || !ID.test(String(node.id)) || !isText(node.title, PLAN_LIMITS.title)) return false;
   if (!PLAN_NODE_STATES.includes(node.state) || !Number.isSafeInteger(node.order) || node.order < 0) return false;
   return [node.where, node.doneWhen, node.note].every(value => optionalText(value, PLAN_LIMITS.text)) && optionalText(node.reason, PLAN_LIMITS.reason)
-    && rulesFit(node.forbid) && rulesFit(node.caution) && kindFits(node.kind) && optionalText(node.kindRaw, 64) && prepFits(node.prep);
+    && rulesFit(node.forbid) && rulesFit(node.caution) && kindFits(node.kind)
+    && optionalText(node.kindRaw, 64) && prepFits(node.prep) && targetFits(node.target);
+}
+function setTarget(node: PlanNode, target: PlanNode['target'] | null): void {
+  if (target === null) delete node.target;
+  else if (target !== undefined) node.target = { ...target };
 }
 /** A node's forbid or caution: absent, or at most `PLAN_LIMITS.rules` lines, each a text within `PLAN_LIMITS.rule`. */
 function rulesFit(value: unknown): boolean {
@@ -79,6 +90,7 @@ function draftProblem(draft: PlanNodeDraft, id: string): string | null {
   if (![draft.where, draft.doneWhen, draft.note].every(value => optionalText(value, PLAN_LIMITS.text))) return `${id} の文が長すぎる`;
   if (draft.state !== undefined && !PLAN_NODE_STATES.includes(draft.state)) return `${id} の state が合わない`;
   if (draft.kind !== undefined && !isText(draft.kind, 64)) return `${id} の kind は 64 字までの語`;
+  if (!targetFits(draft.target)) return `${id} の target は item と正の整数 count`;
   return prepFits(draft.prep) ? null : `${id} の prep は state（met・skipped・unmet_now）と why`;
 }
 /** A kind as the model wrote it: one of the list as it is, anything else `other` with the value kept. */
@@ -91,6 +103,7 @@ function kindOf(value: string | undefined): { kind: PlanKind; kindRaw?: string }
 function draftNode(draft: PlanNodeDraft, id: string, parent: string | null, forbid?: string[], caution?: string[]): PlanNode {
   return { id, parentId: parent, order: 0, title: draft.title.trim(), state: draft.state ?? 'continue', ...kindOf(draft.kind),
     ...(draft.prep ? { prep: { ...draft.prep } } : {}),
+    ...(draft.target ? { target: { ...draft.target } } : {}),
     ...(draft.where ? { where: draft.where } : {}), ...(draft.doneWhen ? { doneWhen: draft.doneWhen } : {}), ...(draft.note ? { note: draft.note } : {}),
     ...(forbid ? { forbid } : {}), ...(caution ? { caution } : {}) };
 }
@@ -136,6 +149,7 @@ function setProblem(op: Extract<PlanOp, { op: 'set' }>): string | null {
   const fits = (value: string | undefined, limit: number) => value === undefined || value === '' || optionalText(value, limit);
   if (![op.where, op.doneWhen, op.note].every(value => fits(value, PLAN_LIMITS.text))) return `${op.id} の文が長すぎる`;
   if (op.kind !== undefined && !isText(op.kind, 64)) return `${op.id} の kind は 64 字までの語`;
+  if (op.target !== null && !targetFits(op.target)) return `${op.id} の target は item と正の整数 count（消す時は null）`;
   if (!prepFits(op.prep)) return `${op.id} の prep は state（met・skipped・unmet_now）と why`;
   return fits(op.reason, PLAN_LIMITS.reason) ? null : `${op.id} の reason が長すぎる`;
 }
@@ -257,6 +271,7 @@ class PlanEdit {
     if (problem) return problem;
     if (op.state) node.state = op.state;
     if (op.title) node.title = op.title.trim();
+    setTarget(node, op.target);
     if (op.kind !== undefined) {
       const kind = kindOf(op.kind);
       node.kind = kind.kind;

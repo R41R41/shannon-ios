@@ -184,7 +184,9 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     expectNoConversationRules(on.system);
     for (const tactics of [DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE, '## マイクラの体の決め方', '待ち場', '## 詰まった時の調べ方'])
       expect(on.system).not.toContain(tactics);
-    expect(text).toContain('済みの形と順番（r9）');
+    expect(text).toContain('現在の能力・現物');
+    expect(text).toContain('target:');
+    expect(JSON.stringify(on.body.output_config)).toContain('"target"');
     expect(off.system).not.toContain(STRATEGY_KNOWLEDGE_V2);
     const decisions = await llmcRequests({ systemAppendix: llmcCoreKnowledge(), minecraftOwnPrompt: true });
     for (const body of decisions) expect(JSON.stringify(body.system)).not.toContain('作戦の知識');

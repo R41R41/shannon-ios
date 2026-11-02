@@ -1,3 +1,4 @@
+import { PLAN_TARGET_SCHEMA } from './minecraftPlanRequirements.js';
 import { PLAN_KINDS } from '@shannon/mind';
 import {
   DRAGON_KNOWLEDGE,
@@ -144,6 +145,15 @@ export const FIRST_PLAN_SCHEMA_R4 = Object.freeze({
     },
     promises: promiseField,
   },
+});
+
+/** Active planner schema; historical request schemas remain unchanged for replay. */
+export const CURRENT_FIRST_PLAN_SCHEMA = Object.freeze({
+  ...FIRST_PLAN_SCHEMA_R4,
+  properties: { ...FIRST_PLAN_SCHEMA_R4.properties,
+    nodes: { ...FIRST_PLAN_SCHEMA_R4.properties.nodes,
+      items: { ...FIRST_PLAN_SCHEMA_R4.properties.nodes.items,
+        properties: { ...FIRST_PLAN_SCHEMA_R4.properties.nodes.items.properties, target: PLAN_TARGET_SCHEMA } } } },
 });
 
 export const FIRST_PLAN_SYSTEM_R4 = [

@@ -1,3 +1,4 @@
+import { targetConditionProblem } from './minecraftPlanRequirements.js';
 export { FIRST_PLAN, CHECK_FORBID } from './minecraftFirstPlanPrompts.js';
 import { FIRST_PLAN,CHECK_FORBID } from './minecraftFirstPlanPrompts.js';
 import { FIRST_PLAN_SYSTEM,FIRST_PLAN_SYSTEM_R4 } from './minecraftFirstPlanPrompts.js';
@@ -206,7 +207,8 @@ function seedFields(item: Record<string, unknown>): Omit<PlanSeed, 'title' | 'ch
   const forbid = rules(item.forbid), caution = rules(item.caution);
   // The kind as the model wrote it (`planFromSeeds` takes one outside the list as `other` with the value kept in
 // `kindRaw`); none: `other`.
-  return { ...(text(item.kind, 64) ? { kind: text(item.kind, 64) } : {}), ...(text(item.where, 120) ? { where: text(item.where, 120) } : {}),
+  return { ...(item.target !== undefined ? { target: item.target as NonNullable<PlanSeed['target']> } : {}),
+    ...(text(item.kind, 64) ? { kind: text(item.kind, 64) } : {}), ...(text(item.where, 120) ? { where: text(item.where, 120) } : {}),
     ...(text(item.doneWhen, 120) ? { doneWhen: text(item.doneWhen, 120) } : {}), ...(text(item.note, 120) ? { note: text(item.note, 120) } : {}),
     ...(forbid.length ? { forbid } : {}), ...(caution.length ? { caution } : {}) };
 }
@@ -266,6 +268,7 @@ export function planFromAnswer(answer: unknown, at?: string): PlanTree | null {
     (parent ? seeds.get(parent)!.children : top).push(seed);
   }
   const tree = top.length ? planFromSeeds(top) : null;
+  if (tree?.nodes.some(node => targetConditionProblem(node))) return null;
   return tree ? withPromises(tree, record(answer)?.promises, at) : tree;
 }
 

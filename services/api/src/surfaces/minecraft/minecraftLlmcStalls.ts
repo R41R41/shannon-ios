@@ -86,7 +86,8 @@ export const MOVING: ReadonlySet<string> = new Set(['walk', 'go', 'vertical', 'p
 /** What the progress of the current node is read from, at one moment. `node` is null when the plan has no current
  * node (nothing is counted then). */
 export interface ProgressSnapshot { node: string | null; state: string | null; milestone: string | null; items: number; inventory?:
-   Readonly<Record<string, number>>; reached?: readonly string[]; externalWork?: readonly string[] }
+   Readonly<Record<string, number>>; reached?: readonly string[]; externalWork?: readonly string[];
+   purpose?: Readonly<Record<string, number>>; waitUntil?: number }
 /** Observed external-work phases, not a prediction that the output exists. A countdown alone is not progress. */
 export function externalWorkMilestones(frame: BodyObservation | null): string[] {
   const world = frame?.state.world as { jobs?: unknown; dimension?: unknown } | undefined;
@@ -105,7 +106,14 @@ export function externalWorkMilestones(frame: BodyObservation | null): string[] 
 }
 /** Whether the task moved on between two moments: another node, another state of it, another next milestone, or
  * more things carried. Pure. */
+function purposeMoved(before: ProgressSnapshot, after: ProgressSnapshot): boolean {
+  return before.node !== after.node || before.state !== after.state
+    || (after.externalWork ?? []).some(name => !(before.externalWork ?? []).includes(name))
+    || (after.reached ?? []).some(name => !(before.reached ?? []).includes(name))
+    || Object.entries(after.purpose ?? {}).some(([key, value]) => value > (before.purpose?.[key] ?? (key.startsWith('explore:') ? 0 : value)));
+}
 export function movedOn(before: ProgressSnapshot, after: ProgressSnapshot): boolean {
+  if (after.purpose) return purposeMoved(before, after);
   return before.node !== after.node || before.state !== after.state || before.milestone !== after.milestone || after.items > before.items
     || (after.reached ?? []).some(name => !(before.reached ?? []).includes(name))
     || (after.externalWork ?? []).some(name => !(before.externalWork ?? []).includes(name))
@@ -127,6 +135,21 @@ interface TaskStalls {
   deaths: DeathCounter | null;
 }
 const tasks = new Map<string, TaskStalls>();
+/** The task checkpoint survives a worker restart; it does not grant another retry window. */
+export function stallsCheckpoint(taskId: string): { minecraftStalls: unknown } {
+  const state = tasks.get(taskId);
+  return { minecraftStalls: state ? { ...state, gains: [...state.gains], version: 1 } : null };
+}
+export function restoreStalls(taskId: string, saved: unknown): void {
+  if (tasks.has(taskId) || !saved || typeof saved !== 'object') return;
+  const value = saved as TaskStalls & { version?: number; gains: string[] };
+  if (value.version !== 1 || typeof value.quiet !== 'boolean' || !Array.isArray(value.gains)
+    || !value.gains.every(id => typeof id === 'string') || !Number.isSafeInteger(value.waits)
+    || !Number.isSafeInteger(value.refusals)) return;
+  if (value.node && (!Number.isFinite(value.node.since) || !value.node.snapshot || typeof value.node.snapshot.node !== 'string')) return;
+  const { version: _, ...state } = value;
+  tasks.set(taskId, { ...state, gains: new Set(value.gains) });
+}
 const fresh = (): TaskStalls => ({ quiet: false, node: null, spot: null, explained: null, seen: null, waits: 0,
   gains: new Set(), refusals: 0, deaths: null });
 function taskOf(taskId: string): TaskStalls {
@@ -180,6 +203,13 @@ const posOf = (value: unknown): ActPos | null => {
  * task's running time that stands still while it is held (the wall clock
  * less the time held in all, `IncidentHoldPort.heldMs`); the node must not have moved on for `STALL.nodeMs` of it.
  */
+function mergeProgress(before: ProgressSnapshot | undefined, snapshot: ProgressSnapshot): ProgressSnapshot {
+  if (!before || before.node !== snapshot.node) return snapshot;
+  const purpose = snapshot.purpose ? Object.fromEntries(Object.entries({ ...before.purpose, ...snapshot.purpose })
+    .slice(0, 256).map(([key, value]) => [key, Math.max(value, before.purpose?.[key] ?? value)])) : undefined;
+  return { ...snapshot, ...(purpose ? { purpose } : {}),
+    externalWork: [...new Set([...(before.externalWork ?? []), ...(snapshot.externalWork ?? [])])] };
+}
 export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeMs: number): Stall | null {
   const state = taskOf(taskId);
   if (state.quiet) return null;
@@ -188,15 +218,13 @@ export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeM
     state.node = null;
     return null;
   }
-  // A partial/urgent observation can omit jobs. Remember phases within this node,
-  // so a missing row, a stale countdown or a phase seen again cannot renew the clock.
-  if (state.node?.snapshot.node === snapshot.node) snapshot = { ...snapshot,
-    externalWork: [...new Set([...(state.node.snapshot.externalWork ?? []), ...(snapshot.externalWork ?? [])])] };
+  snapshot = mergeProgress(state.node?.snapshot, snapshot);
   if (!state.node || movedOn(state.node.snapshot, snapshot)) {
     state.node = { snapshot, since: activeMs };
     return null;
   }
   state.node.snapshot = snapshot;
+  if (snapshot.waitUntil !== undefined && activeMs < snapshot.waitUntil) return null;
   const idle = activeMs - state.node.since;
   if (idle < STALL.nodeMs) return null;
   return found(state, { kind: 'node_stalled', key: node,
@@ -238,7 +266,7 @@ function newGains(act: NonNullable<ReturnType<typeof readActResult>>, seen: Set<
  * placed where the act ended (`ActResult.at`).
  */
 export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unknown } | null | undefined>; result: string | undefined;
-   command?: string }): Stall | null {
+   command?: string; waitUntil?: number; activeMs?: number }): Stall | null {
   const state = taskOf(taskId);
   if (state.quiet) return null;
   // An act that did not run (taken off, dropped behind a stop, its result unknown) is neither a wait nor a move.
@@ -248,7 +276,10 @@ export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unkno
   if (act.lines.some(line => line.end !== 'not_run' && line.end !== 'unknown')) {
     const kinds = ran.hands.map(hand => String(hand?.do ?? ''));
     if (gained || kinds.some(kind => MOVING.has(kind))) state.waits = 0;
-    else if (kinds.length > 0 && kinds.every(kind => kind === 'wait')) state.waits += 1;
+    else if (kinds.length > 0 && kinds.every(kind => kind === 'wait')) {
+      if (ran.waitUntil !== undefined && ran.activeMs !== undefined && ran.activeMs < ran.waitUntil) state.waits = 0;
+      else state.waits += 1;
+    }
     if (state.waits >= STALL.waits) return found(state, { kind: 'wait_loop', key: `${state.waits}`,
       why: `wait だけの act が ${state.waits} 回続いた（間に移動や新しい成果が無い）` });
   }

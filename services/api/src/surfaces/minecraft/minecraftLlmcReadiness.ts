@@ -92,11 +92,27 @@ const MINING_TOOLS: Readonly<Partial<Record<PlanKind, { label: string; tools: Re
   diamond: { label: 'ダイヤ鉱石の採掘に使えるツルハシ（鉄・ダイヤ・ネザライト）', tools: /^(?:iron|diamond|netherite)_pickaxe$/u },
   obsidian: { label: '黒曜石の採掘に使えるツルハシ（ダイヤ・ネザライト）', tools: /^(?:diamond|netherite)_pickaxe$/u },
 };
-function miningToolShortage(counts: ItemCounts, kinds: readonly PlanKind[] | null): string | null {
+function miningToolShortage(counts: ItemCounts, kinds: readonly PlanKind[] | null, inventory?: unknown): string | null {
   // A past acquisition node is history; the current pack establishes mining capability.
   // This is a mining fact, not a requirement on chest loot, casting a portal, or an ancestor node.
   const requirement = kinds?.[0] ? MINING_TOOLS[kinds[0]] : undefined;
-  return requirement && countMatching(counts, requirement.tools) === 0 ? `${requirement.label}が現在無い` : null;
+  if (!requirement) return null;
+  const usable = currentUsableCounts(counts, inventory);
+  return countMatching(usable, requirement.tools) === 0 ? `${requirement.label}が現在無い（過去の達成履歴とは別）` : null;
+}
+
+/** Unknown wear is kept unknown; an explicitly exhausted stack cannot establish current capability. */
+export function currentUsableCounts(counts: ItemCounts, inventory?: unknown): Map<string, number> {
+  const usable = new Map(counts);
+  if (!Array.isArray(inventory)) return usable;
+  const broken = new Map<string, number>();
+  for (const raw of inventory) {
+    const stack = raw as { name?: string; count?: number; durability?: { left?: number } } | null;
+    if (stack && typeof stack.name === 'string' && typeof stack.count === 'number' && stack.durability?.left === 0)
+      broken.set(stack.name, (broken.get(stack.name) ?? 0) + stack.count);
+  }
+  for (const [name, count] of broken) usable.set(name, Math.max(0, (usable.get(name) ?? 0) - count));
+  return usable;
 }
 
 /**
@@ -105,8 +121,8 @@ function miningToolShortage(counts: ItemCounts, kinds: readonly PlanKind[] | nul
  * that is to be worn and is only carried is said as such (「着ていない: iron_helmet」), since armour in the pack does not protect.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
-  worn?: readonly string[] }): string | null {
-  const mining = miningToolShortage(parts.counts, parts.nowKinds);
+  worn?: readonly string[]; inventory?: unknown }): string | null {
+  const mining = miningToolShortage(parts.counts, parts.nowKinds, parts.inventory);
   const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
   const table: PrepStage = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];

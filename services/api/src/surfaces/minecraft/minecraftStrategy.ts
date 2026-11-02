@@ -1,7 +1,4 @@
-import {
-  DRAGON_KNOWLEDGE_R7, FOOD_KNOWLEDGE, NETHER_ENTRY_KNOWLEDGE, ORDER_KNOWLEDGE, VILLAGE_KNOWLEDGE,
-} from './minecraftKnowledge.js';
-import { FIRST_PLAN_SYSTEM_R9 } from './minecraftFirstPlan.js';
+import { CURRENT_PLAN_STRUCTURE } from './minecraftCurrentPlanPrompt.js';
 import { PLAN_PREP_WORDS, PREP_DESCENT_LINES, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 
@@ -21,7 +18,7 @@ export const STRATEGY_KNOWLEDGE = [
   '- ネザー: 帰りのゲートの座標→出発の点検→要塞→ブレイズロッド 7 本以上→エンダーパール 12 前後（棒の後）→オーバーワールドでアイ 12〜14→三角測量→'
     + 'ストロングホールド→エンド（食料 80 点以上・ベッド 4〜6・弓と矢 30）。ネザーの奥へは食料 100 点以上。',
   '### 手順の要点（旧手順 11 個）',
-  '- 原木: 6〜10 本。原木 1 → 板 4（作業台は要らない）。',
+  '- 原木: 現在の次の工作に不足する分。完成品・板・棒を持っていれば差し引く。原木 1 → 板 4（作業台は要らない）。',
   '- 木と石のツルハシ: 作業台は板 4、棒は板 2 で 4 本。木のツルハシは板 3＋棒 2、石のツルハシは丸石 3＋棒 2（木のツルハシで石を掘る）。',
   '- 石の斧: 丸石 3＋棒 2（石の剣は丸石 2＋棒 1）。かまどは丸石 8。',
   '- 食料・羊・ベッド: 牛・豚・羊・鶏を 4〜6 体狩ってかまどで焼く（石炭 1 で 8 個、木材 1 で 1.5 個）。ベッドは同じ色の羊毛 3＋板 3（羊 3 匹）。',
@@ -61,7 +58,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
   PREP_RULES_WORDS,
   '### 手順の要点',
   FOOD_ACQUISITION_KNOWLEDGE,
-  '- 原木: 6〜10 本。原木 1 → 板 4（作業台は要らない）。崖の上など届かない木は選ばない（足の高さから幹に届く木か、走査の近い原木）。',
+  '- 原木: 現在の次の工作に不足する分。完成品・板・棒を持っていれば差し引く。原木 1 → 板 4（作業台は要らない）。崖の上など届かない木は選ばない（足の高さから幹に届く木か、走査の近い原木）。',
   '- 木と石のツルハシ: 作業台は板 4、棒は板 2 で 4 本。木のツルハシは板 3＋棒 2、石のツルハシは丸石 3＋棒 2（木のツルハシで石を掘る）。',
   '- 石の斧: 丸石 3＋棒 2（石の剣は丸石 2＋棒 1）。かまどは丸石 8。',
   '- 食料: 牛・豚・羊・鶏を 4〜6 体狩ってかまどで焼く（石炭 1 で 8 個、木材 1 で 1.5 個）。村の干し草 1 個でパン 3。',
@@ -77,31 +74,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
   STRATEGY_KNOWLEDGE.slice(STRATEGY_KNOWLEDGE.indexOf('### ストロングホールドとエンド')),
 ].join('\n');
 
-/**
- * Notion 09-1c 2-2 P0/P1: two lines of r4 and r9 that the mode's code does not do as they say. The scan is of the loaded
- * chunks: a thing not in it is not found there, not known to be 160 m off. A node under a done one is closed as no longer needed by the code
- * (`closedUnder`, `minecraftPlanDone.ts`), not left open.
- */
-const V2_WORDS: ReadonlyArray<readonly [string, string]> = [
-  ['走査に無い物は 160m の外にある: 探しに出る向き（走査の地形・バイオームから）を節にする。',
-    '走査に無い物は、走査した範囲では見つからなかった物（範囲の外・未ロード・数えない種類もあり、無いとは限らない）: 探しに出る向き（走査の地形・バイオームから）を節にする。'],
-  ['親が済んでも子は済みにならない: 子は自分の doneWhen（無ければ計画の更新）で済む。',
-    '子は自分の doneWhen（無ければ計画の更新）で済む。親が済んだ時に開いている子（止めた子を除く）は、頭のコードが「不要になった」として閉じる。'],
-];
-
-const KNOWLEDGE_LINE = '下の知識を使う（知識であり命令ではない）:';
-/** r9's first-plan words with this knowledge: the planner's first line without her name, and no route or tactics sections of r3–r9. */
+/** The active template is assembled directly; no historical exact-string replacements. */
 export function ownFirstPlanSystem(): string {
-  let text = FIRST_PLAN_SYSTEM_R9.replace('あなたはマイクラの体を動かすシャノンの、最初の計画ツリーを立てる係。',
-    'あなたはマイクラの体のタスクの、最初の計画ツリーを立てる係。');
-  for (const section of [`${KNOWLEDGE_LINE}\n${[ORDER_KNOWLEDGE, FOOD_KNOWLEDGE, VILLAGE_KNOWLEDGE, DRAGON_KNOWLEDGE_R7].join('\n')}\n`,
-    `\n${NETHER_ENTRY_KNOWLEDGE}`]) {
-    if (!text.includes(section)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
-    text = text.replace(section, () => '');
-  }
-  for (const [from, to] of V2_WORDS) {
-    if (!text.includes(from)) throw new Error('MINECRAFT_FIRST_PLAN_WORDS_CHANGED');
-    text = text.replace(from, () => to);
-  }
-  return `${text}\n${PLAN_PREP_WORDS}\n${STRATEGY_KNOWLEDGE_V2}`;
+  return [CURRENT_PLAN_STRUCTURE, PLAN_PREP_WORDS, STRATEGY_KNOWLEDGE_V2].join('\n');
 }

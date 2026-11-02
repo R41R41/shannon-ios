@@ -152,11 +152,12 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
  * 「観測では確かめられない」 for free words; null
  * with no frame (unknown, not unmet).
  */
-export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts | null): string | null {
+export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts | null, target?: PlanNode['target']): string | null {
   if (!doneWhen?.trim()) return null;
   const predicate = parseDoneWhen(doneWhen);
   if (!predicate) return '観測では確かめられない（済んだら set state=done）';
   if (!facts) return null;
+  if (target && carried(facts.counts, target.item) < target.count) return `未: ${target.item} ${carried(facts.counts, target.item)}/${target.count}`;
   if (predicateHolds(predicate, facts)) return '満たしている';
   return `未: ${bestAlternative(predicate, facts).filter(clause => !holds(clause, facts)).map(clause => clauseWords(clause, facts)).join('・')}`;
 }
@@ -215,11 +216,13 @@ export function nodesSeenDone(tree: PlanTree, facts: DoneFacts, inOrder = false)
   // Deepest first: a parent is judged after its children, so that a child its own predicate closed does not hold it open.
   for (const node of orderedPlan(tree.nodes).reverse()) {
     if (node.state === 'done' || node.state === 'blocked') continue;
+    if (node.target && carried(facts.counts, node.target.item) < node.target.count) continue;
     const predicate = predicates.get(node.id);
     if (!predicate || !predicateHolds(predicate, facts)) continue;
     const kids = tree.nodes.filter(child => child.parentId === node.id && open(child));
     if (kids.length && !holdsByThePack(predicate, facts)) continue;
-    if (kids.some(child => unmetGear(predicates.get(child.id), facts))) continue;
+    if (kids.some(child => child.target && carried(facts.counts, child.target.item) < child.target.count
+      || unmetGear(predicates.get(child.id), facts))) continue;
     out.add(node.id);
   }
   const ids = orderedPlan(tree.nodes).map(node => node.id).filter(id => out.has(id));

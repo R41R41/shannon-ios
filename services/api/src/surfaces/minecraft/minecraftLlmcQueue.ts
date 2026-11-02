@@ -306,6 +306,7 @@ void restoreReceipts();
     // Once the items are taken off (a stop, the close of the step) an unsettled one is unsafe again: the guard must not look past it.
     openIds: () => stopped ? new Set<string>() : new Set(open().map(item => item.id)),
     open: () => open().length > 0,
+    runningInput: () => open().find(item => item.id === deps.control.progress(deps.bodyId())?.id)?.input ?? null,
     version: () => version,
     tail: () => open().at(-1)?.item ?? null,
     ahead: () => open().map(item => item.input),

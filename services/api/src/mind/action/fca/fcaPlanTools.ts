@@ -1,3 +1,4 @@
+import { PLAN_TARGET_SCHEMA } from '../../../surfaces/minecraft/minecraftPlanRequirements.js';
 import {
   applyPlanUpdate, emptyPlanTree, flatPlan, orderedPlan, planDisplay, planPath, planText, readPlanTreeWith, PLAN_KINDS, PLAN_LIMITS, PREP_STATES,
   type PlanPathView, type PlanTree, type PlanUpdate,
@@ -42,7 +43,7 @@ const promiseFields = {
 };
 const nodeDraft = { type: 'object', additionalProperties: false, required: ['title'], properties: {
   id: { type: 'string', maxLength: 32 }, title: { type: 'string', minLength: 1, maxLength: PLAN_LIMITS.title },
-  where: { type: 'string', maxLength: PLAN_LIMITS.text }, doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text },
+  where: { type: 'string', maxLength: PLAN_LIMITS.text }, doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text }, target: PLAN_TARGET_SCHEMA,
   note: { type: 'string', maxLength: PLAN_LIMITS.text }, state: { type: 'string', enum: ['done', 'blocked', 'continue', 'wait'] },
   kind: kindField, prep: prepField,
 } };
@@ -68,7 +69,8 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
       op: { type: 'string', enum: ['add', 'split', 'set', 'move', 'drop', 'promise', 'release'] }, id: opId,
       parent: { type: ['string', 'null'], maxLength: 32 }, after: { type: ['string', 'null'], maxLength: 32 },
       title: { type: 'string', maxLength: PLAN_LIMITS.title }, where: { type: 'string', maxLength: PLAN_LIMITS.text },
-      doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text }, note: { type: 'string', maxLength: PLAN_LIMITS.text },
+      doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text },
+      target: { ...PLAN_TARGET_SCHEMA, type: ['object', 'null'] }, note: { type: 'string', maxLength: PLAN_LIMITS.text },
       reason: { type: 'string', maxLength: PLAN_LIMITS.reason }, state: { type: 'string', enum: ['done', 'blocked', 'continue', 'wait'] },
       into: { type: 'array', minItems: 1, maxItems: PLAN_LIMITS.split, items: nodeDraft },
       kind: kindField, prep: prepField, ...promiseFields,
@@ -100,7 +102,8 @@ export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
       op: { type: 'string', enum: ['add', 'split', 'set', 'move', 'drop', 'promise', 'release', 'forbid', 'caution', 'lift'] }, id: opId,
       parent: { type: ['string', 'null'], maxLength: 32 }, after: { type: ['string', 'null'], maxLength: 32 },
       title: { type: 'string', maxLength: PLAN_LIMITS.title }, where: { type: 'string', maxLength: PLAN_LIMITS.text },
-      doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text }, note: { type: 'string', maxLength: PLAN_LIMITS.text },
+      doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text },
+      target: { ...PLAN_TARGET_SCHEMA, type: ['object', 'null'] }, note: { type: 'string', maxLength: PLAN_LIMITS.text },
       reason: { type: 'string', maxLength: PLAN_LIMITS.reason }, state: { type: 'string', enum: ['done', 'blocked', 'continue', 'wait'] },
       into: { type: 'array', minItems: 1, maxItems: PLAN_LIMITS.split, items: nodeDraftWithRules },
       kind: kindField, prep: prepField, ...promiseFields,

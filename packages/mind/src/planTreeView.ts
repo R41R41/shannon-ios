@@ -60,6 +60,7 @@ export const nodeLine = (node: PlanNode) =>
   [
     `${node.id} ${node.title}`,
     node.where ? `＠${node.where}` : '',
+    node.target ? `（取得目標: ${node.target.item}×${node.target.count}）` : '',
     node.doneWhen ? `（済み: ${node.doneWhen}）` : '',
     node.note ? ` ${node.note}` : '',
   ].join('');
@@ -146,6 +147,7 @@ export function planDisplay(tree: PlanTree): {
     reason?: string;
     where?: string;
     doneWhen?: string;
+    target?: PlanNode['target'];
     note?: string;
     forbid?: string[];
     caution?: string[];
@@ -163,6 +165,7 @@ export function planDisplay(tree: PlanTree): {
       ...(node.state === 'blocked' && node.reason ? { reason: node.reason } : {}),
       ...(node.where ? { where: node.where } : {}),
       ...(node.doneWhen ? { doneWhen: node.doneWhen } : {}),
+      ...(node.target ? { target: { ...node.target } } : {}),
       ...(node.note ? { note: node.note } : {}),
       ...(node.forbid?.length ? { forbid: [...node.forbid] } : {}),
       ...(node.caution?.length ? { caution: [...node.caution] } : {}),

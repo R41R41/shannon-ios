@@ -8,12 +8,14 @@ import { ACT_CONTRACT_VERSION, type ActPos } from './minecraftActContract.js';
  */
 export const MC_PROBE_SKILL = 'probe' as const;
 export const MC_PROBE_TOOL = `mc.${MC_PROBE_SKILL}` as const;
-export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan'] as const;
+export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan', 'worksite'] as const;
 export type ProbeKind = typeof PROBE_KINDS[number];
 export interface ProbeInput {
   kind: ProbeKind;
   /** path: where to go. */
   to?: ActPos;
+  /** worksite: explicit return destination, evaluated independently. */
+  retreat?: ActPos;
   /** path, sight: from where (default her feet). */
   from?: ActPos;
   /** sight: a block, or a creature (`#12`). */
@@ -61,6 +63,7 @@ export const PROBE_DESCRIPTION = [
     + 'column(x, z, yFrom, yTo: 縦の列の連なり。落差・水・溶岩・砂利) / '
     + 'around(radius: 生き物（敵か・狙っているか・見えるか・高さの差）と危ないブロック) / history(at, radius: その場所の最近の手と止まり) / '
     + 'scan(radius: 読み込み済みの範囲の目印。木・村・水・溶岩・構造物・ネザーの幹・要塞・スポナー・ポータル)。',
+  'worksite(target または at: 目的物、to: 作業する立ち位置、省略なら届く現在地か隣接候補、retreat: 帰還先): 接近・作業の射程/呼吸/道具・逆向きの帰路を別々に調べる。結果は観測時点の短区間だけ。施工後は再確認。',
   '省いた座標は足から。column の yFrom・yTo を省くと足の上下。',
 ].join('\n');
 
@@ -73,6 +76,7 @@ export const PROBE_INPUT_SCHEMA = Object.freeze({
   properties: {
     kind: { type: 'string', enum: [...PROBE_KINDS] },
     to: pos('path の行き先'),
+    retreat: pos('worksite の帰還先'),
     from: pos('path・sight の始まり（既定は足）'),
     target: { type: 'string', maxLength: 64, description: 'sight の的: "#id"・生き物の名前・"x,y,z"' },
     at: pos('sight の的のブロック、history の場所'),

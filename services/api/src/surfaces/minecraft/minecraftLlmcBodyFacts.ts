@@ -1,3 +1,4 @@
+import { targetRequirements } from './minecraftPlanRequirements.js';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { carriedFood } from './minecraftLlmcLive.js';
@@ -128,8 +129,10 @@ export function readinessParts(
         food: facts.food,
         nowKinds: nowKinds(planFacts),
         worn: wornItems(facts.world.worn),
+        inventory: facts.world.inventory,
       }),
       fuelShortage(facts.world, facts.counts),
+      targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),
     ]
       .filter(Boolean)
       .join('。') || null;

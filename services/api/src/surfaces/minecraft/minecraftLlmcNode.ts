@@ -157,7 +157,7 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   const node = tree?.current ? tree.nodes.find(item => item.id === tree.current) : undefined;
   const shown = view as { now?: unknown; path?: unknown } | null;
   if (!node) return planNowLine(shown);
-  const facts = doneFacts(observation), status = doneStatusWords(node.doneWhen, facts);
+  const facts = doneFacts(observation), status = doneStatusWords(node.doneWhen, facts, node.target);
   // A preparation node that is not met says so beside its condition (the work for another node does not move it);
   // below the surface it is one not to be met now.
   const word = facts && undergroundInOverworld(facts) ? PREP_NOT_NOW : PREP_NOTE;

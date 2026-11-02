@@ -63,6 +63,7 @@ export async function bodySummaryRequest(options: Partial<AnthropicFcaOptions> =
 /** The first plan's request (`configuredMinecraftLlmc` with the probe on, so r9's words), with the given switches. */
 export async function firstPlanRequest(own = true): Promise<{ body: Record<string, unknown>; system: string }> {
   const { configuredMinecraftLlmc } = await import('../../src/wiring/minecraftLlmcWiring.js');
+  const { firstPlanner } = await import('../../src/wiring/minecraftLlmcConfiguration.js');
   const { FIRST_PLAN_SYSTEM_R9 } = await import('../../src/surfaces/minecraft/minecraftFirstPlan.js');
   const { ownFirstPlanSystem } = await import('../../src/surfaces/minecraft/minecraftStrategy.js');
   const planned: Array<Record<string, unknown>> = [];
@@ -72,7 +73,8 @@ export async function firstPlanRequest(own = true): Promise<{ body: Record<strin
   const llmc = configuredMinecraftLlmc({ ANTHROPIC_API_KEY: 'k' }, { recordUsage() {} }, { log: () => {}, client })!;
   // `own`: the words the wiring asks with (`ownFirstPlanSystem`); false: r9's, as the request was before the task's own words.
   const system = own ? ownFirstPlanSystem() : FIRST_PLAN_SYSTEM_R9;
-  await llmc.planner!(system, '依頼: エンドラを倒して', new AbortController().signal);
+  const planner = own ? llmc.planner! : firstPlanner({ ANTHROPIC_API_KEY: 'k' }, 'claude-opus-5-5', () => {}, () => {}, client).planner!;
+  await planner(system, '依頼: エンドラを倒して', new AbortController().signal);
   vi.restoreAllMocks();
   return { body: planned[0]!, system };
 }

@@ -131,6 +131,9 @@ export interface PlanPromise {
   have?: number;
 }
 
+/** An explicit acquisition objective; titles never imply a target. */
+export interface PlanTarget { item: string; count: number }
+
 export interface PlanNode {
   id: string;
   parentId: string | null;
@@ -145,6 +148,7 @@ export interface PlanNode {
   where?: string;
   /** What shows it done (an observation: `iron_ingot×24 を持つ`, a milestone). */
   doneWhen?: string;
+  target?: PlanTarget;
   note?: string;
   /** Why it is blocked. */
   reason?: string;
@@ -172,6 +176,7 @@ export interface PlanNodeDraft {
   title: string;
   where?: string;
   doneWhen?: string;
+  target?: PlanTarget;
   note?: string;
   state?: PlanNodeState;
   forbid?: readonly string[];
@@ -200,6 +205,7 @@ export type PlanOp =
       title?: string;
       where?: string;
       doneWhen?: string;
+      target?: PlanTarget | null;
       note?: string;
       reason?: string;
       kind?: string;

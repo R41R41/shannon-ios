@@ -22,6 +22,7 @@ import {
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { CURRENT_FIRST_PLAN_SCHEMA } from '../surfaces/minecraft/minecraftFirstPlanPrompts.js';
 import { amendAnthropicControl } from '../infra/models/anthropic/anthropicFcaControl.js';
 import type { FcaCompletionMistake } from '../mind/action/fca/fcaCompletionMistake.js';
 import { LLMC_PROBE } from '../surfaces/minecraft/minecraftLlmcProbe.js';
@@ -260,7 +261,7 @@ export function configuredMinecraftLlmc(
         : null,
     policy: LLMC_HISTORY_POLICY,
     historyAhead: createFcaHistoryAhead(),
-    ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client),
+    ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, CURRENT_FIRST_PLAN_SCHEMA),
   };
 }
 

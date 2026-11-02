@@ -175,6 +175,8 @@ export interface LlmcQueue extends FcaBodyQueue {
   lines(frame: BodyObservation | null): string[];
   /** The input of the items ahead of a new one, in order (the act preflight reads them as the hands that come first). */
   ahead(): ActInput[];
+  /** Accepted work actually started by the body; never a queued intention. */
+  runningInput?(): ActInput | null;
   /** What the body measured of a step of each vertical form in this task (`progress.msPerUnit`), for the time a vertical hand that
    * names none is given. */
   tuning(): ActTimeTuning;

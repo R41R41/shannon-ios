@@ -95,7 +95,7 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
   it('the first plan reads the scan as not found there, and the closing of the children under a done node', () => {
     const plan = ownFirstPlanSystem();
     expect(plan).not.toContain('走査に無い物は 160m の外にある');
-    expect(plan).toContain('走査した範囲では見つからなかった物');
+    expect(plan).toContain('載らない物は未発見');
     expect(plan).not.toContain('親が済んでも子は済みにならない');
   });
 });

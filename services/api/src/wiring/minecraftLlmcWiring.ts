@@ -1,3 +1,5 @@
+import { createWorksiteMemory } from '../surfaces/minecraft/minecraftWorksiteMemory.js';
+import { purposeEvidence, travelEvidence, explorationEvidence, observedWait, createWaitLedger } from '../surfaces/minecraft/minecraftPurposeProgress.js';
 import { bodyHoldOf,withResend,withIncident,withStalls } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import {
@@ -20,13 +22,14 @@ import { createLlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { snapshotUses } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { meterParts,reachedMilestoneNames } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import {
-deathCounterOf,noteDeath,noteProgress,noteRan,noteRefusal,resumeStalls,stallIncidentId,watchStalls,externalWorkMilestones,
+stallsCheckpoint,restoreStalls,deathCounterOf,noteDeath,noteProgress,noteRan,noteRefusal,resumeStalls,stallIncidentId,watchStalls,externalWorkMilestones,
 type Stall
 } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
+import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
 import { chestNodesDone,followNode,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
@@ -55,7 +58,14 @@ export type { LlmcModelNames, LlmcWiring } from './minecraftLlmcConfiguration.js
  * fixed menu, the history policy).
  */
 export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: MinecraftControl, log: (line: string) => void = line => console.info(line)) {
+  const worksite = createWorksiteMemory((step.snapshot.checkpoint as { minecraftWorksite?: unknown } | null)?.minecraftWorksite);
   const journey = createMinecraftJourney((step.snapshot.checkpoint as { minecraftJourney?: unknown } | null)?.minecraftJourney);
+  const waits = createWaitLedger((step.snapshot.checkpoint as { minecraftWaitDeadlines?: unknown } | null)?.minecraftWaitDeadlines);
+  const savedStalls = step.snapshot.checkpoint as { minecraftStalls?: unknown; minecraftActiveWait?: { node: string; until: number } } | null;
+  restoreStalls(step.taskId, savedStalls?.minecraftStalls);
+  let activeWait = savedStalls?.minecraftActiveWait;
+  let waitUntil: number | undefined;
+  const activeClock = () => Date.now() - (holds?.heldMs?.(step.taskId) ?? 0);
   const bodyId = () => control.store.body(step.taskId) ?? '';
   const observe = () => control.observe(bodyId());
   // What a decision reads: the current frame, or one up to `LLMC_STALE_FRAME_MS` old (mc-chat-stale-frame).
@@ -65,7 +75,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r5: a node whose doneWhen the frame shows is marked done before each decision reads the plan (`minecraftPlanDone.ts`).
   // Run 42: a chest node is done when an act opened the chest at its place (`chestNodesDone`), with the nodes the frame shows done.
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: firstPlanInbox, log,
-    validateUpdate: (before, after) => preparationCompletionProblem(before, after, observe()),
+    validateUpdate: (before, after) => targetUpdateProblem(before, after, observe()) ?? preparationCompletionProblem(before, after, observe()),
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
     follow: tree => followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(doneFacts(observe()))) });
@@ -322,15 +332,26 @@ queue.onRan(noteIncidentResult);
         else void hold(); // stop waits for this step to close; the audit and stop request are published synchronously.
       })().catch(error => log(`Shannon Minecraft head stall take failed task=${step.taskId} ${String(error)}`));
     };
+    const refreshWait = (current: string | null, frame: ReturnType<typeof observe>, running: ReturnType<NonNullable<typeof queue.runningInput>>) => {
+      waits.observeDay(frame);
+      if (running?.hands.length && running.hands.every(h => h.do === 'wait')) {
+        const until = waits.until(current ?? '', observedWait(running.done, frame), activeClock());
+        if (current && until !== undefined) activeWait = { node: current, until };
+      } else if (running) activeWait = undefined;
+      waitUntil = activeWait?.node === current ? activeWait.until : undefined;
+    };
     const look = (): boolean => {
       if (holding) return true;
       try {
         const frame = observe(), tree = plan.port.tree(), current = workingNode(step.taskId, tree.current) ?? tree.current, node =
            tree.nodes.find(item => item.id === current);
         const counts = doneFacts(frame)?.counts;
+        const running = queue.runningInput?.() ?? null;
+        refreshWait(current, frame, running);
         const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
           milestone: meterParts(tree, frame, 0)?.next ?? null, reached: reachedMilestoneNames(tree, frame) ?? [],
-          externalWork: externalWorkMilestones(frame),
+          externalWork: externalWorkMilestones(frame), purpose: { ...purposeEvidence(node, frame), ...travelEvidence(running, frame),
+            ...explorationEvidence(node, running, frame) }, waitUntil,
           inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) :
              0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
         if (stall) headHold(stall);
@@ -342,8 +363,13 @@ queue.onRan(noteIncidentResult);
     };
     const noteQueueResult: Parameters<typeof queue.onRan>[0] = (item, _result, receipt) => {
       try {
-        const input = item.call.input as { hands?: unknown } | null;
-        const stall = noteRan(step.taskId, { hands: Array.isArray(input?.hands) ? input.hands : [], result: receipt?.result, ...(
+        const input = item.call.input as { hands?: unknown; done?: unknown } | null;
+        const tree = plan.port.tree(), current = workingNode(step.taskId, tree.current) ?? tree.current;
+        const waiting = Array.isArray(input?.hands) && input.hands.length > 0 && input.hands.every(h => h?.do === 'wait');
+        waitUntil = waiting ? waits.until(current ?? '', observedWait(input?.done, observe()), activeClock()) : undefined;
+        activeWait = current && waitUntil !== undefined ? { node: current, until: waitUntil } : undefined;
+        const stall = noteRan(step.taskId, { hands: Array.isArray(input?.hands) ? input.hands : [], result: receipt?.result,
+          waitUntil, activeMs: activeClock(), ...(
           receipt?.id ? { command: receipt.id } : {}) });
         if (stall) headHold(stall, incidentOfResult(receipt?.result));
         else look();
@@ -381,7 +407,9 @@ queue.onRan(noteQueueResult);
         return { committed: async () => { await commitHold?.(); } };
       } };
   })() : null;
-  const bodyParts = { plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(), returnRoute: journey.read };
+  const bodyParts = {
+    plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(),
+    returnRoute: (observation: ReturnType<typeof observe>) => [...journey.read(observation), ...worksite.read(observation)] };
   // Amendment A-10: the model that decided this step (the main one, or the escalation while the task is stuck); an
 // act of it that would break a promise is decided again by Opus
   // (`FcaModel.redecide`: the step's last request with the act and the promise line added). Opus's plan.update
@@ -411,7 +439,8 @@ queue.onRan(noteQueueResult);
   const stepPorts = () => ({
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null, openIds: () => queue.openIds() },
-    tools: { llmc: { plan: display, urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read,
+    tools: { llmc: { plan: display, observedProbe: (result: string | undefined) => worksite.remember(result, observe()),
+      urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read,
       // Amendment A-7 1: an act's `keep` becomes promises of the plan, by the plan's own handling (the same as
 // `plan.update`'s promise op).
       keep: (entry: ActKeep) => plan.port.keepPromise?.(entry) ?? { problem: 'この計画には約束を書けない' },
@@ -433,7 +462,9 @@ queue.onRan(noteQueueResult);
       // The completion reads the frame a decision reads (the current one, or one up to `LLMC_STALE_FRAME_MS` old): a stall of the
       // API's thread must not turn a done task back.
       ? { ...ports, tools: llmcTools(ports.tools, { tree: () => plan.port.tree(), observe: decided, goal: step.snapshot.task.goal }) } : ports,
-    ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port, checkpoint: journey.checkpoint,
+    ports: { model: stalls ? billingGuarded(model, stalls.billing) : model, plan: plan.port, checkpoint: () => ({
+      ...journey.checkpoint(), ...waits.checkpoint(), ...stallsCheckpoint(step.taskId),
+      ...worksite.checkpoint(), minecraftActiveWait: activeWait }),
       ...(stalls ? { prepareStop: stalls.prepareStop } : {}),
       // The decision records name the body's connection and catalog beside each request (`minecraftBodyVersion.ts`).
       versions: () => minecraftBodyVersion(control, bodyId(), read),

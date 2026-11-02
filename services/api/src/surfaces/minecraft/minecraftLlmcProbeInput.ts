@@ -61,7 +61,8 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
 };
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
-  path: ['to', 'from'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'], scan: ['radius'],
+  path: ['to', 'from'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
+  scan: ['radius'], worksite: ['target', 'to', 'retreat'],
 };
 /** The radius each kind takes: its range and default (none: the body's own). */
 const RADIUS: Readonly<Partial<Record<ProbeKind, { low: number; high: number; fallback?: number }>>> = {
@@ -126,6 +127,15 @@ function position(work: Preparing, key: string): ActPos | null | undefined {
 }
 /** Each kind's own fields (a problem, or null); around and scan have none of their own (their radius is `prepareRadius`'s). */
 const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => string | null>>> = {
+  worksite(work) {
+    const target = position(work, 'target') ?? position(work, 'at');
+    if (!target) return 'worksite には target または at に目的物の座標が要る';
+    work.out.target = target;
+    const to = position(work, 'to'), retreat = position(work, 'retreat');
+    if (to) work.out.to = to;
+    if (retreat) work.out.retreat = retreat;
+    return null;
+  },
   path(work) {
     const to = position(work, 'to') ?? position(work, 'at') ?? (typeof work.fields.target === 'string' ? readPos(work.fields.target) : null);
     if (!to) return 'path には to {x,y,z} が要る';
@@ -220,6 +230,7 @@ export function probeLabel(input: ProbeInput, feet: ActPos | null = null): strin
   return LABELS[input.kind](input, feet);
 }
 const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null) => string>> = {
+  worksite: input => `worksite→${typeof input.target === 'object' ? posText(input.target) : '?'} 戻り${input.retreat ? posText(input.retreat) : '未指定'}`,
   path: input => `path→${input.to ? posText(input.to) : '?'}`,
   sight: input => `sight→${typeof input.target === 'string' ? input.target : input.target ? posText(input.target) : '?'}`,
   column: (input, feet) => {
