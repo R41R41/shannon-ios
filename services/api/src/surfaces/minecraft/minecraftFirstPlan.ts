@@ -92,7 +92,8 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ',
     caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）'] }),
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
-    caution: ['縁から5マス以上内側で戦う。縁では sneak', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は水入りバケツ（hotbar に）と積める物3個以上で登り、長居しない'],
+    caution: ['縁から5マス以上内側で戦う。縁では sneak', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は水入りバケツ（hotbar に）と積める物3個以上で登り、長居しない',
+      '竜を打つ前に剣か斧を equip で手に持つ（手が別の物のことがある）'],
     children: [node('クリスタルを弓で壊す', { kind: 'dragon', doneWhen: 'crystals<=0' }), node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
 ];
 /**
