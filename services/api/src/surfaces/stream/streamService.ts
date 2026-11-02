@@ -360,20 +360,14 @@ export class StreamService {
     const gateAt = this.now();
     const gate = primary.event ? { declined: false } : await this.parts.gate.before(primary.text, primary.tags, recent);
     this.measure.note(this.measure.gateMs, this.now() - gateAt);
-    if (this.stale(session, epoch)) {
-      group.forEach(record => this.give(record, 'new'));
-      return;
-    }
+    if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
     const comments = group.map(record => this.writerComment(record));
     const purpose: WriterPurpose = tellOff ? { kind: 'notice', comments } : { kind: 'reply', comments, decline: gate.declined };
     const kind: StreamLineKind = tellOff ? 'notice' : 'reply';
     const writerAt = this.now();
     const written = await this.author.write(this.authorSession(session), turn, purpose, group.map(record => record.commentId), kind);
     this.measure.note(this.measure.writerMs, this.now() - writerAt);
-    if (this.stale(session, epoch)) {
-      group.forEach(record => this.give(record, 'new'));
-      return;
-    }
+    if (this.stale(session, epoch)) return group.forEach(record => this.give(record, 'new'));
     if (!written) return group.forEach(record => this.give(record, 'new'));
     this.enqueueReply(group, written, kind, gate.declined);
   }

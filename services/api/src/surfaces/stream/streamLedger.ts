@@ -112,7 +112,8 @@ export class StreamLedger {
       commentId: incoming.id, authorId: incoming.authorId, authorName: plain(incoming.authorName, 40) || 'みなさん',
       viewer: viewerDigest(incoming.authorId, this.salt), text, kind: incoming.kind,
       amountDisplay: incoming.amount ? plain(incoming.amount.display, 20) : null, roles: incoming.roles,
-      publishedMs: Number.isFinite(published) ? Math.min(published, nowMs) : nowMs, publishedKnown: Number.isFinite(published) && published <= nowMs, receivedMs: nowMs, status: 'new', tags, digest: commentDigest(text),
+      publishedMs: Number.isFinite(published) ? Math.min(published, nowMs) : nowMs,
+      publishedKnown: Number.isFinite(published) && published <= nowMs, receivedMs: nowMs, status: 'new', tags, digest: commentDigest(text),
       event, question: !event && isQuestion(text), named: !event && isNamed(text), reaction: isReaction(text) && !tags.length && !PAID_KINDS.has(incoming.kind),
       first: !this.seenViewers.has(incoming.authorId), attempts: 0,
     };
