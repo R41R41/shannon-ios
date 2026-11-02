@@ -26,12 +26,8 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
     }
     // R3-1 (6): nothing is put behind a running item that only waits.
     if (waiting.length && spec.input.hands.length > 0 && spec.input.hands.every((hand) => hand.do === 'wait')) return waitBehindWords(waiting.at(-1)!.item);
-    if (spec.reserve === true || spec.input.reserve === true) {
-      const observation = deps.observe();
-      const refused = reserveRefusal(spec.input, { allowed: deps.reserveAllowed?.() === true, dimension: observation ? dimensionOf(observation) : null,
-        hasReserve: waiting.some((item) => item.reserve === true), hasDecided: waiting.some((item) => item.reserve !== true) });
-      if (refused) return refused;
-    }
+    const reserveProblem = reserveAdmissionProblem(spec, waiting);
+    if (reserveProblem) return reserveProblem;
     const same = waiting.find((item) => sameWork(item.input, spec.input));
     if (same) return `送らなかった: ${same.item} ${SAME_IN_QUEUE_WORDS}（${waiting[0] === same ? '実行中' : '待ち'}）。列は live の queue`;
     // Continue contract 2: a mark of another step's queue cannot be relied on (the marks belong to one queue); said
@@ -40,6 +36,18 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
     if (unknown.length) {
       const usable = (waiting.length ? waiting : items.slice(-3)).map((entry) => entry.item);
       return `送らなかった: dependsOn の ${unknown.join('・')} は前の段の列（今の列で頼れるのは ${usable.length ? usable.join('・') : 'まだ無い'}）`;
+    }
+    return null;
+  }
+
+  function reserveAdmissionProblem(spec: QueueAdd, waiting: QueueItem[]): string | null {
+    if (spec.reserve === true || spec.input.reserve === true) {
+      const observation = deps.observe();
+      const refused = reserveRefusal(spec.input, {
+        allowed: deps.reserveAllowed?.() === true, dimension: observation ? dimensionOf(observation) : null,
+        hasReserve: waiting.some((item) => item.reserve === true), hasDecided: waiting.some((item) => item.reserve !== true),
+      });
+      if (refused) return refused;
     }
     return null;
   }

@@ -11,7 +11,8 @@ import type { MinecraftControl } from './minecraftControl.js';
 import { urgentWatch } from './minecraftLlmc.js';
 import { type ReflexCapped } from './minecraftLlmcBodyEvents.js';
 
-/** R3-1 (1): T' is the 90th percentile of the last `kept` decisions and a second more (the median woke the head too late for about half of its decisions: they took longer than T), within min and max. */
+/** R3-1 (1): T' is the 90th percentile of the last `kept` decisions and a second more (the median woke the head
+ * too late for about half of its decisions: they took longer than T), within min and max. */
 export const QUEUE_T = Object.freeze({ minMs: 2_000, maxMs: 8_000, defaultMs: 5_000, kept: 10, quantile: 0.9, marginMs: 1_000 });
 
 /** The longest an item's wait to start (the sum of the items ahead of it and a margin). */
@@ -170,7 +171,8 @@ export type RanListener = (item: { call: FcaToolCall; why: string }, result: Too
 
 /** The queue as the head's tools and lifecycle use it (`FcaBodyQueue` is what the runner sees of it). */
 export interface LlmcQueue extends FcaBodyQueue {
-  /** (R3-1 3) The step's close, for the head's own callers (the stall detector, the plan's node change): the reserve items go, the decided ones run out, the step ends. */
+  /** (R3-1 3) The step's close, for the head's own callers (the stall detector, the plan's node change):
+   * the reserve items go, the decided ones run out, the step ends. */
   closeStep(reason: string): void;
   closing(): boolean;
   add(spec: QueueAdd): Promise<AddResult>;

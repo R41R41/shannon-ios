@@ -2,10 +2,13 @@ import type { ActInput, ActPos, ActStopIf } from '../../contracts/minecraftActCo
 import type { ActClause, ActCondition } from '../../contracts/minecraftActCondition.js';
 
 /**
- * R3-1 (4): the reserve item. While the head thinks, the body goes on with a small item the model wrote for that (`reserve: true` on an act: a head-only mark, not sent to the body): what can be
- * done on the spot first (pick up, a vein next to the body, a craft at hand, a gathering between bakes), a `go` only to within 16 m of where the next hand will be. The head puts it last in the
- * queue and takes it off itself when the decided item comes (`replace`), the safety defaults are the head's and the body's (`dependsOn: []`, a `pre`, a `stopIf`, and the body's safety cut: no reserve
- * starts after an item that ended in a danger). Used only for a task nobody watches (a held or watched task does not take one), and in the Nether and the End no reserve moves the body.
+ * R3-1 (4): the reserve item. While the head thinks, the body goes on with a small item the model wrote for that
+ * (`reserve: true` on an act: a head-only mark, not sent to the body): what can be done on the spot first (pick up,
+ * a vein next to the body, a craft at hand, a gathering between bakes), a `go` only to within 16 m of where the next
+ * hand will be. The head puts it last in the queue and takes it off itself when the decided item comes (`replace`),
+ * the safety defaults are the head's and the body's (`dependsOn: []`, a `pre`, a `stopIf`, and the body's safety cut:
+ * no reserve starts after an item that ended in a danger). Used only for a task nobody watches (a held or watched
+ * task does not take one), and in the Nether and the End no reserve moves the body.
  */
 export const RESERVE_DEFAULTS = Object.freeze({ safeR: 16, hp: 12, atR: 32, hostileWithin: 8, hpBelow: 10 });
 /** The hands that move the body from where it is: no reserve has them in the Nether or the End. */
@@ -13,7 +16,10 @@ export const RESERVE_TRAVEL_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 
 const QUIET_DIMENSIONS: ReadonlySet<string> = new Set(['the_nether', 'nether', 'the_end', 'end']);
 
 /** Why a reserve is not taken, or null. `hasReserve`: one is open already; `hasDecided`: a decided item is open (the reserve goes behind it). */
-export function reserveRefusal(input: Pick<ActInput, 'hands' | 'dependsOn' | 'replace'>, state: { allowed: boolean; dimension: string | null; hasReserve: boolean; hasDecided: boolean }): string | null {
+export function reserveRefusal(
+  input: Pick<ActInput, 'hands' | 'dependsOn' | 'replace'>,
+  state: { allowed: boolean; dimension: string | null; hasReserve: boolean; hasDecided: boolean },
+): string | null {
   if (!state.allowed) return '送らなかった: この依頼は控えを受け付けない（人が見守る・保留つきの依頼）。決めた項目だけを送る';
   if (state.hasReserve) return '送らなかった: 控えは列に 1 つまで。今の控えを使うか、決めた項目を送れば控えは自分で消える';
   if (!state.hasDecided) return '送らなかった: 控えは決めた項目の後ろに置くもの（列が空なら、決めた項目として reserve を付けずに送る）';
@@ -27,8 +33,9 @@ export function reserveRefusal(input: Pick<ActInput, 'hands' | 'dependsOn' | 're
 
 const hasKind = (alternative: readonly ActClause[], kind: ActClause['k']) => alternative.some(clause => clause.k === kind);
 /**
- * The reserve's `pre`: the one the model wrote (or none) with the defaults added to every alternative that lacks them: safe (no hostile in sight within 16), health 12 or more, and within 32 m of where the
- * decision was made. A condition that would pass six clauses keeps the ones it has (the body's limit).
+ * The reserve's `pre`: the one the model wrote (or none) with the defaults added to every alternative that lacks them:
+ * safe (no hostile in sight within 16), health 12 or more, and within 32 m of where the decision was made.
+ * A condition that would pass six clauses keeps the ones it has (the body's limit).
  */
 export function reserveCondition(pre: ActCondition | undefined, feet: ActPos | null, dimension: string | null): ActCondition {
   const base: ActCondition = pre?.length ? pre : [[]];
@@ -45,5 +52,6 @@ export function reserveCondition(pre: ActCondition | undefined, feet: ActPos | n
 }
 /** The reserve's `stopIf`: the model's, with hostileWithin and hpBelow at least the defaults (a stricter word of the model stands). */
 export function reserveStopIf(stopIf: ActStopIf | undefined): ActStopIf {
-  return { ...(stopIf ?? {}), hostileWithin: Math.max(stopIf?.hostileWithin ?? 0, RESERVE_DEFAULTS.hostileWithin), hpBelow: Math.max(stopIf?.hpBelow ?? 0, RESERVE_DEFAULTS.hpBelow) };
+  return { ...(stopIf ?? {}), hostileWithin: Math.max(stopIf?.hostileWithin ?? 0, RESERVE_DEFAULTS.hostileWithin),
+    hpBelow: Math.max(stopIf?.hpBelow ?? 0, RESERVE_DEFAULTS.hpBelow) };
 }
