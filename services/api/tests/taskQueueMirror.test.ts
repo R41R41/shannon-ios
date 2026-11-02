@@ -163,6 +163,7 @@ describe('the results as news, and the version', () => {
     const no = setup();
     await no.queue.add(no.spec(wait1));
     expect(await no.queue.add(no.spec([{ do: 'pickup' }] as never, { reserve: true }))).toMatchObject({ ok: false });
+    forgetLlmcQueues(); // the item numbers are the task's: the second queue starts again at q1
     const f = setup({ reserveAllowed: true });
     await f.queue.add(f.spec(wait1));
     expect(await f.queue.add(f.spec([{ do: 'pickup' }] as never, { reserve: true }))).toMatchObject({ ok: true, item: 'q2', after: 'q1' });
