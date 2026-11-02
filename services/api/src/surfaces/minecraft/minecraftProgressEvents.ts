@@ -13,12 +13,17 @@ const KILLS = /(?:^|:)(?:blaze|enderman)$|^#\d+$/u;
 
 export type ProgressHand = { do?: unknown; target?: unknown; item?: unknown; at?: unknown } | null | undefined;
 
+/** Whether a fight or an attack line is the death of a blaze or an enderman (the target named, or the line saying so). */
+function killed(hand: ProgressHand, line: ActHandLine): boolean {
+  const ended = line.do === 'fight' ? line.code === 'target_killed' : line.do === 'attack' && line.status === 'done';
+  const target = typeof hand?.target === 'string' ? hand.target : '';
+  return ended && (KILLS.test(target) || /blaze|enderman/u.test(line.line));
+}
+
 /** The event one result line is, with the hand it belongs to (the lines count from 1 in the order the hands were sent), or null. */
 function eventOf(hand: ProgressHand, line: ActHandLine): ProgressEvent | null {
   if (line.end === 'not_run' || line.end === 'unknown' || line.goal !== 'done') return null;
-  const target = typeof hand?.target === 'string' ? hand.target : '';
-  if (line.do === 'fight' && line.code === 'target_killed') return KILLS.test(target) || /blaze|enderman/u.test(line.line) ? 'kill' : null;
-  if (line.do === 'attack' && line.status === 'done') return KILLS.test(target) || /blaze|enderman/u.test(line.line) ? 'kill' : null;
+  if (killed(hand, line)) return 'kill';
   if (line.do === 'obsidian') return 'frame';
   if (line.do === 'portal') return 'ignition';
   return line.do === 'use' && hand?.item === 'ender_eye' && hand.at !== undefined ? 'eye' : null;
