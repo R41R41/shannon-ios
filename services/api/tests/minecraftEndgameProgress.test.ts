@@ -94,9 +94,9 @@ describe('walking the late-game seed with the frames of a run', () => {
   it('keeps the meter on the later milestones: the next target after the Nether is the fortress, then the rods, and so on', () => {
     const dragon = { ...seedPlan('エンドラを討伐して')!, current: 'p9' };
     const nether = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: [], mapLandmarks: [] });
-    expect(meterLine(dragon, nether, 1_900 / 60)).toContain('次の節目 ネザー要塞 目安 2,700 秒');
+    expect(meterLine(dragon, nether, 1_900 / 60)).toContain('次の節目 ネザー要塞 目安 3,200 秒');
     const fortress = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: items({ cooked_beef: 4 }), mapLandmarks: ['N ネザー要塞 (10,64,0) 東10m レンガ×30'] });
-    expect(meterLine(dragon, fortress, 2_000 / 60)).toContain('次の節目 ブレイズロッド 7 本 目安 4,500 秒');
+    expect(meterLine(dragon, fortress, 2_000 / 60)).toContain('次の節目 ブレイズロッド 7 本 目安 4,700 秒');
   });
 
   it('gives the held diagnostic run only the first stretch of the road: a fortress coming into view past the Nether is not its progress', () => {
