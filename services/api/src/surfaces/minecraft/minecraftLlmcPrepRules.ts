@@ -39,7 +39,9 @@ const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て・脚', count: 3, patte
 const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true };
 /** The Nether's rock wears a pickaxe out (an iron one is 250 uses: S2's lab, one broke): three iron ones, or one diamond one (which counts for three). */
 const TRIP_PICKAXE: PrepNeed = { label: 'ツルハシ（ダイヤ 1 か鉄 3）', count: 3, pattern: PICKAXE.pattern, weight: name => /^(?:diamond|netherite)_/u.test(name) ? 3 : 1 };
-const SWORD: PrepNeed = { label: '剣', count: 1, pattern: /^(?:stone|iron|diamond|netherite)_sword$/u };
+// A goal, as the rules' words say (the coordinator's list of what is required leaves the sword out; Codex 7th review: the table and the
+// words disagreed).
+const SWORD: PrepNeed = { label: '剣', count: 1, pattern: /^(?:stone|iron|diamond|netherite)_sword$/u, goal: true };
 const FOOTING: PrepNeed = { label: '足場のブロック', count: 64, pattern: BLOCKS };
 
 export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food: 40, needs: [PICKAXE, BUCKET, SHIELD, ARMOUR],

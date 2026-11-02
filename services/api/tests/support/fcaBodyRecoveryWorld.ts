@@ -16,6 +16,8 @@ import { fcaMinecraftTools } from '../../src/wiring/fcaMinecraftTools.js';
 import { MINECRAFT_REQUEST_CRITERIA } from '../../src/wiring/fcaMinecraftRequests.js';
 import type { FcaBudget } from '../../src/wiring/fcaBudgetWiring.js';
 import type { FcaModel, FcaModelInput, FcaModelOutput } from '../../src/mind/action/fca/fcaPorts.js';
+import type { FcaStepPorts } from '../../src/mind/action/fca/fcaStepPorts.js';
+import type { TaskStep } from '../../src/mind/action/taskRuntime/taskRuntimePorts.js';
 
 /**
  * A Minecraft request, the real task runtime, the real action store and the real body control, with a body that can be made to
@@ -46,6 +48,8 @@ export function minecraftWorld(options: { windowMs?: number; /** A-17: the tasks
   budget?(parts: { db: DatabaseSync; actions: ActionThreads; now(): string }): FcaBudget;
   /** Stands in for the body's release when it answers something else than the real re-check would (`real` is the real one). */
   release?(step: Parameters<FcaBodyRecoveryParts['body']['release']>[0], real: FcaBodyRecoveryParts['body']['release']): ReturnType<FcaBodyRecoveryParts['body']['release']>;
+  /** More ports for each step (a lifecycle, a checkpoint, a hold), made anew for every step. */
+  ports?(step: TaskStep): Partial<FcaStepPorts>;
 } = {}) {
   let clock = Date.parse('2026-10-19T09:00:00.000Z');
   const now = () => new Date(clock).toISOString();
@@ -95,7 +99,7 @@ export function minecraftWorld(options: { windowMs?: number; /** A-17: the tasks
         windowMs: options.windowMs ?? 30 * 60_000, ...(options.limit ? { limit: options.limit } : {}),
         body: { bound: id => control.store.body(id), connected: id => control.frame(id) !== null,
           release: step => options.release ? options.release(step, real => recheck.releaseStep(real)) : recheck.releaseStep(step) } })),
-      stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true }) }) });
+      stepPorts: (_runtime, step) => ({ tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true }), ...options.ports?.(step) }) });
     const api = { control, recheck, driver, recovery };
     apis.push(api);
     return api;

@@ -60,6 +60,13 @@ describe('a stage that says what its lack costs says it in two parts; the others
     expect(noShield.startsWith(`準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾が無い。欠けたまま進むと: ${BEFORE_GATE.risk}。`)).toBe(true);
     expect(noShield).toContain('目標（そろえば。必須ではない）— 金のブーツ');
   });
+  it('says the sword as a goal, as the rules\' words do, not as a required need', () => {
+    const noSword = gateLine(KIT.filter(([name]) => name !== 'iron_sword'));
+    expect(noSword).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 剣・金のブーツ（金 4 がそろう時）が無い');
+    expect(requiredLack(readinessOf(frame(KIT.filter(([name]) => name !== 'iron_sword')))!, ['portal'])).toBeNull();
+    expect(PREP_RULES_WORDS).toContain('目標: 金のブーツ（金 4 がそろう時）・剣・水入りバケツ');
+    expect(PREP_RULES_WORDS).not.toMatch(/必須[^。]*[:：][^。]*剣/u);
+  });
   it('says the food as a required lack, not as a goal', () => {
     const hungry = preparationShortage({ dimension: 'overworld', counts: owned(KIT.filter(([name]) => name !== 'cooked_beef'), WORN), food: 15.6, nowKinds: ['portal'], worn: WORN_PIECES })!;
     expect(hungry).toContain('必須（ネザーに入る前に必ず）— 食料 15.6 点（目安 40）。欠けたまま進むと:');
