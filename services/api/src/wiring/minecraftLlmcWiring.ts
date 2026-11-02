@@ -35,7 +35,7 @@ import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
-import { chestNodesDone,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { chestNodesDone,followDimension,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
 import { recordedLedger } from '../surfaces/minecraft/minecraftLedgerRows.js';
@@ -86,8 +86,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     validateUpdate: validate,
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
-    follow: tree => followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(doneFacts(observe())),
-      leaf => lackBefore(observe(), tree, leaf)) });
+    follow: tree => followDimension(tree, doneFacts(observe())) ?? followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(
+      doneFacts(observe())), leaf => lackBefore(observe(), tree, leaf)) });
   const worldOf = () => {
     const world = decided()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
@@ -426,7 +426,7 @@ queue.onRan(noteQueueResult);
     checkpoint: step.snapshot.checkpoint, replanner: llmc.replanner, observe, plan: plan.port, bodyParts, queue, waits, activeClock,
     heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log, ...(keep ? { persist: keep } : {}) });
   // Amendment A-10 (`minecraftLlmcRedecideWiring.ts`): the model of this step, and the port that asks the stronger one again for an act that breaks a promise.
-  const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId);
+  const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId, () => doneFacts(observe())?.dimension ?? null);
   const { planTools, redecide } = redecideParts(llmc, model, step, plan, log);
   const currentNode = () => workingNode(step.taskId, plan.port.tree().current) ?? plan.port.tree().current ?? '-';
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.

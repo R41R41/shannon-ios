@@ -181,10 +181,12 @@ export function llmcModelRouter(
   checkpoint: unknown,
   log?: (line: string) => void,
   taskId = '',
+  dimension: () => string | null = () => null,
 ): FcaModel {
   const failures = Number((checkpoint as { consecutiveToolFailures?: unknown } | null)?.consecutiveToolFailures ?? 0);
   const raised = models.escalate && Number.isSafeInteger(failures) && failures >= LLMC_ESCALATE_FAILURES;
-  const stage = raised || !models.strong ? null : strongStage(checkpoint);
+  // In the End the strong model decides whatever the plan's current node says (run59, 00:50: the node stayed on the overworld's beds in the Nether).
+  const stage = raised || !models.strong ? null : strongStage(checkpoint) ?? (dimension() === 'the_end' ? 'end' : null);
   if (raised || stage) {
     try {
       log?.(raised ? `Shannon Minecraft model raised task=${taskId} failures=${failures}` : `Shannon Minecraft model strong task=${taskId} stage=${stage}`);

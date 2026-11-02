@@ -3,7 +3,10 @@ import { PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree } from '@shann
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { planFromAnswer, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
-import { forgetActNodes, followNode, lackBefore, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
+import { forgetActNodes, followDimension, followNode, lackBefore, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
+import { doneFacts } from '../src/surfaces/minecraft/minecraftPlanDone.js';
+import { llmcModelRouter } from '../src/wiring/minecraftLlmcConfiguration.js';
+import type { FcaModel } from '../src/mind/action/fca/fcaPorts.js';
 import { heldOfFrame, heldTail, holdV2, sentPart } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, SAFETY_FIRST } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { gateHold, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
@@ -380,5 +383,53 @@ describe('the stronghold\'s road, as the lab measured it (S4, 2026-11-03)', () =
     const stronghold = V2_STAGES.stronghold;
     for (const word of ['1,454m を 110m 前後の hop で 600 秒に 1,274m 進み', '歩く前に丸石を 300 前後持つ', 'maxPlace 100・hop は 110m 前後',
       'ネザーの歩きが 2 回とも通らなかった', '今は勧めない']) expect(stronghold, word).toContain(word);
+  });
+});
+
+describe('the current node follows the body\'s dimension, and the strong model decides in the End whatever the node says (run59 00:50, the owner\'s 3-hour plan)', () => {
+  const rows: Array<[id: string, kind: PlanKind, title: string, doneWhen: string, parent?: string]> = [['p1', 'prep_descent', '地上の準備', 'have:bed>=4&have:golden_boots'],
+    ['p1.1', 'bed', '村のベッド集め', 'have:bed>=4', 'p1'], ['p1.3', 'other', '金のブーツを着る', 'have:golden_boots', 'p1'], ['p2', 'portal', 'ゲートでネザーへ', 'dim:the_nether'],
+    ['p3', 'nether', 'ネザーの攻略', 'have:blaze_rod>=7&have:ender_pearl>=12'], ['p3.1', 'fortress', '要塞を探す', 'see:fortress', 'p3'], ['p3.2', 'blaze', 'ブレイズロッド7本', 'have:blaze_rod>=7', 'p3'],
+    ['p5', 'stronghold', 'ストロングホールド', 'see:end_portal'], ['p6', 'dragon', 'エンドで竜を倒す', ''], ['p6.1', 'end', 'エンドに入る', 'dim:the_end', 'p6'],
+    ['p6.3', 'dragon', 'エンダードラゴン討伐', '', 'p6']];
+  const treeAt = (current: string, done: string[] = []): PlanTree => {
+    const order = new Map<string | null, number>();
+    const nodes: PlanNode[] = rows.map(([id, kind, title, doneWhen, parent]) => {
+      const next = order.get(parent ?? null) ?? 0;
+      order.set(parent ?? null, next + 1);
+      return { id, parentId: parent ?? null, order: next, title, state: done.includes(id) ? 'done' : 'continue', kind, ...(doneWhen ? { doneWhen } : {}) } as PlanNode;
+    });
+    return v2tree({ revision: 1, current, nodes });
+  };
+  const facts = (dimension: string, items: Array<[string, number]> = []) => doneFacts(frame(items, { dimension }))!;
+
+  it('moves a current node of the overworld\'s work to the first open leaf of the Nether\'s work, past the gate node that the beds hold open', () => {
+    const moved = followDimension(treeAt('p1.1', ['p1.2']), facts('the_nether', [['white_bed', 1]]))!;
+    expect(moved).toMatchObject({ to: 'p3.1', from: 'p1.1' });
+    expect(moved.words).toContain('今の節を [p3.1] 要塞を探す に置いた（体は the_nether にいて、今の節 [p1.1] 村のベッド集め は地上の仕事。飛ばした節は順のまま残っている）');
+    // a leaf whose own condition already holds is not the place to stand: the fortress seen, the rods are next
+    expect(followDimension(treeAt('p1.1'), { ...facts('the_nether'), seen: new Set(['fortress']) })).toMatchObject({ to: 'p3.2' });
+  });
+  it('moves to the End\'s work in the End, from the Nether\'s work too, and leaves a current node that is of the dimension or of no kind', () => {
+    expect(followDimension(treeAt('p3.1'), facts('the_end'))).toMatchObject({ to: 'p6.3', from: 'p3.1' });
+    expect(followDimension(treeAt('p1.1'), facts('the_end'))).toMatchObject({ to: 'p6.3' });
+    expect(followDimension(treeAt('p3.1'), facts('the_nether'))).toBeNull();
+    expect(followDimension(treeAt('p1.3'), facts('the_nether'))).toBeNull();
+    expect(followDimension(treeAt('p6.3'), facts('the_end'))).toBeNull();
+  });
+  it('does nothing in the overworld, without a frame, or with no leaf of the dimension\'s work open', () => {
+    expect(followDimension(treeAt('p1.1'), facts('overworld'))).toBeNull();
+    expect(followDimension(treeAt('p1.1'), null)).toBeNull();
+    expect(followDimension(treeAt('p1.1', ['p3', 'p3.1', 'p3.2']), facts('the_nether'))).toBeNull();
+  });
+  it('picks the strong model in the End from the dimension, and not elsewhere for a node of the overworld', () => {
+    const main = { name: 'main' } as unknown as FcaModel, strong = { name: 'strong' } as unknown as FcaModel, escalate = { name: 'up' } as unknown as FcaModel;
+    const checkpoint = { fcaPlanTree: treeAt('p1.1') };
+    expect(llmcModelRouter({ main, escalate: null, strong }, checkpoint, undefined, 't', () => 'the_end')).toBe(strong);
+    expect(llmcModelRouter({ main, escalate: null, strong }, checkpoint, undefined, 't', () => 'the_nether')).toBe(main);
+    expect(llmcModelRouter({ main, escalate: null, strong }, checkpoint, undefined, 't', () => 'overworld')).toBe(main);
+    expect(llmcModelRouter({ main, escalate: null, strong }, checkpoint)).toBe(main);
+    expect(llmcModelRouter({ main, escalate: null }, checkpoint, undefined, 't', () => 'the_end')).toBe(main);
+    expect(llmcModelRouter({ main, escalate, strong }, { ...checkpoint, consecutiveToolFailures: 2 }, undefined, 't', () => 'the_end')).toBe(escalate);
   });
 });

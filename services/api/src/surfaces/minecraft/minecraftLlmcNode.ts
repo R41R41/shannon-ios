@@ -1,6 +1,6 @@
 import { orderedPlan, type PlanKind, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
-import { doneFacts, doneStatusWords, undergroundInOverworld } from './minecraftPlanDone.js';
+import { doneFacts, doneStatusWords, predicateHolds, predicatesOf, undergroundInOverworld, type DoneFacts } from './minecraftPlanDone.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 
@@ -164,6 +164,34 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   const word = facts && undergroundInOverworld(facts) ? PREP_NOT_NOW : PREP_NOTE;
   const held = node.state !== 'done' && holdsNow(node) && status !== '満たしている' ? { ...node, note: node.note ? `${word} ${node.note}` : word } : node;
   return currentNodeLine(held, shown?.path, status);
+}
+
+/** The work of the overworld, which is not what a body in the Nether or the End does now. */
+const OVERWORLD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor', 'diamond',
+  'water', 'lava', 'obsidian', 'portal', 'stronghold', 'chest']);
+/** The kinds of the work that belongs to a dimension besides the overworld. */
+const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = { the_nether: new Set<PlanKind>(['nether', 'fortress', 'blaze', 'pearl']),
+  the_end: new Set<PlanKind>(['end', 'dragon']) };
+/**
+ * The current node follows the body's dimension (run59, 00:50, the owner's three-hour plan: the body was in the Nether and the plan's now stayed on 「村のベッド集め」,
+ * the road said 地上の準備◀今: the node of the gate, `dim:the_nether`, is held open by the beds and the golden boots before it, so the now never left them).
+ * In the Nether or the End, a current node of the overworld's work (or, in the End, of the Nether's) moves to the first open leaf of that dimension's work whose
+ * own condition does not already hold. The nodes it passes stay open in their order, as for `followNode`. Null: no body, the overworld, a current node that
+ * is of the dimension or of no kind (`other`), or no such leaf.
+ */
+export function followDimension(tree: PlanTree, facts: DoneFacts | null): { to: string; from: string | null; acts: number; words: string } | null {
+  const wanted = facts?.dimension ? DIMENSION_KINDS[facts.dimension] : undefined;
+  const order = orderedPlan(tree.nodes), current = order.find(node => node.id === tree.current);
+  if (!facts || !wanted || !current) return null;
+  const kind = kindOf(current);
+  const stale = OVERWORLD_KINDS.has(kind) || (facts.dimension === 'the_end' && DIMENSION_KINDS.the_nether!.has(kind));
+  if (!stale) return null;
+  const predicates = predicatesOf(tree), questions = treeQuestions(tree);
+  const leaf = order.find(node => wanted.has(kindOf(node)) && questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))
+    && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts)));
+  if (!leaf) return null;
+  return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（体は ${facts.dimension} にいて、今の節 [${current.id}] `
+    + `${current.title.slice(0, 24)} は地上の仕事。飛ばした節は順のまま残っている）` };
 }
 
 /** The items in a row, started for the one same node that is not the current one, after which the head moves the
