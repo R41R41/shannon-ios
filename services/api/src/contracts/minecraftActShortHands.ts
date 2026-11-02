@@ -24,7 +24,8 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
  *   [face=F] [target=T]
  *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
  *   drop 物 [数] [target=#id か x,y,z]
- *   上に無い形（furnace・chest・shoot、use の ほかの欄など）は `json {手の JSON}` の 1 行。
+ *   shoot 相手(#id か名前) か x,y,z [item=bow] [charge=秒] [n=本数]
+ *   上に無い形（furnace・chest、use の ほかの欄など）は `json {手の JSON}` の 1 行。
  * 往復（手 → 1 行 → 手）が元と同じにならない手は、必ず json の行に落ちる（欄を黙って失わない）。
  */
 type Fields = Record<string, unknown>;
@@ -259,6 +260,12 @@ const READERS: Record<string, Reader> = {
     : bad('drop', '物の名前が要る（座標は 1 つまで）'),
   look: ({ cells, hand }) => done(cells.length ? { ...hand, to: cells[0] } : hand),
   attack: ({ words, hand }) => words[0] ? done({ ...hand, target: words[0] }) : bad('attack', '相手が要る'),
+  // The bow at an entity or at one cell (the crystals of the End; 2026-11-02, the first real replay: Sonnet wrote it as a line and was turned away).
+  shoot: ({ cells, words, hand }) => {
+    const target = words[0] ?? hand.target;
+    if (target === undefined ? cells.length !== 1 : cells.length > 0) return bad('shoot', '相手（#id か名前）か座標 1 つの、どちらか 1 つが要る');
+    return done(target === undefined ? { ...hand, at: cells } : { ...hand, target });
+  },
   use: ({ words, cells, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(cells.length ? { at: [cells[0]] } : {}) }) : bad('use', '物の名前が要る'),
 };

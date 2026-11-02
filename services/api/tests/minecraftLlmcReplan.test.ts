@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { planFromSeeds, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { CURRENT_FIRST_PLAN_SCHEMA } from '../src/surfaces/minecraft/minecraftFirstPlanPrompts.js';
 import {
   boundTo,
   forgetReplans,
@@ -78,6 +79,26 @@ describe('the strong model\'s answer', () => {
     expect(replanOf('x')).toBeNull();
   });
 
+  /** The API refuses a strict schema with more than 24 optional parameters (2026-11-02: the first real replay got a 400 for every new plan). */
+  const optionalParameters = (schema: unknown, seen = new Set<object>()): number => {
+    if (!schema || typeof schema !== 'object' || seen.has(schema)) return 0;
+    seen.add(schema);
+    const node = schema as { properties?: Record<string, unknown>; required?: string[]; items?: unknown; anyOf?: unknown[] };
+    const required = new Set(node.required ?? []);
+    const own = Object.keys(node.properties ?? {}).filter(key => !required.has(key)).length;
+    const inner = Object.values(node.properties ?? {}).reduce<number>((sum, value) => sum + optionalParameters(value, seen), 0);
+    return own + inner + optionalParameters(node.items, seen) + (node.anyOf ?? []).reduce<number>((sum, value) => sum + optionalParameters(value, seen), 0);
+  };
+
+  it('has a schema the API takes: no more than 24 optional parameters, and so has the schema of the first plan', () => {
+    expect(optionalParameters(REPLAN_SCHEMA)).toBeLessThanOrEqual(24);
+    expect(optionalParameters(CURRENT_FIRST_PLAN_SCHEMA)).toBeLessThanOrEqual(24);
+    const op = (REPLAN_SCHEMA.properties.ops as { items: { properties: Record<string, unknown> } }).items.properties;
+    // what the allowed ops are written with stays, and the promises' fields are gone
+    for (const key of ['op', 'id', 'parent', 'after', 'title', 'kind', 'where', 'doneWhen', 'note', 'target', 'state', 'reason', 'text', 'prep', 'into']) expect(op).toHaveProperty(key);
+    for (const key of ['item', 'count', 'use', 'until', 'instead', 'why']) expect(op).not.toHaveProperty(key);
+  });
+
   it('has a schema whose ops have no promise or release', () => {
     const ops = (REPLAN_SCHEMA.properties.ops as { items: { properties: { op: { enum: string[] } } } }).items.properties.op.enum;
     expect(ops).toContain('split');
@@ -140,7 +161,7 @@ describe('the brief', () => {
     expect(order.every(index => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(text).toContain('止まった節: p10.1。その条件の今: 未: blaze_rod 3/7。');
-    expect(text).toContain('▶p10.1 [blaze] スポナーから3〜5マスに隙間つきの待ち場');
+    expect(text).toContain('▶p10.1 [blaze] mc_probe kind=camp で湧き場の足場を見つけ、go で着く');
     expect(text).toContain('済み: ');
   });
 
