@@ -12,14 +12,13 @@ LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,redecideLabel,llmcModelRouter,
 llmcProbeRunner,billingGuarded
 } from './minecraftLlmcConfiguration.js';
 import type { LlmcWiring } from './minecraftLlmcConfiguration.js';
-import type { FcaExternalTools,FcaToolCall } from '../mind/action/fca/fcaPorts.js';
+import type { FcaBodyLifecycle,FcaExternalTools,FcaToolCall } from '../mind/action/fca/fcaPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { createFcaPlanTools,PLAN_UPDATE_TOOL } from '../mind/action/fca/fcaPlanTools.js';
 import type { PlanTree } from '@shannon/mind';
 import { toolOk,type ToolResult } from '../mind/tools/shannonTools.js';
 import { REDECIDE_GIVE_UP_MS,type RedecidePort } from '../surfaces/minecraft/minecraftLlmcRedecide.js';
 import { firstPlanInbox,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
-import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { createLlmcEvents,urgentDecision,withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
@@ -40,8 +39,7 @@ import { chestNodesDone,followNode,noteChestsOpened,workingNode } from '../surfa
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
 import { recordedLedger } from '../surfaces/minecraft/minecraftLedgerRows.js';
-import { noteHeadHold,noteHeadTail,noteHistoryChange,noteStageRow } from '../infra/decisionRecords/decisionRecordNotes.js';
-import { recordedPlanner } from '../infra/decisionRecords/decisionRecordNotes.js';
+import { noteHeadHold,noteHeadTail,noteHistoryChange,noteStageRow,recordedPlanner } from '../infra/decisionRecords/decisionRecordNotes.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { driftWords,feet,headIncidentKind,incidentHoldPort,incidentOfResult,takeEnd,type Feet,type IncidentNote } from './minecraftIncidentHold.js';
