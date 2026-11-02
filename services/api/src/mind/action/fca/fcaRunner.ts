@@ -35,6 +35,9 @@ export type { FcaStepPorts } from './fcaStepPorts.js';
 /** How many answers of one step may be discarded for a changed life, dimension or connection and asked again; the next one goes
  * through as stale (no call is run). */
 export const FCA_REDECIDE_MAX = 3;
+/** R3-1 (2): a decision thrown away because an item ended badly is asked again in the same step after this many ms, at most this many times in a step (the step is closed after that, as before). */
+export const FCA_STALE_REASK_MS = 250;
+export const FCA_STALE_REASK_MAX = 3;
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   // The decision records (`decisionRecords/`) keep a body task's steps: what each request, call and command is
@@ -283,7 +286,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const queue = bodyTask ? ports.body?.queue : undefined;
   let output!: FcaModelOutput, decision!: FcaDecision, rounds = 0;
   let asked: FcaModelInput | null = request;
-  let redecided = 0;
+  let redecided = 0, reasked = 0;
   /** The last round's results and where its message stands in `history`: a decision thrown away puts the news of
  * the items that ended after it there (run 41). */
   let lastRound: { results: Array<{ id: string; text: string; ok: boolean }>; at: number } | null = null;
@@ -335,6 +338,17 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
           lastRound.results[lastRound.results.length - 1] = { ...last, text: `${last.text}\n${news.text}` };
           history[lastRound.at] = ports.model.toolResults(lastRound.results);
         } else if (news.text) ports.body?.noteNews?.(news.text);
+      }
+      // R3-1 (2): the decision that was thrown away is asked again in this step, 250 ms later, on the queue as it is now (the step used to be closed here, and the body stood idle for the
+      // time a new step takes). Not more than FCA_STALE_REASK_MAX times in a step: after that the step closes as it did.
+      reasked += 1;
+      if (queue && reasked <= FCA_STALE_REASK_MAX && !signal.aborted) {
+        await new Promise<void>(resolve => { const timer = setTimeout(resolve, FCA_STALE_REASK_MS); signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true }); });
+        signal.throwIfAborted();
+        await checked('fresh');
+        asked = await freshen(latest.asked);
+        await checked('fresh');
+        continue;
       }
       break;
     }

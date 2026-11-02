@@ -19,7 +19,7 @@ const lease = { id: 'lease-1', generation: 1, holder: 'test' };
 const cleanups: Array<() => void> = [];
 afterEach(() => { for (const close of cleanups.splice(0)) close(); forgetLlmcQueues(); forgetActNodes(); });
 
-function setup() {
+function setup(options: { reserveAllowed?: boolean } = {}) {
   const db = new DatabaseSync(':memory:'), store = new MinecraftControlStore(db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world',
     onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
@@ -45,7 +45,7 @@ function setup() {
   };
   poll();
   const lines: string[] = [];
-  const queue = createLlmcQueue({ control, taskId: 't1', lease, bodyId: () => 'minecraft:world', observe: () => control.observe('minecraft:world'), log: line => lines.push(line),
+  const queue = createLlmcQueue({ control, taskId: 't1', lease, bodyId: () => 'minecraft:world', observe: () => control.observe('minecraft:world'), log: line => lines.push(line), ...(options.reserveAllowed ? { reserveAllowed: () => true } : {}),
     context: () => ({ scopeKey: 'owner', taskId: 't1', taskRevision: 1, bodyId: 'minecraft:world', sessionId: 'session-1', generation: 1, goal: 'g', completionCondition: 'c' }) });
   cleanups.push(() => { queue.stop(); db.close(); });
   let counter = 0;
@@ -159,6 +159,72 @@ describe('the results as news, and the version', () => {
     expect(await f.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('dropped');
   });
 
+  it('R3-1 (4): a reserve goes behind a decided item with dependsOn [] in its envelope, only where the task takes reserves; the decided item that comes takes it off; the reserve changes no version', async () => {
+    const no = setup();
+    await no.queue.add(no.spec(wait1));
+    expect(await no.queue.add(no.spec([{ do: 'pickup' }] as never, { reserve: true }))).toMatchObject({ ok: false });
+    forgetLlmcQueues(); // the item numbers are the task's: the second queue starts again at q1
+    const f = setup({ reserveAllowed: true });
+    await f.queue.add(f.spec(wait1));
+    expect(await f.queue.add(f.spec([{ do: 'pickup' }] as never, { reserve: true }))).toMatchObject({ ok: true, item: 'q2', after: 'q1' });
+    expect(await f.queue.add(f.spec([{ do: 'pickup' }, { do: 'jump' }] as never, { reserve: true }))).toMatchObject({ ok: false });
+    f.take();
+    const sent = f.handed.find(command => command.queue?.item === 'q2')!;
+    expect(sent.queue?.dependsOn).toEqual([]);
+    f.queue.mark();
+    // the decided item comes: the reserve is taken off first (the body answers for it), the new item follows the running one
+    const adding = f.queue.add(f.spec(dig(2)));
+    await delay(100);
+    f.poll();
+    f.dropRest('捨てた: 取り消された。手は動いていない');
+    f.poll();
+    expect(await adding).toMatchObject({ ok: true, item: 'q3', after: 'q1' });
+    expect(f.queue.stale()).toBe(false);
+  });
+
+  it('R3-1 (4): a reserve that ends or is dropped does not make a decision stale, a decided one does', async () => {
+    const f = setup({ reserveAllowed: true });
+    await f.queue.add(f.spec(wait1));
+    await f.queue.add(f.spec([{ do: 'pickup' }] as never, { reserve: true }));
+    f.take();
+    f.queue.mark();
+    f.dropRest('捨てた: 前の項目 q1 が危険で止まった（reflex）。安全のため始めていない（手は動いていない）');
+    f.poll();
+    await settle();
+    expect(f.queue.stale()).toBe(false); // the reserve never ran: nothing a decision rested on changed
+  });
+
+  it('R3-1 (6): a wait-only act behind a running item is refused at admission, with the words; one with another hand, or onto an empty queue, is not', async () => {
+    const f = setup();
+    expect(await f.queue.add(f.spec(wait1))).toMatchObject({ ok: true, item: 'q1' }); // an empty queue: a wait (night, healing, a furnace) may be written
+    const refused = await f.queue.add(f.spec([{ do: 'wait', seconds: 30 }]));
+    expect(refused).toMatchObject({ ok: false });
+    expect((refused as { text: string }).text).toContain('走っている q1 の後ろに wait だけの項目は積めない');
+    expect(await f.queue.add(f.spec([{ do: 'wait', seconds: 5 }, { do: 'jump' }]))).toMatchObject({ ok: true, item: 'q2' });
+    expect(f.queue.tail()).toBe('q2');
+  });
+
+  it('R3-1 (2): a lone item that ends badly makes the decision being thought stale (nothing was dropped), and a good end does not', async () => {
+    const bad = setup();
+    await bad.queue.add(bad.spec(wait1));
+    bad.take();
+    bad.queue.mark();
+    expect(bad.queue.stale()).toBe(false);
+    bad.end('failed', JSON.stringify({ v: 1, ok: false, done: 0, of: 1, stoppedBy: 'failure', stoppedWhy: '掘れない', ms: 500, at: { x: 0, y: 64, z: 0 }, hp: 20, food: 20,
+      lines: [{ i: 1, do: 'wait', status: 'stopped', line: '失敗' }] }));
+    bad.poll();
+    await settle();
+    expect(bad.queue.stale()).toBe(true);
+    const good = setup();
+    await good.queue.add(good.spec(wait1));
+    good.take();
+    good.queue.mark();
+    good.end('completed', actResult());
+    good.poll();
+    await settle();
+    expect(good.queue.stale()).toBe(false);
+  });
+
   it('the body refusing an item (the item before it is gone) is a drop that never ran, with the body\'s sentence', async () => {
     const f = setup();
     await f.queue.add(f.spec(wait1));
@@ -175,15 +241,33 @@ describe('the results as news, and the version', () => {
 });
 
 describe('when the next decision is due', () => {
-  it('T is the median of the last decisions, within 2 and 8 s; 5 s with none', () => {
+  it('T\x27 is the 90th percentile of the last ten decisions and a second more, within 2 and 8 s; 5 s with none (R3-1 1)', () => {
     const f = setup();
     expect(queueWakeMs('t1')).toBe(QUEUE_T.defaultMs);
-    for (const ms of [3000, 4000, 9000]) f.queue.noteDecision(ms);
+    f.queue.noteDecision(3000);
     expect(queueWakeMs('t1')).toBe(4000);
+    for (const ms of [2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]) f.queue.noteDecision(ms); // ten decisions: 3000, 2000 ... 6000: the 90th is 5500
+    expect(queueWakeMs('t1')).toBe(6500);
     for (const ms of [20_000, 20_000, 20_000, 20_000]) f.queue.noteDecision(ms);
     expect(queueWakeMs('t1')).toBe(QUEUE_T.maxMs);
     for (let index = 0; index < 10; index++) f.queue.noteDecision(100);
     expect(queueWakeMs('t1')).toBe(QUEUE_T.minMs);
+  });
+
+  it('R3-1 (1, A3): a wake for the item that runs is made once; a decision that added nothing is not followed by another wake on the same queue, a new item is', async () => {
+    const f = setup();
+    await f.queue.add(f.spec(wait1));
+    f.take();
+    expect(await f.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('remaining');
+    const again = new AbortController();
+    const pending = f.queue.ready({ signal: again.signal, drain: false });
+    let woke = false;
+    void pending.then(() => { woke = true; }, () => undefined);
+    await delay(300);
+    expect(woke).toBe(false); // the same queue: no second wake
+    again.abort();
+    await expect(pending).rejects.toThrow();
+    await f.queue.add(f.spec([{ do: 'wait', seconds: 3 }, { do: 'jump' }])); // the decision put an item: a new queue, a new wake when it is the one left to wait for
   });
 
   it('with one item left and 5 s or less of it to run, now; with a long one, not yet; with another waiting, not yet', async () => {

@@ -204,6 +204,7 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     done: { type: 'string', maxLength: 120, description: '満たした所で済みにする条件（例 "have:log>=10"）' },
     repeat: { type: 'integer', minimum: 2, maximum: 8, description: '手の組を最大何回まわすか（rel の手か、座標の無い手だけ）' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目（例 ["q15"]、全部は ["all"]）' },
+    reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に置かれ、決めた項目が来ると自動で消える）' },
     dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目（例 ["q12"]、何にも頼らないなら []）' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
     keep: { type: 'array', maxItems: KEEP_MAX, items: { type: 'string', maxLength: 120 }, description: '後で使うために残す物（品目:数:用途。例 "spruce_planks:4:作業台"）' },
@@ -211,7 +212,7 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
 });
 
 export interface ShortAct {
-  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[];
+  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[]; reserve?: boolean;
      dependsOn?: string[]; uses?: number[];
   keep?: string[];
 }
@@ -227,7 +228,7 @@ export function actToShort(input: ActInput): ShortAct {
   return { ...(input.why !== undefined ? { why: input.why } : {}), hands: input.hands.map(handToLine),
     ...(input.stopIf ? { stopIf: stopIfText(input.stopIf) } : {}), ...(input.accept?.length ? { accept: [...input.accept] } : {}),
     ...(input.pre ? { pre: conditionText(input.pre) } : {}), ...(input.done ? { done: conditionText(input.done) } : {}),
-    ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}),
+    ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}), ...(input.reserve === true ? { reserve: true } : {}),
     ...(input.dependsOn !== undefined ? { dependsOn: [...input.dependsOn] } : {}), ...(input.uses?.length ? { uses: [...input.uses] } : {}),
     ...(input.keep?.length ? { keep: input.keep.map(entry => `${entry.item}:${entry.count}:${entry.use}`) } : {}) };
 }
@@ -287,12 +288,13 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
  * write), `repeat` a whole number of 2–8, `replace` item ids (a bare id too). A field that is already JSON (a
  * condition array) is kept as it is.
  */
-function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace' | 'dependsOn' | 'uses' | 'keep'> {
+function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace' | 'reserve' | 'dependsOn' | 'uses' | 'keep'> {
   const value = (input ?? {}) as Record<string, unknown>, out: Record<string, unknown> = {};
   readQueueConditions(value, out, errors);
   readQueueRepeat(value, out, errors);
   const replace = typeof value.replace === 'string' ? [value.replace] : value.replace;
   if (Array.isArray(replace)) out.replace = replace.filter(item => typeof item === 'string');
+  if (value.reserve === true || value.reserve === 'true') out.reserve = true;
   // dependsOn: marks ("q12"), a bare mark or marks joined by commas; an empty list (or "none") relies on none.
 // uses: promise numbers, a bare number or numbers joined by commas.
   const depends = value.dependsOn === 'none' ? [] : typeof value.dependsOn === 'string' ? value.dependsOn.split(',').map(item => item.trim(

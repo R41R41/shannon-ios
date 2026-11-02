@@ -1,8 +1,10 @@
 import { sameWork } from './minecraftLlmcQueueState.js';
 import type { QueueItem, QueueAdd, QueueDeps } from './minecraftLlmcQueueState.js';
 import { createHash } from 'node:crypto';
+import { dimensionOf } from './minecraftControlState.js';
+import { reserveRefusal } from './minecraftLlmcReserve.js';
 import { feetOf } from './minecraftLlmc.js';
-import { QUEUE_MAX, SAME_IN_QUEUE_WORDS } from './minecraftLlmcQueueWords.js';
+import { QUEUE_MAX, SAME_IN_QUEUE_WORDS, waitBehindWords } from './minecraftLlmcQueueWords.js';
 
 export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem[]; open(): QueueItem[]; now(): number }) {
   const { items, open, now } = shared;
@@ -21,6 +23,14 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
     const waiting = open();
     if (waiting.length >= QUEUE_MAX) {
       return `送らなかった: 列がいっぱい（実行中を含めて ${QUEUE_MAX} つ）。差し替えるなら replace に ${waiting.at(-1)!.item} などを書く`;
+    }
+    // R3-1 (6): nothing is put behind a running item that only waits.
+    if (waiting.length && spec.input.hands.length > 0 && spec.input.hands.every((hand) => hand.do === 'wait')) return waitBehindWords(waiting.at(-1)!.item);
+    if (spec.reserve === true || spec.input.reserve === true) {
+      const observation = deps.observe();
+      const refused = reserveRefusal(spec.input, { allowed: deps.reserveAllowed?.() === true, dimension: observation ? dimensionOf(observation) : null,
+        hasReserve: waiting.some((item) => item.reserve === true), hasDecided: waiting.some((item) => item.reserve !== true) });
+      if (refused) return refused;
     }
     const same = waiting.find((item) => sameWork(item.input, spec.input));
     if (same) return `送らなかった: ${same.item} ${SAME_IN_QUEUE_WORDS}（${waiting[0] === same ? '実行中' : '待ち'}）。列は live の queue`;
@@ -65,7 +75,9 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
       dependsOn: spec.input.dependsOn ? [...spec.input.dependsOn] : undefined,
       uses: [],
       resume: spec.resumeOf,
+      ...(spec.reserve === true || spec.input.reserve === true ? { reserve: true } : {}),
     };
+    if (item.reserve) item.dependsOn = [];
     return item;
   }
   return { refusal, makeItem };

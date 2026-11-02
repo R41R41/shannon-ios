@@ -734,7 +734,7 @@ describe('the queue: the head reads what the body decided and takes nothing off 
   it('a failed item does NOT take the independent one behind it off: the head cancels nothing, reads startedAt and droppedBecause from the receipts', async () => {
     const { f, queue, spec, take } = setup();
     await queue.add(spec(wait1));
-    await queue.add(spec([{ do: 'wait', seconds: 30 }], { dependsOn: [] }));
+    await queue.add(spec([{ do: 'wait', seconds: 30 }, { do: 'jump' }], { dependsOn: [] }));
     await queue.add(spec(dig(2), { dependsOn: ['q1'] }));
     take();
     queue.mark();

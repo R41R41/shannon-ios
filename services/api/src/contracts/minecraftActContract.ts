@@ -190,6 +190,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
     done: { ...CONDITION_SCHEMA, description: '満たした所で済みにする条件' },
     pre: { ...CONDITION_SCHEMA, description: '始める時に確かめる条件' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目' },
+    reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に置かれ、決めた項目が来ると自動で消える）' },
     dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目。[] は何にも頼らない' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
     keep: { type: 'array', maxItems: KEEP_MAX, description: '後で使うために残す物（約束になる）', items: { type: 'object', additionalProperties: false,
@@ -227,6 +228,7 @@ function queueFieldProblem(input: ActInput): string | null {
   if (input.done !== undefined && !validCondition(input.done)) return 'done が条件の形ではない';
   if (input.pre !== undefined && !validCondition(input.pre)) return 'pre が条件の形ではない';
   if (input.replace?.every(id => /^(?:q[0-9]{1,6}|all)$/u.test(id)) === false) return 'replace は列の項目（q15）か all';
+  if (input.reserve !== undefined && typeof input.reserve !== 'boolean') return 'reserve は true か false';
   if (input.dependsOn?.every(id => /^q[0-9]{1,6}$/u.test(id)) === false) return 'dependsOn は列の項目（q12）の並び。何にも頼らないなら []';
   if (input.dependsOn !== undefined && new Set(input.dependsOn).size !== input.dependsOn.length) return 'dependsOn に同じ項目が 2 度ある';
   if (input.uses?.every(id => Number.isInteger(id) && id >= 1) === false) return 'uses は約束の番号（1 から）の並び';
