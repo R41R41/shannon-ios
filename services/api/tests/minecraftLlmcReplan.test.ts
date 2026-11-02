@@ -79,7 +79,10 @@ describe('the strong model\'s answer', () => {
     expect(replanOf('x')).toBeNull();
   });
 
-  /** The API refuses a strict schema with more than 24 optional parameters (2026-11-02: the first real replay got a 400 for every new plan). */
+  /**
+   * The API compiles a strict schema into a grammar and refused the answer's schema twice (2026-11-02, the first real replay): for more than 24
+   * optional parameters (the plan tool's op has 37), then, with 20 and with 15, as "too complex" after 100 seconds. The optional fields of an op are what costs.
+   */
   const optionalParameters = (schema: unknown, seen = new Set<object>()): number => {
     if (!schema || typeof schema !== 'object' || seen.has(schema)) return 0;
     seen.add(schema);
@@ -90,42 +93,27 @@ describe('the strong model\'s answer', () => {
     return own + inner + optionalParameters(node.items, seen) + (node.anyOf ?? []).reduce<number>((sum, value) => sum + optionalParameters(value, seen), 0);
   };
 
-  it('has a schema the API takes: no more than 24 optional parameters, and so has the schema of the first plan', () => {
-    expect(optionalParameters(REPLAN_SCHEMA)).toBeLessThanOrEqual(24);
+  it('has a schema the API takes: a list of strings, one optional field, and the first plan\'s schema within the limit as well', () => {
+    expect(optionalParameters(REPLAN_SCHEMA)).toBeLessThanOrEqual(2);
     expect(optionalParameters(CURRENT_FIRST_PLAN_SCHEMA)).toBeLessThanOrEqual(24);
-    const op = (REPLAN_SCHEMA.properties.ops as { items: { properties: Record<string, unknown> } }).items.properties;
-    // what the allowed ops are written with stays, flat; the promises' fields, the nested target, preparation and children are gone
-    for (const key of ['op', 'id', 'parent', 'after', 'title', 'kind', 'where', 'doneWhen', 'note', 'state', 'reason', 'text', 'targetItem', 'targetCount', 'prepState', 'prepWhy']) expect(op).toHaveProperty(key);
-    for (const key of ['item', 'count', 'use', 'until', 'instead', 'why', 'target', 'prep', 'into']) expect(op).not.toHaveProperty(key);
-    // nothing nested and nothing nullable: the API's grammar for it was "too complex" with them (the first real replay, 2026-11-02)
-    const text = JSON.stringify(REPLAN_SCHEMA);
-    expect(text).not.toContain('anyOf');
-    expect(text).not.toContain('"pattern"');
-    const fields = Object.values(op) as Array<{ type?: string; properties?: unknown; items?: unknown }>;
-    expect(fields.every(field => field.type === 'string' && field.properties === undefined && field.items === undefined || field.type === 'integer')).toBe(true);
+    expect((REPLAN_SCHEMA.properties.ops as { items: unknown }).items).toEqual({ type: 'string' });
+    expect(JSON.stringify(REPLAN_SCHEMA)).not.toContain('anyOf');
+    expect(REPLAN_SCHEMA.required).toEqual(['ops', 'why']);
   });
 
-  it('puts the flat fields of an answer back into the shapes of the plan tool, and leaves an empty field out', () => {
-    const made = replanOf({ ops: [
-      { op: 'add', parent: 'p10', title: '待ち場を探す', kind: 'blaze', after: '', where: '', targetItem: 'blaze_rod', targetCount: 7 },
-      { op: 'set', id: 'p8', prepState: 'skipped', prepWhy: '食料が足りている', state: 'continue' },
-      { op: 'set', id: 'p9', targetItem: 'ender_pearl' },
-    ], current: 'p10.1', why: '割った' });
+  it('reads an op written as a string of JSON, and turns away a string that is not one, an op of a promise, and anything that is not an object', () => {
+    const made = replanOf({ ops: ['{"op":"add","parent":"p10","title":"待ち場を探す","kind":"blaze","target":{"item":"blaze_rod","count":7}}',
+      { op: 'set', id: 'p8', prep: { state: 'skipped', why: '食料が足りている' } }, '{"op":"split","id":"p9","into":[{"title":"歩く"}]}'], current: 'p10.1', why: '割った' });
     expect(made!.update.ops).toEqual([
       { op: 'add', parent: 'p10', title: '待ち場を探す', kind: 'blaze', target: { item: 'blaze_rod', count: 7 } },
-      { op: 'set', id: 'p8', state: 'continue', prep: { state: 'skipped', why: '食料が足りている' } },
-      { op: 'set', id: 'p9' },
+      { op: 'set', id: 'p8', prep: { state: 'skipped', why: '食料が足りている' } },
+      { op: 'split', id: 'p9', into: [{ title: '歩く' }] },
     ]);
     expect(made!.update.current).toBe('p10.1');
-  });
-
-  it('has a schema whose ops have no promise or release', () => {
-    const ops = (REPLAN_SCHEMA.properties.ops as { items: { properties: { op: { enum: string[] } } } }).items.properties.op.enum;
-    expect(ops).toContain('add');
-    expect(ops).not.toContain('split');
-    expect(ops).not.toContain('promise');
-    expect(ops).not.toContain('release');
-    expect(REPLAN_SCHEMA.required).toEqual(['ops', 'why']);
+    expect(replanOf({ ops: ['{"op":"add"'], why: '' })).toBeNull();
+    expect(replanOf({ ops: ['{"op":"promise","item":"x","count":1,"use":"y"}'], why: '' })).toBeNull();
+    expect(replanOf({ ops: ['{"op":"release","id":1}'], why: '' })).toBeNull();
+    expect(replanOf({ ops: ['"add"', '[1]', 'null', '7'], why: '' })).toBeNull();
   });
 
   it('is taken at the plan\'s next read, after the first plan, applied to the plan as it is then, and only once', () => {
