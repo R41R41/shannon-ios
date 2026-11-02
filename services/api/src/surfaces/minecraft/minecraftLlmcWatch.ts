@@ -1,4 +1,4 @@
-import type { PlanTree } from '@shannon/mind';
+import type { PlanNode, PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { doneFacts } from './minecraftConditions.js';
@@ -37,6 +37,13 @@ export interface WatchDeps {
   log(line: string): void;
 }
 
+/** The node and the nodes above it (three at most): what a child works for is what its parent asks for. */
+function chainOf(tree: PlanTree, node: PlanNode | undefined): PlanNode[] {
+  const out: PlanNode[] = [];
+  for (let at = node; at && out.length < 3; at = tree.nodes.find(item => item.id === at!.parentId)) out.push(at);
+  return out;
+}
+
 export function createStallWatch(deps: WatchDeps) {
   let activeWait = deps.savedWait;
   let waitUntil: number | undefined;
@@ -59,8 +66,9 @@ export function createStallWatch(deps: WatchDeps) {
       const counts = doneFacts(frame)?.counts;
       const running = deps.running();
       refreshWait(current, frame, running);
-      const purpose = { ...purposeEvidence(node, frame), ...travelEvidence(running, frame), ...explorationEvidence(node, running, frame),
-        ...endFightEvidence(frame) };
+      // A child's progress is its parent's too: the rods of 「ブレイズロッド7」 count for the waiting at the spawner under it.
+      const purpose = { ...Object.assign({}, ...chainOf(tree, node).map(item => purposeEvidence(item, frame))), ...travelEvidence(running, frame),
+        ...explorationEvidence(node, running, frame), ...endFightEvidence(frame) };
       const progress = { node: current, state: node?.state ?? null, milestone: meterParts(tree, frame, 0)?.next ?? null,
         reached: reachedMilestoneNames(tree, frame) ?? [],
         externalWork: externalWorkMilestones(frame),

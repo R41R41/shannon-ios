@@ -283,6 +283,25 @@ describe('the look of a task that is not held', () => {
     expect(watch.look()).toBe(false);
   });
 
+  it('counts what a child works for as its parent\'s: the rods collected under 「ブレイズロッド7」 keep the waiting at the spawner from being a stall', () => {
+    const raised: Stall[] = [];
+    const clock = { now: 0 };
+    let rods = 1;
+    const nether = seedPlan('エンドラを討伐して', 'the_nether')!;
+    const world = () => frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: [{ name: 'blaze_rod', count: rods }] });
+    const watch = createStallWatch({ taskId: 'watch3', observe: world, tree: () => ({ ...nether, current: 'p3.2' }), running: () => null, activeClock: () => clock.now,
+      waits: createWaitLedger(null), raise: item => raised.push(item), log: () => undefined });
+    watch.look();
+    for (const step of [1, 2, 3]) {
+      clock.now = step * 100_000;
+      rods += 1;
+      expect(watch.look()).toBe(false);
+    }
+    clock.now = 500_000;
+    expect(watch.look()).toBe(true);
+    expect(raised[0]!.key).toBe('p3.2');
+  });
+
   it('does not count a move toward the node\'s purpose as a stall', () => {
     const raised: Stall[] = [];
     const clock = { now: 0 };

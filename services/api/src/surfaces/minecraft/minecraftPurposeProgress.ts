@@ -46,7 +46,7 @@ export function travelEvidence(input: ActInput | null, frame: BodyObservation | 
   }
   return values;
 }
-const SEARCH_KINDS = new Set(['wood', 'food', 'village', 'iron', 'diamond', 'water', 'lava', 'obsidian', 'fortress', 'stronghold', 'chest']);
+const SEARCH_KINDS = new Set(['wood', 'food', 'village', 'iron', 'diamond', 'water', 'lava', 'obsidian', 'fortress', 'stronghold', 'chest', 'pearl', 'blaze']);
 export function explorationEvidence(node: PlanNode | undefined, input: ActInput | null, frame: BodyObservation | null): Record<string, number> {
   if (!node?.kind || !SEARCH_KINDS.has(node.kind) || !input?.hands.some(h => h.do === 'go' || h.do === 'walk' || h.do === 'vertical')) return {};
   const world = frame?.state.world as Record<string, unknown> | undefined, facts = doneFacts(frame);
