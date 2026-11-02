@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { planFromAnswer, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { forgetActNodes, followNode, lackBefore, noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { heldOfFrame, heldTail, holdV2, sentPart } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, SAFETY_FIRST } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { gateHold, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { dropAdvice, packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { v2tree } from './helpers/planTreeV2.js';
@@ -302,5 +303,56 @@ describe('the spare pickaxes and a need that cannot be made (the coordinator, 20
     expect(PREP_RULES_WORDS).toContain('必須が作れない・材料が無いと見えた時は、後回しにして先へ進まない。材料を取りに行く（盾なら木と鉄 1。');
     const noShield = frame(KIT.filter(([name]) => name !== 'shield'));
     expect(gateHold({ hands: [{ do: 'portal' }] }, noShield)?.line).toContain('作れない・材料が無いと見えた時は、後回しにして先へ進まず、材料を取りに行く');
+  });
+});
+
+describe('a first plan is not thrown away for a node whose target its doneWhen does not establish (run59 task 1, the coordinator 2026-11-03)', () => {
+  const answer = (target: { item: string; count: number }, doneWhen: string) => ({ nodes: [
+    { id: 'p1', parent: '', title: '木', kind: 'wood', where: '', doneWhen: 'have:log>=3' },
+    { id: 'p8', parent: '', title: 'ベッド', kind: 'bed', where: '', doneWhen, target },
+    { id: 'p9', parent: '', title: '石', kind: 'stone_tools', where: '', doneWhen: 'have:stone_pickaxe' }] });
+  it('counts a generic name as the target\'s: have:bed establishes white_bed, as the conditions read it', () => {
+    const tree = planFromAnswer(answer({ item: 'white_bed', count: 1 }, 'have:bed>=1'))!;
+    expect(tree.nodes.find(node => node.id === 'p8')!.target).toEqual({ item: 'white_bed', count: 1 });
+    expect(planFromAnswer(answer({ item: 'white_bed', count: 1 }, 'have:white_bed>=1'))!.nodes).toHaveLength(3);
+  });
+  it('takes the target off a node it does not match and keeps the node, its doneWhen and the rest of the plan, and says which node and why', () => {
+    const lines: string[] = [];
+    const tree = planFromAnswer(answer({ item: 'shield', count: 1 }, 'have:bed>=1'), undefined, line => lines.push(line))!;
+    expect(tree.nodes.map(node => node.id)).toEqual(['p1', 'p8', 'p9']);
+    const node = tree.nodes.find(item => item.id === 'p8')!;
+    expect(node.target).toBeUndefined();
+    expect(node.doneWhen).toBe('have:bed>=1');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('first plan target dropped node=p8 p8: target shield×1 と doneWhen が不一致');
+    expect(planFromAnswer({ nodes: [] })).toBeNull();
+  });
+  it('keeps a target that its doneWhen establishes, and is silent', () => {
+    const lines: string[] = [];
+    const tree = planFromAnswer(answer({ item: 'bed', count: 1 }, 'have:bed>=1'), undefined, line => lines.push(line))!;
+    expect(tree.nodes.find(node => node.id === 'p8')!.target).toEqual({ item: 'bed', count: 1 });
+    expect(lines).toEqual([]);
+  });
+});
+
+describe('the full pack names the clutter first and keeps 128 blocks (the coordinator, 2026-11-03; run59 leg 2: 空き 2, 丸石 350 dropped)', () => {
+  const lines = (...stacks: string[]) => stacks;
+  it('names fences, stairs, rails, mossy cobblestone, string (under three), saplings and seeds before the filler, and not a bow\'s string', () => {
+    const packed = packFacts(lines('oak_fence×3', 'oak_stairs×6', 'rail×1', 'mossy_cobblestone×1', 'string×1', 'oak_sapling×4', 'wheat_seeds×1', 'cobblestone×189', 'string×3'));
+    expect(packed.junk.map(([name]) => name).sort()).toEqual(['mossy_cobblestone', 'oak_fence', 'oak_sapling', 'oak_stairs', 'rail', 'string', 'wheat_seeds']);
+    expect(packed.junk.find(([name]) => name === 'string')![1]).toBe(1);
+    expect(packFacts(lines('string×3', 'stick×4', 'oak_planks×6')).junk).toEqual([]);
+    const words = dropAdvice(packed);
+    expect(words.startsWith('雑物 oak_stairs×6・oak_sapling×4・oak_fence×3')).toBe(true);
+    expect(words.endsWith('・cobblestone×61（1 マス）')).toBe(true);
+  });
+  it('keeps 128 of the most carried filler, in the words of a full pack and of one nearly full', () => {
+    const full = packLines(lines('cobblestone×350', 'granite×37', 'dirt×22', 'oak_fence×3', ...Array.from({ length: 30 }, (_, i) => `item_${i}×1`)))
+      .join('\n');
+    expect(full).toContain('雑物 oak_fence×3・cobblestone×222');
+    expect(full).toContain('cobblestone 128 は柱と橋用に数えていない');
+    const soon = packLines(lines('cobblestone×350', 'oak_fence×3', 'rail×2', ...Array.from({ length: 26 }, (_, i) => `item_${i}×1`))).join('\n');
+    expect(soon).toContain('捨てる物の候補: 雑物 oak_fence×3・rail×2・cobblestone×222');
+    expect(soon).toContain('cobblestone 128 は柱と橋に残す');
   });
 });

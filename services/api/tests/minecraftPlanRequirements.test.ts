@@ -18,7 +18,11 @@ describe('explicit current acquisition requirements', () => {
     expect(targetConditionProblem(node)).toContain('不一致');
     expect(targetConditionProblem({ ...node, doneWhen: 'have:bucket|have:iron_ingot>=30' })).toBeTruthy();
     expect(targetConditionProblem({ ...node, doneWhen: 'have:bucket&have:shield|have:bucket&have:iron_pickaxe' })).toBeNull();
-    expect(planFromAnswer({ nodes: [{ ...node, parent: '' }] })).toBeNull();
+    // A first plan with such a node is not thrown away (run59 task 1): the node stays with its doneWhen, without the target that its alternatives do not prove.
+    const kept = planFromAnswer({ nodes: [{ ...node, parent: '' }] })!;
+    expect(kept.nodes).toHaveLength(1);
+    expect(kept.nodes[0]!.target).toBeUndefined();
+    expect(kept.nodes[0]!.doneWhen).toBe('have:iron_ingot>=30|have:iron_chestplate');
   });
   it('uses two ingots and one raw iron for one bucket, without demanding thirty more iron', () => {
     const words = targetRequirements(bucket().nodes[0], new Map([['iron_ingot', 2], ['raw_iron', 1]]));

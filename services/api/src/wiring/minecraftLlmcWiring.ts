@@ -1,6 +1,6 @@
 import { createWorksiteMemory } from '../surfaces/minecraft/minecraftWorksiteMemory.js';
 import {
-  purposeEvidence, lookTravelEvidence, explorationEvidence, observedWait, createWaitLedger, readActiveWait,
+  lookPurpose, lookTravelEvidence, observedWait, createWaitLedger, readActiveWait,
 } from '../surfaces/minecraft/minecraftPurposeProgress.js';
 import { bodyHoldOf,withResend,withIncident,withStalls,withBodyPresent } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
@@ -362,8 +362,7 @@ queue.onRan(noteIncidentResult);
         const road = firstStretch(tree, frame);
         const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
           milestone: road.next, reached: road.reached,
-          externalWork: externalWorkMilestones(frame), purpose: { ...purposeEvidence(node, frame), ...lookTravelEvidence(running, ended, frame),
-            ...explorationEvidence(node, running, frame) }, waitUntil,
+          externalWork: externalWorkMilestones(frame), purpose: lookPurpose(node, frame, running, ended), waitUntil,
           inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) :
              0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
         if (stall) headHold(stall);

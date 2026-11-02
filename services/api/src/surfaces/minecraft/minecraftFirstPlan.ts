@@ -79,9 +79,9 @@ const BEYOND: readonly PlanSeed[] = [
     caution: ['死んだらアウト。体力12未満・盾の耐久2割未満なら戦わず退いて補う'],
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('fight でブレイズを14体ほど倒す（傷が深ければ attack hold）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
-  node('エンダーパール12以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 12 }, doneWhen: 'have:ender_pearl>=12', note: '14あると目玉の投げに足りる',
+  node('エンダーパール14以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 14 }, doneWhen: 'have:ender_pearl>=14', note: '枠に11〜12・投げの損耗に2〜3',
     children: [node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金の延べ棒をピグリンに投げて交換', { kind: 'pearl' })] }),
-  node('エンダーアイ12個', { kind: 'pearl', target: { item: 'ender_eye', count: 12 }, doneWhen: 'have:ender_eye>=12',
+  node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=14',
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
   node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: '帰りのゲートから。ポータルの対は live の控え' }),
   node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
@@ -94,7 +94,7 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ',
     caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）'] }),
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
-    caution: ['縁から5マス以上内側で戦う。縁では sneak', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は水入りバケツ（hotbar に）と積める物3個以上で登り、長居しない',
+    caution: ['縁から5マス以上内側で戦う（sneak は押されるのを止めない）', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は水入りバケツ（hotbar に）と積める物3個以上で登り、長居しない',
       '竜を打つ前に剣か斧を equip で手に持つ（手が別の物のことがある）'],
     children: [node('クリスタルを弓で壊す', { kind: 'dragon', doneWhen: 'crystals<=0' }), node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
 ];
@@ -267,8 +267,10 @@ function withPromises(tree: PlanTree, rows: unknown, at: string | undefined): Pl
  * The answer as a tree (null when it does not fit: no node, a parent not before its child, past the bounds).
  * Each node's `kind` is the model's (outside the list: `other` with the
  * value kept); `promises` are entered as `plan.update`'s `promise` op does it, at `at`.
+ * A node whose target its doneWhen does not establish keeps its doneWhen and loses the target (run59 task 1: one such node threw the whole first plan
+ * away); `said` is told which node and why.
  */
-export function planFromAnswer(answer: unknown, at?: string): PlanTree | null {
+export function planFromAnswer(answer: unknown, at?: string, said?: (line: string) => void): PlanTree | null {
   const rows = Array.isArray(record(answer)?.nodes) ? record(answer)!.nodes as unknown[] : [];
   const seeds = new Map<string, PlanSeed & { children: PlanSeed[] }>(), top: PlanSeed[] = [];
   for (const row of rows.slice(0, 64)) {
@@ -280,8 +282,16 @@ export function planFromAnswer(answer: unknown, at?: string): PlanTree | null {
     seeds.set(id, seed);
     (parent ? seeds.get(parent)!.children : top).push(seed);
   }
-  const tree = top.length ? planFromSeeds(top) : null;
-  if (tree?.nodes.some(node => targetConditionProblem(node))) return null;
+  let tree = top.length ? planFromSeeds(top) : null;
+  const loose = (tree?.nodes ?? []).flatMap(node => {
+    const problem = targetConditionProblem(node);
+    return problem ? [{ id: node.id, problem }] : [];
+  });
+  for (const { id, problem } of loose) {
+    delete seeds.get(id)?.target;
+    said?.(`Shannon Minecraft first plan target dropped node=${id} ${problem.slice(0, 160)}`);
+  }
+  if (loose.length) tree = planFromSeeds(top);
   return tree ? withPromises(tree, record(answer)?.promises, at) : tree;
 }
 
@@ -386,7 +396,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
       abort.signal);
   }) : planner(FIRST_PLAN_SYSTEM, firstPlanInput(parts.goal, parts.world), abort.signal);
   ask.then(answer => {
-    const tree = abort.signal.aborted ? null : planFromAnswer(answer, new Date().toISOString());
+    const tree = abort.signal.aborted ? null : planFromAnswer(answer, new Date().toISOString(), say);
     if (tree) slot.answer = tree;
     say(("Shannon Minecraft first plan " +
 `${tree ? 'planned' : 'missing'}` +

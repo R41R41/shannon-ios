@@ -6,7 +6,7 @@ import { readActResult } from '../../contracts/minecraftActContract.js';
 import { carriedItemCounts,EDIBLE_FOOD } from './minecraftItems.js';
 import { FOOD_POINTS,stacks } from './minecraftLlmcLive.js';
 import { markDelivered,offer,pending,type OnceFact } from './minecraftLlmcOnceFacts.js';
-import { dropCandidates,dropWords,FULL_COST,packFacts,PACK_SLOTS,reportedFree } from './minecraftLlmcPack.js';
+import { dropAdvice,FULL_COST,packFacts,PACK_SLOTS,reportedFree } from './minecraftLlmcPack.js';
 import { heldBack,promiseLines } from './minecraftLlmcPromises.js';
 import { FOOD_FISH,nearNeeds } from './minecraftLlmcReachWords.js';
 import { PLAN_FACTS_KEY,type PlanFacts } from './minecraftPlanFacts.js';
@@ -225,7 +225,7 @@ export function digPackLine(observation: BodyObservation | null, hands: readonly
   if (toldPack.get(taskId) === free) return null;
   toldPack.set(taskId, free);
   if (toldPack.size > 32) toldPack.delete(toldPack.keys().next().value as string);
-  const spare = dropWords(dropCandidates(packed.filler, item => heldBack(promises, item)));
+  const spare = dropAdvice(packed, item => heldBack(promises, item));
   return `空き ${free}/${PACK_SLOTS}：掘って出る石・深層岩・土は ${free === 0 ? '1 つも拾えない' : `${free} マスより多くは拾えない`}。`
     + (spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）');
 }
@@ -246,7 +246,7 @@ export function packLines(observation: BodyObservation | null, ahead: readonly A
   const head = `持ち物の空き ${free}/${PACK_SLOTS}${free === 0 ? `（満杯）：${FULL_COST}` : free <= NEAR_FULL ? '（もうすぐ満杯）' :
      ''}${gains.length ? `・次の手で増える見込み: ${gains.join('・')}` : ''}`;
   if (free === 0) {
-    const spare = dropWords(dropCandidates(packed.filler, item => heldBack(promises, item)));
+    const spare = dropAdvice(packed, item => heldBack(promises, item));
     const drop = spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）';
     return [head, drop];
   }

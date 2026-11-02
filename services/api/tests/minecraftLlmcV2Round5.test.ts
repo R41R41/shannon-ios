@@ -139,7 +139,7 @@ describe('the pack when it is full (run 46)', () => {
       ...Array.from({ length: 27 }, (_, index) => `junk_${index}×1`)];
     const lines = packLines(FULL36);
     expect(lines[0]).toBe('持ち物 満杯 36/36（空き 0 マス）');
-    expect(lines[1]).toBe(`満杯: ${FULL_COST}。drop で空けられる物: cobbled_deepslate×166（3 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）（cobbled_deepslate 1 スタックは柱と橋用に数えていない）`);
+    expect(lines[1]).toBe(`満杯: ${FULL_COST}。drop で空けられる物: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）（cobbled_deepslate 128 は柱と橋用に数えていない）`);
     expect(lines[1]).toContain('黒曜石');
     expect(packLines(Array.from({ length: 36 }, (_, index) => `junk_${index}×1`))[1]).toBe(`満杯: ${FULL_COST}。空けるのは drop`);
   });

@@ -119,7 +119,7 @@ describe('run 43: the pack says what to drop before it is full', () => {
     const out = packLines(lines(2));
     expect(out[0]).toBe('持ち物の空き 2 マス（使用 34/36。満杯だと dig・pickup が「満杯」で止まる）');
     expect(out[1]).toBe('空きが 2 マス。満杯になると make・pickup・dig の物が入らず止まる（実走 43 はパンを作れず約 60 秒、go も満杯で止まった）。'
-      + '捨てる物の候補: cobblestone×128（2 マス）・cobbled_deepslate×128（2 マス）・diorite×40（1 マス）。cobblestone 1 スタックは柱と橋に残す。drop で捨てる');
+      + '捨てる物の候補: cobblestone×64（1 マス）・cobbled_deepslate×128（2 マス）・diorite×40（1 マス）。cobblestone 128 は柱と橋に残す。drop で捨てる');
   });
   it('is not said with 4 free slots', () => {
     expect(packLines(lines(4)).join('\n')).not.toContain('捨てる物の候補');
