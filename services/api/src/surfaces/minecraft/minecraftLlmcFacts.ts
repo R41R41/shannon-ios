@@ -319,6 +319,8 @@ export interface FactsContext {
   wantsFood?: boolean;
   /** The stops of the last results (`stopFactsOf`). */
   stops?: readonly string[];
+  /** The way to the dragon (`minecraftEndgame.ts`): the lines of the normal version, and the shorter set an urgent or shortened one keeps. */
+  endgame?: { lines: readonly string[]; short: readonly string[] };
 }
 export interface InputFacts { lines: string[]; compressed: string[] }
 /**
@@ -335,7 +337,8 @@ export function inputFacts(observation: BodyObservation | null, context: FactsCo
   const promises = promiseLines(context.promises ?? [], { ...context.since ? { since: context.since } : {}, observation, limit: 4 });
   const stops = [...context.stops ?? []];
   const food = (shown: number) => context.wantsFood ? [foodLine(observation, shown)] : [];
-  const make = (short: boolean) => [...head, ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short,
+  const endgame = (short: boolean) => (short || urgent ? context.endgame?.short : context.endgame?.lines) ?? [];
+  const make = (short: boolean) => [...head, ...endgame(short), ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short,
      context.promises ?? []), ...promises, ...stops]
     .filter((line): line is string => !!line);
   return { lines: make(false), compressed: make(true) };

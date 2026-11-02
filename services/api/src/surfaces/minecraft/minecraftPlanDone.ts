@@ -1,9 +1,10 @@
 import { orderedPlan, PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { carried, clauseHolds, clauseLack, doneFacts, type DoneFacts } from './minecraftConditions.js';
+import { acquired, carried, clauseHolds, clauseLack, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { newerClause, type ActClause } from '../../contracts/minecraftActCondition.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { kindOf } from './minecraftPlanFacts.js';
+import { isSeenName, SEEN_WORDS, type SeenName } from './minecraftSeenMarks.js';
 
 export { doneFacts, type DoneFacts };
 
@@ -42,6 +43,9 @@ export type DoneClause =
   | { kind: 'dim'; dimension: string }
   | { kind: 'at'; x: number; y: number; z: number; r: number; dimension?: string }
   | { kind: 'food'; points: number }
+  /** `see:fortress`: a mark of the body's scan is in view now (`minecraftSeenMarks.ts`); `crystals<=0`: the end crystals left, as the body counts them. */
+  | { kind: 'see'; what: SeenName }
+  | { kind: 'crystals'; max: number }
   /** A clause of the task queue's forms (`hp`, `hunger`, `free`, `time`, `have` with `<`), judged as the queue's conditions are. */
   | { kind: 'act'; clause: ActClause };
 /** Alternatives, each a list of clauses that must all hold. */
@@ -52,8 +56,18 @@ const DIMENSIONS: Readonly<Record<string, string>> = { nether: 'the_nether', the
 const ITEM = /^[a-z][a-z0-9_]{0,63}$/u;
 const NUMBER = '-?\\d{1,7}';
 
+/** `see:<name>` (a name of `SEEN_NAMES`) and `crystals<=n`; null for any other text. */
+function markClause(text: string): DoneClause | null {
+  const see = /^see:([a-z_]{1,24})$/u.exec(text);
+  if (see) return isSeenName(see[1]!) ? { kind: 'see', what: see[1]! } : null;
+  const crystals = /^crystals<=(\d{1,2})$/u.exec(text);
+  return crystals ? { kind: 'crystals', max: Number(crystals[1]) } : null;
+}
+
 function clauseOf(text: string): DoneClause | null {
-  const have = /^have:([a-z][a-z0-9_]{0,63})(?:>=(\d{1,5}))?$/u.exec(text);
+  const mark = markClause(text);
+  if (mark) return mark;
+  const have =/^have:([a-z][a-z0-9_]{0,63})(?:>=(\d{1,5}))?$/u.exec(text);
   if (have) return ITEM.test(have[1]!) ? { kind: 'have', item: have[1]!, count: Math.max(1, Number(have[2] ?? 1)) } : null;
   const dim = /^dim:([a-z_]{1,16})$/u.exec(text);
   if (dim) return DIMENSIONS[dim[1]!] ? { kind: 'dim', dimension: DIMENSIONS[dim[1]!]! } : null;
@@ -118,9 +132,11 @@ function madeInto(counts: ReadonlyMap<string, number>, clause: Extract<DoneClaus
 }
 function holds(clause: DoneClause, facts: DoneFacts): boolean {
   switch (clause.kind) {
-    case 'have': return carried(facts.counts, clause.item) >= clause.count || madeInto(facts.counts, clause);
+    case 'have': return acquired(facts.counts, clause.item) >= clause.count || madeInto(facts.counts, clause);
     case 'dim': return facts.dimension === clause.dimension;
     case 'food': return facts.food >= clause.points;
+    case 'see': return facts.seen?.has(clause.what) === true;
+    case 'crystals': return typeof facts.crystals === 'number' && facts.crystals <= clause.max;
     case 'act': return clauseHolds(clause.clause, facts) === true;
     case 'at': return !!facts.feet && (!clause.dimension || facts.dimension === null || facts.dimension === clause.dimension)
       && Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y, facts.feet.z - clause.z) <= clause.r;
@@ -137,9 +153,12 @@ export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): bool
 /** A clause as the status says it: `iron_leggings 0/1`, `食料 32/40 点`, `次元 the_nether`, `(10,64,5) から 12m`. */
 function clauseWords(clause: DoneClause, facts: DoneFacts): string {
   switch (clause.kind) {
-    case 'have': return `${clause.item} ${Math.min(carried(facts.counts, clause.item), clause.count)}/${clause.count}`;
+    case 'have': return `${clause.item} ${Math.min(acquired(facts.counts, clause.item), clause.count)}/${clause.count}`;
     case 'act': return clauseLack(clause.clause, facts);
     case 'food': return foodPointsWords(facts.food, clause.points);
+    case 'see': return `${SEEN_WORDS[clause.what]}はまだ見えていない`;
+    case 'crystals': return typeof facts.crystals === 'number' ? `エンドクリスタル 残り ${facts.crystals}（${clause.max} 以下が条件）`
+      : 'エンドクリスタルの残りは体がまだ数えていない';
     case 'dim': return `次元 ${clause.dimension}（今 ${facts.dimension ?? '不明'}）`;
     case 'at': return facts.feet ? `(${clause.x},${clause.y},${clause.z}) から ${Math.round(Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y,
       facts.feet.z - clause.z))}m（${clause.r}m 内で済む）` : `(${clause.x},${clause.y},${clause.z}) までは不明`;
@@ -157,7 +176,7 @@ export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts |
   const predicate = parseDoneWhen(doneWhen);
   if (!predicate) return '観測では確かめられない（済んだら set state=done）';
   if (!facts) return null;
-  if (target && carried(facts.counts, target.item) < target.count) return `未: ${target.item} ${carried(facts.counts, target.item)}/${target.count}`;
+  if (target && acquired(facts.counts, target.item) < target.count) return `未: ${target.item} ${acquired(facts.counts, target.item)}/${target.count}`;
   if (predicateHolds(predicate, facts)) return '満たしている';
   return `未: ${bestAlternative(predicate, facts).filter(clause => !holds(clause, facts)).map(clause => clauseWords(clause, facts)).join('・')}`;
 }
@@ -216,12 +235,12 @@ export function nodesSeenDone(tree: PlanTree, facts: DoneFacts, inOrder = false)
   // Deepest first: a parent is judged after its children, so that a child its own predicate closed does not hold it open.
   for (const node of orderedPlan(tree.nodes).reverse()) {
     if (node.state === 'done' || node.state === 'blocked') continue;
-    if (node.target && carried(facts.counts, node.target.item) < node.target.count) continue;
+    if (node.target && acquired(facts.counts, node.target.item) < node.target.count) continue;
     const predicate = predicates.get(node.id);
     if (!predicate || !predicateHolds(predicate, facts)) continue;
     const kids = tree.nodes.filter(child => child.parentId === node.id && open(child));
     if (kids.length && !holdsByThePack(predicate, facts)) continue;
-    if (kids.some(child => child.target && carried(facts.counts, child.target.item) < child.target.count
+    if (kids.some(child => child.target && acquired(facts.counts, child.target.item) < child.target.count
       || unmetGear(predicates.get(child.id), facts))) continue;
     out.add(node.id);
   }

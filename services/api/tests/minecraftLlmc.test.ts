@@ -257,12 +257,13 @@ describe('the first plan (design 2.5, 2.6; owner: the whole game in the same sha
       planner: () => new Promise(resolve => { answer = resolve; }) });
     const seeded = firstPlanInbox.take('t', held0)!;
     expect(seeded.tree.nodes.length).toBeGreaterThan(30);
-    // Chapter 7: a node is carried by its kind and its words (a title says nothing): the seed's fortress node, whose condition is in free words.
+    // Chapter 7: a node is carried by its kind and its words (a title says nothing): the seed's fortress node, with its condition put in free words here.
+    // (A predicate such as `see:fortress` is never carried by words: the frame says whether it holds.)
     const fortress = seeded.tree.nodes.find(node => node.kind === 'fortress')!;
-    const done = applyPlanUpdate(seeded.tree, { ops: [{ op: 'set', id: fortress.id, state: 'done' }] }).tree;
+    const done = applyPlanUpdate(seeded.tree, { ops: [{ op: 'set', id: fortress.id, doneWhen: 'ネザーレンガ（N）が見える', state: 'done' }] }).tree;
     expect(firstPlanInbox.take('t', done)).toBeNull();
     answer({ nodes: [{ id: 'q1', parent: '', title: '木と石の道具', kind: 'stone_tools', where: '', doneWhen: '' },
-      { id: 'q2', parent: 'q1', title: '砦のレンガを見つける', kind: 'fortress', where: '', doneWhen: fortress.doneWhen },
+      { id: 'q2', parent: 'q1', title: '砦のレンガを見つける', kind: 'fortress', where: '', doneWhen: 'ネザーレンガ（N）が見える' },
       { id: 'q3', parent: '', title: '村を回る', kind: 'village', where: '(196,69,237)', doneWhen: '' }] });
     await new Promise(resolve => setTimeout(resolve, 0));
     const taken = firstPlanInbox.take('t', done)!;

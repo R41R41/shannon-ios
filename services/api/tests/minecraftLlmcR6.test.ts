@@ -179,7 +179,7 @@ describe('the first plan\'s done nodes are carried by the frame (run 29: 「動�
       { id: 'p5.1', parent: 'p5', title: '動物を狩り肉を焼く', where: '', doneWhen: 'food>=100' },
       { id: 'p5.2', parent: 'p5', title: '砦のレンガを探す', kind: 'fortress', where: '', doneWhen: 'ネザーレンガ（N）が見える' },
       { id: 'p5.3', parent: 'p5', title: 'ネザー要塞を探す', kind: 'other', where: '', doneWhen: 'ネザーレンガ（N）が見える' }] })!;
-    const freeDone = { ...settled, nodes: settled.nodes.map(node => node.kind === 'fortress' ? { ...node, state: 'done' as const } : node) };
+    const freeDone = { ...settled, nodes: settled.nodes.map(node => node.kind === 'fortress' ? { ...node, doneWhen: 'ネザーレンガ（N）が見える', state: 'done' as const } : node) };
     const carried = carryDone(freeDone, answer);
     expect(carried.nodes.find(node => node.id === 'p5.1')!.state).toBe('continue');
     expect(carried.nodes.find(node => node.id === 'p5.2')!.state).toBe('done');

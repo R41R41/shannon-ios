@@ -149,7 +149,10 @@ describe('v2 stages of knowledge', () => {
     expect(stagesFor(body({ planNow: '[p2.2] ブレイズの棒を 7 本', planFacts: planFacts('blaze', { id: 'p2.2' }) }))).toEqual(['nether', 'blaze']);
     // The next node's kind counts too: the pearls come after the rods.
     expect(stagesFor(body({ planFacts: planFacts('blaze', { next: ['pearl'] }) }))).toEqual(['nether', 'blaze', 'pearl']);
-    expect(stagesFor({ body: { state: { dimension: 'overworld' }, planFacts: planFacts('obsidian'), inventory: ['ender_eye×3'] } })).toEqual(['prep', 'pearl']);
+    // Eyes in the pack are the stronghold's stage; pearls and the endermen near are the pearl stage's.
+    expect(stagesFor({ body: { state: { dimension: 'overworld' }, planFacts: planFacts('obsidian'), inventory: ['ender_eye×3'] } })).toEqual(['prep', 'stronghold']);
+    expect(stagesFor({ body: { state: { dimension: 'overworld' }, planFacts: planFacts('obsidian'), inventory: ['ender_pearl×3'] } })).toEqual(['prep', 'pearl']);
+    expect(stagesFor({ body: { state: { dimension: 'overworld' }, planFacts: planFacts('stronghold') } })).toEqual(['prep', 'stronghold']);
     expect(stagesFor({ body: { state: { dimension: 'the_end' } } })).toEqual(['end']);
     expect(stagesFor({ body: { state: { dimension: 'overworld' }, planFacts: planFacts('dragon') } })).toEqual(['prep', 'end']);
     // Without the facts, a line that says the blazes picks nothing: no kind is inferred from `planNow`.

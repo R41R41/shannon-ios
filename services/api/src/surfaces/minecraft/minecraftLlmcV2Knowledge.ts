@@ -130,8 +130,8 @@ const PLAN = [
 /** The text every decision reads (the knowledge part of the cached system text). */
 export const V2_ALWAYS = [GOAL, PREP, DECIDE, URGENT, LIVE, MAP, FALLS, DANGER, PLAN].join('\n\n');
 
-export type StageId = 'prep' | 'nether' | 'blaze' | 'pearl' | 'end';
-export const STAGE_IDS: readonly StageId[] = ['prep', 'nether', 'blaze', 'pearl', 'end'];
+export type StageId = 'prep' | 'nether' | 'blaze' | 'pearl' | 'stronghold' | 'end';
+export const STAGE_IDS: readonly StageId[] = ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'];
 /** The knowledge of each stage, cut from the own prompt's 材料と手順 / ネザー・要塞・ブレイズ / パール・アイ・エンド. */
 export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   prep: [
@@ -195,23 +195,52 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 要塞（N）は帯に並ぶ: ゲートから 1 方向へ 100〜300 進み、無ければ直角へ（mc_probe kind=scan radius=32 で要塞・ネザーレンガの方角、高い所から mc_view mode=top）。',
     '- 要塞やスポナー（S）の近くでは通路を歩かず、床より 1 段下の岩に 1 幅 2 高のトンネルを掘って進む（足と頭を dig→1 歩）。射線の中で立ち止まらない'
       + '（wait・食べる・作るは見えない所で）。',
+    '- ガストの火の玉は体が打ち返す。溶岩の縁・橋の上で撃たれたら岩の側へ寄って受ける（押されて落ちるのが多い死に方）。ウィザースケルトンは近づかれる前に離れる。',
+    '- ポータルの対は live の「控え」の行（ネザー側の座標 ↔ 向こう側の座標）。ネザーで死ぬと持ち物はそこに約 5 分残る（近くにいる間だけ減る）。'
+      + 'リスポーンはベッドか最初の場所（オーバーワールド）。取りに戻るか装備を作り直すかは、最後の死の行の残り時間と比べて決める。',
   ].join('\n'),
   blaze: [
     '## ブレイズ',
     '- ブレイズは準備（shortage が空）の後。準備の前に近くにいる・撃たれた時は戦わず、射線の外の岩へ離れて塞ぐ。',
     '- 戦い方: スポナーから 3〜5 マス・同じ高さか 1 段下に 2×1 の隠れ場、三方を囲い目の高さに下付きハーフブロックの隙間。hold は部屋へ開いた同じ高さのマスで'
       + '（床・壁越しには届かない）。accept ["blaze"]、attack target=blaze hold seconds 20〜30、stopIf hpBelow 12。棒は敵がいない時に pickup。スポナーは壊さない。',
+    '- 待ち打ち: ブレイズは 10〜40 秒おきに湧き（あなたが 16m 内の間）、1 体で棒は 0〜1 本（平均 0.5）。7 本には 14 体ほど・300〜500 秒。'
+      + '隠れ場で盾を左手（offhand）のまま構え、来た相手を hold で打つ。火の玉は盾が止める。',
+    '- 目より 3 マス以上上に浮いたブレイズは追わない（届かない）。守りながら待つ（高さは数秒ごとに変わる）。棒は live の inventory で数える。粉にするのは 7 本そろってから。',
   ].join('\n'),
   pearl: [
     '## パールとアイ',
-    '- エンダーマン（歪んだ森に多い）: 目を合わせない（look で足元）、2 高の天井の下には来られない、accept ["enderman"]。離れる時は live の away の隣へ。追って歩き回らない（来るのを待つ）。ピグリンには金の延べ棒を drop target=ピグリン（真珠は 2〜4%）。',
-    '- アイ（粉 1 + 真珠 1）を 12〜14 個。use item=ender_eye（at 無し）で方位 bearingDeg が返る。200m 以上離れた 2 地点で投げ、方位 θ（0 北・90 東、x は sinθ・z は −cosθ）の線の交点を where に。',
-    '- ストロングホールド: 交点から vertical の stairs で下り、ポータルの枠（Q）12 か所に use item=ender_eye at=枠 face=up。全部 R になったら中の e のマスへ walk（range=0）で入る。',
+    '- パールの当て: ①歪んだ森（青い森）のエンダーマン ②ピグリンに金の延べ棒を drop target=ピグリン（当たりは約 2%、当たると 4〜8 個。金 90 個前後が目安でばらつきが大きい）'
+      + '③夜のオーバーワールドのエンダーマン（少ない）。近い当て・金がある当てを並べて選ぶ。',
+    '- エンダーマン（HP 40・背が 3 マス）: 目を合わせると怒る。準備なしに合わせない（look で足元）。accept ["enderman"]。弓は使わない（テレポートでよける）。'
+      + '倒す形（外の先例・この体では未確認）: 足の +2 の高さに 3×3 の屋根を置いた 2 マス高の穴に入って盾を構え、目（足の 2.55 上）を見て怒らせる。2 高の所には入れない。'
+      + '離れる時は live の away の隣へ。追って歩き回らない（来るのを待つ）。',
+    '- アイは粉 1 + 真珠 1（ロッド 1 本で粉 2）。枠は最初から平均 1 つ入っているので 12 個が目標、投げの損耗に 14 個あると安心。',
+  ].join('\n'),
+  stronghold: [
+    '## ストロングホールド',
+    '- アイは use item=ender_eye（at 無し）で投げる。結果の bearingDeg（0 北・90 東）を頭が帳簿に書き、live の「目玉の帳簿」に 交点・誤差の見積り・次に投げる場所の案 を出す。'
+      + '交点が出るまでは、最後の線の横へ 100m 以上動いて投げる（2 本の線が離れて交わるほど誤差が小さい）。',
+    '- 最初の 3 つの要塞は原点 (0,0) から 1,280〜2,816m の輪の上にあり、アイは一番近い要塞へ飛ぶ。交点がこの輪から大きく外れたら向きや帳簿を疑う。',
+    '- 交点の近く（100m 内）でもう 1 回投げる。アイが真下へ沈んだ所の下か近くが部屋。落ちたアイは約 5 分、pickup で拾える（割れるのは 5 回に 1 回ほど）。',
+    '- 下りは vertical の stairs（真下を素手で掘らない・溶岩に注意）。石レンガの廊下に出たら歩く。ひび割れ・苔の石レンガに紛れた感染石を掘るとシルバーフィッシュが出る。'
+      + '図書室・牢屋・泉の部屋は寄らない。',
+    '- 枠（Q）の部屋: 溶岩の溜まりの上の台に枠 12 か所。use item=ender_eye at=枠 face=up で 1 つずつはめる（最初から入っている枠もある）。全部 R になれば中の e が開く。'
+      + '足りないアイは live の「ポータルの枠」の行に出る。',
+    '- 入る前に、近くで place した bed を use してリスポーン地点にしておく（昼でも設定できる）。エンドで死んでも、この近くで復活して戻れる。エンドの中ではベッドは使わない（爆発する）。',
+    '- 全部 R になったら中の e のマスへ walk（range=0）で入り、約 4 秒立って待つ。着いた先が次元の変化。',
   ].join('\n'),
   end: [
     '## エンド',
-    '- 柱の上のクリスタルを shoot（囲いは pillarUp で登って打つ）。ドラゴンは止まり木（X）に降りた時に attack、飛ぶ時は shoot。'
-      + '降りた時に頭の近くへベッドを place→use で爆発（4〜5 マス離れ、間にブロック）。縁では sneak、奈落に落ちない。',
+    '- 着くのは黒曜石の台（100,49,0）。主島までは虚空のことが多い: 足元と両脇に壁を置く橋（go の canPlace）で渡る。縁では sneak。落ちたら戻れない。',
+    '- 順番: ①クリスタルを弓で壊す（柱の上。13〜64m 離れて shoot。爆発は 12m まで届く）→ ②鉄格子の檻つきは柱を登って壊す（pillarUp。通る所の格子だけ dig）'
+      + '→ ③竜が止まり木（X）に降りたら頭を剣で打つ（attack。頭の下から）→ ④息の雲・火の玉を避ける → ⑤縁に近づかない。',
+    '- 竜は live の「竜」の行（体力・phase）。止まっている phase 5〜7 の間だけ頭に剣が届き、矢は効かない。飛んでいる間は降りて来るまで、クリスタル（竜の回復源）を壊すか胴を shoot。'
+      + 'クリスタルが残っていると竜は回復する。頭以外への攻撃は効きが小さい。',
+    '- 息の雲（紫の粒子）は半径 7m ほどとして避け、雲の中で立ち止まらない。火の玉・体当たりは体の反射が避けるが、縁の外へ押されると落ちる: 縁から離れて戦う。',
+    '- 降りた竜の頭の近くへベッドを place→use で爆発（4〜5 マス離れ、間にブロック）すると体力を大きく削れるが、自分にも大きく当たる。',
+    '- エンドで死んだら: リスポーンはベッドか最初の場所。落とし物は約 5 分で消え、エンドは遠い。戻るのは開いたポータルから（座標は live の控え）。竜の体力と壊したクリスタルは戻らない見込み（未確認）。',
+    '- 討伐の確認は体の記録（boss.verified）。倒したと思っても、自分で完了にせず確認を待つ。',
   ].join('\n'),
 });
 
@@ -239,7 +268,8 @@ const STAGE_KINDS: Readonly<Record<StageId, ReadonlySet<PlanKind>>> = {
   prep: kindsOf('wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor', 'diamond', 'obsidian', 'portal', 'chest'),
   nether: kindsOf('nether', 'fortress', 'portal'),
   blaze: kindsOf('blaze'),
-  pearl: kindsOf('pearl', 'stronghold'),
+  pearl: kindsOf('pearl'),
+  stronghold: kindsOf('stronghold'),
   end: kindsOf('end', 'dragon'),
 };
 /** When each stage is needed: the dimension, the kinds of the plan's nodes, the structure she is in, what she carries and what is near. */
@@ -247,9 +277,18 @@ const STAGE_WHEN: Readonly<Record<StageId, (dimension: string, where: Where) => 
   prep: (dimension, where) => dimension === 'overworld' || hasKind(where.kinds, STAGE_KINDS.prep),
   nether: (dimension, where) => dimension === 'the_nether' || hasKind(where.kinds, STAGE_KINDS.nether) || /要塞|砦/u.test(where.inside),
   blaze: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.blaze) || /blaze|スポナー/u.test(where.near),
-  pearl: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.pearl) || /ender_(pearl|eye)/u.test(where.inventory) || /enderman/u.test(where.near),
+  pearl: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.pearl) || /ender_pearl/u.test(where.inventory) || /enderman/u.test(where.near),
+  stronghold: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.stronghold) || /ストロングホールド|エンドポータル/u.test(`${where.inside} ${where.near}`)
+    || /ender_eye/u.test(where.inventory),
   end: (dimension, where) => dimension === 'the_end' || hasKind(where.kinds, STAGE_KINDS.end),
 };
+
+/** The knowledge of the stage(s) a plan node of this kind is in (the dimension's own when no stage holds the kind), for the plan made again. */
+export function stageTextsForKind(kind: PlanKind, dimension: string): string {
+  const ids = STAGE_IDS.filter(id => STAGE_KINDS[id].has(kind));
+  const own: StageId = dimension === 'the_nether' ? 'nether' : dimension === 'the_end' ? 'end' : 'prep';
+  return (ids.length ? ids : [own]).map(id => V2_STAGES[id]).join('\n\n');
+}
 
 /** The message before the live state: the stages' knowledge, headed by which stages (null when there is no live body to pick from). */
 export function stageKnowledge(live: Rec): string | null {

@@ -22,6 +22,8 @@ export interface Milestone {
   name: string; seconds: number; doneWhen: string;
   /** The name in the instructions' list of targets, when the meter's own is longer. */
   short?: string;
+  /** Past the Nether: said by the meter alone, not in the instructions' list of targets (the cached text has a cap). */
+  late?: boolean;
   /** Passed over, it is still said while a plan node for it is open (the pack's item stays, so is kept; the food and the table are
  * used, but a node open says it is not met). */
   kept?: boolean;
@@ -71,13 +73,25 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: '水バケツ', seconds: 1_000, doneWhen: 'have:water_bucket' },
   { name: '黒曜石 10 個', seconds: 1_500, doneWhen: 'have:obsidian>=10' },
   { name: 'ネザー', seconds: 1_800, doneWhen: 'dim:the_nether' },
+  // Past the Nether (2026-11-02): the stretches of the one kill known to be made without a script (an Opus agent with about 37 tools, a fixed
+  // seed: the Nether at 55 min, the fortress a minute later, the stronghold at 3:25, the End at 3:31, the kill at 3:56) added to the owner's 30
+  // minutes. They are a ruler for the pace and nothing else; the first runs past the Nether will say what they should be.
+  { name: 'ネザー要塞', seconds: 2_700, doneWhen: 'see:fortress', late: true },
+  { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_500, doneWhen: 'have:blaze_rod>=7', late: true },
+  { name: 'エンダーパール 12 個', short: 'パール12', seconds: 7_800, doneWhen: 'have:ender_pearl>=12', late: true },
+  { name: 'エンダーアイ 12 個', short: 'アイ12', seconds: 8_100, doneWhen: 'have:ender_eye>=12', late: true },
+  { name: 'ポータルの枠の部屋', short: '枠の部屋', seconds: 10_800, doneWhen: 'see:end_portal_frame', late: true },
+  { name: 'エンド', seconds: 11_200, doneWhen: 'dim:the_end', late: true },
 ]);
 /** The milestones whose item stays in the pack (a bed, the pickaxes, the bucket): one passed over is still to do. */
 const KEPT_MILESTONES: ReadonlySet<string> = new Set(['have:bed', 'have:iron_pickaxe', 'have:bucket', 'have:diamond_pickaxe']);
 const isKept = (item: Milestone): boolean => item.kept === true || KEPT_MILESTONES.has(item.doneWhen);
 const grouped = (seconds: number): string => seconds.toLocaleString('en-US');
+/** The milestone of the gate: the Nether entered. */
+const GATE_INDEX = DRAGON_MILESTONES.findIndex(item => item.doneWhen === 'dim:the_nether');
 /** The targets as the instructions say them: 「ベッド 150・地下の準備 300・鉄のツルハシ 350・…・ネザー 1,800」. */
-export const milestoneWords = (): string => DRAGON_MILESTONES.map(item => `${item.short ?? item.name} ${grouped(item.seconds)}`).join('・');
+export const milestoneWords = (): string =>
+  DRAGON_MILESTONES.filter(item => !item.late).map(item => `${item.short ?? item.name} ${grouped(item.seconds)}`).join('・');
 
 /** Whether the plan is the dragon's: a node of it has the kind `dragon` (chapter 7: the kind the model wrote, not
  * the title's words; the seeded plan's last node, 「エンドでドラゴン」). */
@@ -222,7 +236,8 @@ export function meterParts(tree: PlanTree | null | undefined, observation: BodyO
   const names = (node: PlanNode, item: Milestone) => item.node?.(node) === true || clausesOf(node).some(
     clause => clause === item.doneWhen || clause.startsWith(`${item.doneWhen}>=`));
   const current = tree.nodes.find(node => node.id === tree.current);
-  const throughTheGate = reached[reached.length - 1];
+  // Through the gate: the Nether is reached (past it the later milestones follow one another; none is named by a node or passed over).
+  const throughTheGate = reached[GATE_INDEX] === true;
   const named = throughTheGate ? -1 : DRAGON_MILESTONES.findIndex((item, index) => !reached[index] && !!current && names(current, item));
   const { index: prepIndex, over: prepOver, fact: prepFact } = prepEnd(tree, facts, reached);
   const nextMilestoneIndex = () => (named >= 0 ? named : last + 1);

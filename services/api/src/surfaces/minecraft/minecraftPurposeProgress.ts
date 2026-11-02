@@ -1,10 +1,11 @@
 import type { PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { carried, doneFacts, validCondition } from './minecraftConditions.js';
+import { acquired, carried, doneFacts, validCondition } from './minecraftConditions.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
 import { materialsOf } from './minecraftLlmcRecipes.js';
 import { BODY_SMELTING_INPUT } from './minecraftSmelting.generated.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
+import { crystalsLeft } from './minecraftSeenMarks.js';
 
 /** Objective evidence, never total inventory or distance travelled. Unknown objectives earn no invented credit. */
 export function purposeEvidence(node: PlanNode | undefined, frame: BodyObservation | null): Record<string, number> {
@@ -13,7 +14,7 @@ export function purposeEvidence(node: PlanNode | undefined, frame: BodyObservati
   const clauses = parseDoneWhen(node.doneWhen)?.flat() ?? [];
   const targets = node.target ? [node.target] : clauses.flatMap(c => c.kind === 'have' ? [{ item: c.item, count: c.count }] : []);
   for (const target of targets) {
-    evidence[`have:${target.item}`] = Math.min(target.count, carried(facts.counts, target.item));
+    evidence[`have:${target.item}`] = Math.min(target.count, acquired(facts.counts, target.item));
     const recipe = materialsOf(target.item, target.count, { chain: true, pack: new Map() });
     for (const part of recipe.spends) {
       const raw = BODY_SMELTING_INPUT[part.item];
@@ -53,6 +54,17 @@ export function explorationEvidence(node: PlanNode | undefined, input: ActInput 
   if ((node.kind === 'food' || node.kind === 'village') && !/^地図 v1[^\n]*方式=surface/u.test(world.localMap)) return {};
   const { x, y, z } = facts.feet;
   return { [`explore:${facts.dimension}:${Math.floor(x / 16)},${Math.floor(y / 8)},${Math.floor(z / 16)}`]: 1 };
+}
+/**
+ * The fight in the End as progress: the damage done to the dragon and the crystals destroyed (numbers that only go up). The body's own
+ * count (`world.dragon.health`, `world.crystals.remaining`); nothing when it does not say, so a fight the body does not report earns no credit.
+ */
+export function endFightEvidence(frame: BodyObservation | null): Record<string, number> {
+  const world = (frame?.state.world ?? {}) as Record<string, unknown>;
+  const health = (world.dragon as { health?: unknown } | undefined)?.health;
+  const left = crystalsLeft(world);
+  return { ...(typeof health === 'number' && Number.isFinite(health) ? { 'dragon:damage': Math.max(0, 200 - health) } : {}),
+    ...(left !== null ? { 'crystals:down': Math.max(0, 10 - left) } : {}) };
 }
 /** A reason string cannot grant more waiting time. Only an explicit predicate and an observed clock/job can. */
 function waitForDay(clauses: import('../../contracts/minecraftActCondition.js').ActClause[], world: Record<string, unknown>): ObservedWait | null {

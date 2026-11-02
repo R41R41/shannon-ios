@@ -243,7 +243,7 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
     expect(isDragonPlan(retitled)).toBe(true);
   });
   it('the nodes done in the plan held are carried to the answer by kind and words only', () => {
-    const held: PlanTree = { ...dragon, nodes: dragon.nodes.map(node => node.kind === 'fortress' ? { ...node, state: 'done' as const } : node) };
+    const held: PlanTree = { ...dragon, nodes: dragon.nodes.map(node => node.kind === 'fortress' ? { ...node, doneWhen: 'ネザーレンガ（N）が見える', state: 'done' as const } : node) };
     const next = planFromAnswer({ nodes: [{ id: 'q1', parent: '', title: 'x', kind: 'fortress', where: '', doneWhen: 'ネザーレンガ（N）が見える' },
       { id: 'q2', parent: '', title: 'ネザー要塞を探す', kind: 'other', where: '', doneWhen: 'ネザーレンガ（N）が見える' }, { id: 'q3', parent: '', title: 'ネザー要塞を探す', kind: 'fortress', where: '', doneWhen: '' }] })!;
     const carried = carryDone(held, next);

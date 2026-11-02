@@ -46,14 +46,15 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
   it('every doneWhen of the seed that an observation can show is a predicate', () => {
     const tree = seedPlan('エンドラを討伐してください')!;
     const free = tree.nodes.filter(node => node.doneWhen && !parseDoneWhen(node.doneWhen)).map(node => node.doneWhen);
-    expect(free).toEqual(['ネザーレンガ（N）が見える']);
+    // The fortress, the portal room and the End are predicates too now (`see:`, `crystals<=`): nothing is left to the model's words.
+    expect(free).toEqual([]);
   });
 
   it('marks the nodes done that run 28 had done at 608 s, and the current node moves past them', () => {
     const tree = seedPlan('エンドラを討伐してください')!;
     const facts = doneFacts(RUN28)!;
     expect(facts.food).toBe(44);
-    const done = nodesSeenDone(tree, facts);
+    const done = nodesSeenDone(tree, facts, true);
     // Wood and stone (all three tools), the food and the bed (bread 44 points, a bed), the iron pickaxe is not yet the iron node (no bucket).
     // r9: a node is done by its own predicate: p1 (the pack: the stone pickaxe) and its children p1.2, p1.3 (their tools) are; p1.1 (6 logs: she has 4)
     // is done too since run 26 (by the tools the logs were made into), and the open children under a parent done by the pack are closed by the plan (`closedUnder`).
