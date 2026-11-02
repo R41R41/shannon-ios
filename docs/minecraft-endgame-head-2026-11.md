@@ -163,7 +163,7 @@ The saved request of run59's hold 2 (decision `d0070` of the task `e0bd9155`: th
 
 | input | gravel in `canDig` of the vertical | turned (any direction) without gravel |
 |---|---|---|
-| A (as it was) | 2 of 10 (3 of 11 with the probe call) | 8 of 10 (6 south, 2 north) |
+| A (as it was) | 2 of 10 (3 of 11 with the probe call) | 8 of 10 (5 south, 3 north) |
 | B (reason added) | 10 of 10 | 0 of 10 |
 
 Read: for this scene the input is the cause (P). The model followed the line once it said why; a Sonnet-vs-Opus comparison is not needed here. What is not shown: that the stairs then went down (the real-world step is not replayed), and several turns of it. About $0.8 spent (the first calls write the cache). The script and the rows: `status/codex-s3/t6-replay.py`, `t6-gravel.json`.
