@@ -276,6 +276,11 @@ describe('the ledger of the thrown eyes', () => {
     expect(ledger.note('a', eye(0, 0), null, 1000)).toBe(true);
     ledger.note('b', eye(800, 0), 'overworld', 2000);
     expect(ledger.fix(2000 + 3 * 3_600_000)).not.toBeNull();
+    // Back after 60 minutes, from the checkpoint: the same lines (the point and the next place to throw from).
+    const restored = createEyeLedger(ledger.checkpoint().minecraftEyes);
+    const hour = 2000 + 60 * 60_000;
+    expect(restored.lines({ x: 800, z: 0 }, hour)).toEqual(ledger.lines({ x: 800, z: 0 }, hour));
+    expect(restored.lines({ x: 800, z: 0 }, hour).join('\n')).toContain('交点');
     expect(ledger.note('c', eye(0, 0), 'the_end', 3000)).toBe(false);
   });
 });
