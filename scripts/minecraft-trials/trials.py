@@ -5,8 +5,11 @@ Runs on the production VM as azureuser, from ~/minecraft/shannon-home/trials (py
 
   scout   --key K --seed S        make the pristine practice world of one seed and measure it (village, lava, trees, sheep ...)
   seedof  <world dir>...          print the seed of existing worlds (level.dat)
-  run     [--sections 1,2] [--seeds a,b] [--model sonnet] [--dry-run]
-                                  one batch: each section on each of its seeds, from a fresh copy of the pristine world
+  run     [--sections 1,2] [--seeds a,b] [--model sonnet|current] [--dry-run] [--batch-cap-yen N] [--owner-ok-supply WHO-WHEN]
+                                  one batch: each section on each of its seeds, from a fresh copy of the pristine world.
+                                  S6-S11 (nether fortress ... dragon) start in a prepared place of the world (pristine/<key>/sites.json),
+                                  give items / teleport / build, and so run only with --owner-ok-supply (or --dry-run); --model current
+                                  is their default. seedscan.py makes the worlds and sites.json.
   report  [--batch B]             the table of one batch next to the previous result of each section and seed
   restore                         put the production world settings back (after an interrupted batch)
   env     on|off|status           the temporary SHANNON_FCA_MODEL line in api.env (with the six service restarts)
@@ -56,6 +59,8 @@ OPERATOR = 'trials'
 RATE_PER_HOUR = 20          # OPERATOR_LIMITS.requestsPerHour (accepted invocations of every operator)
 FINISHED = {'completed', 'failed', 'cancelled'}
 PAUSE_PATIENCE = 90          # an fca_unknown pause is often resumed by the body recovery within seconds (trial 20261020T1450)
+PREFLIGHT_POLL = 3
+DIMENSION_NAMES = {'overworld': 'minecraft:overworld', 'nether': 'minecraft:the_nether', 'end': 'minecraft:the_end'}
 
 
 def settled(row):
@@ -790,13 +795,35 @@ def body_state(r):
 
 
 def check_milestones(section, counts, state, latched, maxima, elapsed):
-    """Latches each milestone the first time it holds; returns whether every end milestone is latched."""
+    """Latches each milestone the first time it holds; returns whether every end milestone is latched.
+
+    A milestone is one of (the server's own facts, read over RCON, never the body's report):
+      any / all / count / orRespawn   items in the inventory (`clear <body> <item> 0` counts armour worn too)
+      weighted + count                a sum of item counts times a weight (blaze rods count 1, powder 0.5, an eye 0.5 ...)
+      dropFrom / after / drop         the count of an item fell by `drop` from a peak of at least `after` (obsidian placed)
+      dimension                       the body is in it
+      advancement                     the body holds the advancement (minecraft:nether/find_fortress ...)
+      near + within (+ dimension)     the body is within `within` blocks of a site, in that dimension
+      framesFilled                    this many of the stronghold's end_portal_frame blocks hold an eye
+      entity (+ dimension)            an entity matching the selector exists (the dragon)
+    """
+    extra = state.get('extra') or {}
     for m in section['milestones']:
         name = m['name']
         if name in latched: continue
         ok = False
-        if 'dimension' in m:
+        if 'dimension' in m and 'near' not in m and 'entity' not in m:
             ok = state.get('dimension') == m['dimension']
+        elif 'advancement' in m:
+            ok = bool(extra.get('adv:' + m['advancement']))
+        elif 'near' in m:
+            ok = bool(extra.get('near:' + name))
+        elif 'framesFilled' in m:
+            ok = extra.get('frames', 0) >= m['framesFilled']
+        elif 'entity' in m:
+            ok = bool(extra.get('ent:' + m['entity']))
+        elif 'weighted' in m:
+            ok = sum(counts.get(i, 0) * w for i, w in m['weighted'].items()) >= m['count']
         elif 'all' in m:
             ok = all(counts.get(i, 0) >= 1 for i in m['all'])
         elif 'any' in m:
@@ -817,8 +844,136 @@ def tracked_items(section):
     for m in section['milestones']:
         items.update(m.get('any', []))
         items.update(m.get('all', []))
+        items.update(m.get('weighted', {}))
         if 'dropFrom' in m: items.add(m['dropFrom'])
+    items.update(section.get('alsoCount', []))      # counted and reported, not a milestone (pearls of a barter run ...)
     return sorted(items)
+
+
+# ---------------------------------------------------------------- sites (where a section starts and what it looks for)
+
+def load_sites(world_key):
+    """pristine/<key>/sites.json: positions the generator made in that world (seedscan.py deep + publish)."""
+    return load_json(os.path.join(PRISTINE, world_key, 'sites.json'), {})
+
+
+def site_ref(sites, ref):
+    """A position from sites.json. ref is 'a.b.0.c' (keys and list indices), or {'site': 'a.b', 'offset': [dx, dy, dz]}, or [x, y, z]."""
+    offset = [0, 0, 0]
+    if isinstance(ref, dict):
+        offset = ref.get('offset', offset)
+        ref = ref['site']
+    if isinstance(ref, list):
+        value = ref
+    else:
+        value = sites
+        for part in str(ref).split('.'):
+            try:
+                value = value[int(part)] if isinstance(value, list) else value.get(part)
+            except (IndexError, ValueError, AttributeError):
+                value = None
+            if value is None: raise Stop(f'site {ref} is not in sites.json')
+    if not (isinstance(value, list) and len(value) == 3 and all(isinstance(v, (int, float)) for v in value)):
+        raise Stop(f'site {ref} is not a position: {value!r}')
+    return [value[i] + offset[i] for i in range(3)]
+
+
+KNOWN_SITES = ('spawn', 'netherArrival', 'blazeStand', 'blazeSpawner', 'warpedStand', 'strongholdPortalCenter', 'strongholdStand',
+               'strongholdFrames', 'endPlatform')       # what seedscan.py publish writes into pristine/<key>/sites.json
+
+
+def site_refs(section):
+    """The top-level sites.json keys a section reads."""
+    refs = set()
+    start = section['start']
+
+    def add(ref):
+        if isinstance(ref, dict): ref = ref['site']
+        if isinstance(ref, str): refs.add(ref.split('.')[0])
+
+    if start.get('at'): add(start['at'])
+    for m in section['milestones']:
+        if 'near' in m: add(m['near'])
+        if 'framesFilled' in m: refs.add('strongholdFrames')
+    for check in start.get('preflight', []):
+        if 'near' in check: add(check['near'])
+        if 'at' in check: add(check['at'])
+    for step in start.get('prep', []):
+        if isinstance(step, dict) and 'framesEmpty' in step: refs.add('strongholdFrames')
+    return refs
+
+
+def validate_sections(cfg):
+    """Problems of the section definitions (empty list = fine): checked before a batch spends anything and by the unit test."""
+    problems, seen = [], set()
+    for s in cfg['sections']:
+        sid = str(s.get('id'))
+        if sid in seen: problems.append(f'S{sid}: id twice')
+        seen.add(sid)
+        for key in ('name', 'targetSeconds', 'limitMinutes', 'start', 'milestones', 'seeds'):
+            if key not in s: problems.append(f'S{sid}: no {key}')
+        if problems and problems[-1].startswith(f'S{sid}: no'): continue
+        if not any(m.get('end') for m in s['milestones']): problems.append(f'S{sid}: no end milestone')
+        if s['limitMinutes'] > 118: problems.append(f'S{sid}: {s["limitMinutes"]} minutes is above the operator CLI limit of 120 (with the 2 minutes the harness adds)')
+        if s.get('capYen', cfg['trialCapYen']) > 2000: problems.append(f'S{sid}: capYen above the operator CLI limit of 2000')
+        if s['limitMinutes'] * 60 <= s['targetSeconds']: problems.append(f'S{sid}: the limit is not above the target')
+        for ref in site_refs(s) - set(KNOWN_SITES): problems.append(f'S{sid}: unknown site {ref}')
+        kinds = set(supply_kinds(s))
+        if kinds & {'tp', 'fill', 'setblock', 'summon', 'framesEmpty', 'effect', 'cmd'} and not s.get('requiresOwnerOk'):
+            problems.append(f'S{sid}: teleports or builds but is not marked requiresOwnerOk')
+        for m in s['milestones']:
+            if 'name' not in m: problems.append(f'S{sid}: a milestone without a name')
+        pred = s.get('prediction')
+        if s.get('requiresOwnerOk') and not (pred and all(k in pred for k in ('successRate', 'seconds', 'yen'))):
+            problems.append(f'S{sid}: no prediction (successRate, seconds, yen)')
+    return problems
+
+
+def supply_kinds(section):
+    """What a section does to the world before the request (the owner decides whether that is allowed on trial_live)."""
+    start = section['start']
+    kinds = []
+    if start.get('give'): kinds.append('give')
+    if start.get('wear') or start.get('hold'): kinds.append('equip')
+    if start.get('dimension') or start.get('at'): kinds.append('tp')
+    for step in start.get('prep', []):
+        kind = next(iter(step)) if isinstance(step, dict) else 'cmd'
+        if kind not in kinds: kinds.append(kind)
+    if start.get('effects'): kinds.append('effect')
+    return kinds
+
+
+def expand_prep(step, at, sites):
+    """One prep step as an RCON command (without the `execute in <dim> run` prefix). Offsets are from the start position `at`."""
+    def p(dx, dy, dz): return f'{math.floor(at[0] + dx)} {math.floor(at[1] + dy)} {math.floor(at[2] + dz)}'
+    if isinstance(step, str): return [step]
+    (kind, spec), = step.items()
+    if kind == 'fill':
+        dx1, dy1, dz1, dx2, dy2, dz2, block, *mode = spec
+        return [f'fill {p(dx1, dy1, dz1)} {p(dx2, dy2, dz2)} {block} {" ".join(mode)}'.strip()]
+    if kind == 'setblock':
+        dx, dy, dz, block = spec
+        return [f'setblock {p(dx, dy, dz)} {block}']
+    if kind == 'summon':
+        dx, dy, dz, entity, *nbt = spec
+        return [f'summon {entity} {p(dx, dy, dz)} {nbt[0] if nbt else ""}'.strip()]
+    if kind == 'framesEmpty':        # every end_portal_frame of the stronghold set back without its eye (any eye the generator placed is taken)
+        return [f'setblock {f["x"]} {f["y"]} {f["z"]} minecraft:end_portal_frame[facing={f["facing"]},eye=false] replace' for f in sites.get('strongholdFrames', [])]
+    if kind == 'forceloadBox':        # [dx1, dz1, dx2, dz2]: keeps the chunks loaded while the prep runs (done by run_prep)
+        return []
+    raise Stop(f'unknown prep step {kind}')
+
+
+def prep_box(start, at):
+    """The block box the prep touches (for forceload): from the offsets of its fill / setblock / summon steps and the start position itself."""
+    xs, zs = [at[0]], [at[2]]
+    for step in start.get('prep', []):
+        if not isinstance(step, dict): continue
+        (kind, spec), = step.items()
+        if kind == 'fill': xs += [at[0] + spec[0], at[0] + spec[3]]; zs += [at[2] + spec[2], at[2] + spec[5]]
+        elif kind in ('setblock', 'summon'): xs.append(at[0] + spec[0]); zs.append(at[2] + spec[2])
+        elif kind == 'forceloadBox': xs += [at[0] + spec[0], at[0] + spec[2]]; zs += [at[2] + spec[1], at[2] + spec[3]]
+    return math.floor(min(xs)) - 4, math.floor(min(zs)) - 4, math.floor(max(xs)) + 4, math.floor(max(zs)) + 4
 
 
 def variant_start(variant, facts):
@@ -833,22 +988,97 @@ def variant_start(variant, facts):
     return [round(sx + (tx - sx) * k), round(sz + (tz - sz) * k)]
 
 
-def setup_body(r, section, start_at):
+def passed(text):
+    return 'passed' in text.lower()
+
+
+def self_selector(*conditions):
+    return '@a[' + ','.join([f'name={BODY}', *conditions]) + ']'
+
+
+def run_prep(r, start, at, sites):
+    """The start's prep steps (fill / setblock / summon / framesEmpty) in the start's dimension, with the chunks they touch held loaded."""
+    dim = start.get('dimension', DIMENSION_NAMES['overworld'])
+    x0, z0, x1, z1 = prep_box(start, at)
+    r.cmd(f'execute in {dim} run forceload add {x0} {z0} {x1} {z1}')
+    try:
+        for _ in range(90):
+            if all(passed(r.cmd(f'execute in {dim} if loaded {x} 64 {z}')) for x, z in ((x0, z0), (x1, z1), (x0, z1), (x1, z0))): break
+            time.sleep(1)
+        else:
+            raise Stop(f'prep area {x0},{z0}..{x1},{z1} did not load in {dim}')
+        for step in start.get('prep', []):
+            for command in expand_prep(step, at, sites):
+                text = r.cmd(f'execute in {dim} run {command}')
+                if any(bad in text for bad in ('Unknown or incomplete', 'Incorrect argument', 'not loaded', 'Expected')):
+                    raise Stop(f'prep step failed: {command[:90]} -> {text[:100]}')
+    finally:
+        r.cmd(f'execute in {dim} run forceload remove all')
+
+
+def setup_body(r, section, start_at, sites=None):
+    start = section['start']
     r.cmd(f'clear {BODY}')
-    for item, count in section['start'].get('give', {}).items():
+    for item, count in start.get('give', {}).items():
         r.cmd(f'give {BODY} {item} {count}')
-    for slot, item in section['start'].get('wear', {}).items():
+    for slot, item in start.get('wear', {}).items():
         r.cmd(f'item replace entity {BODY} {slot} with {item}')
-    if section['start'].get('hold'):
-        r.cmd(f'item replace entity {BODY} weapon.mainhand with {section["start"]["hold"]}')
-    if start_at:   # on the ground there (spreadplayers finds the top block; the chunks generate as she arrives)
+    if start.get('hold'):
+        r.cmd(f'item replace entity {BODY} weapon.mainhand with {start["hold"]}')
+    if start.get('at'):         # a site of this world: prepared first, then she is put there (in its dimension)
+        at = site_ref(sites or {}, start['at'])
+        if start.get('prep'): run_prep(r, start, at, sites or {})
+        r.cmd(f'execute in {start.get("dimension", DIMENSION_NAMES["overworld"])} run tp {BODY} {at[0] + 0.5} {at[1]} {at[2] + 0.5}')
+    elif start_at:   # on the ground there (spreadplayers finds the top block; the chunks generate as she arrives)
         r.cmd(f'spreadplayers {start_at[0]} {start_at[1]} 0 6 false {BODY}')
     r.cmd(f'effect clear {BODY}')
     r.cmd(f'effect give {BODY} minecraft:instant_health 1 10 true')
     r.cmd(f'effect give {BODY} minecraft:saturation 1 10 true')
-    r.cmd(f'time set {section["start"].get("time", 0)}')
+    for effect in start.get('effects', []):
+        r.cmd(f'effect give {BODY} {effect["id"]} {effect.get("seconds", 30)} {effect.get("amplifier", 0)} true')
+    r.cmd(f'time set {start.get("time", 0)}')
     r.cmd('weather clear')
     r.cmd(f'scoreboard players set {BODY} trial_deaths 0')
+
+
+def preflight(r, section, sites):
+    """The start's own checks (the dragon is there, a block is as prepared): the name of the first that fails, or None. Costs nothing."""
+    for check in section['start'].get('preflight', []):
+        dim = check.get('dimension', DIMENSION_NAMES['overworld'])
+        deadline = time.monotonic() + check.get('wait', 30)
+        ok = False
+        while True:
+            if 'entity' in check:
+                ok = passed(r.cmd(f'execute in {dim} if entity {check["entity"]}'))
+            elif 'block' in check:
+                x, y, z = site_ref(sites, check['at'])
+                ok = passed(r.cmd(f'execute in {dim} if block {x} {y} {z} {check["block"]}'))
+            elif 'near' in check:
+                x, y, z = site_ref(sites, check['near'])
+                ok = passed(r.cmd(f'execute in {dim} positioned {x} {y} {z} if entity {self_selector(f"distance=..{check["within"]}")}'))
+            if ok or time.monotonic() >= deadline: break
+            time.sleep(PREFLIGHT_POLL)
+        if not ok: return check['name']
+    return None
+
+
+def extra_probes(r, section, sites, latched):
+    """Server facts the inventory counts cannot give: advancements, nearness to a site, filled portal frames, an entity's presence."""
+    out = {}
+    for m in section['milestones']:
+        if m['name'] in latched: continue
+        if 'advancement' in m:
+            key = 'adv:' + m['advancement']
+            if key not in out: out[key] = passed(r.cmd(f'execute if entity {self_selector(f"advancements={{{m["advancement"]}=true}}")}'))
+        elif 'near' in m:
+            x, y, z = site_ref(sites, m['near'])
+            out['near:' + m['name']] = passed(r.cmd(f'execute in {m.get("dimension", DIMENSION_NAMES["overworld"])} positioned {x} {y} {z} if entity {self_selector(f"distance=..{m["within"]}")}'))
+        elif 'framesFilled' in m:
+            out['frames'] = sum(passed(r.cmd(f'execute in {DIMENSION_NAMES["overworld"]} if block {f["x"]} {f["y"]} {f["z"]} minecraft:end_portal_frame[eye=true]'))
+                                for f in sites.get('strongholdFrames', []))
+        elif 'entity' in m:
+            out['ent:' + m['entity']] = passed(r.cmd(f'execute in {m.get("dimension", DIMENSION_NAMES["overworld"])} if entity {m["entity"]}'))
+    return out
 
 
 def wait_body_online(seconds=90):
@@ -870,18 +1100,49 @@ def step_unknown_codes(task_id, since_iso):
     return codes
 
 
-def run_trial(section, seed_key, batch, cfg, dry_run):
+def section_cap(section, cfg):
+    return section.get('capYen', cfg['trialCapYen'])
+
+
+def needs_sites(section):
+    return bool(site_refs(section))
+
+
+def fail_rule_hit(section, state, since, elapsed):
+    """The name of the failIf rule that has held for its holdSeconds, else None. `since` carries each rule's first-seen time between polls."""
+    hit = None
+    for rule in section.get('failIf', []):
+        dimension = state.get('dimension')
+        now = False
+        if dimension is not None:
+            if 'dimension' in rule: now = dimension == rule['dimension']
+            elif 'dimensionIsNot' in rule: now = dimension != rule['dimensionIsNot']
+        if not now: since.pop(rule['name'], None); continue
+        since.setdefault(rule['name'], elapsed)
+        if elapsed - since[rule['name']] >= rule.get('holdSeconds', 0): hit = hit or rule['name']
+    return hit
+
+
+def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     trial_id = f'{batch}-s{section["id"]}-{seed_key}'
     variant = (load_json(os.path.join(HERE, 'seeds.json'), {}).get('variants') or {}).get(seed_key, {})
     world_key = variant.get('world', seed_key)
     pristine = os.path.join(PRISTINE, world_key, 'world')
     facts = load_json(os.path.join(PRISTINE, world_key, 'facts.json'), {})
+    sites = load_sites(world_key)
     start_at = variant_start(variant, facts)
+    cap = section_cap(section, cfg)
+    kinds = supply_kinds(section)
     result = {'trial': trial_id, 'batch': batch, 'section': section['id'], 'sectionName': section['name'], 'seedKey': seed_key,
               'seed': facts.get('seed'), 'targetSeconds': section['targetSeconds'], 'limitMinutes': section['limitMinutes'],
-              'capYen': cfg['trialCapYen'], 'startedAt': now_iso(), 'ok': False, 'reason': None, 'seconds': None, 'milestones': {}}
+              'capYen': cap, 'startedAt': now_iso(), 'ok': False, 'reason': None, 'seconds': None, 'milestones': {},
+              'supplied': bool(section.get('supplied', kinds)), 'supplyKinds': kinds, 'ownerOk': owner_ok,
+              'prediction': section.get('prediction')}
     if not os.path.exists(pristine):
         result['reason'] = 'no_pristine_world'; return result
+    missing_sites = sorted(k for k in site_refs(section) if k not in sites)
+    if missing_sites:
+        result['reason'] = 'no_sites:' + ','.join(missing_sites); return result
     stop_server()
     target = clear_trial_dir(LIVE)
     shutil.copytree(pristine, target)
@@ -904,12 +1165,21 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
         result['reason'] = f'login_failed:{login.get("code")}'; return result
     time.sleep(8)
     r = Rcon()
-    setup_body(r, section, start_at)
+    try:
+        setup_body(r, section, start_at, sites)
+    except Stop as error:
+        r.close()
+        result['reason'] = f'setup_failed:{error}'[:200]
+        wait_rate(1); ops('logout'); return result
     time.sleep(4)
     result['startState'] = body_state(r)
-    result['startAt'] = start_at or 'spawn'
+    result['startAt'] = start_at or (site_ref(sites, section['start']['at']) if section['start'].get('at') else 'spawn')
+    failed_check = preflight(r, section, sites)
     r.close()
-    request = ops('request', '--max-minutes', str(section['limitMinutes'] + 2), '--budget-yen', str(cfg['trialCapYen']), GOAL)
+    if failed_check:
+        result['reason'] = f'setup_failed:preflight:{failed_check}'
+        wait_rate(1); ops('logout'); return result
+    request = ops('request', '--max-minutes', str(section['limitMinutes'] + 2), '--budget-yen', str(cap), GOAL)
     task_id = request.get('taskId')
     if request.get('outcome') != 'accepted' or not task_id:
         result['reason'] = f'request_refused:{request.get("code")}'
@@ -920,7 +1190,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
     result['goalChars'] = len(row['goal']) if row else None
     result['goalOk'] = bool(row) and row['goal'] == GOAL and len(row['goal']) == 13
     log(f'trial {trial_id}: task {task_id} goal={result["goalChars"]} chars ok={result["goalOk"]}')
-    latched, maxima, first_seen, last = {}, {}, {}, {}
+    latched, maxima, first_seen, last, fail_since = {}, {}, {}, {}, {}
     items = tracked_items(section)
     reason, paused_since = None, None
     while True:
@@ -929,6 +1199,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
             r = Rcon()
             counts = {i: count_items(r, i) for i in items}
             state = body_state(r)
+            state['extra'] = extra_probes(r, section, sites, latched)
             r.close()
         except (OSError, ConnectionError) as error:
             counts, state = {}, {}
@@ -941,6 +1212,8 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
         last = {'counts': counts, 'state': state, 'row': row}
         if done: reason = 'reached'; break
         if state.get('deaths'): reason = 'died'; break
+        rule = fail_rule_hit(section, state, fail_since, elapsed)
+        if rule: reason = f'fail:{rule}'; break
         if row.get('status') in FINISHED: reason = f'task_{row["status"]}:{row.get("pauseReason") or row.get("execState")}'; break
         if row.get('status') == 'paused':
             paused_since = paused_since if paused_since is not None else elapsed
@@ -948,7 +1221,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run):
                 reason = f'task_paused:{row.get("pauseReason") or row.get("execState")}'; break
         else:
             paused_since = None
-        if row.get('yen', 0) >= cfg['trialCapYen'] - 1: reason = 'budget'; break
+        if row.get('yen', 0) >= cap - 1: reason = 'budget'; break
         if elapsed >= section['limitMinutes'] * 60: reason = 'time_limit'; break
         time.sleep(cfg['pollSeconds'])
     elapsed = time.monotonic() - t0
@@ -993,17 +1266,34 @@ def config():
     return load_json(os.path.join(HERE, 'sections.json'))
 
 
+def resolve_model(asked, sections):
+    """--model if given; else the one defaultModel the chosen sections agree on (S6-S11: current); else sonnet as before."""
+    if asked: return asked
+    wanted = {s.get('defaultModel') for s in sections}
+    if len(wanted) > 1: raise Stop('the chosen sections want different models (S1-S5 sonnet, S6-S11 current): run them in separate batches or pass --model')
+    return wanted.pop() or 'sonnet'
+
+
 def cmd_run(args):
     cfg = config()
+    problems = validate_sections(cfg)
+    if problems: raise Stop('sections.json: ' + '; '.join(problems))
     sections = {str(s['id']): s for s in cfg['sections']}
     chosen = [sections[k] for k in (args.sections.split(',') if args.sections else sections)]
     only_seeds = set(args.seeds.split(',')) if args.seeds else None
-    plan = [(s, k) for s in chosen for k in s['seeds'] if not only_seeds or k in only_seeds]
+    # --seeds narrows the seeds a section lists; for the sections that can start in any prepared world (anySeed) it names them
+    plan = [(s, k) for s in chosen for k in (sorted(only_seeds) if only_seeds and s.get('anySeed') else s['seeds']) if not only_seeds or k in only_seeds]
     if args.limit: plan = plan[:args.limit]
     batch = args.batch or jst_stamp()
     folder = os.path.join(RESULTS, batch)
     os.makedirs(folder, exist_ok=True)
     log(f'batch {batch}: {len(plan)} trials: {", ".join(f"S{s["id"]}/{k}" for s, k in plan)}')
+    model = resolve_model(args.model, [s for s, _ in plan])
+    batch_cap = args.batch_cap_yen or cfg['batchCapYen']
+    asking = [s for s, _ in plan if s.get('requiresOwnerOk')]
+    if asking and not args.dry_run and not args.owner_ok_supply:
+        raise Stop(f'S{", S".join(sorted({str(s["id"]) for s in asking}))} give items, teleport or build on trial_live ({", ".join(sorted({k for s in asking for k in supply_kinds(s)}))}); '
+                   'the owner has not confirmed that yet. After his word: --owner-ok-supply "<who, when>" (kept in every result). --dry-run needs nothing.')
     busy = minecraft_task_active()
     if busy: raise Stop(f'a Minecraft task is still active: {busy}')
     if subprocess.run(['pgrep', '-f', 'minecraft-campaign-live-probe'], capture_output=True).returncode == 0: raise Stop('a lab probe is running')
@@ -1011,12 +1301,13 @@ def cmd_run(args):
     spent, results, env_changed = 0.0, [], False
     save_production_state()
     try:
-        if args.model == 'sonnet' and not args.dry_run:
+        if model == 'sonnet' and not args.dry_run:
             env_on(); env_changed = True
         for section, seed_key in plan:
-            if spent + cfg['trialCapYen'] > cfg['batchCapYen']:
-                log(f'batch: {spent:.0f} yen spent; the next trial could pass {cfg["batchCapYen"]} yen: stopping'); break
-            result = run_trial(section, seed_key, batch, cfg, args.dry_run)
+            if spent + section_cap(section, cfg) > batch_cap:
+                log(f'batch: {spent:.0f} yen spent; S{section["id"]} could take {section_cap(section, cfg)} more and pass {batch_cap} yen: stopping'); break
+            result = run_trial(section, seed_key, batch, cfg, args.dry_run, args.owner_ok_supply)
+            result['model'] = model
             spent += result.get('yen') or 0
             result['batchYenAfter'] = round(spent, 2)
             results.append(result)
@@ -1025,7 +1316,7 @@ def cmd_run(args):
                 handle.write(json.dumps(result, ensure_ascii=False) + '\n')
             log(f'trial {result["trial"]}: ok={result["ok"]} reason={result["reason"]} s={result.get("seconds")} '
                 f'decisions={result.get("decisions")} yen={result.get("yen")} (batch {spent:.0f})')
-            if result['reason'] and result['reason'].startswith(('login_failed', 'request_refused', 'no_pristine')) and not args.keep_going:
+            if result['reason'] and result['reason'].startswith(('login_failed', 'request_refused', 'no_pristine', 'no_sites', 'setup_failed')) and not args.keep_going:
                 log('batch: stopping after a setup failure'); break
     except Stop as error:
         log(f'batch: stopped: {error}')
@@ -1062,8 +1353,10 @@ def write_report(batch):
     rows = [load_json(os.path.join(folder, n)) for n in sorted(os.listdir(folder)) if n.endswith('.json') and n.startswith(batch)]
     prev = previous_results(batch)
     lines = [f'# 区間タイムアタック {batch}', '',
-             '| 区間 | 種 | 結果 | 秒（目標） | 前回 | 差 | 判断 | 費用 | 理由・足りない物 |', '|---|---|---|---|---|---|---|---|---|']
+             '| 区間 | 種 | 支給 | 予測（成功） | 結果 | 秒（予測 / 目標） | 前回 | 差 | 判断 | 費用（予測） | 理由・足りない物 |', '|---|---|---|---|---|---|---|---|---|---|---|']
     table = []
+    expected_ok = 0.0
+    predicted_rows = 0
     for r in rows:
         p = prev.get((r['section'], r['seedKey']))
         delta = None
@@ -1071,12 +1364,22 @@ def write_report(batch):
         verdict = '—' if delta is None else ('速くなった' if delta < -5 else '遅くなった' if delta > 5 else '同じ')
         why = r.get('reason') or ''
         if r.get('missing'): why += '（無い: ' + '・'.join(r['missing']) + '）'
-        lines.append(f'| S{r["section"]} {r["sectionName"]} | {r["seedKey"]} | {"達成" if r.get("ok") else "未達"} | {fmt_s(r.get("seconds"))}（{r["targetSeconds"]}） '
+        pred = r.get('prediction') or {}
+        if pred.get('successRate') is not None:
+            expected_ok += pred['successRate']; predicted_rows += 1
+        supply = ('支給あり: ' + '・'.join(r['supplyKinds'])) if r.get('supplied') else ('なし' if 'supplied' in r else '—')
+        lines.append(f'| S{r["section"]} {r["sectionName"]} | {r["seedKey"]} | {supply} | {"—" if pred.get("successRate") is None else f"{pred['successRate'] * 100:.0f}%"} '
+                     f'| {"達成" if r.get("ok") else "未達"} | {fmt_s(r.get("seconds"))}（{fmt_s(pred.get("seconds"))} / {r["targetSeconds"]}） '
                      f'| {fmt_s(p.get("seconds")) if p else "—"} | {"" if delta is None else f"{delta:+.0f} {verdict}"} | {r.get("decisions", "—")} '
-                     f'| ¥{r.get("yen") or 0:.0f} | {why} |')
-        table.append({**{k: r.get(k) for k in ('trial', 'section', 'sectionName', 'seedKey', 'ok', 'seconds', 'targetSeconds', 'decisions', 'yen', 'reason', 'missing', 'milestones')},
+                     f'| ¥{r.get("yen") or 0:.0f}（{"—" if pred.get("yen") is None else f"¥{pred['yen']:.0f}"}） | {why} |')
+        table.append({**{k: r.get(k) for k in ('trial', 'section', 'sectionName', 'seedKey', 'ok', 'seconds', 'targetSeconds', 'decisions', 'yen', 'reason', 'missing', 'milestones',
+                                                 'supplied', 'supplyKinds', 'ownerOk', 'prediction', 'model')},
                       'previous': {k: p.get(k) for k in ('trial', 'seconds', 'decisions', 'yen', 'reason')} if p else None, 'deltaSeconds': delta, 'verdict': verdict})
     lines += ['', f'合計 ¥{sum((r.get("yen") or 0) for r in rows):.0f}・{len(rows)} 区間・達成 {sum(1 for r in rows if r.get("ok"))}', '']
+    if predicted_rows:
+        got = sum(1 for r in rows if r.get('ok') and (r.get('prediction') or {}).get('successRate') is not None)
+        lines += [f'予測との答え合わせ：成功の予測の合計 {expected_ok:.1f} 件に対し、実測 {got} 件（予測のある {predicted_rows} 区間）。'
+                  f'費用は予測 ¥{sum((r.get("prediction") or {}).get("yen") or 0 for r in rows):.0f} に対し実測 ¥{sum((r.get("yen") or 0) for r in rows):.0f}。', '']
     lines.append('## 節目（依頼からの秒）')
     for r in rows:
         ms = '、'.join(f'{k} {v:.0f}' for k, v in sorted((r.get('milestones') or {}).items(), key=lambda kv: kv[1]))
@@ -1107,8 +1410,11 @@ def main(argv):
     p.add_argument('--quick', action='store_true', help='locate only: no chunks generated, nothing saved')
     p = sub.add_parser('seedof'); p.add_argument('worlds', nargs='+')
     p = sub.add_parser('run'); p.add_argument('--sections'); p.add_argument('--seeds'); p.add_argument('--batch')
-    p.add_argument('--model', choices=['sonnet', 'current'], default='sonnet'); p.add_argument('--dry-run', action='store_true')
+    p.add_argument('--model', choices=['sonnet', 'current'], default=None, help='default: what the chosen sections ask for (S6-S11: current), else sonnet')
+    p.add_argument('--dry-run', action='store_true')
     p.add_argument('--limit', type=int); p.add_argument('--keep-going', action='store_true')
+    p.add_argument('--batch-cap-yen', type=int, help='replaces sections.json batchCapYen for this batch (the sum of the per-section caps of S6-S11 is above it)')
+    p.add_argument('--owner-ok-supply', help='who confirmed, and when, that sections marked requiresOwnerOk may give items / teleport / build on trial_live')
     p = sub.add_parser('report'); p.add_argument('--batch')
     sub.add_parser('restore')
     p = sub.add_parser('env'); p.add_argument('what', choices=['on', 'off', 'status'])

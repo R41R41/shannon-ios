@@ -83,6 +83,160 @@
         { "name": "ネザー", "dimension": "minecraft:the_nether", "end": true }
       ],
       "seeds": ["x3", "r16", "x6"]
+    },
+    {
+      "id": 6, "name": "ネザーの到着地点→ネザー要塞", "targetSeconds": 480, "limitMinutes": 15, "capYen": 300,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡・15 分・¥300・タスクの終わり・オーバーワールドに 30 秒いる。要塞に入った（advancement）が成功",
+      "prediction": { "successRate": 0.25, "seconds": 600, "yen": 150, "builds": "head 2bd7788 / body 8c48b7e",
+        "basis": "新しい作りのネザー入りは実走 48・49 の 2 回だけで、要塞に着いた実走は 0。要塞まで 180〜350 ブロック（ガスト・溶岩あり）" },
+      "start": { "dimension": "minecraft:the_nether", "at": "netherArrival", "time": 1000,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate", "armor.legs": "minecraft:iron_leggings",
+                  "armor.feet": "minecraft:iron_boots", "weapon.offhand": "minecraft:shield" },
+        "give": { "minecraft:diamond_pickaxe": 1, "minecraft:iron_pickaxe": 1, "minecraft:iron_sword": 1, "minecraft:bow": 1, "minecraft:arrow": 32,
+                  "minecraft:water_bucket": 1, "minecraft:flint_and_steel": 1, "minecraft:cobblestone": 64, "minecraft:torch": 16, "minecraft:cooked_beef": 16 },
+        "prep": [ { "fill": [1, 0, -2, 8, 4, 2, "minecraft:air"] }, { "fill": [3, -1, 0, 6, 3, 0, "minecraft:obsidian"] },
+                  { "fill": [4, 0, 0, 5, 2, 0, "minecraft:nether_portal[axis=x]"] } ],
+        "preflight": [ { "name": "ネザーの到着地点", "near": "netherArrival", "within": 3, "dimension": "minecraft:the_nether", "wait": 6 } ] },
+      "milestones": [
+        { "name": "要塞の 100 ブロック以内", "near": "blazeStand", "within": 100, "dimension": "minecraft:the_nether" },
+        { "name": "スポナーの 24 ブロック以内", "near": "blazeStand", "within": 24, "dimension": "minecraft:the_nether" },
+        { "name": "要塞に入った", "advancement": "minecraft:nether/find_fortress", "end": true }
+      ],
+      "failIf": [ { "name": "オーバーワールドに戻った", "dimension": "minecraft:overworld", "holdSeconds": 30 } ],
+      "seeds": []
+    },
+    {
+      "id": 7, "name": "ブレイズのスポナー→ブレイズロッド 6", "targetSeconds": 720, "limitMinutes": 25, "capYen": 400,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡・25 分・¥400・タスクの終わり・オーバーワールドに 60 秒いる。ロッド換算 6（ロッド 1・粉 0.5・目玉 0.5）が成功",
+      "prediction": { "successRate": 0.10, "seconds": 1200, "yen": 300, "builds": "head 2bd7788 / body 8c48b7e",
+        "basis": "新しい作りのロッドは 0（最高 1 本は旧の作り）。スポナーの 5 ブロック隣から始めても、浮いたブレイズ・火の玉・盾の持ち方が未検証" },
+      "start": { "dimension": "minecraft:the_nether", "at": "blazeStand", "time": 1000,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate", "armor.legs": "minecraft:iron_leggings",
+                  "armor.feet": "minecraft:iron_boots", "weapon.offhand": "minecraft:shield" },
+        "give": { "minecraft:diamond_pickaxe": 1, "minecraft:iron_pickaxe": 1, "minecraft:iron_sword": 1, "minecraft:bow": 1, "minecraft:arrow": 32,
+                  "minecraft:water_bucket": 1, "minecraft:cobblestone": 128, "minecraft:cobblestone_slab": 8, "minecraft:torch": 16, "minecraft:cooked_beef": 24 },
+        "preflight": [ { "name": "スポナーのそば", "near": "blazeSpawner", "within": 9, "dimension": "minecraft:the_nether", "wait": 6 } ] },
+      "alsoCount": [ "minecraft:blaze_rod", "minecraft:blaze_powder", "minecraft:ender_eye" ],
+      "milestones": [
+        { "name": "ブレイズロッド 1", "advancement": "minecraft:nether/obtain_blaze_rod" },
+        { "name": "ロッド換算 3", "weighted": { "minecraft:blaze_rod": 1, "minecraft:blaze_powder": 0.5, "minecraft:ender_eye": 0.5 }, "count": 3 },
+        { "name": "ロッド換算 6", "weighted": { "minecraft:blaze_rod": 1, "minecraft:blaze_powder": 0.5, "minecraft:ender_eye": 0.5 }, "count": 6, "end": true }
+      ],
+      "failIf": [ { "name": "オーバーワールドに戻った", "dimension": "minecraft:overworld", "holdSeconds": 60 } ],
+      "seeds": []
+    },
+    {
+      "id": "8a", "name": "歪んだ森でエンダーパール 12（エンダーマン狩り）", "targetSeconds": 900, "limitMinutes": 30, "capYen": 450,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡・30 分・¥450・タスクの終わり・オーバーワールドに 60 秒いる。パール換算 12（パール 1・目玉 1）が成功",
+      "prediction": { "successRate": 0.05, "seconds": 1500, "yen": 350, "builds": "head 2bd7788 / body 8c48b7e",
+        "basis": "新しい作りのパールは 0。先例は人手の戦術（2 マスの壕・盾・視線）で 1 時間前後、DeepMind も壕。体のエンダーマン対応（視線の反射）はあるが、狩りの手順は無い" },
+      "start": { "dimension": "minecraft:the_nether", "at": "warpedStand", "time": 1000,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate", "armor.legs": "minecraft:iron_leggings",
+                  "armor.feet": "minecraft:iron_boots", "weapon.offhand": "minecraft:shield" },
+        "give": { "minecraft:diamond_pickaxe": 1, "minecraft:iron_pickaxe": 1, "minecraft:iron_sword": 1, "minecraft:water_bucket": 1,
+                  "minecraft:cobblestone": 128, "minecraft:torch": 8, "minecraft:cooked_beef": 24 },
+        "preflight": [ { "name": "歪んだ森のそば", "near": "warpedStand", "within": 3, "dimension": "minecraft:the_nether", "wait": 6 } ] },
+      "alsoCount": [ "minecraft:ender_pearl", "minecraft:ender_eye" ],
+      "milestones": [
+        { "name": "パール 1", "weighted": { "minecraft:ender_pearl": 1, "minecraft:ender_eye": 1 }, "count": 1 },
+        { "name": "パール 6", "weighted": { "minecraft:ender_pearl": 1, "minecraft:ender_eye": 1 }, "count": 6 },
+        { "name": "パール 12", "weighted": { "minecraft:ender_pearl": 1, "minecraft:ender_eye": 1 }, "count": 12, "end": true }
+      ],
+      "failIf": [ { "name": "オーバーワールドに戻った", "dimension": "minecraft:overworld", "holdSeconds": 60 } ],
+      "seeds": []
+    },
+    {
+      "id": "8b", "name": "ピグリンとの物々交換（金 40 のうち 32 を渡す。パールは数えるだけ）", "targetSeconds": 480, "limitMinutes": 15, "capYen": 250,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡・15 分・¥250・タスクの終わり・オーバーワールドに 60 秒いる。金が 8 以下（32 個を渡した）が成功。パールの数は成否に使わない",
+      "prediction": { "successRate": 0.25, "seconds": 600, "yen": 180, "builds": "head 2bd7788 / body 8c48b7e",
+        "basis": "取引の手順（use-item-on-entity）は無課金プローブで 1 回確認済み。金 1 個あたりパール約 0.07 個（確率 2.4% × 平均 3 個）なので、32 個でパール期待値は約 2.2（標準偏差約 2）。パール 12 の道としては成り立たない",
+        "pearlsExpected": 2.2 },
+      "start": { "dimension": "minecraft:the_nether", "at": "warpedStand", "time": 1000,
+        "wear": { "armor.head": "minecraft:golden_helmet", "armor.chest": "minecraft:iron_chestplate", "armor.legs": "minecraft:iron_leggings",
+                  "armor.feet": "minecraft:iron_boots", "weapon.offhand": "minecraft:shield" },
+        "give": { "minecraft:gold_ingot": 40, "minecraft:iron_sword": 1, "minecraft:cobblestone": 64, "minecraft:cooked_beef": 8 },
+        "prep": [ { "fill": [2, -1, -4, 8, -1, 4, "minecraft:netherrack"] }, { "fill": [2, 0, -4, 8, 3, 4, "minecraft:air"] },
+                  { "summon": [4, 0, 0, "minecraft:piglin", "{PersistenceRequired:1b,IsImmuneToZombification:1b}"] },
+                  { "summon": [4, 0, 3, "minecraft:piglin", "{PersistenceRequired:1b,IsImmuneToZombification:1b}"] },
+                  { "summon": [4, 0, -3, "minecraft:piglin", "{PersistenceRequired:1b,IsImmuneToZombification:1b}"] } ],
+        "preflight": [ { "name": "ピグリンがいる", "entity": "@e[type=minecraft:piglin]", "dimension": "minecraft:the_nether", "wait": 10 } ] },
+      "alsoCount": [ "minecraft:ender_pearl", "minecraft:obsidian", "minecraft:crying_obsidian", "minecraft:fire_charge", "minecraft:string" ],
+      "milestones": [
+        { "name": "金を 8 個渡した", "dropFrom": "minecraft:gold_ingot", "after": 40, "drop": 8 },
+        { "name": "金を 16 個渡した", "dropFrom": "minecraft:gold_ingot", "after": 40, "drop": 16 },
+        { "name": "金を 32 個渡した", "dropFrom": "minecraft:gold_ingot", "after": 40, "drop": 32, "end": true }
+      ],
+      "failIf": [ { "name": "オーバーワールドに戻った", "dimension": "minecraft:overworld", "holdSeconds": 60 } ],
+      "seeds": []
+    },
+    {
+      "id": 9, "name": "目玉 12→三角測量→ストロングホールド", "targetSeconds": 1200, "limitMinutes": 45, "capYen": 600,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡・45 分・¥600・タスクの終わり。ストロングホールドに入った（advancement story/follow_ender_eye）が成功",
+      "prediction": { "successRate": 0.10, "seconds": 1800, "yen": 450, "builds": "head 2bd7788 / body 8c48b7e",
+        "basis": "目玉の飛びを追う手と三角測量は実走で一度も動いていない（体は方位を返し、交点の計算は頭の仕事で、まだ無い）。1 輪目まで約 1,400〜2,300 ブロックの徒歩" },
+      "start": { "dimension": "minecraft:overworld", "at": "spawn", "time": 1000,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate", "armor.legs": "minecraft:iron_leggings",
+                  "armor.feet": "minecraft:iron_boots", "weapon.offhand": "minecraft:shield" },
+        "give": { "minecraft:diamond_pickaxe": 1, "minecraft:iron_pickaxe": 1, "minecraft:iron_sword": 1, "minecraft:iron_axe": 1, "minecraft:bow": 1,
+                  "minecraft:arrow": 32, "minecraft:water_bucket": 1, "minecraft:cobblestone": 64, "minecraft:torch": 16, "minecraft:cooked_beef": 24,
+                  "minecraft:white_bed": 1, "minecraft:ender_eye": 12, "minecraft:crafting_table": 1, "minecraft:furnace": 1, "minecraft:coal": 8 } },
+      "alsoCount": [ "minecraft:ender_eye" ],
+      "milestones": [
+        { "name": "目玉を 1 個使った", "dropFrom": "minecraft:ender_eye", "after": 12, "drop": 1 },
+        { "name": "目玉を 3 個使った", "dropFrom": "minecraft:ender_eye", "after": 12, "drop": 3 },
+        { "name": "ストロングホールドの 200 ブロック以内", "near": "strongholdPortalCenter", "within": 200, "dimension": "minecraft:overworld" },
+        { "name": "ストロングホールドの 32 ブロック以内", "near": "strongholdPortalCenter", "within": 32, "dimension": "minecraft:overworld" },
+        { "name": "ストロングホールドに入った", "advancement": "minecraft:story/follow_ender_eye", "end": true }
+      ],
+      "seeds": []
+    },
+    {
+      "id": 10, "name": "枠の部屋→目玉 12 を置く→エンドに入る", "targetSeconds": 240, "limitMinutes": 15, "capYen": 250,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡（ポータルの下は溶岩）・15 分・¥250・タスクの終わり。エンドに入ったが成功",
+      "prediction": { "successRate": 0.20, "seconds": 420, "yen": 150, "builds": "head 2bd7788 / body 8c48b7e",
+        "basis": "枠に目玉を置く手は実走で未使用。枠 12 個は prep で全部空にしてある（生成時に目玉が入っている枠も空にする）ので、目玉 12 個が全部要る" },
+      "start": { "dimension": "minecraft:overworld", "at": "strongholdStand", "time": 1000,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate", "armor.legs": "minecraft:iron_leggings",
+                  "armor.feet": "minecraft:iron_boots", "weapon.offhand": "minecraft:shield" },
+        "give": { "minecraft:diamond_pickaxe": 1, "minecraft:iron_sword": 1, "minecraft:water_bucket": 1, "minecraft:cobblestone": 64,
+                  "minecraft:cooked_beef": 8, "minecraft:ender_eye": 12 },
+        "prep": [ { "framesEmpty": true } ],
+        "preflight": [ { "name": "枠の部屋", "near": "strongholdStand", "within": 3, "dimension": "minecraft:overworld", "wait": 6 } ] },
+      "alsoCount": [ "minecraft:ender_eye" ],
+      "milestones": [
+        { "name": "枠に目玉 1", "framesFilled": 1 },
+        { "name": "枠に目玉 6", "framesFilled": 6 },
+        { "name": "枠に目玉 12", "framesFilled": 12 },
+        { "name": "エンドに入った", "dimension": "minecraft:the_end", "end": true }
+      ],
+      "seeds": []
+    },
+    {
+      "id": 11, "name": "エンドの到着→エンダードラゴン討伐", "targetSeconds": 1500, "limitMinutes": 45, "capYen": 800,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡（奈落を含む）・45 分・¥800・タスクの終わり・エンドを出て 20 秒。竜を倒した（advancement end/kill_dragon）が成功。竜が最初からいなければ開始しない",
+      "prediction": { "successRate": 0.02, "seconds": 2400, "yen": 600, "builds": "head 2bd7788 / body 8c48b7e",
+        "basis": "エンドの実サーバー試験は一度も無い。竜の頭への攻撃・クリスタル・息の反射は S1 が作っている最中で、この版の予測は 0 に近い" },
+      "start": { "dimension": "minecraft:the_end", "at": "endPlatform", "time": 1000,
+        "wear": { "armor.head": "minecraft:iron_helmet", "armor.chest": "minecraft:iron_chestplate", "armor.legs": "minecraft:iron_leggings",
+                  "armor.feet": "minecraft:iron_boots", "weapon.offhand": "minecraft:shield" },
+        "give": { "minecraft:diamond_pickaxe": 1, "minecraft:iron_pickaxe": 1, "minecraft:iron_sword": 1, "minecraft:bow": 1, "minecraft:arrow": 64,
+                  "minecraft:water_bucket": 1, "minecraft:cobblestone": 64, "minecraft:cooked_beef": 24, "minecraft:carved_pumpkin": 1,
+                  "minecraft:golden_apple": 2 },
+        "prep": [ { "fill": [-2, -1, -2, 2, -1, 2, "minecraft:obsidian"] }, { "fill": [-2, 0, -2, 2, 3, 2, "minecraft:air"] } ],
+        "preflight": [ { "name": "竜がいる", "entity": "@e[type=minecraft:ender_dragon]", "dimension": "minecraft:the_end", "wait": 120 } ] },
+      "milestones": [
+        { "name": "竜が存在した", "entity": "@e[type=minecraft:ender_dragon]", "dimension": "minecraft:the_end" },
+        { "name": "竜を倒した", "advancement": "minecraft:end/kill_dragon", "end": true }
+      ],
+      "failIf": [ { "name": "エンドを出た", "dimensionIsNot": "minecraft:the_end", "holdSeconds": 20 } ],
+      "seeds": []
     }
   ]
 }
