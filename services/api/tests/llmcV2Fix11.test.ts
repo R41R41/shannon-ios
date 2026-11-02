@@ -177,9 +177,9 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
     const line = meterLine(done(['p7']), bare, 100 / 60)!;
     expect(line).toBe('目安: 今 100 秒・次の節目 ネザー要塞 目安 3,200 秒（あと 3,100 秒）');
     expect(line).not.toContain('まだの節目');
-    // After the last milestone (the End entered) the seconds alone are said.
+    // The kill is the last target and the frame never reaches it (the task ends there): the meter keeps saying it, past its seconds.
     const every = done(tree.nodes.map(node => node.id));
-    expect(meterLine(every, bare, 12_000 / 60)).toBe('目安: 今 12,000 秒（節目は全部済んだ）');
+    expect(meterLine(every, bare, 12_000 / 60)).toContain('次の節目 竜の討伐 目安 9,300 秒（');
   });
   it('writes a blocked node before the current one as 止, as the dictionary says', () => {
     const road = roadLine(done(['p1', 'p2'], 'p5.1', { p3: 'blocked' }))!;
