@@ -49,6 +49,7 @@ export interface JudgeParts {
   since?: string | undefined;
   ahead?: readonly ActInput[];
   stops?: readonly string[];
+  failures?: readonly string[];
 }
 
 /** The facts' context from the plan's promises (the tree), and whether food is what she is short of (the near
@@ -76,6 +77,7 @@ export function factsContext(
       : {}),
     ...(judge.ahead?.length ? { ahead: judge.ahead } : {}),
     ...(judge.stops?.length ? { stops: judge.stops } : {}),
+    ...(judge.failures?.length ? { failures: judge.failures } : {}),
     wantsFood: wantsFood({
       fullness: hunger,
       points: food.points,

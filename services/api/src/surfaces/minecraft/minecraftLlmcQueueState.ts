@@ -166,7 +166,9 @@ export const sleepMs = (ms: number) =>
 export const sameWork = (left: ActInput, right: ActInput): boolean =>
   JSON.stringify([left.hands, left.repeat, left.done]) === JSON.stringify([right.hands, right.repeat, right.done]);
 
-export type RanListener = (item: { call: FcaToolCall; why: string }, result: ToolResult, receipt?: MinecraftControlReceipt) => void;
+/** The actual prepared input is optional for older head callers; absent input cannot prove a repeated hand. */
+export type RanListener = (item: { call: FcaToolCall; why: string; input?: ActInput },
+  result: ToolResult, receipt?: MinecraftControlReceipt) => void;
 
 /** The queue as the head's tools and lifecycle use it (`FcaBodyQueue` is what the runner sees of it). */
 export interface LlmcQueue extends FcaBodyQueue {
