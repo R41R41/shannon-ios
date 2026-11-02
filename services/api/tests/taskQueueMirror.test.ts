@@ -159,6 +159,27 @@ describe('the results as news, and the version', () => {
     expect(await f.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('dropped');
   });
 
+  it('R3-1 (2): a lone item that ends badly makes the decision being thought stale (nothing was dropped), and a good end does not', async () => {
+    const bad = setup();
+    await bad.queue.add(bad.spec(wait1));
+    bad.take();
+    bad.queue.mark();
+    expect(bad.queue.stale()).toBe(false);
+    bad.end('failed', JSON.stringify({ v: 1, ok: false, done: 0, of: 1, stoppedBy: 'failure', stoppedWhy: '掘れない', ms: 500, at: { x: 0, y: 64, z: 0 }, hp: 20, food: 20,
+      lines: [{ i: 1, do: 'wait', status: 'stopped', line: '失敗' }] }));
+    bad.poll();
+    await settle();
+    expect(bad.queue.stale()).toBe(true);
+    const good = setup();
+    await good.queue.add(good.spec(wait1));
+    good.take();
+    good.queue.mark();
+    good.end('completed', actResult());
+    good.poll();
+    await settle();
+    expect(good.queue.stale()).toBe(false);
+  });
+
   it('the body refusing an item (the item before it is gone) is a drop that never ran, with the body\'s sentence', async () => {
     const f = setup();
     await f.queue.add(f.spec(wait1));

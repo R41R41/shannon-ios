@@ -88,6 +88,8 @@ export interface QueueItem {
   dependsOn: string[] | undefined;
   uses: UsesSnapshot[];
   resume: { item: string; command: string } | undefined;
+  /** R3-1 (4): a reserve item (the stand-in the head puts last while it thinks): its end is not what a decision rests on. */
+  reserve?: boolean;
 }
 
 export interface QueueAdd {

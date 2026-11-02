@@ -84,6 +84,12 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     version += 1;
     droppedNow += 1;
   };
+  /**
+   * R3-1 (2): a decided item that ended badly makes a decision that was being thought meanwhile stale: it followed a queue whose last item did not
+   * do what the decision counted on, and without this its calls ran as hands made for a state that was gone (run59: ten of them). A reserve item's end (a stand-in the head
+   * put last, R3-1 4) is not such a change: it was never what the decision rested on.
+   */
+  const staleAfterBadEnd = (item: QueueItem) => { if (!item.reserve) version += 1; };
   /** The step is settled when nothing is open and no result is left unknown (an unknown result is settled only by
  * the proof of the release). */
   const settleFlag = () => {
@@ -164,7 +170,8 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     if (taken) { bump();
       noteDropped(item, item.unit.droppedBecause?.code ?? item.because ?? ''); }
     else if (!result.ok) { failedNow += 1;
-      troubleAt ??= now(); }
+      troubleAt ??= now();
+      staleAfterBadEnd(item); }
     if (!taken) { book(item, receipt);
       learnSpeed(item, receipt);
       for (const listener of listeners) tell(listener, item, result, receipt); }
@@ -189,6 +196,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
        label: itemLabel(item) });
     failedNow += 1;
     troubleAt ??= now();
+    staleAfterBadEnd(item);
     deps.control.store.markTold(item.id);
     record(unknownNotifiedRow(rowContext(item)));
     record(receivedRow(rowContext(item), receipt));
