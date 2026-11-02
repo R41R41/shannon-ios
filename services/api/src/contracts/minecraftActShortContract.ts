@@ -204,7 +204,9 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     done: { type: 'string', maxLength: 120, description: '満たした所で済みにする条件（例 "have:log>=10"）' },
     repeat: { type: 'integer', minimum: 2, maximum: 8, description: '手の組を最大何回まわすか（rel の手か、座標の無い手だけ）' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目（例 ["q15"]、全部は ["all"]）' },
-    reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に 1 つ・決めた項目が来ると自動で消える・見守りの依頼は不可）。その場の手（拾う・隣の鉱脈・手元の作る・焼きの合間の採取）と、次の場所から 16 m 内の go。危険（反射・stopIf・被弾・落下・戦いの相手が近い）で前の項目が止まれば控えも始まらない' },
+    reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に 1 つ・決めた項目が来ると自動で消える・見守りの依頼は不可）。'
+      + 'その場の手（拾う・隣の鉱脈・手元の作る・焼きの合間の採取）と、次の場所から 16 m 内の go。'
+      + '危険（反射・stopIf・被弾・落下・戦いの相手が近い）で前の項目が止まれば控えも始まらない' },
     dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目（例 ["q12"]、何にも頼らないなら []）' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
     keep: { type: 'array', maxItems: KEEP_MAX, items: { type: 'string', maxLength: 120 }, description: '後で使うために残す物（品目:数:用途。例 "spruce_planks:4:作業台"）' },
