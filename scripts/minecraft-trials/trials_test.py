@@ -113,7 +113,7 @@ class SitesTest(unittest.TestCase):
         cfg = trials.load_json(os.path.join(trials.HERE, 'sections.json'))
         self.assertEqual(trials.validate_sections(cfg), [])
         ids = [str(s['id']) for s in cfg['sections']]
-        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '8a', '8b', '9', '10', '11', 'Z'])
+        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '8a', '8b', '9', '10', '11', 'Z', 'M'])
 
     def test_validation_names_what_is_wrong(self):
         base = {'trialCapYen': 300, 'sections': [{'id': 6, 'name': 'x', 'targetSeconds': 100, 'limitMinutes': 130, 'capYen': 3000,

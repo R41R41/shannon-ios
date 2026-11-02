@@ -266,6 +266,31 @@
         { "name": "ネザー", "dimension": "minecraft:the_nether", "end": true }
       ],
       "seeds": []
+    },
+    {
+      "id": "M",
+      "name": "指定の作業台で鉄のツルハシを作る（頭の版の比べ・c1・保留なし）",
+      "targetSeconds": 90,
+      "limitMinutes": 6,
+      "capYen": 150,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current", "anySeed": true,
+      "failure": "死亡・6 分・¥150・タスクの終わり。鉄のツルハシが手に入ったら成功（作業台は 6 m 先に置いてある）。人の手は入れない",
+      "prediction": { "successRate": 0.8, "seconds": 90, "yen": 40, "builds": "head claude/dragon-head と claude/dragon-head-purpose の先端",
+        "basis": "材料（鉄 3・棒 2）を持ち、作業台が 6 m 先にある。ツルハシ 1 つなので go→craft の 2〜4 判断。実走の記録はまだ無い" },
+      "start": {
+        "at": "spawn",
+        "time": 1000,
+        "give": { "minecraft:iron_ingot": 3, "minecraft:stick": 2, "minecraft:cooked_beef": 8 },
+        "prep": [
+          { "fill": [6, -1, -1, 6, -1, 1, "minecraft:stone"] },
+          { "fill": [6, 0, -1, 6, 3, 1, "minecraft:air"] },
+          { "setblock": [6, 0, 0, "minecraft:crafting_table"] }
+        ]
+      },
+      "milestones": [
+        { "name": "鉄のツルハシ", "any": ["minecraft:iron_pickaxe"], "end": true }
+      ],
+      "seeds": []
     }
   ]
 }

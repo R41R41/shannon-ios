@@ -47,8 +47,12 @@ import trials; print(len(trials.minecraft_task_active()))" 2>/dev/null)
   [ "${active:-x}" = "0" ] || echo "a production Minecraft task is active or unknown (${active:-unreadable})"
 }
 
-pins() {            # makes (when missing) and prints the head pin and the body pin of what is deployed
+pins() {            # makes (when missing) and prints the head pin and the body pin of what is deployed (RIG_HEAD_PIN / RIG_BODY_PIN name other trees: the A/B of two head branches)
   local hs bs hp bp d
+  if [ -n "${RIG_HEAD_PIN:-}" ] && [ -n "${RIG_BODY_PIN:-}" ]; then
+    cp "$HERE/minecraft-rig.ts" "$RIG_HEAD_PIN/services/api/scripts/minecraft-rig.ts" || return 1
+    echo "$RIG_HEAD_PIN $RIG_BODY_PIN"; return 0
+  fi
   hs=$(git -C "$HOME/shannon-ios" rev-parse --short=7 HEAD) || return 1
   bs=$(git -C "$HOME/Shannon" rev-parse --short=7 HEAD) || return 1
   hp=$HOME/s4-pins/head-$hs; bp=$HOME/s4-pins/body-$bs
