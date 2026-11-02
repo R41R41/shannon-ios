@@ -149,11 +149,15 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   const observeNoted = (): BodyObservation | null => { const frame = parts.observe();
     hitWatch.note(frame);
     return frame; };
-  const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops() });
+  const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops(),
+    failures: events.failureFacts(observation) });
   const queueNow = (frame: BodyObservation | null): string[] => parts.queue ? queueNowLines(parts.queue.lines(frame), parts.queue.ahead()) : [];
   // The stops of the acts that ended (a go's or a vertical's distance left) are told with the next decision, from
 // the receipt's result and not from its words.
-  parts.queue?.onRan((_item, _result, receipt) => events.noteStops(receipt?.result));
+  parts.queue?.onRan((item, _result, receipt) => {
+    events.noteStops(receipt?.result);
+    events.noteFailures(receipt?.result, parts.observe(), item.input);
+  });
   let observation: BodyObservation | null = null, bodyAge: string | null = null, reasons: string[] = [];
   /** Continue contract 5: the frame the last context read, as the commands name it (null: it had no life to name). */
   let read: MadeIn | null = null;

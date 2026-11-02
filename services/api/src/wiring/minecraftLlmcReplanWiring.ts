@@ -127,11 +127,13 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
   parts.queue.onRan(watch.noteQueueResult);
   const current = (): string | null => workingNode(parts.taskId, parts.plan.tree().current) ?? parts.plan.tree().current ?? null;
   const stage = (): PlanKind | null => strongStage({ fcaPlanTree: parts.plan.tree() });
-  return { watch, flow, current, stage, close: reason => parts.queue.closeStep?.(reason), checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
+  const close = (reason: string): void => parts.queue.closeStep?.(reason);
+  return { watch, flow, current, stage, close, checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
 }
 
 /** The lifecycle of an unheld task: the look at each result and before each decision, and the plan made again at a decision's start. */
-export function withReplan(lifecycle: FcaBodyLifecycle, unheld: Pick<Unheld, 'watch' | 'flow' | 'current'> & Partial<Pick<Unheld, 'stage' | 'close'>> | null): FcaBodyLifecycle {
+type ReplanLook = Pick<Unheld, 'watch' | 'flow' | 'current'> & Partial<Pick<Unheld, 'stage' | 'close'>>;
+export function withReplan(lifecycle: FcaBodyLifecycle, unheld: ReplanLook | null): FcaBodyLifecycle {
   if (!unheld) return lifecycle;
   // The step's model was chosen from the stage it began in: a stronger stage than that closes the step, and the next begins with the strong model.
   const began = unheld.stage?.() ?? null;

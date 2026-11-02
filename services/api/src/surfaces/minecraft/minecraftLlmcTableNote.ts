@@ -22,19 +22,26 @@ function needsTable(hand: Record<string, unknown>): boolean {
   return item !== '' && !NO_TABLE.test(item) && recipeOf(item) !== null;
 }
 
+/** The scan's fact alone, shared with typed failures; no scan means no claim of absence. */
+export function tableLackFact(frame: BodyObservation | null): string | null {
+  const scan = doneFacts(frame)?.utilities;
+  if (!scan?.scanned) return null;
+  const nearest = scan.found.filter(item => item.block === 'crafting_table').map(item => item.distance).sort((a, b) => a - b)[0];
+  if (nearest !== undefined && nearest <= TABLE_REACH_METERS) return null;
+  const where = nearest === undefined ? `半径 ${scan.radius} m 内に作業台が見えない` : `一番近い作業台は ${Math.round(nearest * 10) / 10} m 先`;
+  return `${where}（作る手が届くのは ${TABLE_REACH_METERS} m 以内）`;
+}
+
 /** The note for the first hand that needs a table when none is within reach, or null. */
 export function tableNote(input: unknown, frame: BodyObservation | null): string | null {
   const hands = objectOf(input)?.hands;
-  const scan = doneFacts(frame)?.utilities;
-  if (!Array.isArray(hands) || !scan?.scanned) return null;
+  const fact = tableLackFact(frame);
+  if (!Array.isArray(hands) || !fact) return null;
   for (const [index, raw] of hands.entries()) {
     const hand = objectOf(raw);
     if (!hand) return null;
     if (needsTable(hand)) {
-      const nearest = scan.found.filter(item => item.block === 'crafting_table').map(item => item.distance).sort((a, b) => a - b)[0];
-      if (nearest !== undefined && nearest <= TABLE_REACH_METERS) return null;
-      const where = nearest === undefined ? `半径 ${scan.radius} m 内に作業台が見えない` : `一番近い作業台は ${Math.round(nearest * 10) / 10} m 先`;
-      return `手 ${index + 1} ${String(hand.do)} ${String(hand.item)}: ${where}（作る手が届くのは ${TABLE_REACH_METERS} m 以内）。`
+      return `手 ${index + 1} ${String(hand.do)} ${String(hand.item)}: ${fact}。`
         + '先に go で作業台へ寄るか、持ち物の板 4 で作業台を place してから作る';
     }
     if (MOVES.has(String(hand.do)) || (hand.do === 'place' && hand.block === 'crafting_table')) return null;

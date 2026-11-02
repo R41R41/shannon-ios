@@ -42,7 +42,7 @@ export function createQueueProgress(deps: QueueDeps, shared: { items: QueueItem[
   /** Her feelings read each result; they never fail a step. */
   function tell(listener: RanListener, item: QueueItem, result: ToolResult, receipt: MinecraftControlReceipt): void {
     try {
-      listener({ call: item.call, why: item.why }, result, receipt);
+      listener({ call: item.call, why: item.why, input: item.input }, result, receipt);
     } catch {
       /* feelings never fail a step */
     }

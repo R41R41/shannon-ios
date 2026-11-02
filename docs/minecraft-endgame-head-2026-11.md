@@ -156,3 +156,29 @@ S1・S2 の手の言葉に合わせた（`stronghold` 段を足した）:
 
 - 確かめた（単体・結合テスト、型検査、コードの形の検査、関係するテスト）: 済む条件の読みと閉じ方（クリスタルの親を含む）、数え方、S1 の実機ラボの 8 場面と、フェイクの frame（S1 の体の形 = `state.world` 直下・S2 の `eye` の形）からの行、目玉の帳簿と交点（真の位置との誤差・残差・沈んだ／止まった目玉・読む時の期限切れ）、checkpoint の往復、立て直しの上限と流れ（フェイクの強いモデル、ステップをまたぐ止まり、取り込み時の束ねと再検査）、brief の大きさ。
 - **未確認**: 実機の体が上の欄名で送ってくるか（S1・S2 の枝のコードを読んで合わせたが、頭と体を合わせた通しはまだ）、実機の本番の世界での目玉の方位の精度（S2 の隔離ラボは 0.003° 以内、頭は 0.02° で受ける）、Opus が立て直しで有用な ops を返すか・誤検出の頻度、段の知識の言い回しが Sonnet の判断を良くするか（場面再生は API キーと予算の承認待ち）、2〜4 時間の通しで要約をまたいで事実が効くか、エンダーマンの屋根の穴が本物に効くか（S2 の練習場は模型）。
+
+## 11/3 T6: the gravel stop (H2), input only, the same Sonnet (S3)
+
+The saved request of run59's hold 2 (decision `d0070` of the task `e0bd9155`: the stairs-down `vertical` had stopped at gravel with "canDig に gravel を足せば進む"; the production record, read only) was sent again to `claude-sonnet-5-5` as it was (adaptive thinking, effort low), ten times for each of two inputs. A: the result as the model saw it. B: the same result with the reason the head says since `22a1503` (a falling block is dug again as it falls; the same lump is met again after a turn; adding it is usually quicker). Everything else is the same bytes.
+
+| input | gravel in `canDig` of the vertical | turned (any direction) without gravel |
+|---|---|---|
+| A (as it was) | 2 of 10 (3 of 11 with the probe call) | 8 of 10 (5 south, 3 north) |
+| B (reason added) | 10 of 10 | 0 of 10 |
+
+Read: for this scene the input is the cause (P). The model followed the line once it said why; a Sonnet-vs-Opus comparison is not needed here. What is not shown: that the stairs then went down (the real-world step is not replayed), and several turns of it. About $0.8 spent (the first calls write the cache). The script and the rows: `status/codex-s3/t6-replay.py`, `t6-gravel.json`.
+
+### T6/T7 (S3, 11/3): 2 × 2 on the gravel stop, and the water alert (saved requests, replayed as they were)
+
+Gravel (decision `d0070`, ten calls per cell, adaptive thinking, effort low): gravel put in `canDig` —
+
+| | input A (as it was) | input B (the reason added) |
+|---|---|---|
+| Sonnet 5.5 | 2 / 10 | 10 / 10 |
+| Opus 5.5 | 9 / 10 | 10 / 10 |
+
+Both the input (P) and the model (L) move it: with the old input Opus follows the line nine times in ten and Sonnet twice; with the reason added the two are the same. So for the model that decides the descent (Sonnet in the early stages) the input is the cheaper fix, and it is in.
+
+Water alert (run58's task `d43770fb`: the decisions `d0074`, `d0081`, `d0092`, each the "oxygen 9, under 10" alert beside an iron vein in water; six calls per decision and model, the input as it was): all 36 calls rise first (a `go … waterOk`, a `jump`, a `pillarUp`), none keeps mining in the water; Opus sometimes adds a dig or a place behind the rise (`onFail=continue`), Sonnet mostly rises alone. So the single decision at the alert is safe for both models and is not where the run was lost: the records show the same alert three times in 25 minutes (14:29, 14:30, 14:54), each time followed by the model going back to the same vein once the breath was full. That is a failure over several turns, which one saved request cannot show; it needs the lab with the water vein, or the Codex typed failure of "the same place, the same stop" shown as a fact. Not replayed: the shield scene (measured on 11/2 with n=10), the real-world result of any hand.
+
+Spent on 11/3: about $4.4 of the $6 (gravel $0.8 Sonnet and $1.5 Opus, water $2.1). Rows: `status/codex-s3/t6-gravel*.json`, `t7-d00*.json`; script `t7-replay.py`.
