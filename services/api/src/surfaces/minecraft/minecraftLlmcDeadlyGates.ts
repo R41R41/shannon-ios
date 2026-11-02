@@ -38,7 +38,8 @@ export function blazeLack(facts: Facts): string | null {
     facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18（食べる）` : '',
     facts.food < 150 ? `持ち物の食料 ${foodPointsWords(facts.food, 150)}（焼く・狩る・拾う）` : '',
     shields < 1 ? '盾 0/1（板 6 と鉄 1 で作業台で作る。作れない時は missing の行を読んで材料を取る）' : ''].filter(Boolean);
-  return lacks.length ? `未達の必須（ブレイズの湧き場に入る前に必ず）— ${lacks.join('・')}。欠けたまま進むと: ${BLAZE_RISK}` : null;
+  const head = '未達の必須（ブレイズの湧き場に入る前に必ず）';
+  return lacks.length ? `${head}— ${lacks.join('・')}。欠けたまま進むと: ${BLAZE_RISK}` : null;
 }
 
 const cellOf = (value: unknown): Cell | null => {
