@@ -124,7 +124,7 @@ if (real) emit('RIG_MODELS', { main: real.names.main, escalate: real.names.escal
 
 function withoutHistory<T extends { history?: unknown }>(ports: T): Omit<T, 'history'> { const { history: _history, ...rest } = ports; return rest; }
 driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: nowIso, model: llmc.models.main, budget, continueAtOnce: true,
-  stepPorts: (runtime, step) => {
+  stepPorts: (runtime: any, step: any) => {
     const small = llmcStepParts(llmc, step, control, line => log(`head: ${line}`));
     const taskBody = createMinecraftTaskBody({ control, runtime, step, ownerAlone: () => true, sourcesVisible: () => true, ...small.body });
     const permit = async () => {
@@ -147,8 +147,8 @@ const wakeTimer = setInterval(() => { void driver.tick().catch(() => undefined);
 
 const spec = (goal: string) => ({ title: goal.slice(0, 120), goal, completionCriteria: MINECRAFT_REQUEST_CRITERIA, context: MINECRAFT_REQUEST_CONTEXT });
 const bound = () => { const tasks = []; for (const task of driver.runtime.list('owner', { limit: 100, offset: 0 })) if (control.store.body(task.id)) tasks.push(task); return tasks; };
-const requests = operatorMinecraftRequests({ control, runtime: driver.runtime, ownerScope: 'owner', stop: driver.stop, atomic: work => work(), bound, spec } as never);
-const operator = startOperatorMinecraft({ audit, path: dbPath, scopeKey: 'owner', now: nowIso, ownerAlone: () => true, log: line => log(`operator: ${line}`),
+const requests = operatorMinecraftRequests({ control, runtime: driver.runtime, ownerScope: 'owner', stop: driver.stop, atomic: (work: () => unknown) => work(), bound, spec } as never);
+const operator = startOperatorMinecraft({ audit, path: dbPath, scopeKey: 'owner', now: nowIso, ownerAlone: () => true, log: (line: string) => log(`operator: ${line}`),
   requests: { ...requests, wake: () => { void driver.tick(); } }, lifecycle: null, actions: h.actions,
   activity: { append: () => undefined } as never, config: { timeZone } as never,
   conversation: { threadId: () => 'thread', appendNoteOnce: () => null } } as never);
