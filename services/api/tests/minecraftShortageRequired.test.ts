@@ -136,8 +136,7 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
   });
   describe('a go or a walk that ends in a lit portal cell enters the Nether too (the hole of 56a6f5b)', () => {
     const MAP = ['地図 v1 足=(0,70,0) x=-2..2 z=-2..2 方式=cube', 'y=71 x=-2..2 z=-2..2', '-2 . . . . .', '-1 . . . . .', '0 . . . . p', '1 . . . . .', '2 . . . . .',
-      'y=70 x=-2..2 z=-2..2', '-2 . . . . .', '-1 . . . . .', '0 . . . . p', '1 . . . . .', '2 . . . . .'].join('
-');
+      'y=70 x=-2..2 z=-2..2', '-2 . . . . .', '-1 . . . . .', '0 . . . . p', '1 . . . . .', '2 . . . . .'].join('\n');
     const lit = frame(KIT.filter(([name]) => name !== 'shield'), { localMap: MAP });
     it('holds a go to the cell, a go with the cell among its goals, a walk to it, and a relative one', () => {
       expect(gateHold({ hands: [{ do: 'go', to: { x: 2, y: 70, z: 0 } }] }, lit)).toMatchObject({ hand: 1 });
