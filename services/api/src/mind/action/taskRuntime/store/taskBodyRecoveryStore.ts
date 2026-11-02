@@ -88,6 +88,20 @@ export class TaskBodyRecoveryStore {
     this.db.prepare('UPDATE fca_task_checkpoints SET checkpoint_json=? WHERE task_id=?').run(JSON.stringify(next), taskId);
   }
 
+  /**
+   * Keys put into the task's checkpoint at once, while the step `stepId` still holds the task (false: it does not, nothing is written). A count
+   * the step makes before something that may not come back (a request to the strong model) is kept this way, so that a step that ends unknown or
+   * dies is recovered with the count, not without it (Codex, 2026-11-03: the replan limits were given back). The step's own commit replaces the
+   * checkpoint as before, and the ports hold the same keys.
+   */
+  saveKeys(taskId: string, stepId: string, keys: Record<string, unknown>): boolean {
+    const row = this.checkpoint(taskId);
+    if (!row || row.stepId !== stepId) return false;
+    const prior = row.checkpointJson ? JSON.parse(row.checkpointJson) as Record<string, unknown> : {};
+    return Number(this.db.prepare('UPDATE fca_task_checkpoints SET checkpoint_json=? WHERE task_id=? AND step_id=?')
+      .run(JSON.stringify({ ...prior, ...keys }), taskId, stepId).changes) === 1;
+  }
+
   checkpoint(taskId: string): RecoveryCheckpoint | undefined {
     const row = this.db.prepare('SELECT step_id,checkpoint_json,stop_requested,lease_json FROM fca_task_checkpoints WHERE task_id=?').get(taskId);
     if (!row) return undefined;

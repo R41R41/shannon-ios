@@ -39,6 +39,8 @@ export interface UnheldParts {
   heldMs(): number;
   validate(before: PlanTree, after: PlanTree): string | null;
   log(line: string): void;
+  /** Puts keys into the task's checkpoint at once (the step holding the task only): the count of the asks for a new plan is kept before one is sent. */
+  persist?(keys: Record<string, unknown>): boolean;
 }
 
 const strings = (value: unknown, limit: number): string[] =>
@@ -102,6 +104,7 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
     minecraftActiveWait?: { node: string; until: number } } | null;
   const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending, replanner: parts.replanner,
     clock: parts.activeClock, log: parts.log, sources: stall => sourcesOf(parts, results, stall), bind: update => boundTo(parts.plan.tree(), update),
+    ...(parts.persist ? { persist: parts.persist } : {}),
     check: (update: PlanUpdate) => {
       const before = parts.plan.tree();
       const made = applyPlanUpdate(before, update, { at: new Date().toISOString() });
