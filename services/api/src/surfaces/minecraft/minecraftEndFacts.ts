@@ -209,11 +209,27 @@ export function placeLine(world: Rec): string | null {
  * The eyes the portal room needs: the frames the body counts (`×12 アイ入り 3`), how many are still empty, and what she holds. Said
  * only once frames are in view; before that the eyes are counted by the ledger of the throws.
  */
-export function frameLine(world: Rec, eyesHeld: number): string | null {
+export function frameLine(world: Rec, eyesHeld: number, supply?: EyeSupply): string | null {
   const frames = framesOf(world);
   if (!frames) return null;
   const empty = Math.max(0, frames.frames - frames.eyes);
   const lack = Math.max(0, empty - eyesHeld);
   return `ポータルの枠: 見えている ${frames.frames} 個のうちアイ入り ${frames.eyes}・あと ${empty} 個はめる・手持ちのアイ ${eyesHeld} 個`
-    + `${lack ? `（${lack} 個足りない）` : ''}`;
+    + `${lack ? `（${lack} 個足りない${supply ? `: ${shortOfEyes(lack, supply)}` : ''}）` : ''}`;
+}
+
+/** What is carried to make eyes from (a pearl and a powder each; a rod makes two powders). */
+export interface EyeSupply { pearls: number; powder: number; rods: number }
+
+/**
+ * Once the frames are in view the count is exact (no reserve is needed any more): what the missing eyes take, and how many can be made from what
+ * is carried now, so that a trip back to the Nether is a number (pearls and rods to bring), not a guess.
+ */
+export function shortOfEyes(lack: number, supply: EyeSupply): string {
+  const makeable = Math.min(supply.pearls, supply.powder + supply.rods * 2);
+  const pearls = Math.max(0, lack - supply.pearls);
+  const rods = Math.max(0, Math.ceil((lack - supply.powder) / 2) - supply.rods);
+  const have = `手持ち パール ${supply.pearls}・粉 ${supply.powder}・ロッド ${supply.rods} から作れるのは ${makeable} 個`;
+  const need = `作るには パール ${lack}・粉 ${lack}（ロッド ${Math.ceil(lack / 2)} 本分）。${have}`;
+  return makeable >= lack ? `${need}（手持ちで足りる）` : `${need}。ネザーで取る分: パール ${pearls} 個・ロッド ${rods} 本`;
 }

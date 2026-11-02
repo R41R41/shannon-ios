@@ -31,7 +31,8 @@ const some = (line: string | null): string[] => line ? [line] : [];
 /** The lines of one decision from the frame and the ledger's lines (pure). */
 function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[]): EndgameLines {
   const fight = endFightLines(end);
-  const frames = some(frameLine(world, carried(facts.counts, 'ender_eye')));
+  const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
+  const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
   const death = some(deathLine(world));
   const places = some(placeLine(world));
   const pearls = some(pearlLine(facts.counts, facts.dimension));

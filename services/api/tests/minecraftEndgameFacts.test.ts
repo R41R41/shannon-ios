@@ -6,7 +6,7 @@ import { acquired, doneFacts } from '../src/surfaces/minecraft/minecraftConditio
 import { doneStatusWords, nodesSeenDone, parseDoneWhen, predicateHolds } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { framesOf, marksOf, seenMarks } from '../src/surfaces/minecraft/minecraftSeenMarks.js';
 import { crystalsLeft, endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { breathLine, crystalLine, deathLine, dragonLine, endFightLines, fireballLine, frameLine, perchLine, placeLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { breathLine, crystalLine, deathLine, dragonLine, endFightLines, fireballLine, frameLine, perchLine, placeLine, shortOfEyes } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEyeLedger, flightOf } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 
@@ -150,6 +150,15 @@ describe('facts of the way to the dragon', () => {
     expect(frameLine(world, 5)).toBe('ポータルの枠: 見えている 12 個のうちアイ入り 3・あと 9 個はめる・手持ちのアイ 5 個（4 個足りない）');
     expect(placeLine(world)).toBe('控え（体の記憶、今いる次元）: ポータル 34m 北東 (12,63,-40) ↔nether(1,70,-5)・リスポーン地点 120m 北 (0,64,-120) respawn');
     expect(frameLine({}, 5)).toBeNull();
+  });
+
+  it('says what the missing eyes take and what is to be brought from the Nether, in numbers', () => {
+    const world = { mapLandmarks: ['Q エンドポータルの枠 (10,30,12) 南10m・下2 ×12 アイ入り 3'] };
+    // 9 to put, 5 held: 4 short; from 6 pearls, 2 powders and 1 rod: 3 can be made, so 1 pearl is missing and 1 rod
+    expect(frameLine(world, 5, { pearls: 6, powder: 2, rods: 1 })).toContain('作るには パール 4・粉 4（ロッド 2 本分）。手持ち パール 6・粉 2・ロッド 1 から作れるのは 3 個。ネザーで取る分: パール 0 個・ロッド 1 本');
+    expect(shortOfEyes(4, { pearls: 4, powder: 4, rods: 0 })).toContain('（手持ちで足りる）');
+    expect(shortOfEyes(4, { pearls: 0, powder: 0, rods: 0 })).toContain('ネザーで取る分: パール 4 個・ロッド 2 本');
+    expect(frameLine(world, 9, { pearls: 0, powder: 0, rods: 0 })).not.toContain('足りない');
   });
 });
 
