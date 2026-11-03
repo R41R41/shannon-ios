@@ -58,6 +58,14 @@
     {
      "name": "iron_ingot",
      "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
     }
    ],
    "mapLandmarks": [
@@ -180,6 +188,14 @@
     {
      "name": "iron_ingot",
      "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
     }
    ],
    "mapLandmarks": [
@@ -294,6 +310,14 @@
     {
      "name": "iron_ingot",
      "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
     }
    ],
    "mapLandmarks": [
@@ -397,6 +421,14 @@
     {
      "name": "iron_ingot",
      "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
     }
    ],
    "mapLandmarks": [
