@@ -62,6 +62,29 @@
      "x": 2,
      "y": 67.5,
      "z": 6
+    },
+    "approach": {
+     "strike": [],
+     "stage": [],
+     "retreat": [],
+     "wait": [
+      {
+       "x": 12.5,
+       "y": 64,
+       "z": 3.5,
+       "walkMeters": 26,
+       "walkSeconds": 6.0,
+       "side": 0.1
+      },
+      {
+       "x": 11.5,
+       "y": 64,
+       "z": -7.5,
+       "walkMeters": 33,
+       "walkSeconds": 7.7,
+       "side": -0.2
+      }
+     ]
     }
    },
    "perch": {
@@ -293,6 +316,21 @@
      "x": 2,
      "y": 67.5,
      "z": 6
+    },
+    "approach": {
+     "strike": [],
+     "stage": [],
+     "retreat": [],
+     "wait": [
+      {
+       "x": 12.5,
+       "y": 64,
+       "z": 3.5,
+       "walkMeters": 12,
+       "walkSeconds": 2.8,
+       "side": 0.1
+      }
+     ]
     }
    },
    "perch": {
