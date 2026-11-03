@@ -31,7 +31,8 @@ const worldOf = (observation: BodyObservation | null): Record<string, unknown> |
 const some = (line: string | null): string[] => line ? [line] : [];
 
 /** The lines of one decision from the frame and the ledger's lines (pure). */
-function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[], watched: { blaze: string | null; hunt: string | null }): EndgameLines {
+function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[],
+  watched: { blaze: string | null; hunt: string | null }): EndgameLines {
   const { blaze, hunt } = watched;
   const fight = endFightLines(end);
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
@@ -41,7 +42,8 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const pearls = some(pearlLine(facts.counts, facts.dimension));
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true))];
-  return { lines: [...fight, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places], short: [...urgent, ...some(blaze), ...frames, ...death] };
+  return { lines: [...fight, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
+    short: [...urgent, ...some(blaze), ...frames, ...death] };
 }
 
 /** The ledger's lines while the stronghold is still to be found: in the overworld, before the portal room's frames are in view. */

@@ -35,7 +35,8 @@ export function endermenNear(world: Record<string, unknown>): Array<{ id: unknow
 function storedOf(saved: unknown): HuntState {
   const raw = saved && typeof saved === 'object' && (saved as { v?: unknown }).v === 1 ? saved as Partial<HuntState> : null;
   const kills = Array.isArray(raw?.kills) ? raw.kills.filter(item => item && typeof item.key === 'string' && finite(item.at)).slice(-KEEP_KILLS) : [];
-  return { v: 1, since: finite(raw?.since) ? raw.since : null, lastNear: finite(raw?.lastNear) ? raw.lastNear : 0, pearls0: finite(raw?.pearls0) ? raw.pearls0 : 0, kills };
+  return { v: 1, since: finite(raw?.since) ? raw.since : null, lastNear: finite(raw?.lastNear) ? raw.lastNear : 0,
+    pearls0: finite(raw?.pearls0) ? raw.pearls0 : 0, kills };
 }
 
 export function createEnderHunt(saved: unknown) {
@@ -64,7 +65,7 @@ export function createEnderHunt(saved: unknown) {
       return huntLine({ near: near.length, nearest: near[0]!.distance, elapsedMs: now - state.since, kills: state.kills.length,
         gained: Math.max(0, pearlsOf(counts) - state.pearls0), have: pearlsOf(counts) });
     },
-    checkpoint: () => ({ minecraftEnderHunt: { v: state.v, since: state.since, lastNear: state.lastNear, pearls0: state.pearls0, kills: state.kills.map(item => ({ ...item })) } }),
+    checkpoint: () => ({ minecraftEnderHunt: { ...state, kills: state.kills.map(item => ({ ...item })) } }),
   };
 }
 export type EnderHunt = ReturnType<typeof createEnderHunt>;
@@ -76,9 +77,11 @@ export function huntLine(n: HuntNumbers): string | null {
   if (n.have >= PEARL_TARGET || n.elapsedMs < SHOW_AFTER_MS) return null;
   const minutes = Math.max(1, Math.round(n.elapsedMs / 60_000));
   const missing = PEARL_TARGET - n.have;
-  const base = `エンダーマン狩り ${minutes} 分: いま近くに ${n.near} 体（最寄り ${Math.round(n.nearest)}m）・撃破 ${n.kills} 体・パール +${n.gained}（${n.have}/${PEARL_TARGET}）。`
+  const base = `エンダーマン狩り ${minutes} 分: いま近くに ${n.near} 体（最寄り ${Math.round(n.nearest)}m）・撃破 ${n.kills} 体`
+    + `・パール +${n.gained}（${n.have}/${PEARL_TARGET}）。`
     + `1 体の落とし物は平均 ${PEARLS_PER_KILL} 個（0〜1）`;
   if (n.kills === 0) return base;
   const perMinute = n.kills / (n.elapsedMs / 60_000) * PEARLS_PER_KILL;
-  return `${base}。この速さ（撃破 ${(n.kills / (n.elapsedMs / 60_000)).toFixed(1)} 体/分）ならあと ${missing} 個に約 ${Math.ceil(missing / perMinute)} 分`;
+  const rate = (n.kills / (n.elapsedMs / 60_000)).toFixed(1);
+  return `${base}。この速さ（撃破 ${rate} 体/分）ならあと ${missing} 個に約 ${Math.ceil(missing / perMinute)} 分`;
 }
