@@ -132,7 +132,8 @@ function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
 }
 
 /** Hands that put the armour on, make it, feed or defend: they go whatever the armour is. */
-const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['equip', 'craft', 'make', 'smelt', 'furnace', 'eat', 'fight', 'attack', 'shoot', 'look', 'wait', 'sneak']);
+const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['equip', 'craft', 'make', 'smelt', 'furnace', 'eat', 'fight', 'attack', 'shoot', 'look', 'wait',
+  'sneak']);
 
 /**
  * Piglins turn on a body with no golden piece worn (run59, 11/3 14:15: dead in the Nether to a piglin; the boots were never made, one ingot in the pack).

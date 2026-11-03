@@ -167,7 +167,9 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
     const whole = holdV2(enter, noShield, 't1');
     expect(whole).toMatchObject({ whole: expect.stringContaining('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 1 portal: ネザーへ入る手は送らない。') });
     expect(heldOfFrame(enter, noShield, 't1', true)).toMatchObject({ hand: 1, code: 'gate_required' });
-    expect(heldOfFrame(enter, frame(KIT), 't1')).toBeNull();
+    // the kit complete and a golden piece worn (the gold gate of 11/3 holds the entry otherwise): nothing is held
+    expect(heldOfFrame(enter, frame(KIT, { worn: WORN.replace('足: なし', '足: golden_boots(残り65/65)') }), 't1')).toBeNull();
+    expect(heldOfFrame(enter, frame(KIT), 't1')).toMatchObject({ hand: 1, kind: 'portal', code: 'gate_required' });
   });
   it('says so to the model before it tries: the stage rules', () => {
     expect(PREP_RULES_WORDS).toContain('ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る');
