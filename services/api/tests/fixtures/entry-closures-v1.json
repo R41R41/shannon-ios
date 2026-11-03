@@ -881,6 +881,7 @@
     "surfaces/minecraft/minecraftLlmcFurnaceWait.ts",
     "surfaces/minecraft/minecraftLlmcGateEntry.ts",
     "surfaces/minecraft/minecraftLlmcGoGuard.ts",
+    "surfaces/minecraft/minecraftLlmcGoldTravel.ts",
     "surfaces/minecraft/minecraftLlmcHandGuards.ts",
     "surfaces/minecraft/minecraftLlmcHealth.ts",
     "surfaces/minecraft/minecraftLlmcHeldStreak.ts",
