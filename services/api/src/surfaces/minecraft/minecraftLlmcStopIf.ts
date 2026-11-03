@@ -5,7 +5,8 @@ import type { ActHand, ActInput } from '../../contracts/minecraftActContract.js'
  * mb-llmc r9 (run 33, +997: the urgent decision's act was `attack #1677` with `stopIf hpBelow 9`; it reached the body 4.4 s after the first hit,
  * when her health was 6.6, and stopped at once with 0 hands; the act before it, wait and look for an enderman, had no `hostileWithin` and the
  * piglin came up unseen): the stopIf the model wrote is looked at against the frame before it goes to the body.
- * - `hpBelow` at or above her health now would stop the act before its first hand: it is taken off, and the result says so.
+ * - `hpBelow` at or above her health now is NOT taken off (11/3, the isolated lab: the head took off `hpBelow 7` at 5.7 and sent a mine; she died): the body stops an act
+ *   whose condition already holds at once, with a result that says no hand moved, and the decision chooses the recovery from that fact.
  * - an act that waits for something to come to her (`attack` with `hold`, or a `wait` of 3 seconds or more) without `hostileWithin` gets
  *   `hostileWithin: 4` (a walking hostile this near stops it), unless a hostile that is not one she accepts and can reach her is already
  *   that near (it would stop the act before its first hand too), and the result says so.
@@ -32,13 +33,6 @@ function reachingThreats(observation: BodyObservation | null): Array<{ name: str
 const waits = (hand: ActHand) => (hand.do === 'attack' && hand.hold === true) || (hand.do === 'wait' && (hand.seconds ?? 0) >= LONG_WAIT_SECONDS);
 
 type StopIf = Record<string, unknown>;
-/** hpBelow above her health is taken off (it would stop the act before its first hand); the line that says so, or null. */
-function withoutDeadHp(stopIf: StopIf, health: number | null): string | null {
-  const hpBelow = finite(stopIf.hpBelow);
-  if (hpBelow === null || health === null || hpBelow <= health) return null;
-  delete stopIf.hpBelow;
-  return `stopIf hpBelow ${shown(hpBelow)} は今の体力 ${shown(health)} 以上なので外した（付けたままだと 1 手も動かずに止まる）`;
-}
 /** The hostileWithin a waiting act gets, or the line that says why it did not (a hostile that stops it at once is already that near). */
 function waitDefault(act: Partial<ActInput>, observation: BodyObservation | null): { add: boolean; line: string } {
   const accepted = new Set((Array.isArray(act.accept) ? act.accept : []).map(name => String(name).toLowerCase()));
@@ -54,8 +48,6 @@ export function checkedStopIf(input: unknown, observation: BodyObservation | nul
   if (!act || !Array.isArray(act.hands)) return { input, fixes: [] };
   const fixes: string[] = [];
   const stopIf: StopIf = { ...record(act.stopIf) };
-  const dead = withoutDeadHp(stopIf, finite(record(observation?.state.world)?.health));
-  if (dead) fixes.push(dead);
   if (finite(stopIf.hostileWithin) === null && (act.hands as ActHand[]).some(hand => record(hand) && waits(hand))) {
     const chosen = waitDefault(act, observation);
     fixes.push(chosen.line);

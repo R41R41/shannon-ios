@@ -173,17 +173,14 @@ describe('the plan\'s done is each node\'s own (run 33: p2.3 with 0 rods, p4 aft
 
 describe('the stopIf looked at against the frame (run 33 +997: hpBelow 9 at health 6.6 stopped with 0 hands)', () => {
   const hurt = frame({ health: 6.6, position: at(0, 64, 0), dimension: 'the_nether', nearbyThreats: [] });
-  it('takes off an hpBelow above her health and says so; keeps one at or under it', () => {
+  it('keeps an hpBelow above her health (the body stops the act at once and says no hand moved; 11/3: taking it off sent a mine at 5.7 health)', () => {
     const act = { hands: [{ do: 'attack', target: '#1677', untilDead: true }], accept: ['piglin'], stopIf: { hpBelow: 9 }, why: '[急ぎ] ピグリンを倒す' };
     const checked = checkedStopIf(act, hurt);
-    expect(checked.input).toEqual({ hands: act.hands, accept: ['piglin'], why: act.why });
-    expect(checked.fixes).toEqual(['stopIf hpBelow 9 は今の体力 6.6 以上なので外した（付けたままだと 1 手も動かずに止まる）']);
-    expect(checkedStopIf({ ...act, stopIf: { hpBelow: 6.6 } }, hurt).fixes).toEqual([]);
+    expect(checked.input).toEqual(act);
+    expect(checked.fixes).toEqual([]);
     expect(checkedStopIf({ ...act, stopIf: { hpBelow: 5 } }, hurt).input).toEqual({ ...act, stopIf: { hpBelow: 5 } });
     const mixed = checkedStopIf({ ...act, stopIf: { hpBelow: 9, hostileWithin: 6 } }, hurt);
-    expect(mixed.input).toMatchObject({ stopIf: { hostileWithin: 6 } });
-    expect((mixed.input as { stopIf: object }).stopIf).not.toHaveProperty('hpBelow');
-    expect(checkedStopIf(act, frame({ position: at(0, 64, 0) })).fixes).toEqual([]);
+    expect(mixed.input).toMatchObject({ stopIf: { hpBelow: 9, hostileWithin: 6 } });
   });
 
   it('adds hostileWithin 4 to a wait and a hold with none, and says so; not when one is there, or an unaccepted hostile is already that near', () => {
