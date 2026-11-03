@@ -112,6 +112,7 @@ function furnaceWords(hand: ActHand): Words {
   return [pos(hand.at[0]!), 'put', hand.item, String(hand.count), ...given('fuel', hand.fuel), ...given('fuelCount', hand.fuelCount)];
 }
 const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
+  fill: () => null, // Keep every group and required permission in the existing JSON fallback.
   chest: chestWords, furnace: furnaceWords,
   go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords, vertical: verticalWords,
   make: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
@@ -202,6 +203,7 @@ function attackHand({ words, hand }: Read): ActHand | { error: string } {
   return done({ ...hand, target: words[0] });
 }
 const READERS: Record<string, Reader> = {
+  fill: () => bad('fill', 'json {"do":"fill",...} で全必須欄を書く'),
   chest: chestHand, furnace: furnaceHand,
   obsidian: ({ cells, hand }) => cells.length ? done(blocksOf({ ...hand, at: cells })) : bad('obsidian', '溶岩の源の座標が要る'),
   mine: ({ cells, words, hand }) => cells.length && words[0] ? done(blocksOf({ ...hand, block: words[0], at: cells })) : bad('mine', 'ブロック名と座標が要る'),

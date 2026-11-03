@@ -1,5 +1,5 @@
 import type { CutBy, Handover, ItemOutcome, Progress } from '../../contracts/continueContract.js';
-import { readActResult, type ActHandLine, type ActResult, type RushCode, type ShieldRushResult } from '../../contracts/minecraftActContract.js';
+import { readActResult, type ActHandLine, type ActResult, type FillCode, type FillResult, type RushCode, type ShieldRushResult } from '../../contracts/minecraftActContract.js';
 
 /**
  * The words of a result that the contract's two axes make possible (continue contract 1 and 2; chapter 8's 再開):
@@ -68,6 +68,41 @@ export function shieldRushWords(line: ActHandLine): string[] {
   const facts = rushFacts(rush);
   return [first, ...(facts.length ? [facts.join('・')] : []),
     ...(Array.isArray(rush.pendingDrops) && rush.pendingDrops.length ? [`拾い残し ${rush.pendingDrops.length} 個`] : [])];
+}
+
+export const FILL_CODE_WORDS: Readonly<Record<FillCode, string>> = {
+  HP_FLOOR: '体力が下限以下になった',
+  TIME_LIMIT: '秒数の上限に達した',
+  NO_STAND: '立つ足場が無かった',
+  NO_BLOCKS: '置くブロックが足りなかった',
+  RETREAT_BLOCKED: '退避先へ戻れなかった',
+  REFLEX: '体の反射が手を止めた',
+  DEAD: '死んだ',
+};
+const FILL_SKIPS: Readonly<Record<keyof FillResult['skippedBy'], string>> = {
+  creature: '生き物に邪魔された', reach: '届かない', hazard: '危険で飛ばした', other: 'その他',
+};
+
+/** Only the body's structured fill measurements; no inferred arrival, success or next action. */
+export function fillWords(line: ActHandLine): string[] {
+  const fill = line.fill;
+  if (line.do !== 'fill' || !fill) return [];
+  const code = fill.code && Object.hasOwn(FILL_CODE_WORDS, fill.code) ? fill.code : null;
+  const first = `fill: ${fill.status}${fill.code ? `（${fill.code}）` : ''}${code ? ` ${FILL_CODE_WORDS[code]}` : ''}`;
+  const facts: string[] = [];
+  if (known(fill.placed)) facts.push(`置いた ${num(fill.placed)}`);
+  const skipped = (Object.entries(FILL_SKIPS) as Array<[keyof FillResult['skippedBy'], string]>).flatMap(([key, label]) => {
+    const count = fill.skippedBy?.[key];
+    return known(count) ? [`${label} ${num(count)}`] : [];
+  });
+  if (Array.isArray(fill.remaining)) facts.push(`残り ${fill.remaining.length}${skipped.length ? `（${skipped.join('・')}）` : ''}`);
+  else if (skipped.length) facts.push(skipped.join('・'));
+  if (known(fill.hpMin)) facts.push(`体力最低 ${num(fill.hpMin)}`);
+  if (known(fill.hpEnd)) facts.push(`終了体力 ${num(fill.hpEnd)}`);
+  if (known(fill.elapsedMs)) facts.push(`経過 ${num(fill.elapsedMs)} ms`);
+  if (fill.at && [fill.at.x, fill.at.y, fill.at.z].every(known)) facts.push(`終了地点 ${at(fill.at)}`);
+  if (typeof fill.safe === 'boolean') facts.push(fill.safe ? '終了地点は安全' : '終了地点の安全は未確認');
+  return [first, ...(facts.length ? [facts.join('・')] : [])];
 }
 
 /** The last path search of a go, as the model reads it: found, partial, timed out (with the cells round the goal
@@ -174,6 +209,8 @@ export function verticalStopWords(line: ActHandLine): string {
 /** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain
  * failure adds none). */
 export function handFacts(line: ActHandLine): string[] {
+  const fill = fillWords(line);
+  if (fill.length) return fill.map(text => `${FACT}${text}`);
   const rush = shieldRushWords(line);
   if (rush.length) return rush.map(text => `${FACT}${text}`);
   const out: string[] = [];

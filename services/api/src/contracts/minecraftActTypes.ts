@@ -1,4 +1,5 @@
 import { PLAN_LIMITS } from '@shannon/mind';
+import type { FillGroup, FillResult } from './minecraftFillContract.js';
 import type { ShieldRushResult } from './minecraftShieldRushContract.js';
 import type { WorldScan } from './minecraftProbeContract.js';
 import { type ActCondition } from './minecraftActCondition.js';
@@ -53,6 +54,7 @@ export const HAND_KINDS = [
   'portal',
   'smelt',
   'vertical',
+  'fill',
 ] as const;
 
 export type HandKind = (typeof HAND_KINDS)[number];
@@ -119,7 +121,9 @@ export interface ActHand {
   at?: readonly ActPos[];
   /** place/use: the face of `at` to put against or use (default: the body's choice of a face it can reach). */
   face?: ActFace;
-  /** place/pillarUp: the block to place (pillarUp default: the most numerous of cobblestone, cobbled_deepslate,
+  /** fill: ordered feet cells and placements, all absolute coordinates. */
+  groups?: readonly FillGroup[];
+  /** place/fill/pillarUp: the block to place (pillarUp default: the most numerous of cobblestone, cobbled_deepslate,
    * dirt, netherrack). */
   block?: string;
   /** use/equip/craft/eat/shoot: the item (use: water_bucket, bucket, lava_bucket, flint_and_steel, ender_eye, a bed, a door…). */
@@ -146,7 +150,7 @@ export interface ActHand {
   hold?: boolean;
   /** attack: shielded rush at one blaze (#id), then return to retreatTo. */
   style?: 'shield_rush';
-  /** attack shield_rush: required retreat destination. */
+  /** attack shield_rush / fill: required retreat destination (sheltered feet cell). */
   retreatTo?: ActPos;
   /** attack shield_rush: required area (radius 1–16, integer maxDrop 0–3; absolute coordinates). */
   area?: { center: ActPos; radius: number; maxDrop: number };
@@ -156,7 +160,7 @@ export interface ActHand {
   onCrossfire?: 'retreat' | 'continue';
   /** attack shield_rush: required pickup choice (the target's drops, or none). */
   pickup?: 'target_drops' | 'none';
-  /** wait: 0.5–30; attack: at most 30 (default 20), shield_rush: required 5–60 including return; go: 5–120 (default 60). */
+  /** wait: 0.5–30; attack: at most 30 (default 20), shield_rush / fill: required 5–60 including return; go: 5–120 (default 60). */
   seconds?: number;
   /** shoot: seconds to draw (0.2–3, default 1.0: a full bow). */
   charge?: number;
@@ -190,7 +194,7 @@ export interface ActHand {
    * or runs when health falls under it (1–19).
    */
   stance?: 'fight' | 'flee';
-  /** fight / attack shield_rush: retreat health (integer 1–19; required for shield_rush, at or below). */
+  /** fight / attack shield_rush / fill: retreat health (integer 1–19; required for shield_rush / fill, at or below). */
   retreatHp?: number;
   /** portal: the frame's plane runs along x or z. */
   axis?: 'x' | 'z';
@@ -396,6 +400,7 @@ export interface ActHandLine {
   code?: string;
   progress?: HandOutcome['progress'];
   shieldRush?: ShieldRushResult;
+  fill?: FillResult;
   delta?: HandOutcome['delta'];
   pass?: number;
   motorOps?: number;
