@@ -62,3 +62,24 @@ describe('the End', () => {
     expect(deadlyGateHold({ hands: [{ do: 'walk', to: { x: 1, y: 70, z: 0 } }] }, overworld([]))).toBeNull();
   });
 });
+
+describe('work with almost no health', () => {
+  const mine = { hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'mine', block: 'iron_ore', count: 3 }] };
+  const overworld = (health: number, world: Record<string, unknown> = {}) => frame([['cooked_beef', 4]], { dimension: 'overworld', health, food: 12, ...world });
+  it('holds the work hand under 8 health, with an enemy near or not, and says how health comes back', () => {
+    for (const world of [{}, { threats: ['#9 skeleton 1.0m (1,2,3)'] }]) {
+      const held = deadlyGateHold(mine, overworld(5.7, world));
+      expect(held).toMatchObject({ hand: 2, kind: 'work' });
+      expect(held!.line).toContain('体力が 8 を切っている間は掘る・作る・拾うなどの作業の手を送らない');
+      expect(held!.line).toContain('戦う・逃げる・食べる・遮蔽に入る手は出せる');
+    }
+    expect(heldOfFrame(mine, overworld(5.7), 'lh')).toMatchObject({ hand: 2, code: 'gate_required' });
+  });
+  it('lets go the hands of defence, and everything at 8 or more', () => {
+    expect(deadlyGateHold(mine, overworld(8))).toBeNull();
+    for (const hand of [{ do: 'fight', target: 'zombie' }, { do: 'attack', target: '#9' }, { do: 'eat', item: 'cooked_beef' }, { do: 'go', to: { x: 1, y: 2, z: 3 } },
+      { do: 'equip', item: 'shield' }, { do: 'place', block: 'cobblestone', at: [{ x: 1, y: 2, z: 3 }] }, { do: 'wait', seconds: 5 }]) {
+      expect(deadlyGateHold({ hands: [hand] }, overworld(5.7, { threats: ['#9 skeleton 1.0m (1,2,3)'] })), String(hand.do)).toBeNull();
+    }
+  });
+});

@@ -21,6 +21,11 @@ describe('where a reserve is refused', () => {
       }
       expect(reserveRefusal({ hands: hands('pickup', 'eat', 'equip') }, { ...open, dimension })).toBeNull();
     }
+    for (const dimension of ['the_nether', 'the_end']) {
+      expect(reserveRefusal({ hands: hands('fight') }, { ...open, dimension })).toContain('体を動かす手');
+      expect(reserveRefusal({ hands: hands('pickup', 'attack') }, { ...open, dimension })).toContain('attack');
+    }
+    expect(reserveRefusal({ hands: hands('fight') }, { ...open, dimension: 'overworld' })).toBeNull();
     expect(reserveRefusal({ hands: hands('go', 'pickup') }, open)).toBeNull();
     expect(reserveRefusal({ hands: hands('go') }, { ...open, dimension: null })).toBeNull();
   });
@@ -31,12 +36,17 @@ describe('the defaults a reserve carries', () => {
     const feet = { x: 10.6, y: 64, z: -3.2 };
     expect(reserveCondition(undefined, feet, 'overworld')).toEqual([[{ k: 'safe', r: 16 }, { k: 'hp', n: 12 }, { k: 'at', x: 10, y: 64, z: -4, r: 32, dim: 'overworld' }]]);
     const own = reserveCondition([[{ k: 'hp', n: 15 }, { k: 'free', n: 2 }], [{ k: 'safe', r: 8 }]], feet, 'the_end');
-    expect(own[0]).toEqual([{ k: 'hp', n: 15 }, { k: 'free', n: 2 }, { k: 'safe', r: 16 }, { k: 'at', x: 10, y: 64, z: -4, r: 32, dim: 'the_end' }]);
+    expect(own[0]).toEqual([{ k: 'hp', n: 15 }, { k: 'safe', r: 16 }, { k: 'at', x: 10, y: 64, z: -4, r: 32, dim: 'the_end' }, { k: 'free', n: 2 }]);
     expect(own[1]).toEqual([{ k: 'safe', r: 8 }, { k: 'hp', n: 12 }, { k: 'at', x: 10, y: 64, z: -4, r: 32, dim: 'the_end' }]);
     // no position known: no `at`; the clause count stays within the body's six
     expect(reserveCondition(undefined, null, null)).toEqual([[{ k: 'safe', r: 16 }, { k: 'hp', n: 12 }]]);
     const full = reserveCondition([[{ k: 'free', n: 1 }, { k: 'free', n: 2 }, { k: 'free', n: 3 }, { k: 'free', n: 4 }, { k: 'free', n: 5 }]], feet, null);
     expect(full[0]).toHaveLength(6);
+    // six clauses of the model's own: the safety defaults still stand and its other clauses give way (review of 11/3)
+    expect(full[0]).toEqual(expect.arrayContaining([{ k: 'safe', r: 16 }, { k: 'hp', n: 12 }, { k: 'at', x: 10, y: 64, z: -4, r: 32 }]));
+    const six = reserveCondition([[1, 2, 3, 4, 5, 6].map(n => ({ k: 'free' as const, n }))], feet, 'overworld');
+    expect(six[0]).toHaveLength(6);
+    expect(six[0]!.filter(clause => clause.k !== 'free').map(clause => clause.k).sort()).toEqual(['at', 'hp', 'safe']);
   });
   it('stopIf: hostileWithin 8 and hpBelow 10 at least; a stricter word of the model stands', () => {
     expect(reserveStopIf(undefined)).toEqual({ hostileWithin: RESERVE_DEFAULTS.hostileWithin, hpBelow: RESERVE_DEFAULTS.hpBelow });

@@ -3,7 +3,7 @@ import { foodPointsWords } from './minecraftFoodWords.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
 import { BEFORE_END } from './minecraftLlmcPrepRules.js';
-import { lackOfTable, readinessOf } from './minecraftLlmcReadiness.js';
+import { lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
  * The deadly gates, in `gateHold`'s form (the coordinator's list for 11/4, item 2; the owner: a death after the iron gear is out): the hand that
@@ -92,10 +92,33 @@ function blazeEntryHand(input: unknown, facts: Facts): number {
   return fight >= 0 ? fight : nearSpawnerHand(hands, facts.world);
 }
 
+const LOW_HEALTH = 8;
+/** The hands that are work, not defence: held below `LOW_HEALTH` whether an enemy is near or not (fighting, fleeing, eating, getting into cover go). */
+const WORK_HANDS: ReadonlySet<string> = new Set(['mine', 'dig', 'make', 'craft', 'smelt', 'furnace', 'chest', 'obsidian', 'drop', 'pickup']);
+
+/**
+ * Work with almost no health (the isolated lab of 11/3: `eat` and `mine iron_ore` at 5.7, a skeleton came to a metre, and the body dropped the
+ * `stopIf hpBelow 7` as already true; the first form of this hold let it pass with an enemy near, which is the very case): the first work hand is
+ * held below `LOW_HEALTH`, an `eat` before it too (the meal does not heal by itself). Fighting, fleeing, eating, equipping and getting into cover
+ * are the decision's.
+ */
+function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  if (!Array.isArray(hands) || facts.health === null || facts.health >= LOW_HEALTH) return null;
+  const at = hands.findIndex(raw => WORK_HANDS.has(String(objectOf(raw)?.do ?? '')));
+  if (at < 0) return null;
+  const back = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts) ?? `体力 ${facts.health}/20`;
+  const line = `体力が ${LOW_HEALTH} を切っている間は掘る・作る・拾うなどの作業の手を送らない（敵が近くても）。${back}。`
+    + '戦う・逃げる・食べる・遮蔽に入る手は出せる。回復してから作業をもう一度出す（どう回復するかは自分で決める）';
+  return { hand: at + 1, kind: 'work', line };
+}
+
 /** The hold of the deadly gate the act goes into, or null (nothing held). */
 export function deadlyGateHold(input: unknown, frame: BodyObservation | null): DeadlyHold | null {
   const facts = readinessOf(frame);
   if (!facts) return null;
+  const weak = lowHealthHold(input, facts);
+  if (weak) return weak;
   if (facts.dimension === 'the_nether') {
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
     return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}` } : null;

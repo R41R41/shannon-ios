@@ -12,7 +12,7 @@ import type { ActClause, ActCondition } from '../../contracts/minecraftActCondit
  */
 export const RESERVE_DEFAULTS = Object.freeze({ safeR: 16, hp: 12, atR: 32, hostileWithin: 8, hpBelow: 10 });
 /** The hands that move the body from where it is: no reserve has them in the Nether or the End. */
-export const RESERVE_TRAVEL_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 'vertical', 'portal', 'obsidian', 'pillarUp']);
+export const RESERVE_TRAVEL_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 'vertical', 'portal', 'obsidian', 'pillarUp', 'fight', 'attack']);
 const QUIET_DIMENSIONS: ReadonlySet<string> = new Set(['the_nether', 'nether', 'the_end', 'end']);
 
 /** Why a reserve is not taken, or null. `hasReserve`: one is open already; `hasDecided`: a decided item is open (the reserve goes behind it). */
@@ -31,6 +31,7 @@ export function reserveRefusal(
   return null;
 }
 
+const SAFETY_CLAUSES: ReadonlySet<string> = new Set(['safe', 'hp', 'at']);
 const hasKind = (alternative: readonly ActClause[], kind: ActClause['k']) => alternative.some(clause => clause.k === kind);
 /**
  * The reserve's `pre`: the one the model wrote (or none) with the defaults added to every alternative that lacks them:
@@ -47,7 +48,10 @@ export function reserveCondition(pre: ActCondition | undefined, feet: ActPos | n
       const dim = dimension === 'overworld' || dimension === 'the_nether' || dimension === 'the_end' ? dimension : undefined;
       added.push({ k: 'at', x: Math.floor(feet.x), y: Math.floor(feet.y), z: Math.floor(feet.z), r: RESERVE_DEFAULTS.atR, ...(dim ? { dim } : {}) });
     }
-    return [...alternative, ...added].slice(0, 6);
+    // The body's limit is six clauses: the safety ones (the model's own and the added) stay, the model's others give way
+    // (review of 11/3: cut by position, the added fell off).
+    const safety = alternative.filter(clause => SAFETY_CLAUSES.has(clause.k));
+    return [...safety, ...added, ...alternative.filter(clause => !SAFETY_CLAUSES.has(clause.k))].slice(0, 6);
   });
 }
 /** The reserve's `stopIf`: the model's, with hostileWithin and hpBelow at least the defaults (a stricter word of the model stands). */
