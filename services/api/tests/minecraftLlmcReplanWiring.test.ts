@@ -84,6 +84,19 @@ describe('the look and the plan made again for a task that is not held, wired', 
     expect(unheld!.checkpoint()).toHaveProperty('minecraftActiveWait');
   });
 
+  it('closes the step for a stronger stage at a result too, not only at the start of a step (review of 11/3)', () => {
+    let stage: 'end' | null = null;
+    const closed: string[] = [];
+    const fake = { watch: { look: () => false }, flow: { escaped: () => undefined, run: async () => undefined }, current: () => null,
+      stage: () => stage, close: (reason: string) => { closed.push(reason); } };
+    const wrapped = withReplan({ noteResult() { /* the inner lifecycle */ } } as unknown as FcaBodyLifecycle, fake as never);
+    wrapped.noteResult!({ name: 'mc.act', input: {} } as never, { ok: true, text: '' } as never, 10);
+    expect(closed).toEqual([]);
+    stage = 'end';
+    wrapped.noteResult!({ name: 'mc.act', input: {} } as never, { ok: true, text: '' } as never, 10);
+    expect(closed).toEqual(['stage']);
+  });
+
   it('works inside the lifecycle: a look at each decision\'s start and result, and the plan made again before the decision', async () => {
     const { clock, briefs, unheld } = setup();
     const calls: string[] = [];

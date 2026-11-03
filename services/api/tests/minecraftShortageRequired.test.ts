@@ -436,6 +436,13 @@ describe('the current node follows the body\'s dimension, and the strong model d
     // a leaf whose own condition already holds is not the place to stand: the fortress seen, the rods are next
     expect(followDimension(treeAt('p1.1'), { ...facts('the_nether'), seen: new Set(['fortress']) })).toMatchObject({ to: 'p3.2' });
   });
+  it('holds a supply (food) node under a departure check that is not met, in the Nether: it is the preparation, not the overworld work (review of 11/3)', () => {
+    const node = (id: string, kind: PlanKind, order: number, doneWhen: string, parentId: string | null = null): PlanNode =>
+      ({ id, parentId, order, title: id, state: 'continue', kind, ...(doneWhen ? { doneWhen } : {}) } as PlanNode);
+    const tree = v2tree({ revision: 1, current: 'p8.4', nodes: [node('p8', 'prep_descent', 0, 'food>=100&have:shield'), node('p8.4', 'food', 0, 'food>=100', 'p8'),
+      node('p9', 'fortress', 1, 'see:fortress')] });
+    expect(followDimension(tree, facts('the_nether', [['cooked_beef', 2]]))).toBeNull();
+  });
   it('moves to the End\'s work in the End, from the Nether\'s work too, and leaves a current node that is of the dimension or of no kind', () => {
     expect(followDimension(treeAt('p3.1'), facts('the_end'))).toMatchObject({ to: 'p6.3', from: 'p3.1' });
     expect(followDimension(treeAt('p1.1'), facts('the_end'))).toMatchObject({ to: 'p6.3' });
