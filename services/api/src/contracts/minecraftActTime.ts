@@ -132,7 +132,10 @@ function handMetres(input: ActInput, from: ActPos | null): Array<{ hand: ActHand
       return { hand, metres: 0, steps };
     }
     // A partial or cut fill's endpoint is unknown until the receipt.
-    if (hand.do === 'fill') { at = null; return { hand, metres: 0 }; }
+    if (hand.do === 'fill') {
+      at = null;
+      return { hand, metres: 0 };
+    }
     if (hand.do !== 'walk' && hand.do !== 'go') return { hand, metres: 0 };
     const points = nearestOf(hand, at).map(point => hand.rel && at
       ? { x: at.x + point.x, y: at.y + point.y, z: at.z + point.z } : point);

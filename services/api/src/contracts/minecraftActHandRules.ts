@@ -127,6 +127,9 @@ export function shieldRushHandProblem(hand: ActHand): string | null {
   return shieldRushProblem(hand as unknown as Record<string, unknown>);
 }
 
+/** The structured hands' act checks (a rush's, a fill's), the first problem or null. */
+export const structuredActProblem = (input: unknown): string | null => fillActProblem(input) ?? shieldRushActProblem(input);
+
 /** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */
 export function shieldRushActProblem(input: unknown): string | null {
   const act = objectOf(input), hands = act?.hands;

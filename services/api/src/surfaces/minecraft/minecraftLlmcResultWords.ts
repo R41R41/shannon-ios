@@ -1,5 +1,7 @@
 import type { CutBy, Handover, ItemOutcome, Progress } from '../../contracts/continueContract.js';
-import { readActResult, type ActHandLine, type ActResult, type FillCode, type FillResult, type RushCode, type ShieldRushResult } from '../../contracts/minecraftActContract.js';
+import {
+  readActResult, type ActHandLine, type ActResult, type FillCode, type FillResult, type RushCode, type ShieldRushResult,
+} from '../../contracts/minecraftActContract.js';
 
 /**
  * The words of a result that the contract's two axes make possible (continue contract 1 and 2; chapter 8's 再開):
@@ -83,25 +85,31 @@ const FILL_SKIPS: Readonly<Record<keyof FillResult['skippedBy'], string>> = {
   creature: '生き物に邪魔された', reach: '届かない', hazard: '危険で飛ばした', other: 'その他',
 };
 
+/** The placed and the left, with what skipped them. */
+function fillCounts(fill: FillResult): string[] {
+  const skipped = (Object.entries(FILL_SKIPS) as Array<[keyof FillResult['skippedBy'], string]>).flatMap(([key, label]) => {
+    const count = fill.skippedBy?.[key];
+    return known(count) ? [`${label} ${num(count)}`] : [];
+  });
+  const left = Array.isArray(fill.remaining) ? [`残り ${fill.remaining.length}${skipped.length ? `（${skipped.join('・')}）` : ''}`] : skipped.length ? [skipped.join('・')] : [];
+  return [...(known(fill.placed) ? [`置いた ${num(fill.placed)}`] : []), ...left];
+}
+
+/** The fill's numbers in order: counts, health, time, the end and whether it was safe. */
+function fillFacts(fill: FillResult): string[] {
+  const end = fill.at && [fill.at.x, fill.at.y, fill.at.z].every(known) ? [`終了地点 ${at(fill.at)}`] : [];
+  const safe = typeof fill.safe === 'boolean' ? [fill.safe ? '終了地点は安全' : '終了地点の安全は未確認'] : [];
+  return [...fillCounts(fill), ...(known(fill.hpMin) ? [`体力最低 ${num(fill.hpMin)}`] : []), ...(known(fill.hpEnd) ? [`終了体力 ${num(fill.hpEnd)}`] : []),
+    ...(known(fill.elapsedMs) ? [`経過 ${num(fill.elapsedMs)} ms`] : []), ...end, ...safe];
+}
+
 /** Only the body's structured fill measurements; no inferred arrival, success or next action. */
 export function fillWords(line: ActHandLine): string[] {
   const fill = line.fill;
   if (line.do !== 'fill' || !fill) return [];
   const code = fill.code && Object.hasOwn(FILL_CODE_WORDS, fill.code) ? fill.code : null;
   const first = `fill: ${fill.status}${fill.code ? `（${fill.code}）` : ''}${code ? ` ${FILL_CODE_WORDS[code]}` : ''}`;
-  const facts: string[] = [];
-  if (known(fill.placed)) facts.push(`置いた ${num(fill.placed)}`);
-  const skipped = (Object.entries(FILL_SKIPS) as Array<[keyof FillResult['skippedBy'], string]>).flatMap(([key, label]) => {
-    const count = fill.skippedBy?.[key];
-    return known(count) ? [`${label} ${num(count)}`] : [];
-  });
-  if (Array.isArray(fill.remaining)) facts.push(`残り ${fill.remaining.length}${skipped.length ? `（${skipped.join('・')}）` : ''}`);
-  else if (skipped.length) facts.push(skipped.join('・'));
-  if (known(fill.hpMin)) facts.push(`体力最低 ${num(fill.hpMin)}`);
-  if (known(fill.hpEnd)) facts.push(`終了体力 ${num(fill.hpEnd)}`);
-  if (known(fill.elapsedMs)) facts.push(`経過 ${num(fill.elapsedMs)} ms`);
-  if (fill.at && [fill.at.x, fill.at.y, fill.at.z].every(known)) facts.push(`終了地点 ${at(fill.at)}`);
-  if (typeof fill.safe === 'boolean') facts.push(fill.safe ? '終了地点は安全' : '終了地点の安全は未確認');
+  const facts = fillFacts(fill);
   return [first, ...(facts.length ? [facts.join('・')] : [])];
 }
 

@@ -7,7 +7,7 @@ import {
   MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActHand,
      type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
-import { fillActProblem, shieldRushActProblem, verticalLimitProblem } from '../../contracts/minecraftActHandRules.js';
+import { structuredActProblem, verticalLimitProblem } from '../../contracts/minecraftActHandRules.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
 import { MC_PROBE_SKILL, MC_PROBE_TOOL, PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../../contracts/minecraftProbeContract.js';
 import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
@@ -63,10 +63,8 @@ export function llmcInputProblem(name: string, input: unknown): string | null {
   if (!schema) return null;
   const unread = name === MC_ACT_TOOL ? shortHandProblem(input) : null;
   if (unread) return unread;
-  const fill = name === MC_ACT_TOOL ? fillActProblem(input) : null;
-  if (fill) return fill;
-  const rush = name === MC_ACT_TOOL ? shieldRushActProblem(input) : null;
-  if (rush) return rush;
+  const structured = name === MC_ACT_TOOL ? structuredActProblem(input) : null;
+  if (structured) return structured;
   // Amendment A-7 2: a vertical's maxDig / maxPlace above its top is refused with the mend, before the schema (whose bounds are the
 // widest of any kind) says only the range.
   const hands = name === MC_ACT_TOOL && input && typeof input === 'object' ? (input as { hands?: unknown }).hands : undefined;
