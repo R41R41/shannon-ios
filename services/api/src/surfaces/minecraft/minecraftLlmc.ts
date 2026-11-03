@@ -7,7 +7,7 @@ import {
   MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActHand,
      type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
-import { shieldRushActProblem, verticalLimitProblem } from '../../contracts/minecraftActHandRules.js';
+import { structuredActProblem, verticalLimitProblem } from '../../contracts/minecraftActHandRules.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
 import { MC_PROBE_SKILL, MC_PROBE_TOOL, PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../../contracts/minecraftProbeContract.js';
 import { normalizeActInput, schemaProblem } from './minecraftLlmcShape.js';
@@ -15,7 +15,7 @@ import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type
 import { validSkillInput } from './minecraftControlValidation.js';
 import { isShooter } from './minecraftLlmcThreat.js';
 import { urgentRange } from './minecraftLlmcUrgent.js';
-import { actFacts, handFacts, shieldRushWords } from './minecraftLlmcResultWords.js';
+import { actFacts, fillWords, handFacts, shieldRushWords } from './minecraftLlmcResultWords.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the
@@ -63,8 +63,8 @@ export function llmcInputProblem(name: string, input: unknown): string | null {
   if (!schema) return null;
   const unread = name === MC_ACT_TOOL ? shortHandProblem(input) : null;
   if (unread) return unread;
-  const rush = name === MC_ACT_TOOL ? shieldRushActProblem(input) : null;
-  if (rush) return rush;
+  const structured = name === MC_ACT_TOOL ? structuredActProblem(input) : null;
+  if (structured) return structured;
   // Amendment A-7 2: a vertical's maxDig / maxPlace above its top is refused with the mend, before the schema (whose bounds are the
 // widest of any kind) says only the range.
   const hands = name === MC_ACT_TOOL && input && typeof input === 'object' ? (input as { hands?: unknown }).hands : undefined;
@@ -128,8 +128,8 @@ export function actResultText(result: ActResult): string {
       : `act ${result.done}/${result.of} 済みで止まった（${result.stoppedBy ?? 'failure'}${result.stoppedWhy ? `: ${result.stoppedWhy}` : ''}）`;
   const mark = { done: '済', stopped: '止', failed: '失', skipped: '未' } as const;
   const lines = result.lines.flatMap(line => {
-    const rush = shieldRushWords(line);
-    const words = rush.length ? rush.map((fact, index) => `${index === 0 ? line.i : ''}  事実: ${fact}`)
+    const structured = line.do === 'fill' ? fillWords(line) : shieldRushWords(line);
+    const words = structured.length ? structured.map((fact, index) => `${index === 0 ? line.i : ''}  事実: ${fact}`)
       : [`${line.i} ${line.do} ${mark[line.status] ?? '未'} ${line.line}`, ...handFacts(line)];
     return [...words, ...((line.status === 'stopped' || line.status === 'failed') && line.around
       ? [`${AROUND_PREFIX}${line.around.slice(0, 160)}`] : [])];

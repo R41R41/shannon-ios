@@ -22,6 +22,7 @@ import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract
  *   `msPerUnit` the body returned for that
  *   form (`ActTimeTuning`); the ceiling is its `seconds` (default 60) and 2 s, for the body stops the hand at `seconds`;
  * - dig, place: by the cells; pillarUp, jump, shoot: by `n`; attack and wait: by `seconds`; craft: by `count`; the rest fixed.
+ * - fill: its required `seconds` (5–60, including return), with 2 s for the receipt; the estimate stays within those seconds.
  * Task queue: an act that repeats its hands (`repeat`) takes that many times as long; the ceiling is still the body's one bound,
  * the expected time is not capped.
  */
@@ -86,6 +87,7 @@ const COMPASS_STEP: Readonly<Record<string, { x: number; z: number }>> = { north
    0 }, west: { x: -1, z: 0 } };
 const goTypicalMs = (hand: ActHand, metres: number) => Math.min(goMostMs(hand), 1_000 + 1.3 * walkMs(hand, metres));
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
+  fill: mostMs,
   walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), go: hand => goMostMs(hand) + 2_000,
   obsidian: mostMs, fight: mostMs, mine: mostMs, portal: mostMs, smelt: mostMs, vertical: verticalMostMs, make: hand => 3_000 + 1_000 * blocksOf(hand),
   dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
@@ -95,6 +97,7 @@ const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: () => 5_000, eat: () => 4_000,
 };
 const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
+  fill: hand => Math.min(1_000 * (hand.seconds ?? 30), 2_000 + 400 * (hand.groups ?? []).reduce((sum, group) => sum + group.at.length, 0)),
   walk: (hand, metres) => 500 + walkMs(hand, metres), go: goTypicalMs,
   obsidian: hand => Math.min(mostMs(hand), 20_000 + 8_000 * blocksOf(hand)), fight: hand => 500 * (hand.seconds ?? 20),
   mine: hand => Math.min(mostMs(hand), 1_500 * blocksOf(hand) + 1_000),
@@ -127,6 +130,11 @@ function handMetres(input: ActInput, from: ActPos | null): Array<{ hand: ActHand
       const steps = verticalSteps(hand, at ? at.y : null);
       at = verticalEnd(at, hand, steps);
       return { hand, metres: 0, steps };
+    }
+    // A partial or cut fill's endpoint is unknown until the receipt.
+    if (hand.do === 'fill') {
+      at = null;
+      return { hand, metres: 0 };
     }
     if (hand.do !== 'walk' && hand.do !== 'go') return { hand, metres: 0 };
     const points = nearestOf(hand, at).map(point => hand.rel && at

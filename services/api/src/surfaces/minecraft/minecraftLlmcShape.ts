@@ -80,8 +80,8 @@ export function normalizeActInput(input: unknown): { input: unknown; fixes: stri
     out.hands = out.hands.map((value, index) => {
       const hand = plainRecord(value);
       if (!hand) return value;
-      // Rush permissions are checked exactly as written, including any extra fields.
-      if (hand.style === 'shield_rush') return hand;
+      // Rush and fill permissions are checked exactly as written, including any extra fields.
+      if (hand.style === 'shield_rush' || hand.do === 'fill') return hand;
       const fixed = { ...hand };
       // A-11 3: a plain variation of a hand word in `slot` (off-hand, main_hand…) is the body's word; not said (it is
 // a spelling, not a change of meaning).

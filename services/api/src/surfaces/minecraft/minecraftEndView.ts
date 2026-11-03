@@ -10,7 +10,7 @@ import { marksOf } from './minecraftSeenMarks.js';
  * `healing` and `blast`; `unseen`), `perch`, `dragonBreath` (x y z, `radius`, `dangerRadius`) and `dragonFireballs` (a count). A body that sends
  * none of them still marks the dragon, the crystals and the perch on the map (`mapLandmarks`): that is read instead, with what the marks can say
  * (the dragon's health; the crystals in view, not how many are left). Optional S1 shooting places, sets and search stats, the measured
- * window ranges, and the perched stage/strike/retreat positions are read below without inventing missing fields.
+ * window ranges, and the perched stage/strike/retreat/basin positions are read below without inventing missing fields.
  */
 type Rec = Record<string, unknown>;
 export interface Point {
@@ -70,10 +70,30 @@ export interface EndStagePoint extends Point {
   walkMeters: number | null;
   strikeIndex: number | null;
 }
+export interface EndBasinPoint extends Point {
+  walkMeters: number | null;
+  /** The body's walking-time estimate, separate from the route length. */
+  walkSeconds: number | null;
+  /** Eye to the nearest head/neck/body/wing box, unlike the dragon's head-only reach. */
+  headReach: number | null;
+  inWingPush: boolean | null;
+  inBreathNow: boolean | null;
+  /** Facing projection: side 0, front 1, behind -1. */
+  side: number | null;
+}
+/** A waiting cell beside the perch's facing (phases 3 to 7): 10 to 14 m from the portal's centre, clear of the head, neck, wings, breath and clouds. */
+export interface EndWaitPoint extends Point {
+  walkMeters: number | null;
+  walkSeconds: number | null;
+  /** Facing projection: side 0, front 1, behind -1. */
+  side: number | null;
+}
 export interface EndDragonApproach {
   strike: EndStrikePoint[];
   stage: EndStagePoint[];
   retreat: Array<Point & { walkMeters: number | null }>;
+  basin?: EndBasinPoint[];
+  wait?: EndWaitPoint[];
 }
 export interface EndDragon {
   id: number | null;
@@ -184,7 +204,27 @@ function approachOf(raw: unknown): EndDragonApproach | undefined {
     const entry = rec(raw), at = point(entry);
     return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters) }] : [];
   }).slice(0, 2);
-  return { strike, stage, retreat };
+  const basin = Array.isArray(item.basin) ? item.basin.flatMap((raw): EndBasinPoint[] => {
+    const entry = rec(raw), at = point(entry);
+    return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters), walkSeconds: nonnegative(entry.walkSeconds),
+      headReach: nonnegative(entry.headReach), inWingPush: bool(entry.inWingPush), inBreathNow: bool(entry.inBreathNow), side: num(entry.side) }] : [];
+  }).sort((a, b) => (a.walkMeters ?? Infinity) - (b.walkMeters ?? Infinity)).slice(0, 3) : undefined;
+  const wait = Array.isArray(item.wait) ? item.wait.flatMap((raw): EndWaitPoint[] => {
+    const entry = rec(raw), at = point(entry);
+    return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters), walkSeconds: nonnegative(entry.walkSeconds), side: num(entry.side) }] : [];
+  }).sort((a, b) => (a.walkSeconds ?? Infinity) - (b.walkSeconds ?? Infinity)).slice(0, 3) : undefined;
+  return { strike, stage, retreat, ...(basin ? { basin } : {}), ...(wait?.length ? { wait } : {}) };
+}
+
+/**
+ * The approach as the phase allows: all of it while she sits (phases 5 to 7); in the landing and the take-off (3, 4) the waiting cells only, since a
+ * stale strike, stage, retreat or basin there is not read; none otherwise.
+ */
+function approachInPhase(phase: number | null, raw: unknown): EndDragonApproach | undefined {
+  if (phase === null || phase < 3 || phase > 7) return undefined;
+  const read = approachOf(raw);
+  if (phase >= 5) return read;
+  return read?.wait?.length ? { strike: [], stage: [], retreat: [], wait: read.wait } : undefined;
 }
 
 function dragonOf(raw: unknown): EndDragon | null {
@@ -192,7 +232,7 @@ function dragonOf(raw: unknown): EndDragon | null {
   if (!item) return null;
   const phase = num(item.phase);
   const windows = windowsOf(item.windows);
-  const approach = phase !== null && [5, 6, 7].includes(phase) ? approachOf(item.approach) : undefined;
+  const approach = approachInPhase(phase, item.approach);
   return { id: num(item.id), health: num(item.health), phase: phase !== null && Number.isInteger(phase) && phase >= 0 && phase <= 10 ? phase : null,
     phaseName: typeof item.phaseName === 'string' ? item.phaseName : null, phaseFor: num(item.phaseFor), perched: item.perched === true,
     position: point(item.position), headPosition: point(item.headPosition), distance: num(item.distance),

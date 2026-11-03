@@ -1,0 +1,374 @@
+[
+ {
+  "name": "basin-wait",
+  "goal": "エンドラを討伐して",
+  "current": "p17.2",
+  "elapsedMinutes": 251,
+  "expect": "着地して約 3 秒。竜の向き（yaw）の横 10〜14m の開けた足場で、竜から見える所に go して待つ。まだ窪みへ入らない。",
+  "world": {
+   "dimension": "the_end",
+   "position": {
+    "x": 30.5,
+    "y": 64,
+    "z": 20.5
+   },
+   "health": 15,
+   "food": 14,
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 20
+    },
+    {
+     "name": "cobblestone",
+     "count": 32
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ],
+   "dragon": {
+    "id": 77,
+    "health": 150,
+    "phase": 3,
+    "phaseName": "landing",
+    "phaseFor": 3.0,
+    "perched": false,
+    "yaw": 1.5,
+    "headReach": 6.5,
+    "strike": false,
+    "position": {
+     "x": 1,
+     "y": 66,
+     "z": 2
+    },
+    "distance": 8.7,
+    "headPosition": {
+     "x": 2,
+     "y": 67.5,
+     "z": 6
+    },
+    "approach": {
+     "strike": [],
+     "stage": [],
+     "retreat": [],
+     "wait": [
+      {
+       "x": 12.5,
+       "y": 64,
+       "z": 3.5,
+       "walkMeters": 26,
+       "walkSeconds": 6.0,
+       "side": 0.1
+      },
+      {
+       "x": 11.5,
+       "y": 64,
+       "z": -7.5,
+       "walkMeters": 33,
+       "walkSeconds": 7.7,
+       "side": -0.2
+      }
+     ]
+    }
+   },
+   "perch": {
+    "x": 0.5,
+    "y": 68,
+    "z": 0.5
+   },
+   "crystals": {
+    "remaining": 0,
+    "gone": 10,
+    "caged": 0,
+    "unseen": [],
+    "list": []
+   },
+   "dragonBreath": [
+    {
+     "x": -8,
+     "y": 65,
+     "z": 4,
+     "radius": 6.5,
+     "dangerRadius": 7
+    }
+   ],
+   "dragonFireballs": 0
+  },
+  "events": [
+   "クリスタルを全部壊した（残り 0）"
+  ]
+ },
+ {
+  "name": "basin-sit",
+  "goal": "エンドラを討伐して",
+  "current": "p17.2",
+  "elapsedMinutes": 251,
+  "expect": "phase 6: 窪みの足場の先頭（3.5,66,-2.5）へ go（range 0.5・seconds 12）、そこで attack target=ender_dragon seconds=12。",
+  "world": {
+   "dimension": "the_end",
+   "position": {
+    "x": 8.5,
+    "y": 64,
+    "z": 8.5
+   },
+   "health": 15,
+   "food": 14,
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 20
+    },
+    {
+     "name": "cobblestone",
+     "count": 32
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ],
+   "dragon": {
+    "id": 77,
+    "health": 150,
+    "phase": 6,
+    "phaseName": "sitting_scanning",
+    "phaseFor": 1.0,
+    "perched": true,
+    "yaw": 1.5,
+    "headReach": 6.5,
+    "strike": false,
+    "position": {
+     "x": 1,
+     "y": 66,
+     "z": 2
+    },
+    "distance": 8.7,
+    "headPosition": {
+     "x": 2,
+     "y": 67.5,
+     "z": 6
+    },
+    "approach": {
+     "strike": [],
+     "stage": [],
+     "retreat": [],
+     "basin": [
+      {
+       "x": 3.5,
+       "y": 66,
+       "z": -2.5,
+       "walkMeters": 14,
+       "walkSeconds": 3.2,
+       "headReach": 4.8,
+       "inWingPush": false,
+       "inBreathNow": false,
+       "side": 0
+      },
+      {
+       "x": -2.5,
+       "y": 66,
+       "z": -2.5,
+       "walkMeters": 19,
+       "walkSeconds": 4.4,
+       "headReach": 5.4,
+       "inWingPush": true,
+       "inBreathNow": false,
+       "side": 0.2
+      }
+     ]
+    }
+   },
+   "perch": {
+    "x": 0.5,
+    "y": 68,
+    "z": 0.5
+   },
+   "crystals": {
+    "remaining": 0,
+    "gone": 10,
+    "caged": 0,
+    "unseen": [],
+    "list": []
+   },
+   "dragonBreath": [
+    {
+     "x": -8,
+     "y": 65,
+     "z": 4,
+     "radius": 6.5,
+     "dangerRadius": 7
+    }
+   ],
+   "dragonFireballs": 0
+  },
+  "events": [
+   "クリスタルを全部壊した（残り 0）"
+  ],
+  "check": {
+   "eachOf": [
+    [
+     "go",
+     "walk"
+    ],
+    [
+     "attack"
+    ]
+   ],
+   "match": [
+    "ender_dragon|#77"
+   ],
+   "noHand": [
+    "shoot",
+    "fight"
+   ]
+  }
+ },
+ {
+  "name": "basin-leave",
+  "goal": "エンドラを討伐して",
+  "current": "p17.2",
+  "elapsedMinutes": 251,
+  "expect": "phase 4（離陸）: すぐ go で、座りの向きの横 10〜14m の待ち場へ戻る。窪みに残らない。",
+  "world": {
+   "dimension": "the_end",
+   "position": {
+    "x": 3.5,
+    "y": 66,
+    "z": -2.5
+   },
+   "health": 15,
+   "food": 14,
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 20
+    },
+    {
+     "name": "cobblestone",
+     "count": 32
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ],
+   "dragon": {
+    "id": 77,
+    "health": 150,
+    "phase": 4,
+    "phaseName": "takeoff",
+    "phaseFor": 0.5,
+    "perched": false,
+    "yaw": 1.5,
+    "headReach": 6.5,
+    "strike": false,
+    "position": {
+     "x": 1,
+     "y": 66,
+     "z": 2
+    },
+    "distance": 8.7,
+    "headPosition": {
+     "x": 2,
+     "y": 67.5,
+     "z": 6
+    },
+    "approach": {
+     "strike": [],
+     "stage": [],
+     "retreat": [],
+     "wait": [
+      {
+       "x": 12.5,
+       "y": 64,
+       "z": 3.5,
+       "walkMeters": 12,
+       "walkSeconds": 2.8,
+       "side": 0.1
+      }
+     ]
+    }
+   },
+   "perch": {
+    "x": 0.5,
+    "y": 68,
+    "z": 0.5
+   },
+   "crystals": {
+    "remaining": 0,
+    "gone": 10,
+    "caged": 0,
+    "unseen": [],
+    "list": []
+   },
+   "dragonBreath": [
+    {
+     "x": -8,
+     "y": 65,
+     "z": 4,
+     "radius": 6.5,
+     "dangerRadius": 7
+    }
+   ],
+   "dragonFireballs": 0
+  },
+  "events": [
+   "クリスタルを全部壊した（残り 0）"
+  ],
+  "check": {
+   "anyHand": [
+    "go",
+    "walk"
+   ],
+   "noHand": [
+    "attack",
+    "fight",
+    "shoot"
+   ]
+  }
+ }
+]

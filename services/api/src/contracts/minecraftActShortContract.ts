@@ -1,5 +1,6 @@
 import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
+import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -24,6 +25,7 @@ export const SHORT_HAND_ERROR_KEY = '書き方の誤り';
  * the old modes) is untouched.
  */
 const SHORT_LINES = [
+  FILL_DESCRIPTION,
   SHIELD_RUSH_DESCRIPTION,
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、手ごとの1行と止まった所の周りを返す。'
     + '手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める。',
@@ -121,6 +123,7 @@ const SHORT_LINES = [
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
   'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',
+  'json {"do":"fill",...}（上記の全必須欄を書く）',
   'pickup [range=N] [target=..]',
   ("chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 " +
 "iron_ingot）"),

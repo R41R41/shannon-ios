@@ -2,12 +2,14 @@ import { ACT_CONTRACT_VERSION,ACT_MAX_HANDS,HAND_KINDS,VERTICAL_DIRS,VERTICAL_SH
   KEEP_FORM } from './minecraftActTypes.js';
 import type { ActHand,ActKeep,ActInput,ActResult,ViewResult } from './minecraftActTypes.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
+import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
       KEEP_FORM } from './minecraftActTypes.js';
 export type { ActPos, ActFace, HandKind, ActHand, ActStopIf, ActKeep, ActInput, EarlierPass, ActHandLine, EnderEyeFlight, ActResult,
    ViewInput, ViewResult, LlmCentricWorld } from './minecraftActTypes.js';
 export type { RushCode, RushState, ShieldRushArgs, ShieldRushResult } from './minecraftShieldRushContract.js';
+export type { FillArgs, FillCode, FillGroup, FillResult } from './minecraftFillContract.js';
 /**
  * The LLM-centric Minecraft body (design mb-llm-centric, 2026-10-21; head switch the LLM-centric mode, body MINEBOT_LLM_CENTRIC):
  * the head owns this contract, the body follows it (shared note `mb-llm-centric-contract.md`). Four parts:
@@ -28,7 +30,7 @@ export type { RushCode, RushState, ShieldRushArgs, ShieldRushResult } from './mi
  */
 import { PLAN_LIMITS,promiseItemFits } from '@shannon/mind';
 import { CONDITION_SCHEMA,validCondition } from './minecraftActCondition.js';
-import { dependsProblem,handProblem,shieldRushActProblem } from './minecraftActHandRules.js';
+import { dependsProblem,fillActProblem,handProblem,shieldRushActProblem } from './minecraftActHandRules.js';
 import { aggregateGoal,type CutBy,type GoalOutcome,type RunEnd } from './continueContract.js';
 
 /**
@@ -82,6 +84,7 @@ export const MAP_LEGEND = [
 
 /** The definition text of `mc.act` the model reads (fixed: part of the cached prefix). */
 export const ACT_DESCRIPTION = [
+  FILL_DESCRIPTION,
   SHIELD_RUSH_DESCRIPTION,
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、外れたら（失敗・反射・stopIf・満杯）そこで止めて、手ごとの1行と新しい地図を返す。',
   '体は自分で決めない: 回り道・置き場所・道具作り・片づけ・夜の睡眠・戦うかどうかは、あなたが地図と状態を見て手で出す。',
@@ -137,6 +140,11 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         at: { type: 'array', minItems: 1, maxItems: 16, items: pos('ブロック'), description: 'dig・place は順に全部。use・furnace・chest・shoot は 1 つ' },
         face: { type: 'string', enum: ['up', 'down', 'north', 'south', 'east', 'west'] },
         block: { type: 'string', maxLength: 64 },
+        groups: { type: 'array', minItems: 1, maxItems: 12, description: 'fill: 足の stand と置く at（絶対座標）',
+          items: { type: 'object', additionalProperties: false, required: ['stand', 'at'], properties: {
+            stand: pos('立つ足のマス'),
+            at: { type: 'array', minItems: 1, maxItems: 8, items: pos('置くマス') },
+          } } },
         item: { type: 'string', maxLength: 64 },
         count: { type: 'integer', minimum: 1, maximum: 2304 },
         items: itemCounts,
@@ -147,7 +155,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         untilDead: { type: 'boolean' },
         hold: { type: 'boolean' },
         style: { type: 'string', enum: ['shield_rush'], description: 'attack: ブレイズ1体へ盾突進' },
-        retreatTo: pos('shield_rush の退避先（必須・絶対座標）'),
+        retreatTo: pos('shield_rush・fill の退避先の足（必須・絶対座標）'),
         area: { type: 'object', additionalProperties: false, required: ['center', 'radius', 'maxDrop'],
           description: 'shield_rush の範囲（必須）', properties: {
             center: pos('中心（絶対座標）'), radius: { type: 'number', minimum: 1, maximum: 16 },
@@ -230,6 +238,8 @@ export const VIEW_INPUT_SCHEMA = Object.freeze({
 });
 
 export function actProblem(input: ActInput): string | null {
+  const fill = fillActProblem(input);
+  if (fill) return fill;
   const rush = shieldRushActProblem(input);
   if (rush) return rush;
   for (const [index, hand] of input.hands.entries()) {
@@ -274,7 +284,8 @@ export function keepProblem(keep: ActInput['keep']): string | null {
 }
 /** A repeated hand that names cells must count them from her feet: the same absolute cells asked again are the same cells. */
 function repeatProblem(hand: ActHand): string | null {
-  const named = hand.to !== undefined || (hand.path?.length ?? 0) > 0 || (hand.goals?.length ?? 0) > 0 || (hand.at?.length ?? 0) > 0;
+  const named = hand.to !== undefined || (hand.path?.length ?? 0) > 0 || (hand.goals?.length ?? 0) > 0
+    || (hand.at?.length ?? 0) > 0 || (hand.groups?.length ?? 0) > 0;
   return named && !hand.rel ? 'repeat の手は rel:true で書く（絶対座標の手を繰り返すと同じマスをまた掘る・置くことになる）' : null;
 }
 /** One hand's fields against its kind, then the checks a kind adds. */

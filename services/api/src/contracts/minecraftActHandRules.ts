@@ -1,5 +1,6 @@
 import { handDependsProblem } from './continueContract.js';
 import { shieldRushProblem } from './minecraftShieldRushContract.js';
+import { fillProblem } from './minecraftFillContract.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
@@ -14,6 +15,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   go: { needs: [['to', 'goals']], may: ['range', 'canDig', 'canPlace', 'maxDrop', 'waterOk', 'seconds', 'maxDig', 'maxPlace', 'sprint'] },
   dig: { needs: [['at']], may: ['tool', 'collect', 'exposeOk', 'takeOk'] },
   place: { needs: [['at'], ['block']], may: ['face'] },
+  fill: { needs: [['groups'], ['block'], ['retreatHp'], ['retreatTo'], ['seconds']], may: [] },
   pillarUp: { needs: [['n']], may: ['block'] },
   use: { needs: [['item']], may: ['at', 'face', 'target'] },
   look: { needs: [['to', 'yaw']], may: ['pitch'] },
@@ -41,7 +43,7 @@ const COMMON = new Set(['do', 'rel', 'note', 'onFail', 'dependsOn']);
 /** The fields a kind of hand takes (needed, then optional, then the common ones), for a refusal that names them. */
 export function handFieldNames(kind: HandKind): string[] {
   const fields = HAND_FIELDS[kind];
-  return fields ? [...fields.needs.flat(), ...fields.may, 'rel', 'note', 'onFail'] : [];
+  return fields ? [...fields.needs.flat(), ...fields.may, ...(kind === 'fill' ? ['note', 'onFail', 'dependsOn'] : ['rel', 'note', 'onFail'])] : [];
 }
 /**
  * Continue contract 2: a hand's `dependsOn` is a list of the numbers of earlier hands of the same act (1 up).
@@ -69,6 +71,7 @@ const BLOCK_NAME = /^[a-z][a-z0-9_]{0,39}$/u;
  * Closed words, Japanese. */
 
 export function handProblem(hand: ActHand): string | null {
+  if (hand.do === 'fill') return fillProblem(hand as unknown as Record<string, unknown>);
   if (hand.do === 'attack' && hand.style === 'shield_rush') return shieldRushHandProblem(hand);
   const fields = HAND_FIELDS[hand.do];
   if (!fields) return 'do が分からない';
@@ -100,6 +103,19 @@ const RUSH_FIELDS = ['retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCross
 const objectOf = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
+/** Fill's required shape is checked before the broad schema and unrelated hand styles. */
+export function fillActProblem(input: unknown): string | null {
+  const hands = objectOf(input)?.hands;
+  if (!Array.isArray(hands)) return null;
+  for (const [index, raw] of hands.entries()) {
+    const hand = objectOf(raw);
+    if (hand?.do !== 'fill') continue;
+    const problem = fillProblem(hand);
+    if (problem) return `手${index + 1}（fill）: ${problem}`;
+  }
+  return null;
+}
+
 /** Shield rush fields are checked before the broad schema too, so each refusal gives the form to write. */
 export function shieldRushHandProblem(hand: ActHand): string | null {
   if (hand.do !== 'attack') return null;
@@ -110,6 +126,9 @@ export function shieldRushHandProblem(hand: ActHand): string | null {
   if (hand.style !== 'shield_rush') return 'style は shield_rush だけ（style=shield_rush）';
   return shieldRushProblem(hand as unknown as Record<string, unknown>);
 }
+
+/** The structured hands' act checks (a rush's, a fill's), the first problem or null. */
+export const structuredActProblem = (input: unknown): string | null => fillActProblem(input) ?? shieldRushActProblem(input);
 
 /** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */
 export function shieldRushActProblem(input: unknown): string | null {

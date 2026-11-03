@@ -29,7 +29,7 @@ const SKILL_SCHEMA_ANY_OF = 16;
  * The most properties an object schema may have. run 39 (2026-10-26): the act's hand has 43 with the new hands'
  * fields (it had 31); 48 left room.
  * Continue contract 2 (the 欄の数): `dependsOn` and vertical's `dir`, `shape`, `toward`, `toY` and `liquid` make
- * the hand's 49; 56 leaves room.
+ * the hand's 49; shield_rush's six and fill's groups use all 56.
  */
 const SKILL_SCHEMA_PROPERTIES = 56;
 /** Bounded JSON-schema subset; native skill validation remains authoritative at the actuator. */
@@ -63,7 +63,8 @@ export function validSkills(skills: unknown): skills is MinecraftSkillDefinition
       && skillSchema(item.inputSchema) && item.inputSchema.type === 'object') && boundedJSON(skills, 250_000);
 }
 export function validSkillInput(value: unknown, schema: Readonly<Record<string, unknown>>, depth = 0): boolean {
-  if (depth > 6 || !boundedJSON(value, 32_000)) return false;
+  // fill's groups[].at[].x is at depth 7; keep inputs within the schema's existing depth bound.
+  if (depth > SKILL_SCHEMA_DEPTH || !boundedJSON(value, 32_000)) return false;
   if (Array.isArray(schema.anyOf)) return schema.anyOf.some(item => record(item) && validSkillInput(value, item, depth + 1));
   if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return false;
   if (schema.type === 'object') {
