@@ -20,8 +20,8 @@ const FIXTURES = ['rel55', 'rel56', 'produced'] as const;
 const catalogOf = (release: string): MinecraftSkillDefinition[] => release === 'produced'
   ? (JSON.parse(readFileSync(new URL('./fixtures/continue/produced/catalog.json', import.meta.url), 'utf8')) as { offered: MinecraftSkillDefinition[] }).offered.filter(skill => skill.name === 'act')
   : JSON.parse(readFileSync(new URL(`./fixtures/minecraft-body-act-catalog-${release}.json`, import.meta.url), 'utf8')) as MinecraftSkillDefinition[];
-/** The most properties a hand had in each: 48 was the head's limit for rel55 and rel56; the continue version's hand has 49, shield_rush's six make 55, and the limit is 56. */
-const HAND_PROPERTIES: Readonly<Record<(typeof FIXTURES)[number], number>> = { rel55: 48, rel56: 48, produced: 56 };
+/** The most properties a hand had in each: 48 was the head's limit for rel55 and rel56; the continue version's hand has 49, shield_rush's six make 55, fill's groups 56, den 57, and the limit is 64. */
+const HAND_PROPERTIES: Readonly<Record<(typeof FIXTURES)[number], number>> = { rel55: 48, rel56: 48, produced: 57 };
 
 const NOW = Date.parse('2026-10-26T07:00:00.000Z');
 function poll(skills: unknown): unknown {
@@ -78,10 +78,10 @@ describe('the body\'s act catalog of the continue version (produced): the hands 
   it('names every kind of hand the head sends', () => {
     expect(hands.do.enum).toEqual(expect.arrayContaining(['go', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt', 'vertical']));
   });
-  it('has 56 properties in the hand, the limit of the head (the own hand of the head has the same 56)', () => {
-    expect(Object.keys(hands)).toHaveLength(56);
-    expect(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties)).toHaveLength(56);
-    expect(Object.keys(hands).length).toBeLessThanOrEqual(56);
+  it('has 57 properties in the hand, within the limit of the head (the own hand of the head has the same 57)', () => {
+    expect(Object.keys(hands)).toHaveLength(57);
+    expect(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties)).toHaveLength(57);
+    expect(Object.keys(hands).length).toBeLessThanOrEqual(64);
   });
   it('is the head\'s hand, kind for kind and field for field (a drift between the two is the way rel55 was refused)', () => {
     const theirs = ACT_INPUT_SCHEMA.properties.hands.items.properties as Record<string, any>;
