@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { createEyeLedger, type EyeLedger } from './minecraftEyeLedger.js';
+import { createBlazeWatch } from './minecraftBlazeFacts.js';
 import { crystalLine, deathLine, dragonApproachLine, dragonLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { pearlLine } from './minecraftPearlFacts.js';
@@ -29,7 +30,7 @@ const worldOf = (observation: BodyObservation | null): Record<string, unknown> |
 const some = (line: string | null): string[] => line ? [line] : [];
 
 /** The lines of one decision from the frame and the ledger's lines (pure). */
-function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[]): EndgameLines {
+function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[], blaze: string | null): EndgameLines {
   const fight = endFightLines(end);
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
@@ -38,7 +39,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const pearls = some(pearlLine(facts.counts, facts.dimension));
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true))];
-  return { lines: [...fight, ...eyeLines, ...pearls, ...frames, ...death, ...places], short: [...urgent, ...frames, ...death] };
+  return { lines: [...fight, ...some(blaze), ...eyeLines, ...pearls, ...frames, ...death, ...places], short: [...urgent, ...some(blaze), ...frames, ...death] };
 }
 
 /** The ledger's lines while the stronghold is still to be found: in the overworld, before the portal room's frames are in view. */
@@ -50,10 +51,12 @@ function eyeLinesOf(ledger: EyeLedger, facts: DoneFacts, now: number): string[] 
 
 export function createEndgame(saved: unknown, now: () => number = Date.now) {
   const ledger = createEyeLedger((saved as { minecraftEyes?: unknown } | null)?.minecraftEyes);
+  const blaze = createBlazeWatch((saved as { minecraftBlazeWatch?: unknown } | null)?.minecraftBlazeWatch);
   return {
     /** An act's result (the receipt's id and its result JSON): a thrown eye goes in the ledger. */
     noteResult(id: string | undefined, resultJson: string | undefined, observation: BodyObservation | null): void {
       ledger.note(id, resultJson, doneFacts(observation)?.dimension ?? null, now());
+      blaze.note(id, resultJson, now());
     },
     /** The lines of this decision: empty for a task that is not after the dragon. */
     lines(observation: BodyObservation | null, dragonTask: boolean): EndgameLines {
@@ -61,9 +64,9 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       const facts = doneFacts(observation);
       if (!dragonTask || !world || !facts) return NONE;
       if (facts.seen?.has('end_portal_frame') || facts.dimension === 'the_end') ledger.clear();
-      return compose(world, endViewOf(observation), facts, eyeLinesOf(ledger, facts, now()));
+      return compose(world, endViewOf(observation), facts, eyeLinesOf(ledger, facts, now()), blaze.line(world, facts.counts, facts.dimension, now()));
     },
-    checkpoint: ledger.checkpoint,
+    checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint() }),
   };
 }
 export type Endgame = ReturnType<typeof createEndgame>;
