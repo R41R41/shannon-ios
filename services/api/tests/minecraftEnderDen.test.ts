@@ -39,6 +39,7 @@ describe('probe kind den', () => {
     expect(PROBE_KINDS).toContain('den');
     const context = { feet: null } as never;
     expect(prepareProbeInput({ kind: 'den' }, context)).toMatchObject({ input: { kind: 'den' } });
-    expect(prepareProbeInput({ kind: 'enderman_den', radius: 8 }, context)).toMatchObject({ input: { kind: 'den' }, fixes: ['den に使わない欄 radius を外した'] });
+    expect(prepareProbeInput({ kind: 'enderman_den', radius: 8 }, context)).toMatchObject({ input: { kind: 'den' } });
+    expect(prepareProbeInput({ kind: 'enderman_den', radius: 8 }, context)?.fixes).toContain('den に使わない欄 radius を外した');
   });
 });

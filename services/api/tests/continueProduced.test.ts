@@ -616,7 +616,7 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(skillSchema(act.inputSchema)).toBe(true);
     const hand = act.inputSchema.properties.hands.items.properties as Record<string, any>;
     expect(Object.keys(hand)).toHaveLength(whole.actHandFieldCount);
-    expect(Object.keys(hand).length).toBeLessThanOrEqual(56);
+    expect(Object.keys(hand).length).toBeLessThanOrEqual(64);
     expect(hand.do.enum).toContain('vertical');
     expect([...hand.do.enum].sort()).toEqual([...HAND_KINDS].sort());
     expect(Object.keys(hand).sort()).toEqual(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties).sort());

@@ -37,7 +37,7 @@ describe('fill input contract', () => {
     expect(llmcInputProblem(MC_ACT_TOOL, input)).toBeNull();
     expect(llmcPrepare(MC_ACT_TOOL, input)).toEqual({ input, fixes: [], problem: null });
     const fields = ACT_INPUT_SCHEMA.properties.hands.items.properties;
-    expect(Object.keys(fields)).toHaveLength(56);
+    expect(Object.keys(fields)).toHaveLength(57);
     expect(fields.do.enum).toContain('fill');
     expect(fields.groups).toMatchObject({ minItems: 1, maxItems: 12 });
     expect(fields.groups.items).toMatchObject({ additionalProperties: false, required: ['stand', 'at'] });
