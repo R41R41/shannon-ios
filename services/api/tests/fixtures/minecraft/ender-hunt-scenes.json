@@ -1,0 +1,259 @@
+[
+ {
+  "name": "hunt-slow",
+  "goal": "エンドラを討伐して",
+  "current": "p11.1",
+  "elapsedMinutes": 118,
+  "events": [
+   "歪んだ森でエンダーマンを待っている"
+  ],
+  "expect": "10 分で撃破 1: 数字を読んで場所を選び直すかどうか（金の交換・夜の地上・森の別の所）。",
+  "hunt": {
+   "minutes": 12,
+   "kills": 1,
+   "pearls0": 0
+  },
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 120.5,
+    "y": 64,
+    "z": -40.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "inside": "歪んだ森",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 24
+    },
+    {
+     "name": "blaze_rod",
+     "count": 7
+    },
+    {
+     "name": "shield",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 12
+    },
+    {
+     "name": "ender_pearl",
+     "count": 1
+    },
+    {
+     "name": "gold_ingot",
+     "count": 6
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "[overworld] P ネザーポータル (-39,70,23) 拠点"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "170m 西 (-39,70,23)"
+   },
+   "nearbyEntities": [
+    {
+     "id": 501,
+     "name": "enderman",
+     "kind": "neutral",
+     "distance": 14,
+     "position": {
+      "x": 128,
+      "y": 70,
+      "z": -30
+     }
+    },
+    {
+     "id": 502,
+     "name": "enderman",
+     "kind": "neutral",
+     "distance": 22,
+     "position": {
+      "x": 135,
+      "y": 70,
+      "z": -50
+     }
+    }
+   ],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "fight",
+    "attack",
+    "go",
+    "walk",
+    "wait",
+    "look",
+    "probe",
+    "use",
+    "equip"
+   ]
+  }
+ },
+ {
+  "name": "hunt-fast",
+  "goal": "エンドラを討伐して",
+  "current": "p11.1",
+  "elapsedMinutes": 118,
+  "events": [
+   "歪んだ森でエンダーマンを待っている"
+  ],
+  "expect": "6 分で撃破 4: 続ける。",
+  "hunt": {
+   "minutes": 6,
+   "kills": 4,
+   "pearls0": 0
+  },
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 120.5,
+    "y": 64,
+    "z": -40.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "inside": "歪んだ森",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 24
+    },
+    {
+     "name": "blaze_rod",
+     "count": 7
+    },
+    {
+     "name": "shield",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 12
+    },
+    {
+     "name": "ender_pearl",
+     "count": 2
+    },
+    {
+     "name": "gold_ingot",
+     "count": 6
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "[overworld] P ネザーポータル (-39,70,23) 拠点"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "170m 西 (-39,70,23)"
+   },
+   "nearbyEntities": [
+    {
+     "id": 511,
+     "name": "enderman",
+     "kind": "neutral",
+     "distance": 10,
+     "position": {
+      "x": 126,
+      "y": 70,
+      "z": -32
+     }
+    },
+    {
+     "id": 512,
+     "name": "enderman",
+     "kind": "neutral",
+     "distance": 18,
+     "position": {
+      "x": 130,
+      "y": 70,
+      "z": -52
+     }
+    },
+    {
+     "id": 513,
+     "name": "enderman",
+     "kind": "neutral",
+     "distance": 25,
+     "position": {
+      "x": 140,
+      "y": 70,
+      "z": -36
+     }
+    }
+   ],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "fight",
+    "attack",
+    "go",
+    "walk",
+    "wait",
+    "look",
+    "probe",
+    "use",
+    "equip"
+   ]
+  }
+ }
+]
