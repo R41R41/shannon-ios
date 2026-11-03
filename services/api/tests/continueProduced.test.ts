@@ -607,7 +607,7 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(handFacts(hand).join('\n')).toContain('下りる先に立てる床が無い');
   });
 
-  it('catalog.json: the pre-fill body catalog passes validSkills(), matches the pre-fill head and carries bodyVersion', () => {
+  it('catalog.json: the body\'s whole catalog passes the head\'s own validSkills(), the act has vertical and the 49 fields, and the poll\'s bodyVersion is read', () => {
     const catalog = out('catalog.json') ?? (get('catalog.json') as unknown as Record<string, any>);
     const whole = get('catalog.json') as unknown as { offered: Array<{ name: string; inputSchema: Record<string, any> }>; catalogHash: string; bodyRevision: string; actHandFieldCount: number; internal: string[]; runnable: string[] };
     void catalog;
@@ -618,10 +618,8 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(Object.keys(hand)).toHaveLength(whole.actHandFieldCount);
     expect(Object.keys(hand).length).toBeLessThanOrEqual(56);
     expect(hand.do.enum).toContain('vertical');
-    // Keep the produced catalog and its digest intact: this body revision predates fill/groups.
-    const { groups: _fillGroups, ...preFill } = ACT_INPUT_SCHEMA.properties.hands.items.properties;
-    expect([...hand.do.enum].sort()).toEqual(HAND_KINDS.filter(kind => kind !== 'fill').sort());
-    expect(Object.keys(hand).sort()).toEqual(Object.keys(preFill).sort());
+    expect([...hand.do.enum].sort()).toEqual([...HAND_KINDS].sort());
+    expect(Object.keys(hand).sort()).toEqual(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties).sort());
     expect(validBodyVersion({ revision: whole.bodyRevision, catalogHash: whole.catalogHash })).toBe(true);
     expect(whole.internal).toEqual(['events']);
     expect(whole.runnable).toContain('act');

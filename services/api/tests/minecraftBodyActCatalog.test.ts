@@ -13,14 +13,14 @@ import { skillSchema, validControlPoll, validSkillInput, validSkills } from '../
  */
 /**
  * rel55 and rel56 are the `act` definitions of those releases, unchanged. `produced` is the act of the body's own catalog of the continue version (`fixtures/continue/produced/catalog.json`,
- * made by the body's `continue-produce.ts` and copied by `scripts/sync-body-produced.sh`): it has vertical, dependsOn and shield_rush, 55 properties in the hand.
- * It predates fill; compare the exact pre-fill contract without altering this produced evidence or its hashes.
+ * made by the body's `continue-produce.ts` and copied by `scripts/sync-body-produced.sh`): it has the `vertical` hand and `dependsOn`, 49 properties in the hand. The comparison with the head's
+ * hand (kind for kind, field for field) is made against that one, since the head's hand has moved on from rel56.
  */
 const FIXTURES = ['rel55', 'rel56', 'produced'] as const;
 const catalogOf = (release: string): MinecraftSkillDefinition[] => release === 'produced'
   ? (JSON.parse(readFileSync(new URL('./fixtures/continue/produced/catalog.json', import.meta.url), 'utf8')) as { offered: MinecraftSkillDefinition[] }).offered.filter(skill => skill.name === 'act')
   : JSON.parse(readFileSync(new URL(`./fixtures/minecraft-body-act-catalog-${release}.json`, import.meta.url), 'utf8')) as MinecraftSkillDefinition[];
-/** The most properties a hand had in each: shield_rush makes 55; fill's groups uses the last of the head's 56. */
+/** The most properties a hand had in each: 48 was the head's limit for rel55 and rel56; the continue version's hand has 49, shield_rush's six make 55, and the limit is 56. */
 const HAND_PROPERTIES: Readonly<Record<(typeof FIXTURES)[number], number>> = { rel55: 48, rel56: 48, produced: 56 };
 
 const NOW = Date.parse('2026-10-26T07:00:00.000Z');
@@ -78,14 +78,14 @@ describe('the body\'s act catalog of the continue version (produced): the hands 
   it('names every kind of hand the head sends', () => {
     expect(hands.do.enum).toEqual(expect.arrayContaining(['go', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt', 'vertical']));
   });
-  it('keeps the pre-fill body evidence at 55 properties and the current head at its limit of 56', () => {
-    expect(Object.keys(hands)).toHaveLength(55);
+  it('has 55 properties in the hand, within the head\'s 56 (the head\'s own hand has the same 55)', () => {
+    expect(Object.keys(hands)).toHaveLength(56);
     expect(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties)).toHaveLength(56);
     expect(Object.keys(hands).length).toBeLessThanOrEqual(56);
   });
-  it('matches the exact pre-fill head contract, kind for kind and field for field', () => {
-    const { groups: _fillGroups, ...theirs } = ACT_INPUT_SCHEMA.properties.hands.items.properties as Record<string, any>;
-    expect([...hands.do.enum].sort()).toEqual(HAND_KINDS.filter(kind => kind !== 'fill').sort());
+  it('is the head\'s hand, kind for kind and field for field (a drift between the two is the way rel55 was refused)', () => {
+    const theirs = ACT_INPUT_SCHEMA.properties.hands.items.properties as Record<string, any>;
+    expect([...hands.do.enum].sort()).toEqual([...HAND_KINDS].sort());
     expect(Object.keys(hands).sort()).toEqual(Object.keys(theirs).sort());
     // The body may be looser than the head (the head checks first) but never tighter: what the head sends the body must take.
     for (const field of Object.keys(theirs)) {
