@@ -91,7 +91,8 @@ function fillCounts(fill: FillResult): string[] {
     const count = fill.skippedBy?.[key];
     return known(count) ? [`${label} ${num(count)}`] : [];
   });
-  const left = Array.isArray(fill.remaining) ? [`残り ${fill.remaining.length}${skipped.length ? `（${skipped.join('・')}）` : ''}`] : skipped.length ? [skipped.join('・')] : [];
+  const why = skipped.length ? `（${skipped.join('・')}）` : '';
+  const left = Array.isArray(fill.remaining) ? [`残り ${fill.remaining.length}${why}`] : skipped.length ? [skipped.join('・')] : [];
   return [...(known(fill.placed) ? [`置いた ${num(fill.placed)}`] : []), ...left];
 }
 
@@ -99,8 +100,9 @@ function fillCounts(fill: FillResult): string[] {
 function fillFacts(fill: FillResult): string[] {
   const end = fill.at && [fill.at.x, fill.at.y, fill.at.z].every(known) ? [`終了地点 ${at(fill.at)}`] : [];
   const safe = typeof fill.safe === 'boolean' ? [fill.safe ? '終了地点は安全' : '終了地点の安全は未確認'] : [];
-  return [...fillCounts(fill), ...(known(fill.hpMin) ? [`体力最低 ${num(fill.hpMin)}`] : []), ...(known(fill.hpEnd) ? [`終了体力 ${num(fill.hpEnd)}`] : []),
-    ...(known(fill.elapsedMs) ? [`経過 ${num(fill.elapsedMs)} ms`] : []), ...end, ...safe];
+  const health = [...(known(fill.hpMin) ? [`体力最低 ${num(fill.hpMin)}`] : []), ...(known(fill.hpEnd) ? [`終了体力 ${num(fill.hpEnd)}`] : [])];
+  const time = known(fill.elapsedMs) ? [`経過 ${num(fill.elapsedMs)} ms`] : [];
+  return [...fillCounts(fill), ...health, ...time, ...end, ...safe];
 }
 
 /** Only the body's structured fill measurements; no inferred arrival, success or next action. */
