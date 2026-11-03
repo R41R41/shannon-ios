@@ -2,7 +2,7 @@ import { orderedPlan, type PlanTree } from '@shannon/mind';
 import { blazeLack } from './minecraftLlmcDeadlyGates.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { predicateHolds, predicatesOf, type DoneFacts } from './minecraftPlanDone.js';
-import { DIMENSION_KINDS, treeQuestions } from './minecraftLlmcNode.js';
+import { DIMENSION_KINDS, followDimension, treeQuestions } from './minecraftLlmcNode.js';
 
 /**
  * A gate that stops the same node over and over (the owner's d50, run59: the blaze gate stopped the rods three times; words alone moved the plan to
@@ -61,7 +61,10 @@ export function followHeld(taskId: string, tree: PlanTree, facts: DoneFacts | nu
   const elsewhere = (node: (typeof order)[number]) =>
     Object.entries(DIMENSION_KINDS).some(([dimension, kinds]) => dimension !== facts.dimension && kinds.has(kindOf(node)));
   const blazeShut = blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
-  const leaf = around.find(node => open(node) && kindOf(node) !== kindOf(current) && !elsewhere(node) && !(kindOf(node) === 'blaze' && blazeShut));
+  // A node the next read would move away from again (a food node in the Nether, `followDimension`) is no place to put the current node: pearl, food, pearl.
+  const stays = (node: (typeof order)[number]) => followDimension({ ...tree, current: node.id }, facts) === null;
+  const leaf = around.find(node => open(node) && kindOf(node) !== kindOf(current) && !elsewhere(node)
+    && !(kindOf(node) === 'blaze' && blazeShut) && stays(node));
   if (!leaf) return null;
   window.outcomes = [];
   window.moved = { from: current.id, kind: gate };

@@ -110,12 +110,24 @@ describe('the golden piece against the piglins (run59, 14:15: dead in the Nether
     expect(deadlyGateHold(portalHand, overworld([['golden_boots', 1]], '足: golden_boots(残り65/65)')))?.toBeNull();
     expect(deadlyGateHold({ hands: [{ do: 'eat', item: 'cooked_beef' }] }, overworld([]))).toBeNull();
   });
-  it('in the Nether holds what is not the putting on, making, eating or defence, only when the means are in the pack', () => {
+  it('in the Nether holds the travel of the search, only when the means are in the pack', () => {
     const work = { hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'go', to: { x: 5, y: 70, z: 5 } }] };
     expect(deadlyGateHold(work, nether([['gold_ingot', 4]]))).toMatchObject({ hand: 2, kind: 'gold' });
     expect(deadlyGateHold(work, nether([['golden_helmet', 1]]))!.line).toContain('equip で着る');
     expect(deadlyGateHold(work, nether([['gold_ingot', 1]]))).toBeNull();
     expect(deadlyGateHold(work, nether([['gold_ingot', 4]], '足: golden_boots(残り65/65)'))).toBeNull();
     expect(deadlyGateHold({ hands: [{ do: 'make', item: 'golden_boots' }, { do: 'equip', item: 'golden_boots' }] }, nether([['gold_ingot', 4]]))).toBeNull();
+  });
+  it('lets a retreat, cover, food from a chest and the boots through at 5 health (review of 11/4); holds a move only while well and alone', () => {
+    const hurt = () => frame([['gold_ingot', 4], ['bread', 2]], { dimension: 'the_nether', health: 5, food: 12 });
+    const chestTake = { do: 'chest', op: 'take', at: [{ x: 2, y: 70, z: 2 }], items: [{ item: 'bread', count: 2 }] };
+    for (const hand of [{ do: 'go', to: { x: 5, y: 70, z: 5 } }, { do: 'place', at: [{ x: 1, y: 70, z: 1 }], block: 'cobblestone' }, chestTake,
+      { do: 'make', item: 'golden_boots' }]) expect(deadlyGateHold({ hands: [hand] }, hurt()), String(hand.do)).toBeNull();
+    const trip = { hands: [{ do: 'go', to: { x: 5, y: 70, z: 5 } }] };
+    expect(deadlyGateHold(trip, frame([['gold_ingot', 4]], { dimension: 'the_nether', health: 12 }))).toMatchObject({ hand: 1, kind: 'gold' });
+    const piglin = { dimension: 'the_nether', health: 12, nearbyThreats: [{ name: 'piglin', distance: 6 }] };
+    expect(deadlyGateHold(trip, frame([['gold_ingot', 4]], piglin))).toBeNull();
+    const cover = { hands: [{ do: 'place', at: [{ x: 1, y: 70, z: 1 }], block: 'cobblestone' }] };
+    expect(deadlyGateHold(cover, frame([['gold_ingot', 4]], { dimension: 'the_nether', health: 20 }))).toBeNull();
   });
 });

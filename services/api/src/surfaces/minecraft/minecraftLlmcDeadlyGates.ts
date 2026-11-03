@@ -105,10 +105,10 @@ const foodItems = (hand: Record<string, unknown>): boolean => Array.isArray(hand
 
 /**
  * The work that makes the recovery: food made, cooked, taken from a furnace or a chest (review of 11/3: at 5 health with wheat and a table, `make bread` was
- * refused and health could never come back to 8). These go through whatever the health.
+ * refused and health could never come back to 8), and the golden armour made (the piglins' gate asks for it first). These go through whatever the health.
  */
 function foodWork(hand: Record<string, unknown>): boolean {
-  if (hand.do === 'make' || hand.do === 'craft') return isFood(hand.item);
+  if (hand.do === 'make' || hand.do === 'craft') return isFood(hand.item) || (typeof hand.item === 'string' && GOLD_ARMOUR.test(hand.item));
   if (hand.do === 'furnace') return hand.op === 'take' || hand.op === 'look';
   if (hand.do === 'smelt') return foodItems(hand);
   return hand.do === 'chest' && (hand.op === 'look' || (hand.op === 'take' && foodItems(hand)));
@@ -131,14 +131,19 @@ function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
   return { hand: at + 1, kind: 'work', line };
 }
 
-/** Hands that put the armour on, make it, feed or defend: they go whatever the armour is. */
-const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['equip', 'craft', 'make', 'smelt', 'furnace', 'eat', 'fight', 'attack', 'shoot', 'look', 'wait',
-  'sneak']);
+/**
+ * The hands the piglins' gate holds: the travel of the search (the way to the blazes and the pearls). A retreat, cover, a meal, the food taken from a chest
+ * and the golden armour made are not held (review of 11/4: at 5 health a retreating `go`, a `place` for cover and a `chest take` of bread were refused).
+ */
+const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 'vertical']);
+/** Below this health, or with an enemy near, a move is a retreat and goes through. */
+const GOLD_FIRST_HEALTH = 12;
+const threatened = (world: Record<string, unknown>): boolean => [world.nearbyThreats, world.threats].some(list => Array.isArray(list) && list.length > 0);
 
 /**
  * Piglins turn on a body with no golden piece worn (run59, 11/3 14:15: dead in the Nether to a piglin; the boots were never made, one ingot in the pack).
- * In the Nether with none worn and the means in the pack (a golden piece carried, or four ingots for the boots), the hands that are not the putting
- * on, the making, eating or defence are held: the armour comes first. Without the means in the pack nothing is held (the way to gold is the
+ * In the Nether with none worn and the means in the pack (a golden piece carried, or four ingots for the boots), the travel of the search is held
+ * while she is well and nothing is near: the armour comes first. Without the means in the pack nothing is held (the way to gold is the
  * decision's).
  */
 function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
@@ -148,11 +153,13 @@ function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
   const piece = [...facts.counts].find(([name, count]) => GOLD_ARMOUR.test(name) && count > 0)?.[0];
   const ingots = facts.counts.get('gold_ingot') ?? 0;
   if (!piece && ingots < GOLD_FOR_BOOTS) return null;
-  const at = hands.findIndex(raw => !GOLD_FIRST_HANDS.has(String(objectOf(raw)?.do ?? '')));
+  if (facts.health !== null && facts.health < GOLD_FIRST_HEALTH) return null;
+  if (threatened(facts.world)) return null;
+  const at = hands.findIndex(raw => GOLD_FIRST_HANDS.has(String(objectOf(raw)?.do ?? '')));
   if (at < 0) return null;
   const means = piece ? `持っている ${piece} を equip で着る`
     : `金の延べ棒 ${ingots} 個でブーツを作って着る（${GOLD_FOR_BOOTS} 個で 1 足）`;
-  const line = `金の防具を着ていない間はピグリンが襲う。先に着る手以外は送らない: ${means}。`
+  const line = `金の防具を着ていない間はピグリンが襲う。先に着る前に探索の移動（go・walk・vertical）は送らない: ${means}。`
     + '着てからもう一度出す（どう着るかは自分で決める）';
   return { hand: at + 1, kind: 'gold', line };
 }
