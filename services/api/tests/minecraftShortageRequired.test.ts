@@ -434,7 +434,7 @@ describe('the current node follows the body\'s dimension, and the strong model d
     expect(moved).toMatchObject({ to: 'p3.1', from: 'p1.1' });
     expect(moved.words).toContain('今の節を [p3.1] 要塞を探す に置いた（体は the_nether にいて、今の節 [p1.1] 村のベッド集め は地上の仕事。飛ばした節は順のまま残っている）');
     // a leaf whose own condition already holds is not the place to stand: the fortress seen, the rods are next
-    expect(followDimension(treeAt('p1.1'), { ...facts('the_nether'), seen: new Set(['fortress']) })).toMatchObject({ to: 'p3.2' });
+    expect(followDimension(treeAt('p1.1'), { ...facts('the_nether', [['cooked_beef', 40], ['shield', 1]]), hp: 20, hunger: 20, seen: new Set(['fortress']) })).toMatchObject({ to: 'p3.2' });
   });
   it('passes over the blaze nodes while the blaze gate holds (a shield missing), and goes to the pearls; with the needs met it stays on the blaze (d50, run59)', () => {
     const blazeRows = (current: string): PlanTree => {

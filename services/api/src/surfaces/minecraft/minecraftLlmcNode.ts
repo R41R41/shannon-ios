@@ -190,8 +190,7 @@ export function followDimension(tree: PlanTree, facts: DoneFacts | null):
   const kind = kindOf(current);
   // The blaze gate holds the blaze work while its needs are missing (the Nether only): the blaze nodes are passed over and the pearls
   // come first (the owner's d50, run59: the head kept choosing the rods and the gate kept stopping it).
-  const blazeGated = facts.dimension === 'the_nether'
-    && blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
+  const blazeGated = blazeHeld(facts);
   const stale = OVERWORLD_KINDS.has(kind) || (facts.dimension === 'the_end' && DIMENSION_KINDS.the_nether!.has(kind)) || (blazeGated && kind === 'blaze');
   if (!stale) return null;
   const passed = (node: PlanNode) => blazeGated && kindOf(node) === 'blaze';
@@ -204,6 +203,10 @@ export function followDimension(tree: PlanTree, facts: DoneFacts | null):
   const why = passed(current) ? 'ブレイズの関所が止めている間は先へ進める' : work;
   return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（${why}。飛ばした節は順のまま残っている）` };
 }
+
+/** Whether the blaze gate holds the blaze work now: in the Nether, with a need of the spawner missing (`blazeLack`). */
+const blazeHeld = (facts: DoneFacts): boolean => facts.dimension === 'the_nether'
+  && blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
 
 /**
  * A supply node (food) under a preparation node that is not met is the preparation itself, not the overworld's work (review of 11/3: the move to the
