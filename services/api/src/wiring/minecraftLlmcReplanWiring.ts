@@ -137,6 +137,11 @@ export function withReplan(lifecycle: FcaBodyLifecycle, unheld: ReplanLook | nul
   if (!unheld) return lifecycle;
   // The step's model was chosen from the stage it began in: a stronger stage than that closes the step, and the next begins with the strong model.
   const began = unheld.stage?.() ?? null;
+  // Looked at each result as well as each step's start: the decisions of one step go on, and a stronger stage can come in the middle of them (review of 11/3).
+  const closeForStage = (): void => {
+    const stage = unheld.stage?.() ?? null;
+    if (stage && stage !== began) unheld.close?.('stage');
+  };
   const before = lifecycle.beforeDecision?.bind(lifecycle);
   const noted = lifecycle.noteResult?.bind(lifecycle);
   return Object.assign(lifecycle, {
@@ -144,13 +149,13 @@ export function withReplan(lifecycle: FcaBodyLifecycle, unheld: ReplanLook | nul
       await before?.(signal);
       unheld.watch.look();
       unheld.flow.escaped(unheld.current());
-      const stage = unheld.stage?.() ?? null;
-      if (stage && stage !== began) unheld.close?.('stage');
+      closeForStage();
       await unheld.flow.run(signal);
     },
     noteResult(...args: Parameters<NonNullable<FcaBodyLifecycle['noteResult']>>) {
       noted?.(...args);
       unheld.watch.look();
+      closeForStage();
     },
   });
 }

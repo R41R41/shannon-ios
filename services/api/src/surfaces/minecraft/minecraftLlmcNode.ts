@@ -190,11 +190,25 @@ export function followDimension(tree: PlanTree, facts: DoneFacts | null):
   const stale = OVERWORLD_KINDS.has(kind) || (facts.dimension === 'the_end' && DIMENSION_KINDS.the_nether!.has(kind));
   if (!stale) return null;
   const predicates = predicatesOf(tree), questions = treeQuestions(tree);
+  if (kind === 'food' && underUnmetPrep(order, current, predicates, facts)) return null;
   const leaf = order.find(node => wanted.has(kindOf(node)) && questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))
     && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts)));
   if (!leaf) return null;
   return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（体は ${facts.dimension} にいて、今の節 [${current.id}] `
     + `${current.title.slice(0, 24)} は地上の仕事。飛ばした節は順のまま残っている）` };
+}
+
+/**
+ * A supply node (food) under a preparation node that is not met is the preparation itself, not the overworld's work (review of 11/3: the move to the
+ * fortress from a food node of the departure check sent her on before the preparation): it is held where it is.
+ */
+function underUnmetPrep(order: readonly PlanNode[], current: PlanNode, predicates: ReturnType<typeof predicatesOf>, facts: DoneFacts): boolean {
+  const byId = new Map(order.map(node => [node.id, node]));
+  for (let at: PlanNode | undefined = byId.get(current.parentId ?? ''), guard = 0; at && guard < 8; at = byId.get(at.parentId ?? ''), guard += 1) {
+    const predicate = predicates.get(at.id);
+    if (holdsNow(at) && !(predicate && predicateHolds(predicate, facts))) return true;
+  }
+  return false;
 }
 
 /** The items in a row, started for the one same node that is not the current one, after which the head moves the
