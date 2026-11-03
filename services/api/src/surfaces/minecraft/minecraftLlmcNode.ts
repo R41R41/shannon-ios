@@ -2,6 +2,7 @@ import { orderedPlan, type PlanKind, type PlanNode, type PlanTree } from '@shann
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { doneFacts, doneStatusWords, predicateHolds, predicatesOf, undergroundInOverworld, type DoneFacts } from './minecraftPlanDone.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
+import { blazeLack } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 
 /**
@@ -187,15 +188,21 @@ export function followDimension(tree: PlanTree, facts: DoneFacts | null):
   const order = orderedPlan(tree.nodes), current = order.find(node => node.id === tree.current);
   if (!facts || !wanted || !current) return null;
   const kind = kindOf(current);
-  const stale = OVERWORLD_KINDS.has(kind) || (facts.dimension === 'the_end' && DIMENSION_KINDS.the_nether!.has(kind));
+  // The blaze gate holds the blaze work while its needs are missing (the Nether only): the blaze nodes are passed over and the pearls
+  // come first (the owner's d50, run59: the head kept choosing the rods and the gate kept stopping it).
+  const blazeGated = facts.dimension === 'the_nether'
+    && blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
+  const stale = OVERWORLD_KINDS.has(kind) || (facts.dimension === 'the_end' && DIMENSION_KINDS.the_nether!.has(kind)) || (blazeGated && kind === 'blaze');
   if (!stale) return null;
+  const passed = (node: PlanNode) => blazeGated && kindOf(node) === 'blaze';
   const predicates = predicatesOf(tree), questions = treeQuestions(tree);
   if (kind === 'food' && underUnmetPrep(order, current, predicates, facts)) return null;
-  const leaf = order.find(node => wanted.has(kindOf(node)) && questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))
-    && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts)));
+  const leaf = order.find(node => wanted.has(kindOf(node)) && !passed(node) && questions.open(node.id)
+    && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts)));
   if (!leaf) return null;
-  return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（体は ${facts.dimension} にいて、今の節 [${current.id}] `
-    + `${current.title.slice(0, 24)} は地上の仕事。飛ばした節は順のまま残っている）` };
+  const work = `体は ${facts.dimension} にいて、今の節 [${current.id}] ${current.title.slice(0, 24)} は地上の仕事`;
+  const why = passed(current) ? 'ブレイズの関所が止めている間は先へ進める' : work;
+  return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（${why}。飛ばした節は順のまま残っている）` };
 }
 
 /**

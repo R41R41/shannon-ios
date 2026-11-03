@@ -34,7 +34,7 @@ const blazesWithin = (world: Record<string, unknown>, meters: number): number =>
   .filter(line => Number(/^#\d+ blaze ([\d.]+)m/u.exec(line)?.[1] ?? Infinity) <= meters).length;
 
 /** What the blaze spawner needs and the body does not have, in words (each with the way it is usually made up), or null. */
-export function blazeLack(facts: Facts): string | null {
+export function blazeLack(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'counts'>): string | null {
   const shields = [...facts.counts].reduce((sum, [name, count]) => sum + (name === 'shield' ? count : 0), 0);
   const lacks = [facts.health !== null && facts.health < 20 ? `体力 ${facts.health}/20（食べて回復を待つ）` : '',
     facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18（食べる）` : '',

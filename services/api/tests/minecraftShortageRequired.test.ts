@@ -436,6 +436,23 @@ describe('the current node follows the body\'s dimension, and the strong model d
     // a leaf whose own condition already holds is not the place to stand: the fortress seen, the rods are next
     expect(followDimension(treeAt('p1.1'), { ...facts('the_nether'), seen: new Set(['fortress']) })).toMatchObject({ to: 'p3.2' });
   });
+  it('passes over the blaze nodes while the blaze gate holds (a shield missing), and goes to the pearls; with the needs met it stays on the blaze (d50, run59)', () => {
+    const blazeRows = (current: string): PlanTree => {
+      const node = (id: string, kind: PlanKind, order: number, doneWhen: string, parentId: string | null = null): PlanNode =>
+        ({ id, parentId, order, title: id, state: 'continue', kind, ...(doneWhen ? { doneWhen } : {}) } as PlanNode);
+      return v2tree({ revision: 1, current, nodes: [node('p1', 'bed', 0, 'have:bed>=4'), node('p3', 'nether', 1, ''), node('p3.1', 'fortress', 0, 'see:fortress', 'p3'),
+        node('p3.2', 'blaze', 1, 'have:blaze_rod>=7', 'p3'), node('p3.3', 'pearl', 2, 'have:ender_pearl>=12', 'p3')] });
+    };
+    const seen = { ...facts('the_nether', [['cooked_beef', 20]]), seen: new Set(['fortress']), hp: 20, hunger: 20 };
+    // no shield: gated, from the overworld's node and from the blaze node itself
+    expect(followDimension(blazeRows('p1'), seen)).toMatchObject({ to: 'p3.3' });
+    expect(followDimension(blazeRows('p3.2'), seen)).toMatchObject({ to: 'p3.3', from: 'p3.2' });
+    expect(followDimension(blazeRows('p3.2'), seen)!.words).toContain('ブレイズの関所が止めている間は先へ進める');
+    // a shield, health, hunger and food: not gated, the blaze node is where the body goes
+    const ready = { ...facts('the_nether', [['cooked_beef', 40], ['shield', 1]]), seen: new Set(['fortress']), hp: 20, hunger: 20 };
+    expect(followDimension(blazeRows('p1'), ready)).toMatchObject({ to: 'p3.2' });
+    expect(followDimension(blazeRows('p3.2'), ready)).toBeNull();
+  });
   it('holds a supply (food) node under a departure check that is not met, in the Nether: it is the preparation, not the overworld work (review of 11/3)', () => {
     const node = (id: string, kind: PlanKind, order: number, doneWhen: string, parentId: string | null = null): PlanNode =>
       ({ id, parentId, order, title: id, state: 'continue', kind, ...(doneWhen ? { doneWhen } : {}) } as PlanNode);
