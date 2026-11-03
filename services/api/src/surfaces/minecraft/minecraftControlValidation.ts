@@ -31,7 +31,7 @@ const SKILL_SCHEMA_ANY_OF = 16;
  * Continue contract 2 (the 欄の数): `dependsOn` and vertical's `dir`, `shape`, `toward`, `toY` and `liquid` make
  * the hand's 49; shield_rush's six and fill's groups use all 56.
  */
-const SKILL_SCHEMA_PROPERTIES = 56;
+const SKILL_SCHEMA_PROPERTIES = 64;
 /** Bounded JSON-schema subset; native skill validation remains authoritative at the actuator. */
 export function skillSchema(value: unknown, depth = 0): value is Readonly<Record<string, unknown>> {
   if (!record(value) || depth > SKILL_SCHEMA_DEPTH) return false;

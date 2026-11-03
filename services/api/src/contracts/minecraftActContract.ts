@@ -31,6 +31,7 @@ export type { FillArgs, FillCode, FillGroup, FillResult } from './minecraftFillC
 import { PLAN_LIMITS,promiseItemFits } from '@shannon/mind';
 import { CONDITION_SCHEMA,validCondition } from './minecraftActCondition.js';
 import { dependsProblem,fillActProblem,handProblem,shieldRushActProblem } from './minecraftActHandRules.js';
+import { DEN_DESCRIPTION, DEN_DIRECTIONS, denActProblem } from './minecraftEnderDenContract.js';
 import { aggregateGoal,type CutBy,type GoalOutcome,type RunEnd } from './continueContract.js';
 
 /**
@@ -169,6 +170,9 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         canPlace: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'go で置いてよい物（足場・橋・柱）' },
         maxDrop: { type: 'integer', minimum: 0, maximum: 10 },
         waterOk: { type: 'boolean' },
+        den: { type: 'object', additionalProperties: false, required: ['entrance', 'direction'], description: DEN_DESCRIPTION, properties: {
+          entrance: { type: 'object', additionalProperties: false, required: ['x', 'y', 'z'], properties: { x: { type: 'integer' }, y: { type: 'integer' }, z: { type: 'integer' } } },
+          direction: { type: 'string', enum: [...DEN_DIRECTIONS] } } },
         stance: { type: 'string', enum: ['fight', 'flee'] },
         retreatHp: { type: 'integer', minimum: 1, maximum: 19 },
         axis: { type: 'string', enum: ['x', 'z'] },
@@ -242,6 +246,8 @@ export function actProblem(input: ActInput): string | null {
   if (fill) return fill;
   const rush = shieldRushActProblem(input);
   if (rush) return rush;
+  const den = denActProblem(input);
+  if (den) return den;
   for (const [index, hand] of input.hands.entries()) {
     const problem = handProblem(hand) ?? dependsProblem(index + 1, hand, input.hands.length) ?? (input.repeat === undefined ? null : repeatProblem(hand));
     if (problem) return `手${index + 1}（${hand.do}）: ${problem}`;

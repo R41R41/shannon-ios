@@ -28,7 +28,11 @@ import { stagesFor } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js
 import { sceneVerdict, type SceneCheck } from '../src/surfaces/minecraft/minecraftLlmcSceneCheck.js';
 import { candidateLive, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 
-type EndScene = LlmcScene & { eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }>;
+type EndScene = LlmcScene & { /** The blazes' watch at the camp: minutes since they came near, and the kills since. */
+  blaze?: { minutes: number; kills: number };
+  /** The endermen hunt: minutes since they came near, the deaths since, and the pearls carried then. */
+  hunt?: { minutes: number; kills: number; pearls0: number };
+  eyes?: Array<{ x: number; z: number; bearingDeg: number; flew: number; broke: boolean; at: number }>;
   /** What the hands of a good decision hold (`minecraftLlmcSceneCheck.ts`); the replay counts the decisions that meet it. */
   check?: SceneCheck };
 const MODELS: Record<string, string> = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' };
@@ -59,9 +63,13 @@ function inputOf(scene: EndScene): { input: FcaModelInput; live: Record<string, 
   const tree = treeOf(scene);
   const view = { revision: tree.revision, ...planPath(tree) };
   // The scene's clock is half a minute after its newest throw (the ledger does not read a throw older than 45 minutes).
-  const sceneNow = Math.max(0, ...(scene.eyes ?? []).map(item => item.at)) + 30_000;
+  const sceneNow = Math.max(scene.blaze || scene.hunt ? 3_600_000 : 0, ...(scene.eyes ?? []).map(item => item.at)) + 30_000;
   const throws = (scene.eyes ?? []).map((item, index) => ({ id: `scene${index}`, toX: item.x, toZ: item.z, ...item }));
-  const endgame = endgameModule?.createEndgame({ minecraftEyes: { v: 1, throws } }, () => sceneNow);
+  const watch = scene.blaze ? { minecraftBlazeWatch: { v: 1, since: sceneNow - scene.blaze.minutes * 60_000, lastNear: sceneNow - 5_000,
+    kills: Array.from({ length: scene.blaze.kills }, (_, index) => ({ key: `scene:${index}`, at: sceneNow - 60_000 })) } } : {};
+  const chase = scene.hunt ? { minecraftEnderHunt: { v: 1, since: sceneNow - scene.hunt.minutes * 60_000, lastNear: sceneNow - 5_000, pearls0: scene.hunt.pearls0,
+    kills: Array.from({ length: scene.hunt.kills }, (_, index) => ({ key: `scene:${index}`, at: sceneNow - 60_000 })) } } : {};
+  const endgame = endgameModule?.createEndgame({ minecraftEyes: { v: 1, throws }, ...watch, ...chase }, () => sceneNow);
   const parts = { plan: () => planDisplay(tree), planView: () => view, planTree: () => tree, ...(endgame ? { endgame } : {}) } as unknown as LlmcBodyParts;
   const events = createLlmcEvents(`scene-${scene.name}`);
   for (const line of scene.events ?? []) events.note(line);

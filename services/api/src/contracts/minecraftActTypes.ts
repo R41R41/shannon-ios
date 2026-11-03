@@ -1,4 +1,5 @@
 import { PLAN_LIMITS } from '@shannon/mind';
+import type { EnderDen } from './minecraftEnderDenContract.js';
 import type { FillGroup, FillResult } from './minecraftFillContract.js';
 import type { ShieldRushResult } from './minecraftShieldRushContract.js';
 import type { WorldScan } from './minecraftProbeContract.js';
@@ -194,6 +195,8 @@ export interface ActHand {
    * or runs when health falls under it (1–19).
    */
   stance?: 'fight' | 'flee';
+  /** fight enderman: the den (`minecraftEnderDenContract.ts`). */
+  den?: EnderDen;
   /** fight / attack shield_rush / fill: retreat health (integer 1–19; required for shield_rush / fill, at or below). */
   retreatHp?: number;
   /** portal: the frame's plane runs along x or z. */

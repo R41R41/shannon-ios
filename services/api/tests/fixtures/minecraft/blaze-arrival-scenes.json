@@ -1,0 +1,655 @@
+[
+ {
+  "name": "arrive-bridge",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "elapsedMinutes": 95,
+  "events": [
+   "橋の上に着いた（スポナーまで 3m）",
+   "mc_probe kind=camp: スポナー (9,66,5)、湧く: blaze。立てる足場（火の無い・スポナーから 3m 以内）: 橋の上 (6,66,5)・(7,66,5)。橋は幅 3、両側は溶岩の谷。"
+  ],
+  "expect": "橋の西の壁の角を遮蔽にして待ち、来た相手だけ短い act で打ち、角へ戻る。浮いた相手を追って橋を出ない。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 6.5,
+    "y": 66,
+    "z": 5.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "inside": "ネザー要塞の橋の上（両側は溶岩）",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 24
+    },
+    {
+     "name": "blaze_rod",
+     "count": 2
+    },
+    {
+     "name": "shield",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 12
+    },
+    {
+     "name": "iron_ingot",
+     "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "S スポナー (9,66,5) 東3m 湧く: blaze",
+    "N ネザー要塞 (6,66,5) 足元 レンガ",
+    "N 黒石レンガの壁の角 (1,66,5) 西 5m・橋の端"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "300m 南 (-39,70,23)"
+   },
+   "nearbyThreats": [
+    {
+     "id": 401,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 6.5,
+     "position": {
+      "x": 12,
+      "y": 69,
+      "z": 6
+     }
+    },
+    {
+     "id": 402,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 9.2,
+     "position": {
+      "x": 15,
+      "y": 72,
+      "z": 2
+     }
+    },
+    {
+     "id": 403,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 11.0,
+     "position": {
+      "x": 17,
+      "y": 68,
+      "z": 9
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "go",
+    "fight",
+    "attack",
+    "probe",
+    "place",
+    "equip"
+   ],
+   "noHand": [
+    "dig",
+    "mine"
+   ],
+   "match": [
+    "\"to\":\\{\"x\":[0-3](\\.5)?,"
+   ]
+  }
+ },
+ {
+  "name": "arrive-room",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "elapsedMinutes": 95,
+  "events": [
+   "部屋の入口に着いた（スポナーまで 4m）",
+   "mc_probe kind=camp: スポナー (9,66,5)、湧く: blaze。立てる足場（火の無い・スポナーから 3m 以内）: 部屋の床 (7,66,4)・(7,66,6)。部屋は 7×7 の閉じた石レンガの部屋で、入口は西の通路 1 つ（幅 2）。"
+  ],
+  "expect": "柱の陰を遮蔽にして待ち、来た相手だけ短い act で打ち、柱へ戻る。部屋の外へ追わない。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 5.5,
+    "y": 66,
+    "z": 5.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "inside": "ネザー要塞の部屋の中",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 24
+    },
+    {
+     "name": "blaze_rod",
+     "count": 2
+    },
+    {
+     "name": "shield",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 12
+    },
+    {
+     "name": "iron_ingot",
+     "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "S スポナー (9,66,5) 東4m 湧く: blaze",
+    "N 石レンガの柱 (5,66,3) 部屋の中",
+    "N 部屋の入口の通路 (3,66,5) 西 2m・幅 2・石レンガの側壁"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "300m 南 (-39,70,23)"
+   },
+   "nearbyThreats": [
+    {
+     "id": 411,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 3.8,
+     "position": {
+      "x": 9,
+      "y": 68,
+      "z": 6
+     }
+    },
+    {
+     "id": 412,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 5.2,
+     "position": {
+      "x": 10,
+      "y": 67,
+      "z": 3
+     }
+    },
+    {
+     "id": 413,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 7.0,
+     "position": {
+      "x": 12,
+      "y": 70,
+      "z": 7
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "go",
+    "fight",
+    "attack",
+    "probe",
+    "place",
+    "equip"
+   ],
+   "noHand": [
+    "dig",
+    "mine"
+   ],
+   "match": [
+    "\"to\":\\{\"x\":[0-4](\\.5)?,|\"z\":[2-4](\\.5)?\\}"
+   ]
+  }
+ },
+ {
+  "name": "hp12-bridge",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "elapsedMinutes": 99,
+  "events": [
+   "ブレイズの火の玉が当たった（体力 20→12）",
+   "stopIf hpBelow 12 が働いて止まった",
+   "mc_probe kind=camp: スポナー (9,66,5)、湧く: blaze。立てる足場（火の無い・スポナーから 3m 以内）: 橋の上 (6,66,5)・(7,66,5)。橋は幅 3、両側は溶岩の谷。"
+  ],
+  "expect": "体力 12: 戦いを続けず、角へ退いて回復（食べる・待つ）か盾を作る。追って打たない。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 6.5,
+    "y": 66,
+    "z": 5.5
+   },
+   "health": 12,
+   "food": 20,
+   "saturation": 5,
+   "inside": "ネザー要塞の橋の上（両側は溶岩）",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 24
+    },
+    {
+     "name": "blaze_rod",
+     "count": 3
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "oak_planks",
+     "count": 12
+    },
+    {
+     "name": "iron_ingot",
+     "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "S スポナー (9,66,5) 東3m 湧く: blaze",
+    "N 黒石レンガの壁の角 (1,66,5) 西 5m・橋の端"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "300m 南 (-39,70,23)"
+   },
+   "nearbyThreats": [
+    {
+     "id": 421,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 5.5,
+     "position": {
+      "x": 11,
+      "y": 68,
+      "z": 6
+     }
+    },
+    {
+     "id": 422,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 8.0,
+     "position": {
+      "x": 14,
+      "y": 71,
+      "z": 3
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "go",
+    "eat",
+    "equip",
+    "make",
+    "craft",
+    "place",
+    "probe",
+    "wait"
+   ],
+   "noMatch": [
+    "\"do\":\"fight\"",
+    "\"do\":\"attack\""
+   ]
+  }
+ },
+ {
+  "name": "many-room",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "elapsedMinutes": 104,
+  "events": [
+   "ブレイズを倒した（棒 4/7）",
+   "落とし物 blaze_rod×1",
+   "mc_probe kind=camp: スポナー (9,66,5)、湧く: blaze。立てる足場（火の無い・スポナーから 3m 以内）: 部屋の床 (7,66,4)・(7,66,6)。部屋は 7×7 の閉じた石レンガの部屋で、入口は西の通路 1 つ（幅 2）。",
+   "数を数えた: 部屋の中のブレイズ 6 体（16m 内）"
+  ],
+  "expect": "6 体が残る間は湧き場に立ち続けない。棒を拾って遠く（部屋の外・32m 以上）へ離れて待ち、数えて戻る。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 5.5,
+    "y": 66,
+    "z": 5.5
+   },
+   "health": 17,
+   "food": 20,
+   "saturation": 5,
+   "inside": "ネザー要塞の部屋の中",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 24
+    },
+    {
+     "name": "blaze_rod",
+     "count": 4
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "oak_planks",
+     "count": 12
+    },
+    {
+     "name": "iron_ingot",
+     "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "S スポナー (9,66,5) 東4m 湧く: blaze",
+    "N 石レンガの柱 (5,66,3) 部屋の中",
+    "N 部屋の入口の通路 (3,66,5) 西 2m・幅 2・石レンガの側壁"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "300m 南 (-39,70,23)"
+   },
+   "nearbyThreats": [
+    {
+     "id": 431,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 3.8,
+     "position": {
+      "x": 9,
+      "y": 68,
+      "z": 6
+     }
+    },
+    {
+     "id": 432,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 5.2,
+     "position": {
+      "x": 10,
+      "y": 67,
+      "z": 3
+     }
+    },
+    {
+     "id": 433,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 6.0,
+     "position": {
+      "x": 11,
+      "y": 70,
+      "z": 7
+     }
+    },
+    {
+     "id": 434,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 7.5,
+     "position": {
+      "x": 12,
+      "y": 69,
+      "z": 2
+     }
+    },
+    {
+     "id": 435,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 8.8,
+     "position": {
+      "x": 14,
+      "y": 71,
+      "z": 6
+     }
+    },
+    {
+     "id": 436,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 10.1,
+     "position": {
+      "x": 15,
+      "y": 68,
+      "z": 8
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "go",
+    "walk"
+   ],
+   "match": [
+    "\"x\":(-(2[4-9]|[3-9]\\d|\\d{3,})|(4[2-9]|[5-9]\\d|\\d{3,}))\\b|\"z\":(-(2[8-9]|[3-9]\\d|\\d{3,})|(3[8-9]|[4-9]\\d|\\d{3,}))\\b"
+   ]
+  },
+  "blaze": {
+   "minutes": 6,
+   "kills": 4
+  }
+ },
+ {
+  "name": "quiet-bridge",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "elapsedMinutes": 95,
+  "events": [
+   "橋の端の壁の角で 5 分待った",
+   "mc_probe kind=camp: スポナー (9,66,5)、湧く: blaze。立てる足場（火の無い・スポナーから 3m 以内）: 橋の上 (6,66,5)・(7,66,5)。橋は幅 3、両側は溶岩の谷。"
+  ],
+  "expect": "5 分で撃破 0: 数字と原因の行を読み、待つ・打つの続きを選び直す（離れる、位置を替える、など）。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 6.5,
+    "y": 66,
+    "z": 5.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "inside": "ネザー要塞の橋の上（両側は溶岩）",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 24
+    },
+    {
+     "name": "blaze_rod",
+     "count": 2
+    },
+    {
+     "name": "shield",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 12
+    },
+    {
+     "name": "iron_ingot",
+     "count": 1
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "S スポナー (9,66,5) 東3m 湧く: blaze",
+    "N ネザー要塞 (6,66,5) 足元 レンガ",
+    "N 黒石レンガの壁の角 (1,66,5) 西 5m・橋の端"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "300m 南 (-39,70,23)"
+   },
+   "nearbyThreats": [
+    {
+     "id": 401,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 6.5,
+     "position": {
+      "x": 12,
+      "y": 69,
+      "z": 6
+     }
+    },
+    {
+     "id": 402,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 9.2,
+     "position": {
+      "x": 15,
+      "y": 72,
+      "z": 2
+     }
+    },
+    {
+     "id": 403,
+     "name": "blaze",
+     "kind": "hostile",
+     "distance": 11.0,
+     "position": {
+      "x": 17,
+      "y": 68,
+      "z": 9
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "go",
+    "walk",
+    "wait",
+    "probe"
+   ]
+  },
+  "blaze": {
+   "minutes": 5,
+   "kills": 0
+  }
+ }
+]
