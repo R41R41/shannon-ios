@@ -1,0 +1,70 @@
+[
+ {
+  "name": "make-pickaxe-table-6m",
+  "goal": "エンドラを討伐して",
+  "current": "p3.2",
+  "elapsedMinutes": 40,
+  "expect": "鉄のツルハシ（鉄 3・棒 2）を作る。作業台は東 6m（作る手が届くのは 4.5m 以内）: 近づいて make。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 64,
+    "z": 200.5
+   },
+   "health": 20,
+   "food": 20,
+   "time": "昼",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_ingot",
+     "count": 3
+    },
+    {
+     "name": "stick",
+     "count": 2
+    },
+    {
+     "name": "cobblestone",
+     "count": 20
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "stone_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "stone_sword",
+     "count": 1
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [
+    "T 作業台 crafting_table (106,64,200) 東 6m"
+   ],
+   "utilities": {
+    "radius": 16,
+    "dim": "overworld",
+    "scanned": true,
+    "found": [
+     {
+      "block": "crafting_table",
+      "distance": 6.0
+     }
+    ]
+   },
+   "nearbyThreats": []
+  },
+  "events": [
+   "鉄を焼いた: 鉄の延べ棒 3 本",
+   "棒 2 本ができた"
+  ]
+ }
+]
