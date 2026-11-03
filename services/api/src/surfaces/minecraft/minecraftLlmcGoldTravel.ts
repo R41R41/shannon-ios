@@ -25,7 +25,8 @@ const distance = (a: Cell, b: Cell): number => Math.hypot(a.x - b.x, a.y - b.y, 
 /** The places for the way back in this dimension: what the body remembers (its coordinates come first) and the marks of the map. */
 export function backPlaces(world: Record<string, unknown>): Cell[] {
   const remembered = world.rememberedPlaces && typeof world.rememberedPlaces === 'object' ? Object.values(world.rememberedPlaces) : [];
-  const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter(line => typeof line === 'string' && !line.startsWith('[') && BACK_MARK.test(line));
+  const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : [])
+    .filter(line => typeof line === 'string' && !line.startsWith('[') && BACK_MARK.test(line));
   return [...remembered, ...marks].flatMap(parsed);
 }
 
