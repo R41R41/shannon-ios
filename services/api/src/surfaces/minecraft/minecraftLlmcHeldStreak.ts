@@ -2,7 +2,7 @@ import { orderedPlan, type PlanTree } from '@shannon/mind';
 import { blazeLack } from './minecraftLlmcDeadlyGates.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { predicateHolds, predicatesOf, type DoneFacts } from './minecraftPlanDone.js';
-import { treeQuestions } from './minecraftLlmcNode.js';
+import { DIMENSION_KINDS, treeQuestions } from './minecraftLlmcNode.js';
 
 /**
  * A gate that stops the same node over and over (the owner's d50, run59: the blaze gate stopped the rods three times; words alone moved the plan to
@@ -55,13 +55,18 @@ export function followHeld(taskId: string, tree: PlanTree, facts: DoneFacts | nu
   const predicates = predicatesOf(tree), questions = treeQuestions(tree);
   const open = (node: (typeof order)[number]) => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))
     && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts));
-  const at = order.indexOf(current), around = [...order.slice(at + 1), ...order.slice(0, at)];
+  const at = order.indexOf(current), before = order.slice(0, at).reverse(), after = order.slice(at + 1);
+  // The entry gates (the portal, the golden piece) are stopped by something earlier in the plan: look back first. The others (the blaze) look on.
+  const around = gate === 'portal' || gate === 'gold' ? [...before, ...after] : [...after, ...[...before].reverse()];
+  const elsewhere = (node: (typeof order)[number]) =>
+    Object.entries(DIMENSION_KINDS).some(([dimension, kinds]) => dimension !== facts.dimension && kinds.has(kindOf(node)));
   const blazeShut = blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
-  const leaf = around.find(node => open(node) && kindOf(node) !== kindOf(current) && !(kindOf(node) === 'blaze' && blazeShut));
+  const leaf = around.find(node => open(node) && kindOf(node) !== kindOf(current) && !elsewhere(node) && !(kindOf(node) === 'blaze' && blazeShut));
   if (!leaf) return null;
   window.outcomes = [];
   window.moved = { from: current.id, kind: gate };
-  const gateWords = gate === 'fight' ? 'ブレイズの関所' : `関所（${gate}）`;
+  const NAMES: Record<string, string> = { fight: 'ブレイズの関所', portal: 'ネザーへ入る関所', gold: '金の防具の関所' };
+  const gateWords = NAMES[gate] ?? `関所（${gate}）`;
   const put = `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた。`;
   const kept = `元の節 [${current.id}] ${current.title.slice(0, 24)} は順のまま残る（${liftWords(gate, facts)}）`;
   return { to: leaf.id, from: tree.current, acts: 0, words: `${gateWords}が ${HELD_LIMIT} 回止めた: ${put}${kept}` };

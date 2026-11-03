@@ -171,7 +171,7 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
 const OVERWORLD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor',
   'diamond', 'water', 'lava', 'obsidian', 'portal', 'stronghold', 'chest']);
 /** The kinds of the work that belongs to a dimension besides the overworld. */
-const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = {
+export const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = {
   the_nether: new Set<PlanKind>(['nether', 'fortress', 'blaze', 'pearl']),
   the_end: new Set<PlanKind>(['end', 'dragon']),
 };

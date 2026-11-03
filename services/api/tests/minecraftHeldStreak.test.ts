@@ -47,6 +47,16 @@ describe('followHeld', () => {
     noteHeldAct('t', { code: 'cannot_dig', kind: 'dig' });
     expect(followHeld('t', tree('p3.2'), facts())).toBeNull();
   });
+  it('the entry gate of the Nether looks back first, to the golden piece, and never puts the node on the Nether's work while she is in the overworld', () => {
+    const rows = (current: string) => v2tree({ revision: 1, current, nodes: [node('p6', 'portal', 0, ''), node('p6.1', 'other', 0, 'have:golden_boots', 'p6'),
+      node('p7', 'portal', 1, 'dim:the_nether'), node('p7.3', 'portal', 0, 'dim:the_nether', 'p7'), node('p9', 'fortress', 2, 'see:fortress'), node('p10', 'blaze', 3, 'have:blaze_rod>=7')] });
+    const overworld = doneFacts(frameWith([['cooked_beef', 20]], { dimension: 'overworld' }))!;
+    noteHeldAct('t', { code: 'gate_required', kind: 'portal' });
+    noteHeldAct('t', { code: 'gate_required', kind: 'portal' });
+    const moved = followHeld('t', rows('p7.3'), overworld)!;
+    expect(moved).toMatchObject({ to: 'p6.1', from: 'p7.3' });
+    expect(moved.words).toContain('ネザーへ入る関所が 2 回止めた');
+  });
   it('goes to nothing when no open leaf of another kind is left', () => {
     noteHeldAct('t', gate);
     noteHeldAct('t', gate);
