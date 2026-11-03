@@ -78,7 +78,7 @@ describe('the body\'s act catalog of the continue version (produced): the hands 
   it('names every kind of hand the head sends', () => {
     expect(hands.do.enum).toEqual(expect.arrayContaining(['go', 'obsidian', 'fight', 'mine', 'make', 'portal', 'smelt', 'vertical']));
   });
-  it('has 56 properties in the hand, the head's limit (the head's own hand has the same 56)', () => {
+  it('has 56 properties in the hand, the limit of the head (the own hand of the head has the same 56)', () => {
     expect(Object.keys(hands)).toHaveLength(56);
     expect(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties)).toHaveLength(56);
     expect(Object.keys(hands).length).toBeLessThanOrEqual(56);
