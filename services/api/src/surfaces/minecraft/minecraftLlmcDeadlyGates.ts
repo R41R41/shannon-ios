@@ -4,7 +4,7 @@ import { wornItems } from './minecraftItems.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
 import { BEFORE_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
-import { FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
  * The deadly gates, in `gateHold`'s form (the coordinator's list for 11/4, item 2; the owner: a death after the iron gear is out): the hand that
@@ -149,8 +149,10 @@ function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
   if (!piece && ingots < GOLD_FOR_BOOTS) return null;
   const at = hands.findIndex(raw => !GOLD_FIRST_HANDS.has(String(objectOf(raw)?.do ?? '')));
   if (at < 0) return null;
-  const means = piece ? `持っている ${piece} を equip で着る` : `金の延べ棒 ${ingots} 個でブーツを作って着る（${GOLD_FOR_BOOTS} 個で 1 足）`;
-  const line = `金の防具を着ていない間はピグリンが襲う。先に着る手以外は送らない: ${means}。着てからもう一度出す（どう着るかは自分で決める）`;
+  const means = piece ? `持っている ${piece} を equip で着る`
+    : `金の延べ棒 ${ingots} 個でブーツを作って着る（${GOLD_FOR_BOOTS} 個で 1 足）`;
+  const line = `金の防具を着ていない間はピグリンが襲う。先に着る手以外は送らない: ${means}。`
+    + '着てからもう一度出す（どう着るかは自分で決める）';
   return { hand: at + 1, kind: 'gold', line };
 }
 
@@ -164,7 +166,26 @@ export function deadlyGateHold(input: unknown, frame: BodyObservation | null): D
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
     return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${OTHER_STAGE}` } : null;
   }
+  const goldGate = facts.dimension === 'overworld' ? goldAtPortalHold(input, frame, facts) : null;
+  if (goldGate) return goldGate;
   const at = facts.dimension === 'overworld' ? portalCellHand(input, frame, 'e') : -1;
   const lack = at >= 0 ? lackOfTable(facts, BEFORE_END) : null;
   return lack ? { hand: at + 1, kind: 'walk', line: `エンドへ入る手は送らない。${lack}。${AGAIN}` } : null;
+}
+
+/**
+ * The hand that enters the Nether (the portal hand, or a go or a walk into a lit portal cell) is held while no golden piece is worn: the piglins
+ * turn on a body without one (run59, 11/3 14:15, dead to a piglin; the boots were a goal in the table and were never made). The line says what
+ * is in the pack toward it.
+ */
+function goldAtPortalHold(input: unknown, frame: BodyObservation | null, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  const portal = enteringHand(hands), at = portal >= 0 ? portal : portalCellHand(input, frame);
+  if (at < 0 || wornItems(facts.world.worn).some(name => GOLD_ARMOUR.test(name))) return null;
+  const piece = [...facts.counts].find(([name, count]) => GOLD_ARMOUR.test(name) && count > 0)?.[0];
+  const ingots = facts.counts.get('gold_ingot') ?? 0, raw = facts.counts.get('raw_gold') ?? 0;
+  const have = piece ? `持っている ${piece} を equip で着る`
+    : `金の延べ棒 ${ingots} 個・生の金 ${raw} 個（ブーツは延べ棒 ${GOLD_FOR_BOOTS} 個。生の金はかまどで焼く）`;
+  const line = `ネザーへ入る手は送らない。金の防具を 1 つ着ていない（ピグリンが襲う）: ${have}。${AGAIN}`;
+  return { hand: at + 1, kind: 'portal', line };
 }

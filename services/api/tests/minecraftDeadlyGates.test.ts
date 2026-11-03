@@ -96,3 +96,26 @@ describe('work with almost no health', () => {
     }
   });
 });
+
+describe('the golden piece against the piglins (run59, 14:15: dead in the Nether to a piglin with none worn)', () => {
+  const portalHand = { hands: [{ do: 'portal', enter: true }] };
+  const overworld = (items: Array<[string, number]>, worn = '') => frame(items, { dimension: 'overworld', worn });
+  const nether = (items: Array<[string, number]>, worn = '') => frame(items, { dimension: 'the_nether', worn });
+  it('holds the hand that enters the Nether while no golden piece is worn, and says what is in the pack toward it', () => {
+    const held = deadlyGateHold(portalHand, overworld([['gold_ingot', 1], ['raw_gold', 2]]));
+    expect(held).toMatchObject({ hand: 1, kind: 'portal' });
+    expect(held!.line).toContain('金の防具を 1 つ着ていない（ピグリンが襲う）');
+    expect(held!.line).toContain('金の延べ棒 1 個・生の金 2 個');
+    expect(deadlyGateHold(portalHand, overworld([['golden_boots', 1]]))!.line).toContain('持っている golden_boots を equip で着る');
+    expect(deadlyGateHold(portalHand, overworld([['golden_boots', 1]], '足: golden_boots(残り65/65)')))?.toBeNull();
+    expect(deadlyGateHold({ hands: [{ do: 'eat', item: 'cooked_beef' }] }, overworld([]))).toBeNull();
+  });
+  it('in the Nether holds what is not the putting on, making, eating or defence, only when the means are in the pack', () => {
+    const work = { hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'go', to: { x: 5, y: 70, z: 5 } }] };
+    expect(deadlyGateHold(work, nether([['gold_ingot', 4]]))).toMatchObject({ hand: 2, kind: 'gold' });
+    expect(deadlyGateHold(work, nether([['golden_helmet', 1]]))!.line).toContain('equip で着る');
+    expect(deadlyGateHold(work, nether([['gold_ingot', 1]]))).toBeNull();
+    expect(deadlyGateHold(work, nether([['gold_ingot', 4]], '足: golden_boots(残り65/65)'))).toBeNull();
+    expect(deadlyGateHold({ hands: [{ do: 'make', item: 'golden_boots' }, { do: 'equip', item: 'golden_boots' }] }, nether([['gold_ingot', 4]]))).toBeNull();
+  });
+});
