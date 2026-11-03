@@ -216,15 +216,23 @@ function approachOf(raw: unknown): EndDragonApproach | undefined {
   return { strike, stage, retreat, ...(basin ? { basin } : {}), ...(wait?.length ? { wait } : {}) };
 }
 
+/**
+ * The approach as the phase allows: all of it while she sits (phases 5 to 7); in the landing and the take-off (3, 4) the waiting cells only, since a
+ * stale strike, stage, retreat or basin there is not read; none otherwise.
+ */
+function approachInPhase(phase: number | null, raw: unknown): EndDragonApproach | undefined {
+  if (phase === null || phase < 3 || phase > 7) return undefined;
+  const read = approachOf(raw);
+  if (phase >= 5) return read;
+  return read?.wait?.length ? { strike: [], stage: [], retreat: [], wait: read.wait } : undefined;
+}
+
 function dragonOf(raw: unknown): EndDragon | null {
   const item = rec(raw);
   if (!item) return null;
   const phase = num(item.phase);
   const windows = windowsOf(item.windows);
-  const sitting = phase !== null && [5, 6, 7].includes(phase), landing = phase === 3 || phase === 4;
-  const read = sitting || landing ? approachOf(item.approach) : undefined;
-  // Landing and take-off carry the waiting cells only; a stale strike, stage, retreat or basin there is not read.
-  const approach = landing ? (read?.wait?.length ? { strike: [], stage: [], retreat: [], wait: read.wait } : undefined) : read;
+  const approach = approachInPhase(phase, item.approach);
   return { id: num(item.id), health: num(item.health), phase: phase !== null && Number.isInteger(phase) && phase >= 0 && phase <= 10 ? phase : null,
     phaseName: typeof item.phaseName === 'string' ? item.phaseName : null, phaseFor: num(item.phaseFor), perched: item.perched === true,
     position: point(item.position), headPosition: point(item.headPosition), distance: num(item.distance),
