@@ -62,3 +62,20 @@ describe('the End', () => {
     expect(deadlyGateHold({ hands: [{ do: 'walk', to: { x: 1, y: 70, z: 0 } }] }, overworld([]))).toBeNull();
   });
 });
+
+describe('mining with almost no health', () => {
+  const mine = { hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'mine', block: 'iron_ore', count: 3 }] };
+  const overworld = (health: number, world: Record<string, unknown> = {}) => frame([['cooked_beef', 4]], { dimension: 'overworld', health, food: 12, ...world });
+  it('holds the mine hand under 8 health when nothing hostile is near, and says how health comes back', () => {
+    const held = deadlyGateHold(mine, overworld(5.7));
+    expect(held).toMatchObject({ hand: 2, kind: 'mine' });
+    expect(held!.line).toContain('体力が 8 を切っている間は掘る手を送らない');
+    expect(held!.line).toContain('どう回復するかは自分で決める');
+    expect(heldOfFrame(mine, overworld(5.7), 'lh')).toMatchObject({ hand: 2, code: 'gate_required' });
+  });
+  it('lets it go at 8 or more, with an enemy within 8 m (the fight or the flight is the decision's), or with no mine hand', () => {
+    expect(deadlyGateHold(mine, overworld(8))).toBeNull();
+    expect(deadlyGateHold(mine, overworld(5.7, { threats: ['#9 skeleton 6.0m (1,2,3)'] }))).toBeNull();
+    expect(deadlyGateHold({ hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'wait', seconds: 5 }] }, overworld(5.7))).toBeNull();
+  });
+});

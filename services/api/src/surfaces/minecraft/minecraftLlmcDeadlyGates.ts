@@ -3,7 +3,7 @@ import { foodPointsWords } from './minecraftFoodWords.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
 import { BEFORE_END } from './minecraftLlmcPrepRules.js';
-import { lackOfTable, readinessOf } from './minecraftLlmcReadiness.js';
+import { lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
  * The deadly gates, in `gateHold`'s form (the coordinator's list for 11/4, item 2; the owner: a death after the iron gear is out): the hand that
@@ -92,10 +92,31 @@ function blazeEntryHand(input: unknown, facts: Facts): number {
   return fight >= 0 ? fight : nearSpawnerHand(hands, facts.world);
 }
 
+const LOW_HEALTH = 8;
+const NEAR_HOSTILE_METERS = 8;
+
+/**
+ * Mining with almost no health (the isolated lab of 11/3: `eat` and `mine iron_ore` at 5.7, a skeleton came to a metre, and the body dropped the
+ * `stopIf hpBelow 7` as already true): a `mine` hand is held below `LOW_HEALTH` while nothing hostile is within `NEAR_HOSTILE_METERS`. With an enemy
+ * near, the hands that fight or flee are the decision's; eating comes first and a meal does not heal by itself.
+ */
+function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  if (!Array.isArray(hands) || facts.health === null || facts.health >= LOW_HEALTH) return null;
+  if (liveLines(facts.world).some(line => Number(/^#\d+ \S+ ([\d.]+)m/u.exec(line)?.[1] ?? Infinity) <= NEAR_HOSTILE_METERS)) return null;
+  const at = hands.findIndex(raw => objectOf(raw)?.do === 'mine');
+  if (at < 0) return null;
+  const back = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts) ?? `体力 ${facts.health}/20`;
+  const line = `体力が ${LOW_HEALTH} を切っている間は掘る手を送らない。${back}。回復してからもう一度出す（どう回復するかは自分で決める）`;
+  return { hand: at + 1, kind: 'mine', line };
+}
+
 /** The hold of the deadly gate the act goes into, or null (nothing held). */
 export function deadlyGateHold(input: unknown, frame: BodyObservation | null): DeadlyHold | null {
   const facts = readinessOf(frame);
   if (!facts) return null;
+  const weak = lowHealthHold(input, facts);
+  if (weak) return weak;
   if (facts.dimension === 'the_nether') {
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
     return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}` } : null;
