@@ -1,8 +1,9 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { createEyeLedger, type EyeLedger } from './minecraftEyeLedger.js';
-import { deathLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
+import { crystalLine, deathLine, dragonApproachLine, dragonLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
+import { pearlLine } from './minecraftPearlFacts.js';
 
 /**
  * What a task that goes for the dragon keeps and says of the way after the Nether, as facts for the live state (one object a task, made
@@ -19,7 +20,7 @@ export interface EndgameLines {
   short: string[];
 }
 const NONE: EndgameLines = { lines: [], short: [] };
-const FIGHT_HEADS = ['竜:', 'エンドクリスタル:', '竜の息の雲:', '火の玉:'];
+const HAZARD_HEADS = ['竜の息の雲:', '火の玉:'];
 
 const worldOf = (observation: BodyObservation | null): Record<string, unknown> | null => {
   const world = observation?.state.world;
@@ -30,11 +31,14 @@ const some = (line: string | null): string[] => line ? [line] : [];
 /** The lines of one decision from the frame and the ledger's lines (pure). */
 function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[]): EndgameLines {
   const fight = endFightLines(end);
-  const frames = some(frameLine(world, carried(facts.counts, 'ender_eye')));
+  const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
+  const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
   const death = some(deathLine(world));
   const places = some(placeLine(world));
-  const urgent = fight.filter(line => FIGHT_HEADS.some(head => line.startsWith(head)));
-  return { lines: [...fight, ...eyeLines, ...frames, ...death, ...places], short: [...urgent, ...frames, ...death] };
+  const pearls = some(pearlLine(facts.counts, facts.dimension));
+  const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
+    ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true))];
+  return { lines: [...fight, ...eyeLines, ...pearls, ...frames, ...death, ...places], short: [...urgent, ...frames, ...death] };
 }
 
 /** The ledger's lines while the stronghold is still to be found: in the overworld, before the portal room's frames are in view. */

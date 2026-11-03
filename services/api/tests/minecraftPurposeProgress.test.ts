@@ -1,6 +1,7 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { planFromSeeds } from '@shannon/mind';
-import { purposeEvidence, travelEvidence, lookTravelEvidence, observedWait, createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
+import { readFileSync } from 'node:fs';
+import { lookPurpose, purposeEvidence, travelEvidence, lookTravelEvidence, observedWait, createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
 import { forgetStalls, noteProgress, noteRan, stallsCheckpoint, restoreStalls } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 afterEach(forgetStalls);
@@ -98,4 +99,19 @@ it('run 59 hold 1: a go cut by its time after 120 s of digging toward its goal c
   expect(noteProgress('stuck', look(null, go, at(157, 56, 55)), 121_000)?.kind).toBe('node_stalled');
   noteProgress('unseen', look(null, null, at(157, 56, 55)), 0);
   expect(noteProgress('unseen', look(null, go, at(136, 37, 74)), 121_000)?.kind).toBe('node_stalled');
+});
+
+describe('the held run\'s look counts the End fight as progress, as the unattended watch does (the coordinator, 2026-11-03)', () => {
+  const frameOf = (fight: object) => ({ connected: true, state: { world: { dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: [], ...fight } }, facts: {}, bodyId: 'b', sequence: 1,
+    stateAt: new Date(0).toISOString() }) as unknown as Parameters<typeof lookPurpose>[1];
+  it('adds the damage done to the dragon and the crystals down to the evidence of the look, with nothing when the body says nothing of the fight', () => {
+    const fought = lookPurpose(undefined, frameOf({ crystals: { remaining: 4 }, dragon: { health: 150 } }), null, null);
+    expect(fought).toMatchObject({ 'crystals:down': 6, 'dragon:damage': 50 });
+    expect(lookPurpose(undefined, frameOf({}), null, null)).not.toHaveProperty('crystals:down');
+    expect(lookPurpose(undefined, null, null, null)).toEqual({});
+  });
+  it('is read by the held look of the step\'s ports, where the unattended watch has it too', () => {
+    const source = readFileSync(new URL('../src/wiring/minecraftLlmcWiring.ts', import.meta.url), 'utf8');
+    expect(source).toContain('purpose: lookPurpose(node, frame, running, ended)');
+  });
 });

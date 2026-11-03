@@ -6,7 +6,7 @@ import { acquired, doneFacts } from '../src/surfaces/minecraft/minecraftConditio
 import { doneStatusWords, nodesSeenDone, parseDoneWhen, predicateHolds } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { framesOf, marksOf, seenMarks } from '../src/surfaces/minecraft/minecraftSeenMarks.js';
 import { crystalsLeft, endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { breathLine, crystalLine, deathLine, dragonLine, endFightLines, fireballLine, frameLine, perchLine, placeLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { breathLine, crystalLine, deathLine, dragonLine, endFightLines, fireballLine, frameLine, perchLine, placeLine, shortOfEyes } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEyeLedger, flightOf } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 
@@ -151,6 +151,15 @@ describe('facts of the way to the dragon', () => {
     expect(placeLine(world)).toBe('控え（体の記憶、今いる次元）: ポータル 34m 北東 (12,63,-40) ↔nether(1,70,-5)・リスポーン地点 120m 北 (0,64,-120) respawn');
     expect(frameLine({}, 5)).toBeNull();
   });
+
+  it('says what the missing eyes take and what is to be brought from the Nether, in numbers', () => {
+    const world = { mapLandmarks: ['Q エンドポータルの枠 (10,30,12) 南10m・下2 ×12 アイ入り 3'] };
+    // 9 to put, 5 held: 4 short; from 6 pearls and 2 powders (no rod): 2 can be made, so 1 rod is to be brought
+    expect(frameLine(world, 5, { pearls: 6, powder: 2, rods: 0 })).toContain('作るには パール 4・粉 4（ロッド 2 本分）。手持ち パール 6・粉 2・ロッド 0 から作れるのは 2 個。ネザーで取る分: パール 0 個・ロッド 1 本');
+    expect(shortOfEyes(4, { pearls: 4, powder: 4, rods: 0 })).toContain('（手持ちで足りる）');
+    expect(shortOfEyes(4, { pearls: 0, powder: 0, rods: 0 })).toContain('ネザーで取る分: パール 4 個・ロッド 2 本');
+    expect(frameLine(world, 9, { pearls: 0, powder: 0, rods: 0 })).not.toContain('足りない');
+  });
 });
 
 /**
@@ -254,7 +263,7 @@ describe('the ledger of the thrown eyes', () => {
     expect(ledger.throws()).toHaveLength(1);
     ledger.note('c', eye(9100, 40, { down: true }), 'overworld', 20_000);
     expect(ledger.lines({ x: 9100, z: 40 }, 21_000).join('\n')).toContain('真下へ沈んだ');
-    ledger.note('d', eye(9100, 60), 'overworld', 46 * 60_000);
+    ledger.note('d', eye(9100, 60), 'overworld', 4 * 3_600_000 + 60_000);
     expect(ledger.throws().map(item => item.id.split(':')[0])).toEqual(['d']);
   });
 
@@ -263,12 +272,25 @@ describe('the ledger of the thrown eyes', () => {
     ledger.note('a', eye(0, 0), 'overworld', 1000);
     ledger.note('b', eye(800, 0), 'overworld', 2000);
     expect(ledger.fix(3000)).not.toBeNull();
-    const later = 2000 + 46 * 60_000;
+    const later = 2000 + 4 * 3_600_000 + 60_000;
     expect(ledger.fix(later)).toBeNull();
     expect(ledger.throws(later)).toEqual([]);
     expect(ledger.lines({ x: 0, z: 0 }, later)).toEqual([]);
     expect(createEyeLedger(ledger.checkpoint().minecraftEyes).lines({ x: 0, z: 0 }, later)).toEqual([]);
     expect(createEyeLedger(ledger.checkpoint().minecraftEyes).fix(3000)).toEqual(ledger.fix(3000));
+  });
+
+  it('keeps a throw through the whole run (the stronghold does not move), and notes a flight when no frame is there', () => {
+    const ledger = createEyeLedger(null);
+    expect(ledger.note('a', eye(0, 0), null, 1000)).toBe(true);
+    ledger.note('b', eye(800, 0), 'overworld', 2000);
+    expect(ledger.fix(2000 + 3 * 3_600_000)).not.toBeNull();
+    // Back after 60 minutes, from the checkpoint: the same lines (the point and the next place to throw from).
+    const restored = createEyeLedger(ledger.checkpoint().minecraftEyes);
+    const hour = 2000 + 60 * 60_000;
+    expect(restored.lines({ x: 800, z: 0 }, hour)).toEqual(ledger.lines({ x: 800, z: 0 }, hour));
+    expect(restored.lines({ x: 800, z: 0 }, hour).join('\n')).toContain('交点');
+    expect(ledger.note('c', eye(0, 0), 'the_end', 3000)).toBe(false);
   });
 });
 
@@ -338,7 +360,7 @@ describe('the endgame of a task', () => {
     const inRoom = { ...world, mapLandmarks: ['Q エンドポータルの枠 (10,30,12) 南10m ×12 アイ入り 2'] };
     const room = restored.lines(frame(inRoom), true);
     expect(room.lines.join('\n')).not.toContain('目玉の帳簿');
-    expect(room.lines.join('\n')).toContain('あと 10 個はめる・手持ちのアイ 9 個（1 個足りない）');
+    expect(room.lines.join('\n')).toContain('あと 10 個はめる・手持ちのアイ 9 個（1 個足りない: 作るには');
     expect(room.short.join('\n')).toContain('ポータルの枠');
     expect(restored.checkpoint().minecraftEyes.throws).toEqual([]);
   });

@@ -1,5 +1,5 @@
 import type { CutBy, Handover, ItemOutcome, Progress } from '../../contracts/continueContract.js';
-import { readActResult, type ActHandLine, type ActResult } from '../../contracts/minecraftActContract.js';
+import { readActResult, type ActHandLine, type ActResult, type RushCode, type ShieldRushResult } from '../../contracts/minecraftActContract.js';
 
 /**
  * The words of a result that the contract's two axes make possible (continue contract 1 and 2; chapter 8's 再開):
@@ -19,6 +19,56 @@ const UNIT_WORDS: Readonly<Record<Progress['unit'], string>> = { step: '段', bl
 /** A number to one decimal without a trailing `.0` (35.9, 27.5, 10). */
 const num = (value: number): string => String(Math.round(value * 10) / 10);
 const at = (cell: { x: number; y: number; z: number }) => cell && typeof cell === 'object' ? `(${cell.x},${cell.y},${cell.z})` : String(cell);
+
+/** Closed body facts, never a prescription for the next hand. */
+export const SHIELD_RUSH_CODE_WORDS: Readonly<Record<RushCode, string>> = {
+  TARGET_LOST: '相手を見失った',
+  HEIGHT_UNREACHABLE: '高さの差で届かなかった',
+  NO_ATTACK_WINDOW: '打てる機会が無かった',
+  CROSSFIRE: '複数方向から射撃を受けた',
+  SHIELD_LOW: '盾の耐久の残りが下限以下になった',
+  RETREAT_BLOCKED: '退避先へ戻れなかった',
+  PICKUP_UNSAFE: '安全に拾えなかった',
+  TIME_LIMIT: '秒数の上限に達した',
+  REFLEX: '体の反射が手を止めた',
+  DEAD: '死んだ',
+};
+
+type RushMeasurements = Partial<ShieldRushResult>;
+type RushNumberKey = 'hpMin' | 'hpEnd' | 'hits' | 'rodsDelta' | 'elapsedMs';
+const known = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const rushNumber = (label: (value: number) => string, key: RushNumberKey) => (p: RushMeasurements): string | null => {
+  const value = p[key];
+  return known(value) ? label(value) : null;
+};
+const RUSH_FACTS: ReadonlyArray<(p: RushMeasurements) => string | null> = [
+  p => known(p.shieldBefore) && known(p.shieldAfter) ? `盾 ${num(p.shieldBefore)}→${num(p.shieldAfter)}` : null,
+  p => known(p.shieldBefore) && !known(p.shieldAfter) ? `盾の開始時 ${num(p.shieldBefore)}` : null,
+  p => known(p.shieldAfter) && !known(p.shieldBefore) ? `盾の終了時 ${num(p.shieldAfter)}` : null,
+  rushNumber(value => `体力最低 ${num(value)}`, 'hpMin'),
+  rushNumber(value => `終了体力 ${num(value)}`, 'hpEnd'),
+  rushNumber(value => `${num(value)} 回打った`, 'hits'),
+  rushNumber(value => `ロッド増減 ${value >= 0 ? '+' : ''}${num(value)}`, 'rodsDelta'),
+  rushNumber(value => `経過 ${num(value)} ms`, 'elapsedMs'),
+  p => p.at && [p.at.x, p.at.y, p.at.z].every(known) ? `終了地点 ${at(p.at)}` : null,
+  p => typeof p.safe === 'boolean' ? (p.safe ? '終了地点は安全' : '終了地点の安全は未確認') : null,
+];
+const rushFacts = (p: RushMeasurements): string[] => RUSH_FACTS.flatMap(fact => fact(p) ?? []);
+
+/** The body's structured rush result only; the usual line status/code/progress keep their meanings. */
+export function shieldRushWords(line: ActHandLine): string[] {
+  const rush = line.shieldRush;
+  if (line.do !== 'attack' || !rush) return [];
+  const code = rush.code && Object.hasOwn(SHIELD_RUSH_CODE_WORDS, rush.code) ? rush.code : null;
+  const target = /#\d+\b/u.exec(line.line)?.[0];
+  const death = rush.status === 'killed' || rush.targetDead === true ? '相手の死を観測した'
+    : rush.targetDead === false ? '相手の死は観測していない' : '相手の生死は不明';
+  const first = `shield_rush${target ? ` ${target}` : ''}: ${rush.status}${rush.code ? `（${rush.code}）` : ''}`
+    + `${code ? ` ${SHIELD_RUSH_CODE_WORDS[code]}` : ''}・${death}`;
+  const facts = rushFacts(rush);
+  return [first, ...(facts.length ? [facts.join('・')] : []),
+    ...(Array.isArray(rush.pendingDrops) && rush.pendingDrops.length ? [`拾い残し ${rush.pendingDrops.length} 個`] : [])];
+}
 
 /** The last path search of a go, as the model reads it: found, partial, timed out (with the cells round the goal
  * that nothing can pass), none. */
@@ -124,6 +174,8 @@ export function verticalStopWords(line: ActHandLine): string {
 /** The fact lines of a hand: only what its two axes add to the line the body wrote (a plain done or a plain
  * failure adds none). */
 export function handFacts(line: ActHandLine): string[] {
+  const rush = shieldRushWords(line);
+  if (rush.length) return rush.map(text => `${FACT}${text}`);
   const out: string[] = [];
   const cutBy = line.cutBy ? CUT_WORDS[line.cutBy] : '';
   const noteGoal = () => {

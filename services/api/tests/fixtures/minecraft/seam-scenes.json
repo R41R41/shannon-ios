@@ -1,0 +1,425 @@
+[
+ {
+  "name": "seam-rods-to-pearls",
+  "goal": "エンドラを討伐して",
+  "current": "p11.1",
+  "elapsedMinutes": 100,
+  "expect": "ロッド 7 が済み、パールの節へ。歪んだ森を探す／金での交換を比べる。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 105.5,
+    "y": 70,
+    "z": 120.5
+   },
+   "biome": "nether_wastes",
+   "health": 20,
+   "food": 18,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "netherrack",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "blaze_rod",
+     "count": 7
+    },
+    {
+     "name": "gold_ingot",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [
+    "N ネザー要塞 周囲",
+    "[overworld] P ネザーポータル (-39,70,23) 拠点"
+   ],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "events": [
+   "ブレイズロッド 7 本そろった（p10 済み）"
+  ],
+  "check": null
+ },
+ {
+  "name": "seam-pearls-to-eyes",
+  "goal": "エンドラを討伐して",
+  "current": "p12.1",
+  "elapsedMinutes": 122,
+  "expect": "粉を作り（blaze_powder）、アイを作る（ender_eye）。作業台は要らない。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": -90.5,
+    "y": 70,
+    "z": 60.5
+   },
+   "biome": "warped_forest",
+   "health": 20,
+   "food": 18,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "netherrack",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "blaze_rod",
+     "count": 7
+    },
+    {
+     "name": "warped_stem",
+     "count": 6
+    },
+    {
+     "name": "ender_pearl",
+     "count": 14
+    }
+   ],
+   "mapLandmarks": [
+    "[overworld] P ネザーポータル (-39,70,23) 拠点"
+   ],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "events": [
+   "エンダーパール 14 そろった（p11 済み）"
+  ],
+  "check": {
+   "anyHand": [
+    "craft"
+   ]
+  }
+ },
+ {
+  "name": "seam-eyes-to-return",
+  "goal": "エンドラを討伐して",
+  "current": "p13",
+  "elapsedMinutes": 126,
+  "expect": "ゲートへ戻る（控えのポータルの座標へ go/walk、道中の危険に注意）。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": -90.5,
+    "y": 70,
+    "z": 60.5
+   },
+   "biome": "warped_forest",
+   "health": 20,
+   "food": 18,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "netherrack",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "gold_ingot",
+     "count": 9
+    },
+    {
+     "name": "warped_stem",
+     "count": 6
+    },
+    {
+     "name": "ender_eye",
+     "count": 14
+    }
+   ],
+   "mapLandmarks": [
+    "[overworld] P ネザーポータル (-39,70,23) 拠点"
+   ],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "events": [
+   "エンダーアイ 14 個できた（p12 済み）"
+  ],
+  "check": {
+   "anyHand": [
+    "go",
+    "walk"
+   ]
+  }
+ },
+ {
+  "name": "seam-arrived-overworld",
+  "goal": "エンドラを討伐して",
+  "current": "p13",
+  "elapsedMinutes": 134,
+  "events": [
+   "オーバーワールドに戻った (-39,70,23)",
+   "アイ 14 個を持っている"
+  ],
+  "expect": "戻った（p13 済み）。点検 p14: ベッド 4・弓と矢・水バケツ・食料 80 に足りない物を集める。要塞へはその後。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": -39.5,
+    "y": 70,
+    "z": 23.5
+   },
+   "inside": "ストロングホールドの中",
+   "health": 20,
+   "food": 18,
+   "saturation": 5,
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "cobblestone",
+     "count": 20
+    },
+    {
+     "name": "cooked_beef",
+     "count": 18
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "ender_eye",
+     "count": 14
+    }
+   ],
+   "mapLandmarks": [
+    "Q エンドポータルの枠 (703,26,-1899) 北4m ×12 アイ入り 12",
+    "e エンドポータル (703,26,-1903) 北8m"
+   ],
+   "rememberedPlaces": {
+    "stronghold": "8m 北 (703,26,-1899)",
+    "respawn": "6m 南 (701,27,-1889) respawn"
+   }
+  }
+ },
+ {
+  "name": "seam-portal-open-node-behind",
+  "goal": "エンドラを討伐して",
+  "current": "p15.2",
+  "elapsedMinutes": 190,
+  "events": [
+   "エンドポータルが開いた",
+   "mc_probe kind=frames: 枠 12 個（アイ入り 12）"
+  ],
+  "expect": "ポータルは開いた（節は p15.2 のまま）。点検（積める物・水バケツ・ベッド 4・食料 80）がそろっていれば walk で入る。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 701.5,
+    "y": 27,
+    "z": -1895.5
+   },
+   "inside": "ストロングホールドの中",
+   "health": 20,
+   "food": 18,
+   "saturation": 5,
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 40
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "cooked_beef",
+     "count": 18
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    },
+    {
+     "name": "water_bucket",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [
+    "Q エンドポータルの枠 (703,26,-1899) 北4m ×12 アイ入り 12",
+    "e エンドポータル (703,26,-1903) 北8m"
+   ],
+   "rememberedPlaces": {
+    "stronghold": "8m 北 (703,26,-1899)",
+    "respawn": "6m 南 (701,27,-1889) respawn"
+   }
+  }
+ },
+ {
+  "name": "seam-in-end-node-behind",
+  "goal": "エンドラを討伐して",
+  "current": "p15.2",
+  "elapsedMinutes": 196,
+  "expect": "エンドに着いた（節は p15.2 のまま、実際の次元は the_end）。エンドの知識でクリスタル・足場へ。強いモデルが選ばれる。",
+  "world": {
+   "dimension": "the_end",
+   "position": {
+    "x": 38.5,
+    "y": 64,
+    "z": 10.5
+   },
+   "health": 20,
+   "food": 17,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 38
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "cooked_beef",
+     "count": 18
+    },
+    {
+     "name": "white_bed",
+     "count": 4
+    }
+   ],
+   "dragon": {
+    "id": 77,
+    "health": 200,
+    "phase": 0,
+    "phaseName": "holding_pattern",
+    "phaseFor": 12.4,
+    "perched": false,
+    "yaw": 0,
+    "headReach": null,
+    "strike": false,
+    "position": {
+     "x": -20,
+     "y": 90,
+     "z": 40
+    },
+    "distance": 70.5
+   },
+   "perch": {
+    "x": 0.5,
+    "y": 68,
+    "z": 0.5
+   },
+   "crystals": {
+    "remaining": 10,
+    "gone": 0,
+    "caged": 2,
+    "unseen": [],
+    "list": [
+     {
+      "id": 12,
+      "caged": false,
+      "position": {
+       "x": 42,
+       "y": 85,
+       "z": 3
+      },
+      "distance": 22
+     },
+     {
+      "id": 15,
+      "caged": true,
+      "position": {
+       "x": 30,
+       "y": 99,
+       "z": -25
+      },
+      "distance": 37
+     },
+     {
+      "id": 11,
+      "caged": false,
+      "position": {
+       "x": 8,
+       "y": 80,
+       "z": -40
+      },
+      "distance": 55
+     }
+    ]
+   },
+   "dragonBreath": [],
+   "dragonFireballs": 0
+  },
+  "events": [
+   "エンドへ移った (100,49,0)"
+  ]
+ }
+]

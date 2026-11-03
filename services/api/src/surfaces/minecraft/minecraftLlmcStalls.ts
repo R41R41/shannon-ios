@@ -3,6 +3,7 @@ import { deathBetween, type DeathCounter } from '../../contracts/continueContrac
 import { onRedecideNote } from '../../infra/decisionRecords/decisionRecordNotes.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { EXPLORE_KEYS, GAINS_KEPT, LIST_KEPT, TRAVEL_KEYS, readSavedStalls } from './minecraftLlmcStallsSaved.js';
+import { progressEvents, type ProgressHand } from './minecraftProgressEvents.js';
 
 /**
  * Amendment A-12 (owner's decision 2026-10-29: 「新しい版だけ・詰まったら止めて直す」): the stalls the head finds itself, beside the ones the body
@@ -57,6 +58,8 @@ export interface Stall {
   /** The command that made the stall, when sending it again is what a resume should do (same_spot_stops); absent: a
  * resume sends nothing. */
   command?: string;
+  /** node_stalled: the task's running time (ms) the node did not move on for; the stall record's seconds. */
+  idleMs?: number;
 }
 
 /** The hands that move the body or change the world around it: an act with one of them is not a wait. The others
@@ -246,7 +249,7 @@ export function noteProgress(taskId: string, snapshot: ProgressSnapshot, activeM
   if (snapshot.waitUntil !== undefined && activeMs < snapshot.waitUntil) return null;
   const idle = activeMs - state.node.since;
   if (idle < STALL.nodeMs) return null;
-  return found(state, { kind: 'node_stalled', key: node,
+  return found(state, { kind: 'node_stalled', key: node, idleMs: idle,
     why: ("節 " +
 `${snapshot.node}` +
 " が " +
@@ -279,19 +282,29 @@ function newGains(act: NonNullable<ReturnType<typeof readActResult>>, seen: Set<
   return gained;
 }
 /**
+ * A kill, the gate's frame or its ignition, an eye in the frame is progress the pack does not show: the node's window starts again from it
+ * (`progressEvents`). True when the act had one.
+ */
+function noteWork(state: TaskStalls, act: NonNullable<ReturnType<typeof readActResult>>,
+  ran: { hands: ReadonlyArray<ProgressHand>; activeMs?: number }): boolean {
+  const worked = progressEvents(ran.hands, act.lines).length > 0;
+  if (worked && state.node && ran.activeMs !== undefined) state.node.since = ran.activeMs;
+  return worked;
+}
+/**
  * An act of the task ended: its hands (`hands[].do`), the receipt's result (the ActResult JSON) and the command
  * that ran it. Finds `wait_loop` and `same_spot_stops`.
  * A hand that was not run (`not_run`, or its result unknown) is not a stop; a stop with no place of its own is
  * placed where the act ended (`ActResult.at`).
  */
-export function noteRan(taskId: string, ran: { hands: ReadonlyArray<{ do?: unknown } | null | undefined>; result: string | undefined;
+export function noteRan(taskId: string, ran: { hands: ReadonlyArray<ProgressHand>; result: string | undefined;
    command?: string; waitUntil?: number; activeMs?: number }): Stall | null {
   const state = taskOf(taskId);
   if (state.quiet) return null;
   // An act that did not run (taken off, dropped behind a stop, its result unknown) is neither a wait nor a move.
   const act = readActResult(ran.result);
   if (!act) return null;
-  const gained = newGains(act, state.gains);
+  const gained = [newGains(act, state.gains), noteWork(state, act, ran)].some(Boolean);
   if (act.lines.some(line => line.end !== 'not_run' && line.end !== 'unknown')) {
     const kinds = ran.hands.map(hand => String(hand?.do ?? ''));
     if (gained || kinds.some(kind => MOVING.has(kind))) state.waits = 0;

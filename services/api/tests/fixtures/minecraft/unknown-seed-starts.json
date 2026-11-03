@@ -1,0 +1,166 @@
+[
+ {
+  "name": "start-no-village",
+  "goal": "エンドラを討伐して",
+  "world": {
+   "dimension": "overworld",
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "heldItem": "なし",
+   "worn": "なし",
+   "inventory": [],
+   "nearbyThreats": [],
+   "time": "day",
+   "biome": "plains",
+   "position": {
+    "x": -412,
+    "y": 68,
+    "z": 1203
+   },
+   "mapLandmarks": [
+    "木 oak_log (-405,68,1195) 北東 10m ×6",
+    "石の露頭 stone (-440,70,1180) 北西 35m",
+    "牛 cow ×3 (-390,68,1220) 南東 25m"
+   ],
+   "scan": {
+    "trigger": "login",
+    "at": "2026-11-03T00:00:00Z",
+    "dimension": "overworld",
+    "reach": 160,
+    "text": "160m 内に村なし。地表の原木は北東に少し。石の露頭が北西にある。牛と羊がいる。鉄・ダイヤは地表から見えない。",
+    "rows": [
+     "W oak_log (-405,68,1195) 北東10m",
+     "W oak_log (-398,67,1190) 北東16m",
+     "S stone (-440,70,1180) 北西35m",
+     "C coal_ore (-441,69,1178) 北西36m",
+     "A cow (-390,68,1220) 南東25m",
+     "A sheep (-430,68,1250) 南西50m",
+     "H water (-370,62,1180) 北東50m"
+    ]
+   }
+  }
+ },
+ {
+  "name": "start-ocean",
+  "goal": "エンドラを討伐して",
+  "world": {
+   "dimension": "overworld",
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "heldItem": "なし",
+   "worn": "なし",
+   "inventory": [],
+   "nearbyThreats": [],
+   "time": "day",
+   "biome": "beach",
+   "position": {
+    "x": 15,
+    "y": 63,
+    "z": -880
+   },
+   "mapLandmarks": [
+    "海 water 東西に広がる",
+    "木 birch_log (20,66,-940) 北 55m ×4",
+    "砂浜 sand (10,63,-890) 北 10m"
+   ],
+   "scan": {
+    "trigger": "login",
+    "at": "2026-11-03T00:00:00Z",
+    "dimension": "overworld",
+    "reach": 160,
+    "text": "160m 内は大半が海。北の砂浜の奥（55m）に小さな森。村なし。石は海岸の崖に少し。牛はいない。",
+    "rows": [
+     "W birch_log (20,66,-940) 北55m",
+     "W oak_log (28,66,-948) 北64m",
+     "S stone (-30,70,-960) 北西85m",
+     "H water 海 全周",
+     "A salmon (5,62,-870) 南10m"
+    ]
+   }
+  }
+ },
+ {
+  "name": "start-snow",
+  "goal": "エンドラを討伐して",
+  "world": {
+   "dimension": "overworld",
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "heldItem": "なし",
+   "worn": "なし",
+   "inventory": [],
+   "nearbyThreats": [],
+   "time": "day",
+   "biome": "snowy_taiga",
+   "position": {
+    "x": 900,
+    "y": 70,
+    "z": -345
+   },
+   "mapLandmarks": [
+    "木 spruce_log (905,71,-350) 北東 7m ×10",
+    "氷 ice (880,62,-330) 南西 25m",
+    "ウサギ rabbit (915,70,-340) 東 15m"
+   ],
+   "scan": {
+    "trigger": "login",
+    "at": "2026-11-03T00:00:00Z",
+    "dimension": "overworld",
+    "reach": 160,
+    "text": "160m 内は雪のトウヒ林。村なし。水は凍っている。牛・羊なし、ウサギが数匹。石は雪の下に露頭が少し。",
+    "rows": [
+     "W spruce_log (905,71,-350) 北東7m",
+     "W spruce_log (910,72,-356) 北東14m",
+     "S stone (870,69,-360) 西30m",
+     "C coal_ore (871,68,-362) 西31m",
+     "A rabbit (915,70,-340) 東15m",
+     "H ice (880,62,-330) 南西25m"
+    ]
+   }
+  }
+ },
+ {
+  "name": "start-cave-mouth",
+  "goal": "エンドラを討伐して",
+  "world": {
+   "dimension": "overworld",
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "heldItem": "なし",
+   "worn": "なし",
+   "inventory": [],
+   "nearbyThreats": [],
+   "time": "day",
+   "biome": "stony_peaks",
+   "position": {
+    "x": -77,
+    "y": 52,
+    "z": 640
+   },
+   "mapLandmarks": [
+    "洞窟の入口 下へ続く (-77,50,642) 南 2m",
+    "石 stone 周囲",
+    "鉄 iron_ore (-84,44,650) 南西 12m",
+    "炭 coal_ore (-72,48,646) 南東 8m"
+   ],
+   "scan": {
+    "trigger": "login",
+    "at": "2026-11-03T00:00:00Z",
+    "dimension": "overworld",
+    "reach": 160,
+    "text": "160m 内に地表の原木なし。村なし。足元は岩山の洞窟の入口で、地下へ続く。石・炭・鉄が洞窟の壁に見える。動物なし。",
+    "rows": [
+     "S stone 周囲",
+     "C coal_ore (-72,48,646) 南東8m",
+     "I iron_ore (-84,44,650) 南西12m",
+     "V cave 洞窟の入口 (-77,50,642) 南2m",
+     "H water (-60,40,660) 南東25m 地下水"
+    ]
+   }
+  }
+ }
+]

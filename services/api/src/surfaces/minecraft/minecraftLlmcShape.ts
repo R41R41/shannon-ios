@@ -71,13 +71,17 @@ export function normalizeActInput(input: unknown): { input: unknown; fixes: stri
   if (!act) return { input, fixes: [] };
   const fixes: string[] = [];
   let spelled = false;
-  const out = applyFixes(act, ACT_FIXES, fixes, '');
+  const hands = Array.isArray(act.hands) ? act.hands : [act.hands];
+  const rush = hands.some(value => plainRecord(value)?.style === 'shield_rush');
+  const out = applyFixes(act, rush ? ACT_FIXES.filter(fix => fix.key !== 'accept') : ACT_FIXES, fixes, '');
   const stopIf = plainRecord(out.stopIf);
   if (stopIf) out.stopIf = applyFixes(stopIf, [listOf('blockChanged', isPos)], fixes, 'stopIf');
   if (Array.isArray(out.hands)) {
     out.hands = out.hands.map((value, index) => {
       const hand = plainRecord(value);
       if (!hand) return value;
+      // Rush permissions are checked exactly as written, including any extra fields.
+      if (hand.style === 'shield_rush') return hand;
       const fixed = { ...hand };
       // A-11 3: a plain variation of a hand word in `slot` (off-hand, main_hand…) is the body's word; not said (it is
 // a spelling, not a change of meaning).

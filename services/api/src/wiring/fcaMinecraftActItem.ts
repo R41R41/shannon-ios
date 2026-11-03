@@ -10,6 +10,8 @@ import { toolFailure, toolOk, type ToolResult } from '../mind/tools/toolRegistry
 import type { MinecraftFeelingPort } from '../mind/emotion/minecraftFeeling.js';
 import { conditionHolds, conditionText, conditionWords } from '../surfaces/minecraft/minecraftConditions.js';
 import { feetOf } from '../surfaces/minecraft/minecraftLlmc.js';
+import { dimensionOf } from '../surfaces/minecraft/minecraftControlState.js';
+import { reserveCondition, reserveStopIf } from '../surfaces/minecraft/minecraftLlmcReserve.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueue.js';
 import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
@@ -59,7 +61,17 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope), `uses` (kept with the
 // command, never sent to the body) and `keep`
   // (made into promises of the plan below, once the queue has the act).
-  const { pre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, ...rawArgs } = input;
+  const { pre: modelPre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, reserve: _reserve, ...rawArgs } = input;
+  // R3-1 (4): a reserve carries the head's safety defaults: its `pre` (safe, health, near here) and its `stopIf`
+  // (the body gets the stopIf in its arguments, the pre in the envelope).
+  function reserveDefaults() {
+    const reserving = input.reserve === true;
+    const feetNow = feetOf(parts.control.observe(parts.bodyId));
+    const pre = reserving ? reserveCondition(modelPre, feetNow, parts.frame ? dimensionOf(parts.frame) : null) : modelPre;
+    if (reserving) (rawArgs as { stopIf?: unknown }).stopIf = reserveStopIf(rawArgs.stopIf as ActInput['stopIf']);
+    return { reserving, pre };
+  }
+  const { reserving, pre } = reserveDefaults();
   // Run 47: a vertical hand that names no seconds gets the time its height needs (not the body's 60 s); the time
 // of the act follows it.
   const feet = feetOf(parts.control.observe(parts.bodyId));
@@ -76,7 +88,7 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const queueItemFields = (): Parameters<LlmcQueue['add']>[0] => ({ call: { id: call.operationId, name: call.name, input: call.input },
      operationId: call.operationId, input: timed,
     arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, current: parts.current ?? null,
-    why: String(input.why ?? ''), fixes: [], ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
+    why: String(input.why ?? ''), fixes: [], ...(reserving ? { reserve: true } : {}), ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
     maxMs: actMilliseconds(timed, feet) });
   const added = await queue.add(queueItemFields());
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });

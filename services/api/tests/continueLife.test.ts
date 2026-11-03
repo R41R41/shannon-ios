@@ -279,7 +279,7 @@ function queueRig(options: { headBoot?: string; applyLedger?: (input: any) => un
   let counter = 0;
   const spec = (extra: Record<string, unknown> = {}) => {
     counter += 1;
-    const input = { hands: [{ do: 'wait' as const, seconds: counter }], why: `[p1] 項目${counter}` };
+    const input = { hands: [{ do: 'wait' as const, seconds: counter }, { do: 'jump' as const }], why: `[p1] 項目${counter}` };
     return { call: { id: `c${counter}`, name: MC_ACT_TOOL, input }, operationId: `step:c${counter}`, input, arguments: input as unknown as Record<string, unknown>, skill: 'act',
       node: 'p1', why: input.why, fixes: [] as string[], maxMs: 20_000, ...extra };
   };

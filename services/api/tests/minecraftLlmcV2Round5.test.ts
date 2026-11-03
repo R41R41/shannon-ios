@@ -139,7 +139,7 @@ describe('the pack when it is full (run 46)', () => {
       ...Array.from({ length: 27 }, (_, index) => `junk_${index}×1`)];
     const lines = packLines(FULL36);
     expect(lines[0]).toBe('持ち物 満杯 36/36（空き 0 マス）');
-    expect(lines[1]).toBe(`満杯: ${FULL_COST}。drop で空けられる物: cobbled_deepslate×166（3 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）（cobbled_deepslate 1 スタックは柱と橋用に数えていない）`);
+    expect(lines[1]).toBe(`満杯: ${FULL_COST}。drop で空けられる物: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）（cobbled_deepslate 128 は柱と橋用に数えていない）`);
     expect(lines[1]).toContain('黒曜石');
     expect(packLines(Array.from({ length: 36 }, (_, index) => `junk_${index}×1`))[1]).toBe(`満杯: ${FULL_COST}。空けるのは drop`);
   });
@@ -195,7 +195,7 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     expect(preparationShortage({ ...parts, nowKinds: ['obsidian'] })).toContain('黒曜石の採掘に使えるツルハシ');
     expect(preparationShortage({ ...parts, food: 24 })).toContain('必須（ネザーに入る前に必ず）— 食料 24 点（目安 40）。欠けたまま進むと:');
     expect(preparationShortage({ ...parts, counts: owned([['stone_sword', 1]]) }))
-      .toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）・盾・鉄の兜・胸当て・脚・足場のブロックが無い');
+      .toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）・石以上のツルハシ（予備 2 本を含め 3 本）・盾・鉄の兜・胸当て・脚・足場のブロックが無い');
   });
   it('the check inside the Nether is as it was (the table, slabs, gold armour and food 100 before the fortress)', () => {
     const nether = { dimension: 'the_nether', counts: owned([['shield', 1]]), food: 48, nowKinds: ['fortress' as const] };

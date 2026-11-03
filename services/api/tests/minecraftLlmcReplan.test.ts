@@ -38,11 +38,11 @@ const stall = (kind: Stall['kind'] = 'node_stalled', key = 'p1'): Stall => ({ ki
 const tree = (): PlanTree => planFromSeeds([{ title: '木', kind: 'wood', doneWhen: 'have:log>=3' }, { title: '石', kind: 'stone_tools', doneWhen: 'have:stone_pickaxe' }])!;
 
 describe('the bounds of the plan made again', () => {
-  it('lets one through at first, then waits 10 minutes, allows 6 in an hour, 30 in a run and 3 for one node', () => {
+  it('lets one through at first, then waits 5 minutes, allows 6 in an hour, 30 in a run and 3 for one node', () => {
     expect(replanVerdict(empty, 'p1', 0)).toEqual({ ok: true });
     const one = withAttempt(empty, record(0));
-    expect(replanVerdict(one, 'p2', 5 * MIN)).toEqual({ ok: false, why: 'gap' });
-    expect(replanVerdict(one, 'p2', 10 * MIN)).toEqual({ ok: true });
+    expect(replanVerdict(one, 'p2', 5 * MIN - 1)).toEqual({ ok: false, why: 'gap' });
+    expect(replanVerdict(one, 'p2', 5 * MIN)).toEqual({ ok: true });
     let six = empty;
     for (let index = 0; index < REPLAN.perHour; index += 1) six = withAttempt(six, record(index * 10 * MIN, `n${index}`));
     expect(replanVerdict(six, 'p9', 50 * MIN + 10 * MIN - 1)).toEqual({ ok: false, why: 'hour' });
@@ -259,7 +259,8 @@ describe('the flow of one task', () => {
     expect(unreadable.flow.ledger().last[0]).toMatchObject({ outcome: 'refused' });
   });
 
-  it('waits 10 minutes between two, and tells the decision once when one node did not move after three new plans', async () => {
+  it('waits 5 minutes between two, and tells the decision once when one node did not move after three new plans', async () => {
+    const replanLines = (all: string[]) => all.filter(line => !line.includes('stall record'));
     let now = 0;
     const { flow, asked, lines } = make(async () => ({ ops: [], why: 'そのまま' }), { clock: () => now });
     for (let index = 0; index < REPLAN.perNode; index += 1) {
@@ -271,20 +272,20 @@ describe('the flow of one task', () => {
     flow.note(stall('node_stalled', 'p1'));
     await flow.run(signal);
     expect(asked).toHaveLength(3);
-    expect(lines.at(-1)).toContain('replan skipped task=flow node=p1 kind=node_stalled why=node');
+    expect(replanLines(lines).at(-1)).toContain('replan skipped task=flow node=p1 kind=node_stalled why=node');
     expect(pending('flow').some(fact => fact.key === 'replan_node:p1' && fact.text.includes('3 回立て直しても進まなかった'))).toBe(true);
     now += 1;
     flow.note(stall('node_stalled', 'p2'));
     flow.note(stall('node_stalled', 'p2'));
     await flow.run(signal);
-    expect(lines.at(-1)).toContain('replan task=flow node=p2');
+    expect(replanLines(lines).at(-1)).toContain('replan task=flow node=p2');
     const nearly = make(async () => ({ ops: [], why: '' }), { clock: () => 0 });
     nearly.flow.note(stall());
     await nearly.flow.run(signal);
     nearly.flow.note(stall('wait_loop', '3'));
     await nearly.flow.run(signal);
     expect(nearly.asked).toHaveLength(1);
-    expect(nearly.lines.at(-1)).toContain('why=gap');
+    expect(replanLines(nearly.lines).at(-1)).toContain('why=gap');
   });
 
   it('keeps a stall found at the end of a step for the next step, and one the gap holds back until the gap has passed', async () => {

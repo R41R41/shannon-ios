@@ -100,6 +100,14 @@ export interface FcaBodyQueue {
   dropWaiting(): number;
   /** Takes everything off, the running item stopped: the step is being stopped. */
   cancelAll(): void;
+  /**
+   * R3-1 (3): the step is to close now (a stall found, the plan's node changed to a stronger model's, the stretch's limit):
+   * the reserve items (the stand-ins the head put last) are
+   * taken off, the step decides no more and ends once the items that were decided have run out. Nothing else is cancelled (`cancelAll` is the stop).
+   */
+  closeStep?(reason: string): void;
+  /** Whether `closeStep` was called for this step's queue. */
+  closing?(): boolean;
 }
 export interface FcaBodyLifecycle {
   start(signal: AbortSignal): void;

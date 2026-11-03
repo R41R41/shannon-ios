@@ -28,7 +28,9 @@ export { LLMC_PROBE } from './minecraftLlmcProbeInput.js';
  * has come (the second notes its fact as a caution, `minecraftLlmcCaution.ts`), and the stopped hand it came from.
  */
 export interface Surprise { code: 'health' | 'oxygen' | 'fall' | 'repeat' | 'dig' | 'miss' | 'found'; line: string; probes: ProbeInput[];
-  nth?: number; hand?: { do: string; aim: ActPos | null; line: string } | null }
+  nth?: number; hand?: { do: string; aim: ActPos | null; line: string } | null;
+  /** Where she stood (the air's surprise: the same place again is counted). */
+  at?: ActPos }
 /** What the watch reads of a frame; r5: `items`, the dropped items near her, nearest first (a pickup's surprise looks at one). */
 export interface SurpriseFrame { health: number | null; oxygen: number | null; feet: ActPos | null; dimension: string | null; arrival: number | null;
   items?: ActPos[] }
@@ -181,11 +183,20 @@ export function createSurpriseWatch(taskId: string) {
         state.fired.set(key, (state.fired.get(key) ?? 0) + 1);
         foundOne[0]!.nth = nth(key);
       }
-      return [...bodySurprises(prev, frame, due), ...actSurprises(state.acts, fresh, frame, due, nth), ...foundOne];
+      const body = bodySurprises(prev, frame, due);
+      for (const air of body) if (air.code === 'oxygen' && air.at) air.nth = countHere(state.fired, 'oxygen', air.at);
+      return [...body, ...actSurprises(state.acts, fresh, frame, due, nth), ...foundOne];
     },
   };
 }
 type Due = (key: string, every: number) => boolean;
+/** How many times a surprise came within the same 8 m cell (this one included): the same place again is a fact, not a new alarm. */
+function countHere(fired: Map<string, number>, code: string, at: ActPos): number {
+  const key = `${code}@${Math.floor(at.x / 8)},${Math.floor(at.y / 8)},${Math.floor(at.z / 8)}`;
+  fired.set(key, (fired.get(key) ?? 0) + 1);
+  if (fired.size > 64) fired.delete(fired.keys().next().value as string);
+  return fired.get(key) ?? 1;
+}
 /** Health, a fall, air: from the frame now and the one the last decision read. */
 function bodySurprises(prev: SurpriseFrame | null, frame: SurpriseFrame, due: Due): Surprise[] {
   // The body arrived again (a death, a login) or crossed into another dimension: health and height are not this decision's to compare.
@@ -193,7 +204,7 @@ function bodySurprises(prev: SurpriseFrame | null, frame: SurpriseFrame, due: Du
   const feet = frame.feet;
   if (!feet) return [];
   const air = frame.oxygen !== null && frame.oxygen < 10 && due('oxygen', OXYGEN_COOLDOWN)
-    ? [{ code: 'oxygen' as const, line: `酸素 ${round1(frame.oxygen!)}（10 未満）`, probes: [column(feet, COLUMN_UP), around()] }] : [];
+    ? [{ code: 'oxygen' as const, line: `酸素 ${round1(frame.oxygen!)}（10 未満）`, probes: [column(feet, COLUMN_UP), around()], at: feet }] : [];
   return [...(comparable ? [...healthSurprise(prev, frame, feet), ...fallSurprise(prev, feet)] : []), ...air];
 }
 /** Health down 5 or more in one decision, or under 10 now. */

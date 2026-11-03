@@ -8,12 +8,18 @@ export const PLAN_TARGET_SCHEMA = { type: 'object', additionalProperties: false,
   item: { type: 'string', pattern: '^[a-z][a-z0-9_]{0,63}$' }, count: { type: 'integer', minimum: 1, maximum: 99999 } },
   description: 'この節で取得する物と数。材料や道具の節とは分ける。doneWhen のどの代替条件でもこの取得が必要' };
 
+/**
+ * The item a clause names is the target's when it is the same id, or the generic name the head's own conditions read it by (`carried`: `bed` is any
+ * `*_bed`): run59 task 1's first plan was thrown away whole for a node of target white_bed with doneWhen have:bed>=1.
+ */
+const sameItem = (target: string, clause: string): boolean => target === clause || target.endsWith(`_${clause}`);
+
 /** Every alternative must establish the explicit target. A title is never parsed into one. */
 export function targetConditionProblem(node: PlanNode): string | null {
   const target = node.target;
   if (!target) return null;
   const predicate = parseDoneWhen(node.doneWhen);
-  if (!predicate || predicate.some(clauses => !clauses.some(c => c.kind === 'have' && c.item === target.item && c.count >= target.count))) {
+  if (!predicate || predicate.some(clauses => !clauses.some(c => c.kind === 'have' && sameItem(target.item, c.item) && c.count >= target.count))) {
     return `${node.id}: target ${target.item}×${target.count} と doneWhen が不一致。各 | の枝に have:${target.item}>=${target.count} が必要（材料を持つだけでは完成品の取得ではない）`;
   }
   return null;

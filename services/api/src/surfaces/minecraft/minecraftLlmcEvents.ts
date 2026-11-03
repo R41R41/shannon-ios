@@ -1,11 +1,13 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
+import { MC_ACT_TOOL, readActResult } from '../../contracts/minecraftActContract.js';
 import { createFoodTrend, type FoodTrend } from './minecraftLlmcLive.js';
 import { urgentRange } from './minecraftLlmcUrgent.js';
 import { stopFactLines } from './minecraftLlmcFacts.js';
 import { sameSpotStops } from './minecraftLlmcStalls.js';
 import { nearThreats, THREAT_SIGHT, threatLine, walledOff, type NearThreat, type ThreatSight } from './minecraftLlmcThreat.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
+import { typedFailureAttemptsOf, typedFailureLines, type TypedFailureAttempt } from './minecraftLlmcTypedFailure.js';
+import { shieldRushWords } from './minecraftLlmcResultWords.js';
 
 export interface TaskEvents {
   lines: Array<{ seq: number; line: string }>;
@@ -27,6 +29,11 @@ export interface TaskEvents {
    * until the next decision shows them. */
   lastAt: number | null;
   stops: Array<string | (() => string)>;
+  /** Actual failed hands, bounded in this task; alternatives shown to the model are never recorded as attempts. */
+  typedFailures: TypedFailureAttempt[];
+  typedFailureCount: number;
+  /** Latest rush outcomes, including success and cuts, also shown in compressed decisions. */
+  shieldRushFacts: string[];
 }
 
 export const tasks = new Map<string, TaskEvents>();
@@ -47,6 +54,9 @@ export function eventsOf(taskId: string): TaskEvents {
       stopIf: false,
       lastAt: null,
       stops: [],
+      typedFailures: [],
+      typedFailureCount: 0,
+      shieldRushFacts: [],
     };
     tasks.set(taskId, state);
     if (tasks.size > 32) tasks.delete(tasks.keys().next().value as string);
@@ -214,6 +224,21 @@ export function createLlmcEvents(taskId: string, now: () => number = Date.now) {
     noteStops(resultJson: string | undefined) {
       for (const line of stopFactLines(resultJson, (at) => sameSpotStops(taskId, at))) state.stops.push(line);
       if (state.stops.length > 4) state.stops.splice(0, state.stops.length - 4);
+    },
+    /** A known act result, once at queue settlement. A success/other outcome breaks a consecutive failure run. */
+    noteFailures(resultJson: string | undefined, observation: BodyObservation | null, input: unknown) {
+      state.shieldRushFacts = (readActResult(resultJson)?.lines ?? []).map(shieldRushWords).filter(words => words.length).slice(-4).flat();
+      const attempts = typedFailureAttemptsOf(resultJson, observation, input);
+      state.typedFailures = attempts.length ? [...state.typedFailures, ...attempts].slice(-24) : [];
+      state.typedFailureCount = Math.min(attempts.length, 24);
+    },
+    /** Latest result's facts, also for urgent/compressed inputs; candidate freshness is checked at use time. */
+    failureFacts(observation: BodyObservation | null): string[] {
+      const start = state.typedFailures.length - state.typedFailureCount;
+      return [...state.shieldRushFacts, ...state.typedFailures.slice(start).slice(-4).flatMap((attempt, index, shown) => {
+        const before = state.typedFailures.length - shown.length + index;
+        return typedFailureLines(attempt, observation, state.typedFailures.slice(0, before));
+      })];
     },
     healthLost: () => healthLost,
     /** Why the last result makes the next step urgent, or null. */

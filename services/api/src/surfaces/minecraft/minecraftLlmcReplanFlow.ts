@@ -14,6 +14,7 @@ import {
   type ReplanRecord,
 } from './minecraftLlmcReplan.js';
 import { replanBrief, type BriefInput } from './minecraftLlmcReplanBrief.js';
+import { stallEscapedLine, stallRecordLine, type StallVitals } from './minecraftLlmcStallRecord.js';
 import { resumeStalls, type Stall } from './minecraftLlmcStalls.js';
 
 /**
@@ -45,6 +46,8 @@ export interface ReplanDeps {
   persist?(checkpoint: { minecraftReplans: ReplanLedger; minecraftReplanPending: Waiting | null }): boolean;
   /** The nodes an update names, as the plan it was checked against has them (`boundTo`): the update is taken only by a plan that still has them so. */
   bind?(update: PlanUpdate): Record<string, string>;
+  /** What the body is in now, for the stall record (`minecraftLlmcStallRecord.ts`). */
+  vitals?(): StallVitals;
   log(line: string): void;
 }
 
@@ -68,6 +71,8 @@ export function createReplanFlow(deps: ReplanDeps) {
   let pending: Waiting | null = readWaiting(deps.savedPending);
   /** The waiting stall the skipped line was said for (said once, not at every decision). */
   let told: Stall | null = null;
+  /** The newest stall record, kept until the body has got out of its node (`escaped`). */
+  let lastRecord: { node: string; outcome: string; at: number } | null = null;
   const say = (line: string): void => {
     try {
       deps.log(line);
@@ -77,6 +82,12 @@ export function createReplanFlow(deps: ReplanDeps) {
   };
   const record = (node: string, stall: Stall, outcome: ReplanRecord['outcome'], why: string): ReplanRecord =>
     ({ at: deps.clock(), node, kind: stall.kind, outcome, why });
+  const written = (stall: Stall, node: string, outcome: string, askMs: number, waitedMs: number): void => {
+    lastRecord = { node, outcome, at: deps.clock() };
+    say(stallRecordLine(deps.taskId, { kind: stall.kind, node, idleSeconds: stall.idleMs === undefined ? null : Math.round(stall.idleMs / 1000), outcome,
+      askMs, gapWaitMs: Math.max(0, waitedMs), nodeAsks: ledger.nodes[node] ?? 0, nodeCap: REPLAN.perNode,
+      vitals: deps.vitals?.() ?? { hp: null, hunger: null, dimension: null, enemies16: 0 } }));
+  };
   /** The ledger with the ask counted, kept at once when the deps keep it; false: it could not be kept, and nothing is asked (the stall waits). */
   const keep = (asked: ReplanLedger, stall: Stall): boolean => {
     if (!deps.persist) return true;
@@ -136,7 +147,10 @@ export function createReplanFlow(deps: ReplanDeps) {
       const node = parts.node ?? '-';
       const verdict = replanVerdict(ledger, node, deps.clock());
       if (!verdict.ok) {
-        if (told !== stall) say(`Shannon Minecraft replan skipped task=${deps.taskId} node=${node} kind=${stall.kind} why=${verdict.why}`);
+        if (told !== stall) {
+          say(`Shannon Minecraft replan skipped task=${deps.taskId} node=${node} kind=${stall.kind} why=${verdict.why}`);
+          written(stall, node, `skipped:${verdict.why}`, 0, deps.clock() - at);
+        }
         told = stall;
         if (verdict.why === 'run' || verdict.why === 'node') pending = null;
         if (verdict.why === 'node') offer(deps.taskId, `replan_node:${node}`, `節 ${node} は、計画を ${REPLAN.perNode} 回立て直しても進まなかった。続けるか、blocked にして別の道を計画するかを決める`);
@@ -146,7 +160,16 @@ export function createReplanFlow(deps: ReplanDeps) {
       // The ask is counted before it is sent: a step that ends unknown, or dies, after it is recovered with the count (Codex, 2026-11-03).
       if (!keep(asked, stall)) return;
       pending = null;
-      ledger = settledAttempt(asked, await answer(stall, parts, signal, earlier));
+      const began = Date.now(), waitedMs = deps.clock() - at;
+      const settled = await answer(stall, parts, signal, earlier);
+      ledger = settledAttempt(asked, settled);
+      written(stall, node, settled.outcome, Date.now() - began, waitedMs);
+    },
+    /** At a decision's start: the node now current. The body got out of the node the last record was for (said once). */
+    escaped(current: string | null): void {
+      if (!lastRecord || current === lastRecord.node) return;
+      say(stallEscapedLine(deps.taskId, lastRecord, deps.clock()));
+      lastRecord = null;
     },
     ledger: (): typeof ledger => ledger,
     checkpoint: () => ({ minecraftReplans: ledger, minecraftReplanPending: pending }),

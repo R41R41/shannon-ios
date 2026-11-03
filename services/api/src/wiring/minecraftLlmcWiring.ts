@@ -1,6 +1,7 @@
+import { tapEyes } from '../surfaces/minecraft/minecraftEyeTap.js';
 import { createWorksiteMemory } from '../surfaces/minecraft/minecraftWorksiteMemory.js';
 import {
-  purposeEvidence, lookTravelEvidence, explorationEvidence, observedWait, createWaitLedger, readActiveWait,
+  lookPurpose, lookTravelEvidence, observedWait, createWaitLedger, readActiveWait,
 } from '../surfaces/minecraft/minecraftPurposeProgress.js';
 import { bodyHoldOf,withResend,withIncident,withStalls,withBodyPresent } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
@@ -35,7 +36,7 @@ import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
-import { chestNodesDone,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { chestNodesDone,followDimension,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
 import { recordedLedger } from '../surfaces/minecraft/minecraftLedgerRows.js';
@@ -86,8 +87,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     validateUpdate: validate,
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
-    follow: tree => followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(doneFacts(observe())),
-      leaf => lackBefore(observe(), tree, leaf)) });
+    follow: tree => followDimension(tree, doneFacts(observe())) ?? followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(
+      doneFacts(observe())), leaf => lackBefore(observe(), tree, leaf)) });
   const worldOf = () => {
     const world = decided()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
@@ -123,6 +124,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
 // (the incident port) for the task.
   const queue = createLlmcQueue({ control, taskId: step.taskId, lease: step.lease, bodyId, step: step.id,
     holdPending: () => stalls?.look() ?? false,
+    // R3-1 (4): a reserve item only for a request nobody watches (no hold on failure, no stall watch of a held task).
+    reserveAllowed: () => !holdOn && stalls === null,
     context: () => withIncident(minecraftTaskContext(step, bodyId(), step.id, display()), holdOn, resumeOf), observe, log,
     applyLedger: input => recordedLedger(plan.port, input, { run: step.taskId, headBoot: control.headBoot(), record: row => noteStageRow(
       row) }), snapshotUses: ids => snapshotUses(plan.port.tree().promises, ids),
@@ -132,6 +135,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       .catch(error => log(`Shannon Minecraft cleanup hold failed task=${step.taskId} ${String(error)}`)); } });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
   queue.onRan((_item, _result, receipt) => endgame.noteResult(receipt?.id, receipt?.result, observe()));
+  tapEyes(control, step.taskId, (id, result) => endgame.noteResult(id, result, observe()));
   // Run 45: the call id of the act a resume sends again (the body says when it failed for the reason it was held
 // for: `incident.repeated`).
   let resent: string | null = null;
@@ -362,8 +366,7 @@ queue.onRan(noteIncidentResult);
         const road = firstStretch(tree, frame);
         const stall = noteDeath(step.taskId, deathCounterOf(frame)) ?? noteProgress(step.taskId, { node: current, state: node?.state ?? null,
           milestone: road.next, reached: road.reached,
-          externalWork: externalWorkMilestones(frame), purpose: { ...purposeEvidence(node, frame), ...lookTravelEvidence(running, ended, frame),
-            ...explorationEvidence(node, running, frame) }, waitUntil,
+          externalWork: externalWorkMilestones(frame), purpose: lookPurpose(node, frame, running, ended), waitUntil,
           inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) :
              0 }, Date.now() - (holds.heldMs?.(step.taskId) ?? 0));
         if (stall) headHold(stall);
@@ -427,7 +430,7 @@ queue.onRan(noteQueueResult);
     checkpoint: step.snapshot.checkpoint, replanner: llmc.replanner, observe, plan: plan.port, bodyParts, queue, waits, activeClock,
     heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log, ...(keep ? { persist: keep } : {}) });
   // Amendment A-10 (`minecraftLlmcRedecideWiring.ts`): the model of this step, and the port that asks the stronger one again for an act that breaks a promise.
-  const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId);
+  const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId, () => doneFacts(observe())?.dimension ?? null);
   const { planTools, redecide } = redecideParts(llmc, model, step, plan, log);
   const currentNode = () => workingNode(step.taskId, plan.port.tree().current) ?? plan.port.tree().current ?? '-';
   // r4: the current node's place (a find-blocks far from it is a surprise) and the body's probe.

@@ -60,7 +60,7 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     expect(DRAGON_MILESTONES.map(item => item.name).slice(0, 3)).toEqual(['ベッド', PREP_MILESTONE_NAME, '鉄のツルハシ']);
     expect(DRAGON_MILESTONES.find(item => item.name === PREP_MILESTONE_NAME)!.seconds).toBe(300);
     expect(milestoneWords()).toContain('ベッド 150・地下の準備 300・鉄のツルハシ 350');
-    expect(V2_ALWAYS).toContain(milestoneWords());
+    expect(V2_ALWAYS).not.toContain(milestoneWords());
   });
 });
 
@@ -114,7 +114,7 @@ describe('the reason is in real numbers, and the rule is plain', () => {
     expect(V2_STAGES.prep).not.toContain('鉄へ下りる（食料 40/40');
   });
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
-    expect(V2_ALWAYS).toContain('ネザーへ入るまでを 30 分以内に');
+    expect(V2_ALWAYS).toContain('ネザーへ入るまでは 47 分ほど（準備を含む）');
     expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(V2_ALWAYS).toContain('足りなくなると地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）。死ぬこともある');
     expect(V2_ALWAYS).not.toContain('鉄の夜');

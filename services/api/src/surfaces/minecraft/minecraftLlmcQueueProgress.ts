@@ -42,7 +42,7 @@ export function createQueueProgress(deps: QueueDeps, shared: { items: QueueItem[
   /** Her feelings read each result; they never fail a step. */
   function tell(listener: RanListener, item: QueueItem, result: ToolResult, receipt: MinecraftControlReceipt): void {
     try {
-      listener({ call: item.call, why: item.why }, result, receipt);
+      listener({ call: item.call, why: item.why, input: item.input }, result, receipt);
     } catch {
       /* feelings never fail a step */
     }
@@ -60,7 +60,11 @@ export function createQueueProgress(deps: QueueDeps, shared: { items: QueueItem[
   function wakeNow(queue: readonly QueueItem[], options: { messages?(): boolean; alert?(): boolean }, wake: number): FcaQueueWake | null {
     if (options.messages?.()) return 'message';
     if (options.alert?.()) return 'alert';
-    return queue.length === 1 && remainingMs(queue[0]!) <= wake ? 'remaining' : null;
+    // R3-1 (1, A2): a reserve item (the stand-in the head put last) is not a decided one: the decision is due when
+    // the one decided item left is nearly done (or none is, and only the reserve runs).
+    const decided = queue.filter(item => !item.reserve);
+    if (!decided.length) return queue.length ? 'remaining' : null;
+    return decided.length === 1 && remainingMs(decided[0]!) <= wake ? 'remaining' : null;
   }
   return { progressOf, remainingMs, dependStateOfRef, tell, aheadMs, nextNumber, wakeNow };
 }

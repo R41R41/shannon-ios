@@ -72,16 +72,18 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ダイヤのツルハシ', seconds: 1_000, doneWhen: 'have:diamond_pickaxe' },
   { name: '水バケツ', seconds: 1_000, doneWhen: 'have:water_bucket' },
   { name: '黒曜石 10 個', seconds: 1_500, doneWhen: 'have:obsidian>=10' },
-  { name: 'ネザー', seconds: 1_800, doneWhen: 'dim:the_nether' },
-  // Past the Nether (2026-11-02): the stretches of the one kill known to be made without a script (an Opus agent with about 37 tools, a fixed
-  // seed: the Nether at 55 min, the fortress a minute later, the stronghold at 3:25, the End at 3:31, the kill at 3:56) added to the owner's 30
-  // minutes. They are a ruler for the pace and nothing else; the first runs past the Nether will say what they should be.
-  { name: 'ネザー要塞', seconds: 2_700, doneWhen: 'see:fortress', late: true },
-  { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_500, doneWhen: 'have:blaze_rod>=7', late: true },
-  { name: 'エンダーパール 12 個', short: 'パール12', seconds: 7_800, doneWhen: 'have:ender_pearl>=12', late: true },
-  { name: 'エンダーアイ 12 個', short: 'アイ12', seconds: 8_100, doneWhen: 'have:ender_eye>=12', late: true },
-  { name: 'ポータルの枠の部屋', short: '枠の部屋', seconds: 10_800, doneWhen: 'see:end_portal_frame', late: true },
-  { name: 'エンド', seconds: 11_200, doneWhen: 'dim:the_end', late: true },
+  { name: 'ネザー', seconds: 2_820, doneWhen: 'dim:the_nether' },
+  // Past the Nether, on the three hours of the owner's pass mark (2026-11-03: the dragon within three hours, an hour and a half at best): the
+  // coordinator's pace for each stretch, a ruler and nothing else; the Nether's own target above is the same plan's (47 minutes).
+  { name: 'ネザー要塞', seconds: 3_200, doneWhen: 'see:fortress', late: true },
+  { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_700, doneWhen: 'have:blaze_rod>=7', late: true },
+  { name: 'エンダーパール 12 個', short: 'パール12', seconds: 6_000, doneWhen: 'have:ender_pearl>=12', late: true },
+  { name: 'エンダーアイ 12 個', short: 'アイ12', seconds: 6_700, doneWhen: 'have:ender_eye>=12', late: true },
+  { name: 'エンドの点検（ベッド 4・水バケツ・食料 80 点）', short: '点検', seconds: 7_500, doneWhen: 'food>=80&have:bed>=4&have:water_bucket', late: true },
+  { name: 'ポータルの枠の部屋', short: '枠の部屋', seconds: 8_300, doneWhen: 'see:end_portal_frame', late: true },
+  { name: 'エンド', seconds: 8_700, doneWhen: 'dim:the_end', late: true },
+  // The kill ends the task: the frame says no more than the End's own count, so this one is never reached here, only said as the next target.
+  { name: '竜の討伐', short: '討伐', seconds: 9_300, doneWhen: 'crystals<=0&dim:the_end', late: true, holds: () => false },
 ]);
 /** The milestones whose item stays in the pack (a bed, the pickaxes, the bucket): one passed over is still to do. */
 const KEPT_MILESTONES: ReadonlySet<string> = new Set(['have:bed', 'have:iron_pickaxe', 'have:bucket', 'have:diamond_pickaxe']);

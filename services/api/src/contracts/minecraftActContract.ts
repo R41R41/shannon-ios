@@ -1,11 +1,13 @@
 import { ACT_CONTRACT_VERSION,ACT_MAX_HANDS,HAND_KINDS,VERTICAL_DIRS,VERTICAL_SHAPES,VERTICAL_TOWARDS,VERTICAL_LIQUIDS,EQUIP_SLOTS,KEEP_MAX,
   KEEP_FORM } from './minecraftActTypes.js';
 import type { ActHand,ActKeep,ActInput,ActResult,ViewResult } from './minecraftActTypes.js';
+import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
       KEEP_FORM } from './minecraftActTypes.js';
 export type { ActPos, ActFace, HandKind, ActHand, ActStopIf, ActKeep, ActInput, EarlierPass, ActHandLine, EnderEyeFlight, ActResult,
    ViewInput, ViewResult, LlmCentricWorld } from './minecraftActTypes.js';
+export type { RushCode, RushState, ShieldRushArgs, ShieldRushResult } from './minecraftShieldRushContract.js';
 /**
  * The LLM-centric Minecraft body (design mb-llm-centric, 2026-10-21; head switch the LLM-centric mode, body MINEBOT_LLM_CENTRIC):
  * the head owns this contract, the body follows it (shared note `mb-llm-centric-contract.md`). Four parts:
@@ -26,7 +28,7 @@ export type { ActPos, ActFace, HandKind, ActHand, ActStopIf, ActKeep, ActInput, 
  */
 import { PLAN_LIMITS,promiseItemFits } from '@shannon/mind';
 import { CONDITION_SCHEMA,validCondition } from './minecraftActCondition.js';
-import { dependsProblem,handProblem } from './minecraftActHandRules.js';
+import { dependsProblem,handProblem,shieldRushActProblem } from './minecraftActHandRules.js';
 import { aggregateGoal,type CutBy,type GoalOutcome,type RunEnd } from './continueContract.js';
 
 /**
@@ -80,6 +82,7 @@ export const MAP_LEGEND = [
 
 /** The definition text of `mc.act` the model reads (fixed: part of the cached prefix). */
 export const ACT_DESCRIPTION = [
+  SHIELD_RUSH_DESCRIPTION,
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、外れたら（失敗・反射・stopIf・満杯）そこで止めて、手ごとの1行と新しい地図を返す。',
   '体は自分で決めない: 回り道・置き場所・道具作り・片づけ・夜の睡眠・戦うかどうかは、あなたが地図と状態を見て手で出す。',
   '手（do）と引数: walk(to か path, sprint, range: 掘らない・置かない。段差1と泳ぎだけ。地図の外の遠い点は64mごとに区切って歩き、掘る所で止まる) / '
@@ -98,7 +101,7 @@ export const ACT_DESCRIPTION = [
   '形: why は act に 1 つ（手の中に書かない。手の短い説明は note）。at・path・items は 1 つでも配列 [ ] で書く。',
   'かまど（F・燻製器・溶鉱炉）は furnace（op=take で出来上がりを取る、op=put で入れる）。chest は箱・樽（C）だけ。',
   'use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石 1 枚の向こうの水は、その石を dig してから use bucket）。',
-  ("stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たしたら全体を止めて返す。hpBelow は今の体力より低い値（以上だと 1 " +
+  ("stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）。hpBelow は今の体力より低い値（以上だと 1 " +
 "手も動かず止まる）。待つ手の act には hostileWithin。"),
   ("同じ種類の手が続く場面（トンネル・階段・橋・採掘）は、10〜12 手を 1 つの act に入れる（dig の at は 16 マスまで、walk の path は 32 点まで 1 " +
 "手に）。止まりは反射・stopIf・onFail が守る。"),
@@ -143,6 +146,16 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         target: { type: 'string', maxLength: 64, description: '生き物（#id か名前）' },
         untilDead: { type: 'boolean' },
         hold: { type: 'boolean' },
+        style: { type: 'string', enum: ['shield_rush'], description: 'attack: ブレイズ1体へ盾突進' },
+        retreatTo: pos('shield_rush の退避先（必須・絶対座標）'),
+        area: { type: 'object', additionalProperties: false, required: ['center', 'radius', 'maxDrop'],
+          description: 'shield_rush の範囲（必須）', properties: {
+            center: pos('中心（絶対座標）'), radius: { type: 'number', minimum: 1, maximum: 16 },
+            maxDrop: { type: 'integer', minimum: 0, maximum: 3 },
+          } },
+        shieldReserve: { type: 'number', minimum: 0, maximum: 335, description: '盾の残りの下限（必須）' },
+        onCrossfire: { type: 'string', enum: ['retreat', 'continue'], description: '交差射撃時（必須）' },
+        pickup: { type: 'string', enum: ['target_drops', 'none'], description: '拾う物（必須）' },
         goals: { type: 'array', minItems: 2, maxItems: 8, items: pos('行き先の候補'), description: 'go の行き先の候補（どれか 1 つに着けば済み）' },
         canDig: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'string', maxLength: 40 }, description: 'go で掘ってよい物（id か stone・dirt・sand・wood）' },
         canPlace: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'go で置いてよい物（足場・橋・柱）' },
@@ -190,6 +203,9 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
     done: { ...CONDITION_SCHEMA, description: '満たした所で済みにする条件' },
     pre: { ...CONDITION_SCHEMA, description: '始める時に確かめる条件' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目' },
+    reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に 1 つ・決めた項目が来ると自動で消える・見守りの依頼は不可）。'
+      + 'その場の手（拾う・隣の鉱脈・手元の作る・焼きの合間の採取）と、次の場所から 16 m 内の go。'
+      + '危険（反射・stopIf・被弾・落下・戦いの相手が近い）で前の項目が止まれば控えも始まらない' },
     dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目。[] は何にも頼らない' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
     keep: { type: 'array', maxItems: KEEP_MAX, description: '後で使うために残す物（約束になる）', items: { type: 'object', additionalProperties: false,
@@ -214,6 +230,8 @@ export const VIEW_INPUT_SCHEMA = Object.freeze({
 });
 
 export function actProblem(input: ActInput): string | null {
+  const rush = shieldRushActProblem(input);
+  if (rush) return rush;
   for (const [index, hand] of input.hands.entries()) {
     const problem = handProblem(hand) ?? dependsProblem(index + 1, hand, input.hands.length) ?? (input.repeat === undefined ? null : repeatProblem(hand));
     if (problem) return `手${index + 1}（${hand.do}）: ${problem}`;
@@ -227,10 +245,16 @@ function queueFieldProblem(input: ActInput): string | null {
   if (input.done !== undefined && !validCondition(input.done)) return 'done が条件の形ではない';
   if (input.pre !== undefined && !validCondition(input.pre)) return 'pre が条件の形ではない';
   if (input.replace?.every(id => /^(?:q[0-9]{1,6}|all)$/u.test(id)) === false) return 'replace は列の項目（q15）か all';
+  const reserveProblem = reserveFieldProblem(input);
+  if (reserveProblem) return reserveProblem;
   if (input.dependsOn?.every(id => /^q[0-9]{1,6}$/u.test(id)) === false) return 'dependsOn は列の項目（q12）の並び。何にも頼らないなら []';
   if (input.dependsOn !== undefined && new Set(input.dependsOn).size !== input.dependsOn.length) return 'dependsOn に同じ項目が 2 度ある';
   if (input.uses?.every(id => Number.isInteger(id) && id >= 1) === false) return 'uses は約束の番号（1 から）の並び';
   return keepProblem(input.keep);
+}
+function reserveFieldProblem(input: ActInput): string | null {
+  if (input.reserve !== undefined && typeof input.reserve !== 'boolean') return 'reserve は true か false';
+  return null;
 }
 /** `keep` (amendment A-7 1): up to `KEEP_MAX` entries, each an item (a name or `food`), a whole count and a use
  * of a few words; a refusal shows the form to write. */
@@ -274,12 +298,16 @@ export function readActResult(text: string | undefined): ActResult | null {
       if (line.goal !== undefined && line.end !== undefined) return line;
       const filled = line.status === 'done' ? { goal: 'done' as const, end: 'finished' as const }
         : line.status === 'skipped' ? { goal: 'not_started' as const, end: 'not_run' as const }
-          : line.status === 'stopped' && cut ? { goal: 'partial' as const, end: 'cut' as const, cutBy: result.stoppedBy as CutBy }
+          : line.status === 'stopped' && cut ? { goal: 'partial' as const, end: 'cut' as const,
+            ...(cut ? { cutBy: result.stoppedBy as CutBy } : {}) }
             : { goal: 'failed' as const, end: 'finished' as const };
       return { ...filled, ...line, goal: line.goal ?? filled.goal, end: line.end ?? filled.end };
     }) };
   } catch { return null; }
 }
+/** The goal a hand line without one is read as, from its status. */
+const goalOfStatus = (status: string): GoalOutcome =>
+  status === 'done' ? 'done' : status === 'skipped' ? 'not_started' : 'failed';
 /**
  * The act's goal and end: the body's `outcome` when the result has one, else worked out from the lines by the
  * contract's order (`aggregateGoal`; a line without
@@ -288,13 +316,12 @@ export function readActResult(text: string | undefined): ActResult | null {
  */
 export function actOutcomeOf(result: ActResult): { goal: GoalOutcome; end: RunEnd; cutBy?: CutBy } {
   if (result.outcome) return { goal: result.outcome.goal, end: result.outcome.end, ...(result.outcome.cutBy ? { cutBy: result.outcome.cutBy } : {}) };
-  const hands = result.lines.map(line => ({ goal: line.goal ?? (line.status === 'done' ? 'done' :
-     line.status === 'skipped' ? 'not_started' : 'failed'), motorOps: line.motorOps ?? (line.status === 'skipped' ? 0 : 1) }));
+  const hands = result.lines.map(line => ({ goal: line.goal ?? goalOfStatus(line.status), motorOps: line.motorOps ?? (line.status === 'skipped' ? 0 : 1) }));
   const goal = aggregateGoal(hands, result.doneMet !== undefined);
   const cut = result.stoppedBy !== undefined && result.stoppedBy !== 'failure';
   const end: RunEnd = hands.length > 0 && hands.every(hand => hand.goal === 'not_started') && !hands.some(hand => hand.motorOps > 0) ? (cut ? 'cut' : 'not_run')
     : cut ? 'cut' : 'finished';
-  return { goal, end, ...(cut ? { cutBy: result.stoppedBy as CutBy } : {}) };
+  return { goal, end, ...(result.stoppedBy && result.stoppedBy !== 'failure' ? { cutBy: result.stoppedBy as CutBy } : {}) };
 }
 /** A view's result (`ViewResult`), or null. */
 export function readViewResult(text: string | undefined): ViewResult | null {

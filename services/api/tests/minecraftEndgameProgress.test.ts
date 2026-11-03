@@ -30,7 +30,7 @@ describe('walking the late-game seed with the frames of a run', () => {
 
   it('starts at the check before the Nether\'s depth, and the later nodes need their own observations', () => {
     expect(seed.nodes.filter(node => node.parentId === null).map(node => node.title)).toEqual(['出発の点検（ネザーの奥へ）', 'ネザー要塞を探す', 'ブレイズロッド7以上',
-      'エンダーパール12以上', 'エンダーアイ12個', 'オーバーワールドへ戻る', '出発の点検（エンドへ）', 'ストロングホールド', 'エンドに入る', 'エンドでドラゴン']);
+      'エンダーパール14以上', 'エンダーアイ14個', 'オーバーワールドへ戻る', '出発の点検（エンドへ）', 'ストロングホールド', 'エンドに入る', 'エンドでドラゴン']);
     // a fortress in view before the check is not the fortress node yet: the check comes first
     const early = at({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: items({ cooked_beef: 2 }), mapLandmarks: ['N ネザー要塞 (10,64,10) 北10m レンガ×9'] });
     expect(state(early, 'p2')).toBe('continue');
@@ -52,11 +52,11 @@ describe('walking the late-game seed with the frames of a run', () => {
     expect(state(tree, 'p3')).toBe('done');
     expect(['p3.1', 'p3.2', 'p3.3'].map(id => state(tree, id))).toEqual(['done', 'done', 'done']);
     expect(tree.current).toBe('p4.1');
-    tree = at({ dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, inventory: items({ ...kit, ...food, blaze_rod: 7, ender_pearl: 12 }), mapLandmarks: [] });
+    tree = at({ dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, inventory: items({ ...kit, ...food, blaze_rod: 7, ender_pearl: 14 }), mapLandmarks: [] });
     expect(state(tree, 'p4')).toBe('done');
     expect(tree.current).toBe('p5.1');
     // the pearls became eyes: the eye node closes by the eyes, its open child as no longer needed
-    tree = at({ dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, inventory: items({ ...kit, ...food, blaze_powder: 2, ender_eye: 12 }), mapLandmarks: [] });
+    tree = at({ dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, inventory: items({ ...kit, ...food, blaze_powder: 2, ender_eye: 14 }), mapLandmarks: [] });
     expect(state(tree, 'p5')).toBe('done');
     expect(state(tree, 'p5.1')).toBe('done');
     expect(tree.current).toBe('p6');
@@ -94,9 +94,9 @@ describe('walking the late-game seed with the frames of a run', () => {
   it('keeps the meter on the later milestones: the next target after the Nether is the fortress, then the rods, and so on', () => {
     const dragon = { ...seedPlan('エンドラを討伐して')!, current: 'p9' };
     const nether = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: [], mapLandmarks: [] });
-    expect(meterLine(dragon, nether, 1_900 / 60)).toContain('次の節目 ネザー要塞 目安 2,700 秒');
+    expect(meterLine(dragon, nether, 1_900 / 60)).toContain('次の節目 ネザー要塞 目安 3,200 秒');
     const fortress = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: items({ cooked_beef: 4 }), mapLandmarks: ['N ネザー要塞 (10,64,0) 東10m レンガ×30'] });
-    expect(meterLine(dragon, fortress, 2_000 / 60)).toContain('次の節目 ブレイズロッド 7 本 目安 4,500 秒');
+    expect(meterLine(dragon, fortress, 2_000 / 60)).toContain('次の節目 ブレイズロッド 7 本 目安 4,700 秒');
   });
 
   it('gives the held diagnostic run only the first stretch of the road: a fortress coming into view past the Nether is not its progress', () => {

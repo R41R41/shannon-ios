@@ -154,7 +154,7 @@ describe('the live state and the results say facts', () => {
     expect(stop.line).not.toMatch(/もう一度|出し直|足して/u);
     // The mechanism is unchanged: the same stand again straight after is sent.
     expect(furnaceStandStop({ hands: [{ do: 'wait', seconds: 30 }] }, observation, 'gpt-review')).toBeNull();
-    expect(system).toContain('wait だけの act は、有用な手を選べない時だけで、why に待つ対象と理由を書く');
+    expect(system).toContain('wait だけの act は夜・回復の待ちで他に手が無い時だけ、why に待つ対象と理由');
   });
   it('does not tell a fight to be sent with a lower retreatHp: the fact, and the health of 8 or under named', () => {
     const fight = (retreatHp: number) => ({ hands: [{ do: 'fight', target: '#5493', item: 'iron_sword', retreatHp }] });

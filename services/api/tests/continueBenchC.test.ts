@@ -396,9 +396,9 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
     bench.body.begin(q1.id);
     bench.body.finish(q1.id, { hands: [{ do: 'place', goal: 'done', events: placed(1) }] });
     await bench.settle(60);
-    const q2 = await send(bench, [{ do: 'wait', seconds: 20 }]);
+    const q2 = await send(bench, [{ do: 'wait', seconds: 20 }, { do: 'jump' }]);
     bench.body.begin(q2.id);
-    const q3 = await send(bench, [{ do: 'wait', seconds: 21 }]);
+    const q3 = await send(bench, [{ do: 'wait', seconds: 21 }, { do: 'jump' }]);
     const handedBefore = bench.body.handed.length;
     // A decision that read the frame of the first connection and is still being thought (the answer is not made yet).
     const thinking = bench.lifecycle();
@@ -436,7 +436,7 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
     bench.body.begin(q1.id);
     bench.body.finish(q1.id, { hands: [{ do: 'place', goal: 'done', events: placed(1) }] });
     await bench.settle(60);
-    const q2 = await send(bench, [{ do: 'wait', seconds: 20 }]);
+    const q2 = await send(bench, [{ do: 'wait', seconds: 20 }, { do: 'jump' }]);
     bench.body.begin(q2.id);
     bench.commit();
     // The body takes its time to cut what ran for the head that is gone, so the stop's proof comes first.
@@ -465,7 +465,7 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
     bench.body.begin(q1.id);
     bench.body.finish(q1.id, { hands: [{ do: 'place', goal: 'done', events: placed(1) }] });
     await bench.settle(60);
-    const q2 = await send(bench, [{ do: 'wait', seconds: 20 }]);
+    const q2 = await send(bench, [{ do: 'wait', seconds: 20 }, { do: 'jump' }]);
     bench.body.begin(q2.id);
     bench.commit();
     bench.body.cutDelayMs = 0;
@@ -609,9 +609,9 @@ describe('boundary 8 (the link and the restarts): every scene of the table, judg
 
   it('b8-lease-swap: q2 waits while the lease is renewed: the head cancels what the old lease sent, the body answers lease_expired for q2 and q2 never moved', SLOW, async () => {
     const bench = await scene8('b8-lease-swap');
-    const q1 = await send(bench, [{ do: 'wait', seconds: 20 }]);
+    const q1 = await send(bench, [{ do: 'wait', seconds: 20 }, { do: 'jump' }]);
     bench.body.begin(q1.id);
-    const q2 = await send(bench, [{ do: 'wait', seconds: 22 }]);
+    const q2 = await send(bench, [{ do: 'wait', seconds: 22 }, { do: 'jump' }]);
     bench.body.cancelCode = 'lease_expired';
     bench.swapLease();
     expect(await until(() => bench.body.entries.get(q2.id)!.state === 'ended' && bench.body.entries.get(q1.id)!.state === 'ended', 4_000)).toBe(true);
@@ -785,7 +785,7 @@ describe('boundary 9 (the plan): kind and prep from the first plan to a restarte
 // ---- the seams the bench C can show (the head and the body meeting): 1 to 5 ---------------------------------------------------------------------------------------
 /** A body's result lines (a `produced/` file's) as the hands a script gives the stand-in: each line is kept as the body wrote it. */
 const handsOf = (lines: Array<Record<string, any>>) => lines.map(line => ({ do: String(line.do), goal: line.goal, end: line.end, status: line.status, motorOps: line.motorOps, code: line.code, raw: line }));
-const WAIT = (seconds: number) => [{ do: 'wait' as const, seconds }];
+const WAIT = (seconds: number) => [{ do: 'wait' as const, seconds }, { do: 'jump' as const }]; // not wait-only: a wait-only act behind a running item is refused at admission (R3-1 6)
 /** An item with the fields of the act the model chose (`dependsOn`, `uses`, ...): its mark and its command's id once the body has been handed it. */
 async function sendX(bench: BenchC, hands: unknown, extra: Record<string, unknown> = {}, maxMs = 20_000) {
   let item = '';

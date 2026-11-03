@@ -97,7 +97,7 @@ S1・S2 の手の言葉に合わせた（`stronghold` 段を足した）:
 ## 11. 強いモデル（Opus）を使う所（2026-11-02、新しい環境変数なし）
 
 - 最初の計画と立て直し（監督）は、常に計画のモデル（`SHANNON_MINECRAFT_LLMC_PLAN_MODEL`、既定 Opus 5.5）。
-- 判断（1 手ごと）は主モデル（本番の設定。run 55 の記録は Sonnet 5.5）。ただし計画の今の節、またはその上の節の kind が `LLMC_STRONG_KINDS`（今は `nether`・`fortress`・`blaze`・`pearl`・`stronghold`・`end`・`dragon` = ネザーの奥からエンドまで）の間は、計画のモデルが決める（`strongStage`、`minecraftLlmcConfiguration.ts`）。計画は checkpoint の `fcaPlanTree` から読むので、再起動の後も同じ。主モデルと計画のモデルが同じ（既定は両方 Opus）なら何も変わらない。失敗が続いた時の引き上げ（`ESCALATE`）が先に効く。
+- 判断（1 手ごと）は主モデル（本番の設定。run 55 の記録は Sonnet 5.5）。ただし計画の今の節、またはその上の節の kind が `LLMC_STRONG_KINDS`（今は `end`・`dragon` だけ。11/3 に取りまとめの決定で、ネザー・要塞・ブレイズ・パール・ストロングホールドを外した: 場面再生でネザー・アイの場面は Sonnet でも同じ質、エンドは Opus 4/4 対 Sonnet 1/4。撮影は競争なので、判断を速く・安くする）の間は、計画のモデルが決める（`strongStage`、`minecraftLlmcConfiguration.ts`）。計画は checkpoint の `fcaPlanTree` から読むので、再起動の後も同じ。主モデルと計画のモデルが同じ（既定は両方 Opus）なら何も変わらない。失敗が続いた時の引き上げ（`ESCALATE`）が先に効く。
 - 本番が主 Sonnet・計画 Opus のままなら、api.env の変更は要らない。
 - ライ氏の許可（11/2: 迷ったら Opus 側）で、エンドまでの道は全部 Opus に倒した。**この集合は場面再生（Sonnet と Opus の正しさと 1 判断の秒、費用）で絞れる**が、エンドまでを急ぐので比べは後回し。実 LLM を使うので API キーの供給待ち（`scripts/minecraft-llmc-endgame-scene.ts --models=sonnet,opus`、立て直しは `scripts/minecraft-llmc-stall-replay.ts`）。
 - 費用の見込み: 切り替えた節の間は Opus の接頭辞のキャッシュ（1 時間）を使い、節が変わる度に書き込みが 1 回（約 $0.1〜0.2）。判断 1 回の単価は Sonnet の約 2 倍。
@@ -133,9 +133,121 @@ S1・S2 の手の言葉に合わせた（`stronghold` 段を足した）:
   | shortage-skip-shield・-late（今の節が盾） | 19/20 | 19/20 |
 
   ゲートの 2 場面は、直す前に run59 の送り方（ポータルの手）が 20 回中 9 回（late の版は 8/10）で再現し、直した後は 0/20。盾の 2 場面は、直す前から最初の判断では盾の側（原木・鉄）を選び、不合格の 1 回は両側とも mc.view だけ（check は手の無い呼びを不合格に数える）。**run59 の盾の節からの前進は、最初の判断ではなく体の項目の札で今の節が進む所で起きたので、場面再生には出ない**（2 の直しは単体試験 `minecraftShortageRequired.test.ts` で確かめた）。Opus 5.5（各 3 回）は直す前 11/12、直した後 9/12 で、不合格の 3 回は盾の遅い版で 3 回とも mc.view で原木を探したもの（盾の側。ダイヤへは進んでいない）。
+- **ネザーへ入る手は、必須が欠けている間は送らない**（run59 脚 2、11/2 14:34Z。コードで止める最後の手段）: 8503f22 の言葉が本番（526bed9）に入った後でも、頭は盾なしで portal の手を送った（判断 d0034: `equip iron_chestplate` と `portal …`、why は「胸当てを着てゲートを建て点火（盾は材料なしで後回し）」。見守りの門が止めた。この実走で 3 回目）。そのときの live は、今の節が [p1] 盾（kind iron: 段が無い）なので「準備の不足」の必須の行を持たず、「取得目標 shield あと1: 所持材料で製作可能」だけだった。直前の `make shield` は「missing: oak_log×2」で止まっていた（皮むき原木 stripped_oak_log×4 は、体の make が材料に数えない。頭の取得目標の行は数える）ので、モデルは「材料なし」と読んで後回しにした。言葉が結果の後に付く形（`gateNote`）では間に合わないため、`gateHold`（`minecraftLlmcReadiness.ts`）を `heldOfFrame` に足した: portal の手（enter でない時を除く）は、ゲートの必須が未達の間、ほかの手と同じ部分送りで止め（手の前の手は送る）、足りない物・費用・「理由を書いても省けない」を返す。急ぎの act にも効く。着る物は今の体で読むので、「着る」と「入る」を 1 つの act に書いた時は次で入る。見守りの外の通し（撮影）でも、頭がゲートの必須を守る。`gateNote` は、止めた手の結果にしか出なくなるので外した。未対応: すでに点いたポータルのマスへ walk で入る手、ダイヤの層へ下りる手（どちらも言葉と note だけ）。
+- **死なないことを速さより上に置く**（ライ氏 11/2 23:30 の合格の基準: 3 時間以内・理想 1.5 時間・鉄装備を得た後に死んだらアウト）: 段の知識（prep・nether・blaze・pearl・stronghold・end）に `SAFETY_FIRST`（`minecraftLlmcPrepRules.ts`）を 1 本ずつ足し、ダイヤとブレイズの節の caution に同じことを短く書いた。体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満のまま、深い所・ネザー・戦いへ進まない（食べる・回復を待つ・作り直す・退くが先）。数字は live が見せる値（体力・食料の点・持ち物の行の耐久）に合わせた。時間の内訳（run59 の記録から）は共有メモ `s3-run59-time-analysis-20261103.md`。
+- **ツルハシの予備**（取りまとめの決定 11/3、run59 脚 2 の計画 7 章①の A）: ネザーの前の必須に「石以上のツルハシ 3 本（予備 2 本を含む）」を足した（`SPARE_PICKAXES`）。ダイヤのツルハシ 1 本（耐久 1,249）は、ネザーの往復の掘り 1,200〜1,600 回で尽きる見込み。知識は「石のツルハシを 2〜3 本作って持つ（丸石 3・棒 2）。ダイヤが 300 を切ったら黒石か丸石と棒で作る」。**必須が作れない・材料が無いと見えた時**（脚 2 の 14:34: make が missing: oak_log）は、後回しにせず、材料を取りに行き、行の理由を読んで別の材料の形を試す（必須の行・止めた手の文・段の規則に書いた）。
+- **11/3 7:00 までの取りまとめの 5 件**（run59 脚 2 の計画 S3 #1〜#5）: ①Opus の範囲を `end`・`dragon` だけにした（`LLMC_STRONG_KINDS`。立て直しと最初の計画は元から計画のモデル）②最初の計画で、target と doneWhen が合わない節は、節と doneWhen を残して target だけ外す（理由はログ `first plan target dropped node=… `）。総称は同じに数える（`bed` は `white_bed`。頭の conditions の読みと同じ）。run59 task 1 は p8 の食い違い 1 つで最初の計画を丸ごと捨てていた ③持ち物の空きの文は、雑物（柵・階段・レール・苔むした丸石・糸（3 未満）・苗木・種）を先に名指しし、丸石は 128 残す（`KEEP_STACK`、`dropAdvice`）④保留つきの依頼の look も、竜へのダメージとクリスタルの破壊を進みに数える（`lookPurpose`、無人の見張りと同じ）⑤知識: パールとアイは 14（seed の target も）・ネザーの前の食料は 250 点前後（目標）・地上の長い歩きは朝に出て夜は先に寝る・ストロングホールドへはネザー経由（ゲートの近くで 2 か所で投げる → ネザーで (x/8, z/8) へ歩く → 黒曜石 10 でゲートを建てる）・金が 190 個に届かない時は物々交換を選ばない・ブレイズの hold も傷が少ないとは限らない・縁の sneak は押されるのを止めない（段の知識と計画の caution）。核の知識（`minecraftKnowledgeCore.ts` の「縁では sneak」）は署名つきの接頭辞なので触っていない。
+- **今の節を実際の段に合わせる・Opus を次元で選ぶ**（取りまとめ 11/3 01:55、3 時間計画の 3 番）: run59 の 00:50 の判断で、体はネザーなのに今の節が「[p1.1] 村のベッド集め（1/4）」、道のりは「地上の準備◀今」、済んだ節は 1/18 だった。**原因**（決定の記録と checkpoint を読み取りだけで確かめた）: Opus の計画の p2「ゲートでネザーへ」`dim:the_nether` は、体がネザーにいて条件が満たされているのに閉じない。`nodesSeenDone` の `afterEarlier`（場所と次元の節は、前の節がすべて済んだ時だけ閉じる。run 35 の誤閉じの対策）が、前にある p1.1（ベッド 4 つ）と p1.3（金のブーツ）を理由に止める。ベッドが 1 つ・金のブーツ無しのまま、今の節は最初の開いた葉に残る。LLM が進めないのでも、済む条件の作りでもなく、この 2 つの組み合わせ。**直し**: (1) `followDimension`（`minecraftLlmcNode.ts`、計画の `follow` で `followNode` の前に呼ぶ）: ネザー・エンドにいて、今の節が地上の仕事の kind（wood・stone_tools・food・bed・village・prep_descent・iron・iron_armor・diamond・water・lava・obsidian・portal・stronghold・chest。エンドでは nether・fortress・blaze・pearl も）なら、その次元の仕事の最初の開いた葉（自分の条件がもう満たされていない物）へ今の節を置く。飛ばした節は順のまま開いている。kind が other の節は動かさない。(2) `llmcModelRouter` に次元を渡し、エンド（`the_end`）では今の節に関わらず強いモデル（失敗が続けば escalate が先）。範囲は `end`・`dragon` と立て直しのまま。
+- **知識の誤りの言葉**: エンドの橋は「足元に橋を置いて渡る（go の canPlace は足元の床だけで壁は作らない。幅 1 は押されると落ちる）」。「黒曜石はネザーの溶岩と水で作る」は 3 回目の書き直しで外れている（ネザーでは水を置けない）。`stopIf` の説明は「満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）」（`ACT_DESCRIPTION`・`SHORT_ACT_DESCRIPTION`）。S2 が 11/4 に go の縁の費用と橋の壁を入れる時に、橋の言葉を合わせ直す。
 - 同じ回で入れた知識: S2 のネザーの長い歩き（go の引数・速さ・止まった時の直し・要塞の探し方・ツルハシの耐久）を `nether` の段と要塞の節の caution に、S1 のエンドの最初の数分（入る前に丸石か黒曜石 3 個以上・足場から島へ go・息の雲の dead_end・表彰台・檻つきの柱を登る時の水バケツ）を `stronghold`・`end` の段と計画の caution と `STRATEGY_KNOWLEDGE_V2` に。水入りバケツは、エンドへの準備の不足（`STAGES.end`）と、計画の「出発の点検（エンドへ）」の doneWhen（`have:water_bucket`）にも入れた。水バケツは hotbar（最初の 9 スロット）に持つと書いた（S1: 体の落下止めは、水バケツが手か hotbar にある時だけ起動し、荷の中だと起動しない。強い反射に体を取られた時の台帳の文言も段の知識に入れた）。
+
+- **11/4 の反映 1: 無人の詰まり（取りまとめ 11/3 01:55）**: ①誤検出をなくす: 結果の手がブレイズ・エンダーマンの撃破（`fight` の `target_killed`、`attack` の完了）・ゲートの枠（`obsidian`）・点火（`portal`）・枠にはめた目（`use ender_eye` の `at` あり）で done なら、節の窓を起こし直し wait の連続を数え直す（`minecraftProgressEvents.ts`、`noteRan`）。焼き待ち・夜待ちは従来の期限（`observedWait`）。②立て直しの間隔を 10 分から 5 分にした（`REPLAN.gapMs`。立て直しは「held でない依頼」の経路だけなので無人の依頼だけに効く。回数の上限 6/時・30/run・3/節は同じ）。③gateHold を、点いたポータルのマス（地図の `p`）で終わる go（`to`・`goals`）・walk（最後の点。range 1 以上は除く）にも広げた（`minecraftLlmcGateEntry.ts`）。④止まりの記録: 立て直しを頼む時・止められた時に `stall record` の 1 行（種類・止まった秒・Opus の待ち・間隔の待ち・節の回数と上限・体力・空腹・次元・16m 内の敵）、節が変わった時に `stall escaped` の 1 行（何秒後・その立て直しの結果）をログに書く（`minecraftLlmcStallRecord.ts`）。足場の隙間は地図の物で、S5 の記録が取る。⑤止まった時と strong 段の節に変わった時に歩を閉じる手: 列側（S1）の閉じる手を待っている（頭の側は立て直しを次の歩の始めに頼む作りのまま）。
+- **11/4 の反映 0: c1 固有の物を頭の知識から外した**（取りまとめ 11/3 03:05、ライ氏の決定「撮影は両者とも初見」）: c1 の座標・距離・高さ・湧いた数（ゲートの出口の 7 ブロック・溶岩 1.4m・208 秒の歩きで見えた数・要塞まで 233m・地上の 1,454m と 110m の hop と丸石 300・fight と hold の標本・ネザー経由が 2 回通らなかったこと・「今は勧めない」）を `nether`・`blaze`・`stronghold` の段から外し、どのシードでも成り立つ形に言い換えた（出口の高さは枠の高さと限らず、着いたら足元と溶岩を確かめる・go は 1 手 90m 以内・真紅の森にはピグリンとホグリンが湧く・長い地上の歩きは丸石を多めに・道の選びはアイの交点が出た時にその場で測った距離から頭が決める）。テストは、外した語が段の知識のどれにも無いことを固定する。End の隔離ラボの数（竜の周期・クリスタルなど）は世界に依らない規則なので残した。
+
+- **11/4 の反映 2〜7（取りまとめ 11/3 01:55 の優先順の 2〜7）**:
+  - **2 致命の関所**（`minecraftLlmcDeadlyGates.ts`、`gateHold` の形で `heldOfFrame` に足した）: ブレイズの湧き場へ入る手（ブレイズへの fight・attack を、16m 内にブレイズがいない時に始める手と、`S` の 8m 内で終わる go・walk を 10m より遠くから出す手）は、体力 20・満腹度 18・持ち物の食料 150 点・盾 2 枚がそろうまで送らない。エンドへ入る手（`e` のマスへ walk）は、積める物 64（黒曜石を含む）・水入りバケツ・ベッド 4・食料 80 点（`BEFORE_END`）がそろうまで送らない。欠けた物と費用を言い、取り方は頭が決める。S2 の体の版は、フレームに欄が無いので読んでいない。段の知識にも一文ずつ。
+  - **3 言葉（R3-3）**: 「短く区切り」を「結果を待たずに決められる手は次の移動と同じ act へ。同じ手の連続は repeat・done・count・seconds」に。焼き待ち・夜待ちの間は焼き上がりに頼らない採取・作業台・食料と帰路、wait だけの act は夜・回復の待ちで他に手が無い時だけ。かまどは 2〜3 基（smelt の furnaces）。sprint の既定（地上 on・溝の走り跳びは sprint:true の時だけ、ネザー・エンド off）。**未了**: 控えの書き方の言葉（控えの印の欄がこの枝に無い。S1 の枝の欄が来てから）、live の jobs の「焼き上がりまで N 秒・その間に進められる不足」の行（live の項目を足すと固定の桁が動くので見送り。jobs の生の欄に remainingEstimateMs がある）、場面再生（T1 q4・q5 ほかの保存場面がこの枝に無く、実 LLM の費用も使っていない）。
+  - **4 失敗の入力（R3-4）**: 作業台の位置と 4.5m の届き（`minecraftLlmcTableNote.ts`: 作業台が要る make・craft の手で、体の走査に届く所の作業台が無ければ、結果に事実の 1 文。手は止めない）。**未了**: 掘る・作るマスの見える・届く（not_visible・unreachable）、dead_end の理由（体の側の結果の行にある）。
+  - **5 エンドの準備を前へ**: 初期の計画の村の節に、ベッド 3〜4 台と、通りがかりの糸・火打石・羽の注意（弓と矢 30 の分）。弓なしのクリスタルの手は S1 と決める（未）。
+  - **6 夜と効果**: 夜のオーバーワールドは持っているベッドで寝る（ネザー・エンドでは寝ない）。エンドのベッドは「自分への被害」の見込みが 4 以下の時だけ。体の効果（`world.effects`・`onFire`）を残り秒つきで体力の行に出す（体がその欄を送る時だけ。無ければ今のまま）。
+  - **7 3 時間の物差し**: ネザー 2,820・要塞 3,200・ロッド 4,700・パール 6,000・アイ 6,700・エンドの点検 7,500（ベッド 4・水バケツ・食料 80 点）・枠 8,300・エンド 8,700（取りまとめに無い数。間に置いた）・竜の討伐 9,300（枠が届かない節目。討伐の確認は体の記録なので、メーターは次の目標として言い続ける）。共通の文は節目の一覧を持たなくなった（meter が今と次を言う）ので、トークンが約 90 減った。目的の行は「3 時間以内（理想 1.5 時間）・ネザーまで 47 分ほど」。
 
 ## 9. 確かめたこと・未確認
 
 - 確かめた（単体・結合テスト、型検査、コードの形の検査、関係するテスト）: 済む条件の読みと閉じ方（クリスタルの親を含む）、数え方、S1 の実機ラボの 8 場面と、フェイクの frame（S1 の体の形 = `state.world` 直下・S2 の `eye` の形）からの行、目玉の帳簿と交点（真の位置との誤差・残差・沈んだ／止まった目玉・読む時の期限切れ）、checkpoint の往復、立て直しの上限と流れ（フェイクの強いモデル、ステップをまたぐ止まり、取り込み時の束ねと再検査）、brief の大きさ。
 - **未確認**: 実機の体が上の欄名で送ってくるか（S1・S2 の枝のコードを読んで合わせたが、頭と体を合わせた通しはまだ）、実機の本番の世界での目玉の方位の精度（S2 の隔離ラボは 0.003° 以内、頭は 0.02° で受ける）、Opus が立て直しで有用な ops を返すか・誤検出の頻度、段の知識の言い回しが Sonnet の判断を良くするか（場面再生は API キーと予算の承認待ち）、2〜4 時間の通しで要約をまたいで事実が効くか、エンダーマンの屋根の穴が本物に効くか（S2 の練習場は模型）。
+
+## 11/3 T6: the gravel stop (H2), input only, the same Sonnet (S3)
+
+The saved request of run59's hold 2 (decision `d0070` of the task `e0bd9155`: the stairs-down `vertical` had stopped at gravel with "canDig に gravel を足せば進む"; the production record, read only) was sent again to `claude-sonnet-5-5` as it was (adaptive thinking, effort low), ten times for each of two inputs. A: the result as the model saw it. B: the same result with the reason the head says since `22a1503` (a falling block is dug again as it falls; the same lump is met again after a turn; adding it is usually quicker). Everything else is the same bytes.
+
+| input | gravel in `canDig` of the vertical | turned (any direction) without gravel |
+|---|---|---|
+| A (as it was) | 2 of 10 (3 of 11 with the probe call) | 8 of 10 (5 south, 3 north) |
+| B (reason added) | 10 of 10 | 0 of 10 |
+
+Read: for this scene the input is the cause (P). The model followed the line once it said why; a Sonnet-vs-Opus comparison is not needed here. What is not shown: that the stairs then went down (the real-world step is not replayed), and several turns of it. About $0.8 spent (the first calls write the cache). The script and the rows: `status/codex-s3/t6-replay.py`, `t6-gravel.json`.
+
+### T6/T7 (S3, 11/3): 2 × 2 on the gravel stop, and the water alert (saved requests, replayed as they were)
+
+Gravel (decision `d0070`, ten calls per cell, adaptive thinking, effort low): gravel put in `canDig` —
+
+| | input A (as it was) | input B (the reason added) |
+|---|---|---|
+| Sonnet 5.5 | 2 / 10 | 10 / 10 |
+| Opus 5.5 | 9 / 10 | 10 / 10 |
+
+Both the input (P) and the model (L) move it: with the old input Opus follows the line nine times in ten and Sonnet twice; with the reason added the two are the same. So for the model that decides the descent (Sonnet in the early stages) the input is the cheaper fix, and it is in.
+
+Water alert (run58's task `d43770fb`: the decisions `d0074`, `d0081`, `d0092`, each the "oxygen 9, under 10" alert beside an iron vein in water; six calls per decision and model, the input as it was): all 36 calls rise first (a `go … waterOk`, a `jump`, a `pillarUp`), none keeps mining in the water; Opus sometimes adds a dig or a place behind the rise (`onFail=continue`), Sonnet mostly rises alone. So the single decision at the alert is safe for both models and is not where the run was lost: the records show the same alert three times in 25 minutes (14:29, 14:30, 14:54), each time followed by the model going back to the same vein once the breath was full. That is a failure over several turns, which one saved request cannot show; it needs the lab with the water vein, or the Codex typed failure of "the same place, the same stop" shown as a fact. Not replayed: the shield scene (measured on 11/2 with n=10), the real-world result of any hand.
+
+Spent on 11/3: about $4.4 of the $6 (gravel $0.8 Sonnet and $1.5 Opus, water $2.1). Rows: `status/codex-s3/t6-gravel*.json`, `t7-d00*.json`; script `t7-replay.py`.
+
+## 11/3 Unknown-seed starts (S3, skill-port plan #6, about $1.3 of the $3)
+
+Four invented starts (`tests/fixtures/minecraft/unknown-seed-starts.json`: no village / a beach by the sea / a snowy forest / a cave mouth with no tree in 160 m), each asked as the run asks: the first plan from Opus (`ownFirstPlanSystem`, the scan, the readiness), then the first decision from Sonnet with that plan; two rounds each (`scripts/minecraft-llmc-start-scenes.ts`, rows in `status/codex-s3/start-scenes*.json`). Coordinates in the answers that are not in the world given: none (the one flagged is the start's own position, which the plan copies into a `where`). Every plan has food, iron, the gate and the rest of the road; the first decision is a walk, dig and pickup to the nearest trees in the three starts that have trees, and a `mc.view` in the cave mouth (no tree to walk to: it looks first).
+
+Found: the bow and arrows came only at the frame room or the End (node 14 to 28 of 17 to 31), long after the gate. Cure: one line in the first plan's preparation words (`PLAN_PREP_WORDS`): the materials for the bow and arrows (string, feathers, flint) are gathered on the way early, written into the food or iron node's caution. After it, in 8 of 8 plans the string and feather line is in the second to fifth node, before the gate (node 6 to 15). Not shown: that the materials were then found in a world (a plan names them, the world must have them), and the 40 minutes to the Nether, which needs a run.
+
+## 11/3 Survey and eye continuity (S3, skill-port plan #9, about $1.4 of the $2)
+
+Six scenes (`tests/fixtures/minecraft/eye-continuity-scenes.json`, Sonnet, three calls each, the end-game scene script): two lines nearly parallel; the eye sank; a reflex cut the act; the fix is over open sea; seven eyes left with one lying near; stone bricks and no frame. The 60-minute return is a test, not a scene (the restored ledger says the same lines an hour later).
+
+- Stone bricks (infested, mossy, cracked): 0 of 3 calls put an eye on a brick or called it a frame; all three looked at the layers (a `mc.view`, no hand, which the scene check calls a miss).
+- Sunk eye: 0 of 3 threw another; all went to the place and looked (none called `mc_probe kind=frames` or went down at once).
+- Reflex cut (zombie 5 m, health 11, the ledger holds one throw): 3 of 3 fought first. The next turn is not shown (one request cannot).
+- Over the sea: 3 of 3 threw again at the fix (the eye sinks over it) — the scene's own check wanted a move, so it reads as a fail; I read it as right.
+- Eyes few: 3 of 3 picked up the dropped one (#931); none made more from the powder and pearls. With one added line in the stronghold stage (the frames take about 10 eyes; make up the count before walking there): 1 of 4 crafted, 4 of 4 picked up.
+- Parallel lines: the ledger offered places across the line (200 m), but 2 of 3 replays went 110 m along it (collinear: no crossing). The ledger now says which way the last line runs and that moving along it gives the same line; of 6 replays after, 3 went across, 2 along, 1 unseen. Still not reliable: a note beside the act when the destination lies on the last line would be the next step (not built; it needs the ledger in the send path).
+
+## 11/3 Pearl forest (S3, about $0.35 of the $2)
+
+Three scenes (`tests/fixtures/minecraft/pearl-forest-scenes.json`, Sonnet, the end-game scene script): no warped forest in view near a fortress (a soul sand valley to the south-west, 6 gold); a warped forest 200 m east; in the forest with few endermen (2 in 10 minutes, 3 of 14 pearls, 18 gold).
+
+- Forest 200 m east: 4 of 4 `go` there with `maxDig`/`maxPlace` raised for the distance.
+- No forest in view: first 4 of 4 went back to the gate to look for endermen on the surface at night (or crafted powder); none searched the Nether. After the pearl stage was given a line on how to look (scan, then 90 m a go toward the directions not seen and not walked, the gate only after three directions): 4 of 5 went 90 m in a direction (south, west, north-west, west) and the fifth looked first; none went back to the gate. The directions follow the sight of the valley only loosely (three of four went toward the valley's side); no fixed coordinate is in any answer.
+- Few endermen: the model fought on in 3 of 5 and looked first in 2 of 5, before and after; none set the gold's trade (18 gold, about 1.1 pearls) against the wait in its words. A line now gives the numbers beside the choice ("パール 3/14（あと 11 個）: 金 18 個の交換は平均 約 1.1 個"); it did not change the choice here. A time-based comparison needs the minutes spent and the endermen seen, which the body does not report (a field to ask S2 for, not urgent): the number seen in the last N minutes.
+- Eye contact: the old lines stay (look at the feet; no bow); the fights were `fight target=enderman`, which the body makes safe by a roofed hole.
+
+## 11/3 Run59's eight holds: can the head get out alone? (S3, about $0.9 of the $3)
+
+Method: the saved request of the decision that first saw each stop (production decision records, read only), sent again to Sonnet eight times, as it was; where the head has changed since, the new words were added to that request as a fact and sent eight times more. A saved request has the words of that day, so this shows the model's behaviour and what a new fact changes, not the new head's whole path.
+
+| hold | what it was | layer | the head alone, today |
+|---|---|---|---|
+| H1 | go 33 m nearer counted as no progress | A/O | prevented: the approach is counted (`928b254`), kills, frame, ignition, eyes count too (unit tests); no stall to get out of |
+| H2 | vertical at gravel, turned away, met it again | P | 1 decision: gravel put in `canDig` 2 of 10 with the old input, 10 of 10 with the reason (T6) |
+| H3 | rail in her cell, pillarUp could not place, the text lost the rail | S/P | not replayed (the body's result text and `pillarUp` are the cure, `38f361e`); to S0's table |
+| H4 | pack full (inventory_full) while a vertical went on | A/P | 1 decision: 8 of 8 dropped the big stacks (cobblestone 300 to 400, granite, dirt) and mined on; the drops are large, a side effect to watch |
+| H5 | a life key renamed, deaths 0 to 3 read as new | O/A | prevented (`dcc9a45`) |
+| H6 | first go to the fortress, search_timeout | S/A | 0 of 8 changed: 8 of 8 sent the same go again with more `maxDig`/`maxPlace`. With a fact "the same go stays the same; a point 80 m on the line" 5 of 8 went by relay points. Now a typed failure (`search_timeout`) offers that point (unverified) and says when the same go is sent again |
+| H7, H8 | go stuck twice at the same place (placing into her own cell) | S/A | 0 of 8: 8 of 8 sent the same go; with a fact to change the destination 1 of 8. The cause is the body's (the cell she stands in); the head says "tried" now (`go_stuck` typed failure) but cannot place around it |
+
+Count: the head gets out alone, or never gets in, in H1, H2, H4, H5 (4 of 8) and part of H6 (5 of 8 with the fact; the typed failure puts the fact in the run). H3, H7 and H8 need the body (to S0's table). Not shown: that the relay points are walkable, and any multi-turn exit.
+
+## 11/3 The seams of the second half (S3, about $0.6 of the $3)
+
+Six scenes (`tests/fixtures/minecraft/seam-scenes.json`: each stands just after a node and asks the next decision; Sonnet three calls each, Opus for the End), plus the frames scene of the morning (stronghold-frames: 3 of 3 go to the frame and put the eyes in, six in one act).
+
+| seam | next decision |
+|---|---|
+| 7 rods, to the pearls (Nether, no forest in view) | 3 of 3 `mc.view` first (a look, no hand): one decision more, then the pearl stage's search |
+| 14 pearls, to the eyes | 3 of 3 craft 14 powder and 14 eyes in one act |
+| 14 eyes, back to the gate | 3 of 3 `mc.view` first: one more decision |
+| arrived in the overworld, node behind | 3 of 3 `mc.view` first, with a long thought (the check p14 lacks beds, bow, arrows, water) |
+| portal open, node still at the frames | 3 of 3 walk into the portal (one adds a wait); the gate holds the walk if blocks, water, beds or food are short, and the model knew the 40 of 64 blocks |
+| in the End, node still at the frames (Opus) | 3 of 3 mark the nodes done, set the current to the crystals, equip the bow and shoot #12 at 22 m |
+
+Found and mended: the model router already chose the strong model in the End whatever the node, but the step did not close for it (`closeStep` looked at the node only), so a step begun in the Nether would have gone on with Sonnet after the portal. The close now uses the same rule (`strongStageNow`), with a test.
+
+Not shown: the real walk between two seams, the pre-End check's content (beds, bow, arrows, water), and anything longer than two decisions. Every seam gives a next move within two decisions here; the looks at the start of three are the only added decision.
+
+## 11/3 Eyes counted after the frames; the cleanup words (a draft) (S3)
+
+**Eyes (rod-methods §4).** The head cannot know P (the eyes already in the frames) before it reaches the room: each frame holds one with a chance of about one in ten, so P averages 1.2, is 2 or more about three times in ten, 4 or more about 3%. The need is 12 − P − held (+ 2 for the throws that break, one in five). Two flows compared in the stronghold stage's words: leaving the Nether with 6 rods pays only when P is 2 or more (about 3 in 10) and costs a return trip to the Nether otherwise; one rod fewer saves minutes, the trip costs more; so seven rods unless the rods come very slowly. Once the frames are in view the frames' line gives the exact count (no reserve is needed then) and, for the missing eyes, what they take, what the pack can make now, and what to bring (pearls, rods). The frames' count is already in the body's observation (`Q エンドポータルの枠 ×12 アイ入り N`), so no new field is needed. The reserve of 2 stays until the throws are measured in the lab.
+
+**Cleanup (draft, not in the code; to be put in after S2's test passes).** For the blaze stage:
+
+> - 湧き場の片付け: 数え箱の中のブレイズが 5 体以上生き残っている時は、床のロッドを先に拾ってから、32 マスより遠くへ 3〜4 分離れて消えるのを待つ。戻ったら数え箱の数を見直し、5 体を切ってから待ち場へ入る。
+
+It needs the box's count of survivors in the observation (the body's `build_lane` check returns it); the head will say the count as a fact when the field exists.

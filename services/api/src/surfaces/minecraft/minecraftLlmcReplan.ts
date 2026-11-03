@@ -6,14 +6,15 @@ import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
  * The head's look for a task that is not held (`minecraftLlmcWatch.ts`) finds the stall; the strong model is asked once, with a short brief
  * that holds no history (`minecraftLlmcReplanBrief.ts`), for the ops of a `plan.update`; the head applies them at the next read of the plan.
  * It is bounded in time, count and tries, and every attempt counts, an answer or not:
- * - at least `gapMs` of the task's running time between two, `perHour` in any hour, `perRun` in the whole run;
+ * - at least `gapMs` (5 minutes: the owner's 3-hour plan, 2026-11-03; it was 10) of the task's running time between two, `perHour` in any
+ *   hour, `perRun` in the whole run;
  * - `perNode` for one plan node: past it the stall is told to the decision as a fact (the node did not move after that many new plans), and
  *   the decision chooses; the head blocks nothing by itself.
  * A stall found at the end of a step (a death above all, which the look sees only once) waits in the checkpoint for the next step, and for a
  * free slot, for `pendingMs` of the running clock; after that the look finds it again if it still stands.
  * A hold is kept for the results nobody knows and for the body's and the head's disagreement on who holds the body.
  */
-export const REPLAN = Object.freeze({ gapMs: 10 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000,
+export const REPLAN = Object.freeze({ gapMs: 5 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000,
   pendingMs: 15 * 60_000 });
 
 /** The stalls a new plan answers; a failure of the decision's writing is not one. */

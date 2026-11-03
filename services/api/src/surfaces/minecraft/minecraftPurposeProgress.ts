@@ -93,6 +93,15 @@ export function endFightEvidence(frame: BodyObservation | null): Record<string, 
   return { ...(health !== null ? { 'dragon:damage': Math.max(0, 200 - health) } : {}),
     ...(left !== null ? { 'crystals:down': Math.max(0, 10 - left) } : {}) };
 }
+/**
+ * What the held run's look counts as progress (run59 leg 2's plan, 6.4 and the coordinator's list, 2026-11-03): the unattended watch's evidence, the End
+ * fight included (`endFightEvidence`): without it a held request's dragon fight read as a stall and was held at the first strike.
+ */
+export function lookPurpose(node: PlanNode | undefined, frame: BodyObservation | null, running: ActInput | null,
+  ended: ActInput | null): Record<string, number> {
+  return { ...purposeEvidence(node, frame), ...lookTravelEvidence(running, ended, frame), ...explorationEvidence(node, running, frame),
+    ...endFightEvidence(frame) };
+}
 /** A reason string cannot grant more waiting time. Only an explicit predicate and an observed clock/job can. */
 function waitForDay(clauses: import('../../contracts/minecraftActCondition.js').ActClause[], world: Record<string, unknown>): ObservedWait | null {
   const day = clauses.some(c => c.k === 'time' && c.t === 'day');

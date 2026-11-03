@@ -1,4 +1,5 @@
 import { handDependsProblem } from './continueContract.js';
+import { shieldRushProblem } from './minecraftShieldRushContract.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
@@ -22,7 +23,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   craft: { needs: [['item']], may: ['count'] },
   furnace: { needs: [['at'], ['op']], may: ['item', 'count', 'fuel', 'fuelCount'] },
   chest: { needs: [['at'], ['op']], may: ['items'] },
-  attack: { needs: [['target']], may: ['untilDead', 'seconds', 'hold'] },
+  attack: { needs: [['target']], may: ['untilDead', 'seconds', 'hold', 'style', 'retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] },
   shoot: { needs: [['target', 'at']], may: ['item', 'charge', 'n'] },
   eat: { needs: [], may: ['item'] },
   drop: { needs: [['items']], may: ['target', 'at'] },
@@ -68,6 +69,7 @@ const BLOCK_NAME = /^[a-z][a-z0-9_]{0,39}$/u;
  * Closed words, Japanese. */
 
 export function handProblem(hand: ActHand): string | null {
+  if (hand.do === 'attack' && hand.style === 'shield_rush') return shieldRushHandProblem(hand);
   const fields = HAND_FIELDS[hand.do];
   if (!fields) return 'do が分からない';
   const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
@@ -82,7 +84,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : null,
   chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : null,
   wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
-  attack: hand => hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null,
+  attack: attackProblem,
   go: goProblem,
   obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
   fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null),
@@ -94,6 +96,41 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   smelt: hand => seconds(hand, 5, 60) ?? (hand.items!.length < 1 || hand.items!.length > 4 ? 'items は 1〜4 種類' : null)
     ?? (hand.items!.some(entry => entry.count === undefined) ? 'items には個数が要る' : null) ?? (hand.at !== undefined && hand.at.length > 4 ? 'at は 4 つまで' : null),
 };
+const RUSH_FIELDS = ['retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] as const;
+const objectOf = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+
+/** Shield rush fields are checked before the broad schema too, so each refusal gives the form to write. */
+export function shieldRushHandProblem(hand: ActHand): string | null {
+  if (hand.do !== 'attack') return null;
+  if (hand.style === undefined) {
+    const field = RUSH_FIELDS.find(key => hand[key] !== undefined);
+    return field ? `${field} は style=shield_rush の attack だけ` : null;
+  }
+  if (hand.style !== 'shield_rush') return 'style は shield_rush だけ（style=shield_rush）';
+  return shieldRushProblem(hand as unknown as Record<string, unknown>);
+}
+
+/** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */
+export function shieldRushActProblem(input: unknown): string | null {
+  const act = objectOf(input), hands = act?.hands;
+  if (!Array.isArray(hands)) return null;
+  for (const [index, raw] of hands.entries()) {
+    const hand = objectOf(raw);
+    if (!hand) continue;
+    const problem = shieldRushHandProblem(hand as unknown as ActHand);
+    if (problem) return `手${index + 1}（${String(hand.do)}）: ${problem}`;
+  }
+  if (hands.some(raw => objectOf(raw)?.style === 'shield_rush') &&
+    !(Array.isArray(act?.accept) && act.accept.length === 1 && act.accept[0] === 'blaze')) {
+    return 'shield_rush を含む act の accept は ["blaze"] が要る（ほかの種類を含めない）';
+  }
+  return null;
+}
+
+function attackProblem(hand: ActHand): string | null {
+  return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null);
+}
 /** A hand's `seconds` within a kind's own range. */
 const seconds = (hand: ActHand, least: number, most: number): string | null =>
   hand.seconds !== undefined && (hand.seconds < least || hand.seconds > most) ? `seconds は ${least}〜${most}` : null;

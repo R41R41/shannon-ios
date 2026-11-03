@@ -89,7 +89,7 @@ export function noteCautions(surprises: readonly Surprise[], probes: readonly Pr
   for (const surprise of surprises) {
     const own = probes.flatMap((probe, index) => surprise.probes.some(item => JSON.stringify(item) === JSON.stringify(probe))
       ? [{ probe, answer: answers[index] }] : []);
-    const fact = cautionFact({ code: surprise.code, nth: surprise.nth ?? 1, hand: surprise.hand ?? null }, own.map(item => item.probe),
+    const fact = cautionFact({ code: surprise.code, nth: surprise.nth ?? 1, hand: surprise.hand ?? null, at: surprise.at ?? null }, own.map(item => item.probe),
       own.map(item => item.answer));
     try { if (fact && note(fact)) noted += 1; } catch { /* a note never fails a step */ }
   }
@@ -149,11 +149,15 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   const observeNoted = (): BodyObservation | null => { const frame = parts.observe();
     hitWatch.note(frame);
     return frame; };
-  const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops() });
+  const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops(),
+    failures: events.failureFacts(observation) });
   const queueNow = (frame: BodyObservation | null): string[] => parts.queue ? queueNowLines(parts.queue.lines(frame), parts.queue.ahead()) : [];
   // The stops of the acts that ended (a go's or a vertical's distance left) are told with the next decision, from
 // the receipt's result and not from its words.
-  parts.queue?.onRan((_item, _result, receipt) => events.noteStops(receipt?.result));
+  parts.queue?.onRan((item, _result, receipt) => {
+    events.noteStops(receipt?.result);
+    events.noteFailures(receipt?.result, parts.observe(), item.input);
+  });
   let observation: BodyObservation | null = null, bodyAge: string | null = null, reasons: string[] = [];
   /** Continue contract 5: the frame the last context read, as the commands name it (null: it had no life to name). */
   let read: MadeIn | null = null;

@@ -11,7 +11,9 @@ import type { MinecraftControl } from './minecraftControl.js';
 import { urgentWatch } from './minecraftLlmc.js';
 import { type ReflexCapped } from './minecraftLlmcBodyEvents.js';
 
-export const QUEUE_T = Object.freeze({ minMs: 2_000, maxMs: 8_000, defaultMs: 5_000, kept: 10 });
+/** R3-1 (1): T' is the 90th percentile of the last `kept` decisions and a second more (the median woke the head
+ * too late for about half of its decisions: they took longer than T), within min and max. */
+export const QUEUE_T = Object.freeze({ minMs: 2_000, maxMs: 8_000, defaultMs: 5_000, kept: 10, quantile: 0.9, marginMs: 1_000 });
 
 /** The longest an item's wait to start (the sum of the items ahead of it and a margin). */
 export const START_MARGIN_MS = 10_000,
@@ -32,14 +34,13 @@ export const counters = new Map<string, number>();
  * in place of the first guesses of an estimate. */
 export const verticalSpeeds = new Map<string, ActTimeTuning>();
 
-/** T for a task: the median of its last decisions' seconds, within `QUEUE_T`. */
+/** T' for a task: the 90th percentile of its last decisions' ms plus `QUEUE_T.marginMs`, within `QUEUE_T`; the default with none. */
 export function queueWakeMs(taskId: string): number {
   const times = decisionTimes.get(taskId) ?? [];
   if (!times.length) return QUEUE_T.defaultMs;
-  const sorted = [...times].sort((a, b) => a - b),
-    middle = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
-  return Math.round(Math.min(QUEUE_T.maxMs, Math.max(QUEUE_T.minMs, median)));
+  const sorted = [...times].sort((a, b) => a - b);
+  const high = sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(QUEUE_T.quantile * sorted.length) - 1))]!;
+  return Math.round(Math.min(QUEUE_T.maxMs, Math.max(QUEUE_T.minMs, high + QUEUE_T.marginMs)));
 }
 
 /** For tests: no task has a record of its decisions or its item numbers. */
@@ -88,6 +89,8 @@ export interface QueueItem {
   dependsOn: string[] | undefined;
   uses: UsesSnapshot[];
   resume: { item: string; command: string } | undefined;
+  /** R3-1 (4): a reserve item (the stand-in the head puts last while it thinks): its end is not what a decision rests on. */
+  reserve?: boolean;
 }
 
 export interface QueueAdd {
@@ -97,6 +100,8 @@ export interface QueueAdd {
   arguments: Record<string, unknown>;
   skill: string;
   pre?: ActCondition;
+  /** R3-1 (4): the head's reserve item (see minecraftLlmcReserve.ts); set by the act's `reserve` mark. */
+  reserve?: boolean;
   /** The plan's current node when the model sent it (the plan follows the work only under the same one). */
   current?: string | null;
   node: string | null;
@@ -123,6 +128,8 @@ export interface QueueDeps {
   context(): BodyTaskContext;
   lease: ActionLease;
   taskId: string;
+  /** R3-1 (4): whether this task takes reserve items (an unattended task only: a held or watched one does not). Absent: no reserve. */
+  reserveAllowed?(): boolean;
   /** A pending incident take prevents new motor commands, including answers from an already running decision. */
   holdPending?(): boolean;
   observe(): BodyObservation | null;
@@ -160,10 +167,16 @@ export const sleepMs = (ms: number) =>
 export const sameWork = (left: ActInput, right: ActInput): boolean =>
   JSON.stringify([left.hands, left.repeat, left.done]) === JSON.stringify([right.hands, right.repeat, right.done]);
 
-export type RanListener = (item: { call: FcaToolCall; why: string }, result: ToolResult, receipt?: MinecraftControlReceipt) => void;
+/** The actual prepared input is optional for older head callers; absent input cannot prove a repeated hand. */
+export type RanListener = (item: { call: FcaToolCall; why: string; input?: ActInput },
+  result: ToolResult, receipt?: MinecraftControlReceipt) => void;
 
 /** The queue as the head's tools and lifecycle use it (`FcaBodyQueue` is what the runner sees of it). */
 export interface LlmcQueue extends FcaBodyQueue {
+  /** (R3-1 3) The step's close, for the head's own callers (the stall detector, the plan's node change):
+   * the reserve items go, the decided ones run out, the step ends. */
+  closeStep(reason: string): void;
+  closing(): boolean;
   add(spec: QueueAdd): Promise<AddResult>;
   /** The items asked to be taken off, and the ones behind them that do not say they rely on something else;
    * resolves when the body has

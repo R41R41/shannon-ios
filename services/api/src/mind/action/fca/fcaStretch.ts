@@ -10,7 +10,7 @@ import { resultSummary, type RoundContext, type RoundOutcome } from './fcaToolRo
  * decides again from the history so far, and it commits only when no item is open. This file is what the step does between two decisions: the wait,
  * and the results of the items that ended meanwhile (news), which stand in the history once, at the end of the round they came during.
  */
-export const FCA_STRETCH = Object.freeze({ maxDecisions: 10, maxMs: 180_000 });
+export const FCA_STRETCH = Object.freeze({ maxDecisions: 18, maxMs: 300_000 });
 export const NEWS_HEAD = '（列の知らせ）';
 
 /** What the step does after a round's calls: wait for the queue to ask for a decision, or to run dry. `continuing`: decide again, items still open. */
@@ -21,7 +21,10 @@ export async function waitForQueue(parts: { ports: FcaStepPorts; signal: AbortSi
   if (parts.stale) queue.cancelAll();
   const messages = () => (parts.runtime.pendingMessageIds?.(parts.step.scopeKey, parts.step.taskId) ?? []).some(id => !parts.step.messageIds.includes(id));
   const alert = () => { try { return parts.ports.body?.alert?.() === true; } catch { return false; } };
-  const drain = parts.round >= FCA_STRETCH.maxDecisions || Date.now() - parts.startedAt >= FCA_STRETCH.maxMs;
+  const limited = parts.round >= FCA_STRETCH.maxDecisions || Date.now() - parts.startedAt >= FCA_STRETCH.maxMs;
+  // R3-1 (3): a step that closes (its limit, or a close asked for) takes the reserve items off first.
+  if (limited) queue.closeStep?.('step_limit');
+  const drain = limited || queue.closing?.() === true;
   let wake: FcaQueueWake = 'empty';
   if (queue.open() && parts.tools && !parts.stale) wake = await queue.ready({ signal: parts.signal, drain, messages, alert });
   // Words from the owner: what waits is taken off, the running item goes on, and the step ends once it has (the message is the next step's).

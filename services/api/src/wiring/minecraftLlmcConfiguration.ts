@@ -148,12 +148,14 @@ export function keyFor(values: Readonly<Record<string, string | undefined>>, mod
 
 /**
  * The kinds of the plan's current node in which a decision is made by the strong model (the plan's: `names.plan`, Opus unless the
- * environment says otherwise) and not by the main one (owner 2026-11-02: Opus where it matters, the late game). It is read from the plan the
+ * environment says otherwise) and not by the main one (owner 2026-11-02: Opus where it matters, the late game; the coordinator, 2026-11-03, after the scene
+ * replays: the End and the dragon only, since the Nether and the eyes were as good with Sonnet and the filming is a race). It is read from the plan the
  * last step committed (`fcaPlanTree` of the checkpoint), so a restart picks the same model. No new setting: with the main model the same as the
- * plan's, nothing is raised. Which stages: the way past the Nether and the End (owner 2026-11-02: when in doubt, Opus); the scene replay of Sonnet
- * against Opus (`docs/minecraft-endgame-head-2026-11.md`, correct decisions and seconds per decision) may narrow it.
+ * plan's, nothing is raised. Which stages: the End and the dragon (the scene replay of Sonnet against Opus,
+ * `docs/minecraft-endgame-head-2026-11.md`: the End scenes Opus 4 of 4, Sonnet 1 of 4; the Nether and eye scenes the same quality). The plan's own
+ * model also makes the first plan and the new plans of the supervision.
  */
-export const LLMC_STRONG_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['nether', 'fortress', 'blaze', 'pearl', 'stronghold', 'end', 'dragon']);
+export const LLMC_STRONG_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['end', 'dragon']);
 
 /** The strong kind of the plan node the task is on, or of the nearest node above it that has one (a node the strong model's own plan added
  * under the stage keeps the stage), from the plan in its checkpoint; null in any other stage and without a readable plan. */
@@ -168,6 +170,11 @@ export function strongStage(checkpoint: unknown): PlanKind | null {
   return null;
 }
 
+/** The strong kind of the stage she is in: the plan's node when it is one, else `end` when the body is in the End (the node may be behind). */
+export function strongStageNow(checkpoint: unknown, dimension: string | null): PlanKind | null {
+  return strongStage(checkpoint) ?? (dimension === 'the_end' ? 'end' : null);
+}
+
 /**
  * Picks the model of one decision: the escalation model while the task's failed steps in a row
  * (`consecutiveToolFailures` of the step's checkpoint) are `LLMC_ESCALATE_FAILURES` or more; else the strong one in a stage of
@@ -179,10 +186,12 @@ export function llmcModelRouter(
   checkpoint: unknown,
   log?: (line: string) => void,
   taskId = '',
+  dimension: () => string | null = () => null,
 ): FcaModel {
   const failures = Number((checkpoint as { consecutiveToolFailures?: unknown } | null)?.consecutiveToolFailures ?? 0);
   const raised = models.escalate && Number.isSafeInteger(failures) && failures >= LLMC_ESCALATE_FAILURES;
-  const stage = raised || !models.strong ? null : strongStage(checkpoint);
+  // In the End the strong model decides whatever the plan's current node says (run59, 00:50: the node stayed on the overworld's beds in the Nether).
+  const stage = raised || !models.strong ? null : strongStageNow(checkpoint, dimension());
   if (raised || stage) {
     try {
       log?.(raised ? `Shannon Minecraft model raised task=${taskId} failures=${failures}` : `Shannon Minecraft model strong task=${taskId} stage=${stage}`);

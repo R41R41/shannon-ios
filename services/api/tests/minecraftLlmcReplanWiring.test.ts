@@ -58,6 +58,24 @@ describe('the look and the plan made again for a task that is not held, wired', 
     expect(unheld!.checkpoint()).toMatchObject({ minecraftReplans: { v: 1, total: 1, nodes: { 'p1.1': 1 } } });
   });
 
+  it('writes the stall record when it asks (kind, seconds, the strong model wait, the count against the cap, the body state), and says when the body got out of the node', async () => {
+    const { clock, lines, unheld } = setup();
+    unheld!.watch.look();
+    clock.now = 130_000;
+    unheld!.watch.look();
+    await unheld!.flow.run(signal);
+    const record = lines.find(line => line.startsWith('Shannon Minecraft stall record task=uw '));
+    expect(JSON.parse(record!.replace('Shannon Minecraft stall record task=uw ', ''))).toMatchObject({ kind: 'node_stalled', node: 'p1.1', idleSeconds: 130, outcome: 'changed',
+      gapWaitMs: 0, nodeAsks: 1, nodeCap: 3, vitals: { enemies16: 0 } });
+    unheld!.flow.escaped('p1.1');
+    expect(lines.some(line => line.startsWith('Shannon Minecraft stall escaped'))).toBe(false);
+    clock.now = 190_000;
+    unheld!.flow.escaped('p2');
+    expect(lines).toContain('Shannon Minecraft stall escaped task=uw node=p1.1 afterSeconds=60 replan=changed');
+    unheld!.flow.escaped('p3');
+    expect(lines.filter(line => line.startsWith('Shannon Minecraft stall escaped'))).toHaveLength(1);
+  });
+
   it('watches the queue\'s results too (a result is a look), and puts the wait it saved into the checkpoint', () => {
     const { clock, listeners, unheld } = setup();
     expect(listeners).toHaveLength(2);

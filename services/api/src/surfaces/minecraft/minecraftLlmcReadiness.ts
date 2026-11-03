@@ -4,6 +4,7 @@ import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts 
 import { carriedFood } from './minecraftLlmcLive.js';
 import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 
@@ -446,23 +447,33 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
  */
 export function requiredLack(facts: NonNullable<ReturnType<typeof readinessOf>>, kinds: readonly PlanKind[]): string | null {
   const stage = preparationStage(facts.dimension, facts.counts, kinds);
-  const table = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : null;
+  return lackOfTable(facts, stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : null);
+}
+
+/** The required needs of one table that are not met, with what going on without them costs, or null (no table, no risk to say, or all met). */
+export function lackOfTable(facts: NonNullable<ReturnType<typeof readinessOf>>, table: PrepStage | null): string | null {
   if (!table?.risk) return null;
   const must = mustWords(table, { counts: facts.counts, food: facts.food, worn: wornItems(facts.world.worn) });
   return must.length ? `未達の必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : null;
 }
 
-/** A hand that goes into the Nether: the portal hand (it enters unless `enter` is false). */
-const entersNether = (hands: unknown): boolean => (Array.isArray(hands) ? hands : []).some(raw => record(raw)?.do === 'portal' && record(raw)?.enter !== false);
+/** The first hand of an act (0-based) that goes into the Nether: the portal hand, which enters unless `enter` is false; -1 when none. */
+const enteringHand = (hands: unknown): number => (Array.isArray(hands) ? hands : [])
+  .findIndex(raw => record(raw)?.do === 'portal' && record(raw)?.enter !== false);
 
 /**
- * Run59 leg 1: the portal hand went out five seconds after the obsidian with the shield and the armour still missing in the shortage line, and nothing
- * in the hand's answer said that going in was what the lack costs. A hand that enters the Nether while a required need of the gate is missing says so
- * in its result, as the descent's does: the lack, what it costs, and that its acceptance does not mean the need was met.
+ * Run59 leg 2 (2026-11-02 14:34Z, with the wording of 8503f22 in production): the shield was missing (`make shield` had said 「missing: oak_log×2」)
+ * and the model sent 「胸当てを着てゲートを建て点火（盾は材料なしで後回し）」: the portal hand, the third time in the run, with a required need of the
+ * gate missing (the lines said it, and the result said it after the hand was accepted). The last resort of the coordinator's order (the wording
+ * first): the hand that enters the Nether is held while a required need of the gate is missing, as the act's other held hands are (the hands
+ * before it are sent), and what is missing and what going on costs is said in its place. The need is read as the body is now: armour carried and
+ * not worn is missing, so an act that equips it and enters in one goes in the next. Null: nothing is held.
  */
-export function gateNote(input: unknown, frame: BodyObservation | null): string | null {
+export function gateHold(input: unknown, frame: BodyObservation | null): { hand: number; line: string } | null {
   const facts = readinessOf(frame);
-  if (!facts || facts.dimension !== 'overworld' || !entersNether(record(input)?.hands)) return null;
+  if (!facts || facts.dimension !== 'overworld') return null;
+  const portalHand = enteringHand(record(input)?.hands), at = portalHand >= 0 ? portalHand : portalCellHand(input, frame);
+  if (at < 0) return null;
   const lack = requiredLack(facts, ['portal']);
-  return lack ? `準備の状態（この act はネザーへ入る手）: ${lack}。この受付は、準備が満たされたことを表さない` : null;
+  return lack ? { hand: at + 1, line: `ネザーへ入る手は送らない。${lack}。そろえてからもう一度出す（理由を書いても省けない）` } : null;
 }

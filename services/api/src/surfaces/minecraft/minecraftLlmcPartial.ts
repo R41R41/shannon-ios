@@ -4,7 +4,9 @@ import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
-import { descentNote, gateNote } from './minecraftLlmcReadiness.js';
+import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
+import { tableNote } from './minecraftLlmcTableNote.js';
+import { descentNote, gateHold } from './minecraftLlmcReadiness.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
 import { ruleGuardOfFrame, type RuleStop } from './minecraftLlmcRuleGuard.js';
 import { goStop } from './minecraftLlmcGoGuard.js';
@@ -40,16 +42,19 @@ const handLine = (stop: HandStop): string => `手 ${stop.hand} ${stop.kind}: ${s
  * urgent limit). `urgent`: the decision was an urgent one (its live state's answer line says 「手は 3 つまで」). Null when none holds.
  */
 export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, notes?: string[]): Held | null {
-  const wait = furnaceWaitNote(input, frame);
+  const wait = furnaceWaitNote(input, frame), table = tableNote(input, frame);
   if (wait) notes?.push(wait);
+  if (table) notes?.push(table);
   const dive = urgent ? null : descentNote(input, frame);
   if (dive) notes?.push(dive);
-  const gate = urgent ? null : gateNote(input, frame);
-  if (gate) notes?.push(gate);
   const options = { bodyRules: true, continuePlace: true, ...(notes ? { notes } : {}) };
   const stand = preflightOfFrame(input, frame, taskId, options), rule = ruleGuardOfFrame(input, frame, taskId);
   const found: Held[] = [...stand ? [{ hand: stand.hand, code: stand.code, kind: stand.kind, line: preflightLine(stand) }] : [],
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
+  const gate = gateHold(input, frame);
+  if (gate) found.push({ hand: gate.hand, code: 'gate_required', kind: 'portal', line: `手 ${gate.hand} portal: ${gate.line}。` });
+  const deadly = deadlyGateHold(input, frame);
+  if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
     furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
