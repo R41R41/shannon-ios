@@ -1,8 +1,9 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { wornItems } from './minecraftItems.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
-import { BEFORE_END } from './minecraftLlmcPrepRules.js';
+import { BEFORE_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
 import { FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
@@ -130,11 +131,34 @@ function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
   return { hand: at + 1, kind: 'work', line };
 }
 
+/** Hands that put the armour on, make it, feed or defend: they go whatever the armour is. */
+const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['equip', 'craft', 'make', 'smelt', 'furnace', 'eat', 'fight', 'attack', 'shoot', 'look', 'wait', 'sneak']);
+
+/**
+ * Piglins turn on a body with no golden piece worn (run59, 11/3 14:15: dead in the Nether to a piglin; the boots were never made, one ingot in the pack).
+ * In the Nether with none worn and the means in the pack (a golden piece carried, or four ingots for the boots), the hands that are not the putting
+ * on, the making, eating or defence are held: the armour comes first. Without the means in the pack nothing is held (the way to gold is the
+ * decision's).
+ */
+function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  if (!Array.isArray(hands) || facts.dimension !== 'the_nether') return null;
+  if (wornItems(facts.world.worn).some(name => GOLD_ARMOUR.test(name))) return null;
+  const piece = [...facts.counts].find(([name, count]) => GOLD_ARMOUR.test(name) && count > 0)?.[0];
+  const ingots = facts.counts.get('gold_ingot') ?? 0;
+  if (!piece && ingots < GOLD_FOR_BOOTS) return null;
+  const at = hands.findIndex(raw => !GOLD_FIRST_HANDS.has(String(objectOf(raw)?.do ?? '')));
+  if (at < 0) return null;
+  const means = piece ? `持っている ${piece} を equip で着る` : `金の延べ棒 ${ingots} 個でブーツを作って着る（${GOLD_FOR_BOOTS} 個で 1 足）`;
+  const line = `金の防具を着ていない間はピグリンが襲う。先に着る手以外は送らない: ${means}。着てからもう一度出す（どう着るかは自分で決める）`;
+  return { hand: at + 1, kind: 'gold', line };
+}
+
 /** The hold of the deadly gate the act goes into, or null (nothing held). */
 export function deadlyGateHold(input: unknown, frame: BodyObservation | null): DeadlyHold | null {
   const facts = readinessOf(frame);
   if (!facts) return null;
-  const weak = lowHealthHold(input, facts);
+  const weak = lowHealthHold(input, facts) ?? goldFirstHold(input, facts);
   if (weak) return weak;
   if (facts.dimension === 'the_nether') {
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;

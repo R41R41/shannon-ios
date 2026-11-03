@@ -35,9 +35,11 @@ const PICKAXE: PrepNeed = { label: '鉄以上のツルハシ', count: 1, pattern
 const BUCKET: PrepNeed = { label: 'バケツ', count: 1, pattern: /^(?:bucket|water_bucket|lava_bucket)$/u };
 const SHIELD: PrepNeed = { label: '盾', count: 1, pattern: /^shield$/u };
 const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て・脚', count: 3, pattern: UPPER_ARMOUR, slots: true, worn: true };
-// The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots are a goal,
-// the rest of the gate's list is required.
-const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true };
+// The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots were a goal.
+// 2026-11-03 14:15 (run59 died in the Nether to a piglin with no golden piece on, a boot not made and one ingot in the pack): one golden piece worn
+// is required at the gate (the boots are the cheapest: four ingots).
+export const GOLD_ARMOUR = /^golden_(?:helmet|chestplate|leggings|boots)$/u;
+const BOOTS: PrepNeed = { label: '金の防具 1 つ（着る。ブーツなら金の延べ棒 4）', count: 1, pattern: GOLD_ARMOUR, worn: true };
 /** The Nether's rock wears a pickaxe out (an iron one is 250 uses: S2's lab, one broke): three iron ones, or one diamond one (which counts for three). */
 const TRIP_PICKAXE: PrepNeed = { label: 'ツルハシ（ダイヤ 1 か鉄 3）', count: 3, pattern: PICKAXE.pattern, weight: name => /^(?:diamond|netherite)_/u.test(name) ? 3 : 1 };
 /**
