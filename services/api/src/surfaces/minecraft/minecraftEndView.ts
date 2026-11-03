@@ -221,7 +221,10 @@ function dragonOf(raw: unknown): EndDragon | null {
   if (!item) return null;
   const phase = num(item.phase);
   const windows = windowsOf(item.windows);
-  const approach = phase !== null && [3, 4, 5, 6, 7].includes(phase) ? approachOf(item.approach) : undefined;
+  const sitting = phase !== null && [5, 6, 7].includes(phase), landing = phase === 3 || phase === 4;
+  const read = sitting || landing ? approachOf(item.approach) : undefined;
+  // Landing and take-off carry the waiting cells only; a stale strike, stage, retreat or basin there is not read.
+  const approach = landing ? (read?.wait?.length ? { strike: [], stage: [], retreat: [], wait: read.wait } : undefined) : read;
   return { id: num(item.id), health: num(item.health), phase: phase !== null && Number.isInteger(phase) && phase >= 0 && phase <= 10 ? phase : null,
     phaseName: typeof item.phaseName === 'string' ? item.phaseName : null, phaseFor: num(item.phaseFor), perched: item.perched === true,
     position: point(item.position), headPosition: point(item.headPosition), distance: num(item.distance),
