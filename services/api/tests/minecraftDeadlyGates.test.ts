@@ -73,7 +73,7 @@ describe('mining with almost no health', () => {
     expect(held!.line).toContain('どう回復するかは自分で決める');
     expect(heldOfFrame(mine, overworld(5.7), 'lh')).toMatchObject({ hand: 2, code: 'gate_required' });
   });
-  it('lets it go at 8 or more, with an enemy within 8 m (the fight or the flight is the decision's), or with no mine hand', () => {
+  it('lets it go at 8 or more, with an enemy within 8 m (the fight or the flight is left to the decision), or with no mine hand', () => {
     expect(deadlyGateHold(mine, overworld(8))).toBeNull();
     expect(deadlyGateHold(mine, overworld(5.7, { threats: ['#9 skeleton 6.0m (1,2,3)'] }))).toBeNull();
     expect(deadlyGateHold({ hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'wait', seconds: 5 }] }, overworld(5.7))).toBeNull();
