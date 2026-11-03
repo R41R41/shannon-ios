@@ -237,3 +237,11 @@ python3 -I rig.py report
 - 分かっている：`execute if entity @a[name=...,advancements={...}]`・`distance`・`[eye=true]` の書き方、`/locate` の答え、End へ tp すると竜が 4.7〜7.3 秒で現れること（ラボで実測。体の観測はまだ）。
 - 仮説：`trial_live` の `server.properties`（難易度 normal、view-distance 10、simulation-distance 8）では、ブレイズのスポナー・エンダーマン・ピグリンの `summon` が期待どおり動く。S7・S8 は実機で初めて確かめる。
 - 不明：S6〜S11 を shannon-home で一度も回していない（確認待ち）。体がネザー・エンドで頭の計画にどう入るか、`goalEvidence`（竜の死を接続中に見る）と advancement の食い違い（弓・爆発・再接続）。
+
+## 後半の通し（区間 L・隔離台・11/4 の反映の後）
+
+ブレイズロッド 7 本を持ってネザーの湧き場に立つところから、パール 12 → 目玉 → 三角測量 → ストロングホールド → 枠 → **エンドに入る**までを、頭は本物・保留なしで一続きに通す区間です（竜を倒す手がまだ無いので、ここで終える）。上限は ¥2,000（運用 CLI の上限）・100 分。物を渡すのはラボの中だけ（本番では渡さない）。
+
+- 走らせ方（VM。11/4 の反映の後に、その頭と体のピンで）：`RIG_HEAD_PIN=<頭のピン> RIG_BODY_PIN=<体のピン> ./rig-window.sh --beside --batch L-<日付> --sections L --seeds c1 --max-wait 900 -- --max-section-yen 2000 --keep-going --keep`（`--keep` でデータベースを残すと、止まりの理由が agent_task_events の fca_stop_requested に残る）。隔離台のあいだ、`vm-lab` の枠とは別に動く。
+- つなぎ目の記録：`PYTHONIOENCODING=utf-8 python3 -I seams.py results/<batch>/<trial>.json results/<batch>/rig-<trial>.log` が、節目と節目のあいだの判断数・使った道具・待ち（fca_wait）・止まった時の次元と所持を出す。S3 の「次の手が出るまでの判断数（再生では 1〜2）」の実走版。
+- S3 のつなぎ目の場面（`services/api/tests/fixtures/minecraft/seam-scenes.json`）の順：ロッド 7→パール（歪んだ森は 90m ずつ go→走査）→パール 14→目玉を作る→ゲートへ戻る→点検（ベッド 4・弓・矢 30・水入りバケツ・食料 80）→要塞を測る→枠→ポータルが開いたら（積める物 64・水・ベッド 4・食料 80）を持って入る。現在節が遅れる場面（ポータルが開いても、エンドに入っても節が p15.2 のまま）は、この区間では意図せず起きるかを見る（作為はしない）。
