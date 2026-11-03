@@ -1,3 +1,4 @@
+import { denStopWords } from '../../contracts/minecraftEnderDenContract.js';
 import type { CutBy, Handover, ItemOutcome, Progress } from '../../contracts/continueContract.js';
 import {
   readActResult, type ActHandLine, type ActResult, type FillCode, type FillResult, type RushCode, type ShieldRushResult,
@@ -249,6 +250,8 @@ noteGoal();
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
   const stopped = verticalStopWords(line);
   if (stopped) out.push(stopped);
+  const den = line.do === 'fight' ? denStopWords(line.code) : '';
+  if (den) out.push(den);
   const fought = line.do === 'fight' && line.code && line.goal === 'done' ? FIGHT_END_WORDS[line.code] : undefined;
   if (fought) out.push(fought);
   if (line.progress?.seen?.length) out.push(`途中で見えた物（追っていない）: ${seenWords(line.progress.seen)}`);

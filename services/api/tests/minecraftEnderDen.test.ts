@@ -43,3 +43,13 @@ describe('probe kind den', () => {
     expect(prepareProbeInput({ kind: 'enderman_den', radius: 8 }, context)?.fixes).toContain('den に使わない欄 radius を外した');
   });
 });
+
+describe('the stop words of a den fight', () => {
+  it('says the reason of a den code as a fact on the fight line, and nothing for another code or hand', async () => {
+    const { handFacts } = await import('../src/surfaces/minecraft/minecraftLlmcResultWords.js');
+    const line = (extra: Record<string, unknown>) => ({ i: 1, do: 'fight', status: 'stopped', line: 'fight 止まった', goal: 'failed', end: 'finished', ...extra }) as never;
+    expect(handFacts(line({ code: 'enderman_did_not_arrive' })).join('\n')).toContain('穴の手が止まった理由 enderman_did_not_arrive: 敵対させて穴の奥で待ったが、20 秒来なかった');
+    expect(handFacts(line({ code: 'reflex' })).join('\n')).not.toContain('穴の手');
+    expect(handFacts(line({ do: 'go', code: 'den_hurt' })).join('\n')).not.toContain('穴の手');
+  });
+});

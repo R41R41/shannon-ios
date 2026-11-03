@@ -35,3 +35,32 @@ export function denActProblem(input: unknown): string | null {
   const index = hands.findIndex(raw => objectOf(raw)?.den !== undefined);
   return index < 0 ? null : `手${index + 1}（fight）: den の手は act に 1 つだけ（他の手と混ぜない）`;
 }
+
+/** What the codes a den fight stops with say (S4's list of 11/3; the body writes `fight 止まった <code>` and no other field). A fact each; none names a next hand. */
+export const DEN_STOP_WORDS: Readonly<Record<string, string>> = {
+  den_angry_before_ready: '穴が出来る前に相手が敵対した',
+  den_path_unsafe: '入口までの道が安全でない',
+  den_turn_timeout: '向き直しが時間内に終わらなかった',
+  den_move_timeout: '移動が時間内に終わらなかった',
+  den_too_far: '入口が遠すぎる',
+  den_approach_failed: '入口に着けなかった',
+  den_dig_failed: '横穴を掘れなかった',
+  den_dig_unconfirmed: '掘れたかを確かめられなかった',
+  den_gaze_conflict: '掘る間に目が合った',
+  den_displaced: '穴の外に出された',
+  den_pickup_threat: '落とし物を拾う間に他の個体が近づいた',
+  den_hurt: '体力を受けた',
+  enderman_not_visible: '相手が見えない',
+  enderman_not_angry: '相手が敵対しなかった',
+  enderman_did_not_arrive: '敵対させて穴の奥で待ったが、20 秒来なかった',
+  den_hazard: '穴の中か周りに溶岩など危ないブロックがある',
+  den_not_diggable: '横穴で掘ってよい固いブロックでない',
+  den_not_open: '入口が開いていない',
+  den_open_shell: '穴の周りに空洞がある',
+  den_outside_unsafe: '入口の外に平らで乾いた床と高さ 3 が無い',
+};
+/** The fact for one stop code of a fight line, or '' for any other code. */
+export const denStopWords = (code: string | undefined): string => {
+  const words = code ? DEN_STOP_WORDS[code] : undefined;
+  return words ? `穴の手が止まった理由 ${code}: ${words}` : '';
+};
