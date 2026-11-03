@@ -877,6 +877,7 @@
     "surfaces/minecraft/minecraftLlmcGoGuard.ts",
     "surfaces/minecraft/minecraftLlmcHandGuards.ts",
     "surfaces/minecraft/minecraftLlmcHealth.ts",
+    "surfaces/minecraft/minecraftLlmcHeldStreak.ts",
     "surfaces/minecraft/minecraftLlmcJourney.ts",
     "surfaces/minecraft/minecraftLlmcLiquid.ts",
     "surfaces/minecraft/minecraftLlmcLive.ts",
