@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { wornItems } from './minecraftItems.js';
+import { searchTravel } from './minecraftLlmcGoldTravel.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
 import { BEFORE_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
@@ -132,10 +133,11 @@ function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
 }
 
 /**
- * The hands the piglins' gate holds: the travel of the search (the way to the blazes and the pearls). A retreat, cover, a meal, the food taken from a chest
- * and the golden armour made are not held (review of 11/4: at 5 health a retreating `go`, a `place` for cover and a `chest take` of bread were refused).
+ * The hands the piglins' gate holds: the long travel of the search (the way to the blazes and the pearls), judged by where it ends (`searchTravel`). A retreat,
+ * cover, a meal, the food taken from a chest, the golden armour made and a way back are not held (review of 11/4: at 5 health a retreating `go`, a `place`
+ * for cover and a `chest take` of bread were refused; at 20 health a `go` back to the gate).
  */
-const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 'vertical']);
+const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['go', 'walk']);
 /** Below this health, or with an enemy near, a move is a retreat and goes through. */
 const GOLD_FIRST_HEALTH = 12;
 const threatened = (world: Record<string, unknown>): boolean => [world.nearbyThreats, world.threats].some(list => Array.isArray(list) && list.length > 0);
@@ -155,11 +157,11 @@ function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
   if (!piece && ingots < GOLD_FOR_BOOTS) return null;
   if (facts.health !== null && facts.health < GOLD_FIRST_HEALTH) return null;
   if (threatened(facts.world)) return null;
-  const at = hands.findIndex(raw => GOLD_FIRST_HANDS.has(String(objectOf(raw)?.do ?? '')));
+  const at = hands.findIndex(raw => GOLD_FIRST_HANDS.has(String(objectOf(raw)?.do ?? '')) && searchTravel(objectOf(raw) ?? {}, facts.world));
   if (at < 0) return null;
   const means = piece ? `持っている ${piece} を equip で着る`
     : `金の延べ棒 ${ingots} 個でブーツを作って着る（${GOLD_FOR_BOOTS} 個で 1 足）`;
-  const line = `金の防具を着ていない間はピグリンが襲う。先に着る前に探索の移動（go・walk・vertical）は送らない: ${means}。`
+  const line = `金の防具を着ていない間はピグリンが襲う。先に着る前に、探索の長い移動（帰る場所への移動と近い一歩は除く）は送らない: ${means}。`
     + '着てからもう一度出す（どう着るかは自分で決める）';
   return { hand: at + 1, kind: 'gold', line };
 }

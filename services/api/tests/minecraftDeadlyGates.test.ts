@@ -111,19 +111,32 @@ describe('the golden piece against the piglins (run59, 14:15: dead in the Nether
     expect(deadlyGateHold({ hands: [{ do: 'eat', item: 'cooked_beef' }] }, overworld([]))).toBeNull();
   });
   it('in the Nether holds the travel of the search, only when the means are in the pack', () => {
-    const work = { hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'go', to: { x: 5, y: 70, z: 5 } }] };
+    const work = { hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'go', to: { x: 60, y: 70, z: 60 } }] };
     expect(deadlyGateHold(work, nether([['gold_ingot', 4]]))).toMatchObject({ hand: 2, kind: 'gold' });
     expect(deadlyGateHold(work, nether([['golden_helmet', 1]]))!.line).toContain('equip で着る');
     expect(deadlyGateHold(work, nether([['gold_ingot', 1]]))).toBeNull();
     expect(deadlyGateHold(work, nether([['gold_ingot', 4]], '足: golden_boots(残り65/65)'))).toBeNull();
     expect(deadlyGateHold({ hands: [{ do: 'make', item: 'golden_boots' }, { do: 'equip', item: 'golden_boots' }] }, nether([['gold_ingot', 4]]))).toBeNull();
   });
+  it('lets a way back and a short hop through at full health, holds the far search (the end of the move decides)', () => {
+    const well = (world: Record<string, unknown> = {}) => frame([['gold_ingot', 4]], { dimension: 'the_nether', health: 20, ...world });
+    const far = { hands: [{ do: 'go', to: { x: 60, y: 70, z: 60 } }] };
+    expect(deadlyGateHold(far, well())).toMatchObject({ hand: 1, kind: 'gold' });
+    expect(deadlyGateHold({ hands: [{ do: 'go', to: { x: 6, y: 70, z: 6 } }] }, well())).toBeNull();
+    const portal = { mapLandmarks: ['P ネザーポータル (60,70,62) 拠点'] };
+    expect(deadlyGateHold(far, well(portal))).toBeNull();
+    expect(deadlyGateHold(far, well({ mapLandmarks: ['[overworld] P ネザーポータル (60,70,62) 拠点'] }))).toMatchObject({ kind: 'gold' });
+    expect(deadlyGateHold(far, well({ rememberedPlaces: { nether_portal: '90m 南 (60,70,62) ↔overworld(1,2,3)' } }))).toBeNull();
+    const goals = (...cells: Array<[number, number]>) => ({ hands: [{ do: 'go', goals: cells.map(([x, z]) => ({ x, y: 70, z })) }] });
+    expect(deadlyGateHold(goals([61, 60], [80, 80]), well(portal))).toBeNull();
+    expect(deadlyGateHold(goals([90, 90], [80, 80]), well(portal))).toMatchObject({ kind: 'gold' });
+  });
   it('lets a retreat, cover, food from a chest and the boots through at 5 health (review of 11/4); holds a move only while well and alone', () => {
     const hurt = () => frame([['gold_ingot', 4], ['bread', 2]], { dimension: 'the_nether', health: 5, food: 12 });
     const chestTake = { do: 'chest', op: 'take', at: [{ x: 2, y: 70, z: 2 }], items: [{ item: 'bread', count: 2 }] };
-    for (const hand of [{ do: 'go', to: { x: 5, y: 70, z: 5 } }, { do: 'place', at: [{ x: 1, y: 70, z: 1 }], block: 'cobblestone' }, chestTake,
+    for (const hand of [{ do: 'go', to: { x: 60, y: 70, z: 60 } }, { do: 'place', at: [{ x: 1, y: 70, z: 1 }], block: 'cobblestone' }, chestTake,
       { do: 'make', item: 'golden_boots' }]) expect(deadlyGateHold({ hands: [hand] }, hurt()), String(hand.do)).toBeNull();
-    const trip = { hands: [{ do: 'go', to: { x: 5, y: 70, z: 5 } }] };
+    const trip = { hands: [{ do: 'go', to: { x: 60, y: 70, z: 60 } }] };
     expect(deadlyGateHold(trip, frame([['gold_ingot', 4]], { dimension: 'the_nether', health: 12 }))).toMatchObject({ hand: 1, kind: 'gold' });
     const piglin = { dimension: 'the_nether', health: 12, nearbyThreats: [{ name: 'piglin', distance: 6 }] };
     expect(deadlyGateHold(trip, frame([['gold_ingot', 4]], piglin))).toBeNull();
