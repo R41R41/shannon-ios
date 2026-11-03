@@ -212,6 +212,7 @@ export const seenWords = (seen: NonNullable<Progress['seen']>): string => seen.s
 /** What the stop code of a vertical hand means, with (for a falling block the body asked to be added) why adding it is safe and quick;
  * '' for any other hand or code. */
 export function verticalStopWords(line: ActHandLine): string {
+  if (line.do === 'fight') return denStopWords(line.code);
   const stop = line.do === 'vertical' && line.code ? VERTICAL_STOP_WORDS[line.code] : undefined;
   if (!stop) return '';
   const falling = fallingDigWords(line);
@@ -250,8 +251,6 @@ noteGoal();
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
   const stopped = verticalStopWords(line);
   if (stopped) out.push(stopped);
-  const den = line.do === 'fight' ? denStopWords(line.code) : '';
-  if (den) out.push(den);
   const fought = line.do === 'fight' && line.code && line.goal === 'done' ? FIGHT_END_WORDS[line.code] : undefined;
   if (fought) out.push(fought);
   if (line.progress?.seen?.length) out.push(`途中で見えた物（追っていない）: ${seenWords(line.progress.seen)}`);

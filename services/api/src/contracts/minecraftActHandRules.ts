@@ -91,7 +91,8 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   attack: attackProblem,
   go: goProblem,
   obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
-  fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null) ?? denProblem(hand as unknown as Record<string, unknown>),
+  fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
+    ?? denProblem(hand as unknown as Record<string, unknown>),
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
     ?? (BLOCK_NAME.test(hand.block!) ? null : 'block はブロックの id（例 iron_ore）') ?? names(hand),
   make: hand => count(hand, 64),

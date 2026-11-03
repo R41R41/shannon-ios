@@ -18,7 +18,9 @@ export function denProblem(hand: Record<string, unknown>): string | null {
   const den = objectOf(hand.den), entrance = objectOf(den?.entrance);
   const cells = ['x', 'y', 'z'].map(key => entrance?.[key]);
   if (!den || Object.keys(den).some(key => key !== 'entrance' && key !== 'direction')
-    || !DEN_DIRECTIONS.includes(den.direction as typeof DEN_DIRECTIONS[number])) return 'den は {entrance:{x,y,z}, direction: north|east|south|west}（mc_probe kind=den の候補のまま）';
+    || !DEN_DIRECTIONS.includes(den.direction as typeof DEN_DIRECTIONS[number])) {
+    return 'den は {entrance:{x,y,z}, direction: north|east|south|west}（mc_probe kind=den の候補のまま）';
+  }
   if (!entrance || Object.keys(entrance).length !== 3 || !cells.every(cell => Number.isSafeInteger(cell))) return 'den.entrance は整数の絶対マス {x,y,z}';
   const target = hand.target;
   if (!(typeof target === 'number' && Number.isSafeInteger(target) && target >= 0) && !(typeof target === 'string' && /^#\d+$/u.test(target.trim()))) {
@@ -36,7 +38,7 @@ export function denActProblem(input: unknown): string | null {
   return index < 0 ? null : `手${index + 1}（fight）: den の手は act に 1 つだけ（他の手と混ぜない）`;
 }
 
-/** What the codes a den fight stops with say (S4's list of 11/3; the body writes `fight 止まった <code>` and no other field). A fact each; none names a next hand. */
+/** What the codes a den fight stops with say (S4's list of 11/3; the body writes `fight 止まった <code>`, no other field). A fact each; no next hand. */
 export const DEN_STOP_WORDS: Readonly<Record<string, string>> = {
   den_angry_before_ready: '穴が出来る前に相手が敵対した',
   den_path_unsafe: '入口までの道が安全でない',

@@ -170,6 +170,8 @@ export function llmcStoredResult(name: string, text: string): { stored: string; 
     return kept.length === lines.length ? { stored: text, shown: null }
       : { stored: [...kept, '（止まった手の周りは、この次の判断の live.lastResults に一度だけ出した）'].join('\n'), shown: shown.slice(0, SHOWN_RESULT_CHARS) };
   }
+  // Lane's compact geometry is for the next decision once, even when the whole answer fits in 400 characters.
+  if (name === MC_PROBE_TOOL && text.startsWith('lane: ') && text.includes('\n')) return keptAndRest(text, text.split('\n')[0]!);
   if (text.length <= LLMC_KEPT_RESULT_CHARS) return { stored: text, shown: null };
   const first = (text.split('\n')[0] ?? '').slice(0, 200);
   return keptAndRest(text, first);
