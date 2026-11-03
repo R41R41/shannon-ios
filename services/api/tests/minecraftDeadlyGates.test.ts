@@ -28,6 +28,7 @@ describe('the blaze spawner', () => {
     expect(held!.line).toContain('ブレイズの湧き場へ入る手は送らない');
     expect(held!.line).toContain('盾 0/1');
     expect(held!.line).toContain('どう取るかは自分で決める');
+    expect(held!.line).toContain('先にパールなど他の段の節へ今の節を移して進めてよい');
     expect(heldOfFrame(fight, frame([['cooked_beef', 20]]), 'dg')).toMatchObject({ hand: 2, code: 'gate_required' });
   });
   it('holds a fight on a blaze given by its id, and a go that ends beside a spawner from far away', () => {

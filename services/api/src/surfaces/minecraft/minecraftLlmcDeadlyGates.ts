@@ -18,6 +18,8 @@ import { FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlm
 export interface DeadlyHold { hand: number; kind: string; line: string }
 const BLAZE_RISK = 'ブレイズの火の玉と炎の傷が重なる。体力・満腹度・食料・盾が足りないと足場で死に、ここまでの装備と時間を失う。作れない・材料が無いと見えた時は、後回しにせず取りに行く';
 const AGAIN = 'そろえてからもう一度出す（理由を書いても省けない。どう取るかは自分で決める）';
+const OTHER_STAGE = 'ブレイズの段が進められない間は、先にパールなど他の段の節へ今の節を移して進めてよい'
+  + '（plan.update の current。飛ばした節は順のまま残る）';
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 type Facts = NonNullable<ReturnType<typeof readinessOf>>;
 type Cell = { x: number; y: number; z: number };
@@ -136,7 +138,7 @@ export function deadlyGateHold(input: unknown, frame: BodyObservation | null): D
   if (weak) return weak;
   if (facts.dimension === 'the_nether') {
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
-    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}` } : null;
+    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${OTHER_STAGE}` } : null;
   }
   const at = facts.dimension === 'overworld' ? portalCellHand(input, frame, 'e') : -1;
   const lack = at >= 0 ? lackOfTable(facts, BEFORE_END) : null;

@@ -1,0 +1,144 @@
+[
+ {
+  "name": "gate-held-old",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "elapsedMinutes": 120,
+  "events": [
+   "act は止められた（手 2 fight）: ブレイズの湧き場へ入る手は送らない。未達の必須（ブレイズの湧き場に入る前に必ず）— 盾 0/1（板 6 と鉄 1 で作業台で作る。作れない時は missing の行を読んで材料を取る）。欠けたまま進むと: ブレイズの火の玉と炎の傷が重なる。体力・満腹度・食料・盾が足りないと足場で死に、ここまでの装備と時間を失う。作れない・材料が無いと見えた時は、後回しにせず取りに行く。そろえてからもう一度出す（理由を書いても省けない。どう取るかは自分で決める）"
+  ],
+  "expect": "ブレイズは今は進められない。計画の今の節をパール（p11.1 など）へ移し（plan.update current）、パールの手を出す。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": -312.5,
+    "y": 64,
+    "z": 188.5
+   },
+   "health": 17,
+   "food": 16,
+   "saturation": 5,
+   "inside": "ネザー要塞の中",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 14
+    },
+    {
+     "name": "blaze_rod",
+     "count": 2
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "[overworld] P ネザーポータル (-39,70,23) 拠点 30m"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "350m 南 (-39,70,23) ↔overworld(-312,68,184)"
+   },
+   "nearbyThreats": [],
+   "nearbyEntities": []
+  },
+  "check": {
+   "match": [
+    "p11"
+   ]
+  }
+ },
+ {
+  "name": "gate-held-new",
+  "goal": "エンドラを討伐して",
+  "current": "p10.2",
+  "elapsedMinutes": 120,
+  "events": [
+   "act は止められた（手 2 fight）: ブレイズの湧き場へ入る手は送らない。未達の必須（ブレイズの湧き場に入る前に必ず）— 盾 0/1（板 6 と鉄 1 で作業台で作る。作れない時は missing の行を読んで材料を取る）。欠けたまま進むと: ブレイズの火の玉と炎の傷が重なる。体力・満腹度・食料・盾が足りないと足場で死に、ここまでの装備と時間を失う。作れない・材料が無いと見えた時は、後回しにせず取りに行く。そろえてからもう一度出す（理由を書いても省けない。どう取るかは自分で決める）。ブレイズの段が進められない間は、先にパールなど他の段の節へ今の節を移して進めてよい（plan.update の current。飛ばした節は順のまま残る）"
+  ],
+  "expect": "ブレイズは今は進められない。計画の今の節をパール（p11.1 など）へ移し（plan.update current）、パールの手を出す。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": -312.5,
+    "y": 64,
+    "z": 188.5
+   },
+   "health": 17,
+   "food": 16,
+   "saturation": 5,
+   "inside": "ネザー要塞の中",
+   "heldItem": "iron_sword",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "cobblestone",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 14
+    },
+    {
+     "name": "blaze_rod",
+     "count": 2
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    },
+    {
+     "name": "oak_slab",
+     "count": 12
+    }
+   ],
+   "mapLandmarks": [
+    "[overworld] P ネザーポータル (-39,70,23) 拠点 30m"
+   ],
+   "rememberedPlaces": {
+    "nether_portal": "350m 南 (-39,70,23) ↔overworld(-312,68,184)"
+   },
+   "nearbyThreats": [],
+   "nearbyEntities": []
+  },
+  "check": {
+   "match": [
+    "p11"
+   ]
+  }
+ }
+]
