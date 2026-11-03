@@ -16,7 +16,7 @@ describe('where a reserve is refused', () => {
   });
   it('in the Nether and the End no reserve has a hand that moves the body; in the overworld it may', () => {
     for (const dimension of ['the_nether', 'nether', 'the_end', 'end']) {
-      for (const kind of ['go', 'walk', 'vertical', 'portal', 'obsidian', 'pillarUp']) {
+      for (const kind of ['go', 'walk', 'vertical', 'portal', 'obsidian', 'pillarUp', 'fight', 'attack', 'fill']) {
         expect(reserveRefusal({ hands: hands('pickup', kind) }, { ...open, dimension }), `${dimension} ${kind}`).toContain('体を動かす手');
       }
       expect(reserveRefusal({ hands: hands('pickup', 'eat', 'equip') }, { ...open, dimension })).toBeNull();
