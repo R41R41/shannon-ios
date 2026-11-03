@@ -127,7 +127,9 @@ describe('the golden piece against the piglins (run59, 14:15: dead in the Nether
     expect(deadlyGateHold(far, well(portal))).toBeNull();
     expect(deadlyGateHold(far, well({ mapLandmarks: ['[overworld] P ネザーポータル (60,70,62) 拠点'] }))).toMatchObject({ kind: 'gold' });
     expect(deadlyGateHold(far, well({ rememberedPlaces: { nether_portal: '90m 南 (60,70,62) ↔overworld(1,2,3)' } }))).toBeNull();
-    expect(deadlyGateHold({ hands: [{ do: 'go', goals: [{ x: 61, y: 70, z: 60 }, { x: 80, y: 70, z: 80 }] }] }, well(portal))).toMatchObject({ kind: 'gold' });
+    const goals = (...cells: Array<[number, number]>) => ({ hands: [{ do: 'go', goals: cells.map(([x, z]) => ({ x, y: 70, z })) }] });
+    expect(deadlyGateHold(goals([61, 60], [80, 80]), well(portal))).toBeNull();
+    expect(deadlyGateHold(goals([90, 90], [80, 80]), well(portal))).toMatchObject({ kind: 'gold' });
   });
   it('lets a retreat, cover, food from a chest and the boots through at 5 health (review of 11/4); holds a move only while well and alone', () => {
     const hurt = () => frame([['gold_ingot', 4], ['bread', 2]], { dimension: 'the_nether', health: 5, food: 12 });
