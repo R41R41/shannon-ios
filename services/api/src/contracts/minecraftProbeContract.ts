@@ -8,7 +8,7 @@ import { ACT_CONTRACT_VERSION, type ActPos } from './minecraftActContract.js';
  */
 export const MC_PROBE_SKILL = 'probe' as const;
 export const MC_PROBE_TOOL = `mc.${MC_PROBE_SKILL}` as const;
-export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp'] as const;
+export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp', 'lane'] as const;
 export type ProbeKind = typeof PROBE_KINDS[number];
 export interface ProbeInput {
   kind: ProbeKind;
@@ -16,8 +16,10 @@ export interface ProbeInput {
   to?: ActPos;
   /** worksite: explicit return destination, evaluated independently. */
   retreat?: ActPos;
-  /** path, sight: from where (default her feet). */
+  /** path, sight, lane: from where (default her feet). */
   from?: ActPos;
+  /** lane: the spawner (default the nearest loaded Nether spawner). */
+  spawner?: ActPos;
   /** sight: a block, or a creature (`#12`). */
   target?: ActPos | string;
   /** column: the column (default her feet's) and its y bounds, top to bottom; frames: the centre of the search (default her feet). */
@@ -52,6 +54,7 @@ export function readProbeResult(text: string | undefined): ProbeResult | { text:
   if (!text) return null;
   try {
     const value = JSON.parse(text) as Partial<ProbeResult>;
+    if (value?.kind === 'lane') return { ...value, text: typeof value.text === 'string' ? value.text : '' } as ProbeResult;
     if (value && typeof value === 'object' && typeof value.text === 'string') return value as ProbeResult;
   } catch { /* not JSON: the text as it is */ }
   return { text };
@@ -65,7 +68,8 @@ export const PROBE_DESCRIPTION = [
     + 'around(radius: 生き物（敵か・狙っているか・見えるか・高さの差）と危ないブロック) / history(at, radius: その場所の最近の手と止まり) / '
     + 'scan(radius: 読み込み済みの範囲の目印。木・村・水・溶岩・構造物・ネザーの幹・要塞・スポナー・ポータル) / '
     + 'frames(x, z: 探す中心（省くと足）、radius: ブロック 16〜128（既定 64）。要塞のエンドポータルの枠を近い順に。無ければ 16 ブロック刻みの輪の次に歩く点) / '
-    + 'camp(ネザーのブレイズの湧き場と、その 3m 以内で縁・火の無い立てる足場)。',
+    + 'camp(ネザーのブレイズの湧き場と、その 3m 以内で縁・火の無い立てる足場) / '
+    + 'lane(spawner, from: 省くと近い湧き場と現在地。暗い1列の通路の四方向の必要数、最少候補の栓・待ち場・通路・立つ所・支え・危険の事実)。',
   'worksite(target または at: 目的物、to: 作業する立ち位置、省略なら届く現在地か隣接候補、retreat: 帰還先): 接近・作業の射程/呼吸/道具・逆向きの帰路を別々に調べる。結果は観測時点の短区間だけ。施工後は再確認。',
   '省いた座標は足から。column の yFrom・yTo を省くと足の上下。',
 ].join('\n');
@@ -80,7 +84,8 @@ export const PROBE_INPUT_SCHEMA = Object.freeze({
     kind: { type: 'string', enum: [...PROBE_KINDS] },
     to: pos('path の行き先'),
     retreat: pos('worksite の帰還先'),
-    from: pos('path・sight の始まり（既定は足）'),
+    from: pos('path・sight・lane の始まり（既定は足）'),
+    spawner: pos('lane の湧き場（省くとネザーの読み込み済みの範囲の近い湧き場）'),
     target: { type: 'string', maxLength: 64, description: 'sight の的: "#id"・生き物の名前・"x,y,z"' },
     at: pos('sight の的のブロック、history の場所'),
     x: intField(-30_000_000, 30_000_000), z: intField(-30_000_000, 30_000_000),
