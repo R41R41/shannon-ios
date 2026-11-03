@@ -10,7 +10,7 @@ import { marksOf } from './minecraftSeenMarks.js';
  * `healing` and `blast`; `unseen`), `perch`, `dragonBreath` (x y z, `radius`, `dangerRadius`) and `dragonFireballs` (a count). A body that sends
  * none of them still marks the dragon, the crystals and the perch on the map (`mapLandmarks`): that is read instead, with what the marks can say
  * (the dragon's health; the crystals in view, not how many are left). Optional S1 shooting places, sets and search stats, the measured
- * window ranges, and the perched stage/strike/retreat positions are read below without inventing missing fields.
+ * window ranges, and the perched stage/strike/retreat/basin positions are read below without inventing missing fields.
  */
 type Rec = Record<string, unknown>;
 export interface Point {
@@ -70,10 +70,22 @@ export interface EndStagePoint extends Point {
   walkMeters: number | null;
   strikeIndex: number | null;
 }
+export interface EndBasinPoint extends Point {
+  walkMeters: number | null;
+  /** The body's walking-time estimate, separate from the route length. */
+  walkSeconds: number | null;
+  /** Eye to the nearest head/neck/body/wing box, unlike the dragon's head-only reach. */
+  headReach: number | null;
+  inWingPush: boolean | null;
+  inBreathNow: boolean | null;
+  /** Facing projection: side 0, front 1, behind -1. */
+  side: number | null;
+}
 export interface EndDragonApproach {
   strike: EndStrikePoint[];
   stage: EndStagePoint[];
   retreat: Array<Point & { walkMeters: number | null }>;
+  basin?: EndBasinPoint[];
 }
 export interface EndDragon {
   id: number | null;
@@ -184,7 +196,12 @@ function approachOf(raw: unknown): EndDragonApproach | undefined {
     const entry = rec(raw), at = point(entry);
     return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters) }] : [];
   }).slice(0, 2);
-  return { strike, stage, retreat };
+  const basin = Array.isArray(item.basin) ? item.basin.flatMap((raw): EndBasinPoint[] => {
+    const entry = rec(raw), at = point(entry);
+    return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters), walkSeconds: nonnegative(entry.walkSeconds),
+      headReach: nonnegative(entry.headReach), inWingPush: bool(entry.inWingPush), inBreathNow: bool(entry.inBreathNow), side: num(entry.side) }] : [];
+  }).sort((a, b) => (a.walkMeters ?? Infinity) - (b.walkMeters ?? Infinity)).slice(0, 3) : undefined;
+  return { strike, stage, retreat, ...(basin ? { basin } : {}) };
 }
 
 function dragonOf(raw: unknown): EndDragon | null {

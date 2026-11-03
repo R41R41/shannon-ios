@@ -140,6 +140,19 @@ export function dragonApproachLine(end: EndView | null, short = false): string |
   return parts.length ? `止まり木の位置: ${parts.join('・')}` : null;
 }
 
+/** Proven basin footing, nearest by the body's walking distance. Unknown fields never mean clear of a hazard. */
+export function dragonBasinLine(end: EndView | null): string | null {
+  const dragon = end?.dragon;
+  if (!dragon || dragon.phase === null || !SITTING.has(dragon.phase)) return null;
+  const positions = (dragon.approach?.basin ?? []).slice(0, 3).map(spot => {
+    const walk = spot.walkSeconds === null ? '' : ` 歩く約 ${tenth(spot.walkSeconds)} 秒`;
+    const wing = spot.inWingPush === null ? '不明' : spot.inWingPush ? '⚠範囲内' : '範囲外';
+    const breath = spot.inBreathNow === null ? '不明' : spot.inBreathNow ? '範囲内' : '範囲外';
+    return `${place(spot)}${walk}・翼の押し ${wing}・息 ${breath}`;
+  });
+  return positions.length ? `窪みの足場 ${positions.length} 件: ${positions.join(' / ')}` : null;
+}
+
 /** A cloud's size in words: the radius the body avoids (it grows with the cloud's age) when it says one, with the cloud's radius now. */
 function cloudWords(cloud: EndCloud): string {
   const now = cloud.radius === null ? '?' : String(round(cloud.radius));
@@ -163,7 +176,7 @@ export function perchLine(end: EndView | null): string | null {
   return spot ? `止まり木: ${spot}` : null;
 }
 
-/** At most six fight lines. Join the two hazards only when the optional observations need the room. */
+/** At most six existing fight lines, plus one basin line for normal decisions. Join hazards when the existing observations need the room. */
 export function endFightLines(end: EndView | null): string[] {
   const lines = [dragonLine(end), crystalLine(end), crystalOpeningLine(end), crystalShootSetsLine(end)].filter((line): line is string => line !== null);
   const positions = dragonApproachLine(end) ?? perchLine(end);
@@ -171,6 +184,8 @@ export function endFightLines(end: EndView | null): string[] {
   if (lines.length + hazards.length + (positions ? 1 : 0) > 6) lines.push(hazards.join('・'));
   else lines.push(...hazards);
   if (positions) lines.push(positions);
+  const basin = dragonBasinLine(end);
+  if (basin) lines.push(basin);
   return lines;
 }
 
