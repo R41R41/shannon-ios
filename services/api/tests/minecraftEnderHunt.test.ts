@@ -12,7 +12,7 @@ describe('huntLine', () => {
     const line = huntLine({ near: 3, nearest: 9.4, elapsedMs: 10 * 60_000, kills: 2, gained: 1, have: 3 })!;
     expect(line).toContain('エンダーマン狩り 10 分: いま近くに 3 体（最寄り 9m）・撃破 2 体・パール +1（3/14）');
     expect(line).toContain('1 体の落とし物は平均 0.5 個（0〜1）');
-    expect(line).toContain('撃破 0.2 体/分）ならあと 11 個に約 55 分');
+    expect(line).toContain('撃破 0.2 体/分）ならあと 11 個に約 110 分');
   });
   it('has no time estimate with no kill, nothing before two minutes, nothing once the pearls are enough', () => {
     expect(huntLine({ near: 2, nearest: 5, elapsedMs: 10 * 60_000, kills: 0, gained: 0, have: 0 })).not.toContain('ならあと');
