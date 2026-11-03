@@ -428,7 +428,7 @@ function heldByPreparation(tree: PlanTree, leaf: string, questions: ReturnType<t
 }
 
 /** The tree's own questions: a node is open (not done, not blocked), and one is itself or under another. */
-function treeQuestions(tree: PlanTree) {
+export function treeQuestions(tree: PlanTree) {
   const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const under = (id: string, top: string): boolean => {
     for (let at: string | null = id, guard = 0; at && guard < 16; at = byId.get(at)?.parentId ?? null, guard += 1) if (at === top) return true;

@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
+import { noteHeldAct } from './minecraftLlmcHeldStreak.js';
 import { heldBeforeSend, heldOfFrame, heldTail, heldWhole, sentPart, type BeforeSend, type Held } from './minecraftLlmcPartial.js';
 import { standAfterHands } from './minecraftLlmcPreflight.js';
 
@@ -22,6 +23,7 @@ export function heldBeforeSendQueued(urgent: boolean, input: ActInput, frame: Bo
   const combined: ActInput = { ...input, hands: [...before, ...input.hands] };
   const notes: string[] = [];
   const found = heldOfFrame(combined, frame, taskId, urgent, notes);
+  if (!found || found.hand > before.length) noteHeldAct(taskId, found);
   const note = notes.length ? { note: notes.join('\n') } : null;
   // A stop in the hands that went before is theirs (they are sent); the new item is held only by its own hands.
   if (!found || found.hand <= before.length) return note;

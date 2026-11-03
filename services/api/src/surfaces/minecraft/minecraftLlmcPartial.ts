@@ -5,6 +5,7 @@ import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } 
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
 import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
+import { noteHeldAct } from './minecraftLlmcHeldStreak.js';
 import { tableNote } from './minecraftLlmcTableNote.js';
 import { descentNote, gateHold } from './minecraftLlmcReadiness.js';
 import { useReachStop } from './minecraftLlmcLiquid.js';
@@ -98,6 +99,7 @@ export type HoldV2 = { whole: string; held: Held } | { part: unknown; tail: stri
 export function holdV2(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): HoldV2 {
   const notes: string[] = [];
   const held = heldOfFrame(input, frame, taskId, urgent, notes);
+  noteHeldAct(taskId, held);
   if (!held) return notes.length ? { note: notes.join('\n') } : null;
   const part = sentPart(input, held);
   if (part === null) return { whole: heldWhole(held), held };
