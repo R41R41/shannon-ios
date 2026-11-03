@@ -251,3 +251,12 @@ Not shown: the real walk between two seams, the pre-End check's content (beds, b
 > - 湧き場の片付け: 数え箱の中のブレイズが 5 体以上生き残っている時は、床のロッドを先に拾ってから、32 マスより遠くへ 3〜4 分離れて消えるのを待つ。戻ったら数え箱の数を見直し、5 体を切ってから待ち場へ入る。
 
 It needs the box's count of survivors in the observation (the body's `build_lane` check returns it); the head will say the count as a fact when the field exists.
+
+## ブレイズの湧き場に着いた場面（Opus、2026-11-03、S3）
+
+`tests/fixtures/minecraft/blaze-arrival-scenes.json`（開けた橋・閉じた部屋・体力 12・生き残り 6 体）を Opus で各 4 回。camp の結果には遮蔽が出ない（body の契約）ので、遮蔽は地図の目印だけにした。
+
+- 変更前の文面（遮蔽は節の末尾の 1 行）: 橋 4/4・部屋 4/4 とも、着いた所から（部屋は camp の足場へ go して）すぐ fight。遮蔽へ入った回は 0。
+- 変更後（戦い方の行に「着いたら先に遮蔽へ go で入る。打つ時は短い act、終わったら遮蔽へ戻る。遮蔽が見つからない時だけ camp の足場から」を足し、遮蔽は camp に出ず地図か around で探すと書いた）: 橋 4/4 が「角へ go → fight → 角へ戻る」。部屋は柱だけの目印では 0/4（部屋の外へ出ない・柱へ行かない）、入口の通路の側壁を目印に足して 4/4。追って橋・部屋の外へ出た回は 0。
+- 体力 12（盾 1）: 4/4 が打たずに角へ退き、食べる・待つ（1 回は丸石で射線を塞ぐ）。盾を作った回は無い（盾 1 枚あり、残りは 60 を切っていない）。
+- 生き残り 6 体: 距離を取って離れ待つ（cleanup）を選んだ回は 0/4。通路の陰へ 2〜3m 退く・食べる 3/4、うち 1 回は退いてまた fight。32m 以上離れて待つ形は出ない。この手は camp の結果にも事実の行にも無く、ラボで通っていないので、頭の言葉では勧めていない（lane／cleanup の文面は `claude/dragon-head-lane` の通過後）。
