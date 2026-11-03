@@ -81,11 +81,19 @@ export interface EndBasinPoint extends Point {
   /** Facing projection: side 0, front 1, behind -1. */
   side: number | null;
 }
+/** A waiting cell beside the perch's facing (phases 3 to 7): 10 to 14 m from the portal's centre, clear of the head, neck, wings, breath and clouds. */
+export interface EndWaitPoint extends Point {
+  walkMeters: number | null;
+  walkSeconds: number | null;
+  /** Facing projection: side 0, front 1, behind -1. */
+  side: number | null;
+}
 export interface EndDragonApproach {
   strike: EndStrikePoint[];
   stage: EndStagePoint[];
   retreat: Array<Point & { walkMeters: number | null }>;
   basin?: EndBasinPoint[];
+  wait?: EndWaitPoint[];
 }
 export interface EndDragon {
   id: number | null;
@@ -201,7 +209,11 @@ function approachOf(raw: unknown): EndDragonApproach | undefined {
     return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters), walkSeconds: nonnegative(entry.walkSeconds),
       headReach: nonnegative(entry.headReach), inWingPush: bool(entry.inWingPush), inBreathNow: bool(entry.inBreathNow), side: num(entry.side) }] : [];
   }).sort((a, b) => (a.walkMeters ?? Infinity) - (b.walkMeters ?? Infinity)).slice(0, 3) : undefined;
-  return { strike, stage, retreat, ...(basin ? { basin } : {}) };
+  const wait = Array.isArray(item.wait) ? item.wait.flatMap((raw): EndWaitPoint[] => {
+    const entry = rec(raw), at = point(entry);
+    return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters), walkSeconds: nonnegative(entry.walkSeconds), side: num(entry.side) }] : [];
+  }).sort((a, b) => (a.walkSeconds ?? Infinity) - (b.walkSeconds ?? Infinity)).slice(0, 3) : undefined;
+  return { strike, stage, retreat, ...(basin ? { basin } : {}), ...(wait?.length ? { wait } : {}) };
 }
 
 function dragonOf(raw: unknown): EndDragon | null {

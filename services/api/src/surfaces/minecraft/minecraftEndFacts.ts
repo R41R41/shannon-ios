@@ -153,6 +153,15 @@ export function dragonBasinLine(end: EndView | null): string | null {
   return positions.length ? `窪みの足場 ${positions.length} 件: ${positions.join(' / ')}` : null;
 }
 
+/** The waiting cells beside the perch's facing (phases 3 to 7), nearest by the body's walking time. */
+export function dragonWaitLine(end: EndView | null): string | null {
+  const dragon = end?.dragon;
+  if (!dragon || dragon.phase === null || dragon.phase < 3 || dragon.phase > 7) return null;
+  const seconds = (spot: { walkSeconds: number | null }) => spot.walkSeconds === null ? '' : ` 歩く約 ${tenth(spot.walkSeconds)} 秒`;
+  const cells = (dragon.approach?.wait ?? []).slice(0, 3).map(spot => `${place(spot)}${seconds(spot)}`);
+  return cells.length ? `待ち場の候補（竜の向きの横 10〜14m の足場）${cells.length} 件: ${cells.join(' / ')}` : null;
+}
+
 /** A cloud's size in words: the radius the body avoids (it grows with the cloud's age) when it says one, with the cloud's radius now. */
 function cloudWords(cloud: EndCloud): string {
   const now = cloud.radius === null ? '?' : String(round(cloud.radius));
@@ -186,6 +195,8 @@ export function endFightLines(end: EndView | null): string[] {
   if (positions) lines.push(positions);
   const basin = dragonBasinLine(end);
   if (basin) lines.push(basin);
+  const wait = dragonWaitLine(end);
+  if (wait) lines.push(wait);
   return lines;
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { dragonBasinLine, endFightLines } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { dragonBasinLine, dragonWaitLine, endFightLines } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { factsContext, type LlmcBodyParts } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
@@ -129,5 +129,23 @@ describe('the perched dragon basin as observed facts', () => {
     const { basin: _basin, ...withoutBasin } = approach();
     const next = frame(world(withoutBasin));
     expect(inputFacts(next, factsContext(body, next, {}, undefined), false).lines.join('\n')).not.toContain('窪みの足場');
+  });
+});
+
+describe('the waiting cells beside the perch (phases 3 to 7)', () => {
+  const cell = (x: number, walkSeconds: number) => ({ ...at(x), walkMeters: walkSeconds * 4, walkSeconds, side: 0.1 });
+  const only = (wait: unknown) => ({ strike: [], stage: [], retreat: [], wait });
+  it('says them nearest by walking time, at most three, in the landing and the take-off too', () => {
+    for (const phase of [3, 4, 5, 6, 7]) {
+      const end = view(only([cell(40, 6), cell(41, 2), cell(42, 9), cell(43, 12)]), phase);
+      expect(dragonWaitLine(end)).toBe('待ち場の候補（竜の向きの横 10〜14m の足場）3 件: (41,72,-11) 歩く約 2 秒 / (40,72,-11) 歩く約 6 秒 / (42,72,-11) 歩く約 9 秒');
+    }
+    expect(endFightLines(view(only([cell(40, 6)]), 3)).some(line => line.startsWith('待ち場の候補'))).toBe(true);
+  });
+  it('says nothing without the field, outside the phases, or with an empty or malformed list', () => {
+    expect(dragonWaitLine(view(only(undefined), 3))).toBeNull();
+    expect(dragonWaitLine(view(only([cell(40, 6)]), 2))).toBeNull();
+    expect(dragonWaitLine(view(only([]), 3))).toBeNull();
+    expect(dragonWaitLine(view(only([{ x: 'a', y: 1, z: 2 }]), 3))).toBeNull();
   });
 });
