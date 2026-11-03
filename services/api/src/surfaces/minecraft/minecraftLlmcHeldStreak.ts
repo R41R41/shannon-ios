@@ -63,7 +63,8 @@ export function followHeld(taskId: string, tree: PlanTree, facts: DoneFacts | nu
   const blazeShut = blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
   // A node the next read would move away from again (a food node in the Nether, `followDimension`) is no place to put the current node: pearl, food, pearl.
   const stays = (node: (typeof order)[number]) => followDimension({ ...tree, current: node.id }, facts) === null;
-  const leaf = around.find(node => open(node) && kindOf(node) !== kindOf(current) && !elsewhere(node) && !(kindOf(node) === 'blaze' && blazeShut) && stays(node));
+  const leaf = around.find(node => open(node) && kindOf(node) !== kindOf(current) && !elsewhere(node)
+    && !(kindOf(node) === 'blaze' && blazeShut) && stays(node));
   if (!leaf) return null;
   window.outcomes = [];
   window.moved = { from: current.id, kind: gate };
