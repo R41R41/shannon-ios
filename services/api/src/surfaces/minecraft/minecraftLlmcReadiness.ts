@@ -458,7 +458,7 @@ export function lackOfTable(facts: NonNullable<ReturnType<typeof readinessOf>>, 
 }
 
 /** The first hand of an act (0-based) that goes into the Nether: the portal hand, which enters unless `enter` is false; -1 when none. */
-const enteringHand = (hands: unknown): number => (Array.isArray(hands) ? hands : [])
+export const enteringHand = (hands: unknown): number => (Array.isArray(hands) ? hands : [])
   .findIndex(raw => record(raw)?.do === 'portal' && record(raw)?.enter !== false);
 
 /**

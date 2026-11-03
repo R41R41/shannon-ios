@@ -88,6 +88,8 @@ export const SAFETY_FIRST = '- 死なないことを速さより上に置く（�
 export const IRON_BEFORE_NETHER = 30;
 /** The gold of the golden boots (ingots). */
 export const GOLD_FOR_BOOTS = 4;
+/** A golden piece of armour (one worn keeps the piglins calm). */
+export const GOLD_ARMOUR = /^golden_(?:helmet|chestplate|leggings|boots)$/u;
 
 /**
  * The 500 of this constant came from run 42's one trip back to the surface (540 s, with the go's fault in it):

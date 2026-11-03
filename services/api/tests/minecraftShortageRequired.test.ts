@@ -167,7 +167,9 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
     const whole = holdV2(enter, noShield, 't1');
     expect(whole).toMatchObject({ whole: expect.stringContaining('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 1 portal: ネザーへ入る手は送らない。') });
     expect(heldOfFrame(enter, noShield, 't1', true)).toMatchObject({ hand: 1, code: 'gate_required' });
-    expect(heldOfFrame(enter, frame(KIT), 't1')).toBeNull();
+    // the kit complete and a golden piece worn (the gold gate of 11/3 holds the entry otherwise): nothing is held
+    expect(heldOfFrame(enter, frame(KIT, { worn: WORN.replace('足: なし', '足: golden_boots(残り65/65)') }), 't1')).toBeNull();
+    expect(heldOfFrame(enter, frame(KIT), 't1')).toMatchObject({ hand: 1, kind: 'portal', code: 'gate_required' });
   });
   it('says so to the model before it tries: the stage rules', () => {
     expect(PREP_RULES_WORDS).toContain('ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る');
@@ -434,7 +436,24 @@ describe('the current node follows the body\'s dimension, and the strong model d
     expect(moved).toMatchObject({ to: 'p3.1', from: 'p1.1' });
     expect(moved.words).toContain('今の節を [p3.1] 要塞を探す に置いた（体は the_nether にいて、今の節 [p1.1] 村のベッド集め は地上の仕事。飛ばした節は順のまま残っている）');
     // a leaf whose own condition already holds is not the place to stand: the fortress seen, the rods are next
-    expect(followDimension(treeAt('p1.1'), { ...facts('the_nether'), seen: new Set(['fortress']) })).toMatchObject({ to: 'p3.2' });
+    expect(followDimension(treeAt('p1.1'), { ...facts('the_nether', [['cooked_beef', 40], ['shield', 1]]), hp: 20, hunger: 20, seen: new Set(['fortress']) })).toMatchObject({ to: 'p3.2' });
+  });
+  it('passes over the blaze nodes while the blaze gate holds (a shield missing), and goes to the pearls; with the needs met it stays on the blaze (d50, run59)', () => {
+    const blazeRows = (current: string): PlanTree => {
+      const node = (id: string, kind: PlanKind, order: number, doneWhen: string, parentId: string | null = null): PlanNode =>
+        ({ id, parentId, order, title: id, state: 'continue', kind, ...(doneWhen ? { doneWhen } : {}) } as PlanNode);
+      return v2tree({ revision: 1, current, nodes: [node('p1', 'bed', 0, 'have:bed>=4'), node('p3', 'nether', 1, ''), node('p3.1', 'fortress', 0, 'see:fortress', 'p3'),
+        node('p3.2', 'blaze', 1, 'have:blaze_rod>=7', 'p3'), node('p3.3', 'pearl', 2, 'have:ender_pearl>=12', 'p3')] });
+    };
+    const seen = { ...facts('the_nether', [['cooked_beef', 20]]), seen: new Set(['fortress']), hp: 20, hunger: 20 };
+    // no shield: gated, from the overworld's node and from the blaze node itself
+    expect(followDimension(blazeRows('p1'), seen)).toMatchObject({ to: 'p3.3' });
+    expect(followDimension(blazeRows('p3.2'), seen)).toMatchObject({ to: 'p3.3', from: 'p3.2' });
+    expect(followDimension(blazeRows('p3.2'), seen)!.words).toContain('ブレイズの関所が止めている間は先へ進める');
+    // a shield, health, hunger and food: not gated, the blaze node is where the body goes
+    const ready = { ...facts('the_nether', [['cooked_beef', 40], ['shield', 1]]), seen: new Set(['fortress']), hp: 20, hunger: 20 };
+    expect(followDimension(blazeRows('p1'), ready)).toMatchObject({ to: 'p3.2' });
+    expect(followDimension(blazeRows('p3.2'), ready)).toBeNull();
   });
   it('holds a supply (food) node under a departure check that is not met, in the Nether: it is the preparation, not the overworld work (review of 11/3)', () => {
     const node = (id: string, kind: PlanKind, order: number, doneWhen: string, parentId: string | null = null): PlanNode =>

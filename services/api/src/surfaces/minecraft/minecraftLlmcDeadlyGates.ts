@@ -1,9 +1,10 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { wornItems } from './minecraftItems.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
-import { BEFORE_END } from './minecraftLlmcPrepRules.js';
-import { FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { BEFORE_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
+import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
  * The deadly gates, in `gateHold`'s form (the coordinator's list for 11/4, item 2; the owner: a death after the iron gear is out): the hand that
@@ -18,6 +19,8 @@ import { FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlm
 export interface DeadlyHold { hand: number; kind: string; line: string }
 const BLAZE_RISK = 'ブレイズの火の玉と炎の傷が重なる。体力・満腹度・食料・盾が足りないと足場で死に、ここまでの装備と時間を失う。作れない・材料が無いと見えた時は、後回しにせず取りに行く';
 const AGAIN = 'そろえてからもう一度出す（理由を書いても省けない。どう取るかは自分で決める）';
+const OTHER_STAGE = 'ブレイズの段が進められない間は、先にパールなど他の段の節へ今の節を移して進めてよい'
+  + '（plan.update の current。飛ばした節は順のまま残る）';
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 type Facts = NonNullable<ReturnType<typeof readinessOf>>;
 type Cell = { x: number; y: number; z: number };
@@ -32,7 +35,7 @@ const blazesWithin = (world: Record<string, unknown>, meters: number): number =>
   .filter(line => Number(/^#\d+ blaze ([\d.]+)m/u.exec(line)?.[1] ?? Infinity) <= meters).length;
 
 /** What the blaze spawner needs and the body does not have, in words (each with the way it is usually made up), or null. */
-export function blazeLack(facts: Facts): string | null {
+export function blazeLack(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'counts'>): string | null {
   const shields = [...facts.counts].reduce((sum, [name, count]) => sum + (name === 'shield' ? count : 0), 0);
   const lacks = [facts.health !== null && facts.health < 20 ? `体力 ${facts.health}/20（食べて回復を待つ）` : '',
     facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18（食べる）` : '',
@@ -128,17 +131,62 @@ function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
   return { hand: at + 1, kind: 'work', line };
 }
 
+/** Hands that put the armour on, make it, feed or defend: they go whatever the armour is. */
+const GOLD_FIRST_HANDS: ReadonlySet<string> = new Set(['equip', 'craft', 'make', 'smelt', 'furnace', 'eat', 'fight', 'attack', 'shoot', 'look', 'wait',
+  'sneak']);
+
+/**
+ * Piglins turn on a body with no golden piece worn (run59, 11/3 14:15: dead in the Nether to a piglin; the boots were never made, one ingot in the pack).
+ * In the Nether with none worn and the means in the pack (a golden piece carried, or four ingots for the boots), the hands that are not the putting
+ * on, the making, eating or defence are held: the armour comes first. Without the means in the pack nothing is held (the way to gold is the
+ * decision's).
+ */
+function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  if (!Array.isArray(hands) || facts.dimension !== 'the_nether') return null;
+  if (wornItems(facts.world.worn).some(name => GOLD_ARMOUR.test(name))) return null;
+  const piece = [...facts.counts].find(([name, count]) => GOLD_ARMOUR.test(name) && count > 0)?.[0];
+  const ingots = facts.counts.get('gold_ingot') ?? 0;
+  if (!piece && ingots < GOLD_FOR_BOOTS) return null;
+  const at = hands.findIndex(raw => !GOLD_FIRST_HANDS.has(String(objectOf(raw)?.do ?? '')));
+  if (at < 0) return null;
+  const means = piece ? `持っている ${piece} を equip で着る`
+    : `金の延べ棒 ${ingots} 個でブーツを作って着る（${GOLD_FOR_BOOTS} 個で 1 足）`;
+  const line = `金の防具を着ていない間はピグリンが襲う。先に着る手以外は送らない: ${means}。`
+    + '着てからもう一度出す（どう着るかは自分で決める）';
+  return { hand: at + 1, kind: 'gold', line };
+}
+
 /** The hold of the deadly gate the act goes into, or null (nothing held). */
 export function deadlyGateHold(input: unknown, frame: BodyObservation | null): DeadlyHold | null {
   const facts = readinessOf(frame);
   if (!facts) return null;
-  const weak = lowHealthHold(input, facts);
+  const weak = lowHealthHold(input, facts) ?? goldFirstHold(input, facts);
   if (weak) return weak;
   if (facts.dimension === 'the_nether') {
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
-    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}` } : null;
+    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${OTHER_STAGE}` } : null;
   }
+  const goldGate = facts.dimension === 'overworld' ? goldAtPortalHold(input, frame, facts) : null;
+  if (goldGate) return goldGate;
   const at = facts.dimension === 'overworld' ? portalCellHand(input, frame, 'e') : -1;
   const lack = at >= 0 ? lackOfTable(facts, BEFORE_END) : null;
   return lack ? { hand: at + 1, kind: 'walk', line: `エンドへ入る手は送らない。${lack}。${AGAIN}` } : null;
+}
+
+/**
+ * The hand that enters the Nether (the portal hand, or a go or a walk into a lit portal cell) is held while no golden piece is worn: the piglins
+ * turn on a body without one (run59, 11/3 14:15, dead to a piglin; the boots were a goal in the table and were never made). The line says what
+ * is in the pack toward it.
+ */
+function goldAtPortalHold(input: unknown, frame: BodyObservation | null, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  const portal = enteringHand(hands), at = portal >= 0 ? portal : portalCellHand(input, frame);
+  if (at < 0 || wornItems(facts.world.worn).some(name => GOLD_ARMOUR.test(name))) return null;
+  const piece = [...facts.counts].find(([name, count]) => GOLD_ARMOUR.test(name) && count > 0)?.[0];
+  const ingots = facts.counts.get('gold_ingot') ?? 0, raw = facts.counts.get('raw_gold') ?? 0;
+  const have = piece ? `持っている ${piece} を equip で着る`
+    : `金の延べ棒 ${ingots} 個・生の金 ${raw} 個（ブーツは延べ棒 ${GOLD_FOR_BOOTS} 個。生の金はかまどで焼く）`;
+  const line = `ネザーへ入る手は送らない。金の防具を 1 つ着ていない（ピグリンが襲う）: ${have}。${AGAIN}`;
+  return { hand: at + 1, kind: 'portal', line };
 }

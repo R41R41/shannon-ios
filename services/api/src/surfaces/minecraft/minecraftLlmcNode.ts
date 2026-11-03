@@ -2,6 +2,7 @@ import { orderedPlan, type PlanKind, type PlanNode, type PlanTree } from '@shann
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { doneFacts, doneStatusWords, predicateHolds, predicatesOf, undergroundInOverworld, type DoneFacts } from './minecraftPlanDone.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
+import { blazeLack } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 
 /**
@@ -170,7 +171,7 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
 const OVERWORLD_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['wood', 'stone_tools', 'food', 'bed', 'village', 'prep_descent', 'iron', 'iron_armor',
   'diamond', 'water', 'lava', 'obsidian', 'portal', 'stronghold', 'chest']);
 /** The kinds of the work that belongs to a dimension besides the overworld. */
-const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = {
+export const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = {
   the_nether: new Set<PlanKind>(['nether', 'fortress', 'blaze', 'pearl']),
   the_end: new Set<PlanKind>(['end', 'dragon']),
 };
@@ -187,16 +188,25 @@ export function followDimension(tree: PlanTree, facts: DoneFacts | null):
   const order = orderedPlan(tree.nodes), current = order.find(node => node.id === tree.current);
   if (!facts || !wanted || !current) return null;
   const kind = kindOf(current);
-  const stale = OVERWORLD_KINDS.has(kind) || (facts.dimension === 'the_end' && DIMENSION_KINDS.the_nether!.has(kind));
+  // The blaze gate holds the blaze work while its needs are missing (the Nether only): the blaze nodes are passed over and the pearls
+  // come first (the owner's d50, run59: the head kept choosing the rods and the gate kept stopping it).
+  const blazeGated = blazeHeld(facts);
+  const stale = OVERWORLD_KINDS.has(kind) || (facts.dimension === 'the_end' && DIMENSION_KINDS.the_nether!.has(kind)) || (blazeGated && kind === 'blaze');
   if (!stale) return null;
+  const passed = (node: PlanNode) => blazeGated && kindOf(node) === 'blaze';
   const predicates = predicatesOf(tree), questions = treeQuestions(tree);
   if (kind === 'food' && underUnmetPrep(order, current, predicates, facts)) return null;
-  const leaf = order.find(node => wanted.has(kindOf(node)) && questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))
-    && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts)));
+  const leaf = order.find(node => wanted.has(kindOf(node)) && !passed(node) && questions.open(node.id)
+    && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts)));
   if (!leaf) return null;
-  return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（体は ${facts.dimension} にいて、今の節 [${current.id}] `
-    + `${current.title.slice(0, 24)} は地上の仕事。飛ばした節は順のまま残っている）` };
+  const work = `体は ${facts.dimension} にいて、今の節 [${current.id}] ${current.title.slice(0, 24)} は地上の仕事`;
+  const why = passed(current) ? 'ブレイズの関所が止めている間は先へ進める' : work;
+  return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（${why}。飛ばした節は順のまま残っている）` };
 }
+
+/** Whether the blaze gate holds the blaze work now: in the Nether, with a need of the spawner missing (`blazeLack`). */
+const blazeHeld = (facts: DoneFacts): boolean => facts.dimension === 'the_nether'
+  && blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
 
 /**
  * A supply node (food) under a preparation node that is not met is the preparation itself, not the overworld's work (review of 11/3: the move to the
@@ -418,7 +428,7 @@ function heldByPreparation(tree: PlanTree, leaf: string, questions: ReturnType<t
 }
 
 /** The tree's own questions: a node is open (not done, not blocked), and one is itself or under another. */
-function treeQuestions(tree: PlanTree) {
+export function treeQuestions(tree: PlanTree) {
   const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const under = (id: string, top: string): boolean => {
     for (let at: string | null = id, guard = 0; at && guard < 16; at = byId.get(at)?.parentId ?? null, guard += 1) if (at === top) return true;
