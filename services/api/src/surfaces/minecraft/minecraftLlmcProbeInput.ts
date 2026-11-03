@@ -1,6 +1,8 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActPos } from '../../contracts/minecraftActContract.js';
 import { PROBE_INPUT_SCHEMA, PROBE_KINDS, readProbeResult, type ProbeInput, type ProbeKind } from '../../contracts/minecraftProbeContract.js';
+import { readLaneProbeResult } from '../../contracts/minecraftLaneProbeContract.js';
+import { laneProbeFacts } from './minecraftLaneProbeFacts.js';
 
 /**
  * mb-llmc r4: `mc.probe` as the model writes it, put into the body's form (`prepareProbeInput`: a creature named is sent as its `#id`, a
@@ -63,7 +65,7 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
   path: ['to', 'from'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
-  scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], den: [],
+  scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], lane: ['spawner', 'from'], den: [],
 };
 /** The radius each kind takes: its range and default (none: the body's own). */
 const RADIUS: Readonly<Partial<Record<ProbeKind, { low: number; high: number; fallback?: number }>>> = {
@@ -129,6 +131,14 @@ function position(work: Preparing, key: string): ActPos | null | undefined {
 }
 /** Each kind's own fields (a problem, or null); around and scan have none of their own (their radius is `prepareRadius`'s). */
 const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => string | null>>> = {
+  lane(work) {
+    for (const key of ['spawner', 'from'] as const) {
+      const at = position(work, key);
+      if (at === null) return `lane の ${key} は有限の数の座標 {x,y,z}`;
+      if (at) work.out[key] = at;
+    }
+    return null;
+  },
   worksite(work) {
     const target = position(work, 'target') ?? position(work, 'at');
     if (!target) return 'worksite には target または at に目的物の座標が要る';
@@ -257,6 +267,7 @@ const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null
   frames: input => `frames ${input.x === undefined ? '足' : `(${input.x},${input.z})`} ${input.radius ?? 64}m`,
   camp: () => 'camp',
   den: () => 'den',
+  lane: input => `lane${input.spawner ? ` ${posText(input.spawner)}` : ''}`,
 };
 
 const posList = (value: unknown, limit: number): string[] => (Array.isArray(value) ? value : []).flatMap(item => {
@@ -266,10 +277,13 @@ const posList = (value: unknown, limit: number): string[] => (Array.isArray(valu
 /**
  * A probe's answer as the decision reads it. `live`: the body's text, with the coordinates a hand can use (a path's points and where to
  * stand, what is between in a sight); else the text and the other fields as JSON (a model's own call, `LLMC_PROBE.toolFieldChars`).
+ * Lane uses the same bounded fact lines on both paths, without the raw tables or the body's construction-order text.
  */
 export function probeAnswerText(result: string | undefined, live: boolean): string {
   const read = readProbeResult(result);
   if (!read) return '答えが無い';
+  const lane = readLaneProbeResult(read);
+  if (lane) return laneProbeFacts(lane);
   const text = read.text.trim() || '（文なし）';
   const fields = Object.fromEntries(Object.entries(read).filter(([key]) => key !== 'v' && key !== 'kind' && key !== 'text'));
   if (!live) {
