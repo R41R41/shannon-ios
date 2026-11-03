@@ -12,7 +12,7 @@ import type { ActClause, ActCondition } from '../../contracts/minecraftActCondit
  */
 export const RESERVE_DEFAULTS = Object.freeze({ safeR: 16, hp: 12, atR: 32, hostileWithin: 8, hpBelow: 10 });
 /** The hands that move the body from where it is: no reserve has them in the Nether or the End. */
-export const RESERVE_TRAVEL_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 'vertical', 'portal', 'obsidian', 'pillarUp', 'fight', 'attack']);
+export const RESERVE_TRAVEL_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 'vertical', 'portal', 'obsidian', 'pillarUp', 'fight', 'attack', 'fill']);
 const QUIET_DIMENSIONS: ReadonlySet<string> = new Set(['the_nether', 'nether', 'the_end', 'end']);
 
 /** Why a reserve is not taken, or null. `hasReserve`: one is open already; `hasDecided`: a decided item is open (the reserve goes behind it). */

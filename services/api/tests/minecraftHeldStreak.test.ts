@@ -57,6 +57,12 @@ describe('followHeld', () => {
     expect(moved).toMatchObject({ to: 'p6.1', from: 'p7.3' });
     expect(moved.words).toContain('ネザーへ入る関所が 2 回止めた');
   });
+  it('does not put the node on a food node of the overworld while she is in the Nether (the next read would move it back: pearl, food, pearl)', () => {
+    const rows = v2tree({ revision: 1, current: 'p3.2', nodes: [node('p3', 'nether', 0, ''), node('p3.2', 'blaze', 0, 'have:blaze_rod>=7', 'p3'), node('p4', 'food', 1, 'have:cooked_beef>=20')] });
+    noteHeldAct('t', gate);
+    noteHeldAct('t', gate);
+    expect(followHeld('t', rows, facts())).toBeNull();
+  });
   it('goes to nothing when no open leaf of another kind is left', () => {
     noteHeldAct('t', gate);
     noteHeldAct('t', gate);
