@@ -1,5 +1,6 @@
 import { handDependsProblem } from './continueContract.js';
 import { shieldRushProblem } from './minecraftShieldRushContract.js';
+import { denActProblem, denProblem } from './minecraftEnderDenContract.js';
 import { fillProblem } from './minecraftFillContract.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
@@ -32,7 +33,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   pickup: { needs: [], may: ['target', 'range'] },
   wait: { needs: [['seconds']], may: [] },
   obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace', 'maxDig'] },
-  fight: { needs: [['target']], may: ['stance', 'item', 'retreatHp', 'range', 'seconds'] },
+  fight: { needs: [['target']], may: ['den', 'stance', 'item', 'retreatHp', 'range', 'seconds'] },
   mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig'] },
   make: { needs: [['item']], may: ['count'] },
   portal: { needs: [['at'], ['axis']], may: ['block', 'enter', 'canPlace', 'maxPlace', 'seconds'] },
@@ -90,7 +91,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   attack: attackProblem,
   go: goProblem,
   obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
-  fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null),
+  fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null) ?? denProblem(hand as unknown as Record<string, unknown>),
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
     ?? (BLOCK_NAME.test(hand.block!) ? null : 'block はブロックの id（例 iron_ore）') ?? names(hand),
   make: hand => count(hand, 64),
@@ -128,7 +129,7 @@ export function shieldRushHandProblem(hand: ActHand): string | null {
 }
 
 /** The structured hands' act checks (a rush's, a fill's), the first problem or null. */
-export const structuredActProblem = (input: unknown): string | null => fillActProblem(input) ?? shieldRushActProblem(input);
+export const structuredActProblem = (input: unknown): string | null => fillActProblem(input) ?? shieldRushActProblem(input) ?? denActProblem(input);
 
 /** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */
 export function shieldRushActProblem(input: unknown): string | null {

@@ -58,12 +58,12 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
   around: 'around', look_creatures: 'around', creatures: 'around', entities: 'around', mobs: 'around', nearby: 'around',
   history: 'history', look_history: 'history', stops: 'history', past: 'history',
   scan: 'scan', landmarks: 'scan', survey: 'scan',
-  frames: 'frames', frame: 'frames', stronghold: 'frames', portal_frames: 'frames', camp: 'camp', blaze_camp: 'camp', spawner: 'camp',
+  frames: 'frames', frame: 'frames', stronghold: 'frames', portal_frames: 'frames', camp: 'camp', blaze_camp: 'camp', spawner: 'camp', den: 'den', enderman_den: 'den', tunnel: 'den',
 };
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
   path: ['to', 'from'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
-  scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [],
+  scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], den: [],
 };
 /** The radius each kind takes: its range and default (none: the body's own). */
 const RADIUS: Readonly<Partial<Record<ProbeKind, { low: number; high: number; fallback?: number }>>> = {
@@ -256,6 +256,7 @@ const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null
   scan: input => `scan${input.radius ? ` ${input.radius}チャンク` : ''}`,
   frames: input => `frames ${input.x === undefined ? '足' : `(${input.x},${input.z})`} ${input.radius ?? 64}m`,
   camp: () => 'camp',
+  den: () => 'den',
 };
 
 const posList = (value: unknown, limit: number): string[] => (Array.isArray(value) ? value : []).flatMap(item => {
