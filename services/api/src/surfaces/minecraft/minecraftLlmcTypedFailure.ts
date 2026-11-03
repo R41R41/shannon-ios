@@ -5,7 +5,7 @@ import { tableLackFact } from './minecraftLlmcTableNote.js';
 
 /** Head-only facts and suggestions. No executor, permission change or automatic retry. */
 export interface TypedFailure {
-  code: 'no_table' | 'no_permission' | 'lack_material' | 'not_visible';
+  code: 'no_table' | 'no_permission' | 'lack_material' | 'not_visible' | 'search_timeout' | 'go_stuck';
   evidence: string[];
   candidateArgs: Array<{ hand: Record<string, unknown>; verified: boolean; why: string }>;
   cost: { seconds?: number; risk?: 'low' | 'mid' | 'high' };
@@ -45,6 +45,7 @@ const permissionStop = (line: ActHandLine): boolean => PERMISSION_CODE.test(line
 
 function failureCode(line: ActHandLine): TypedFailure['code'] | null {
   if (!settled(line)) return null;
+  if (line.do === 'go' && (line.code === 'search_timeout' || line.code === 'go_stuck')) return line.code;
   if (CREATION.has(line.do)) return line.code === 'no_table' ? 'no_table' : lacksMaterial(line) ? 'lack_material' : null;
   if ((line.do === 'dig' || line.do === 'mine') && (line.code === 'not_visible' || line.code === 'unreachable')) return 'not_visible';
   return PERMISSION_HANDS.has(line.do) && permissionStop(line) ? 'no_permission' : null;
@@ -91,6 +92,23 @@ export function typedFailureOf(line: ActHandLine, observation: BodyObservation |
   return { code, evidence: fact ? [line.line, fact] : [line.line], candidateArgs, cost: {}, checkedAt };
 }
 
+const HOP_METERS = 80;
+const cellOf = (value: unknown): { x: number; y: number; z: number } | null => {
+  const at = record(value);
+  return at && [at.x, at.y, at.z].every(item => typeof item === 'number' && Number.isFinite(item)) ? at as { x: number; y: number; z: number } : null;
+};
+
+/** A go that ran out of search time over a long way: a point on the straight line to where it was going, `HOP_METERS` from her feet, as the one candidate. */
+function withHop(failure: TypedFailure, hand: Record<string, unknown> | null, observation: BodyObservation | null): TypedFailure {
+  const feet = cellOf(record(observation?.state.world)?.position), to = cellOf(hand?.to);
+  const far = feet && to ? Math.hypot(to.x - feet.x, to.z - feet.z) : 0;
+  if (!feet || !to || far <= HOP_METERS + 10) return failure;
+  const along = (from: number, end: number) => Math.round(from + (end - from) * HOP_METERS / far);
+  const at = { x: along(feet.x, to.x), y: Math.round(feet.y), z: along(feet.z, to.z) };
+  const why = `行き先まで 水平 ${Math.round(far)}m。直線で ${HOP_METERS}m の途中の点。通れるかは未確認`;
+  return { ...failure, candidateArgs: [candidate({ do: 'go', to: at }, why)] };
+}
+
 /** Only actual body result lines become attempts. No parsing of a model's explanation or a head guard's prose. */
 export function typedFailureAttemptsOf(resultJson: string | undefined, observation: BodyObservation | null, input: unknown): TypedFailureAttempt[] {
   const act = readActResult(resultJson);
@@ -101,7 +119,8 @@ export function typedFailureAttemptsOf(resultJson: string | undefined, observati
     const failure = typedFailureOf(line, observation);
     if (!failure) return [];
     const hand = Array.isArray(hands) && Number.isInteger(line.i) && line.i >= 1 ? record(hands[line.i - 1]) : null;
-    return [{ failure, hand: hand?.do === line.do ? hand : null }];
+    const sent = hand?.do === line.do ? hand : null;
+    return [{ failure: failure.code === 'search_timeout' ? withHop(failure, sent, observation) : failure, hand: sent }];
   });
 }
 
@@ -116,12 +135,39 @@ function sameValue(left: unknown, right: unknown): boolean {
   return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && sameValue(a[key], b[key]));
 }
 
-/** Same premise means the same frame time, code and evidence. Merely displaying an alternative never counts as trying it. */
+/** Same premise means the same code and the same words of the body (they carry the place and the counts, so another situation reads
+ * differently). Merely displaying an alternative never counts as trying it. */
 export function repeatedTypedFailure(attempt: TypedFailureAttempt, previous: readonly TypedFailureAttempt[]): boolean {
   const last = previous.at(-1);
   return !!last && attempt.hand !== null && last.hand !== null && sameValue(last.hand, attempt.hand) &&
-    last.failure.checkedAt === attempt.failure.checkedAt && last.failure.code === attempt.failure.code &&
+    last.failure.code === attempt.failure.code &&
     sameValue(last.failure.evidence, attempt.failure.evidence);
+}
+
+const CANDIDATE_LIFE_MS = 30_000;
+const LOOK_REACH_METERS = 6;
+const sumOf = (counts: ReadonlyMap<string, number>, pattern: RegExp): number =>
+  [...counts].reduce((sum, [item, count]) => sum + (pattern.test(item) ? count : 0), 0);
+
+/** Whether the facts a candidate stands on still hold in the frame now: not older than the failure, within 30 s of it, and what it uses still carried. */
+function candidateHolds(item: { hand: Record<string, unknown> }, checkedAt: number, observation: BodyObservation | null): boolean {
+  const now = failureCheckedAt(observation);
+  if (now === null || now < checkedAt || now - checkedAt > CANDIDATE_LIFE_MS) return false;
+  const world = record(observation?.state.world);
+  const counts = carriedItemCounts(world, observation?.facts);
+  const hand = item.hand, made = typeof hand.item === 'string' ? hand.item : '';
+  if (hand.do === 'look') return lookNear(world, record(hand.to));
+  if (made === 'crafting_table') return sumOf(counts, /_planks$/u) >= 4 && !counts.has('crafting_table');
+  const wood = /^(.+)_planks$/u.exec(made)?.[1];
+  return wood ? (counts.get(`${wood}_log`) ?? 0) >= 1 : true;
+}
+
+/** She still stands near the place the body reported. */
+function lookNear(world: Record<string, unknown> | null, to: Record<string, unknown> | null): boolean {
+  const at = record(world?.position);
+  const values = [at?.x, at?.y, at?.z, to?.x, to?.y, to?.z];
+  if (!values.every((value): value is number => typeof value === 'number')) return false;
+  return Math.hypot(values[0]! - values[3]!, values[1]! - values[4]!, values[2]! - values[5]!) <= LOOK_REACH_METERS;
 }
 
 const TRIED = '同じ候補はもう試した（同じ code・evidence・観測時刻で、同じ手が再び失敗した）';
@@ -132,8 +178,9 @@ export function typedFailureLines(attempt: TypedFailureAttempt, observation: Bod
   const { failure } = attempt;
   const lines = [`失敗 ${failure.code}（観測 ${failure.checkedAt} ms）: ${failure.evidence.join(' / ')}`];
   if (repeatedTypedFailure(attempt, previous)) lines.push(TRIED);
-  if (failure.checkedAt === failureCheckedAt(observation) && failure.candidateArgs.length) {
-    lines.push(`候補: ${failure.candidateArgs.slice(0, 2).map(candidate => `${JSON.stringify(candidate.hand)}（${candidate.verified ?
+  const shown = failure.candidateArgs.filter(item => candidateHolds(item, failure.checkedAt, observation));
+  if (shown.length) {
+    lines.push(`候補: ${shown.slice(0, 2).map(candidate => `${JSON.stringify(candidate.hand)}（${candidate.verified ?
       '現観測で確認' : '未確認'}: ${candidate.why}）`).join(' / ')}`);
   }
   return lines;

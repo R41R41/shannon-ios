@@ -11,18 +11,24 @@ export type ProgressEvent = 'kill' | 'frame' | 'ignition' | 'eye';
 /** The mobs whose death is the aim of a node (a blaze for the rods, an enderman for the pearls). */
 const KILLS = /(?:^|:)(?:blaze|enderman)$|^#\d+$/u;
 
-export type ProgressHand = { do?: unknown; target?: unknown; item?: unknown; at?: unknown } | null | undefined;
+export type ProgressHand = { do?: unknown; target?: unknown; item?: unknown; at?: unknown; style?: unknown } | null | undefined;
+const isRush = (hand: ProgressHand, line: ActHandLine): boolean =>
+  line.do === 'attack' && (hand?.style === 'shield_rush' || line.shieldRush !== undefined);
 
 /** Whether a fight or an attack line is the death of a blaze or an enderman (the target named, or the line saying so). */
 function killed(hand: ProgressHand, line: ActHandLine): boolean {
-  const ended = line.do === 'fight' ? line.code === 'target_killed' : line.do === 'attack' && line.status === 'done';
+  if (line.do === 'attack' && line.shieldRush) return line.shieldRush.status === 'killed' || line.shieldRush.targetDead === true;
+  const ended = line.do === 'fight' ? line.code === 'target_killed' : line.do === 'attack' &&
+    hand?.style !== 'shield_rush' && line.status === 'done';
   const target = typeof hand?.target === 'string' ? hand.target : '';
   return ended && (KILLS.test(target) || /blaze|enderman/u.test(line.line));
 }
 
 /** The event one result line is, with the hand it belongs to (the lines count from 1 in the order the hands were sent), or null. */
 function eventOf(hand: ProgressHand, line: ActHandLine): ProgressEvent | null {
-  if (line.end === 'not_run' || line.end === 'unknown' || line.goal !== 'done') return null;
+  if (line.end === 'not_run' || line.end === 'unknown' || line.goal === 'unknown' || line.goal === 'not_started') return null;
+  if (isRush(hand, line)) return killed(hand, line) ? 'kill' : null;
+  if (line.goal !== 'done') return null;
   if (killed(hand, line)) return 'kill';
   if (line.do === 'obsidian') return 'frame';
   if (line.do === 'portal') return 'ignition';
@@ -30,8 +36,8 @@ function eventOf(hand: ProgressHand, line: ActHandLine): ProgressEvent | null {
 }
 
 /**
- * The events of an act's lines. A hand that did not run, or did not end done, earns nothing; a fight or an attack counts when the body saw the
- * opponent die (`target_killed`) or, for an attack, when it ran until the opponent was dead and ended done.
+ * The events of an act's lines. A hand that did not run or whose result is unknown earns nothing. A rush counts a confirmed death
+ * (shieldRush.status === 'killed' or targetDead === true) even when the return was cut; other hands need goal === 'done'.
  */
 export function progressEvents(hands: ReadonlyArray<ProgressHand>, lines: readonly ActHandLine[]): ProgressEvent[] {
   return lines.flatMap(line => eventOf(hands[line.i - 1], line) ?? []);

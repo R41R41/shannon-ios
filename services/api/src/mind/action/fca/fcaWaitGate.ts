@@ -15,7 +15,7 @@ export interface FcaWaitOutcome { disposition: 'continue' | 'wait' | 'complete';
  * give) and that has no unfinished child would wait for nothing until its time limit. The decision is told so beforehand; a wait
  * is turned away (the step continues) at most `FCA_WAIT_REFUSALS` times; a wait after that is committed with her summary and the
  * task is stopped. Nothing is said for her: the fact is data for her decision, and her summary stays her own.
- * (A Minecraft body task has no `fca_wait`: the task queue's items wait for it, `fcaStretch.ts`.)
+ * (A Minecraft body task: its queue's items wait for it, `fcaStretch.ts`; a wait it still decides is turned away again and again, never a stop.)
  */
 export function fcaWaitGate(step: TaskStep, runtime: TaskRuntime, counterpart: (() => boolean) | undefined, prior: Readonly<Record<string, unknown>>) {
   const stored = Number(prior.fcaWaitRefusals ?? 0);
@@ -29,9 +29,14 @@ export function fcaWaitGate(step: TaskStep, runtime: TaskRuntime, counterpart: (
     fact(): FcaWaitFact | undefined {
       return unanswerable() ? { replyPossible: false, refusedWaits, refusalLimit: FCA_WAIT_REFUSALS } : undefined;
     },
-    apply(disposition: FcaWaitOutcome['disposition']): FcaWaitOutcome {
+    /**
+     * `body`: a Minecraft body task (11/3, the isolated lab: 5 of 7 runs stopped here, three to four minutes in, when the head had nothing to send and waited).
+     * Its stall watch (`wait_loop`) and the strong model's new plan answer a head that only waits; the gate does not stop it, it turns the wait away again.
+     */
+    apply(disposition: FcaWaitOutcome['disposition'], body = false): FcaWaitOutcome {
       if (disposition !== 'wait' || !unanswerable()) return { disposition, refusedWaits, stop: false };
       if (refusedWaits < FCA_WAIT_REFUSALS) return { disposition: 'continue', refusedWaits: refusedWaits + 1, stop: false };
+      if (body) return { disposition: 'continue', refusedWaits, stop: false };
       return { disposition, refusedWaits, stop: true };
     },
   };

@@ -33,6 +33,30 @@ const llmc: LlmcBodyParts = { plan: () => undefined, planView: () => null };
 
 afterEach(() => forgetLlmcEvents());
 
+describe('T8: a shield that cannot be made, over several turns', () => {
+  const lacking = (line = 'make shield: missing: oak_log×2') => stopped({ code: 'missing', line });
+  const carrying = (at: number) => frame({ inventory: ['birch_log×3'] }, at);
+  it('says the same candidate was tried when the same words come again in a later frame, and not when the situation read differently', () => {
+    const events = createLlmcEvents('t8-shield');
+    events.noteFailures(resultJson([lacking()]), carrying(AT), input);
+    const first = events.failureFacts(carrying(AT + 2000)).join('\n');
+    expect(first).toContain('失敗 lack_material');
+    expect(first).toContain('birch_planks');
+    expect(first).not.toContain('同じ候補はもう試した');
+    events.noteFailures(resultJson([lacking()]), carrying(AT + 8000), input);
+    expect(events.failureFacts(carrying(AT + 9000)).join('\n')).toContain('同じ候補はもう試した');
+    events.noteFailures(resultJson([lacking('make shield: missing: oak_log×1')]), carrying(AT + 20_000), input);
+    expect(events.failureFacts(carrying(AT + 21_000)).join('\n')).not.toContain('同じ候補はもう試した');
+  });
+  it('starts again after a result without a failure', () => {
+    const events = createLlmcEvents('t8-shield-reset');
+    events.noteFailures(resultJson([lacking()]), carrying(AT), input);
+    events.noteFailures(resultJson([stopped({ status: 'done', goal: 'done', code: undefined, line: '拾った' })]), carrying(AT + 5000), input);
+    events.noteFailures(resultJson([lacking()]), carrying(AT + 9000), input);
+    expect(events.failureFacts(carrying(AT + 9500)).join('\n')).not.toContain('同じ候補はもう試した');
+  });
+});
+
 describe('the four typed body failures', () => {
   it('no_table keeps the body line and shares the exact distance/reach words of tableNote', () => {
     const observation = frame({ inventory: ['birch_planks×4'], utilities: {
@@ -148,11 +172,13 @@ describe('freshness and the record of actual attempts (pure arguments)', () => {
     }
   });
 
-  it('omits all stale candidates even one ms later, on disconnect, or without an observation', () => {
+  it('omits candidates that no longer hold: an older frame, 30 s later, what they use gone, disconnected, or no observation', () => {
     const observation = frame({ inventory: ['birch_planks×4'] });
     const current = attempt(stopped(), observation);
     expect(typedFailureLines(current, observation).join('\n')).toContain('候補:');
-    for (const fresh of [frame({}, AT + 1), frame({}, AT - 1), null, { ...observation, connected: false }]) {
+    expect(typedFailureLines(current, frame({ inventory: ['birch_planks×4'] }, AT + 1000)).join('\n')).toContain('候補:');
+    const still = (at: number) => frame({ inventory: ['birch_planks×4'] }, at);
+    for (const fresh of [frame({}, AT + 1), still(AT - 1), still(AT + 31_000), null, { ...observation, connected: false }]) {
       const lines = typedFailureLines(current, fresh);
       expect(lines).toHaveLength(1);
       expect(lines.join('\n')).not.toContain('crafting_table');
@@ -177,7 +203,6 @@ describe('freshness and the record of actual attempts (pure arguments)', () => {
     const different: TypedFailureAttempt[] = [
       { ...current, failure: { ...current.failure, code: 'lack_material' } },
       { ...current, failure: { ...current.failure, evidence: ['別の報告'] } },
-      { ...current, failure: { ...current.failure, checkedAt: AT - 1 } },
       { ...current, hand: { do: 'make', item: 'iron_pickaxe' } },
       { ...current, hand: null },
     ];
@@ -227,7 +252,7 @@ describe('the head facts at decision time', () => {
     expect(normal.facts.join('\n')).toContain('同じ候補はもう試した');
     expect(normal.facts.join('\n')).toContain('未確認');
     observation = frame({ inventory: ['birch_planks×4'], nearbyThreats: [{ id: 7, name: 'zombie', kind: 'hostile',
-      distance: 4, position: where, canSee: true }] }, AT + 1);
+      distance: 4, position: where, canSee: true }] }, AT + 31_000);
     body.context();
     const urgent = body.transient!() as { facts: string[] };
     expect(urgent).toHaveProperty('mode');

@@ -1,4 +1,5 @@
 import { PLAN_LIMITS } from '@shannon/mind';
+import type { ShieldRushResult } from './minecraftShieldRushContract.js';
 import type { WorldScan } from './minecraftProbeContract.js';
 import { type ActCondition } from './minecraftActCondition.js';
 import { type ActOutcome, type EventsMore, type Handover, type HandOutcome, type InventoryEvent } from './continueContract.js';
@@ -143,7 +144,19 @@ export interface ActHand {
    * digging: it stops and says so).
    */
   hold?: boolean;
-  /** wait: seconds (0.5–30); attack: the most seconds (default 20); go: the most seconds the hand may take (5–120, default 60). */
+  /** attack: shielded rush at one blaze (#id), then return to retreatTo. */
+  style?: 'shield_rush';
+  /** attack shield_rush: required retreat destination. */
+  retreatTo?: ActPos;
+  /** attack shield_rush: required area (radius 1–16, integer maxDrop 0–3; absolute coordinates). */
+  area?: { center: ActPos; radius: number; maxDrop: number };
+  /** attack shield_rush: required remaining shield durability to retreat at (0–335). */
+  shieldReserve?: number;
+  /** attack shield_rush: required crossfire response. */
+  onCrossfire?: 'retreat' | 'continue';
+  /** attack shield_rush: required pickup choice (the target's drops, or none). */
+  pickup?: 'target_drops' | 'none';
+  /** wait: 0.5–30; attack: at most 30 (default 20), shield_rush: required 5–60 including return; go: 5–120 (default 60). */
   seconds?: number;
   /** shoot: seconds to draw (0.2–3, default 1.0: a full bow). */
   charge?: number;
@@ -177,6 +190,7 @@ export interface ActHand {
    * or runs when health falls under it (1–19).
    */
   stance?: 'fight' | 'flee';
+  /** fight / attack shield_rush: retreat health (integer 1–19; required for shield_rush, at or below). */
   retreatHp?: number;
   /** portal: the frame's plane runs along x or z. */
   axis?: 'x' | 'z';
@@ -381,6 +395,7 @@ export interface ActHandLine {
   cutBy?: HandOutcome['cutBy'];
   code?: string;
   progress?: HandOutcome['progress'];
+  shieldRush?: ShieldRushResult;
   delta?: HandOutcome['delta'];
   pass?: number;
   motorOps?: number;

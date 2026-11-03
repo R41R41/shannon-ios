@@ -1,4 +1,5 @@
 import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
+import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -23,6 +24,7 @@ export const SHORT_HAND_ERROR_KEY = '書き方の誤り';
  * the old modes) is untouched.
  */
 const SHORT_LINES = [
+  SHIELD_RUSH_DESCRIPTION,
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、手ごとの1行と止まった所の周りを返す。'
     + '手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める。',
   ("あなたが決める: 目的・対象・行き先・許す掘る/置く・済む条件、食事・睡眠・片づけ、戦うか逃げるか（地図と状態を見て手で出す）。体に任せる細部: " +
@@ -118,6 +120,7 @@ const SHORT_LINES = [
   'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
+  'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',
   'pickup [range=N] [target=..]',
   ("chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 " +
 "iron_ingot）"),
@@ -138,7 +141,7 @@ const SHORT_LINES = [
     + ("dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: " +
 "item・at（1つ）・face・target"),
   ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
-"target・untilDead・seconds・hold / eat: item"),
+"target・untilDead・seconds・hold（shield_rush は上の欄も） / eat: item"),
   ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +
 "at（1つ）・op・items"),
   '- drop: items・target か at / shoot: target か at・item・charge・n',
@@ -281,7 +284,8 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
   if (typeof value.why === 'string') act.why = value.why;
   if (typeof value.stopIf === 'string') act.stopIf = stopIfOf(value.stopIf, errors);
   else if (value.stopIf && typeof value.stopIf === 'object') act.stopIf = value.stopIf;
-  if (Array.isArray(value.accept)) act.accept = value.accept.filter(item => typeof item === 'string');
+  if (Array.isArray(value.accept)) act.accept = (act.hands as ActHand[]).some(hand => hand.style === 'shield_rush')
+    ? value.accept : value.accept.filter(item => typeof item === 'string');
   return { act: { ...act, ...queued } as unknown as ActInput, errors };
 }
 

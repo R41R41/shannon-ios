@@ -4,7 +4,7 @@ import type { FcaBodyLifecycle } from '../mind/action/fca/fcaPorts.js';
 import { failureStops, unattendedFailureStops } from '../mind/action/fca/fcaFailureLadder.js';
 import type { FcaStepPorts } from '../mind/action/fca/fcaStepPorts.js';
 import { readinessParts, type LlmcBodyParts } from '../surfaces/minecraft/minecraftLlmcBodyFacts.js';
-import { strongStage } from './minecraftLlmcConfiguration.js';
+import { strongStageNow } from './minecraftLlmcConfiguration.js';
 import { stageTextsForKind } from '../surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneFacts, doneStatusWords, parseDoneWhen, predicateHolds } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
@@ -126,7 +126,7 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
       parts.queue.closeStep?.('stall'); }, log: parts.log });
   parts.queue.onRan(watch.noteQueueResult);
   const current = (): string | null => workingNode(parts.taskId, parts.plan.tree().current) ?? parts.plan.tree().current ?? null;
-  const stage = (): PlanKind | null => strongStage({ fcaPlanTree: parts.plan.tree() });
+  const stage = (): PlanKind | null => strongStageNow({ fcaPlanTree: parts.plan.tree() }, doneFacts(parts.observe())?.dimension ?? null);
   const close = (reason: string): void => parts.queue.closeStep?.(reason);
   return { watch, flow, current, stage, close, checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
 }

@@ -1,0 +1,211 @@
+[
+ {
+  "name": "pearl-no-warped",
+  "goal": "エンドラを討伐して",
+  "current": "p11.1",
+  "elapsedMinutes": 131,
+  "expect": "歪んだ森が見えていない。探す方向を観測（見えた谷・走査・通った所）から決める（座標の決め打ちはしない）。ピグリンへの金の交換（金 6 個）は当たりが小さいので比べて、探しに出る。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 310.5,
+    "y": 70,
+    "z": -205.5
+   },
+   "biome": "nether_wastes",
+   "health": 20,
+   "food": 18,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "netherrack",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "blaze_rod",
+     "count": 8
+    },
+    {
+     "name": "gold_ingot",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [
+    "N ネザー要塞 (330,70,-240) 北東 40m レンガ×60",
+    "[overworld] P ネザーポータル (300,70,-190) 拠点 15m"
+   ],
+   "nearbyEntities": [],
+   "nearbyThreats": [],
+   "biomesSeen": [
+    "nether_wastes",
+    "soul_sand_valley"
+   ]
+  },
+  "events": [
+   "mc_probe kind=scan: 160m 内に歪んだ森・真紅の森は見えない。魂の砂の谷が南西にある"
+  ]
+ },
+ {
+  "name": "pearl-warped-200",
+  "goal": "エンドラを討伐して",
+  "current": "p11.1",
+  "elapsedMinutes": 131,
+  "expect": "東の歪んだ森へ go（遠いので maxDig・maxPlace を足す）。道中の安全（溶岩・敵）を見る。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 310.5,
+    "y": 70,
+    "z": -205.5
+   },
+   "biome": "nether_wastes",
+   "health": 20,
+   "food": 18,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "netherrack",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "blaze_rod",
+     "count": 8
+    },
+    {
+     "name": "gold_ingot",
+     "count": 9
+    }
+   ],
+   "mapLandmarks": [
+    "W 歪んだ森 warped_forest (510,72,-190) 東 200m",
+    "[overworld] P ネザーポータル (300,70,-190) 拠点 15m"
+   ],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "events": [
+   "mc_probe kind=scan: 東 200m に歪んだ森（青い森）が見えた"
+  ],
+  "check": {
+   "anyHand": [
+    "go",
+    "walk"
+   ]
+  }
+ },
+ {
+  "name": "pearl-warped-few",
+  "goal": "エンドラを討伐して",
+  "current": "p11.1",
+  "elapsedMinutes": 131,
+  "expect": "エンダーマンが少ない（10 分で 2 体）。金 18 個の交換は平均 1.1 個。残り 11 個に足りない。待ち打ちを続ける・別の歪んだ森を探す・金で交換、を観測した数（10 分 2 体、金 18）から比べて選ぶ。目を合わせない（look で足元）。弓は使わない。",
+  "world": {
+   "dimension": "the_nether",
+   "position": {
+    "x": 510.5,
+    "y": 72,
+    "z": -190.5
+   },
+   "biome": "warped_forest",
+   "health": 20,
+   "food": 18,
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "bow",
+     "count": 1
+    },
+    {
+     "name": "arrow",
+     "count": 30
+    },
+    {
+     "name": "netherrack",
+     "count": 64
+    },
+    {
+     "name": "cooked_beef",
+     "count": 10
+    },
+    {
+     "name": "blaze_rod",
+     "count": 8
+    },
+    {
+     "name": "gold_ingot",
+     "count": 18
+    },
+    {
+     "name": "warped_stem",
+     "count": 6
+    },
+    {
+     "name": "ender_pearl",
+     "count": 3
+    }
+   ],
+   "mapLandmarks": [
+    "[overworld] P ネザーポータル (300,70,-190) 拠点 210m"
+   ],
+   "nearbyEntities": [
+    {
+     "id": 522,
+     "name": "enderman",
+     "kind": "hostile",
+     "distance": 41.0,
+     "position": {
+      "x": 545,
+      "y": 72,
+      "z": -210
+     }
+    }
+   ],
+   "nearbyThreats": []
+  },
+  "events": [
+   "歪んだ森に着いた。10 分でエンダーマンを 2 体見た（倒した 1、パール 1 個）",
+   "パール 3/14（アイ 14 個の目標）"
+  ],
+  "check": {
+   "noHand": [
+    "shoot"
+   ]
+  }
+ }
+]

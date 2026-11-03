@@ -182,3 +182,72 @@ Both the input (P) and the model (L) move it: with the old input Opus follows th
 Water alert (run58's task `d43770fb`: the decisions `d0074`, `d0081`, `d0092`, each the "oxygen 9, under 10" alert beside an iron vein in water; six calls per decision and model, the input as it was): all 36 calls rise first (a `go … waterOk`, a `jump`, a `pillarUp`), none keeps mining in the water; Opus sometimes adds a dig or a place behind the rise (`onFail=continue`), Sonnet mostly rises alone. So the single decision at the alert is safe for both models and is not where the run was lost: the records show the same alert three times in 25 minutes (14:29, 14:30, 14:54), each time followed by the model going back to the same vein once the breath was full. That is a failure over several turns, which one saved request cannot show; it needs the lab with the water vein, or the Codex typed failure of "the same place, the same stop" shown as a fact. Not replayed: the shield scene (measured on 11/2 with n=10), the real-world result of any hand.
 
 Spent on 11/3: about $4.4 of the $6 (gravel $0.8 Sonnet and $1.5 Opus, water $2.1). Rows: `status/codex-s3/t6-gravel*.json`, `t7-d00*.json`; script `t7-replay.py`.
+
+## 11/3 Unknown-seed starts (S3, skill-port plan #6, about $1.3 of the $3)
+
+Four invented starts (`tests/fixtures/minecraft/unknown-seed-starts.json`: no village / a beach by the sea / a snowy forest / a cave mouth with no tree in 160 m), each asked as the run asks: the first plan from Opus (`ownFirstPlanSystem`, the scan, the readiness), then the first decision from Sonnet with that plan; two rounds each (`scripts/minecraft-llmc-start-scenes.ts`, rows in `status/codex-s3/start-scenes*.json`). Coordinates in the answers that are not in the world given: none (the one flagged is the start's own position, which the plan copies into a `where`). Every plan has food, iron, the gate and the rest of the road; the first decision is a walk, dig and pickup to the nearest trees in the three starts that have trees, and a `mc.view` in the cave mouth (no tree to walk to: it looks first).
+
+Found: the bow and arrows came only at the frame room or the End (node 14 to 28 of 17 to 31), long after the gate. Cure: one line in the first plan's preparation words (`PLAN_PREP_WORDS`): the materials for the bow and arrows (string, feathers, flint) are gathered on the way early, written into the food or iron node's caution. After it, in 8 of 8 plans the string and feather line is in the second to fifth node, before the gate (node 6 to 15). Not shown: that the materials were then found in a world (a plan names them, the world must have them), and the 40 minutes to the Nether, which needs a run.
+
+## 11/3 Survey and eye continuity (S3, skill-port plan #9, about $1.4 of the $2)
+
+Six scenes (`tests/fixtures/minecraft/eye-continuity-scenes.json`, Sonnet, three calls each, the end-game scene script): two lines nearly parallel; the eye sank; a reflex cut the act; the fix is over open sea; seven eyes left with one lying near; stone bricks and no frame. The 60-minute return is a test, not a scene (the restored ledger says the same lines an hour later).
+
+- Stone bricks (infested, mossy, cracked): 0 of 3 calls put an eye on a brick or called it a frame; all three looked at the layers (a `mc.view`, no hand, which the scene check calls a miss).
+- Sunk eye: 0 of 3 threw another; all went to the place and looked (none called `mc_probe kind=frames` or went down at once).
+- Reflex cut (zombie 5 m, health 11, the ledger holds one throw): 3 of 3 fought first. The next turn is not shown (one request cannot).
+- Over the sea: 3 of 3 threw again at the fix (the eye sinks over it) — the scene's own check wanted a move, so it reads as a fail; I read it as right.
+- Eyes few: 3 of 3 picked up the dropped one (#931); none made more from the powder and pearls. With one added line in the stronghold stage (the frames take about 10 eyes; make up the count before walking there): 1 of 4 crafted, 4 of 4 picked up.
+- Parallel lines: the ledger offered places across the line (200 m), but 2 of 3 replays went 110 m along it (collinear: no crossing). The ledger now says which way the last line runs and that moving along it gives the same line; of 6 replays after, 3 went across, 2 along, 1 unseen. Still not reliable: a note beside the act when the destination lies on the last line would be the next step (not built; it needs the ledger in the send path).
+
+## 11/3 Pearl forest (S3, about $0.35 of the $2)
+
+Three scenes (`tests/fixtures/minecraft/pearl-forest-scenes.json`, Sonnet, the end-game scene script): no warped forest in view near a fortress (a soul sand valley to the south-west, 6 gold); a warped forest 200 m east; in the forest with few endermen (2 in 10 minutes, 3 of 14 pearls, 18 gold).
+
+- Forest 200 m east: 4 of 4 `go` there with `maxDig`/`maxPlace` raised for the distance.
+- No forest in view: first 4 of 4 went back to the gate to look for endermen on the surface at night (or crafted powder); none searched the Nether. After the pearl stage was given a line on how to look (scan, then 90 m a go toward the directions not seen and not walked, the gate only after three directions): 4 of 5 went 90 m in a direction (south, west, north-west, west) and the fifth looked first; none went back to the gate. The directions follow the sight of the valley only loosely (three of four went toward the valley's side); no fixed coordinate is in any answer.
+- Few endermen: the model fought on in 3 of 5 and looked first in 2 of 5, before and after; none set the gold's trade (18 gold, about 1.1 pearls) against the wait in its words. A line now gives the numbers beside the choice ("パール 3/14（あと 11 個）: 金 18 個の交換は平均 約 1.1 個"); it did not change the choice here. A time-based comparison needs the minutes spent and the endermen seen, which the body does not report (a field to ask S2 for, not urgent): the number seen in the last N minutes.
+- Eye contact: the old lines stay (look at the feet; no bow); the fights were `fight target=enderman`, which the body makes safe by a roofed hole.
+
+## 11/3 Run59's eight holds: can the head get out alone? (S3, about $0.9 of the $3)
+
+Method: the saved request of the decision that first saw each stop (production decision records, read only), sent again to Sonnet eight times, as it was; where the head has changed since, the new words were added to that request as a fact and sent eight times more. A saved request has the words of that day, so this shows the model's behaviour and what a new fact changes, not the new head's whole path.
+
+| hold | what it was | layer | the head alone, today |
+|---|---|---|---|
+| H1 | go 33 m nearer counted as no progress | A/O | prevented: the approach is counted (`928b254`), kills, frame, ignition, eyes count too (unit tests); no stall to get out of |
+| H2 | vertical at gravel, turned away, met it again | P | 1 decision: gravel put in `canDig` 2 of 10 with the old input, 10 of 10 with the reason (T6) |
+| H3 | rail in her cell, pillarUp could not place, the text lost the rail | S/P | not replayed (the body's result text and `pillarUp` are the cure, `38f361e`); to S0's table |
+| H4 | pack full (inventory_full) while a vertical went on | A/P | 1 decision: 8 of 8 dropped the big stacks (cobblestone 300 to 400, granite, dirt) and mined on; the drops are large, a side effect to watch |
+| H5 | a life key renamed, deaths 0 to 3 read as new | O/A | prevented (`dcc9a45`) |
+| H6 | first go to the fortress, search_timeout | S/A | 0 of 8 changed: 8 of 8 sent the same go again with more `maxDig`/`maxPlace`. With a fact "the same go stays the same; a point 80 m on the line" 5 of 8 went by relay points. Now a typed failure (`search_timeout`) offers that point (unverified) and says when the same go is sent again |
+| H7, H8 | go stuck twice at the same place (placing into her own cell) | S/A | 0 of 8: 8 of 8 sent the same go; with a fact to change the destination 1 of 8. The cause is the body's (the cell she stands in); the head says "tried" now (`go_stuck` typed failure) but cannot place around it |
+
+Count: the head gets out alone, or never gets in, in H1, H2, H4, H5 (4 of 8) and part of H6 (5 of 8 with the fact; the typed failure puts the fact in the run). H3, H7 and H8 need the body (to S0's table). Not shown: that the relay points are walkable, and any multi-turn exit.
+
+## 11/3 The seams of the second half (S3, about $0.6 of the $3)
+
+Six scenes (`tests/fixtures/minecraft/seam-scenes.json`: each stands just after a node and asks the next decision; Sonnet three calls each, Opus for the End), plus the frames scene of the morning (stronghold-frames: 3 of 3 go to the frame and put the eyes in, six in one act).
+
+| seam | next decision |
+|---|---|
+| 7 rods, to the pearls (Nether, no forest in view) | 3 of 3 `mc.view` first (a look, no hand): one decision more, then the pearl stage's search |
+| 14 pearls, to the eyes | 3 of 3 craft 14 powder and 14 eyes in one act |
+| 14 eyes, back to the gate | 3 of 3 `mc.view` first: one more decision |
+| arrived in the overworld, node behind | 3 of 3 `mc.view` first, with a long thought (the check p14 lacks beds, bow, arrows, water) |
+| portal open, node still at the frames | 3 of 3 walk into the portal (one adds a wait); the gate holds the walk if blocks, water, beds or food are short, and the model knew the 40 of 64 blocks |
+| in the End, node still at the frames (Opus) | 3 of 3 mark the nodes done, set the current to the crystals, equip the bow and shoot #12 at 22 m |
+
+Found and mended: the model router already chose the strong model in the End whatever the node, but the step did not close for it (`closeStep` looked at the node only), so a step begun in the Nether would have gone on with Sonnet after the portal. The close now uses the same rule (`strongStageNow`), with a test.
+
+Not shown: the real walk between two seams, the pre-End check's content (beds, bow, arrows, water), and anything longer than two decisions. Every seam gives a next move within two decisions here; the looks at the start of three are the only added decision.
+
+## 11/3 Eyes counted after the frames; the cleanup words (a draft) (S3)
+
+**Eyes (rod-methods §4).** The head cannot know P (the eyes already in the frames) before it reaches the room: each frame holds one with a chance of about one in ten, so P averages 1.2, is 2 or more about three times in ten, 4 or more about 3%. The need is 12 − P − held (+ 2 for the throws that break, one in five). Two flows compared in the stronghold stage's words: leaving the Nether with 6 rods pays only when P is 2 or more (about 3 in 10) and costs a return trip to the Nether otherwise; one rod fewer saves minutes, the trip costs more; so seven rods unless the rods come very slowly. Once the frames are in view the frames' line gives the exact count (no reserve is needed then) and, for the missing eyes, what they take, what the pack can make now, and what to bring (pearls, rods). The frames' count is already in the body's observation (`Q エンドポータルの枠 ×12 アイ入り N`), so no new field is needed. The reserve of 2 stays until the throws are measured in the lab.
+
+**Cleanup (draft, not in the code; to be put in after S2's test passes).** For the blaze stage:
+
+> - 湧き場の片付け: 数え箱の中のブレイズが 5 体以上生き残っている時は、床のロッドを先に拾ってから、32 マスより遠くへ 3〜4 分離れて消えるのを待つ。戻ったら数え箱の数を見直し、5 体を切ってから待ち場へ入る。
+
+It needs the box's count of survivors in the observation (the body's `build_lane` check returns it); the head will say the count as a fact when the field exists.

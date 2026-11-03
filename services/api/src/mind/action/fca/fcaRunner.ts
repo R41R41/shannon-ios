@@ -425,7 +425,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
         return child && !['completed', 'failed'].includes(child.phase);
     }))) disposition = 'wait';
   // A wait nobody can answer is turned away a bounded number of times, then committed and the task stopped (below).
-  const gated = waitGate.apply(disposition);
+  const gated = waitGate.apply(disposition, bodyTask);
   disposition = gated.disposition;
   await checked('local');
   if (disposition === 'complete' && !state.bodyStale && ports.tools?.progress) await metrics.timed('verifyMs', async () => {
