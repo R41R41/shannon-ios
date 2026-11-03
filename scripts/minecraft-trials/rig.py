@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -29,8 +30,9 @@ sys.path.insert(0, HERE)        # `python3 -I` leaves the script's own directory
 import trials  # noqa: E402
 import seedscan  # noqa: E402
 
+EXIT_PLAN_DONE = 10      # `run` ends with this when nothing of the plan is left that could still run (all done, or the rest does not fit the batch cap)
 HOME = os.path.expanduser('~')
-RIG_ROOT = os.path.join(HOME, '.cache', 'minebot-lab', 'rig')
+RIG_ROOT =os.path.join(HOME, '.cache', 'minebot-lab', 'rig')
 PRODUCTION_ENV = os.path.join(HOME, '.config', 'shannon-ios', 'api.env')
 BODY_RUN_RELATIVE = os.path.join('scripts', 'lab', 'rig-body-run.ts')
 BODY_RUN_SOURCE = """// The body's half of S4's isolated head + body rig (rig.py writes this file into the body pin; the same text is backend/scripts/lab/rig-body-run.ts).
@@ -90,6 +92,14 @@ def free_slot(port_from, port_to):
     raise trials.Stop(f'no free port in {port_from}-{port_to} (and +1000 for RCON)')
 
 
+def kill_group(proc, sig):
+    """Signals the whole process group of a child that was started in its own session."""
+    try: os.killpg(os.getpgid(proc.pid), sig)
+    except (ProcessLookupError, PermissionError, OSError):
+        try: proc.send_signal(sig)
+        except (ProcessLookupError, OSError): pass
+
+
 class Rig:
     """One trial's lab server, head rig and body. start() points trials.py at them (RCON, database, operator CLI); stop() puts everything back."""
 
@@ -116,7 +126,7 @@ class Rig:
                'NODE_ENV': 'production'}
         if a.model == 'real': env['RIG_ENV_FILE'] = a.env_file
         self.head = subprocess.Popen([a.node, '--import', 'tsx', 'scripts/minecraft-rig.ts'], cwd=os.path.join(a.head_pin, 'services', 'api'), env=env, stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
         threading.Thread(target=self._drain, args=(self.head, 'rig.log'), daemon=True).start()
         self._wait(lambda: self.http is not None, 90, 'the head\'s rig did not open its door', self.head)
         node_dir = os.path.dirname(a.body_node)
@@ -124,7 +134,7 @@ class Rig:
                     'SHANNON_ISOLATED_MINEBOT_PROBE': 'true', 'MINECRAFT_COGNITION_MODE': 'off', 'MINECRAFT_OUTAGE_NO_LLM': 'true', 'MINECRAFT_HUNT_NO_LLM': 'true',
                     'MINECRAFT_PROBE_FLOOR': 'default', 'TS_NODE_TRANSPILE_ONLY': 'true', 'RIG_MC_PORT': str(self.lab.port), 'RIG_HEAD_URL': self.http['url'], 'RIG_BODY_NAME': trials.BODY}
         self.body = subprocess.Popen(['nice', '-n', '5', a.body_node, '--loader', 'ts-node/esm', BODY_RUN_RELATIVE], cwd=backend, env=body_env, stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
         threading.Thread(target=self._drain, args=(self.body, 'body.log'), daemon=True).start()
         self._wait(lambda: self.ready is not None, a.ready_seconds, 'the rig did not come up', self.head, self.body)
         self.saved = {'DB': trials.DB, 'IOS': trials.IOS, 'NODE': trials.NODE, 'RCON_TARGET': trials.RCON_TARGET}
@@ -159,13 +169,13 @@ class Rig:
         if self.saved:
             trials.DB, trials.IOS, trials.NODE, trials.RCON_TARGET = (self.saved[k] for k in ('DB', 'IOS', 'NODE', 'RCON_TARGET'))
             self.saved = {}
-        for proc in (self.body, self.head):          # the body first: it polls the head
+        for proc in (self.body, self.head):          # the body first: it polls the head; each is its own process group, ended whole (nothing may stay behind holding the slot or the memory)
             if proc and proc.poll() is None:
-                proc.terminate()
-                try: proc.wait(timeout=25)
+                kill_group(proc, signal.SIGTERM)
+                try: proc.wait(timeout=8)
                 except subprocess.TimeoutExpired:
-                    proc.kill(); proc.wait()
-        if self.lab: self.lab.stop(remove=True)
+                    kill_group(proc, signal.SIGKILL); proc.wait()
+        if self.lab: self.lab.stop(remove=True, fast=True)
         if not self.args.keep and os.path.isdir(self.dir) and os.path.abspath(self.dir).startswith(os.path.abspath(RIG_ROOT) + os.sep):
             os.makedirs(os.path.join(trials.RESULTS, self.batch), exist_ok=True)
             for name in ('rig.log', 'body.log'):
@@ -225,15 +235,22 @@ def cmd_run(args):
     trials.log(f'rig batch {batch}: {len(plan)} trials: {", ".join(f"S{s["id"]}/{k}" for s, k in plan)}; model {args.model}; ceiling ¥{trials.MAX_SECTION_YEN}, batch ¥{batch_cap}')
     limit = args.load_limit if args.load_limit is not None else (3.5 if (os.cpu_count() or 2) <= 4 else 0)
     with LoadWatch(limit, args.load_minutes):
-        run_plan(args, cfg, plan, batch, folder, batch_cap)
+        left = run_plan(args, cfg, plan, batch, folder, batch_cap)
     trials.write_report(batch)
-    return 0
+    return 0 if left else EXIT_PLAN_DONE
 
 
 def run_plan(args, cfg, plan, batch, folder, batch_cap):
-    spent = 0.0
+    """Runs the trials of the plan that have no result yet (a batch folder is resumed, its spending counted), at most --limit of them. Returns how many trials remain
+    that could still run (0 = the plan is done, or what is left does not fit the batch cap)."""
+    finished, interrupted = trials.batch_rows(batch)
+    done = {r['trial'] for r in finished}
+    spent = sum((r.get('yen') or 0) for r in finished + interrupted)
+    ran, stopped = 0, False
     for section, seed_key in plan:
-        if trials.stop_requested(): trials.log(f'batch: {trials.STOP_FILE} exists: stopping before S{section["id"]}'); break
+        if f'{batch}-s{section["id"]}-{seed_key}' in done: continue
+        if args.limit and ran >= args.limit: break
+        if trials.stop_requested(): trials.log(f'batch: {trials.STOP_FILE} exists: stopping before S{section["id"]}'); stopped = True; break
         if spent + trials.section_cap(section, cfg) > batch_cap:
             trials.log(f'batch: ¥{spent:.0f} spent; S{section["id"]} could take {trials.section_cap(section, cfg)} more and pass ¥{batch_cap}: stopping'); break
         variant = (trials.load_json(os.path.join(HERE, 'seeds.json'), {}).get('variants') or {}).get(seed_key, {})
@@ -258,13 +275,21 @@ def run_plan(args, cfg, plan, batch, folder, batch_cap):
         result['rig'] = {'headPin': os.path.basename(args.head_pin), 'bodyPin': os.path.basename(args.body_pin), 'usd': usd}
         result['builds'] = {'head': os.path.basename(args.head_pin).replace('head-', ''), 'body': os.path.basename(args.body_pin).replace('body-', '')}
         spent += result.get('yen') or 0
+        ran += 1
         result['batchYenAfter'] = round(spent, 2)
-        trials.save_json(os.path.join(folder, f'{result["trial"]}.json'), result)
+        # A trial that the rig could not run, or that the stop file cut off, is not done: it is kept as an `interrupted` result (its yen still count) and runs again in a later window.
+        again = str(result['reason']).startswith('rig_failed') or result['reason'] == 'stopped_by_file'
+        name = f'{result["trial"]}.interrupted-{"rigfail" if str(result["reason"]).startswith("rig_failed") else "stop"}-{trials.jst_stamp(True)}.json' if again else f'{result["trial"]}.json'
+        trials.save_json(os.path.join(folder, name), result)
         with open(os.path.join(trials.RESULTS, 'history.jsonl'), 'a', encoding='utf-8') as handle: handle.write(json.dumps(result, ensure_ascii=False) + '\n')
         trials.log(f'trial {result["trial"]}: ok={result["ok"]} reason={result["reason"]} s={result.get("seconds")} decisions={result.get("decisions")} yen={result.get("yen")} (batch {spent:.0f})')
-        if result['reason'] == 'stopped_by_file': trials.log('batch: the stop file ended this trial; no more trials'); break
-        if str(result['reason']).startswith('rig_failed') and not args.keep_going: trials.log('batch: stopping after a rig failure'); break
-    return spent
+        if result['reason'] == 'stopped_by_file': trials.log('batch: the stop file ended this trial; no more trials'); stopped = True; break
+        if str(result['reason']).startswith('rig_failed') and not args.keep_going: trials.log('batch: stopping after a rig failure'); stopped = True; break
+    finished, interrupted = trials.batch_rows(batch)
+    done = {r['trial'] for r in finished}
+    spent = sum((r.get('yen') or 0) for r in finished + interrupted)
+    left = [(s, k) for s, k in plan if f'{batch}-s{s["id"]}-{k}' not in done and spent + trials.section_cap(s, cfg) <= batch_cap]
+    return len(left)
 
 
 def main(argv):
@@ -278,6 +303,7 @@ def main(argv):
     p.add_argument('--model', choices=['real', 'script'], default='real'); p.add_argument('--env-file', default=PRODUCTION_ENV)
     p.add_argument('--max-section-yen', type=int); p.add_argument('--batch-cap-yen', type=int); p.add_argument('--owner-ok-supply')
     p.add_argument('--smoke', action='store_true', help='cut every trial to one minute (the plumbing test)')
+    p.add_argument('--limit', type=int, help='run at most this many trials in this call (the batch folder is resumed: finished trials are skipped, their yen counted)')
     p.add_argument('--port-from', type=int, default=25580); p.add_argument('--port-to', type=int, default=25589,
                    help='the rig\'s own game ports (its RCON is +1000): other sessions\' labs use 25590-25599 or ports they name, so the rig keeps below them')
     p.add_argument('--heap', default='2G'); p.add_argument('--cores', type=int, default=3); p.add_argument('--ready-seconds', type=int, default=180)
@@ -287,6 +313,8 @@ def main(argv):
     p.add_argument('--keep-going', action='store_true')
     p = sub.add_parser('report'); p.add_argument('--batch')
     args = parser.parse_args(argv)
+    def on_term(signum, frame): raise KeyboardInterrupt()
+    signal.signal(signal.SIGTERM, on_term)      # a kill still runs the finally blocks: the rig's three processes are stopped and the lab slot is let go
     try:
         if args.cmd == 'run': return cmd_run(args)
         trials.cmd_report(args); return 0

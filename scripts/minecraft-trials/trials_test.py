@@ -113,7 +113,7 @@ class SitesTest(unittest.TestCase):
         cfg = trials.load_json(os.path.join(trials.HERE, 'sections.json'))
         self.assertEqual(trials.validate_sections(cfg), [])
         ids = [str(s['id']) for s in cfg['sections']]
-        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '8a', '8b', '9', '10', '11'])
+        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '8a', '8b', '9', '10', '11', 'Z', 'M'])
 
     def test_validation_names_what_is_wrong(self):
         base = {'trialCapYen': 300, 'sections': [{'id': 6, 'name': 'x', 'targetSeconds': 100, 'limitMinutes': 130, 'capYen': 3000,
@@ -333,6 +333,19 @@ class RigHooksTest(unittest.TestCase):
             server.close()
         thread.join(5)
         self.assertEqual(seen.get('password'), 'rig-password')
+
+    def test_stopping_a_rig_ends_its_process_groups_whole_and_fast(self):
+        import rig, subprocess, time, types
+        r = rig.Rig(types.SimpleNamespace(keep=True), {'id': 6}, 'c1', 'b', '/nowhere', {})
+        r.head = subprocess.Popen(['bash', '-c', 'sleep 61.37 & sleep 61.38'], start_new_session=True)       # a child with a grandchild in its group
+        r.body = subprocess.Popen(['sleep', '61.39'], start_new_session=True)
+        time.sleep(0.5)
+        started = time.monotonic()
+        r.stop()
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertIsNotNone(r.head.poll()); self.assertIsNotNone(r.body.poll())
+        left = subprocess.run(['pgrep', '-f', 'sleep 61.3'], capture_output=True, text=True).stdout.split()
+        self.assertEqual(left, [], 'a process of the rig stayed behind')
 
     def test_the_body_pin_gets_its_runner_and_its_packages(self):
         import rig

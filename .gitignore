@@ -18,3 +18,7 @@ xcuserdata/
 /design/character-concepts/drafts/
 /artifacts/gemini-tts/
 /artifacts/reach/
+
+# Python bytecode (the minecraft-trials tools)
+__pycache__/
+*.pyc

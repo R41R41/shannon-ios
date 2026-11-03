@@ -228,6 +228,9 @@ python3 -I rig.py run --head-pin ~/s4-pins/head-<sha> --body-pin ~/s4-pins/body-
 python3 -I rig.py run ... --model script --smoke      # 鍵なし・1 分に切った配線の試験（頭の台本のモデル）
 python3 -I rig.py report
 ```
+- **2 vCPU の VM では run59 の保留の窓で 1 区間ずつ**（取りまとめの決め 23 時台：4 vCPU 化は Spot の vCPU 上限で止まっている）：`rig-window.sh`（`~/minecraft/shannon-home/trials/`）が、`prod.lock` が空き（S5 が `~/.cache/run59/prodlock-release` を作った時）・本番の Minecraft タスクが動いておらず・`trials.stop` が無い間だけ、`rig.py run --limit 1` で 1 区間を回す。
+  pin は本番に入っている版（頭 `~/shannon-ios`・体 `~/Shannon`）から `git archive` で作る（無ければ）。1 区間 ¥500・バッチ全体 ¥3,000、`--cores 2 --load-limit 0`。**S5 が run59 を再開する時は `touch ~/.cache/minebot-lab/trials.stop`**：走っている区間は次の確認（5 秒）で `stopped_by_file` で終わり、1 分以内に両方を止める。止められた区間は `interrupted` で記録されて次の窓で最初からやり直す。ファイルは作った人が、窓を再び開けたい時に消す（残っている間は始まらない）。
+  `rig-window.sh --check` は窓が開いているか（なければ理由）と使う pin を表示するだけ。終わる時：計画が済む・上限に達する（rig.py の終了 10）、失敗が 3 回続く、`--max-wait`（既定 12 時間）。
 - 結果は `results/<バッチ>/`（試しごとの JSON・`rig-<試し>.log`＝rig の出力・`report.md`）。rig の出力の `RIG_USAGE` は有料の呼出し 1 回ごとの費用（USD）。`builds` は試した頭と体の版。
 
 ### 未確認のこと（分かっていること／仮説／不明）
