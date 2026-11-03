@@ -248,10 +248,8 @@ switch (line.goal) {
 noteGoal();
   if (line.goal !== 'partial' && line.end === 'cut' && cutBy) out.push(`外から止められた（${cutBy}）`);
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
-  const stopped = verticalStopWords(line);
+  const stopped = verticalStopWords(line) || (line.do === 'fight' ? denStopWords(line.code) : '');
   if (stopped) out.push(stopped);
-  const den = line.do === 'fight' ? denStopWords(line.code) : '';
-  if (den) out.push(den);
   const fought = line.do === 'fight' && line.code && line.goal === 'done' ? FIGHT_END_WORDS[line.code] : undefined;
   if (fought) out.push(fought);
   if (line.progress?.seen?.length) out.push(`途中で見えた物（追っていない）: ${seenWords(line.progress.seen)}`);

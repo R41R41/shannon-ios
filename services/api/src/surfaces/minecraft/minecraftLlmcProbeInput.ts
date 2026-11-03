@@ -60,7 +60,8 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
   around: 'around', look_creatures: 'around', creatures: 'around', entities: 'around', mobs: 'around', nearby: 'around',
   history: 'history', look_history: 'history', stops: 'history', past: 'history',
   scan: 'scan', landmarks: 'scan', survey: 'scan',
-  frames: 'frames', frame: 'frames', stronghold: 'frames', portal_frames: 'frames', camp: 'camp', blaze_camp: 'camp', spawner: 'camp', den: 'den', enderman_den: 'den', tunnel: 'den',
+  frames: 'frames', frame: 'frames', stronghold: 'frames', portal_frames: 'frames', camp: 'camp', blaze_camp: 'camp', spawner: 'camp',
+  den: 'den', enderman_den: 'den', tunnel: 'den',
 };
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {

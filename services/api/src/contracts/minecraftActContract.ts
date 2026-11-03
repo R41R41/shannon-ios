@@ -171,7 +171,8 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         maxDrop: { type: 'integer', minimum: 0, maximum: 10 },
         waterOk: { type: 'boolean' },
         den: { type: 'object', additionalProperties: false, required: ['entrance', 'direction'], description: DEN_DESCRIPTION, properties: {
-          entrance: { type: 'object', additionalProperties: false, required: ['x', 'y', 'z'], properties: { x: { type: 'integer' }, y: { type: 'integer' }, z: { type: 'integer' } } },
+          entrance: { type: 'object', additionalProperties: false, required: ['x', 'y', 'z'],
+            properties: { x: { type: 'integer' }, y: { type: 'integer' }, z: { type: 'integer' } } },
           direction: { type: 'string', enum: [...DEN_DIRECTIONS] } } },
         stance: { type: 'string', enum: ['fight', 'flee'] },
         retreatHp: { type: 'integer', minimum: 1, maximum: 19 },
