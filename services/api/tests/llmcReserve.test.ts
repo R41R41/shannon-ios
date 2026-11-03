@@ -47,6 +47,9 @@ describe('the defaults a reserve carries', () => {
     const six = reserveCondition([[1, 2, 3, 4, 5, 6].map(n => ({ k: 'free' as const, n }))], feet, 'overworld');
     expect(six[0]).toHaveLength(6);
     expect(six[0]!.filter(clause => clause.k !== 'free').map(clause => clause.k).sort()).toEqual(['at', 'hp', 'safe']);
+    // six legal hp clauses: one stays, the added safe and at are not cut off (review of 11/3)
+    const hps = reserveCondition([[1, 2, 3, 4, 5, 6].map(n => ({ k: 'hp' as const, n: 12 + n }))], feet, 'overworld');
+    expect(hps[0]!.map(clause => clause.k).sort()).toEqual(['at', 'hp', 'safe']);
   });
   it('stopIf: hostileWithin 8 and hpBelow 10 at least; a stricter word of the model stands', () => {
     expect(reserveStopIf(undefined)).toEqual({ hostileWithin: RESERVE_DEFAULTS.hostileWithin, hpBelow: RESERVE_DEFAULTS.hpBelow });

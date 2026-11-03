@@ -3,7 +3,7 @@ import { foodPointsWords } from './minecraftFoodWords.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
 import { BEFORE_END } from './minecraftLlmcPrepRules.js';
-import { lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
  * The deadly gates, in `gateHold`'s form (the coordinator's list for 11/4, item 2; the owner: a death after the iron gear is out): the hand that
@@ -96,16 +96,31 @@ const LOW_HEALTH = 8;
 /** The hands that are work, not defence: held below `LOW_HEALTH` whether an enemy is near or not (fighting, fleeing, eating, getting into cover go). */
 const WORK_HANDS: ReadonlySet<string> = new Set(['mine', 'dig', 'make', 'craft', 'smelt', 'furnace', 'chest', 'obsidian', 'drop', 'pickup']);
 
+const isFood = (name: unknown): boolean => typeof name === 'string' && Object.hasOwn(FULLNESS, name.replace(/^minecraft:/u, ''));
+const foodItems = (hand: Record<string, unknown>): boolean => Array.isArray(hand.items) && hand.items.length > 0
+  && hand.items.every(entry => isFood(objectOf(entry)?.item));
+
+/**
+ * The work that makes the recovery: food made, cooked, taken from a furnace or a chest (review of 11/3: at 5 health with wheat and a table, `make bread` was
+ * refused and health could never come back to 8). These go through whatever the health.
+ */
+function foodWork(hand: Record<string, unknown>): boolean {
+  if (hand.do === 'make' || hand.do === 'craft') return isFood(hand.item);
+  if (hand.do === 'furnace') return hand.op === 'take' || hand.op === 'look';
+  if (hand.do === 'smelt') return foodItems(hand);
+  return hand.do === 'chest' && (hand.op === 'look' || (hand.op === 'take' && foodItems(hand)));
+}
+
 /**
  * Work with almost no health (the isolated lab of 11/3: `eat` and `mine iron_ore` at 5.7, a skeleton came to a metre, and the body dropped the
  * `stopIf hpBelow 7` as already true; the first form of this hold let it pass with an enemy near, which is the very case): the first work hand is
- * held below `LOW_HEALTH`, an `eat` before it too (the meal does not heal by itself). Fighting, fleeing, eating, equipping and getting into cover
- * are the decision's.
+ * held below `LOW_HEALTH` (food made, cooked or taken is not work: `foodWork`), an `eat` before it too (the meal does not heal by itself).
+ * Fighting, fleeing, eating, equipping and getting into cover are the decision's.
  */
 function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
   const hands = (input as { hands?: unknown } | null)?.hands;
   if (!Array.isArray(hands) || facts.health === null || facts.health >= LOW_HEALTH) return null;
-  const at = hands.findIndex(raw => WORK_HANDS.has(String(objectOf(raw)?.do ?? '')));
+  const at = hands.findIndex(raw => WORK_HANDS.has(String(objectOf(raw)?.do ?? '')) && !foodWork(objectOf(raw) ?? {}));
   if (at < 0) return null;
   const back = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts) ?? `体力 ${facts.health}/20`;
   const line = `体力が ${LOW_HEALTH} を切っている間は掘る・作る・拾うなどの作業の手を送らない（敵が近くても）。${back}。`

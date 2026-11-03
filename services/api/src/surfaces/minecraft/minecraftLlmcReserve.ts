@@ -50,8 +50,9 @@ export function reserveCondition(pre: ActCondition | undefined, feet: ActPos | n
     }
     // The body's limit is six clauses: the safety ones (the model's own and the added) stay, the model's others give way
     // (review of 11/3: cut by position, the added fell off).
-    const safety = alternative.filter(clause => SAFETY_CLAUSES.has(clause.k));
-    return [...safety, ...added, ...alternative.filter(clause => !SAFETY_CLAUSES.has(clause.k))].slice(0, 6);
+    const safety = alternative.filter((clause, index) => SAFETY_CLAUSES.has(clause.k) && alternative.findIndex(other => other.k === clause.k) === index);
+    const rest = alternative.filter(clause => !SAFETY_CLAUSES.has(clause.k));
+    return [...safety, ...added, ...rest].slice(0, 6);
   });
 }
 /** The reserve's `stopIf`: the model's, with hostileWithin and hpBelow at least the defaults (a stricter word of the model stands). */

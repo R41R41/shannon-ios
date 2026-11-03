@@ -75,6 +75,18 @@ describe('work with almost no health', () => {
     }
     expect(heldOfFrame(mine, overworld(5.7), 'lh')).toMatchObject({ hand: 2, code: 'gate_required' });
   });
+  it('lets the food through: made, cooked, taken from a furnace or a chest (health could never come back otherwise)', () => {
+    const hungry = overworld(5, { food: 12 });
+    for (const hand of [{ do: 'make', item: 'bread', count: 3 }, { do: 'craft', item: 'cooked_beef' }, { do: 'furnace', op: 'take', at: [{ x: 1, y: 2, z: 3 }] },
+      { do: 'chest', op: 'take', items: [{ item: 'cooked_porkchop', count: 4 }], at: [{ x: 1, y: 2, z: 3 }] },
+      { do: 'smelt', items: [{ item: 'beef', count: 4 }], fuel: 'coal' }, { do: 'chest', op: 'look', at: [{ x: 1, y: 2, z: 3 }] }]) {
+      expect(deadlyGateHold({ hands: [hand] }, hungry), String(hand.do)).toBeNull();
+    }
+    for (const hand of [{ do: 'make', item: 'iron_pickaxe' }, { do: 'chest', op: 'take', items: [{ item: 'iron_ingot', count: 4 }], at: [{ x: 1, y: 2, z: 3 }] },
+      { do: 'chest', op: 'takeAll', at: [{ x: 1, y: 2, z: 3 }] }, { do: 'smelt', items: [{ item: 'raw_iron', count: 4 }], fuel: 'coal' }]) {
+      expect(deadlyGateHold({ hands: [hand] }, hungry), `${hand.do} ${JSON.stringify(hand)}`).toMatchObject({ kind: 'work' });
+    }
+  });
   it('lets go the hands of defence, and everything at 8 or more', () => {
     expect(deadlyGateHold(mine, overworld(8))).toBeNull();
     for (const hand of [{ do: 'fight', target: 'zombie' }, { do: 'attack', target: '#9' }, { do: 'eat', item: 'cooked_beef' }, { do: 'go', to: { x: 1, y: 2, z: 3 } },
