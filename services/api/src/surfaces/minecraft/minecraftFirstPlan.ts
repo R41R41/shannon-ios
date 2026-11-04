@@ -158,7 +158,8 @@ function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
   if (seed.kind === 'village') return { title: '村を回る（ベッド全部・干し草・畑・箱）' };
   if (seed.kind === 'prep_descent' && seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
   if (seed.kind === 'iron' && seed.doneWhen === IRON_TOP_DONE) {
-    return { title: '鉄（約30・兜・胸・脚まで）', doneWhen: `have:iron_pickaxe&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };
+    // The pre-deploy review of 11/5 (item 7): the iron sword is the gate's, so the iron node is done with it too (not only with the armour).
+    return { title: '鉄（約35・剣・兜・胸・脚まで）', doneWhen: `have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };
   }
   return {};
 }

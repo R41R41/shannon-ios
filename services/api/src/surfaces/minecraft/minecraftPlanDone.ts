@@ -386,9 +386,17 @@ export function prepUnmetFacts(tree: PlanTree, facts: DoneFacts): OnceFactDraft[
  * `continue` for good, and the plan shows work to do under a node that is done): a node open under one that is
  * done (or seen done in this pass) is
  * not needed any more, and is closed as done with the reason in its note. Its nearest done ancestor is named.
- * Never a blocked node.
+ * Never a blocked node. With `facts`, a node closed short of its own condition says so (the pre-deploy review of 11/5, item 9: the beds 10 and
+ * the fight obsidian 12 were closed when their parent's least, 8 and 8, was met): the parent's least is the decision to go on, the node's own
+ * count is the record of what was aimed at and not reached.
  */
-export function closedUnder(tree: PlanTree, seen: readonly string[]): Array<{ id: string; by: string; note: string }> {
+/** The reason a node closed under `by` is given: short of its own condition (the aim not reached), or not needed any more. */
+function closedWhy(node: PlanNode, by: PlanNode, facts: DoneFacts | null | undefined): string {
+  const short = facts && node.doneWhen ? doneStatusWords(node.doneWhen, facts, node.target) : null;
+  const tail = by.doneWhen ? `: ${by.doneWhen}` : '';
+  return short?.startsWith('未: ') ? `目標に届かずに閉じた（${short.slice(3)}。${by.id} の最低数で先へ${tail}）` : `不要になった（${by.id} が済んだ${tail}）`;
+}
+export function closedUnder(tree: PlanTree, seen: readonly string[], facts?: DoneFacts | null): Array<{ id: string; by: string; note: string }> {
   const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const done = new Set([...tree.nodes.filter(node => node.state === 'done').map(node => node.id), ...seen]);
   const out: Array<{ id: string; by: string; note: string }> = [];
@@ -397,7 +405,7 @@ export function closedUnder(tree: PlanTree, seen: readonly string[]): Array<{ id
     let by: PlanNode | undefined;
     for (let up = byId.get(node.parentId ?? ''); up && !by; up = byId.get(up.parentId ?? '')) if (done.has(up.id)) by = up;
     if (!by) continue;
-    const why = `不要になった（${by.id} が済んだ${by.doneWhen ? `: ${by.doneWhen}` : ''}）`;
+    const why = closedWhy(node, by, facts);
     out.push({ id: node.id, by: by.id, note: (node.note ? `${why} ${node.note}` : why).slice(0, PLAN_LIMITS.text) });
   }
   return out;
@@ -414,7 +422,7 @@ export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | nu
   const seen = nodesSeenDone(tree, facts, true).slice(0, 24);
   // The preparation before the descent is not closed here (chapter 7): the head says the fact once
 // (`prepUnmetFacts`) and the model decides.
-  const under = closedUnder(tree, seen);
+  const under = closedUnder(tree, seen, facts);
   const held = nodesHeldOpen(tree, facts, true).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
   if (!seen.length && !under.length && !held.length) return null;
   const ops = [...seen.map(id => ({ op: 'set' as const, id, state: 'done' as const })),

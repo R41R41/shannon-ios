@@ -3,6 +3,7 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { blazeLack, deadlyGateHold } from '../src/surfaces/minecraft/minecraftLlmcDeadlyGates.js';
 import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { readinessOf } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { END_GATHER_MS, firstEntryLack, forgetEndGather } from '../src/surfaces/minecraft/minecraftEndGather.js';
 
 /**
  * The deadly gates in `gateHold`'s form (the coordinator's list for 11/4, item 2): a hand that goes into the blaze spawner or the End is held
@@ -70,6 +71,25 @@ describe('the End', () => {
     const fewObsidian = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'obsidian' ? 7 : n] as [string, number])));
     expect(fewObsidian?.line).toContain('黒曜石（エンドの戦い用');
     expect(fewObsidian?.line).toContain('7/8');
+  });
+  it('lets the fallback in once the gathering of beds has had ten minutes, with the bow, 30 arrows and an iron sword (the review of 11/5, item 8)', () => {
+    forgetEndGather();
+    let clock = 0;
+    const now = () => clock;
+    const fallback: Array<[string, number]> = [['cobblestone', 64], ['water_bucket', 1], ['white_bed', 6], ['cooked_beef', 12], ['bow', 1], ['arrow', 30],
+      ['iron_sword', 1]];
+    const facts = readinessOf(overworld(fallback))!;
+    expect(firstEntryLack(facts, 't', now)).toContain('残り約 10 分');
+    clock = END_GATHER_MS - 60_000;
+    expect(firstEntryLack(facts, 't', now)).toContain('残り約 1 分');
+    clock = END_GATHER_MS;
+    expect(firstEntryLack(facts, 't', now)).toBeNull();
+    // Without the fallback's kit the clock lets nothing in, and the line says so.
+    const bare = readinessOf(overworld(fallback.filter(([name]) => name !== 'bow')))!;
+    expect(firstEntryLack(bare, 't', now)).toContain('予備の手（クリスタルを弓・止まり木の竜を剣）の必須もそろっていない');
+    // Through the gate: the walk is held, with the clock in its words.
+    forgetEndGather();
+    expect(deadlyGateHold(walkIn, overworld(fallback), 'g')?.line).toContain('最初に止めてから 10 分まで');
   });
 });
 

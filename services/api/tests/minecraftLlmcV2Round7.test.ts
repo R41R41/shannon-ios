@@ -74,7 +74,7 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
   const on = seedPlan('エンドラを倒して')!;
   // Owner 2026-10-24 (after run 38): the iron helmet, chestplate and leggings worn before the diamonds; the boots are golden (`minecraftLlmcV2Fix12.test.ts`).
   it('about 30 iron, the pickaxe, the bucket, the shield and the helmet, chestplate and leggings worn', () => {
-    expect(rows(on)).toContain('p3 鉄（約30・兜・胸・脚まで）|have:iron_pickaxe&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings');
+    expect(rows(on)).toContain('p3 鉄（約35・剣・兜・胸・脚まで）|have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings');
     expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
     expect(rows(on).some(line => line.includes('鉄を約30個掘る（y=16前後・洞窟）'))).toBe(true);
   });

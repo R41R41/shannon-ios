@@ -11,6 +11,7 @@ import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
+import { framesOf } from './minecraftSeenMarks.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
@@ -150,6 +151,18 @@ function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; 
   return [...gapWords(gapsOf(table.needs.filter(need => !need.goal), parts)), foodLack(table, parts.food)].filter(Boolean);
 }
 
+/**
+ * The End's check with the eyes the frames still need once the portal room's frames are in view (S5's section of 11/5: the line asked 12 eyes
+ * in hand when the frames held some already): the empty frames, not twelve; none when every frame holds one.
+ */
+function endStage(world: Record<string, unknown> | undefined): PrepStage {
+  const frames = world ? framesOf(world) : null;
+  if (!frames) return STAGES.end;
+  const empty = Math.max(0, frames.frames - frames.eyes);
+  return { ...STAGES.end, needs: STAGES.end.needs.flatMap(need => need.label !== 'エンダーアイ' ? [need]
+    : empty > 0 ? [{ ...need, label: 'エンダーアイ（空いた枠の分）', count: empty }] : []) };
+}
+
 /** Goals are facts of a missing fallback, never requirements of the entry gate. */
 function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonly string[] }): string {
   const wanted = gapWords(gapsOf(table.needs.filter(need => need.goal), parts));
@@ -170,7 +183,7 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
   const mining = miningToolShortage(parts.counts, parts.nowKinds, parts.inventory);
   const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
-  const table: PrepStage = stage === 'end' && returning ? RETURN_TO_END
+  const table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endStage(parts.world))
     : stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
   const goals = goalWords(table, parts);
   if (!table.risk) {

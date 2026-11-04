@@ -107,6 +107,13 @@ export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80,
 
 // 11/5 checked audit: recovering an End death must not require eight new beds and obsidian before reaching the dropped kit.
 // Keep the existing food minimum; 20 blocks cover the arrival platform and the existing bridge, without rebuilding a full fight kit.
+/**
+ * The fallback's own entry (the pre-deploy review of 11/5, item 8: with 6 beds and no village or sheep left, the crystals-and-sword way could not pass
+ * the gate, and the gathering had no end): the blocks, the water and the food as for the beds' way, and the bow, 30 arrows and an iron sword
+ * required. The gate lets it in once the beds' gathering has had its time (`minecraftEndGather.ts`).
+ */
+export const BEFORE_END_FALLBACK: PrepStage = { title: 'エンドに入る前（予備の手）', food: BEFORE_END.food,
+  needs: [STACKABLE, WATER_BUCKET, BOW, ARROWS, { ...SWORD, label: '鉄以上の剣' }], risk: BEFORE_END.risk };
 export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: BEFORE_END.food,
   needs: [{ ...STACKABLE, count: 20 }, ...END_WEAPONS, { ...WATER_BUCKET, goal: true }],
   risk: 'エンドへ戻る時も、積める物と食料が無いと足場の火の玉や回復不足で死ぬ。落とした装備が残っているかは未確認。' };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlanUpdate, orderedPlan, planPath, readPlanTree, type PlanNode, type PlanTree } from '@shannon/mind';
+import { applyPlanUpdate, orderedPlan, planFromSeeds, planPath, readPlanTree, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { gateFirst, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -174,6 +174,14 @@ describe('the plan tree of run 36 (task 40bd0b3e, revision 21): children left op
     expect(closedUnder(done, []).filter(item => item.by === 'p1').map(item => item.id)).toEqual(['p1.2', 'p1.3']);
     expect(closedUnder(start(), [])).toEqual([]);
     expect(orderedPlan(done.nodes).length).toBe(41);
+  });
+  it('records a node closed short of its own count: the least of the parent goes on, the aim stays written (the review of 11/5, item 9)', () => {
+    const plan = planFromSeeds([{ title: '点検', kind: 'prep_descent', doneWhen: 'have:bed>=8', children: [
+      { title: 'ベッドを10', kind: 'bed', doneWhen: 'have:bed>=10' }] }])!;
+    const done: PlanTree = { ...plan, nodes: plan.nodes.map(node => node.parentId ? node : { ...node, state: 'done' as const }) };
+    const [closed] = closedUnder(done, [], doneFacts(pack([['white_bed', 8]])));
+    expect(closed!.note).toBe('目標に届かずに閉じた（bed 8/10。p1 の最低数で先へ: have:bed>=8）');
+    expect(closedUnder(done, [], doneFacts(pack([['white_bed', 10]])))[0]!.note).toBe('不要になった（p1 が済んだ: have:bed>=8）');
   });
   it('reads the end of the run as it was: p7.2 the obsidian is current, p8 and p9 are not started (the facts the closing leaves alone)', () => {
     const facts = doneFacts(pack([['obsidian', 7]]));
