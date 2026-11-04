@@ -29,8 +29,9 @@ type Need = PrepNeed;
 
 const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: number; needs: readonly Need[] }>> = {
   nether_deep: { title: 'ネザーの奥へ', food: 100, needs: [
-    { label: '作業台', count: 1, pattern: /^crafting_table$/u }, { label: 'ハーフブロック', count: 12, pattern: /_slab$/u },
-    { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u },
+    // The section audit of 11/5: the slabs left the check (they held the fortress's search), and the golden piece is a goal here (the gate asks it).
+    { label: '作業台', count: 1, pattern: /^crafting_table$/u },
+    { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u, goal: true },
     { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
   end: { title: 'エンドへ', food: 80, needs: [
     { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM },

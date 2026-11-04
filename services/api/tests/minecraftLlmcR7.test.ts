@@ -9,7 +9,7 @@ import { urgentWatch } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { toolFailure } from '../src/mind/tools/toolRegistryPorts.js';
 import { forgetSurpriseWatches } from '../src/surfaces/minecraft/minecraftLlmcProbe.js';
 import { forgetThreatSights, readThreatSight, threatLine, nearThreats } from '../src/surfaces/minecraft/minecraftLlmcThreat.js';
-import { CHECK_FORBID, FIRST_PLAN_SYSTEM_R6, FIRST_PLAN_SYSTEM_R7, forgetFirstPlans, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { CHECK_FORBID, CHECK_FORBID_NOW, FIRST_PLAN_SYSTEM_R6, FIRST_PLAN_SYSTEM_R7, forgetFirstPlans, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { foodFirstLine, foodLeads } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { forgetActNodes, noteActNode, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import {
@@ -168,7 +168,8 @@ describe('the check forbids the fight before it is done (runs 30, 31: the only f
     expect(FIRST_PLAN_SYSTEM_R7.startsWith(FIRST_PLAN_SYSTEM_R6.replace(DRAGON_KNOWLEDGE, () => DRAGON_KNOWLEDGE_R7))).toBe(true);
     expect(CHECK_FORBID.length).toBeLessThanOrEqual(80);
     const seed = seedPlan('エンドラを討伐してください', 'the_nether')!;
-    expect(seed.nodes.find(node => node.title === '出発の点検（ネザーの奥へ）')!.forbid).toEqual([CHECK_FORBID]);
+    // The section audit of 11/5: the seed's check no longer asks the slabs and the golden piece (the old modes' words keep theirs).
+    expect(seed.nodes.find(node => node.title === '出発の点検（ネザーの奥へ）')!.forbid).toEqual([CHECK_FORBID_NOW]);
   });
 });
 

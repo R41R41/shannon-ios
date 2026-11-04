@@ -69,7 +69,7 @@ describe('the first plan is told the place and what it lacks (run 29: 28 nodes, 
     expect(input).toContain('ディメンション: the_nether');
     expect(input).toContain('着ている物: 頭: iron_helmet');
     expect(input).toMatch(/^食料 15\.6 点$/mu);
-    expect(input).toContain('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具・足場のブロックが無い。食料 15.6 点（目安 100）');
+    expect(input).toContain('準備の不足（ネザーの奥へ）: 作業台・盾・金の防具・足場のブロックが無い。食料 15.6 点（目安 100）');
     expect(firstPlanInput(GOAL, START, { scan: true })).not.toContain('準備の不足');
     expect(FIRST_PLAN_SYSTEM_R6.startsWith(FIRST_PLAN_SYSTEM_R5)).toBe(true);
     for (const words of ['今いる所から始める', '準備の不足', '出発の点検', '食料を含む', 'ホグリン']) expect(FIRST_PLAN_SYSTEM_R6).toContain(words);
@@ -89,10 +89,10 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
 
   it('the Nether\'s check against the pack, in one line: none, short, food', () => {
     const shaft = counts(SHAFT);
-    expect(preparationShortage({ ...shaft, nowKinds: null })).toBe('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具が無い。食料 0 点（目安 100）');
+    expect(preparationShortage({ ...shaft, nowKinds: null })).toBe('準備の不足（ネザーの奥へ）: 作業台・盾・金の防具が無い。食料 0 点（目安 100）');
     const some = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'crafting_table', count: 1 }, { name: 'cobbled_deepslate_slab', count: 6 },
       { name: 'shield', count: 1 }, { name: 'cooked_porkchop', count: 5 }] });
-    expect(preparationShortage({ ...some, nowKinds: null })).toBe('準備の不足（ネザーの奥へ）: 金の防具が無い。ハーフブロック 6/12');
+    expect(preparationShortage({ ...some, nowKinds: null })).toBe('準備の不足（ネザーの奥へ）: 金の防具が無い');
     const ready = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'blaze_rod', count: 7 }, { name: 'ender_pearl', count: 14 }] });
     expect(preparationShortage({ ...ready, nowKinds: null })).toBeNull();
   });
@@ -150,7 +150,7 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     // Chapter 8: the facts of the input (`facts`) come after the readiness lines and just before the map, counted in the bound and never cut.
     expect(keys.slice(0, 5)).toEqual(['planNow', 'shortage', 'recovery', 'facts', 'map']);
     expect(live.planNow).toBe('[p1.1] 作業台と板を作る＠(296,66,70)（済み: have:crafting_table）（道: 出発の点検（ネザーの奥へ））');
-    expect(live.shortage).toBe('準備の不足（ネザーの奥へ）: 作業台・ハーフブロック・盾・金の防具が無い。食料 0 点（目安 100）');
+    expect(live.shortage).toBe('準備の不足（ネザーの奥へ）: 作業台・盾・金の防具が無い。食料 0 点（目安 100）');
     expect(live.recovery).toEqual([NO_RECOVERY_LIVE,
       '食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）']);
   });

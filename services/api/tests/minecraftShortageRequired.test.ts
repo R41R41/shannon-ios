@@ -76,7 +76,7 @@ describe('a stage that says what its lack costs says it in two parts; the others
     expect(requiredLack(readinessOf(frame(KIT.filter(([name]) => name !== 'iron_sword')))!, ['portal'])).toContain('鉄の剣');
     const stone = [...KIT.filter(([name]) => name !== 'iron_sword'), ['stone_sword', 1]] as Array<[string, number]>;
     expect(requiredLack(readinessOf(frame(stone))!, ['portal'])).toContain('鉄の剣');
-    expect(PREP_RULES_WORDS).toContain('目標: 金のブーツ（金 4 がそろう時）・水入りバケツ');
+    expect(PREP_RULES_WORDS).toContain('目標: 金のブーツ（金 4 がそろう時。金の防具を 1 つも着ていないと、ネザーへ入る手は止まる）・水入りバケツ');
     expect(PREP_RULES_WORDS).toContain('そろうまで入らない。理由を書いても省けない）: 盾・鉄の剣・');
   });
   it('says the food as a required lack, not as a goal', () => {
@@ -291,7 +291,7 @@ describe('the first plan and the knowledge say the required list where the model
   });
   it('says the gate\'s required needs and its goals apart in the stage rules', () => {
     expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾・鉄の剣・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）');
-    expect(PREP_RULES_WORDS).toContain('目標: 金のブーツ（金 4 がそろう時）・水入りバケツ・黒曜石 10・火打ち金');
+    expect(PREP_RULES_WORDS).toContain('・水入りバケツ・黒曜石 22（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金');
     expect(PREP_RULES_WORDS).toContain('死ねばダイヤのツルハシと黒曜石を失う');
   });
 });

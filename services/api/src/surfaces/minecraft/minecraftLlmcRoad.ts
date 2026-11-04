@@ -150,8 +150,17 @@ const doneInPlan = (tree: PlanTree, item: Milestone): boolean => tree.nodes.some
   if (item.node?.(node)) return true;
   // A dimension in an alternative (「have:obsidian>=10|dim:the_nether」) is not what the node being done says: only
 // a node that names it alone counts.
-  return text.split(/[|&]/u).includes(clause) && (!clause.startsWith('dim:') || !text.includes('|'));
+  return text.split(/[|&]/u).some(part => covers(part, clause)) && (!clause.startsWith('dim:') || !text.includes('|'));
 });
+/**
+ * Whether a clause of a node says the milestone's: the same clause, or the same item at a count as high or higher (the section audit of 11/5: the
+ * obsidian node asks 22 at the first lava, and its being done reaches the milestone of 10).
+ */
+function covers(part: string, clause: string): boolean {
+  if (part === clause) return true;
+  const want = /^have:([a-z_]+)>=(\d+)$/u.exec(clause), got = /^have:([a-z_]+)>=(\d+)$/u.exec(part);
+  return want !== null && got !== null && want[1] === got[1] && Number(got[2]) >= Number(want[2]);
+}
 /**
  * GPT's review 2026-10-28: the preparation before the descent skipped (the model wrote `prep: skipped`), or open
  * with she below the

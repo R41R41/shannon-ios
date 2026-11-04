@@ -1,6 +1,6 @@
 import { targetConditionProblem } from './minecraftPlanRequirements.js';
-export { FIRST_PLAN, CHECK_FORBID } from './minecraftFirstPlanPrompts.js';
-import { FIRST_PLAN,CHECK_FORBID } from './minecraftFirstPlanPrompts.js';
+export { FIRST_PLAN, CHECK_FORBID, CHECK_FORBID_NOW } from './minecraftFirstPlanPrompts.js';
+import { FIRST_PLAN,CHECK_FORBID_NOW } from './minecraftFirstPlanPrompts.js';
 import { FIRST_PLAN_SYSTEM,FIRST_PLAN_SYSTEM_R4 } from './minecraftFirstPlanPrompts.js';
 import { applyPlanUpdate,orderedPlan,planFromSeeds,PLAN_LIMITS,promiseItemFits,type PlanCondition,type PlanOp,type PlanSeed,
   type PlanTree } from '@shannon/mind';
@@ -63,7 +63,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
   node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', caution: ['必須（盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシと石の予備2本・足場64・食料40点）が欠けたら入らない'], children: [
-    node('溶岩源に水で黒曜石10', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|dim:the_nether' }),
+    node('溶岩源で黒曜石22（ゲート10・竜戦12）', { kind: 'obsidian', doneWhen: 'have:obsidian>=22|dim:the_nether', note: '最初の溶岩でまとめて取る（竜戦の分を後で取りに来ない）' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether' }),
     node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether',
       caution: ['火をつける前に必須を確かめる: 盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点',
@@ -77,10 +77,10 @@ const TO_NETHER: readonly PlanSeed[] = [
  * `pearl`, the End's `dragon`.
  */
 const BEYOND: readonly PlanSeed[] = [
-  node('出発の点検（ネザーの奥へ）', { kind: 'prep_descent', doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12&have:gold_armor', note: '足りない物はゲートのそばで作る',
-    forbid: [CHECK_FORBID],
+  node('出発の点検（ネザーの奥へ）', { kind: 'prep_descent', doneWhen: 'food>=100&have:crafting_table&have:shield', note: '足りない物はゲートのそばで作る',
+    forbid: [CHECK_FORBID_NOW],
     children: [node('ネザーの幹で作業台（持ち歩く）', { kind: 'other', doneWhen: 'have:crafting_table' }),
-      node('深層岩の丸石でハーフブロック12', { kind: 'other', doneWhen: 'have:slab>=12' }),
+      node('足場のブロック64（橋と囲い）', { kind: 'other', doneWhen: 'have:cobblestone>=64|have:netherrack>=64|have:cobbled_deepslate>=64' }),
       node('かまどで鉄を焼き盾', { kind: 'other', doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { kind: 'food', doneWhen: 'food>=100' }),
       node('金の防具を1つ着る（ピグリンが襲わない）', { kind: 'other', doneWhen: 'have:gold_armor' })] }),
   node('ネザー要塞を探す', { kind: 'fortress', note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'see:fortress',

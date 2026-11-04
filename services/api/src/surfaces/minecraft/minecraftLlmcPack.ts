@@ -48,6 +48,8 @@ export function slotsOf(name: string, count: number): number {
 export function packFacts(lines: readonly string[]): { used: number; filler: Array<[string, number]>; junk: Array<[string, number]> } {
   let used = 0;
   const filler = new Map<string, number>(), junk = new Map<string, number>();
+  // The section audit of 11/5: gravel is the flint's source (10% a block), kept until the flint and steel is made.
+  const flintMade = lines.some(line => /^flint_and_steel×/u.test(line));
   for (const line of lines) {
     const omitted = OMIT.exec(line) ?? /^ほか(\d+)件は略$/u.exec(line);
     if (omitted) {
@@ -56,7 +58,7 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
     }
     const stack = STACK.exec(line);
     used += stack ? slotsOf(stack[1]!, Number(stack[2])) : 1;
-    if (stack && FILLER.test(stack[1]!)) {
+    if (stack && FILLER.test(stack[1]!) && (stack[1] !== 'gravel' || flintMade)) {
       filler.set(stack[1]!, (filler.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
     if (stack && JUNK.test(stack[1]!)) {

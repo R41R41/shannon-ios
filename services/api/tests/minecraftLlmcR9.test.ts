@@ -159,11 +159,12 @@ describe('the plan\'s done is each node\'s own (run 33: p2.3 with 0 rods, p4 aft
     expect(carryDone(doneParent, answer).current).toBe('p2');
   });
 
-  it('the seed\'s check holds a piece of golden armour (have:gold_armor), and the predicate reads any piece', () => {
+  it('the seed\'s check keeps a child for a piece of golden armour (have:gold_armor), and the predicate reads any piece', () => {
     const tree = seedPlan('エンドラを討伐してください', 'the_nether')!;
     const check = tree.nodes.find(node => node.title.startsWith('出発の点検（ネザーの奥へ）'))!;
-    expect(check.doneWhen).toContain('have:gold_armor');
-    expect(check.forbid?.[0]).toContain('金の防具');
+    // The section audit of 11/5: the golden piece is the gate's, and the check no longer waits on it (nor on the slabs).
+    expect(check.doneWhen).not.toContain('have:gold_armor');
+    expect(check.doneWhen).not.toContain('slab');
     expect(tree.nodes.some(node => node.parentId === check.id && node.doneWhen === 'have:gold_armor')).toBe(true);
     const base = { position: at(0, 64, 0), dimension: 'the_nether' };
     expect(nodesSeenDone(tree, doneFacts(frame({ ...base, inventory: [] }))!)).not.toContain(tree.nodes.find(node => node.doneWhen === 'have:gold_armor')!.id);
