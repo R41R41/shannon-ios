@@ -57,7 +57,7 @@ describe('nightBedLine', () => {
 });
 
 describe('crying obsidian is not obsidian', () => {
-  it('is left out of the count of obsidian (the gate, the End's fight)', async () => {
+  it('is left out of the count of obsidian (the gate, the End fight)', async () => {
     const { carried } = await import('../src/surfaces/minecraft/minecraftConditions.js');
     expect(carried(new Map([['obsidian', 3], ['crying_obsidian', 5]]), 'obsidian')).toBe(3);
     expect(carried(new Map([['crying_obsidian', 5]]), 'obsidian')).toBe(0);
