@@ -1,6 +1,6 @@
 import { targetConditionProblem } from './minecraftPlanRequirements.js';
-export { FIRST_PLAN, CHECK_FORBID } from './minecraftFirstPlanPrompts.js';
-import { FIRST_PLAN,CHECK_FORBID } from './minecraftFirstPlanPrompts.js';
+export { FIRST_PLAN, CHECK_FORBID, CHECK_FORBID_NOW } from './minecraftFirstPlanPrompts.js';
+import { FIRST_PLAN,CHECK_FORBID_NOW } from './minecraftFirstPlanPrompts.js';
 import { FIRST_PLAN_SYSTEM,FIRST_PLAN_SYSTEM_R4 } from './minecraftFirstPlanPrompts.js';
 import { applyPlanUpdate,orderedPlan,planFromSeeds,PLAN_LIMITS,promiseItemFits,type PlanCondition,type PlanOp,type PlanSeed,
   type PlanTree } from '@shannon/mind';
@@ -63,7 +63,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
   node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', caution: ['必須（盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシと石の予備2本・足場64・食料40点）が欠けたら入らない'], children: [
-    node('溶岩源に水で黒曜石10', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|dim:the_nether' }),
+    node('溶岩源で黒曜石22（ゲート10・竜戦12）', { kind: 'obsidian', doneWhen: 'have:obsidian>=22|dim:the_nether', note: '最初の溶岩でまとめて取る（竜戦の分を後で取りに来ない）' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether' }),
     node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether',
       caution: ['火をつける前に必須を確かめる: 盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点',
@@ -77,10 +77,10 @@ const TO_NETHER: readonly PlanSeed[] = [
  * `pearl`, the End's `dragon`.
  */
 const BEYOND: readonly PlanSeed[] = [
-  node('出発の点検（ネザーの奥へ）', { kind: 'prep_descent', doneWhen: 'food>=100&have:crafting_table&have:shield&have:slab>=12&have:gold_armor', note: '足りない物はゲートのそばで作る',
-    forbid: [CHECK_FORBID],
+  node('出発の点検（ネザーの奥へ）', { kind: 'prep_descent', doneWhen: 'food>=100&have:crafting_table&have:shield', note: '足りない物はゲートのそばで作る',
+    forbid: [CHECK_FORBID_NOW],
     children: [node('ネザーの幹で作業台（持ち歩く）', { kind: 'other', doneWhen: 'have:crafting_table' }),
-      node('深層岩の丸石でハーフブロック12', { kind: 'other', doneWhen: 'have:slab>=12' }),
+      node('足場のブロック64（橋と囲い）', { kind: 'other', doneWhen: 'have:cobblestone>=64|have:netherrack>=64|have:cobbled_deepslate>=64' }),
       node('かまどで鉄を焼き盾', { kind: 'other', doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { kind: 'food', doneWhen: 'food>=100' }),
       node('金の防具を1つ着る（ピグリンが襲わない）', { kind: 'other', doneWhen: 'have:gold_armor' })] }),
   node('ネザー要塞を探す', { kind: 'fortress', note: '帰りのゲート座標を控える。要塞は南北・東西の帯', doneWhen: 'see:fortress',
@@ -106,11 +106,15 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ',
     caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）', '橋の先端（幅1）に長居せず、玉が来る向きを見て渡る。積める物を残す'] }),
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
-    caution: ['縁から5マス以上内側で戦う（sneak は押されるのを止めない）', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は積める物3個以上を持って登り、長居しない（落下止めは当てにしない）',
+    caution: ['縁から5マス以上内側で戦う（sneak は押されるのを止めない）', '息の雲・火の玉の線の上で立ち止まらない',
+      '檻つきの柱は積める物3個以上を持って登り、長居しない（落下止めは当てにしない）。檻は本命が尽きて竜の体力100超の予備の最後',
       '竜を打つ前に剣か斧を equip で手に持つ（手が別の物のことがある）'],
     children: [node('ベッドで倒す（本命）', { kind: 'dragon',
-        note: 'ベッド 10・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }), node('クリスタルを弓で壊す（予備）', { kind: 'dragon', doneWhen: 'crystals<=0' }),
-      node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
+        note: 'ベッド 10・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }),
+      // Unseen crystal bases count as remaining: full clearance must not be a prerequisite for the perched sword fallback.
+      node('結晶を弓で壊しつつ止まり木の竜を剣で打つ（予備）', { kind: 'dragon',
+        note: '竜の体力50以下なら結晶へ行かず窪みの足場の剣か残りのベッドで届く。',
+        caution: ['本命が尽きて竜の体力100超なら檻なしを地面から弓で壊す余地がある', '剣は結晶全破壊を待たず座りごとに使える（檻は最後）'] })] }),
 ];
 /**
  * mb-llmc v2 (run 36, the pass mark: the Nether within 30 minutes): before the gate only what the gate needs.
@@ -222,7 +226,7 @@ function readinessInput(world: Record<string, unknown>): string[] {
   const dimension = typeof world.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;
   const food = carriedFood(world, {}).points, health = typeof world.health === 'number' ? world.health : null;
   const counts = carriedItemCounts(world, {});
-  const shortage = preparationShortage({ dimension, counts, food, nowKinds: null });
+  const shortage = preparationShortage({ dimension, counts, food, nowKinds: null, world });
   const recovery = recoveryLine(typeof world.food === 'number' ? world.food : null, health, food, counts);
   return [foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }

@@ -9,6 +9,7 @@ import { stageTextsForKind } from '../surfaces/minecraft/minecraftLlmcV2Knowledg
 import { doneFacts, doneStatusWords, parseDoneWhen, predicateHolds } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
 import { isDragonPlan } from '../surfaces/minecraft/minecraftLlmcRoad.js';
+import { paceDelay, paceKey } from '../surfaces/minecraft/minecraftLlmcPace.js';
 import { boundTo } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { nowLines } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { createReplanFlow, type ReplanFlow, type Replanner, type ReplanSources } from '../surfaces/minecraft/minecraftLlmcReplanFlow.js';
@@ -76,9 +77,11 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
   const readiness = readinessParts(parts.bodyParts, parts.plan.view(), frame, parts.taskId);
   const endgame = parts.bodyParts.endgame?.lines(frame, isDragonPlan(tree)).lines ?? [];
   const stops = strings((frame?.state.world as { recentStops?: unknown } | undefined)?.recentStops, 5).map(line => `最近の止まり: ${line}`);
-  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(parts.createdAt) - parts.heldMs()) / 1000));
+  const seconds = Math.max(0, Math.round((parts.activeClock() - Date.parse(parts.createdAt)) / 1000));
+  const pace = paceDelay(tree, frame, seconds);
+  if (stall.kind === 'behind_pace' && (!pace || paceKey(pace) !== stall.key)) return null;
   const doneStatus = stalled ? doneStatusWords(stalled.doneWhen, facts, stalled.target) : null;
-  return { node: stalled ? stalled.id : null, goal: parts.goal, seconds, tree, doneStatus,
+  return { node: stalled ? stalled.id : null, goal: parts.goal, seconds, pace, tree, doneStatus,
     now: nowLines(frame), facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(readiness.recovery ?? []), ...endgame, ...stops],
     results: [...results], queue: parts.queue.lines(frame),
     knowledge: stageTextsForKind(stalled ? kindOf(stalled) : 'other', facts?.dimension ?? 'overworld') };
@@ -108,12 +111,12 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
     results.push(result.text.replace(/\s+/gu, ' ').slice(0, 320));
     if (results.length > 4) results.shift();
   });
-  const saved = parts.checkpoint as { minecraftReplans?: unknown; minecraftReplanPending?: unknown;
+  const saved = parts.checkpoint as { minecraftReplans?: unknown; minecraftReplanPending?: unknown; minecraftBehindPace?: unknown;
     minecraftActiveWait?: { node: string; until: number } } | null;
   const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending, replanner: parts.replanner,
     clock: parts.activeClock, log: parts.log, vitals: () => stallVitals(parts.observe()), sources: stall => sourcesOf(parts, results, stall),
     bind: update => boundTo(parts.plan.tree(), update),
-    ...(parts.persist ? { persist: parts.persist } : {}),
+    ...(parts.persist ? { persist: keys => parts.persist!({ ...watch.checkpoint(), ...keys }) } : {}),
     check: (update: PlanUpdate) => {
       const before = parts.plan.tree();
       const made = applyPlanUpdate(before, update, { at: new Date().toISOString() });
@@ -121,6 +124,7 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
       return made.changed ? adoptProblem(parts, before, made.tree) : '変化なし';
     } });
   const watch = createStallWatch({ taskId: parts.taskId, observe: parts.observe, tree: parts.plan.tree, running: () => parts.queue.runningInput?.() ?? null,
+    elapsedSeconds: () => Math.max(0, (parts.activeClock() - Date.parse(parts.createdAt)) / 1000), savedPace: saved?.minecraftBehindPace,
     activeClock: parts.activeClock, waits: parts.waits, ...(saved?.minecraftActiveWait ? { savedWait: saved.minecraftActiveWait } : {}),
     raise: stall => { flow.note(stall);
       parts.queue.closeStep?.('stall'); }, log: parts.log });
@@ -128,7 +132,8 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
   const current = (): string | null => workingNode(parts.taskId, parts.plan.tree().current) ?? parts.plan.tree().current ?? null;
   const stage = (): PlanKind | null => strongStageNow({ fcaPlanTree: parts.plan.tree() }, doneFacts(parts.observe())?.dimension ?? null);
   const close = (reason: string): void => parts.queue.closeStep?.(reason);
-  return { watch, flow, current, stage, close, checkpoint: () => ({ ...flow.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
+  return { watch, flow, current, stage, close,
+    checkpoint: () => ({ ...flow.checkpoint(), ...watch.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
 }
 
 /** The lifecycle of an unheld task: the look at each result and before each decision, and the plan made again at a decision's start. */

@@ -1,4 +1,5 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
+import { OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
 import { isHard, NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
 import { factsIn, hasKind, nowAndNextKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
@@ -74,8 +75,8 @@ export function contactCells(view: MapView, self: P): string[] {
   return found.sort((a, b) => a.meters - b.meters).slice(0, CONTACTS).map(item => `${ptText(item.at)} 目から ${item.meters.toFixed(1)}m（${name(item.at)}）`
     + `・隣の水の源 ${ptText(item.water)}・溶岩の源 ${ptText(item.lava)}`);
 }
-/** Enough sources for the ten obsidian of a gate. */
-export const POOL_SOURCES = 10;
+/** Enough sources for the obsidian taken at the first lava: the gate's ten and the End fight's twelve (`OBSIDIAN_AT_FIRST_LAVA`). */
+export const POOL_SOURCES = OBSIDIAN_AT_FIRST_LAVA;
 /**
  * Run 38 (2026-10-24: from +1,090 s she went to single lava sources one after another and reached a pool of 64
  * sources at +1,310 s, about 220 s):
@@ -142,7 +143,7 @@ export function obsidianWays(body: Rec, self: P, view: MapView | null): string[]
   const closer = lava && (!obsidian || lava.meters < obsidian.meters) ? '（溶岩の方が近い）' : '';
   const pools = [...view ? lavaPools(view, self) : [], ...countedPools(landmarks, self, '目印'), ...countedPools(scan, self, '走査')];
   const poolWords = poolsLine(pools, lava);
-  return [`黒曜石 10 個の元: 溶岩の源 ${show(lava, '見えていない')} / 自然の黒曜石 ${show(obsidian, '見えていない')}${closer}${poolWords}。`
+  return [`黒曜石 ${OBSIDIAN_AT_FIRST_LAVA} 個（ゲート 10＋竜戦 12）の元: 溶岩の源 ${show(lava, '見えていない')} / 自然の黒曜石 ${show(obsidian, '見えていない')}${closer}${poolWords}。`
     + '階段掘りは 0.5〜0.9 マス/秒（ダイヤのツルハシ）、溶岩に水を注いで 1 個目ができるまで 30〜50 秒、黒曜石の dig は空気中で 1 個約 9 秒（ダイヤのツルハシ・測った値）',
     ...contact.length ? [`水の源と溶岩の源の両方に隣り合うマス（開けると水と溶岩が出会う）: ${contact.join(' / ')}。溶岩の源だけに隣り合う岩を開けると、溶岩が流れ込む`] : []];
 }

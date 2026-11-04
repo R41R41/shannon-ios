@@ -34,6 +34,8 @@ import { progressEvents, type ProgressHand } from './minecraftProgressEvents.js'
  *   and decides again (A-18).
  * - `death`: the body's death counter rose (`deathBetween`: a rise of `deathSeq` within one `deathEpoch`; a full
  * loss is the same).
+ * - `behind_pace`: the unheld watch's next meter milestone is overdue, even with objective progress (once per milestone;
+ * `minecraftLlmcPace.ts`). The existing stall windows above stay unchanged.
  *
  * Each `note…` returns the stall it found, or null. A task that found one is quiet (nothing more is counted: the
  * hold is being made,
@@ -45,7 +47,7 @@ import { progressEvents, type ProgressHand } from './minecraftProgressEvents.js'
  * head by it (`headIncidentKind`). */
 export const HEAD_INCIDENT_PREFIX = 'head:';
 export const STALL = Object.freeze({ nodeMs: 120_000, spotRadius: 3, spotStops: 2, waits: 3, refusals: 2 });
-export type StallKind = 'node_stalled' | 'same_spot_stops' | 'wait_loop' | 'decide_error' | 'death';
+export type StallKind = 'node_stalled' | 'same_spot_stops' | 'wait_loop' | 'decide_error' | 'death' | 'behind_pace';
 export interface Stall {
   kind: StallKind;
   /** What tells this stall from another of its kind (the node, the place, the way the decision failed): part of the

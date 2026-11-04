@@ -151,10 +151,10 @@ describe('run 38: the size of the lava pools (1,090–1,310 s on single sources 
     const [line] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p5.2' }), landmarks: ['L 溶岩源 (1,0,0) 東1 溜まりの源 2'],
       scan: ['溶岩の溜まり 3 つ以上（最寄り 東 40m・源 64） (40,0,0)'] }, SELF, null);
     expect(line).toContain('溶岩の源 (1,0,0) まで 1m（目印）');
-    expect(line).toContain('源が 10 以上の溜まり (40,0,0) まで 40m（走査）・源 64');
+    expect(line).toContain('源が 22 以上の溜まり (40,0,0) まで 40m（走査）・源 64');
     expect(line).toContain('（いちばん近い源の溜まりは源 2: 黒曜石も 2 個まで）');
     const [none] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p5.2' }), landmarks: ['L 溶岩源 (1,0,0) 東1'] }, SELF, null);
-    expect(none).toContain('源が 10 以上の溜まり 見えていない');
+    expect(none).toContain('源が 22 以上の溜まり 見えていない');
   });
   it('compares accessible local supply with the shortage, and leaves a tree that cannot be reached', () => {
     const prep = stageKnowledge({ body: { state: { dimension: 'overworld' } } })!;

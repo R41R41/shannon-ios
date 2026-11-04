@@ -214,7 +214,7 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     // Notion 09-1c P1: the mode's words carry one set of numbers (`STRATEGY_KNOWLEDGE_V2`), not the old ones and their corrections.
     expect(on).toContain(STRATEGY_KNOWLEDGE_V2);
     expect(on).not.toContain('24〜36');
-    expect(on).toContain('ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点');
+    expect(on).toContain('ネザーに入った後、要塞（奥）へ行く前: 作業台・食料 100 点');
     expect(on).toContain('村の家で見つけた分は全部取る');
     // run 26: no village and no sheep, the bed under ground is not gone down to; the bed's node is put off and written so.
     expect(on).toContain('村も羊も見つからない世界では、地下の構造物のベッドへ下りず、竜戦用はエンドの点検の前に羊毛から作る');

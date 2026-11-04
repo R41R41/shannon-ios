@@ -76,13 +76,17 @@ export function lookTravelEvidence(running: ActInput | null, ended: ActInput | n
   return { ...travelEvidence(ended, frame), ...travelEvidence(running, frame) };
 }
 const SEARCH_KINDS = new Set(['wood', 'food', 'village', 'iron', 'diamond', 'water', 'lava', 'obsidian', 'fortress', 'stronghold', 'chest', 'pearl', 'blaze']);
+/** These searches cover horizontal ground; changing height in one column is no new area searched. */
+const HORIZONTAL_SEARCH_KINDS = new Set(['wood', 'food', 'village', 'fortress', 'pearl', 'blaze']);
 export function explorationEvidence(node: PlanNode | undefined, input: ActInput | null, frame: BodyObservation | null): Record<string, number> {
   if (!node?.kind || !SEARCH_KINDS.has(node.kind) || !input?.hands.some(h => h.do === 'go' || h.do === 'walk' || h.do === 'vertical')) return {};
   const world = frame?.state.world as Record<string, unknown> | undefined, facts = doneFacts(frame);
   if (!facts?.feet || !facts.dimension || typeof world?.localMap !== 'string') return {};
   if ((node.kind === 'food' || node.kind === 'village') && !/^地図 v1[^\n]*方式=surface/u.test(world.localMap)) return {};
   const { x, y, z } = facts.feet;
-  return { [`explore:${facts.dimension}:${Math.floor(x / 16)},${Math.floor(y / 8)},${Math.floor(z / 16)}`]: 1 };
+  const cell = HORIZONTAL_SEARCH_KINDS.has(node.kind) ? `${Math.floor(x / 16)},${Math.floor(z / 16)}`
+    : `${Math.floor(x / 16)},${Math.floor(y / 8)},${Math.floor(z / 16)}`;
+  return { [`explore:${facts.dimension}:${cell}`]: 1 };
 }
 /**
  * The fight in the End as progress: the damage done to the dragon and the crystals destroyed (numbers that only go up). The body's own

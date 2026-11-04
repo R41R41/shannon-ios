@@ -35,6 +35,8 @@ export const FIRST_PLAN = Object.freeze({ inputCharacters: 6_000, giveUpMs: 120_
 
 /** r7: the check's forbid (the seed's, and the words the first plan is asked to write: `FIRST_PLAN_SYSTEM_R7`). */
 export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
+/** The check's forbid as the seed writes it now (the section audit of 11/5: the slabs and the golden piece left the check; the old modes keep theirs). */
+export const CHECK_FORBID_NOW = '点検（作業台・盾・食料 100）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
 
 /**
  * r4 (mb-llmc r4; arch-check 6: run 26 went on to the fortress with no table while a Nether stem stood 4 m away; run 27's

@@ -43,7 +43,11 @@ const SHIELD: PrepNeed = { label: '盾', count: 1, pattern: /^shield$/u };
 const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て・脚', count: 3, pattern: UPPER_ARMOUR, slots: true, worn: true };
 // The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots are a goal,
 // the rest of the gate's list is required.
+// A goal of the table; the gate's hand is held while no golden piece is worn (`goldAtPortalHold`), and the stage words say so (the section audit
+// of 11/5: the plan read it as a goal and the gate as required).
 const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true };
+/** The obsidian taken at the first lava (the section audit of 11/5): the gate's 10 and the End fight's 12 at once, not a second trip after the Nether. */
+export const OBSIDIAN_AT_FIRST_LAVA = 22;
 /** The Nether's rock wears a pickaxe out (an iron one is 250 uses: S2's lab, one broke): three iron ones, or one diamond one (which counts for three). */
 const TRIP_PICKAXE: PrepNeed = { label: 'ツルハシ（ダイヤ 1 か鉄 3）', count: 3, pattern: PICKAXE.pattern, weight: name => /^(?:diamond|netherite)_/u.test(name) ? 3 : 1 };
 /**
@@ -93,8 +97,19 @@ const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）
  * while the blocks to stand and cover on, the water bucket, the beds or the food are missing. What is missing is said; how to gather it is the
  * decision's.
  */
-export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80, needs: [STACKABLE, WATER_BUCKET, BEDS, FIGHT_OBSIDIAN],
+// 11/5 End audit: beds are the main plan; bow, 30 arrows and an iron-or-better sword support the fallback.
+// Keep them goals so missing fallback equipment cannot deadlock a bed-equipped entry (the sword was required before the Nether).
+export const END_WEAPONS: readonly PrepNeed[] = [BOW, ARROWS, { ...SWORD, label: '鉄以上の剣' }]
+  .map(need => ({ ...need, goal: true }));
+export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80,
+  needs: [STACKABLE, WATER_BUCKET, BEDS, FIGHT_OBSIDIAN, ...END_WEAPONS],
   risk: 'エンドは虚空の島で、戻る道は開いたポータルだけ。積める物・水バケツ・ベッド・食料が無いと、虚空に落ちるか竜に押されて死に、ここまでの装備と時間を失う。' + MAKE_IT };
+
+// 11/5 checked audit: recovering an End death must not require eight new beds and obsidian before reaching the dropped kit.
+// Keep the existing food minimum; 20 blocks cover the arrival platform and the existing bridge, without rebuilding a full fight kit.
+export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: BEFORE_END.food,
+  needs: [{ ...STACKABLE, count: 20 }, ...END_WEAPONS, { ...WATER_BUCKET, goal: true }],
+  risk: 'エンドへ戻る時も、積める物と食料が無いと足場の火の玉や回復不足で死ぬ。落とした装備が残っているかは未確認。' };
 
 /**
  * The coordinator, 2026-11-02 (the owner: dragon within three hours, an hour and a half at best; a death after the iron gear puts the time in doubt, so a
@@ -165,14 +180,16 @@ export const PREP_RULES_WORDS = [
     + `（${IRON_USES.map(([use, count]) => `${use} ${count}`).join('・')}）` + ("。火打ち金は鉄のある高さで先に作る。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
-    + '（生の金をかまどで焼く。村の箱や廃坑の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
+    + '（生の金をかまどで焼く。村の箱・廃坑の箱・荒廃したポータル（走査の「壊れたポータル」）の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
   '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾・鉄の剣・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
     + '・石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）・足場のブロック 64（丸石 128 あると橋で尽きない）・食料 40 点。'
     + '鉄のツルハシは 1 本が耐久 250 で、ネザーの岩を掘り続けると壊れて止まった（鉄はネザーに無い）。'
-    + '目標: 金のブーツ（金 4 がそろう時）・水入りバケツ・黒曜石 10・火打ち金・食料 250 点前後（干し草 1 個でパン 3）。必須が欠けたまま入ると、ブレイズ・ガスト・ウィザースケルトンの傷が重なり、死ねばダイヤのツルハシと黒曜石を失う。'
+    + '目標: 金のブーツ（金 4 がそろう時。金の防具を 1 つも着ていないと、ネザーへ入る手は止まる）'
+    + `・水入りバケツ・黒曜石 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金・`
+    + '食料 250 点前後（干し草 1 個でパン 3）。必須が欠けたまま入ると、ブレイズ・ガスト・ウィザースケルトンの傷が重なり、死ねばダイヤのツルハシと黒曜石を失う。'
     + 'ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る。'
     + '必須が作れない・材料が無いと見えた時は、後回しにして先へ進まない。材料を取りに行く（盾なら木と鉄 1。作る手が失敗したら行の理由（missing: …）を読み、別の材料の形を試す）。',
-  '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
+  '- ネザーに入った後、要塞（奥）へ行く前: 作業台・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
   '- ベッドは用途が 2 つ: 寝る用 1 個（最初の夜の前。doneWhen have:bed>=1）と、竜戦用 10 個（最低 8。target bed×10）。村の家で見つけた分は全部取る'
     + '（竜戦用の節は寝る用の親の子にしない: 親が済むと開いた子は閉じられる）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、竜戦用はエンドの点検の前に羊毛から作る。'
     + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。ベッドは重ならず 1 個 1 マス（10 個で 10 マス）。'
