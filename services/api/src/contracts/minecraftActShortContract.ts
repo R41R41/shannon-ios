@@ -59,7 +59,10 @@ const SHORT_LINES = [
 "無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す。"),
   '範囲を挙げて体に任せる手（go と同じ形: 何を・どこで・どこまでをあなたが決め、体は細かい動きだけ。挙げた範囲の外は探さない。上限 seconds が必ずあり、止まる時は「<手> 止まった 理由」）:',
   'obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N] [maxDig=N]',
-  '  黒曜石づくり。X,Y,Z は溶岩の源のマス（地図の L、8 つまで。体は探さない）。持ち物の水入りバケツで水を注ぎ、固まったらダイヤのツルハシで掘って拾い、水を汲み戻す。count（既定 1）まで。'
+  '  黒曜石づくり。'
+    + 'X,Y,Z は溶岩の源のマス（地図の L、1〜24 マス。体は探さない）。'
+    + '同じ高さでつながった源は 1 回の注水で面を固め、ダイヤのツルハシで続けて掘って拾い、水を汲み戻す。'
+    + 'count（省略時は座標の数）まで、seconds は 5〜300（既定 90）。'
     + ("立てない時の立ち直しは体。足場は place= の物。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: " +
 "no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。"),
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
@@ -75,7 +78,10 @@ const SHORT_LINES = [
   ("  作る（途中の物の板・棒なども持ち物の材料から作る。3×3 で作業台が近くに無ければ持っているものを置く）。材料が足りなければ何も作らず足りない物の一覧を返す。材料は集めに行かない。理由: " +
 "missing・no_table・no_recipe・full。"),
   'portal X,Y,Z x|z [block=obsidian] [place=名,名] [maxPlace=N] [seconds=N] [noEnter]',
-  '  ポータルの枠。X,Y,Z は枠の内側の左下のマス、x|z は枠が広がる向き。黒曜石 10 個で 4×5 の枠を組み（足場込み）、火打ち金で点け、入る（noEnter なら入らない）。'
+  '  ポータルの枠。'
+    + 'X,Y,Z は枠の内側の左下のマス、x|z は枠が広がる向きで、その 1 段下が枠の下の段。'
+    + '黒曜石 10 個で 4×5 の枠を組み（足場込み）、火打ち金かファイヤーチャージで点け、入る（noEnter なら入らない）。'
+    + 'noEnter なら点ける物が無くても枠を組み「点火は未」で済む。'
     + '理由: no_obsidian・no_flint・blocked・ignite_failed・limit_time・stuck。',
   'smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [seconds=N] [X,Y,Z ...]',
   ("  かまどに入れる（取り出さない・焼き上がりを待たない）。furnaces 基に分けて入れ、燃料を足す（X,Y,Z は使うかまど。無ければ持っているかまどを置く）。焼き上がると出来事で知らされる。取り出しは " +
@@ -113,7 +119,7 @@ const SHORT_LINES = [
   'place ブロック名 X,Y,Z ... [face=down] / pillarUp N [ブロック名]',
   '  place は空気（. か *）で、6面のどれかが固いマスへ。足と頭のマス・草花（,）・水・レール・ポータル・周りが全部空気の宙には置けない。',
   '  pillarUp は真下に置きながら N 段登る（縦穴を上る）。足元が丸ごとのブロックでない（芽・雪・ハーフブロックの上）と「足場が無い」で止まる: 隣の丸ごとの床へずれる。',
-  'use 物 [X,Y,Z] [face=..] [target=#id]',
+  'use 物 [X,Y,Z] [face=..] [target=#id] [count=N]',
   ("  バケツで汲む・注ぐ、火打ち金、ベッドで寝る（夜か雷雨の時だけ。昼は寝られない。ネザー・エンドでは爆発する）、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と " +
 "face）。"),
   '  use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石1枚の向こうの水は、その石を dig してから use bucket）。',
@@ -142,7 +148,7 @@ const SHORT_LINES = [
 "dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds / walk: to か path・sprint・range " +
 "/ ")
     + ("dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: " +
-"item・at（1つ）・face・target"),
+"item・at（1つ）・face・target・count"),
   ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
 "target・untilDead・seconds・hold（shield_rush は上の欄も） / eat: item"),
   ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +

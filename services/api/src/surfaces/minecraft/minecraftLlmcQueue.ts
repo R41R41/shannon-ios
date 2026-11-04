@@ -5,6 +5,7 @@ import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS
 import type { QueueItem,QueueAdd,QueueRecordRow,QueueDeps,RanListener,LlmcQueue } from './minecraftLlmcQueueState.js';
 import { createQueueReceiptHandlers } from './minecraftLlmcQueueReceipts.js';
 import { readActResult,tunedBy } from '../../contracts/minecraftActContract.js';
+import { actMaxMilliseconds } from '../../contracts/minecraftActTime.js';
 import { queueName,type OperationState } from '../../contracts/continueContract.js';
 import type { MinecraftControlReceipt,MinecraftQueueEnvelope } from '../../contracts/minecraftControlContract.js';
 import type { FcaQueueNews,FcaQueueWake } from '../../mind/action/fca/fcaPorts.js';
@@ -357,7 +358,8 @@ void restoreReceipts();
       const replacement = replaceReserveForDecided(spec);
       if (replacement) await replacement;
       const label = `q${nextNumber()}`, after = open().at(-1)?.item ?? null, ahead = aheadMs();
-      const maxMs = Math.max(1_000, Math.min(180_000, spec.maxMs)), startInMs = Math.min(START_CAP_MS, ahead + START_MARGIN_MS);
+      const maxMs = Math.max(1_000, Math.min(Math.max(180_000, actMaxMilliseconds(spec.input)), spec.maxMs));
+      const startInMs = Math.min(START_CAP_MS, ahead + START_MARGIN_MS);
       const item = makeItem(spec, label, maxMs, startInMs);
       item.uses = deps.snapshotUses?.(spec.input.uses ?? []) ?? [];
       const madeIn = spec.madeIn === undefined ? madeInOf(deps.observe(), headBoot) : spec.madeIn;

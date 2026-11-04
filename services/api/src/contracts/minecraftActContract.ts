@@ -95,7 +95,9 @@ export const ACT_DESCRIPTION = [
     + '道は体が引く。許した物だけ掘り・置いて着くまで歩く。溶岩は避ける) / '
     + ("dig(at: 順に掘る, tool, collect, exposeOk: 敵に見られても掘る, takeOk: 村の物も掘る) / place(block, at, face) / pillarUp(n: " +
 "真下に置きながら n 段登る, block) / ")
-    + 'use(item, at, face, target: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、エンダーアイを投げる（at 無し: 飛んだ方位と距離が返る）・枠にはめる（at と face）) / '
+    + 'use(item, at, face, target, count: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、'
+    + 'エンダーアイを投げる（at 無し: 飛んだ方位と距離が返る）・枠にはめる（at と face）、'
+    + 'gold_ingot を target=piglin に count 個まで交換（1〜64 の整数、省略時 1。最大 3 体へ渡し、見終わるのを待ち、出た物を拾う）) / '
     + 'look(to か yaw・pitch) / jump(n) / sneak(on) / equip(item, slot) / craft(item, count: 作業台が4.5m内に要る) / '
     + 'furnace(at, op=put: item・count・fuel・fuelCount | op=take) / chest(at, op=look|take|put|takeAll, items) / '
     + 'attack(target: #id か名前, untilDead, seconds, hold: その場で待って届いたら打つ・追わない) / '
@@ -138,7 +140,8 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         do: { type: 'string', enum: [...HAND_KINDS] },
         to: pos('walk の着く所、look の向く点'),
         path: { type: 'array', minItems: 1, maxItems: 32, items: pos('道の点'), description: 'walk の道（掘らずに歩ける点の列）' },
-        at: { type: 'array', minItems: 1, maxItems: 16, items: pos('ブロック'), description: 'dig・place は順に全部。use・furnace・chest・shoot は 1 つ' },
+        at: { type: 'array', minItems: 1, maxItems: 24, items: pos('ブロック'),
+          description: 'obsidian は 24 マス、dig・place は順に 16 マスまで。use・furnace・chest・shoot は 1 つ' },
         face: { type: 'string', enum: ['up', 'down', 'north', 'south', 'east', 'west'] },
         block: { type: 'string', maxLength: 64 },
         groups: { type: 'array', minItems: 1, maxItems: 12, description: 'fill: 足の stand と置く at（絶対座標）',
@@ -181,7 +184,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         enter: { type: 'boolean' },
         maxDig: { type: 'integer', minimum: 0, maximum: 200 },
         maxPlace: { type: 'integer', minimum: 0, maximum: 100 },
-        seconds: { type: 'number', minimum: 0.5, maximum: 120 },
+        seconds: { type: 'number', minimum: 0.5, maximum: 300 },
         charge: { type: 'number', minimum: 0.2, maximum: 3 },
         n: { type: 'integer', minimum: 1, maximum: 16 },
         sprint: { type: 'boolean' },

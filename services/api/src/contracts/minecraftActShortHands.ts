@@ -21,7 +21,7 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
  * [slot] | craft 物 [個数]
  *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false]
  * | use 物 [x,y,z]
- *   [face=F] [target=T]
+ *   [face=F] [target=T] [count=N]
  *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
  *   drop 物 [数] [target=#id か x,y,z]
  *   shoot 相手(#id か名前) か x,y,z [item=bow] [charge=秒] [n=本数]
@@ -137,7 +137,8 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   look: hand => hand.to ? [pos(hand.to)] : hand.yaw !== undefined && hand.pitch !== undefined ? [`yaw=${hand.yaw}`, `pitch=${hand.pitch}`] : null,
   attack: attackWords,
   use: hand => hand.item && (hand.at?.length ?? 0) <= 1
-    ? [hand.item, ...(hand.at?.length ? [pos(hand.at[0]!)] : []), ...given('face', hand.face), ...given('target', hand.target)] : null,
+    ? [hand.item, ...(hand.at?.length ? [pos(hand.at[0]!)] : []), ...given('face', hand.face), ...given('target', hand.target),
+      ...given('count', hand.count)] : null,
 };
 /** `dependsOn=1,3`; an empty list (relies on no hand) is `dependsOn=none`. */
 const dependsWord = (hand: ActHand): string[] => hand.dependsOn === undefined ? [] : [`dependsOn=${hand.dependsOn.length ? hand.dependsOn.join(',') : 'none'}`];

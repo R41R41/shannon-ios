@@ -12,7 +12,7 @@ import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract
  * deadline must lie after it;
  * - obsidian, fight, mine, make, portal, smelt (run 39): the ceiling is the hand's `seconds` (obsidian 90, fight
  * 20, mine 60, portal
- * 60, smelt 30) and 2 s; the
+ * 60, smelt 30) and 2 s (obsidian adds 20 s for the S8 body's water recovery and receipt); the
  *   expected time is obsidian 20 s and 8 s each, fight half its seconds, mine 1.5 s a block, make 1 s and 0.5 s
  * each, portal 25 s,
  *   smelt 6 s and 2 s a kind;
@@ -27,7 +27,7 @@ import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract
  * the expected time is not capped.
  */
 const WALK_MPS = 4.3, SPRINT_MPS = 5.6, UNKNOWN_WALK_M = 32;
-/** The longest act (the body's own bound is 180 s; the command adds its margin). */
+/** The longest ordinary act; the S8 body's obsidian extension is computed by actMaxMilliseconds. */
 export const ACT_MAX_MS = 170_000;
 type HandTime = (hand: ActHand, metres: number) => number;
 const cells = (hand: ActHand) => hand.at?.length ?? 1, times = (hand: ActHand) => hand.n ?? 1;
@@ -40,6 +40,15 @@ const goMostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? GO_DEFAULT_SECONDS)
 const SECONDS_BY_KIND: Partial<Record<HandKind, number>> = { obsidian: 90, fight: 20, mine: 60, portal: 60, smelt: 30 };
 const mostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? SECONDS_BY_KIND[hand.do] ?? 30) + 2_000;
 const blocksOf = (hand: ActHand) => Math.max(1, hand.count ?? 1);
+/** S8: count defaults to the named sources, and an obsidian act may run for its seconds plus 20 s. */
+const obsidianMostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? SECONDS_BY_KIND.obsidian!) + 20_000;
+const obsidianBlocks = (hand: ActHand) => hand.count ?? cells(hand);
+/** The S8 extension is only for obsidian; ordinary acts retain their existing ceiling. */
+export const actMaxMilliseconds = (input: ActInput): number =>
+  Math.max(ACT_MAX_MS, ...input.hands.filter(hand => hand.do === 'obsidian').map(obsidianMostMs));
+/** A barter waits 6 s per ingot even with only one piglin; reserve pickup time inside the existing act ceiling. */
+const useMostMs = (hand: ActHand) => hand.item === 'gold_ingot' && hand.target !== undefined
+  ? 20_000 + 6_000 * blocksOf(hand) : 4_000;
 /**
  * vertical: about how long one step takes by form (ms; the first guess of the continue contract 6, a hypothesis until the body's
  * `progress.msPerUnit` replaces it),
@@ -89,22 +98,25 @@ const goTypicalMs = (hand: ActHand, metres: number) => Math.min(goMostMs(hand), 
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   fill: mostMs,
   walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), go: hand => goMostMs(hand) + 2_000,
-  obsidian: mostMs, fight: mostMs, mine: mostMs, portal: mostMs, smelt: mostMs, vertical: verticalMostMs, make: hand => 3_000 + 1_000 * blocksOf(hand),
+  obsidian: obsidianMostMs, fight: mostMs, mine: mostMs, portal: mostMs, smelt: mostMs, vertical: verticalMostMs,
+  make: hand => 3_000 + 1_000 * blocksOf(hand),
   dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
   pillarUp: hand => 1_200 * times(hand), attack: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
   shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1)) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
-  pickup: hand => 3_000 + 1_000 * (hand.range ?? 6), use: () => 4_000, craft: hand => 2_000 + 300 * Math.min(64, hand.count ?? 1),
+  pickup: hand => 3_000 + 1_000 * (hand.range ?? 6), use: useMostMs, craft: hand => 2_000 + 300 * Math.min(64, hand.count ?? 1),
   jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: () => 5_000, eat: () => 4_000,
 };
 const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
   fill: hand => Math.min(1_000 * (hand.seconds ?? 30), 2_000 + 400 * (hand.groups ?? []).reduce((sum, group) => sum + group.at.length, 0)),
   walk: (hand, metres) => 500 + walkMs(hand, metres), go: goTypicalMs,
-  obsidian: hand => Math.min(mostMs(hand), 20_000 + 8_000 * blocksOf(hand)), fight: hand => 500 * (hand.seconds ?? 20),
+  obsidian: hand => Math.min(obsidianMostMs(hand), 20_000 + 8_000 * obsidianBlocks(hand)), fight: hand => 500 * (hand.seconds ?? 20),
   mine: hand => Math.min(mostMs(hand), 1_500 * blocksOf(hand) + 1_000),
   make: hand => 1_000 + 500 * blocksOf(hand), portal: () => 25_000, smelt: hand => 6_000 + 2_000 * (hand.items?.length ?? 1),
   dig: hand => 900 * cells(hand), place: hand => 400 * cells(hand),
   pillarUp: hand => 600 * times(hand), attack: hand => Math.min(8_000, 1_000 * (hand.seconds ?? 6)), wait: hand => 1_000 * (hand.seconds ?? 1),
-  eat: () => 1_700, pickup: hand => 1_000 + 300 * (hand.range ?? 6), use: () => 1_000, shoot: hand => (500 + 1_000 * (hand.charge ?? 1)) * times(hand),
+  eat: () => 1_700, pickup: hand => 1_000 + 300 * (hand.range ?? 6),
+  use: hand => hand.item === 'gold_ingot' && hand.target !== undefined ? 6_000 * blocksOf(hand) : 1_000,
+  shoot: hand => (500 + 1_000 * (hand.charge ?? 1)) * times(hand),
   craft: hand => 500 + 150 * Math.min(64, hand.count ?? 1), jump: hand => 600 * times(hand), chest: () => 1_500, furnace: () => 1_200,
   equip: () => 300, look: () => 200, sneak: () => 200, drop: hand => 300 * (hand.items?.length ?? 1),
 };
@@ -165,11 +177,11 @@ export function withVerticalSeconds(input: ActInput, from: ActPos | null, tune: 
 }
 /** How many times the hands run: the act's `repeat` (2–8), else once. */
 const passes = (input: ActInput): number => Number.isInteger(input.repeat) && input.repeat! >= 2 ? Math.min(8, input.repeat!) : 1;
-/** How long an act may run on the body: the sum of each hand's ceiling times its passes, within 5 s and `ACT_MAX_MS` (the command
+/** How long an act may run on the body: the sum of each hand's ceiling times its passes, within 5 s and its act ceiling (the command
  * adds its own margin). */
 export function actMilliseconds(input: ActInput, from: ActPos | null = null): number {
   const total = handMetres(input, from).reduce((sum, { hand, metres }) => sum + (CEILING_MS[hand.do]?.(hand, metres) ?? 2_000), 0) * passes(input);
-  return Math.round(Math.max(5_000, Math.min(ACT_MAX_MS, total)));
+  return Math.round(Math.max(5_000, Math.min(actMaxMilliseconds(input), total)));
 }
 /** The typical time of each hand of one pass. */
 function typicalTimes(input: ActInput, from: ActPos | null, tune: ActTimeTuning): number[] {

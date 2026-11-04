@@ -18,7 +18,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   place: { needs: [['at'], ['block']], may: ['face'] },
   fill: { needs: [['groups'], ['block'], ['retreatHp'], ['retreatTo'], ['seconds']], may: [] },
   pillarUp: { needs: [['n']], may: ['block'] },
-  use: { needs: [['item']], may: ['at', 'face', 'target'] },
+  use: { needs: [['item']], may: ['at', 'face', 'target', 'count'] },
   look: { needs: [['to', 'yaw']], may: ['pitch'] },
   jump: { needs: [], may: ['n'] },
   sneak: { needs: [['on']], may: [] },
@@ -85,12 +85,16 @@ export function handProblem(hand: ActHand): string | null {
   return KIND_CHECKS[hand.do]?.(hand) ?? null;
 }
 const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> = {
+  dig: hand => hand.at!.length > 16 ? 'at は 16 マスまで' : null,
+  place: hand => hand.at!.length > 16 ? 'at は 16 マスまで' : null,
+  use: useProblem,
   furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : null,
   chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : null,
   wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
   attack: attackProblem,
   go: goProblem,
-  obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
+  obsidian: hand => seconds(hand, 5, 300) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源のマス 1〜24 マス' : null)
+    ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
   fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
     ?? denProblem(hand as unknown as Record<string, unknown>),
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
@@ -151,6 +155,11 @@ export function shieldRushActProblem(input: unknown): string | null {
 
 function attackProblem(hand: ActHand): string | null {
   return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null);
+}
+/** S6 (body claude/dragon-pearls14): batch barters use count; keep one call within one stack of 64 gold ingots. */
+function useProblem(hand: ActHand): string | null {
+  if (hand.count === undefined) return null;
+  return Number.isInteger(hand.count) && hand.count >= 1 && hand.count <= 64 ? null : 'count は 1〜64 の整数';
 }
 /** A hand's `seconds` within a kind's own range. */
 const seconds = (hand: ActHand, least: number, most: number): string | null =>
