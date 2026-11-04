@@ -14,7 +14,7 @@ const frame = (items: ReadonlyArray<readonly [string, number]>, world: Record<st
   stateAt: 't', receivedAt: 't', connected: true, facts: {},
   state: { world: { dimension: 'the_nether', position: { x: 0, y: 70, z: 0 }, health: 20, food: 20, inventory: pack(items), worn: '', ...world } as never } });
 
-const READY: Array<[string, number]> = [['shield', 1], ['cooked_beef', 20], ['iron_sword', 1]];
+const READY: Array<[string, number]> = [['shield', 1], ['cooked_beef', 20], ['iron_sword', 1], ['iron_pickaxe', 1]];
 const fight = { hands: [{ do: 'wait', seconds: 1 }, { do: 'fight', target: 'blaze', seconds: 20 }] };
 
 describe('the blaze spawner', () => {
@@ -42,7 +42,7 @@ describe('the blaze spawner', () => {
   });
   it('holds nothing when the needs are met, a blaze is already near (the fight is on), or the hand is not the fight', () => {
     expect(deadlyGateHold(fight, frame(READY))).toBeNull();
-    expect(deadlyGateHold(fight, frame([['shield', 1]], { threats: ['#41 blaze 9.5m (3,72,4)'] }))).toBeNull();
+    expect(deadlyGateHold(fight, frame(READY, { health: 18, threats: ['#41 blaze 9.5m (3,72,4)'] }))).toBeNull();
     expect(deadlyGateHold({ hands: [{ do: 'fight', target: 'zombie' }, { do: 'eat' }] }, frame([]))).toBeNull();
     expect(deadlyGateHold(fight, null)).toBeNull();
   });
@@ -183,7 +183,7 @@ describe('the blaze fight once the rods are in (S5, 11/5)', () => {
     expect(held!.line).toContain('湧き場から離れて帰りのゲートか次の節へ');
     expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 3], ['blaze_powder', 6], ['ender_eye', 2], ['shield', 1], ['cooked_beef', 20]]))?.kind).toBe('rods');
     // Fewer than seven: the blaze gate as before (or nothing when ready).
-    expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 6], ['shield', 1], ['cooked_beef', 20], ['iron_sword', 1]]))).toBeNull();
+    expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 6], ...READY]))).toBeNull();
     // A shot with the bow is held as well (S2, 11/5).
     expect(deadlyGateHold({ hands: [{ do: 'shoot', target: 'blaze', item: 'bow' }] }, frame([['blaze_rod', 7]]))?.kind).toBe('rods');
     // Other foes are not held.

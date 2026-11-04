@@ -4,7 +4,7 @@ import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
-import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
+import { commitDeadlyHold, deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
 import { sleepFirstHold } from './minecraftLlmcSleepHold.js';
 import { tableDescentHold } from './minecraftLlmcTableHold.js';
 import { eyeThrowHold } from './minecraftEyeThrowHold.js';
@@ -71,6 +71,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   }
   const first = found.reduce<Held | null>((held, next) => !held || next.hand < held.hand ? next : held, null);
   counted.find(item => item.held === first)?.commit();
+  commitDeadlyHold(deadly, first);
   return first;
 }
 

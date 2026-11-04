@@ -286,7 +286,7 @@ describe('shield_rush progress', () => {
 
 describe('shield_rush uses the existing blaze deadly gate', () => {
   const live = { threats: ['#123 blaze 30.0m (4,2,6)'] };
-  const ready: Array<[string, number]> = [['shield', 1], ['cooked_beef', 20], ['iron_sword', 1]];
+  const ready: Array<[string, number]> = [['shield', 1], ['cooked_beef', 20], ['iron_sword', 1], ['iron_pickaxe', 1]];
   it('holds rush/fight/attack on the same blaze id with the same prerequisites', () => {
     for (const hand of [rush, { do: 'fight', target: '#123' }, { do: 'attack', target: '#123' }, { do: 'attack', target: 'blaze' }]) {
       const held = deadlyGateHold({ hands: [hand] }, frame([], { ...live, health: 14, food: 12 }));
@@ -297,7 +297,8 @@ describe('shield_rush uses the existing blaze deadly gate', () => {
   });
   it('preserves the ongoing-fight exception and resolves ids from both live lists', () => {
     expect(deadlyGateHold(act(), frame([], { urgent: live.threats }))).toMatchObject({ hand: 1 });
-    expect(deadlyGateHold(act(), frame([], { threats: ['#123 blaze 9.5m (4,2,6)'] }))).toBeNull();
+    expect(deadlyGateHold(act(), frame(ready, { threats: ['#123 blaze 9.5m (4,2,6)'] }))).toBeNull();
+    expect(deadlyGateHold(act(), frame([], { threats: ['#123 blaze 9.5m (4,2,6)'] }))?.line).toContain('ツルハシ 0');
     expect(deadlyGateHold(act(), frame([], { threats: ['#123 zombie 30.0m (4,2,6)'] }))).toBeNull();
   });
 });

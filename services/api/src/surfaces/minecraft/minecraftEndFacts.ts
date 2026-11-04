@@ -1,5 +1,6 @@
 import type { EndCloud, EndCrystal, EndDragon, EndView, Point } from './minecraftEndView.js';
 import { framesOf } from './minecraftSeenMarks.js';
+import { deathDimensions, deathRiskWords } from './minecraftDeathRecovery.js';
 
 /**
  * The facts of the way to the dragon, as lines for the live state (a pure reading of the body's frame; nothing is kept here).
@@ -200,9 +201,6 @@ export function endFightLines(end: EndView | null): string[] {
   return lines;
 }
 
-/** The dimension a death line or a record names, without `minecraft:`. */
-const dimensionOf = (value: unknown): string | null => typeof value === 'string' ? value.replace(/^minecraft:/u, '') : null;
-
 /**
  * The last death: the body's line as it is (while the dropped items may still lie there or for half an hour: where, how long ago, the
  * cause, what was dropped and how long they last), and the dimension it was in when that is not the one she is in now.
@@ -210,11 +208,9 @@ const dimensionOf = (value: unknown): string | null => typeof value === 'string'
 export function deathLine(world: Rec): string | null {
   const said = typeof world.lastDeath === 'string' ? world.lastDeath.trim() : '';
   if (!said) return null;
-  const last = rec((Array.isArray(world.deaths) ? world.deaths : []).at(-1));
-  const there = dimensionOf(last?.dimension);
-  const here = dimensionOf(world.dimension);
-  const apart = there && here && there !== here ? `（その次元 ${there} は今いる ${here} と別。行くにはポータルを通る）` : '';
-  return `最後の死: ${said}${apart}`;
+  const { here, there, apart } = deathDimensions(world);
+  const where = apart ? `（その次元 ${there} は今いる ${here} と別。行くにはポータルを通る）` : '';
+  return [`最後の死: ${said}${where}`, ...deathRiskWords(world)].join('\n');
 }
 
 const PLACE_LABELS: ReadonlyArray<readonly [string, string]> = [['nether_portal', 'ポータル'], ['fortress', 'ネザー要塞'], ['stronghold', 'ストロングホールド'],

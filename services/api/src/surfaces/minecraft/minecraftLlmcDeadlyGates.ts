@@ -8,6 +8,8 @@ import { RETURN_TO_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepR
 import { returningToEnd } from './minecraftEndEntry.js';
 import { firstEntryLack } from './minecraftEndGather.js';
 import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { blazesWithin, onBlaze } from './minecraftLlmcBlazeThreats.js';
+import { blazeFightHold } from './minecraftLlmcBlazeHold.js';
 
 /**
  * The deadly gates, in `gateHold`'s form (the coordinator's list for 11/4, item 2; the owner: a death after the iron gear is out): the hand that
@@ -15,11 +17,18 @@ import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from '
  * to gather it is the decision's. Two places:
  * - the blaze spawner (the Nether): a fight or an attack on a blaze when none is within 16 m (the hand that begins it), and a go or a walk that ends
  *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, 150 food points carried, a shield (S2's loads carried one).
+ *   Every combat hand also checks escape tools, shield wear, visible blazes and fire (`minecraftLlmcBlazeHold.ts`), bounded per spawner.
  * - the End: a walk that ends in an end portal cell (`e`): `BEFORE_END` for a first entry, or the fallback's kit after the beds' gathering has had its
  *   time (`minecraftEndGather.ts`), and `RETURN_TO_END` for a return.
  * The body's own version (S2's) is not read: the frame has no field for it.
  */
-export interface DeadlyHold { hand: number; kind: string; line: string }
+export interface DeadlyHold { hand: number; kind: string; line: string; commit?(): void }
+
+/** The bounded gate counts only when its exact line is the stop selected before send. */
+export function commitDeadlyHold(hold: DeadlyHold | null, selected: { line: string } | null): void {
+  if (hold && selected?.line === `手 ${hold.hand} ${hold.kind}: ${hold.line}。`) hold.commit?.();
+}
+
 const BLAZE_RISK = 'ブレイズの火の玉と炎の傷が重なる。体力・満腹度・食料・盾が足りないと足場で死に、ここまでの装備と時間を失う。作れない・材料が無いと見えた時は、後回しにせず取りに行く';
 const AGAIN = 'そろえてからもう一度出す（理由を書いても省けない。どう取るかは自分で決める）';
 const OTHER_STAGE = 'ブレイズの段が進められない間は、先にパールなど他の段の節へ今の節を移して進めてよい'
@@ -28,14 +37,6 @@ const finite = (value: unknown): value is number => typeof value === 'number' &&
 type Facts = NonNullable<ReturnType<typeof readinessOf>>;
 type Cell = { x: number; y: number; z: number };
 const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
-
-/** The live lists of the frame (`#id name 12.3m …`), as strings. */
-const liveLines = (world: Record<string, unknown>): string[] => [world.threats, world.urgent]
-  .flatMap(list => Array.isArray(list) ? list : []).filter((line): line is string => typeof line === 'string');
-
-/** The blazes of the live lists within `meters`. */
-const blazesWithin = (world: Record<string, unknown>, meters: number): number => liveLines(world)
-  .filter(line => Number(/^#\d+ blaze ([\d.]+)m/u.exec(line)?.[1] ?? Infinity) <= meters).length;
 
 /** What the blaze spawner needs and the body does not have, in words (each with the way it is usually made up), or null. */
 export function blazeLack(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'counts'>): string | null {
@@ -52,14 +53,6 @@ const cellOf = (value: unknown): Cell | null => {
   const at = objectOf(value);
   return at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) } : null;
 };
-
-/** Whether a hand is a fight, an attack or a shot on a blaze (named, or the id of a blaze of the live lists). */
-function onBlaze(hand: Record<string, unknown>, world: Record<string, unknown>): boolean {
-  if (hand.do !== 'fight' && hand.do !== 'attack' && hand.do !== 'shoot') return false;
-  const target = typeof hand.target === 'string' ? hand.target : '';
-  const id = /^#(\d+)$/u.exec(target)?.[1];
-  return /blaze/u.test(target) || (id !== undefined && liveLines(world).some(line => line.startsWith(`#${id} blaze `)));
-}
 
 /** The spawners (`S`) the map shows. */
 function spawnersOf(map: unknown): Cell[] {
@@ -199,7 +192,8 @@ export function deadlyGateHold(input: unknown, frame: BodyObservation | null, ta
     const done = rodsDoneHold(input, facts);
     if (done) return done;
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
-    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${OTHER_STAGE}` } : null;
+    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${OTHER_STAGE}` }
+      : blazeFightHold(input, facts, spawnersOf(facts.world.localMap), taskId);
   }
   const goldGate = facts.dimension === 'overworld' ? goldAtPortalHold(input, frame, facts) : null;
   if (goldGate) return goldGate;

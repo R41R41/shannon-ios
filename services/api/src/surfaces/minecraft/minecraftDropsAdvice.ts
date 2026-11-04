@@ -1,4 +1,5 @@
 import type { ItemCounts } from './minecraftItems.js';
+import { deathDimensions } from './minecraftDeathRecovery.js';
 
 /** Drops worth a walk back for: tools of iron or better, a bucket, a bed, a shield or a bow, cooked food. */
 const WORTH_FETCHING = /^(?:(?:iron|diamond|netherite)_[a-z]+|bucket|water_bucket|lava_bucket|[a-z_]+_bed|shield|bow|flint_and_steel|cooked_[a-z]+)$/u;
@@ -26,13 +27,18 @@ export function dropsReminder(list: string, advice: string | null): string {
  * `drops` are those she can still pick up (`recoverableDrops`, `minecraftSkillPointers.ts`).
  */
 export function dropsAdvice(world: Record<string, unknown>, drops: ItemCounts | null): string | null {
+  if (!drops?.size) return null;
+  const { there, apart } = deathDimensions(world);
+  if (apart) return `落とし物は別の次元 ${there} にある。\n`
+    + '自分がその次元にいない間は消える時計が進まない。\n'
+    + '木→石の道具・ブロック 64・食料をそろえてから、1 幅 2 高のトンネルで寄る。';
   const places = world.rememberedPlaces && typeof world.rememberedPlaces === 'object' ? world.rememberedPlaces as Record<string, unknown> : null;
   const row = places?.death;
   const found = typeof row === 'string' ? DEATH_ROW.exec(row.trim()) : null;
-  if (!drops || !found) return null;
+  if (!found) return null;
   const metres = Number(found[1]), seconds = Math.round(metres / WALK_METRES_PER_SECOND);
   const worth = [...drops.keys()].filter(name => WORTH_FETCHING.test(name)).slice(0, 4);
-  const head = `死んだ所まで${metres}m（歩いて約${seconds}秒、落とし物は死んで5分で消える）。`;
+  const head = `死んだ所まで${metres}m（歩いて約${seconds}秒、落とし物は近くにいる間だけ約5分で消える）。\n`;
   if (!worth.length) return `${head}拾う値打ちのある物（鉄以上の道具や防具・バケツ・ベッドなど）は無い。その場で作り直すほうが早い`;
   const far = metres > FAR_FETCH_METRES ? '。遠い（途中の洞窟や夜に注意）' : '';
   return `${head}拾う値打ちのある物: ${worth.join('・')}。往復の時間と、作り直す時間（鉄の精錬を含めて数分）を比べて決める${far}`;
