@@ -79,8 +79,9 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_700, doneWhen: 'have:blaze_rod>=7', late: true },
   { name: 'エンダーパール 12 個', short: 'パール12', seconds: 6_000, doneWhen: 'have:ender_pearl>=12', late: true },
   { name: 'エンダーアイ 12 個', short: 'アイ12', seconds: 6_700, doneWhen: 'have:ender_eye>=12', late: true },
-  // 11/4 (the dragon is killed with beds): the check takes beds 8 (aim 10) and obsidian 8 (aim 12) on top of the old four beds, about +300 s
-  // (the obsidian 12 × 9.4 s with the diamond pickaxe is about 110 s, the wool of about 5 more beds 120–200 s; estimates): the stretches after it move by the same.
+  // 11/4 (the dragon is killed with beds): the check takes beds 8 (aim 10) and obsidian 8 (aim 12) on top of the old four beds,
+  // about +300 s (obsidian 12 at 9.4 s each with the diamond pickaxe about 110 s, the wool of about 5 more beds 120-200 s; estimates):
+  // the stretches after it move by the same.
   { name: 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 80 点）', short: '点検', seconds: 7_800,
     doneWhen: 'food>=80&have:bed>=8&have:obsidian>=8&have:water_bucket', late: true },
   { name: 'ポータルの枠の部屋', short: '枠の部屋', seconds: 8_600, doneWhen: 'see:end_portal_frame', late: true },

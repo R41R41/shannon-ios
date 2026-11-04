@@ -41,7 +41,9 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
     node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
   node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'food>=40&have:bed', children: [
-    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（エンドの竜戦に 10 個、最低 8 要る）。羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
+    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village',
+    note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（エンドの竜戦に 10 個、最低 8 要る）。'
+      + '羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
     caution: ['通りがかりに糸・火打石（砂利を掘る）・羽（ニワトリ）を見かけたら拾う（エンドの弓と矢 30 の分。取りに戻らない）'] }),
     node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
   node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる'],
@@ -98,7 +100,8 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
     caution: ['縁から5マス以上内側で戦う（sneak は押されるのを止めない）', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は積める物3個以上を持って登り、長居しない（落下止めは当てにしない）',
       '竜を打つ前に剣か斧を equip で手に持つ（手が別の物のことがある）'],
-    children: [node('ベッドで倒す（本命）', { kind: 'dragon', note: 'ベッド 10・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }), node('クリスタルを弓で壊す（予備）', { kind: 'dragon', doneWhen: 'crystals<=0' }),
+    children: [node('ベッドで倒す（本命）', { kind: 'dragon',
+        note: 'ベッド 10・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }), node('クリスタルを弓で壊す（予備）', { kind: 'dragon', doneWhen: 'crystals<=0' }),
       node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
 ];
 /**
