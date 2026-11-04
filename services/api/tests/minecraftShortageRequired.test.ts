@@ -365,10 +365,9 @@ describe('a first plan is not thrown away for a node whose target its doneWhen d
 
 describe('the full pack names the clutter first and keeps 128 blocks (the coordinator, 2026-11-03; run59 leg 2: 空き 2, 丸石 350 dropped)', () => {
   const lines = (...stacks: string[]) => stacks;
-  it('names fences, stairs, rails, mossy cobblestone, string (under three), saplings and seeds before the filler, and not a bow\'s string', () => {
+  it('names fences, stairs, rails, mossy cobblestone, saplings and seeds before the filler, and never the string (the audit of 11/4, order 10)', () => {
     const packed = packFacts(lines('oak_fence×3', 'oak_stairs×6', 'rail×1', 'mossy_cobblestone×1', 'string×1', 'oak_sapling×4', 'wheat_seeds×1', 'cobblestone×189', 'string×3'));
-    expect(packed.junk.map(([name]) => name).sort()).toEqual(['mossy_cobblestone', 'oak_fence', 'oak_sapling', 'oak_stairs', 'rail', 'string', 'wheat_seeds']);
-    expect(packed.junk.find(([name]) => name === 'string')![1]).toBe(1);
+    expect(packed.junk.map(([name]) => name).sort()).toEqual(['mossy_cobblestone', 'oak_fence', 'oak_sapling', 'oak_stairs', 'rail', 'wheat_seeds']);
     expect(packFacts(lines('string×3', 'stick×4', 'oak_planks×6')).junk).toEqual([]);
     const words = dropAdvice(packed);
     expect(words.startsWith('雑物 oak_stairs×6・oak_sapling×4・oak_fence×3')).toBe(true);

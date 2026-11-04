@@ -20,7 +20,9 @@ import { BED_ITEM } from './minecraftItems.js';
  * `goal`: wanted when it can be had, not required (the golden boots, when 4 gold is found). `weight`: what one stack of a matching item is worth in the count
  * (a diamond pickaxe stands for three iron ones).
  */
-export interface PrepNeed { label: string; count: number; pattern: RegExp; slots?: boolean; worn?: boolean; goal?: boolean; weight?: (name: string) => number }
+/** `materials`: what the pack holds toward a missing or short need, said beside its label (the bow's string, the arrows' feathers). */
+export interface PrepNeed { label: string; count: number; pattern: RegExp; slots?: boolean; worn?: boolean; goal?: boolean; weight?: (name: string) => number;
+  materials?: (counts: ReadonlyMap<string, number>) => string }
 /** `risk`: what going on without the required needs costs, said beside the lack (a stage that has one says its lack as a required part and a goal part). */
 export interface PrepStage { title: string; food: number; needs: readonly PrepNeed[]; risk?: string }
 
@@ -50,6 +52,16 @@ const SPARE_PICKAXES: PrepNeed = { label: '石以上のツルハシ（予備 2 �
 // smelted; a stone sword passed this gate and put the night's warning out): the iron sword, two iron, is made with the armour before the gate.
 const SWORD: PrepNeed = { label: '鉄の剣', count: 1, pattern: /^(?:iron|diamond|netherite)_sword$/u };
 const FOOTING: PrepNeed = { label: '足場のブロック', count: 64, pattern: BLOCKS };
+const has = (counts: ReadonlyMap<string, number>, name: string): number => (counts.get(name) ?? 0) + (counts.get(`minecraft:${name}`) ?? 0);
+/**
+ * The bow and the arrows the End's crystals take (the whole-run audit of 11/4, order 10: the shortage counted plain arrows only, the body shoots spectral
+ * ones too, and the materials were not said): a crossbow is a bow here, a spectral arrow an arrow; a lack says the materials carried (the string is
+ * kept in the pack, `minecraftLlmcPack.ts`, and the first plan asks the materials on the way, `PLAN_PREP_WORDS`).
+ */
+export const BOW: PrepNeed = { label: '弓', count: 1, pattern: /^(?:bow|crossbow)$/u,
+  materials: counts => `材料 糸 ${has(counts, 'string')}/3・棒 ${has(counts, 'stick')}/3` };
+export const ARROWS: PrepNeed = { label: '矢', count: 30, pattern: /^(?:arrow|spectral_arrow)$/u,
+  materials: counts => `光の矢も数える。材料 羽根 ${has(counts, 'feather')}・火打石 ${has(counts, 'flint')}・棒 ${has(counts, 'stick')}（1 ずつで 4 本）` };
 
 /**
  * Run59 leg 2 (2026-11-02 23:34): a need that looked impossible to make (the body's make said missing oak_log) was put off and the portal hand was
@@ -89,9 +101,18 @@ export const SAFETY_FIRST = '- 死なないことを速さより上に置く（�
   + '体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満（持ち物の行の耐久）のまま、深い所・ネザー・戦いへ進まない: 食べる・回復を待つ・作り直す・退くを先にする。'
   + '溶岩の縁・落下の上・火の玉の線では、足元と両脇を確かめて 1 マスずつ。';
 
-/** The iron the way to the Nether takes: pickaxe 3, bucket 3, shield 1, helmet 5, chestplate 8, leggings 7, flint
- * and steel 1, sword 2. */
-export const IRON_BEFORE_NETHER = 30;
+/**
+ * The iron the way to the Nether takes, by its use (the whole-run audit of 11/4, order 11: the 30 had no shears, no spare sword and no spare shield,
+ * and the old path's 「鉄は33まで」 cut the digging short of them): the sum is the budget, and the words say the uses.
+ */
+export const IRON_USES: ReadonlyArray<readonly [string, number]> = Object.freeze([['ツルハシ', 3], ['バケツ', 3], ['盾', 1], ['兜', 5], ['胸', 8],
+  ['脚', 7], ['火打ち金', 1], ['剣', 2], ['ハサミ', 2], ['予備の剣', 2], ['予備の盾', 1]] as const);
+export const IRON_BEFORE_NETHER = IRON_USES.reduce((sum, [, count]) => sum + count, 0);
+/**
+ * The owner's ruler to the Nether (the 3-hour plan of 11/3: 47 minutes, the preparation included): one number for the road's milestone, the stage
+ * knowledge and the old route's planner (the whole-run audit of 11/4, order 12: they said 47 and 30 minutes).
+ */
+export const NETHER_BY_SECONDS = 2_820;
 /** The gold of the golden boots (ingots). */
 export const GOLD_FOR_BOOTS = 4;
 /** A golden piece of armour (one worn keeps the piglins calm). */
@@ -137,7 +158,7 @@ export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の�
  */
 export const PREP_RULES_WORDS = [
   `- ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
-    + ("（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）。火打ち金は鉄のある高さで先に作る。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
+    + `（${IRON_USES.map(([use, count]) => `${use} ${count}`).join('・')}）` + ("。火打ち金は鉄のある高さで先に作る。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱や廃坑の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',

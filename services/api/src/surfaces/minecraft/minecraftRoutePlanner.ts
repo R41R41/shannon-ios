@@ -1,4 +1,5 @@
 import { MILESTONES, MILESTONE_TARGET_SECONDS, milestoneTargetSeconds } from './minecraftStage.js';
+import { NETHER_BY_SECONDS } from './minecraftLlmcPrepRules.js';
 import { lineEntries, mapText, partEntries, positionOf, type MapEntry } from './minecraftMapRead.js';
 import { woodAdvice } from './minecraftWoodAdvice.js';
 
@@ -34,13 +35,13 @@ export const ROUTE_SCHEMA = Object.freeze({
 
 /** The fixed instructions: the order is the owner's, the places and times are the planner's. */
 export const ROUTE_SYSTEM = [
-  'あなたはマイクラの体を動かすシャノンの、ルートを立てる係。目標は、タスク開始から30分（1,800秒）以内にネザーへ入ること。',
+  `あなたはマイクラの体を動かすシャノンの、ルートを立てる係。目標は、タスク開始から${Math.round(NETHER_BY_SECONDS / 60)}分（${NETHER_BY_SECONDS.toLocaleString('en-US')}秒）以内にネザーへ入ること。`,
   '節目の順番は変えない: 木 → 木と石のツルハシ → 石の斧 → 木材 → 食料と羊とベッド → 鉄 → バケツ → 鉄の全身の防具 → ダイヤ → 黒曜石 → ゲート → ネザー。',
   'それぞれの節目を、どの場所で済ませるかを決める。地図の要約・場所の記憶・通ったバイオームにある物だけを使い、無い物を作り出さない。',
   '使える出どころ: 村（家のベッド・パン・干し草・鍛冶屋の箱の鉄と黒曜石）、荒廃したポータル（枠の黒曜石・箱の火打ち金や金）、'
     + '洞窟の入口（底へ歩いて下りられる。階段掘りより早い）と y=16 前後（鉄）、y=-58（ダイヤ）、溶岩の溜まり（水バケツで黒曜石）、砂利（火打石）、'
     + '置かれたベッド（壊せば持てる）。',
-  '近い順にまとめ、行ったり来たりを減らす。羊の出ない所（雪原・荒野・砂漠・海・氷）では羊を探さず、村か草地へ向かう。防具を着ていれば夜は地下で掘り続ける。',
+  '近い順にまとめ、行ったり来たりを減らす。羊の出ない所（雪原・荒野・砂漠・海・氷）では羊を探さず、村か草地へ向かう。夜はベッドで寝て飛ばす（地下も時刻にかかわらず暗く、敵が湧く）。',
   '木: 砂漠・荒野・海・川・浜には木がほぼ無い。通ったバイオームに川や海があるだけで「川沿いの木」と決めない。入力の「木と木材の出どころ」に木が無い時、'
     + '最初の行（木）は、難破船・廃坑・村など木材の出どころが近ければそれ、無ければ木の生えるバイオーム（森・タイガ・ジャングル・サバンナ）の方角へ木を探しに出る、と書く。',
   'x・y・z は開始時の見立て。後で近くに見える候補（溶岩・鉱石）があればそちらが優先される。確かでない座標は入れない。',

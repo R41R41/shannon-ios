@@ -184,7 +184,8 @@ describe('the time budget to the Nether and the steps from the diamonds on', () 
     expect(milestoneLines(facts(atIron), 300)).toContain('時間の目安: 「鉄」は420秒までに（いま300秒、あと120秒）');
     expect(milestoneLines(facts(atIron), 535).at(-1)).toMatch(/^時間の目安: 「鉄」は420秒までに。いま535秒で115秒遅れている。寄り道を切る: 掘りすぎ/u);
     expect(milestoneLines(facts(atIron))).toHaveLength(2);
-    expect(MILESTONE_TARGET_SECONDS['ネザー']).toBe(1_800);
+    // The whole-run audit of 11/4, order 12: one ruler to the Nether (47 minutes) for the old route and the road.
+    expect(MILESTONE_TARGET_SECONDS['ネザー']).toBe(2_820);
   });
   it('has the diamonds, the obsidian and the gate as procedures with the body\'s tools', () => {
     expect(milestoneSteps('ダイヤ', 3).join('\n')).toContain('mc.stair-mine（targetY=-58）');
@@ -249,9 +250,9 @@ describe('her route to the Nether, planned once by a strong model', () => {
     failing.situate({ milestoneName: '木', elapsedSeconds: 10 }, {});
     expect(asked).toBe(1);
   });
-  it('lets a replan when late give the steps left until a minute after it, never past the Nether\'s 1,800 s', () => {
-    const late = routeFrom({ legs: [{ milestone: '鉄', goal: '洞窟', where: '北', targetSeconds: 1_000 }, { milestone: 'ネザー', goal: 'g', where: 'w', targetSeconds: 2_400 }] }, 900, 1, 'late')!;
-    expect(late.legs.map(leg => leg.targetSeconds)).toEqual([960, 1_800]);
+  it('lets a replan when late give the steps left until a minute after it, never past the Nether\'s 2,820 s', () => {
+    const late = routeFrom({ legs: [{ milestone: '鉄', goal: '洞窟', where: '北', targetSeconds: 1_000 }, { milestone: 'ネザー', goal: 'g', where: 'w', targetSeconds: 3_400 }] }, 900, 1, 'late')!;
+    expect(late.legs.map(leg => leg.targetSeconds)).toEqual([960, 2_820]);
   });
   it('does not keep a stopped step waiting for the planner', async () => {
     let aborted = false;

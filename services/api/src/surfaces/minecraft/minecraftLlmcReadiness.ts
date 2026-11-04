@@ -3,7 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import {
-  BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_OBSIDIAN, FIGHT_OBSIDIAN_LABEL, type PrepNeed, type PrepStage,
+  ARROWS, BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, BOW, END_BEDS, END_OBSIDIAN, FIGHT_OBSIDIAN_LABEL, type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
@@ -35,7 +35,7 @@ const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: numb
   end: { title: 'エンドへ', food: 80, needs: [
     { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM },
     { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u },
-    { label: '弓', count: 1, pattern: /^bow$/u }, { label: '矢', count: 30, pattern: /^arrow$/u },
+    BOW, ARROWS,
     { label: 'エンダーアイ', count: 12, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
     // S1's lab (2026-11-02): a fall from a crystal's pillar is stopped by water the body pours under itself, with a full bucket and nothing else.
     { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u }] },
@@ -129,8 +129,9 @@ function gapsOf(needs: readonly Need[], parts: { counts: ItemCounts; worn?: read
   const gaps: Gaps = { none: [], short: [], unworn: [] };
   for (const need of needs) {
     const have = held(parts.counts, need);
-    if (have <= 0) gaps.none.push(need.label);
-    else if (have < need.count) gaps.short.push(`${need.label} ${have}/${need.count}`);
+    const label = need.materials ? `${need.label}（${need.materials(parts.counts)}）` : need.label;
+    if (have <= 0) gaps.none.push(label);
+    else if (have < need.count) gaps.short.push(`${label} ${have}/${need.count}`);
     if (need.worn && parts.worn && have > 0) {
       gaps.unworn.push(...[...parts.counts.keys()].filter(name => need.pattern.test(name) && !parts.worn!.includes(name)));
     }

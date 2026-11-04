@@ -14,10 +14,11 @@ const FILLER = new RegExp('^(?:cobblestone|cobbled_deepslate|deepslate|diorite|a
   + 'netherrack|basalt|blackstone|calcite|dripstone_block)$', 'u');
 /**
  * The clutter that is dropped before the filler (run59 leg 2: free 2 of 36 with fences, stairs, rails, mossy cobblestone, string, saplings and seeds in the
- * pack, and the candidates named were the cobblestone the gate asks for). The string is clutter only under three (a bow takes three).
+ * pack, and the candidates named were the cobblestone the gate asks for). The string is never clutter (the whole-run audit of 11/4, order 10: one or
+ * two of it were named to drop while the bow was not made; a bow takes three, and four make a wool).
  */
 const JUNK = new RegExp('(?:_fence|_fence_gate|_stairs|_sapling|_seeds)$|^(?:rail|powered_rail|detector_rail|activator_rail|mossy_cobblestone'
-  + '|mossy_stone_bricks|string)$', 'u');
+  + '|mossy_stone_bricks)$', 'u');
 /** The stacks per filler kind are shown when the filler alone fills this many slots. */
 const FILLER_SLOTS = 3;
 const STACK = /^([a-z_0-9]+)×(\d+)/u;
@@ -58,7 +59,7 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
     if (stack && FILLER.test(stack[1]!)) {
       filler.set(stack[1]!, (filler.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
-    if (stack && JUNK.test(stack[1]!) && !(stack[1] === 'string' && Number(stack[2]) >= 3)) {
+    if (stack && JUNK.test(stack[1]!)) {
       junk.set(stack[1]!, (junk.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
   }
