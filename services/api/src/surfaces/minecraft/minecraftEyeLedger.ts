@@ -113,15 +113,34 @@ export function ledgerLines(throws: readonly StoredThrow[], feet: { x: number; z
   return [head, ...fixLines(fix, feet)];
 }
 
+/** A throw this near the line of an earlier one, sideways, draws the same line (S5's rig of 11/5: the throws along the line counted as tries). */
+const SAME_LINE_BLOCKS = 12;
+/**
+ * The sideways tries that gave no point: the lines drawn from places at least `SAME_LINE_BLOCKS` sideways of every earlier line, less the first.
+ * A throw further along the same line is no try (its place stays 24 m sideways, the first of the table).
+ */
+export function sidewaysTries(throws: readonly StoredThrow[]): number {
+  const lines: StoredThrow[] = [];
+  for (const item of throws) {
+    if (item.down || !Number.isFinite(item.bearingDeg)) continue;
+    const apart = lines.every(line => {
+      const r = line.bearingDeg * Math.PI / 180;
+      return Math.abs((item.x - line.x) * -Math.cos(r) - (item.z - line.z) * Math.sin(r)) >= SAME_LINE_BLOCKS;
+    });
+    if (apart) lines.push(item);
+  }
+  return Math.max(0, lines.length - 1);
+}
+
 function noFixLine(throws: readonly StoredThrow[], last: StoredThrow): string {
   const why = throws.length < 2 ? '線が 1 本だけ' : '線が近すぎるか、誤差が大きい（誤差 600m 超）';
-  const places = nextThrowPlaces(last, throws.length - 1);
+  const places = nextThrowPlaces(last, sidewaysTries(throws));
   if (!places.length) return `交点はまだ無い（${why}）`;
   const where = places.map(item => place(item.x, item.z)).join(' か ');
   const north = Math.abs(Math.cos(last.bearingDeg * Math.PI / 180)) >= Math.SQRT1_2;
   const along = north ? '南北' : '東西', across = north ? '東西' : '南北';
-  return `交点はまだ無い（${why}）。最後の線は${along}に走る: 線に沿って進んでも同じ線になる。`
-    + `次に投げる場所の案: 最後の線の横（${across}）${places[0]!.from}m の ${where}（2 本の線が離れて交わるほど誤差が小さい）`;
+  return `交点はまだ無い（${why}）。次は ${where}（最後の線の横 ${across} ${places[0]!.from}m）で投げる。`
+    + `最後の線は${along}に走る: 線の先へ進んで投げても同じ線になり、交点は出ない`;
 }
 
 /** A sunk or a stopped eye: the place itself, with no lines. */
