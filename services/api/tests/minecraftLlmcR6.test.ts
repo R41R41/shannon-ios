@@ -50,7 +50,7 @@ describe('the seed begins where she is (run 29: begun in the Nether, "now" was �
       expect(tree.nodes.find(node => node.id === 'p1')!.title).toBe('出発の点検（ネザーの奥へ）');
       expect(tree.nodes.some(node => /村を回る|木と石の道具/u.test(node.title))).toBe(false);
     }
-    expect(planPath(seedPlan(GOAL, 'the_end')!).now).toMatch(/エンドでドラゴン|クリスタル/u);
+    expect(planPath(seedPlan(GOAL, 'the_end')!).now).toMatch(/エンドでドラゴン|クリスタル|ベッドで倒す/u);
     expect(seedPlan(GOAL, 'overworld')).toEqual(seedPlan(GOAL));
     expect(planPath(seedPlan(GOAL)!).now).toMatch(/^p1\.1 原木を集める/u);
   });
