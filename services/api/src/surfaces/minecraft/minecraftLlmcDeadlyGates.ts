@@ -53,9 +53,9 @@ const cellOf = (value: unknown): Cell | null => {
   return at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) } : null;
 };
 
-/** Whether a hand is a fight or an attack on a blaze (named, or the id of a blaze of the live lists). */
+/** Whether a hand is a fight, an attack or a shot on a blaze (named, or the id of a blaze of the live lists). */
 function onBlaze(hand: Record<string, unknown>, world: Record<string, unknown>): boolean {
-  if (hand.do !== 'fight' && hand.do !== 'attack') return false;
+  if (hand.do !== 'fight' && hand.do !== 'attack' && hand.do !== 'shoot') return false;
   const target = typeof hand.target === 'string' ? hand.target : '';
   const id = /^#(\d+)$/u.exec(target)?.[1];
   return /blaze/u.test(target) || (id !== undefined && liveLines(world).some(line => line.startsWith(`#${id} blaze `)));

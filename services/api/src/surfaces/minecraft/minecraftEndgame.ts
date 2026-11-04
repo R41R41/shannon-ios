@@ -89,6 +89,8 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
         hunt: hunt.line(world, facts.counts, facts.dimension, now()), trail: trail.line(facts),
         wool: wool.line(world, facts.counts, facts.dimension) });
     },
+    /** The eyes' ledger, for the hold that keeps the frames' eyes (`minecraftEyeThrowHold.ts`). */
+    ledger,
     checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint(), ...hunt.checkpoint(), ...trail.checkpoint() }),
   };
 }

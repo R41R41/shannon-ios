@@ -127,7 +127,7 @@ export const SAFETY_FIRST = '- 死なないことを速さより上に置く（�
   + '体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満（持ち物の行の耐久）のまま、深い所・ネザー・戦いへ進まない: 食べる・回復を待つ・作り直す・退くを先にする。'
   + '溶岩の縁・落下の上・火の玉の線では、足元と両脇を確かめて 1 マスずつ。'
   // S2's blaze lab of 11/5 (raid3: health 6.1 and fullness 17 for about 1.5 minutes of sorties, health never came back): the head chooses the meal.
-  + '戦いの合間は、体力 12 未満なら見えない所で満腹 18 以上まで食べ、体力 12 を超えるまで待ってから出る（満腹 18 未満では体力は自然に戻らない。live の recovery の行）。';
+  + '戦いの合間は、体力 18 未満なら見えない所で満腹 18 以上まで食べ、体力 18 以上まで待ってから出る（満腹 18 未満では体力は自然に戻らない。live の recovery の行）。';
 
 /**
  * The iron the way to the Nether takes, by its use (the whole-run audit of 11/4, order 11: the 30 had no shears, no spare sword and no spare shield,

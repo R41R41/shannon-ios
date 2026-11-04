@@ -7,6 +7,7 @@ import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js
 import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
 import { sleepFirstHold } from './minecraftLlmcSleepHold.js';
 import { tableDescentHold } from './minecraftLlmcTableHold.js';
+import { eyeThrowHold } from './minecraftEyeThrowHold.js';
 import { noteHeldAct } from './minecraftLlmcHeldStreak.js';
 import { tableNote } from './minecraftLlmcTableNote.js';
 import { descentNote, gateHold } from './minecraftLlmcReadiness.js';
@@ -60,6 +61,8 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
   const counted = countedHolds(input, frame, taskId);
   found.push(...counted.map(item => item.held));
+  const eye = eyeThrowHold(input, frame, taskId);
+  if (eye) found.push({ hand: eye.hand, code: 'eye_kept', kind: eye.kind, line: `手 ${eye.hand} ${eye.kind}: ${eye.line}。` });
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
     furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });

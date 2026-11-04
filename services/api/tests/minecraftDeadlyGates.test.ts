@@ -184,6 +184,8 @@ describe('the blaze fight once the rods are in (S5, 11/5)', () => {
     expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 3], ['blaze_powder', 6], ['ender_eye', 2], ['shield', 1], ['cooked_beef', 20]]))?.kind).toBe('rods');
     // Fewer than seven: the blaze gate as before (or nothing when ready).
     expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 6], ['shield', 1], ['cooked_beef', 20], ['iron_sword', 1]]))).toBeNull();
+    // A shot with the bow is held as well (S2, 11/5).
+    expect(deadlyGateHold({ hands: [{ do: 'shoot', target: 'blaze', item: 'bow' }] }, frame([['blaze_rod', 7]]))?.kind).toBe('rods');
     // Other foes are not held.
     expect(deadlyGateHold({ hands: [{ do: 'fight', target: 'wither_skeleton' }] }, frame([['blaze_rod', 7]]))).toBeNull();
   });
