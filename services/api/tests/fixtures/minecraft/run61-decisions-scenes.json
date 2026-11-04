@@ -631,7 +631,7 @@
  {
   "name": "run61-d0179-real-result",
   "goal": "エンドラを討伐して",
-  "current": "p4",
+  "current": "p1",
   "elapsedMinutes": 36,
   "events": [
    "q126 [n8] 水から東へ出て塞ぎ地上へ: act 0/5 済みで止まった（failure）\n1 dig 止 無い: 掘削中に呼吸の余裕が失われたため中止: insufficient_air（残り息 15秒・呼吸先まで 0.10863641096975796秒）。現在の呼吸先を再確認する。そのマスは deepslate\n  事実: 進んでいない: 進んだ 0マス・残り 4マス\n2 walk 未 未実行\n3 place 未 未実行\n4 place 未 未実行\n5 vertical 未 未実行",
@@ -740,6 +740,144 @@
     "wait",
     "eat"
    ]
-  }
+  },
+  "plan": [
+   {
+    "title": "地上で原木を取り作業台と3本目のツルハシ",
+    "kind": "wood",
+    "doneWhen": "have:crafting_table>=1&have:stone_pickaxe>=2"
+   },
+   {
+    "title": "黒曜石10とゲート",
+    "kind": "obsidian",
+    "doneWhen": "have:obsidian>=10"
+   }
+  ]
+ },
+ {
+  "name": "run61-d0179-need-seconds",
+  "goal": "エンドラを討伐して",
+  "current": "p1",
+  "elapsedMinutes": 36,
+  "events": [
+   "q126 [n8] 水から東へ出て塞ぎ地上へ: act 0/5 済みで止まった（failure）\n1 dig 止 無い: 掘削中に呼吸の余裕が失われたため中止: insufficient_air（残り息 15秒・呼吸先まで 0.1秒。掘削に必要な時間 24秒 = 1 マス 6 秒 × 4 マス）。そのマスは deepslate\n  事実: 進んでいない: 進んだ 0マス・残り 4マス\n2 walk 未 未実行\n3 place 未 未実行\n4 place 未 未実行\n5 vertical 未 未実行",
+   "q127 [n8] 水から東へ出て塞ぎ地上へ: act 0/5 済みで止まった（failure）\n1 dig 止 無い: 掘削中に呼吸の余裕が失われたため中止: insufficient_air（残り息 15秒・呼吸先まで 0.14943641096975796秒）。現在の呼吸先を再確認する。そのマスは deepslate\n  事実: 進んでいない: 進んだ 0マス・残り 4マス\n2 walk 未 未実行\n3 place 未 未実行\n4 place 未 未実行\n5 vertical 未 未実行",
+   "q128 [n8] 水から東へ出て塞ぎ地上へ: act 0/5 済みで止まった（failure）\n1 dig 止 無い: 掘削中に呼吸の余裕が失われたため中止: insufficient_air（残り息 15秒・呼吸先まで 0.1秒。掘削に必要な時間 24秒 = 1 マス 6 秒 × 4 マス）。そのマスは deepslate\n  事実: 進んでいない: 進んだ 0マス・残り 4マス\n2 walk 未 未実行\n3 place 未 未実行\n4 place 未 未実行\n5 vertical 未 未実行"
+  ],
+  "expect": "同じ失敗に、掘削に必要な秒数（24 秒 > 残り息 15 秒）を足した版。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 118.5,
+    "y": 2,
+    "z": 123.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "time": "2600",
+   "inside": "深い水の中（足の下も水で床が無い。掘る・置く間も沈むことがあり、頭が水中なら息が減る）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "stone_sword",
+     "count": 1
+    },
+    {
+     "name": "stone_axe",
+     "count": 1
+    },
+    {
+     "name": "stone_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "bread",
+     "count": 18
+    },
+    {
+     "name": "cooked_porkchop",
+     "count": 3
+    },
+    {
+     "name": "cooked_beef",
+     "count": 2
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "flint_and_steel",
+     "count": 1
+    },
+    {
+     "name": "furnace",
+     "count": 1
+    },
+    {
+     "name": "raw_iron",
+     "count": 8
+    },
+    {
+     "name": "diamond",
+     "count": 5
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    },
+    {
+     "name": "cobblestone",
+     "count": 183
+    },
+    {
+     "name": "cobbled_deepslate",
+     "count": 142
+    },
+    {
+     "name": "tuff",
+     "count": 18
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [],
+   "oxygen": 20,
+   "threats": []
+  },
+  "check": {
+   "anyHand": [
+    "dig",
+    "vertical",
+    "place",
+    "pillarUp",
+    "go",
+    "walk",
+    "wait",
+    "eat"
+   ]
+  },
+  "plan": [
+   {
+    "title": "地上で原木を取り作業台と3本目のツルハシ",
+    "kind": "wood",
+    "doneWhen": "have:crafting_table>=1&have:stone_pickaxe>=2"
+   },
+   {
+    "title": "黒曜石10とゲート",
+    "kind": "obsidian",
+    "doneWhen": "have:obsidian>=10"
+   }
+  ]
  }
 ]
