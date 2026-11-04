@@ -134,7 +134,8 @@ export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
   ...seed.kind === 'diamond' && seed.children ? [GOLDEN_BOOTS_NODE] : []]);
 }
 /**
- * The fields of the seed the gate's side changes: the village's beds (all of them: the End takes 10; the node itself is done at one), the food, and the iron before the diamonds
+ * The fields of the seed the gate's side changes: the village's beds (all of them: the End takes 10; the node itself is done at one),
+ * the food, and the iron before the diamonds
  * (about 30). The seed is
  * picked by its `kind` and its `doneWhen` (chapter 7), never by the sameness of its title: the village node, the
  * preparation of the
