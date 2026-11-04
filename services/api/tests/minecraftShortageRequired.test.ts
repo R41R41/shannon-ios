@@ -77,7 +77,7 @@ describe('a stage that says what its lack costs says it in two parts; the others
     const stone = [...KIT.filter(([name]) => name !== 'iron_sword'), ['stone_sword', 1]] as Array<[string, number]>;
     expect(requiredLack(readinessOf(frame(stone))!, ['portal'])).toContain('鉄の剣');
     expect(PREP_RULES_WORDS).toContain('目標: 金のブーツ（金 4 がそろう時）・水入りバケツ');
-    expect(PREP_RULES_WORDS).toMatch(/必須[^。]*[:：][^。]*鉄の剣/u);
+    expect(PREP_RULES_WORDS).toContain('そろうまで入らない。理由を書いても省けない）: 盾・鉄の剣・');
   });
   it('says the food as a required lack, not as a goal', () => {
     const hungry = preparationShortage({ dimension: 'overworld', counts: owned(KIT.filter(([name]) => name !== 'cooked_beef'), WORN), food: 15.6, nowKinds: ['portal'], worn: WORN_PIECES })!;
