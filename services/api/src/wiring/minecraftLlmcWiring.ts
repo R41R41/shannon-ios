@@ -88,7 +88,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     validateUpdate: validate,
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
-    follow: tree => followDimension(tree, doneFacts(observe())) ?? followBelow(tree, doneFacts(observe())) ?? followHeld(step.taskId, tree, doneFacts(observe()))
+    follow: tree => followDimension(tree, doneFacts(observe())) ?? followBelow(tree, doneFacts(observe()))
+      ?? followHeld(step.taskId, tree, doneFacts(observe()))
       ?? followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(
       doneFacts(observe())), leaf => lackBefore(observe(), tree, leaf)) });
   const worldOf = () => {

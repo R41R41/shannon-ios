@@ -6,12 +6,12 @@ import { doneFacts } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { v2tree } from './helpers/planTreeV2.js';
 
 /** Underground, the now does not stay on a preparation node of the descent (run61: seven minutes of coming up for wood the live called 「地下なので今は満たせない」). */
-const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,
-  facts: {}, state: { world: { dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, health: 20, food: 20, inventory: [], worn: '', ...world } as never } });
+const frame = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't',
+  connected: true, facts: {}, state: { world: { dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, health: 20, food: 20, inventory: [], worn: '', ...world } as never } });
 const node = (id: string, kind: PlanKind, order: number, doneWhen: string, extra: Partial<PlanNode> = {}): PlanNode =>
   ({ id, parentId: null, order, title: `節 ${id}`, state: 'continue', kind, ...(doneWhen ? { doneWhen } : {}), ...extra } as PlanNode);
-const tree = (current: string, prep: Partial<PlanNode> = {}) => v2tree({ revision: 1, current, nodes: [node('n8', 'prep_descent', 0, 'have:crafting_table>=1', prep),
-  node('p5', 'obsidian', 1, 'have:obsidian>=10'), node('p6', 'nether', 2, 'dim:the_nether')] });
+const tree = (current: string, prep: Partial<PlanNode> = {}) => v2tree({ revision: 1, current,
+  nodes: [node('n8', 'prep_descent', 0, 'have:crafting_table>=1', prep), node('p5', 'obsidian', 1, 'have:obsidian>=10'), node('p6', 'nether', 2, 'dim:the_nether')] });
 const below = (world: Record<string, unknown> = {}) => doneFacts(frame({ position: { x: 0, y: 10, z: 0 }, ...world }))!;
 
 describe('followBelow', () => {

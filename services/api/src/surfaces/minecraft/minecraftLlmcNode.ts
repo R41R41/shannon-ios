@@ -325,8 +325,7 @@ export function followNode(taskId: string, tree: PlanTree, underground = false, 
   if (!leaf || leaf.id === tree.current || alreadyInTarget()) return null;
   // Run 40: an open preparation node holds the current node (the work for another node may go on; the node that
 // asks for the food stays the now).
-  if (underground && holdsNow(leaf)) return null;
-  if (!underground && heldByPreparation(tree, leaf.id, questions)) return null;
+  if (underground ? holdsNow(leaf) : heldByPreparation(tree, leaf.id, questions)) return null;
   // Run 41 (the current node went p2.3 → p4.1 over p1.3 and p3, so no preparation node was ever the now and
 // `heldByPreparation` never held): the work for a node that
   // is no preparation, with a preparation node open before it, puts the current node on that preparation node (the
