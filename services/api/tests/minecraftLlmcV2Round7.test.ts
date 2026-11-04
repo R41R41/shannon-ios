@@ -79,7 +79,7 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
   });
   it('the beds node done by `have:bed>=1` and one or two', () => {
     expect(rows(on)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed>=1');
-    expect(rows(on).some(line => line.includes('ベッド1〜2'))).toBe(true);
+    expect(rows(on).some(line => line.includes('ベッド全部'))).toBe(true);
   });
   it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
     expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 30（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）');

@@ -134,7 +134,7 @@ export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
   ...seed.kind === 'diamond' && seed.children ? [GOLDEN_BOOTS_NODE] : []]);
 }
 /**
- * The fields of the seed the gate's side changes: the village's beds (one is enough), the food, and the iron before the diamonds
+ * The fields of the seed the gate's side changes: the village's beds (all of them: the End takes 10; the node itself is done at one), the food, and the iron before the diamonds
  * (about 30). The seed is
  * picked by its `kind` and its `doneWhen` (chapter 7), never by the sameness of its title: the village node, the
  * preparation of the
@@ -142,7 +142,7 @@ export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
  * one with the iron ingots in its condition).
  */
 function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
-  if (seed.kind === 'village') return { title: '村を回る（ベッド1〜2・干し草・畑・箱）' };
+  if (seed.kind === 'village') return { title: '村を回る（ベッド全部・干し草・畑・箱）' };
   if (seed.kind === 'prep_descent' && seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
   if (seed.kind === 'iron' && seed.doneWhen === IRON_TOP_DONE) {
     return { title: '鉄（約30・兜・胸・脚まで）', doneWhen: `have:iron_pickaxe&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };

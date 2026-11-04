@@ -205,7 +205,7 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     const titles = (tree: PlanTree) => tree.nodes.map(node => `${node.title}|${node.doneWhen ?? ''}`);
     const on = seedPlan('エンドラを倒して')!;
     expect(titles(on).some(line => line.includes('食料100点以上に足す'))).toBe(false);
-    expect(titles(on)).toContain('村を回る（ベッド1〜2・干し草・畑・箱）|');
+    expect(titles(on)).toContain('村を回る（ベッド全部・干し草・畑・箱）|');
     expect(titles(on).some(line => line.startsWith('出発の点検（ネザーの奥へ）'))).toBe(true);
     expect(gateFirst([]).length).toBe(0);
   });
@@ -215,7 +215,7 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     expect(on).toContain(STRATEGY_KNOWLEDGE_V2);
     expect(on).not.toContain('24〜36');
     expect(on).toContain('ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点');
-    expect(on).toContain('ベッドは村の家で 1〜2 つ');
+    expect(on).toContain('ベッドは村の家で見つけた分を全部');
     // run 26: no village and no sheep, the bed under ground is not gone down to; the bed's node is put off and written so.
     expect(on).toContain('村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む');
   });

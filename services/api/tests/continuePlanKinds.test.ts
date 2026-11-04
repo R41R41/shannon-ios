@@ -227,7 +227,7 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
   });
   it('the gate-first changes find their seeds by kind: one bed, the iron with the armour, the golden boots after the diamonds, no food 100 before the gate', () => {
     const titles = dragon.nodes.map(node => node.title);
-    expect(titles).toContain('村を回る（ベッド1〜2・干し草・畑・箱）');
+    expect(titles).toContain('村を回る（ベッド全部・干し草・畑・箱）');
     expect(titles).toContain('鉄（約30・兜・胸・脚まで）');
     expect(titles).toContain('鉄を約30個掘る（y=16前後・洞窟）');
     expect(titles).toContain('鉄の兜・胸当て・脚を作って着る');
