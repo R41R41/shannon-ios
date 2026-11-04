@@ -57,7 +57,7 @@ describe('the beds: enough with two (runs 36 and 37: 85–90 s fetching beds wit
   const BEDS = ['purple_bed×1', 'blue_bed×1', 'red_bed×1', 'cobblestone×12'];
   it('counts the beds in the stacks and says they are enough from two, not in front of the End', () => {
     expect(bedsIn(BEDS)).toBe(3);
-    expect(packLines(BEDS).at(-1)).toBe('ベッドは 3 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 8）');
+    expect(packLines(BEDS).at(-1)).toBe('ベッドは 3 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 6）');
     expect(packLines(['purple_bed×1', 'cobblestone×12']).join('\n')).not.toContain('ベッドは 3 個ある');
     expect(packLines(BEDS, { forEnd: true }).join('\n')).not.toContain('ベッドは 3 個ある');
   });

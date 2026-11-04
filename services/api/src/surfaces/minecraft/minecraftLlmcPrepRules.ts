@@ -62,8 +62,8 @@ export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food
 export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SPARE_PICKAXES, SHIELD, SWORD, ARMOUR, FOOTING, BOOTS],
   risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い。' + MAKE_IT };
 
-/** Owner 2026-11-04 (「ベッドと黒曜石を持っていく」): the dragon is killed with beds; 10 is the aim, 8 the least the End's gate lets in. */
-export const END_BEDS = 8;
+/** Owner 2026-11-04 (「ベッドと黒曜石を持っていく」): the dragon is killed with beds; 10 is the aim, 6 the least the End's gate lets in. */
+export const END_BEDS = 6;
 /** The obsidian the End fight takes (a bed's shield and its base), counted apart from the portal's ten: 12 is the aim, 8 the least. */
 export const END_OBSIDIAN = 8;
 const BEDS: PrepNeed = { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM };
@@ -149,7 +149,7 @@ export const PREP_RULES_WORDS = [
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
   ("- ベッドは村の家で 1〜2 つ（ベッドの節の doneWhen は " +
 "have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan_update に書く）。")
-    + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。エンドの竜戦はベッドで倒す（目標 10・最低 8、黒曜石も 8〜12）。',
+    + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。エンドの竜戦はベッドで倒す（目標 10・最低 6、黒曜石は 8〜12）。',
   PREP_REFERENCE,
 ].join('\n');
 
