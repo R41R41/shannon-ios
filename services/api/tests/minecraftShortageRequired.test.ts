@@ -86,10 +86,12 @@ describe('a stage that says what its lack costs says it in two parts; the others
   it('keeps the one line for the stages of the Nether\'s depth and the End', () => {
     const deep = preparationShortage({ dimension: 'the_nether', counts: owned([]), food: 10, nowKinds: null })!;
     expect(deep.startsWith('準備の不足（ネザーの奥へ）: ')).toBe(true);
-    for (const word of ['必須', '欠けたまま進むと', '目標']) expect(deep).not.toContain(word);
+    // The section audit of 11/5: the golden piece is a goal of the depth, said apart; no part is required with a cost.
+    for (const word of ['必須（', '欠けたまま進むと']) expect(deep).not.toContain(word);
     const end = preparationShortage({ dimension: 'overworld', counts: owned([['ender_eye', 3]]), food: 10, nowKinds: null })!;
     expect(end.startsWith('準備の不足（エンドへ）: ')).toBe(true);
-    expect(end).not.toContain('必須');
+    // The goals of a stage that says no cost are said apart (「目標（そろえば。必須ではない）」): no part says 必須（…に必ず）.
+    expect(end).not.toContain('必須（');
   });
 });
 
@@ -263,8 +265,9 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
   });
   it('asks the water bucket before the End: the stage\'s shortage line and the check node\'s condition', () => {
     const base = { dimension: 'overworld', food: 90, nowKinds: ['stronghold' as const] };
-    const kit: Array<[string, number]> = [['white_bed', 8], ['obsidian', 8], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64]];
+    const kit: Array<[string, number]> = [['white_bed', 8], ['obsidian', 8], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64], ['iron_sword', 1]];
     expect(preparationShortage({ ...base, counts: owned(kit) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
+    expect(preparationShortage({ ...base, counts: owned(kit.slice(0, -1)) })).toMatch(/^準備の不足（エンドへ）: 水入りバケツが無い。目標/u);
     expect(preparationShortage({ ...base, counts: owned([...kit, ['water_bucket', 1]]) })).toBeNull();
     expect(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
     const plan = seedPlan('エンドラを倒して')!;

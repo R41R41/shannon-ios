@@ -159,7 +159,9 @@ export function createReplanFlow(deps: ReplanDeps) {
     /** The look found a stall: the count starts again from nothing, and a stall a new plan answers waits for the next decision. */
     note(stall: Stall): void {
       resumeStalls(deps.taskId);
-      if (REPLAN_STALLS.has(stall.kind)) pending = { stall, at: deps.clock() };
+      // A pace stall never takes the place of another stall waiting for its ask (a death above all): it is the weakest sign.
+      const weaker = stall.kind === 'behind_pace' && pending !== null && pending.stall.kind !== 'behind_pace';
+      if (REPLAN_STALLS.has(stall.kind) && !weaker) pending = { stall, at: deps.clock() };
     },
     /**
      * At a decision's start: the strong model is asked when a stall waits and the bounds allow. A stall that the gap or the hour's count holds

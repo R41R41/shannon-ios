@@ -86,7 +86,9 @@ describe('walking the late-game seed with the frames of a run', () => {
     tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 20 }), mapLandmarks: [] }, { crystals: { remaining: 4 } });
     expect(state(tree, 'p10.2')).toBe('continue');
     tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [] }, { crystals: { remaining: 0 } });
-    expect(state(tree, 'p10.2')).toBe('done');
+    // The section audit of 11/5: the fallback is one node (crystals with the bow while the sword strikes the perched dragon), with no
+    // condition of its own: all crystals gone is no longer a step before the sword.
+    expect(state(tree, 'p10.2')).toBe('continue');
     expect(state(tree, 'p10')).toBe('continue');
     // the bed way (the first child, no condition: the kill is the body's record) stays the current node whatever the crystals say
     expect(tree.current).toBe('p10.1');
