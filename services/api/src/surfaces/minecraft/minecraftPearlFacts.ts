@@ -3,11 +3,12 @@ import { carried } from './minecraftConditions.js';
 /**
  * The pearls still to find, said as numbers beside the choices (the pearl forest scenes of 11/3: with 18 gold and 2 endermen in 10 minutes the
  * model fought on and never set the trade against the wait): how many are carried (pearls and eyes, an eye was a pearl), how many are
- * missing of the 14 the road aims at, and what the gold carried gives at a piglin's 16 ingots to one pearl on average. Only numbers the body
+ * missing of the 14 the road aims at, and what the gold carried gives at a piglin's 15.6 ingots to one pearl on average (S6 read the 1.21.11
+ * barter table: weight 10 of 469, 2 to 4 pearls). Only numbers the body
  * reported; it names no way to get them.
  */
 export const PEARL_TARGET = 14;
-const GOLD_PER_PEARL = 16;
+const GOLD_PER_PEARL = 15.6;
 
 /** The line for a decision in the Nether with rods in hand and pearls missing, or null. */
 export function pearlLine(counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
