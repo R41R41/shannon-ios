@@ -115,6 +115,44 @@ describe('stronghold from thrown eyes', () => {
     expect(stronghold([odd, { ...exactFrom(200, 0, truth), unit: { x: 0.6, z: 0.8 } }])).toBeNull();
   });
 
+  it.each([24, 32])('finds the lab target after %i m sideways, within the 128 m frame search radius', sideways => {
+    // Synthetic exact flights with S5's c1 start and /locate target, not a replay of the body's measured flights.
+    const start = { x: 135, z: 104 };
+    const truth = { x: -1072, z: 928 };
+    const first = exactFrom(start.x, start.z, truth);
+    const second = exactFrom(start.x - first.unit!.z * sideways, start.z + first.unit!.x * sideways, truth);
+    const fix = stronghold([first, second]);
+    expect(fix).not.toBeNull();
+    near(fix!.x, truth.x, 1);
+    near(fix!.z, truth.z, 1);
+    expect(fix!.throws).toBe(2);
+    expect(fix!.errorBlocks).toBeGreaterThan(60);
+    expect(fix!.errorBlocks).toBeLessThan(100);
+    expect(fix!.errorBlocks).toBeLessThan(128);
+    expect(stronghold([throwFrom(start.x, start.z, truth), second])).toBeNull();
+    expect(stronghold([first, { ...second, flew: 3 }])).toBeNull();
+  });
+
+  it('grows the error as precise crossings narrow, and still rejects crossings below 0.5 degrees or excessive error', () => {
+    const truth = { x: 0, z: -1460 };
+    const pair = (degrees: number, distance = 1460) => {
+      const target = { x: 0, z: -distance };
+      return [exactFrom(0, 0, target), exactFrom(distance * Math.tan(degrees * Math.PI / 180), 0, target)];
+    };
+    const wide = stronghold(pair(3))!;
+    const lab = stronghold(pair(0.9))!;
+    const narrow = stronghold(pair(0.51))!;
+    expect([wide, lab, narrow]).not.toContain(null);
+    near(lab.x, truth.x, 1);
+    near(lab.z, truth.z, 1);
+    expect(lab.errorBlocks).toBeGreaterThan(85);
+    expect(lab.errorBlocks).toBeLessThan(100);
+    expect(narrow.errorBlocks).toBeGreaterThan(lab.errorBlocks * 1.7);
+    expect(lab.errorBlocks).toBeGreaterThan(wide.errorBlocks * 3);
+    expect(stronghold(pair(0.49))).toBeNull();
+    expect(stronghold(pair(0.51, 8000))).toBeNull();
+  });
+
   it('does not claim more than its lines agree on (two parallel lines 20 m apart and one across)', () => {
     const lines: EyeThrow[] = [{ x: 0, z: 0, bearingDeg: 90, flew: 12, broke: false }, { x: 30, z: 30, bearingDeg: 0, flew: 12, broke: false },
       { x: 0, z: 20, bearingDeg: 90, flew: 12, broke: false }];
@@ -137,10 +175,12 @@ describe('stronghold from thrown eyes', () => {
     expect(nextThrowPlaces(stopped, 0)).toEqual([]);
   });
 
-  it('suggests wider places to throw from after a line read exactly', () => {
+  it('starts 24 m sideways after a precise line, then widens when no point is found', () => {
     const places = nextThrowPlaces(exactFrom(0, 0, { x: 0, z: -2000 }), 0);
-    expect(places.map(place => place.from)).toEqual([200, 200]);
-    expect(nextThrowPlaces(exactFrom(0, 0, { x: 0, z: -2000 }), 2).map(place => place.from)).toEqual([800, 800]);
+    expect(places).toEqual([{ x: 24, z: 0, from: 24 }, { x: -24, z: 0, from: 24 }]);
+    for (const [failed, distance] of [[1, 200], [2, 400], [3, 800], [9, 800]] as const) {
+      expect(nextThrowPlaces(exactFrom(0, 0, { x: 0, z: -2000 }), failed).map(place => place.from)).toEqual([distance, distance]);
+    }
   });
 
   it('suggests a place on the line toward the point, short of it', () => {

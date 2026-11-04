@@ -101,7 +101,12 @@ const BEYOND: readonly PlanSeed[] = [
       node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12' }),
       node('弓と矢（糸・棒・火打石・羽根）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
-    node('目玉の交点へ行き、地下の枠の部屋を見つける', { kind: 'stronghold', doneWhen: 'see:end_portal_frame', note: '交点・誤差・次の投げ位置は live の目玉の帳簿' }),
+    node('目玉の交点へ行き、地下の枠の部屋を見つける', { kind: 'stronghold', doneWhen: 'see:end_portal_frame',
+      note: '交点・誤差・次の投げ位置は live の目玉の帳簿。',
+      caution: ['ネザー経由なら、アイの交点が出た後にネザーへ入り直し、掘る前にネザー側のゲート座標を控える。',
+        '入った側（1 つ目のゲートの向こう側）の枠の黒曜石 10 は、ダイヤのツルハシで回収できる（1 個 9.4 秒、計約 94 秒）。',
+        '回収した 10 は (x/8, z/8) の 2 つ目のゲートの分で、竜戦用の 12 を残せる（エンドの入場は戦い用 8 以上）。',
+        '枠を回収したゲートは帰りには使わない。'] }),
     node('枠にアイをはめてポータルを開く', { kind: 'stronghold', doneWhen: 'see:end_portal' })] }),
   node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ',
     caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）', '橋の先端（幅1）に長居せず、玉が来る向きを見て渡る。積める物を残す'] }),
