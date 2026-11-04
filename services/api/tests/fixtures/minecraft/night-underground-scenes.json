@@ -377,5 +377,221 @@
     "vertical"
    ]
   }
+ },
+ {
+  "name": "surface-zombies-hp20",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "地上へ出た（洞窟の口）",
+   "ゾンビが 2 体、5m と 9m"
+  ],
+  "expect": "夜の地上、ゾンビ 2 体が近い。体力 20。run61 は d0185 で「ゾンビを倒す」を選び 20 秒で死んだ。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 72,
+    "z": 50.5
+   },
+   "health": 20,
+   "food": 17,
+   "saturation": 3,
+   "time": "14300",
+   "inside": "地上（夜）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [
+    {
+     "id": 711,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 5,
+     "position": {
+      "x": 103,
+      "y": 72,
+      "z": 54
+     }
+    },
+    {
+     "id": 712,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 9,
+     "position": {
+      "x": 108,
+      "y": 72,
+      "z": 45
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ },
+ {
+  "name": "surface-zombies-hp14",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "地上へ出た（洞窟の口）",
+   "ゾンビが 2 体、5m と 9m"
+  ],
+  "expect": "夜の地上、ゾンビ 2 体が近い。体力 14。run61 は d0185 で「ゾンビを倒す」を選び 20 秒で死んだ。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 72,
+    "z": 50.5
+   },
+   "health": 14,
+   "food": 17,
+   "saturation": 3,
+   "time": "14300",
+   "inside": "地上（夜）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [
+    {
+     "id": 711,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 5,
+     "position": {
+      "x": 103,
+      "y": 72,
+      "z": 54
+     }
+    },
+    {
+     "id": 712,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 9,
+     "position": {
+      "x": 108,
+      "y": 72,
+      "z": 45
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
  }
 ]
