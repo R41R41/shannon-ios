@@ -24,8 +24,8 @@ export function nightArmsLine(world: Record<string, unknown>, counts: ReadonlyMa
 
 /** The bed in the pack. */
 const BED = /(?:^|:)[a-z_]+_bed$/u;
-/** The night this close, or through it, is when a bed can be used. */
-const BED_NEAR_TICKS = 1_200;
+/** A bed can be slept in from tick 12,542 (the game's dusk, before the hostiles of 13,000); the line comes a minute before that. */
+const BED_FROM = 12_542, BED_NEAR_TICKS = 1_200;
 const BED_ENEMY_BLOCKS = 8;
 
 const enemyNear = (world: Record<string, unknown>): boolean => (Array.isArray(world.nearbyThreats) ? world.nearbyThreats : []).some(item => {
@@ -43,7 +43,8 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
   const bed = [...counts].find(([name, count]) => BED.test(name) && count > 0);
   if (!bed || enemyNear(world)) return null;
   const tick = Number(world.time.trim()) % DAY_LENGTH;
-  if (tick >= NIGHT_TO || tick < NIGHT_FROM - BED_NEAR_TICKS) return null;
-  const when = tick >= NIGHT_FROM ? `夜（朝まで ${minutes(NIGHT_TO - tick)}）` : `夜まで ${minutes(NIGHT_FROM - tick)}`;
-  return `${when}: ベッドを持っている（${bed[0].replace(/^minecraft:/u, '')}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる`;
+  if (tick >= NIGHT_TO || tick < BED_FROM - BED_NEAR_TICKS) return null;
+  const name = bed[0].replace(/^minecraft:/u, '');
+  if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。寝れば夜が飛び、朝になる`;
+  return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる`;
 }
