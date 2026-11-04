@@ -13,7 +13,15 @@ import { feetOf, lowestReach, readinessOf } from './minecraftLlmcReadiness.js';
 export const RETURN_MINUTES = 5;
 export const RETURN_BLOCKS = 16;
 export const RETURN_HOLDS = 2;
+/** Words that go to die whatever is carried. */
 const SUICIDE = /わざと(?:死|倒れ)|自殺|(?:倒れて|死んで|落ちて|燃えて)(?:地上|ベッド|最初の場所|リスポーン|再開|戻)|リスポーン(?:する|で戻|して戻)/u;
+/**
+ * The run62 whys of 03:47–03:53 (S0's reading of the trail), said with nothing in the pack: a hazard and the restart (「下の溶岩へ降り地上で再開」,
+ * 「縁から落ちて地上で再開」, 「溶岩で戻る」), into the lava (「溶岩へ落ちる」, 「溶岩の上へ」), or waiting for an enemy (「動けない。敵が来るのを待つ」).
+ * Read only while the pack holds no pickaxe, sword or axe, so that a careful line of ordinary work is not taken for one.
+ */
+const BARE_SUICIDE = /(?:溶岩|マグマ|落下|落ち|縁|崖|下へ)[^。]*?(?:再開|地上)|(?:溶岩|マグマ)(?:へ落ち|の(?:上|縁)へ|で戻|へ向|へ掘り)|マグマ床へ|敵(?:を|が来るのを)待つ/u;
+const TOOL = /_(?:pickaxe|sword|axe)$/u;
 const IRON_BLADE = /^(?:iron|diamond|netherite)_sword$/u;
 const held = new Map<string, number>();
 
@@ -22,11 +30,13 @@ export function forgetDeathHolds(): void { held.clear(); }
 
 const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
 
-/** The act whose why says it goes to die: the whole act, or null. */
-export function suicideHold(input: unknown): { hand: number; kind: string; line: string } | null {
+/** The act whose why says it goes to die (the broad words only with no tool in the pack): the whole act, or null. */
+export function suicideHold(input: unknown, frame: BodyObservation | null = null): { hand: number; kind: string; line: string } | null {
   const act = objectOf(input), why = typeof act?.why === 'string' ? act.why : '';
   const hands = Array.isArray(act?.hands) ? act.hands : [];
-  if (!hands.length || !SUICIDE.test(why)) return null;
+  const counts = readinessOf(frame)?.counts;
+  const bare = !!counts && ![...counts].some(([name, count]) => count > 0 && TOOL.test(name));
+  if (!hands.length || !(SUICIDE.test(why) || (bare && BARE_SUICIDE.test(why)))) return null;
   return { hand: 1, kind: String(objectOf(hands[0])?.do ?? 'act'),
     line: 'わざと死ぬ手は送らない（死ぬとこの通しはアウトで、持ち物も消える）。持ち物が無くても、帰りのゲートか安全な所へ歩いて戻り、木・石から作り直す' };
 }

@@ -62,7 +62,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
   const counted = countedHolds(input, frame, taskId);
   found.push(...counted.map(item => item.held));
-  for (const [code, hold] of [['eye_kept', eyeThrowHold(input, frame, taskId)], ['no_suicide', suicideHold(input)]] as const) {
+  for (const [code, hold] of [['eye_kept', eyeThrowHold(input, frame, taskId)], ['no_suicide', suicideHold(input, frame)]] as const) {
     if (hold) found.push({ hand: hold.hand, code, kind: hold.kind, line: `手 ${hold.hand} ${hold.kind}: ${hold.line}。` });
   }
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
