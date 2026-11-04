@@ -77,13 +77,17 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   // coordinator's pace for each stretch, a ruler and nothing else; the Nether's own target above is the same plan's (47 minutes).
   { name: 'ネザー要塞', seconds: 3_200, doneWhen: 'see:fortress', late: true },
   { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_700, doneWhen: 'have:blaze_rod>=7', late: true },
-  { name: 'エンダーパール 12 個', short: 'パール12', seconds: 6_000, doneWhen: 'have:ender_pearl>=12', late: true },
-  { name: 'エンダーアイ 12 個', short: 'アイ12', seconds: 6_700, doneWhen: 'have:ender_eye>=12', late: true },
-  { name: 'エンドの点検（ベッド 4・水バケツ・食料 80 点）', short: '点検', seconds: 7_500, doneWhen: 'food>=80&have:bed>=4&have:water_bucket', late: true },
-  { name: 'ポータルの枠の部屋', short: '枠の部屋', seconds: 8_300, doneWhen: 'see:end_portal_frame', late: true },
-  { name: 'エンド', seconds: 8_700, doneWhen: 'dim:the_end', late: true },
+  { name: 'エンダーパール 14 個', short: 'パール14', seconds: 6_000, doneWhen: 'have:ender_pearl>=14', late: true },
+  { name: 'エンダーアイ 14 個', short: 'アイ14', seconds: 6_700, doneWhen: 'have:ender_eye>=14', late: true },
+  // 11/4 (the dragon is killed with beds): the check takes beds 8 (aim 10) and obsidian 8 (aim 12) on top of the old four beds,
+  // about +300 s (obsidian 12 at 9.4 s each with the diamond pickaxe about 110 s, the wool of about 5 more beds 120-200 s; estimates):
+  // the stretches after it move by the same.
+  { name: 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 80 点）', short: '点検', seconds: 7_800,
+    doneWhen: 'food>=80&have:bed>=8&have:obsidian>=8&have:water_bucket', late: true },
+  { name: 'ポータルの枠の部屋', short: '枠の部屋', seconds: 8_600, doneWhen: 'see:end_portal_frame', late: true },
+  { name: 'エンド', seconds: 9_000, doneWhen: 'dim:the_end', late: true },
   // The kill ends the task: the frame says no more than the End's own count, so this one is never reached here, only said as the next target.
-  { name: '竜の討伐', short: '討伐', seconds: 9_300, doneWhen: 'crystals<=0&dim:the_end', late: true, holds: () => false },
+  { name: '竜の討伐', short: '討伐', seconds: 9_600, doneWhen: 'crystals<=0&dim:the_end', late: true, holds: () => false },
 ]);
 /** The milestones whose item stays in the pack (a bed, the pickaxes, the bucket): one passed over is still to do. */
 const KEPT_MILESTONES: ReadonlySet<string> = new Set(['have:bed', 'have:iron_pickaxe', 'have:bucket', 'have:diamond_pickaxe']);

@@ -46,9 +46,9 @@ const TRIP_PICKAXE: PrepNeed = { label: 'ツルハシ（ダイヤ 1 か鉄 3）'
  * first): two besides the one in use.
  */
 const SPARE_PICKAXES: PrepNeed = { label: '石以上のツルハシ（予備 2 本を含め 3 本）', count: 3, pattern: /^(?:stone|iron|diamond|netherite)_pickaxe$/u };
-// A goal, as the rules' words say (the coordinator's list of what is required leaves the sword out; Codex 7th review: the table and the
-// words disagreed).
-const SWORD: PrepNeed = { label: '剣', count: 1, pattern: /^(?:stone|iron|diamond|netherite)_sword$/u, goal: true };
+// Required since 2026-11-04 (the coordinator, the whole-run audit: run60 and run61 met the night with a stone sword or none after the iron was
+// smelted; a stone sword passed this gate and put the night's warning out): the iron sword, two iron, is made with the armour before the gate.
+const SWORD: PrepNeed = { label: '鉄の剣', count: 1, pattern: /^(?:iron|diamond|netherite)_sword$/u };
 const FOOTING: PrepNeed = { label: '足場のブロック', count: 64, pattern: BLOCKS };
 
 /**
@@ -62,7 +62,13 @@ export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food
 export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SPARE_PICKAXES, SHIELD, SWORD, ARMOUR, FOOTING, BOOTS],
   risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い。' + MAKE_IT };
 
-const BEDS: PrepNeed = { label: 'ベッド', count: 4, pattern: BED_ITEM };
+/** Owner 2026-11-04 (「ベッドと黒曜石を持っていく」): the dragon is killed with beds; 10 is the aim, 8 the least the End's gate lets in. */
+export const END_BEDS = 8;
+/** The obsidian the End fight takes (a bed's shield and its base), counted apart from the portal's ten: 12 is the aim, 8 the least. */
+export const END_OBSIDIAN = 8;
+const BEDS: PrepNeed = { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM };
+export const FIGHT_OBSIDIAN_LABEL = '黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）';
+const FIGHT_OBSIDIAN: PrepNeed = { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u };
 const WATER_BUCKET: PrepNeed = { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u };
 /** What a pillar, a bridge or a cover is made of in the End: the footing's blocks and obsidian. */
 const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）', count: 64, pattern: new RegExp(`${BLOCKS.source}|^obsidian$`, 'u') };
@@ -71,7 +77,7 @@ const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）
  * while the blocks to stand and cover on, the water bucket, the beds or the food are missing. What is missing is said; how to gather it is the
  * decision's.
  */
-export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80, needs: [STACKABLE, WATER_BUCKET, BEDS],
+export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80, needs: [STACKABLE, WATER_BUCKET, BEDS, FIGHT_OBSIDIAN],
   risk: 'エンドは虚空の島で、戻る道は開いたポータルだけ。積める物・水バケツ・ベッド・食料が無いと、虚空に落ちるか竜に押されて死に、ここまでの装備と時間を失う。' + MAKE_IT };
 
 /**
@@ -135,16 +141,16 @@ export const PREP_RULES_WORDS = [
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱や廃坑の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
-  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
+  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾・鉄の剣・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
     + '・石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）・足場のブロック 64（丸石 128 あると橋で尽きない）・食料 40 点。'
     + '鉄のツルハシは 1 本が耐久 250 で、ネザーの岩を掘り続けると壊れて止まった（鉄はネザーに無い）。'
-    + '目標: 金のブーツ（金 4 がそろう時）・剣・水入りバケツ・黒曜石 10・火打ち金・食料 250 点前後（干し草 1 個でパン 3）。必須が欠けたまま入ると、ブレイズ・ガスト・ウィザースケルトンの傷が重なり、死ねばダイヤのツルハシと黒曜石を失う。'
+    + '目標: 金のブーツ（金 4 がそろう時）・水入りバケツ・黒曜石 10・火打ち金・食料 250 点前後（干し草 1 個でパン 3）。必須が欠けたまま入ると、ブレイズ・ガスト・ウィザースケルトンの傷が重なり、死ねばダイヤのツルハシと黒曜石を失う。'
     + 'ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る。'
     + '必須が作れない・材料が無いと見えた時は、後回しにして先へ進まない。材料を取りに行く（盾なら木と鉄 1。作る手が失敗したら行の理由（missing: …）を読み、別の材料の形を試す）。',
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
-  ("- ベッドは村の家で 1〜2 つ（ベッドの節の doneWhen は " +
+  ("- ベッドは村の家で見つけた分を全部（ベッドの節の doneWhen は " +
 "have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan_update に書く）。")
-    + '羊は見かけたら羊毛 3 を取り、エンドの前に板 3 と作って 4〜6 にする。',
+    + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。エンドの竜戦はベッドで倒す（目標 10・最低 8、黒曜石も 8〜12）。',
   PREP_REFERENCE,
 ].join('\n');
 
@@ -159,4 +165,5 @@ export const PLAN_PREP_WORDS = [
   '- 食料の節の where は、食料のある所（箱・畑・干し草の座標）にする。ベッドの座標にしない。見当たらなければ ""。',
   '- 準備の節の doneWhen は観測の形で書く: 例 "food>=40&have:crafting_table|food>=40&have:planks>=4"。',
   '- 弓と矢（クリスタルとエンダーマンに要る）の材料は序盤の道中で集める。食料か鉄の節の caution に「糸3・羽根・火打石を拾う」と書く（後の節に回さない）。',
+  '- エンダーマン 1 体は鉄の剣で約 7 打撃かかり、そのたびに剣の耐久（250）が減る: パール狩りの前に、予備の鉄の剣をもう 1 本作る（鉄の節の caution に書く）。',
 ].join('\n');

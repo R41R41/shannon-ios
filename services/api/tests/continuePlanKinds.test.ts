@@ -227,7 +227,7 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
   });
   it('the gate-first changes find their seeds by kind: one bed, the iron with the armour, the golden boots after the diamonds, no food 100 before the gate', () => {
     const titles = dragon.nodes.map(node => node.title);
-    expect(titles).toContain('村を回る（ベッド1〜2・干し草・畑・箱）');
+    expect(titles).toContain('村を回る（ベッド全部・干し草・畑・箱）');
     expect(titles).toContain('鉄（約30・兜・胸・脚まで）');
     expect(titles).toContain('鉄を約30個掘る（y=16前後・洞窟）');
     expect(titles).toContain('鉄の兜・胸当て・脚を作って着る');
@@ -328,8 +328,8 @@ describe('the live state: the facts are the code\'s own, outside the model\'s si
   });
   it('the kinds decide the add-ons of the pack and the route\'s goal', () => {
     const body = { state: { dimension: 'overworld' }, inventory: ['red_bed×3'], planFacts: planFacts('stronghold') };
-    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body }).live.body)).not.toContain('ベッドは足りている');
-    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body: { ...body, planFacts: planFacts('wood') } }).live.body)).toContain('ベッドは足りている');
+    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body }).live.body)).not.toContain('ベッドは 3 個ある');
+    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body: { ...body, planFacts: planFacts('wood') } }).live.body)).toContain('ベッドは 3 個ある');
   });
 });
 

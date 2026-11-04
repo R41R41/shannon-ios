@@ -113,10 +113,10 @@ export const MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ゲート', condition: '枠を建てて火をつけ、入る', why: 'ネザーへの入口', done: nether, anchor: true },
   { name: 'ネザー', condition: 'ネザーに入った', why: '要塞とブレイズはネザーにだけある', done: nether, anchor: true },
   { name: 'ネザー要塞', condition: 'ブレイズロッドを持つ', why: 'ブレイズは要塞にだけ湧く', done: facts => has(facts, BLAZE) || eyeMade(facts), anchor: true },
-  { name: 'ブレイズ', condition: 'ロッド6本分（パウダー12、目安は8本）', why: 'アイ12個にパウダーが12要る', anchor: true,
-    done: facts => sum(facts, [/^blaze_rod$/u, 2], [/^blaze_powder$/u, 1], [EYE, 1]) >= 12 || eyeMade(facts) },
+  { name: 'ブレイズ', condition: 'ロッド7本分（パウダー14）', why: 'アイ14個にパウダーが14要る', anchor: true,
+    done: facts => sum(facts, [/^blaze_rod$/u, 2], [/^blaze_powder$/u, 1], [EYE, 1]) >= 14 || eyeMade(facts) },
   // Not an anchor: pearls gathered first (endermen) must not pass the blaze rods still missing.
-  { name: 'パール', condition: 'パール12個分', why: 'アイの材料', done: facts => sum(facts, [/^ender_pearl$/u, 1], [EYE, 1]) >= 12 || eyeMade(facts) },
+  { name: 'パール', condition: 'パール14個分', why: 'アイの材料', done: facts => sum(facts, [/^ender_pearl$/u, 1], [EYE, 1]) >= 14 || eyeMade(facts) },
   // Eyes break as they are thrown and go into the frames: eight are enough to call this step passed (`EYES_TO_SEARCH`).
   { name: 'アイ', condition: 'ender_eye を12個', why: '要塞を探し、ポータルの枠を埋める', done: facts => has(facts, EYE, 8), anchor: true },
   { name: 'エンド要塞', condition: '持ち物では見えない', why: 'エンドへのポータルがある', done: null },

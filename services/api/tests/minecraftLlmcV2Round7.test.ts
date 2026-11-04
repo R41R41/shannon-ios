@@ -57,14 +57,14 @@ describe('the beds: enough with two (runs 36 and 37: 85–90 s fetching beds wit
   const BEDS = ['purple_bed×1', 'blue_bed×1', 'red_bed×1', 'cobblestone×12'];
   it('counts the beds in the stacks and says they are enough from two, not in front of the End', () => {
     expect(bedsIn(BEDS)).toBe(3);
-    expect(packLines(BEDS).at(-1)).toBe('ベッドは足りている（3）。これ以上取りに行かない（エンドの前に羊毛から 4〜6 に増やす）');
-    expect(packLines(['purple_bed×1', 'cobblestone×12']).join('\n')).not.toContain('ベッドは足りている');
-    expect(packLines(BEDS, { forEnd: true }).join('\n')).not.toContain('ベッドは足りている');
+    expect(packLines(BEDS).at(-1)).toBe('ベッドは 3 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 8）');
+    expect(packLines(['purple_bed×1', 'cobblestone×12']).join('\n')).not.toContain('ベッドは 3 個ある');
+    expect(packLines(BEDS, { forEnd: true }).join('\n')).not.toContain('ベッドは 3 個ある');
   });
   it('is in the rewritten live state, and not when the plan\'s node is the End\'s', () => {
     const live = (planNow: string, kind: PlanKind) => rewriteLlmcLive({ body: { map: undefined, state: { dimension: 'overworld' }, planNow, planFacts: planFacts(kind), inventory: BEDS }, plan: {} }).live.body as Record<string, unknown>;
-    expect((live('[p2.1] 村を回る', 'village').pack as string[]).join('\n')).toContain('ベッドは足りている（3）');
-    expect((live('[p17] エンドへ: アイをはめる', 'stronghold').pack as string[]).join('\n')).not.toContain('ベッドは足りている');
+    expect((live('[p2.1] 村を回る', 'village').pack as string[]).join('\n')).toContain('ベッドは 3 個ある');
+    expect((live('[p17] エンドへ: アイをはめる', 'stronghold').pack as string[]).join('\n')).not.toContain('ベッドは 3 個ある');
   });
 });
 
@@ -79,7 +79,7 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
   });
   it('the beds node done by `have:bed>=1` and one or two', () => {
     expect(rows(on)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed>=1');
-    expect(rows(on).some(line => line.includes('ベッド1〜2'))).toBe(true);
+    expect(rows(on).some(line => line.includes('ベッド全部'))).toBe(true);
   });
   it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
     expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 30（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2）');

@@ -1,0 +1,686 @@
+[
+ {
+  "name": "dusk-underground-nobed",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "ダイヤのツルハシができた",
+   "金鉱石 2 個を持っている"
+  ],
+  "expect": "夜まで 1 分、地下 y=10 の洞窟で金鉱石を掘っている。ベッド無し: 夜の前に地上へ出る／ここで塞ぐ／明かりを置く、のどれかを選ぶか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 10,
+    "z": 50.5
+   },
+   "health": 20,
+   "food": 17,
+   "saturation": 3,
+   "time": "11800",
+   "inside": "洞窟の中（暗い）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ },
+ {
+  "name": "dusk-underground-bed",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "ダイヤのツルハシができた",
+   "金鉱石 2 個を持っている"
+  ],
+  "expect": "同じでベッドあり: 地上へ出て寝る・ここで置いて寝る、が出るか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 10,
+    "z": 50.5
+   },
+   "health": 20,
+   "food": 17,
+   "saturation": 3,
+   "time": "11800",
+   "inside": "洞窟の中（暗い）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ },
+ {
+  "name": "night-underground-exits-failed",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "go 止まった: 洞窟を避けた階段で行き止まり（1 回目）",
+   "vertical up 止まった: 水源の手前（2 回目）",
+   "go 止まった: 水の階段から東へ出られず（3 回目）"
+  ],
+  "expect": "夜の洞窟、地上へ出る手が 3 回続けて失敗。別の出方（掘り上がる・柱）／塞いで朝を待つ、に変えるか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 21,
+    "z": 50.5
+   },
+   "health": 18,
+   "food": 17,
+   "saturation": 3,
+   "time": "14000",
+   "inside": "洞窟の中（暗い）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [
+    {
+     "id": 701,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 12,
+     "position": {
+      "x": 92,
+      "y": 21,
+      "z": 48
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ },
+ {
+  "name": "surface-zombies-night",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "地上へ出た（洞窟の口）"
+  ],
+  "expect": "夜の地上に出た直後、ゾンビ 2 体が近い。体力 9。戦う・塞ぐ・離れる、のどれか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 72,
+    "z": 50.5
+   },
+   "health": 9,
+   "food": 17,
+   "saturation": 3,
+   "time": "14300",
+   "inside": "地上（夜）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [
+    {
+     "id": 711,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 5,
+     "position": {
+      "x": 103,
+      "y": 72,
+      "z": 54
+     }
+    },
+    {
+     "id": 712,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 9,
+     "position": {
+      "x": 108,
+      "y": 72,
+      "z": 45
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ },
+ {
+  "name": "surface-zombies-hp20",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "地上へ出た（洞窟の口）",
+   "ゾンビが 2 体、5m と 9m"
+  ],
+  "expect": "夜の地上、ゾンビ 2 体が近い。体力 20。run61 は d0185 で「ゾンビを倒す」を選び 20 秒で死んだ。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 72,
+    "z": 50.5
+   },
+   "health": 20,
+   "food": 17,
+   "saturation": 3,
+   "time": "14300",
+   "inside": "地上（夜）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [
+    {
+     "id": 711,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 5,
+     "position": {
+      "x": 103,
+      "y": 72,
+      "z": 54
+     }
+    },
+    {
+     "id": 712,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 9,
+     "position": {
+      "x": 108,
+      "y": 72,
+      "z": 45
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ },
+ {
+  "name": "surface-zombies-hp14",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "地上へ出た（洞窟の口）",
+   "ゾンビが 2 体、5m と 9m"
+  ],
+  "expect": "夜の地上、ゾンビ 2 体が近い。体力 14。run61 は d0185 で「ゾンビを倒す」を選び 20 秒で死んだ。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 72,
+    "z": 50.5
+   },
+   "health": 14,
+   "food": 17,
+   "saturation": 3,
+   "time": "14300",
+   "inside": "地上（夜）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [
+    {
+     "id": 711,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 5,
+     "position": {
+      "x": 103,
+      "y": 72,
+      "z": 54
+     }
+    },
+    {
+     "id": 712,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 9,
+     "position": {
+      "x": 108,
+      "y": 72,
+      "z": 45
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ },
+ {
+  "name": "night-underground-bed",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "ダイヤのツルハシができた",
+   "金鉱石 2 個を持っている"
+  ],
+  "expect": "夜の洞窟、ベッドを持っている。寝る手（place bed → use）が出るか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 10,
+    "z": 50.5
+   },
+   "health": 20,
+   "food": 17,
+   "saturation": 3,
+   "time": "14000",
+   "inside": "洞窟の中（暗い）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
+ }
+]

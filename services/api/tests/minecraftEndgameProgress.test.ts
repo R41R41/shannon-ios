@@ -64,7 +64,7 @@ describe('walking the late-game seed with the frames of a run', () => {
     tree = at({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: items({ ender_eye: 12, cooked_beef: 20 }), mapLandmarks: [] });
     expect(state(tree, 'p6')).toBe('done');
     expect(tree.current).toBe('p7.1');
-    tree = at({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: items({ ender_eye: 12, cooked_beef: 20, white_bed: 4, bow: 1, arrow: 40 }), mapLandmarks: [] });
+    tree = at({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: items({ ender_eye: 12, cooked_beef: 20, white_bed: 10, obsidian: 12, bow: 1, arrow: 40 }), mapLandmarks: [] });
     expect(state(tree, 'p7')).toBe('done');
     expect(tree.current).toBe('p8.1');
     // far from the room nothing of the stronghold closes; at the room the frames close its first node
@@ -84,11 +84,12 @@ describe('walking the late-game seed with the frames of a run', () => {
     expect(state(tree, 'p9')).toBe('done');
     expect(tree.current).toBe('p10.1');
     tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 20 }), mapLandmarks: [] }, { crystals: { remaining: 4 } });
-    expect(state(tree, 'p10.1')).toBe('continue');
+    expect(state(tree, 'p10.2')).toBe('continue');
     tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [] }, { crystals: { remaining: 0 } });
-    expect(state(tree, 'p10.1')).toBe('done');
+    expect(state(tree, 'p10.2')).toBe('done');
     expect(state(tree, 'p10')).toBe('continue');
-    expect(tree.current).toBe('p10.2');
+    // the bed way (the first child, no condition: the kill is the body's record) stays the current node whatever the crystals say
+    expect(tree.current).toBe('p10.1');
   });
 
   it('keeps the meter on the later milestones: the next target after the Nether is the fortress, then the rods, and so on', () => {

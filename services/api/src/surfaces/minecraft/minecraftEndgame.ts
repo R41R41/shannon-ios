@@ -5,7 +5,9 @@ import { createBlazeWatch } from './minecraftBlazeFacts.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
 import { crystalLine, deathLine, dragonApproachLine, dragonLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
+import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
 import { pearlLine } from './minecraftPearlFacts.js';
+import { undergroundInOverworld } from './minecraftPlanDone.js';
 
 /**
  * What a task that goes for the dragon keeps and says of the way after the Nether, as facts for the live state (one object a task, made
@@ -38,12 +40,14 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
   const death = some(deathLine(world));
+  const night = [...some(nightArmsLine(world, facts.counts, facts.dimension, undergroundInOverworld(facts))),
+    ...some(nightBedLine(world, facts.counts, facts.dimension))];
   const places = some(placeLine(world));
   const pearls = some(pearlLine(facts.counts, facts.dimension));
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true))];
-  return { lines: [...fight, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
-    short: [...urgent, ...some(blaze), ...frames, ...death] };
+  return { lines: [...night, ...fight, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
+    short: [...night, ...urgent, ...some(blaze), ...frames, ...death] };
 }
 
 /** The ledger's lines while the stronghold is still to be found: in the overworld, before the portal room's frames are in view. */

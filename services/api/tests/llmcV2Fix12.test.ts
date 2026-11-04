@@ -64,7 +64,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     expect(PREP_RULES_WORDS).toContain('靴は鉄でなく金のブーツ（金の延べ棒 4）');
     const plan = ownFirstPlanSystem();
     expect(plan).toContain(PREP_RULES_WORDS);
-    for (const old of ['鉄 24〜36', '24〜36 個', 'ネザーの前の鉄は約 10', '防具は箱で見つけた物か余裕がある時だけ', 'ベッド全部']) expect(plan, old).not.toContain(old);
+    for (const old of ['鉄 24〜36', '24〜36 個', 'ネザーの前の鉄は約 10', '防具は箱で見つけた物か余裕がある時だけ']) expect(plan, old).not.toContain(old);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(PREP_RULES_WORDS);
   });
 });
