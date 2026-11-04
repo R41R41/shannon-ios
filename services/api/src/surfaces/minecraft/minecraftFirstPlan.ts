@@ -83,7 +83,9 @@ const BEYOND: readonly PlanSeed[] = [
       node('足場のブロック64（橋と囲い）', { kind: 'other', doneWhen: 'have:cobblestone>=64|have:netherrack>=64|have:cobbled_deepslate>=64' }),
       node('かまどで鉄を焼き盾', { kind: 'other', doneWhen: 'have:shield' }), node('食料が100点に足りなければ戻って狩る', { kind: 'food', doneWhen: 'food>=100' }),
       node('金の防具を1つ着る（ピグリンが襲わない）', { kind: 'other', doneWhen: 'have:gold_armor' })] }),
-  node('ネザー要塞を探す', { kind: 'fortress', note: '帰りのゲート座標を控える。432m区画の要塞・砦・未確認を見る。手がかりが無ければ南北から', doneWhen: 'see:fortress',
+  node('ネザー要塞を探す', { kind: 'fortress', note: '帰りのゲート座標を控える。432m区画の要塞・砦・未確認を見る。手がかりが無ければ南北から',
+    // S5's rig of 11/5: with 7 rods in hand the node held and she went to the fortress again; the rods or an eye close it too.
+    doneWhen: 'see:fortress|have:blaze_rod>=7|have:ender_eye>=1',
     caution: ['橋の下は溶岩のことがある。足元と両脇を確かめて渡る', '遠い go に canDig[netherrack,basalt,blackstone] canPlace[cobblestone,netherrack]',
       'maxDig 200・maxPlace 100・seconds 100〜120。止まったら行の通りに直して同じ go'] }),
   node('ブレイズロッド7以上', { kind: 'blaze', target: { item: 'blaze_rod', count: 7 }, doneWhen: 'have:blaze_rod>=7', note: '粉にするのは7本そろってから',
