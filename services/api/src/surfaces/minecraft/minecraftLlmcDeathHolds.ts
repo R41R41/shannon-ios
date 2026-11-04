@@ -1,0 +1,74 @@
+import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { feetOf, lowestReach, readinessOf } from './minecraftLlmcReadiness.js';
+
+/**
+ * Two ways run62 (11/5) lost its last hour after the deaths, held before they are sent:
+ * - a death on purpose (03:47–03:53, 20 decisions and more: 「持ち物なし。溶岩／マグマ／落下で倒れて地上で再開」): an act whose `why` says it goes
+ *   to die (to fall, burn or be killed to respawn) is held whole; a death ends this run, and the way back is walked;
+ * - the same danger at once (03:22–03:27, five deaths to wither skeletons in the fortress, each straight back from the respawn): within
+ *   `RETURN_MINUTES` of a death and with no iron sword or better in the pack, a go or a walk that ends within `RETURN_BLOCKS` of the place of the
+ *   death, and a fight or an attack on the kind that the death names, are held, `RETURN_HOLDS` times a death at most (the drops last 5 minutes).
+ * Facts with the hand held; they move no node.
+ */
+export const RETURN_MINUTES = 5;
+export const RETURN_BLOCKS = 16;
+export const RETURN_HOLDS = 2;
+const SUICIDE = /わざと(?:死|倒れ)|自殺|(?:倒れて|死んで|落ちて|燃えて)(?:地上|ベッド|最初の場所|リスポーン|再開|戻)|リスポーン(?:する|で戻|して戻)/u;
+const IRON_BLADE = /^(?:iron|diamond|netherite)_sword$/u;
+const held = new Map<string, number>();
+
+/** For tests: no death has been held. */
+export function forgetDeathHolds(): void { held.clear(); }
+
+const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
+
+/** The act whose why says it goes to die: the whole act, or null. */
+export function suicideHold(input: unknown): { hand: number; kind: string; line: string } | null {
+  const act = objectOf(input), why = typeof act?.why === 'string' ? act.why : '';
+  const hands = Array.isArray(act?.hands) ? act.hands : [];
+  if (!hands.length || !SUICIDE.test(why)) return null;
+  return { hand: 1, kind: String(objectOf(hands[0])?.do ?? 'act'),
+    line: 'わざと死ぬ手は送らない（死ぬとこの通しはアウトで、持ち物も消える）。持ち物が無くても、帰りのゲートか安全な所へ歩いて戻り、木・石から作り直す' };
+}
+
+/** The last death the body says: minutes ago, the place and the cause, or null. */
+function lastDeathOf(world: Record<string, unknown>): { minutes: number; at: { x: number; y: number; z: number }; cause: string } | null {
+  const said = typeof world.lastDeath === 'string' ? world.lastDeath : '';
+  const ago = /^(\d+)\s*(分|秒)前/u.exec(said), at = /\((-?\d+),(-?\d+),(-?\d+)\)/u.exec(said);
+  if (!ago || !at) return null;
+  const minutes = ago[2] === '秒' ? 0 : Number(ago[1]);
+  return { minutes, at: { x: Number(at[1]), y: Number(at[2]), z: Number(at[3]) }, cause: /「([^」]+)」/u.exec(said)?.[1] ?? said };
+}
+
+/** The first hand going back to the place of a fresh death, or fighting its killer, unarmed (0-based), or -1. */
+function returningHand(hands: readonly unknown[], death: NonNullable<ReturnType<typeof lastDeathOf>>, feetY: number): number {
+  return hands.findIndex(raw => {
+    const hand = objectOf(raw) ?? {};
+    if ((hand.do === 'fight' || hand.do === 'attack') && typeof hand.target === 'string') {
+      const kind = hand.target.replace(/^#\d+$/u, '');
+      return kind.length > 0 && death.cause.includes(kind);
+    }
+    if (hand.do !== 'go' && hand.do !== 'walk') return false;
+    const to = objectOf(hand.to);
+    if (!to || typeof to.x !== 'number' || typeof to.z !== 'number') return false;
+    const y = typeof to.y === 'number' ? to.y : lowestReach([hand], feetY);
+    return Math.hypot(to.x - death.at.x, y - death.at.y, to.z - death.at.z) <= RETURN_BLOCKS;
+  });
+}
+
+/** The hold of a return to a fresh death's place or killer with no iron sword, or null; `commit` counts it when it stops the act. */
+export function deathReturnHold(input: unknown, frame: BodyObservation | null, taskId: string):
+  { hand: number; kind: string; line: string; commit(): void } | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  const facts = readinessOf(frame), feet = facts ? feetOf(facts.world) : null;
+  const death = facts ? lastDeathOf(facts.world) : null;
+  if (!Array.isArray(hands) || !facts || !feet || !death || death.minutes >= RETURN_MINUTES) return null;
+  if ([...facts.counts].some(([name, count]) => count > 0 && IRON_BLADE.test(name))) return null;
+  const key = `${taskId}:${death.at.x},${death.at.y},${death.at.z}`, count = held.get(key) ?? 0;
+  if (count >= RETURN_HOLDS) return null;
+  const at = returningHand(hands, death, feet.y);
+  if (at < 0) return null;
+  const line = `最後の死から ${death.minutes} 分（${death.cause.slice(0, 40)}）。鉄の剣が無いまま、死んだ所（16m 内）や同じ相手へ戻る手は送らない`
+    + `（run62: 同じ相手に 5 分で 5 回死んだ）。先に安全な所で剣・盾・防具を作り直す（${count + 1}/${RETURN_HOLDS} 回目）`;
+  return { hand: at + 1, kind: String(objectOf(hands[at])?.do ?? 'go'), line, commit: () => { held.set(key, count + 1); } };
+}
