@@ -68,7 +68,7 @@ export function followHeld(taskId: string, tree: PlanTree, facts: DoneFacts | nu
   if (!leaf) return null;
   window.outcomes = [];
   window.moved = { from: current.id, kind: gate };
-  const NAMES: Record<string, string> = { fight: 'ブレイズの関所', portal: 'ネザーへ入る関所', gold: '金の防具の関所' };
+  const NAMES: Record<string, string> = { fight: 'ブレイズの関所', portal: 'ネザーへ入る関所', gold: '金の防具の関所', rods: 'ロッドがそろった後の関所' };
   const gateWords = NAMES[gate] ?? `関所（${gate}）`;
   const put = `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた。`;
   const kept = `元の節 [${current.id}] ${current.title.slice(0, 24)} は順のまま残る（${liftWords(gate, facts)}）`;
