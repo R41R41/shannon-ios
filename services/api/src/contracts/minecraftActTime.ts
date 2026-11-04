@@ -105,6 +105,8 @@ const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1)) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
   pickup: hand => 3_000 + 1_000 * (hand.range ?? 6), use: useMostMs, craft: hand => 2_000 + 300 * Math.min(64, hand.count ?? 1),
   jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: () => 5_000, eat: () => 4_000,
+  // The sleep hand (S4, 11/5): its seconds (10–60, 45 when not written) to place, sleep, wait for the morning and take the bed up.
+  sleep: hand => 1_000 * (hand.seconds ?? 45) + 5_000,
 };
 const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
   fill: hand => Math.min(1_000 * (hand.seconds ?? 30), 2_000 + 400 * (hand.groups ?? []).reduce((sum, group) => sum + group.at.length, 0)),
@@ -114,7 +116,7 @@ const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
   make: hand => 1_000 + 500 * blocksOf(hand), portal: () => 25_000, smelt: hand => 6_000 + 2_000 * (hand.items?.length ?? 1),
   dig: hand => 900 * cells(hand), place: hand => 400 * cells(hand),
   pillarUp: hand => 600 * times(hand), attack: hand => Math.min(8_000, 1_000 * (hand.seconds ?? 6)), wait: hand => 1_000 * (hand.seconds ?? 1),
-  eat: () => 1_700, pickup: hand => 1_000 + 300 * (hand.range ?? 6),
+  eat: () => 1_700, sleep: () => 15_000, pickup: hand => 1_000 + 300 * (hand.range ?? 6),
   use: hand => hand.item === 'gold_ingot' && hand.target !== undefined ? 6_000 * blocksOf(hand) : 1_000,
   shoot: hand => (500 + 1_000 * (hand.charge ?? 1)) * times(hand),
   craft: hand => 500 + 150 * Math.min(64, hand.count ?? 1), jump: hand => 600 * times(hand), chest: () => 1_500, furnace: () => 1_200,

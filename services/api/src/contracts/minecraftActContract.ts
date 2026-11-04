@@ -95,14 +95,16 @@ export const ACT_DESCRIPTION = [
     + '道は体が引く。許した物だけ掘り・置いて着くまで歩く。溶岩は避ける) / '
     + ("dig(at: 順に掘る, tool, collect, exposeOk: 敵に見られても掘る, takeOk: 村の物も掘る) / place(block, at, face) / pillarUp(n: " +
 "真下に置きながら n 段登る, block) / ")
-    + 'use(item, at, face, target, count: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、'
+    + 'use(item, at, face, target, count: バケツで汲む・注ぐ、火打ち金、扉、'
     + 'エンダーアイを投げる（at 無し: 飛んだ方位と距離が返る）・枠にはめる（at と face）、'
     + 'gold_ingot を target=piglin に count 個まで交換（1〜64 の整数、省略時 1。最大 3 体へ渡し、見終わるのを待ち、出た物を拾う）) / '
     + 'look(to か yaw・pitch) / jump(n) / sneak(on) / equip(item, slot) / craft(item, count: 作業台が4.5m内に要る) / '
     + 'furnace(at, op=put: item・count・fuel・fuelCount | op=take) / chest(at, op=look|take|put|takeAll, items) / '
     + 'attack(target: #id か名前, untilDead, seconds, hold: その場で待って届いたら打つ・追わない) / '
     + 'shoot(target か at, item: 弓かクロスボウ, charge: 引く秒, n: 本数) / eat(item) / '
-    + 'drop(items, target か at: その方へ投げる。ピグリンへの金など) / pickup(target か range) / wait(seconds: 0.5〜30)。',
+    + 'drop(items, target か at: その方へ投げる。ピグリンへの金など) / pickup(target か range) / wait(seconds: 0.5〜30) / '
+    + 'sleep(item: ベッド（省くと持っている物）, seconds: 10〜60、既定 45: 16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す。'
+    + '8m（上下 5）に敵がいる・夜でない（雷雨は可）・ネザーとエンドでは止まる。掘って場所は作らない)。',
   '座標はブロックの整数。rel: true の手は、その手を始める時の足のブロックからの差（x 東+、z 南+、y 上+）。',
   '形: why は act に 1 つ（手の中に書かない。手の短い説明は note）。at・path・items は 1 つでも配列 [ ] で書く。',
   'かまど（F・燻製器・溶鉱炉）は furnace（op=take で出来上がりを取る、op=put で入れる）。chest は箱・樽（C）だけ。',

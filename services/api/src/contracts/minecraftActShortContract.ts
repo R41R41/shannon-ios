@@ -120,12 +120,15 @@ const SHORT_LINES = [
   '  place は空気（. か *）で、6面のどれかが固いマスへ。足と頭のマス・草花（,）・水・レール・ポータル・周りが全部空気の宙には置けない。',
   '  pillarUp は真下に置きながら N 段登る（縦穴を上る）。足元が丸ごとのブロックでない（芽・雪・ハーフブロックの上）と「足場が無い」で止まる: 隣の丸ごとの床へずれる。',
   'use 物 [X,Y,Z] [face=..] [target=#id] [count=N]',
-  ("  バケツで汲む・注ぐ、火打ち金、ベッドで寝る（夜か雷雨の時だけ。昼は寝られない。ネザー・エンドでは爆発する）、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と " +
+  ("  バケツで汲む・注ぐ、火打ち金、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と " +
 "face）。"),
   '  use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石1枚の向こうの水は、その石を dig してから use bucket）。',
   'craft 物 [個数]',
   '  2×2 で作れる物（板・棒・作業台・松明・火打ち金など）は作業台が要らない。3×3 の物（ツルハシ・剣・盾・かまど・バケツ・ハーフブロックなど）は作業台が5m内に要る。',
   'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
+  'sleep [ベッド] [seconds=N]',
+  '  16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す（seconds 10〜60、既定 45）。夜か雷雨の時だけ。8m（上下 5）に敵がいると寝られない（壁越しでも）。'
+    + 'ネザー・エンドでは爆発する。掘って場所は作らない。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
   'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',

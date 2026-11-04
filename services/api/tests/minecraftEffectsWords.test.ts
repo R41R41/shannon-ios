@@ -20,7 +20,7 @@ describe('the effects on the body', () => {
 
 describe('the night and the End bed', () => {
   it('sleeps in a carried bed on the overworld night, not in the Nether or the End', () => {
-    expect(V2_STAGES.prep).toContain('夜（オーバーワールド）は、持っているベッドを place して use し、寝て朝にする');
+    expect(V2_STAGES.prep).toContain('夜（オーバーワールド）は、sleep の手で寝て朝にする（体が持っているベッドを置き、朝に拾い直す）');
     expect(V2_STAGES.prep).toContain('ネザー・エンドでは寝ない（爆発する）');
   });
   it('uses a bed in the End only when the expected damage to herself is 4 or less', () => {

@@ -292,7 +292,9 @@ describe('D3: the bootstrap of a new epoch as readable lines', () => {
 
 describe('the review of 10: words restored in the hand and dictionary', () => {
   it('says in mc.act that a bed works at night or in a thunderstorm only, and the units of stopIf', () => {
-    expect(SHORT_ACT_DESCRIPTION).toContain('ベッドで寝る（夜か雷雨の時だけ。昼は寝られない');
+    // The sleep hand (S4's body of 11/5) took the bed's use: night or thunderstorm only, an enemy near refuses it.
+    expect(SHORT_ACT_DESCRIPTION).toContain('sleep [ベッド] [seconds=N]');
+    expect(SHORT_ACT_DESCRIPTION).toContain('夜か雷雨の時だけ。8m（上下 5）に敵がいると寝られない');
     expect(SHORT_ACT_DESCRIPTION).toContain('hostileWithin は敵までの m、hpBelow は体力 0〜20');
   });
   it('gives the unit of health and says which thrown items are not shown', () => {
