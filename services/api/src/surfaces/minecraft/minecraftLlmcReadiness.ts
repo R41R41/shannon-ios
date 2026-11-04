@@ -3,12 +3,14 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import {
-  ARROWS, BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, BOW, END_BEDS, END_OBSIDIAN, FIGHT_OBSIDIAN_LABEL, type PrepNeed, type PrepStage,
+  BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_OBSIDIAN, END_WEAPONS, FIGHT_OBSIDIAN_LABEL, RETURN_TO_END,
+  type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
+import { returningToEnd } from './minecraftEndEntry.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
@@ -36,7 +38,7 @@ const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: numb
   end: { title: 'エンドへ', food: 80, needs: [
     { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM },
     { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u },
-    BOW, ARROWS,
+    ...END_WEAPONS,
     { label: 'エンダーアイ', count: 12, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
     // S1's lab (2026-11-02): a fall from a crystal's pillar is stopped by water the body pours under itself, with a full bucket and nothing else.
     { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u }] },
@@ -148,6 +150,12 @@ function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; 
   return [...gapWords(gapsOf(table.needs.filter(need => !need.goal), parts)), foodLack(table, parts.food)].filter(Boolean);
 }
 
+/** Goals are facts of a missing fallback, never requirements of the entry gate. */
+function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonly string[] }): string {
+  const wanted = gapWords(gapsOf(table.needs.filter(need => need.goal), parts));
+  return wanted.length ? `目標（そろえば。必須ではない）— ${wanted.join('。')}` : '';
+}
+
 /**
  * The one line of what is missing for the stage or current mining operation, or null. `worn` (the frame's worn
  * ids, `wornItems`): a piece of a need
@@ -157,19 +165,21 @@ function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; 
  * without them, and the goals; the other stages keep the one line.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
-  worn?: readonly string[]; inventory?: unknown }): string | null {
+  worn?: readonly string[]; inventory?: unknown; world?: Record<string, unknown>; taskId?: string }): string | null {
+  const returning = returningToEnd(parts.world ?? {}, parts.dimension, parts.taskId);
   const mining = miningToolShortage(parts.counts, parts.nowKinds, parts.inventory);
   const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
-  const table: PrepStage = stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
+  const table: PrepStage = stage === 'end' && returning ? RETURN_TO_END
+    : stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
+  const goals = goalWords(table, parts);
   if (!table.risk) {
-    const said = [...gapWords(gapsOf(table.needs, parts)), foodLack(table, parts.food), mining].filter(Boolean);
+    const said = [...mustWords(table, parts), goals, mining].filter(Boolean);
     return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
   }
   const must = mustWords(table, parts);
-  const wanted = gapWords(gapsOf(table.needs.filter(need => need.goal), parts));
   const said = [must.length ? `必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : '',
-    wanted.length ? `目標（そろえば。必須ではない）— ${wanted.join('。')}` : '', mining].filter(Boolean);
+    goals, mining].filter(Boolean);
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
 }
 

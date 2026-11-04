@@ -55,7 +55,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
     ...rule ? [{ hand: rule.hand, code: rule.code, kind: rule.kind, line: ruleLine(rule) }] : []];
   const gate = gateHold(input, frame);
   if (gate) found.push({ hand: gate.hand, code: 'gate_required', kind: 'portal', line: `手 ${gate.hand} portal: ${gate.line}。` });
-  const deadly = deadlyGateHold(input, frame);
+  const deadly = deadlyGateHold(input, frame, taskId);
   if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
   const sleep = sleepFirstHold(input, frame, taskId);
   if (sleep) found.push({ hand: sleep.hand, code: 'sleep_first', kind: sleep.kind, line: `手 ${sleep.hand} ${sleep.kind}: ${sleep.line}。` });

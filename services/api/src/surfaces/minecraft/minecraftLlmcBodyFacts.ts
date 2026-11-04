@@ -137,6 +137,8 @@ export function readinessParts(
         nowKinds: nowKinds(planFacts),
         worn: wornItems(facts.world.worn),
         inventory: facts.world.inventory,
+        world: facts.world,
+        taskId,
       }),
       fuelShortage(facts.world, facts.counts),
       targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),

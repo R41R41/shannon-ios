@@ -1,4 +1,6 @@
 import { carried } from './minecraftConditions.js';
+import { thunderstorm } from './minecraftLlmcStateWords.js';
+export { thunderstorm } from './minecraftLlmcStateWords.js';
 
 /**
  * The night with nothing to fight with, said as a fact (run60, 11/4 01:47: three minutes before night she kept taking planks from a village for sticks,
@@ -20,6 +22,13 @@ export function dayTick(world: Record<string, unknown>): number | null {
   const raw = world.timeOfDay;
   if (typeof raw === 'number' && Number.isFinite(raw)) return ((Math.floor(raw) % DAY_LENGTH) + DAY_LENGTH) % DAY_LENGTH;
   return typeof world.time === 'string' && /^\d+$/u.test(world.time.trim()) ? Number(world.time.trim()) % DAY_LENGTH : null;
+}
+
+/** A bed works in an overworld thunderstorm even when the clock is absent. */
+export function canSleepNow(world: Record<string, unknown>): boolean {
+  if (thunderstorm(world)) return true;
+  const tick = dayTick(world);
+  return tick !== null && tick >= BED_FROM && tick < NIGHT_TO;
 }
 
 const carriedNames = (counts: ReadonlyMap<string, number>, pattern: RegExp): string[] =>
@@ -54,9 +63,11 @@ export function nightArmsLine(world: Record<string, unknown>, counts: ReadonlyMa
   if (dimension !== 'overworld') return null;
   const time = dayTick(world);
   const night = time !== null && time < NIGHT_TO && time >= NIGHT_FROM - NEAR_TICKS;
-  if (!night && !underground) return null;
+  const storm = thunderstorm(world);
+  if (!night && !underground && !storm) return null;
   const arms = armsWords(counts);
   if (!arms) return null;
+  if (storm) return `雷雨は昼でも地上にゾンビ・スケルトンが湧く: ${arms}`;
   if (!night || time === null) return `地下は昼でも暗く、ゾンビ・スケルトンが湧く: ${arms}`;
   const when = time >= NIGHT_FROM ? `夜（朝まで ${minutes(NIGHT_TO - time)}）` : `夜まで ${minutes(NIGHT_FROM - time)}`;
   return `${when}: ${arms}。夜は地上にゾンビ・スケルトンが湧く`;
@@ -81,8 +92,10 @@ export const enemyNear = (world: Record<string, unknown>): boolean => (Array.isA
  * then, and a place out of their reach was never said to come first). It names no hand.
  */
 export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
+  if (dimension !== 'overworld') return null;
+  if (thunderstorm(world)) return stormBedLine(world, counts);
   const tick = dayTick(world);
-  if (dimension !== 'overworld' || tick === null) return null;
+  if (tick === null) return null;
   const bed = [...counts].find(([name, count]) => BED.test(name) && count > 0);
   if (!bed || tick >= NIGHT_TO || tick < BED_FROM - BED_NEAR_TICKS) return null;
   const name = bed[0].replace(/^minecraft:/u, '');
@@ -92,4 +105,15 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
   }
   if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。寝れば夜が飛び、朝になる`;
   return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる`;
+}
+
+/** Thunderstorm sleep changes the weather; it need not advance a daytime clock to morning. */
+function stormBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>): string | null {
+  const bed = [...counts].find(([name, count]) => BED.test(name) && count > 0);
+  if (!bed) return null;
+  const have = `雷雨: ベッドを持っている（${bed[0].replace(/^minecraft:/u, '')}）。`;
+  return enemyNear(world)
+    ? have + '時刻に関係なく寝られるが、8m 内に敵がいる間は寝られない（壁の向こうでも断られる）。'
+      + '敵が届かず 8m より離れた所なら寝られる'
+    : have + '時刻に関係なく寝られ、寝ると雷雨が止む（地下でも寝られる）';
 }

@@ -97,8 +97,19 @@ const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）
  * while the blocks to stand and cover on, the water bucket, the beds or the food are missing. What is missing is said; how to gather it is the
  * decision's.
  */
-export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80, needs: [STACKABLE, WATER_BUCKET, BEDS, FIGHT_OBSIDIAN],
+// 11/5 End audit: beds are the main plan; bow, 30 arrows and an iron-or-better sword support the fallback.
+// Keep them goals so missing fallback equipment cannot deadlock a bed-equipped entry (the sword was required before the Nether).
+export const END_WEAPONS: readonly PrepNeed[] = [BOW, ARROWS, { ...SWORD, label: '鉄以上の剣' }]
+  .map(need => ({ ...need, goal: true }));
+export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80,
+  needs: [STACKABLE, WATER_BUCKET, BEDS, FIGHT_OBSIDIAN, ...END_WEAPONS],
   risk: 'エンドは虚空の島で、戻る道は開いたポータルだけ。積める物・水バケツ・ベッド・食料が無いと、虚空に落ちるか竜に押されて死に、ここまでの装備と時間を失う。' + MAKE_IT };
+
+// 11/5 checked audit: recovering an End death must not require eight new beds and obsidian before reaching the dropped kit.
+// Keep the existing food minimum; 20 blocks cover the arrival platform and the existing bridge, without rebuilding a full fight kit.
+export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: BEFORE_END.food,
+  needs: [{ ...STACKABLE, count: 20 }, ...END_WEAPONS, { ...WATER_BUCKET, goal: true }],
+  risk: 'エンドへ戻る時も、積める物と食料が無いと足場の火の玉や回復不足で死ぬ。落とした装備が残っているかは未確認。' };
 
 /**
  * The coordinator, 2026-11-02 (the owner: dragon within three hours, an hour and a half at best; a death after the iron gear puts the time in doubt, so a

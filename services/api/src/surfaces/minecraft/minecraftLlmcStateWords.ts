@@ -7,6 +7,10 @@ const TICKS_PER_SECOND = 20;
 /** The world's day: tick 0 is sunrise, the night (hostiles spawn) 13,000 to 23,000, sunrise again at 24,000. */
 const NIGHT_FROM = 13_000, NIGHT_TO = 23_000, DAY_LENGTH = 24_000;
 
+/** The frame's weather string (fixtures: clear, thunder); rain alone is not a thunderstorm. */
+export const thunderstorm = (world: Record<string, unknown>): boolean => typeof world.weather === 'string'
+  && /thunder|雷/u.test(world.weather);
+
 function span(ticks: number): string {
   const seconds = Math.max(0, Math.round(ticks / TICKS_PER_SECOND));
   return seconds < 120 ? `${seconds} 秒` : `約 ${Math.round(seconds / 60)} 分`;
@@ -17,8 +21,15 @@ function span(ticks: number): string {
  * 「夜（朝まで 約 7 分）」. The Nether and the End have no time of day: 「（時刻なし）」. A time that is not a plain number (the body's own words) is
  * null, kept as it is.
  */
-export function timeWords(raw: string, dimension: string | undefined): string | null {
+export function timeWords(raw: string, dimension: string | undefined, weather?: unknown): string | null {
   if (dimension !== undefined && /nether|end/u.test(dimension)) return '（時刻なし）';
+  const clock = clockWords(raw);
+  if (!thunderstorm({ weather })) return clock;
+  const storm = '雷雨（時刻に関係なく寝られる・昼でも地上に敵が湧く）';
+  return clock ? `${clock}・${storm}` : storm;
+}
+
+function clockWords(raw: string): string | null {
   if (!/^\d+$/u.test(raw.trim())) return null;
   const tick = Number(raw.trim()) % DAY_LENGTH;
   if (tick >= NIGHT_TO) return `明け方（日の出まで ${span(DAY_LENGTH - tick)}）`;

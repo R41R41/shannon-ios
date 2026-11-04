@@ -4,7 +4,8 @@ import { wornItems } from './minecraftItems.js';
 import { searchTravel } from './minecraftLlmcGoldTravel.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
-import { BEFORE_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
+import { BEFORE_END, RETURN_TO_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
+import { returningToEnd } from './minecraftEndEntry.js';
 import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
@@ -13,8 +14,7 @@ import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from '
  * to gather it is the decision's. Two places:
  * - the blaze spawner (the Nether): a fight or an attack on a blaze when none is within 16 m (the hand that begins it), and a go or a walk that ends
  *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, 150 food points carried, a shield (S2's loads carried one).
- * - the End: a walk that ends in an end portal cell (`e`): blocks to stand and cover on, the water bucket, four beds, 80 food points
- *   (`BEFORE_END`).
+ * - the End: a walk that ends in an end portal cell (`e`), using `BEFORE_END` for a first entry and `RETURN_TO_END` for a return.
  * The body's own version (S2's) is not read: the frame has no field for it.
  */
 export interface DeadlyHold { hand: number; kind: string; line: string }
@@ -167,9 +167,10 @@ function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
 }
 
 /** The hold of the deadly gate the act goes into, or null (nothing held). */
-export function deadlyGateHold(input: unknown, frame: BodyObservation | null): DeadlyHold | null {
+export function deadlyGateHold(input: unknown, frame: BodyObservation | null, taskId?: string): DeadlyHold | null {
   const facts = readinessOf(frame);
   if (!facts) return null;
+  const endTable = returningToEnd(facts.world, facts.dimension, taskId) ? RETURN_TO_END : BEFORE_END;
   const weak = lowHealthHold(input, facts) ?? goldFirstHold(input, facts);
   if (weak) return weak;
   if (facts.dimension === 'the_nether') {
@@ -179,7 +180,7 @@ export function deadlyGateHold(input: unknown, frame: BodyObservation | null): D
   const goldGate = facts.dimension === 'overworld' ? goldAtPortalHold(input, frame, facts) : null;
   if (goldGate) return goldGate;
   const at = facts.dimension === 'overworld' ? portalCellHand(input, frame, 'e') : -1;
-  const lack = at >= 0 ? lackOfTable(facts, BEFORE_END) : null;
+  const lack = at >= 0 ? lackOfTable(facts, endTable) : null;
   return lack ? { hand: at + 1, kind: 'walk', line: `エンドへ入る手は送らない。${lack}。${AGAIN}` } : null;
 }
 

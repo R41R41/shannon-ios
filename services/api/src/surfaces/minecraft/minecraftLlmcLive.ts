@@ -187,7 +187,7 @@ export function stacks(value: unknown): string[] {
  */
 function timeOf(world: Record<string, unknown>, dimension: BodyValue | undefined): string | null {
   const raw = finite(world.timeOfDay) !== null ? String(world.timeOfDay) : String(world.time);
-  return timeWords(raw, typeof dimension === 'string' ? dimension : undefined);
+  return timeWords(raw, typeof dimension === 'string' ? dimension : undefined, world.weather);
 }
 
 /** Her state in one object: where, the time, health, hunger, air, what she holds and wears. */
