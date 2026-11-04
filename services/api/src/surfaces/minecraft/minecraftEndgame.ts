@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { createEyeLedger, type EyeLedger } from './minecraftEyeLedger.js';
+import { bearingBetween, compassWord } from './minecraftEyeTriangulation.js';
 import { createBlazeWatch } from './minecraftBlazeFacts.js';
 import { createDescentTrail } from './minecraftDescentTrail.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
@@ -52,11 +53,17 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
     short: [...night, ...urgent, ...some(blaze), ...frames, ...death] };
 }
 
-/** The ledger's lines while the stronghold is still to be found: in the overworld, before the portal room's frames are in view. */
+/** The ledger before the portal room is found, with a single coordinate conversion for travel through the Nether. */
 function eyeLinesOf(ledger: EyeLedger, facts: DoneFacts, now: number): string[] {
-  const looking = facts.dimension === 'overworld' && facts.seen?.has('end_portal_frame') !== true;
-  if (!looking) return [];
-  return ledger.lines(facts.feet ? { x: facts.feet.x, z: facts.feet.z } : null, now);
+  if (facts.seen?.has('end_portal_frame') === true) return [];
+  if (facts.dimension === 'overworld') return ledger.lines(facts.feet, now);
+  if (facts.dimension !== 'the_nether') return [];
+  const fix = ledger.fix(now);
+  if (!fix) return [];
+  const target = { x: fix.x / 8, z: fix.z / 8 };
+  const distance = facts.feet ? Math.round(Math.hypot(target.x - facts.feet.x, target.z - facts.feet.z)).toLocaleString('en-US') : null;
+  const there = facts.feet ? `・あなたから ${compassWord(bearingBetween(facts.feet, target))} ${distance}m` : '';
+  return [`要塞の交点 (${fix.x},${fix.z}) のネザー座標 (${target.x},${target.z})${there}（ネザーの座標で）`];
 }
 
 export function createEndgame(saved: unknown, now: () => number = Date.now) {
