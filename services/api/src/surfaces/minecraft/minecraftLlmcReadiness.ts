@@ -34,7 +34,8 @@ const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: numb
     { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
   end: { title: 'エンドへ', food: 80, needs: [
     { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM },
-    { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u }, { label: '弓', count: 1, pattern: /^bow$/u }, { label: '矢', count: 30, pattern: /^arrow$/u },
+    { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u },
+    { label: '弓', count: 1, pattern: /^bow$/u }, { label: '矢', count: 30, pattern: /^arrow$/u },
     { label: 'エンダーアイ', count: 12, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
     // S1's lab (2026-11-02): a fall from a crystal's pillar is stopped by water the body pours under itself, with a full bucket and nothing else.
     { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u }] },
