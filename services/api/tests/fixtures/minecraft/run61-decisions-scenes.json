@@ -879,5 +879,282 @@
     "doneWhen": "have:obsidian>=10"
    }
   ]
+ },
+ {
+  "name": "run61-d0161-now-on-prep",
+  "goal": "エンドラを討伐して",
+  "current": "p1",
+  "elapsedMinutes": 36,
+  "events": [
+   "go 止まった: 止まった位置から行き先まで 23.8 m",
+   "洞窟を避けて地上へ向かう手を繰り返している"
+  ],
+  "expect": "今の節が「地上で原木を取り…」: 地上へ出る手が出るか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 134.5,
+    "y": -7,
+    "z": 112.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "time": "19800",
+   "inside": "深い地下（洞窟）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "stone_sword",
+     "count": 1
+    },
+    {
+     "name": "stone_axe",
+     "count": 1
+    },
+    {
+     "name": "stone_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "bread",
+     "count": 18
+    },
+    {
+     "name": "cooked_porkchop",
+     "count": 3
+    },
+    {
+     "name": "cooked_beef",
+     "count": 2
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "flint_and_steel",
+     "count": 1
+    },
+    {
+     "name": "furnace",
+     "count": 1
+    },
+    {
+     "name": "raw_iron",
+     "count": 8
+    },
+    {
+     "name": "diamond",
+     "count": 5
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    },
+    {
+     "name": "cobblestone",
+     "count": 183
+    },
+    {
+     "name": "cobbled_deepslate",
+     "count": 142
+    },
+    {
+     "name": "tuff",
+     "count": 18
+    },
+    {
+     "name": "oak_planks",
+     "count": 1
+    },
+    {
+     "name": "water_bucket",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "vertical",
+    "go",
+    "dig",
+    "place",
+    "mine",
+    "use",
+    "walk",
+    "wait",
+    "eat",
+    "pillarUp"
+   ]
+  },
+  "plan": [
+   {
+    "title": "地上で原木を取り作業台と3本目のツルハシ",
+    "kind": "prep_descent",
+    "doneWhen": "have:crafting_table>=1&have:stone_pickaxe>=2"
+   },
+   {
+    "title": "黒曜石10＠(117,26,75)（水バケツで溶岩を固める）",
+    "kind": "obsidian",
+    "doneWhen": "have:obsidian>=10"
+   },
+   {
+    "title": "ゲートを点火し入る",
+    "kind": "portal",
+    "doneWhen": "dim:the_nether"
+   }
+  ]
+ },
+ {
+  "name": "run61-d0161-now-moved",
+  "goal": "エンドラを討伐して",
+  "current": "p2",
+  "elapsedMinutes": 36,
+  "events": [
+   "go 止まった: 止まった位置から行き先まで 23.8 m",
+   "洞窟を避けて地上へ向かう手を繰り返している",
+   "今の節 [p1] 地上で原木を取り作業台と3本目の… は下りる前の準備の節で、地下なので今は満たせない: 今の節を [p2] 黒曜石10＠(117,26,75)（水… に置いた（準備の節は順のまま残る。地上に出たら戻れる）"
+  ],
+  "expect": "今の節が黒曜石: 地上へ出る手が減るか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 134.5,
+    "y": -7,
+    "z": 112.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "time": "19800",
+   "inside": "深い地下（洞窟）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "stone_sword",
+     "count": 1
+    },
+    {
+     "name": "stone_axe",
+     "count": 1
+    },
+    {
+     "name": "stone_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "bread",
+     "count": 18
+    },
+    {
+     "name": "cooked_porkchop",
+     "count": 3
+    },
+    {
+     "name": "cooked_beef",
+     "count": 2
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "flint_and_steel",
+     "count": 1
+    },
+    {
+     "name": "furnace",
+     "count": 1
+    },
+    {
+     "name": "raw_iron",
+     "count": 8
+    },
+    {
+     "name": "diamond",
+     "count": 5
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    },
+    {
+     "name": "cobblestone",
+     "count": 183
+    },
+    {
+     "name": "cobbled_deepslate",
+     "count": 142
+    },
+    {
+     "name": "tuff",
+     "count": 18
+    },
+    {
+     "name": "oak_planks",
+     "count": 1
+    },
+    {
+     "name": "water_bucket",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "vertical",
+    "go",
+    "dig",
+    "place",
+    "mine",
+    "use",
+    "walk",
+    "wait",
+    "eat",
+    "pillarUp"
+   ]
+  },
+  "plan": [
+   {
+    "title": "地上で原木を取り作業台と3本目のツルハシ",
+    "kind": "prep_descent",
+    "doneWhen": "have:crafting_table>=1&have:stone_pickaxe>=2"
+   },
+   {
+    "title": "黒曜石10＠(117,26,75)（水バケツで溶岩を固める）",
+    "kind": "obsidian",
+    "doneWhen": "have:obsidian>=10"
+   },
+   {
+    "title": "ゲートを点火し入る",
+    "kind": "portal",
+    "doneWhen": "dim:the_nether"
+   }
+  ]
  }
 ]
