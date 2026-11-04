@@ -180,7 +180,9 @@ describe('the hands that take a range: obsidian, fight, mine, make, portal, smel
     expect(ok({ do: 'obsidian', at: [cell], count: 3, seconds: 90, canPlace: ['cobblestone'], maxPlace: 6 })).toBeNull();
     expect(ok({ do: 'obsidian', at: [cell], tool: 'x' })).toContain('tool は使えない');
     expect(ok({ do: 'obsidian', at: [cell], count: 65 })).toContain('count は 64 まで');
-    expect(ok({ do: 'obsidian', at: Array.from({ length: 9 }, () => cell) })).toContain('8 つまで');
+    // S8's body of 11/5: up to 24 lava sources in one hand (seconds up to 300).
+    expect(ok({ do: 'obsidian', at: Array.from({ length: 24 }, () => cell) })).toBeNull();
+    expect(ok({ do: 'obsidian', at: Array.from({ length: 25 }, () => cell) })).toContain('1〜24 マス');
     expect(ok({ do: 'fight', target: '#12', stance: 'flee', item: 'iron_sword', retreatHp: 8, range: 8, seconds: 30 })).toBeNull();
     expect(ok({ do: 'fight', target: '#12', seconds: 90 })).toContain('seconds は 5〜60');
     expect(ok({ do: 'fight', stance: 'flee' })).toContain('target が要る');
@@ -212,7 +214,8 @@ describe('the hands that take a range: obsidian, fight, mine, make, portal, smel
   });
   it('have a ceiling at their seconds and a typical time', () => {
     const from = { x: 0, y: 40, z: 0 };
-    expect(actMilliseconds(act({ do: 'obsidian', at: [cell] } as ActHand), from)).toBe(92_000);
+    // The obsidian hand runs for its seconds plus 20 s (the body's water recovery and receipt, S8 11/5).
+    expect(actMilliseconds(act({ do: 'obsidian', at: [cell] } as ActHand), from)).toBe(110_000);
     expect(actMilliseconds(act({ do: 'fight', target: '#1' } as ActHand), from)).toBe(22_000);
     expect(actRemainingMilliseconds(act({ do: 'obsidian', at: [cell], count: 2 } as ActHand), from, null, 0)).toBe(36_000);
     expect(actRemainingMilliseconds(act({ do: 'make', item: 'stick', count: 4 } as ActHand), from, null, 0)).toBe(3_000);

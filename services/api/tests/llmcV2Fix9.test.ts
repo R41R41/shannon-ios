@@ -141,7 +141,7 @@ describe('B2: no text of the mode names a tool it does not offer', () => {
   });
   it('tells the scan and the view by the tools\' own words where the stages sent her to find-blocks and view top', () => {
     expect(V2_STAGES.prep).toContain('mc_probe kind=scan');
-    expect(V2_STAGES.nether).toContain('mc_probe kind=scan radius=32');
+    expect(V2_STAGES.nether).toContain('mc_probe kind=scan radius=16');
     expect(V2_STAGES.nether).toContain('mc_view mode=top');
   });
 });
