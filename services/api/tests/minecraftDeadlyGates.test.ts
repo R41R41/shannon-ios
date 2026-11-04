@@ -57,16 +57,16 @@ describe('the End', () => {
     for (const word of ['エンドへ入る手は送らない', '積める物（丸石・黒曜石など） 10/64', '水入りバケツ', 'ベッド', '食料', '欠けたまま進むと']) expect(held!.line, word).toContain(word);
   });
   it('counts obsidian as a block, and lets the walk go when everything is carried', () => {
-    const kit: Array<[string, number]> = [['obsidian', 64], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 12]];
+    const kit: Array<[string, number]> = [['obsidian', 64], ['water_bucket', 1], ['white_bed', 6], ['cooked_beef', 12]];
     expect(deadlyGateHold(walkIn, overworld(kit))).toBeNull();
     expect(deadlyGateHold(walkIn, overworld(kit.filter(([name]) => name !== 'water_bucket')))?.line).toContain('水入りバケツ');
     expect(deadlyGateHold({ hands: [{ do: 'walk', to: { x: 1, y: 70, z: 0 } }] }, overworld([]))).toBeNull();
   });
   it('the dragon is killed with beds: fewer than 8 beds, or fewer than 8 obsidian for the fight beside the blocks to stand on, holds the walk', () => {
-    const kit: Array<[string, number]> = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 12]];
+    const kit: Array<[string, number]> = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 6], ['cooked_beef', 12]];
     expect(deadlyGateHold(walkIn, overworld(kit))).toBeNull();
-    const fewBeds = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'white_bed' ? 7 : n] as [string, number])));
-    expect(fewBeds?.line).toContain('ベッド（目標 10） 7/8');
+    const fewBeds = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'white_bed' ? 5 : n] as [string, number])));
+    expect(fewBeds?.line).toContain('ベッド（目標 10） 5/6');
     const fewObsidian = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'obsidian' ? 7 : n] as [string, number])));
     expect(fewObsidian?.line).toContain('黒曜石（エンドの戦い用');
     expect(fewObsidian?.line).toContain('7/8');
