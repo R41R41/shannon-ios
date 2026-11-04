@@ -42,7 +42,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
   node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'food>=40&have:bed', children: [
     node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village',
-    note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（エンドの竜戦に 10 個、最低 8 要る）。'
+    note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（エンドの竜戦に 10 個、最低 6 要る）。'
       + '羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
     caution: ['通りがかりに糸・火打石（砂利を掘る）・羽（ニワトリ）を見かけたら拾う（エンドの弓と矢 30 の分。取りに戻らない）'] }),
     node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
@@ -87,9 +87,9 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=14',
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
   node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: '帰りのゲートから。ポータルの対は live の控え' }),
-  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=8&have:obsidian>=8&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
+  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=6&have:obsidian>=8&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
     note: '水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ: 手で使う物（体の自動の落下止めは働かない前提）',
-    children: [node('ベッドを10個にする（羊毛3と板3・最低8）', { kind: 'bed', doneWhen: 'have:bed>=10' }),
+    children: [node('ベッドを10個にする（羊毛3と板3・最低6）', { kind: 'bed', doneWhen: 'have:bed>=10' }),
       node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12' }),
       node('弓と矢（糸・棒・火打石・羽根）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
