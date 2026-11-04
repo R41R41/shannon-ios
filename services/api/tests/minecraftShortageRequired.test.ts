@@ -303,6 +303,8 @@ describe('a death is out (the owner, 2026-11-02): not dying stands above being f
   it('says it in every stage, in the numbers the live state shows', () => {
     expect(SAFETY_FIRST).toContain('死なないことを速さより上に置く');
     expect(SAFETY_FIRST).toContain('体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満');
+    // S2's blaze lab of 11/5: between fights the meal to fullness 18 and the wait to health 12 come first, out of sight.
+    expect(SAFETY_FIRST).toContain('体力 12 未満なら見えない所で満腹 18 以上まで食べ、体力 12 を超えるまで待ってから出る');
     for (const id of ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'] as const) expect(V2_STAGES[id], id).toContain(SAFETY_FIRST);
   });
   it('puts it in the cautions of the diamonds and the blaze rods, within the plan\'s bounds', () => {
