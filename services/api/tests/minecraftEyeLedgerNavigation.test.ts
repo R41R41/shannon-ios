@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
-import { createEyeLedger } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
+import { createEyeLedger, sidewaysTries } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
 import { bearingBetween } from '../src/surfaces/minecraft/minecraftEyeTriangulation.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
@@ -40,7 +40,7 @@ describe('the short eye baseline and travel through the Nether', () => {
   it('offers a short baseline after one precise flight and reports the intersection after two, including after restore', () => {
     const ledger = createEyeLedger(null);
     ledger.note('first', report({ x: 135, z: 104 }), 'overworld', NOW);
-    expect(ledger.lines(null, NOW).join('\n')).toMatch(/最後の線の横（[^）]+）24m/);
+    expect(ledger.lines(null, NOW).join('\n')).toMatch(/次は .+（最後の線の横 \S+ 24m）で投げる/u);
     ledger.note('second', report({ x: 121, z: 84 }), 'overworld', NOW);
     const restored = createEyeLedger(ledger.checkpoint().minecraftEyes);
     expect(restored.fix(NOW)).toMatchObject({ ...TARGET, throws: 2 });
@@ -112,5 +112,15 @@ describe('the stronghold route knowledge and the seed plan', () => {
     const initial = seedPlan('エンドラを討伐して')!;
     expect(initial.nodes.find(node => node.title === '溶岩源で黒曜石22（ゲート10・竜戦12）')?.doneWhen).toBe(
       'have:obsidian>=22|dim:the_nether');
+  });
+});
+
+describe('the throws along one line are one try (S5, 11/5)', () => {
+  const line = (x: number, z: number, bearingDeg: number) => ({ id: `${x},${z}`, at: 0, x, z, toX: x, toZ: z, bearingDeg, flew: 30, precise: true }) as never;
+  it('counts only lines thrown 12 m or more sideways of every earlier one', () => {
+    // Bearing 180 (south): a line along z. Throws further south on it are the same line; 24 m east is a new one.
+    expect(sidewaysTries([line(0, 0, 180), line(0, 40, 180), line(1, 80, 180), line(0, 120, 180)])).toBe(0);
+    expect(sidewaysTries([line(0, 0, 180), line(24, 0, 181)])).toBe(1);
+    expect(sidewaysTries([line(0, 0, 180), line(0, 40, 180), line(24, 40, 181), line(24, 80, 181)])).toBe(1);
   });
 });
