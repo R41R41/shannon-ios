@@ -36,7 +36,7 @@ import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
-import { chestNodesDone,followDimension,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { chestNodesDone,followBelow,followDimension,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { followHeld } from '../surfaces/minecraft/minecraftLlmcHeldStreak.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
@@ -88,7 +88,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     validateUpdate: validate,
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
-    follow: tree => followDimension(tree, doneFacts(observe())) ?? followHeld(step.taskId, tree, doneFacts(observe()))
+    follow: tree => followDimension(tree, doneFacts(observe())) ?? followBelow(tree, doneFacts(observe())) ?? followHeld(step.taskId, tree, doneFacts(observe()))
       ?? followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(
       doneFacts(observe())), leaf => lackBefore(observe(), tree, leaf)) });
   const worldOf = () => {

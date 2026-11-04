@@ -1,6 +1,8 @@
 import { orderedPlan, type PlanKind, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
-import { doneFacts, doneStatusWords, predicateHolds, predicatesOf, undergroundInOverworld, type DoneFacts } from './minecraftPlanDone.js';
+import {
+  doneFacts, doneStatusWords, predicateHolds, predicatesOf, undergroundInOverworld, UNDERGROUND_KINDS, type DoneFacts,
+} from './minecraftPlanDone.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { blazeLack } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
@@ -182,6 +184,24 @@ export const DIMENSION_KINDS: Readonly<Record<string, ReadonlySet<PlanKind>>> = 
  * dimension's work whose own condition does not already hold. The nodes it passes stay open in their order, as for `followNode`. Null: no body, the
  * overworld, a current node that is of the dimension or of no kind (`other`), or no such leaf.
  */
+/**
+ * Underground, the current node is not an open preparation node of the descent (run61: for seven minutes she tried to come up out of the cave for the
+ * wood the node [n8] asked for, which the live itself called 「地下なので今は満たせない」; the now stayed on it because every item was tagged for it). The
+ * node goes to the first open leaf of the work down there (the iron, the diamonds, the obsidian, the Nether) and the preparation stays open in its order.
+ * Null on the surface, in the Nether and the End, and when no such leaf is open.
+ */
+export function followBelow(tree: PlanTree, facts: DoneFacts | null): { to: string; from: string | null; acts: number; words: string } | null {
+  if (!facts || !undergroundInOverworld(facts)) return null;
+  const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), current = order.find(node => node.id === tree.current);
+  if (!current || !questions.open(current.id) || !holdsNow(current)) return null;
+  const predicates = predicatesOf(tree);
+  const done = (node: PlanNode) => !!predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts);
+  const leaf = order.find(node => UNDERGROUND_KINDS.has(kindOf(node)) && questions.open(node.id)
+    && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !done(node));
+  if (!leaf) return null;
+  const now = `今の節 [${current.id}] ${current.title.slice(0, 24)} は下りる前の準備の節で、地下なので今は満たせない`;
+  return { to: leaf.id, from: tree.current, acts: 0, words: `${now}: 今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（準備の節は順のまま残る。地上に出たら戻れる）` };
+}
 export function followDimension(tree: PlanTree, facts: DoneFacts | null):
   { to: string; from: string | null; acts: number; words: string } | null {
   const wanted = facts?.dimension ? DIMENSION_KINDS[facts.dimension] : undefined;
@@ -305,6 +325,7 @@ export function followNode(taskId: string, tree: PlanTree, underground = false, 
   if (!leaf || leaf.id === tree.current || alreadyInTarget()) return null;
   // Run 40: an open preparation node holds the current node (the work for another node may go on; the node that
 // asks for the food stays the now).
+  if (underground && holdsNow(leaf)) return null;
   if (!underground && heldByPreparation(tree, leaf.id, questions)) return null;
   // Run 41 (the current node went p2.3 → p4.1 over p1.3 and p3, so no preparation node was ever the now and
 // `heldByPreparation` never held): the work for a node that

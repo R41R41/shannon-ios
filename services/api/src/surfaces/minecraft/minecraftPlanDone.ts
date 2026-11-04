@@ -334,7 +334,7 @@ function prepLack(facts: DoneFacts): string | null {
 }
 /** The kinds of the work down there (the iron and what comes after it): the preparation before the descent comes
  * before the first node of one. */
-const UNDERGROUND_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['iron', 'iron_armor', 'diamond', 'obsidian', 'nether']);
+export const UNDERGROUND_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['iron', 'iron_armor', 'diamond', 'obsidian', 'nether']);
 /** Below this y in the overworld the body is underground (the descent's own line, `minecraftLlmcReadiness.ts`). */
 export const DESCENT_SURFACE_Y = 45;
 /** Whether the body has gone down from the surface: underground in the overworld, or in the Nether or the End. */
