@@ -268,6 +268,31 @@
       "seeds": []
     },
     {
+      "id": "O",
+      "name": "ゼロ→ダイヤのツルハシ（c1・保留なし・通し・本物の頭。頭の次の版の出だしを確かめる）",
+      "targetSeconds": 1800,
+      "limitMinutes": 40,
+      "capYen": 800,
+      "anySeed": true,
+      "failure": "死亡・40 分・¥800・タスクの終わり。ダイヤのツルハシを持った（inventory）が成功。人の手は入れない（保留なし）",
+      "start": { "time": 0, "give": {} },
+      "milestones": [
+        { "name": "原木", "any": ["#minecraft:logs"] },
+        { "name": "作業台", "any": ["minecraft:crafting_table"] },
+        { "name": "木のツルハシ", "any": ["minecraft:wooden_pickaxe"] },
+        { "name": "石のツルハシ", "any": ["minecraft:stone_pickaxe"] },
+        { "name": "石炭", "any": ["minecraft:coal", "minecraft:charcoal"] },
+        { "name": "かまど", "any": ["minecraft:furnace"] },
+        { "name": "鉄のツルハシ", "any": ["minecraft:iron_pickaxe"] },
+        { "name": "バケツ", "any": ["minecraft:bucket", "minecraft:water_bucket", "minecraft:lava_bucket"] },
+        { "name": "鉄の全身", "all": ["minecraft:iron_helmet", "minecraft:iron_chestplate", "minecraft:iron_leggings", "minecraft:iron_boots"] },
+        { "name": "ベッド", "any": ["#minecraft:beds"], "orRespawn": true },
+        { "name": "予備のツルハシ", "any": ["minecraft:iron_pickaxe", "minecraft:diamond_pickaxe"], "count": 2 },
+        { "name": "ダイヤのツルハシ", "any": ["minecraft:diamond_pickaxe"], "end": true }
+      ],
+      "seeds": []
+    },
+    {
       "id": "M",
       "name": "指定の作業台で鉄のツルハシを作る（頭の版の比べ・c1・保留なし）",
       "targetSeconds": 90,
