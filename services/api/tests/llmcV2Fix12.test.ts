@@ -43,7 +43,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
   });
   it('asks the three pieces worn at the diamonds\' node, and says one carried and not worn', () => {
     const base = { dimension: 'overworld', food: 50, nowKinds: ['diamond' as const] };
-    const kit: Array<[string, number]> = [['iron_pickaxe', 1], ['bucket', 1], ['shield', 1]];
+    const kit: Array<[string, number]> = [['iron_pickaxe', 1], ['water_bucket', 1], ['shield', 1]];
     expect(preparationShortage({ ...base, counts: owned(kit), worn: [] })).toBe(lack(BEFORE_DIAMONDS, '鉄の兜・胸当て・脚が無い'));
     const armour: Array<[string, number]> = [...kit, ['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]];
     expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate'] }))
@@ -60,7 +60,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     expect(owned([], '頭: iron_helmet(残り 160/165)、足: golden_boots(残り 91/91)').get('golden_boots')).toBe(1);
   });
   it('says the rules once, the same words in the first plan and the stage knowledge, with no old numbers', () => {
-    expect(PREP_RULES_WORDS).toContain('ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点');
+    expect(PREP_RULES_WORDS).toContain('ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・水入りバケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点');
     expect(PREP_RULES_WORDS).toContain('靴は鉄でなく金のブーツ（金の延べ棒 4）');
     const plan = ownFirstPlanSystem();
     expect(plan).toContain(PREP_RULES_WORDS);

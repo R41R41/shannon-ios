@@ -84,7 +84,7 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
   });
   it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
     expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 35（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2・ハサミ 2・予備の剣 2・予備の盾 1）');
-    expect(PREP_RULES_WORDS).toContain('ベッドの節の doneWhen は have:bed>=1');
+    expect(PREP_RULES_WORDS).toContain('寝る用 1 個（最初の夜の前。doneWhen have:bed>=1）と、竜戦用 10 個（最低 8。target bed×10）');
     expect(ownFirstPlanSystem()).toContain(PREP_RULES_WORDS);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(PREP_RULES_WORDS);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).not.toContain('約 10');

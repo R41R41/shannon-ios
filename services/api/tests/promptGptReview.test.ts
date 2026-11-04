@@ -46,7 +46,7 @@ describe('the rules are in the instructions', () => {
     expect(system).toContain('## 準備の決まり（鉄を掘りに地下へ下りる前）');
     expect(PREP_DESCENT_RULE).toContain('必須（未達の間は下りない・鉄を掘らない。省くなら prep に skipped と理由を書く。省いた節は達成に数えない）: 食料の点 40 以上');
     expect(PREP_DESCENT_RULE).toContain('石のツルハシと石の斧・作業台 1 つか板 4 以上');
-    expect(PREP_DESCENT_RULE).toContain('目標: 食料 40〜60 点・板 8 ほどと棒の余り');
+    expect(PREP_DESCENT_RULE).toContain('目標: 食料 40〜60 点・原木 20〜24 本分');
     // The skip is said once, in the requirement (未達の間は下りない。省くなら prep に skipped と理由): not again in the priority line or the plan's.
     expect(system.split('prep に skipped と理由').length - 1).toBe(1);
     expect(system).not.toContain('準備も省かない');

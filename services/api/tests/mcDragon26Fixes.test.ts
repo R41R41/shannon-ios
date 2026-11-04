@@ -226,7 +226,7 @@ describe('fix 6: the meter keeps a milestone that was passed over', () => {
 
 describe('fix 6: the bed rule', () => {
   it('puts the bed off when there is no village and no sheep, without a condition on what is urgent', () => {
-    expect(PREP_RULES_WORDS).toContain('村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む');
+    expect(PREP_RULES_WORDS).toContain('村も羊も見つからない世界では、地下の構造物のベッドへ下りず、竜戦用はエンドの点検の前に羊毛から作る');
     expect(PREP_RULES_WORDS).not.toContain('の時だけ');
   });
 });

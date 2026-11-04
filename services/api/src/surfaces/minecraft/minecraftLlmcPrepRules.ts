@@ -34,7 +34,11 @@ export const UPPER_ARMOUR = /^(?:iron|diamond|netherite)_(?:helmet|chestplate|le
 export const GOLDEN_BOOTS = /^golden_boots$/u;
 
 const PICKAXE: PrepNeed = { label: '鉄以上のツルハシ', count: 1, pattern: /^(?:iron|diamond|netherite)_pickaxe$/u };
-const BUCKET: PrepNeed = { label: 'バケツ', count: 1, pattern: /^(?:bucket|water_bucket|lava_bucket)$/u };
+/**
+ * The bucket before the diamonds is a full one (the section audit of 11/5: run61 passed this check with an empty bucket, looked for water below for
+ * 6 minutes at 2,345 s and died on the way up; it had walked past a known spring with the empty bucket).
+ */
+const BUCKET: PrepNeed = { label: '水入りバケツ（空なら水源の隣で use して汲む）', count: 1, pattern: /^water_bucket$/u };
 const SHIELD: PrepNeed = { label: '盾', count: 1, pattern: /^shield$/u };
 const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て・脚', count: 3, pattern: UPPER_ARMOUR, slots: true, worn: true };
 // The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots are a goal,
@@ -141,7 +145,7 @@ export const PREP_SKIP_SECONDS = 500;
 export const PREP_DESCENT_LINES: readonly string[] = [
   ("- 必須（未達の間は下りない・鉄を掘らない。省くなら prep に skipped と理由を書く。省いた節は達成に数えない）: 食料の点 40 以上（foodPoints.total。満腹 fullness " +
 "では数えない）・石のツルハシと石の斧・作業台 1 つか板 4 以上（持つ）。"),
-  '- 目標: 食料 40〜60 点・板 8 ほどと棒の余り（ツルハシの作り直し分）。',
+  '- 目標: 食料 40〜60 点・原木 20〜24 本分（板なら 80 前後。通しの分）。',
   '- 下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）。',
   ("- 理由: 持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない。地下には食べ物も木も見つかりにくく、足りなくなると地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 " +
 "秒）。死ぬこともある。"),
@@ -157,7 +161,7 @@ export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の�
  * procedures; the descent's rule is `PREP_DESCENT_RULE`. Knowledge, not an order.
  */
 export const PREP_RULES_WORDS = [
-  `- ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・バケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
+  `- ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・水入りバケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
     + `（${IRON_USES.map(([use, count]) => `${use} ${count}`).join('・')}）` + ("。火打ち金は鉄のある高さで先に作る。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
@@ -169,9 +173,10 @@ export const PREP_RULES_WORDS = [
     + 'ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る。'
     + '必須が作れない・材料が無いと見えた時は、後回しにして先へ進まない。材料を取りに行く（盾なら木と鉄 1。作る手が失敗したら行の理由（missing: …）を読み、別の材料の形を試す）。',
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
-  ("- ベッドは村の家で見つけた分を全部（ベッドの節の doneWhen は " +
-"have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan_update に書く）。")
-    + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。エンドの竜戦はベッドで倒す（目標 10・最低 8、黒曜石も 8〜12）。',
+  '- ベッドは用途が 2 つ: 寝る用 1 個（最初の夜の前。doneWhen have:bed>=1）と、竜戦用 10 個（最低 8。target bed×10）。村の家で見つけた分は全部取る'
+    + '（竜戦用の節は寝る用の親の子にしない: 親が済むと開いた子は閉じられる）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、竜戦用はエンドの点検の前に羊毛から作る。'
+    + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。ベッドは重ならず 1 個 1 マス（10 個で 10 マス）。'
+    + 'ネザーへ入る前に、ゲートの横に箱を置いて寝る用の 1〜2 個を残して預け（羊毛・弓の材料・予備の食料も）、帰りに同じゲートから出て取る（ネザーでロッドとパールの入る所を残す）。',
   PREP_REFERENCE,
 ].join('\n');
 
@@ -185,6 +190,11 @@ export const PLAN_PREP_WORDS = [
   '- 地下へ下りる節（鉄・ダイヤを掘る節）の caution に、その前に済ませる準備を書く（30 字以内。例「食料40点・作業台か板4を持ってから下りる」）。',
   '- 食料の節の where は、食料のある所（箱・畑・干し草の座標）にする。ベッドの座標にしない。見当たらなければ ""。',
   '- 準備の節の doneWhen は観測の形で書く: 例 "food>=40&have:crafting_table|food>=40&have:planks>=4"。',
+  '- 村の節（ベッド全部・干し草・箱）は、食料とベッド（寝る用）の親の子にせず、一番上の節にする（親が済むと開いた子は閉じられる）。'
+    + '竜戦用のベッドは target bed×10 の節にする。',
+  '- 木は序盤だけ通しの分を一度に: 石の斧ができたら原木を合計 20〜24 本まで取る節を書く（doneWhen は作った分を引いて板も数える: have:log>=16|have:planks>=64）。'
+    + '後で木のために地上へ戻らない。',
+  '- バケツを作ったら、最初の水源ですぐ汲む節を鉄の節の次に書く（doneWhen have:water_bucket）。',
   '- 弓と矢（クリスタルとエンダーマンに要る）の材料は序盤の道中で集める。食料か鉄の節の caution に「糸3・羽根・火打石を拾う」と書く（後の節に回さない）。',
   '- エンダーマン 1 体は鉄の剣で約 7 打撃かかり、そのたびに剣の耐久（250）が減る: パール狩りの前に、予備の鉄の剣をもう 1 本作る（鉄の節の caution に書く）。',
 ].join('\n');

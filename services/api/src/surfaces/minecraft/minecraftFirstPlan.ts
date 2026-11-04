@@ -36,13 +36,18 @@ const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => (
  * nodes the same way.
  */
 const TO_NETHER: readonly PlanSeed[] = [
-  node('木と石の道具', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe', children: [
+  // The section audit of 11/5 (runs 60 and 61 both went back up for wood and died there): the wood of the whole run at once after the stone axe, as
+  // the last child; the parent waits for it (a child is closed when its parent is done).
+  node('木と石の道具', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:log>=16|have:stone_pickaxe&have:planks>=64|have:iron_pickaxe|have:diamond_pickaxe',
+    children: [
     node('原木を集める', { kind: 'wood', doneWhen: 'have:log>=8|have:planks>=24', note: '作業台・木のツルハシ・斧と石の道具の棒の分（ツルハシ 1 つで済みにしない）' }),
     node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
-    node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
+    node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' }),
+    node('原木を通しの分（計20〜24）', { kind: 'wood', doneWhen: 'have:log>=16|have:planks>=64',
+      note: '石の斧の後に一度に（板・棒・盾・ベッドの板・箱の分）。後で木のために地上へ戻らない' })] }),
   node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'food>=40&have:bed', children: [
     node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village',
-    note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（エンドの竜戦に 10 個、最低 8 要る）。'
+    note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（寝る用 1 と、エンドの竜戦に 10 個・最低 8）。この親が済んでも取り切ってから出る。'
       + '羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
     caution: ['通りがかりに糸・火打石（砂利を掘る）・羽（ニワトリ）を見かけたら拾う（エンドの弓と矢 30 の分。取りに戻らない）'] }),
     node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
@@ -52,16 +57,17 @@ const TO_NETHER: readonly PlanSeed[] = [
     // the golden ones (the gate's table), so the armour is the three iron pieces.
     node('焼いて鉄のツルハシ・剣・盾・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket' }),
     node('鉄の兜・胸当て・脚', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings' })] }),
-  node('水入りバケツ', { kind: 'water', doneWhen: 'have:water_bucket' }),
+  node('水入りバケツ（最初の水源ですぐ汲む）', { kind: 'water', doneWhen: 'have:water_bucket' }),
   node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe',
-    caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・バケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [
+    caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・水入りバケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
   node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether', caution: ['必須（盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシと石の予備2本・足場64・食料40点）が欠けたら入らない'], children: [
     node('溶岩源に水で黒曜石10', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|dim:the_nether' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether' }),
     node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether',
-      caution: ['火をつける前に必須を確かめる: 盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点'] })] }),
+      caution: ['火をつける前に必須を確かめる: 盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点',
+        'ベッドは寝る用2を残し、ゲートの横の箱に預けて入る（1個1マス。帰りに同じゲートで取る）'] })] }),
 ];
 /**
  * Run 26 (owner 2026-10-21): she went on to the fortress with no table, slabs, shield or food; each stage past
@@ -91,7 +97,7 @@ const BEYOND: readonly PlanSeed[] = [
   node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: '帰りのゲートから。ポータルの対は live の控え' }),
   node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=8&have:obsidian>=8&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
     note: '水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ: 手で使う物（体の自動の落下止めは働かない前提）',
-    children: [node('ベッドを10個にする（羊毛3と板3・最低8）', { kind: 'bed', doneWhen: 'have:bed>=10' }),
+    children: [node('ベッドを10個にする（預けた箱から・羊毛3と板3・最低8）', { kind: 'bed', doneWhen: 'have:bed>=10' }),
       node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12' }),
       node('弓と矢（糸・棒・火打石・羽根）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [

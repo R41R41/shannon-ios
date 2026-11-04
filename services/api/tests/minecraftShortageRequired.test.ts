@@ -103,7 +103,7 @@ describe('requiredLack: the required needs of the stage a node belongs to that a
     expect(requiredLack(without, ['food', 'portal'])).toBe(words);
   });
   it('names the lack of the diamonds, the armour carried and not worn included', () => {
-    const base: Array<[string, number]> = [['iron_pickaxe', 1], ['bucket', 1], ...FOOD];
+    const base: Array<[string, number]> = [['iron_pickaxe', 1], ['water_bucket', 1], ...FOOD];
     expect(requiredLack(facts(base, { worn: '' }), ['diamond'])).toBe(`未達の必須（ダイヤを掘る前に必ず）— 盾・鉄の兜・胸当て・脚が無い。欠けたまま進むと: ${BEFORE_DIAMONDS.risk}`);
     const carried = facts([...base, ['shield', 1], ['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]], { worn: '頭: iron_helmet(残り165/165)、胴: なし' });
     expect(requiredLack(carried, ['diamond'])).toContain('持っているが着ていない: iron_chestplate・iron_leggings');
@@ -191,7 +191,7 @@ describe('followNode: the step on past an open node says what the node it steps 
     return v2tree({ revision: 1, current, nodes });
   };
   const start = (task: string, to: string, from: string) => { noteItemStart(task, to, from); noteItemStart(task, to, from); };
-  const bare = frame([['iron_pickaxe', 1], ['bucket', 1], ...FOOD], { worn: '' });
+  const bare = frame([['iron_pickaxe', 1], ['water_bucket', 1], ...FOOD], { worn: '' });
   it('adds the skipped required needs and what they cost to the words of the step', () => {
     const tree = treeOf('p4.3');
     start('t1', 'p5', 'p4.3');
@@ -205,7 +205,7 @@ describe('followNode: the step on past an open node says what the node it steps 
     start('t2', 'p5', 'p4.3');
     const plain = followNode('t2', tree)!.words;
     expect(plain).not.toContain('未達の必須');
-    const ready = frame([['iron_pickaxe', 1], ['bucket', 1], ['shield', 1], ...FOOD]);
+    const ready = frame([['iron_pickaxe', 1], ['water_bucket', 1], ['shield', 1], ...FOOD]);
     expect(followNode('t2', tree, false, leaf => lackBefore(ready, tree, leaf))!.words).toBe(plain);
     expect(lackBefore(null, tree, tree.nodes.find(node => node.id === 'p5')!)).toBeNull();
   });
