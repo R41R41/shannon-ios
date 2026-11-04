@@ -21,3 +21,22 @@ describe('nightArmsLine', () => {
     expect(nightArmsLine({}, pack(), 'overworld')).toBeNull();
   });
 });
+
+describe('nightBedLine', () => {
+  const bed = (...extra: string[]) => new Map([['white_bed', 1], ...extra.map(name => [name, 1] as [string, number])]);
+  it('comes within a minute of the night and through it, with a bed in the pack and no enemy within 8 blocks, and names no hand', async () => {
+    const { nightBedLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
+    expect(nightBedLine({ time: '12000' }, bed(), 'overworld')).toBe('夜まで 約 1 分: ベッドを持っている（white_bed）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる'
+      .replace('約 1 分', '50 秒'));
+    expect(nightBedLine({ time: '14000' }, bed(), 'overworld')).toContain('夜（朝まで 約 8 分）: ベッドを持っている');
+    expect(nightBedLine({ time: '14000', nearbyThreats: [{ name: 'zombie', distance: 30 }] }, bed(), 'overworld')).not.toBeNull();
+  });
+  it('is silent by day, with no bed, with an enemy within 8 blocks, and outside the overworld', async () => {
+    const { nightBedLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
+    expect(nightBedLine({ time: '6000' }, bed(), 'overworld')).toBeNull();
+    expect(nightBedLine({ time: '11000' }, bed(), 'overworld')).toBeNull();
+    expect(nightBedLine({ time: '14000' }, new Map([['stone', 3]]), 'overworld')).toBeNull();
+    expect(nightBedLine({ time: '14000', nearbyThreats: [{ name: 'zombie', distance: 7 }] }, bed(), 'overworld')).toBeNull();
+    expect(nightBedLine({ time: '14000' }, bed(), 'the_nether')).toBeNull();
+  });
+});

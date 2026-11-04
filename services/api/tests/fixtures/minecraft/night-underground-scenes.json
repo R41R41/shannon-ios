@@ -593,5 +593,94 @@
     "vertical"
    ]
   }
+ },
+ {
+  "name": "night-underground-bed",
+  "goal": "エンドラを討伐して",
+  "current": "p6.1",
+  "elapsedMinutes": 38,
+  "events": [
+   "ダイヤのツルハシができた",
+   "金鉱石 2 個を持っている"
+  ],
+  "expect": "夜の洞窟、ベッドを持っている。寝る手（place bed → use）が出るか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 100.5,
+    "y": 10,
+    "z": 50.5
+   },
+   "health": 20,
+   "food": 17,
+   "saturation": 3,
+   "time": "14000",
+   "inside": "洞窟の中（暗い）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: iron_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "iron_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "cooked_beef",
+     "count": 12
+    },
+    {
+     "name": "cobblestone",
+     "count": 40
+    },
+    {
+     "name": "coal",
+     "count": 6
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "raw_gold",
+     "count": 2
+    },
+    {
+     "name": "oak_planks",
+     "count": 6
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "use",
+    "place",
+    "go",
+    "walk",
+    "dig",
+    "vertical"
+   ]
+  }
  }
 ]

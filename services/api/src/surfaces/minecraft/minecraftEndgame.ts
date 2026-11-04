@@ -5,7 +5,7 @@ import { createBlazeWatch } from './minecraftBlazeFacts.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
 import { crystalLine, deathLine, dragonApproachLine, dragonLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
-import { nightArmsLine } from './minecraftNightArms.js';
+import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
 import { pearlLine } from './minecraftPearlFacts.js';
 
 /**
@@ -39,7 +39,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
   const death = some(deathLine(world));
-  const night = some(nightArmsLine(world, facts.counts, facts.dimension));
+  const night = [...some(nightArmsLine(world, facts.counts, facts.dimension)), ...some(nightBedLine(world, facts.counts, facts.dimension))];
   const places = some(placeLine(world));
   const pearls = some(pearlLine(facts.counts, facts.dimension));
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
