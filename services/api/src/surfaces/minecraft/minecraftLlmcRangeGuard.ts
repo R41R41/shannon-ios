@@ -36,7 +36,7 @@ const NOT_MINED = new RegExp(("^(?:bedrock|barrier|end_portal_frame|end_portal|n
 const NOT_MINED_KIND = new RegExp('(?:_bed|_door|_chest|_barrel|_furnace|_shulker_box|_sign|_banner|_portal)$'
   + '|^(?:chest|barrel|furnace|bed|crafting_table|smoker|blast_furnace)$', 'u');
 /** What a frame can be built of. */
-const FRAME_BLOCKS = new Set(['obsidian', 'crying_obsidian']);
+const FRAME_BLOCKS = new Set(['obsidian']);
 
 /**
  * The frame's lava: the cells the map shows that are no lava (known and something else), or null when the map does not show them.
@@ -70,7 +70,7 @@ function obsidianProblem(hand: Rec, world: Rec, here: Cell | null): Found {
 function portalProblem(hand: Rec): Found {
   const blocks = goBlocksProblem({ canPlace: list(hand.canPlace) });
   if (blocks) return reason('range_blocks', blocks);
-  return typeof hand.block === 'string' && !FRAME_BLOCKS.has(hand.block) ? reason('frame_block', 'ポータルの枠は黒曜石（obsidian か crying_obsidian）だけで組める') : null;
+  return typeof hand.block === 'string' && !FRAME_BLOCKS.has(hand.block) ? reason('frame_block', 'ポータルの枠は黒曜石（obsidian。泣く黒曜石 crying_obsidian では組めない）だけで組める') : null;
 }
 function mineProblem(hand: Rec): Found {
   const block = String(hand.block ?? '');

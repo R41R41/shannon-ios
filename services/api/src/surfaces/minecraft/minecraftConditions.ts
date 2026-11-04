@@ -72,10 +72,16 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
 /** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a
  * piglin does not attack her in it). */
 const GOLD_ARMOUR = /^golden_(?:helmet|chestplate|leggings|boots)$/u;
-/** How many of `item` she has: the id itself, or every id that ends in `_<item>`. */
+/**
+ * How many of `item` she has: the id itself, or every id that ends in `_<item>`. Crying obsidian is not obsidian (the whole-run audit of 11/4: it
+ * is no frame of a portal, and the count of `obsidian` for the gate and the End's fight is of the plain one).
+ */
 export function carried(counts: ReadonlyMap<string, number>, item: string): number {
   let total = 0;
-  for (const [name, count] of counts) if (name === item || name.endsWith(`_${item}`) || (item === 'gold_armor' && GOLD_ARMOUR.test(name))) total += count;
+  for (const [name, count] of counts) {
+    if (item === 'obsidian' && name.endsWith('crying_obsidian')) continue;
+    if (name === item || name.endsWith(`_${item}`) || (item === 'gold_armor' && GOLD_ARMOUR.test(name))) total += count;
+  }
   return total;
 }
 
