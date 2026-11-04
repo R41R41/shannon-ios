@@ -950,6 +950,7 @@
     "surfaces/minecraft/minecraftMilestoneLog.ts",
     "surfaces/minecraft/minecraftMoments.ts",
     "surfaces/minecraft/minecraftNetherCare.ts",
+    "surfaces/minecraft/minecraftNightArms.ts",
     "surfaces/minecraft/minecraftObservationReflexes.ts",
     "surfaces/minecraft/minecraftObservationSummary.ts",
     "surfaces/minecraft/minecraftOperationRows.ts",
