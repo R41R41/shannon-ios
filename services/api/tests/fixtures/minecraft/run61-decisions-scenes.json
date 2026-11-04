@@ -509,5 +509,123 @@
     "iron_sword"
    ]
   }
+ },
+ {
+  "name": "run61-d0171-water-stair",
+  "goal": "エンドラを討伐して",
+  "current": "p4",
+  "elapsedMinutes": 36,
+  "events": [
+   "水の階段から東へ出て塞ぐ手を出した",
+   "dig 止まった breathing_work: 水中の掘削を始めない: 呼吸の余裕が足りない（残り息 4秒・呼吸先まで 7秒）。掘削と帰還の両方を賄えない",
+   "10 秒待って、同じ手をもう一度出した",
+   "dig 止まった breathing_work: 水中の掘削を始めない: 呼吸の余裕が足りない（残り息 4秒・呼吸先まで 7秒）。掘削と帰還の両方を賄えない（2 回目）",
+   "同じ手の 3 回目も同じ理由で止まった。高さは 21 から 8 まで落ちた（水の流れで下がった）"
+  ],
+  "expect": "地下から地上へ急ぐ途中、水中の掘削が同じ理由で 3 回止まった。同じ手を送り直すか、別の出方（水から出る・柱・別の道）にするか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 150.5,
+    "y": 8,
+    "z": 112.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "time": "19900",
+   "inside": "地下の洞窟（水の階段の途中）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "stone_sword",
+     "count": 1
+    },
+    {
+     "name": "stone_axe",
+     "count": 1
+    },
+    {
+     "name": "stone_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "bread",
+     "count": 18
+    },
+    {
+     "name": "cooked_porkchop",
+     "count": 3
+    },
+    {
+     "name": "cooked_beef",
+     "count": 2
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "flint_and_steel",
+     "count": 1
+    },
+    {
+     "name": "furnace",
+     "count": 1
+    },
+    {
+     "name": "raw_iron",
+     "count": 8
+    },
+    {
+     "name": "diamond",
+     "count": 5
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    },
+    {
+     "name": "cobblestone",
+     "count": 183
+    },
+    {
+     "name": "cobbled_deepslate",
+     "count": 142
+    },
+    {
+     "name": "tuff",
+     "count": 18
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [],
+   "oxygen": 7
+  },
+  "check": {
+   "anyHand": [
+    "vertical",
+    "go",
+    "place",
+    "pillarUp",
+    "dig",
+    "walk",
+    "eat",
+    "wait"
+   ],
+   "noMatch": [
+    "breathing_work"
+   ]
+  }
  }
 ]
