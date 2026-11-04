@@ -328,8 +328,8 @@ describe('the live state: the facts are the code\'s own, outside the model\'s si
   });
   it('the kinds decide the add-ons of the pack and the route\'s goal', () => {
     const body = { state: { dimension: 'overworld' }, inventory: ['red_bed×3'], planFacts: planFacts('stronghold') };
-    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body }).live.body)).not.toContain('ベッドは 3 個ある');
-    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body: { ...body, planFacts: planFacts('wood') } }).live.body)).toContain('ベッドは 3 個ある');
+    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body }).live.body)).not.toContain('ベッドは 3 個（');
+    expect(JSON.stringify(rewriteLlmcLive({ plan: {}, body: { ...body, planFacts: planFacts('wood') } }).live.body)).toContain('ベッドは 3 個（');
   });
 });
 

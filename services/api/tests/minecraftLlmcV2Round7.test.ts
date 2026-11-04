@@ -57,14 +57,15 @@ describe('the beds: enough with two (runs 36 and 37: 85–90 s fetching beds wit
   const BEDS = ['purple_bed×1', 'blue_bed×1', 'red_bed×1', 'cobblestone×12'];
   it('counts the beds in the stacks and says they are enough from two, not in front of the End', () => {
     expect(bedsIn(BEDS)).toBe(3);
-    expect(packLines(BEDS).at(-1)).toBe('ベッドは 3 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 8）');
-    expect(packLines(['purple_bed×1', 'cobblestone×12']).join('\n')).not.toContain('ベッドは 3 個ある');
-    expect(packLines(BEDS, { forEnd: true }).join('\n')).not.toContain('ベッドは 3 個ある');
+    expect(packLines(BEDS).at(-1)).toBe('ベッドは 3 個（エンドの竜戦に 10・最低 8）。通る村のベッドは全部取れる。ベッドのためだけに村へ戻った往復は 1 回 85〜90 秒だった（実走 36・37）。'
+      + '羊毛からも作れる（同じ色 3＋板 3。ハサミなら羊 1 頭で 1〜3）');
+    expect(packLines(['purple_bed×1', 'cobblestone×12']).join('\n')).not.toContain('ベッドは 3 個（');
+    expect(packLines(BEDS, { forEnd: true }).join('\n')).not.toContain('ベッドは 3 個（');
   });
   it('is in the rewritten live state, and not when the plan\'s node is the End\'s', () => {
     const live = (planNow: string, kind: PlanKind) => rewriteLlmcLive({ body: { map: undefined, state: { dimension: 'overworld' }, planNow, planFacts: planFacts(kind), inventory: BEDS }, plan: {} }).live.body as Record<string, unknown>;
-    expect((live('[p2.1] 村を回る', 'village').pack as string[]).join('\n')).toContain('ベッドは 3 個ある');
-    expect((live('[p17] エンドへ: アイをはめる', 'stronghold').pack as string[]).join('\n')).not.toContain('ベッドは 3 個ある');
+    expect((live('[p2.1] 村を回る', 'village').pack as string[]).join('\n')).toContain('ベッドは 3 個（');
+    expect((live('[p17] エンドへ: アイをはめる', 'stronghold').pack as string[]).join('\n')).not.toContain('ベッドは 3 個（');
   });
 });
 

@@ -134,8 +134,8 @@ function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: A
 }
 /**
  * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run
- * 36 and 37 (85–90 s each): with two beds or more
- * the beds are enough (the End asks four, made from wool before it: `forEnd`). Empty when the inventory is not a list.
+ * 36 and 37 (85–90 s each going back to a village): with two beds or more the line says what the beds are for and what each way costs (not in the
+ * End's own check: `forEnd`). Empty when the inventory is not a list.
  */
 export function packLines(lines: readonly string[], options: { forEnd?: boolean; free?: number } = {}): string[] {
   if (!lines.length) return [];
@@ -157,6 +157,10 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
       + 'その近くに立ち続ける・歩くと拾い直す）');
   }
   const beds = bedsIn(lines);
-  if (beds >= 2 && !options.forEnd) out.push(`ベッドは ${beds} 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 8）`);
+  // The whole-run audit of 11/4 (chapter 1: 「村へ取りに戻らない」 stood against taking every bed of a village): the facts of both ways, no rule.
+  if (beds >= 2 && !options.forEnd) {
+    out.push(`ベッドは ${beds} 個（エンドの竜戦に 10・最低 8）。通る村のベッドは全部取れる。ベッドのためだけに村へ戻った往復は 1 回 85〜90 秒だった（実走 36・37）。`
+      + '羊毛からも作れる（同じ色 3＋板 3。ハサミなら羊 1 頭で 1〜3）');
+  }
   return out;
 }

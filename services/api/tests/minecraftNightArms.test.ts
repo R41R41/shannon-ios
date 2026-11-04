@@ -60,7 +60,10 @@ describe('nightBedLine', () => {
     expect(nightBedLine({ time: '11000' }, bed(), 'overworld')).toBeNull();
     expect(nightBedLine({ time: '11300' }, bed(), 'overworld')).toBeNull();
     expect(nightBedLine({ time: '14000' }, new Map([['stone', 3]]), 'overworld')).toBeNull();
-    expect(nightBedLine({ time: '14000', nearbyThreats: [{ name: 'zombie', distance: 7 }] }, bed(), 'overworld')).toBeNull();
+    expect(nightBedLine({ time: '12000', nearbyThreats: [{ name: 'zombie', distance: 7 }] }, bed(), 'overworld')).toBeNull();
+    // At night with an enemy within 8 blocks: the refusal is said (the audit of 11/4, chapter 3).
+    expect(nightBedLine({ time: '14000', nearbyThreats: [{ name: 'zombie', distance: 7 }] }, bed(), 'overworld'))
+      .toContain('8m 内に敵がいる間は寝られない（壁の向こうでも断られる）');
     expect(nightBedLine({ time: '14000' }, bed(), 'the_nether')).toBeNull();
   });
 });

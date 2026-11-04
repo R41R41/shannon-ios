@@ -76,16 +76,20 @@ export const enemyNear = (world: Record<string, unknown>): boolean => (Array.isA
 
 /**
  * The bed against the night, as the facts of the game (the coordinator's wording of 11/4, after run60 and run61 both ended in a night): within a minute of
- * the night and through it, with a bed in the pack and no enemy within 8 blocks. A sleep skips the night and makes the morning; it cannot begin with an
- * enemy near; it works underground too. It names no hand.
+ * the night and through it, with a bed in the pack. A sleep skips the night and makes the morning; it works underground too. With an enemy within 8
+ * blocks at night the line says the sleep is refused while it is there, walls or not (the whole-run audit of 11/4, chapter 3: the line went out
+ * then, and a place out of their reach was never said to come first). It names no hand.
  */
 export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
   const tick = dayTick(world);
   if (dimension !== 'overworld' || tick === null) return null;
   const bed = [...counts].find(([name, count]) => BED.test(name) && count > 0);
-  if (!bed || enemyNear(world)) return null;
-  if (tick >= NIGHT_TO || tick < BED_FROM - BED_NEAR_TICKS) return null;
+  if (!bed || tick >= NIGHT_TO || tick < BED_FROM - BED_NEAR_TICKS) return null;
   const name = bed[0].replace(/^minecraft:/u, '');
+  if (enemyNear(world)) {
+    return tick < BED_FROM ? null
+      : `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）が、8m 内に敵がいる間は寝られない（壁の向こうでも断られる）。敵が届かず 8m より離れた所なら寝られる`;
+  }
   if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。寝れば夜が飛び、朝になる`;
   return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる`;
 }
