@@ -11,11 +11,20 @@ export interface FillResult {
   remaining: ActPos[];
   skippedBy: { creature: number; reach: number; hazard: number; other: number };
   hpMin: number; hpEnd: number; elapsedMs: number; at: ActPos; safe: boolean;
+  /** Reached retreatTo; separate from safe, which also requires no shooter seeing the end position. */
+  reached?: boolean;
+  /** Number of shooters seeing the end position. */
+  seen?: number;
 }
 
 export const FILL_DESCRIPTION = 'fill: groups(1〜12組、各{stand:{x,y,z},at:[{x,y,z},…1〜8マス]})・block・'
   + 'retreatHp(1〜19の整数、以下で置くのを中止)・retreatTo({x,y,z}、遮蔽の足)・seconds(5〜60、帰還込み)は全て必須。'
-  + '座標は絶対座標（rel不可）。指定順に置き、帰還を試みる。結果は行の fill。safe:false は安全未確認。';
+  + '座標は絶対座標（rel不可）。'
+  + '指定順に置き、帰還を試みる。'
+  + '結果は行の fill。'
+  + 'reached は退避先に着いたか、seen は見ている射手の数。'
+  + 'safe は着き、かつ射手に見られていない時だけ true。'
+  + 'safe:false だけでは未到着とは限らない。';
 
 const objectOf = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;

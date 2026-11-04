@@ -97,13 +97,26 @@ function fillCounts(fill: FillResult): string[] {
   return [...(known(fill.placed) ? [`置いた ${num(fill.placed)}`] : []), ...left];
 }
 
+/** Arrival and shooter visibility are independent facts; old bodies may omit both measurements. */
+function fillReturnWords(fill: FillResult): string[] {
+  const seen = Number.isInteger(fill.seen) && fill.seen! >= 0 ? fill.seen : undefined;
+  const visibility = seen === undefined ? [] : [`見ている射手 ${seen} 体`];
+  if (fill.safe === true) return ['退避先に着き、射手に見られていない', ...visibility];
+  if (fill.reached === true && fill.safe === false && seen !== undefined && seen > 0) {
+    return [`退避先に着いたが射線が通っている（${seen} 体）`];
+  }
+  const arrival = fill.reached === false ? ['退避先に着いていない']
+    : fill.reached === true ? ['退避先に着いた'] : [];
+  if (fill.safe === false && !arrival.length && !visibility.length) return ['退避先への到着と射手の視線は未確認'];
+  return [...arrival, ...visibility];
+}
+
 /** The fill's numbers in order: counts, health, time, the end and whether it was safe. */
 function fillFacts(fill: FillResult): string[] {
   const end = fill.at && [fill.at.x, fill.at.y, fill.at.z].every(known) ? [`終了地点 ${at(fill.at)}`] : [];
-  const safe = typeof fill.safe === 'boolean' ? [fill.safe ? '終了地点は安全' : '終了地点の安全は未確認'] : [];
   const health = [...(known(fill.hpMin) ? [`体力最低 ${num(fill.hpMin)}`] : []), ...(known(fill.hpEnd) ? [`終了体力 ${num(fill.hpEnd)}`] : [])];
   const time = known(fill.elapsedMs) ? [`経過 ${num(fill.elapsedMs)} ms`] : [];
-  return [...fillCounts(fill), ...health, ...time, ...end, ...safe];
+  return [...fillCounts(fill), ...health, ...time, ...end, ...fillReturnWords(fill)];
 }
 
 /** Only the body's structured fill measurements; no inferred arrival, success or next action. */

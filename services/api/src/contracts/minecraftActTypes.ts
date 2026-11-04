@@ -129,7 +129,7 @@ export interface ActHand {
   block?: string;
   /** use/equip/craft/eat/shoot: the item (use: water_bucket, bucket, lava_bucket, flint_and_steel, ender_eye, a bed, a door…). */
   item?: string;
-  /** craft: how many of `item`; furnace put: how many of `item`. */
+  /** craft/furnace put: how many of `item`; use gold_ingot target=piglin: up to 1–64 trades (default 1). */
   count?: number;
   /** drop/chest take/chest put: the items and counts (count absent: the whole stack kind). */
   items?: readonly { item: string; count?: number }[];
