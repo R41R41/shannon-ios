@@ -62,7 +62,12 @@ export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food
 export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SPARE_PICKAXES, SHIELD, SWORD, ARMOUR, FOOTING, BOOTS],
   risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い。' + MAKE_IT };
 
-const BEDS: PrepNeed = { label: 'ベッド', count: 4, pattern: BED_ITEM };
+/** Owner 2026-11-04 (「ベッドと黒曜石を持っていく」): the dragon is killed with beds; 10 is the aim, 8 the least the End's gate lets in. */
+export const END_BEDS = 8;
+/** The obsidian the End fight takes (a bed's shield and its base), counted apart from the portal's ten: 12 is the aim, 8 the least. */
+export const END_OBSIDIAN = 8;
+const BEDS: PrepNeed = { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM };
+const FIGHT_OBSIDIAN: PrepNeed = { label: '黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）', count: END_OBSIDIAN, pattern: /^obsidian$/u };
 const WATER_BUCKET: PrepNeed = { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u };
 /** What a pillar, a bridge or a cover is made of in the End: the footing's blocks and obsidian. */
 const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）', count: 64, pattern: new RegExp(`${BLOCKS.source}|^obsidian$`, 'u') };
@@ -71,7 +76,7 @@ const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）
  * while the blocks to stand and cover on, the water bucket, the beds or the food are missing. What is missing is said; how to gather it is the
  * decision's.
  */
-export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80, needs: [STACKABLE, WATER_BUCKET, BEDS],
+export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80, needs: [STACKABLE, WATER_BUCKET, BEDS, FIGHT_OBSIDIAN],
   risk: 'エンドは虚空の島で、戻る道は開いたポータルだけ。積める物・水バケツ・ベッド・食料が無いと、虚空に落ちるか竜に押されて死に、ここまでの装備と時間を失う。' + MAKE_IT };
 
 /**
@@ -144,7 +149,7 @@ export const PREP_RULES_WORDS = [
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・ハーフブロック 12・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
   ("- ベッドは村の家で 1〜2 つ（ベッドの節の doneWhen は " +
 "have:bed>=1）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、ベッドの節は後回しにして鉄へ進む（plan_update に書く）。")
-    + '羊は見かけたら羊毛 3 を取り、エンドの前に板 3 と作って 4〜6 にする。',
+    + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。エンドの竜戦はベッドで倒す（目標 10・最低 8、黒曜石も 8〜12）。',
   PREP_REFERENCE,
 ].join('\n');
 

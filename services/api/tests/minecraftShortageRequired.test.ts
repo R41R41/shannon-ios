@@ -267,7 +267,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
     const plan = seedPlan('エンドラを倒して')!;
     const check = plan.nodes.find(node => node.title === '出発の点検（エンドへ）')!;
-    expect(check.doneWhen).toBe('food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12&have:water_bucket');
+    expect(check.doneWhen).toBe('food>=80&have:bed>=8&have:obsidian>=8&have:arrow>=30&have:ender_eye>=12&have:water_bucket');
     expect(check.note).toContain('水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ: 手で使う物');
     expect(STRATEGY_KNOWLEDGE_V2).toContain('弓と矢 30・水入りバケツ');
   });

@@ -41,7 +41,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
     node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' })] }),
   node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'food>=40&have:bed', children: [
-    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', note: '村が見えなければ飛ばす。ベッドは 3〜4 台（エンドの前に要る）を今のうちに。羊毛が手に入るなら羊毛 3＋板 3 で作る',
+    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（エンドの竜戦に 10 個、最低 8 要る）。羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
     caution: ['通りがかりに糸・火打石（砂利を掘る）・羽（ニワトリ）を見かけたら拾う（エンドの弓と矢 30 の分。取りに戻らない）'] }),
     node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
   node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる'],
@@ -85,9 +85,10 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=14',
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
   node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: '帰りのゲートから。ポータルの対は live の控え' }),
-  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=4&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
+  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=80&have:bed>=8&have:obsidian>=8&have:arrow>=30&have:ender_eye>=12&have:water_bucket',
     note: '水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ: 手で使う物（体の自動の落下止めは働かない前提）',
-    children: [node('ベッドを作る（羊毛3と板3）', { kind: 'bed', doneWhen: 'have:bed>=4' }),
+    children: [node('ベッドを10個にする（羊毛3と板3・最低8）', { kind: 'bed', doneWhen: 'have:bed>=10' }),
+      node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12' }),
       node('弓と矢（糸・棒・火打石・羽根）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
     node('目玉の交点へ行き、地下の枠の部屋を見つける', { kind: 'stronghold', doneWhen: 'see:end_portal_frame', note: '交点・誤差・次の投げ位置は live の目玉の帳簿' }),
@@ -97,7 +98,8 @@ const BEYOND: readonly PlanSeed[] = [
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
     caution: ['縁から5マス以上内側で戦う（sneak は押されるのを止めない）', '息の雲・火の玉の線の上で立ち止まらない', '檻つきの柱は積める物3個以上を持って登り、長居しない（落下止めは当てにしない）',
       '竜を打つ前に剣か斧を equip で手に持つ（手が別の物のことがある）'],
-    children: [node('クリスタルを弓で壊す', { kind: 'dragon', doneWhen: 'crystals<=0' }), node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
+    children: [node('ベッドで倒す（本命）', { kind: 'dragon', note: 'ベッド 10・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }), node('クリスタルを弓で壊す（予備）', { kind: 'dragon', doneWhen: 'crystals<=0' }),
+      node('止まり木の竜を剣で打つ', { kind: 'dragon' })] }),
 ];
 /**
  * mb-llmc v2 (run 36, the pass mark: the Nether within 30 minutes): before the gate only what the gate needs.

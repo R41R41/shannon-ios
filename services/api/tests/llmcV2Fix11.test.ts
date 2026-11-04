@@ -155,9 +155,9 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(system).toContain('節目の目安（開始からの秒）は live の meter が、今と次の節目で言う');
     expect(milestoneWords()).toBe('ベッド 150・地下の準備 300・鉄のツルハシ 350・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 2,820');
-    expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 2_820, 3_200, 4_700, 6_000, 6_700, 7_500, 8_300, 8_700, 9_300]);
+    expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 2_820, 3_200, 4_700, 6_000, 6_700, 7_800, 8_600, 9_000, 9_600]);
     // The instructions list the targets up to the Nether (the cached text has a cap); the meter says the later ones.
-    expect(DRAGON_MILESTONES.filter(item => item.late).map(item => item.name)).toEqual(['ネザー要塞', 'ブレイズロッド 7 本', 'エンダーパール 12 個', 'エンダーアイ 12 個', 'エンドの点検（ベッド 4・水バケツ・食料 80 点）', 'ポータルの枠の部屋', 'エンド', '竜の討伐']);
+    expect(DRAGON_MILESTONES.filter(item => item.late).map(item => item.name)).toEqual(['ネザー要塞', 'ブレイズロッド 7 本', 'エンダーパール 12 個', 'エンダーアイ 12 個', 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 80 点）', 'ポータルの枠の部屋', 'エンド', '竜の討伐']);
     expect(V2_ALWAYS).toContain('road・meter（エンドラ討伐だけ）: road は');
     expect(V2_ALWAYS).toContain('meter は開始からの秒と次の節目の「あと」か「遅れ」');
   });
@@ -179,7 +179,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
     expect(line).not.toContain('まだの節目');
     // The kill is the last target and the frame never reaches it (the task ends there): the meter keeps saying it, past its seconds.
     const every = done(tree.nodes.map(node => node.id));
-    expect(meterLine(every, bare, 12_000 / 60)).toContain('次の節目 竜の討伐 目安 9,300 秒（');
+    expect(meterLine(every, bare, 12_000 / 60)).toContain('次の節目 竜の討伐 目安 9,600 秒（');
   });
   it('writes a blocked node before the current one as 止, as the dictionary says', () => {
     const road = roadLine(done(['p1', 'p2'], 'p5.1', { p3: 'blocked' }))!;
