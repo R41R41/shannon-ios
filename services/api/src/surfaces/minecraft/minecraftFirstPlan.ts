@@ -48,8 +48,10 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
   node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる'],
     children: [node('鉄を掘る（y=16前後・洞窟）', { kind: 'iron' }),
-    node('焼いて鉄のツルハシ・バケツ・盾', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:bucket&have:shield' }),
-    node('鉄の全身の防具', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings&have:iron_boots' })] }),
+    // The whole-run audit of 11/4, order 1: the sword and the shield the moment the iron is smelted (run60 met the night with no sword); the boots are
+    // the golden ones (the gate's table), so the armour is the three iron pieces.
+    node('焼いて鉄のツルハシ・剣・盾・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket' }),
+    node('鉄の兜・胸当て・脚', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings' })] }),
   node('水入りバケツ', { kind: 'water', doneWhen: 'have:water_bucket' }),
   node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe',
     caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・バケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [

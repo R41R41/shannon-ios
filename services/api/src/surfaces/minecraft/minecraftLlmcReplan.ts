@@ -15,7 +15,7 @@ import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
  * A hold is kept for the results nobody knows and for the body's and the head's disagreement on who holds the body.
  */
 export const REPLAN = Object.freeze({ gapMs: 5 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000,
-  pendingMs: 15 * 60_000 });
+  pendingMs: 15 * 60_000, safeHp: 12, watchMs: 1_000 });
 
 /** The stalls a new plan answers; a failure of the decision's writing is not one. */
 export const REPLAN_STALLS: ReadonlySet<string> = new Set(['node_stalled', 'same_spot_stops', 'wait_loop', 'death']);

@@ -1,4 +1,5 @@
 import { BED_ITEM, EDIBLE_FOOD, countMatching, type ItemCounts } from './minecraftItems.js';
+import { IRON_BEFORE_NETHER, NETHER_BY_SECONDS } from './minecraftLlmcPrepRules.js';
 
 /**
  * The stage of her Minecraft opening, read from what she carries: the one definition, shared by the skill pointers
@@ -151,7 +152,7 @@ export function milestoneNow(facts: MilestoneFacts): { now: Milestone; next: Mil
  */
 export const MILESTONE_TARGET_SECONDS: Readonly<Record<string, number>> = Object.freeze({
   '木': 60, '木と石のツルハシ': 150, '石の斧': 150, '木材': 200, '食料と羊とベッド': 600, '鉄': 420, 'バケツ': 420, '鉄の全身の防具': 780,
-  'ダイヤ': 1_200, '黒曜石': 1_500, 'ゲート': 1_650, 'ネザー': 1_800,
+  'ダイヤ': 1_200, '黒曜石': 1_500, 'ゲート': 1_650, 'ネザー': NETHER_BY_SECONDS,
 });
 /**
  * A step's budget: the owner's own seconds, a deadline from the task's start, not a sum along the order. The bed's 600 s is the
@@ -161,7 +162,8 @@ export function milestoneTargetSeconds(name: string): number | undefined {
   return MILESTONE_TARGET_SECONDS[name];
 }
 /** What a step that is late cuts first: the detours run 18 and 19 lost their time to. */
-export const MILESTONE_LATE_CUTS = '掘りすぎ（鉄は33まで）・望みの薄い探し（羊の出ない所、同じ方角）・水の中の生き物の追い・かまどの前の待ち';
+// The whole-run audit of 11/4, order 11: the iron is cut at the budget of its uses (`IRON_BEFORE_NETHER`), not at a fixed 33.
+export const MILESTONE_LATE_CUTS = `掘りすぎ（鉄はネザーまでの予算 ${IRON_BEFORE_NETHER} 個を超えて）・望みの薄い探し（羊の出ない所、同じ方角）・水の中の生き物の追い・かまどの前の待ち`;
 
 /**
  * The lines a decision carries (`milestone`): the step now with its condition and reason, the next one, and, with the seconds since

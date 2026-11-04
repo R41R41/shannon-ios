@@ -2,12 +2,14 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { createEyeLedger, type EyeLedger } from './minecraftEyeLedger.js';
 import { createBlazeWatch } from './minecraftBlazeFacts.js';
+import { createDescentTrail } from './minecraftDescentTrail.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
 import { crystalLine, deathLine, dragonApproachLine, dragonLine, endFightLines, frameLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
 import { pearlLine } from './minecraftPearlFacts.js';
 import { undergroundInOverworld } from './minecraftPlanDone.js';
+import { createWoolWatch } from './minecraftWoolFacts.js';
 
 /**
  * What a task that goes for the dragon keeps and says of the way after the Nether, as facts for the live state (one object a task, made
@@ -34,19 +36,19 @@ const some = (line: string | null): string[] => line ? [line] : [];
 
 /** The lines of one decision from the frame and the ledger's lines (pure). */
 function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[],
-  watched: { blaze: string | null; hunt: string | null }): EndgameLines {
+  watched: { blaze: string | null; hunt: string | null; trail?: string | null; wool?: string | null }): EndgameLines {
   const { blaze, hunt } = watched;
   const fight = endFightLines(end);
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
   const death = some(deathLine(world));
   const night = [...some(nightArmsLine(world, facts.counts, facts.dimension, undergroundInOverworld(facts))),
-    ...some(nightBedLine(world, facts.counts, facts.dimension))];
+    ...some(nightBedLine(world, facts.counts, facts.dimension)), ...some(watched.trail ?? null)];
   const places = some(placeLine(world));
   const pearls = some(pearlLine(facts.counts, facts.dimension));
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true))];
-  return { lines: [...night, ...fight, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
+  return { lines: [...night, ...some(watched.wool ?? null), ...fight, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
     short: [...night, ...urgent, ...some(blaze), ...frames, ...death] };
 }
 
@@ -61,6 +63,8 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
   const ledger = createEyeLedger((saved as { minecraftEyes?: unknown } | null)?.minecraftEyes);
   const blaze = createBlazeWatch((saved as { minecraftBlazeWatch?: unknown } | null)?.minecraftBlazeWatch);
   const hunt = createEnderHunt((saved as { minecraftEnderHunt?: unknown } | null)?.minecraftEnderHunt);
+  const wool = createWoolWatch();
+  const trail = createDescentTrail((saved as { minecraftDescentTrail?: unknown } | null)?.minecraftDescentTrail);
   return {
     /** An act's result (the receipt's id and its result JSON): a thrown eye goes in the ledger. */
     noteResult(id: string | undefined, resultJson: string | undefined, observation: BodyObservation | null): void {
@@ -75,9 +79,10 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       if (!dragonTask || !world || !facts) return NONE;
       if (facts.seen?.has('end_portal_frame') || facts.dimension === 'the_end') ledger.clear();
       return compose(world, endViewOf(observation), facts, eyeLinesOf(ledger, facts, now()), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),
-        hunt: hunt.line(world, facts.counts, facts.dimension, now()) });
+        hunt: hunt.line(world, facts.counts, facts.dimension, now()), trail: trail.line(facts),
+        wool: wool.line(world, facts.counts, facts.dimension) });
     },
-    checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint(), ...hunt.checkpoint() }),
+    checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint(), ...hunt.checkpoint(), ...trail.checkpoint() }),
   };
 }
 export type Endgame = ReturnType<typeof createEndgame>;

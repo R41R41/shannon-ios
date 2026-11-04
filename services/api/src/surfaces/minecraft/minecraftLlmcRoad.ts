@@ -4,6 +4,7 @@ import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, prepHold
    undergroundInOverworld,
   type DoneFacts } from './minecraftPlanDone.js';
 import { kindOf } from './minecraftPlanFacts.js';
+import { NETHER_BY_SECONDS } from './minecraftLlmcPrepRules.js';
 
 /**
  * mb-llmc v2 (mb-llmc-cand 11, chapter 4 A: the goal's yardstick and the stage road): for a task that goes for
@@ -72,7 +73,7 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ダイヤのツルハシ', seconds: 1_000, doneWhen: 'have:diamond_pickaxe' },
   { name: '水バケツ', seconds: 1_000, doneWhen: 'have:water_bucket' },
   { name: '黒曜石 10 個', seconds: 1_500, doneWhen: 'have:obsidian>=10' },
-  { name: 'ネザー', seconds: 2_820, doneWhen: 'dim:the_nether' },
+  { name: 'ネザー', seconds: NETHER_BY_SECONDS, doneWhen: 'dim:the_nether' },
   // Past the Nether, on the three hours of the owner's pass mark (2026-11-03: the dragon within three hours, an hour and a half at best): the
   // coordinator's pace for each stretch, a ruler and nothing else; the Nether's own target above is the same plan's (47 minutes).
   { name: 'ネザー要塞', seconds: 3_200, doneWhen: 'see:fortress', late: true },

@@ -5,6 +5,7 @@ import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } 
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
 import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
 import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
+import { sleepFirstHold } from './minecraftLlmcSleepHold.js';
 import { noteHeldAct } from './minecraftLlmcHeldStreak.js';
 import { tableNote } from './minecraftLlmcTableNote.js';
 import { descentNote, gateHold } from './minecraftLlmcReadiness.js';
@@ -56,11 +57,15 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   if (gate) found.push({ hand: gate.hand, code: 'gate_required', kind: 'portal', line: `手 ${gate.hand} portal: ${gate.line}。` });
   const deadly = deadlyGateHold(input, frame);
   if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
+  const sleep = sleepFirstHold(input, frame, taskId);
+  if (sleep) found.push({ hand: sleep.hand, code: 'sleep_first', kind: sleep.kind, line: `手 ${sleep.hand} ${sleep.kind}: ${sleep.line}。` });
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
     furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
   }
-  return found.reduce<Held | null>((first, next) => !first || next.hand < first.hand ? next : first, null);
+  const first = found.reduce<Held | null>((held, next) => !held || next.hand < held.hand ? next : held, null);
+  if (first?.code === 'sleep_first') sleep?.commit();
+  return first;
 }
 
 /** 手 1 … k−1 だけの act（他の欄はそのまま）。手が 1 つも残らなければ null（全部止める）。 */

@@ -14,10 +14,11 @@ const FILLER = new RegExp('^(?:cobblestone|cobbled_deepslate|deepslate|diorite|a
   + 'netherrack|basalt|blackstone|calcite|dripstone_block)$', 'u');
 /**
  * The clutter that is dropped before the filler (run59 leg 2: free 2 of 36 with fences, stairs, rails, mossy cobblestone, string, saplings and seeds in the
- * pack, and the candidates named were the cobblestone the gate asks for). The string is clutter only under three (a bow takes three).
+ * pack, and the candidates named were the cobblestone the gate asks for). The string is never clutter (the whole-run audit of 11/4, order 10: one or
+ * two of it were named to drop while the bow was not made; a bow takes three, and four make a wool).
  */
 const JUNK = new RegExp('(?:_fence|_fence_gate|_stairs|_sapling|_seeds)$|^(?:rail|powered_rail|detector_rail|activator_rail|mossy_cobblestone'
-  + '|mossy_stone_bricks|string)$', 'u');
+  + '|mossy_stone_bricks)$', 'u');
 /** The stacks per filler kind are shown when the filler alone fills this many slots. */
 const FILLER_SLOTS = 3;
 const STACK = /^([a-z_0-9]+)×(\d+)/u;
@@ -58,7 +59,7 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
     if (stack && FILLER.test(stack[1]!)) {
       filler.set(stack[1]!, (filler.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
-    if (stack && JUNK.test(stack[1]!) && !(stack[1] === 'string' && Number(stack[2]) >= 3)) {
+    if (stack && JUNK.test(stack[1]!)) {
       junk.set(stack[1]!, (junk.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
   }
@@ -133,8 +134,8 @@ function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: A
 }
 /**
  * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run
- * 36 and 37 (85–90 s each): with two beds or more
- * the beds are enough (the End asks four, made from wool before it: `forEnd`). Empty when the inventory is not a list.
+ * 36 and 37 (85–90 s each going back to a village): with two beds or more the line says what the beds are for and what each way costs (not in the
+ * End's own check: `forEnd`). Empty when the inventory is not a list.
  */
 export function packLines(lines: readonly string[], options: { forEnd?: boolean; free?: number } = {}): string[] {
   if (!lines.length) return [];
@@ -156,6 +157,10 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
       + 'その近くに立ち続ける・歩くと拾い直す）');
   }
   const beds = bedsIn(lines);
-  if (beds >= 2 && !options.forEnd) out.push(`ベッドは ${beds} 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 8）`);
+  // The whole-run audit of 11/4 (chapter 1: 「村へ取りに戻らない」 stood against taking every bed of a village): the facts of both ways, no rule.
+  if (beds >= 2 && !options.forEnd) {
+    out.push(`ベッドは ${beds} 個（エンドの竜戦に 10・最低 8）。通る村のベッドは全部取れる。ベッドのためだけに村へ戻った往復は 1 回 85〜90 秒だった（実走 36・37）。`
+      + '羊毛からも作れる（同じ色 3＋板 3。ハサミなら羊 1 頭で 1〜3）');
+  }
   return out;
 }

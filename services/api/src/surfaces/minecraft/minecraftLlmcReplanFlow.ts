@@ -15,6 +15,24 @@ import {
 } from './minecraftLlmcReplan.js';
 import { replanBrief, type BriefInput } from './minecraftLlmcReplanBrief.js';
 import { stallEscapedLine, stallRecordLine, type StallVitals } from './minecraftLlmcStallRecord.js';
+
+/**
+ * The body is not left to wait for a new plan in danger (the whole-run audit of 11/4, order 12: the ask waits up to 120 s inside the step, and the
+ * body stands while it does): a hostile within 16 m or health under `REPLAN.safeHp` puts the ask off to a later decision (the stall waits, for
+ * `pendingMs`), and a wait that sees a hostile come or health fall is given up at once (it was counted when asked).
+ */
+const inDanger = (vitals: StallVitals | undefined): boolean => vitals !== undefined
+  && (vitals.enemies16 > 0 || (vitals.hp !== null && vitals.hp < REPLAN.safeHp));
+const worse = (start: StallVitals, now: StallVitals): boolean => now.enemies16 > start.enemies16
+  || (start.hp !== null && now.hp !== null && now.hp <= start.hp - 2);
+/** A watch over the wait: its signal aborts when the body's state gets worse than at the start; `stop` ends the watch. */
+function dangerWatch(vitals: (() => StallVitals) | undefined): { signal: AbortSignal; stop(): void } {
+  const danger = new AbortController(), start = vitals?.();
+  if (!vitals || !start) return { signal: danger.signal, stop: () => undefined };
+  const timer = setInterval(() => { if (worse(start, vitals())) danger.abort(); }, REPLAN.watchMs);
+  (timer as { unref?: () => void }).unref?.();
+  return { signal: danger.signal, stop: () => clearInterval(timer) };
+}
 import { resumeStalls, type Stall } from './minecraftLlmcStalls.js';
 
 /**
@@ -71,6 +89,8 @@ export function createReplanFlow(deps: ReplanDeps) {
   let pending: Waiting | null = readWaiting(deps.savedPending);
   /** The waiting stall the skipped line was said for (said once, not at every decision). */
   let told: Stall | null = null;
+  /** The waiting stall the danger put off (said once). */
+  let putOff: Stall | null = null;
   /** The newest stall record, kept until the body has got out of its node (`escaped`). */
   let lastRecord: { node: string; outcome: string; at: number } | null = null;
   const say = (line: string): void => {
@@ -79,6 +99,13 @@ export function createReplanFlow(deps: ReplanDeps) {
     } catch {
       /* a log never fails a step */
     }
+  };
+  /** The body in danger: the ask waits for a later decision (said once for a stall). */
+  const heldByDanger = (stall: Stall, node: string): boolean => {
+    if (!inDanger(deps.vitals?.())) return false;
+    if (putOff !== stall) say(`Shannon Minecraft replan put off task=${deps.taskId} node=${node} kind=${stall.kind} why=danger`);
+    putOff = stall;
+    return true;
   };
   const record = (node: string, stall: Stall, outcome: ReplanRecord['outcome'], why: string): ReplanRecord =>
     ({ at: deps.clock(), node, kind: stall.kind, outcome, why });
@@ -106,13 +133,16 @@ export function createReplanFlow(deps: ReplanDeps) {
     const { node: _node, ...rest } = parts;
     const brief = replanBrief({ ...rest, stall: { kind: stall.kind, why: stall.why, node: parts.node }, earlier: earlier.last,
       sameNode: earlier.nodes[node] ?? 0 });
-    const began = Date.now();
+    const began = Date.now(), danger = dangerWatch(deps.vitals);
     let reply: unknown;
     try {
-      reply = await deps.replanner!(REPLAN_SYSTEM, brief, AbortSignal.any([signal, AbortSignal.timeout(REPLAN.giveUpMs)]));
+      reply = await deps.replanner!(REPLAN_SYSTEM, brief, AbortSignal.any([signal, AbortSignal.timeout(REPLAN.giveUpMs), danger.signal]));
     } catch (error) {
-      say(`Shannon Minecraft replan failed task=${deps.taskId} node=${node} ms=${Date.now() - began} ${String(error).slice(0, 100)}`);
-      return record(node, stall, 'failed', '答えが来なかった');
+      const cut = danger.signal.aborted ? ' why=danger' : '';
+      say(`Shannon Minecraft replan failed task=${deps.taskId} node=${node} ms=${Date.now() - began}${cut} ${String(error).slice(0, 100)}`);
+      return record(node, stall, 'failed', danger.signal.aborted ? '待つ間に敵が来た・体力が減った（打ち切った）' : '答えが来なかった');
+    } finally {
+      danger.stop();
     }
     const made = replanOf(reply);
     if (!made) return record(node, stall, 'refused', '答えが読めなかった');
@@ -145,6 +175,7 @@ export function createReplanFlow(deps: ReplanDeps) {
         return;
       }
       const node = parts.node ?? '-';
+      if (heldByDanger(stall, node)) return;
       const verdict = replanVerdict(ledger, node, deps.clock());
       if (!verdict.ok) {
         if (told !== stall) {

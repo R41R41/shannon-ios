@@ -345,6 +345,25 @@ describe('the flow of one task', () => {
     await flow.run(signal);
     expect(asked).toHaveLength(0);
   });
+  it('puts the ask off while the body is in danger, and gives up a wait that sees a hostile come (the audit of 11/4, order 12)', async () => {
+    let vitals = { hp: 20, hunger: 20, dimension: 'overworld', enemies16: 1 };
+    const asked: string[] = [], lines: string[] = [];
+    const flow = createReplanFlow({ taskId: 'danger', saved: null, replanner: async (_system, brief, wait) => {
+      asked.push(brief);
+      vitals = { ...vitals, enemies16: 2 };
+      return new Promise((_resolve, reject) => wait.addEventListener('abort', () => reject(new Error('aborted'))));
+    }, clock: () => 0, sources: item => sources({ node: item.key }), check: () => null, vitals: () => vitals, log: line => lines.push(line) });
+    flow.note(stall());
+    await flow.run(signal);
+    await flow.run(signal);
+    expect(asked).toHaveLength(0);
+    expect(lines.filter(line => line.includes('put off') && line.includes('why=danger'))).toHaveLength(1);
+    vitals = { ...vitals, enemies16: 0 };
+    await flow.run(signal);
+    expect(asked).toHaveLength(1);
+    expect(flow.ledger().last.at(-1)).toMatchObject({ outcome: 'failed', why: '待つ間に敵が来た・体力が減った（打ち切った）' });
+    expect(lines.some(line => line.includes('replan failed') && line.includes('why=danger'))).toBe(true);
+  });
 });
 
 describe('the look of a task that is not held', () => {

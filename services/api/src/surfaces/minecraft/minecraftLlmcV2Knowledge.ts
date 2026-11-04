@@ -1,5 +1,5 @@
 import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
-import { PREP_DESCENT_RULE, PREP_RULES_WORDS, SAFETY_FIRST } from './minecraftLlmcPrepRules.js';
+import { NETHER_BY_SECONDS, PREP_DESCENT_RULE, PREP_RULES_WORDS, SAFETY_FIRST } from './minecraftLlmcPrepRules.js';
 import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
 import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
@@ -21,7 +21,7 @@ import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
  */
 const GOAL = [
   '## 目的と物差し',
-  '- 目的は課題の goal。持ち主の物差しは速さ: エンドラ討伐なら 3 時間以内（理想 1.5 時間）。ネザーへ入るまでは 47 分ほど（準備を含む）で、なめらかに。',
+  `- 目的は課題の goal。持ち主の物差しは速さ: エンドラ討伐なら 3 時間以内（理想 1.5 時間）。ネザーへ入るまでは ${Math.round(NETHER_BY_SECONDS / 60)} 分ほど（準備を含む）で、なめらかに。`,
   '- 速さと同じだけ、生きていることが大事。死ぬと持ち物と時間を失い、用心より時間がかかる。',
   '- 優先の順: 差し迫った危険を避ける → 準備の必須を満たす → 目的へ早く進める。時間を理由に止めたり、早く完了にしたりしない。目安は物差しで、手を決める物ではない。',
   '- 節目の目安（開始からの秒）は live の meter が、今と次の節目で言う（一覧は持たない: 通しの尺は 3 時間）。',
@@ -164,6 +164,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 地下で食料を補えない時は、帰還の観測記録と以前の通過点から戻る道を比べ、pathやcolumnで短い区間ずつ確認する。'
       + '通過記録は逆向きの安全を保証しない。新しい穴を掘り続ける前に既存の階段・通路を調べる。水や鉱石の座標は地上の出口ではない。'
       + '魚は見えた個体と岸・水面の出入口を確かめて狙う。魚を探すためだけに地下から水の天井を開けない。',
+    '- 地上へ上る時は、live の「下りた跡」を逆にたどる道と、新しく掘り上がる道を比べる（run61: 新しい水・岩の階段で 7 分かかり、上りの途中の洞窟 y44 で'
+      + '日の出の約 3 分後にゾンビ 4 体に囲まれて死んだ）。上りで同じ所の止まりが 2 回続いたら、足の周りと頭の上を塞いでから道を組み直す。'
+      + '地下・洞窟は朝でも暗く敵が湧く: 朝になったことを洞窟を通る理由にしない。',
     '- 補助の魚を取ると選んだ時だけ、岸から届くかsightで調べ、狙う個体を選んでfightへ追従と武器の持替えを任せる。attackを選ぶなら先に手の武器を確認する（食後は食べ物や空手のことがある）。動く魚の過去座標へgoしてから複数個体を攻撃する列にはしない。'
       + '潜るなら先に氷などの出入口を開け、水へ入れたことと戻る穴・息を確認する。goの水中の上下移動は、体の幅と高さが通る既知の静水の通路だけで、氷や壁を越えない。'
       + '1個体の結果後に持ち物と落ちた食料を確かめ、回収・加工・補給の成果で続行を決める。呼吸の反射後は水面への復帰を先にし、深い魚の追跡と届く別個体・地上の食料を比べる。',
