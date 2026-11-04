@@ -7,6 +7,7 @@ import { crystalLine, deathLine, dragonApproachLine, dragonLine, endFightLines, 
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
 import { pearlLine } from './minecraftPearlFacts.js';
+import { undergroundInOverworld } from './minecraftPlanDone.js';
 
 /**
  * What a task that goes for the dragon keeps and says of the way after the Nether, as facts for the live state (one object a task, made
@@ -39,7 +40,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
   const death = some(deathLine(world));
-  const night = [...some(nightArmsLine(world, facts.counts, facts.dimension)), ...some(nightBedLine(world, facts.counts, facts.dimension))];
+  const night = [...some(nightArmsLine(world, facts.counts, facts.dimension, undergroundInOverworld(facts))), ...some(nightBedLine(world, facts.counts, facts.dimension))];
   const places = some(placeLine(world));
   const pearls = some(pearlLine(facts.counts, facts.dimension));
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),

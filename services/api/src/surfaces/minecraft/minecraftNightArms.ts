@@ -8,18 +8,41 @@ import { carried } from './minecraftConditions.js';
 const NIGHT_FROM = 13_000, NIGHT_TO = 23_000, DAY_LENGTH = 24_000, TICKS_PER_MINUTE = 1_200;
 const NEAR_TICKS = 3 * TICKS_PER_MINUTE;
 const WEAPON = /(?:^|:)(?:wooden|stone|golden|iron|diamond|netherite)_(?:sword|axe)$/u;
+/** The blade of the iron gear: the weapon the night and the gate are met with (a stone one is what the first hour makes). */
+const IRON_BLADE = /(?:^|:)(?:iron|diamond|netherite)_sword$/u;
+const IRON_FOR_SWORD = 2;
 
 const minutes = (ticks: number): string => ticks < 2 * TICKS_PER_MINUTE
   ? `${Math.max(1, Math.round(ticks / 20))} 秒` : `約 ${Math.round(ticks / TICKS_PER_MINUTE)} 分`;
 
-/** The line for a decision, or null: not the overworld, the night not near, or a sword or an axe in the pack. */
-export function nightArmsLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
-  if (dimension !== 'overworld' || typeof world.time !== 'string' || !/^\d+$/u.test(world.time.trim())) return null;
-  if ([...counts.keys()].some(name => WEAPON.test(name) && carried(counts, name) > 0)) return null;
-  const tick = Number(world.time.trim()) % DAY_LENGTH;
-  if (tick >= NIGHT_TO || tick < NIGHT_FROM - NEAR_TICKS) return null;
-  const when = tick >= NIGHT_FROM ? `夜（朝まで ${minutes(NIGHT_TO - tick)}）` : `夜まで ${minutes(NIGHT_FROM - tick)}`;
-  return `${when}: 剣も斧も荷に無い。夜は地上にゾンビ・スケルトンが湧く`;
+const carriedNames = (counts: ReadonlyMap<string, number>, pattern: RegExp): string[] =>
+  [...counts].filter(([name, count]) => pattern.test(name) && count > 0).map(([name]) => name.replace(/^minecraft:/u, ''));
+
+/** What she holds against the dark, as a fact: nothing, or only blades that are not iron while iron for a sword is in the pack (the iron was smelted and the sword not made). */
+function armsWords(counts: ReadonlyMap<string, number>): string | null {
+  if (carriedNames(counts, IRON_BLADE).length) return null;
+  const weapons = carriedNames(counts, WEAPON);
+  if (!weapons.length) return '剣も斧も荷に無い';
+  const iron = carried(counts, 'iron_ingot');
+  return iron >= IRON_FOR_SWORD || carriedNames(counts, /(?:^|:)iron_pickaxe$/u).length
+    ? `荷の剣・斧は ${weapons.join('・')} だけ（鉄の剣は無い。鉄の剣は鉄 ${IRON_FOR_SWORD} 個で作れる。鉄は ${iron} 個）` : null;
+}
+
+/**
+ * The line for a decision, or null: not the overworld, the dark not near (the night within three minutes and through it; underground at any hour, where
+ * the light is out and hostiles spawn: `underground`), or an iron sword in the pack (or, with no iron for one, any blade).
+ */
+export function nightArmsLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null,
+  underground = false): string | null {
+  if (dimension !== 'overworld') return null;
+  const time = typeof world.time === 'string' && /^\d+$/u.test(world.time.trim()) ? Number(world.time.trim()) % DAY_LENGTH : null;
+  const night = time !== null && time < NIGHT_TO && time >= NIGHT_FROM - NEAR_TICKS;
+  if (!night && !underground) return null;
+  const arms = armsWords(counts);
+  if (!arms) return null;
+  if (!night || time === null) return `地下は昼でも暗く、ゾンビ・スケルトンが湧く: ${arms}`;
+  const when = time >= NIGHT_FROM ? `夜（朝まで ${minutes(NIGHT_TO - time)}）` : `夜まで ${minutes(NIGHT_FROM - time)}`;
+  return `${when}: ${arms}。夜は地上にゾンビ・スケルトンが湧く`;
 }
 
 /** The bed in the pack. */
