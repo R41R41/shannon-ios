@@ -225,7 +225,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
   it('gives the Nether go its arguments, the pace and what to do on a stop, in the words of the body\'s rows', () => {
     const nether = lines('nether');
     for (const word of ['canDig=[netherrack,basalt,blackstone]', 'nether_bricks', 'canPlace=[cobblestone,netherrack]', 'maxDig 120〜200', 'maxPlace 40〜100', 'seconds 100〜120',
-      '1.5〜2.3 秒', '「maxDig を増やす」', '「canDig に足す」', '荷の netherrack×99 を canPlace に足す', '置く物 cobblestone を N 個置いて使い切った', '火 (x,y,z) は dig で消せる',
+      '0.7〜1.0 秒', 'ホグリンが見えたら', '「maxDig を増やす」', '「canDig に足す」', '荷の netherrack×99 を canPlace に足す', '置く物 cobblestone を N 個置いて使い切った', '火 (x,y,z) は dig で消せる',
       'mc_probe kind=scan', 'mc_probe kind=camp', '同じ種類以上の予備が荷に無い']) expect(nether, word).toContain(word);
     expect(nether).not.toContain('maxDig 150・maxPlace 40 を渡す');
   });
@@ -304,7 +304,7 @@ describe('a death is out (the owner, 2026-11-02): not dying stands above being f
     expect(SAFETY_FIRST).toContain('死なないことを速さより上に置く');
     expect(SAFETY_FIRST).toContain('体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満');
     // S2's blaze lab of 11/5: between fights the meal to fullness 18 and the wait to health 12 come first, out of sight.
-    expect(SAFETY_FIRST).toContain('体力 12 未満なら見えない所で満腹 18 以上まで食べ、体力 12 を超えるまで待ってから出る');
+    expect(SAFETY_FIRST).toContain('体力 18 未満なら見えない所で満腹 18 以上まで食べ、体力 18 以上まで待ってから出る');
     for (const id of ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'] as const) expect(V2_STAGES[id], id).toContain(SAFETY_FIRST);
   });
   it('puts it in the cautions of the diamonds and the blaze rods, within the plan\'s bounds', () => {

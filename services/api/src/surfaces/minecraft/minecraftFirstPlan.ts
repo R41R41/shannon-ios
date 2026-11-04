@@ -91,7 +91,7 @@ const BEYOND: readonly PlanSeed[] = [
   node('ブレイズロッド7以上', { kind: 'blaze', target: { item: 'blaze_rod', count: 7 }, doneWhen: 'have:blaze_rod>=7', note: '粉にするのは7本そろってから',
     caution: ['死んだらアウト。体力12未満・盾の耐久2割未満なら戦わず退いて補う'],
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
-    node('fight でブレイズを14体ほど倒す（傷が深ければ attack hold）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
+    node('fight でブレイズを20体ほど倒す（傷が深ければ attack hold）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
   node('エンダーパール14以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 14 }, doneWhen: 'have:ender_pearl>=14', note: '枠に11〜12・投げの損耗に2〜3',
     children: [node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金の延べ棒をピグリンに投げて交換', { kind: 'pearl' })] }),
   node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=14',

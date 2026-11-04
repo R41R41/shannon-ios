@@ -6,6 +6,7 @@ import {
 import { bodyHoldOf,withResend,withIncident,withStalls,withBodyPresent } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
+import { registerEyeLedger } from '../surfaces/minecraft/minecraftEyeThrowHold.js';
 import { withReplanInbox } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { adoptProblem, unattendedFailureStop, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
 import {
@@ -67,6 +68,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const worksite = createWorksiteMemory((step.snapshot.checkpoint as { minecraftWorksite?: unknown } | null)?.minecraftWorksite);
   const journey = createMinecraftJourney((step.snapshot.checkpoint as { minecraftJourney?: unknown } | null)?.minecraftJourney);
   const endgame = createEndgame(step.snapshot.checkpoint);
+  registerEyeLedger(step.taskId, endgame.ledger);
   const waits = createWaitLedger((step.snapshot.checkpoint as { minecraftWaitDeadlines?: unknown } | null)?.minecraftWaitDeadlines);
   const savedStalls = step.snapshot.checkpoint as { minecraftStalls?: unknown; minecraftActiveWait?: unknown } | null;
   restoreStalls(step.taskId, savedStalls?.minecraftStalls);
