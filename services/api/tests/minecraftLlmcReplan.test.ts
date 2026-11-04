@@ -195,6 +195,15 @@ describe('the brief', () => {
   });
 });
 
+describe('a death has its own ask (run62, 11/5)', () => {
+  it('lets a death through the gap, the hour and the node, and not past the run', () => {
+    const busy = { v: 1 as const, total: 5, recent: [0, 60_000, 120_000, 180_000, 240_000, 300_000], nodes: { p3: 3 }, last: [] };
+    expect(replanVerdict(busy, 'p3', 310_000)).toMatchObject({ ok: false });
+    expect(replanVerdict(busy, 'p3', 310_000, 'death')).toEqual({ ok: true });
+    expect(replanVerdict({ ...busy, total: REPLAN.perRun }, 'p3', 310_000, 'death')).toEqual({ ok: false, why: 'run' });
+  });
+});
+
 describe('the flow of one task', () => {
   const sources = (extra: Partial<ReplanSources> = {}): ReplanSources => ({ node: 'p1', goal: '木', seconds: 600, tree: tree(), doneStatus: null, now: [], facts: [], results: [], queue: [],
     knowledge: '', ...extra });
