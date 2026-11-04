@@ -118,8 +118,18 @@ describe('S8 and S6 stage knowledge', () => {
   it('compares pearl routes and explains enderman selection and stop evidence', () => {
     const pearl = V2_STAGES.pearl;
     for (const fact of ['count=N', '最大 3 体', '戻る時間・夜までの待ち', '怒っている個体を先', '8〜48m',
-      '30m 以内を先', 'enderman_not_visible', '開けた所や高い所', '15 秒', 'enderman_did_not_arrive',
+      '30m 以内を先', 'enderman_not_visible', 'mc_probe kind=roofsite', '15 秒', 'enderman_did_not_arrive',
       'そちら側に屋根を作り直す', 'lost', 'id・距離・方角・マス', '黒曜石以外']) expect(pearl).toContain(fact);
     expect(pearl).not.toContain('ネザーの 3 方向を見てから');
+  });
+});
+
+describe('the roofsite probe (S6, body fb180c10)', () => {
+  it('is a kind of mc_probe with a radius of 4 to 24 (16 when not given)', async () => {
+    const { PROBE_KINDS } = await import('../src/contracts/minecraftProbeContract.js');
+    const { prepareProbeInput } = await import('../src/surfaces/minecraft/minecraftLlmcProbeInput.js');
+    expect(PROBE_KINDS).toContain('roofsite');
+    expect(prepareProbeInput({ kind: 'roofsite' }, { feet: null, creatures: [] })).toMatchObject({ input: { kind: 'roofsite', radius: 16 } });
+    expect(prepareProbeInput({ kind: 'enderman_roof', radius: 40 }, { feet: null, creatures: [] })).toMatchObject({ input: { kind: 'roofsite', radius: 24 } });
   });
 });

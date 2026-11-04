@@ -8,7 +8,8 @@ import { ACT_CONTRACT_VERSION, type ActPos } from './minecraftActContract.js';
  */
 export const MC_PROBE_SKILL = 'probe' as const;
 export const MC_PROBE_TOOL = `mc.${MC_PROBE_SKILL}` as const;
-export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp', 'lane', 'den'] as const;
+// roofsite: S6's body fb180c10 (11/5), where an enderman roof can be built, by the endermen whose eyes are seen from there.
+export const PROBE_KINDS = ['path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp', 'lane', 'den', 'roofsite'] as const;
 export type ProbeKind = typeof PROBE_KINDS[number];
 export interface ProbeInput {
   kind: ProbeKind;
@@ -70,7 +71,8 @@ export const PROBE_DESCRIPTION = [
     + 'frames(x, z: 探す中心（省くと足）、radius: ブロック 16〜128（既定 64）。要塞のエンドポータルの枠を近い順に。無ければ 16 ブロック刻みの輪の次に歩く点) / '
     + 'camp(ネザーのブレイズの湧き場と、その 3m 以内で縁・火の無い立てる足場) / '
     + 'lane(spawner, from: 省くと近い湧き場と現在地。暗い1列の通路の四方向の必要数、最少候補の栓・待ち場・通路・立つ所・支え・危険の事実) / '
-    + 'den(エンダーマンの横穴の候補: 壁に掘れる 2 高×2 奥の穴の入口と向き・入口正面の見通し・未掘削のマス数を、良い順に最大 8 件。引数なし)。',
+    + 'den(エンダーマンの横穴の候補: 壁に掘れる 2 高×2 奥の穴の入口と向き・入口正面の見通し・未掘削のマス数を、良い順に最大 8 件。引数なし) / '
+    + 'roofsite(radius 4〜24、既定 16: エンダーマンの屋根を作れる所を、そこから 8〜48m に目の見える個体の多い順に最大 5 件。マス・見える数・要るブロック・距離)。',
   'worksite(target または at: 目的物、to: 作業する立ち位置、省略なら届く現在地か隣接候補、retreat: 帰還先): 接近・作業の射程/呼吸/道具・逆向きの帰路を別々に調べる。結果は観測時点の短区間だけ。施工後は再確認。',
   '省いた座標は足から。column の yFrom・yTo を省くと足の上下。',
 ].join('\n');
