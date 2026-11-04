@@ -9,7 +9,8 @@ const NIGHT_FROM = 13_000, NIGHT_TO = 23_000, DAY_LENGTH = 24_000, TICKS_PER_MIN
 const NEAR_TICKS = 3 * TICKS_PER_MINUTE;
 const WEAPON = /(?:^|:)(?:wooden|stone|golden|iron|diamond|netherite)_(?:sword|axe)$/u;
 
-const minutes = (ticks: number): string => ticks < 2 * TICKS_PER_MINUTE ? `${Math.max(1, Math.round(ticks / 20))} 秒` : `約 ${Math.round(ticks / TICKS_PER_MINUTE)} 分`;
+const minutes = (ticks: number): string => ticks < 2 * TICKS_PER_MINUTE
+  ? `${Math.max(1, Math.round(ticks / 20))} 秒` : `約 ${Math.round(ticks / TICKS_PER_MINUTE)} 分`;
 
 /** The line for a decision, or null: not the overworld, the night not near, or a sword or an axe in the pack. */
 export function nightArmsLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
