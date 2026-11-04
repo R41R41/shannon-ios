@@ -355,7 +355,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- アイは枠 12 のうち最初から入っていない分が要る（平均 10 個）。手元が 10 個を切るなら、要塞へ向かう前に増やす（落ちたアイを拾う・粉とパールで craft・足りなければ取りに戻る）。',
     '- 枠は mc_probe kind=frames（x z=探す中心、省くと足。radius=16〜128、既定 64）が、要塞のエンドポータルの枠を近い順に最大 12 個教える。入口で radius 128 を使う'
       + '（読み込みの外なら 16 ブロック刻みの輪の次に歩く点を返すので、歩いて着いたらもう一度）。感染した石レンガは要塞が近い印で、枠ではない。枠が見えたら live の印（Q）にも出る。',
-    '- 下り: go to=立てる所 maxDig=120 canDig=[stone,dirt,gravel ほか 12 種まで] canPlace=[cobblestone]。真下を素手で掘らず、溶岩に注意。'
+    // S5's rig of 11/5 (S5b, from above the stronghold): 14 hands between vertical shaft and go on the way down; the body alone took 2 go hands.
+    '- 下り: 枠が見えたら go to=枠の 1 つ上のマス range=3 maxDig=150 canDig=[stone,dirt,gravel,stone_bricks ほか 12 種まで] canPlace=[cobblestone] を 1 手で出す'
+      + '（vertical と go を行き来しない）。止まったら、行の言う物を canDig に足して同じ go。真下を素手で掘らず、溶岩に注意。'
       + '石レンガの廊下に出たら歩く。ひび割れ・苔の石レンガに紛れた感染石を掘るとシルバーフィッシュが出る。図書室・牢屋・泉の部屋は寄らない。',
     '- 枠（Q）の部屋: 溶岩の溜まりの上の台に枠 12 か所（最初から入っている枠もある）。目の無い枠ごとに 1 回の act で [{do:go, to:枠の座標, range:3}, {do:use, item:ender_eye, at:[枠の座標]}]'
       + '（at は配列で 1 つ）。1 枠 0.7〜2.0 秒で、はまった数 N/12 が毎回行に出て、最後の枠で「エンドポータルが開いた」と出る。足りないアイは live の「ポータルの枠」の行に出る。',
