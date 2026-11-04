@@ -156,6 +156,6 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
       + 'その近くに立ち続ける・歩くと拾い直す）');
   }
   const beds = bedsIn(lines);
-  if (beds >= 2 && !options.forEnd) out.push(`ベッドは ${beds} 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 8）`);
+  if (beds >= 2 && !options.forEnd) out.push(`ベッドは ${beds} 個ある。ネザーの前は村へ取りに戻らない（エンドの前に羊毛から 10 個まで増やす: 最低 6）`);
   return out;
 }
