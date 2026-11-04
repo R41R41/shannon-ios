@@ -19,6 +19,15 @@ describe('the deaths of run62', () => {
     expect(heldOfFrame(act, frame([]), 's')).toMatchObject({ hand: 1, code: 'no_suicide' });
     expect(suicideHold({ why: '[n12] ゾンビを倒してから進む', hands: [{ do: 'fight', target: 'zombie' }] })).toBeNull();
   });
+  it('reads the whys of run62 with nothing in the pack, and leaves ordinary work with tools alone', () => {
+    const whys = ['持ち物なし。溶岩で戻る', '持ち物なし。マグマで倒れ地上で再開', '持ち物なし。下の溶岩へ降り地上で再開', '持ち物なし。落下で倒れ地上で再開',
+      '溶岩の縁へ。持ち物なし', '縁から落ちて地上で再開', '溶岩へ落ちる', '溶岩の上へ', '動けない。敵が来るのを待つ', 'マグマ床へ。倒れて地上再開',
+      '崖へ出て落ちて地上再開', '溶岩へ掘り進み地上で再開'];
+    for (const why of whys) expect(suicideHold({ why: `[n31] ${why}`, hands: [{ do: 'wait', seconds: 5 }] }, frame([])), why).not.toBeNull();
+    const tools = frame([['iron_pickaxe', 1], ['iron_sword', 1]]);
+    expect(suicideHold({ why: '[n5] 溶岩の縁を避けて地上へ戻る', hands: [{ do: 'go', to: { x: 1, y: 64, z: 1 } }] }, tools)).toBeNull();
+    expect(suicideHold({ why: '[n5] 溶岩へ落ちる', hands: [{ do: 'go', to: { x: 1, y: 64, z: 1 } }] }, tools)).toBeNull();
+  });
   it('holds a go back to the place of a fresh death and a fight on its killer with no iron sword, twice a death', () => {
     const back = { hands: [{ do: 'go', to: { x: 95, y: 64, z: 98 } }] };
     for (let i = 1; i <= RETURN_HOLDS; i += 1) {
