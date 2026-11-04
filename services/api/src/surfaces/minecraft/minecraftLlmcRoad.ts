@@ -77,8 +77,8 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   // coordinator's pace for each stretch, a ruler and nothing else; the Nether's own target above is the same plan's (47 minutes).
   { name: 'ネザー要塞', seconds: 3_200, doneWhen: 'see:fortress', late: true },
   { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_700, doneWhen: 'have:blaze_rod>=7', late: true },
-  { name: 'エンダーパール 12 個', short: 'パール12', seconds: 6_000, doneWhen: 'have:ender_pearl>=12', late: true },
-  { name: 'エンダーアイ 12 個', short: 'アイ12', seconds: 6_700, doneWhen: 'have:ender_eye>=12', late: true },
+  { name: 'エンダーパール 14 個', short: 'パール14', seconds: 6_000, doneWhen: 'have:ender_pearl>=14', late: true },
+  { name: 'エンダーアイ 14 個', short: 'アイ14', seconds: 6_700, doneWhen: 'have:ender_eye>=14', late: true },
   // 11/4 (the dragon is killed with beds): the check takes beds 8 (aim 10) and obsidian 8 (aim 12) on top of the old four beds,
   // about +300 s (obsidian 12 at 9.4 s each with the diamond pickaxe about 110 s, the wool of about 5 more beds 120-200 s; estimates):
   // the stretches after it move by the same.

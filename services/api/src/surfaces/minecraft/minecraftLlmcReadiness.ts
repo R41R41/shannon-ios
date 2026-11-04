@@ -2,7 +2,7 @@ import { orderedPlan, type PlanKind, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
-import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_OBSIDIAN, FIGHT_OBSIDIAN_LABEL, type PrepNeed, type PrepStage } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
@@ -31,7 +31,7 @@ const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: numb
     { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u },
     { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
   end: { title: 'エンドへ', food: 80, needs: [
-    { label: 'ベッド', count: 4, pattern: BED_ITEM }, { label: '弓', count: 1, pattern: /^bow$/u }, { label: '矢', count: 30, pattern: /^arrow$/u },
+    { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM }, { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u }, { label: '弓', count: 1, pattern: /^bow$/u }, { label: '矢', count: 30, pattern: /^arrow$/u },
     { label: 'エンダーアイ', count: 12, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
     // S1's lab (2026-11-02): a fall from a crystal's pillar is stopped by water the body pours under itself, with a full bucket and nothing else.
     { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u }] },
@@ -69,7 +69,7 @@ const STAGE_OF_KIND: Readonly<Partial<Record<PlanKind, Stage>>> = { end: 'end', 
 export function preparationStage(dimension: string | null, counts: ItemCounts, kinds: readonly PlanKind[] | null): Stage | null {
   if (dimension === 'the_nether') {
     const rods = countMatching(counts, /^blaze_rod$/u), pearls = countMatching(counts, /^(?:ender_pearl|ender_eye)$/u);
-    return rods >= 7 && pearls >= 12 ? null : 'nether_deep';
+    return rods >= 7 && pearls >= 14 ? null : 'nether_deep';
   }
   if (dimension !== 'overworld') return null;
   if (countMatching(counts, /^ender_eye$/u) > 0) return 'end';

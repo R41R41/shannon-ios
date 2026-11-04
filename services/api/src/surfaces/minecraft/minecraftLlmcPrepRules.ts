@@ -67,7 +67,8 @@ export const END_BEDS = 8;
 /** The obsidian the End fight takes (a bed's shield and its base), counted apart from the portal's ten: 12 is the aim, 8 the least. */
 export const END_OBSIDIAN = 8;
 const BEDS: PrepNeed = { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM };
-const FIGHT_OBSIDIAN: PrepNeed = { label: '黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）', count: END_OBSIDIAN, pattern: /^obsidian$/u };
+export const FIGHT_OBSIDIAN_LABEL = '黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）';
+const FIGHT_OBSIDIAN: PrepNeed = { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u };
 const WATER_BUCKET: PrepNeed = { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u };
 /** What a pillar, a bridge or a cover is made of in the End: the footing's blocks and obsidian. */
 const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）', count: 64, pattern: new RegExp(`${BLOCKS.source}|^obsidian$`, 'u') };
