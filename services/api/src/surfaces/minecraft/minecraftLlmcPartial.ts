@@ -8,6 +8,7 @@ import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
 import { sleepFirstHold } from './minecraftLlmcSleepHold.js';
 import { tableDescentHold } from './minecraftLlmcTableHold.js';
 import { eyeThrowHold } from './minecraftEyeThrowHold.js';
+import { deathReturnHold, suicideHold } from './minecraftLlmcDeathHolds.js';
 import { noteHeldAct } from './minecraftLlmcHeldStreak.js';
 import { tableNote } from './minecraftLlmcTableNote.js';
 import { descentNote, gateHold } from './minecraftLlmcReadiness.js';
@@ -61,8 +62,9 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
   const counted = countedHolds(input, frame, taskId);
   found.push(...counted.map(item => item.held));
-  const eye = eyeThrowHold(input, frame, taskId);
-  if (eye) found.push({ hand: eye.hand, code: 'eye_kept', kind: eye.kind, line: `手 ${eye.hand} ${eye.kind}: ${eye.line}。` });
+  for (const [code, hold] of [['eye_kept', eyeThrowHold(input, frame, taskId)], ['no_suicide', suicideHold(input)]] as const) {
+    if (hold) found.push({ hand: hold.hand, code, kind: hold.kind, line: `手 ${hold.hand} ${hold.kind}: ${hold.line}。` });
+  }
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
     furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
@@ -74,10 +76,10 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
 
 /** The holds that count themselves against a bound (the sleep before the night's work, the table before a descent): each counts only when it stops the act. */
 function countedHolds(input: unknown, frame: BodyObservation | null, taskId: string): Array<{ held: Held; commit(): void }> {
-  const sleep = sleepFirstHold(input, frame, taskId), bare = tableDescentHold(input, frame, taskId);
+  const sleep = sleepFirstHold(input, frame, taskId), bare = tableDescentHold(input, frame, taskId), back = deathReturnHold(input, frame, taskId);
   const held = (code: string, hold: { hand: number; kind: string; line: string; commit(): void }) =>
     ({ held: { hand: hold.hand, code, kind: hold.kind, line: `手 ${hold.hand} ${hold.kind}: ${hold.line}。` }, commit: hold.commit });
-  return [...sleep ? [held('sleep_first', sleep)] : [], ...bare ? [held('table_required', bare)] : []];
+  return [...sleep ? [held('sleep_first', sleep)] : [], ...bare ? [held('table_required', bare)] : [], ...back ? [held('death_return', back)] : []];
 }
 
 /** 手 1 … k−1 だけの act（他の欄はそのまま）。手が 1 つも残らなければ null（全部止める）。 */
