@@ -251,7 +251,7 @@ const record = (value: unknown): Record<string, unknown> | null => value && type
   ? value as Record<string, unknown> : null;
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 interface Feet { x: number; y: number; z: number }
-const feetOf = (world: Record<string, unknown>): Feet | null => {
+export const feetOf = (world: Record<string, unknown>): Feet | null => {
   const at = record(world.position), x = finite(at?.x), y = finite(at?.y), z = finite(at?.z);
   return x !== null && y !== null && z !== null ? { x, y, z } : null;
 };
@@ -372,11 +372,12 @@ export function readinessOf(observation: BodyObservation | null): { world: Recor
  */
 export const FOOD_BEFORE_DESCENT = 40;
 /** Planks that make a table (4), when the pack holds no table. */
-const TABLE_PLANKS = 4;
-const SURFACE_Y = 45, DESCENT = 10;
+export const TABLE_PLANKS = 4;
+const SURFACE_Y = 45;
+export const DESCENT = 10;
 /** The lowest y the walks and digs of an act reach (a `rel` hand counts from her feet), or the feet's own when
  * none goes lower. */
-function lowestReach(hands: unknown, feetY: number): number {
+export function lowestReach(hands: unknown, feetY: number): number {
   let lowest = feetY;
   for (const raw of Array.isArray(hands) ? hands : []) {
     const hand = record(raw);

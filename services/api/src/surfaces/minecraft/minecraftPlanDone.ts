@@ -121,7 +121,11 @@ const MADE_INTO: ReadonlyArray<{ material: RegExp; into: RegExp; upTo: number; t
   // table, the pickaxe and the axe is used up, so it is made into once she carries both a pickaxe and an axe (or
 // an iron pickaxe, past the wood's tools);
   // a wooden pickaxe alone is not that much.
-  { material: /^(?:log|planks|stick)$/u, upTo: 24, together: [TOOL('pickaxe'), TOOL('axe')],
+  // run62 (11/5): 「原木を通しの分（計20〜24）」 `have:log>=16|have:planks>=64` was done at 4 logs by the pickaxe and the axe (upTo 24 took
+  // the log count in); the wood of the whole run is a stock. The tools' wood is up to 10 logs, 24 planks or sticks.
+  { material: /^log$/u, upTo: 10, together: [TOOL('pickaxe'), TOOL('axe')],
+    into: /^(?:shield|chest|[a-z]+_bed|(?:iron|diamond|netherite)_pickaxe)$/u },
+  { material: /^(?:planks|stick)$/u, upTo: 24, together: [TOOL('pickaxe'), TOOL('axe')],
     into: /^(?:shield|chest|[a-z]+_bed|(?:iron|diamond|netherite)_pickaxe)$/u },
   { material: /^cobblestone$/u, upTo: 8, into: /^(?:furnace|(?:stone|iron|diamond|netherite)_(?:pickaxe|axe|shovel|hoe|sword))$/u },
 ];

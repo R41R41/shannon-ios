@@ -29,7 +29,7 @@ const PINNED = {
   // r10: 「一歩ではない」に頭の高さ、「届かない」に dig の届く範囲を足した 2 句の分だけ変わった（前は 6db83be5990e06f3）。
   // Run 41: the live's key for the food she carries is `foodPoints.total` (was `food.points`), so the line that names it says so (前は 5309f0c44e4ce9ef).
   // 2026-11-04 (S0's order): the order rule's example 「ブレイズの棒 7 本の後にエンダーパール」 is 「鉄の剣を作った後にネザーへ」, the pearls no longer fixed after the rods (前は cb7a450223101f12).
-  llmc_r9_system: 'e87011a5b9022fd1',
+  llmc_r9_system: '182d6b9a3d81a035',
   old_mode_system: '9484df3e3e4d04cf',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
