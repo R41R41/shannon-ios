@@ -93,7 +93,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     const some = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'crafting_table', count: 1 }, { name: 'cobbled_deepslate_slab', count: 6 },
       { name: 'shield', count: 1 }, { name: 'cooked_porkchop', count: 5 }] });
     expect(preparationShortage({ ...some, nowKinds: null })).toBe('準備の不足（ネザーの奥へ）: 金の防具が無い。ハーフブロック 6/12');
-    const ready = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'blaze_rod', count: 6 }, { name: 'ender_pearl', count: 12 }] });
+    const ready = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'blaze_rod', count: 7 }, { name: 'ender_pearl', count: 14 }] });
     expect(preparationShortage({ ...ready, nowKinds: null })).toBeNull();
   });
 
@@ -104,7 +104,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     expect(gate.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾・足場のブロックが無い。')).toBe(true);
     expect(gate).toContain(`食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`);
     expect(gate.endsWith('目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い')).toBe(true);
-    expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const] })).toMatch(/^準備の不足（エンドへ）: ベッド・弓・矢・エンダーアイ・足場のブロックが無い/u);
+    expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const] })).toMatch(/^準備の不足（エンドへ）: ベッド（目標 10）・黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）・弓・矢・エンダーアイ・足場のブロックが無い/u);
   });
 
   it('health does not come back under hunger 18: said as the fact, never at 18 or at full health', () => {

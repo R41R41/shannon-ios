@@ -263,7 +263,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
   });
   it('asks the water bucket before the End: the stage\'s shortage line and the check node\'s condition', () => {
     const base = { dimension: 'overworld', food: 90, nowKinds: ['stronghold' as const] };
-    const kit: Array<[string, number]> = [['white_bed', 4], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64]];
+    const kit: Array<[string, number]> = [['white_bed', 8], ['obsidian', 8], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64]];
     expect(preparationShortage({ ...base, counts: owned(kit) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
     expect(preparationShortage({ ...base, counts: owned([...kit, ['water_bucket', 1]]) })).toBeNull();
     expect(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');

@@ -165,8 +165,9 @@ describe('the owner\'s order to the dragon, as the step now and the next', () =>
     expect(step(['diamond_pickaxe×1', 'carved_pumpkin×1'])).toEqual(['黒曜石', 'ゲート']);
     expect(step([], 'the_nether', true)).toEqual(['ネザー要塞', 'ブレイズ']);
     expect(step(['blaze_rod×3'], 'the_nether', true)).toEqual(['ブレイズ', 'パール']);
-    expect(step(['blaze_rod×6'], 'the_nether', true)).toEqual(['パール', 'アイ']);
-    expect(step(['blaze_rod×6', 'ender_pearl×12'], 'overworld', true)).toEqual(['アイ', 'エンド要塞']);
+    expect(step(['blaze_rod×6'], 'the_nether', true)).toEqual(['ブレイズ', 'パール']);
+    expect(step(['blaze_rod×7'], 'the_nether', true)).toEqual(['パール', 'アイ']);
+    expect(step(['blaze_rod×7', 'ender_pearl×14'], 'overworld', true)).toEqual(['アイ', 'エンド要塞']);
     expect(step(['ender_eye×12'], 'overworld', true)).toEqual(['エンド要塞', 'ベッドで地点']);
     expect(step([], 'the_end', true)).toEqual(['クリスタル', 'ドラゴン']);
   });
