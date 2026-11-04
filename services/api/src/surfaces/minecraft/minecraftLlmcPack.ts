@@ -156,7 +156,10 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
     const kinds = filler.slice(0, 4).map(([name, n]) => `${name}×${n}`).join('・');
     out.push(`掘って拾い続けた石や土 ${total} 個（${kinds}）が約 ${Math.ceil(total / 64)} マスを占める。`
       + 'dig は拾いに歩く (collect 既定 true): 階段・トンネルで使わない石や土を掘る dig は collect=false。捨てるなら drop（体は 3m 以上先へ水平に投げる。'
-      + 'その近くに立ち続ける・歩くと拾い直す）');
+      + 'その近くに立ち続ける・歩くと拾い直す）'
+      // run62 (11/5): 81 drop hands of 90 to 120 cobblestone each, the pack full four times on the way down.
+      + (dropCandidates(filler).length ? `。下りる前に、余り（${dropWords(dropCandidates(filler))}）を 1 つの act の drop で一度に捨てる`
+        + `（${filler[0]![0]} ${KEEP_STACK} は柱と橋に残す）` : ''));
   }
   const beds = bedsIn(lines);
   // The whole-run audit of 11/4 (chapter 1: 「村へ取りに戻らない」 stood against taking every bed of a village): the facts of both ways, no rule.

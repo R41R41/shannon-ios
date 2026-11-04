@@ -373,7 +373,10 @@ export function breakingOf(promises: readonly PlanPromise[], hands: Parameters<t
    lines: string[]; keptBy: string[]; uncounted: string[] } {
   const facts = doneFacts(observation);
   if (!facts) return { lines: [], keptBy: [], uncounted: [] };
-  const { spends, uncounted } = spendsOf(hands, facts.counts);
+  const counted = spendsOf(hands, facts.counts), uncounted = counted.uncounted;
+  // run62 (11/5): every night's bed, placed to sleep and taken up again, was said to break the promise of the dragon's 10 beds and asked a new
+  // decision six times; a bed placed in the overworld comes back (only the Nether's and the End's explode).
+  const spends = facts.dimension === 'overworld' ? counted.spends.filter(spend => !/(?:^|_)bed$/u.test(spend.item)) : counted.spends;
   if (!spends.length) return { lines: [], keptBy: [], uncounted };
   const lines: string[] = [], keptBy: string[] = [];
   const forPurpose = new Set(promises.filter(promise => {

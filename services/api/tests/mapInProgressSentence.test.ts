@@ -19,7 +19,7 @@ import { useReachStop } from '../src/surfaces/minecraft/minecraftLlmcLiquid.js';
 const SENTENCE = '地図はまだ作り中（周りのチャンクを読み込み中）。view で周りを見るか、少し待ってから';
 const POSITION = { x: 171.5, y: -4, z: 180.5 };
 const frame = (localMap: unknown): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', facts: {}, state: { world: { position: POSITION, localMap, health: 20, food: 20, dimension: 'overworld',
-  inventory: [{ name: 'bucket', count: 1 }, { name: 'obsidian', count: 1 }], nearbyThreats: [], nearbyEntities: [] } } } as unknown as BodyObservation);
+  inventory: [{ name: 'bucket', count: 1 }, { name: 'obsidian', count: 1 }, { name: 'crafting_table', count: 1 }], nearbyThreats: [], nearbyEntities: [] } } } as unknown as BodyObservation);
 const acts = [
   { hands: [{ do: 'obsidian', at: [{ x: 171, y: -5, z: 179 }] }] },
   { hands: [{ do: 'go', to: { x: 175, y: -4, z: 180 }, canDig: ['stone'], maxDig: 20 }] },
