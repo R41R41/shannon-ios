@@ -98,6 +98,26 @@ function blazeEntryHand(input: unknown, facts: Facts): number {
   return fight >= 0 ? fight : nearSpawnerHand(hands, facts.world);
 }
 
+/** The rods the run needs; a powder is half a rod and an eye holds one powder. */
+const RODS_NEEDED = 7;
+/**
+ * The blaze fight once the rods are in (S5's rig of 11/5, 8a3c4fd2: with 7 rods and 14 pearls at the spawner the decision probed the camp, fought
+ * three times and held attacks until health 1, and died at 86 s; two earlier runs from the same start went to the gate): a fight or an attack on
+ * a blaze, and a go or a walk up to a spawner, are held while the pack holds the rods (rods, powder and eyes counted as rods).
+ */
+function rodsDoneHold(input: unknown, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  const count = (name: string) => facts.counts.get(name) ?? 0;
+  const rods = count('blaze_rod') + (count('blaze_powder') + count('ender_eye')) / 2;
+  if (!Array.isArray(hands) || rods < RODS_NEEDED) return null;
+  const fight = hands.findIndex(raw => onBlaze(objectOf(raw) ?? {}, facts.world));
+  const at = fight >= 0 ? fight : nearSpawnerHand(hands, facts.world);
+  if (at < 0) return null;
+  const line = `ブレイズロッドは足りている（ロッド換算 ${Math.floor(rods)}/${RODS_NEEDED}。粉 2 で 1 本、アイ 1 個に粉 1）。ブレイズと戦う手・湧き場へ寄る手は送らない: `
+    + '湧き場から離れて帰りのゲートか次の節へ（傷が深ければ、見えない所で食べてから）';
+  return { hand: at + 1, kind: 'rods', line };
+}
+
 const LOW_HEALTH = 8;
 /** The hands that are work, not defence: held below `LOW_HEALTH` whether an enemy is near or not (fighting, fleeing, eating, getting into cover go). */
 const WORK_HANDS: ReadonlySet<string> = new Set(['mine', 'dig', 'make', 'craft', 'smelt', 'furnace', 'chest', 'obsidian', 'drop', 'pickup']);
@@ -176,6 +196,8 @@ export function deadlyGateHold(input: unknown, frame: BodyObservation | null, ta
   const weak = lowHealthHold(input, facts) ?? goldFirstHold(input, facts);
   if (weak) return weak;
   if (facts.dimension === 'the_nether') {
+    const done = rodsDoneHold(input, facts);
+    if (done) return done;
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
     return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${OTHER_STAGE}` } : null;
   }

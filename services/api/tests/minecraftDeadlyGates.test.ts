@@ -173,3 +173,18 @@ describe('the golden piece against the piglins (run59, 14:15: dead in the Nether
     expect(deadlyGateHold(cover, frame([['gold_ingot', 4]], { dimension: 'the_nether', health: 20 }))).toBeNull();
   });
 });
+
+describe('the blaze fight once the rods are in (S5, 11/5)', () => {
+  it('holds a fight or an attack on a blaze while the pack holds seven rods (powder and eyes counted), and says to leave', () => {
+    const fightBlaze = { hands: [{ do: 'fight', target: 'blaze', seconds: 20 }] };
+    const held = deadlyGateHold(fightBlaze, frame([['blaze_rod', 7], ['shield', 1], ['cooked_beef', 20]]));
+    expect(held).toMatchObject({ hand: 1, kind: 'rods' });
+    expect(held!.line).toContain('ブレイズロッドは足りている（ロッド換算 7/7');
+    expect(held!.line).toContain('湧き場から離れて帰りのゲートか次の節へ');
+    expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 3], ['blaze_powder', 6], ['ender_eye', 2], ['shield', 1], ['cooked_beef', 20]]))?.kind).toBe('rods');
+    // Fewer than seven: the blaze gate as before (or nothing when ready).
+    expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 6], ['shield', 1], ['cooked_beef', 20], ['iron_sword', 1]]))).toBeNull();
+    // Other foes are not held.
+    expect(deadlyGateHold({ hands: [{ do: 'fight', target: 'wither_skeleton' }] }, frame([['blaze_rod', 7]]))).toBeNull();
+  });
+});
