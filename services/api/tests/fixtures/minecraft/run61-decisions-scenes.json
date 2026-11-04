@@ -199,6 +199,10 @@
     {
      "name": "bucket",
      "count": 1
+    },
+    {
+     "name": "raw_iron",
+     "count": 8
     }
    ],
    "mapLandmarks": [],
@@ -225,6 +229,284 @@
     "go",
     "vertical",
     "pillarUp"
+   ]
+  }
+ },
+ {
+  "name": "run61-d0185-crowd",
+  "goal": "エンドラを討伐して",
+  "current": "p4",
+  "elapsedMinutes": 42,
+  "events": [
+   "vertical 止まった (145,44,106): 残り 22 段（stop_if_hostile: 敵が近い）",
+   "洞窟は開けている"
+  ],
+  "expect": "4 体に囲まれる前: 戦う／幅 1 の通路へ下がる／柱・塞ぐ、のどれか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 145.5,
+    "y": 44,
+    "z": 106.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "time": "2600",
+   "inside": "地下の洞窟（暗い）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "stone_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "stone_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "stone_axe",
+     "count": 1
+    },
+    {
+     "name": "bread",
+     "count": 18
+    },
+    {
+     "name": "cooked_porkchop",
+     "count": 3
+    },
+    {
+     "name": "cooked_beef",
+     "count": 2
+    },
+    {
+     "name": "cobblestone",
+     "count": 314
+    },
+    {
+     "name": "cobbled_deepslate",
+     "count": 196
+    },
+    {
+     "name": "andesite",
+     "count": 20
+    },
+    {
+     "name": "granite",
+     "count": 10
+    },
+    {
+     "name": "tuff",
+     "count": 18
+    },
+    {
+     "name": "diamond",
+     "count": 5
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    },
+    {
+     "name": "flint_and_steel",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "raw_iron",
+     "count": 8
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": [
+    {
+     "id": 6983,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 2.1,
+     "position": {
+      "x": 145,
+      "y": 46,
+      "z": 106
+     }
+    },
+    {
+     "id": 6984,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 3.4,
+     "position": {
+      "x": 148,
+      "y": 44,
+      "z": 107
+     }
+    },
+    {
+     "id": 6985,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 5.2,
+     "position": {
+      "x": 141,
+      "y": 44,
+      "z": 103
+     }
+    },
+    {
+     "id": 6986,
+     "name": "zombie",
+     "kind": "hostile",
+     "distance": 6.6,
+     "position": {
+      "x": 150,
+      "y": 44,
+      "z": 110
+     }
+    }
+   ]
+  },
+  "check": {
+   "anyHand": [
+    "fight",
+    "attack",
+    "place",
+    "go",
+    "vertical",
+    "pillarUp",
+    "dig"
+   ]
+  }
+ },
+ {
+  "name": "cave-stone-sword-iron",
+  "goal": "エンドラを討伐して",
+  "current": "p4",
+  "elapsedMinutes": 42,
+  "events": [
+   "地上へ向かう途中、洞窟で一息ついた"
+  ],
+  "expect": "鉄の延べ棒 8 個・棒 4 本・作業台、剣は石の剣。鉄の剣を作る手が出るか。",
+  "world": {
+   "dimension": "overworld",
+   "position": {
+    "x": 145.5,
+    "y": 44,
+    "z": 106.5
+   },
+   "health": 20,
+   "food": 20,
+   "saturation": 5,
+   "time": "2600",
+   "inside": "地下の洞窟（暗い）",
+   "heldItem": "diamond_pickaxe",
+   "worn": "頭: iron_helmet・胴: iron_chestplate・脚: iron_leggings・足: golden_boots・左手: shield",
+   "inventory": [
+    {
+     "name": "stone_sword",
+     "count": 1
+    },
+    {
+     "name": "shield",
+     "count": 1
+    },
+    {
+     "name": "stone_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "diamond_pickaxe",
+     "count": 1
+    },
+    {
+     "name": "stone_axe",
+     "count": 1
+    },
+    {
+     "name": "bread",
+     "count": 18
+    },
+    {
+     "name": "cooked_porkchop",
+     "count": 3
+    },
+    {
+     "name": "cooked_beef",
+     "count": 2
+    },
+    {
+     "name": "cobblestone",
+     "count": 314
+    },
+    {
+     "name": "cobbled_deepslate",
+     "count": 196
+    },
+    {
+     "name": "andesite",
+     "count": 20
+    },
+    {
+     "name": "granite",
+     "count": 10
+    },
+    {
+     "name": "tuff",
+     "count": 18
+    },
+    {
+     "name": "diamond",
+     "count": 5
+    },
+    {
+     "name": "white_bed",
+     "count": 1
+    },
+    {
+     "name": "flint_and_steel",
+     "count": 1
+    },
+    {
+     "name": "bucket",
+     "count": 1
+    },
+    {
+     "name": "iron_ingot",
+     "count": 8
+    },
+    {
+     "name": "stick",
+     "count": 4
+    },
+    {
+     "name": "crafting_table",
+     "count": 1
+    }
+   ],
+   "mapLandmarks": [],
+   "nearbyEntities": [],
+   "nearbyThreats": []
+  },
+  "check": {
+   "anyHand": [
+    "make",
+    "craft"
+   ],
+   "match": [
+    "iron_sword"
    ]
   }
  }
