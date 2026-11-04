@@ -18,7 +18,10 @@ const minutes = (ticks: number): string => ticks < 2 * TICKS_PER_MINUTE
 const carriedNames = (counts: ReadonlyMap<string, number>, pattern: RegExp): string[] =>
   [...counts].filter(([name, count]) => pattern.test(name) && count > 0).map(([name]) => name.replace(/^minecraft:/u, ''));
 
-/** What she holds against the dark, as a fact: nothing, or only blades that are not iron while iron for a sword is in the pack (the iron was smelted and the sword not made). */
+/**
+ * What she holds against the dark, as a fact: nothing, or only blades that are not iron while iron for a sword is in the pack (the iron was
+ * smelted and the sword not made).
+ */
 function armsWords(counts: ReadonlyMap<string, number>): string | null {
   if (carriedNames(counts, IRON_BLADE).length) return null;
   const weapons = carriedNames(counts, WEAPON);
@@ -29,8 +32,8 @@ function armsWords(counts: ReadonlyMap<string, number>): string | null {
 }
 
 /**
- * The line for a decision, or null: not the overworld, the dark not near (the night within three minutes and through it; underground at any hour, where
- * the light is out and hostiles spawn: `underground`), or an iron sword in the pack (or, with no iron for one, any blade).
+ * The line for a decision, or null: not the overworld, the dark not near (the night within three minutes and through it; underground at any
+ * hour, where the light is out and hostiles spawn: `underground`), or an iron sword in the pack (or, with no iron for one, any blade).
  */
 export function nightArmsLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null,
   underground = false): string | null {

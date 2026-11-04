@@ -70,7 +70,8 @@ function obsidianProblem(hand: Rec, world: Rec, here: Cell | null): Found {
 function portalProblem(hand: Rec): Found {
   const blocks = goBlocksProblem({ canPlace: list(hand.canPlace) });
   if (blocks) return reason('range_blocks', blocks);
-  return typeof hand.block === 'string' && !FRAME_BLOCKS.has(hand.block) ? reason('frame_block', 'ポータルの枠は黒曜石（obsidian。泣く黒曜石 crying_obsidian では組めない）だけで組める') : null;
+  return typeof hand.block === 'string' && !FRAME_BLOCKS.has(hand.block)
+    ? reason('frame_block', 'ポータルの枠は黒曜石（obsidian。泣く黒曜石 crying_obsidian では組めない）だけで組める') : null;
 }
 function mineProblem(hand: Rec): Found {
   const block = String(hand.block ?? '');
