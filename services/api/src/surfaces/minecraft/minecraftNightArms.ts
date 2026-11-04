@@ -48,39 +48,3 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
   if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。寝れば夜が飛び、朝になる`;
   return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる`;
 }
-
-/** Swords by their material, weakest first (a golden sword is the weakest of the hitting ones). */
-const SWORDS = ['wooden', 'golden', 'stone', 'iron', 'diamond', 'netherite'] as const;
-const IRON_RANK = SWORDS.indexOf('iron');
-const swordRank = (name: string): number => SWORDS.findIndex(material => name.replace(/^minecraft:/u, '') === `${material}_sword`);
-
-/**
- * The sword against the iron she carries (run61: stone sword 115/131 in a cave with 8 raw iron; run60: no sword after the iron was smelted): while the best
- * sword is below iron and the pack holds iron for one (two ingots, or raw iron to smelt), whatever the hour. The recipe is a fact of the game; no hand named.
- */
-export function swordLine(counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
-  if (dimension !== 'overworld') return null;
-  const best = [...counts].filter(([name, count]) => count > 0 && swordRank(name) >= 0).sort((a, b) => swordRank(b[0]) - swordRank(a[0]))[0]?.[0];
-  if (best !== undefined && swordRank(best) >= IRON_RANK) return null;
-  const ingots = carried(counts, 'iron_ingot'), raw = carried(counts, 'raw_iron');
-  if (ingots + raw < 2) return null;
-  const iron = `延べ棒 ${ingots} 個${raw ? `・生の鉄 ${raw} 個（焼くと延べ棒）` : ''}`;
-  return `剣は ${best?.replace(/^minecraft:/u, '') ?? 'なし'}（鉄の剣は延べ棒 2 個と棒 1 本。持っている鉄: ${iron}）`;
-}
-
-const CROWD = 3, CROWD_BLOCKS = 8;
-const hostileNames = (world: Record<string, unknown>): string[] => (Array.isArray(world.nearbyThreats) ? world.nearbyThreats : []).flatMap(item => {
-  const entry = item && typeof item === 'object' ? item as { name?: unknown; distance?: unknown } : null;
-  return typeof entry?.name === 'string' && typeof entry.distance === 'number' && entry.distance <= CROWD_BLOCKS ? [entry.name] : [];
-});
-
-/**
- * Three or more enemies within 8 blocks (run61 d0185: four zombies in an open cave took 20 health to 3.5 in about 20 seconds). How many can strike at once
- * is the game's: all of them on open ground, the one in front in a corridor one block wide. No hand named.
- */
-export function crowdLine(world: Record<string, unknown>): string | null {
-  const names = hostileNames(world);
-  if (names.length < CROWD) return null;
-  const kinds = [...new Set(names)].join('・');
-  return `${CROWD_BLOCKS}m 内に敵 ${names.length} 体（${kinds}）: 開けた所では全員が同時に殴る。幅 1 の通路では前の 1 体ずつになる`;
-}

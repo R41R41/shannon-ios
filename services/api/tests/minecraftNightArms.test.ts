@@ -41,25 +41,3 @@ describe('nightBedLine', () => {
     expect(nightBedLine({ time: '14000' }, bed(), 'the_nether')).toBeNull();
   });
 });
-
-describe('swordLine and crowdLine', () => {
-  it('names the sword and the iron while the best sword is below iron and iron for one is carried, at any hour', async () => {
-    const { swordLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
-    const pack = (entries: Array<[string, number]>) => new Map(entries);
-    expect(swordLine(pack([['stone_sword', 1], ['raw_iron', 8]]), 'overworld')).toBe('剣は stone_sword（鉄の剣は延べ棒 2 個と棒 1 本。持っている鉄: 延べ棒 0 個・生の鉄 8 個（焼くと延べ棒））');
-    expect(swordLine(pack([['iron_ingot', 3]]), 'overworld')).toContain('剣は なし');
-    expect(swordLine(pack([['wooden_sword', 1], ['stone_sword', 1], ['iron_ingot', 2]]), 'overworld')).toContain('剣は stone_sword');
-    expect(swordLine(pack([['iron_sword', 1], ['iron_ingot', 8]]), 'overworld')).toBeNull();
-    expect(swordLine(pack([['stone_sword', 1], ['iron_ingot', 1]]), 'overworld')).toBeNull();
-    expect(swordLine(pack([['stone_sword', 1], ['iron_ingot', 8]]), 'the_nether')).toBeNull();
-  });
-  it('counts three or more enemies within 8 blocks and says how many can strike; silent with two or far ones', async () => {
-    const { crowdLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
-    const zombie = (distance: number) => ({ name: 'zombie', distance });
-    expect(crowdLine({ nearbyThreats: [zombie(2), zombie(3), zombie(5), { name: 'skeleton', distance: 7 }, zombie(30)] }))
-      .toBe('8m 内に敵 4 体（zombie・skeleton）: 開けた所では全員が同時に殴る。幅 1 の通路では前の 1 体ずつになる');
-    expect(crowdLine({ nearbyThreats: [zombie(2), zombie(3)] })).toBeNull();
-    expect(crowdLine({ nearbyThreats: [zombie(2), zombie(3), zombie(9)] })).toBeNull();
-    expect(crowdLine({})).toBeNull();
-  });
-});
