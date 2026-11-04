@@ -15,6 +15,7 @@ import { noteActNode, tagActWhy, type ActNodeMark } from '../surfaces/minecraft/
 import { actGuards, feelWhenItsDone, replacedOnly, sendItem } from './fcaMinecraftActItem.js';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
+import { createDragonDefeatLog } from '../surfaces/minecraft/minecraftDragonDefeatLog.js';
 import { authorizeToolCall } from '../mind/inhibition/toolGatePorts.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import type { ToolResult } from '../mind/tools/toolRegistryPorts.js';
@@ -96,6 +97,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
   feelings?: MinecraftFeelingPort;
 }): FcaExternalTools {
   const { control, step } = parts;
+  const dragonLog = createDragonDefeatLog(step);
   const audienceAllowed = () => parts.ownerAlone() || parts.gameplayAllowed?.() === true;
   if (parts.feelings && parts.llmc) feelWhenItsDone(parts.llmc.queue, parts.feelings, step);
   const bodyId = control.store.body(step.taskId) ?? (control.available().length === 1 ? control.available()[0]! : null);
@@ -110,7 +112,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
     ...bodyTools] : [];
   // A body skill asks the lease with the body's resource just before its command (below); `minecraft.observe` has
 // no outside effect.
-  return { definitions, permitsItself: name => name.startsWith('mc.'), async execute(call) {
+  return { definitions, checkpoint: dragonLog.checkpoint, permitsItself: name => name.startsWith('mc.'), async execute(call) {
     call.signal.throwIfAborted();
     if (call.taskId !== step.taskId || call.scopeKey !== step.scopeKey || !parts.sourcesVisible()) throw new Error('FCA_SOURCE_WITHHELD');
     const offered = definitions.find(tool => tool.name === call.name);
@@ -227,6 +229,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
       skill: current!.name, arguments: call.input as Record<string, unknown>, milliseconds: minecraftSkillMilliseconds(current!) }, call.signal);
     active.stepOutcome = 'acknowledged';
     if (receipt.outcome === 'completed' && current!.name === 'goal-evidence') {
+      dragonLog.note(bodyId, receipt.result);
       try { parts.evidence?.(receipt.result); } catch { /* learning never fails a step */ }
     }
     const result = minecraftSkillResult(receipt);

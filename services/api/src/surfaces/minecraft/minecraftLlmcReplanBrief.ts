@@ -3,6 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carriedFood, llmcTokens, stacks } from './minecraftLlmcLive.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { REPLAN, type ReplanRecord } from './minecraftLlmcReplan.js';
+import type { PaceDelay } from './minecraftLlmcPace.js';
 
 /**
  * The brief the strong model makes the plan again from (no history of the talk: the head's own record of the task, in order of how much it
@@ -13,6 +14,8 @@ export interface BriefInput {
   goal: string;
   /** The task's running seconds. */
   seconds: number;
+  /** The meter's current overdue milestone, as facts alone. */
+  pace?: PaceDelay | null;
   stall: { kind: string; why: string; node: string | null };
   tree: PlanTree;
   /** What the stalled node's condition lacks now (`doneStatusWords`), or null. */
@@ -96,6 +99,7 @@ function sections(input: BriefInput, cut: number): string[] {
   const parts: Array<[string, readonly string[]]> = [
     ['依頼', [`${input.goal}（開始から ${minutes(input.seconds)}）`]],
     ['止まり', [`${stall.why}（種類 ${stall.kind}）`, ...(stall.node ? [stalledWords(input)] : [])]],
+    ['時間の物差し', input.pace ? [`節目 ${input.pace.milestone}・目安 ${input.pace.targetSeconds} 秒・遅れ ${input.pace.secondsBehind} 秒`] : []],
     ['計画', planLines(input.tree)],
     ['今の様子', input.now],
     ['事実', input.facts.slice(0, cut > 1 ? 14 : 6)],

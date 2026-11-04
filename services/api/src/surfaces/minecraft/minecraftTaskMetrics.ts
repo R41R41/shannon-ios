@@ -4,7 +4,7 @@ import { callTags, craftedOrderedTool, earlyGameLine, eatsFood, isFirstLook, min
 import { closeGistDecision, gistAdoptionLine, noteGistCall, observeGistOutcomes, predicateSkills, showGists,
   type GistAdoptionEvent } from './minecraftGistAdoption.js';
 import { BED_ITEM, carriedItemCounts, COOKED_FOOD, countMatching, EDIBLE_FOOD, type ItemCounts } from './minecraftItems.js';
-import { milestoneLine, milestonesShown, minecraftStage, newlyReached, stageLine } from './minecraftMilestoneLog.js';
+import { lateMilestonesShown, logMilestoneOnce, milestoneLine, milestonesShown, minecraftStage, newlyReached, stageLine } from './minecraftMilestoneLog.js';
 import { count, finite, readMetricsState, record, type MetricsState } from './minecraftMetricsState.js';
 import { followedGists } from './minecraftSkillPointers.js';
 import { adoptionTags } from './minecraftStage.js';
@@ -42,15 +42,6 @@ function frameFacts(observation: BodyObservation, summary: BodyObservation | nul
     edible: countMatching(counts, EDIBLE_FOOD) > 0 };
 }
 
-/** The first-reach lines already written by this process, so that a step that never committed and runs again does not repeat one. */
-const logged = new Set<string>();
-const logOnce = (key: string): boolean => {
-  if (logged.has(key)) return false;
-  if (logged.size >= 4_096) logged.clear();
-  logged.add(key);
-  return true;
-};
-
 export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
   const state: MetricsState = readMetricsState(parts.kept), { taskId } = parts, began = Date.parse(parts.createdAt);
   const elapsed = () => Number.isFinite(began) ? Math.max(0, parts.now() - began) : 0;
@@ -67,10 +58,11 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
   };
 
   /** The milestones this frame shows that were not shown before, written with the time they are seen at (the decision they belong to is `d`). */
-  function reach(counts: ItemCounts, dimension: string | null, tick: number | null, d: number): void {
-    for (const name of newlyReached(milestonesShown(counts, dimension), new Set(state.reached))) {
+  function reach(counts: ItemCounts, dimension: string | null, tick: number | null, d: number, observation: BodyObservation): void {
+    const shown = [...milestonesShown(counts, dimension), ...lateMilestonesShown(observation)];
+    for (const name of newlyReached(shown, new Set(state.reached))) {
       state.reached.push(name);
-      if (logOnce(`${taskId}:${name}`)) emit(milestoneLine(taskId, name, elapsed(), tick, d));
+      if (logMilestoneOnce(taskId, name)) emit(milestoneLine(taskId, name, elapsed(), tick, d));
     }
   }
 
@@ -80,7 +72,7 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
     const d = begin();
     if (!observation) return;
     const facts = frameFacts(observation, summary), { counts } = facts;
-    reach(counts, facts.dimension, facts.tick, d);
+    reach(counts, facts.dimension, facts.tick, d, observation);
     stage = minecraftStage(counts);
     const pointed = (fields.skillPointers ?? []).map(pointer => pointer.split('（')[0]!);
     const offered = (fields.skillGists ?? []).map(gist => gist.skill);
@@ -104,7 +96,7 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
     // when a decision began, and a procedure's run is one call of 400 s and more. Every frame is read, so a milestone is written when seen.
     if (observation.facts.alive !== false) {
       const seen = frameFacts(observation, null);
-      reach(seen.counts, seen.dimension, seen.tick, decision || state.d + 1);
+      reach(seen.counts, seen.dimension, seen.tick, decision || state.d + 1, observation);
     }
     try { parts.onFrame?.(observation); } catch { /* the route's lateness is a read of the frame; measuring never fails a step */ }
     if (observation.facts.alive === false) {

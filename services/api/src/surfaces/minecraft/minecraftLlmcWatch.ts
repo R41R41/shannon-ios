@@ -4,6 +4,7 @@ import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { doneFacts } from './minecraftConditions.js';
 import { workingNode } from './minecraftLlmcNode.js';
 import { meterParts, reachedMilestoneNames } from './minecraftLlmcRoad.js';
+import { createPaceWatch } from './minecraftLlmcPace.js';
 import type { RanListener } from './minecraftLlmcQueueState.js';
 import {
   deathCounterOf,
@@ -30,6 +31,9 @@ export interface WatchDeps {
   running(): ActInput | null;
   /** The task's running clock in ms (the wall clock less the time it was held). */
   activeClock(): number;
+  /** Seconds since task creation on the same running clock, when its creation time is known. */
+  elapsedSeconds?(): number | null;
+  savedPace?: unknown;
   waits: ReturnType<typeof createWaitLedger>;
   /** The wait the task's checkpoint held (`minecraftActiveWait`). */
   savedWait?: { node: string; until: number };
@@ -45,6 +49,7 @@ function chainOf(tree: PlanTree, node: PlanNode | undefined): PlanNode[] {
 }
 
 export function createStallWatch(deps: WatchDeps) {
+  const pace = createPaceWatch(deps.savedPace);
   let activeWait = deps.savedWait;
   let waitUntil: number | undefined;
   const refreshWait = (current: string | null, frame: BodyObservation | null, running: ActInput | null): void => {
@@ -74,7 +79,8 @@ export function createStallWatch(deps: WatchDeps) {
         externalWork: externalWorkMilestones(frame),
         purpose,
         waitUntil, inventory: counts ? Object.fromEntries(counts) : {}, items: counts ? [...counts.values()].reduce((sum, count) => sum + count, 0) : 0 };
-      const stall = noteDeath(deps.taskId, deathCounterOf(frame)) ?? noteProgress(deps.taskId, progress, deps.activeClock());
+      const stall = noteDeath(deps.taskId, deathCounterOf(frame)) ?? noteProgress(deps.taskId, progress, deps.activeClock())
+        ?? pace.note(tree, frame, deps.elapsedSeconds?.() ?? null);
       if (stall) deps.raise(stall);
       return stall !== null;
     } catch (error) {
@@ -99,5 +105,5 @@ export function createStallWatch(deps: WatchDeps) {
       deps.log(`Shannon Minecraft stall ran failed task=${deps.taskId} ${String(error)}`);
     }
   };
-  return { look, noteQueueResult, activeWait: (): { node: string; until: number } | undefined => activeWait };
+  return { look, noteQueueResult, checkpoint: pace.checkpoint, activeWait: (): { node: string; until: number } | undefined => activeWait };
 }
