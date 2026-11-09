@@ -1,6 +1,7 @@
 import { aroundLines, awayLines, watchedHostile, type Watched } from './minecraftLlmcAround.js';
 import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { liquidLines } from './minecraftLlmcLiquid.js';
+import { FOOD_PASS, NIGHT_PASS } from './minecraftNightArms.js';
 import { obsidianWays } from './minecraftLlmcObsidianWays.js';
 import { packLines } from './minecraftLlmcPack.js';
 import { nearNeeds, nearWorthy, type NearNeeds } from './minecraftLlmcReachWords.js';
@@ -120,13 +121,28 @@ export function staleStand(rule: string, view: MapView): boolean {
   return at !== undefined && head !== undefined && floor !== undefined && isOpen(at) && isOpen(head) && !noFloor(floor);
 }
 
-function rewritePlan(plan: Rec, planNow: string, view: MapView | null, notes: RewriteNotes, facts: PlanFacts | null): Rec {
+function rewritePlan(plan: Rec, planNow: string, view: MapView | null, notes: RewriteNotes, facts: PlanFacts | null, shortage = ''): Rec {
   const out: Rec = { ...plan };
+  const passed = planNow.includes(NIGHT_PASS) || shortage.includes(FOOD_PASS);
   if (Array.isArray(out.rules)) {
     const seen = new Set<string>();
     out.rules = (out.rules as unknown[]).filter((rule): rule is string => typeof rule === 'string').filter(rule => {
       if (view && staleStand(rule, view)) {
         notes.fixed.push(`plan.rules の古い注意を外した「${rule.slice(0, 30)}」（今の地図ではそのマスは立てる）`);
+        return false;
+      }
+      // end1109o13: the night's line passes the descent's food 40 (`NIGHT_PASS`); her own caution of the 40 is left out while it does.
+      // end1110r1: and while the food-absent line is said (`FOOD_PASS`); her own forbid 「未達の間は地下へ下りない（夜通しでも同じ）」 too.
+      // A rule that takes the food on the way (「食料40点は鉄の途中で見えた動物か村の畑で補う」) is kept: it says the same as the pass.
+      const onTheWay = /途中/u.test(rule);
+      if (passed && !onTheWay && (/食料\s*40/u.test(rule) || /未達の間は[^。]*下りない|下りる前に[^。]*満たす/u.test(rule))) {
+        notes.fixed.push(`plan.rules の食料 40 の注意を外した「${rule.slice(0, 30)}」（${planNow.includes(NIGHT_PASS) ? '夜の通し' : '動物なし'}）`);
+        return false;
+      }
+      // end1110r1 (the second day): with no land animal her own cautions 「朝になったら…食料（動物）を探す」「草原の方角を朝に探す」 kept her
+      // walking the dark forest by day. While the food-absent line is said, a caution to search for animals is left out (a forbid is kept).
+      if (shortage.includes(FOOD_PASS) && !onTheWay && !/^禁止/u.test(rule) && /(?:動物|食料|草原|草地)[^。]*探/u.test(rule)) {
+        notes.fixed.push(`plan.rules の動物探しの注意を外した「${rule.slice(0, 30)}」（動物なし）`);
         return false;
       }
       const norm = rule.replace(/（p\d+(?:\.\d+)*）/u, '');
@@ -289,7 +305,7 @@ export function rewriteLlmcLive(live: Rec): { live: Rec; notes: RewriteNotes } {
   if (!bodyIn) return { live: out, notes };
   const layers = typeof bodyIn.map === 'string' ? readLayers(bodyIn.map, BODY_RULES) : null;
   const plan = rec(live.plan);
-  if (plan) out.plan = rewritePlan(plan, String(bodyIn.planNow ?? ''), layers ? mapView(layers) : null, notes, factsIn(bodyIn));
+  if (plan) out.plan = rewritePlan(plan, String(bodyIn.planNow ?? ''), layers ? mapView(layers) : null, notes, factsIn(bodyIn), String(bodyIn.shortage ?? ''));
   try {
     out.body = rewriteBody(bodyIn, notes, nearNeeds(bodyIn));
   } catch {

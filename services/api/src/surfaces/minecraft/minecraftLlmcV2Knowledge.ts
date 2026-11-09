@@ -107,6 +107,24 @@ const FALLS = [
 
 /** The coordinator, 2026-11-03 (leg 2's plan 5.10: the sea and the night on the 1.4 km walk, the phantoms for a body that has not slept). */
 const LONG_WALK = '- 地上の長い歩き（1 km 超）は朝に出る。ベッドで寝ると夜を飛ばせる。';
+/** The coordinator's outside view of 11/4 (night-rules-external-20261104.md): the hour to stop starting, the night before the armour, the climb. */
+const PREP_NIGHT_STOP = '- ベッドがあれば、11500 を過ぎて地上にいたら長い移動・探索を始めず、洞窟から離れた岩の中に 1×2 を掘って塞ぎ、12542 に寝る（敵は壁越しでも水平 8・上下 5 で寝させない）。'
+  + 'sleep の手は起きたらベッドを拾い直す。鉄の兜・胸の前は夜に地上を歩かない。地上に着くのが 12500〜23500 になるなら岩の中で寝てから上る。';
+/**
+ * With 12 eyes on the ground the stages are prep and stronghold at once, and prep's "walk long ways in the morning" and "stop starting at 11500"
+ * went in with the stronghold's "go on through the night, no hole before dark" (the outside review of 11/10, Q1; end1109s14's detour to a village
+ * to sleep, ~190 s, may be this). While the stronghold stage is on, its night line is the only one: these two are taken out of prep's text.
+ */
+const PREP_NIGHT_LINES: ReadonlySet<string> = new Set([LONG_WALK, PREP_NIGHT_STOP]);
+const PREP_NIGHT_ELSEWHERE = '- 夜と長い道の動き方は、下のストロングホールドの段の行に従う（材料の段の「朝に出る」「11500 を過ぎたら始めない」はこの場面では使わない）。';
+function stageText(id: StageId, ids: readonly StageId[]): string {
+  if (id !== 'prep' || !ids.includes('stronghold')) return V2_STAGES[id];
+  const lines = V2_STAGES.prep.split('\n');
+  const at = lines.findIndex(line => PREP_NIGHT_LINES.has(line));
+  const kept = lines.filter(line => !PREP_NIGHT_LINES.has(line));
+  kept.splice(at < 0 ? 1 : at, 0, PREP_NIGHT_ELSEWHERE);
+  return kept.join('\n');
+}
 
 const DANGER = [
   '## 敵と体力',
@@ -144,9 +162,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- ファントムは 3 夜寝ていないと夜に現れることがあり、空から急降下して襲う。',
     '- ベッドで寝ると、ファントムが現れるまでの不眠の数えが戻る。',
     '- 夜（オーバーワールド）は、sleep の手で寝て朝にする（体が持っているベッドを置き、朝に拾い直す）（夜は敵が増え、ファントムも来る）。ネザー・エンドでは寝ない（爆発する）。',
-    // The coordinator's outside view of 11/4 (night-rules-external-20261104.md): the hour to stop starting, the night before the armour, the climb.
-    '- ベッドがあれば、11500 を過ぎて地上にいたら長い移動・探索を始めず、洞窟から離れた岩の中に 1×2 を掘って塞ぎ、12542 に寝る（敵は壁越しでも水平 8・上下 5 で寝させない）。'
-      + 'sleep の手は起きたらベッドを拾い直す。鉄の兜・胸・脚の前は夜に地上を歩かない。地上に着くのが 12500〜23500 になるなら岩の中で寝てから上る。',
+    PREP_NIGHT_STOP,
     '- バケツを作ったら最初の水源ですぐ汲む（run61 は空のまま地上を通り、地下で 6 分探した帰りに死んだ）。',
     // run62 (11/5): the pickup's walk went onto the magma floor of a ruined portal; two deaths and the diamond pickaxe were lost there.
     '- 壊れたポータルの周りはマグマの床が多い。拾いに歩く前に、足元とその先のマグマを丸石か土で覆う（途中の足場の安全は保証されない）。立っている段は掘らない。',
@@ -179,7 +195,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '移動が時間切れでも距離が縮まらない時、秒数を増す・goをwalkへ替えるだけでは道はできない。乾いた側から通路を整えるか、回収を打ち切り準備へ計画を組み直す。'
       + '対象が消えpickupでも見つからなければ、過去の個体を当てに再入水しない。最後に通過した地表は落とし物の位置とは限らない。',
     '- 射手に撃たれている間は、分かっている敵の向きと足場から射線を切る・離れる手を先に選ぶ。'
-      + '同じsight・around・columnを何度も読む間も攻撃される。追加の読取りは逃げる手を決めるために必要な不明だけに絞り、工作・回収・食事は安全な位置で行う。',
+      + '同じsight・around・columnを何度も読む間も攻撃される。追加の読取りは逃げる手を決めるために必要な不明だけに絞り、工作・回収・食事は安全な位置で行う。'
+      + 'ウィッチは例外: 薬（毒・負傷）は 10m 先まで投げ、走って離れる背中にも当たる（end1110r1 は 2.8m から逃げて 6 秒で体力 7→0）。'
+      + '4m 内なら離れずに fight（target=#id・一番強い斧か剣）で打ち続ける（体力 26・石の斧で 3〜4 打ち）。体力が低くても近ければ打つ方が生き残る。10m より遠い時だけ、壁の陰へ入って見えなくする。',
     '- 食料が少ない時は、今見えている動物・作物・箱と、手持ちの調理見込みを先に使う。鶏しか見えなくても食料源であり、地下へ行けば補えるという根拠にはならない。'
       + '周りに無ければ食料探索の過去観測と比べ、地表の未探索方向を短い中継点で探す。到着後にscanかaroundで現在の個体を確かめてから狩る。'
       + '未確認のcow→pig→sheep等をfightに並べると、最初の対象なしで後ろも未実行になる。過去の個体は移動・消失していることがある。',
@@ -432,6 +450,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // end1109s07 S9 (11/9): three minutes before dark she dug a hole, walled it and waited for night to sleep (~200 s still).
     '- 地上の長い道は夜も止まらずに進む（鉄の鎧か盾があれば戦える。無い時も敵が寄ったら fight か go で離れ、暗いうちの wait はしない。水の中の drowned だけは戦わない: 下の海の行）。sleep は暗くなって最初の 1 回だけ、その場で試す。'
       + '暗くなる前に穴・囲い・柱を作って夜を待たない。「夜まで約 3 分」でも go を続け、暗くなった所で sleep を 1 回試す（s07 は夜の 3 分前に穴を掘って囲い、待って 約 200 秒止まった）。'
+      // end1109s14 S9 (11/9): swimming at sea seven minutes before dark, she turned 120 m north to a village to sleep (~190 s with the waits).
+      + '海・水の上で夕方や夜になっても、寝るために陸・村へ寄り道しない。交点への go（waterOk）を続け、陸の上で暗くなった時だけ sleep を 1 回（s14：夜の 7 分前に北の村へ 約 120m 寄り、待って寝て 約 190 秒）。'
+      + 'sleep が not_night（夜まであと N 秒）で返っても wait で待たず、go を続ける（s12：wait 30・20・15 秒と sleep を繰り返して 約 130 秒）。'
       + '寝られなかったら（not_slept・enemy_near・no_bed_spot のどれでも）、朝を待たずにすぐ go で交点へ進む。wait で朝を待たない（h32b：宙の足場で 30 秒の wait を 13 回、最後の 7 分は 0 m/s。end1108g：寝られずに 20 分待った）。',
     // end1109 (h32b S9): a go laid a stair 16 high into the air; the head's stair down took one step, its plan then forbade going down without a floor
     // and digging its own blocks, and no way down was left. The body says the way down of a perch in the air (宙の足場) in its stop.
@@ -656,5 +677,5 @@ export function stageTextsForKind(kind: PlanKind, dimension: string): string {
 export function stageKnowledge(live: Rec): string | null {
   if (!rec(live.body)) return null;
   const ids = stagesFor(live);
-  return `（この場面の知識: ${ids.join('・')}）\n${ids.map(id => V2_STAGES[id]).join('\n\n')}`;
+  return `（この場面の知識: ${ids.join('・')}）\n${ids.map(id => stageText(id, ids)).join('\n\n')}`;
 }

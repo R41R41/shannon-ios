@@ -36,18 +36,18 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     const tops = on.nodes.filter(node => node.parentId === null).map(node => node.title);
     expect(tops.indexOf('金のブーツ（ネザーの前）')).toBe(tops.indexOf('ダイヤ（y=-58）') + 1);
     expect(tops.indexOf('黒曜石10とゲート')).toBe(tops.indexOf('金のブーツ（ネザーの前）') + 1);
-    expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
+    expect(rows(on)).toContain('p3.3 鉄の兜・胸当てを作って着る|have:iron_helmet&have:iron_chestplate');
     expect(rows(on)).toContain('p6 金のブーツ（ネザーの前）|have:golden_boots|have:ender_eye>=10');
     expect(rows(on)).toContain('p6.1 金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）|have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots|have:ender_eye>=10');
     expect(gateFirst([]).length).toBe(0);
   });
-  it('asks the three pieces worn at the diamonds\' node, and says one carried and not worn', () => {
+  it('asks the two pieces worn at the diamonds\' node, and says one carried and not worn', () => {
     const base = { dimension: 'overworld', food: 50, nowKinds: ['diamond' as const] };
     const kit: Array<[string, number]> = [['iron_pickaxe', 1], ['water_bucket', 1], ['shield', 1]];
-    expect(preparationShortage({ ...base, counts: owned(kit), worn: [] })).toBe(lack(BEFORE_DIAMONDS, '鉄の兜・胸当て・脚が無い'));
+    expect(preparationShortage({ ...base, counts: owned(kit), worn: [] })).toBe(lack(BEFORE_DIAMONDS, '鉄の兜・胸当てが無い'));
     const armour: Array<[string, number]> = [...kit, ['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]];
-    expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate'] }))
-      .toBe(lack(BEFORE_DIAMONDS, '持っているが着ていない: iron_leggings'));
+    expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet'] }))
+      .toBe(lack(BEFORE_DIAMONDS, '持っているが着ていない: iron_chestplate'));
     expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate', 'iron_leggings'] })).toBeNull();
   });
   it('asks the golden boots at the gate, iron boots do not stand for them', () => {
@@ -60,7 +60,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     expect(owned([], '頭: iron_helmet(残り 160/165)、足: golden_boots(残り 91/91)').get('golden_boots')).toBe(1);
   });
   it('says the rules once, the same words in the first plan and the stage knowledge, with no old numbers', () => {
-    expect(PREP_RULES_WORDS).toContain('ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・水入りバケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点');
+    expect(PREP_RULES_WORDS).toContain('ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・水入りバケツ・盾・鉄の兜・胸当て（着る）・食料 40 点');
     expect(PREP_RULES_WORDS).toContain('靴は鉄でなく金のブーツ（金の延べ棒 4）');
     const plan = ownFirstPlanSystem();
     expect(plan).toContain(PREP_RULES_WORDS);
@@ -106,8 +106,8 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
 describe('the current node with its condition read against the frame', () => {
   const facts = (items: Array<[string, number]>, food = 30): DoneFacts => ({ counts: owned(items), dimension: 'overworld', feet: { x: 0, y: 64, z: 0 }, food });
   it('says met, or what is missing with how many, or that the frame cannot show it', () => {
-    const when = 'have:iron_helmet&have:iron_chestplate&have:iron_leggings';
-    expect(doneStatusWords(when, facts([['iron_helmet', 1]]))).toBe('未: iron_chestplate 0/1・iron_leggings 0/1');
+    const when = 'have:iron_helmet&have:iron_chestplate';
+    expect(doneStatusWords(when, facts([['iron_helmet', 1]]))).toBe('未: iron_chestplate 0/1');
     expect(doneStatusWords(when, facts([['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]]))).toBe('満たしている');
     expect(doneStatusWords('food>=40&have:bed>=1', facts([['red_bed', 1]]))).toBe('未: 食料 30/40 点（あと 10 点: bread 1 個）');
     expect(doneStatusWords('have:obsidian>=10|dim:the_nether', facts([['obsidian', 7]]))).toBe('未: obsidian 7/10');
@@ -116,15 +116,15 @@ describe('the current node with its condition read against the frame', () => {
     expect(doneStatusWords(undefined, facts([]))).toBeNull();
   });
   it('keeps the condition whole when the place and the path are long: the path goes first, then the place is shortened', () => {
-    const node = { id: 'p3.3', title: '鉄の兜・胸当て・脚を作って着る', where: `洞窟の奥 ${'(120,16,-40) '.repeat(12)}`,
-      doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings' };
-    const line = currentNodeLine(node, ['鉄（約30・兜・胸・脚まで）', '鉄の兜・胸当て・脚を作って着る'], '未: iron_leggings 0/1');
+    const node = { id: 'p3.3', title: '鉄の兜・胸当てを作って着る', where: `洞窟の奥 ${'(120,16,-40) '.repeat(12)}`,
+      doneWhen: 'have:iron_helmet&have:iron_chestplate' };
+    const line = currentNodeLine(node, ['鉄（約30・兜・胸・脚まで）', '鉄の兜・胸当てを作って着る'], '未: iron_leggings 0/1');
     expect(line.length).toBeLessThanOrEqual(200);
-    expect(line).toContain('（済む条件: have:iron_helmet&have:iron_chestplate&have:iron_leggings／今: 未: iron_leggings 0/1）');
-    expect(line.startsWith('[p3.3] 鉄の兜・胸当て・脚を作って着る（済む条件:')).toBe(true);
+    expect(line).toContain('（済む条件: have:iron_helmet&have:iron_chestplate／今: 未: iron_leggings 0/1）');
+    expect(line.startsWith('[p3.3] 鉄の兜・胸当てを作って着る（済む条件:')).toBe(true);
     expect(line).not.toContain('（道:');
     const short = currentNodeLine({ ...node, where: '(120,16,-40)' }, ['鉄（約30・兜・胸・脚まで）'], null);
-    expect(short).toBe('[p3.3] 鉄の兜・胸当て・脚を作って着る（済む条件: have:iron_helmet&have:iron_chestplate&have:iron_leggings）＠(120,16,-40)（道: 鉄（約30・兜・胸・脚まで））');
+    expect(short).toBe('[p3.3] 鉄の兜・胸当てを作って着る（済む条件: have:iron_helmet&have:iron_chestplate）＠(120,16,-40)（道: 鉄（約30・兜・胸・脚まで））');
   });
 });
 
@@ -151,10 +151,10 @@ describe('run 38: the size of the lava pools (1,090–1,310 s on single sources 
     const [line] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p5.2' }), landmarks: ['L 溶岩源 (1,0,0) 東1 溜まりの源 2'],
       scan: ['溶岩の溜まり 3 つ以上（最寄り 東 40m・源 64） (40,0,0)'] }, SELF, null);
     expect(line).toContain('溶岩の源 (1,0,0) まで 1m（目印）');
-    expect(line).toContain('源が 22 以上の溜まり (40,0,0) まで 40m（走査）・源 64');
+    expect(line).toContain('源が 10 以上の溜まり (40,0,0) まで 40m（走査）・源 64');
     expect(line).toContain('（いちばん近い源の溜まりは源 2: 黒曜石も 2 個まで）');
     const [none] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p5.2' }), landmarks: ['L 溶岩源 (1,0,0) 東1'] }, SELF, null);
-    expect(none).toContain('源が 22 以上の溜まり 見えていない');
+    expect(none).toContain('源が 10 以上の溜まり 見えていない');
   });
   it('compares accessible local supply with the shortage, and leaves a tree that cannot be reached', () => {
     const prep = stageKnowledge({ body: { state: { dimension: 'overworld' } } })!;

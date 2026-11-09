@@ -150,7 +150,8 @@ describe('health that does not come back says what to eat, how long it then take
 const descent = (health: number, hunger: number) => {
   const observation: BodyObservation = { schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,
     state: { world: { position: { x: 156, y: 66, z: 198 }, dimension: 'overworld', health, food: hunger,
-      inventory: [{ name: 'spruce_planks', count: 0 }, { name: 'sweet_berries', count: 6 }, { name: 'potato', count: 2 }] } as never }, facts: {} };
+      inventory: [{ name: 'spruce_planks', count: 0 }, { name: 'sweet_berries', count: 6 }, { name: 'potato', count: 2 }],
+      nearbyEntities: [{ name: 'cow', position: { x: 160, y: 66, z: 198 } }] } as never }, facts: {} };
   return descentNote({ hands: [{ do: 'go', to: { x: 155, y: 14, z: 223 } }] }, observation);
 };
 

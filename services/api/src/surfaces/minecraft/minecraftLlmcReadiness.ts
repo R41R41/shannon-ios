@@ -1,9 +1,11 @@
 import { orderedPlan, type PlanKind, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { FOOD_PASS } from './minecraftNightArms.js';
 import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import {
-  BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_OBSIDIAN, END_WEAPONS, FIGHT_OBSIDIAN_LABEL, RETURN_TO_END,
+  BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_FALLBACK_WEAPONS, END_GATHER_MS, END_OBSIDIAN, END_WEAPONS, endGatherSince,
+  FIGHT_OBSIDIAN_LABEL, RETURN_TO_END,
   type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
@@ -12,7 +14,7 @@ import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
 import { framesOf } from './minecraftSeenMarks.js';
-import { oreRouteHands } from './minecraftOreRoute.js';
+import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
@@ -173,6 +175,23 @@ function endStage(world: Record<string, unknown> | undefined): PrepStage {
     : empty > 0 ? [{ ...need, label: 'エンダーアイ（空いた枠の分）', count: empty }] : []) };
 }
 
+/**
+ * The End's check against the beds' gathering clock (`endGatherSince`, the gate's own; ChatGPT's review of 11/10, Q2: past ten minutes the gate
+ * let her in on the fallback while this line still asked the beds and the fight obsidian at every decision). The clock starts the first time
+ * the check finds the beds or the fight obsidian short; past `END_GATHER_MS` the check asks the fallback's kit instead (an iron sword required,
+ * the bow and 30 arrows aims; the beds and the fight obsidian no longer asked). Without a task there is no clock and the table stays.
+ */
+function endCheck(parts: { counts: ItemCounts; world?: Record<string, unknown>; taskId?: string; now?: number }): PrepStage {
+  const table = endStage(parts.world);
+  if (!parts.taskId) return table;
+  const gathering = (need: Need): boolean => need.pattern === BED_ITEM || need.label === FIGHT_OBSIDIAN_LABEL;
+  const short = table.needs.some(need => gathering(need) && held(parts.counts, need) < need.count);
+  const now = parts.now ?? Date.now(), since = endGatherSince(parts.taskId, now, short);
+  if (since === null || now - since < END_GATHER_MS) return table;
+  return { ...table, title: `エンドへ（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 30 はあれば使う）`,
+    needs: [...table.needs.filter(need => !gathering(need) && !END_WEAPONS.includes(need)), ...END_FALLBACK_WEAPONS] };
+}
+
 /** Goals are facts of a missing fallback, never requirements of the entry gate. */
 function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonly string[] }): string {
   const wanted = gapWords(gapsOf(table.needs.filter(need => need.goal), parts));
@@ -188,12 +207,12 @@ function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonl
  * without them, and the goals; the other stages keep the one line.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
-  worn?: readonly string[]; inventory?: unknown; world?: Record<string, unknown>; taskId?: string; journeyReadiness?: boolean }): string | null {
+  worn?: readonly string[]; inventory?: unknown; world?: Record<string, unknown>; taskId?: string; journeyReadiness?: boolean; now?: number }): string | null {
   const returning = returningToEnd(parts.world ?? {}, parts.dimension, parts.taskId);
   const mining = miningToolShortage(parts.counts, parts.nowKinds, parts.inventory);
   const stage = parts.journeyReadiness === false ? null : preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
-  const table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endStage(parts.world))
+  const table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endCheck(parts))
     : stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
   const goals = goalWords(table, parts);
   if (!table.risk) {
@@ -513,7 +532,36 @@ export function sheepAbsentLine(world: Record<string, unknown>, counts: ItemCoun
     + `${top.id === now.id ? 'この節' : `ベッドの節 ${top.id}`}を外し、次の節へ。ほかの用事の途中で羊が見えたら倒して羊毛を取り、state=continue で戻す`;
 }
 
-const FOOD_ANIMALS = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit', 'mooshroom', 'cod', 'salmon']);
+const WANTS_GOLD = (node: PlanNode): boolean => /raw_gold|gold_ingot|golden_/u.test(String(node.doneWhen ?? '')) || /金鉱石|金のブーツ|金の防具/u.test(String(node.title ?? ''));  // not 「火打ち金」
+/** The map's mark of a gold ore (the body's mapMarks: 「金[gold_ore] (x,y,z)」, the id beside the word). */
+const GOLD_MARK = /\[(?:deepslate_)?gold_ore\]/u;
+/**
+ * end1109o5a (section 5, the kit given): the gold boots' node came after the kit closed the diamonds, the nearest gold was about 60 m off and
+ * deep, and she held that node for about 11 of her 15 minutes (much of it waiting a night in a hole); the obsidian, the flint and the gate
+ * were never begun. The golden piece is a goal at the gate, not a requirement (`STAGES.nether_deep`, the prep rules' 「目標」). Said like the
+ * sheep's (`sheepAbsentLine`): while the now wants gold, no golden piece is carried and no gold ore is on the map, the hand sets the gold
+ * node aside, to be taken up again when gold is seen on the way.
+ */
+export function goldAbsentLine(world: Record<string, unknown>, counts: ItemCounts, dimension: string | null, nodes: readonly PlanNode[],
+  now: PlanNode | undefined): string | null {
+  if (dimension !== 'overworld' || !now || !WANTS_GOLD(now)) return null;
+  if (countMatching(counts, /^golden_(?:helmet|chestplate|leggings|boots)$/u) > 0) return null;
+  if (countMatching(counts, /^(?:raw_gold|gold_ingot)$/u) >= 4) return null;
+  if ((Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).some(line => typeof line === 'string' && GOLD_MARK.test(line))) return null;
+  let top = now;
+  const clean = (node: PlanNode) => WANTS_GOLD(node) && nodes.filter(kid => kid.parentId === node.id).every(kid => kid.state === 'done' || WANTS_GOLD(kid));
+  for (let parent = nodes.find(node => node.id === top.parentId); parent && clean(parent); parent = nodes.find(node => node.id === top.parentId)) top = parent;
+  return `金: 今の節 ${now.id} に金が要るが、地図に金鉱石が見えていない。金の防具はゲートの目標で必須ではない（無くてもネザーへ入れる。ピグリンに襲われやすくなるだけ）。`
+    + `探して歩くより黒曜石・火打ち金・ゲートが先。手: plan_update の ops [{"op":"set","id":"${top.id}","state":"blocked","reason":"金鉱石が見えない"}] で`
+    + `${top.id === now.id ? 'この節' : `金の節 ${top.id}`}を外し、次の節へ。途中で金鉱石（y=-16 前後の壁）や箱の金が見えたら取り、state=continue で戻す`;
+}
+
+/**
+ * thru t05b (w1109v, 11/9 18:08〜19:22, the same icy world with this line in): salmon swam 15〜24 m out in deep water, so the line never came,
+ * and she waited on the shore for them for about 35 minutes at 0 food, starving at 2.3 health, until the night's zombies and a stray killed her
+ * three times in 70 s. A fish in the water is no hunt without a rod: only land animals count as food in sight.
+ */
+const LAND_FOOD = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit', 'mooshroom']);
 const WANTS_FOOD = (node: PlanNode): boolean => /food\s*>=|foodPoints/u.test(String(node.doneWhen ?? '')) || /食料|狩/u.test(String(node.title ?? ''));
 
 /**
@@ -523,14 +571,38 @@ const WANTS_FOOD = (node: PlanNode): boolean => /food\s*>=|foodPoints/u.test(Str
  * fields, fish) is faster; the rule 「省くなら prep に skipped と理由を書く」 is the way to go down. Said while the now wants food, the points
  * are under 40 and no animal that is food is in sight, in the overworld.
  */
-export function foodAbsentLine(world: Record<string, unknown>, food: number, dimension: string | null, now: PlanNode | undefined): string | null {
+export function foodAbsentLine(world: Record<string, unknown>, food: number, dimension: string | null, now: PlanNode | undefined,
+  counts?: ItemCounts): string | null {
   if (dimension !== 'overworld' || !now || !WANTS_FOOD(now) || food >= 40) return null;
+  // end1110r1: no land animal in the world, a cod 7〜31 m off in the water hid this line for about 6 minutes; she tried the fish five times
+  // with no rod and got none. Only the land animals count.
   const seen = (Array.isArray(world.nearbyEntities) ? world.nearbyEntities : [])
-    .some(entity => !!entity && typeof entity === 'object' && FOOD_ANIMALS.has(String((entity as { name?: unknown }).name)));
+    .some(entity => !!entity && typeof entity === 'object' && LAND_FOOD.has(String((entity as { name?: unknown }).name)));
   if (seen) return null;
-  return `食料: 今の節 ${now.id} は食料 ${round1(food)}/40 点だが、見える所に食べられる動物がいない（歩き回っても動物が出てくる保証は無く、時間だけが減る）。`
-    + `先に鉄へ下り、途中で見えた動物・村の畑・魚で補う方が速い。下りるなら決まりの「省くなら prep に skipped と理由を書く」に当たる: plan_update の ops `
-    + `[{"op":"set","id":"${now.id}","state":"blocked","reason":"動物が見えない","prep":{"state":"skipped","why":"動物が見えない"}}]。動物が見えたら狩って state=continue で戻す`;
+  // end1110r1 (w1109i, no animals): 100 minutes on the food node at fullness 17〜18 and health 20, walking 10 m legs for animals by day and
+  // waiting in a hole by night. A full bar is what the food is for: it lasts the way down to the iron.
+  const hunger = finite(world.food);
+  const full = hunger !== null && hunger >= 10 ? `満腹 ${round1(hunger)}/20 はまだ十分で、食料を持たずに鉄まで下りられる（満腹が 6 を切る前に、途中で見えた動物を狩る）。` : '';
+  return `${FOOD_PASS} 食料: 今の節 ${now.id} は食料 ${round1(food)}/40 点だが、見える所に食べられる動物がいない（歩き回っても動物が出てくる保証は無く、時間だけが減る）。${full}`
+    + `先に鉄へ下り、途中で見えた動物・村の畑で補う方が速い（水の中の魚は竿が無いと取れない。岸で待たない）。下りるなら決まりの「省くなら prep に skipped と理由を書く」に当たる: plan_update の ops `
+    + `[{"op":"set","id":"${now.id}","state":"blocked","reason":"動物が見えない","prep":{"state":"skipped","why":"動物が見えない"}}]。動物が見えたら狩って state=continue で戻す`
+    + (counts ? foodAbsentHands(world, counts) : '');
+}
+
+/**
+ * end1110r1: the line said 「先に鉄へ下り」 with no hand. She wrote the plan_update (p2.1 blocked, prep skipped), the now stayed p2.1 and she
+ * searched the dark forest by day and waited the night; she had a wooden pickaxe only. The way down is said as one act: the stone pickaxe
+ * made in a shaft when the wooden one is all (`stonePickHands`), then the way to the iron (`oreRouteHands`). No hand with no pickaxe at all.
+ */
+function foodAbsentHands(world: Record<string, unknown>, counts: ItemCounts): string {
+  const stone = stonePickHands(world, counts);
+  if (!stone && countMatching(counts, /^(?:stone|iron|diamond|netherite)_pickaxe$/u) === 0) return '';
+  const route = oreRouteHands(world, 'iron', counts);
+  if (!route) return '';
+  if (route.startsWith('先に原木')) return `。下りる手: ${route}`;
+  const hands = [...(stone ?? []), ...[...route.matchAll(/「([^」]+)」/gu)].map(m => m[1]!)];
+  return `。下りる手（plan_update と同じ判断で出してよい）: mc_act ${JSON.stringify(hands)}`
+    + `${stone ? '（木のツルハシで足元を掘って石を取り、頭の上に作業台を置いて石のツルハシを作る。鉄は石のツルハシから）' : ''}`;
 }
 
 export function descentNote(input: unknown, frame: BodyObservation | null): string | null {
@@ -540,7 +612,11 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
   if (feet.y < SURFACE_Y) return deepDescentNote(input, facts, feet);
   // Run 41 (the table was missing as well: 372 s with none, and she died on the way up): the food and the table
 // (or planks to make one) are the descent's.
-  const lacks = [facts.food < FOOD_BEFORE_DESCENT ? foodPointsWords(facts.food, FOOD_BEFORE_DESCENT) : '',
+  // end1110r1: with no animal in sight, this note's 「未達 — 食料」 told her to stay up while the food line told her to go down first; she stayed
+  // 100 minutes. The food is taken on the way down then (foodAbsentLine), not before it.
+  const animalSeen = (Array.isArray(facts.world.nearbyEntities) ? facts.world.nearbyEntities : [])
+    .some(entity => !!entity && typeof entity === 'object' && LAND_FOOD.has(String((entity as { name?: unknown }).name)));
+  const lacks = [facts.food < FOOD_BEFORE_DESCENT && animalSeen ? foodPointsWords(facts.food, FOOD_BEFORE_DESCENT) : '',
     countMatching(facts.counts, /^crafting_table$/u) < 1 && countMatching(facts.counts, /_planks$/u) < TABLE_PLANKS
       ? `作業台 無・板 ${countMatching(facts.counts, /_planks$/u)}` : ''].filter(Boolean);
   if (!lacks.length) return null;

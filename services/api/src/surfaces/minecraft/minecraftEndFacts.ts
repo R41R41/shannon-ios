@@ -290,8 +290,14 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
   const build = offer.build.length ? ` → place block=obsidian at=[${offer.build.map(cell => place(cell)).join(',')}]（${offer.build.some(cell => cell.role === 'screen') ? '自分を守る壁' : 'ベッドの下の支え'}）` : '';
   const estimate = [offer.dragonExpected === null ? '' : `竜の頭 −${round(offer.dragonExpected)}`, offer.selfExpected === null ? '' : `自分 −${tenth(offer.selfExpected)}`].filter(Boolean).join('・');
   const walk = offer.walkMeters === null ? '' : `、歩き ${round(offer.walkMeters)}m`;
-  return `ベッドの手（体が測った候補）: go ${place(offer.stand)} range=0.5${build} → place block=${bed} at=[${foot}] → use at=[${foot}]`
-    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。同じ act に並べる。立つ所から動くと計算が変わる）`;
+  // The server names no one for a bed's blast, so a kill by the bed alone gives no end/kill_dragon, which the full run's gate and section T
+  // want beside boss.verified: vanilla credits the kill to a player who hurt her within the last 5 s. When this bed may be the last one,
+  // a short strike from the stand comes first (any part, any held item); out of reach it ends at once and the bed goes off as before.
+  const last = dragon.health !== null && offer.dragonExpected !== null && dragon.health <= offer.dragonExpected + 10;
+  const credit = last ? ' → attack target=ender_dragon seconds=2 onFail="continue"' : '';
+  const why = last ? `。竜の体力 ${round(dragon.health!)} はこのベッドで尽きる見込み: ベッドだけで倒すと手柄が付かず advancement end/kill_dragon が出ないので、use の前に 1 回打つ（届かなくてもそのまま use）` : '';
+  return `ベッドの手（体が測った候補）: go ${place(offer.stand)} range=0.5${build} → place block=${bed} at=[${foot}]${credit} → use at=[${foot}]`
+    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。同じ act に並べる。立つ所から動くと計算が変わる${why}）`;
 }
 
 /** The waiting cells, nearest by the body's walking time: beside the perch's facing (phases 3 to 7), or for the next sit while she flies (0, 1, 2, 8, 10). */
@@ -374,6 +380,17 @@ function climbTarget(end: EndView | null): EndCrystal | null {
   return [...(away.length ? away : open)].sort((a, b) => cost(a) - cost(b))[0] ?? null;
 }
 
+/**
+ * How many crystals are left when every one left is caged and in the list (null otherwise). With no uncaged crystal the line said
+ * 「檻なしの結晶の柱の脇へ walk → vertical pillar up」 and the climb watch pressed for a climb, though the order (crystals down to 2,
+ * then the bed) already puts the two caged ones last.
+ */
+function cagedLeft(end: EndView | null): number | null {
+  const list = end?.crystals.list ?? [];
+  const left = end?.crystals.remaining ?? list.length;
+  return list.length > 0 && list.length >= left && list.every(crystal => crystal.caged === true) ? list.length : null;
+}
+
 export function noBowLine(end: EndView | null): string {
   const head = 'クリスタルの射点: 弓か矢が無いので射点は使わない（結晶は柱の脇を積んで登って殴る）';
   const dragon = end?.dragon ?? null;
@@ -382,12 +399,18 @@ export function noBowLine(end: EndView | null): string {
   const target = climbTarget(end);
   const name = target ? `${target.id === null ? '' : `#${target.id} `}${place(target.position)}${target.distance === null ? '' : ` 自分から ${metres(target.distance)}`}` : null;
   const rise = target && end?.feet ? Math.round(target.position.y - end.feet.y) - 2 : null;
+  // e04e (11/9): 17 minutes for two crystals, the climb, the strike and the way down each its own decision. One decision now queues all four.
+  const chain = '。この 4 手は 1 つの判断の hands に続けて並べ、stopIf は hpBelow だけ（hostileWithin を付けると周りのエンダーマンで止まる）';
   const climb = name
-    ? `檻なしで竜から遠く低い ${name} の柱の脇へ行き vertical pillar up で上端の 1〜2 段下まで${rise !== null && rise > 0 ? `（約 ${rise} 段）` : ''}→ attack target=end_crystal → すぐ vertical down shaft で降りる`
-    : '檻なしの結晶の柱の脇で vertical pillar up → 上端の少し下から殴る → すぐ降りる';
+    ? `檻なしで竜から遠く低い ${name} の柱の脇へ walk → vertical pillar up で上端の 1〜2 段下まで${rise !== null && rise > 0 ? `（約 ${rise} 段）` : ''}→ attack target=end_crystal → すぐ vertical down shaft で降りる${chain}`
+    : `檻なしの結晶の柱の脇へ walk → vertical pillar up → 上端の少し下から attack → すぐ vertical down shaft で降りる${chain}`;
   const foot = name ? `${name} の柱の根` : '檻なしの結晶の柱の根';
   const tail = '。檻つきの結晶は後回し。柱の上で黒曜石を掘って材料にしない';
   if (phase === 9) return `${head}${tail}`;
+  const caged = cagedLeft(end);
+  if (caged !== null && caged <= 2) {
+    return `${head}。檻なしの結晶はもう無い（残りは檻つき ${caged} 本）: 檻つきは残したまま竜を倒す。竜が座ったらベッドの手の行、飛んでいる間は待ち場の行の所で次の座りを待つ（柱は登らない）`;
+  }
   if (phase === 1 || phase === 8) {
     return `${head}。今は登らない（竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}）: ${foot}へ寄って待ち、phase が変わり 30m 以上離れたらすぐ登る${tail}`;
   }
@@ -397,6 +420,47 @@ export function noBowLine(end: EndView | null): string {
     return `${head}。今登れる（${why}。座りや 60m を待たない）: ${climb}${tail}`;
   }
   return `${head}。まだ登らない（竜が自分から ${metres(far)}、30m 未満）: ${foot}へ寄り、30m 以上になったらすぐ登る${tail}`;
+}
+
+/** Whether the no-bow line says 「今登れる」 now (the same tests as `noBowLine`). */
+export function climbNow(end: EndView | null): boolean {
+  const phase = end?.dragon?.phase ?? null, far = end?.dragon?.distance ?? null;
+  if (phase === 9 || phase === 1 || phase === 8) return false;
+  const caged = cagedLeft(end);
+  if (caged !== null && caged <= 2) return false;
+  return (phase !== null && phase >= 3 && phase <= 7) || far === null || far >= CLIMB_CLEAR_METRES;
+}
+
+/** How long 「今登れる」 may stand with the feet not rising before the stall line speaks. */
+export const CLIMB_STALL_MS = 40_000;
+/** The rise of the feet that counts as climbing (a pillar block is one). */
+const CLIMB_RISE = 3;
+
+/**
+ * The history's anchor (e04e 0046, 0/4 of the replays climbed after the line said 「今登れる」): once the head has written its wait's
+ * reason several times, its queue still holds `wait` hands and its own rule (「座りか 60m 以上だけ」) beats the present line. When the
+ * no-bow line has said 「今登れる」 for `CLIMB_STALL_MS` with crystals left and the feet have not risen `CLIMB_RISE`, one line says the
+ * queued waits and the earlier reasons are spent. It starts over when the line stops saying it, the feet rise, or a crystal falls.
+ */
+export function createClimbWatch() {
+  let since: number | null = null, baseY = 0, gone: number | null = null;
+  return {
+    line(end: EndView | null, shooting: boolean | null, now: number): string | null {
+      const feet = end?.feet ?? null, left = end?.crystals.remaining ?? end?.crystals.list.length ?? 0;
+      const goneNow = end?.crystals.gone ?? null;
+      if (shooting !== false || !feet || left <= 0 || !climbNow(end) || feet.y - baseY >= CLIMB_RISE || (since !== null && goneNow !== gone)) {
+        since = shooting === false && feet && left > 0 && climbNow(end) ? now : null;
+        baseY = feet?.y ?? 0;
+        gone = goneNow;
+        return null;
+      }
+      if (since === null) { since = now; baseY = feet.y; gone = goneNow; return null; }
+      const seconds = Math.round((now - since) / 1000);
+      return now - since < CLIMB_STALL_MS ? null
+        : `登りの止まり: 「今登れる」が ${seconds} 秒続き、足の高さは変わっていない。前の判断で並べた wait は replace で全部捨て、`
+          + '前に書いた待つ理由や「座りか 60m 以上だけ」のような自分の決まりはもう当てはまらない。この判断で上の柱の行の手を並べて登る';
+    },
+  };
 }
 
 /** At most six existing fight lines, plus one basin line for normal decisions. Join hazards when the existing observations need the room. */

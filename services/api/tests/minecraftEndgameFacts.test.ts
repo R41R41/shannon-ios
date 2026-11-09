@@ -428,3 +428,24 @@ describe('the arrival platform buried in the island (e04b, 11/9)', () => {
     expect(strafe(95.4)).toContain('狙いを定めて火の玉（phase 1・この phase 95 秒目。竜はあなたが見えて火の玉を撃つまでこの phase を続け、その間は止まり木へ降りない）');
   });
 });
+
+describe('the no-bow climb stall line (hole 1, 11/10)', () => {
+  const view = (y: number, phase: number, distance: number, gone = 0) => ({
+    feet: { x: 0, y, z: 0 }, dragon: { phase, distance, position: { x: 0, y: 70, z: 0 } }, perch: null, breath: [], fireballs: 0,
+    crystals: { remaining: 10 - gone, gone, caged: 2, unseen: 0, visible: 10 - gone, list: [] },
+  }) as unknown as import('../src/surfaces/minecraft/minecraftEndView.js').EndView;
+  it('speaks after 40 s of 「今登れる」 with the feet not rising, and starts over on a rise, a fallen crystal or no climb', async () => {
+    const { createClimbWatch } = await import('../src/surfaces/minecraft/minecraftEndFacts.js');
+    const watch = createClimbWatch();
+    expect(watch.line(view(56, 0, 45), false, 0)).toBeNull();
+    expect(watch.line(view(56, 0, 45), false, 30_000)).toBeNull();
+    expect(watch.line(view(56, 0, 45), false, 41_000)).toContain('replace');
+    expect(watch.line(view(56, 0, 45), true, 42_000)).toBeNull();
+    expect(watch.line(view(56, 1, 45), false, 50_000)).toBeNull();
+    expect(watch.line(view(56, 0, 45), false, 60_000)).toBeNull();
+    expect(watch.line(view(60, 0, 45), false, 101_000)).toBeNull();
+    expect(watch.line(view(60, 0, 45), false, 140_000)).toBeNull();
+    expect(watch.line(view(60, 0, 45), false, 142_000)).toContain('登りの止まり');
+    expect(watch.line(view(60, 0, 45, 1), false, 143_000)).toBeNull();
+  });
+});

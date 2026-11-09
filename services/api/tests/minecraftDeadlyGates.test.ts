@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { blazeLack, deadlyGateHold } from '../src/surfaces/minecraft/minecraftLlmcDeadlyGates.js';
 import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
-import { readinessOf } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { preparationShortage, readinessOf } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { END_GATHER_MS, firstEntryLack, forgetEndGather } from '../src/surfaces/minecraft/minecraftEndGather.js';
 
 /**
@@ -111,6 +111,28 @@ describe('the End', () => {
     // Through the gate: the walk is held, with the clock in its words.
     forgetEndGather();
     expect(deadlyGateHold(walkIn, overworld(fallback), 'g')?.line).toContain('最初に止めてから 10 分まで');
+  });
+  it("starts the clock at the End check's first shortage and, past ten minutes, asks the fallback's kit there too (ChatGPT's review of 11/10, Q2)", () => {
+    forgetEndGather();
+    const kit: Array<[string, number]> = [['cobblestone', 64], ['water_bucket', 1], ['white_bed', 6], ['cooked_beef', 12], ['bow', 1], ['arrow', 30],
+      ['iron_sword', 1], ['ender_eye', 12]];
+    const check = (items: Array<[string, number]>, now: number) => {
+      const facts = readinessOf(overworld(items))!;
+      return preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowKinds: ['end'], world: facts.world, taskId: 'q2', now });
+    };
+    expect(check(kit, 0)).toContain('ベッド');
+    // The gate reads the same clock: ten minutes after the check first said the beds, the fallback goes in.
+    expect(firstEntryLack(readinessOf(overworld(kit))!, 'q2', () => END_GATHER_MS)).toBeNull();
+    const after = check(kit, END_GATHER_MS);
+    expect(after ?? '').not.toContain('ベッド');
+    expect(after ?? '').not.toContain('黒曜石（エンドの戦い用');
+    const noSword = check(kit.filter(([name]) => name !== 'iron_sword'), END_GATHER_MS);
+    expect(noSword).toContain('予備の手');
+    expect(noSword).toContain('剣');
+    // Without a task there is no clock: the beds stay asked.
+    const facts = readinessOf(overworld(kit))!;
+    expect(preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowKinds: ['end'], world: facts.world }))
+      .toContain('ベッド');
   });
 });
 

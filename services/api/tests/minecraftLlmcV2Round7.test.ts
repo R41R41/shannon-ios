@@ -74,8 +74,8 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
   const on = seedPlan('エンドラを倒して')!;
   // Owner 2026-10-24 (after run 38): the iron helmet, chestplate and leggings worn before the diamonds; the boots are golden (`minecraftLlmcV2Fix12.test.ts`).
   it('about 30 iron, the pickaxe, the bucket, the shield and the helmet, chestplate and leggings worn', () => {
-    expect(rows(on)).toContain('p3 鉄（約35・剣・兜・胸・脚まで）|have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings');
-    expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
+    expect(rows(on)).toContain('p3 鉄（約30・剣・兜・胸まで）|have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate');
+    expect(rows(on)).toContain('p3.3 鉄の兜・胸当てを作って着る|have:iron_helmet&have:iron_chestplate');
     expect(rows(on).some(line => line.includes('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）'))).toBe(true);
   });
   it('the beds node done by `have:bed>=1` and one or two', () => {
@@ -83,7 +83,7 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
     expect(rows(on).some(line => line.includes('ベッド全部'))).toBe(true);
   });
   it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
-    expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 37（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2・ハサミ 2・予備の剣 2・予備の盾 1・盾の作り直し 2）');
+    expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 30（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・火打ち金 1・剣 2・ハサミ 2・予備の剣 2・予備の盾 1・盾の作り直し 2）');
     expect(PREP_RULES_WORDS).toContain('寝る用 1 個（最初の夜の前。doneWhen have:bed>=1）と、竜戦用 10 個（最低 8。target bed×10）');
     expect(ownFirstPlanSystem()).toContain(PREP_RULES_WORDS);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(PREP_RULES_WORDS);

@@ -900,6 +900,7 @@
     "surfaces/minecraft/minecraftLlmcLiveEnemies.ts",
     "surfaces/minecraft/minecraftLlmcLiveMap.ts",
     "surfaces/minecraft/minecraftLlmcLiveRewrite.ts",
+    "surfaces/minecraft/minecraftLlmcNightWaitHold.ts",
     "surfaces/minecraft/minecraftLlmcNode.ts",
     "surfaces/minecraft/minecraftLlmcObsidianWays.ts",
     "surfaces/minecraft/minecraftLlmcOnceFacts.ts",

@@ -81,6 +81,35 @@ export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'dia
 }
 
 /**
+ * end1110r1 (w1109i, no land animal): after the death she had a wooden pickaxe, a table, planks and sticks, no stone tool. The night line had
+ * no hand (its iron way wants a stone pickaxe) and by day the food-absent line said 「先に鉄へ下り」 with no hand; she searched for animals by
+ * day and waited the second night in a hole, stone two blocks under her feet. The wooden pickaxe digs stone: down a shaft 8 (the rock is
+ * mostly 3〜5 under the grass), the table set in the shaft over her head, the stone pickaxe made there. Null when a stone or better pickaxe
+ * is carried, no wooden one, or no table and too few planks for one; no position.
+ */
+const STONE_PICK = /(?:^|:)(?:stone|iron|diamond|netherite)_pickaxe$/u;
+/** The shaft's dig list for a wooden pickaxe (12 kinds, the act's limit): rock that drops cobblestone first, coal so the shaft is not stopped. */
+const SHAFT_DIG = 'dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore';
+export const STONE_SHAFT = 8;
+export function stonePickHands(world: Record<string, unknown>, counts: ItemCounts): string[] | null {
+  const feet = cellOf(world);
+  if (!feet || countMatching(counts, STONE_PICK) > 0 || countMatching(counts, /^wooden_pickaxe$/u) === 0) return null;
+  const table = countMatching(counts, /^crafting_table$/u) > 0;
+  const planks = countMatching(counts, /_planks$/u), sticks = countMatching(counts, /^stick$/u);
+  const plankUse = (table ? 0 : TABLE_PLANKS) + (sticks >= 2 ? 0 : 2);
+  if (planks < plankUse) return null;
+  const bottom = feet.y - STONE_SHAFT;
+  // The shaft is dug with cobblestone carried too: it is the way down, and the table goes in it over her head (feet at the bottom, head +1).
+  return [
+    ...(table ? [] : ['craft crafting_table 1']),
+    ...(sticks >= 2 ? [] : ['craft stick 4']),
+    `vertical down shaft y=${bottom} dig=${SHAFT_DIG} liquid=stop`,
+    `place crafting_table ${feet.x},${bottom + 2},${feet.z}`,
+    'craft stone_pickaxe 1',
+  ];
+}
+
+/**
  * end1109o10: at y=55 in a sealed hole in the rock (the surface about y=70) the night line said 「夜に地上で待てば」 and she answered
  * 「夜の地上は敵が多い」 and waited; the y<45 test of `undergroundInOverworld` did not hold. Roofed in rock: the map is the layers kind and
  * its top layer (feet +2) is rock in at least 80 of each 100 cells it shows.

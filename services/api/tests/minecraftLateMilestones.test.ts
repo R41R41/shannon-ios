@@ -99,12 +99,19 @@ describe('the final milestone is a witnessed native kill', () => {
     expect(lines).toEqual([]);
     tracker.note('b', evidence(step));
     tracker.note('b', evidence(step));
-    expect(lines).toEqual(['Shannon Minecraft milestone task=late-kill name=dragon_defeated t=9601 tick=- d=1']);
+    expect(lines).toEqual(['Shannon Minecraft milestone task=late-kill name=dragon_defeated t=9601 tick=- d=1 verifiedAt=1970-01-01T02:40:01.000Z witnessedAt=-']);
     const saved = JSON.parse(JSON.stringify(tracker.checkpoint()));
     const next = createDragonDefeatLog(task('late-kill', saved), line => lines.push(line), () => 9_700_000);
     next.note('b', evidence(step));
     expect(lines).toHaveLength(1);
     expect(next.checkpoint()).toEqual({ minecraftDragonDefeatLogged: true });
+    // ChatGPT's review of 11/10, M1: the body's time of seeing her fall beside the head's.
+    const seen = task('seen-kill');
+    const witnessed: string[] = [];
+    createDragonDefeatLog(seen, line => witnessed.push(line), () => 9_601_000)
+      .note('b', evidence(seen, { boss: { verified: true, witness: { observedAt: '1970-01-01T02:39:58.250Z' } } }));
+    expect(witnessed).toEqual(['Shannon Minecraft milestone task=seen-kill name=dragon_defeated t=9601 tick=- d=1 verifiedAt=1970-01-01T02:40:01.000Z '
+      + 'witnessedAt=1970-01-01T02:39:58.250Z']);
   });
 
   // The verifier's path (goal.verify through the FCA progress tools) is left to a lab: its unit is the log above.

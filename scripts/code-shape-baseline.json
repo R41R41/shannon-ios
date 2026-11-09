@@ -1841,9 +1841,9 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftEndFacts.ts": {
-      "complex-function": 3,
+      "complex-function": 5,
       "long-line": 7,
-      "multi-statement-line": 1
+      "multi-statement-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftEndGather.ts": {
       "long-line": 1
@@ -1852,7 +1852,7 @@
       "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftEndgame.ts": {
-      "long-line": 2
+      "long-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlan.ts": {
       "long-line": 6,
@@ -1884,14 +1884,17 @@
       "complex-function": 1,
       "multi-statement-line": 1
     },
+    "services/api/src/surfaces/minecraft/minecraftLlmcNightWaitHold.ts": {
+      "complex-function": 1
+    },
     "services/api/src/surfaces/minecraft/minecraftLlmcPreflight.ts": {
       "complex-function": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPrepRules.ts": {
-      "long-line": 1
+      "long-line": 4
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts": {
-      "long-line": 1
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcUrgent.ts": {
       "long-line": 1

@@ -15,7 +15,7 @@ import {
   foodFirstLine,
   foodLeads,
   fuelShortage,
-  ironSearchLine, sheepAbsentLine, foodAbsentLine,
+  ironSearchLine, sheepAbsentLine, goldAbsentLine, foodAbsentLine,
   preparationShortage,
   readinessOf,
   recoveryLine,
@@ -151,7 +151,8 @@ export function readinessParts(
       fuelShortage(facts.world, facts.counts),
       ironSearchLine(facts.world, facts.counts, facts.dimension, tree?.nodes.find(node => node.id === tree.current)),
       sheepAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
-      foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current)),
+      goldAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
+      foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.counts),
       targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),
     ]
       .filter(Boolean)
@@ -168,7 +169,7 @@ export function readinessParts(
   // end1109o03: the night with no bed: the choices before the plan's now (`nightChoiceLine`); end1109o04: by day with a bed, the day is the plan's (`dayBedLine`).
   const done = doneFacts(observation);
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
-    facts.food, tree?.current ?? undefined) : null;
+    facts.food) : null;
   const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension) : null);
   // end1109o06 (meta 13:10, the fifth first night lost) and o08 (the village's beds, meta 14:58): at dusk with the now an errand on the surface, it waits for the morning and the night's
   // choice (the sealed shaft down to the iron) goes first; the plan is not changed, its now is said as the morning's.

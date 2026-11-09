@@ -126,7 +126,8 @@ describe('the live state and the results say facts', () => {
     expect(PREP_NOTE).not.toMatch(/済ませてから|移らない/u);
   });
   it('says the state of the preparation of a descent and that an acceptance is not a check, with no rule and no story of a run', () => {
-    const observation = frame({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: pack([['cooked_beef', 1]]), health: 20, food: 20 });
+    const observation = frame({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: pack([['cooked_beef', 1]]), health: 20, food: 20,
+      nearbyEntities: [{ name: 'cow', position: { x: 4, y: 70, z: 0 } }] });
     const note = descentNote({ hands: [{ do: 'go', to: { x: 3, y: 36, z: 4 } }] }, observation)!;
     expect(note).toMatch(/^準備の状態（この act は地下 y=36 へ下りる手）: 未達 — 食料 20\.8\/40 点/u);
     expect(note).toContain('この受付は、準備が満たされたことを表さない');

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { dragonBasinLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { climbNow, dragonBasinLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { factsContext, type LlmcBodyParts } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
@@ -175,7 +175,7 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
     };
     const line = (phase: number, distance: number | null) => noBowLine(flying(phase, distance));
     expect(line(0, 32)).toContain('今登れる（竜は phase 0 で自分から 32m、30m 以上');
-    expect(line(0, 32)).toContain('檻なしで竜から遠く低い #15 (50,100,-11) 自分から 38m の柱の脇へ行き vertical pillar up で上端の 1〜2 段下まで（約 34 段）');
+    expect(line(0, 32)).toContain('檻なしで竜から遠く低い #15 (50,100,-11) 自分から 38m の柱の脇へ walk → vertical pillar up で上端の 1〜2 段下まで（約 34 段）');
     expect(line(0, null)).toContain('今登れる（竜が見えない');
     expect(line(0, 20)).toContain('まだ登らない（竜が自分から 20m、30m 未満）: #15 (50,100,-11) 自分から 38m の柱の根へ寄り');
     for (const phase of [1, 8]) expect(line(phase, 50)).toContain(`今は登らない（竜は`);
@@ -186,6 +186,12 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
       crystals: { ...base.crystals, list: [crystal(14, 40, true, 20), crystal(15, 50, false, 38), { ...crystal(16, -20, false, 32), position: at(-20, 80) },
         { ...crystal(17, 85, false, 73), position: at(85, 70) }] } }));
     expect(noBowLine(choose)).toContain('#16 (-20,80,-11) 自分から 32m');
+    // Only the two caged ones left: the bed, not a pillar.
+    const cagedOnly = endViewOf(frame({ ...base, position: at(12, 64), dragon: { ...base.dragon, perched: false, distance: 40 },
+      crystals: { ...base.crystals, remaining: 2, list: [crystal(14, 40, true, 20), crystal(18, -40, true, 45)] } }));
+    expect(noBowLine(cagedOnly)).toContain('檻なしの結晶はもう無い（残りは檻つき 2 本）');
+    expect(noBowLine(cagedOnly)).not.toContain('pillar up');
+    expect(climbNow(cagedOnly)).toBe(false);
   });
   it('keeps only the waiting cells of a full approach sent while she flies', () => {
     const end = view({ ...approach(), wait: [cell(41, 2)] }, 8);

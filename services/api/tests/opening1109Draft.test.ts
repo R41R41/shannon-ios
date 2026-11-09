@@ -39,10 +39,10 @@ describe('end1109o03 (opening lane): the night with no bed says its choices befo
     expect(line).toContain('夜（朝まで 約 4 分）');
     expect(line).toContain('A) 村のベッド (216,79,28)');
     expect(line).toContain('dig takeOk collect=true');
-    expect(line).toContain('B) 足元を 2 段掘って');
+    expect(line).toContain('B) 地下で鉄を掘り進む（stone_pickaxe）: 次の 1 手 mc_act [');
     // end1109o06: the hole is a shaft with the cap cell said (the feet cell now), not stairs whose mouth stays open.
-    expect(line).toContain('「vertical down shaft y=77 dig=');
-    expect(line).toContain('「place dirt 214,79,29」');
+    expect(line).toContain('"vertical down shaft y=77 dig=');
+    expect(line).toContain('"place dirt 214,79,29"');
     // ...and it is said from about 3 minutes before the night (o06 dug in then), not earlier.
     expect(nightChoiceLine(world({ timeOfDay: 9_500 }), pack({ stone_pickaxe: 1 }), 'overworld')).toContain('夜まで 約 3 分');
     expect(nightChoiceLine(world({ timeOfDay: 8_000 }), pack({ stone_pickaxe: 1 }), 'overworld')).toBeNull();
@@ -55,8 +55,10 @@ describe('end1109o03 (opening lane): the night with no bed says its choices befo
     expect(nightChoiceLine(world(), pack({ stone_pickaxe: 1 }), 'overworld', true)).toContain('A) 今いる所から地下で鉄を掘り進む');
     expect(nightChoiceLine(world(), pack({ stone_pickaxe: 1 }), 'overworld', true)).not.toContain('村のベッド');
     expect(nightChoiceLine(world(), pack({ stone_pickaxe: 1 }), 'the_nether')).toBeNull();
-    expect(nightChoiceLine(world({ mapLandmarks: [] }), pack({ wooden_pickaxe: 1 }), 'overworld')).toBeNull();
-    expect(nightChoiceLine(world({ mapLandmarks: [] }), pack({ stone_pickaxe: 1 }), 'overworld')).toContain('A) 足元を 2 段掘って');
+    // thru t05b: with no bed near and no stone pickaxe, the hole by hand is said (it said nothing, and she stood on the shore at night).
+    expect(nightChoiceLine(world({ mapLandmarks: [] }), pack({ wooden_pickaxe: 1 }), 'overworld')).toContain('土・砂・砂利・雪は素手でも掘れる');
+    expect(nightChoiceLine(world({ mapLandmarks: [] }), pack({}), 'overworld')).toContain('vertical down shaft');
+    expect(nightChoiceLine(world({ mapLandmarks: [] }), pack({ stone_pickaxe: 1 }), 'overworld')).toContain('A) 地下で鉄を掘り進む');
   });
 });
 
@@ -105,17 +107,17 @@ describe('end1109o10 (opening lane): the night with no bed says the way to the o
     mapLandmarks: ['c 石炭[coal_ore] (-20,55,3) 東2・南1 ×6 見えている'], ...extra });
   it('with no iron on the map: the seal, then the stair to y=16 and the row, as hands (o10 payload 112 had only 「scan の行」)', () => {
     const line = nightChoiceLine(night(), pack({ stone_pickaxe: 1 }), 'overworld')!;
-    expect(line).toContain('「place dirt -22,55,2」');
-    expect(line).toContain('地下で鉄を掘り進む（stone_pickaxe）: 手 今の高さで横へ 1 列掘り進む「go -22,55,-28 '); expect(line).not.toContain('先に原木');
-    expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')).toContain('「vertical down stairs north y=16 dig=');
-    expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')).toContain('「go -22,16,-67 dig=');
+    expect(line).toContain('"place dirt -22,55,2"');
+    expect(line).toContain('地下で鉄を掘り進む（stone_pickaxe）: 次の 1 手 mc_act ['); expect(line).toContain('"go -22,55,-28 '); expect(line).not.toContain('先に原木');
+    expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')).toContain('"vertical down stairs north y=16 dig=');
+    expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')).toContain('"go -22,16,-67 dig=');
     expect(line).not.toContain('scan の鉄鉱石の行');
   });
   it('with iron on the map: the go to the nearest one; after the armour the diamonds at y=-58; nothing with 3 diamonds', () => {
     const marks = ['i 鉄鉱石[iron_ore] (-36,60,4) 西15・上5 ×3 見えている', 'i 鉄鉱石[iron_ore] (-26,55,2) 西4 ×1 見えている'];
-    expect(nightChoiceLine(night({ mapLandmarks: marks }), pack({ stone_pickaxe: 1 }), 'overworld')).toContain('「go -26,55,2 range=1 dig=');
+    expect(nightChoiceLine(night({ mapLandmarks: marks }), pack({ stone_pickaxe: 1 }), 'overworld')).toContain('"go -26,55,2 range=1 dig=');
     const armoured = nightChoiceLine(night(), pack({ iron_pickaxe: 1, iron_helmet: 1, iron_chestplate: 1, iron_leggings: 1, oak_log: 2 }), 'overworld')!;
-    expect(armoured).toContain('地下でダイヤを掘り進む（iron_pickaxe）: 手 '); expect(armoured).toContain('「vertical down stairs north y=-58 ');
+    expect(armoured).toContain('地下でダイヤを掘り進む（iron_pickaxe）: 次の 1 手 mc_act ['); expect(armoured).toContain('"vertical down stairs north y=-58 ');
     expect(nightChoiceLine(night(), pack({ iron_pickaxe: 1, iron_helmet: 1, iron_chestplate: 1, iron_leggings: 1, diamond: 3 }), 'overworld')).toBeNull();
     expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, iron_helmet: 1, iron_chestplate: 1, iron_leggings: 1 }), 'overworld')).toBeNull();
   });
@@ -172,7 +174,11 @@ describe('thru t05 → opening: the food now with no animal in sight says the wa
     expect(line).toContain('"prep":{"state":"skipped","why":"動物が見えない"}');
   });
   it('says nothing with an animal in sight, 40 points, a now that is not food, or outside the overworld', () => {
-    expect(foodAbsentLine({ nearbyEntities: [{ name: 'salmon' }] }, 2.4, 'overworld', now)).toBeNull();
+    expect(foodAbsentLine({ nearbyEntities: [{ name: 'cow' }] }, 2.4, 'overworld', now)).toBeNull();
+    // thru t05b: a fish out in the water is no hunt without a rod; the line still says the way down.
+    expect(foodAbsentLine({ nearbyEntities: [{ name: 'salmon' }, { name: 'cod' }] }, 2.4, 'overworld', now)).toContain('水の中の魚は竿が無いと取れない');
+    // end1110r1: a fish in the water is not food to a hand with no rod; the line stays.
+    expect(foodAbsentLine({ nearbyEntities: [{ name: 'cod' }, { name: 'salmon' }] }, 0, 'overworld', now)).toContain('【動物なし】 食料: 今の節 p2.2');
     expect(foodAbsentLine({}, 40, 'overworld', now)).toBeNull();
     expect(foodAbsentLine({}, 2.4, 'overworld', { id: 'p3.1', title: '鉄のツルハシ', doneWhen: 'have:iron_pickaxe' } as never)).toBeNull();
     expect(foodAbsentLine({}, 2.4, 'the_nether', now)).toBeNull();
@@ -235,7 +241,7 @@ describe('end1109o12 (opening lane): every hand of the way to the ore is one the
     const { nightChoiceLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
     const night = { timeOfDay: 14_000, position: { x: -21.5, y: 55, z: 2.5 }, mapLandmarks: [] };
     const line = nightChoiceLine(night, pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')!;
-    const all = [...line.matchAll(/「((?:go|vertical|mine|place|dig) [^」]+)」/gu)].map(m => m[1]!);
+    const all = JSON.parse(/mc_act (\[[^\]]+\])/u.exec(line)![1]!) as string[];
     expect(all.length).toBeGreaterThanOrEqual(4);
     for (const one of all) {
       const expanded = expandShortAct({ hands: [one], why: 'test' });
@@ -252,21 +258,144 @@ describe('end1109o13 (opening lane): the night line lifts the food prep with its
   const { MC_ACT_TOOL } = await import('../src/contracts/minecraftActTypes.js');
   const pack = (items: Record<string, number>) => new Map(Object.entries(items));
   const night = { timeOfDay: 14_000, position: { x: 21.5, y: 108, z: 15.5 }, mapLandmarks: [] };
-  it('food under 40 at night: says it cannot grow by waiting and gives the prep skipped hand for the now', () => {
-    const line = nightChoiceLine(night, pack({ stone_pickaxe: 1, oak_log: 7 }), 'overworld', false, 27.2, 'p3.1')!;
-    expect(line).toContain('食料 27.2 点は下りる準備の 40 に足りないが、夜は狩れず待っても増えない');
-    expect(line).toContain('[{"op":"set","id":"p3.1","prep":{"state":"skipped","why":"夜は狩れない。朝に狩って 40 にする"}}]');
-    expect(nightChoiceLine(night, pack({ stone_pickaxe: 1, oak_log: 7 }), 'overworld', false, 45, 'p3.1')).not.toContain('下りる準備の 40');
+  it('food under 40 at night: the head passes the prep for the night (no plan_update asked); the raw iron is smelted where she is', () => {
+    const line = nightChoiceLine(night, pack({ stone_pickaxe: 1, oak_log: 7 }), 'overworld', false, 27.2)!;
+    expect(line).toContain('【夜の通し】 下りる準備の食料 40 は夜の間は通す（今 27.2 点。');
+    expect(line).not.toContain('"op":"set"');
+    expect(nightChoiceLine(night, pack({ stone_pickaxe: 1, oak_log: 7 }), 'overworld', false, 45)).not.toContain('夜の通し');
+    expect(nightChoiceLine(night, pack({ stone_pickaxe: 1, oak_log: 7, raw_iron: 5, cobblestone: 12 }), 'overworld', false, 45))
+      .toContain('持っている生鉄 5 は今いる所で焼く（かまどを丸石 8 で作って足元に置き');
+    expect(nightChoiceLine(night, pack({ stone_pickaxe: 1, oak_log: 7, raw_iron: 5 }), 'overworld', false, 45)).not.toContain('生鉄');
   });
   it('no table, planks or log at night: the row at her height, no wood first; the hands pass the act checks', () => {
-    const line = nightChoiceLine({ ...night, position: { x: 38.5, y: 97, z: 25.5 } }, pack({ iron_pickaxe: 1, iron_helmet: 1, iron_chestplate: 1, oak_planks: 2 }), 'overworld', true)!;
+    const line = nightChoiceLine({ ...night, position: { x: 38.5, y: 97, z: 25.5 } }, pack({ iron_pickaxe: 1, iron_helmet: 1, oak_planks: 2 }), 'overworld', true)!;
     expect(line).toContain('地下で鉄を掘り進む（iron_pickaxe）');
-    expect(line).toContain('今の高さで横へ 1 列掘り進む「go 38,97,-5 ');
+    expect(line).toContain('"go 38,97,-5 ');
     expect(line).not.toContain('先に原木');
-    for (const one of [...line.matchAll(/「((?:go|vertical|mine|place|dig) [^」]+)」/gu)].map(m => m[1]!)) {
+    const hands = JSON.parse(/mc_act (\[[^\]]+\])/u.exec(line)![1]!) as string[];
+    expect(hands.length).toBeGreaterThan(0);
+    for (const one of hands) {
       const expanded = expandShortAct({ hands: [one], why: 'test' });
       expect(expanded.errors, one).toEqual([]);
       expect(llmcPrepare(MC_ACT_TOOL, expanded.input).problem, one).toBeNull();
     }
+  });
+});
+
+describe('11/10 (opening lane, no run): the night pass leaves out her own caution of the food 40 while the night line carries it', async () => {
+  const { rewriteLlmcLive } = await import('../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js');
+  const { NIGHT_PASS } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
+  const live = (planNow: string) => ({ plan: { rules: ['注意（p3）: 下りる前に食料40点・石のツルハシ・作業台を持つ', '禁止: 溶岩の上を歩かない'] }, body: { planNow } });
+  it('drops only the food 40 rule, and only with the pass in body.planNow', () => {
+    const passed = rewriteLlmcLive(live(`夜（朝まで 約 8 分）… ${NIGHT_PASS} 下りる準備の食料 40 は夜の間は通す`)).live as { plan: { rules: string[] } };
+    expect(passed.plan.rules).toEqual(['禁止: 溶岩の上を歩かない']);
+    const day = rewriteLlmcLive(live('[p3.1] 鉄を掘る')).live as { plan: { rules: string[] } };
+    expect(day.plan.rules).toHaveLength(2);
+  });
+});
+
+describe('end1109o5a (opening lane, no run): the gold boots with no gold ore on the map are set aside like the sheep', async () => {
+  const { goldAbsentLine } = await import('../src/surfaces/minecraft/minecraftLlmcReadiness.js');
+  const pack = (items: Record<string, number>) => new Map(Object.entries(items));
+  const nodes = [
+    { id: 'p6', parentId: null, order: 6, title: '金のブーツ（ネザーの前）', doneWhen: 'have:golden_boots|have:ender_eye>=10', state: 'continue' },
+    { id: 'p6.1', parentId: 'p6', order: 1, title: '金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）', doneWhen: 'have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots|have:ender_eye>=10', state: 'continue' },
+    { id: 'p6.2', parentId: 'p6', order: 2, title: '焼いて金のブーツを作り履く', doneWhen: 'have:golden_boots|have:ender_eye>=10', state: 'continue' },
+    { id: 'p7.2', parentId: null, order: 7, title: '火打ち金を作る', doneWhen: 'have:flint_and_steel', state: 'continue' },
+  ] as never[];
+  const at = (id: string) => (nodes as { id: string }[]).find(node => node.id === id) as never;
+  const world = (marks: string[] = []) => ({ position: { x: 0, y: 55, z: 0 }, mapLandmarks: marks });
+  it('says the goal is not required and sets the whole gold node aside', () => {
+    const line = goldAbsentLine(world(), pack({ diamond_pickaxe: 1 }), 'overworld', nodes, at('p6.1'))!;
+    expect(line).toContain('必須ではない');
+    expect(line).toContain('[{"op":"set","id":"p6","state":"blocked","reason":"金鉱石が見えない"}]');
+  });
+  it('says nothing with gold on the map, gold enough, a golden piece, another now (not the flint and steel) or outside the overworld', () => {
+    expect(goldAbsentLine(world(['g 金[deepslate_gold_ore] (3,-16,4) 東3・下71 ×2 見えている']), pack({}), 'overworld', nodes, at('p6.1'))).toBeNull();
+    expect(goldAbsentLine(world(), pack({ raw_gold: 4 }), 'overworld', nodes, at('p6.1'))).toBeNull();
+    expect(goldAbsentLine(world(), pack({ golden_boots: 1 }), 'overworld', nodes, at('p6.1'))).toBeNull();
+    expect(goldAbsentLine(world(), pack({}), 'overworld', nodes, at('p7.2'))).toBeNull();
+    expect(goldAbsentLine(world(), pack({}), 'the_nether', nodes, at('p6.1'))).toBeNull();
+  });
+});
+
+describe('end1110r1 (opening lane, no run): while the food-absent line is said, her own rules that hold the descent for the 40 are left out', async () => {
+  const { rewriteLlmcLive } = await import('../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js');
+  const rules = ['注意（p3）: 食料 40 点が未達。下りる前に必ず満たす', '禁止（p3）: 未達の間は地下へ下りない・鉄を掘らない（夜通しでも同じ）', '禁止: 溶岩の上を歩かない'];
+  const live = (body: Record<string, unknown>) => ({ plan: { rules }, body });
+  it('drops the caution and the forbid with 【動物なし】 in body.shortage, and nothing without it', () => {
+    const out = rewriteLlmcLive(live({ planNow: '[p2.1] 動物を狩る', shortage: '【動物なし】 食料: 今の節 p2.1 は食料 0/40 点だが' })).live as { plan: { rules: string[] } };
+    expect(out.plan.rules).toEqual(['禁止: 溶岩の上を歩かない']);
+    const kept = rewriteLlmcLive(live({ planNow: '[p2.1] 動物を狩る', shortage: '鉄鉱石: …' })).live as { plan: { rules: string[] } };
+    expect(kept.plan.rules).toHaveLength(3);
+  });
+});
+
+describe('end1110r1 night 2 and day 2 (opening lane, no run): a wooden pickaxe only, no land animal: the stone pickaxe in a shaft, then the iron, as one act', async () => {
+  const { nightChoiceLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
+  const { foodAbsentLine } = await import('../src/surfaces/minecraft/minecraftLlmcReadiness.js');
+  const { stonePickHands } = await import('../src/surfaces/minecraft/minecraftOreRoute.js');
+  const { rewriteLlmcLive } = await import('../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js');
+  const { expandShortAct } = await import('../src/contracts/minecraftActShortContract.js');
+  const { llmcPrepare } = await import('../src/surfaces/minecraft/minecraftLlmc.js');
+  const { MC_ACT_TOOL } = await import('../src/contracts/minecraftActTypes.js');
+  const pack = (items: Record<string, number>) => new Map(Object.entries(items));
+  // Her pack at the second night of end1110r1 (seq 130), in the dark forest at (-22,62,18).
+  const r1Pack = pack({ crafting_table: 1, dark_oak_planks: 3, oak_planks: 5, stick: 5, wooden_pickaxe: 1, wooden_sword: 1, rotten_flesh: 2, dirt: 3 });
+  const at = { position: { x: -21.5, y: 62, z: 18.5 }, mapLandmarks: [] };
+  const handsOf = (line: string) => JSON.parse(/mc_act (\[[^\]]+\])/u.exec(line)![1]!) as string[];
+  const passes = (hands: string[]) => {
+    for (const one of hands) {
+      const expanded = expandShortAct({ hands: [one], why: 'test' });
+      expect(expanded.errors, one).toEqual([]);
+      expect(llmcPrepare(MC_ACT_TOOL, expanded.input).problem, one).toBeNull();
+    }
+  };
+  it('the stone pickaxe hands: shaft 8, the table over her head, the craft; null with a stone pickaxe, no wooden one, or no table and few planks', () => {
+    expect(stonePickHands(at, r1Pack)).toEqual([
+      'vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop',
+      'place crafting_table -22,56,18', 'craft stone_pickaxe 1']);
+    expect(stonePickHands(at, pack({ wooden_pickaxe: 1, oak_planks: 6 }))!.slice(0, 2)).toEqual(['craft crafting_table 1', 'craft stick 4']);
+    expect(stonePickHands(at, pack({ wooden_pickaxe: 1, stone_pickaxe: 1, crafting_table: 1, stick: 2 }))).toBeNull();
+    expect(stonePickHands(at, pack({ crafting_table: 1, stick: 2 }))).toBeNull();
+    expect(stonePickHands(at, pack({ wooden_pickaxe: 1, oak_planks: 3 }))).toBeNull();
+  });
+  it('night 2: the line gives one act, the seal, the stone pickaxe and the way down, all the act takes as written', () => {
+    const line = nightChoiceLine({ ...at, timeOfDay: 14_000 }, r1Pack, 'overworld', false, 0)!;
+    expect(line).toContain('地下で鉄を掘り進む（木のツルハシだけ。先に石のツルハシを作る）');
+    expect(line).toContain('【夜の通し】');
+    const hands = handsOf(line);
+    expect(hands.slice(0, 5)).toEqual([
+      'vertical down shaft y=60 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,deepslate,gravel,sand liquid=stop',
+      'place dirt -22,62,18',
+      'vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop',
+      'place crafting_table -22,56,18', 'craft stone_pickaxe 1']);
+    expect(hands.some(hand => hand.startsWith('vertical down stairs north y=16'))).toBe(true);
+    passes(hands);
+    // A stone pickaxe carried: the line is as it was (no shaft for the stone).
+    expect(nightChoiceLine({ ...at, timeOfDay: 14_000 }, pack({ stone_pickaxe: 1, crafting_table: 1 }), 'overworld', false, 0)).not.toContain('craft stone_pickaxe');
+  });
+  it('day 2: the food-absent line gives the same way down as one act (with the counts), and none with no pickaxe', () => {
+    const now = { id: 'p2.1', title: '無ければ動物を4〜6体狩る', doneWhen: 'food>=40' } as never;
+    const line = foodAbsentLine({ ...at, nearbyEntities: [{ name: 'cod' }] }, 0, 'overworld', now, r1Pack)!;
+    expect(line).toContain('下りる手（plan_update と同じ判断で出してよい）: mc_act');
+    const hands = handsOf(line);
+    expect(hands[0]).toBe('vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop');
+    expect(hands).toContain('craft stone_pickaxe 1');
+    passes(hands);
+    expect(foodAbsentLine(at, 0, 'overworld', now, pack({ stone_pickaxe: 1, crafting_table: 1 }))).not.toContain('craft stone_pickaxe');
+    expect(foodAbsentLine(at, 0, 'overworld', now, pack({ stone_pickaxe: 1, oak_log: 2 }))).toContain('mc_act');
+    expect(foodAbsentLine(at, 0, 'overworld', now, pack({ stone_pickaxe: 1 }))).toContain('下りる手: 先に原木 2 本');
+    expect(foodAbsentLine(at, 0, 'overworld', now, pack({ oak_planks: 2 }))).not.toContain('mc_act');
+    expect(foodAbsentLine(at, 0, 'overworld', now)).not.toContain('mc_act');
+  });
+  it('day 2: with 【動物なし】 her own cautions to search for animals are left out; the forbid and 「途中で補う」 are kept', () => {
+    const rules = ['注意: 夜は柱の上で待つ。朝になったら土か砂の所を探して食料（動物）を探す', '注意: 夜前: 草原（平地）の方角を朝に探す。暗い森は動物が出にくい',
+      '禁止（p2）: 夜に囲いの外で動物を探し歩かない', '注意（p2）: 食料40点は鉄の途中で見えた動物か村の畑で補う。魚は竿が無いと取れないので岸で待たない',
+      '注意: 食料 0。腐った肉（rotten_flesh）は非常食。ゾンビを倒すと落ちる。動物は近くに無し'];
+    const out = rewriteLlmcLive({ plan: { rules }, body: { planNow: '[p2.1] 動物を狩る', shortage: '【動物なし】 食料: 今の節 p2.1' } }).live as { plan: { rules: string[] } };
+    expect(out.plan.rules).toEqual(rules.slice(2));
+    const kept = rewriteLlmcLive({ plan: { rules }, body: { planNow: '[p2.1] 動物を狩る', shortage: '' } }).live as { plan: { rules: string[] } };
+    expect(kept.plan.rules).toHaveLength(5);
   });
 });

@@ -75,8 +75,13 @@ export function contactCells(view: MapView, self: P): string[] {
   return found.sort((a, b) => a.meters - b.meters).slice(0, CONTACTS).map(item => `${ptText(item.at)} 目から ${item.meters.toFixed(1)}m（${name(item.at)}）`
     + `・隣の水の源 ${ptText(item.water)}・溶岩の源 ${ptText(item.lava)}`);
 }
-/** Enough sources for the obsidian taken at the first lava: the gate's ten and the End fight's twelve (`OBSIDIAN_AT_FIRST_LAVA`). */
-export const POOL_SOURCES = OBSIDIAN_AT_FIRST_LAVA;
+/**
+ * The pool worth going to: ten sources or more, the gate's (the strategy's 「10 個には源が 10 以上ある溜まり」). end1109t04b (thru, 11/9):
+ * with this at 22 (`OBSIDIAN_AT_FIRST_LAVA`, the gate's and the fight's) the node of the first lava stayed open about 70 minutes without
+ * reaching 10 (the run's records were cleared; the pull to a far pool of 22 is the head's reading, not observed). The plan's 22 is unchanged:
+ * the rest is taken at the same pool when it has them, or at the next lava.
+ */
+export const POOL_SOURCES = 10;
 /**
  * Run 38 (2026-10-24: from +1,090 s she went to single lava sources one after another and reached a pool of 64
  * sources at +1,310 s, about 220 s):

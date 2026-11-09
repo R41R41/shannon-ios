@@ -24,8 +24,14 @@ export function createDragonDefeatLog(step: Task, log: (line: string) => void = 
           .update(JSON.stringify([step.scopeKey, step.taskId, bodyId, task.goal, task.completionCriteria])).digest('hex');
         if (evidence?.contextKey !== contextKey || evidence.connected !== true || record(evidence.boss)?.verified !== true) return;
         reached = true;
-        const elapsed = Number.isFinite(began) ? Math.max(0, now() - began) : 0;
-        if (logMilestoneOnce(step.taskId, 'dragon_defeated')) log(milestoneLine(step.taskId, 'dragon_defeated', elapsed, null, decision));
+        const at = now(), elapsed = Number.isFinite(began) ? Math.max(0, at - began) : 0;
+        // ChatGPT's review of 11/10, M1: the time the body saw her fall beside the time the head checked it, for the filming's clock. The
+        // judgement of the win is unchanged (boss.verified).
+        const seen = record(record(evidence.boss)?.witness)?.observedAt;
+        const witnessed = typeof seen === 'string' && Number.isFinite(Date.parse(seen)) ? seen : '-';
+        if (logMilestoneOnce(step.taskId, 'dragon_defeated')) {
+          log(`${milestoneLine(step.taskId, 'dragon_defeated', elapsed, null, decision)} verifiedAt=${new Date(at).toISOString()} witnessedAt=${witnessed}`);
+        }
       } catch {
         // A missing or malformed proof, or a journal failure, never changes the task's verification or execution.
       }

@@ -1,6 +1,6 @@
 import { carried } from './minecraftConditions.js';
 import { thunderstorm } from './minecraftLlmcStateWords.js';
-import { oreRouteHands } from './minecraftOreRoute.js';
+import { oreRouteHands, stonePickHands, STONE_SHAFT } from './minecraftOreRoute.js';
 export { thunderstorm } from './minecraftLlmcStateWords.js';
 
 /**
@@ -67,7 +67,7 @@ function armsWords(counts: ReadonlyMap<string, number>): string | null {
  * hour, where the light is out and hostiles spawn: `underground`), or an iron sword in the pack (or, with no iron for one, any blade).
  */
 export function nightArmsLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null,
-  underground = false, food?: number, nowId?: string): string | null {
+  underground = false): string | null {
   if (dimension !== 'overworld') return null;
   const time = dayTick(world);
   const night = time !== null && time < NIGHT_TO && time >= NIGHT_FROM - NEAR_TICKS;
@@ -155,9 +155,37 @@ function sealHands(at: { x?: unknown; y?: unknown; z?: unknown } | null): string
   return `足元を 2 段掘って頭の上を塞ぐ（手 2 つ「vertical down shaft y=${y - 2} dig=${HOLE_DIG} liquid=stop」「place dirt ${x},${y},${z}」。`
     + `今の足のマスが、下りた後の頭の上。土が無ければ cobblestone。stairs は口が開いたままになる。葉の上なら先に地面へ）。塞いだ後、その底から`;
 }
+/** The two hands of the sealed hole as `mc_act` takes them; empty without a position. */
+function sealList(at: { x?: unknown; y?: unknown; z?: unknown } | null): string[] {
+  const [x, y, z] = [at?.x, at?.y, at?.z].map(value => typeof value === 'number' ? Math.floor(value) : null);
+  return x === null || y === null || z === null ? [] : [`vertical down shaft y=${y - 2} dig=${HOLE_DIG} liquid=stop`, `place dirt ${x},${y},${z}`];
+}
+/**
+ * The head passes the descent's preparation (food 40) for the night with no bed (end1109o13): said in the night's line, and the live's rewrite
+ * leaves out the plan's own cautions of the 40 while the line carries it (`minecraftLlmcLiveRewrite.ts`). By day the rule is as it was.
+ */
+export const NIGHT_PASS = '【夜の通し】';
+/**
+ * thru t05b (w1109v, 11/9 18:43): after a death she had nothing (no pickaxe, no planks, no logs), no village bed was near, and the night line
+ * said nothing at all (its two choices both need a bed or a pickaxe); she stood on the shore at 2.3 health and the zombies and a stray killed
+ * her three times in 70 s. Dirt, sand, gravel and snow come by hand: the hole of `sealHands` without the stone, and its cap from what was dug.
+ */
+const HAND_DIG = 'dirt,grass_block,coarse_dirt,podzol,rooted_dirt,mud,clay,sand,red_sand,gravel,snow,snow_block';
+function handSealHands(at: { x?: unknown; y?: unknown; z?: unknown } | null): string {
+  const [x, y, z] = [at?.x, at?.y, at?.z].map(value => typeof value === 'number' ? Math.floor(value) : null);
+  const hands = x === null || y === null || z === null ? '「vertical down shaft で y を今の足の y−2」と、今の足のマスへ place'
+    : `「vertical down shaft y=${y - 2} dig=${HAND_DIG} liquid=stop」「place dirt ${x},${y},${z}」`;
+  return `土・砂・砂利・雪は素手でも掘れる: 足元を 2 段掘って頭の上を塞ぐ（手 2 つ ${hands}。掘った土か砂で塞ぐ。`
+    + '足元が石・氷・水なら、土か砂の地面まで歩いてから）。底で朝を待ち、朝に原木から道具を作り直す（地上に立ったまま待たない・素手で敵と打ち合わない）';
+}
+/**
+ * The mark of the food-absent line (`foodAbsentLine`): while it is said, the live's rewrite leaves out her own rules that hold the descent for
+ * the food 40 too (end1110r1: she wrote 「未達の間は地下へ下りない・鉄を掘らない（夜通しでも同じ）」 in a world with no land animal and waited).
+ */
+export const FOOD_PASS = '【動物なし】';
 const BED_MARK = /^B [^()]*ベッド \((-?\d+),(-?\d+),(-?\d+)\)/u;
 export function nightChoiceLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null,
-  underground = false, food?: number, nowId?: string): string | null {
+  underground = false, food?: number): string | null {
   if (dimension !== 'overworld') return null;
   const tick = dayTick(world);
   // end1109o06: she dug in about 3 minutes before night (before the old 1-minute window), stairs with an open mouth: the choice is said from then.
@@ -166,7 +194,7 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
   // The iron is the night's work until the armour is made, then the diamonds' (end1109o10: the way to either is said as hands, `oreRouteHands`).
   // end1109o13: the diamonds' prep wants the helmet, chestplate and leggings worn; with the chestplate alone the line said the diamonds and she
   // waited (the prep held the descent). The iron is the night's work until all three.
-  const armoured = ['iron_helmet', 'iron_chestplate', 'iron_leggings'].every(name => carried(counts, name) > 0);
+  const armoured = ['iron_helmet', 'iron_chestplate'].every(name => carried(counts, name) > 0);
   const ore = !armoured ? 'iron' as const
     : carried(counts, 'diamond') < 3 && carriedNames(counts, IRON_PICK_UP).length ? 'diamond' as const : null;
   if (!ore) return null;
@@ -180,14 +208,29 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
   }).sort((a, b) => a.d - b.d);
   const pick = carriedNames(counts, ore === 'diamond' ? IRON_PICK_UP : PICKAXE)[0];
   const route = oreRouteHands(world, ore, counts, true);
-  // end1109o13: the descent's prep (food 40) held her the first night with 27 points; the knowledge lets it be skipped with a reason, and the
-  // night is one (no animal is hunted by night and waiting adds none).
-  const hungry = typeof food === 'number' && food < 40 && nowId
-    ? `食料 ${Math.round(food * 10) / 10} 点は下りる準備の 40 に足りないが、夜は狩れず待っても増えない。夜の間に掘るなら先に plan_update の ops [{"op":"set","id":"${nowId}","prep":{"state":"skipped","why":"夜は狩れない。朝に狩って 40 にする"}}] で準備を省いて下り、朝に狩る。` : '';
+  // end1109o13 (the coordinator's 0:50 of 11/10, no run to check it): the first night with food 27.2 she waited in a hole while the line asked
+  // three steps (seal, write prep skipped in a plan_update, go down) and each replay moved at most 2 of 6. The night's way is said as one act,
+  // its hands as they go into `mc_act`, and the descent's prep is passed by the head for the night (`NIGHT_PASS`): no plan_update is asked.
+  // end1110r1: with a wooden pickaxe only (after a death) the line had no hand and she waited the second night in a hole, stone 2 under her
+  // feet: the stone pickaxe is made in the shaft first (`stonePickHands`), then the same way to the iron.
+  const stone = ore === 'iron' && !pick ? stonePickHands(world, counts) : null;
+  const hands = [...(underground ? [] : sealList(at)), ...(stone ?? []), ...[...(route ?? '').matchAll(/「([^」]+)」/gu)].map(m => m[1]!)];
+  const pass = typeof food === 'number' && food < 40
+    ? `${NIGHT_PASS} 下りる準備の食料 40 は夜の間は通す（今 ${Math.round(food * 10) / 10} 点。夜は狩れず、待っても増えない。plan_update は要らない。朝に狩って 40 にする）。` : '';
+  const way = hands.length && (underground || sealList(at).length)
+    ? `次の 1 手 mc_act ${JSON.stringify(hands)}（${underground ? '' : '最初の 2 手で足元を掘って頭の上を塞ぐ。'}`
+      + `${stone ? `木のツルハシで ${STONE_SHAFT} 段下りて石を掘り、頭の上に作業台を置いて石のツルハシを作る（鉄は石のツルハシから）。` : ''}掘った壁に鉱石が見えたら mine。y=0 より下は deepslate_ の付く名前）`
+    : `${underground ? '今いる所から' : sealHands(at)}手 ${route}`;
+  // end1109o13: with the helmet and chestplate on and 5 raw iron for the legs, she waited the night out to smelt at the furnace on the surface.
+  // A furnace is 8 cobblestone and works below as well: the raw iron carried is smelted where she is.
+  const raw = carried(counts, 'raw_iron');
+  const smelt = ore === 'iron' && raw >= 3 && (carried(counts, 'furnace') > 0 || carried(counts, 'cobblestone') >= 8)
+    ? `持っている生鉄 ${raw} は今いる所で焼く（かまどを${carried(counts, 'furnace') > 0 ? '' : '丸石 8 で作って'}足元に置き、燃料と入れる。地上のかまどへ朝に戻らない）。それから ` : '';
   const choices = [
     ...(!underground && beds[0] && beds[0].d <= 64 ? [`村のベッド (${beds[0].x},${beds[0].y},${beds[0].z})（${Math.round(beds[0].d)}m）へ寄り、sleep で寝る。村人が寝ていたら、そのベッドを dig takeOk collect=true で取り、sleep で置いて寝る（約 20 秒で朝。村人は起きるだけで傷つかない。村のベッドは取ってよい）`] : []),
-    ...(pick && route ? [`${underground ? '今いる所から' : sealHands(at)}地下で${ore === 'iron' ? '鉄' : 'ダイヤ'}を掘り進む（${pick}）: ${hungry}手 ${route}。地下の暗さは昼も夜も同じなので、夜も昼と同じだけ進む（「朝に掘る」のなら今掘るのと同じ。待てば朝に同じ所から始まるだけ）`] : []),
+    ...((pick || stone) && route ? [`${underground ? '今いる所から' : ''}地下で${ore === 'iron' ? '鉄' : 'ダイヤ'}を掘り進む（${pick ?? '木のツルハシだけ。先に石のツルハシを作る'}）: ${pass}${smelt}${way}。地下の暗さは昼も夜も同じなので、夜も昼と同じだけ進む（「朝に掘る」のなら今掘るのと同じ。待てば朝に同じ所から始まるだけ）`] : []),
   ];
+  if (!choices.length && !underground && !pick) choices.push(handSealHands(at));
   if (!choices.length) return null;
   const left = tick >= NIGHT_FROM ? NIGHT_TO - tick : NIGHT_TO - NIGHT_FROM;
   const share = Math.round(100 * left / (30 * TICKS_PER_MINUTE));

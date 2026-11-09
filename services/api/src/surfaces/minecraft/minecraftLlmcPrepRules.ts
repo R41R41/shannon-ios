@@ -29,8 +29,8 @@ export interface PrepStage { title: string; food: number; needs: readonly PrepNe
 /** Blocks to stand on and to wall with (the knowledge's 足場のブロック 64). */
 export const BLOCKS = new RegExp('^(?:cobblestone|cobbled_deepslate|netherrack|blackstone|stone|deepslate|dirt|andesite|diorite|granite|tuff'
   + '|basalt|end_stone|nether_bricks)$', 'u');
-/** The three pieces in iron or better (the feet are the golden boots'). */
-export const UPPER_ARMOUR = /^(?:iron|diamond|netherite)_(?:helmet|chestplate|leggings)$/u;
+/** The two pieces in iron or better before the diamonds and the gate (the coordinator, 11/10 6:55, plan A: t03 6/15 ingots at 5,146 s and o05 54.7 min to the whole set; the legs (7) are left out, the feet are the golden boots'). */
+export const UPPER_ARMOUR = /^(?:iron|diamond|netherite)_(?:helmet|chestplate)$/u;
 export const GOLDEN_BOOTS = /^golden_boots$/u;
 
 const PICKAXE: PrepNeed = { label: '鉄以上のツルハシ', count: 1, pattern: /^(?:iron|diamond|netherite)_pickaxe$/u };
@@ -49,7 +49,7 @@ const SHIELDS_FOR_NETHER: PrepNeed = { label: '盾（予備を含め 2）', coun
 // as their materials (iron 2, in IRON_USES, and planks), made where the last one breaks.
 const SHIELD_IRON: PrepNeed = { label: '盾の作り直しの鉄（2）', count: 2, pattern: /^iron_ingot$/u };
 const SHIELD_PLANKS: PrepNeed = { label: '板（盾の作り直し 2 枚分と作業台、16）', count: 16, pattern: /_planks$/u };
-const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て・脚', count: 3, pattern: UPPER_ARMOUR, slots: true, worn: true };
+const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て', count: 2, pattern: UPPER_ARMOUR, slots: true, worn: true };
 // The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots are a goal,
 // the rest of the gate's list is required.
 // A goal of the table; the gate's hand is held while no golden piece is worn (`goldAtPortalHold`), and the stage words say so (the section audit
@@ -133,16 +133,35 @@ export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 330
  */
 export const BEFORE_END_FALLBACK: PrepStage = { title: 'エンドに入る前（予備の手）', food: END_MIN_FOOD,
   needs: [STACKABLE, WATER_BUCKET, { ...SWORD, label: '鉄以上の剣' }, { ...BOW, goal: true }, { ...ARROWS, goal: true }], risk: BEFORE_END.risk };
+/** The fallback's weapons (the End's check after the beds' gathering has had its time): the sword required, the bow and the arrows aims as above. */
+export const END_FALLBACK_WEAPONS: readonly PrepNeed[] = [{ ...SWORD, label: '鉄以上の剣' }, { ...BOW, goal: true }, { ...ARROWS, goal: true }];
+/**
+ * The beds' gathering clock, one per task, read by the End's gate (`minecraftEndGather.ts`) and by the End's check (`preparationShortage`),
+ * so the two say the same (ChatGPT's review of 11/10, Q2: the gate let her in on the fallback after ten minutes while the check still asked
+ * the beds, and the clock began only at the portal). Kept per process (a restart gives the gathering its time again).
+ */
+export const END_GATHER_MS = 10 * 60_000;
+const gatherStarted = new Map<string, number>();
+/** For tests: no task has started gathering. */
+export function forgetEndGather(): void { gatherStarted.clear(); }
+/** When the beds' gathering of a task began, starting it at `now` when `start` and it has not; null when it has not begun. */
+export function endGatherSince(taskId: string, now: number, start: boolean): number | null {
+  const since = gatherStarted.get(taskId);
+  if (since !== undefined || !start) return since ?? null;
+  if (gatherStarted.size > 64) gatherStarted.delete(gatherStarted.keys().next().value as string);
+  gatherStarted.set(taskId, now);
+  return now;
+}
 export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: END_MIN_FOOD,
   needs: [{ ...STACKABLE, count: 20 }, ...END_WEAPONS, { ...WATER_BUCKET, goal: true }],
   risk: 'エンドへ戻る時も、積める物と食料が無いと足場の火の玉や回復不足で死ぬ。落とした装備が残っているかは未確認。' };
 
 /**
- * The coordinator, 2026-11-02 (the owner: dragon within three hours, an hour and a half at best; a death after the iron gear puts the time in doubt, so a
- * death is out): from the iron gear on, not dying stands above being fast. Knowledge of the stages, in the numbers the live state shows (the health, the food
+ * The coordinator, 2026-11-02 (the owner: dragon within three hours, an hour and a half at best; a death after the iron gear puts the time in doubt). The owner,
+ * 2026-11-10: a death in the filming does not end the run (the clock goes on): a death is avoided for the items and the time it costs, never feared into waiting. Knowledge of the stages, in the numbers the live state shows (the health, the food
  * points, the wear of a piece in the pack's line).
  */
-export const SAFETY_FIRST = '- 死なないことを速さより上に置く（鉄の装備を手に入れた後は特に。死ぬと装備と時間を失い、この通しは死んだらアウト）。'
+export const SAFETY_FIRST = '- 死は避ける（死ぬと持ち物と、それを取り戻す時間を失う。鉄の装備を手に入れた後は特に高くつく）。ただし死んでも通しは終わらない: 生き返ったら持ち物を回収するか作り直して続ける。死を恐れて待ちを増やさない（待ちも時間を失う）。'
   + '体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満（持ち物の行の耐久）のまま、深い所・ネザー・戦いへ進まない: 食べる・回復を待つ・作り直す・退くを先にする。'
   + '溶岩の縁・落下の上・火の玉の線では、足元と両脇を確かめて 1 マスずつ。'
   // S2's blaze lab of 11/5 (raid3: health 6.1 and fullness 17 for about 1.5 minutes of sorties, health never came back): the head chooses the meal.
@@ -153,7 +172,7 @@ export const SAFETY_FIRST = '- 死なないことを速さより上に置く（�
  * and the old path's 「鉄は33まで」 cut the digging short of them): the sum is the budget, and the words say the uses.
  */
 export const IRON_USES: ReadonlyArray<readonly [string, number]> = Object.freeze([['ツルハシ', 3], ['バケツ', 3], ['盾', 1], ['兜', 5], ['胸', 8],
-  ['脚', 7], ['火打ち金', 1], ['剣', 2], ['ハサミ', 2], ['予備の剣', 2], ['予備の盾', 1], ['盾の作り直し', 2]] as const);
+  ['火打ち金', 1], ['剣', 2], ['ハサミ', 2], ['予備の剣', 2], ['予備の盾', 1], ['盾の作り直し', 2]] as const);
 export const IRON_BEFORE_NETHER = IRON_USES.reduce((sum, [, count]) => sum + count, 0);
 /**
  * The owner's ruler to the Nether (the 3-hour plan of 11/3: 47 minutes, the preparation included): one number for the road's milestone, the stage
@@ -204,12 +223,12 @@ export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の�
  * procedures; the descent's rule is `PREP_DESCENT_RULE`. Knowledge, not an order.
  */
 export const PREP_RULES_WORDS = [
-  `- ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・水入りバケツ・盾・鉄の兜・胸当て・脚（着る）・食料 40 点。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
+  `- ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・水入りバケツ・盾・鉄の兜・胸当て（着る）・食料 40 点。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
     + `（${IRON_USES.map(([use, count]) => `${use} ${count}`).join('・')}）` + ("。火打ち金は鉄のある高さで先に作る。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱・廃坑の箱・荒廃したポータル（走査の「壊れたポータル」）の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
-  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
+  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
     + '・石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）・足場のブロック 64（丸石 128 あると橋で尽きない）・食料 40 点。'
     + '鉄のツルハシは 1 本が耐久 250 で、ネザーの岩を掘り続けると壊れて止まった（鉄はネザーに無い）。'
     + '目標: 金のブーツ（金 4 がそろう時。金の防具を 1 つも着ていないと、ネザーへ入る手は止まる）'

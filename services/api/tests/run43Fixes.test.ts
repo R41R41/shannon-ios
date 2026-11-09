@@ -69,7 +69,7 @@ describe('run 43: the food points are one number, said and judged', () => {
   });
   it('says the same food in the recovery line and the descent note', () => {
     expect(recoveryLine(16, 14, 39.6, carriedItemCounts({ inventory: pack(AT_402) }, {}))).toContain('食料 39.6 点）');
-    const note = descentNote({ hands: [{ do: 'go', to: { x: 165, y: 7, z: 215 } }] }, surface([['sweet_berries', 6]]))!;
+    const note = descentNote({ hands: [{ do: 'go', to: { x: 165, y: 7, z: 215 } }] }, surface([['sweet_berries', 6]], { nearbyEntities: [{ name: 'cow', position: { x: 163, y: 66, z: 200 } }] }))!;
     expect(note).toContain('食料 14.4/40 点（あと 25.6 点: bread 3 個）');
   });
 });

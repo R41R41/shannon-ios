@@ -57,18 +57,18 @@ const TO_NETHER: readonly PlanSeed[] = [
     // The whole-run audit of 11/4, order 1: the sword and the shield the moment the iron is smelted (run60 met the night with no sword); the boots are
     // the golden ones (the gate's table), so the armour is the three iron pieces.
     node('残りの鉄をまとめて採り焼く・剣・盾・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket' }),
-    node('鉄の兜・胸当て・脚', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate&have:iron_leggings' })] }),
+    node('鉄の兜・胸当て', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate' })] }),
   node('水入りバケツ（最初の水源ですぐ汲む）', { kind: 'water', doneWhen: 'have:water_bucket' }),
   node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe',
-    caution: ['必須（盾・鉄の兜胸当て脚を着る・鉄のツルハシ・水入りバケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [
+    caution: ['必須（盾・鉄の兜胸当てを着る・鉄のツルハシ・水入りバケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
   // 「|have:ender_eye>=10」 (end1108d S9, 11/8): 12 eyes less the one or two just thrown and not yet picked up still close the stages that make them.
-  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10', caution: ['必須（盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシと石の予備2本・足場64・食料40点）が欠けたら入らない'], children: [
+  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10', caution: ['必須（盾・鉄の剣・鉄の兜胸当てを着る・ツルハシと石の予備2本・足場64・食料40点）が欠けたら入らない'], children: [
     node('溶岩源で黒曜石22（ゲート10・竜戦12）', { kind: 'obsidian', doneWhen: 'have:obsidian>=22|dim:the_nether|have:ender_eye>=10', note: '最初の溶岩でまとめて取る（竜戦の分を後で取りに来ない）' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether|have:ender_eye>=10' }),
     node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10',
-      caution: ['火をつける前に必須を確かめる: 盾・鉄の剣・鉄の兜胸当て脚を着る・ツルハシ・足場64・食料40点',
+      caution: ['火をつける前に必須を確かめる: 盾・鉄の剣・鉄の兜胸当てを着る・ツルハシ・足場64・食料40点',
         'ベッドは寝る用2を残し、ゲートの横の箱に預けて入る（1個1マス。帰りに同じゲートで取る）'] })] }),
 ];
 /**
@@ -95,7 +95,7 @@ const BEYOND: readonly PlanSeed[] = [
     caution: ['橋の下は溶岩のことがある。足元と両脇を確かめて渡る', '遠い go に canDig[netherrack,basalt,blackstone] canPlace[cobblestone,netherrack]',
       'maxDig 200・maxPlace 100・seconds 100〜120。止まったら行の通りに直して同じ go'] }),
   node('ブレイズロッド7以上', { kind: 'blaze', target: { item: 'blaze_rod', count: 7 }, doneWhen: 'have:blaze_rod>=7|have:ender_eye>=10', note: '粉にするのは7本そろってから',
-    caution: ['死んだらアウト。体力12未満・盾の耐久2割未満なら戦わず退いて補う'],
+    caution: ['死ぬと持ち物と時間を失う（死んでも続ける）。体力12未満・盾の耐久2割未満なら戦わず退いて補う'],
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('8m 内の見えるブレイズへ待たずに attack target=#id（体が追う）、剣で 20 体ほど（矢なし）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
   node('エンダーパール14以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 14 }, doneWhen: 'have:ender_pearl>=14|have:ender_eye>=12', note: '枠に11〜12・投げの損耗に2〜3',
@@ -156,7 +156,8 @@ const DROPPED_BEFORE_GATE = (seed: PlanSeed): boolean => seed.kind === 'food' &&
  * chestplate and leggings are made and worn before the diamonds, and the feet's piece is golden boots before the
  * gate (`minecraftLlmcPrepRules.ts`).
  */
-const IRON_ARMOUR_WORN = 'have:iron_helmet&have:iron_chestplate&have:iron_leggings';
+// The coordinator, 11/10 6:55 (plan A): the helmet and chestplate; the legs' 7 iron are left out before the Nether.
+const IRON_ARMOUR_WORN = 'have:iron_helmet&have:iron_chestplate';
 // The kind `portal`: the golden boots are the piece of the gate's check (`BEFORE_GATE`); the ore on the way down is `other` (it
 // stands under the boots, whose stage it takes).
 const GOLDEN_BOOTS_NODE = node('金のブーツ（ネザーの前）', { kind: 'portal', doneWhen: 'have:golden_boots|have:ender_eye>=10', children: [
@@ -182,7 +183,7 @@ function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
   if (seed.kind === 'prep_descent' && seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
   if (seed.kind === 'iron' && seed.doneWhen === IRON_TOP_DONE) {
     // The pre-deploy review of 11/5 (item 7): the iron sword is the gate's, so the iron node is done with it too (not only with the armour).
-    return { title: '鉄（約35・剣・兜・胸・脚まで）', doneWhen: `have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };
+    return { title: '鉄（約30・剣・兜・胸まで）', doneWhen: `have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };
   }
   return {};
 }
@@ -190,7 +191,7 @@ function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
  * thirty with the armour. */
 const IRON_TOP_DONE = 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield';
 const ironFirst = (seed: PlanSeed): PlanSeed => seed.kind === 'iron' && !seed.doneWhen ? { ...seed, title: '最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）' }
-  : seed.kind === 'iron_armor' ? { ...seed, title: '鉄の兜・胸当て・脚を作って着る', doneWhen: IRON_ARMOUR_WORN } : seed;
+  : seed.kind === 'iron_armor' ? { ...seed, title: '鉄の兜・胸当てを作って着る', doneWhen: IRON_ARMOUR_WORN } : seed;
 /**
  * The fixed first plan of a goal (null: none for this goal). r6 (run 29: a task begun in the Nether fortress
  * held the whole seed; only

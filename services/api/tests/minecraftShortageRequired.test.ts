@@ -106,9 +106,9 @@ describe('requiredLack: the required needs of the stage a node belongs to that a
   });
   it('names the lack of the diamonds, the armour carried and not worn included', () => {
     const base: Array<[string, number]> = [['iron_pickaxe', 1], ['water_bucket', 1], ...FOOD];
-    expect(requiredLack(facts(base, { worn: '' }), ['diamond'])).toBe(`未達の必須（ダイヤを掘る前に必ず）— 盾・鉄の兜・胸当て・脚が無い。欠けたまま進むと: ${BEFORE_DIAMONDS.risk}`);
+    expect(requiredLack(facts(base, { worn: '' }), ['diamond'])).toBe(`未達の必須（ダイヤを掘る前に必ず）— 盾・鉄の兜・胸当てが無い。欠けたまま進むと: ${BEFORE_DIAMONDS.risk}`);
     const carried = facts([...base, ['shield', 1], ['iron_helmet', 1], ['iron_chestplate', 1], ['iron_leggings', 1]], { worn: '頭: iron_helmet(残り165/165)、胴: なし' });
-    expect(requiredLack(carried, ['diamond'])).toContain('持っているが着ていない: iron_chestplate・iron_leggings');
+    expect(requiredLack(carried, ['diamond'])).toContain('持っているが着ていない: iron_chestplate');
     expect(requiredLack(facts([...base, ['shield', 1]]), ['diamond'])).toBeNull();
   });
   it('is null for a goal only, a stage that does not say its cost, no stage, and the Nether', () => {
@@ -200,7 +200,7 @@ describe('followNode: the step on past an open node says what the node it steps 
     const moved = followNode('t1', tree, false, leaf => lackBefore(bare, tree, leaf))!;
     expect(moved).toMatchObject({ to: 'p5', from: 'p4.3' });
     expect(moved.words).toContain('今の節を [p5] に進めた');
-    expect(moved.words).toContain(`。未達の必須（ダイヤを掘る前に必ず）— 盾・鉄の兜・胸当て・脚が無い。欠けたまま進むと: ${BEFORE_DIAMONDS.risk}`);
+    expect(moved.words).toContain(`。未達の必須（ダイヤを掘る前に必ず）— 盾・鉄の兜・胸当てが無い。欠けたまま進むと: ${BEFORE_DIAMONDS.risk}`);
   });
   it('keeps the words as they were with no lack to say, or no port to say it', () => {
     const tree = treeOf('p4.3');
@@ -287,7 +287,7 @@ describe('the first plan and the knowledge say the required list where the model
   const titled = (title: string) => plan.nodes.find(node => node.parentId === null && node.title === title)!;
   const cautionOf = (node: PlanNode) => (node.caution ?? []).join(' ');
   it('puts it in the cautions of the diamonds and of the gate, and in the lit portal\'s step', () => {
-    for (const word of ['必須', '盾', '鉄の兜胸当て脚', '食料40点']) {
+    for (const word of ['必須', '盾', '鉄の兜胸当て', '食料40点']) {
       expect(cautionOf(titled('ダイヤ（y=-58）')), word).toContain(word);
       expect(cautionOf(titled('黒曜石10とゲート')), word).toContain(word);
     }
@@ -297,15 +297,15 @@ describe('the first plan and the knowledge say the required list where the model
     expect(cautionOf(titled('黒曜石10とゲート'))).toContain('ツルハシ');
   });
   it('says the gate\'s required needs and its goals apart in the stage rules', () => {
-    expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）');
+    expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）');
     expect(PREP_RULES_WORDS).toContain('・水入りバケツ・黒曜石 22（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金');
     expect(PREP_RULES_WORDS).toContain('死ねばダイヤのツルハシと黒曜石を失う');
   });
 });
 
-describe('a death is out (the owner, 2026-11-02): not dying stands above being fast, in the stages\' knowledge and the plan\'s cautions', () => {
+describe('a death is avoided, not the end (the owner, 2026-11-02 and 2026-11-10): its cost in items and time, in the stages\' knowledge and the plan\'s cautions', () => {
   it('says it in every stage, in the numbers the live state shows', () => {
-    expect(SAFETY_FIRST).toContain('死なないことを速さより上に置く');
+    expect(SAFETY_FIRST).toContain('死んでも通しは終わらない');
     expect(SAFETY_FIRST).toContain('体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満');
     // S2's blaze lab of 11/5: between fights the meal to fullness 18 and the wait to health 12 come first, out of sight.
     expect(SAFETY_FIRST).toContain('体力 18 未満なら見えない所で満腹 18 以上まで食べ、体力 18 以上まで待ってから出る');
@@ -315,7 +315,7 @@ describe('a death is out (the owner, 2026-11-02): not dying stands above being f
     const plan = seedPlan('エンドラを倒して')!;
     const cautions = (title: string) => plan.nodes.find(node => node.title === title)?.caution ?? [];
     expect(cautions('ダイヤ（y=-58）').join(' ')).toContain('死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う');
-    expect(cautions('ブレイズロッド7以上').join(' ')).toContain('死んだらアウト。体力12未満・盾の耐久2割未満なら戦わず退いて補う');
+    expect(cautions('ブレイズロッド7以上').join(' ')).toContain('死ぬと持ち物と時間を失う（死んでも続ける）。体力12未満・盾の耐久2割未満なら戦わず退いて補う');
     for (const node of plan.nodes) {
       expect((node.caution ?? []).length, node.title).toBeLessThanOrEqual(PLAN_LIMITS.rules);
       for (const line of node.caution ?? []) expect(line.length, `${node.title}: ${line}`).toBeLessThanOrEqual(PLAN_LIMITS.rule);

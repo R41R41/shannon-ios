@@ -39,7 +39,7 @@ export function suicideHold(input: unknown, frame: BodyObservation | null = null
   const bare = !!counts && ![...counts].some(([name, count]) => count > 0 && TOOL.test(name));
   if (!hands.length || !(SUICIDE.test(why) || (bare && BARE_SUICIDE.test(why)))) return null;
   return { hand: 1, kind: String(objectOf(hands[0])?.do ?? 'act'),
-    line: 'わざと死ぬ手は送らない（死ぬとこの通しはアウトで、持ち物も消える）。持ち物が無くても、帰りのゲートか安全な所へ歩いて戻り、木・石から作り直す' };
+    line: 'わざと死ぬ手は送らない（死ぬと持ち物が消え、取り戻す時間がかかる。死んでも通しは続くが、得はない）。持ち物が無くても、帰りのゲートか安全な所へ歩いて戻り、木・石から作り直す' };
 }
 
 /** The last death the body says: minutes ago, the place and the cause, or null. */
