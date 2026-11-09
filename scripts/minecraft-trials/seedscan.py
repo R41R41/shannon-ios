@@ -1250,7 +1250,7 @@ def main(argv):
     p = sub.add_parser('scan')
     p.add_argument('--tag', default=dt.datetime.now().strftime('%Y%m%dT%H%M'))
     p.add_argument('--random', type=int, default=0)
-    p.add_argument('--master', type=int, default=20261102)
+    p.add_argument('--master', type=int, default=None)
     p.add_argument('--skip', type=int, default=0)
     p.add_argument('--seeds')
     p.add_argument('--seeds-file')

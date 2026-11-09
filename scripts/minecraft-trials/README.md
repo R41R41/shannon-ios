@@ -114,7 +114,7 @@ python3 -I trials.py restore                                                    
 
 ```bash
 # PC の WSL（24 コア。HOME=/home/azureuser を付けると VM と同じパスになる。ラボ側の準備は backend/scripts/lab/README.md）
-wsl -d Ubuntu-24.04 -u ghrunner -- env HOME=/home/azureuser bash -lc 'cd ~/seedscan-bin && python3 -I seedscan.py scan --tag r1 --random 2000 --master 20261102 --workers 6'
+wsl -d Ubuntu-24.04 -u ghrunner -- env HOME=/home/azureuser bash -lc 'cd ~/seedscan-bin && python3 -I seedscan.py scan --tag r1 --random 2000 --master <主の種> --workers 6'
 python3 -I seedscan.py rank --top 14                       # A の点の順位（途中でも見られる。足切りの数も出る）
 python3 -I seedscan.py deep --seeds=<シード>,<シード> --keys c1,c2 --workers 1 --heap 1G   # B（負のシードは --seeds=<...> の形）。--reuse --stages nether で一部の段だけやり直し、--discard で測ったら世界を消す
 python3 -I seedscan.py report --keys c1,c2,...             # A と B をまとめた点と事実（このまま表になる）
