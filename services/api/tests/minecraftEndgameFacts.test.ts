@@ -6,7 +6,7 @@ import { acquired, doneFacts } from '../src/surfaces/minecraft/minecraftConditio
 import { doneStatusWords, nodesSeenDone, parseDoneWhen, predicateHolds } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { framesOf, marksOf, seenMarks } from '../src/surfaces/minecraft/minecraftSeenMarks.js';
 import { crystalsLeft, endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { breathLine, crystalLine, deathLine, dragonLine, endFightLines, fireballLine, frameLine, perchLine, placeLine, shortOfEyes } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { breathLine, crystalLine, deathLine, dragonLine, enclosedLine, endFightLines, fireballLine, frameLine, perchLine, pillarLine, placeLine, shortOfEyes } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEyeLedger, flightOf } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 
@@ -92,7 +92,7 @@ describe('facts of the way to the dragon', () => {
 
   it('says the dragon, its phase and reach, the crystals, the breath, the fireballs and the perch', () => {
     const view = endViewOf(frame({ dimension: 'the_end' }, end));
-    expect(dragonLine(view)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6)・頭の箱まで 4.2m（剣が届く）・#77');
+    expect(dragonLine(view)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6) 自分から 10m・頭の箱まで 4.2m（剣が届く）・#77');
     expect(crystalLine(view)).toBe('エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
       + '#12 (40,90,5) 21m 竜を回復中・壊すと爆発（今の立ち位置で体力 −14 の見込み）・#15 (-30,100,2) 34m 檻つき');
     expect(breathLine(view)).toBe('竜の息の雲: (4,8) 避ける半径 9（雲の今の半径 7）（中で立ち止まらない）');
@@ -196,9 +196,9 @@ describe('the End fight as the isolated lab made it (S1, 8 situations)', () => {
     expect(perchLine(view('arrival'))).toBeNull();
     expect(dragonLine(view('dragon_flying'))).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (-39,93,39) 自分から 53m・#53');
     expect(dragonLine(view('dragon_perched_out_of_reach'))).toBe(
-      '竜: 体力 200/200・止まり木で見回している（phase 6・この phase 0 秒目。矢は効かない）・頭 (-4,67,5)・頭の箱まで 8.4m（剣は 5m 以内で届く）・#53');
+      '竜: 体力 200/200・止まり木で見回している（phase 6・この phase 0 秒目。矢は効かない）・頭 (-4,67,5) 自分から 13m・頭の箱まで 8.4m（剣は 5m 以内で届く）・#53');
     expect(dragonLine(view('dragon_perched_in_reach'))).toBe(
-      '竜: 体力 200/200・止まり木で見回している（phase 6・この phase 1.4 秒目。矢は効かない）・頭 (-4,67,5)・頭の箱まで 3.4m（剣が届く）・#53');
+      '竜: 体力 200/200・止まり木で見回している（phase 6・この phase 1.4 秒目。矢は効かない）・頭 (-4,67,5) 自分から 11m・頭の箱まで 3.4m（剣が届く）・#53');
     expect(perchLine(view('dragon_perched_in_reach'))).toBe('止まり木: (0,68,0)');
   });
 
@@ -363,5 +363,68 @@ describe('the endgame of a task', () => {
     expect(room.lines.join('\n')).toContain('あと 10 個はめる・手持ちのアイ 9 個（1 個足りない: 作るには');
     expect(room.short.join('\n')).toContain('ポータルの枠');
     expect(restored.checkpoint().minecraftEyes.throws).toEqual([]);
+  });
+});
+
+describe('the arrival platform buried in the island (e04b, 11/9)', () => {
+  /** The body's raw map text (`utils/localMap.ts`): a 5×5 hole at (98..102, -2..2) in end stone, the platform's obsidian under it. */
+  const raw = (open: (x: number, z: number) => boolean, column: string) => {
+    const layer = (y: number, symbol: (x: number, z: number) => string) => [`y=${y} x=95..105 z=-5..5`,
+      ...Array.from({ length: 11 }, (_, i) => `${i - 5} ${Array.from({ length: 11 }, (_, j) => symbol(95 + j, i - 5)).join(' ')}`)];
+    const inside = (x: number, z: number) => Math.abs(x - 100) <= 2 && Math.abs(z) <= 2;
+    return ['地図 v1 足=(100,49,0) x=95..105 z=-5..5 方式=layers 上=北',
+      ...layer(51, (x, z) => inside(x, z) ? '.' : 'E'), ...layer(50, (x, z) => open(x, z) ? '.' : 'E'),
+      ...layer(49, (x, z) => x === 100 && z === 0 ? '@' : open(x, z) ? '.' : 'E'), ...layer(48, (x, z) => inside(x, z) ? 'O' : 'E'),
+      `縦 (100,0) 上: ${column}`, '縦 (100,0) 下: y=48 O / y=47〜33 E×15 …'].join('\n');
+  };
+  const hole = (x: number, z: number) => Math.abs(x - 100) <= 2 && Math.abs(z) <= 2;
+  const roofed = 'y=50〜52 .×3 / y=53〜57 E×5 / y=58〜65 .×8 …';
+
+  it('says the closed hole, its roof from the column, and that the dragon will not come down', () => {
+    const line = enclosedLine({ dimension: 'the_end', localMap: raw(hole, roofed) });
+    expect(line).toBe('閉じた穴: 到着の台が島の中に埋まっている。足の高さで立てる所は 25 マスだけで、四方はエンドストーンの壁（真上は y=53〜57 がエンドストーン（5 段）、y=58 から空気）。'
+      + '空が見えないので、竜はあなたを撃てず狙いの周回（phase 1）のまま止まり木へ降りない。ここでは待たない。vertical（stairs）で上へ掘り上がって地表に出る（島の上は地続きで、橋は要らない）');
+    const endgame = createEndgame(null, () => 0);
+    const said = endgame.lines(frame({ dimension: 'the_end', position: { x: 100.5, y: 49, z: 0.5 }, localMap: raw(hole, roofed) }), true);
+    expect(said.lines.some(text => text.startsWith('閉じた穴:'))).toBe(true);
+    expect(said.short.some(text => text.startsWith('閉じた穴:'))).toBe(true);
+  });
+
+  it('says nothing for an open sky, a way out, the overworld, or away from the platform', () => {
+    expect(enclosedLine({ dimension: 'the_end', localMap: raw(hole, 'y=50〜65 .×16 …') })).toBeNull();
+    const gap = (x: number, z: number) => hole(x, z) || (z === 0 && x >= 100);
+    expect(enclosedLine({ dimension: 'the_end', localMap: raw(gap, roofed) })).toBeNull();
+    expect(enclosedLine({ dimension: 'overworld', localMap: raw(hole, roofed) })).toBeNull();
+    const far = raw(hole, roofed).replace('足=(100,49,0)', '足=(30,49,0)');
+    expect(enclosedLine({ dimension: 'the_end', localMap: far })).toBeNull();
+  });
+
+  it('says how to come down from a 1×1 pillar, and nothing on the ground or over the void (e04e)', () => {
+    const pillar = (below: string, sides = '.') => {
+      const layer = (y: number, symbol: (x: number, z: number) => string) => [`y=${y} x=-22..-12 z=-42..-32`,
+        ...Array.from({ length: 11 }, (_, i) => `${i - 42} ${Array.from({ length: 11 }, (_, j) => symbol(j - 22, i - 42)).join(' ')}`)];
+      const me = (x: number, z: number) => x === -17 && z === -37;
+      return ['地図 v1 足=(-17,74,-37) x=-22..-12 z=-42..-32 方式=layers 上=北',
+        ...layer(75, () => '.'), ...layer(74, (x, z) => me(x, z) ? '@' : '.'), ...layer(73, (x, z) => me(x, z) ? 'E' : sides),
+        '縦 (-17,-37) 上: y=75〜90 .×16 …', `縦 (-17,-37) 下: ${below}`].join('\n');
+    };
+    const tall = 'y=73〜72 E×2 / y=71〜58 #×14 …';
+    expect(pillarLine({ dimension: 'the_end', localMap: pillar(tall) })).toBe('柱の上: 足の下は y=73〜58 より下まで続く 1 マスの柱（16 段以上、周りは空気）。'
+      + '降りるのは 1 手 `vertical down shaft y=58 dig=end_stone,cobblestone,stone liquid=stop`（1 段約 1 秒）。'
+      + 'dig 0,-1,0 で足元を掘ると体はすぐ 1 段落ちるので、続けた walk 0,-1,0 は落ちた後の足のさらに 1 段下（柱の中の固いマス）を指して必ず失敗し、手はそこで止まる（repeat を付けても 1 段だけ）（実走: これを 7 回繰り返して約 90 秒柱の上に居て、その間に雲の反射が足元へ積み直し、火の玉と息の雲で死亡）');
+    const endgame = createEndgame(null, () => 0);
+    const said = endgame.lines(frame({ dimension: 'the_end', position: { x: -16.5, y: 74, z: -36.5 }, localMap: pillar(tall) }), true);
+    expect(said.lines.some(text => text.startsWith('柱の上:'))).toBe(true);
+    expect(said.short.some(text => text.startsWith('柱の上:'))).toBe(true);
+    expect(pillarLine({ dimension: 'the_end', localMap: pillar(tall, 'E') })).toBeNull();
+    expect(pillarLine({ dimension: 'the_end', localMap: pillar('y=73〜70 #×4 / y=69〜54 .×16 …') })).toBeNull();
+    expect(pillarLine({ dimension: 'overworld', localMap: pillar(tall) })).toBeNull();
+  });
+
+  it('says how long the dragon has strafed once it is long', () => {
+    const strafe = (phaseFor: number) => dragonLine(endViewOf(frame({ dimension: 'the_end' }, { dragon: { id: 9, health: 200, phase: 1, phaseName: 'strafe_player',
+      phaseFor, perched: false, position: { x: 118, y: 63, z: -5 }, distance: 24 } })));
+    expect(strafe(5)).not.toContain('秒目');
+    expect(strafe(95.4)).toContain('狙いを定めて火の玉（phase 1・この phase 95 秒目。竜はあなたが見えて火の玉を撃つまでこの phase を続け、その間は止まり木へ降りない）');
   });
 });

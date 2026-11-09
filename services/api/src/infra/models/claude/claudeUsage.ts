@@ -6,7 +6,7 @@ import { usesOneHourAnthropicCache } from '../anthropic/haikuConfig.js';
  * Claude's prices and the usage a request books (Syzygy ADR-0009 stage 1, M3; `docs/haiku-model-cache-contract.md`).
  *
  * Haiku 5.5 first-party pricing (2026-10-08), including its 100k prompt threshold and separate cache TTLs. The existing
- * Sonnet 5.5 uses its first-party 2026-10-08 prices; older Sonnet overrides retain their conservative estimates.
+ * Sonnet 5.5 uses its first-party prices verified 2026-11-05; older Sonnet overrides retain their conservative estimates.
  * Web search is 10 USD per thousand searches; unknown models stay priced high. Previously recorded spend is not rewritten.
  */
 export interface AnthropicPrices {
@@ -20,14 +20,16 @@ export interface AnthropicPrices {
 
 const HAIKU_PRICES: AnthropicPrices = { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, searchUsd: 0.01 };
 const HAIKU_LONG_PRICES: AnthropicPrices = { input: 0.5, output: 2.5, cacheWrite: 0.625, cacheWrite1h: 1, cacheRead: 0.05, searchUsd: 0.01 };
-// Sonnet 5.5 and the older Sonnet 5 share the published rates: cache reads are 10% of input ($0.20; ADR-0009 stage 1, quick fix 3).
+// Preserve older Sonnet 5 estimates. Exact Sonnet 5.5 cache reads are $0.10/MTok (official pricing verified 2026-11-05).
 const SONNET_PRICES: AnthropicPrices = { input: 2, output: 10, cacheWrite: 2.5, cacheWrite1h: 4, cacheRead: 0.2, searchUsd: 0.01 };
+const SONNET_55_PRICES: AnthropicPrices = { ...SONNET_PRICES, cacheRead: 0.1 };
 const UNKNOWN_PRICES: AnthropicPrices = { input: 10, output: 50, cacheWrite: 12.5, cacheWrite1h: 20, cacheRead: 1, searchUsd: 0.01 };
 // Opus 5.5 (2026-10-21, the API's model table): $4 in, $20 out, cache reads $0.20; writes at 1.25× (5 min) and 2× (1 h) of input.
 const OPUS_55_PRICES: AnthropicPrices = { input: 4, output: 20, cacheWrite: 5, cacheWrite1h: 8, cacheRead: 0.2, searchUsd: 0.01 };
 
 export function anthropicPrices(model: string, inputTokens = 0): AnthropicPrices {
   if (model === 'claude-haiku-5-5') return { ...(inputTokens > 100_000 ? HAIKU_LONG_PRICES : HAIKU_PRICES) };
+  if (model === 'claude-sonnet-5-5') return { ...SONNET_55_PRICES };
   if (model.startsWith('claude-sonnet-5')) return { ...SONNET_PRICES };
   if (model === 'claude-opus-5-5') return { ...OPUS_55_PRICES };
   return { ...UNKNOWN_PRICES };

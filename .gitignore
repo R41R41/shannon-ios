@@ -22,3 +22,6 @@ xcuserdata/
 # Python bytecode (the minecraft-trials tools)
 __pycache__/
 *.pyc
+
+# The trial seeds stay out of git (public repository): on the VM only, see scripts/minecraft-trials/README.md
+scripts/minecraft-trials/seeds.json

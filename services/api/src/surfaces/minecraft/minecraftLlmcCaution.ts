@@ -62,6 +62,9 @@ function pathFact(fields: Record<string, unknown>, probe: ProbeInput): string | 
 export function cautionFact(source: CautionSource, probes: readonly ProbeInput[], answers: ReadonlyArray<string | null | undefined>): string | null {
   if (source.nth < 2 || !CAUTION_CODES.has(source.code)) return null;
   if (source.code === 'oxygen') return source.at ? cut(`${posText(source.at)} の近くで息が 10 未満になったのは ${source.nth} 回目`) : null;
+  // end1109f03: a creature's distance is that moment's (「blaze #993 は目から 4.4m: 手が届かない（3m まで）」 stood as a rule, and she waited ten
+  // minutes for blazes to come within 3 m; the attack itself chases). A surprise aimed at a creature notes no fact.
+  if (probes.some(probe => probe.kind === 'sight' && typeof probe.target === 'string' && !/^\s*-?\d+\s*,/u.test(probe.target))) return null;
   for (const [index, probe] of probes.entries()) {
     const read = readProbeResult(answers[index] ?? undefined);
     if (!read || read.kind === undefined) continue;

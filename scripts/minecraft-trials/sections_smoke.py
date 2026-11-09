@@ -36,6 +36,7 @@ def load(name):
 PROVE = {
     '6': ['advancement grant I_am_Shannon only minecraft:nether/find_fortress'],
     '7': ['give I_am_Shannon minecraft:blaze_rod 6'],
+    '67': ['give I_am_Shannon minecraft:blaze_rod 7'],
     '8a': ['give I_am_Shannon minecraft:ender_pearl 12'],
     '8b': ['clear I_am_Shannon minecraft:gold_ingot 32'],
     '9': ['advancement grant I_am_Shannon only minecraft:story/follow_ender_eye'],

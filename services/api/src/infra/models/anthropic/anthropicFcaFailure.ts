@@ -3,11 +3,15 @@ import { FcaNoDecisionError, FcaNoResponseError } from '../../../mind/action/fca
 import { FCA_MODEL_BILLING, FcaProviderError, retryableStatus } from '../../../mind/action/fca/fcaProviderRetry.js';
 import { connectionFailedBeforeResponse, providerFailureFacts, providerServerError } from './anthropicRejection.js';
 
+/** A local transport policy rejected the request before invoking the provider. */
+export class AnthropicRequestNotSentError extends Error {}
+
 /**
  * How a dispatched FCA decision request failed, and what that means for the caller (Minebot parity audit C-20, 2026-10-19).
  * Closed facts only; provider text is never read beyond a status, a header number and a network cause code.
  */
 export type DispatchFailure =
+  | { kind: 'not_sent' }
   | { kind: 'server'; status: number; retryAfterMs: number | null }
   | { kind: 'stopped' }
   | { kind: 'deadline' }
@@ -19,6 +23,7 @@ export type DispatchFailure =
 const NEVER_SENT_CAUSES: ReadonlySet<string> = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']);
 
 export function classifyDispatchFailure(error: unknown, signals: { stopped: boolean; deadline: boolean }): DispatchFailure {
+  if (error instanceof AnthropicRequestNotSentError) return { kind: 'not_sent' };
   if (signals.stopped) return { kind: 'stopped' };
   if (signals.deadline) return { kind: 'deadline' };
   if (providerServerError(error)) return { kind: 'server', status: error.status, retryAfterMs: retryAfterMilliseconds(error) };
@@ -31,7 +36,7 @@ export function classifyDispatchFailure(error: unknown, signals: { stopped: bool
 /** Whether the provider may have processed (and charged) a request that failed this way: its unknown upper bound
  * is then booked. */
 export function failureMayHaveBeenCharged(failure: DispatchFailure): boolean {
-  if (failure.kind === 'server') return false;
+  if (failure.kind === 'server' || failure.kind === 'not_sent') return false;
   return failure.kind === 'no_response' ? failure.possiblyBilled : true;
 }
 
@@ -41,6 +46,7 @@ export function failureMayHaveBeenCharged(failure: DispatchFailure): boolean {
  * again by the runner (`retryVerdict`), the closed code it always threw for a stop or an unclassified failure.
  */
 export function failureError(failure: DispatchFailure): Error {
+  if (failure.kind === 'not_sent') return new Error('ANTHROPIC_REQUEST_NOT_SENT');
   if (failure.kind === 'server') return new FcaProviderError(failure.status, failure.retryAfterMs);
   if (failure.kind === 'deadline') return new FcaNoResponseError({ reason: 'timeout', possiblyBilled: true, message: 'FCA_MODEL_ABORTED' });
   if (failure.kind === 'sdk_timeout') return new FcaNoResponseError({ reason: 'timeout', possiblyBilled: true });
@@ -73,8 +79,11 @@ export function missingDecision(message: Pick<Anthropic.Message, 'stop_reason' |
   const text = message.content.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0);
   console.warn(JSON.stringify({ event: 'fca_decision_missing', task: taskId, model: message.model, stopReason: message.stop_reason, blocks,
     textCharacters: text, outputTokens: message.usage?.output_tokens ?? null }));
-  return new FcaNoDecisionError();
+  const words = message.content.map(block => block.type === 'text' ? block.text : '').join('\n').trim();
+  return new FcaNoDecisionError(words.length > UNDECIDED_WORDS_MAX ? `…${words.slice(-UNDECIDED_WORDS_MAX)}` : words);
 }
+/** The end of a word-only answer kept for the request asked again (where her conclusion usually is). */
+const UNDECIDED_WORDS_MAX = 400;
 
 const MAXIMUM_RETRY_AFTER_MS = 600_000;
 

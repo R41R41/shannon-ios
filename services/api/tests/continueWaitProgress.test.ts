@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { forgetStalls, noteRan, resumeStalls } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
-import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 
 afterEach(forgetStalls);
 it('does not call the recorded withdrawal and crafting sequence a wait-only loop', () => {
@@ -31,8 +31,8 @@ it('does not renew from the same positive event replayed after a resume', () => 
   expect(wait()?.kind).toBe('wait_loop');
 });
 it('keeps the reconnect rule in the instructions without treating estimates as inventory', () => {
-  expect(V2_ALWAYS).toContain('jobs は見込み');
-  expect(V2_ALWAYS).toContain('残り秒で待ち直さず');
-  expect(V2_ALWAYS).toContain('焼き上がりに頼らない採取・作業台・食料と帰路を進める');
-  expect(V2_ALWAYS).toContain('furnace op=take');
+  expect(V2_STAGES.prep).toContain('jobs は見込み');
+  expect(V2_STAGES.prep).toContain('残り秒で待ち直さず');
+  expect(V2_STAGES.prep).toContain('焼き上がりに頼らない採取・作業台・食料と帰路を進める');
+  expect(V2_STAGES.prep).toContain('furnace op=take');
 });

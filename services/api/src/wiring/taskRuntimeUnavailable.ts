@@ -112,9 +112,11 @@ function kept(fresh?: FreshCheckpoint): Record<string, unknown> {
 const roundLimit = (body: boolean, absent: boolean): number => absent ? BODY_ABSENT_CYCLES : body ? BODY_UNAVAILABLE_CYCLES : OTHER_UNAVAILABLE_CYCLES;
 
 /** The wait before the next round (tests replace a Minecraft request's wait with `bodyCooldownMs`). */
-function roundWaitMs(parts: UnavailableParts, round: { body: boolean; absent: boolean; cycles: number; retryAfterMs: number | null }): number {
+function roundWaitMs(parts: UnavailableParts, round: { body: boolean; absent: boolean; answered: boolean; cycles: number; retryAfterMs: number | null }): number {
   if (round.absent) return parts.bodyCooldownMs?.(round.cycles) ?? BODY_ABSENT_WAIT_MS;
-  const cooldown = round.body ? parts.bodyCooldownMs?.(round.cycles) ?? unavailableCooldownMs(round.cycles) : parts.otherCooldownMs();
+  // end1108b: the provider answered (in words, or cut at its ceiling); it is not down, so a Minecraft request does not wait
+  // 20 s-2 min for it with the body standing in the world. The round goes on after the short wait of any other task.
+  const cooldown = round.body && !round.answered ? parts.bodyCooldownMs?.(round.cycles) ?? unavailableCooldownMs(round.cycles) : parts.otherCooldownMs();
   return unavailableWaitMs(cooldown, round.retryAfterMs);
 }
 
@@ -133,7 +135,8 @@ export async function settleUnavailableStep(parts: UnavailableParts, step: TaskS
   const body = parts.isBodyTask(step.taskId);
   const absent = body && error.reason === BODY_ABSENT_REASON;
   if (cycles >= roundLimit(body, absent)) return finish(parts, step, error, body, { ...prior, ...kept(fresh) }, cycles);
-  const milliseconds = roundWaitMs(parts, { body, absent, cycles, retryAfterMs: error.retryAfterMs });
+  const answered = error.reason === 'no_decision' || error.reason === 'truncated';
+  const milliseconds = roundWaitMs(parts, { body, absent, answered, cycles, retryAfterMs: error.retryAfterMs });
   if (!await sleep(milliseconds, execution.signal) || parts.runtime.get(parts.scopeKey, step.taskId)?.phase !== 'executing') return null;
   if (!close(parts, step, { ...prior, ...kept(fresh), fcaProviderRetries: cycles + 1 })) return null;
   parts.log(`Shannon FCA step retried task=${step.taskId} code=${error.message}`);

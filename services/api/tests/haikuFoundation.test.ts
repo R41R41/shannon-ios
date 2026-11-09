@@ -124,7 +124,8 @@ describe('Haiku mandatory prefix caching', () => {
       { type: 'text', text: original.system }]);
     expect(cacheHaikuRequest(cached)).toBe(cached);
     expect(estimatedAnthropicCostUsd(original.model, { input: 0, cacheWrite: 1_000_000, cacheRead: 0, output: 0, searches: 0 })).toBe(4);
-    expect(anthropicPrices(original.model, 100_001).cacheRead).toBe(0.2);
+    expect(anthropicPrices(original.model, 100_001).cacheRead).toBe(0.1);
+    expect(estimatedAnthropicCostUsd(original.model, { input: 0, cacheWrite: 0, cacheRead: 1_000_000, output: 0, searches: 0 })).toBe(0.1);
     expect(anthropicPrices('claude-sonnet-5', 100_001).cacheRead).toBe(0.2);
   });
   it('requires actual positive native cache usage, including consistent mixed TTL accounting', () => {

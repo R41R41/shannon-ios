@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { crystalOpeningLine, crystalShootSetsLine, dragonApproachLine, dragonLine, endFightLines } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { crystalOpeningLine, crystalShootSetsLine, dragonApproachLine, dragonBedLine, dragonLine, endFightLines } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { factsContext, type LlmcBodyParts } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
@@ -54,9 +54,21 @@ describe('optional End observations as facts', () => {
     const raw = world();
     const end = view({ ...raw, crystals: { ...raw.crystals, openings: [{ id: 13, caged: true, positions: [shot(99)],
       blockedBy: { ...at(24, 86), name: 'iron_bars' }, afterCageRemoved: [shot(12, 35)] }] } });
-    expect(crystalOpeningLine(end)).toBe('クリスタルの射点: #13 檻 (iron_bars (24,86,12)) を取ると撃てる位置 (12,70,12) 距離 35m');
+    expect(crystalOpeningLine(end)).toBe('クリスタルの射点: #13 檻つき: 柱を登って格子 (iron_bars (24,86,12)) を dig で取った後なら撃てる位置 (12,70,12) 距離 35m');
     expect(crystalOpeningLine(end)).not.toContain('(99,');
     expect(crystalOpeningLine(view({ crystals: { openings: [{ id: 13, caged: true, positions: [shot(99)] }] } }))).toBeNull();
+  });
+
+  it('puts the uncaged places before nearer caged ones and names an uncaged crystal that has no place yet (e01)', () => {
+    const raw = world();
+    const crystal = (id: number, x: number, caged: boolean) => ({ id, position: at(x, 90, 40), caged, distance: 60 });
+    const end = view({ ...raw, crystals: { ...raw.crystals, list: [crystal(13, -10, true), crystal(14, -30, false), crystal(15, 30, false)],
+      openings: [{ id: 13, caged: true, positions: [], blockedBy: { ...at(24, 86), name: 'iron_bars' }, afterCageRemoved: [shot(10, 50), shot(11, 50), shot(9, 50)] },
+        { id: 14, caged: false, positions: [] }, { id: 15, caged: false, positions: [shot(40, 58)] }] } });
+    const line = crystalOpeningLine(end)!;
+    expect(line.startsWith('クリスタルの射点: #15 撃てる位置 (40,70,12) 距離 58m・#13 檻つき')).toBe(true);
+    expect(line).toContain('檻なし #14 (-30,90,40) は今の床から射点なし（64m 以内の開けた床へ近づくと出る）');
+    expect(line).not.toContain('#15 (30,90,40)');
   });
 
   it('leaves missing fields unknown without inventing a point, a distance, a window length or a closed window', () => {
@@ -83,6 +95,28 @@ describe('optional End observations as facts', () => {
   it.each([5, 6, 7])('reads the approach in perched phase %s', phase => {
     const raw = world();
     expect(dragonApproachLine(view({ ...raw, dragon: { ...raw.dragon, phase } }))).toContain('頭の下 strike');
+  });
+
+  it('writes the body bed offer as one act from its stand while perched, and nothing otherwise', () => {
+    const raw = world(), bed = [{ stand: at(20, 64), walkMeters: 4.2, foot: at(17, 64), head: at(16, 64), build: [{ ...at(19, 64), role: 'screen' }, { ...at(9, 9), role: 'wall' }],
+      selfExpected: 3.14, dragonExpected: 44.9 }, { stand: at(30, 64), foot: null }];
+    const end = view({ ...raw, crystals: { ...raw.crystals, remaining: 2 }, dragon: { ...raw.dragon, approach: { ...approach(), bed } } });
+    expect(end?.dragon?.approach?.bed).toHaveLength(1);
+    expect(end?.dragon?.approach?.bed?.[0].build).toEqual([{ ...at(19, 64), role: 'screen' }]);
+    const line = dragonBedLine(end, 'white_bed')!;
+    expect(line).toContain('go (20,64,12) range=0.5 → place block=obsidian at=[(19,64,12)]（自分を守る壁） → place block=white_bed at=[(17,64,12)] → use at=[(17,64,12)]');
+    expect(line).toContain('枕は (16,64,12)、見込み 竜の頭 −45・自分 −3.1、歩き 4m');
+    expect(endFightLines(end, 'white_bed')).toContain(line);
+    expect(dragonBedLine(view({ ...raw, dragon: { ...raw.dragon, phase: 3, approach: { ...approach(), bed } } }))).toBeNull();
+    expect(dragonBedLine(view())).toBeNull();
+  });
+
+  it('holds the bed hand and the waiting while three or more crystals stand (e04c: 200→173 healed back in about 13 s)', () => {
+    const raw = world(), bed = [{ stand: at(20, 64), walkMeters: 4.2, foot: at(17, 64), head: at(16, 64), build: [], selfExpected: 3.14, dragonExpected: 44.9 }];
+    const held = dragonBedLine(view({ ...raw, dragon: { ...raw.dragon, approach: { ...approach(), bed } } }), 'white_bed')!;
+    expect(held).toContain('ベッドの手: 今は使わない（結晶が 3 本残る間');
+    expect(held).not.toContain('use at=');
+    expect(dragonBedLine(view({ ...raw, crystals: { ...raw.crystals, remaining: null }, dragon: { ...raw.dragon, approach: { ...approach(), bed } } }), 'white_bed')).toContain('use at=[(17,64,12)]');
   });
 
   it('bounds and deduplicates shooting places and groups, preserving hazards within six lines', () => {

@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import type { FcaBodyLifecycle } from '../src/mind/action/fca/fcaPorts.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
-import { forgetReplans, withReplanInbox } from '../src/surfaces/minecraft/minecraftLlmcReplan.js';
+import { forgetReplans, REPLAN, withReplanInbox } from '../src/surfaces/minecraft/minecraftLlmcReplan.js';
 import { forgetStalls } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import type { LlmcQueue, RanListener } from '../src/surfaces/minecraft/minecraftLlmcQueueState.js';
 import { createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
@@ -20,18 +21,20 @@ const dragon = seedPlan('エンドラを討伐して')!;
 const tree = { ...dragon, current: 'p1.1' };
 const signal = new AbortController().signal;
 
-function setup(over: { held?: boolean; reply?: () => Promise<unknown>; checkpoint?: unknown } = {}) {
+function setup(over: { held?: boolean; reply?: () => Promise<unknown>; checkpoint?: unknown; planTree?: () => PlanTree } = {}) {
   const clock = { now: 0 };
   const listeners: RanListener[] = [];
   const briefs: string[] = [];
   const lines: string[] = [];
+  const liveTree = () => over.planTree?.() ?? tree;
   const queue = { onRan: (listener: RanListener) => { listeners.push(listener); }, lines: () => ['▶ q1: go'], runningInput: () => null } as unknown as LlmcQueue;
   const unheld = unheldReplan({ held: over.held ?? false, taskId: 'uw', goal: 'エンドラを討伐して', createdAt: new Date(0).toISOString(), checkpoint: over.checkpoint ?? null,
     replanner: async (_system, brief) => {
       briefs.push(brief);
       return over.reply ? over.reply() : { ops: [{ op: 'caution', text: '木の近くの敵に気をつける' }], why: '木の節に注意を足した' };
     },
-    observe: () => idle, plan: { tree: () => tree, view: () => null }, bodyParts: { plan: () => undefined, planView: () => null, planTree: () => tree, endgame: createEndgame(null) },
+    observe: () => idle, plan: { tree: liveTree, view: () => null },
+    bodyParts: { plan: () => undefined, planView: () => null, planTree: liveTree, endgame: createEndgame(null) },
     queue, waits: createWaitLedger(null), activeClock: () => clock.now, heldMs: () => 0, validate: () => null, log: line => lines.push(line) });
   return { clock, listeners, briefs, lines, unheld };
 }
@@ -133,6 +136,61 @@ describe('the look and the plan made again for a task that is not held, wired', 
     expect(unheld!.flow.ledger().last[0]).toMatchObject({ outcome: 'refused' });
     expect(withReplanInbox({ take: () => null }).take('uw', tree)).toBeNull();
   });
+});
+
+describe('a queued stall follows whether its work still exists, not just the current node', () => {
+  const waiting = (kind = 'node_stalled') => ({
+    minecraftReplans: { v: 1, total: 1, recent: [0], nodes: { 'p1.1': 1 }, last: [] },
+    minecraftReplanPending: { stall: { kind, key: 'p1.1', why: '節 p1.1 が進まない' }, at: 0 },
+  });
+
+  it.each(['done', 'removed', 'parent_done'] as const)(
+    'drops the old node stall after %s during the gap, without asking or spending another attempt', async change => {
+      let live: PlanTree = tree;
+      const { clock, briefs, lines, unheld } = setup({ checkpoint: waiting(), planTree: () => live });
+      clock.now = 1_000;
+      await unheld!.flow.run(signal);
+      expect(unheld!.checkpoint().minecraftReplanPending).not.toBeNull();
+      const changed = change === 'parent_done' ? 'p1' : 'p1.1';
+      live = { ...tree, current: 'p1.2', nodes: change === 'removed'
+        ? tree.nodes.filter(node => node.id !== 'p1.1')
+        : tree.nodes.map(node => node.id === changed ? { ...node, state: 'done' as const } : node) };
+      unheld!.flow.escaped('p1.2');
+      clock.now = 2_000;
+      await unheld!.flow.run(signal);
+      expect(unheld!.checkpoint().minecraftReplanPending).toBeNull();
+      clock.now = REPLAN.gapMs;
+      await unheld!.flow.run(signal);
+      expect(briefs).toEqual([]);
+      expect(unheld!.flow.ledger().total).toBe(1);
+      expect(unheld!.checkpoint().minecraftReplanPending).toBeNull();
+      expect(lines.some(line => line.includes('replan task=uw'))).toBe(false);
+    },
+  );
+
+  it.each(['continue', 'blocked'] as const)('keeps unfinished %s work after the current node moves elsewhere', async state => {
+    const live = { ...tree, current: 'p2', nodes: tree.nodes.map(node => node.id === 'p1.1' ? { ...node, state } : node) };
+    const { clock, briefs, unheld } = setup({ checkpoint: waiting(), planTree: () => live });
+    clock.now = REPLAN.gapMs;
+    unheld!.flow.escaped('p2');
+    await unheld!.flow.run(signal);
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0]).toContain('止まった節: p1.1');
+    expect(unheld!.flow.ledger().total).toBe(2);
+  });
+
+  it.each(['death', 'same_spot_stops', 'wait_loop'])(
+    'keeps %s recovery when the old node was completed', async kind => {
+      const live = { ...tree, current: 'p2', nodes: tree.nodes.map(node => node.id === 'p1' ? { ...node, state: 'done' as const } : node) };
+      const { clock, briefs, unheld } = setup({ checkpoint: waiting(kind), planTree: () => live });
+      clock.now = kind === 'death' ? 1_000 : REPLAN.gapMs;
+      unheld!.flow.escaped('p2');
+      await unheld!.flow.run(signal);
+      expect(briefs).toHaveLength(1);
+      expect(unheld!.flow.ledger().last.at(-1)).toMatchObject({ node: 'p2', kind });
+      expect(unheld!.checkpoint().minecraftReplanPending).toBeNull();
+    },
+  );
 });
 
 describe('what the strong model may not close', () => {

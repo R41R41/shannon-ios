@@ -18,6 +18,8 @@ export type ReachKind = keyof typeof REACH_TEXT;
 /** The short form of the same, for the one line that folds the far hostiles. */
 export const REACH_SHORT: Readonly<Record<ReachKind, string>> = Object.freeze({ seen: '見える', path: '見えない・道はある', walled: '壁の向こう', unknown: '道は不明' });
 export const SHOOTER_WORD = '飛び道具';
+/** H6: an enderman's mood as the body says it (`angry`). */
+export const MOOD_TEXT = Object.freeze({ calm: '怒っていない（目を合わせず叩かなければ来ない）', angry: '怒っている（向かって来る）' });
 /** A part of a hostile's line that is one of the reach words (a probe's own reach line wins over the frame's). */
 export const isReachWord = (part: string): boolean => /^(?:見える|見えない|壁の向こう)/u.test(part) || part === REACH_TEXT.unknown;
 
@@ -37,7 +39,8 @@ export function reachOf(entity: Rec): ReachKind | null {
 /** The words after a hostile's place: its reach, then 飛び道具 for a kind that hurts from a distance. */
 export function reachSuffix(entity: Rec): string {
   const kind = reachOf(entity);
-  return [...kind ? [REACH_TEXT[kind]] : [], ...entity.shooter === true ? [SHOOTER_WORD] : []].map(part => `・${part}`).join('');
+  const mood = entity.name === 'enderman' && typeof entity.angry === 'boolean' ? [entity.angry ? MOOD_TEXT.angry : MOOD_TEXT.calm] : [];
+  return [...kind ? [REACH_TEXT[kind]] : [], ...entity.shooter === true ? [SHOOTER_WORD] : [], ...mood].map(part => `・${part}`).join('');
 }
 
 /** What a dropped item is, `cobblestone×4`; empty for a stack the body did not name (the line then says just `item`). */

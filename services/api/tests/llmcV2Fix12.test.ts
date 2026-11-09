@@ -37,8 +37,8 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     expect(tops.indexOf('金のブーツ（ネザーの前）')).toBe(tops.indexOf('ダイヤ（y=-58）') + 1);
     expect(tops.indexOf('黒曜石10とゲート')).toBe(tops.indexOf('金のブーツ（ネザーの前）') + 1);
     expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
-    expect(rows(on)).toContain('p6 金のブーツ（ネザーの前）|have:golden_boots');
-    expect(rows(on)).toContain('p6.1 金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）|have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots');
+    expect(rows(on)).toContain('p6 金のブーツ（ネザーの前）|have:golden_boots|have:ender_eye>=10');
+    expect(rows(on)).toContain('p6.1 金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）|have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots|have:ender_eye>=10');
     expect(gateFirst([]).length).toBe(0);
   });
   it('asks the three pieces worn at the diamonds\' node, and says one carried and not worn', () => {
@@ -51,8 +51,8 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     expect(preparationShortage({ ...base, counts: owned(armour), worn: ['iron_helmet', 'iron_chestplate', 'iron_leggings'] })).toBeNull();
   });
   it('asks the golden boots at the gate, iron boots do not stand for them', () => {
-    const gate: Array<[string, number]> = [['iron_pickaxe', 3], ['shield', 1], ['iron_sword', 1], ['cobblestone', 64], ['iron_helmet', 1],
-      ['iron_chestplate', 1], ['iron_leggings', 1], ['iron_boots', 1]];
+    const gate: Array<[string, number]> = [['iron_pickaxe', 3], ['shield', 2], ['iron_sword', 1], ['cobblestone', 64], ['iron_helmet', 1],
+      ['iron_chestplate', 1], ['iron_leggings', 1], ['iron_boots', 1], ['iron_ingot', 2], ['oak_planks', 16]];
     const parts = { dimension: 'overworld', food: 50, nowKinds: ['portal' as const], v2: true };
     expect(preparationShortage({ ...parts, counts: owned(gate) })).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い');
     expect(preparationShortage({ ...parts, counts: owned([...gate, ['golden_boots', 1]]) })).toBeNull();

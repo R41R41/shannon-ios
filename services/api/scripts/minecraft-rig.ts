@@ -11,7 +11,7 @@
 //
 //   cd <head tree>/services/api && node --import tsx scripts/minecraft-rig.ts
 //   env: RIG_DIR (work dir, made if missing)  RIG_PORT (the lab server's game port, for the record)  RIG_BODY_NAME (default I_am_Shannon)
-//        RIG_MODEL=real|script  RIG_ENV_FILE (api.env, for real)  RIG_STOP_FILE (the file whose existence ends the rig; default <RIG_DIR>/rig.stop)
+//        RIG_MODEL=real|script  RIG_LLM_MODEL=haiku|sonnet  RIG_ENV_FILE (api.env, for real)  RIG_STOP_FILE (default <RIG_DIR>/rig.stop)
 // It prints `RIG_HTTP {port,url}` when the body's door is open, `RIG_READY {...}` when the operator socket is served and the body has polled, `RIG_USAGE {...}` for
 // every paid call, `RIG_LOG ...` lines of the head, and exits 0 on SIGTERM.
 import fs from 'node:fs';
@@ -20,6 +20,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { actionHarness } from '../tests/support/actionThreadHarness.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
+import { bodyTaskOnlyRecovery } from '../src/wiring/fcaBodyRecovery.js';
 import { MinecraftControl } from '../src/surfaces/minecraft/minecraftControl.js';
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
@@ -43,10 +44,15 @@ import { ownerLocalClock, ownerTimeZone } from '../src/infra/time/localDate.js';
 import { MC_ACT_TOOL } from '../src/contracts/minecraftActContract.js';
 import { MINECRAFT_CONTROL_PATH } from '../src/contracts/minecraftControlContract.js';
 import type { FcaModel } from '../src/mind/action/fca/fcaPorts.js';
+import { strictMinecraftLlmcModel } from '../src/wiring/minecraftLlmcModelPolicy.js';
+import { createRigModelLifecycle, rigModelValues, trackRigModelWork } from './minecraftRigModelPolicy.js';
+import { rigObservationPorts } from './minecraftRigObservation.js';
+import { installRigFirstPayload } from './minecraftRigFirstPayload.js';
 
 const env = process.env;
 const DIR = env.RIG_DIR ?? '', PORT = Number(env.RIG_PORT), NAME = env.RIG_BODY_NAME ?? 'I_am_Shannon', MODE = env.RIG_MODEL ?? 'script';
 if (!DIR || !Number.isInteger(PORT)) throw new Error('RIG_DIR and RIG_PORT (the lab server\'s game port, for the record) are required');
+if (MODE !== 'real' && MODE !== 'script') throw new Error('RIG_MODEL_INVALID');
 fs.mkdirSync(DIR, { recursive: true });
 const STOP_FILE = env.RIG_STOP_FILE ?? path.join(DIR, 'rig.stop');
 const log = (line: string) => console.log(`RIG_LOG [${new Date().toISOString().slice(11, 19)}] ${line}`);
@@ -64,7 +70,8 @@ function readValues(file: string): Record<string, string> {
   }
   return out;
 }
-const values: Record<string, string> = MODE === 'real' ? readValues(env.RIG_ENV_FILE ?? '') : {};
+const values: Record<string, string> = MODE === 'real' ? rigModelValues(readValues(env.RIG_ENV_FILE ?? ''), env.RIG_LLM_MODEL) : {};
+const strictModel = strictMinecraftLlmcModel(values);
 
 // ---- the head (the hold lab's wiring, with the production's budget and models) ------------------------------------------------------------------
 const dbPath = path.join(DIR, 'head', 'shannon.db');
@@ -81,6 +88,8 @@ const control = new MinecraftControl(new MinecraftControlStore(h.db), configurat
   leaseKnown: (lease, taskId) => bodyLeaseKnown(known(lease, taskId), bodyResource),
   leaseValid: (lease, taskId) => bodyLeaseValid(known(lease, taskId), lease, bodyResource, nowIso()),
   leaseAttempted: (lease, taskId) => known(lease, taskId) !== null });
+const firstPayload = installRigFirstPayload({ enabled: env.RIG_CAPTURE_FIRST_PAYLOAD, keep: env.RIG_KEEP === 'true', modelMode: MODE,
+  directory: DIR, obsMode: rigObservationPorts({}, values).obsMode, minecraftTask: id => Boolean(control.store.body(id)), log });
 
 const audit = configuredOperatorAudit({ ...values, SHANNON_OPERATOR_MINECRAFT: 'on' }, dbPath)!;
 let driver: ReturnType<typeof createTaskRuntimeWiring>;
@@ -88,11 +97,12 @@ const budget = fcaBudget({ actions: h.actions, store: new TaskBudgetStore(h.db),
   minecraftRequest: task => admittedMinecraftRequest(task as never, (task as { parentId?: string }).parentId ? driver.runtime.get((task as { scopeKey: string }).scopeKey, (task as { parentId: string }).parentId) as never : null,
     Boolean(control.store.body((task as { id: string }).id))),
   taskCapYen: (id: string) => audit.store.budgetYen(id) });
-let spentUsd = 0, calls = 0;
+let spentUsd = 0, calls = 0, usageComplete = true;
 const timeZone = ownerTimeZone(values);
 const recordUsage = (usage: { estimatedCostUsd: number; usageComplete: boolean; model: string; inputTokens: number; cachedInputTokens: number; outputTokens: number }) => {
   budget.recordUsage(usage.estimatedCostUsd, !usage.usageComplete);
   spentUsd += usage.estimatedCostUsd; calls++;
+  usageComplete = usageComplete && usage.usageComplete;
   emit('RIG_USAGE', { n: calls, model: usage.model, usd: Number(usage.estimatedCostUsd.toFixed(4)), totalUsd: Number(spentUsd.toFixed(4)), inTokens: usage.inputTokens,
     cachedIn: usage.cachedInputTokens, outTokens: usage.outputTokens, complete: usage.usageComplete });
 };
@@ -118,12 +128,16 @@ const real = MODE === 'real'
   : null;
 if (MODE === 'real' && !real) throw new Error('RIG_NO_MODEL_KEY: configuredMinecraftLlmc made nothing (no key for the main model in the env file)');
 const fake = scriptModel();
-const llmc: LlmcWiring = real ?? { names: { main: 'rig-script', escalate: null, plan: 'rig-script' } as never, models: { main: fake, escalate: null }, summarizer: null,
+const baseLlmc: LlmcWiring = real ?? { names: { main: 'rig-script', escalate: null, plan: 'rig-script' } as never, models: { main: fake, escalate: null }, summarizer: null,
   policy: LLMC_HISTORY_POLICY, historyAhead: createFcaHistoryAhead() };
-if (real) emit('RIG_MODELS', { main: real.names.main, escalate: real.names.escalate, plan: real.names.plan });
+const modelLifecycle = createRigModelLifecycle();
+const llmc = trackRigModelWork(baseLlmc, modelLifecycle);
+if (real) emit('RIG_MODELS', { main: real.names.main, escalate: real.names.escalate, plan: real.names.plan,
+  summary: strictModel, redecide: strictModel });
 
 function withoutHistory<T extends { history?: unknown }>(ports: T): Omit<T, 'history'> { const { history: _history, ...rest } = ports; return rest; }
 driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', ownerAlone: () => true, now: nowIso, model: llmc.models.main, budget, continueAtOnce: true,
+  bodyRecovery: () => bodyTaskOnlyRecovery(id => control.store.body(id)),
   stepPorts: (runtime: any, step: any) => {
     const small = llmcStepParts(llmc, step, control, line => log(`head: ${line}`));
     const taskBody = createMinecraftTaskBody({ control, runtime, step, ownerAlone: () => true, sourcesVisible: () => true, ...small.body });
@@ -141,7 +155,7 @@ driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owne
         { checkpoint: step.snapshot.checkpoint, binding, requireConditions: true, permit }),
       // The script's rounds are plain (not the Anthropic model's signed rounds): without a key the mode's history codec is left out, as the hold lab does.
       ...(MODE === 'real' ? small.ports : withoutHistory(small.ports)) };
-    return small.menu(ports as never);
+    return small.menu(rigObservationPorts(ports, values) as never);
   } } as never);
 const wakeTimer = setInterval(() => { void driver.tick().catch(() => undefined); }, 200);
 
@@ -162,7 +176,10 @@ const door = http.createServer((request, response) => {
   request.on('end', () => {
     response.setHeader('content-type', 'application/json');
     try {
-      response.end(JSON.stringify(control.poll({ scopeKey: 'owner', deviceId: 'minebot' } as never, JSON.parse(Buffer.concat(chunks).toString('utf8')))));
+      const poll = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const result = control.poll({ scopeKey: 'owner', deviceId: 'minebot' } as never, poll);
+      firstPayload?.observe(poll);
+      response.end(JSON.stringify(result));
     } catch (error) {
       if (!pollErrors++) log(`the body's poll was refused: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
       response.statusCode = 400; response.end(JSON.stringify({ error: 'FCA_BODY_POLL_INVALID' }));
@@ -176,18 +193,22 @@ emit('RIG_HTTP', { port: httpPort, url: `http://127.0.0.1:${httpPort}` });
 const socketReady = () => fs.existsSync(path.join(path.dirname(dbPath), 'operator-runtime', 'operator.sock'));
 for (let waited = 0; waited < 150_000 && !(socketReady() && control.available().length === 1); waited += 200) await delay(200);
 if (!(socketReady() && control.available().length === 1)) { emit('RIG_FAILED', { reason: 'the head never saw the body or the operator socket is missing', socket: socketReady(), bodies: control.available().length }); process.exit(3); }
-emit('RIG_READY', { db: dbPath, socket: path.join(path.dirname(dbPath), 'operator-runtime', 'operator.sock'), body: NAME, port: PORT, mode: MODE, pid: process.pid, httpPort });
+emit('RIG_READY', { db: dbPath, socket: path.join(path.dirname(dbPath), 'operator-runtime', 'operator.sock'), body: NAME, port: PORT, mode: MODE,
+  configuredObsMode: rigObservationPorts({}, values).obsMode, pid: process.pid, httpPort });
 
 let closing = false;
 async function shutdown(code: number): Promise<never> {
-  if (!closing) {
-    closing = true;
-    clearInterval(wakeTimer);
-    emit('RIG_STOPPING', { totalUsd: Number(spentUsd.toFixed(4)), calls });
-    await new Promise<void>(resolve => door.close(() => resolve()));
-    await operator.close().catch(() => undefined);
-    await driver.close().catch(() => undefined);
-  }
+  if (closing) return new Promise<never>(() => undefined);
+  closing = true;
+  modelLifecycle.stopAccepting();
+  clearInterval(wakeTimer);
+  emit('RIG_STOPPING', { totalUsd: Number(spentUsd.toFixed(4)), calls });
+  await new Promise<void>(resolve => door.close(() => resolve()));
+  await operator.close().catch(() => undefined);
+  await driver.close().catch(() => { usageComplete = false; });
+  await modelLifecycle.drain();
+  firstPayload?.close();
+  emit('RIG_STOPPED', { totalUsd: Number(spentUsd.toFixed(4)), calls, complete: usageComplete });
   setTimeout(() => process.exit(code), 500).unref();
   return new Promise<never>(() => undefined);
 }

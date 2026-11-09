@@ -13,7 +13,7 @@ const frame = (pack: Pack, extra: Record<string, unknown> = {}): BodyObservation
   state: { world: { dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, localMap: MAP, health: 20, food: 20,
     inventory: pack.map(([name, count]) => ({ name, count })), ...extra } as never },
 });
-const FULL: Pack = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 10]];
+const FULL: Pack = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 16]];
 const RETURN: Pack = [['cobblestone', 20], ['cooked_beef', 10]];
 const endDeath = { lastDeath: '2分前 the_end (10,60,10) 「void」 落とした物: iron_sword×1' };
 
@@ -30,7 +30,7 @@ describe('End entry goals and recovery', () => {
 
   it('counts ordinary and spectral arrows together in the displayed shortage', () => {
     const counts = new Map([...FULL, ['bow', 1], ['arrow', 10], ['spectral_arrow', 20], ['ender_eye', 12], ['iron_sword', 1]] as Pack);
-    const shortage = () => preparationShortage({ dimension: 'overworld', nowKinds: ['end'], counts, food: 80 });
+    const shortage = () => preparationShortage({ dimension: 'overworld', nowKinds: ['end'], counts, food: 333 });
     expect(shortage()).toBeNull();
     counts.set('spectral_arrow', 19);
     expect(shortage()).toContain('29/30');

@@ -50,6 +50,8 @@ export interface AnthropicFcaClient {
 
 export interface AnthropicFcaOptions {
   model?: string;
+  /** Explicit caller policy for a second judgment; absent preserves the existing Opus escalation. */
+  redecideModel?: string;
   /** Already selected by the caller's provider/credential policy. No ambient environment lookup. */
   apiKey?: string;
   client?: AnthropicFcaClient;
@@ -100,6 +102,10 @@ export interface AnthropicFcaOptions {
 /** How many tasks' last requests a model keeps. */
 const SENT_KEPT = 8;
 
+function assertRedecideModel(model: string | undefined): void {
+  if (model !== undefined && !usesOneHourAnthropicCache(model)) throw new Error('FCA_MODEL_CONFIG_INVALID');
+}
+
 /** One native Messages request per decision. Scheduling, execution and authority stay with the caller. */
 export class AnthropicFcaModel implements FcaModel {
   readonly model: string;
@@ -126,6 +132,7 @@ export class AnthropicFcaModel implements FcaModel {
     this.maximumOutputTokens = options.maximumOutputTokens ?? 4_000;
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 90_000;
     this.compactAboveTokens = options.compactAboveTokens ?? FCA_COMPACT_ABOVE_TOKENS;
+    assertRedecideModel(options.redecideModel);
     if (!usesOneHourAnthropicCache(this.model) || !positiveInteger(this.maximumOutputTokens) || this.maximumOutputTokens > 128_000
       || !positiveInteger(this.timeoutMilliseconds) || !positiveInteger(this.compactAboveTokens)
       || typeof options.recordUsage !== 'function') throw new Error('FCA_MODEL_CONFIG_INVALID');
@@ -258,7 +265,7 @@ export class AnthropicFcaModel implements FcaModel {
       // step sat unknown for ten minutes holding a research slot), and nothing is booked, as for a 4xx. Any other failure may have been
       // processed and charged by the provider: booked at an upper bound sized by this request, never as a whole context (an outage's
       // retries would otherwise book the cap away). One that never left this machine (refused, unresolved) is booked as nothing.
-      if (failure.kind === 'server' && execution) {
+      if ((failure.kind === 'server' || failure.kind === 'not_sent') && execution) {
         execution.modelOutcome = 'acknowledged';
         execution.modelUsage = { inputTokens: 0, outputTokens: 0 };
       } else if (failureMayHaveBeenCharged(failure)) await this.options.recordUsage(this.usage(undefined, requestTokens));
@@ -304,39 +311,40 @@ export class AnthropicFcaModel implements FcaModel {
   }
 
   /**
-   * Amendment A-10: the task's last request sent again to Opus, once, with the note after its live state and
+   * Amendment A-10: the task's last request sent again once (Opus unless the caller pins `redecideModel`), with the note after its live state and
  * nothing else changed (the same system, tools, history, settings and
    * thinking: only `model`), and answered like a decision. The answer is decoded and shaped by the mode's hooks as
  * a decision's is, but it is not the task's history: the caller uses it
    * for the one call it was asked about. Its cost is booked like a decision's (`recordUsage`, the budget's). Null:
- * this model is Opus already. Throws: nothing remembered, a request the note
+ * this model is Opus already without an explicit second-judgment policy. Throws: nothing remembered, a request the note
    * cannot be added to, a request that failed or timed out (booked at its upper bound when it may have been
  * charged), an answer that cannot be read.
    */
   async redecide(parts: { taskId: string; note: string; signal: AbortSignal; timeoutMs: number }): Promise<FcaRedecided | null> {
-    if (this.model === OPUS_MODEL) return null;
+    const model = this.options.redecideModel ?? OPUS_MODEL;
+    if (this.options.redecideModel === undefined && this.model === OPUS_MODEL) return null;
     const sent = this.sent.get(parts.taskId);
     if (!sent) throw new Error('FCA_REDECIDE_NO_REQUEST');
     const messages = notedMessages(sent.body.messages, parts.note);
     if (!messages) throw new Error('FCA_REDECIDE_NOT_EXTENDABLE');
     const timeout = AbortSignal.timeout(parts.timeoutMs), combined = AbortSignal.any([parts.signal, timeout]);
     combined.throwIfAborted();
-    const body = { ...sent.body, model: OPUS_MODEL, messages } as Anthropic.MessageCreateParamsNonStreaming;
+    const body = { ...sent.body, model, messages } as Anthropic.MessageCreateParamsNonStreaming;
     const began = Date.now();
     let message: Anthropic.Message;
     try {
       message = await this.redecideClient.messages.create(body, { signal: combined, maxRetries: 0, ...(sent.headers ? { headers: sent.headers } : {}) });
     } catch (error) {
       const failure = classifyDispatchFailure(error, { stopped: parts.signal.aborted, deadline: timeout.aborted });
-      if (failureMayHaveBeenCharged(failure)) await this.options.recordUsage(this.usage(undefined, sent.requestTokens, OPUS_MODEL));
+      if (failureMayHaveBeenCharged(failure)) await this.options.recordUsage(this.usage(undefined, sent.requestTokens, model));
       throw new Error(`FCA_REDECIDE_${timeout.aborted ? 'TIMEOUT' : parts.signal.aborted ? 'ABORTED' : 'FAILED'}: ${String((error as Error |
          undefined)?.message ?? error).slice(0, 160)}`);
     }
-    const usage = this.usage(message.usage, undefined, OPUS_MODEL);
+    const usage = this.usage(message.usage, undefined, model);
     await this.options.recordUsage(usage);
     const spent = { complete: usage.usageComplete, inputTokens: usage.inputTokens, cachedInputTokens: usage.cachedInputTokens,
       cacheCreationInputTokens: usage.cacheCreationInputTokens, outputTokens: usage.outputTokens, costUsd: usage.estimatedCostUsd };
-    const answered = { model: OPUS_MODEL, ms: Date.now() - began, stopReason: message.stop_reason ?? null, usage: spent };
+    const answered = { model, ms: Date.now() - began, stopReason: message.stop_reason ?? null, usage: spent };
     if (message.stop_reason !== 'tool_use') throw new Error(`FCA_REDECIDE_NO_CALL: stop_reason=${String(message.stop_reason)}`);
     const { decision } = decodeDecision(message.content, sent.names, sent.history, FCA_CONTEXT_NAME);
     if (decision.kind !== 'tools') return { ...answered, calls: [], control: decision.kind };

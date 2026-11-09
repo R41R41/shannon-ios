@@ -44,16 +44,19 @@ Python 3.12 の標準ライブラリだけを使います（`python3 -I trials.p
 途中の節目（原木・作業台・かまど・鉄の原鉱・各防具・ダイヤ・黒曜石 1/10・火打石・ゲート（黒曜石を 8 個以上置いた）など）も時刻を残します。
 節目は一度でも満たせば済み（後で減っても戻らない）です。
 
-## 種（`seeds.json`）
+## 種（シードの表は git の外。VM の `~/.config/shannon/minecraft-trials-seeds.json`）
 
 下見（`scout`）で、スポーンから 96 ブロックの中を実際に作って数えた事実です（村・イグルー・荒れたポータルは `locate`、
 溶岩・原木・鉱石・羊は保存されたチャンクを読んで数えます）。区間ごとに条件の違う 3 つを選んで `sections.json` の `seeds` に書きます。
+
+リポジトリは公開なので、シード値と各シードの構造物の表は git に入れない（2026-11-09）。VM の上の 1 つのファイル（`SHANNON_TRIALS_SEEDS`、無ければ `~/.config/shannon/minecraft-trials-seeds.json`、無ければこのフォルダの `seeds.json`＝git が無視）から読む。
+試しに要る「鍵ごとの始め方」（どの pristine の世界か・どこから始めるか）は `seed-variants.json`（シード値なし）にある。値は `python3 -I trials.py seed <鍵>` で取り出し、文書・ログ・モデルの入力に書かない。
 
 ## 回し方
 
 ```bash
 cd ~/minecraft/shannon-home/trials
-python3 -I trials.py scout --key r19-snowy --seed 5313593320881658764 --note 'run19'   # 種の下見（1 つ 約 2.5 分）
+python3 -I trials.py scout --key r19-snowy --seed "$(python3 -I trials.py seed r19-snowy)" --note 'run19'   # 種の下見（1 つ 約 2.5 分）
 python3 -I trials.py run --dry-run --sections 1 --seeds r19-snowy                     # ワールドの入れ替えだけ（運用 CLI も費用も使わない）
 nohup python3 -I trials.py run --sections 1 --seeds r19-snowy > results/run.log 2>&1 &   # 1 区間（Sonnet、下を参照）
 nohup python3 -I trials.py run > results/run.log 2>&1 &                                  # 全区間 × 各 3 種
@@ -122,11 +125,11 @@ python3 -I seedscan.py publish --key c1 --labworld         # pristine/c1/{world,
 結果は `~/.cache/minebot-lab/seedscan-out/`（`phaseA-<tag>.jsonl` に 1 本 1 行、`deep-<名前>.json`、`sites.json` を含む `pristine/<名前>/`）。WSL と VM と本番で /locate の答えは同じになる
 （サーバーの jar が同じ：`versions/1.21.11/server-1.21.11.jar` の sha256 先頭 `ec47239a8de24633` が WSL・VM のラボの雛形・本番 shannon-home で一致、Fabric の起動 jar も `437be1fb0db0cec0` で一致）。
 
-**決まったシード（取りまとめ、2026-11-02）：本命 c1（-1687609181642700084）、予備 c6（3528818900495331395）**。c1 の弱点はストロングホールドの部屋の地下 170（区間の試しで重いと分かったら c6 に替える）。
+**決まったシード（取りまとめ、2026-11-02）：本命 c1、予備 c6（値は git に置かない。VM の `~/.config/shannon/minecraft-trials-seeds.json` にだけあり、`python3 -I trials.py seed c1` で取り出す）**。c1 の弱点はストロングホールドの部屋の地下 170（区間の試しで重いと分かったら c6 に替える）。
 VM の `trials/pristine/` に c1・c6 を置いた（各 33〜35MB）。
 
-- **実走（`shannon_home`）で c1 の新しいワールドを用意する（1 行）**：shannon-home を止めたまま `ssh azure-constant-server 'flock ~/.cache/minebot-lab/prod.lock bash -c "cd ~/minecraft/shannon-home && ./new-world.sh --seed -1687609181642700084"'`
-  （古いワールドは `shannon_home.before-regen-…` に残り、次の起動で c1 の世界が作られる。支給・tp なしのゼロから。c6 は `--seed 3528818900495331395`。起動はいつもの `./start.sh` か運用 CLI）。
+- **実走（`shannon_home`）で c1 の新しいワールドを用意する（1 行）**：shannon-home を止めたまま `ssh azure-constant-server 'flock ~/.cache/minebot-lab/prod.lock bash -c "cd ~/minecraft/shannon-home && ./new-world.sh --seed \"$(python3 -I ~/shannon-ios/scripts/minecraft-trials/trials.py seed c1)\""'`
+  （古いワールドは `shannon_home.before-regen-…` に残り、次の起動で c1 の世界が作られる。支給・tp なしのゼロから。c6 は `--seed "$(python3 -I …/trials.py seed c6)"`。起動はいつもの `./start.sh` か運用 CLI）。
 
 ---
 
@@ -224,7 +227,7 @@ python3 -I trials.py report          # 表と「止まりの様子」（頭の�
 ```bash
 cd ~/minecraft/shannon-home/trials
 python3 -I rig.py run --head-pin ~/s4-pins/head-<sha> --body-pin ~/s4-pins/body-<sha> --sections 6,7,9,8a,8b,10 --seeds c1 --model real \
-  --max-section-yen 500 --batch-cap-yen 3000 --owner-ok-supply "ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）"
+  --llm-model haiku --keep --max-section-yen 500 --batch-cap-yen 3000 --owner-ok-supply "ライ氏 2026-11-02 選択肢で回答（取りまとめ経由）"
 python3 -I rig.py run ... --model script --smoke      # 鍵なし・1 分に切った配線の試験（頭の台本のモデル）
 python3 -I rig.py report
 ```
@@ -232,6 +235,7 @@ python3 -I rig.py report
   pin は本番に入っている版（頭 `~/shannon-ios`・体 `~/Shannon`）から `git archive` で作る（無ければ）。1 区間 ¥500・バッチ全体 ¥3,000、`--cores 2 --load-limit 0`。**S5 が run59 を再開する時は `touch ~/.cache/minebot-lab/trials.stop`**：走っている区間は次の確認（5 秒）で `stopped_by_file` で終わり、1 分以内に両方を止める。止められた区間は `interrupted` で記録されて次の窓で最初からやり直す。ファイルは作った人が、窓を再び開けたい時に消す（残っている間は始まらない）。
   `rig-window.sh --check` は窓が開いているか（なければ理由）と使う pin を表示するだけ。終わる時：計画が済む・上限に達する（rig.py の終了 10）、失敗が 3 回続く、`--max-wait`（既定 12 時間）。
 - 結果は `results/<バッチ>/`（試しごとの JSON・`rig-<試し>.log`＝rig の出力・`report.md`）。rig の出力の `RIG_USAGE` は有料の呼出し 1 回ごとの費用（USD）。`builds` は試した頭と体の版。
+- real 検証は Haiku・`--keep`・正の個別／バッチ上限を必須にする。停止時は新しい推論を断り、開始済みの計画・要約の使用量記録まで待って `RIG_STOPPED` を出す。頭には有料リクエストの終了猶予が20秒あるため、Pythonは頭だけ25秒待つ（体は8秒）。強制killや不完全な使用量は `unknown` として記録し、費用を確定するまで自動再試行しない。
 
 ### 未確認のこと（分かっていること／仮説／不明）
 - 分かっている：`execute if entity @a[name=...,advancements={...}]`・`distance`・`[eye=true]` の書き方、`/locate` の答え、End へ tp すると竜が 4.7〜7.3 秒で現れること（ラボで実測。体の観測はまだ）。

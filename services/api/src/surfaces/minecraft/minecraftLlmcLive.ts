@@ -150,8 +150,11 @@ interface Seen { line: string; distance: number }
  * `near` names a dropped item
  * (`cobblestone×4`), leaves out an item she threw herself and the hostiles (the threats say them).
  */
+// 1107e: the body says a sheep's wool (`wool`: a colour or `shorn`); a bed is three of one colour, and the scan names the colour to hunt.
+const woolWords = (entity: Record<string, unknown>): string => typeof entity.wool !== 'string' ? ''
+  : entity.wool === 'shorn' ? '(毛なし)' : `(毛 ${cleanText(entity.wool)})`;
 const seenName = (entity: Record<string, unknown>, mode: SeenMode): string => mode === 'near' && entity.name === 'item'
-  ? `item${itemWords(entity) ? ` ${itemWords(entity)}` : ''}` : cleanText(entity.name as string);
+  ? `item${itemWords(entity) ? ` ${itemWords(entity)}` : ''}` : `${cleanText(entity.name as string)}${entity.name === 'sheep' ? woolWords(entity) : ''}`;
 function seen(value: unknown, limit: number, mode: SeenMode): string[] {
   const items: Seen[] = (Array.isArray(value) ? value : []).flatMap(item => {
     const entity = record(item);
@@ -161,7 +164,13 @@ function seen(value: unknown, limit: number, mode: SeenMode): string[] {
     const at = record(entity.position);
     const where = at && finite(at.x) !== null ? ` (${Math.floor(Number(at.x))},${Math.floor(Number(at.y))},${Math.floor(Number(at.z))})` : '';
     const id = finite(entity.id) !== null ? `#${entity.id} ` : '';
-    return [{ line: `${id}${seenName(entity, mode)} ${round1(distance)}m${where}${mode === 'threat' ? reachSuffix(entity) : ''}`, distance }];
+    // The body files an unprovoked zombified piglin, a piglin by a body in gold or a calm enderman as 'neutral' (rig end1109f01:
+    // one struck as a hostile brought its group down on her).
+    // A calm enderman is angered by a look as well as a blow (V2Knowledge: 目を合わせると怒る), and the pearl hunt angers it by a look on purpose:
+    // 「殴らなければ来ない」 alone said the opposite of the hunt's way (review 11/9 07:40).
+    const neutral = mode !== 'near' || entity.kind !== 'neutral' ? ''
+      : entity.name === 'enderman' ? '・中立（目を合わせるか殴ると怒る）' : '・中立（殴らなければ来ない）';
+    return [{ line: `${id}${seenName(entity, mode)} ${round1(distance)}m${where}${mode === 'threat' ? reachSuffix(entity) : neutral}`, distance }];
   });
   return items.sort((left, right) => left.distance - right.distance).slice(0, limit).map(item => item.line);
 }

@@ -50,7 +50,7 @@ export interface Fix {
 /** A pair whose lines cross at less than this angle is not used. */
 export const MIN_CROSSING_DEGREES = 8;
 /** The same for two lines the body read exactly (`unit`): their error is small, so a narrower crossing still places the point. */
-export const MIN_PRECISE_CROSSING_DEGREES = 3;
+export const MIN_PRECISE_CROSSING_DEGREES = 0.5;
 /** A point whose estimated error is above this is not given: it does not even say which way to walk. */
 export const MAX_ERROR_BLOCKS = 600;
 /** The error of a bearing is about this many blocks of sideways position over the blocks flown. */
@@ -170,7 +170,10 @@ function leastSquares(rays: readonly Ray[], start: { x: number; z: number }): { 
   return { x, z, ...cov };
 }
 
-/** The radius of the error: twice the long half-axis of the one-sigma ellipse. */
+/**
+ * The radius of the error: twice the long half-axis of the one-sigma ellipse.
+ * The covariance already grows as the crossing narrows: at 1,460 m and 0.9°, two precise lines give about 92 m.
+ */
 function errorRadius(cov: { xx: number; xz: number; zz: number }): number {
   const mean = (cov.xx + cov.zz) / 2;
   const spread = Math.sqrt(Math.max(0, ((cov.xx - cov.zz) / 2) ** 2 + cov.xz ** 2));
@@ -261,8 +264,11 @@ export interface ThrowPlace {
 
 /** The distances sideways (blocks) a second throw is suggested at, widening with each pair that did not give a point. */
 export const SIDEWAYS_BLOCKS: readonly number[] = [100, 200, 400];
-/** The same after a line read exactly: the first stronghold is 1,280 m or more away, and 3° of crossing is enough for two such lines. */
-export const PRECISE_SIDEWAYS_BLOCKS: readonly number[] = [200, 400, 800];
+/**
+ * S5's PC lab (2026-11-05, c1, three runs): 24 m sideways gave a 0.9° crossing at about 1,460 m, within 6.4 m of /locate.
+ * Start with that short baseline for precise lines; if it gives no point, widen it to reduce the estimated error.
+ */
+export const PRECISE_SIDEWAYS_BLOCKS: readonly number[] = [24, 200, 400, 800];
 
 /**
  * Where to throw the next eye when there is no point yet: sideways of the last throw's line, on either side, far enough that

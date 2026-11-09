@@ -34,11 +34,11 @@ describe('the journal measures the late road', () => {
     expect(shown({ ender_pearl: 14 })).toContain('ender_pearls_14');
     expect(shown({ ender_eye: 13 })).not.toContain('ender_eyes_14');
     expect(shown({ ender_eye: 14 })).toContain('ender_eyes_14');
-    // A cooked beef is 20.8 food points: four make the End's 80, three do not.
-    const pack = { white_bed: 8, obsidian: 8, water_bucket: 1, cooked_beef: 4 };
+    // A cooked beef is 20.8 food points: sixteen make the End's 330, fifteen do not (thru ddcd20a0).
+    const pack = { white_bed: 8, obsidian: 8, water_bucket: 1, cooked_beef: 16 };
     expect(shown(pack)).toContain('end_preparation');
     expect(shown({ ...pack, white_bed: 7 })).not.toContain('end_preparation');
-    expect(shown({ ...pack, cooked_beef: 3 })).not.toContain('end_preparation');
+    expect(shown({ ...pack, cooked_beef: 15 })).not.toContain('end_preparation');
     // Conversion into eyes still counts for the road's rod and pearl conditions.
     expect(shown({ ender_eye: 14 })).toEqual(expect.arrayContaining(['blaze_rods_7', 'ender_pearls_14']));
   });

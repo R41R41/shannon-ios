@@ -31,7 +31,8 @@ import {
  * but the body recall's
  * first pool (odyTaskRecall.ts, poolMs 3,076), now built over several turns of the loop.
  */
-export const FIRST_PLAN = Object.freeze({ inputCharacters: 6_000, giveUpMs: 120_000, outputTokens: 6_000, nodes: 40 });
+// inputCharacters 9_500 (end1109o02): the opening draft (up to 3,200) comes before the scan, which must still fit.
+export const FIRST_PLAN = Object.freeze({ inputCharacters: 9_500, giveUpMs: 120_000, outputTokens: 6_000, nodes: 40 });
 
 /** r7: the check's forbid (the seed's, and the words the first plan is asked to write: `FIRST_PLAN_SYSTEM_R7`). */
 export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
@@ -107,10 +108,10 @@ export const FIRST_PLAN_SYSTEM = [
   '- title は20字以内で、する事。where はその場所（座標だけ、分からなければ ""）。doneWhen は済んだと分かる観測（持ち物の名前と数、20字以内、無ければ ""）。note ' +
     'は書かない。説明の文は要らない。',
   '- 入力の地図・目印・場所の記憶・通ったバイオームにある物だけを場所に使う。無い物を作り出さない。座標は見立て。',
-  '- 食料の節は鉄より前（最初の夜の前）。村が見えていれば、最初に近い節で村を回ってベッド・干し草・畑・箱を取る。',
+  '- 食料の節は鉄より前（最初の夜の前）。ベッドが一番（寝れば夜を飛ばせる）。夜にベッドが無ければ、地面に 2 段の穴を掘って塞ぎ、その底から鉄の節の「最初の鉄3を焼いて鉄のツルハシ」へ先に下りてよい（外で待たない。朝に戻る）。鉄の節の最初の子は「最初の鉄3を焼いて鉄のツルハシ」（doneWhen は have:iron_pickaxe）のまま残す。村が見えていれば、最初に近い節で村を回ってベッド・干し草・畑・箱を取る。',
   '- 最初の「木と石の道具」は、原木の節（作業台・木のツルハシ・斧と石の道具の棒の分: doneWhen は have:log>=8 の形。ツルハシ 1 つで済みにしない）、作業台と木のツルハシ、' +
     '丸石で石のツルハシ・石の斧・石の剣（doneWhen は have:stone_pickaxe&have:stone_axe&have:stone_sword。斧を落とさない）に分ける。',
-  '- 鉄を掘りに地下へ下りる前に済ませる物（食料 40 点・石の斧・作業台か板 4 以上・板の余り）は、鉄の節より前の節か、その doneWhen に入れる。',
+  '- 鉄を掘りに地下へ下りる前に済ませる物（食料 40 点・石の斧・作業台か板 4 以上・板の余り）は、鉄の節より前の節か、その doneWhen に入れる（ベッドの無い夜に塞いだ穴から最初の鉄 3 へ下りるのは、この前でもよい）。',
   '- 依頼がエンドラ討伐なら、ネザー・要塞・ブレイズ・パール・アイ・ストロングホールド・エンドまで全部入れる。ネザーまでなら、ネザーに入るまで。',
   '- 依頼がそれ以外なら、その依頼に要る節だけ。',
   KIND_WORDS,
@@ -242,4 +243,11 @@ export const FIRST_PLAN_SYSTEM_R9 = [
     '親が済んでも子は済みにならない: 子は自分の doneWhen（無ければ計画の更新）で済む。消費して無くなる物（板・棒・原木）は子の doneWhen にしない。' +
     '集める節（原木・丸石）の doneWhen は、集めた物で作った物との | にする（板や道具にすると数が減って戻る）: "have:log>=8|have:wooden_pickaxe"。',
   '- 順番: ブレイズロッド（7 本以上）の節はエンダーパールの節より前。「出発の点検」には金の防具 1 つ（have:gold_armor）も入れる（ネザーのピグリンは金の防具を着ていないと襲う）。',
+  // end1108a S9 (11/8): 12 eyes in the overworld, and her plan went for 10 beds, 22 obsidian, a gate and the Nether again for 2 more eyes.
+  // end1108d S9 (11/8): one eye thrown before this plan was asked (11 in hand, the other on the ground), and the plan went for 22 obsidian
+  // and a gate again: the count in hand just after a throw is one or two short of what she has.
+  '- オーバーワールドでエンダーアイを 10 個以上持っている時は、ゲート・ブレイズ・パール・アイを作る節を入れず、ストロングホールドを探す節から始める。' +
+    '理由: 2 投で交点が出て、割れるのは 1 投に約 2 割（落ちたアイは拾える。投げた直後は拾う前で 1〜2 個少なく見える）、' +
+    '枠に最初から入っているアイが平均 1.2 個あるので、12 個で足りることが多い（約 9 割）。' +
+    'ネザーへの往復は 10 分以上かかる。投げて「落ちて残る」と出たアイは拾ってから先へ進む。枠の部屋で空きを数え、足りない時だけネザーへ取りに戻る。',
 ].join('\n');

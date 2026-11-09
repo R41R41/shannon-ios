@@ -81,14 +81,27 @@ export interface EndBasinPoint extends Point {
   /** Facing projection: side 0, front 1, behind -1. */
   side: number | null;
 }
-/** A waiting cell beside the perch's facing (phases 3 to 7): 10 to 14 m from the portal's centre, clear of the head, neck, wings, breath and clouds. */
+/** A waiting cell 10 to 14 m from the portal's centre: beside the perch's facing (phases 3 to 7), or where to wait for the next sit while she flies. */
 export interface EndWaitPoint extends Point {
   walkMeters: number | null;
   walkSeconds: number | null;
   /** Facing projection: side 0, front 1, behind -1. */
   side: number | null;
+  /** While she flies and the body is far: open ground the body found on the ring, its route unchecked (go finds it); walkMeters is the straight line. */
+  straight: boolean;
+}
+/** While perched and a bed is held (the body's `approach.bed`): where to stand, what to place first, where to click the bed, both estimates. */
+export interface EndBedOffer {
+  stand: Point;
+  walkMeters: number | null;
+  foot: Point;
+  head: Point;
+  build: Array<Point & { role: 'support' | 'screen' }>;
+  selfExpected: number | null;
+  dragonExpected: number | null;
 }
 export interface EndDragonApproach {
+  bed?: EndBedOffer[];
   strike: EndStrikePoint[];
   stage: EndStagePoint[];
   retreat: Array<Point & { walkMeters: number | null }>;
@@ -211,19 +224,29 @@ function approachOf(raw: unknown): EndDragonApproach | undefined {
   }).sort((a, b) => (a.walkMeters ?? Infinity) - (b.walkMeters ?? Infinity)).slice(0, 3) : undefined;
   const wait = Array.isArray(item.wait) ? item.wait.flatMap((raw): EndWaitPoint[] => {
     const entry = rec(raw), at = point(entry);
-    return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters), walkSeconds: nonnegative(entry.walkSeconds), side: num(entry.side) }] : [];
+    return entry && at ? [{ ...at, walkMeters: nonnegative(entry.walkMeters), walkSeconds: nonnegative(entry.walkSeconds), side: num(entry.side), straight: entry.straight === true }] : [];
   }).sort((a, b) => (a.walkSeconds ?? Infinity) - (b.walkSeconds ?? Infinity)).slice(0, 3) : undefined;
-  return { strike, stage, retreat, ...(basin ? { basin } : {}), ...(wait?.length ? { wait } : {}) };
+  const bed = Array.isArray(item.bed) ? item.bed.slice(0, 2).flatMap((raw): EndBedOffer[] => {
+    const entry = rec(raw), stand = point(entry?.stand), foot = point(entry?.foot), head = point(entry?.head);
+    if (!entry || !stand || !foot || !head) return [];
+    const build = array(entry.build).slice(0, 7).flatMap(raw => {
+      const cell = rec(raw), at = point(cell), role = cell?.role === 'support' ? 'support' as const : cell?.role === 'screen' ? 'screen' as const : null;
+      return at && role ? [{ ...at, role }] : [];
+    });
+    return [{ stand, walkMeters: nonnegative(entry.walkMeters), foot, head, build, selfExpected: nonnegative(entry.selfExpected), dragonExpected: nonnegative(entry.dragonExpected) }];
+  }) : [];
+  return { strike, stage, retreat, ...(basin ? { basin } : {}), ...(wait?.length ? { wait } : {}), ...(bed.length ? { bed } : {}) };
 }
 
 /**
  * The approach as the phase allows: all of it while she sits (phases 5 to 7); in the landing and the take-off (3, 4) the waiting cells only, since a
- * stale strike, stage, retreat or basin there is not read; none otherwise.
+ * stale strike, stage, retreat or basin there is not read; while she flies (0, 1, 2, 8, 10) the waiting cells for the next sit only; none while she dies.
  */
+const FLYING_PHASES = new Set([0, 1, 2, 8, 10]);
 function approachInPhase(phase: number | null, raw: unknown): EndDragonApproach | undefined {
-  if (phase === null || phase < 3 || phase > 7) return undefined;
+  if (phase === null || (!FLYING_PHASES.has(phase) && (phase < 3 || phase > 7))) return undefined;
   const read = approachOf(raw);
-  if (phase >= 5) return read;
+  if (phase >= 5 && phase <= 7) return read;
   return read?.wait?.length ? { strike: [], stage: [], retreat: [], wait: read.wait } : undefined;
 }
 

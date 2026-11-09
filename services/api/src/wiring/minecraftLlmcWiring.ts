@@ -6,6 +6,7 @@ import {
 import { bodyHoldOf,withResend,withIncident,withStalls,withBodyPresent } from './minecraftLlmcLifecycle.js';
 import { createMinecraftJourney } from '../surfaces/minecraft/minecraftLlmcJourney.js';
 import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
+import { registerEyeLedger } from '../surfaces/minecraft/minecraftEyeThrowHold.js';
 import { withReplanInbox } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { adoptProblem, unattendedFailureStop, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
 import {
@@ -36,8 +37,8 @@ import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
-import { chestNodesDone,followBelow,followDimension,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
-import { followHeld } from '../surfaces/minecraft/minecraftLlmcHeldStreak.js';
+import { chestNodesDone,followBelow,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { followBack, followDimensionHeld, followHeld } from '../surfaces/minecraft/minecraftLlmcHeldStreak.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
 import { recordedLedger } from '../surfaces/minecraft/minecraftLedgerRows.js';
@@ -46,6 +47,7 @@ import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { driftWords,feet,headIncidentKind,incidentHoldPort,incidentOfResult,takeEnd,type Feet,type IncidentNote } from './minecraftIncidentHold.js';
 import { headTake } from './minecraftHeadTake.js';
+import { isNativeDragonGoal } from './fcaMinecraftGoalBinding.js';
 import { randomUUID } from 'node:crypto';
 import { MC_ACT_TOOL,type ActKeep } from '../contracts/minecraftActContract.js';
 import type { MadeIn } from '../contracts/continueContract.js';
@@ -67,6 +69,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const worksite = createWorksiteMemory((step.snapshot.checkpoint as { minecraftWorksite?: unknown } | null)?.minecraftWorksite);
   const journey = createMinecraftJourney((step.snapshot.checkpoint as { minecraftJourney?: unknown } | null)?.minecraftJourney);
   const endgame = createEndgame(step.snapshot.checkpoint);
+  registerEyeLedger(step.taskId, endgame.ledger);
   const waits = createWaitLedger((step.snapshot.checkpoint as { minecraftWaitDeadlines?: unknown } | null)?.minecraftWaitDeadlines);
   const savedStalls = step.snapshot.checkpoint as { minecraftStalls?: unknown; minecraftActiveWait?: unknown } | null;
   restoreStalls(step.taskId, savedStalls?.minecraftStalls);
@@ -88,7 +91,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     validateUpdate: validate,
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
-    follow: tree => followDimension(tree, doneFacts(observe())) ?? followBelow(tree, doneFacts(observe()))
+    follow: tree => followBack(step.taskId, tree, doneFacts(observe())) ?? followDimensionHeld(step.taskId, tree, doneFacts(observe()))
+      ?? followBelow(tree, doneFacts(observe()))
       ?? followHeld(step.taskId, tree, doneFacts(observe()))
       ?? followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(
       doneFacts(observe())), leaf => lackBefore(observe(), tree, leaf)) });
@@ -102,8 +106,9 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
 // own condition, a place with
   // its dimension, the pearls after the rods, the golden armour in the check (`FIRST_PLAN_SYSTEM_R9`).
   const planner = recordedPlanner({ taskId: step.taskId, stepId: step.id }, llmc.planner);
+  const journeyReadiness = isNativeDragonGoal(step.snapshot.task.goal);
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner, log, world: worldOf(),
-    r4: { world: worldOf, system: ownFirstPlanSystem(), readiness: true } });
+    r4: { world: worldOf, system: ownFirstPlanSystem(), readiness: true, journeyReadiness } });
   const display = () => plan.port.display();
   // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step
 // decides again while its items run.
@@ -426,7 +431,7 @@ queue.onRan(noteQueueResult);
       } };
   })() : null;
   const bodyParts = {
-    plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(), endgame,
+    plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(), endgame, journeyReadiness,
     returnRoute: (observation: ReturnType<typeof observe>) => [...journey.read(observation), ...worksite.read(observation)] };
   // A request that is not held on a failure still looks for its stalls and asks for a new plan (`minecraftLlmcReplanWiring.ts`).
   const unheld = unheldReplan({ held: stalls !== null, taskId: step.taskId, goal: step.snapshot.task.goal, createdAt: step.snapshot.task.createdAt,

@@ -21,6 +21,7 @@ import { createMinecraftFastJudgment } from './minecraftFastJudgment.js';
 import { createBodyRevisions,createFightOwner,fightCall } from './minecraftFightOwner.js';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { MINECRAFT_SPAWN_GRACE_MILLISECONDS } from './minecraftControl.js';
+import { safeOnceCleaned } from './minecraftControlRecovery.js';
 import { minecraftObservationSummary } from './minecraftObservationSummary.js';
 import { madeInOf,withMadeIn } from './minecraftMadeIn.js';
 import { stepMetrics } from './minecraftTaskMetrics.js';
@@ -311,6 +312,8 @@ let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitM
     void job.catch(error => { if (!monitorAbort.signal.aborted) fault = error; }).finally(() => { if (monitoring === job) monitoring = null; });
   };
   const safe = () => !unknown && control.store.safe(step.taskId, parts.openIds?.());
+  // A guard waits for a cleanup under way to give its verdict before it calls the outcome unknown (`safeOnceCleaned`).
+  const safeCleaned = async () => !unknown && await safeOnceCleaned(step.taskId, safe);
   // A body tool that changes something (not read-only), named by a gist the deciding step was shown; learning never fails a step.
   const noteGistFollowed = (name: string, input: unknown) => {
     const id = availableBody();
@@ -388,14 +391,14 @@ let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitM
     storedResult: (call, text) => storedBodyResult(call.name, text),
     async guard(version) { if (active) await active;
       if (fault) throw fault;
-      if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+      if (!await safeCleaned()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
        return revisions.current(version); },
     /** A fight she chose goes on when only reflexes touched the body since the decision (not when her own tool was
  * cut off): the fight is hers. */
     async guardFor(version, call) {
       if (active) await active;
       if (fault) throw fault;
-      if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+      if (!await safeCleaned()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
       // The LLM-centric mode: the body checks each hand of an act against the world as it is then and stops at the first that does not
       // fit, so only a cut of her own tool makes the decision stale (run 27: ten acts came back "身体の状態が変わりました" while she drowned).
       if (revisions.current(version) || (parts.llmc && call.name.startsWith('mc.') && revisions.current(version, true))) return true;
@@ -462,7 +465,7 @@ let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitM
       if (monitoring) await monitoring.catch(() => {});
         if (active) await active;
       await route;
-      if (!safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+      if (!await safeCleaned()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
     },
   };
   const definition = { name: 'minecraft.reflex', description: '現在のタスクの目的で、一人称画像を更新しながら短い身体操作を選ぶ。最新状態と結果を返し、長期計画はここで立てない。',
@@ -489,7 +492,7 @@ let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitM
     const ctx = context(bodyId, `${step.id}:reflex:${hash(call.operationId).slice(0, 16)}`, decisionFrame);
     if (active) await active;
     const receipt = await startSession({ context: ctx, limits, requiresImage: true }, 'explicit', call.signal);
-    if (!receipt || receipt.control === 'held' || !safe()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
+    if (!receipt || receipt.control === 'held' || !await safeCleaned()) throw new Error('FCA_BODY_OUTCOME_UNKNOWN');
     return toolOk(JSON.stringify(receipt));
   } };
   return { body, tools, safeToAcknowledgeStop: safe };

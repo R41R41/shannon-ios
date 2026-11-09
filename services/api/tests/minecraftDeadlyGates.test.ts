@@ -3,6 +3,7 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { blazeLack, deadlyGateHold } from '../src/surfaces/minecraft/minecraftLlmcDeadlyGates.js';
 import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { readinessOf } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { END_GATHER_MS, firstEntryLack, forgetEndGather } from '../src/surfaces/minecraft/minecraftEndGather.js';
 
 /**
  * The deadly gates in `gateHold`'s form (the coordinator's list for 11/4, item 2): a hand that goes into the blaze spawner or the End is held
@@ -21,6 +22,25 @@ describe('the blaze spawner', () => {
     const lack = blazeLack(readinessOf(frame([['cooked_beef', 2]], { health: 14, food: 12 }))!)!;
     for (const word of ['体力 14/20', '満腹度 12/18', '持ち物の食料', '盾 0/1', '未達の必須（ブレイズの湧き場に入る前に必ず）', '欠けたまま進むと']) expect(lack, word).toContain(word);
     expect(blazeLack(readinessOf(frame(READY))!)).toBeNull();
+  });
+  it('asks for less food as rods come in, never under 60 points (end1108h25: 16 meals in one camp would hold the walk back after a retreat)', () => {
+    const ready = (rods: Array<[string, number]>, beef: number) => blazeLack(readinessOf(frame([['shield', 1], ['cooked_beef', beef], ...rods]))!);
+    // A cooked beef is 20.8 points: 150 is 8 beef, 64 (4 rods) is 4, the floor of 60 is 3.
+    expect(ready([], 7)).toContain('ロッド 0/7');
+    expect(ready([], 8)).toBeNull();
+    expect(ready([['blaze_rod', 4]], 3)).toContain('ロッド 4/7');
+    expect(ready([['blaze_rod', 4]], 4)).toBeNull();
+    expect(ready([['blaze_rod', 6]], 2)).toContain('持ち物の食料');
+    expect(ready([['blaze_rod', 6]], 3)).toBeNull();
+    expect(ready([['blaze_rod', 2], ['blaze_powder', 6]], 3)).toBeNull();
+    expect(blazeLack(readinessOf(frame(READY, { health: 19.66666603088379 }))!)).toContain('体力 19.7/20（満腹度 20 なので食べずに見えない所で wait 約 2 秒で戻る）');
+    expect(blazeLack(readinessOf(frame(READY, { health: 15, food: 18 }))!)).toContain('wait 約 20 秒');
+    expect(blazeLack(readinessOf(frame(READY, { health: 15, food: 12 }))!)).toContain('体力 15/20（食べて回復を待つ）');
+  });
+  it('says to make a shield where she stands when the materials are carried (end1108h18: both shields broke, 14 minutes on other work)', () => {
+    const carrying = blazeLack(readinessOf(frame([['cooked_beef', 20], ['iron_ingot', 2], ['oak_planks', 16]]))!)!;
+    expect(carrying).toContain('盾 0/1（鉄 2・板 16 を持っている。今その場で make shield');
+    expect(blazeLack(readinessOf(frame([['cooked_beef', 20], ['iron_ingot', 1], ['oak_planks', 4]]))!)).toContain('盾 0/1（板 6 と鉄 1 で作業台で作る');
   });
   it('holds the hand that begins the fight when none is near, and says that the way of gathering is the decision\'s', () => {
     const held = deadlyGateHold(fight, frame([['cooked_beef', 20]]));
@@ -57,19 +77,40 @@ describe('the End', () => {
     for (const word of ['エンドへ入る手は送らない', '積める物（丸石・黒曜石など） 10/64', '水入りバケツ', 'ベッド', '食料', '欠けたまま進むと']) expect(held!.line, word).toContain(word);
   });
   it('counts obsidian as a block, and lets the walk go when everything is carried', () => {
-    const kit: Array<[string, number]> = [['obsidian', 64], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 12]];
+    const kit: Array<[string, number]> = [['obsidian', 64], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 16]];
     expect(deadlyGateHold(walkIn, overworld(kit))).toBeNull();
     expect(deadlyGateHold(walkIn, overworld(kit.filter(([name]) => name !== 'water_bucket')))?.line).toContain('水入りバケツ');
     expect(deadlyGateHold({ hands: [{ do: 'walk', to: { x: 1, y: 70, z: 0 } }] }, overworld([]))).toBeNull();
   });
   it('the dragon is killed with beds: fewer than 8 beds, or fewer than 8 obsidian for the fight beside the blocks to stand on, holds the walk', () => {
-    const kit: Array<[string, number]> = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 12]];
+    const kit: Array<[string, number]> = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 16]];
     expect(deadlyGateHold(walkIn, overworld(kit))).toBeNull();
     const fewBeds = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'white_bed' ? 7 : n] as [string, number])));
     expect(fewBeds?.line).toContain('ベッド（目標 10） 7/8');
     const fewObsidian = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'obsidian' ? 7 : n] as [string, number])));
     expect(fewObsidian?.line).toContain('黒曜石（エンドの戦い用');
     expect(fewObsidian?.line).toContain('7/8');
+  });
+  it('lets the fallback in once the gathering of beds has had ten minutes, with an iron sword; the bow and arrows are aims (the review of 11/5, item 8; thru-1110 11/9)', () => {
+    forgetEndGather();
+    let clock = 0;
+    const now = () => clock;
+    const fallback: Array<[string, number]> = [['cobblestone', 64], ['water_bucket', 1], ['white_bed', 6], ['cooked_beef', 12], ['bow', 1], ['arrow', 30],
+      ['iron_sword', 1]];
+    const facts = readinessOf(overworld(fallback))!;
+    expect(firstEntryLack(facts, 't', now)).toContain('残り約 10 分');
+    clock = END_GATHER_MS - 60_000;
+    expect(firstEntryLack(facts, 't', now)).toContain('残り約 1 分');
+    clock = END_GATHER_MS;
+    expect(firstEntryLack(facts, 't', now)).toBeNull();
+    // thru-1110 (11/9): no bow and no arrows do not hold it for ever.
+    expect(firstEntryLack(readinessOf(overworld(fallback.filter(([name]) => name !== 'bow' && name !== 'arrow')))!, 't', now)).toBeNull();
+    // Without the fallback's kit the clock lets nothing in, and the line says so.
+    const bare = readinessOf(overworld(fallback.filter(([name]) => name !== 'iron_sword')))!;
+    expect(firstEntryLack(bare, 't', now)).toContain('予備の手（止まり木の竜を剣・あれば弓でクリスタル）の必須もそろっていない');
+    // Through the gate: the walk is held, with the clock in its words.
+    forgetEndGather();
+    expect(deadlyGateHold(walkIn, overworld(fallback), 'g')?.line).toContain('最初に止めてから 10 分まで');
   });
 });
 
@@ -151,5 +192,22 @@ describe('the golden piece against the piglins (run59, 14:15: dead in the Nether
     expect(deadlyGateHold(trip, frame([['gold_ingot', 4]], piglin))).toBeNull();
     const cover = { hands: [{ do: 'place', at: [{ x: 1, y: 70, z: 1 }], block: 'cobblestone' }] };
     expect(deadlyGateHold(cover, frame([['gold_ingot', 4]], { dimension: 'the_nether', health: 20 }))).toBeNull();
+  });
+});
+
+describe('the blaze fight once the rods are in (S5, 11/5)', () => {
+  it('holds a fight or an attack on a blaze while the pack holds seven rods (powder and eyes counted), and says to leave', () => {
+    const fightBlaze = { hands: [{ do: 'fight', target: 'blaze', seconds: 20 }] };
+    const held = deadlyGateHold(fightBlaze, frame([['blaze_rod', 7], ['shield', 1], ['cooked_beef', 20]]));
+    expect(held).toMatchObject({ hand: 1, kind: 'rods' });
+    expect(held!.line).toContain('ブレイズロッドは足りている（ロッド換算 7/7');
+    expect(held!.line).toContain('湧き場から離れて帰りのゲートか次の節へ');
+    expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 3], ['blaze_powder', 6], ['ender_eye', 2], ['shield', 1], ['cooked_beef', 20]]))?.kind).toBe('rods');
+    // Fewer than seven: the blaze gate as before (or nothing when ready).
+    expect(deadlyGateHold(fightBlaze, frame([['blaze_rod', 6], ['shield', 1], ['cooked_beef', 20], ['iron_sword', 1]]))).toBeNull();
+    // A shot with the bow is held as well (S2, 11/5).
+    expect(deadlyGateHold({ hands: [{ do: 'shoot', target: 'blaze', item: 'bow' }] }, frame([['blaze_rod', 7]]))?.kind).toBe('rods');
+    // Other foes are not held.
+    expect(deadlyGateHold({ hands: [{ do: 'fight', target: 'wither_skeleton' }] }, frame([['blaze_rod', 7]]))).toBeNull();
   });
 });

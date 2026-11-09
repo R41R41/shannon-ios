@@ -40,6 +40,15 @@ const PICKAXE: PrepNeed = { label: '鉄以上のツルハシ', count: 1, pattern
  */
 const BUCKET: PrepNeed = { label: '水入りバケツ（空なら水源の隣で use して汲む）', count: 1, pattern: /^water_bucket$/u };
 const SHIELD: PrepNeed = { label: '盾', count: 1, pattern: /^shield$/u };
+// end1108h12 S7 (11/8): among six blazes the shield broke in 5 minutes (about 120 raises) at 5 kills and 2 rods, and the head waited out of
+// sight with no shield for the next 7 (「盾が無く湧き場へ入れない」). The spare (iron 1, already in IRON_USES) goes in before the gate; the hold
+// puts it on the arm the moment the first breaks.
+const SHIELDS_FOR_NETHER: PrepNeed = { label: '盾（予備を含め 2）', count: 2, pattern: /^shield$/u };
+// end1108h18 S7 (11/8): with the sword alone (no arrow spent) both shields broke within 10 minutes at 8 kills and 3 rods, and the blaze hands were
+// held for the 14 minutes left (「盾 0/1」, no iron or planks carried). Seven rods take about 14 kills, about four shields: two more are carried
+// as their materials (iron 2, in IRON_USES, and planks), made where the last one breaks.
+const SHIELD_IRON: PrepNeed = { label: '盾の作り直しの鉄（2）', count: 2, pattern: /^iron_ingot$/u };
+const SHIELD_PLANKS: PrepNeed = { label: '板（盾の作り直し 2 枚分と作業台、16）', count: 16, pattern: /_planks$/u };
 const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て・脚', count: 3, pattern: UPPER_ARMOUR, slots: true, worn: true };
 // The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots are a goal,
 // the rest of the gate's list is required.
@@ -79,7 +88,7 @@ const MAKE_IT = '作れない・材料が無いと見えた時は、後回しに
 
 export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food: 40, needs: [PICKAXE, BUCKET, SHIELD, ARMOUR],
   risk: 'ダイヤの層（y=-58）は溶岩と深い所の敵の中。死ねば鉄の道具と防具を失い、取りに戻れないことが多い。' + MAKE_IT };
-export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SPARE_PICKAXES, SHIELD, SWORD, ARMOUR, FOOTING, BOOTS],
+export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SPARE_PICKAXES, SHIELDS_FOR_NETHER, SHIELD_IRON, SHIELD_PLANKS, SWORD, ARMOUR, FOOTING, BOOTS],
   risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い。' + MAKE_IT };
 
 /** Owner 2026-11-04 (「ベッドと黒曜石を持っていく」): the dragon is killed with beds; 10 is the aim, 8 the least the End's gate lets in. */
@@ -101,13 +110,30 @@ const STACKABLE: PrepNeed = { label: '積める物（丸石・黒曜石など）
 // Keep them goals so missing fallback equipment cannot deadlock a bed-equipped entry (the sword was required before the Nether).
 export const END_WEAPONS: readonly PrepNeed[] = [BOW, ARROWS, { ...SWORD, label: '鉄以上の剣' }]
   .map(need => ({ ...need, goal: true }));
-export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 80,
+/**
+ * thru-1110 (11/9, meta: e04c went into the End with 4 cooked beef, 83 points, and ate to 0 in the fight): the beds' way gathers 330 food points
+ * (16 cooked beef, 20.8 each) within the gathering's ten minutes; the fallback and a return go in with 80, so food never holds the walk in for ever.
+ */
+export const END_MIN_FOOD = 80;
+export const BEFORE_END: PrepStage = { title: 'エンドに入る前', food: 330,
   needs: [STACKABLE, WATER_BUCKET, BEDS, FIGHT_OBSIDIAN, ...END_WEAPONS],
   risk: 'エンドは虚空の島で、戻る道は開いたポータルだけ。積める物・水バケツ・ベッド・食料が無いと、虚空に落ちるか竜に押されて死に、ここまでの装備と時間を失う。' + MAKE_IT };
 
 // 11/5 checked audit: recovering an End death must not require eight new beds and obsidian before reaching the dropped kit.
 // Keep the existing food minimum; 20 blocks cover the arrival platform and the existing bridge, without rebuilding a full fight kit.
-export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: BEFORE_END.food,
+/**
+ * The fallback's own entry (the pre-deploy review of 11/5, item 8: with 6 beds and no village or sheep left, the crystals-and-sword way could not pass
+ * the gate, and the gathering had no end): the blocks, the water and the food as for the beds' way, and the bow, 30 arrows and an iron sword
+ * required. The gate lets it in once the beds' gathering has had its time (`minecraftEndGather.ts`).
+ */
+/**
+ * thru-1110 (11/9, the owner: no safety nobody asked for may stop the filmed run): the bow and the 30 arrows are aims of the fallback, not its
+ * required: with fewer than 8 beds and no arrows the gate held the walk in for ever, and the run ended at the portal without a try at the dragon.
+ * After the gathering's ten minutes the blocks, the water, the food and an iron sword let her in; a bow and arrows are used when carried.
+ */
+export const BEFORE_END_FALLBACK: PrepStage = { title: 'エンドに入る前（予備の手）', food: END_MIN_FOOD,
+  needs: [STACKABLE, WATER_BUCKET, { ...SWORD, label: '鉄以上の剣' }, { ...BOW, goal: true }, { ...ARROWS, goal: true }], risk: BEFORE_END.risk };
+export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: END_MIN_FOOD,
   needs: [{ ...STACKABLE, count: 20 }, ...END_WEAPONS, { ...WATER_BUCKET, goal: true }],
   risk: 'エンドへ戻る時も、積める物と食料が無いと足場の火の玉や回復不足で死ぬ。落とした装備が残っているかは未確認。' };
 
@@ -118,14 +144,16 @@ export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: 
  */
 export const SAFETY_FIRST = '- 死なないことを速さより上に置く（鉄の装備を手に入れた後は特に。死ぬと装備と時間を失い、この通しは死んだらアウト）。'
   + '体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満（持ち物の行の耐久）のまま、深い所・ネザー・戦いへ進まない: 食べる・回復を待つ・作り直す・退くを先にする。'
-  + '溶岩の縁・落下の上・火の玉の線では、足元と両脇を確かめて 1 マスずつ。';
+  + '溶岩の縁・落下の上・火の玉の線では、足元と両脇を確かめて 1 マスずつ。'
+  // S2's blaze lab of 11/5 (raid3: health 6.1 and fullness 17 for about 1.5 minutes of sorties, health never came back): the head chooses the meal.
+  + '戦いの合間は、体力 18 未満なら見えない所で満腹 18 以上まで食べ、体力 18 以上まで待ってから出る（満腹 18 未満では体力は自然に戻らない。live の recovery の行）。';
 
 /**
  * The iron the way to the Nether takes, by its use (the whole-run audit of 11/4, order 11: the 30 had no shears, no spare sword and no spare shield,
  * and the old path's 「鉄は33まで」 cut the digging short of them): the sum is the budget, and the words say the uses.
  */
 export const IRON_USES: ReadonlyArray<readonly [string, number]> = Object.freeze([['ツルハシ', 3], ['バケツ', 3], ['盾', 1], ['兜', 5], ['胸', 8],
-  ['脚', 7], ['火打ち金', 1], ['剣', 2], ['ハサミ', 2], ['予備の剣', 2], ['予備の盾', 1]] as const);
+  ['脚', 7], ['火打ち金', 1], ['剣', 2], ['ハサミ', 2], ['予備の剣', 2], ['予備の盾', 1], ['盾の作り直し', 2]] as const);
 export const IRON_BEFORE_NETHER = IRON_USES.reduce((sum, [, count]) => sum + count, 0);
 /**
  * The owner's ruler to the Nether (the 3-hour plan of 11/3: 47 minutes, the preparation included): one number for the road's milestone, the stage
@@ -181,7 +209,7 @@ export const PREP_RULES_WORDS = [
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱・廃坑の箱・荒廃したポータル（走査の「壊れたポータル」）の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
-  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾・鉄の剣・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
+  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当てと脚（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
     + '・石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）・足場のブロック 64（丸石 128 あると橋で尽きない）・食料 40 点。'
     + '鉄のツルハシは 1 本が耐久 250 で、ネザーの岩を掘り続けると壊れて止まった（鉄はネザーに無い）。'
     + '目標: 金のブーツ（金 4 がそろう時。金の防具を 1 つも着ていないと、ネザーへ入る手は止まる）'
@@ -193,7 +221,7 @@ export const PREP_RULES_WORDS = [
   '- ベッドは用途が 2 つ: 寝る用 1 個（最初の夜の前。doneWhen have:bed>=1）と、竜戦用 10 個（最低 8。target bed×10）。村の家で見つけた分は全部取る'
     + '（竜戦用の節は寝る用の親の子にしない: 親が済むと開いた子は閉じられる）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、竜戦用はエンドの点検の前に羊毛から作る。'
     + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。ベッドは重ならず 1 個 1 マス（10 個で 10 マス）。'
-    + 'ネザーへ入る前に、ゲートの横に箱を置いて寝る用の 1〜2 個を残して預け（羊毛・弓の材料・予備の食料も）、帰りに同じゲートから出て取る（ネザーでロッドとパールの入る所を残す）。',
+    + 'ネザーへ入る前に、ゲートの横に箱を置いて寝る用の 1〜2 個を残して預け（羊毛・弓の材料・予備の食料・戦いに要らない物も。死ぬとネザーでは取りに行けない）、帰りに同じゲートから出て取る（ネザーでロッドとパールの入る所を残す）。',
   PREP_REFERENCE,
 ].join('\n');
 

@@ -16,7 +16,7 @@ const UNKNOWN: CellState = { kind: 'unknown' };
 const OPEN: CellState = { kind: 'open' };
 /** 地図の記号が空いている物（空気・敵や動物の足・足の跡）。 */
 export const isOpenSymbol = (symbol: string | undefined): boolean =>
-  symbol !== undefined && (AIRISH.has(symbol) || symbol === '@' || symbol === '!' || symbol === 'm');
+  symbol !== undefined && (AIRISH.has(symbol) || symbol === '@' || symbol === '!' || symbol === '&' || symbol === 'm');
 
 /** 上からの格子の 1 マス: 一番上のブロックの記号と、足から見たその高さ（null: 10 以上離れている）。 */
 export interface TopCell { symbol: string; diff: number | null; far: 'down' | 'up' | null }

@@ -259,7 +259,7 @@ describe('foreground conversation task adapter', () => {
 });
 
 describe('conversation FCA kernel seam', () => {
-  it('uses one normal model/stream and binds only after its source experience is stored; guest text stays outside the bridge', async () => {
+  it('uses one normal model/stream and binds only after its source experience is stored; a turn others can read keeps the bridge (owner 2026-11-09)', async () => {
     const conversations = new InMemoryConversationStore(), events: string[] = [], contexts: string[] = [];
     const model: ShannonChatModel = { mode: 'local-stub', model: 'fixture', async generate(request) {
       contexts.push(request.turnContext ?? ''); events.push('model'); return { mode: 'local-stub', model: 'fixture', reply: 'こんばんは。' };
@@ -276,8 +276,8 @@ describe('conversation FCA kernel seam', () => {
     expect(contexts[0]).toContain('[Fixture inbox]');
     events.length = 0;
     const guest = await kernel.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', message: 'こんにちは', audience: 'others' } });
-    expect(guest.status).toBe(200); expect(events).toEqual(['model']);
-    expect(contexts[1]).not.toContain('[Fixture inbox]');
+    expect(guest.status).toBe(200); expect(events).toEqual(['begin', 'model', 'commit']);
+    expect(contexts[1]).toContain('[Fixture inbox]');
     await kernel.waitForBackground('owner');
   });
   it('aborts the bound task after a model error and never calls a fallback model', async () => {

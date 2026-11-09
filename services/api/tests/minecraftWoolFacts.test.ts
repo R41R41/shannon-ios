@@ -24,4 +24,10 @@ describe('the wool line', () => {
     expect(watch.line(sheep([7, 5]), new Map([['white_wool', 3]]), 'overworld')).toContain('羊毛 white×3（前の判断から +2）');
     expect(watch.line(sheep([7, 5]), new Map([['white_wool', 3]]), 'overworld')).not.toContain('前の判断から');
   });
+  it('1107f: with no bed yet, names the colour nearest three and how many more, or that the bed can be made now', () => {
+    expect(woolLine(sheep([7, 5]), new Map([['brown_wool', 2], ['gray_wool', 1]]), 'overworld', null))
+      .toContain('羊毛 brown×2・gray×1（寝る用の 1 個まで brown あと 1）: ');
+    expect(woolLine(sheep([7, 5]), new Map([['brown_wool', 3]]), 'overworld', null)).toContain('（brown×3 で今ベッドを作れる）');
+    expect(woolLine(sheep([7, 5]), new Map([['brown_wool', 2], ['white_bed', 1]]), 'overworld', null)).not.toContain('寝る用');
+  });
 });

@@ -204,6 +204,16 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
   it('writes a stack the body did not name as just 「item」', () => {
     expect(live({ nearbyEntities: [{ id: 3, name: 'item', kind: 'passive', distance: 1, position: { x: 0, y: 0, z: 1 } }] }).near[0]).toBe('#3 item 1m (0,0,1)');
   });
+  it('1107e: says the wool colour of a sheep (or shorn) and still treats the line as a sheep', () => {
+    const wool = [{ id: 11, name: 'sheep', kind: 'passive', distance: 10, position: { x: 10, y: 0, z: 2 }, wool: 'brown' },
+      { id: 12, name: 'sheep', kind: 'passive', distance: 12, position: { x: 12, y: 0, z: 2 }, wool: 'shorn' }];
+    const near = live({ nearbyEntities: wool, ...fed }).near as string[];
+    expect(near).toContain('#11 sheep(毛 brown) 10m (10,0,2)');
+    expect(near).toContain('#12 sheep(毛なし) 12m (12,0,2)');
+    const shown = (extra: Record<string, unknown>) => rewriteLlmcLive({ plan: {}, body: { ...live({ nearbyEntities: wool, ...fed }), ...extra } }).live.body as Record<string, any>;
+    expect(shown({}).near.join('\n')).not.toContain('sheep');
+    expect(shown({ planFacts: planFacts('bed') }).near).toEqual(['#11 sheep(毛 brown) 10m (10,0,2)', '#12 sheep(毛なし) 12m (12,0,2)']);
+  });
 });
 
 describe('D3: one language, one topic in one place, a dictionary of the live fields', () => {
@@ -292,7 +302,9 @@ describe('D3: the bootstrap of a new epoch as readable lines', () => {
 
 describe('the review of 10: words restored in the hand and dictionary', () => {
   it('says in mc.act that a bed works at night or in a thunderstorm only, and the units of stopIf', () => {
-    expect(SHORT_ACT_DESCRIPTION).toContain('ベッドで寝る（夜か雷雨の時だけ。昼は寝られない');
+    // The sleep hand (S4's body of 11/5) took the bed's use: night or thunderstorm only, an enemy near refuses it.
+    expect(SHORT_ACT_DESCRIPTION).toContain('sleep [ベッド] [seconds=N]');
+    expect(SHORT_ACT_DESCRIPTION).toContain('夜か雷雨の時だけ。8m（上下 5）に敵がいると寝られない');
     expect(SHORT_ACT_DESCRIPTION).toContain('hostileWithin は敵までの m、hpBelow は体力 0〜20');
   });
   it('gives the unit of health and says which thrown items are not shown', () => {

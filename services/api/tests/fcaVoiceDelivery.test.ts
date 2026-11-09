@@ -180,13 +180,13 @@ describe('FCA voice uses existing sentence and visible-history delivery', () => 
     expect(f.db.prepare('SELECT * FROM fca_conversation_deliveries').all()).toEqual([]);
   });
 
-  it('does not bind a mismatched device, raw input, scope, thread or companion receipt', async () => {
+  it('does not bind a mismatched device, raw input, scope or thread receipt; a companion present no longer holds it (owner 2026-11-09)', async () => {
     const f = fixture(); await f.turn();
     await f.stored({}, 'other-device'); await f.stored({ userTranscript: 'different original input' });
-    await f.stored({ scopeKey: 'other-owner' }); await f.stored({ threadId: 'different-thread' }); await f.stored({ companionPresent: true });
+    await f.stored({ scopeKey: 'other-owner' }); await f.stored({ threadId: 'different-thread' });
     expect(f.runtime().conversationDelivery('owner', f.thread, 'utterance-1')?.state).toBe('staged');
     expect(f.runtime().readyTasks('owner')).toEqual([]);
-    await f.stored(); expect(f.runtime().readyTasks('owner')).toHaveLength(1);
+    await f.stored({ companionPresent: true }); expect(f.runtime().readyTasks('owner')).toHaveLength(1);
   });
 
   it('keeps an actually played interrupted prefix as history while failed-generation descendants stay stopped', async () => {

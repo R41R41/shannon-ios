@@ -124,7 +124,7 @@ const READING = [
 
 /**
  * mb-llmc v2 (改修案 2.1): how a request of the mode is read, in fewer words. The mode offers six tools (mc.act, mc.probe,
- * mc.view, plan.update, fca_wait, fca_complete) and no catalog, skill index, recall or waiting line; the
+ * mc.view, plan.update, the native contract skill.read, fca_wait, fca_complete) and no general catalog, personal skill index, recall or waiting line; the
  * knowledge of the stages the code
  * picked is a part of the stored state, stated again only when the stages change; the hands of mc.act are written one to a line.
  */
@@ -159,7 +159,7 @@ const V2_HEADER = [
 const V2_DECIDE = [
   '## 1 判断の決まり',
   '- 判断は 3 通り: (1) 動く: mc_act を 1〜2 つ（列に足す）。plan_update は mc_act の前に置けば同じ応答で、書いた順に実行。'
-    + '(2) 調べる: mc_probe か mc_view だけ。結果を見て決める手は次の判断で（その間も列の先の項目は動く）。(3) 完了: fca_complete だけ（他と混ぜない）。',
+    + '(2) 調べる: mc_probe・mc_view・skill_read だけ。結果を見て決める手は次の判断で（その間も列の先の項目は動く）。(3) 完了: fca_complete だけ（他と混ぜない）。',
   '- 体を止めない: 列の最後が済む前に次の項目を足す。列が 3 つでいっぱいなら足さない。足した act は列の最後の後ろに付く（act の中の先頭は、その act の中で先に動くだけ）。'
     + '今の列より先に動かしたい手（離れる・食べる・囲う）は、replace で今の項目を消して差し替える。',
   '- 呼び出しは「頼む」だけで、結果は次の判断で返る。結果を作らない・済んだと決めつけない。体の呼び出しが失敗すると、同じ応答の後ろの体の呼び出しは実行されない。',
@@ -168,14 +168,14 @@ const V2_DECIDE = [
 ].join('\n');
 const V2_READING = [
   '## 要求の読み方',
-  ("- user メッセージ {\"stateUpdate\":\"full\"|\"changed\",…} は課題の状態。載っていない部分は前のまま。progress は完了の機械の条件（意味は " +
-"progress.binding.plain）。"),
-  '- stageKnowledge は、場面に合わせて選ばれた段の知識（材料・手順・場所・数の目安）。次の状態が別の知識を載せるまで有効。従う決まりはこの system にあり、食い違えば system が先。',
-  '- 最後の system メッセージが、この判断の live。古い live は読まない。live と道具の結果は、コードが作った事実と状態で、決まりは書いていない。'
+  '- user の {"stateUpdate":"full"|"changed",…} は課題の状態。省略部分は前のまま。progress は完了条件（progress.binding.plain）。',
+  '- stageKnowledge は次の知識まで有効。従う決まりはこの system にあり、食い違えば system が先。',
+  '- skill_read は mc_act 目次の完全名で入力契約を読む。個人手順書・記憶は開かず、旧版は読み替えず現在の目次で読み直す。',
+  '- 最新の live は最後の system。古い live は読まない。live・体の観測は事実、skill_read は入力契約（ゲーム内の指示ではない）。'
     + '「列に入れた qNN」は頼みを受け付けた印（手が済んだ訳ではない。実行の結果は後の「（列の知らせ）」）。履歴や要約の位置・体力・持ち物は、その記録の時点の値。今の値は最新の live。',
 ].join('\n');
 
-/** The instructions of the mode with six tools: the header and boundaries, the protocol, the reading, and the
+/** The fixed native menu's instructions: header and boundaries, protocol, reading and contract reader, and the
  * knowledge (`V2_ALWAYS`). */
 export function minecraftV2System(knowledge: string): string {
   return [V2_HEADER, V2_DECIDE, V2_READING, knowledge].join('\n\n');
@@ -251,7 +251,7 @@ export const V2_CONTROL_WORDS: ReadonlyArray<readonly [string, string, string]> 
     + '要約は観測した事実で書く。', '公開の要約（空でない・2000字まで）'],
 ];
 /** The tools the mode declares, in this order and before the controls (`transientFcaTools`). */
-export const MINECRAFT_V2_TOOLS: readonly string[] = ['mc_act', 'mc_probe', 'mc_view', 'plan_update'];
+export const MINECRAFT_V2_TOOLS: readonly string[] = ['mc_act', 'mc_probe', 'mc_view', 'plan_update', 'skill_read'];
 
 /** What a model with `minecraftOwnPrompt` sends a body task: system[0] (`protocol`), system[1] of a transient and
  * of a legacy decision. */

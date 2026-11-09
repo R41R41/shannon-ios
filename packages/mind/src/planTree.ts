@@ -19,6 +19,9 @@ const isText = (value: unknown, limit: number): value is string =>
   typeof value === 'string' && value.trim().length > 0 && value.length <= limit && !value.includes('\0');
 const optionalText = (value: unknown, limit: number) => value === undefined || isText(value, limit);
 
+/** A done condition on what is held (`have:物` / `food>=点`, the Minecraft head's predicate words): the frame closes such a node, its children do not. */
+const heldCondition = (doneWhen: string | undefined): boolean => typeof doneWhen === 'string' && /(?:^|[&|])\s*(?:have:|food>=)/u.test(doneWhen);
+
 export function emptyPlanTree(): PlanTree { return { schema: PLAN_TREE_SCHEMA, revision: 0, current: null, nodes: [], promises: [] }; }
 
 /** What is wrong with a tree (its shape, its links, its bounds), or null. */
@@ -322,12 +325,17 @@ class PlanEdit {
       default: return 'op は add・split・set・move・drop・forbid・caution・lift・promise・release';
     }
   }
-  /** A parent whose children are all done is done (deepest first), unless it names an acquisition of its own (`target`): that is closed by
-   * seeing the pack hold what it names, or by an op the head has checked against the pack, never by its children. */
+  /** A parent whose children are all done is done (deepest first), unless it names an acquisition of its own (`target`) or a condition of
+   * its own (`doneWhen`): that is closed by seeing the pack (or the frame) hold what it names, or by an op the head has checked, never by its
+   * children. end1109o02 (11/9): Haiku's first plan put only 「バケツを作る」「水を汲む」 under 「鉄の道具と防具」 (doneWhen
+   * have:iron_pickaxe&have:shield&…); the two closed the parent with no iron pickaxe or armour, and the plan went on to the diamonds with a
+   * stone pickaxe (the bed's parent, food>=40&have:bed, closed with no bed the same way). Now such a parent becomes the open node, its
+   * condition still to meet. Only a condition on what is held (`have:` / `food>=`, the head's predicate words) keeps it so: a place or a
+   * dimension (`at:` / `dim:`) is reached after the children, and closes with them as before (run 33's p4 `dim:overworld`). */
   settleParents(): void {
     for (const node of orderedPlan([...this.nodes.values()]).reverse()) {
       const kids = this.children(node.id);
-      if (kids.length && kids.every(kid => kid.state === 'done') && node.state !== 'blocked' && !node.target) node.state = 'done';
+      if (kids.length && kids.every(kid => kid.state === 'done') && node.state !== 'blocked' && !node.target && !heldCondition(node.doneWhen)) node.state = 'done';
     }
   }
   /** r9: whether a node above `node` is done (a done node leaves nothing under it to do, so none of its open
@@ -337,6 +345,34 @@ class PlanEdit {
       if (this.nodes.get(up)?.state === 'done') return true;
     }
     return false;
+  }
+  /** The nearest node above a done `node` that is left open with every child done (its own condition still to meet, `settleParents`): the
+   * plan stays there before the next node in order (end1109o02: the diamonds came next while the iron's parent was still unmet). */
+  openParent(node: PlanNode): string | null {
+    if (node.state !== 'done') return null;
+    for (let up = node.parentId, guard = 0; up !== null && guard < PLAN_LIMITS.nodes; guard += 1) {
+      const parent = this.nodes.get(up);
+      if (!parent || parent.state === 'blocked' || this.doneAbove(parent)) return null;
+      if (parent.state !== 'done') return this.children(parent.id).every(kid => kid.state === 'done') ? parent.id : null;
+      up = parent.parentId;
+    }
+    return null;
+  }
+  /** end1109o04 (11/9, Haiku): the current followed her acts from 「丸石で石のツルハシ・斧・剣」 (the pickaxe made, no sword) to the food,
+   * and when the food was done the next node in order was the iron; the sword and the run's wood behind it were never the current again, and
+   * at 20 minutes she waited for the night in the village "with no weapon". So a done current goes back first to the earliest node still open
+   * before it, up to the last dimension node reached (`dim:` done): what was left behind in this dimension is resumed, nothing from before a
+   * gate (the gold boots once she is in the Nether). Null when there is none. */
+  earlierOpen(from: string): string | null {
+    const order = orderedPlan([...this.nodes.values()]);
+    const at = order.findIndex(node => node.id === from);
+    let found: string | null = null;
+    for (let index = at - 1; index >= 0; index -= 1) {
+      const node = order[index]!;
+      if (node.state === 'done' && /(?:^|[&|])\s*dim:/u.test(node.doneWhen ?? '')) break;
+      if (node.state !== 'done' && node.state !== 'blocked' && !this.children(node.id).some(kid => kid.state !== 'done') && !this.doneAbove(node)) found = node.id;
+    }
+    return found;
   }
   /** The first node not done after `from` in order (or from the start): a leaf before its parent's turn comes. */
   nextOpen(from: string | null): string | null {
@@ -381,7 +417,7 @@ function settleCurrent(edit: PlanEdit, named: string | null | undefined): string
   }
   edit.settleParents();
   const now = edit.current === null ? undefined : edit.nodes.get(edit.current);
-  if (named === undefined && (!now || now.state === 'done' || edit.doneAbove(now))) edit.current = edit.nextOpen(now ? now.id : null);
+  if (named === undefined && (!now || now.state === 'done' || edit.doneAbove(now))) edit.current = (now && (edit.openParent(now) ?? edit.earlierOpen(now.id))) ?? edit.nextOpen(now ? now.id : null);
   return null;
 }
 

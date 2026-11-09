@@ -169,7 +169,7 @@ function rewriteState(value: unknown, notes: RewriteNotes): unknown {
  */
 function nearLines(list: readonly string[], needs: NearNeeds, notes: RewriteNotes): string[] {
   const kept = dropOmits(list, notes).filter(line => {
-    const m = /^#\d+ (item \S+|\S+) ([\d.]+)m/u.exec(line);
+    const m = /^#\d+ (item \S+|[^\s(]+)(?:\([^)]*\))? ([\d.]+)m/u.exec(line); // 1107e: `sheep(毛 brown)` is a sheep
     return !m || nearWorthy(m[1]!, Number(m[2]), needs);
   });
   if (kept.length < list.length) notes.dropped.push(`near ${list.length - kept.length} 行（関係の薄い生き物・遠い物）`);

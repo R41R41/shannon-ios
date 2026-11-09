@@ -14,7 +14,7 @@ import { boundTo } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { nowLines } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { createReplanFlow, type ReplanFlow, type Replanner, type ReplanSources } from '../surfaces/minecraft/minecraftLlmcReplanFlow.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueueState.js';
-import { workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { treeQuestions, workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import type { Stall } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { stallVitals } from '../surfaces/minecraft/minecraftLlmcStallRecord.js';
 import { createStallWatch } from '../surfaces/minecraft/minecraftLlmcWatch.js';
@@ -67,10 +67,17 @@ export function doneClaimProblem(before: PlanTree, after: PlanTree, observation:
   return null;
 }
 
+/** A queued node stall is obsolete once its node is gone or done, including work closed by a done parent. */
+function resolvedNodeStall(tree: PlanTree, stall: Stall): boolean {
+  if (stall.kind !== 'node_stalled') return false;
+  const { byId, under } = treeQuestions(tree);
+  return !byId.has(stall.key) || tree.nodes.some(node => node.state === 'done' && under(stall.key, node.id));
+}
+
 function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall): ReplanSources | null {
   const tree = parts.plan.tree();
   const frame = parts.observe();
-  if (!tree.nodes.length) return null;
+  if (!tree.nodes.length || resolvedNodeStall(tree, stall)) return null;
   const node = stall.kind === 'node_stalled' ? stall.key : workingNode(parts.taskId, tree.current) ?? tree.current;
   const stalled = tree.nodes.find(item => item.id === node);
   const facts = doneFacts(frame);

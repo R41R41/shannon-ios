@@ -37,7 +37,7 @@ const quoted = (names: readonly string[]) => names.map(name => `「${name}」`).
 export function goBlocksProblem(hand: { canDig?: readonly string[]; canPlace?: readonly string[] }): string | null {
   const digs = (hand.canDig ?? []).filter(name => !DIG_WORDS.has(name) && (NO_DIG.test(name) || NO_DIG_KIND.test(name)));
   if (digs.length) {
-    return `canDig の ${quoted(digs)} は go では掘らない（鉱石・箱・かまど・ベッド・扉・黒曜石・岩盤・液体・村の物は dig の手で、自分で掘る物を決める）。道に要る岩・土・砂だけを書く`;
+    return `canDig の ${quoted(digs)} は go では掘らない（鉱石・箱・かまど・ベッド・扉・黒曜石・スポナー・岩盤・液体・村の物は dig の手で、自分で掘る物を決める）。道に要る岩・土・砂だけを書く`;
   }
   const places = (hand.canPlace ?? []).filter(name => NO_PLACE.test(name) || NO_PLACE_KIND.test(name));
   return places.length ? `canPlace の ${quoted(places)} は go では置かない（落ちる・流れる・燃える・足を取る・燃料や道具の物）。丸石・土・深層岩の丸石・ネザーラックなどの固い物を書く` : null;

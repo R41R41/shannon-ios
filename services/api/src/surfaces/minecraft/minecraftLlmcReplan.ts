@@ -63,9 +63,14 @@ export function readReplanLedger(saved: unknown): ReplanLedger {
 
 export type ReplanVerdict = { ok: true } | { ok: false; why: 'gap' | 'hour' | 'run' | 'node' };
 
-/** Whether another plan may be asked for now (`nowMs`: the task's running clock) for a stall at `node`. */
-export function replanVerdict(ledger: ReplanLedger, node: string, nowMs: number): ReplanVerdict {
+/**
+ * Whether another plan may be asked for now (`nowMs`: the task's running clock) for a stall at `node`. A death has its own ask (run62, 11/5: the
+ * new plans after three clusters of deaths were held by the gap and the hour, 「replan skipped … kind=death why=hour」 from 02:24:44): only the
+ * run's count holds it.
+ */
+export function replanVerdict(ledger: ReplanLedger, node: string, nowMs: number, kind?: string): ReplanVerdict {
   if (ledger.total >= REPLAN.perRun) return { ok: false, why: 'run' };
+  if (kind === 'death') return { ok: true };
   if ((ledger.nodes[node] ?? 0) >= REPLAN.perNode) return { ok: false, why: 'node' };
   const recent = ledger.recent.filter(at => nowMs - at < HOUR_MS);
   if (recent.length >= REPLAN.perHour) return { ok: false, why: 'hour' };

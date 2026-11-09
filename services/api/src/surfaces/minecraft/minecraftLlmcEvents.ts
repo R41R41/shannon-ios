@@ -4,7 +4,7 @@ import { createFoodTrend, type FoodTrend } from './minecraftLlmcLive.js';
 import { urgentRange } from './minecraftLlmcUrgent.js';
 import { stopFactLines } from './minecraftLlmcFacts.js';
 import { sameSpotStops } from './minecraftLlmcStalls.js';
-import { nearThreats, THREAT_SIGHT, threatLine, walledOff, type NearThreat, type ThreatSight } from './minecraftLlmcThreat.js';
+import { calmEnderman, nearThreats, THREAT_SIGHT, threatLine, walledOff, type NearThreat, type ThreatSight } from './minecraftLlmcThreat.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
 import { typedFailureAttemptsOf, typedFailureLines, type TypedFailureAttempt } from './minecraftLlmcTypedFailure.js';
 import { fillWords, shieldRushWords } from './minecraftLlmcResultWords.js';
@@ -123,7 +123,7 @@ export function urgentFacts(
   const near = open.find((item) => item.distance <= urgentRange(item, urgentMeters(item.name)));
   if (near) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}`);
   const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
-  if (health !== null && health <= LOW_HEALTH && open.some((item) => item.distance <= 16))
+  if (health !== null && health <= LOW_HEALTH && open.some((item) => item.distance <= 16 && !calmEnderman(item)))
     reasons.push(`体力 ${Math.round(health * 10) / 10} で敵が近い`);
   if (cut) reasons.push(cut);
   // r10 (H2): while a multi-hand reflex holds the body, an urgent decision is told so first; its act is sent after
@@ -141,10 +141,20 @@ export function urgentFacts(
  * at 8.7 left her standing
  * in the blaze's line, burning, and the next decision took 8 s): a stopIf on health too.
  */
+const MELEE_FOES = new Set(['magma_cube', 'wither_skeleton', 'piglin_brute', 'hoglin', 'zoglin', 'zombie', 'husk', 'drowned']);
+
 export function cutOf(text: string, bodyReflex: boolean): string | null {
   if (/急ぎ: .+ が近づいたので act を止めた/u.test(text)) return '前の act は敵が近づいて止めた';
   if (bodyReflex) return '前の act は体の反射が止めた';
-  if (/stopIf: hostileWithin/u.test(text)) return '前の act は stopIf（敵が近い）で止まった';
+  if (/stopIf: hostileWithin/u.test(text)) {
+    // end1109f19/f20: after a stop on a magma cube, Haiku re-sent the same go with accept [magma_cube] both times
+    // (the DANGER line was far away); the next step is said here, beside the stop, for a melee foe.
+    const foe = /stopIf: hostileWithin:([a-z_]+) #(\d+) ([\d.]+)m/u.exec(text);
+    if (foe && MELEE_FOES.has(foe[1]))
+      return `前の act は stopIf（${foe[1]} #${foe[2]} ${foe[3]}m）で止まった。近接敵なので accept に入れて横を通らない:`
+        + ` 「押されたら落ちる」の無い開けた所で attack target=#${foe[2]} untilDead、縁なら先に空所から離れる`;
+    return '前の act は stopIf（敵が近い）で止まった';
+  }
   return /stopIf: hpBelow/u.test(text) ? '前の act は stopIf（体力）で止まった' : null;
 }
 

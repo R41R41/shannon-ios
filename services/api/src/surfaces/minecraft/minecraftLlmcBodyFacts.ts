@@ -2,7 +2,8 @@ import { targetRequirements } from './minecraftPlanRequirements.js';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { carriedFood } from './minecraftLlmcLive.js';
-import { doneFacts, parseDoneWhen, prepUnmetFacts } from './minecraftPlanDone.js';
+import { doneFacts, parseDoneWhen, prepUnmetFacts, undergroundInOverworld } from './minecraftPlanDone.js';
+import { dayBedLine, nightChoiceLine } from './minecraftNightArms.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
 import { isDragonPlan, reachedMilestoneNames } from './minecraftLlmcRoad.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
@@ -14,6 +15,7 @@ import {
   foodFirstLine,
   foodLeads,
   fuelShortage,
+  ironSearchLine, sheepAbsentLine, foodAbsentLine,
   preparationShortage,
   readinessOf,
   recoveryLine,
@@ -22,6 +24,7 @@ import { wornItems } from './minecraftItems.js';
 import { missingNodeFact, planNowOf } from './minecraftLlmcNode.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
+import { roofedInRock } from './minecraftOreRoute.js';
 import type { Endgame } from './minecraftEndgame.js';
 
 /**
@@ -32,6 +35,8 @@ import type { Endgame } from './minecraftEndgame.js';
  * events and food trend kept across steps.
  */
 export interface LlmcBodyParts {
+  /** Original task's native dragon binding; absent keeps legacy helper inputs unchanged. */
+  journeyReadiness?: boolean;
   plan(): BodyPlanView | undefined;
   /** The plan's path as the decision reads it (its tokens count against the live state's bound). */
   planView(): object | null;
@@ -54,6 +59,8 @@ export interface JudgeParts {
 
 /** The facts' context from the plan's promises (the tree), and whether food is what she is short of (the near
  * words' own reading). */
+/** A surface errand (o06 a hunt, o08 the village's beds): at dusk it is the morning's. Cooking and crafting are done in the hole. */
+const SURFACE_ERRAND = /村|原木|動物|狩|豚|牛|羊|鶏|ニワトリ|羊毛|干し草|畑|箱|ベッド|歩く|探す|見に行く|寄る/u, INDOOR = /焼く|かまど|調理|作る|工作|鉄|石炭|ダイヤ|鉱/u;
 export function factsContext(
   llmc: LlmcBodyParts,
   observation: BodyObservation | null,
@@ -139,8 +146,12 @@ export function readinessParts(
         inventory: facts.world.inventory,
         world: facts.world,
         taskId,
+        journeyReadiness: llmc.journeyReadiness,
       }),
       fuelShortage(facts.world, facts.counts),
+      ironSearchLine(facts.world, facts.counts, facts.dimension, tree?.nodes.find(node => node.id === tree.current)),
+      sheepAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
+      foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current)),
       targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),
     ]
       .filter(Boolean)
@@ -154,9 +165,22 @@ export function readinessParts(
       ? foodFirstLine(nodes, display?.current ?? tree?.current ?? null, feetIn(facts.world), facts.dimension)
       : null;
   const first = foodRecoveryFirstStep();
+  // end1109o03: the night with no bed: the choices before the plan's now (`nightChoiceLine`); end1109o04: by day with a bed, the day is the plan's (`dayBedLine`).
+  const done = doneFacts(observation);
+  const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
+    facts.food, tree?.current ?? undefined) : null;
+  const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension) : null);
+  // end1109o06 (meta 13:10, the fifth first night lost) and o08 (the village's beds, meta 14:58): at dusk with the now an errand on the surface, it waits for the morning and the night's
+  // choice (the sealed shaft down to the iron) goes first; the plan is not changed, its now is said as the morning's.
+  const current = nodes.find(node => node.id === (display?.current ?? tree?.current));
+  const huntWaits = !!choice && !!current && SURFACE_ERRAND.test(current.title ?? '') && !INDOOR.test(current.title ?? '');
+  // end1109o10: 「朝へ回す」 alone left the night with no now; the first open node of the ore (iron, then the diamonds) is said as the night's.
+  const underNode = huntWaits ? nodes.find(node => node.state !== 'done' && node.state !== 'blocked' && node.id !== current?.id
+    && !nodes.some(kid => kid.parentId === node.id && kid.state !== 'done') && /鉄(?!ゴーレム)|ダイヤ|iron|diamond/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)) : undefined;
   const onceFacts = taskId ? (preparationFacts(taskId, tree, observation), staleNodeFacts(taskId, tree, observation)) : undefined;
   return {
-    ...(planNow ? { planNow: first ? `${first}。その後に今の節 ${planNow}` : planNow } : {}),
+    ...(planNow ? { planNow: huntWaits ? `${night}。今の節 ${planNow} は地上の用事なので朝へ回す（夜の地上は骸骨・クリーパー・ゾンビが多い。朝になったら続ける）。${underNode ? `夜の間は地下の節 [${underNode.id}] ${underNode.title} を進める（地下の暗さは昼も夜も同じ）` : '夜の間は地下で鉱石を掘る'}`
+      : [night, first].filter(Boolean).length ? `${[night, first].filter(Boolean).join('。')}。その後に今の節 ${planNow}` : planNow } : {}),
     ...(shortage ? { shortage } : {}),
     ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes), route),
     ...(planFacts ? { planFacts } : {}),

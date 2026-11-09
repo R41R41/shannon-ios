@@ -34,6 +34,21 @@ export type CleanupOutcome = 'released' | 'held' | 'nothing';
 export function forgetCleanups(): void { cleaning.clear(); }
 /** Whether a cleanup of this task is under way (a queue that closes waits for it). */
 export const cleaningNow = (taskId: string): boolean => cleaning.has(taskId);
+/**
+ * Whether the task is safe, once a cleanup under way for it has given its verdict. A queue item whose receipt is unknown leaves the
+ * queue at once and its cleanup stop is handed in; until that stop proves the release (about a second) the row is `settled_unknown`
+ * and outside the queue's open ids. A guard asked in that second declared the step FCA_BODY_OUTCOME_UNKNOWN and paused the task,
+ * though the stop proved the release a moment later (Minecraft end run e01, 2026-11-09: q131 was released by the cleanup at
+ * 20:03:00, the step was already unknown). The cleanup has its own limit, so this waits for it at most that long; a cleanup that ends
+ * in a hold leaves the row unresolved and the answer stays false.
+ */
+export async function safeOnceCleaned(taskId: string, safe: () => boolean): Promise<boolean> {
+  if (safe()) return true;
+  const running = cleaning.get(taskId);
+  if (!running) return false;
+  await running.catch(() => undefined);
+  return safe();
+}
 
 /**
  * The cleanup after a result is unknown (and when the head starts and finds commands it cannot account for): a

@@ -66,7 +66,13 @@ export function planLines(tree: PlanTree): string[] {
     out.push(nodeLine(node, tree));
     if (node.id !== here) continue;
     for (const line of [...(node.forbid ?? []).map(text => `  禁止: ${text}`), ...(node.caution ?? []).map(text => `  注意: ${text}`)]) out.push(line);
-    for (const child of order.filter(item => item.id.startsWith(`${node.id}.`))) out.push(`  ${nodeLine(child, tree)}`);
+    const descendants = new Set([node.id]);
+    for (const child of order) {
+      if (child.parentId && descendants.has(child.parentId)) {
+        descendants.add(child.id);
+        out.push(`  ${nodeLine(child, tree)}`);
+      }
+    }
   }
   const promises = tree.promises.filter(item => item.state === 'open').slice(0, 6);
   return [...out, ...promises.map(item => `約束 #${item.id}: ${item.item}×${item.count}（${item.use}）`)];

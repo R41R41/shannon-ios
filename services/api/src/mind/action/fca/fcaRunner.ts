@@ -38,6 +38,29 @@ export const FCA_REDECIDE_MAX = 3;
 /** R3-1 (2): a decision thrown away because an item ended badly is asked again in the same step after this many ms, at most this many times in a step (the step is closed after that, as before). */
 export const FCA_STALE_REASK_MS = 250;
 export const FCA_STALE_REASK_MAX = 3;
+/** What the live state says after an answer that called no tool or was cut, for the one request asked again. */
+export const FCA_ANSWER_SHAPE_NOTES: Readonly<Record<string, string>> = Object.freeze({
+  no_decision: '前の返事は道具を呼ばず、文だけで終わった（何も起きていない）。今回は文で終えず、次の一手を道具（mc_act・mc_probe・mc_view・plan_update など）で呼ぶ。',
+  truncated: '前の返事は長すぎて出力の上限で切れた（何も起きていない）。今回は考えを短くし、次の一手の道具を先に呼ぶ。',
+});
+/**
+ * end1108a S7 (Haiku, 66k input): four answers in a row ended in words with no tool call, the same request being sent again each time,
+ * and the task failed. The request asked again after such an answer says so in its live state (a transient task's turn-scoped part:
+ * the cached prefix and the stored history are unchanged). A request without a live state is returned as it is.
+ */
+export function answerShapeNoted(asked: FcaModelInput, reason: string, said?: string): FcaModelInput {
+  const fixed = FCA_ANSWER_SHAPE_NOTES[reason];
+  if (!fixed || !asked.transient) return asked;
+  const note = reason === 'no_decision' && said ? `${fixed}${saidNote(said)}` : fixed;
+  return { ...asked, transient: { ...asked.transient, lastAnswer: note } };
+}
+/**
+ * end1108b S8b (Haiku, stranded on one block over lava): the fixed note was given twice and both answers were words again. Her own
+ * words are quoted back so that the next answer acts on what she herself concluded; a dead end is turned into a look or a new plan.
+ */
+function saidNote(said: string): string {
+  return `その文：「${said.replace(/\s+/gu, ' ')}」。文に書いた考えのとおりに、その一手を道具で呼ぶ。手が無いと思うなら、mc_probe・mc_view で周りを確かめるか、plan_update で別の道に替える（待つ・誰かに頼むという文では体は動かない）。`;
+}
 /** One bounded model decision; waiting and completed segments release their inference slot in wiring. */
 export async function runFcaStep(step: TaskStep, ports: FcaStepPorts, signal: AbortSignal): Promise<TaskSnapshot> {
   // The decision records (`decisionRecords/`) keep a body task's steps: what each request, call and command is
@@ -214,7 +237,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       ...(ports.observations ? { observations: ports.observations.map(observation => observation.context()) } : {}),
       ...(ports.tools?.progress ? { progress: ports.tools.progress.context() } : {}),
       ...(ports.body ? { body: ports.body.context() } : {}), ...planInput(ports.plan),
-      ...(asked.transient !== undefined && ports.body?.transient ? { transient: ports.body.transient() } : {}) };
+      ...(asked.transient !== undefined && ports.body?.transient ? { transient: { ...ports.body.transient(),
+        ...(asked.transient?.lastAnswer !== undefined ? { lastAnswer: asked.transient.lastAnswer } : {}) } } : {}) };
     read = ports.body?.readOf?.() ?? null;
     return rebuilt;
   };
@@ -225,7 +249,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     latest = { asked, at: Date.now() };
     const thrown = () => cancel !== signal && cancel.aborted && !signal.aborted;
     return decideWithRetry(() => metrics.timed('llmMs', () => ports.model.decide(latest.asked, cancel), thrown), { signal: cancel,
-      recheck: () => checked('fresh'), delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed, failed: answeredNothing,
+      recheck: () => checked('fresh'), delay: ports.decisionRetryDelayMs, afford: ports.retryAllowed,
+      failed: verdict => { answeredNothing(); latest = { ...latest, asked: answerShapeNoted(latest.asked, verdict.reason, verdict.said) }; },
       log: line => console.warn(`${line} task=${step.taskId}`),
       refresh: async () => { latest = { asked: await freshen(latest.asked), at: Date.now() }; } });
   };

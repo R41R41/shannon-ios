@@ -1,6 +1,8 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { isDeepStrictEqual } from 'node:util';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { expandShortAct, SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA } from '../../contracts/minecraftActShortContract.js';
+import { MINECRAFT_CONTRACT_READ_SCHEMA } from '../../contracts/minecraftContractBook.js';
 import type { FcaToolDefinition } from '../../mind/action/fca/fcaPorts.js';
 import { llmcPrepare } from './minecraftLlmc.js';
 import { heldBeforeSend } from './minecraftLlmcPartial.js';
@@ -25,7 +27,7 @@ import { stageKnowledge, V2_ALWAYS } from './minecraftLlmcV2Knowledge.js';
  *   live state but a part of the stored state, `stageKnowledge`, stated again only when it changes. Same in, same out.
  * - `candidateMenuTools(core)`: the tool definitions of the mode from any list of the body's and the plan's (the
  * recorded core or the body's
- *   catalog): `mc.act` with the hands written one to a line, `mc.probe`, `mc.view`, `plan.update`, in this order
+ *   catalog): `mc.act` with the hands written one to a line, `mc.probe`, `mc.view`, `plan.update`, native contract `skill.read`, in this order
  * (`MINECRAFT_V2_TOOLS`);
  *   everything else is left out. The controls (`fca_wait`, `fca_complete`) are the model's own and come after.
  * - `candidateInput(name, input)`: a call of the model as the body's tools read it (`mc.act` hands from lines to
@@ -64,14 +66,17 @@ export const candidateStage = (live: Record<string, unknown>): string | undefine
 
 /** The mode's `mc.act` definition: the hands one to a line. */
 export function shortActDefinition(base: FcaToolDefinition): FcaToolDefinition {
-  return { ...base, description: SHORT_ACT_DESCRIPTION, nativeInputSchema: SHORT_ACT_INPUT_SCHEMA };
+  // An already-short definition may carry the current contract book's inline/index projection. Preserve its same-schema words.
+  return { ...base, description: isDeepStrictEqual(base.nativeInputSchema, SHORT_ACT_INPUT_SCHEMA) ? base.description : SHORT_ACT_DESCRIPTION,
+    nativeInputSchema: SHORT_ACT_INPUT_SCHEMA };
 }
-const MENU_ORDER = ['mc.act', 'mc.probe', 'mc.view', 'plan.update'];
-/** Whether a tool is one of the mode's four (the controls are not definitions of the catalog). */
+const MENU_ORDER = ['mc.act', 'mc.probe', 'mc.view', 'plan.update', 'skill.read'];
+/** V2 names; the runtime menu additionally requires skill.read's registered native contract source. */
 export const v2MenuTool = (tool: Pick<FcaToolDefinition, 'name'>): boolean => MENU_ORDER.includes(tool.name);
 
 export function candidateMenuTools(core: readonly FcaToolDefinition[]): FcaToolDefinition[] {
-  const ordered = MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name));
+  const ordered = MENU_ORDER.flatMap(name => core.filter(tool => tool.name === name
+    && (name !== 'skill.read' || isDeepStrictEqual(tool.nativeInputSchema, MINECRAFT_CONTRACT_READ_SCHEMA))));
   return ordered.map(tool => tool.name === MC_ACT_TOOL ? shortActDefinition(tool) : planWords(reachWords(tool)));
 }
 /**

@@ -9,7 +9,7 @@ import { bedsIn, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.j
 import { preflightAct } from '../src/surfaces/minecraft/minecraftLlmcPreflight.js';
 import { BODY_RULES } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { candidateAct } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
-import { stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { stageKnowledge, V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { planFacts } from './helpers/planTreeV2.js';
@@ -74,16 +74,16 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
   const on = seedPlan('エンドラを倒して')!;
   // Owner 2026-10-24 (after run 38): the iron helmet, chestplate and leggings worn before the diamonds; the boots are golden (`minecraftLlmcV2Fix12.test.ts`).
   it('about 30 iron, the pickaxe, the bucket, the shield and the helmet, chestplate and leggings worn', () => {
-    expect(rows(on)).toContain('p3 鉄（約30・兜・胸・脚まで）|have:iron_pickaxe&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings');
+    expect(rows(on)).toContain('p3 鉄（約35・剣・兜・胸・脚まで）|have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate&have:iron_leggings');
     expect(rows(on)).toContain('p3.3 鉄の兜・胸当て・脚を作って着る|have:iron_helmet&have:iron_chestplate&have:iron_leggings');
-    expect(rows(on).some(line => line.includes('鉄を約30個掘る（y=16前後・洞窟）'))).toBe(true);
+    expect(rows(on).some(line => line.includes('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）'))).toBe(true);
   });
   it('the beds node done by `have:bed>=1` and one or two', () => {
     expect(rows(on)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|food>=40&have:bed>=1');
     expect(rows(on).some(line => line.includes('ベッド全部'))).toBe(true);
   });
   it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
-    expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 35（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2・ハサミ 2・予備の剣 2・予備の盾 1）');
+    expect(PREP_RULES_WORDS).toContain('鉄はネザーまでに約 37（ツルハシ 3・バケツ 3・盾 1・兜 5・胸 8・脚 7・火打ち金 1・剣 2・ハサミ 2・予備の剣 2・予備の盾 1・盾の作り直し 2）');
     expect(PREP_RULES_WORDS).toContain('寝る用 1 個（最初の夜の前。doneWhen have:bed>=1）と、竜戦用 10 個（最低 8。target bed×10）');
     expect(ownFirstPlanSystem()).toContain(PREP_RULES_WORDS);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain(PREP_RULES_WORDS);
@@ -121,7 +121,7 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     expect(candidateAct({ hands: ['dig 1,0,0 rel', 'wait 30'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand', { urgent: true }).guard).toBeUndefined();
     expect(candidateAct({ hands: ['wait 5'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
-    expect(V2_ALWAYS).toContain('焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める');
+    expect(V2_STAGES.prep).toContain('焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める');
     expect(V2_ALWAYS).toContain('wait だけの act は夜・回復の待ちで他に手が無い時だけ、why に待つ対象と理由');
   });
 });

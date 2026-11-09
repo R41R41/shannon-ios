@@ -12,7 +12,7 @@ import { actToShort, expandShortAct, handToLine, lineToHand, SHORT_ACT_DESCRIPTI
 import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
 import { MinecraftControl } from '../src/surfaces/minecraft/minecraftControl.js';
 import { eventsCommandId, eventsOfReceipt, readEventsReply, storedPages } from '../src/surfaces/minecraft/minecraftControlEvents.js';
-import { forgetCleanups } from '../src/surfaces/minecraft/minecraftControlRecovery.js';
+import { forgetCleanups, safeOnceCleaned } from '../src/surfaces/minecraft/minecraftControlRecovery.js';
 import { validBodyTimes, validBodyVersion, validControlPoll, validEventsMore, validUnit } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { llmcResult, actResultText } from '../src/surfaces/minecraft/minecraftLlmc.js';
@@ -392,6 +392,34 @@ describe('an unknown result: the stop is sent at once, nothing moves the body un
     expect(f.store.state('w1')).toBe('released');
     expect(f.store.safe('t1')).toBe(true);
     expect(f.control.motorBlocked('t1')).toBeNull();
+  });
+  it('e01 S11: a guard asked while the cleanup stop is on its way waits for its verdict, not calling the step unknown', async () => {
+    const f = rig();
+    await unknownItem(f);
+    const done = f.control.cleanup({ taskId: 't1', context: f.context, lease, limitMs: 2_000 });
+    await delay(20);
+    f.poll();
+    expect(f.store.safe('t1')).toBe(false);
+    const verdict = safeOnceCleaned('t1', () => f.store.safe('t1'));
+    answerStop(f);
+    f.poll();
+    await expect(done).resolves.toBe('released');
+    await expect(verdict).resolves.toBe(true);
+    // No cleanup under way: an unresolved row is unsafe at once, as before.
+    await unknownItem(f, 'w2');
+    await expect(safeOnceCleaned('t1', () => f.store.safe('t1'))).resolves.toBe(false);
+  });
+  it('e01 S11: a cleanup that ends in a hold leaves the guard unsafe', async () => {
+    const f = rig();
+    await unknownItem(f);
+    const done = f.control.cleanup({ taskId: 't1', context: f.context, lease, limitMs: 60 });
+    const verdict = safeOnceCleaned('t1', () => f.store.safe('t1'));
+    await delay(10);
+    f.poll();
+    f.running.push(stopOf(f)[0]!.id);
+    f.poll();
+    await expect(done).resolves.toBe('held');
+    await expect(verdict).resolves.toBe(false);
   });
   it('cleanup_failed: a stop that does not prove the release in time makes the command held; no motor command goes, an observation does', async () => {
     const f = rig();

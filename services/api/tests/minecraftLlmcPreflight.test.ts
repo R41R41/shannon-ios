@@ -157,6 +157,14 @@ describe('a place the body would refuse (primitives/place.ts)', () => {
     // A block put into the cell she stands in, with no pillar before it, is held (mc-sonnet-guards: the body cannot place there).
     expect(hold([{ do: 'place', block: 'cobblestone', at: [at(0, 0, 0)] }], shaft)).toMatchObject({ code: 'own_cell', hand: 1 });
   });
+
+  it('end1109o06: after a vertical (or mine, fight, jump) the cell she stood in is not her feet any more: the cap over the hole is not held', () => {
+    const shaft = [at(0, 0, 0), at(0, 1, 0), at(0, 2, 0)];
+    for (const first of [{ do: 'vertical', dir: 'down', shape: 'shaft', toY: -2 }, { do: 'vertical', dir: 'down', shape: 'stairs', toY: -4, toward: 'north' },
+      { do: 'mine', block: 'stone', at: [at(1, 0, 0)] }, { do: 'fight', target: '#12' }, { do: 'jump' }]) {
+      expect(hold([first, { do: 'place', block: 'dirt', at: [at(0, 0, 0)] }], shaft), String(first.do)).toBeNull();
+    }
+  });
 });
 
 describe('the map as the body draws it in the surface form (the three layers are 11 wide under a 21-wide top grid)', () => {

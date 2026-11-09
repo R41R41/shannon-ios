@@ -179,7 +179,7 @@ describe('fill results are facts, never a next action', () => {
     expect(words).toHaveLength(2);
     expect(words[0]).toBe('fill: ' + status);
     for (const fact of ['置いた 14', '残り 6', '生き物に邪魔された 4', '届かない 2', '危険で飛ばした 3', 'その他 1',
-      '体力最低 11', '終了体力 12', '経過 15000 ms', '終了地点 (0,0,0)', '終了地点は安全']) expect(words[1]).toContain(fact);
+      '体力最低 11', '終了体力 12', '経過 15000 ms', '終了地点 (0,0,0)', '退避先に着き、射手に見られていない']) expect(words[1]).toContain(fact);
     expect(handFacts(line)).toEqual(words.map(word => '  事実: ' + word));
     const parsed = read(line);
     expect(parsed.lines[0]!.fill).toEqual(line.fill);
@@ -211,7 +211,7 @@ describe('fill results are facts, never a next action', () => {
       hpMin: 0, hpEnd: 0, elapsedMs: 0, safe: false });
     const words = fillWords(line).join('\n');
     for (const fact of ['置いた 0', '残り 0', '生き物に邪魔された 0', '届かない 0', '危険で飛ばした 0', 'その他 0',
-      '体力最低 0', '終了体力 0', '経過 0 ms', '終了地点の安全は未確認']) expect(words).toContain(fact);
+      '体力最低 0', '終了体力 0', '経過 0 ms', '退避先への到着と射手の視線は未確認']) expect(words).toContain(fact);
     expect(words).not.toMatch(/終了地点は安全|帰還した|退避先に着いた|全て置いた/u);
     expect(fillWords(row({ placed: NaN, hpMin: Infinity, at: cell(NaN) })).join('\n')).not.toMatch(/置いた|体力最低|終了地点 \(/u);
     const remaining = Array.from({ length: 40 }, (_, x) => cell(x, 1));
@@ -225,6 +225,38 @@ describe('fill results are facts, never a next action', () => {
       expect(words).toContain(label + ' 9');
       expect(words).toContain('置いた 14・残り 6');
     }
+  });
+
+  it.each([
+    { reached: true, seen: 2, fact: '退避先に着いたが射線が通っている（2 体）' },
+    { reached: false, seen: 2, fact: '退避先に着いていない・見ている射手 2 体' },
+    { reached: false, seen: 0, fact: '退避先に着いていない・見ている射手 0 体' },
+    { reached: true, seen: 0, fact: '退避先に着いた・見ている射手 0 体' },
+  ])('separates arrival and visibility: reached=$reached seen=$seen', ({ reached, seen, fact }) => {
+    const line = row({ reached, seen, safe: false });
+    expect(fillWords(line).join('\n')).toContain(fact);
+    const parsed = read(line);
+    expect(parsed.lines[0]!.fill).toMatchObject({ reached, seen, safe: false });
+    const text = actResultText(parsed);
+    expect(text).toContain(fact);
+    expect(llmcStoredResult(MC_ACT_TOOL, text).stored).toContain(fact);
+    const events = createLlmcEvents('fill-return');
+    events.noteFailures(JSON.stringify(result([line])), null, act());
+    expect(events.failureFacts(null).join('\n')).toContain(fact);
+    expect(text).not.toContain('終了地点は安全');
+  });
+
+  it('reads safe as arrival without a shooter, and preserves absent or invalid optional measurements', () => {
+    expect(fillWords(row({ reached: true, seen: 0, safe: true })).join('\n'))
+      .toContain('退避先に着き、射手に見られていない・見ている射手 0 体');
+    expect(read(row()).lines[0]!.fill).not.toHaveProperty('reached');
+    expect(read(row()).lines[0]!.fill).not.toHaveProperty('seen');
+    for (const seen of [undefined, -1, 0.5, NaN, Infinity]) {
+      expect(fillWords(row({ seen, safe: false })).join('\n')).toContain('退避先への到着と射手の視線は未確認');
+    }
+    const visible = fillWords(row({ seen: 2, safe: false })).join('\n');
+    expect(visible).toContain('見ている射手 2 体');
+    expect(visible).not.toContain('着いた');
   });
 
   it('preserves the existing line axes independently of fill.status', () => {

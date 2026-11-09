@@ -35,7 +35,7 @@ function fixture(options: { audited?: boolean; initiallyAlone?: boolean } = {}) 
   const answer = new Promise<void>(resolve => { release = resolve; });
   let driver!: ReturnType<typeof createTaskRuntimeWiring>;
   let currentStep: TaskStep | null = null;
-  const allowed = (id: string) => gameOnlyMinecraftTask(id, { scopeKey: 'owner', runtime: driver.runtime, audit, bound: task => store.body(task) });
+  const allowed = (id: string) => gameOnlyMinecraftTask(id, { scopeKey: 'owner', runtime: driver.runtime, audit });
   const config = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [
     { serverId: 'world', title: 'World', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
   const resource = actionResource('minebot', 'minecraft-body');
@@ -44,7 +44,7 @@ function fixture(options: { audited?: boolean; initiallyAlone?: boolean } = {}) 
       && h.store.check(lease, now())!.resources.includes(resource), pollMilliseconds: 1, cancelWaitMilliseconds: 10 });
   const readPrivate = vi.fn(() => { throw Error('PRIVATE_CANARY_MUST_NOT_BE_READ'); });
   const guard = createFcaSourceGuard({ runtime: { get: (scope: string, id: string) => driver.runtime.get(scope, id), taskSources: (scope: string, id: string) => driver.runtime.taskSources(scope, id) } as never,
-    state: { snapshot: readPrivate } as never, conversations: {} as never, ownerScope: 'owner', ownerAlone: () => alone, sourceFreeTaskAllowed: allowed });
+    state: { snapshot: readPrivate } as never, conversations: {} as never, ownerScope: 'owner', ownerAlone: () => alone, gameTaskAllowed: allowed });
   driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, scopeKey: 'owner', now, ownerAlone: () => alone, publicTaskAllowed: allowed,
     canRunTask: (runtime, id) => guard('owner', id),
     model: { async decide(input) { inputs.push(input); await answer;
@@ -126,14 +126,15 @@ describe('Minecraft and streaming share the real runtime without sharing private
     await f.driver.tick(); await delay(20);
     expect(f.inputs).toEqual([]); expect(f.handed).toEqual([]);
   });
-  it('denies sources, other scopes and child tasks, even when a canonical request exists', () => {
+  // Owner 2026-11-09: a canonical request stays public when a source or a child is added later (a filmed run with a third person).
+  it('keeps a canonical request public with later sources and children, and still denies other scopes and private content', () => {
     const f = fixture(), task = f.driver.runtime.get('owner', f.task.id)!;
     expect(f.guard.sources('owner', task, [])).toBe(true);
     expect(f.guard.content?.('owner', f.task.id, 'private text', new Date().toISOString())).toBe(false);
     expect(f.guard.sources('other', task, [])).toBe(false);
-    expect(f.guard.sources('owner', task, [{ stepId: 'private', threadId: 'private', experienceId: 'private', observedAt: new Date().toISOString(), recalledMemoryIds: [] }])).toBe(false);
+    expect(f.guard.sources('owner', task, [{ stepId: 'private', threadId: 'private', experienceId: 'private', observedAt: new Date().toISOString(), recalledMemoryIds: [] }])).toBe(true);
     f.driver.runtime.createChild('owner', f.task.id, { title: 'child', goal: 'child' }, 'child');
-    expect(f.allowed(f.task.id)).toBe(false);
+    expect(f.allowed(f.task.id)).toBe(true);
     expect(f.readPrivate).not.toHaveBeenCalled();
   });
   it('still refuses a physical command whose action lease was revoked', async () => {
@@ -142,12 +143,12 @@ describe('Minecraft and streaming share the real runtime without sharing private
     await until(() => f.driver.runtime.get('owner', f.task.id)?.phase !== 'executing');
     expect(f.handed).toEqual([]);
   });
-  it('revokes the public exception if a private source is attached while the decision waits', async () => {
+  it('keeps playing when a source is attached while the decision waits and someone else arrives', async () => {
     const f = fixture({ initiallyAlone: true }); await f.driver.tick(); await until(() => f.inputs.length === 1);
-    expect(f.addPrivateSource()).toBe(true); expect(f.allowed(f.task.id)).toBe(false);
+    expect(f.addPrivateSource()).toBe(true); expect(f.allowed(f.task.id)).toBe(true);
     f.alone(false); await f.driver.tick(); f.release();
-    await until(() => f.driver.runtime.get('owner', f.task.id)?.phase !== 'executing');
-    expect(f.handed).toEqual([]);
+    await until(() => f.handed.length === 1 && f.driver.runtime.get('owner', f.task.id)?.phase === 'ready');
+    expect(f.readPrivate).not.toHaveBeenCalled();
     expect(JSON.stringify(f.inputs)).not.toContain('PRIVATE_CANARY');
   });
   it('does not expose private tool implementations through a filtered menu', async () => {

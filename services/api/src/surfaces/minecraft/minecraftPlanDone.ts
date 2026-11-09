@@ -121,7 +121,11 @@ const MADE_INTO: ReadonlyArray<{ material: RegExp; into: RegExp; upTo: number; t
   // table, the pickaxe and the axe is used up, so it is made into once she carries both a pickaxe and an axe (or
 // an iron pickaxe, past the wood's tools);
   // a wooden pickaxe alone is not that much.
-  { material: /^(?:log|planks|stick)$/u, upTo: 24, together: [TOOL('pickaxe'), TOOL('axe')],
+  // run62 (11/5): 「原木を通しの分（計20〜24）」 `have:log>=16|have:planks>=64` was done at 4 logs by the pickaxe and the axe (upTo 24 took
+  // the log count in); the wood of the whole run is a stock. The tools' wood is up to 10 logs, 24 planks or sticks.
+  { material: /^log$/u, upTo: 10, together: [TOOL('pickaxe'), TOOL('axe')],
+    into: /^(?:shield|chest|[a-z]+_bed|(?:iron|diamond|netherite)_pickaxe)$/u },
+  { material: /^(?:planks|stick)$/u, upTo: 24, together: [TOOL('pickaxe'), TOOL('axe')],
     into: /^(?:shield|chest|[a-z]+_bed|(?:iron|diamond|netherite)_pickaxe)$/u },
   { material: /^cobblestone$/u, upTo: 8, into: /^(?:furnace|(?:stone|iron|diamond|netherite)_(?:pickaxe|axe|shovel|hoe|sword))$/u },
 ];
@@ -141,6 +145,19 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
     case 'at': return !!facts.feet && (!clause.dimension || facts.dimension === null || facts.dimension === clause.dimension)
       && Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y, facts.feet.z - clause.z) <= clause.r;
   }
+}
+/** What an item of a node's target is made into on the way to the End (a rod into powder and eyes, a pearl into an eye). */
+const MADE_ON: Readonly<Record<string, readonly string[]>> = { blaze_rod: ['blaze_powder', 'ender_eye'], blaze_powder: ['ender_eye'], ender_pearl: ['ender_eye'] };
+/**
+ * Whether a node's target is met: its count is in hand, or an alternative of its own condition that holds names a count of the same
+ * item or of what it is made into (end1108a S9, 11/8: 「ブレイズロッド7以上」 target 7 with `|have:ender_eye>=12` stayed open with 12 eyes
+ * in the overworld, and the first plan went back to the Nether). An alternative that names neither (`see:fortress`) does not meet it.
+ */
+function targetMet(target: NonNullable<PlanNode['target']>, predicate: DonePredicate | null, facts: DoneFacts): boolean {
+  if (acquired(facts.counts, target.item) >= target.count) return true;
+  const names = new Set([target.item, ...(MADE_ON[target.item] ?? [])]);
+  return !!predicate?.some(clauses => clauses.every(clause => holds(clause, facts))
+    && clauses.some(clause => clause.kind === 'have' && names.has(clause.item)));
 }
 /** The alternative with the most of its clauses holding. */
 function bestAlternative(predicate: DonePredicate, facts: DoneFacts): DoneClause[] {
@@ -176,7 +193,7 @@ export function doneStatusWords(doneWhen: string | undefined, facts: DoneFacts |
   const predicate = parseDoneWhen(doneWhen);
   if (!predicate) return '観測では確かめられない（済んだら set state=done）';
   if (!facts) return null;
-  if (target && acquired(facts.counts, target.item) < target.count) return `未: ${target.item} ${acquired(facts.counts, target.item)}/${target.count}`;
+  if (target && !targetMet(target, predicate, facts)) return `未: ${target.item} ${acquired(facts.counts, target.item)}/${target.count}`;
   if (predicateHolds(predicate, facts)) return '満たしている';
   return `未: ${bestAlternative(predicate, facts).filter(clause => !holds(clause, facts)).map(clause => clauseWords(clause, facts)).join('・')}`;
 }
@@ -236,7 +253,7 @@ export function nodesSeenDone(tree: PlanTree, facts: DoneFacts, inOrder = false)
   // Deepest first: a parent is judged after its children, so that a child its own predicate closed does not hold it open.
   for (const node of orderedPlan(tree.nodes).reverse()) {
     if (node.state === 'done' || node.state === 'blocked') continue;
-    if (node.target && acquired(facts.counts, node.target.item) < node.target.count) continue;
+    if (node.target && !targetMet(node.target, predicates.get(node.id) ?? null, facts)) continue;
     const predicate = predicates.get(node.id);
     if (!predicate || !predicateHolds(predicate, facts)) continue;
     const kids = tree.nodes.filter(child => child.parentId === node.id && open(child));
@@ -386,9 +403,17 @@ export function prepUnmetFacts(tree: PlanTree, facts: DoneFacts): OnceFactDraft[
  * `continue` for good, and the plan shows work to do under a node that is done): a node open under one that is
  * done (or seen done in this pass) is
  * not needed any more, and is closed as done with the reason in its note. Its nearest done ancestor is named.
- * Never a blocked node.
+ * Never a blocked node. With `facts`, a node closed short of its own condition says so (the pre-deploy review of 11/5, item 9: the beds 10 and
+ * the fight obsidian 12 were closed when their parent's least, 8 and 8, was met): the parent's least is the decision to go on, the node's own
+ * count is the record of what was aimed at and not reached.
  */
-export function closedUnder(tree: PlanTree, seen: readonly string[]): Array<{ id: string; by: string; note: string }> {
+/** The reason a node closed under `by` is given: short of its own condition (the aim not reached), or not needed any more. */
+function closedWhy(node: PlanNode, by: PlanNode, facts: DoneFacts | null | undefined): string {
+  const short = facts && node.doneWhen ? doneStatusWords(node.doneWhen, facts, node.target) : null;
+  const tail = by.doneWhen ? `: ${by.doneWhen}` : '';
+  return short?.startsWith('未: ') ? `目標に届かずに閉じた（${short.slice(3)}。${by.id} の最低数で先へ${tail}）` : `不要になった（${by.id} が済んだ${tail}）`;
+}
+export function closedUnder(tree: PlanTree, seen: readonly string[], facts?: DoneFacts | null): Array<{ id: string; by: string; note: string }> {
   const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const done = new Set([...tree.nodes.filter(node => node.state === 'done').map(node => node.id), ...seen]);
   const out: Array<{ id: string; by: string; note: string }> = [];
@@ -397,7 +422,7 @@ export function closedUnder(tree: PlanTree, seen: readonly string[]): Array<{ id
     let by: PlanNode | undefined;
     for (let up = byId.get(node.parentId ?? ''); up && !by; up = byId.get(up.parentId ?? '')) if (done.has(up.id)) by = up;
     if (!by) continue;
-    const why = `不要になった（${by.id} が済んだ${by.doneWhen ? `: ${by.doneWhen}` : ''}）`;
+    const why = closedWhy(node, by, facts);
     out.push({ id: node.id, by: by.id, note: (node.note ? `${why} ${node.note}` : why).slice(0, PLAN_LIMITS.text) });
   }
   return out;
@@ -414,7 +439,7 @@ export function seenDoneUpdate(tree: PlanTree, observation: BodyObservation | nu
   const seen = nodesSeenDone(tree, facts, true).slice(0, 24);
   // The preparation before the descent is not closed here (chapter 7): the head says the fact once
 // (`prepUnmetFacts`) and the model decides.
-  const under = closedUnder(tree, seen);
+  const under = closedUnder(tree, seen, facts);
   const held = nodesHeldOpen(tree, facts, true).slice(0, 6).map(item => `${item.id}←${item.open.slice(0, 4).join(',')}`);
   if (!seen.length && !under.length && !held.length) return null;
   const ops = [...seen.map(id => ({ op: 'set' as const, id, state: 'done' as const })),

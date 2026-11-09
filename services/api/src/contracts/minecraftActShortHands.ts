@@ -19,9 +19,9 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
  *   walk 225,57,63 | walk 1,2,3 4,5,6（path）[sprint] [range=2] | dig x,y,z x,y,z [tool=名] [exposeOk] [takeOk] [collect=false]
  *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物
  * [slot] | craft 物 [個数]
- *   pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false]
+ *   sleep [ベッド] [seconds=N] | pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false]
  * | use 物 [x,y,z]
- *   [face=F] [target=T]
+ *   [face=F] [target=T] [count=N]
  *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
  *   drop 物 [数] [target=#id か x,y,z]
  *   shoot 相手(#id か名前) か x,y,z [item=bow] [charge=秒] [n=本数]
@@ -112,6 +112,7 @@ function furnaceWords(hand: ActHand): Words {
   return [pos(hand.at[0]!), 'put', hand.item, String(hand.count), ...given('fuel', hand.fuel), ...given('fuelCount', hand.fuelCount)];
 }
 const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
+  bed_burst: () => null,
   fill: () => null, // Keep every group and required permission in the existing JSON fallback.
   chest: chestWords, furnace: furnaceWords,
   go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords, vertical: verticalWords,
@@ -127,6 +128,7 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   sneak: hand => hand.on !== undefined ? [hand.on ? 'on' : 'off'] : null,
   jump: hand => hand.n !== undefined ? [String(hand.n)] : [],
   eat: hand => hand.item ? [hand.item] : [],
+  sleep: hand => [...(hand.item ? [hand.item] : []), ...given('seconds', hand.seconds)],
   equip: hand => hand.item ? [hand.item, ...(hand.slot ? [hand.slot] : [])] : null,
   craft: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   pickup: hand => [...given('range', hand.range), ...given('target', hand.target)],
@@ -137,7 +139,8 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   look: hand => hand.to ? [pos(hand.to)] : hand.yaw !== undefined && hand.pitch !== undefined ? [`yaw=${hand.yaw}`, `pitch=${hand.pitch}`] : null,
   attack: attackWords,
   use: hand => hand.item && (hand.at?.length ?? 0) <= 1
-    ? [hand.item, ...(hand.at?.length ? [pos(hand.at[0]!)] : []), ...given('face', hand.face), ...given('target', hand.target)] : null,
+    ? [hand.item, ...(hand.at?.length ? [pos(hand.at[0]!)] : []), ...given('face', hand.face), ...given('target', hand.target),
+      ...given('count', hand.count)] : null,
 };
 /** `dependsOn=1,3`; an empty list (relies on no hand) is `dependsOn=none`. */
 const dependsWord = (hand: ActHand): string[] => hand.dependsOn === undefined ? [] : [`dependsOn=${hand.dependsOn.length ? hand.dependsOn.join(',') : 'none'}`];
@@ -167,8 +170,10 @@ const done = (hand: Fields) => hand as unknown as ActHand;
 const bad = (verb: string, reason: string) => ({ error: `${verb}: ${reason}` });
 const isCount = (word: string | undefined) => /^\d+$/u.test(word ?? '');
 
-/** The names of `dig=a,b` / `place=a,b` as the list a go takes. */
-const names = (value: unknown): string[] => String(value).split(',').map(name => name.trim()).filter(Boolean);
+/** The names of `dig=a,b` / `place=a,b` as the list a go takes. The list may come wrapped as `[a,b]` or with
+ * quotes (end1108a S6: Haiku wrote `canDig=[netherrack,basalt]` twice and both acts were refused unsent). */
+const names = (value: unknown): string[] => String(value).split(',').map(name => name.trim().replace(/^[[("']+|[\])"']+$/gu, '').trim())
+  .filter(Boolean);
 /** A hand's `dig=a,b` / `place=a,b` words moved to the fields the contract names. */
 function blocksOf(hand: Fields): Fields {
   // The long field names are read too (run 39 bench: `mine ... canDig=stone` was refused).
@@ -197,10 +202,18 @@ function furnaceHand({ cells, words, hand }: Read): ActHand | { error: string } 
 /** The names of vertical's fields written with `=` (a word of these in the place of the compass word is a field
  * written without it). */
 const VERTICAL_FIELDS: ReadonlySet<string> = new Set(['maxDig', 'maxPlace', 'seconds', 'range', 'dig', 'place', 'liquid', 'y']);
+/** go's fields written with `=` (end1109f13: Haiku wrote `maxDig 120 maxPlace 60` in four gos; the words were dropped unsaid and each go
+ * stopped at the default limits 40 and 24, limit_dig or limit_place, a decision each). */
+const GO_FIELDS: ReadonlySet<string> = new Set(['maxDig', 'maxPlace', 'maxDrop', 'seconds', 'range', 'dig', 'place', 'canDig', 'canPlace']);
+/** The `name=value` forms of fields written as a word and a value (「maxDig 200」); none when no such word is there. */
+const fieldForms = (words: readonly string[], fields: ReadonlySet<string>): string[] =>
+  words.flatMap((word, index) => fields.has(word) ? [`${word}=${words[index + 1] ?? '値'}`] : []);
 function attackHand({ words, hand }: Read): ActHand | { error: string } {
   if (hand.style !== undefined) return bad('attack', 'shield_rush は json {"do":"attack","style":"shield_rush",...} で書く');
-  if (!words[0]) return bad('attack', '相手が要る');
-  return done({ ...hand, target: words[0] });
+  // The knowledge writes `attack target=blaze hold=true` (as the json and shoot do); the bare word and target= are the same.
+  const target = words[0] ?? hand.target;
+  if (target === undefined || target === '') return bad('attack', '相手が要る');
+  return done({ ...hand, target });
 }
 const READERS: Record<string, Reader> = {
   fill: () => bad('fill', 'json {"do":"fill",...} で全必須欄を書く'),
@@ -226,21 +239,32 @@ const READERS: Record<string, Reader> = {
   // `vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=.. liquid=..`: the words are only the
 // way, the form and the compass word; whether they fit
   // each other is `handProblem`'s (the same refusal for a json hand).
-  vertical: ({ words, hand }) => {
-    const [dir, shape, toward, ...extra] = words;
-    if (dir !== 'down' && dir !== 'up') return bad('vertical', 'dir（down か up）が要る（vertical down stairs south y=10 dig=stone liquid=stop）');
+  vertical: ({ words, hand: read }) => {
+    // s02 (end1109) 0056・0065・0066: `vertical dir=up shape=stairs toward=west ...` (the json's names with `=`) was
+    // refused as 「dir が要る」 three times while dir=up stood in it, and the same line came back twice. The named
+    // fields mean the same as the words; a word and a field that differ are refused.
+    const { dir: dirField, shape: shapeField, toward: towardField, ...hand } = read;
+    const [dirWord, shapeWord, towardWord, ...extra] = words;
+    const clash = ([['dir', dirWord, dirField], ['shape', shapeWord, shapeField], ['toward', towardWord, towardField]] as const)
+      .find(([, word, field]) => word !== undefined && field !== undefined && word !== field);
+    if (clash) return bad('vertical', `${clash[0]} が語（${clash[1]}）と ${clash[0]}=${String(clash[2])} で食い違う（どちらか一方で書く）`);
+    const dir = dirWord ?? dirField, shape = shapeWord ?? shapeField, toward = towardWord ?? towardField;
+    if (dir !== 'down' && dir !== 'up') return bad('vertical', 'dir（down か up）が要る（vertical down stairs south y=10 dig=stone liquid=stop、または dir=down shape=stairs toward=south の形）');
     if (!shape) return bad('vertical', '形（stairs・shaft・pillar）が要る');
     if (extra.length) {
       // A field written as a word and a value (「maxDig 200」): said with its form, not read as that field (the model
 // writes the form, the head does not guess it).
-      const forms = extra.flatMap((word, index) => VERTICAL_FIELDS.has(word) ? [`${word}=${extra[index + 1] ?? '値'}`] : []);
+      const forms = fieldForms(extra, VERTICAL_FIELDS);
       return bad('vertical', `読めない語 ${extra.join(' ')}${forms.length ? `（${forms.join('・')} の形で書く。= で結ぶ）` : ''}`);
     }
     const { y, toY, ...rest } = blocksOf(hand), target = toY ?? y;
     return done({ ...rest, dir, shape, ...(toward ? { toward } : {}), ...(target !== undefined ? { toY: target } : {}) });
   },
-  go: ({ cells, hand }) => {
+  go: ({ cells, words, hand }) => {
     if (!cells.length) return bad('go', '座標が無い');
+    // A field written as a word and a value is said with its form (as vertical's), not dropped: the go would run at the default limits.
+    const forms = fieldForms(words, GO_FIELDS);
+    if (forms.length) return bad('go', `読めない語 ${words.join(' ')}（${forms.join('・')} の形で書く。= で結ぶ）`);
     const rest = blocksOf(hand);
     if (cells.length === 1) rest.to = cells[0]; else rest.goals = cells;
     return done(rest);
@@ -260,6 +284,7 @@ const READERS: Record<string, Reader> = {
   sneak: ({ words, hand }) => words[0] === 'on' || words[0] === 'off' ? done({ ...hand, on: words[0] === 'on' }) : bad('sneak', 'on か off'),
   jump: ({ words, hand }) => done(isCount(words[0]) ? { ...hand, n: Number(words[0]) } : hand),
   eat: ({ words, hand }) => done(words[0] ? { ...hand, item: words[0] } : hand),
+  sleep: ({ words, hand }) => done(words[0] ? { ...hand, item: words[0] } : hand),
   equip: ({ words, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(words[1] ? { slot: slotWordOf(words[1]) } : {}) }) : bad('equip', '物の名前が要る'),
   craft: ({ words, hand }) => words[0]
@@ -282,6 +307,7 @@ const READERS: Record<string, Reader> = {
 const FLAGS: Record<string, string> = { rel: 'rel', sprint: 'sprint', exposeOk: 'exposeOk', takeOk: 'takeOk', hold: 'hold', waterOk: 'waterOk', flee: 'flee',
   noEnter: 'noEnter' };
 const NOTE = /\s+note=("(?:[^"\\]|\\.)*")/u;
+const BARE_NOTE = /\s+note=(?!")(.*)$/su;
 
 /** `key=value` の値: true・false・数はその型、それ以外は文字。 */
 function valueOf(raw: string): unknown {
@@ -313,15 +339,20 @@ export function withSlotWord<T extends object>(hand: T): T {
 /** 1 行 → 手。読めない行は { error }。 */
 export function lineToHand(line: string): ActHand | { error: string } {
   const text = line.trim();
-  if (text.startsWith('json ')) {
-    try { return withSlotWord(JSON.parse(text.slice(5)) as ActHand); } catch { return { error: `json の行が読めない: ${text.slice(0, 40)}` }; }
+  // A bare `{...}` is the json line without its word (end1108a S7 wrote two hands so and both were refused as 知らない手).
+  if (text.startsWith('json ') || text.startsWith('{')) {
+    const body = text.startsWith('{') ? text : text.slice(5);
+    try { return withSlotWord(JSON.parse(body) as ActHand); } catch { return { error: `json の行が読めない: ${text.slice(0, 40)}` }; }
   }
   const note = NOTE.exec(text);
-  let noteText: string | undefined;
+  // end1108h7 S7: `equip iron_sword note=近い blaze を剣で打つ` without quotes gave "blaze" as the slot and the last hand was refused.
+  // A note stands at the end of the line, so an unquoted one is the rest of the line.
+  const bare = note ? null : BARE_NOTE.exec(text);
+  let noteText: string | undefined = bare ? bare[1]!.trim().slice(0, 40) : undefined;
   if (note) {
     try { noteText = JSON.parse(note[1]!) as string; } catch { return { error: `note の引用が読めない: ${text.slice(0, 40)}` }; }
   }
-  const [verb = '', ...tokens] = (note ? text.replace(NOTE, '') : text).split(/\s+/u);
+  const [verb = '', ...tokens] = (note ? text.replace(NOTE, '') : bare ? text.slice(0, bare.index) : text).split(/\s+/u);
   const reader = Object.hasOwn(READERS, verb) ? READERS[verb] : undefined;
   if (!reader) return bad(verb, '知らない手');
   const read = readTokens(tokens, verb);

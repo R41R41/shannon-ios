@@ -6,6 +6,7 @@ import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraft
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
 import type { ActInput } from '../src/contracts/minecraftActContract.js';
+import { actMilliseconds } from '../src/contracts/minecraftActTime.js';
 import { createLlmcQueue, forgetLlmcQueues, queueWakeMs, QUEUE_MAX, QUEUE_T } from '../src/surfaces/minecraft/minecraftLlmcQueue.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
@@ -84,6 +85,44 @@ const wait1 = [{ do: 'wait' as const, seconds: 1 }];
 const dig = (x: number) => [{ do: 'dig' as const, at: [{ x, y: 64, z: 0 }] }];
 
 describe('the items in their order', () => {
+  it('retains the ordinary item ceiling for hands without obsidian', async () => {
+    const f = setup();
+    expect((await f.queue.add({ ...f.spec(wait1), maxMs: 320_000 })).ok).toBe(true);
+    f.poll();
+    expect(f.handed[0]!.queue?.maxMs).toBe(180_000);
+  });
+
+  it('carries the S8 obsidian deadline through the queue and the command without the old 180 s clamp', async () => {
+    const f = setup();
+    const sources = Array.from({ length: 22 }, (_, x) => ({ x, y: 64, z: 1 }));
+    const spec = f.spec([{ do: 'obsidian', at: sources, count: 22, seconds: 300 }]);
+    const before = Date.now();
+    expect((await f.queue.add({ ...spec, maxMs: actMilliseconds(spec.input) })).ok).toBe(true);
+    f.poll();
+    const command = f.handed[0]!;
+    expect(command.queue?.maxMs).toBe(320_000);
+    expect(command.arguments).toMatchObject({ hands: [{ do: 'obsidian', at: sources, count: 22, seconds: 300 }] });
+    expect(Date.parse(command.deadlineAt)).toBeGreaterThanOrEqual(before + 325_000);
+  });
+
+  it.each([
+    { seconds: 160.0005, expectedMs: 180_000 },
+    { seconds: 200, expectedMs: 220_000 },
+    { seconds: 200.0005, expectedMs: 220_000 },
+  ])('sends an integer envelope within the obsidian bound for $seconds seconds', async ({ seconds, expectedMs }) => {
+    const f = setup();
+    const spec = f.spec([{ do: 'obsidian', at: [{ x: 1, y: 64, z: 1 }], seconds }]);
+    const maxMs = actMilliseconds(spec.input);
+    expect((await f.queue.add({ ...spec, maxMs })).ok).toBe(true);
+    f.poll();
+    const command = f.handed[0]!;
+    expect(command.queue?.maxMs).toBe(expectedMs);
+    expect(Number.isInteger(command.queue?.maxMs)).toBe(true);
+    expect(command.queue!.maxMs).toBeGreaterThanOrEqual(1_000);
+    expect(command.queue!.maxMs).toBeLessThanOrEqual(Math.min(maxMs, seconds * 1_000 + 20_000));
+    expect(command.arguments).toMatchObject({ hands: [{ do: 'obsidian', seconds }] });
+  });
+
   it('chains each item to the one before, hands them over together, and says where each stands', async () => {
     const f = setup();
     const first = await f.queue.add(f.spec(wait1)), second = await f.queue.add(f.spec(dig(1)));

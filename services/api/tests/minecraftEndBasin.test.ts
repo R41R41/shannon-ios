@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { dragonBasinLine, dragonWaitLine, endFightLines } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { dragonBasinLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { factsContext, type LlmcBodyParts } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
@@ -142,9 +142,59 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
     }
     expect(endFightLines(view(only([cell(40, 6)]), 3)).some(line => line.startsWith('待ち場の候補'))).toBe(true);
   });
+  it.each([0, 1, 2, 8, 10])('says where to wait for the next sit while she flies (phase %s), the far ones as a straight line for go', phase => {
+    const far = { ...at(52), walkMeters: 61.4, walkSeconds: 14.2, side: 0.3, straight: true };
+    expect(dragonWaitLine(view(only([far, cell(41, 2)]), phase))).toBe('待ち場の候補（次の座りを待つ所、止まり木から 10〜14m）2 件: (41,72,-11) 歩く約 2 秒 / (52,72,-11) 直線約 61m（道は go が引く）');
+    expect(endFightLines(view(only([far]), phase)).some(line => line.startsWith('待ち場の候補（次の座り'))).toBe(true);
+    expect(endFightLines(view(only([far]), phase)).some(line => line.startsWith('止まり木の位置'))).toBe(false);
+  });
+  it('tells a body standing on the perch while she flies not to wait there (her landing breath falls in the basin)', () => {
+    const near = endViewOf(frame({ ...world(only([cell(41, 2)]), 1), position: at(27) }));
+    expect(dragonWaitLine(near)).toBe('今いる (27,72,-11) は止まり木から 1m で、待ち場ではない: 着地の前の息の雲が落ちる所で、窪みから歩いて出る道が無い。ここで待たず下の候補へ go して待つ。'
+      + '待ち場の候補（次の座りを待つ所、止まり木から 10〜14m）1 件: (41,72,-11) 歩く約 2 秒');
+    expect(dragonWaitLine(endViewOf(frame({ ...world(only([cell(41, 2)]), 6), position: at(27) })))).not.toContain('ここで待たず');
+    // The urgent decision after a fireball's reflex keeps it too; away from the perch the short set has no waiting line.
+    const short = (position: object) => createEndgame(null).lines(frame({ ...world(only([cell(41, 2)]), 1), position }), true).short.join('\n');
+    expect(short(at(27))).toContain('ここで待たず下の候補へ go して待つ。待ち場の候補');
+    expect(short(at(12))).not.toContain('待ち場の候補');
+  });
+  it('says the shooting places cannot be used without a bow or arrows, and keeps them when that is unknown', () => {
+    const without = endFightLines(view(), null, false).join('\n');
+    expect(without).toContain('クリスタルの射点: 弓か矢が無いので射点は使わない');
+    expect(without).toContain('今登れる（竜は止まり木）');
+    expect(without).not.toMatch(/撃てる位置|同じ射点/u);
+    expect(endFightLines(view()).join('\n')).toContain('同じ射点: (13,72,-11) から 2 基');
+    expect(endFightLines(view(), null, true).join('\n')).toContain('撃てる位置 (13,72,-11)');
+  });
+  it('says from her phase and distance whether to climb a pillar now, with the nearest uncaged crystal (e04e: 250 s waiting at 26-56 m)', () => {
+    const crystal = (id: number, x: number, caged: boolean, distance: number) => ({ id, position: at(x, 100), caged, distance });
+    const flying = (phase: number, distance: number | null) => {
+      const base = world(approach(), phase);
+      return endViewOf(frame({ ...base, position: at(12, 64), dragon: { ...base.dragon, perched: false, distance },
+        crystals: { ...base.crystals, list: [crystal(14, 40, true, 20), crystal(15, 50, false, 38)] } }));
+    };
+    const line = (phase: number, distance: number | null) => noBowLine(flying(phase, distance));
+    expect(line(0, 32)).toContain('今登れる（竜は phase 0 で自分から 32m、30m 以上');
+    expect(line(0, 32)).toContain('檻なしで竜から遠く低い #15 (50,100,-11) 自分から 38m の柱の脇へ行き vertical pillar up で上端の 1〜2 段下まで（約 34 段）');
+    expect(line(0, null)).toContain('今登れる（竜が見えない');
+    expect(line(0, 20)).toContain('まだ登らない（竜が自分から 20m、30m 未満）: #15 (50,100,-11) 自分から 38m の柱の根へ寄り');
+    for (const phase of [1, 8]) expect(line(phase, 50)).toContain(`今は登らない（竜は`);
+    expect(line(6, 10)).toContain('今登れる（竜は止まり木）');
+    // Uncaged and away from her first, then the least climb: #17 is low but beside her, #16 is lower than #15.
+    const base = world(approach(), 0);
+    const choose = endViewOf(frame({ ...base, position: at(12, 64), dragon: { ...base.dragon, perched: false, distance: 40, position: at(80, 90) },
+      crystals: { ...base.crystals, list: [crystal(14, 40, true, 20), crystal(15, 50, false, 38), { ...crystal(16, -20, false, 32), position: at(-20, 80) },
+        { ...crystal(17, 85, false, 73), position: at(85, 70) }] } }));
+    expect(noBowLine(choose)).toContain('#16 (-20,80,-11) 自分から 32m');
+  });
+  it('keeps only the waiting cells of a full approach sent while she flies', () => {
+    const end = view({ ...approach(), wait: [cell(41, 2)] }, 8);
+    expect(end?.dragon?.approach).toEqual({ strike: [], stage: [], retreat: [], wait: [{ ...cell(41, 2), straight: false }] });
+    expect(dragonBasinLine(end)).toBeNull();
+  });
   it('says nothing without the field, outside the phases, or with an empty or malformed list', () => {
     expect(dragonWaitLine(view(only(undefined), 3))).toBeNull();
-    expect(dragonWaitLine(view(only([cell(40, 6)]), 2))).toBeNull();
+    expect(dragonWaitLine(view(only([cell(40, 6)]), 9))).toBeNull();
     expect(dragonWaitLine(view(only([]), 3))).toBeNull();
     expect(dragonWaitLine(view(only([{ x: 'a', y: 1, z: 2 }]), 3))).toBeNull();
   });

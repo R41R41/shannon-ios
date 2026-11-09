@@ -37,6 +37,19 @@ const record = (at: number, node = 'p1') => ({ at, node, kind: 'node_stalled', o
 const stall = (kind: Stall['kind'] = 'node_stalled', key = 'p1'): Stall => ({ kind, key, why: `節 ${key} が 130 秒、進みが無い` });
 const tree = (): PlanTree => planFromSeeds([{ title: '木', kind: 'wood', doneWhen: 'have:log>=3' }, { title: '石', kind: 'stone_tools', doneWhen: 'have:stone_pickaxe' }])!;
 
+it('shows replanned descendants by parent links, including generated ids, without taking a different branch by id prefix', () => {
+  const original = tree();
+  const replanned: PlanTree = { ...original, current: 'p1', nodes: [...original.nodes,
+    { id: 'n1', parentId: 'p1', order: 0, title: '原木4本', kind: 'wood', state: 'continue' },
+    { id: 'n2', parentId: 'n1', order: 0, title: '届く幹へ', kind: 'wood', state: 'continue' },
+    { id: 'p1.unrelated', parentId: 'p2', order: 0, title: '別の枝の仕事', kind: 'other', state: 'continue' },
+  ] };
+  const brief = planLines(replanned).join('\n');
+  expect(brief).toContain('n1 [wood] 原木4本');
+  expect(brief).toContain('n2 [wood] 届く幹へ');
+  expect(brief).not.toContain('p1.unrelated');
+});
+
 describe('the bounds of the plan made again', () => {
   it('lets one through at first, then waits 5 minutes, allows 6 in an hour, 30 in a run and 3 for one node', () => {
     expect(replanVerdict(empty, 'p1', 0)).toEqual({ ok: true });
@@ -192,6 +205,15 @@ describe('the brief', () => {
     expect(nowLines(null)).toEqual(['体の観測が取れていない']);
     expect(nowLines(frame({ dimension: 'minecraft:the_nether', position: { x: 1.5, y: 70, z: -3.2 }, health: 18, food: 12, inventory: [{ name: 'stone_sword', count: 1 }] }))[0])
       .toContain('場所: the_nether (1,70,-4)・体力 18/20・満腹 12/20');
+  });
+});
+
+describe('a death has its own ask (run62, 11/5)', () => {
+  it('lets a death through the gap, the hour and the node, and not past the run', () => {
+    const busy = { v: 1 as const, total: 5, recent: [0, 60_000, 120_000, 180_000, 240_000, 300_000], nodes: { p3: 3 }, last: [] };
+    expect(replanVerdict(busy, 'p3', 310_000)).toMatchObject({ ok: false });
+    expect(replanVerdict(busy, 'p3', 310_000, 'death')).toEqual({ ok: true });
+    expect(replanVerdict({ ...busy, total: REPLAN.perRun }, 'p3', 310_000, 'death')).toEqual({ ok: false, why: 'run' });
   });
 });
 

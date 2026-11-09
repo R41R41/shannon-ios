@@ -35,10 +35,13 @@ export function woolLine(world: Record<string, unknown>, counts: ReadonlyMap<str
   const wool = woolOf(counts), total = wool.reduce((sum, [, count]) => sum + count, 0);
   const nearest = sheep[0]!, others = sheep.length > 1 ? ` ほか ${sheep.length - 1} 頭` : '';
   const change = before !== null && total !== before ? `（前の判断から ${total > before ? '+' : ''}${total - before}）` : '';
+  // 1107f: "bed 0/10" with brown×2 in hand read as far from done; one more brown sheep made the first bed. The colour nearest three is named.
+  const best = [...wool].sort((a, b) => b[1] - a[1])[0];
+  const first = beds === 0 && best ? (best[1] >= 3 ? `（${best[0]}×${best[1]} で今ベッドを作れる）` : `（寝る用の 1 個まで ${best[0]} あと ${3 - best[1]}）`) : '';
   const carriedWool = wool.length ? wool.map(([colour, count]) => `${colour}×${count}`).join('・') : 'なし';
   const shears = carried(counts, 'shears') > 0 ? 'ハサミ 有り'
     : `ハサミ 無し（鉄 ${SHEARS_IRON} で作れる。鉄は ${carried(counts, 'iron_ingot')} 個）`;
-  return `羊${nearest.id !== null ? ` #${nearest.id}` : ''} ${one(nearest.distance)}m${others}・ベッド ${beds}/${BED_TARGET}・羊毛 ${carriedWool}${change}: `
+  return `羊${nearest.id !== null ? ` #${nearest.id}` : ''} ${one(nearest.distance)}m${others}・ベッド ${beds}/${BED_TARGET}・羊毛 ${carriedWool}${change}${first}: `
     + `羊毛はハサミで刈ると 1 頭 1〜3 個（羊は残り、毛はまた生える）、殺すと 1 個。${shears}。刈る手は use item=shears target=#id（体のラボでは未確認。`
     + '刈れたかはこの行の羊毛の数で見る）、落ちた羊毛は pickup。ベッド 1 個は同じ色の羊毛 3＋板 3';
 }

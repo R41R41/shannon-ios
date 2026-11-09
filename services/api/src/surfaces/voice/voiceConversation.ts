@@ -170,7 +170,7 @@ export class VoiceConversation implements ConversationModality<ApiResponse> {
     // ADR-0013: a call with anyone else is the call's scene, never the owner's; a platform's channel is keyed as its typed turns.
     this.feelingTurn = feelingVoice.start(deps.feeling, { scopeKey, alone: this.alone, guest: this.temporaryGuest, threadId: this.threadId, transcript,
       at: this.occurredAt, snapshot: this.routingState, ...(seat ? { platform: seat.speaker ? { speaker: seat.speaker } : {} } : {}) });
-    this.fca = !this.temporaryGuest && this.alone && !seat ? deps.fcaVoice?.() ?? null : null;
+    this.fca = !this.temporaryGuest && !seat ? deps.fcaVoice?.() ?? null : null; // Owner 2026-11-09: also when others are there.
     this.fcaInput = confirmedFcaVoiceInput(scopeKey, this.threadId, deps.deviceId, this.utterance, transcript);
     return voiceFcaDuplicate(this.fca, this.fcaInput);
   }

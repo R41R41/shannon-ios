@@ -2,6 +2,7 @@ import { handDependsProblem } from './continueContract.js';
 import { shieldRushProblem } from './minecraftShieldRushContract.js';
 import { denActProblem, denProblem } from './minecraftEnderDenContract.js';
 import { fillProblem } from './minecraftFillContract.js';
+import { bedBurstActProblem, bedBurstProblem } from './minecraftBedBurstContract.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
@@ -16,9 +17,10 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   go: { needs: [['to', 'goals']], may: ['range', 'canDig', 'canPlace', 'maxDrop', 'waterOk', 'seconds', 'maxDig', 'maxPlace', 'sprint'] },
   dig: { needs: [['at']], may: ['tool', 'collect', 'exposeOk', 'takeOk'] },
   place: { needs: [['at'], ['block']], may: ['face'] },
+  bed_burst: { needs: [['at'], ['target'], ['count'], ['seconds']], may: [] },
   fill: { needs: [['groups'], ['block'], ['retreatHp'], ['retreatTo'], ['seconds']], may: [] },
   pillarUp: { needs: [['n']], may: ['block'] },
-  use: { needs: [['item']], may: ['at', 'face', 'target'] },
+  use: { needs: [['item']], may: ['at', 'face', 'target', 'count'] },
   look: { needs: [['to', 'yaw']], may: ['pitch'] },
   jump: { needs: [], may: ['n'] },
   sneak: { needs: [['on']], may: [] },
@@ -32,6 +34,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   drop: { needs: [['items']], may: ['target', 'at'] },
   pickup: { needs: [], may: ['target', 'range'] },
   wait: { needs: [['seconds']], may: [] },
+  sleep: { needs: [], may: ['item', 'seconds'] },
   obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace', 'maxDig'] },
   fight: { needs: [['target']], may: ['den', 'stance', 'item', 'retreatHp', 'range', 'seconds'] },
   mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig'] },
@@ -79,18 +82,25 @@ export function handProblem(hand: ActHand): string | null {
   const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
   const extra = Object.keys(hand).filter(key => !allowed.has(key));
   if (extra.length) return `${extra.join('・')} は使えない（${hand.do} の欄: ${handFieldNames(hand.do).join('・')}）`;
-  const missing = fields.needs.find(group => !group.some(key => (hand as unknown as Record<string, unknown>)[key] !== undefined));
-  if (missing) return `${missing.join(' か ')} が要る${missingFix(hand.do, missing.join(' か '))}`;
+  const missing = fields.needs.filter(group => !group.some(key => (hand as unknown as Record<string, unknown>)[key] !== undefined));
+  if (missing.length && hand.do === 'vertical') return verticalMissingProblem(hand, missing.map(group => group.join(' か ')));
+  if (missing.length) return `${missing[0]!.join(' か ')} が要る${missingFix(hand.do, missing[0]!.join(' か '))}`;
   if (ONE_AT.has(hand.do) && hand.at && hand.at.length !== 1) return 'at は 1 つ';
   return KIND_CHECKS[hand.do]?.(hand) ?? null;
 }
 const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> = {
+  dig: hand => hand.at!.length > 16 ? 'at は 16 マスまで' : null,
+  place: hand => hand.at!.length > 16 ? 'at は 16 マスまで' : null,
+  bed_burst: bedBurstProblem,
+  use: useProblem,
   furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : null,
   chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : null,
   wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
   attack: attackProblem,
   go: goProblem,
-  obsidian: hand => seconds(hand, 5, 120) ?? (hand.at!.length > 8 ? 'at は溶岩の源のマス 8 つまで' : null) ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
+  sleep: hand => seconds(hand, 10, 60) ?? (hand.item !== undefined && !/^[a-z_]+_bed$/u.test(hand.item) ? 'item はベッド（〜_bed）' : null),
+  obsidian: hand => seconds(hand, 5, 300) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源のマス 1〜24 マス' : null)
+    ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
   fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
     ?? denProblem(hand as unknown as Record<string, unknown>),
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
@@ -130,7 +140,8 @@ export function shieldRushHandProblem(hand: ActHand): string | null {
 }
 
 /** The structured hands' act checks (a rush's, a fill's), the first problem or null. */
-export const structuredActProblem = (input: unknown): string | null => fillActProblem(input) ?? shieldRushActProblem(input) ?? denActProblem(input);
+export const structuredActProblem = (input: unknown): string | null =>
+  fillActProblem(input) ?? shieldRushActProblem(input) ?? denActProblem(input) ?? bedBurstActProblem(input);
 
 /** A rush act names exactly the blaze audience; neither this check nor preparation repairs accept. */
 export function shieldRushActProblem(input: unknown): string | null {
@@ -151,6 +162,11 @@ export function shieldRushActProblem(input: unknown): string | null {
 
 function attackProblem(hand: ActHand): string | null {
   return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null);
+}
+/** S6 (body claude/dragon-pearls14): batch barters use count; keep one call within one stack of 64 gold ingots. */
+function useProblem(hand: ActHand): string | null {
+  if (hand.count === undefined) return null;
+  return Number.isInteger(hand.count) && hand.count >= 1 && hand.count <= 64 ? null : 'count は 1〜64 の整数';
 }
 /** A hand's `seconds` within a kind's own range. */
 const seconds = (hand: ActHand, least: number, most: number): string | null =>
@@ -174,18 +190,25 @@ const oneOf = (list: readonly string[], value: unknown): boolean => typeof value
  * `rel` is not taken: `toY` is the feet's own y.
  */
 function verticalProblem(hand: ActHand): string | null {
-  const direction = verticalDirectionProblem(hand);
-  if (direction) return direction;
-  const facing = verticalFacingProblem(hand);
-  if (facing) return facing;
-  if (!oneOf(VERTICAL_LIQUIDS, hand.liquid)) return `liquid は ${VERTICAL_LIQUIDS.join('・')}（liquid=${VERTICAL_LIQUIDS.join('|')} のどれかを書く）`;
-  if (!Number.isInteger(hand.toY) || hand.toY! < -64 || hand.toY! > 320) return 'toY は -64〜320 の整数';
-  const materials = verticalMaterialProblem(hand);
-  if (materials) return materials;
-  const limit = verticalLimitProblem(hand);
-  if (limit) return limit;
-  if (hand.range !== undefined && !(Number.isInteger(hand.range) && hand.range >= 1 && hand.range <= 2)) return 'range は 1 か 2';
-  return seconds(hand, VERTICAL_SECONDS_RANGE[0], VERTICAL_SECONDS_RANGE[1]) ?? names(hand);
+  return verticalProblems(hand).join('。') || null;
+}
+/**
+ * Every rule a vertical breaks, over the fields it has (a missing one is said by `verticalMissingProblem`).
+ * Replay of s02 end1109 0057: told only the first rule, 2 of 5 answers mended it and came back with range=8,
+ * the next rule; the model mends what the refusal names, so the refusal names all of them.
+ */
+function verticalProblems(hand: ActHand): string[] {
+  const out: Array<string | null> = [];
+  const hasWay = hand.dir !== undefined && hand.shape !== undefined;
+  if (hand.rel !== undefined || hasWay) out.push(verticalDirectionProblem(hand));
+  if (oneOf(VERTICAL_SHAPES, hand.shape)) out.push(verticalFacingProblem(hand));
+  if (hand.liquid !== undefined && !oneOf(VERTICAL_LIQUIDS, hand.liquid)) out.push(`liquid は ${VERTICAL_LIQUIDS.join('・')}（liquid=${VERTICAL_LIQUIDS.join('|')} のどれかを書く）`);
+  if (hand.toY !== undefined && (!Number.isInteger(hand.toY) || hand.toY < -64 || hand.toY > 320)) out.push('toY は -64〜320 の整数');
+  if (hand.canDig !== undefined) out.push(verticalMaterialProblem(hand));
+  out.push(verticalLimitProblem(hand));
+  if (hand.range !== undefined && !(Number.isInteger(hand.range) && hand.range >= 1 && hand.range <= 2)) out.push('range は 1 か 2（書かなければ既定）');
+  out.push(seconds(hand, VERTICAL_SECONDS_RANGE[0], VERTICAL_SECONDS_RANGE[1]), names(hand));
+  return [...new Set(out.filter((problem): problem is string => Boolean(problem)))];
 }
 /**
  * vertical's `maxDig` and `maxPlace` against their top (the defaults are the tops: 200 and 100, amendment A-1
@@ -224,9 +247,19 @@ function verticalDirectionProblem(hand: ActHand): string | null {
   if (hand.rel !== undefined) return 'rel は使えない（toY は足の y そのもの）';
   if (!oneOf(VERTICAL_DIRS, hand.dir)) return 'dir は down か up';
   if (!oneOf(VERTICAL_SHAPES, hand.shape)) return 'shape は stairs・shaft・pillar';
-  if (hand.shape === 'shaft' && hand.dir !== 'down') return 'shaft は down だけ（上るなら pillar か stairs）';
+  if (hand.shape === 'shaft' && hand.dir !== 'down') return 'shaft は down だけ（上るなら pillar か、stairs と toward=north|east|south|west）';
   if (hand.shape === 'pillar' && hand.dir !== 'up') return 'pillar は up だけ（下りるなら shaft か stairs）';
   return null;
+}
+
+/**
+ * A vertical that lacks fields says all of them in one refusal, with what is wrong in the way and form it has
+ * (s02 end1109 0057→0058→0060: liquid, then 「shaft は down だけ」, then toward came one refusal at a time and the
+ * model mended one each time).
+ */
+function verticalMissingProblem(hand: ActHand, missing: readonly string[]): string {
+  const fix = missing.includes('liquid') ? missingFix('vertical', 'liquid') : '';
+  return [`${missing.join('・')} が要る${fix}`, ...verticalProblems(hand)].join('。');
 }
 
 function verticalFacingProblem(hand: ActHand): string | null {

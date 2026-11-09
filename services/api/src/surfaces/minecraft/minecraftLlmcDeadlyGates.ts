@@ -4,8 +4,9 @@ import { wornItems } from './minecraftItems.js';
 import { searchTravel } from './minecraftLlmcGoldTravel.js';
 import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
-import { BEFORE_END, RETURN_TO_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
+import { RETURN_TO_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
 import { returningToEnd } from './minecraftEndEntry.js';
+import { firstEntryLack } from './minecraftEndGather.js';
 import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
@@ -13,8 +14,10 @@ import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from '
  * goes in is held, as the portal hand is, while what the place needs is missing, and the line names what is missing and what going on costs. How
  * to gather it is the decision's. Two places:
  * - the blaze spawner (the Nether): a fight or an attack on a blaze when none is within 16 m (the hand that begins it), and a go or a walk that ends
- *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, 150 food points carried, a shield (S2's loads carried one).
- * - the End: a walk that ends in an end portal cell (`e`), using `BEFORE_END` for a first entry and `RETURN_TO_END` for a return.
+ *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, the food points the rods still need
+ *   carried (150 at 0 rods, less as rods come in, never under 60: `blazeLacks`), a shield (S2's loads carried one; made where she stands from iron and planks).
+ * - the End: a walk that ends in an end portal cell (`e`): `BEFORE_END` for a first entry, or the fallback's kit after the beds' gathering has had its
+ *   time (`minecraftEndGather.ts`), and `RETURN_TO_END` for a return.
  * The body's own version (S2's) is not read: the frame has no field for it.
  */
 export interface DeadlyHold { hand: number; kind: string; line: string }
@@ -22,6 +25,7 @@ const BLAZE_RISK = 'ブレイズの火の玉と炎の傷が重なる。体力・
 const AGAIN = 'そろえてからもう一度出す（理由を書いても省けない。どう取るかは自分で決める）';
 const OTHER_STAGE = 'ブレイズの段が進められない間は、先にパールなど他の段の節へ今の節を移して進めてよい'
   + '（plan.update の current。飛ばした節は順のまま残る）';
+const STAY_STAGE = '足りないのはその場で戻る体力・満腹度だけなので、今の節はブレイズのまま変えない（パールなど他の段へ移らない）。戻ったら湧き場へ';
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 type Facts = NonNullable<ReturnType<typeof readinessOf>>;
 type Cell = { x: number; y: number; z: number };
@@ -35,25 +39,62 @@ const liveLines = (world: Record<string, unknown>): string[] => [world.threats, 
 const blazesWithin = (world: Record<string, unknown>, meters: number): number => liveLines(world)
   .filter(line => Number(/^#\d+ blaze ([\d.]+)m/u.exec(line)?.[1] ?? Infinity) <= meters).length;
 
-/** What the blaze spawner needs and the body does not have, in words (each with the way it is usually made up), or null. */
-export function blazeLack(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'counts'>): string | null {
-  const shields = [...facts.counts].reduce((sum, [name, count]) => sum + (name === 'shield' ? count : 0), 0);
-  const lacks = [facts.health !== null && facts.health < 20 ? `体力 ${facts.health}/20（食べて回復を待つ）` : '',
+/** The food of the spawner: 150 points for the 20 kills that bring 7 rods, less as rods come in, never under the meals of one more retreat. */
+const BLAZE_FOOD = 150, BLAZE_FOOD_FLOOR = 60, RODS_FOR_EYES = 7;
+
+/**
+ * What the blaze spawner needs and the body does not have, in words (each with the way it is usually made up), split by how long it takes:
+ * `quick` is made up where she stands within about a minute (health by a wait or a meal, hunger by a meal, from food carried, a shield from iron
+ * and planks carried); `lasting` asks for work elsewhere (the food points the rods still need, a shield without its materials). end1109f02 (11/9): a wither skeleton took health to 11.6 with 24 beef and a
+ * shield carried, the plan was put on the pearls as if the gate were shut, and it stayed there with health 20 and 1 rod for the rest of the run.
+ */
+export function blazeLacks(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'counts'>): { quick: string[]; lasting: string[] } {
+  const carried = (pattern: RegExp): number => [...facts.counts].reduce((sum, [name, count]) => sum + (pattern.test(name) ? count : 0), 0);
+  const shields = carried(/^(?:minecraft:)?shield$/u), iron = carried(/^(?:minecraft:)?iron_ingot$/u), planks = carried(/_planks$/u);
+  // end1108h25 S7 (11/8): 16 meals in one camp, most for the gate's health 20 and hunger 18. The runs carry far less than the rig's 24 beef
+  // (run48 arrived with 39.6 points), so with 150 asked whatever the rods, a retreat at 4 rods could not walk back for the food of rods already in.
+  const rods = carried(/^(?:minecraft:)?blaze_rod$/u) + (carried(/^(?:minecraft:)?blaze_powder$/u) + carried(/^(?:minecraft:)?ender_eye$/u)) / 2;
+  const foodNeed = Math.max(BLAZE_FOOD_FLOOR, Math.round(BLAZE_FOOD * Math.max(0, RODS_FOR_EYES - rods) / RODS_FOR_EYES));
+  const health = facts.health === null ? null : Math.round(facts.health * 10) / 10;
+  // end1108h18 (11/8): both shields broke at the spawner and the head turned to other work for 14 minutes; with the materials carried the
+  // line says to make one where she stands (the body places a carried crafting table).
+  // end1109f03 (11/9): the shield broke at the spawner with iron 2 and planks 16 carried; a shield counted as work elsewhere moved the plan off
+  // the rods and she walked back toward the portal. A shield she can make from what she carries is made where she stands: quick, not lasting.
+  const shieldHere = iron >= 1 && planks >= 6;
+  const shieldWords = shieldHere
+    ? `盾 0/1（鉄 ${iron}・板 ${planks} を持っている。今その場で make shield。作業台を持っていれば体が置く。作ったら湧き場へ戻る）`
+    : '盾 0/1（板 6 と鉄 1 で作業台で作る。作れない時は missing の行を読んで材料を取る）';
+  // The rig of 11/8: of the gate's holds most were health 19.5-19.9 (17:48 batch: 4 of 13). At hunger 18 or more the body heals by itself, about
+  // 1 point in 4 s (at 20 a meal cannot be eaten), so the words name the wait instead of a meal.
+  const healthWords = health === null ? '' : facts.hunger !== null && facts.hunger >= 18
+    ? `体力 ${health}/20（満腹度 ${facts.hunger} なので食べずに見えない所で wait 約 ${Math.max(2, Math.ceil((20 - health) * 4))} 秒で戻る）`
+    : `体力 ${health}/20（食べて回復を待つ）`;
+  const quick = [health !== null && health < 20 ? healthWords : '',
     facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18（食べる）` : '',
-    facts.food < 150 ? `持ち物の食料 ${foodPointsWords(facts.food, 150)}（焼く・狩る・拾う）` : '',
-    shields < 1 ? '盾 0/1（板 6 と鉄 1 で作業台で作る。作れない時は missing の行を読んで材料を取る）' : ''].filter(Boolean);
+    shields < 1 && shieldHere ? shieldWords : ''].filter(Boolean);
+  const lasting = [facts.food < foodNeed ? `持ち物の食料 ${foodPointsWords(facts.food, foodNeed)}（ロッド ${Math.floor(rods)}/7 の残りの分。焼く・狩る・拾う）` : '',
+    shields < 1 && !shieldHere ? shieldWords : ''].filter(Boolean);
+  return { quick, lasting };
+}
+
+/** What the blaze spawner needs and the body does not have, in words, or null (`blazeLacks`, both kinds). */
+export function blazeLack(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'counts'>): string | null {
+  const { quick, lasting } = blazeLacks(facts), lacks = [...quick, ...lasting];
   const head = '未達の必須（ブレイズの湧き場に入る前に必ず）';
   return lacks.length ? `${head}— ${lacks.join('・')}。欠けたまま進むと: ${BLAZE_RISK}` : null;
 }
+
+/** Whether the blaze gate is shut by something that asks for work elsewhere (`blazeLacks`' `lasting`), so the plan may go on to other work. */
+export const blazeShutLong = (facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'counts'>): boolean => blazeLacks(facts).lasting.length > 0;
 
 const cellOf = (value: unknown): Cell | null => {
   const at = objectOf(value);
   return at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) } : null;
 };
 
-/** Whether a hand is a fight or an attack on a blaze (named, or the id of a blaze of the live lists). */
+/** Whether a hand is a fight, an attack or a shot on a blaze (named, or the id of a blaze of the live lists). */
 function onBlaze(hand: Record<string, unknown>, world: Record<string, unknown>): boolean {
-  if (hand.do !== 'fight' && hand.do !== 'attack') return false;
+  if (hand.do !== 'fight' && hand.do !== 'attack' && hand.do !== 'shoot') return false;
   const target = typeof hand.target === 'string' ? hand.target : '';
   const id = /^#(\d+)$/u.exec(target)?.[1];
   return /blaze/u.test(target) || (id !== undefined && liveLines(world).some(line => line.startsWith(`#${id} blaze `)));
@@ -94,6 +135,26 @@ function blazeEntryHand(input: unknown, facts: Facts): number {
   const fresh = blazesWithin(facts.world, 16) === 0;
   const fight = fresh ? hands.findIndex(raw => onBlaze(objectOf(raw) ?? {}, facts.world)) : -1;
   return fight >= 0 ? fight : nearSpawnerHand(hands, facts.world);
+}
+
+/** The rods the run needs; a powder is half a rod and an eye holds one powder. */
+const RODS_NEEDED = 7;
+/**
+ * The blaze fight once the rods are in (S5's rig of 11/5, 8a3c4fd2: with 7 rods and 14 pearls at the spawner the decision probed the camp, fought
+ * three times and held attacks until health 1, and died at 86 s; two earlier runs from the same start went to the gate): a fight or an attack on
+ * a blaze, and a go or a walk up to a spawner, are held while the pack holds the rods (rods, powder and eyes counted as rods).
+ */
+function rodsDoneHold(input: unknown, facts: Facts): DeadlyHold | null {
+  const hands = (input as { hands?: unknown } | null)?.hands;
+  const count = (name: string) => facts.counts.get(name) ?? 0;
+  const rods = count('blaze_rod') + (count('blaze_powder') + count('ender_eye')) / 2;
+  if (!Array.isArray(hands) || rods < RODS_NEEDED) return null;
+  const fight = hands.findIndex(raw => onBlaze(objectOf(raw) ?? {}, facts.world));
+  const at = fight >= 0 ? fight : nearSpawnerHand(hands, facts.world);
+  if (at < 0) return null;
+  const line = `ブレイズロッドは足りている（ロッド換算 ${Math.floor(rods)}/${RODS_NEEDED}。粉 2 で 1 本、アイ 1 個に粉 1）。ブレイズと戦う手・湧き場へ寄る手は送らない: `
+    + '湧き場から離れて帰りのゲートか次の節へ（傷が深ければ、見えない所で食べてから）';
+  return { hand: at + 1, kind: 'rods', line };
 }
 
 const LOW_HEALTH = 8;
@@ -170,17 +231,21 @@ function goldFirstHold(input: unknown, facts: Facts): DeadlyHold | null {
 export function deadlyGateHold(input: unknown, frame: BodyObservation | null, taskId?: string): DeadlyHold | null {
   const facts = readinessOf(frame);
   if (!facts) return null;
-  const endTable = returningToEnd(facts.world, facts.dimension, taskId) ? RETURN_TO_END : BEFORE_END;
+  const returning = returningToEnd(facts.world, facts.dimension, taskId);
   const weak = lowHealthHold(input, facts) ?? goldFirstHold(input, facts);
   if (weak) return weak;
   if (facts.dimension === 'the_nether') {
+    const done = rodsDoneHold(input, facts);
+    if (done) return done;
     const at = blazeEntryHand(input, facts), lack = at >= 0 ? blazeLack(facts) : null;
-    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${OTHER_STAGE}` } : null;
+    // end1109f02: with only health or hunger short the stage is not stopped; the words keep the node where it is.
+    const next = lack && blazeShutLong(facts) ? OTHER_STAGE : STAY_STAGE;
+    return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${next}` } : null;
   }
   const goldGate = facts.dimension === 'overworld' ? goldAtPortalHold(input, frame, facts) : null;
   if (goldGate) return goldGate;
   const at = facts.dimension === 'overworld' ? portalCellHand(input, frame, 'e') : -1;
-  const lack = at >= 0 ? lackOfTable(facts, endTable) : null;
+  const lack = at < 0 ? null : returning ? lackOfTable(facts, RETURN_TO_END) : firstEntryLack(facts, taskId);
   return lack ? { hand: at + 1, kind: 'walk', line: `エンドへ入る手は送らない。${lack}。${AGAIN}` } : null;
 }
 

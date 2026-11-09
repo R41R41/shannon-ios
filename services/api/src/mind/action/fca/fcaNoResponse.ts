@@ -33,7 +33,12 @@ export const FCA_NO_RESPONSE_RETRY_DELAY = () => 2_000 + Math.floor(Math.random(
  */
 export class FcaNoDecisionError extends Error {
   readonly beforeResponse = false;
-  constructor() {
+  /**
+   * `said`: her own words of that answer (its text blocks, the end kept when long), for the request asked again only
+   * (end1108b S8b: stranded on one block over lava, Haiku answered in words four times and the fixed note did not turn it).
+   * Never logged by the adapter.
+   */
+  constructor(readonly said = '') {
     super('FCA_MODEL_DECISION_MISSING');
     this.name = 'FcaNoDecisionError';
   }

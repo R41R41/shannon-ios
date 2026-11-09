@@ -27,6 +27,28 @@ export type { FcaBodyRecoveryParts, FcaBodyRecovery } from './fcaBodyRecoveryTyp
  */
 export * from './fcaBodyRecoveryPolicy.js';
 
+/** A Minecraft request: the owner's research or generic task bound to a body. The rigs judge their requests by this too. */
+export function isMinecraftBodyTask(task: Pick<TaskRecord, 'id' | 'origin' | 'kind'>, bound: (taskId: string) => string | null): boolean {
+  return task.origin === 'owner_request' && (task.kind === 'research' || task.kind === 'generic') && bound(task.id) !== null;
+}
+
+/**
+ * The rigs' recovery (`scripts/minecraft-rig.ts`, `minecraft-fullrun.ts`): only which task is a Minecraft request, so that an
+ * unavailable decision goes on through the same rounds as in production (end1108b S7/S8b: the rig had none, and two word-only
+ * answers failed the request after one round where production goes on). Nothing is recovered, held or blocked.
+ */
+export function bodyTaskOnlyRecovery(bound: (taskId: string) => string | null): FcaBodyRecovery {
+  return {
+    isBodyTask: task => isMinecraftBodyTask(task, bound),
+    holds: () => false,
+    blocks: () => false,
+    expire: () => undefined,
+    advance: async () => undefined,
+    idle: async () => undefined,
+    retained: () => ({ releasing: 0, told: 0, awaiting: 0, exhausted: 0, unannounced: 0 }),
+  };
+}
+
 export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecovery {
   const { db, authority, runtime, scopeKey } = parts;
   const windowMs = parts.windowMs ?? FCA_BODY_RETURN_WINDOW_MS, limit = parts.limit ?? FCA_BODY_RECOVERY_LIMIT;
@@ -46,8 +68,7 @@ export function createFcaBodyRecovery(parts: FcaBodyRecoveryParts): FcaBodyRecov
   let lost: LostFcaStep[] = [];
   let working: Promise<void> | null = null, lastPass = Number.NEGATIVE_INFINITY;
 
-  const isBodyTask = (task: Pick<TaskRecord, 'id' | 'origin' | 'kind'>) => task.origin === 'owner_request'
-    && (task.kind === 'research' || task.kind === 'generic') && parts.body.bound(task.id) !== null;
+  const isBodyTask = (task: Pick<TaskRecord, 'id' | 'origin' | 'kind'>) => isMinecraftBodyTask(task, parts.body.bound);
   const isBodyTaskId = (taskId: string) => {
     const task = authority.get(scopeKey, taskId);
     return !!task && isBodyTask(task);

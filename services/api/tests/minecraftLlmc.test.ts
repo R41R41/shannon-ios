@@ -156,6 +156,22 @@ describe('the mode\'s tools', () => {
     expect(own.signal.aborted).toBe(false);
     own.stop();
   });
+
+  it('the act own fight target coming near does not cut it; another kind still does (end1109p02)', async () => {
+    let threats: unknown[] = [{ name: 'enderman', id: 424, distance: 14 }];
+    const observe = () => frame({ nearbyThreats: threats });
+    const byKind = urgentWatch({ hands: [{ do: 'fight', target: 'enderman' }] }, observe, new AbortController().signal, 5);
+    const byId = urgentWatch({ hands: [{ do: 'fight', target: '#424' }] }, observe, new AbortController().signal, 5);
+    threats = [{ name: 'enderman', id: 424, distance: 2 }];
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(byKind.signal.aborted).toBe(false);
+    expect(byId.signal.aborted).toBe(false);
+    threats = [{ name: 'enderman', id: 424, distance: 2 }, { name: 'piglin', id: 7, distance: 3 }];
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(byKind.signal.aborted).toBe(true);
+    expect(byKind.reason()).toBe('piglin 3.0m');
+    byKind.stop(); byId.stop();
+  });
 });
 
 describe('the live state (design 2.2, 2.6): the map first, at most 3,000 tokens', () => {

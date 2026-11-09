@@ -5,6 +5,12 @@
 - 切り替え: **無い**（2026-10-24 に撤去。下の「13 回目」）。当時は `SHANNON_MINECRAFT_LLMC_V2` と、その前提の `SHANNON_MINECRAFT_OWN_PROMPT`・`SHANNON_MINECRAFT_LLMC_PROBE`・`SHANNON_MINECRAFT_ACT_PREFLIGHT`・`SHANNON_MINECRAFT_LLM_CENTRIC` で切り替えていた。
 - 体の側の直し（目印・持ち物・biome・undefined）は Shannon の `codex/shannon/mb-llmc-cand`。頭と体の分担は r4-contract.md の「2026-10-23 03:50 頭（mb-llmc-cand）」。
 
+## Minecraftのモデル固定（2026-11-05、未反映候補）
+
+`SHANNON_MINECRAFT_LLMC_STRICT_MODEL=on`では、`SHANNON_MINECRAFT_LLMC_MODEL`にHaikuまたはSonnetの完全なIDを明示する。`PLAN_MODEL`は未指定なら同じモデルを使い、明示するなら主判断と一致させる。`ESCALATE_MODEL`は未指定または`none`のみ。初期計画・再計画・重要な節の判断・制約違反時の再判断・履歴要約も同じモデルに固定し、送信直前にもモデルを照合する。設定の不一致や必要な鍵の不足では起動を止め、一般FCAや旧経路計画へ戻さない。
+
+検証は`claude-haiku-5-5`、実走は`claude-sonnet-5-5`を指定する。strictを指定しない一般FCAの既定とMinecraftの従来設定は維持する。未送信のモデル拒否は課金なしと区別し、実際に送信した要求の既知の費用・不明な費用の上限・停止時の扱いは変えない。この変更は費用とモデル選択の制御であり、討伐の進歩は区間ラボや実走で別に確かめる。
+
 ## 食料源の効率比較（2026-10-31、未反映候補）
 
 Raiの指示により、`minecraftFoodAcquisition.ts`の食料手順を作戦とprep知識で共有する。移動・捕獲・回収・調理の手間と危険、食料点と入手見込み数を比較し、手持ちの加工・到達できる陸上動物・確認した村/干し草/畑/箱を優先する。魚は岸や浅瀬から短く安全に確保できる場合の補助。潜水・長い追跡・新たな掘削を要する魚は主食の目標にしない。短い試行で食料が増えず、経路/回収の条件が改善しない時は射程や秒数の延長だけをせず、候補と探索方向を変える。知らない村や安全な帰路を存在するものとして扱わない。

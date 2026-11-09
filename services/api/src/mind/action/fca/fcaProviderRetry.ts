@@ -62,10 +62,16 @@ export class FcaDecisionUnavailableError extends Error {
 }
 
 /** `attempts`: the requests this kind of failure is asked for, the first included (absent: the policy's `maxAttempts`). */
-export interface RetryVerdict { reason: string; possiblyBilled: boolean; retryAfterMs: number | null; attempts?: number }
-/** An answer that called no tool is asked again once: a second one that is the same is not luck (it goes on as an
- * unavailable decision). */
-const NO_DECISION_ATTEMPTS = 2;
+/** `said`: the words of an answer that called no tool, for the note of the request asked again (`answerShapeNoted`). */
+export interface RetryVerdict { reason: string; possiblyBilled: boolean; retryAfterMs: number | null; attempts?: number; said?: string }
+/**
+ * An answer that called no tool is asked again twice, each time with its words quoted back: a third one that is the same is not
+ * luck (it goes on as an unavailable decision). end1108b S7/S8b: only one of the two requests of a round carried the note, and
+ * both rounds ended in words.
+ */
+const NO_DECISION_ATTEMPTS = 3;
+/** An answer cut at the output ceiling is asked again once. */
+const TRUNCATED_ATTEMPTS = 2;
 
 /** Whether a failed attempt may be asked again, and why (a closed reason for the log). */
 export function retryVerdict(error: unknown): RetryVerdict | null {
@@ -73,7 +79,15 @@ export function retryVerdict(error: unknown): RetryVerdict | null {
     return retryableStatus(error.status) ? { reason: `http_${error.status}`, possiblyBilled: false, retryAfterMs: error.retryAfterMs } : null;
   }
   if (error instanceof FcaNoResponseError) return { reason: error.reason, possiblyBilled: error.possiblyBilled, retryAfterMs: null };
-  if (error instanceof FcaNoDecisionError) return { reason: 'no_decision', possiblyBilled: false, retryAfterMs: null, attempts: NO_DECISION_ATTEMPTS };
+  if (error instanceof FcaNoDecisionError) {
+    return { reason: 'no_decision', possiblyBilled: false, retryAfterMs: null, attempts: NO_DECISION_ATTEMPTS, ...(error.said ? { said: error.said } : {}) };
+  }
+  // An answer cut at the output ceiling carried no complete tool call, so nothing was executed (end1108a S8b: one
+  // cut Haiku answer paused the whole task as fca_unknown at 411 s). It was charged, so it counts against the
+  // charged bound, and it is asked once more; a second cut ends the decision as an unavailable one.
+  if (error instanceof Error && error.message === 'FCA_MODEL_TRUNCATED') {
+    return { reason: 'truncated', possiblyBilled: true, retryAfterMs: null, attempts: TRUNCATED_ATTEMPTS };
+  }
   return null;
 }
 

@@ -207,7 +207,7 @@ const WATCH = /^#(\d+) (\S+) ([\d.]+)m \((-?\d+),(-?\d+),(-?\d+)\)/u;
 /** The hostile the first of `lines` says (the urgent ones first, then those that see her within 16 m), or null. */
 export function watchedHostile(urgent: readonly string[] | undefined, threats: readonly string[] | undefined): Watched | null {
   const first = urgent?.find(item => WATCH.test(item));
-  const line = first ?? threats?.find(item => WATCH.test(item) && item.includes('見える（射線の中）') && Number(WATCH.exec(item)![3]) <= 16);
+  const line = first ?? threats?.find(item => WATCH.test(item) && item.includes('見える（射線の中）') && !item.includes('怒っていない') && Number(WATCH.exec(item)![3]) <= 16);
   const m = line ? WATCH.exec(line) : null;
   return m ? { id: m[1]!, name: m[2]!, meters: Number(m[3]), at: { x: +m[4]!, y: +m[5]!, z: +m[6]! } } : null;
 }

@@ -87,8 +87,8 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   // 11/4 (the dragon is killed with beds): the check takes beds 8 (aim 10) and obsidian 8 (aim 12) on top of the old four beds,
   // about +300 s (obsidian 12 at 9.4 s each with the diamond pickaxe about 110 s, the wool of about 5 more beds 120-200 s; estimates):
   // the stretches after it move by the same.
-  { name: 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 80 点）', short: '点検', seconds: 7_800,
-    doneWhen: 'food>=80&have:bed>=8&have:obsidian>=8&have:water_bucket', late: true, journal: 'end_preparation' },
+  { name: 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 330 点）', short: '点検', seconds: 7_800,
+    doneWhen: 'food>=330&have:bed>=8&have:obsidian>=8&have:water_bucket', late: true, journal: 'end_preparation' },
   { name: 'ポータルの枠の部屋', short: '枠の部屋', seconds: 8_600, doneWhen: 'see:end_portal_frame', late: true, journal: 'end_portal_room' },
   { name: 'エンド', seconds: 9_000, doneWhen: 'dim:the_end', late: true, journal: 'the_end' },
   // The kill ends the task: the frame says no more than the End's own count, so this one is never reached here, only said as the next target.
@@ -154,7 +154,10 @@ const doneInPlan = (tree: PlanTree, item: Milestone): boolean => tree.nodes.some
   if (item.node?.(node)) return true;
   // A dimension in an alternative (「have:obsidian>=10|dim:the_nether」) is not what the node being done says: only
 // a node that names it alone counts.
-  return text.split(/[|&]/u).some(part => covers(part, clause)) && (!clause.startsWith('dim:') || !text.includes('|'));
+  // end1108a S9 (11/8): 「|have:ender_eye>=12」 closes the gate's nodes in the overworld; the eyes are made from the Nether's rods, so that
+  // alternative does not make the dimension a mere alternative.
+  const alternatives = text.split('|').filter(alt => !/^have:ender_eye>=\d+$/u.test(alt));
+  return text.split(/[|&]/u).some(part => covers(part, clause)) && (!clause.startsWith('dim:') || alternatives.length <= 1);
 });
 /**
  * Whether a clause of a node says the milestone's: the same clause, or the same item at a count as high or higher (the section audit of 11/5: the

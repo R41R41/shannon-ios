@@ -180,7 +180,9 @@ describe('the hands that take a range: obsidian, fight, mine, make, portal, smel
     expect(ok({ do: 'obsidian', at: [cell], count: 3, seconds: 90, canPlace: ['cobblestone'], maxPlace: 6 })).toBeNull();
     expect(ok({ do: 'obsidian', at: [cell], tool: 'x' })).toContain('tool は使えない');
     expect(ok({ do: 'obsidian', at: [cell], count: 65 })).toContain('count は 64 まで');
-    expect(ok({ do: 'obsidian', at: Array.from({ length: 9 }, () => cell) })).toContain('8 つまで');
+    // S8's body of 11/5: up to 24 lava sources in one hand (seconds up to 300).
+    expect(ok({ do: 'obsidian', at: Array.from({ length: 24 }, () => cell) })).toBeNull();
+    expect(ok({ do: 'obsidian', at: Array.from({ length: 25 }, () => cell) })).toContain('1〜24 マス');
     expect(ok({ do: 'fight', target: '#12', stance: 'flee', item: 'iron_sword', retreatHp: 8, range: 8, seconds: 30 })).toBeNull();
     expect(ok({ do: 'fight', target: '#12', seconds: 90 })).toContain('seconds は 5〜60');
     expect(ok({ do: 'fight', stance: 'flee' })).toContain('target が要る');
@@ -212,7 +214,8 @@ describe('the hands that take a range: obsidian, fight, mine, make, portal, smel
   });
   it('have a ceiling at their seconds and a typical time', () => {
     const from = { x: 0, y: 40, z: 0 };
-    expect(actMilliseconds(act({ do: 'obsidian', at: [cell] } as ActHand), from)).toBe(92_000);
+    // The obsidian hand runs for its seconds plus 20 s (the body's water recovery and receipt, S8 11/5).
+    expect(actMilliseconds(act({ do: 'obsidian', at: [cell] } as ActHand), from)).toBe(110_000);
     expect(actMilliseconds(act({ do: 'fight', target: '#1' } as ActHand), from)).toBe(22_000);
     expect(actRemainingMilliseconds(act({ do: 'obsidian', at: [cell], count: 2 } as ActHand), from, null, 0)).toBe(36_000);
     expect(actRemainingMilliseconds(act({ do: 'make', item: 'stick', count: 4 } as ActHand), from, null, 0)).toBe(3_000);
@@ -277,7 +280,13 @@ describe('chest and furnace as lines, and the long names of the blocks (bench of
   it('read canDig= and canPlace= as dig= and place= (mine, go, obsidian, portal)', () => {
     expect(lineToHand('mine iron_ore 1,2,3 canDig=stone,dirt maxDig=5')).toEqual({ do: 'mine', block: 'iron_ore', at: [{ x: 1, y: 2, z: 3 }], canDig: ['stone', 'dirt'], maxDig: 5 });
     expect(lineToHand('go 1,2,3 canDig=stone canPlace=cobblestone')).toEqual({ do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone'], canPlace: ['cobblestone'] });
+    // end1108a S6: Haiku wrapped the list in brackets twice and both acts were refused.
+    expect(lineToHand('go 1,2,3 canDig=[netherrack,basalt] canPlace=["cobblestone"]')).toEqual({ do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['netherrack', 'basalt'], canPlace: ['cobblestone'] });
     expect(lineToHand('obsidian 1,2,3 canPlace=dirt')).toEqual({ do: 'obsidian', at: [{ x: 1, y: 2, z: 3 }], canPlace: ['dirt'] });
     expect(lineToHand('portal 1,2,3 x canPlace=dirt,stone')).toEqual({ do: 'portal', at: [{ x: 1, y: 2, z: 3 }], axis: 'x', canPlace: ['dirt', 'stone'] });
+    // end1108a S7: a json hand without its word was refused as 知らない手 twice.
+    expect(lineToHand('{"do":"go","to":{"x":1,"y":2,"z":3},"range":4}')).toEqual({ do: 'go', to: { x: 1, y: 2, z: 3 }, range: 4 });
+    expect(lineToHand('json {"do":"wait","seconds":3}')).toEqual({ do: 'wait', seconds: 3 });
+    expect(lineToHand('{"do":"go",')).toEqual({ error: 'json の行が読めない: {"do":"go",' });
   });
 });

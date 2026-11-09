@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
 import { fcaMinecraftTools } from '../src/wiring/fcaMinecraftTools.js';
 import { MinecraftControl } from '../src/surfaces/minecraft/minecraftControl.js';
@@ -9,7 +9,7 @@ import type { MinecraftControlPoll, MinecraftControlReceipt } from '../src/contr
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import { actionResource } from '../src/contracts/actionThreadContract.js';
 import { MC_ACT_TOOL, type ActResult } from '../src/contracts/minecraftActContract.js';
-import { SHORT_ACT_INPUT_SCHEMA } from '../src/contracts/minecraftActShortContract.js';
+import { expandShortAct, SHORT_ACT_INPUT_SCHEMA } from '../src/contracts/minecraftActShortContract.js';
 import type { BodyPlanView } from '../src/contracts/bodyControlContract.js';
 import { configuredMinecraftLlmc } from '../src/wiring/minecraftLlmcWiring.js';
 import { actionHarness } from './support/actionThreadHarness.js';
@@ -20,18 +20,20 @@ import { queueBody, queueFor } from './support/llmcQueueHarness.js';
  * sent as the body's `act` skill with the task's plan in its context, and its result read back as lines; with the switch off nothing of it.
  */
 const at = '2026-10-21T00:00:00.000Z', closes: Array<() => Promise<void>> = [];
-afterEach(async () => { for (const close of closes.splice(0)) await close(); });
+afterEach(async () => { for (const close of closes.splice(0)) await close(); vi.restoreAllMocks(); });
 const PLAN: BodyPlanView = { revision: 3, current: 'p2', nodes: [{ id: 'p1', parentId: null, title: '木', state: 'done' },
   { id: 'p2', parentId: null, title: '食料', state: 'continue' }] };
 const HANDS = { hands: [{ do: 'walk', to: { x: 3, y: 64, z: 4 } }, { do: 'chest', at: [{ x: 4, y: 64, z: 4 }], op: 'takeAll' }], stopIf: { hostileWithin: 8 } };
 
 function fixture(llmc: boolean, input: unknown = HANDS) {
   const news: string[] = [];
+  const queueSpies: Array<{ mock: { calls: unknown[][] } }> = [];
   const h = actionHarness(() => at), calls: FcaModelInput[] = [], bodyStore = new MinecraftControlStore(h.db);
   const configuration = configuredMinecraftBody({ SHANNON_MINECRAFT_BODY_JSON: JSON.stringify({ deviceId: 'minebot', servers: [{ serverId: 'world', title: 'world', onlineMode: true, ownerUuid: 'b9191317-c52d-4d67-85fe-ab831e6db146' }] }) })!;
   let sequence = 0;
   const control = new MinecraftControl(bodyStore, configuration, { now: () => Date.parse(at), ownerAlone: () => true, pollMilliseconds: 1,
     leaseValid: lease => !!h.store.check(lease, at)?.resources.includes(actionResource('minebot', 'minecraft-body')) });
+  const bodyCommand = vi.spyOn(control, 'command'), bodyEnqueue = vi.spyOn(control, 'enqueue');
   const loose = { type: 'object', properties: { hands: { type: 'array', items: { type: 'object', properties: {}, required: [], additionalProperties: false } } },
     required: [], additionalProperties: false };
   const poll = (receipts: MinecraftControlReceipt[] = [], active: string[] = []) => control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, {
@@ -49,6 +51,7 @@ function fixture(llmc: boolean, input: unknown = HANDS) {
       toolResults: results => ({ role: 'user', results }) },
     stepPorts: (_runtime, step) => {
       const queue = queueFor(control, step, PLAN);
+      queueSpies.push(vi.spyOn(queue, 'add'));
       return { ...(llmc ? { keepBodyTools: () => true, body: queueBody(queue, news) } : {}), tools: fcaMinecraftTools({ control, step, ownerAlone: () => true, sourcesVisible: () => true,
         ...(llmc ? { llmc: { plan: () => PLAN, queue } } : {}) }) };
     },
@@ -56,7 +59,7 @@ function fixture(llmc: boolean, input: unknown = HANDS) {
   const root = driver.runtime.ensureRoot('owner'), task = driver.runtime.createChild('owner', root.id, { title: 'Food', goal: 'エンドラを倒して' }, 'owner-request');
   bodyStore.bind(task.id, 'minecraft:world');
   closes.push(async () => { await driver.close(); h.close(); });
-  return { ...h, driver, task, control, bodyStore, calls, poll, news };
+  return { ...h, driver, task, control, bodyStore, calls, poll, news, queueSpies, bodyCommand, bodyEnqueue };
 }
 async function dispatched(f: ReturnType<typeof fixture>) {
   await f.driver.tick();
@@ -65,6 +68,36 @@ async function dispatched(f: ReturnType<typeof fixture>) {
 }
 
 describe('mc.act through the control', () => {
+  it('tells the next decision that a later malformed hand also left the valid first go undispatched', async () => {
+    for (const later of ['mine oak_log', 'json {"hand":"mine","block":"oak_log","at":"150,81,79","count":8}']) {
+      const input = expandShortAct({ hands: ['go 150,80,78 dig=dirt seconds=60', later] }).input;
+      expect((input as { hands: unknown[] }).hands[0]).toMatchObject({ do: 'go', to: { x: 150, y: 80, z: 78 } });
+      const f = fixture(true, input);
+      await f.driver.tick(); await f.driver.drain();
+      expect(f.poll().commands).toEqual([]);
+      expect(f.bodyCommand).not.toHaveBeenCalled();
+      expect(f.bodyEnqueue).not.toHaveBeenCalled();
+      expect(f.queueSpies.length).toBeGreaterThan(0);
+      expect(f.queueSpies.every(spy => spy.mock.calls.length === 0)).toBe(true);
+      expect(f.db.prepare('SELECT COUNT(*) AS n FROM fca_body_operations').get()).toEqual({ n: 0 });
+      await f.driver.tick(); await f.driver.drain();
+      const next = JSON.stringify(f.calls[1]!.history);
+      expect(next).toContain('この act は全体を送っていない。先行 go を含め、この act のどの手も動いていない。');
+      expect(next).toContain(later.startsWith('mine') ? 'ブロック名と座標が要る' : 'hand は無い欄');
+    }
+    const ran = fixture(true), command = (await dispatched(ran))!;
+    const partial: ActResult = { v: 1, ok: false, done: 1, of: 2, at: { x: 3, y: 64, z: 4 }, hp: 20, food: 20, ms: 500,
+      lines: [{ i: 1, do: 'walk', status: 'done', line: '先行移動を実行した' },
+        { i: 2, do: 'chest', status: 'failed', line: '箱の手は実行時に止まった' }] };
+    ran.poll([{ id: command.id, connectionId: 'connection', outcome: 'failed', inputsReleased: true,
+      observedAt: at, result: JSON.stringify(partial) }]);
+    await ran.driver.drain(); await ran.driver.tick(); await ran.driver.drain();
+    const afterExecution = JSON.stringify(ran.calls[1]!.history) + ran.news.join('\n');
+    expect(ran.bodyEnqueue).toHaveBeenCalledTimes(1);
+    expect(afterExecution).toContain('先行移動を実行した');
+    expect(afterExecution).not.toContain('この act は全体を送っていない');
+  });
+
   it('offers only the mode\'s tools, sends the act with the plan, and reads its result as lines', async () => {
     const f = fixture(true), command = (await dispatched(f))!;
     expect(f.calls[0]!.tools.map(tool => tool.name).filter(name => /^(mc|minecraft)\./u.test(name))).toEqual(['minecraft.observe', MC_ACT_TOOL]);

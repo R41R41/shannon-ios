@@ -5,6 +5,7 @@ Runs on the production VM as azureuser, from ~/minecraft/shannon-home/trials (py
 
   scout   --key K --seed S        make the pristine practice world of one seed and measure it (village, lava, trees, sheep ...)
   seedof  <world dir>...          print the seed of existing worlds (level.dat)
+  seed    KEY                     print the seed value of one key from the seeds file outside git (SEEDS_FILE, VM only)
   run     [--sections 1,2] [--seeds a,b] [--model sonnet|current] [--dry-run] [--batch-cap-yen N] [--owner-ok-supply WHO-WHEN]
                                   one batch: each section on each of its seeds, from a fresh copy of the pristine world.
                                   S6-S11 (nether fortress ... dragon) start in a prepared place of the world (pristine/<key>/sites.json),
@@ -68,6 +69,10 @@ FINISHED = {'completed', 'failed', 'cancelled'}
 PAUSE_PATIENCE = 90          # an fca_unknown pause is often resumed by the body recovery within seconds (trial 20261020T1450)
 PREFLIGHT_POLL = 3
 DIMENSION_NAMES = {'overworld': 'minecraft:overworld', 'nether': 'minecraft:the_nether', 'end': 'minecraft:the_end'}
+# The seed values (and the structures found around each) are not in git: the repositories are public. They live in one file on the VM only
+# (SHANNON_TRIALS_SEEDS, else ~/.config/shannon/minecraft-trials-seeds.json, else a seeds.json next to this script that git ignores).
+# What a run needs from a seed key (which pristine world, where to start) is in seed-variants.json, which holds no seed value.
+SEEDS_FILE = os.environ.get('SHANNON_TRIALS_SEEDS') or os.path.join(HOME, '.config', 'shannon', 'minecraft-trials-seeds.json')
 PROD_LOCK = os.path.join(HOME, '.cache', 'minebot-lab', 'prod.lock')     # `flock` it for as long as shannon-home is yours (deploy restarts, real runs, this)
 PARTIAL_EVERY = 20           # seconds between the saves of a running trial: the VM is a Spot machine and may stop under it
 STOP_FILE = os.path.join(HOME, '.cache', 'minebot-lab', 'trials.stop')   # `touch` it and the running trial ends at its next poll (cancel, logout, restore); `run` refuses to start while it exists
@@ -99,6 +104,14 @@ def load_json(path, default=None):
             return json.load(handle)
     except FileNotFoundError:
         return default
+
+
+def seed_variant(seed_key):
+    """The variant of a seed key ({world, near, offset} or {}): seed-variants.json in git, else the 'variants' of the seeds file outside git."""
+    for path in (os.path.join(HERE, 'seed-variants.json'), SEEDS_FILE, os.path.join(HERE, 'seeds.json')):
+        variants = (load_json(path, {}) or {}).get('variants')
+        if variants is not None: return variants.get(seed_key, {})
+    return {}
 
 
 def save_json(path, value):
@@ -831,6 +844,16 @@ def cmd_seedof(args):
             print(world, 'unreadable', error)
 
 
+def cmd_seed(args):
+    """Print only the seed value of one key, from the seeds file outside git (for new-world.sh --seed "$(...)": the value stays off docs and logs)."""
+    for path in (SEEDS_FILE, os.path.join(HERE, 'seeds.json')):
+        for entry in (load_json(path, {}) or {}).get('seeds') or []:
+            if entry.get('key') == args.key and entry.get('seed') not in (None, ''):
+                print(entry['seed'])
+                return
+    raise Stop(f'seed: no seed for key {args.key} in {SEEDS_FILE} (the file is on the VM only)')
+
+
 # ---------------------------------------------------------------- one trial
 
 def count_items(r, item):
@@ -973,8 +996,8 @@ def validate_sections(cfg):
             if key not in s: problems.append(f'S{sid}: no {key}')
         if problems and problems[-1].startswith(f'S{sid}: no'): continue
         if not any(m.get('end') for m in s['milestones']): problems.append(f'S{sid}: no end milestone')
-        if s['limitMinutes'] > 118: problems.append(f'S{sid}: {s["limitMinutes"]} minutes is above the operator CLI limit of 120 (with the 2 minutes the harness adds)')
-        if s.get('capYen', cfg['trialCapYen']) > 2000: problems.append(f'S{sid}: capYen above the operator CLI limit of 2000')
+        if s['limitMinutes'] > 358: problems.append(f'S{sid}: {s["limitMinutes"]} minutes is above the operator CLI limit of 360 (with the 2 minutes the harness adds)')
+        if s.get('capYen', cfg['trialCapYen']) > 10000: problems.append(f'S{sid}: capYen above the operator CLI limit of 10000')
         if s['limitMinutes'] * 60 <= s['targetSeconds']: problems.append(f'S{sid}: the limit is not above the target')
         for ref in site_refs(s) - set(KNOWN_SITES): problems.append(f'S{sid}: unknown site {ref}')
         kinds = set(supply_kinds(s))
@@ -1233,7 +1256,7 @@ def fail_rule_hit(section, state, since, elapsed):
 
 def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     trial_id = f'{batch}-s{section["id"]}-{seed_key}'
-    variant = (load_json(os.path.join(HERE, 'seeds.json'), {}).get('variants') or {}).get(seed_key, {})
+    variant = seed_variant(seed_key)
     world_key = variant.get('world', seed_key)
     pristine = os.path.join(PRISTINE, world_key, 'world')
     facts = load_json(os.path.join(PRISTINE, world_key, 'facts.json'), {})
@@ -1307,6 +1330,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     result['goalOk'] = bool(row) and row['goal'] == GOAL and len(row['goal']) == 13
     log(f'trial {trial_id}: task {task_id} goal={result["goalChars"]} chars ok={result["goalOk"]}')
     latched, maxima, first_seen, last, fail_since = {}, {}, {}, {}, {}
+    deaths, gate = [], section.get('deathFailsAfter')      # the thru (T) goes on through a death, as the filmed run would; a death after the gate is a failure of the run
     items = tracked_items(section)
     reason, paused_since, last_saved = None, None, -PARTIAL_EVERY
     while True:
@@ -1330,11 +1354,14 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
             last_saved = elapsed
             save_json(partial_path(batch, trial_id), {**{k: result.get(k) for k in ('trial', 'batch', 'section', 'sectionName', 'seedKey', 'seed', 'taskId', 'startedAt', 'worldId',
                                                                                         'capYen', 'targetSeconds', 'limitMinutes', 'supplied', 'supplyKinds', 'ownerOk', 'prediction')},
-                                                      'elapsed': round(elapsed, 1), 'milestones': dict(latched), 'maxCounts': dict(maxima), 'firstSeen': dict(first_seen),
+                                                      'elapsed': round(elapsed, 1), 'milestones': dict(latched), 'maxCounts': dict(maxima), 'firstSeen': dict(first_seen), 'deaths': list(deaths),
                                                       'position': {k: state.get(k) for k in ('dimension', 'pos', 'health')}, 'yen': row.get('yen'),
                                                       'taskStatus': row.get('status'), 'pauseReason': row.get('pauseReason'), 'savedAt': now_iso()})
         if done: reason = 'reached'; break
-        if state.get('deaths'): reason = 'died'; break
+        while len(deaths) < state.get('deaths', 0):
+            deaths.append({'at': round(elapsed, 1), 'afterGate': bool(gate) and gate in latched, 'dimension': state.get('dimension'), 'pos': state.get('pos')})
+            log(f'trial {trial_id}: death {len(deaths)} at {elapsed:.0f} s' + (f' (after {gate})' if deaths[-1]['afterGate'] else ''))
+        if deaths and not section.get('continueAfterDeath'): reason = 'died'; break
         rule = fail_rule_hit(section, state, fail_since, elapsed)
         if rule: reason = f'fail:{rule}'; break
         if row.get('status') in FINISHED: reason = f'task_{row["status"]}:{row.get("pauseReason") or row.get("execState")}'; break
@@ -1379,6 +1406,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     result.update({'ok': reason == 'reached', 'reason': reason, 'seconds': end_seconds(section, latched) if reason == 'reached' else None,
                    'elapsed': round(elapsed, 1), 'milestones': latched, 'firstSeen': first_seen, 'maxCounts': maxima,
                    'missing': [m['name'] for m in section['milestones'] if m.get('end') and m['name'] not in latched],
+                   'deaths': deaths, 'deathsAfterGate': sum(1 for d in deaths if d['afterGate']),
                    'final': last.get('state'), 'yen': row.get('yen'), 'budgetSteps': row.get('steps'),
                    'taskStatus': row.get('status'), 'pauseReason': row.get('pauseReason'), **decisions(task_id)})
     if body_logout():
@@ -1612,6 +1640,7 @@ def main(argv):
     p.add_argument('--keep-stopped', action='store_true')
     p.add_argument('--quick', action='store_true', help='locate only: no chunks generated, nothing saved')
     p = sub.add_parser('seedof'); p.add_argument('worlds', nargs='+')
+    p = sub.add_parser('seed'); p.add_argument('key')
     p = sub.add_parser('run'); p.add_argument('--sections'); p.add_argument('--seeds'); p.add_argument('--batch')
     p.add_argument('--model', choices=['sonnet', 'current'], default=None, help='default: what the chosen sections ask for (S6-S11: current), else sonnet')
     p.add_argument('--dry-run', action='store_true')
@@ -1630,6 +1659,7 @@ def main(argv):
         with (ProdLock(args.cmd, args.wait_lock) if uses_shannon_home else contextlib.nullcontext()):
             if args.cmd == 'scout': cmd_scout(args)
             elif args.cmd == 'seedof': cmd_seedof(args)
+            elif args.cmd == 'seed': cmd_seed(args)
             elif args.cmd == 'run': cmd_run(args)
             elif args.cmd == 'report': cmd_report(args)
             elif args.cmd == 'restore': restore_production()

@@ -1,0 +1,11 @@
+{
+  "note": "シードの鍵ごとの始め方（どの pristine の世界か・どこから始めるか）。シード値はここに無い（git の外、VM の ~/.config/shannon/minecraft-trials-seeds.json。trials.SEEDS_FILE）。",
+  "variants": {
+    "r17-village": {
+      "world": "r17",
+      "near": "village",
+      "offset": 48,
+      "note": "実走17 の種で、村の 48m 手前から始める。村あり（羊・ベッド・食べ物）の条件"
+    }
+  }
+}

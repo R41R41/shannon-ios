@@ -40,9 +40,9 @@ export const FORWARDED_QUESTION = '[Conversation work: the same request, refined
 const AWAIT_WORK_POLL_MS = 300;
 
 /** The admitted research as a waiting voice turn sees it: its result, still running, or nothing to wait for (null). */
-function workResult(parts: { runtime: TaskRuntime; visible: FcaSourceGuard }, step: TaskStep, id: string, ownerAlone: () => boolean) {
+function workResult(parts: { runtime: TaskRuntime; visible: FcaSourceGuard }, step: TaskStep, id: string) {
   const task = parts.runtime.get(step.scopeKey, id), report = parts.runtime.progress?.(step.scopeKey, id)?.report;
-  if (!task || ['failed', 'stopped', 'unknown'].includes(task.phase) || !ownerAlone()) return null;
+  if (!task || ['failed', 'stopped', 'unknown'].includes(task.phase)) return null;
   if (task.phase !== 'completed') return 'running' as const;
   return report?.text.trim() && !report.heard && parts.visible(step.scopeKey, id, step.id) ? { taskId: id, title: task.title, report } : null;
 }
@@ -107,7 +107,7 @@ export function createFcaConversationBridge(parts: {
     if (!turn || !execution || execution.signal.aborted || scopeKey !== parts.ownerScope || turn.step.scopeKey !== scopeKey) return null;
     try {
       const task = parts.runtime.get(scopeKey, turn.step.taskId);
-      return turn.ownerAlone() && task?.phase === 'executing' && budgeted(turn, false, () => parts.visible.sources(scopeKey, task,
+      return task?.phase === 'executing' && budgeted(turn, false, () => parts.visible.sources(scopeKey, task,
         parts.runtime.taskSources(scopeKey, task.id, [...turn.observed]), turn.step.id, 'conversation')) ? turn : null;
     } catch { return null; }
   };
@@ -130,7 +130,8 @@ export function createFcaConversationBridge(parts: {
   };
   return {
     begin(input) {
-      if (input.scopeKey !== parts.ownerScope || !input.ownerAlone()) return null;
+      // Owner decision 2026-11-09: a turn others can hear keeps his tasks and their tools.
+      if (input.scopeKey !== parts.ownerScope) return null;
       const execution = currentActionExecution(), leaseKey = key();
       if (!execution || !leaseKey || execution.signal.aborted) throw new Error('FCA_CONVERSATION_LEASE_REQUIRED');
       if (active.has(leaseKey)) throw new Error('FCA_CONVERSATION_ALREADY_ACTIVE');
@@ -206,7 +207,7 @@ export function createFcaConversationBridge(parts: {
         async awaitWork(milliseconds, signal) {
           const id = turn.work, until = performance.now() + milliseconds;
           while (id && !signal?.aborted && !closed && performance.now() < until) {
-            const seen = workResult(parts, step, id, turn.ownerAlone);
+            const seen = workResult(parts, step, id);
             if (seen !== 'running') return seen;
             await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(AWAIT_WORK_POLL_MS, until - performance.now()))));
           }

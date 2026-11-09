@@ -26,7 +26,7 @@ describe('followHeld', () => {
     expect(moved).toMatchObject({ to: 'p3.3', from: 'p3.2' });
     expect(moved.words).toContain(`ブレイズの関所が ${HELD_LIMIT} 回止めた: 今の節を [p3.3]`);
     expect(moved.words).toContain('元の節 [p3.2] p3.2 は順のまま残る');
-    expect(moved.words).toContain('そろえば元の節に戻れる');
+    expect(moved.words).toContain('食料・盾がそろえば体が元の節へ戻す');
     expect(followHeld('t', tree('p3.3'), facts())).toBeNull();
   });
   it('counts the holds among the last acts (an act that went through between them does not reset), not across a long gap, not for another gate', () => {

@@ -10,6 +10,8 @@ import { approaching, urgentRange } from '../src/surfaces/minecraft/minecraftLlm
 import { urgentFacts } from '../src/surfaces/minecraft/minecraftLlmcBody.js';
 import { urgentWatch } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { nearThreats } from '../src/surfaces/minecraft/minecraftLlmcThreat.js';
+import { reachSuffix } from '../src/surfaces/minecraft/minecraftLlmcReachWords.js';
+import { watchedHostile } from '../src/surfaces/minecraft/minecraftLlmcAround.js';
 import { PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { v2tree } from './helpers/planTreeV2.js';
 
@@ -204,6 +206,32 @@ describe('fix 5: a hostile behind rock does not make an act urgent', () => {
     expect(urgentFacts(threats(walled), null).reasons).toEqual([]);
     expect(urgentFacts(threats(detour), null).reasons).toEqual([]);
     expect(urgentFacts(threats({ ...detour, canSee: true, reach: 'in_sight' }), null).reasons[0]).toContain('creeper');
+  });
+});
+
+describe('H6 (end1109e02): an enderman the body says is not angry makes nothing urgent', () => {
+  const threats = (health: number, ...items: Array<Record<string, unknown>>) => frame({ position: { x: 0, y: 64, z: 0 }, health, nearbyThreats: items });
+  const calm = { name: 'enderman', id: 7, distance: 8.9, canReachMe: true, canSee: true, reach: 'in_sight', angry: false, position: { x: 3, y: 62, z: 8 } };
+  it('gives no range to a calm one and the usual range to an angry one or one whose mood is not said', () => {
+    expect(urgentRange({ name: 'enderman', angry: false }, 8)).toBe(0);
+    expect(urgentRange({ name: 'enderman', angry: true }, 8)).toBe(8);
+    expect(urgentRange({ name: 'enderman' }, 8)).toBe(8);
+    const [read] = nearThreats(threats(20, calm));
+    expect(read!.angry).toBe(false);
+    expect(approaching(read!, 8)).toBe(false);
+  });
+  it('is no urgent reason at a decision, not even at low health, and an angry one is', () => {
+    expect(urgentFacts(threats(20, calm), null).reasons).toEqual([]);
+    expect(urgentFacts(threats(5, calm), null).reasons).toEqual([]);
+    expect(urgentFacts(threats(20, { ...calm, distance: 3.2, angry: true }), null).reasons[0]).toContain('enderman');
+    expect(urgentFacts(threats(20, { ...calm, distance: 3.2 }), null).reasons).toEqual([]);
+  });
+  it('says the mood in the line and is not the one to step away from', () => {
+    expect(reachSuffix(calm)).toBe('・見える（射線の中）・怒っていない（目を合わせず叩かなければ来ない）');
+    expect(reachSuffix({ ...calm, angry: true })).toContain('怒っている');
+    expect(reachSuffix({ name: 'zombie', reach: 'in_sight', angry: false })).toBe('・見える（射線の中）');
+    expect(watchedHostile([], ['#7 enderman 8.9m (3,62,8) 東3・南8・下2・見える（射線の中）・怒っていない（目を合わせず叩かなければ来ない）'])).toBeNull();
+    expect(watchedHostile([], ['#7 enderman 8.9m (3,62,8) 東3・南8・下2・見える（射線の中）・怒っている（向かって来る）'])?.id).toBe('7');
   });
 });
 

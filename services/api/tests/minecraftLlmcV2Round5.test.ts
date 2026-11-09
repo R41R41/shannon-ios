@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlanUpdate, orderedPlan, planPath, readPlanTree, type PlanNode, type PlanTree } from '@shannon/mind';
+import { applyPlanUpdate, orderedPlan, planFromSeeds, planPath, readPlanTree, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { gateFirst, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -175,6 +175,14 @@ describe('the plan tree of run 36 (task 40bd0b3e, revision 21): children left op
     expect(closedUnder(start(), [])).toEqual([]);
     expect(orderedPlan(done.nodes).length).toBe(41);
   });
+  it('records a node closed short of its own count: the least of the parent goes on, the aim stays written (the review of 11/5, item 9)', () => {
+    const plan = planFromSeeds([{ title: '点検', kind: 'prep_descent', doneWhen: 'have:bed>=8', children: [
+      { title: 'ベッドを10', kind: 'bed', doneWhen: 'have:bed>=10' }] }])!;
+    const done: PlanTree = { ...plan, nodes: plan.nodes.map(node => node.parentId ? node : { ...node, state: 'done' as const }) };
+    const [closed] = closedUnder(done, [], doneFacts(pack([['white_bed', 8]])));
+    expect(closed!.note).toBe('目標に届かずに閉じた（bed 8/10。p1 の最低数で先へ: have:bed>=8）');
+    expect(closedUnder(done, [], doneFacts(pack([['white_bed', 10]])))[0]!.note).toBe('不要になった（p1 が済んだ: have:bed>=8）');
+  });
   it('reads the end of the run as it was: p7.2 the obsidian is current, p8 and p9 are not started (the facts the closing leaves alone)', () => {
     const facts = doneFacts(pack([['obsidian', 7]]));
     expect(tree.current).toBe('p7.2');
@@ -186,8 +194,8 @@ describe('the plan tree of run 36 (task 40bd0b3e, revision 21): children left op
 describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
   const owned = (items: Array<[string, number]>) => carriedItemCounts({ inventory: items.map(([name, count]) => ({ name, count })) }, {});
   // Owner 2026-10-24 (after run 38): the gate also asks the iron helmet, chestplate and leggings and the golden boots (`minecraftLlmcPrepRules.ts`).
-  const GEAR: Array<[string, number]> = [['shield', 1], ['iron_sword', 1], ['iron_pickaxe', 3], ['cobblestone', 64], ['iron_helmet', 1],
-    ['iron_chestplate', 1], ['iron_leggings', 1], ['golden_boots', 1]];
+  const GEAR: Array<[string, number]> = [['shield', 2], ['iron_sword', 1], ['iron_pickaxe', 3], ['cobblestone', 64], ['iron_helmet', 1],
+    ['iron_chestplate', 1], ['iron_leggings', 1], ['golden_boots', 1], ['iron_ingot', 2], ['oak_planks', 16]];
   it('the entry\'s shortage asks 40 points of food, a pickaxe, a shield, a sword, blocks and the armour; not 100 points or the water bucket', () => {
     const parts = { dimension: 'overworld', counts: owned(GEAR), food: 48, nowKinds: ['portal' as const] };
     expect(preparationShortage(parts)).toBeNull();
@@ -195,7 +203,7 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     expect(preparationShortage({ ...parts, nowKinds: ['obsidian'] })).toContain('黒曜石の採掘に使えるツルハシ');
     expect(preparationShortage({ ...parts, food: 24 })).toContain('必須（ネザーに入る前に必ず）— 食料 24 点（目安 40）。欠けたまま進むと:');
     expect(preparationShortage({ ...parts, counts: owned([['stone_sword', 1]]) }))
-      .toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）・石以上のツルハシ（予備 2 本を含め 3 本）・盾・鉄の剣・鉄の兜・胸当て・脚・足場のブロックが無い');
+      .toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）・石以上のツルハシ（予備 2 本を含め 3 本）・盾（予備を含め 2）・盾の作り直しの鉄（2）・板（盾の作り直し 2 枚分と作業台、16）・鉄の剣・鉄の兜・胸当て・脚・足場のブロックが無い');
   });
   it('the check inside the Nether is as it was (the table, slabs, gold armour and food 100 before the fortress)', () => {
     const nether = { dimension: 'the_nether', counts: owned([['shield', 1]]), food: 48, nowKinds: ['fortress' as const] };

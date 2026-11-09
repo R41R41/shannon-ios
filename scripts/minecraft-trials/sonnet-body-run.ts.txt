@@ -1,0 +1,62 @@
+// The body's half of S4's isolated head + body rig (rig.py writes this file into the body pin; the same text is backend/scripts/lab/rig-body-run.ts).
+import { createProbeBot, closeProbeBot } from '../../src/services/minebot/testing/MinecraftProbeBot.js';
+import { NativeCommonFcaBody } from '../../src/services/minebot/integration/commonFca/nativeBody.js';
+import { CommonFcaControlLoop } from '../../src/services/minebot/integration/commonFca/controlLoop.js';
+import { installSpawnScan } from '../../src/services/minebot/utils/worldScan.js';
+import { installRigSpawnScan } from './rig-spawn-scan.js';
+import { installFullrunBodyAdapter } from './sonnet-fullrun-body-adapter.js';
+import { loadFloorLayer } from '../../src/services/minebot/utils/floorLayer.js';
+import { installDimensionKeeper } from '../../src/services/minebot/utils/dimensionKeeper.js';
+import { SkillRegistrar } from '../../src/services/minebot/skills/SkillRegistrar.js';
+import { skillCategory } from '../../src/services/minebot/execution/SkillExecutor.js';
+const port = Number(process.env.RIG_MC_PORT);
+const name = process.env.RIG_BODY_NAME ?? 'I_am_Shannon';
+const head = process.env.RIG_HEAD_URL ?? '';
+if (!Number.isInteger(port) || !head)
+    throw new Error('RIG_MC_PORT and RIG_HEAD_URL are required');
+const say = (tag: string, value: unknown) => console.log(`${tag} ${JSON.stringify(value)}`);
+const actor: any = await createProbeBot(port, name);
+// The normal client installs this before spawn; the probe has already awaited spawn. Reuse its real scan and wait/cancel rules.
+const stopSpawnScan = installRigSpawnScan(actor, installSpawnScan, line => say('RIG_BODY_SCAN', line));
+actor.on('error', (error: Error) => say('RIG_BODY_ERROR', String(error?.message ?? error).slice(0, 200)));
+actor.on('death', () => say('RIG_EVENT', {
+    event: 'death', at: new Date().toISOString()
+}));
+actor.on('end', (reason: unknown) => say('RIG_EVENT', {
+    event: 'body_end', reason: String(reason).slice(0, 120)
+}));
+const body = new NativeCommonFcaBody(actor, {
+    serverId: 'rig', capture: async () => { throw new Error('no picture in the rig'); }, rendererConfigured: () => false
+});
+const loop = new CommonFcaControlLoop({
+    baseUrl: head, token: 'rig-device-token-0000', serverId: 'rig', actuator: body, pollMilliseconds: 150
+});
+const registrar = new SkillRegistrar();
+const stopAdapter = installFullrunBodyAdapter(actor, {
+    floor: bot => loadFloorLayer(bot as any), dimension: bot => installDimensionKeeper(bot as any),
+    category: skillCategory, register: (bot, skill) => registrar.registerSingleConstantSkill(bot as any, actor.constantSkills, skill as any),
+    detach: (bot, name) => registrar.detachConstantSkillInterval(bot as any, name), leaseHeld: () => loop.leaseHeld,
+    every: (ms, tick) => { const timer = setInterval(tick, ms); timer.unref?.(); return () => clearInterval(timer); },
+});
+loop.start();
+say('RIG_BODY_UP', {
+    name, port, head, bodyVersion: body.bodyVersion(), constants: actor.constantSkills.getSkills().map((s: {
+        skillName: string;
+    }) => s.skillName), dimension: actor.game?.dimension
+});
+let closing = false;
+async function shutdown(): Promise<void> {
+    if (closing)
+        return;
+    closing = true;
+    stopAdapter();
+    stopSpawnScan();
+    await loop.stop().catch(() => undefined);
+    try {
+        closeProbeBot(actor);
+    }
+    catch { /* the lab is closing */ }
+    setTimeout(() => process.exit(0), 500).unref();
+}
+process.on('SIGTERM', () => { void shutdown(); });
+process.on('SIGINT', () => { void shutdown(); });

@@ -37,8 +37,8 @@ describe('owner-selectable Sonnet cache accounting', () => {
     await expect(h.model.generate(request)).rejects.toThrow('HAIKU_RESPONSE_USAGE_INVALID');
     expect(h.bodies).toHaveLength(1);
     expect(h.recorded[0]).toMatchObject({ model: settings.model, inputTokens: 1320, cachedInputTokens: 900, outputTokens: 0 });
-    // The reported input (420 at $2, 900 read at $0.20) and the whole output ceiling; a full-context write before M4's review.
-    expect(h.recorded[0]!.estimatedCostUsd).toBe(0.16102);
+    // The reported input (420 at $2, 900 read at $0.10) and the whole output ceiling; a full-context write before M4's review.
+    expect(h.recorded[0]!.estimatedCostUsd).toBe(0.16093);
   });
 
   it('charges a mixed provider TTL receipt by its actual counts while requesting one-hour reuse', async () => {
@@ -47,6 +47,6 @@ describe('owner-selectable Sonnet cache accounting', () => {
     const result = await h.model.generate(request);
     expect(result.model).toBe(settings.model);
     expect(h.bodies[0]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
-    expect(h.recorded[0]!.estimatedCostUsd).toBeCloseTo((420 * 2 + 300 * 2.5 + 700 * 4 + 900 * 0.2 + 96 * 10) / 1e6, 9);
+    expect(h.recorded[0]!.estimatedCostUsd).toBeCloseTo((420 * 2 + 300 * 2.5 + 700 * 4 + 900 * 0.1 + 96 * 10) / 1e6, 9);
   });
 });

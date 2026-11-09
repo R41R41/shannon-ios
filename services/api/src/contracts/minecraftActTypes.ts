@@ -2,7 +2,7 @@ import { PLAN_LIMITS } from '@shannon/mind';
 import type { EnderDen } from './minecraftEnderDenContract.js';
 import type { FillGroup, FillResult } from './minecraftFillContract.js';
 import type { ShieldRushResult } from './minecraftShieldRushContract.js';
-import type { WorldScan } from './minecraftProbeContract.js';
+
 import { type ActCondition } from './minecraftActCondition.js';
 import { type ActOutcome, type EventsMore, type Handover, type HandOutcome, type InventoryEvent } from './continueContract.js';
 
@@ -56,6 +56,9 @@ export const HAND_KINDS = [
   'smelt',
   'vertical',
   'fill',
+  'bed_burst',
+  // S4's body of 11/5 (0f0a2a2): place a bed, sleep, take it up in the morning, as one hand.
+  'sleep',
 ] as const;
 
 export type HandKind = (typeof HAND_KINDS)[number];
@@ -129,7 +132,7 @@ export interface ActHand {
   block?: string;
   /** use/equip/craft/eat/shoot: the item (use: water_bucket, bucket, lava_bucket, flint_and_steel, ender_eye, a bed, a door…). */
   item?: string;
-  /** craft: how many of `item`; furnace put: how many of `item`. */
+  /** craft/furnace put: how many of `item`; use gold_ingot target=piglin: up to 1–64 trades (default 1). */
   count?: number;
   /** drop/chest take/chest put: the items and counts (count absent: the whole stack kind). */
   items?: readonly { item: string; count?: number }[];
@@ -376,6 +379,8 @@ export interface ActHandLine {
    * Japanese, at most 160 characters. done: what changed (`(201,45,277)→(205,45,277) 1.2秒`, `丸石×3 を得た`); stopped:
    * the place and the
    * reason in closed words first (`届かない`, `一歩ではない`, `掘れない`, `置けない`, `無い`, `満杯`, `見られる`, `守られた物`, `溶岩が流れ込む`,
+   * the sleep hand's `敵が近い`, `夜ではない`, `爆発する`, `夜が明けない`, `寝られない` (codes enemy_near, not_night, no_bed, no_bed_spot, bed_explodes,
+   * night_went_on, not_slept),
    * `足場が無い`, `上から落ちる`, `時間切れ`, `反射`, `stopIf`), then what is there now (`そのマスは stone`); skipped: `未実行`.
    */
   line: string;
@@ -471,49 +476,4 @@ export interface ActResult {
   earlierEvents?: readonly InventoryEvent[];
 }
 
-export interface ViewInput {
-  /** Default: her feet. */
-  center?: ActPos;
-  /** Blocks out from the centre (1–32, default 12). */
-  radius?: number;
-  /** Absolute y bounds (default: centre −4 … +4; `top` ignores them). */
-  yFrom?: number;
-  yTo?: number;
-  /** layers: one grid per y; top: the surface from above with heights; slice: a vertical cut through the centre;
-   * column: the x,z column. */
-  mode: 'layers' | 'top' | 'slice' | 'column';
-  /** slice: north–south (ns, rows are y, columns z) or east–west (ew, columns x). Default ns. */
-  axis?: 'ns' | 'ew';
-  /** Show only these (block names or map symbols); everything else solid is `#`, passable `.`. At most 8. */
-  only?: readonly string[];
-}
-
-export interface ViewResult {
-  v: typeof ACT_CONTRACT_VERSION;
-  /** The map text (format below). Past 6,000 cells the body draws `top` with each cell 2×2 and says so in the header. */
-  map: string;
-  /** Up to 12 landmark lines inside the view (same form as `world.mapLandmarks`). */
-  landmarks?: readonly string[];
-}
-
-/** The world fields the body adds to every frame while MINEBOT_LLM_CENTRIC is on (`observation.state.world`). */
-export interface LlmCentricWorld {
-  /** The map of this frame (format below): redrawn when she moved a block or a block in it changed, at most every 500 ms. */
-  localMap?: string;
-  /**
-   * Off-map landmarks, at most 12 lines: `記号 名前 (x,y,z) 方角距離・上下 注記`, nearest and most useful first. Only places of the dimension
-   * she is in (run 26: an overworld crafting table read as 3 m away in the Nether); a place of another dimension,
-   * when worth saying (the
-   * gate back, her base), starts with that dimension in brackets and gives no distance: `[overworld] T 作業台 (10,35,15) 拠点`.
-   */
-  mapLandmarks?: readonly string[];
-  /** The structure she is in or beside (run 26): `ネザー要塞の中`, `砦の遺跡（bastion）の脇`, `ストロングホールドの中`, `村の中`, `エンドシティ`; absent: none. */
-  inside?: string;
-  /** The recent stops, at most 5 lines, newest first: `(x,y,z)→(x,y,z) 理由 ×回数 N秒前`. Counted by the body, never acted on by it. */
-  recentStops?: readonly string[];
-  /** The hidden food saturation (0–20). */
-  saturation?: number;
-  /** r4: the body's own `scan` at a spawn, a new dimension or a respawn (`WorldScan`, `minecraftProbeContract.ts`);
-   * absent until the first. */
-  scan?: WorldScan;
-}
+export type { ViewInput, ViewResult, LlmCentricWorld } from './minecraftWorldViewTypes.js';

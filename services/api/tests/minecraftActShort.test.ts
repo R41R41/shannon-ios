@@ -82,6 +82,13 @@ describe('short hands: lines the model got wrong', () => {
   });
 });
 
+describe('short hands: a go field written without =', () => {
+  it('end1109f13: refuses maxDig 120 maxPlace 60 with the = form instead of running at the default limits', () => {
+    expect(lineToHand('go 0,34,-60 canDig=[netherrack] maxDig 120 maxPlace 60 seconds=100')).toEqual({ error: 'go: 読めない語 maxDig 120 maxPlace 60（maxDig=120・maxPlace=60 の形で書く。= で結ぶ）' });
+    expect(lineToHand('go 0,34,-60 maxDig=120 maxPlace=60')).toEqual({ do: 'go', to: { x: 0, y: 34, z: -60 }, maxDig: 120, maxPlace: 60 });
+  });
+});
+
 describe('short hands: a whole act', () => {
   const act: ActInput = {
     why: '[p1.2] 西へ掘る', accept: ['blaze'],

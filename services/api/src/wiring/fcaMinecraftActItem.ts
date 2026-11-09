@@ -31,17 +31,6 @@ import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js
  */
 type Call = Parameters<FcaExternalTools['execute']>[0];
 
-/**
- * Run 59 leg 2: "wait 30" queued to wait for the stairs ahead of it ran after them, idle for 30 s, and held the next decision back by as
- * much (leg 1 had a dozen such waits). The queue's order and when the next decision comes were not said where the wait was queued.
- */
-function waitBehindWords(after: string | null | undefined, input: ActInput): string | null {
-  const onlyWaits = input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait');
-  if (!after || !onlyWaits || (input as { done?: unknown }).done) return null;
-  return `wait は ${after} が終わってから動く（並行には待たない）。列に手が 1 つだけなら、その手の残りが数秒になった時に次の判断が来る。`
-    + `前の手が終わるのを待つための wait は、その秒数だけ次の判断を遅らせる（焼き上がり・夜明け・回復を待つ wait とは別）`;
-}
-
 export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftControl; bodyId: string; call: Call; skill: string;
   fixes: readonly string[]; node: string | null; current?: string | null; frame: BodyObservation | null;
   /** Continue contract 5: the observation the decision that chose this act read (its life, dimension, body and
@@ -102,9 +91,8 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const breaking = counted ? [...counted.lines, ...counted.keptBy] : [];
   // Run 47 (hold 5): an act that digs with the pack nearly full is told what that costs (nothing is refused).
   const full = digPackLine(parts.frame, input.hands, parts.promises?.() ?? [], call.taskId);
-  const behind = waitBehindWords(added.after, input);
-  const addedItemWords = () => (toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...(behind ? [behind] : []),
-     ...(parts.lead ?? []), ...kept, ...breaking, ...(full ? [full] : [])].join('\n')));
+  const addedItemWords = () => (toolOk([`${fixes}列に入れた ${added.item}（${place}。始まりの期限 +${Math.round(added.startInMs / 1000)} 秒）`, ...(parts.lead ?? []), ...kept,
+     ...breaking, ...(full ? [full] : [])].join('\n')));
   return addedItemWords();
 }
 

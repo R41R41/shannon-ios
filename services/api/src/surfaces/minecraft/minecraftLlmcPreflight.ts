@@ -236,6 +236,13 @@ function advance(hand: ActHand, track: Track, base: Cell | null | undefined, vie
       track.at = null;
       track.via = null;
       return false;
+    // end1109o06: a vertical moves her and digs cells the map does not draw; walked through as if she stood still, the cap after
+    // "vertical down … y=120" was held as "her own feet cell" twice, the hole stayed open and the first night killed her. Like go, the
+    // hands after a hand that ends where the body's own way took her are not walked through.
+    case 'vertical': case 'jump': case 'mine': case 'fight': case 'portal': case 'obsidian':
+      track.via = track.at ?? track.via;
+      track.at = null;
+      return false;
     case 'dig':
       afterDig(hand, track, base, view);
       return true;

@@ -66,7 +66,8 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
       log: line => lines.push(line) });
     const view = plan.port.view()!;
     expect(view.now).not.toMatch(/^p1\.1 /u);
-    expect(view.now).toMatch(/^p2\.[12] |^p3\.1 /u);
+    // 1107 (11/7): the first iron leaf is closed by the iron pickaxe (have:iron_pickaxe), so the now may be past it.
+    expect(view.now).toMatch(/^p2\.[12] |^p3\.[12] /u);
     expect(plan.port.committed()).not.toBeNull();
     expect(lines.some(line => line.startsWith('Shannon FCA plan settled task=r5-plan'))).toBe(true);
     expect(seen.ids.slice(0, done.length)).toEqual(done);

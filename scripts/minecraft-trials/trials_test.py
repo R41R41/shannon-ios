@@ -113,13 +113,18 @@ class SitesTest(unittest.TestCase):
         cfg = trials.load_json(os.path.join(trials.HERE, 'sections.json'))
         self.assertEqual(trials.validate_sections(cfg), [])
         ids = [str(s['id']) for s in cfg['sections']]
-        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '8a', '8b', '9', '10', '11', 'Z', 'M', 'L'])
+        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '67', '8a', '8b', '9', '10', '11', 'Z', 'O', 'M', 'L', 'T'])
+        by_id = {str(s['id']): s for s in cfg['sections']}
+        s6, s67 = by_id['6']['start'], by_id['67']['start']     # S6 and S7 joined: the nether arrival of S6, the rods of S7 (7, not 6)
+        self.assertEqual((s67['dimension'], s67['at'], s67['prep']), (s6['dimension'], s6['at'], s6['prep']))
+        self.assertEqual([m['count'] for m in by_id['67']['milestones'] if m.get('end')], [7])
+        self.assertGreaterEqual(s67['give']['minecraft:cooked_beef'] * 8, 150)      # the head's gate before a spawner wants 150 food points
 
     def test_validation_names_what_is_wrong(self):
-        base = {'trialCapYen': 300, 'sections': [{'id': 6, 'name': 'x', 'targetSeconds': 100, 'limitMinutes': 130, 'capYen': 3000,
+        base = {'trialCapYen': 300, 'sections': [{'id': 6, 'name': 'x', 'targetSeconds': 100, 'limitMinutes': 400, 'capYen': 12000,
                 'start': {'dimension': 'minecraft:the_nether', 'at': 'nowhereAtAll'}, 'milestones': [{'name': 'a'}], 'seeds': []}]}
         problems = ' | '.join(trials.validate_sections(base))
-        for needle in ('no end milestone', 'operator CLI limit of 120', 'operator CLI limit of 2000', 'unknown site nowhereAtAll', 'not marked requiresOwnerOk'):
+        for needle in ('no end milestone', 'operator CLI limit of 360', 'operator CLI limit of 10000', 'unknown site nowhereAtAll', 'not marked requiresOwnerOk'):
             self.assertIn(needle, problems)
 
     def test_supply_is_named(self):

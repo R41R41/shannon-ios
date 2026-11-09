@@ -3,6 +3,7 @@ import type { ActPos } from '../../contracts/minecraftActContract.js';
 import { PROBE_INPUT_SCHEMA, PROBE_KINDS, readProbeResult, type ProbeInput, type ProbeKind } from '../../contracts/minecraftProbeContract.js';
 import { readLaneProbeResult } from '../../contracts/minecraftLaneProbeContract.js';
 import { laneProbeFacts } from './minecraftLaneProbeFacts.js';
+import { bedBurstTargetProblem } from '../../contracts/minecraftBedBurstContract.js';
 
 /**
  * mb-llmc r4: `mc.probe` as the model writes it, put into the body's form (`prepareProbeInput`: a creature named is sent as its `#id`, a
@@ -62,16 +63,18 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
   scan: 'scan', landmarks: 'scan', survey: 'scan',
   frames: 'frames', frame: 'frames', stronghold: 'frames', portal_frames: 'frames', camp: 'camp', blaze_camp: 'camp', spawner: 'camp',
   den: 'den', enderman_den: 'den', tunnel: 'den',
+  roofsite: 'roofsite', roof: 'roofsite', roof_site: 'roofsite', enderman_roof: 'roofsite',
 };
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
   path: ['to', 'from'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
-  scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], lane: ['spawner', 'from'], den: [],
+  scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], lane: ['spawner', 'from'], den: [], roofsite: ['radius'],
+  bedsite: ['target'],
 };
 /** The radius each kind takes: its range and default (none: the body's own). */
 const RADIUS: Readonly<Partial<Record<ProbeKind, { low: number; high: number; fallback?: number }>>> = {
   around: { low: 1, high: 16, fallback: 8 }, history: { low: 1, high: 32, fallback: 4 }, scan: { low: 1, high: 16 },
-  frames: { low: 16, high: 128, fallback: 64 },
+  frames: { low: 16, high: 128, fallback: 64 }, roofsite: { low: 4, high: 24, fallback: 16 },
 };
 /** A column's default bounds from her feet: below her (a fall, a shaft) or above her (air, water over her head). */
 export const COLUMN_DOWN = Object.freeze({ up: 2, down: 14 });
@@ -132,6 +135,12 @@ function position(work: Preparing, key: string): ActPos | null | undefined {
 }
 /** Each kind's own fields (a problem, or null); around and scan have none of their own (their radius is `prepareRadius`'s). */
 const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => string | null>>> = {
+  bedsite(work) {
+    const problem = bedBurstTargetProblem(work.fields.target);
+    if (problem) return `bedsite の ${problem}`;
+    work.out.target = work.fields.target as string;
+    return null;
+  },
   lane(work) {
     for (const key of ['spawner', 'from'] as const) {
       const at = position(work, key);
@@ -255,6 +264,7 @@ export function probeLabel(input: ProbeInput, feet: ActPos | null = null): strin
   return LABELS[input.kind](input, feet);
 }
 const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null) => string>> = {
+  bedsite: input => `bedsite→${input.target ?? '?'}`,
   worksite: input => `worksite→${typeof input.target === 'object' ? posText(input.target) : '?'} 戻り${input.retreat ? posText(input.retreat) : '未指定'}`,
   path: input => `path→${input.to ? posText(input.to) : '?'}`,
   sight: input => `sight→${typeof input.target === 'string' ? input.target : input.target ? posText(input.target) : '?'}`,
@@ -268,6 +278,7 @@ const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null
   frames: input => `frames ${input.x === undefined ? '足' : `(${input.x},${input.z})`} ${input.radius ?? 64}m`,
   camp: () => 'camp',
   den: () => 'den',
+  roofsite: input => `roofsite ${input.radius ?? 16}m`,
   lane: input => `lane${input.spawner ? ` ${posText(input.spawner)}` : ''}`,
 };
 

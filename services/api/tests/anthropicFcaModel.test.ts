@@ -372,16 +372,18 @@ describe('FCA usage evidence and invalid decisions', () => {
       const failure = await fixture.model.decide(input(), signal()).then(() => null, (error: Error) => error);
       expect(failure).toBeInstanceOf(FcaNoDecisionError);
       expect(failure?.message).toBe('FCA_MODEL_DECISION_MISSING');
-      expect(retryVerdict(failure)).toMatchObject({ reason: 'no_decision', possiblyBilled: false, attempts: 2 });
+      expect(retryVerdict(failure)).toMatchObject({ reason: 'no_decision', possiblyBilled: false, attempts: 3 });
       expect(fixture.receipts).toHaveLength(1);
       const line = String(warned.mock.calls.map(call => String(call[0])).find(text => text.includes('fca_decision_missing')));
       expect(JSON.parse(line)).toMatchObject({ event: 'fca_decision_missing', stopReason: 'end_turn', blocks: { thinking: 1, text: 1 }, textCharacters: 19 });
       expect(line).not.toContain('secret reasoning');
       expect(line).not.toContain('Done with the logs');
-      for (const stop of ['max_tokens', 'refusal']) {
-        const other = harness([answer([call()], nativeUsage(), stop)]);
-        expect(retryVerdict(await other.model.decide(input(), signal()).then(() => null, (error: Error) => error))).toBeNull();
-      }
+      // end1108a: an answer cut at its ceiling is asked again (twice in all, it may have been billed); a refusal is not.
+      const cut = harness([answer([call()], nativeUsage(), 'max_tokens')]);
+      expect(retryVerdict(await cut.model.decide(input(), signal()).then(() => null, (error: Error) => error)))
+        .toMatchObject({ reason: 'truncated', attempts: 2, possiblyBilled: true });
+      const refused = harness([answer([call()], nativeUsage(), 'refusal')]);
+      expect(retryVerdict(await refused.model.decide(input(), signal()).then(() => null, (error: Error) => error))).toBeNull();
     } finally { warned.mockRestore(); }
   });
 

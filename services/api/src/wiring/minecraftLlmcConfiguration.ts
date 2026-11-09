@@ -23,6 +23,7 @@ import {
 } from '../surfaces/minecraft/minecraftLlmcCompletion.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { minecraftV2Hooks, v2MenuTool } from '../surfaces/minecraft/minecraftLlmcV2.js';
+import { minecraftContractMenu } from '../surfaces/minecraft/minecraftContractRead.js';
 import { FIRST_PLAN, FIRST_PLAN_SCHEMA_R4 } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { REPLAN, REPLAN_SCHEMA } from '../surfaces/minecraft/minecraftLlmcReplan.js';
 import { CURRENT_FIRST_PLAN_SCHEMA } from '../surfaces/minecraft/minecraftFirstPlanPrompts.js';
@@ -36,6 +37,8 @@ import { recordedClient } from '../infra/decisionRecords/decisionRecordClient.js
 import { createHash } from 'node:crypto';
 import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
+import { AnthropicRequestNotSentError } from '../infra/models/anthropic/anthropicFcaFailure.js';
+import { guardMinecraftLlmcModelClient, strictMinecraftLlmcModel } from './minecraftLlmcModelPolicy.js';
 
 /**
  * The models of a Minecraft body task's decisions (design mb-llm-centric; owner 2026-10-21: the main model is
@@ -48,6 +51,8 @@ import { currentActionExecution } from '../infra/context/actionExecution.js';
  * 28: raised 9 times,
  *   23% of the cost, and the same stops went on: they were the body's faults): unset or `none`, never.
  * - `SHANNON_MINECRAFT_LLMC_PLAN_MODEL`: the first plan's model (default claude-opus-5-5).
+ * - `SHANNON_MINECRAFT_LLMC_STRICT_MODEL=on`: require one explicitly selected Haiku or Sonnet for every paid
+ * Minecraft inference, including summaries and second judgments; missing keys or conflicting settings fail closed.
  * Each decision model carries the mode's instructions and knowledge in its cached instructions (`minecraftV2Hooks`).
  */
 export const LLMC_MAIN_MODEL = OPUS_MODEL;
@@ -79,19 +84,23 @@ export const LLMC_HISTORY_HARD: Readonly<Partial<FcaHistoryPolicy>> = Object.fre
  * fallback epoch). */
 export const LLMC_SUMMARY_OUTPUT_TOKENS = 8_000;
 
+/** A body task's decision's output ceiling (end1108a S8b: a Haiku decision with its thinking reached the default
+ * 4,000 and was cut; a long act list with notes is about 1,500). Only what is written is charged. */
+export const LLMC_DECISION_OUTPUT_TOKENS = 10_000;
+
 /**
- * A body task's tools in the mode: six, fixed (mc.act, mc.probe, mc.view, plan.update and the model's two
- * controls; `v2MenuTool`), no skill index,
+ * A body task's fixed menu, including only the native input-contract source of skill.read; no personal skill index,
  * and the goal progress without its list of failed calls (run 27: the list grew with every failed act and the
  * whole progress was stated again in
  * the history each time, about 2,800 characters a round; each act's own result says how it failed).
  */
 export function llmcTools(tools: FcaExternalTools, completion?: LlmcCompletion): FcaExternalTools {
-  const { skillIndex: _index, ...rest } = tools;
+  const native = minecraftContractMenu(tools, v2MenuTool);
+  const { skillIndex: _index, ...rest } = native;
   const progress = tools.progress;
   return {
     ...rest,
-    definitions: tools.definitions.filter((tool) => v2MenuTool(tool)),
+    get definitions() { return native.definitions; },
     ...(progress
       ? {
           progress: {
@@ -135,6 +144,8 @@ export interface LlmcModelNames {
 /** The three models from the environment; an unknown name falls back to the default (and is logged without its
  * value by the caller). */
 export function llmcModelNames(values: Readonly<Record<string, string | undefined>>): LlmcModelNames {
+  const strict = strictMinecraftLlmcModel(values);
+  if (strict) return { main: strict, escalate: null, plan: strict };
   const main = known(values.SHANNON_MINECRAFT_LLMC_MODEL, LLMC_MAIN_MODEL);
   const raised = values.SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL?.trim();
   const escalate = raised === 'next' || raised === 'on' ? nextUp(main) : raised && MODELS.has(raised) && raised !== main ? raised : null;
@@ -240,7 +251,7 @@ export const LLMC_CATALOG_SELECTOR: FcaToolSelector = {
 
 /**
  * The mode of a Minecraft body task (owner 2026-10-24: 「切り替える仕組みもいらない。常に最新版を使っていい」): one mode, no switch. The probe of a
- * surprise and `mc.probe`, the task's own words, the act preflight and the six fixed tools with the mode's live
+ * surprise and `mc.probe`, the task's own words, the act preflight and the fixed native menu with its contract reader and live
  * state and guards are always on.
  */
 export interface LlmcWiring {
@@ -266,13 +277,20 @@ export function configuredMinecraftLlmc(
   parts: { log?(line: string): void; client?: PlanClient } = {},
 ): LlmcWiring | null {
   const names = llmcModelNames(values),
-    log = parts.log ?? ((line) => console.info(line));
+    log = parts.log ?? ((line) => console.info(line)),
+    strict = strictMinecraftLlmcModel(values);
+  const guardedClient = (apiKey: string | null) => strict
+    ? guardMinecraftLlmcModelClient(base.client ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: base.timeoutMilliseconds ?? 90_000,
+        ...(base.fetcher ? { fetch: base.fetcher } : {}) }), strict)
+    : base.client;
   const make = (model: string) => {
     const apiKey = keyFor(values, model);
     return apiKey || base.client
       ? createAnthropicFcaModel({
+          maximumOutputTokens: LLMC_DECISION_OUTPUT_TOKENS,
           ...base,
           model,
+          ...(strict ? { client: guardedClient(apiKey)!, redecideModel: strict } : {}),
           ...(apiKey ? { apiKey } : {}),
           minecraftOwnPrompt: true,
           minecraftV2: minecraftV2Hooks(),
@@ -281,10 +299,12 @@ export function configuredMinecraftLlmc(
   };
   const main = make(names.main);
   if (!main) {
+    if (strict) throw new Error('MINECRAFT_LLMC_STRICT_MODEL_KEY_REQUIRED');
     log('Shannon Minecraft LLM-centric off: no key for its main model');
     return null;
   }
-  const haikuKey = keyFor(values, DEFAULT_HAIKU_MODEL);
+  const summaryModel = strict ?? DEFAULT_HAIKU_MODEL;
+  const summaryKey = keyFor(values, summaryModel);
   log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}`);
   const escalate = names.escalate ? make(names.escalate) : null;
   // The plan's model also decides in the stages of `LLMC_STRONG_KINDS`; when it is the main one, or the escalation, no second copy is made.
@@ -293,11 +313,12 @@ export function configuredMinecraftLlmc(
     names,
     models: { main, escalate, strong },
     summarizer:
-      haikuKey || base.client
+      summaryKey || base.client
         ? createAnthropicFcaSummarizer({
             ...base,
-            model: DEFAULT_HAIKU_MODEL,
-            ...(haikuKey ? { apiKey: haikuKey } : {}),
+            model: summaryModel,
+            ...(summaryKey ? { apiKey: summaryKey } : {}),
+            ...(strict ? { client: guardedClient(summaryKey)!, redecideModel: strict } : {}),
             body: true,
             minecraftOwnPrompt: true,
             minecraftV2Facts: true,
@@ -408,9 +429,15 @@ export function firstPlanner(
   schema: Readonly<Record<string, unknown>> = FIRST_PLAN_SCHEMA_R4,
   limits: PlannerLimits = { outputTokens: FIRST_PLAN.outputTokens, giveUpMs: FIRST_PLAN.giveUpMs, label: 'first plan', effort: 'low' },
 ): { planner?: LlmcWiring['planner'] } {
+  const strict = strictMinecraftLlmcModel(values);
+  if (strict && model !== strict) throw new Error('MINECRAFT_LLMC_STRICT_MODEL_INVALID');
   const apiKey = keyFor(values, model);
-  if (!apiKey && !given) return {};
-  const client = recordedClient(given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: limits.giveUpMs }), 'plan');
+  if (!apiKey && !given) {
+    if (strict) throw new Error('MINECRAFT_LLMC_STRICT_MODEL_KEY_REQUIRED');
+    return {};
+  }
+  const provider = given ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: limits.giveUpMs });
+  const client = recordedClient(strict ? guardMinecraftLlmcModelClient(provider, strict) : provider, 'plan');
   return {
     planner: async (system, input, signal) => {
       const body = structuredBody(model, system, input, schema, limits.effort, limits.outputTokens);
@@ -419,7 +446,9 @@ export function firstPlanner(
       try {
         message = await client.messages.create(body, { signal });
       } catch (error) {
-        void recordUsage(abortedRouteUsage(model, system.length + input.length, Date.now() - began, body.max_tokens));
+        if (!(error instanceof AnthropicRequestNotSentError)) {
+          void recordUsage(abortedRouteUsage(model, system.length + input.length, Date.now() - began, body.max_tokens));
+        }
         throw error;
       }
       const usage = message.usage,

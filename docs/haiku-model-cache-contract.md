@@ -145,6 +145,12 @@ Before an own-time paid action, `paidCall` includes the stable prefix in its con
 
 On a closed response, charge actual ordinary input, write/read and output. On an incomplete usage receipt or interrupted call, retain the original unknown-action/reservation handling; do not fabricate an acknowledged zero. Background/main usage likewise records known lower-bound spend and a conservative bound when complete native counts are unavailable (since ADR-0009 stage 1, M4 review: the input counts the provider already reported, every write at the one-hour price, plus the whole output ceiling and every allowed search; a full-context one-hour write only when no input count is known or the request carries a server tool, whose results add input later in the same request), so a malformed receipt cannot free budget. The conversation token bound includes the separately acknowledged web-search fee; taking the larger token estimate must not absorb that fee. Historical Luna cost examples in earlier architecture sections are historical estimates, not current Haiku prices.
 
+### Sonnet 5.5 cache-read correction (2026-11-05)
+
+For the exact `claude-sonnet-5-5` model, [official first-party pricing](https://platform.claude.com/docs/en/about-claude/pricing) is USD2 input, USD10 output, USD2.50 five-minute writes, USD4 one-hour writes and USD0.10 cache reads per million tokens. The earlier shared Sonnet estimate used USD0.20 for reads; older `claude-sonnet-5` and unrecognized Sonnet overrides keep that conservative estimate. Haiku and Opus rates are unchanged.
+
+The correction applies to new estimates and newly booked usage. No stored usage, historical run report, reservation, unknown outcome or budget cap is rewritten or released. Counts and the conservative one-hour input reservation remain required; a lower read price never bypasses admission or reconciles an incomplete receipt.
+
 ## Search evidence and structured output
 
 Text search uses the real `web.search` read tool, selected by Jev or discovered through `tool_open`. A separate native Haiku 5.5 operation searches without JSON output format; the pinned primary model receives its result and produces the usual structured answer. Explicit web and place searches retain their existing user intent. The existing native non-JSON voice search stays available.

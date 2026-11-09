@@ -39,6 +39,12 @@ function storedOf(saved: unknown): HuntState {
     pearls0: finite(raw?.pearls0) ? raw.pearls0 : 0, kills };
 }
 
+/** The kills one fight line says: the body watches on after a kill and says "N 体倒した" when it killed more than one in the same hand. */
+export function killsInLine(text: unknown): number {
+  const many = typeof text === 'string' ? /(\d+) 体倒した/u.exec(text) : null;
+  return many ? Math.max(1, Math.min(20, Number(many[1]))) : 1;
+}
+
 export function createEnderHunt(saved: unknown) {
   let state = storedOf(saved);
   return {
@@ -48,8 +54,11 @@ export function createEnderHunt(saved: unknown) {
       if (!result || state.since === null) return;
       const killed = result.lines.filter(line => line.do === 'fight' && line.code === 'target_killed' && /enderman/u.test(line.line));
       killed.forEach((line, index) => {
-        const key = `${id ?? 'none'}:${line.i ?? index}`.slice(0, 80);
-        if (!state.kills.some(item => item.key === key)) state.kills = [...state.kills, { key, at: now }].slice(-KEEP_KILLS);
+        const base = `${id ?? 'none'}:${line.i ?? index}`.slice(0, 72);
+        for (let k = 0; k < killsInLine(line.line); k++) {
+          const key = k === 0 ? base : `${base}#${k}`;
+          if (!state.kills.some(item => item.key === key)) state.kills = [...state.kills, { key, at: now }].slice(-KEEP_KILLS);
+        }
       });
     },
     /** The frame of a decision: the hunt starts when an enderman comes near in the Nether or the overworld, and ends when none was near for a while. */

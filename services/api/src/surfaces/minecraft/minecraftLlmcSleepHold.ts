@@ -21,7 +21,7 @@ const holds = new Map<string, number[]>();
 export function forgetSleepHolds(): void { holds.clear(); }
 
 const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
-const sleeps = (hand: Record<string, unknown>): boolean => hand.do === 'use'
+const sleeps = (hand: Record<string, unknown>): boolean => hand.do === 'sleep' || hand.do === 'use'
   || (hand.do === 'place' && typeof hand.block === 'string' && BED.test(hand.block));
 
 function sleepWhen(world: Record<string, unknown>): string {
@@ -49,7 +49,7 @@ export function sleepFirstHold(input: unknown, frame: BodyObservation | null, ta
   const when = sleepWhen(facts.world);
   const effect = thunderstorm(facts.world) ? '雷雨が止む' : '夜が飛び、朝になる';
   const line = `${when}・ベッドを持っている（${bed.replace(/^minecraft:/u, '')}）・8m 内に敵はいない。寝る前の作業（掘る・作る・焼く・箱）は送らない`
-    + `（${recent.length + 1}/${SLEEP_HOLDS} 回目。${SLEEP_HOLDS} 回止めた後は通す）: ベッドを place して use すると${effect}（地下でも寝られる。`
+    + `（${recent.length + 1}/${SLEEP_HOLDS} 回目。${SLEEP_HOLDS} 回止めた後は通す）: sleep の手（ベッドを置いて寝て、朝に拾い直す）で${effect}（地下でも寝られる。`
     + 'ネザー・エンドでは爆発する）。'
     + '寝られなかった時は返った理由（置けない・敵が近い）を直す手（dig で 2 マス空ける・離れる・囲う）を出す。'
     + '作業は寝た後にもう一度出す';

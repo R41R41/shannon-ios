@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEnderHunt, endermenNear, huntLine } from '../src/surfaces/minecraft/minecraftEnderHunt.js';
+import { createEnderHunt, endermenNear, huntLine, killsInLine } from '../src/surfaces/minecraft/minecraftEnderHunt.js';
 
 /** The enderman hunt as numbers: the time near them, the deaths since, the pearls gained, the average drop; no place and no hand. */
 const enders = (...distances: number[]) => ({ nearbyThreats: [], nearbyEntities: distances.map((distance, id) => ({ id, name: 'enderman', distance })) });
@@ -39,6 +39,16 @@ describe('createEnderHunt', () => {
     expect(line).toContain('エンダーマン狩り 4 分: いま近くに 2 体（最寄り 8m）・撃破 1 体・パール +1（2/14）');
     const again = createEnderHunt(hunt.checkpoint().minecraftEnderHunt);
     expect(again.line(enders(8), pearls(2), NETHER, 4 * 60_000 + 1_000)).toContain('撃破 1 体');
+  });
+  it('counts every kill of a fight that watched on and killed more than one, once each', () => {
+    const hunt = createEnderHunt(null);
+    hunt.line(enders(8), pearls(0), NETHER, 0);
+    const chained = JSON.stringify({ v: 1, done: 1, of: 1, lines: [{ i: 1, do: 'fight', status: 'done', code: 'target_killed',
+      line: 'fight 3 体倒した: 済 enderman #4 → 済 enderman #7 → 済 enderman #9', goal: 'done', end: 'finished' }] });
+    hunt.note('r2', chained, 60_000);
+    hunt.note('r2', chained, 61_000);
+    expect(hunt.line(enders(8), pearls(1), NETHER, 3 * 60_000)).toContain('撃破 3 体');
+    expect(killsInLine('fight enderman #4 死んだ')).toBe(1);
   });
   it('ends after three quiet minutes or when the dimension is not read, and stays out of the End', () => {
     const hunt = createEnderHunt(null);

@@ -97,12 +97,16 @@ describe('the now comes to the preparation in run 42\'s order of acts', () => {
   it('after: p1.2 closed by its chest, the stone tools take the now, then 食料を集める (+190), and the descent tags (p4.1) put it on 下りる準備, where the iron (p5.1) does not move it', () => {
     noteChestsOpened(T, Q7, '[p1.2] 村の箱を開ける');
     let tree = apply(run42Tree(), chestNodesDone(T, run42Tree())!.update);
+    // end1109o02 (head 117f2727): 村を回る has a condition of its own (food>=20) still unmet, so it is the now until the frame shows it met.
+    expect(tree.current).toBe('p1');
+    tree = apply(tree, { ops: [{ op: 'set', id: 'p1', state: 'done' }] });
     expect(tree.current).toBe('p2.3');
     for (const tag of ['p2.3', 'p2.3']) noteItemStart(T, tag, tree.current);
     const toTools = followNode(T, tree);
     if (toTools) tree = apply(tree, { ops: [], current: toTools.to });
     expect(tree.current).toBe('p2.3');
-    tree = apply(tree, { ops: [{ op: 'set', id: 'p2.3', state: 'done' }] });
+    // The stone tools in hand close their parent too (the frame's seen-done; here by hand).
+    tree = apply(tree, { ops: [{ op: 'set', id: 'p2.3', state: 'done' }, { op: 'set', id: 'p2', state: 'done' }] });
     expect(tree.current).toBe('p3');
     // +294: 「[p4.1] 鉄へ下りる（食料 18/40・作業台 無・板 20）」 twice.
     for (const tag of ['p4.1', 'p4.1']) noteItemStart(T, tag, tree.current);

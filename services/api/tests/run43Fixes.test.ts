@@ -80,7 +80,8 @@ describe('run 43: the fuel is a lack of its own', () => {
     mapLandmarks: ['S スポナー (133,-5,229) 西60・南17・下43 湧く: zombie', 'c 石炭[coal_ore] (195,44,215) 東2・南3・上9 ×10 見えている'] };
   it('says the coal the raw iron needs, and the coal on the map with its distance', () => {
     expect(fuelShortage(world, carriedItemCounts(world, {})))
-      .toBe('燃料: 焼く物 15 個に石炭 2 が要る（石炭 1 で 8 個、板 1 枚は 1.5 個。板 1 は作業台と道具の分）。地図の石炭 (195,44,215) ×10 が 10m');
+      .toBe('燃料: 焼く物 15 個（鉱石 15）に石炭 2 が要る（石炭 1 で 8 個、板 1 枚は 1.5 個。板 1 は作業台と道具の分）。地図の石炭 (195,44,215) ×10 が 10m。'
+        + '燃料が無くても鉱石は先に掘っておける（焼くのは燃料が揃ってから）');
   });
   it('is not said with coal enough, nothing to smelt, or says that no coal is in sight', () => {
     const coal = { ...world, inventory: pack([['raw_iron', 15], ['coal', 2]]) };
@@ -89,6 +90,12 @@ describe('run 43: the fuel is a lack of its own', () => {
     expect(fuelShortage(none, carriedItemCounts(none, {}))).toBeNull();
     const blind = { ...world, mapLandmarks: [] };
     expect(fuelShortage(blind, carriedItemCounts(blind, {}))).toContain('地図に石炭は見えていない');
+    // end1109o04: raw meat with logs and no coal in sight: the meat is food raw, the coal is in the iron's rock, the mining does not wait.
+    const meat = { ...world, mapLandmarks: [], inventory: pack([['mutton', 7], ['beef', 4], ['oak_log', 4]]) };
+    const line = fuelShortage(meat, carriedItemCounts(meat, {}))!;
+    expect(line).toContain('（鉱石 0・食べ物 11。生でも食べられる）');
+    expect(line).toContain('石炭は鉄と同じ地下の岩によく出る');
+    expect(line).toContain('原木 4 も燃える');
   });
 });
 

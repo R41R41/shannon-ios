@@ -1,8 +1,7 @@
 import { orderedPlan, type PlanTree } from '@shannon/mind';
-import { blazeLack } from './minecraftLlmcDeadlyGates.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { predicateHolds, predicatesOf, type DoneFacts } from './minecraftPlanDone.js';
-import { DIMENSION_KINDS, followDimension, treeQuestions } from './minecraftLlmcNode.js';
+import { blazeHeld, DIMENSION_KINDS, followDimension, treeQuestions } from './minecraftLlmcNode.js';
 
 /**
  * A gate that stops the same node over and over (the owner's d50, run59: the blaze gate stopped the rods three times; words alone moved the plan to
@@ -13,7 +12,7 @@ import { DIMENSION_KINDS, followDimension, treeQuestions } from './minecraftLlmc
  */
 export const HELD_LIMIT = 2;
 export const HELD_WINDOW = 6;
-interface Window { outcomes: Array<string | null>; moved: { from: string; kind: string } | null }
+interface Window { outcomes: Array<string | null>; moved: { from: string; to: string; kind: string } | null }
 const windows = new Map<string, Window>();
 const windowOf = (taskId: string): Window => {
   const found = windows.get(taskId) ?? { outcomes: [], moved: null };
@@ -34,7 +33,7 @@ export function forgetHeldStreaks(): void { windows.clear(); }
 /** What lifts the gate of a kind, in words (the facts the gate itself says), for the line that moves the node. */
 function liftWords(kind: string, facts: DoneFacts): string {
   if (kind === 'fight' && facts.dimension === 'the_nether') {
-    return 'ブレイズの関所の必須（体力 20・満腹度 18・食料 150 点・盾 1）がそろえば元の節に戻れる';
+    return 'ブレイズの関所の食料・盾がそろえば体が元の節へ戻す。体力・満腹度はその場で戻る分なので節を移す理由にならない';
   }
   return '関所の足りない物がそろえば元の節に戻れる';
 }
@@ -60,17 +59,49 @@ export function followHeld(taskId: string, tree: PlanTree, facts: DoneFacts | nu
   const around = gate === 'portal' || gate === 'gold' ? [...before, ...after] : [...after, ...[...before].reverse()];
   const elsewhere = (node: (typeof order)[number]) =>
     Object.entries(DIMENSION_KINDS).some(([dimension, kinds]) => dimension !== facts.dimension && kinds.has(kindOf(node)));
-  const blazeShut = blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
+  const blazeShut = blazeHeld(facts);
+  // end1109f02: holds of the blaze gate for health or hunger alone are made up where she stands (the gate's words say wait or eat); the node stays.
+  if (gate === 'fight' && facts.dimension === 'the_nether' && kindOf(current) === 'blaze' && !blazeShut) return null;
   // A node the next read would move away from again (a food node in the Nether, `followDimension`) is no place to put the current node: pearl, food, pearl.
   const stays = (node: (typeof order)[number]) => followDimension({ ...tree, current: node.id }, facts) === null;
   const leaf = around.find(node => open(node) && kindOf(node) !== kindOf(current) && !elsewhere(node)
     && !(kindOf(node) === 'blaze' && blazeShut) && stays(node));
   if (!leaf) return null;
   window.outcomes = [];
-  window.moved = { from: current.id, kind: gate };
-  const NAMES: Record<string, string> = { fight: 'ブレイズの関所', portal: 'ネザーへ入る関所', gold: '金の防具の関所' };
+  window.moved = { from: current.id, to: leaf.id, kind: gate };
+  const NAMES: Record<string, string> = { fight: 'ブレイズの関所', portal: 'ネザーへ入る関所', gold: '金の防具の関所', rods: 'ロッドがそろった後の関所' };
   const gateWords = NAMES[gate] ?? `関所（${gate}）`;
   const put = `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた。`;
   const kept = `元の節 [${current.id}] ${current.title.slice(0, 24)} は順のまま残る（${liftWords(gate, facts)}）`;
   return { to: leaf.id, from: tree.current, acts: 0, words: `${gateWords}が ${HELD_LIMIT} 回止めた: ${put}${kept}` };
+}
+
+/** `followDimension`, noting a move off a blaze node while the blaze gate shuts the stage, so `followBack` can put the node back on it. */
+export function followDimensionHeld(taskId: string, tree: PlanTree, facts: DoneFacts | null): ReturnType<typeof followDimension> {
+  const moved = followDimension(tree, facts);
+  const from = moved?.from ? tree.nodes.find(node => node.id === moved.from) : undefined;
+  if (moved && from && facts && kindOf(from) === 'blaze' && blazeHeld(facts)) windowOf(taskId).moved = { from: from.id, to: moved.to, kind: 'fight' };
+  return moved;
+}
+
+/**
+ * The way back (end1109f02: the node went from the rods to the pearls and stayed there with the gate open for the rest of the run, though the words
+ * said 「そろえば元の節に戻れる」): when the blaze gate moved the node off a blaze node and what shut the stage is now carried (food points, a shield),
+ * the node goes back to that blaze node (its first open leaf), once. A node the head chose itself since (anything not under the node moved to) stands.
+ */
+export function followBack(taskId: string, tree: PlanTree, facts: DoneFacts | null): { to: string; from: string | null; acts: number; words: string } | null {
+  const window = windows.get(taskId), moved = window?.moved;
+  if (!window || !moved || moved.kind !== 'fight' || !facts || !tree.current) return null;
+  const questions = treeQuestions(tree);
+  if (!questions.under(tree.current, moved.to) || !questions.byId.has(moved.from)) { window.moved = null; return null; }
+  if (facts.dimension !== 'the_nether' || blazeHeld(facts)) return null;
+  window.moved = null;
+  const order = orderedPlan(tree.nodes), predicates = predicatesOf(tree);
+  const open = (node: (typeof order)[number]) => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))
+    && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts));
+  const back = order.find(node => questions.under(node.id, moved.from) && kindOf(node) === 'blaze' && open(node));
+  if (!back) return null;
+  const left = questions.byId.get(tree.current)!;
+  return { to: back.id, from: tree.current, acts: 0, words: `ブレイズの関所の食料・盾がそろった: 今の節を [${back.id}] ${back.title.slice(0, 24)} に戻した`
+    + `（[${left.id}] ${left.title.slice(0, 24)} は順のまま残る。体力・満腹度が足りない時はその場で wait か食べてから湧き場へ）` };
 }

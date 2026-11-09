@@ -3,6 +3,7 @@ import { ACT_CONTRACT_VERSION,ACT_MAX_HANDS,HAND_KINDS,VERTICAL_DIRS,VERTICAL_SH
 import type { ActHand,ActKeep,ActInput,ActResult,ViewResult } from './minecraftActTypes.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
+import { BED_BURST_DESCRIPTION, bedBurstActProblem } from './minecraftBedBurstContract.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
       KEEP_FORM } from './minecraftActTypes.js';
@@ -69,7 +70,7 @@ import { aggregateGoal,type CutBy,type GoalOutcome,type RunEnd } from './continu
  */
 export const MAP_LEGEND = [
   '地図の記号（1字。地図は上が北・左が西。行の頭は z、列の見出しは x の下 1 桁）:',
-  '@ 自分の足 / ! 敵の足 / m 動物の足 / * 60秒以内に歩いた空気 / . 空気 / , 通れる草花・雪 / ? 未ロード / X 掘れない（岩盤・バリア）',
+  '@ 自分の足 / ! 敵の足 / & 中立の足 / m 動物の足 / * 60秒以内に歩いた空気 / . 空気 / , 通れる草花・雪 / ? 未ロード / X 掘れない（岩盤・バリア）',
   '# 石の類（石・深層岩・安山岩・閃緑岩・花崗岩・凝灰岩・丸石・石レンガ）/ : 土・草・雪・粘土 / s 砂・砂利 / I 氷',
   'w 水源 / - 流れる水 / L 溶岩源 / l 流れる溶岩 / f 火 / x クモの巣',
   'i 鉄 / c 石炭 / d ダイヤ / g 金 / r レッドストーン / o ほかの鉱石（銅・ラピス・エメラルド・石英・古代の残骸）',
@@ -85,6 +86,7 @@ export const MAP_LEGEND = [
 
 /** The definition text of `mc.act` the model reads (fixed: part of the cached prefix). */
 export const ACT_DESCRIPTION = [
+  BED_BURST_DESCRIPTION,
   FILL_DESCRIPTION,
   SHIELD_RUSH_DESCRIPTION,
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、外れたら（失敗・反射・stopIf・満杯）そこで止めて、手ごとの1行と新しい地図を返す。',
@@ -95,12 +97,16 @@ export const ACT_DESCRIPTION = [
     + '道は体が引く。許した物だけ掘り・置いて着くまで歩く。溶岩は避ける) / '
     + ("dig(at: 順に掘る, tool, collect, exposeOk: 敵に見られても掘る, takeOk: 村の物も掘る) / place(block, at, face) / pillarUp(n: " +
 "真下に置きながら n 段登る, block) / ")
-    + 'use(item, at, face, target: バケツで汲む・注ぐ、火打ち金、ベッドで寝る、扉、エンダーアイを投げる（at 無し: 飛んだ方位と距離が返る）・枠にはめる（at と face）) / '
+    + 'use(item, at, face, target, count: バケツで汲む・注ぐ、火打ち金、扉、'
+    + 'エンダーアイを投げる（at 無し: 飛んだ方位と距離が返る）・枠にはめる（at と face）、'
+    + 'gold_ingot を target=piglin に count 個まで交換（1〜64 の整数、省略時 1。最大 3 体へ渡し、見終わるのを待ち、出た物を拾う）) / '
     + 'look(to か yaw・pitch) / jump(n) / sneak(on) / equip(item, slot) / craft(item, count: 作業台が4.5m内に要る) / '
     + 'furnace(at, op=put: item・count・fuel・fuelCount | op=take) / chest(at, op=look|take|put|takeAll, items) / '
     + 'attack(target: #id か名前, untilDead, seconds, hold: その場で待って届いたら打つ・追わない) / '
     + 'shoot(target か at, item: 弓かクロスボウ, charge: 引く秒, n: 本数) / eat(item) / '
-    + 'drop(items, target か at: その方へ投げる。ピグリンへの金など) / pickup(target か range) / wait(seconds: 0.5〜30)。',
+    + 'drop(items, target か at: その方へ投げる。ピグリンへの金など) / pickup(target か range) / wait(seconds: 0.5〜30) / '
+    + 'sleep(item: ベッド（省くと持っている物）, seconds: 10〜60、既定 45: 16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す。'
+    + '8m（上下 5）に敵がいる・夜でない（雷雨は可）・ネザーとエンドでは止まる。掘って場所は作らない)。',
   '座標はブロックの整数。rel: true の手は、その手を始める時の足のブロックからの差（x 東+、z 南+、y 上+）。',
   '形: why は act に 1 つ（手の中に書かない。手の短い説明は note）。at・path・items は 1 つでも配列 [ ] で書く。',
   'かまど（F・燻製器・溶鉱炉）は furnace（op=take で出来上がりを取る、op=put で入れる）。chest は箱・樽（C）だけ。',
@@ -138,7 +144,8 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         do: { type: 'string', enum: [...HAND_KINDS] },
         to: pos('walk の着く所、look の向く点'),
         path: { type: 'array', minItems: 1, maxItems: 32, items: pos('道の点'), description: 'walk の道（掘らずに歩ける点の列）' },
-        at: { type: 'array', minItems: 1, maxItems: 16, items: pos('ブロック'), description: 'dig・place は順に全部。use・furnace・chest・shoot は 1 つ' },
+        at: { type: 'array', minItems: 1, maxItems: 24, items: pos('ブロック'),
+          description: 'obsidian は 24 マス、dig・place は順に 16 マスまで。use・furnace・chest・shoot は 1 つ' },
         face: { type: 'string', enum: ['up', 'down', 'north', 'south', 'east', 'west'] },
         block: { type: 'string', maxLength: 64 },
         groups: { type: 'array', minItems: 1, maxItems: 12, description: 'fill: 足の stand と置く at（絶対座標）',
@@ -181,7 +188,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         enter: { type: 'boolean' },
         maxDig: { type: 'integer', minimum: 0, maximum: 200 },
         maxPlace: { type: 'integer', minimum: 0, maximum: 100 },
-        seconds: { type: 'number', minimum: 0.5, maximum: 120 },
+        seconds: { type: 'number', minimum: 0.5, maximum: 300 },
         charge: { type: 'number', minimum: 0.2, maximum: 3 },
         n: { type: 'integer', minimum: 1, maximum: 16 },
         sprint: { type: 'boolean' },
@@ -243,6 +250,8 @@ export const VIEW_INPUT_SCHEMA = Object.freeze({
 });
 
 export function actProblem(input: ActInput): string | null {
+  const burst = bedBurstActProblem(input);
+  if (burst) return burst;
   const fill = fillActProblem(input);
   if (fill) return fill;
   const rush = shieldRushActProblem(input);

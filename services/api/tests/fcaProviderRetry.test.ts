@@ -45,9 +45,13 @@ describe('which failures are asked again', () => {
   });
 
   it('never asks again after anything else: a decoded refusal, an invalid answer, a plain closed code', () => {
-    for (const error of [new Error('FCA_MODEL_HTTP_503'), new Error('FCA_MODEL_RESPONSE_UNKNOWN'), new Error('FCA_MODEL_TRUNCATED'), 'x', null]) {
+    for (const error of [new Error('FCA_MODEL_HTTP_503'), new Error('FCA_MODEL_RESPONSE_UNKNOWN'), 'x', null]) {
       expect(retryVerdict(error)).toBeNull();
     }
+  });
+
+  it('asks once more after an answer cut at the output ceiling, counted as charged (end1108a S8b)', () => {
+    expect(retryVerdict(new Error('FCA_MODEL_TRUNCATED'))).toEqual({ reason: 'truncated', possiblyBilled: true, retryAfterMs: null, attempts: 2 });
   });
 });
 
@@ -96,10 +100,21 @@ describe('asking for a decision again', () => {
   });
 
   it('passes any other failure through at once, with no wait', async () => {
-    const run = script([new Error('FCA_MODEL_TRUNCATED')]);
-    await expect(decideWithRetry(run.attempt, parts())).rejects.toThrow('FCA_MODEL_TRUNCATED');
+    const run = script([new Error('FCA_MODEL_REFUSED')]);
+    await expect(decideWithRetry(run.attempt, parts())).rejects.toThrow('FCA_MODEL_REFUSED');
     expect(run.calls()).toBe(1);
     expect(waits).toEqual([]);
+  });
+
+  it('a cut answer is asked once more; a second cut ends as an unavailable decision, not a paused task', async () => {
+    const once = script([new Error('FCA_MODEL_TRUNCATED')]);
+    expect(await decideWithRetry(once.attempt, parts())).toBe(output);
+    expect(once.calls()).toBe(2);
+    const twice = script([new Error('FCA_MODEL_TRUNCATED'), new Error('FCA_MODEL_TRUNCATED')]);
+    const failure = await decideWithRetry(twice.attempt, parts()).catch(error => error as FcaDecisionUnavailableError);
+    expect(failure).toBeInstanceOf(FcaDecisionUnavailableError);
+    expect(failure).toMatchObject({ message: 'FCA_MODEL_TRUNCATED', reason: 'truncated', attempts: 2, possiblyBilled: true });
+    expect(twice.calls()).toBe(2);
   });
 
   it('gives up after five attempts with the last failure\'s closed code and a count', async () => {
@@ -274,18 +289,18 @@ describe('asking for a decision again', () => {
 });
 
 describe('an answer that called no tool (production 2026-10-26 04:50, Sonnet 5.5: end_turn, 1 of 16 decisions)', () => {
-  it('is asked again once, with the same closed code if it fails again, and is not counted as a charge in doubt', async () => {
-    expect(retryVerdict(new FcaNoDecisionError())).toEqual({ reason: 'no_decision', possiblyBilled: false, retryAfterMs: null, attempts: 2 });
+  it('is asked again twice (end1108b), with the same closed code if it fails again, and is not counted as a charge in doubt', async () => {
+    expect(retryVerdict(new FcaNoDecisionError())).toEqual({ reason: 'no_decision', possiblyBilled: false, retryAfterMs: null, attempts: 3 });
     const again = script([new FcaNoDecisionError()]);
     const log: string[] = [];
     expect(await decideWithRetry(again.attempt, parts({ log: line => log.push(line) }))).toBe(output);
     expect(again.calls()).toBe(2);
-    expect(log).toEqual(['Shannon FCA decision retry reason=no_decision attempt=2/2 waitMs=0']);
+    expect(log).toEqual(['Shannon FCA decision retry reason=no_decision attempt=2/3 waitMs=0']);
     const same = script(Array(5).fill(new FcaNoDecisionError()));
     const failure = await decideWithRetry(same.attempt, parts()).catch(error => error as FcaDecisionUnavailableError);
     expect(failure).toBeInstanceOf(FcaDecisionUnavailableError);
-    expect(failure).toMatchObject({ message: 'FCA_MODEL_DECISION_MISSING', reason: 'no_decision', attempts: 2, possiblyBilled: false });
-    expect(same.calls()).toBe(2);
+    expect(failure).toMatchObject({ message: 'FCA_MODEL_DECISION_MISSING', reason: 'no_decision', attempts: 3, possiblyBilled: false });
+    expect(same.calls()).toBe(3);
   });
 
   it('counts its requests with the others of the decision: a miss after a provider failure is not asked a third time', async () => {

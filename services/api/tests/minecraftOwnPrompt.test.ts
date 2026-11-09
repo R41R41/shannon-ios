@@ -29,7 +29,10 @@ const PINNED = {
   // r10: 「一歩ではない」に頭の高さ、「届かない」に dig の届く範囲を足した 2 句の分だけ変わった（前は 6db83be5990e06f3）。
   // Run 41: the live's key for the food she carries is `foodPoints.total` (was `food.points`), so the line that names it says so (前は 5309f0c44e4ce9ef).
   // 2026-11-04 (S0's order): the order rule's example 「ブレイズの棒 7 本の後にエンダーパール」 is 「鉄の剣を作った後にネザーへ」, the pearls no longer fixed after the rods (前は cb7a450223101f12).
-  llmc_r9_system: '47f85e5a1fe09bc9',
+  // end1108h11 S7 (11/8): the blaze rule says to shoot a lone blaze in sight at health 14 or more once the (blaze node's) shortage is empty (前は 182d6b9a3d81a035).
+  // end1109f01 (11/9): the map legend says & 中立の足 (前は 9c8529376da81379).
+  // 11/9 release: エンドの前の食料 330（thru ddcd20a0）と柱・足場は黒曜石で積まない（end 0fc9cd81・ec76577b）の分だけ変わった（前は 36fb364a9803c6a8）。
+  llmc_r9_system: 'fdeb35d336c31278',
   old_mode_system: '9484df3e3e4d04cf',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
@@ -126,7 +129,8 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     const before = measure(off!), after = measure(on!);
     console.info(JSON.stringify({ event: 'minecraft_own_prompt_size', before, after }));
     expect(before.llmcTokens).toBeGreaterThan(30_000);
-    expect(after.llmcTokens).toBeLessThanOrEqual(8_100);
+    // end1109f01 (11/9): the map legend says & for a neutral that comes only when struck (about 6 tokens); the budget is 8,150.
+    expect(after.llmcTokens).toBeLessThanOrEqual(8_150);
     expect(after.estimated).toBeLessThanOrEqual(7_000);
     expect(after.llmcTokens / before.llmcTokens).toBeLessThan(0.3);
   }, 60_000);

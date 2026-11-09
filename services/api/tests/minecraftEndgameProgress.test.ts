@@ -64,7 +64,8 @@ describe('walking the late-game seed with the frames of a run', () => {
     tree = at({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: items({ ender_eye: 12, cooked_beef: 20 }), mapLandmarks: [] });
     expect(state(tree, 'p6')).toBe('done');
     expect(tree.current).toBe('p7.1');
-    tree = at({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: items({ ender_eye: 12, cooked_beef: 20, white_bed: 10, obsidian: 12, bow: 1, arrow: 40 }), mapLandmarks: [] });
+    // end1109o02: the check before the End (have:… & have:water_bucket) closes by the frame, not by its children: the water bucket is in the frame.
+    tree = at({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: items({ ender_eye: 12, cooked_beef: 20, white_bed: 10, obsidian: 12, bow: 1, arrow: 40, water_bucket: 1 }), mapLandmarks: [] });
     expect(state(tree, 'p7')).toBe('done');
     expect(tree.current).toBe('p8.1');
     // far from the room nothing of the stronghold closes; at the room the frames close its first node

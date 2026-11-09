@@ -110,6 +110,26 @@ describe('vertical: the short line and the json hand are the same hand (fixture 
     expect(refusal('vertical up pillar y=63 place=cobblestone liquid=stop')).toContain('canDig が要る');
     expect(refusal('vertical stairs south y=10 dig=stone liquid=stop')).toContain('dir');
   });
+  it('reads dir= shape= toward= as the words (s02 end1109 0056・0065・0066 were refused as 「dir が要る」 with dir=up in the line)', () => {
+    const line = 'vertical dir=up shape=stairs toward=west toY=122 canDig=stone,dirt maxDig=90 canPlace=cobblestone maxPlace=80 liquid=seal seconds=120';
+    const result = expandShortAct({ hands: [line] });
+    expect(shortHandProblem(result.input)).toBeNull();
+    expect(actProblem(result.input as ActInput)).toBeNull();
+    expect(lineToHand(line)).toMatchObject({ do: 'vertical', dir: 'up', shape: 'stairs', toward: 'west', toY: 122, liquid: 'seal' });
+    expect(lineToHand('vertical down stairs dir=down toward=south y=10 dig=stone liquid=stop')).toMatchObject({ dir: 'down', shape: 'stairs', toward: 'south' });
+    expect(lineToHand('vertical up stairs dir=down toward=south y=10 dig=stone liquid=stop')).toEqual({ error: expect.stringContaining('dir が語（up）と dir=down で食い違う') });
+  });
+  it('says every missing field and the misfit of way and form in one refusal (s02 end1109 0057→0058→0060 took three)', () => {
+    const hand = { do: 'vertical', dir: 'up', shape: 'shaft', toY: 122, canDig: ['stone'], maxDig: 60, seconds: 120 } as unknown as ActHand;
+    const text = handProblem(hand) ?? '';
+    expect(text).toContain('liquid が要る');
+    expect(text).toContain('shaft は down だけ（上るなら pillar か、stairs と toward=north|east|south|west）');
+    expect(handProblem({ ...hand, liquid: 'stop', shape: 'stairs' } as ActHand)).toBe('stairs には toward（north・east・south・west）が要る');
+    expect(handProblem({ do: 'vertical', dir: 'up', canDig: ['stone'] } as unknown as ActHand)).toMatch(/^shape・toY・liquid が要る/u);
+    // The replay of 0057 with the first two rules said: 2 of 5 came back with range=8, the rule after them.
+    expect(handProblem({ ...hand, range: 8 } as ActHand)).toContain('range は 1 か 2');
+    expect(handProblem({ ...hand, liquid: 'stop', shape: 'stairs', toward: 'north', range: 8 } as ActHand)).toBe('range は 1 か 2（書かなければ既定）');
+  });
 });
 
 describe('vertical: the rules of one hand (handProblem)', () => {
@@ -159,7 +179,7 @@ describe('vertical: the rules of one hand (handProblem)', () => {
     expect(handProblem({ do: 'go', to: { x: 1, y: 2, z: 3 }, dir: 'down' } as ActHand)).toContain('dir は使えない');
   });
   it('is checked inside an act, with the hand\'s number', () => {
-    expect(actProblem({ hands: [{ do: 'wait', seconds: 1 }, { ...shaft, dir: 'up' }] })).toBe('手2（vertical）: shaft は down だけ（上るなら pillar か stairs）');
+    expect(actProblem({ hands: [{ do: 'wait', seconds: 1 }, { ...shaft, dir: 'up' }] })).toBe('手2（vertical）: shaft は down だけ（上るなら pillar か、stairs と toward=north|east|south|west）');
     expect(actProblem({ hands: [stairs, shaft, pillar] })).toBeNull();
   });
   it('is described to the model in the tools text: the grammar line, the json fields', () => {

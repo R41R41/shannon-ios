@@ -178,7 +178,7 @@ export function createReplanFlow(deps: ReplanDeps) {
       }
       const node = parts.node ?? '-';
       if (heldByDanger(stall, node)) return;
-      const verdict = replanVerdict(ledger, node, deps.clock());
+      const verdict = replanVerdict(ledger, node, deps.clock(), stall.kind);
       if (!verdict.ok) {
         if (told !== stall) {
           say(`Shannon Minecraft replan skipped task=${deps.taskId} node=${node} kind=${stall.kind} why=${verdict.why}`);

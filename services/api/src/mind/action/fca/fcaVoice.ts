@@ -61,7 +61,8 @@ export function createFcaVoiceBridge(parts: {
       return known && matches(input, known.record) && inFlight(known.record) ? 'duplicate' : 'new';
     },
     begin(input) {
-      if (input.scopeKey !== parts.ownerScope || !parts.ownerAlone() || !input.ownerAlone()) return null;
+      // Owner decision 2026-11-09: a turn others can hear keeps his tasks (`parts.ownerAlone` is the wiring's, open to all).
+      if (input.scopeKey !== parts.ownerScope || !parts.ownerAlone()) return null;
       const known = newest(input);
       const occurrence = known ? known.occurrence + 1 : 1;
       // Past the bound the turn is ordinary voice, without task attachment.
@@ -73,7 +74,7 @@ export function createFcaVoiceBridge(parts: {
       const known = receiptFor(input);
       if (!known) return { status: 'untracked' };
       const { record } = known;
-      if (!matches(input, record) || input.companionPresent || !parts.ownerAlone()) return { status: 'rejected' };
+      if (!matches(input, record) || !parts.ownerAlone()) return { status: 'rejected' };
       // A bound occurrence with another reply is a new utterance whose turn had no task attachment: ordinary history.
       if (record.state === 'bound') return record.experienceId && source(input, record.experienceId)
         ? { status: 'duplicate', experienceId: record.experienceId } : { status: 'untracked' };
@@ -82,7 +83,7 @@ export function createFcaVoiceBridge(parts: {
     },
     recorded(input) {
       const known = receiptFor(input);
-      if (!known || !matches(input, known.record) || input.companionPresent || !parts.ownerAlone() || !source(input, input.experienceId)) return false;
+      if (!known || !matches(input, known.record) || !parts.ownerAlone() || !source(input, input.experienceId)) return false;
       return parts.runtime.bindConversationDelivery(input.scopeKey,
         { ...identity(input, known.id), threadId: input.threadId, experienceId: input.experienceId });
     },

@@ -105,7 +105,7 @@ export class TextConversation implements ConversationModality<TextTurnResult> {
 
   constructor(private readonly parts: TextConversationParts, private readonly input: TextTurnInput) {
     this.scopeKey = input.body.scopeKey;
-    this.fca = !input.surface && input.audience.alone ? parts.fcaConversation?.() ?? null : null;
+    this.fca = !input.surface ? parts.fcaConversation?.() ?? null : null; // Owner 2026-11-09: also when others are there.
     this.deadline = input.deadline ?? new TurnDeadline(TEXT_TURN_DEADLINE, () => Date.parse(parts.deps.now()));
   }
 
@@ -125,7 +125,7 @@ export class TextConversation implements ConversationModality<TextTurnResult> {
       { scopeKey: this.scopeKey, alone: audience.alone, surface, message, begun: this.begun });
     this.perceived = observeSync('perception', { message, audience: audience.audience }, () => perceiveTextTurn(parts.mind, input, this.opened.occurredAt),
       value => ({ eventId: value?.itemId ?? null }));
-    const commonFca = !surface && audience.alone && Boolean(parts.fcaConversation?.());
+    const commonFca = !surface && Boolean(parts.fcaConversation?.());
     this.tools = textToolStart(input, this.begun, { autonomy: parts.deps.autonomy, toolServer: parts.deps.toolServer, turnChooser: parts.turnChooser,
       commonFca, readTools: parts.readTools, toolHints: parts.toolHints });
   }

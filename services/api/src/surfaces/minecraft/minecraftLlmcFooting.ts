@@ -17,7 +17,7 @@ import { readProbeResult, type ProbeInput } from '../../contracts/minecraftProbe
 export const FOOTING_PROBES = Object.freeze({ max: 2, depth: 60, kept: 48, hurtsFrom: 3 });
 
 /** The symbols she can stand in or pass (air, grass, a torch, a ladder, a rail, a portal, fire, a web, a creature's feet or her own). */
-const OPEN = new Set(['.', '*', ',', '!', 'm', '@', 't', 'h', '=', 'f', 'x', 'p', 'k']);
+const OPEN = new Set(['.', '*', ',', '!', '&', 'm', '@', 't', 'h', '=', 'f', 'x', 'p', 'k']);
 const WATER = new Set(['w', '-']);
 const LAVA = new Set(['L', 'l']);
 const DIRECTIONS: ReadonlyArray<readonly [number, number, string]> = [[0, -1, '北'], [1, -1, '北東'], [1, 0, '東'], [1, 1, '南東'],

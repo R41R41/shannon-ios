@@ -134,7 +134,7 @@ describe('the first plan is asked for the preparation in the descent\'s caution,
     expect(PLAN_PREP_WORDS).toContain('食料の節の where は、食料のある所（箱・畑・干し草の座標）にする。ベッドの座標にしない。見当たらなければ ""');
   });
   it('is in the seed plan too: the iron node cautions the descent', () => {
-    expect(tree.nodes.find(node => node.title.startsWith('鉄（'))?.caution).toEqual(['食料40点・作業台か板4を持ってから下りる']);
+    expect(tree.nodes.find(node => node.title.startsWith('鉄（'))?.caution).toEqual(['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）']);
   });
 });
 
@@ -158,5 +158,31 @@ describe('the body\'s new stops and names are in the contract', () => {
       { fixed: [], added: [], omitted: 0 } as never);
     expect(lines[0]).toBe('i 鉄鉱石[deepslate_iron_ore] (152,-14,210) 東2・南2・下8 ×17 見えている');
     expect(lines[1]).toBe('i 鉄鉱石 (152,-14,210) 東2・南2・下9 ×17 見えている');
+  });
+});
+
+/**
+ * 1107d (2026-11-07): three prep lines spoke of the night (sleep in a 1x2 with a bed, compare waiting in an enclosure, dig down from the
+ * enclosure's floor). On a jungle top the dirt ring had no face, the head waited four minutes in the open and a zombie killed it.
+ * One ordered no-bed rule now.
+ */
+describe('the night without a bed is one ordered rule', () => {
+  const prep = V2_STAGES.prep;
+
+  it('puts the ground first, then the two-deep hole with a lid, then the stairs toward iron, and never waits outside', () => {
+    const at = (words: string) => { const index = prep.indexOf(words); expect(index).toBeGreaterThan(-1); return index; };
+    const ground = at('① 木・葉・柱の上なら、まず地面');
+    const hole = at('② その場で足元を 2 段掘って入り');
+    const stairs = at('③ 石のツルハシがあれば、その底から facts の「鉄」の行の鉄鉱石へ vertical（stairs）で toY まで掘り下り');
+    const outside = at('④ 囲いの外で wait しない');
+    expect(ground).toBeLessThan(hole);
+    expect(hole).toBeLessThan(stairs);
+    expect(stairs).toBeLessThan(outside);
+  });
+
+  it('keeps the sleeping and the morning wait for a night with a bed', () => {
+    expect(prep).toContain('ベッドがあれば、11500 を過ぎて地上にいたら');
+    expect(prep).toContain('ベッドが無い夜は朝待ちを選ばず');
+    expect(prep).not.toContain('朝を待たずに囲いの床から');
   });
 });

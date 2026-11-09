@@ -4,7 +4,7 @@ import {
   doneFacts, doneStatusWords, predicateHolds, predicatesOf, undergroundInOverworld, UNDERGROUND_KINDS, type DoneFacts,
 } from './minecraftPlanDone.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
-import { blazeLack } from './minecraftLlmcDeadlyGates.js';
+import { blazeShutLong } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 
 /**
@@ -220,13 +220,13 @@ export function followDimension(tree: PlanTree, facts: DoneFacts | null):
     && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts)));
   if (!leaf) return null;
   const work = `体は ${facts.dimension} にいて、今の節 [${current.id}] ${current.title.slice(0, 24)} は地上の仕事`;
-  const why = passed(current) ? 'ブレイズの関所が止めている間は先へ進める' : work;
+  const why = passed(current) ? 'ブレイズの関所が止めている間は先へ進める。食料・盾がそろえば元の節へ戻す' : work;
   return { to: leaf.id, from: tree.current, acts: 0, words: `今の節を [${leaf.id}] ${leaf.title.slice(0, 24)} に置いた（${why}。飛ばした節は順のまま残っている）` };
 }
 
-/** Whether the blaze gate holds the blaze work now: in the Nether, with a need of the spawner missing (`blazeLack`). */
-const blazeHeld = (facts: DoneFacts): boolean => facts.dimension === 'the_nether'
-  && blazeLack({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts }) !== null;
+/** The blaze gate shuts the stage only for what asks for work elsewhere (food points, a shield); health and hunger come back where she stands (end1109f02). */
+export const blazeHeld = (facts: DoneFacts): boolean => facts.dimension === 'the_nether'
+  && blazeShutLong({ health: facts.hp ?? null, hunger: facts.hunger ?? null, food: facts.food, counts: facts.counts });
 
 /**
  * A supply node (food) under a preparation node that is not met is the preparation itself, not the overworld's work (review of 11/3: the move to the

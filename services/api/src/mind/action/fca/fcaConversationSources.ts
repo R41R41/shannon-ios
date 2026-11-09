@@ -99,8 +99,11 @@ export type FcaSourceGuardParts = Parameters<typeof createFcaSourceGuard>[0];
 export function createFcaSourceGuard(parts: {
   runtime: TaskRuntime; state: Pick<CompanionStateStore, 'snapshot'>; conversations: ConversationStore;
   ownerScope: string; ownerAlone(): boolean;
-  /** Only a canonical standalone game request with no inherited sources may execute in public. */
-  sourceFreeTaskAllowed?(taskId: string): boolean;
+  /**
+   * A canonical standalone game request (`minecraftGameOnly.ts`): visible whoever is present and whatever was sent to it later, and
+   * never stopped by the provenance cap (owner 2026-11-09: a filmed run is not held by a third person in the world or by a message).
+   */
+  gameTaskAllowed?(taskId: string): boolean;
   readSourceVisible?(scopeKey: string, id: string, observedAt: string, shared?: TaskMemoryReadSnapshot): boolean;
   /**
    * r9: the inputs every answer of `readSourceVisible` is made from, as one string, at this moment (`readSourceFingerprint`), or null where
@@ -318,9 +321,10 @@ export function createFcaSourceGuard(parts: {
     if (scopeKey !== parts.ownerScope) return false;
     try {
       // Who can hear is asked every time; only the provenance walk is reused.
-      if (!parts.ownerAlone() && !(rows.length === 0 && parts.sourceFreeTaskAllowed?.(task.id) === true)) return false;
+      const game = parts.gameTaskAllowed?.(task.id) === true;
+      if (!parts.ownerAlone() && !game) return false;
       if (task.scopeKey !== scopeKey) return false;
-      if (!rows.length) return true; // Direct owner API tasks have no inherited conversation source.
+      if (!rows.length || game) return true; // Direct owner API tasks have no inherited conversation source.
       // The same verdict over fewer sources: every memory id once, at the earliest time it was observed (`foldFcaProvenance`).
       // Only a task the cap applies to is folded to the limit; the root, a conversation and the sleep task are never hidden by it.
       const sources = timing.time('provenance', () => fcaProvenanceForCheck(rows, cappable(task) ? FCA_PROVENANCE_LIMITS.sources : Infinity, folds));

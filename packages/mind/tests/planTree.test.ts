@@ -104,6 +104,22 @@ describe('plan tree', () => {
     expect(after.nodes.find(node => node.id === 'c')?.state).toBe('done');
     expect(after.nodes.find(node => node.id === 'p')?.state).not.toBe('done');
     expect(applyPlanUpdate(after, { ops: [{ op: 'set', id: 'p', state: 'done' }] }).tree.nodes.find(node => node.id === 'p')?.state).toBe('done');
+    // end1109o02: a parent with a condition of its own (doneWhen) is not closed by its children either; it becomes the open node.
+    const conditioned = planFromSeeds([{ id: 'p', title: '鉄の道具と防具', doneWhen: 'have:iron_pickaxe&have:shield', children: [{ id: 'c', title: 'バケツ', doneWhen: 'have:bucket' }] },
+      { id: 'q', title: 'ダイヤ', doneWhen: 'have:diamond>=3' }])!;
+    const bucketed = applyPlanUpdate({ ...conditioned, current: 'c' }, { ops: [{ op: 'set', id: 'c', state: 'done' }] }).tree;
+    expect(bucketed.nodes.find(node => node.id === 'p')?.state).not.toBe('done');
+    expect(bucketed.current).toBe('p');
+    // end1109o04: a node left behind when the current followed her forward is the current again once the node followed to is done; not one
+    // from before a dimension reached.
+    const left = planFromSeeds([{ id: 'p1', title: '木と石', doneWhen: 'have:stone_pickaxe&have:log>=16', children: [{ id: 'p1.3', title: '石の剣', doneWhen: 'have:stone_sword' },
+      { id: 'p1.4', title: '原木', doneWhen: 'have:log>=16' }] }, { id: 'p2', title: '食料', doneWhen: 'food>=40' }, { id: 'p3', title: '鉄', doneWhen: 'have:iron_pickaxe' }])!;
+    const fed = applyPlanUpdate({ ...left, current: 'p2' }, { ops: [{ op: 'set', id: 'p2', state: 'done' }] }).tree;
+    expect(fed.current).toBe('p1.3');
+    const gated = planFromSeeds([{ id: 'g', title: '金のブーツ', doneWhen: 'have:golden_boots' }, { id: 'n', title: 'ネザーへ', doneWhen: 'dim:the_nether' },
+      { id: 'f', title: '要塞', doneWhen: 'see:fortress' }, { id: 'r', title: 'ロッド', doneWhen: 'have:blaze_rod>=7' }])!;
+    const inNether = applyPlanUpdate({ ...gated, current: 'f' }, { ops: [{ op: 'set', id: 'n', state: 'done' }, { op: 'set', id: 'f', state: 'done' }] }).tree;
+    expect(inNether.current).toBe('r');
     const plain = planFromSeeds([{ id: 'p', title: '道具', children: [{ id: 'c', title: 'バケツ' }] }])!;
     expect(applyPlanUpdate(plain, { ops: [{ op: 'set', id: 'c', state: 'done' }] }).tree.nodes.find(node => node.id === 'p')?.state).toBe('done');
   });

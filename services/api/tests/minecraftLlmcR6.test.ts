@@ -97,15 +97,24 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     expect(preparationShortage({ ...ready, nowKinds: null })).toBeNull();
   });
 
+  it('end1108h11: the blaze node checks the fight (shield, blocks, food), not the table or the golden piece', () => {
+    const armed = counts({ ...SHAFT, inventory: [...SHAFT.inventory, { name: 'shield', count: 1 }, { name: 'cobblestone', count: 114 },
+      { name: 'cooked_beef', count: 23 }] });
+    expect(preparationShortage({ ...armed, nowKinds: ['blaze', 'blaze'] })).toBeNull();
+    expect(preparationShortage({ ...armed, nowKinds: ['fortress'] })).toContain('準備の不足（ネザーの奥へ）: 作業台が無い');
+    const bare = counts(SHAFT);
+    expect(preparationShortage({ ...bare, nowKinds: ['blaze'] })).toBe('準備の不足（ブレイズ戦へ）: 盾が無い。食料 0 点（目安 60）');
+  });
+
   it('in the overworld only by the current node: the gate\'s check before the Nether, the End\'s with eyes', () => {
     const home = counts({ ...START, dimension: 'overworld' });
     expect(preparationShortage({ ...home, nowKinds: ['wood' as const] })).toBeNull();
     const gate = preparationShortage({ ...home, nowKinds: ['portal' as const] })!;
-    expect(gate.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾・足場のブロックが無い。')).toBe(true);
+    expect(gate.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾（予備を含め 2）・盾の作り直しの鉄（2）・板（盾の作り直し 2 枚分と作業台、16）・足場のブロックが無い。')).toBe(true);
     expect(gate).toContain(`食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`);
     expect(gate.endsWith('目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い')).toBe(true);
     const end = preparationShortage({ ...home, nowKinds: ['stronghold' as const] })!;
-    expect(end).toContain('準備の不足（エンドへ）: ベッド（目標 10）・黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）・エンダーアイ・足場のブロックが無い');
+    expect(end).toContain('準備の不足（エンドへ）: ベッド（目標 10）・黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）・エンダーアイ（12 が目安。落ちたアイは拾う）・足場のブロックが無い');
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）');
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）・矢（光の矢も数える。材料 羽根 0・火打石 0・棒 0（1 ずつで 4 本））が無い');
     // The audit of 11/4, order 10: a spectral arrow is an arrow, a crossbow a bow.
@@ -178,9 +187,10 @@ describe('the first plan\'s done nodes are carried by the frame (run 29: 「動�
     const plan = createFcaPlanTools({ taskId: 'r6-carry-held', checkpoint: { fcaPlanTree: held }, seen: tree => seenDoneUpdate(tree, nether) });
     plan.port.view();
     const seenTree = plan.port.tree();
+    // thru-1110 (11/9): the seed's food check in the Nether is now 200 (the spawner's gate asks 150).
     expect(seen.ids.length).toBeGreaterThan(0);
-    expect(seenTree.nodes.find(node => node.doneWhen === 'food>=100')!.state).toBe('continue');
-    const settled = { ...seenTree, nodes: seenTree.nodes.map(node => node.doneWhen === 'food>=100' ? { ...node, state: 'done' as const } : node) };
+    expect(seenTree.nodes.find(node => node.doneWhen === 'food>=200')!.state).toBe('continue');
+    const settled = { ...seenTree, nodes: seenTree.nodes.map(node => node.doneWhen === 'food>=200' ? { ...node, state: 'done' as const } : node) };
     const answer = planFromAnswer({ nodes: [
       { id: 'p1', parent: '', title: '出発の点検', where: '', doneWhen: '' },
       { id: 'p1.1', parent: 'p1', title: '作業台と板を作る', where: '', doneWhen: 'have:crafting_table' },
@@ -217,9 +227,10 @@ describe('a miss is counted as every other surprise (run 29: two misses, the sec
     watch.noteResult(MC_ACT_TOOL, true, swing, { hands: [{ do: 'attack', target: '#9', hold: true, seconds: 20 }], accept: ['blaze'] });
     const [second] = watch.detect(ctx(), null);
     expect(second).toMatchObject({ code: 'miss', nth: 2 });
+    // end1109f03 (c1ae2ad7): a surprise aimed at a creature notes no standing caution (its distance and walls are that moment's).
     const noted: string[] = [];
-    expect(noteCautions([second!], second!.probes, [sight, null], text => { noted.push(text); return true; })).toBe(1);
-    expect(noted).toEqual(['(308,69,73) の blaze は見えない: 間に cobbled_deepslate (310,66,73)']);
+    expect(noteCautions([second!], second!.probes, [sight, null], text => { noted.push(text); return true; })).toBe(0);
+    expect(noted).toEqual([]);
   });
 
   it('a hold with no target, stopped by the body\'s r6 「届かない」: the nearest it names is looked at (r4-contract.md 10:05)', () => {

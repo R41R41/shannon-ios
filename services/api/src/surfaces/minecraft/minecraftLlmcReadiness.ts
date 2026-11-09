@@ -11,6 +11,8 @@ import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
+import { framesOf } from './minecraftSeenMarks.js';
+import { oreRouteHands } from './minecraftOreRoute.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
@@ -26,20 +28,28 @@ import { returningToEnd } from './minecraftEndEntry.js';
  * - `recoveryLine`: health below full and hunger under 18, where health does not come back by itself; `foodLeads`: where food is
  *   (animals near, the scan's village rows, a hoglin and a crimson forest in the Nether, the gate back with its distance).
  */
-type Stage = 'nether_deep' | 'nether_entry' | 'end' | 'diamonds';
+type Stage = 'nether_deep' | 'nether_blaze' | 'nether_entry' | 'end' | 'diamonds';
 type Need = PrepNeed;
 
-const STAGES: Readonly<Record<'nether_deep' | 'end', { title: string; food: number; needs: readonly Need[] }>> = {
+const STAGES: Readonly<Record<'nether_deep' | 'nether_blaze' | 'end', { title: string; food: number; needs: readonly Need[] }>> = {
   nether_deep: { title: 'ネザーの奥へ', food: 100, needs: [
     // The section audit of 11/5: the slabs left the check (they held the fortress's search), and the golden piece is a goal here (the gate asks it).
     { label: '作業台', count: 1, pattern: /^crafting_table$/u },
     { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u, goal: true },
     { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
-  end: { title: 'エンドへ', food: 80, needs: [
+  // end1108h11 S7 (11/8): at the fortress with a bow, 30 arrows, a shield and 478 food points, the check of the way in said 「作業台が無い」 at
+  // every decision, the knowledge said 「ブレイズは準備（shortage が空）の後」, and the head hid from a lone blaze at 14 m for 6 minutes at
+  // health 20 (0 shots). Rods become powder and eyes in the 2×2 grid; the table is for remaking tools, not for the fight. The fight's own
+  // check: the shield, the blocks of the hideout and food; no goals (a goal line would keep the shortage from being empty).
+  nether_blaze: { title: 'ブレイズ戦へ', food: 60, needs: [
+    { label: '盾', count: 1, pattern: /^shield$/u }, { label: '足場のブロック', count: 32, pattern: BLOCKS }] },
+  end: { title: 'エンドへ', food: 330, needs: [
     { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM },
     { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u },
     ...END_WEAPONS,
-    { label: 'エンダーアイ', count: 12, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
+    // end1108d S9 (11/8): 「エンダーアイ 11/12」 one throw after 12 sent the first plan back to the Nether; 10 in hand is the stronghold's
+    // (thrown eyes are picked up, frames hold some from the start; the frames in view say the rest).
+    { label: 'エンダーアイ（12 が目安。落ちたアイは拾う）', count: 10, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
     // S1's lab (2026-11-02): a fall from a crystal's pillar is stopped by water the body pours under itself, with a full bucket and nothing else.
     { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u }] },
 };
@@ -76,7 +86,8 @@ const STAGE_OF_KIND: Readonly<Partial<Record<PlanKind, Stage>>> = { end: 'end', 
 export function preparationStage(dimension: string | null, counts: ItemCounts, kinds: readonly PlanKind[] | null): Stage | null {
   if (dimension === 'the_nether') {
     const rods = countMatching(counts, /^blaze_rod$/u), pearls = countMatching(counts, /^(?:ender_pearl|ender_eye)$/u);
-    return rods >= 7 && pearls >= 14 ? null : 'nether_deep';
+    if (rods >= 7 && pearls >= 14) return null;
+    return kinds?.[0] === 'blaze' && rods < 7 ? 'nether_blaze' : 'nether_deep';
   }
   if (dimension !== 'overworld') return null;
   if (countMatching(counts, /^ender_eye$/u) > 0) return 'end';
@@ -150,6 +161,18 @@ function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; 
   return [...gapWords(gapsOf(table.needs.filter(need => !need.goal), parts)), foodLack(table, parts.food)].filter(Boolean);
 }
 
+/**
+ * The End's check with the eyes the frames still need once the portal room's frames are in view (S5's section of 11/5: the line asked 12 eyes
+ * in hand when the frames held some already): the empty frames, not twelve; none when every frame holds one.
+ */
+function endStage(world: Record<string, unknown> | undefined): PrepStage {
+  const frames = world ? framesOf(world) : null;
+  if (!frames) return STAGES.end;
+  const empty = Math.max(0, frames.frames - frames.eyes);
+  return { ...STAGES.end, needs: STAGES.end.needs.flatMap(need => !need.label.startsWith('エンダーアイ') ? [need]
+    : empty > 0 ? [{ ...need, label: 'エンダーアイ（空いた枠の分）', count: empty }] : []) };
+}
+
 /** Goals are facts of a missing fallback, never requirements of the entry gate. */
 function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonly string[] }): string {
   const wanted = gapWords(gapsOf(table.needs.filter(need => need.goal), parts));
@@ -165,12 +188,12 @@ function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonl
  * without them, and the goals; the other stages keep the one line.
  */
 export function preparationShortage(parts: { dimension: string | null; counts: ItemCounts; food: number; nowKinds: readonly PlanKind[] | null;
-  worn?: readonly string[]; inventory?: unknown; world?: Record<string, unknown>; taskId?: string }): string | null {
+  worn?: readonly string[]; inventory?: unknown; world?: Record<string, unknown>; taskId?: string; journeyReadiness?: boolean }): string | null {
   const returning = returningToEnd(parts.world ?? {}, parts.dimension, parts.taskId);
   const mining = miningToolShortage(parts.counts, parts.nowKinds, parts.inventory);
-  const stage = preparationStage(parts.dimension, parts.counts, parts.nowKinds);
+  const stage = parts.journeyReadiness === false ? null : preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
-  const table: PrepStage = stage === 'end' && returning ? RETURN_TO_END
+  const table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endStage(parts.world))
     : stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
   const goals = goalWords(table, parts);
   if (!table.risk) {
@@ -238,7 +261,7 @@ const record = (value: unknown): Record<string, unknown> | null => value && type
   ? value as Record<string, unknown> : null;
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 interface Feet { x: number; y: number; z: number }
-const feetOf = (world: Record<string, unknown>): Feet | null => {
+export const feetOf = (world: Record<string, unknown>): Feet | null => {
   const at = record(world.position), x = finite(at?.x), y = finite(at?.y), z = finite(at?.z);
   return x !== null && y !== null && z !== null ? { x, y, z } : null;
 };
@@ -359,11 +382,12 @@ export function readinessOf(observation: BodyObservation | null): { world: Recor
  */
 export const FOOD_BEFORE_DESCENT = 40;
 /** Planks that make a table (4), when the pack holds no table. */
-const TABLE_PLANKS = 4;
-const SURFACE_Y = 45, DESCENT = 10;
+export const TABLE_PLANKS = 4;
+const SURFACE_Y = 45;
+export const DESCENT = 10;
 /** The lowest y the walks and digs of an act reach (a `rel` hand counts from her feet), or the feet's own when
  * none goes lower. */
-function lowestReach(hands: unknown, feetY: number): number {
+export function lowestReach(hands: unknown, feetY: number): number {
   let lowest = feetY;
   for (const raw of Array.isArray(hands) ? hands : []) {
     const hand = record(raw);
@@ -426,7 +450,87 @@ export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts)
     .map(c => ({ ...c, far: feet ? Math.round(Math.hypot(c.x - feet.x, c.y - feet.y, c.z - feet.z)) : null }))
     .sort((a, b) => (a.far ?? 1e9) - (b.far ?? 1e9))[0];
   const where = seen ? `地図の石炭 (${seen.x},${seen.y},${seen.z}) ×${seen.n}${seen.far !== null ? ` が ${seen.far}m` : ''}` : '地図に石炭は見えていない';
-  return `燃料: 焼く物 ${items} 個に石炭 ${coal} が要る（石炭 1 で 8 個、板 1 枚は 1.5 個。板 ${planks} は作業台と道具の分）。${where}`;
+  // end1109o04: 14 raw meats and no coal on the map read as "no fuel, so wait for the night" with iron ore 14 blocks down. What is to be
+  // smelted, ores apart from meat, and that the mining does not wait for the fuel (the coal is in the same rock as the iron; a log burns too).
+  let ores = 0;
+  for (const [name, count] of counts) if (TO_SMELT.test(name) && /(?:^raw_|_ore$)/u.test(name)) ores += count;
+  const logs = countMatching(counts, /_(?:log|stem)$/u);
+  const what = ores === items ? `（鉱石 ${ores}）` : `（鉱石 ${ores}・食べ物 ${items - ores}。生でも食べられる）`;
+  const meanwhile = `${seen ? '' : '石炭は鉄と同じ地下の岩によく出る（鉄へ下りる途中で掘れる）。'}燃料が無くても鉱石は先に掘っておける（焼くのは燃料が揃ってから）`
+    + (logs > 0 ? `。原木 ${logs} も燃える（1 本で 1.5 個）` : '');
+  return `燃料: 焼く物 ${items} 個${what}に石炭 ${coal} が要る（石炭 1 で 8 個、板 1 枚は 1.5 個。板 ${planks} は作業台と道具の分）。${where}。${meanwhile}`;
+}
+
+const IRON_MARK = /鉄鉱石\[(?:deepslate_)?iron_ore\]/u;
+
+/**
+ * end1109o09: the now was the iron armour, no iron ore and no coal on the map, and twice by day she waited about 4 minutes for the night
+ * (planNow already said waiting cost 14% of the goal; the replay with that said louder chose the wait 5 of 6). What was missing was how
+ * to find it: the scan, then the stair down to y=16 and one row dug sideways (`oreRouteHands`). The line is said only while the now wants
+ * iron and the map shows none, in the overworld, with a pickaxe that takes iron.
+ */
+export function ironSearchLine(world: Record<string, unknown>, counts: ItemCounts, dimension: string | null, now: PlanNode | undefined): string | null {
+  if (dimension !== 'overworld' || !now) return null;
+  const wants = /iron/u.test(String(now.doneWhen ?? '')) || /鉄(?!ゴーレム)/u.test(String(now.title ?? ''));
+  if (!wants) return null;
+  if (!['stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe'].some(name => (counts.get(name) ?? 0) > 0)) return null;
+  const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter((line): line is string => typeof line === 'string');
+  if (marks.some(line => IRON_MARK.test(line))) return null;
+  const route = oreRouteHands(world, 'iron', counts);
+  if (!route) return null;
+  return `鉄鉱石: 今の節 ${now.id} に要るが、地図に見えていない（待っても見えてこない。地下は昼も夜も同じ暗さなので夜を待たない）。探す手: ① mc_probe kind=scan（鉱石の行）`
+    + ` ② それでも無ければ ${route}`;
+}
+
+const WANTS_WOOL = (node: PlanNode): boolean => /wool|_bed(?![a-z_])|(?:^|[^a-z_])bed(?:[^a-z_]|$)/u.test(String(node.doneWhen ?? '')) || /羊|ベッド/u.test(String(node.title ?? ''));
+
+/**
+ * end1109o10: no sheep near her start; the now was the bed (wool 3) and she walked the grass for them about 15 minutes over three days,
+ * saw none, and waited each night in a hole (bed none). The facts she lacked: a walk does not make a sheep appear, the bed is not needed
+ * to go on (the night underground goes as far as the day), and the node can be set aside and taken up again when a sheep is seen. Said
+ * while the now (or the node above it that wants the bed) wants wool, no bed is in the pack, no sheep is in sight and no village bed
+ * within 64 m is on the map. The hand names the highest node of the bed so that one set clears the sheep, the wool and the bed together.
+ */
+export function sheepAbsentLine(world: Record<string, unknown>, counts: ItemCounts, dimension: string | null, nodes: readonly PlanNode[],
+  now: PlanNode | undefined): string | null {
+  if (dimension !== 'overworld' || !now || !WANTS_WOOL(now)) return null;
+  if (countMatching(counts, BED_ITEM) > 0) return null;
+  const seen = (Array.isArray(world.nearbyEntities) ? world.nearbyEntities : [])
+    .some(entity => !!entity && typeof entity === 'object' && (entity as { name?: unknown }).name === 'sheep');
+  if (seen) return null;
+  const feet = feetOf(world);
+  const villageBed = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).some(line => {
+    const m = typeof line === 'string' ? /^B [^()]*ベッド \((-?\d+),(-?\d+),(-?\d+)\)/u.exec(line) : null;
+    return !!m && (!feet || Math.hypot(Number(m[1]) - feet.x, Number(m[3]) - feet.z) <= 64);
+  });
+  if (villageBed) return null;
+  let top = now;
+  // Up while the node above wants the bed too and holds nothing else still open (「食料とベッド」 with the food done, not with it to do).
+  const clean = (node: PlanNode) => WANTS_WOOL(node) && nodes.filter(kid => kid.parentId === node.id).every(kid => kid.state === 'done' || WANTS_WOOL(kid));
+  for (let parent = nodes.find(node => node.id === top.parentId); parent && clean(parent); parent = nodes.find(node => node.id === top.parentId)) top = parent;
+  return `羊: 今の節 ${now.id} に羊毛が要るが、見える所に羊がいない（草原を歩き回っても羊が出てくる保証は無く、時間だけが減る）。`
+    + `ベッドが無くても先へ進める（夜は地下で鉄・ダイヤを掘れば昼と同じだけ進む）。手: plan_update の ops [{"op":"set","id":"${top.id}","state":"blocked","reason":"羊が見えない"}] で`
+    + `${top.id === now.id ? 'この節' : `ベッドの節 ${top.id}`}を外し、次の節へ。ほかの用事の途中で羊が見えたら倒して羊毛を取り、state=continue で戻す`;
+}
+
+const FOOD_ANIMALS = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit', 'mooshroom', 'cod', 'salmon']);
+const WANTS_FOOD = (node: PlanNode): boolean => /food\s*>=|foodPoints/u.test(String(node.doneWhen ?? '')) || /食料|狩/u.test(String(node.title ?? ''));
+
+/**
+ * thru t05 (w1109v, an icy world by the water, 17:58): the now was the food (40 points, 「無ければ動物を4〜6体狩る」) and for about 35 minutes
+ * she walked for salmon and rabbits at 0〜2.4 points, saw almost none, and never went down to the iron. The same facts as the sheep's
+ * (`sheepAbsentLine`): a walk does not make an animal appear; going down first and taking what is seen on the way (animals, a village's
+ * fields, fish) is faster; the rule 「省くなら prep に skipped と理由を書く」 is the way to go down. Said while the now wants food, the points
+ * are under 40 and no animal that is food is in sight, in the overworld.
+ */
+export function foodAbsentLine(world: Record<string, unknown>, food: number, dimension: string | null, now: PlanNode | undefined): string | null {
+  if (dimension !== 'overworld' || !now || !WANTS_FOOD(now) || food >= 40) return null;
+  const seen = (Array.isArray(world.nearbyEntities) ? world.nearbyEntities : [])
+    .some(entity => !!entity && typeof entity === 'object' && FOOD_ANIMALS.has(String((entity as { name?: unknown }).name)));
+  if (seen) return null;
+  return `食料: 今の節 ${now.id} は食料 ${round1(food)}/40 点だが、見える所に食べられる動物がいない（歩き回っても動物が出てくる保証は無く、時間だけが減る）。`
+    + `先に鉄へ下り、途中で見えた動物・村の畑・魚で補う方が速い。下りるなら決まりの「省くなら prep に skipped と理由を書く」に当たる: plan_update の ops `
+    + `[{"op":"set","id":"${now.id}","state":"blocked","reason":"動物が見えない","prep":{"state":"skipped","why":"動物が見えない"}}]。動物が見えたら狩って state=continue で戻す`;
 }
 
 export function descentNote(input: unknown, frame: BodyObservation | null): string | null {

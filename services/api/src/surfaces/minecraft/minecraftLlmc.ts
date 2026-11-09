@@ -216,13 +216,14 @@ function actResult(receipt: MinecraftControlReceipt, urgent: string | null): Too
 }
 
 /** The hostiles of a frame, nearest first (with the body's own `canSee`, when the frame says it). */
-function hostiles(observation: BodyObservation | null): Array<{ name: string; distance: number; canSee?: boolean; canReachMe?: boolean; reach?: string }> {
+function hostiles(observation: BodyObservation | null): Array<{ name: string; distance: number; id?: number; canSee?: boolean; canReachMe?: boolean; reach?: string; angry?: boolean }> {
   const world = observation?.state.world as { nearbyThreats?: unknown } | undefined;
   return (Array.isArray(world?.nearbyThreats) ? world!.nearbyThreats as Array<Record<string, unknown>> : [])
     .flatMap(item => typeof item?.name === 'string' && typeof item.distance === 'number' && Number.isFinite(item.distance)
-      ? [{ name: item.name, distance: item.distance, ...(typeof item.canSee === 'boolean' ? { canSee: item.canSee } : {}),
+      ? [{ name: item.name, distance: item.distance, ...(typeof item.id === 'number' ? { id: item.id } : {}), ...(typeof item.canSee === 'boolean' ? { canSee: item.canSee } : {}),
         ...(typeof item.canReachMe === 'boolean' ? { canReachMe: item.canReachMe } : {}),
-        ...(typeof item.reach === 'string' ? { reach: item.reach } : {}) }] : [])
+        ...(typeof item.reach === 'string' ? { reach: item.reach } : {}),
+        ...(typeof item.angry === 'boolean' ? { angry: item.angry } : {}) }] : [])
     .sort((left, right) => left.distance - right.distance);
 }
 
@@ -241,13 +242,18 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
   // The kinds she took on in this act (`accept`) are hers to fight: they never cut it.
   const near = new Set([...(input as ActInput | null)?.accept ?? [],
     ...hostiles(observe()).filter(item => item.distance <= LLMC_URGENT_METERS).map(item => item.name)]);
+  // end1109p02: an enderman she angered came to her roof and its own fight was cut 6 times (server_cancel, 33 s in). What the act's fight or
+  // attack hands name as their target (a kind, or `#id`) is the one she means to meet: it never cuts that act.
+  const targets = ((input as ActInput | null)?.hands ?? []).flatMap(hand => (hand.do === 'fight' || hand.do === 'attack') && typeof hand.target === 'string'
+    && hand.stance !== 'flee' ? [hand.target.trim().toLowerCase()] : []);
+  const mine = (item: { name: string; id?: number }) => targets.includes(item.name.toLowerCase()) || (item.id !== undefined && targets.includes(`#${item.id}`));
   const controller = new AbortController();
   let reason: string | null = null;
   const cancel = () => controller.abort(parent.reason);
   parent.addEventListener('abort', cancel, { once: true });
   if (parent.aborted) cancel();
   const timer = watched >= LLMC_URGENT_METERS ? null : setInterval(() => {
-    const come = hostiles(observe()).find(item => item.distance <= urgentRange(item, LLMC_URGENT_METERS) && !near.has(item.name)
+    const come = hostiles(observe()).find(item => item.distance <= urgentRange(item, LLMC_URGENT_METERS) && !near.has(item.name) && !mine(item)
       && !(isShooter(item.name) && item.canSee === false));
     if (!come || controller.signal.aborted) return;
     reason = `${come.name} ${come.distance.toFixed(1)}m`;

@@ -1,6 +1,7 @@
 import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
+import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
 import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -24,9 +25,17 @@ export const SHORT_HAND_ERROR_KEY = '書き方の誤り';
  * place, dig and use, how a stop is read. Ends with the cut-offs (stopIf, accept, onFail). `ACT_DESCRIPTION` (the json hands, for
  * the old modes) is untouched.
  */
-const SHORT_LINES = [
+export interface ShortActManualFragment { readonly id: string; readonly text: string; readonly inline: boolean; readonly title?: string }
+interface ShortActManualPage { readonly id: string; readonly title: string; readonly lines: readonly string[] }
+const manualPage = (id: string, title: string, lines: readonly string[]): ShortActManualPage => Object.freeze({ id, title, lines: Object.freeze([...lines]) });
+// Default fragments stay inline, so a newly added ordinary/emergency hand is never silently deferred.
+const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
+  manualPage('special', 'bed_burst（エンドのベッド連爆）・fill（指定範囲の充填）・shield_rush（ブレイズ用の盾突進）', [
+  BED_BURST_DESCRIPTION,
+  'bed_burst は json {"do":"bed_burst","at":[{"x":0,"y":67,"z":2},{"x":0,"y":67,"z":3}],"target":"#12","count":5,"seconds":20} の行で書く。',
   FILL_DESCRIPTION,
-  SHIELD_RUSH_DESCRIPTION,
+  SHIELD_RUSH_DESCRIPTION
+  ]),
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、手ごとの1行と止まった所の周りを返す。'
     + '手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める。',
   ("あなたが決める: 目的・対象・行き先・許す掘る/置く・済む条件、食事・睡眠・片づけ、戦うか逃げるか（地図と状態を見て手で出す）。体に任せる細部: " +
@@ -56,32 +65,47 @@ const SHORT_LINES = [
     + ("search_timeout（時間切れ: 道探しが持ち時間で終わり、道があるかは分からない。調べたマスと、いちばん近づけた所があと何 m かが付く。近い中継点を行き先に go を出し直す。高さの差が大きい道は " +
 "vertical で進む）・")
     + ("stuck・low_floor（足場が無い: 立つ所が丸ごとのブロックでない。隣の丸ごとの床へずれる）・no_floor（行き先の足元が作物・草花、または place= " +
-"無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す。"),
+"無しで足元が空気（洞窟の宙）で立てない。理由に出る立てる所か床の上を行き先に）・unsafe。理由に合わせて dig=/place=/道具を直して出し直す（ただし長い地上の道で石に当たった limit_dig・search_timeout は、dig= に stone を足さず、行き先を横へずらして回る）。"),
   '範囲を挙げて体に任せる手（go と同じ形: 何を・どこで・どこまでをあなたが決め、体は細かい動きだけ。挙げた範囲の外は探さない。上限 seconds が必ずあり、止まる時は「<手> 止まった 理由」）:',
+  manualPage('obsidian', 'obsidian（指定した溶岩源を固めて採掘・水回収）', [
   'obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N] [maxDig=N]',
-  '  黒曜石づくり。X,Y,Z は溶岩の源のマス（地図の L、8 つまで。体は探さない）。持ち物の水入りバケツで水を注ぎ、固まったらダイヤのツルハシで掘って拾い、水を汲み戻す。count（既定 1）まで。'
+  '  黒曜石づくり。'
+    + 'X,Y,Z は溶岩の源のマス（地図の L、1〜24 マス。体は探さない）。'
+    + '同じ高さでつながった源は 1 回の注水で面を固め、ダイヤのツルハシで続けて掘って拾い、水を汲み戻す。'
+    + 'count（省略時は座標の数）まで、seconds は 5〜300（既定 90）。'
     + ("立てない時の立ち直しは体。足場は place= の物。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: " +
-"no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。"),
+"no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。")
+  ]),
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
   ("  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp " +
 "は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。")
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
+  manualPage('mine', 'mine（指定した同種の鉱脈を掘って回収）', [
   'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [seconds=N]',
   ("  鉱脈を掘る。ブロック名は id そのまま（iron_ore）。y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine " +
 "に書く名前。X,Y,Z はその鉱脈のマス（4 つまで。種類が分かるマスだけ: 地図の o " +
 "は鉄ではない）。同じ種類のつながったマスだけを近い順にたどって掘り、拾い、道具を持ち替える（ほかの鉱石は探さない）。count（既定 8）まで。道が岩に塞がれている時だけ dig= の物を掘って届く。")
-    + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。',
+    + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。'
+  ]),
   'make 物 [個数]',
   ("  作る（途中の物の板・棒なども持ち物の材料から作る。3×3 で作業台が近くに無ければ持っているものを置く）。材料が足りなければ何も作らず足りない物の一覧を返す。材料は集めに行かない。理由: " +
 "missing・no_table・no_recipe・full。"),
+  manualPage('portal', 'portal（指定位置へゲート枠・点火・通過）', [
   'portal X,Y,Z x|z [block=obsidian] [place=名,名] [maxPlace=N] [seconds=N] [noEnter]',
-  '  ポータルの枠。X,Y,Z は枠の内側の左下のマス、x|z は枠が広がる向き。黒曜石 10 個で 4×5 の枠を組み（足場込み）、火打ち金で点け、入る（noEnter なら入らない）。'
-    + '理由: no_obsidian・no_flint・blocked・ignite_failed・limit_time・stuck。',
+  '  ポータルの枠。'
+    + 'X,Y,Z は枠の内側の左下のマス、x|z は枠が広がる向きで、その 1 段下が枠の下の段。'
+    + '黒曜石 10 個で 4×5 の枠を組み（足場込み）、火打ち金かファイヤーチャージで点け、入る（noEnter なら入らない）。'
+    + 'noEnter なら点ける物が無くても枠を組み「点火は未」で済む。'
+    + '理由: no_obsidian・no_flint・blocked・ignite_failed・limit_time・stuck。'
+  ]),
+  manualPage('smelt', 'smelt（炉へ投入・燃料補給。回収は別）', [
   'smelt 物 個数 [fuel=名] [fuelCount=N] [furnaces=N] [seconds=N] [X,Y,Z ...]',
   ("  かまどに入れる（取り出さない・焼き上がりを待たない）。furnaces 基に分けて入れ、燃料を足す（X,Y,Z は使うかまど。無ければ持っているかまどを置く）。焼き上がると出来事で知らされる。取り出しは " +
 "furnace op=take を列に足す。")
-    + '種類が 2 つ以上は json（items）。理由: no_furnace・fuel_short・missing・unreachable・limit_time。',
-("vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water " +
+    + '種類が 2 つ以上は json（items）。理由: no_furnace・fuel_short・missing・unreachable・limit_time。'
+  ]),
+manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）', [
+  ("vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water " +
 "[maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [seconds=N]"),
   '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
     + ("shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物（vertical " +
@@ -99,7 +123,8 @@ const SHORT_LINES = [
 "")
     + `（maxDig は ${VERTICAL_DEFAULTS.maxDig}・maxPlace は ${VERTICAL_DEFAULTS.maxPlace} まで）。見えた鉱石は結果で知らされる。`,
   ("  例（liquid= は必ず書く）: vertical down stairs south y=10 dig=stone,dirt liquid=stop   vertical up pillar y=70 " +
-"dig=dirt place=cobblestone liquid=seal_water"),
+"dig=dirt place=cobblestone liquid=seal_water")
+  ]),
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
   '  近くの数歩を、掘らず置かずに歩く手（段差1と泳ぎだけ。点を空白で続けると path。32点まで）。range は的から何 m で着いたことにするか。',
   '  地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる（64m ごとに区切って歩く）。遠くへ・壁や穴や崖のある道は go（道を体が引く）、高さの差が大きい上り下りは vertical。',
@@ -113,24 +138,39 @@ const SHORT_LINES = [
   'place ブロック名 X,Y,Z ... [face=down] / pillarUp N [ブロック名]',
   '  place は空気（. か *）で、6面のどれかが固いマスへ。足と頭のマス・草花（,）・水・レール・ポータル・周りが全部空気の宙には置けない。',
   '  pillarUp は真下に置きながら N 段登る（縦穴を上る）。足元が丸ごとのブロックでない（芽・雪・ハーフブロックの上）と「足場が無い」で止まる: 隣の丸ごとの床へずれる。',
-  'use 物 [X,Y,Z] [face=..] [target=#id]',
-  ("  バケツで汲む・注ぐ、火打ち金、ベッドで寝る（夜か雷雨の時だけ。昼は寝られない。ネザー・エンドでは爆発する）、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と " +
+  'use 物 [X,Y,Z] [face=..] [target=#id] [count=N]',
+  ("  バケツで汲む・注ぐ、火打ち金、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と " +
 "face）。"),
   '  use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石1枚の向こうの水は、その石を dig してから use bucket）。',
   'craft 物 [個数]',
   '  2×2 で作れる物（板・棒・作業台・松明・火打ち金など）は作業台が要らない。3×3 の物（ツルハシ・剣・盾・かまど・バケツ・ハーフブロックなど）は作業台が5m内に要る。',
   'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
+  'sleep [ベッド] [seconds=N]',
+  '  16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す（seconds 10〜60、既定 45）。夜か雷雨の時だけ。8m（上下 5）に敵がいると寝られない（壁越しでも）。'
+    + 'ネザー・エンドでは爆発する。掘って場所は作らない。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
+  manualPage('special-json', 'shield_rush・fill のJSON書式例', [
   'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',
-  'json {"do":"fill",...}（上記の全必須欄を書く）',
+  'json {"do":"fill",...}（上記の全必須欄を書く）'
+  ]),
   'pickup [range=N] [target=..]',
   ("chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 " +
 "iron_ingot）"),
   ("furnace X,Y,Z take   furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]   （かまど・溶鉱炉・燻製器。例: furnace 12,64,-3 put " +
 "raw_iron 8 fuel=coal fuelCount=2。")
     + '裸で furnace/chest と書いても座標と op が無いと断られる）',
+  manualPage('shoot', 'shoot（弓で指定した敵/座標を撃つ）', [
   'shoot 相手(#id か名前) か X,Y,Z [item=bow] [charge=秒] [n=本数]  弓で撃つ。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。',
+  '  item=crossbow も使える。弓の charge は既定 1.05 秒（0.2〜1.2 秒に収める）。n は既定 1、1〜8 本に収める。落下と観測した相手の速度から狙うが、命中は保証しない。',
+  '  結晶を相手に指定する時は、足元から結晶まで 13m 以上・64m 以内。開始時に着座中の竜は perched_immune で断る。',
+  '  結晶の予測軌道に見えている solid の遮断があれば line_blocked。未読のマスは遮断と数えていないので、未読を含む射線の開通・安全は証明しない。',
+  '  結晶は最後の照準待ち後にも、現在の立場・距離・相手と、すでに向けた角度の軌道を再確認する。その時に遮断・範囲外・相手消失が分かれば、放さず持ち替えて止める。',
+  '  弓を引いた後の再照準で相手を見失うか、届く軌道を計算できない場合も、放す代わりに持ち替えて止める。',
+  '  結果に矢の残数と、減らなかった場合の表示がある。手の done や「射った」は命中・結晶破壊の保証ではない。',
+  '  当たりは照準開始から飛行待ち終了までの相手の被害通知、結晶は消失通知を数える。自分の矢が原因かまでは確定しないので、現在の相手・残る結晶数なども観測して読む。',
+  '  反射や取消で手が cut されても、すでに放った矢の飛行は取り消せない。cut や矢の消費だけで命中・失敗を確定せず、飛行後の相手・結晶を再観測して次の手を選ぶ。'
+  ]),
   '',
   '## json の欄（手ごとに決まっている。ほかの欄は断られる。どの手にも rel・note・onFail）',
   ("- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: " +
@@ -142,12 +182,13 @@ const SHORT_LINES = [
 "dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds / walk: to か path・sprint・range " +
 "/ ")
     + ("dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: " +
-"item・at（1つ）・face・target"),
+"item・at（1つ）・face・target・count"),
   ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
 "target・untilDead・seconds・hold（shield_rush は上の欄も） / eat: item"),
   ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +
 "at（1つ）・op・items"),
   '- drop: items・target か at / shoot: target か at・item・charge・n',
+  manualPage('examples', 'walk・furnace・chest・drop・shoot のJSON例', [
   'json {"do":"walk","to":{"x":1,"y":64,"z":2},"range":1,"sprint":true,"note":"村へ"}',
   ("json {\"do\":\"furnace\",\"at\":[{\"x\":1,\"y\":2,\"z\":3}],\"op\":\"put\",\"item\":\"iron_ore\",\"count\":8,\"fuel\":\"coal\",\"fue" +
 "lCount\":2}（op=take で出来上がりを取る。溶鉱炉・燻製器も）"),
@@ -155,7 +196,8 @@ const SHORT_LINES = [
 "look・take・put・takeAll のどれか 1 つ）"),
   'json {"do":"drop","items":[{"item":"gold_ingot","count":1}],"target":"#12"}（その方へ投げる）',
   'json {"do":"shoot","target":"#12","item":"bow","charge":1,"n":3}（target の代わりに at も可）',
-  '',
+  ''
+  ]),
   '## 止める・守る',
   ("- stopIf は文字列 \"hostileWithin=8 hpBelow=10\"（hostileWithin は敵までの m、hpBelow は体力 " +
 "0〜20、hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）。")
@@ -184,7 +226,7 @@ const SHORT_LINES = [
   ("- 条件の書き方（& が「かつ」、| が「または」。読めない書き方は断られる）: have:物>=n（物は id か id の終わり。log " +
 "は全部の原木）・have:物<n・food>=n・hunger>=n・hp>=n・")
     + ("dim:nether|end|overworld・at:x,y,z~r（r の既定 4）・near:ブロック~r（r の既定 4、8 " +
-"まで）・free>=n・time:day|night・furnace:x,y,z（体が入れた焼きが終わった）・safe~r（r 以内に来られる敵がいない）。"),
+"まで）・free>=n・time:day|night・furnace:x,y,z（焼きの見込み時間に達した。現物はtakeで確認）・safe~r（r 以内に来られる敵がいない）。"),
   ("- 例: pre \"have:iron_ore>=3&near:furnace~4\"。下りる act の pre " +
 "\"food>=40&have:crafting_table|food>=40&have:planks>=4\"（満たさない時は始めずに捨てる）。")
     + 'done "have:log>=10"。repeat 8 と done "at:26,51,7~2"（手は rel で書いたトンネルの 1 組）。',
@@ -195,7 +237,10 @@ const SHORT_LINES = [
 "「掘れない」は道具か岩盤（X）/ ")
     + '「見えない：間に (x,y,z)」はその間を先に掘る / 「そのものには立てない」は続く「立てる隣」へ / 「時間切れ」は秒の上限か道探しの持ち時間（go の search_timeout は道が無いとは限らない）。',
 ];
-export const SHORT_ACT_DESCRIPTION: string = SHORT_LINES.join('\n');
+export const SHORT_ACT_MANUAL_FRAGMENTS: readonly ShortActManualFragment[] = Object.freeze(SHORT_LINES.map((part, index) =>
+  Object.freeze(typeof part === 'string' ? { id: `inline-${index}`, text: part, inline: true }
+    : { id: part.id, title: part.title, text: part.lines.join('\n'), inline: false })));
+export const SHORT_ACT_DESCRIPTION: string = SHORT_ACT_MANUAL_FRAGMENTS.map(part => part.text).join('\n');
 
 /** `mc.act` の短い書き方の入力 schema（API の道具の schema に使える範囲）。体の schema（ACT_INPUT_SCHEMA）に直した後で通る。 */
 export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({

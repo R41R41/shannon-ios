@@ -15,7 +15,7 @@ export interface ShieldRushResult {
 
 export const SHIELD_RUSH_DESCRIPTION = 'attack style=shield_rush: 見たブレイズ1体の target(#id)・seconds(5〜60、帰還込み)・retreatHp(1〜19の整数)・retreatTo({x,y,z})・'
   + 'area({center:{x,y,z},radius:1〜16,maxDrop:0〜3の整数})・shieldReserve(0〜335)・onCrossfire(retreat/continue)・pickup(target_drops/none)は全て必須。座標は絶対座標（rel不可）。'
-  + '盾を構えて詰めて打ち、指定した落とし物を拾って退避先へ戻る。掘る・置く・作る・食べるはしない。'
+  + '盾を構えて詰めて打ち、指定した落とし物を拾って退避先へ戻る。再出撃・食事はしない。施工はretreatToがarea外の退避goだけで、cobblestone/netherrackを最大6個置ける。'
   + '結果の shieldRush は status(killed/retreated/failed/cut)・targetDead(true/false/null)・'
   + 'code(TARGET_LOST/HEIGHT_UNREACHABLE/NO_ATTACK_WINDOW/CROSSFIRE/SHIELD_LOW/RETREAT_BLOCKED/PICKUP_UNSAFE/TIME_LIMIT/REFLEX/DEAD/null)と実測値。'
   + 'retreatHpで帰れた時はretreated/code:null。';

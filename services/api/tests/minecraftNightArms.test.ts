@@ -8,7 +8,7 @@ const at = (time: string) => ({ time });
 describe('nightArmsLine', () => {
   it('comes within three minutes of the night and through it, with no sword and no axe', () => {
     expect(nightArmsLine(at('12300'), pack('iron_ingot'), 'overworld'))
-      .toBe('夜まで 35 秒: 剣も斧も荷に無い。盾が無い（盾は板 6 と鉄 1 で作れる。鉄は 1 個）。夜は地上にゾンビ・スケルトンが湧く');
+      .toBe('夜まで 35 秒: 剣も斧も荷に無い。鉄 1 個は鉄のツルハシ（鉄 3）が先（ダイヤと黒曜石は鉄のツルハシでしか掘れない。剣・盾に使うとツルハシが次の鉄まで遅れる）。夜は地上にゾンビ・スケルトンが湧く');
     expect(nightArmsLine(at('9500'), pack(), 'overworld')).toContain('夜まで 約 3 分');
     expect(nightArmsLine(at('14000'), pack(), 'overworld')).toContain('夜（朝まで 約 8 分）');
   });
@@ -24,21 +24,25 @@ describe('nightArmsLine', () => {
   it('says a stone sword is not the iron one once iron for a sword is in the pack (the audit of 11/4: a stone sword put the warning out)', () => {
     const iron = new Map([['stone_sword', 1], ['iron_ingot', 5]]);
     expect(nightArmsLine(at('14000'), new Map([...iron, ['shield', 1]]), 'overworld'))
-      .toBe('夜（朝まで 約 8 分）: 荷の剣・斧は stone_sword だけ（鉄の剣は無い。鉄の剣は鉄 2 個で作れる。鉄は 5 個）。夜は地上にゾンビ・スケルトンが湧く');
+      .toBe('夜（朝まで 約 8 分）: 荷の剣・斧は stone_sword だけ（鉄の剣は無い。鉄の剣は鉄 2 個で作れる。鉄のツルハシの 3 個を除いて鉄は 2 個）。夜は地上にゾンビ・スケルトンが湧く');
     expect(nightArmsLine(at('14000'), new Map([...iron, ['iron_sword', 1], ['shield', 1]]), 'overworld')).toBeNull();
     expect(nightArmsLine(at('14000'), new Map([['stone_sword', 1], ['iron_pickaxe', 1]]), 'overworld')).toContain('鉄は 0 個');
     expect(nightArmsLine(at('14000'), new Map([['stone_sword', 1], ['iron_ingot', 1], ['shield', 1]]), 'overworld')).toBeNull();
+    expect(nightArmsLine(at('14000'), new Map([['stone_sword', 1], ['iron_pickaxe', 1], ['iron_ingot', 1], ['shield', 1]]), 'overworld')).toContain('鉄は 1 個');
   });
   it('says no shield once iron is in the pack (the audit of 11/4, order 1: the sword and the shield right after the iron)', () => {
-    expect(nightArmsLine(at('14000'), new Map([['iron_sword', 1], ['iron_ingot', 3]]), 'overworld'))
+    expect(nightArmsLine(at('14000'), new Map([['iron_sword', 1], ['iron_pickaxe', 1], ['iron_ingot', 3]]), 'overworld'))
       .toBe('夜（朝まで 約 8 分）: 盾が無い（盾は板 6 と鉄 1 で作れる。鉄は 3 個）。夜は地上にゾンビ・スケルトンが湧く');
-    expect(nightArmsLine(at('14000'), new Map([['stone_sword', 1], ['iron_ingot', 1]]), 'overworld')).toContain('盾が無い');
+    // end1109o10: the first 3 iron are the pickaxe's; the shield gets the 4th.
+    expect(nightArmsLine(at('14000'), new Map([['stone_sword', 1], ['iron_ingot', 1]]), 'overworld')).not.toContain('盾が無い');
+    expect(nightArmsLine(at('14000'), new Map([['iron_sword', 1], ['iron_ingot', 4]]), 'overworld')).toContain('盾が無い（盾は板 6 と鉄 1 で作れる。鉄のツルハシの 3 個を除いて鉄は 1 個）');
     expect(nightArmsLine(at('14000'), new Map([['stone_sword', 1]]), 'overworld')).toBeNull();
     expect(nightArmsLine({ timeOfDay: 14_000 }, new Map([['iron_sword', 1], ['iron_pickaxe', 1]]), 'overworld')).toContain('鉄は 0 個');
   });
   it('treats underground as dark at any hour (a cave is dark in the morning)', () => {
     expect(nightArmsLine(at('6000'), pack(), 'overworld', true)).toBe('地下は昼でも暗く、ゾンビ・スケルトンが湧く: 剣も斧も荷に無い');
-    expect(nightArmsLine({}, new Map([['stone_axe', 1], ['iron_ingot', 3]]), 'overworld', true)).toContain('stone_axe だけ');
+    expect(nightArmsLine({}, new Map([['stone_axe', 1], ['iron_ingot', 5]]), 'overworld', true)).toContain('stone_axe だけ');
+    expect(nightArmsLine({}, new Map([['stone_axe', 1], ['iron_ingot', 3]]), 'overworld', true)).toContain('鉄 3 個は鉄のツルハシ');
     expect(nightArmsLine(at('6000'), pack('iron_sword'), 'overworld', true)).toBeNull();
     expect(nightArmsLine(at('6000'), pack(), 'overworld', false)).toBeNull();
     expect(nightArmsLine(at('6000'), pack(), 'the_nether', true)).toBeNull();

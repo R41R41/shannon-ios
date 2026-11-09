@@ -37,7 +37,15 @@ export interface NearThreat { id: number | null; name: string; distance: number;
   /** r8: the body's own `canSee` (its check at every frame, `threatExposure`): whether the hostile sees her; absent or null: not said. */
   canSee?: boolean | null;
   /** run 26: the body's `reach` word (in_sight | path_no_sight | walled | unknown), when it says one. */
-  reach?: string | null }
+  reach?: string | null;
+  /** H6 (end1109e02): the body's `angry` for an enderman (its mood flag); absent or null: not said. */
+  angry?: boolean | null }
+/**
+ * H6 (end1109e02, 11/9: in the End, endermen the body said were not angry stood 9〜17 m off in sight, and about 40 decisions in a row were the urgent
+ * kind 「敵から離れ、足元を見る」, while the dragon sat on the perch): an enderman the body says is not angry comes only when looked in the eye or struck.
+ * It makes no step urgent and is no reason to step away; its line says its mood.
+ */
+export const calmEnderman = (threat: { name: string; angry?: boolean | null }): boolean => threat.name === 'enderman' && threat.angry === false;
 /** The hostiles of a frame, nearest first, with their id, place, height against her feet and the body's own `canReachMe` and `canSee`. */
 export function nearThreats(observation: BodyObservation | null): NearThreat[] {
   const world = plain(observation?.state.world) ?? {};
@@ -49,7 +57,8 @@ export function nearThreats(observation: BodyObservation | null): NearThreat[] {
     return [{ id: typeof entity.id === 'number' && Number.isInteger(entity.id) ? entity.id : null, name: entity.name, distance, at,
       dy: feet && y !== null && feetY !== null ? Math.round(y - feetY) : null,
       canReachMe: typeof entity.canReachMe === 'boolean' ? entity.canReachMe : null,
-      canSee: typeof entity.canSee === 'boolean' ? entity.canSee : null, reach: typeof entity.reach === 'string' ? entity.reach : null }];
+      canSee: typeof entity.canSee === 'boolean' ? entity.canSee : null, reach: typeof entity.reach === 'string' ? entity.reach : null,
+      ...(typeof entity.angry === 'boolean' ? { angry: entity.angry } : {}) }];
   }).sort((left, right) => left.distance - right.distance);
 }
 

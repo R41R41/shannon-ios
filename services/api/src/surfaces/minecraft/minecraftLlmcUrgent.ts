@@ -1,5 +1,5 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { isShooter, nearThreats, type NearThreat } from './minecraftLlmcThreat.js';
+import { calmEnderman, isShooter, nearThreats, type NearThreat } from './minecraftLlmcThreat.js';
 
 /**
  * mb-llmc r8 (run 32, 2026-10-22: the decision after 「wither_skeleton #696 は見える・6m」 took 10.3 s, and in that time she was hit three
@@ -26,7 +26,8 @@ export const URGENT_NOTE = `${URGENT_MODE}（決まりは system の「急ぎの
  */
 export const UNSEEN_URGENT_METERS = 5;
 export const SEALED_CREEPER_METERS = 4;
-export function urgentRange(threat: { name: string; canReachMe?: boolean | null; canSee?: boolean | null; reach?: string | null }, meters: number): number {
+export function urgentRange(threat: { name: string; canReachMe?: boolean | null; canSee?: boolean | null; reach?: string | null; angry?: boolean | null }, meters: number): number {
+  if (calmEnderman(threat)) return 0;
   if (threat.canReachMe === false || threat.reach === 'walled') return threat.name === 'creeper' ? Math.min(meters, SEALED_CREEPER_METERS) : 0;
   if (isShooter(threat.name)) return meters;
   return threat.canSee === false || threat.reach === 'path_no_sight' ? Math.min(meters, UNSEEN_URGENT_METERS) : meters;
