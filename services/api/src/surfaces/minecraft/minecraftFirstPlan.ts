@@ -133,7 +133,7 @@ const BEYOND: readonly PlanSeed[] = [
       '檻つきの柱は積める物3個以上を持って登り、長居しない（落下止めは当てにしない）。檻は本命が尽きて竜の体力100超の予備の最後',
       '竜を打つ前に剣か斧を equip で手に持つ（手が別の物のことがある）'],
     children: [node('ベッドで倒す（本命）', { kind: 'dragon',
-        note: 'ベッド 10・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }),
+        note: 'ベッド（戦い用 8 以上）・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }),
       // Unseen crystal bases count as remaining: full clearance must not be a prerequisite for the perched sword fallback.
       node('結晶を弓で壊しつつ止まり木の竜を剣で打つ（予備）', { kind: 'dragon',
         note: '竜の体力50以下なら結晶へ行かず窪みの足場の剣か残りのベッドで届く。',
