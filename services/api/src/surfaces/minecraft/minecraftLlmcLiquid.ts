@@ -17,7 +17,7 @@ const EYE = 1.62;
  */
 export const USE_REACH = 5.0;
 /** What the run measured: a dig of a cell in water takes about 6 seconds, in air about 1. */
-const WATER_DIG = '水中のマスの dig は 1 マス 6 秒ほど（空気中は約 1 秒）、流れの中の walk は同じマスで進めないことがある';
+const WATER_DIG = '水中のマスの dig は 1 マス 6 秒ほど（空気中は約 1 秒）、流れの中の walk は同じマスで進めないことがある（上流のマスにブロックを place すると流れは止まる）';
 const RANGE = 7, SHOWN = 3;
 
 interface Found { cell: P; reach: number; between: string | null }
