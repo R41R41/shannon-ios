@@ -109,6 +109,26 @@ describe('the End', () => {
     expect(fewObsidian?.line).toContain('黒曜石（エンドの戦い用');
     expect(fewObsidian?.line).toContain('7/8');
   });
+  it('does not hold a full kit of the beds for the food eaten on the way, and starts no clock (the review of 11/10, G12)', () => {
+    forgetEndGather();
+    // She left the surface with 330 points (16 cooked beef) and ate on the way: 12 are 249.6. No food can be added in the frames' room.
+    const kit: Array<[string, number]> = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 12], ['ender_eye', 12]];
+    expect(deadlyGateHold(walkIn, overworld(kit), 'g12')).toBeNull();
+    expect(firstEntryLack(readinessOf(overworld(kit))!, undefined)).toBeNull();
+    // The check in the frames' room asks the same food as the gate, so no line sends her back to the surface for it.
+    const seen = { dimension: 'overworld', mapLandmarks: ['Q エンドポータルの枠 (3,26,-9) 北3m ×12 アイ入り 0'] };
+    const facts = readinessOf(frame([...kit, ['bow', 1], ['arrow', 30], ['iron_sword', 1]], seen))!;
+    const check = { dimension: facts.dimension, counts: facts.counts, food: facts.food, nowKinds: ['end' as const], taskId: 'g12', now: 0 };
+    expect(preparationShortage({ ...check, world: facts.world })).toBeNull();
+    expect(preparationShortage(check)).toContain('目安 330');
+    // Under the fallback's food the gate holds, and so does a missing bed with the food short; the words say that waiting is the faster way.
+    const few = kit.map(([name, n]) => [name, name === 'cooked_beef' ? 3 : n] as [string, number]);
+    expect(deadlyGateHold(walkIn, overworld(few), 'g12')?.line).toContain('目安 330');
+    forgetEndGather();
+    const sevenBeds = kit.map(([name, n]) => [name, name === 'white_bed' ? 7 : n] as [string, number]);
+    const held = deadlyGateHold(walkIn, overworld([...sevenBeds, ['iron_sword', 1]]), 'g12')?.line ?? '';
+    for (const word of ['7/8', '残り約 10 分', '地上へ取りに戻る往復はこの残りより長い']) expect(held, word).toContain(word);
+  });
   it('lets the fallback in once the gathering of beds has had ten minutes, with an iron sword; the bow and arrows are aims (the review of 11/5, item 8; thru-1110 11/9)', () => {
     forgetEndGather();
     let clock = 0;

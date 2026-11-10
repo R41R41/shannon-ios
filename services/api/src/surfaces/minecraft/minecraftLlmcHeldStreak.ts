@@ -35,6 +35,8 @@ function liftWords(kind: string, facts: DoneFacts): string {
   if (kind === 'fight' && facts.dimension === 'the_nether') {
     return 'ブレイズの関所の食料・盾がそろえば体が元の節へ戻す。体力・満腹度はその場で戻る分なので節を移す理由にならない';
   }
+  // The review of 11/10, G12: the End's gate held twice in the frames' room moved the node to a gathering leaf, and nothing said the gate opens by itself.
+  if (kind === 'walk') return '関所の足りない物がそろえば元の節に戻れる。初めて入る時の関所は、最初に止めてから 10 分たてば予備の手の必須だけで通す';
   return '関所の足りない物がそろえば元の節に戻れる';
 }
 

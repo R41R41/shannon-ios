@@ -164,14 +164,14 @@ function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; 
 }
 
 /**
- * The End's check with the eyes the frames still need once the portal room's frames are in view (S5's section of 11/5: the line asked 12 eyes
- * in hand when the frames held some already): the empty frames, not twelve; none when every frame holds one.
+ * The End's check once the portal room's frames are in view (S5's section of 11/5: the line asked 12 eyes in hand when the frames held some
+ * already): the eyes of the empty frames, not twelve (none when all hold one), and the food the gate asks there (80; G12, `minecraftEndGather.ts`).
  */
 function endStage(world: Record<string, unknown> | undefined): PrepStage {
   const frames = world ? framesOf(world) : null;
   if (!frames) return STAGES.end;
   const empty = Math.max(0, frames.frames - frames.eyes);
-  return { ...STAGES.end, needs: STAGES.end.needs.flatMap(need => !need.label.startsWith('エンダーアイ') ? [need]
+  return { ...STAGES.end, food: END_MIN_FOOD, needs: STAGES.end.needs.flatMap(need => !need.label.startsWith('エンダーアイ') ? [need]
     : empty > 0 ? [{ ...need, label: 'エンダーアイ（空いた枠の分）', count: empty }] : []) };
 }
 
