@@ -23,6 +23,30 @@ function working(frame: BodyObservation | null): Array<{ at: string; what: strin
   }).sort((a, b) => a.left - b.left);
 }
 
+/**
+ * The furnace ledger (run 5, 2026-11-11: 5 stands, 233 s of 1,261, beside the furnace; the frame said only "seconds left"): one line per furnace the
+ * body's jobs list, with where it is, what goes in and what comes out, how long it has, and what to do meanwhile (the body does not wait for a
+ * furnace: another act goes on while it burns, and a `furnace … take` act is sent when its event comes; the body walks to the furnace to take).
+ * A line is a reading of the frame's jobs (`remainingEstimateMs`, `expects`, `from`), made again every decision. Null when the jobs are not a list the body wrote.
+ */
+export function furnaceLedgerLines(jobs: unknown): string[] | null {
+  if (!Array.isArray(jobs) || !jobs.length) return null;
+  const lines: string[] = [];
+  for (const item of jobs) {
+    const job = rec(item), at = rec(job?.position), ms = num(job?.remainingEstimateMs);
+    if (!job || !at || ms === null || typeof job.status !== 'string') return null;
+    const cell = `${String(at.x)},${String(at.y)},${String(at.z)}`;
+    const from = typeof job.from === 'string' && job.from ? `（${job.from.slice(0, 20)}）` : '';
+    const what = `${String(job.input ?? '')}×${String(job.count ?? '')}${typeof job.expects === 'string' && job.expects ? ` → ${job.expects.slice(0, 30)}` : ''}`;
+    const lack = num(job.unfueledInputCount) ? `。燃料が足りず ${job.unfueledInputCount} 個は焼けない（石炭か板を足す）` : '';
+    if (job.status === 'different_dimension') { lines.push(`かまど (${cell}): ${what}。別のディメンションにある${lack}`); continue; }
+    lines.push(ms > 0
+      ? `かまど (${cell})${from}: ${what}、焼き上がりまであと約 ${Math.round(ms / 1000)} 秒。待たずに別の作業の act を足す。時間が来たら furnace ${cell} take の act を足す（遠くても体が歩く）${lack}`
+      : `かまど (${cell})${from}: ${what}、焼き上がりの見込みの時間は来た。furnace ${cell} take の act を足す（遠くても体が歩く）${lack}`);
+  }
+  return lines.slice(0, 4);
+}
+
 /** The note for an act whose waits add up to a long stand while a furnace works, or null. */
 export function furnaceWaitNote(input: unknown, frame: BodyObservation | null): string | null {
   const hands = Array.isArray(rec(input)?.hands) ? rec(input)!.hands as unknown[] : [];
