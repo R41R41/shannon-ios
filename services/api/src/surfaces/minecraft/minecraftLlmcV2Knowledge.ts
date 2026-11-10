@@ -98,6 +98,7 @@ const FALLS = [
   '- Never dig straight down with bare hands. Do not dig down while in water or directly above it. Do not dig or walk next to lava (L, l). Descend only a drop of n≤3; for 4 or more use vertical stairs or water at the landing point.',
   '- Cross a gap (a lava sea, a deep hole, a cliff) through a tunnel in rock one level below the edge, or on a bridge with walls placed at the feet and on both sides for every cell. Never use a 1-wide bridge without walls. '
     + 'While footing shows 「押されたら落ちる」, do not stand still, jump or stack at the edge.',
+  '- Digging in water is slow (5x with the head under, 5x more afloat). Before a hand the body lays a block under the feet and stops a stream; never repeat the same dig, re-plan from its note.',
 ].join('\n');
 
 /** The coordinator, 2026-11-03 (leg 2's plan 5.10: the sea and the night on the 1.4 km walk, the phantoms for a body that has not slept). */
@@ -222,7 +223,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 木が無い時: 地表の木（mc_probe kind=scan で原木の方角・mc_view mode=top で上から）→村の木の物（扉・柵・ベッド・作業台・板、takeOk）→難破船→廃坑（vertical の stairs で下りる）。',
     '- 村は鉄より前に 128m 内を回る（takeOk: true。鉄ゴーレムと村人は打たない）: ベッド（下の決まり）、干し草（1 個でパン 3）、育った畑、箱は chest op=look→take。',
     PREP_RULES_WORDS,
-    '- 鉄は facts の「鉄」の行・走査の鉄鉱石の行・地図の i の座標へ掘りに行く（全体では y=16 前後に多いが、座標の分かる鉄があれば y=16 まで下りなくてよい。埋まった近い鉄は遠くの空気に面した鉄より早い）。ダイヤは y=-58 前後（d、鉄のツルハシ）。水バケツは水源（w）の隣から use（流れ - からは汲めない）。',
+    '- 鉄は facts の「鉄」の行・走査の鉄鉱石の行・地図の i の座標へ掘りに行く（全体では y=16 前後に多いが、座標の分かる鉄があれば y=16 まで下りなくてよい。埋まった近い鉄は遠くの空気に面した鉄より早い）。ダイヤは y=-58 前後（d、鉄のツルハシ）。水バケツは水源（w）に use bucket（流れ - からは汲めない）。体が乾いた床の立ち位置を探し、間に石が 1 枚なら開けて汲んで塞ぐので、石を自分で dig しない（水の壁を dig すると坑道が水没して出られなくなる）。',
     '- 鉱石（鉄・石炭・ダイヤ・銅）は mine ブロック名 X,Y,Z の 1 マスだけ書く。つながった鉱脈は体が全部たどって拾う（count は要る個数。dig の並べ書きは遅く落とし物も落とす）。dig は岩・土・木だけ。',
     '- 資源のマスと作業の立ち位置は別。距離や数より、通れる道・高低差・掘る/置く許可・視線と足場を比べる。'
       + '今届く操作に移動は不要。不明な経路は path、操作の届き方は sight、上下は column で確かめる。'

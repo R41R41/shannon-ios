@@ -126,7 +126,7 @@ describe('the live state\'s tokens as the provider counts them (scene replay: th
 
 describe('the knowledge the scenes asked for (the furnace, water behind stone, the lake, the blaze\'s place)', () => {
   it('is in the cached instructions and the act\'s description', () => {
-    for (const words of ['furnace op=take で取る（chest では取れない）', 'その石を dig してから use', '水の溜まり', '下へ掘らない',
+    for (const words of ['furnace op=take で取る（chest では取れない）', '体が乾いた床から開けて汲んで塞ぐので use だけでよい', '水の溜まり', '下へ掘らない',
       'hold は届く所で', '部屋の床と同じ高さ', '縦穴を上るのは walk ではなく pillarUp', '急ぐ手（離れる walk・食べる）は act の先頭に置く']) expect(LLMC_SYSTEM_APPENDIX).toContain(words);
     for (const words of ['why は act に 1 つ', 'at・path・items は 1 つでも配列', 'かまど（F・燻製器・溶鉱炉）は furnace', '間に固いブロックがあれば先に dig']) {
       expect(ACT_DESCRIPTION).toContain(words);

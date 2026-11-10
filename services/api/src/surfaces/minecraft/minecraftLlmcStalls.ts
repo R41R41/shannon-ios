@@ -349,9 +349,10 @@ const noteStoppedLine = () => {
     const interruptedMovement = () => (line.end === 'cut' && (line.cutBy === 'reflex' || line.cutBy === 'cancelled' || line.cutBy === 'operator_stop' ||
        /反射|wall_escape/u.test(line.line)));
     if (interruptedMovement()) return null;
-    const explainedMovement = () => (line.code === 'threat_exposed' || line.code === 'falling_above' || (line.code === 'cannot_dig' &&
+    // Run 6: a dig refused for the water (breathing_work, water_behind) and a walk held in a stream are explained too: the same words twice in a row are the body's note, not a stall of the head's.
+    const explainedMovement = () => (line.code === 'threat_exposed' || line.code === 'falling_above' || line.code === 'breathing_work' || line.code === 'water_behind' || (line.code === 'cannot_dig' &&
        /canDig に \S+ を足/u.test(line.line))
-      || (line.do === 'go' && /流れる水の中|置いたブロックが世界に現れない|掘ると流れ込む|掘ると落ちてくる|canDig に無い|掘ってよい物に無い|道は流れる水を天井/u.test(line.line)));
+      || (line.do === 'walk' && /流れ|水の中|水流/u.test(line.line)) || (line.do === 'go' && /流れる水の中|置いたブロックが世界に現れない|掘ると流れ込む|掘ると落ちてくる|canDig に無い|掘ってよい物に無い|道は流れる水を天井/u.test(line.line)));
     const explained = explainedMovement();
     if (explained) {
       const previous = state.explained;

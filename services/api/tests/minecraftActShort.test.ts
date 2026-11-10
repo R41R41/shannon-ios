@@ -189,7 +189,7 @@ describe('short hands: the tool', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('walk X,Y,Z');
     expect(SHORT_ACT_DESCRIPTION).toContain('json {"do":"furnace"');
     // The cut-offs of the old text are still said, now in the description's own sections.
-    for (const word of ['stopIf は文字列', 'accept は', 'onFail:', 'hpBelow は今の体力より低い値', '石1枚の向こうの水は、その石を dig してから use bucket',
+    for (const word of ['stopIf は文字列', 'accept は', 'onFail:', 'hpBelow は今の体力より低い値', '石1枚の向こうの水は use bucket だけでよい',
       'chest は', '箱・樽だけ']) expect(SHORT_ACT_DESCRIPTION, word).toContain(word);
   });
 });

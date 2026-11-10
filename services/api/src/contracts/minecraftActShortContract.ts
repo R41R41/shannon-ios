@@ -144,7 +144,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   'use 物 [X,Y,Z] [face=..] [target=#id] [count=N]',
   ("  バケツで汲む・注ぐ、火打ち金、扉、エンダーアイを投げる（X,Y,Z 無し: 飛んだ方位と距離が返る）・枠にはめる（X,Y,Z と " +
 "face）。"),
-  '  use・furnace put・chest は目からそのマスの面が見える所で（furnace take は遠くても体が歩く）。間に固いブロックがあれば先に dig する（石1枚の向こうの水は、その石を dig してから use bucket）。',
+  '  use・furnace put・chest は目からそのマスの面が見える所で（furnace take は遠くても体が歩く）。間に固いブロックがあれば先に dig する（ただし水の壁は dig しない: 石1枚の向こうの水は use bucket だけでよい。体が乾いた床から石を開けて汲んで塞ぐ）。',
   'craft 物 [個数]',
   '  2×2 で作れる物（板・棒・作業台・松明・火打ち金など）は作業台が要らない。3×3 の物（ツルハシ・剣・盾・かまど・バケツ・ハーフブロックなど）は作業台が5m内に要る。',
   'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',

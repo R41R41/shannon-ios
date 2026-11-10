@@ -111,7 +111,7 @@ export const ACT_DESCRIPTION = [
   '座標はブロックの整数。rel: true の手は、その手を始める時の足のブロックからの差（x 東+、z 南+、y 上+）。',
   '形: why は act に 1 つ（手の中に書かない。手の短い説明は note）。at・path・items は 1 つでも配列 [ ] で書く。',
   'かまど（F・燻製器・溶鉱炉）は furnace（op=take で出来上がりを取る、op=put で入れる）。chest は箱・樽（C）だけ。',
-  'use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（石 1 枚の向こうの水は、その石を dig してから use bucket）。',
+  'use・furnace・chest は目からそのマスの面が見える所で。間に固いブロックがあれば先に dig する（ただし水の壁は dig しない: 石 1 枚の向こうの水は use bucket だけでよい。体が乾いた床から石を開けて汲んで塞ぐ）。',
   ("stopIf: hostileWithin（m）・hpBelow・hungerBelow・blockChanged（見張るマス）。満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）。hpBelow は今の体力より低い値（以上だと 1 " +
 "手も動かず止まる）。待つ手の act には hostileWithin。"),
   ("同じ種類の手が続く場面（トンネル・階段・橋・採掘）は、10〜12 手を 1 つの act に入れる（dig の at は 16 マスまで、walk の path は 32 点まで 1 " +
