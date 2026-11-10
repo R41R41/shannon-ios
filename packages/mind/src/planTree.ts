@@ -346,6 +346,21 @@ class PlanEdit {
     }
     return false;
   }
+  /** end1110r1 (11/10): whether `node` or a node above it is blocked (set aside with a reason): nothing there is the next node. */
+  blockedAt(node: PlanNode): boolean {
+    for (let at: PlanNode | undefined = node, guard = 0; at && guard < PLAN_LIMITS.nodes; guard += 1) {
+      if (at.state === 'blocked') return true;
+      at = at.parentId === null ? undefined : this.nodes.get(at.parentId);
+    }
+    return false;
+  }
+  /** end1110r1 (11/10): the lines' hand 「set blocked … 外し、次の節へ」 left the now on the node set aside (p2.1 blocked, the now still p2.1), and
+   * the same line came again until the node stalled. Where a current set aside (not done; it or a node above it blocked) goes with no
+   * current named: the next open node, or itself when there is none. Null for a current not set aside. */
+  asideNext(now: PlanNode | undefined): string | null {
+    if (!now || now.state === 'done' || this.doneAbove(now) || !this.blockedAt(now)) return null;
+    return this.nextOpen(now.id) ?? now.id;
+  }
   /** The nearest node above a done `node` that is left open with every child done (its own condition still to meet, `settleParents`): the
    * plan stays there before the next node in order (end1109o02: the diamonds came next while the iron's parent was still unmet). */
   openParent(node: PlanNode): string | null {
@@ -370,7 +385,7 @@ class PlanEdit {
     for (let index = at - 1; index >= 0; index -= 1) {
       const node = order[index]!;
       if (node.state === 'done' && /(?:^|[&|])\s*dim:/u.test(node.doneWhen ?? '')) break;
-      if (node.state !== 'done' && node.state !== 'blocked' && !this.children(node.id).some(kid => kid.state !== 'done') && !this.doneAbove(node)) found = node.id;
+      if (node.state !== 'done' && !this.blockedAt(node) && !this.children(node.id).some(kid => kid.state !== 'done') && !this.doneAbove(node)) found = node.id;
     }
     return found;
   }
@@ -378,7 +393,7 @@ class PlanEdit {
   nextOpen(from: string | null): string | null {
     const order = orderedPlan([...this.nodes.values()]);
     const start = from === null ? 0 : order.findIndex(node => node.id === from) + 1;
-    const open = (node: PlanNode) => node.state !== 'done' && node.state !== 'blocked' && !this.children(node.id).some(kid => kid.state !== 'done')
+    const open = (node: PlanNode) => node.state !== 'done' && !this.blockedAt(node) && !this.children(node.id).some(kid => kid.state !== 'done')
       && !this.doneAbove(node);
     return [...order.slice(start), ...order.slice(0, start)].find(open)?.id ?? null;
   }
@@ -409,7 +424,7 @@ export function applyPlanUpdate(tree: PlanTree, update: PlanUpdate, context: Pla
 const PROBLEM_WORDS: Readonly<Record<string, string>> = { PLAN_TOO_MANY: `節は ${PLAN_LIMITS.nodes} 個まで`, PLAN_DEPTH: `深さは ${PLAN_LIMITS.depth} まで`,
   PLAN_PROMISES: '約束の形が合わない' };
 /** The current node after the ops: the one named, or (none named) the next open one when the current is done or
- * gone. A problem, or null. */
+ * gone, or set aside (`asideNext`). A problem, or null. */
 function settleCurrent(edit: PlanEdit, named: string | null | undefined): string | null {
   if (named !== undefined) {
     if (named !== null && !edit.nodes.has(named)) return `current の ${named} が無い`;
@@ -417,7 +432,9 @@ function settleCurrent(edit: PlanEdit, named: string | null | undefined): string
   }
   edit.settleParents();
   const now = edit.current === null ? undefined : edit.nodes.get(edit.current);
-  if (named === undefined && (!now || now.state === 'done' || edit.doneAbove(now))) edit.current = (now && (edit.openParent(now) ?? edit.earlierOpen(now.id))) ?? edit.nextOpen(now ? now.id : null);
+  const aside = named === undefined ? edit.asideNext(now) : null;
+  if (aside !== null) edit.current = aside;
+  else if (named === undefined && (!now || now.state === 'done' || edit.doneAbove(now))) edit.current = (now && (edit.openParent(now) ?? edit.earlierOpen(now.id))) ?? edit.nextOpen(now ? now.id : null);
   return null;
 }
 

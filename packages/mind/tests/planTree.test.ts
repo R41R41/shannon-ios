@@ -71,6 +71,40 @@ describe('plan tree', () => {
     expect(open.nodes.find(node => node.id === 'p2')!.reason).toBeUndefined();
   });
 
+  // end1110r1 (11/10): the hand 「set blocked … 外し、次の節へ」 left the now on the node set aside (p2.1 blocked, the now still p2.1).
+  describe('a current set aside', () => {
+    const food = (): PlanTree => applyPlanUpdate(planFromSeeds([
+      { title: '道具', children: [{ title: '原木' }] },
+      { title: '食料とベッド', children: [{ title: '動物を狩る' }, { title: '肉を焼く' }, { title: 'ベッド' }] },
+      { title: '鉄' },
+    ])!, { ops: [{ op: 'set', id: 'p1.1', state: 'done' }] }).tree;
+
+    it('blocked with no current named, the now goes on to the next open node; named, it is as named until the next update', () => {
+      expect(food().current).toBe('p2.1');
+      const aside = applyPlanUpdate(food(), { ops: [{ op: 'set', id: 'p2.1', state: 'blocked', reason: '動物が見えない' }] }).tree;
+      expect(aside.current).toBe('p2.2');
+      expect(aside.nodes.find(node => node.id === 'p2.1')).toMatchObject({ state: 'blocked', reason: '動物が見えない' });
+      const named = applyPlanUpdate(food(), { ops: [{ op: 'set', id: 'p2.1', state: 'blocked', reason: 'x' }], current: 'p2.1' }).tree;
+      expect(named.current).toBe('p2.1');
+      expect(applyPlanUpdate(named, { ops: [{ op: 'set', id: 'p3', note: '後で' }] }).tree.current).toBe('p2.2');
+    });
+
+    it('the node above it blocked, the now leaves everything under that node, and nothing under it is the next until it is open again', () => {
+      const under = applyPlanUpdate(food(), { current: 'p2.2' }).tree;
+      const aside = applyPlanUpdate(under, { ops: [{ op: 'set', id: 'p2', state: 'blocked', reason: '羊が見えない' }] }).tree;
+      expect(aside.current).toBe('p3');
+      const after = applyPlanUpdate(aside, { ops: [{ op: 'set', id: 'p3', state: 'done' }] }).tree;
+      expect(after.current).toBeNull();
+      expect(applyPlanUpdate(after, { ops: [{ op: 'set', id: 'p2', state: 'continue' }] }).tree.current).toBe('p2.1');
+    });
+
+    it('with no other open node, the now stays', () => {
+      const one = applyPlanUpdate(emptyPlanTree(), { ops: [{ op: 'add', id: 'a', title: '鉄を掘る' }] }).tree;
+      expect(one.current).toBe('a');
+      expect(applyPlanUpdate(one, { ops: [{ op: 'set', id: 'a', state: 'blocked', reason: 'y' }] }).tree.current).toBe('a');
+    });
+  });
+
   it('the path a decision reads: the parents, the current node with where and doneWhen, the next three leaves', () => {
     const tree = applyPlanUpdate(base(), { current: 'p1.2' }).tree;
     expect(planPath(tree)).toEqual({ done: '0/5', path: ['木と石の道具'], now: 'p1.2 石のツルハシ（済み: stone_pickaxe）',
