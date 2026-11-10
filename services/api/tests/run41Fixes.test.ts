@@ -102,8 +102,9 @@ describe('the reason is in real numbers, and the rule is plain', () => {
     expect(PREP_DESCENT_RULE).toContain('地下には食べ物も木も見つかりにくく');
     expect(PREP_DESCENT_RULE).toContain('地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）');
     expect(PREP_DESCENT_RULE).not.toContain('約 500 秒');
-    expect(PREP_RULES_WORDS).toContain('372 秒止まって上りの途中で死んだ');
-    expect(PREP_RULES_WORDS).toContain('以前の実走の記録。今回の所要時間ではない');
+    expect(PREP_DESCENT_RULE).toContain('作業台が無いまま止まって上りの途中で死んだ例もある'); // run 41's case, merged into the descent's reason (11/11 trim: the stage's reference sentence is gone)
+    expect(PREP_RULES_WORDS).not.toContain('372 秒');
+    expect(PREP_RULES_WORDS).not.toContain('以前の実走の記録');
     expect(PREP_RULES_WORDS).not.toContain('戻りが長い');
     expect(PREP_RULES_WORDS).not.toContain('鉄の夜');
     expect(PREP_RULES_WORDS).not.toContain('の時だけ');

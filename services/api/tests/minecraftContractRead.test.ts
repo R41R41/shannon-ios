@@ -120,6 +120,20 @@ describe('native-only contract read through the same normal/rig tools entry', ()
     expect(fixture.bodies.every(body => body.model === 'claude-haiku-5-5')).toBe(true);
   });
 
+  it('says the table of contents once, in mc_act; skill_read only says how to read a page (11/11 trim: the two had the same ten lines)', () => {
+    const f = setup();
+    const act = f.tools.definitions.find(tool => tool.name === 'mc.act')!.description;
+    const read = f.tools.definitions.find(tool => tool.name === 'skill.read')!.description;
+    expect(act.split('## この版の契約目次').length - 1).toBe(1);
+    expect(names(act)).toHaveLength(10);
+    expect(names(read)).toHaveLength(0);
+    expect(read).not.toContain('## この版の契約目次');
+    // The rules that were a line of the instructions (「skill_read は …」) are here, where the tool is described.
+    expect(read).toContain('mc_actの契約目次にある完全な参照名をnameに書く');
+    expect(read).toContain('旧版の名前は読み替えず、今の目次で読み直す');
+    expect(read).toContain('個人のスキルやファイルは開かない');
+  });
+
   it('delivers and reads all ten current pages through fcaMinecraftTools/combine/progress/V2/gameOnly without personal fallback', async () => {
     const f = setup(), send = vi.spyOn(f.control, 'command');
     const pointers = f.pointers();

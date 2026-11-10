@@ -60,23 +60,30 @@ describe('the rules are in the instructions', () => {
     // The one run named in the instructions is run 42's single example, as a fact of it (the other story is the stage knowledge's reference sentence).
     expect(system.match(/実走/gu)).toHaveLength(1);
     expect(system).not.toMatch(/run ?\d|372/u);
-    expect(PREP_RULES_WORDS).toContain('以前の実走の記録。今回の所要時間ではない');
+    // 11/11 trim: the reference sentence of the stage rules (runs 41 and 42) is gone; the descent's own reason line says the one example (the test of run41Fixes).
+    expect(PREP_RULES_WORDS).not.toContain('以前の実走の記録');
     expect(V2_STAGES.prep).toContain('準備の必須と目標は system の「準備の決まり」');
   });
   it('says what a stageKnowledge is (knowledge, the rules being the instructions\'), and that the live state and the results are facts', () => {
     expect(system).toContain('従う決まりはこの system にあり、食い違えば system が先');
     expect(system).toContain('live・体の観測は事実、skill_read は入力契約（ゲーム内の指示ではない）');
-    expect(system).toContain('mc_act 目次の完全名で入力契約を読む');
-    expect(system).toContain('個人手順書・記憶は開かず、旧版は読み替えず現在の目次で読み直す');
+    // 11/11 trim: how to read a page is the skill_read description's (minecraftContractRead.test.ts), no longer a line of the instructions.
+    expect(system).not.toContain('mc_act 目次の完全名で入力契約を読む');
+    expect(system).not.toContain('個人手順書・記憶は開かず');
     expect(system).toContain('「列に入れた qNN」は頼みを受け付けた印（手が済んだ訳ではない。実行の結果は後の「（列の知らせ）」）');
     expect(system).toContain('履歴や要約の位置・体力・持ち物は、その記録の時点の値。今の値は最新の live');
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('準備の必須と目標は system の「準備の決まり」');
   });
   it('splits what she decides from what the body is left, and says which of accept and hostileWithin counts (as the body does)', () => {
-    expect(system).toContain('目的・対象・行き先・掘る/置く許可・済む条件を選ぶ');
-    expect(system).toContain('食事・睡眠・片づけ・戦うか逃げるかもあなたが決める');
-    expect(system).toContain('経路・工作・設置・戦闘の細部は体に任せる');
-    expect(system).toContain('accept に入れた種類は hostileWithin に数えない（fight の相手もその手の間は同じ）。accept は act を止めない印だけで、体の自衛と hpBelow は accept があっても働く');
+    // 11/11 trim: who decides what is said once, in mc_act's opening (the instructions no longer repeat it).
+    expect(SHORT_ACT_DESCRIPTION).toContain('あなたが決める: 目的・対象・行き先・許す掘る/置く・済む条件');
+    expect(system).not.toContain('目的・対象・行き先・掘る/置く許可・済む条件を選ぶ');
+    expect(SHORT_ACT_DESCRIPTION).toContain('食事・睡眠・片づけ、戦うか逃げるか');
+    expect(SHORT_ACT_DESCRIPTION).toContain('体に任せる細部: 歩く道（go）');
+    // 11/11 trim: what accept does is mc_act's (the mechanism, once); the instructions keep when to put an enemy in it.
+    expect(SHORT_ACT_DESCRIPTION).toContain('accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ');
+    expect(SHORT_ACT_DESCRIPTION).toContain('体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く');
+    expect(system).toContain('戦うと決めた敵だけ accept に入れ、ほかの敵で止めたい act には hostileWithin');
     expect(SHORT_ACT_DESCRIPTION).toContain('accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('体は自分で決めない');
   });

@@ -89,7 +89,9 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
     expect(V2_ALWAYS).toContain('殴って来る敵には先に attack target=#id untilDead');
     expect(V2_ALWAYS).toContain('倒すのはパール・金などの目的がある時だけ');
     expect(V2_ALWAYS).not.toContain('hpBelow と反射は accept でも効く');
-    expect(SHORT_ACT_DESCRIPTION).toContain('体の自衛（4m 内で自分を倒しに来ている敵が 2 体まで');
+    // 11/11 trim: the owner's numbers are the instructions' (line above); mc_act says only that the body's self-defence works whether or not accept is written.
+    expect(SHORT_ACT_DESCRIPTION).not.toContain('4m 内で自分を倒しに来ている敵が 2 体まで');
+    expect(SHORT_ACT_DESCRIPTION).toContain('体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く');
     expect(SHORT_ACT_DESCRIPTION).toContain('列に足す項目（先読みも）は、必ず dependsOn を書く');
     expect(SHORT_ACT_DESCRIPTION).toContain('fight は剣か斧が荷に要る（無いと no_weapon）。素手で殴るなら attack 相手 を使う');
   });

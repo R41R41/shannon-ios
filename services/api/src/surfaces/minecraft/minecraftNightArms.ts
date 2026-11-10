@@ -1,4 +1,5 @@
 import { carried } from './minecraftConditions.js';
+import { NETHER_BY_SECONDS } from './minecraftLlmcPrepRules.js';
 import { thunderstorm } from './minecraftLlmcStateWords.js';
 import { oreRouteHands, SEALED_SHAFT_WORD, stonePickHands, STONE_SHAFT } from './minecraftOreRoute.js';
 export { thunderstorm } from './minecraftLlmcStateWords.js';
@@ -10,6 +11,8 @@ export { thunderstorm } from './minecraftLlmcStateWords.js';
  */
 export const NIGHT_FROM = 13_000, NIGHT_TO = 23_000, DAY_LENGTH = 24_000, TICKS_PER_MINUTE = 1_200;
 const NEAR_TICKS = 3 * TICKS_PER_MINUTE;
+/** The owner's ruler to the Nether, the one the goal's text and the road's milestone use (`NETHER_BY_SECONDS`): the night's lines say their share of it. */
+const NETHER_MINUTES = Math.round(NETHER_BY_SECONDS / 60), NETHER_TICKS = NETHER_BY_SECONDS * 20;
 const WEAPON = /(?:^|:)(?:wooden|stone|golden|iron|diamond|netherite)_(?:sword|axe)$/u;
 /** The blade of the iron gear: the weapon the night and the gate are met with (a stone one is what the first hour makes). */
 const IRON_BLADE = /(?:^|:)(?:iron|diamond|netherite)_sword$/u;
@@ -140,7 +143,7 @@ export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<s
   if (![...counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
   const left = BED_FROM - tick;
   return `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない`
-    + `（ネザーまで 30 分の目標の ${Math.round(100 * left / (30 * TICKS_PER_MINUTE))}%）。今の節を進め、夜になった所で sleep する（ベッドは持って行けて、地下でも寝られる）${pearlNightWord(counts, pearlNow)}`;
+    + `（ネザーまで ${NETHER_MINUTES} 分の目標の ${Math.round(100 * left / NETHER_TICKS)}%）。今の節を進め、夜になった所で sleep する（ベッドは持って行けて、地下でも寝られる）${pearlNightWord(counts, pearlNow)}`;
 }
 
 /**
@@ -246,9 +249,9 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
   if (!choices.length && !underground && !pick) choices.push(handSealHands(at));
   if (!choices.length) return null;
   const left = tick >= NIGHT_FROM ? NIGHT_TO - tick : NIGHT_TO - NIGHT_FROM;
-  const share = Math.round(100 * left / (30 * TICKS_PER_MINUTE));
+  const share = Math.round(100 * left / NETHER_TICKS);
   return `${tick >= NIGHT_FROM ? `夜（朝まで ${minutes(NIGHT_TO - tick)}）` : `夜まで ${minutes(NIGHT_FROM - tick)}`}・ベッドを持っていない。`
-    + `${underground ? '穴で' : '夜に地上で'}待てば ${minutes(left)} なにも進まない（ネザーまで 30 分の目標の ${share}%）。次の 1 手はどれか: `
+    + `${underground ? '穴で' : '夜に地上で'}待てば ${minutes(left)} なにも進まない（ネザーまで ${NETHER_MINUTES} 分の目標の ${share}%）。次の 1 手はどれか: `
     + choices.map((text, index) => `${'AB'[index]}) ${text}`).join(' ') + '。囲いで待つのは、どれもできない時だけ';
 }
 

@@ -215,7 +215,7 @@ export const PREP_SKIP_SECONDS = 500;
  * does not skip an unmet requirement; that the food carried is for eating below (the fullness does not stand for it); and that
  * eating below the 40 is not a new
  * shortage. The live state and the results only say the state (`preparationState`); the story of runs 41 and 42 is one reference
- * sentence (`PREP_REFERENCE`).
+ * sentence (the descent's 理由 line; the stage knowledge no longer repeats it).
  */
 export const PREP_DESCENT_LINES: readonly string[] = [
   ("- 必須（未達の間は下りない・鉄を掘らない。省くなら prep に skipped と理由を書く。省いた節は達成に数えない）: 食料の点 40 以上（foodPoints.total。満腹 fullness " +
@@ -223,12 +223,10 @@ export const PREP_DESCENT_LINES: readonly string[] = [
   '- 目標: 食料 40〜60 点・原木 20〜24 本分（板なら 80 前後。通しの分）。',
   '- 下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）。',
   ("- 理由: 持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない。地下には食べ物も木も見つかりにくく、足りなくなると地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 " +
-"秒）。死ぬこともある。"),
+"秒）。死ぬこともある（作業台が無いまま止まって上りの途中で死んだ例もある）。"),
   '- 下りた後に食べて 40 点を切るのは未達ではない。未達のまま下りていたら、奥へ進む前に補う（近くで補えるか調べ、無ければ上で）。「もう地下にいる」は続ける理由にならない。',
 ];
 export const PREP_DESCENT_RULE: string = ['## 準備の決まり（鉄を掘りに地下へ下りる前）', ...PREP_DESCENT_LINES].join('\n');
-/** An earlier run's measure, as a reference (not this run's time). */
-export const PREP_REFERENCE = '- 参考（以前の実走の記録。今回の所要時間ではない）: 実走 42 は地上へ戻るのに 540 秒かかり（移動の不具合込みの 1 回の例）、実走 41 は作業台が無いまま 372 秒止まって上りの途中で死んだ。';
 /**
  * The knowledge of the stages as the first plan and the stage knowledge say it (one text, so the plan and the
  * decision read the same
@@ -254,7 +252,6 @@ export const PREP_RULES_WORDS = [
     + '（竜戦用の節は寝る用の親の子にしない: 親が済むと開いた子は閉じられる）。村も羊も見つからない世界では、地下の構造物のベッドへ下りず、竜戦用はエンドの点検の前に羊毛から作る。'
     + '羊は見かけたら羊毛を取る（同じ色 3＋板 3 で 1 個。殺すと羊毛 1、ハサミなら 1〜3）。ベッドは重ならず 1 個 1 マス（10 個で 10 マス）。10 個の内訳は、戦い用 8＋エンドの枠の近くに置いて残すリスポーン用 1＋予備 1（リスポーン用は戦い用の 8 と別に数える）。'
     + 'ネザーへ入る前に、ゲートの横に箱を置いて寝る用の 1〜2 個を残して預け（羊毛・弓の材料・予備の食料・戦いに要らない物も。死ぬとネザーでは取りに行けない）、帰りに同じゲートから出て取る（ネザーでロッドとパールの入る所を残す）。',
-  PREP_REFERENCE,
 ].join('\n');
 
 /**

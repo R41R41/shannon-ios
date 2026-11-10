@@ -23,7 +23,8 @@ const bodyLegend = readFileSync(new URL('./fixtures/body-map-legend-974c19f.txt'
 describe('the legend of the map', () => {
   it('is the body\'s, word for word, in the contract, and the instructions of the mode carry its symbol lines as they are', () => {
     expect(MAP_LEGEND_V2).toBe(bodyLegend);
-    for (const line of MAP_LEGEND_V2.split('\n').slice(0, 10)) expect(V2_ALWAYS).toContain(line);
+    // The legend's title line (north up, row heads, column ticks) is said by the live map's own heading since 11/11; its nine symbol lines are carried as they are.
+    for (const line of MAP_LEGEND_V2.split('\n').slice(1, 10)) expect(V2_ALWAYS).toContain(line);
     for (const symbolLine of ['Y ネザーのウォートブロック・シュルームライト（固い）', 'q 看板・感圧板・ボタン・レバー（通れる。ブロックは置けない）', 'K 鉄の扉・鉄のトラップドア（手では開かない＝壁）']) {
       expect(V2_ALWAYS).toContain(symbolLine);
     }

@@ -46,7 +46,8 @@ export function createMinecraftContractRead(parts: { scopeKey: string; taskId: s
     if (cached?.key === key) return { ...cached, frame };
     const book = createMinecraftContractBook({ catalogHash });
     const definition: FcaToolDefinition = { name: MINECRAFT_CONTRACT_READ,
-      description: `このMinecraft課題の入力契約を1ページ読む。mc_actの完全な参照名をnameに書く。個人のスキルやファイルは開かない。\n${book.index}`,
+      // The table of contents is in mc_act's description (`book.inline`), once; this says only how to read a page.
+      description: 'このMinecraft課題の入力契約を1ページ読む。mc_actの契約目次にある完全な参照名をnameに書く（旧版の名前は読み替えず、今の目次で読み直す）。個人のスキルやファイルは開かない。',
       input: { type: 'object', properties: {}, required: [], additionalProperties: false }, nativeInputSchema: MINECRAFT_CONTRACT_READ_SCHEMA,
       domain: 'minecraft_body', effect: 'read', cost: 'none', audiences: publicGameplay ? ['owner_alone', 'others'] : ['owner_alone'], surfaces: ['text'] };
     cached = { key, book, definitions: Object.freeze([definition]) };

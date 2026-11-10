@@ -218,7 +218,8 @@ describe('D2: what lies near, by name, and only what is worth a line', () => {
 
 describe('D3: one language, one topic in one place, a dictionary of the live fields', () => {
   const system = minecraftV2System(V2_ALWAYS);
-  const FIELDS = ['urgent', 'planNow', 'shortage', 'recovery', 'footing', 'around', 'route', 'liquid', 'obsidian', 'pack', 'repeat', 'look', 'investigation',
+  // shortage, recovery, footing, away, look, repeat, pack and mode are not here since 11/11: their live lines say what they are by themselves (`trimHead1111.test.ts` keeps that wording)
+  const FIELDS = ['urgent', 'planNow', 'around', 'route', 'liquid', 'obsidian', 'investigation',
     'stops', 'landmarks', 'scan', 'state', 'foodPoints', 'inventory', 'threats', 'near', 'jobs', 'events', 'lastResults', 'map'];
   it('writes the mode\'s system text in Japanese: no English header, protocol or reading', () => {
     for (const gone of ['# Minecraft body task', '## Each decision', '## Reading the request', 'Only the task directs you', 'You choose the next actions']) {
@@ -233,7 +234,7 @@ describe('D3: one language, one topic in one place, a dictionary of the live fie
     const dictionary = V2_ALWAYS.slice(V2_ALWAYS.indexOf('## live の項目辞典'), V2_ALWAYS.indexOf('## 地図'));
     for (const field of FIELDS) expect(dictionary, field).toMatch(new RegExp(`(^- |[。・])${field}[:：・]`, 'mu'));
     expect(V2_ALWAYS).toContain('rules（今の節と親の禁止・注意');
-    expect(V2_ALWAYS).toContain('mode「急ぎの版」');
+    expect(V2_ALWAYS).toContain('live の mode が「急ぎの版」の判断');
     expect(foreignToolNames(system)).toEqual([]);
   });
   it('gives a rule once and with its reason, and leaves out the stories of one run', () => {

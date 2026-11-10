@@ -13,7 +13,7 @@ import { heldOfFrame, heldTail, holdV2, sentPart } from '../src/surfaces/minecra
 import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, SAFETY_FIRST } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { gateHold, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { dropAdvice, packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
-import { V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { stageKnowledge, stageTextsForKind, V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { v2tree } from './helpers/planTreeV2.js';
 
@@ -326,12 +326,16 @@ describe('the first plan and the knowledge say the required list where the model
 });
 
 describe('a death is avoided, not the end (the owner, 2026-11-02 and 2026-11-10): its cost in items and time, in the stages\' knowledge and the plan\'s cautions', () => {
-  it('says it in every stage, in the numbers the live state shows', () => {
+  it('says it once in the instructions (not in every stage, 11/11 trim), in the numbers the live state shows', () => {
     expect(SAFETY_FIRST).toContain('死んでも通しは終わらない');
     expect(SAFETY_FIRST).toContain('体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満');
     // S2's blaze lab of 11/5: between fights the meal to fullness 18 and the wait to health 12 come first, out of sight.
     expect(SAFETY_FIRST).toContain('体力 18 未満なら見えない所で満腹 18 以上まで食べ、体力 18 以上まで待ってから出る');
-    for (const id of ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'] as const) expect(V2_STAGES[id], id).toContain(SAFETY_FIRST);
+    expect(V2_ALWAYS.split(SAFETY_FIRST).length - 1).toBe(1);
+    for (const id of ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'] as const) expect(V2_STAGES[id], id).not.toContain(SAFETY_FIRST);
+    // Two stages at once (prep with blaze) used to say it twice; the plan made again has no instructions of its own, so it gets it once.
+    expect(stageKnowledge({ body: { state: { dimension: 'the_nether' }, planFacts: undefined } })!).not.toContain(SAFETY_FIRST);
+    expect(stageTextsForKind('blaze', 'the_nether').split(SAFETY_FIRST).length - 1).toBe(1);
   });
   it('puts it in the cautions of the diamonds and the blaze rods, within the plan\'s bounds', () => {
     const plan = seedPlan('エンドラを倒して')!;

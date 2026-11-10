@@ -22,8 +22,8 @@ import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFood
 const GOAL = [
   '## 目的と物差し',
   `- 目的は課題の goal。持ち主の物差しは速さ: エンドラ討伐なら 3 時間以内（理想 1.5 時間）。ネザーへ入るまでは ${Math.round(NETHER_BY_SECONDS / 60)} 分ほど（準備を含む）で、なめらかに。`,
-  '- 速さと同じだけ、生きていることが大事。死ぬと持ち物と時間を失い、用心より時間がかかる。',
-  '- 優先の順: 差し迫った危険を避ける → 準備の必須を満たす → 目的へ早く進める。時間を理由に止めたり、早く完了にしたりしない。目安は物差しで、手を決める物ではない。',
+  '- 優先の順: 差し迫った危険を避ける → 準備の必須を満たす → 目的へ早く進める（生きていることは速さと同じだけ大事。死ぬと持ち物と時間を失い、用心より時間がかかる）。'
+    + '時間を理由に止めたり、早く完了にしたりしない。目安は物差しで、手を決める物ではない。',
 ].join('\n');
 
 /** The descent's preparation as a rule for choosing the action (one place; the live state and the results say only the state of it). */
@@ -31,21 +31,18 @@ const PREP = PREP_DESCENT_RULE;
 
 const DECIDE = [
   '## 決め方（手の書き方は mc_act）',
-  '- 毎判断、live の urgent・planNow・shortage・footing・around・route・threats・lastResults と plan を読んで決める。',
-  '- 結果を待たずに決められる手（作る・持ち替え・食べる・拾う）は次の移動と同じ act へ。同じ手の連続は repeat と done・mine の count・go の seconds。'
-    + '動く対象・未知経路は結果を読み直す。途中失敗で後の手は未実行。'
+  '- 毎判断、live と plan を読んで決める。',
+  '- 結果を待たずに決められる手（作る・持ち替え・食べる・拾う）は次の移動と同じ act へ。動く対象・未知経路は結果を読み直す。途中失敗で後の手は未実行。'
     + '進行中の手は危険・失敗・目的変更時だけ replace。後で使う物は act の keep に書く（帳簿に載る）。約束の物は残し、割るなら why に番号と理由。',
-  '- 範囲スキルでは目的・対象・行き先・掘る/置く許可・済む条件を選ぶ。食事・睡眠・片づけ・戦うか逃げるかもあなたが決める。'
-    + '経路・工作・設置・戦闘の細部は体に任せる。',
   '- why は節の札で始める（「[p1.2] 丸石でハーフブロック」）。別の節なら番号と理由を書く。数は観測済みと「これから」を分ける。',
-  '- 履歴は act の各手の行（周り・地図・probe の長い答えは lastResults に一度だけ）。後で要る座標・危険は plan か why に書く。'
-    + '止まったら未成立の前提を直す。同じ手を同じまま出さない。座標・向き・上限だけ変えても、同じ障害や許可不足が残る場合がある。',
+  '- 後で要る座標・危険は plan か why に書く（履歴は各手の行だけ）。止まったら未成立の前提を直す。同じ手を同じまま出さない。'
+    + '座標・向き・上限だけ変えても、同じ障害や許可不足が残る場合がある。',
   '- 分からない時・同じ止まり 2 回・落ちた時・live に look が出た時は、調べる判断で mc_view か mc_probe（同じ止まり→history と path か sight、落ちた→column、敵→around）。'
     + 'investigation に原因が出ていればそれを使う。原因が分かったら plan_update の forbid（してはいけない事）か caution（気をつける事）の op で、今の節に 1 行書く（plan.rules に出る）。',
   '- wait だけの act は夜・回復の待ちで他に手が無い時だけ、why に待つ対象と理由。',
   '- 「見られる」で止まったマスを exposeOk で掘り直さない。見られない別のマス（敵と反対側・下の岩）を掘る。敵のいる側へ近づく向きに掘らない・歩かない。'
     + 'attack が「届かない」で 2 回止まった的は追わない（hold で来るのを待つか離れる）。食料・盾・金の防具が無いまま遠出して敵を追わない。',
-  '- 自分で書いた注意（plan.rules）に反して節を飛ばさない。次元が変わったら scan と landmarks を見て計画を見直す。',
+  '- 自分で書いた注意（plan.rules）に反して節を飛ばさない。次元が変わったら計画を見直す。',
 ].join('\n');
 
 /**
@@ -55,7 +52,8 @@ const DECIDE = [
 const URGENT = [
   '## 急ぎの時',
   '- live の mode が「急ぎの版」の判断: 考えは 2〜3 文、mc_act は 1 つ・手は合わせて 3 つまで、why は 20 字まで（「[急ぎ] …」）。'
-    + '離れる・敵との間にブロックを置く・囲う・食べるを、採掘や工作より先に。足場が「押されたら落ちる」なら、空所から離れるのが先。',
+    + '離れる・敵との間にブロックを置く・囲う・食べるを、採掘や工作より先に。足場が「押されたら落ちる」なら、空所から離れるのが先。'
+    + '「今いる所は … から見える」と出たら、囲う・食べる前に見えない所へ。',
 ].join('\n');
 
 /**
@@ -66,44 +64,40 @@ const URGENT = [
 const LIVE = [
   '## live の項目辞典（コードが作った事実で、手は決めない）',
   '- 出ていない項目は「無い」とは限らない（関係で省いた・未測定・未ロード・範囲外・急ぎの版）。安全や成否を左右する不明だけ probe か view で調べる。',
-  '- plan: done（済み扱いの節/全体。達成率ではない）・next（予定の次 3 節。すぐできるとは限らない）・blocked・rules（今の節と親の禁止・注意の行。forbid・caution で書いた行と頭が事実で足した行。最大 8）。'
-    + '済む条件（doneWhen）は観測で満たされるとコードが済みにする（今済んだ印ではない）。',
-  '- urgent: 急ぎの理由（敵が近い・体力が低く敵がいる・前の act が反射か stopIf で止まった）。mode「急ぎの版」は急ぎの時の短い live の印。',
+  '- plan: done（済み扱いの節/全体。達成率ではない）・next（予定の次 3 節。すぐできるとは限らない）・blocked・rules（今の節と親の禁止・注意の行。最大 8）。'
+    + '済む条件（doneWhen）は観測で満たされるとコードが済みにする。',
+  '- urgent: 急ぎの理由（敵が近い・体力が低く敵がいる・前の act が反射か stopIf で止まった）。',
   '- planNow: 今の節「[p6.4] 題（済む条件: …／今: 未: 足りない物 数/要る数）＠座標（道: 親›子）」。今: は条件を今の観測で読んだ結果。'
     + 'road・meter（エンドラ討伐だけ）: road は最上位の節の順（✓ 済み・◀今・（止）止めた・（未・飛ばした）今より前の開いた節）、meter は開始からの秒と次の節目の「あと」か「遅れ」（準備の節目は今の数付き）。',
-  '- shortage: 今の段階（ダイヤの前・ネザーの前・奥・エンド）に足りない準備と着ていない防具。recovery: 体力が自然に戻らない事実と食料の当て。footing: 足元の空所の数と「押されたら落ちる」。',
-  '- around: 足の周りの歩ける所。最初の 10 行は足の 8 方向の 1 歩・頭の上・足の下（掘らず置かず、上り 1・下り 3、斜めは角の列が空く時だけ）。'
-    + 'その後は水平 6 マスの足・頭・床を高さ別に、完全な座標で。書いていない所は固い岩（掘って通る）か地図に無い所（不明）。「掘る (x,y,z) 石の類（溶岩の隣: …）」は、開けると溶岩が流れ込むマス。',
-  '- away: 急ぎの敵から離れる、掘らずに歩ける隣（「は無い」= どれも近づくか、掘る・置くが要る）。route: 今の節の＠座標への道（掘らずに行ける最も近い立ち位置・道の点・掘り k マス）。敵と体力は見ない。目的地が地図の外なら、その先の道は不明。'
+  '- around: 足の 8 方向の 1 歩・頭の上・足の下（掘らず置かず、上り 1・下り 3、斜めは角の列が空く時だけ）と、その先の水平 6 マス（完全な座標）。'
+    + '書いていない所は固い岩（掘って通る）か地図に無い所（不明）。「掘る (x,y,z) 石の類（溶岩の隣: …）」は、開けると溶岩が流れ込むマス。',
+  '- route: 今の節の＠座標への道（掘らずに行ける最も近い立ち位置・道の点・掘り k マス）。敵と体力は見ない。目的地が地図の外なら、その先の道は不明。'
     + 'liquid・obsidian: 水・溶岩・黒曜石の近い順の距離・届くか（5m まで）・間のブロック（obsidian は黒曜石の節だけ。水と溶岩の両方に隣り合うマス＝開けると出会う）。',
-  '- pack: 持ち物の空きマスと、拾い続けた石や土が占める所。使用数は省いた分も含めた全部から数える。',
-  '- repeat・look・investigation: 同じ止まりが 2 回以上の事実・調べる事実（落ちた・溺れかけた・大きく打たれた）・驚きの後に頭が調べた probe の答え。stops・jobs・events: 最近の止まり・かまどなど外の仕事と残り秒・前の判断の後の出来事。',
-  '- map: 層ごとの地図（around と route の元。記号は下の凡例）。landmarks: 目印（[overworld] 付きは別の次元。方角・上下は今の足から）。scan: 体の走査（次元変化などの後に 1 回）。'
+  '- investigation: 驚きの後に頭が調べた probe の答え。stops・jobs・events: 最近の止まり・かまどなど外の仕事と残り秒・前の判断の後の出来事。',
+  '- map: 層ごとの地図（記号は下の凡例）。landmarks: 目印（[overworld] 付きは別の次元。方角・上下は今の足から）。scan: 体の走査（次元変化などの後に 1 回）。'
     + 'lastResults: 履歴に無い前の結果を 1 回だけ（止まった手の周りの 3×3×3・view の地図・probe の続き）。',
-  '- state: 位置 at・inside（今いる構造物）・worn（防具の耐久 残り/最大）・health（0〜20。ハート 1 個 = 2）・fullness（満腹 0〜20）・'
-    + 'fullnessLostIn5min・saturation（隠れた満腹）・oxygen（息 n/20）・minutes（課題の経過分）。'
+  '- state: inside（今いる構造物）・worn（防具の耐久 残り/最大）・health（0〜20。ハート 1 個 = 2）・fullness（満腹 0〜20）・saturation（隠れた満腹）・oxygen（息 n/20）・minutes（課題の経過分）。'
     + 'inventory: 持ち物（品目×数）。「ほか N 件は略」= 省いた分（省いた物は無いとは限らない）。',
   '- foodPoints: total（食料の点＝持ち物の食べ物の合計。満腹 fullness とは別）・items。',
   '- threats: 敵 1 体 1 行（#id 名前 距離 (座標) 方角・見え方）。行になるのは 24m 内（クリーパー・エンダーマン 32m、飛び道具の種類 48m）。'
-    + '見え方: 見える（射線の中）= 撃たれる所 / 見えない・道はある = 回って来る / 壁の向こうで届かない = 急ぎではない / 飛び道具 = 遠くから撃つ種類 / 無い = 未測定。残りは「ほか N 体」。'
-    + 'near: 敵でない生き物と落ちている物（16m 内）。',
-  '- queue: 体の列。▶ が実行中（残りの秒・手の進み）、・が待ち。足せる数も出る。',
+    + '見え方: 見える（射線の中）= 撃たれる所 / 見えない・道はある = 回って来る / 壁の向こうで届かない = 急ぎではない / 飛び道具 = 遠くから撃つ種類 / 無い = 未測定。'
+    + '残りは「ほか N 体」。near: 敵でない生き物と落ちている物（16m 内）。',
+  '- queue: 体の列（▶ 実行中・・待ち）。',
 ].join('\n');
 
 const MAP = [
   '## 地図（予備）',
-  '- 足=(x,y,z) が足のマス、頭は y+1。層は全部同じ範囲。',
-  // The body's legend, word for word (mb-llmc-cand 2): its symbol lines and the surface form's. The layers' ranges are the v2 map's own (above).
-  ...MAP_LEGEND_V2.split('\n').slice(0, 10),
+  '- 足=(x,y,z) が足のマス、頭は y+1。上が北・左が西。記号は 1 字:',
+  // The body's legend, word for word (mb-llmc-cand 2): its symbol lines and the surface form's. Its title line (north up, row heads, column ticks) is said by the live map's own heading.
+  ...MAP_LEGEND_V2.split('\n').slice(1, 10),
   '縦: 足の列の上下（「上: y=46〜51 .×6 / y=52 #」= 空気 6 段の上が石）。',
 ].join('\n');
 
 const FALLS = [
   '## 落ちる・水・溶岩・空所',
-  '- 高さの差が大きい上り下りは vertical、横の移動と短い段差は go。素手で真下へ掘らない。水の中や真上では下へ掘らない。溶岩（L・l）の隣は掘らない・歩かない。降りてよいのは落差 n≤3、4 以上は vertical の stairs か着地点に水。',
+  '- 素手で真下へ掘らない。水の中や真上では下へ掘らない。溶岩（L・l）の隣は掘らない・歩かない。降りてよいのは落差 n≤3、4 以上は vertical の stairs か着地点に水。',
   '- 空所（溶岩の海・深い穴・崖）は、縁より 1 段下の岩のトンネルか、1 マスごとに足元と両脇に置いた壁付きの橋で渡る。壁の無い幅 1 の橋は使わない。'
     + 'footing に「押されたら落ちる」がある間は、立ち止まらない・跳ばない・縁で積まない。',
-  '- 流れる水（「水の流れ N」「押し戻された」）で go/walk が進まない時は、上流の 1 マスに dirt か cobblestone を place（足の下も水でよい）。',
 ].join('\n');
 
 /** The coordinator, 2026-11-03 (leg 2's plan 5.10: the sea and the night on the 1.4 km walk, the phantoms for a body that has not slept). */
@@ -132,24 +126,24 @@ const DANGER = [
   '- 体の自衛（オーナーの決め）: 4m 内で自分を狙う敵が 2 体まで・8m 内の敵が 4 体までなら、体は殴られる前から倒す（accept・体力に関係なく。体力 8 以下も逃げない）。'
     + 'クリーパーは打って爆発の外へ下がり、盾があれば膨らみ始めに構える。エンダーマン・ピグリンなど中立は敵意を向けるまで迎撃しない（倒すのはパール・金などの目的がある時だけ。accept に入れて attack）。逃げ切れず背中を殴られる方が損なので。'
     + '数を超える時（4m 内 3 体以上・8m 内 5 体以上）は体は自分から戦いを始めない（体力 8 以下なら逃げる）ので、あなたが先に離れる・囲う・食べる。',
-  '- 体の反射（溶岩・溺れ・落下・燃え・爆発・飛び道具・体力 8 以下の逃走・瀕死の食事）は体がして、act を止めて何をしたかを返す。その先はあなたが出す。',
+  // The death-avoiding rule is said here once for every stage (the stages' knowledge no longer repeats it).
+  SAFETY_FIRST,
+  '- 体の反射（溶岩・溺れ・落下・燃え・爆発・飛び道具・体力 8 以下の逃走・瀕死の食事）は体がして、何をしたかを返す。その先はあなたが出す。',
   '- 危ない act には stopIf: 夜・洞窟・ネザーは hostileWithin 8〜12（クリーパーは 10）、射線の中を通る act は hpBelow 12 前後（今の体力より低く）、待ち打ちは hostileWithin。'
-    + 'accept に入れた種類は hostileWithin に数えない（fight の相手もその手の間は同じ）。accept は act を止めない印だけで、体の自衛と hpBelow は accept があっても働く。戦うと決めた敵だけ accept に入れ、ほかの敵で止めたい act には hostileWithin。'
+    + '戦うと決めた敵だけ accept に入れ、ほかの敵で止めたい act には hostileWithin（accept の意味は mc_act の止める・守る）。'
     // end1109f12b: a go with accept [wither_skeleton] dug through the wall to it; struck from 20 to 10 on the way, then lost the trade at 12. Run 4 (11/10): a go with accept [zombie] and no fighting hand, 4 hits, 10 health.
     + 'go の accept に近接敵を入れない（止まらず敵の隣を歩き・壁も掘り続け、敵に向かう手が無いまま殴られる）。殴って来る敵には先に attack target=#id untilDead（剣か斧があれば fight）。',
-  '- 体力 8 以下で戦わないのは、数を超える時・遠くから撃つ敵・夜の露出: sprint で離れる→囲う（足の周り 4 面と頭の上）→食べる→満腹 18 以上で wait（自然回復は満腹 18 以上のみ）。ベッドは夜に寝る（ネザー・エンドのベッドは爆発する: そこでは寝ない）。',
+  '- 体力 8 以下で戦わないのは、数を超える時・遠くから撃つ敵・夜の露出: sprint で離れる→囲う（足の周り 4 面と頭の上）→食べる→満腹 18 以上で wait。ベッドは夜に寝る（ネザー・エンドのベッドは爆発する: そこでは寝ない）。',
   '- 体力が戻らない間（満腹 18 未満。recovery が出る）は、下りる・戦う前に食べる。敵が近くても 1 個食べてから（1.6 秒。殴って来る近接敵が 4m 内なら attack が先）。戻らないまま下りたり戦ったりすると、落下や矢 2〜3 発で死ぬ。',
-  '- 「今いる所は … から見える」と出たら、囲う・食べる前に見えない所へ。壁の向こうの敵は急ぎではない。',
-  '- 近接敵（ピグリン・ゾンビ・ウィザースケルトン・溺死ゾンビ）は自衛の数の中なら体が打つ: 剣か斧を持たせる。数を超える・回復しない・夜の時は、食べるか間に2マスplace。柱はpillarUp 2、ウィザースケルトンは3段。跳ぶ頭上の空間も確認。'
-    + 'ウィザースケルトンは 1 打ち 4〜8 と毒で、12 からは 2 打ちで死ぬ（体力 14 以上なら自分から斬り合う）。',
+  '- 近接敵（ピグリン・ゾンビ・ウィザースケルトン・溺死ゾンビ）は自衛の数の中なら体が打つ: 剣か斧を持たせる。数を超える・回復しない・夜の時は、食べるか間に2マスplace。柱はpillarUp 2、ウィザースケルトンは3段。跳ぶ頭上の空間も確認。',
 ].join('\n');
 
 const PLAN = [
   '## 計画',
   '- 計画は自分のもの（順を変える・足す・割る・blocked と reason）。済んだ・止まった・変えた時だけ plan_update。順を守る（例: 鉄の剣を作った後にネザーへ）。'
     + '節を飛ばす・後回しにする時は reason に理由を書く。',
-  '- 体が別の節の項目を続けて始めると、頭が今の節をその節へ動かすことがある（戻すのは plan_update の current）。今の節が未達の準備の節の間は動かない。',
-  '- 済む条件（doneWhen）と、消費して無くなる物の子の閉じ方は plan_update の説明。shortage は戦い・奥への移動の前に埋める。',
+  '- 体が別の節の項目を始めると、今の節がその節へ動くことがある（戻すのは plan_update の current）。今の節が未達の準備の節の間は動かない。',
+  '- shortage は戦い・奥への移動の前に埋める（済む条件・子の閉じ方は plan_update の説明）。',
 ].join('\n');
 
 /** The text every decision reads (the knowledge part of the cached system text). */
@@ -228,7 +222,6 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 木が無い時: 地表の木（mc_probe kind=scan で原木の方角・mc_view mode=top で上から）→村の木の物（扉・柵・ベッド・作業台・板、takeOk）→難破船→廃坑（vertical の stairs で下りる）。',
     '- 村は鉄より前に 128m 内を回る（takeOk: true。鉄ゴーレムと村人は打たない）: ベッド（下の決まり）、干し草（1 個でパン 3）、育った畑、箱は chest op=look→take。',
     PREP_RULES_WORDS,
-    SAFETY_FIRST,
     '- 鉄は facts の「鉄」の行・走査の鉄鉱石の行・地図の i の座標へ掘りに行く（全体では y=16 前後に多いが、座標の分かる鉄があれば y=16 まで下りなくてよい。埋まった近い鉄は遠くの空気に面した鉄より早い）。ダイヤは y=-58 前後（d、鉄のツルハシ）。水バケツは水源（w）の隣から use（流れ - からは汲めない）。',
     '- 鉱石（鉄・石炭・ダイヤ・銅）は mine ブロック名 X,Y,Z の 1 マスだけ書く。つながった鉱脈は体が全部たどって拾う（count は要る個数。dig の並べ書きは遅く落とし物も落とす）。dig は岩・土・木だけ。',
     '- 資源のマスと作業の立ち位置は別。距離や数より、通れる道・高低差・掘る/置く許可・視線と足場を比べる。'
@@ -257,7 +250,6 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   nether: [
     '## ネザーと要塞',
-    SAFETY_FIRST,
     '- ネザーの x・z はオーバーワールドの 1/8（ネザーの座標をオーバーワールドの go に使わない。オーバーワールドでは 8 倍）。帰りのゲートの座標を where に書く（帰りも p のマスの中へ walk して約 4 秒待つ）。y=31 より下は溶岩の海、マグマ（M）は燃える。',
     '- ピグリンは金の防具を 1 つ着るまで襲う（着るまでピグリンの群れ・砦の遺跡の 8m 内に長居しない）。金を掘る・箱を開けると怒る。',
     // Rig end1109f01 (c1): an unprovoked zombified piglin came 5 m near, the decision struck it, its group answered and she died without a hand.
@@ -320,7 +312,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '体の行に「体が中継点（n 回）でも進めなかった」と出たら、行き先を変える合図になる。'
       + 'limit_place は置く物の上限（置く所が maxPlace の残りを超える）なので、1 手を短くするか maxPlace を上げる。',
     // run62 (11/5): five deaths to wither skeletons, the body met three at once in the open.
-    '- ウィザースケルトン（背が 2.4 マス）は 2 マスの穴に入れず、柱は 3 段で届かない（2 段では届く）。2 体以上なら開けた通路で戦わず、2 段で塞ぐか 1×2 のトンネルへ下がる。'
+    '- ウィザースケルトン（背が 2.4 マス。1 打ち 4〜8 と毒で、12 からは 2 打ちで死ぬ。体力 14 以上なら自分から斬り合う）は 2 マスの穴に入れず、柱は 3 段で届かない（2 段では届く）。2 体以上なら開けた通路で戦わず、2 段で塞ぐか 1×2 のトンネルへ下がる。'
       + '床1段下の1×2退避路も、入口・開口の射線、近敵の間合いと逃げ道は別に確認する。',
     '- ブレイズの湧き場（要塞）から出る前に体力を戻す（要塞の生き物を残して出ると、ウィザースケルトンとブレイズに囲まれて体力が短い間に尽きかねない）。足場の外へ出てからは、出口側へ短い go を重ねる。',
     '- 道のバイオームで危険が変わる: 玄武岩の三角州・荒地は静かで、真紅の森（crimson_forest）にはピグリンとホグリンが湧く。'
@@ -347,7 +339,6 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   blaze: [
     '## ブレイズ',
-    SAFETY_FIRST,
     '- ブレイズは shortage が空の後（前は戦わず射線の外へ離れ塞ぐ。ロッド 1 本以上で、残りが作れない盾だけの時は次の項の通り盾なしで続ける）。空で体力 14 以上、8m 内に 1 体だけ見えたら待たず attack target=#id（下の剣の項）',
     '- 湧き場へ入る手（足場へ着く go と最初の fight）は、体力 20・満腹度 18・持ち物の食料 60 点（焼き肉 3。退いて立て直す分）・盾 1 枚がそろうまで送られない（足りない物は返す行が言う）。食べて回復を待つ・盾を作る・食料を取るは自分で決める。戦いはロッド 1 本で約 21 点食べる。'
       + '60 点を切りそうで取りに出る時は、残りの本数の分を一度で持ち帰る。ロッドが 1 本入った後に盾が尽き、材料（板 6＋鉄 1）も持っていない時は、盾なしでも送られる（鉄はネザーでほぼ採れない。取りに戻るより遮蔽から 1 体ずつ斬る方が速い。この時は shortage の「盾」を待たない）。',
@@ -407,7 +398,6 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   pearl: [
     '## パールとアイ',
-    SAFETY_FIRST,
     '- パールの当て: ①歪んだ森（青い森）のエンダーマン ②ピグリンに金の延べ棒を渡す（当たりは約 2.1%、当たると 2〜4 個。金 15.6 個で平均 1 個、14 個には平均 220 個・9 割なら 380 個。ばらつきが大きい）'
       + '③夜のオーバーワールドのエンダーマン（歪んだ森より少ないが、森が見つからない時の道）。足りない数に対する手間（秒）で当てを並べて選ぶ。金が少なくても交換は金の分だけ取り、残りをエンダーマン（1 体で平均 0.4〜0.5 個。14 個に約 28 体: 平均の期待値）で補ってよい。通り道のエンダーマンも取る。',
     '- 歪んだ森が見えない時: 走査（mc_probe kind=scan）で見えていない方向と、通っていないバイオームの方向へ、1 回 90m 以内の go で進み、着くたびに走査し直す。見えた谷や森の反対側を先にする。'
@@ -452,7 +442,6 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   stronghold: [
     '## ストロングホールド',
-    SAFETY_FIRST,
     // end1108g S9 (11/8): three sleeps failed on a slow server and the head waited out a 20-minute night in place (45-minute limit hit, 497 m short).
     // end1109 (h32b S9): one no_bed_spot, then 13 waits of 30 s on a perch in the air, 0 m/s for the last 7 minutes, 560 m short.
     // end1109s07 S9 (11/9): three minutes before dark she dug a hole, walled it and waited for night to sleep (~200 s still).
@@ -539,7 +528,6 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   ].join('\n'),
   end: [
     '## エンド',
-    SAFETY_FIRST,
     // The lab's words are kept as they were (S1's measure); the section audit of 11/5 adds when to cross and where to.
     // e04b (11/9): the platform lay inside the island; 「虚空のことが多い」 made the model count an 89 m bridge and wait in the hole 30 min.
     '- 着くのは黒曜石の台（100,49,0）。台は世界ごとに、島の外の虚空に浮くことも、島の中に埋まることもある。'
@@ -674,11 +662,14 @@ const STAGE_WHEN: Readonly<Record<StageId, (dimension: string, where: Where) => 
   end: (dimension, where) => dimension === 'the_end' || hasKind(where.kinds, STAGE_KINDS.end),
 };
 
-/** The knowledge of the stage(s) a plan node of this kind is in (the dimension's own when no stage holds the kind), for the plan made again. */
+/**
+ * The knowledge of the stage(s) a plan node of this kind is in (the dimension's own when no stage holds the kind), for the plan made again. The death-avoiding
+ * rule (`SAFETY_FIRST`) is in the decision's instructions once and no longer in each stage; the plan made again has no such instructions, so it is added here once.
+ */
 export function stageTextsForKind(kind: PlanKind, dimension: string): string {
   const ids = STAGE_IDS.filter(id => STAGE_KINDS[id].has(kind));
   const own: StageId = dimension === 'the_nether' ? 'nether' : dimension === 'the_end' ? 'end' : 'prep';
-  return (ids.length ? ids : [own]).map(id => V2_STAGES[id]).join('\n\n');
+  return [...(ids.length ? ids : [own]).map(id => V2_STAGES[id]), `## 死の扱い（どの場面でも）\n${SAFETY_FIRST}`].join('\n\n');
 }
 
 /** The message before the live state: the stages' knowledge, headed by which stages (null when there is no live body to pick from). */

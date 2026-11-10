@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyPlanUpdate, planFromSeeds, type PlanTree } from '@shannon/mind';
 import { firstPlanInput, openingDraft, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { NETHER_BY_SECONDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 
 describe('end1109o02 (opening lane): the seed is the first plan\'s draft from the overworld; a held condition keeps its parent open', () => {
   it('draws the seed up to the gate, with the iron pickaxe before the bucket, and fits its bound', () => {
@@ -47,7 +48,8 @@ describe('end1109o03 (opening lane): the night with no bed says its choices befo
     expect(nightChoiceLine(world({ timeOfDay: 9_500 }), pack({ stone_pickaxe: 1 }), 'overworld')).toContain('夜まで 約 3 分');
     expect(nightChoiceLine(world({ timeOfDay: 8_000 }), pack({ stone_pickaxe: 1 }), 'overworld')).toBeNull();
     expect(line).toContain('stone_pickaxe');
-    expect(line).toMatch(/30 分の目標の \d+%/u);
+    // the goal's own ruler (the night said a fixed 30 minutes until 11/11)
+    expect(line).toMatch(new RegExp(`${Math.round(NETHER_BY_SECONDS / 60)} 分の目標の \\d+%`, 'u'));
   });
   it('says nothing by day, with a bed carried, underground, outside the overworld, or with neither choice', () => {
     expect(nightChoiceLine(world({ timeOfDay: 6000 }), pack({ stone_pickaxe: 1 }), 'overworld')).toBeNull();
@@ -68,7 +70,8 @@ describe('end1109o04 (opening lane): by day with a bed, the day is the plan\'s a
   it('says how long until the bed works, what waiting costs and that the bed goes with her; nothing near the bed\'s minute, by night or with no bed', () => {
     const line = dayBedLine({ timeOfDay: 1000 }, pack({ white_bed: 1, stone_pickaxe: 1 }), 'overworld')!;
     expect(line).toContain('ベッドを持っている');
-    expect(line).toMatch(/30 分の目標の \d+%/u);
+    // the goal's own ruler (the night said a fixed 30 minutes until 11/11)
+    expect(line).toMatch(new RegExp(`${Math.round(NETHER_BY_SECONDS / 60)} 分の目標の \\d+%`, 'u'));
     expect(line).toContain('夜になった所で sleep');
     expect(dayBedLine({ timeOfDay: 11_800 }, pack({ white_bed: 1 }), 'overworld')).toBeNull();
     expect(dayBedLine({ timeOfDay: 18_000 }, pack({ white_bed: 1 }), 'overworld')).toBeNull();

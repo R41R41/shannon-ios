@@ -2,7 +2,6 @@ import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type A
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
-import { SELF_DEFENCE_SHORT } from './minecraftSelfDefenceWords.js';
 import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -205,10 +204,10 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   '## 止める・守る',
   ("- stopIf は文字列 \"hostileWithin=8 hpBelow=10\"（hostileWithin は敵までの m、hpBelow は体力 " +
 "0〜20、hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）。")
-    + 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。待つ手の act には hostileWithin。',
+    + 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。',
   '- accept は、この act で戦うと決めた敵の種類の配列（例 ["blaze"]）。その種類が近くにいても act を止めず、体もそれから逃げない（盾の構えと火の玉の打ち返しはする）。'
     + 'accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ。'
-    + SELF_DEFENCE_SHORT + '。近接の敵が殴って来る時は accept に入れず attack を先頭の手に（accept だけでは歩く・掘る手が続く）。'
+    + '体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く。近接の敵が殴って来る時は accept に入れず attack を先頭の手に（accept だけでは歩く・掘る手が続く）。'
     + '溶岩・溺れ・落下・点火クリーパー・体力 8 以下の逃走の反射と hpBelow も残る。早めに引くなら stopIf の hpBelow を高めに。',
   '- onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、'
     + 'ほかは stop。急ぐ手（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',

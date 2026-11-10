@@ -211,6 +211,17 @@ export function fallingDigWords(line: { code?: string; line: string }): string {
     + `砂利・砂は塊で埋まっていることが多く、向きを変えても同じ塊に当たることがある。下りる道では canDig に ${name} を足すほうが、`
     + `向きを変えるより早く進むことが多い（砂利は火打石の元にもなる）`);
 }
+/**
+ * 11/11 (run 5: 308 s held in shallow flowing water): what to do about a stream was a line of the instructions' 「落ちる・水・溶岩・空所」, read at every decision
+ * and needed in about one of a thousand. It is said where it happens: a go or walk that stopped with the body's words 「水の流れ N」/「押し戻された」/「流れる水の中」
+ * gets the way to stop the stream, unless the body's own line already says it (it names the dirt or the cobblestone).
+ */
+const STREAM_HELD = /水の流れ|押し戻された|流れる水の中/u;
+export const STREAM_WORDS = '流れる水で進めない時は、上流の 1 マスに dirt か cobblestone を place する（足の下も水でよい）';
+export function streamWords(line: { do: string; status: string; line: string }): string {
+  if ((line.do !== 'go' && line.do !== 'walk') || (line.status !== 'stopped' && line.status !== 'failed')) return '';
+  return STREAM_HELD.test(line.line) && !/dirt か cobblestone/u.test(line.line) ? STREAM_WORDS : '';
+}
 /** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the
  * opponent did is said by the code. */
 export const FIGHT_END_WORDS: Readonly<Record<string, string>> = {
@@ -264,6 +275,8 @@ noteGoal();
   if (line.code === 'cleanup_stop' && line.goal !== 'not_started') out.push(codeWords(line));
   const stopped = verticalStopWords(line);
   if (stopped) out.push(stopped);
+  const streamed = streamWords(line);
+  if (streamed) out.push(streamed);
   const fought = line.do === 'fight' && line.code && line.goal === 'done' ? FIGHT_END_WORDS[line.code] : undefined;
   if (fought) out.push(fought);
   if (line.progress?.seen?.length) out.push(`途中で見えた物（追っていない）: ${seenWords(line.progress.seen)}`);

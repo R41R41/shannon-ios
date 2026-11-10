@@ -75,8 +75,8 @@ describe('s14: the steps that take her away from the hostile', () => {
     const out = rewriteLlmcLive({ plan: {}, body: { state: { at: '(0,0,0)' }, map: mapOf({}), urgent: ['#1 enderman 4.2m (-3,0,-3)'] } }).live.body as Record<string, any>;
     expect(out.away[0]).toContain('離れる、掘らずに歩ける隣は無い');
   });
-  it('is in the dictionary and the enderman\'s rule points to it', () => {
-    expect(V2_ALWAYS).toMatch(/^- away: /mu);
+  it('is said by its own line (above), so the dictionary has no entry for it', () => {
+    expect(V2_ALWAYS).not.toMatch(/^- away: /mu);
   });
 });
 
@@ -202,7 +202,8 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
     expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
     expect(V2_ALWAYS).toContain('優先の順: 差し迫った危険を避ける → 準備の必須を満たす → 目的へ早く進める');
     expect(V2_STAGES.prep).toContain('足元・立っているマスからは離れたマスを開ける');
-    expect(V2_ALWAYS).toContain('mode「急ぎの版」は急ぎの時の短い live の印');
+    expect(V2_ALWAYS).toContain('live の mode が「急ぎの版」の判断');
+    expect(V2_ALWAYS).not.toContain('mode「急ぎの版」は急ぎの時の短い live の印');
     expect(V2_ALWAYS).toContain('出ていない項目は「無い」とは限らない（関係で省いた・未測定・未ロード・範囲外・急ぎの版）');
   });
 });
