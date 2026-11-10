@@ -39,7 +39,7 @@ const DECIDE = [
     + 'Changing only the coordinates, the direction or the limit may leave the same obstacle or missing permission.',
   '- When unsure, after the same stop twice, after a fall, or when live shows look: make an investigating decision with mc_view or mc_probe (same stop → history and path or sight; fell → column; enemy → around). '
     + 'If the investigation shows the cause, use it. Once the cause is known, write one line into the current section with plan_update\'s forbid (things not to do) or caution (things to watch out for) op (it appears in plan.rules).',
-  '- A wait-only act only when nothing else can be done (waiting stops the plan: in one run waits took about a quarter of the time); the why names what is awaited and the reason. To sleep, do not wait for the night: put one sleep hand at the start or end of a work act (the body lies down at dusk, before the next hand; within 10 s of dusk it waits by itself). A furnace take may be sent early (the body waits a remainder of 15 s or less); do other work while it burns.',
+  '- A wait-only act only when nothing else can be done (waiting stops the plan: one run lost a quarter of its time); the why names what is awaited and the reason. Do not wait for the night: put one sleep hand in a work act (the body lies down at dusk). A furnace take may be sent early; do other work while it burns.',
   '- Do not re-dig with exposeOk a cell where a 「見られる」 stop occurred. Dig a different cell that cannot be seen (the side away from the enemy, rock below). Do not dig or walk in a direction that approaches the enemy\'s side. '
     + 'Do not chase a target when attack stopped twice with 「届かない」 (wait for it to come with hold, or move away). Do not travel far or chase enemies while lacking food, a shield or golden armour.',
   '- Do not skip a section against a note you wrote yourself (plan.rules). Review the plan when the dimension changes.',
@@ -98,7 +98,7 @@ const FALLS = [
   '- Never dig straight down with bare hands. Do not dig down while in water or directly above it. Do not dig or walk next to lava (L, l). Descend only a drop of n≤3; for 4 or more use vertical stairs or water at the landing point.',
   '- Cross a gap (a lava sea, a deep hole, a cliff) through a tunnel in rock one level below the edge, or on a bridge with walls placed at the feet and on both sides for every cell. Never use a 1-wide bridge without walls. '
     + 'While footing shows 「押されたら落ちる」, do not stand still, jump or stack at the edge.',
-  '- Digging in water is slow (5x with the head under, 5x more afloat). Before a hand the body lays a block under the feet and stops a stream; never repeat the same dig, re-plan from its note.',
+  '- Digging in water is very slow; the body first steadies its feet and stops a stream. Never repeat the same dig; re-plan from its note.',
 ].join('\n');
 
 /** The coordinator, 2026-11-03 (leg 2's plan 5.10: the sea and the night on the 1.4 km walk, the phantoms for a body that has not slept). */
