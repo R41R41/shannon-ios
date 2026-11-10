@@ -64,7 +64,9 @@ export function createQueueProgress(deps: QueueDeps, shared: { items: QueueItem[
     // the one decided item left is nearly done (or none is, and only the reserve runs).
     const decided = queue.filter(item => !item.reserve);
     if (!decided.length) return queue.length ? 'remaining' : null;
-    return decided.length === 1 && remainingMs(decided[0]!) <= wake ? 'remaining' : null;
+    // Loop 11/10: the decision is due when all the decided items left are nearly done together (two short ones behind each other as
+    // much as one), not only when one is left: the next item goes in before the body runs dry.
+    return decided.reduce((sum, item) => sum + remainingMs(item), 0) <= wake ? 'remaining' : null;
   }
   return { progressOf, remainingMs, dependStateOfRef, tell, aheadMs, nextNumber, wakeNow };
 }

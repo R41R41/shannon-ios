@@ -280,17 +280,17 @@ describe('the results as news, and the version', () => {
 });
 
 describe('when the next decision is due', () => {
-  it('T\x27 is the 90th percentile of the last ten decisions and a second more, within 2 and 8 s; 5 s with none (R3-1 1)', () => {
+  it('T\x27 is the 90th percentile of the last ten decisions and 3 s more, within 3 and 20 s; 9 s with none (R3-1 1, loop 11/10)', () => {
     const f = setup();
     expect(queueWakeMs('t1')).toBe(QUEUE_T.defaultMs);
     f.queue.noteDecision(3000);
-    expect(queueWakeMs('t1')).toBe(4000);
+    expect(queueWakeMs('t1')).toBe(6000);
     for (const ms of [2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]) f.queue.noteDecision(ms); // ten decisions: 3000, 2000 ... 6000: the 90th is 5500
-    expect(queueWakeMs('t1')).toBe(6500);
+    expect(queueWakeMs('t1')).toBe(8500);
     for (const ms of [20_000, 20_000, 20_000, 20_000]) f.queue.noteDecision(ms);
     expect(queueWakeMs('t1')).toBe(QUEUE_T.maxMs);
     for (let index = 0; index < 10; index++) f.queue.noteDecision(100);
-    expect(queueWakeMs('t1')).toBe(QUEUE_T.minMs);
+    expect(queueWakeMs('t1')).toBe(100 + QUEUE_T.marginMs);
   });
 
   it('R3-1 (1, A3): a wake for the item that runs is made once; a decision that added nothing is not followed by another wake on the same queue, a new item is', async () => {
@@ -309,7 +309,7 @@ describe('when the next decision is due', () => {
     await f.queue.add(f.spec([{ do: 'wait', seconds: 3 }, { do: 'jump' }])); // the decision put an item: a new queue, a new wake when it is the one left to wait for
   });
 
-  it('with one item left and 5 s or less of it to run, now; with a long one, not yet; with another waiting, not yet', async () => {
+  it('with the items left nearly done together, now; with a long one, not yet; with a long one waiting behind, not yet (loop 11/10)', async () => {
     const f = setup();
     await f.queue.add(f.spec(wait1));
     f.take();
@@ -325,9 +325,15 @@ describe('when the next decision is due', () => {
     expect(woke).toBe(false);
     stop.abort();
     await expect(pending).rejects.toThrow();
+    // Two short items: their time left together is within T', so the next item is asked for now (the body would run dry otherwise).
+    const short = setup();
+    await short.queue.add(short.spec(wait1));
+    await short.queue.add(short.spec(dig(2)));
+    short.take();
+    expect(await short.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('remaining');
     const two = setup();
     await two.queue.add(two.spec(wait1));
-    await two.queue.add(two.spec(dig(2)));
+    await two.queue.add(two.spec([...dig(3), { do: 'wait', seconds: 30 }]));
     two.take();
     const hold = new AbortController();
     const waiting = two.queue.ready({ signal: hold.signal, drain: false });
@@ -335,10 +341,8 @@ describe('when the next decision is due', () => {
     void waiting.then(() => { two_woke = true; }, () => undefined);
     await delay(250);
     expect(two_woke).toBe(false);
-    // The first ends well: the second runs alone and is short.
-    two.end('completed', actResult(1));
-    two.poll();
-    expect(await waiting).toBe('remaining');
+    hold.abort();
+    await expect(waiting).rejects.toThrow();
   });
 
   it('the progress of the body counts: the hands left of a long repeat are time left', async () => {
@@ -422,7 +426,7 @@ describe('the lines of the live state', () => {
     const lines = f.queue.lines(null);
     expect(lines[0]).toMatch(/^▶ q1 \[p1\] 項目1 実行中: 済む: have:log>=10・残り約 \d+ 秒$/u);
     expect(lines[1]).toBe('・ q2 [p7] 項目2 待ち: 前提 near:furnace~5（前の項目の後で体が確かめる）');
-    expect(lines[2]).toBe('あと 1 つ足せる（足した項目は q2 の後ろに付く）');
+    expect(lines[2]).toBe('あと 1 つ足せる（足した項目は q2 の後ろに付く。q2 の結果を待たずに次の作業を足せば、体は止まらない）');
   });
 });
 

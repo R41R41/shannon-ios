@@ -11,9 +11,12 @@ import type { MinecraftControl } from './minecraftControl.js';
 import { urgentWatch } from './minecraftLlmc.js';
 import { type ReflexCapped } from './minecraftLlmcBodyEvents.js';
 
-/** R3-1 (1): T' is the 90th percentile of the last `kept` decisions and a second more (the median woke the head
- * too late for about half of its decisions: they took longer than T), within min and max. */
-export const QUEUE_T = Object.freeze({ minMs: 2_000, maxMs: 8_000, defaultMs: 5_000, kept: 10, quantile: 0.9, marginMs: 1_000 });
+/** R3-1 (1): T' is the 90th percentile of the last `kept` decisions and a margin more (the median woke the head
+ * too late for about half of its decisions: they took longer than T), within min and max.
+ * Loop 11/10 (task 193a86b0, 21:50–22:13): 100 of 134 items were added to an empty queue, and the body stood about 4 s before each (510 s
+ * of 1,404). T' was 4.4–5.5 s (the old ceiling 8 s) while a decision took 5–7 s of the model and 2–3 s more to read the frame and send the
+ * item: the head woke too late to have the next item in before the running one ended. The ceiling is 20 s and the margin 3 s now. */
+export const QUEUE_T = Object.freeze({ minMs: 3_000, maxMs: 20_000, defaultMs: 9_000, kept: 10, quantile: 0.9, marginMs: 3_000 });
 
 /** The longest an item's wait to start (the sum of the items ahead of it and a margin). */
 export const START_MARGIN_MS = 10_000,

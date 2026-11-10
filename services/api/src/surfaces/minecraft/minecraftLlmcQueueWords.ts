@@ -110,5 +110,6 @@ export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservat
   const room = QUEUE_MAX - items.length;
   const last = items[items.length - 1]!.item;
   return [...items.map((item, index) => itemLine(item, index, frame, running)),
-    room > 0 ? `あと ${room} つ足せる（足した項目は ${last} の後ろに付く）` : `列はいっぱい（${QUEUE_MAX}/${QUEUE_MAX}）`];
+    // Loop 11/10: the room is said with what it is for: the next work behind the running item, not a look at its result.
+    room > 0 ? `あと ${room} つ足せる（足した項目は ${last} の後ろに付く。${last} の結果を待たずに次の作業を足せば、体は止まらない）` : `列はいっぱい（${QUEUE_MAX}/${QUEUE_MAX}）`];
 }
