@@ -112,7 +112,7 @@ describe('the End', () => {
     forgetEndGather();
     expect(deadlyGateHold(walkIn, overworld(fallback), 'g')?.line).toContain('最初に止めてから 10 分まで');
   });
-  it("starts the clock at the End check's first shortage and, past ten minutes, asks the fallback's kit there too (ChatGPT's review of 11/10, Q2)", () => {
+  it("reads the gate's clock at the End check and, ten minutes past the gate's first hold, asks the fallback's kit there too (ChatGPT's review of 11/10, Q2; E1)", () => {
     forgetEndGather();
     const kit: Array<[string, number]> = [['cobblestone', 64], ['water_bucket', 1], ['white_bed', 6], ['cooked_beef', 12], ['bow', 1], ['arrow', 30],
       ['iron_sword', 1], ['ender_eye', 12]];
@@ -121,12 +121,16 @@ describe('the End', () => {
       return preparationShortage({ dimension: facts.dimension, counts: facts.counts, food: facts.food, nowKinds: ['end'], world: facts.world, taskId: 'q2', now });
     };
     expect(check(kit, 0)).toContain('ベッド');
-    // The gate reads the same clock: ten minutes after the check first said the beds, the fallback goes in.
-    expect(firstEntryLack(readinessOf(overworld(kit))!, 'q2', () => END_GATHER_MS)).toBeNull();
-    const after = check(kit, END_GATHER_MS);
+    // The check does not start the clock: ten minutes on, with no hold at the gate yet, the beds and the food of the beds' way are still asked.
+    expect(check(kit, END_GATHER_MS)).toContain('ベッド');
+    expect(check(kit, END_GATHER_MS)).not.toContain('予備の手');
+    // The gate's first hold starts it; ten minutes after that the fallback goes in, and the check says the same.
+    expect(firstEntryLack(readinessOf(overworld(kit))!, 'q2', () => END_GATHER_MS)).toContain('残り約 10 分');
+    expect(firstEntryLack(readinessOf(overworld(kit))!, 'q2', () => 2 * END_GATHER_MS)).toBeNull();
+    const after = check(kit, 2 * END_GATHER_MS);
     expect(after ?? '').not.toContain('ベッド');
     expect(after ?? '').not.toContain('黒曜石（エンドの戦い用');
-    const noSword = check(kit.filter(([name]) => name !== 'iron_sword'), END_GATHER_MS);
+    const noSword = check(kit.filter(([name]) => name !== 'iron_sword'), 2 * END_GATHER_MS);
     expect(noSword).toContain('予備の手');
     expect(noSword).toContain('剣');
     // Without a task there is no clock: the beds stay asked.

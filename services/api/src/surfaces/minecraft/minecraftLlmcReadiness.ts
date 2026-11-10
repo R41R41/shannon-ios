@@ -177,16 +177,16 @@ function endStage(world: Record<string, unknown> | undefined): PrepStage {
 
 /**
  * The End's check against the beds' gathering clock (`endGatherSince`, the gate's own; ChatGPT's review of 11/10, Q2: past ten minutes the gate
- * let her in on the fallback while this line still asked the beds and the fight obsidian at every decision). The clock starts the first time
- * the check finds the beds or the fight obsidian short; past `END_GATHER_MS` the check asks the fallback's kit instead (an iron sword required,
+ * let her in on the fallback while this line still asked the beds and the fight obsidian at every decision). The check only reads the clock;
+ * the gate's first hold at the portal starts it. Past `END_GATHER_MS` the check asks the fallback's kit instead (an iron sword required,
  * the bow and 30 arrows aims; the beds and the fight obsidian no longer asked). Without a task there is no clock and the table stays.
  */
 function endCheck(parts: { counts: ItemCounts; world?: Record<string, unknown>; taskId?: string; now?: number }): PrepStage {
   const table = endStage(parts.world);
   if (!parts.taskId) return table;
   const gathering = (need: Need): boolean => need.pattern === BED_ITEM || need.label === FIGHT_OBSIDIAN_LABEL;
-  const short = table.needs.some(need => gathering(need) && held(parts.counts, need) < need.count);
-  const now = parts.now ?? Date.now(), since = endGatherSince(parts.taskId, now, short);
+  // The review of 11/10, E1: an eye carried started the clock at the check, and it ran out before the stronghold. The gate starts it.
+  const now = parts.now ?? Date.now(), since = endGatherSince(parts.taskId, now, false);
   if (since === null || now - since < END_GATHER_MS) return table;
   return { ...table, food: END_MIN_FOOD, title: `エンドへ（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 30 はあれば使う）`,
     needs: [...table.needs.filter(need => !gathering(need) && !END_WEAPONS.includes(need)), ...END_FALLBACK_WEAPONS] };

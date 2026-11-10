@@ -5,8 +5,8 @@ import { lackOfTable, type readinessOf } from './minecraftLlmcReadiness.js';
 /**
  * The end of the beds' gathering at the End's gate (the pre-deploy review of 11/5, item 8: the beds 8 and the fight obsidian 8 were required with
  * no end, and a world short of them kept her looking into the night; the fallback, crystals with the bow and the sword on the perched dragon, could
- * not pass). The first time the End's check (`preparationShortage`) says the beds or the fight obsidian are short, or the gate holds the entry
- * of a task for the beds' way, a clock starts (`endGatherSince`, one clock for both); after `END_GATHER_MS` the entry passes with the
+ * not pass). The first time the gate holds the entry
+ * of a task for the beds' way, a clock starts (`endGatherSince`; the End's check, `preparationShortage`, only reads it); after `END_GATHER_MS` the entry passes with the
  * fallback's kit (`BEFORE_END_FALLBACK`: blocks, water, food, an iron sword; the bow and 30 arrows are aims since thru-1110, 11/9). The line says the time left and what the fallback
  * still lacks. Kept per process (a restart gives the gathering its time again).
  */
