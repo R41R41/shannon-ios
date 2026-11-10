@@ -39,7 +39,9 @@ const goMostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? GO_DEFAULT_SECONDS)
 /** The hands that take a range (run 39) and their default `seconds`. */
 const SECONDS_BY_KIND: Partial<Record<HandKind, number>> = { obsidian: 90, fight: 20, mine: 60, portal: 60, smelt: 30 };
 const mostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? SECONDS_BY_KIND[hand.do] ?? 30) + 2_000;
-const blocksOf = (hand: ActHand) => Math.max(1, hand.count ?? 1);
+/** mine without a count takes the whole vein (up to 24): about 8 blocks is the usual vein, not 1 (run 5). */
+const MINE_UNSAID_BLOCKS = 8;
+const blocksOf = (hand: ActHand) => Math.max(1, hand.count ?? (hand.do === 'mine' ? MINE_UNSAID_BLOCKS : 1));
 /** S8: count defaults to the named sources, and an obsidian act may run for its seconds plus 20 s. */
 const obsidianMostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? SECONDS_BY_KIND.obsidian!) + 20_000;
 const obsidianBlocks = (hand: ActHand) => hand.count ?? cells(hand);

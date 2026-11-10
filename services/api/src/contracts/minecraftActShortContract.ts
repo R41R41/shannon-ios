@@ -84,9 +84,11 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
   manualPage('mine', 'mine（指定した同種の鉱脈を掘って回収）', [
   'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [seconds=N]',
-  ("  鉱脈を掘る。ブロック名は id そのまま（iron_ore）。y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine " +
-"に書く名前。X,Y,Z はその鉱脈のマス（4 つまで。種類が分かるマスだけ: 地図の o " +
-"は鉄ではない）。同じ種類のつながったマスだけを近い順にたどって掘り、拾い、道具を持ち替える（ほかの鉱石は探さない）。count（既定 8）まで。道が岩に塞がれている時だけ dig= の物を掘って届く。")
+  ("  鉱脈を掘る。1 マスだけ書けば足りる: つながった同じ鉱石（ななめも。y=0 付近は iron_ore と deepslate_iron_ore もひと続き）は体が近い順に全部たどって掘り、拾い、道具を持ち替える" +
+"（岩に埋まった落とし物へも岩を掘って取りに行く。ほかの鉱石は探さない）。鉱石を dig で 1 個ずつ並べて書かない（遅く、落とし物も拾い損ねる）。" +
+"ブロック名は id そのまま（iron_ore）で、y<0 は deepslate_ が付く: landmarks・走査の行の名前を写す。X,Y,Z は必須（座標なしは断られる。待ちの代わりに使わない）で、" +
+"種類が分かるマスだけ（地図の o は鉄ではない。指したマスが掘り済みでも 2 マス内の同じ鉱石から始める）。" +
+"count は要る個数（鉄のツルハシなら count=3。書かないと鉱脈ぜんぶ・24 まで）。岩に埋まっていても dig= を書かなくても岩・土・砂利だけ掘って届く（maxDig 既定 16）。")
     + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。'
   ]),
   'make 物 [個数]',
