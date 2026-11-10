@@ -149,8 +149,7 @@ describe('the body\'s new stops and names are in the contract', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('「時間切れ」は秒の上限か道探しの持ち時間（go の search_timeout は道が無いとは限らない）');
   });
   it('says in mine and in the map\'s legend that an ore below y=0 is named with deepslate_, and which name to write', () => {
-    expect(SHORT_ACT_DESCRIPTION).toContain('y<0 の鉱石は deepslate_ が付く（deepslate_iron_ore）: landmarks の [ ] の中が mine に書く名前');
-    expect(SHORT_ACT_DESCRIPTION).toContain('landmarks の [ ] の中が mine に書く名前');
+    expect(SHORT_ACT_DESCRIPTION).toContain('y<0 は deepslate_ が付く: landmarks・走査の行の名前を写す');
   });
   it('reads a landmark line that carries the ore\'s id in brackets, as it reads one without', () => {
     const self = { x: 150, y: -6, z: 208 };

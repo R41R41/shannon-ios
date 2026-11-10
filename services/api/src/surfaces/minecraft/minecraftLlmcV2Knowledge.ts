@@ -167,7 +167,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 夜（オーバーワールド）は、sleep の手で寝て朝にする（体が持っているベッドを置き、朝に拾い直す）（夜は敵が増え、ファントムも来る）。ネザー・エンドでは寝ない（爆発する）。',
     PREP_NIGHT_STOP,
     // run 5 (11/11) issue 3: a drop one block off a one-wide gap stopped the walk again and again. The body now digs 1-3 blocks of rock to it (only for a pickup that names the drop).
-    '- pickup target=#id（か名前）は、落とし物の前の石・土・普通の鉱石 1〜3 マスを体が自分で掘って近づいて拾う（結果に「途中で…を掘った」）: dig→walk を前に並べない。止まりに「掘って近づこうとして止まった …」が付いたら、その理由（溶岩・水・頭上の砂利・敵・ツルハシ無し）を直す。target 無しの pickup と mine の拾いは掘らない。',
+    '- pickup target=#id（か名前）は、落とし物の前の石・土・普通の鉱石 1〜3 マスを体が自分で掘って近づいて拾う（結果に「途中で…を掘った」）: dig→walk を前に並べない。止まりに「掘って近づこうとして止まった …」が付いたら、その理由（溶岩・水・頭上の砂利・敵・ツルハシ無し）を直す。target 無しの pickup は掘らない（mine は自分で岩を掘って取りに行く）。',
     '- バケツを作ったら最初の水源ですぐ汲む（run61 は空のまま地上を通り、地下で 6 分探した帰りに死んだ）。',
     // run62 (11/5): the pickup's walk went onto the magma floor of a ruined portal; two deaths and the diamond pickaxe were lost there.
     '- 壊れたポータルの周りはマグマの床が多い。拾いに歩く前に、足元とその先のマグマを丸石か土で覆う（途中の足場の安全は保証されない）。立っている段は掘らない。',
@@ -185,7 +185,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     HUNT_FOOD_KNOWLEDGE,
     '- foodPreparation は加工の見込み。炉・作業台・燃料・設置場所と加工後の持ち物を観測で確かめる。',
     '- jobs は見込み。保留・再接続後は残り秒で待ち直さず furnace op=take で現物確認。焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める。jobs の各行は、かまどの場所・入れた物と出てくる物・あと何秒かで、待たずに別の act を足し、時間が来たら take の act を足す。',
-    '- 置いた作業台・かまどは、10 m より遠くへ行く手（go・walk・vertical・portal、at を書いた mine）の前に体が拾って持ち歩く（置きっぱなしだと板・丸石を毎回失うため）。焼き途中・出来上がり待ちのかまどは残る。敵が近い・体力が低い・水中や空中・持ち物が満杯の時は拾えず残るので、手の行と持ち物で確かめる。使う時は持っている物を place し、近くに作業台があれば新しく作らない。',
+    '- 置いた作業台・かまどは、10 m より遠くへ行く手（go・walk・vertical・portal・hunt、at を書いた mine）の前に体が拾って持ち歩く（置きっぱなしだと板・丸石を毎回失うため）。焼き途中・出来上がり待ちのかまどは残る。敵が近い・体力が低い・水中や空中・持ち物が満杯の時は拾えず残るので、手の行と持ち物で確かめる。使う時は持っている物を place し、近くに作業台があれば新しく作らない。',
     '- ベッドのある安全な囲いでは、射線・敵の到達・足場を確かめ、朝待ちと調理・工作・近くの夜の狩り（食料源の選び方の条件）を比べる。ベッドが無い夜は朝待ちを選ばず、次の順番に従う。',
     // 1107c (11/7): with no bed the head waited 13 of its 19.6 minutes in a dirt pocket, 11 blocks above the iron shaft's depth. The owner: food first by day,
     // iron can be dug at night, and the bed matters most. 1107d (11/7): the line presupposed an enclosure; on a jungle top the dirt ring had no face
