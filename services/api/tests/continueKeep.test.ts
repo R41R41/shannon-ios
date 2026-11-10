@@ -17,6 +17,7 @@ import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMin
 import { validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 import { sendItem } from '../src/wiring/fcaMinecraftActItem.js';
 import { lineToHand } from '../src/contracts/minecraftActShortHands.js';
+import { ALWAYS_TEXT_CAP_LLMC } from './support/alwaysTextCap.js';
 
 /**
  * Amendment A-7 (the head only), from the short run of Sonnet: 1 `keep` (an act says what to keep, the head makes the promise), 2 vertical's `liquid` and limits told with the
@@ -299,10 +300,10 @@ describe('vertical: the refusal says how to mend it, and the examples all write 
 });
 
 describe('the system text: keep in the order of what to do, within the size', () => {
-  it('says keep once, in the deciding lines, and stays within 9,200 tokens', () => {
-    expect(V2_ALWAYS).toContain('後で使う物は act の keep に書く（帳簿に載る）');
-    expect(V2_ALWAYS.split('act の keep').length).toBe(2);
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThanOrEqual(9_200);
+  it('says keep once, in the deciding lines, and stays within the cap of the always-on text', () => {
+    expect(V2_ALWAYS).toContain("Write what you need later in the act's keep (it goes on the ledger)");
+    expect(V2_ALWAYS.split("act's keep").length).toBe(2);
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThanOrEqual(ALWAYS_TEXT_CAP_LLMC);
   });
 });
 

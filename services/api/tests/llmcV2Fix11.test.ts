@@ -50,7 +50,7 @@ describe('s47: a place far outside the map is not written as if it were near', (
   it('says in mc.act that a far point only works when the way is open, not that any far point may be given', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('地図の外の遠い点も渡せるが、掘らず置かないので、途中に壁があるとそこで止まる');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('40m 以上先は地図の外の座標を渡してよい');
-    expect(V2_ALWAYS).toContain('目的地が地図の外なら、その先の道は不明');
+    expect(V2_ALWAYS).toContain('If the destination is off the map, the road beyond is unknown');
   });
 });
 
@@ -101,8 +101,8 @@ describe('s67: where the water and the lava meet', () => {
     expect(digWords(view, [{ x: 0, y: 0, z: 2 }, { x: -1, y: 0, z: 0 }])).toBe('(0,0,2) 石の類（溶岩の隣: 開けると溶岩が流れ込む）、(-1,0,0) 石の類');
   });
   it('says the same in the stage knowledge and in the dictionary', () => {
-    expect(V2_ALWAYS).toContain('開けると溶岩が流れ込むマス');
-    expect(V2_ALWAYS).toContain('水と溶岩の両方に隣り合うマス');
+    expect(V2_ALWAYS).toContain('is a cell where lava flows in when it is opened');
+    expect(V2_ALWAYS).toContain('a cell next to both water and lava');
   });
 });
 
@@ -149,17 +149,17 @@ describe('chapter 4 A: the road and the pace', () => {
   });
   it('gives the goal and the yardstick in the instructions, the numbers from the one constant, and each line in the dictionary', () => {
     const system = minecraftV2System(V2_ALWAYS);
-    expect(system).toContain('## 目的と物差し');
-    expect(system).toContain('ネザーへ入るまでは 47 分ほど（準備を含む）');
-    expect(system).toContain('死ぬと持ち物と時間を失い');
-    expect(system).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
-    expect(system).toContain('meter は開始からの秒と次の節目の「あと」か「遅れ」');
+    expect(system).toContain('## Purpose and yardstick (目的と物差し)');
+    expect(system).toContain('Entering the Nether takes about 47 minutes (preparation included)');
+    expect(system).toContain('a death loses items and time');
+    expect(system).toContain('Never stop or complete early because of time. The yardstick is a guide');
+    expect(system).toContain('meter is the seconds since the start and 「あと」 (remaining) or 「遅れ」 (behind) for the next milestone');
     expect(milestoneWords()).toBe('ベッド 150・地下の準備 300・鉄のツルハシ 350・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 2,820');
     expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 2_820, 3_200, 4_700, 6_000, 6_700, 7_800, 8_600, 9_000, 9_600]);
     // The instructions list the targets up to the Nether (the cached text has a cap); the meter says the later ones.
     expect(DRAGON_MILESTONES.filter(item => item.late).map(item => item.name)).toEqual(['ネザー要塞', 'ブレイズロッド 7 本', 'エンダーパール 14 個', 'エンダーアイ 12 個', 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 330 点）', 'ポータルの枠の部屋', 'エンド', '竜の討伐']);
-    expect(V2_ALWAYS).toContain('road・meter（エンドラ討伐だけ）: road は');
-    expect(V2_ALWAYS).toContain('meter は開始からの秒と次の節目の「あと」か「遅れ」');
+    expect(V2_ALWAYS).toContain('road, meter (dragon task only): road is');
+    expect(V2_ALWAYS).toContain('meter is the seconds since the start and 「あと」 (remaining) or 「遅れ」 (behind) for the next milestone');
   });
 });
 
@@ -198,13 +198,13 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
     expect(obsidianWays({ planFacts: planFacts('obsidian', { id: 'p7.2' }) }, origin, view)).toHaveLength(1);
   });
   it('says in the instructions: beds explode in the Nether and the End, shortage is not skipped for speed, the cell to open is away from her feet, and the urgent live\'s fields', () => {
-    expect(V2_ALWAYS).toContain('ネザー・エンドのベッドは爆発する: そこでは寝ない');
-    expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
-    expect(V2_ALWAYS).toContain('優先の順: 差し迫った危険を避ける → 準備の必須を満たす → 目的へ早く進める');
+    expect(V2_ALWAYS).toContain('a bed in the Nether or the End explodes: do not sleep there');
+    expect(V2_ALWAYS).toContain('Never stop or complete early because of time. The yardstick is a guide');
+    expect(V2_ALWAYS).toContain('Order of priority: avoid imminent danger → meet the preparation requirements → advance quickly to the goal');
     expect(V2_STAGES.prep).toContain('足元・立っているマスからは離れたマスを開ける');
-    expect(V2_ALWAYS).toContain('live の mode が「急ぎの版」の判断');
+    expect(V2_ALWAYS).toContain("In a decision where live's mode is 「急ぎの版」");
     expect(V2_ALWAYS).not.toContain('mode「急ぎの版」は急ぎの時の短い live の印');
-    expect(V2_ALWAYS).toContain('出ていない項目は「無い」とは限らない（関係で省いた・未測定・未ロード・範囲外・急ぎの版）');
+    expect(V2_ALWAYS).toContain('A field that is absent is not necessarily absent in fact (it was cut as irrelevant, unmeasured, unloaded, out of range, or left out of the urgent version 「急ぎの版」)');
   });
 });
 

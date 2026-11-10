@@ -72,22 +72,22 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
 describe('Notion 09-1c: the rules said as the code keeps them', () => {
   const system = minecraftV2System(V2_ALWAYS);
   it('one act a decision, plan.update first in the same response, a probe\'s answer before the hand that needs it', () => {
-    expect(system).toContain('mc_act を 1〜2 つ（列に足す）。plan_update は mc_act の前に置けば同じ応答で、書いた順に実行');
+    expect(system).toContain('one or two mc_act (added to the queue). A plan_update placed before the mc_act runs in the same response, in the order written');
     expect(system).not.toContain('のどれか。');
     expect(SHORT_ACT_DESCRIPTION).toContain('手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める');
   });
   it('one health line (owner 11/10): inside the body self-defence count it fights it out at any health; beyond it, no fight at 8 or less', () => {
-    expect(V2_ALWAYS).toContain('4m 内で自分を狙う敵が 2 体まで・8m 内の敵が 4 体までなら、体は殴られる前から倒す');
-    expect(V2_ALWAYS).toContain('体力 8 以下も逃げない');
-    expect(V2_ALWAYS).toContain('体力 8 以下で戦わないのは、数を超える時');
+    expect(V2_ALWAYS).toContain('while at most 2 enemies target you within 4 m and at most 4 enemies are within 8 m, the body kills them before it is hit');
+    expect(V2_ALWAYS).toContain('it does not flee even at health 8 or below');
+    expect(V2_ALWAYS).toContain('At health 8 or below, do not fight when the enemies are over the counts');
     expect(V2_ALWAYS).not.toContain('鉄以上の剣があり体力 8 超で遮れない時は打ち返す');
     expect(V2_ALWAYS).not.toContain('体力 6 超');
   });
   it('tells the model the body fights by itself (creepers with technique, neutrals only when hostile) and that accept only keeps the act from stopping', () => {
-    expect(V2_ALWAYS).toContain('クリーパーは打って爆発の外へ下がり、盾があれば膨らみ始めに構える');
-    expect(V2_ALWAYS).toContain('中立は敵意を向けるまで迎撃しない');
-    expect(V2_ALWAYS).toContain('殴って来る敵には先に attack target=#id untilDead');
-    expect(V2_ALWAYS).toContain('倒すのはパール・金などの目的がある時だけ');
+    expect(V2_ALWAYS).toContain('It hits a creeper and then backs out of the blast range, and with a shield it raises it when the creeper starts to swell');
+    expect(V2_ALWAYS).toContain('are not engaged until they turn hostile');
+    expect(V2_ALWAYS).toContain('For an enemy that is hitting you, first attack target=#id untilDead');
+    expect(V2_ALWAYS).toContain('kill them only when there is a purpose such as pearls or gold');
     expect(V2_ALWAYS).not.toContain('hpBelow と反射は accept でも効く');
     // 11/11 trim: the owner's numbers are the instructions' (line above); mc_act says only that the body's self-defence works whether or not accept is written.
     expect(SHORT_ACT_DESCRIPTION).not.toContain('4m 内で自分を倒しに来ている敵が 2 体まで');
@@ -97,9 +97,9 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
   });
   it('an absent field is not an absent fact, the plan\'s done is not the goal\'s progress, next is the order', () => {
     expect(V2_ALWAYS).not.toContain('出ていない項目 = その事実が今は無い');
-    expect(V2_ALWAYS).toContain('出ていない項目は「無い」とは限らない');
-    expect(V2_ALWAYS).toContain('done（済み扱いの節/全体。達成率ではない）');
-    expect(V2_ALWAYS).toContain('next（予定の次 3 節。すぐできるとは限らない）');
+    expect(V2_ALWAYS).toContain('A field that is absent is not necessarily absent in fact');
+    expect(V2_ALWAYS).toContain('done (sections and whole counted as done; not a completion rate)');
+    expect(V2_ALWAYS).toContain('next (the next 3 planned sections; not necessarily doable now)');
     expect(candidateMenuTools([PLAN_UPDATE_RULES_DEFINITION])[0]!.description).toContain('親が済むと、その下の開いた子（blocked を除く）は「不要になった」として閉じる');
   });
   it('the plan tool says the children of a done node are closed, and plan.update goes before the act', () => {

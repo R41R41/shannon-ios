@@ -6,10 +6,11 @@ import { minecraftV2System } from '../src/infra/models/anthropic/anthropicFcaMin
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { createFoodTrend, llmcTokens, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { fixLandmarks } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
-import { PLAN_PREP_WORDS, PREP_DESCENT_RULE, PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { PLAN_PREP_WORDS, PREP_DESCENT_RULE, PREP_DESCENT_RULE_EN, PREP_RULES_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { DRAGON_MILESTONES, isPrepMilestoneNode, meterLine, milestoneWords, PREP_MILESTONE_NAME, roadLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
+import { ALWAYS_TEXT_CAP_LLMC } from './support/alwaysTextCap.js';
 
 /**
  * Run 41 (2026-10-27, Sonnet, rel57): she went down to the iron with no food hunted and no table, stood 372 s without one and died on the way up. The speed had its
@@ -88,8 +89,8 @@ describe('the live says the hunger bar and the food she carries in two words', (
     expect(JSON.stringify(live.state)).not.toContain('"food"');
   });
   it('says so in the dictionary', () => {
-    expect(V2_ALWAYS).toMatch(/^- foodPoints: total（食料の点＝持ち物の食べ物の合計。満腹 fullness とは別）/mu);
-    expect(V2_ALWAYS).toContain('fullness（満腹 0〜20）');
+    expect(V2_ALWAYS).toMatch(/^- foodPoints: total \(food points = the sum of the food items carried; separate from fullness\)/mu);
+    expect(V2_ALWAYS).toContain('fullness (0–20)');
     expect(V2_STAGES.prep).toContain('食料の点（live の foodPoints.total。満腹 fullness とは別）');
   });
 });
@@ -111,18 +112,19 @@ describe('the reason is in real numbers, and the rule is plain', () => {
   });
   it('asks for the numbers in the why of a hand that goes down, as a check (run 42: the example of a pack that lacks all, as a way through, went)', () => {
     expect(PREP_DESCENT_RULE).toContain('下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）');
-    expect(V2_ALWAYS).toContain(PREP_DESCENT_RULE);
+    expect(V2_ALWAYS).toContain(PREP_DESCENT_RULE_EN);
+    expect(PREP_DESCENT_RULE_EN).toContain('The why of the descending hand states the current numbers you checked and how the shortfall is made up (only once met, like');
     expect(V2_STAGES.prep).not.toContain('鉄へ下りる（食料 40/40');
   });
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
-    expect(V2_ALWAYS).toContain('ネザーへ入るまでは 47 分ほど（準備を含む）');
-    expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
-    expect(V2_ALWAYS).toContain('足りなくなると地上へ戻る必要がある。死ぬこともある（以前の実走の記録で、今回の所要時間ではない: 42 は');
+    expect(V2_ALWAYS).toContain('Entering the Nether takes about 47 minutes (preparation included)');
+    expect(V2_ALWAYS).toContain('Never stop or complete early because of time. The yardstick is a guide');
+    expect(V2_ALWAYS).toContain("running short forces a return to the surface. You can die too (records of earlier runs, not this run's duration: run 42 took 540");
     expect(V2_ALWAYS).not.toContain('鉄の夜');
-    expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
+    expect(minecraftV2System(V2_ALWAYS).split('\n').filter(line => !line.startsWith('- Reason: the food you carry')).join('\n')).not.toMatch(/実走\d|run ?\d/u);
   });
-  it('keeps the instructions within the cap of the mode\'s system text (9,200 by llmcTokens since the owner combat rule of 11/10: about 7.5k real tokens, inside the 8k of D3)', () => {
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(9_200);
+  it('keeps the instructions within the cap of the mode\'s system text (English since 11/11: the cap of tests/support/alwaysTextCap.ts)', () => {
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);
   });
 });
 

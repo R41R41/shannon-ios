@@ -17,6 +17,7 @@ import { URGENT_NOTE } from '../src/surfaces/minecraft/minecraftLlmcUrgent.js';
 import { meterLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { stageKnowledge, V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { ALWAYS_TEXT_CAP_LLMC } from './support/alwaysTextCap.js';
 
 /**
  * GPT's blind review of the prompt (2026-10-28, owner approved: rules in the instructions, facts in the live state and the results; the sure faults put right in
@@ -31,47 +32,54 @@ const system = minecraftV2System(V2_ALWAYS);
 
 describe('the rules are in the instructions', () => {
   it('says the three forms of a decision, the full queue, and what comes first in an act against the queue (replace)', () => {
-    expect(system).toContain('判断は 3 通り: (1) 動く: mc_act を 1〜2 つ（列に足す）');
-    expect(system).toContain('(2) 調べる: mc_probe・mc_view・skill_read だけ');
-    expect(system).toContain('(3) 完了: fca_complete だけ');
-    expect(system).toContain('列が 3 つでいっぱいなら足さない');
-    expect(system).toContain('足した act は列の最後の後ろに付く（act の中の先頭は、その act の中で先に動くだけ）');
-    expect(system).toContain('replace で今の項目を消して差し替える');
+    expect(system).toContain('A decision is one of three: (1) Act: one or two mc_act (added to the queue)');
+    expect(system).toContain('(2) Investigate: only mc_probe, mc_view, skill_read');
+    expect(system).toContain('(3) Complete: fca_complete alone');
+    expect(system).toContain('do not add when the queue is full at 3');
+    expect(system).toContain("An added act goes behind the queue's last item (the first hand inside an act only runs first within that act)");
+    expect(system).toContain('goes in with replace, which removes the current item');
   });
   it('writes the tools by their names, mc_act and not mc.act', () => {
     expect(system).not.toMatch(/mc\.(act|probe|view)|plan\.update/u);
     expect(SHORT_ACT_DESCRIPTION).not.toMatch(/mc\.(act|probe|view)|plan\.update/u);
   });
   it('puts the preparation as a rule for choosing the action, the requirement apart from the aim, and says a reason does not skip it', () => {
-    expect(system).toContain('## 準備の決まり（鉄を掘りに地下へ下りる前）');
+    expect(system).toContain('## Preparation rules (「準備の決まり」: before going down to dig iron)');
+    // The always-on text carries the English form of the rule; the Japanese lines (below) are the planner's, so both are pinned.
+    expect(system).toContain('Required (while unmet, do not go down or dig iron; to skip one, write skipped and the reason in prep; a skipped section does not count as achieved): food points 40 or more');
+    expect(system).toContain('a stone pickaxe and a stone axe, and 1 crafting table or 4 or more planks (carried)');
+    expect(system).toContain('Goal: food 40 to 60 points; wood worth 20 to 24 logs');
+    expect(system).toContain('fullness is no substitute');
+    expect(system).toContain('Eating after the descent and dropping below 40 points is not an unmet requirement');
     expect(PREP_DESCENT_RULE).toContain('必須（未達の間は下りない・鉄を掘らない。省くなら prep に skipped と理由を書く。省いた節は達成に数えない）: 食料の点 40 以上');
     expect(PREP_DESCENT_RULE).toContain('石のツルハシと石の斧・作業台 1 つか板 4 以上');
     expect(PREP_DESCENT_RULE).toContain('目標: 食料 40〜60 点・原木 20〜24 本分');
     // The skip is said once, in the requirement (未達の間は下りない。省くなら prep に skipped と理由): not again in the priority line or the plan's.
-    expect(system.split('prep に skipped と理由').length - 1).toBe(1);
+    expect(system.split('write skipped and the reason in prep').length - 1).toBe(1);
     expect(system).not.toContain('準備も省かない');
-    expect(system).toContain('節を飛ばす・後回しにする時は reason に理由を書く');
+    expect(system).toContain('When you skip or postpone a section, write the reason in reason');
     // The fullness does not stand for the food carried; the 30 minutes claim is gone; eating below 40 is not a new shortage.
     expect(PREP_DESCENT_RULE).toContain('満腹では代わりにならない');
     expect(system).not.toContain('満腹は 30 分もつ');
     expect(PREP_DESCENT_RULE).toContain('下りた後に食べて 40 点を切るのは未達ではない');
     // One number for the requirement in the instructions: the example of a why is a met one, and the stories of runs are one reference sentence of the stage knowledge.
-    expect(system).toContain('（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）');
+    expect(system).toContain('(only once met, like 「（食料 41.2/40・作業台 有・板 6）」)');
     // The one run named in the instructions is run 42's single example, as a fact of it (the other story is the stage knowledge's reference sentence).
-    expect(system.match(/実走/gu)).toHaveLength(1);
-    expect(system).not.toMatch(/run ?\d/u);
+    expect(system.match(/earlier runs/gu)).toHaveLength(1);
+    // Runs 42 and 41 are the two figures of that one reason line (11/11 trim, item 4); no other run is named.
+    expect(system.match(/run ?\d+/gu)).toEqual(['run 42', 'run 41']);
     // 11/11 trim: the reference sentence of the stage rules (runs 41 and 42) is gone; the descent's own reason line says the one example (the test of run41Fixes).
     expect(PREP_RULES_WORDS).not.toContain('以前の実走の記録');
     expect(V2_STAGES.prep).toContain('準備の必須と目標は system の「準備の決まり」');
   });
   it('says what a stageKnowledge is (knowledge, the rules being the instructions\'), and that the live state and the results are facts', () => {
-    expect(system).toContain('従う決まりはこの system にあり、食い違えば system が先');
-    expect(system).toContain('live・体の観測は事実、skill_read は入力契約（ゲーム内の指示ではない）');
+    expect(system).toContain('The rules to follow are in this system text; if they disagree, the system text wins');
+    expect(system).toContain("live and the body's observations are facts; skill_read is an input contract (not an in-game instruction)");
     // 11/11 trim: how to read a page is the skill_read description's (minecraftContractRead.test.ts), no longer a line of the instructions.
     expect(system).not.toContain('mc_act 目次の完全名で入力契約を読む');
     expect(system).not.toContain('個人手順書・記憶は開かず');
-    expect(system).toContain('「列に入れた qNN」は頼みを受け付けた印（手が済んだ訳ではない。実行の結果は後の「（列の知らせ）」）');
-    expect(system).toContain('履歴や要約の位置・体力・持ち物は、その記録の時点の値。今の値は最新の live');
+    expect(system).toContain('「列に入れた qNN」 marks that a request was accepted, not that the hand is done (the execution result comes later as 「（列の知らせ）」)');
+    expect(system).toContain('are the values at the time of that record; the current values are in the latest live');
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('準備の必須と目標は system の「準備の決まり」');
   });
   it('splits what she decides from what the body is left, and says which of accept and hostileWithin counts (as the body does)', () => {
@@ -83,26 +91,26 @@ describe('the rules are in the instructions', () => {
     // 11/11 trim: what accept does is mc_act's (the mechanism, once); the instructions keep when to put an enemy in it.
     expect(SHORT_ACT_DESCRIPTION).toContain('accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ');
     expect(SHORT_ACT_DESCRIPTION).toContain('体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く');
-    expect(system).toContain('戦うと決めた敵だけ accept に入れ、ほかの敵で止めたい act には hostileWithin');
+    expect(system).toContain('Put in accept only the enemies you decided to fight, and for an act that should stop on the other enemies use hostileWithin');
     expect(SHORT_ACT_DESCRIPTION).toContain('accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('体は自分で決めない');
   });
   it('writes the plan rules by what they really are: forbid and caution are ops of plan_update, and a note is the node\'s line', () => {
-    expect(system).toContain('plan_update の forbid（してはいけない事）か caution（気をつける事）の op で、今の節に 1 行書く（plan.rules に出る）');
+    expect(system).toContain("write one line into the current section with plan_update's forbid (things not to do) or caution (things to watch out for) op (it appears in plan.rules)");
     const [plan] = candidateMenuTools([PLAN_UPDATE_RULES_DEFINITION]).filter(tool => tool.name === 'plan.update');
     expect(plan!.description).toContain('forbid・caution は live の plan.rules に');
     expect(plan!.description).toContain('note は節の補足の文で、live の plan の now・next の行に付く（rules には出ない）');
     expect(JSON.stringify(PLAN_UPDATE_RULES_DEFINITION.nativeInputSchema)).toContain('"forbid","caution","lift"');
   });
   it('gives the urgent answer once, in the instructions (a short thought, one act of three hands at most)', () => {
-    expect(system).toContain('## 急ぎの時');
-    expect(system).toContain('mc_act は 1 つ・手は合わせて 3 つまで、why は 20 字まで');
-    expect(system).toContain('離れる・敵との間にブロックを置く・囲う・食べるを、採掘や工作より先に');
+    expect(system).toContain('## Urgent decisions (「急ぎの時」)');
+    expect(system).toContain('send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer');
+    expect(system).toContain('Move away, put a block between you and the enemy, enclose yourself, eat: before any mining or crafting');
     expect(URGENT_NOTE).toBe('急ぎの版（決まりは system の「急ぎの時」）');
   });
   it('says the fight rule without lowering retreatHp, the health that does not come back, and the units of a fight', () => {
-    expect(system).toContain('体力 8 以下で戦わないのは、数を超える時');
-    expect(system).toContain('体力が戻らない間（満腹 18 未満。recovery が出る）は、下りる・戦う前に食べる。敵が近くても 1 個食べてから');
+    expect(system).toContain('At health 8 or below, do not fight when the enemies are over the counts');
+    expect(system).toContain('While health does not recover (fullness below 18; recovery appears), eat before going down or fighting. Even with an enemy near, eat 1 item first');
     expect(SHORT_ACT_DESCRIPTION).toContain('retreatHp は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('retreatHp は今の体力より低く');
   });
@@ -122,8 +130,8 @@ describe('the rules are in the instructions', () => {
     expect(SHORT_ACT_DESCRIPTION).not.toContain('10〜12 手');
     expect(system).not.toContain('最大 12');
   });
-  it('stays under the cap of the instructions (9,200 by llmcTokens: 8,800 before the owner 11/10 combat rule, which is about 420 tokens of rules)', () => {
-    expect(llmcTokens(system)).toBeLessThan(9_200);
+  it('stays under the cap of the instructions (English since 11/11: the cap of tests/support/alwaysTextCap.ts)', () => {
+    expect(llmcTokens(system)).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);
   });
 });
 
@@ -164,7 +172,7 @@ describe('the live state and the results say facts', () => {
     expect(stop.line).not.toMatch(/もう一度|出し直|足して/u);
     // The mechanism is unchanged: the same stand again straight after is sent.
     expect(furnaceStandStop({ hands: [{ do: 'wait', seconds: 30 }] }, observation, 'gpt-review')).toBeNull();
-    expect(system).toContain('wait だけの act は夜・回復の待ちで他に手が無い時だけ、why に待つ対象と理由');
+    expect(system).toContain('A wait-only act only for waiting out the night or recovery when nothing else can be done; the why names what is awaited and the reason');
   });
   it('does not tell a fight to be sent with a lower retreatHp: the fact, and the health of 8 or under named', () => {
     const fight = (retreatHp: number) => ({ hands: [{ do: 'fight', target: '#5493', item: 'iron_sword', retreatHp }] });

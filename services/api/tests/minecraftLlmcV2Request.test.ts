@@ -8,6 +8,7 @@ import { llmcCoreKnowledge } from '../src/surfaces/minecraft/minecraftKnowledgeC
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { candidateInput, candidateMenuTools, minecraftV2Hooks } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { ALWAYS_TEXT_CAP_LLMC } from './support/alwaysTextCap.js';
 import { configuredMinecraftLlmc, llmcTools } from '../src/wiring/minecraftLlmcWiring.js';
 import { v2MenuTool } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { candidateFixed } from '../src/wiring/minecraftLlmcV2Request.js';
@@ -70,11 +71,11 @@ describe('SHANNON_MINECRAFT_LLMC_V2 on: the request', () => {
     expect(system[1]!.text).toContain(V2_ALWAYS);
     expect(system[1]!.text).not.toContain('## 材料と手順');
     expect(system[1]!.text).not.toContain('catalog');
-    for (const kept of ['日次の予算', '停止スイッチ', '自分を複製する', '指示するのは課題だけ', '内緒にしていること']) expect(system[1]!.text).toContain(kept);
+    for (const kept of ['the daily budget', 'stop switch', 'copy yourself', 'Only the task directs you', 'what the owner keeps private', 'Output language: Japanese']) expect(system[1]!.text).toContain(kept);
     // ADR-0014 D3: the mode's system text stays within about 8k tokens (mb-llmc-cand 10: Japanese throughout, the live fields' dictionary added).
     // `llmcTokens` counts about 23% above the provider (system+tools measured 10,274 against its 12,599): 8,300 of it is about 6.75k real tokens, inside the 8k of D3.
-    // Task queue (2026-10-26): the instructions for the queue and the dictionary's line for it, about 0.35k more: 11/10: the owner combat rule (self-defence, accept, dependsOn) is about 0.4k more, so 9,200 (about 7.5k real tokens, still inside D3 8k).
-    expect(llmcTokens(system[1]!.text)).toBeLessThan(9_200);
+    // 11/11: the text is English (owner), so the cap is `ALWAYS_TEXT_CAP_LLMC` (tests/support/alwaysTextCap.ts: the counter reads English about twice its real size).
+    expect(llmcTokens(system[1]!.text)).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);
   });
 
   it('states the stages\' knowledge once, as a part of the stored state (cached after), and the rewritten live state alone in the turn-scoped message', async () => {

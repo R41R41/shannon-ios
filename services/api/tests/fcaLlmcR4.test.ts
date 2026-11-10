@@ -178,6 +178,6 @@ describe('the models of the mode with Sonnet as its main one (shared note 6)', (
     for (const model of [llmc.models.main, llmc.models.escalate!] as FcaModel[]) await model.decide(input, new AbortController().signal).catch(() => null);
     const sent = fixture.bodies.map(item => ({ model: item.model, system: JSON.stringify(item.system) }));
     expect(sent.map(item => item.model)).toEqual(['claude-sonnet-5-5', 'claude-opus-5-5']);
-    for (const item of sent) expect(item.system).toContain('# Minecraft の体の課題');
+    for (const item of sent) expect(item.system).toContain('# Minecraft body task');
   });
 });

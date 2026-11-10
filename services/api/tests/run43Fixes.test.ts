@@ -12,6 +12,7 @@ import { meterLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneFacts, doneStatusWords, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { v2tree } from './helpers/planTreeV2.js';
+import { ALWAYS_TEXT_CAP_LLMC } from './support/alwaysTextCap.js';
 
 /**
  * Run 43 (2026-10-27, Sonnet, rel60): 39.6 food points said 「40/40」 while `food>=40` judged them short (p3 the now for 2,126 s); a furnace out of
@@ -141,13 +142,13 @@ describe('run 43: eat before a fight', () => {
     const counts = carriedItemCounts({ inventory: pack([['bread', 1]]) }, {});
     expect(recoveryLine(16, 10, 11, counts)).not.toContain('戦う前に');
     expect(recoveryLine(16, 10, 11, counts)).not.toContain('実走 42');
-    expect(V2_ALWAYS).toContain('敵が近くても 1 個食べてから');
-    expect(V2_ALWAYS).toContain('落下や矢 2〜3 発で死ぬ');
+    expect(V2_ALWAYS).toContain('Even with an enemy near, eat 1 item first');
+    expect(V2_ALWAYS).toContain('gets you killed by a fall or 2 to 3 arrows');
   });
 });
 
 describe('run 43: the always text does not grow', () => {
-  it('stays under 9,200', () => {
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(9_200);
+  it('stays under the cap of tests/support/alwaysTextCap.ts', () => {
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);
   });
 });

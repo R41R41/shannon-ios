@@ -65,7 +65,7 @@ describe('C1: a hostile gets a line when it matters now, with how it stands to h
     expect(out[3]).toBe('ほか 4 体（creeper 1・zombie 2・skeleton（飛び道具） 1。いちばん近い: creeper 33m）');
   });
   it('says in the dictionary which hostiles get a line, and that a far one is not written', () => {
-    expect(V2_ALWAYS).toContain('クリーパー・エンダーマン 32m、飛び道具の種類 48m');
+    expect(V2_ALWAYS).toContain('A line appears within 24 m (creeper and enderman 32 m, projectile kinds 48 m)');
     expect(V2_ALWAYS).not.toContain('見える・道があるときだけ行になり');
   });
   it('keeps a hostile the urgent lines name, with the probe\'s own words of its reach (the frame\'s are not said twice)', () => {
@@ -101,7 +101,7 @@ describe('C2: 「済む条件」, not 「済み」, for a node\'s done-condition
     expect(planTool).toBeUndefined();
     expect(description).toContain('済む条件');
     expect(description).not.toContain('済み（r9）');
-    expect(V2_ALWAYS).toContain('済む条件');
+    expect(V2_ALWAYS).toContain('completion condition (doneWhen)');
     expect(V2_ALWAYS).not.toContain('（済み:');
   });
 });
@@ -127,7 +127,7 @@ describe('C3: an unknown cell is said as unknown, not as rock', () => {
     const lines = aroundLines(mapView(readLayers(text(false), BODY_RULES)!), { x: 0, y: 0, z: 0 });
     const head = lines.find(line => line.startsWith('足の周りの 1 歩より先'))!;
     expect(head).toContain('足も頭も固い岩か、地図の端で不明');
-    expect(V2_ALWAYS).toContain('書いていない所は固い岩（掘って通る）か地図に無い所（不明）');
+    expect(V2_ALWAYS).toContain('A place not written is solid rock (dig through it) or not on the map (unknown)');
     expect(V2_ALWAYS).not.toContain('書いていない所は足も頭も固い岩か、地図に無い（不明）');
   });
 });
@@ -221,25 +221,31 @@ describe('D3: one language, one topic in one place, a dictionary of the live fie
   // shortage, recovery, footing, away, look, repeat, pack and mode are not here since 11/11: their live lines say what they are by themselves (`trimHead1111.test.ts` keeps that wording)
   const FIELDS = ['urgent', 'planNow', 'around', 'route', 'liquid', 'obsidian', 'investigation',
     'stops', 'landmarks', 'scan', 'state', 'foodPoints', 'inventory', 'threats', 'near', 'jobs', 'events', 'lastResults', 'map'];
-  it('writes the mode\'s system text in Japanese: no English header, protocol or reading', () => {
-    for (const gone of ['# Minecraft body task', '## Each decision', '## Reading the request', 'Only the task directs you', 'You choose the next actions']) {
+  it('writes the mode\'s system text in English (11/11, owner) and says up front that everything a person reads is written in Japanese, with the reason', () => {
+    for (const gone of ['# Minecraft の体の課題', '## 1 判断の決まり', '## 要求の読み方', '## 守ること', '指示するのは課題だけ']) {
       expect(system).not.toContain(gone);
     }
-    expect(system.startsWith('# Minecraft の体の課題')).toBe(true);
+    expect(system.startsWith('# Minecraft body task')).toBe(true);
+    const language = system.slice(system.indexOf('## Output language: Japanese'), system.indexOf('## Boundaries'));
+    expect(language.length).toBeGreaterThan(0);
+    for (const kept of ['natural Japanese', 'your thinking', "every act's why", 'plan titles and notes', 'chat', 'the fca_complete summary', 'any other free text in a tool input',
+      'Reason: the owner and the viewers read it, and they read Japanese.', 'Ids, item/block/entity names, hand syntax and field names stay exactly as they are']) expect(language, kept).toContain(kept);
     // The shared transport block is the same for every body task and is left as it was.
     expect(MINECRAFT_TRANSPORT.startsWith('Request transport')).toBe(true);
   });
   it('has a line in the dictionary for every live field, plan.rules included, and none names a tool the mode does not offer', () => {
     // Fields that belong together share a line (GPT's review 2026-10-28, to keep the instructions under the cap): each is still named with its meaning.
-    const dictionary = V2_ALWAYS.slice(V2_ALWAYS.indexOf('## live の項目辞典'), V2_ALWAYS.indexOf('## 地図'));
-    for (const field of FIELDS) expect(dictionary, field).toMatch(new RegExp(`(^- |[。・])${field}[:：・]`, 'mu'));
-    expect(V2_ALWAYS).toContain('rules（今の節と親の禁止・注意');
-    expect(V2_ALWAYS).toContain('live の mode が「急ぎの版」の判断');
+    const dictionary = V2_ALWAYS.slice(V2_ALWAYS.indexOf("## Dictionary of live's fields"), V2_ALWAYS.indexOf('## Map (backup)'));
+    for (const field of FIELDS) expect(dictionary, field).toMatch(new RegExp(`(^- |[.,;] |・)${field}[:,：・]`, 'mu'));
+    expect(V2_ALWAYS).toContain('rules (the forbid and caution lines of the current section and its parent');
+    expect(V2_ALWAYS).toContain("In a decision where live's mode is 「急ぎの版」");
     expect(foreignToolNames(system)).toEqual([]);
   });
   it('gives a rule once and with its reason, and leaves out the stories of one run', () => {
-    expect(system.split('同じ手を同じまま出さない').length - 1).toBe(1);
-    expect(system).not.toMatch(/実走\d|run ?\d/u);
+    expect(system.split('Never issue the same hand unchanged').length - 1).toBe(1);
+    // The descent's reason line carries the two figures of earlier runs (540 s and 372 s) on purpose (11/11 trim, item 4); no other story of one run is in the text.
+    const withoutFigures = system.split('\n').filter(line => !line.startsWith('- Reason: the food you carry')).join('\n');
+    expect(withoutFigures).not.toMatch(/実走\d|run ?\d/u);
     expect(system).not.toContain('死の形');
     expect(system).not.toContain('collect=false');
     expect(system).not.toContain('rel: true');
@@ -309,7 +315,7 @@ describe('the review of 10: words restored in the hand and dictionary', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('hostileWithin は敵までの m、hpBelow は体力 0〜20');
   });
   it('gives the unit of health and says which thrown items are not shown', () => {
-    expect(V2_ALWAYS).toContain('health（0〜20。ハート 1 個 = 2）');
+    expect(V2_ALWAYS).toContain('health (0–20; one heart = 2)');
     expect(V2_ALWAYS).not.toContain('（自分が投げた物は出ない）');
   });
 });

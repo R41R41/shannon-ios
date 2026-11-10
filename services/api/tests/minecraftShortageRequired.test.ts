@@ -10,7 +10,7 @@ import { doneFacts } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { llmcModelRouter } from '../src/wiring/minecraftLlmcConfiguration.js';
 import type { FcaModel } from '../src/mind/action/fca/fcaPorts.js';
 import { heldOfFrame, heldTail, holdV2, sentPart } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
-import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, SAFETY_FIRST } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, SAFETY_FIRST, SAFETY_FIRST_EN } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { gateHold, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { dropAdvice, packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { stageKnowledge, stageTextsForKind, V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
@@ -331,8 +331,13 @@ describe('a death is avoided, not the end (the owner, 2026-11-02 and 2026-11-10)
     expect(SAFETY_FIRST).toContain('体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満');
     // S2's blaze lab of 11/5: between fights the meal to fullness 18 and the wait to health 12 come first, out of sight.
     expect(SAFETY_FIRST).toContain('体力 18 未満なら見えない所で満腹 18 以上まで食べ、体力 18 以上まで待ってから出る');
-    expect(V2_ALWAYS.split(SAFETY_FIRST).length - 1).toBe(1);
-    for (const id of ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'] as const) expect(V2_STAGES[id], id).not.toContain(SAFETY_FIRST);
+    // The always-on instructions carry the English form (11/11); the planner's prompts keep the Japanese one above, so the two must say the same numbers.
+    expect(V2_ALWAYS.split(SAFETY_FIRST_EN).length - 1).toBe(1);
+    expect(V2_ALWAYS).not.toContain(SAFETY_FIRST);
+    expect(SAFETY_FIRST_EN).toContain('a death does not end the run');
+    expect(SAFETY_FIRST_EN).toContain('health below 12, food below 40 points, or the durability of armour, shield or pickaxe below 20% remaining');
+    expect(SAFETY_FIRST_EN).toContain('if health is below 18, eat out of sight up to fullness 18 or more and wait until health is 18 or more before going out');
+    for (const id of ['prep', 'nether', 'blaze', 'pearl', 'stronghold', 'end'] as const) { expect(V2_STAGES[id], id).not.toContain(SAFETY_FIRST); expect(V2_STAGES[id], id).not.toContain(SAFETY_FIRST_EN); }
     // Two stages at once (prep with blaze) used to say it twice; the plan made again has no instructions of its own, so it gets it once.
     expect(stageKnowledge({ body: { state: { dimension: 'the_nether' }, planFacts: undefined } })!).not.toContain(SAFETY_FIRST);
     expect(stageTextsForKind('blaze', 'the_nether').split(SAFETY_FIRST).length - 1).toBe(1);

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { MAP_LEGEND } from '../src/contracts/minecraftActContract.js';
-import { MAP_LEGEND_V2 } from '../src/contracts/minecraftMapLegendV2.js';
+import { MAP_LEGEND_V2, MAP_LEGEND_V2_EN } from '../src/contracts/minecraftMapLegendV2.js';
 import { PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA } from '../src/contracts/minecraftProbeContract.js';
 import type { FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
 import { liquidLines, USE_REACH, useReachStop } from '../src/surfaces/minecraft/minecraftLlmcLiquid.js';
@@ -23,9 +23,16 @@ const bodyLegend = readFileSync(new URL('./fixtures/body-map-legend-974c19f.txt'
 describe('the legend of the map', () => {
   it('is the body\'s, word for word, in the contract, and the instructions of the mode carry its symbol lines as they are', () => {
     expect(MAP_LEGEND_V2).toBe(bodyLegend);
-    // The legend's title line (north up, row heads, column ticks) is said by the live map's own heading since 11/11; its nine symbol lines are carried as they are.
-    for (const line of MAP_LEGEND_V2.split('\n').slice(1, 10)) expect(V2_ALWAYS).toContain(line);
-    for (const symbolLine of ['Y ネザーのウォートブロック・シュルームライト（固い）', 'q 看板・感圧板・ボタン・レバー（通れる。ブロックは置けない）', 'K 鉄の扉・鉄のトラップドア（手では開かない＝壁）']) {
+    // The legend's title line (north up, row heads, column ticks) is said by the live map's own heading since 11/11; its nine symbol lines are carried in English
+    // (11/11, owner): every line of `MAP_LEGEND_V2_EN` is in the instructions, and its symbols (the key of each ` / ` entry, in order) are the body's, line for line.
+    const keys = (line: string) => line.split('/').map(entry => entry.trim().split(' ')[0]);
+    const bodyLines = MAP_LEGEND_V2.split('\n').slice(1, 10);
+    expect(MAP_LEGEND_V2_EN).toHaveLength(bodyLines.length);
+    MAP_LEGEND_V2_EN.forEach((line, index) => {
+      expect(V2_ALWAYS).toContain(line);
+      expect(keys(line), line).toEqual(keys(bodyLines[index]!));
+    });
+    for (const symbolLine of ['Y Nether wart blocks and shroomlight (solid)', 'q signs, pressure plates, buttons, levers (passable; no block can be placed)', 'K iron door and iron trapdoor (not opened by hand = a wall)']) {
       expect(V2_ALWAYS).toContain(symbolLine);
     }
   });

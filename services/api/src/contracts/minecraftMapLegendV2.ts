@@ -21,3 +21,20 @@ export const MAP_LEGEND_V2 = [
   '方式=layers の層: 足 −1〜+1 は 15×15、足 ±2 は 11×11（「y=47 x=196..206 z=272..282」のように範囲を書く）。足の 3〜6 上に敵（!）かスポナー（S）があれば、その高さの層（11×11）を一番上に足す。',
   '縦: 足の列の上（頭のマスから上へ）と下（足の下のマスから下へ）を、同じ記号の続きでまとめる。「上: y=46〜51 .×6 / y=52 #」は頭から空気が 6 段、その上が石。… はその先も続く。',
 ].join('\n');
+
+/**
+ * The same nine symbol lines in English, the form the mode's always-on instructions carry (the owner, 2026-11-11: the instructions are written in English; the
+ * model's outputs stay Japanese). The symbols and their order are the body's: a test compares the symbol keys of each line with `MAP_LEGEND_V2`'s.
+ */
+export const MAP_LEGEND_V2_EN: readonly string[] = [
+  '@ my feet / ! enemy\'s feet / & neutral mob\'s feet / m animal\'s feet / * air walked on within 60 s / . air / , passable grass and flowers, snow / ? not loaded / X undiggable (bedrock, barrier)',
+  '# stone kinds (stone, deepslate, andesite, diorite, granite, tuff, cobblestone, stone bricks) / : dirt, grass, snow, clay / s sand, gravel / I ice',
+  'w water source / - flowing water / L lava source / l flowing lava / f fire / x cobweb',
+  'i iron / c coal / d diamond / g gold / r redstone / o other ores (copper, lapis, emerald, quartz, ancient debris)',
+  'W logs (Nether stems too) / % leaves (broken through while walking) / Y Nether wart blocks and shroomlight (solid) / P planks, stairs, slabs, bookshelves (solid) / h ladders, vines / t torch / = rail',
+  'D wooden door / A wooden trapdoor / J wooden fence gate (D, A, J are opened and passed through while walking, even when closed)'
+    + ' / K iron door and iron trapdoor (not opened by hand = a wall) / + fences and walls (1.5 high, cannot be climbed) / b glass, glass panes, iron bars, chains (impassable) / q signs, pressure plates, buttons, levers (passable; no block can be placed)',
+  'F furnace (blast furnace and smoker too) / T crafting table / C chest, barrel / B bed / H hay bale / k farm crops (Nether wart too) / S spawner',
+  'O obsidian (crying obsidian too) / p Nether portal / n netherrack / u soul sand, soul soil / N Nether bricks (fortress) / M magma / G glowstone',
+  'E end stone / Q end portal frame (empty) / R frame (with an eye) / e end portal, end gateway / $ other solid blocks',
+];

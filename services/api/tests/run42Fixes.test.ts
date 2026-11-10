@@ -11,6 +11,7 @@ import { DRAGON_MILESTONES } from '../src/surfaces/minecraft/minecraftLlmcRoad.j
 import { V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { withChestsDone } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { v2tree } from './helpers/planTreeV2.js';
+import { ALWAYS_TEXT_CAP_LLMC } from './support/alwaysTextCap.js';
 
 /**
  * Run 42 (2026-10-27, Sonnet, rel59): she went down at health 11.3 that did not come back (the live said the fact alone, 7 decisions in a row) and was shot dead;
@@ -182,7 +183,7 @@ describe('the cost of leaving the preparation out is one number everywhere', () 
     expect(V2_ALWAYS).not.toContain('約 500 秒');
     expect(`${V2_ALWAYS}\n${PREP_RULES_WORDS}`).not.toMatch(/150 秒/u);
   });
-  it('keeps the always text within 9,200', () => {
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(9_200);
+  it('keeps the always text within the cap of tests/support/alwaysTextCap.ts', () => {
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);
   });
 });
