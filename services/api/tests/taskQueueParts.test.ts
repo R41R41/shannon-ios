@@ -125,6 +125,56 @@ describe('what the stretch does on a message, and the lifecycle\'s additions', (
   });
 });
 
+describe('the health alert counts real damage (run 4: 4.83 net after two hits was under 5 and the alert waited for the third)', () => {
+  const inner: FcaBodyLifecycle = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
+    async guardFor() { return true; }, toolSignal: (_name, parent) => parent, async close() {} };
+  const at = (health: number) => frame({ position: { x: 0, y: 64, z: 0 }, health, oxygen: 20 });
+  it('two hits with a regeneration tick between them alert; a new decision frame starts the count again', () => {
+    let kept = surpriseFrame(at(20), null), now = at(20);
+    const lifecycle = queueLifecycle({ queue: undefined, observe: () => now, arrival: () => null, peek: () => kept, keep: () => undefined }, inner);
+    expect(lifecycle.alert!()).toBe(false);
+    now = at(17.5);
+    expect(lifecycle.alert!()).toBe(false);
+    now = at(18);
+    expect(lifecycle.alert!()).toBe(false);
+    now = at(15.17); // 20 - 15.17 = 4.83 net, 5.33 taken
+    expect(lifecycle.alert!()).toBe(true);
+    expect(lifecycle.alert!()).toBe(false); // told once
+    kept = surpriseFrame(at(15.17), null);
+    now = at(14);
+    expect(lifecycle.alert!()).toBe(false); // the decision read a new frame: a new count (15.17 -> 14 is 1.2)
+  });
+  it('regeneration does not take back a loss that was already counted', () => {
+    const kept = surpriseFrame(at(20), null);
+    let now = at(20);
+    const lifecycle = queueLifecycle({ queue: undefined, observe: () => now, arrival: () => null, peek: () => kept, keep: () => undefined }, inner);
+    now = at(16.5); expect(lifecycle.alert!()).toBe(false);
+    now = at(19.5); expect(lifecycle.alert!()).toBe(false);
+    now = at(19); expect(lifecycle.alert!()).toBe(true); // 3.5 + 0.5 = 4 taken
+  });
+});
+
+describe('a wait-only act behind a running item (run 4: refused 5 times, each a decision round)', () => {
+  const call = (input: object) => ({ scopeKey: 's', taskId: 't', operationId: 'op', name: 'mc.act', input, signal: new AbortController().signal });
+  const parts = (queue: object) => ({ queue: queue as never, control: { observe: () => null } as never, bodyId: 'b', skill: 'act', fixes: [], node: 'p1', frame: null });
+  it('is answered as "woken when it ends": nothing is added, no refusal', async () => {
+    let added = 0;
+    const queue = { open: () => true, tail: () => 'q4', async add() { added += 1; return { ok: false as const, text: 'no' }; } };
+    const result = await sendItem({ ...parts(queue), call: call({ hands: [{ do: 'wait', seconds: 20 }], why: 'x' }) });
+    expect(result.ok).toBe(true);
+    expect(added).toBe(0);
+    expect(result.text).toContain('走っている q4 の終わりで起こす');
+    expect(result.text).toContain('体には何も足していない');
+  });
+  it('an empty queue, or a wait with another hand, goes to the queue as before', async () => {
+    let added = 0;
+    const queue = (open: boolean) => ({ open: () => open, tail: () => (open ? 'q4' : null), async add() { added += 1; return { ok: true as const, item: 'q5', after: null, startInMs: 1000 }; } });
+    expect((await sendItem({ ...parts(queue(false)), call: call({ hands: [{ do: 'wait', seconds: 20 }], why: 'x' }) })).text).toContain('列に入れた q5');
+    expect((await sendItem({ ...parts(queue(true)), call: call({ hands: [{ do: 'wait', seconds: 5 }, { do: 'jump' }], why: 'x' }) })).text).toContain('列に入れた q5');
+    expect(added).toBe(2);
+  });
+});
+
 describe('an item whose pre the frame shows unmet', () => {
   const call = (input: object) => ({ scopeKey: 's', taskId: 't', operationId: 'op', name: 'mc.act', input, signal: new AbortController().signal });
   const queueOf = (open: boolean) => ({ open: () => open, async add() { return { ok: true as const, item: 'q1', after: null, startInMs: 10_000 }; } });
@@ -138,7 +188,7 @@ describe('an item whose pre the frame shows unmet', () => {
     expect(result.text).toContain('体には何も送っていない');
   });
   it('is sent when something is ahead of it (the body checks it when it starts), and says where it stands', async () => {
-    const result = await sendItem({ ...parts(true), call: call({ hands: [{ do: 'wait', seconds: 1 }], pre }) });
+    const result = await sendItem({ ...parts(true), call: call({ hands: [{ do: 'jump' }], pre }) });
     expect(result.ok).toBe(true);
     expect(result.text).toContain('列に入れた q1（列は空だった');
   });

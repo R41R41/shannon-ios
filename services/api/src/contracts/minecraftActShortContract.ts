@@ -2,6 +2,7 @@ import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type A
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
+import { SELF_DEFENCE_SHORT } from './minecraftSelfDefenceWords.js';
 import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -78,7 +79,8 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
   ]),
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
   ("  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp " +
-"は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。")
+"は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・自衛の数を超えた時の逃走）が優先で、反射が起きたら止まる。")
+    + 'fight は剣か斧が荷に要る（無いと no_weapon）。素手で殴るなら attack 相手 を使う。'
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
   manualPage('mine', 'mine（指定した同種の鉱脈を掘って回収）', [
   'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [seconds=N]',
@@ -202,9 +204,10 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   ("- stopIf は文字列 \"hostileWithin=8 hpBelow=10\"（hostileWithin は敵までの m、hpBelow は体力 " +
 "0〜20、hungerBelow=N、blockChanged=X,Y,Z/X,Y,Z で見張るマス最大4 も可）。満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）。")
     + 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。待つ手の act には hostileWithin。',
-  '- accept は、この act で戦うと決めた敵の種類の配列（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
+  '- accept は、この act で戦うと決めた敵の種類の配列（例 ["blaze"]）。その種類が近くにいても act を止めず、体もそれから逃げない（盾の構えと火の玉の打ち返しはする）。'
     + 'accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ。'
-    + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射と hpBelow は残る。早めに引くなら stopIf の hpBelow を高めに。',
+    + SELF_DEFENCE_SHORT + '。近接の敵が殴って来る時は accept に入れず attack を先頭の手に（accept だけでは歩く・掘る手が続く）。'
+    + '溶岩・溺れ・落下・点火クリーパー・自衛の数を超えた時の逃走の反射と hpBelow も残る。早めに引くなら stopIf の hpBelow を高めに。',
   '- onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、'
     + 'ほかは stop。急ぐ手（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',
   '- 同じ種類の手が続く場面（採掘・作る）は 1 つの act にまとめる（dig の at は16マスまで1手に）。トンネル・橋の道は go 1 手、階段・柱・縦穴は vertical 1 手。'
@@ -215,10 +218,10 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
     + '足す項目は、列の最後の項目が成功した後の世界を前提に書く（成功が分かった訳ではない）。列は live の queue に出る。',
   '- 体を止めない: 判断の間も体は列を動かし、列が空になると判断が終わるまで立ち止まる。実行中の項目があれば、その結果を待たずに次の作業の act を足す'
     + '（同じ作業の続き・次の行き先・作る・焼く・食べる）。結果で選び方が変わる時だけ、足さずに終わりを待つ（探し物が見つかったか、戦いの相手が倒れたか）。'
-    + '結果を確かめるためだけの項目（pickup だけ・wait だけ）は足さない: 拾う物は作業の act に pickup の手を入れ、結果は終わった時に知らせが来る。'
+    + '結果を確かめるためだけの項目（pickup だけ・wait だけ）は足さない（走っている項目の後ろの wait だけは積まれず、その項目の終わりで起こす返事になる）: 拾う物は作業の act に pickup の手を入れ、結果は終わった時に知らせが来る。'
     + 'wait は待つ物がある時だけ（夜明け・焼き上がり・満腹 18 以上の回復）。',
-  '- 実行中の項目の結果を使う項目（掘ってから作る・焼いてから取る）には、その項目を dependsOn に書く（例 ["q12"]）。前が止まれば、体が始めずに捨てる。'
-    + '結果に関係なく安全に動ける項目（食べる・別の場所の作業）だけ dependsOn [] にする。',
+  '- 列に足す項目（先読みも）は、必ず dependsOn を書く。実行中の項目の結果を使う項目（掘ってから作る・焼いてから取る）はその項目（例 ["q12"]）、'
+    + '結果に関係なく安全に動ける項目（食べる・別の場所の作業）は []。理由: 書かないと「前の項目に頼る」とみなされ、前が止まった時に体が始めずに捨てる（手は動かない）。',
   ("- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。ただし欄 dependsOn が [] " +
 "か、止まった項目を含まない配列の項目は動かす。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。"),
   ("- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる（furnace:x,y,z は始める時に一度見るだけで、焼き上がりまで待たない）。 欄 " +
@@ -264,7 +267,7 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に 1 つ・決めた項目が来ると自動で消える・見守りの依頼は不可）。'
       + 'その場の手（拾う・隣の鉱脈・手元の作る・焼きの合間の採取）と、次の場所から 16 m 内の go。'
       + '危険（反射・stopIf・被弾・落下・戦いの相手が近い）で前の項目が止まれば控えも始まらない' },
-    dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目（例 ["q12"]、何にも頼らないなら []）' },
+    dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目（例 ["q12"]、何にも頼らないなら []）。列に足す項目は必ず書く（無いと前の項目が止まった時に捨てられる）' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
     keep: { type: 'array', maxItems: KEEP_MAX, items: { type: 'string', maxLength: 120 }, description: '後で使うために残す物（品目:数:用途。例 "spruce_planks:4:作業台"）' },
   },

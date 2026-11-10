@@ -82,6 +82,15 @@ describe('short hands: lines the model got wrong', () => {
   });
 });
 
+describe('short hands: wait with its field name (run 4: wait seconds=30 was refused 3 times)', () => {
+  it('reads wait 30 and wait seconds=30 as the same hand; a wait with no seconds is still refused', () => {
+    expect(lineToHand('wait 30')).toEqual({ do: 'wait', seconds: 30 });
+    expect(lineToHand('wait seconds=30')).toEqual({ do: 'wait', seconds: 30 });
+    expect(lineToHand('wait seconds=0')).toEqual({ error: 'wait: 秒が要る' });
+    expect(lineToHand('wait')).toEqual({ error: 'wait: 秒が要る' });
+  });
+});
+
 describe('short hands: a go field written without =', () => {
   it('end1109f13: refuses maxDig 120 maxPlace 60 with the = form instead of running at the default limits', () => {
     expect(lineToHand('go 0,34,-60 canDig=[netherrack] maxDig 120 maxPlace 60 seconds=100')).toEqual({ error: 'go: 読めない語 maxDig 120 maxPlace 60（maxDig=120・maxPlace=60 の形で書く。= で結ぶ）' });

@@ -151,8 +151,9 @@ export function cutOf(text: string, bodyReflex: boolean): string | null {
     // (the DANGER line was far away); the next step is said here, beside the stop, for a melee foe.
     const foe = /stopIf: hostileWithin:([a-z_]+) #(\d+) ([\d.]+)m/u.exec(text);
     if (foe && MELEE_FOES.has(foe[1]))
-      return `前の act は stopIf（${foe[1]} #${foe[2]} ${foe[3]}m）で止まった。近接敵なので accept に入れて横を通らない:`
-        + ` 「押されたら落ちる」の無い開けた所で attack target=#${foe[2]} untilDead、縁なら先に空所から離れる`;
+      return `前の act は stopIf（${foe[1]} #${foe[2]} ${foe[3]}m）で止まった。近接敵なので accept に入れて横を通らない（歩く・掘る手が続いて殴られる）: `
+        + `attack target=#${foe[2]} untilDead を先頭の手に（「押されたら落ちる」の無い開けた所で）、縁なら先に空所から離れる。`
+        + '体も、4m 内の自分を狙う敵が 2 体まで・8m 内が 4 体までなら accept が無くても自分で倒す';
     return '前の act は stopIf（敵が近い）で止まった';
   }
   return /stopIf: hpBelow/u.test(text) ? '前の act は stopIf（体力）で止まった' : null;

@@ -5,7 +5,7 @@ import type { MinecraftControlReceipt, MinecraftSkillDefinition } from '../../co
 import {
   ACT_INPUT_SCHEMA, actMilliseconds, actProblem, MC_ACT_SKILL, MC_ACT_TOOL,
   MC_VIEW_SKILL, MC_VIEW_TOOL, actOutcomeOf, readActResult, readViewResult, VIEW_DESCRIPTION, VIEW_INPUT_SCHEMA, type ActHand,
-     type ActInput, type ActPos, type ActResult,
+     type ActHandLine, type ActInput, type ActPos, type ActResult,
 } from '../../contracts/minecraftActContract.js';
 import { structuredActProblem, verticalLimitProblem } from '../../contracts/minecraftActHandRules.js';
 import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, shortHandProblem } from '../../contracts/minecraftActShortContract.js';
@@ -117,6 +117,19 @@ export function feetOf(observation: BodyObservation | null): ActPos | null {
  * kept in the history). */
 export const AROUND_PREFIX = '  周り（上の層から、北が上・西が左）';
 /** An act's result in the lines the model reads (no map: the live state carries the newest one). */
+/** The words of a body refusal that name what to allow or raise (`canDig に stone を許せば掘 4 で道がある`, 「上限 10」, 「waterOk の許可が無い」). */
+const REMEDY_SENTENCE = /canDig|canPlace|maxDig|maxPlace|waterOk|許せば|許可|上限/u;
+/**
+ * end1109 run 4: the body refused `go` four times in 30 s with `canDig に white_terracotta を許せば … 道がある` in the middle of the hand's line, and the
+ * decision sent the same go again (q29–q31, q72/q73: the way out was in a line it had to read to the end). The first stopped or failed hand's
+ * suggestion is put first in the result, as the body said it (a quotation; the choice stays the model's).
+ */
+export function bodyRemedy(lines: readonly ActHandLine[]): string | null {
+  const sentencesOf = (line: ActHandLine) => line.line.split('。').map(sentence => sentence.trim()).filter(sentence => REMEDY_SENTENCE.test(sentence));
+  const refused = lines.find(line => (line.status === 'stopped' || line.status === 'failed') && sentencesOf(line).length > 0);
+  if (!refused) return null;
+  return `体の示した直し（手 ${refused.i} ${refused.do}）: ${sentencesOf(refused).slice(0, 2).join('。').slice(0, 200)}。同じ手のままでは通らない`;
+}
 export function actResultText(result: ActResult): string {
   // r3: an act whose hands all ran, one or more of them `failed` (onFail continue), did not stop.
   const failed = result.lines.filter(line => line.status === 'failed').length;
@@ -144,7 +157,8 @@ export function actResultText(result: ActResult): string {
   ];
   // r10 (body): the act began after a reflex that held the body let go.
   const after = typeof result.afterReflex === 'string' && result.afterReflex ? [`（${result.afterReflex.slice(0, 200)}）`] : [];
-  return [head, ...after, ...lines, ...actFacts(result), ...extras].join('\n');
+  const remedy = bodyRemedy(result.lines);
+  return [head, ...after, ...(remedy ? [remedy] : []), ...lines, ...actFacts(result), ...extras].join('\n');
 }
 
 /** A result longer than this is kept in the history by its first line; the whole text is shown once, in the next
@@ -240,8 +254,13 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
 ): { signal: AbortSignal; reason(): string | null; stop(): void } {
   const watched = (input as ActInput | null)?.stopIf?.hostileWithin ?? 0;
   // The kinds she took on in this act (`accept`) are hers to fight: they never cut it.
-  const near = new Set([...(input as ActInput | null)?.accept ?? [],
-    ...hostiles(observe()).filter(item => item.distance <= LLMC_URGENT_METERS).map(item => item.name)]);
+  const accepted = new Set((input as ActInput | null)?.accept ?? []);
+  // Those already near when the act began are known to it; end1109 run 4: this was keyed by kind, so one zombie within 6 m at the start blinded the
+  // watch to every later zombie. A hostile with an id is known by its id (a new one of the same kind cuts); one the frame gives no id for, by its kind.
+  const startNear = hostiles(observe()).filter(item => item.distance <= LLMC_URGENT_METERS);
+  const knownIds = new Set(startNear.flatMap(item => item.id !== undefined ? [item.id] : []));
+  const knownKinds = new Set(startNear.filter(item => item.id === undefined).map(item => item.name));
+  const known = (item: { name: string; id?: number }) => accepted.has(item.name) || (item.id !== undefined ? knownIds.has(item.id) : knownKinds.has(item.name));
   // end1109p02: an enderman she angered came to her roof and its own fight was cut 6 times (server_cancel, 33 s in). What the act's fight or
   // attack hands name as their target (a kind, or `#id`) is the one she means to meet: it never cuts that act.
   const targets = ((input as ActInput | null)?.hands ?? []).flatMap(hand => (hand.do === 'fight' || hand.do === 'attack') && typeof hand.target === 'string'
@@ -253,7 +272,7 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
   parent.addEventListener('abort', cancel, { once: true });
   if (parent.aborted) cancel();
   const timer = watched >= LLMC_URGENT_METERS ? null : setInterval(() => {
-    const come = hostiles(observe()).find(item => item.distance <= urgentRange(item, LLMC_URGENT_METERS) && !near.has(item.name) && !mine(item)
+    const come = hostiles(observe()).find(item => item.distance <= urgentRange(item, LLMC_URGENT_METERS) && !known(item) && !mine(item)
       && !(isShooter(item.name) && item.canSee === false));
     if (!come || controller.signal.aborted) return;
     reason = `${come.name} ${come.distance.toFixed(1)}m`;

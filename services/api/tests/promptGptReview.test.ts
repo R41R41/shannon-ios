@@ -76,7 +76,7 @@ describe('the rules are in the instructions', () => {
     expect(system).toContain('目的・対象・行き先・掘る/置く許可・済む条件を選ぶ');
     expect(system).toContain('食事・睡眠・片づけ・戦うか逃げるかもあなたが決める');
     expect(system).toContain('経路・工作・設置・戦闘の細部は体に任せる');
-    expect(system).toContain('accept に入れた種類は hostileWithin に数えない（fight の相手もその手の間は同じ）。hpBelow と反射は accept でも効く');
+    expect(system).toContain('accept に入れた種類は hostileWithin に数えない（fight の相手もその手の間は同じ）。accept は act を止めない印だけで、体の自衛と hpBelow は accept があっても働く');
     expect(SHORT_ACT_DESCRIPTION).toContain('accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('体は自分で決めない');
   });
@@ -94,7 +94,7 @@ describe('the rules are in the instructions', () => {
     expect(URGENT_NOTE).toBe('急ぎの版（決まりは system の「急ぎの時」）');
   });
   it('says the fight rule without lowering retreatHp, the health that does not come back, and the units of a fight', () => {
-    expect(system).toContain('体力 8 以下では戦わない');
+    expect(system).toContain('体力 8 以下で戦わないのは、数を超える時');
     expect(system).toContain('体力が戻らない間（満腹 18 未満。recovery が出る）は、下りる・戦う前に食べる。敵が近くても 1 個食べてから');
     expect(SHORT_ACT_DESCRIPTION).toContain('retreatHp は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('retreatHp は今の体力より低く');
@@ -115,8 +115,8 @@ describe('the rules are in the instructions', () => {
     expect(SHORT_ACT_DESCRIPTION).not.toContain('10〜12 手');
     expect(system).not.toContain('最大 12');
   });
-  it('stays under the cap of the instructions (8,800 by llmcTokens)', () => {
-    expect(llmcTokens(system)).toBeLessThan(8_800);
+  it('stays under the cap of the instructions (9,200 by llmcTokens: 8,800 before the owner 11/10 combat rule, which is about 420 tokens of rules)', () => {
+    expect(llmcTokens(system)).toBeLessThan(9_200);
   });
 });
 

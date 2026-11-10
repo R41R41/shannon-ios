@@ -182,7 +182,7 @@ describe('the cost of leaving the preparation out is one number everywhere', () 
     expect(V2_ALWAYS).not.toContain('約 500 秒');
     expect(`${V2_ALWAYS}\n${PREP_RULES_WORDS}`).not.toMatch(/150 秒/u);
   });
-  it('keeps the always text within 8,800', () => {
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(8_800);
+  it('keeps the always text within 9,200', () => {
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(9_200);
   });
 });

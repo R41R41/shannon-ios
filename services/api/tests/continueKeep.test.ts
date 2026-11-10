@@ -299,10 +299,10 @@ describe('vertical: the refusal says how to mend it, and the examples all write 
 });
 
 describe('the system text: keep in the order of what to do, within the size', () => {
-  it('says keep once, in the deciding lines, and stays within 8,800 tokens', () => {
+  it('says keep once, in the deciding lines, and stays within 9,200 tokens', () => {
     expect(V2_ALWAYS).toContain('後で使う物は act の keep に書く（帳簿に載る）');
     expect(V2_ALWAYS.split('act の keep').length).toBe(2);
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThanOrEqual(8_800);
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThanOrEqual(9_200);
   });
 });
 

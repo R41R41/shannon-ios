@@ -157,6 +157,38 @@ describe('the mode\'s tools', () => {
     own.stop();
   });
 
+  it('run 4: a zombie within 6 m when the act began does not blind the watch to a later zombie (known by id, not by kind)', async () => {
+    let threats: unknown[] = [{ name: 'zombie', id: 5, distance: 4 }];
+    const observe = () => frame({ nearbyThreats: threats });
+    const watch = urgentWatch({ hands: [{ do: 'eat' }] }, observe, new AbortController().signal, 5);
+    threats = [{ name: 'zombie', id: 5, distance: 3 }];
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(watch.signal.aborted).toBe(false);
+    threats = [{ name: 'zombie', id: 5, distance: 3 }, { name: 'zombie', id: 9, distance: 5 }];
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(watch.signal.aborted).toBe(true);
+    expect(watch.reason()).toBe('zombie 5.0m');
+    watch.stop();
+    // A frame that gives no id keeps the old rule (by kind); an accepted kind never cuts, by any id.
+    threats = [{ name: 'zombie', distance: 4 }];
+    const byKind = urgentWatch({ hands: [{ do: 'eat' }] }, observe, new AbortController().signal, 5);
+    const accepted = urgentWatch({ hands: [{ do: 'eat' }], accept: ['zombie'] }, () => frame({ nearbyThreats: [{ name: 'zombie', id: 1, distance: 12 }] }), new AbortController().signal, 5);
+    threats = [{ name: 'zombie', distance: 3 }];
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(byKind.signal.aborted).toBe(false);
+    expect(accepted.signal.aborted).toBe(false);
+    byKind.stop(); accepted.stop();
+  });
+
+  it('run 4: the way out a body refusal names is said first in the act result', () => {
+    const line = 'dead_end: 許した手では道が無い。canDig に stone を許せば掘 4 で道がある (282,21,-145) 道 0 歩・掘 0・置 0。許すか、別の行き先を';
+    const text = actResultText(result({ ok: false, done: 0, of: 1, stoppedBy: 'failure', lines: [{ i: 1, do: 'go', status: 'stopped', line }] }));
+    const rows = text.split('\n');
+    expect(rows[1]).toBe('体の示した直し（手 1 go）: canDig に stone を許せば掘 4 で道がある (282,21,-145) 道 0 歩・掘 0・置 0。同じ手のままでは通らない');
+    expect(rows[2]).toContain('1 go 止 dead_end');
+    expect(actResultText(result({}))).not.toContain('体の示した直し');
+  });
+
   it('the act own fight target coming near does not cut it; another kind still does (end1109p02)', async () => {
     let threats: unknown[] = [{ name: 'enderman', id: 424, distance: 14 }];
     const observe = () => frame({ nearbyThreats: threats });

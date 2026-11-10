@@ -4,6 +4,7 @@ import type { ActHand,ActKeep,ActInput,ActResult,ViewResult } from './minecraftA
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { BED_BURST_DESCRIPTION, bedBurstActProblem } from './minecraftBedBurstContract.js';
+import { SELF_DEFENCE_SHORT } from './minecraftSelfDefenceWords.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
       KEEP_FORM } from './minecraftActTypes.js';
@@ -115,8 +116,9 @@ export const ACT_DESCRIPTION = [
 "手も動かず止まる）。待つ手の act には hostileWithin。"),
   ("同じ種類の手が続く場面（トンネル・階段・橋・採掘）は、10〜12 手を 1 つの act に入れる（dig の at は 16 マスまで、walk の path は 32 点まで 1 " +
 "手に）。止まりは反射・stopIf・onFail が守る。"),
-  'accept: この act で戦うと決めた敵の種類（例 ["blaze"]）。体はその敵から下がらず・逃げず・止まらない（盾の構えと火の玉の打ち返しはする）。'
-    + '溶岩・溺れ・落下・点火クリーパー・体力8以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
+  'accept: この act で戦うと決めた敵の種類（例 ["blaze"]）。その種類が近くにいても act を止めず、体もそれから逃げない（盾の構えと火の玉の打ち返しはする）。'
+    + SELF_DEFENCE_SHORT + '。'
+    + '溶岩・溺れ・落下・点火クリーパー・自衛の数を超えた時の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
   ("onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が " +
 "continue、ほかは stop。")
     + '急ぐ act（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',
@@ -226,7 +228,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
     reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に 1 つ・決めた項目が来ると自動で消える・見守りの依頼は不可）。'
       + 'その場の手（拾う・隣の鉱脈・手元の作る・焼きの合間の採取）と、次の場所から 16 m 内の go。'
       + '危険（反射・stopIf・被弾・落下・戦いの相手が近い）で前の項目が止まれば控えも始まらない' },
-    dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目。[] は何にも頼らない' },
+    dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目。[] は何にも頼らない。列に足す項目は必ず書く（無いと前の項目が止まった時に捨てられる）' },
     uses: { type: 'array', maxItems: 4, items: { type: 'integer', minimum: 1, maximum: 999 }, description: '使う約束の番号' },
     keep: { type: 'array', maxItems: KEEP_MAX, description: '後で使うために残す物（約束になる）', items: { type: 'object', additionalProperties: false,
        required: ['item', 'count', 'use'],

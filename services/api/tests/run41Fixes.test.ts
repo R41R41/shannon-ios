@@ -120,8 +120,8 @@ describe('the reason is in real numbers, and the rule is plain', () => {
     expect(V2_ALWAYS).not.toContain('鉄の夜');
     expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
   });
-  it('keeps the instructions within the cap of the mode\'s system text (8,800 by llmcTokens: about 7.1k real tokens, inside the 8k of D3)', () => {
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(8_800);
+  it('keeps the instructions within the cap of the mode\'s system text (9,200 by llmcTokens since the owner combat rule of 11/10: about 7.5k real tokens, inside the 8k of D3)', () => {
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(9_200);
   });
 });
 

@@ -76,10 +76,22 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
     expect(system).not.toContain('のどれか。');
     expect(SHORT_ACT_DESCRIPTION).toContain('手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める');
   });
-  it('one health line: no fight at 8 or less, strike back over 8', () => {
-    expect(V2_ALWAYS).toContain('体力 8 以下では戦わない');
-    expect(V2_ALWAYS).toContain('鉄以上の剣があり体力 8 超で遮れない時は打ち返す');
+  it('one health line (owner 11/10): inside the body self-defence count it fights it out at any health; beyond it, no fight at 8 or less', () => {
+    expect(V2_ALWAYS).toContain('4m 内で自分を狙う敵が 2 体まで・8m 内の敵が 4 体までなら、体は殴られる前から倒す');
+    expect(V2_ALWAYS).toContain('体力 8 以下も逃げない');
+    expect(V2_ALWAYS).toContain('体力 8 以下で戦わないのは、数を超える時');
+    expect(V2_ALWAYS).not.toContain('鉄以上の剣があり体力 8 超で遮れない時は打ち返す');
     expect(V2_ALWAYS).not.toContain('体力 6 超');
+  });
+  it('tells the model the body fights by itself (creepers with technique, neutrals only when hostile) and that accept only keeps the act from stopping', () => {
+    expect(V2_ALWAYS).toContain('クリーパーは打って爆発の外へ下がり、盾があれば膨らみ始めに構える');
+    expect(V2_ALWAYS).toContain('中立は敵意を向けるまで迎撃しない');
+    expect(V2_ALWAYS).toContain('殴って来る敵には先に attack target=#id untilDead');
+    expect(V2_ALWAYS).toContain('倒すのはパール・金などの目的がある時だけ');
+    expect(V2_ALWAYS).not.toContain('hpBelow と反射は accept でも効く');
+    expect(SHORT_ACT_DESCRIPTION).toContain('体の自衛（4m 内で自分を倒しに来ている敵が 2 体まで');
+    expect(SHORT_ACT_DESCRIPTION).toContain('列に足す項目（先読みも）は、必ず dependsOn を書く');
+    expect(SHORT_ACT_DESCRIPTION).toContain('fight は剣か斧が荷に要る（無いと no_weapon）。素手で殴るなら attack 相手 を使う');
   });
   it('an absent field is not an absent fact, the plan\'s done is not the goal\'s progress, next is the order', () => {
     expect(V2_ALWAYS).not.toContain('出ていない項目 = その事実が今は無い');

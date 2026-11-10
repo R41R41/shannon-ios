@@ -5,20 +5,38 @@ import type { LlmcQueue } from './minecraftLlmcQueue.js';
 export type { LlmcQueue };
 import { surpriseFrame, type SurpriseFrame } from './minecraftLlmcProbe.js';
 
-/** The surprises a frame shows against the one the last decision read: health lost 5 or more (or under 10), a
+/** The surprises a frame shows against the one the last decision read: health lost (`createHealthLoss`, or under 10), a
  * fall of 5 or more, air under 10. */
-function alertKinds(before: SurpriseFrame | null, now: SurpriseFrame): Set<string> {
+function alertKinds(before: SurpriseFrame | null, now: SurpriseFrame, lost: number): Set<string> {
   const kinds = new Set<string>();
   const same = before !== null && before.arrival === now.arrival && before.dimension === now.dimension;
-  if (same && healthAlert(before, now)) kinds.add('health');
+  if (same && healthAlert(before, now, lost)) kinds.add('health');
   if (same && before.feet && now.feet && before.feet.y - now.feet.y >= 5) kinds.add('fall');
   if (now.oxygen !== null && now.oxygen < 10) kinds.add('oxygen');
   return kinds;
 }
-/** Health lost 5 or more since the frame the last decision read, or under 10 now when it was not. */
-function healthAlert(before: SurpriseFrame, now: SurpriseFrame): boolean {
+/** Damage taken since the frame the last decision read that makes the next decision urgent: about two hits of a zombie. */
+export const HEALTH_ALERT_DAMAGE = 4;
+/**
+ * The damage a body took since the frame the last decision read, summed over the drops between looks: a regeneration tick
+ * between two hits does not take from it (end1109 run 4: the net loss was 4.83 after two hits, under 5, and the alert waited for the
+ * third). It starts again when the decision reads a new frame.
+ */
+export function createHealthLoss() {
+  let frame: SurpriseFrame | null = null, last: number | null = null, lost = 0;
+  return (before: SurpriseFrame | null, now: SurpriseFrame): number => {
+    if (before !== frame) { frame = before; last = before?.health ?? null; lost = 0; }
+    if (now.health !== null) {
+      if (last !== null && now.health < last) lost += last - now.health;
+      last = now.health;
+    }
+    return lost;
+  };
+}
+/** Real damage of 4 or more (HEALTH_ALERT_DAMAGE) since the frame the last decision read, or under 10 now when it was not. */
+function healthAlert(before: SurpriseFrame, now: SurpriseFrame, lost: number): boolean {
   if (before.health === null || now.health === null) return false;
-  return before.health - now.health >= 5 || (before.health >= 10 && now.health < 10);
+  return lost >= HEALTH_ALERT_DAMAGE || (before.health >= 10 && now.health < 10);
 }
 
 /**
@@ -35,6 +53,7 @@ export function queueLifecycle(parts: { queue: LlmcQueue | undefined; observe():
   keep(text: string): void }, body: FcaBodyLifecycle): Partial<FcaBodyLifecycle> {
   const { queue } = parts;
   let alerted = new Set<string>();
+  const healthLoss = createHealthLoss();
   return {
     ...(queue ? { queue } : {}),
     noteNews: (text: string) => parts.keep(text),
@@ -59,12 +78,13 @@ export function queueLifecycle(parts: { queue: LlmcQueue | undefined; observe():
       queue?.stale() ? false : body.guardFor ? body.guardFor(version, call) : body.guard(version),
     /**
      * A surprise of the body while items run, told without using up the investigation's own count (`peek`): health
- * lost 5 or more or under 10, a fall
+ * lost (real damage 4 or more, regeneration between hits not taken off) or under 10, a fall
      * of 5 or more, air under 10, since the frame the last decision read. Each kind once until it clears; the next
  * `investigate` finds and probes it.
      */
     alert: (): boolean => {
-      const kinds = alertKinds(parts.peek(), surpriseFrame(parts.observe(), parts.arrival()));
+      const before = parts.peek(), now = surpriseFrame(parts.observe(), parts.arrival());
+      const kinds = alertKinds(before, now, healthLoss(before, now));
       const fresh = [...kinds].some(kind => !alerted.has(kind));
       alerted = kinds;
       // A furnace that came due (the body's `furnace.done`) is told to the next decision once, and is a reason to

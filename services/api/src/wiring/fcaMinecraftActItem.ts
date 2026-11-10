@@ -17,6 +17,7 @@ import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { breakingOf } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { digPackLine } from '../surfaces/minecraft/minecraftLlmcFacts.js';
+import { waitWakeWords } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -79,6 +80,11 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
     arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, current: parts.current ?? null,
     why: String(input.why ?? ''), fixes: [], ...(reserving ? { reserve: true } : {}), ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
     maxMs: actMilliseconds(timed, feet) });
+  // run 4: a wait-only act behind an item that runs is answered as "woken when it ends", not refused (the queue's own wakes do it; nothing is added).
+  if (input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait') && queue.open()) {
+    const tail = queue.tail();
+    if (tail !== null) return toolOk([`${fixes}${waitWakeWords(tail)}`, ...(parts.lead ?? [])].join('\n'));
+  }
   const added = await queue.add(queueItemFields());
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';

@@ -147,7 +147,7 @@ describe('run 43: eat before a fight', () => {
 });
 
 describe('run 43: the always text does not grow', () => {
-  it('stays under 8,800', () => {
-    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(8_800);
+  it('stays under 9,200', () => {
+    expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(9_200);
   });
 });

@@ -280,7 +280,12 @@ const READERS: Record<string, Reader> = {
     const n = words.find(isCount), block = words.find(word => !isCount(word));
     return done({ ...hand, ...(n ? { n: Number(n) } : {}), ...(block ? { block } : {}) });
   },
-  wait: ({ words, hand }) => /^[\d.]+$/u.test(words[0] ?? '') ? done({ ...hand, seconds: Number(words[0]) }) : bad('wait', '秒が要る'),
+  // end1109 run4: `wait seconds=30` (the field with its name, as the contract writes it) was refused 3 times; the word and the field mean the same.
+  wait: ({ words, hand }) => {
+    if (/^[\d.]+$/u.test(words[0] ?? '')) return done({ ...hand, seconds: Number(words[0]) });
+    const named = Number(hand.seconds);
+    return hand.seconds !== undefined && Number.isFinite(named) && named > 0 ? done({ ...hand, seconds: named }) : bad('wait', '秒が要る');
+  },
   sneak: ({ words, hand }) => words[0] === 'on' || words[0] === 'off' ? done({ ...hand, on: words[0] === 'on' }) : bad('sneak', 'on か off'),
   jump: ({ words, hand }) => done(isCount(words[0]) ? { ...hand, n: Number(words[0]) } : hand),
   eat: ({ words, hand }) => done(words[0] ? { ...hand, item: words[0] } : hand),
