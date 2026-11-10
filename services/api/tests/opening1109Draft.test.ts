@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlanUpdate, planFromSeeds } from '@shannon/mind';
+import { applyPlanUpdate, planFromSeeds, type PlanTree } from '@shannon/mind';
 import { firstPlanInput, openingDraft, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 
 describe('end1109o02 (opening lane): the seed is the first plan\'s draft from the overworld; a held condition keeps its parent open', () => {
@@ -402,5 +402,53 @@ describe('end1110r1 night 2 and day 2 (opening lane, no run): a wooden pickaxe o
     expect(out.plan.rules).toEqual(rules.slice(2));
     const kept = rewriteLlmcLive({ plan: { rules }, body: { planNow: '[p2.1] 動物を狩る', shortage: '' } }).live as { plan: { rules: string[] } };
     expect(kept.plan.rules).toHaveLength(5);
+  });
+});
+
+describe('end1110r1 (the review of 11/10, G05, no run): the food node set aside and the now gone on to the iron: the pass is still said', async () => {
+  const { foodAbsentLine } = await import('../src/surfaces/minecraft/minecraftLlmcReadiness.js');
+  const { rewriteLlmcLive } = await import('../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js');
+  const { planRules } = await import('@shannon/mind');
+  const pack = (items: Record<string, number>) => new Map(Object.entries(items));
+  const at = { position: { x: -21.5, y: 62, z: 18.5 }, mapLandmarks: [], food: 17 };
+  const wooden = pack({ crafting_table: 1, oak_planks: 5, stick: 5, wooden_pickaxe: 1 });
+  // The line's own hand, written twice (the hunt, then the furnace beside it): the now goes on to the iron's first node.
+  const aside = () => {
+    let tree: PlanTree = { ...seedPlan('エンドラを討伐してください', 'overworld')!, current: 'p2.2' };
+    for (const id of ['p2.2', 'p2.3']) {
+      expect(tree.current).toBe(id);
+      const now = tree.nodes.find(node => node.id === id);
+      const ops = JSON.parse(/ops (\[\{.*?\}\])/u.exec(foodAbsentLine(at, 0, 'overworld', now, wooden, tree.nodes)!)![1]!);
+      tree = applyPlanUpdate(tree, { ops }).tree;
+    }
+    return tree;
+  };
+  it('says the node is set aside (no op), keeps the mark and the way down, and the iron node\'s caution of the 40 is left out', () => {
+    const tree = aside();
+    expect(tree.current).toBe('p3.1');
+    const now = tree.nodes.find(node => node.id === 'p3.1');
+    const line = foodAbsentLine(at, 0, 'overworld', now, wooden, tree.nodes)!;
+    expect(line).toContain('【動物なし】 食料: 食料の節 p2.2 は外してある（prep skipped）ので、食料 0/40 点のまま鉄へ下りてよい');
+    expect(line).toContain('満腹 17/20 はまだ十分');
+    expect(line).not.toContain('plan_update');
+    expect(line).toContain('下りる手: mc_act');
+    expect(line).toContain('craft stone_pickaxe 1');
+    const rules = planRules(tree);
+    expect(rules.some(rule => rule.includes('食料40点・作業台か板4を持ってから下りる'))).toBe(true);
+    const shown = (shortage: string) => (rewriteLlmcLive({ plan: { rules }, body: { planNow: '[p3.1] 最初の鉄3', shortage } }).live as { plan: { rules: string[] } }).plan.rules;
+    expect(shown(line).some(rule => rule.includes('食料40点'))).toBe(false);
+    expect(shown('').some(rule => rule.includes('食料40点'))).toBe(true);
+  });
+  it('leaves the way down to the iron line when that is said, and says nothing with an animal in sight, an iron pickaxe, or no node set aside', () => {
+    const tree = aside();
+    const now = tree.nodes.find(node => node.id === 'p3.1');
+    const stone = foodAbsentLine(at, 0, 'overworld', now, pack({ stone_pickaxe: 1, crafting_table: 1 }), tree.nodes)!;
+    expect(stone).toContain('食料の節 p2.2 は外してある');
+    expect(stone).not.toContain('下りる手');
+    expect(foodAbsentLine({ ...at, nearbyEntities: [{ name: 'cow' }] }, 0, 'overworld', now, wooden, tree.nodes)).toBeNull();
+    expect(foodAbsentLine(at, 0, 'overworld', now, pack({ iron_pickaxe: 1 }), tree.nodes)).toBeNull();
+    expect(foodAbsentLine(at, 40, 'overworld', now, wooden, tree.nodes)).toBeNull();
+    const open = seedPlan('エンドラを討伐してください', 'overworld')!;
+    expect(foodAbsentLine(at, 0, 'overworld', open.nodes.find(node => node.id === 'p3.1'), wooden, open.nodes)).toBeNull();
   });
 });

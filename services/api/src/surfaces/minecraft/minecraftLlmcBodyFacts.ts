@@ -152,7 +152,7 @@ export function readinessParts(
       ironSearchLine(facts.world, facts.counts, facts.dimension, tree?.nodes.find(node => node.id === tree.current)),
       sheepAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
       goldAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
-      foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.counts),
+      foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.counts, tree?.nodes),
       targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),
     ]
       .filter(Boolean)

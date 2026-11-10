@@ -572,8 +572,10 @@ const WANTS_FOOD = (node: PlanNode): boolean => /food\s*>=|foodPoints/u.test(Str
  * are under 40 and no animal that is food is in sight, in the overworld.
  */
 export function foodAbsentLine(world: Record<string, unknown>, food: number, dimension: string | null, now: PlanNode | undefined,
-  counts?: ItemCounts): string | null {
-  if (dimension !== 'overworld' || !now || !WANTS_FOOD(now) || food >= 40) return null;
+  counts?: ItemCounts, nodes: readonly PlanNode[] = []): string | null {
+  if (dimension !== 'overworld' || !now || food >= 40) return null;
+  const aside = foodSetAside(now, nodes, counts);
+  if (!WANTS_FOOD(now) && !aside) return null;
   // end1110r1: no land animal in the world, a cod 7〜31 m off in the water hid this line for about 6 minutes; she tried the fish five times
   // with no rod and got none. Only the land animals count.
   const seen = (Array.isArray(world.nearbyEntities) ? world.nearbyEntities : [])
@@ -583,10 +585,30 @@ export function foodAbsentLine(world: Record<string, unknown>, food: number, dim
   // waiting in a hole by night. A full bar is what the food is for: it lasts the way down to the iron.
   const hunger = finite(world.food);
   const full = hunger !== null && hunger >= 10 ? `満腹 ${round1(hunger)}/20 はまだ十分で、食料を持たずに鉄まで下りられる（満腹が 6 を切る前に、途中で見えた動物を狩る）。` : '';
+  if (aside) {
+    // The iron line (`ironSearchLine`) says the way down when the now wants iron; the hands are said here only when it is silent.
+    const hands = counts && !ironSearchLine(world, counts, dimension, now) ? foodAbsentHands(world, counts, false) : '';
+    return `${FOOD_PASS} 食料: 食料の節 ${aside.id} は外してある（prep skipped）ので、食料 ${round1(food)}/40 点のまま鉄へ下りてよい`
+      + `（見える所に食べられる動物がいない。探し歩いても出てくる保証は無く、途中で見えた動物・村の畑で補う方が速い）。${full}`
+      + `動物が見えたら狩って ${aside.id} を state=continue で戻す${hands}`;
+  }
   return `${FOOD_PASS} 食料: 今の節 ${now.id} は食料 ${round1(food)}/40 点だが、見える所に食べられる動物がいない（歩き回っても動物が出てくる保証は無く、時間だけが減る）。${full}`
     + `先に鉄へ下り、途中で見えた動物・村の畑で補う方が速い（水の中の魚は竿が無いと取れない。岸で待たない）。下りるなら決まりの「省くなら prep に skipped と理由を書く」に当たる: plan_update の ops `
     + `[{"op":"set","id":"${now.id}","state":"blocked","reason":"動物が見えない","prep":{"state":"skipped","why":"動物が見えない"}}]。動物が見えたら狩って state=continue で戻す`
     + (counts ? foodAbsentHands(world, counts) : '');
+}
+
+const SKIPPED_FOOD = (node: PlanNode): boolean => WANTS_FOOD(node) && node.state === 'blocked' && node.prep?.state === 'skipped';
+/**
+ * end1110r1 (the review of 11/10, G05): once the food node is set aside the now goes on to the iron (`asideNext` in the plan tree), and the
+ * food line, its mark and the way down went with it, while the iron node's own caution 「食料40点…を持ってから下りる」 came into the rules.
+ * The food node set aside by the line's hand (blocked, prep skipped): the now itself, or with the now elsewhere the first such node, until an
+ * iron pickaxe is held (the descent the 40 holds is the one to the iron; the diamonds' and the gate's needs are not passed by the mark).
+ */
+function foodSetAside(now: PlanNode, nodes: readonly PlanNode[], counts?: ItemCounts): PlanNode | undefined {
+  if (SKIPPED_FOOD(now)) return now;
+  if (WANTS_FOOD(now) || !counts || countMatching(counts, /^(?:iron|diamond|netherite)_pickaxe$/u) > 0) return undefined;
+  return nodes.find(SKIPPED_FOOD);
 }
 
 /**
@@ -594,14 +616,14 @@ export function foodAbsentLine(world: Record<string, unknown>, food: number, dim
  * searched the dark forest by day and waited the night; she had a wooden pickaxe only. The way down is said as one act: the stone pickaxe
  * made in a shaft when the wooden one is all (`stonePickHands`), then the way to the iron (`oreRouteHands`). No hand with no pickaxe at all.
  */
-function foodAbsentHands(world: Record<string, unknown>, counts: ItemCounts): string {
+function foodAbsentHands(world: Record<string, unknown>, counts: ItemCounts, withUpdate = true): string {
   const stone = stonePickHands(world, counts);
   if (!stone && countMatching(counts, /^(?:stone|iron|diamond|netherite)_pickaxe$/u) === 0) return '';
   const route = oreRouteHands(world, 'iron', counts);
   if (!route) return '';
   if (route.startsWith('先に原木')) return `。下りる手: ${route}`;
   const hands = [...(stone ?? []), ...[...route.matchAll(/「([^」]+)」/gu)].map(m => m[1]!)];
-  return `。下りる手（plan_update と同じ判断で出してよい）: mc_act ${JSON.stringify(hands)}`
+  return `。下りる手${withUpdate ? '（plan_update と同じ判断で出してよい）' : ''}: mc_act ${JSON.stringify(hands)}`
     + `${stone ? '（木のツルハシで足元を掘って石を取り、頭の上に作業台を置いて石のツルハシを作る。鉄は石のツルハシから）' : ''}`;
 }
 
