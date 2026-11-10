@@ -228,9 +228,10 @@ throw error;
    * never a write over the
    * request's row; the budget check reads it through `OperatorAuditStore.budgetYen`, so it holds from the task's
    * next decision on. A task
-   * that has stopped for good (a cancel, a failure, the request cap) is not resumed by this, so a change to it is refused.
-   * A PAUSED request (2026-11-10: stopped at the cap the operator lowered, or by its estimates; resumable) takes the
-   * change and stays paused: the reply says that `minecraft resume` is what makes it go on.
+   * that has ended for good (completed, failed: the request cap of 10,000 yen, the steps) is not resumed by this, so a change
+   * to it is refused. A PAUSED request (2026-11-10: stopped at the cap the operator lowered, or by its estimates; resumable)
+   * takes the change and stays paused: the reply says that `minecraft resume` is what makes it go on. A cancelled request is
+   * stored in the same shape (stopped, paused, `fca_stopped`: `budgetState`), so it takes the change too and is told the same.
    */
   async function budget(c: Context, input: Extract<OperatorInput, { command: 'budget' }>) {
     const requests = parts.requests;
