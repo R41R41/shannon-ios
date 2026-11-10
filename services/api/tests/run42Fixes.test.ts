@@ -178,7 +178,7 @@ describe('the cost of leaving the preparation out is one number everywhere', () 
     // The meter says the state of the preparation only; the 500 s and its reason are said once, in the rule of the instructions.
     expect(DRAGON_MILESTONES.find(item => item.kept)!.cost).toBeUndefined();
     // The 540 s is one example of run 42 (with the go\'s fault in it), said as that fact and not as a loss in general.
-    expect(PREP_DESCENT_RULE).toContain('実走 42 の 1 回の例、移動の不具合込みで 540 秒');
+    expect(PREP_DESCENT_RULE).toContain('42 は地上へ戻るのに移動の不具合込みで 540 秒');
     expect(V2_ALWAYS).not.toContain('約 500 秒');
     expect(`${V2_ALWAYS}\n${PREP_RULES_WORDS}`).not.toMatch(/150 秒/u);
   });

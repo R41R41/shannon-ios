@@ -100,9 +100,9 @@ describe('the reason is in real numbers, and the rule is plain', () => {
     expect(PREP_DESCENT_RULE).toContain('持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない');
     expect(PREP_DESCENT_RULE).not.toContain('満腹は 30 分もつ');
     expect(PREP_DESCENT_RULE).toContain('地下には食べ物も木も見つかりにくく');
-    expect(PREP_DESCENT_RULE).toContain('地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）');
+    expect(PREP_DESCENT_RULE).toContain('地上へ戻る必要がある。死ぬこともある（以前の実走の記録で、今回の所要時間ではない: 42 は地上へ戻るのに移動の不具合込みで 540 秒、41 は作業台が無いまま 372 秒止まって上りの途中で死んだ）');
     expect(PREP_DESCENT_RULE).not.toContain('約 500 秒');
-    expect(PREP_DESCENT_RULE).toContain('作業台が無いまま止まって上りの途中で死んだ例もある'); // run 41's case, merged into the descent's reason (11/11 trim: the stage's reference sentence is gone)
+    // 11/11 trim: the stage's reference sentence is gone; the descent's reason line (always on) holds both runs' figures with the disclaimer that they are earlier records.
     expect(PREP_RULES_WORDS).not.toContain('372 秒');
     expect(PREP_RULES_WORDS).not.toContain('以前の実走の記録');
     expect(PREP_RULES_WORDS).not.toContain('戻りが長い');
@@ -117,7 +117,7 @@ describe('the reason is in real numbers, and the rule is plain', () => {
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
     expect(V2_ALWAYS).toContain('ネザーへ入るまでは 47 分ほど（準備を含む）');
     expect(V2_ALWAYS).toContain('時間を理由に止めたり、早く完了にしたりしない。目安は');
-    expect(V2_ALWAYS).toContain('足りなくなると地上へ戻る必要がある（実走 42 の 1 回の例、移動の不具合込みで 540 秒）。死ぬこともある');
+    expect(V2_ALWAYS).toContain('足りなくなると地上へ戻る必要がある。死ぬこともある（以前の実走の記録で、今回の所要時間ではない: 42 は');
     expect(V2_ALWAYS).not.toContain('鉄の夜');
     expect(minecraftV2System(V2_ALWAYS)).not.toMatch(/実走\d|run ?\d/u);
   });

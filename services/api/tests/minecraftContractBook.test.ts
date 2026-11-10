@@ -22,12 +22,10 @@ const CURRENT_FURNACE_PRE = 'furnace:x,y,z（焼きの見込み時間に達し�
 const CURRENT_ATTACK_POINTER = '。食料の動物を何体も狩るのは hunt';
 const CURRENT_HUNT_FIELDS = ' / hunt: target（種類。id は不可）・count・range・seconds';
 
-// 11/11 trim: the owner's self-defence numbers are said once (the instructions' 「敵と体力」); mc_act's accept line points to them, and the wait-act advice that the instructions
-// already give (「待ち打ちは hostileWithin」) is not said twice. The historical contract is made with the earlier words.
+// 11/11 trim: the owner's self-defence numbers are said once (the instructions' 「敵と体力」); mc_act's accept line points to them. The historical contract is made with the earlier words.
+// (The wait hand's 「待つ手の act には hostileWithin」 stays in mc_act's stopIf line: the instructions' 待ち打ち is another rule.)
 const CURRENT_SELF_DEFENCE = '体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く。';
 const LEGACY_SELF_DEFENCE = `${SELF_DEFENCE_SHORT}。`;
-const CURRENT_HPBELOW = 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。';
-const LEGACY_HPBELOW = 'hpBelow は今の体力より低い値（以上だと1手も動かず止まる）。待つ手の act には hostileWithin。';
 
 const pin = { catalogHash: 'a'.repeat(64) };
 const book = () => createMinecraftContractBook(pin);
@@ -35,7 +33,7 @@ const book = () => createMinecraftContractBook(pin);
 describe('the canonical Minecraft input-contract book', () => {
   it('pins the revised shoot manual and unchanged schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('49afcfa947e8b5818e9d09ed5ff698ab8c31519ecd36523a0d5e15381f9f607e');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('bfde594e105469fa1d0842da59598abd5cc72aafd9b82f0c19d3436eb9271326');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('77cb8d5128ca66d050bd7396b5ec3ab17b09ef02e6263c0fa151f37715de1855');
     const current = book();
     expect(current.pages).toHaveLength(10);
@@ -52,7 +50,7 @@ describe('the canonical Minecraft input-contract book', () => {
     const fragments = SHORT_ACT_MANUAL_FRAGMENTS;
     const historical = fragments.filter(part => part.id !== 'hunt').map(part => ({ ...part, text: part.id === 'special'
       ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '')
-        .replace(CURRENT_SELF_DEFENCE, LEGACY_SELF_DEFENCE).replace(CURRENT_HPBELOW, LEGACY_HPBELOW) }));
+        .replace(CURRENT_SELF_DEFENCE, LEGACY_SELF_DEFENCE) }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))
       .toBe('2da25be2c44bb7acc79f097519d9a22cb23e4cb3e4e45d120b438e2d8382d873');
     expect(fragments.find(part => part.id === 'shoot')!.text.split('\n')[0]).toBe(legacyShoot);

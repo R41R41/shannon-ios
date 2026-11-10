@@ -247,7 +247,7 @@ describe('the lifecycle investigates before the decision and says it first in th
       rows: ['W crimson_stem (11,35,13) 東4m', 'N nether_bricks (200,60,40) 東190m 要塞'] };
     lifecycle.context();
     expect((lifecycle.transient!() as { scan: string[] }).scan).toEqual(['走査（次元の移動の後・the_nether・160m 内）: ネザーの幹 4m 東、溶岩の海 20m 下',
-      'W crimson_stem (11,35,13) 東4m', 'N nether_bricks (200,60,40) 東190m 要塞', '次元が変わった（この走査は新しい次元のもの）']);
+      'W crimson_stem (11,35,13) 東4m', 'N nether_bricks (200,60,40) 東190m 要塞', '次元が変わった（この走査は新しい次元のもの）。計画の次の節を、この走査と landmarks で見直す']);
     lifecycle.context();
     expect(lifecycle.transient!()).not.toHaveProperty('scan');
     expect(scanLines(scan, null)!.lines.length).toBeLessThanOrEqual(10);

@@ -80,3 +80,14 @@ describe('the nether ruler is one number: the goal, the road and the night\'s li
     expect(source('minecraftNightArms.ts')).not.toContain('30 分の目標');
   });
 });
+
+describe('the review of the trim (11/11): what the reviewers found lost is back, in the fewest words', () => {
+  it('keeps the doneWhen caveat of the dictionary, the fullnessLostIn5min definition and the same-hands policy at decision time', () => {
+    expect(V2_ALWAYS).toContain('済む条件（doneWhen）は観測で満たされるとコードが済みにする（今済んだ印ではない）');
+    expect(V2_ALWAYS).toContain('fullnessLostIn5min（直近 5 分に減った満腹の点');
+    expect(V2_ALWAYS).toContain('同じ手の連続は repeat と done・mine の count・go の seconds');
+  });
+  it('says the re-look after a dimension change (scan and landmarks) in the scan line shown right after the portal', () => {
+    expect(source('minecraftLlmcProbe.ts')).toContain('この走査と landmarks で見直す');
+  });
+});

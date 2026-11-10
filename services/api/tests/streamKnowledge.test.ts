@@ -12,12 +12,16 @@ describe('a stream that holds the body is stopped at its source', () => {
     expect(STREAM_WORDS).toContain('上流の 1 マスに dirt か cobblestone を place');
     expect(STREAM_WORDS).toContain('足の下も水でよい');
     expect(STREAM_WORDS.length).toBeLessThanOrEqual(110);
-    for (const line of [held({}), held({ do: 'walk', line: 'walk 止 流れる水の中（(1,64,2) は 水の流れ 2）で 3秒ずつ進めない' }), held({ status: 'failed', line: 'go 止 流れる水の中で押し戻された' })]) {
+    for (const line of [held({}), held({ do: 'walk', line: 'walk 止 流れる水の中（(1,64,2) は 水の流れ 2）で 3秒ずつ進めない' }), held({ status: 'failed', line: 'go 止 流れる水の中で押し戻された' }),
+      held({ line: 'go 止 時間切れ: 5秒進めず止まった。流れる水の中（(1,64,2) は 水の流れ 2）で押し戻された' })]) {
       expect(handFacts(line).join(' '), line.line).toContain(STREAM_WORDS);
     }
   });
   it('says nothing for a hand that went well, for another hand, for a stop with no stream, or when the body own line already names the blocks', () => {
     for (const line of [held({ status: 'done', line: 'go 済 (1,64,2) に着いた（水の流れ 1 を渡った）' }), held({ do: 'dig' }), held({ line: 'go 止まった 溶岩が流れ込む' }),
+      // a bare 「水の流れ N」 is the cell she stands in: a stop for another cause while she wades gets no stream advice
+      held({ line: 'go 止 敵が近い（足は 水の流れ 1）' }), held({ line: 'walk 止 反射（水の流れ 2 の中で溺れかけた）' }), held({ line: 'go 止 stopIf hostileWithin（そのマスは 水の流れ 1）' }),
+      held({ do: 'walk', line: 'walk 止 時間切れ（そのマスは 水の流れ 3）' }),
       held({ line: 'go 止まった 流れる水の中で進めない。流れは dirt か cobblestone を 1 個持てば止められる（上流のマスに置く）' })]) {
       expect(handFacts(line).join(' '), line.line).not.toContain(STREAM_WORDS);
     }

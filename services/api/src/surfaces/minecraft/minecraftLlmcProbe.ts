@@ -352,7 +352,7 @@ export function scanLines(scan: unknown, shownAt: string | null): { lines: strin
   const words = { login: 'ログイン', reconnect: '再接続', respawn: 'リスポーン', portal: '次元の移動' } as Record<string, string>;
   return { at: value.at, lines: [`走査（${words[value.trigger ?? ''] ?? '体'}の後${value.dimension ? `・${String(value.dimension).replace(/^minecraft:/u, '')}` : ''}`
     + `${typeof value.reach === 'number' ? `・${Math.round(value.reach)}m 内` : ''}）: ${value.text.slice(0, 300)}`, ...rows,
-    ...(portal ? ['次元が変わった（この走査は新しい次元のもの）'] : [])] };
+    ...(portal ? ['次元が変わった（この走査は新しい次元のもの）。計画の次の節を、この走査と landmarks で見直す'] : [])] };
 }
 /** The scan as the first plan reads it: its words and every row. */
 export function scanForPlan(scan: unknown): string | null {

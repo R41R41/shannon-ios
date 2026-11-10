@@ -131,7 +131,7 @@ describe('native-only contract read through the same normal/rig tools entry', ()
     // The rules that were a line of the instructions (「skill_read は …」) are here, where the tool is described.
     expect(read).toContain('mc_actの契約目次にある完全な参照名をnameに書く');
     expect(read).toContain('旧版の名前は読み替えず、今の目次で読み直す');
-    expect(read).toContain('個人のスキルやファイルは開かない');
+    expect(read).toContain('個人の手順書（スキル）・記憶・ファイルは開かない');
   });
 
   it('delivers and reads all ten current pages through fcaMinecraftTools/combine/progress/V2/gameOnly without personal fallback', async () => {

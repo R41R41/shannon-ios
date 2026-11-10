@@ -213,14 +213,17 @@ export function fallingDigWords(line: { code?: string; line: string }): string {
 }
 /**
  * 11/11 (run 5: 308 s held in shallow flowing water): what to do about a stream was a line of the instructions' 「落ちる・水・溶岩・空所」, read at every decision
- * and needed in about one of a thousand. It is said where it happens: a go or walk that stopped with the body's words 「水の流れ N」/「押し戻された」/「流れる水の中」
- * gets the way to stop the stream, unless the body's own line already says it (it names the dirt or the cobblestone).
+ * and needed in about one of a thousand. It is said where it happens: a go or walk that stopped (or failed and went on) with the body's own stream-held words gets the way
+ * to stop the stream, unless the body's own line already says it (it names the dirt or the cobblestone). The words are the body's two forms of "the stream held her":
+ * 「流れる水の中…」 (its stuck and its limit_time sentence) and the walk's 「体は進まなかった・…水の流れ N」; a bare 「水の流れ N」 is only the cell she stands in and also
+ * comes with a stop for another cause (an enemy near while she wades, a reflex, a stopIf), which gets no stream advice.
  */
-const STREAM_HELD = /水の流れ|押し戻された|流れる水の中/u;
+const STREAM_HELD = /流れる水の中|体は進まなかった[^。]*水の流れ/u;
+const STREAM_OTHER_CAUSE = /反射|stopIf|敵が近い|見られる|溶岩が流れ込む/u;
 export const STREAM_WORDS = '流れる水で進めない時は、上流の 1 マスに dirt か cobblestone を place する（足の下も水でよい）';
 export function streamWords(line: { do: string; status: string; line: string }): string {
   if ((line.do !== 'go' && line.do !== 'walk') || (line.status !== 'stopped' && line.status !== 'failed')) return '';
-  return STREAM_HELD.test(line.line) && !/dirt か cobblestone/u.test(line.line) ? STREAM_WORDS : '';
+  return STREAM_HELD.test(line.line) && !STREAM_OTHER_CAUSE.test(line.line) && !/dirt か cobblestone/u.test(line.line) ? STREAM_WORDS : '';
 }
 /** The codes a fight hand ends with when it ends well or unseen (amendment A-2 5): success stays `done`; what the
  * opponent did is said by the code. */

@@ -59,7 +59,7 @@ describe('the rules are in the instructions', () => {
     expect(system).toContain('（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）');
     // The one run named in the instructions is run 42's single example, as a fact of it (the other story is the stage knowledge's reference sentence).
     expect(system.match(/実走/gu)).toHaveLength(1);
-    expect(system).not.toMatch(/run ?\d|372/u);
+    expect(system).not.toMatch(/run ?\d/u);
     // 11/11 trim: the reference sentence of the stage rules (runs 41 and 42) is gone; the descent's own reason line says the one example (the test of run41Fixes).
     expect(PREP_RULES_WORDS).not.toContain('以前の実走の記録');
     expect(V2_STAGES.prep).toContain('準備の必須と目標は system の「準備の決まり」');
