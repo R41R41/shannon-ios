@@ -5,7 +5,7 @@ import { MinecraftControl } from '../src/surfaces/minecraft/minecraftControl.js'
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import type { MinecraftControlCommand, MinecraftControlPoll, MinecraftControlReceipt } from '../src/contracts/minecraftControlContract.js';
-import type { ActInput } from '../src/contracts/minecraftActContract.js';
+import { MC_ACT_TOOL, type ActInput } from '../src/contracts/minecraftActContract.js';
 import { actMilliseconds } from '../src/contracts/minecraftActTime.js';
 import { createLlmcQueue, forgetLlmcQueues, queueWakeMs, QUEUE_MAX, QUEUE_T } from '../src/surfaces/minecraft/minecraftLlmcQueue.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
@@ -262,6 +262,30 @@ describe('the results as news, and the version', () => {
     good.poll();
     await settle();
     expect(good.queue.stale()).toBe(false);
+  });
+
+  it('E2: after a bad end the decision being thought is judged call by call: an act that names what it relies on and none of that left stands', async () => {
+    const f = setup();
+    await f.queue.add(f.spec(wait1));
+    await f.queue.add(f.spec(dig(1)));
+    f.take();
+    f.queue.mark();
+    const act = (input: Record<string, unknown>) => ({ name: MC_ACT_TOOL, input });
+    expect(f.queue.staleFor(act({}))).toBe(false); // nothing changed since the request was built
+    f.end('failed', JSON.stringify({ v: 1, ok: false, done: 0, of: 1, stoppedBy: 'failure', stoppedWhy: '掘れない', ms: 500, at: { x: 0, y: 64, z: 0 }, hp: 20, food: 20,
+      lines: [{ i: 1, do: 'wait', status: 'stopped', line: '失敗' }] }));
+    f.dropRest('捨てた: 前の項目 q1 が止まった（failure）。手は動いていない');
+    f.poll();
+    await settle();
+    expect(f.queue.stale()).toBe(true);
+    expect(f.queue.staleFor(act({}))).toBe(true); // no dependsOn: it relied on everything before it
+    expect(f.queue.staleFor(act({ dependsOn: ['q1'] }))).toBe(true);
+    expect(f.queue.staleFor(act({ dependsOn: ['q3', 'q2'] }))).toBe(true); // q2 was dropped behind q1
+    expect(f.queue.staleFor(act({ dependsOn: [] }))).toBe(false);
+    expect(f.queue.staleFor(act({ dependsOn: ['q9'] }))).toBe(false); // names something that is still there
+    expect(f.queue.staleFor({ name: 'mc.look', input: { dependsOn: [] } })).toBe(true); // a call that is not an act followed the queue it saw
+    f.queue.mark();
+    expect(f.queue.staleFor(act({}))).toBe(false); // the next decision's request is built on the queue as it is
   });
 
   it('the body refusing an item (the item before it is gone) is a drop that never ran, with the body\'s sentence', async () => {

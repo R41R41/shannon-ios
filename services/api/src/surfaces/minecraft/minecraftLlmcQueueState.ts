@@ -199,6 +199,8 @@ export interface LlmcQueue extends FcaBodyQueue {
   /** A decision's request is built now: a drop after this makes it stale (`stale`). */
   mark(): void;
   stale(): boolean;
+  /** E2: whether a call a decision chose no longer follows the queue (see `FcaBodyQueue.staleFor`). */
+  staleFor(call: { name: string; input: unknown }): boolean;
   /** Told of each item the body ran when it ends, with its result (her feelings read it). */
   onRan(listener: RanListener): void;
   /** The furnaces that came due since the last look (the body's `furnace.done` events, run 39): one line each, once. */

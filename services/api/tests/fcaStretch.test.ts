@@ -29,9 +29,10 @@ const complete: FcaDecision = { kind: 'complete', summary: 'done' };
 
 interface Step { wake: FcaQueueWake; ends?: Array<{ item: string; ok: boolean; text: string; kind?: 'ran' | 'dropped' }>; bump?: boolean }
 /** A queue the test drives: `put` an item as the tool does; each `ready` takes the next step of the script. */
-function fakeQueue(script: Step[]) {
+function fakeQueue(script: Step[], staleForRefs = false) {
   const open = new Set<string>(), news: FcaQueueNews[] = [];
   let version = 0, counter = 0, noted: number[] = [], cancelled = 0, drains = 0, waited = 0, closing = false;
+  const lost = new Set<string>();
   const closed: string[] = [];
   const call: FcaToolCall = { id: 'c', name: MC_ACT_TOOL, input: {} };
   const end = (item: string, ok: boolean, text: string, kind: 'ran' | 'dropped' = 'ran') => {
@@ -40,6 +41,8 @@ function fakeQueue(script: Step[]) {
   };
   const queue: FcaBodyQueue = {
     openIds: () => new Set(open), open: () => open.size > 0, version: () => version,
+    ...(staleForRefs ? { staleFor: (c: { name: string; input: unknown }) => lost.size > 0 && (c.name !== MC_ACT_TOOL
+      || !Array.isArray((c.input as { dependsOn?: unknown }).dependsOn) || ((c.input as { dependsOn: string[] }).dependsOn).some(ref => lost.has(ref))) } : {}),
     noteDecision: ms => { noted.push(ms); },
     dropWaiting: () => 0,
     cancelAll: () => { cancelled += 1; for (const item of [...open]) end(item, false, '捨てた: 止めた', 'dropped'); },
@@ -60,7 +63,7 @@ function fakeQueue(script: Step[]) {
       return step.wake;
     },
   };
-  return { queue, setClosing: () => { closing = true; }, closed, put: () => { counter += 1; open.add(`q${counter}`); return `q${counter}`; }, bump: () => { version += 1; }, end,
+  return { queue, markNow: () => { lost.clear(); }, lose: (item: string) => { lost.add(item); version += 1; }, setClosing: () => { closing = true; }, closed, put: () => { counter += 1; open.add(`q${counter}`); return `q${counter}`; }, bump: () => { version += 1; }, end,
     stats: () => ({ noted, cancelled, drains, waited, open: [...open] }) };
 }
 
@@ -74,7 +77,7 @@ function fixture(decisions: Array<FcaDecision | ((input: FcaModelInput) => Promi
   const task = runtime.createChild('owner', root.id, { title: 'Body task', goal: 'エンドラを倒して', completionCriteria: 'Observed result' }, 'body');
   const inputs: FcaModelInput[] = [], lines: string[] = [], noted: string[] = [];
   let recalls = 0, commits = 0;
-  const lifecycle: FcaBodyLifecycle = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }),
+  const lifecycle: FcaBodyLifecycle = { start() {}, revision: () => 0, context: () => { queue?.markNow(); return { revision: 0, observation: null }; },
     async guard() { return true; }, guardFor: async () => !(options.stale?.() ?? false), toolSignal: (_name, parent) => parent, async close() {},
     recallWanted: () => true, transient: () => ({ map: 'm' }), noteNews: text => { noted.push(text); }, ...(queue ? { queue: queue.queue } : {}) };
   const run = async () => {
@@ -220,6 +223,35 @@ describe('a queue that changes, and the limits', () => {
     expect(f.inputs).toHaveLength(3); // the first, the one thrown away, the one asked again
     expect(f.commits()).toBe(1);
     expect(text(f.runtime.snapshot('owner', f.task.id)!.history)).toContain('turn 1');
+  });
+
+  it('E2: a decision that was being thought when an item ended badly is not thrown away: the act that does not rely on it is used, the one that does is told and not run', async () => {
+    const queue = fakeQueue([{ wake: 'remaining' }, { wake: 'empty' }], true);
+    const ran: string[] = [];
+    const independent: FcaDecision = { kind: 'tools', calls: [
+      { id: 'dep', name: MC_ACT_TOOL, input: { hands: [{ do: 'wait' }], why: 'relies', dependsOn: ['q1'] } },
+      { id: 'free', name: MC_ACT_TOOL, input: { hands: [{ do: 'wait' }], why: 'free', dependsOn: [] } }] };
+    const f = fixture([act('a'), async () => { queue.lose('q1'); await sleep(50); ran.push('decided'); return independent; }, complete], queue);
+    await f.run();
+    // Two decisions, not three: the second one was used, and was not asked again.
+    expect(f.inputs).toHaveLength(2);
+    const kept = text(f.runtime.snapshot('owner', f.task.id)!.history);
+    expect(kept).toContain('turn 2');
+    expect(kept).toContain('列に入れた q2'); // the independent act reached the queue
+    expect(kept).toContain('送らなかった: この判断を考えている間に列が変わった'); // the dependent one was told
+    expect(kept.split('列に入れた').length).toBe(3); // q1 (first decision) and q2: the dependent act was not put in
+    // The act that was not sent is not a failure of the ladder's.
+    expect((f.runtime.snapshot('owner', f.task.id)!.checkpoint as { consecutiveToolFailures?: number }).consecutiveToolFailures ?? 0).toBe(0);
+  });
+
+  it('E2: a decision whose every call relied on the queue that changed is asked again in the step, as one thrown away was', async () => {
+    const queue = fakeQueue([{ wake: 'remaining' }], true);
+    const f = fixture([act('a'), async () => { queue.lose('q1'); await sleep(50); return act('b'); }, complete], queue);
+    await f.run();
+    expect(f.inputs).toHaveLength(3);
+    expect(f.metrics()[0]).toMatchObject({ stretch: { rounds: 3, thrown: false } });
+    expect(text(f.runtime.snapshot('owner', f.task.id)!.history)).not.toContain('turn 2');
+    expect(f.commits()).toBe(1);
   });
 
   it('the result of the item that threw the decision away stands in the last tool result of the round before (run 41: the reason of q103 and q143 reached no input)', async () => {

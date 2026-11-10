@@ -4,7 +4,7 @@ import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS
   keep,ioTurn,sleepMs } from './minecraftLlmcQueueState.js';
 import type { QueueItem,QueueAdd,QueueRecordRow,QueueDeps,RanListener,LlmcQueue } from './minecraftLlmcQueueState.js';
 import { createQueueReceiptHandlers } from './minecraftLlmcQueueReceipts.js';
-import { readActResult,tunedBy } from '../../contracts/minecraftActContract.js';
+import { MC_ACT_TOOL,readActResult,tunedBy } from '../../contracts/minecraftActContract.js';
 import { actMaxMilliseconds } from '../../contracts/minecraftActTime.js';
 import { queueName,type OperationState } from '../../contracts/continueContract.js';
 import type { MinecraftControlReceipt,MinecraftQueueEnvelope } from '../../contracts/minecraftControlContract.js';
@@ -85,17 +85,22 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
   const booked = new Set<string>();
   let sealed: string[] = [];
   const open = () => items.filter(item => !item.ended);
-  const bump = () => {
+  /** The items that left the queue badly (ended badly, were dropped or taken off) since a decision's request was built (`mark`): what
+   * a decided act that names them in its `dependsOn` rested on (`staleFor`). */
+  const lost = new Set<string>();
+  const bump = (leaving: readonly QueueItem[] = []) => {
     version += 1;
     droppedNow += 1;
+    for (const item of leaving) lost.add(item.item);
   };
+  const markNow = () => { marked = version; lost.clear(); };
   /**
    * R3-1 (2): a decided item that ended badly makes a decision that was being thought meanwhile stale: it followed a queue whose last item did not
    * do what the decision counted on, and without this its calls ran as hands made for a state that was gone
    * (run59: ten of them). A reserve item's end (a stand-in the head put last, R3-1 4) is not such a change:
    * it was never what the decision rested on.
    */
-  const staleAfterBadEnd = (item: QueueItem) => { if (!item.reserve) version += 1; };
+  const staleAfterBadEnd = (item: QueueItem) => { if (!item.reserve) { version += 1; lost.add(item.item); } };
   /** The step is settled when nothing is open and no result is left unknown (an unknown result is settled only by
  * the proof of the release). */
   const settleFlag = () => {
@@ -184,7 +189,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     pump();
   }
   function noteBadEnd(item: QueueItem, unit: ReturnType<typeof unitOfReceipt>, taken: boolean, ok: boolean): void {
-    if (taken) { if (item.reserve) droppedNow += 1; else bump();
+    if (taken) { if (item.reserve) droppedNow += 1; else bump([item]);
       noteDropped(item, unit.droppedBecause?.code ?? item.because ?? ''); }
     else if (!ok) { failedNow += 1;
       troubleAt ??= now();
@@ -240,7 +245,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     item.watch?.stop();
     error ??= cause;
     drop(item, item.item);
-    bump();
+    bump([item]);
   }
 const { refusal, makeItem } = createQueueAdmission(deps, { items, open, now });
 
@@ -338,8 +343,17 @@ void restoreReceipts();
         `Shannon Minecraft receipt mark failed task=${deps.taskId} ${String(cause).slice(0, 120)}`); }
     },
     openItems: () => open().map(item => ({ item: item.item, why: itemLabel(item) })),
-    mark() { marked = version; },
+    mark: markNow,
     stale: () => version !== marked,
+    // E2: a decision that was being thought while the queue changed is not thrown away. Its acts are judged one by one when the answer is in: an
+    // act that names what it relies on (`dependsOn`) and none of that left stands; one that does not name it relied on everything before it
+    // (as `replace` reads it), and every other call (a read, a task tool) was made for the queue it saw.
+    staleFor(call) {
+      if (version === marked) return false;
+      if (call.name !== MC_ACT_TOOL) return true;
+      const relies = (call.input as { dependsOn?: unknown } | null)?.dependsOn;
+      return !Array.isArray(relies) || relies.some(ref => lost.has(String(ref)));
+    },
     // Once the items are taken off (a stop, the close of the step) an unsettled one is unsafe again: the guard must not look past it.
     openIds: () => stopped ? new Set<string>() : new Set(open().map(item => item.id)),
     open: () => open().length > 0,
@@ -432,7 +446,7 @@ void restoreReceipts();
       const until = now() + waitMs;
       while (gone.some(item => !item.ended) && now() < until && !error) await sleep(50);
       // The decision chose this itself: the drops it made are not a change it has not seen.
-      if (gone.length) marked = version;
+      if (gone.length) markNow();
       const kept = open().filter(item => items.indexOf(item) > first && first >= 0);
       const replacementWords = () => (gone.length ? `消した: ${gone.map(item => item.item).join('・')}${open().length ? '' :
          '（列は空）'}${kept.length ? `。残した（頼っていない）: ${kept.map(item => item.item).join('・')}` : ''}` : '消す物は無かった');
@@ -455,7 +469,7 @@ void restoreReceipts();
         item.because ??= '依頼者の言葉';
         item.abort.abort('message');
       }
-      if (waiting.length) bump();
+      if (waiting.length) bump(waiting);
       return waiting.length;
     },
     cancelAll() {

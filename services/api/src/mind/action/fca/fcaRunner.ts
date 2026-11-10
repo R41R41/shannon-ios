@@ -296,7 +296,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   let completionVerificationFailures = Number(prior.completionVerificationFailures ?? 0);
   if (!Number.isSafeInteger(completionVerificationFailures) || completionVerificationFailures < 0) completionVerificationFailures = 0;
   let completionRejected = null as { reason?: string } | null;
-  const state = { bodyStale: false };
+  const state: RoundContext['state'] = { bodyStale: false };
   const settleOutcomes = (outcomes: readonly RoundOutcome[]) => {
     // A cut call does not count until the same tool (or any) has been cut off too many times in a row; any outcome
 // of its own ends the run, but a
@@ -322,30 +322,32 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     beginDecisionRound(operationId, rounds);
     progress({ operationId, tool: 'fca.decide', status: 'running' });
     if (rounds === 1) await checked('fresh');
-    // A decision asked while items run is thrown away when one of them ends badly or is taken off: what it chose
-// followed the queue it saw.
-    const cancel = new AbortController();
-    let thrownAway = false;
-    const watch = rounds > 1 && queue ? setInterval(() => { if (queue.version() !== askedVersion) { thrownAway = true;
-      cancel.abort(
-      new Error('FCA_QUEUE_CHANGED')); } }, 100) : null;
-    watch?.unref?.();
+    // E2: a decision asked while items run is not thrown away when one of them ends badly or is taken off (its request is sent and
+    // is paid for either way): when the answer is in, each call it chose is judged against the queue as it is now. A call that
+    // followed a queue that is gone is dropped (told in its result); the calls that stand are used. A decision with nothing that stands is
+    // asked again below.
     const decidedAt = performance.now();
     let answer: FcaModelOutput | null = null;
     try {
-      answer = rounds === 1 ? await decideFirst(asked) : await decide(asked, AbortSignal.any([signal, cancel.signal]));
+      answer = rounds === 1 ? await decideFirst(asked) : await decide(asked);
     } catch (error) {
-      if (!thrownAway || signal.aborted) {
-        noteDecisionOutcome('failed', { code: String((error as Error | undefined)?.message ?? error).slice(0, 120) });
-        progress({ operationId, tool: 'fca.decide', status: 'unknown' });
-        // Run 41: a step that ends on an error with items still running in the body leaves nobody to watch them and its
+      noteDecisionOutcome('failed', { code: String((error as Error | undefined)?.message ?? error).slice(0, 120) });
+      progress({ operationId, tool: 'fca.decide', status: 'unknown' });
+      // Run 41: a step that ends on an error with items still running in the body leaves nobody to watch them and its
 // outcome unknown until they end (1.5 minutes
-        // of a refused request, minecraft_busy). The items are taken off here, so that their answers settle the step
+      // of a refused request, minecraft_busy). The items are taken off here, so that their answers settle the step
 // within a moment (`queueLifecycle.close`).
-        queue?.cancelAll();
-        throw error;
-      }
-    } finally { if (watch) clearInterval(watch); }
+      queue?.cancelAll();
+      throw error;
+    }
+    const droppedCalls = new Set<string>();
+    if (answer && queue && rounds > 1) {
+      const changed = queue.staleFor ? (call: { name: string; input: unknown }) => queue.staleFor!(call) : () => queue.version() !== askedVersion;
+      if (answer.decision.kind === 'tools') {
+        for (const call of answer.decision.calls) if (changed(call)) droppedCalls.add(call.id);
+        if (droppedCalls.size === answer.decision.calls.length) answer = null;
+      } else if (changed({ name: answer.decision.kind, input: null })) answer = null;
+    }
     if (!answer) {
       noteDecisionOutcome('discarded', { reason: 'queue_changed' });
       progress({ operationId, tool: 'fca.decide', status: 'failed' });
@@ -399,8 +401,9 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     queue?.noteDecision(performance.now() - decidedAt);
     progress({ operationId, tool: 'fca.decide', status: 'received' });
     await checked('local');
-    state.bodyStale = state.bodyStale || !await stillFreshFor(output.decision.kind === 'tools' ? output.decision.calls[0] : undefined);
-    noteDecisionOutcome('applied', { decision: output.decision.kind, stale: state.bodyStale,
+    state.droppedCalls = droppedCalls;
+    state.bodyStale = state.bodyStale || !await stillFreshFor(output.decision.kind === 'tools' ? output.decision.calls.find(call => !droppedCalls.has(call.id)) : undefined);
+    noteDecisionOutcome('applied', { decision: output.decision.kind, stale: state.bodyStale, ...(droppedCalls.size ? { droppedStale: [...droppedCalls] } : {}),
       calls: output.decision.kind === 'tools' ? output.decision.calls.map(call => ({ id: call.id, name: call.name })) : [],
       ...(output.decision.kind === 'tools' ? {} : { summary: output.decision.summary.slice(0, 2_000) }) });
     if (ports.evidence && !observeSync('prediction', { phase: 'before_actions', expectationCount: output.expectations?.length ?? 0,

@@ -51,12 +51,12 @@ export function queueLifecycle(parts: { queue: LlmcQueue | undefined; observe():
       await body.close();
     },
     /**
-     * A call chosen before an item ended badly (or was taken off) is stale: it followed a queue that is gone.
- * Otherwise the body's own rule (only
+     * A call chosen before an item ended badly (or was taken off) is stale: it followed a queue that is gone. An act that names what it
+ * relies on (`dependsOn`) and none of that left is not (E2: `staleFor`). Otherwise the body's own rule (only
      * a cut of her own tool makes a call of the mode stale).
      */
     guardFor: async (version: number, call: Parameters<NonNullable<FcaBodyLifecycle['guardFor']>>[1]) =>
-      queue?.stale() ? false : body.guardFor ? body.guardFor(version, call) : body.guard(version),
+      queue?.staleFor(call) ? false : body.guardFor ? body.guardFor(version, call) : body.guard(version),
     /**
      * A surprise of the body while items run, told without using up the investigation's own count (`peek`): health
  * lost 5 or more or under 10, a fall

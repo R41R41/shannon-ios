@@ -90,7 +90,7 @@ describe('what the stretch does on a message, and the lifecycle\'s additions', (
     expect(waited).toEqual({ continuing: false, wake: 'message' });
     expect(calls).toEqual(['ready', 'drop', 'drain']);
   });
-  const stub = (stale: boolean, settledCalls: string[]) => ({ stale: () => stale, cancelAll() { settledCalls.push('cancel'); }, stop() { settledCalls.push('stop'); },
+  const stub = (stale: boolean, settledCalls: string[]) => ({ stale: () => stale, staleFor: () => stale, cancelAll() { settledCalls.push('cancel'); }, stop() { settledCalls.push('stop'); },
     async settled() { settledCalls.push('settled'); } });
   const inner: FcaBodyLifecycle = { start() {}, revision: () => 0, context: () => ({ revision: 0, observation: null }), async guard() { return true; },
     async guardFor() { return true; }, toolSignal: (_name, parent) => parent, async close() {} };
