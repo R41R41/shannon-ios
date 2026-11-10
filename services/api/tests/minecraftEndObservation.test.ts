@@ -109,10 +109,13 @@ describe('optional End observations as facts', () => {
     expect(endFightLines(end, 'white_bed')).toContain(line);
     expect(dragonBedLine(view({ ...raw, dragon: { ...raw.dragon, phase: 3, approach: { ...approach(), bed } } }))).toBeNull();
     expect(line).not.toContain('attack target=ender_dragon');
+    // One bed a sit heals back by the next sit: while she still sits the same line asks for the next bed (not on the bed that ends her).
+    expect(line).toContain('use の後もこの行が出ていれば、すぐもう 1 個');
     // The bed that may kill her: a strike first, so the kill is credited (a bed's blast names no one).
     const low = dragonBedLine(view({ ...raw, crystals: { ...raw.crystals, remaining: 2 }, dragon: { ...raw.dragon, health: 40, approach: { ...approach(), bed } } }), 'white_bed')!;
     expect(low).toContain('place block=white_bed at=[(17,64,12)] → attack target=ender_dragon seconds=2 onFail="continue" → use at=[(17,64,12)]');
     expect(low).toContain('advancement end/kill_dragon');
+    expect(low).not.toContain('すぐもう 1 個');
     expect(dragonBedLine(view())).toBeNull();
   });
 

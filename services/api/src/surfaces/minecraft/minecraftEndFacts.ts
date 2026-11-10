@@ -297,7 +297,7 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
   const credit = last ? ' → attack target=ender_dragon seconds=2 onFail="continue"' : '';
   const why = last ? `。竜の体力 ${round(dragon.health!)} はこのベッドで尽きる見込み: ベッドだけで倒すと手柄が付かず advancement end/kill_dragon が出ないので、use の前に 1 回打つ（届かなくてもそのまま use）` : '';
   return `ベッドの手（体が測った候補）: go ${place(offer.stand)} range=0.5${build} → place block=${bed} at=[${foot}]${credit} → use at=[${foot}]`
-    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。同じ act に並べる。立つ所から動くと計算が変わる${why}）`;
+    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。同じ act に並べる。立つ所から動くと計算が変わる${last ? '' : '。use の後もこの行が出ていれば、すぐもう 1 個'}${why}）`;
 }
 
 /** The waiting cells, nearest by the body's walking time: beside the perch's facing (phases 3 to 7), or for the next sit while she flies (0, 1, 2, 8, 10). */
