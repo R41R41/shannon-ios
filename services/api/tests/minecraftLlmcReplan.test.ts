@@ -225,7 +225,21 @@ describe('a death has its own ask (run62, 11/5)', () => {
     expect(under('p1')).toEqual(['不要になった（p1 が済んだ: have:log>=3）']);
     expect(under('p2')).toEqual([]);
     expect(REPLAN_SYSTEM).toContain('済みの節の下に足した節は、親が済みなので「不要になった」としてすぐ閉じられる');
-    expect(REPLAN_SYSTEM).toContain('今の節（▶）か、その上の開いている節の下');
+  });
+  it('tells it to add that node beside the current one, not under it: a node with no held condition closes with its children (G07, 11/10)', () => {
+    const made = planFromSeeds([{ title: 'エンドに入る', kind: 'other', doneWhen: 'dim:the_end' }, { title: '竜を倒す', kind: 'other' }])!;
+    const plan: PlanTree = { ...made, current: 'p1' };
+    const back = { title: '鉄の剣を取り戻す', doneWhen: 'have:iron_sword' };
+    const gotBack = (held: PlanTree) => applyPlanUpdate(held, { ops: [{ op: 'set', id: 'n1', state: 'done' }] }).tree;
+    const stateOf = (held: PlanTree, id: string) => held.nodes.find(node => node.id === id)?.state;
+    const under = gotBack(applyPlanUpdate(plan, { ops: [{ op: 'add', parent: 'p1', ...back }] }).tree);
+    expect([stateOf(under, 'p1'), under.current]).toEqual(['done', 'p2']);
+    const beside = applyPlanUpdate(plan, { ops: [{ op: 'add', after: 'p1', ...back }] });
+    expect([beside.problem ?? null, beside.tree.current, beside.tree.nodes.find(node => node.id === 'n1')?.parentId]).toEqual([null, 'p1', null]);
+    const after = gotBack(beside.tree);
+    expect([stateOf(after, 'n1'), stateOf(after, 'p1') === 'done', after.current]).toEqual(['done', false, 'p1']);
+    expect(REPLAN_SYSTEM).toContain('今の節（▶）と同じ親の下に、after を今の節の id にして足し（今の節が字下げの無い行なら parent は書かない）');
+    expect(REPLAN_SYSTEM).toContain('今の節の下には足さない: 済む条件が have:・food>= でも target でもない節は、下の節が全部済むと一緒に済みになる');
   });
 });
 
