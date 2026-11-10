@@ -28,10 +28,13 @@ function working(frame: BodyObservation | null): Array<{ at: string; what: strin
  * body's jobs list, with where it is, what goes in and what comes out, how long it has, and what to do meanwhile (the body does not wait for a
  * furnace: another act goes on while it burns, and a `furnace … take` act is sent when its event comes; the body walks to the furnace to take).
  * A line is a reading of the frame's jobs (`remainingEstimateMs`, `expects`, `from`), made again every decision. Null when the jobs are not a list the body wrote.
+ * The instruction is said once, in the first line (not once per furnace); the furnace lines are short, soonest first, 4 at most with the rest counted.
  */
+const LEDGER_HEAD = 'かまど帳: 焼く間は待たずに別の作業（かまどの近くの作業が良い）の act を足す。時間が来たら「furnace X,Y,Z take」の act を足す（遠くても体が歩く。離れ切る前に取る）';
+const LEDGER_MAX = 4;
 export function furnaceLedgerLines(jobs: unknown): string[] | null {
   if (!Array.isArray(jobs) || !jobs.length) return null;
-  const lines: string[] = [];
+  const rows: Array<{ ms: number; line: string }> = [];
   for (const item of jobs) {
     const job = rec(item), at = rec(job?.position), ms = num(job?.remainingEstimateMs);
     if (!job || !at || ms === null || typeof job.status !== 'string') return null;
@@ -39,12 +42,13 @@ export function furnaceLedgerLines(jobs: unknown): string[] | null {
     const from = typeof job.from === 'string' && job.from ? `（${job.from.slice(0, 20)}）` : '';
     const what = `${String(job.input ?? '')}×${String(job.count ?? '')}${typeof job.expects === 'string' && job.expects ? ` → ${job.expects.slice(0, 30)}` : ''}`;
     const lack = num(job.unfueledInputCount) ? `。燃料が足りず ${job.unfueledInputCount} 個は焼けない（石炭か板を足す）` : '';
-    if (job.status === 'different_dimension') { lines.push(`かまど (${cell}): ${what}。別のディメンションにある${lack}`); continue; }
-    lines.push(ms > 0
-      ? `かまど (${cell})${from}: ${what}、焼き上がりまであと約 ${Math.round(ms / 1000)} 秒。待たずに別の作業の act を足す。時間が来たら furnace ${cell} take の act を足す（遠くても体が歩く）${lack}`
-      : `かまど (${cell})${from}: ${what}、焼き上がりの見込みの時間は来た。furnace ${cell} take の act を足す（遠くても体が歩く）${lack}`);
+    if (job.status === 'different_dimension') { rows.push({ ms: Number.MAX_SAFE_INTEGER, line: `かまど (${cell}): ${what}。別のディメンションにある${lack}` }); continue; }
+    rows.push({ ms, line: ms > 0 ? `かまど (${cell})${from}: ${what}、あと約 ${Math.round(ms / 1000)} 秒${lack}` : `かまど (${cell})${from}: ${what}、時間は来た（take）${lack}` });
   }
-  return lines.slice(0, 4);
+  rows.sort((x, y) => x.ms - y.ms);
+  const shown = rows.slice(0, LEDGER_MAX).map(row => row.line);
+  const head = rows.some(row => row.ms < Number.MAX_SAFE_INTEGER) ? [LEDGER_HEAD] : [];
+  return [...head, ...shown, ...(rows.length > LEDGER_MAX ? [`ほか ${rows.length - LEDGER_MAX} 基`] : [])];
 }
 
 /** The note for an act whose waits add up to a long stand while a furnace works, or null. */

@@ -18,7 +18,7 @@ export const SAME_IN_QUEUE_WORDS = 'と同じ手が列にある';
 /** R3-1 (6): a wait-only act behind an item that runs is not put in the queue (run59: 172 s of them, each run in full after the item before it ended). */
 export const waitBehindWords = (running: string) =>
   `送らなかった: 走っている ${running} の後ろに wait だけの項目は積めない（積んだ wait は ${running} が終わってから全長走る）。${running} の結果は終わった時に知らせる。`
-  + '有用な手（拾う・作る・食べる・隣の採掘・安全な前提作業）を同じ項目に入れるか、列が空になってから wait を送る（夜・回復・焼き上がりの待ちは空の列で書ける）';
+  + '有用な手（拾う・作る・食べる・隣の採掘・安全な前提作業）を同じ項目に入れるか、列が空になってから wait を送る（夜・回復の待ちは空の列で書ける）';
 /**
  * run 4 (11/10): a wait-only act behind a running item is not put in the queue (a queued wait runs in full after the item before it), and it
  * is no refusal either: a refusal cost a whole new decision round (5 times in run 4) and the model only wanted "tell me when it ends". It is
