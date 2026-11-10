@@ -16,17 +16,21 @@ const LEGACY_SPECIAL_8C = [
 // Restore the exact parent pre text only when constructing the historical contract.
 const LEGACY_FURNACE_PRE = 'furnace:x,y,z（体が入れた焼きが終わった）';
 const CURRENT_FURNACE_PRE = 'furnace:x,y,z（焼きの見込み時間に達した。現物はtakeで確認）';
+// The hunt hand (2026-11-11) added a page (last, so the earlier fragments keep their ids), a pointer on the attack line and a clause in the json fields line:
+// the historical contract is made without them.
+const CURRENT_ATTACK_POINTER = '。食料の動物を何体も狩るのは hunt';
+const CURRENT_HUNT_FIELDS = ' / hunt: target（種類。id は不可）・count・range・seconds';
 
 const pin = { catalogHash: 'a'.repeat(64) };
 const book = () => createMinecraftContractBook(pin);
 
 describe('the canonical Minecraft input-contract book', () => {
-  it('pins the revised shoot manual and unchanged schema while deriving all nine pages', () => {
+  it('pins the revised shoot manual and unchanged schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('ddb25f9de34179e4d653f7fdaf4686e5765fc5483bd19d35e372e4a3b69264ca');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('49e811b1c3366d7079a16e7832551ba2fabcd55c482eceb77f6cbb01c47cf916');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('acdac6edc8341fbd5689593064fbaa2a8387c869af06a1e9fcb2fbc1179cedc5');
     const current = book();
-    expect(current.pages).toHaveLength(9);
+    expect(current.pages).toHaveLength(10);
     expect(current.reconstruct()).toBe(SHORT_ACT_DESCRIPTION);
     expect(current.manualHash).toBe(sha(SHORT_ACT_DESCRIPTION));
     for (const fragment of SHORT_ACT_MANUAL_FRAGMENTS) {
@@ -38,8 +42,8 @@ describe('the canonical Minecraft input-contract book', () => {
   it('retains untouched parent fragments and refuses its historical book after current manual revisions', () => {
     const legacyShoot = 'shoot 相手(#id か名前) か X,Y,Z [item=bow] [charge=秒] [n=本数]  弓で撃つ。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。';
     const fragments = SHORT_ACT_MANUAL_FRAGMENTS;
-    const historical = fragments.map(part => ({ ...part, text: part.id === 'special'
-      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE) }));
+    const historical = fragments.filter(part => part.id !== 'hunt').map(part => ({ ...part, text: part.id === 'special'
+      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '') }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))
       .toBe('24065a68017c1cf82467357e4846ffa96682dbb4bf56f8c6976c6c27d9c6abca');
     expect(fragments.find(part => part.id === 'shoot')!.text.split('\n')[0]).toBe(legacyShoot);
@@ -52,7 +56,7 @@ describe('the canonical Minecraft input-contract book', () => {
     expect(current.manualHash).not.toBe(parent.manualHash);
     expect(current.revision).not.toBe(parent.revision);
     for (const page of parent.pages) expect(current.read(page.name)).toBeNull();
-    for (const page of current.pages.filter(page => !page.name.startsWith('mc/act/shoot@') && !page.name.startsWith('mc/act/special@'))) {
+    for (const page of current.pages.filter(page => !page.name.startsWith('mc/act/shoot@') && !page.name.startsWith('mc/act/special@') && !page.name.startsWith('mc/act/hunt@'))) {
       expect(page.text).toBe(parent.pages.find(old => old.title === page.title)!.text);
     }
   });

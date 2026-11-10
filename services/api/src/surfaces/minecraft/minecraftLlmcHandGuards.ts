@@ -85,7 +85,7 @@ function walkEnd(hand: Rec, here: { x: number; y: number; z: number }): Here {
   if (!last || (typeof hand.range === 'number' && hand.range >= 1)) return null;
   return hand.rel === true ? { x: here.x + last.x, y: here.y + last.y, z: here.z + last.z } : last;
 }
-const MOVES_HER = new Set(['attack', 'pickup', 'shoot', 'drop', 'pillarUp']);
+const MOVES_HER = new Set(['attack', 'hunt', 'pickup', 'shoot', 'drop', 'pillarUp']);
 export function movedBy(hand: Rec, here: Here): Here {
   if (!here) return null;
   // A go ends at its one cell when that is exact (no range, no candidates); otherwise somewhere the body chose.

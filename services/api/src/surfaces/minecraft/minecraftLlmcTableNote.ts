@@ -12,7 +12,7 @@ import { recipeOf } from './minecraftLlmcRecipes.js';
 export const TABLE_REACH_METERS = 4.5;
 /** Made without a table (the 2×2 grid of the inventory). */
 const NO_TABLE = /^(?:planks|stick|crafting_table|torch|blaze_powder|ender_eye|[a-z_]+_planks|bamboo_planks)$/u;
-const MOVES = new Set(['go', 'walk', 'vertical', 'pillarUp', 'jump', 'portal', 'fight', 'attack', 'pickup', 'dig', 'mine']);
+const MOVES = new Set(['go', 'walk', 'vertical', 'pillarUp', 'jump', 'portal', 'fight', 'attack', 'hunt', 'pickup', 'dig', 'mine']);
 const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
 
 /** Whether a hand makes something that needs a table. */

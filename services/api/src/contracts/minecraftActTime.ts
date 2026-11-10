@@ -21,6 +21,7 @@ import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract
  *   the time of a step, from a first guess (stairs 1.6 s, shaft 1.0 s, pillar 0.9 s; a hypothesis, not a promise) or from the
  *   `msPerUnit` the body returned for that
  *   form (`ActTimeTuning`); the ceiling is its `seconds` (default 60) and 2 s, for the body stops the hand at `seconds`;
+ * - hunt (2026-11-11): the ceiling is its `seconds` (default 60) and 2 s; the expected time is 8 s a kill (`count`, 3 when not written) and 2 s.
  * - dig, place: by the cells; pillarUp, jump, shoot: by `n`; attack and wait: by `seconds`; craft: by `count`; the rest fixed.
  * - fill: its required `seconds` (5–60, including return), with 2 s for the receipt; the estimate stays within those seconds.
  * Task queue: an act that repeats its hands (`repeat`) takes that many times as long; the ceiling is still the body's one bound,
@@ -37,7 +38,7 @@ const walkMs = (hand: ActHand, metres: number) => 1_000 * metres / (hand.sprint 
 export const GO_DEFAULT_SECONDS = 60;
 const goMostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? GO_DEFAULT_SECONDS);
 /** The hands that take a range (run 39) and their default `seconds`. */
-const SECONDS_BY_KIND: Partial<Record<HandKind, number>> = { obsidian: 90, fight: 20, mine: 60, portal: 60, smelt: 30 };
+const SECONDS_BY_KIND: Partial<Record<HandKind, number>> = { obsidian: 90, fight: 20, mine: 60, portal: 60, smelt: 30, hunt: 60 };
 const mostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? SECONDS_BY_KIND[hand.do] ?? 30) + 2_000;
 const blocksOf = (hand: ActHand) => Math.max(1, hand.count ?? 1);
 /** S8: count defaults to the named sources, and an obsidian act may run for its seconds plus 20 s. */
@@ -99,7 +100,7 @@ const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   bed_burst: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
   fill: mostMs,
   walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), go: hand => goMostMs(hand) + 2_000,
-  obsidian: obsidianMostMs, fight: mostMs, mine: mostMs, portal: mostMs, smelt: mostMs, vertical: verticalMostMs,
+  obsidian: obsidianMostMs, fight: mostMs, mine: mostMs, hunt: mostMs, portal: mostMs, smelt: mostMs, vertical: verticalMostMs,
   make: hand => 3_000 + 1_000 * blocksOf(hand),
   dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
   pillarUp: hand => 1_200 * times(hand), attack: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
@@ -115,6 +116,7 @@ const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
   walk: (hand, metres) => 500 + walkMs(hand, metres), go: goTypicalMs,
   obsidian: hand => Math.min(obsidianMostMs(hand), 20_000 + 8_000 * obsidianBlocks(hand)), fight: hand => 500 * (hand.seconds ?? 20),
   mine: hand => Math.min(mostMs(hand), 1_500 * blocksOf(hand) + 1_000),
+  hunt: hand => Math.min(mostMs(hand), 8_000 * (hand.count ?? 3) + 2_000),
   make: hand => 1_000 + 500 * blocksOf(hand), portal: () => 25_000, smelt: hand => 6_000 + 2_000 * (hand.items?.length ?? 1),
   dig: hand => 900 * cells(hand), place: hand => 400 * cells(hand),
   pillarUp: hand => 600 * times(hand), attack: hand => Math.min(8_000, 1_000 * (hand.seconds ?? 6)), wait: hand => 1_000 * (hand.seconds ?? 1),

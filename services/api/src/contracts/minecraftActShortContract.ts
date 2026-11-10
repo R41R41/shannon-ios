@@ -151,7 +151,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   '  16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す（seconds 10〜60、既定 45）。夜か雷雨の時だけ。8m（上下 5）に敵がいると寝られない（壁越しでも）。'
     + 'ネザー・エンドでは爆発する。掘って場所は作らない。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
   'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
-  'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）',
+  'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）。食料の動物を何体も狩るのは hunt',
   manualPage('special-json', 'shield_rush・fill のJSON書式例', [
   'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',
   'json {"do":"fill",...}（上記の全必須欄を書く）'
@@ -188,7 +188,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
 "target・untilDead・seconds・hold（shield_rush は上の欄も） / eat: item"),
   ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +
-"at（1つ）・op・items"),
+"at（1つ）・op・items / hunt: target（種類。id は不可）・count・range・seconds"),
   '- drop: items・target か at / shoot: target か at・item・charge・n',
   manualPage('examples', 'walk・furnace・chest・drop・shoot のJSON例', [
   'json {"do":"walk","to":{"x":1,"y":64,"z":2},"range":1,"sprint":true,"note":"村へ"}',
@@ -245,6 +245,15 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   ("- 止まりの読み方: 「go 止まった 理由」は上の go の理由の語 / 「一歩ではない」は段差2以上か着いていない（walk。遠い・段差のある道は go に） / 「届かない」は5m内へ寄る / " +
 "「掘れない」は道具か岩盤（X）/ ")
     + '「見えない：間に (x,y,z)」はその間を先に掘る / 「そのものには立てない」は続く「立てる隣」へ / 「時間切れ」は秒の上限か道探しの持ち時間（go の search_timeout は道が無いとは限らない）。',
+  manualPage('hunt', 'hunt（食料の動物を種類で指定してまとめて狩り・拾う）', [
+  'hunt 種類[,種類 ...] [count=N] [range=N] [seconds=N]',
+  '  食料の動物を、居なくなるか count 体になるまで狩って落とし物を拾う（attack と pickup を 1 体ずつ並べない。id は要らない）。'
+    + '種類は名前（cow・pig・sheep・chicken・rabbit・mooshroom。カンマで複数: hunt pig,cow）。'
+    + '体は、手を始めた所から range m（4〜48、既定 32）の成体を近い順に倒し、倒した所の落とし物をその場で拾って次へ行く。count を省くと居なくなるまで。',
+  '  子は倒さない（何も落とさず、群れが減る）。届かない個体は飛ばして次へ行き、3 体続けて届かないと止まる。掘らず置かない。seconds は 5〜120（既定 60）。'
+    + '敵・村人・飼える動物・乗り物は断られる（戦うなら fight か attack）。'
+    + '理由: no_target（範囲に居ない。見えている動物の名前と距離が返るので、そちらへ短い go で寄って出し直す）・unreachable・full・limit_time。結果に倒した数・残り・拾った物が返る。'
+  ]),
 ];
 export const SHORT_ACT_MANUAL_FRAGMENTS: readonly ShortActManualFragment[] = Object.freeze(SHORT_LINES.map((part, index) =>
   Object.freeze(typeof part === 'string' ? { id: `inline-${index}`, text: part, inline: true }
