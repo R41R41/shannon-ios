@@ -32,7 +32,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   shoot: { needs: [['target', 'at']], may: ['item', 'charge', 'n'] },
   eat: { needs: [], may: ['item'] },
   drop: { needs: [['items']], may: ['target', 'at'] },
-  pickup: { needs: [], may: ['target', 'range'] },
+  pickup: { needs: [], may: ['target', 'range', 'canDig', 'maxDig'] },
   wait: { needs: [['seconds']], may: [] },
   sleep: { needs: [], may: ['item', 'seconds'] },
   obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace', 'maxDig'] },

@@ -131,7 +131,7 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   sleep: hand => [...(hand.item ? [hand.item] : []), ...given('seconds', hand.seconds)],
   equip: hand => hand.item ? [hand.item, ...(hand.slot ? [hand.slot] : [])] : null,
   craft: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
-  pickup: hand => [...given('range', hand.range), ...given('target', hand.target)],
+  pickup: hand => [...given('range', hand.range), ...given('target', hand.target), ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig)],
   // `drop 物 [数] [target=#id か x,y,z]`: one kind, one place at most (a second kind or both a target and a place are a json line).
   drop: hand => hand.items?.length === 1 && (hand.at?.length ?? 0) <= 1 && !(hand.at?.length && hand.target)
     ? [hand.items[0]!.item, ...(hand.items[0]!.count !== undefined ? [String(hand.items[0]!.count)] : []), ...given('target', hand.target),
@@ -294,7 +294,7 @@ const READERS: Record<string, Reader> = {
     ? done({ ...hand, item: words[0], ...(words[1] ? { slot: slotWordOf(words[1]) } : {}) }) : bad('equip', '物の名前が要る'),
   craft: ({ words, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('craft', '物の名前が要る'),
-  pickup: ({ hand }) => done(hand),
+  pickup: ({ hand }) => done(blocksOf(hand)),
   drop: ({ words, cells, hand }) => words[0] && cells.length <= 1
     ? done({ ...hand, items: [{ item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }], ...(cells.length ? { at: [cells[0]] } : {}) })
     : bad('drop', '物の名前が要る（座標は 1 つまで）'),

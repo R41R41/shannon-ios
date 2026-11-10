@@ -210,7 +210,7 @@ describe('the completion and the knowledge (r5)', () => {
 
   it('the knowledge: a completion only on the goal seen, never cut by time; stairs one step at a time; the code\'s own plan changes', () => {
     for (const words of ['ドラゴンの死を見た時だけ', '時間や遠さで区切らない', '計画を見直して続ける', '階段は 1 段ずつ', '足の前の 2 マス（頭と足）を掘ってから 1 歩下りる',
-      '間のブロックを先に掘る', 'have:', 'caution']) expect(R5_KNOWLEDGE).toContain(words);
+      '間のブロックを先に掘る', '体が自分で掘って近づいて拾う', 'have:', 'caution']) expect(R5_KNOWLEDGE).toContain(words);
     // r6: the mode's appendix is r6's now (minecraftLlmcR6.test.ts), which begins with r5's.
     expect(LLMC_SYSTEM_APPENDIX_R5).toBe(`${LLMC_SYSTEM_APPENDIX_R4}\n\n${R5_KNOWLEDGE}`);
     expect(LLMC_SYSTEM_APPENDIX_R6.startsWith(LLMC_SYSTEM_APPENDIX_R5)).toBe(true);
