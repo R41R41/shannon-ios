@@ -51,4 +51,15 @@ describe('the deaths of run62', () => {
     expect(deathReturnHold({ hands: [{ do: 'go', to: { x: 0, y: 64, z: 0 } }] }, frame([]), 'y4')).toBeNull();
     expect(deathReturnHold(back, frame([], { lastDeath: DEATH.replace('2分前', '6分前') }), 'y5')).toBeNull();
   });
+  // film 11/10 (15:41–15:45): five deaths in four minutes; the way back is for the drops, and only where they can be had.
+  it('lets the return go for the drops by day on the surface after a zombie, and holds it at night, in a cave, or after a creeper', () => {
+    const over = (lastDeath: string, timeOfDay: number) => frame([], { dimension: 'overworld', lastDeath, timeOfDay, deaths: [{ dimension: 'overworld' }] });
+    const back = { hands: [{ do: 'go', to: { x: 85, y: 66, z: 38 } }] };
+    expect(deathReturnHold(back, over('1分前 overworld (89,67,40) 「Zombie に倒された」', 6000), 'd1')).toBeNull();
+    expect(deathReturnHold(back, over('1分前 overworld (89,67,40) 「Zombie に倒された」', 18000), 'd2')).toMatchObject({ hand: 1, kind: 'go' });
+    const cave = { hands: [{ do: 'go', to: { x: 85, y: -30, z: 38 } }] };
+    expect(deathReturnHold(cave, over('1分前 overworld (89,-33,40) 「Zombie に倒された」', 6000), 'd3')).toMatchObject({ hand: 1 });
+    expect(deathReturnHold(back, over('1分前 overworld (89,67,40) 「Creeper に倒された」', 6000), 'd4')).toMatchObject({ hand: 1 });
+    expect(deathReturnHold(back, over('1分前 overworld (89,67,40) 「Cave Spider に倒された」', 6000), 'd5')).toMatchObject({ hand: 1 });
+  });
 });

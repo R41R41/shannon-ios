@@ -1,4 +1,5 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { doneFacts } from './minecraftConditions.js';
 import { feetOf, lowestReach, readinessOf } from './minecraftLlmcReadiness.js';
 
 /**
@@ -10,10 +11,20 @@ import { feetOf, lowestReach, readinessOf } from './minecraftLlmcReadiness.js';
  *   of the place of the death, a fight, an attack or a shot on the kind the death names (「Wither Skeleton」 is `wither_skeleton`, an `#id` is
  *   read from the live lines), and an act that accepts it, are held, `RETURN_HOLDS` times a death at most (the drops last 5 minutes).
  * Facts with the hand held; they move no node.
+ *
+ * film 11/10 (15:41–15:45, five deaths in four minutes from four minutes after the iron armour): the way back is for the drops, and only when
+ * they can be had: in the overworld by day, at a place on the surface (`SURFACE_Y` and up), from a killer the daylight burns or calms
+ * (`DAY_SAFE`), the return goes (the drops last five minutes, and the iron armour is worth the walk). Anywhere else (the night, a cave, the
+ * Nether, a creeper's or a cave spider's death) it is held until she is armed again, `RETURN_HOLDS` times a death.
  */
 export const RETURN_MINUTES = 5;
 export const RETURN_BLOCKS = 32;
-export const RETURN_HOLDS = 2;
+export const RETURN_HOLDS = 4;
+/** At or over this height a place is taken for the surface (the sea is at 63; a cave below is dark at any hour). */
+export const SURFACE_Y = 56;
+/** Killers the daylight burns (the undead) or calms (a spider): by day on the surface the place of their kill can be walked back to. */
+const DAY_SAFE = /zombie|skeleton|drowned|phantom|spider|ゾンビ|スケルトン|ドラウンド|ファントム|クモ|蜘蛛/iu;
+const NOT_DAY_SAFE = /cave\s*spider|husk|stray|bogged|creeper|witch|enderman|洞窟グモ|ハスク|ストレイ|クリーパー|ウィッチ|エンダーマン/iu;
 /** Words that go to die whatever is carried. */
 const SUICIDE = /わざと(?:死|倒れ)|自殺|(?:倒れて|死んで|落ちて|燃えて)(?:地上|ベッド|最初の場所|リスポーン|再開|戻)|リスポーン(?:する|で戻|して戻)/u;
 /**
@@ -100,6 +111,13 @@ function freshMobDeath(world: Record<string, unknown>, counts: ReadonlyMap<strin
   return death && death.minutes < RETURN_MINUTES && MOB_DEATH.test(death.cause) && !armedAgain(world, counts) ? death : null;
 }
 
+/** The drops of the death can be fetched: the overworld by day, a place on the surface, a killer the daylight burns or calms. */
+function retrievable(frame: BodyObservation | null, death: Death): boolean {
+  const now = doneFacts(frame);
+  if (!now || now.dimension !== 'overworld' || now.night !== false) return false;
+  return death.at.y >= SURFACE_Y && DAY_SAFE.test(death.cause) && !NOT_DAY_SAFE.test(death.cause);
+}
+
 /**
  * The hold of a return to a fresh mob death's place or killer while not armed again, or null; `commit` counts it when it stops the act. A death
  * is told by the count of deaths the body keeps and the 32 m around it (run62: the same place twice, so a key of the place alone ran out).
@@ -110,12 +128,14 @@ export function deathReturnHold(input: unknown, frame: BodyObservation | null, t
   const facts = readinessOf(frame), feet = facts ? feetOf(facts.world) : null;
   const death = facts ? freshMobDeath(facts.world, facts.counts) : null;
   if (!Array.isArray(hands) || !facts || !feet || !death) return null;
+  if (retrievable(frame, death)) return null;
   const epoch = Array.isArray(facts.world.deaths) ? facts.world.deaths.length : 0;
   const key = `${taskId}:${epoch}:${Math.round(death.at.x / 32)},${Math.round(death.at.z / 32)}`, count = held.get(key) ?? 0;
   if (count >= RETURN_HOLDS) return null;
   const at = returningHand(act, hands, death, facts.world, feet.y);
   if (at < 0) return null;
-  const line = `最後の死から ${death.minutes} 分（${death.cause.slice(0, 40)}）。胸当てと鉄の剣がそろうまで、死んだ所（${RETURN_BLOCKS}m 内）や同じ相手へ戻る手は送らない`
-    + `（run62: 裸で同じ通路へ 4 回戻り、同じ相手に 5 回死んだ）。先に安全な所で剣・盾・防具を作り直す（${count + 1}/${RETURN_HOLDS} 回目）`;
+  const line = `最後の死から ${death.minutes} 分（${death.cause.slice(0, 40)}）。夜・洞窟・ネザーでは、胸当てと鉄の剣がそろうまで死んだ所（${RETURN_BLOCKS}m 内）や同じ相手へ戻る手は送らない`
+    + `（11/10 の撮影: 鉄の防具の 4 分後から 4 分で 5 回死んだ）。落とし物を拾いに戻れるのは、昼の地上でゾンビ・スケルトン・クモに倒された時だけ。`
+    + `今は明るく敵のいない所で、木・石から剣・盾・防具を作り直す（${count + 1}/${RETURN_HOLDS} 回目）`;
   return { hand: at + 1, kind: String(objectOf(hands[at])?.do ?? 'go'), line, commit: () => { held.set(key, count + 1); } };
 }
