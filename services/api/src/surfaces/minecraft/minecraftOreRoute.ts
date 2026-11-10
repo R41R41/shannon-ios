@@ -73,9 +73,9 @@ export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'dia
   if (night && bare && deep(y)) {
     // G23 (11/10 review, no run): `sealed` is the night line's hole just dug at the surface (feet 2 under it, the cap on). A `go` to a place at the
     // surface's height is a route search, not a tunnel: opening the cap and walking 30 over the night's surface costs a few digs against 60, and the
-    // night-wait hold sends this act. From the sealed hole the shaft goes on down under the cap, 9 from the surface (the table hold stops 10); a
+    // night-wait hold sends this act. From the sealed hole the shaft goes on down under the cap, 9 from this decision's feet (the table hold stops 10; the hand's y is counted from them, on a hill too); a
     // stair's first step would open the surface block beside the cap. Underground the row is as it was.
-    if (sealed) return `${SEALED_SHAFT_WORD}、地表から ${DESCENT - 1} 段まで下りる「vertical down shaft y=${feet.y - (DESCENT - 1)} dig=${SHAFT_DIG} liquid=stop」`
+    if (sealed) return `${SEALED_SHAFT_WORD}、今の足から ${DESCENT - 1} 段まで下りる「vertical down shaft y=${feet.y - (DESCENT - 1)} dig=${SHAFT_DIG} liquid=stop」`
       + `（作業台・板 4・原木が無いので 10 段以上は下りない。掘った壁に見えた鉱石は mine で掘る。原木は朝に取り、それから y=${y} へ下りる）`;
     return `今の高さで横へ 1 列掘り進む「go ${feet.x},${feet.y},${feet.z - 30} dig=${WAY_DIG} maxDig=60」（作業台・板 4・原木が無いので 10 段以上は下りない。`
       + `掘った壁に見えた鉱石は mine で掘る。鉄は山の中の高い所にも出る。原木は朝に取り、それから y=${y} へ下りる）`;
