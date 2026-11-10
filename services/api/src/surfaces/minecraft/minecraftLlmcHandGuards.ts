@@ -32,13 +32,25 @@ export function isUrgentLive(live: Rec): boolean {
   return (typeof mode === 'string' && mode.includes(URGENT_MODE)) || (typeof answer === 'string' && answer.includes(`手は ${URGENT_HANDS} つまで`));
 }
 
-/** The fourth hand of an urgent decision's act, when it has more than three. */
-export function urgentLimitStop(input: unknown, urgent: boolean): HandStop | null {
+/**
+ * The fourth hand of an urgent decision's act, when it has more than three. `from`: the act's own first hand (0-based) when the hands before it are
+ * the queue's items ahead (`minecraftLlmcQueueSend.ts`); they are not this act's and do not count. An `eat` neither counts nor is held.
+ * Task 85663847 (11/10 16:24, y=-27 among three zombies): a queued fight of 3 hands was counted with each new urgent act, so 「eat bread」 alone
+ * at health 3 was held as 「4 手目」 three times, and she died with 12 bread and 4 porkchops in the pack.
+ */
+export function urgentLimitStop(input: unknown, urgent: boolean, from = 0): HandStop | null {
   const hands = handsOf(input);
-  if (!urgent || hands.length <= URGENT_HANDS) return null;
-  const kind = String(hands[URGENT_HANDS]!.do ?? '?');
-  return { hand: URGENT_HANDS + 1, kind, code: 'urgent_limit',
-    line: `急ぎの判断は ${URGENT_HANDS} 手まで（system の「急ぎの時」）。${URGENT_HANDS + 1} 手目（${kind}）から先は送っていない。続きは次の判断で出せる` };
+  if (!urgent) return null;
+  let counted = 0;
+  for (let index = Math.max(0, from); index < hands.length; index += 1) {
+    const kind = String(hands[index]!.do ?? '?');
+    if (kind === 'eat') continue;
+    counted += 1;
+    if (counted <= URGENT_HANDS) continue;
+    return { hand: index + 1, kind, code: 'urgent_limit',
+      line: `急ぎの判断は ${URGENT_HANDS} 手まで（system の「急ぎの時」。eat は数えない）。${counted} 手目（${kind}）から先は送っていない。続きは次の判断で出せる` };
+  }
+  return null;
 }
 
 /** The cells the body's recent stops say stopped for 「見られる」 within `SEEN_REOPEN_SECONDS`: `x,y,z` → seconds ago. */

@@ -47,7 +47,7 @@ const handLine = (stop: HandStop): string => `手 ${stop.hand} ${stop.kind}: ${s
  * The guards' stops, the one with the smallest hand number (the same hand: the act-preflight's, then the rule guard's, the seen-again dig, the
  * urgent limit). `urgent`: the decision was an urgent one (its live state's answer line says 「手は 3 つまで」). Null when none holds.
  */
-export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, notes?: string[]): Held | null {
+export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, notes?: string[], ownFrom = 0): Held | null {
   const wait = furnaceWaitNote(input, frame), table = tableNote(input, frame);
   if (wait) notes?.push(wait);
   if (table) notes?.push(table);
@@ -66,7 +66,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   for (const [code, hold] of [['eye_kept', eyeThrowHold(input, frame, taskId)], ['no_suicide', suicideHold(input, frame)]] as const) {
     if (hold) found.push({ hand: hold.hand, code, kind: hold.kind, line: `手 ${hold.hand} ${hold.kind}: ${hold.line}。` });
   }
-  for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent),
+  for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent, ownFrom),
     furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
   }

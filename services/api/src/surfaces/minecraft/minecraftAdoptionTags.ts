@@ -90,3 +90,28 @@ export function earlyGameLine(task: string, decision: number, elapsedMillisecond
   return `Shannon Minecraft early-game task=${task} d=${decision} t=${seconds(elapsedMilliseconds)} stage=${stage} tags=${csv(tags)} new=${csv(fresh)} `
     + `food=${Math.max(0, Math.min(food, 9_999))} bed=${bed}${iron ? ` foodBeforeIron=${iron.food} bedBeforeIron=${iron.bed}` : ''}`;
 }
+
+/** The legacy tool each `mc_act` verb counts as for these tags (task 85663847, 11/10: the v2 route sends only `mc_act`, so every line said tags=-). */
+const ACT_VERB_TOOL: Readonly<Record<string, string>> = Object.freeze({
+  eat: 'mc.eat-food', craft: 'mc.craft-one', make: 'mc.craft-one', mine: 'mc.mine-block', dig: 'mc.dig-block', sleep: 'mc.sleep-in-bed',
+  go: 'mc.move-to', walk: 'mc.move-to', furnace: 'mc.start-smelting', smelt: 'mc.start-smelting', fight: 'mc.attack-entity', attack: 'mc.attack-entity',
+});
+/**
+ * The hands of an `mc_act` call as the legacy calls the tags read (`{name, input}` each): a short hand 「eat bread」 is its verb and its words; an
+ * expanded hand `{do, ...}` is its `do` and its other fields. Hands of other verbs are left out. Any other call is itself.
+ */
+export function actCalls(name: string, input: unknown): Array<{ name: string; input: unknown }> {
+  if (name !== 'mc_act') return [{ name, input }];
+  const hands = input && typeof input === 'object' ? (input as { hands?: unknown }).hands : null;
+  return (Array.isArray(hands) ? hands.slice(0, 32) : []).flatMap(hand => {
+    if (typeof hand === 'string') {
+      const [verb = '', ...words] = hand.trim().split(/\s+/u);
+      const tool = ACT_VERB_TOOL[verb];
+      return tool ? [{ name: tool, input: { words: words.slice(0, 16) } }] : [];
+    }
+    if (!hand || typeof hand !== 'object') return [];
+    const { do: verb, ...rest } = hand as Record<string, unknown>;
+    const tool = typeof verb === 'string' ? ACT_VERB_TOOL[verb] : undefined;
+    return tool ? [{ name: tool, input: rest }] : [];
+  });
+}

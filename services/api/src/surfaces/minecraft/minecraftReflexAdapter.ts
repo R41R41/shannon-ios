@@ -361,6 +361,10 @@ let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitM
     context: () => {
       if (parts.llmc) {
         decisionFrame = bound() ? control.observe(bound()!) : null;
+        // Task 85663847 (11/10): the early-game line said stage=1 food=0 bed=false all run (the bed came at 16:03): this branch returned before the
+        // measurement's context, which reads the stage, the cooked food and the bed from the frame. Measuring only; nothing reaches the decision.
+        const measuredFrame = decisionFrame;
+        measured(() => metrics.context(measuredFrame, null, {}));
         return llmcBodyContext({ observation: decisionFrame, step, recentResults, now: now(), milestones, idleWaitMs,
           revision: revisions.revision, keep: value => { latest = value; } });
       }

@@ -22,7 +22,8 @@ export function heldBeforeSendQueued(urgent: boolean, input: ActInput, frame: Bo
   const before = ahead.flatMap(item => [...item.hands]);
   const combined: ActInput = { ...input, hands: [...before, ...input.hands] };
   const notes: string[] = [];
-  const found = heldOfFrame(combined, frame, taskId, urgent, notes);
+  // The urgent limit is the new item's own (task 85663847: the ahead fight's 3 hands held 「eat bread」 at health 3).
+  const found = heldOfFrame(combined, frame, taskId, urgent, notes, before.length);
   if (!found || found.hand > before.length) noteHeldAct(taskId, found);
   const note = notes.length ? { note: notes.join('\n') } : null;
   // A stop in the hands that went before is theirs (they are sent); the new item is held only by its own hands.
