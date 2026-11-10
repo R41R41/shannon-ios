@@ -287,7 +287,7 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
   const standing = end?.crystals.remaining ?? null;
   if (standing !== null && standing >= 3) return `ベッドの手: 今は使わない（結晶が ${standing} 本残る間は、削った分が周回中に +2 体力/秒で戻る。実走で 173→200 を約 13 秒。ベッドは結晶を残り 2 以下にしてから）`;
   const bed = bedItem ?? 'red_bed', foot = place(offer.foot);
-  const build = offer.build.length ? ` → place block=obsidian at=[${offer.build.map(cell => place(cell)).join(',')}]（${offer.build.some(cell => cell.role === 'screen') ? '自分を守る壁。黒曜石が無ければ end_stone で置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く' : 'ベッドの下の支え。黒曜石が無ければ end_stone・cobblestone でもよい'}）` : '';
+  const build = offer.build.length ? ` → place block=obsidian at=[${offer.build.map(cell => place(cell)).join(',')}]（${offer.build.some(cell => cell.role === 'screen') ? '自分を守る壁。黒曜石が無ければ end_stone・cobblestone など手持ちの固いブロックで置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く' : 'ベッドの下の支え。黒曜石が無ければ end_stone・cobblestone でもよい'}）` : '';
   const estimate = [offer.dragonExpected === null ? '' : `竜の頭 −${round(offer.dragonExpected)}`, offer.selfExpected === null ? '' : `自分 −${tenth(offer.selfExpected)}`].filter(Boolean).join('・');
   const walk = offer.walkMeters === null ? '' : `、歩き ${round(offer.walkMeters)}m`;
   // The server names no one for a bed's blast, so a kill by the bed alone gives no end/kill_dragon, which the full run's gate and section T
