@@ -108,7 +108,12 @@ describe('end1109o10 (opening lane): the night with no bed says the way to the o
   it('with no iron on the map: the seal, then the stair to y=16 and the row, as hands (o10 payload 112 had only 「scan の行」)', () => {
     const line = nightChoiceLine(night(), pack({ stone_pickaxe: 1 }), 'overworld')!;
     expect(line).toContain('"place dirt -22,55,2"');
-    expect(line).toContain('地下で鉄を掘り進む（stone_pickaxe）: 次の 1 手 mc_act ['); expect(line).toContain('"go -22,55,-28 '); expect(line).not.toContain('先に原木');
+    expect(line).toContain('地下で鉄を掘り進む（stone_pickaxe）: 次の 1 手 mc_act ['); expect(line).not.toContain('先に原木');
+    // G23: from the sealed hole no `go` at the surface's height (the route search opens the cap and walks the night's surface): the shaft goes on down, 9 from the surface.
+    expect(JSON.parse(/mc_act (\[[^\]]+\])/u.exec(line)![1]!)).toEqual([expect.stringContaining('vertical down shaft y=53 '), 'place dirt -22,55,2',
+      'vertical down shaft y=46 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop']);
+    expect(line).toContain('3 手目は塞いだまま真下へ（作業台・板 4・原木が無いと 10 段以上の下りは止められるので、地表から 9 段まで）');
+    expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1 }), 'overworld', true)).toContain('mc_act ["go -22,55,-28 ');
     expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')).toContain('"vertical down stairs north y=16 dig=');
     expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')).toContain('"go -22,16,-67 dig=');
     expect(line).not.toContain('scan の鉄鉱石の行');

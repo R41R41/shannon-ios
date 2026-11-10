@@ -23,6 +23,8 @@ const TABLE_PLANKS = 4;
 const DESCENT = 10;
 /** The rock a `go` may dig on its way (the go guard holds ores, which are the `mine`/`dig` hands; o11 had eight go hands held for the ores in its list). */
 export const WAY_DIG = 'stone,andesite,diorite,granite,tuff,deepslate,cobbled_deepslate,dirt,gravel';
+/** How the sealed night's shaft with no wood begins (`oreRouteHands` with `sealed`; the night line says its reason by this). */
+export const SEALED_SHAFT_WORD = '塞いだまま真下へ';
 const IRON_ROW = /鉄鉱石\[(?:deepslate_)?iron_ore\] \((-?\d+),(-?\d+),(-?\d+)\)/u;
 export const IRON_ORE_Y = 16;
 export const DIAMOND_ORE_Y = -58;
@@ -49,7 +51,7 @@ export function nearestIronMark(world: Record<string, unknown>): Cell | null {
  * The hands from the feet to the ore: `iron` goes to the nearest iron on the map when there is one; otherwise (and for `diamond`) the stair
  * down to the ore's height when she is above it, then one row of 30 dug sideways. Null without a position.
  */
-export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'diamond', counts?: ItemCounts, night = false): string | null {
+export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'diamond', counts?: ItemCounts, night = false, sealed = false): string | null {
   const feet = cellOf(world);
   if (!feet) return null;
   const mark = ore === 'iron' ? nearestIronMark(world) : null;
@@ -69,6 +71,12 @@ export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'dia
   // end1109o13: by night the wood is surface work, and 「先に原木」 was her reason to wait in the enclosure (two nights). By night with no wood the
   // row is dug at the height she stands (no descent the table hold stops); iron comes high in a mountain too.
   if (night && bare && deep(y)) {
+    // G23 (11/10 review, no run): `sealed` is the night line's hole just dug at the surface (feet 2 under it, the cap on). A `go` to a place at the
+    // surface's height is a route search, not a tunnel: opening the cap and walking 30 over the night's surface costs a few digs against 60, and the
+    // night-wait hold sends this act. From the sealed hole the shaft goes on down under the cap, 9 from the surface (the table hold stops 10); a
+    // stair's first step would open the surface block beside the cap. Underground the row is as it was.
+    if (sealed) return `${SEALED_SHAFT_WORD}、地表から ${DESCENT - 1} 段まで下りる「vertical down shaft y=${feet.y - (DESCENT - 1)} dig=${SHAFT_DIG} liquid=stop」`
+      + `（作業台・板 4・原木が無いので 10 段以上は下りない。掘った壁に見えた鉱石は mine で掘る。原木は朝に取り、それから y=${y} へ下りる）`;
     return `今の高さで横へ 1 列掘り進む「go ${feet.x},${feet.y},${feet.z - 30} dig=${WAY_DIG} maxDig=60」（作業台・板 4・原木が無いので 10 段以上は下りない。`
       + `掘った壁に見えた鉱石は mine で掘る。鉄は山の中の高い所にも出る。原木は朝に取り、それから y=${y} へ下りる）`;
   }

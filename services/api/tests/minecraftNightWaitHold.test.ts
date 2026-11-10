@@ -3,6 +3,10 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { forgetNightWaitHolds, NIGHT_WAIT_HOLDS, NIGHT_WAIT_WINDOW_MS, nightWaitHold } from '../src/surfaces/minecraft/minecraftLlmcNightWaitHold.js';
 import { forgetSleepHolds } from '../src/surfaces/minecraft/minecraftLlmcSleepHold.js';
+import { forgetTableHolds, tableDescentHold } from '../src/surfaces/minecraft/minecraftLlmcTableHold.js';
+import { expandShortAct } from '../src/contracts/minecraftActShortContract.js';
+import { llmcPrepare } from '../src/surfaces/minecraft/minecraftLlmc.js';
+import { MC_ACT_TOOL } from '../src/contracts/minecraftActTypes.js';
 
 /**
  * The night's wait while the way down is open (the coordinator, 11/10 6:55; end1110r1 night 2: a hole and `wait 30` ten times). With no bed, a pickaxe
@@ -16,7 +20,7 @@ const frame = (items: ReadonlyArray<readonly [string, number]>, world: Record<st
 const KIT: Array<[string, number]> = [['stone_pickaxe', 1], ['crafting_table', 1], ['oak_planks', 8], ['stick', 4]];
 const sealWait = { hands: [{ do: 'vertical', dir: 'down', toY: 60 }, { do: 'place', block: 'dirt', at: { x: -22, y: 62, z: 18 } }, { do: 'wait', seconds: 30 }] };
 
-beforeEach(() => { forgetNightWaitHolds(); forgetSleepHolds(); });
+beforeEach(() => { forgetNightWaitHolds(); forgetSleepHolds(); forgetTableHolds(); });
 
 describe('the night\'s wait with the way down open', () => {
   it('sends the seal and holds the wait, with the night line\'s act', () => {
@@ -24,6 +28,18 @@ describe('the night\'s wait with the way down open', () => {
     expect(held).toMatchObject({ hand: 3, kind: 'wait' });
     for (const word of ['穴で待つ wait は送らない', '1/3 回目', '次の 1 手 mc_act ["vertical down shaft y=60', 'vertical down stairs north y=16']) expect(held!.line, word).toContain(word);
     expect(heldOfFrame(sealWait, frame(KIT), 't1')).toMatchObject({ hand: 3, code: 'night_dig', kind: 'wait' });
+  });
+  it('G23: with no table, planks or log the held wait is given the sealed shaft 9 down, an act the checks and the table hold take', () => {
+    const bare = frame([['stone_pickaxe', 1]]);
+    const held = nightWaitHold(sealWait, bare, 'g23')!;
+    const hands = JSON.parse(/mc_act (\[[^\]]*\])/u.exec(held.line)![1]!) as string[];
+    expect(hands).toHaveLength(3);
+    expect(hands[2]).toMatch(/^vertical down shaft y=53 dig=/u);
+    expect(hands.some(hand => hand.startsWith('go '))).toBe(false);
+    const expanded = expandShortAct({ hands, why: 'test' });
+    expect(expanded.errors).toEqual([]);
+    expect(llmcPrepare(MC_ACT_TOOL, expanded.input).problem).toBeNull();
+    expect(tableDescentHold(expanded.input, bare, 'g23')).toBeNull();
   });
   it('holds with a wooden pickaxe too (the stone pickaxe made in the shaft), and the wait alone', () => {
     const wooden = nightWaitHold({ hands: [{ do: 'wait', seconds: 30 }] }, frame([['wooden_pickaxe', 1], ['crafting_table', 1], ['oak_planks', 8], ['stick', 5]]), 'w');

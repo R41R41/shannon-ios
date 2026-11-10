@@ -1,6 +1,6 @@
 import { carried } from './minecraftConditions.js';
 import { thunderstorm } from './minecraftLlmcStateWords.js';
-import { oreRouteHands, stonePickHands, STONE_SHAFT } from './minecraftOreRoute.js';
+import { oreRouteHands, SEALED_SHAFT_WORD, stonePickHands, STONE_SHAFT } from './minecraftOreRoute.js';
 export { thunderstorm } from './minecraftLlmcStateWords.js';
 
 /**
@@ -207,7 +207,7 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
     return [{ x, y, z, d: px === null || pz === null ? 0 : Math.hypot(x - px, z - pz) }];
   }).sort((a, b) => a.d - b.d);
   const pick = carriedNames(counts, ore === 'diamond' ? IRON_PICK_UP : PICKAXE)[0];
-  const route = oreRouteHands(world, ore, counts, true);
+  const route = oreRouteHands(world, ore, counts, true, !underground);
   // end1109o13 (the coordinator's 0:50 of 11/10, no run to check it): the first night with food 27.2 she waited in a hole while the line asked
   // three steps (seal, write prep skipped in a plan_update, go down) and each replay moved at most 2 of 6. The night's way is said as one act,
   // its hands as they go into `mc_act`, and the descent's prep is passed by the head for the night (`NIGHT_PASS`): no plan_update is asked.
@@ -219,6 +219,7 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
     ? `${NIGHT_PASS} 下りる準備の食料 40 は夜の間は通す（今 ${Math.round(food * 10) / 10} 点。夜は狩れず、待っても増えない。plan_update は要らない。朝に狩って 40 にする）。` : '';
   const way = hands.length && (underground || sealList(at).length)
     ? `次の 1 手 mc_act ${JSON.stringify(hands)}（${underground ? '' : '最初の 2 手で足元を掘って頭の上を塞ぐ。'}`
+      + `${route?.startsWith(SEALED_SHAFT_WORD) ? '3 手目は塞いだまま真下へ（作業台・板 4・原木が無いと 10 段以上の下りは止められるので、地表から 9 段まで）。' : ''}`
       + `${stone ? `木のツルハシで ${STONE_SHAFT} 段下りて石を掘り、頭の上に作業台を置いて石のツルハシを作る（鉄は石のツルハシから）。` : ''}掘った壁に鉱石が見えたら mine。y=0 より下は deepslate_ の付く名前）`
     : `${underground ? '今いる所から' : sealHands(at)}手 ${route}`;
   // end1109o13: with the helmet and chestplate on and 5 raw iron for the legs, she waited the night out to smelt at the furnace on the surface.
