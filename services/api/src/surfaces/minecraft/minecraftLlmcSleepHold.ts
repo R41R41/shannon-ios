@@ -21,7 +21,14 @@ const holds = new Map<string, number[]>();
  * of a task that booked is not held for "sleep first": the body does that itself. The booking is remembered for `BOOKING_MS` (the body drops it after 25 minutes).
  */
 const BOOKING_MS = 15 * 60_000;
-const bookings = new Map<string, number>();
+/**
+ * Review of run 6's fixes: the head never hears whether the body kept the booking (a no_bed, a held hand, three misses, a death, a lost abort: the body drops it and says so
+ * only in a result). So the booking excuses the night's work for `BOOKING_GRACE_MS` from the first night act that sees it: the body lies down at the first hand's start (up to
+ * 10 s of waiting for the dusk and the sleep itself), and a night still running after that means it did not (a morning ends it: the hold is for a night only). Then the
+ * booking is forgotten and the hold is back.
+ */
+const BOOKING_GRACE_MS = 90_000;
+const bookings = new Map<string, { at: number; night?: number }>();
 
 /** For tests: no task has held a sleep. */
 export function forgetSleepHolds(): void { holds.clear(); bookings.clear(); }
@@ -47,10 +54,16 @@ export function sleepFirstHold(input: unknown, frame: BodyObservation | null, ta
   if (!Array.isArray(hands) || !facts || facts.dimension !== 'overworld') return null;
   const clock = now();
   if (!canSleepNow(facts.world)) {
-    if (hands.some(raw => objectOf(raw)?.do === 'sleep')) { bookings.set(taskId, clock); if (bookings.size > 32) bookings.delete(bookings.keys().next().value as string); }
+    if (hands.some(raw => objectOf(raw)?.do === 'sleep')) { bookings.set(taskId, { at: clock }); if (bookings.size > 32) bookings.delete(bookings.keys().next().value as string); }
     return null;
   }
-  if (enemyNear(facts.world) || clock - (bookings.get(taskId) ?? -Infinity) < BOOKING_MS) return null;
+  if (enemyNear(facts.world)) return null;
+  const booked = bookings.get(taskId);
+  if (booked && clock - booked.at < BOOKING_MS) {
+    booked.night ??= clock;
+    if (clock - booked.night < BOOKING_GRACE_MS) return null;
+    bookings.delete(taskId);
+  }
   const bed = [...facts.counts].find(([name, count]) => BED.test(name) && count > 0)?.[0];
   if (!bed) return null;
   const at = hands.findIndex(raw => WORK.has(String(objectOf(raw)?.do ?? '')));

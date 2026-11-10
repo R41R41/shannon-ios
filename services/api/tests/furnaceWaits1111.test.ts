@@ -90,6 +90,17 @@ describe('after the holds, a wait right before a take is taken out of the act', 
     expect(dropWaitBeforeTake(act(wait(30), { ...take, dependsOn: [1] }), 'k')).toBeNull();
     expect(dropWaitBeforeTake(act(wait(30), mine), 'k')).toBeNull();
   });
+  it('takes the wait out only when the take can then work (a furnace with 15 s or less) or other work stands open; at most twice in a window', () => {
+    used('f');
+    const nothing = frame({ mapLandmarks: [] });
+    expect(dropWaitBeforeTake(act(mine, wait(30), take), 'f', 0, Date.now, nothing)).toBeNull();
+    const nearly = frame({ mapLandmarks: [], jobs: [job({ remainingEstimateMs: 10_000 })] });
+    expect(dropWaitBeforeTake(act(mine, wait(30), take), 'f', 0, () => 1, nearly)).not.toBeNull();
+    const open = frame();
+    const long = dropWaitBeforeTake(act(mine, wait(30), take), 'f', 0, () => 2, open)!;
+    expect(long.note).toContain('あと約 88 秒あるので「まだ」と返る');
+    expect(dropWaitBeforeTake(act(mine, wait(30), take), 'f', 0, () => 3, open)).toBeNull();
+  });
   it('is what the tools send: the act without the wait and the fix said as a note', () => {
     used('m');
     const before = heldBeforeSend(false, act(wait(30), take), frame(), 'm')!;
@@ -142,10 +153,26 @@ describe('sleeping is one hand, not a wait', () => {
     expect(sleepFirstHold(planks, night, 'book')).toBeNull();
     expect(sleepFirstHold(planks, night, 'other')).not.toBeNull();
   });
+  it('the booking excuses the work of the night for 90 s from the first night act that sees it; a night still running then means the body did not keep it, and the hold is back', () => {
+    const day = frame({ time: '9000', inventory: BED, jobs: [], mapLandmarks: [] });
+    const night = frame({ time: '14000', inventory: BED, jobs: [], mapLandmarks: [] });
+    sleepFirstHold(act({ do: 'sleep' }, mine), day, 'miss', () => 0);
+    expect(sleepFirstHold(planks, night, 'miss', () => 1_000)).toBeNull();
+    expect(sleepFirstHold(planks, night, 'miss', () => 60_000)).toBeNull();
+    expect(sleepFirstHold(planks, night, 'miss', () => 100_000)).not.toBeNull();
+    expect(sleepFirstHold(planks, night, 'miss', () => 101_000)).not.toBeNull();
+  });
   it('a wait that names an item of the queue is a result wait, not a night wait', () => {
     const waiting = { ...act(wait(30)), dependsOn: ['q12'] };
     const night = frame({ time: '14000', inventory: [{ name: 'stone_pickaxe', count: 1 }], jobs: [], mapLandmarks: [] });
     expect(nightWaitHold(waiting, night, 'dep')).toBeNull();
+    // behind an ahead item the wait is still the new item's only hand
+    expect(nightWaitHold({ ...act({ do: 'go', to: [{ x: 1, y: 60, z: 1 }] }, wait(30)), dependsOn: ['q12'] }, night, 'dep2', Date.now, 1)).toBeNull();
+  });
+  it('a work act that ends in a wait is a night wait even with dependsOn written (the contract has it on every queued item)', () => {
+    const seal = { ...act({ do: 'vertical', dir: 'down', toY: 60 }, wait(30)), dependsOn: ['q12'] };
+    const night = frame({ time: '14000', inventory: [{ name: 'stone_pickaxe', count: 1 }, { name: 'crafting_table', count: 1 }, { name: 'oak_planks', count: 8 }, { name: 'stick', count: 4 }], jobs: [], mapLandmarks: [] });
+    expect(nightWaitHold(seal, night, 'dep3')).toMatchObject({ hand: 2, kind: 'wait' });
   });
   it('the day line and the bed line say one sleep hand in the work act, and that nothing is waited for', () => {
     const line = dayBedLine({ timeOfDay: 1000 }, new Map([['white_bed', 1]]), 'overworld')!;

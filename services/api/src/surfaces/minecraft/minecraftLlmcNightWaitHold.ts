@@ -23,16 +23,17 @@ export function forgetNightWaitHolds(): void { holds.clear(); }
 const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
 
 /** The hold (the hand, 1-based, its kind and its line) of a night's wait with the way down open, or null; `commit` counts it when it stops the act. */
-export function nightWaitHold(input: unknown, frame: BodyObservation | null, taskId: string, now: () => number = Date.now):
+export function nightWaitHold(input: unknown, frame: BodyObservation | null, taskId: string, now: () => number = Date.now, ownFrom = 0):
   { hand: number; kind: string; line: string; commit(): void } | null {
   const hands = (input as { hands?: unknown } | null)?.hands;
   const facts = readinessOf(frame);
   if (!Array.isArray(hands) || !facts || facts.dimension !== 'overworld' || enemyNear(facts.world)) return null;
   const at = hands.findIndex(raw => objectOf(raw)?.do === 'wait');
   if (at < 0) return null;
-  // Run 6: a wait that names an item of the queue (`dependsOn`) waits for that item's result, not for the night (3 of the 24 result waits were held as night waits).
+  // Run 6: a wait item that names an item of the queue (`dependsOn`) waits for that item's result, not for the night (3 of the 24 result waits were held as night waits).
+  // Only an item that is nothing but that wait counts: `dependsOn` is on every queued item by the contract (a failure dependency), so a work act that ends in a wait is still a night wait.
   const depends = (input as { dependsOn?: unknown } | null)?.dependsOn;
-  if (Array.isArray(depends) && depends.length) return null;
+  if (Array.isArray(depends) && depends.length && at >= ownFrom && hands.length - ownFrom === 1) return null;
   const position = objectOf(facts.world.position);
   const feetY = typeof position?.y === 'number' ? Math.floor(position.y) : null;
   const before = hands.slice(0, at);

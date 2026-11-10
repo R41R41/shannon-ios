@@ -78,7 +78,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
 /** The holds that count themselves against a bound (the sleep before the night's work, the table before a descent): each counts only when it stops the act. */
 function countedHolds(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, ownFrom = 0): Array<{ held: Held; commit(): void }> {
   const sleep = sleepFirstHold(input, frame, taskId), bare = tableDescentHold(input, frame, taskId), back = deathReturnHold(input, frame, taskId);
-  const dark = nightWaitHold(input, frame, taskId), stand = furnaceStandHold(input, frame, taskId, urgent, ownFrom);
+  const dark = nightWaitHold(input, frame, taskId, Date.now, ownFrom), stand = furnaceStandHold(input, frame, taskId, urgent, ownFrom);
   const held = (code: string, hold: { hand: number; kind: string; line: string; commit(): void }) =>
     ({ held: { hand: hold.hand, code, kind: hold.kind, line: `手 ${hold.hand} ${hold.kind}: ${hold.line}。` }, commit: hold.commit });
   return [...sleep ? [held('sleep_first', sleep)] : [], ...bare ? [held('table_required', bare)] : [], ...back ? [held('death_return', back)] : [],
@@ -140,8 +140,8 @@ const say = (line: string): void => { console.info(line); };
  */
 export function heldBeforeSend(urgent: boolean, input: unknown, frame: BodyObservation | null, taskId: string): BeforeSend | null {
   const hold = holdV2(input, frame, taskId, urgent);
-  if (!hold) return withoutTakeTimer(null, input, taskId);
-  if ('note' in hold) return withoutTakeTimer({ note: hold.note }, input, taskId);
+  if (!hold) return withoutTakeTimer(null, input, taskId, 0, frame);
+  if ('note' in hold) return withoutTakeTimer({ note: hold.note }, input, taskId, 0, frame);
   if ('whole' in hold) {
     say(`Shannon Minecraft act held before send task=${taskId} hand=${hold.held.hand} do=${hold.held.kind} code=${hold.held.code}`);
     return { result: toolFailure('refused', hold.whole, { retryable: true }) };
@@ -154,8 +154,8 @@ export function heldBeforeSend(urgent: boolean, input: unknown, frame: BodyObser
  * Run 6 (2026-11-11): after the furnace stand's holds, a wait of 10 s or more right before a `furnace take` is taken out of the act (the take needs no timer: the body waits a
  * short remainder, and says 「まだ」 for a longer one). The act to send is the one without it; the fix is said in the result's note. `ownFrom`: the hands of the items ahead.
  */
-export function withoutTakeTimer(before: BeforeSend | null, input: unknown, taskId: string, ownFrom = 0): BeforeSend | null {
-  const dropped = dropWaitBeforeTake(input, taskId, ownFrom);
+export function withoutTakeTimer(before: BeforeSend | null, input: unknown, taskId: string, ownFrom = 0, frame: BodyObservation | null = null): BeforeSend | null {
+  const dropped = dropWaitBeforeTake(input, taskId, ownFrom, Date.now, frame);
   if (!dropped) return before;
   return { ...before, input: dropped.input, note: [before?.note, dropped.note].filter(Boolean).join('\n') };
 }

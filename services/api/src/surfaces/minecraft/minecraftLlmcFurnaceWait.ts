@@ -82,6 +82,10 @@ export const FURNACE_STAND_WINDOW_MS = 10 * 60_000;
 /** A run of waits (the new item's own) adding up to this is a stand too, even if no one of them is `LONG_WAIT_SECONDS`. */
 export const STAND_TOTAL_SECONDS = 20;
 const SPLIT_PIECES = 5;
+/** The body waits this many seconds of a furnace's remainder before a take itself (utils/primitives: furnace take). */
+const TAKE_WAITS_SECONDS = 15;
+const MAX_DROPS = 2;
+const drops = new Map<string, number[]>();
 const stands = new Map<string, number[]>();
 const recentStands = (taskId: string, now: number): number[] => (stands.get(taskId) ?? []).filter(when => now - when < FURNACE_STAND_WINDOW_MS);
 const isPut = (hand: Rec | null): boolean => !!hand && (hand.do === 'smelt' || (hand.do === 'furnace' && hand.op !== 'take' && (hand.op === 'put' || typeof hand.item === 'string')));
@@ -124,16 +128,27 @@ export function furnaceStandHold(input: unknown, frame: BodyObservation | null, 
  * take, and the take needs none. The act goes without it, and the result says so (a fix the head made, said first). Null: nothing to take out, holds not used up,
  * or an act whose hands name each other (`dependsOn` counts hands: taking one out would move them).
  */
-export function dropWaitBeforeTake(input: unknown, taskId: string, ownFrom = 0, now: () => number = Date.now): { input: unknown; note: string } | null {
+export function dropWaitBeforeTake(input: unknown, taskId: string, ownFrom = 0, now: () => number = Date.now, frame: BodyObservation | null = null): { input: unknown; note: string } | null {
   const act = rec(input);
   const hands = Array.isArray(act?.hands) ? (act!.hands as unknown[]).map(rec) : [];
   if (!act || hands.length < 2 || hands.some(hand => Array.isArray(hand?.dependsOn))) return null;
   if (recentStands(taskId, now()).length < FURNACE_STAND_HOLDS) return null;
   const cut = hands.flatMap((hand, index) => index >= ownFrom && waitSeconds(hand) >= LONG_WAIT_SECONDS && hands[index + 1]?.do === 'furnace' && hands[index + 1]?.op === 'take' ? [index] : []);
   if (!cut.length) return null;
+  // Review of run 6's fixes: the wait comes out only when the take can then work (the furnace is done or has 15 s or less: the body waits that itself) or when other work stands open
+  // (the take answers 「まだ」 at once and the next decision is that work). With neither, waiting is the best there is; and a repeat of the same act is let through after `MAX_DROPS`
+  // drops of a task in the window (a head with nothing else to do sent `wait 30, take` again and again, a decision and a 「まだ」 with no progress).
+  const furnaces = working(frame), left = furnaces[0]?.left ?? 0;
+  const facts = readinessOf(frame);
+  const otherWork = !!facts && holdChoices(facts.world, facts.counts, taskId).length > 0;
+  if (left > TAKE_WAITS_SECONDS && !otherWork) return null;
+  const clock = now(), recent = (drops.get(taskId) ?? []).filter(when => clock - when < FURNACE_STAND_WINDOW_MS);
+  if (recent.length >= MAX_DROPS) return null;
+  drops.set(taskId, [...recent, clock]);
+  if (drops.size > 32) drops.delete(drops.keys().next().value as string);
   const kept = (act.hands as unknown[]).filter((_hand, index) => !cut.includes(index));
   const words = cut.map(index => `手 ${index + 1} の wait ${Math.round(waitSeconds(hands[index]))} 秒`).join('・');
-  return { input: { ...act, hands: kept }, note: `（頭が形を直して送った: ${words}は take の前だったので外した。take は早くても、残りが短ければ体が待って取り、長ければ「まだ」と返り、焼き上がりの知らせで起こす）` };
+  return { input: { ...act, hands: kept }, note: `（頭が形を直して送った: ${words}は take の前だったので外した。take は早くても、残りが短ければ体が待って取り、長ければ「まだ」と返り、焼き上がりの知らせで起こす${left > TAKE_WAITS_SECONDS ? `。今はあと約 ${left} 秒あるので「まだ」と返る。その間は別の作業を` : ''}）` };
 }
 /** For tests: no task has been held at a stand. */
-export function forgetFurnaceStands(): void { stands.clear(); }
+export function forgetFurnaceStands(): void { stands.clear(); drops.clear(); }
