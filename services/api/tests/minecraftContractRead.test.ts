@@ -120,10 +120,10 @@ describe('native-only contract read through the same normal/rig tools entry', ()
     expect(fixture.bodies.every(body => body.model === 'claude-haiku-5-5')).toBe(true);
   });
 
-  it('delivers and reads all nine current pages through fcaMinecraftTools/combine/progress/V2/gameOnly without personal fallback', async () => {
+  it('delivers and reads all ten current pages through fcaMinecraftTools/combine/progress/V2/gameOnly without personal fallback', async () => {
     const f = setup(), send = vi.spyOn(f.control, 'command');
     const pointers = f.pointers();
-    expect(pointers).toHaveLength(9);
+    expect(pointers).toHaveLength(10);
     expect(f.tools.definitions.filter(tool => tool.name === 'skill.read')).toHaveLength(1);
     expect(f.tools.permitsItself?.('skill.read')).toBe(false);
     expect(f.tools.permitsItself?.('mc.act')).toBe(true);
@@ -187,7 +187,7 @@ describe('native-only contract read through the same normal/rig tools entry', ()
     expect(refused.ok).toBe(false);
     expect(refused.failure).toBe('not_found');
     const fresh = f.pointers();
-    expect(fresh).toHaveLength(9);
+    expect(fresh).toHaveLength(10);
     expect(fresh).not.toEqual(before);
     expect(names(refused.text)).toEqual(fresh);
     expect((await f.call(fresh[0]!)).ok).toBe(true);

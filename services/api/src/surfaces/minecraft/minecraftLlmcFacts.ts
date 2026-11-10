@@ -152,6 +152,7 @@ case 'attack':
 case 'fight':
 case 'pickup':
 case 'shoot': return `${hand.do}${hand.target ? ` ${hand.target}` : ''}`;
+case 'hunt': return `hunt${hand.target ? ` ${hand.target}` : ''}${hand.count && hand.count > 1 ? `×${hand.count}` : ''}`;
 case 'wait': return `wait${hand.seconds ? ` ${hand.seconds} 秒` : ''}`;
 default: return null;
 }
@@ -195,6 +196,7 @@ const noteNextGain = () => {
       else if (hand.do === 'mine' && (hand.item ?? hand.block)) out.push(`mine ${hand.item ?? hand.block} で +${n} 個（拾う）`);
       else if (hand.do === 'dig') out.push('dig で掘った物（collect が真なら拾う）');
       else if (hand.do === 'pickup') out.push('pickup で拾う物');
+      else if (hand.do === 'hunt') out.push(`hunt${hand.target ? ` ${hand.target}` : ''} の肉・革・羊毛（拾う）`);
       else if (hand.do === 'smelt' && hand.item) out.push(`smelt ${hand.item} の取り出しで増える`);
       else if (hand.do === 'chest' && (hand.op === 'take' || hand.op === 'takeAll')) out.push('chest から取る物');
 

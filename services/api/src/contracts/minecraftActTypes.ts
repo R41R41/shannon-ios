@@ -59,6 +59,8 @@ export const HAND_KINDS = [
   'bed_burst',
   // S4's body of 11/5 (0f0a2a2): place a bed, sleep, take it up in the morning, as one hand.
   'sleep',
+  // 2026-11-11: the food animals around her, until none is left in range or count have fallen, with their drops (body claude/hunt-body-1111).
+  'hunt',
 ] as const;
 
 export type HandKind = (typeof HAND_KINDS)[number];

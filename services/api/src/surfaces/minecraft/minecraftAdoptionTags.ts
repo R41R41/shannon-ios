@@ -15,8 +15,11 @@ export function argumentWords(input: unknown): string[] {
   const words: string[] = [];
   const take = (value: unknown, depth: number): void => {
     if (typeof value === 'string') {
-      const word = value.trim().toLowerCase().replace(/^minecraft:/u, '');
-      if (WORD.test(word)) words.push(word);
+      // hunt's kinds come as one word with commas ("cow,pig"): each is a word.
+      for (const part of value.split(',').slice(0, 8)) {
+        const word = part.trim().toLowerCase().replace(/^minecraft:/u, '');
+        if (WORD.test(word)) words.push(word);
+      }
     } else if (depth < 2 && Array.isArray(value)) value.slice(0, 16).forEach(item => take(item, depth + 1));
     else if (depth < 2 && value && typeof value === 'object') {
       Object.values(value as Record<string, unknown>).slice(0, 16).forEach(item => take(item, depth + 1));
@@ -94,7 +97,7 @@ export function earlyGameLine(task: string, decision: number, elapsedMillisecond
 /** The legacy tool each `mc_act` verb counts as for these tags (task 85663847, 11/10: the v2 route sends only `mc_act`, so every line said tags=-). */
 const ACT_VERB_TOOL: Readonly<Record<string, string>> = Object.freeze({
   eat: 'mc.eat-food', craft: 'mc.craft-one', make: 'mc.craft-one', mine: 'mc.mine-block', dig: 'mc.dig-block', sleep: 'mc.sleep-in-bed',
-  go: 'mc.move-to', walk: 'mc.move-to', furnace: 'mc.start-smelting', smelt: 'mc.start-smelting', fight: 'mc.attack-entity', attack: 'mc.attack-entity',
+  go: 'mc.move-to', walk: 'mc.move-to', furnace: 'mc.start-smelting', smelt: 'mc.start-smelting', fight: 'mc.attack-entity', attack: 'mc.attack-entity', hunt: 'mc.attack-entity',
 });
 /**
  * The hands of an `mc_act` call as the legacy calls the tags read (`{name, input}` each): a short hand 「eat bread」 is its verb and its words; an

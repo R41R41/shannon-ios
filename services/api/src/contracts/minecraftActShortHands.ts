@@ -9,6 +9,7 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
  *   obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=a,b] [maxPlace=N]   （溶岩の源のマス。水を注いで黒曜石にして掘る）
  *   fight 相手 [flee] [item=名] [retreatHp=N] [range=N] [seconds=N]   mine ブロック名 X,Y,Z ... [count=N] [tool=名] [dig=a,b] [maxDig=N]
  *   [collect=false] [seconds=N]
+ *   hunt 種類[,種類 ...] [count=N] [range=N] [seconds=N]   （食料の動物を種類で。近い成体から倒して落とし物を拾う）
  *   chest X,Y,Z look|takeAll | chest X,Y,Z take|put 物 [数] [物 [数] ...]   furnace X,Y,Z take | furnace X,Y,Z put 物
  * 個数 [fuel=名] [fuelCount=N]
  *   make 物 [個数]   portal X,Y,Z x|z [block=名] [place=a,b] [maxPlace=N] [seconds=N] [noEnter]
@@ -79,6 +80,11 @@ function fightWords(hand: ActHand): Words {
   return [hand.target, ...(hand.stance === 'flee' ? ['flee'] : given('stance', hand.stance)), ...given('item', hand.item),
     ...given('retreatHp', hand.retreatHp),    ...given('range', hand.range), ...given('seconds', hand.seconds)];
 }
+/** hunt: the kinds (one word, commas between), then count, range and seconds. */
+function huntWords(hand: ActHand): Words {
+  return typeof hand.target === 'string' && hand.target && !/\s/u.test(hand.target)
+    ? [hand.target, ...given('count', hand.count), ...given('range', hand.range), ...given('seconds', hand.seconds)] : null;
+}
 function attackWords(hand: ActHand): Words {
   if (hand.style !== undefined || !hand.target) return null;
   return [hand.target, ...flag(hand.hold, 'hold'), ...given('seconds', hand.seconds), ...given('untilDead', hand.untilDead)];
@@ -115,7 +121,7 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   bed_burst: () => null,
   fill: () => null, // Keep every group and required permission in the existing JSON fallback.
   chest: chestWords, furnace: furnaceWords,
-  go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords, vertical: verticalWords,
+  go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords, vertical: verticalWords, hunt: huntWords,
   make: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   walk: hand => (hand.path && hand.to) || hand.path?.length === 1 || !points(hand).length
     ? null : [...points(hand).map(pos), ...flag(hand.sprint, 'sprint'), ...given('range', hand.range)],
@@ -220,6 +226,13 @@ const READERS: Record<string, Reader> = {
   chest: chestHand, furnace: furnaceHand,
   obsidian: ({ cells, hand }) => cells.length ? done(blocksOf({ ...hand, at: cells })) : bad('obsidian', '溶岩の源の座標が要る'),
   mine: ({ cells, words, hand }) => cells.length && words[0] ? done(blocksOf({ ...hand, block: words[0], at: cells })) : bad('mine', 'ブロック名と座標が要る'),
+  // `hunt cow,pig count=6`; `hunt cow pig` (kinds as separate words) and `hunt target=cow` are the same. A bare number (`hunt cow 6`, as make and craft take it) is the count.
+  hunt: ({ words, hand }) => {
+    const kinds = words.filter(word => !isCount(word)), counts = words.filter(isCount);
+    const target = kinds.length ? kinds.join(',') : hand.target;
+    const count = hand.count === undefined && counts.length ? { count: Number(counts[0]) } : {};
+    return typeof target === 'string' && target ? done({ ...hand, target, ...count }) : bad('hunt', '食料の動物の種類が要る（hunt cow count=6、hunt pig,cow）');
+  },
   make: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('make', '物の名前が要る'),
   fight: ({ words, hand }) => {
     if (!words[0]) return bad('fight', '相手（#id か名前）が要る');

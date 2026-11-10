@@ -38,6 +38,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace', 'maxDig'] },
   fight: { needs: [['target']], may: ['den', 'stance', 'item', 'retreatHp', 'range', 'seconds'] },
   mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig'] },
+  hunt: { needs: [['target']], may: ['count', 'range', 'seconds'] },
   make: { needs: [['item']], may: ['count'] },
   portal: { needs: [['at'], ['axis']], may: ['block', 'enter', 'canPlace', 'maxPlace', 'seconds'] },
   smelt: { needs: [['items']], may: ['fuel', 'fuelCount', 'furnaces', 'at', 'seconds'] },
@@ -105,6 +106,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
     ?? denProblem(hand as unknown as Record<string, unknown>),
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
     ?? (BLOCK_NAME.test(hand.block!) ? null : 'block はブロックの id（例 iron_ore）') ?? names(hand),
+  hunt: huntProblem,
   make: hand => count(hand, 64),
   portal: hand => seconds(hand, 5, 120) ?? (hand.at!.length !== 1 ? 'at は枠の内側の左下のマス 1 つ' : null) ?? names(hand),
   vertical: verticalProblem,
@@ -160,6 +162,15 @@ export function shieldRushActProblem(input: unknown): string | null {
   return null;
 }
 
+/**
+ * hunt (2026-11-11): `target` is the kind of food animal (a name or names with commas), never an id; count 1〜64, range 4〜48 (m from where it began), seconds 5〜120.
+ * The body checks the same (utils/actHandRules) and refuses a hostile, a pet or a mount by name.
+ */
+function huntProblem(hand: ActHand): string | null {
+  if (typeof hand.target !== 'string' || /^#?\d+$/u.test(hand.target.trim())) return 'target は食料の動物の種類（cow・pig・sheep・chicken・rabbit。カンマで複数: pig,cow）。id は attack';
+  return seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.count !== undefined && !(Number.isInteger(hand.count) && hand.count >= 1) ? 'count は 1〜64 の整数' : null)
+    ?? (hand.range !== undefined && !(hand.range >= 4 && hand.range <= 48) ? 'range は 4〜48（m。手を始めた所から測る）' : null);
+}
 function attackProblem(hand: ActHand): string | null {
   return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null);
 }

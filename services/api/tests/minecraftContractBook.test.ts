@@ -16,17 +16,21 @@ const LEGACY_SPECIAL_8C = [
 // Restore the exact parent pre text only when constructing the historical contract.
 const LEGACY_FURNACE_PRE = 'furnace:x,y,z（体が入れた焼きが終わった）';
 const CURRENT_FURNACE_PRE = 'furnace:x,y,z（焼きの見込み時間に達した。現物はtakeで確認）';
+// The hunt hand (2026-11-11) added a page (last, so the earlier fragments keep their ids), a pointer on the attack line and a clause in the json fields line:
+// the historical contract is made without them.
+const CURRENT_ATTACK_POINTER = '。食料の動物を何体も狩るのは hunt';
+const CURRENT_HUNT_FIELDS = ' / hunt: target（種類。id は不可）・count・range・seconds';
 
 const pin = { catalogHash: 'a'.repeat(64) };
 const book = () => createMinecraftContractBook(pin);
 
 describe('the canonical Minecraft input-contract book', () => {
-  it('pins the revised shoot manual and unchanged schema while deriving all nine pages', () => {
+  it('pins the revised shoot manual and unchanged schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('1e57b7ec545bdefa1ccba5f50d1a8ac68b492cb9219edb178249f5dea639372c');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('2e68308a5a5f0e8c2a6f98db2d3e077abba1f3e8b1c6cfa3abfeaf346ec01ede');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('77cb8d5128ca66d050bd7396b5ec3ab17b09ef02e6263c0fa151f37715de1855');
     const current = book();
-    expect(current.pages).toHaveLength(9);
+    expect(current.pages).toHaveLength(10);
     expect(current.reconstruct()).toBe(SHORT_ACT_DESCRIPTION);
     expect(current.manualHash).toBe(sha(SHORT_ACT_DESCRIPTION));
     for (const fragment of SHORT_ACT_MANUAL_FRAGMENTS) {
@@ -38,21 +42,21 @@ describe('the canonical Minecraft input-contract book', () => {
   it('retains untouched parent fragments and refuses its historical book after current manual revisions', () => {
     const legacyShoot = 'shoot 相手(#id か名前) か X,Y,Z [item=bow] [charge=秒] [n=本数]  弓で撃つ。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。';
     const fragments = SHORT_ACT_MANUAL_FRAGMENTS;
-    const historical = fragments.map(part => ({ ...part, text: part.id === 'special'
-      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE) }));
+    const historical = fragments.filter(part => part.id !== 'hunt').map(part => ({ ...part, text: part.id === 'special'
+      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '') }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))
-      .toBe('6476fbb9fe7d70939d5257528ca4caa36ec4f3033ef4bbdc4770e5b5bfe94c92');
+      .toBe('2da25be2c44bb7acc79f097519d9a22cb23e4cb3e4e45d120b438e2d8382d873');
     expect(fragments.find(part => part.id === 'shoot')!.text.split('\n')[0]).toBe(legacyShoot);
     const parent = createMinecraftContractBook(pin, { schema: SHORT_ACT_INPUT_SCHEMA,
       fragments: historical.map(part => part.id === 'shoot' ? { ...part, text: legacyShoot } : part) });
-    expect(parent.manualHash).toBe('9d45da8bb365c11d8cea9383641f0ba3ec9b1033e05053df65c2c109179fcabd');
+    expect(parent.manualHash).toBe('f0a1a0d5359d5c4ea1673f5b28aad86d2ff7cfbb1bbe82c1e9d1170987bc6fd6');
     const current = book();
     expect(current.schemaHash).toBe(parent.schemaHash);
     expect(current.catalogHash).toBe(parent.catalogHash);
     expect(current.manualHash).not.toBe(parent.manualHash);
     expect(current.revision).not.toBe(parent.revision);
     for (const page of parent.pages) expect(current.read(page.name)).toBeNull();
-    for (const page of current.pages.filter(page => !page.name.startsWith('mc/act/shoot@') && !page.name.startsWith('mc/act/special@'))) {
+    for (const page of current.pages.filter(page => !page.name.startsWith('mc/act/shoot@') && !page.name.startsWith('mc/act/special@') && !page.name.startsWith('mc/act/hunt@'))) {
       expect(page.text).toBe(parent.pages.find(old => old.title === page.title)!.text);
     }
   });

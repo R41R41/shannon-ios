@@ -2,7 +2,7 @@ import { MAP_LEGEND_V2 } from '../../contracts/minecraftMapLegendV2.js';
 import { END_BOW_KNOWLEDGE, NETHER_BY_SECONDS, PREP_DESCENT_RULE, PREP_RULES_WORDS, SAFETY_FIRST } from './minecraftLlmcPrepRules.js';
 import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
-import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
+import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -182,6 +182,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + 'stoneの許可に鉱石は含まれない。cannot_digは具体的な材質と道具・重力・液体を確認して許可か経路を直し、短く進んで再観測する。秒数や向きだけ変えない。',
     '- 高所から下りる前は column で通過空間と着地の床・水を確かめる。つたの途中は着地ではない。階段・足場と実在する着地点へのgoを比べ、水に入るならwaterOk・許す落差maxDrop、葉等を通るならdigを指定。つたが切れた所から着地までの落差も数える。',
     FOOD_ACQUISITION_KNOWLEDGE,
+    HUNT_FOOD_KNOWLEDGE,
     '- foodPreparation は加工の見込み。炉・作業台・燃料・設置場所と加工後の持ち物を観測で確かめる。',
     '- jobs は見込み。保留・再接続後は残り秒で待ち直さず furnace op=take で現物確認。焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める。jobs の各行は、かまどの場所・入れた物と出てくる物・あと何秒かで、待たずに別の act を足し、時間が来たら take の act を足す。',
     '- 置いた作業台・かまどは、10 m より遠くへ行く手（go・walk・vertical・portal、at を書いた mine）の前に体が拾って持ち歩く（置きっぱなしだと板・丸石を毎回失うため）。焼き途中・出来上がり待ちのかまどは残る。敵が近い・体力が低い・水中や空中・持ち物が満杯の時は拾えず残るので、手の行と持ち物で確かめる。使う時は持っている物を place し、近くに作業台があれば新しく作らない。',
