@@ -6,11 +6,8 @@ describe('a stream that holds the body is stopped at its source', () => {
   it('tells the planner what to do when go/walk do not move in a stream, with the reason, in one line', () => {
     const line = V2_ALWAYS.split('\n').find(row => row.includes('水の流れ N'));
     expect(line).toBeDefined();
-    expect(line).toContain('繰り返さず');
     expect(line).toContain('上流の 1 マスに dirt か cobblestone を place');
-    expect(line).toContain('源を断てば流れは数秒で消える');
-    expect(line).toContain('足の下も水でも');
-    expect(line).toContain('置けない・持っていない時だけ流れの無い側へ');
-    expect(line!.length).toBeLessThanOrEqual(175);
+    expect(line).toContain('足の下も水でよい');
+    expect(line!.length).toBeLessThanOrEqual(110);
   });
 });

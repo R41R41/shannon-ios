@@ -34,7 +34,7 @@ const DECIDE = [
   '- 毎判断、live の urgent・planNow・shortage・footing・around・route・threats・lastResults と plan を読んで決める。',
   '- 結果を待たずに決められる手（作る・持ち替え・食べる・拾う）は次の移動と同じ act へ。同じ手の連続は repeat と done・mine の count・go の seconds。'
     + '動く対象・未知経路は結果を読み直す。途中失敗で後の手は未実行。'
-    + '列に足す項目は必ず dependsOn を書く（頼る ["q12"]・頼らない []。無いと前が止まった時に捨てられる）。進行中の手は危険・失敗・目的変更時だけ replace。後で使う物は act の keep に書く（帳簿に載る）。約束の物は残し、割るなら why に番号と理由。',
+    + '進行中の手は危険・失敗・目的変更時だけ replace。後で使う物は act の keep に書く（帳簿に載る）。約束の物は残し、割るなら why に番号と理由。',
   '- 範囲スキルでは目的・対象・行き先・掘る/置く許可・済む条件を選ぶ。食事・睡眠・片づけ・戦うか逃げるかもあなたが決める。'
     + '経路・工作・設置・戦闘の細部は体に任せる。',
   '- why は節の札で始める（「[p1.2] 丸石でハーフブロック」）。別の節なら番号と理由を書く。数は観測済みと「これから」を分ける。',
@@ -101,9 +101,9 @@ const MAP = [
 const FALLS = [
   '## 落ちる・水・溶岩・空所',
   '- 高さの差が大きい上り下りは vertical、横の移動と短い段差は go。素手で真下へ掘らない。水の中や真上では下へ掘らない。溶岩（L・l）の隣は掘らない・歩かない。降りてよいのは落差 n≤3、4 以上は vertical の stairs か着地点に水。',
-  '- 空所（溶岩の海・深い穴・崖）は、縁より 1 段下の岩のトンネルか、1 マスごとに足元と両脇に置いた壁付きの橋で渡る。壁の無い幅 1 の橋は使わない（押されると落ちる）。'
+  '- 空所（溶岩の海・深い穴・崖）は、縁より 1 段下の岩のトンネルか、1 マスごとに足元と両脇に置いた壁付きの橋で渡る。壁の無い幅 1 の橋は使わない。'
     + 'footing に「押されたら落ちる」がある間は、立ち止まらない・跳ばない・縁で積まない。',
-  '- 流れる水（「水の流れ N」「押し戻された」）で go/walk が進まない時は繰り返さず、上流の 1 マスに dirt か cobblestone を place する。源を断てば流れは数秒で消える（体も止まった時に自分で置く）。足の下も水でも、上流のマスの隣に固い面があれば置ける。置けない・持っていない時だけ流れの無い側へ出る。',
+  '- 流れる水（「水の流れ N」「押し戻された」）で go/walk が進まない時は、上流の 1 マスに dirt か cobblestone を place（足の下も水でよい）。',
 ].join('\n');
 
 /** The coordinator, 2026-11-03 (leg 2's plan 5.10: the sea and the night on the 1.4 km walk, the phantoms for a body that has not slept). */
@@ -166,6 +166,8 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- ベッドで寝ると、ファントムが現れるまでの不眠の数えが戻る。',
     '- 夜（オーバーワールド）は、sleep の手で寝て朝にする（体が持っているベッドを置き、朝に拾い直す）（夜は敵が増え、ファントムも来る）。ネザー・エンドでは寝ない（爆発する）。',
     PREP_NIGHT_STOP,
+    // run 5 (11/11) issue 3: a drop one block off a one-wide gap stopped the walk again and again. The body now digs 1-3 blocks of rock to it (only for a pickup that names the drop).
+    '- pickup target=#id（か名前）は、落とし物の前の石・土・普通の鉱石 1〜3 マスを体が自分で掘って近づいて拾う（結果に「途中で…を掘った」）: dig→walk を前に並べない。止まりに「掘って近づこうとして止まった …」が付いたら、その理由（溶岩・水・頭上の砂利・敵・ツルハシ無し）を直す。target 無しの pickup と mine の拾いは掘らない。',
     '- バケツを作ったら最初の水源ですぐ汲む（run61 は空のまま地上を通り、地下で 6 分探した帰りに死んだ）。',
     // run62 (11/5): the pickup's walk went onto the magma floor of a ruined portal; two deaths and the diamond pickaxe were lost there.
     '- 壊れたポータルの周りはマグマの床が多い。拾いに歩く前に、足元とその先のマグマを丸石か土で覆う（途中の足場の安全は保証されない）。立っている段は掘らない。',
