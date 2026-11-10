@@ -31,7 +31,7 @@ const BACK_HP = 18;
  * second of losing sight, and its straight flight stops at the wall). The kills of h22 (14 in 195 s) were all chases of one seen and reachable. */
 const SWORD_FACT = 'ブレイズは剣で倒す: 体力 14 以上の時に、見えている 8m 内の 1 体へ attack target=#id（実測 end1108h16: 追って斬った 2 回は 3 秒以内に倒し傷 0、動かず待つ hold は約 25 回で 1 体）'
   + '。ロッドは倒れた所に落ちる: 幅 1 の橋や足場の外で倒すと下へ落ちて失う（end1108h21: 13 体で 3 本）。湧き場の部屋の床の上で斬り、落ちた棒は pickup target=blaze_rod'
-  + '。pickup が「掘らない道が無い」「そこまで着けない」と返した棒は、同じ pickup を出し直さず、1 つの act で go to=棒のマス canDig=[nether_bricks,netherrack] maxDig 6 → pickup target=blaze_rod'
+  + '。pickup が「掘らない道が無い」「そこまで着けない」と返した棒は、同じ pickup を出し直さず、pickup target=blaze_rod に canDig=[nether_bricks,netherrack] maxDig 6 を付けて出す（煉瓦・ネザーラックは既定では掘らない）'
   + '（end1108h27: 同じ pickup 3 回・3 分の間に棒が消えた）'
   + '。上に浮いて、または壁の向こうで attack が「届かない」と返った相手へ、同じ id の attack を出し直さない（h27: 届かない 7 回）。壁の陰で attack hold して寄るのを待つのは効かない: 壁の向こうのブレイズは壁で止まって来ない'
   + '（end1108h23: 煉瓦の陰で hold 8 秒を 51 回・10 分、振れたのは 0 回。h22 の 14 体は全部、見えている届く 1 体を追った attack）'

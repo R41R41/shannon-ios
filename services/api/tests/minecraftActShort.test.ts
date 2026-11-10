@@ -41,6 +41,9 @@ describe('short hands: one hand, one line', () => {
     expect(roundTrip({ do: 'equip', item: 'iron_sword', slot: 'offhand' })).toBe('equip iron_sword offhand');
     expect(roundTrip({ do: 'craft', item: 'stick', count: 4 })).toBe('craft stick 4');
     expect(roundTrip({ do: 'pickup', range: 6, target: 'coal' })).toBe('pickup range=6 target=coal');
+    // Issue 3 (run 5): a pickup may name what the body digs to reach a drop (it digs a few stones itself when nothing is said).
+    expect(roundTrip({ do: 'pickup', range: 4, canDig: ['stone', 'dirt'], maxDig: 2 })).toBe('pickup range=4 dig=stone,dirt maxDig=2');
+    expect(shortHandProblem({ do: 'pickup', canDig: ['stone'], maxDig: 2 })).toBeNull();
     expect(roundTrip({ do: 'look', to: cell(1, 2, 3) })).toBe('look 1,2,3');
     expect(roundTrip({ do: 'look', yaw: 90, pitch: -10 })).toBe('look yaw=90 pitch=-10');
     expect(roundTrip({ do: 'attack', target: '#12', hold: true, seconds: 25, untilDead: false })).toBe('attack #12 hold seconds=25 untilDead=false');

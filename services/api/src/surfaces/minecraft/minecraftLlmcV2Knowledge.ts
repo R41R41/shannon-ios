@@ -364,7 +364,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // end1108h25-27 S7 (11/8): a rod fell behind the room's bricks 3 m up; pickup came back 「掘らない道が無い」 three times over 3 minutes, the go that
     // dug 3 bricks got there after the rod was gone. Across the four camps that made rods 20 of 52 kills dropped one, so each lost rod is about 2 more kills.
     '- pickup が「掘らない道が無い」「そこまで着けない」と返した棒へ、同じ pickup を出し直さない（何度出しても同じ答え: end1108h27 で 3 回・3 分、その間に棒は消えた）。'
-      + '次の 1 手で、同じ act に go to=棒のマス canDig=[nether_bricks,netherrack] maxDig 6（accept ["blaze"]）→ pickup target=blaze_rod を続けて出す。'
+      + '次の 1 手で、pickup target=blaze_rod に canDig=[nether_bricks,netherrack] maxDig 6 を付ける（煉瓦・ネザーラックは既定では掘らない。石・土は付けなくても体が掘る。accept ["blaze"]）。'
       + '棒が溶岩の上・足場の外の空所なら諦めて次の 1 体へ（棒 1 本は平均 2 体分）。',
     // end1108h27 S7 (11/8): attacks on blazes behind the room's bricks came back 届かない 7 times (5 s each and a decision between), twice on the same id.
     '- attack が「届かない: … 5秒近づけない」と返した相手へ、同じ id の attack を出し直さない（ブレイズは動くので、間の煉瓦を掘っても追いつけない。'
