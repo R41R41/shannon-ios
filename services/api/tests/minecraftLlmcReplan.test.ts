@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { planFromSeeds, type PlanTree } from '@shannon/mind';
+import { applyPlanUpdate, planFromSeeds, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { CURRENT_FIRST_PLAN_SCHEMA } from '../src/surfaces/minecraft/minecraftFirstPlanPrompts.js';
@@ -10,6 +10,7 @@ import {
   readReplanLedger,
   REPLAN,
   REPLAN_SCHEMA,
+  REPLAN_SYSTEM,
   replanOf,
   replanVerdict,
   settledAttempt,
@@ -22,6 +23,7 @@ import { createReplanFlow, readWaiting, type ReplanSources } from '../src/surfac
 import { pending } from '../src/surfaces/minecraft/minecraftLlmcOnceFacts.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { forgetStalls, noteProgress, type Stall } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
+import { closedUnder } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { createStallWatch } from '../src/surfaces/minecraft/minecraftLlmcWatch.js';
 import { createWaitLedger } from '../src/surfaces/minecraft/minecraftPurposeProgress.js';
 
@@ -214,6 +216,15 @@ describe('a death has its own ask (run62, 11/5)', () => {
     expect(replanVerdict(busy, 'p3', 310_000)).toMatchObject({ ok: false });
     expect(replanVerdict(busy, 'p3', 310_000, 'death')).toEqual({ ok: true });
     expect(replanVerdict({ ...busy, total: REPLAN.perRun }, 'p3', 310_000, 'death')).toEqual({ ok: false, why: 'run' });
+  });
+  it('tells the strong model where a node that takes back what a death lost lives on: under an open node, not under a done one (G07, 11/10)', () => {
+    const done = { ...tree(), nodes: tree().nodes.map(node => (node.id === 'p1' ? { ...node, state: 'done' as const } : node)), current: 'p2' };
+    const add = (parent: string) => applyPlanUpdate(done, { ops: [{ op: 'add', parent, title: '石のツルハシを作り直す', doneWhen: 'have:stone_pickaxe' }] }).tree;
+    const under = (parent: string) => closedUnder(add(parent), []).map(item => item.note);
+    expect(under('p1')).toEqual(['不要になった（p1 が済んだ: have:log>=3）']);
+    expect(under('p2')).toEqual([]);
+    expect(REPLAN_SYSTEM).toContain('済みの節の下に足した節は、親が済みなので「不要になった」としてすぐ閉じられる');
+    expect(REPLAN_SYSTEM).toContain('今の節（▶）か、その上の開いている節の下');
   });
 });
 
