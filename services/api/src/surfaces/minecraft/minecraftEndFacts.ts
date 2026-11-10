@@ -476,7 +476,7 @@ export function endFightLines(end: EndView | null, bedItem: string | null = null
   const bedHand = dragonBedLine(end, bedItem), basin = dragonBasinLine(end);
   if (bedHand) lines.push(bedHand);
   // With no bed hand (no bed held, or no cell to set one) the sword from the basin is the hand left: the act stands beside the footing, as section T's ②③.
-  if (basin) lines.push(bedHand || (end?.crystals.remaining ?? 0) > 2 ? basin : `${basin}（ベッドの手が出ない間は剣の手: 上の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。頭への剣は全量が入る）`);
+  if (basin) lines.push(bedHand || (end?.crystals.remaining ?? 0) > 2 ? basin : `${basin}（ベッドの手が出ない間は剣の手: この行の先頭の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。この足場から届くのは主に首・胴（傷は 1/4＋1）で、座りの間打ち続けて削る形: 頭の下へは寄らない。途中で竜が飛び立ったら replace で待ち場へ go（窪みに残らない））`);
   const wait = dragonWaitLine(end);
   if (wait) lines.push(wait);
   return lines;
