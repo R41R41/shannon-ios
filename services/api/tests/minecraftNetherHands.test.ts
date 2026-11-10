@@ -97,13 +97,14 @@ describe('S8 and S6 stage knowledge', () => {
   it('reads fortress districts and scan coverage before inferring absence', () => {
     const nether = V2_STAGES.nether;
     for (const fact of ['world.scan', '432m', '境から 50m 以上', 'radius=16', '未確認', '9 割未満', '150m',
-      'z 軸（南北）', '最大 30 秒', '120 秒まで', '20% 増える', '描画の距離の 39%',
+      '溶岩の湖や崖の少ない向きを 1 つ選ぶ', '最大 30 秒', '120 秒まで', '20% 増える', '描画の距離の 39%',
       '約 121m までに無い（この先はまだ読めていない）']) expect(nether).toContain(fact);
-    expect(nether).not.toMatch(/帯に並ぶ|radius=32/u);
+    expect(nether).not.toMatch(/帯に並ぶ|radius=32|z 軸|直角の向き/u);
     const plan = seedPlan('エンドラを討伐してください', 'the_nether');
     const fortress = plan?.nodes.find(node => node.title === 'ネザー要塞を探す');
     expect(fortress?.note).toContain('432m区画');
     expect(fortress?.note).not.toContain('帯');
+    expect(fortress?.note).not.toContain('南北');
   });
 
   it('describes portal clearing, alternate ignition and a single 22-source obsidian hand', () => {

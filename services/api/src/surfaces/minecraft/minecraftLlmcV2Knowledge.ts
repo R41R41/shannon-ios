@@ -260,7 +260,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 区画が「要塞」ならその方へ進める。'
       + '「砦（この区画に要塞は無い）」なら隣の区画が候補で、境から 50m 以上入って mc_probe kind=scan radius=16 で読み直す（高い所から mc_view mode=top でも見る）。',
     '- 区画が「未確認」で読み込みが 9 割未満なら、待つか読めていない側へ 150m 進んで読み直せる（go は 1 手 90m 以内）。'
-      + '向きに手がかりが無い時は z 軸（南北）を先に、それでも無ければ直角の向きが候補になる。',
+      + '向きに手がかりが無い時は、要塞の置き場に決まった向きは無いので、見通しが良く溶岩の湖や崖の少ない向きを 1 つ選ぶ。',
     // Rig end1109f10 (random world, the spawner some 830 m off; the old "10 m relay" line further down taught the hand-dig): west 90 m, then south, then west again, then south (33 min, no fortress); after a search_timeout
     // she dug by hand 1 cell a decision (about 10 m in 3 min); a group of plain skeletons (a soul sand valley) was read as the fortress's sign.
     '- 200m 内に要塞が無い時: 1 つの方角を決め、新しい区画の答え（要塞・砦）が scan に出るまでその方角を変えない（行き来すると同じ所を 2 度通る）。'
