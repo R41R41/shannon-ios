@@ -173,14 +173,23 @@ export function parsedMinecraftThought(value: unknown): MinecraftThought | null 
   return { primary: feeling, intensity, words: said };
 }
 
-/** The appraisal on Haiku (owner 2026-10-26) when a key is set; without one, only the failures in a row are felt. */
+/**
+ * The appraisal on Haiku is OFF by default (temporary, owner 2026-11-11: 「haikuでの感情生成の回路は一時的に抑止しよう」): only the code-based
+ * feelings (failures in a row) run. To turn the Haiku appraisal back on, set `SHANNON_MINECRAFT_THOUGHTS=on` (a key is needed as before);
+ * to make it the default again, drop the `minecraftThoughtsOn` check in `configuredMinecraftFeelings`.
+ */
+export const minecraftThoughtsOn = (environment: Readonly<Record<string, string | undefined>>): boolean =>
+  environment.SHANNON_MINECRAFT_THOUGHTS?.trim().toLowerCase() === 'on';
+
 export function configuredMinecraftFeelings(environment: Readonly<Record<string, string | undefined>>,
   parts: { state: Pick<CompanionStateStore, 'apply'>; usageStore?: LlmUsageStore }): MinecraftFeelings {
-  const apiKey = environment.SHANNON_HAIKU_API_KEY?.trim() || anthropicApiKey(environment);
   let appraiser: MinecraftThoughtAppraiser | null = null;
-  try {
-    const claude = apiKey ? claudeBackground(DEFAULT_HAIKU_MODEL, { apiKey, ...(parts.usageStore ? { usageStore: parts.usageStore } : {}) }) : null;
-    appraiser = claude ? new ClaudeMinecraftThoughts(claude) : null;
-  } catch { appraiser = null; }
+  if (minecraftThoughtsOn(environment)) {
+    const apiKey = environment.SHANNON_HAIKU_API_KEY?.trim() || anthropicApiKey(environment);
+    try {
+      const claude = apiKey ? claudeBackground(DEFAULT_HAIKU_MODEL, { apiKey, ...(parts.usageStore ? { usageStore: parts.usageStore } : {}) }) : null;
+      appraiser = claude ? new ClaudeMinecraftThoughts(claude) : null;
+    } catch { appraiser = null; }
+  }
   return new MinecraftFeelings({ state: parts.state, appraiser });
 }
