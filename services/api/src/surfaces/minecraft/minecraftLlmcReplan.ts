@@ -7,7 +7,8 @@ import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
  * that holds no history (`minecraftLlmcReplanBrief.ts`), for the ops of a `plan.update`; the head applies them at the next read of the plan.
  * It is bounded in time, count and tries, and every attempt counts, an answer or not:
  * - at least `gapMs` (5 minutes: the owner's 3-hour plan, 2026-11-03; it was 10) of the task's running time between two, `perHour` in any
- *   hour, `perRun` in the whole run;
+ *   hour, `perRun` in the whole run (a death's ask is outside the three, `replanVerdict`); past `perRun` the decision is told once that no
+ *   new plan comes for a stall;
  * - `perNode` for one plan node: past it the stall is told to the decision as a fact (the node did not move after that many new plans), and
  *   the decision chooses; the head blocks nothing by itself.
  * A stall found at the end of a step (a death above all, which the look sees only once) waits in the checkpoint for the next step, and for a
@@ -65,12 +66,13 @@ export type ReplanVerdict = { ok: true } | { ok: false; why: 'gap' | 'hour' | 'r
 
 /**
  * Whether another plan may be asked for now (`nowMs`: the task's running clock) for a stall at `node`. A death has its own ask (run62, 11/5: the
- * new plans after three clusters of deaths were held by the gap and the hour, 「replan skipped … kind=death why=hour」 from 02:24:44): only the
- * run's count holds it.
+ * new plans after three clusters of deaths were held by the gap and the hour, 「replan skipped … kind=death why=hour」 from 02:24:44): no count
+ * holds it, the run's neither (K7, 11/10: a run that had used its `perRun` on stalls got no new plan for a death late in it, where she has lost
+ * what the plan stands on). It is still counted when asked.
  */
 export function replanVerdict(ledger: ReplanLedger, node: string, nowMs: number, kind?: string): ReplanVerdict {
-  if (ledger.total >= REPLAN.perRun) return { ok: false, why: 'run' };
   if (kind === 'death') return { ok: true };
+  if (ledger.total >= REPLAN.perRun) return { ok: false, why: 'run' };
   if ((ledger.nodes[node] ?? 0) >= REPLAN.perNode) return { ok: false, why: 'node' };
   const recent = ledger.recent.filter(at => nowMs - at < HOUR_MS);
   if (recent.length >= REPLAN.perHour) return { ok: false, why: 'hour' };

@@ -186,6 +186,9 @@ export function createReplanFlow(deps: ReplanDeps) {
         }
         told = stall;
         if (verdict.why === 'run' || verdict.why === 'node') pending = null;
+        // The run's count is used up: the decision is told once (it was only a log line, and she went on waiting for a plan that never came).
+        if (verdict.why === 'run') offer(deps.taskId, 'replan_run', `計画の立て直しは、この通しの上限 ${REPLAN.perRun} 回に達した。この先は止まっても新しい計画は来ない`
+          + '（死んだ時だけ来る）。進まない節は、自分で plan.update で直すか、blocked にして別の道を計画する');
         if (verdict.why === 'node') offer(deps.taskId, `replan_node:${node}`, `節 ${node} は、計画を ${REPLAN.perNode} 回立て直しても進まなかった。続けるか、blocked にして別の道を計画するかを決める`);
         return;
       }

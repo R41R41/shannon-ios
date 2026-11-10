@@ -211,11 +211,12 @@ describe('the brief', () => {
 });
 
 describe('a death has its own ask (run62, 11/5)', () => {
-  it('lets a death through the gap, the hour and the node, and not past the run', () => {
+  it('lets a death through the gap, the hour, the node and the run (K7, 11/10)', () => {
     const busy = { v: 1 as const, total: 5, recent: [0, 60_000, 120_000, 180_000, 240_000, 300_000], nodes: { p3: 3 }, last: [] };
     expect(replanVerdict(busy, 'p3', 310_000)).toMatchObject({ ok: false });
     expect(replanVerdict(busy, 'p3', 310_000, 'death')).toEqual({ ok: true });
-    expect(replanVerdict({ ...busy, total: REPLAN.perRun }, 'p3', 310_000, 'death')).toEqual({ ok: false, why: 'run' });
+    expect(replanVerdict({ ...busy, total: REPLAN.perRun }, 'p3', 310_000, 'death')).toEqual({ ok: true });
+    expect(replanVerdict({ ...busy, total: REPLAN.perRun }, 'p9', 99 * 60_000)).toEqual({ ok: false, why: 'run' });
   });
   it('tells the strong model where a node that takes back what a death lost lives on: under an open node, not under a done one (G07, 11/10)', () => {
     const done = { ...tree(), nodes: tree().nodes.map(node => (node.id === 'p1' ? { ...node, state: 'done' as const } : node)), current: 'p2' };
@@ -319,6 +320,24 @@ describe('the flow of one task', () => {
     await nearly.flow.run(signal);
     expect(nearly.asked).toHaveLength(1);
     expect(replanLines(nearly.lines).at(-1)).toContain('why=gap');
+  });
+
+  it('past the count of the run, tells the decision once that no new plan comes for a stall, and still asks for a death (K7, 11/10)', async () => {
+    const used = { v: 1, total: REPLAN.perRun, recent: [], nodes: {}, last: [] };
+    const { flow, asked, lines } = make(async () => ({ ops: [], why: 'そのまま' }), { clock: () => 200 * MIN, saved: used });
+    flow.note(stall('node_stalled', 'p2'));
+    await flow.run(signal);
+    expect(asked).toHaveLength(0);
+    expect(lines.some(line => line.includes('replan skipped task=flow node=p2 kind=node_stalled why=run'))).toBe(true);
+    expect(flow.checkpoint().minecraftReplanPending).toBeNull();
+    const told = pending('flow').filter(fact => fact.key === 'replan_run');
+    expect(told).toHaveLength(1);
+    expect(told[0]!.text).toContain(`上限 ${REPLAN.perRun} 回に達した`);
+    expect(told[0]!.text).toContain('死んだ時だけ来る');
+    flow.note(stall('death', '3-1'));
+    await flow.run(signal);
+    expect(asked).toHaveLength(1);
+    expect(flow.ledger().total).toBe(REPLAN.perRun + 1);
   });
 
   it('keeps a stall found at the end of a step for the next step, and one the gap holds back until the gap has passed', async () => {
