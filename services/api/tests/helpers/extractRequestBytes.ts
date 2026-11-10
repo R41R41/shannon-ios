@@ -103,7 +103,7 @@ function queueOf(options: ExtractOptions, listeners: Array<(item: unknown, resul
     input: options.hands?.[index] ?? { hands: [] }, pre: undefined, done: undefined, reason: () => null }));
   const left = (options.state.queue[0]?.leftS ?? 0) * 1000;
   const none = () => {};
-  return { lines: (frame: BodyObservation | null) => queueLines(items, frame, { progress: null, leftMs: left }), ahead: () => items.map(item => item.input), mark: none, stale: () => false,
+  return { lines: (frame: BodyObservation | null) => queueLines(items, frame, { progress: null, leftMs: left }), ahead: () => items.map(item => item.input), mark: none, stale: () => false, staleFor: () => false,
     onRan: (listener: (item: unknown, result: unknown, receipt?: unknown) => void) => { listeners.push(listener); }, furnaceNews: () => [], notes: () => [], settled: async () => {}, stop: none, cancelAll: none, noteReflexCapped: none, droppedSince: () => [], tail: () => null } as unknown as LlmcQueue;
 }
 

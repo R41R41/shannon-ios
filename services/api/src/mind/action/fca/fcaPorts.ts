@@ -94,6 +94,13 @@ export interface FcaBodyQueue {
   take(): FcaQueueNews[];
   /** Changes with every drop (an item that ended badly, a replaced or expired one): a decision asked before it is thrown away. */
   version(): number;
+  /**
+   * E2: a decision whose request was sent is not thrown away when the queue changes while it is thought. When the answer is in, each call it chose
+   * is judged against the queue as it is now: true when that call followed a queue that is gone (the step drops it and says so in its result),
+   * false when it stands (an act that names what it relies on, and none of that left). Absent: any change of `version` since the request makes
+   * every call stale.
+   */
+  staleFor?(call: { name: string; input: unknown }): boolean;
   /** How long the model took for a decision (the median of the last ten is when `ready` says `remaining`). */
   noteDecision(milliseconds: number): void;
   /** Takes the items that wait off the queue (the running one goes on); returns how many. */

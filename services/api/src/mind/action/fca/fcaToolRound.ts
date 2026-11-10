@@ -26,13 +26,17 @@ export interface RoundContext {
   provenance: Record<string, unknown>;
   bodyTask: boolean;
   /** Whether the body or the observations moved since the decision: set here, read by the step. */
-  state: { bodyStale: boolean };
+  state: { bodyStale: boolean;
+    /** E2: the calls of this decision that followed a queue that changed while it was thought (the ids): not run, and told so; the step goes on. */
+    droppedCalls?: ReadonlySet<string> };
 }
 /** One call's outcome as the failure ladder reads it (`settleReflexStep`). */
 export interface RoundOutcome { name: string; ok: boolean; cut: boolean; read: boolean }
 export interface ToolRound { results: Array<{ id: string; text: string; ok: boolean }>; outcomes: RoundOutcome[] }
 
 const STALE = '身体の状態が変わりました。最新の観測から判断し直してください。';
+/** E2: a call of a decision whose queue changed meanwhile (an item ended badly or was taken off) and that did not say it did not rely on it (`dependsOn`). */
+export const FCA_DROPPED_STALE = '送らなかった: この判断を考えている間に列が変わった（前の項目が失敗した、または外れた）。列の今の状態から選び直してください。頼る物が無い行いは dependsOn で頼り先を空か今も残る項目にすれば、そのまま送られます。';
 /** Past 1,000 characters the start and the end are kept: a body result says what to do first at its end (the failure review reads it). */
 export const resultSummary = (text: string): string => text.length <= 1_000 ? text : `${text.slice(0, 560)}…${text.slice(-439)}`;
 
@@ -128,6 +132,15 @@ const isBodyAction = (ctx: RoundContext, name: string): boolean => ctx.bodyTask 
 /** One call of the round: the gates, the call, its progress records, and its place in the tally. */
 async function runOne(ctx: RoundContext, call: FcaToolCall, last: boolean, tally: Tally): Promise<void> {
   const { step, ports, metrics, catalog, provenance, state } = ctx;
+  if (state.droppedCalls?.has(call.id)) {
+    // E2: told, not run, and not a failure the ladder counts; the calls that stand go on.
+    const operationId = `${step.id}:${call.id}`;
+    ctx.progress({ operationId, tool: call.name, status: 'failed' });
+    ports.evidence?.notRun?.(step, call);
+    tally.notRun.add(call.id);
+    tally.results.push({ id: call.id, text: FCA_DROPPED_STALE, ok: false });
+    return;
+  }
   await ctx.checked(ports.tools?.permitsItself?.(call.name) ? 'local' : 'fresh');
   if (!await ctx.stillFreshFor(call)) state.bodyStale = true;
   const operationId = `${step.id}:${call.id}`;
