@@ -208,7 +208,7 @@ describe('the urgent live state keeps what it lost', () => {
     expect(isUrgentLive({ body: {} })).toBe(false);
     const sent = candidateAct({ hands: ['jump 1', 'jump 1', 'jump 1', 'jump 1'] }, frame(world), 'gpt-review', { urgent: true });
     expect(sent.guard?.sentHands).toBe(3);
-    expect(sent.guard?.text).toContain('急ぎの判断は 3 手まで（system の「急ぎの時」）');
+    expect(sent.guard?.text).toContain('急ぎの判断は 3 手まで（system の「急ぎの時」。eat は数えない）');
   });
   it('is made of facts: the live state of a calm decision has no key answer either', () => {
     const calm = minecraftLlmcLive({ observation: frame(world), elapsedMinutes: 3, trend: createFoodTrend(), events: [] });
