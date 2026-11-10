@@ -53,10 +53,16 @@ describe('run50 hold1: deferring unmet preparation is not completing it', () => 
 });
 
 describe('run50 hold1: low-health combat and emergency food', () => {
-  it.each([undefined, 3, 5, 8])('does not send a fight at health 5 with retreatHp %s, but permits fleeing', retreatHp => {
-    const hand = { do: 'fight', target: 'skeleton', ...(retreatHp === undefined ? {} : { retreatHp }) };
+  it.each([5, 8])('does not send a fight at health 5 with retreatHp %s (at or above the health), but permits fleeing', retreatHp => {
+    const hand = { do: 'fight', target: 'skeleton', retreatHp };
     expect(heldBeforeSend(false, { hands: [hand] }, frame({ health: 5 }), 't')?.result?.text).toContain('fight は送っていない');
     expect(heldBeforeSend(false, { hands: [{ ...hand, stance: 'flee' }] }, frame({ health: 5 }), 't')).toBeNull();
+  });
+  // The owner's 11/10 combat rule (267e8420): health 8 or less alone no longer refuses a fight hand; only a retreatHp at or above
+  // the health does (the case above). Low health with a lower retreatHp, or none, is sent.
+  it.each([undefined, 3])('sends a fight at health 5 with retreatHp %s (health alone does not refuse it)', retreatHp => {
+    const hand = { do: 'fight', target: 'skeleton', ...(retreatHp === undefined ? {} : { retreatHp }) };
+    expect(heldBeforeSend(false, { hands: [hand] }, frame({ health: 5 }), 't')).toBeNull();
   });
   it('lets a healthy body fight, with the existing retreat threshold respected', () => {
     expect(heldBeforeSend(false, { hands: [{ do: 'fight', target: 'skeleton', retreatHp: 8 }] }, frame({ health: 12 }), 't')).toBeNull();
