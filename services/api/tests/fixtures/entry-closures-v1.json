@@ -36,6 +36,7 @@
     "contracts/minecraftLlmcToolWords.ts",
     "contracts/minecraftMapLegendV2.ts",
     "contracts/minecraftProbeContract.ts",
+    "contracts/minecraftSelfDefenceWords.ts",
     "contracts/minecraftShieldRushContract.ts",
     "contracts/modelModeContract.ts",
     "contracts/moodHistoryContract.ts",
