@@ -206,7 +206,9 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
   // waited (the prep held the descent). The iron is the night's work until all three.
   const armoured = ['iron_helmet', 'iron_chestplate'].every(name => carried(counts, name) > 0);
   const ore = !armoured ? 'iron' as const
-    : carried(counts, 'diamond') < 3 && carriedNames(counts, IRON_PICK_UP).length ? 'diamond' as const : null;
+    // 11/10 review (no run): with the diamond pickaxe made the diamonds are no longer the night's work (the pearls hunted on the overworld's
+    // night, the walk to the stronghold); the line and `nightWaitHold` stay silent then.
+    : carried(counts, 'diamond') < 3 && carried(counts, 'diamond_pickaxe') === 0 && carriedNames(counts, IRON_PICK_UP).length ? 'diamond' as const : null;
   if (!ore) return null;
   const at = world.position && typeof world.position === 'object' ? world.position as { x?: unknown; y?: unknown; z?: unknown } : null;
   const px = typeof at?.x === 'number' ? at.x : null, pz = typeof at?.z === 'number' ? at.z : null;
