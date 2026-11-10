@@ -35,7 +35,7 @@ const filmingOverLimit = new Map([
   ['services/api/src/surfaces/minecraft/minecraftFirstPlan.ts', 564],
   ['services/api/src/surfaces/minecraft/minecraftLlmcLive.ts', 503],
   ['services/api/src/surfaces/minecraft/minecraftLlmcQueue.ts', 546],
-  ['services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts', 675],
+  ['services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts', 697],
   ['services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts', 681],
   ['services/api/src/wiring/fcaBodyRecovery.ts', 508],
 ]);

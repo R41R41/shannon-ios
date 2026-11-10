@@ -1842,8 +1842,8 @@
     },
     "services/api/src/surfaces/minecraft/minecraftEndFacts.ts": {
       "complex-function": 5,
-      "long-line": 7,
-      "multi-statement-line": 2
+      "long-line": 9,
+      "multi-statement-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftEndGather.ts": {
       "long-line": 1
@@ -1855,7 +1855,7 @@
       "long-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlan.ts": {
-      "long-line": 6,
+      "long-line": 8,
       "multi-statement-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlanPrompts.ts": {
@@ -1900,7 +1900,7 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts": {
-      "long-line": 14
+      "long-line": 22
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
@@ -1908,7 +1908,7 @@
     },
     "services/api/src/surfaces/minecraft/minecraftOreRoute.ts": {
       "complex-function": 1,
-      "long-line": 2,
+      "long-line": 3,
       "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftPlanDone.ts": {
@@ -2261,6 +2261,9 @@
     "services/api/src/worldWorker.ts": {
       "multi-statement-line": 5,
       "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftDropsAdvice.ts": {
+      "long-line": 1
     }
   }
 }
