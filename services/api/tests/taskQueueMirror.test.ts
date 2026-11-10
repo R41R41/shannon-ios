@@ -331,6 +331,21 @@ describe('when the next decision is due', () => {
     await short.queue.add(short.spec(dig(2)));
     short.take();
     expect(await short.queue.ready({ signal: new AbortController().signal, drain: false })).toBe('remaining');
+    // A full queue takes no more: three short items do not wake the head (the add would be refused) until one of them ends.
+    const full = setup();
+    await full.queue.add(full.spec(wait1));
+    await full.queue.add(full.spec(dig(2)));
+    await full.queue.add(full.spec(dig(3)));
+    full.take();
+    const fullStop = new AbortController();
+    const fullWait = full.queue.ready({ signal: fullStop.signal, drain: false });
+    let fullWoke = false;
+    void fullWait.then(() => { fullWoke = true; }, () => undefined);
+    await delay(250);
+    expect(fullWoke).toBe(false);
+    full.end('completed', actResult(1));
+    full.poll();
+    expect(await fullWait).toBe('remaining');
     const two = setup();
     await two.queue.add(two.spec(wait1));
     await two.queue.add(two.spec([...dig(3), { do: 'wait', seconds: 30 }]));

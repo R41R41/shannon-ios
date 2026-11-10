@@ -1,4 +1,5 @@
 import { counters, verticalSpeeds, keep } from './minecraftLlmcQueueState.js';
+import { QUEUE_MAX } from './minecraftLlmcQueueWords.js';
 import type { QueueItem, QueueDeps, RanListener } from './minecraftLlmcQueueState.js';
 import { actRemainingMilliseconds } from '../../contracts/minecraftActContract.js';
 import { dependStateOf, unitView, type DependState } from '../../contracts/continueContract.js';
@@ -65,7 +66,9 @@ export function createQueueProgress(deps: QueueDeps, shared: { items: QueueItem[
     const decided = queue.filter(item => !item.reserve);
     if (!decided.length) return queue.length ? 'remaining' : null;
     // Loop 11/10: the decision is due when all the decided items left are nearly done together (two short ones behind each other as
-    // much as one), not only when one is left: the next item goes in before the body runs dry.
+    // much as one), not only when one is left: the next item goes in before the body runs dry. A full queue (QUEUE_MAX, the running one
+    // and reserves counted, as the admission counts them) takes nothing more: no wake for it, or the decision is paid for and refused.
+    if (queue.length >= QUEUE_MAX) return null;
     return decided.reduce((sum, item) => sum + remainingMs(item), 0) <= wake ? 'remaining' : null;
   }
   return { progressOf, remainingMs, dependStateOfRef, tell, aheadMs, nextNumber, wakeNow };
