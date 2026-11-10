@@ -5,6 +5,7 @@ import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS
 import type { QueueItem,QueueAdd,QueueRecordRow,QueueDeps,RanListener,LlmcQueue } from './minecraftLlmcQueueState.js';
 import { createQueueReceiptHandlers } from './minecraftLlmcQueueReceipts.js';
 import { MC_ACT_TOOL,readActResult,tunedBy } from '../../contracts/minecraftActContract.js';
+import { readDependsOn } from '../../contracts/minecraftActShortContract.js';
 import { actMaxMilliseconds } from '../../contracts/minecraftActTime.js';
 import { queueName,type OperationState } from '../../contracts/continueContract.js';
 import type { MinecraftControlReceipt,MinecraftQueueEnvelope } from '../../contracts/minecraftControlContract.js';
@@ -92,6 +93,13 @@ export function createLlmcQueue(deps: QueueDeps): LlmcQueue {
     version += 1;
     droppedNow += 1;
     for (const item of leaving) lost.add(item.item);
+  };
+  /** A mark that left badly, or whose item rests (through its own `dependsOn`) on one that did: the drops of its followers are booked a little later. */
+  const leftBadly = (ref: string, seen = new Set<string>()): boolean => {
+    if (lost.has(ref)) return true;
+    if (seen.has(ref)) return false;
+    seen.add(ref);
+    return items.find(item => item.item === ref)?.dependsOn?.some(next => leftBadly(next, seen)) ?? false;
   };
   const markNow = () => { marked = version; lost.clear(); };
   /**
@@ -351,8 +359,8 @@ void restoreReceipts();
     staleFor(call) {
       if (version === marked) return false;
       if (call.name !== MC_ACT_TOOL) return true;
-      const relies = (call.input as { dependsOn?: unknown } | null)?.dependsOn;
-      return !Array.isArray(relies) || relies.some(ref => lost.has(String(ref)));
+      const relies = readDependsOn((call.input as { dependsOn?: unknown } | null)?.dependsOn);
+      return !Array.isArray(relies) || relies.some(ref => leftBadly(String(ref)));
     },
     // Once the items are taken off (a stop, the close of the step) an unsettled one is unsafe again: the guard must not look past it.
     openIds: () => stopped ? new Set<string>() : new Set(open().map(item => item.id)),

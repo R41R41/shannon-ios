@@ -349,6 +349,10 @@ export function shortToAct(input: unknown): { act: ActInput; errors: string[] } 
  * write), `repeat` a whole number of 2–8, `replace` item ids (a bare id too). A field that is already JSON (a
  * condition array) is kept as it is.
  */
+/** `dependsOn` as the act's reader takes it: a list of marks, a bare mark or marks joined by commas, "none" for none; anything else is returned as it is. */
+export function readDependsOn(raw: unknown): unknown {
+  return raw === 'none' ? [] : typeof raw === 'string' ? raw.split(',').map(item => item.trim()).filter(Boolean) : raw;
+}
 function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' | 'done' | 'repeat' | 'replace' | 'reserve' | 'dependsOn' | 'uses' | 'keep'> {
   const value = (input ?? {}) as Record<string, unknown>, out: Record<string, unknown> = {};
   readQueueConditions(value, out, errors);
@@ -358,8 +362,7 @@ function queueFieldsOf(input: unknown, errors: string[]): Pick<ActInput, 'pre' |
   if (value.reserve === true || value.reserve === 'true') out.reserve = true;
   // dependsOn: marks ("q12"), a bare mark or marks joined by commas; an empty list (or "none") relies on none.
 // uses: promise numbers, a bare number or numbers joined by commas.
-  const depends = value.dependsOn === 'none' ? [] : typeof value.dependsOn === 'string' ? value.dependsOn.split(',').map(item => item.trim(
-    )).filter(Boolean) : value.dependsOn;
+  const depends = readDependsOn(value.dependsOn);
   if (Array.isArray(depends)) out.dependsOn = depends.filter(item => typeof item === 'string');
   else if (value.dependsOn !== undefined) errors.push('dependsOn の書き方の誤り: 列の項目の並び（["q12"]）。何にも頼らないなら []');
   const uses = typeof value.uses === 'number' ? [value.uses] : typeof value.uses === 'string' ? value.uses.split(',').map(Number) : value.uses;

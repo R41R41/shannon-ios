@@ -325,27 +325,38 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     // E2: a decision asked while items run is not thrown away when one of them ends badly or is taken off (its request is sent and
     // is paid for either way): when the answer is in, each call it chose is judged against the queue as it is now. A call that
     // followed a queue that is gone is dropped (told in its result); the calls that stand are used. A decision with nothing that stands is
-    // asked again below.
+    // asked again below. Only when the queue changed AND nothing is open any more (the body stands idle) is the request given up at once, as before:
+    // waiting for the rest of a request that may well be dropped would be an idle wait.
+    const cancel = new AbortController();
+    let thrownAway = false;
+    const watch = rounds > 1 && queue ? setInterval(() => { if (queue.version() !== askedVersion && !queue.open()) { thrownAway = true;
+      cancel.abort(new Error('FCA_QUEUE_CHANGED')); } }, 100) : null;
+    watch?.unref?.();
     const decidedAt = performance.now();
     let answer: FcaModelOutput | null = null;
     try {
-      answer = rounds === 1 ? await decideFirst(asked) : await decide(asked);
+      answer = rounds === 1 ? await decideFirst(asked) : await decide(asked, AbortSignal.any([signal, cancel.signal]));
     } catch (error) {
-      noteDecisionOutcome('failed', { code: String((error as Error | undefined)?.message ?? error).slice(0, 120) });
-      progress({ operationId, tool: 'fca.decide', status: 'unknown' });
-      // Run 41: a step that ends on an error with items still running in the body leaves nobody to watch them and its
+      if (!thrownAway || signal.aborted) {
+        noteDecisionOutcome('failed', { code: String((error as Error | undefined)?.message ?? error).slice(0, 120) });
+        progress({ operationId, tool: 'fca.decide', status: 'unknown' });
+        // Run 41: a step that ends on an error with items still running in the body leaves nobody to watch them and its
 // outcome unknown until they end (1.5 minutes
-      // of a refused request, minecraft_busy). The items are taken off here, so that their answers settle the step
+        // of a refused request, minecraft_busy). The items are taken off here, so that their answers settle the step
 // within a moment (`queueLifecycle.close`).
-      queue?.cancelAll();
-      throw error;
-    }
+        queue?.cancelAll();
+        throw error;
+      }
+    } finally { if (watch) clearInterval(watch); }
     const droppedCalls = new Set<string>();
     if (answer && queue && rounds > 1) {
       const changed = queue.staleFor ? (call: { name: string; input: unknown }) => queue.staleFor!(call) : () => queue.version() !== askedVersion;
+      // A read or a tool of the task or goal does not follow the queue (it acts on no item): it is kept, not dropped.
+      const followsQueue = (name: string) => { const definition = ports.tools?.definitions.find(entry => entry.name === name);
+        return !definition || (definition.domain === 'minecraft_body' && definition.effect !== 'read'); };
       if (answer.decision.kind === 'tools') {
-        for (const call of answer.decision.calls) if (changed(call)) droppedCalls.add(call.id);
-        if (droppedCalls.size === answer.decision.calls.length) answer = null;
+        for (const call of answer.decision.calls) if (followsQueue(call.name) && changed(call)) droppedCalls.add(call.id);
+        if (droppedCalls.size && droppedCalls.size === answer.decision.calls.length) answer = null;
       } else if (changed({ name: answer.decision.kind, input: null })) answer = null;
     }
     if (!answer) {

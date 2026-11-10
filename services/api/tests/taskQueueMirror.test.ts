@@ -283,6 +283,9 @@ describe('the results as news, and the version', () => {
     expect(f.queue.staleFor(act({ dependsOn: ['q3', 'q2'] }))).toBe(true); // q2 was dropped behind q1
     expect(f.queue.staleFor(act({ dependsOn: [] }))).toBe(false);
     expect(f.queue.staleFor(act({ dependsOn: ['q9'] }))).toBe(false); // names something that is still there
+    expect(f.queue.staleFor(act({ dependsOn: 'none' }))).toBe(false); // written as the act's reader takes it
+    expect(f.queue.staleFor(act({ dependsOn: 'q9' }))).toBe(false);
+    expect(f.queue.staleFor(act({ dependsOn: 'q9, q1' }))).toBe(true);
     expect(f.queue.staleFor({ name: 'mc.look', input: { dependsOn: [] } })).toBe(true); // a call that is not an act followed the queue it saw
     f.queue.mark();
     expect(f.queue.staleFor(act({}))).toBe(false); // the next decision's request is built on the queue as it is
