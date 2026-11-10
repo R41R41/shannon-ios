@@ -90,6 +90,7 @@ describe('End entry goals and recovery', () => {
   it('names twelve arrows as the least worth carrying and the lone skeleton of the road as a source', () => {
     expect(END_BOW_KNOWLEDGE).toContain('矢は最低 12 本（檻なしのクリスタル 8 本に 1 射ずつ');
     expect(END_BOW_KNOWLEDGE).toContain('矢のために夜を待たない・追いかけない・寄り道しない');
+    expect(END_BOW_KNOWLEDGE).toContain('鉄の防具と盾があり、道の近くに 1 体だけの時に fight する（防具か盾が無い時・2 体以上の時は、射線を切って離れる）');
     expect(PLAN_PREP_WORDS).toContain('矢だけのために夜を待つ節・狩りに出る節は書かない');
     const bow = seedPlan('エンドラを倒して')!.nodes.find(node => node.title.startsWith('弓と矢'))!;
     expect(bow.title).toContain('矢は最低 12・目標 30');
