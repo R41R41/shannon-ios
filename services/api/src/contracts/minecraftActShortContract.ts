@@ -79,7 +79,7 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
   ]),
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
   ("  戦い方を体に任せる（狙い・間合い・盾・クリティカル・低体力で食べる/退く）。flee は戦わず range m 離れる。retreatHp " +
-"は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・自衛の数を超えた時の逃走）が優先で、反射が起きたら止まる。")
+"は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。")
     + 'fight は剣か斧が荷に要る（無いと no_weapon）。素手で殴るなら attack 相手 を使う。'
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
   manualPage('mine', 'mine（指定した同種の鉱脈を掘って回収）', [
@@ -207,7 +207,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   '- accept は、この act で戦うと決めた敵の種類の配列（例 ["blaze"]）。その種類が近くにいても act を止めず、体もそれから逃げない（盾の構えと火の玉の打ち返しはする）。'
     + 'accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ。'
     + SELF_DEFENCE_SHORT + '。近接の敵が殴って来る時は accept に入れず attack を先頭の手に（accept だけでは歩く・掘る手が続く）。'
-    + '溶岩・溺れ・落下・点火クリーパー・自衛の数を超えた時の逃走の反射と hpBelow も残る。早めに引くなら stopIf の hpBelow を高めに。',
+    + '溶岩・溺れ・落下・点火クリーパー・体力 8 以下の逃走の反射と hpBelow も残る。早めに引くなら stopIf の hpBelow を高めに。',
   '- onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、'
     + 'ほかは stop。急ぐ手（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',
   '- 同じ種類の手が続く場面（採掘・作る）は 1 つの act にまとめる（dig の at は16マスまで1手に）。トンネル・橋の道は go 1 手、階段・柱・縦穴は vertical 1 手。'

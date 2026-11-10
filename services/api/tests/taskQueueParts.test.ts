@@ -163,7 +163,7 @@ describe('a wait-only act behind a running item (run 4: refused 5 times, each a 
     const result = await sendItem({ ...parts(queue), call: call({ hands: [{ do: 'wait', seconds: 20 }], why: 'x' }) });
     expect(result.ok).toBe(true);
     expect(added).toBe(0);
-    expect(result.text).toContain('走っている q4 の終わりで起こす');
+    expect(result.text).toContain('列の最後の q4 が終わって列が空になったら起こす');
     expect(result.text).toContain('体には何も足していない');
   });
   it('an empty queue, or a wait with another hand, goes to the queue as before', async () => {

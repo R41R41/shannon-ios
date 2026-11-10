@@ -163,7 +163,7 @@ describe('the live state and the results say facts', () => {
     const fight = (retreatHp: number) => ({ hands: [{ do: 'fight', target: '#5493', item: 'iron_sword', retreatHp }] });
     const low = rangeStop(fight(7), frame({ health: 6 }))!;
     expect(low.code).toBe('retreat_on');
-    expect(low.line).toBe('retreatHp 7 は今の体力 6 以上で、始める前に退く値。体力 6 は 8 以下で、fight は送っていない');
+    expect(low.line).toBe('retreatHp 7 は今の体力 6 以上で、始める前に退く値。fight は送っていない');
     expect(rangeStop(fight(16), frame({ health: 15 }))!.line).toBe('retreatHp 16 は今の体力 15 以上で、始める前に退く値。fight は送っていない');
     expect(low.line).not.toMatch(/低く|下げ/u);
   });

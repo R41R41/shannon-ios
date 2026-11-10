@@ -118,7 +118,7 @@ export const ACT_DESCRIPTION = [
 "手に）。止まりは反射・stopIf・onFail が守る。"),
   'accept: この act で戦うと決めた敵の種類（例 ["blaze"]）。その種類が近くにいても act を止めず、体もそれから逃げない（盾の構えと火の玉の打ち返しはする）。'
     + SELF_DEFENCE_SHORT + '。'
-    + '溶岩・溺れ・落下・点火クリーパー・自衛の数を超えた時の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
+    + '溶岩・溺れ・落下・点火クリーパー・体力 8 以下の逃走の反射は残る。早めに引くなら stopIf の hpBelow を高めに。',
   ("onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が " +
 "continue、ほかは stop。")
     + '急ぐ act（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',

@@ -91,15 +91,9 @@ function fightProblem(hand: Rec, world: Rec): Found {
   if (!target.startsWith('#') && NOT_ENEMIES.test(target)) return reason('not_enemy', `target の「${target}」は敵ではない（村人・ゴーレム・商人・人・飼える動物とは戦わない）`);
   const health = typeof world.health === 'number' ? world.health : null;
   if (typeof hand.retreatHp === 'number' && health !== null && hand.retreatHp >= health && hand.stance !== 'flee') {
-    // GPT's review 2026-10-28: a fact only. It no longer tells to lower retreatHp (at health 8 or under that would
-// push a fight through;
-    // system: 「体力 8 以下では戦わない」).
-    return reason('retreat_on', health <= 8
-      ? `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。体力 ${Math.round(health)} は 8 以下で、fight は送っていない`
-      : `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。fight は送っていない`);
-  }
-  if (health !== null && health <= 8 && hand.stance !== 'flee') {
-    return reason('retreat_on', `体力 ${Math.round(health)} は 8 以下。retreatHp を低くしても fight は送っていない。退避・遮蔽・回復を選ぶ`);
+    // A fact only: this fight hand would start with a retreat value already reached. (Owner's rule 11/10: at health 8 or
+    // under, inside the self-defence count the body fights, so no refusal rests on health alone.)
+    return reason('retreat_on', `retreatHp ${hand.retreatHp} は今の体力 ${Math.round(health)} 以上で、始める前に退く値。fight は送っていない`);
   }
   return null;
 }

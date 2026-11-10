@@ -117,8 +117,8 @@ export function feetOf(observation: BodyObservation | null): ActPos | null {
  * kept in the history). */
 export const AROUND_PREFIX = '  周り（上の層から、北が上・西が左）';
 /** An act's result in the lines the model reads (no map: the live state carries the newest one). */
-/** The words of a body refusal that name what to allow or raise (`canDig に stone を許せば掘 4 で道がある`, 「上限 10」, 「waterOk の許可が無い」). */
-const REMEDY_SENTENCE = /canDig|canPlace|maxDig|maxPlace|waterOk|許せば|許可|上限/u;
+/** The words of a body refusal that name what to allow or raise (`canDig に stone を許せば掘 4 で道がある`, 「waterOk の許可が無い」). */
+const REMEDY_SENTENCE = /(?:canDig|canPlace|maxDig|maxPlace|waterOk)[^。]*(?:許せば|許可|足せば|足す|入れれば)|許せば/u;
 /**
  * end1109 run 4: the body refused `go` four times in 30 s with `canDig に white_terracotta を許せば … 道がある` in the middle of the hand's line, and the
  * decision sent the same go again (q29–q31, q72/q73: the way out was in a line it had to read to the end). The first stopped or failed hand's

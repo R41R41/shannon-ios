@@ -81,7 +81,7 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
     why: String(input.why ?? ''), fixes: [], ...(reserving ? { reserve: true } : {}), ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
     maxMs: actMilliseconds(timed, feet) });
   // run 4: a wait-only act behind an item that runs is answered as "woken when it ends", not refused (the queue's own wakes do it; nothing is added).
-  if (input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait') && queue.open()) {
+  if (input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait') && queue.open() && !(keep?.length) && !(input.uses?.length)) {
     const tail = queue.tail();
     if (tail !== null) return toolOk([`${fixes}${waitWakeWords(tail)}`, ...(parts.lead ?? [])].join('\n'));
   }

@@ -26,7 +26,7 @@ export const waitBehindWords = (running: string) =>
  * nearly done, or the queue empty, once on this queue).
  */
 export const waitWakeWords = (running: string) =>
-  `wait は積まなかった（体には何も足していない。体は列を動かし続ける）。走っている ${running} の終わりで起こす: その結果は終わった時に知らせる。`
+  `wait は積まなかった（体には何も足していない。体は列を動かし続ける）。列の最後の ${running} が終わって列が空になったら起こす: その結果は終わった時に知らせる。`
   + '待つ間に体を使う項目があれば、wait ではなくその項目を足す';
 /** The body's own words of an item it did not run (`failureType`): the item never started and no hand moved. */
 export const NEVER_RAN: ReadonlySet<string> = new Set(['queue_dropped', 'queue_expired', 'queue_after_gone', 'queue_busy', 'queue_full']);
