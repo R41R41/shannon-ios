@@ -4,6 +4,7 @@ import { blazeLack, deadlyGateHold } from '../src/surfaces/minecraft/minecraftLl
 import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 import { preparationShortage, readinessOf } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { END_GATHER_MS, firstEntryLack, forgetEndGather } from '../src/surfaces/minecraft/minecraftEndGather.js';
+import { V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 
 /**
  * The deadly gates in `gateHold`'s form (the coordinator's list for 11/4, item 2): a hand that goes into the blaze spawner or the End is held
@@ -37,6 +38,22 @@ describe('the blaze spawner', () => {
     expect(blazeLack(readinessOf(frame(READY, { health: 19.66666603088379 }))!)).toContain('体力 19.7/20（満腹度 20 なので食べずに見えない所で wait 約 2 秒で戻る）');
     expect(blazeLack(readinessOf(frame(READY, { health: 15, food: 18 }))!)).toContain('wait 約 20 秒');
     expect(blazeLack(readinessOf(frame(READY, { health: 15, food: 12 }))!)).toContain('体力 15/20（食べて回復を待つ）');
+  });
+  it('reads one set of food numbers on the way to the spawner: 100 to go deep, 60 to go in, 200 from a herd before the gate (K4, 11/10)', () => {
+    // The check of the way in and the check of the fight (the shortage lines), then the gate itself: 5 beef (104 points) pass all three.
+    const facts = (beef: number) => readinessOf(frame([['shield', 1], ['crafting_table', 1], ['cobblestone', 64], ['cooked_beef', beef]]))!;
+    const shortage = (beef: number, kind: 'fortress' | 'blaze') => preparationShortage({ dimension: 'the_nether', counts: facts(beef).counts, food: facts(beef).food, nowKinds: [kind] }) ?? '';
+    expect(shortage(4, 'fortress')).toContain('（目安 100）');
+    expect(shortage(5, 'fortress')).not.toContain('目安');
+    expect(shortage(2, 'blaze')).toContain('（目安 60）');
+    expect(shortage(3, 'blaze')).not.toContain('目安');
+    expect(blazeLack(facts(3))).toBeNull();
+    // The knowledge says the same numbers, and why more than the least is worth a herd in sight (the fight eats about 150).
+    expect(V2_STAGES.prep).toContain('ネザーの奥へ 100、エンドへ 330');
+    expect(V2_STAGES.prep).toContain('ネザーの奥への 100 は最低で、ブレイズ戦はロッド 7 本で約 150 点食べる（湧き場は 60 点を切ると入れない');
+    expect(V2_STAGES.prep).toContain('数頭まとまって見えたら、その場で 200 点以上（焼き肉 10）まで狩って焼く。見えない時は、そのために探し回らず 100 で進む');
+    expect(V2_STAGES.blaze).toContain('持ち物の食料 60 点（焼き肉 3。退いて立て直す分）');
+    expect(V2_STAGES.blaze).not.toContain('150 点');
   });
   it('says to make a shield where she stands when the materials are carried (end1108h18: both shields broke, 14 minutes on other work)', () => {
     const carrying = blazeLack(readinessOf(frame([['cooked_beef', 20], ['iron_ingot', 2], ['oak_planks', 16]]))!)!;
