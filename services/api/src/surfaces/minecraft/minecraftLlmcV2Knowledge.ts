@@ -181,6 +181,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     FOOD_ACQUISITION_KNOWLEDGE,
     '- foodPreparation は加工の見込み。炉・作業台・燃料・設置場所と加工後の持ち物を観測で確かめる。',
     '- jobs は見込み。保留・再接続後は残り秒で待ち直さず furnace op=take で現物確認。焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める。',
+    '- 置いた作業台・かまどは、遠くへ行く手（go・walk・vertical・portal・mine）の前に体が拾って持ち歩く（置きっぱなしだと板・丸石を毎回失うため）。焼き途中・出来上がり待ちのかまどだけ残る。使う時は持っている物を place し、近くに作業台があれば新しく作らない。',
     '- ベッドのある安全な囲いでは、射線・敵の到達・足場を確かめ、朝待ちと調理・工作・近くの夜の狩り（食料源の選び方の条件）を比べる。ベッドが無い夜は朝待ちを選ばず、次の順番に従う。',
     // 1107c (11/7): with no bed the head waited 13 of its 19.6 minutes in a dirt pocket, 11 blocks above the iron shaft's depth. The owner: food first by day,
     // iron can be dug at night, and the bed matters most. 1107d (11/7): the line presupposed an enclosure; on a jungle top the dirt ring had no face

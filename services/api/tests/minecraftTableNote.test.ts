@@ -12,7 +12,7 @@ const make = (item: string) => ({ hands: [{ do: 'make', item }] });
 describe('the table note', () => {
   it('says the nearest table\'s distance and the reach when it is out of reach, and what to do', () => {
     const note = tableNote(make('stone_pickaxe'), frame([{ block: 'crafting_table', distance: 9.2 }]))!;
-    for (const word of ['手 1 make stone_pickaxe', '一番近い作業台は 9.2 m 先', '4.5 m 以内', '先に go で作業台へ寄るか', '板 4 で作業台を place']) expect(note, word).toContain(word);
+    for (const word of ['手 1 make stone_pickaxe', '一番近い作業台は 9.2 m 先', '4.5 m 以内', '先に go で作業台へ寄るか', '持っている作業台（無ければ板 4 で作る）を place']) expect(note, word).toContain(word);
   });
   it('says that no table is in the scan\'s radius', () => {
     expect(tableNote(make('iron_pickaxe'), frame([]))).toContain('半径 16 m 内に作業台が見えない');
