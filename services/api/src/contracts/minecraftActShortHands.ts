@@ -226,10 +226,12 @@ const READERS: Record<string, Reader> = {
   chest: chestHand, furnace: furnaceHand,
   obsidian: ({ cells, hand }) => cells.length ? done(blocksOf({ ...hand, at: cells })) : bad('obsidian', '溶岩の源の座標が要る'),
   mine: ({ cells, words, hand }) => cells.length && words[0] ? done(blocksOf({ ...hand, block: words[0], at: cells })) : bad('mine', 'ブロック名と座標が要る'),
-  // `hunt cow,pig count=6`; `hunt cow pig` (kinds as separate words) and `hunt target=cow` are the same.
+  // `hunt cow,pig count=6`; `hunt cow pig` (kinds as separate words) and `hunt target=cow` are the same. A bare number (`hunt cow 6`, as make and craft take it) is the count.
   hunt: ({ words, hand }) => {
-    const target = words.length ? words.join(',') : hand.target;
-    return typeof target === 'string' && target ? done({ ...hand, target }) : bad('hunt', '食料の動物の種類が要る（hunt cow count=6、hunt pig,cow）');
+    const kinds = words.filter(word => !isCount(word)), counts = words.filter(isCount);
+    const target = kinds.length ? kinds.join(',') : hand.target;
+    const count = hand.count === undefined && counts.length ? { count: Number(counts[0]) } : {};
+    return typeof target === 'string' && target ? done({ ...hand, target, ...count }) : bad('hunt', '食料の動物の種類が要る（hunt cow count=6、hunt pig,cow）');
   },
   make: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('make', '物の名前が要る'),
   fight: ({ words, hand }) => {

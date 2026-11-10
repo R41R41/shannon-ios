@@ -45,6 +45,10 @@ describe('the hunt hand: the short line', () => {
     expect(lineToHand('hunt pig,cow range=24 seconds=40')).toEqual({ do: 'hunt', target: 'pig,cow', range: 24, seconds: 40 });
     expect(lineToHand('hunt cow pig')).toEqual({ do: 'hunt', target: 'cow,pig' });
     expect(lineToHand('hunt target=sheep count=3')).toEqual({ do: 'hunt', target: 'sheep', count: 3 });
+    // a bare number is the count (as make and craft take it), not a kind
+    expect(lineToHand('hunt cow 6')).toEqual({ do: 'hunt', target: 'cow', count: 6 });
+    expect(lineToHand('hunt pig cow 3')).toEqual({ do: 'hunt', target: 'pig,cow', count: 3 });
+    expect(lineToHand('hunt cow 6 count=2')).toEqual({ do: 'hunt', target: 'cow', count: 2 });
     expect(lineToHand('hunt')).toEqual({ error: expect.stringContaining('食料の動物の種類が要る') });
     for (const line of ['hunt cow count=6', 'hunt pig,cow range=24 seconds=40', 'hunt sheep']) expect(handToLine(lineToHand(line) as ActHand)).toBe(line);
     // the common fields ride along
