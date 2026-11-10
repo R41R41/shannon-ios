@@ -4,7 +4,7 @@ import { FOOD_PASS } from './minecraftNightArms.js';
 import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import {
-  BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_FALLBACK_WEAPONS, END_GATHER_MS, END_OBSIDIAN, END_WEAPONS, endGatherSince,
+  BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_FALLBACK_WEAPONS, END_GATHER_MS, END_MIN_FOOD, END_OBSIDIAN, END_WEAPONS, endGatherSince,
   FIGHT_OBSIDIAN_LABEL, RETURN_TO_END,
   type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
@@ -188,7 +188,7 @@ function endCheck(parts: { counts: ItemCounts; world?: Record<string, unknown>; 
   const short = table.needs.some(need => gathering(need) && held(parts.counts, need) < need.count);
   const now = parts.now ?? Date.now(), since = endGatherSince(parts.taskId, now, short);
   if (since === null || now - since < END_GATHER_MS) return table;
-  return { ...table, title: `エンドへ（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 30 はあれば使う）`,
+  return { ...table, food: END_MIN_FOOD, title: `エンドへ（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 30 はあれば使う）`,
     needs: [...table.needs.filter(need => !gathering(need) && !END_WEAPONS.includes(need)), ...END_FALLBACK_WEAPONS] };
 }
 
