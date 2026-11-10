@@ -8,6 +8,7 @@ import {
   RELEASE_UNPROVEN_SUMMARY, releaseBackoffMs, STALE_SUMMARY,
 } from '../src/wiring/fcaBodyRecovery.js';
 import { fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
+import { capPausedReport } from '../src/wiring/taskPauseNotice.js';
 import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudgetStore.js';
 import { TaskBodyRecoveryStore } from '../src/mind/action/taskRuntime/store/taskBodyRecoveryStore.js';
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
@@ -113,11 +114,11 @@ describe('a restart while the model was deciding (no body operation was sent)', 
     expect(noticeOf(w.inputsOf(task.id)[1])).toMatchObject({ kind: 'body.recovery', lostOperations: [] });
   });
 
-  it('is ready to run only when its fresh step is admitted like any other: a task at its cap meets the cap, no decision is asked', async () => {
-    let spend!: TaskBudgetStore;
+  it('is ready to run only when its fresh step is admitted like any other: a task at the cap its operator set is paused there, no decision is asked, and it goes on once the cap is raised and it is resumed', async () => {
+    let spend!: TaskBudgetStore, capYen = 1;
     const w = world({ budget: ({ db, actions, now }) => {
       spend = new TaskBudgetStore(db);
-      return fcaBudget({ actions, store: spend, now, minecraftRequest: () => true, taskCapYen: () => 1 });
+      return fcaBudget({ actions, store: spend, now, minecraftRequest: () => true, taskCapYen: () => capYen });
     } });
     const first = w.startApi();
     const task = w.createTask(first);
@@ -128,10 +129,22 @@ describe('a restart while the model was deciding (no body operation was sent)', 
     spend.add(task.id, 'owner', 'owner_request', 5, w.now()); // the first step spent more than the one yen the operator left
     const api = w.startApi();
     w.connectBody(api, 'c2', 'complete');
-    await w.until(api, () => w.phase(api) === 'failed', 'the cap stops it');
+    await w.until(api, () => w.phase(api) === 'stopped', 'the cap stops it');
     expect(w.inputsOf(task.id)).toHaveLength(1);
-    expect(api.driver.runtime.get('owner', task.id)?.summary).toContain('上限');
+    // 2026-11-10: a cap the operator can raise pauses the request (it used to fail it, and a failed request is never resumed).
+    expect(api.driver.runtime.get('owner', task.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped', summary: capPausedReport(task.title, 1) });
     expect(w.events()).toContain('fca_body_recovered');
+    // Resumed without a raise it is paused again at once, with nothing asked and nothing spent.
+    expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
+    await w.until(api, () => api.driver.runtime.get('owner', task.id)?.summary === capPausedReport(task.title, 1), 'paused again at the same cap');
+    expect(w.phase(api)).toBe('stopped');
+    expect(w.inputsOf(task.id)).toHaveLength(1);
+    // The operator raises the cap and resumes it: the same task goes on, with its history, and completes.
+    capYen = 100;
+    expect(api.driver.runtime.resume('owner', task.id)).not.toBeNull();
+    await w.until(api, () => w.phase(api) === 'completed', 'goes on after the raise');
+    expect(w.inputsOf(task.id)).toHaveLength(2);
+    expect(api.driver.runtime.get('owner', task.id)?.summary).not.toContain('上限');
   });
 
   it('respects an owner\'s stop: a stopped unknown request is not taken back, and leaves at its exit as before', async () => {

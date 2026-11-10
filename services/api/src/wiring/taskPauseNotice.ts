@@ -24,6 +24,22 @@ const ESTIMATES_TAIL = 'に近づいたので、いったん止めました。�
 export const estimatesPausedReport = (title: string, capYen: number) => `「${title.slice(0, 60)}${ESTIMATES_MARK}（${capYen}円）${ESTIMATES_TAIL}`;
 const estimatesPaused = (text: string): boolean => text.startsWith('「') && text.includes(ESTIMATES_MARK) && text.endsWith(ESTIMATES_TAIL);
 
+/**
+ * The report of a Minecraft request paused at the yen cap its operator lowered (`fcaBudgetWiring.ts`, 2026-11-10): the
+ * operator may raise that cap (`minecraft budget`) and resume it, so it is a pause and never the failure of a cap nobody
+ * can raise. Recognised by its marker and its tail, like the estimates' report.
+ */
+const CAP_MARK = '」は、予算の上限';
+const CAP_TAIL = 'に達したので、いったん止めました。上限を上げれば再開できます。';
+export const capPausedReport = (title: string, capYen: number) => `「${title.slice(0, 60)}${CAP_MARK}（${capYen}円）${CAP_TAIL}`;
+const capPaused = (text: string): boolean => text.startsWith('「') && text.includes(CAP_MARK) && text.endsWith(CAP_TAIL);
+
+/** The spoken reason of a pause the budget made (its estimates, or the operator's cap), or undefined for any other report. */
+function budgetReason(report: string): string | undefined {
+  if (estimatesPaused(report)) return '確定していない利用料の見積りが上限に近づいた';
+  return capPaused(report) ? '予算の上限に達した' : undefined;
+}
+
 /** The report of a pause whose summary is `summary` (without any hint for the operator): 「title」は、<reason>. */
 export const pausedReport = (title: string, summary: string) => `「${title.slice(0, 60)}」は、${summary}`;
 
@@ -41,7 +57,7 @@ const SPOKEN_REASONS: ReadonlyArray<readonly [string, string]> = [
  * whose reason is not known says only that it is paused and can be resumed.
  */
 export function pausedSpoken(title: string, report: string): string {
-  const reason = SPOKEN_REASONS.find(([summary]) => report.endsWith(summary))?.[1] ?? (estimatesPaused(report) ? '確定していない利用料の見積りが上限に近づいた' : undefined);
+  const reason = SPOKEN_REASONS.find(([summary]) => report.endsWith(summary))?.[1] ?? budgetReason(report);
   return pausedReportLine(title, reason);
 }
 
@@ -51,4 +67,4 @@ export function pausedSpoken(title: string, report: string): string {
  * must not keep it. Cleared on `resume` and, failing that, at the next commit (`SQLiteTaskRuntimeStore`).
  */
 export const pausedSummary = (summary: string): boolean =>
-  summary === PROVIDER_UNAVAILABLE_SUMMARY || summary === BILLING_PAUSED_SUMMARY || estimatesPaused(summary) || ownSummary(summary);
+  summary === PROVIDER_UNAVAILABLE_SUMMARY || summary === BILLING_PAUSED_SUMMARY || estimatesPaused(summary) || capPaused(summary) || ownSummary(summary);

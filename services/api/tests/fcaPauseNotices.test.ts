@@ -4,7 +4,7 @@ import type { ActionLease } from '../src/contracts/actionThreadContract.js';
 import {
   BODY_ABSENT_SUMMARY, createFcaBodyRecovery, FCA_BODY_RELEASE_ATTEMPTS, RECOVERY_LIMIT_SUMMARY, RELEASE_UNPROVEN_SUMMARY, releaseBackoffMs, STALE_SUMMARY,
 } from '../src/wiring/fcaBodyRecovery.js';
-import { pausedSummary } from '../src/wiring/taskPauseNotice.js';
+import { capPausedReport, pausedSpoken, pausedSummary } from '../src/wiring/taskPauseNotice.js';
 import { SQLiteFcaTaskAuthority } from '../src/mind/action/agentTasks/store/fcaTaskAuthority.js';
 import { TaskBodyRecoveryStore } from '../src/mind/action/taskRuntime/store/taskBodyRecoveryStore.js';
 import type { TaskAuthority, TaskRuntime } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
@@ -169,6 +169,8 @@ describe('what a pause said is gone when the owner resumes the request (M-1)', (
   it('recognises the words of the pauses and nothing else', () => {
     expect([BODY_ABSENT_SUMMARY, RECOVERY_LIMIT_SUMMARY, STALE_SUMMARY, RELEASE_UNPROVEN_SUMMARY].every(pausedSummary)).toBe(true);
     expect(pausedSummary('「採掘」は、確定していない利用料の見積りを含めると上限（2000円）に近づいたので、いったん止めました。再開できます。')).toBe(true);
+    expect(pausedSummary(capPausedReport('採掘', 7000))).toBe(true); // 2026-11-10: the cap its operator can raise
+    expect(pausedSpoken('採掘', capPausedReport('採掘', 7000))).toBe('『採掘』は予算の上限に達したため一時停止しています。再開できます。');
     expect(pausedSummary('')).toBe(false);
     expect(pausedSummary('石を3個集めました。')).toBe(false);
     expect(pausedSummary('「採掘」は1件の上限（300円・40歩）に達したので、ここで止めました。')).toBe(false); // a failure's words stay

@@ -172,10 +172,12 @@ describe('a decision is asked again inside its step after a provider error (C-20
     expect(f.driver.runtime.progress!('owner', f.child.id)?.report).toBeUndefined(); // the progress it had before is put back, without the report
     await f.run();
     // Resumed, it asks again (the estimates are reviewed and no longer stop it); its one yen step then reaches the cap by confirmed spend,
-    // and that is the cap's to end, as before.
+    // and that is the cap's to stop. 2026-11-10: the cap is the operator's own (20 yen), which the operator can raise, so the request
+    // is paused there (resumable) and no longer failed.
     expect(f.provider.bodies).toHaveLength(2);
-    expect(f.phase()).toBe('failed');
-    expect(f.driver.runtime.get('owner', f.child.id)?.summary).toContain('上限');
+    expect(f.phase()).toBe('stopped');
+    expect(f.driver.runtime.get('owner', f.child.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped' });
+    expect(f.driver.runtime.get('owner', f.child.id)?.summary).toContain('予算の上限（20円）に達したので、いったん止めました');
     expect(f.budgetStore.spent(f.child.id).cappedAt).not.toBeNull();
   });
 });

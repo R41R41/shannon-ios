@@ -1,6 +1,8 @@
 import type { OperatorAdmission } from './operatorMinecraftRequests.js';
 import { createOperatorContext } from './operatorMinecraftContext.js';
-import { FINISHED, holdDetail, FINISHED_FOR_GOOD, HOUR_MS, ago, BUDGET_NOT_RUNNING } from './operatorMinecraftWords.js';
+import {
+  FINISHED, holdDetail, FINISHED_FOR_GOOD, HOUR_MS, ago, BUDGET_NOT_RUNNING, BUDGET_NEXT, budgetState, isRecoveredPause,
+} from './operatorMinecraftWords.js';
 import type { OperatorMinecraftParts } from './operatorMinecraftWords.js';
 import { operatorTalkNote, OPERATOR_LIMITS, type OperatorCode, type OperatorInput } from '../contracts/operatorContract.js';
 import type { LifecycleSettlement } from './minecraftLifecycleRunner.js';
@@ -132,15 +134,20 @@ throw error;
     });
   }
 
-  function target(c: Context, requests: OperatorMinecraftRequests, taskId: string | null): { id: string } | { code: OperatorCode } {
+  /** `paused` (`minecraft budget`): the newest request may also be one that is paused and resumable, not only one that runs. */
+  function target(
+    c: Context, requests: OperatorMinecraftRequests, taskId: string | null, paused = false,
+  ): { id: string } | { code: OperatorCode } {
     if (taskId) {
       if (parts.audit.requestOf(parts.scopeKey, taskId)) return { id: taskId };
       return { code: requests.get(taskId) ? 'not_operator_task' : 'not_found' };
     }
-    const open = parts.audit
-      .requestsSince(parts.scopeKey, ago(c.at, 48 * HOUR_MS))
-      .find((row) => row.taskId && !FINISHED.includes(requests.get(row.taskId)?.phase ?? 'stopped'));
-    return open?.taskId ? { id: open.taskId } : { code: 'not_found' };
+    const open = (id: string): boolean => {
+      const task = requests.get(id);
+      return !!task && (!FINISHED.includes(task.phase) || (paused && isRecoveredPause(task)));
+    };
+    const found = parts.audit.requestsSince(parts.scopeKey, ago(c.at, 48 * HOUR_MS)).find((row) => row.taskId && open(row.taskId));
+    return found?.taskId ? { id: found.taskId } : { code: 'not_found' };
   }
 
   async function cancel(c: Context, input: Extract<OperatorInput, { command: 'cancel' }>) {
@@ -221,15 +228,18 @@ throw error;
    * never a write over the
    * request's row; the budget check reads it through `OperatorAuditStore.budgetYen`, so it holds from the task's
    * next decision on. A task
-   * that has stopped (for its cap, its estimates, or a cancel) is not resumed by this, so a change to it is refused.
+   * that has stopped for good (a cancel, a failure, the request cap) is not resumed by this, so a change to it is refused.
+   * A PAUSED request (2026-11-10: stopped at the cap the operator lowered, or by its estimates; resumable) takes the
+   * change and stays paused: the reply says that `minecraft resume` is what makes it go on.
    */
   async function budget(c: Context, input: Extract<OperatorInput, { command: 'budget' }>) {
     const requests = parts.requests;
     if (!requests) return c.refuse('body_unavailable');
-    const found = target(c, requests, input.taskId);
+    const found = target(c, requests, input.taskId, true);
     if ('code' in found) return c.refuse(found.code, undefined, input.taskId ? { taskId: input.taskId } : {});
     const task = requests.get(found.id);
-    if (!task || FINISHED.includes(task.phase)) return c.refuse('not_running', BUDGET_NOT_RUNNING, { taskId: found.id });
+    const state = budgetState(task);
+    if (!task || !state) return c.refuse('not_running', BUDGET_NOT_RUNNING, { taskId: found.id });
     const from = parts.audit.budgetYen(found.id) ?? OPERATOR_LIMITS.maxBudgetYen,
       spent = parts.spentYen?.(found.id) ?? null;
     if (input.budgetYen < from && (spent === null || input.budgetYen < spent)) {
@@ -262,7 +272,7 @@ throw error;
     return c.reply(
       'accepted',
       'accepted',
-      `予算の上限を${from}円から${input.budgetYen}円にしました。走っているタスクの次の判断から効きます。`,
+      `予算の上限を${from}円から${input.budgetYen}円にしました。${BUDGET_NEXT[state]}`,
       { taskId: found.id, budgetYen: input.budgetYen },
     );
   }

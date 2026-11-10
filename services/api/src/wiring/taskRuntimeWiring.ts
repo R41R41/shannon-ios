@@ -17,7 +17,7 @@ UNKNOWN_EXIT_MODEL_ONLY_MS,classifyLease,deriveTaskKind,leaseOutcome,leaseUnsent
 } from '@shannon/mind';
 import { ActionLeaseReader } from '../mind/action/threads/store/actionLeaseReader.js';
 import { conversationLeaseValid,fcaTaskLeaseValid,lostAdmissionExpired } from './actionLeaseRules.js';
-import type { FcaBudget } from './fcaBudgetWiring.js';
+import type { BudgetVerdict, FcaBudget } from './fcaBudgetWiring.js';
 import type { FcaBodyRecovery } from './fcaBodyRecovery.js';
 import { pauseForBilling,settleUnavailableStep,type UnavailableParts } from './taskRuntimeUnavailable.js';
 import { FCA_MODEL_BILLING } from '../mind/action/fca/fcaProviderRetry.js';
@@ -28,6 +28,15 @@ export { fcaErrorCode, PROVIDER_RETRY_DELAY, providerServerErrorCode, rejectedBe
 
 /** The gate the once-a-second tick asks for a ready task: the walk-free `canScheduleTask`, else `canRunTask`. */
 const schedulingGate = (options: Pick<TaskRuntimeWiringOptions, 'canScheduleTask' | 'canRunTask'>) => options.canScheduleTask ?? options.canRunTask;
+
+/**
+ * The reason a refused budget check PAUSES its task under (stopped, resumable), or false when it fails it: only unconfirmed
+ * charges reached the cap, or the cap is the one an operator lowered and can raise (`BudgetVerdict.resumable`, 2026-11-10).
+ */
+function pauseOf(verdict: Extract<BudgetVerdict, { ok: false }>): string | false {
+  if (verdict.code === 'task_estimates') return 'fca_budget_estimates';
+  return verdict.resumable ? 'fca_budget_cap_paused' : false;
+}
 
 export interface TaskRuntimeWiringOptions {
   db: DatabaseSync; actions: ActionThreads; model: FcaModel; scopeKey: string;
@@ -199,7 +208,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
       if (!budgeted.ok) {
         // At its cap or without her budget: the task ends here with a report, before any paid call (E3). A throw goes to
 // settleFailedStep.
-        await stopForBudget(admitted, budgeted.report, budgeted.code === 'task_estimates');
+        await stopForBudget(admitted, budgeted.report, pauseOf(budgeted));
         await flushReceipts();
         return false;
       }
@@ -336,16 +345,16 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
    * children cannot fail while they run, so it and its children are stopped instead and this step closes as stopped. Any
    * refusal is thrown to the caller, which closes the step through settleFailedStep.
    *
-   * `pausing` (only unconfirmed charges would take the task over its cap, `fcaBudgetWiring.ts`): the task is never
- * failed. It is stopped
+   * `pausing` (only unconfirmed charges would take the task over its cap, or it reached the yen cap its operator
+   * can raise, `fcaBudgetWiring.ts`; the stop's reason, `pauseOf`): the task is never failed. It is stopped
    * (resumable by the owner) with the report as its summary, whether or not it has children.
    */
-  async function stopForBudget(step: TaskStep, report: string, pausing = false): Promise<void> {
+  async function stopForBudget(step: TaskStep, report: string, pausing: string | false = false): Promise<void> {
     if (!pausing) runtime.recordProgress?.(step, { operationId: `${step.id}:capped`, tool: 'fca.result', status: 'failed', report: { text: report } });
     const task = runtime.get(scopeKey, step.taskId);
     const open = (id: string) => !['completed', 'failed', 'stopped', undefined].includes(runtime.get(scopeKey, id)?.phase);
     if (pausing || task?.childIds.some(open)) {
-      const stopped = runtime.stop(scopeKey, step.taskId, pausing ? 'fca_budget_estimates' : 'fca_budget_capped');
+      const stopped = runtime.stop(scopeKey, step.taskId, pausing || 'fca_budget_capped');
       for (const item of stopped) if (item.id !== step.taskId) running.get(item.id)?.controller.abort();
       for (const live of runtime.activeSteps(scopeKey)) {
         if (live.taskId !== step.taskId && stopped.some(item => item.id === live.taskId)) await actions.stop(scopeKey, live.lease.id, randomUUID());

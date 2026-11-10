@@ -11,6 +11,7 @@ import { TaskBudgetStore } from '../src/mind/action/taskRuntime/store/taskBudget
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { MINECRAFT_TASK_CAP, OWNER_TASK_CAP, OWN_TIME_STEP_ESTIMATE_YEN, fcaBudget } from '../src/wiring/fcaBudgetWiring.js';
 import { MINECRAFT_REQUEST_CRITERIA, admittedMinecraftRequest } from '../src/wiring/fcaMinecraftRequests.js';
+import { capPausedReport, pausedSpoken, pausedSummary } from '../src/wiring/taskPauseNotice.js';
 import { inActionExecution } from '../src/infra/context/actionExecution.js';
 
 const cleanups: Array<() => void> = [];
@@ -105,9 +106,24 @@ describe('one budget for FCA steps (E3)', () => {
     const budget = fcaBudget({ actions, store, now, minecraftRequest: () => true, taskCapYen: id => caps[id] ?? null });
     const of = (id: string) => ({ ...(task('owner_request') as object), id, kind: 'generic' }) as never;
     for (const id of ['t-op', 't-high', 't-owner']) store.add(id, 'owner', 'owner_request', 600, now());
-    expect(await budget.before(of('t-op'), lease)).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('500円・6000歩') });
+    // 2026-11-10: the cap an operator lowered is one the operator can raise, so reaching it pauses the request (resumable) instead of
+    // failing it; the request cap of 10,000 yen and the step cap, which nobody can raise, fail as before.
+    const paused = await budget.before(of('t-op'), lease);
+    expect(paused).toEqual({ ok: false, code: 'task_cap', report: capPausedReport('雨の調べもの', 500), resumable: true });
+    expect(pausedSummary((paused as { report: string }).report)).toBe(true);
+    expect(pausedSpoken('雨の調べもの', (paused as { report: string }).report)).toContain('予算の上限に達したため一時停止しています');
     expect(await budget.before(of('t-high'), lease)).toEqual({ ok: true });
     expect(await budget.before(of('t-owner'), lease)).toEqual({ ok: true });
+    store.add('t-high', 'owner', 'owner_request', 9400, now()); // 10,000 yen under a cap of 5,000: still the operator's cap
+    expect(await budget.before(of('t-high'), lease)).toMatchObject({ ok: false, code: 'task_cap', resumable: true });
+    caps['t-high'] = 10_000; // raised to the request cap: nobody can raise that one
+    const failed = await budget.before(of('t-high'), lease);
+    expect(failed).toMatchObject({ ok: false, code: 'task_cap', report: expect.stringContaining('10000円・6000歩') });
+    expect(failed).not.toHaveProperty('resumable');
+    expect(pausedSummary((failed as { report: string }).report)).toBe(false);
+    for (let step = 0; step < 6000; step += 1) store.add('t-steps', 'owner', 'owner_request', 0.01, now());
+    caps['t-steps'] = 500; // out of steps under an operator's cap: a raise of the yen would not let it go on
+    expect(await budget.before(of('t-steps'), lease)).not.toHaveProperty('resumable');
   });
 
   it('counts as a Minecraft request only the admitted task: bound at creation, with its criteria, under the conversation or root', () => {

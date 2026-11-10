@@ -173,6 +173,22 @@ export const MESSAGES: Partial<Record<OperatorCode, string>> = {
   not_held: 'このタスクは保留されていません（再開は、保留された依頼と、体の取り戻しで止まった依頼だけです）。',
 };
 
+/**
+ * What a request is to `minecraft budget`: `running`, `paused` (stopped but resumable, as at the cap its operator lowered:
+ * the change is taken and it stays paused), or null (gone, or finished for good: the change is refused).
+ */
+export function budgetState(task: { phase: string; status?: string; pauseReason?: string | null } | null | undefined): 'running' | 'paused' | null {
+  if (!task) return null;
+  if (isRecoveredPause(task)) return 'paused';
+  return FINISHED.includes(task.phase) ? null : 'running';
+}
+
+/** What `minecraft budget` says after the change: for a paused request, that the change alone does not make it go on. */
+export const BUDGET_NEXT = {
+  running: '走っているタスクの次の判断から効きます。',
+  paused: 'このタスクは一時停止中です。続けるには minecraft resume でこのタスクを再開してください。',
+} as const;
+
 export const BUDGET_NOT_RUNNING =
   'このタスクはもう止まっているか、止めている途中です。予算を変えても再開はしません（止まった理由が予算でも同じです。再開はライ氏の操作で、新しく頼むこともできます）。';
 

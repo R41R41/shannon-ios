@@ -2,7 +2,7 @@ import type { ActionLease, ActionThreads } from '../contracts/actionThreadContra
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import type { TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { TaskBudgetStore } from '../mind/action/taskRuntime/store/taskBudgetStore.js';
-import { estimatesPausedReport } from './taskPauseNotice.js';
+import { capPausedReport, estimatesPausedReport } from './taskPauseNotice.js';
 
 /**
  * One budget for FCA steps (Syzygy ADR-0009 stage 2, E3; owner answer 3):
@@ -40,9 +40,13 @@ export interface OwnTimeBudgetPort {
   yen(usd: number): number;
 }
 
-/** `task_estimates`: only unconfirmed charges would take the task over its cap; it is paused (the owner may resume it), not failed. */
+/**
+ * `task_estimates`: only unconfirmed charges would take the task over its cap; it is paused (the owner may resume it), not failed.
+ * `resumable` (a `task_cap` only): the cap reached is the yen cap an operator lowered for a Minecraft request, which the operator
+ * can raise; the task is paused with its plan and history instead of failed (`capOf`).
+ */
 export type BudgetVerdict = { ok: true; reservationId?: string }
-  | { ok: false; code: 'task_cap' | 'own_time_budget' | 'task_estimates'; report: string };
+  | { ok: false; code: 'task_cap' | 'own_time_budget' | 'task_estimates'; report: string; resumable?: true };
 
 /** The most of a task's cap that charges nobody confirmed can take in the cap check. */
 export const ESTIMATE_SHARE = 0.2;
@@ -74,12 +78,22 @@ const capped = (task: TaskView, cap: { yen: number; steps: number }) =>
 
 const estimatesPaused = (task: TaskView, cap: { yen: number }) => estimatesPausedReport(task.title, cap.yen);
 
-/** The cap of one task: her own time's, an admitted Minecraft request's (lowered by an operator's cap), or an owner task's. */
-function capOf(task: TaskView, options: { minecraftRequest?(task: TaskView): boolean; taskCapYen?(taskId: string): number | null }) {
+/**
+ * The cap of one task: her own time's, an admitted Minecraft request's (lowered by an operator's cap), or an owner task's.
+ *
+ * `raisable` (2026-11-10): the yen are the cap an operator lowered for a Minecraft request, below the request cap of 10,000 yen,
+ * so the operator can raise them (`minecraft budget`). A run whose operator set 7,000 yen and meant to raise it used to FAIL at
+ * 7,000, and a failed task is never resumed: its plan and history were lost in the middle of the run. Reached with steps left, such
+ * a cap pauses the task instead. The request cap itself, the step cap and every other task's cap have nobody who can raise them,
+ * and fail as before.
+ */
+function capOf(
+  task: TaskView, options: { minecraftRequest?(task: TaskView): boolean; taskCapYen?(taskId: string): number | null },
+): { yen: number; steps: number; raisable?: true } {
   if (task.origin === 'own_time') return OWN_TIME_TASK_CAP;
   if (!options.minecraftRequest?.(task)) return OWNER_TASK_CAP;
   const lower = options.taskCapYen?.(task.id) ?? null;
-  return lower !== null && lower > 0 && lower < MINECRAFT_TASK_CAP.yen ? { ...MINECRAFT_TASK_CAP, yen: lower } : MINECRAFT_TASK_CAP;
+  return lower !== null && lower > 0 && lower < MINECRAFT_TASK_CAP.yen ? { ...MINECRAFT_TASK_CAP, yen: lower, raisable: true } : MINECRAFT_TASK_CAP;
 }
 
 export function fcaBudget(options: {
@@ -117,6 +131,7 @@ export function fcaBudget(options: {
       if (spent.steps >= cap.steps || spent.yen >= cap.yen) {
         booked.delete(lease.id);
         options.store.capped(task.id, task.scopeKey, task.origin, options.now());
+        if (cap.raisable && spent.steps < cap.steps) return { ok: false, code: 'task_cap', report: capPausedReport(task.title, cap.yen), resumable: true };
         return { ok: false, code: 'task_cap', report: capped(task, cap) };
       }
       // Only the unconfirmed charges would take it over: the owner is asked (the task is paused), nothing fails, and from here those

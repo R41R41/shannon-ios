@@ -112,6 +112,20 @@ describe('minecraft budget raises a running task\'s cap as a new audit row', () 
     expect(w.audit.recent('owner', 200).some(row => row.command === 'budget' && row.event === 'accepted')).toBe(false);
   });
 
+  it('takes a change for a PAUSED request (stopped at its cap, resumable), by id or --latest, and says that resume is what makes it go on', async () => {
+    const w = await started(1000);
+    w.spend.add(TASK, 'owner', 'owner_request', 1020, at);
+    expect(await verdict(w)).toMatchObject({ ok: false, code: 'task_cap', resumable: true });
+    w.tasks.set(TASK, { ...taskView(TASK, 'stopped'), status: 'paused', pauseReason: 'fca_stopped' } as TaskView);
+    const reply = await w.ask('budget', { latest: true, budgetYen: 1600 });
+    expect(reply).toMatchObject({ status: 202, body: { outcome: 'accepted', code: 'accepted', taskId: TASK, budgetYen: 1600 } });
+    expect((reply.body as { message: string }).message).toContain('minecraft resume');
+    expect((reply.body as { message: string }).message).not.toContain('走っているタスク');
+    expect(w.audit.budgetYen(TASK)).toBe(1600);
+    expect(await verdict(w)).toMatchObject({ ok: true }); // the resumed task's next decision is inside the raised cap
+    expect((await w.ask('budget', { taskId: TASK, budgetYen: 1700 })).body).toMatchObject({ outcome: 'accepted', budgetYen: 1700 });
+  });
+
   it('refuses a cap below what the task has used (confirmed and estimated), and above the request cap', async () => {
     const w = await started(1000);
     w.spend.add(TASK, 'owner', 'owner_request', 600, at);
