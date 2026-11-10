@@ -203,3 +203,15 @@ describe('shoot as a line (2026-11-02, the first real replay: a model wrote it a
     expect(lineToHand('shoot 40,90,5 item=bow')).toEqual({ do: 'shoot', at: [{ x: 40, y: 90, z: 5 }], item: 'bow' });
   });
 });
+
+describe('mine as a line (run 5: one cell is enough, the whole vein is the default)', () => {
+  it('reads one cell and no count; the expected time of a mine without a count is that of a vein (about 8 blocks), not of one block', async () => {
+    expect(lineToHand('mine iron_ore 11,64,8')).toEqual({ do: 'mine', block: 'iron_ore', at: [{ x: 11, y: 64, z: 8 }] });
+    const { actExpectedMilliseconds } = await import('../src/contracts/minecraftActTime.js');
+    const input = (line: string): ActInput => ({ hands: [lineToHand(line)!] }) as ActInput;
+    expect(actExpectedMilliseconds(input('mine iron_ore 11,64,8'))).toBe(13_000);
+    expect(actExpectedMilliseconds(input('mine iron_ore 11,64,8 count=3'))).toBe(5_500);
+    expect(SHORT_ACT_DESCRIPTION).toContain('1 マスだけ書けば足りる');
+    expect(SHORT_ACT_DESCRIPTION).toContain('座標なしは断られる');
+  });
+});
