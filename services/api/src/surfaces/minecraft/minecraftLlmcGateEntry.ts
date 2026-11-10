@@ -51,6 +51,9 @@ export function fetchingNetherDrops(world: Record<string, unknown>): boolean {
   const last = (Array.isArray(world.deaths) ? world.deaths : []).at(-1) as { cause?: unknown } | null | undefined;
   return !/lava|溶岩/iu.test(`${/「([^」]*)」/u.exec(said)?.[1] ?? ''} ${typeof last?.cause === 'string' ? last.cause : ''}`);
 }
-/** Said after the last death's line in the overworld while `fetchingNetherDrops` holds: the gates' own lines are not there to say what entering bare costs. */
+/**
+ * Said after the last death's line in the overworld while `fetchingNetherDrops` holds: the gates' own lines are not there to say what entering bare costs.
+ * The blaze spawner's gate (`deadlyGateHold` in the Nether) is not opened by this and is said (the refuter on G01: most Nether deaths are there).
+ */
 export const FETCH_ENTRY_WORDS = '落とし物が残る間は、取りに戻れるように、ネザーへ入る手は準備の必須・金の防具が欠けていても止まらない'
-  + '（金の防具なしではピグリンが襲う。取りに戻るか作り直すかは比べて決める）';
+  + '（金の防具なしではピグリンが襲う。ブレイズの湧き場の 8m 内へ寄る手は、食料と盾が無いとその関所が止める。取りに戻るか作り直すかは比べて決める）';
