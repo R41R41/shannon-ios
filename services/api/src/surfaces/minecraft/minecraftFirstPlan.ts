@@ -50,7 +50,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village',
     note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（寝る用 1 と、エンドの竜戦に 10 個・最低 8）。この親が済んでも取り切ってから出る。'
       + '羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
-    caution: ['通りがかりに糸・火打石（砂利を掘る）・羽（ニワトリ）を見かけたら拾う（エンドの弓と矢 30 の分。取りに戻らない）'] }),
+    caution: ['通りがかりにクモ（剣で倒すと糸。弓に 3）・砂利（火打石）・ニワトリ（羽）を見たら寄って取る（エンドの結晶を地面から撃つ弓と矢の分。探し回らない）'] }),
     node('無ければ動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
   node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）'],
     children: [node('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）', { kind: 'iron', doneWhen: 'have:iron_pickaxe' }),
@@ -117,7 +117,7 @@ const BEYOND: readonly PlanSeed[] = [
       node('食料330点（焼き牛16）にする', { kind: 'food', doneWhen: 'food>=330',
         note: '地上で牛・豚・羊を狩ってかまどで焼く。竜の戦いは20分ほど食べ続ける（焼き牛4では途中で0になった）' }),
       node('弓と矢（手元の材料で作れる分。集めに行かない）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30',
-        note: '糸・棒・火打石・羽根。矢は予備の手の物で、ベッド8がそろえば無くても入れる' })] }),
+        note: '糸（クモ）・棒・火打石・羽根。弓があればクリスタルを地面から撃てる（無いと柱を登る）。無くても入場は止まらない' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
     node('目玉の交点へ行き、地下の枠の部屋を見つける', { kind: 'stronghold', doneWhen: 'see:end_portal_frame',
       note: '交点・誤差・次の投げ位置は live の目玉の帳簿。',

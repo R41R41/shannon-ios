@@ -79,6 +79,14 @@ export const BOW: PrepNeed = { label: '弓', count: 1, pattern: /^(?:bow|crossbo
   materials: counts => `材料 糸 ${has(counts, 'string')}/3・棒 ${has(counts, 'stick')}/3` };
 export const ARROWS: PrepNeed = { label: '矢', count: 30, pattern: /^(?:arrow|spectral_arrow)$/u,
   materials: counts => `光の矢も数える。材料 羽根 ${has(counts, 'feather')}・火打石 ${has(counts, 'flint')}・棒 ${has(counts, 'stick')}（1 ずつで 4 本）` };
+/**
+ * The review of 11/10 (G15): the bow is an aim and never holds the End's gate, and nothing on the ground said where string comes from or what
+ * the bow saves; the End rig's three bowless runs (e04c, e04d, e04e) all died on or beside a crystal's pillar. Said in prep's knowledge, while
+ * she is still where spiders are. No gate is added (the owner, 11/9).
+ */
+export const END_BOW_KNOWLEDGE = '- 弓の糸はクモから（1 体 0〜2 本。弓は糸 3 と棒 3）: 昼の明るい所のクモは打つまで襲ってこないことが多く、見えたら剣で fight して糸を拾う。夜と洞窟のクモは鉄の剣と盾を持ってから。'
+  + '弓と矢があればエンドのクリスタルを地面から撃てる。無いと柱を 1 本ずつ登ることになり（1 本に 5〜8 分）、弓なしの実走 3 本は 3 本とも柱の上か途中で死んだ。'
+  + '見えない時に探し回らない（弓がそろわなくても入場は止まらない）。';
 
 /**
  * Run59 leg 2 (2026-11-02 23:34): a need that looked impossible to make (the body's make said missing oak_log) was put off and the portal hand was
@@ -259,6 +267,7 @@ export const PLAN_PREP_WORDS = [
   '- 木は序盤だけ通しの分を一度に: 石の斧ができたら原木を合計 20〜24 本まで取る節を書く（doneWhen は作った分を引いて板も数える: have:log>=16|have:planks>=64）。'
     + '後で木のために地上へ戻らない。',
   '- バケツを作ったら、最初の水源ですぐ汲む節を鉄の節の次に書く（doneWhen have:water_bucket）。',
-  '- 弓と矢（クリスタルとエンダーマンに要る）の材料は序盤の道中で集める。食料か鉄の節の caution に「糸3・羽根・火打石を拾う」と書く（後の節に回さない）。',
+  '- 弓と矢（エンドのクリスタルを地面から壊す道具。無いと柱を 1 本ずつ登ることになり、弓なしの実走 3 本は 3 本ともその柱で死んだ）の材料は序盤の道中で集める。'
+    + '食料か鉄の節の caution に「クモを見たら剣で倒して糸3・ニワトリの羽根・砂利の火打石」と書く（後の節に回さない）。',
   '- エンダーマン 1 体は鉄の剣で約 7 打撃かかり、そのたびに剣の耐久（250）が減る: パール狩りの前に、予備の鉄の剣をもう 1 本作る（鉄の節の caution に書く）。',
 ].join('\n');

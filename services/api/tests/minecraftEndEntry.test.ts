@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { deadlyGateHold } from '../src/surfaces/minecraft/minecraftLlmcDeadlyGates.js';
 import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
-import { BEFORE_END } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { BEFORE_END, END_BOW_KNOWLEDGE, PLAN_PREP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { V2_STAGES, stageKnowledge } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 
 type Pack = Array<[string, number]>;
@@ -65,5 +67,22 @@ describe('End entry goals and recovery', () => {
     expect(words).toContain('目標（そろえば。必須ではない）');
     expect(words).not.toContain('ベッド');
     expect(words).not.toContain('未達の必須');
+  });
+
+  // The review of 11/10 (G15): the bow stays an aim of the gate (above); the ground is told where its string comes from and what it saves,
+  // and a return is told that a death in the void left nothing to pick up.
+  it('says on the ground where the string of the bow comes from, and what a death in the void leaves', () => {
+    expect(V2_STAGES.prep).toContain(END_BOW_KNOWLEDGE);
+    expect(END_BOW_KNOWLEDGE).toContain('弓の糸はクモから');
+    expect(END_BOW_KNOWLEDGE).toContain('入場は止まらない');
+    const walking = stageKnowledge({ body: { state: { dimension: 'overworld' }, inventory: ['ender_eye×12'] } })!;
+    expect(walking).toContain('stronghold');
+    expect(walking).toContain(END_BOW_KNOWLEDGE);
+    expect(PLAN_PREP_WORDS).toContain('クモを見たら剣で倒して糸3');
+    expect(PLAN_PREP_WORDS).not.toContain('エンダーマンに要る');
+    const cautions = seedPlan('エンドラを倒して')!.nodes.flatMap(node => node.caution ?? []);
+    expect(cautions.some(line => line.includes('クモ（剣で倒すと糸'))).toBe(true);
+    for (const stage of [V2_STAGES.stronghold, V2_STAGES.end]) expect(stage).toContain('虚空に落ちて死んだ時（最後の死の行の y が 0 より下');
+    expect(V2_STAGES.stronghold).toContain('鉄以上の剣（止まり木の竜を打つ手）を作り直し');
   });
 });
