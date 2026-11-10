@@ -11,9 +11,20 @@ import { fcaMinecraftVoice } from './fcaMinecraftVoice.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { fcaMinecraftBodyWake } from './fcaMinecraftBodyWake.js';
 import { isNativeDragonGoal } from './fcaMinecraftGoalBinding.js';
+import { operatorSocketPath, requestOperatorSocket } from '../infra/ops/operatorSocket.js';
+import { OPERATOR_LIMITS } from '../contracts/operatorContract.js';
 
 /** How long the mod's 「やめる」 waits for the body's stop acknowledgement before it is answered (the stop is already asked). */
 export const OWNER_STOP_WAIT_MS = 3_000;
+/**
+ * The in-game dragon request as an operator's request (owner decision 2026-11-10, the filming: he asks from the mod, and the run must
+ * still be one that `resume`, `budget` and `cancel` reach and that pauses at its cap instead of failing; those hang on the audit row
+ * only the operator's request writes). The label of the audit row, the limits (the contract's most: the run from nothing to the dragon),
+ * and how long the API's own socket is waited for before the request is made the old way.
+ */
+export const GAME_DRAGON_OPERATOR = 'game-owner';
+export const GAME_DRAGON_BUDGET_YEN = OPERATOR_LIMITS.maxBudgetYen - 1;
+export const GAME_DRAGON_SOCKET_WAIT_MS = 10_000;
 /** The completion criteria every admitted Minecraft request carries (`minecraft.request` and the in-game intent). */
 export const MINECRAFT_REQUEST_CRITERIA = '目的の達成を新しいワールド観測と実行結果から確認する。';
 /**
@@ -51,6 +62,10 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   atomic<T>(work: () => T): T;
   /** Where the content-free lines go (`console.log` when absent). */
   log?(line: string): void;
+  /** The database path, beside which the operator's socket is (`operatorSocketPath`); absent, the dragon request is made the old way. */
+  path?: string;
+  /** The call on the operator's socket (`requestOperatorSocket` when absent; a test's own). */
+  operatorCall?(path: string, body: unknown, timeoutMs: number): Promise<{ status: number; body: unknown }>;
 }): { tools: MinecraftTaskToolPort; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
   admission: NonNullable<MinecraftBodyDependencies['fcaAdmission']>; operator: OperatorMinecraftRequests; voice: VoiceMinecraftPort;
   /** The mod's 「やめる」 (`MINECRAFT_STOP_PATH`): stops the owner's unfinished body task(s) without a conversation turn. */
@@ -95,6 +110,26 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   const refused = (reason: MinecraftIntentRefusal, kind: string) => {
     log(`Shannon Minecraft intent refused reason=${reason} kind=${kind}`);
     return { kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason };
+  };
+  /**
+   * The owner's dragon words asked of the API's own operator socket, exactly as the CLI's `minecraft request` asks them (the same checks,
+   * task, audit row and wake). The task's id when it was accepted, else null: any refusal, error or wait that ran out leaves the request
+   * to the path it had before (never worse than it was), with one content-free line saying why.
+   */
+  const dragonAsOperator = async (goal: string): Promise<string | null> => {
+    if (!parts.path) return null;
+    try {
+      const reply = await (parts.operatorCall ?? requestOperatorSocket)(operatorSocketPath(parts.path), { v: 1, operator: GAME_DRAGON_OPERATOR,
+        domain: 'minecraft', op: 'request', args: { goal, maxMinutes: OPERATOR_LIMITS.maxMinutes, budgetYen: GAME_DRAGON_BUDGET_YEN } },
+      GAME_DRAGON_SOCKET_WAIT_MS);
+      const body = reply.body as { code?: unknown; taskId?: unknown } | null;
+      const taskId = reply.status === 202 && typeof body?.taskId === 'string' && body.taskId ? body.taskId : null;
+      log(`Shannon Minecraft intent dragon as=operator status=${reply.status} code=${typeof body?.code === 'string' ? body.code.slice(0, 40) : '-'} accepted=${taskId ? 'yes' : 'no'}`);
+      return taskId;
+    } catch (error) {
+      log(`Shannon Minecraft intent dragon as=operator failed code=${error instanceof Error ? error.message.slice(0, 60).replace(/[^ -~]/gu, '?') : 'unknown'}`);
+      return null;
+    }
   };
   const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
     sourceVisible: parts.sourceVisible, atomic: parts.atomic, bound: () => bound(undefined, unfinished), openRequest, spec, log });
@@ -192,6 +227,13 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
           // It ended meanwhile (`FCA_TARGET_FINISHED`): a new task, as before. A changed retry of the same request still conflicts.
           if (!(error instanceof Error) || error.message !== 'FCA_TARGET_FINISHED') throw error;
         }
+      }
+      if (ownDragonWords(input.request.message)) {
+        const taskId = await dragonAsOperator(goal);
+        if (taskId) return { ...intent, goal, request: { id: taskId } };
+        // A wait that ran out may still have made the task: it is the request, not a second one beside it.
+        const made = openRequest(bodyId);
+        if (made) { log(`Shannon Minecraft intent dragon found task=${made.id} after=operator_unanswered`); return { ...intent, goal, request: { id: made.id } }; }
       }
       return parts.atomic(() => {
         // Only the asking turn (the event below), not the root's whole set (owner decision 2026-10-15, `TaskChildOptions`).
