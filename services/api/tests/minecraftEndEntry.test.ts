@@ -85,4 +85,17 @@ describe('End entry goals and recovery', () => {
     for (const stage of [V2_STAGES.stronghold, V2_STAGES.end]) expect(stage).toContain('虚空に落ちて死んだ時（最後の死の行の y が 0 より下');
     expect(V2_STAGES.stronghold).toContain('鉄以上の剣（止まり木の竜を打つ手）を作り直し');
   });
+
+  // K2 (the same review): how few arrows are worth carrying and where the road gives them, as an aim that sends her on no detour.
+  it('names twelve arrows as the least worth carrying and the lone skeleton of the road as a source', () => {
+    expect(END_BOW_KNOWLEDGE).toContain('矢は最低 12 本（檻なしのクリスタル 8 本に 1 射ずつ');
+    expect(END_BOW_KNOWLEDGE).toContain('矢のために夜を待たない・追いかけない・寄り道しない');
+    expect(PLAN_PREP_WORDS).toContain('矢だけのために夜を待つ節・狩りに出る節は書かない');
+    const bow = seedPlan('エンドラを倒して')!.nodes.find(node => node.title.startsWith('弓と矢'))!;
+    expect(bow.title).toContain('矢は最低 12・目標 30');
+    expect(bow.title.length).toBeLessThanOrEqual(60);
+    expect(bow.note!.length).toBeLessThanOrEqual(120);
+    expect(bow.doneWhen).toBe('have:bow&have:arrow>=30');
+    expect(BEFORE_END.needs.some(need => need.label === '矢' && !need.goal)).toBe(false);
+  });
 });

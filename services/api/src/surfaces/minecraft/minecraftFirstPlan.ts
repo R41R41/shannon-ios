@@ -116,8 +116,8 @@ const BEYOND: readonly PlanSeed[] = [
       node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12' }),
       node('食料330点（焼き牛16）にする', { kind: 'food', doneWhen: 'food>=330',
         note: '地上で牛・豚・羊を狩ってかまどで焼く。竜の戦いは20分ほど食べ続ける（焼き牛4では途中で0になった）' }),
-      node('弓と矢（手元の材料で作れる分。集めに行かない）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30',
-        note: '糸（クモ）・棒・火打石・羽根。弓があればクリスタルを地面から撃てる（無いと柱を登る）。無くても入場は止まらない' })] }),
+      node('弓と矢（矢は最低 12・目標 30。道中の材料とスケルトンの矢で。寄り道しない）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30',
+        note: '糸（クモ）・棒・火打石・羽根。弓があればクリスタルを地面から撃てる（無いと柱を登る）。矢 12 は檻なし 8 本に 1 射ずつと予備。無くても入場は止まらない' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
     node('目玉の交点へ行き、地下の枠の部屋を見つける', { kind: 'stronghold', doneWhen: 'see:end_portal_frame',
       note: '交点・誤差・次の投げ位置は live の目玉の帳簿。',

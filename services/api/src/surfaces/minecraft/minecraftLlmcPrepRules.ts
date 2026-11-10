@@ -83,10 +83,15 @@ export const ARROWS: PrepNeed = { label: '矢', count: 30, pattern: /^(?:arrow|s
  * The review of 11/10 (G15): the bow is an aim and never holds the End's gate, and nothing on the ground said where string comes from or what
  * the bow saves; the End rig's three bowless runs (e04c, e04d, e04e) all died on or beside a crystal's pillar. Said in prep's knowledge, while
  * she is still where spiders are. No gate is added (the owner, 11/9).
+ * K2 (the same review, from the earlier agents' runs): a run that shot the eight open crystals from the ground went in with a bow and arrows;
+ * the second line says how few arrows are worth carrying and that the road's lone skeleton is a source, without a detour or a night's wait.
  */
 export const END_BOW_KNOWLEDGE = '- 弓の糸はクモから（1 体 0〜2 本。弓は糸 3 と棒 3）: 昼の明るい所のクモは打つまで襲ってこないことが多く、見えたら剣で fight して糸を拾う。夜と洞窟のクモは鉄の剣と盾を持ってから。'
   + '弓と矢があればエンドのクリスタルを地面から撃てる。無いと柱を 1 本ずつ登ることになり（1 本に 5〜8 分）、弓なしの実走 3 本は 3 本とも柱の上か途中で死んだ。'
-  + '見えない時に探し回らない（弓がそろわなくても入場は止まらない）。';
+  + '見えない時に探し回らない（弓がそろわなくても入場は止まらない）。\n'
+  + '- 矢は最低 12 本（檻なしのクリスタル 8 本に 1 射ずつと、外した分の予備。目標は 30）: 火打石 1・棒 1・羽根 1 で 4 本なので、3 組で 12 本になる。'
+  + 'スケルトンも倒すと矢を 0〜2 本落とす（まれに弓も。撃たれて刺さった矢は拾えない）。遠くから撃ってくるので、鉄の防具と盾があり、道の近くに 1 体だけの時に fight する。'
+  + '矢のために夜を待たない・追いかけない・寄り道しない。';
 
 /**
  * Run59 leg 2 (2026-11-02 23:34): a need that looked impossible to make (the body's make said missing oak_log) was put off and the portal hand was
@@ -268,6 +273,8 @@ export const PLAN_PREP_WORDS = [
     + '後で木のために地上へ戻らない。',
   '- バケツを作ったら、最初の水源ですぐ汲む節を鉄の節の次に書く（doneWhen have:water_bucket）。',
   '- 弓と矢（エンドのクリスタルを地面から壊す道具。無いと柱を 1 本ずつ登ることになり、弓なしの実走 3 本は 3 本ともその柱で死んだ）の材料は序盤の道中で集める。'
-    + '食料か鉄の節の caution に「クモを見たら剣で倒して糸3・ニワトリの羽根・砂利の火打石」と書く（後の節に回さない）。',
+    + '食料か鉄の節の caution に「クモを見たら剣で倒して糸3・ニワトリの羽根・砂利の火打石」と書く（後の節に回さない）。'
+    + '矢は最低 12 本（檻なしの結晶 8 本に 1 射ずつと予備。目標 30）で、道に出てきたスケルトン 1 体（矢 0〜2 本）も鉄の防具と盾があれば倒して拾う物として書く。'
+    + '矢だけのために夜を待つ節・狩りに出る節は書かない（エンドへ着くのが先）。',
   '- エンダーマン 1 体は鉄の剣で約 7 打撃かかり、そのたびに剣の耐久（250）が減る: パール狩りの前に、予備の鉄の剣をもう 1 本作る（鉄の節の caution に書く）。',
 ].join('\n');
