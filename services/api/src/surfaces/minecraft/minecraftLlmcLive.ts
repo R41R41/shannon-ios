@@ -8,6 +8,7 @@ import { foodPreparation } from './minecraftFoodPreparation.js';
 import { itemWords, reachSuffix } from './minecraftLlmcReachWords.js';
 import { breathWords, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
+import { furnaceLedgerLines } from './minecraftLlmcFurnaceWait.js';
 
 /**
  * The body part of a decision's live state in the LLM-centric mode (design mb-llm-centric 2.2, 2.3, 2.6): the
@@ -351,7 +352,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     inventory: shareStacks(stacks(world.inventory).slice(0, INVENTORY), parts.promises),
     threats,
     near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
-    ...(parts.jobs !== undefined ? { jobs: parts.jobs } : {}),
+    ...(parts.jobs !== undefined ? { jobs: furnaceLedgerLines(parts.jobs) ?? parts.jobs } : {}),
     ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-EVENTS)] } : {}),
   });
   const live: Record<string, unknown> = bodyFields();
@@ -453,7 +454,7 @@ export function llmcPlanTokens(plan: unknown): number {
  * craft with are what a decision needs most.
  */
 const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['near', 0], ['stops', 2], ['foodPreparation', -1],
-  ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['foodPoints.items', -1], ['jobs', -1], ['inventory', 10], ['landmarks', 3],
+  ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['foodPoints.items', -1], ['inventory', 10], ['landmarks', 3], ['jobs', -1],
   ['threats', 2], ['stops', 1], ['events', 1],
   // A map of water (three tokens a cell) leaves little beside it: the last of the rest, the plan's path and her state kept.
   ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
