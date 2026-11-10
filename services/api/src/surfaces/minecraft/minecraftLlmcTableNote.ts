@@ -42,7 +42,7 @@ export function tableNote(input: unknown, frame: BodyObservation | null): string
     if (!hand) return null;
     if (needsTable(hand)) {
       return `手 ${index + 1} ${String(hand.do)} ${String(hand.item)}: ${fact}。`
-        + '先に go で作業台へ寄るか、持ち物の板 4 で作業台を place してから作る';
+        + '先に go で作業台へ寄るか、持っている作業台（無ければ板 4 で作る）を place してから作る';
     }
     if (MOVES.has(String(hand.do)) || (hand.do === 'place' && hand.block === 'crafting_table')) return null;
   }

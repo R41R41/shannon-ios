@@ -80,7 +80,7 @@ describe('the four typed body failures', () => {
     }
     const scanned = frame({ utilities: { radius: 16, scanned: true, found: [] } });
     expect(typedFailureOf(stopped(), scanned)!.evidence[1]).toBe('半径 16 m 内に作業台が見えない（作る手が届くのは 4.5 m 以内）');
-    expect(tableNote(input, scanned)).toContain('先に go で作業台へ寄るか、持ち物の板 4 で作業台を place してから作る');
+    expect(tableNote(input, scanned)).toContain('先に go で作業台へ寄るか、持っている作業台（無ければ板 4 で作る）を place してから作る');
     expect(tableNote({ hands: [{ do: 'go', to: where }, ...input.hands] }, scanned)).toBeNull();
   });
 
