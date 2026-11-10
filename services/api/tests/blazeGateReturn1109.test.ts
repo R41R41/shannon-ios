@@ -37,6 +37,16 @@ describe('the blaze gate and the plan (end1109f02)', () => {
     expect(makeable.lasting).toEqual([]);
     expect(makeable.quick[0]).toContain('今その場で make shield');
   });
+  it('does not ask for a shield she cannot make once a rod is in (end1108h18: shields and materials gone at 3 rods)', () => {
+    const spent: Array<[string, number]> = [['cooked_beef', 24], ['iron_sword', 1], ['blaze_rod', 1]];
+    expect(blazeLacks(readinessOf(frame(spent))!)).toEqual({ quick: [], lasting: [] });
+    expect(deadlyGateHold(fight, frame(spent))).toBeNull();
+    expect(followDimension(tree('p2'), facts(spent))).toBeNull();
+    // Health and food are still asked; half a rod (one powder) and no rod keep the shield in the gate.
+    expect(deadlyGateHold(fight, frame(spent, { health: 12 }))!.line).toContain('今の節はブレイズのまま変えない');
+    expect(blazeLacks(readinessOf(frame([['cooked_beef', 24], ['blaze_powder', 1]]))!).lasting[0]).toContain('盾 0/1');
+    expect(deadlyGateHold(fight, frame([['cooked_beef', 24], ['iron_sword', 1]]))!.line).toContain('盾 0/1');
+  });
   it('holds the fight for health alone and says to keep the node, not to go on to the pearls', () => {
     const held = deadlyGateHold(fight, frame(F02, { health: 11.6 }))!;
     expect(held).toMatchObject({ kind: 'fight' });

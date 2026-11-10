@@ -73,7 +73,9 @@ export function blazeLacks(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'co
     facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18（食べる）` : '',
     shields < 1 && shieldHere ? shieldWords : ''].filter(Boolean);
   const lasting = [facts.food < foodNeed ? `持ち物の食料 ${foodPointsWords(facts.food, foodNeed)}（ロッド ${Math.floor(rods)}/7 の残りの分。焼く・狩る・拾う）` : '',
-    shields < 1 && !shieldHere ? shieldWords : ''].filter(Boolean);
+    // end1108h18 (11/8): the shields and their materials ran out at 3 rods and the gate held the blaze hands for the 14 minutes left. Iron is
+    // hardly found in the Nether, and the knowledge says to go on from cover without one: once a rod is in, a shield she cannot make is not asked.
+    shields < 1 && !shieldHere && rods < 1 ? shieldWords : ''].filter(Boolean);
   return { quick, lasting };
 }
 
