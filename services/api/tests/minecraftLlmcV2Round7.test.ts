@@ -123,7 +123,7 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     expect(candidateAct({ hands: ['wait 5'] }, withWork, 'furnace-stand').guard).toBeUndefined();
     expect(V2_STAGES.prep).toContain('焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める');
     expect(V2_ALWAYS).toContain('A wait-only act only when nothing else can be done');
-    expect(V2_ALWAYS).toContain('To sleep, do not wait for the night: put one sleep hand');
+    expect(V2_ALWAYS).toContain('Do not wait for the night: put one sleep hand');
   });
 });
 
