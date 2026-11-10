@@ -8,6 +8,7 @@ import { liquidLines, useReachStop } from '../src/surfaces/minecraft/minecraftLl
 import { FULL_COST, packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { createFoodTrend, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { rewriteLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLiveRewrite.js';
 import { ownFirstPlanSystem, STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { closedUnder, doneFacts, seenDoneUpdate } from '../src/surfaces/minecraft/minecraftPlanDone.js';
@@ -56,7 +57,7 @@ describe('the obsidian scene: water, lava and the bucket', () => {
   it('says the water sources and flows, the lava and what a dig in water costs, with each source\'s distance from the eye and whether it is reached', () => {
     const text = liquidLines(view(), FEET).join('\n');
     expect(text).toContain('水: 源 1 マス・流れ 4 マス');
-    expect(text).toContain('水中のマスの dig は 1 マス 6 秒ほど');
+    expect(text).toContain('目が水の中だと dig は 5 倍');
     expect(text).toMatch(/水の源（汲み戻せる）: \(251,-24,208\) 目から 5\.\dm・届かない（5m まで）/u);
     expect(text).toContain('溶岩: 源 2 マス・流れ 0 マス。近い源: ');
     expect(text).toContain('(252,-24,209)');
@@ -76,15 +77,25 @@ describe('the obsidian scene: water, lava and the bucket', () => {
     expect(bare.pack).toBeUndefined();
   });
   it('holds a bucket\'s use at a source out of reach (5.1 m from the eye, run 36 seq 1787), naming the distance, before it is sent', () => {
-    const stop = useReachStop({ hands: [bucket(251, -24, 208)] }, obsidianFrame())!;
+    const stop = useReachStop({ hands: [bucket(251, -24, 208, 'water_bucket')] }, obsidianFrame())!;
     expect(stop).toMatchObject({ hand: 1, kind: 'use', code: 'use_reach' });
     expect(stop.line).toContain('(251,-24,208)');
     expect(stop.line).toMatch(/目から 5\.\dm（dig・place・use は 5m まで）/u);
   });
   it('holds it when a hard block stands between the eye and the source after a walk (seq 1789: 目との間の (249,-23,205) が deepslate)', () => {
-    const stop = useReachStop({ hands: [walk(248, -24, 205), bucket(251, -24, 208)] }, obsidianFrame())!;
+    const stop = useReachStop({ hands: [walk(248, -24, 205), bucket(251, -24, 208, 'water_bucket')] }, obsidianFrame())!;
     expect(stop).toMatchObject({ hand: 2, kind: 'use', code: 'use_blocked' });
     expect(stop.line).toMatch(/線の間に \(\d+,-?\d+,\d+\) # 石の類 がある/u);
+  });
+  it('does not hold an empty bucket drawing water (the body fill finds the stand and opens a wall), but still holds a lava bucket out of reach', () => {
+    expect(useReachStop({ hands: [bucket(251, -24, 208)] }, obsidianFrame())).toBeNull();
+    expect(useReachStop({ hands: [walk(248, -24, 205), bucket(251, -24, 208)] }, obsidianFrame())).toBeNull();
+    expect(useReachStop({ hands: [bucket(253, -24, 209)] }, obsidianFrame())).toMatchObject({ code: 'use_reach' });
+  });
+  it('carries the body feetWater line into the live state', () => {
+    const state = minecraftLlmcLive({ elapsedMinutes: 3, trend: createFoodTrend(() => 0), events: [],
+      observation: frame({ position: { x: 0, y: 0, z: 0 }, dimension: 'overworld', health: 20, food: 20, feetWater: '足元: 止まった水（深さ 2）・頭は水の中・足は地面' }) }) as { state: Record<string, unknown> };
+    expect(state.state.feetWater).toBe('足元: 止まった水（深さ 2）・頭は水の中・足は地面');
   });
   it('lets a use go that is within reach with a clear line, and a use after a dig, a place or a loose walk (not judged from here)', () => {
     // Standing at (251,-24,207) with (251,-23,208) opened (run 36 seq 1785 dug it): one block from the source, a clear line.
@@ -95,7 +106,7 @@ describe('the obsidian scene: water, lava and the bucket', () => {
     expect(useReachStop({ hands: [{ do: 'use', item: 'flint_and_steel', at: [at(251, -24, 208)] }] }, obsidianFrame())).toBeNull();
   });
   it('goes through the part-send: the hands before the held use are sent', () => {
-    const act = { hands: [{ do: 'equip', item: 'bucket' }, bucket(251, -24, 208), { do: 'wait', seconds: 2 }], why: '[p7.2] 汲み戻す' };
+    const act = { hands: [{ do: 'equip', item: 'bucket' }, bucket(251, -24, 208, 'water_bucket'), { do: 'wait', seconds: 2 }], why: '[p7.2] 汲み戻す' };
     const held = heldBeforeSend(false, act, obsidianFrame(), 't')!;
     expect((held.input as { hands: unknown[] }).hands).toHaveLength(1);
     expect(held.tail).toContain('手 2 use');
@@ -213,7 +224,7 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     const titles = (tree: PlanTree) => tree.nodes.map(node => `${node.title}|${node.doneWhen ?? ''}`);
     const on = seedPlan('エンドラを倒して')!;
     expect(titles(on).some(line => line.includes('食料100点以上に足す'))).toBe(false);
-    expect(titles(on)).toContain('村を回る（ベッド全部・干し草・畑・箱）|');
+    expect(titles(on)).toContain('村を回る（ベッド全部・干し草・畑・箱）|have:bed>=3|have:bread>=6');
     expect(titles(on).some(line => line.startsWith('出発の点検（ネザーの奥へ）'))).toBe(true);
     expect(gateFirst([]).length).toBe(0);
   });

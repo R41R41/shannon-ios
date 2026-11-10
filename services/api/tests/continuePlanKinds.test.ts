@@ -225,6 +225,12 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
     expect(isDragonPlan(seedPlan('ネザーに行って')!)).toBe(false);
     expect(seedPlan('ネザーに行って')!.nodes.some(node => node.kind === 'portal')).toBe(true);
   });
+  it('the village section ends on a condition she can meet (3 beds or 6 bread), so a skipped village does not stay the current node', () => {
+    const village = dragon.nodes.find(node => node.kind === 'village')!;
+    expect(village.doneWhen).toBe('have:bed>=3|have:bread>=6');
+    expect(village.note).toContain('札のベッドを取り切るまで 1 周で回る');
+    expect(village.note).not.toContain('この親が済んでも');
+  });
   it('the gate-first changes find their seeds by kind: one bed, the iron with the armour, the golden boots after the diamonds, no food 100 before the gate', () => {
     const titles = dragon.nodes.map(node => node.title);
     expect(titles).toContain('村を回る（ベッド全部・干し草・畑・箱）');

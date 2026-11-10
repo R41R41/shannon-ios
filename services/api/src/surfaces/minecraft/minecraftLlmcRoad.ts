@@ -3,6 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { doneFacts, isPrepMilestoneNode, parseDoneWhen, predicateHolds, prepHolds, prepNowWords, prepSkipped, PREP_SKIPPED, prepUnmetNow,
    undergroundInOverworld,
   type DoneFacts } from './minecraftPlanDone.js';
+import { carried } from './minecraftConditions.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { NETHER_BY_SECONDS } from './minecraftLlmcPrepRules.js';
 
@@ -276,6 +277,13 @@ export function meterParts(tree: PlanTree | null | undefined, observation: BodyO
   const throughTheGate = reached[GATE_INDEX] === true;
   const named = throughTheGate ? -1 : DRAGON_MILESTONES.findIndex((item, index) => !reached[index] && !!current && names(current, item));
   const { index: prepIndex, over: prepOver, fact: prepFact } = prepEnd(tree, facts, reached);
+  // Run 6: a village of 8 beds or more stood 146 m off while she went to the iron with 3 beds in the pack; the clock says it once, with how long a round takes.
+  const villageFact = (nextName: string | undefined): string => {
+    const village = facts.village, have = carried(facts.counts, 'bed');
+    if (!village || village.beds < 8 || have >= 8 || throughTheGate || facts.dimension !== 'overworld'
+      || !nextName || !['ベッド', PREP_MILESTONE_NAME, '鉄のツルハシ'].includes(nextName)) return '';
+    return `・村: ベッド ${village.beds} 台が ${village.distance} m（持ち ${have}/8）。${village.seconds === null ? '' : `1 周 約 ${village.seconds} 秒。`}鉄より前が往復が少ない`;
+  };
   const nextMilestoneIndex = () => (named >= 0 ? named : last + 1);
   let nextIndex = nextMilestoneIndex();
   if (prepOver && nextIndex === prepIndex) nextIndex += 1;
@@ -291,5 +299,5 @@ export function meterParts(tree: PlanTree | null | undefined, observation: BodyO
   const gap = next.seconds - now;
   const state = gap >= 0 ? `あと ${grouped(gap)} 秒` : `${grouped(-gap)} 秒遅れ`;
   return { line: `目安: ${clock}・次の節目 ${next.name} 目安 ${grouped(next.seconds)} 秒（${state}）${detail(next) ? `・${detail(next)}` :
-     ''}${skipped}${prepFact}`, next: next.name };
+     ''}${skipped}${prepFact}${villageFact(next.name)}`, next: next.name };
 }

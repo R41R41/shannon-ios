@@ -187,6 +187,13 @@ export interface LlmcQueue extends FcaBodyQueue {
   replace(ids: readonly string[], waitMs?: number): Promise<string>;
   /** The item the next one would follow (the last open one), or null. */
   tail(): string | null;
+  /** What the queue knows of the item `ref` (a result a wait-only act is waiting for): whether it ended, whether its result is still unread
+   * (not yet handed to the decision) and how it ended (`ok`: null while open or unknown); null when it is no item of this queue. */
+  resultOf(ref: string): { ended: boolean; unread: boolean; ok: boolean | null } | null;
+  /** The time the decided items still open likely have left (the sum `wakeNow` compares with the wake margin). */
+  leftMs(): number;
+  /** Whether a result waits to be handed to the decision (an item ended since the last one was read). */
+  hasUnread(): boolean;
   /** The lines of the live state. */
   lines(frame: BodyObservation | null): string[];
   /** The input of the items ahead of a new one, in order (the act preflight reads them as the hands that come first). */

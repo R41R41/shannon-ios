@@ -173,6 +173,41 @@ describe('a wait-only act behind a running item (run 4: refused 5 times, each a 
     expect((await sendItem({ ...parts(queue(true)), call: call({ hands: [{ do: 'wait', seconds: 5 }, { do: 'jump' }], why: 'x' }) })).text).toContain('列に入れた q5');
     expect(added).toBe(2);
   });
+  describe('a wait for a result (run 6: 13 of them, 64 s of the body waiting for what the decision was about to read)', () => {
+    const waitFor = (extra: object) => call({ hands: [{ do: 'wait', seconds: 5 }], why: 'x', ...extra });
+    const stub = (over: Record<string, unknown>) => {
+      const added = { n: 0 };
+      const queue = { open: () => false, tail: () => null, hasUnread: () => false, resultOf: () => null, leftMs: () => 0, openItems: () => [],
+        async add() { added.n += 1; return { ok: true as const, item: 'q9', after: null, startInMs: 1000 }; }, ...over };
+      return { queue, added };
+    };
+    it('is answered with the result at hand when the item it names has ended (success or failure), and nothing is added', async () => {
+      const done = stub({ resultOf: () => ({ ended: true, unread: true, ok: true }) });
+      const text = (await sendItem({ ...parts(done.queue), call: waitFor({ dependsOn: ['q3'] }) })).text;
+      expect(text).toContain('q3 はもう成功で終わった');
+      expect(text).toContain('結果はこの下の行');
+      expect(done.added.n).toBe(0);
+      const bad = stub({ resultOf: () => ({ ended: true, unread: true, ok: false }) });
+      expect((await sendItem({ ...parts(bad.queue), call: call({ hands: [{ do: 'wait', seconds: 5 }], why: 'q3 の結果を待つ' }) })).text).toContain('q3 はもう失敗で終わった');
+      expect(bad.added.n).toBe(0);
+    });
+    it('says how long a running item has left and how many places the queue has, and asks for the next hand', async () => {
+      const running = stub({ open: () => true, tail: () => 'q3', resultOf: () => ({ ended: false, unread: false, ok: null }), leftMs: () => 41_000, openItems: () => [{ item: 'q3', why: 'x' }] });
+      const text = (await sendItem({ ...parts(running.queue), call: waitFor({ dependsOn: ['q3'] }) })).text;
+      expect(text).toContain('q3 はまだ走っている（あと約 41 秒・列の空き 2 件）');
+      expect(text).toContain('待つ間に体を使う項目を足す');
+      expect(running.added.n).toBe(0);
+    });
+    it('an empty queue with a result unread is answered with it, once; with nothing unread, or with done or repeat, a real wait goes to the queue', async () => {
+      const unread = stub({ hasUnread: () => true });
+      expect((await sendItem({ ...parts(unread.queue), call: waitFor({}) })).text).toContain('結果が手元に届いている');
+      expect(unread.added.n).toBe(0);
+      const quiet = stub({});
+      expect((await sendItem({ ...parts(quiet.queue), call: waitFor({}) })).text).toContain('列に入れた q9');
+      const withDone = stub({ hasUnread: () => true });
+      expect((await sendItem({ ...parts(withDone.queue), call: waitFor({ done: { k: 'have', item: 'dirt', n: 1 } }) })).text).toContain('列に入れた q9');
+    });
+  });
 });
 
 describe('an item whose pre the frame shows unmet', () => {

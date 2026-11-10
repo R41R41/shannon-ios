@@ -55,7 +55,8 @@ export const FCA_TRANSIENT_BETAS = 'inline-tools-2026-09-15,mid-conversation-sys
  * the response names it
  * (`input_transformations`, counted in `fca_decision_metrics`).
  */
-export const FCA_TRANSIENT_THINKING = { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } } as const;
+// `display: 'summarized'` (run 6: every thinking block came back with no text, only its signature; the models of this generation omit the text unless asked).
+export const FCA_TRANSIENT_THINKING = { type: 'adaptive', display: 'summarized', block_binding: { prefix_mismatch_behavior: 'drop_block' } } as const;
 
 /**
  * The fixed words of a transient task's instructions (the cached system text): how to read its stored deltas and its live state.
@@ -177,16 +178,39 @@ export function renderedRequest<T extends { messages: readonly unknown[] }>(body
 }
 
 /** How many input transformations the provider reported (`thinking_dropped`, …) and their closed reasons. Content-free. */
-export function inputTransformations(message: unknown): { count: number; reasons: string[] } {
+export function inputTransformations(message: unknown): { count: number; reasons: string[]; paths: string[] } {
   const list = object(message)?.input_transformations;
-  if (!Array.isArray(list)) return { count: 0, reasons: [] };
+  if (!Array.isArray(list)) return { count: 0, reasons: [], paths: [] };
   const reasons = [...new Set(list.flatMap(item => {
     const entry = object(item);
     const type = typeof entry?.type === 'string' && /^[a-z_]{1,40}$/u.test(entry.type) ? entry.type : 'other';
     const reason = typeof entry?.reason === 'string' && /^[a-z_]{1,40}$/u.test(entry.reason) ? entry.reason : 'other';
     return [`${type}:${reason}`];
   }))];
-  return { count: list.length, reasons };
+  // Where the provider says each block was (`messages.2.content.0`): kept only in that form, the first twelve.
+  const paths = list.flatMap(item => {
+    const path = object(item)?.path;
+    return typeof path === 'string' && /^messages\.\d+\.content\.\d+$/u.test(path) ? [path] : [];
+  }).slice(0, 12);
+  return { count: list.length, reasons, paths };
+}
+
+/**
+ * The shape of a request that was sent, without its words: how many messages, which assistant messages carry a thinking block and which messages
+ * are the live state (`system`, clear_at). Next to the provider's `path`s of the blocks it dropped, this tells whether a drop follows the live
+ * state (run 6: 142 drops in 177 decisions; the cause is a hypothesis until a run's record shows the paths).
+ */
+export function requestShape(body: unknown): { n: number; assistantThinking: number[]; clearAt: number[] } {
+  const messages = Array.isArray(object(body)?.messages) ? object(body)!.messages as unknown[] : [];
+  const assistantThinking: number[] = [], clearAt: number[] = [];
+  messages.forEach((message, index) => {
+    const entry = object(message);
+    if (entry?.role === 'system' || isFcaClearAtMessage(message)) clearAt.push(index);
+    const content = entry?.content;
+    if (entry?.role === 'assistant' && Array.isArray(content)
+      && content.some(block => ['thinking', 'redacted_thinking'].includes(String(object(block)?.type)))) assistantThinking.push(index);
+  });
+  return { n: messages.length, assistantThinking, clearAt };
 }
 
 /** A provider 400 about these betas or the request shape they allow: asked of the very first decision of a task

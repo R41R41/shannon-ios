@@ -17,7 +17,7 @@ import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { breakingOf } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { digPackLine } from '../surfaces/minecraft/minecraftLlmcFacts.js';
-import { waitWakeWords } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
+import { QUEUE_MAX, resultWaitWords, waitWakeWords } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -81,7 +81,21 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
     why: String(input.why ?? ''), fixes: [], ...(reserving ? { reserve: true } : {}), ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
     maxMs: actMilliseconds(timed, feet) });
   // run 4: a wait-only act behind an item that runs is answered as "woken when it ends", not refused (the queue's own wakes do it; nothing is added).
-  if (input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait') && queue.open() && !(keep?.length) && !(input.uses?.length)) {
+  // A wait-only act for a result (it names the item, or one waits unread) goes to no wait of the body: the result is told now, or the next hand is asked for.
+  const lone = input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait') && !(keep?.length) && !(input.uses?.length)
+    && input.done === undefined && input.repeat === undefined;
+  if (lone) {
+    const refs = [...(input.dependsOn ?? []), ...(String(input.why ?? '').match(/\bq\d{1,6}\b/gu) ?? [])];
+    const marked = refs.map(ref => ({ ref, got: queue.resultOf?.(ref) ?? null })).find(entry => entry.got !== null);
+    const answer = (words: string) => toolOk([`${fixes}${words}`, ...(parts.lead ?? [])].join('\n'));
+    if (marked?.got && !marked.got.ended) {
+      const room = QUEUE_MAX - (queue.openItems?.().length ?? 0);
+      return answer(resultWaitWords(marked.ref, { ended: false, left: queue.leftMs?.() ?? 0, room }));
+    }
+    if (marked?.got) return answer(resultWaitWords(marked.ref, { ended: true, ok: marked.got.ok, unread: marked.got.unread }));
+    if (!queue.open() && queue.hasUnread?.() === true) return answer(resultWaitWords(null, { ended: true, ok: null, unread: true }));
+  }
+  if (lone && queue.open()) {
     const tail = queue.tail();
     if (tail !== null) return toolOk([`${fixes}${waitWakeWords(tail)}`, ...(parts.lead ?? [])].join('\n'));
   }

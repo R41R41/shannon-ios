@@ -15,7 +15,8 @@ import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
  * free slot, for `pendingMs` of the running clock; after that the look finds it again if it still stands.
  * A hold is kept for the results nobody knows and for the body's and the head's disagreement on who holds the body.
  */
-export const REPLAN = Object.freeze({ gapMs: 5 * 60_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000,
+/** `gapSameNodeMs`: after a plan that changed the node, the same node stalling again is asked after this (run 6: a 500 s water loop got no second look in 5 minutes). */
+export const REPLAN = Object.freeze({ gapMs: 5 * 60_000, gapSameNodeMs: 90_000, perHour: 6, perRun: 30, perNode: 3, briefTokens: 8_000, giveUpMs: 120_000, outputTokens: 5_000,
   pendingMs: 15 * 60_000, safeHp: 12, watchMs: 1_000 });
 
 /** The stalls a new plan answers; a failure of the decision's writing is not one. */
@@ -77,7 +78,10 @@ export function replanVerdict(ledger: ReplanLedger, node: string, nowMs: number,
   const recent = ledger.recent.filter(at => nowMs - at < HOUR_MS);
   if (recent.length >= REPLAN.perHour) return { ok: false, why: 'hour' };
   const last = recent.at(-1);
-  return last !== undefined && nowMs - last < REPLAN.gapMs ? { ok: false, why: 'gap' } : { ok: true };
+  // A plan that changed this very node and did not move it: a shorter wait (the counts above still bound the asks). An ask still waiting for its answer or recovered is not `changed`.
+  const latest = ledger.last.at(-1);
+  const gap = latest && latest.at === last && latest.node === node && latest.outcome === 'changed' ? REPLAN.gapSameNodeMs : REPLAN.gapMs;
+  return last !== undefined && nowMs - last < gap ? { ok: false, why: 'gap' } : { ok: true };
 }
 
 /** The ledger with one more attempt (an attempt counts whether or not an answer came). */

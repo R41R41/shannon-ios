@@ -177,6 +177,12 @@ describe('run 38: the size of the lava pools (1,090–1,310 s on single sources 
     expect(prep).toContain('崖の上・高い所の木へ土で登る手が 2 回止まったら、その木はやめて別の木へ');
     expect(prep).not.toMatch(/実走\d/u);
   });
+  it('tells how to take a village\'s things in one example (the house is never a go goal; takeOk belongs to dig; a chest is read from 3-4 m)', () => {
+    const prep = stageKnowledge({ body: { state: { dimension: 'overworld' } } })!;
+    expect(prep).toContain('家の外 3〜4m に go X,Y,Z range=3 → dig ベッドの座標 takeOk');
+    expect(prep).toContain('chest X,Y,Z takeAll（chest は歩かない）');
+    expect(prep).toContain('go に takeOk は付けない');
+  });
 });
 
 describe('the bench of 2026-10-24: the slot words of equip', () => {

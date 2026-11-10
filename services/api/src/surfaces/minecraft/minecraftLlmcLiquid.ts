@@ -16,8 +16,11 @@ const EYE = 1.62;
  * is a stop the body would have made.
  */
 export const USE_REACH = 5.0;
-/** What the run measured: a dig of a cell in water takes about 6 seconds, in air about 1. */
-const WATER_DIG = '水中のマスの dig は 1 マス 6 秒ほど（空気中は約 1 秒）、流れの中の walk は同じマスで進めないことがある（上流のマスにブロックを place すると流れは止まる）';
+/**
+ * What the body does and measures: a dig with the eyes in water takes 5 times as long, and 5 times more when the feet are off the floor; the body
+ * puts a block under her feet and stops a stream before a hand when it can, so a dig beside water is allowed (lava is not).
+ */
+const WATER_DIG = '目が水の中だと dig は 5 倍、足が地面から浮くとさらに 5 倍かかる（体が先に足元へ足場を置き、流れを止めてから手を出す。水の隣のマスの dig は許される。溶岩の隣は今まで通り断る）。流れの中の walk は同じマスで進めないことがある（上流のマスにブロックを place すると流れは止まる）';
 const RANGE = 7, SHOWN = 3;
 
 interface Found { cell: P; reach: number; between: string | null }
@@ -137,6 +140,8 @@ function bucketTarget(hand: Rec, view: MapView): P | null {
 function reachStop(hand: number, item: string, view: MapView, eye: Eye, feet: P, cell: P): HandStop | null {
   const reach = meters(eye, cell);
   const symbol = view.symbol(cell.x, cell.y, cell.z), what = `${ptText(cell)}（${nameOf(symbol)}）`;
+  // An empty bucket drawing water: the body's fill finds a dry stand and opens one wall itself (use.ts), so a stop from here would only come first.
+  if (item === 'bucket' && symbol === 'w') return null;
   if (reach > USE_REACH) {
     return { hand, kind: 'use', code: 'use_reach', line: `${item} の use: ${what} は目から ${reach.toFixed(1)}m（dig・place・use は ${USE_REACH}m まで）。`
       + `${ptText(cell)} の ${USE_REACH}m 内に立ってから use する（先に walk）` };

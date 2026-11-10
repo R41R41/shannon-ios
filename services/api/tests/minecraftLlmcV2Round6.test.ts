@@ -86,7 +86,7 @@ describe('the reach of 5 m (utils/blockReach.ts BLOCK_REACH), from the eye (feet
     return { schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't', connected: true,
       state: { world: { localMap: lines.join('\n'), position: { x: 248.5, y: -24, z: 204.5 }, dimension: 'overworld' } as never }, facts: {} };
   }
-  const bucket = (x: number, z: number) => ({ do: 'use', item: 'bucket', at: [{ x, y: -24, z }] });
+  const bucket = (x: number, z: number) => ({ do: 'use', item: 'water_bucket', at: [{ x, y: -24, z }] });
   it('is one number, 5.0: 4.4 m and 4.6 m go to the body, 5.1 m and 5.8 m are held', () => {
     expect(USE_REACH).toBe(5);
     expect(useReachStop({ hands: [bucket(251, 207)] }, room([251, 207]))).toBeNull();

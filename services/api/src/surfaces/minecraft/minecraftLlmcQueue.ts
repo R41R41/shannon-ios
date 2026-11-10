@@ -368,6 +368,14 @@ void restoreReceipts();
     runningInput: () => open().find(item => item.id === deps.control.progress(deps.bodyId())?.id)?.input ?? null,
     version: () => version,
     tail: () => open().at(-1)?.item ?? null,
+    resultOf(ref) {
+      const found = items.find(entry => entry.item === ref);
+      if (!found) return null;
+      const state = dependStateOfRef(ref);
+      return { ended: found.ended === true, unread: news.some(entry => entry.item === ref), ok: state === 'succeeded' ? true : state === 'failed' ? false : null };
+    },
+    leftMs: () => open().filter(item => !item.reserve).reduce((sum, item) => sum + remainingMs(item), 0),
+    hasUnread: () => news.length > 0,
     ahead: () => open().map(item => item.input),
     tuning: () => verticalSpeeds.get(deps.taskId) ?? {},
     noteDecision(milliseconds) {

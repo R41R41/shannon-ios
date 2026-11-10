@@ -39,7 +39,7 @@ describe('transient turn shape (P3)', () => {
       for (const entry of messages.filter(item => item.role === 'system')) expect(JSON.stringify(entry)).not.toContain('cache_control');
       expect(body.cache_control).toBeUndefined();
       expect(breakpointCount(body as never)).toBeLessThanOrEqual(4);
-      expect(body.thinking).toEqual({ type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } });
+      expect(body.thinking).toEqual({ type: 'adaptive', display: 'summarized', block_binding: { prefix_mismatch_behavior: 'drop_block' } });
     });
     expect(breakpointCount(run.bodies[5] as never)).toBe(3);
     for (const headers of run.headers) expect(headers['anthropic-beta']).toBe(FCA_TRANSIENT_BETAS);
@@ -351,7 +351,7 @@ describe('safety fallback and provider reports', () => {
     // Every request that was answered is the legacy shape: no turn-scoped message, no thinking binding, the legacy menu.
     for (const body of run.bodies) {
       expect(clearAts(body)).toHaveLength(0);
-      expect(body.thinking).toEqual({ type: 'adaptive' });
+      expect(body.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
       expect((body.tools as Array<{ name: string }>).map(tool => tool.name)).toEqual(['tool_open', 'fca_wait', 'fca_complete']);
     }
     expect(warn.mock.calls.some(call => String(call[0]).includes('fca_obs_mode_fallback'))).toBe(true);
@@ -375,7 +375,10 @@ describe('safety fallback and provider reports', () => {
     await model.decide({ task: { id: 't', title: 'x', goal: 'x', completionCriteria: 'x' }, messages: [], history: [], tools: [core], coreTools: [core],
       catalog: [], transient: live(1) } as never, new AbortController().signal);
     const line = warn.mock.calls.map(call => String(call[0])).find(text => text.includes('fca_input_transformations'))!;
-    expect(JSON.parse(line)).toEqual({ event: 'fca_input_transformations', task: 't', count: 1, reasons: ['thinking_dropped:prefix_binding_mismatch'] });
+    expect(JSON.parse(line)).toMatchObject({ event: 'fca_input_transformations', task: 't', count: 1, reasons: ['thinking_dropped:prefix_binding_mismatch'], paths: ['messages.2.content.0'] });
+    // The shape of the request that was sent (no words): how many messages, where the thinking and the live state are.
+    expect(JSON.parse(line).shape).toEqual({ n: expect.any(Number), assistantThinking: expect.any(Array), clearAt: expect.any(Array) });
+    expect(JSON.parse(line).shape.clearAt.length).toBeGreaterThan(0);
     expect(anthropicRequestViolation(fixture.bodies[0]!)).toBeNull();
     vi.restoreAllMocks();
   });

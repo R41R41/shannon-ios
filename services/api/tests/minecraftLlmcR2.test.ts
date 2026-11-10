@@ -49,6 +49,29 @@ describe('the act as the model writes it (scene replay: Haiku wrote why in a han
     expect(llmcPrepare(MC_ACT_TOOL, { hands: [{ do: 'dig', at: [{ x: 1, y: 2 }] }] }).problem).toContain('手1（dig）の at[1] に z が要る');
   });
 
+  it('a hand without do that names its kind under another word is told to write do, with that kind fields (run 6: {"type":"vertical"} sent twice)', () => {
+    const problem = schemaProblem({ hands: [{ type: 'vertical', dir: 'down' }] }, ACT_INPUT_SCHEMA)!;
+    expect(problem).toContain('手1 に do が要る（type は無い欄。do に "vertical" と書く）');
+    expect(problem).toContain('vertical の欄: dir・shape・toY・canDig・liquid・toward');
+  });
+  it('a hand without do and with no kind under any word is told the shape of a hand and the kinds', () => {
+    const problem = schemaProblem({ hands: [{ type: 'put' }] }, ACT_INPUT_SCHEMA)!;
+    expect(problem).toContain('手1 の type は無い欄');
+    expect(problem).toContain('{"do":"walk","to":{"x":1,"y":64,"z":2}}');
+    expect(problem).toContain('種類: walk・go・dig・place');
+    // Only a field the schema takes (op): no stray field to name, the same shape and kinds.
+    const bare = schemaProblem({ hands: [{ op: 'put' }] }, ACT_INPUT_SCHEMA)!;
+    expect(bare).toContain('手1 に do が要る。json は {"do":"walk"');
+    expect(bare).toContain('種類: walk・go・dig・place');
+  });
+  it('a hand that has do keeps its refusal as it was, and a takeOk on a go says it belongs to dig', () => {
+    expect(schemaProblem({ hands: [{ do: 'walk', to: { x: 1, y: 2, z: 3 }, why: 'x', speed: 2 }] }, ACT_INPUT_SCHEMA))
+      .toBe('手1（walk）の why・speed は無い欄（why は act に 1 つ）。walk の欄: to・path・sprint・range・rel・note・onFail');
+    const problem = llmcPrepare(MC_ACT_TOOL, { hands: [{ do: 'go', to: { x: 1, y: 2, z: 3 }, takeOk: true }] }).problem!;
+    expect(problem).toContain('takeOk は使えない（go の欄:');
+    expect(problem).toContain('takeOk は dig の欄（村の物は dig X,Y,Z takeOk。go に付けない）');
+  });
+
   it('the result says what the head put into shape, and a stopped hand\'s 3×3×3', () => {
     const act: ActResult = { v: 1, ok: false, done: 0, of: 1, stoppedBy: 'failure', at: { x: 201, y: 45, z: 277 }, hp: 20, food: 18, ms: 900,
       lines: [{ i: 1, do: 'walk', status: 'stopped', line: '一歩ではない: (201,48,277) …', where: { x: 201, y: 48, z: 277 },

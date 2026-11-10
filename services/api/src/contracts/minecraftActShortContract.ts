@@ -87,7 +87,7 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
 "（岩に埋まった落とし物へも岩を掘って取りに行く。ほかの鉱石は探さない）。鉱石を dig で 1 個ずつ並べて書かない（遅く、落とし物も拾い損ねる）。" +
 "ブロック名は id そのまま（iron_ore）で、y<0 は deepslate_ が付く: landmarks・走査の行の名前を写す。X,Y,Z は必須（座標なしは断られる。待ちの代わりに使わない）で、" +
 "種類が分かるマスだけ（地図の o は鉄ではない。指したマスが掘り済みでも 2 マス内の同じ鉱石から始める）。" +
-"count は要る個数（鉄のツルハシなら count=3。書かないと鉱脈ぜんぶ・24 まで）。岩に埋まっていても dig= を書かなくても岩・土・砂利だけ掘って届く（maxDig 既定 16）。")
+"count は要る個数（鉄のツルハシなら count=3。書かないと鉱脈ぜんぶ・24 まで）。岩に埋まっていても dig= を書かなくても岩・土・砂利だけ掘って届く（maxDig 既定 16。届かない時は体の行が必要な数を言うので、その数で maxDig を付けて出し直す）。")
     + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。'
   ]),
   'make 物 [個数]',

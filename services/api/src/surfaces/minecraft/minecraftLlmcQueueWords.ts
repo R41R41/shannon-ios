@@ -28,6 +28,24 @@ export const waitBehindWords = (running: string) =>
 export const waitWakeWords = (running: string) =>
   `wait は積まなかった（体には何も足していない。体は列を動かし続ける）。列の最後の ${running} が終わって列が空になったら起こす: その結果は終わった時に知らせる。`
   + '待つ間に体を使う項目があれば、wait ではなくその項目を足す';
+/**
+ * A wait-only act that waits for the result of an item (it names it in `dependsOn` or its why), or that is written while a result is already in
+ * hand: no wait goes to the body (run 6 / Haiku 1: 13 such waits, 64 s of the body standing still, each for a result the decision was about to read).
+ * `state`: the item ended (`ok`: how), or is still running (`left` ms, `room` free places in the queue).
+ */
+export function resultWaitWords(ref: string | null,
+  state: { ended: true; ok: boolean | null; unread: boolean } | { ended: false; left: number; room: number }): string {
+  const lead = 'wait は積まなかった（体には何も足していない）。';
+  if (!state.ended) {
+    const seconds = Math.max(1, Math.round(state.left / 1000));
+    return `${lead}${ref ?? '走っている項目'} はまだ走っている（あと約 ${seconds} 秒・列の空き ${Math.max(0, state.room)} 件）。`
+      + '待つ間に体を使う項目を足す（今の節の次の手）。終わった時に結果を知らせる';
+  }
+  const how = state.ok === true ? '成功で' : state.ok === false ? '失敗で' : '';
+  const where = state.unread ? '結果はこの下の行' : '結果は知らせた通り';
+  const name = ref ? `${ref} はもう${how}終わった` : '結果が手元に届いている';
+  return `${lead}${name}: ${where}。体は空いている。読んで次の手を積む（待たない）`;
+}
 /** The body's own words of an item it did not run (`failureType`): the item never started and no hand moved. */
 export const NEVER_RAN: ReadonlySet<string> = new Set(['queue_dropped', 'queue_expired', 'queue_after_gone', 'queue_busy', 'queue_full']);
 

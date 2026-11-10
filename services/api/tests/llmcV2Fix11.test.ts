@@ -136,6 +136,19 @@ describe('chapter 4 A: the road and the pace', () => {
     // Past the Nether the pace goes on to the fortress, the rods, the pearls, the eyes, the portal room and the End (2026-11-02).
     expect(meterLine(tree, have([['diamond_pickaxe', 1]], 'the_nether'), 1_700 / 60)).toBe('目安: 今 1,700 秒・次の節目 ネザー要塞 目安 3,200 秒（あと 1,500 秒）');
   });
+  it('says a village of 8 beds or more once, with the distance and how long a round takes, while the next milestone is before the iron and the pack has fewer beds', () => {
+    const marks = ['B 村 (100,64,0) 東100 ベッド9台、hay_block×25、箱×4、村人4人、一周 約160秒。取り方: 家の外へ go range=3 → dig takeOk'];
+    const at = (items: Array<[string, number]>, mapLandmarks: string[], dimension = 'overworld') => frame({ position: { x: 0, y: 64, z: 0 }, dimension, mapLandmarks,
+      inventory: items.map(([name, count]) => ({ name, count })) });
+    const told = meterLine(tree, at([['blue_bed', 3]], marks), 100 / 60)!;
+    expect(told).toContain('・村: ベッド 9 台が 100 m（持ち 3/8）。1 周 約 160 秒。鉄より前が往復が少ない');
+    // No seconds said: the phrase is left out. Fewer than 8 beds in the village, 8 or more carried, the Nether, or the next milestone after the iron: not said.
+    expect(meterLine(tree, at([['blue_bed', 3]], [marks[0]!.replace('、一周 約160秒', '')]), 100 / 60)).toContain('（持ち 3/8）。鉄より前が往復が少ない');
+    expect(meterLine(tree, at([['blue_bed', 3]], [marks[0]!.replace('ベッド9台', 'ベッド6台')]), 100 / 60)).not.toContain('・村:');
+    expect(meterLine(tree, at([['blue_bed', 8]], marks), 100 / 60)).not.toContain('・村:');
+    expect(meterLine(tree, at([['blue_bed', 3], ['iron_pickaxe', 1], ['crafting_table', 1], ['cooked_beef', 2]], marks), 100 / 60)).not.toContain('・村:');
+    expect(meterLine(tree, at([['blue_bed', 3]], ['B 村のベッド (216,79,28) 東2・北1 white_bed']), 100 / 60)).not.toContain('・村:');
+  });
   it('is absent for another plan, an unknown time or no frame', () => {
     expect(meterLine(notDragon, have([]), 1)).toBeNull();
     expect(meterLine(tree, have([]), null)).toBeNull();

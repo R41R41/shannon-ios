@@ -163,7 +163,7 @@ describe('native one-step FCA model', () => {
     expect(JSON.stringify(fixture.bodies[1]).match(/cache_control/gu)).toHaveLength(4);
     expect(JSON.stringify(first.history)).not.toContain('cache_control');
     for (const body of fixture.bodies) expect(body).toMatchObject({ model: 'claude-haiku-5-5', max_tokens: 4_000,
-      thinking: { type: 'adaptive' }, output_config: { effort: 'low' }, cache_control: { type: 'ephemeral', ttl: '1h' }, tool_choice: { type: 'auto' } });
+      thinking: { type: 'adaptive', display: 'summarized' }, output_config: { effort: 'low' }, cache_control: { type: 'ephemeral', ttl: '1h' }, tool_choice: { type: 'auto' } });
     expect(fixture.receipts[1]).toMatchObject({ usageComplete: true, cachedInputTokens: 700, cacheCreationInputTokens: 0 });
   });
 

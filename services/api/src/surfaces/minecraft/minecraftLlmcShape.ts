@@ -1,4 +1,5 @@
 import { handFieldNames, slotWordOf, type HandKind } from '../../contracts/minecraftActContract.js';
+import { HAND_FIELDS } from '../../contracts/minecraftActHandRules.js';
 
 /**
  * The act as the model writes it, made ready for the body (r2, 2026-10-22; contract `minecraftActContract.ts`):
@@ -148,10 +149,23 @@ function boundsProblem(value: unknown, node: Schema, here: string): string | nul
   }
   return null;
 }
+/** The words a model writes for the kind of a hand when it leaves `do` out (run 6: `{"type":"vertical",…}` sent twice, three seconds apart). */
+const KIND_ALIASES = ['type', 'kind', 'op', 'action', 'hand'] as const;
+/** A hand with no `do`: the kind it wrote under another name (named, with that kind's fields), or the shape of a hand and the kinds. */
+function noDoProblem(object: Fields, extra: string[], here: string): string {
+  const key = KIND_ALIASES.find(name => typeof object[name] === 'string' && Object.hasOwn(HAND_FIELDS, object[name] as string));
+  if (key) {
+    const kind = object[key] as HandKind;
+    return `${here} に do が要る（${key} は無い欄。do に "${kind}" と書く）。${kind} の欄: ${handFieldNames(kind).join('・')}`;
+  }
+  return `${here}${here.endsWith('）') ? '' : ' '}の ${extra.join('・')} は無い欄。do が要る: json は {"do":"walk","to":{"x":1,"y":64,"z":2}} のように do（手の種類）から書く。`
+    + `種類: ${Object.keys(HAND_FIELDS).join('・')}`;
+}
 /** A field an object does not take, said with the fields a hand of that kind takes. */
 function extraProblem(object: Fields, properties: Fields, path: Path, here: string): string | null {
   const extra = Object.keys(object).filter(key => !(key in properties));
   if (!extra.length) return null;
+  if (path.length === 2 && path[0] === 'hands' && typeof object.do !== 'string') return noDoProblem(object, extra, here);
   const names = path.length === 2 && path[0] === 'hands' && typeof object.do === 'string' ? handFieldNames(object.do as HandKind) : [];
   const may = names.length ? `。${String(object.do)} の欄: ${names.join('・')}` : '';
   return `${here}${here.endsWith('）') ? '' : ' '}の ${extra.join('・')} は無い欄${extra.includes('why') ? '（why は act に 1 つ）' : ''}${may}`;
@@ -178,6 +192,10 @@ export function schemaProblem(input: unknown, schema: Schema): string | null {
     const extra = node.additionalProperties === false ? extraProblem(object, properties, path, here) : null;
     if (extra) return extra;
     const missing = (Array.isArray(node.required) ? node.required as string[] : []).find(key => object[key] === undefined);
+    // A hand with no `do` and no stray field (e.g. only `op`): the same shape and kinds, so the retry is not the same refusal again.
+    if (missing === 'do' && path.length === 2 && path[0] === 'hands') {
+      return `${here} に do が要る。json は {"do":"walk","to":{"x":1,"y":64,"z":2}} のように do（手の種類）から書く。種類: ${Object.keys(HAND_FIELDS).join('・')}`;
+    }
     if (missing) return `${here} に ${missing} が要る`;
     return Object.entries(properties).reduce<string | null>((found, [key, child]) => found
       ?? (object[key] === undefined || !plainRecord(child) ? null : walk(object[key], child as Schema, [...path, key])), null);

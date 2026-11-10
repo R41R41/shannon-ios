@@ -69,6 +69,22 @@ describe('the bounds of the plan made again', () => {
     expect(replanVerdict({ ...empty, total: REPLAN.perRun }, 'p1', 0)).toEqual({ ok: false, why: 'run' });
   });
 
+  it('asks again after 90 seconds when a plan that changed this node did not move it; any other newest attempt keeps the 5 minutes', () => {
+    const changed = withAttempt(empty, record(0));
+    expect(replanVerdict(changed, 'p1', REPLAN.gapSameNodeMs - 1)).toEqual({ ok: false, why: 'gap' });
+    expect(replanVerdict(changed, 'p1', REPLAN.gapSameNodeMs)).toEqual({ ok: true });
+    expect(replanVerdict(changed, 'p2', REPLAN.gapSameNodeMs)).toEqual({ ok: false, why: 'gap' });
+    for (const outcome of ['unchanged', 'refused', 'failed'] as const) {
+      const other = withAttempt(empty, { ...record(0), outcome });
+      expect(replanVerdict(other, 'p1', REPLAN.gapSameNodeMs)).toEqual({ ok: false, why: 'gap' });
+      expect(replanVerdict(other, 'p1', 5 * MIN)).toEqual({ ok: true });
+    }
+    // The counts still bound it: the third plan of one node is not asked again after 90 seconds.
+    let three = empty;
+    for (let index = 0; index < REPLAN.perNode; index += 1) three = withAttempt(three, record(index * REPLAN.gapSameNodeMs));
+    expect(replanVerdict(three, 'p1', 10 * MIN)).toEqual({ ok: false, why: 'node' });
+  });
+
   it('counts an attempt when it is asked, keeps the newest three for the next brief, and reads a checkpoint with care', () => {
     let ledger = empty;
     for (let index = 0; index < 5; index += 1) ledger = withAttempt(ledger, { ...record(index * 11 * MIN, 'p1'), why: `w${index}` });

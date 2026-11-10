@@ -29,7 +29,9 @@ export interface DoneFacts { counts: ReadonlyMap<string, number>; dimension: str
   utilities?: UtilitiesScan | null;
   /** The marks in view now (`see:fortress`, `minecraftSeenMarks.ts`) and the end crystals left (`crystals<=0`); the frame may say neither. */
   seen?: ReadonlySet<string>;
-  crystals?: number | null }
+  crystals?: number | null;
+  /** The village the landmarks name: its beds (the body's count of beds, not halves), the seconds a round is said to take (null: not said) and its distance. */
+  village?: { beds: number; seconds: number | null; distance: number } | null }
 /** What the body scanned for a work table, a furnace, a chest or a bed near her: `scanned` false is "not looked",
  * never "none". */
 export interface UtilitiesScan { radius: number; dim: string | null; scanned: boolean; found: ReadonlyArray<{ block: string; distance: number }> }
@@ -55,6 +57,20 @@ function nightOf(world: Record<string, unknown>, dimension: string | null): bool
   const at = tick % 24_000;
   return (at >= 12_542 && at <= 23_459) || /thunder|雷/u.test(String(world.weather ?? ''));
 }
+/** The village the body's landmarks name (`B 村 (x,y,z) …ベッド9台、…、一周 約160秒…`): its beds, the seconds a round is said to take and how far it is; null when none reads. */
+function villageOf(world: Record<string, unknown>, feet: { x: number; y: number; z: number } | null): DoneFacts['village'] {
+  const marks = Array.isArray(world.mapLandmarks) ? world.mapLandmarks : [];
+  for (const line of marks) {
+    const found = typeof line === 'string' ? /^[A-Z]\s*村\s*\((-?\d+),(-?\d+),(-?\d+)\)/u.exec(line) : null;
+    if (!found) continue;
+    const beds = /ベッド\s*(\d+)\s*台/u.exec(line as string), seconds = /一周\s*約\s*(\d+)\s*秒/u.exec(line as string);
+    if (!beds) return null;
+    const [x, y, z] = [Number(found[1]), Number(found[2]), Number(found[3])];
+    return { beds: Number(beds[1]), seconds: seconds ? Number(seconds[1]) : null,
+      distance: feet ? Math.round(Math.hypot(x - feet.x, y - feet.y, z - feet.z)) : 0 };
+  }
+  return null;
+}
 export function doneFacts(observation: BodyObservation | null): DoneFacts | null {
   const world = observation?.state.world;
   if (!world || typeof world !== 'object' || Array.isArray(world)) return null;
@@ -66,7 +82,7 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
   const dim = typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null;
   return { counts: carriedItemCounts(frame, observation!.facts), feet, food: carriedFood(frame, observation!.facts).points, dimension: dim,
     hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame),
-    seen: seenMarks(frame), crystals: crystalsLeft(observation) };
+    seen: seenMarks(frame), crystals: crystalsLeft(observation), village: villageOf(frame, feet) };
 }
 
 /** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a

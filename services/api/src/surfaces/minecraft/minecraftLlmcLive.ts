@@ -207,7 +207,7 @@ function stateOf(world: Record<string, unknown>, observation: BodyObservation): 
   if (at && finite(at.x) !== null) out.at = `(${Math.floor(Number(at.x))},${Math.floor(Number(at.y))},${Math.floor(Number(at.z))})`;
   const dimension = world.dimension ?? observation.facts.dimension;
   if (typeof dimension === 'string') out.dimension = dimension.replace(/^minecraft:/u, '');
-  for (const key of ['inside', 'biome', 'time', 'weather', 'heldItem', 'worn'] as const) {
+  for (const key of ['inside', 'biome', 'time', 'weather', 'heldItem', 'worn', 'feetWater'] as const) {
     if (typeof world[key] !== 'string') continue;
     out[key] = (key === 'time' ? timeOf(world, out.dimension) : null) ?? cleanText(world[key] as string);
   }

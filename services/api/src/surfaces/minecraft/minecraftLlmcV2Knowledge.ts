@@ -180,7 +180,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     HUNT_FOOD_KNOWLEDGE,
     '- foodPreparation は加工の見込み。炉・作業台・燃料・設置場所と加工後の持ち物を観測で確かめる。',
     '- jobs は見込み。保留・再接続後は残り秒で待ち直さず furnace op=take で現物確認。焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める。jobs の各行は、かまどの場所・入れた物と出てくる物・あと何秒かで、待たずに別の act を足し、時間が来たら take の act を足す。',
-    '- 置いた作業台・かまどは、10 m より遠くへ行く手（go・walk・vertical・portal・hunt、at を書いた mine）の前に体が拾って持ち歩く（置きっぱなしだと板・丸石を毎回失うため）。焼き途中・出来上がり待ちのかまどは残る。敵が近い・体力が低い・水中や空中・持ち物が満杯の時は拾えず残るので、手の行と持ち物で確かめる。使う時は持っている物を place し、近くに作業台があれば新しく作らない。',
+    '- 作業台は置きっぱなしでよい。make は近くに作業台が無く持ってもいない時、板（原木があれば板にして）4 枚から作って置く（行に「作業台を置いた」と出る）。かまどは 10 m より遠くへ行く手の前に体が拾うことがある（行に「拾って持った」と出る。焼き途中・出来上がり待ちは残る）。',
     '- ベッドのある安全な囲いでは、射線・敵の到達・足場を確かめ、sleep 1 手（朝へ飛ぶ。wait で待たない）と調理・工作・近くの夜の狩り（食料源の選び方の条件）を比べる。ベッドが無い夜は朝待ちを選ばず、次の順番に従う。',
     // 1107c (11/7): with no bed the head waited 13 of its 19.6 minutes in a dirt pocket, 11 blocks above the iron shaft's depth. The owner: food first by day,
     // iron can be dug at night, and the bed matters most. 1107d (11/7): the line presupposed an enclosure; on a jungle top the dirt ring had no face
@@ -221,7 +221,8 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 以後は所持・作成済みを引いた残りをまとめて掘り焼く（鉄は総目安24〜36・石炭6）。生の鉄5以上は smelt furnaces=2〜3 に分け（1個10秒）、jobs の残秒で掘る・作る。',
     '- 木は、足の高さから幹に届く木か、走査の近い原木を選ぶ。崖の上・高い所の木へ土で登る手が 2 回止まったら、その木はやめて別の木へ。',
     '- 木が無い時: 地表の木（mc_probe kind=scan で原木の方角・mc_view mode=top で上から）→村の木の物（扉・柵・ベッド・作業台・板、takeOk）→難破船→廃坑（vertical の stairs で下りる）。',
-    '- 村は鉄より前に 128m 内を回る（takeOk: true。鉄ゴーレムと村人は打たない）: ベッド（下の決まり）、干し草（1 個でパン 3）、育った畑、箱は chest op=look→take。',
+    '- 村（landmarks の B 村・走査のベッド）は鉄より前に回る。1 周は約 2.5 分（以前の通し: ベッド 6＋パン 12 が 146 秒）。ベッド 1 個を羊で作ると 100 秒ほど、干し草 1 個＝パン 3。ベッド 8 個（竜戦の最低）に足りない間は回る。',
+    '  取り方: 家の外 3〜4m に go X,Y,Z range=3 → dig ベッドの座標 takeOk（壁は体が壊す）→ pickup。箱は 3〜4m まで go してから chest X,Y,Z takeAll（chest は歩かない）。go の行き先を家の中のマスにしない・go に takeOk は付けない。鉄ゴーレムと村人は打たない。',
     PREP_RULES_WORDS,
     '- 鉄は facts の「鉄」の行・走査の鉄鉱石の行・地図の i の座標へ掘りに行く（全体では y=16 前後に多いが、座標の分かる鉄があれば y=16 まで下りなくてよい。埋まった近い鉄は遠くの空気に面した鉄より早い）。ダイヤは y=-58 前後（d、鉄のツルハシ）。水バケツは水源（w）に use bucket（流れ - からは汲めない）。体が乾いた床の立ち位置を探し、間に石が 1 枚なら開けて汲んで塞ぐ（塞ぐ dirt か cobblestone を 1 個持っておく）ので、石を自分で dig しない（水の壁を dig すると坑道が水没して出られなくなる）。',
     '- 鉱石（鉄・石炭・ダイヤ・銅）は mine ブロック名 X,Y,Z の 1 マスだけ書く。つながった鉱脈は体が全部たどって拾う（count は要る個数。dig の並べ書きは遅く落とし物も落とす）。dig は岩・土・木だけ。',
@@ -246,7 +247,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '火打石を待つ間に enter:false で枠だけ先に組める（点ける物が無くても ok、行に「点火は未」）。',
     '- すでに点いたポータル（p ネザー・e エンド）の入り方: そのマスの中へ walk（range=0。足と頭がポータルのマスで、下は枠の黒曜石）して、約 4 秒立って待つ。着いた先が次元の変化。'
       + 'ポータルのマスには place できず、その上面は床ではない。',
-    '- ネザーで作り直す: 真紅・歪んだ幹（素手で可）→板（1 で 4）→作業台（持ち歩く）・棒。丸石 3→ハーフブロック 6。盾は板 6・鉄 1 で offhand に equip。'
+    '- ネザーで作り直す: 真紅・歪んだ幹（素手で可）→板（1 で 4）→作業台（make が板から作って置く）・棒。丸石 3→ハーフブロック 6。盾は板 6・鉄 1 で offhand に equip。'
       + '金の防具は延べ棒 4（靴）〜5（兜）。',
   ].join('\n'),
   nether: [

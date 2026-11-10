@@ -82,7 +82,11 @@ export function handProblem(hand: ActHand): string | null {
   if (!fields) return 'do が分からない';
   const allowed = new Set([...COMMON, ...fields.may, ...fields.needs.flat()]);
   const extra = Object.keys(hand).filter(key => !allowed.has(key));
-  if (extra.length) return `${extra.join('・')} は使えない（${hand.do} の欄: ${handFieldNames(hand.do).join('・')}）`;
+  if (extra.length) {
+    // Run 6: takeOk written on a go (a village's bed) turned the whole act back and the retry never came; say where it belongs.
+    const takeOk = hand.do === 'go' && extra.includes('takeOk') ? '。takeOk は dig の欄（村の物は dig X,Y,Z takeOk。go に付けない）' : '';
+    return `${extra.join('・')} は使えない（${hand.do} の欄: ${handFieldNames(hand.do).join('・')}）${takeOk}`;
+  }
   const missing = fields.needs.filter(group => !group.some(key => (hand as unknown as Record<string, unknown>)[key] !== undefined));
   if (missing.length && hand.do === 'vertical') return verticalMissingProblem(hand, missing.map(group => group.join(' か ')));
   if (missing.length) return `${missing[0]!.join(' か ')} が要る${missingFix(hand.do, missing[0]!.join(' か '))}`;

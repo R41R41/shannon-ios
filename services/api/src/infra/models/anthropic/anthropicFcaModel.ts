@@ -27,7 +27,7 @@ import { decisionRequestMetrics } from './anthropicFcaMetrics.js';
 import { transientRequest } from './anthropicFcaTransientRequest.js';
 import { FCA_TRANSIENT_UNSUPPORTED } from '../../../mind/action/fca/fcaTransientFallback.js';
 import { minecraftProfile,type MinecraftProfile,type MinecraftV2Hooks } from './anthropicFcaMinecraftSystem.js';
-import { FCA_TRANSIENT_BETAS,FCA_TRANSIENT_BODY_RULE,FCA_TRANSIENT_CURRENT,FCA_TRANSIENT_READING,inputTransformations,appendixOf,notedMessages,transientBetaRefused } from './anthropicFcaTransient.js';
+import { FCA_TRANSIENT_BETAS,FCA_TRANSIENT_BODY_RULE,FCA_TRANSIENT_CURRENT,FCA_TRANSIENT_READING,inputTransformations,requestShape,appendixOf,notedMessages,transientBetaRefused } from './anthropicFcaTransient.js';
 
 /** Only content-free accounting leaves this adapter; signed history belongs to the task's private replay. */
 export interface AnthropicFcaUsage {
@@ -203,7 +203,7 @@ export class AnthropicFcaModel implements FcaModel {
         const request = {
           model: this.model, max_tokens: this.maximumOutputTokens, system,
           messages: [...replay, ...turn], tools: menu.tools, tool_choice: { type: 'auto' as const },
-          thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const },
+          thinking: { type: 'adaptive' as const, display: 'summarized' as const }, output_config: { effort: 'low' as const },
         };
         return continued ? cacheHaikuRequest(request) : cacheOneShotRequest(request);
       };
@@ -277,9 +277,9 @@ export class AnthropicFcaModel implements FcaModel {
     if (execution) { execution.modelOutcome = 'acknowledged';
       execution.modelUsage = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }; }
     // Measurement only: the response is already received and billed, so nothing here may fail the decision.
-    const transformed = transient ? inputTransformations(message) : { count: 0, reasons: [] };
+    const transformed = transient ? inputTransformations(message) : { count: 0, reasons: [], paths: [] as string[] };
     if (transformed.count) {
-      console.warn(JSON.stringify({ event: 'fca_input_transformations', task: input.task.id, count: transformed.count, reasons: transformed.reasons }));
+      console.warn(JSON.stringify({ event: 'fca_input_transformations', task: input.task.id, count: transformed.count, reasons: transformed.reasons, paths: transformed.paths, shape: requestShape(body) }));
     }
     if (execution) {
       const extra = transient ? { providerTransformations: transformed.count, cuts: (built as RequestBuilt).sent?.stages } : undefined;
