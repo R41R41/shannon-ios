@@ -157,7 +157,7 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(milestoneWords()).toBe('ベッド 150・地下の準備 300・鉄のツルハシ 350・バケツ 600・ダイヤのツルハシ 1,000・水バケツ 1,000・黒曜石 10 個 1,500・ネザー 2,820');
     expect(DRAGON_MILESTONES.map(item => item.seconds)).toEqual([150, 300, 350, 600, 1_000, 1_000, 1_500, 2_820, 3_200, 4_700, 6_000, 6_700, 7_800, 8_600, 9_000, 9_600]);
     // The instructions list the targets up to the Nether (the cached text has a cap); the meter says the later ones.
-    expect(DRAGON_MILESTONES.filter(item => item.late).map(item => item.name)).toEqual(['ネザー要塞', 'ブレイズロッド 7 本', 'エンダーパール 14 個', 'エンダーアイ 14 個', 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 330 点）', 'ポータルの枠の部屋', 'エンド', '竜の討伐']);
+    expect(DRAGON_MILESTONES.filter(item => item.late).map(item => item.name)).toEqual(['ネザー要塞', 'ブレイズロッド 7 本', 'エンダーパール 14 個', 'エンダーアイ 12 個', 'エンドの点検（ベッド 8・黒曜石 8・水バケツ・食料 330 点）', 'ポータルの枠の部屋', 'エンド', '竜の討伐']);
     expect(V2_ALWAYS).toContain('road・meter（エンドラ討伐だけ）: road は');
     expect(V2_ALWAYS).toContain('meter は開始からの秒と次の節目の「あと」か「遅れ」');
   });

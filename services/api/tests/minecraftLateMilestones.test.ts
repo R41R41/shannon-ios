@@ -32,8 +32,9 @@ describe('the journal measures the late road', () => {
     expect(shown({ blaze_rod: 7 })).toContain('blaze_rods_7');
     expect(shown({ ender_pearl: 13 })).not.toContain('ender_pearls_14');
     expect(shown({ ender_pearl: 14 })).toContain('ender_pearls_14');
-    expect(shown({ ender_eye: 13 })).not.toContain('ender_eyes_14');
-    expect(shown({ ender_eye: 14 })).toContain('ender_eyes_14');
+    // The eyes' milestone is the line to leave the Nether (12, the seed's eye node), under the journal's old name.
+    expect(shown({ ender_eye: 11 })).not.toContain('ender_eyes_14');
+    expect(shown({ ender_eye: 12 })).toContain('ender_eyes_14');
     // A cooked beef is 20.8 food points: sixteen make the End's 330, fifteen do not (thru ddcd20a0).
     const pack = { white_bed: 8, obsidian: 8, water_bucket: 1, cooked_beef: 16 };
     expect(shown(pack)).toContain('end_preparation');

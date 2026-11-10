@@ -103,6 +103,20 @@ describe('walking the late-game seed with the frames of a run', () => {
     expect(meterLine(dragon, fortress, 2_000 / 60)).toContain('次の節目 ブレイズロッド 7 本 目安 4,700 秒');
   });
 
+  it('keeps the eyes reached once their node closed at 12: an eye thrown in the overworld does not turn the meter back to the eyes', () => {
+    // The through run's plan back in the overworld: the gate, the pearls and the eyes (12 made, the line to leave the Nether) are done.
+    const seed = seedPlan('エンドラを討伐して')!, closed = new Set(['黒曜石10とゲート', 'エンダーパール14以上', 'エンダーアイ14個']);
+    const dragon: PlanTree = { ...seed, current: seed.nodes.find(node => node.title === '出発の点検（エンドへ）')!.id,
+      nodes: seed.nodes.map(node => (closed.has(node.title) ? { ...node, state: 'done' as const } : node)) };
+    expect(dragon.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=12');
+    // one eye thrown and not yet picked up: 11 in the pack
+    const thrown = frame({ dimension: 'overworld', position: { x: 40, y: 70, z: 0 }, inventory: items({ ender_eye: 11, cooked_beef: 4 }), mapLandmarks: [] });
+    const line = meterLine(dragon, thrown, 7_000 / 60);
+    expect(line).toContain('次の節目 エンドの点検');
+    expect(line).not.toContain('次の節目 エンダーアイ');
+    expect(reachedMilestoneNames(dragon, thrown)).toContain('アイ12');
+  });
+
   it('gives the held diagnostic run only the first stretch of the road: a fortress coming into view past the Nether is not its progress', () => {
     const dragon = { ...seedPlan('エンドラを討伐して')!, current: 'p9' };
     const nether = frame({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: [], mapLandmarks: [] });

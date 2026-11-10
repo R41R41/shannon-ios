@@ -83,7 +83,10 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ネザー要塞', seconds: 3_200, doneWhen: 'see:fortress', late: true, journal: 'nether_fortress' },
   { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_700, doneWhen: 'have:blaze_rod>=7', late: true, journal: 'blaze_rods_7' },
   { name: 'エンダーパール 14 個', short: 'パール14', seconds: 6_000, doneWhen: 'have:ender_pearl>=14', late: true, journal: 'ender_pearls_14' },
-  { name: 'エンダーアイ 14 個', short: 'アイ14', seconds: 6_700, doneWhen: 'have:ender_eye>=14', late: true, journal: 'ender_eyes_14' },
+  // The review of 11/10 (G11): the line to leave the Nether is 12 eyes (the seed's eye node closes at 12, the coordinator's of 11/9), and a node done
+  // holds a milestone only at a count as high (`covers`): at 14 this one fell back to unreached at the first eye thrown, and the meter and the pace
+  // stall said 「エンダーアイ 14 個・遅れ」 to a pack of 12-13 (the going back for 2 more of end1108a). The journal's name is the record's key and stays.
+  { name: 'エンダーアイ 12 個', short: 'アイ12', seconds: 6_700, doneWhen: 'have:ender_eye>=12', late: true, journal: 'ender_eyes_14' },
   // 11/4 (the dragon is killed with beds): the check takes beds 8 (aim 10) and obsidian 8 (aim 12) on top of the old four beds,
   // about +300 s (obsidian 12 at 9.4 s each with the diamond pickaxe about 110 s, the wool of about 5 more beds 120-200 s; estimates):
   // the stretches after it move by the same.
