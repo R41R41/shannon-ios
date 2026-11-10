@@ -9,7 +9,7 @@ import {
   type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
-import { portalCellHand } from './minecraftLlmcGateEntry.js';
+import { fetchingNetherDrops, portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
@@ -667,7 +667,7 @@ export const enteringHand = (hands: unknown): number => (Array.isArray(hands) ? 
  */
 export function gateHold(input: unknown, frame: BodyObservation | null): { hand: number; line: string } | null {
   const facts = readinessOf(frame);
-  if (!facts || facts.dimension !== 'overworld') return null;
+  if (!facts || facts.dimension !== 'overworld' || fetchingNetherDrops(facts.world)) return null;
   const portalHand = enteringHand(record(input)?.hands), at = portalHand >= 0 ? portalHand : portalCellHand(input, frame);
   if (at < 0) return null;
   const lack = requiredLack(facts, ['portal']);

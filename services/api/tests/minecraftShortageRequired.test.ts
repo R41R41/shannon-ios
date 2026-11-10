@@ -156,6 +156,17 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
       expect(gateHold({ hands: [{ do: 'go', to: { x: 2, y: 70, z: 0 } }] }, frame(KIT.filter(([name]) => name !== 'shield')))).toBeNull();
     });
   });
+  it('lets a return for the drops of a Nether death through (G01, the review of 11/10), not a lava death, drops gone, none dropped or another dimension', () => {
+    const death = '3分前 the_nether (89,67,40)「Shannon was slain by Blaze」 落とした物: iron_sword×1, shield×1。消えるまで最長約5分（近くにいる間だけ減る）→拾いに戻れる';
+    expect(gateHold(enter, frame([]))).toMatchObject({ hand: 1 });
+    expect(gateHold(enter, frame([], { lastDeath: death }))).toBeNull();
+    expect(heldOfFrame(enter, frame([], { lastDeath: death, worn: '' }), 't1')).toBeNull();
+    expect(gateHold(enter, frame([], { lastDeath: death.replace('was slain by Blaze', 'tried to swim in lava') }))).not.toBeNull();
+    expect(gateHold(enter, frame([], { lastDeath: death.replace(/「[^」]*」/u, ''), deaths: [{ dimension: 'the_nether', cause: 'Shannon tried to swim in lava' }] }))).not.toBeNull();
+    expect(gateHold(enter, frame([], { lastDeath: death.replace(/落とした物.*$/u, '落とした物（iron_sword×1）は消えた見込み') }))).not.toBeNull();
+    expect(gateHold(enter, frame([], { lastDeath: death.replace(/落とした物.*$/u, '何も落としていない') }))).not.toBeNull();
+    expect(gateHold(enter, frame([], { lastDeath: death.replace('the_nether', 'overworld') }))).not.toBeNull();
+  });
   it('reads the armour as worn now: carried and not worn is missing, so an act that equips it and enters in one goes in the next', () => {
     const carried = frame([...KIT, ['iron_chestplate', 1]], { worn: '頭: iron_helmet(残り165/165)、胴: なし、脚: iron_leggings(残り225/225)、足: なし' });
     expect(gateHold(enter, carried)?.line).toContain('持っているが着ていない: iron_chestplate');

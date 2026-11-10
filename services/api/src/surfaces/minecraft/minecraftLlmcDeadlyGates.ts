@@ -2,7 +2,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { wornItems } from './minecraftItems.js';
 import { searchTravel } from './minecraftLlmcGoldTravel.js';
-import { portalCellHand } from './minecraftLlmcGateEntry.js';
+import { fetchingNetherDrops, portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
 import { RETURN_TO_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
 import { returningToEnd } from './minecraftEndEntry.js';
@@ -242,7 +242,7 @@ export function deadlyGateHold(input: unknown, frame: BodyObservation | null, ta
     const next = lack && blazeShutLong(facts) ? OTHER_STAGE : STAY_STAGE;
     return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${next}` } : null;
   }
-  const goldGate = facts.dimension === 'overworld' ? goldAtPortalHold(input, frame, facts) : null;
+  const goldGate = facts.dimension === 'overworld' && !fetchingNetherDrops(facts.world) ? goldAtPortalHold(input, frame, facts) : null;
   if (goldGate) return goldGate;
   const at = facts.dimension === 'overworld' ? portalCellHand(input, frame, 'e') : -1;
   const lack = at < 0 ? null : returning ? lackOfTable(facts, RETURN_TO_END) : firstEntryLack(facts, taskId);

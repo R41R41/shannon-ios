@@ -7,6 +7,7 @@ import { createDescentTrail } from './minecraftDescentTrail.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
 import { createClimbWatch, crystalLine, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
+import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
 import { pearlLine } from './minecraftPearlFacts.js';
 import { undergroundInOverworld } from './minecraftPlanDone.js';
@@ -45,7 +46,8 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const stall = some(watched.climb?.(shooting) ?? null);
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
-  const death = some(deathLine(world));
+  // G01 (the review of 11/10): the Nether's entry gates let a return for a Nether death's drops through; the death's line says so and what it costs.
+  const death = some(deathLine(world)).map(line => (facts.dimension === 'overworld' && fetchingNetherDrops(world) ? `${line}。${FETCH_ENTRY_WORDS}` : line));
   const night = [...some(nightArmsLine(world, facts.counts, facts.dimension, undergroundInOverworld(facts))),
     ...some(nightBedLine(world, facts.counts, facts.dimension)), ...some(watched.trail ?? null)];
   const places = some(placeLine(world, carried(facts.counts, 'bed')));

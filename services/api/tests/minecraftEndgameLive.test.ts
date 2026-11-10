@@ -35,6 +35,15 @@ describe('the way to the dragon in the live state', () => {
     expect(urgent.compressed.join('\n')).toContain('エンドクリスタル: 残り 9');
   });
 
+  it('says beside a Nether death whose drops wait that the entry is not held for them, in the overworld only (G01, the review of 11/10)', () => {
+    const died = (dimension: string) => frame({ dimension, position: { x: 0, y: 64, z: 0 }, health: 20, food: 20, inventory: [], deaths: [{ dimension: 'the_nether' }],
+      lastDeath: '3分前 the_nether (89,67,40)「Shannon was slain by Blaze」 落とした物: iron_sword×1。消えるまで最長約5分（近くにいる間だけ減る）→拾いに戻れる' });
+    const said = (at: BodyObservation) => inputFacts(at, factsContext(parts(), at, {}, undefined, {}), false).lines.join('\n');
+    expect(said(died('overworld'))).toContain('行くにはポータルを通る）。落とし物が残る間は、取りに戻れるように、ネザーへ入る手は準備の必須・金の防具が欠けていても止まらない');
+    expect(said(died('the_nether'))).toContain('最後の死: 3分前 the_nether');
+    expect(said(died('the_nether'))).not.toContain('止まらない');
+  });
+
   it('says nothing of it for a request that is not after the dragon', () => {
     const nether = seedPlan('ネザーに行って')!;
     const lines = inputFacts(fight, factsContext(parts(nether), fight, {}, undefined, {}), false).lines.join('\n');
