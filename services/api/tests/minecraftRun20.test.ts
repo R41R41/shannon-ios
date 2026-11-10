@@ -371,4 +371,19 @@ describe('the drops of a death, weighed against the walk', () => {
     expect(dropsAdvice({ ...world(['iron_pickaxe×1']), rememberedPlaces: {} }, new Map([['iron_pickaxe', 1]]))).toBeNull();
     expect(dropsAdvice(world(['iron_pickaxe×1']), null)).toBeNull();
   });
+  it('says the five minutes run only while she is near, as the body does', () => {
+    const iron = advice(world(['iron_pickaxe×1']))!;
+    expect(iron).toContain('約160m以内にいる間だけ減る');
+    expect(iron).not.toContain('死んで5分で消える');
+    expect(iron).toContain('比べて決める');
+  });
+  it('says the eyes, the pearls, the rods and the diamond tools are worth the walk back, and names them first', () => {
+    const end = advice(world(['iron_sword×1', 'iron_axe×1', 'iron_shovel×1', 'cooked_beef×5', 'ender_eye×12', 'blaze_rod×2'], '420m 北 (10,64,-400)'))!;
+    expect(end).toContain('拾う値打ちのある物: ender_eye・blaze_rod・iron_sword・iron_axe。');
+    expect(end).toContain('ender_eye・blaze_rodは作り直しに数十分かかる');
+    expect(end).toContain('戻る値打ちが高い。遠い');
+    expect(advice(world(['stone_axe×1', 'ender_pearl×3']))).toContain('戻る値打ちが高い');
+    expect(advice(world(['diamond_pickaxe×1']))).toContain('diamond_pickaxeは作り直しに数十分かかる');
+    expect(advice(world(['stone_axe×1', 'oak_planks×8']))).toContain('その場で作り直すほうが早い');
+  });
 });
