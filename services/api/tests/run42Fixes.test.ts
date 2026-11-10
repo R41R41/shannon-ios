@@ -180,8 +180,8 @@ describe('the cost of leaving the preparation out is one number everywhere', () 
     expect(DRAGON_MILESTONES.find(item => item.kept)!.cost).toBeUndefined();
     // The 540 s is one example of run 42 (with the go\'s fault in it), said as that fact and not as a loss in general.
     expect(PREP_DESCENT_RULE).toContain('42 は地上へ戻るのに移動の不具合込みで 540 秒');
-    expect(V2_ALWAYS).not.toContain('約 500 秒');
-    expect(`${V2_ALWAYS}\n${PREP_RULES_WORDS}`).not.toMatch(/150 秒/u);
+    expect(V2_ALWAYS).not.toMatch(/about 500 s/i);
+    expect(`${V2_ALWAYS}\n${PREP_RULES_WORDS}`).not.toMatch(/150 秒|\b150 s\b/u);
   });
   it('keeps the always text within the cap of tests/support/alwaysTextCap.ts', () => {
     expect(llmcTokens(minecraftV2System(V2_ALWAYS))).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);

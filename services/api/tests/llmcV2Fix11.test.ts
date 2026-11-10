@@ -150,7 +150,7 @@ describe('chapter 4 A: the road and the pace', () => {
   it('gives the goal and the yardstick in the instructions, the numbers from the one constant, and each line in the dictionary', () => {
     const system = minecraftV2System(V2_ALWAYS);
     expect(system).toContain('## Purpose and yardstick (目的と物差し)');
-    expect(system).toContain('Entering the Nether takes about 47 minutes (preparation included)');
+    expect(system).toContain('Aim to enter the Nether in about 47 minutes (preparation included)');
     expect(system).toContain('a death loses items and time');
     expect(system).toContain('Never stop or complete early because of time. The yardstick is a guide');
     expect(system).toContain('meter is the seconds since the start and 「あと」 (remaining) or 「遅れ」 (behind) for the next milestone');

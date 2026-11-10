@@ -73,22 +73,21 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
   const system = minecraftV2System(V2_ALWAYS);
   it('one act a decision, plan.update first in the same response, a probe\'s answer before the hand that needs it', () => {
     expect(system).toContain('one or two mc_act (added to the queue). A plan_update placed before the mc_act runs in the same response, in the order written');
-    expect(system).not.toContain('のどれか。');
     expect(SHORT_ACT_DESCRIPTION).toContain('手が自分で失敗した時は onFail に従い、反射・stopIf・満杯・時間切れは act 全体をいつでも止める');
   });
   it('one health line (owner 11/10): inside the body self-defence count it fights it out at any health; beyond it, no fight at 8 or less', () => {
     expect(V2_ALWAYS).toContain('while at most 2 enemies target you within 4 m and at most 4 enemies are within 8 m, the body kills them before it is hit');
     expect(V2_ALWAYS).toContain('it does not flee even at health 8 or below');
     expect(V2_ALWAYS).toContain('At health 8 or below, do not fight when the enemies are over the counts');
-    expect(V2_ALWAYS).not.toContain('鉄以上の剣があり体力 8 超で遮れない時は打ち返す');
-    expect(V2_ALWAYS).not.toContain('体力 6 超');
+    expect(V2_ALWAYS).not.toMatch(/sword of iron or better.{0,80}health (above|over) 8/i);
+    expect(V2_ALWAYS).not.toMatch(/health (above|over|more than) 6\b|health 6\b/i);
   });
   it('tells the model the body fights by itself (creepers with technique, neutrals only when hostile) and that accept only keeps the act from stopping', () => {
     expect(V2_ALWAYS).toContain('It hits a creeper and then backs out of the blast range, and with a shield it raises it when the creeper starts to swell');
     expect(V2_ALWAYS).toContain('are not engaged until they turn hostile');
     expect(V2_ALWAYS).toContain('For an enemy that is hitting you, first attack target=#id untilDead');
     expect(V2_ALWAYS).toContain('kill them only when there is a purpose such as pearls or gold');
-    expect(V2_ALWAYS).not.toContain('hpBelow と反射は accept でも効く');
+    expect(V2_ALWAYS).not.toMatch(/hpBelow and (the )?reflex(es)? (also )?(work|apply)/i);
     // 11/11 trim: the owner's numbers are the instructions' (line above); mc_act says only that the body's self-defence works whether or not accept is written.
     expect(SHORT_ACT_DESCRIPTION).not.toContain('4m 内で自分を倒しに来ている敵が 2 体まで');
     expect(SHORT_ACT_DESCRIPTION).toContain('体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く');
@@ -96,7 +95,7 @@ describe('Notion 09-1c: the rules said as the code keeps them', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('fight は剣か斧が荷に要る（無いと no_weapon）。素手で殴るなら attack 相手 を使う');
   });
   it('an absent field is not an absent fact, the plan\'s done is not the goal\'s progress, next is the order', () => {
-    expect(V2_ALWAYS).not.toContain('出ていない項目 = その事実が今は無い');
+    expect(V2_ALWAYS).not.toMatch(/absent (field|item)s? (=|means|is) (that )?(the )?fact (is )?(absent|not)/i);
     expect(V2_ALWAYS).toContain('A field that is absent is not necessarily absent in fact');
     expect(V2_ALWAYS).toContain('done (sections and whole counted as done; not a completion rate)');
     expect(V2_ALWAYS).toContain('next (the next 3 planned sections; not necessarily doable now)');

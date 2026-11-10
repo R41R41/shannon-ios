@@ -185,7 +185,7 @@ export const SAFETY_FIRST = '- 死は避ける（死ぬと持ち物と、それ�
  * the planner writes the plan in Japanese, and its prompt is Japanese. A test keeps the numbers of the two equal.
  */
 export const SAFETY_FIRST_EN = '- Avoid death (a death loses the items and the time to get them back; it costs especially much once iron gear has been obtained). But a death does not end the run: after respawning, recover the items or make them again and carry on. Do not add waiting out of fear of death (waiting loses time too). '
-  + 'Do not go deeper, into the Nether or into a fight with health below 12, food below 40 points, or the durability of armour, shield or pickaxe below 20% remaining (the durability in the inventory line): eat, wait to recover, remake, or withdraw first. '
+  + 'Do not go deeper, into the Nether or into a fight with health below 12, food below 40 points, or the durability of armour, shield or pickaxe below 20% remaining (the 耐久 durability in the inventory line): eat, wait to recover, remake, or withdraw first. '
   + 'At a lava edge, above a drop and in a fireball line, check the feet and both sides and go one cell at a time. '
   // S2's blaze lab of 11/5 (raid3: health 6.1 and fullness 17 for about 1.5 minutes of sorties, health never came back): the head chooses the meal.
   + 'Between fights, if health is below 18, eat out of sight up to fullness 18 or more and wait until health is 18 or more before going out (below fullness 18 health does not come back by itself: live\'s recovery line).';
@@ -242,7 +242,7 @@ export const PREP_DESCENT_LINES_EN: readonly string[] = [
   ("- Required (while unmet, do not go down or dig iron; to skip one, write skipped and the reason in prep; a skipped section does not count as achieved): food points 40 or more (foodPoints.total; fullness " +
 "does not count), a stone pickaxe and a stone axe, and 1 crafting table or 4 or more planks (carried)."),
   '- Goal: food 40 to 60 points; wood worth 20 to 24 logs (about 80 if as planks; the amount for the whole run).',
-  '- The why of the descending hand states the current numbers you checked and how the shortfall is made up (only once met, like 「（食料 41.2/40・作業台 有・板 6）」).',
+  '- The why of the descending hand states the current numbers you checked and how any shortfall is made up; once all requirements are met, write it in the form 「（食料 41.2/40・作業台 有・板 6）」.',
   ("- Reason: the food you carry is for eating below to get health back; fullness is no substitute. Underground, food and trees are hard to find, and running short forces a return to the surface. You can die too (records of earlier runs, not this run's duration: run 42 took 540 " +
 "seconds to get back to the surface, including a movement fault; run 41 stood still for 372 seconds with no crafting table and died on the way up)."),
   '- Eating after the descent and dropping below 40 points is not an unmet requirement. If you went down while unmet, make it up before going deeper (check whether it can be made up nearby, otherwise go up). "Already underground" is not a reason to carry on.',

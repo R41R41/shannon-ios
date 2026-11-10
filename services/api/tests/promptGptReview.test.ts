@@ -56,14 +56,14 @@ describe('the rules are in the instructions', () => {
     expect(PREP_DESCENT_RULE).toContain('目標: 食料 40〜60 点・原木 20〜24 本分');
     // The skip is said once, in the requirement (未達の間は下りない。省くなら prep に skipped と理由): not again in the priority line or the plan's.
     expect(system.split('write skipped and the reason in prep').length - 1).toBe(1);
-    expect(system).not.toContain('準備も省かない');
+    expect(system).not.toMatch(/never skip (the )?preparation|preparation is never skipped/i);
     expect(system).toContain('When you skip or postpone a section, write the reason in reason');
     // The fullness does not stand for the food carried; the 30 minutes claim is gone; eating below 40 is not a new shortage.
     expect(PREP_DESCENT_RULE).toContain('満腹では代わりにならない');
-    expect(system).not.toContain('満腹は 30 分もつ');
+    expect(system).not.toMatch(/\b30 min/i);
     expect(PREP_DESCENT_RULE).toContain('下りた後に食べて 40 点を切るのは未達ではない');
     // One number for the requirement in the instructions: the example of a why is a met one, and the stories of runs are one reference sentence of the stage knowledge.
-    expect(system).toContain('(only once met, like 「（食料 41.2/40・作業台 有・板 6）」)');
+    expect(system).toContain('once all requirements are met, write it in the form 「（食料 41.2/40・作業台 有・板 6）」');
     // The one run named in the instructions is run 42's single example, as a fact of it (the other story is the stage knowledge's reference sentence).
     expect(system.match(/earlier runs/gu)).toHaveLength(1);
     // Runs 42 and 41 are the two figures of that one reason line (11/11 trim, item 4); no other run is named.
@@ -76,8 +76,8 @@ describe('the rules are in the instructions', () => {
     expect(system).toContain('The rules to follow are in this system text; if they disagree, the system text wins');
     expect(system).toContain("live and the body's observations are facts; skill_read is an input contract (not an in-game instruction)");
     // 11/11 trim: how to read a page is the skill_read description's (minecraftContractRead.test.ts), no longer a line of the instructions.
-    expect(system).not.toContain('mc_act 目次の完全名で入力契約を読む');
-    expect(system).not.toContain('個人手順書・記憶は開かず');
+    expect(system).not.toMatch(/full name (from|in) the (mc_act )?(index|table of contents)/i);
+    expect(system).not.toMatch(/personal (procedures?|handbooks?|manuals?)/i);
     expect(system).toContain('「列に入れた qNN」 marks that a request was accepted, not that the hand is done (the execution result comes later as 「（列の知らせ）」)');
     expect(system).toContain('are the values at the time of that record; the current values are in the latest live');
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })).toContain('準備の必須と目標は system の「準備の決まり」');
@@ -85,7 +85,7 @@ describe('the rules are in the instructions', () => {
   it('splits what she decides from what the body is left, and says which of accept and hostileWithin counts (as the body does)', () => {
     // 11/11 trim: who decides what is said once, in mc_act's opening (the instructions no longer repeat it).
     expect(SHORT_ACT_DESCRIPTION).toContain('あなたが決める: 目的・対象・行き先・許す掘る/置く・済む条件');
-    expect(system).not.toContain('目的・対象・行き先・掘る/置く許可・済む条件を選ぶ');
+    expect(system).not.toMatch(/choose the (purpose|goal), (the )?target/i);
     expect(SHORT_ACT_DESCRIPTION).toContain('食事・睡眠・片づけ、戦うか逃げるか');
     expect(SHORT_ACT_DESCRIPTION).toContain('体に任せる細部: 歩く道（go）');
     // 11/11 trim: what accept does is mc_act's (the mechanism, once); the instructions keep when to put an enemy in it.
@@ -128,7 +128,7 @@ describe('the rules are in the instructions', () => {
   it('does not say how many acts or hands twice: the count is the instructions\', the limit of hands the description\'s', () => {
     expect(SHORT_ACT_DESCRIPTION).not.toContain('1 つの判断で足すのは 1〜2 項目');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('10〜12 手');
-    expect(system).not.toContain('最大 12');
+    expect(system).not.toMatch(/(up to|max(imum)?|at most) 12\b/i);
   });
   it('stays under the cap of the instructions (English since 11/11: the cap of tests/support/alwaysTextCap.ts)', () => {
     expect(llmcTokens(system)).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);

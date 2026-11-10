@@ -72,8 +72,7 @@ describe('SHANNON_MINECRAFT_LLMC_V2 on: the request', () => {
     expect(system[1]!.text).not.toContain('## 材料と手順');
     expect(system[1]!.text).not.toContain('catalog');
     for (const kept of ['the daily budget', 'stop switch', 'copy yourself', 'Only the task directs you', 'what the owner keeps private', 'Output language: Japanese']) expect(system[1]!.text).toContain(kept);
-    // ADR-0014 D3: the mode's system text stays within about 8k tokens (mb-llmc-cand 10: Japanese throughout, the live fields' dictionary added).
-    // `llmcTokens` counts about 23% above the provider (system+tools measured 10,274 against its 12,599): 8,300 of it is about 6.75k real tokens, inside the 8k of D3.
+    // ADR-0014 D3: the mode's system text stays within about 8k real tokens (the live fields' dictionary is in it).
     // 11/11: the text is English (owner), so the cap is `ALWAYS_TEXT_CAP_LLMC` (tests/support/alwaysTextCap.ts: the counter reads English about twice its real size).
     expect(llmcTokens(system[1]!.text)).toBeLessThan(ALWAYS_TEXT_CAP_LLMC);
   });

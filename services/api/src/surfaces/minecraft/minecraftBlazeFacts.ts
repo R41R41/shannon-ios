@@ -194,7 +194,7 @@ export function retreatLine(health: unknown, near: number): string | null {
   return `体力 ${Math.round(health * 10) / 10}（${RETREAT_HP} 未満）でブレイズ ${near} 体の近く: 今いる所で食べる・斬り返すと撃たれ続けて燃える`
     + `（end1108h20: 体力 11.3 で 2 体から見えたまま食べて斬り返し、8 秒で 5.8、48 秒後に死亡）。先に湧き場から見えない隠れ場所へ go で退く`
     + `（場所は手が止まった行の「隠れ場所」か probe kind=camp）。この act は hands が go 1 つだけで、act の accept に blaze を入れる`
-    + `（ブレイズは「go の accept に近接敵を入れない」の近接敵ではない。accept が無いと燃えて見えている間の覆いの反射が go を 0m で止め、eat を前に置くとその間撃たれる:`
+    + `（ブレイズは system「敵と体力」で accept に入れないとされる近接敵ではない。accept が無いと燃えて見えている間の覆いの反射が go を 0m で止め、eat を前に置くとその間撃たれる:`
     + ` end1109f23 は accept の無い退く go が 0m で止まり、食べてから退くを繰り返して 44 秒で体力 11.9→0）。着いてから食べ、体力 ${BACK_HP} 以上で野営マスへ戻る`;
 }
 

@@ -73,7 +73,7 @@ describe('a death is avoided: said once in the instructions, in no stage', () =>
 describe('the nether ruler is one number: the goal, the road and the night\'s lines say the same minutes', () => {
   it('says 47 minutes in the goal, and the night\'s line says its share of the same 47', () => {
     const minutes = Math.round(NETHER_BY_SECONDS / 60);
-    expect(V2_ALWAYS).toContain(`Entering the Nether takes about ${minutes} minutes`);
+    expect(V2_ALWAYS).toContain(`Aim to enter the Nether in about ${minutes} minutes`);
     const line = dayBedLine({ timeOfDay: 1000 }, new Map([['white_bed', 1]]), 'overworld')!;
     const share = /ネザーまで (\d+) 分の目標の (\d+)%/u.exec(line)!;
     expect(Number(share[1])).toBe(minutes);
@@ -114,10 +114,12 @@ describe('the instructions are English (11/11, owner) and keep the Japanese word
       expect(system, anchor).toContain(anchor);
     }
   });
-  it('says the same numbers in the English rules and the Japanese ones the planner reads (the descent and the death rule)', () => {
-    for (const number of ['40', '60', '20', '24', '4', '540', '372']) { expect(PREP_DESCENT_RULE_EN).toContain(number); expect(PREP_DESCENT_RULE).toContain(number); }
-    for (const number of ['12', '40', '18']) { expect(SAFETY_FIRST_EN).toContain(number); expect(SAFETY_FIRST).toContain(number); }
-    expect(SAFETY_FIRST_EN).toContain('20%');
+  it('says the same numbers in the English rules and the Japanese ones the planner reads (the descent and the death rule): the whole multiset', () => {
+    // 2 割 is 20%; 1 マスずつ is "one cell at a time" (a word, not a number in English).
+    const numbers = (text: string): string[] => (text.replace(/2 割/gu, '20').replace(/1 マスずつ/gu, '').match(/\d+(?:\.\d+)?/gu) ?? []).sort();
+    expect(numbers(PREP_DESCENT_RULE_EN)).toEqual(numbers(PREP_DESCENT_RULE));
+    expect(numbers(SAFETY_FIRST_EN)).toEqual(numbers(SAFETY_FIRST));
+    expect(SAFETY_FIRST_EN).toContain('20% remaining');
     expect(SAFETY_FIRST).toContain('2 割');
   });
 });

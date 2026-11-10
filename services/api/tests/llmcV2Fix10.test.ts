@@ -66,7 +66,7 @@ describe('C1: a hostile gets a line when it matters now, with how it stands to h
   });
   it('says in the dictionary which hostiles get a line, and that a far one is not written', () => {
     expect(V2_ALWAYS).toContain('A line appears within 24 m (creeper and enderman 32 m, projectile kinds 48 m)');
-    expect(V2_ALWAYS).not.toContain('見える・道があるときだけ行になり');
+    expect(V2_ALWAYS).not.toMatch(/only (when|while) (it is )?visible and (there is )?a (path|way)/i);
   });
   it('keeps a hostile the urgent lines name, with the probe\'s own words of its reach (the frame\'s are not said twice)', () => {
     const out = rewritten({ urgent: ['blaze #5 30.0m・上 2・見える（射線の中）'], threats: ['#5 blaze 30m (5,2,0)・壁の向こうで届かない'] });
@@ -102,7 +102,7 @@ describe('C2: 「済む条件」, not 「済み」, for a node\'s done-condition
     expect(description).toContain('済む条件');
     expect(description).not.toContain('済み（r9）');
     expect(V2_ALWAYS).toContain('completion condition (doneWhen)');
-    expect(V2_ALWAYS).not.toContain('（済み:');
+    expect(V2_ALWAYS).not.toMatch(/\(done: /i);
   });
 });
 
@@ -128,7 +128,7 @@ describe('C3: an unknown cell is said as unknown, not as rock', () => {
     const head = lines.find(line => line.startsWith('足の周りの 1 歩より先'))!;
     expect(head).toContain('足も頭も固い岩か、地図の端で不明');
     expect(V2_ALWAYS).toContain('A place not written is solid rock (dig through it) or not on the map (unknown)');
-    expect(V2_ALWAYS).not.toContain('書いていない所は足も頭も固い岩か、地図に無い（不明）');
+    expect(V2_ALWAYS).not.toMatch(/feet and head (are )?(both )?solid rock/i);
   });
 });
 
@@ -229,7 +229,7 @@ describe('D3: one language, one topic in one place, a dictionary of the live fie
     const language = system.slice(system.indexOf('## Output language: Japanese'), system.indexOf('## Boundaries'));
     expect(language.length).toBeGreaterThan(0);
     for (const kept of ['natural Japanese', 'your thinking', "every act's why", 'plan titles and notes', 'chat', 'the fca_complete summary', 'any other free text in a tool input',
-      'Reason: the owner and the viewers read it, and they read Japanese.', 'Ids, item/block/entity names, hand syntax and field names stay exactly as they are']) expect(language, kept).toContain(kept);
+      'Reason: the owner and the viewers read it, and they read Japanese.', 'Only machine fields stay as they are', 'write the item, block and entity names in Japanese']) expect(language, kept).toContain(kept);
     // The shared transport block is the same for every body task and is left as it was.
     expect(MINECRAFT_TRANSPORT.startsWith('Request transport')).toBe(true);
   });
@@ -246,10 +246,10 @@ describe('D3: one language, one topic in one place, a dictionary of the live fie
     // The descent's reason line carries the two figures of earlier runs (540 s and 372 s) on purpose (11/11 trim, item 4); no other story of one run is in the text.
     const withoutFigures = system.split('\n').filter(line => !line.startsWith('- Reason: the food you carry')).join('\n');
     expect(withoutFigures).not.toMatch(/実走\d|run ?\d/u);
-    expect(system).not.toContain('死の形');
+    expect(system).not.toMatch(/shape of (a |the )?death/i);
     expect(system).not.toContain('collect=false');
     expect(system).not.toContain('rel: true');
-    expect(system).not.toContain('place は空気');
+    expect(system).not.toMatch(/\bplace (is|needs|goes into) air/i);
   });
   it('puts the hand grammar in the mc_act description: the json fields of every hand, with walk\'s `to` or `path` (not `at`)', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('walk: to か path・sprint・range');
@@ -315,8 +315,8 @@ describe('the review of 10: words restored in the hand and dictionary', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('hostileWithin は敵までの m、hpBelow は体力 0〜20');
   });
   it('gives the unit of health and says which thrown items are not shown', () => {
-    expect(V2_ALWAYS).toContain('health (0–20; one heart = 2)');
-    expect(V2_ALWAYS).not.toContain('（自分が投げた物は出ない）');
+    expect(V2_ALWAYS).toContain('health (体力, 0–20; one heart = 2)');
+    expect(V2_ALWAYS).not.toMatch(/(you|she) threw[^.]{0,40}(not shown|do not appear)/i);
   });
 });
 

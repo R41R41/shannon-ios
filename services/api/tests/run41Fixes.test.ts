@@ -90,7 +90,7 @@ describe('the live says the hunger bar and the food she carries in two words', (
   });
   it('says so in the dictionary', () => {
     expect(V2_ALWAYS).toMatch(/^- foodPoints: total \(food points = the sum of the food items carried; separate from fullness\)/mu);
-    expect(V2_ALWAYS).toContain('fullness (0–20)');
+    expect(V2_ALWAYS).toContain('fullness (満腹, 0–20)');
     expect(V2_STAGES.prep).toContain('食料の点（live の foodPoints.total。満腹 fullness とは別）');
   });
 });
@@ -113,14 +113,14 @@ describe('the reason is in real numbers, and the rule is plain', () => {
   it('asks for the numbers in the why of a hand that goes down, as a check (run 42: the example of a pack that lacks all, as a way through, went)', () => {
     expect(PREP_DESCENT_RULE).toContain('下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）');
     expect(V2_ALWAYS).toContain(PREP_DESCENT_RULE_EN);
-    expect(PREP_DESCENT_RULE_EN).toContain('The why of the descending hand states the current numbers you checked and how the shortfall is made up (only once met, like');
+    expect(PREP_DESCENT_RULE_EN).toContain('The why of the descending hand states the current numbers you checked and how any shortfall is made up; once all requirements are met, write it in the form');
     expect(V2_STAGES.prep).not.toContain('鉄へ下りる（食料 40/40');
   });
   it('puts the priority plainly in the goal, beside the speed, without a condition under which it holds', () => {
-    expect(V2_ALWAYS).toContain('Entering the Nether takes about 47 minutes (preparation included)');
+    expect(V2_ALWAYS).toContain('Aim to enter the Nether in about 47 minutes (preparation included)');
     expect(V2_ALWAYS).toContain('Never stop or complete early because of time. The yardstick is a guide');
     expect(V2_ALWAYS).toContain("running short forces a return to the surface. You can die too (records of earlier runs, not this run's duration: run 42 took 540");
-    expect(V2_ALWAYS).not.toContain('鉄の夜');
+    expect(V2_ALWAYS).not.toMatch(/iron night|night of iron/i);
     expect(minecraftV2System(V2_ALWAYS).split('\n').filter(line => !line.startsWith('- Reason: the food you carry')).join('\n')).not.toMatch(/実走\d|run ?\d/u);
   });
   it('keeps the instructions within the cap of the mode\'s system text (English since 11/11: the cap of tests/support/alwaysTextCap.ts)', () => {

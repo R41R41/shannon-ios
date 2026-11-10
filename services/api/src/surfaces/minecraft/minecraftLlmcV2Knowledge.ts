@@ -21,7 +21,7 @@ import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFood
  */
 const GOAL = [
   '## Purpose and yardstick (目的と物差し)',
-  `- The purpose is the task's goal. The owner's yardstick is speed: a dragon kill within 3 hours (ideally 1.5 hours). Entering the Nether takes about ${Math.round(NETHER_BY_SECONDS / 60)} minutes (preparation included), done smoothly.`,
+  `- The purpose is the task's goal. The owner's yardstick is speed: a dragon kill within 3 hours (ideally 1.5 hours). Aim to enter the Nether in about ${Math.round(NETHER_BY_SECONDS / 60)} minutes (preparation included), moving smoothly.`,
   '- Order of priority: avoid imminent danger → meet the preparation requirements → advance quickly to the goal (staying alive matters as much as speed: a death loses items and time, and costs more time than caution does). '
     + 'Never stop or complete early because of time. The yardstick is a guide, not something that decides a hand.',
 ].join('\n');
@@ -76,8 +76,8 @@ const LIVE = [
   '- investigation: the answers of the probe the head ran after a surprise. stops, jobs, events: the recent stops; outside jobs such as furnaces with the seconds left; what happened after the previous decision.',
   '- map: the map by layer (symbols in the legend below). landmarks: landmarks (one marked [overworld] is in another dimension; directions and up/down are from the current feet). scan: the body\'s scan (once, after a change such as a dimension change). '
     + 'lastResults: the previous results that are not in the history, once only (the 3×3×3 around a stopped hand, a view\'s map, a probe\'s continuation).',
-  '- state: inside (the structure you are in), worn (armour durability left/max), health (0–20; one heart = 2), fullness (0–20), fullnessLostIn5min (the fullness points lost in the last 5 minutes; points regained by eating are not subtracted; absent when the record is short), saturation (hidden fullness), oxygen (breath n/20), minutes (minutes elapsed in the task). '
-    + 'inventory: the items (name×count). 「ほか N 件は略」 = omitted ones (an omitted item may exist).',
+  '- state: inside (the structure you are in), worn (armour durability 耐久 left/max), health (体力, 0–20; one heart = 2), fullness (満腹, 0–20), fullnessLostIn5min (the fullness points lost in the last 5 minutes; points regained by eating are not subtracted; absent when the record is short), saturation (hidden fullness), oxygen (息 n/20), minutes (minutes elapsed in the task). '
+    + 'inventory: the items (name×count; the durability of a tool shows as 耐久left/max). 「ほか N 件は略」 = omitted ones (an omitted item may exist).',
   '- foodPoints: total (food points = the sum of the food items carried; separate from fullness) and items.',
   '- threats: one enemy per line (#id name distance (coordinates) direction・visibility). A line appears within 24 m (creeper and enderman 32 m, projectile kinds 48 m). '
     + 'Visibility: 見える（射線の中）= you can be shot there / 見えない・道はある = it will come around / 壁の向こうで届かない = not urgent / 飛び道具 = a kind that shoots from far away / 無い = unmeasured. '
@@ -94,7 +94,7 @@ const MAP = [
 ].join('\n');
 
 const FALLS = [
-  '## Falls, water, lava, gaps',
+  '## Falls, water, lava, gaps (「落ちる・水・溶岩・空所」)',
   '- Never dig straight down with bare hands. Do not dig down while in water or directly above it. Do not dig or walk next to lava (L, l). Descend only a drop of n≤3; for 4 or more use vertical stairs or water at the landing point.',
   '- Cross a gap (a lava sea, a deep hole, a cliff) through a tunnel in rock one level below the edge, or on a bridge with walls placed at the feet and on both sides for every cell. Never use a 1-wide bridge without walls. '
     + 'While footing shows 「押されたら落ちる」, do not stand still, jump or stack at the edge.',

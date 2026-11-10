@@ -27,7 +27,7 @@ describe('a stream that holds the body is stopped at its source', () => {
     }
   });
   it('is no longer a line of the instructions read at every decision', () => {
-    expect(V2_ALWAYS).not.toContain('水の流れ N');
-    expect(V2_ALWAYS).not.toContain('上流の 1 マスに dirt か cobblestone を place');
+    expect(V2_ALWAYS).not.toMatch(/water flow N/i);
+    expect(V2_ALWAYS).not.toMatch(/place (a )?dirt or cobblestone[^.]{0,40}upstream/i);
   });
 });

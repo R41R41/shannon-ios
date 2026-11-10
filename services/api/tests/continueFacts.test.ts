@@ -123,8 +123,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     expect(pending('once-versions').map(fact => fact.key)).toEqual(['promise_instead_lost:3:r1', 'prep_unmet:p1']);
   });
 
-  it('the system prompt is as it was: V2_ALWAYS is not touched, and the live state\'s growth is measured', async () => {
-    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_800);
+  it('the system prompt stays inside its cap (English since 11/11), and the live state\'s growth is measured', async () => {
+    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_500);
     const got = await extractRequestBytes({ ...options, variant: 'normal', taskId: 'size' });
     // What this chapter added to the live state, taken off again: the `facts` lines and the queue's 「予定」 and 「（見込み）」.
     const { facts, queue, ...rest } = got.live.body as Record<string, any>;
