@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { planFromAnswer, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { openingDraft, planFromAnswer, seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { ACT_DESCRIPTION } from '../src/contracts/minecraftActContract.js';
 import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
@@ -306,6 +306,17 @@ describe('the first plan and the knowledge say the required list where the model
     expect(cautionOf(light)).toContain('火をつける前に必須を確かめる');
     expect(cautionOf(titled('黒曜石10とゲート'))).toContain('足場64');
     expect(cautionOf(titled('黒曜石10とゲート'))).toContain('ツルハシ');
+  });
+  // The review of 11/10 (G06): the seed said one shield where the gate's table asks two with iron 2 and planks 16, and the iron node closed at one.
+  it('says the two shields and their materials at the iron (the title, which the first plan\'s draft carries) and at the gate', () => {
+    const count = (label: string) => BEFORE_GATE.needs.find(need => need.label.startsWith(label))?.count;
+    expect([count('盾（'), count('盾の作り直しの鉄'), count('板（')]).toEqual([2, 2, 16]);
+    const iron = plan.nodes.find(node => node.title.startsWith('残りの鉄をまとめて採り焼く'))!;
+    expect(iron.title).toContain('盾2（予備1）');
+    expect(cautionOf(iron)).toContain('盾は2枚（予備1）作り、作り直しの鉄2と板16も残す（ゲートの必須');
+    const light = plan.nodes.find(node => node.title === 'ゲートを組んで火をつける')!;
+    for (const node of [titled('黒曜石10とゲート'), light]) expect(cautionOf(node), node.title).toContain('盾2と作り直しの鉄2・板16');
+    expect(openingDraft(seedPlan('エンドラを倒して', 'overworld'))).toContain('盾2（予備1）');
   });
   it('says the gate\'s required needs and its goals apart in the stage rules', () => {
     expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）');
