@@ -124,12 +124,26 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       GAME_DRAGON_SOCKET_WAIT_MS);
       const body = reply.body as { code?: unknown; taskId?: unknown } | null;
       const taskId = reply.status === 202 && typeof body?.taskId === 'string' && body.taskId ? body.taskId : null;
-      log(`Shannon Minecraft intent dragon as=operator status=${reply.status} code=${typeof body?.code === 'string' ? body.code.slice(0, 40) : '-'} accepted=${taskId ? 'yes' : 'no'}`);
+      const code = typeof body?.code === 'string' ? body.code.slice(0, 40) : '-';
+      log(`Shannon Minecraft intent dragon as=operator status=${reply.status} code=${code} accepted=${taskId ? 'yes' : 'no'}`);
       return taskId;
     } catch (error) {
-      log(`Shannon Minecraft intent dragon as=operator failed code=${error instanceof Error ? error.message.slice(0, 60).replace(/[^ -~]/gu, '?') : 'unknown'}`);
+      const code = error instanceof Error ? error.message.slice(0, 60).replace(/[^ -~]/gu, '?') : 'unknown';
+      log(`Shannon Minecraft intent dragon as=operator failed code=${code}`);
       return null;
     }
+  };
+  /**
+   * The id of the new task for his words: his dragon words through the operator's socket when that takes them, else `own` (the path every
+   * request had before). A wait that ran out may still have made the task: that one is the request, not a second one beside it.
+   */
+  const newTask = async (message: string, goal: string, bodyId: string, own: () => string | Promise<string>): Promise<string> => {
+    if (!ownDragonWords(message)) return own();
+    const taskId = await dragonAsOperator(goal);
+    if (taskId) return taskId;
+    const made = openRequest(bodyId);
+    if (made) log(`Shannon Minecraft intent dragon found task=${made.id} after=operator_unanswered`);
+    return made?.id ?? own();
   };
   const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
     sourceVisible: parts.sourceVisible, atomic: parts.atomic, bound: () => bound(undefined, unfinished), openRequest, spec, log });
@@ -228,21 +242,15 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
           if (!(error instanceof Error) || error.message !== 'FCA_TARGET_FINISHED') throw error;
         }
       }
-      if (ownDragonWords(input.request.message)) {
-        const taskId = await dragonAsOperator(goal);
-        if (taskId) return { ...intent, goal, request: { id: taskId } };
-        // A wait that ran out may still have made the task: it is the request, not a second one beside it.
-        const made = openRequest(bodyId);
-        if (made) { log(`Shannon Minecraft intent dragon found task=${made.id} after=operator_unanswered`); return { ...intent, goal, request: { id: made.id } }; }
-      }
-      return parts.atomic(() => {
+      const id = await newTask(input.request.message, goal, bodyId, () => parts.atomic(() => {
         // Only the asking turn (the event below), not the root's whole set (owner decision 2026-10-15, `TaskChildOptions`).
         const task = parts.runtime.createChild(scopeKey, parts.runtime.ensureRoot(scopeKey).id, spec(goal), `mc:${input.request.requestId}`,
           { sources: 'asking' });
         parts.runtime.observeExternal(scopeKey, task.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId], observedAt: input.request.observedAt, text: `ゲーム内の本人の依頼: ${goal}` });
         if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
-        return { ...intent, goal, request: { id: task.id } };
-      });
+        return task.id;
+      }));
+      return { ...intent, goal, request: { id } };
     },
   };
 }
