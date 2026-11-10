@@ -23,13 +23,14 @@ describe('the blaze spawner', () => {
     for (const word of ['体力 14/20', '満腹度 12/18', '持ち物の食料', '盾 0/1', '未達の必須（ブレイズの湧き場に入る前に必ず）', '欠けたまま進むと']) expect(lack, word).toContain(word);
     expect(blazeLack(readinessOf(frame(READY))!)).toBeNull();
   });
-  it('asks for less food as rods come in, never under 60 points (end1108h25: 16 meals in one camp would hold the walk back after a retreat)', () => {
+  it('asks 60 food points whatever the rods, and says what the rods still to come eat (G04, 11/10: the head leaves for the fortress with 100)', () => {
     const ready = (rods: Array<[string, number]>, beef: number) => blazeLack(readinessOf(frame([['shield', 1], ['cooked_beef', beef], ...rods]))!);
-    // A cooked beef is 20.8 points: 150 is 8 beef, 64 (4 rods) is 4, the floor of 60 is 3.
-    expect(ready([], 7)).toContain('ロッド 0/7');
-    expect(ready([], 8)).toBeNull();
-    expect(ready([['blaze_rod', 4]], 3)).toContain('ロッド 4/7');
-    expect(ready([['blaze_rod', 4]], 4)).toBeNull();
+    // A cooked beef is 20.8 points: the gate asks 60 whatever the rods, 3 beef. What a trip for food should bring is said, not asked.
+    expect(ready([], 2)).toContain('ロッド 0/7。入るのに 60 点。残りのロッドを取り切るまでに約 150 点食べるので、取りに出るなら一度でそこまで');
+    expect(ready([], 3)).toBeNull();
+    expect(ready([['blaze_rod', 4]], 2)).toContain('ロッド 4/7。入るのに 60 点。残りのロッドを取り切るまでに約 64 点');
+    expect(ready([['blaze_rod', 4]], 3)).toBeNull();
+    expect(ready([['blaze_rod', 6]], 2)).toContain('ロッド 6/7。入るのに 60 点。焼く・狩る・拾う');
     expect(ready([['blaze_rod', 6]], 2)).toContain('持ち物の食料');
     expect(ready([['blaze_rod', 6]], 3)).toBeNull();
     expect(ready([['blaze_rod', 2], ['blaze_powder', 6]], 3)).toBeNull();

@@ -87,7 +87,7 @@ const BEYOND: readonly PlanSeed[] = [
     children: [node('ネザーの幹で作業台（持ち歩く）', { kind: 'other', doneWhen: 'have:crafting_table' }),
       node('足場のブロック64（橋と囲い）', { kind: 'other', doneWhen: 'have:cobblestone>=64|have:netherrack>=64|have:cobbled_deepslate>=64' }),
       node('かまどで鉄を焼き盾', { kind: 'other', doneWhen: 'have:shield' }), node('食料が200点に足りなければ地上で狩って焼く（焼き肉10ほど）', { kind: 'food', doneWhen: 'food>=200',
-        note: 'ブレイズの湧き場の関所が150点を求める。要塞までの道で減る分を足して200（ゲートを出てすぐの地上で）' }),
+        note: 'ブレイズ戦がロッド7本で約150点を食べる。要塞までの道で減る分を足して200（ゲートを出てすぐの地上で）' }),
       node('金の防具を1つ着る（ピグリンが襲わない）', { kind: 'other', doneWhen: 'have:gold_armor' })] }),
   node('ネザー要塞を探す', { kind: 'fortress', note: '帰りのゲート座標を控える。432m区画の要塞・砦・未確認を見る。手がかりが無ければ南北から',
     // S5's rig of 11/5: with 7 rods in hand the node held and she went to the fortress again; the rods or an eye close it too.

@@ -15,7 +15,7 @@ import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from '
  * to gather it is the decision's. Two places:
  * - the blaze spawner (the Nether): a fight or an attack on a blaze when none is within 16 m (the hand that begins it), and a go or a walk that ends
  *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, the food points the rods still need
- *   carried (150 at 0 rods, less as rods come in, never under 60: `blazeLacks`), a shield (S2's loads carried one; made where she stands from iron and planks).
+ *   carried (60, whatever the rods; what the rods still to come will eat is said beside it: `blazeLacks`), a shield (S2's loads carried one; made where she stands from iron and planks).
  * - the End: a walk that ends in an end portal cell (`e`): `BEFORE_END` for a first entry, or the fallback's kit after the beds' gathering has had its
  *   time (`minecraftEndGather.ts`), and `RETURN_TO_END` for a return.
  * The body's own version (S2's) is not read: the frame has no field for it.
@@ -39,7 +39,10 @@ const liveLines = (world: Record<string, unknown>): string[] => [world.threats, 
 const blazesWithin = (world: Record<string, unknown>, meters: number): number => liveLines(world)
   .filter(line => Number(/^#\d+ blaze ([\d.]+)m/u.exec(line)?.[1] ?? Infinity) <= meters).length;
 
-/** The food of the spawner: 150 points for the 20 kills that bring 7 rods, less as rods come in, never under the meals of one more retreat. */
+/**
+ * The food of the spawner: the gate asks the meals of one more retreat (60 points, the 「ブレイズ戦へ」 check's own number), whatever the rods.
+ * The 150 points the 20 kills of 7 rods eat are not asked: they are said in the line as what a trip for food should bring.
+ */
 const BLAZE_FOOD = 150, BLAZE_FOOD_FLOOR = 60, RODS_FOR_EYES = 7;
 
 /**
@@ -54,7 +57,12 @@ export function blazeLacks(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'co
   // end1108h25 S7 (11/8): 16 meals in one camp, most for the gate's health 20 and hunger 18. The runs carry far less than the rig's 24 beef
   // (run48 arrived with 39.6 points), so with 150 asked whatever the rods, a retreat at 4 rods could not walk back for the food of rods already in.
   const rods = carried(/^(?:minecraft:)?blaze_rod$/u) + (carried(/^(?:minecraft:)?blaze_powder$/u) + carried(/^(?:minecraft:)?ender_eye$/u)) / 2;
-  const foodNeed = Math.max(BLAZE_FOOD_FLOOR, Math.round(BLAZE_FOOD * Math.max(0, RODS_FOR_EYES - rods) / RODS_FOR_EYES));
+  // The review of 11/10 (G04): everything the head reads before the fortress says 100 points (the check of the way in, the knowledge, the rules),
+  // so a run that did as told arrived with 60-149 and the gate's 150 at 0 rods shut the stage for food (end1109f02's turn to the pearls). The gate
+  // asks 60; the rest is said, so that one trip for food brings what the rods still to come eat instead of 60 again after each rod.
+  const foodNeed = BLAZE_FOOD_FLOOR;
+  const foodForRods = Math.round(BLAZE_FOOD * Math.max(0, RODS_FOR_EYES - rods) / RODS_FOR_EYES);
+  const tripWords = foodForRods > foodNeed ? `入るのに ${foodNeed} 点。残りのロッドを取り切るまでに約 ${foodForRods} 点食べるので、取りに出るなら一度でそこまで` : `入るのに ${foodNeed} 点`;
   const health = facts.health === null ? null : Math.round(facts.health * 10) / 10;
   // end1108h18 (11/8): both shields broke at the spawner and the head turned to other work for 14 minutes; with the materials carried the
   // line says to make one where she stands (the body places a carried crafting table).
@@ -72,7 +80,7 @@ export function blazeLacks(facts: Pick<Facts, 'health' | 'hunger' | 'food' | 'co
   const quick = [health !== null && health < 20 ? healthWords : '',
     facts.hunger !== null && facts.hunger < 18 ? `満腹度 ${facts.hunger}/18（食べる）` : '',
     shields < 1 && shieldHere ? shieldWords : ''].filter(Boolean);
-  const lasting = [facts.food < foodNeed ? `持ち物の食料 ${foodPointsWords(facts.food, foodNeed)}（ロッド ${Math.floor(rods)}/7 の残りの分。焼く・狩る・拾う）` : '',
+  const lasting = [facts.food < foodNeed ? `持ち物の食料 ${foodPointsWords(facts.food, foodNeed)}（ロッド ${Math.floor(rods)}/7。${tripWords}。焼く・狩る・拾う）` : '',
     // end1108h18 (11/8): the shields and their materials ran out at 3 rods and the gate held the blaze hands for the 14 minutes left. Iron is
     // hardly found in the Nether, and the knowledge says to go on from cover without one: once a rod is in, a shield she cannot make is not asked.
     shields < 1 && !shieldHere && rods < 1 ? shieldWords : ''].filter(Boolean);
