@@ -104,7 +104,7 @@ describe('optional End observations as facts', () => {
     expect(end?.dragon?.approach?.bed).toHaveLength(1);
     expect(end?.dragon?.approach?.bed?.[0].build).toEqual([{ ...at(19, 64), role: 'screen' }]);
     const line = dragonBedLine(end, 'white_bed')!;
-    expect(line).toContain('go (20,64,12) range=0.5 → place block=obsidian at=[(19,64,12)]（自分を守る壁） → place block=white_bed at=[(17,64,12)] → use at=[(17,64,12)]');
+    expect(line).toContain('go (20,64,12) range=0.5 → place block=obsidian at=[(19,64,12)]（自分を守る壁。黒曜石が無ければ end_stone で置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く） → place block=white_bed at=[(17,64,12)] → use at=[(17,64,12)]');
     expect(line).toContain('枕は (16,64,12)、見込み 竜の頭 −45・自分 −3.1、歩き 4m');
     expect(endFightLines(end, 'white_bed')).toContain(line);
     expect(dragonBedLine(view({ ...raw, dragon: { ...raw.dragon, phase: 3, approach: { ...approach(), bed } } }))).toBeNull();
