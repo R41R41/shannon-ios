@@ -95,12 +95,22 @@ export const enemyNear = (world: Record<string, unknown>): boolean => (Array.isA
 });
 
 /**
+ * K10 (11/10 review, no run): the pearls hunted on the overworld's night when no warped forest was found. The bed's lines say in every decision
+ * that a sleep makes the morning, and a night slept through has no endermen. While the plan's now is a pearl node (`pearlNow`) and the pearls and
+ * eyes are under the 10 that go to the stronghold, the bed's line says that too, as a fact beside it; the choice stays hers.
+ */
+const PEARLS_TO_GO = 10;
+const pearlNightWord = (counts: ReadonlyMap<string, number>, pearlNow: boolean): string =>
+  pearlNow && carried(counts, 'ender_pearl') + carried(counts, 'ender_eye') < PEARLS_TO_GO
+    ? '。パールを地上のエンダーマンで集めるなら、その夜は寝ない（地上のエンダーマンは夜に出て、寝ると夜が飛ぶ）' : '';
+
+/**
  * The bed against the night, as the facts of the game (the coordinator's wording of 11/4, after run60 and run61 both ended in a night): within a minute of
  * the night and through it, with a bed in the pack. A sleep skips the night and makes the morning; it works underground too. With an enemy within 8
  * blocks at night the line says the sleep is refused while it is there, walls or not (the whole-run audit of 11/4, chapter 3: the line went out
  * then, and a place out of their reach was never said to come first). It names no hand.
  */
-export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
+export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null, pearlNow = false): string | null {
   if (dimension !== 'overworld') return null;
   if (thunderstorm(world)) return stormBedLine(world, counts);
   const tick = dayTick(world);
@@ -112,8 +122,8 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
     return tick < BED_FROM ? null
       : `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）が、8m 内に敵がいる間は寝られない（壁の向こうでも断られる）。敵が届かず 8m より離れた所なら寝られる`;
   }
-  if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。寝れば夜が飛び、朝になる`;
-  return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる`;
+  if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。寝れば夜が飛び、朝になる${pearlNightWord(counts, pearlNow)}`;
+  return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる${pearlNightWord(counts, pearlNow)}`;
 }
 
 /**
@@ -123,14 +133,14 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
  * body like the night's choices. Null: not the overworld, no clock, a storm (the storm's bed line), no bed carried, or within the bed line's
  * minute.
  */
-export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
+export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null, pearlNow = false): string | null {
   if (dimension !== 'overworld' || thunderstorm(world)) return null;
   const tick = dayTick(world);
   if (tick === null || tick >= BED_FROM - BED_NEAR_TICKS) return null;
   if (![...counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
   const left = BED_FROM - tick;
   return `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない`
-    + `（ネザーまで 30 分の目標の ${Math.round(100 * left / (30 * TICKS_PER_MINUTE))}%）。今の節を進め、夜になった所で sleep する（ベッドは持って行けて、地下でも寝られる）`;
+    + `（ネザーまで 30 分の目標の ${Math.round(100 * left / (30 * TICKS_PER_MINUTE))}%）。今の節を進め、夜になった所で sleep する（ベッドは持って行けて、地下でも寝られる）${pearlNightWord(counts, pearlNow)}`;
 }
 
 /**

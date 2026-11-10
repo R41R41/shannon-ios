@@ -126,11 +126,14 @@ describe('S8 and S6 stage knowledge', () => {
 
   it('keeps the overworld night as the pearls\' way when no warped forest is found (review 11/10, K10)', () => {
     const pearl = V2_STAGES.pearl;
-    for (const fact of ['森が見つからない時の道', '地上でも戦い方は同じ', 'パールを地上で集める時は別: ロッドが 7 本あれば出て']) expect(pearl).toContain(fact);
+    for (const fact of ['森が見つからない時の道', '地上で狩る時: 屋根の作りは同じ', 'パールを地上で集める時は別: ロッドが 7 本あれば出て',
+      // The refuter's reading (11/10): the bed's lines say a sleep makes the morning in every decision, and the other hostiles of a surface night come under the roof.
+      'この狩りの夜は寝ない（寝ると夜が飛び、エンダーマンが出ない', 'ゾンビ・スケルトン・クリーパーも来て屋根の下へ入れる', '数は持ち物の ender_pearl で数える']) expect(pearl).toContain(fact);
+    expect(pearl).not.toContain('地上でも戦い方は同じ');
     const tree = seedPlan('エンドラを討伐してください')!;
     const pearls = tree.nodes.find(node => node.title === 'エンダーパール14以上')!;
     const ways = tree.nodes.filter(node => node.parentId === pearls.id);
-    expect(ways.map(node => node.title)).toContain('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2）');
+    expect(ways.map(node => node.title)).toContain('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2。寝ると夜が飛ぶので寝ない）');
     expect(ways.every(node => node.kind === 'pearl')).toBe(true);
     expect(tree.nodes.length).toBeLessThanOrEqual(64);
   });

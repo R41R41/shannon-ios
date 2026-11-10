@@ -99,7 +99,7 @@ const BEYOND: readonly PlanSeed[] = [
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('8m 内の見えるブレイズへ待たずに attack target=#id（体が追う）、剣で 20 体ほど（矢なし）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
   node('エンダーパール14以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 14 }, doneWhen: 'have:ender_pearl>=14|have:ender_eye>=12', note: '枠に11〜12・投げの損耗に2〜3',
-    children: [node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金の延べ棒をピグリンに投げて交換', { kind: 'pearl' }), node('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2）', { kind: 'pearl' })] }),
+    children: [node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金の延べ棒をピグリンに投げて交換', { kind: 'pearl' }), node('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2。寝ると夜が飛ぶので寝ない）', { kind: 'pearl' })] }),
   // The coordinator, 11/9 (thru-1110's table): leave the Nether with 12 eyes, not 10 (a frame holds one from the start 1 time in 10, 1.2 on
   // average, so about 11 are needed, and a throw breaks about 1 in 5). A node closed in the Nether stays done while eyes fly; a first plan made
   // in the overworld with 10 or more eyes has these stages taken out (`strongholdFirst`, EYES_FOR_STRONGHOLD), so 10 still keep her from going back.

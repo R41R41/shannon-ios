@@ -72,7 +72,7 @@ export function factsContext(
     world = (observation?.state.world ?? {}) as Record<string, unknown>;
   const food = carriedFood(world, observation?.facts ?? {}),
     hunger = typeof world.food === 'number' && Number.isFinite(world.food) ? world.food : null;
-  const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree));
+  const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree), nowKinds(planFacts).includes('pearl'));
   return {
     ...(judge.hits ? { hits: judge.hits } : {}),
     ...(endgame?.lines.length ? { endgame } : {}),
@@ -170,7 +170,7 @@ export function readinessParts(
   const done = doneFacts(observation);
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
     facts.food) : null;
-  const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension) : null);
+  const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl')) : null);
   // end1109o06 (meta 13:10, the fifth first night lost) and o08 (the village's beds, meta 14:58): at dusk with the now an errand on the surface, it waits for the morning and the night's
   // choice (the sealed shaft down to the iron) goes first; the plan is not changed, its now is said as the morning's.
   const current = nodes.find(node => node.id === (display?.current ?? tree?.current));

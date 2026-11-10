@@ -70,6 +70,28 @@ describe('nightBedLine', () => {
       .toContain('8m 内に敵がいる間は寝られない（壁の向こうでも断られる）');
     expect(nightBedLine({ time: '14000' }, bed(), 'the_nether')).toBeNull();
   });
+  it('K10: while the plan\'s now is a pearl node and the pearls are under 10, the bed\'s lines say a night slept through has no endermen', async () => {
+    const { nightBedLine, dayBedLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
+    const { createEndgame } = await import('../src/surfaces/minecraft/minecraftEndgame.js');
+    const word = 'パールを地上のエンダーマンで集めるなら、その夜は寝ない（地上のエンダーマンは夜に出て、寝ると夜が飛ぶ）';
+    const few = new Map([['white_bed', 1], ['blaze_rod', 7], ['ender_pearl', 3]]);
+    for (const time of ['12000', '14000']) {
+      expect(nightBedLine({ time }, few, 'overworld', true)).toContain(word);
+      expect(nightBedLine({ time }, few, 'overworld')).not.toContain('パールを地上の');
+    }
+    expect(dayBedLine({ timeOfDay: 1000 }, few, 'overworld', true)).toContain(word);
+    expect(dayBedLine({ timeOfDay: 1000 }, few, 'overworld')).not.toContain('パールを地上の');
+    // With 10 or more pearls and eyes the stronghold is next (no going back for more): the bed's line is as it was.
+    const enough = new Map([['white_bed', 1], ['ender_pearl', 4], ['ender_eye', 6]]);
+    expect(nightBedLine({ time: '14000' }, enough, 'overworld', true)).not.toContain('パールを地上の');
+    expect(dayBedLine({ timeOfDay: 1000 }, enough, 'overworld', true)).not.toContain('パールを地上の');
+    // The wire: the endgame's lines take the plan's now from the caller.
+    const frame = { connected: true, state: { world: { dimension: 'overworld', time: '14000', position: { x: 0, y: 64, z: 0 }, health: 20, food: 20,
+      inventory: [{ name: 'white_bed', count: 1 }, { name: 'blaze_rod', count: 7 }] } }, facts: {}, bodyId: 'b', sequence: 1, stateAt: new Date(0).toISOString() } as never;
+    expect(createEndgame(null).lines(frame, true, true).lines.join('\n')).toContain(word);
+    expect(createEndgame(null).lines(frame, true).lines.join('\n')).toContain('寝れば夜が飛び、朝になる');
+    expect(createEndgame(null).lines(frame, true).lines.join('\n')).not.toContain('パールを地上の');
+  });
 });
 
 describe('crying obsidian is not obsidian', () => {

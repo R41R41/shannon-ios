@@ -38,7 +38,7 @@ const some = (line: string | null): string[] => line ? [line] : [];
 
 /** The lines of one decision from the frame and the ledger's lines (pure). */
 function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[],
-  watched: { blaze: string | null; hunt: string | null; trail?: string | null; wool?: string | null; climb?: ((shooting: boolean | null) => string | null) }): EndgameLines {
+  watched: { blaze: string | null; hunt: string | null; trail?: string | null; wool?: string | null; climb?: ((shooting: boolean | null) => string | null); pearlNow?: boolean }): EndgameLines {
   const { blaze, hunt } = watched;
   const arrows = ['arrow', 'spectral_arrow', 'tipped_arrow'].reduce((sum, item) => sum + (facts.counts.get(item) ?? 0), 0);
   const shooting = facts.counts.size ? (facts.counts.get('bow') ?? 0) > 0 && arrows > 0 : null;
@@ -49,7 +49,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   // G01 (the review of 11/10): the Nether's entry gates let a return for a Nether death's drops through; the death's line says so and what it costs.
   const death = some(deathLine(world)).map(line => (facts.dimension === 'overworld' && fetchingNetherDrops(world) ? `${line}。${FETCH_ENTRY_WORDS}` : line));
   const night = [...some(nightArmsLine(world, facts.counts, facts.dimension, undergroundInOverworld(facts))),
-    ...some(nightBedLine(world, facts.counts, facts.dimension)), ...some(watched.trail ?? null)];
+    ...some(nightBedLine(world, facts.counts, facts.dimension, watched.pearlNow)), ...some(watched.trail ?? null)];
   const places = some(placeLine(world, carried(facts.counts, 'bed')));
   const footing = some(footingLine(facts.counts, facts.dimension));
   const enclosed = [...some(enclosedLine(world)), ...some(pillarLine(world))];
@@ -89,7 +89,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       hunt.note(id, resultJson, now());
     },
     /** The lines of this decision: empty for a task that is not after the dragon. */
-    lines(observation: BodyObservation | null, dragonTask: boolean): EndgameLines {
+    lines(observation: BodyObservation | null, dragonTask: boolean, pearlNow = false): EndgameLines {
       const world = worldOf(observation);
       const facts = doneFacts(observation);
       if (!dragonTask || !world || !facts) return NONE;
@@ -97,7 +97,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       const end = endViewOf(observation);
       return compose(world, end, facts, eyeLinesOf(ledger, facts, now()), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),
         hunt: hunt.line(world, facts.counts, facts.dimension, now()), trail: trail.line(facts),
-        wool: wool.line(world, facts.counts, facts.dimension), climb: shooting => climb.line(end, shooting, now()) });
+        wool: wool.line(world, facts.counts, facts.dimension), climb: shooting => climb.line(end, shooting, now()), pearlNow });
     },
     /** The eyes' ledger, for the hold that keeps the frames' eyes (`minecraftEyeThrowHold.ts`). */
     ledger,
