@@ -111,9 +111,22 @@ describe('the perched dragon basin as observed facts', () => {
     expect(after).toHaveLength(before.length + 1);
     expect(after.filter(line => !line.startsWith('窪みの足場'))).toEqual(before);
     const index = after.findIndex(line => line.startsWith('止まり木の位置:'));
-    expect(after[index + 1]).toBe(dragonBasinLine(view()));
+    expect(after[index + 1]!.startsWith(dragonBasinLine(view())!)).toBe(true);
     expect(after.some(line => line.includes('竜の息の雲:') && line.includes('火の玉:'))).toBe(true);
     expect(after.filter(line => line.includes('phase 6'))).toHaveLength(1);
+  });
+
+  it('puts the sword act beside the footing while no bed hand shows (no bed held), and not beside a bed hand or with three crystals standing', () => {
+    const basinOf = (lines: string[]) => lines.find(line => line.startsWith('窪みの足場'))!;
+    const sword = 'attack target=ender_dragon seconds=30 onFail="continue"';
+    expect(basinOf(endFightLines(view()))).toContain(`go range=0.5 seconds=12 → 剣を持って ${sword}`);
+    const bed = [{ stand: at(20), walkMeters: 4, foot: at(22), head: at(23), build: [], selfExpected: 3, dragonExpected: 40 }];
+    const withBed = endFightLines(view({ ...approach(), bed }), 'white_bed');
+    expect(withBed.some(line => line.startsWith('ベッドの手（体が測った候補）'))).toBe(true);
+    expect(basinOf(withBed)).toBe(dragonBasinLine(view()));
+    const three = world();
+    const standing = endViewOf(frame({ ...three, crystals: { ...three.crystals, remaining: 3 } }));
+    expect(basinOf(endFightLines(standing))).toBe(dragonBasinLine(standing));
   });
 
   it('reaches normal inputFacts through factsContext, stays out of urgent/compressed facts, and disappears on the next absent frame', () => {

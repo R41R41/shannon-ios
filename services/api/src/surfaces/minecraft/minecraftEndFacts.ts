@@ -473,10 +473,10 @@ export function endFightLines(end: EndView | null, bedItem: string | null = null
   if (lines.length + hazards.length + (positions ? 1 : 0) > 6) lines.push(hazards.join('・'));
   else lines.push(...hazards);
   if (positions) lines.push(positions);
-  const bedHand = dragonBedLine(end, bedItem);
+  const bedHand = dragonBedLine(end, bedItem), basin = dragonBasinLine(end);
   if (bedHand) lines.push(bedHand);
-  const basin = dragonBasinLine(end);
-  if (basin) lines.push(basin);
+  // With no bed hand (no bed held, or no cell to set one) the sword from the basin is the hand left: the act stands beside the footing, as section T's ②③.
+  if (basin) lines.push(bedHand || (end?.crystals.remaining ?? 0) > 2 ? basin : `${basin}（ベッドの手が出ない間は剣の手: 上の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。頭への剣は全量が入る）`);
   const wait = dragonWaitLine(end);
   if (wait) lines.push(wait);
   return lines;
