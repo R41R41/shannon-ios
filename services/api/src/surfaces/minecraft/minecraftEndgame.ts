@@ -48,7 +48,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const death = some(deathLine(world));
   const night = [...some(nightArmsLine(world, facts.counts, facts.dimension, undergroundInOverworld(facts))),
     ...some(nightBedLine(world, facts.counts, facts.dimension)), ...some(watched.trail ?? null)];
-  const places = some(placeLine(world));
+  const places = some(placeLine(world, carried(facts.counts, 'bed')));
   const footing = some(footingLine(facts.counts, facts.dimension));
   const enclosed = [...some(enclosedLine(world)), ...some(pillarLine(world))];
   const pearls = some(pearlLine(facts.counts, facts.dimension));

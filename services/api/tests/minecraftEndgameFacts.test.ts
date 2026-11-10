@@ -9,6 +9,7 @@ import { crystalsLeft, endViewOf } from '../src/surfaces/minecraft/minecraftEndV
 import { breathLine, crystalLine, deathLine, dragonLine, enclosedLine, endFightLines, fireballLine, frameLine, perchLine, pillarLine, placeLine, shortOfEyes } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEyeLedger, flightOf } from '../src/surfaces/minecraft/minecraftEyeLedger.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
+import { END_BEDS } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 
 /** A frame; the End fight, when given, sits directly in the world as the body sends it. */
 const frame = (world: object, fight?: object): BodyObservation => ({ connected: true, state: { world: { ...world, ...fight } }, facts: {} }) as unknown as BodyObservation;
@@ -150,6 +151,25 @@ describe('facts of the way to the dragon', () => {
     expect(frameLine(world, 5)).toBe('ポータルの枠: 見えている 12 個のうちアイ入り 3・あと 9 個はめる・手持ちのアイ 5 個（4 個足りない）');
     expect(placeLine(world)).toBe('控え（体の記憶、今いる次元）: ポータル 34m 北東 (12,63,-40) ↔nether(1,70,-5)・リスポーン地点 120m 北 (0,64,-120) respawn');
     expect(frameLine({}, 5)).toBeNull();
+  });
+
+  it('says the respawn point is not set beside the remembered frames, with what leaving a bed does to the count of the fight (K3)', () => {
+    const frames = { dimension: 'overworld', rememberedPlaces: { end_portal_frame: '6m 南 (10,30,12) ×12' } };
+    // The fight's eight are counted apart from the bed that stays by the frames: nine carried leave eight, eight carried leave seven.
+    expect(placeLine(frames, 9, END_BEDS)).toBe(placeLine(frames, 9));
+    expect(placeLine(frames, 9)).toBe('控え（体の記憶、今いる次元）: エンドポータルの枠 6m 南 (10,30,12) ×12・リスポーン地点 未設定（枠の近くに bed を place→use して'
+      + '残すと、エンドで死んでもここへ戻れる。置くと荷のベッドは 9→8、戦い用の必須は 8）');
+    expect(placeLine(frames, 8)).toContain('置くと荷のベッドは 8→7、戦い用の必須は 8）');
+    // No bed to leave, a bed already hers, no frames remembered yet, or another dimension (the digest is of this one): the row is not said.
+    expect(placeLine(frames)).toBe('控え（体の記憶、今いる次元）: エンドポータルの枠 6m 南 (10,30,12) ×12');
+    expect(placeLine({ ...frames, rememberedPlaces: { ...frames.rememberedPlaces, respawn: '4m 南 (10,30,16) bed・リスポーン地点' } }, 9)).not.toContain('未設定');
+    expect(placeLine({ dimension: 'overworld', rememberedPlaces: { stronghold: '40m 西 (1,2,3)' } }, 9)).not.toContain('未設定');
+    expect(placeLine({ ...frames, dimension: 'the_nether' }, 9)).not.toContain('未設定');
+    expect(placeLine({ dimension: 'overworld' }, 9)).toBeNull();
+    // The task's live lines count the beds of every colour in the pack.
+    const world = { ...frames, position: { x: 10, y: 30, z: 6 }, inventory: [stack('white_bed', 5), stack('red_bed', 4)] };
+    expect(createEndgame(null).lines(frame(world), true).lines.join('\n')).toContain('置くと荷のベッドは 9→8');
+    expect(createEndgame(null).lines(frame({ ...world, inventory: [] }), true).lines.join('\n')).not.toContain('未設定');
   });
 
   it('says what the missing eyes take and what is to be brought from the Nether, in numbers', () => {

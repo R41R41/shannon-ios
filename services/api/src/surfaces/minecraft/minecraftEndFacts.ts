@@ -502,14 +502,14 @@ export function deathLine(world: Rec): string | null {
 const PLACE_LABELS: ReadonlyArray<readonly [string, string]> = [['nether_portal', 'ポータル'], ['fortress', 'ネザー要塞'], ['stronghold', 'ストロングホールド'],
   ['end_portal_frame', 'エンドポータルの枠'], ['respawn', 'リスポーン地点']];
 
-/** 「ポータル 34m 北東 (12,63,-40) ↔overworld(100,64,-300)」: the body's remembered places the way to the dragon uses. */
-export function placeLine(world: Rec): string | null {
+/** 「ポータル 34m 北東 (12,63,-40) ↔overworld(100,64,-300)」: the body's remembered places the way to the dragon uses. With the frames remembered, beds
+ * carried and no respawn bed among them, it says so and what leaving one does to the fight's count (`fightBeds` is `END_BEDS`; the gate counts the pack). */
+export function placeLine(world: Rec, beds = 0, fightBeds = 8): string | null {
   const places = rec(world.rememberedPlaces);
-  if (!places) return null;
-  const lines = PLACE_LABELS.flatMap(([kind, label]) => {
-    const line = places[kind];
-    return typeof line === 'string' && line.trim() ? [`${label} ${line.trim().slice(0, 90)}`] : [];
-  });
+  const said = (kind: string) => { const line = places?.[kind]; return typeof line === 'string' && line.trim() ? line.trim().slice(0, 90) : null; };
+  const lines = PLACE_LABELS.flatMap(([kind, label]) => said(kind) ? [`${label} ${said(kind)}`] : []);
+  if (beds > 0 && dimensionOf(world.dimension) === 'overworld' && said('end_portal_frame') && !said('respawn')) lines.push('リスポーン地点 未設定（枠の近くに bed を place→use して'
+    + `残すと、エンドで死んでもここへ戻れる。置くと荷のベッドは ${beds}→${beds - 1}、戦い用の必須は ${fightBeds}）`);
   return lines.length ? `控え（体の記憶、今いる次元）: ${lines.join('・')}` : null;
 }
 
