@@ -69,10 +69,8 @@ let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitM
   // mb-r25: every frame also tells the route whether its step is late now (`minecraftRouteWatch.ts`), not only the decisions.
   const metrics = stepMetrics(step, now, parts.metricsLog, routeWatcher({ plan: routePlan, createdAt: step.snapshot.task.createdAt, now }));
   const measured = (work: () => void) => { try { work(); } catch { /* measuring never fails a step */ } };
-  // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal
-// too: the Minebot lane
-  // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written
-// (main, unchanged).
+  // To the Observer (its sidecar, kept 15 minutes) and, with the fast judgment on, content-free to the journal too: the Minebot lane
+  // looked for the governor's holds there after run 11 and found none. With the switch off nothing new is written (main, unchanged).
   const hold = (reason: string, detail: Record<string, string | number | boolean | null> = {}) => {
     if (held !== reason) {
       observerHandoff('bodyObserve', 'reflex', { phase: 'entry_held', reason, ...detail });
@@ -328,8 +326,7 @@ let { prior, recentResults, kept, milestones, keptWait, idleWaitMs, pendingWaitM
       try { parts.gistFollowed!(gist); } catch { /* learning never fails a step */ }
     }
   };
-  // A call that matches what a pointed skill is about (a tool and an argument, `ADOPTIONS`): a closed tag, never
-// her content. Measuring only.
+  // A call that matches what a pointed skill is about (a tool and an argument, `ADOPTIONS`): a closed tag, never her content. Measuring only.
   const noteStageAdoption = (call: { name: string; input: unknown }) => {
     if (!pointedSkills.length) return;
     for (const { skill, tag } of adoptionTags(pointedSkills, call)) {

@@ -136,7 +136,11 @@ export function createMinecraftTaskMetrics(parts: MinecraftTaskMetricsParts) {
   /** One body call of the decision, by name and arguments only. `shown` is the gists' tool names by skill (`minecraftSkillContext`). */
   function noteCall(name: string, input: unknown, shown: ReadonlyMap<string, ReadonlySet<string>>): void {
     // The v2 route's one tool: each hand counts as the call it does (`actCalls`).
-    if (name === 'mc_act') { begin(); for (const call of actCalls(name, input)) noteCall(call.name, call.input, shown); return; }
+    if (name === 'mc_act') {
+      begin();
+      for (const call of actCalls(name, input)) noteCall(call.name, call.input, shown);
+      return;
+    }
     const d = begin();
     if (isFirstLook(name, d)) tag('first_look');
     callTags(name, input).forEach(tag);
