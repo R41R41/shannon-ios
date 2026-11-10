@@ -14,8 +14,8 @@ import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from '
  * goes in is held, as the portal hand is, while what the place needs is missing, and the line names what is missing and what going on costs. How
  * to gather it is the decision's. Two places:
  * - the blaze spawner (the Nether): a fight or an attack on a blaze when none is within 16 m (the hand that begins it), and a go or a walk that ends
- *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, the food points the rods still need
- *   carried (60, whatever the rods; what the rods still to come will eat is said beside it: `blazeLacks`), a shield (S2's loads carried one; made where she stands from iron and planks).
+ *   within 8 m of a spawner (`S` of the map) from farther than 10 m: health 20, hunger 18, the food points carried (60, whatever the rods; what
+ *   the rods still to come will eat is said beside it: `blazeLacks`), a shield (S2's loads carried one; made where she stands from iron and planks).
  * - the End: a walk that ends in an end portal cell (`e`): `BEFORE_END` for a first entry, or the fallback's kit after the beds' gathering has had its
  *   time (`minecraftEndGather.ts`), and `RETURN_TO_END` for a return.
  * The body's own version (S2's) is not read: the frame has no field for it.

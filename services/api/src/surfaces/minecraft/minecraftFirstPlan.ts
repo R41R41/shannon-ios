@@ -79,9 +79,9 @@ const TO_NETHER: readonly PlanSeed[] = [
  * `pearl`, the End's `dragon`.
  */
 const BEYOND: readonly PlanSeed[] = [
-  // thru-1110 (11/9, the kits of the rig's sections against a through run): the blaze spawner's gate asks 150 food points with no rods (S7's rig
-  // gives 24 beef, about 500); run48 reached the spawner with 39.6. The check before going deep asks 200 (about 10 cooked beef), the gate's 150
-  // and the way to the fortress, so the gate does not turn the plan to the pearls for food.
+  // thru-1110 (11/9, the kits of the rig's sections against a through run): the blaze fight eats about 150 food points over the 7 rods (S7's rig
+  // gives 24 beef, about 500); run48 reached the spawner with 39.6. The check before going deep asks 200 (about 10 cooked beef), the fight's 150
+  // and the way to the fortress, so the gate (60 to go in since G04, 11/10) does not turn the plan to the pearls for food.
   node('出発の点検（ネザーの奥へ）', { kind: 'prep_descent', doneWhen: 'food>=200&have:crafting_table&have:shield', note: '足りない物はゲートのそばで作る',
     forbid: [CHECK_FORBID_NOW],
     children: [node('ネザーの幹で作業台（持ち歩く）', { kind: 'other', doneWhen: 'have:crafting_table' }),

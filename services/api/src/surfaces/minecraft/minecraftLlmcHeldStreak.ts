@@ -105,5 +105,6 @@ export function followBack(taskId: string, tree: PlanTree, facts: DoneFacts | nu
   if (!back) return null;
   const left = questions.byId.get(tree.current)!;
   return { to: back.id, from: tree.current, acts: 0, words: `ブレイズの関所の食料・盾がそろった: 今の節を [${back.id}] ${back.title.slice(0, 24)} に戻した`
-    + `（[${left.id}] ${left.title.slice(0, 24)} は順のまま残る。体力・満腹度が足りない時はその場で wait か食べてから湧き場へ）` };
+    + `（[${left.id}] ${left.title.slice(0, 24)} は順のまま残る。体力・満腹度が足りない時はその場で wait か食べてから湧き場へ。`
+    + '食料が関所の下限ぎりぎりなら、残りのロッドの分まで足してから戻る）' };
 }
