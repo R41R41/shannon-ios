@@ -158,7 +158,8 @@ function fixLines(fix: Fix, feet: { x: number; z: number } | null): string[] {
   const far = fix.errorBlocks > 150 ? '誤差が大きい間は方角の目安。近づいてから投げ直す。' : '';
   const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${far}`
     + `原点から ${grouped(ring)}m（最初の 3 つの要塞は 1,280〜2,816m の輪）`;
-  const near = feet ? nearThrowPlace(feet, fix, Math.max(60, fix.errorBlocks)) : null;
+  // At 128 m of error or less the frames' probe reaches from the point and the hold keeps the eyes (`minecraftEyeThrowHold.ts`): no throw before it is offered.
+  const near = feet && fix.errorBlocks > 128 ? nearThrowPlace(feet, fix, Math.max(60, fix.errorBlocks)) : null;
   return near ? [line, `近づいたら、交点の ${Math.max(60, fix.errorBlocks)}m 手前 ${place(near.x, near.z)} から投げ直すと誤差が小さくなる`] : [line];
 }
 

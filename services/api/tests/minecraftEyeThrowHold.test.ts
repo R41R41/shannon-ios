@@ -23,6 +23,18 @@ describe('the eyes kept for the frames', () => {
     registerEyeLedger('a2', ledger({ x: -1072, z: 928, errorBlocks: 300 }));
     expect(eyeThrowHold(throwEye, frame(KIT), 'a2')).toBeNull();
   });
+  it('lets one throw go from within 128 m of the point (the frames are not seen there), and holds the next once the ledger has one thrown there', () => {
+    const far = [{ x: 135, z: 104, bearingDeg: 304 }, { x: 121, z: 84, bearingDeg: 305 }], at = { x: -1000, y: 70, z: 900 };
+    registerEyeLedger('n', ledger({ x: -1072, z: 928, errorBlocks: 90 }, far));
+    expect(eyeThrowHold(throwEye, frame(KIT), 'n')!.line).toContain('交点の 128m 内まで来ても枠が見えない時だけ、そこで 1 回投げ直せる');
+    expect(eyeThrowHold(throwEye, frame(KIT, at), 'n')).toBeNull();
+    // The frames' eyes are still kept while more can be made.
+    expect(eyeThrowHold(throwEye, frame([['ender_eye', 12], ['ender_pearl', 2], ['blaze_powder', 2]], at), 'n')!.line).toContain('枠に要る数（12）以下');
+    registerEyeLedger('n2', ledger({ x: -1072, z: 928, errorBlocks: 90 }, [...far, { x: -1000, z: 900, bearingDeg: 291 }]));
+    const again = eyeThrowHold(throwEye, frame(KIT, { x: -1060, y: 70, z: 920 }), 'n2')!.line;
+    expect(again).toContain('もう投げない');
+    expect(again).not.toContain('投げ直せる');
+  });
   it('holds a throw on the same line as the last one, and lets one 24 m sideways go', () => {
     registerEyeLedger('b', ledger(null, [{ x: 0, z: 0, bearingDeg: 180 }]));
     expect(eyeThrowHold(throwEye, frame(KIT, { x: 1, y: 70, z: 40 }), 'b')!.line).toContain('同じ線になり、交点は出ない');
@@ -37,5 +49,6 @@ describe('the eyes kept for the frames', () => {
   });
   it('says in the stronghold stage not to throw once the point is out', () => {
     expect(V2_STAGES.stronghold).toContain('交点が出たら、もう投げない');
+    expect(V2_STAGES.stronghold).toContain('交点の 128m 内まで来ても枠が見えない時の 1 回だけ');
   });
 });
