@@ -6,7 +6,7 @@ import { readableBootstrap } from '../src/infra/models/anthropic/anthropicFcaBoo
 import { PLAN_UPDATE_RULES_DEFINITION } from '../src/mind/action/fca/fcaPlanTools.js';
 import { candidateAct, candidateMenuTools, isUrgentLive } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { descentNote, recoveryLine } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
-import { forgetFurnaceStands, furnaceStandStop } from '../src/surfaces/minecraft/minecraftLlmcFurnaceWait.js';
+import { forgetFurnaceStands, furnaceStandHold } from '../src/surfaces/minecraft/minecraftLlmcFurnaceWait.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { createFoodTrend, llmcTokens, lookHint, minecraftLlmcLive, minecraftLlmcUrgentLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { PREP_NOTE } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
@@ -163,16 +163,16 @@ describe('the live state and the results say facts', () => {
     expect(line).toContain('今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 2');
     expect(line).not.toMatch(/省くと|死ぬ|plan\.update/u);
   });
-  it('does not tell a stand of waits to be sent again: not sent, the furnace\'s seconds, and the rule is the instructions\'', () => {
-    const observation = frame({ position: { x: 158, y: 66, z: 199 }, health: 20, food: 20,
+  it('does not tell a stand of waits to be sent again: the hold says the seconds left and the work instead, and the rule is in the instructions', () => {
+    const observation = frame({ position: { x: 158, y: 66, z: 199 }, health: 20, food: 20, inventory: pack([['stone_pickaxe', 1]]),
+      mapLandmarks: ['c 石炭[coal_ore] (160,66,203) 東2・南4 ×5 見えている'],
       jobs: [{ status: 'waiting_external', remainingEstimateMs: 148_000, input: 'raw_iron', count: 15, position: { x: 158, y: 66, z: 200 } }] });
-    const stop = furnaceStandStop({ hands: [{ do: 'wait', seconds: 30 }] }, observation, 'gpt-review')!;
-    expect(stop.code).toBe('furnace_stand');
-    expect(stop.line).toBe('立って待つだけの手（合わせて 30 秒）は送っていない（手は動いていない）。かまどの焼き上がりまで (158,66,200) の raw_iron×15 はあと約 148 秒。raw_iron×15 を1基で焼くと 150 秒かかる（1個 10 秒。基数に分けると並んで焼ける）');
-    expect(stop.line).not.toMatch(/もう一度|出し直|足して/u);
-    // The mechanism is unchanged: the same stand again straight after is sent.
-    expect(furnaceStandStop({ hands: [{ do: 'wait', seconds: 30 }] }, observation, 'gpt-review')).toBeNull();
-    expect(system).toContain('A wait-only act only for waiting out the night or recovery when nothing else can be done; the why names what is awaited and the reason');
+    const hold = furnaceStandHold({ hands: [{ do: 'wait', seconds: 30 }] }, observation, 'gpt-review')!;
+    expect(hold.kind).toBe('wait');
+    expect(hold.line).toContain('かまど (158,66,200) の raw_iron×15 はあと約 148 秒（raw_iron×15 を1基で焼くと 150 秒かかる。1個 10 秒。基数に分けると並んで焼ける）');
+    expect(hold.line).toContain('A) 石炭 (160,66,203)');
+    expect(hold.line).not.toMatch(/もう一度|出し直/u);
+    expect(system).toContain('A wait-only act only when nothing else can be done');
   });
   it('does not tell a fight to be sent with a lower retreatHp: the fact, and the health of 8 or under named', () => {
     const fight = (retreatHp: number) => ({ hands: [{ do: 'fight', target: '#5493', item: 'iron_sword', retreatHp }] });

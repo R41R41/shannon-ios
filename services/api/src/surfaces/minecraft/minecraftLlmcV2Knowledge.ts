@@ -39,7 +39,7 @@ const DECIDE = [
     + 'Changing only the coordinates, the direction or the limit may leave the same obstacle or missing permission.',
   '- When unsure, after the same stop twice, after a fall, or when live shows look: make an investigating decision with mc_view or mc_probe (same stop → history and path or sight; fell → column; enemy → around). '
     + 'If the investigation shows the cause, use it. Once the cause is known, write one line into the current section with plan_update\'s forbid (things not to do) or caution (things to watch out for) op (it appears in plan.rules).',
-  '- A wait-only act only for waiting out the night or recovery when nothing else can be done; the why names what is awaited and the reason.',
+  '- A wait-only act only when nothing else can be done (waiting stops the plan: in one run waits took about a quarter of the time); the why names what is awaited and the reason. To sleep, do not wait for the night: put one sleep hand at the start or end of a work act (the body lies down at dusk, before the next hand; within 10 s of dusk it waits by itself). A furnace take may be sent early (the body waits a remainder of 15 s or less); do other work while it burns.',
   '- Do not re-dig with exposeOk a cell where a 「見られる」 stop occurred. Dig a different cell that cannot be seen (the side away from the enemy, rock below). Do not dig or walk in a direction that approaches the enemy\'s side. '
     + 'Do not chase a target when attack stopped twice with 「届かない」 (wait for it to come with hold, or move away). Do not travel far or chase enemies while lacking food, a shield or golden armour.',
   '- Do not skip a section against a note you wrote yourself (plan.rules). Review the plan when the dimension changes.',
@@ -180,7 +180,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- foodPreparation は加工の見込み。炉・作業台・燃料・設置場所と加工後の持ち物を観測で確かめる。',
     '- jobs は見込み。保留・再接続後は残り秒で待ち直さず furnace op=take で現物確認。焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める。jobs の各行は、かまどの場所・入れた物と出てくる物・あと何秒かで、待たずに別の act を足し、時間が来たら take の act を足す。',
     '- 置いた作業台・かまどは、10 m より遠くへ行く手（go・walk・vertical・portal・hunt、at を書いた mine）の前に体が拾って持ち歩く（置きっぱなしだと板・丸石を毎回失うため）。焼き途中・出来上がり待ちのかまどは残る。敵が近い・体力が低い・水中や空中・持ち物が満杯の時は拾えず残るので、手の行と持ち物で確かめる。使う時は持っている物を place し、近くに作業台があれば新しく作らない。',
-    '- ベッドのある安全な囲いでは、射線・敵の到達・足場を確かめ、朝待ちと調理・工作・近くの夜の狩り（食料源の選び方の条件）を比べる。ベッドが無い夜は朝待ちを選ばず、次の順番に従う。',
+    '- ベッドのある安全な囲いでは、射線・敵の到達・足場を確かめ、sleep 1 手（朝へ飛ぶ。wait で待たない）と調理・工作・近くの夜の狩り（食料源の選び方の条件）を比べる。ベッドが無い夜は朝待ちを選ばず、次の順番に従う。',
     // 1107c (11/7): with no bed the head waited 13 of its 19.6 minutes in a dirt pocket, 11 blocks above the iron shaft's depth. The owner: food first by day,
     // iron can be dug at night, and the bed matters most. 1107d (11/7): the line presupposed an enclosure; on a jungle top the dirt ring had no face
     // (nothing_to_set_against), the head waited 4 minutes in the open and a zombie killed it. One ordered rule now, the shelter first and anywhere.
@@ -446,10 +446,10 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // end1109 (h32b S9): one no_bed_spot, then 13 waits of 30 s on a perch in the air, 0 m/s for the last 7 minutes, 560 m short.
     // end1109s07 S9 (11/9): three minutes before dark she dug a hole, walled it and waited for night to sleep (~200 s still).
     '- 地上の長い道は夜も止まらずに進む（鉄の鎧か盾があれば戦える。無い時も敵が寄ったら fight か go で離れ、暗いうちの wait はしない。水の中の drowned だけは戦わない: 下の海の行）。sleep は暗くなって最初の 1 回だけ、その場で試す。'
-      + '暗くなる前に穴・囲い・柱を作って夜を待たない。「夜まで約 3 分」でも go を続け、暗くなった所で sleep を 1 回試す（s07 は夜の 3 分前に穴を掘って囲い、待って 約 200 秒止まった）。'
+      + '暗くなる前に穴・囲い・柱を作って夜を待たない。「夜まで約 3 分」でも go を続け、その act に sleep を 1 手積む（夜になり次第、体が次の手の前で寝る。s07 は夜の 3 分前に穴を掘って囲い、待って 約 200 秒止まった）。'
       // end1109s14 S9 (11/9): swimming at sea seven minutes before dark, she turned 120 m north to a village to sleep (~190 s with the waits).
       + '海・水の上で夕方や夜になっても、寝るために陸・村へ寄り道しない。交点への go（waterOk）を続け、陸の上で暗くなった時だけ sleep を 1 回（s14：夜の 7 分前に北の村へ 約 120m 寄り、待って寝て 約 190 秒）。'
-      + 'sleep が not_night（夜まであと N 秒）で返っても wait で待たず、go を続ける（s12：wait 30・20・15 秒と sleep を繰り返して 約 130 秒）。'
+      + 'sleep は夜でなくても積める（予約。夜まで 10 秒以内なら体が待って寝る）。wait で夜を待たず、go を続ける（s12：旧の not_night で返った時の例、wait 30・20・15 秒と sleep を繰り返して 約 130 秒）。'
       + '寝られなかったら（not_slept・enemy_near・no_bed_spot のどれでも）、朝を待たずにすぐ go で交点へ進む。wait で朝を待たない（h32b：宙の足場で 30 秒の wait を 13 回、最後の 7 分は 0 m/s。end1108g：寝られずに 20 分待った）。',
     // end1109 (h32b S9): a go laid a stair 16 high into the air; the head's stair down took one step, its plan then forbade going down without a floor
     // and digging its own blocks, and no way down was left. The body says the way down of a perch in the air (宙の足場) in its stop.

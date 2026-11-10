@@ -104,25 +104,26 @@ describe('the furnace: no standing while it works (run 37, 855–1,030 s: 22 iro
     expect(furnaceWaitNote(waits(30), world(0))).toBeNull();
     expect(furnaceWaitNote(waits(30), frame({ jobs: [{ status: 'different_dimension', remainingEstimateMs: 90_000, input: 'raw_iron', count: 4, position: at(1, 2, 3) }] }))).toBeNull();
   });
-  it('is not sent the first time (a stand of waits only), and the same act again is sent whole with the note', () => {
+  it('is held at the long wait with the work as hands (run 6: a hold with choices, not a one-time refusal), and the note stays on an act that goes', () => {
     forgetFurnaceStands();
-    const first = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand');
+    const marks = ['i 鉄鉱石[iron_ore] (160,60,205) 東2・北5 ×3 見えている'];
+    const withWork = frame({ ...(world(151_000).state.world as object), inventory: [{ name: 'stone_pickaxe', count: 1 }], position: at(158, 66, 199), mapLandmarks: marks });
+    const first = candidateAct({ hands: ['wait 30', 'wait 30'] }, withWork, 'furnace-stand');
     expect(first.guard?.stopped).toBe(true);
-    expect(first.guard?.text).toContain('立って待つだけの手（合わせて 60 秒）は送っていない（手は動いていない）。かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
+    expect(first.guard?.text).toContain('立って待つ wait（60 秒）は送らない');
+    expect(first.guard?.text).toContain('かまど (158,66,200) の raw_iron×22 はあと約 151 秒');
     expect(first.guard?.text).toContain('基数に分けると並んで焼ける');
-    // GPT's review 2026-10-28: the result no longer tells that the same act sent again goes.
-    expect(first.guard?.text).not.toContain('もう一度出せば送る');
-    expect(first.guard?.text).not.toContain('足して出し直す');
+    expect(first.guard?.text).toContain('A) 鉄鉱石 (160,60,205)');
+    // No iron, coal or open section beside the furnace: nothing to put instead, so the wait goes (with the note), as does an urgent decision and a short wait.
+    forgetFurnaceStands();
     const entry = candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand');
     expect(entry.note).toContain('かまどの焼き上がりまで (158,66,200) の raw_iron×22 はあと約 151 秒');
     expect(entry.guard).toBeUndefined();
-    // Hands that work beside the wait, an urgent decision, and a short wait are never held.
-    forgetFurnaceStands();
-    expect(candidateAct({ hands: ['dig 1,0,0 rel', 'wait 30'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
-    expect(candidateAct({ hands: ['wait 30', 'wait 30'] }, world(151_000), 'furnace-stand', { urgent: true }).guard).toBeUndefined();
-    expect(candidateAct({ hands: ['wait 5'] }, world(151_000), 'furnace-stand').guard).toBeUndefined();
+    expect(candidateAct({ hands: ['wait 30', 'wait 30'] }, withWork, 'furnace-stand', { urgent: true }).guard).toBeUndefined();
+    expect(candidateAct({ hands: ['wait 5'] }, withWork, 'furnace-stand').guard).toBeUndefined();
     expect(V2_STAGES.prep).toContain('焼き待ち・夜待ちの間は、焼き上がりに頼らない採取・作業台・食料と帰路を進める');
-    expect(V2_ALWAYS).toContain('A wait-only act only for waiting out the night or recovery when nothing else can be done; the why names what is awaited and the reason');
+    expect(V2_ALWAYS).toContain('A wait-only act only when nothing else can be done');
+    expect(V2_ALWAYS).toContain('To sleep, do not wait for the night: put one sleep hand');
   });
 });
 

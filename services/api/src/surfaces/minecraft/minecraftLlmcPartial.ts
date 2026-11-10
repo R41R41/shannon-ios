@@ -3,7 +3,7 @@ import type { ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { toolFailure } from '../../mind/tools/toolRegistryPorts.js';
 import { preflightOfFrame, preflightText, standAfterHands, type PreflightStop } from './minecraftLlmcPreflight.js';
 import { seenReopenStop, smallCoordinateStop, urgentLimitStop, type HandStop } from './minecraftLlmcHandGuards.js';
-import { furnaceStandStop, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
+import { dropWaitBeforeTake, furnaceStandHold, furnaceWaitNote } from './minecraftLlmcFurnaceWait.js';
 import { deadlyGateHold } from './minecraftLlmcDeadlyGates.js';
 import { sleepFirstHold } from './minecraftLlmcSleepHold.js';
 import { tableDescentHold } from './minecraftLlmcTableHold.js';
@@ -61,13 +61,13 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
   if (gate) found.push({ hand: gate.hand, code: 'gate_required', kind: 'portal', line: `手 ${gate.hand} portal: ${gate.line}。` });
   const deadly = deadlyGateHold(input, frame, taskId);
   if (deadly) found.push({ hand: deadly.hand, code: 'gate_required', kind: deadly.kind, line: `手 ${deadly.hand} ${deadly.kind}: ${deadly.line}。` });
-  const counted = countedHolds(input, frame, taskId);
+  const counted = countedHolds(input, frame, taskId, urgent, ownFrom);
   found.push(...counted.map(item => item.held));
   for (const [code, hold] of [['eye_kept', eyeThrowHold(input, frame, taskId)], ['no_suicide', suicideHold(input, frame)]] as const) {
     if (hold) found.push({ hand: hold.hand, code, kind: hold.kind, line: `手 ${hold.hand} ${hold.kind}: ${hold.line}。` });
   }
   for (const stop of [seenReopenStop(input, frame), useReachStop(input, frame), smallCoordinateStop(input, frame), urgentLimitStop(input, urgent, ownFrom),
-    furnaceStandStop(input, frame, taskId, urgent), goStop(input, frame), rangeStop(input, frame)]) {
+    goStop(input, frame), rangeStop(input, frame)]) {
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
   }
   const first = found.reduce<Held | null>((held, next) => !held || next.hand < held.hand ? next : held, null);
@@ -76,13 +76,13 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
 }
 
 /** The holds that count themselves against a bound (the sleep before the night's work, the table before a descent): each counts only when it stops the act. */
-function countedHolds(input: unknown, frame: BodyObservation | null, taskId: string): Array<{ held: Held; commit(): void }> {
+function countedHolds(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, ownFrom = 0): Array<{ held: Held; commit(): void }> {
   const sleep = sleepFirstHold(input, frame, taskId), bare = tableDescentHold(input, frame, taskId), back = deathReturnHold(input, frame, taskId);
-  const dark = nightWaitHold(input, frame, taskId);
+  const dark = nightWaitHold(input, frame, taskId), stand = furnaceStandHold(input, frame, taskId, urgent, ownFrom);
   const held = (code: string, hold: { hand: number; kind: string; line: string; commit(): void }) =>
     ({ held: { hand: hold.hand, code, kind: hold.kind, line: `手 ${hold.hand} ${hold.kind}: ${hold.line}。` }, commit: hold.commit });
   return [...sleep ? [held('sleep_first', sleep)] : [], ...bare ? [held('table_required', bare)] : [], ...back ? [held('death_return', back)] : [],
-    ...dark ? [held('night_dig', dark)] : []];
+    ...dark ? [held('night_dig', dark)] : [], ...stand ? [held('furnace_stand', stand)] : []];
 }
 
 /** 手 1 … k−1 だけの act（他の欄はそのまま）。手が 1 つも残らなければ null（全部止める）。 */
@@ -140,12 +140,22 @@ const say = (line: string): void => { console.info(line); };
  */
 export function heldBeforeSend(urgent: boolean, input: unknown, frame: BodyObservation | null, taskId: string): BeforeSend | null {
   const hold = holdV2(input, frame, taskId, urgent);
-  if (!hold) return null;
-  if ('note' in hold) return { note: hold.note };
+  if (!hold) return withoutTakeTimer(null, input, taskId);
+  if ('note' in hold) return withoutTakeTimer({ note: hold.note }, input, taskId);
   if ('whole' in hold) {
     say(`Shannon Minecraft act held before send task=${taskId} hand=${hold.held.hand} do=${hold.held.kind} code=${hold.held.code}`);
     return { result: toolFailure('refused', hold.whole, { retryable: true }) };
   }
   say(`Shannon Minecraft act held partway task=${taskId} hand=${hold.held.hand} sent=${hold.held.hand - 1} code=${hold.held.code}`);
   return { input: hold.part, tail: hold.tail };
+}
+
+/**
+ * Run 6 (2026-11-11): after the furnace stand's holds, a wait of 10 s or more right before a `furnace take` is taken out of the act (the take needs no timer: the body waits a
+ * short remainder, and says 「まだ」 for a longer one). The act to send is the one without it; the fix is said in the result's note. `ownFrom`: the hands of the items ahead.
+ */
+export function withoutTakeTimer(before: BeforeSend | null, input: unknown, taskId: string, ownFrom = 0): BeforeSend | null {
+  const dropped = dropWaitBeforeTake(input, taskId, ownFrom);
+  if (!dropped) return before;
+  return { ...before, input: dropped.input, note: [before?.note, dropped.note].filter(Boolean).join('\n') };
 }

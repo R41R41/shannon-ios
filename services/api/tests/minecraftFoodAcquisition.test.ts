@@ -61,7 +61,7 @@ describe('food acquisition: compare return and access, not a nearby school of fi
     expect(FOOD_ACQUISITION_KNOWLEDGE).toContain('hostileWithin 10・hpBelow 12');
     expect(FOOD_ACQUISITION_KNOWLEDGE).toContain('囲いへ戻る');
     const prep = stageKnowledge({ body: { state: { dimension: 'overworld' } } })!;
-    expect(prep).toContain('朝待ちと調理・工作・近くの夜の狩り');
+    expect(prep).toContain('sleep 1 手（朝へ飛ぶ。wait で待たない）と調理・工作・近くの夜の狩り');
   });
 
   for (const variant of ['normal', 'urgent', 'compressed'] as Variant[]) {

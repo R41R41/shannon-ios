@@ -30,6 +30,9 @@ export function nightWaitHold(input: unknown, frame: BodyObservation | null, tas
   if (!Array.isArray(hands) || !facts || facts.dimension !== 'overworld' || enemyNear(facts.world)) return null;
   const at = hands.findIndex(raw => objectOf(raw)?.do === 'wait');
   if (at < 0) return null;
+  // Run 6: a wait that names an item of the queue (`dependsOn`) waits for that item's result, not for the night (3 of the 24 result waits were held as night waits).
+  const depends = (input as { dependsOn?: unknown } | null)?.dependsOn;
+  if (Array.isArray(depends) && depends.length) return null;
   const position = objectOf(facts.world.position);
   const feetY = typeof position?.y === 'number' ? Math.floor(position.y) : null;
   const before = hands.slice(0, at);

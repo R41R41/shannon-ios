@@ -175,11 +175,11 @@ export function candidateAct(raw: unknown, frame: BodyObservation | null, taskId
   const fixes = [...prepared.fixes, ...checked.fixes];
   const held = heldBeforeSend(options.urgent === true, checked.input, frame, taskId);
   if (held?.result) return { input: checked.input, fixes, problem: null, guard: { stopped: true, hand: 1, text: held.result.text } };
-  if (held?.input) {
+  if (held?.input && held.tail !== undefined) {
     const sent = (held.input as { hands: unknown[] }).hands.length;
     return { input: held.input, fixes, problem: null, guard: { stopped: false, hand: sent + 1, sentHands: sent, text: held.tail ?? '' } };
   }
-  return { input: checked.input, fixes, problem: null, ...held?.note ? { note: held.note } : {} };
+  return { input: held?.input ?? checked.input, fixes, problem: null, ...held?.note ? { note: held.note } : {} };
 }
 
 /**

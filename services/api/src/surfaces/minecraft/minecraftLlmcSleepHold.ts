@@ -16,9 +16,15 @@ export const SLEEP_HOLDS = 3;
 export const SLEEP_WINDOW_MS = 10 * 60_000;
 const WORK: ReadonlySet<string> = new Set(['mine', 'make', 'craft', 'smelt', 'furnace', 'obsidian', 'fill', 'chest']);
 const holds = new Map<string, number[]>();
+/**
+ * Run 6 (2026-11-11): a `sleep` hand sent by day is a booking the body keeps (it lies down before the first hand once it is dark), so the night's first work hand
+ * of a task that booked is not held for "sleep first": the body does that itself. The booking is remembered for `BOOKING_MS` (the body drops it after 25 minutes).
+ */
+const BOOKING_MS = 15 * 60_000;
+const bookings = new Map<string, number>();
 
 /** For tests: no task has held a sleep. */
-export function forgetSleepHolds(): void { holds.clear(); }
+export function forgetSleepHolds(): void { holds.clear(); bookings.clear(); }
 
 const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
 const sleeps = (hand: Record<string, unknown>): boolean => hand.do === 'sleep' || hand.do === 'use'
@@ -39,12 +45,17 @@ export function sleepFirstHold(input: unknown, frame: BodyObservation | null, ta
   const hands = (input as { hands?: unknown } | null)?.hands;
   const facts = readinessOf(frame);
   if (!Array.isArray(hands) || !facts || facts.dimension !== 'overworld') return null;
-  if (!canSleepNow(facts.world) || enemyNear(facts.world)) return null;
+  const clock = now();
+  if (!canSleepNow(facts.world)) {
+    if (hands.some(raw => objectOf(raw)?.do === 'sleep')) { bookings.set(taskId, clock); if (bookings.size > 32) bookings.delete(bookings.keys().next().value as string); }
+    return null;
+  }
+  if (enemyNear(facts.world) || clock - (bookings.get(taskId) ?? -Infinity) < BOOKING_MS) return null;
   const bed = [...facts.counts].find(([name, count]) => BED.test(name) && count > 0)?.[0];
   if (!bed) return null;
   const at = hands.findIndex(raw => WORK.has(String(objectOf(raw)?.do ?? '')));
   if (at < 0 || hands.slice(0, at).some(raw => sleeps(objectOf(raw) ?? {}))) return null;
-  const clock = now(), recent = (holds.get(taskId) ?? []).filter(when => clock - when < SLEEP_WINDOW_MS);
+  const recent = (holds.get(taskId) ?? []).filter(when => clock - when < SLEEP_WINDOW_MS);
   if (recent.length >= SLEEP_HOLDS) return null;
   const when = sleepWhen(facts.world);
   const effect = thunderstorm(facts.world) ? '雷雨が止む' : '夜が飛び、朝になる';

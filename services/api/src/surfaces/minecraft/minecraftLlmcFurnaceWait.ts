@@ -1,5 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import type { HandStop } from './minecraftLlmcHandGuards.js';
+import { holdChoices, letteredChoices } from './minecraftFurnaceMeanwhile.js';
+import { readinessOf } from './minecraftLlmcReadiness.js';
 
 /**
  * mb-llmc v2 (実走37: 鉄 22 個を 1 つのかまどに入れ、wait×6 で 175 秒立って待った。他の手は何も入れなかった): an act with a long wait while a furnace works
@@ -30,7 +31,7 @@ function working(frame: BodyObservation | null): Array<{ at: string; what: strin
  * A line is a reading of the frame's jobs (`remainingEstimateMs`, `expects`, `from`), made again every decision. Null when the jobs are not a list the body wrote.
  * The instruction is said once, in the first line (not once per furnace); the furnace lines are short, soonest first, 4 at most with the rest counted.
  */
-const LEDGER_HEAD = 'かまど帳: 焼く間は待たずに別の作業（かまどの近くの作業が良い）の act を足す。時間が来たら「furnace X,Y,Z take」の act を足す（遠くても体が歩く。離れ切る前に取る）';
+const LEDGER_HEAD = 'かまど帳: 焼く間は待たずに別の作業（かまどの近くの作業が良い。手は planNow の A/B/C）の act を足す。「furnace X,Y,Z take」の act は早めに足してもよい（残りが 15 秒以内なら体が待って取る。長ければ「まだ」と返る）。離れ切る前に取る';
 const LEDGER_MAX = 4;
 export function furnaceLedgerLines(jobs: unknown): string[] | null {
   if (!Array.isArray(jobs) || !jobs.length) return null;
@@ -66,39 +67,73 @@ export function furnaceWaitNote(input: unknown, frame: BodyObservation | null): 
 }
 
 /**
- * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: 4 stands at the furnace, 244 s of 1,340, each time 6〜7 pieces in one furnace; the note above was in
- * the result every time and the next act was wait only, four times of four; one of them wrote 「焼き上がりまで待ちつつ、足元の鉄を掘る」 and sent wait 30 + wait 30):
- * an act whose hands are only waits (and the furnace's own, equip, look, eat) that add up to `STAND_REFUSE_SECONDS` while a furnace works is not sent the first
- * time, and the fact comes back at once. The same act again, straight after, is sent: waiting may be the best there is. Not in an urgent decision.
- * GPT's review 2026-10-28: the result says the fact only (not sent, the furnace's seconds); it no longer tells that the same act sent again goes
- * (a mechanism that is unchanged), and the rule for a wait is in the instructions (「体を止めない」).
- * Pieces to smelt are split over more furnaces (a furnace takes 10 s a piece): the fact says so when one furnace holds `SPLIT_PIECES` or more.
+ * run 26 (2026-10-26, 「エンドラを討伐して」, Sonnet: 4 stands at the furnace, 244 s of 1,340) put a first, one-time refusal on a stand of waits; run 6 (2026-11-11) showed it
+ * fires once in seven: it looked only at acts of wait/furnace/equip/look/eat hands (a `mine` in the act or ahead of it made it "work"), it read the new act joined to the
+ * ones ahead, it refused once only (the re-send went through, and the head answered the refusal with a LONGER wait, 30 s to 90 s), and a put in the same act was
+ * invisible. It is a hold now (like `nightWaitHold`): any `wait` of 10 s or more of the NEW item, while a furnace works (the frame's jobs) or a `furnace put` / `smelt`
+ * comes before it (this act or the ones ahead), is held at that hand (the hands before it are sent), up to `FURNACE_STAND_HOLDS` times in `FURNACE_STAND_WINDOW_MS`
+ * for a task; the line carries the choices of `minecraftFurnaceMeanwhile` as hands. With no choice (no iron or coal in reach, no open section that does not need the
+ * furnace's output) nothing is held: waiting is then the best there is. Not in an urgent decision. After the holds, a wait right before a `furnace take` is taken out
+ * (`dropWaitBeforeTake`; the body waits a remainder of 15 s or less by itself and says 「まだ」 for a longer one, and `furnace.done` wakes the head).
+ * Pieces to smelt are split over more furnaces (a furnace takes 10 s a piece): the line says so when one furnace holds `SPLIT_PIECES` or more.
  */
-export const STAND_REFUSE_SECONDS = 20;
+export const FURNACE_STAND_HOLDS = 3;
+export const FURNACE_STAND_WINDOW_MS = 10 * 60_000;
+/** A run of waits (the new item's own) adding up to this is a stand too, even if no one of them is `LONG_WAIT_SECONDS`. */
+export const STAND_TOTAL_SECONDS = 20;
 const SPLIT_PIECES = 5;
-const STAND_KINDS = new Set(['wait', 'furnace', 'equip', 'look', 'eat']);
-const refused = new Map<string, number>();
-export function furnaceStandStop(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): HandStop | null {
+const stands = new Map<string, number[]>();
+const recentStands = (taskId: string, now: number): number[] => (stands.get(taskId) ?? []).filter(when => now - when < FURNACE_STAND_WINDOW_MS);
+const isPut = (hand: Rec | null): boolean => !!hand && (hand.do === 'smelt' || (hand.do === 'furnace' && hand.op !== 'take' && (hand.op === 'put' || typeof hand.item === 'string')));
+const waitSeconds = (hand: Rec | null): number => hand?.do === 'wait' ? num(hand.seconds) ?? 1 : 0;
+
+/**
+ * The hold (the hand, 1-based in the act as given, its kind and its line) of a stand beside a furnace, or null; `commit` counts it when it stops the act.
+ * `ownFrom`: the number of hands ahead (the items ahead of the new one in the queue): only the hands from there on are the new item's.
+ */
+export function furnaceStandHold(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, ownFrom = 0, now: () => number = Date.now):
+  { hand: number; kind: string; line: string; commit(): void } | null {
+  if (urgent) return null;
   const hands = Array.isArray(rec(input)?.hands) ? (rec(input)!.hands as unknown[]).map(rec) : [];
-  const total = hands.reduce((sum, hand) => sum + (hand?.do === 'wait' ? num(hand.seconds) ?? 0 : 0), 0);
+  const own = hands.slice(ownFrom);
+  const total = own.reduce((sum, hand) => sum + waitSeconds(hand), 0);
+  const at = hands.findIndex((hand, index) => index >= ownFrom && waitSeconds(hand) >= LONG_WAIT_SECONDS);
+  const index = at >= 0 ? at : total >= STAND_TOTAL_SECONDS ? hands.findIndex((hand, i) => i >= ownFrom && waitSeconds(hand) > 0) : -1;
+  if (index < 0) return null;
   const furnaces = working(frame);
-  const standing = hands.length > 0 && hands.every(hand => hand !== null && STAND_KINDS.has(String(hand.do)));
-  if (urgent || !standing || total < STAND_REFUSE_SECONDS || !furnaces.length) {
-    refused.delete(taskId);
-    return null;
-  }
-  if (refused.has(taskId)) {
-    refused.delete(taskId);
-    return null;
-  }
-  refused.set(taskId, 1);
-  if (refused.size > 32) refused.delete(refused.keys().next().value as string);
-  const first = hands.findIndex(hand => hand?.do === 'wait') + 1;
-  const shown = furnaces.slice(0, 2).map(item => `${item.at} の ${item.what} はあと約 ${item.left} 秒`).join('、');
+  const putBefore = hands.slice(0, index).some(isPut);
+  if (!furnaces.length && !putBefore) return null;
+  const facts = readinessOf(frame);
+  if (!facts) return null;
+  const choices = holdChoices(facts.world, facts.counts, taskId);
+  if (!choices.length) return null;
+  const clock = now(), recent = recentStands(taskId, clock);
+  if (recent.length >= FURNACE_STAND_HOLDS) return null;
+  const left = furnaces[0];
+  const seconds = Math.round(hands.slice(index).reduce((sum, hand) => sum + waitSeconds(hand), 0));
   const many = furnaces.find(item => item.count >= SPLIT_PIECES);
-  const split = many ? `。${many.what} を1基で焼くと ${many.count * 10} 秒かかる（1個 10 秒。基数に分けると並んで焼ける）` : '';
-  return { hand: Math.max(1, first), kind: 'wait', code: 'furnace_stand',
-    line: `立って待つだけの手（合わせて ${Math.round(total)} 秒）は送っていない（手は動いていない）。かまどの焼き上がりまで ${shown}${split}` };
+  const split = many ? `（${many.what} を1基で焼くと ${many.count * 10} 秒かかる。1個 10 秒。基数に分けると並んで焼ける）` : '';
+  const line = `${left ? `かまど ${left.at} の ${left.what} はあと約 ${left.left} 秒` : '焼いている最中'}${split}。立って待つ wait（${seconds} 秒）は送らない`
+    + `（${recent.length + 1}/${FURNACE_STAND_HOLDS} 回目。${FURNACE_STAND_HOLDS} 回止めた後は通す）: 立って待つと焼く間の ${seconds} 秒がそのまま止まる（実走 6 は 1564 秒中 270 秒）。`
+    + `take は待たなくてよい（早めに足しても、残りが短ければ体が待って取り、長ければ「まだ」と返る）。次の 1 手はどれか: ${letteredChoices(choices)}`;
+  return { hand: index + 1, kind: 'wait', line, commit: () => { stands.set(taskId, [...recent, clock]); if (stands.size > 32) stands.delete(stands.keys().next().value as string); } };
 }
-/** For tests: no task has been refused a stand. */
-export function forgetFurnaceStands(): void { refused.clear(); }
+
+/**
+ * After the holds (`FURNACE_STAND_HOLDS` of them) a wait of 10 s or more right before a `furnace take` (the new item's own hands) is taken out: it was the head's timer for the
+ * take, and the take needs none. The act goes without it, and the result says so (a fix the head made, said first). Null: nothing to take out, holds not used up,
+ * or an act whose hands name each other (`dependsOn` counts hands: taking one out would move them).
+ */
+export function dropWaitBeforeTake(input: unknown, taskId: string, ownFrom = 0, now: () => number = Date.now): { input: unknown; note: string } | null {
+  const act = rec(input);
+  const hands = Array.isArray(act?.hands) ? (act!.hands as unknown[]).map(rec) : [];
+  if (!act || hands.length < 2 || hands.some(hand => Array.isArray(hand?.dependsOn))) return null;
+  if (recentStands(taskId, now()).length < FURNACE_STAND_HOLDS) return null;
+  const cut = hands.flatMap((hand, index) => index >= ownFrom && waitSeconds(hand) >= LONG_WAIT_SECONDS && hands[index + 1]?.do === 'furnace' && hands[index + 1]?.op === 'take' ? [index] : []);
+  if (!cut.length) return null;
+  const kept = (act.hands as unknown[]).filter((_hand, index) => !cut.includes(index));
+  const words = cut.map(index => `手 ${index + 1} の wait ${Math.round(waitSeconds(hands[index]))} 秒`).join('・');
+  return { input: { ...act, hands: kept }, note: `（頭が形を直して送った: ${words}は take の前だったので外した。take は早くても、残りが短ければ体が待って取り、長ければ「まだ」と返り、焼き上がりの知らせで起こす）` };
+}
+/** For tests: no task has been held at a stand. */
+export function forgetFurnaceStands(): void { stands.clear(); }

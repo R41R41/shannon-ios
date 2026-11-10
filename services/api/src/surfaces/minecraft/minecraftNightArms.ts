@@ -125,7 +125,7 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
     return tick < BED_FROM ? null
       : `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）が、8m 内に敵がいる間は寝られない（壁の向こうでも断られる）。敵が届かず 8m より離れた所なら寝られる`;
   }
-  if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。寝れば夜が飛び、朝になる${pearlNightWord(counts, pearlNow)}`;
+  if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。待たずに sleep の手を 1 つ積めば、夜になり次第（10 秒以内なら体が待って）寝る。寝れば夜が飛び、朝になる${pearlNightWord(counts, pearlNow)}`;
   return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。寝れば夜が飛び、朝になる（近くに敵がいる間は寝られない）。地下でも寝られる${pearlNightWord(counts, pearlNow)}`;
 }
 
@@ -143,7 +143,7 @@ export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<s
   if (![...counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
   const left = BED_FROM - tick;
   return `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない`
-    + `（ネザーまで ${NETHER_MINUTES} 分の目標の ${Math.round(100 * left / NETHER_TICKS)}%）。今の節を進め、夜になった所で sleep する（ベッドは持って行けて、地下でも寝られる）${pearlNightWord(counts, pearlNow)}`;
+    + `（ネザーまで ${NETHER_MINUTES} 分の目標の ${Math.round(100 * left / NETHER_TICKS)}%）。今の節を進め、sleep を作業の act の先頭か末尾に 1 手入れる（夜になり次第、体が次の手の前で寝る。待たなくてよい。ベッドは持って行けて、地下でも寝られる）${pearlNightWord(counts, pearlNow)}`;
 }
 
 /**

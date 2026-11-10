@@ -4,6 +4,7 @@ import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { doneFacts, parseDoneWhen, prepUnmetFacts, undergroundInOverworld } from './minecraftPlanDone.js';
 import { dayBedLine, nightChoiceLine } from './minecraftNightArms.js';
+import { furnaceMeanwhileLine } from './minecraftFurnaceMeanwhile.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
 import { isDragonPlan, reachedMilestoneNames } from './minecraftLlmcRoad.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
@@ -171,6 +172,9 @@ export function readinessParts(
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
     facts.food) : null;
   const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl')) : null);
+  // Run 6 (2026-11-11): while a furnace works, the hands to take instead of standing (the iron and coal in reach, the plan's next section that does not need the furnace's output),
+  // said first like the night's choices (the replay of the night's line moved 3/6 to 6/6); the same choices are in the hold of a long wait (`furnaceStandHold`).
+  const meanwhile = planNow ? furnaceMeanwhileLine(facts.world, facts.counts, nodes, display?.current ?? tree?.current ?? null, taskId) : null;
   // end1109o06 (meta 13:10, the fifth first night lost) and o08 (the village's beds, meta 14:58): at dusk with the now an errand on the surface, it waits for the morning and the night's
   // choice (the sealed shaft down to the iron) goes first; the plan is not changed, its now is said as the morning's.
   const current = nodes.find(node => node.id === (display?.current ?? tree?.current));
@@ -180,8 +184,8 @@ export function readinessParts(
     && !nodes.some(kid => kid.parentId === node.id && kid.state !== 'done') && /鉄(?!ゴーレム)|ダイヤ|iron|diamond/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)) : undefined;
   const onceFacts = taskId ? (preparationFacts(taskId, tree, observation), staleNodeFacts(taskId, tree, observation)) : undefined;
   return {
-    ...(planNow ? { planNow: huntWaits ? `${night}。今の節 ${planNow} は地上の用事なので朝へ回す（夜の地上は骸骨・クリーパー・ゾンビが多い。朝になったら続ける）。${underNode ? `夜の間は地下の節 [${underNode.id}] ${underNode.title} を進める（地下の暗さは昼も夜も同じ）` : '夜の間は地下で鉱石を掘る'}`
-      : [night, first].filter(Boolean).length ? `${[night, first].filter(Boolean).join('。')}。その後に今の節 ${planNow}` : planNow } : {}),
+    ...(planNow ? { planNow: huntWaits ? `${[meanwhile, night].filter(Boolean).join('。')}。今の節 ${planNow} は地上の用事なので朝へ回す（夜の地上は骸骨・クリーパー・ゾンビが多い。朝になったら続ける）。${underNode ? `夜の間は地下の節 [${underNode.id}] ${underNode.title} を進める（地下の暗さは昼も夜も同じ）` : '夜の間は地下で鉱石を掘る'}`
+      : [meanwhile, night, first].filter(Boolean).length ? `${[meanwhile, night, first].filter(Boolean).join('。')}。その後に今の節 ${planNow}` : planNow } : {}),
     ...(shortage ? { shortage } : {}),
     ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes), route),
     ...(planFacts ? { planFacts } : {}),

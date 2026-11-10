@@ -311,7 +311,7 @@ describe('the review of 10: words restored in the hand and dictionary', () => {
   it('says in mc.act that a bed works at night or in a thunderstorm only, and the units of stopIf', () => {
     // The sleep hand (S4's body of 11/5) took the bed's use: night or thunderstorm only, an enemy near refuses it.
     expect(SHORT_ACT_DESCRIPTION).toContain('sleep [ベッド] [seconds=N]');
-    expect(SHORT_ACT_DESCRIPTION).toContain('夜か雷雨の時だけ。8m（上下 5）に敵がいると寝られない');
+    expect(SHORT_ACT_DESCRIPTION).toContain('夜か雷雨なら今寝る。夜まで 10 秒以内なら体が待って寝る。それより前（昼）は寝る予約で、夜になり次第、体が次の手の前で寝る（wait で夜を待たない）。8m（上下 5）に敵がいると寝られない');
     expect(SHORT_ACT_DESCRIPTION).toContain('hostileWithin は敵までの m、hpBelow は体力 0〜20');
   });
   it('gives the unit of health and says which thrown items are not shown', () => {

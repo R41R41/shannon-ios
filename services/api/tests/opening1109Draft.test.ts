@@ -72,7 +72,9 @@ describe('end1109o04 (opening lane): by day with a bed, the day is the plan\'s a
     expect(line).toContain('ベッドを持っている');
     // the goal's own ruler (the night said a fixed 30 minutes until 11/11)
     expect(line).toMatch(new RegExp(`${Math.round(NETHER_BY_SECONDS / 60)} 分の目標の \\d+%`, 'u'));
-    expect(line).toContain('夜になった所で sleep');
+    // run 6 (11/11): not "sleep where it gets dark" (a wait or a retry) but one sleep hand in the work act: the body lies down at dusk.
+    expect(line).toContain('sleep を作業の act の先頭か末尾に 1 手入れる');
+    expect(line).toContain('夜になり次第、体が次の手の前で寝る。待たなくてよい');
     expect(dayBedLine({ timeOfDay: 11_800 }, pack({ white_bed: 1 }), 'overworld')).toBeNull();
     expect(dayBedLine({ timeOfDay: 18_000 }, pack({ white_bed: 1 }), 'overworld')).toBeNull();
     expect(dayBedLine({ timeOfDay: 1000 }, pack({ stone_pickaxe: 1 }), 'overworld')).toBeNull();
