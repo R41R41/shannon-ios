@@ -9,6 +9,7 @@ import { createRoutePlanning, forgetRoutes, liveRoute } from '../src/surfaces/mi
 import { minecraftEnemyInSight, minecraftFrameNeeds } from '../src/surfaces/minecraft/minecraftWorkingArbiter.js';
 import { dropsAdvice } from '../src/surfaces/minecraft/minecraftDropsAdvice.js';
 import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
+import { V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { ProcedureMemory } from '@shannon/mind';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { AT, SimBody, setup, type Input } from './support/minecraftProcedureSim.js';
@@ -385,5 +386,13 @@ describe('the drops of a death, weighed against the walk', () => {
     expect(advice(world(['stone_axe×1', 'ender_pearl×3']))).toContain('戻る値打ちが高い');
     expect(advice(world(['diamond_pickaxe×1']))).toContain('diamond_pickaxeは作り直しに数十分かかる');
     expect(advice(world(['stone_axe×1', 'oak_planks×8']))).toContain('その場で作り直すほうが早い');
+  });
+  // The row above is the old path's (the skill pointers' reminders); the LLMC v2 head reads the body's last-death row and its stage knowledge.
+  it('says the same in the knowledge the v2 head reads after a death (the overworld, where she respawns)', () => {
+    const prep = V2_STAGES.prep;
+    expect(prep).toContain('死んだ所の約 160m 以内にいる間だけ減り、離れている間は減らない');
+    expect(prep).toContain('アイ・パール・ロッド・ダイヤのツルハシは作り直しに数十分かかる');
+    expect(prep).toContain('「ほかN種」に隠れていることがある');
+    expect(prep).toContain('溶岩の中・虚空で死んだ時は物も燃える・消えるので当てにしない');
   });
 });
