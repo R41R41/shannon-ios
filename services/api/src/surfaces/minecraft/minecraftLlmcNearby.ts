@@ -9,7 +9,7 @@ import type { P } from './minecraftLlmcWalkRules.js';
  */
 export type NearbyPurpose = 'wood' | 'food_animal' | 'food_village' | 'ore' | 'bed' | 'water';
 export interface NearbySite { x: number; y: number; z: number; note?: string }
-export interface NearbyResource { purpose: NearbyPurpose; kind: string; count: number; range: number; sites: NearbySite[] }
+export interface NearbyResource { purpose: NearbyPurpose; kind: string; count: number; range: number; sites: NearbySite[]; trees?: number }
 
 const LABEL: Readonly<Record<NearbyPurpose, readonly [string, string]>> = {
   wood: ['木', '本'], food_animal: ['食料（動物）', '体'], food_village: ['食料（村）', '個'], ore: ['鉱石（空気に面した物）', '個'], bed: ['寝床', '台'], water: ['水', 'マス'],
@@ -31,7 +31,8 @@ export function nearbyResourcesOf(raw: unknown): NearbyResource[] {
       const [x, y, z] = [finite(at?.x), finite(at?.y), finite(at?.z)];
       return at && x !== null && y !== null && z !== null ? [{ x, y, z, ...typeof at.note === 'string' && at.note ? { note: at.note.slice(0, 40) } : {} }] : [];
     });
-    return [{ purpose: entry.purpose as NearbyPurpose, kind: entry.kind.slice(0, 40), count, range, sites }];
+    const trees = finite(entry.trees);
+    return [{ purpose: entry.purpose as NearbyPurpose, kind: entry.kind.slice(0, 40), count, range, sites, ...(trees !== null && trees >= 0 ? { trees } : {}) }];
   });
 }
 

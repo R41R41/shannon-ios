@@ -55,7 +55,7 @@ const exactPos = (value: unknown) => {
 
 /** The words a model may use for a kind (the prototype's names, mc.view's modes). */
 const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
-  path: 'path', look_path: 'path', route: 'path', way: 'path', walk: 'path',
+  path: 'path', look_path: 'path', route: 'route', plan_route: 'route', route_plan: 'route', way: 'path', walk: 'path',
   sight: 'sight', look_reach: 'sight', reach: 'sight', see: 'sight', los: 'sight',
   column: 'column', look_section: 'column', section: 'column', vertical: 'column', drop: 'column',
   around: 'around', look_creatures: 'around', creatures: 'around', entities: 'around', mobs: 'around', nearby: 'around',
@@ -67,7 +67,7 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
 };
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
-  path: ['to', 'from'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
+  path: ['to', 'from'], route: ['to', 'from', 'range'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
   scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], lane: ['spawner', 'from'], den: [], roofsite: ['radius'],
   bedsite: ['target'],
 };
@@ -118,7 +118,7 @@ export function prepareProbeInput(input: unknown, context: ProbeContext): { inpu
   const problem = KIND_PREPARE[kind]?.({ fields, context, fixes, out }) ?? null;
   if (problem) return { input: null, fixes, problem };
   prepareRadius(kind, fields, fixes, out);
-  const taken = new Set(['kind', ...KIND_FIELDS[kind], ...(kind === 'path' || kind === 'sight' ? ['at'] : [])]);
+  const taken = new Set(['kind', ...KIND_FIELDS[kind], ...(kind === 'path' || kind === 'route' || kind === 'sight' ? ['at'] : [])]);
   const extra = Object.keys(fields).filter(key => !taken.has(key));
   if (extra.length) fixes.push(`${kind} に使わない欄 ${extra.join('・')} を外した`);
   return { input: out, fixes, problem: null };
@@ -158,13 +158,15 @@ const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => stri
     if (retreat) work.out.retreat = retreat;
     return null;
   },
-  path(work) {
-    const to = position(work, 'to') ?? position(work, 'at') ?? (typeof work.fields.target === 'string' ? readPos(work.fields.target) : null);
-    if (!to) return 'path には to {x,y,z} が要る';
-    if (work.fields.to === undefined) work.fixes.push('行き先を to にした');
-    work.out.to = to;
-    const from = position(work, 'from');
-    if (from) work.out.from = from;
+  path: work => preparePath(work, 'path'),
+  route(work) {
+    const problem = preparePath(work, 'route');
+    if (problem) return problem;
+    const range = finite(work.fields.range);
+    if (range !== null) {
+      work.out.range = clamp(Math.round(range), 0, 32);
+      if (work.out.range !== work.fields.range) work.fixes.push(`range を ${work.out.range} にした`);
+    }
     return null;
   },
   sight(work) {
@@ -186,6 +188,16 @@ const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => stri
     return null;
   },
 };
+/** A path's or a route's `to` (and `from`): the place, as whole blocks. */
+function preparePath(work: Preparing, kind: 'path' | 'route'): string | null {
+  const to = position(work, 'to') ?? position(work, 'at') ?? (typeof work.fields.target === 'string' ? readPos(work.fields.target) : null);
+  if (!to) return `${kind} には to {x,y,z} が要る`;
+  if (work.fields.to === undefined) work.fixes.push('行き先を to にした');
+  work.out.to = to;
+  const from = position(work, 'from');
+  if (from) work.out.from = from;
+  return null;
+}
 /** The frames' centre: both x and z, or neither (the body takes her feet); one alone is completed from her feet. */
 function prepareFrames(work: Preparing): string | null {
   const x = finite(work.fields.x), z = finite(work.fields.z), feet = work.context.feet;
@@ -267,6 +279,7 @@ const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null
   bedsite: input => `bedsite→${input.target ?? '?'}`,
   worksite: input => `worksite→${typeof input.target === 'object' ? posText(input.target) : '?'} 戻り${input.retreat ? posText(input.retreat) : '未指定'}`,
   path: input => `path→${input.to ? posText(input.to) : '?'}`,
+  route: input => `route→${input.to ? posText(input.to) : '?'}`,
   sight: input => `sight→${typeof input.target === 'string' ? input.target : input.target ? posText(input.target) : '?'}`,
   column: (input, feet) => {
     const own = feet && Math.floor(feet.x) === input.x && Math.floor(feet.z) === input.z;
@@ -302,7 +315,7 @@ export function probeAnswerText(result: string | undefined, live: boolean): stri
     const rest = Object.keys(fields).length ? JSON.stringify(fields) : '';
     return rest ? `${text}\n${rest.length > LLMC_PROBE.toolFieldChars ? `${rest.slice(0, LLMC_PROBE.toolFieldChars)}…（後略）` : rest}` : text;
   }
-  const extra = read.kind === 'path' ? pathExtras(fields, text) : read.kind === 'sight' ? sightExtras(fields, text) : [];
+  const extra = read.kind === 'path' || read.kind === 'route' ? pathExtras(fields, text) : read.kind === 'sight' ? sightExtras(fields, text) : [];
   return [text, ...extra].join(' ／ ');
 }
 /** A path's points (for walk's path), where to stand near the target and the nearest point it reaches, when the text lacks them. */

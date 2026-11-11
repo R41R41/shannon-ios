@@ -73,6 +73,7 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
     + 'X,Y,Z は溶岩の源のマス（地図の L、1〜24 マス。体は探さない）。'
     + '同じ高さでつながった源は 1 回の注水で面を固め、ダイヤのツルハシで続けて掘って拾い、水を汲み戻す。'
     + 'count（省略時は座標の数）まで、seconds は 5〜300（既定 90）。'
+    + '真上や横に自分で固めた黒曜石があれば体が続けて掘る。at は溶岩源 1〜数個でよい。'
     + ("立てない時の立ち直しは体。足場は place= の物。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: " +
 "no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。")
   ]),

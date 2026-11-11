@@ -10,16 +10,18 @@ export const MC_PROBE_SKILL = 'probe' as const;
 export const MC_PROBE_TOOL = `mc.${MC_PROBE_SKILL}` as const;
 // roofsite: S6's body fb180c10 (11/5), where an enderman roof can be built, by the endermen whose eyes are seen from there.
 export const PROBE_KINDS = [
-  'path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp', 'lane', 'den', 'roofsite', 'bedsite',
+  'path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp', 'lane', 'den', 'roofsite', 'bedsite', 'route',
 ] as const;
 export type ProbeKind = typeof PROBE_KINDS[number];
 export interface ProbeInput {
   kind: ProbeKind;
-  /** path: where to go. */
+  /** path, route: where to go. */
   to?: ActPos;
   /** worksite: explicit return destination, evaluated independently. */
   retreat?: ActPos;
-  /** path, sight, lane: from where (default her feet). */
+  /** route: how near is near enough (0–32, default 0: the cell itself). */
+  range?: number;
+  /** path, route, sight, lane: from where (default her feet). */
   from?: ActPos;
   /** lane: the spawner (default the nearest loaded Nether spawner). */
   spawner?: ActPos;
@@ -66,6 +68,7 @@ export function readProbeResult(text: string | undefined): ProbeResult | { text:
 export const PROBE_DESCRIPTION = [
   'bedsite(target:#竜ID): 現在のphase 2の進入に対するベッド配置候補を読む。立場・支持と施工順・足側/枕側・必要黒曜石と実在庫を返す。'
     + '体は動かず施工しない。初回は観測不足を返す場合がある。候補は同じ接続・生命・進入だけの観測で、安全の保証ではない。選択と施工は頭が行い、bed_burstで起爆前に再確認する。',
+  'route(to, from, range: 掘る・置くを混ぜた最短の道の見積り。歩く・掘る・置く数と秒、道の点。水源・溶岩は避ける。着けない時は行ける所まで。見積りだけで動かない): 長い道は go の前にこれで数を読む。',
   '体の周りを調べる（読むだけ・速い・体は動かない）。詰まった時・驚いた時に、手を変える前に事実を確かめる。答えは危ない事実が先。',
   'kind と引数: path(to, from: 掘らず置かずに歩いて行けるか。行けない時は、行けない所とその理由（落差 n・壁・水深 n・溶岩・すき間）と、'
     + 'walk の path に使える点・的の近くに立てる場所) / sight(target: 座標か "#id"、from: 見えるか・4.5m で届くか・間のブロック) / '
@@ -97,6 +100,7 @@ export const PROBE_INPUT_SCHEMA = Object.freeze({
     at: pos('sight の的のブロック、history の場所'),
     x: intField(-30_000_000, 30_000_000), z: intField(-30_000_000, 30_000_000),
     yFrom: intField(-64, 320), yTo: intField(-64, 320),
+    range: intField(0, 32),
     radius: intField(1, 128),
   },
 });

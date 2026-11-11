@@ -149,3 +149,32 @@ describe('stock:food', () => {
     expect(foodNearOf(undefined)).toBeNull();
   });
 });
+
+describe('run 7: probe kind=route, the logs near from the nearby count alone, the obsidian page', () => {
+  it('route is a kind of its own (not path) with to, from and range kept within 0..32', async () => {
+    const { prepareProbeInput, probeAnswerText, probeLabel } = await import('../src/surfaces/minecraft/minecraftLlmcProbeInput.js');
+    const { PROBE_KINDS } = await import('../src/contracts/minecraftProbeContract.js');
+    expect(PROBE_KINDS).toContain('route');
+    const made = prepareProbeInput({ kind: 'route', to: { x: 10, y: 64, z: -3 }, range: 99, color: 1 }, { feet: null, creatures: [] });
+    expect(made.problem).toBeNull();
+    expect(made.input).toEqual({ kind: 'route', to: { x: 10, y: 64, z: -3 }, range: 32 });
+    expect(made.fixes.join('／')).toContain('range を 32');
+    expect(prepareProbeInput({ kind: 'route' }, { feet: null, creatures: [] }).problem).toContain('route には to');
+    expect(prepareProbeInput({ kind: 'walk', to: { x: 1, y: 2, z: 3 } }, { feet: null, creatures: [] }).input?.kind).toBe('path');
+    expect(probeLabel(made.input!)).toBe('route→(10,64,-3)');
+    const answer = JSON.stringify({ v: 1, kind: 'route', text: '(10,64,-3) へ 歩き 12・掘り 3・置き 0、約 9 秒', status: 'ok', points: [{ x: 1, y: 64, z: 0 }, { x: 10, y: 64, z: -3 }] });
+    expect(probeAnswerText(answer, true)).toContain('道の点');
+  });
+  it('the logs near are read from the nearby count when the body sends no woodNear', () => {
+    const wood = { purpose: 'wood', kind: 'oak_log', count: 38, range: 48, trees: 6, sites: [] };
+    const f = doneFacts(frame({ inventory: items([['oak_log', 4]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: [wood] }))!;
+    expect(doneStatusWords('stock:wood', f)).toContain('近くに原木 38 本（木 6 本・48m 内）');
+  });
+  it('the obsidian page tells that the body goes on digging what it hardened (one sentence, within 120 characters)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(new URL('../src/contracts/minecraftActShortContract.ts', import.meta.url), 'utf8');
+    const sentence = '真上や横に自分で固めた黒曜石があれば体が続けて掘る。at は溶岩源 1〜数個でよい。';
+    expect(source).toContain(sentence);
+    expect(sentence.length).toBeLessThanOrEqual(120);
+  });
+});

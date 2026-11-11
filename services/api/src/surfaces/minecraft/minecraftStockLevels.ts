@@ -26,6 +26,15 @@ export function woodNearOf(raw: unknown): WoodNear | null {
 }
 
 /**
+ * The logs near her from the nearby count's wood entry (`nearbyResources`), for a body that sends no `woodNear`: the one count the live state reads, so the
+ * body need not send the same logs twice. The entry has no trees field in an older body: the trees are then the sites it names.
+ */
+export function woodNearFromResources(raw: unknown): WoodNear | null {
+  const wood = nearbyResourcesOf(raw).find(item => item.purpose === 'wood');
+  return wood ? { logs: Math.max(0, wood.count), trees: wood.trees ?? wood.sites.length, withinM: wood.range } : null;
+}
+
+/**
  * Whether the wood is enough to go on: at the safe amount, or at the min with no more near enough to reach it (the logs near are fewer than the
  * gap). A frame without the count of the logs near is judged by the min.
  */
