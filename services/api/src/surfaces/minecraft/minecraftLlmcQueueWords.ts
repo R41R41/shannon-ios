@@ -38,7 +38,7 @@ export function resultWaitWords(ref: string | null,
   const lead = 'wait は積まなかった（体には何も足していない）。';
   if (!state.ended) {
     const seconds = Math.max(1, Math.round(state.left / 1000));
-    return `${lead}${ref ?? '走っている項目'} はまだ走っている（あと約 ${seconds} 秒・列の空き ${Math.max(0, state.room)} 件）。`
+    return `${lead}${ref ?? '走っている項目'} はまだ走っている（列全体で あと約 ${seconds} 秒・列の空き ${Math.max(0, state.room)} 件）。`
       + '待つ間に体を使う項目を足す（今の節の次の手）。終わった時に結果を知らせる';
   }
   const how = state.ok === true ? '成功で' : state.ok === false ? '失敗で' : '';

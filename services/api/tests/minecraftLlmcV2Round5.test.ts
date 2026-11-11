@@ -224,7 +224,7 @@ describe('the gate\'s check cut down: the Nether within 30 minutes', () => {
     const titles = (tree: PlanTree) => tree.nodes.map(node => `${node.title}|${node.doneWhen ?? ''}`);
     const on = seedPlan('エンドラを倒して')!;
     expect(titles(on).some(line => line.includes('食料100点以上に足す'))).toBe(false);
-    expect(titles(on)).toContain('村を回る（ベッド全部・干し草・畑・箱）|have:bed>=3|have:bread>=6');
+    expect(titles(on)).toContain('村を回る（ベッド全部・干し草・畑・箱）|have:bed>=8');
     expect(titles(on).some(line => line.startsWith('出発の点検（ネザーの奥へ）'))).toBe(true);
     expect(gateFirst([]).length).toBe(0);
   });

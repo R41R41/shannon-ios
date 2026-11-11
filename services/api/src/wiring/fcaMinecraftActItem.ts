@@ -85,8 +85,12 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const lone = input.hands.length > 0 && input.hands.every(hand => hand.do === 'wait') && !(keep?.length) && !(input.uses?.length)
     && input.done === undefined && input.repeat === undefined;
   if (lone) {
-    const refs = [...(input.dependsOn ?? []), ...(String(input.why ?? '').match(/\bq\d{1,6}\b/gu) ?? [])];
-    const marked = refs.map(ref => ({ ref, got: queue.resultOf?.(ref) ?? null })).find(entry => entry.got !== null);
+    // A ref in `dependsOn` is the act's own ground; one only written in the why counts while its result is still running or unread (an old q number
+    // in a roast/night wait's why must not turn that wait into "the body is free" when there is nothing else to do).
+    const entries = [...(input.dependsOn ?? []).map(ref => ({ ref, own: true })),
+      ...(String(input.why ?? '').match(/\bq\d{1,6}\b/gu) ?? []).map(ref => ({ ref, own: false }))]
+      .map(entry => ({ ...entry, got: queue.resultOf?.(entry.ref) ?? null }));
+    const marked = entries.find(entry => entry.got !== null && (entry.own || !entry.got.ended || entry.got.unread));
     const answer = (words: string) => toolOk([`${fixes}${words}`, ...(parts.lead ?? [])].join('\n'));
     if (marked?.got && !marked.got.ended) {
       const room = QUEUE_MAX - (queue.openItems?.().length ?? 0);

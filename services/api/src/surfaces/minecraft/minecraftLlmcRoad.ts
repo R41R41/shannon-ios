@@ -282,7 +282,8 @@ export function meterParts(tree: PlanTree | null | undefined, observation: BodyO
     const village = facts.village, have = carried(facts.counts, 'bed');
     if (!village || village.beds < 8 || have >= 8 || throughTheGate || facts.dimension !== 'overworld'
       || !nextName || !['ベッド', PREP_MILESTONE_NAME, '鉄のツルハシ'].includes(nextName)) return '';
-    return `・村: ベッド ${village.beds} 台が ${village.distance} m（持ち ${have}/8）。${village.seconds === null ? '' : `1 周 約 ${village.seconds} 秒。`}鉄より前が往復が少ない`;
+    const away = village.distance ? `が ${village.distance} m` : '';
+    return `・村: ベッド ${village.beds} 台${away}（持ち ${have}/8）。${village.seconds === null ? '' : `1 周 約 ${village.seconds} 秒。`}鉄より前に回る方が往復が少ない`;
   };
   const nextMilestoneIndex = () => (named >= 0 ? named : last + 1);
   let nextIndex = nextMilestoneIndex();

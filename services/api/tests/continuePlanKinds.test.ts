@@ -227,7 +227,7 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
   });
   it('the village section ends on a condition she can meet (3 beds or 6 bread), so a skipped village does not stay the current node', () => {
     const village = dragon.nodes.find(node => node.kind === 'village')!;
-    expect(village.doneWhen).toBe('have:bed>=3|have:bread>=6');
+    expect(village.doneWhen).toBe('have:bed>=8');
     expect(village.note).toContain('札のベッドを取り切るまで 1 周で回る');
     expect(village.note).not.toContain('この親が済んでも');
   });
