@@ -163,7 +163,7 @@ describe('the knowledge the scenes asked for (the furnace, water behind stone, t
 
 describe('the first plan asked shorter (run 27: 46 s, 5,221 tokens out, 54 nodes)', () => {
   it('asks 40 nodes of short fields without notes, in fewer tokens', () => {
-    expect(FIRST_PLAN.outputTokens).toBeLessThanOrEqual(6_000);
+    expect(FIRST_PLAN.outputTokens).toBeLessThanOrEqual(9_000);
     expect(FIRST_PLAN_SYSTEM).toContain(`節は全部で${FIRST_PLAN.nodes}まで`);
     expect(FIRST_PLAN.nodes).toBe(40);
     expect(FIRST_PLAN_SYSTEM).toContain('note は書かない');

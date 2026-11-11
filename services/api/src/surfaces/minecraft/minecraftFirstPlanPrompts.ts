@@ -32,7 +32,9 @@ import {
  * first pool (odyTaskRecall.ts, poolMs 3,076), now built over several turns of the loop.
  */
 // inputCharacters 9_500 (end1109o02): the opening draft (up to 3,200) comes before the scan, which must still fit.
-export const FIRST_PLAN = Object.freeze({ inputCharacters: 9_500, giveUpMs: 120_000, outputTokens: 6_000, nodes: 40 });
+// outputTokens 9_000 (e1111h2): a Haiku answer to the same ask ran 3,781, 4,520, 5,023 and once past 6,000, which lost the whole plan;
+// the cap is headroom only (the ask still says 40 nodes, short fields), a shorter answer costs the same.
+export const FIRST_PLAN = Object.freeze({ inputCharacters: 9_500, giveUpMs: 120_000, outputTokens: 9_000, nodes: 40 });
 
 /** r7: the check's forbid (the seed's, and the words the first plan is asked to write: `FIRST_PLAN_SYSTEM_R7`). */
 export const CHECK_FORBID = '点検（作業台・ハーフブロック・盾・食料 100・金の防具）が済むまで、湧き場の前で戦わない。受けた時は離れて塞ぐ';
