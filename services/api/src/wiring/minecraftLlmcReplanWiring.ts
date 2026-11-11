@@ -11,6 +11,7 @@ import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
 import { isDragonPlan } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import { paceDelay, paceKey } from '../surfaces/minecraft/minecraftLlmcPace.js';
 import { boundTo } from '../surfaces/minecraft/minecraftLlmcReplan.js';
+import { keepPreparation } from '../surfaces/minecraft/minecraftReplanPrep.js';
 import { nowLines } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { createReplanFlow, type ReplanFlow, type Replanner, type ReplanSources } from '../surfaces/minecraft/minecraftLlmcReplanFlow.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueueState.js';
@@ -123,6 +124,7 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
   const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending, replanner: parts.replanner,
     clock: parts.activeClock, log: parts.log, vitals: () => stallVitals(parts.observe()), sources: stall => sourcesOf(parts, results, stall),
     bind: update => boundTo(parts.plan.tree(), update),
+    unskipped: update => keepPreparation(parts.plan.tree(), doneFacts(parts.observe()), update),
     ...(parts.persist ? { persist: keys => parts.persist!({ ...watch.checkpoint(), ...keys }) } : {}),
     check: (update: PlanUpdate) => {
       const before = parts.plan.tree();

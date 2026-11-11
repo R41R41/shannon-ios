@@ -38,7 +38,7 @@ const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => (
 const TO_NETHER: readonly PlanSeed[] = [
   // The section audit of 11/5 (runs 60 and 61 both went back up for wood and died there): the wood of the whole run at once after the stone axe, as
   // the last child; the parent waits for it (a child is closed when its parent is done).
-  node('木と石の道具', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:log>=16|have:stone_pickaxe&have:planks>=64|have:iron_pickaxe|have:diamond_pickaxe',
+  node('木と石の道具', { kind: 'stone_tools',  // no doneWhen: done when its children are, the last the run's wood (e1111h2: an iron-pickaxe branch closed p1.4 at log 3/16)
     children: [
     node('原木を集める', { kind: 'wood', doneWhen: 'have:log>=8|have:planks>=24', note: '作業台・木のツルハシ・斧と石の道具の棒の分（ツルハシ 1 つで済みにしない）' }),
     node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),

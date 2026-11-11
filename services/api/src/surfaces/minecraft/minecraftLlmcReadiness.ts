@@ -512,7 +512,7 @@ const WANTS_WOOL = (node: PlanNode): boolean => /wool|_bed(?![a-z_])|(?:^|[^a-z_
  */
 export function sheepAbsentLine(world: Record<string, unknown>, counts: ItemCounts, dimension: string | null, nodes: readonly PlanNode[],
   now: PlanNode | undefined): string | null {
-  if (dimension !== 'overworld' || !now || !WANTS_WOOL(now)) return null;
+  if (dimension !== 'overworld' || !now || !WANTS_WOOL(now) || kindOf(now) === 'village') return null;  // a village node takes the village's beds; wool is the side of it
   if (countMatching(counts, BED_ITEM) > 0) return null;
   const seen = (Array.isArray(world.nearbyEntities) ? world.nearbyEntities : [])
     .some(entity => !!entity && typeof entity === 'object' && (entity as { name?: unknown }).name === 'sheep');
