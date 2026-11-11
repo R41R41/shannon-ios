@@ -235,7 +235,7 @@ export const REPLAN_SYSTEM = [
     + 'id は入力の計画に出ている物。節は 64 まで・深さ 4 まで・title 60 字まで。',
   '- 止まりの原因が「見えていない事実」か「足りない前提」かを考える。計画を、観測で確かめられる小さな節に割る・前提の節を足す・順を変える・別の手段の節に替える・できない節を blocked にして理由と代わりの道を書く。',
   '- doneWhen は観測の形で書く: have:物>=数・food>=点・dim:the_nether|the_end|overworld・at:x,y,z~半径@次元・'
-    + 'see:fortress / see:end_portal_frame / see:end_portal・crystals<=n。& が全部、| がどれか。target は完成品を取る節にだけ。',
+    + 'see:fortress / see:end_portal_frame / see:end_portal・crystals<=n・stock:wood / stock:food（安心の量まで。近くに無ければ最低で済み）。& が全部、| がどれか。target は完成品を取る節にだけ。',
   '- 座標は入力にある物だけを使う。無い場所を作らない。時間や許可を増やすだけの直しはしない。同じ直しを繰り返さない（前の立て直しが入力にある）。',
   '- 準備の節（prep_descent）を黙って飛ばさない。省くなら set で prep {state:skipped, why} を書く。済んでいない節を done にしない。',
   '- 原因が分かったら、今の節に forbid（してはいけない事）か caution（気をつける事）を 1 行足すと、次の判断が読む。',

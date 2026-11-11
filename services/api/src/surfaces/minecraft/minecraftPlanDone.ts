@@ -3,7 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { acquired, carried, clauseHolds, clauseLack, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { newerClause, type ActClause } from '../../contracts/minecraftActCondition.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
-import { woodEnough, woodLogs, woodStockWords } from './minecraftStockLevels.js';
+import { foodEnough, foodStockWords, woodEnough, woodLogs, woodStockWords } from './minecraftStockLevels.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { isSeenName, SEEN_WORDS, type SeenName } from './minecraftSeenMarks.js';
 
@@ -44,8 +44,8 @@ export type DoneClause =
   | { kind: 'dim'; dimension: string }
   | { kind: 'at'; x: number; y: number; z: number; r: number; dimension?: string }
   | { kind: 'food'; points: number }
-  /** `stock:wood`: the wood of the whole run, at the safe amount, or at the least with no more near (`minecraftStockLevels.ts`). */
-  | { kind: 'stock'; what: 'wood' }
+  /** `stock:wood` / `stock:food`: the wood (or the food points) of the whole run, at the safe amount, or at the least with no more near (`minecraftStockLevels.ts`). */
+  | { kind: 'stock'; what: 'wood' | 'food' }
   /** `see:fortress`: a mark of the body's scan is in view now (`minecraftSeenMarks.ts`); `crystals<=0`: the end crystals left, as the body counts them. */
   | { kind: 'see'; what: SeenName }
   | { kind: 'crystals'; max: number }
@@ -80,7 +80,7 @@ function clauseOf(text: string): DoneClause | null {
     if (at[5] !== undefined && !where) return null;
     return { kind: 'at', x: Number(at[1]), y: Number(at[2]), z: Number(at[3]), r: Number(at[4] ?? 4), ...(where ? { dimension: where } : {}) };
   }
-  if (text === 'stock:wood') return { kind: 'stock', what: 'wood' };
+  if (text === 'stock:wood' || text === 'stock:food') return { kind: 'stock', what: text === 'stock:food' ? 'food' : 'wood' };
   const food = /^food>=(\d{1,4})$/u.exec(text);
   if (food) return { kind: 'food', points: Number(food[1]) };
   const newer = newerClause(text);
@@ -143,7 +143,7 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
     case 'have': return acquired(facts.counts, clause.item) >= clause.count || madeInto(facts.counts, clause);
     case 'dim': return facts.dimension === clause.dimension;
     case 'food': return facts.food >= clause.points;
-    case 'stock': return woodEnough(woodLogs(facts.counts), facts.woodNear);
+    case 'stock': return clause.what === 'food' ? foodEnough(facts.food, facts.foodNear) : woodEnough(woodLogs(facts.counts), facts.woodNear);
     case 'see': return facts.seen?.has(clause.what) === true;
     case 'crystals': return typeof facts.crystals === 'number' && facts.crystals <= clause.max;
     case 'act': return clauseHolds(clause.clause, facts) === true;
@@ -178,7 +178,7 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
     case 'have': return `${clause.item} ${Math.min(acquired(facts.counts, clause.item), clause.count)}/${clause.count}`;
     case 'act': return clauseLack(clause.clause, facts);
     case 'food': return foodPointsWords(facts.food, clause.points);
-    case 'stock': return woodStockWords(woodLogs(facts.counts), facts.woodNear);
+    case 'stock': return clause.what === 'food' ? foodStockWords(facts.food, facts.foodNear) : woodStockWords(woodLogs(facts.counts), facts.woodNear);
     case 'see': return `${SEEN_WORDS[clause.what]}はまだ見えていない`;
     case 'crystals': return typeof facts.crystals === 'number' ? `エンドクリスタル 残り ${facts.crystals}（${clause.max} 以下が条件）`
       : 'エンドクリスタルの残りは体がまだ数えていない';

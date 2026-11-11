@@ -9,6 +9,8 @@
  */
 export const STOCK_LEVELS = { wood: { min: 12, safe: 24 }, food: { min: 40, safe: 100 } } as const;
 
+import { nearbyResourcesOf } from './minecraftLlmcNearby.js';
+
 /** The wood she carries in logs: logs, a quarter for planks, an eighth for sticks (rounded down). */
 export function woodLogs(counts: ReadonlyMap<string, number>): number {
   const of = (item: string) => [...counts].reduce((sum, [name, count]) => sum + (name === item || name.endsWith(`_${item}`) ? count : 0), 0);
@@ -39,5 +41,29 @@ export function woodStockWords(stock: number, near: WoodNear | null | undefined)
   const nearWords = near ? near.logs > 0 ? `近くに原木 ${near.logs} 本（木 ${near.trees} 本・${near.withinM}m 内）` : `${near.withinM}m 内に原木なし` : '';
   const count = near ? Math.min(gap, near.logs) : gap;
   if (stock < min) return `木 ${stock}/最低 ${min}（安心 ${safe}）${nearWords ? `。${nearWords}` : ''}${count > 0 ? ` → mine count=${count} が目安` : ''}`;
-  return `木 ${stock}/最低 ${min} は満たす・安心 ${safe} まであと ${gap}${nearWords ? `（${nearWords}）` : ''}${count > 0 ? ` → 取り切ってから進む（count=${count}）` : ''}`;
+  return `木 ${stock}/最低 ${min} は満たす・安心 ${safe} まであと ${gap}${nearWords ? `（${nearWords}）` : ''}${count > 0 ? ` → 取り切ってから進む（count=${count}。取れない分は数えず、取れる分で set state=done 可）` : ''}`;
+}
+
+/** The food animals and the village's food near her, from the body's `nearbyResources`; null when the frame has no such count (judged by the min then). */
+export function foodNearOf(raw: unknown): number | null {
+  const items = nearbyResourcesOf(raw);
+  if (!items.length) return null;
+  return items.filter(item => item.purpose === 'food_animal' || item.purpose === 'food_village').reduce((sum, item) => sum + Math.max(0, item.count), 0);
+}
+
+/**
+ * `stock:food` (run 7: food, like wood, stopped at the least while animals and hay stood near): at the safe amount, or at the least with no food near
+ * (or no count of it: judged by the min). Closes by points, so the node stays open while food is near and the points are under 100.
+ */
+export function foodEnough(points: number, near: number | null | undefined): boolean {
+  const { min, safe } = STOCK_LEVELS.food;
+  if (points >= safe) return true;
+  return points >= min && (near === null || near === undefined || near <= 0);
+}
+
+export function foodStockWords(points: number, near: number | null | undefined): string {
+  const { min, safe } = STOCK_LEVELS.food, have = Math.round(points * 10) / 10;
+  const nearWords = near === null || near === undefined ? '' : near > 0 ? `（近くに食料 ${near}）` : '（近くに食料なし）';
+  if (points < min) return `食料 ${have}/最低 ${min}（安心 ${safe}）${nearWords}`;
+  return `食料 ${have}/最低 ${min} は満たす・安心 ${safe} まであと ${Math.round((safe - points) * 10) / 10}${nearWords}。近くに無ければ（取れなければ）済みにしてよい`;
 }

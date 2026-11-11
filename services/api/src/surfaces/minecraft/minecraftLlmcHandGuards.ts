@@ -162,6 +162,7 @@ export function smallCoordinateStop(input: unknown, frame: BodyObservation | nul
  * passes (the body hunts bare-handed then: starving is worse).
  */
 export const HUNT_FULLNESS_BARE = 6;
+const FOOD_ANIMAL = /^(?:cow|pig|sheep|chicken|rabbit|mooshroom)$/u;
 export function huntWeaponStop(input: unknown, frame: BodyObservation | null): HandStop | null {
   const world = rec(frame?.state.world);
   if (!world) return null;
@@ -170,10 +171,13 @@ export function huntWeaponStop(input: unknown, frame: BodyObservation | null): H
   if (huntWeaponIn(carriedItemCounts(world, frame?.facts ?? {}))) return null;
   let made = false;
   for (const [index, hand] of handsOf(input).entries()) {
-    if (hand.do === 'make' && typeof hand.item === 'string' && HUNT_WEAPON.test(hand.item)) made = true;
-    if (hand.do === 'hunt' && !made) {
-      return { hand: index + 1, kind: 'hunt', code: 'hunt_no_weapon',
-        line: 'hunt は石以上の剣か斧を持ってから（今: 無し。素手は牛 1 体に約 10 回かかる）。丸石 2・棒 1 で stone_sword（作業台）。先に剣か斧を作る手を足す。'
+    const item = typeof hand.item === 'string' ? hand.item.replace(/^minecraft:/u, '') : '';
+    if ((hand.do === 'make' || hand.do === 'craft') && HUNT_WEAPON.test(item)) made = true;
+    // `attack cow` is the same bare-handed hunt as `hunt cow` (the manual points at attack for one animal); a #id is not a name, so it passes.
+    const target = typeof hand.target === 'string' ? hand.target.replace(/^minecraft:/u, '') : '';
+    if ((hand.do === 'hunt' || (hand.do === 'attack' && FOOD_ANIMAL.test(target))) && !made) {
+      return { hand: index + 1, kind: String(hand.do), code: 'hunt_no_weapon',
+        line: `${hand.do} は石以上の剣か斧を持ってから（今: 無し。素手は牛 1 体に約 10 回かかる）。丸石 2・棒 1 で stone_sword（作業台）。先に剣か斧を作る手を足す。`
           + `満腹 ${HUNT_FULLNESS_BARE} 以下なら素手でも狩れる` };
     }
   }

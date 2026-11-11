@@ -46,7 +46,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     // 11/11 run 7: the amount was the least (16) while many trees stood near; the node says the least and the safe amount, and `stock:wood` reads the logs near.
     node('原木を通しの分（最低12・安心24）', { kind: 'wood', doneWhen: 'stock:wood',
       note: '石の斧の後に一度に（板・棒・盾・ベッドの板・箱の分）。近くに多ければ安心の量まで。後で木のために地上へ戻らない' })] }),
-  node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'food>=40&have:bed',
+  node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'stock:food&have:bed',
     note: '食料は最低40・安心100点（干し草3個）。ベッドが一番（寝れば夜を飛ばせる）: 走査の羊の行で同じ色 3 体を探す。夜にベッドが無ければ、地面に 2 段の穴を掘って塞ぎ、その底から鉄の節へ下りる（外で待たない。朝に戻って続ける）', children: [
     node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', doneWhen: 'have:bed>=8',
     note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（寝る用 1 と、エンドの竜戦に 10 個・最低 8）。札のベッドを取り切るまで 1 周で回る。'
@@ -181,7 +181,7 @@ export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
  */
 function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
   if (seed.kind === 'village') return { title: '村を回る（ベッド全部・干し草・畑・箱）' };
-  if (seed.kind === 'prep_descent' && seed.doneWhen === 'food>=40&have:bed') return { doneWhen: 'food>=40&have:bed>=1' };
+  if (seed.kind === 'prep_descent' && seed.doneWhen === 'stock:food&have:bed') return { doneWhen: 'stock:food&have:bed>=1' };
   if (seed.kind === 'iron' && seed.doneWhen === IRON_TOP_DONE) {
     // The pre-deploy review of 11/5 (item 7): the iron sword is the gate's, so the iron node is done with it too (not only with the armour).
     return { title: '鉄（約30・剣・兜・胸まで）', doneWhen: `have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };

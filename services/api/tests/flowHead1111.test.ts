@@ -8,7 +8,7 @@ import { foodLine } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 import { createFoodTrend, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { huntWeaponStop } from '../src/surfaces/minecraft/minecraftLlmcHandGuards.js';
 import { nearbyLines, nearbyResourcesOf } from '../src/surfaces/minecraft/minecraftLlmcNearby.js';
-import { STOCK_LEVELS, woodEnough, woodLogs } from '../src/surfaces/minecraft/minecraftStockLevels.js';
+import { STOCK_LEVELS, foodEnough, foodNearOf, foodStockWords, woodEnough, woodLogs } from '../src/surfaces/minecraft/minecraftStockLevels.js';
 import { foodLeads } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 
 // Run 7 (2026-11-11): the owner's seven notes, the head's half: wood in two amounts, food in two amounts, the village before the cow, a sword before a hunt,
@@ -31,7 +31,7 @@ describe('wood: the least (12) and the safe amount (24), with the logs near', ()
   });
   it('at the least with many near is still open (go on to the safe amount); with few near it is done', () => {
     expect(doneStatusWords('stock:wood', facts([['oak_log', 14]], { logs: 30, trees: 5, withinM: 24 })))
-      .toBe('未: 木 14/最低 12 は満たす・安心 24 まであと 10（近くに原木 30 本（木 5 本・24m 内）） → 取り切ってから進む（count=10）');
+      .toBe('未: 木 14/最低 12 は満たす・安心 24 まであと 10（近くに原木 30 本（木 5 本・24m 内）） → 取り切ってから進む（count=10。取れない分は数えず、取れる分で set state=done 可）');
     expect(doneStatusWords('stock:wood', facts([['oak_log', 14]], { logs: 3, trees: 1, withinM: 24 }))).toBe('満たしている');
     expect(woodEnough(24, { logs: 99, trees: 9, withinM: 24 })).toBe(true);
   });
@@ -88,6 +88,12 @@ describe('a hunt waits for a sword or an axe of stone or better', () => {
     expect(huntWeaponStop({ hands: [hunt] }, frame({ food: 20, inventory: items([['stone_axe', 1]]) }))).toBeNull();
     expect(huntWeaponStop({ hands: [{ do: 'make', item: 'stone_sword' }, hunt] }, bare)).toBeNull();
   });
+  it('counts a craft, with or without the minecraft: prefix, and holds an attack on a food animal the same way', () => {
+    expect(huntWeaponStop({ hands: [{ do: 'craft', item: 'minecraft:stone_sword', count: 1 }, hunt] }, bare)).toBeNull();
+    expect(huntWeaponStop({ hands: [{ do: 'attack', target: 'cow' }] }, bare)).toMatchObject({ hand: 1, kind: 'attack', code: 'hunt_no_weapon' });
+    expect(huntWeaponStop({ hands: [{ do: 'attack', target: 'zombie' }] }, bare)).toBeNull();
+    expect(huntWeaponStop({ hands: [{ do: 'attack', target: '#12' }] }, bare)).toBeNull();
+  });
   it('lets a starving one hunt bare-handed (fullness 6 or less: the body does too)', () => {
     expect(huntWeaponStop({ hands: [hunt] }, frame({ food: 5, inventory: [] }))).toBeNull();
   });
@@ -125,5 +131,21 @@ describe('drop: several kinds in one hand', () => {
     expect(lineToHand('drop dirt:17,granite:17,gravel')).toEqual({ do: 'drop', items: [{ item: 'dirt', count: 17 }, { item: 'granite', count: 17 }, { item: 'gravel' }] });
     expect(handToLine({ do: 'drop', items: [{ item: 'dirt', count: 17 }, { item: 'granite', count: 17 }] } as never)).toBe('drop dirt:17,granite:17');
     expect(lineToHand('drop cobblestone 64 target=#12')).toEqual({ do: 'drop', items: [{ item: 'cobblestone', count: 64 }], target: '#12' });
+  });
+});
+
+describe('stock:food', () => {
+  it('stays open under the safe amount while food is near, and closes at the min with none near', () => {
+    expect(foodEnough(45, 6)).toBe(false);
+    expect(foodEnough(45, 0)).toBe(true);
+    expect(foodEnough(45, null)).toBe(true);
+    expect(foodEnough(30, 0)).toBe(false);
+    expect(foodEnough(100, 9)).toBe(true);
+    expect(foodStockWords(45, 6)).toContain('安心 100 まであと 55');
+    expect(parseDoneWhen('stock:food&have:bed>=1')).not.toBeNull();
+  });
+  it('counts the food near from the body nearby count', () => {
+    expect(foodNearOf([{ purpose: 'food_animal', kind: 'cow', count: 4, range: 48, sites: [] }, { purpose: 'wood', kind: 'oak_log', count: 9, range: 24, sites: [] }])).toBe(4);
+    expect(foodNearOf(undefined)).toBeNull();
   });
 });

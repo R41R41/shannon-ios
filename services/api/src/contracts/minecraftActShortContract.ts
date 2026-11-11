@@ -152,7 +152,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   '  16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す（seconds 10〜60、既定 45）。夜か雷雨なら今寝る。夜まで 10 秒以内なら体が待って寝る。それより前（昼）は寝る予約で、夜になり次第、体が次の手の前で寝る（wait で夜を待たない）。8m（上下 5）に敵がいると寝られない（壁越しでも）。'
     + 'ネザー・エンドでは爆発する。掘って場所は作らない。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
   'drop 物[:数][,物[:数]…] [target=#id か X,Y,Z]  捨てる（体が深さ2の穴を掘って埋める。target か座標ならその方へ投げる＝ピグリンへの金）',
-  'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）。食料の動物を何体も狩るのは hunt',
+  'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）。食料の動物を何体も狩るのは hunt（どちらも食料の動物は石以上の剣か斧を持ってから）',
   manualPage('special-json', 'shield_rush・fill のJSON書式例', [
   'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',
   'json {"do":"fill",...}（上記の全必須欄を書く）'
