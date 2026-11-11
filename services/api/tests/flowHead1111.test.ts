@@ -170,10 +170,10 @@ describe('run 7: probe kind=route, the logs near from the nearby count alone, th
     const f = doneFacts(frame({ inventory: items([['oak_log', 4]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: [wood] }))!;
     expect(doneStatusWords('stock:wood', f)).toContain('近くに原木 38 本（木 6 本・48m 内）');
   });
-  it('the obsidian page tells that the body goes on digging what it hardened (one sentence, within 120 characters)', async () => {
+  it('the obsidian page tells that the body goes on digging what it hardened (count decides the total, within 120 characters)', async () => {
     const { readFileSync } = await import('node:fs');
     const source = readFileSync(new URL('../src/contracts/minecraftActShortContract.ts', import.meta.url), 'utf8');
-    const sentence = '真上や横に自分で固めた黒曜石があれば体が続けて掘る。at は溶岩源 1〜数個でよい。';
+    const sentence = '注水で固まった隣の溶岩源（挙げた源から半径 6）の黒曜石は、count まで体が続けて掘る。座標 1 個で隣も掘らせたいなら count=N で総数を決める（count を書かないと座標の数だけで、隣は掘らない）。';
     expect(source).toContain(sentence);
     expect(sentence.length).toBeLessThanOrEqual(120);
   });
