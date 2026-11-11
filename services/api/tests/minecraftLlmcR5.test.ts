@@ -58,7 +58,10 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
     // Wood and stone (all three tools), the food and the bed (bread 44 points, a bed), the iron pickaxe is not yet the iron node (no bucket).
     // r9: a node is done by its own predicate: p1 (the pack: the stone pickaxe) and its children p1.2, p1.3 (their tools) are; p1.1 (6 logs: she has 4)
     // is done too since run 26 (by the tools the logs were made into), and the open children under a parent done by the pack are closed by the plan (`closedUnder`).
-    expect(done).toEqual(expect.arrayContaining(['p1', 'p1.1', 'p1.2', 'p1.3', 'p2', 'p2.3']));
+    // e1111h2 (11/11): p1 has no doneWhen of its own now; it is done when its children are, and its last child (the run's wood, 16 logs) is
+    // not done at 608 s, so p1 is not in the frame's done list.
+    expect(done).toEqual(expect.arrayContaining(['p1.1', 'p1.2', 'p1.3', 'p2', 'p2.3']));
+    expect(done).not.toContain('p1');
     expect(done).not.toContain('p3');
     const seen = seenDoneUpdate(tree, RUN28)!;
     const lines: string[] = [];
@@ -67,7 +70,8 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
     const view = plan.port.view()!;
     expect(view.now).not.toMatch(/^p1\.1 /u);
     // 1107 (11/7): the first iron leaf is closed by the iron pickaxe (have:iron_pickaxe), so the now may be past it.
-    expect(view.now).toMatch(/^p2\.[12] |^p3\.[12] /u);
+    // e1111h2 (11/11): p1 waits for its last child, the run's wood (4 logs of 16 at 608 s), so the now is that leaf, not the iron.
+    expect(view.now).toMatch(/^p1\.4 /u);
     expect(plan.port.committed()).not.toBeNull();
     expect(lines.some(line => line.startsWith('Shannon FCA plan settled task=r5-plan'))).toBe(true);
     expect(seen.ids.slice(0, done.length)).toEqual(done);

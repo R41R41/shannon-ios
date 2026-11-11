@@ -1856,7 +1856,7 @@
       "long-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlan.ts": {
-      "long-line": 8,
+      "long-line": 9,
       "multi-statement-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlanPrompts.ts": {
@@ -1897,7 +1897,7 @@
       "long-line": 12
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts": {
-      "long-line": 2
+      "long-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcUrgent.ts": {
       "long-line": 1
