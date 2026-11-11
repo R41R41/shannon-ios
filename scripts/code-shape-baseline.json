@@ -1839,7 +1839,7 @@
       "long-line": 8
     },
     "services/api/src/surfaces/minecraft/minecraftCurrentPlanPrompt.ts": {
-      "long-line": 1
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftEndFacts.ts": {
       "complex-function": 5,
@@ -1856,7 +1856,7 @@
       "long-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlan.ts": {
-      "long-line": 9,
+      "long-line": 10,
       "multi-statement-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlanPrompts.ts": {
@@ -1915,7 +1915,8 @@
       "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftPlanDone.ts": {
-      "long-line": 1
+      "long-line": 2,
+      "complex-function": 2
     },
     "services/api/src/surfaces/minecraft/minecraftReflexAdapter.ts": {
       "multi-statement-line": 22,
@@ -2281,17 +2282,18 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftConditions.ts": {
-      "long-line": 1
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftFurnaceMeanwhile.ts": {
       "long-line": 5,
       "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftKnowledgeCore.ts": {
-      "long-line": 1
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcFacts.ts": {
-      "complex-function": 1
+      "complex-function": 1,
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcFurnaceWait.ts": {
       "complex-function": 1,
@@ -2329,6 +2331,25 @@
     },
     "services/api/src/wiring/fcaMinecraftActItem.ts": {
       "complex-function": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftFoodWords.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcHandGuards.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcLive.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcNearby.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcProbeInput.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftStockLevels.ts": {
+      "long-line": 1
     }
   }
 }

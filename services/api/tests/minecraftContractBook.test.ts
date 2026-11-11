@@ -33,7 +33,7 @@ const book = () => createMinecraftContractBook(pin);
 describe('the canonical Minecraft input-contract book', () => {
   it('pins the revised shoot manual and unchanged schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('be81a7bd89d2bd15edb50d5469241e0058adb6ead0ce053c8b3b63a5a86390dc');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('92ea8d5d04b593a7e543b3c547b2c4e500d1364605818970dc88a25eb70a8d0d');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('77cb8d5128ca66d050bd7396b5ec3ab17b09ef02e6263c0fa151f37715de1855');
     const current = book();
     expect(current.pages).toHaveLength(10);
@@ -52,11 +52,11 @@ describe('the canonical Minecraft input-contract book', () => {
       ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '')
         .replace(CURRENT_SELF_DEFENCE, LEGACY_SELF_DEFENCE) }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))
-      .toBe('a13070c97e7ffd9056196a1c57d83d0770aec309d9a5c82e0e54f25a769d4191');
+      .toBe('e37a7862bc0c4536f51c81add3e4cebd0f7ff21c07dc83e0f1190179622c4c3e');
     expect(fragments.find(part => part.id === 'shoot')!.text.split('\n')[0]).toBe(legacyShoot);
     const parent = createMinecraftContractBook(pin, { schema: SHORT_ACT_INPUT_SCHEMA,
       fragments: historical.map(part => part.id === 'shoot' ? { ...part, text: legacyShoot } : part) });
-    expect(parent.manualHash).toBe('b0720a5199cda38d6d92890ea2ee08a6b2bdfcad400e6cdd804b0e2e71ed6a7e');
+    expect(parent.manualHash).toBe('757823f669674ee8b965153d040c9275f06d0c94297ac717bdbe03226b241471');
     const current = book();
     expect(current.schemaHash).toBe(parent.schemaHash);
     expect(current.catalogHash).toBe(parent.catalogHash);
