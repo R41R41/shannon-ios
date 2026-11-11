@@ -235,7 +235,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
   const lines = (id: keyof typeof V2_STAGES) => V2_STAGES[id];
   it('gives the Nether go its arguments, the pace and what to do on a stop, in the words of the body\'s rows', () => {
     const nether = lines('nether');
-    for (const word of ['canDig=[netherrack,basalt,blackstone]', 'nether_bricks', 'canPlace=[cobblestone,netherrack]', 'maxDig 120〜200', 'maxPlace 40〜100', 'seconds 100〜120',
+    for (const word of ['canDig=[netherrack,basalt,blackstone]', 'nether_bricks', 'canPlace=[cobblestone,netherrack]', 'seconds 100〜120', 'は省けば体が決める',
       '0.7〜1.0 秒', 'ホグリン（体力 40・1 撃 5 前後）', '斬り合わない', '「maxDig を増やす」', '「canDig に足す」', '荷の netherrack×99 を canPlace に足す', '置く物 cobblestone を N 個置いて使い切った', '火 (x,y,z) は dig で消せる',
       'mc_probe kind=scan', 'mc_probe kind=camp', '同じ種類以上の予備が荷に無い']) expect(nether, word).toContain(word);
     expect(nether).not.toContain('maxDig 150・maxPlace 40 を渡す');

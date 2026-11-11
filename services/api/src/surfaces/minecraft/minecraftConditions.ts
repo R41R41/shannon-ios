@@ -5,6 +5,7 @@ import { carriedFood } from './minecraftLlmcLive.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { crystalsLeft } from './minecraftEndView.js';
 import { seenMarks } from './minecraftSeenMarks.js';
+import { woodNearOf } from './minecraftStockLevels.js';
 
 export { parseCondition, conditionText, validCondition, parseClause, newerClause, clauseText, CONDITION_SCHEMA, CONDITION_FORMS,
   type ActClause, type ActCondition, type Dim, type ParsedCondition } from '../../contracts/minecraftActCondition.js';
@@ -31,7 +32,9 @@ export interface DoneFacts { counts: ReadonlyMap<string, number>; dimension: str
   seen?: ReadonlySet<string>;
   crystals?: number | null;
   /** The village the landmarks name: its beds (the body's count of beds, not halves), the seconds a round is said to take (null: not said) and its distance. */
-  village?: { beds: number; seconds: number | null; distance: number } | null }
+  village?: { beds: number; seconds: number | null; distance: number } | null;
+  /** The logs and trees the body counted near her (`state.world.woodNear`; null: the frame has none, an older body). */
+  woodNear?: { logs: number; trees: number; withinM: number } | null }
 /** What the body scanned for a work table, a furnace, a chest or a bed near her: `scanned` false is "not looked",
  * never "none". */
 export interface UtilitiesScan { radius: number; dim: string | null; scanned: boolean; found: ReadonlyArray<{ block: string; distance: number }> }
@@ -82,7 +85,7 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
   const dim = typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null;
   return { counts: carriedItemCounts(frame, observation!.facts), feet, food: carriedFood(frame, observation!.facts).points, dimension: dim,
     hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame),
-    seen: seenMarks(frame), crystals: crystalsLeft(observation), village: villageOf(frame, feet) };
+    seen: seenMarks(frame), crystals: crystalsLeft(observation), village: villageOf(frame, feet), woodNear: woodNearOf(frame.woodNear) };
 }
 
 /** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a

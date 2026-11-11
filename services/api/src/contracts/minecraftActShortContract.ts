@@ -151,7 +151,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   'sleep [ベッド] [seconds=N]',
   '  16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す（seconds 10〜60、既定 45）。夜か雷雨なら今寝る。夜まで 10 秒以内なら体が待って寝る。それより前（昼）は寝る予約で、夜になり次第、体が次の手の前で寝る（wait で夜を待たない）。8m（上下 5）に敵がいると寝られない（壁越しでも）。'
     + 'ネザー・エンドでは爆発する。掘って場所は作らない。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
-  'drop 物 [数] [target=#id か X,Y,Z]  その方へ投げる。target も座標も無ければ体が水平に投げる（ピグリンへの金は target=#id）',
+  'drop 物[:数][,物[:数]…] [target=#id か X,Y,Z]  捨てる（体が深さ2の穴を掘って埋める。target か座標ならその方へ投げる＝ピグリンへの金）',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）。食料の動物を何体も狩るのは hunt',
   manualPage('special-json', 'shield_rush・fill のJSON書式例', [
   'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',
@@ -257,7 +257,8 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
     + '体は、手を始めた所から range m（4〜48、既定 32）の成体を近い順に倒し、倒した所の落とし物をその場で拾って次へ行く。count を省くと居なくなるまで。',
   '  子は倒さない（何も落とさず、群れが減る）。届かない個体は飛ばして次へ行き、3 体続けて届かないと止まる。掘らず置かない。seconds は 5〜120（既定 60）。'
     + '敵・村人・飼える動物・乗り物は断られる（戦うなら fight か attack）。'
-    + '理由: no_target（範囲に居ない。見えている動物の名前と距離が返るので、そちらへ短い go で寄って出し直す）・unreachable・full・limit_time。結果に倒した数・残り・拾った物が返る。'
+    + '石以上の剣か斧が無いと no_weapon で止まる（満腹 6 以下は素手でも狩る）。'
+    + '理由: no_target（範囲に居ない。見えている動物の名前と距離が返るので、そちらへ短い go で寄って出し直す）・no_weapon・unreachable・full・limit_time。結果に倒した数・残り・拾った物が返る。'
   ]),
 ];
 export const SHORT_ACT_MANUAL_FRAGMENTS: readonly ShortActManualFragment[] = Object.freeze(SHORT_LINES.map((part, index) =>

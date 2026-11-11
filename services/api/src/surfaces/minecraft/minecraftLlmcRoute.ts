@@ -163,8 +163,7 @@ function aimOf(view: MapView, goal: Goal, reach: Map<string, Reach>, feet: P): {
  * first wall): when the goal is outside the map, what is not known: the way out there is not on the map, and a
  * walk neither digs nor lays a block.
  */
-const outsideWords = (meters: number): string => `目的地は地図の外（水平 ${meters.toFixed(0)}m）: そこまでの道は地図に無く、不明。`
-  + 'walk は掘らず置かないので、遠い点を渡しても途中の壁で止まる。下の立ち位置までが地図で分かる所（そこへの dig と walk までが、今この地図で言える手）';
+const outsideWords = (meters: number): string => `目的地は地図の外（水平 ${meters.toFixed(0)}m）: 道は地図に無く不明。下の立ち位置までが地図で分かる所`;
 /** The way to the goal: where she gets to without digging, then with more cells dug while that brings her at
  * least a block nearer (four lines at most). */
 export function routeLines(view: MapView, feet: P, goal: Goal, label: string): string[] {
@@ -174,7 +173,8 @@ export function routeLines(view: MapView, feet: P, goal: Goal, label: string): s
   const inMap = view.known(goal.at.x, goal.at.y, goal.at.z);
   const lines = [`計画 ${label} の目的地 ${ptText(goal.at)}（足から 水平 ${horizontal(feet, goal.at).toFixed(1)}m・高さ ${sign(goal.at.y - feet.y)}。`
     + `${inMap ? '地図の中' : '地図の外'}${goal.range > 1 ? `。済みの条件は目的地の ${goal.range}m 以内` : ''}）。`
-    + '地図はこの判断の始めの frame。歩きの決まりは walk と同じ（掘らず置かず、上り 1・下り 3 まで、2〜4 マスの空きは走って越える）。敵に見られるかは含まない',
+    + (inMap ? '地図はこの判断の始めの frame。歩きの決まりは walk と同じ（掘らず置かず、上り 1・下り 3 まで、2〜4 マスの空きは走って越える）。敵に見られるかは含まない'
+      : '地図はこの判断の始めの frame（歩きは掘らず置かない）'),
     ...words ? [words] : [], ...inMap ? [] : [outsideWords(horizontal(feet, goal.at))]];
   let previous = Infinity, shown = 0;
   for (let k = 0; k <= DIG_LIMIT && shown < 4; k += 1) {

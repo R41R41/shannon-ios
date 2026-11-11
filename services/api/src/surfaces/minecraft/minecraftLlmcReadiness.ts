@@ -322,8 +322,10 @@ export function foodLeads(world: Record<string, unknown>, dimension: string | nu
   const rows = sameDimension && Array.isArray(scan?.rows) ? (scan!.rows as unknown[]).filter((row): row is string => typeof row === 'string') : [];
   const places = rows.filter(row => VILLAGE_ROW.test(row) || (dimension === 'the_nether' && /crimson|真紅/u.test(row)))
     .slice(0, 3).map(row => row.slice(0, 60));
+  const village = places.filter(row => VILLAGE_ROW.test(row)), others = places.filter(row => !VILLAGE_ROW.test(row));
   const gate = dimension === 'the_nether' ? gateBack(world, rows, nodes, feetOf(world)) : null;
-  const near = [...animals, ...places];
+  // 11/11 run 7: the village's hay and fields first (food that needs no fire and no sword), then the animals.
+  const near = [...village, ...animals, ...others];
   const unexplored = dimension === 'overworld' && !near.length ? '。走査外は未確認。地下や水中の食料・地表への帰路も未確認。水が見えるだけでは魚の所在も未確認' : '';
   const nether = dimension === 'the_nether' && !near.some(line => /hoglin|crimson|真紅/u.test(line)) ? '・ホグリン・真紅の森は見えていない' : '';
   return `食料の当て: ${near.length ? near.join('・') : `近くに動物・村・畑は見えていない${scan ? '（走査の範囲）' : ''}`}${nether}${gate ? `・${gate}` : ''}${unexplored}`;

@@ -1,4 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import { carriedItemCounts } from './minecraftItems.js';
+import { HUNT_WEAPON, huntWeaponIn } from './minecraftFoodAcquisition.js';
 import { URGENT_MODE } from './minecraftLlmcUrgent.js';
 
 /**
@@ -149,6 +151,31 @@ export function smallCoordinateStop(input: unknown, frame: BodyObservation | nul
     return { hand: index + 1, kind: String(hand.do ?? '?'), code: 'small_absolute',
       line: `座標 (${at.x},${at.y},${at.z}) は足 ${stand} から ${Math.round(far)}m 離れている。座標は絶対座標（世界の座標）で、足からの差で書く時は rel を付ける（例 dig 1,0,0 rel）。`
         + `足からの差のつもりなら rel を付けるか、足 ${stand} からの座標で書き直す` };
+  }
+  return null;
+}
+
+/**
+ * Run 7 (2026-11-11: a cow was hunted with a bare hand, about ten blows each, 4 cows in 38 s; the owner: 「牛を素手で殴って倒してる。牛を狩るにしても石の剣ができてからでいい」):
+ * a `hunt` hand while she carries no sword or axe of stone or better, and no earlier hand of the act (or the queue's items ahead, which the hands carry) makes one, is
+ * not sent. The body stops it as well (`no_weapon`); this says it before the send, once, with the way: stone_sword is cobblestone 2 and a stick 1. Fullness 6 or less
+ * passes (the body hunts bare-handed then: starving is worse).
+ */
+export const HUNT_FULLNESS_BARE = 6;
+export function huntWeaponStop(input: unknown, frame: BodyObservation | null): HandStop | null {
+  const world = rec(frame?.state.world);
+  if (!world) return null;
+  const fullness = typeof world.food === 'number' ? world.food : null;
+  if (fullness !== null && fullness <= HUNT_FULLNESS_BARE) return null;
+  if (huntWeaponIn(carriedItemCounts(world, frame?.facts ?? {}))) return null;
+  let made = false;
+  for (const [index, hand] of handsOf(input).entries()) {
+    if (hand.do === 'make' && typeof hand.item === 'string' && HUNT_WEAPON.test(hand.item)) made = true;
+    if (hand.do === 'hunt' && !made) {
+      return { hand: index + 1, kind: 'hunt', code: 'hunt_no_weapon',
+        line: 'hunt は石以上の剣か斧を持ってから（今: 無し。素手は牛 1 体に約 10 回かかる）。丸石 2・棒 1 で stone_sword（作業台）。先に剣か斧を作る手を足す。'
+          + `満腹 ${HUNT_FULLNESS_BARE} 以下なら素手でも狩れる` };
+    }
   }
   return null;
 }

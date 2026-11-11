@@ -164,6 +164,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // run 5 (11/11) issue 3: a drop one block off a one-wide gap stopped the walk again and again. The body now digs 1-3 blocks of rock to it (only for a pickup that names the drop).
     '- pickup target=#id（か名前）は、落とし物の前の石・土・普通の鉱石 1〜3 マスを体が自分で掘って近づいて拾う（結果に「途中で…を掘った」）: dig→walk を前に並べない。止まりに「掘って近づこうとして止まった …」が付いたら、その理由（溶岩・水・頭上の砂利・敵・ツルハシ無し）を直す。target 無しの pickup は掘らない（mine は自分で岩を掘って取りに行く）。',
     '- バケツを作ったら最初の水源ですぐ汲む（run61 は空のまま地上を通り、地下で 6 分探した帰りに死んだ）。',
+    '- 水の隣を掘る時、体は裏の水を先に塞いでから掘る。waterOk は泳いで渡る許可で、水の隣を掘る許可ではない。',
     // run62 (11/5): the pickup's walk went onto the magma floor of a ruined portal; two deaths and the diamond pickaxe were lost there.
     '- 壊れたポータルの周りはマグマの床が多い。拾いに歩く前に、足元とその先のマグマを丸石か土で覆う（途中の足場の安全は保証されない）。立っている段は掘らない。',
     '- 夜明けの森のスケルトンとゾンビは、木の下の日陰では燃え残る（朝でも森の中は安全ではない）。',
@@ -282,11 +283,10 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '走らせたくない時だけ sprint:false。sprint:true は常に走る指定で、3 マスの溝の走り跳びには sprint:true を書く。',
     '- ソウルサンドの上は歩幅が 4 割（時間 2.5 倍）。go の経路探索は、回り道が少し長いだけなら避けて回り、他に道が無ければ渡る。',
     '- 遠い go（要塞が見えるまでの道）は最初から canDig=[netherrack,basalt,blackstone]（要塞の床・壁へ入るなら nether_bricks も）・canPlace=[cobblestone,netherrack]'
-      + '・maxDig 120〜200・maxPlace 40〜100・seconds 100〜120 が目安になる。'
+      + '・seconds 100〜120 が目安。maxDig・maxPlace は省けば体が決める。'
       + 'ただし maxPlace は「いま持っている置ける物の数 − 32」まで（1 回の go で使い切ると、橋の途中で置く物 0 になって進めも戻れもしない）。'
       + '出る前に丸石か netherrack を 64 個以上持つと橋の材料になる。'
-      + 'ネザーでは掘る経路の費用が 2.5 倍で、体は開けた所や丘の上を選びやすく、掘った netherrack の補充は当てにしにくい。'
-      + '既定の maxDig 40・maxPlace 24 では limit_dig・limit_place で止まることがある。',
+      + 'ネザーでは掘る経路の費用が 2.5 倍で、体は開けた所や丘の上を選びやすく、掘った netherrack の補充は当てにしにくい。',
     // Rig end1109f11 (random world): two far gos with maxPlace 60 and 80 laid all 128 cobblestone over a void, leaving her on a plank bridge with nothing to place.
     // Rig end1109f01 (c1): a go from 25 m short of the fortress to the spawner with canPlace laid 32 cobblestone as a bridge over a 17-deep gap
     // and she fell to health 10; the gap she fell into is where the zombified piglins were.

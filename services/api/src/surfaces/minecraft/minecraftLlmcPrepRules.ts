@@ -230,7 +230,7 @@ export const PREP_SKIP_SECONDS = 500;
 export const PREP_DESCENT_LINES: readonly string[] = [
   ("- 必須（未達の間は下りない・鉄を掘らない。省くなら prep に skipped と理由を書く。省いた節は達成に数えない）: 食料の点 40 以上（foodPoints.total。満腹 fullness " +
 "では数えない）・石のツルハシと石の斧・作業台 1 つか板 4 以上（持つ）。"),
-  '- 目標: 食料 40〜60 点・原木 20〜24 本分（板なら 80 前後。通しの分）。',
+  '- 量は最低と安心の両方: 食料は最低 40 点・安心 100 点、原木は最低 12・安心 24 本分（通しの分。近くに多ければ安心の量まで）。',
   '- 下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）。',
   ("- 理由: 持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない。地下には食べ物も木も見つかりにくく、足りなくなると地上へ戻る必要がある。死ぬこともある（以前の実走の記録で、今回の所要時間ではない: 42 は地上へ戻るのに移動の不具合込みで 540 " +
 "秒、41 は作業台が無いまま 372 秒止まって上りの途中で死んだ）。"),
@@ -241,7 +241,7 @@ export const PREP_DESCENT_RULE: string = ['## 準備の決まり（鉄を掘り�
 export const PREP_DESCENT_LINES_EN: readonly string[] = [
   ("- Required (while unmet, do not go down or dig iron; to skip one, write skipped and the reason in prep; a skipped section does not count as achieved): food points 40 or more (foodPoints.total; fullness " +
 "does not count), a stone pickaxe and a stone axe, and 1 crafting table or 4 or more planks (carried)."),
-  '- Goal: food 40 to 60 points; wood worth 20 to 24 logs (about 80 if as planks; the amount for the whole run).',
+  '- Amounts: least/safe. Food 40/100 points; wood 12/24 logs (whole run; safe one when many trees are near).',
   '- The why of the descending hand states the current numbers you checked and how any shortfall is made up; once all requirements are met, write it in the form 「（食料 41.2/40・作業台 有・板 6）」.',
   ("- Reason: the food you carry is for eating below to get health back; fullness is no substitute. Underground, food and trees are hard to find, and running short forces a return to the surface. You can die too (records of earlier runs, not this run's duration: run 42 took 540 " +
 "seconds to get back to the surface, including a movement fault; run 41 stood still for 372 seconds with no crafting table and died on the way up)."),
@@ -287,7 +287,7 @@ export const PLAN_PREP_WORDS = [
   '- 準備の節の doneWhen は観測の形で書く: 例 "food>=40&have:crafting_table|food>=40&have:planks>=4"。',
   '- 村の節（ベッド全部・干し草・箱）は、食料とベッド（寝る用）の親の子にせず、一番上の節にする（親が済むと開いた子は閉じられる）。'
     + '竜戦用のベッドは target bed×10 の節にする。',
-  '- 木は序盤だけ通しの分を一度に: 石の斧ができたら原木を合計 20〜24 本まで取る節を書く（doneWhen は作った分を引いて板も数える: have:log>=16|have:planks>=64）。'
+  '- 木は序盤だけ通しの分を一度に: 石の斧ができたら原木を最低 12・安心 24 本分まで取る節を書く（doneWhen は stock:wood。作った分を引き、板・棒も原木に換算して数える）。'
     + '後で木のために地上へ戻らない。',
   '- バケツを作ったら、最初の水源ですぐ汲む節を鉄の節の次に書く（doneWhen have:water_bucket）。',
   '- 弓と矢（エンドのクリスタルを地面から壊す道具。無いと柱を 1 本ずつ登ることになり、弓なしの実走 3 本は 3 本ともその柱で死んだ）の材料は序盤の道中で集める。'

@@ -18,7 +18,7 @@ import {
  */
 export const AROUND_RANGE = 6;
 /** How many rows of one kind a level lists before it says how many it left out. */
-const ROWS_PER_KIND = 8;
+const ROWS_PER_KIND = 4;
 const triple = (view: MapView, cell: P) => `足 ${nameOf(view.symbol(cell.x, cell.y, cell.z))}・頭 ${nameOf(view.symbol(cell.x, cell.y + 1, cell.z))}`
   + `・床 ${nameOf(view.symbol(cell.x, cell.y - 1, cell.z))}`;
 const digText = digWords;

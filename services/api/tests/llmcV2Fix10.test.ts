@@ -327,12 +327,16 @@ describe('the bench of 10 (cd-fixes-20261024): craft, drop, reach, far endermen'
     expect(SHORT_ACT_DESCRIPTION).not.toContain('craft 物 [個数]（作業台が5m内に要る）');
   });
   it('gives drop a line form again, round trips with the json form, and reads a target or a place', () => {
-    expect(SHORT_ACT_DESCRIPTION).toContain('drop 物 [数] [target=#id か X,Y,Z]');
+    expect(SHORT_ACT_DESCRIPTION).toContain('drop 物[:数][,物[:数]…] [target=#id か X,Y,Z]');
     expect(lineToHand('drop gold_ingot 1 target=#12')).toEqual({ do: 'drop', items: [{ item: 'gold_ingot', count: 1 }], target: '#12' });
     expect(lineToHand('drop cobblestone 64 1,2,3')).toEqual({ do: 'drop', items: [{ item: 'cobblestone', count: 64 }], at: [{ x: 1, y: 2, z: 3 }] });
     expect(lineToHand('drop cobblestone')).toEqual({ do: 'drop', items: [{ item: 'cobblestone' }] });
     expect(handToLine({ do: 'drop', items: [{ item: 'gold_ingot', count: 1 }], target: '#12' } as never)).toBe('drop gold_ingot 1 target=#12');
-    expect(handToLine({ do: 'drop', items: [{ item: 'a' }, { item: 'b' }] } as never).startsWith('json ')).toBe(true);
+    // 11/11 (run 7): several kinds are one hand, `drop 物:数,物:数`; with a target or a place it stays json.
+    expect(handToLine({ do: 'drop', items: [{ item: 'a' }, { item: 'b' }] } as never)).toBe('drop a,b');
+    expect(handToLine({ do: 'drop', items: [{ item: 'dirt', count: 17 }, { item: 'granite', count: 17 }] } as never)).toBe('drop dirt:17,granite:17');
+    expect(lineToHand('drop dirt:17,granite:17,gravel')).toEqual({ do: 'drop', items: [{ item: 'dirt', count: 17 }, { item: 'granite', count: 17 }, { item: 'gravel' }] });
+    expect(handToLine({ do: 'drop', items: [{ item: 'a' }, { item: 'b' }], target: '#1' } as never).startsWith('json ')).toBe(true);
   });
   it('restores the reach guidance where dig is explained: 5 m at a time, not 16 cells at once', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('届くのは目から5m以内のマス: トンネルや階段は5mずつ');

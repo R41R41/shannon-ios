@@ -57,7 +57,6 @@ describe('the obsidian scene: water, lava and the bucket', () => {
   it('says the water sources and flows, the lava and what a dig in water costs, with each source\'s distance from the eye and whether it is reached', () => {
     const text = liquidLines(view(), FEET).join('\n');
     expect(text).toContain('水: 源 1 マス・流れ 4 マス');
-    expect(text).toContain('目が水の中だと dig は 5 倍');
     expect(text).toMatch(/水の源（汲み戻せる）: \(251,-24,208\) 目から 5\.\dm・届かない（5m まで）/u);
     expect(text).toContain('溶岩: 源 2 マス・流れ 0 マス。近い源: ');
     expect(text).toContain('(252,-24,209)');

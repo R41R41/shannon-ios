@@ -16,11 +16,6 @@ const EYE = 1.62;
  * is a stop the body would have made.
  */
 export const USE_REACH = 5.0;
-/**
- * What the body does and measures: a dig with the eyes in water takes 5 times as long, and 5 times more when the feet are off the floor; the body
- * puts a block under her feet and stops a stream before a hand when it can, so a dig beside water is allowed (lava is not).
- */
-const WATER_DIG = '目が水の中だと dig は 5 倍、足が地面から浮くとさらに 5 倍かかる（体が先に足元へ足場を置き、流れを止めてから手を出す。水の隣のマスの dig は許される。溶岩の隣は今まで通り断る）。流れの中の walk は同じマスで進めないことがある（上流のマスにブロックを place すると流れは止まる）';
 const RANGE = 7, SHOWN = 3;
 
 interface Found { cell: P; reach: number; between: string | null }
@@ -73,7 +68,7 @@ export function liquidLines(view: MapView, feet: P): string[] {
   const lava = cellsOf(view, feet, new Set(['L'])), lavaFlows = cellsOf(view, feet, new Set(['l'])), obsidian = cellsOf(view, feet, new Set(['O']));
   const lines: string[] = [];
   if (sources.length || flows.length) {
-    lines.push(`水: 源 ${sources.length} マス・流れ ${flows.length} マス（足の周り ${RANGE} マス内）。${WATER_DIG}`);
+    lines.push(`水: 源 ${sources.length} マス・流れ ${flows.length} マス（足の周り ${RANGE} マス内）`);
     if (sources.length) lines.push(`水の源（汲み戻せる）: ${listing(nearest(view, eye, feet, sources))}`);
   }
   if (lava.length || lavaFlows.length) {

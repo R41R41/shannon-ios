@@ -11,7 +11,8 @@ import { heldBack,promiseLines } from './minecraftLlmcPromises.js';
 import { FOOD_FISH,nearNeeds } from './minecraftLlmcReachWords.js';
 import { PLAN_FACTS_KEY,type PlanFacts } from './minecraftPlanFacts.js';
 import { round1 } from './minecraftTransientObservation.js';
-import { foodChoices, foodYieldWords } from './minecraftFoodAcquisition.js';
+import { foodChoices, foodYieldWords, huntWeaponIn } from './minecraftFoodAcquisition.js';
+import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
 export { FACT_WINDOW_MS, controlOf, lifeOf, holderWords, holderLine, createHitWatch } from './minecraftLlmcHealth.js';
 export type { Hit, HitWatch } from './minecraftLlmcHealth.js';
 /** The creatures that are food are listed within this many metres (the near words' own reach for food animals). */
@@ -87,12 +88,30 @@ export function wantsFood(parts: { fullness: number | null; points: number; shor
      ...parts.shortage ? { shortage: parts.shortage } : {},
     ...parts.recovery?.length ? { recovery: [...parts.recovery] } : {}, ...parts.planFacts ? { [PLAN_FACTS_KEY]: parts.planFacts } : {} }).food;
 }
+/**
+ * The village's food from the body: the hay, the fields and the crops of its nearby count (`nearbyResources`, purpose food_village), else the first scan's rows.
+ * Said before the animals (run 7: a cow was the first candidate, with points, and the village's hay none, so a cow was hunted bare-handed): the foods that
+ * need no fire first, with their points, then the animals with what they need. Null when none is known.
+ */
+function villageFoodWords(observation: BodyObservation | null): string | null {
+  const w = world(observation), at = rec(w.position);
+  const feet = at && finite(at.x) !== null && finite(at.y) !== null && finite(at.z) !== null
+    ? { x: Math.floor(Number(at.x)), y: Math.floor(Number(at.y)), z: Math.floor(Number(at.z)) } : null;
+  const body = nearbyLines(nearbyResourcesOf(w.nearbyResources).filter(item => item.purpose === 'food_village' && item.count > 0), feet);
+  const scan = rec(w.scan), rows = Array.isArray(scan?.rows) ? (scan!.rows as unknown[]).filter((row): row is string => typeof row === 'string' && /^(?:干し草|畑|作物)/u.test(row)) : [];
+  const places = body.length ? body.map(line => line.replace(/^食料（村）: /u, '')) : rows.slice(0, 3).map(row => row.slice(0, 60));
+  return places.length ? `村の食べ物: ${places.join('・')}（干し草は 1 個でパン 3＝約 33 点・焼かずに食べられる。hay_block→wheat→bread は make。育った作物は収穫）` : null;
+}
 export function foodLine(observation: BodyObservation | null, shown: number): string | null {
   const list = foodChoices(foodCandidates(observation), shown, FOOD_FISH);
-  if (!list.length) return null;
-  return `近くの食べ物の候補（${FOOD_NEAR_METERS} m 以内・1個の食料点、経路/回収/個数は未確認）: ${list.map(item =>
+  const village = villageFoodWords(observation);
+  if (!list.length) return village;
+  const bare = list.some(item => !FOOD_FISH.has(item.name)) && !huntWeaponIn(carriedItemCounts(world(observation), observation?.facts))
+    ? '（狩りは石以上の剣か斧が要る: 今 無し）' : '';
+  const animals = `近くの食べ物の候補（${FOOD_NEAR_METERS} m 以内・1個の食料点、経路/回収/個数は未確認）: ${list.map(item =>
     `[${FOOD_FISH.has(item.name) ? '魚' : '陸'}]${item.name}${item.id !== null ? ` #${item.id}` : ''} ${one(item.distance)}m`
-      + `${item.at ? ` ${cell(item.at)}` : ''}${foodYieldWords(item.name, FOOD_POINTS)}`).join('・')}`;
+      + `${item.at ? ` ${cell(item.at)}` : ''}${foodYieldWords(item.name, FOOD_POINTS)}`).join('・')}${bare}`;
+  return village ? `${village}／${animals}` : animals;
 }
 
 // ---- the pack, and the queue

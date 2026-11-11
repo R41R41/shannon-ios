@@ -13,11 +13,25 @@ export function foodFill(gap: number): string {
   return one ? `${one[0]} 1 個` : `bread ${Math.ceil(gap / 11 - 1e-9)} 個`;
 }
 
+/**
+ * The safe amount beside a least (2026-11-11, run 7: the least was all the plan said): the preparation's 40 is safe at 100, the gate's 100 at 150, the Nether's depth
+ * 200 at 300 and the End's 330 at 400. Said only once the least is met (below it the line is as it was). Null for a need that is not one of the gates'.
+ */
+export function foodComfort(need: number): number | null {
+  if (need === 40) return 100;
+  if (need === 100) return 150;
+  if (need === 200) return 300;
+  return need === 330 ? 400 : null;
+}
+
 /** The food points as every line says them: 「食料 39.6 点」, or against a need 「食料 39.6/40 点（あと 0.4 点: potato 1 個）」. */
 export function foodPointsWords(food: number, need?: number): string {
   const have = round1(food);
   if (need === undefined) return `食料 ${have} 点`;
-  if (have >= need) return `食料 ${have}/${need} 点`;
+  if (have >= need) {
+    const comfort = foodComfort(need);
+    return comfort !== null && have < comfort ? `食料 ${have}/${need} 点・安心 ${comfort} 点まであと ${round1(comfort - have)} 点（bread ${Math.ceil((comfort - have) / 11 - 1e-9)} 個＝干し草 ${Math.ceil((comfort - have) / 33 - 1e-9)} 個）` : `食料 ${have}/${need} 点`;
+  }
   const gap = round1(need - have);
   return `食料 ${have}/${need} 点（あと ${gap} 点: ${foodFill(gap)}）`;
 }

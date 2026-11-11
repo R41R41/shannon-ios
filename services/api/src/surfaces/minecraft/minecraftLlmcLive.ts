@@ -1,3 +1,4 @@
+import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
 import type { PlanPromise } from '@shannon/mind';
 import { shareStacks } from './minecraftLlmcPromises.js';
 import type { BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
@@ -100,14 +101,40 @@ export function planksHeld(world: Record<string, unknown>, facts: Readonly<Recor
   }
   return planks;
 }
+/**
+ * A spawner farther than `SPAWNER_FAR_METERS` is left out of the landmarks (run 7: a decision's twelve landmark lines held three spawners 42〜80 m off and no
+ * village food or tree): kept in the Nether and the End, and when the plan's now speaks of a spawner or the blaze (`mapLandmarks` itself is not touched:
+ * the blaze's facts read it whole).
+ */
+const SPAWNER_FAR_METERS = 30;
+function farSpawnersOut(lines: string[], world: Record<string, unknown>, planNow: string): string[] {
+  const dimension = String(world.dimension ?? '').replace(/^minecraft:/u, '');
+  if (dimension === 'the_nether' || dimension === 'the_end' || /スポナー|ブレイズ|blaze|spawner/iu.test(planNow)) return lines;
+  const feet = world.position as { x?: unknown; y?: unknown; z?: unknown } | undefined;
+  if (!feet || ![feet.x, feet.y, feet.z].every(value => typeof value === 'number' && Number.isFinite(value))) return lines;
+  return lines.filter(line => {
+    const at = /^[A-Za-z]\s*スポナー\s*\((-?\d+),(-?\d+),(-?\d+)\)/u.exec(line);
+    return !at || Math.hypot(Number(at[1]) - (feet.x as number), Number(at[2]) - (feet.y as number), Number(at[3]) - (feet.z as number)) <= SPAWNER_FAR_METERS;
+  });
+}
+
 /** The landmark lines: the body's wood mark only while wood is short (run 39: no table below, 400 s, the mine's
  * planks 30 m off and unsaid). */
-function landmarkLines(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>): string[] {
-  const lines = strings(world.mapLandmarks, LANDMARKS);
+function landmarkLines(world: Record<string, unknown>, facts: Readonly<Record<string, unknown>>, planNow: string | null | undefined = null): string[] {
+  const lines = farSpawnersOut(strings(world.mapLandmarks, LANDMARKS), world, planNow ?? '');
   if (planksHeld(world, facts) < WOOD_SHORT_PLANKS) {
     return lines.map(line => line.includes(WOOD_MARK) ? `${line}（板が足りない間だけ出す。dig で取れる。作業台は板 4）` : line);
   }
   return lines.filter(line => !line.includes(WOOD_MARK));
+}
+
+/** `nearby`: what is near by purpose (`minecraftLlmcNearby.ts`), from the body's `nearbyResources` at her feet now; no key when the body sends none. */
+function nearbyField(world: Record<string, unknown>, planNow: string | null | undefined): Record<string, unknown> {
+  const at = world.position as { x?: unknown; y?: unknown; z?: unknown } | undefined;
+  const feet = at && [at.x, at.y, at.z].every(value => typeof value === 'number' && Number.isFinite(value))
+    ? { x: Math.floor(at.x as number), y: Math.floor(at.y as number), z: Math.floor(at.z as number) } : null;
+  const lines = nearbyLines(nearbyResourcesOf(world.nearbyResources), feet, planNow ?? '');
+  return lines.length ? { nearby: lines } : {};
 }
 
 /** The food she carries, as points (design 2.6): the total and each kind. */
@@ -341,7 +368,8 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...readinessFields(parts),
     ...(parts.facts?.lines.length ? { facts: [...parts.facts.lines] } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc_view で見られる）',
-    landmarks: landmarkLines(world, observation.facts),
+    landmarks: landmarkLines(world, observation.facts, parts.planNow),
+    ...nearbyField(world, parts.planNow),
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
     stops: strings(world.recentStops, STOPS),
     ...(look ? { look } : {}),
@@ -453,8 +481,8 @@ export function llmcPlanTokens(plan: unknown): number {
  * up and the stone to
  * craft with are what a decision needs most.
  */
-const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['near', 0], ['stops', 2], ['foodPreparation', -1],
-  ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['foodPoints.items', -1], ['inventory', 10], ['landmarks', 3], ['jobs', -1],
+const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['nearby', 4], ['near', 0], ['stops', 2], ['foodPreparation', -1],
+  ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['nearby', 2], ['foodPoints.items', -1], ['inventory', 10], ['landmarks', 3], ['nearby', 1], ['jobs', -1],
   ['threats', 2], ['stops', 1], ['events', 1],
   // A map of water (three tokens a cell) leaves little beside it: the last of the rest, the plan's path and her state kept.
   ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];

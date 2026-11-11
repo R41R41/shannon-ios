@@ -24,7 +24,7 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
  * | use 物 [x,y,z]
  *   [face=F] [target=T] [count=N]
  *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
- *   drop 物 [数] [target=#id か x,y,z]
+ *   drop 物 [数] [target=#id か x,y,z]   (several: drop 物:数,物:数 with no target or place)
  *   shoot 相手(#id か名前) か x,y,z [item=bow] [charge=秒] [n=本数]
  *   上に無い形（furnace・chest、use の ほかの欄など）は `json {手の JSON}` の 1 行。
  * 往復（手 → 1 行 → 手）が元と同じにならない手は、必ず json の行に落ちる（欄を黙って失わない）。
@@ -139,9 +139,11 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   craft: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   pickup: hand => [...given('range', hand.range), ...given('target', hand.target), ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig)],
   // `drop 物 [数] [target=#id か x,y,z]`: one kind, one place at most (a second kind or both a target and a place are a json line).
-  drop: hand => hand.items?.length === 1 && (hand.at?.length ?? 0) <= 1 && !(hand.at?.length && hand.target)
-    ? [hand.items[0]!.item, ...(hand.items[0]!.count !== undefined ? [String(hand.items[0]!.count)] : []), ...given('target', hand.target),
-      ...(hand.at?.length ? [pos(hand.at[0]!)] : [])] : null,
+  drop: hand => hand.items && hand.items.length >= 2 && !hand.at?.length && !hand.target
+    ? [hand.items.map(item => item.count !== undefined ? `${item.item}:${item.count}` : item.item).join(',')]
+    : hand.items?.length === 1 && (hand.at?.length ?? 0) <= 1 && !(hand.at?.length && hand.target)
+      ? [hand.items[0]!.item, ...(hand.items[0]!.count !== undefined ? [String(hand.items[0]!.count)] : []), ...given('target', hand.target),
+        ...(hand.at?.length ? [pos(hand.at[0]!)] : [])] : null,
   look: hand => hand.to ? [pos(hand.to)] : hand.yaw !== undefined && hand.pitch !== undefined ? [`yaw=${hand.yaw}`, `pitch=${hand.pitch}`] : null,
   attack: attackWords,
   use: hand => hand.item && (hand.at?.length ?? 0) <= 1
@@ -308,9 +310,18 @@ const READERS: Record<string, Reader> = {
   craft: ({ words, hand }) => words[0]
     ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('craft', '物の名前が要る'),
   pickup: ({ hand }) => done(blocksOf(hand)),
-  drop: ({ words, cells, hand }) => words[0] && cells.length <= 1
-    ? done({ ...hand, items: [{ item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }], ...(cells.length ? { at: [cells[0]] } : {}) })
-    : bad('drop', '物の名前が要る（座標は 1 つまで）'),
+  drop: ({ words, cells, hand }) => {
+    // 2026-11-11 (run 7: three drop hands in a row for one pile): `drop dirt:17,granite:17,gravel` is one hand of several kinds (the body digs one pit).
+    if (words[0] && /[,:]/u.test(words[0])) {
+      const items = words[0].split(',').map(part => /^([a-z][a-z0-9_]{0,63})(?::(\d{1,4}))?$/u.exec(part));
+      return items.every(item => item !== null) && cells.length === 0 && !hand.target
+        ? done({ ...hand, items: items.map(item => ({ item: item![1]!, ...(item![2] ? { count: Number(item![2]) } : {}) })) })
+        : bad('drop', '物[:数][,物[:数]…] の形（複数の時は target・座標は付けない）');
+    }
+    return words[0] && cells.length <= 1
+      ? done({ ...hand, items: [{ item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }], ...(cells.length ? { at: [cells[0]] } : {}) })
+      : bad('drop', '物の名前が要る（座標は 1 つまで）');
+  },
   look: ({ cells, hand }) => done(cells.length ? { ...hand, to: cells[0] } : hand),
   attack: attackHand,
   // The bow at an entity or at one cell (the crystals of the End; 2026-11-02, the first real replay: Sonnet wrote it as a line and was turned away).

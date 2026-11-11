@@ -40,8 +40,8 @@ describe('s47: a place far outside the map is not written as if it were near', (
   it('says that the way out there is unknown, that a walk neither digs nor lays, and where the map says she gets to', () => {
     const lines = routeLines(view, origin, { at: { x: 195, y: 66, z: 60 }, range: 1 }, 'p1.1');
     expect(lines[0]).toContain('地図の外');
-    expect(lines[1]).toContain('目的地は地図の外（水平 204m）: そこまでの道は地図に無く、不明');
-    expect(lines[1]).toContain('walk は掘らず置かないので、遠い点を渡しても途中の壁で止まる');
+    expect(lines[1]).toContain('目的地は地図の外（水平 204m）: 道は地図に無く不明');
+    expect(lines[0]).toContain('歩きは掘らず置かない');
   });
   it('writes nothing of the kind for a place on the map', () => {
     const lines = routeLines(view, origin, { at: { x: 1, y: 0, z: 0 }, range: 1 }, 'p1.1');

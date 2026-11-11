@@ -33,7 +33,7 @@ const PINNED = {
   // end1109f01 (11/9): the map legend says & 中立の足 (前は 9c8529376da81379).
   // 11/9 release: エンドの前の食料 330（thru ddcd20a0）と柱・足場は黒曜石で積まない（end 0fc9cd81・ec76577b）の分だけ変わった（前は 36fb364a9803c6a8）。
   // 11/11 flow (ec854a5e): the words of the flow change say so (前は fdeb35d336c31278).
-  llmc_r9_system: 'ad21b05d1b6779a3',
+  llmc_r9_system: '381079159224f450',
   old_mode_system: '9484df3e3e4d04cf',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);

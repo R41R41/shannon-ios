@@ -27,8 +27,12 @@ export const FOOD_ACQUISITION_KNOWLEDGE = [
 export const HUNT_FOOD_KNOWLEDGE = [
   '- 食料・革・羊毛の動物（cow・pig・sheep・chicken・rabbit）が周りに見えている時は、attack と pickup を 1 体ずつ並べず `hunt cow count=6`（種類はカンマで複数: `hunt pig,cow`）を 1 手で出す。'
     + 'id は要らず、体が近い成体から倒して落とし物を拾い、居なくなるか count で止まる（子は倒さない。届かない個体は飛ばす）。count は要る数だけ（牛 1 体で生肉 1〜3・革 0〜2）。',
-  '- 序盤は牛・豚を数体（食料 40 点）。革は牛（防具一式は革 24）、羊は羊毛と羊肉（ベッドは同色の羊毛 3）。no_target は結果の「見えている動物」の方へ短い go で寄って出し直す。',
+  '- 動物は石以上の剣か斧を持ってから（素手は牛 1 体に 10 回ほど）。序盤の食料は村の干し草・畑が先。革は牛（防具一式は革 24）、羊は羊毛と羊肉（ベッドは同色の羊毛 3）。no_target は結果の「見えている動物」の方へ短い go で寄って出し直す。',
 ].join('\n');
+
+/** A sword or axe of stone or better: a hunt with a bare hand or a pickaxe takes about ten blows a cow (run 7, 2026-11-11). */
+export const HUNT_WEAPON = /^(?:stone|iron|diamond|netherite)_(?:sword|axe)$/u;
+export const huntWeaponIn = (counts: ReadonlyMap<string, number>): boolean => [...counts].some(([name, count]) => count > 0 && HUNT_WEAPON.test(name));
 
 /** A food item's value, not a claim about how many drops this creature will give. */
 const FOOD_DROP: Readonly<Record<string, string>> = Object.freeze({

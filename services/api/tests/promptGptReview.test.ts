@@ -48,12 +48,12 @@ describe('the rules are in the instructions', () => {
     // The always-on text carries the English form of the rule; the Japanese lines (below) are the planner's, so both are pinned.
     expect(system).toContain('Required (while unmet, do not go down or dig iron; to skip one, write skipped and the reason in prep; a skipped section does not count as achieved): food points 40 or more');
     expect(system).toContain('a stone pickaxe and a stone axe, and 1 crafting table or 4 or more planks (carried)');
-    expect(system).toContain('Goal: food 40 to 60 points; wood worth 20 to 24 logs');
+    expect(system).toContain('Amounts: least/safe. Food 40/100 points; wood 12/24 logs');
     expect(system).toContain('fullness is no substitute');
     expect(system).toContain('Eating after the descent and dropping below 40 points is not an unmet requirement');
     expect(PREP_DESCENT_RULE).toContain('必須（未達の間は下りない・鉄を掘らない。省くなら prep に skipped と理由を書く。省いた節は達成に数えない）: 食料の点 40 以上');
     expect(PREP_DESCENT_RULE).toContain('石のツルハシと石の斧・作業台 1 つか板 4 以上');
-    expect(PREP_DESCENT_RULE).toContain('目標: 食料 40〜60 点・原木 20〜24 本分');
+    expect(PREP_DESCENT_RULE).toContain('量は最低と安心の両方: 食料は最低 40 点・安心 100 点、原木は最低 12・安心 24 本分');
     // The skip is said once, in the requirement (未達の間は下りない。省くなら prep に skipped と理由): not again in the priority line or the plan's.
     expect(system.split('write skipped and the reason in prep').length - 1).toBe(1);
     expect(system).not.toMatch(/never skip (the )?preparation|preparation is never skipped/i);

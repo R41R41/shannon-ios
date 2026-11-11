@@ -45,7 +45,9 @@ const surface = (items: Array<[string, number]>, extra: Record<string, unknown> 
 describe('run 43: the food points are one number, said and judged', () => {
   it('says 39.6/40 with what is short and what fills it, and judges it short (not 「40/40」)', () => {
     expect(foodPointsWords(39.6, 40)).toBe('食料 39.6/40 点（あと 0.4 点: potato 1 個）');
-    expect(foodPointsWords(40, 40)).toBe('食料 40/40 点');
+    expect(foodPointsWords(40, 40)).toBe('食料 40/40 点・安心 100 点まであと 60 点（bread 6 個＝干し草 2 個）');
+    expect(foodPointsWords(100, 40)).toBe('食料 100/40 点');
+    expect(foodPointsWords(60, 45)).toBe('食料 60/45 点');
     expect(foodPointsWords(39.6)).toBe('食料 39.6 点');
     expect(foodFill(2)).toBe('sweet_berries 1 個');
     expect(foodFill(30)).toBe('bread 3 個');
