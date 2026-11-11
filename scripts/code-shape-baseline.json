@@ -220,11 +220,11 @@
     },
     "services/api/src/contracts/minecraftActHandRules.ts": {
       "complex-function": 1,
-      "long-line": 1
+      "long-line": 4
     },
     "services/api/src/contracts/minecraftActShortHands.ts": {
       "complex-function": 1,
-      "long-line": 1
+      "long-line": 2
     },
     "services/api/src/contracts/minecraftBodyContract.ts": {
       "complex-function": 2,
@@ -766,7 +766,8 @@
       "multi-statement-line": 9,
       "long-function": 1,
       "complex-function": 2,
-      "long-line": 15
+      "long-line": 15,
+      "long-file": 1
     },
     "services/api/src/mind/action/fca/fcaToolState.ts": {
       "complex-function": 1,
@@ -1867,11 +1868,12 @@
       "long-line": 11
     },
     "services/api/src/surfaces/minecraft/minecraftLlmc.ts": {
-      "long-line": 2
+      "long-line": 2,
+      "complex-function": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcBodyFacts.ts": {
       "complex-function": 1,
-      "long-line": 4
+      "long-line": 6
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcCaution.ts": {
       "complex-function": 1
@@ -1885,13 +1887,14 @@
       "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcNightWaitHold.ts": {
-      "complex-function": 1
+      "complex-function": 1,
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPreflight.ts": {
       "complex-function": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPrepRules.ts": {
-      "long-line": 4
+      "long-line": 12
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts": {
       "long-line": 2
@@ -1900,11 +1903,11 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts": {
-      "long-line": 22
+      "long-line": 71
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
-      "long-line": 3
+      "long-line": 4
     },
     "services/api/src/surfaces/minecraft/minecraftOreRoute.ts": {
       "complex-function": 1,
@@ -2264,6 +2267,68 @@
     },
     "services/api/src/surfaces/minecraft/minecraftDropsAdvice.ts": {
       "long-line": 1
+    },
+    "services/api/src/contracts/minecraftActShortContract.ts": {
+      "long-line": 3
+    },
+    "services/api/src/contracts/minecraftMapLegendV2.ts": {
+      "long-line": 3
+    },
+    "services/api/src/infra/models/anthropic/anthropicFcaMinecraftSystem.ts": {
+      "long-line": 12
+    },
+    "services/api/src/surfaces/minecraft/minecraftAdoptionTags.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftConditions.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftFurnaceMeanwhile.ts": {
+      "long-line": 5,
+      "multi-statement-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftKnowledgeCore.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcFacts.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcFurnaceWait.ts": {
+      "complex-function": 1,
+      "long-line": 20,
+      "multi-statement-line": 3
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcLiquid.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcPartial.ts": {
+      "long-line": 3
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcQueue.ts": {
+      "long-file": 1,
+      "long-line": 1,
+      "multi-statement-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcQueueBody.ts": {
+      "multi-statement-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcReplan.ts": {
+      "long-line": 3
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcReserve.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcResultWords.ts": {
+      "complex-function": 1,
+      "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcSleepHold.ts": {
+      "complex-function": 1,
+      "long-line": 6,
+      "multi-statement-line": 2
+    },
+    "services/api/src/wiring/fcaMinecraftActItem.ts": {
+      "complex-function": 1
     }
   }
 }

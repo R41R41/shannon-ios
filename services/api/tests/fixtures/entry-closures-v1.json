@@ -856,6 +856,7 @@
     "surfaces/minecraft/minecraftFoodAcquisition.ts",
     "surfaces/minecraft/minecraftFoodPreparation.ts",
     "surfaces/minecraft/minecraftFoodWords.ts",
+    "surfaces/minecraft/minecraftFurnaceMeanwhile.ts",
     "surfaces/minecraft/minecraftGistAdoption.ts",
     "surfaces/minecraft/minecraftHeadBoot.ts",
     "surfaces/minecraft/minecraftIntent.ts",

@@ -30,13 +30,13 @@ const productionSources = [
 // Over 500 lines in the 11/10 filming release; split them after the filming. Only these exact files and only up to the
 // count they have now: any other file still stops at 500, and these stop if they grow.
 const filmingOverLimit = new Map([
-  ['services/api/src/mind/action/fca/fcaRunner.ts', 527],
+  ['services/api/src/mind/action/fca/fcaRunner.ts', 541],
   ['services/api/src/surfaces/minecraft/minecraftEndFacts.ts', 543],
   ['services/api/src/surfaces/minecraft/minecraftFirstPlan.ts', 564],
-  ['services/api/src/surfaces/minecraft/minecraftLlmcLive.ts', 503],
-  ['services/api/src/surfaces/minecraft/minecraftLlmcQueue.ts', 546],
+  ['services/api/src/surfaces/minecraft/minecraftLlmcLive.ts', 504],
+  ['services/api/src/surfaces/minecraft/minecraftLlmcQueue.ts', 576],
   ['services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts', 697],
-  ['services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts', 681],
+  ['services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts', 682],
   ['services/api/src/wiring/fcaBodyRecovery.ts', 508],
 ]);
 

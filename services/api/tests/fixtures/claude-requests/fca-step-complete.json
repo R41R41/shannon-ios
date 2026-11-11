@@ -186,7 +186,8 @@
      "type": "auto"
     },
     "thinking": {
-     "type": "adaptive"
+     "type": "adaptive",
+     "display": "summarized"
     },
     "output_config": {
      "effort": "low"
@@ -213,7 +214,7 @@
     "tools": "a7a68b1f",
     "system": "992db30f",
     "schema": "-",
-    "effort": "8a3bb108",
+    "effort": "a2b089d3",
     "history": "50d5c05c"
    }
   }

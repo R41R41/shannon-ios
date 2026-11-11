@@ -11,11 +11,11 @@ import { quiet, requestDigest, scenario, WIDE_POLICY, SUMMARY_POLICY } from './f
  * the others are as they were.
  */
 const GOLDEN = {
-  transient_one_epoch: ['eddf94d3b1ef91bb', '4654cbc14a63f06f', '29c338928c4f6968', 'c7d701daf38462bd', '5e224b1666fe64a8', '1f954f2300fd6062', '6c83287ac9460438', 'bd159dbfd829db5b', '6ab0fa01fc78289a', '1397581d5bbb00b6', '487fc2bee410a252', 'b2cd43c94761cbf6', '7f9f42697d6b700a', '53b878aeefb97208', 'b540873b8ee66064', 'd77f872cf418d38d', '8db7b5e317f65b39', 'cf8ec4d3ab6c8691', 'c3b146509c653106', 'b668f42c6e455171', 'cb4208ac8ca666f7', '412a88b09a2c50f7', 'cab86c3978620ec7', '6ba2885d250f3f8d', '1b3c7567bab82722', '0183e65c217bc13a', '92553a4daf637b05', 'b938600758edf66c', 'd67e7e86df5d810b', 'ca0735af3b0b45f1'],
-  transient_summaries: ['eddf94d3b1ef91bb', '4654cbc14a63f06f', '29c338928c4f6968', 'c7d701daf38462bd', '5e224b1666fe64a8', '1f954f2300fd6062', '6c83287ac9460438', 'bd159dbfd829db5b', '6ab0fa01fc78289a', '1397581d5bbb00b6', '96e65cc04c6eecc9', '618e7cbfa9e928ca', '14861444176cfc3b', '4b95dcc001993096', '8082bd578945bd54', '986243b7895b2b7c', '2fcdd4ee172a4ea6', 'a26562c0f4493a6e', '40e1720a7e199452', '85a712416337f6cd', '4e5fd1ac8522395d', '47b5ea5fcd6dedcb', '320e614b4b3f2400', 'f9b05a5c5e73477c', 'a3440dfd6e93254e', '91c50bf7552be186', '9932b51e0651bf11', 'd4f5a098babc10ee', 'c4b888ef93df63b6', '71a51e890bcadd55'],
-  body_summary: ['54841a24b34c54d9'],
+  transient_one_epoch: ['ff33a6f160d06a8a', '41a6b63de1858b9d', 'fd1cc22e4fde9eaf', '57b1790563b465cd', '56071f8faf322718', 'e5559d0bac45b8a2', '728c9857da850d8b', 'e5f6f559be79c883', '151028729e706a27', '182bd80cae803bbf', 'fa4ac8eded3016a9', 'dd4909e551b44607', '780dccb5b19409eb', '2fa713925af4e8d2', '57dda367f4b17273', '666d9681b367f2d7', '29b1ab440138c561', '50ca3bbe18198484', 'e2bdeafda9e3c095', 'a67559707ff6ec9e', '35c022c4d30251c3', '0b8cc31513d10fb8', 'c86039d6e693a8f7', '454fd1d5d3d7dd60', '6f09d3998fcbb058', '40ef69ad99b80863', '65794c1d1c86ac42', '7e206fa060a3c5f4', '46f9975157ae370d', 'c09164cf6e4e49f6'],
+  transient_summaries: ['ff33a6f160d06a8a', '41a6b63de1858b9d', 'fd1cc22e4fde9eaf', '57b1790563b465cd', '56071f8faf322718', 'e5559d0bac45b8a2', '728c9857da850d8b', 'e5f6f559be79c883', '151028729e706a27', '182bd80cae803bbf', 'c140aa19fde60ce9', '1880da65c8aa039e', '32fabbe3f9519663', '18a711e99962b3ab', '35527622b8fcd17f', '3884a7be1ace3814', '5095f531c8c346e5', '972d6a4140ee201f', 'aa98aa1171a2c5f5', '32daf21aa358b61e', 'a6c748a0b6582d8b', '0d3977bc4f4056bc', 'c2b669212b027760', '774133ba92d2bca9', 'ccc692f07a8ff659', '3af4d4715b2303c4', 'a5a99f421b96e0ec', '2afb7c0808b79909', '69e0b3903999ac45', '521246ad8660176e'],
+  body_summary: ['b349b46c45a059b4'],
   // 11/11 trim: the stage rules (and so the first plan, which carries them) lose the reference sentence of runs 41 and 42, whose example the descent's reason line says once.
-  first_plan: ['7236561c08a6c728'],
+  first_plan: ['1d03a04bc6c71595'],
 };
 
 const live = (step: number) => ({ observation: { position: { x: 10 + step, y: 64, z: -3 }, health: 20, food: 18 }, pace: { minutes: step } });
