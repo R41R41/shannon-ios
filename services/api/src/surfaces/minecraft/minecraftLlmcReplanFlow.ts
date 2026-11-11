@@ -64,11 +64,6 @@ export interface ReplanDeps {
   persist?(checkpoint: { minecraftReplans: ReplanLedger; minecraftReplanPending: Waiting | null }): boolean;
   /** The nodes an update names, as the plan it was checked against has them (`boundTo`): the update is taken only by a plan that still has them so. */
   bind?(update: PlanUpdate): Record<string, string>;
-  /**
-   * A same-spot stall is the road's, not the plan's (e1111h2): the update without what would set aside a preparation node still owed
-   * (`minecraftReplanPrep.ts`). `owed`: the nodes still owed and how far each is, for the record.
-   */
-  unskipped?(update: PlanUpdate, stall: Stall): { update: PlanUpdate; dropped: string[]; owed: string[] };
   /** What the body is in now, for the stall record (`minecraftLlmcStallRecord.ts`). */
   vitals?(): StallVitals;
   log(line: string): void;
@@ -149,17 +144,8 @@ export function createReplanFlow(deps: ReplanDeps) {
     } finally {
       danger.stop();
     }
-    const asked = replanOf(reply);
-    if (!asked) return record(node, stall, 'refused', '答えが読めなかった');
-    let made = asked, keptWhy: string | null = null;
-    const kept = stall.kind === 'same_spot_stops' ? deps.unskipped?.(asked.update, stall) : undefined;
-    if (kept?.dropped.length) {
-      made = { ...asked, update: kept.update };
-      const first = kept.owed[0] ?? kept.dropped[0]!;
-      keptWhy = `準備の節 ${first}は未達なので、外す直しは通さなかった`;
-      say(`Shannon Minecraft replan kept preparation task=${deps.taskId} node=${node} kept=${kept.dropped.join(',')} dropped=${(asked.update.ops?.length ?? 0) - (kept.update.ops?.length ?? 0)}`);
-      offer(deps.taskId, `replan_prep:${node}`, `止まりの原因は道なので、準備の節 ${first} は外さない。同じ節を別の道・別の面から続ける`);
-    }
+    const made = replanOf(reply);
+    if (!made) return record(node, stall, 'refused', '答えが読めなかった');
     const unchanged = !made.update.ops?.length && !made.update.current;
     const problem = unchanged ? null : deps.check(made.update);
     const outcome = unchanged ? 'unchanged' : problem ? 'refused' : 'changed';
@@ -167,7 +153,7 @@ export function createReplanFlow(deps: ReplanDeps) {
     const why = problem ? ` problem=${problem.slice(0, 100)}` : '';
     say(`Shannon Minecraft replan task=${deps.taskId} node=${node} kind=${stall.kind} outcome=${outcome} ops=${made.update.ops?.length ?? 0}`
       + ` ms=${Date.now() - began}${why}`);
-    return record(node, stall, outcome, problem ? `通らなかった: ${problem.slice(0, 80)}` : keptWhy && outcome === 'unchanged' ? keptWhy : made.why);
+    return record(node, stall, outcome, problem ? `通らなかった: ${problem.slice(0, 80)}` : made.why);
   }
   return {
     /** The look found a stall: the count starts again from nothing, and a stall a new plan answers waits for the next decision. */
