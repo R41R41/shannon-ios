@@ -436,8 +436,8 @@ describe('the full pack names the clutter first and keeps 128 blocks (the coordi
   it('keeps 128 of the most carried filler, in the words of a full pack and of one nearly full', () => {
     const full = packLines(lines('cobblestone×350', 'granite×37', 'dirt×22', 'oak_fence×3', ...Array.from({ length: 30 }, (_, i) => `item_${i}×1`)))
       .join('\n');
-    expect(full).toContain('雑物 oak_fence×3・cobblestone×222');
-    expect(full).toContain('cobblestone 128 は柱と橋用に数えていない');
+    expect(full).toContain('雑物 oak_fence×3・cobblestone×286');
+    expect(full).toContain('cobblestone 64 は柱と橋用に数えていない');
     const soon = packLines(lines('cobblestone×350', 'oak_fence×3', 'rail×2', ...Array.from({ length: 26 }, (_, i) => `item_${i}×1`))).join('\n');
     expect(soon).toContain('捨てる物の候補: 雑物 oak_fence×3・rail×2・cobblestone×222');
     expect(soon).toContain('cobblestone 128 は柱と橋に残す');

@@ -39,6 +39,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   fight: { needs: [['target']], may: ['den', 'stance', 'item', 'retreatHp', 'range', 'seconds'] },
   mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig'] },
   hunt: { needs: [['target']], may: ['count', 'range', 'seconds'] },
+  tidy: { needs: [], may: ['items', 'keep', 'room', 'smelt', 'seconds'] },
   make: { needs: [['item']], may: ['count'] },
   portal: { needs: [['at'], ['axis']], may: ['block', 'enter', 'canPlace', 'maxPlace', 'seconds'] },
   smelt: { needs: [['items']], may: ['fuel', 'fuelCount', 'furnaces', 'at', 'seconds'] },
@@ -111,6 +112,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
     ?? (BLOCK_NAME.test(hand.block!) ? null : 'block はブロックの id（例 iron_ore）') ?? names(hand),
   hunt: huntProblem,
+  tidy: tidyProblem,
   make: hand => count(hand, 64),
   portal: hand => seconds(hand, 5, 120) ?? (hand.at!.length !== 1 ? 'at は枠の内側の左下のマス 1 つ' : null) ?? names(hand),
   vertical: verticalProblem,
@@ -174,6 +176,14 @@ function huntProblem(hand: ActHand): string | null {
   if (typeof hand.target !== 'string' || /^#?\d+$/u.test(hand.target.trim())) return 'target は食料の動物の種類（cow・pig・sheep・chicken・rabbit。カンマで複数: pig,cow）。id は attack';
   return seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.count !== undefined && !(Number.isInteger(hand.count) && hand.count >= 1) ? 'count は 1〜64 の整数' : null)
     ?? (hand.range !== undefined && !(hand.range >= 4 && hand.range <= 48) ? 'range は 4〜48（m。手を始めた所から測る）' : null);
+}
+/** tidy (2026-11-13): room 1〜20 (whole), seconds 5〜120, items and keep with counts 1 or more (keep needs one). */
+function tidyProblem(hand: ActHand): string | null {
+  if (hand.room !== undefined && !(Number.isInteger(hand.room) && hand.room >= 1 && hand.room <= 20)) return 'room は 1〜20 の整数（空けたい枠数。既定 6）';
+  if (hand.smelt !== undefined && typeof hand.smelt !== 'boolean') return 'smelt は true か false（smelt=off）';
+  if (hand.items !== undefined && (hand.items.length > 8 || hand.items.some(entry => entry.count !== undefined && !(entry.count >= 1)))) return 'items は 8 種類まで・個数は 1 以上';
+  if (hand.keep !== undefined && (hand.keep.length > 8 || hand.keep.some(entry => !entry.item || !(entry.count >= 1)))) return 'keep は 物:数 を 8 つまで（数は 1 以上）';
+  return seconds(hand, 5, 120);
 }
 function attackProblem(hand: ActHand): string | null {
   return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null);

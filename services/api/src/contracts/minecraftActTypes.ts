@@ -61,6 +61,8 @@ export const HAND_KINDS = [
   'sleep',
   // 2026-11-11: the food animals around her, until none is left in range or count have fallen, with their drops (body claude/hunt-body-1111).
   'hunt',
+  // 2026-11-13: make room in the pack (throw what is not needed, hay_block to bread, smelt raw ore) as one hand (body claude/flow-body-1111).
+  'tidy',
 ] as const;
 
 export type HandKind = (typeof HAND_KINDS)[number];
@@ -141,6 +143,10 @@ export interface ActHand {
   /** furnace put: the fuel and how many. */
   fuel?: string;
   fuelCount?: number;
+  /** tidy: what must stay (counts; overrides the body's default list), the free slots wanted (1–20, default 6), and false: do not smelt. */
+  keep?: readonly { item: string; count: number }[];
+  room?: number;
+  smelt?: boolean;
   /** furnace: put | take; chest: look | take | put | takeAll. */
   op?: 'put' | 'take' | 'look' | 'takeAll';
   /** attack/shoot/pickup/drop: an entity, `#<id>` or a name (the nearest of that name). drop: throw toward it. */

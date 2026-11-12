@@ -153,6 +153,8 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   '  16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す（seconds 10〜60、既定 45）。夜か雷雨なら今寝る。夜まで 10 秒以内なら体が待って寝る。それより前（昼）は寝る予約で、夜になり次第、体が次の手の前で寝る（wait で夜を待たない）。8m（上下 5）に敵がいると寝られない（壁越しでも）。'
     + 'ネザー・エンドでは爆発する。掘って場所は作らない。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
   'drop 物[:数][,物[:数]…] [target=#id か X,Y,Z]  捨てる（体が深さ2の穴を掘って埋める。target か座標ならその方へ投げる＝ピグリンへの金）',
+  'tidy [物[:数],…] [keep=物:数,…] [room=N] [smelt=off]  持ち物に隙間を作る（要らない物を捨て・hay_block をパンに・原石を炉で焼く。穴に入ったか確かめる）',
+  '  物を省くと体が選ぶ。結果に「空き A→B」が出る。要る物（約束・防具の材料）は keep= で守る。drop は物と数を決めて捨てる時に。',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）。食料の動物を何体も狩るのは hunt（どちらも食料の動物は石以上の剣か斧を持ってから）',
   manualPage('special-json', 'shield_rush・fill のJSON書式例', [
   'json {"do":"attack","style":"shield_rush",...}（上記の全必須欄を書く・act の accept=["blaze"]）',
@@ -190,7 +192,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
 "target・untilDead・seconds・hold（shield_rush は上の欄も） / eat: item"),
   ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +
-"at（1つ）・op・items / hunt: target（種類。id は不可）・count・range・seconds"),
+"at（1つ）・op・items / hunt: target（種類。id は不可）・count・range・seconds / tidy: items・keep・room・smelt・seconds"),
   '- drop: items・target か at / shoot: target か at・item・charge・n',
   manualPage('examples', 'walk・furnace・chest・drop・shoot のJSON例', [
   'json {"do":"walk","to":{"x":1,"y":64,"z":2},"range":1,"sprint":true,"note":"村へ"}',

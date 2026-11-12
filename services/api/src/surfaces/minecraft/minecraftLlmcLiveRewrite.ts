@@ -3,7 +3,9 @@ import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { liquidLines } from './minecraftLlmcLiquid.js';
 import { FOOD_PASS, NIGHT_PASS } from './minecraftNightArms.js';
 import { obsidianWays } from './minecraftLlmcObsidianWays.js';
-import { packLines } from './minecraftLlmcPack.js';
+import { packLines, type TidyContext } from './minecraftLlmcPack.js';
+import { keepWordsOf, planMaterials } from './minecraftLlmcTidyKeep.js';
+import { inFurnaceOf, ironArmorLine } from './minecraftLlmcIronNumbers.js';
 import { nearNeeds, nearWorthy, type NearNeeds } from './minecraftLlmcReachWords.js';
 import { expandAround, normalizeMap } from './minecraftLlmcLiveMap.js';
 import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
@@ -259,12 +261,52 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Wa
 
 /** `body.pack`: the free slots of the pack, from the inventory lines as the body wrote them (one line a stack). */
 const END_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['end', 'stronghold', 'pearl', 'dragon']);
+/** What the plan's nodes and the body's remembered places say to the tidy words (flow design C-5): materials held back, a table or furnace within 16 m. */
+const NEAR_STATION_M = 16;
+function tidyContext(inventory: readonly string[], bodyIn: Rec): TidyContext {
+  const carried = new Map<string, number>();
+  for (const line of inventory) {
+    const stack = /^([a-z_0-9]+)×(\d+)/u.exec(line);
+    if (stack) carried.set(stack[1]!, (carried.get(stack[1]!) ?? 0) + Number(stack[2]));
+  }
+  const facts = factsIn(bodyIn);
+  const kinds = facts ? [...(facts.now ? [facts.now.kind] : []), ...facts.next.map(node => node.kind)] : [];
+  const held = planMaterials(kinds, carried);
+  const places = rec(rec(bodyIn.state)?.rememberedPlaces) ?? {};
+  const within = (names: readonly string[]): boolean => names.some(name => {
+    const text = places[name];
+    const metres = typeof text === 'string' ? /^(\d+(?:\.\d+)?)m/u.exec(text.trim())?.[1] : undefined;
+    return metres !== undefined && Number(metres) <= NEAR_STATION_M;
+  });
+  return { ...(held.size ? { held: (item: string) => held.get(item) ?? 0, keepWords: keepWordsOf(held) } : {}),
+    near: { table: within(['crafting_table']), furnace: within(['furnace', 'blast_furnace', 'smoker']) } };
+}
+/** Flow design E: the iron armour's numbers, only while the current or next node is the iron armour. */
+function ironLineOf(inventory: readonly string[], bodyIn: Rec): string | null {
+  const facts = factsIn(bodyIn);
+  if (!facts || ![...(facts.now ? [facts.now.kind] : []), ...facts.next.map(node => node.kind)].includes('iron_armor')) return null;
+  const count = (pattern: RegExp): number => inventory.reduce((sum, line) => {
+    const stack = /^([a-z_0-9]+)×(\d+)/u.exec(line);
+    return stack && pattern.test(stack[1]!) ? sum + Number(stack[2]) : sum;
+  }, 0);
+  const state = rec(bodyIn.state), worn = typeof state?.worn === 'string' ? state.worn : '';
+  const places = rec(state?.rememberedPlaces) ?? {};
+  const furnaceNear = ['furnace', 'blast_furnace', 'smoker'].some(name => {
+    const place = places[name];
+    const metres = typeof place === 'string' ? /^(\d+(?:\.\d+)?)m/u.exec(place.trim())?.[1] : undefined;
+    return metres !== undefined && Number(metres) <= NEAR_STATION_M;
+  });
+  return ironArmorLine({ ingots: count(/^iron_ingot$/u), raw: count(/^raw_iron$/u), inFurnace: inFurnaceOf(bodyIn.jobs, state?.jobs),
+    haveHelmet: count(/^iron_helmet$/u) > 0 || /iron_helmet/u.test(worn), haveChestplate: count(/^iron_chestplate$/u) > 0 || /iron_chestplate/u.test(worn), furnaceNear });
+}
 function addPack(body: Rec, inventory: unknown, notes: RewriteNotes, bodyIn: Rec): void {
   const now = factsIn(bodyIn)?.now;
   const forEnd = (!!now && hasKind([now.kind], END_KINDS)) || rec(bodyIn.state)?.dimension === 'the_end';
   const reported = rec(bodyIn.state)?.freeSlots;
-  const lines = packLines(strings(inventory), { forEnd, ...(typeof reported === 'number' ? { free: reported } : {}) });
+  const lines = packLines(strings(inventory), { forEnd, ...(typeof reported === 'number' ? { free: reported } : {}), ...tidyContext(strings(inventory), bodyIn) });
   if (!lines.length) return;
+  const iron = ironLineOf(strings(inventory), bodyIn);
+  if (iron) lines.push(iron);
   body.pack = lines;
   notes.added.push('pack');
 }

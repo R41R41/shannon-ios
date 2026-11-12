@@ -25,6 +25,7 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
  *   [face=F] [target=T] [count=N]
  *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
  *   drop 物 [数] [target=#id か x,y,z]   (several: drop 物:数,物:数 with no target or place)
+ *   tidy [物[:数],…] [keep=物:数,…] [room=N] [smelt=off] [seconds=N]   (items = what to throw; keep = what must stay; no words: the body chooses)
  *   shoot 相手(#id か名前) か x,y,z [item=bow] [charge=秒] [n=本数]
  *   上に無い形（furnace・chest、use の ほかの欄など）は `json {手の JSON}` の 1 行。
  * 往復（手 → 1 行 → 手）が元と同じにならない手は、必ず json の行に落ちる（欄を黙って失わない）。
@@ -117,6 +118,16 @@ function furnaceWords(hand: ActHand): Words {
   if (!hand.item || hand.count === undefined) return null;
   return [pos(hand.at[0]!), 'put', hand.item, String(hand.count), ...given('fuel', hand.fuel), ...given('fuelCount', hand.fuelCount)];
 }
+/** `物:数,物` (the count of a kind is optional). */
+const itemList = (entries: ReadonlyArray<{ item: string; count?: number }>): string =>
+  entries.map(entry => entry.count !== undefined ? `${entry.item}:${entry.count}` : entry.item).join(',');
+/** tidy: the kinds to throw (none: the body chooses), keep=, room=, smelt=off, seconds=. */
+function tidyWords(hand: ActHand): Words {
+  if (hand.items && !hand.items.length) return null;
+  if (hand.keep && !hand.keep.length) return null;
+  return [...(hand.items ? [itemList(hand.items)] : []), ...(hand.keep ? [`keep=${itemList(hand.keep)}`] : []), ...given('room', hand.room),
+    ...(hand.smelt === false ? ['smelt=off'] : hand.smelt === true ? ['smelt=on'] : []), ...given('seconds', hand.seconds)];
+}
 const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   bed_burst: () => null,
   fill: () => null, // Keep every group and required permission in the existing JSON fallback.
@@ -144,6 +155,8 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
     : hand.items?.length === 1 && (hand.at?.length ?? 0) <= 1 && !(hand.at?.length && hand.target)
       ? [hand.items[0]!.item, ...(hand.items[0]!.count !== undefined ? [String(hand.items[0]!.count)] : []), ...given('target', hand.target),
         ...(hand.at?.length ? [pos(hand.at[0]!)] : [])] : null,
+  // `tidy [物[:数],…] [keep=物:数,…] [room=N] [smelt=off] [seconds=N]`.
+  tidy: tidyWords,
   look: hand => hand.to ? [pos(hand.to)] : hand.yaw !== undefined && hand.pitch !== undefined ? [`yaw=${hand.yaw}`, `pitch=${hand.pitch}`] : null,
   attack: attackWords,
   use: hand => hand.item && (hand.at?.length ?? 0) <= 1
@@ -321,6 +334,20 @@ const READERS: Record<string, Reader> = {
     return words[0] && cells.length <= 1
       ? done({ ...hand, items: [{ item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }], ...(cells.length ? { at: [cells[0]] } : {}) })
       : bad('drop', '物の名前が要る（座標は 1 つまで）');
+  },
+  // `tidy cobblestone:64,dirt keep=iron_ingot:12 room=8 smelt=off`: the words are kinds (commas or spaces); keep= is `物:数` kinds; smelt=off|false|on|true.
+  tidy: ({ cells, words, hand }) => {
+    if (cells.length) return bad('tidy', '座標は要らない（体が選ぶ）。物[:数],… [keep=物:数,…] [room=N] [smelt=off]');
+    const { keep, smelt, ...rest } = hand;
+    const read = (text: string) => text.split(',').map(part => /^([a-z][a-z0-9_]{0,63})(?::(\d{1,4}))?$/u.exec(part.trim()));
+    const items = words.flatMap(word => word.split(',')).filter(Boolean).map(part => /^([a-z][a-z0-9_]{0,63})(?::(\d{1,4}))?$/u.exec(part));
+    if (items.some(item => item === null)) return bad('tidy', '捨てる物は 物[:数][,物[:数]…] の形');
+    const kept = keep === undefined ? null : read(String(keep));
+    if (kept && (kept.some(entry => entry === null || !entry[2]))) return bad('tidy', 'keep= は 物:数 をコンマで（keep=iron_ingot:12,coal:8）');
+    if (smelt !== undefined && !['off', 'on', 'false', 'true', false, true].includes(smelt as string | boolean)) return bad('tidy', 'smelt は off か on');
+    return done({ ...rest, ...(items.length ? { items: items.map(item => ({ item: item![1]!, ...(item![2] ? { count: Number(item![2]) } : {}) })) } : {}),
+      ...(kept ? { keep: kept.map(entry => ({ item: entry![1]!, count: Number(entry![2]) })) } : {}),
+      ...(smelt !== undefined ? { smelt: smelt === 'on' || smelt === true || smelt === 'true' } : {}) });
   },
   look: ({ cells, hand }) => done(cells.length ? { ...hand, to: cells[0] } : hand),
   attack: attackHand,

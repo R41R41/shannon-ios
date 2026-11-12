@@ -27,13 +27,17 @@ const CURRENT_HUNT_FIELDS = ' / hunt: target（種類。id は不可）・count�
 const CURRENT_SELF_DEFENCE = '体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く。';
 const LEGACY_SELF_DEFENCE = `${SELF_DEFENCE_SHORT}。`;
 
+// The tidy hand (2026-11-13) added two lines after the drop line and a clause in the json fields line: the historical contract is made without them.
+const CURRENT_TIDY_FIELDS = ' / tidy: items・keep・room・smelt・seconds';
+const isTidyLine = (text: string) => text.startsWith('tidy [物[:数]') || text.startsWith('  物を省くと体が選ぶ。結果に「空き A→B」が出る');
+
 const pin = { catalogHash: 'a'.repeat(64) };
 const book = () => createMinecraftContractBook(pin);
 
 describe('the canonical Minecraft input-contract book', () => {
   it('pins the revised shoot manual and unchanged schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('21199899c9dfc09d0db391d87adf8cc7e95de38eedd78003dafe4aafcc2ae1fb');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('158ad73bb584ded9e8ccc6224810493752f159548050d93aa8e3301d734db0c0');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('77cb8d5128ca66d050bd7396b5ec3ab17b09ef02e6263c0fa151f37715de1855');
     const current = book();
     expect(current.pages).toHaveLength(10);
@@ -48,8 +52,9 @@ describe('the canonical Minecraft input-contract book', () => {
   it('retains untouched parent fragments and refuses its historical book after current manual revisions', () => {
     const legacyShoot = 'shoot 相手(#id か名前) か X,Y,Z [item=bow] [charge=秒] [n=本数]  弓で撃つ。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。';
     const fragments = SHORT_ACT_MANUAL_FRAGMENTS;
-    const historical = fragments.filter(part => part.id !== 'hunt').map(part => ({ ...part, text: part.id === 'special'
-      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '')
+    // The inline ids are the lines' positions: without the tidy lines the later ones are numbered as before.
+    const historical = fragments.filter(part => part.id !== 'hunt' && !isTidyLine(part.text)).map((part, index) => ({ ...part, ...(part.inline ? { id: `inline-${index}` } : {}), text: part.id === 'special'
+      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '').replace(CURRENT_TIDY_FIELDS, '')
         .replace(CURRENT_SELF_DEFENCE, LEGACY_SELF_DEFENCE) }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))
       .toBe('cb97fbfd11373fe99d4971da05a6e36483a4d5a87f8b7fbb85ea99588aa84cd3');

@@ -69,7 +69,7 @@ export interface Stall {
  * craft, furnace, chest, …) are neither. */
 /** A-13: the hands whose being done changes the pack or the world (they set the count of stops in one place afresh). */
 const WORKED: ReadonlySet<string> = new Set(['dig', 'mine', 'place', 'pickup', 'make', 'craft', 'smelt', 'furnace', 'chest', 'pillarUp',
-   'obsidian', 'portal', 'attack', 'fight', 'hunt']);
+   'obsidian', 'portal', 'attack', 'fight', 'hunt', 'tidy']);
 /** A-13: a hand that stopped short spent time or work when it moved (a step or a meter), dug or placed, or ran 3 s and more (the
  * act's whole time when it was the only hand that ran). */
 const SPENT_MS = 3_000;

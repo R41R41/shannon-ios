@@ -17,8 +17,13 @@ const FILLER = new RegExp('^(?:cobblestone|cobbled_deepslate|deepslate|diorite|a
  * pack, and the candidates named were the cobblestone the gate asks for). The string is never clutter (the whole-run audit of 11/4, order 10: one or
  * two of it were named to drop while the bow was not made; a bow takes three, and four make a wool).
  */
-const JUNK = new RegExp('(?:_fence|_fence_gate|_stairs|_sapling|_seeds)$|^(?:rail|powered_rail|detector_rail|activator_rail|mossy_cobblestone'
-  + '|mossy_stone_bricks)$', 'u');
+const JUNK = new RegExp('(?:_fence|_fence_gate|_stairs|_sapling|_seeds|_terracotta|_door|_banner|_sign|_tulip)$|^(?:rail|powered_rail|detector_rail|activator_rail|mossy_cobblestone'
+  + '|mossy_stone_bricks|rotten_flesh|spider_eye|poisonous_potato|terracotta|short_grass|tall_grass|fern|large_fern|dandelion|poppy|blue_orchid|allium'
+  + '|azure_bluet|oxeye_daisy|cornflower|lily_of_the_valley|sunflower|lilac|rose_bush|peony)$', 'u');
+/** 2026-11-13 (run 9: the clutter of the pack was about 12 slots): a few of these are clutter only while they are few or while a better one is held. */
+const FEW = /^(?:gold_nugget|emerald)$/u;
+const FEW_BELOW = 9;
+const TOOL_KIND = /^(wooden|stone|golden)_(pickaxe|axe|shovel|hoe|sword)$/u;
 /** A tool with this many uses left or fewer is nearly spent. */
 const WORN_LEFT = 3;
 const TOOL = /_(?:pickaxe|axe|shovel|hoe|sword)$/u;
@@ -47,6 +52,14 @@ export function slotsOf(name: string, count: number): number {
   return Math.max(1, Math.ceil(count / size));
 }
 
+/** A wooden tool when a stone or better one of its kind is held, a stone sword when an iron one is (the weaker one is clutter, not the last tool). */
+function spareTool(name: string, held: ReadonlySet<string>): boolean {
+  const tool = TOOL_KIND.exec(name);
+  if (!tool) return false;
+  const better = tool[1] === 'wooden' ? ['stone', 'golden', 'iron', 'diamond', 'netherite'] : tool[1] === 'stone' && tool[2] === 'sword' ? ['iron', 'diamond', 'netherite'] : [];
+  return better.some(kind => held.has(`${kind}_${tool[2]}`));
+}
+
 /** Stacks used (the lines, and the omitted ones), the filler kinds with their totals, from the inventory lines. */
 export function packFacts(lines: readonly string[]): { used: number; filler: Array<[string, number]>; junk: Array<[string, number]>; worn: Array<[string, number]> } {
   let used = 0;
@@ -54,6 +67,7 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
   const filler = new Map<string, number>(), junk = new Map<string, number>();
   // The section audit of 11/5: gravel is the flint's source (10% a block), kept until the flint and steel is made.
   const flintMade = lines.some(line => /^flint_and_steel×/u.test(line));
+  const held = new Set(lines.flatMap(line => STACK.exec(line)?.[1] ?? []));
   for (const line of lines) {
     const omitted = OMIT.exec(line) ?? /^ほか(\d+)件は略$/u.exec(line);
     if (omitted) {
@@ -67,7 +81,7 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
     }
     const left = /\(耐久(\d+)\/\d+\)$/u.exec(line);
     if (stack && left && TOOL.test(stack[1]!)) tools.push([stack[1]!, Number(left[1])]);
-    if (stack && JUNK.test(stack[1]!)) {
+    if (stack && (JUNK.test(stack[1]!) || (FEW.test(stack[1]!) && Number(stack[2]) < FEW_BELOW) || spareTool(stack[1]!, held))) {
       junk.set(stack[1]!, (junk.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
   }
@@ -95,11 +109,11 @@ export const FULL_COST = 'これ以上拾えない（黒曜石・鉱石・落と
  * less one stack kept for pillars and bridges. The kinds
  * are in the order of `packFacts` (the most carried first); a kind with nothing to spare is left out.
  */
-export function dropCandidates(filler: ReadonlyArray<[string, number]>, held: (item: string) => number = () => 0): Array<[string, number]> {
+export function dropCandidates(filler: ReadonlyArray<[string, number]>, held: (item: string) => number = () => 0, keepStack: number = KEEP_STACK): Array<[string, number]> {
   const out: Array<[string, number]> = [];
   let kept = false;
   for (const [name, n] of filler) {
-    const spare = Math.max(0, n - held(name) - (!kept ? KEEP_STACK : 0));
+    const spare = Math.max(0, n - held(name) - (!kept ? keepStack : 0));
     if (n - held(name) > 0) kept = true;
     if (spare > 0) out.push([name, spare]);
   }
@@ -115,12 +129,15 @@ export const FULL_SOON = 3;
  * 128 cobblestone to bridge on, and a pack emptied to 64 by the words was refilled by digging).
  */
 const KEEP_STACK = 128;
+/** With one free slot or none the pillar stack kept is one stack (2026-11-13, run 9: 128 kept is two slots a full pack cannot spare). */
+const KEEP_STACK_TIGHT = 64;
+const keepStackFor = (free: number): number => free <= 1 ? KEEP_STACK_TIGHT : KEEP_STACK;
 /** What can be dropped, in words: the clutter first, then the filler beyond what is kept (`dropCandidates`). */
 export function dropAdvice(packed: { filler: ReadonlyArray<[string, number]>; junk: ReadonlyArray<[string, number]>; worn?: ReadonlyArray<[string, number]> },
-  held: (item: string) => number = () => 0): string {
+  held: (item: string) => number = () => 0, keepStack: number = KEEP_STACK): string {
   const junk = packed.junk.slice(0, 6).map(([name, n]) => `${name}×${n}`).join('・');
   const worn = (packed.worn ?? []).slice(0, 3).map(([name, left]) => `${name}(残り ${left})`).join('・');
-  return [junk ? `雑物 ${junk}` : '', dropWords(dropCandidates(packed.filler, held)), worn ? `使い切りかけの道具（同じ種類の別の物がある）${worn}` : ''].filter(Boolean).join('・');
+  return [junk ? `雑物 ${junk}` : '', dropWords(dropCandidates(packed.filler, held, keepStack)), worn ? `使い切りかけの道具（同じ種類の別の物がある）${worn}` : ''].filter(Boolean).join('・');
 }
 /**
  * Run 43 (the 36 slots filled with about 270 cobblestone and cobbled deepslate: bread could not be made, about
@@ -128,27 +145,64 @@ export function dropAdvice(packed: { filler: ReadonlyArray<[string, number]>; ju
  * stopped full at +2,427; the pack's line said the free slots only after they were 0): at 3 free slots or fewer,
  * what to drop, before it is full.
  */
-function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: Array<[string, number]> = []): string | null {
+function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: Array<[string, number]> = [], tidy: TidyContext = {}): string | null {
   if (free > FULL_SOON) return null;
+  const keepStack = keepStackFor(free), held = tidy.held ?? (() => 0);
+  const say = tidySay(tidy.keepWords);
   if (free === 0) {
-    // Full now: said as what is so and what it costs, not as what will happen (run 46).
-    const spare = dropAdvice({ filler, junk });
-    return spare ? `満杯: ${FULL_COST}。drop で空けられる物: ${spare}（${filler[0]?.[0] ?? '丸石'} ${KEEP_STACK} は柱と橋用に数えていない）`
-      : `満杯: ${FULL_COST}。空けるのは drop`;
+    // Full now: said as what is so and what it costs, not as what will happen (run 46). tidy goes before drop (2026-11-13).
+    const spare = dropAdvice({ filler, junk }, held, keepStack);
+    return spare ? `満杯: ${FULL_COST}。${say}。drop で空けられる物: ${spare}（${filler[0]?.[0] ?? '丸石'} ${keepStack} は柱と橋用に数えていない）`
+      : `満杯: ${FULL_COST}。${say}`;
   }
-  const drops = filler.map(([name, n], index) => [name, index === 0 ? Math.max(0, n - KEEP_STACK) : n] as const).filter(([, n]) => n > 0);
+  const drops = dropCandidates(filler, held, keepStack);
   const kinds = drops.slice(0, 4).map(([name, n]) => `${name}×${n}（${Math.ceil(n / 64)} マス）`).join('・');
-  const keep = filler.length ? `${filler[0]![0]} ${KEEP_STACK} は柱と橋に残す` : '';
+  const keep = filler.length ? `${filler[0]![0]} ${keepStack} は柱と橋に残す` : '';
   const clutter = junk.length ? `雑物 ${junk.slice(0, 6).map(([name, n]) => `${name}×${n}`).join('・')}・` : '';
   return `空きが ${free} マス。満杯になると make・pickup・dig の物が入らず止まる（実走 43 はパンを作れず約 60 秒、go も満杯で止まった）。`
-    + (kinds || clutter ? `捨てる物の候補: ${clutter}${kinds}。${keep}。drop で捨てる` : '要らない物を drop で捨てる');
+    + (kinds || clutter ? `捨てる物の候補: ${clutter}${kinds}。${keep}。drop で捨てる` : '要らない物を drop で捨てる') + `。${say}`;
+}
+/**
+ * 2026-11-13 (run 9: 20 acts to clear a full pack, the drops mostly missing the pit): at 3 free slots or fewer, the hand that makes the room. `keepWords`: what the
+ * plan's current and next nodes need, as `物:数,…` (nothing: no example).
+ */
+const tidySay = (keepWords?: string): string => `tidy で空ける（捨てる物と焼く原石を体が選ぶ）。要る物は keep=物:数${keepWords ? `（今の節の材料: keep=${keepWords}）` : ''}`;
+/** What the plan needs and where she stands, for the tidy words (all optional; none given: no extra line is said). */
+export interface TidyContext {
+  /** What the open promises and the plan's materials hold back of an item. */
+  held?: (item: string) => number;
+  keepWords?: string;
+  /** A crafting table or a furnace within reach (remembered within 16 m). */
+  near?: { table?: boolean; furnace?: boolean };
+}
+const countOf = (lines: readonly string[], pattern: RegExp): number => lines.reduce((sum, line) => {
+  const stack = STACK.exec(line);
+  return stack && pattern.test(stack[1]!) ? sum + Number(stack[2]) : sum;
+}, 0);
+const HAY_POINTS = 33;
+/**
+ * At 3 free slots or fewer, two facts that only tidy can use, each said only when it can be done now: hay_block turns into bread (a table is
+ * carried, planks to put one down are, or one is near), raw iron or gold is smelted (a furnace is carried or near, or 8 cobblestone make one; fuel is held).
+ */
+export function tidyExtras(lines: readonly string[], free: number, tidy: TidyContext = {}): string[] {
+  if (free > FULL_SOON) return [];
+  const out: string[] = [];
+  const hay = countOf(lines, /^hay_block$/u);
+  if (hay > 0 && (tidy.near?.table || countOf(lines, /^crafting_table$/u) > 0 || countOf(lines, /_planks$/u) >= 4)) {
+    out.push(`hay_block×${hay} は tidy で食料のパンになる（約 ${hay * HAY_POINTS} 点）`);
+  }
+  const raw = [['raw_iron', countOf(lines, /^raw_iron$/u)], ['raw_gold', countOf(lines, /^raw_gold$/u)]].filter(([, n]) => (n as number) > 0);
+  const fuel = countOf(lines, /^(?:coal|charcoal)$/u) > 0 || countOf(lines, /_(?:log|stem)$/u) > 0;
+  const stove = tidy.near?.furnace || countOf(lines, /^furnace$/u) > 0 || countOf(lines, /^(?:cobblestone|cobbled_deepslate)$/u) >= 8;
+  if (raw.length && fuel && stove) out.push(`原石 ${raw.map(([name, n]) => `${name}×${n}`).join('・')} は tidy で焼ける`);
+  return out;
 }
 /**
  * `body.pack`: the free slots as a line, and the filler that takes them when it takes three slots or more; run
  * 36 and 37 (85–90 s each going back to a village): with two beds or more the line says what the beds are for and what each way costs (not in the
  * End's own check: `forEnd`). Empty when the inventory is not a list.
  */
-export function packLines(lines: readonly string[], options: { forEnd?: boolean; free?: number } = {}): string[] {
+export function packLines(lines: readonly string[], options: { forEnd?: boolean; free?: number } & TidyContext = {}): string[] {
   if (!lines.length) return [];
   const { used: counted, filler, junk } = packFacts(lines);
   // The body's own number when the frame has it (Math.floor, 0 to 36); else the lines' stacks.
@@ -158,8 +212,9 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
   const free = Math.max(0, PACK_SLOTS - used);
   const out = [free === 0 ? `持ち物 満杯 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}（空き 0 マス）`
     : `持ち物の空き ${free} マス（使用 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}。満杯だと dig・pickup が「満杯」で止まる）`];
-  const before = fullSoon(free, filler, junk);
+  const before = fullSoon(free, filler, junk, options);
   if (before) out.push(before);
+  out.push(...tidyExtras(lines, free, options));
   const total = filler.reduce((sum, [, n]) => sum + n, 0);
   if (Math.ceil(total / 64) >= FILLER_SLOTS) {
     const kinds = filler.slice(0, 4).map(([name, n]) => `${name}×${n}`).join('・');
@@ -167,8 +222,8 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
       + 'dig は拾いに歩く (collect 既定 true): 階段・トンネルで使わない石や土を掘る dig は collect=false。捨てるなら drop（体は 3m 以上先へ水平に投げる。'
       + 'その近くに立ち続ける・歩くと拾い直す）'
       // run62 (11/5): 81 drop hands of 90 to 120 cobblestone each, the pack full four times on the way down.
-      + (dropCandidates(filler).length ? `。下りる前に、余り（${dropWords(dropCandidates(filler))}）を 1 つの act の drop で一度に捨てる`
-        + `（${filler[0]![0]} ${KEEP_STACK} は柱と橋に残す）` : ''));
+      + (dropCandidates(filler, options.held, keepStackFor(free)).length ? `。下りる前に、余り（${dropWords(dropCandidates(filler, options.held, keepStackFor(free)))}）を 1 つの act の drop で一度に捨てる`
+        + `（${filler[0]![0]} ${keepStackFor(free)} は柱と橋に残す）` : ''));
   }
   const beds = bedsIn(lines);
   // The whole-run audit of 11/4 (chapter 1: 「村へ取りに戻らない」 stood against taking every bed of a village): the facts of both ways, no rule.
