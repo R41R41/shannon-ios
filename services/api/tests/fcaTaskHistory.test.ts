@@ -454,7 +454,7 @@ describe('a body task\'s rare history summaries (FCA_BODY_HISTORY_POLICY)', () =
     ({ ...f.ports(summarize), codec: anthropicFcaHistoryCodec });
 
   it('names the owner\'s numbers: 24,000 to trigger, 8,000 to reach, the newest 6 whole', () => {
-    expect(FCA_BODY_HISTORY_POLICY).toMatchObject({ maximumConversationTokens: 24_000, compactedConversationTokens: 3_000, recentRounds: 6 });
+    expect(FCA_BODY_HISTORY_POLICY).toMatchObject({ maximumConversationTokens: 24_000, compactedConversationTokens: 8_000, recentRounds: 6 });
     expect(FCA_HISTORY_POLICY).not.toHaveProperty('maximumConversationTokens');
     expect(() => planFcaHistory({ revision: 0, sourceRevision: '', tailSequence: 0, summary: null, rounds: [] }, anthropicFcaHistoryCodec,
       { maximumConversationTokens: 1_000, compactedConversationTokens: 2_000 })).toThrow('FCA_HISTORY_POLICY');
@@ -489,7 +489,7 @@ describe('a body task\'s rare history summaries (FCA_BODY_HISTORY_POLICY)', () =
     expect(planFcaHistory(f.window(), anthropicFcaHistoryCodec, { ...body, maximumReplayTokens: 20_000 }).kind).toBe('compact');
   });
 
-  it('compacts down to 3,000 tokens with the newest rounds whole, then stays quiet', async () => {
+  it('compacts down to 8,000 tokens with the newest 6 rounds whole, then stays quiet', async () => {
     const f = fixture(); const inputs: FcaHistorySummaryInput[] = [];
     let steps = 0;
     for (; steps < 60 && !inputs.length; steps++) {
@@ -497,9 +497,8 @@ describe('a body task\'s rare history summaries (FCA_BODY_HISTORY_POLICY)', () =
       const replay = await prepareFcaHistory(step, live(f, async input => { inputs.push(structuredClone(input)); return summary; }), new AbortController().signal, body);
       if (inputs.length) {
         const stored = f.window();
-        expect(tokensOf(replay.history)).toBeLessThanOrEqual(3_000);
-        expect(stored.rounds.length).toBeGreaterThanOrEqual(1);
-        expect(stored.rounds.length).toBeLessThanOrEqual(6);
+        expect(tokensOf(replay.history)).toBeLessThanOrEqual(8_000);
+        expect(stored.rounds).toHaveLength(6);
         const kept = JSON.parse(stored.summary!.bootstrapText) as { rounds: Array<{ sequence: number }> };
         expect(kept.rounds.map(round => round.sequence)).toEqual(stored.rounds.map(round => round.sequence));
         expect(inputs[0]!.rounds.at(-1)!.sequence).toBe(stored.rounds[0]!.sequence - 1);
@@ -516,7 +515,7 @@ describe('a body task\'s rare history summaries (FCA_BODY_HISTORY_POLICY)', () =
     }
   });
 
-  it('keeps fewer than 6 rounds only while they alone would pass the 3,000-token target, never fewer than the newest one', async () => {
+  it('keeps fewer than 6 rounds only while they alone would pass the 8,000-token target, never fewer than the newest one', async () => {
     const f = fixture(); const inputs: FcaHistorySummaryInput[] = [];
     for (let index = 1; index <= 12; index++) await f.finish(await f.begin(), index, bodyRound(index, 3_000));
     const step = await f.begin();

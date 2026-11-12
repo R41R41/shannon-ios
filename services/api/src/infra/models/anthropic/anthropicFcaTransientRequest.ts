@@ -10,7 +10,7 @@ import { clearAtMessage, FCA_TRANSIENT_THINKING, isFcaClearAtMessage, liveObject
 
 /** The room (estimated tokens) one more round takes in the replay: its calls, their stored results and the answer's blocks. */
 export const FCA_TRANSIENT_ROUND_TOKENS = 4_000;
-/** What a summary's bootstrap takes of a new epoch's replay (`FCA_BODY_HISTORY_POLICY` compacts down to 3,000; the room kept for it stays 8,000). */
+/** What a summary's bootstrap takes of a new epoch's replay (`FCA_BODY_HISTORY_POLICY` compacts down to 8,000). */
 export const FCA_TRANSIENT_BOOTSTRAP_TOKENS = 8_000;
 /** What a typical live state takes of a new epoch's first request. */
 export const FCA_TRANSIENT_LIVE_TOKENS = LIVE_TYPICAL_TOKENS;

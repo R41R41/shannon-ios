@@ -143,7 +143,7 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
     case 'have': return acquired(facts.counts, clause.item) >= clause.count || madeInto(facts.counts, clause);
     case 'dim': return facts.dimension === clause.dimension;
     case 'food': return facts.food >= clause.points;
-    case 'stock': return clause.what === 'food' ? foodEnough(facts.food, facts.foodNear, facts.foodVillage) : woodEnough(woodLogs(facts.counts), facts.woodNear);
+    case 'stock': return clause.what === 'food' ? foodEnough(facts.food, facts.foodNear) : woodEnough(woodLogs(facts.counts), facts.woodNear);
     case 'see': return facts.seen?.has(clause.what) === true;
     case 'crystals': return typeof facts.crystals === 'number' && facts.crystals <= clause.max;
     case 'act': return clauseHolds(clause.clause, facts) === true;

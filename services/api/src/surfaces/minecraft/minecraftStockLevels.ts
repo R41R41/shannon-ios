@@ -72,12 +72,10 @@ export function villageFoodOf(raw: unknown): { food: number; hay: number } | nul
 
 /**
  * `stock:food` (run 7: food, like wood, stopped at the least while animals and hay stood near): at the safe amount, or at the least with no food near
- * (or no count of it: judged by the min). Closes by points, so the node stays open while food is near and the points are under 100. While the village's
- * food is near it stays open at 100 too (run 8: the hay was left; away from it the node closes as before, and the model may still set it done).
+ * (or no count of it: judged by the min). Closes by points, so the node stays open while food is near and the points are under 100.
  */
-export function foodEnough(points: number, near: number | null | undefined, village?: number | null): boolean {
+export function foodEnough(points: number, near: number | null | undefined): boolean {
   const { min, safe } = STOCK_LEVELS.food;
-  if (village !== null && village !== undefined && village > 0) return false;
   if (points >= safe) return true;
   return points >= min && (near === null || near === undefined || near <= 0);
 }
@@ -87,5 +85,6 @@ export function foodStockWords(points: number, near: number | null | undefined, 
   const hayWords = villageHayWords(hay);
   const nearWords = (near === null || near === undefined ? '' : near > 0 ? `（近くに食料 ${near}）` : '（近くに食料なし）') + (hayWords ? `。${hayWords}` : '');
   if (points < min) return `食料 ${have}/最低 ${min}（安心 ${safe}）${nearWords}`;
+  if (points >= safe) return `食料 ${have}/安心 ${safe} を満たす${nearWords}`;
   return `食料 ${have}/最低 ${min} は満たす・安心 ${safe} まであと ${Math.round((safe - points) * 10) / 10}${nearWords}。近くに無ければ（取れなければ）済みにしてよい`;
 }

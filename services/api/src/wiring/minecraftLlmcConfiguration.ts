@@ -62,12 +62,12 @@ export const LLMC_ESCALATE_FAILURES = 2;
 /** One lease grant serves the step (`FcaStepPorts.permitWindowMs`): the body tools and the commit check it on their own. */
 export const LLMC_PERMIT_WINDOW_MS = 30_000;
 
-/** A summary about every 40 small steps (design 2.3), by Haiku: the newest rounds kept whole up to 3,000 tokens (11/13 run 8: a summary down to 8,000 stopped the step for long; the summary is 2〜3k tokens, 10〜15 s). */
+/** A summary about every 40 small steps (design 2.3), by Haiku: the newest 6 kept whole. */
 export const LLMC_HISTORY_POLICY: Readonly<Partial<FcaHistoryPolicy>> = Object.freeze({
   maximumRounds: 46,
   recentRounds: 6,
   maximumConversationTokens: 40_000,
-  compactedConversationTokens: 3_000,
+  compactedConversationTokens: 8_000,
 });
 
 /**

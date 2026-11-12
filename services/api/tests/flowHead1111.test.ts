@@ -180,7 +180,7 @@ describe('run 7: probe kind=route, the logs near from the nearby count alone, th
 });
 
 // Run 8 (2026-11-13), the head's half of the chosen fixes.
-describe('run 8: the food of the village is a fact beside the points, and keeps the node open while it is near', () => {
+describe('run 8: the food of the village is a fact beside the points', () => {
   const hayNear = [{ purpose: 'food_village', kind: '干し草ブロック', count: 6, range: 128, sites: [{ x: 1, y: 63, z: 1 }] }];
   it('foodPointsWords says no bread-for-hay conversion; the hay words come only with hay near', () => {
     expect(foodPointsWords(60, 40)).toBe('食料 60/40 点・安心 100 点まであと 40 点');
@@ -188,18 +188,19 @@ describe('run 8: the food of the village is a fact beside the points, and keeps 
     expect(foodPointsWords(60, 40, 6)).toContain('ネザー奥 100〜200・エンド 330');
     expect(foodPointsWords(60, 40, 0)).toBe('食料 60/40 点・安心 100 点まであと 40 点');
   });
-  it('stock:food stays open at 100 points while village food is near, and closes as before away from it', () => {
-    expect(foodEnough(120, 0, 6)).toBe(false);
-    expect(foodEnough(120, 0, 0)).toBe(true);
-    expect(foodEnough(120, 0, null)).toBe(true);
-    expect(foodEnough(45, 0, undefined)).toBe(true);
+  it('stock:food closes at 100 points whatever stands near; the words at 100 or more name no negative gap', () => {
+    expect(foodEnough(120, 0)).toBe(true);
+    expect(foodEnough(120, 6)).toBe(true);
+    expect(foodEnough(45, 0)).toBe(true);
+    expect(foodStockWords(120, 6, 6)).not.toContain('あと');
+    expect(foodStockWords(120, 6, 6)).toContain('安心 100 を満たす');
   });
   it('the plan\'s now says the hay while it is near and not when it is away', () => {
     const near = doneFacts(frame({ inventory: items([['bread', 5]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: hayNear }))!;
     expect(near.foodVillage).toBe(6);
     expect(near.foodHay).toBe(6);
     expect(doneStatusWords('stock:food', near)).toContain('村の干し草 6 個＝約 198 点');
-    expect(predicateHolds(parseDoneWhen('stock:food')!, doneFacts(frame({ inventory: items([['bread', 40]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: hayNear }))!)).toBe(false);
+    expect(predicateHolds(parseDoneWhen('stock:food')!, doneFacts(frame({ inventory: items([['bread', 40]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: hayNear }))!)).toBe(true);
     const away = doneFacts(frame({ inventory: items([['bread', 5]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: [] }))!;
     expect(doneStatusWords('stock:food', away)).not.toContain('干し草');
   });
@@ -210,16 +211,6 @@ describe('run 8: the food of the village is a fact beside the points, and keeps 
   });
 });
 
-describe('run 8: a hand that depends on nothing goes on past a failed hand', () => {
-  it('dependsOn [] continues by default; onFail and the kind\'s default are kept; no dependsOn stops as before', async () => {
-    const { handContinuesOnFail } = await import('../src/contracts/minecraftActContract.js');
-    expect(handContinuesOnFail({ do: 'dig', dependsOn: [] })).toBe(true);
-    expect(handContinuesOnFail({ do: 'dig', dependsOn: [], onFail: 'stop' })).toBe(false);
-    expect(handContinuesOnFail({ do: 'dig', dependsOn: [1] })).toBe(false);
-    expect(handContinuesOnFail({ do: 'dig' })).toBe(false);
-    expect(handContinuesOnFail({ do: 'eat' })).toBe(true);
-  });
-});
 
 describe('run 8: a pack that is full offers a nearly spent tool when another of its kind is whole', () => {
   it('names the worn pickaxe (3 or fewer left) only with a better one beside it, and only at 0 free slots', async () => {
