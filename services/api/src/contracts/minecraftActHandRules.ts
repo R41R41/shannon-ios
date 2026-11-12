@@ -104,7 +104,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   attack: attackProblem,
   go: goProblem,
   sleep: hand => seconds(hand, 10, 60) ?? (hand.item !== undefined && !/^[a-z_]+_bed$/u.test(hand.item) ? 'item はベッド（〜_bed）' : null),
-  obsidian: hand => seconds(hand, 5, 300) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源のマス 1〜24 マス' : null)
+  obsidian: hand => seconds(hand, 5, 300) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源（L）か黒曜石（O）のマス 1〜24 マス' : null)
     ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
   fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
     ?? denProblem(hand as unknown as Record<string, unknown>),

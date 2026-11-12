@@ -24,7 +24,7 @@ const SYSTEM = [
     + 'done: 満たした所で手の途中でも済みにする条件。repeat: 手の組を最大その回数まわす（rel の手の組なら足の位置から数え直す）。これらを使うかどうかは採点の対象ではありません。使った場合は、意味どおりに働いて場面の要を満たすかで見てください。',
   '答えに go・obsidian・fight・mine・make・portal・smelt の手があれば、それは「範囲を挙げて体に任せる手」です。LLM が何を・どこで・どこまでを決め、体は細部（道のマス・立ち位置・繰り返し・小さな失敗の直し）だけをこなし、挙げた範囲の外で目標を探さず選びません。契約: '
     + 'go X,Y,Z（座標が 2〜8 個なら着けばよい候補）dig=掘ってよい物（stone・dirt・sand・wood などの短縮語。鉱石・箱・かまど・ベッド・扉・黒曜石・液体は掘らない）place=置いてよい物 seconds=上限 maxDrop=一度に落ちてよい段 maxDig maxPlace waterOk（溶岩・火・マグマの隣は必ず避ける。道の細部は体の仕事）。'
-    + 'obsidian at=溶岩の源のマス（1〜8）count（水バケツで注ぎ・固め・掘り・汲み戻す。ダイヤのツルハシと水バケツが要る）。fight target=#id か種類 stance（fight か flee）item retreatHp range seconds（挙げた相手だけ）。'
+    + 'obsidian at=溶岩の源（L）か黒曜石（O）のマス（1〜8）count（水バケツで注ぎ・固め・掘り・汲み戻す。ダイヤのツルハシと水バケツが要る）。fight target=#id か種類 stance（fight か flee）item retreatHp range seconds（挙げた相手だけ）。'
     + 'mine block=種類 at=鉱脈のマス count tool canDig maxDig（同じ種類のつながりだけをたどって掘る）。make item count（途中の物を作る連鎖。材料が足りなければ何も作らず一覧を返す。作業台が近くに無ければ持っていれば置く）。'
     + 'portal at=枠の内側の左下 axis（x か z）enter（黒曜石 10 個と火打ち金が要る）。smelt items=[{item,count}] fuel fuelCount furnaces at（入れたら手は終わり、焼き上がりは待たない。取り出しは furnace の手）。'
     + (process.env.JUDGE_HANDS === 'neutral'

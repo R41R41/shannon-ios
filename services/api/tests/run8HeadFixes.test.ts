@@ -164,7 +164,8 @@ describe('the water node said unneeded when the obsidian in view covers the lack
   it('says in the stage knowledge that obsidian in view is dug with no water, but lava right under it needs the bucket', () => {
     const text = Object.values(V2_STAGES).join('\n');
     expect(text).toContain('見えている黒曜石（live の obsidian・liquid の行）を掘るだけなら水は要らない。横・上の溶岩と落ちる先の空気は体が石で埋めてから掘る');
-    expect(text).toContain('真下が溶岩の O は上に水をかけてから掘るので水入りバケツが要り、無ければ掘らない（liquid の行の「真下が溶岩」。dig で拾う鉱石も同じ。');
+    expect(text).toContain('真下が溶岩の O は上に水をかけてから掘るので水入りバケツが要り、無ければ掘らない（liquid の行の「真下が溶岩」。dig はそのマスを飛ばし');
+    expect(text).not.toContain('dig で拾う鉱石も同じ');
     // The body (dropGuard, obsidian f0a5b064): the obsidian hand fills with its canPlace, else covers with water (not in the Nether); water is poured only from a step over
     // the O on open ground, two steps in a tunnel (wetWall.waterReachesBody).
     expect(text).toContain('溶岩に接する O を at に挙げる時は canPlace に dirt・cobblestone を渡す。渡さないと obsidian の手は上に水をかけて掘り、水入りバケツも無いと lava_danger');

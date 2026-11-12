@@ -36,7 +36,7 @@ describe('S8 obsidian input and time', () => {
   });
 
   it.each([0, 25])('refuses %i sources', n => {
-    expect(actProblem(obsidian({ at: sources(n) }))).toContain('at は溶岩の源のマス 1〜24');
+    expect(actProblem(obsidian({ at: sources(n) }))).toContain('at は溶岩の源（L）か黒曜石（O）のマス 1〜24');
     expect(llmcPrepare(MC_ACT_TOOL, obsidian({ at: sources(n) })).problem).not.toBeNull();
   });
 
