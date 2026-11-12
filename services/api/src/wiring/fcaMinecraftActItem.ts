@@ -17,6 +17,7 @@ import { URGENT_TAG } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { breakingOf } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { digPackLine } from '../surfaces/minecraft/minecraftLlmcFacts.js';
+import { keptSurfaceWaterWalk, waterFailuresOfFrame } from '../surfaces/minecraft/minecraftLlmcWaterSwitch.js';
 import { QUEUE_MAX, resultWaitWords, waitWakeWords } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
@@ -133,7 +134,12 @@ export async function replacedOnly(queue: LlmcQueue, input: unknown): Promise<To
  */
 export async function actGuards(parts: { queue: LlmcQueue; urgent: boolean; input: ActInput; frame: BodyObservation | null; taskId: string }):
   Promise<{ hold: BeforeSend | null; led(result: ToolResult): ToolResult }> {
-  const lead = parts.input.replace?.length ? await parts.queue.replace(parts.input.replace) : null;
+  // Flow design D (2026-11-13): a walk to the surface water is not replaced by a retry of an underground pool the bucket could not draw.
+  const open = parts.queue.openItems?.() ?? [], world = parts.frame?.state?.world as Record<string, unknown> | undefined;
+  const kept = parts.input.replace?.length ? keptSurfaceWaterWalk(open, parts.input.replace, parts.input, waterFailuresOfFrame(world)) : { keep: [], note: null };
+  const ids = kept.keep.length && parts.input.replace ? (parts.input.replace.includes('all') ? open.map(item => item.item) : parts.input.replace).filter(id => !kept.keep.includes(id)) : parts.input.replace;
+  const replaced = ids?.length ? await parts.queue.replace(ids) : null;
+  const lead = replaced || kept.note ? [replaced, kept.note].filter(Boolean).join('。') : null;
   const hold = heldBeforeSendQueued(parts.urgent, parts.input, parts.frame, parts.taskId, parts.queue.ahead());
   return { hold, led: result => lead ? { ...result, text: `${lead}\n${result.text}` } : result };
 }

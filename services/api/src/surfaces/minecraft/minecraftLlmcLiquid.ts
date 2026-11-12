@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { HandStop } from './minecraftLlmcHandGuards.js';
 import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPreflightMap.js';
+import { givenUp, waterSwitchLine, type WaterFail } from './minecraftLlmcWaterSwitch.js';
 import { isHard, keyOf, nameOf, ptText, type P } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -83,11 +84,14 @@ const listing = (items: Found[]): string => items.map(item => `${ptText(item.cel
  * Water, lava and obsidian near her, from the map: the sources she can pour or draw from (with the distance from the eye and whether the line
  * is clear), how many cells flow, and the measured cost of a dig in water. Empty when the map shows none of them within range.
  */
-export function liquidLines(view: MapView, feet: P): string[] {
+export function liquidLines(view: MapView, feet: P, given: { fails: readonly WaterFail[]; summary?: unknown } = { fails: [] }): string[] {
   const eye = { x: feet.x + 0.5, y: feet.y + EYE, z: feet.z + 0.5 };
-  const sources = cellsOf(view, feet, new Set(['w'])), flows = cellsOf(view, feet, new Set(['-']));
+  // Flow design D: the sources of a pool the bucket could not draw (twice) are not offered again; the line says where the surface water is.
+  const sources = cellsOf(view, feet, new Set(['w'])).filter(cell => !givenUp(cell, given.fails)), flows = cellsOf(view, feet, new Set(['-']));
   const lava = cellsOf(view, feet, new Set(['L'])), lavaFlows = cellsOf(view, feet, new Set(['l'])), obsidian = cellsOf(view, feet, new Set(['O']));
   const lines: string[] = [];
+  const switched = waterSwitchLine(given.fails, given.summary, feet);
+  if (switched) lines.push(switched);
   if (sources.length || flows.length) {
     lines.push(`水: 源 ${sources.length} マス・流れ ${flows.length} マス（足の周り ${RANGE} マス内）`);
     if (sources.length) lines.push(`水の源（汲み戻せる）: ${listing(nearest(view, eye, feet, sources))}`);

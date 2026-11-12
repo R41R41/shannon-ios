@@ -1,6 +1,7 @@
 import { aroundLines, awayLines, watchedHostile, type Watched } from './minecraftLlmcAround.js';
 import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { liquidLines } from './minecraftLlmcLiquid.js';
+import { waterFailures } from './minecraftLlmcWaterSwitch.js';
 import { FOOD_PASS, NIGHT_PASS } from './minecraftNightArms.js';
 import { obsidianWays } from './minecraftLlmcObsidianWays.js';
 import { packLines, type TidyContext } from './minecraftLlmcPack.js';
@@ -239,7 +240,7 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Wa
     const away = awayLines(view, layers.feet, watched);
     if (away.length) out.away = away;
     notes.added.push('around');
-    const liquid = liquidLines(view, layers.feet);
+    const liquid = liquidLines(view, layers.feet, { fails: waterFailures(bodyIn), summary: rec(bodyIn.state)?.mapSummary });
     if (liquid.length) {
       out.liquid = liquid;
       notes.added.push('liquid');
