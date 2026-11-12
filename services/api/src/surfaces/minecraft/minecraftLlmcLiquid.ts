@@ -37,14 +37,35 @@ function cellsOf(view: MapView, feet: P, symbols: ReadonlySet<string>): P[] {
 const center = (cell: P): Eye => ({ x: cell.x + 0.5, y: cell.y + 0.5, z: cell.z + 0.5 });
 const meters = (eye: Eye, cell: P): number => Math.hypot(center(cell).x - eye.x, center(cell).y - eye.y, center(cell).z - eye.z);
 
-/** The first hard cell on the straight line from the eye to the cell's middle (her own two cells and the cell itself left out), or null. */
+/**
+ * The first hard cell on the straight line from the eye to the cell's middle (her own two cells and the cell itself left out), or null.
+ * Every cell of the line is visited, not samples along it. A line that crosses two or three cell borders at the same instant (a source one block aside on both
+ * horizontal axes, from the middle of her cell to its middle: run 9, 「届く」 said of eleven sources the body then could not fill) runs between the cells beside
+ * it, and which the server's ray enters is not known: every one of those cells counts, so the line is clear only when all of them are.
+ */
 export function blockBetween(view: MapView, eye: Eye, target: P, feet: P): P | null {
-  const to = center(target), length = Math.hypot(to.x - eye.x, to.y - eye.y, to.z - eye.z);
+  const to = center(target);
+  const delta = { x: to.x - eye.x, y: to.y - eye.y, z: to.z - eye.z };
   const skip = new Set([keyOf(target), keyOf(feet), keyOf({ ...feet, y: feet.y + 1 })]);
-  for (let at = 0.2; at < length; at += 0.1) {
-    const cell = { x: Math.floor(eye.x + (to.x - eye.x) * at / length), y: Math.floor(eye.y + (to.y - eye.y) * at / length),
-      z: Math.floor(eye.z + (to.z - eye.z) * at / length) };
-    if (!skip.has(keyOf(cell)) && isHard(view.symbol(cell.x, cell.y, cell.z))) return cell;
+  const cell: P = { x: Math.floor(eye.x), y: Math.floor(eye.y), z: Math.floor(eye.z) };
+  const axes = ['x', 'y', 'z'] as const;
+  const step = { x: Math.sign(delta.x), y: Math.sign(delta.y), z: Math.sign(delta.z) };
+  const next = (axis: 'x' | 'y' | 'z') => delta[axis] === 0 ? Infinity : ((delta[axis] > 0 ? cell[axis] + 1 : cell[axis]) - eye[axis]) / delta[axis];
+  const t = { x: next('x'), y: next('y'), z: next('z') };
+  const size = { x: delta.x === 0 ? Infinity : Math.abs(1 / delta.x), y: delta.y === 0 ? Infinity : Math.abs(1 / delta.y), z: delta.z === 0 ? Infinity : Math.abs(1 / delta.z) };
+  const hard = (at: P): boolean => !skip.has(keyOf(at)) && isHard(view.symbol(at.x, at.y, at.z));
+  for (let guard = 0; guard < 64; guard++) {
+    if (guard > 0 && hard(cell)) return { ...cell };
+    const now = Math.min(t.x, t.y, t.z);
+    if (now > 1) return null;
+    const tied = axes.filter(axis => Math.abs(t[axis] - now) < 1e-9);
+    for (let mask = 1; tied.length > 1 && mask < (1 << tied.length) - 1; mask++) {
+      const beside: P = { ...cell };
+      tied.forEach((axis, index) => { if (mask & (1 << index)) beside[axis] += step[axis]; });
+      if (hard(beside)) return beside;
+    }
+    for (const axis of tied) { cell[axis] += step[axis]; t[axis] += size[axis]; }
+    if (keyOf(cell) === keyOf(target)) return null;
   }
   return null;
 }
