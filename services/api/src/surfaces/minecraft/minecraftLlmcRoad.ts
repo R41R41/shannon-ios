@@ -165,7 +165,7 @@ const doneInPlan = (tree: PlanTree, item: Milestone): boolean => tree.nodes.some
 });
 /**
  * Whether a clause of a node says the milestone's: the same clause, or the same item at a count as high or higher (the section audit of 11/5: the
- * obsidian node asks 22 at the first lava, and its being done reaches the milestone of 10).
+ * obsidian node asks 10 at the first lava, and its being done reaches the milestone of 10).
  */
 function covers(part: string, clause: string): boolean {
   if (part === clause) return true;

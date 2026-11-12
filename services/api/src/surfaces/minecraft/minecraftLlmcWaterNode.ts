@@ -5,7 +5,7 @@ import { BODY_RULES, mapView, readLayers, type MapView } from './minecraftLlmcPr
 import { litGate, litGateLine, naturalObsidian, obsidianTally, ruinsIn } from './minecraftLlmcObsidianWays.js';
 import { lavaRightUnder } from './minecraftLlmcLiquid.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
-import { GATE_OBSIDIAN, OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
+import { OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
 import { kindOf } from './minecraftPlanFacts.js';
 
 /**
@@ -52,15 +52,15 @@ export function waterNodeUnneeded(tree: PlanTree, facts: DoneFacts, view: MapVie
   const open = (state: string) => state !== 'done' && state !== 'blocked';
   if (!tree.nodes.some(node => open(node.state) && kindOf(node) === 'obsidian')) return [];
   const held = carried(facts.counts, 'obsidian');
-  const lack = Math.max(0, GATE_OBSIDIAN - held), goalLack = Math.max(0, OBSIDIAN_AT_FIRST_LAVA - held);
+  const lack = Math.max(0, OBSIDIAN_AT_FIRST_LAVA - held);
   // Review of the run-8 fixes (11/13): five of run 8's six burnt had lava right under them, which only water keeps from the drop.
   const cells = naturalObsidian(view, ruins).cells.filter(cell => !lavaRightUnder(view, cell));
-  const need = lack > 0 ? lack : goalLack, visible = cells.length;
+  const need = lack, visible = cells.length;
   if (need <= 0 || visible < need) return [];
   const near = nearestOf(cells, facts.feet);
   return tree.nodes.filter(node => open(node.state) && WATER_ONLY.test(node.doneWhen ?? '')).map(node => ({
     key: `${WATER_FACT_KEY}${node.id}`,
-    text: `水入りバケツの節 ${node.id}「${node.title.slice(0, 24)}」: 黒曜石の不足はゲートの最低 ${GATE_OBSIDIAN} まで ${lack}・目標 ${OBSIDIAN_AT_FIRST_LAVA} まで ${goalLack}、`
+    text: `水入りバケツの節 ${node.id}「${node.title.slice(0, 24)}」: 黒曜石の不足はゲートの分 ${OBSIDIAN_AT_FIRST_LAVA} まで ${lack}、`
       + `見えている黒曜石は ${visible} マス${near !== null ? `（最寄り ${Math.round(near)}m。真下が溶岩の O・枠・壊れたポータルの近くは数えない）` : ''}。`
       + '水は溶岩に注いで作る時と、真下が溶岩の O を掘る時だけ要る。見えている黒曜石を掘るだけなら要らない',
   }));

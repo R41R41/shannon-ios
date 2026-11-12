@@ -70,7 +70,7 @@ const TO_NETHER: readonly PlanSeed[] = [
   // a lit gate is entered at once. The obsidian's node closes when a lit portal is in view (the frame's 10 leave the pack and the node opened again).
   node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10', caution: ['必須（盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ（ダイヤ1か鉄3）・足場32・食料40点）が欠けたら入らない',
     '点いたらその場ですぐ入る（必須がそろえば、目標のために地上へ戻らない）'], children: [
-    node('溶岩源で黒曜石22（ゲート10・竜戦12）', { kind: 'obsidian', doneWhen: 'have:obsidian>=22|see:nether_portal|dim:the_nether|have:ender_eye>=10', note: '最初の溶岩でまとめて取る（竜戦の分を後で取りに来ない）' }),
+    node('溶岩源で黒曜石10（ゲートの分）', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|see:nether_portal|dim:the_nether|have:ender_eye>=10', note: 'ゲートの 10 だけ取る。10 に届いたら掘りをやめてゲートへ（竜戦の分 12 は出発の点検で別に取る）' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether|have:ender_eye>=10' }),
     node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10',
       caution: ['火をつける前に必須を確かめる: 盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ・足場32・食料40点。点いたらその場ですぐ入る',

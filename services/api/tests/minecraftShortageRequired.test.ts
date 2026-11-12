@@ -337,7 +337,7 @@ describe('the first plan and the knowledge say the required list where the model
   it('says the gate\'s required needs and its goals apart in the stage rules', () => {
     expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 1・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）・足場のブロック 32（ネザーの岩も足場になる）・食料 40 点。');
     expect(PREP_RULES_WORDS).toContain('火打ち金（捨てずに持って入る。');
-    expect(PREP_RULES_WORDS).toContain('・水入りバケツ・黒曜石 22（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金');
+    expect(PREP_RULES_WORDS).toContain('・水入りバケツ・黒曜石 10（ゲートの分だけ。竜戦の 12 は出発の点検で別に取る）・火打ち金');
     expect(PREP_RULES_WORDS).toContain('死ねばダイヤのツルハシと黒曜石を失う');
   });
 });

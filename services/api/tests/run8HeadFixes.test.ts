@@ -50,7 +50,7 @@ const POOLS: NearbyResource = { purpose: 'lava', kind: 'lava', count: 187, pools
 
 describe('the lava pools near her (run 8: four pools loaded, the head told the nearest source 27 below across a hollow)', () => {
   it('writes the pools as a nearby line, first while the plan is at the obsidian, and reads them back', () => {
-    const lines = nearbyLines([{ purpose: 'wood', kind: 'oak_log', count: 10, range: 64, sites: [{ x: 3, y: 0, z: 0 }] }, POOLS], FEET, '[p7.1] 溶岩源で黒曜石22');
+    const lines = nearbyLines([{ purpose: 'wood', kind: 'oak_log', count: 10, range: 64, sites: [{ x: 3, y: 0, z: 0 }] }, POOLS], FEET, '[p7.1] 溶岩源で黒曜石10');
     // The body's count is the sources and its pools the pools (review of the run-8 fixes: 「溜まり 300 つ」 was the sources read as pools).
     expect(lines[0]!.startsWith('溶岩の溜まり: lava 96m 内に 源 187 マス・溜まり 4。最寄り (7,20,0) 東7・上20 21m（源 3・覆い×）')).toBe(true);
     expect(nearbyLines([{ ...POOLS, pools: undefined } as NearbyResource], FEET)[0]).toMatch(/^溶岩の溜まり: lava 96m 内に 源 187 マス。最寄り/u);
@@ -69,7 +69,7 @@ describe('the lava pools near her (run 8: four pools loaded, the head told the n
   it('puts the three pools in the obsidian line with how far across and up or down from her feet, beside the obsidian carried and in view', () => {
     const body = { planFacts: planFacts('obsidian', { id: 'p7.1' }), nearby: nearbyLines([POOLS], FEET, '黒曜石'), inventory: ['obsidian×4', 'diamond_pickaxe×1'] };
     const [line] = obsidianWays(body, FEET, view({ '2,0,0': 'O', '2,0,1': 'O' }));
-    expect(line!.startsWith('黒曜石: 持ち物 4／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。見えている自然の黒曜石 地図に 2 マス・最寄り (2,0,0) まで 2m（地図）。')).toBe(true);
+    expect(line!.startsWith('黒曜石: 持ち物 4／ゲートの分 10（これで足りる。竜戦の 12 は出発の点検で別に取る）。見えている自然の黒曜石 地図に 2 マス・最寄り (2,0,0) まで 2m（地図）。')).toBe(true);
     expect(line).toContain('溶岩の溜まり（近い順・今の足から）: (7,20,0) 水平 7m・上 20・源 3・覆い× / (0,-19,40) 水平 40m・下 19・源 30・覆い○ / (36,-45,0) 水平 36m・下 45・源 64。');
     expect(line).not.toContain('源が 10 以上の溜まり');
   });
@@ -77,7 +77,7 @@ describe('the lava pools near her (run 8: four pools loaded, the head told the n
     const none = { purpose: 'lava', kind: 'lava', count: 0, pools: 0, range: 96, sites: [] };
     expect(nearbyResourcesOf([none])).toEqual([{ purpose: 'lava', kind: 'lava', count: 0, pools: 0, range: 96, sites: [] }]);
     const live = minecraftLlmcLive({ observation: frame([['diamond_pickaxe', 1]], { nearbyResources: [none] }), elapsedMinutes: 1, trend: createFoodTrend(() => 0), events: [],
-      planNow: '[p7.1] 溶岩源で黒曜石22' });
+      planNow: '[p7.1] 溶岩源で黒曜石10' });
     expect(live.nearby).toEqual(['溶岩の溜まり: lava 96m 内に なし']);
     const [line] = obsidianWays({ planFacts: planFacts('obsidian'), nearby: live.nearby }, FEET, view({}));
     expect(line).toContain('溶岩の溜まり 96m 内に見えない（洞窟・地表の近くも mc_probe kind=scan で読み直す。それでも無ければ低い y を当てて掘る）');
@@ -116,13 +116,13 @@ describe('the lava touching an obsidian cell (run 8: six dug with lava beside or
 
 describe('the water node said unneeded when the obsidian in view covers the lack (run 8: 252 s to fetch water with obsidian standing near)', () => {
   const tree = (nodes: PlanNode[]) => v2tree({ revision: 1, current: 'p7.1', nodes });
-  const WITH_WATER = [node('p7', 'portal', 0, 'dim:the_nether'), node('p7.1', 'obsidian', 0, 'have:obsidian>=22', 'p7'), node('n3', 'water', 1, 'have:water_bucket', 'p7')];
+  const WITH_WATER = [node('p7', 'portal', 0, 'dim:the_nether'), node('p7.1', 'obsidian', 0, 'have:obsidian>=10', 'p7'), node('n3', 'water', 1, 'have:water_bucket', 'p7')];
   const twelve = Object.fromEntries(Array.from({ length: 12 }, (_, index) => [`${(index % 6) - 3},-1,${Math.floor(index / 6) + 1}`, 'O']));
   const facts = (items: Array<[string, number]>) => doneFacts(frame(items))!;
   it('says it once with the lack, the obsidian in view and that water is only for pouring', () => {
     const [fact] = waterNodeUnneeded(tree(WITH_WATER), facts([['diamond_pickaxe', 1]]), view(twelve));
     expect(fact!.key).toBe('water_node_unneeded:n3');
-    expect(fact!.text).toContain('水入りバケツの節 n3「n3」: 黒曜石の不足はゲートの最低 10 まで 10・目標 22 まで 22、見えている黒曜石は 12 マス（最寄り');
+    expect(fact!.text).toContain('水入りバケツの節 n3「n3」: 黒曜石の不足はゲートの分 10 まで 10、見えている黒曜石は 12 マス（最寄り');
     expect(fact!.text).toContain('水は溶岩に注いで作る時と、真下が溶岩の O を掘る時だけ要る。見えている黒曜石を掘るだけなら要らない');
   });
   it('does not count the obsidian right over lava, a frame or the cells near a ruined portal as obsidian in view', () => {
@@ -138,8 +138,8 @@ describe('the water node said unneeded when the obsidian in view covers the lack
     expect(waterNodeUnneeded(tree(WITH_WATER.slice(0, 2)), facts([['diamond_pickaxe', 1]]), view(twelve))).toEqual([]);
     expect(waterNodeUnneeded(tree(WITH_WATER), facts([['diamond_pickaxe', 1], ['water_bucket', 1]]), view(twelve))).toEqual([]);
     expect(waterNodeUnneeded(tree(WITH_WATER), facts([['iron_pickaxe', 1]]), view(twelve))).toEqual([]);
-    // Ten carried: the aim's 12 still to dig, twelve in view.
-    expect(waterNodeUnneeded(tree(WITH_WATER), facts([['diamond_pickaxe', 1], ['obsidian', 10]]), view(twelve))).toHaveLength(1);
+    // Ten carried: the gate's 10 are held (the aim is the gate's only, run 8 11/13), so nothing more to dig and no water to say.
+    expect(waterNodeUnneeded(tree(WITH_WATER), facts([['diamond_pickaxe', 1], ['obsidian', 10]]), view(twelve))).toEqual([]);
   });
   it('is offered with the frame and taken back when it no longer holds', () => {
     const map = mapOf(twelve);
@@ -150,12 +150,12 @@ describe('the water node said unneeded when the obsidian in view covers the lack
   });
   it('says how many of the obsidian in view lie right over lava (the body digs those only with a water bucket)', () => {
     expect(obsidianTallyLine(frame([['obsidian', 4]], { localMap: mapOf({ '2,0,0': 'O', '2,-1,0': 'L', '2,0,1': 'O' }) })))
-      .toBe('黒曜石: 持ち物 4／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。見えている自然の黒曜石 地図に 2 マス（うち真下が溶岩 1: 水入りバケツが要る）・最寄り 2m（地図）');
+      .toBe('黒曜石: 持ち物 4／ゲートの分 10（これで足りる。竜戦の 12 は出発の点検で別に取る）。見えている自然の黒曜石 地図に 2 マス（うち真下が溶岩 1: 水入りバケツが要る）・最寄り 2m（地図）');
     expect(obsidianTally(0, 0, null, { overLava: 1 })).not.toContain('真下が溶岩');
   });
   it('gives the replan the obsidian carried and in view', () => {
     expect(obsidianTallyLine(frame([['obsidian', 4]], { localMap: mapOf({ '2,0,0': 'O', '2,0,1': 'O' }) })))
-      .toBe('黒曜石: 持ち物 4／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。見えている自然の黒曜石 地図に 2 マス・最寄り 2m（地図）');
+      .toBe('黒曜石: 持ち物 4／ゲートの分 10（これで足りる。竜戦の 12 は出発の点検で別に取る）。見えている自然の黒曜石 地図に 2 マス・最寄り 2m（地図）');
     expect(obsidianTallyLine(frame([], { dimension: 'the_nether' }))).toBeNull();
     // A lit gate: only that it is lit (its frame is not obsidian lacking).
     expect(obsidianTallyLine(frame([['obsidian', 8]], { localMap: mapOf({ '2,0,0': 'O', '2,1,0': 'p' }) })))
@@ -193,7 +193,7 @@ describe('the End\'s water bucket promised (run 8: 「足りない 1」 at every
 describe('the lit gate is entered (run 8: the obsidian node opened again when the frame took 10)', () => {
   it('closes the obsidian node when a lit portal is in view, and has no food 100 before the gate', () => {
     const plan = seedPlan('エンドラを倒して')!;
-    const obsidian = plan.nodes.find(item => item.kind === 'obsidian' && item.title.startsWith('溶岩源で黒曜石22'))!;
+    const obsidian = plan.nodes.find(item => item.kind === 'obsidian' && item.title.startsWith('溶岩源で黒曜石10'))!;
     const seen = { ...doneFacts(frame([['obsidian', 8]]))!, seen: new Set(['nether_portal']) };
     expect(predicateHolds(parseDoneWhen(obsidian.doneWhen)!, seen)).toBe(true);
     expect(predicateHolds(parseDoneWhen(obsidian.doneWhen)!, doneFacts(frame([['obsidian', 8]]))!)).toBe(false);
@@ -217,7 +217,7 @@ describe('the lit gate is entered (run 8: the obsidian node opened again when th
     // An unlit frame of her own: two columns of three, the bottom and the top: none of it natural.
     const frameCells = { '-1,0,2': 'O', '-1,1,2': 'O', '-1,-1,2': 'O', '2,0,2': 'O', '2,1,2': 'O', '2,-1,2': 'O', '0,-2,2': 'O', '1,-2,2': 'O', '0,2,2': 'O', '1,2,2': 'O' };
     const [line] = obsidianWays({ ...body, nearby: nearbyLines([POOLS], FEET) }, FEET, mapView(readLayers(mapOf(frameCells, [2, 1, 0, -1, -2]), BODY_RULES)!));
-    expect(line).toContain('黒曜石: 持ち物 8／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。自然の黒曜石 見えていない（枠の形の O 10 マス（組んだ枠・壊れたポータル）は数えない）');
+    expect(line).toContain('黒曜石: 持ち物 8／ゲートの分 10（これで足りる。竜戦の 12 は出発の点検で別に取る）。自然の黒曜石 見えていない（枠の形の O 10 マス（組んだ枠・壊れたポータル）は数えない）');
   });
   it('leaves the cells near a ruined portal out (crying obsidian is O too) and says why', () => {
     const body = { planFacts: planFacts('obsidian'), inventory: ['obsidian×2'], scan: ['壊れたポータル（泣く黒曜石） ×3 最寄り (2,0,0) 東 2m'], nearby: nearbyLines([POOLS], FEET) };
@@ -229,7 +229,7 @@ describe('the lit gate is entered (run 8: the obsidian node opened again when th
     expect(heldObsidian(['obsidian×8', 'ほか12件（長いため略）'])).toBe(8);
     expect(heldObsidian(['diamond_pickaxe×1'])).toBe(0);
     const [line] = obsidianWays({ planFacts: planFacts('obsidian'), inventory: ['dirt×3', 'ほか20件（長いため略）'] }, FEET, view({ '2,0,0': 'O' }));
-    expect(line).toContain('黒曜石: 持ち物 不明（持ち物の行が略された）／ゲートの最低 10');
+    expect(line).toContain('黒曜石: 持ち物 不明（持ち物の行が略された）／ゲートの分 10');
   });
 });
 

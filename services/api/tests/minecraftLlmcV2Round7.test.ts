@@ -133,7 +133,7 @@ describe('the near lava beside the far obsidian (run 37, 1,349–1,611 s: 85 m o
   it('puts both distances side by side with where each was read, and says the lava is the nearer', () => {
     const [line] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p6.2' }), landmarks: LANDMARKS }, SELF, null);
     // Run 8 (11/13): the line begins with the obsidian carried, the gate's least, the aim and the obsidian in view.
-    expect(line.startsWith('黒曜石: 持ち物 0／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。見えている自然の黒曜石 最寄り (253,-55,154) まで 93m（目印）。')).toBe(true);
+    expect(line.startsWith('黒曜石: 持ち物 0／ゲートの分 10（これで足りる。竜戦の 12 は出発の点検で別に取る）。見えている自然の黒曜石 最寄り (253,-55,154) まで 93m（目印）。')).toBe(true);
     expect(line).toContain('溶岩の源 (173,-16,147) まで 5m（目印）');
     expect(line).toContain('（溶岩の方が近い）');
     expect(line).toContain('階段掘りは 0.5〜0.9 マス/秒');

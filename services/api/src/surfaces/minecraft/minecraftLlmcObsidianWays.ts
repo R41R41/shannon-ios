@@ -1,7 +1,7 @@
 import { PORTAL, type MapView } from './minecraftLlmcPreflightMap.js';
 import { lavaRightUnder } from './minecraftLlmcLiquid.js';
 import { lavaSitesIn, type LavaSite } from './minecraftLlmcNearby.js';
-import { GATE_OBSIDIAN, OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
+import { OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
 import { isHard, NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
 import { factsIn, hasKind, nowAndNextKinds } from './minecraftPlanFacts.js';
 import { firstMark } from './minecraftSeenMarks.js';
@@ -81,9 +81,9 @@ export function contactCells(view: MapView, self: P): string[] {
 }
 /**
  * The pool worth going to: ten sources or more, the gate's (the strategy's 「10 個には源が 10 以上ある溜まり」). end1109t04b (thru, 11/9):
- * with this at 22 (`OBSIDIAN_AT_FIRST_LAVA`, the gate's and the fight's) the node of the first lava stayed open about 70 minutes without
- * reaching 10 (the run's records were cleared; the pull to a far pool of 22 is the head's reading, not observed). The plan's 22 is unchanged:
- * the rest is taken at the same pool when it has them, or at the next lava.
+ * with the goal at 22 the node of the first lava stayed open about 70 minutes without
+ * reaching 10 (the run's records were cleared; the pull to a far pool of 22 is the head's reading, not observed). Since run 8 (11/13) the goal
+ * (`OBSIDIAN_AT_FIRST_LAVA`) is the gate's 10 only; the End fight's 12 is taken by the departure check's own node.
  */
 export const POOL_SOURCES = 10;
 /**
@@ -221,7 +221,7 @@ export function obsidianTally(held: number | null, visible: number, nearest: str
     : '自然の黒曜石 見えていない';
   const notes = [...left.frame ? [`枠の形の O ${left.frame} マス（組んだ枠・壊れたポータル）は数えない`] : [],
     ...left.ruined ? [`壊れたポータルの近くの O ${left.ruined} マスは泣く黒曜石が混ざるので数えない（泣く黒曜石はゲートに使えない）`] : []];
-  return `黒曜石: 持ち物 ${held ?? '不明（持ち物の行が略された）'}／ゲートの最低 ${GATE_OBSIDIAN}／目標 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート ${GATE_OBSIDIAN}＋竜戦 12）。${seen}`
+  return `黒曜石: 持ち物 ${held ?? '不明（持ち物の行が略された）'}／ゲートの分 ${OBSIDIAN_AT_FIRST_LAVA}（これで足りる。竜戦の 12 は出発の点検で別に取る）。${seen}`
     + `${notes.length ? `（${notes.join('。')}）` : ''}`;
 }
 /** A pool from her feet: the place, how far across and how far up or down, the sources and the cover (the body's note). */

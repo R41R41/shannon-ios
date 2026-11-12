@@ -55,10 +55,13 @@ const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て', count: 2, pattern: UP
 // A goal of the table, and only a goal (run 8, 11/13: the hand that held the gate while no golden piece was worn stopped a lit gate; it is gone).
 // In the Nether, a golden piece carried is put on before the search (`goldFirstHold`).
 const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true };
-/** The obsidian taken at the first lava (the section audit of 11/5): the gate's 10 and the End fight's 12 at once, not a second trip after the Nether. */
-export const OBSIDIAN_AT_FIRST_LAVA = 22;
 /** The portal's frame (four wide, five high, no corners). */
 export const GATE_OBSIDIAN = 10;
+/**
+ * The obsidian taken at the first lava: the gate's 10 only (run 8, 11/13: with 22 she kept digging at 12 and 17 for a goal the gate does not need).
+ * The End fight's 12 is taken by its own node of the departure check (`エンドの戦い用の黒曜石を12`), which counts what is held.
+ */
+export const OBSIDIAN_AT_FIRST_LAVA = GATE_OBSIDIAN;
 /** The Nether's rock wears a pickaxe out (an iron one is 250 uses: S2's lab, one broke): three iron ones, or one diamond one (which counts for three). */
 const TRIP_PICKAXE: PrepNeed = { label: 'ツルハシ（ダイヤ 1 か鉄 3）', count: 3, pattern: PICKAXE.pattern, weight: name => /^(?:diamond|netherite)_/u.test(name) ? 3 : 1 };
 /**
@@ -278,7 +281,7 @@ export const PREP_RULES_WORDS = [
     + '目標（あれば持つ。無くても入る）: 予備の盾と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で盾が壊れた時にその場で作り直せる。板はネザーの幹でもよい）'
     + '・石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）・足場のブロック 64（丸石 128 あると橋で尽きない）'
     + '・金のブーツ（金 4 がそろう時。金を着ていない間はピグリンの群れ・砦の遺跡の 8m 内に長居しない）'
-    + `・水入りバケツ・黒曜石 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金（捨てずに持って入る。帰りのゲートの火が消えても、枠はそのままで点け直せる）・`
+    + `・水入りバケツ・黒曜石 ${OBSIDIAN_AT_FIRST_LAVA}（ゲートの分だけ。竜戦の 12 は出発の点検で別に取る）・火打ち金（捨てずに持って入る。帰りのゲートの火が消えても、枠はそのままで点け直せる）・`
     + '食料 250 点前後（干し草 1 個でパン 3）。必須が欠けたまま入ると、ブレイズ・ガスト・ウィザースケルトンの傷が重なり、死ねばダイヤのツルハシと黒曜石を失う。'
     + 'ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る。'
     + 'ゲートが点いたら、その場ですぐ入る（必須がそろっていれば、目標のために地上へ戻らない。点いたゲートは 4 秒で戻れる扉）。'

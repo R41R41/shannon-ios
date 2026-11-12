@@ -21,7 +21,7 @@ const titlesDone = (dimension: string, items: Array<[string, number]>) => {
 describe('end1108a S9: twelve eyes in the overworld close the stages that make them', () => {
   it('closes the gate, the rods, the pearls and the eyes with 12 eyes in the overworld', () => {
     const done = titlesDone('overworld', [['ender_eye', 12]]);
-    for (const title of ['黒曜石10とゲート', '溶岩源で黒曜石22（ゲート10・竜戦12）', '火打ち金（火打石は砂利）', 'ブレイズロッド7以上', 'エンダーパール14以上', 'エンダーアイ14個'])
+    for (const title of ['黒曜石10とゲート', '溶岩源で黒曜石10（ゲートの分）', '火打ち金（火打石は砂利）', 'ブレイズロッド7以上', 'エンダーパール14以上', 'エンダーアイ14個'])
       expect(done.has(title), title).toBe(true);
     expect(done.has('目玉の交点へ行き、地下の枠の部屋を見つける')).toBe(false);
   });
