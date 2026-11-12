@@ -99,6 +99,11 @@ describe('run 43: the fuel is a lack of its own', () => {
     expect(line).toContain('（鉱石 0・食べ物 11。生でも食べられる）');
     expect(line).toContain('石炭は鉄と同じ地下の岩によく出る');
     expect(line).toContain('原木 4 も燃える');
+    // run 9: two logs burn three of the four ores now; the rest waits for fuel, and the ingots in hand and the raw ore are said.
+    const some = { ...world, mapLandmarks: [], inventory: pack([['raw_iron', 4], ['iron_ingot', 1], ['oak_log', 1], ['stripped_oak_log', 1]]) };
+    const part = fuelShortage(some, carriedItemCounts(some, {}))!;
+    expect(part).toContain('今ある原木で 3 個は焼ける（残り 1 は燃料が揃ってから）');
+    expect(part).toContain('鉄の延べ棒は今 1・焼ける原鉱 4');
   });
 });
 

@@ -453,6 +453,19 @@ const TO_SMELT = /^(?:raw_iron|raw_gold|iron_ore|deepslate_iron_ore|gold_ore|dee
 const FUELS: ReadonlyArray<readonly [RegExp, number]> = [[/^(?:coal|charcoal)$/u, 8], [/^coal_block$/u, 80], [/^lava_bucket$/u, 100]];
 const COAL_MARK = /石炭\[(?:deepslate_)?coal_ore\] \((-?\d+),(-?\d+),(-?\d+)\)[^×]*×(\d+)/u;
 /**
+ * Run 9 (11/12: raw_iron ×4 in the pack and one in a furnace without fuel, two logs, and the next piece one ingot short; the head went to dig 14 more
+ * ore, which stopped at the dig limit, instead of smelting what it had): what the logs carried burn now, so a part of the smelting is a hand of its own,
+ * with the ingots it makes. Said only with a log in the pack and something to smelt that the logs do not cover.
+ */
+function logsNow(logs: number, items: number, counts: ItemCounts): string {
+  const now = Math.min(items, Math.floor(logs * 1.5));
+  if (now < 1) return '';
+  const ingots = countMatching(counts, /^iron_ingot$/u), raw = countMatching(counts, /^raw_iron$/u);
+  return `。今ある原木で ${now} 個は焼ける（残り ${items - now} は燃料が揃ってから）${raw > 0 ? `。鉄の延べ棒は今 ${ingots}・焼ける原鉱 ${raw}` : ''}`
+    + '。焼ける分を先に炉へ入れ、待つ間に掘る・歩く';
+}
+
+/**
  * Run 43 (+720 to +1,766, about 600 s: raw_iron ×15 with one plank, five waits before a furnace out of fuel, a
  * climb to the surface for wood; the
  * coal ore ×10 on the map at y=44 was passed on the way down): what she carries to smelt against the fuel she
@@ -480,7 +493,7 @@ export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts)
   const logs = countMatching(counts, /_(?:log|stem)$/u);
   const what = ores === items ? `（鉱石 ${ores}）` : `（鉱石 ${ores}・食べ物 ${items - ores}。生でも食べられる）`;
   const meanwhile = `${seen ? '' : '石炭は鉄と同じ地下の岩によく出る（鉄へ下りる途中で掘れる）。'}燃料が無くても鉱石は先に掘っておける（焼くのは燃料が揃ってから）`
-    + (logs > 0 ? `。原木 ${logs} も燃える（1 本で 1.5 個）` : '');
+    + (logs > 0 ? `。原木 ${logs} も燃える（1 本で 1.5 個）${logsNow(logs, items, counts)}` : '');
   return `燃料: 焼く物 ${items} 個${what}に石炭 ${coal} が要る（石炭 1 で 8 個、板 1 枚は 1.5 個。板 ${planks} は作業台と道具の分）。${where}。${meanwhile}`;
 }
 
