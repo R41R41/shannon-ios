@@ -958,6 +958,7 @@
     "surfaces/minecraft/minecraftLlmcV2Knowledge.ts",
     "surfaces/minecraft/minecraftLlmcWalkRules.ts",
     "surfaces/minecraft/minecraftLlmcWatch.ts",
+    "surfaces/minecraft/minecraftLlmcWaterNode.ts",
     "surfaces/minecraft/minecraftLookahead.ts",
     "surfaces/minecraft/minecraftMadeIn.ts",
     "surfaces/minecraft/minecraftMapRead.ts",

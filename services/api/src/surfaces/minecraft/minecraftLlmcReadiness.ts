@@ -566,7 +566,8 @@ export function goldAbsentLine(world: Record<string, unknown>, counts: ItemCount
  * three times in 70 s. A fish in the water is no hunt without a rod: only land animals count as food in sight.
  */
 const LAND_FOOD = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit', 'mooshroom']);
-const WANTS_FOOD = (node: PlanNode): boolean => /food\s*>=|foodPoints/u.test(String(node.doneWhen ?? '')) || /食料|狩/u.test(String(node.title ?? ''));
+// Run 8 (11/13): the furnace's food node is done by `stock:food` now (was food>=40); it still wants food.
+const WANTS_FOOD = (node: PlanNode): boolean => /food\s*>=|foodPoints|stock:food/u.test(String(node.doneWhen ?? '')) || /食料|狩/u.test(String(node.title ?? ''));
 
 /**
  * thru t05 (w1109v, an icy world by the water, 17:58): the now was the food (40 points, 「無ければ動物を4〜6体狩る」) and for about 35 minutes

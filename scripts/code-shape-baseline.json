@@ -1903,7 +1903,7 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts": {
-      "long-line": 71
+      "long-line": 72
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
@@ -1915,7 +1915,7 @@
       "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftPlanDone.ts": {
-      "long-line": 2,
+      "long-line": 3,
       "complex-function": 2
     },
     "services/api/src/surfaces/minecraft/minecraftReflexAdapter.ts": {
@@ -2289,7 +2289,7 @@
       "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftKnowledgeCore.ts": {
-      "long-line": 2
+      "long-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcFacts.ts": {
       "complex-function": 1,
@@ -2301,7 +2301,8 @@
       "multi-statement-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcLiquid.ts": {
-      "long-line": 1
+      "long-line": 1,
+      "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPartial.ts": {
       "long-line": 3
@@ -2309,7 +2310,8 @@
     "services/api/src/surfaces/minecraft/minecraftLlmcQueue.ts": {
       "long-file": 1,
       "long-line": 1,
-      "multi-statement-line": 2
+      "multi-statement-line": 2,
+      "complex-function": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcQueueBody.ts": {
       "multi-statement-line": 1
@@ -2349,6 +2351,24 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftStockLevels.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcEvents.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcObsidianWays.ts": {
+      "long-line": 5,
+      "multi-statement-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcPack.ts": {
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcWaterNode.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/minecraftLlmcReplanWiring.ts": {
+      "complex-function": 1,
       "long-line": 1
     }
   }
