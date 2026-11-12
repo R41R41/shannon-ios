@@ -5,7 +5,9 @@ import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { urgentFacts } from '../src/surfaces/minecraft/minecraftLlmcEvents.js';
 import { liquidLines } from '../src/surfaces/minecraft/minecraftLlmcLiquid.js';
 import { lavaSitesIn, nearbyLines, nearbyResourcesOf, type NearbyResource } from '../src/surfaces/minecraft/minecraftLlmcNearby.js';
-import { heldObsidian, obsidianWays } from '../src/surfaces/minecraft/minecraftLlmcObsidianWays.js';
+import { heldObsidian, obsidianTally, obsidianWays } from '../src/surfaces/minecraft/minecraftLlmcObsidianWays.js';
+import { createFoodTrend, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
+import { llmcCoreKnowledge } from '../src/surfaces/minecraft/minecraftKnowledgeCore.js';
 import { forgetOnceFacts, pending } from '../src/surfaces/minecraft/minecraftLlmcOnceFacts.js';
 import { BODY_RULES, mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
 import { promiseLines } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
@@ -71,6 +73,15 @@ describe('the lava pools near her (run 8: four pools loaded, the head told the n
     expect(line).toContain('溶岩の溜まり（近い順・今の足から）: (7,20,0) 水平 7m・上 20・源 3・覆い× / (0,-19,40) 水平 40m・下 19・源 30・覆い○ / (36,-45,0) 水平 36m・下 45・源 64。');
     expect(line).not.toContain('源が 10 以上の溜まり');
   });
+  it('reads the entry the body sends for a scan that found no lava (count 0, pools 0, no sites) through the live state into the obsidian line', () => {
+    const none = { purpose: 'lava', kind: 'lava', count: 0, pools: 0, range: 96, sites: [] };
+    expect(nearbyResourcesOf([none])).toEqual([{ purpose: 'lava', kind: 'lava', count: 0, pools: 0, range: 96, sites: [] }]);
+    const live = minecraftLlmcLive({ observation: frame([['diamond_pickaxe', 1]], { nearbyResources: [none] }), elapsedMinutes: 1, trend: createFoodTrend(() => 0), events: [],
+      planNow: '[p7.1] 溶岩源で黒曜石22' });
+    expect(live.nearby).toEqual(['溶岩の溜まり: lava 96m 内に なし']);
+    const [line] = obsidianWays({ planFacts: planFacts('obsidian'), nearby: live.nearby }, FEET, view({}));
+    expect(line).toContain('溶岩の溜まり 96m 内に見えない（洞窟・地表の近くも mc_probe kind=scan で読み直す。それでも無ければ低い y を当てて掘る）');
+  });
   it('says none within the range and where else to look only when the body sees no pool and the map no lava', () => {
     const body = { planFacts: planFacts('obsidian'), nearby: nearbyLines([{ ...POOLS, count: 0, sites: [] }], FEET) };
     const [line] = obsidianWays(body, FEET, view({}));
@@ -86,7 +97,9 @@ describe('the lava touching an obsidian cell (run 8: six dug with lava beside or
   it('marks a cell with lava right under it, under its fall through air, beside it or above it, and counts them', () => {
     const cells = { '2,0,0': 'O', '2,-1,0': 'L', '-2,0,0': 'O', '-2,-1,0': '.', '-2,-2,0': 'l', '0,0,2': 'O', '1,0,2': 'L', '0,0,-2': 'O' };
     const line = liquidLines(view(cells), FEET).find(item => item.startsWith('黒曜石'))!;
-    expect(line.startsWith('黒曜石 4 マス（うち溶岩に接する 3・そのうち真下が溶岩 1（水入りバケツが無いと体は掘らない））: ')).toBe(true);
+    // Lava beside or above and the air of a fall the body fills with stone (the obsidian hand with its canPlace only); lava right under it needs the bucket.
+    expect(line.startsWith('黒曜石 4 マス（うち溶岩に接する 3・石で埋めてから掘る 2（obsidian の手は canPlace に石を渡す）・真下が溶岩 1（水入りバケツが無いと体は掘らない））: ')).toBe(true);
+    expect(liquidLines(view({ '2,0,0': 'O', '2,-1,0': 'L' }), FEET).find(item => item.startsWith('黒曜石'))!.startsWith('黒曜石 1 マス（うち溶岩に接する 1・真下が溶岩 1（水入りバケツが無いと体は掘らない））: ')).toBe(true);
     expect(line).toContain('(2,0,0) 目から');
     // Review of the run-8 fixes: lava right under the block only water keeps from the drop; a fall through air the body fills with stone.
     expect(line).toMatch(/\(2,0,0\) 目から [\d.]+m・届く・真下が溶岩/u);
@@ -131,6 +144,11 @@ describe('the water node said unneeded when the obsidian in view covers the lack
     waterNodeFacts('w', tree(WITH_WATER), frame([['diamond_pickaxe', 1], ['water_bucket', 1]], { localMap: map }));
     expect(pending('w')).toEqual([]);
   });
+  it('says how many of the obsidian in view lie right over lava (the body digs those only with a water bucket)', () => {
+    expect(obsidianTallyLine(frame([['obsidian', 4]], { localMap: mapOf({ '2,0,0': 'O', '2,-1,0': 'L', '2,0,1': 'O' }) })))
+      .toBe('黒曜石: 持ち物 4／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。見えている自然の黒曜石 地図に 2 マス（うち真下が溶岩 1: 水入りバケツが要る）・最寄り 2m（地図）');
+    expect(obsidianTally(0, 0, null, { overLava: 1 })).not.toContain('真下が溶岩');
+  });
   it('gives the replan the obsidian carried and in view', () => {
     expect(obsidianTallyLine(frame([['obsidian', 4]], { localMap: mapOf({ '2,0,0': 'O', '2,0,1': 'O' }) })))
       .toBe('黒曜石: 持ち物 4／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。見えている自然の黒曜石 地図に 2 マス・最寄り 2m（地図）');
@@ -143,6 +161,11 @@ describe('the water node said unneeded when the obsidian in view covers the lack
     const text = Object.values(V2_STAGES).join('\n');
     expect(text).toContain('見えている黒曜石（live の obsidian・liquid の行）を掘るだけなら水は要らない。横・上の溶岩と落ちる先の空気は体が石で埋めてから掘る');
     expect(text).toContain('真下が溶岩の黒曜石は、体が上に水を注いでから掘るので水入りバケツが要り、無ければ掘らない');
+    // The body (dropGuard): the obsidian hand fills only with its canPlace, so the words ask for stone there; water is not poured in the Nether or onto the head.
+    expect(text).toContain('溶岩に接する O を obsidian の at に挙げる時は canPlace に持っている dirt・cobblestone を渡す。渡さないと掘らずに lava_danger で止まる');
+    expect(text).toContain('ネザーでは注げない。水が頭に流れる高さでは注がないので、足が O より 1 段上の所から掘る');
+    const core = llmcCoreKnowledge();
+    expect(core).toContain('既にある O は掘るだけ（水は不要。横・上の溶岩は体が石で埋めて掘る: obsidian の手は canPlace に石を渡す。真下が溶岩の O だけ水入りバケツが要り、無いと体は掘らない）');
     expect(text).not.toContain('石のツルハシを 2〜3 本作って持つ');
     expect(text).not.toContain('水入りバケツ・ダイヤpick・作業位置を先に確保し');
   });

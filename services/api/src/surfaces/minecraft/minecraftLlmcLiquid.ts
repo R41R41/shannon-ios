@@ -75,12 +75,16 @@ export function liquidLines(view: MapView, feet: P): string[] {
     lines.push(`溶岩: 源 ${lava.length} マス・流れ ${lavaFlows.length} マス${lava.length ? `。近い源: ${listing(nearest(view, eye, feet, lava))}` : ''}`);
   }
   if (obsidian.length) {
-    const marked = obsidian.filter(cell => lavaBeside(view, cell) !== null).length, direct = obsidian.filter(cell => lavaRightUnder(view, cell)).length;
+    const marks = obsidian.map(cell => lavaBeside(view, cell));
+    const marked = marks.filter(mark => mark !== null).length, direct = obsidian.filter(cell => lavaRightUnder(view, cell)).length;
+    // The cells the body fills with stone first (lava beside or above, or under its fall through air): the obsidian hand fills with its canPlace only.
+    const stone = marks.filter(mark => mark !== null && /横・上|落ちる先/u.test(mark)).length;
     const shown = nearest(view, eye, feet, obsidian).map(item => {
       const lava = lavaBeside(view, item.cell);
       return `${ptText(item.cell)} 目から ${item.reach.toFixed(1)}m・${reachWord(item)}${lava ? `・${lava}` : ''}`;
     });
-    const touched = marked ? `（うち溶岩に接する ${marked}${direct ? `・そのうち真下が溶岩 ${direct}（水入りバケツが無いと体は掘らない）` : ''}）` : '';
+    const touched = marked ? `（うち溶岩に接する ${marked}${stone ? `・石で埋めてから掘る ${stone}（obsidian の手は canPlace に石を渡す）` : ''}`
+      + `${direct ? `・真下が溶岩 ${direct}（水入りバケツが無いと体は掘らない）` : ''}）` : '';
     lines.push(`黒曜石 ${obsidian.length} マス${touched}: ${shown.join(' / ')}`);
   }
   return lines;

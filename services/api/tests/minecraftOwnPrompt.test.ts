@@ -35,7 +35,8 @@ const PINNED = {
   // 11/11 flow (ec854a5e): the words of the flow change say so (前は fdeb35d336c31278).
   // 11/13 run 8: the obsidian in sight is dug with no water, the lava beside or under it filled by the body (前は 381079159224f450).
   // 11/13 review of the run-8 fixes: only the O with lava right under it needs a water bucket (the body fills the rest) (前は 640b0eb4dec985c4).
-  llmc_r9_system: 'a4f7d78bb3171771',
+  // 11/13 the body's dropGuard: the lava beside or above is filled with stone, the obsidian hand's with its canPlace only, so the core asks for stone there (前は a4f7d78bb3171771).
+  llmc_r9_system: 'a49b5cc1bdf3e971',
   old_mode_system: '9484df3e3e4d04cf',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
@@ -136,7 +137,8 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     // 11/11 flow (ec854a5e): its words measure 8,284; the budget is 8,300.
     // 11/13 run 8: obsidian in sight is dug with no water, and the body fills the lava beside or under it first (about 44); the budget is 8,350.
     // 11/13 review: the O with lava right under it needs a water bucket (the line measures about the same as before).
-    expect(after.llmcTokens).toBeLessThanOrEqual(8_350);
+    // 11/13 the body's dropGuard: the obsidian hand fills the lava beside a block only with its canPlace, and the core says to give it stone (about 50); the budget is 8,400.
+    expect(after.llmcTokens).toBeLessThanOrEqual(8_400);
     expect(after.estimated).toBeLessThanOrEqual(7_000);
     expect(after.llmcTokens / before.llmcTokens).toBeLessThan(0.3);
   }, 60_000);

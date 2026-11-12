@@ -1,4 +1,5 @@
 import { PORTAL, type MapView } from './minecraftLlmcPreflightMap.js';
+import { lavaRightUnder } from './minecraftLlmcLiquid.js';
 import { lavaSitesIn, type LavaSite } from './minecraftLlmcNearby.js';
 import { GATE_OBSIDIAN, OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
 import { isHard, NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
@@ -174,10 +175,13 @@ export const ruinsIn = (lines: readonly string[]): P[] => lines.flatMap(line => 
   const at = /壊れたポータル/u.test(line) ? pointOf(line) : null;
   return at ? [at] : [];
 });
-/** The obsidian of the map that may go to the gate: not in a frame's shape (`frameCell`) and not near a ruined portal (crying obsidian is O too). */
-export interface MapObsidian { cells: P[]; frame: number; ruined: number }
+/**
+ * The obsidian of the map that may go to the gate: not in a frame's shape (`frameCell`) and not near a ruined portal (crying obsidian is O too).
+ * `overLava`: how many of the cells have lava right under them (the body digs those only after water is poured on top: a water bucket is needed).
+ */
+export interface MapObsidian { cells: P[]; frame: number; ruined: number; overLava: number }
 export function naturalObsidian(view: MapView | null, ruins: readonly P[] = []): MapObsidian {
-  const out: MapObsidian = { cells: [], frame: 0, ruined: 0 };
+  const out: MapObsidian = { cells: [], frame: 0, ruined: 0, overLava: 0 };
   if (!view) return out;
   for (const [y, layer] of view.layers.layers) {
     for (const [key, symbol] of layer) {
@@ -185,7 +189,10 @@ export function naturalObsidian(view: MapView | null, ruins: readonly P[] = []):
       const [x, z] = key.split(',').map(Number) as [number, number], at = { x, y, z };
       if (frameCell(view, at)) out.frame += 1;
       else if (ruins.some(ruin => distance(ruin, at) <= RUIN_METERS)) out.ruined += 1;
-      else out.cells.push(at);
+      else {
+        out.cells.push(at);
+        if (lavaRightUnder(view, at)) out.overLava += 1;
+      }
     }
   }
   return out;
@@ -207,8 +214,10 @@ export const litGateLine = (gate: { at: P; meters: number }): string =>
  * in the world): the head of the obsidian line, the count in the pack beside the gate's least and the aim, and the obsidian in view (the frames
  * and the cells near a ruined portal not counted, and said so). Facts only. `held` null: the pack's lines were cut.
  */
-export function obsidianTally(held: number | null, visible: number, nearest: string | null, left: { frame?: number; ruined?: number } = {}): string {
-  const seen = visible > 0 || nearest ? `見えている自然の黒曜石 ${visible > 0 ? `地図に ${visible} マス` : ''}${visible > 0 && nearest ? '・' : ''}${nearest ? `最寄り ${nearest}` : ''}`
+export function obsidianTally(held: number | null, visible: number, nearest: string | null, left: { frame?: number; ruined?: number; overLava?: number } = {}): string {
+  // The body digs an O with lava right under it only with a water bucket (poured on top first); without one it is not dug.
+  const overLava = visible > 0 && left.overLava ? `（うち真下が溶岩 ${left.overLava}: 水入りバケツが要る）` : '';
+  const seen = visible > 0 || nearest ? `見えている自然の黒曜石 ${visible > 0 ? `地図に ${visible} マス${overLava}` : ''}${visible > 0 && nearest ? '・' : ''}${nearest ? `最寄り ${nearest}` : ''}`
     : '自然の黒曜石 見えていない';
   const notes = [...left.frame ? [`枠の形の O ${left.frame} マス（組んだ枠・壊れたポータル）は数えない`] : [],
     ...left.ruined ? [`壊れたポータルの近くの O ${left.ruined} マスは泣く黒曜石が混ざるので数えない（泣く黒曜石はゲートに使えない）`] : []];
