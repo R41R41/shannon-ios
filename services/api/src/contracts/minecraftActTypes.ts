@@ -276,9 +276,13 @@ export interface ActHand {
 /** The kinds whose failure does not end the act unless the hand says `onFail: 'stop'` (r3). */
 export const HAND_CONTINUES_BY_DEFAULT: ReadonlySet<HandKind> = new Set(['equip', 'eat', 'look', 'sneak', 'jump']);
 
-/** Whether the act goes on past this hand when it fails by itself (`ActHand.onFail`, or its kind's default). */
-export function handContinuesOnFail(hand: Pick<ActHand, 'do' | 'onFail'>): boolean {
-  return hand.onFail ? hand.onFail === 'continue' : HAND_CONTINUES_BY_DEFAULT.has(hand.do);
+/**
+ * Whether the act goes on past this hand when it fails by itself (`ActHand.onFail`, or the default: a hand that depends on nothing (`dependsOn: []`) goes on,
+ * run 8, 2026-11-13: a hand that failed left the ones behind it, which did not rely on it, unrun; else its kind's default). The hands that name it still stop.
+ */
+export function handContinuesOnFail(hand: Pick<ActHand, 'do' | 'onFail'> & { dependsOn?: readonly number[] | undefined }): boolean {
+  if (hand.onFail) return hand.onFail === 'continue';
+  return (Array.isArray(hand.dependsOn) && hand.dependsOn.length === 0) || HAND_CONTINUES_BY_DEFAULT.has(hand.do);
 }
 
 /** Stop the whole act when one holds (checked between hands and every 250 ms inside a long one). */

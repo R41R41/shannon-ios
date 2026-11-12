@@ -47,7 +47,7 @@ describe('food: the safe amount beside the least, said only once the least is me
   });
   it('says nothing more below the least, and the way to the safe amount above it', () => {
     expect(foodPointsWords(38, 40)).toBe('食料 38/40 点（あと 2 点: sweet_berries 1 個）');
-    expect(foodPointsWords(60, 40)).toBe('食料 60/40 点・安心 100 点まであと 40 点（bread 4 個＝干し草 2 個）');
+    expect(foodPointsWords(60, 40)).toBe('食料 60/40 点・安心 100 点まであと 40 点');
     expect(foodPointsWords(100, 40)).toBe('食料 100/40 点');
   });
 });
@@ -176,5 +176,70 @@ describe('run 7: probe kind=route, the logs near from the nearby count alone, th
     const sentence = '注水で固まった隣の溶岩源（挙げた源から半径 6）の黒曜石は、count まで体が続けて掘る。座標 1 個で隣も掘らせたいなら count=N で総数を決める（count を書かないと座標の数だけで、隣は掘らない）。';
     expect(source).toContain(sentence);
     expect(sentence.length).toBeLessThanOrEqual(120);
+  });
+});
+
+// Run 8 (2026-11-13), the head's half of the chosen fixes.
+describe('run 8: the food of the village is a fact beside the points, and keeps the node open while it is near', () => {
+  const hayNear = [{ purpose: 'food_village', kind: '干し草ブロック', count: 6, range: 128, sites: [{ x: 1, y: 63, z: 1 }] }];
+  it('foodPointsWords says no bread-for-hay conversion; the hay words come only with hay near', () => {
+    expect(foodPointsWords(60, 40)).toBe('食料 60/40 点・安心 100 点まであと 40 点');
+    expect(foodPointsWords(60, 40, 6)).toContain('村の干し草 6 個＝約 198 点（1 個 2〜3 秒・下りると戻らない');
+    expect(foodPointsWords(60, 40, 6)).toContain('ネザー奥 100〜200・エンド 330');
+    expect(foodPointsWords(60, 40, 0)).toBe('食料 60/40 点・安心 100 点まであと 40 点');
+  });
+  it('stock:food stays open at 100 points while village food is near, and closes as before away from it', () => {
+    expect(foodEnough(120, 0, 6)).toBe(false);
+    expect(foodEnough(120, 0, 0)).toBe(true);
+    expect(foodEnough(120, 0, null)).toBe(true);
+    expect(foodEnough(45, 0, undefined)).toBe(true);
+  });
+  it('the plan\'s now says the hay while it is near and not when it is away', () => {
+    const near = doneFacts(frame({ inventory: items([['bread', 5]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: hayNear }))!;
+    expect(near.foodVillage).toBe(6);
+    expect(near.foodHay).toBe(6);
+    expect(doneStatusWords('stock:food', near)).toContain('村の干し草 6 個＝約 198 点');
+    expect(predicateHolds(parseDoneWhen('stock:food')!, doneFacts(frame({ inventory: items([['bread', 40]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: hayNear }))!)).toBe(false);
+    const away = doneFacts(frame({ inventory: items([['bread', 5]]), position: { x: 0, y: 64, z: 0 }, nearbyResources: [] }))!;
+    expect(doneStatusWords('stock:food', away)).not.toContain('干し草');
+  });
+  it('the first plan\'s cooking leaf closes by stock:food, not by 40 points', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(new URL('../src/surfaces/minecraft/minecraftFirstPlan.ts', import.meta.url), 'utf8');
+    expect(source).toContain("node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'stock:food' })");
+  });
+});
+
+describe('run 8: a hand that depends on nothing goes on past a failed hand', () => {
+  it('dependsOn [] continues by default; onFail and the kind\'s default are kept; no dependsOn stops as before', async () => {
+    const { handContinuesOnFail } = await import('../src/contracts/minecraftActContract.js');
+    expect(handContinuesOnFail({ do: 'dig', dependsOn: [] })).toBe(true);
+    expect(handContinuesOnFail({ do: 'dig', dependsOn: [], onFail: 'stop' })).toBe(false);
+    expect(handContinuesOnFail({ do: 'dig', dependsOn: [1] })).toBe(false);
+    expect(handContinuesOnFail({ do: 'dig' })).toBe(false);
+    expect(handContinuesOnFail({ do: 'eat' })).toBe(true);
+  });
+});
+
+describe('run 8: a pack that is full offers a nearly spent tool when another of its kind is whole', () => {
+  it('names the worn pickaxe (3 or fewer left) only with a better one beside it, and only at 0 free slots', async () => {
+    const { packFacts, dropAdvice } = await import('../src/surfaces/minecraft/minecraftLlmcPack.js');
+    const both = packFacts(['stone_pickaxe×1(耐久2/131)', 'stone_pickaxe×1(耐久120/131)', 'iron_pickaxe×1(耐久240/250)']);
+    expect(both.worn).toEqual([['stone_pickaxe', 2]]);
+    expect(dropAdvice(both)).toContain('stone_pickaxe(残り 2)');
+    expect(packFacts(['stone_pickaxe×1(耐久2/131)']).worn).toEqual([]);
+    expect(dropAdvice({ filler: [], junk: [] })).toBe('');
+  });
+});
+
+describe('run 8: the table note says what the make itself does while she carries planks or a table', () => {
+  const noTable = (inventory: unknown[]): BodyObservation => frame({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory,
+    utilities: { radius: 16, dim: 'overworld', scanned: true, found: [] } });
+  it('keeps the old words without planks, and names the carried planks or table otherwise', async () => {
+    const { tableNote } = await import('../src/surfaces/minecraft/minecraftLlmcTableNote.js');
+    const make = { hands: [{ do: 'make', item: 'stone_pickaxe' }] };
+    expect(tableNote(make, noTable(items([['oak_planks', 3]])))).toContain('先に go で作業台へ寄るか');
+    expect(tableNote(make, noTable(items([['oak_planks', 4]])))).toContain('この手が持っている板・作業台を置いて作る。置ける所が無ければ止まる');
+    expect(tableNote(make, noTable(items([['crafting_table', 1]])))).toContain('この手が持っている板・作業台を置いて作る');
   });
 });

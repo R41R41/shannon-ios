@@ -52,7 +52,7 @@ const TO_NETHER: readonly PlanSeed[] = [
     note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（寝る用 1 と、エンドの竜戦に 10 個・最低 8）。札のベッドを取り切るまで 1 周で回る。'
       + '羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
     caution: ['通りがかりに昼のクモ（剣で倒すと糸。弓に 3）・砂利（火打石）・ニワトリ（羽）を見たら寄って取る（エンドの結晶を地面から撃つ弓と矢の分。探し回らない）'] }),
-    node('無ければ（石の剣か斧を持って）動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'food>=40' })] }),
+    node('無ければ（石の剣か斧を持って）動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'stock:food' })] }),
   node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）'],
     children: [node('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）', { kind: 'iron', doneWhen: 'have:iron_pickaxe' }),
     // The whole-run audit of 11/4, order 1: the sword and the shield the moment the iron is smelted (run60 met the night with no sword); the boots are

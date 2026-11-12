@@ -143,7 +143,7 @@ function holds(clause: DoneClause, facts: DoneFacts): boolean {
     case 'have': return acquired(facts.counts, clause.item) >= clause.count || madeInto(facts.counts, clause);
     case 'dim': return facts.dimension === clause.dimension;
     case 'food': return facts.food >= clause.points;
-    case 'stock': return clause.what === 'food' ? foodEnough(facts.food, facts.foodNear) : woodEnough(woodLogs(facts.counts), facts.woodNear);
+    case 'stock': return clause.what === 'food' ? foodEnough(facts.food, facts.foodNear, facts.foodVillage) : woodEnough(woodLogs(facts.counts), facts.woodNear);
     case 'see': return facts.seen?.has(clause.what) === true;
     case 'crystals': return typeof facts.crystals === 'number' && facts.crystals <= clause.max;
     case 'act': return clauseHolds(clause.clause, facts) === true;
@@ -178,7 +178,7 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
     case 'have': return `${clause.item} ${Math.min(acquired(facts.counts, clause.item), clause.count)}/${clause.count}`;
     case 'act': return clauseLack(clause.clause, facts);
     case 'food': return foodPointsWords(facts.food, clause.points);
-    case 'stock': return clause.what === 'food' ? foodStockWords(facts.food, facts.foodNear) : woodStockWords(woodLogs(facts.counts), facts.woodNear);
+    case 'stock': return clause.what === 'food' ? foodStockWords(facts.food, facts.foodNear, facts.foodHay) : woodStockWords(woodLogs(facts.counts), facts.woodNear);
     case 'see': return `${SEEN_WORDS[clause.what]}はまだ見えていない`;
     case 'crystals': return typeof facts.crystals === 'number' ? `エンドクリスタル 残り ${facts.crystals}（${clause.max} 以下が条件）`
       : 'エンドクリスタルの残りは体がまだ数えていない';

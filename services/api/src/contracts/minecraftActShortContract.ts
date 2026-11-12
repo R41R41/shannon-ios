@@ -47,7 +47,7 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
   '- 足からの差で書きたい手は rel を付ける（その手を始める時の足のブロックから。x 東+・z 南+・y 上+）。例（足が 230,-54,197 の時）:',
   '  dig 230,-54,196      ← 絶対座標（足の北隣）。  dig 0,0,-1 rel      ← 同じマスを足からの差で。  walk 3,0,0 rel      ← 足の 3 マス東へ。',
   ("- どの手にも onFail=continue|stop を付けられる。dependsOn=1,3 は頼る前の手の番号で、その手が済んでいる時だけ動く（none " +
-"は何にも頼らない。書かなければ前の手が止まれば止まる）。"),
+"は何にも頼らず、前の手が失敗しても続ける。書かなければ前の手が止まれば止まる）。"),
   '- 1 行で書けない形は json {手の JSON} の 1 行。at・items・path は 1 つでも配列。使える欄は手ごとに決まっていて（下の「json の欄」）、'
     + '違う欄の名前を書くとその手は断られる（例: walk に at は使えない。to か path）。',
   '- why は act に 1 つ（手の中には書かない）。',
@@ -210,7 +210,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
     + 'accept の種類は stopIf の hostileWithin にも数えない（その敵が近づいても止まらない）。fight の手の相手も、その手の間は同じ。'
     + '体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く。近接の敵が殴って来る時は accept に入れず attack を先頭の手に（accept だけでは歩く・掘る手が続く）。'
     + '溶岩・溺れ・落下・点火クリーパー・体力 8 以下の逃走の反射と hpBelow も残る。早めに引くなら stopIf の hpBelow を高めに。',
-  '- onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump が continue、'
+  '- onFail: 手が自分で失敗した時、continue なら「失」と書いて次の手へ進み、stop ならそこで act を止める。既定は equip・eat・look・sneak・jump と dependsOn=none（何にも頼らない手）が continue、'
     + 'ほかは stop。急ぐ手（離れる・食べる）の前の手が失敗しそうなら continue に。反射・stopIf・満杯・時間切れはいつでも act を止める。',
   '- 同じ種類の手が続く場面（採掘・作る）は 1 つの act にまとめる（dig の at は16マスまで1手に）。トンネル・橋の道は go 1 手、階段・柱・縦穴は vertical 1 手。'
     + '止まった時は反射・stopIf・onFail が act を止めるが、止まっても安全な所へ動いたことにはならない: 敵で止まった次の判断では、同じ所の作業に戻る前に、敵との距離と回復を見る。',

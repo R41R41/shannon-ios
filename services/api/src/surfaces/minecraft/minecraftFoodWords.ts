@@ -24,13 +24,24 @@ export function foodComfort(need: number): number | null {
   return need === 330 ? 400 : null;
 }
 
-/** The food points as every line says them: 「食料 39.6 点」, or against a need 「食料 39.6/40 点（あと 0.4 点: potato 1 個）」. */
-export function foodPointsWords(food: number, need?: number): string {
+/**
+ * The village's hay as a fact beside the points (run 8, 2026-11-13: hay stood near and only the least was taken): said only while the body counts hay near.
+ * One hay block is three bread, about 33 points; the hand and the amount are the model's.
+ */
+export function villageHayWords(hay: number | null | undefined): string {
+  if (hay === null || hay === undefined || hay <= 0) return '';
+  return `村の干し草 ${hay} 個＝約 ${Math.round(hay * 33)} 点（1 個 2〜3 秒・下りると戻らない・必要は ネザー奥 100〜200・エンド 330）`;
+}
+
+/** The food points as every line says them: 「食料 39.6 点」, or against a need 「食料 39.6/40 点（あと 0.4 点: potato 1 個）」; the village's hay (when near) after the safe amount. */
+export function foodPointsWords(food: number, need?: number, hay?: number | null): string {
   const have = round1(food);
   if (need === undefined) return `食料 ${have} 点`;
   if (have >= need) {
     const comfort = foodComfort(need);
-    return comfort !== null && have < comfort ? `食料 ${have}/${need} 点・安心 ${comfort} 点まであと ${round1(comfort - have)} 点（bread ${Math.ceil((comfort - have) / 11 - 1e-9)} 個＝干し草 ${Math.ceil((comfort - have) / 33 - 1e-9)} 個）` : `食料 ${have}/${need} 点`;
+    if (comfort === null || have >= comfort) return `食料 ${have}/${need} 点`;
+    const hayWords = villageHayWords(hay);
+    return `食料 ${have}/${need} 点・安心 ${comfort} 点まであと ${round1(comfort - have)} 点${hayWords ? `（${hayWords}）` : ''}`;
   }
   const gap = round1(need - have);
   return `食料 ${have}/${need} 点（あと ${gap} 点: ${foodFill(gap)}）`;

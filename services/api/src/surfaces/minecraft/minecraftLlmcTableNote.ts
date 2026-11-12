@@ -32,6 +32,15 @@ export function tableLackFact(frame: BodyObservation | null): string | null {
   return `${where}（作る手が届くのは ${TABLE_REACH_METERS} m 以内）`;
 }
 
+/** Whether she carries a crafting table or at least four planks (what the make itself puts down as a table when none is within reach). */
+function carriesTable(frame: BodyObservation | null): boolean {
+  const counts = doneFacts(frame)?.counts;
+  if (!counts) return false;
+  let planks = 0;
+  for (const [name, count] of counts) if (name === 'crafting_table' && count > 0) return true; else if (name.endsWith('_planks')) planks += count;
+  return planks >= 4;
+}
+
 /** The note for the first hand that needs a table when none is within reach, or null. */
 export function tableNote(input: unknown, frame: BodyObservation | null): string | null {
   const hands = objectOf(input)?.hands;
@@ -41,8 +50,10 @@ export function tableNote(input: unknown, frame: BodyObservation | null): string
     const hand = objectOf(raw);
     if (!hand) return null;
     if (needsTable(hand)) {
+      const carried = carriesTable(frame);
       return `手 ${index + 1} ${String(hand.do)} ${String(hand.item)}: ${fact}。`
-        + '先に go で作業台へ寄るか、持っている作業台（無ければ板 4 で作る）を place してから作る';
+        + (carried ? 'この手が持っている板・作業台を置いて作る。置ける所が無ければ止まる（先に go で作業台へ寄ってもよい）'
+          : '先に go で作業台へ寄るか、持っている作業台（無ければ板 4 で作る）を place してから作る');
     }
     if (MOVES.has(String(hand.do)) || (hand.do === 'place' && hand.block === 'crafting_table')) return null;
   }

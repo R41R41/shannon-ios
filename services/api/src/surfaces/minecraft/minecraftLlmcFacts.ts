@@ -263,7 +263,7 @@ export function digPackLine(observation: BodyObservation | null, hands: readonly
   if (toldPack.get(taskId) === free) return null;
   toldPack.set(taskId, free);
   if (toldPack.size > 32) toldPack.delete(toldPack.keys().next().value as string);
-  const spare = dropAdvice(packed, item => heldBack(promises, item));
+  const spare = dropAdvice(free === 0 ? packed : { ...packed, worn: [] }, item => heldBack(promises, item));
   return `空き ${free}/${PACK_SLOTS}：掘って出る石・深層岩・土は ${free === 0 ? '1 つも拾えない' : `${free} マスより多くは拾えない`}。`
     + (spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）');
 }

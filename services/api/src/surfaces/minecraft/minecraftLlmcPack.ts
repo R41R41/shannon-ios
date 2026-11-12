@@ -19,6 +19,9 @@ const FILLER = new RegExp('^(?:cobblestone|cobbled_deepslate|deepslate|diorite|a
  */
 const JUNK = new RegExp('(?:_fence|_fence_gate|_stairs|_sapling|_seeds)$|^(?:rail|powered_rail|detector_rail|activator_rail|mossy_cobblestone'
   + '|mossy_stone_bricks)$', 'u');
+/** A tool with this many uses left or fewer is nearly spent. */
+const WORN_LEFT = 3;
+const TOOL = /_(?:pickaxe|axe|shovel|hoe|sword)$/u;
 /** The stacks per filler kind are shown when the filler alone fills this many slots. */
 const FILLER_SLOTS = 3;
 const STACK = /^([a-z_0-9]+)×(\d+)/u;
@@ -45,8 +48,9 @@ export function slotsOf(name: string, count: number): number {
 }
 
 /** Stacks used (the lines, and the omitted ones), the filler kinds with their totals, from the inventory lines. */
-export function packFacts(lines: readonly string[]): { used: number; filler: Array<[string, number]>; junk: Array<[string, number]> } {
+export function packFacts(lines: readonly string[]): { used: number; filler: Array<[string, number]>; junk: Array<[string, number]>; worn: Array<[string, number]> } {
   let used = 0;
+  const tools: Array<[string, number]> = [];
   const filler = new Map<string, number>(), junk = new Map<string, number>();
   // The section audit of 11/5: gravel is the flint's source (10% a block), kept until the flint and steel is made.
   const flintMade = lines.some(line => /^flint_and_steel×/u.test(line));
@@ -61,11 +65,15 @@ export function packFacts(lines: readonly string[]): { used: number; filler: Arr
     if (stack && FILLER.test(stack[1]!) && (stack[1] !== 'gravel' || flintMade)) {
       filler.set(stack[1]!, (filler.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
+    const left = /\(耐久(\d+)\/\d+\)$/u.exec(line);
+    if (stack && left && TOOL.test(stack[1]!)) tools.push([stack[1]!, Number(left[1])]);
     if (stack && JUNK.test(stack[1]!)) {
       junk.set(stack[1]!, (junk.get(stack[1]!) ?? 0) + Number(stack[2]));
     }
   }
-  return { used, filler: [...filler].sort((a, b) => b[1] - a[1]), junk: [...junk].sort((a, b) => b[1] - a[1]) };
+  // A tool with at most WORN_LEFT uses left while another of its kind has more: it is not the last one, so it can go (run 8: the pack filled with half-used pickaxes).
+  const worn = tools.filter(([name, left]) => left <= WORN_LEFT && tools.some(([other, more]) => other.replace(/^[a-z]+_/u, '') === name.replace(/^[a-z]+_/u, '') && more > WORN_LEFT));
+  return { used, filler: [...filler].sort((a, b) => b[1] - a[1]), junk: [...junk].sort((a, b) => b[1] - a[1]), worn };
 }
 
 /** The body's free slots in a frame (`world.freeSlots`: its own count, the same as its pickup's), or null when it
@@ -108,10 +116,11 @@ export const FULL_SOON = 3;
  */
 const KEEP_STACK = 128;
 /** What can be dropped, in words: the clutter first, then the filler beyond what is kept (`dropCandidates`). */
-export function dropAdvice(packed: { filler: ReadonlyArray<[string, number]>; junk: ReadonlyArray<[string, number]> },
+export function dropAdvice(packed: { filler: ReadonlyArray<[string, number]>; junk: ReadonlyArray<[string, number]>; worn?: ReadonlyArray<[string, number]> },
   held: (item: string) => number = () => 0): string {
   const junk = packed.junk.slice(0, 6).map(([name, n]) => `${name}×${n}`).join('・');
-  return [junk ? `雑物 ${junk}` : '', dropWords(dropCandidates(packed.filler, held))].filter(Boolean).join('・');
+  const worn = (packed.worn ?? []).slice(0, 3).map(([name, left]) => `${name}(残り ${left})`).join('・');
+  return [junk ? `雑物 ${junk}` : '', dropWords(dropCandidates(packed.filler, held)), worn ? `使い切りかけの道具（同じ種類の別の物がある）${worn}` : ''].filter(Boolean).join('・');
 }
 /**
  * Run 43 (the 36 slots filled with about 270 cobblestone and cobbled deepslate: bread could not be made, about

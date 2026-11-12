@@ -5,7 +5,7 @@ import { carriedFood } from './minecraftLlmcLive.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { crystalsLeft } from './minecraftEndView.js';
 import { seenMarks } from './minecraftSeenMarks.js';
-import { foodNearOf, woodNearFromResources, woodNearOf } from './minecraftStockLevels.js';
+import { foodNearOf, villageFoodOf, woodNearFromResources, woodNearOf } from './minecraftStockLevels.js';
 
 export { parseCondition, conditionText, validCondition, parseClause, newerClause, clauseText, CONDITION_SCHEMA, CONDITION_FORMS,
   type ActClause, type ActCondition, type Dim, type ParsedCondition } from '../../contracts/minecraftActCondition.js';
@@ -36,7 +36,10 @@ export interface DoneFacts { counts: ReadonlyMap<string, number>; dimension: str
   /** The logs and trees the body counted near her (`state.world.woodNear`; null: the frame has none, an older body). */
   woodNear?: { logs: number; trees: number; withinM: number } | null;
   /** The food animals and the village's food the body counted near her (`nearbyResources`); null: the frame has no count. */
-  foodNear?: number | null }
+  foodNear?: number | null;
+  /** The village's food and its hay near her (`nearbyResources`, purpose food_village); null: the frame has no count. */
+  foodVillage?: number | null;
+  foodHay?: number | null }
 /** What the body scanned for a work table, a furnace, a chest or a bed near her: `scanned` false is "not looked",
  * never "none". */
 export interface UtilitiesScan { radius: number; dim: string | null; scanned: boolean; found: ReadonlyArray<{ block: string; distance: number }> }
@@ -87,7 +90,8 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
   const dim = typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null;
   return { counts: carriedItemCounts(frame, observation!.facts), feet, food: carriedFood(frame, observation!.facts).points, dimension: dim,
     hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame),
-    seen: seenMarks(frame), crystals: crystalsLeft(observation), village: villageOf(frame, feet), woodNear: woodNearOf(frame.woodNear) ?? woodNearFromResources(frame.nearbyResources), foodNear: foodNearOf(frame.nearbyResources) };
+    seen: seenMarks(frame), crystals: crystalsLeft(observation), village: villageOf(frame, feet), woodNear: woodNearOf(frame.woodNear) ?? woodNearFromResources(frame.nearbyResources), foodNear: foodNearOf(frame.nearbyResources),
+    foodVillage: villageFoodOf(frame.nearbyResources)?.food ?? null, foodHay: villageFoodOf(frame.nearbyResources)?.hay ?? null };
 }
 
 /** r9: `gold_armor` stands for any piece of golden armour (the check before the Nether's depth asks for one: a
@@ -153,7 +157,7 @@ const round1 = (value: number) => Math.round(value * 10) / 10;
 const LACKS: Lacks = {
   have: (c, facts) => c.op === '<' ? `${c.item} が ${carried(facts.counts, c.item)} 個（${c.n} 未満が条件）`
     : `${c.item} ${Math.min(carried(facts.counts, c.item), c.n)}/${c.n}`,
-  food: (c, facts) => foodPointsWords(facts.food, c.n),
+  food: (c, facts) => foodPointsWords(facts.food, c.n, facts.foodHay),
   hunger: (c, facts) => `満腹 ${round1(facts.hunger ?? 0)}/${c.n}`,
   hp: (c, facts) => `体力 ${round1(facts.hp ?? 0)}/${c.n}`,
   dim: (c, facts) => `次元は ${c.dim}（今 ${facts.dimension ?? '不明'}）`,

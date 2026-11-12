@@ -454,6 +454,7 @@ void restoreReceipts();
           if (named || relies) gone.push(item);
         }
       }
+      const running = chosen.filter(item => item.startedAt !== null).map(item => item.item);
       for (const item of gone) {
         item.because ??= '差し替え';
         item.abort.abort('replaced');
@@ -466,7 +467,7 @@ void restoreReceipts();
       const kept = open().filter(item => items.indexOf(item) > first && first >= 0);
       const replacementWords = () => (gone.length ? `消した: ${gone.map(item => item.item).join('・')}${open().length ? '' :
          '（列は空）'}${kept.length ? `。残した（頼っていない）: ${kept.map(item => item.item).join('・')}` : ''}` : '消す物は無かった');
-      const named = replacementWords();
+      const named = replacementWords() + (running.length ? `。${running.join('・')} は既に実行中だった（手の途中で止めた）` : '');
       return unknown.length ? `${named}。もう列に無い: ${unknown.join('・')}` : named;
     },
     // In the queue's order, whichever receipt came first.
