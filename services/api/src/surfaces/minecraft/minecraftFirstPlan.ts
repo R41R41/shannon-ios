@@ -163,11 +163,14 @@ const DROPPED_BEFORE_GATE = (seed: PlanSeed): boolean => seed.kind === 'food' &&
  */
 // The coordinator, 11/10 6:55 (plan A): the helmet and chestplate; the legs' 7 iron are left out before the Nether.
 const IRON_ARMOUR_WORN = 'have:iron_helmet&have:iron_chestplate';
-// The kind `portal`: the golden boots are the piece of the gate's check (`BEFORE_GATE`); the ore on the way down is `other` (it
-// stands under the boots, whose stage it takes).
-const GOLDEN_BOOTS_NODE = node('金のブーツ（ネザーの前）', { kind: 'portal', doneWhen: 'have:golden_boots|have:ender_eye>=10', children: [
-  node('金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）', { kind: 'other', doneWhen: 'have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots|have:ender_eye>=10' }),
-  node('焼いて金のブーツを作り履く', { kind: 'portal', doneWhen: 'have:golden_boots|have:ender_eye>=10' })] });
+// The kind `portal`: the golden boots are a goal of the gate's check (`BEFORE_GATE`, not required); the ore on the way down is `other` (it
+// stands under the boots, whose stage it takes). Review of the run-8 fixes (11/13): with the boots an aim, the node said 「ネザーの前」 and stayed
+// open until boots were made, and run 8 gathered gold beside a lit gate; it is an aim when four gold come together, and a lit gate or the
+// Nether closes it and its children.
+const BOOTS_OR_GATE = 'have:golden_boots|see:nether_portal|dim:the_nether|have:ender_eye>=10';
+const GOLDEN_BOOTS_NODE = node('金のブーツ（目標・金 4 がそろう時）', { kind: 'portal', doneWhen: BOOTS_OR_GATE, children: [
+  node('金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）', { kind: 'other', doneWhen: `have:raw_gold>=4|have:gold_ingot>=4|${BOOTS_OR_GATE}` }),
+  node('焼いて金のブーツを作り履く', { kind: 'portal', doneWhen: BOOTS_OR_GATE })] });
 export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
   return seeds.flatMap(seed => [{ ...seed, ...gateFirstFields(seed),
     ...seed.children ? { children: gateFirst(seed.children).filter(child => !DROPPED_BEFORE_GATE(child)).map(ironFirst) } : {} },

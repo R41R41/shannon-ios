@@ -53,7 +53,7 @@ const URGENT = [
   '## Urgent decisions (「急ぎの時」)',
   '- In a decision where live\'s mode is 「急ぎの版」: think in 2 to 3 sentences, send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer (「[急ぎ] …」). '
     + 'Move away, put a block between you and the enemy, enclose yourself, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
-    + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating.',
+    + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating. If an urgent line says 「詰めて斬れる」, its fight comes first.',
 ].join('\n');
 
 /**
@@ -241,7 +241,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + 'そこから届く支えは横から dig し、不要な pillarUp を先に挟まない。届かない時だけ sight・column で作業高さを決める。'
       + '掘った後は落下と水流が落ち着くのを待ち、地形を読み直してから進む。支えを掘れたことと、通路ができたことは別。waterOk だけで水中を真上に登れるとは限らない。',
     '- 黒曜石は現在数と不足分を数え、到達できる溶岩源 L と既存の O を組み合わせて集める。同じ作業位置から続けて取れる源も比べる。多い溜まりでも道が未確認なら早いとは限らない。'
-      + '注水して作るには水入りバケツ、掘るにはダイヤpick と作業位置が要る。見えている黒曜石（live の obsidian・liquid の行）を掘るだけなら水は要らない（下・横が溶岩の黒曜石は、石（dirt・丸石）を持っていれば体が埋めてから掘る）。obsidian に対象・足場に使う物・採掘の上限を渡す。注水・待機・採掘・回収・水の汲み戻しはこの手が行う。'
+      + '注水して作るには水入りバケツ、掘るにはダイヤpick と作業位置が要る。見えている黒曜石（live の obsidian・liquid の行）を掘るだけなら水は要らない。横・上の溶岩と落ちる先の空気は体が石で埋めてから掘る（dig は持っている安い石で。obsidian の手は canPlace に dirt・cobblestone を渡した時だけ）。真下が溶岩の黒曜石は、体が上に水を注いでから掘るので水入りバケツが要り、無ければ掘らない（liquid の行の「真下が溶岩」）。obsidian に対象・足場に使う物・採掘の上限を渡す。注水・待機・採掘・回収・水の汲み戻しはこの手が行う。'
       + '同じ高さでつながった源は 1 回の注水で面を固め、続けて掘る。'
       + '22 個なら源 22 マスを at に挙げ、count=22・seconds=300 で 1 手にできる（count 省略時は at の数、seconds は 5〜300・既定 90）。'
       + '手動で水を置くなら、先に乾いた作業位置・流れる先・源を回収できる視線を確かめる。水を置いてから流れに逆らう移動を前提にしない。'
@@ -337,7 +337,8 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 要塞を探す: mc_probe kind=scan が「ネザー要塞」の向きを言う。近づいたら mc_probe kind=camp が湧き場と足場を言う。'
       // Rig end1109f06 (c6): she circled the fortress's near end for minutes and read it as the spawner; the spawner was 195 m on, past the loaded 128 m.
       + 'camp が読むのは読み込み済みの約 128m まで: 要塞に着いても「湧き場はありません」なら、そこは湧き場ではない。ネザーレンガの橋・壁が続く向きへ 100m 進んで camp を読み直す（要塞の端を湧き場と思ってうろついても湧かない）。',
-    '- ツルハシ: ネザーに入る前に石のツルハシを 2〜3 本作って持つ（丸石 3・棒 2 で 1 本）。体は安い道具から使うので、石とネザーラックは石のツルハシで掘る。'
+    // Review of the run-8 fixes (11/13): this stage's words are read at the gate too; the spare stone pickaxes are an aim there, not a want.
+    '- ツルハシ: 石のツルハシの予備はあれば持って入る（目標。無くても入る。ネザーでは黒石か丸石と棒で作れる。丸石 3・棒 2 で 1 本）。体は安い道具から使うので、石とネザーラックは石のツルハシで掘る。'
       + 'ダイヤのツルハシの耐久（持ち物の行）が 300 を切ったら、黒石か丸石と棒で石のツルハシを作って使う。',
     '- 道具が壊れて止まった時（行が「同じ種類以上の予備が荷に無い」と言う）は、作るか拾って持ってから同じ手をもう一度。鉄はネザーに無い。鉄のツルハシは 1 本が耐久 250 で、'
       + 'ネザーの岩を掘り続けると壊れる。予備が荷にあれば go は持ち替えて続ける作りだが、実機では未確認。',

@@ -238,7 +238,7 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
     expect(titles).toContain('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）');
     expect(titles).toContain('鉄の兜・胸当てを作って着る');
     const diamond = dragon.nodes.findIndex(node => node.kind === 'diamond' && node.parentId === null);
-    expect(orderedPlan(dragon.nodes).filter(node => node.parentId === null).map(node => node.title)).toContain('金のブーツ（ネザーの前）');
+    expect(orderedPlan(dragon.nodes).filter(node => node.parentId === null).map(node => node.title)).toContain('金のブーツ（目標・金 4 がそろう時）');
     expect(diamond).toBeGreaterThan(0);
     expect(dragon.nodes.some(node => node.kind === 'food' && node.doneWhen === 'food>=100' && node.parentId !== null && node.title.includes('食料100点'))).toBe(false);
   });

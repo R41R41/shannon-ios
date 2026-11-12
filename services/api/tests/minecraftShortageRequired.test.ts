@@ -375,7 +375,8 @@ describe('the spare pickaxes and a need that cannot be made (the coordinator, 20
   it('says the spares in the stage rules and the Nether\'s knowledge, and the plan\'s gate caution', () => {
     expect(PREP_RULES_WORDS).toContain('石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）');
     const nether = V2_STAGES.nether;
-    expect(nether).toContain('ネザーに入る前に石のツルハシを 2〜3 本作って持つ（丸石 3・棒 2 で 1 本）');
+    // Review of the run-8 fixes (11/13): the Nether's words are read at the gate too; the spares are an aim there (no want to make them before entering).
+    expect(nether).toContain('石のツルハシの予備はあれば持って入る（目標。無くても入る。ネザーでは黒石か丸石と棒で作れる。丸石 3・棒 2 で 1 本）');
     expect(nether).toContain('ダイヤのツルハシの耐久（持ち物の行）が 300 を切ったら、黒石か丸石と棒で石のツルハシを作って使う');
     const gate = seedPlan('エンドラを倒して')!.nodes.find(node => node.title === '黒曜石10とゲート')!;
     // Run 8 (11/13): the spare stone pickaxes are an aim of the gate (the stage rules say them), not its caution's required list.

@@ -34,11 +34,12 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
   const on = seedPlan('エンドラを倒して')!;
   it('puts the three iron pieces under the iron, and the golden boots between the diamonds and the obsidian', () => {
     const tops = on.nodes.filter(node => node.parentId === null).map(node => node.title);
-    expect(tops.indexOf('金のブーツ（ネザーの前）')).toBe(tops.indexOf('ダイヤ（y=-58）') + 1);
-    expect(tops.indexOf('黒曜石10とゲート')).toBe(tops.indexOf('金のブーツ（ネザーの前）') + 1);
+    expect(tops.indexOf('金のブーツ（目標・金 4 がそろう時）')).toBe(tops.indexOf('ダイヤ（y=-58）') + 1);
+    expect(tops.indexOf('黒曜石10とゲート')).toBe(tops.indexOf('金のブーツ（目標・金 4 がそろう時）') + 1);
     expect(rows(on)).toContain('p3.3 鉄の兜・胸当てを作って着る|have:iron_helmet&have:iron_chestplate');
-    expect(rows(on)).toContain('p6 金のブーツ（ネザーの前）|have:golden_boots|have:ender_eye>=10');
-    expect(rows(on)).toContain('p6.1 金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）|have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots|have:ender_eye>=10');
+    // Review of the run-8 fixes (11/13): the boots are an aim; a lit gate or the Nether closes them.
+    expect(rows(on)).toContain('p6 金のブーツ（目標・金 4 がそろう時）|have:golden_boots|see:nether_portal|dim:the_nether|have:ender_eye>=10');
+    expect(rows(on)).toContain('p6.1 金鉱石4を掘る（y=-16前後・ダイヤへ下りる途中）|have:raw_gold>=4|have:gold_ingot>=4|have:golden_boots|see:nether_portal|dim:the_nether|have:ender_eye>=10');
     expect(gateFirst([]).length).toBe(0);
   });
   it('asks the two pieces worn at the diamonds\' node, and says one carried and not worn', () => {

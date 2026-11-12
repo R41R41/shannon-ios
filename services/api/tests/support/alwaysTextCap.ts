@@ -5,5 +5,7 @@
  *   0.43, a calibration for identifiers and JSON; English prose is about 0.25 real tokens a character, so the counter reads the English text about twice its
  *   real size (the English text: 9,9xx llmc, an estimated 5.2k real tokens against the Japanese 8,554 llmc, about 7.0k real). The cap is the measured size
  *   of the English text with a few percent of room, so it still stops the text from growing; the real size is measured with the API's counter.
+ * - 11/13 (review of the run-8 fixes): the urgent rules say a lone skeleton the urgent line says 「詰めて斬れる」 is fought first (about 20 llmc, about 12
+ *   real; the urgent decision otherwise reads only 「離れる・間に置く」 against the line); the text measures 10,306, the cap is 10,320.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_300;
+export const ALWAYS_TEXT_CAP_LLMC = 10_320;

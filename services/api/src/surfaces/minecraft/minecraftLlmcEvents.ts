@@ -4,7 +4,7 @@ import { createFoodTrend, type FoodTrend } from './minecraftLlmcLive.js';
 import { urgentRange } from './minecraftLlmcUrgent.js';
 import { stopFactLines } from './minecraftLlmcFacts.js';
 import { sameSpotStops } from './minecraftLlmcStalls.js';
-import { calmEnderman, isShooter, nearThreats, THREAT_SIGHT, threatLine, walledOff, type NearThreat, type ThreatSight } from './minecraftLlmcThreat.js';
+import { calmEnderman, nearThreats, THREAT_SIGHT, threatLine, walledOff, type NearThreat, type ThreatSight } from './minecraftLlmcThreat.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
 import { FACT_WINDOW_MS } from './minecraftLlmcHealth.js';
 import { typedFailureAttemptsOf, typedFailureLines, type TypedFailureAttempt } from './minecraftLlmcTypedFailure.js';
@@ -109,7 +109,9 @@ const SHOOTER_LINES = 2;
  * `closeInAdvised` was read nowhere, and the decisions after a stop took 5 to 10 s to a fight, or went round out of the line for 65 s): the
  * shooters that hit her in the last ten seconds (the blows' record, `by`), nearest first, two at most, each with the reach facts of its line
  * (`threatLine`), how many times it hit, how many arrows the shield still takes, and, when the body says a lone skeleton can be closed in on
- * (iron or a shield, a sword, health) and there is a way to it, that it can. Facts only: the hand is the decision's.
+ * (iron or a shield, a sword, health) and there is a way to it, that it can, with why and the fight that does it (an urgent decision reads the
+ * standing 「離れる・間に置く」, and a skeleton shoots on within 15 m however she runs). The skeleton's kin only (the design's R1): a blaze's or a
+ * ghast's hit from afar would make every decision at a spawner an urgent one; the other shooters keep the near hostile's line (8 m, in sight).
  */
 function shooterLines(observation: BodyObservation | null, open: readonly NearThreat[], known: (threat: NearThreat) => ThreatSight | undefined,
   hits: readonly { by: string | null }[]): Array<{ id: number; text: string }> {
@@ -119,16 +121,16 @@ function shooterLines(observation: BodyObservation | null, open: readonly NearTh
     if (id) shots.set(Number(id), (shots.get(Number(id)) ?? 0) + 1);
   }
   if (!shots.size) return [];
-  const shooters = open.filter(threat => threat.id !== null && isShooter(threat.name) && shots.has(threat.id)).slice(0, SHOOTER_LINES);
+  const shooters = open.filter(threat => threat.id !== null && SKELETON_KIN.has(threat.name) && shots.has(threat.id)).slice(0, SHOOTER_LINES);
   if (!shooters.length) return [];
   const facts = (observation?.facts ?? {}) as { closeInAdvised?: unknown };
   const worn = String((observation?.state.world as { worn?: unknown } | undefined)?.worn ?? '');
   const shieldLeft = /shield\(残り(\d+)\/\d+\)/u.exec(worn)?.[1];
   const shield = shieldLeft !== undefined ? `・盾 残り約 ${Math.floor(Number(shieldLeft) / SHIELD_PER_ARROW)} 本受けられる` : '';
-  const skeletons = shooters.filter(threat => SKELETON_KIN.has(threat.name)).length;
   return shooters.map(threat => {
     const way = threat.canReachMe !== false && threat.reach !== 'walled' && Math.abs(threat.dy ?? 0) <= 3;
-    const close = facts.closeInAdvised === true && skeletons === 1 && SKELETON_KIN.has(threat.name) && way ? '・盾・剣・撃ってくる骸骨 1 体で、詰めて斬れる' : '';
+    const close = facts.closeInAdvised === true && shooters.length === 1 && way
+      ? `・盾・剣・撃ってくる骸骨 1 体で、詰めて斬れる（離れても 15m の中は射たれ続ける。fight target=#${threat.id} range=16 seconds=15 を先に）` : '';
     return { id: threat.id!, text: `撃ってきた射手: ${shooterHead(threat, known(threat))}・${FACT_WINDOW_MS / 1000} 秒で ${shots.get(threat.id!)} 回当たった${shield}${close}` };
   });
 }

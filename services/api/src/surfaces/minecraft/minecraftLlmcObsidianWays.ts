@@ -1,8 +1,10 @@
-import type { MapView } from './minecraftLlmcPreflightMap.js';
+import { PORTAL, type MapView } from './minecraftLlmcPreflightMap.js';
 import { lavaSitesIn, type LavaSite } from './minecraftLlmcNearby.js';
 import { GATE_OBSIDIAN, OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
 import { isHard, NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
 import { factsIn, hasKind, nowAndNextKinds } from './minecraftPlanFacts.js';
+import { firstMark } from './minecraftSeenMarks.js';
+import { OMIT } from './minecraftLlmcLiveEnemies.js';
 import type { PlanKind } from '@shannon/mind';
 
 /**
@@ -140,24 +142,78 @@ const OBSIDIAN_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['obsidian', 'po
 /** The pools shown from the body's `nearby` lava line. */
 const POOLS_SHOWN = 3;
 
-/** The obsidian in the pack, from the body's inventory lines (`obsidian×18`, a line a stack). */
-export function heldObsidian(inventory: unknown): number {
-  return strings(inventory).reduce((sum, line) => sum + Number(/^(?:minecraft:)?obsidian×(\d+)/u.exec(line)?.[1] ?? 0), 0);
+/**
+ * The obsidian in the pack, from the body's inventory lines (`obsidian×18`, a line a stack); null when no line names it and the lines were cut
+ * (`ほかN件（長いため略）`: the live state shrinks the pack first, and a stack of obsidian in the cut part would read as none).
+ */
+export function heldObsidian(inventory: unknown): number | null {
+  const lines = strings(inventory);
+  const counts = lines.flatMap(line => { const found = /^(?:minecraft:)?obsidian×(\d+)/u.exec(line); return found ? [Number(found[1])] : []; });
+  if (!counts.length && lines.some(line => OMIT.test(line))) return null;
+  return counts.reduce((sum, count) => sum + count, 0);
 }
-/** The obsidian cells the map shows (the whole map: 15 wide). */
-export const mapObsidian = (view: MapView | null): number => {
-  let count = 0;
-  for (const [, layer] of view?.layers.layers ?? []) for (const [, symbol] of layer) if (symbol === 'O') count += 1;
-  return count;
-};
+const VERTICAL: ReadonlyArray<readonly [number, number, number]> = [[0, 1, 0], [0, -1, 0]];
+/** The diagonals of an upright plane (a frame's bottom and top cells touch its sides only by a corner: the frame has none). */
+const UPRIGHT_DIAGONALS: ReadonlyArray<readonly [number, number, number]> = [[1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0], [0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1]];
+/**
+ * Whether an obsidian cell of the map stands in a frame's shape: a lit gate's (it touches a portal cell, `p`: `PORTAL` as read), or an upright one, built or ruined
+ * (it has obsidian right over or under it, or touches such a cell by an upright corner). The obsidian a lava pool leaves lies flat; a gate
+ * stands. Review of the run-8 fixes (11/13): with her frame of 10 built, the line read 「持ち物 8／ゲートの最低 10・見えている自然の黒曜石 10 マス」
+ * and could send her back to the obsidian, or to dig her own frame.
+ */
+export function frameCell(view: MapView, at: P): boolean {
+  const obsidian = (x: number, y: number, z: number) => view.symbol(x, y, z) === 'O';
+  const stacked = (x: number, y: number, z: number) => obsidian(x, y, z) && VERTICAL.some(([dx, dy, dz]) => obsidian(x + dx, y + dy, z + dz));
+  return SIDES.some(([dx, dy, dz]) => view.symbol(at.x + dx, at.y + dy, at.z + dz) === PORTAL) || stacked(at.x, at.y, at.z)
+    || UPRIGHT_DIAGONALS.some(([dx, dy, dz]) => stacked(at.x + dx, at.y + dy, at.z + dz));
+}
+/** How near a ruined portal's crying obsidian (the scan's row) an O of the map may be crying obsidian too (the map marks both O). */
+const RUIN_METERS = 12;
+/** The ruined portals the scan lines name (「壊れたポータル（泣く黒曜石） ×N 最寄り (x,y,z) …」). */
+export const ruinsIn = (lines: readonly string[]): P[] => lines.flatMap(line => {
+  const at = /壊れたポータル/u.test(line) ? pointOf(line) : null;
+  return at ? [at] : [];
+});
+/** The obsidian of the map that may go to the gate: not in a frame's shape (`frameCell`) and not near a ruined portal (crying obsidian is O too). */
+export interface MapObsidian { cells: P[]; frame: number; ruined: number }
+export function naturalObsidian(view: MapView | null, ruins: readonly P[] = []): MapObsidian {
+  const out: MapObsidian = { cells: [], frame: 0, ruined: 0 };
+  if (!view) return out;
+  for (const [y, layer] of view.layers.layers) {
+    for (const [key, symbol] of layer) {
+      if (symbol !== 'O') continue;
+      const [x, z] = key.split(',').map(Number) as [number, number], at = { x, y, z };
+      if (frameCell(view, at)) out.frame += 1;
+      else if (ruins.some(ruin => distance(ruin, at) <= RUIN_METERS)) out.ruined += 1;
+      else out.cells.push(at);
+    }
+  }
+  return out;
+}
+/** The count of the natural obsidian cells the map shows (`naturalObsidian`). */
+export const mapObsidian = (view: MapView | null, ruins: readonly P[] = []): number => naturalObsidian(view, ruins).cells.length;
+/** A lit gate near her: the nearest portal cell of the map (`p`), else the landmarks' ネザーポータル. */
+export function litGate(view: MapView | null, self: P, landmarks: readonly string[]): { at: P; meters: number } | null {
+  const cell = view ? nearest(inMap(view, self, PORTAL)) : null;
+  if (cell) return { at: cell.at, meters: cell.meters };
+  const mark = firstMark({ mapLandmarks: [...landmarks] }, 'nether_portal');
+  return mark ? { at: { x: mark.x, y: mark.y, z: mark.z }, meters: distance(self, mark) } : null;
+}
+/** The obsidian line once the gate is lit: nothing to count or fetch for it, and its frame not to be dug. */
+export const litGateLine = (gate: { at: P; meters: number }): string =>
+  `黒曜石: ゲートは点いている（ネザーポータル ${ptText(gate.at)} まで ${Math.round(gate.meters)}m）。ゲートの黒曜石はもう要らない。枠の O は数えない・掘らない（掘るとゲートが消える）`;
 /**
  * Run 8 (11/13: the strong model's replan decided 「水入りバケツが無く黒曜石を作れない」 and made a node to fetch water, 252 s, while obsidian stood
- * in the world): the head of the obsidian line, the count in the pack beside the gate's least and the aim, and the obsidian in view. Facts only.
+ * in the world): the head of the obsidian line, the count in the pack beside the gate's least and the aim, and the obsidian in view (the frames
+ * and the cells near a ruined portal not counted, and said so). Facts only. `held` null: the pack's lines were cut.
  */
-export function obsidianTally(held: number, visible: number, nearest: string | null): string {
+export function obsidianTally(held: number | null, visible: number, nearest: string | null, left: { frame?: number; ruined?: number } = {}): string {
   const seen = visible > 0 || nearest ? `見えている自然の黒曜石 ${visible > 0 ? `地図に ${visible} マス` : ''}${visible > 0 && nearest ? '・' : ''}${nearest ? `最寄り ${nearest}` : ''}`
     : '自然の黒曜石 見えていない';
-  return `黒曜石: 持ち物 ${held}／ゲートの最低 ${GATE_OBSIDIAN}／目標 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート ${GATE_OBSIDIAN}＋竜戦 12）。${seen}`;
+  const notes = [...left.frame ? [`枠の形の O ${left.frame} マス（組んだ枠・壊れたポータル）は数えない`] : [],
+    ...left.ruined ? [`壊れたポータルの近くの O ${left.ruined} マスは泣く黒曜石が混ざるので数えない（泣く黒曜石はゲートに使えない）`] : []];
+  return `黒曜石: 持ち物 ${held ?? '不明（持ち物の行が略された）'}／ゲートの最低 ${GATE_OBSIDIAN}／目標 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート ${GATE_OBSIDIAN}＋竜戦 12）。${seen}`
+    + `${notes.length ? `（${notes.join('。')}）` : ''}`;
 }
 /** A pool from her feet: the place, how far across and how far up or down, the sources and the cover (the body's note). */
 function poolWords(feet: P, site: LavaSite): string {
@@ -190,12 +246,21 @@ function lavaWords(body: Rec, self: P, view: MapView | null, landmarks: string[]
 export function obsidianWays(body: Rec, self: P, view: MapView | null): string[] {
   if (!hasKind(nowAndNextKinds(factsIn(body)), OBSIDIAN_KINDS)) return [];
   const landmarks = strings(body.landmarks), scan = strings(body.scan);
-  const obsidian = nearest([...view ? inMap(view, self, 'O') : [], ...inLines(landmarks, /^O |黒曜石/u, self, '目印'), ...inLines(scan, /黒曜石/u, self, '走査')]);
+  // Review of the run-8 fixes (11/13): the portal's node stays open until the Nether, so a lit gate's frame read as obsidian lacking.
+  const gate = litGate(view, self, landmarks);
+  if (gate) return [litGateLine(gate)];
+  const ruins = ruinsIn(scan), natural = naturalObsidian(view, ruins);
+  // The map's frames and ruins are left out; a landmark or scan row on a left-out cell of the map, or of crying obsidian, too.
+  const kept = (found: Found) => !view || view.symbol(found.at.x, found.at.y, found.at.z) !== 'O'
+    || natural.cells.some(cell => cell.x === found.at.x && cell.y === found.at.y && cell.z === found.at.z);
+  const obsidian = nearest([...natural.cells.map(at => ({ at, meters: distance(self, at), from: '地図' })),
+    ...inLines(landmarks.filter(line => !/泣く/u.test(line)), /^O |黒曜石/u, self, '目印').filter(kept),
+    ...inLines(scan.filter(line => !/泣く|壊れたポータル/u.test(line)), /黒曜石/u, self, '走査').filter(kept)]);
   const contact = view ? contactCells(view, self) : [];
   const lava = lavaWords(body, self, view, landmarks, scan);
   if (lava.meters === null && !obsidian && !lavaSitesIn(strings(body.nearby))) return [];
   const closer = lava.meters !== null && (!obsidian || lava.meters < obsidian.meters) ? '（溶岩の方が近い）' : '';
-  return [`${obsidianTally(heldObsidian(body.inventory), mapObsidian(view), obsidian ? show(obsidian, '') : null)}。${lava.words}${closer}。`
+  return [`${obsidianTally(heldObsidian(body.inventory), natural.cells.length, obsidian ? show(obsidian, '') : null, natural)}。${lava.words}${closer}。`
     + '階段掘りは 0.5〜0.9 マス/秒（ダイヤのツルハシ）、溶岩に水を注いで 1 個目ができるまで 30〜50 秒、黒曜石の dig は空気中で 1 個約 9 秒（ダイヤのツルハシ・測った値）',
     ...contact.length ? [`水の源と溶岩の源の両方に隣り合うマス（開けると水と溶岩が出会う）: ${contact.join(' / ')}。溶岩の源だけに隣り合う岩を開けると、溶岩が流れ込む`] : []];
 }

@@ -9,16 +9,17 @@ import type { P } from './minecraftLlmcWalkRules.js';
  */
 export type NearbyPurpose = 'wood' | 'food_animal' | 'food_village' | 'ore' | 'bed' | 'water' | 'lava';
 export interface NearbySite { x: number; y: number; z: number; note?: string }
-export interface NearbyResource { purpose: NearbyPurpose; kind: string; count: number; range: number; sites: NearbySite[]; trees?: number }
+export interface NearbyResource { purpose: NearbyPurpose; kind: string; count: number; range: number; sites: NearbySite[]; trees?: number; pools?: number }
 
 const LABEL: Readonly<Record<NearbyPurpose, readonly [string, string]>> = {
   wood: ['木', '本'], food_animal: ['食料（動物）', '体'], food_village: ['食料（村）', '個'], ore: ['鉱石（空気に面した物）', '個'], bed: ['寝床', '台'], water: ['水', 'マス'],
-  lava: ['溶岩の溜まり', 'つ'],
+  lava: ['溶岩の溜まり', 'マス'],
 };
 /**
  * Run 8 (11/13: four pools were loaded at 7 to 40 m and only the nearest source, 27 below across a hollow, reached the head): `lava` is the pools of
- * the overworld near her (the body joins the sources into pools: the count is the pools, each site a pool's nearest source with 「源 N・覆い○/×」
- * in its note). Last in the order; first while the plan's now is the obsidian (`firstPurpose`).
+ * the overworld near her (the body joins the sources into pools: `count` is the sources and `pools` the pools they make, each site a pool's nearest
+ * source with 「源 N・…・覆い ○/×」 in its note; the line says 「源 N マス・溜まり P」). Last in the order; first while the plan's now is the obsidian
+ * (`firstPurpose`).
  */
 const ORDER: readonly NearbyPurpose[] = ['wood', 'food_animal', 'food_village', 'ore', 'bed', 'water', 'lava'];
 const PURPOSES = new Set<string>(ORDER);
@@ -37,8 +38,9 @@ export function nearbyResourcesOf(raw: unknown): NearbyResource[] {
       const [x, y, z] = [finite(at?.x), finite(at?.y), finite(at?.z)];
       return at && x !== null && y !== null && z !== null ? [{ x, y, z, ...typeof at.note === 'string' && at.note ? { note: at.note.slice(0, 40) } : {} }] : [];
     });
-    const trees = finite(entry.trees);
-    return [{ purpose: entry.purpose as NearbyPurpose, kind: entry.kind.slice(0, 40), count, range, sites, ...(trees !== null && trees >= 0 ? { trees } : {}) }];
+    const trees = finite(entry.trees), pools = finite(entry.pools);
+    return [{ purpose: entry.purpose as NearbyPurpose, kind: entry.kind.slice(0, 40), count, range, sites, ...(trees !== null && trees >= 0 ? { trees } : {}),
+      ...(pools !== null && pools >= 0 ? { pools } : {}) }];
   });
 }
 
@@ -75,7 +77,9 @@ export function nearbyLines(resources: readonly NearbyResource[], feet: P | null
       const sites = [...item.sites].sort((a, b) => feet ? dist(feet, a) - dist(feet, b) : 0).slice(0, 3);
       const where = feet ? sites.map((site, index) => siteWords(feet, site, index === 0)).join(' / ')
         : sites.map(site => `(${site.x},${site.y},${site.z})${site.note ? `（${site.note}）` : ''}`).join(' / ');
-      return `${item.kind} ${item.range}m 内に ${item.count}${unit}。${where}`;
+      // The lava's count is the sources (the body's `count`), with the pools they make when the body says (`pools`).
+      const many = purpose === 'lava' ? `源 ${item.count} マス${item.pools !== undefined ? `・溜まり ${item.pools}` : ''}` : `${item.count}${unit}`;
+      return `${item.kind} ${item.range}m 内に ${many}。${where}`;
     });
     lines.push(`${label}: ${parts.join('／')}`);
   }
