@@ -45,8 +45,8 @@ evidence:
     - "docs/screenshots/shannon-ios-settings-figure-light-v1.png"
     - "docs/screenshots/shannon-ios-voice-live2d-dark-v1.png"
   history:
-    - "docs/screenshots/shannon-ios-body-live2d-full-light-v1.png（A6 で無くした『からだ』の画面）"
-    - "docs/screenshots/shannon-ios-body-live2d-full-dark-v1.png（同）"
+    - "docs/screenshots/shannon-ios-body-live2d-full-light-v1.png（A6 で無くした『からだ』の画面。ブーツだけ 2026-11-12 に今の編み上げへ合成で差し替え）"
+    - "docs/screenshots/shannon-ios-body-live2d-full-dark-v1.png（同。ブーツの差し替えも同じ）"
     - "docs/screenshots/shannon-ios-body-live2d-bust-dark-v1.png（同）"
     - "docs/screenshots/shannon-ios-body-waterlight-light-v1.png（同）"
     - "docs/screenshots/shannon-ios-dialogue-live2d-light-v1.png（A6 より前の、四角い姿の向き合う表示）"
