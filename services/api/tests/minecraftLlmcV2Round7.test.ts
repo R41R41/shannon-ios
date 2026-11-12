@@ -132,13 +132,15 @@ describe('the near lava beside the far obsidian (run 37, 1,349–1,611 s: 85 m o
   const LANDMARKS = ['L 溶岩源 (173,-16,147) 東3・北3・下2 溜まりの源 4', 'O 黒曜石 (253,-55,154) 東83・南4・下41 ×6', 'ほか2件（長いため略）'];
   it('puts both distances side by side with where each was read, and says the lava is the nearer', () => {
     const [line] = obsidianWays({ planFacts: planFacts('obsidian', { id: 'p6.2' }), landmarks: LANDMARKS }, SELF, null);
+    // Run 8 (11/13): the line begins with the obsidian carried, the gate's least, the aim and the obsidian in view.
+    expect(line.startsWith('黒曜石: 持ち物 0／ゲートの最低 10／目標 22（ゲート 10＋竜戦 12）。見えている自然の黒曜石 最寄り (253,-55,154) まで 93m（目印）。')).toBe(true);
     expect(line).toContain('溶岩の源 (173,-16,147) まで 5m（目印）');
-    expect(line).toContain('自然の黒曜石 (253,-55,154) まで 93m（目印）（溶岩の方が近い）');
+    expect(line).toContain('（溶岩の方が近い）');
     expect(line).toContain('階段掘りは 0.5〜0.9 マス/秒');
   });
   it('reads the scan\'s rows too, and says what is not in sight', () => {
     expect(obsidianWays({ planFacts: planFacts('obsidian', { id: 'p6.2' }), landmarks: [], scan: ['溶岩の溜まり 1か所: 10m 東 (173,-16,147)'] }, SELF, null)[0])
-      .toContain('溶岩の源 (173,-16,147) まで 5m（走査） / 自然の黒曜石 見えていない');
+      .toContain('自然の黒曜石 見えていない。溶岩の源 (173,-16,147) まで 5m（走査）');
     expect(obsidianWays({ planFacts: planFacts('obsidian', { id: 'p6.2' }), landmarks: [] }, SELF, null)).toEqual([]);
   });
   it('is only for the obsidian\'s node, and is `body.obsidian` in the rewritten live state', () => {

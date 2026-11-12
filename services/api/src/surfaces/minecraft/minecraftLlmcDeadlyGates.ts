@@ -2,12 +2,12 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { wornItems } from './minecraftItems.js';
 import { searchTravel } from './minecraftLlmcGoldTravel.js';
-import { fetchingNetherDrops, portalCellHand } from './minecraftLlmcGateEntry.js';
+import { portalCellHand } from './minecraftLlmcGateEntry.js';
 import { readLayers } from './minecraftLlmcPreflightMap.js';
 import { RETURN_TO_END, GOLD_ARMOUR, GOLD_FOR_BOOTS } from './minecraftLlmcPrepRules.js';
 import { returningToEnd } from './minecraftEndEntry.js';
 import { firstEntryLack } from './minecraftEndGather.js';
-import { enteringHand, FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
+import { FULLNESS, lackOfTable, readinessOf, recoveryLine } from './minecraftLlmcReadiness.js';
 
 /**
  * The deadly gates, in `gateHold`'s form (the coordinator's list for 11/4, item 2; the owner: a death after the iron gear is out): the hand that
@@ -252,26 +252,9 @@ export function deadlyGateHold(input: unknown, frame: BodyObservation | null, ta
     const next = lack && blazeShutLong(facts) ? OTHER_STAGE : STAY_STAGE;
     return lack ? { hand: at + 1, kind: 'fight', line: `ブレイズの湧き場へ入る手は送らない。${lack}。${AGAIN}。${next}` } : null;
   }
-  const goldGate = facts.dimension === 'overworld' && !fetchingNetherDrops(facts.world) ? goldAtPortalHold(input, frame, facts) : null;
-  if (goldGate) return goldGate;
+  // Run 8 (11/13): the hand into a lit gate is no longer held for a golden piece (a goal of the gate, `goldAbsentLine` says so); in the Nether a
+  // piece carried is put on before the search (`goldFirstHold`).
   const at = facts.dimension === 'overworld' ? portalCellHand(input, frame, 'e') : -1;
   const lack = at < 0 ? null : returning ? lackOfTable(facts, RETURN_TO_END) : firstEntryLack(facts, taskId);
   return lack ? { hand: at + 1, kind: 'walk', line: `エンドへ入る手は送らない。${lack}。${AGAIN}` } : null;
-}
-
-/**
- * The hand that enters the Nether (the portal hand, or a go or a walk into a lit portal cell) is held while no golden piece is worn: the piglins
- * turn on a body without one (run59, 11/3 14:15, dead to a piglin; the boots were a goal in the table and were never made). The line says what
- * is in the pack toward it.
- */
-function goldAtPortalHold(input: unknown, frame: BodyObservation | null, facts: Facts): DeadlyHold | null {
-  const hands = (input as { hands?: unknown } | null)?.hands;
-  const portal = enteringHand(hands), at = portal >= 0 ? portal : portalCellHand(input, frame);
-  if (at < 0 || wornItems(facts.world.worn).some(name => GOLD_ARMOUR.test(name))) return null;
-  const piece = [...facts.counts].find(([name, count]) => GOLD_ARMOUR.test(name) && count > 0)?.[0];
-  const ingots = facts.counts.get('gold_ingot') ?? 0, raw = facts.counts.get('raw_gold') ?? 0;
-  const have = piece ? `持っている ${piece} を equip で着る`
-    : `金の延べ棒 ${ingots} 個・生の金 ${raw} 個（ブーツは延べ棒 ${GOLD_FOR_BOOTS} 個。生の金はかまどで焼く）`;
-  const line = `ネザーへ入る手は送らない。金の防具を 1 つ着ていない（ピグリンが襲う）: ${have}。${AGAIN}`;
-  return { hand: at + 1, kind: 'portal', line };
 }

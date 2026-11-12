@@ -43,15 +43,16 @@ describe('the pickaxe for the Nether: one diamond one or three iron ones', () =>
   const rest = [['shield', 2], ...GATE_REST] as Array<[string, number]>;
   it('asks three iron pickaxes, and says how many are carried', () => {
     const one = gateLine([...rest, ['iron_pickaxe', 1]])!;
-    expect(one.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3） 1/3・石以上のツルハシ（予備 2 本を含め 3 本） 1/3。')).toBe(true);
-    expect(one).toContain(`欠けたまま進むと: ${BEFORE_GATE.risk}。目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い`);
+    // Run 8 (11/13): the spare stone pickaxes are an aim of the gate, said apart from the required.
+    expect(one.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3） 1/3。')).toBe(true);
+    expect(one).toContain(`欠けたまま進むと: ${BEFORE_GATE.risk}。目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い。石以上のツルハシ（予備 2 本を含め 3 本） 1/3`);
     expect(gateLine([...rest, ['iron_pickaxe', 2]])).toContain('ツルハシ（ダイヤ 1 か鉄 3） 2/3');
-    expect(gateLine(rest)).toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）・石以上のツルハシ（予備 2 本を含め 3 本）が無い');
+    expect(gateLine(rest)).toContain('必須（ネザーに入る前に必ず）— ツルハシ（ダイヤ 1 か鉄 3）が無い。');
     expect(gateLine([...rest, ['iron_pickaxe', 3]])).toBe(GOAL_ONLY);
   });
   it('counts a diamond or netherite pickaxe for three, and the two kinds together', () => {
     // One diamond pickaxe is the main one's three; the spares are two more of stone or better (run59 leg 2's plan 7.1).
-    expect(gateLine([...rest, ['diamond_pickaxe', 1]])).toContain('必須（ネザーに入る前に必ず）— 石以上のツルハシ（予備 2 本を含め 3 本） 1/3');
+    expect(gateLine([...rest, ['diamond_pickaxe', 1]])).toBe(`${GOAL_ONLY}。石以上のツルハシ（予備 2 本を含め 3 本） 1/3`);
     expect(gateLine([...rest, ['diamond_pickaxe', 1], ['stone_pickaxe', 2]])).toBe(GOAL_ONLY);
     expect(gateLine([...rest, ['netherite_pickaxe', 1], ['stone_pickaxe', 3]])).toBe(GOAL_ONLY);
     expect(gateLine([...rest, ['iron_pickaxe', 1], ['stone_pickaxe', 4]])).toContain('ツルハシ（ダイヤ 1 か鉄 3） 1/3');
@@ -67,8 +68,14 @@ describe('a stage that says what its lack costs says it in two parts; the others
     expect(gateLine(boots)).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 持っているが着ていない: golden_boots');
     expect(preparationShortage({ dimension: 'overworld', counts: owned(boots, WORN), food: 50, nowKinds: ['portal'], worn: [...WORN_PIECES, 'golden_boots'] })).toBeNull();
     const noShield = gateLine(KIT.filter(([name]) => name !== 'shield'))!;
-    expect(noShield.startsWith(`準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾（予備を含め 2）が無い。欠けたまま進むと: ${BEFORE_GATE.risk}。`)).toBe(true);
-    expect(noShield).toContain('目標（そろえば。必須ではない）— 金のブーツ');
+    expect(noShield.startsWith(`準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾が無い。欠けたまま進むと: ${BEFORE_GATE.risk}。`)).toBe(true);
+    expect(noShield).toContain('目標（そろえば。必須ではない）— 盾（予備を含め 2）・金のブーツ');
+    // Run 8 (11/13): one shield, iron and planks short of the spares, and 32 blocks let her in; the rest is said as the aim.
+    const one = gateLine([...KIT.filter(([name]) => !['shield', 'iron_ingot', 'oak_planks', 'cobblestone'].includes(name)), ['shield', 1], ['cobblestone', 32]])!;
+    expect(one).not.toContain('必須（');
+    expect(one).toContain('盾（予備を含め 2） 1/2');
+    expect(one).toContain('足場のブロック（64 あると橋で尽きない） 32/64');
+    expect(gateLine([...KIT.filter(([name]) => name !== 'cobblestone'), ['cobblestone', 31]])).toContain('必須（ネザーに入る前に必ず）— 足場のブロック 31/32');
   });
   it('says the iron sword as a required need (the audit of 11/4: a stone sword passed the gate), not as a goal', () => {
     const noSword = gateLine(KIT.filter(([name]) => name !== 'iron_sword'))!;
@@ -76,8 +83,11 @@ describe('a stage that says what its lack costs says it in two parts; the others
     expect(requiredLack(readinessOf(frame(KIT.filter(([name]) => name !== 'iron_sword')))!, ['portal'])).toContain('鉄の剣');
     const stone = [...KIT.filter(([name]) => name !== 'iron_sword'), ['stone_sword', 1]] as Array<[string, number]>;
     expect(requiredLack(readinessOf(frame(stone))!, ['portal'])).toContain('鉄の剣');
-    expect(PREP_RULES_WORDS).toContain('目標: 金のブーツ（金 4 がそろう時。金の防具を 1 つも着ていないと、ネザーへ入る手は止まる）・水入りバケツ');
-    expect(PREP_RULES_WORDS).toContain('そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・');
+    expect(PREP_RULES_WORDS).toContain('・金のブーツ（金 4 がそろう時。金を着ていない間はピグリンの群れ・砦の遺跡の 8m 内に長居しない）・水入りバケツ');
+    expect(PREP_RULES_WORDS).not.toContain('ネザーへ入る手は止まる');
+    expect(PREP_RULES_WORDS).toContain('そろうまで入らない。理由を書いても省けない）: 盾 1・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）・足場のブロック 32');
+    expect(PREP_RULES_WORDS).toContain('目標（あれば持つ。無くても入る）: 予備の盾と作り直しの材料（鉄 2・板 16。');
+    expect(PREP_RULES_WORDS).toContain('ゲートが点いたら、その場ですぐ入る');
   });
   it('says the food as a required lack, not as a goal', () => {
     const hungry = preparationShortage({ dimension: 'overworld', counts: owned(KIT.filter(([name]) => name !== 'cooked_beef'), WORN), food: 15.6, nowKinds: ['portal'], worn: WORN_PIECES })!;
@@ -99,7 +109,7 @@ describe('requiredLack: the required needs of the stage a node belongs to that a
   const facts = (items: Array<[string, number]>, extra: Record<string, unknown> = {}) => readinessOf(frame(items, extra))!;
   it('names the lack of the gate with what going on costs, by the kinds of the node and of those above it', () => {
     const without = facts(KIT.filter(([name]) => name !== 'shield'));
-    const words = `未達の必須（ネザーに入る前に必ず）— 盾（予備を含め 2）が無い。欠けたまま進むと: ${BEFORE_GATE.risk}`;
+    const words = `未達の必須（ネザーに入る前に必ず）— 盾が無い。欠けたまま進むと: ${BEFORE_GATE.risk}`;
     expect(requiredLack(without, ['portal'])).toBe(words);
     expect(requiredLack(without, ['obsidian'])).toBe(words);
     expect(requiredLack(without, ['food', 'portal'])).toBe(words);
@@ -125,7 +135,7 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
   const noShield = frame(KIT.filter(([name]) => name !== 'shield'));
   const said = (lack: string) => `ネザーへ入る手は送らない。${lack}。そろえてからもう一度出す（理由を書いても省けない）`;
   it('names the hand, what is missing and what going on costs, and that a reason does not skip it', () => {
-    expect(gateHold(enter, noShield)).toEqual({ hand: 1, line: said(`未達の必須（ネザーに入る前に必ず）— 盾（予備を含め 2）が無い。欠けたまま進むと: ${BEFORE_GATE.risk}`) });
+    expect(gateHold(enter, noShield)).toEqual({ hand: 1, line: said(`未達の必須（ネザーに入る前に必ず）— 盾が無い。欠けたまま進むと: ${BEFORE_GATE.risk}`) });
     expect(gateHold({ hands: [{ do: 'wait', seconds: 1 }, { do: 'equip', item: 'shield' }, { do: 'portal', enter: true }] }, noShield)).toMatchObject({ hand: 3 });
     expect(gateHold({ hands: [{ do: 'portal', enter: false }, { do: 'portal' }] }, noShield)).toMatchObject({ hand: 2 });
   });
@@ -146,7 +156,7 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
       expect(gateHold({ hands: [{ do: 'go', to: { x: 2, y: 70, z: 0 } }] }, lit)).toMatchObject({ hand: 1 });
       expect(gateHold({ hands: [{ do: 'wait', seconds: 1 }, { do: 'go', to: { x: 0, y: 70, z: 1 }, goals: [{ x: 2, y: 70, z: 0 }] }] }, lit)).toMatchObject({ hand: 2 });
       expect(gateHold({ hands: [{ do: 'walk', path: [{ x: 1, y: 70, z: 0 }, { x: 2, y: 70, z: 0 }] }] }, lit)).toMatchObject({ hand: 1 });
-      expect(gateHold({ hands: [{ do: 'go', rel: true, to: { x: 2, y: 0, z: 0 } }] }, lit)?.line).toContain('盾（予備を含め 2）が無い');
+      expect(gateHold({ hands: [{ do: 'go', rel: true, to: { x: 2, y: 0, z: 0 } }] }, lit)?.line).toContain('盾が無い');
     });
     it('holds nothing for a cell that is not a portal, a walk that stops short of it by a range, the needs met, or the Nether', () => {
       expect(gateHold({ hands: [{ do: 'go', to: { x: 1, y: 70, z: 0 } }] }, lit)).toBeNull();
@@ -176,15 +186,15 @@ describe('gateHold: a hand that enters the Nether is held while a required need 
     const act = { hands: [{ do: 'equip', item: 'iron_chestplate' }, { do: 'portal', maxPlace: 20 }], why: '[p5] 胸当てを着てゲートを建て点火（盾は材料なしで後回し）' };
     const held = heldOfFrame(act, noShield, 't1')!;
     expect(held).toMatchObject({ hand: 2, kind: 'portal', code: 'gate_required' });
-    expect(held.line.startsWith('手 2 portal: ネザーへ入る手は送らない。未達の必須（ネザーに入る前に必ず）— 盾（予備を含め 2）が無い。')).toBe(true);
+    expect(held.line.startsWith('手 2 portal: ネザーへ入る手は送らない。未達の必須（ネザーに入る前に必ず）— 盾が無い。')).toBe(true);
     expect(sentPart(act, held)).toEqual({ ...act, hands: [act.hands[0]] });
     expect(heldTail(held, 2)).toContain('手 2 から先 1 手（全 2 手のうち）は体へ送っていない');
     const whole = holdV2(enter, noShield, 't1');
     expect(whole).toMatchObject({ whole: expect.stringContaining('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 1 portal: ネザーへ入る手は送らない。') });
     expect(heldOfFrame(enter, noShield, 't1', true)).toMatchObject({ hand: 1, code: 'gate_required' });
-    // the kit complete and a golden piece worn (the gold gate of 11/3 holds the entry otherwise): nothing is held
+    // the kit complete: nothing is held, a golden piece worn or not (run 8, 11/13: the gold gate of 11/3 held a lit gate; the boots are a goal)
     expect(heldOfFrame(enter, frame(KIT, { worn: WORN.replace('足: なし', '足: golden_boots(残り65/65)') }), 't1')).toBeNull();
-    expect(heldOfFrame(enter, frame(KIT), 't1')).toMatchObject({ hand: 1, kind: 'portal', code: 'gate_required' });
+    expect(heldOfFrame(enter, frame(KIT), 't1')).toBeNull();
   });
   it('says so to the model before it tries: the stage rules', () => {
     expect(PREP_RULES_WORDS).toContain('ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る');
@@ -304,22 +314,29 @@ describe('the first plan and the knowledge say the required list where the model
     }
     const light = plan.nodes.find(node => node.title === 'ゲートを組んで火をつける')!;
     expect(cautionOf(light)).toContain('火をつける前に必須を確かめる');
-    expect(cautionOf(titled('黒曜石10とゲート'))).toContain('足場64');
+    expect(cautionOf(titled('黒曜石10とゲート'))).toContain('足場32');
+    expect(cautionOf(titled('黒曜石10とゲート'))).toContain('点いたらその場ですぐ入る');
+    expect(cautionOf(light)).toContain('点いたらその場ですぐ入る');
     expect(cautionOf(titled('黒曜石10とゲート'))).toContain('ツルハシ');
   });
-  // The review of 11/10 (G06): the seed said one shield where the gate's table asks two with iron 2 and planks 16, and the iron node closed at one.
-  it('says the two shields and their materials at the iron (the title, which the first plan\'s draft carries) and at the gate', () => {
-    const count = (label: string) => BEFORE_GATE.needs.find(need => need.label.startsWith(label))?.count;
-    expect([count('盾（'), count('盾の作り直しの鉄'), count('板（')]).toEqual([2, 2, 16]);
+  // The review of 11/10 (G06) asked two shields with iron 2 and planks 16 before the gate; run 8 (11/13) held a lit gate for them for minutes. One shield is
+  // required; the spare and its materials are aims, said at the iron and in the gate's goals.
+  it('says one shield required and the spare with its materials as aims, at the iron and at the gate', () => {
+    const need = (label: string) => BEFORE_GATE.needs.find(item => item.label.startsWith(label));
+    expect([need('盾（')?.count, need('盾の作り直しの鉄')?.count, need('板（')?.count]).toEqual([2, 2, 16]);
+    expect([need('盾（')?.goal, need('盾の作り直しの鉄')?.goal, need('板（')?.goal, need('石以上のツルハシ')?.goal]).toEqual([true, true, true, true]);
+    expect(BEFORE_GATE.needs.filter(item => !item.goal).map(item => `${item.label} ${item.count}`))
+      .toEqual(['ツルハシ（ダイヤ 1 か鉄 3） 3', '盾 1', '鉄の剣 1', '鉄の兜・胸当て 2', '足場のブロック 32']);
     const iron = plan.nodes.find(node => node.title.startsWith('残りの鉄をまとめて採り焼く'))!;
-    expect(iron.title).toContain('盾2（予備1）');
-    expect(cautionOf(iron)).toContain('盾は2枚（予備1）作り、作り直しの鉄2と板16も残す（ゲートの必須');
+    expect(iron.title).toBe('残りの鉄をまとめて採り焼く・剣・盾・バケツ');
+    expect(cautionOf(iron)).toContain('盾1はゲートの必須。予備の盾と作り直しの鉄2・板16は目標');
     const light = plan.nodes.find(node => node.title === 'ゲートを組んで火をつける')!;
-    for (const node of [titled('黒曜石10とゲート'), light]) expect(cautionOf(node), node.title).toContain('盾2と作り直しの鉄2・板16');
-    expect(openingDraft(seedPlan('エンドラを倒して', 'overworld'))).toContain('盾2（予備1）');
+    for (const node of [titled('黒曜石10とゲート'), light]) expect(cautionOf(node), node.title).toContain('盾1・鉄の剣');
+    expect(openingDraft(seedPlan('エンドラを倒して', 'overworld'))).not.toContain('盾2（予備1）');
   });
   it('says the gate\'s required needs and its goals apart in the stage rules', () => {
-    expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）');
+    expect(PREP_RULES_WORDS).toContain('ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 1・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）・足場のブロック 32（ネザーの岩も足場になる）・食料 40 点。');
+    expect(PREP_RULES_WORDS).toContain('火打ち金（捨てずに持って入る。');
     expect(PREP_RULES_WORDS).toContain('・水入りバケツ・黒曜石 22（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金');
     expect(PREP_RULES_WORDS).toContain('死ねばダイヤのツルハシと黒曜石を失う');
   });
@@ -361,7 +378,9 @@ describe('the spare pickaxes and a need that cannot be made (the coordinator, 20
     expect(nether).toContain('ネザーに入る前に石のツルハシを 2〜3 本作って持つ（丸石 3・棒 2 で 1 本）');
     expect(nether).toContain('ダイヤのツルハシの耐久（持ち物の行）が 300 を切ったら、黒石か丸石と棒で石のツルハシを作って使う');
     const gate = seedPlan('エンドラを倒して')!.nodes.find(node => node.title === '黒曜石10とゲート')!;
-    expect((gate.caution ?? []).join(' ')).toContain('ツルハシと石の予備2本');
+    // Run 8 (11/13): the spare stone pickaxes are an aim of the gate (the stage rules say them), not its caution's required list.
+    expect((gate.caution ?? []).join(' ')).toContain('ツルハシ（ダイヤ1か鉄3）');
+    expect((gate.caution ?? []).join(' ')).not.toContain('石の予備');
   });
   it('says what to do when a required need looks impossible to make: gather, read the line, try another form; in the lines of both stages and the rules', () => {
     for (const stage of [BEFORE_DIAMONDS, BEFORE_GATE]) {

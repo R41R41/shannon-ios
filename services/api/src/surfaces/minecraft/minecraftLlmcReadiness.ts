@@ -66,6 +66,8 @@ const STAGES: Readonly<Record<'nether_deep' | 'nether_blaze' | 'end', { title: s
  * diamonds read the one table of
  * `minecraftLlmcPrepRules.ts` (the iron helmet, chestplate and leggings worn before the diamonds, the golden
  * boots before the gate).
+ * Run 8 (11/13): back to the first choice above: the gate's required are a pickaxe, a shield, a sword, the iron helmet and chestplate worn,
+ * 32 blocks and food 40; the spare shield, its iron and planks, the stone pickaxes, 64 blocks and the golden boots are aims (`goalWords`).
  */
 /**
  * Chapter 7 (the continue contract): the stage a node's kind belongs to, read from the kind the model wrote and

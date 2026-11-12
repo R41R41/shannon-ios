@@ -8,6 +8,7 @@ import { strongStageNow } from './minecraftLlmcConfiguration.js';
 import { stageTextsForKind } from '../surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { doneFacts, doneStatusWords, parseDoneWhen, predicateHolds } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
+import { obsidianTallyLine } from '../surfaces/minecraft/minecraftLlmcWaterNode.js';
 import { isDragonPlan } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import { paceDelay, paceKey } from '../surfaces/minecraft/minecraftLlmcPace.js';
 import { boundTo } from '../surfaces/minecraft/minecraftLlmcReplan.js';
@@ -74,6 +75,9 @@ function resolvedNodeStall(tree: PlanTree, stall: Stall): boolean {
   return !byId.has(stall.key) || tree.nodes.some(node => node.state === 'done' && under(stall.key, node.id));
 }
 
+/** The kinds of the obsidian's stage: its replan is shown the obsidian line (`obsidianTallyLine`). */
+const OBSIDIAN_STAGE: ReadonlySet<PlanKind> = new Set<PlanKind>(['obsidian', 'portal', 'water']);
+
 function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall): ReplanSources | null {
   const tree = parts.plan.tree();
   const frame = parts.observe();
@@ -88,8 +92,12 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
   const pace = paceDelay(tree, frame, seconds);
   if (stall.kind === 'behind_pace' && (!pace || paceKey(pace) !== stall.key)) return null;
   const doneStatus = stalled ? doneStatusWords(stalled.doneWhen, facts, stalled.target) : null;
+  // Run 8: the replan of the obsidian's stage is shown the obsidian in the pack and in view (it made a water node with obsidian standing near).
+  const current = tree.nodes.find(item => item.id === tree.current);
+  const obsidian = [stalled, current].some(item => item && OBSIDIAN_STAGE.has(kindOf(item))) ? obsidianTallyLine(frame) : null;
   return { node: stalled ? stalled.id : null, goal: parts.goal, seconds, pace, tree, doneStatus,
-    now: nowLines(frame), facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(readiness.recovery ?? []), ...endgame, ...stops],
+    now: nowLines(frame), facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(obsidian ? [obsidian] : []), ...(readiness.recovery ?? []),
+      ...endgame, ...stops],
     results: [...results], queue: parts.queue.lines(frame),
     knowledge: stageTextsForKind(stalled ? kindOf(stalled) : 'other', facts?.dimension ?? 'overworld') };
 }

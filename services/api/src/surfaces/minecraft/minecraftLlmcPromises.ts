@@ -264,8 +264,17 @@ function lineOf(promise: PlanPromise, facts: DoneFacts | null, context: PromiseL
   if (changes) parts.push(changes);
   if (died.length) parts.push(`死んで ${round1(died.reduce((total, event) => total + event.count, 0))}${unit || ' '}失った`);
   const short = have === undefined ? 0 : round1(promise.count - have);
-  return `${head}: ${parts.join('・')}${short > 0 && !died.length ? `（足りない ${short}）` : ''}`;
+  const lack = short > 0 && !died.length ? (laterForEnd(promise, facts) ? '（エンドの前に用意）' : `（足りない ${short}）`) : '';
+  return `${head}: ${parts.join('・')}${lack}`;
 }
+/**
+ * Run 8 (11/13: 約束 #3, the End's water bucket, said 「足りない 1」 at every decision of the obsidian, and the replan went to fetch water): a
+ * promise for the End (its use names the End or the dragon) of a water bucket is said as one to have before the End while she is not there and
+ * has not got the stronghold's eyes (10): the End's gate and check still ask it there.
+ */
+const END_USE = /エンド|竜|end|dragon/iu;
+const laterForEnd = (promise: PlanPromise, facts: DoneFacts | null): boolean => promise.item === 'water_bucket' && END_USE.test(promise.use)
+  && !!facts && facts.dimension !== null && facts.dimension !== 'the_end' && carried(facts.counts, 'ender_eye') < 10;
 
 /**
  * 「直前に 2 減った（理由: …）」: what the events after the last decision took from the promise's item and gave to it. An event put to the

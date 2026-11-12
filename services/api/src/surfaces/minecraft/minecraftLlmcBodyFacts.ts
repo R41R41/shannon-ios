@@ -22,6 +22,7 @@ import {
   recoveryLine,
 } from './minecraftLlmcReadiness.js';
 import { wornItems } from './minecraftItems.js';
+import { waterNodeFacts } from './minecraftLlmcWaterNode.js';
 import { missingNodeFact, planNowOf } from './minecraftLlmcNode.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
@@ -182,7 +183,8 @@ export function readinessParts(
   // end1109o10: 「朝へ回す」 alone left the night with no now; the first open node of the ore (iron, then the diamonds) is said as the night's.
   const underNode = huntWaits ? nodes.find(node => node.state !== 'done' && node.state !== 'blocked' && node.id !== current?.id
     && !nodes.some(kid => kid.parentId === node.id && kid.state !== 'done') && /鉄(?!ゴーレム)|ダイヤ|iron|diamond/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)) : undefined;
-  const onceFacts = taskId ? (preparationFacts(taskId, tree, observation), staleNodeFacts(taskId, tree, observation)) : undefined;
+  const onceFacts = taskId ? (preparationFacts(taskId, tree, observation), waterNodeFacts(taskId, tree, observation), staleNodeFacts(taskId, tree, observation))
+    : undefined;
   return {
     ...(planNow ? { planNow: huntWaits ? `${[meanwhile, night].filter(Boolean).join('。')}。今の節 ${planNow} は地上の用事なので朝へ回す（夜の地上は骸骨・クリーパー・ゾンビが多い。朝になったら続ける）。${underNode ? `夜の間は地下の節 [${underNode.id}] ${underNode.title} を進める（地下の暗さは昼も夜も同じ）` : '夜の間は地下で鉱石を掘る'}`
       : [meanwhile, night, first].filter(Boolean).length ? `${[meanwhile, night, first].filter(Boolean).join('。')}。その後に今の節 ${planNow}` : planNow } : {}),

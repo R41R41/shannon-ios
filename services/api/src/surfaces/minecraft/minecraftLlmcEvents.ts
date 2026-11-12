@@ -4,8 +4,9 @@ import { createFoodTrend, type FoodTrend } from './minecraftLlmcLive.js';
 import { urgentRange } from './minecraftLlmcUrgent.js';
 import { stopFactLines } from './minecraftLlmcFacts.js';
 import { sameSpotStops } from './minecraftLlmcStalls.js';
-import { calmEnderman, nearThreats, THREAT_SIGHT, threatLine, walledOff, type NearThreat, type ThreatSight } from './minecraftLlmcThreat.js';
+import { calmEnderman, isShooter, nearThreats, THREAT_SIGHT, threatLine, walledOff, type NearThreat, type ThreatSight } from './minecraftLlmcThreat.js';
 import { reflexLines } from './minecraftLlmcReflexHold.js';
+import { FACT_WINDOW_MS } from './minecraftLlmcHealth.js';
 import { typedFailureAttemptsOf, typedFailureLines, type TypedFailureAttempt } from './minecraftLlmcTypedFailure.js';
 import { fillWords, shieldRushWords } from './minecraftLlmcResultWords.js';
 
@@ -97,6 +98,48 @@ export function urgentReasons(observation: BodyObservation | null, cut: string |
   return urgentFacts(observation, cut).reasons;
 }
 
+/** The skeleton's kin: they keep 7.5 to 15 m and shoot; a lone one is closed in on with a shield and a sword. */
+const SKELETON_KIN = new Set(['skeleton', 'stray', 'bogged']);
+/** How many blocks of a shield an arrow takes (its damage, about 3 to 4, plus one). */
+const SHIELD_PER_ARROW = 4;
+/** The most shooter lines an urgent step says. */
+const SHOOTER_LINES = 2;
+/**
+ * Run 8 (11/13: skeletons shot her from 4.4 to 13 m for about 158 s; the urgent line named the nearest hostile alone, the body's
+ * `closeInAdvised` was read nowhere, and the decisions after a stop took 5 to 10 s to a fight, or went round out of the line for 65 s): the
+ * shooters that hit her in the last ten seconds (the blows' record, `by`), nearest first, two at most, each with the reach facts of its line
+ * (`threatLine`), how many times it hit, how many arrows the shield still takes, and, when the body says a lone skeleton can be closed in on
+ * (iron or a shield, a sword, health) and there is a way to it, that it can. Facts only: the hand is the decision's.
+ */
+function shooterLines(observation: BodyObservation | null, open: readonly NearThreat[], known: (threat: NearThreat) => ThreatSight | undefined,
+  hits: readonly { by: string | null }[]): Array<{ id: number; text: string }> {
+  const shots = new Map<number, number>();
+  for (const hit of hits) {
+    const id = /#(\d+)/u.exec(hit.by ?? '')?.[1];
+    if (id) shots.set(Number(id), (shots.get(Number(id)) ?? 0) + 1);
+  }
+  if (!shots.size) return [];
+  const shooters = open.filter(threat => threat.id !== null && isShooter(threat.name) && shots.has(threat.id)).slice(0, SHOOTER_LINES);
+  if (!shooters.length) return [];
+  const facts = (observation?.facts ?? {}) as { closeInAdvised?: unknown };
+  const worn = String((observation?.state.world as { worn?: unknown } | undefined)?.worn ?? '');
+  const shieldLeft = /shield\(残り(\d+)\/\d+\)/u.exec(worn)?.[1];
+  const shield = shieldLeft !== undefined ? `・盾 残り約 ${Math.floor(Number(shieldLeft) / SHIELD_PER_ARROW)} 本受けられる` : '';
+  const skeletons = shooters.filter(threat => SKELETON_KIN.has(threat.name)).length;
+  return shooters.map(threat => {
+    const way = threat.canReachMe !== false && threat.reach !== 'walled' && Math.abs(threat.dy ?? 0) <= 3;
+    const close = facts.closeInAdvised === true && skeletons === 1 && SKELETON_KIN.has(threat.name) && way ? '・盾・剣・撃ってくる骸骨 1 体で、詰めて斬れる' : '';
+    return { id: threat.id!, text: `撃ってきた射手: ${shooterHead(threat, known(threat))}・${FACT_WINDOW_MS / 1000} 秒で ${shots.get(threat.id!)} 回当たった${shield}${close}` };
+  });
+}
+
+/** A shooter's line: `threatLine` when the body's sight looked at it; else its id, distance, height and the body's own `canSee` (the id is what a fight names). */
+function shooterHead(threat: NearThreat, sight: ThreatSight | undefined): string {
+  if (sight) return threatLine(threat, sight);
+  const height = threat.dy !== null && threat.dy !== 0 ? `・${threat.dy > 0 ? '上' : '下'} ${Math.abs(threat.dy)}` : '';
+  return `${threat.name} #${threat.id} ${threat.distance.toFixed(1)}m${height}${threat.canSee === true ? '・見える（射線の中）' : ''}`;
+}
+
 /** How near a hostile makes a step urgent (a creeper a little farther). */
 export const urgentMeters = (name: string) => (name === 'creeper' ? CREEPER_URGENT_METERS : LLMC_URGENT_NEAR_METERS);
 
@@ -113,6 +156,7 @@ export function urgentFacts(
   cut: string | null,
   sights: ReadonlyMap<number, ThreatSight> | null = null,
   inSight: string | null = null,
+  hits: readonly { by: string | null }[] = [],
 ): { reasons: string[]; unreachable: string[] } {
   const world = (observation?.state.world ?? {}) as { health?: unknown };
   const known = (threat: NearThreat) => (threat.id !== null ? sights?.get(threat.id) : undefined);
@@ -121,7 +165,9 @@ export function urgentFacts(
   const open = threats.filter((threat) => !walled.includes(threat));
   const reasons: string[] = inSight ? [inSight] : [];
   const near = open.find((item) => item.distance <= urgentRange(item, urgentMeters(item.name)));
-  if (near) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}`);
+  const shooting = shooterLines(observation, open, known, hits);
+  if (near && !shooting.some(line => line.id === near.id)) reasons.push(`${threatLine(near, known(near))}${near.name === 'creeper' ? '（爆発は約7m まで届く）' : ''}`);
+  reasons.push(...shooting.map(line => line.text));
   const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
   if (health !== null && health <= LOW_HEALTH && open.some((item) => item.distance <= 16 && !calmEnderman(item)))
     reasons.push(`体力 ${Math.round(health * 10) / 10} で敵が近い`);

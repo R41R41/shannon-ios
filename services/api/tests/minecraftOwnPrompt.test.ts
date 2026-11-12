@@ -33,7 +33,8 @@ const PINNED = {
   // end1109f01 (11/9): the map legend says & 中立の足 (前は 9c8529376da81379).
   // 11/9 release: エンドの前の食料 330（thru ddcd20a0）と柱・足場は黒曜石で積まない（end 0fc9cd81・ec76577b）の分だけ変わった（前は 36fb364a9803c6a8）。
   // 11/11 flow (ec854a5e): the words of the flow change say so (前は fdeb35d336c31278).
-  llmc_r9_system: '381079159224f450',
+  // 11/13 run 8: the obsidian in sight is dug with no water, the lava beside or under it filled by the body (前は 381079159224f450).
+  llmc_r9_system: '640b0eb4dec985c4',
   old_mode_system: '9484df3e3e4d04cf',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
@@ -132,7 +133,8 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     expect(before.llmcTokens).toBeGreaterThan(30_000);
     // end1109f01 (11/9): the map legend says & for a neutral that comes only when struck (about 6 tokens); the budget is 8,150.
     // 11/11 flow (ec854a5e): its words measure 8,284; the budget is 8,300.
-    expect(after.llmcTokens).toBeLessThanOrEqual(8_300);
+    // 11/13 run 8: obsidian in sight is dug with no water, and the body fills the lava beside or under it first (about 44); the budget is 8,350.
+    expect(after.llmcTokens).toBeLessThanOrEqual(8_350);
     expect(after.estimated).toBeLessThanOrEqual(7_000);
     expect(after.llmcTokens / before.llmcTokens).toBeLessThan(0.3);
   }, 60_000);

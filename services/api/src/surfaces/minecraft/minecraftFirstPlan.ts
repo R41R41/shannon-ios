@@ -56,8 +56,9 @@ const TO_NETHER: readonly PlanSeed[] = [
   node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）'],
     children: [node('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）', { kind: 'iron', doneWhen: 'have:iron_pickaxe' }),
     // The whole-run audit of 11/4, order 1: the sword and the shield the moment the iron is smelted (run60 met the night with no sword); the boots are
-    // the golden ones (the gate's table), so the armour is the three iron pieces. Review 11/10 (G06): the gate asks two shields, iron 2, planks 16.
-    node('残りの鉄をまとめて採り焼く・剣・盾2（予備1）・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket', caution: ['盾は2枚（予備1）作り、作り直しの鉄2と板16も残す（ゲートの必須。後で鉄と木に戻らずに済む）'] }),
+    // the golden ones (the gate's table), so the armour is the three iron pieces. Run 8 (11/13): the gate asks one shield; the spare and its iron
+    // and planks are aims (the blazes' stage makes a shield where it stands from iron 1 and planks 6).
+    node('残りの鉄をまとめて採り焼く・剣・盾・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket', caution: ['盾1はゲートの必須。予備の盾と作り直しの鉄2・板16は目標（ブレイズの湧き場で盾が壊れた時にその場で作り直せる）'] }),
     node('鉄の兜・胸当て', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate' })] }),
   node('水入りバケツ（最初の水源ですぐ汲む）', { kind: 'water', doneWhen: 'have:water_bucket' }),
   node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe',
@@ -65,11 +66,14 @@ const TO_NETHER: readonly PlanSeed[] = [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
   // 「|have:ender_eye>=10」 (end1108d S9, 11/8): 12 eyes less the one or two just thrown and not yet picked up still close the stages that make them.
-  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10', caution: ['必須（盾2と作り直しの鉄2・板16・鉄の剣・鉄の兜胸当てを着る・ツルハシと石の予備2本・足場64・食料40点）が欠けたら入らない'], children: [
-    node('溶岩源で黒曜石22（ゲート10・竜戦12）', { kind: 'obsidian', doneWhen: 'have:obsidian>=22|dim:the_nether|have:ender_eye>=10', note: '最初の溶岩でまとめて取る（竜戦の分を後で取りに来ない）' }),
+  // Run 8 (11/13): the gate was lit at y=-19 and she gathered spares beside it for minutes; the gate's required are the owner's five and food 40, and
+  // a lit gate is entered at once. The obsidian's node closes when a lit portal is in view (the frame's 10 leave the pack and the node opened again).
+  node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10', caution: ['必須（盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ（ダイヤ1か鉄3）・足場32・食料40点）が欠けたら入らない',
+    '点いたらその場ですぐ入る（必須がそろえば、目標のために地上へ戻らない）'], children: [
+    node('溶岩源で黒曜石22（ゲート10・竜戦12）', { kind: 'obsidian', doneWhen: 'have:obsidian>=22|see:nether_portal|dim:the_nether|have:ender_eye>=10', note: '最初の溶岩でまとめて取る（竜戦の分を後で取りに来ない）' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether|have:ender_eye>=10' }),
-    node('食料100点以上に足す', { kind: 'food', doneWhen: 'food>=100' }), node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10',
-      caution: ['火をつける前に必須を確かめる: 盾2と作り直しの鉄2・板16・鉄の剣・鉄の兜胸当てを着る・ツルハシ・足場64・食料40点',
+    node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10',
+      caution: ['火をつける前に必須を確かめる: 盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ・足場32・食料40点。点いたらその場ですぐ入る',
         'ベッドは寝る用2を残し、ゲートの横の箱に預けて入る（1個1マス。帰りに同じゲートで取る）'] })] }),
 ];
 /**

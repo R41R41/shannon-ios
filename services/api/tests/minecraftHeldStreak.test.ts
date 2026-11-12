@@ -47,15 +47,16 @@ describe('followHeld', () => {
     noteHeldAct('t', { code: 'cannot_dig', kind: 'dig' });
     expect(followHeld('t', tree('p3.2'), facts())).toBeNull();
   });
-  it('the entry gate of the Nether looks back first, to the golden piece, and never puts the node on the work of the Nether while she is in the overworld', () => {
+  // Run 8 (11/13): the portal's gate moved the node 51 m to an old move while the gate stood lit; the gate's line says what is missing, taken where she is.
+  it('does not move the node for the gate of the Nether: what it lacks is taken under the node of the gate', () => {
     const rows = (current: string) => v2tree({ revision: 1, current, nodes: [node('p6', 'portal', 0, ''), node('p6.1', 'other', 0, 'have:golden_boots', 'p6'),
       node('p7', 'portal', 1, 'dim:the_nether'), node('p7.3', 'portal', 0, 'dim:the_nether', 'p7'), node('p9', 'fortress', 2, 'see:fortress'), node('p10', 'blaze', 3, 'have:blaze_rod>=7')] });
     const overworld = doneFacts(frameWith([['cooked_beef', 20]], { dimension: 'overworld' }))!;
     noteHeldAct('t', { code: 'gate_required', kind: 'portal' });
     noteHeldAct('t', { code: 'gate_required', kind: 'portal' });
-    const moved = followHeld('t', rows('p7.3'), overworld)!;
-    expect(moved).toMatchObject({ to: 'p6.1', from: 'p7.3' });
-    expect(moved.words).toContain('ネザーへ入る関所が 2 回止めた');
+    expect(followHeld('t', rows('p7.3'), overworld)).toBeNull();
+    noteHeldAct('t', { code: 'gate_required', kind: 'portal' });
+    expect(followHeld('t', rows('p7.3'), overworld)).toBeNull();
   });
   it('does not put the node on a food node of the overworld while she is in the Nether (the next read would move it back: pearl, food, pearl)', () => {
     const rows = v2tree({ revision: 1, current: 'p3.2', nodes: [node('p3', 'nether', 0, ''), node('p3.2', 'blaze', 0, 'have:blaze_rod>=7', 'p3'), node('p4', 'food', 1, 'have:cooked_beef>=20')] });

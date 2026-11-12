@@ -51,14 +51,17 @@ export function followHeld(taskId: string, tree: PlanTree, facts: DoneFacts | nu
   for (const kind of window.outcomes) if (kind) counts.set(kind, (counts.get(kind) ?? 0) + 1);
   const [gate] = [...counts].filter(([, count]) => count >= HELD_LIMIT).sort((a, b) => b[1] - a[1]).map(([kind]) => kind);
   if (!gate) return null;
+  // Run 8 (11/13): the gate's hold put the node on a move of 51 m to an old node while the gate stood lit; the gate's line says what is
+  // missing, and it is taken where she is, under the gate's node. The node is not moved for the portal's gate.
+  if (gate === 'portal') return null;
   const order = orderedPlan(tree.nodes), current = order.find(node => node.id === tree.current);
   if (!current) return null;
   const predicates = predicatesOf(tree), questions = treeQuestions(tree);
   const open = (node: (typeof order)[number]) => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id))
     && !(predicates.get(node.id) && predicateHolds(predicates.get(node.id)!, facts));
   const at = order.indexOf(current), before = order.slice(0, at).reverse(), after = order.slice(at + 1);
-  // The entry gates (the portal, the golden piece) are stopped by something earlier in the plan: look back first. The others (the blaze) look on.
-  const around = gate === 'portal' || gate === 'gold' ? [...before, ...after] : [...after, ...[...before].reverse()];
+  // The golden piece's gate is stopped by something earlier in the plan: look back first. The others (the blaze) look on.
+  const around = gate === 'gold' ? [...before, ...after] : [...after, ...[...before].reverse()];
   const elsewhere = (node: (typeof order)[number]) =>
     Object.entries(DIMENSION_KINDS).some(([dimension, kinds]) => dimension !== facts.dimension && kinds.has(kindOf(node)));
   const blazeShut = blazeHeld(facts);

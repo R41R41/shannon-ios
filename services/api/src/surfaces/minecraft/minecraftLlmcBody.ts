@@ -191,7 +191,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   /** r8: the live state of an urgent decision (`minecraftLlmcUrgentLive`), made on the frame now; its tokens are
  * kept for the log of its seconds. */
   const urgentState = (minutes: number | null): Record<string, unknown> => {
-    const facts = urgentFacts(observation, events.cut(), sights, inSight);
+    const facts = urgentFacts(observation, events.cut(), sights, inSight, hitWatch.recent());
     const readiness = readinessParts(parts.llmc, parts.llmc.planView() as object | null, observation);
     const live = minecraftLlmcUrgentLive({ observation, elapsedMinutes: activeMinutes(minutes, parts.heldMs?.()), events: events.shown(),
        lastResults: events.results(),
@@ -292,7 +292,7 @@ beginContextRead();
       const minutes = Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null;
       // Tool rounds read a new frame without asking urgent() again. Classify the
       // context from that frame, rather than keeping the first round's mode.
-      const facts = urgentFacts(observation, events.cut(), sights, inSight);
+      const facts = urgentFacts(observation, events.cut(), sights, inSight, hitWatch.recent());
       reasons = facts.reasons;
       unreachable = facts.unreachable;
       // r8: an urgent step, or a decision asked again after an interrupt, reads the short state.
@@ -364,7 +364,7 @@ beginContextRead();
 // this task is marked.
     recallCues: () => ({ ...(body.recallCues?.() ?? { words: [], tags: [] }), since: parts.createdAt }),
     urgent() {
-      const facts = urgentFacts(observeNoted(), events.cut(), sights, inSight);
+      const facts = urgentFacts(observeNoted(), events.cut(), sights, inSight, hitWatch.recent());
       reasons = facts.reasons;
       unreachable = facts.unreachable;
       if (reasons.length) {

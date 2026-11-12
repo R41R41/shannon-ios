@@ -7,14 +7,20 @@ import type { P } from './minecraftLlmcWalkRules.js';
  * least wood while trees stood round it. The body counts (`state.world.nearbyResources`: the count, the range and the nearest three sites of each
  * purpose); the head works the place out from her feet now and writes a line for each. Facts only: no hand and no choice is made here.
  */
-export type NearbyPurpose = 'wood' | 'food_animal' | 'food_village' | 'ore' | 'bed' | 'water';
+export type NearbyPurpose = 'wood' | 'food_animal' | 'food_village' | 'ore' | 'bed' | 'water' | 'lava';
 export interface NearbySite { x: number; y: number; z: number; note?: string }
 export interface NearbyResource { purpose: NearbyPurpose; kind: string; count: number; range: number; sites: NearbySite[]; trees?: number }
 
 const LABEL: Readonly<Record<NearbyPurpose, readonly [string, string]>> = {
   wood: ['木', '本'], food_animal: ['食料（動物）', '体'], food_village: ['食料（村）', '個'], ore: ['鉱石（空気に面した物）', '個'], bed: ['寝床', '台'], water: ['水', 'マス'],
+  lava: ['溶岩の溜まり', 'つ'],
 };
-const ORDER: readonly NearbyPurpose[] = ['wood', 'food_animal', 'food_village', 'ore', 'bed', 'water'];
+/**
+ * Run 8 (11/13: four pools were loaded at 7 to 40 m and only the nearest source, 27 below across a hollow, reached the head): `lava` is the pools of
+ * the overworld near her (the body joins the sources into pools: the count is the pools, each site a pool's nearest source with 「源 N・覆い○/×」
+ * in its note). Last in the order; first while the plan's now is the obsidian (`firstPurpose`).
+ */
+const ORDER: readonly NearbyPurpose[] = ['wood', 'food_animal', 'food_village', 'ore', 'bed', 'water', 'lava'];
 const PURPOSES = new Set<string>(ORDER);
 
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -38,6 +44,7 @@ export function nearbyResourcesOf(raw: unknown): NearbyResource[] {
 
 /** The purpose a plan's now words are about, put first (the other lines stay: nothing is hidden). */
 function firstPurpose(hint: string): NearbyPurpose | null {
+  if (/黒曜石|溶岩|obsidian|lava/u.test(hint)) return 'lava';
   if (/原木|木材|木を|wood|stock:wood/u.test(hint)) return 'wood';
   if (/食料|食べ物|動物|干し草|food|狩/u.test(hint)) return 'food_animal';
   if (/ベッド|羊|bed/u.test(hint)) return 'bed';
@@ -73,4 +80,22 @@ export function nearbyLines(resources: readonly NearbyResource[], feet: P | null
     lines.push(`${label}: ${parts.join('／')}`);
   }
   return lines;
+}
+
+/** A pool of the body's `lava` line as the head wrote it (`nearbyLines`): the place, and the sources and the cover its note says. */
+export interface LavaSite { x: number; y: number; z: number; sources: number | null; covered: boolean | null }
+/**
+ * The pools of the `lava` line of `nearby` (the lines `nearbyLines` wrote), nearest first; `range` when the line says 「なし」 (none within it);
+ * null when there is no lava line (an older body, or the line was cut).
+ */
+export function lavaSitesIn(lines: readonly string[]): { range: number; sites: LavaSite[] } | null {
+  const line = lines.find(item => item.startsWith(`${LABEL.lava[0]}: `));
+  if (!line) return null;
+  const range = Number(/(\d+)m 内に/u.exec(line)?.[1] ?? 0);
+  const sites = [...line.matchAll(/\((-?\d+),(-?\d+),(-?\d+)\)[^(/／]*?(?:（([^）]*)）)?(?=\s*(?:\/|／|$))/gu)].map((match): LavaSite => {
+    const note = match[4] ?? '', sources = /源\s*(\d+)/u.exec(note), cover = /覆い\s*([○×])/u.exec(note);
+    return { x: Number(match[1]), y: Number(match[2]), z: Number(match[3]), sources: sources ? Number(sources[1]) : null,
+      covered: cover ? cover[1] === '○' : null };
+  });
+  return { range, sites };
 }

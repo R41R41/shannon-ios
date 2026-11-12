@@ -74,8 +74,37 @@ export function liquidLines(view: MapView, feet: P): string[] {
   if (lava.length || lavaFlows.length) {
     lines.push(`溶岩: 源 ${lava.length} マス・流れ ${lavaFlows.length} マス${lava.length ? `。近い源: ${listing(nearest(view, eye, feet, lava))}` : ''}`);
   }
-  if (obsidian.length) lines.push(`黒曜石 ${obsidian.length} マス: ${listing(nearest(view, eye, feet, obsidian))}`);
+  if (obsidian.length) {
+    const marked = obsidian.filter(cell => lavaBeside(view, cell) !== null).length;
+    const shown = nearest(view, eye, feet, obsidian).map(item => {
+      const lava = lavaBeside(view, item.cell);
+      return `${ptText(item.cell)} 目から ${item.reach.toFixed(1)}m・${reachWord(item)}${lava ? `・${lava}` : ''}`;
+    });
+    lines.push(`黒曜石 ${obsidian.length} マス${marked ? `（うち下か横が溶岩 ${marked}）` : ''}: ${shown.join(' / ')}`);
+  }
   return lines;
+}
+
+const LAVA = new Set(['L', 'l']);
+/** The cells a drop falls through (air of any mark): below these a drop goes on falling. */
+const FALLS_THROUGH = new Set(['.', '*', '@', '!', '&', 'm']);
+const FALL_CELLS = 6;
+/**
+ * Run 8 (11/13: six of the obsidian dug were lost, one with lava beside it and five with a lava source below, where the drop fell and burned):
+ * whether lava touches an obsidian cell, from the map: beside it (the four sides and above) or below it (the cell under it, or the first one
+ * a drop falls to through air, six at most). 「下と横が溶岩」, 「下が溶岩」, 「横が溶岩」 or null. Facts only: the body fills such lava with
+ * stone before it digs, when it carries some.
+ */
+export function lavaBeside(view: MapView, cell: P): string | null {
+  const side = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]]
+    .some(([dx, dy, dz]) => LAVA.has(view.symbol(cell.x + dx!, cell.y + dy!, cell.z + dz!) ?? ''));
+  let under = false;
+  for (let depth = 1; depth <= FALL_CELLS; depth += 1) {
+    const symbol = view.symbol(cell.x, cell.y - depth, cell.z) ?? '';
+    if (LAVA.has(symbol)) { under = true; break; }
+    if (!FALLS_THROUGH.has(symbol)) break;
+  }
+  return under && side ? '下と横が溶岩' : under ? '下が溶岩' : side ? '横が溶岩' : null;
 }
 
 type Rec = Record<string, unknown>;

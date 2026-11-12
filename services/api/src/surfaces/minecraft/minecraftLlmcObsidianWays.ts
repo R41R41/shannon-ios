@@ -1,5 +1,6 @@
 import type { MapView } from './minecraftLlmcPreflightMap.js';
-import { OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
+import { lavaSitesIn, type LavaSite } from './minecraftLlmcNearby.js';
+import { GATE_OBSIDIAN, OBSIDIAN_AT_FIRST_LAVA } from './minecraftLlmcPrepRules.js';
 import { isHard, NAME, ptText, type P } from './minecraftLlmcWalkRules.js';
 import { factsIn, hasKind, nowAndNextKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
@@ -136,19 +137,65 @@ function poolsLine(pools: Array<Found & { sources: number }>, lava: Found | null
 }
 /** The kinds of node whose distances to lava and to obsidian are shown: the obsidian and the portal (chapter 7). */
 const OBSIDIAN_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['obsidian', 'portal']);
-/** `body.obsidian`: the nearest lava and the nearest obsidian beside each other, when the current node or the
- * next is of the kind obsidian or portal. Empty otherwise. */
+/** The pools shown from the body's `nearby` lava line. */
+const POOLS_SHOWN = 3;
+
+/** The obsidian in the pack, from the body's inventory lines (`obsidian×18`, a line a stack). */
+export function heldObsidian(inventory: unknown): number {
+  return strings(inventory).reduce((sum, line) => sum + Number(/^(?:minecraft:)?obsidian×(\d+)/u.exec(line)?.[1] ?? 0), 0);
+}
+/** The obsidian cells the map shows (the whole map: 15 wide). */
+export const mapObsidian = (view: MapView | null): number => {
+  let count = 0;
+  for (const [, layer] of view?.layers.layers ?? []) for (const [, symbol] of layer) if (symbol === 'O') count += 1;
+  return count;
+};
+/**
+ * Run 8 (11/13: the strong model's replan decided 「水入りバケツが無く黒曜石を作れない」 and made a node to fetch water, 252 s, while obsidian stood
+ * in the world): the head of the obsidian line, the count in the pack beside the gate's least and the aim, and the obsidian in view. Facts only.
+ */
+export function obsidianTally(held: number, visible: number, nearest: string | null): string {
+  const seen = visible > 0 || nearest ? `見えている自然の黒曜石 ${visible > 0 ? `地図に ${visible} マス` : ''}${visible > 0 && nearest ? '・' : ''}${nearest ? `最寄り ${nearest}` : ''}`
+    : '自然の黒曜石 見えていない';
+  return `黒曜石: 持ち物 ${held}／ゲートの最低 ${GATE_OBSIDIAN}／目標 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート ${GATE_OBSIDIAN}＋竜戦 12）。${seen}`;
+}
+/** A pool from her feet: the place, how far across and how far up or down, the sources and the cover (the body's note). */
+function poolWords(feet: P, site: LavaSite): string {
+  const across = Math.round(Math.hypot(site.x - feet.x, site.z - feet.z)), dy = site.y - feet.y;
+  const height = dy === 0 ? '同じ高さ' : `${dy > 0 ? '上' : '下'} ${Math.abs(dy)}`;
+  const facts = [`水平 ${across}m`, height, ...site.sources !== null ? [`源 ${site.sources}`] : [], ...site.covered !== null ? [`覆い${site.covered ? '○' : '×'}`] : []];
+  return `${ptText(site)} ${facts.join('・')}`;
+}
+/**
+ * Run 8 (11/13: pools at y=20 (7 m), y=-19 (about 40 m) and y=-45 (about 36 m) were loaded, and the head was told only the nearest source, y=-55, 27
+ * below across a hollow 21 deep, and dug down to it, 191 s to the lava): the lava part. The body's pools near her (`nearby`, nearest three, each
+ * with how far across and up or down from her feet now, its sources and whether stone covers it) when it sends them; when it says none within its
+ * range, that and where else to look; with no lava line (an older body), the nearest source and the pool of ten as before.
+ */
+function lavaWords(body: Rec, self: P, view: MapView | null, landmarks: string[], scan: string[]): { words: string; meters: number | null } {
+  const nearby = lavaSitesIn(strings(body.nearby));
+  if (nearby?.sites.length) {
+    const sites = nearby.sites.slice(0, POOLS_SHOWN);
+    return { words: `溶岩の溜まり（近い順・今の足から）: ${sites.map(site => poolWords(self, site)).join(' / ')}`, meters: distance(self, sites[0]!) };
+  }
+  const lava = nearest([...view ? inMap(view, self, 'L') : [], ...inLines(landmarks, /^L |溶岩/u, self, '目印'), ...inLines(scan, /溶岩/u, self, '走査')]);
+  if (nearby && !lava) {
+    return { words: `溶岩の溜まり ${nearby.range}m 内に見えない（洞窟・地表の近くも mc_probe kind=scan で読み直す。それでも無ければ低い y を当てて掘る）`, meters: null };
+  }
+  const pools = [...view ? lavaPools(view, self) : [], ...countedPools(landmarks, self, '目印'), ...countedPools(scan, self, '走査')];
+  return { words: `溶岩の源 ${show(lava, '見えていない')}${poolsLine(pools, lava)}`, meters: lava?.meters ?? null };
+}
+/** `body.obsidian`: what she holds and sees of obsidian, and the lava near, when the current node or the next is of the kind obsidian or portal.
+ * Empty otherwise, and when neither lava nor obsidian is known. */
 export function obsidianWays(body: Rec, self: P, view: MapView | null): string[] {
   if (!hasKind(nowAndNextKinds(factsIn(body)), OBSIDIAN_KINDS)) return [];
   const landmarks = strings(body.landmarks), scan = strings(body.scan);
-  const lava = nearest([...view ? inMap(view, self, 'L') : [], ...inLines(landmarks, /^L |溶岩/u, self, '目印'), ...inLines(scan, /溶岩/u, self, '走査')]);
   const obsidian = nearest([...view ? inMap(view, self, 'O') : [], ...inLines(landmarks, /^O |黒曜石/u, self, '目印'), ...inLines(scan, /黒曜石/u, self, '走査')]);
   const contact = view ? contactCells(view, self) : [];
-  if (!lava && !obsidian) return [];
-  const closer = lava && (!obsidian || lava.meters < obsidian.meters) ? '（溶岩の方が近い）' : '';
-  const pools = [...view ? lavaPools(view, self) : [], ...countedPools(landmarks, self, '目印'), ...countedPools(scan, self, '走査')];
-  const poolWords = poolsLine(pools, lava);
-  return [`黒曜石 ${OBSIDIAN_AT_FIRST_LAVA} 個（ゲート 10＋竜戦 12）の元: 溶岩の源 ${show(lava, '見えていない')} / 自然の黒曜石 ${show(obsidian, '見えていない')}${closer}${poolWords}。`
+  const lava = lavaWords(body, self, view, landmarks, scan);
+  if (lava.meters === null && !obsidian && !lavaSitesIn(strings(body.nearby))) return [];
+  const closer = lava.meters !== null && (!obsidian || lava.meters < obsidian.meters) ? '（溶岩の方が近い）' : '';
+  return [`${obsidianTally(heldObsidian(body.inventory), mapObsidian(view), obsidian ? show(obsidian, '') : null)}。${lava.words}${closer}。`
     + '階段掘りは 0.5〜0.9 マス/秒（ダイヤのツルハシ）、溶岩に水を注いで 1 個目ができるまで 30〜50 秒、黒曜石の dig は空気中で 1 個約 9 秒（ダイヤのツルハシ・測った値）',
     ...contact.length ? [`水の源と溶岩の源の両方に隣り合うマス（開けると水と溶岩が出会う）: ${contact.join(' / ')}。溶岩の源だけに隣り合う岩を開けると、溶岩が流れ込む`] : []];
 }

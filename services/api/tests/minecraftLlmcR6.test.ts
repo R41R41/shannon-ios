@@ -110,9 +110,9 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     const home = counts({ ...START, dimension: 'overworld' });
     expect(preparationShortage({ ...home, nowKinds: ['wood' as const] })).toBeNull();
     const gate = preparationShortage({ ...home, nowKinds: ['portal' as const] })!;
-    expect(gate.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾（予備を含め 2）・盾の作り直しの鉄（2）・板（盾の作り直し 2 枚分と作業台、16）・足場のブロックが無い。')).toBe(true);
+    expect(gate.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾・足場のブロックが無い。')).toBe(true);
     expect(gate).toContain(`食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`);
-    expect(gate.endsWith('目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い')).toBe(true);
+    expect(gate).toContain('目標（そろえば。必須ではない）— 盾（予備を含め 2）・盾の作り直しの鉄（2）・板（盾の作り直し 2 枚分と作業台、16）・足場のブロック（64 あると橋で尽きない）・金のブーツ（金 4 がそろう時）が無い');
     const end = preparationShortage({ ...home, nowKinds: ['stronghold' as const] })!;
     expect(end).toContain('準備の不足（エンドへ）: ベッド（目標 10）・黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）・エンダーアイ（12 が目安。落ちたアイは拾う）・足場のブロックが無い');
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）');

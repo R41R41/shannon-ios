@@ -52,11 +52,13 @@ const SHIELD_PLANKS: PrepNeed = { label: '板（盾の作り直し 2 枚分と�
 const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て', count: 2, pattern: UPPER_ARMOUR, slots: true, worn: true };
 // The coordinator, 2026-11-02 (run59 leg 1 went on to the diamonds and the gate with no shield and no armour): the golden boots are a goal,
 // the rest of the gate's list is required.
-// A goal of the table; the gate's hand is held while no golden piece is worn (`goldAtPortalHold`), and the stage words say so (the section audit
-// of 11/5: the plan read it as a goal and the gate as required).
+// A goal of the table, and only a goal (run 8, 11/13: the hand that held the gate while no golden piece was worn stopped a lit gate; it is gone).
+// In the Nether, a golden piece carried is put on before the search (`goldFirstHold`).
 const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true };
 /** The obsidian taken at the first lava (the section audit of 11/5): the gate's 10 and the End fight's 12 at once, not a second trip after the Nether. */
 export const OBSIDIAN_AT_FIRST_LAVA = 22;
+/** The portal's frame (four wide, five high, no corners). */
+export const GATE_OBSIDIAN = 10;
 /** The Nether's rock wears a pickaxe out (an iron one is 250 uses: S2's lab, one broke): three iron ones, or one diamond one (which counts for three). */
 const TRIP_PICKAXE: PrepNeed = { label: 'ツルハシ（ダイヤ 1 か鉄 3）', count: 3, pattern: PICKAXE.pattern, weight: name => /^(?:diamond|netherite)_/u.test(name) ? 3 : 1 };
 /**
@@ -69,6 +71,8 @@ const SPARE_PICKAXES: PrepNeed = { label: '石以上のツルハシ（予備 2 �
 // smelted; a stone sword passed this gate and put the night's warning out): the iron sword, two iron, is made with the armour before the gate.
 const SWORD: PrepNeed = { label: '鉄の剣', count: 1, pattern: /^(?:iron|diamond|netherite)_sword$/u };
 const FOOTING: PrepNeed = { label: '足場のブロック', count: 64, pattern: BLOCKS };
+/** The gate's footing (run 8: 61/64 held the lit gate; the Nether's rock is footing too, and 32 is the blazes' check). 64 stays the aim. */
+const GATE_FOOTING: PrepNeed = { ...FOOTING, count: 32 };
 const has = (counts: ReadonlyMap<string, number>, name: string): number => (counts.get(name) ?? 0) + (counts.get(`minecraft:${name}`) ?? 0);
 /**
  * The bow and the arrows the End's crystals take (the whole-run audit of 11/4, order 10: the shortage counted plain arrows only, the body shoots spectral
@@ -90,7 +94,7 @@ export const END_BOW_KNOWLEDGE = '- 弓の糸はクモから（1 体 0〜2 本�
   + '弓と矢があればエンドのクリスタルを地面から撃てる。無いと柱を 1 本ずつ登ることになり（1 本に 5〜8 分）、弓なしの実走 3 本は 3 本とも柱の上か途中で死んだ。'
   + '見えない時に探し回らない（弓がそろわなくても入場は止まらない）。\n'
   + '- 矢は最低 12 本（檻なしのクリスタル 8 本に 1 射ずつと、外した分の予備。目標は 30）: 火打石 1・棒 1・羽根 1 で 4 本なので、3 組で 12 本になる。'
-  + 'スケルトンも倒すと矢を 0〜2 本落とす（まれに弓も。撃たれて刺さった矢は拾えない）。遠くから撃ってくるので、鉄の防具と盾があり、道の近くに 1 体だけの時に fight する（防具か盾が無い時・2 体以上の時は、射線を切って離れる）。'
+  + 'スケルトンも倒すと矢を 0〜2 本落とす（まれに弓も。撃たれて刺さった矢は拾えない）。遠くから撃ってくるので、鉄の防具と盾があり、撃ってくるのが 1 体だけの時に fight（range=16）で詰めて斬る（防具か盾が無い時・2 体以上の時は、1 枚で射線を切って陰で待つ）。'
   + '矢のために夜を待たない・追いかけない・寄り道しない。';
 
 /**
@@ -101,7 +105,15 @@ const MAKE_IT = '作れない・材料が無いと見えた時は、後回しに
 
 export const BEFORE_DIAMONDS: PrepStage = { title: 'ダイヤを掘る前', food: 40, needs: [PICKAXE, BUCKET, SHIELD, ARMOUR],
   risk: 'ダイヤの層（y=-58）は溶岩と深い所の敵の中。死ねば鉄の道具と防具を失い、取りに戻れないことが多い。' + MAKE_IT };
-export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SPARE_PICKAXES, SHIELDS_FOR_NETHER, SHIELD_IRON, SHIELD_PLANKS, SWORD, ARMOUR, FOOTING, BOOTS],
+/**
+ * Run 8 (11/13: the gate was lit at y=-19 and the hand into it was held three times, by planks 7/16, footing 61/64 and the golden piece, while she
+ * carried a pickaxe, a sword, a shield, the iron helmet and chestplate worn and food over 40; about 13 minutes before it went to gathering the
+ * spares): the gate's required are the owner's first choice again (a pickaxe, a shield, a sword, the armour, footing and the first stretch's
+ * food), what the stages after the entry need are aims here: the spare shield, its iron and planks (the blazes' stage makes one where it stands
+ * from iron 1 and planks 6), the stone pickaxes, 64 blocks and the golden boots.
+ */
+export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40, needs: [TRIP_PICKAXE, SHIELD, SWORD, ARMOUR, GATE_FOOTING,
+  ...[SHIELDS_FOR_NETHER, SHIELD_IRON, SHIELD_PLANKS, SPARE_PICKAXES, { ...FOOTING, label: '足場のブロック（64 あると橋で尽きない）' }].map(need => ({ ...need, goal: true })), BOOTS],
   risk: 'ブレイズの火の玉・ガスト・ウィザースケルトンの傷が重なる。死ねばダイヤのツルハシと黒曜石を失い、ネザーで落とした物は取りに戻れないことが多い。' + MAKE_IT };
 
 /** Owner 2026-11-04 (「ベッドと黒曜石を持っていく」): the dragon is killed with beds; 10 is the aim, 8 the least the End's gate lets in. */
@@ -260,13 +272,16 @@ export const PREP_RULES_WORDS = [
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱・廃坑の箱・荒廃したポータル（走査の「壊れたポータル」）の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
-  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 2（予備 1。火の玉で 5 分で壊れた）と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で 10 分に 2 枚壊れた。壊れたらその場で作る）・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
-    + '・石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）・足場のブロック 64（丸石 128 あると橋で尽きない）・食料 40 点。'
+  '- ゲート（ネザーに入る）の前の必須（そろうまで入らない。理由を書いても省けない）: 盾 1・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）'
+    + '・足場のブロック 32（ネザーの岩も足場になる）・食料 40 点。'
     + '鉄のツルハシは 1 本が耐久 250 で、ネザーの岩を掘り続けると壊れて止まった（鉄はネザーに無い）。'
-    + '目標: 金のブーツ（金 4 がそろう時。金の防具を 1 つも着ていないと、ネザーへ入る手は止まる）'
-    + `・水入りバケツ・黒曜石 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金・`
+    + '目標（あれば持つ。無くても入る）: 予備の盾と作り直しの材料（鉄 2・板 16。ブレイズの湧き場で盾が壊れた時にその場で作り直せる。板はネザーの幹でもよい）'
+    + '・石以上のツルハシの予備 2 本（主の他に。丸石 3・棒 2 で 1 本、体は安い方の道具から使う）・足場のブロック 64（丸石 128 あると橋で尽きない）'
+    + '・金のブーツ（金 4 がそろう時。金を着ていない間はピグリンの群れ・砦の遺跡の 8m 内に長居しない）'
+    + `・水入りバケツ・黒曜石 ${OBSIDIAN_AT_FIRST_LAVA}（ゲート 10＋竜戦 12。最初の溶岩でまとめて）・火打ち金（捨てずに持って入る。帰りのゲートの火が消えても、枠はそのままで点け直せる）・`
     + '食料 250 点前後（干し草 1 個でパン 3）。必須が欠けたまま入ると、ブレイズ・ガスト・ウィザースケルトンの傷が重なり、死ねばダイヤのツルハシと黒曜石を失う。'
     + 'ネザーへ入る手（portal。enter でない時を除く）は、必須が未達の間は体へ送られず、足りない物と費用が返る。'
+    + 'ゲートが点いたら、その場ですぐ入る（必須がそろっていれば、目標のために地上へ戻らない。点いたゲートは 4 秒で戻れる扉）。'
     + '必須が作れない・材料が無いと見えた時は、後回しにして先へ進まない。材料を取りに行く（盾なら木と鉄 1。作る手が失敗したら行の理由（missing: …）を読み、別の材料の形を試す）。',
   '- ネザーに入った後、要塞（奥）へ行く前: 作業台・食料 100 点（足りない食料は帰りのゲートから戻って狩る）。',
   '- ベッドは用途が 2 つ: 寝る用 1 個（最初の夜の前。doneWhen have:bed>=1）と、竜戦用 10 個（最低 8。target bed×10）。村の家で見つけた分は全部取る'

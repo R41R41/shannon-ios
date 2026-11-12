@@ -215,22 +215,14 @@ describe('the golden piece against the piglins (run59, 14:15: dead in the Nether
   const portalHand = { hands: [{ do: 'portal', enter: true }] };
   const overworld = (items: Array<[string, number]>, worn = '') => frame(items, { dimension: 'overworld', worn });
   const nether = (items: Array<[string, number]>, worn = '') => frame(items, { dimension: 'the_nether', worn });
-  it('holds the hand that enters the Nether while no golden piece is worn, and says what is in the pack toward it', () => {
-    const held = deadlyGateHold(portalHand, overworld([['gold_ingot', 1], ['raw_gold', 2]]));
-    expect(held).toMatchObject({ hand: 1, kind: 'portal' });
-    expect(held!.line).toContain('金の防具を 1 つ着ていない（ピグリンが襲う）');
-    expect(held!.line).toContain('金の延べ棒 1 個・生の金 2 個');
-    expect(deadlyGateHold(portalHand, overworld([['golden_boots', 1]]))!.line).toContain('持っている golden_boots を equip で着る');
-    expect(deadlyGateHold(portalHand, overworld([['golden_boots', 1]], '足: golden_boots(残り65/65)')))?.toBeNull();
-    expect(deadlyGateHold({ hands: [{ do: 'eat', item: 'cooked_beef' }] }, overworld([]))).toBeNull();
-  });
-  it('lets a return for the drops of a Nether death through with none worn (G01, the review of 11/10: the golden boots lie with the drops)', () => {
+  // Run 8 (11/13): the hand into a lit gate was held for a golden piece; the boots are a goal of the gate (`goldAbsentLine` says so) and nothing holds it.
+  it('does not hold the hand that enters the Nether for a golden piece, worn, carried or not', () => {
+    for (const items of [[['gold_ingot', 1], ['raw_gold', 2]], [['golden_boots', 1]], []] as Array<Array<[string, number]>>) {
+      expect(deadlyGateHold(portalHand, overworld(items)), JSON.stringify(items)).toBeNull();
+    }
+    expect(deadlyGateHold(portalHand, overworld([['golden_boots', 1]], '足: golden_boots(残り65/65)'))).toBeNull();
     const lastDeath = '3分前 the_nether (89,67,40)「Shannon was slain by Blaze」 落とした物: golden_boots×1。消えるまで最長約5分（近くにいる間だけ減る）→拾いに戻れる';
-    expect(deadlyGateHold(portalHand, frame([], { dimension: 'overworld', lastDeath }))).toBeNull();
-    expect(deadlyGateHold(portalHand, frame([], { dimension: 'overworld', lastDeath: lastDeath.replace('was slain by Blaze', 'tried to swim in lava') })))
-      .toMatchObject({ hand: 1, kind: 'portal' });
-    expect(deadlyGateHold(portalHand, frame([], { dimension: 'overworld', lastDeath: lastDeath.replace(/落とした物.*$/u, '何も落としていない') })))
-      .toMatchObject({ hand: 1, kind: 'portal' });
+    expect(deadlyGateHold(portalHand, frame([], { dimension: 'overworld', lastDeath: lastDeath.replace('was slain by Blaze', 'tried to swim in lava') }))).toBeNull();
   });
   it('in the Nether holds the travel of the search, only when the means are in the pack', () => {
     const work = { hands: [{ do: 'eat', item: 'cooked_beef' }, { do: 'go', to: { x: 60, y: 70, z: 60 } }] };

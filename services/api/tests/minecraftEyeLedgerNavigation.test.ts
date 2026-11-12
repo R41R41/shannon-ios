@@ -114,7 +114,7 @@ describe('the stronghold route knowledge and the seed plan', () => {
     expect(caution).toContain('回収したゲートは帰りには使わない');
     const initial = seedPlan('エンドラを討伐して')!;
     expect(initial.nodes.find(node => node.title === '溶岩源で黒曜石22（ゲート10・竜戦12）')?.doneWhen).toBe(
-      'have:obsidian>=22|dim:the_nether|have:ender_eye>=10');
+      'have:obsidian>=22|see:nether_portal|dim:the_nether|have:ender_eye>=10');
   });
 });
 
