@@ -44,9 +44,9 @@ describe('the tidy hand: fields, reading and writing', () => {
     expect(lineToHand('tidy 1,2,3')).toEqual({ error: expect.stringContaining('座標は要らない') });
     expect(lineToHand('tidy smelt=maybe')).toEqual({ error: expect.stringContaining('smelt は off か on') });
   });
-  it('is in the short manual in two lines, and its ceiling is its seconds (default 90) and 2 s', () => {
+  it('is in the short manual in one line, and its ceiling is its seconds (default 90) and 2 s', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('tidy [物[:数],…] [keep=物:数,…] [room=N] [smelt=off]');
-    expect(SHORT_ACT_DESCRIPTION).toContain('結果に「空き A→B」が出る');
+    expect(SHORT_ACT_DESCRIPTION).toContain('物を省くと体が選ぶ。要る物は keep=');
     expect(actExpectedMilliseconds({ hands: [tidy({})] } as never)).toBeLessThanOrEqual(92_000);
   });
 });

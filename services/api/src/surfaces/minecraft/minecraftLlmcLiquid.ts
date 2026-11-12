@@ -87,10 +87,10 @@ const listing = (items: Found[]): string => items.map(item => `${ptText(item.cel
 export function liquidLines(view: MapView, feet: P, given: { fails: readonly WaterFail[]; summary?: unknown } = { fails: [] }): string[] {
   const eye = { x: feet.x + 0.5, y: feet.y + EYE, z: feet.z + 0.5 };
   // Flow design D: the sources of a pool the bucket could not draw (twice) are not offered again; the line says where the surface water is.
-  const sources = cellsOf(view, feet, new Set(['w'])).filter(cell => !givenUp(cell, given.fails)), flows = cellsOf(view, feet, new Set(['-']));
+  const sources = cellsOf(view, feet, new Set(['w'])).filter(cell => !givenUp(cell, given.fails, { feet })), flows = cellsOf(view, feet, new Set(['-']));
   const lava = cellsOf(view, feet, new Set(['L'])), lavaFlows = cellsOf(view, feet, new Set(['l'])), obsidian = cellsOf(view, feet, new Set(['O']));
   const lines: string[] = [];
-  const switched = waterSwitchLine(given.fails, given.summary, feet);
+  const switched = waterSwitchLine(given.fails, given.summary, feet, view);
   if (switched) lines.push(switched);
   if (sources.length || flows.length) {
     lines.push(`水: 源 ${sources.length} マス・流れ ${flows.length} マス（足の周り ${RANGE} マス内）`);

@@ -13,7 +13,7 @@ const strings = (value: unknown): string[] => Array.isArray(value) ? value.filte
 const CELL = /\((-?\d+,-?\d+,-?\d+)\)/u;
 
 /** The body's recent stops: `(a)→(b) 理由 ×N 15秒前`, the stop's cell, its word and how many times. */
-function stopsOf(list: readonly string[]): Array<{ cell: string; reason: string; count: number }> {
+export function stopsOf(list: readonly string[]): Array<{ cell: string; reason: string; count: number }> {
   return list.flatMap(line => {
     const m = /^(?:\([-\d,]+\)→)?\((-?\d+,-?\d+,-?\d+)\) (\S+?)(?: ×(\d+))? \d+秒前$/u.exec(line);
     return m ? [{ cell: m[1]!, reason: m[2]!, count: m[3] ? Number(m[3]) : 1 }] : [];

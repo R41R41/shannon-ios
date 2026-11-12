@@ -27,9 +27,8 @@ const CURRENT_HUNT_FIELDS = ' / hunt: target（種類。id は不可）・count�
 const CURRENT_SELF_DEFENCE = '体の自衛（数は system の「敵と体力」）は accept の有無に関係なく働く。';
 const LEGACY_SELF_DEFENCE = `${SELF_DEFENCE_SHORT}。`;
 
-// The tidy hand (2026-11-13) added two lines after the drop line and a clause in the json fields line: the historical contract is made without them.
-const CURRENT_TIDY_FIELDS = ' / tidy: items・keep・room・smelt・seconds';
-const isTidyLine = (text: string) => text.startsWith('tidy [物[:数]') || text.startsWith('  物を省くと体が選ぶ。結果に「空き A→B」が出る');
+// The tidy hand (2026-11-13) added one line after the drop line: the historical contract is made without it.
+const isTidyLine = (text: string) => text.startsWith('tidy [物[:数]');
 
 const pin = { catalogHash: 'a'.repeat(64) };
 const book = () => createMinecraftContractBook(pin);
@@ -37,7 +36,7 @@ const book = () => createMinecraftContractBook(pin);
 describe('the canonical Minecraft input-contract book', () => {
   it('pins the revised shoot manual and unchanged schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('158ad73bb584ded9e8ccc6224810493752f159548050d93aa8e3301d734db0c0');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('f023f45c0a38039ef915ed582040d0f39f2c6bf482fe23dadc19f26726afa05f');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('77cb8d5128ca66d050bd7396b5ec3ab17b09ef02e6263c0fa151f37715de1855');
     const current = book();
     expect(current.pages).toHaveLength(10);
@@ -54,7 +53,7 @@ describe('the canonical Minecraft input-contract book', () => {
     const fragments = SHORT_ACT_MANUAL_FRAGMENTS;
     // The inline ids are the lines' positions: without the tidy lines the later ones are numbered as before.
     const historical = fragments.filter(part => part.id !== 'hunt' && !isTidyLine(part.text)).map((part, index) => ({ ...part, ...(part.inline ? { id: `inline-${index}` } : {}), text: part.id === 'special'
-      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '').replace(CURRENT_TIDY_FIELDS, '')
+      ? LEGACY_SPECIAL_8C : part.text.replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '')
         .replace(CURRENT_SELF_DEFENCE, LEGACY_SELF_DEFENCE) }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))
       .toBe('cb97fbfd11373fe99d4971da05a6e36483a4d5a87f8b7fbb85ea99588aa84cd3');
