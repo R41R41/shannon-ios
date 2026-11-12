@@ -130,7 +130,7 @@ function shooterLines(observation: BodyObservation | null, open: readonly NearTh
   return shooters.map(threat => {
     const way = threat.canReachMe !== false && threat.reach !== 'walled' && Math.abs(threat.dy ?? 0) <= 3;
     const close = facts.closeInAdvised === true && shooters.length === 1 && way
-      ? `・盾・剣・撃ってくる骸骨 1 体で、詰めて斬れる（離れても 15m の中は射たれ続ける。fight target=#${threat.id} range=16 seconds=15 を先に）` : '';
+      ? `・剣・防具（鉄 3 部位か盾）・体力 10 以上・射手は骸骨 1 体で、詰めて斬れる（離れても 15m の中は射たれ続ける。fight target=#${threat.id} range=16 seconds=15 を先に）` : '';
     return { id: threat.id!, text: `撃ってきた射手: ${shooterHead(threat, known(threat))}・${FACT_WINDOW_MS / 1000} 秒で ${shots.get(threat.id!)} 回当たった${shield}${close}` };
   });
 }

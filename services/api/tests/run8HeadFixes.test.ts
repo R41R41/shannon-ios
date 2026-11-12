@@ -104,6 +104,10 @@ describe('the lava touching an obsidian cell (run 8: six dug with lava beside or
     // Review of the run-8 fixes: lava right under the block only water keeps from the drop; a fall through air the body fills with stone.
     expect(line).toMatch(/\(2,0,0\) 目から [\d.]+m・届く・真下が溶岩/u);
     expect(line).toMatch(/\(-2,0,0\) 目から [\d.]+m・届く・落ちる先が溶岩/u);
+    // 1111 review: the fall is followed as far as the body follows it (24 cells), not 6.
+    const deep: Record<string, string> = { '2,0,0': 'O', '2,-10,0': 'L' };
+    for (let y = -1; y > -10; y -= 1) deep[`2,${y},0`] = '.';
+    expect(liquidLines(mapView(readLayers(mapOf(deep, [1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]), BODY_RULES)!), FEET).find(item => item.startsWith('黒曜石'))).toMatch(/\(2,0,0\) 目から [\d.]+m・届く・落ちる先が溶岩/u);
     expect(liquidLines(view({ '0,0,2': 'O', '1,0,2': 'L' }), FEET).find(item => item.startsWith('黒曜石'))).toContain('・横・上が溶岩');
     expect(liquidLines(view({ '0,0,2': 'O', '1,0,2': 'L', '0,-1,2': 'L' }), FEET).find(item => item.startsWith('黒曜石'))).toContain('・真下と横・上が溶岩');
     expect(liquidLines(view({ '0,0,-2': 'O' }), FEET).find(item => item.startsWith('黒曜石'))).toBe('黒曜石 1 マス: (0,0,-2) 目から 2.3m・届く');
@@ -160,12 +164,15 @@ describe('the water node said unneeded when the obsidian in view covers the lack
   it('says in the stage knowledge that obsidian in view is dug with no water, but lava right under it needs the bucket', () => {
     const text = Object.values(V2_STAGES).join('\n');
     expect(text).toContain('見えている黒曜石（live の obsidian・liquid の行）を掘るだけなら水は要らない。横・上の溶岩と落ちる先の空気は体が石で埋めてから掘る');
-    expect(text).toContain('真下が溶岩の黒曜石は、体が上に水を注いでから掘るので水入りバケツが要り、無ければ掘らない');
-    // The body (dropGuard): the obsidian hand fills only with its canPlace, so the words ask for stone there; water is not poured in the Nether or onto the head.
-    expect(text).toContain('溶岩に接する O を obsidian の at に挙げる時は canPlace に持っている dirt・cobblestone を渡す。渡さないと掘らずに lava_danger で止まる');
-    expect(text).toContain('ネザーでは注げない。水が頭に流れる高さでは注がないので、足が O より 1 段上の所から掘る');
+    expect(text).toContain('真下が溶岩の O は上に水をかけてから掘るので水入りバケツが要り、無ければ掘らない（liquid の行の「真下が溶岩」。dig で拾う鉱石も同じ。');
+    // The body (dropGuard, obsidian f0a5b064): the obsidian hand fills with its canPlace, else covers with water (not in the Nether); water is poured only from a step over
+    // the O on open ground, two steps in a tunnel (wetWall.waterReachesBody).
+    expect(text).toContain('溶岩に接する O を at に挙げる時は canPlace に dirt・cobblestone を渡す。渡さないと obsidian の手は上に水をかけて掘り、水入りバケツも無いと lava_danger');
+    expect(text).toContain('水をかけるのは足が O より 1 段上（トンネルなど囲まれた所は 2 段上）に立てる時だけ。ネザーでは水が蒸発して使えず、真下が溶岩の O は掘らない。');
+    expect(text).toContain('体は開けると体に流れてくる水だけ先に塞いでから掘る');
     const core = llmcCoreKnowledge();
     expect(core).toContain('既にある O は掘るだけ（水は不要。横・上の溶岩は体が石で埋めて掘る: obsidian の手は canPlace に石を渡す。真下が溶岩の O だけ水入りバケツが要り、無いと体は掘らない）');
+    expect(core).toContain('溶岩（L・l）の隣は歩かず、O のほかは掘らない。');
     expect(text).not.toContain('石のツルハシを 2〜3 本作って持つ');
     expect(text).not.toContain('水入りバケツ・ダイヤpick・作業位置を先に確保し');
   });
@@ -233,7 +240,7 @@ describe('the skeletons that shoot from beyond the reflex\'s 4 m (run 8: about 1
   const hits = [{ by: 'skeleton #6480' }, { by: 'skeleton #6480' }, { by: 'zombie #11' }];
   it('names the shooter that hit her with its id, height, the hits, the shield left and that a lone one can be closed in on', () => {
     const { reasons } = urgentFacts(shot([skeleton(6480, 9.3)], true), null, null, null, hits);
-    expect(reasons).toContain('撃ってきた射手: skeleton #6480 9.3m・上 2・見える（射線の中）・10 秒で 2 回当たった・盾 残り約 8 本受けられる・盾・剣・撃ってくる骸骨 1 体で、詰めて斬れる'
+    expect(reasons).toContain('撃ってきた射手: skeleton #6480 9.3m・上 2・見える（射線の中）・10 秒で 2 回当たった・盾 残り約 8 本受けられる・剣・防具（鉄 3 部位か盾）・体力 10 以上・射手は骸骨 1 体で、詰めて斬れる'
       + '（離れても 15m の中は射たれ続ける。fight target=#6480 range=16 seconds=15 を先に）');
   });
   it('names only the skeleton\'s kin that hit her: a blaze\'s hit from afar does not make the step urgent (the design\'s R1)', () => {

@@ -93,13 +93,14 @@ export function liquidLines(view: MapView, feet: P): string[] {
 const LAVA = new Set(['L', 'l']);
 /** The cells a drop falls through (air of any mark): below these a drop goes on falling. */
 const FALLS_THROUGH = new Set(['.', '*', '@', '!', '&', 'm']);
-const FALL_CELLS = 6;
+/** As far as the body looks down a drop's fall (dropFate MAX_FALL); the walk stops at the first block that holds it. */
+const FALL_CELLS = 24;
 /** Whether the cell right under an obsidian cell is lava (the drop falls into it as the block goes). */
 export const lavaRightUnder = (view: MapView, cell: P): boolean => LAVA.has(view.symbol(cell.x, cell.y - 1, cell.z) ?? '');
 /**
  * Run 8 (11/13: six of the obsidian dug were lost, one with lava beside it and five with a lava source below, where the drop fell and burned):
  * whether lava touches an obsidian cell, from the map: beside it (the four sides and above), right under it, or where a drop falls to through
- * air below it (six cells at most). 「真下が溶岩」, 「落ちる先が溶岩」, each with 「と横・上」, 「横・上が溶岩」 or null. Facts only. The body
+ * air below it (24 cells at most, as the body). 「真下が溶岩」, 「落ちる先が溶岩」, each with 「と横・上」, 「横・上が溶岩」 or null. Facts only. The body
  * (dropGuard) fills the lava beside and above and the air a drop would fall through with stone before it digs; lava right under the block it
  * cannot reach: water poured on top first, and without a water bucket it does not dig.
  */

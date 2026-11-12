@@ -164,7 +164,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // run 5 (11/11) issue 3: a drop one block off a one-wide gap stopped the walk again and again. The body now digs 1-3 blocks of rock to it (only for a pickup that names the drop).
     '- pickup target=#id（か名前）は、落とし物の前の石・土・普通の鉱石 1〜3 マスを体が自分で掘って近づいて拾う（結果に「途中で…を掘った」）: dig→walk を前に並べない。止まりに「掘って近づこうとして止まった …」が付いたら、その理由（溶岩・水・頭上の砂利・敵・ツルハシ無し）を直す。target 無しの pickup は掘らない（mine は自分で岩を掘って取りに行く）。',
     '- バケツを作ったら最初の水源ですぐ汲む（run61 は空のまま地上を通り、地下で 6 分探した帰りに死んだ）。',
-    '- 水の隣を掘る時、体は裏の水を先に塞いでから掘る。waterOk は泳いで渡る許可で、水の隣を掘る許可ではない。',
+    '- 水の隣を掘る時、体は開けると体に流れてくる水だけ先に塞いでから掘る。waterOk は泳いで渡る許可で、水の隣を掘る許可ではない。',
     // run62 (11/5): the pickup's walk went onto the magma floor of a ruined portal; two deaths and the diamond pickaxe were lost there.
     '- 壊れたポータルの周りはマグマの床が多い。拾いに歩く前に、足元とその先のマグマを丸石か土で覆う（途中の足場の安全は保証されない）。立っている段は掘らない。',
     '- 夜明けの森のスケルトンとゾンビは、木の下の日陰では燃え残る（朝でも森の中は安全ではない）。',
@@ -201,7 +201,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // the fight's range (health 20 to 2.2 in one meeting). The skeletons' way is told with its reason; the other shooters keep their line.
     '- 骸骨（skeleton・stray・bogged）は 7.5〜15m の間を保って射つ: 13m より外では寄って来て、7.5m より内では下がる（下がる足は遅く、走れば追いつく）。'
       + '走って離れても 15m の中なら射たれ続け、4m の内へは自分から来ない（体の反射は 4m の内しか斬らない）。見えなくなると寄って来て、約 3 秒で狙いを忘れる。'
-      + '盾・剣があり、撃ってくる骸骨が 1 体なら（urgent の行に「詰めて斬れる」と出る）、その場で fight target=#id range=16 seconds=15 で詰めて斬る（矢が来る時は体が盾を構える）。'
+      + '剣と防具（鉄 3 部位か盾）・体力 10 以上で、撃ってくる骸骨が 1 体なら（urgent の行に「詰めて斬れる」と出る）、その場で fight target=#id range=16 seconds=15 で詰めて斬る（矢が来る時は体が盾を構える）。'
       + '2 体以上か、盾も防具も無い時は、ブロック 1 枚で射線を切って陰で待つ（寄って来れば 4m の内で体が斬る。来なければ狙いは外れた）。その後、近い方から fight。'
       + '走って離れるのは、体力 8 以下の時と骸骨が 3 体以上の時。倒したら元の作業へ戻る（次々来る夜の地上は、囲い・地下へ）。弓で撃ち返さない（矢はエンド用）。',
     '- ほかの射手（ブレイズ・ガスト・ピリジャーなど）に撃たれている間は、分かっている敵の向きと足場から射線を切る・離れる手を先に選ぶ。'
@@ -241,7 +241,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + 'そこから届く支えは横から dig し、不要な pillarUp を先に挟まない。届かない時だけ sight・column で作業高さを決める。'
       + '掘った後は落下と水流が落ち着くのを待ち、地形を読み直してから進む。支えを掘れたことと、通路ができたことは別。waterOk だけで水中を真上に登れるとは限らない。',
     '- 黒曜石は現在数と不足分を数え、到達できる溶岩源 L と既存の O を組み合わせて集める。同じ作業位置から続けて取れる源も比べる。多い溜まりでも道が未確認なら早いとは限らない。'
-      + '注水して作るには水入りバケツ、掘るにはダイヤpick と作業位置が要る。見えている黒曜石（live の obsidian・liquid の行）を掘るだけなら水は要らない。横・上の溶岩と落ちる先の空気は体が石で埋めてから掘る（dig は持っている安い石で。obsidian の手は canPlace の石だけで埋めるので、溶岩に接する O を obsidian の at に挙げる時は canPlace に持っている dirt・cobblestone を渡す。渡さないと掘らずに lava_danger で止まる）。真下が溶岩の黒曜石は、体が上に水を注いでから掘るので水入りバケツが要り、無ければ掘らない（liquid の行の「真下が溶岩」。dig はそのマスを飛ばして言い、全部なら drop_would_burn、obsidian の手は lava_danger。ネザーでは注げない。水が頭に流れる高さでは注がないので、足が O より 1 段上の所から掘る）。obsidian に対象・足場に使う物・採掘の上限を渡す。注水・待機・採掘・回収・水の汲み戻しはこの手が行う。'
+      + '注水して作るには水入りバケツ、掘るにはダイヤpick と作業位置が要る。見えている黒曜石（live の obsidian・liquid の行）を掘るだけなら水は要らない。横・上の溶岩と落ちる先の空気は体が石で埋めてから掘る（dig は持っている安い石で、obsidian の手は canPlace の石で。溶岩に接する O を at に挙げる時は canPlace に dirt・cobblestone を渡す。渡さないと obsidian の手は上に水をかけて掘り、水入りバケツも無いと lava_danger）。真下が溶岩の O は上に水をかけてから掘るので水入りバケツが要り、無ければ掘らない（liquid の行の「真下が溶岩」。dig で拾う鉱石も同じ。dig はそのマスを飛ばし、全部なら drop_would_burn、obsidian の手は lava_danger）。水をかけるのは足が O より 1 段上（トンネルなど囲まれた所は 2 段上）に立てる時だけ。ネザーでは水が蒸発して使えず、真下が溶岩の O は掘らない。obsidian に対象・足場に使う物・採掘の上限を渡す。注水・待機・採掘・回収・水の汲み戻しはこの手が行う。'
       + '同じ高さでつながった源は 1 回の注水で面を固め、続けて掘る。'
       + '22 個なら源 22 マスを at に挙げ、count=22・seconds=300 で 1 手にできる（count 省略時は at の数、seconds は 5〜300・既定 90）。'
       + '手動で水を置くなら、先に乾いた作業位置・流れる先・源を回収できる視線を確かめる。水を置いてから流れに逆らう移動を前提にしない。'

@@ -36,7 +36,8 @@ const PINNED = {
   // 11/13 run 8: the obsidian in sight is dug with no water, the lava beside or under it filled by the body (前は 381079159224f450).
   // 11/13 review of the run-8 fixes: only the O with lava right under it needs a water bucket (the body fills the rest) (前は 640b0eb4dec985c4).
   // 11/13 the body's dropGuard: the lava beside or above is filled with stone, the obsidian hand's with its canPlace only, so the core asks for stone there (前は a4f7d78bb3171771).
-  llmc_r9_system: 'a49b5cc1bdf3e971',
+  // 11/13 the 1111 review: lava beside is not walked and only O is dug there (the core's falls line) (前は a49b5cc1bdf3e971).
+  llmc_r9_system: '05691936cd001657',
   old_mode_system: '9484df3e3e4d04cf',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);

@@ -70,11 +70,11 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
   manualPage('obsidian', 'obsidian（指定した溶岩源を固めて採掘・水回収）', [
   'obsidian X,Y,Z [X,Y,Z ...] [count=N] [seconds=N] [place=名,名] [maxPlace=N] [maxDig=N]',
   '  黒曜石づくり。'
-    + 'X,Y,Z は溶岩の源のマス（地図の L、1〜24 マス。体は探さない）。'
+    + 'X,Y,Z は溶岩の源（L）か黒曜石（O）のマス（1〜24。体は探さない）。O は掘るだけ（接する溶岩は place= の石で埋め、真下の溶岩か石が無い時は上に水をかける）。'
     + '同じ高さでつながった源は 1 回の注水で面を固め、ダイヤのツルハシで続けて掘って拾い、水を汲み戻す。'
     + 'count（省略時は座標の数）まで、seconds は 5〜300（既定 90）。'
     + '注水で固まった隣の溶岩源（挙げた源から半径 6）の黒曜石は、count まで体が続けて掘る。座標 1 個で隣も掘らせたいなら count=N で総数を決める（count を書かないと座標の数だけで、隣は掘らない）。'
-    + ("立てない時の立ち直しは体。足場は place= の物。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: " +
+    + ("立てない時の立ち直しは体。place= は足場と溶岩を埋める石。掘る数の上限は maxDig=（1〜100、書かなければ体の既定 30。足りない時は体が要る値を言う）。理由: " +
 "no_bucket・no_tool・no_lava・unreachable・lava_danger・limit_dig・limit_time・stuck。")
   ]),
   'fight 相手(#id か名前) [flee] [item=武器] [retreatHp=N] [range=N] [seconds=N]',
