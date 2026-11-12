@@ -356,7 +356,7 @@ export function spendsOf(hands: readonly { do?: string; item?: string; items?: r
   for (const hand of hands) {
     if (hand.do === 'smelt') {
       keepSmelting(hand);
-    } else if (hand.do === 'drop') keepListed(hand.items);
+    } else if (hand.do === 'drop' || hand.do === 'tidy') keepListed(hand.items);
     else if (hand.do === 'chest' && (hand.op === 'put')) keepListed(hand.items);
     else if (hand.do === 'place' && hand.block && hand.at?.length) out.push({ item: hand.block, count: hand.at.length });
     else if (hand.do === 'pillarUp' && hand.block && hand.n) out.push({ item: hand.block, count: hand.n });

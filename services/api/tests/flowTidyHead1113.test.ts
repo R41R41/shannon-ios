@@ -5,6 +5,8 @@ import { handToLine, lineToHand, SHORT_ACT_DESCRIPTION } from '../src/contracts/
 import { actExpectedMilliseconds } from '../src/contracts/minecraftActTime.js';
 import { dropCandidates, packFacts, packLines, tidyExtras } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { keepWordsOf, planMaterials } from '../src/surfaces/minecraft/minecraftLlmcTidyKeep.js';
+import { actSpends } from '../src/surfaces/minecraft/minecraftLlmcPromises.js';
+import { factsIn, PLAN_FACTS_KEY, planFactsOf } from '../src/surfaces/minecraft/minecraftPlanFacts.js';
 
 /**
  * 2026-11-13 (flow design C): the tidy hand (the head's half of the contract) and the pack's words for a nearly full pack. The pack's words that
@@ -101,5 +103,19 @@ describe('the pack words of a nearly full pack (the always-on text does not grow
     const soon = packLines(['cobblestone×300', 'iron_ingot×14', ...filler(24)], { free: 3, held: item => item === 'cobblestone' ? 100 : 0, keepWords: 'iron_ingot:14' }).join('\n');
     expect(soon).toContain('keep=iron_ingot:14');
     expect(soon).toContain('cobblestone×72');
+  });
+});
+
+describe('the tidy hand is seen by the open promises', () => {
+  it('counts the throws a tidy names as a spend, like a drop', () => {
+    expect(actSpends([{ do: 'tidy', items: [{ item: 'oak_planks', count: 8 }] }, { do: 'tidy' }])).toEqual([{ item: 'oak_planks', count: 8 }]);
+  });
+  it('carries the open promises in the plan facts (none closed), and reads them back', () => {
+    const promise = (item: string, count: number, state: 'open' | 'closed') => ({ id: 1, rev: 1, item, count, use: 'x', state, ledger: [] });
+    const tree = { schema: 'v2', revision: 1, current: null, nodes: [], promises: [promise('white_bed', 2, 'open'), promise('cobblestone', 8, 'closed')] };
+    const facts = planFactsOf(tree as never);
+    expect(facts?.promised).toEqual([{ item: 'white_bed', count: 2 }]);
+    expect(factsIn({ [PLAN_FACTS_KEY]: facts })?.promised).toEqual([{ item: 'white_bed', count: 2 }]);
+    expect(planFactsOf({ ...tree, promises: [] } as never)?.promised).toBeUndefined();
   });
 });

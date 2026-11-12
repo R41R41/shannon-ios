@@ -67,9 +67,18 @@ export function waterFailures(body: Rec): WaterFail[] {
 /** The same frame's counts from `world.recentStops` (the body's stop lines), for the places that have no live object. */
 export const waterFailuresOfFrame = (world: Rec | null | undefined): WaterFail[] => waterFailures({ stops: strings(world?.recentStops) });
 
-/** Whether a source belongs to a pool that was given up: within `SAME_POOL` of a failed cell (a failure with no known cell is the one at her feet, if they are known). */
+/**
+ * The failures that still stand where she is: a failure with a known cell always, one with no known cell (the body counted it at her feet) only while her
+ * feet are underground. On the surface it is stale (she walked up from the pool it was counted at) and must not mark the surface water as given up.
+ */
+export function standingFails(fails: readonly WaterFail[], context: WaterContext = {}): WaterFail[] {
+  const below = !!context.feet && isUnderground(context.feet, context.view);
+  return fails.filter(fail => fail.cell !== null || below);
+}
+
+/** Whether a source belongs to a pool that was given up: within `SAME_POOL` of a failed cell (a failure with no known cell is the one at her feet, underground only). */
 export function givenUp(source: P, fails: readonly WaterFail[], context: WaterContext = {}): boolean {
-  return fails.some(fail => { const at = fail.cell ?? context.feet ?? null; return at !== null && dist(source, at) <= SAME_POOL; });
+  return standingFails(fails, context).some(fail => { const at = fail.cell ?? context.feet ?? null; return at !== null && dist(source, at) <= SAME_POOL; });
 }
 
 interface Place { distance: number; at: P }
@@ -85,7 +94,8 @@ export function summaryWaterPlaces(summary: unknown): Place[] {
  * The line that switches the candidates, only when a pool was given up: 「地下のこの水は汲めなかった（3 回）。地表の水へ: 95m (x,y,z)・…」. The surface
  * sources are the map's water at the surface that is not of the given-up pool. Empty when nothing failed twice.
  */
-export function waterSwitchLine(fails: readonly WaterFail[], summary: unknown, feet: P | null, view?: SkyView | null): string | null {
+export function waterSwitchLine(allFails: readonly WaterFail[], summary: unknown, feet: P | null, view?: SkyView | null): string | null {
+  const fails = standingFails(allFails, { feet, view });
   if (!fails.length) return null;
   const times = Math.max(...fails.map(fail => fail.count));
   const where = feet && isUnderground(feet, view) ? '地下のこの水' : 'この水';
@@ -108,7 +118,8 @@ const mentionsWater = (text: unknown): boolean => typeof text === 'string' && /�
  * `dropped` counts them). Every other replace is the decision's, unchanged.
  */
 export function keptSurfaceWaterWalk(open: ReadonlyArray<{ item: string; input?: ActInput }>, replace: readonly string[], input: ActInput,
-  fails: readonly WaterFail[], context: WaterContext = {}): { keep: string[]; note: string | null; input: ActInput; dropped: number } {
+  allFails: readonly WaterFail[], context: WaterContext = {}): { keep: string[]; note: string | null; input: ActInput; dropped: number } {
+  const fails = standingFails(allFails, context);
   const none = { keep: [], note: null, input, dropped: 0 };
   if (!fails.length || !replace.length) return none;
   const retried = (hand: ActHand): boolean => { const cell = bucketAt(hand); return cell !== null && isUnderground(cell, context.view) && givenUp(cell, fails, context); };

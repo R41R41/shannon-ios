@@ -273,6 +273,11 @@ function tidyContext(inventory: readonly string[], bodyIn: Rec): TidyContext {
   const facts = factsIn(bodyIn);
   const kinds = facts ? [...(facts.now ? [facts.now.kind] : []), ...facts.next.map(node => node.kind)] : [];
   const held = planMaterials(kinds, carried);
+  // The open promises hold back what they name (never more than she carries), beside the plan's materials.
+  for (const promise of facts?.promised ?? []) {
+    const have = carried.get(promise.item) ?? 0;
+    if (have > 0) held.set(promise.item, Math.min(have, Math.max(held.get(promise.item) ?? 0, promise.count)));
+  }
   const places = rec(rec(bodyIn.state)?.rememberedPlaces) ?? {};
   const within = (names: readonly string[]): boolean => names.some(name => {
     const text = places[name];

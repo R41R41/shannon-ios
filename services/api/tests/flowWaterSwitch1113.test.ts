@@ -105,6 +105,15 @@ describe('the pool is counted by distance and the surface by the rock over a sou
     expect(givenUp({ x: 1, y: 30, z: 1 }, unknown, { feet: { x: 0, y: 31, z: 0 } })).toBe(true);
     expect(givenUp({ x: 90, y: 30, z: 90 }, unknown, { feet: { x: 0, y: 31, z: 0 } })).toBe(false);
   });
+  it('does not carry a failure of no known cell up to the surface pond she walked to', () => {
+    const stale = [{ cell: null, count: 2 }], feet = { x: 210, y: 63, z: -299 }, pond = { x: 210, y: 63, z: -300 };
+    expect(givenUp(pond, stale, { feet })).toBe(false);
+    expect(waterSwitchLine(stale, SUMMARY, feet)).toBeNull();
+    const retry = act([{ do: 'use', item: 'bucket', at: [pond] }], '水', { replace: ['q79'] });
+    expect(keptSurfaceWaterWalk([{ item: 'q79', input: act([{ do: 'go', to: pond }], '地表の水へ向かう') }], ['q79'], retry, stale, { feet }).keep).toEqual([]);
+    expect(givenUp({ x: 210, y: 35, z: -299 }, stale, { feet: { x: 210, y: 36, z: -299 } })).toBe(true);
+    expect(waterSwitchLine(stale, SUMMARY, { x: 210, y: 36, z: -299 })).toContain('地下のこの水は汲めなかった（2 回）');
+  });
   it('calls a source under rock underground even above y 50, and without rock by its height', () => {
     const roofed = { symbol: (x: number, y: number) => (y === 72 ? '#' : undefined) };
     expect(isUnderground({ x: 1, y: 70, z: 1 }, roofed)).toBe(true);

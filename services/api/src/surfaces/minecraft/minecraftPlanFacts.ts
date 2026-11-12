@@ -40,6 +40,8 @@ export interface PlanFacts {
   above: PlanKind[];
   /** The nodes after the current one as the plan shows them (`planPath`'s pick: at most 3, the first is "the next node"). */
   next: Array<{ id: string; kind: PlanKind }>;
+  /** What the open promises hold back (item and count; none when no promise is open): the tidy words keep these from a throw. */
+  promised?: Array<{ item: string; count: number }>;
 }
 const NEXT_SHOWN = 3;
 
@@ -68,7 +70,8 @@ export function planFactsOf(tree: PlanTree | null | undefined): PlanFacts | null
   const next = order.slice(from).filter(node => node.state === 'continue' || node.state === 'wait')
     .filter(node => !order.some(other => other.parentId === node.id && other.state !== 'done') && !doneAbove(node)).slice(0, NEXT_SHOWN)
     .map(node => ({ id: node.id, kind: kindOf(node) }));
-  return { now: now ? { id: now.id, kind: kindOf(now), ...(now.where ? { where: now.where } : {}), ...(now.doneWhen ? { doneWhen: now.doneWhen } : {}),
+  const promised = (tree.promises ?? []).filter(item => item.state !== 'closed' && item.count > 0).map(item => ({ item: item.item, count: item.count }));
+  return { ...(promised.length ? { promised } : {}), now: now ? { id: now.id, kind: kindOf(now), ...(now.where ? { where: now.where } : {}), ...(now.doneWhen ? { doneWhen: now.doneWhen } : {}),
     ...(now.prep ? { prep: now.prep.state } : {}) } : null, above, next };
 }
 
@@ -93,7 +96,11 @@ export function factsIn(body: Record<string, unknown> | null | undefined): PlanF
     const entry = item && typeof item === 'object' ? item as Record<string, unknown> : null, kind = kindName(entry?.kind), nextId = text(entry?.id);
     return kind && nextId ? [{ id: nextId, kind }] : [];
   }).slice(0, NEXT_SHOWN);
-  return { now, above, next };
+  const promised = (Array.isArray(record.promised) ? record.promised : []).flatMap(item => {
+    const entry = item && typeof item === 'object' ? item as Record<string, unknown> : null, name = text(entry?.item), count = entry?.count;
+    return name && typeof count === 'number' && count > 0 ? [{ item: name, count }] : [];
+  });
+  return { now, above, next, ...(promised.length ? { promised } : {}) };
 }
 
 /** The kinds of the current node and the nodes above it, the nearest first (empty with no current node). */
