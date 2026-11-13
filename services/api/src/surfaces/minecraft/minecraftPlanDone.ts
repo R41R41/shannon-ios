@@ -5,7 +5,7 @@ import { newerClause, type ActClause } from '../../contracts/minecraftActConditi
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { foodEnough, foodStockWords, woodEnough, woodLogs, woodStockWords } from './minecraftStockLevels.js';
 import { kindOf } from './minecraftPlanFacts.js';
-import { isSeenName, SEEN_WORDS, type SeenName } from './minecraftSeenMarks.js';
+import { GATE_SPAWN_M, isSeenName, SEEN_WORDS, type SeenName } from './minecraftSeenMarks.js';
 
 export { doneFacts, type DoneFacts };
 
@@ -179,7 +179,8 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
     case 'act': return clauseLack(clause.clause, facts);
     case 'food': return foodPointsWords(facts.food, clause.points);
     case 'stock': return clause.what === 'food' ? foodStockWords(facts.food, facts.foodNear, facts.foodHay) : woodStockWords(woodLogs(facts.counts), facts.woodNear);
-    case 'see': return `${SEEN_WORDS[clause.what]}はまだ見えていない`;
+    case 'see': return clause.what === 'gate_spawn' ? `ゲートの ${GATE_SPAWN_M}m 内のリスポーン地点はまだ無い（ベッドを place して use）`
+      : `${SEEN_WORDS[clause.what]}はまだ見えていない`;
     case 'crystals': return typeof facts.crystals === 'number' ? `エンドクリスタル 残り ${facts.crystals}（${clause.max} 以下が条件）`
       : 'エンドクリスタルの残りは体がまだ数えていない';
     case 'dim': return `次元 ${clause.dimension}（今 ${facts.dimension ?? '不明'}）`;

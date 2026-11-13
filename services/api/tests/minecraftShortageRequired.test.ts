@@ -87,7 +87,7 @@ describe('a stage that says what its lack costs says it in two parts; the others
     expect(PREP_RULES_WORDS).not.toContain('ネザーへ入る手は止まる');
     expect(PREP_RULES_WORDS).toContain('そろうまで入らない。理由を書いても省けない）: 盾 1・鉄の剣・鉄の兜と胸当て（着る）・ツルハシ（ダイヤ 1 か鉄 3）・足場のブロック 32');
     expect(PREP_RULES_WORDS).toContain('目標（あれば持つ。無くても入る）: 予備の盾と作り直しの材料（鉄 2・板 16。');
-    expect(PREP_RULES_WORDS).toContain('ゲートが点いたら、その場ですぐ入る');
+    expect(PREP_RULES_WORDS).toContain('その後すぐ入る（必須がそろっていれば、目標のために地上へ戻らない');
   });
   it('says the food as a required lack, not as a goal', () => {
     const hungry = preparationShortage({ dimension: 'overworld', counts: owned(KIT.filter(([name]) => name !== 'cooked_beef'), WORN), food: 15.6, nowKinds: ['portal'], worn: WORN_PIECES })!;
@@ -312,11 +312,11 @@ describe('the first plan and the knowledge say the required list where the model
       expect(cautionOf(titled('ダイヤ（y=-58）')), word).toContain(word);
       expect(cautionOf(titled('黒曜石10とゲート')), word).toContain(word);
     }
-    const light = plan.nodes.find(node => node.title === 'ゲートを組んで火をつける')!;
+    const light = plan.nodes.find(node => node.title === 'ゲートを組んで火をつける（noEnter）')!;
     expect(cautionOf(light)).toContain('火をつける前に必須を確かめる');
     expect(cautionOf(titled('黒曜石10とゲート'))).toContain('足場32');
-    expect(cautionOf(titled('黒曜石10とゲート'))).toContain('点いたらその場ですぐ入る');
-    expect(cautionOf(light)).toContain('点いたらその場ですぐ入る');
+    expect(cautionOf(titled('黒曜石10とゲート'))).toContain('点いたらゲートの前にベッドを置いて use し、すぐ入る');
+    expect(cautionOf(light)).toContain('portal は noEnter で点ける');
     expect(cautionOf(titled('黒曜石10とゲート'))).toContain('ツルハシ');
   });
   // The review of 11/10 (G06) asked two shields with iron 2 and planks 16 before the gate; run 8 (11/13) held a lit gate for them for minutes. One shield is
@@ -330,7 +330,7 @@ describe('the first plan and the knowledge say the required list where the model
     const iron = plan.nodes.find(node => node.title.startsWith('残りの鉄をまとめて採り焼く'))!;
     expect(iron.title).toBe('残りの鉄をまとめて採り焼く・剣・盾・バケツ');
     expect(cautionOf(iron)).toContain('盾1はゲートの必須。予備の盾と作り直しの鉄2・板16は目標');
-    const light = plan.nodes.find(node => node.title === 'ゲートを組んで火をつける')!;
+    const light = plan.nodes.find(node => node.title === 'ゲートを組んで火をつける（noEnter）')!;
     for (const node of [titled('黒曜石10とゲート'), light]) expect(cautionOf(node), node.title).toContain('盾1・鉄の剣');
     expect(openingDraft(seedPlan('エンドラを倒して', 'overworld'))).not.toContain('盾2（予備1）');
   });

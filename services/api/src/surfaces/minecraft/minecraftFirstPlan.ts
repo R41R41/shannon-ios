@@ -77,14 +77,22 @@ const TO_NETHER: readonly PlanSeed[] = [
   // 「|have:ender_eye>=10」 (end1108d S9, 11/8): 12 eyes less the one or two just thrown and not yet picked up still close the stages that make them.
   // Run 8 (11/13): the gate was lit at y=-19 and she gathered spares beside it for minutes; the gate's required are the owner's five and food 40, and
   // a lit gate is entered at once. The obsidian's node closes when a lit portal is in view (the frame's 10 leave the pack and the node opened again).
+  // Run 10 (11/14, the owner): she died in the Nether with 7 rods and came back far off, and the pack lay there for its 5 minutes. Before going in,
+  // a bed of the 8 is set down in front of the lit gate and used (by day it sets the point without a sleep) and left standing: she comes back
+  // there, 4 s from the Nether. So the gate is lit with noEnter (the light's node closes on the lit portal) and the entering is its own node.
   node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10', caution: ['必須（盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ（ダイヤ1か鉄3）・足場32・食料40点）が欠けたら入らない',
-    '点いたらその場ですぐ入る（必須がそろえば、目標のために地上へ戻らない）'], children: [
+    '点いたらゲートの前にベッドを置いて use し、すぐ入る（目標のために地上へ戻らない）'], children: [
     node('溶岩源で黒曜石10（ゲートの分）', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|see:nether_portal|dim:the_nether|have:ender_eye>=10', note: 'ゲートの 10 だけ取る。10 に届いたら掘りをやめてゲートへ（竜戦の分 12 は出発の点検で別に取る）' }),
     node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether|have:ender_eye>=10',
       note: '火打石は下りや横掘りで見た砂利を掘って持つ（1個10%）。火打石のために地表へ戻らない。鉄のある高さで先に作る' }),
-    node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10',
-      caution: ['火をつける前に必須を確かめる: 盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ・足場32・食料40点。点いたらその場ですぐ入る',
-        'ベッドは寝る用2を残し、ゲートの横の箱に預けて入る（1個1マス。帰りに同じゲートで取る）'] })] }),
+    node('ゲートを組んで火をつける（noEnter）', { kind: 'portal', doneWhen: 'see:nether_portal|dim:the_nether|have:ender_eye>=10',
+      caution: ['火をつける前に必須を確かめる: 盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ・足場32・食料40点',
+        'portal は noEnter で点ける（入る前にゲートの前のベッドの節がある）'] }),
+    node('ゲートの前にベッドを置いて use（寝ない・壊さない）', { kind: 'portal', doneWhen: 'see:gate_spawn|dim:the_nether|have:ender_eye>=10',
+      note: 'ネザーで死んでもゲートの前で復活し、すぐ戻って落とし物（約5分で消える）を拾える。昼も use でリスポーン地点になる。集めた8個の1個を使う',
+      caution: ['現世側の枠の2〜4m前の床に bed を place→use。掘らずに残す（帰りに掘って8に戻す）', 'ベッドが無ければ skip と理由で閉じて入る'] }),
+    node('ゲートに入る（p のマスへ walk）', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10',
+      caution: ['ベッドは寝る用2を残し、ゲートの横の箱に預けて入る（1個1マス。帰りに同じゲートで取る）'] })] }),
 ];
 /**
  * Run 26 (owner 2026-10-21): she went on to the fortress with no table, slabs, shield or food; each stage past
@@ -134,7 +142,7 @@ const BEYOND: readonly PlanSeed[] = [
     note: '帰ってすぐ目玉を 1 個投げて交点の向きを知る（約 10 秒）。水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ: 自動救済は対応版で有効な時だけ手・hotbar の水。'
       + '下降は事前に水を置くか vertical',
     children: [node('ベッドを8個にする（預けた箱から・羊毛3と板3）', { kind: 'bed', doneWhen: 'have:bed>=8',
-        note: '羊毛は鋏（鉄2）で刈ると1頭1〜3枚（殺すと1枚）。村のベッドが8に足りない時に。9個目は枠の近くに置くリスポーン用（戦い用の8とは別）' }),
+        note: 'ゲートの前のベッドも掘って持つ。羊毛は鋏（鉄2）で刈ると1頭1〜3枚（殺すと1枚）。8に足りない時に。9個目は枠の近くに置くリスポーン用（戦い用の8とは別）' }),
       node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12', note: '戻ったゲートの枠から（回収の節）。足りない分は溶岩で' }),
       node('弓と矢（矢は最低 12・目標 30。道中の材料とスケルトンの矢で。寄り道しない）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30',
         note: '糸（クモ）・棒・火打石・羽根。弓があればクリスタルを地面から撃てる（無いと柱を登る）。矢 12 は檻なし 8 本に 1 射ずつと予備。無くても入場は止まらない' })] }),
@@ -285,7 +293,9 @@ export const OPENING_DRAFT_WORDS = [
 export function openingDraft(seed: PlanTree | null): string | null {
   if (!seed) return null;
   const order = orderedPlan(seed.nodes), tops = order.filter(item => item.parentId === null);
-  const gate = tops.findIndex(item => /(?:^|[&|])dim:the_nether(?:$|[&|])/u.test(item.doneWhen ?? ''));
+  // The gate is the node whose first alternative is the Nether (「黒曜石10とゲート」, 「ネザーに入る」). The golden boots' node (11/13) has the
+  // Nether only as a later alternative, and the old test on any alternative ended the draft there, before the obsidian and the gate.
+  const gate = tops.findIndex(item => /^dim:the_nether(?:$|[&|])/u.test((item.doneWhen ?? '').replace(/\s+/gu, '')));
   if (gate < 0) return null;
   const kept = new Set(tops.slice(0, gate + 1).map(item => item.id));
   const depth = (id: string | null): number => { let d = 0; for (let up = id; up !== null && d < 8; d += 1) up = seed.nodes.find(item => item.id === up)?.parentId ?? null; return d; };

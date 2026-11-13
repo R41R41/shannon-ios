@@ -6,13 +6,14 @@
  * The names are the body's own fixed labels (`mapMarks.ts`). Nothing here guesses a place from anything else.
  */
 export const SEEN_NAMES = ['fortress', 'bastion', 'spawner', 'blaze_spawner', 'nether_portal', 'end_portal_frame', 'end_portal', 'stronghold',
-  'village', 'warped_forest'] as const;
+  'village', 'warped_forest', 'gate_spawn'] as const;
 export type SeenName = typeof SEEN_NAMES[number];
 export const isSeenName = (name: string): name is SeenName => (SEEN_NAMES as readonly string[]).includes(name);
 /** What a status says is not in view yet. */
 export const SEEN_WORDS: Readonly<Record<SeenName, string>> = Object.freeze({
   fortress: 'ネザー要塞（ネザーレンガ）', bastion: '砦の遺跡', spawner: 'スポナー', blaze_spawner: 'ブレイズのスポナー', nether_portal: 'ネザーポータル',
   end_portal_frame: 'エンドポータルの枠', end_portal: '開いたエンドポータル', stronghold: 'ストロングホールドの中', village: '村', warped_forest: '歪んだ森',
+  gate_spawn: 'ゲートのそばのリスポーン地点（ベッドを use）',
 });
 
 export interface Mark {
@@ -58,6 +59,29 @@ export function warpedForestIn(world: Record<string, unknown>): boolean {
   return typeof world.biomesSeen === 'string' && /warped_forest(?!\s*未見)/u.test(world.biomesSeen);
 }
 
+/** How near the respawn bed stands to the gate to be the gate's (the bed is set down 2 to 4 m in front of the frame). */
+export const GATE_SPAWN_M = 8;
+const CELL = /\((-?\d+),\s*(-?\d+),\s*(-?\d+)\)/u;
+const cellOf = (value: unknown): { x: number; y: number; z: number } | null => {
+  const found = typeof value === 'string' ? CELL.exec(value) : null;
+  return found ? { x: Number(found[1]), y: Number(found[2]), z: Number(found[3]) } : null;
+};
+/**
+ * Run 10 (11/14, the owner): she died in the Nether after 7 rods and came back far off; the rods, diamond tools and armour lay by the
+ * blazes for their 5 minutes. A bed used by the gate (overworld side, not slept in) is where she comes back, 4 s from the Nether.
+ * True when the body's own respawn bed (`rememberedPlaces.respawn`, this dimension's) is within `GATE_SPAWN_M` of a nether portal it
+ * sees (a landmark) or remembers (`rememberedPlaces.nether_portal`).
+ */
+export function gateSpawnIn(world: Record<string, unknown>): boolean {
+  const raw = world.rememberedPlaces;
+  const places = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
+  const bed = cellOf(places?.respawn);
+  if (!bed) return false;
+  const remembered = cellOf(places?.nether_portal);
+  const portals = [...marksOf(world.mapLandmarks).filter(mark => namesOf(mark).includes('nether_portal')), ...(remembered ? [remembered] : [])];
+  return portals.some(cell => Math.hypot(cell.x - bed.x, cell.y - bed.y, cell.z - bed.z) <= GATE_SPAWN_M);
+}
+
 /** What is in view: the names of the marks, and the structure she is in (`inside`). */
 export function seenMarks(world: Record<string, unknown>): ReadonlySet<SeenName> {
   const seen = new Set<SeenName>(marksOf(world.mapLandmarks).flatMap(namesOf));
@@ -66,6 +90,7 @@ export function seenMarks(world: Record<string, unknown>): ReadonlySet<SeenName>
   if (/砦の遺跡/u.test(inside)) seen.add('bastion');
   if (/ストロングホールド/u.test(inside)) seen.add('stronghold');
   if (warpedForestIn(world)) seen.add('warped_forest');
+  if (gateSpawnIn(world)) seen.add('gate_spawn');
   return seen;
 }
 
