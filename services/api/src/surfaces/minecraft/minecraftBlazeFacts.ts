@@ -33,10 +33,10 @@ const SWORD_FACT = 'ブレイズは剣で倒す: 体力 14 以上の時に、見
   + '。ロッドは倒れた所に落ちる: 幅 1 の橋や足場の外で倒すと下へ落ちて失う（end1108h21: 13 体で 3 本）。湧き場の部屋の床の上で斬り、落ちた棒は pickup target=blaze_rod'
   + '。pickup が「掘らない道が無い」「そこまで着けない」と返した棒は、同じ pickup を出し直さず、pickup target=blaze_rod に canDig=[nether_bricks,netherrack] maxDig 6 を付けて出す（煉瓦・ネザーラックは既定では掘らない）'
   + '（end1108h27: 同じ pickup 3 回・3 分の間に棒が消えた）'
-  + '。上に浮いて、または壁の向こうで attack が「届かない」と返った相手へ、同じ id の attack を出し直さない（h27: 届かない 7 回）。壁の陰で attack hold して寄るのを待つのは効かない: 壁の向こうのブレイズは壁で止まって来ない'
+  + '。上に浮いて、または壁の向こうで attack が「届かない」と返った相手へ、同じ id の attack を出し直さない（h27: 届かない 7 回）。壁越しで届かない相手が 2 回続いたら、同じ act の中で壁の 1 マスを dig（collect=false・accept に blaze）してから attack を出す。壁の陰で attack hold して寄るのを待つのは効かない: 壁の向こうのブレイズは壁で止まって来ない'
   + '（end1108h23: 煉瓦の陰で hold 8 秒を 51 回・10 分、振れたのは 0 回。h22 の 14 体は全部、見えている届く 1 体を追った attack）'
   + '。attack は体が 2m まで追って斬る: 見えている 8m 内の 1 体は、3m まで来るのを待たずにすぐ attack target=#id（end1109f03: 湧き場から 12〜14m で「3m まで来たら斬る」と wait を 10 分続け、撃破 0。ブレイズは上下に動き、多くは剣の高さへ下りてくる）'
-  + '。見えている 8m 内の 1 体がいない時は、体力 18 以上なら野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁のある足場）へ go で入り、そこで見えた 1 体を待たずに斬り続ける（S7 を通った end1108h23・h25 は湧き場から 1〜3m で 11・14 体を斬った。h13 は同じ所で 10 秒待って死んだ＝危ないのは近さではなく待つこと。f07 は 5〜7m の床の縁へ出て数体に撃たれ死んだ）。ただし 8m 内に壁の向こうも含めて 3 体以上いる時は入らない（end1109f16・f17: 3〜6 体の脇へ入り 20 秒で死亡）: 今の陰から壁の 1 マスだけを開けて 1 体ずつ';
+  + '。見えている 8m 内の 1 体がいない時は、体力 18 以上なら野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁があり上が覆われた足場。覆いが無ければ先に頭上へ place 1 手）へ go で入り、そこで見えた 1 体を待たずに斬り続ける（S7 を通った end1108h23・h25 は湧き場から 1〜3m で 11・14 体を斬った。h13 は同じ所で 10 秒待って死んだ＝危ないのは近さではなく待つこと。f07 は 5〜7m の床の縁へ出て数体に撃たれ死んだ）。ただし 8m 内に壁の向こうも含めて 3 体以上いる時は入らない（end1109f16・f17: 3〜6 体の脇へ入り 20 秒で死亡）: 今の陰から壁の 1 マスだけを開けて 1 体ずつ';
 
 /** `camped`: blazes were near on this Nether visit. end1108h15 S7 (11/8): at 0 arrows she held attack 7 minutes about 20 m off the spawner;
  * three quiet minutes ended the watch, and with it the line that farther than 16 m nothing spawns. The spawner's lines stay until she leaves. */
@@ -295,12 +295,12 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
   if (!mark) return first ? `${head}。見えた 1 体へ 8m まで go で寄り、attack target=${tag(first)}` : `${head}。湧き場はまだ見つかっていない（mapLandmarks に blaze_spawner が無い）: ここは湧き場ではない。mc_probe kind=camp で湧き場を探し、無ければネザーレンガの続く向きへ 100m 進んで読み直す（要塞の端でうろついても湧かない）`;
   const place = `${mark.item.x},${mark.item.y},${mark.item.z}`;
   if (mark.distance <= 7.5 && !first && missed.length === 0) {
-    return `${head}。湧き場から ${Math.round(mark.distance)}m だが壁の陰: 野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁のある足場）へ go ${place} range=3 で入る（間の壁は dig で掘る。act の accept に blaze を入れる）。着いたら見えた 1 体を待たずに attack`;
+    return `${head}。湧き場から ${Math.round(mark.distance)}m だが壁の陰: 野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁があり上が覆われた足場。覆いが無ければ先に頭上へ place 1 手）へ go ${place} range=3 で入る（間の壁は同じ act の dig で掘る。act の accept に blaze を入れる）。着いたら見えた 1 体を待たずに attack`;
   }
   if (mark.distance <= 7.5) {
     return `${head}。もう湧き場から ${Math.round(mark.distance)}m の所にいる: 新しいのは湧き場の周り 4 マスに湧くので、見えた 1 体が 8m 内に入ったらすぐ attack`;
   }
-  return `${head}。湧き場まで ${Math.round(mark.distance)}m: go ${place} range=3 で湧き場から 3m 以内の野営マスへ入り（壁のある足場が安全。待つと燃やされるので着いたら斬り続ける。間の壁は dig で掘る。act の accept に blaze を入れる: 入れないとブレイズに身をさらす壁を体が掘らない）、着いたら見えた 1 体へ attack target=#id`;
+  return `${head}。湧き場まで ${Math.round(mark.distance)}m: go ${place} range=3 で湧き場から 3m 以内の野営マスへ入り（壁があり上が覆われた足場が安全。待つと燃やされるので着いたら斬り続ける。間の壁は dig で掘る。act の accept に blaze を入れる: 入れないとブレイズに身をさらす壁を体が掘らない）、着いたら見えた 1 体へ attack target=#id`;
 }
 
 /** The line from the numbers (pure). */
