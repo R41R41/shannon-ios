@@ -4,8 +4,8 @@ import { tableNote } from '../src/surfaces/minecraft/minecraftLlmcTableNote.js';
 import { holdV2 } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
 
 /** The crafting table's place and reach said beside a make that needs a table (the coordinator's list for 11/4, item 4: no_table). */
-const frame = (found: Array<{ block: string; distance: number }>, scanned = true): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't',
-  connected: true, facts: {}, state: { world: { dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: [], worn: '',
+const frame = (found: Array<{ block: string; distance: number }>, scanned = true, inventory: unknown[] = []): BodyObservation => ({ schemaVersion: 1, bodyId: 'b', sequence: 1, stateAt: 't', receivedAt: 't',
+  connected: true, facts: {}, state: { world: { dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory, worn: '',
     utilities: { radius: 16, dim: 'overworld', scanned, found } } as never } });
 const make = (item: string) => ({ hands: [{ do: 'make', item }] });
 
@@ -27,6 +27,7 @@ describe('the table note', () => {
     expect(tableNote({ hands: [{ do: 'equip', item: 'shield' }, { do: 'craft', item: 'iron_pickaxe' }] }, frame([]))).toContain('手 2 craft iron_pickaxe');
   });
   it('goes to the act as a note: nothing is held', () => {
-    expect(holdV2(make('stone_pickaxe'), frame([]), 'tn')).toMatchObject({ note: expect.stringContaining('作業台が見えない') });
+    // The pack holds the materials (a make without them is held by the form check, minecraftLlmcGoGuard.ts), so only the table note is in question.
+    expect(holdV2(make('stone_pickaxe'), frame([], true, [{ name: 'cobblestone', count: 3 }, { name: 'stick', count: 2 }]), 'tn')).toMatchObject({ note: expect.stringContaining('作業台が見えない') });
   });
 });
