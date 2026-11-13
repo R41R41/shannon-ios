@@ -88,7 +88,7 @@ export function fcaMinecraftTools(parts: { control: MinecraftControl; step: Task
    * own words (`minecraftLlmc.ts`), and every command carries the task's plan for the body to show. Absent: as before.
    */
   llmc?: { plan(): BodyPlanView | undefined;
-    observedProbe?(result: string | undefined): void;
+    observedProbe?(result: string | undefined, input?: unknown): void;
     /** Whether the decision now running was an urgent one (its act is held to three hands). */
     urgent?(): boolean;
     /** The task queue (`minecraftLlmcQueue.ts`): an `mc.act` is an item put in it, and the tool returns when the body
@@ -282,7 +282,7 @@ function nodeTagged(call: Parameters<FcaExternalTools['execute']>[0], plan: Body
  */
 async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; bodyId: string; id: string; skill: string;
   call: Parameters<FcaExternalTools['execute']>[0]; active: NonNullable<ReturnType<typeof currentActionExecution>>; plan: BodyPlanView | undefined;
-  fixes: readonly string[]; observedProbe?(result: string | undefined): void }) {
+  fixes: readonly string[]; observedProbe?(result: string | undefined, input?: unknown): void }) {
   const { control, step, bodyId, call, active } = parts;
   active.stepOutcome = 'unknown';
   // A view's or a probe's deadline: its own time.
@@ -290,7 +290,7 @@ async function runLlmcCall(parts: { control: MinecraftControl; step: TaskStep; b
   const receipt = await control.command({ id: parts.id, context: minecraftTaskContext(step, bodyId, step.id, parts.plan), lease: step.lease,
     kind: 'skill', skill: parts.skill, arguments: call.input as Record<string, unknown>, milliseconds }, call.signal);
   active.stepOutcome = 'acknowledged';
-  if (call.name === MC_PROBE_TOOL && receipt.outcome === 'completed') parts.observedProbe?.(receipt.result);
+  if (call.name === MC_PROBE_TOOL && receipt.outcome === 'completed') parts.observedProbe?.(receipt.result, call.input);
   return llmcResult(call.name, receipt, null, parts.fixes);
 }
 export function combineFcaTools(...ports: Array<FcaExternalTools | undefined>): FcaExternalTools {

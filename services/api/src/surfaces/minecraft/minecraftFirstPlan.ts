@@ -104,13 +104,17 @@ const BEYOND: readonly PlanSeed[] = [
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('8m 内の見えるブレイズへ待たずに attack target=#id（体が追う）、剣で 20 体ほど（矢なし）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
   node('エンダーパール14以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 14 }, doneWhen: 'have:ender_pearl>=14|have:ender_eye>=12', note: '枠に11〜12・投げの損耗に2〜3',
-    children: [node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金の延べ棒をピグリンに投げて交換', { kind: 'pearl' }), node('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2。寝ると夜が飛ぶので寝ない）', { kind: 'pearl' })] }),
+    // Run 9 (11/12): after the rods she scanned and searched 0 times, took the way back for the pearls (about 1,100 s, 0 pearls). The search is the first child,
+    // done by what the body saw; the rest of the pearl's children stay until the pearls are in.
+    children: [node('歪んだ森を探す（走査→見えていない向きへ90mのgo→走査）', { kind: 'nether', doneWhen: 'see:warped_forest',
+      note: 'ネザーに居たまま。1 回 約 90 秒。範囲内に無く 90m の go を 3 回重ねても出ない時は、この節を skip と理由で閉じて最後の手（地上の夜）へ' }),
+      node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金の延べ棒をピグリンに投げて交換', { kind: 'pearl' }), node('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2。寝ると夜が飛ぶので寝ない）', { kind: 'pearl' })] }),
   // The coordinator, 11/9 (thru-1110's table): leave the Nether with 12 eyes, not 10 (a frame holds one from the start 1 time in 10, 1.2 on
   // average, so about 11 are needed, and a throw breaks about 1 in 5). A node closed in the Nether stays done while eyes fly; a first plan made
   // in the overworld with 10 or more eyes has these stages taken out (`strongholdFirst`, EYES_FOR_STRONGHOLD), so 10 still keep her from going back.
   node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=12', note: '材料があれば14作る。12以上でネザーを出る（枠に最初から入るのは平均1.2個、投げは1回約2割で割れる。投げて落ちたアイは拾う。枠の空きを見て足りない時だけ戻る）',
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
-  node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: '帰りのゲートから。ポータルの対は live の控え' }),
+  node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: 'パールとアイがそろってから（アイ12以上）。帰りのゲートから。ポータルの対は live の控え。そろう前に始めるなら、エンダーパールの節を skip と理由で閉じてから（往復で戻る理由は黒曜石・ベッドではない）' }),
   // thru-1110 (11/9): the arrows are the fallback's, not the beds' way (the End's gate holds no first entry for them when the beds are in), and a
   // through run brings none from the Nether (the blazes are cut with the sword): the check no longer waits for 30 of them.
   node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=330&have:bed>=8&have:obsidian>=8&have:ender_eye>=10&have:water_bucket',

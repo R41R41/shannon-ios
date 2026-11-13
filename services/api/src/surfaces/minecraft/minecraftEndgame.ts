@@ -9,7 +9,8 @@ import { createClimbWatch, crystalLine, deathLine, dragonApproachLine, dragonLin
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
-import { pearlLine } from './minecraftPearlFacts.js';
+import { pearlLine, pearlSearchLines, searchingForPearls, type PearlSearch } from './minecraftPearlFacts.js';
+import { readActResult } from '../../contracts/minecraftActContract.js';
 import { undergroundInOverworld } from './minecraftPlanDone.js';
 import { createWoolWatch } from './minecraftWoolFacts.js';
 
@@ -38,7 +39,7 @@ const some = (line: string | null): string[] => line ? [line] : [];
 
 /** The lines of one decision from the frame and the ledger's lines (pure). */
 function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[],
-  watched: { blaze: string | null; hunt: string | null; trail?: string | null; wool?: string | null; climb?: ((shooting: boolean | null) => string | null); pearlNow?: boolean }): EndgameLines {
+  watched: { blaze: string | null; hunt: string | null; trail?: string | null; wool?: string | null; climb?: ((shooting: boolean | null) => string | null); pearlNow?: boolean; search?: PearlSearch }): EndgameLines {
   const { blaze, hunt } = watched;
   const arrows = ['arrow', 'spectral_arrow', 'tipped_arrow'].reduce((sum, item) => sum + (facts.counts.get(item) ?? 0), 0);
   const shooting = facts.counts.size ? (facts.counts.get('bow') ?? 0) > 0 && arrows > 0 : null;
@@ -53,7 +54,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const places = some(placeLine(world, carried(facts.counts, 'bed')));
   const footing = some(footingLine(facts.counts, facts.dimension));
   const enclosed = [...some(enclosedLine(world)), ...some(pillarLine(world))];
-  const pearls = some(pearlLine(facts.counts, facts.dimension));
+  const pearls = [...some(pearlLine(facts.counts, facts.dimension)), ...pearlSearchLines(world, facts.counts, facts.dimension, watched.search ?? { scans: 0, goes: 0 })];
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true)),
     ...some(dragonWaitUrgentLine(end))];
@@ -81,12 +82,26 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
   const wool = createWoolWatch();
   const climb = createClimbWatch();
   const trail = createDescentTrail((saved as { minecraftDescentTrail?: unknown } | null)?.minecraftDescentTrail);
+  const savedSearch = (saved as { minecraftPearlSearch?: Partial<PearlSearch> } | null)?.minecraftPearlSearch;
+  const search: PearlSearch = { scans: Math.max(0, Math.floor(Number(savedSearch?.scans) || 0)), goes: Math.max(0, Math.floor(Number(savedSearch?.goes) || 0)) };
+  const goIds: string[] = [];
   return {
     /** An act's result (the receipt's id and its result JSON): a thrown eye goes in the ledger. */
     noteResult(id: string | undefined, resultJson: string | undefined, observation: BodyObservation | null): void {
       ledger.note(id, resultJson, doneFacts(observation)?.dimension ?? null, now());
       blaze.note(id, resultJson, now());
       hunt.note(id, resultJson, now());
+      // The search for a warped forest: each `go` of an act while the rods are in hand and the pearls missing in the Nether, once per receipt.
+      const facts = doneFacts(observation);
+      if (facts && searchingForPearls(facts.counts, facts.dimension) && !(id && goIds.includes(id))) {
+        const goes = readActResult(resultJson)?.lines.filter(line => line.do === 'go').length ?? 0;
+        if (goes > 0) { search.goes += goes; if (id) goIds.push(id); if (goIds.length > 20) goIds.shift(); }
+      }
+    },
+    /** A probe's input came back completed: a scan counts as a search while the pearls are being looked for (`pearlSearchLines`). */
+    noteProbe(input: unknown, observation: BodyObservation | null): void {
+      const facts = doneFacts(observation);
+      if ((input as { kind?: unknown } | null)?.kind === 'scan' && facts && searchingForPearls(facts.counts, facts.dimension)) search.scans += 1;
     },
     /** The lines of this decision: empty for a task that is not after the dragon. */
     lines(observation: BodyObservation | null, dragonTask: boolean, pearlNow = false): EndgameLines {
@@ -97,11 +112,11 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       const end = endViewOf(observation);
       return compose(world, end, facts, eyeLinesOf(ledger, facts, now()), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),
         hunt: hunt.line(world, facts.counts, facts.dimension, now()), trail: trail.line(facts),
-        wool: wool.line(world, facts.counts, facts.dimension), climb: shooting => climb.line(end, shooting, now()), pearlNow });
+        wool: wool.line(world, facts.counts, facts.dimension), climb: shooting => climb.line(end, shooting, now()), pearlNow, search });
     },
     /** The eyes' ledger, for the hold that keeps the frames' eyes (`minecraftEyeThrowHold.ts`). */
     ledger,
-    checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint(), ...hunt.checkpoint(), ...trail.checkpoint() }),
+    checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint(), ...hunt.checkpoint(), ...trail.checkpoint(), minecraftPearlSearch: { ...search } }),
   };
 }
 export type Endgame = ReturnType<typeof createEndgame>;

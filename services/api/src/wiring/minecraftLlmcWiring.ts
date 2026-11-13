@@ -449,7 +449,7 @@ queue.onRan(noteQueueResult);
   const stepPorts = () => ({
     // No image reflex of the head in the mode (r2), and none offered as a tool (r3): no entry, no selector.
     body: { llmc: bodyParts, fastJudgment: false, entry: null, selector: null, openIds: () => queue.openIds() },
-    tools: { llmc: { plan: display, observedProbe: (result: string | undefined) => worksite.remember(result, observe()),
+    tools: { llmc: { plan: display, observedProbe: (result: string | undefined, input?: unknown) => { worksite.remember(result, observe()); endgame.noteProbe(input, observe()); },
       urgent: () => urgentDecision(step.taskId), queue, madeIn: () => read,
       // Amendment A-7 1: an act's `keep` becomes promises of the plan, by the plan's own handling (the same as
 // `plan.update`'s promise op).

@@ -31,3 +31,41 @@ export function pearlLine(counts: ReadonlyMap<string, number>, dimension: string
     + `ピグリンとの交換は金の延べ棒 ${GOLD_PER_PEARL} 個（金塊 約 ${nuggets} 個・ネザー金鉱石 約 ${ores} 個）で平均 1 個、`
     + `持っている金の延べ棒 ${gold} 個では平均 約 ${trade} 個`;
 }
+
+/**
+ * The search for a warped forest, as lines beside the pearl line (run 9, 11/12: after the 7 rods she scanned 0 times, never saw the biomes she
+ * had passed, took the way back for the pearls and found none in about 1,100 s). Only while she is in the Nether with the rods in hand and the
+ * pearls missing: the biomes the body reports (`world.biomesSeen`), where a warped forest was seen or none, how many times she searched and
+ * scanned, the way back to the gate, and the two hunts' numbers side by side. Numbers and what the body said; nothing here stops a way.
+ */
+const RODS_FOR_EYES = 7;
+const WALK_BLOCKS_PER_SECOND = 1.2;
+export const SEARCH_GO_BLOCKS = 90;
+export const searchingForPearls = (counts: ReadonlyMap<string, number>, dimension: string | null): boolean =>
+  dimension === 'the_nether' && carried(counts, 'blaze_rod') + carried(counts, 'blaze_powder') >= RODS_FOR_EYES
+  && carried(counts, 'ender_pearl') + carried(counts, 'ender_eye') < PEARL_TARGET;
+
+export interface PearlSearch { scans: number; goes: number }
+const textOf = (value: unknown): string => typeof value === 'string' ? value : '';
+const placeRow = (world: Record<string, unknown>, kind: string): string => {
+  const places = world.rememberedPlaces;
+  return places && typeof places === 'object' && !Array.isArray(places) ? textOf((places as Record<string, unknown>)[kind]) : '';
+};
+
+export function pearlSearchLines(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null,
+  search: PearlSearch): string[] {
+  if (!searchingForPearls(counts, dimension)) return [];
+  const biomes = textOf(world.biomesSeen).slice(0, 300);
+  const entry = biomes.split(/[・,、]/u).map(item => item.trim()).find(item => /^warped_forest(?!\s*未見)/u.test(item));
+  const place = placeRow(world, 'warped_forest');
+  const forest = place ? `歪んだ森 ${place.slice(0, 60)}` : entry ? entry : null;
+  const gate = /^(\d+)m/u.exec(placeRow(world, 'nether_portal'));
+  const toGate = gate ? `ゲートまで ${gate[1]}m（歩いて 約 ${Math.round(Number(gate[1]) / WALK_BLOCKS_PER_SECOND)} 秒）。` : '';
+  const lines = [`ネザーでロッド ${RODS_FOR_EYES} 本・パールが足りない間の歪んだ森: ${forest ?? '未見'}。探した回数 ${search.goes}（走査 ${search.scans} 回）。${toGate}`
+    + `探すなら 1 回 ${SEARCH_GO_BLOCKS}m ≈ ${SEARCH_GO_BLOCKS} 秒。歪んだ森の狩りは 約 25 分で 11 個（ラボ）、現世の夜は 約 1 時間で 12 個（他の AI の前例。この体は未検証）`];
+  if (biomes) lines.push(`通ったバイオーム: ${biomes}`);
+  lines.push(forest
+    ? '歪んだ森が見えている: 90m ごとの go で寄り、屋根の場所を読んで fight target=enderman。パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）'
+    : '次の手: mc_probe kind=scan → 見えていない向きへ 90m の go → 走査。ネザーに居たまま集め、パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）');
+  return lines;
+}

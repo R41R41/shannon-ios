@@ -6,13 +6,13 @@
  * The names are the body's own fixed labels (`mapMarks.ts`). Nothing here guesses a place from anything else.
  */
 export const SEEN_NAMES = ['fortress', 'bastion', 'spawner', 'blaze_spawner', 'nether_portal', 'end_portal_frame', 'end_portal', 'stronghold',
-  'village'] as const;
+  'village', 'warped_forest'] as const;
 export type SeenName = typeof SEEN_NAMES[number];
 export const isSeenName = (name: string): name is SeenName => (SEEN_NAMES as readonly string[]).includes(name);
 /** What a status says is not in view yet. */
 export const SEEN_WORDS: Readonly<Record<SeenName, string>> = Object.freeze({
   fortress: 'ネザー要塞（ネザーレンガ）', bastion: '砦の遺跡', spawner: 'スポナー', blaze_spawner: 'ブレイズのスポナー', nether_portal: 'ネザーポータル',
-  end_portal_frame: 'エンドポータルの枠', end_portal: '開いたエンドポータル', stronghold: 'ストロングホールドの中', village: '村',
+  end_portal_frame: 'エンドポータルの枠', end_portal: '開いたエンドポータル', stronghold: 'ストロングホールドの中', village: '村', warped_forest: '歪んだ森',
 });
 
 export interface Mark {
@@ -49,6 +49,15 @@ export function namesOf(mark: Mark): SeenName[] {
   return label === '村' ? ['village'] : [];
 }
 
+/** A warped forest the body reports: a place it remembered (`rememberedPlaces.warped_forest`), a landmark labelled so, or a biome of
+ * `world.biomesSeen` (`warped_forest 西 150m`; `warped_forest 未見` is not a sighting). The head reads only the body's words. */
+export function warpedForestIn(world: Record<string, unknown>): boolean {
+  const places = world.rememberedPlaces;
+  if (places && typeof places === 'object' && !Array.isArray(places) && typeof (places as Record<string, unknown>).warped_forest === 'string') return true;
+  if (marksOf(world.mapLandmarks).some(mark => mark.label.startsWith('歪んだ森'))) return true;
+  return typeof world.biomesSeen === 'string' && /warped_forest(?!\s*未見)/u.test(world.biomesSeen);
+}
+
 /** What is in view: the names of the marks, and the structure she is in (`inside`). */
 export function seenMarks(world: Record<string, unknown>): ReadonlySet<SeenName> {
   const seen = new Set<SeenName>(marksOf(world.mapLandmarks).flatMap(namesOf));
@@ -56,6 +65,7 @@ export function seenMarks(world: Record<string, unknown>): ReadonlySet<SeenName>
   if (/ネザー要塞/u.test(inside)) seen.add('fortress');
   if (/砦の遺跡/u.test(inside)) seen.add('bastion');
   if (/ストロングホールド/u.test(inside)) seen.add('stronghold');
+  if (warpedForestIn(world)) seen.add('warped_forest');
   return seen;
 }
 
