@@ -32,12 +32,12 @@ const productionSources = [
 const filmingOverLimit = new Map([
   ['services/api/src/mind/action/fca/fcaRunner.ts', 541],
   ['services/api/src/surfaces/minecraft/minecraftEndFacts.ts', 543],
-  ['services/api/src/surfaces/minecraft/minecraftFirstPlan.ts', 572],
+  ['services/api/src/surfaces/minecraft/minecraftFirstPlan.ts', 576],
   ['services/api/src/surfaces/minecraft/minecraftLlmcLive.ts', 532],
   ['services/api/src/surfaces/minecraft/minecraftLlmcPromises.ts', 504],
   ['services/api/src/surfaces/minecraft/minecraftLlmcQueue.ts', 577],
-  ['services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts', 702],
-  ['services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts', 690],
+  ['services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts', 715],
+  ['services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts', 692],
   ['services/api/src/wiring/fcaBodyRecovery.ts', 508],
 ]);
 

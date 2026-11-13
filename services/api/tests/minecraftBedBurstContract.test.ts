@@ -14,7 +14,7 @@ describe('the head can request a bounded burst and its own immediate retreat', (
     const act = input();
     expect(validSkillInput(act, ACT_INPUT_SCHEMA)).toBe(true);
     expect(actProblem(act)).toBeNull();
-    expect(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties)).toHaveLength(57);
+    expect(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties)).toHaveLength(60);
     expect(act.hands[1]).toEqual({ do: 'go', to: { x: 8, y: 64, z: 8 }, seconds: 10 });
   });
   it('preserves every argument through the short LLMC JSON-line path', () => {

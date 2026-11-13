@@ -48,9 +48,9 @@ describe('vertical: the contract type and the schema', () => {
     expect(validSkillInput({ hands: [{ ...stairs, dir: 'sideways' }] }, ACT_INPUT_SCHEMA)).toBe(false);
     expect(validSkillInput({ hands: [{ ...stairs, liquid: 'ignore' }] }, ACT_INPUT_SCHEMA)).toBe(false);
   });
-  it('keeps the hand within the schema limits: all 57 properties including fill and den, 16,000 characters', () => {
+  it('keeps the hand within the schema limits: all 60 properties including fill, den and the keep, room and smelt of tidy, 16,000 characters', () => {
     const properties = (ACT_INPUT_SCHEMA.properties.hands.items as { properties: Record<string, unknown> }).properties;
-    expect(Object.keys(properties).length).toBe(57);
+    expect(Object.keys(properties).length).toBe(60);
     expect(skillSchema(ACT_INPUT_SCHEMA)).toBe(true);
     const wide = (count: number) => ({ type: 'object', additionalProperties: false, required: [],
       properties: Object.fromEntries(Array.from({ length: count }, (_, index) => [`field${index}`, { type: 'string' }])) });

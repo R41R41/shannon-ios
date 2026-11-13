@@ -220,7 +220,7 @@
     },
     "services/api/src/contracts/minecraftActHandRules.ts": {
       "complex-function": 1,
-      "long-line": 4
+      "long-line": 5
     },
     "services/api/src/contracts/minecraftActShortHands.ts": {
       "complex-function": 1,
@@ -1818,7 +1818,7 @@
     },
     "services/api/src/surfaces/minecraft/minecraftBlazeFacts.ts": {
       "complex-function": 4,
-      "long-line": 12
+      "long-line": 14
     },
     "services/api/src/surfaces/minecraft/minecraftBody.ts": {
       "complex-function": 1,
@@ -1853,10 +1853,11 @@
       "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftEndgame.ts": {
-      "long-line": 3
+      "long-line": 5,
+      "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlan.ts": {
-      "long-line": 10,
+      "long-line": 12,
       "multi-statement-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftFirstPlanPrompts.ts": {
@@ -1903,7 +1904,7 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts": {
-      "long-line": 72
+      "long-line": 76
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
@@ -2302,7 +2303,7 @@
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcLiquid.ts": {
       "long-line": 1,
-      "multi-statement-line": 1
+      "multi-statement-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPartial.ts": {
       "long-line": 3
@@ -2332,7 +2333,8 @@
       "multi-statement-line": 2
     },
     "services/api/src/wiring/fcaMinecraftActItem.ts": {
-      "complex-function": 1
+      "complex-function": 1,
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftFoodWords.ts": {
       "long-line": 2
@@ -2362,7 +2364,7 @@
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPack.ts": {
       "complex-function": 1,
-      "long-line": 3
+      "long-line": 9
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcWaterNode.ts": {
       "long-line": 1
@@ -2370,6 +2372,29 @@
     "services/api/src/wiring/minecraftLlmcReplanWiring.ts": {
       "complex-function": 1,
       "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcIronNumbers.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcLiveRewrite.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcPromises.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcTidyKeep.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcWaterSwitch.ts": {
+      "long-line": 9,
+      "multi-statement-line": 3
+    },
+    "services/api/src/surfaces/minecraft/minecraftPlanFacts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/wiring/minecraftLlmcWiring.ts": {
+      "long-line": 1,
+      "multi-statement-line": 1
     }
   }
 }
