@@ -15,6 +15,7 @@ import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
 import { framesOf } from './minecraftSeenMarks.js';
 import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
+import { workingFurnaces } from './minecraftFurnaceMeanwhile.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
@@ -472,19 +473,58 @@ function logsNow(logs: number, items: number, counts: ItemCounts): string {
  * carries, with the nearest coal on the map.
  * Null when the fuel is enough or there is nothing to smelt.
  */
-export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts): string | null {
-  let items = 0;
-  for (const [name, count] of counts) if (TO_SMELT.test(name)) items += count;
-  if (items < 2) return null;
-  const burns = FUELS.reduce((sum, [pattern, each]) => sum + countMatching(counts, pattern) * each, 0);
-  if (burns >= items) return null;
-  const coal = Math.ceil((items - burns) / 8), planks = countMatching(counts, /_planks$/u);
+/** The nearest coal the map shows (its mark, with the count the body saw), or undefined. */
+function nearestCoal(world: Record<string, unknown>): { x: number; y: number; z: number; n: number; far: number | null } | undefined {
   const feet = feetOf(world);
   const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter((line): line is string => typeof line === 'string');
-  const seen = marks.map(line => COAL_MARK.exec(line)).filter((m): m is RegExpExecArray => !!m)
+  return marks.map(line => COAL_MARK.exec(line)).filter((m): m is RegExpExecArray => !!m)
     .map(m => ({ x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), n: Number(m[4]) }))
     .map(c => ({ ...c, far: feet ? Math.round(Math.hypot(c.x - feet.x, c.y - feet.y, c.z - feet.z)) : null }))
     .sort((a, b) => (a.far ?? 1e9) - (b.far ?? 1e9))[0];
+}
+
+/** The plan's kinds of a section that smelts iron and goes down for it: the coal is taken before the descent (G7). */
+const IRON_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['iron', 'iron_armor']);
+/** Coal carried below which the iron section says the coal first: iron 24 and the meat need about 4 (one coal smelts 8). */
+const COAL_FOR_IRON = 4;
+/**
+ * Run 9 (11/13, G7: the iron section began with no raw iron in the pack, so the fuel line was silent, and she went down with no coal): while the plan's
+ * section is the iron's and the pack holds fewer than 4 coal, the count and the nearest coal on the map, even before any raw iron is carried.
+ */
+function coalBeforeIron(world: Record<string, unknown>, counts: ItemCounts, kinds: readonly PlanKind[] | undefined): string | null {
+  if (!kinds?.[0] || !IRON_KINDS.has(kinds[0])) return null;
+  const coal = countMatching(counts, /^(?:coal|charcoal)$/u);
+  if (coal >= COAL_FOR_IRON) return null;
+  const near = nearestCoal(world);
+  return `石炭 ${coal}（鉄 24 と肉に約 ${COAL_FOR_IRON} 要る。1 個で 8 個焼ける）。最寄りの石炭 ${near ? `(${near.x},${near.y},${near.z})${near.far !== null ? `（${near.far}m）` : ''}` : '地図に見えていない'}`;
+}
+
+/** The furnaces the hand may set at once (`smelt … furnaces=3`). */
+const PARALLEL_FURNACES = 3;
+/** Raw iron carried from which one furnace after another is the slow way (10 s an item). */
+const RAW_IRON_FOR_PARALLEL = 4;
+/**
+ * Run 9 (11/13, G2): raw iron 24 went into one furnace at 10 s an item (about 240 s) while three could burn it in a third of that. Said while raw_iron
+ * in the pack is 4 or more and at most one furnace works (the frame's jobs; with no jobs list, the furnaces the frame says she has set).
+ */
+export function parallelFurnaceLine(world: Record<string, unknown>, counts: ItemCounts): string | null {
+  const raw = countMatching(counts, /^raw_iron$/u);
+  if (raw < RAW_IRON_FOR_PARALLEL) return null;
+  const placed = world.placedFurnaces;
+  const active = Array.isArray(world.jobs) ? workingFurnaces(world).length : Array.isArray(placed) ? placed.length : 0;
+  if (active > 1) return null;
+  const coal = countMatching(counts, /^(?:coal|charcoal)$/u), needed = Math.ceil(raw / 8);
+  const fuel = coal > 0 ? Math.min(coal, needed) : needed;
+  return `smelt raw_iron ${raw} furnaces=${PARALLEL_FURNACES} fuel=coal fuelCount=${fuel}（1 個 10 秒。take は残り 15 秒以内だけ体が待つ。それ以上は掘る・捨てるを先に積み、take は後ろへ）`;
+}
+
+export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts, kinds?: readonly PlanKind[]): string | null {
+  let items = 0;
+  for (const [name, count] of counts) if (TO_SMELT.test(name)) items += count;
+  const burns = FUELS.reduce((sum, [pattern, each]) => sum + countMatching(counts, pattern) * each, 0);
+  if (items < 2 || burns >= items) return coalBeforeIron(world, counts, kinds);
+  const coal = Math.ceil((items - burns) / 8), planks = countMatching(counts, /_planks$/u);
+  const seen = nearestCoal(world);
   const where = seen ? `地図の石炭 (${seen.x},${seen.y},${seen.z}) ×${seen.n}${seen.far !== null ? ` が ${seen.far}m` : ''}` : '地図に石炭は見えていない';
   // end1109o04: 14 raw meats and no coal on the map read as "no fuel, so wait for the night" with iron ore 14 blocks down. What is to be
   // smelted, ores apart from meat, and that the mining does not wait for the fuel (the coal is in the same rock as the iron; a log burns too).

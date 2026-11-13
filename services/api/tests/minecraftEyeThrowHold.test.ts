@@ -29,7 +29,7 @@ describe('the eyes kept for the frames', () => {
     expect(eyeThrowHold(throwEye, frame(KIT), 'n')!.line).toContain('交点の 128m 内まで来ても枠が見えない時だけ、そこで 1 回投げ直せる');
     expect(eyeThrowHold(throwEye, frame(KIT, at), 'n')).toBeNull();
     // The frames' eyes are still kept while more can be made.
-    expect(eyeThrowHold(throwEye, frame([['ender_eye', 12], ['ender_pearl', 2], ['blaze_powder', 2]], at), 'n')!.line).toContain('枠に要る数（12）以下');
+    expect(eyeThrowHold(throwEye, frame([['ender_eye', 12], ['ender_pearl', 2], ['blaze_powder', 2]], at), 'n')!.line).toContain('枠に要る数（13）以下');
     registerEyeLedger('n2', ledger({ x: -1072, z: 928, errorBlocks: 90 }, [...far, { x: -1000, z: 900, bearingDeg: 291 }]));
     const again = eyeThrowHold(throwEye, frame(KIT, { x: -1060, y: 70, z: 920 }), 'n2')!.line;
     expect(again).toContain('もう投げない');
@@ -42,7 +42,7 @@ describe('the eyes kept for the frames', () => {
   });
   it('holds a throw that would eat into the frames\' eyes while more can be made, and lets it go when none can', () => {
     registerEyeLedger('c', ledger(null));
-    expect(eyeThrowHold(throwEye, frame([['ender_eye', 12], ['ender_pearl', 2], ['blaze_powder', 2]]), 'c')!.line).toContain('枠に要る数（12）以下');
+    expect(eyeThrowHold(throwEye, frame([['ender_eye', 12], ['ender_pearl', 2], ['blaze_powder', 2]]), 'c')!.line).toContain('枠に要る数（13）以下');
     expect(eyeThrowHold(throwEye, frame([['ender_eye', 12]]), 'c')).toBeNull();
     // A placed eye (`at`) into a frame is no throw.
     expect(eyeThrowHold({ hands: [{ do: 'use', item: 'ender_eye', at: [{ x: 1, y: 30, z: 1 }] }] }, frame(KIT), 'a')).toBeNull();

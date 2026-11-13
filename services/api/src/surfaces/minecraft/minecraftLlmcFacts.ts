@@ -1,5 +1,5 @@
 import { rec,finite,one,cell,world,holderLine } from './minecraftLlmcHealth.js';
-import type { PlanPromise } from '@shannon/mind';
+import type { PlanKind, PlanPromise } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActHand,ActInput,ActPos } from '../../contracts/minecraftActContract.js';
 import { readActResult } from '../../contracts/minecraftActContract.js';
@@ -13,6 +13,7 @@ import { PLAN_FACTS_KEY,type PlanFacts } from './minecraftPlanFacts.js';
 import { round1 } from './minecraftTransientObservation.js';
 import { foodChoices, foodYieldWords, huntWeaponIn } from './minecraftFoodAcquisition.js';
 import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
+import { AIRISH, readLayers, type Layers } from './minecraftLlmcPreflightMap.js';
 export { FACT_WINDOW_MS, controlOf, lifeOf, holderWords, holderLine, createHitWatch } from './minecraftLlmcHealth.js';
 export type { Hit, HitWatch } from './minecraftLlmcHealth.js';
 /** The creatures that are food are listed within this many metres (the near words' own reach for food animals). */
@@ -112,6 +113,99 @@ export function foodLine(observation: BodyObservation | null, shown: number): st
     `[${FOOD_FISH.has(item.name) ? '魚' : '陸'}]${item.name}${item.id !== null ? ` #${item.id}` : ''} ${one(item.distance)}m`
       + `${item.at ? ` ${cell(item.at)}` : ''}${foodYieldWords(item.name, FOOD_POINTS)}`).join('・')}${bare}`;
   return village ? `${village}／${animals}` : animals;
+}
+
+// ---- the map's diamonds and the flint (run 9, 11/13: M2, M4)
+
+type Cell3 = { x: number; y: number; z: number };
+const feetCell = (w: Record<string, unknown>, layers: Layers | null): Cell3 | null => {
+  const at = rec(w.position);
+  if (at && [at.x, at.y, at.z].every(value => finite(value) !== null)) return { x: Math.floor(Number(at.x)), y: Math.floor(Number(at.y)), z: Math.floor(Number(at.z)) };
+  return layers?.feet ?? null;
+};
+/** The cells of the map that show a symbol, each with its place. */
+function symbolCells(layers: Layers, symbol: string): Cell3[] {
+  const out: Cell3[] = [];
+  for (const [y, cells] of layers.layers) for (const [key, found] of cells) {
+    if (found !== symbol) continue;
+    const [x, z] = key.split(',').map(Number);
+    out.push({ x: x!, y, z: z! });
+  }
+  return out;
+}
+const farFrom = (feet: Cell3 | null, cell: Cell3): number => feet ? Math.round(Math.hypot(cell.x - feet.x, cell.y - feet.y, cell.z - feet.z)) : 0;
+/** The diamond ore the map shows, joined where cells touch (a vein). */
+function diamondClusters(layers: Layers): Cell3[][] {
+  const left = new Map(symbolCells(layers, 'd').map(cell => [`${cell.x},${cell.y},${cell.z}`, cell] as const));
+  const clusters: Cell3[][] = [];
+  for (const [key, first] of [...left]) {
+    if (!left.has(key)) continue;
+    left.delete(key);
+    const cluster = [first], queue = [first];
+    while (queue.length) {
+      const at = queue.pop()!;
+      for (let dx = -1; dx <= 1; dx += 1) for (let dy = -1; dy <= 1; dy += 1) for (let dz = -1; dz <= 1; dz += 1) {
+        const next = `${at.x + dx},${at.y + dy},${at.z + dz}`, found = left.get(next);
+        if (!found) continue;
+        left.delete(next);
+        cluster.push(found);
+        queue.push(found);
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+const DIAMOND_MARK = /ダイヤ\[(?:deepslate_)?diamond_ore\] \((-?\d+),(-?\d+),(-?\d+)\)[^×]*×(\d+)/u;
+/** Whether the map shows air within three cells under an ore: she falls through it when the ore is dug out. */
+const airBelow = (layers: Layers, cell: Cell3): boolean => [1, 2, 3].some(down => {
+  const symbol = layers.layers.get(cell.y - down)?.get(`${cell.x},${cell.z}`);
+  return symbol !== undefined && AIRISH.has(symbol);
+});
+/**
+ * Run 9 (11/13, M2): the map showed diamond ore and the three at one place were not told apart from the one far off. While the plan's section is the diamonds'
+ * and two or more are in view: the veins (ore touching ore, the three nearest) with their count, the metres, and whether air lies within three cells under any of them.
+ * Null with fewer than two in view, or in another section.
+ */
+export function diamondClusterLine(w: Record<string, unknown>, kinds: readonly PlanKind[] | undefined): string | null {
+  if (kinds?.[0] !== 'diamond') return null;
+  const layers = readLayers(typeof w.localMap === 'string' ? w.localMap : undefined);
+  const feet = feetCell(w, layers);
+  const veins = layers ? diamondClusters(layers).map(cluster => {
+    const nearest = [...cluster].sort((a, b) => farFrom(feet, a) - farFrom(feet, b))[0]!;
+    return { at: nearest, n: cluster.length, far: farFrom(feet, nearest), fall: cluster.some(cell => airBelow(layers, cell)) };
+  }) : [];
+  if (veins.reduce((sum, vein) => sum + vein.n, 0) >= 2) {
+    const shown = veins.sort((a, b) => a.far - b.far).slice(0, 3)
+      .map(vein => `(${vein.at.x},${vein.at.y},${vein.at.z}) ${vein.n} 個・${vein.far}m${vein.fall ? '・下が空所（落ちる）' : ''}`);
+    return `ダイヤの群れ: ${shown.join('／')}`;
+  }
+  // The map's grid does not hold them: the body's mark says the nearest and how many are in view.
+  const mark = (Array.isArray(w.mapLandmarks) ? w.mapLandmarks : []).flatMap(line => {
+    const m = typeof line === 'string' ? DIAMOND_MARK.exec(line) : null;
+    return m ? [{ at: { x: Number(m[1]), y: Number(m[2]), z: Number(m[3]) }, n: Number(m[4]) }] : [];
+  })[0];
+  return mark && mark.n >= 2 ? `ダイヤの群れ: 最寄り (${mark.at.x},${mark.at.y},${mark.at.z}) を含め見えているのは ${mark.n} 個・${farFrom(feet, mark.at)}m` : null;
+}
+
+const FLINT_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['diamond', 'obsidian', 'portal']);
+/**
+ * Run 9 (11/13, M4; the same count as the obsidian tidy): no flint and no flint and steel while the plan is at the diamonds, the obsidian or the gate: gravel gives
+ * flint one dig in ten, and the tidy keeps up to 10 gravel. The nearest sand-or-gravel cell of the map is added when one is in view.
+ */
+export function flintLine(observation: BodyObservation | null, kinds: readonly PlanKind[] | undefined): string | null {
+  if (!kinds?.[0] || !FLINT_KINDS.has(kinds[0])) return null;
+  const w = world(observation), counts = carriedItemCounts(w, observation?.facts);
+  if ((counts.get('flint') ?? 0) > 0 || (counts.get('flint_and_steel') ?? 0) > 0) return null;
+  const layers = readLayers(typeof w.localMap === 'string' ? w.localMap : undefined), feet = feetCell(w, layers);
+  const gravel = layers ? symbolCells(layers, 's').sort((a, b) => farFrom(feet, a) - farFrom(feet, b))[0] : undefined;
+  return '火打石 0。砂利は掘ると 10% で火打石（10 個で約 35 秒）。片付けは砂利を 10 個まで残す。通り道の砂利を先に掘る'
+    + (gravel ? `。見えている砂か砂利（地図 s）の最寄り (${gravel.x},${gravel.y},${gravel.z}) ${farFrom(feet, gravel)}m` : '');
+}
+
+/** The lines of the live facts of this section: the diamonds' veins and the flint (the normal version only). */
+export function liveFactLines(observation: BodyObservation | null, kinds: readonly PlanKind[] | undefined): string[] {
+  return [diamondClusterLine(world(observation), kinds), flintLine(observation, kinds)].filter((line): line is string => !!line);
 }
 
 // ---- the pack, and the queue
@@ -361,6 +455,8 @@ export interface FactsContext {
   failures?: readonly string[];
   /** The way to the dragon (`minecraftEndgame.ts`): the lines of the normal version, and the shorter set an urgent or shortened one keeps. */
   endgame?: { lines: readonly string[]; short: readonly string[] };
+  /** The plan's kinds now: the current node's kind, then those above it (`nowKinds`). The diamond veins and flint lines read them. */
+  nowKinds?: readonly PlanKind[];
 }
 export interface InputFacts { lines: string[]; compressed: string[] }
 /**
@@ -379,7 +475,7 @@ export function inputFacts(observation: BodyObservation | null, context: FactsCo
   const food = (shown: number) => context.wantsFood ? [foodLine(observation, shown)] : [];
   const endgame = (short: boolean) => (short || urgent ? context.endgame?.short : context.endgame?.lines) ?? [];
   const make = (short: boolean) => [...head, ...endgame(short), ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short,
-     context.promises ?? []), ...promises, ...stops, ...(context.failures ?? [])]
+     context.promises ?? []), ...(short || urgent ? [] : liveFactLines(observation, context.nowKinds)), ...promises, ...stops, ...(context.failures ?? [])]
     .filter((line): line is string => !!line);
   return { lines: make(false), compressed: make(true) };
 }

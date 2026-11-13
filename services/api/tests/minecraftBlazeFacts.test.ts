@@ -264,3 +264,19 @@ describe('footingLine', () => {
     expect(footingLine(new Map([['blaze_rod', 7]]), NETHER)).toBeNull();
   });
 });
+
+describe('the camp cell the body names (run 9, N1)', () => {
+  const hid = (id: number) => ({ id, name: 'blaze', distance: 6, lineOfSight: false });
+  const spawner = { mapLandmarks: ['S スポナー (0,64,0) 西14m blaze'] };
+  it('sends her to the first camp site, with the roof word and a place over her head when there is none, and keeps the old words with no site', () => {
+    const camp = { ...spawner, position: { x: 9, y: 58, z: 6 }, health: 20, nearbyThreats: [hid(1), hid(2)],
+      campSites: ['野営マス (2,63,1) 屋根なし・壁 3', '野営マス (-2,63,1) 屋根あり・壁 4'] };
+    const line = strikeLine(camp)!;
+    expect(line).toContain('野営マス (2,63,1)（屋根なし・壁 3）へ go 2,63,1 range=1。屋根なしなら先に頭上へ place を 1 手');
+    expect(line).not.toContain('go 0,64,0 range=3');
+    expect(line).not.toContain('(-2,63,1)');
+    expect(strikeLine({ ...camp, campSites: [] })).toContain('go 0,64,0 range=3');
+    const under = strikeLine({ ...camp, position: { x: 3, y: 59, z: 0 }, nearbyThreats: [hid(1)] })!;
+    expect(under).toContain('壁の陰: 野営マス (2,63,1)（屋根なし・壁 3）へ go 2,63,1 range=1');
+  });
+});

@@ -47,7 +47,7 @@ export const bodyAgeField = (line: string | null | undefined): { bodyAge?: strin
 export function staleBodyLine(ageMs: number): string {
   return `体の様子は ${Math.max(1, Math.round(ageMs / 1000))} 秒前のもの（新しい観測がまだ届いていない。位置や敵はもう動いているかもしれない）`;
 }
-const THREATS = 24, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 80, EVENTS = 6;
+const THREATS = 24, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 80, EVENTS = 6, CAMP_SITES = 2;
 type SeenMode = 'threat' | 'near';
 
 /**
@@ -126,6 +126,16 @@ function landmarkLines(world: Record<string, unknown>, facts: Readonly<Record<st
     return lines.map(line => line.includes(WOOD_MARK) ? `${line}（板が足りない間だけ出す。dig で取れる。作業台は板 4）` : line);
   }
   return lines.filter(line => !line.includes(WOOD_MARK));
+}
+
+/**
+ * `route` (N1, N2 of run 9, 11/13): beside the landmarks, the body's own lines as they are, one line each: `world.campSites` (the camp cells within 24 m of
+ * the spawner, in the Nether only; two at most) and `world.routeBack` (the way back, a string). No key when the body sends neither.
+ */
+function routeField(world: Record<string, unknown>): Record<string, unknown> {
+  const back = typeof world.routeBack === 'string' && world.routeBack.trim() ? [clean(world.routeBack).slice(0, 200)] : [];
+  const lines = [...strings(world.campSites, CAMP_SITES), ...back];
+  return lines.length ? { route: lines } : {};
 }
 
 /** `nearby`: what is near by purpose (`minecraftLlmcNearby.ts`), from the body's `nearbyResources` at her feet now; no key when the body sends none. */
@@ -369,6 +379,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.facts?.lines.length ? { facts: [...parts.facts.lines] } : {}),
     map: typeof world.localMap === 'string' ? world.localMap : '（地図なし: 体が地図を送っていない。mc_view で見られる）',
     landmarks: landmarkLines(world, observation.facts, parts.planNow),
+    ...routeField(world),
     ...nearbyField(world, parts.planNow),
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
     stops: strings(world.recentStops, STOPS),
@@ -481,11 +492,11 @@ export function llmcPlanTokens(plan: unknown): number {
  * up and the stone to
  * craft with are what a decision needs most.
  */
-const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['nearby', 4], ['near', 0], ['stops', 2], ['foodPreparation', -1],
+const SHRINK: ReadonlyArray<readonly [string, number]> = [['near', 3], ['inventory', 24], ['landmarks', 8], ['nearby', 4], ['near', 0], ['stops', 2], ['foodPreparation', -1], ['route', 2],
   ['events', 3], ['threats', 4], ['inventory', 16], ['landmarks', 5], ['nearby', 2], ['foodPoints.items', -1], ['inventory', 10], ['landmarks', 3], ['nearby', 1], ['jobs', -1],
   ['threats', 2], ['stops', 1], ['events', 1],
   // A map of water (three tokens a cell) leaves little beside it: the last of the rest, the plan's path and her state kept.
-  ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2]];
+  ['events', -1], ['near', -1], ['threats', 1], ['inventory', 6], ['landmarks', 2], ['route', 1]];
 
 /**
  * The live state when it has to be shortened (chapter 8's table, 「圧縮の後」): the facts in their shortened form (the

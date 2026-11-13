@@ -9,7 +9,7 @@ import { createClimbWatch, crystalLine, deathLine, dragonApproachLine, dragonLin
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
-import { pearlLine, pearlSearchLines, searchingForPearls, type PearlSearch } from './minecraftPearlFacts.js';
+import { deathLossLine, pearlLine, pearlSearchLines, searchingForPearls, type PearlSearch } from './minecraftPearlFacts.js';
 import { readActResult } from '../../contracts/minecraftActContract.js';
 import { undergroundInOverworld } from './minecraftPlanDone.js';
 import { createWoolWatch } from './minecraftWoolFacts.js';
@@ -54,7 +54,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const places = some(placeLine(world, carried(facts.counts, 'bed')));
   const footing = some(footingLine(facts.counts, facts.dimension));
   const enclosed = [...some(enclosedLine(world)), ...some(pillarLine(world))];
-  const pearls = [...some(pearlLine(facts.counts, facts.dimension)), ...pearlSearchLines(world, facts.counts, facts.dimension, watched.search ?? { scans: 0, goes: 0 })];
+  const pearls = [...some(pearlLine(facts.counts, facts.dimension)), ...some(deathLossLine(facts.counts, facts.dimension)), ...pearlSearchLines(world, facts.counts, facts.dimension, watched.search ?? { scans: 0, goes: 0 })];
   const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true)),
     ...some(dragonWaitUrgentLine(end))];

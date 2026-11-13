@@ -152,11 +152,16 @@ function directLine(direct: DirectPoint, feet: { x: number; z: number } | null):
     + `${there}${FRAME_SEARCH}`;
 }
 
+/** A walk on the ground, in metres a second: 4 over dry land, 2 where water is crossed (S9: the long walks over land and sea). */
+const WALK_FAST = 4, WALK_SLOW = 2;
+const walkWords = (distance: number): string => `約 ${grouped(distance)} m・地上の見込み 約 ${grouped(distance / WALK_FAST)}〜${grouped(distance / WALK_SLOW)} 秒（水の割合で ${WALK_SLOW}〜${WALK_FAST} m/s）`;
+
 function fixLines(fix: Fix, feet: { x: number; z: number } | null): string[] {
   const ring = Math.round(Math.hypot(fix.x, fix.z));
   const there = feet ? `あなたから ${compassWord(bearingBetween(feet, fix))} ${grouped(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m。` : '';
   const far = fix.errorBlocks > 150 ? '誤差が大きい間は方角の目安。近づいてから投げ直す。' : '';
-  const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${far}`
+  const walk = feet ? `交点まで${walkWords(Math.hypot(fix.x - feet.x, fix.z - feet.z))}。` : '';
+  const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${walk}${far}`
     + `原点から ${grouped(ring)}m（最初の 3 つの要塞は 1,280〜2,816m の輪）`;
   // At 128 m of error or less the frames' probe reaches from the point and the hold keeps the eyes (`minecraftEyeThrowHold.ts`): no throw before it is offered.
   const near = feet && fix.errorBlocks > 128 ? nearThrowPlace(feet, fix, Math.max(60, fix.errorBlocks)) : null;

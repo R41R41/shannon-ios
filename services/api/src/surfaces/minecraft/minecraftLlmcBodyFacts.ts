@@ -16,6 +16,7 @@ import {
   foodFirstLine,
   foodLeads,
   fuelShortage,
+  parallelFurnaceLine,
   ironSearchLine, sheepAbsentLine, goldAbsentLine, foodAbsentLine,
   preparationShortage,
   readinessOf,
@@ -77,6 +78,7 @@ export function factsContext(
   const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree), nowKinds(planFacts).includes('pearl'));
   return {
     ...(judge.hits ? { hits: judge.hits } : {}),
+    nowKinds: nowKinds(planFacts),
     ...(endgame?.lines.length ? { endgame } : {}),
     ...(tree?.promises.length ? { promises: tree.promises } : {}),
     ...(judge.since
@@ -150,7 +152,8 @@ export function readinessParts(
         taskId,
         journeyReadiness: llmc.journeyReadiness,
       }),
-      fuelShortage(facts.world, facts.counts),
+      fuelShortage(facts.world, facts.counts, nowKinds(planFacts)),
+      parallelFurnaceLine(facts.world, facts.counts),
       ironSearchLine(facts.world, facts.counts, facts.dimension, tree?.nodes.find(node => node.id === tree.current)),
       sheepAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
       goldAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),

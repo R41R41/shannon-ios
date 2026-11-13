@@ -23,6 +23,22 @@ const RODS = 7;
  * from 14 a walk of 20 steps to a footing no blaze sees still arrives with health left; eating where she is seen mends nothing. */
 export const RETREAT_HP = 14;
 const BACK_HP = 18;
+/**
+ * N1 (run 9, 11/13): the body names a camp cell within 24 m of the spawner (`world.campSites`, up to two strings, in the Nether only), so the hand goes to
+ * that cell instead of to the spawner's own cell. The first line, as the body wrote it: its place, its roof (屋根あり／なし) and its walls (壁 n) are read when
+ * they are there. Null when the body names none (the lines keep their old words).
+ */
+function campGo(world: Record<string, unknown>): string | null {
+  const sites = Array.isArray(world.campSites) ? world.campSites : [];
+  const line = typeof sites[0] === 'string' ? sites[0].trim() : '';
+  if (!line) return null;
+  const at = /\((-?\d+),(-?\d+),(-?\d+)\)/u.exec(line);
+  const roof = /屋根なし|覆いなし/u.test(line) ? '屋根なし' : /屋根あり|覆いあり/u.test(line) ? '屋根あり' : '';
+  const walls = /壁\s*(\d+)/u.exec(line)?.[1];
+  const detail = [roof, walls ? `壁 ${walls}` : ''].filter(Boolean).join('・');
+  const spot = at ? `(${at[1]},${at[2]},${at[3]})` : line.slice(0, 80);
+  return `野営マス ${spot}${detail ? `（${detail}）` : ''}へ go${at ? ` ${at[1]},${at[2]},${at[3]} range=1` : ''}。屋根なしなら先に頭上へ place を 1 手`;
+}
 /** end1108h16 S7 (11/8): two chases (attack #id) killed in 0.7 and 2.7 s with no health lost, about 25 holds killed 1, and 32 arrows killed 6 (h15).
  * The owner (11/8): arrows are kept for the dragon, blazes are killed by sword. Said while a bow and arrows are carried, so that they are not spent here. */
 /* end1108h21 (11/8): 13 kills by sword, 3 rods: kills on a 1-wide bridge over a 40-block drop sent the rods down; 9 minutes of attacks on
@@ -293,14 +309,14 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
       + `今の陰に立ったまま、湧き場の向きの壁を 1 マスだけ dig at=[壁のマス] exposeOk=true（collect=false、accept に blaze）し、同じ act でその穴から見えた 1 体へ attack。2 体以上が見えたら穴を cobblestone で塞ぐ${retreat}`;
   }
   if (!mark) return first ? `${head}。見えた 1 体へ 8m まで go で寄り、attack target=${tag(first)}` : `${head}。湧き場はまだ見つかっていない（mapLandmarks に blaze_spawner が無い）: ここは湧き場ではない。mc_probe kind=camp で湧き場を探し、無ければネザーレンガの続く向きへ 100m 進んで読み直す（要塞の端でうろついても湧かない）`;
-  const place = `${mark.item.x},${mark.item.y},${mark.item.z}`;
+  const place = `${mark.item.x},${mark.item.y},${mark.item.z}`, camp = campGo(world);
   if (mark.distance <= 7.5 && !first && missed.length === 0) {
-    return `${head}。湧き場から ${Math.round(mark.distance)}m だが壁の陰: 野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁があり上が覆われた足場。覆いが無ければ先に頭上へ place 1 手）へ go ${place} range=3 で入る（間の壁は同じ act の dig で掘る。act の accept に blaze を入れる）。着いたら見えた 1 体を待たずに attack`;
+    return `${head}。湧き場から ${Math.round(mark.distance)}m だが壁の陰: ${camp ?? `野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁があり上が覆われた足場。覆いが無ければ先に頭上へ place 1 手）へ go ${place} range=3`}${camp ? '。入る' : ' で入る'}（間の壁は同じ act の dig で掘る。act の accept に blaze を入れる）。着いたら見えた 1 体を待たずに attack`;
   }
   if (mark.distance <= 7.5) {
     return `${head}。もう湧き場から ${Math.round(mark.distance)}m の所にいる: 新しいのは湧き場の周り 4 マスに湧くので、見えた 1 体が 8m 内に入ったらすぐ attack`;
   }
-  return `${head}。湧き場まで ${Math.round(mark.distance)}m: go ${place} range=3 で湧き場から 3m 以内の野営マスへ入り（壁があり上が覆われた足場が安全。待つと燃やされるので着いたら斬り続ける。間の壁は dig で掘る。act の accept に blaze を入れる: 入れないとブレイズに身をさらす壁を体が掘らない）、着いたら見えた 1 体へ attack target=#id`;
+  return `${head}。湧き場まで ${Math.round(mark.distance)}m: ${camp ? `${camp}。入って` : `go ${place} range=3 で湧き場から 3m 以内の野営マスへ入り`}（壁があり上が覆われた足場が安全。待つと燃やされるので着いたら斬り続ける。間の壁は dig で掘る。act の accept に blaze を入れる: 入れないとブレイズに身をさらす壁を体が掘らない）、着いたら見えた 1 体へ attack target=#id`;
 }
 
 /** The line from the numbers (pure). */

@@ -11,13 +11,14 @@ import { framesOf } from './minecraftSeenMarks.js';
  *     One throw goes from within that radius of the point while the ledger has none thrown there: the way out when the frames are not at the
  *     point (the eye sinks over the stronghold, or draws a new line from near it);
  * (b) there is no point yet and she stands within `SAME_LINE_BLOCKS` sideways of the last line: the throw draws the same line;
- * (c) the eyes in hand are no more than the frames still need (12 less those set, 12 before the frames are seen) while pearls and powder (or rods)
- *     are left to make more: each throw breaks one in five. With nothing left to make more, the throw goes (the point is needed all the same).
+ * (c) the eyes in hand are no more than the frames still need (12 less those set; 13 before the frames are seen, one over for the one in five that breaks:
+ *     run 9, 11/13, the same 13 as the pearls' target) while pearls and powder (or rods) are left to make more: each throw breaks one in five. With
+ *     nothing left to make more, the throw goes once after a point is out (the point is needed all the same, a second one only spends the frames' eyes).
  * A fact with the hand held; it moves no node. The ledger of a task is registered by its step (`registerEyeLedger`).
  */
 export const FRAME_SEARCH_RADIUS = 128;
 const SAME_LINE_BLOCKS = 12;
-const FRAMES = 12;
+const FRAMES = 13;
 const ledgers = new Map<string, EyeLedger>();
 
 /** The step's ledger, for the hold to read (the newest step of a task replaces the older one). */
@@ -37,7 +38,7 @@ function pointReason(ledger: EyeLedger, fix: Fix, feet: { x: number; z: number }
   if (feet && near(feet) && !thrownNear) return null;
   const there = feet ? `あと ${compassWord(bearingBetween(feet, fix))} ${Math.round(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m` : '';
   return `要塞の交点 (${fix.x},${fix.z})（誤差 ${Math.round(fix.errorBlocks)}m）がある${there ? `・${there}` : ''}。もう投げない: 交点まで歩き、`
-    + `mc_probe kind=frames radius=${FRAME_SEARCH_RADIUS} で枠を探す（アイは枠 12 にそのまま要る。投げると 5 回に 1 回は割れる）`
+    + `mc_probe kind=frames radius=${FRAME_SEARCH_RADIUS} で枠を探す（アイは枠 12 にそのまま要る。投げると 5 回に 1 回は割れる。落ちたアイ（割れなかった物）は拾う）`
     + (thrownNear ? '' : `。交点の ${FRAME_SEARCH_RADIUS}m 内まで来ても枠が見えない時だけ、そこで 1 回投げ直せる（沈めば要塞は真下）`);
 }
 
@@ -51,6 +52,10 @@ function reasonOf(ledger: EyeLedger | undefined, world: Record<string, unknown>,
   if (point) return point;
   const frames = framesOf(world), need = frames ? Math.max(0, frames.frames - frames.eyes) : FRAMES;
   if (eyes <= need && canMake) return `手持ちのアイ ${eyes} は枠に要る数（${need}）以下。投げると枠の分が減る: 粉と真珠で作り足すまで投げない`;
+  // With nothing to make more from, one throw after a point is out is all there is to spend (a throw near the point draws it again; a second only costs a frame's eye).
+  if (!canMake && fix && ledger && eyes > 0 && ledger.throws(now).some(item => Math.hypot(item.x - fix.x, item.z - fix.z) <= Math.max(FRAME_SEARCH_RADIUS, fix.errorBlocks))) {
+    return `要塞の交点 (${fix.x},${fix.z}) は出ている。作る材料（パールと粉）が無いので、交点が出た後の投げは 1 回まで（もう投げた）: 交点まで歩いて枠を探す。落ちたアイ（割れなかった物）は拾う`;
+  }
   const last = fix ? null : ledger?.throws(now).at(-1);
   if (!last || last.down || !feet) return null;
   const r = last.bearingDeg * Math.PI / 180;
