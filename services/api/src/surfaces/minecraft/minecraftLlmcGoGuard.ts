@@ -93,13 +93,15 @@ function unsafeDestination(hand: Rec, here: Cell | null, view: ReturnType<typeof
 
 /**
  * Form checks (the 11/13 flow, "送る前の点検を広げる"): a hand that is sure to fail within a second by its shape (a dig out of reach, a go into the air with no
- * block allowed, a long dig with a pickaxe that cannot last, an eat at 20/20, a make with no materials) is not sent; the line says what to write instead. Not a safety gate:
- * what the hands BEFORE it in the same act do (a go or walk first, a make of the pickaxe, hands that bring materials or use up the food bar) lifts the check.
+ * block allowed, a long dig with a pickaxe that cannot last, an eat at 20/20, a make with no materials) is not sent; the line says what to write
+ * instead. Not a safety gate: what the hands BEFORE it in the same act do (a go or walk first, a make of the pickaxe, hands that bring materials
+ * or use up the food bar) lifts the check.
  */
 type Found = { code: string; line: string } | null;
 interface Seen { walked: boolean; lost: boolean; producer: boolean; hungered: boolean; pickaxe: boolean }
 interface Stack { name: string; left: number | null }
-interface Form { world: Rec; pos: { x: number; y: number; z: number } | null; pack: Map<string, number>; stacks: Stack[]; view: ReturnType<typeof mapView> | null }
+type Point = { x: number; y: number; z: number };
+interface Form { world: Rec; pos: Point | null; pack: Map<string, number>; stacks: Stack[]; view: ReturnType<typeof mapView> | null }
 
 /** Where her position stops being the frame's: a hand that takes her somewhere the act does not say. */
 const LOSES_PLACE = new Set(['vertical', 'jump', 'mine', 'fight', 'hunt', 'portal', 'obsidian', 'attack', 'pickup', 'shoot', 'sleep', 'bed_burst']);
@@ -144,7 +146,7 @@ function noteHand(seen: Seen, hand: Rec): void {
 function formStop(hand: Rec, form: Form, here: Cell | null, seen: Seen): Found {
   switch (hand.do) {
     case 'dig': case 'use': case 'furnace': case 'chest': return reachProblem(hand, form, seen);
-    case 'go': case 'walk': return airProblem(hand, form, here) ?? (hand.do === 'go' && Number(hand.maxDig) >= 30 ? wearProblem(form, seen, Number(hand.maxDig) / 2) : null);
+    case 'go': case 'walk': return airProblem(hand, form, here) ?? (hand.do === 'go' ? longGo(hand, form, seen) : null);
     case 'vertical': return wearProblem(form, seen, verticalCost(hand, form));
     case 'mine': return wearProblem(form, seen, typeof hand.count === 'number' ? hand.count * 4 : null);
     case 'eat': return fullProblem(hand, form, seen);
@@ -152,6 +154,9 @@ function formStop(hand: Rec, form: Form, here: Cell | null, seen: Seen): Found {
     default: return null;
   }
 }
+
+/** A go that may dig 30 blocks or more: half of maxDig is the expected wear. */
+const longGo = (hand: Rec, form: Form, seen: Seen): Found => Number(hand.maxDig) >= 30 ? wearProblem(form, seen, Number(hand.maxDig) / 2) : null;
 
 /** A dig, use, furnace put or chest farther than 5 m from her with no go or walk before it in the act. */
 function reachProblem(hand: Rec, form: Form, seen: Seen): Found {
@@ -215,7 +220,7 @@ function fullProblem(hand: Rec, form: Form, seen: Seen): Found {
 const FROM: Readonly<Record<string, string>> = { cobblestone: '石を dig か mine で掘る', log: '木を dig で切る', planks: 'log から make', stick: 'planks から make',
   iron_ingot: 'raw_iron を smelt', gold_ingot: 'raw_gold を smelt', diamond: '深い所のダイヤ鉱石を mine', coal: '石炭鉱石を mine（木炭は log を smelt）', string: 'クモを fight',
   leather: '牛を fight', wool: '羊を fight', flint: '砂利を dig', feather: '鶏を fight', blaze_rod: 'ブレイズを fight', ender_pearl: 'エンダーマンを fight', wheat: '作物を dig' };
-/** A make whose materials (by the head's recipe table, with the chain planks/stick/blaze_powder) are not in the pack and are not brought by a hand before it. */
+/** A make whose materials (the head's recipe table, with its chain planks/stick/blaze_powder) are not in the pack nor brought by a hand before it. */
 function makeProblem(hand: Rec, form: Form, seen: Seen): Found {
   if (seen.producer || typeof hand.item !== 'string') return null;
   const made = materialsOf(hand.item, typeof hand.count === 'number' ? hand.count : 1, { chain: true, pack: form.pack });
