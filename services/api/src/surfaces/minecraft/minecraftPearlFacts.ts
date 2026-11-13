@@ -71,6 +71,8 @@ export function pearlSearchLines(world: Record<string, unknown>, counts: Readonl
   const lines = [`ネザーでロッド ${RODS_FOR_EYES} 本・パールが足りない間の歪んだ森: ${forest ?? '未見'}。探した回数（走査→go の組） ${search.goes}（走査 ${search.scans} 回）。${toGate}`
     + `探すなら 1 回 ${SEARCH_GO_BLOCKS}m ≈ ${SEARCH_GO_BLOCKS} 秒。歪んだ森の狩りは 約 25 分で 11 個（ラボ）、現世の夜は 約 1 時間で 12 個（他の AI の前例。この体は未検証）`];
   if (biomes) lines.push(`通ったバイオーム: ${biomes}`);
+  // The body's place row for a warped forest is a stand cell read from a far column (round 12): its y is a rough guide, not a height to trust.
+  if (place) lines.push('歪んだ森の控え: y は目安。控えの座標は方角として使い、go の行き先は scan の幹（warped_stem）の位置から選ぶ');
   lines.push(forest
     ? `歪んだ森が見えている: 90m ごとの go で寄り、屋根の場所を読んで fight target=enderman。パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）。着けない・狩りが進まない時: ${LAST_WAY}`
     : search.goes >= SEARCHES_BEFORE_LAST_WAY

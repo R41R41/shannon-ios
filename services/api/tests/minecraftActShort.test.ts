@@ -30,6 +30,7 @@ describe('short hands: one hand, one line', () => {
   it('writes dig, place, pillarUp, wait, sneak, jump, eat, equip, craft, pickup, look, attack and use', () => {
     expect(roundTrip({ do: 'dig', at: [cell(1, 2, 3), cell(1, 2, 4)], tool: 'diamond_pickaxe', exposeOk: true, takeOk: true, collect: false }))
       .toBe('dig 1,2,3 1,2,4 tool=diamond_pickaxe exposeOk takeOk collect=false');
+    expect(lineToHand('dig 4,65,2 exposeOk=true collect=false')).toEqual({ do: 'dig', at: [cell(4, 65, 2)], exposeOk: true, collect: false });
     expect(roundTrip({ do: 'place', block: 'cobblestone', at: [cell(3, 4, 5)], face: 'down' })).toBe('place cobblestone 3,4,5 face=down');
     expect(roundTrip({ do: 'pillarUp', n: 3, block: 'dirt' })).toBe('pillarUp 3 dirt');
     expect(roundTrip({ do: 'pillarUp' })).toBe('pillarUp');

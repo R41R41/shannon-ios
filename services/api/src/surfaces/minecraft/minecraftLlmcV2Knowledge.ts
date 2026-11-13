@@ -376,7 +376,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- attack が「届かない: … 5秒近づけない」と返した相手へ、同じ id の attack を出し直さない（ブレイズは動くので、間の煉瓦を掘っても追いつけない。'
       + '体の行の「同じ所・同じ理由で2回目」は 3 回目も同じになる合図）。次は、live の行で見えていて 8m 内・足から 3m より上でない別の 1 体を斬るか、'
       + '見える 1 体がいなければ湧き場から 3m 以内の、壁があり上が覆われた野営マスへ go で入る。'
-      + '壁越しで「届かない」が 2 回続いた時は、同じ act の中に壁の 1 マスを開ける dig（at=[壁のマス]・collect=false・accept ["blaze"]）を先に入れ、続けて見えた 1 体への attack を出す（別の act に分けると、掘った間に相手が動く）。',
+      + '壁越しで「届かない」が 2 回続いた時は、同じ act の中に壁の 1 マスを開ける dig（at=[壁のマス] exposeOk=true・collect=false・accept ["blaze"]。exposeOk が無いと体は threat_exposed で掘らない）を先に入れ、続けて見えた 1 体への attack を出す（別の act に分けると、掘った間に相手が動く）。',
     // end1108g7 S7 (11/8): she waited 18 m off the spawner, where none came, and one blaze shot dead dropped its rod 18 m off, never picked.
     '- 湧くのはあなたが湧き場から 16m 内にいる間だけ（湧き場の 4 マス内に出る）。退く合図が無い間は湧き場から 16m 内にいる。8m 内に見えている 1 体は待たずにすぐ attack（体が追って斬る。待っても 3m までは来ない）。'
       + '見えている 1 体がいない時・8m より外の時は、湧き場から 3m 以内の壁があり上が覆われた野営マス（mc_probe kind=camp。camp の行に上の覆いが出ていればそのマスを選び、無ければ先に頭上へ place 1 手で屋根を作り、窓は湧き場側の壁に 1 マスだけ開ける）に入る: 新しいのはそのすぐ横に湧くので、見えたらすぐ斬る（S7 を通った回は湧き場から 1〜3m で 11〜17 体。5〜7m の床の縁は数体から撃たれる）。16m より遠くで待つと 1 体も来ない（attack・fight の行の「湧き場まで Nm」で確かめる）。',

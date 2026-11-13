@@ -201,11 +201,11 @@ describe('the distance said as numbers (end1109f03 replay: told the 8 m rule, sh
     const wall = createBlazeWatch(watch.checkpoint().minecraftBlazeWatch).checkpoint().minecraftBlazeWatch.wall;
     expect(wall).toEqual({ name: 'nether_brick_fence', x: 4, y: 65, z: 2 });
     const line = strikeLine({ ...spawner, position: { x: 5, y: 64, z: 4 }, health: 20, nearbyThreats: [seen(905, 7.6, 1), seen(906, 9)] }, new Set([905]), wall)!;
-    expect(line).toContain('"dig 4,65,2 collect=false", "attack target=#906"');
+    expect(line).toContain('"dig 4,65,2 exposeOk=true collect=false", "attack target=#906"');
     expect(line).toContain('accept に blaze');
     expect(line).not.toContain('8m 内に入ったらすぐ attack');
     const reach = strikeLine({ ...spawner, position: { x: 9, y: 64, z: 4 }, health: 20, nearbyThreats: [seen(906, 9)] }, new Set(), wall)!;
-    expect(reach).toContain('"go 4,65,2 range=3", "dig 4,65,2 collect=false"');   // end1109f09: dig does not walk past 5 m
+    expect(reach).toContain('"go 4,65,2 range=3", "dig 4,65,2 exposeOk=true collect=false"');   // end1109f09: dig does not walk past 5 m
     expect(line).not.toContain('"go 4,65,2');
     expect(strikeLine({ ...spawner, position: { x: 30, y: 64, z: 4 }, health: 20, nearbyThreats: [seen(906, 9)] }, new Set(), wall)).not.toContain('dig 4,65,2');
     expect(strikeLine({ ...spawner, position: { x: 5, y: 64, z: 4 }, health: 12, nearbyThreats: [seen(906, 9)] }, new Set(), wall)).toContain('見えない所で食べて 18 以上');
@@ -244,7 +244,7 @@ describe('the distance said as numbers (end1109f03 replay: told the 8 m rule, sh
     expect(line).toContain('attack target=#764');
     expect(line).not.toContain('ここで斬り合わない');
     const dug = strikeLine({ position: { x: 0, y: 64, z: 0 }, health: 20, nearbyThreats: threats }, new Set(), { name: 'netherrack', x: 2, y: 64, z: 0 } as any)!;
-    expect(dug).toContain('hands: ["dig 2,64,0 collect=false", "attack target=#764"]');
+    expect(dug).toContain('hands: ["dig 2,64,0 exposeOk=true collect=false", "attack target=#764"]');
   });
 });
 
