@@ -91,7 +91,7 @@ const STAGE_OF_KIND: Readonly<Partial<Record<PlanKind, Stage>>> = { end: 'end', 
 export function preparationStage(dimension: string | null, counts: ItemCounts, kinds: readonly PlanKind[] | null): Stage | null {
   if (dimension === 'the_nether') {
     const rods = countMatching(counts, /^blaze_rod$/u), pearls = countMatching(counts, /^(?:ender_pearl|ender_eye)$/u);
-    if (rods >= 7 && pearls >= 14) return null;
+    if (rods >= 7 && pearls >= 13) return null;
     return kinds?.[0] === 'blaze' && rods < 7 ? 'nether_blaze' : 'nether_deep';
   }
   if (dimension !== 'overworld') return null;

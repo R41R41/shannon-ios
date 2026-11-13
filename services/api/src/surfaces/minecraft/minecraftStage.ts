@@ -117,7 +117,7 @@ export const MILESTONES: readonly Milestone[] = Object.freeze([
   { name: 'ブレイズ', condition: 'ロッド7本分（パウダー14）', why: 'アイ14個にパウダーが14要る', anchor: true,
     done: facts => sum(facts, [/^blaze_rod$/u, 2], [/^blaze_powder$/u, 1], [EYE, 1]) >= 14 || eyeMade(facts) },
   // Not an anchor: pearls gathered first (endermen) must not pass the blaze rods still missing.
-  { name: 'パール', condition: 'パール14個分', why: 'アイの材料', done: facts => sum(facts, [/^ender_pearl$/u, 1], [EYE, 1]) >= 14 || eyeMade(facts) },
+  { name: 'パール', condition: 'パール13個分', why: 'アイの材料', done: facts => sum(facts, [/^ender_pearl$/u, 1], [EYE, 1]) >= 13 || eyeMade(facts) },
   // Eyes break as they are thrown and go into the frames: eight are enough to call this step passed (`EYES_TO_SEARCH`).
   { name: 'アイ', condition: 'ender_eye を12個', why: '要塞を探し、ポータルの枠を埋める', done: facts => has(facts, EYE, 8), anchor: true },
   { name: 'エンド要塞', condition: '持ち物では見えない', why: 'エンドへのポータルがある', done: null },

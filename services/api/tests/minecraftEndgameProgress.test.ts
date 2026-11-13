@@ -115,7 +115,7 @@ describe('walking the late-game seed with the frames of a run', () => {
     const line = meterLine(dragon, thrown, 7_000 / 60);
     expect(line).toContain('次の節目 エンドの点検');
     expect(line).not.toContain('次の節目 エンダーアイ');
-    expect(reachedMilestoneNames(dragon, thrown)).toContain('アイ12');
+    expect(reachedMilestoneNames(dragon, thrown)).toContain('アイ13');
   });
 
   it('gives the held diagnostic run only the first stretch of the road: a fortress coming into view past the Nether is not its progress', () => {
