@@ -60,9 +60,9 @@ describe('the plan moves on by what the frame shows (run 28: "now" stayed on p1.
     // is done too since run 26 (by the tools the logs were made into), and the open children under a parent done by the pack are closed by the plan (`closedUnder`).
     // e1111h2 (11/11): p1 has no doneWhen of its own now; it is done when its children are, and its last child (the run's wood, 16 logs) is
     // not done at 608 s, so p1 is not in the frame's done list.
-    expect(done).toEqual(expect.arrayContaining(['p1.1', 'p1.2', 'p1.3', 'p2', 'p2.3']));
+    expect(done).toEqual(expect.arrayContaining(['p1.1', 'p1.2', 'p1.3', 'p3', 'p3.2']));
     expect(done).not.toContain('p1');
-    expect(done).not.toContain('p3');
+    expect(done).not.toContain('p4');
     const seen = seenDoneUpdate(tree, RUN28)!;
     const lines: string[] = [];
     const plan = createFcaPlanTools({ taskId: 'r5-plan', checkpoint: { fcaPlanTree: tree }, rules: true, seen: held => seenDoneUpdate(held, RUN28),

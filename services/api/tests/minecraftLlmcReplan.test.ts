@@ -191,8 +191,8 @@ describe('the strong model\'s answer', () => {
 
 describe('the brief', () => {
   const dragon = seedPlan('エンドラを討伐して')!;
-  const input = (extra: Partial<BriefInput> = {}): BriefInput => ({ goal: 'エンドラを討伐して', seconds: 4_000, stall: { kind: 'node_stalled', why: '節 p10.1 が 140 秒、進みが無い', node: 'p10.1' },
-    tree: { ...dragon, current: 'p10.1', nodes: dragon.nodes.map(node => (/^p[1-9](?:\.|$)/u.test(node.id) ? { ...node, state: 'done' as const } : node)) }, doneStatus: '未: blaze_rod 3/7', now: ['場所: the_nether (10,70,20)・体力 20/20', '持ち物: stone_sword×1'], facts: ['足りない物: 食料'],
+  const input = (extra: Partial<BriefInput> = {}): BriefInput => ({ goal: 'エンドラを討伐して', seconds: 4_000, stall: { kind: 'node_stalled', why: '節 p12.1 が 140 秒、進みが無い', node: 'p12.1' },
+    tree: { ...dragon, current: 'p12.1', nodes: dragon.nodes.map(node => (/^p(?:[1-9]|1[01])(?:\.|$)/u.test(node.id) ? { ...node, state: 'done' as const } : node)) }, doneStatus: '未: blaze_rod 3/7', now: ['場所: the_nether (10,70,20)・体力 20/20', '持ち物: stone_sword×1'], facts: ['足りない物: 食料'],
     results: ['go 止まった'], queue: ['・ wait'], earlier: [], sameNode: 0, knowledge: '## ブレイズ\n- 待ち打ち', ...extra });
 
   it('says the stall, the plan with the current subtree, the state and the knowledge, in order', () => {
@@ -200,8 +200,8 @@ describe('the brief', () => {
     const order = ['## 依頼', '## 止まり', '## 計画', '## 今の様子', '## 事実', '## 直近の結果', '## 体の列', '## この段の知識'].map(title => text.indexOf(title));
     expect(order.every(index => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(text).toContain('止まった節: p10.1。その条件の今: 未: blaze_rod 3/7。');
-    expect(text).toContain('▶p10.1 [blaze] mc_probe kind=camp で湧き場の足場を見つけ、go で着く');
+    expect(text).toContain('止まった節: p12.1。その条件の今: 未: blaze_rod 3/7。');
+    expect(text).toContain('▶p12.1 [blaze] mc_probe kind=camp で湧き場の足場を見つけ、go で着く');
     expect(text).toContain('済み: ');
   });
 
@@ -211,11 +211,11 @@ describe('the brief', () => {
     expect(llmcTokens(text)).toBeLessThanOrEqual(REPLAN.briefTokens);
     expect(text).not.toContain('## この段の知識');
     expect(text).toContain('## 止まり');
-    expect(replanBrief(input({ earlier: [{ at: 1, node: 'p10.1', kind: 'node_stalled', outcome: 'changed', why: '待ち場を割った' }] }))).toContain('節 p10.1（node_stalled）: 計画を直した。待ち場を割った');
+    expect(replanBrief(input({ earlier: [{ at: 1, node: 'p12.1', kind: 'node_stalled', outcome: 'changed', why: '待ち場を割った' }] }))).toContain('節 p12.1（node_stalled）: 計画を直した。待ち場を割った');
   });
 
   it('writes a node with what shows it done, its target and its place, and a body with nothing seen', () => {
-    const node = dragon.nodes.find(item => item.id === 'p10')!;
+    const node = dragon.nodes.find(item => item.id === 'p12')!;
     expect(nodeLine(node, dragon)).toContain('ブレイズロッド7以上');
     expect(nodeLine(node, dragon)).toContain('目標: blaze_rod×7');
     expect(nodeLine(node, dragon)).toContain('済む条件: have:blaze_rod>=7');

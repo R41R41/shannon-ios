@@ -42,27 +42,36 @@ const TO_NETHER: readonly PlanSeed[] = [
     children: [
     node('原木を集める', { kind: 'wood', doneWhen: 'have:log>=8|have:planks>=24', note: '作業台・木のツルハシ・斧と石の道具の棒の分（ツルハシ 1 つで済みにしない）' }),
     node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
-    node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword' }),
+    node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword',
+      note: '丸石 11（ツルハシ 3・斧 3・剣 2・予備のツルハシ 3）。炉 8・足場は別' }),
     // 11/11 run 7: the amount was the least (16) while many trees stood near; the node says the least and the safe amount, and `stock:wood` reads the logs near.
     node('原木を通しの分（最低12・安心24）', { kind: 'wood', doneWhen: 'stock:wood',
       note: '石の斧の後に一度に（板・棒・盾・ベッドの板・箱の分）。近くに多ければ安心の量まで。後で木のために地上へ戻らない' })] }),
+  // Run 9 (11/13): the village's beds are taken in one round (a card's beds up to 8, one cell each); top level, so the food node's closing does not close it.
+  node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', doneWhen: 'have:bed>=8',
+    note: '札のベッドを 8 まで 1 周で取り切る（1 個 1 マス。9 個目以上は取らない）・干し草は全部',
+    caution: ['村が見えなければ飛ばす。羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
+      '通りがかりに昼のクモ（剣で倒すと糸。弓に 3）・砂利（火打石）・ニワトリ（羽）を見たら寄って取る（探し回らない）'] }),
   node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'stock:food&have:bed',
     note: '食料は最低40・安心100点（干し草3個）。ベッドが一番（寝れば夜を飛ばせる）: 走査の羊の行で同じ色 3 体を探す。夜にベッドが無ければ、地面に 2 段の穴を掘って塞ぎ、その底から鉄の節へ下りる（外で待たない。朝に戻って続ける）', children: [
-    node('村を回る（ベッド全部・干し草・畑・箱）', { kind: 'village', doneWhen: 'have:bed>=8',
-    note: '村が見えなければ飛ばす。ベッドは見つけた分を全部（寝る用 1 と、エンドの竜戦に 10 個・最低 8）。札のベッドを取り切るまで 1 周で回る。'
-      + '羊を見かけたら羊毛も取る（同じ色 3＋板 3 で 1 個）',
-    caution: ['通りがかりに昼のクモ（剣で倒すと糸。弓に 3）・砂利（火打石）・ニワトリ（羽）を見たら寄って取る（エンドの結晶を地面から撃つ弓と矢の分。探し回らない）'] }),
     node('無ければ（石の剣か斧を持って）動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'stock:food' })] }),
-  node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield', caution: ['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）'],
+  node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket',
+    caution: ['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）',
+      '降りる前に石のツルハシを 2 本と石炭 4（鉄 24 と肉を焼く分。見えている最寄りの石炭を先に mine。原木・板は燃やさない）',
+      '生の鉄 4 以上は smelt furnaces=3 で並べて焼く。take は残り 15 秒以内だけ体が待つ。それより長ければ掘る手を先に積む',
+      '炉は掘り場の 6m 以内に置く。離れたら furnace に dig=stone,dirt maxDig=N を付ける（体が掘って寄る）'],
     children: [node('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）', { kind: 'iron', doneWhen: 'have:iron_pickaxe' }),
     // The whole-run audit of 11/4, order 1: the sword and the shield the moment the iron is smelted (run60 met the night with no sword); the boots are
     // the golden ones (the gate's table), so the armour is the three iron pieces. Run 8 (11/13): the gate asks one shield; the spare and its iron
     // and planks are aims (the blazes' stage makes a shield where it stands from iron 1 and planks 6).
-    node('残りの鉄をまとめて採り焼く・剣・盾・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket', caution: ['盾1はゲートの必須。予備の盾と作り直しの鉄2・板16は目標（ブレイズの湧き場で盾が壊れた時にその場で作り直せる）'] }),
-    node('鉄の兜・胸当て', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate' })] }),
-  node('水入りバケツ（最初の水源ですぐ汲む）', { kind: 'water', doneWhen: 'have:water_bucket' }),
+    node('残りの鉄をまとめて採り焼く・剣・盾・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket', caution: ['盾1はゲートの必須。予備の盾と作り直しの鉄2・板16は目標（ブレイズの湧き場で盾が壊れた時にその場で作り直せる）'] })] }),
+  // Run 9 (11/13): the water before the armour (the bucket is made, and the water is drawn while the furnace smelts).
+  node('水入りバケツ（バケツを作ったらすぐ、炉が焼いている間に）', { kind: 'water', doneWhen: 'have:water_bucket',
+    note: '目から 12m 以内の届く水源ならその場で use bucket。遠い地表の水へは、近くに汲める水が無い時だけ（同じ池で 2 回失敗したら地表へ）' }),
+  node('鉄の兜・胸当てを作って着る', { kind: 'iron_armor', doneWhen: 'have:iron_helmet&have:iron_chestplate' }),
   node('ダイヤ（y=-58）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe',
-    caution: ['必須（盾・鉄の兜胸当てを着る・鉄のツルハシ・水入りバケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う'], children: [
+    caution: ['必須（盾・鉄の兜胸当てを着る・鉄のツルハシ・水入りバケツ・食料40点）が欠けたら下りない', '死ねば鉄装備を失う。体力12未満か、ツルハシの残り耐久が残りの掘る回数（ダイヤ 3＋道。1 段 2〜3 回）に足りなければ補う',
+      '火打石が無ければ、下りや横掘りで見た砂利を掘って持つ（1個10%）。地表へ戻らない。ゲートは溶岩の脇（地下）で組んでよい'], children: [
     node('ダイヤ3以上を掘る', { kind: 'diamond', doneWhen: 'have:diamond>=3|have:diamond_pickaxe' }),
     node('ダイヤのツルハシ（剣も）', { kind: 'diamond', doneWhen: 'have:diamond_pickaxe' })] }),
   // 「|have:ender_eye>=10」 (end1108d S9, 11/8): 12 eyes less the one or two just thrown and not yet picked up still close the stages that make them.
@@ -71,7 +80,8 @@ const TO_NETHER: readonly PlanSeed[] = [
   node('黒曜石10とゲート', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10', caution: ['必須（盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ（ダイヤ1か鉄3）・足場32・食料40点）が欠けたら入らない',
     '点いたらその場ですぐ入る（必須がそろえば、目標のために地上へ戻らない）'], children: [
     node('溶岩源で黒曜石10（ゲートの分）', { kind: 'obsidian', doneWhen: 'have:obsidian>=10|see:nether_portal|dim:the_nether|have:ender_eye>=10', note: 'ゲートの 10 だけ取る。10 に届いたら掘りをやめてゲートへ（竜戦の分 12 は出発の点検で別に取る）' }),
-    node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether|have:ender_eye>=10' }),
+    node('火打ち金（火打石は砂利）', { kind: 'portal', doneWhen: 'have:flint_and_steel|dim:the_nether|have:ender_eye>=10',
+      note: '火打石は下りや横掘りで見た砂利を掘って持つ（1個10%）。火打石のために地表へ戻らない。鉄のある高さで先に作る' }),
     node('ゲートを組んで火をつける', { kind: 'portal', doneWhen: 'dim:the_nether|have:ender_eye>=10',
       caution: ['火をつける前に必須を確かめる: 盾1・鉄の剣・鉄の兜胸当てを着る・ツルハシ・足場32・食料40点。点いたらその場ですぐ入る',
         'ベッドは寝る用2を残し、ゲートの横の箱に預けて入る（1個1マス。帰りに同じゲートで取る）'] })] }),
@@ -103,7 +113,7 @@ const BEYOND: readonly PlanSeed[] = [
     caution: ['死ぬと持ち物と時間を失う（死んでも続ける）。体力12未満・盾の耐久2割未満なら戦わず退いて補う'],
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('8m 内の見えるブレイズへ待たずに attack target=#id（体が追う）、剣で 20 体ほど（矢なし）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
-  node('エンダーパール14以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 14 }, doneWhen: 'have:ender_pearl>=14|have:ender_eye>=12', note: '枠に11〜12・投げの損耗に2〜3',
+  node('エンダーパール13以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 13 }, doneWhen: 'have:ender_pearl>=13|have:ender_eye>=13', note: '13 で出る（アイ 12 だと枠が足りない見込み 約 1 割強、13 で約 3%。早く集まれば 14）',
     // Run 9 (11/12): after the rods she scanned and searched 0 times, took the way back for the pearls (about 1,100 s, 0 pearls). The search is the first child,
     // done by what the body saw; the rest of the pearl's children stay until the pearls are in.
     children: [node('歪んだ森を探す（走査→見えていない向きへ90mのgo→走査）', { kind: 'nether', doneWhen: 'see:warped_forest',
@@ -112,28 +122,30 @@ const BEYOND: readonly PlanSeed[] = [
   // The coordinator, 11/9 (thru-1110's table): leave the Nether with 12 eyes, not 10 (a frame holds one from the start 1 time in 10, 1.2 on
   // average, so about 11 are needed, and a throw breaks about 1 in 5). A node closed in the Nether stays done while eyes fly; a first plan made
   // in the overworld with 10 or more eyes has these stages taken out (`strongholdFirst`, EYES_FOR_STRONGHOLD), so 10 still keep her from going back.
-  node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=12', note: '材料があれば14作る。12以上でネザーを出る（枠に最初から入るのは平均1.2個、投げは1回約2割で割れる。投げて落ちたアイは拾う。枠の空きを見て足りない時だけ戻る）',
+  node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=13', note: '材料（粉 14）があれば全部作る。13 以上でネザーを出る',
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
-  node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: 'パールとアイがそろってから（アイ12以上）。帰りのゲートから。ポータルの対は live の控え。そろう前に始めるなら、エンダーパールの節を skip と理由で閉じてから（往復で戻る理由は黒曜石・ベッドではない）' }),
+  node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: 'パールとアイがそろってから（アイ13以上）。帰りのゲートから。ポータルの対は live の控え。そろう前に始めるなら、エンダーパールの節を skip と理由で閉じてから（往復で戻る理由は黒曜石・ベッドではない）' }),
+  // Run 9 (11/13): the gate's frame (10 obsidian) is taken on the way back, not found again as lava.
+  node('帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12|dim:the_end',
+    note: 'ネザーの用事（ロッド・パール）が済んで戻った後だけ。先に目玉を 1 個投げて向きを知る。ダイヤのツルハシで 1 個約 9 秒、10 個で約 90 秒。足りない 2 は溶岩で' }),
   // thru-1110 (11/9): the arrows are the fallback's, not the beds' way (the End's gate holds no first entry for them when the beds are in), and a
   // through run brings none from the Nether (the blazes are cut with the sword): the check no longer waits for 30 of them.
-  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=330&have:bed>=8&have:obsidian>=8&have:ender_eye>=10&have:water_bucket',
-    note: '水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ: 自動救済は対応版で有効な時だけ手・hotbar の水。'
-      + '下降は事前に水を置くか vertical（自動救済を当てに跳び降りない）',
-    children: [node('ベッドを10個にする（預けた箱から・羊毛3と板3・最低8）', { kind: 'bed', doneWhen: 'have:bed>=10',
+  node('出発の点検（エンドへ）', { kind: 'prep_descent', doneWhen: 'food>=150&have:bed>=8&have:obsidian>=8&have:ender_eye>=10&have:water_bucket',
+    note: '帰ってすぐ目玉を 1 個投げて交点の向きを知る（約 10 秒）。水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ: 自動救済は対応版で有効な時だけ手・hotbar の水。'
+      + '下降は事前に水を置くか vertical',
+    children: [node('ベッドを8個にする（預けた箱から・羊毛3と板3）', { kind: 'bed', doneWhen: 'have:bed>=8',
         note: '羊毛は鋏（鉄2）で刈ると1頭1〜3枚（殺すと1枚）。村のベッドが8に足りない時に。9個目は枠の近くに置くリスポーン用（戦い用の8とは別）' }),
-      node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12' }),
-      node('食料330点（焼き牛16）にする', { kind: 'food', doneWhen: 'food>=330',
-        note: '地上で牛・豚・羊を狩ってかまどで焼く。竜の戦いは20分ほど食べ続ける（焼き牛4では途中で0になった）' }),
+      node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12', note: '戻ったゲートの枠から（回収の節）。足りない分は溶岩で' }),
       node('弓と矢（矢は最低 12・目標 30。道中の材料とスケルトンの矢で。寄り道しない）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30',
         note: '糸（クモ）・棒・火打石・羽根。弓があればクリスタルを地面から撃てる（無いと柱を登る）。矢 12 は檻なし 8 本に 1 射ずつと予備。無くても入場は止まらない' })] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
+    node('食料330点（交点への道すがら）', { kind: 'food', doneWhen: 'food>=330|see:end_portal_frame',
+      note: '交点の向きへ歩きながら、見えた牛・豚・羊を go の間に hunt で積む。かまどは持って歩き、夜の囲いでまとめて焼く。地上で止まって集めない（エンドのゲートは食料 80 の予備で入れる）' }),
     node('目玉の交点へ行き、地下の枠の部屋を見つける', { kind: 'stronghold', doneWhen: 'see:end_portal_frame',
       note: '交点・誤差・次の投げ位置は live の目玉の帳簿。',
-      caution: ['海の向こうも地上の道で行ける: 海は go waterOk で泳いで渡る（約 3 m/s。橋・海の下の掘りはしない）。go の to は 200m 前後先。',
-        'ネザー経由なら、アイの交点が出た後にネザーへ入り直し、掘る前にネザー側のゲート座標を控える。',
-        '入った側（1 つ目のゲートの向こう側）の枠の黒曜石 10 は、ダイヤのツルハシで回収できる（1 個 9.4 秒、計約 94 秒）。',
-        '回収した 10 は (x/8, z/8) の 2 つ目のゲートの分で、竜戦用の 12 を残せる。枠を回収したゲートは帰りには使わない。'] }),
+      caution: ['海の向こうも地上の道で行ける: 海は go waterOk で泳いで渡る（橋・海の下の掘りはしない）。go の to は 200m 前後先。',
+        '泳ぎは 2〜2.3 m/s・歩きは約 4 m/s（実測）。',
+        'ネザー経由は使わない（帰りのゲートの枠は回収済み）。'] }),
     node('枠にアイをはめてポータルを開く', { kind: 'stronghold', doneWhen: 'see:end_portal' })] }),
   node('エンドに入る', { kind: 'end', doneWhen: 'dim:the_end', note: 'ポータルの e のマスへ walk して約4秒待つ',
     caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）', '橋の先端（幅1）に長居せず、玉が来る向きを見て渡る。積める物を残す'] }),
@@ -193,15 +205,15 @@ export function gateFirst(seeds: readonly PlanSeed[]): PlanSeed[] {
 function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
   if (seed.kind === 'village') return { title: '村を回る（ベッド全部・干し草・畑・箱）' };
   if (seed.kind === 'prep_descent' && seed.doneWhen === 'stock:food&have:bed') return { doneWhen: 'stock:food&have:bed>=1' };
-  if (seed.kind === 'iron' && seed.doneWhen === IRON_TOP_DONE) {
+  if (seed.kind === 'iron' && seed.children && seed.doneWhen === IRON_TOP_DONE) {
     // The pre-deploy review of 11/5 (item 7): the iron sword is the gate's, so the iron node is done with it too (not only with the armour).
-    return { title: '鉄（約30・剣・兜・胸まで）', doneWhen: `have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&${IRON_ARMOUR_WORN}` };
+    return { title: '鉄（約30・剣・盾・バケツまで）', doneWhen: IRON_TOP_DONE };
   }
   return {};
 }
-/** The condition of the seed's top iron node (the kind `iron` with children): the iron before the gate is about
- * thirty with the armour. */
-const IRON_TOP_DONE = 'have:iron_ingot>=24|have:iron_chestplate&have:iron_pickaxe&have:shield';
+/** The condition of the seed's top iron node (the kind `iron` with children; its last child has the same words, so the children are told apart):
+ * the pickaxe, sword, shield and bucket (the armour is its own top node, after the water). */
+const IRON_TOP_DONE = 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket';
 const ironFirst = (seed: PlanSeed): PlanSeed => seed.kind === 'iron' && !seed.doneWhen ? { ...seed, title: '最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）' }
   : seed.kind === 'iron_armor' ? { ...seed, title: '鉄の兜・胸当てを作って着る', doneWhen: IRON_ARMOUR_WORN } : seed;
 /**

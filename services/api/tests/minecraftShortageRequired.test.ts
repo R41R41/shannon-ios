@@ -295,9 +295,9 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) })).toBe('準備の不足（エンドへ）: 水入りバケツが無い');
     const plan = seedPlan('エンドラを倒して')!;
     const check = plan.nodes.find(node => node.title === '出発の点検（エンドへ）')!;
-    expect(check.doneWhen).toBe('food>=330&have:bed>=8&have:obsidian>=8&have:ender_eye>=10&have:water_bucket');
-    // The coordinator, 11/9: the Nether is left with 12 eyes.
-    expect(plan.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=12');
+    expect(check.doneWhen).toBe('food>=150&have:bed>=8&have:obsidian>=8&have:ender_eye>=10&have:water_bucket');
+    // Run 9 (11/13): the Nether is left with 13 eyes (12 left the frame short about 1 time in 8).
+    expect(plan.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=13');
     expect(check.note).toContain('水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ');
     expect(STRATEGY_KNOWLEDGE_V2).toContain('弓と矢 30・水入りバケツ');
   });
@@ -362,7 +362,7 @@ describe('a death is avoided, not the end (the owner, 2026-11-02 and 2026-11-10)
   it('puts it in the cautions of the diamonds and the blaze rods, within the plan\'s bounds', () => {
     const plan = seedPlan('エンドラを倒して')!;
     const cautions = (title: string) => plan.nodes.find(node => node.title === title)?.caution ?? [];
-    expect(cautions('ダイヤ（y=-58）').join(' ')).toContain('死ねば鉄装備を失う。体力12未満・耐久2割未満なら進まず補う');
+    expect(cautions('ダイヤ（y=-58）').join(' ')).toContain('死ねば鉄装備を失う。体力12未満か、ツルハシの残り耐久が残りの掘る回数（ダイヤ 3＋道。1 段 2〜3 回）に足りなければ補う');
     expect(cautions('ブレイズロッド7以上').join(' ')).toContain('死ぬと持ち物と時間を失う（死んでも続ける）。体力12未満・盾の耐久2割未満なら戦わず退いて補う');
     for (const node of plan.nodes) {
       expect((node.caution ?? []).length, node.title).toBeLessThanOrEqual(PLAN_LIMITS.rules);

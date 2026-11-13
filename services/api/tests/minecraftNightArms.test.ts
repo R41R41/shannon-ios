@@ -101,3 +101,19 @@ describe('crying obsidian is not obsidian', () => {
     expect(carried(new Map([['crying_obsidian', 5]]), 'obsidian')).toBe(0);
   });
 });
+
+describe('the night is not slept away while the work is underground (run 9, 11/13)', () => {
+  const bed = new Map([['white_bed', 1]]);
+  it('says when to sleep (a night to skip above ground, or the hand before going up) and not that the bed works underground', async () => {
+    const { nightBedLine, dayBedLine } = await import('../src/surfaces/minecraft/minecraftNightArms.js');
+    const night = nightBedLine({ time: '14000' }, bed, 'overworld')!;
+    const day = dayBedLine({ time: '3000' }, bed, 'overworld')!;
+    for (const line of [night, day]) {
+      expect(line).toContain('地下の作業が続く間の夜は飛ばさない');
+      expect(line).toContain('夜は約 520 秒');
+      expect(line).not.toContain('地下でも寝られる');
+    }
+    expect(night).toContain('地上へ出る手の直前が夜の時');
+    expect(day).toContain('夜に地上で動く予定なら sleep');
+  });
+});

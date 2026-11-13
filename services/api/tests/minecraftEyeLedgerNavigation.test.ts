@@ -100,18 +100,16 @@ describe('the stronghold route knowledge and the seed plan', () => {
     expect(knowledge).toContain('回収したゲートは帰りには使わない');
   });
 
-  it('keeps existing node IDs and the first twenty-two blocks while recording recovery beside the stronghold step', () => {
+  it('says in the stronghold step that the Nether is not the way (the frame was taken on the way back, run 9 11/13); the food node is its first child', () => {
     const tree = seedPlan('エンドラを討伐して', 'the_nether')!;
-    expect(tree.nodes.filter(node => node.parentId === 'p8').map(node => node.id)).toEqual(['p8.1', 'p8.2']);
-    const step = tree.nodes.find(node => node.id === 'p8.1')!;
+    expect(tree.nodes.filter(node => node.parentId === 'p9').map(node => node.id)).toEqual(['p9.1', 'p9.2', 'p9.3']);
+    expect(tree.nodes.find(node => node.id === 'p9.1')!.title).toBe('食料330点（交点への道すがら）');
+    const step = tree.nodes.find(node => node.id === 'p9.2')!;
     expect(step.doneWhen).toBe('see:end_portal_frame');
-    const caution = step.caution!.join('\n');
-    expect(caution).toContain('交点が出た後にネザーへ入り直し、掘る前にネザー側のゲート座標を控える');
-    expect(caution).toContain('枠の黒曜石 10');
-    expect(caution).toContain('ダイヤのツルハシ');
-    expect(caution).toContain('計約 94 秒');
-    expect(caution).toContain('竜戦用の 12 を残せる');
-    expect(caution).toContain('回収したゲートは帰りには使わない');
+    const caution = step.caution!.join(' ');
+    expect(caution).toContain('ネザー経由は使わない（帰りのゲートの枠は回収済み）');
+    expect(caution).not.toContain('ネザーへ入り直し');
+    expect(caution).toContain('泳ぎは 2〜2.3 m/s・歩きは約 4 m/s（実測）');
     const initial = seedPlan('エンドラを討伐して')!;
     expect(initial.nodes.find(node => node.title === '溶岩源で黒曜石10（ゲートの分）')?.doneWhen).toBe(
       'have:obsidian>=10|see:nether_portal|dim:the_nether|have:ender_eye>=10');

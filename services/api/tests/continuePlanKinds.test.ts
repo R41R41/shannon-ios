@@ -216,8 +216,8 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
   const kindsOf = (tree: PlanTree) => tree.nodes.map(node => `${node.id}:${node.kind}`).join(' ');
   it('names the kinds of the whole route (the nodes of no kind of their own are other)', () => {
     const kinds = Object.fromEntries(dragon.nodes.map(node => [node.id, node.kind]));
-    expect(kinds).toMatchObject({ p1: 'stone_tools', 'p1.1': 'wood', 'p1.3': 'stone_tools', p2: 'prep_descent', 'p2.1': 'village', 'p2.2': 'food', 'p2.3': 'food', p3: 'iron',
-      'p3.3': 'iron_armor', p4: 'water', p5: 'diamond', 'p5.1': 'diamond' });
+    expect(kinds).toMatchObject({ p1: 'stone_tools', 'p1.1': 'wood', 'p1.3': 'stone_tools', p2: 'village', p3: 'prep_descent', 'p3.1': 'food', 'p3.2': 'food', p4: 'iron',
+      p6: 'iron_armor', p5: 'water', p7: 'diamond', 'p7.1': 'diamond' });
     expect(dragon.nodes.filter(node => node.kind === 'dragon').length).toBeGreaterThan(0);
     for (const kind of ['fortress', 'blaze', 'pearl', 'stronghold', 'portal', 'obsidian'] as PlanKind[]) expect(dragon.nodes.some(node => node.kind === kind), kind).toBe(true);
     expect(dragon.nodes.filter(node => node.kind === 'other').map(node => node.id).length).toBeLessThan(12);
@@ -228,13 +228,13 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
   it('the village section ends on a condition she can meet (3 beds or 6 bread), so a skipped village does not stay the current node', () => {
     const village = dragon.nodes.find(node => node.kind === 'village')!;
     expect(village.doneWhen).toBe('have:bed>=8');
-    expect(village.note).toContain('札のベッドを取り切るまで 1 周で回る');
+    expect(village.note).toContain('札のベッドを 8 まで 1 周で取り切る');
     expect(village.note).not.toContain('この親が済んでも');
   });
   it('the gate-first changes find their seeds by kind: one bed, the iron with the armour, the golden boots after the diamonds, no food 100 before the gate', () => {
     const titles = dragon.nodes.map(node => node.title);
     expect(titles).toContain('村を回る（ベッド全部・干し草・畑・箱）');
-    expect(titles).toContain('鉄（約30・剣・兜・胸まで）');
+    expect(titles).toContain('鉄（約30・剣・盾・バケツまで）');
     expect(titles).toContain('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）');
     expect(titles).toContain('鉄の兜・胸当てを作って着る');
     const diamond = dragon.nodes.findIndex(node => node.kind === 'diamond' && node.parentId === null);
@@ -245,7 +245,7 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
   it('the seed\'s kinds do not change when a title does', () => {
     expect(kindsOf(dragon)).toBe(kindsOf(seedPlan('エンドラを倒して')!));
     const retitled: PlanTree = { ...dragon, nodes: dragon.nodes.map(node => ({ ...node, title: `節${node.id}` })) };
-    expect(planFactsOf(withCurrent(retitled, 'p5'))!.now!.kind).toBe('diamond');
+    expect(planFactsOf(withCurrent(retitled, 'p7'))!.now!.kind).toBe('diamond');
     expect(isDragonPlan(retitled)).toBe(true);
   });
   it('the nodes done in the plan held are carried to the answer by kind and words only', () => {
@@ -260,7 +260,7 @@ describe('the seed plan: every node has the kind its work is, and the seed is pi
 describe('the readers of the plan\'s facts', () => {
   it('planFactsOf: the current node with its place, the kinds above it, and the next nodes as planPath shows them', () => {
     const tree = seedPlan('エンドラを倒して')!;
-    for (const id of ['p1.2', 'p2.3', 'p5.2', 'p7', 'p10.1']) {
+    for (const id of ['p1.2', 'p3.2', 'p7.2', 'p9', 'p12.1']) {
       const at = withCurrent(tree, id), facts = planFactsOf(at)!;
       expect(facts.now!.id).toBe(id);
       expect(facts.next.map(item => item.id), id).toEqual(planPath(at).next.map(line => line.split(' ')[0]));
@@ -313,9 +313,9 @@ describe('the live state: the facts are the code\'s own, outside the model\'s si
   const observation = frame({ dimension: 'overworld', position: { x: 0, y: 64, z: 0 }, inventory: [{ name: 'bread', count: 2 }], health: 20, food: 20, localMap: '地図なし' });
   const llmc = (held: PlanTree) => ({ plan: () => undefined, planView: () => null, planTree: () => held });
   it('llmcTransient carries planFacts of the current node, and the rewrite takes it out before the model reads it', () => {
-    const at = withCurrent(tree, 'p5.1');
+    const at = withCurrent(tree, 'p7.1');
     const live = llmcTransient(llmc(at), createLlmcEvents('plan-facts'), observation, 10, [], {}, 'plan-facts');
-    expect(live[PLAN_FACTS_KEY]).toMatchObject({ now: { id: 'p5.1', kind: 'diamond' }, above: ['diamond'] });
+    expect(live[PLAN_FACTS_KEY]).toMatchObject({ now: { id: 'p7.1', kind: 'diamond' }, above: ['diamond'] });
     // The next nodes' kinds count too: the golden boots (the gate's kind) come after the diamonds, so the Nether's knowledge is ready.
     expect(stagesFor({ body: live })).toEqual(['prep', 'nether']);
     const shown = rewriteLlmcLive({ plan: {}, body: live }).live.body as Record<string, unknown>;

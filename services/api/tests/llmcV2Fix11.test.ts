@@ -116,8 +116,8 @@ describe('chapter 4 A: the road and the pace', () => {
     expect(isDragonPlan(null)).toBe(false);
   });
   it('writes the top-level nodes: the done ones with ✓, the one she is in with ◀今, the next five, and how many are left', () => {
-    const road = roadLine(withStates(['p1', 'p2', 'p3', 'p4'], 'p5.1'))!;
-    expect(road).toBe('道のり: 済み 1 節 食料とベッド✓ 鉄✓ 水入りバケツ✓ → ダイヤ◀今 → 金のブーツ → 黒曜石10とゲート → 出発の点検 → ネザー要塞を探す → ブレイズロッド7以上 → ほか 7 節');
+    const road = roadLine(withStates(['p1', 'p2', 'p3', 'p4', 'p5', 'p6'], 'p7.1'))!;
+    expect(road).toBe('道のり: 済み 3 節 鉄✓ 水入りバケツ✓ 鉄の兜・胸当てを作って着✓ → ダイヤ◀今 → 金のブーツ → 黒曜石10とゲート → 出発の点検 → ネザー要塞を探す → ブレイズロッド7以上 → ほか 8 節');
   });
   it('is absent for a plan that is not the dragon\'s', () => {
     expect(roadLine(notDragon)).toBeNull();
@@ -183,11 +183,11 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   const bare = frame({ position: { x: 0, y: 64, z: 0 }, dimension: 'overworld', inventory: [] });
   it('keeps a milestone reached when its item is used up and she is back in the overworld (the plan holds the node done)', () => {
     // The obsidian went into the gate, she went through and came back: the pack holds nothing, the dimension is the overworld.
-    expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p5.1', 'p5.2', 'p6', 'p7.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 2,820 秒（あと 1,170 秒）・まだの節目: ベッド（目安 150 秒）');
-    expect(meterLine(done(['p7', 'p7.1', 'p7.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒・次の節目 ネザー要塞 目安 3,200 秒（あと 1,200 秒）');
+    expect(meterLine(done(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p7.1', 'p7.2', 'p8', 'p9.1']), bare, 1_650 / 60)).toBe('目安: 今 1,650 秒・次の節目 ネザー 目安 2,820 秒（あと 1,170 秒）・まだの節目: ベッド（目安 150 秒）');
+    expect(meterLine(done(['p9', 'p9.1', 'p9.4']), bare, 2_000 / 60)).toBe('目安: 今 2,000 秒・次の節目 ネザー要塞 目安 3,200 秒（あと 1,200 秒）');
   });
   it('does not go back to an earlier milestone, and shows no next target after the last', () => {
-    const line = meterLine(done(['p7']), bare, 100 / 60)!;
+    const line = meterLine(done(['p9']), bare, 100 / 60)!;
     expect(line).toBe('目安: 今 100 秒・次の節目 ネザー要塞 目安 3,200 秒（あと 3,100 秒）');
     expect(line).not.toContain('まだの節目');
     // The kill is the last target and the frame never reaches it (the task ends there): the meter keeps saying it, past its seconds.
@@ -195,7 +195,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
     expect(meterLine(every, bare, 12_000 / 60)).toContain('次の節目 竜の討伐 目安 9,600 秒（');
   });
   it('writes a blocked node before the current one as 止, as the dictionary says', () => {
-    const road = roadLine(done(['p1', 'p2'], 'p5.1', { p3: 'blocked' }))!;
+    const road = roadLine(done(['p1', 'p2', 'p3'], 'p7.1', { p4: 'blocked' }))!;
     expect(road).toContain('鉄（止）');
     expect(road).toContain('ダイヤ◀今');
   });

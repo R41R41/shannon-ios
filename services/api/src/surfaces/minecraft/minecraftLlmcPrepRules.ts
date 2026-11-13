@@ -246,6 +246,7 @@ export const PREP_DESCENT_LINES: readonly string[] = [
   ("- 必須（未達の間は下りない・鉄を掘らない。省くなら prep に skipped と理由を書く。省いた節は達成に数えない）: 食料の点 40 以上（foodPoints.total。満腹 fullness " +
 "では数えない）・石のツルハシと石の斧・作業台 1 つか板 4 以上（持つ）。"),
   '- 量は最低と安心の両方: 食料は最低 40 点・安心 100 点、原木は最低 12・安心 24 本分（通しの分。近くに多ければ安心の量まで）。',
+  '- 降りる前に石のツルハシ 2 本と石炭 4（鉄と肉を焼く分。見えている最寄りの石炭を先に掘る。原木・板は燃やさない）。',
   '- 下りる手の why には、確かめた今の数と補い方を書く（満たした時だけ「（食料 41.2/40・作業台 有・板 6）」）。',
   ("- 理由: 持ち込む食料は地下で食べて体力を戻す分で、満腹では代わりにならない。地下には食べ物も木も見つかりにくく、足りなくなると地上へ戻る必要がある。死ぬこともある（以前の実走の記録で、今回の所要時間ではない: 42 は地上へ戻るのに移動の不具合込みで 540 " +
 "秒、41 は作業台が無いまま 372 秒止まって上りの途中で死んだ）。"),
@@ -256,7 +257,7 @@ export const PREP_DESCENT_RULE: string = ['## 準備の決まり（鉄を掘り�
 export const PREP_DESCENT_LINES_EN: readonly string[] = [
   ("- Required (while unmet, do not go down or dig iron; to skip one, write skipped and the reason in prep; a skipped section does not count as achieved): food points 40 or more (foodPoints.total; fullness " +
 "does not count), a stone pickaxe and a stone axe, and 1 crafting table or 4 or more planks (carried)."),
-  '- Amounts: least/safe. Food 40/100 points; wood 12/24 logs (whole run; safe one when many trees are near).',
+  '- Amounts: least/safe. Food 40/100 points; wood 12/24 logs (whole run; safe one when many trees are near); 2 stone picks, 4 coal.',
   '- The why of the descending hand states the current numbers you checked and how any shortfall is made up; once all requirements are met, write it in the form 「（食料 41.2/40・作業台 有・板 6）」.',
   ("- Reason: the food you carry is for eating below to get health back; fullness is no substitute. Underground, food and trees are hard to find, and running short forces a return to the surface. You can die too (records of earlier runs, not this run's duration: run 42 took 540 " +
 "seconds to get back to the surface, including a movement fault; run 41 stood still for 372 seconds with no crafting table and died on the way up)."),
@@ -271,7 +272,7 @@ export const PREP_DESCENT_RULE_EN: string = ['## Preparation rules (「準備の
  */
 export const PREP_RULES_WORDS = [
   `- ダイヤを掘りに下りる前の必須（そろうまで下りない。理由を書いても省けない）: 鉄のツルハシ・水入りバケツ・盾・鉄の兜・胸当て（着る）・食料 40 点。鉄はネザーまでに約 ${IRON_BEFORE_NETHER}`
-    + `（${IRON_USES.map(([use, count]) => `${use} ${count}`).join('・')}）` + ("。火打ち金は鉄のある高さで先に作る。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
+    + `（${IRON_USES.map(([use, count]) => `${use} ${count}`).join('・')}）` + ("。火打ち金は鉄のある高さで先に作る（火打石は下りや横掘りで見た砂利から。火打石のために地表へ戻らず、ゲートは地下の溶岩の脇で組んでよい）。黒曜石の後で鉄と火打石を探すために上り直さずに済む。作った防具はすぐ equip " +
 "で着る（持つだけでは守らない）。"),
   `- 靴は鉄でなく金のブーツ（金の延べ棒 ${GOLD_FOR_BOOTS}）。金の防具を 1 つ着ているとピグリンが襲わない。金鉱石は y=-16 前後に多く、ダイヤへ下りる途中の壁で見つかる`
     + '（生の金をかまどで焼く。村の箱・廃坑の箱・荒廃したポータル（走査の「壊れたポータル」）の箱にもある）。鉄のブーツを持っていても、ネザーの前に金のブーツに履き替える。',
@@ -307,7 +308,7 @@ export const PLAN_PREP_WORDS = [
     + '竜戦用のベッドは target bed×10 の節にする。',
   '- 木は序盤だけ通しの分を一度に: 石の斧ができたら原木を最低 12・安心 24 本分まで取る節を書く（doneWhen は stock:wood。作った分を引き、板・棒も原木に換算して数える）。'
     + '後で木のために地上へ戻らない。',
-  '- バケツを作ったら、最初の水源ですぐ汲む節を鉄の節の次に書く（doneWhen have:water_bucket）。',
+  '- バケツを作った直後・鉄の兜と胸当ての前（炉の待ちに重ねる）に、近くの水源ですぐ汲む節を書く（doneWhen have:water_bucket）。',
   '- 弓と矢（エンドのクリスタルを地面から壊す道具。無いと柱を 1 本ずつ登ることになり、弓なしの実走 3 本は 3 本ともその柱で死んだ）の材料は序盤の道中で集める。'
     + '食料か鉄の節の caution に「クモを見たら剣で倒して糸3（夜と洞窟は鉄の剣と盾の後）・ニワトリの羽根・砂利の火打石」と書く（後の節に回さない）。'
     + '矢は 12 本あれば檻なしの結晶 8 本に足りる（1 射ずつと予備。目標 30）。'

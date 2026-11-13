@@ -20,8 +20,8 @@ const titlesDone = (dimension: string, items: Array<[string, number]>) => {
 
 describe('end1108a S9: twelve eyes in the overworld close the stages that make them', () => {
   it('closes the gate, the rods, the pearls and the eyes with 12 eyes in the overworld', () => {
-    const done = titlesDone('overworld', [['ender_eye', 12]]);
-    for (const title of ['黒曜石10とゲート', '溶岩源で黒曜石10（ゲートの分）', '火打ち金（火打石は砂利）', 'ブレイズロッド7以上', 'エンダーパール14以上', 'エンダーアイ14個'])
+    const done = titlesDone('overworld', [['ender_eye', 13]]);
+    for (const title of ['黒曜石10とゲート', '溶岩源で黒曜石10（ゲートの分）', '火打ち金（火打石は砂利）', 'ブレイズロッド7以上', 'エンダーパール13以上', 'エンダーアイ14個'])
       expect(done.has(title), title).toBe(true);
     expect(done.has('目玉の交点へ行き、地下の枠の部屋を見つける')).toBe(false);
   });
@@ -29,7 +29,7 @@ describe('end1108a S9: twelve eyes in the overworld close the stages that make t
     const tree = seedPlan('エンドラを倒して', 'overworld')!;
     // sections.json S9's give and wear.
     const supply: Array<[string, number]> = [['diamond_pickaxe', 1], ['iron_pickaxe', 1], ['iron_axe', 1], ['iron_boots', 1], ['bow', 1], ['arrow', 32],
-      ['water_bucket', 1], ['cobblestone', 64], ['torch', 16], ['cooked_beef', 24], ['white_bed', 10], ['obsidian', 12], ['ender_eye', 12],
+      ['water_bucket', 1], ['cobblestone', 64], ['torch', 16], ['cooked_beef', 24], ['white_bed', 10], ['obsidian', 12], ['ender_eye', 13],
       ['crafting_table', 1], ['furnace', 1], ['coal', 8]];
     const done = new Set(nodesSeenDone(tree, doneFacts(frame('overworld', [...gear, ...supply]))!));
     // A child of a node seen done is closed with it when the plan settles (「closed=p2.1←p2」).
@@ -43,19 +43,19 @@ describe('end1108a S9: twelve eyes in the overworld close the stages that make t
     // The opening's wood and stone tools are closed in the real run (end1108b S9's checkpoint: p1 to p1.4 done), not by this predicate alone.
     expect(new Set(open.map(node => node.kind).filter(kind => kind !== 'wood' && kind !== 'stone_tools'))).toEqual(new Set(['stronghold', 'end', 'dragon']));
   });
-  it('closes the gate and the rods with 10 or 11 (end1108d: one thrown before the plan), the pearls and the eyes at 12; keeps them open with 9; 12 made in the Nether close them too', () => {
+  it('closes the gate and the rods with 10 or 11 (end1108d: one thrown before the plan), the pearls and the eyes at 13; keeps them open with 9; 13 made in the Nether close them too', () => {
     const thrown = titlesDone('overworld', [['ender_eye', 11]]);
     for (const title of ['黒曜石10とゲート', 'ブレイズロッド7以上']) expect(thrown.has(title), title).toBe(true);
     // The coordinator, 11/9: the pearls' and eyes' stages close at 12 (the Nether is left with 12); with 10 or 11 in the overworld the
     // first plan's answer has them taken out (`strongholdFirst`), and a stage closed in the Nether stays done while eyes fly.
-    for (const title of ['エンダーパール14以上', 'エンダーアイ14個']) expect(thrown.has(title), title).toBe(false);
-    expect(titlesDone('overworld', [['ender_eye', 12]]).has('エンダーアイ14個')).toBe(true);
+    for (const title of ['エンダーパール13以上', 'エンダーアイ14個']) expect(thrown.has(title), title).toBe(false);
+    expect(titlesDone('overworld', [['ender_eye', 13]]).has('エンダーアイ14個')).toBe(true);
     const fewer = titlesDone('overworld', [['ender_eye', 9]]);
     for (const title of ['黒曜石10とゲート', 'ブレイズロッド7以上', 'エンダーアイ14個']) expect(fewer.has(title), title).toBe(false);
-    const nether = titlesDone('the_nether', [['ender_eye', 12]]);
-    for (const title of ['ブレイズロッド7以上', 'エンダーパール14以上', 'エンダーアイ14個']) expect(nether.has(title), title).toBe(true);
-    const rods = titlesDone('the_nether', [['blaze_rod', 6], ['ender_pearl', 13]]);
-    for (const title of ['ブレイズロッド7以上', 'エンダーパール14以上', 'エンダーアイ14個']) expect(rods.has(title), title).toBe(false);
+    const nether = titlesDone('the_nether', [['ender_eye', 13]]);
+    for (const title of ['ブレイズロッド7以上', 'エンダーパール13以上', 'エンダーアイ14個']) expect(nether.has(title), title).toBe(true);
+    const rods = titlesDone('the_nether', [['blaze_rod', 6], ['ender_pearl', 12]]);
+    for (const title of ['ブレイズロッド7以上', 'エンダーパール13以上', 'エンダーアイ14個']) expect(rods.has(title), title).toBe(false);
   });
   it('says why to the first plan and in the eyes\' knowledge', () => {
     expect(FIRST_PLAN_SYSTEM_R9).toContain('オーバーワールドでエンダーアイを 10 個以上持っている時は、ゲート・ブレイズ・パール・アイを作る節を入れず');

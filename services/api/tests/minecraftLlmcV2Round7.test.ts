@@ -74,12 +74,12 @@ describe('the seed plan: the iron before the Nether and one bed', () => {
   const on = seedPlan('エンドラを倒して')!;
   // Owner 2026-10-24 (after run 38): the iron helmet, chestplate and leggings worn before the diamonds; the boots are golden (`minecraftLlmcV2Fix12.test.ts`).
   it('about 30 iron, the pickaxe, the bucket, the shield and the helmet, chestplate and leggings worn', () => {
-    expect(rows(on)).toContain('p3 鉄（約30・剣・兜・胸まで）|have:iron_pickaxe&have:iron_sword&have:bucket&have:shield&have:iron_helmet&have:iron_chestplate');
-    expect(rows(on)).toContain('p3.3 鉄の兜・胸当てを作って着る|have:iron_helmet&have:iron_chestplate');
+    expect(rows(on)).toContain('p4 鉄（約30・剣・盾・バケツまで）|have:iron_pickaxe&have:iron_sword&have:shield&have:bucket');
+    expect(rows(on)).toContain('p6 鉄の兜・胸当てを作って着る|have:iron_helmet&have:iron_chestplate');
     expect(rows(on).some(line => line.includes('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）'))).toBe(true);
   });
   it('the beds node done by `have:bed>=1` and one or two', () => {
-    expect(rows(on)).toContain('p2 食料とベッド（最初の夜の前・鉄より前）|stock:food&have:bed>=1');
+    expect(rows(on)).toContain('p3 食料とベッド（最初の夜の前・鉄より前）|stock:food&have:bed>=1');
     expect(rows(on).some(line => line.includes('ベッド全部'))).toBe(true);
   });
   it('is said to the first plan and the stage knowledge in the same words: the iron, the armour, the golden boots and the beds', () => {
@@ -156,5 +156,36 @@ describe('the near lava beside the far obsidian (run 37, 1,349–1,611 s: 85 m o
     expect(knowledge).not.toContain('溶岩が 20m 内にあれば');
     expect(knowledge).toContain('資源のマスと作業の立ち位置は別');
     expect(knowledge).toContain('道が未確認なら早いとは限らない');
+  });
+});
+
+describe('the seed plan after run 9 (11/13): water before the armour, the village on top, eyes 13, the frame taken back', () => {
+  const plan = seedPlan('エンドラを倒して')!;
+  const tops = plan.nodes.filter(node => node.parentId === null);
+  const top = (title: string) => tops.find(node => node.title === title)!;
+  it('orders the top: stone tools, the village, food and bed, the iron, the water, the armour, the diamonds', () => {
+    expect(tops.slice(0, 7).map(node => node.kind)).toEqual(['stone_tools', 'village', 'prep_descent', 'iron', 'water', 'iron_armor', 'diamond']);
+    expect(top('村を回る（ベッド全部・干し草・畑・箱）').doneWhen).toBe('have:bed>=8');
+    // the iron is closed by its tools and the bucket, not by the armour; its last child has the same words and keeps its title
+    expect(tops[3]!.doneWhen).toBe('have:iron_pickaxe&have:iron_sword&have:shield&have:bucket');
+    expect(plan.nodes.some(node => node.title === '残りの鉄をまとめて採り焼く・剣・盾・バケツ')).toBe(true);
+    expect(tops[4]!.note).toContain('12m 以内');
+    expect(tops[5]!.doneWhen).toBe('have:iron_helmet&have:iron_chestplate');
+  });
+  it('asks 13 eyes and the pearls for them, and takes the gate frame back after the way back', () => {
+    const pearls = top('エンダーパール13以上');
+    expect(pearls.doneWhen).toBe('have:ender_pearl>=13|have:ender_eye>=13');
+    expect(top('エンダーアイ14個').doneWhen).toBe('have:ender_eye>=13');
+    const titles = tops.map(node => node.title), back = titles.indexOf('オーバーワールドへ戻る');
+    expect(titles[back + 1]).toBe('帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）');
+    expect(tops[back + 1]!.doneWhen).toBe('have:obsidian>=12|dim:the_end');
+    expect(tops[back + 1]!.kind).toBe('obsidian');
+  });
+  it('checks food 150 before the End and puts the food 330 under the stronghold as its first child', () => {
+    expect(top('出発の点検（エンドへ）').doneWhen).toContain('food>=150');
+    const stronghold = top('ストロングホールド'), first = plan.nodes.find(node => node.parentId === stronghold.id)!;
+    expect(first.kind).toBe('food');
+    expect(first.doneWhen).toBe('food>=330|see:end_portal_frame');
+    expect(plan.nodes.filter(node => node.title.startsWith('食料330点')).length).toBe(1);
   });
 });

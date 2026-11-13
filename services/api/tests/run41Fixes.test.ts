@@ -44,7 +44,7 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
     const open = meterLine(tree, kit, 400 / 60)!;
     expect(open).toContain('次の節目 バケツ');
     expect(open).toContain('・まだの節目: 地下の準備（食料 40 点・作業台か板 4）（目安 300 秒。今 食料 0/40 点（あと 40 点: bread 4 個）・作業台 無・板 0）');
-    expect(meterLine(withState(['p2'], null), kit, 400 / 60)).not.toContain('まだの節目');
+    expect(meterLine(withState(['p3'], null), kit, 400 / 60)).not.toContain('まだの節目');
   });
   it('points the meter at the preparation while the plan\'s current node is one, though a later milestone is met', () => {
     const food = tree.nodes.find(node => node.kind === 'prep_descent')!;
@@ -67,14 +67,14 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
 
 describe('the road keeps a node that was passed over', () => {
   it('writes an open node before the one she is in with 「（未・飛ばした）」, and a done one with ✓ as before', () => {
-    const road = roadLine(withState(['p1'], 'p3.1'))!;
-    expect(road).toContain('木と石の道具✓ 食料とベッド（未・飛ばした） → 鉄◀今');
+    const road = roadLine(withState(['p1', 'p2'], 'p4.1'))!;
+    expect(road).toContain('木と石の道具✓ 村を回る✓ 食料とベッド（未・飛ばした） → 鉄◀今');
     expect(road).not.toContain('済み ');
   });
   it('does not count it among the done nodes of 「済み n 節」, and shows it when the done ones are many', () => {
-    const road = roadLine(withState(['p1', 'p3', 'p4', 'p5'], 'p6.1'))!;
+    const road = roadLine(withState(['p1', 'p2', 'p4', 'p5', 'p6', 'p7'], 'p8.1'))!;
     expect(road).toContain('食料とベッド（未・飛ばした）');
-    expect(road).toContain('済み 1 節');
+    expect(road).toContain('済み 3 節');
   });
 });
 
@@ -137,7 +137,11 @@ describe('the first plan is asked for the preparation in the descent\'s caution,
     expect(PLAN_PREP_WORDS).toContain('食料の節の where は、食料のある所（箱・畑・干し草の座標）にする。ベッドの座標にしない。見当たらなければ ""');
   });
   it('is in the seed plan too: the iron node cautions the descent', () => {
-    expect(tree.nodes.find(node => node.title.startsWith('鉄（'))?.caution).toEqual(['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）']);
+    // Run 9 (11/13): the same caution also says the stone pickaxes and coal before going down, the furnaces and where the furnace stands.
+    const caution = tree.nodes.find(node => node.title.startsWith('鉄（'))?.caution ?? [];
+    expect(caution[0]).toBe('食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）');
+    expect(caution).toHaveLength(4);
+    expect(caution.join(' ')).toContain('石のツルハシを 2 本と石炭 4');
   });
 });
 
