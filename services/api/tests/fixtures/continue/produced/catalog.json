@@ -1,11 +1,11 @@
 {
  "producedBy": "backend/scripts/lab/continue-produce.ts",
  "bench": "offline",
- "bodyRevision": "2c1f2a1d4056a1fd3ae25da764fb1d1a7e9111a2",
- "madeAt": "2026-11-13T00:29:53.538Z",
+ "bodyRevision": "5eaaea1d269d7a699de0d44fb0a4c132f45bc19e",
+ "madeAt": "2026-11-13T17:16:55.535Z",
  "answers": null,
  "fixtureSha256": null,
- "catalogHash": "e99db5705ed438b8",
+ "catalogHash": "fcf3c7c54c83cb1e",
  "offered": [
   {
    "name": "act",
@@ -478,7 +478,7 @@
          },
          "minItems": 1,
          "maxItems": 12,
-         "description": "go・mine・pickup: 掘ってよい物（stone・dirt・sand・wood か ブロック id）。pickup は書かなければ、target で指した落とし物だけ石・土を数マス掘って近づく（range だけの拾いは掘らない）"
+         "description": "go・mine・pickup・furnace・chest・make: 掘ってよい物（stone・dirt・sand・wood か ブロック id。furnace・chest・make は書いた時だけ、その手の所まで掘って近づく）。pickup は書かなければ、target で指した落とし物だけ石・土を数マス掘って近づく（range だけの拾いは掘らない）"
         },
         "canPlace": {
          "type": "array",
@@ -504,7 +504,7 @@
          "type": "integer",
          "minimum": 0,
          "maximum": 200,
-         "description": "go・mine・pickup: 掘る数の上限"
+         "description": "go・mine・pickup・furnace・chest・make: 掘る数の上限"
         },
         "maxPlace": {
          "type": "integer",
@@ -580,7 +580,7 @@
            "maxItems": 16
           }
          ],
-         "description": "true か、受け入れる敵の種類の列"
+         "description": "dig・mine・vertical: true か、受け入れる敵の種類の列"
         },
         "takeOk": {
          "type": "boolean"
