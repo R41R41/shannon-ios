@@ -37,13 +37,13 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   sleep: { needs: [], may: ['item', 'seconds'] },
   obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace', 'maxDig'] },
   fight: { needs: [['target']], may: ['den', 'stance', 'item', 'retreatHp', 'range', 'seconds'] },
-  mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig'] },
+  mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig', 'exposeOk'] },
   hunt: { needs: [['target']], may: ['count', 'range', 'seconds'] },
   tidy: { needs: [], may: ['items', 'keep', 'room', 'smelt', 'seconds'] },
   make: { needs: [['item']], may: ['count'] },
   portal: { needs: [['at'], ['axis']], may: ['block', 'enter', 'canPlace', 'maxPlace', 'seconds'] },
   smelt: { needs: [['items']], may: ['fuel', 'fuelCount', 'furnaces', 'at', 'seconds'] },
-  vertical: { needs: [['dir'], ['shape'], ['toY'], ['canDig'], ['liquid']], may: ['toward', 'maxDig', 'canPlace', 'maxPlace', 'range', 'seconds'] },
+  vertical: { needs: [['dir'], ['shape'], ['toY'], ['canDig'], ['liquid']], may: ['toward', 'maxDig', 'canPlace', 'maxPlace', 'range', 'seconds', 'exposeOk'] },
 };
 const COMMON = new Set(['do', 'rel', 'note', 'onFail', 'dependsOn']);
 /** The fields a kind of hand takes (needed, then optional, then the common ones), for a refusal that names them. */

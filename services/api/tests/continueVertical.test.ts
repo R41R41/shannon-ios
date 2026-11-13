@@ -184,7 +184,7 @@ describe('vertical: the rules of one hand (handProblem)', () => {
   });
   it('is described to the model in the tools text: the grammar line, the json fields', () => {
     expect(SHORT_ACT_DESCRIPTION).toContain('vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water');
-    expect(SHORT_ACT_DESCRIPTION).toContain('vertical: dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds');
+    expect(SHORT_ACT_DESCRIPTION).toContain('vertical: dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・exposeOk・seconds');
   });
   it('shows the model the defaults and the range of the limits (amendment A-1 6: maxDig 200, maxPlace 100, seconds 60 within 5 to 120), the same as the body and the head check', () => {
     expect(VERTICAL_DEFAULTS).toEqual({ maxDig: 200, maxPlace: 100, seconds: 60, range: 1 });

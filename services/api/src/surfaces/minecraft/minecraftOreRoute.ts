@@ -26,6 +26,11 @@ export const WAY_DIG = 'stone,andesite,diorite,granite,tuff,deepslate,cobbled_de
 /** How the sealed night's shaft with no wood begins (`oreRouteHands` with `sealed`; the night line says its reason by this). */
 export const SEALED_SHAFT_WORD = '塞いだまま真下へ';
 const IRON_ROW = /鉄鉱石\[(?:deepslate_)?iron_ore\] \((-?\d+),(-?\d+),(-?\d+)\)/u;
+/** The map's diamond mark (the body's mapMarks: 「ダイヤ[deepslate_diamond_ore] (x,y,z) …」), handled as the iron mark is. */
+const DIAMOND_ROW = /ダイヤ\[((?:deepslate_)?diamond_ore)\] \((-?\d+),(-?\d+),(-?\d+)\)/u;
+/** The liquid words of a stair or shaft: she carries cobblestone in the usual scene, and a stop costs a decision where a seal costs seconds. */
+const SEAL_WORDS = 'liquid=seal place=cobblestone';
+const SEAL_NOTE = '丸石が 20 個未満の時だけ liquid=stop';
 export const IRON_ORE_Y = 16;
 export const DIAMOND_ORE_Y = -58;
 
@@ -38,10 +43,19 @@ const cellOf = (world: Record<string, unknown>): Cell | null => {
 
 /** The nearest iron ore the map shows, or null. */
 export function nearestIronMark(world: Record<string, unknown>): Cell | null {
+  return nearestMark(world, IRON_ROW, 1);
+}
+/** The nearest diamond ore the map shows, with the block's own id (`mine` takes the id), or null. */
+export function nearestDiamondMark(world: Record<string, unknown>): (Cell & { block: string }) | null {
+  const found = nearestMark(world, DIAMOND_ROW, 2);
+  return found ? { ...found, block: found.block ?? 'diamond_ore' } : null;
+}
+/** The nearest mark of a row pattern whose three coordinates start at capture group `first` (the pattern's group 1 is the block id when `first` is 2). */
+function nearestMark(world: Record<string, unknown>, row: RegExp, first: number): (Cell & { block?: string }) | null {
   const feet = cellOf(world);
   const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).flatMap(line => {
-    const m = typeof line === 'string' ? IRON_ROW.exec(line) : null;
-    return m ? [{ x: Number(m[1]), y: Number(m[2]), z: Number(m[3]) }] : [];
+    const m = typeof line === 'string' ? row.exec(line) : null;
+    return m ? [{ x: Number(m[first]), y: Number(m[first + 1]), z: Number(m[first + 2]), ...(first === 2 ? { block: m[1]! } : {}) }] : [];
   });
   if (!feet) return marks[0] ?? null;
   return marks.sort((a, b) => Math.hypot(a.x - feet.x, a.y - feet.y, a.z - feet.z) - Math.hypot(b.x - feet.x, b.y - feet.y, b.z - feet.z))[0] ?? null;
@@ -54,7 +68,7 @@ export function nearestIronMark(world: Record<string, unknown>): Cell | null {
 export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'diamond', counts?: ItemCounts, night = false, sealed = false): string | null {
   const feet = cellOf(world);
   if (!feet) return null;
-  const mark = ore === 'iron' ? nearestIronMark(world) : null;
+  const mark = ore === 'iron' ? nearestIronMark(world) : nearestDiamondMark(world);
   const deep = (to: number) => feet.y - to >= DESCENT;
   // The table hold stops a descent of 10 or more with no table, fewer than 4 planks and no log (minecraftLlmcTableHold): the wood first.
   const bare = !!counts && countMatching(counts, /^crafting_table$/u) === 0 && countMatching(counts, /_planks$/u) < TABLE_PLANKS
@@ -64,7 +78,15 @@ export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'dia
   const y = ore === 'iron' ? IRON_ORE_Y : DIAMOND_ORE_Y;
   // A mark not 10 below (or any, with wood) is gone to as it is; a deeper one with no wood waits for the wood by day.
   if (mark) {
-    const toMark = `「go ${mark.x},${mark.y},${mark.z} range=1 dig=${WAY_DIG} maxDig=40」で地図の鉄鉱石 (${mark.x},${mark.y},${mark.z}) へ掘り進み「mine iron_ore ${mark.x},${mark.y},${mark.z} count=3」`;
+    // M7: a diamond mark is reached by the stair with toY at the mark's y. A stair goes one block across for each block down, so the start is found
+    // backwards: from the mark, the opposite of the stair's way, as many blocks as the drop. Below the mark's height (or less than 2 above) it is a go as the iron's.
+    const drop = feet.y - mark.y;
+    if (ore === 'diamond' && drop >= 2 && (!bare || !deep(mark.y) || !night)) {
+      const block = 'block' in mark && typeof mark.block === 'string' ? mark.block : 'diamond_ore';
+      return `${wood(mark.y)}「go ${mark.x},${feet.y},${mark.z + drop} range=1 dig=${WAY_DIG} maxDig=40」で階段の出発点へ行き（階段は 1 段で向きへ 1 マス進むので、地図のダイヤ (${mark.x},${mark.y},${mark.z}) から向き ${STAIR_WAY} の反対へ ${drop} マス離れた所）、`
+        + `「vertical down stairs ${STAIR_WAY} y=${mark.y} dig=${STAIR_DIG.diamond} ${SEAL_WORDS}」で y=${mark.y} へ下り（${SEAL_NOTE}）、「mine ${block} ${mark.x},${mark.y},${mark.z} count=3」で掘る`;
+    }
+    const toMark =`「go ${mark.x},${mark.y},${mark.z} range=1 dig=${WAY_DIG} maxDig=40」で地図の鉄鉱石 (${mark.x},${mark.y},${mark.z}) へ掘り進み「mine iron_ore ${mark.x},${mark.y},${mark.z} count=3」`;
     if (!(bare && deep(mark.y))) return toMark;
     if (!night) return `${wood(mark.y)}${toMark}`;
   }
@@ -75,8 +97,8 @@ export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'dia
     // surface's height is a route search, not a tunnel: opening the cap and walking 30 over the night's surface costs a few digs against 60, and the
     // night-wait hold sends this act. From the sealed hole the shaft goes on down under the cap, 9 from this decision's feet (the table hold stops 10; the hand's y is counted from them, on a hill too); a
     // stair's first step would open the surface block beside the cap. Underground the row is as it was.
-    if (sealed) return `${SEALED_SHAFT_WORD}、今の足から ${DESCENT - 1} 段まで下りる「vertical down shaft y=${feet.y - (DESCENT - 1)} dig=${SHAFT_DIG} liquid=stop」`
-      + `（作業台・板 4・原木が無いので 10 段以上は下りない。掘った壁に見えた鉱石は mine で掘る。原木は朝に取り、それから y=${y} へ下りる）`;
+    if (sealed) return `${SEALED_SHAFT_WORD}、今の足から ${DESCENT - 1} 段まで下りる「vertical down shaft y=${feet.y - (DESCENT - 1)} dig=${SHAFT_DIG} ${SEAL_WORDS}」`
+      + `（${SEAL_NOTE}。作業台・板 4・原木が無いので 10 段以上は下りない。掘った壁に見えた鉱石は mine で掘る。原木は朝に取り、それから y=${y} へ下りる）`;
     return `今の高さで横へ 1 列掘り進む「go ${feet.x},${feet.y},${feet.z - 30} dig=${WAY_DIG} maxDig=60」（作業台・板 4・原木が無いので 10 段以上は下りない。`
       + `掘った壁に見えた鉱石は mine で掘る。鉄は山の中の高い所にも出る。原木は朝に取り、それから y=${y} へ下りる）`;
   }
@@ -84,7 +106,7 @@ export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'dia
   const row = descend ? y : feet.y;
   // A stair goes one block across for each block down: the row starts where the stair ends and goes on the same way.
   const foot = feet.z - (descend ? feet.y - y : 0);
-  const down = descend ? `「vertical down stairs ${STAIR_WAY} y=${y} dig=${STAIR_DIG[ore]} liquid=stop」で y=${y} へ下り、` : '';
+  const down = descend ? `「vertical down stairs ${STAIR_WAY} y=${y} dig=${STAIR_DIG[ore]} ${SEAL_WORDS}」で y=${y} へ下り（${SEAL_NOTE}）、` : '';
   return `${wood(row)}${down}横へ 1 列掘り進む「go ${feet.x},${row},${foot - 30} dig=${WAY_DIG} maxDig=60」（${ore === 'iron' ? '鉄は y=16' : 'ダイヤは y=-58'} 前後に最も多い。掘った壁に見えた鉱石は mine で掘る。y=0 より下は deepslate_ の付く名前）`;
 }
 
@@ -111,7 +133,7 @@ export function stonePickHands(world: Record<string, unknown>, counts: ItemCount
   return [
     ...(table ? [] : ['craft crafting_table 1']),
     ...(sticks >= 2 ? [] : ['craft stick 4']),
-    `vertical down shaft y=${bottom} dig=${SHAFT_DIG} liquid=stop`,
+    `vertical down shaft y=${bottom} dig=${SHAFT_DIG} ${SEAL_WORDS}`,
     `place crafting_table ${feet.x},${bottom + 2},${feet.z}`,
     'craft stone_pickaxe 1',
   ];

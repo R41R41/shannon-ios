@@ -69,7 +69,7 @@ function obsidianWords(hand: ActHand): Words {
 }
 function mineWords(hand: ActHand): Words {
   return hand.block && hand.at?.length ? [hand.block, ...hand.at.map(pos), ...given('count', hand.count), ...given('tool', hand.tool),
-    ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig), ...given('collect', hand.collect), ...given('seconds', hand.seconds)] : null;
+    ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig), ...given('collect', hand.collect), ...flag(hand.exposeOk, 'exposeOk'), ...given('seconds', hand.seconds)] : null;
 }
 function portalWords(hand: ActHand): Words {
   return hand.at?.length === 1 && hand.axis ? [pos(hand.at[0]!), hand.axis, ...given('block', hand.block), ...listWord('place', hand.canPlace),
@@ -104,7 +104,7 @@ function verticalWords(hand: ActHand): Words {
   if (!hand.dir || !hand.shape || typeof hand.toY !== 'number') return null;
   return [hand.dir, hand.shape, ...(hand.toward ? [hand.toward] : []), `y=${hand.toY}`, ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig),
     ...listWord('place', hand.canPlace), ...given('maxPlace', hand.maxPlace), ...given('liquid', hand.liquid), ...given('range', hand.range),
-    ...given('seconds', hand.seconds)];
+    ...flag(hand.exposeOk, 'exposeOk'), ...given('seconds', hand.seconds)];
 }
 /** chest: the box's cell, the op, and the items with their counts (a list that does not read back is a json line). */
 function chestWords(hand: ActHand): Words {

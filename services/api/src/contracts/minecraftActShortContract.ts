@@ -83,12 +83,13 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
     + 'fight は剣か斧が荷に要る（無いと no_weapon）。素手で殴るなら attack 相手 を使う。'
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
   manualPage('mine', 'mine（指定した同種の鉱脈を掘って回収）', [
-  'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [seconds=N]',
+  'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [exposeOk] [seconds=N]',
   ("  鉱脈を掘る。1 マスだけ書けば足りる: つながった同じ鉱石（ななめも。y=0 付近は iron_ore と deepslate_iron_ore もひと続き）は体が近い順に全部たどって掘り、拾い、道具を持ち替える" +
 "（岩に埋まった落とし物へも岩を掘って取りに行く。ほかの鉱石は探さない）。鉱石を dig で 1 個ずつ並べて書かない（遅く、落とし物も拾い損ねる）。" +
 "ブロック名は id そのまま（iron_ore）で、y<0 は deepslate_ が付く: landmarks・走査の行の名前を写す。X,Y,Z は必須（座標なしは断られる。待ちの代わりに使わない）で、" +
 "種類が分かるマスだけ（地図の o は鉄ではない。指したマスが掘り済みでも 2 マス内の同じ鉱石から始める）。" +
 "count は要る個数（鉄のツルハシなら count=3。書かないと鉱脈ぜんぶ・24 まで）。岩に埋まっていても dig= を書かなくても岩・土・砂利だけ掘って届く（maxDig 既定 16。届かない時は体の行が必要な数を言うので、その数で maxDig を付けて出し直す）。")
+    + 'exposeOk は dig と同じ（敵に見られても掘る。「見られる」の止まりのあと、離れて掘れない時に付ける）。'
     + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。'
   ]),
   'make 物 [個数]',
@@ -110,7 +111,7 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
   ]),
 manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）', [
   ("vertical down|up stairs|shaft|pillar [north|east|south|west] y=N dig=名,名 liquid=stop|seal|seal_water " +
-"[maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [seconds=N]"),
+"[maxDig=N] [place=名,名] [maxPlace=N] [range=1|2] [exposeOk] [seconds=N]"),
   '  縦の長い移動を、体が一段ずつ掘る・置く・歩くだけでする（道探し・形や向きの変更・鉱石を追うことはしない）。向き・形・y（着く足の y）・許す物は全部あなたが書く。'
     + ("shaft は真下（down だけ）、pillar は足の下に置いて真上（up だけ）、stairs は向き 1 つが要る。dig= は掘ってよい物（vertical " +
 "の手の中だけ、柵・レール・クモの巣・松明・はしご・つた・糸は書かなくても壊す。go・dig は変わらない）、place= は足場・塞ぎに置く物。stairs・shaft は place= " +
@@ -126,8 +127,10 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
 `${VERTICAL_DEFAULTS.maxPlace}` +
 "")
     + `（maxDig は ${VERTICAL_DEFAULTS.maxDig}・maxPlace は ${VERTICAL_DEFAULTS.maxPlace} まで）。見えた鉱石は結果で知らされる。`,
-  ("  例（liquid= は必ず書く）: vertical down stairs south y=10 dig=stone,dirt liquid=stop   vertical up pillar y=70 " +
-"dig=dirt place=cobblestone liquid=seal_water")
+  ("  例（liquid= は必ず書く）: vertical down stairs south y=10 dig=stone,dirt,gravel liquid=seal place=cobblestone   vertical up pillar y=70 " +
+"dig=dirt place=cobblestone liquid=seal_water"),
+  '  荷に丸石があるのが普通の場面は liquid=seal place=cobblestone（水・溶岩を塞いで進む。stop は止まって判断し直す 1 回が、塞ぐ数秒より高い）。丸石が 20 個未満の時だけ liquid=stop。exposeOk は dig と同じ（敵に見られても掘る）。',
+  '  stairs は 1 段で向きへ 1 マス進む。目標へ下りるなら、目標から向きの反対へ（今の y−toY）マス離れた所まで go してから下りる（下り切った所が目標の真横になり、横へ掘り直さない）。真下は shaft。'
   ]),
 'walk X,Y,Z [X,Y,Z ...] [sprint] [range=N]',
   '  近くの数歩を、掘らず置かずに歩く手（段差1と泳ぎだけ。点を空白で続けると path。32点まで）。range は的から何 m で着いたことにするか。',
@@ -181,10 +184,10 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   ("- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: " +
 "at・count・seconds・canPlace・maxPlace・maxDig / ")
     + 'fight: target・stance(fight|flee)・item・retreatHp・range・seconds / '
-    + ("mine: block・at・count・tool・collect・seconds・canDig・maxDig / make: item・count / portal: " +
+    + ("mine: block・at・count・tool・collect・exposeOk・seconds・canDig・maxDig / make: item・count / portal: " +
 "at・axis(x|z)・block・enter・canPlace・maxPlace・seconds / ")
     + ("smelt: items・fuel・fuelCount・furnaces・at・seconds / vertical: " +
-"dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・seconds / walk: to か path・sprint・range " +
+"dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・exposeOk・seconds / walk: to か path・sprint・range " +
 "/ ")
     + ("dig: at・tool・collect・exposeOk・takeOk / place: block・at・face / pillarUp: n・block / use: " +
 "item・at（1つ）・face・target・count"),
@@ -229,6 +232,9 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
     + '焼く間は近くでできる作業を選び（planNow の A/B/C）、離れ切る前に take する。put と take を wait で結ばない。形の例: ["furnace X,Y,Z put raw_iron", "mine …"]、後で ["furnace X,Y,Z take", "make …"]。',
   '- 列に足す項目（先読みも）は、必ず dependsOn を書く。実行中の項目の結果を使う項目（掘ってから作る・焼いてから取る）はその項目（例 ["q12"]）、'
     + '結果に関係なく安全に動ける項目（食べる・別の場所の作業）は []。理由: 書かないと「前の項目に頼る」とみなされ、前が止まった時に体が始めずに捨てる（手は動かない）。',
+  '- 列の積み方（体が止まる時間を減らす）: 列の残りが live の「次の決断まで約 T 秒」より短い時は、独立した次の手を dependsOn: [] で足す（理由: 列が空になると、判断が終わるまで体が立ち止まる）。'
+    + '失敗で止まりうる手の後ろに、それと関係ない控え（拾う・隣の鉱脈・手元の作る）を 1 つ付ける（dependsOn: [] なら前が止まっても動く）。'
+    + '結果が時間で決まる手（furnace take・sleep）は列の最後に置き、間に掘る・捨てるを挟む。1 回の act に 2〜3 手をまとめる（判断 1 回の間に体が動ける手が増える）。',
   ("- 項目が自分で止まったら（失敗・反射・stopIf など）、体は後ろの項目を動かさずに捨てる（手は動いていない）。ただし欄 dependsOn が [] " +
 "か、止まった項目を含まない配列の項目は動かす。後ろの項目が古い前提で動くのを防ぐだけで、準備や安全の確認の代わりではない。始める前に確かめたい条件は pre に書く。"),
   ("- act の欄 pre（条件の文字列）: 項目を始める直前に体が確かめる。満たさなければ始めず、後ろも捨てる（furnace:x,y,z は始める時に一度見るだけで、焼き上がりまで待たない）。 欄 " +

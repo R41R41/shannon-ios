@@ -116,7 +116,7 @@ describe('end1109o10 (opening lane): the night with no bed says the way to the o
     expect(line).toContain('地下で鉄を掘り進む（stone_pickaxe）: 次の 1 手 mc_act ['); expect(line).not.toContain('先に原木');
     // G23: from the sealed hole no `go` at the surface's height (the route search opens the cap and walks the night's surface): the shaft goes on down, 9 from the surface.
     expect(JSON.parse(/mc_act (\[[^\]]+\])/u.exec(line)![1]!)).toEqual([expect.stringContaining('vertical down shaft y=53 '), 'place dirt -22,55,2',
-      'vertical down shaft y=46 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop']);
+      'vertical down shaft y=46 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=seal place=cobblestone']);
     expect(line).toContain('3 手目は塞いだまま真下へ（作業台・板 4・原木が無いと 10 段以上の下りは止められるので、今の足から 9 段まで）');
     expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1 }), 'overworld', true)).toContain('mc_act ["go -22,55,-28 ');
     expect(nightChoiceLine(night(), pack({ stone_pickaxe: 1, oak_log: 2 }), 'overworld')).toContain('"vertical down stairs north y=16 dig=');
@@ -363,7 +363,7 @@ describe('end1110r1 night 2 and day 2 (opening lane, no run): a wooden pickaxe o
   };
   it('the stone pickaxe hands: shaft 8, the table over her head, the craft; null with a stone pickaxe, no wooden one, or no table and few planks', () => {
     expect(stonePickHands(at, r1Pack)).toEqual([
-      'vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop',
+      'vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=seal place=cobblestone',
       'place crafting_table -22,56,18', 'craft stone_pickaxe 1']);
     expect(stonePickHands(at, pack({ wooden_pickaxe: 1, oak_planks: 6 }))!.slice(0, 2)).toEqual(['craft crafting_table 1', 'craft stick 4']);
     expect(stonePickHands(at, pack({ wooden_pickaxe: 1, stone_pickaxe: 1, crafting_table: 1, stick: 2 }))).toBeNull();
@@ -378,7 +378,7 @@ describe('end1110r1 night 2 and day 2 (opening lane, no run): a wooden pickaxe o
     expect(hands.slice(0, 5)).toEqual([
       'vertical down shaft y=60 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,deepslate,gravel,sand liquid=stop',
       'place dirt -22,62,18',
-      'vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop',
+      'vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=seal place=cobblestone',
       'place crafting_table -22,56,18', 'craft stone_pickaxe 1']);
     expect(hands.some(hand => hand.startsWith('vertical down stairs north y=16'))).toBe(true);
     passes(hands);
@@ -390,7 +390,7 @@ describe('end1110r1 night 2 and day 2 (opening lane, no run): a wooden pickaxe o
     const line = foodAbsentLine({ ...at, nearbyEntities: [{ name: 'cod' }] }, 0, 'overworld', now, r1Pack)!;
     expect(line).toContain('下りる手（plan_update と同じ判断で出してよい）: mc_act');
     const hands = handsOf(line);
-    expect(hands[0]).toBe('vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=stop');
+    expect(hands[0]).toBe('vertical down shaft y=54 dig=dirt,grass_block,coarse_dirt,podzol,stone,andesite,diorite,granite,tuff,gravel,sand,coal_ore liquid=seal place=cobblestone');
     expect(hands).toContain('craft stone_pickaxe 1');
     passes(hands);
     expect(foodAbsentLine(at, 0, 'overworld', now, pack({ stone_pickaxe: 1, crafting_table: 1 }))).not.toContain('craft stone_pickaxe');
