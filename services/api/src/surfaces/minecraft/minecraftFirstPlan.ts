@@ -117,7 +117,7 @@ const BEYOND: readonly PlanSeed[] = [
     // Run 9 (11/12): after the rods she scanned and searched 0 times, took the way back for the pearls (about 1,100 s, 0 pearls). The search is the first child,
     // done by what the body saw; the rest of the pearl's children stay until the pearls are in.
     children: [node('歪んだ森を探す（走査→見えていない向きへ90mのgo→走査）', { kind: 'nether', doneWhen: 'see:warped_forest',
-      note: 'ネザーに居たまま。1 回 約 90 秒。範囲内に無く 90m の go を 3 回重ねても出ない時は、この節を skip と理由で閉じて最後の手（地上の夜）へ' }),
+      note: 'ネザーに居たまま。1 回 約 90 秒。範囲内に無く 90m の go を 6 回重ねても出ない時は、探し続けるか、この節を skip と理由で閉じて最後の手（地上の夜）へ進むかを選ぶ' }),
       node('歪んだ森のエンダーマン（天井2）', { kind: 'pearl' }), node('金の延べ棒をピグリンに投げて交換', { kind: 'pearl' }), node('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2。寝ると夜が飛ぶので寝ない）', { kind: 'pearl' })] }),
   // The coordinator, 11/9 (thru-1110's table): leave the Nether with 12 eyes, not 10 (a frame holds one from the start 1 time in 10, 1.2 on
   // average, so about 11 are needed, and a throw breaks about 1 in 5). A node closed in the Nether stays done while eyes fly; a first plan made

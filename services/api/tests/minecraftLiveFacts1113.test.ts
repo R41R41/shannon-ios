@@ -113,7 +113,7 @@ describe('the walk to the point (G4) and the throw after it (G2, G3)', () => {
     expect(eyeThrowHold(throwEye, f([['ender_eye', 9]]), 'g-none')).toBeNull();
     registerEyeLedger('g-one', mk([{ x: 135, z: 104, bearingDeg: 304 }, { x: -1050, z: 910, bearingDeg: 291 }]));
     const held = eyeThrowHold(throwEye, f([['ender_eye', 9]]), 'g-one')!.line;
-    expect(held).toContain('交点が出た後の投げは 1 回まで');
+    expect(held).toContain('同じ辺りから投げ直さない');
     expect(held).toContain('落ちたアイ（割れなかった物）は拾う');
     expect(eyeThrowHold(throwEye, f([['ender_eye', 9], ['ender_pearl', 2], ['blaze_powder', 2]]), 'g-one')!.line).toContain('枠に要る数（13）以下');
   });

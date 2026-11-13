@@ -126,7 +126,7 @@ describe('S8 and S6 stage knowledge', () => {
 
   it('keeps the overworld night as the pearls\' way when no warped forest is found (review 11/10, K10)', () => {
     const pearl = V2_STAGES.pearl;
-    for (const fact of ['森が見つからない時の道', '地上で狩る時: 屋根の作りは同じ', '90m の go を 3 回重ねても出ない時にだけ、パールを地上で集める道へ進む。その時は別: ロッドが 7 本あれば出て',
+    for (const fact of ['森が見つからない時の道', '地上で狩る時: 屋根の作りは同じ', '90m の go を 6 回重ねても出ない時にだけ、ネザーで探し続けるか、パールを地上で集める道へ進むかを選ぶ（live の数を比べる）。その時は別: ロッドが 7 本あれば出て',
       // The refuter's reading (11/10): the bed's lines say a sleep makes the morning in every decision, and the other hostiles of a surface night come under the roof.
       'この狩りの夜は寝ない（寝ると夜が飛び、エンダーマンが出ない', 'ゾンビ・スケルトン・クリーパーも来て屋根の下へ入れる', '数は持ち物の ender_pearl で数える']) expect(pearl).toContain(fact);
     expect(pearl).not.toContain('地上でも戦い方は同じ');
