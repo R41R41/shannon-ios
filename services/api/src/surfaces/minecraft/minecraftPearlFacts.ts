@@ -41,9 +41,16 @@ export function pearlLine(counts: ReadonlyMap<string, number>, dimension: string
 const RODS_FOR_EYES = 7;
 const WALK_BLOCKS_PER_SECOND = 1.2;
 export const SEARCH_GO_BLOCKS = 90;
+/** The eyes (a pearl is an eye to be) at which the plan leaves for the overworld; below it the search for pearls goes on in the Nether. */
+export const EYES_TO_LEAVE = 12;
+/** Rods in hand as the plan counts them: two powder make one rod's worth. */
+const rodsCarried = (counts: ReadonlyMap<string, number>): number => carried(counts, 'blaze_rod') + Math.floor(carried(counts, 'blaze_powder') / 2);
 export const searchingForPearls = (counts: ReadonlyMap<string, number>, dimension: string | null): boolean =>
-  dimension === 'the_nether' && carried(counts, 'blaze_rod') + carried(counts, 'blaze_powder') >= RODS_FOR_EYES
-  && carried(counts, 'ender_pearl') + carried(counts, 'ender_eye') < PEARL_TARGET;
+  dimension === 'the_nether' && rodsCarried(counts) >= RODS_FOR_EYES
+  && carried(counts, 'ender_pearl') + carried(counts, 'ender_eye') < EYES_TO_LEAVE;
+/** Searches (a scan, then a go) after which a forest still unseen sends the plan on to its last way. */
+const SEARCHES_BEFORE_LAST_WAY = 3;
+const LAST_WAY = 'エンダーパールの節の探す節を skip と理由で閉じ、地上の夜の手へ';
 
 export interface PearlSearch { scans: number; goes: number }
 const textOf = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -61,11 +68,13 @@ export function pearlSearchLines(world: Record<string, unknown>, counts: Readonl
   const forest = place ? `歪んだ森 ${place.slice(0, 60)}` : entry ? entry : null;
   const gate = /^(\d+)m/u.exec(placeRow(world, 'nether_portal'));
   const toGate = gate ? `ゲートまで ${gate[1]}m（歩いて 約 ${Math.round(Number(gate[1]) / WALK_BLOCKS_PER_SECOND)} 秒）。` : '';
-  const lines = [`ネザーでロッド ${RODS_FOR_EYES} 本・パールが足りない間の歪んだ森: ${forest ?? '未見'}。探した回数 ${search.goes}（走査 ${search.scans} 回）。${toGate}`
+  const lines = [`ネザーでロッド ${RODS_FOR_EYES} 本・パールが足りない間の歪んだ森: ${forest ?? '未見'}。探した回数（走査→go の組） ${search.goes}（走査 ${search.scans} 回）。${toGate}`
     + `探すなら 1 回 ${SEARCH_GO_BLOCKS}m ≈ ${SEARCH_GO_BLOCKS} 秒。歪んだ森の狩りは 約 25 分で 11 個（ラボ）、現世の夜は 約 1 時間で 12 個（他の AI の前例。この体は未検証）`];
   if (biomes) lines.push(`通ったバイオーム: ${biomes}`);
   lines.push(forest
-    ? '歪んだ森が見えている: 90m ごとの go で寄り、屋根の場所を読んで fight target=enderman。パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）'
-    : '次の手: mc_probe kind=scan → 見えていない向きへ 90m の go → 走査。ネザーに居たまま集め、パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）');
+    ? `歪んだ森が見えている: 90m ごとの go で寄り、屋根の場所を読んで fight target=enderman。パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）。着けない・狩りが進まない時: ${LAST_WAY}`
+    : search.goes >= SEARCHES_BEFORE_LAST_WAY
+      ? `探しても出ない（探した ${search.goes} 回）: ${LAST_WAY}`
+      : '次の手: mc_probe kind=scan → 見えていない向きへ 90m の go → 走査。ネザーに居たまま集め、パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）');
   return lines;
 }

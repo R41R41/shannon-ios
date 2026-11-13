@@ -29,13 +29,22 @@ describe('the search for a warped forest (run 9: 0 scans after the rods, then th
   it('names the forest as unseen, the search so far, the way back and what to do first, only with 7 rods and pearls missing in the Nether', () => {
     const world = { biomesSeen: 'nether_wastes（ここ）・crimson_forest 西 120m', rememberedPlaces: { nether_portal: '240m 南 (1,2,3)' } };
     const lines = pearlSearchLines(world, pack({ blaze_rod: 7 }), 'the_nether', { scans: 1, goes: 2 }).join(' ');
-    expect(lines).toContain('歪んだ森: 未見。探した回数 2（走査 1 回）。ゲートまで 240m（歩いて 約 200 秒）。');
+    expect(lines).toContain('歪んだ森: 未見。探した回数（走査→go の組） 2（走査 1 回）。ゲートまで 240m（歩いて 約 200 秒）。');
     expect(lines).toContain('通ったバイオーム: nether_wastes（ここ）・crimson_forest 西 120m');
     expect(lines).toContain('mc_probe kind=scan → 見えていない向きへ 90m の go → 走査');
     expect(lines).toContain('黒曜石 12 はピグリンとの交換でも出る');
     expect(pearlSearchLines(world, pack({ blaze_rod: 6 }), 'the_nether', none)).toEqual([]);
     expect(pearlSearchLines(world, pack({ blaze_rod: 7 }), 'overworld', none)).toEqual([]);
     expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 14 }), 'the_nether', none)).toEqual([]);
+  });
+  it('leaves the search at 12 eyes, counts 2 powder as a rod, and closes a search that finds nothing after 3 pairs', () => {
+    const world = { biomesSeen: 'nether_wastes（ここ）' };
+    expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 12 }), 'the_nether', none)).toEqual([]);
+    expect(pearlSearchLines(world, pack({ blaze_powder: 13 }), 'the_nether', none)).toEqual([]);
+    const out = pearlSearchLines(world, pack({ blaze_rod: 7 }), 'the_nether', { scans: 3, goes: 3 }).join(' ');
+    expect(out).toContain('探しても出ない');
+    expect(out).toContain('skip と理由で閉じ');
+    expect(pearlSearchLines({ biomesSeen: 'warped_forest 東 150m' }, pack({ blaze_rod: 7 }), 'the_nether', none).join(' ')).toContain('skip と理由で閉じ');
   });
   it('points at a forest the body reported instead of another scan, and the forest closes the plan node by see:warped_forest', () => {
     const world = { biomesSeen: 'nether_wastes（ここ）・warped_forest 東 150m' };

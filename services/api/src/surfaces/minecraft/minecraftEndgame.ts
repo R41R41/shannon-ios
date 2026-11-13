@@ -85,17 +85,23 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
   const savedSearch = (saved as { minecraftPearlSearch?: Partial<PearlSearch> } | null)?.minecraftPearlSearch;
   const search: PearlSearch = { scans: Math.max(0, Math.floor(Number(savedSearch?.scans) || 0)), goes: Math.max(0, Math.floor(Number(savedSearch?.goes) || 0)) };
   const goIds: string[] = [];
+  let scansAtLastSearch = search.scans;
   return {
     /** An act's result (the receipt's id and its result JSON): a thrown eye goes in the ledger. */
     noteResult(id: string | undefined, resultJson: string | undefined, observation: BodyObservation | null): void {
       ledger.note(id, resultJson, doneFacts(observation)?.dimension ?? null, now());
       blaze.note(id, resultJson, now());
       hunt.note(id, resultJson, now());
-      // The search for a warped forest: each `go` of an act while the rods are in hand and the pearls missing in the Nether, once per receipt.
+      // The search for a warped forest: one search is a scan followed by a finished `go`; an act counts at most once, and only when a scan
+      // came since the last search (the gold's, the pickups' and the failed gos are not searches).
       const facts = doneFacts(observation);
       if (facts && searchingForPearls(facts.counts, facts.dimension) && !(id && goIds.includes(id))) {
-        const goes = readActResult(resultJson)?.lines.filter(line => line.do === 'go').length ?? 0;
-        if (goes > 0) { search.goes += goes; if (id) goIds.push(id); if (goIds.length > 20) goIds.shift(); }
+        const moved = readActResult(resultJson)?.lines.some(line => line.do === 'go' && line.status === 'done') ?? false;
+        if (moved) {
+          if (search.scans > scansAtLastSearch) { search.goes += 1; scansAtLastSearch = search.scans; }
+          if (id) goIds.push(id);
+          if (goIds.length > 20) goIds.shift();
+        }
       }
     },
     /** A probe's input came back completed: a scan counts as a search while the pearls are being looked for (`pearlSearchLines`). */
