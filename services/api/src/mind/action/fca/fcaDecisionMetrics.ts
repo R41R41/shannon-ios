@@ -26,6 +26,7 @@ import type { BodyRecallMeasure } from '../../recall/taskRecallPorts.js';
  *   "gap":{"sinceCommitMs","afterMs","waitMs","admitMs"} — from the previous decision's commit to this step's start: the previous step's
  *     work after its commit (`afterMs`: its budget and receipts), the scheduler's wait for its next turn (`waitMs`), and this step's
  *     admission (`admitMs`: lease, begin, budget, ports); null for a first step, or when the scheduler did not say (`ActionExecution.admission`);
+ *   "notQueued":{"wait","same","shape","other":<n>} — flow 1113: the acts of the decision that were not put in the queue, by reason (only the nonzero ones);
  *   "skipped":[<names>] — body actions of the response left unrun because an earlier one of it failed (`fcaRunner.ts`);
  *   "probe":{"surprises":[<codes>],"probes","answered":<n>,"ms"} — mb-llmc r4: the body's investigation before the decision (a surprise's
  *     fixed probes, `FcaBodyLifecycle.investigate`) and the ms the step waited for it; absent when there was no surprise.
@@ -61,6 +62,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   let toolMs = 0, permitAsks = 0;
   const tools: string[] = [], skipped: string[] = [];
   let recalled: BodyRecallMeasure | null = null;
+  /** Flow 1113 (F4): the acts that were not put in the queue, by reason (a wait only, the same hand, a form the tool refused, any other). */
+  const notQueued: Record<'wait' | 'same' | 'shape' | 'other', number> = { wait: 0, same: 0, shape: 0, other: 0 };
   /** mb-llmc r3: an urgent step (`FcaBodyLifecycle.urgent`), and what the history did beside the decision (`prepareFcaHistory`'s `ahead`). */
   let urgent = false, thrown: number | null = null;
   const ahead: string[] = [];
@@ -98,6 +101,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
     },
     /** One ask of the action lease of the mind (checked in fcaRunner.ts asks only some of the times it checks). */
     asked(): void { permitAsks += 1; },
+    /** An act of the response that was not put in the queue, and why (`notQueuedReason`). */
+    notQueued(reason: 'wait' | 'same' | 'shape' | 'other'): void { notQueued[reason] += 1; },
     /** A body action of the response left unrun because an earlier one of it failed. */
     skipped(name: string): void { skipped.push(toolName(name)); },
     /** What a body task's recall did (`bodyTaskRecall.ts`: pool, groups, shown, characters, cue tags, Jev). Content-free. */
@@ -139,7 +144,8 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
   };
   /** The fields of the line that are there only when there is something to say. */
   function optional(metrics: ActionExecution['modelMetrics']): Record<string, unknown> {
-    return { ...(skipped.length ? { skipped } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
+    const notQueuedCounts = Object.fromEntries(Object.entries(notQueued).filter(([, count]) => count > 0));
+    return { ...(skipped.length ? { skipped } : {}), ...(Object.keys(notQueuedCounts).length ? { notQueued: notQueuedCounts } : {}), ...(recalled ? { bodyRecall: recalled } : {}),
       ...(stretch ? { stretch } : {}),
       ...(urgent ? { urgent } : {}), ...(thrown !== null ? { interrupt: { thrownMs: thrown } } : {}),
       ...(ahead.length ? { summaryAhead: ahead } : {}),

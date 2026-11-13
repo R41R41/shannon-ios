@@ -7,7 +7,8 @@ import type { FcaExternalTools, FcaToolDefinition } from '../src/mind/action/fca
 import type { FcaToolSelector } from '../src/mind/selectors/fcaToolSelection.js';
 import { providerToolName, toolOk } from '../src/mind/tools/shannonTools.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
-import { FCA_HISTORY_POLICY } from '../src/mind/action/fca/fcaHistory.js';
+import { FCA_HISTORY_POLICY, createFcaHistoryAhead, startFcaHistoryAhead } from '../src/mind/action/fca/fcaHistory.js';
+import { LLMC_HISTORY_POLICY } from '../src/wiring/minecraftLlmcConfiguration.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
 import { anthropicRequestViolation } from './support/anthropicProviderRules.js';
@@ -31,7 +32,7 @@ const summaryCall = (template: unknown): AnthropicMessage =>
   message([{ type: 'tool_use', id: `toolu_summary_${Math.random().toString(36).slice(2, 8)}`, name: 'fca_history_summary', input: { template } }], 'tool_use');
 
 /** Steps 1–3 call mc.find-blocks (each result about 40,000 characters), step 4 waits; `summary` answers every summary request. */
-function run(summary: () => AnthropicMessage | Response, options: { body?: boolean } = {}) {
+function run(summary: () => AnthropicMessage | Response, options: { body?: boolean; ahead?: ReturnType<typeof createFcaHistoryAhead> } = {}) {
   let time = Date.parse('2026-10-14T00:06:57.000Z');
   const now = () => new Date(time).toISOString();
   const h = actionHarness(now);
@@ -54,7 +55,8 @@ function run(summary: () => AnthropicMessage | Response, options: { body?: boole
   let only = '';
   const driver = createTaskRuntimeWiring({ db: h.db, actions: h.actions, model, scopeKey: 'owner', ownerAlone: () => true, now,
     canRunTask: (_runtime, id) => id === only,
-    stepPorts: () => ({ tools, selector, history: { codec: anthropicFcaHistoryCodec, summarizer }, ...(options.body ? { keepBodyTools: () => true } : {}) }) });
+    stepPorts: () => ({ tools, selector, history: { codec: anthropicFcaHistoryCodec, summarizer,
+      ...(options.ahead ? { ahead: { port: options.ahead, hard: { maximumConversationTokens: 100_000 } } } : {}) }, ...(options.body ? { keepBodyTools: () => true } : {}) }) });
   cleanups.push(async () => { await driver.close(); h.close(); });
   const root = driver.runtime.ensureRoot('owner');
   const task = driver.runtime.createChild('owner', root.id, { title: GOAL, goal: GOAL, completionCriteria: CRITERIA }, 'minecraft-request');
@@ -62,7 +64,7 @@ function run(summary: () => AnthropicMessage | Response, options: { body?: boole
   async function settle(done: () => boolean) { for (let i = 0; i < 30 && !done(); i++) { await driver.tick(); await driver.drain(); time += 1_000; } }
   const decisionBodies = () => fixture.bodies.filter(body => !isSummary(body));
   const summaryBodies = () => fixture.bodies.filter(isSummary);
-  return { driver, task, fixture, settle, decisionBodies, summaryBodies };
+  return { driver, task, fixture, settle, decisionBodies, summaryBodies, summarizer };
 }
 const stepLines = (log: ReturnType<typeof vi.spyOn>) => log.mock.calls.map(args => String(args[0])).filter(line => line.startsWith('Shannon FCA'));
 
@@ -150,5 +152,62 @@ describe('a third Minecraft step compacts its first round (Minebot lane run 2, t
     const r = run(unreachable);
     await r.settle(() => r.decisionBodies().length >= 4);
     expect(r.decisionBodies().length).toBeLessThan(4);
+  });
+});
+
+/** Flow 1113 (run 9, t=4175-4385: three summaries in a row cut at the output cap, 37 s each, nothing committed after any of them). */
+const cutSummary = (): AnthropicMessage => message([{ type: 'text', text: '{"目的": ["原木を集める"' }], 'max_tokens');
+
+describe('a summary cut at the output cap is not asked for again (flow 1113, F1)', () => {
+  it('commits the clipped replay as the stored history, marks the cut, and asks no second summary in the step', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const ahead = createFcaHistoryAhead();
+    const r = run(cutSummary, { body: true, ahead });
+    await r.settle(() => r.decisionBodies().length >= 4);
+    expect(r.decisionBodies()).toHaveLength(4);
+    expect(r.driver.runtime.get('owner', r.task.id)?.phase).toBe('waiting');
+    // Stored: the rounds the summary would have covered are one line that says they were left out, not a model's text and not nothing.
+    const window = r.driver.runtime.history('owner', r.task.id)!;
+    expect(window.summary).not.toBeNull();
+    expect(JSON.stringify(window.summary!.template['重要な文脈'])).toContain('要約が長すぎて切れた');
+    expect(stepLines(log).filter(line => line.startsWith('Shannon FCA history summary cut'))[0]).toMatch(/commit=true/u);
+    // Marked as a failed summary in the ahead state, so that the cooldown of `AHEAD_RETRY_ROUNDS` rounds holds in later steps too.
+    expect(ahead.get(r.task.id)).toMatchObject({ state: 'failed' });
+    // Never twice in a row: the model was asked for one summary at most per step, and not again while the cut is fresh.
+    expect(r.summaryBodies().length).toBe(1);
+  });
+
+  it('without the ahead state the step still asks once and commits the cut', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const r = run(cutSummary, { body: true });
+    await r.settle(() => r.decisionBodies().length >= 4);
+    expect(r.decisionBodies()).toHaveLength(4);
+    expect(r.driver.runtime.history('owner', r.task.id)!.summary).not.toBeNull();
+    expect(r.summaryBodies().length).toBe(2);
+  });
+});
+
+describe('the summary is asked beside the steps and sized (flow 1113, F1)', () => {
+  it('a body summary is brought down to 4,000 tokens', () => {
+    expect(LLMC_HISTORY_POLICY.compactedConversationTokens).toBe(4_000);
+  });
+
+  it('startFcaHistoryAhead, called between the decisions of a stretch, asks one summary when the stored history is past its policy, and not a second while it is pending', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const r = run(() => summaryCall('{"目的": ["原木を集める"'));
+    await r.settle(() => r.decisionBodies().length >= 3);
+    const ahead = createFcaHistoryAhead();
+    const options = { port: ahead, hard: {}, detach: <T,>(work: (signal: AbortSignal) => Promise<T>) => work(new AbortController().signal) };
+    const step = { scopeKey: 'owner', taskId: r.task.id, messageIds: [] } as never;
+    const ports = { runtime: r.driver.runtime, codec: anthropicFcaHistoryCodec, summarizer: r.summarizer, permit: async () => true, sourcesVisible: () => true };
+    // Within the policy: nothing is asked.
+    expect(startFcaHistoryAhead(step, ports, { maximumNativeCharacters: 1_000_000, maximumReplayCharacters: 1_000_000, maximumReplayTokens: 1_000_000 }, options)).toBe(false);
+    // Past it (a small native bound): one is asked, and it is pending until it ends.
+    expect(startFcaHistoryAhead(step, ports, { maximumNativeCharacters: 20_000 }, options)).toBe(true);
+    expect(ahead.get(r.task.id)?.state).toBe('pending');
+    expect(startFcaHistoryAhead(step, ports, { maximumNativeCharacters: 20_000 }, options)).toBe(false);
   });
 });

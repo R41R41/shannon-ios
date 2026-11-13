@@ -158,7 +158,8 @@ export interface QueueDeps {
   onReflexCapped?(info: ReflexCapped): void;
 }
 
-export type AddResult = { ok: true; item: string; after: string | null; startInMs: number } | { ok: false; text: string };
+/** `already`: flow 1113 (F4), the same hand was running or waiting: nothing was added and `item` is the mark it already has (an idempotent success). */
+export type AddResult = { ok: true; item: string; after: string | null; startInMs: number; already?: true } | { ok: false; text: string };
 
 export const ioTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 

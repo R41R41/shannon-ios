@@ -90,6 +90,8 @@ export interface FcaBodyQueue {
   /** Waits, with no model call, until the step should decide again or end. `drain`: only until nothing is open.
  * Throws what an item's receipt threw. */
   ready(options: { signal: AbortSignal; drain: boolean; messages?(): boolean; alert?(): boolean }): Promise<FcaQueueWake>;
+  /** The time before the running item's end at which `ready` asks for a decision (T, ms), when the queue knows it (flow 1113: the step waits this long after a decision that added nothing). */
+  wakeMs?(): number;
   /** The items that ended since the last take, oldest first. */
   take(): FcaQueueNews[];
   /** Changes with every drop (an item that ended badly, a replaced or expired one): a decision asked before it is thrown away. */

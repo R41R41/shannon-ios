@@ -9,6 +9,7 @@ import { MC_ACT_TOOL, type ActInput } from '../src/contracts/minecraftActContrac
 import { actMilliseconds } from '../src/contracts/minecraftActTime.js';
 import { createLlmcQueue, forgetLlmcQueues, queueWakeMs, QUEUE_MAX, QUEUE_T } from '../src/surfaces/minecraft/minecraftLlmcQueue.js';
 import { forgetActNodes } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
+import { timingLine } from '../src/surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { inActionExecution, type ActionExecution } from '../src/infra/context/actionExecution.js';
 
 /**
@@ -138,17 +139,21 @@ describe('the items in their order', () => {
     expect(f.queue.openIds().size).toBe(2);
   });
 
-  it('refuses a fourth item, and the same hands twice, saying what to do', async () => {
+  it('refuses a fourth item; the same hands twice is answered as already queued, a success that adds nothing (flow 1113, F4)', async () => {
     const f = setup();
     for (let index = 0; index < QUEUE_MAX; index++) expect((await f.queue.add(f.spec(dig(index)))).ok).toBe(true);
     const full = await f.queue.add(f.spec(dig(9)));
     expect(full).toMatchObject({ ok: false });
     expect((full as { text: string }).text).toContain('列がいっぱい');
+    // Even a full queue answers the hand it already has as taken (the refusal cost a decision round each time in run 9).
+    expect(await f.queue.add(f.spec(dig(1)))).toMatchObject({ ok: true, already: true, item: 'q2' });
+    expect(f.queue.openIds().size).toBe(QUEUE_MAX);
     const g = setup();
     await g.queue.add(f.spec(dig(5)));
     const same = await g.queue.add({ ...f.spec(dig(5)) });
-    expect(same.ok).toBe(false);
-    expect((same as { text: string }).text).toContain('と同じ手が列にある');
+    expect(same).toMatchObject({ ok: true, already: true, item: expect.stringMatching(/^q/u) });
+    expect(g.queue.openIds().size).toBe(1);
+    expect(g.queue.ahead()).toHaveLength(1);
   });
 
   it('carries pre and the node to the body, and a start-by after the items ahead', async () => {
@@ -468,7 +473,33 @@ describe('the lines of the live state', () => {
     const lines = f.queue.lines(null);
     expect(lines[0]).toMatch(/^▶ q1 \[p1\] 項目1 実行中: 済む: have:log>=10・残り約 \d+ 秒$/u);
     expect(lines[1]).toBe('・ q2 [p7] 項目2 待ち: 前提 near:furnace~5（前の項目の後で体が確かめる）');
-    expect(lines[2]).toBe('あと 1 つ足せる（足した項目は q2 の後ろに付く。q2 の結果を待たずに次の作業を足せば、体は止まらない）');
+    // Flow 1113 (F2): the whole queue's time left and the time until the next decision, with T (the wake margin, 9 s with no decision recorded).
+    expect(lines[2]).toMatch(/^列の残り 約 \d+ 秒／次の決断まで約 \d+ 秒（走っている項目の残りが T=9 秒になったら決める/u);
+    expect(lines[3]).toBe('あと 1 つ足せる（足した項目は q2 の後ろに付く。q2 の結果を待たずに次の作業を足せば、体は止まらない）');
+  });
+
+  it('flow 1113 (F2): the line of the queue shows T from the recorded decisions of the task and counts down to the wake', async () => {
+    const f = setup();
+    for (const ms of [4_000, 5_000, 6_000]) f.queue.noteDecision(ms);
+    await f.queue.add(f.spec([{ do: 'wait', seconds: 60 }]));
+    f.take();
+    expect(f.queue.lines(null).find(line => line.startsWith('列の残り'))).toMatch(/T=9 秒/u); // 90th percentile 6 s + the 3 s margin
+    expect(timingLine({ wakeMs: 9_000, leftMs: 40_000 }, 40_000)).toBe('列の残り 約 40 秒／次の決断まで約 31 秒（走っている項目の残りが T=9 秒になったら決める。考える時間はこの T）');
+    expect(timingLine({ wakeMs: 9_000, leftMs: 5_000 }, 5_000)).toContain('次の決断まで約 0 秒');
+  });
+
+  it('flow 1113 (F2): just after a failure emptied the queue the fixed recovery hands are taken as a reserve alone; any other hand is not', async () => {
+    const f = setup({ reserveAllowed: true });
+    await f.queue.add(f.spec(wait1));
+    f.take();
+    f.end('failed', '失敗した');
+    f.poll();
+    await settle();
+    expect(f.queue.open()).toBe(false);
+    const dug = await f.queue.add(f.spec(dig(2), { reserve: true }));
+    expect(dug).toMatchObject({ ok: false });
+    expect((dug as { text: string }).text).toContain('立て直しの手');
+    expect(await f.queue.add(f.spec([{ do: 'eat' }, { do: 'pickup' }] as never, { reserve: true }))).toMatchObject({ ok: true });
   });
 });
 

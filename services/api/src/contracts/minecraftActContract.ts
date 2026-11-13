@@ -229,7 +229,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
     done: { ...CONDITION_SCHEMA, description: '満たした所で済みにする条件' },
     pre: { ...CONDITION_SCHEMA, description: '始める時に確かめる条件' },
     replace: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '先に消す列の項目' },
-    reserve: { type: 'boolean', description: '控え: 考えている間に体が進める小さな手（列の最後に 1 つ・決めた項目が来ると自動で消える・見守りの依頼は不可）。'
+    reserve: { type: 'boolean', description: '控え: 頭が考えている間に体が進める小さな手。失敗で列が空になっても体が止まらない（列の最後に 1 つ・決めた項目が来ると自動で消える・見守りの依頼は不可。失敗の直後で列が空なら eat・pickup・equip・tidy だけ単独で置ける）。'
       + 'その場の手（拾う・隣の鉱脈・手元の作る・焼きの合間の採取）と、次の場所から 16 m 内の go。'
       + '危険（反射・stopIf・被弾・落下・戦いの相手が近い）で前の項目が止まれば控えも始まらない' },
     dependsOn: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 }, description: '頼る列の項目。[] は何にも頼らない。列に足す項目は必ず書く（無いと前の項目が止まった時に捨てられる）' },

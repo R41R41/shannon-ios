@@ -67,7 +67,7 @@ export const LLMC_HISTORY_POLICY: Readonly<Partial<FcaHistoryPolicy>> = Object.f
   maximumRounds: 46,
   recentRounds: 6,
   maximumConversationTokens: 40_000,
-  compactedConversationTokens: 8_000,
+  compactedConversationTokens: 4_000,
 });
 
 /**

@@ -21,7 +21,7 @@ import { fcaTransientHistory,isFcaTransientTask,shouldForceFcaEpoch } from './fc
 import { isTransientUnsupported,legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART,fcaWaitGate } from './fcaWaitGate.js';
 import { runToolRound,type RoundContext,type RoundOutcome } from './fcaToolRound.js';
-import { settleNews,waitForQueue } from './fcaStretch.js';
+import { settleNews,startHistoryAhead,waitForQueue } from './fcaStretch.js';
 import { closeFcaMonitors,investigateFcaBody } from './fcaBodyInvestigation.js';
 import { FCA_COMPLETION_MISTAKES_STOP,sayCompletionMistake } from './fcaCompletionMistake.js';
 import { reflexCutCheckpoint,reflexCutRunOf,repeatedFailureReason,settleReflexStep } from './fcaReflexCuts.js';
@@ -137,11 +137,10 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId, cutLast) : undefined;
   const historyAhead = ports.history?.ahead && ports.history.summarizer ? { ...ports.history.ahead, detach: detachedModelCall, urgent,
     note: (what: string) => metrics.ahead(what) } : undefined;
-  const replay = ports.history ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, {
-    runtime, codec: ports.history!.codec, summarizer: ports.history!.summarizer,
+  const historyPorts = ports.history ? { runtime, codec: ports.history.codec, summarizer: ports.history.summarizer,
     permit: async () => { await checked('fresh');
-      return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true,
-  }, signal, transient?.policy ?? ports.history!.policy, { ...(forceEpoch ? { forceEpoch } : {}), ...(historyAhead ? { ahead: historyAhead } : {}), ...(bodyTask ? { patient: true } : {}) })) : null;
+      return true; }, sourcesVisible: () => ports.sourcesVisible?.() ?? true } : null;
+  const replay = ports.history ? await metrics.timed('summaryMs', () => prepareFcaHistory(step, historyPorts!, signal, transient?.policy ?? ports.history!.policy, { ...(forceEpoch ? { forceEpoch } : {}), ...(historyAhead ? { ahead: historyAhead } : {}), ...(bodyTask ? { patient: true } : {}) })) : null;
   const provenance = { taskId: step.taskId, parentId: step.snapshot.task.parentId, stepId: step.id, revision: step.revision };
   const input = metrics.timedSync('contextMs', () => observeSync('context', provenance, () => {
     const children = step.snapshot.task.childIds.flatMap(id => {
@@ -431,7 +430,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     let continuing = false;
     if (queue) {
       const waited = await waitForQueue({ ports, signal, runtime, step, tools: decision.kind === 'tools', stale: state.bodyStale, round:
-         rounds, startedAt: stepStartedAt });
+         rounds, startedAt: stepStartedAt, ...(round?.idle ? { idle: true } : {}) });
       continuing = waited.continuing;
       const news = settleNews(roundContext, queue.take());
       if (news.outcomes.length && !state.bodyStale) settleOutcomes(news.outcomes);
@@ -452,6 +451,8 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
     // The next decision: the history so far, the body and the plan as they are now; no recall, no message (the
 // step's own were the first decision's).
     await checked('fresh');
+    // Flow 1113: the stored history is looked at before each decision of the stretch, not only at the step's start (`fcaStretch.ts`).
+    if (historyPorts && historyAhead) startHistoryAhead({ step, ports: historyPorts, policy: transient?.policy ?? ports.history!.policy, ahead: historyAhead });
     if (bodyTask && await investigateFcaBody(ports, step.taskId, metrics, signal)) await checked('fresh');
     const { recall: _recall, waiting: _waiting, ...rest } = request;
     asked = await freshen({ ...rest, messages: [], history: [...input.history, ...history] });

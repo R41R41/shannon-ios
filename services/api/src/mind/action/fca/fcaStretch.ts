@@ -1,7 +1,9 @@
 import type { TaskRuntime, TaskStep } from '../taskRuntime/taskRuntimePorts.js';
-import type { FcaQueueNews, FcaQueueWake } from './fcaPorts.js';
+import type { FcaBodyQueue, FcaQueueNews, FcaQueueWake } from './fcaPorts.js';
 import { failureRefreshes } from './fcaToolState.js';
 import type { FcaStepPorts } from './fcaRunner.js';
+import { startFcaHistoryAhead } from './fcaHistory.js';
+import type { FcaHistoryAheadOptions, FcaHistoryPolicy, FcaHistoryPorts } from './fcaHistoryPorts.js';
 import { resultSummary, type RoundContext, type RoundOutcome } from './fcaToolRound.js';
 
 /**
@@ -15,7 +17,9 @@ export const NEWS_HEAD = '（列の知らせ）';
 
 /** What the step does after a round's calls: wait for the queue to ask for a decision, or to run dry. `continuing`: decide again, items still open. */
 export async function waitForQueue(parts: { ports: FcaStepPorts; signal: AbortSignal; runtime: TaskRuntime; step: TaskStep; tools: boolean;
-  stale: boolean; round: number; startedAt: number }): Promise<{ continuing: boolean; wake: FcaQueueWake | null }> {
+  stale: boolean; round: number; startedAt: number;
+  /** Flow 1113 (F4): the decision added nothing and the items go on (`ToolRound.idle`): the queue's next wake is waited for, `wakeMs` at least, before it can ask for a decision. */
+  idle?: boolean; sleep?: (ms: number, signal: AbortSignal) => Promise<void> }): Promise<{ continuing: boolean; wake: FcaQueueWake | null }> {
   const queue = parts.ports.body?.queue;
   if (!queue) return { continuing: false, wake: null };
   if (parts.stale) queue.cancelAll();
@@ -26,6 +30,7 @@ export async function waitForQueue(parts: { ports: FcaStepPorts; signal: AbortSi
   if (limited) queue.closeStep?.('step_limit');
   const drain = limited || queue.closing?.() === true;
   let wake: FcaQueueWake = 'empty';
+  if (parts.idle && !drain && queue.open() && parts.tools && !parts.stale) await idleWait(queue, { signal: parts.signal, messages, alert, sleep: parts.sleep });
   if (queue.open() && parts.tools && !parts.stale) wake = await queue.ready({ signal: parts.signal, drain, messages, alert });
   // Words from the owner: what waits is taken off, the running item goes on, and the step ends once it has (the message is the next step's).
   if (wake === 'message') queue.dropWaiting();
@@ -34,6 +39,20 @@ export async function waitForQueue(parts: { ports: FcaStepPorts; signal: AbortSi
   // Not deciding again: whatever is still open runs out first (a step is committed with no item unsettled).
   if (!continuing && queue.open()) await queue.ready({ signal: parts.signal, drain: true });
   return { continuing, wake };
+}
+
+/** The step that decided nothing new waits `T` (`FcaBodyQueue.wakeMs`) before the queue may wake it, unless the queue changes meanwhile (an item ends or is dropped, words come, an alert). */
+async function idleWait(queue: FcaBodyQueue, parts: { signal: AbortSignal; messages(): boolean; alert(): boolean;
+  sleep: ((ms: number, signal: AbortSignal) => Promise<void>) | undefined }): Promise<void> {
+  const sleep = parts.sleep ?? ((ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+  }));
+  const until = Date.now() + Math.max(0, queue.wakeMs?.() ?? 0), openAt = queue.openIds().size, version = queue.version();
+  while (Date.now() < until && !parts.signal.aborted) {
+    await sleep(Math.min(100, until - Date.now()), parts.signal);
+    if (!queue.open() || queue.openIds().size !== openAt || queue.version() !== version || parts.messages() || parts.alert()) return;
+  }
 }
 
 /**
@@ -61,4 +80,12 @@ export function settleNews(ctx: RoundContext, news: readonly FcaQueueNews[]): { 
     lines.push(`${entry.label}: ${text}`);
   }
   return { text: lines.length ? `${NEWS_HEAD}\n${lines.join('\n')}` : '', outcomes };
+}
+
+/**
+ * Before each further decision of a stretch (flow 1113: `prepareFcaHistory` runs once, at the step's start, so a summary that was due or whose cooldown
+ * had run out waited for the next step): asks the summary beside the step when the stored history is past its policy. Never fails a step.
+ */
+export function startHistoryAhead(parts: { step: TaskStep; ports: FcaHistoryPorts; policy: Partial<FcaHistoryPolicy>; ahead: FcaHistoryAheadOptions }): boolean {
+  try { return startFcaHistoryAhead(parts.step, parts.ports, parts.policy, parts.ahead); } catch { return false; }
 }

@@ -13,16 +13,27 @@ import type { ActClause, ActCondition } from '../../contracts/minecraftActCondit
 export const RESERVE_DEFAULTS = Object.freeze({ safeR: 16, hp: 12, atR: 32, hostileWithin: 8, hpBelow: 10 });
 /** The hands that move the body from where it is: no reserve has them in the Nether or the End. */
 export const RESERVE_TRAVEL_HANDS: ReadonlySet<string> = new Set(['go', 'walk', 'vertical', 'portal', 'obsidian', 'pillarUp', 'fight', 'attack', 'hunt', 'fill']);
+/**
+ * Flow 1113 (F2: run 9, a failed item emptied the queue and the body stood until the next decision, though what to do first is always the same):
+ * the hands of the fixed recovery. With the queue empty just after a failure they are taken as a reserve with no decided item before them. They
+ * only change what is held or picked up, so no place or permission is widened by it.
+ */
+export const RESERVE_RECOVERY_HANDS: ReadonlySet<string> = new Set(['eat', 'pickup', 'equip', 'tidy']);
 const QUIET_DIMENSIONS: ReadonlySet<string> = new Set(['the_nether', 'nether', 'the_end', 'end']);
 
 /** Why a reserve is not taken, or null. `hasReserve`: one is open already; `hasDecided`: a decided item is open (the reserve goes behind it). */
 export function reserveRefusal(
   input: Pick<ActInput, 'hands' | 'dependsOn' | 'replace'>,
-  state: { allowed: boolean; dimension: string | null; hasReserve: boolean; hasDecided: boolean },
+  state: { allowed: boolean; dimension: string | null; hasReserve: boolean; hasDecided: boolean; afterFailure?: boolean },
 ): string | null {
   if (!state.allowed) return '送らなかった: この依頼は控えを受け付けない（人が見守る・保留つきの依頼）。決めた項目だけを送る';
   if (state.hasReserve) return '送らなかった: 控えは列に 1 つまで。今の控えを使うか、決めた項目を送れば控えは自分で消える';
-  if (!state.hasDecided) return '送らなかった: 控えは決めた項目の後ろに置くもの（列が空なら、決めた項目として reserve を付けずに送る）';
+  const recovery = state.afterFailure === true && input.hands.length > 0 && input.hands.every(hand => RESERVE_RECOVERY_HANDS.has(hand.do));
+  if (!state.hasDecided && !recovery) {
+    return state.afterFailure === true
+      ? '送らなかった: 失敗で列が空になった直後に控えにできるのは立て直しの手（eat・pickup・equip・tidy）だけ。それ以外は決めた項目として reserve を付けずに送る'
+      : '送らなかった: 控えは決めた項目の後ろに置くもの（列が空なら、決めた項目として reserve を付けずに送る）';
+  }
   if (input.replace?.length) return '送らなかった: 控えに replace は付けられない（控えは頭が自分で消す）';
   if (state.dimension && QUIET_DIMENSIONS.has(state.dimension) && input.hands.some(hand => RESERVE_TRAVEL_HANDS.has(hand.do))) {
     const travel = [...new Set(input.hands.filter(hand => RESERVE_TRAVEL_HANDS.has(hand.do)).map(hand => hand.do))].join('・');

@@ -255,7 +255,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     drop(item, item.item);
     bump([item]);
   }
-const { refusal, makeItem } = createQueueAdmission(deps, { items, open, now });
+const { refusal, makeItem, existing } = createQueueAdmission(deps, { items, open, now });
 
   // R3-1 (4): the decided item that comes while a reserve is open takes the reserve off first
   // (the reserve is the head's own, and never what a decision rests on).
@@ -374,6 +374,7 @@ void restoreReceipts();
       const state = dependStateOfRef(ref);
       return { ended: found.ended === true, unread: news.some(entry => entry.item === ref), ok: state === 'succeeded' ? true : state === 'failed' ? false : null };
     },
+    wakeMs: () => queueWakeMs(deps.taskId),
     leftMs: () => open().filter(item => !item.reserve).reduce((sum, item) => sum + remainingMs(item), 0),
     hasUnread: () => news.length > 0,
     ahead: () => open().map(item => item.input),
@@ -383,6 +384,8 @@ void restoreReceipts();
       keep(decisionTimes, deps.taskId, [...(decisionTimes.get(deps.taskId) ?? []), milliseconds].slice(-QUEUE_T.kept));
     },
     async add(spec) {
+      const same = spec.input.replace?.length ? null : existing(spec);
+      if (same) return { ok: true, item: same.item, after: null, startInMs: 0, already: true };
       const refused = refusal(spec);
       if (refused) return { ok: false, text: refused };
       const replacement = replaceReserveForDecided(spec);
@@ -570,7 +573,8 @@ void restoreReceipts();
       const queue = open();
       const first = queue[0];
       return queueLines(queue.map(item => ({ ...item, dependStates: item.dependsOn?.map(ref => [ref, dependStateOfRef(ref)] as const),
-         reason: item.reason })), frame, { progress: first ? progressOf(first) : null, leftMs: first ? remainingMs(first) : 0 });
+         reason: item.reason })), frame, { progress: first ? progressOf(first) : null, leftMs: first ? remainingMs(first) : 0 },
+         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0 });
     },
   };
   return api;

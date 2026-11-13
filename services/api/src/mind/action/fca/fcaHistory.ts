@@ -323,7 +323,7 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     signal.throwIfAborted();
     if (!ports.sourcesVisible() || ports.runtime.get(step.scopeKey, step.taskId)?.phase !== 'executing') throw new Error('FCA_HISTORY_HELD');
   };
-  const aheadState = { installed: false, waited: false };
+  const aheadState = { installed: false, waited: false, truncated: false };
   for (let batches = 0; ; batches++) {
     await checked();
     const window = ports.runtime.history(step.scopeKey, step.taskId, step.messageIds);
@@ -341,6 +341,17 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
     }
     if (!ports.summarizer) throw new Error('FCA_HISTORY_SUMMARIZER_REQUIRED');
     if (batches >= policy.maximumBatches) throw new Error('FCA_HISTORY_COMPACTION_LIMIT');
+    // Flow 1113 (run 9, t=4175-4385: three summaries in a row cut at the output cap, 37 s each): after a cut summary no second one is asked in this
+    // step (the clipped replay carries it), and for `AHEAD_RETRY_ROUNDS` rounds none is asked in a later step either; past the bounds meanwhile
+    // the stored history is brought back within them without a model call (`truncatedCommit`).
+    if (aheadState.truncated) return summaryFallback(step, ports, policy, { code: 'FCA_MODEL_TRUNCATED', reason: 'cooldown' }, batches);
+    if (options.ahead && cutRecently(options.ahead.port, step.taskId, window)) {
+      if (await truncatedCommit(step, ports, plan, window, options.ahead.port, checked)) {
+        aheadState.truncated = true;
+        continue;
+      }
+      return summaryFallback(step, ports, policy, { code: 'FCA_MODEL_TRUNCATED', reason: 'cooldown' }, batches);
+    }
     observerHandoff('fca', 'compact', { roundCount: plan.input.rounds.length, batch: batches });
     let template: unknown;
     try {
@@ -350,12 +361,67 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
       const unusable = summaryFailure(error, options.patient);
       if (!unusable || signal.aborted) throw error;
       await checked();
+      if (unusable.code === 'FCA_MODEL_TRUNCATED' && !aheadState.truncated) {
+        aheadState.truncated = true;
+        if (await truncatedCommit(step, ports, plan, window, options.ahead?.port, checked)) continue;
+      }
       return summaryFallback(step, ports, policy, unusable, batches);
     }
     await checked();
     if (!observeSync('compact', { phase: 'commit', roundCount: plan.input.rounds.length },
       () => ports.runtime.commitCompaction(step, { ...plan.request, template }, ports.sourcesVisible), committed => ({ committed }))) throw new Error('FCA_HISTORY_COMMIT_FENCED');
   }
+}
+
+/** What a failed `FcaHistoryPrepared` holds in `template` when its summary was cut at the output cap (`FCA_MODEL_TRUNCATED`): the mark of `cutRecently`. */
+const CUT_AT_CAP = Object.freeze({ cut: 'FCA_MODEL_TRUNCATED' });
+const isCut = (prepared: FcaHistoryPrepared | undefined): boolean => prepared?.state === 'failed' && prepared.template === CUT_AT_CAP;
+
+/** Whether a summary of this task was cut at the output cap fewer than `AHEAD_RETRY_ROUNDS` rounds ago (beside the steps or in one). */
+function cutRecently(port: FcaHistoryAheadOptions['port'], taskId: string, window: TaskHistoryWindow): boolean {
+  const prepared = port.get(taskId);
+  return isCut(prepared) && window.revision === prepared!.revision && window.tailSequence - prepared!.tail < AHEAD_RETRY_ROUNDS;
+}
+
+/**
+ * A summary was cut at the output cap (or was, a few rounds ago): the stored history is brought back within its bounds without asking the
+ * model again. The rounds the summary would have covered are replaced by the previous summary and one line that says how many were left out;
+ * the rounds after them stay whole in the new epoch's bootstrap (the same shape as `fallbackFcaHistory`'s replay, now stored, so that the next step
+ * does not replay and clip it again). The cut is marked in the ahead state as a failed summary (`cutRecently`) so that none is asked for
+ * `AHEAD_RETRY_ROUNDS` rounds. False when the commit was fenced: the caller then replays the clipped fallback for this step.
+ */
+async function truncatedCommit(step: TaskStep, ports: FcaHistoryPorts, plan: Extract<FcaHistoryPlan, { kind: 'compact' }>, window: TaskHistoryWindow,
+  port: FcaHistoryAheadOptions['port'] | undefined, checked: () => Promise<void>): Promise<boolean> {
+  await checked();
+  const sequences = plan.input.rounds.map(round => round.sequence);
+  const previous = (window.summary?.template ?? {}) as unknown as Partial<Record<string, readonly string[]>>;
+  const note = `要約が長すぎて切れたため、round ${sequences[0]}〜${sequences.at(-1)}（${sequences.length} 回分）の経過は省いた`;
+  const template = { ...previous, 重要な文脈: [...(previous['重要な文脈'] ?? []), note] };
+  const committed = observeSync('compact', { phase: 'commit_cut', roundCount: sequences.length },
+    () => ports.runtime.commitCompaction(step, { ...plan.request, template }, ports.sourcesVisible), done => ({ committed: done }));
+  console.log(`Shannon FCA history summary cut task=${step.taskId} commit=${committed} rounds=${sequences.length}`);
+  if (!port) return committed;
+  const after = committed ? ports.runtime.history(step.scopeKey, step.taskId, step.messageIds) ?? window : window;
+  port.set(step.taskId, { revision: after.revision, sequences: [], tail: after.tailSequence, state: 'failed', template: CUT_AT_CAP, done: Promise.resolve() });
+  return committed;
+}
+
+/**
+ * Between the decisions of a stretch (flow 1113; `fcaStretch.ts`): when the stored history passes its policy and no summary is pending (or the last
+ * came back unusable `AHEAD_RETRY_ROUNDS` rounds ago), asks one beside the step. `prepareFcaHistory` looks only at the start of a step.
+ */
+export function startFcaHistoryAhead(step: TaskStep, ports: FcaHistoryPorts, overrides: Partial<FcaHistoryPolicy>, ahead: FcaHistoryAheadOptions): boolean {
+  if (!ports.summarizer) return false;
+  const prepared = ahead.port.get(step.taskId);
+  if (prepared?.state === 'pending') return false;
+  const window = ports.runtime.history(step.scopeKey, step.taskId, step.messageIds);
+  if (!window || !window.rounds.length) return false;
+  if (prepared?.state === 'ready' || (prepared?.state === 'failed' && window.tailSequence - prepared.tail < AHEAD_RETRY_ROUNDS)) return false;
+  const plan = planFcaHistory(window, ports.codec, policyOf(overrides));
+  if (plan.kind !== 'compact') return false;
+  startAhead(step.taskId, plan, window, ahead, ports.summarizer);
+  ahead.note?.('started');
+  return true;
 }
 
 /** How long a step past the hard bounds waits for a summary already asked beside the steps (mb-llmc r3). */
@@ -450,6 +516,7 @@ function startAhead(taskId: string, plan: Extract<FcaHistoryPlan, { kind: 'compa
   }, error => {
     prepared.state = 'failed';
     const code = error instanceof Error && /^[A-Z0-9_]{1,64}$/u.test(error.message) ? error.message : 'other';
+    if (code === 'FCA_MODEL_TRUNCATED') prepared.template = CUT_AT_CAP;
     console.log(`Shannon FCA history summary ahead task=${taskId} outcome=failed code=${code} ms=${Date.now() - began}`);
   }).finally(() => settle());
 }

@@ -11,6 +11,7 @@ import type { FcaBodyLifecycle, FcaBodyQueue, FcaDecision, FcaModelInput, FcaQue
 import { combineFcaTools } from '../src/wiring/fcaMinecraftTools.js';
 import { MC_ACT_TOOL } from '../src/contracts/minecraftActContract.js';
 import { toolOk } from '../src/mind/tools/toolRegistryPorts.js';
+import { QUEUE_RUNS_ON_LINE, waitWakeWords, alreadyQueuedWords } from '../src/surfaces/minecraft/minecraftLlmcQueueWords.js';
 
 /**
  * The step that goes on while the body works through its queue (design minebot-task-queue, 2026-10-26), in the common runner with a queue played by
@@ -29,7 +30,7 @@ const complete: FcaDecision = { kind: 'complete', summary: 'done' };
 
 interface Step { wake: FcaQueueWake; ends?: Array<{ item: string; ok: boolean; text: string; kind?: 'ran' | 'dropped' }>; bump?: boolean }
 /** A queue the test drives: `put` an item as the tool does; each `ready` takes the next step of the script. */
-function fakeQueue(script: Step[], staleForRefs = false) {
+function fakeQueue(script: Step[], staleForRefs = false, wakeMs?: number) {
   const open = new Set<string>(), news: FcaQueueNews[] = [];
   let version = 0, counter = 0, noted: number[] = [], cancelled = 0, drains = 0, waited = 0, closing = false;
   const lost = new Set<string>();
@@ -41,6 +42,7 @@ function fakeQueue(script: Step[], staleForRefs = false) {
   };
   const queue: FcaBodyQueue = {
     openIds: () => new Set(open), open: () => open.size > 0, version: () => version,
+    ...(wakeMs !== undefined ? { wakeMs: () => wakeMs } : {}),
     ...(staleForRefs ? { staleFor: (c: { name: string; input: unknown }) => lost.size > 0 && (c.name !== MC_ACT_TOOL
       || !Array.isArray((c.input as { dependsOn?: unknown }).dependsOn) || ((c.input as { dependsOn: string[] }).dependsOn).some(ref => lost.has(ref))) } : {}),
     noteDecision: ms => { noted.push(ms); },
@@ -68,7 +70,8 @@ function fakeQueue(script: Step[], staleForRefs = false) {
 }
 
 function fixture(decisions: Array<FcaDecision | ((input: FcaModelInput) => Promise<FcaDecision>)>, queue: ReturnType<typeof fakeQueue> | null, options: {
-  recall?: boolean; stale?: () => boolean; messages?: () => boolean; aux?: Array<{ id: string; text: string; ok: boolean }> } = {}) {
+  recall?: boolean; stale?: () => boolean; messages?: () => boolean; aux?: Array<{ id: string; text: string; ok: boolean }>;
+  execute?: () => ReturnType<typeof toolOk> } = {}) {
   const db = new DatabaseSync(':memory:'); databases.push(db); migrateAgentTasks(db);
   const actions = new SQLiteActionStore(db);
   const runtime = new SQLiteTaskRuntimeStore(db, { authority: new SQLiteFcaTaskAuthority(db), now: () => at,
@@ -99,7 +102,7 @@ function fixture(decisions: Array<FcaDecision | ((input: FcaModelInput) => Promi
           ...(index === 0 && options.aux ? { auxiliaryResults: options.aux } : {}) };
       },
       toolResults(value) { return { role: 'user', content: value.map(item => ({ type: 'tool_result', tool_use_id: item.id, content: item.text, ok: item.ok })) }; } },
-      tools: combineFcaTools({ definitions: [ACT], async execute() { return toolOk(queue ? `列に入れた ${queue.put()}` : 'act 全部済み'); } }) };
+      tools: combineFcaTools({ definitions: [ACT], async execute() { return options.execute ? options.execute() : toolOk(queue ? `列に入れた ${queue.put()}` : 'act 全部済み'); } }) };
     const logged = console.info, said = console.log;
     console.info = (line: string) => { lines.push(String(line)); };
     console.log = (line: string) => { lines.push(String(line)); };
@@ -319,5 +322,46 @@ describe('a queue that changes, and the limits', () => {
     await f.run();
     expect(f.inputs.length).toBeGreaterThanOrEqual(2);
     expect(text(f.inputs[1]!.history)).toContain('列に入れた q1');
+  });
+});
+
+describe('a decision that added nothing does not call the model again at once (flow 1113, F4)', () => {
+  const WAKE_MS = 250;
+  /** The step: q1 runs when it starts; decision 1 only waits (the tool says so), the queue then wakes `remaining` at once, and ends. */
+  async function waitOnly(execute: () => ReturnType<typeof toolOk>) {
+    const queue = fakeQueue([{ wake: 'remaining' }, { wake: 'empty', ends: [{ item: 'q1', ok: true, text: 'q1 済み' }] }], false, WAKE_MS);
+    queue.put();
+    const times: number[] = [];
+    const stamp = (decision: FcaDecision) => async () => { times.push(Date.now()); return decision; };
+    const f = fixture([stamp(act('a', '待つ')), stamp(act('b', '続き')), stamp({ kind: 'wait', summary: 'end' })], queue, { execute });
+    await f.run();
+    return { f, times, queue };
+  }
+
+  it('waits the wake margin of the queue before the second decision, tells the model in one line, and counts the wait', async () => {
+    const { f, times } = await waitOnly(() => toolOk(waitWakeWords('q1')));
+    expect(f.inputs.length).toBeGreaterThanOrEqual(2);
+    expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(WAKE_MS - 20);
+    const second = text(f.inputs[1]!.history);
+    expect(second).toContain(QUEUE_RUNS_ON_LINE);
+    expect(second).not.toContain('wait は積まなかった');
+    expect(f.metrics().some(row => (row.notQueued as { wait?: number } | undefined)?.wait === 2)).toBe(true);
+  });
+
+  it('answers the same hand sent again with its mark as a success, and waits for the wake the same way', async () => {
+    const { f, times } = await waitOnly(() => toolOk(alreadyQueuedWords('q1')));
+    expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(WAKE_MS - 20);
+    expect(text(f.inputs[1]!.history)).toContain(QUEUE_RUNS_ON_LINE);
+    expect(f.metrics().some(row => (row.notQueued as { same?: number } | undefined)?.same === 2)).toBe(true);
+  });
+
+  it('does not wait when the decision did add an item', async () => {
+    const queue = fakeQueue([{ wake: 'remaining' }, { wake: 'empty', ends: [{ item: 'q1', ok: true, text: 'q1 済み' }, { item: 'q2', ok: true, text: 'q2 済み' }] }], false, WAKE_MS);
+    const times: number[] = [];
+    const stamp = (decision: FcaDecision) => async () => { times.push(Date.now()); return decision; };
+    const f = fixture([stamp(act('a')), stamp(act('b')), stamp({ kind: 'wait', summary: 'end' })], queue);
+    await f.run();
+    expect(times[1]! - times[0]!).toBeLessThan(WAKE_MS);
+    expect(text(f.inputs[1]!.history)).not.toContain(QUEUE_RUNS_ON_LINE);
   });
 });

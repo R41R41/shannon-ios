@@ -11,6 +11,8 @@ import { FCA_BODY_TOOL_ABSENT, FCA_EARLIER_ACTION_FAILED } from './fcaRunnerWord
 import type { TaskProgressEvent } from '../taskRuntime/taskProgressPorts.js';
 import { withDecisionCall } from '../../../infra/decisionRecords/decisionRecordScope.js';
 import { noteDecisionCall } from '../../../infra/decisionRecords/decisionRecordNotes.js';
+import { MC_ACT_TOOL } from '../../../contracts/minecraftActContract.js';
+import { QUEUE_RUNS_ON_LINE, notQueuedReason, queueRunsOn } from '../../../surfaces/minecraft/minecraftLlmcQueueWords.js';
 
 /** What a round of tool calls needs of the step it runs in (`executeFcaStep`'s own gates and state, by reference). */
 export interface RoundContext {
@@ -32,7 +34,9 @@ export interface RoundContext {
 }
 /** One call's outcome as the failure ladder reads it (`settleReflexStep`). */
 export interface RoundOutcome { name: string; ok: boolean; cut: boolean; read: boolean }
-export interface ToolRound { results: Array<{ id: string; text: string; ok: boolean }>; outcomes: RoundOutcome[] }
+export interface ToolRound { results: Array<{ id: string; text: string; ok: boolean }>; outcomes: RoundOutcome[];
+  /** Flow 1113 (F4): the decision added nothing to the queue and its items go on: the step waits for the queue's next wake before it decides again. */
+  idle?: boolean }
 
 const STALE = '身体の状態が変わりました。最新の観測から判断し直してください。';
 /** E2: a call of a decision whose queue changed meanwhile (an item ended badly or was taken off) and that did not say it did not rely on it (`dependsOn`). */
@@ -161,6 +165,10 @@ async function runOne(ctx: RoundContext, call: FcaToolCall, last: boolean, tally
     });
   noteDecisionCall({ toolUseId: call.id, name: call.name, input: call.input, operationId, skipped, ms: performance.now() - began, result });
   if (skipped) metrics.skipped(call.name); else metrics.tool(call.name, performance.now() - began);
+  if (!skipped && call.name === MC_ACT_TOOL) {
+    const reason = notQueuedReason(result);
+    if (reason) metrics.notQueued(reason);
+  }
   ctx.progress(progressOf(ctx, call, operationId, result));
   if (skipped) ports.evidence?.notRun?.(step, call);
   else if (ports.evidence) observeSync('prediction', { phase: 'observed', ok: result.ok }, () => ports.evidence!.observed(step, call, result));
@@ -179,11 +187,21 @@ export async function runToolRound(ctx: RoundContext, decision: Extract<FcaDecis
   const calls = decision.calls;
   if (!calls.length || calls.length > 8 || new Set(calls.map(call => call.id)).size !== calls.length) throw new Error('FCA_INVALID_CALLS');
   const tally: Tally = { results: [...auxiliary], reflexCuts: new Set(), progressed: new Set(), notRun: new Set(), earlierFailed: false };
+  const queue = ctx.bodyTask ? ctx.ports.body?.queue : undefined;
+  const openBefore = queue ? [...queue.openIds()].sort().join(',') : null;
   for (const [index, call] of calls.entries()) await runOne(ctx, call, index === calls.length - 1, tally);
+  // Flow 1113 (F4, run 9: 40-60 decisions that only said "wait", each a model call): when every call of the decision was a body action that added nothing and
+  // said so (a wait behind a running item, the same hand again, a result still running), and the queue is just as it was, the model is told once, in one
+  // line, that the items run on; the step does not decide again at once (`waitForQueue`).
+  const mine = tally.results.slice(auxiliary.length);
+  const idle = !!queue && openBefore !== null && queue.open() && !ctx.state.bodyStale && mine.length === calls.length
+    && calls.every((call, index) => isBodyAction(ctx, call.name) && mine[index]!.ok && queueRunsOn(mine[index]!.text))
+    && [...queue.openIds()].sort().join(',') === openBefore;
+  if (idle) for (const [index] of calls.entries()) tally.results[auxiliary.length + index] = { ...mine[index]!, text: QUEUE_RUNS_ON_LINE };
   // The outcomes the ladder counts: not the goal and replan tools, nor a call that was not run. A cut call does not count until the same tool (or any)
   // has been cut off too many times in a row (`fcaReflexCuts.ts`, M2); a call that made something is not a failed step (`fcaFailureLadder.ts`).
   const outcomes = calls.flatMap((call, index) => ['goal.set_conditions', 'goal.verify', 'task.replan'].includes(call.name) || tally.notRun.has(call.id)
     ? [] : [{ name: call.name, ok: tally.results[auxiliary.length + index]!.ok || (ctx.bodyTask && tally.progressed.has(call.id)),
       cut: tally.reflexCuts.has(call.id), read: ctx.catalog.find(tool => tool.name === call.name)?.effect === 'read' }]);
-  return { results: tally.results, outcomes };
+  return { results: tally.results, outcomes, ...(idle ? { idle: true } : {}) };
 }

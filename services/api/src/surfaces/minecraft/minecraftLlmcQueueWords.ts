@@ -29,6 +29,24 @@ export const waitWakeWords = (running: string) =>
   `wait は積まなかった（体には何も足していない。体は列を動かし続ける）。列の最後の ${running} が終わって列が空になったら起こす: その結果は終わった時に知らせる。`
   + '待つ間に体を使う項目があれば、wait ではなくその項目を足す';
 /**
+ * Flow 1113 (F4): what the model is told, as one line, when its decision added nothing and the items it has go on (`fcaToolRound.ts` puts it in the
+ * history in place of the longer words of the answer, and the step waits for the queue's next wake before it decides again).
+ */
+export const QUEUE_RUNS_ON_LINE = '積み済みの手が走っている。次の起こしまで待つ';
+/** Whether an answer says nothing was added and the queue still runs: the wait of a running tail, the same hand sent again, a result still running. */
+export const queueRunsOn = (text: string): boolean => text.includes('体は列を動かし続ける') || text.includes('に積み済み（同じ手が列にある')
+  || (text.startsWith('wait は積まなかった') && text.includes('はまだ走っている'));
+/** Which way an act was not put in the queue, for the decision metrics: `wait` (a wait only), `same` (the same hand), `shape` (a form the tool refused), `other`; null when it was queued. */
+export function notQueuedReason(result: { ok: boolean; text: string; failure?: string }): 'wait' | 'same' | 'shape' | 'other' | null {
+  if (result.text.includes('に積み済み（同じ手が列にある') || result.text.includes(SAME_IN_QUEUE_WORDS)) return 'same';
+  if (result.text.startsWith('wait は積まなかった') || result.text.includes('wait だけの項目は積めない')) return 'wait';
+  if (!result.ok && result.failure === 'invalid_input') return 'shape';
+  return !result.ok && result.text.includes('送らなかった') ? 'other' : null;
+}
+/** Flow 1113 (F4): the same hand was sent while it runs or waits: answered as taken (`already`), with the mark it has. */
+export const alreadyQueuedWords = (item: string) =>
+  `${item} に積み済み（同じ手が列にある。足し直していない）。結果は終わった時に知らせる。待つ間に体を使う別の項目があれば足す`;
+/**
  * A wait-only act that waits for the result of an item (it names it in `dependsOn` or its why), or that is written while a result is already in
  * hand: no wait goes to the body (run 6 / Haiku 1: 13 such waits, 64 s of the body standing still, each for a result the decision was about to read).
  * `state`: the item ended (`ok`: how), or is still running (`left` ms, `room` free places in the queue).
@@ -128,15 +146,28 @@ function itemLine(item: QueueWordsItem, index: number, frame: BodyObservation | 
   return `${index === 0 ? '▶' : '・'} ${itemLabel(item)} ${index === 0 ? '実行中' : '待ち'}${parts.length ? `: ${parts.join('・')}` : ''}`;
 }
 
+/**
+ * Flow 1113 (F2: run 9's body stood idle between decisions because the head could not see when the next one came): the whole queue's time left (the
+ * hands' estimates added up, `leftMs`) and the time until the head is asked again. The head is asked when the running item has `T` (`queueWakeMs`: the
+ * 90th percentile of its recent decisions and a margin) left, so the next decision is `first - T` from now (at once when the running item is already
+ * that near): a hand that takes longer than that, added now, is in time.
+ */
+export function timingLine(timing: { wakeMs: number; leftMs: number }, firstLeftMs: number): string {
+  const seconds = (ms: number) => Math.max(1, Math.round(ms / 1000));
+  const until = Math.max(0, firstLeftMs - timing.wakeMs);
+  return `列の残り 約 ${seconds(timing.leftMs)} 秒／次の決断まで約 ${until > 0 ? seconds(until) : 0} 秒（走っている項目の残りが T=${seconds(timing.wakeMs)} 秒になったら決める。考える時間はこの T）`;
+}
+
 /** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it
  * has no item (the
  * reflexes and the hands that no item runs are not said to stop). */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
-  running: { progress: MinecraftQueueProgress | null; leftMs: number }): string[] {
+  running: { progress: MinecraftQueueProgress | null; leftMs: number }, timing?: { wakeMs: number; leftMs: number }): string[] {
   if (!items.length) return ['列に項目なし'];
   const room = QUEUE_MAX - items.length;
   const last = items[items.length - 1]!.item;
   return [...items.map((item, index) => itemLine(item, index, frame, running)),
+    ...(timing ? [timingLine(timing, running.leftMs)] : []),
     // Loop 11/10: the room is said with what it is for: the next work behind the running item, not a look at its result.
     room > 0 ? `あと ${room} つ足せる（足した項目は ${last} の後ろに付く。${last} の結果を待たずに次の作業を足せば、体は止まらない）` : `列はいっぱい（${QUEUE_MAX}/${QUEUE_MAX}）`];
 }

@@ -27,9 +27,12 @@ describe('the summarizer for a body task', () => {
     expect(sent(plain)).toContain(JSON.stringify(ORIGINAL_GOAL).slice(1, -1));
     expect(sent(plain)).not.toContain('coordinates');
     expect(sent(bodied)).toContain('of at most 120 characters');
+    // Flow 1113: a body summary is told its size (4,000 tokens; the output cap stays as a safety valve); the other summary is not.
+    expect(sent(bodied)).toContain('within 4,000 tokens');
+    expect(sent(plain)).not.toContain('4,000 tokens');
     expect(sent(bodied)).toContain('Keep coordinates, the base and known places, the inventory, failures with their causes, and the next plans');
     // Everything else of the request is the same: the body one differs only in that instruction.
-    expect(sent(bodied).replace(/at most 120 characters\. Preserve constraints, unresolved work, actual outcomes and useful source references\.[^"]*?plans: do not drop them for brevity\./u,
+    expect(sent(bodied).replace(/at most 120 characters\. The whole answer must stay within 4,000 tokens[^.]*\. Preserve constraints, unresolved work, actual outcomes and useful source references\.[^"]*?plans: do not drop them for brevity\./u,
       'at most 80 characters. Preserve constraints, unresolved work, actual outcomes and useful source references.')).toBe(sent(plain));
   });
 

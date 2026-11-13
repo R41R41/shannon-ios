@@ -9,6 +9,14 @@ import { QUEUE_MAX, SAME_IN_QUEUE_WORDS, waitBehindWords } from './minecraftLlmc
 export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem[]; open(): QueueItem[]; now(): number }) {
   const { items, open, now } = shared;
 
+  /**
+   * Flow 1113 (F4: run 9 sent the same hand again while it ran, and each was a refusal that cost a decision round): the open item that already does
+   * this work (the same hands, repeat and done), whose mark the answer gives as a success; null when there is none. A reserve is not one.
+   */
+  function existing(spec: QueueAdd): QueueItem | null {
+    return open().find((item) => item.reserve !== true && sameWork(item.input, spec.input)) ?? null;
+  }
+
   /** Why a new item is not put in the queue, or null. */
   function refusal(spec: QueueAdd): string | null {
     if (deps.holdPending?.()) return '送らなかった: 保留の作成・確定中。現場を保全して再開を待つ';
@@ -54,10 +62,18 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
       const refused = reserveRefusal(spec.input, {
         allowed: deps.reserveAllowed?.() === true, dimension: observation ? dimensionOf(observation) : null,
         hasReserve: waiting.some((item) => item.reserve === true), hasDecided: waiting.some((item) => item.reserve !== true),
+        afterFailure: !waiting.length && emptiedByFailure(),
       });
       if (refused) return refused;
     }
     return null;
+  }
+
+  /** The queue is empty and the item that ended last did not do its work (failed, never started, or was dropped): the body would stand until the next decision. */
+  function emptiedByFailure(): boolean {
+    const last = items.at(-1);
+    const unit = last?.ended ? last.unit : null;
+    return !!unit && (unit.goal === 'failed' || unit.goal === 'not_started' || unit.droppedBecause !== undefined);
   }
 
   function makeItem(spec: QueueAdd, label: string, maxMs: number, startInMs: number): QueueItem {
@@ -96,5 +112,5 @@ export function createQueueAdmission(deps: QueueDeps, shared: { items: QueueItem
     if (item.reserve) item.dependsOn = [];
     return item;
   }
-  return { refusal, makeItem };
+  return { refusal, makeItem, existing };
 }

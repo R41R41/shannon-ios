@@ -56,3 +56,18 @@ describe('the defaults a reserve carries', () => {
     expect(reserveStopIf({ hostileWithin: 12, hpBelow: 6, hungerBelow: 4 })).toEqual({ hostileWithin: 12, hpBelow: 10, hungerBelow: 4 });
   });
 });
+
+describe('a reserve just after a failure emptied the queue (flow 1113, F2)', () => {
+  const emptied = { ...open, hasDecided: false, afterFailure: true };
+  it('takes the fixed recovery hands alone, and nothing that moves the body or digs', () => {
+    expect(reserveRefusal({ hands: hands('eat', 'pickup', 'equip', 'tidy') }, emptied)).toBeNull();
+    expect(reserveRefusal({ hands: hands('pickup', 'go') }, emptied)).toContain('立て直しの手');
+    expect(reserveRefusal({ hands: hands('dig') }, emptied)).toContain('立て直しの手');
+  });
+  it('still wants a decided item before it when the queue was not emptied by a failure, and keeps the other refusals', () => {
+    expect(reserveRefusal({ hands: hands('pickup') }, { ...emptied, afterFailure: false })).toContain('決めた項目の後ろ');
+    expect(reserveRefusal({ hands: hands('pickup') }, { ...emptied, allowed: false })).toContain('控えを受け付けない');
+    expect(reserveRefusal({ hands: hands('pickup') }, { ...emptied, hasReserve: true })).toContain('1 つまで');
+  });
+});
+

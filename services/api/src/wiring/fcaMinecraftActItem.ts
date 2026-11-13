@@ -18,7 +18,7 @@ import { promiseKeptWords } from '../surfaces/minecraft/minecraftLlmcResultWords
 import { breakingOf } from '../surfaces/minecraft/minecraftLlmcPromises.js';
 import { digPackLine } from '../surfaces/minecraft/minecraftLlmcFacts.js';
 import { keptSurfaceWaterWalk, waterFailuresOfFrame } from '../surfaces/minecraft/minecraftLlmcWaterSwitch.js';
-import { QUEUE_MAX, resultWaitWords, waitWakeWords } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
+import { QUEUE_MAX, alreadyQueuedWords, resultWaitWords, waitWakeWords } from '../surfaces/minecraft/minecraftLlmcQueueWords.js';
 import { heldBeforeSendQueued } from '../surfaces/minecraft/minecraftLlmcQueueSend.js';
 import type { BeforeSend } from '../surfaces/minecraft/minecraftLlmcPartial.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -106,6 +106,8 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   }
   const added = await queue.add(queueItemFields());
   if (!added.ok) return toolFailure('refused', `${fixes}${added.text}`, { retryable: true });
+  // Flow 1113 (F4): the same hand is running or waits already: said as taken (nothing is added), not as a refusal.
+  if (added.already) return toolOk([`${fixes}${alreadyQueuedWords(added.item)}`, ...(parts.lead ?? [])].join('\n'));
   const place = added.after ? `${added.after} の後` : '列は空だった。体はすぐ動く';
   // Amendment A-7 1: the act is in the queue; what it said to keep becomes promises (an open one of the same item
 // and use is revised). Not put into the act's `uses`.
