@@ -32,6 +32,10 @@ describe('far dig, use, furnace put, chest (G8)', () => {
     expect(goStop(act({ do: 'walk', to: { x: 14, y: 10, z: 10 } }, { do: 'dig', at: [{ x: 18, y: 10, z: 10 }] }), frame([]))).toBeNull();
     expect(goStop(act({ do: 'furnace', op: 'take', at: [{ x: 10, y: 10, z: 16 }] }), frame([]))).toBeNull();
   });
+  it('lets a far furnace put or chest that names canDig go: the body digs its way to it (the iron node says to write it so)', () => {
+    expect(goStop(act({ do: 'furnace', op: 'put', item: 'raw_iron', count: 8, at: [{ x: 10, y: 10, z: 16 }], canDig: ['stone', 'dirt'], maxDig: 20 }), frame([]))).toBeNull();
+    expect(goStop(act({ do: 'chest', op: 'look', at: [{ x: 10, y: 10, z: 16 }], canDig: ['stone'] }), frame([]))).toBeNull();
+  });
 });
 
 describe('go into the air without canPlace (G9)', () => {
@@ -83,5 +87,10 @@ describe('a make without materials (F3)', () => {
     expect(goStop(act({ do: 'make', item: 'stone_pickaxe' }), frame([item('oak_planks', 8), item('cobblestone', 3)]))).toBeNull();
     expect(goStop(act({ do: 'dig', at: [{ x: 11, y: 10, z: 10 }] }, { do: 'make', item: 'stone_pickaxe' }), frame([item('oak_planks', 8)]))).toBeNull();
     expect(goStop(act({ do: 'make', item: 'unknown_thing' }), frame([]))).toBeNull();
+  });
+  it('counts cobbled deepslate and blackstone as cobblestone (below y=0 the pack has mostly cobbled deepslate)', () => {
+    expect(goStop(act({ do: 'make', item: 'furnace' }), frame([item('cobbled_deepslate', 40)]))).toBeNull();
+    expect(goStop(act({ do: 'make', item: 'stone_pickaxe' }), frame([item('oak_planks', 8), item('cobbled_deepslate', 2), item('blackstone', 1)]))).toBeNull();
+    expect(goStop(act({ do: 'make', item: 'furnace' }), frame([item('cobbled_deepslate', 7)]))?.code).toBe('make_short');
   });
 });

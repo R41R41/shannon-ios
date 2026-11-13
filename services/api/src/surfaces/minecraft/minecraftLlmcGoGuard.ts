@@ -161,6 +161,8 @@ const longGo = (hand: Rec, form: Form, seen: Seen): Found => Number(hand.maxDig)
 /** A dig, use, furnace put or chest farther than 5 m from her with no go or walk before it in the act. */
 function reachProblem(hand: Rec, form: Form, seen: Seen): Found {
   if (seen.walked || seen.lost || !form.pos || (hand.do === 'furnace' && hand.op !== 'put')) return null;
+  // A furnace or chest with canDig is walked and dug to by the body itself (G6: the iron node's caution asks for exactly this when the furnace is far).
+  if ((hand.do === 'furnace' || hand.do === 'chest') && list(hand.canDig).length) return null;
   const target = cellOf(Array.isArray(hand.at) ? hand.at[0] : null);
   if (!target) return null;
   const base = hand.rel === true ? { x: Math.floor(form.pos.x), y: Math.floor(form.pos.y), z: Math.floor(form.pos.z) } : { x: 0, y: 0, z: 0 };
@@ -220,12 +222,17 @@ function fullProblem(hand: Rec, form: Form, seen: Seen): Found {
 const FROM: Readonly<Record<string, string>> = { cobblestone: '石を dig か mine で掘る', log: '木を dig で切る', planks: 'log から make', stick: 'planks から make',
   iron_ingot: 'raw_iron を smelt', gold_ingot: 'raw_gold を smelt', diamond: '深い所のダイヤ鉱石を mine', coal: '石炭鉱石を mine（木炭は log を smelt）', string: 'クモを fight',
   leather: '牛を fight', wool: '羊を fight', flint: '砂利を dig', feather: '鶏を fight', blaze_rod: 'ブレイズを fight', ender_pearl: 'エンダーマンを fight', wheat: '作物を dig' };
+/** The stones the game takes for cobblestone in a furnace and the stone tools (the body counts the same three: utils/nightGate, utils/toolWear). */
+const COBBLE_LIKE = ['cobbled_deepslate', 'blackstone'];
+/** What the pack holds of a recipe's part: cobblestone counts cobbled deepslate and blackstone too (below y=0 the pack has mostly cobbled deepslate). */
+const heldFor = (pack: ReadonlyMap<string, number>, item: string): number =>
+  carried(pack, item) + (item === 'cobblestone' ? COBBLE_LIKE.reduce((sum, name) => sum + (pack.get(name) ?? 0), 0) : 0);
 /** A make whose materials (the head's recipe table, with its chain planks/stick/blaze_powder) are not in the pack nor brought by a hand before it. */
 function makeProblem(hand: Rec, form: Form, seen: Seen): Found {
   if (seen.producer || typeof hand.item !== 'string') return null;
   const made = materialsOf(hand.item, typeof hand.count === 'number' ? hand.count : 1, { chain: true, pack: form.pack });
   if (made.uncounted) return null;
-  const lack = made.spends.map(part => ({ item: part.item, n: part.count - carried(form.pack, part.item) })).filter(part => part.n > 0);
+  const lack = made.spends.map(part => ({ item: part.item, n: part.count - heldFor(form.pack, part.item) })).filter(part => part.n > 0);
   if (!lack.length) return null;
   const text = lack.map(part => `${part.item}×${part.n}（${FROM[part.item] ?? '荷に無い。周りで探す'}）`).join('・');
   return { code: 'make_short', line: `足りない: ${text}。先にそろえてから make を置く（同じ act の前の手でそろえてもよい）` };
