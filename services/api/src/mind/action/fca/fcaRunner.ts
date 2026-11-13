@@ -452,7 +452,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
 // step's own were the first decision's).
     await checked('fresh');
     // Flow 1113: the stored history is looked at before each decision of the stretch, not only at the step's start (`fcaStretch.ts`).
-    if (historyPorts && historyAhead) startHistoryAhead({ step, ports: historyPorts, policy: transient?.policy ?? ports.history!.policy, ahead: historyAhead });
+    if (historyPorts && historyAhead) startHistoryAhead({ step, ports: historyPorts, policy: transient?.policy ?? ports.history!.policy ?? {}, ahead: historyAhead });
     if (bodyTask && await investigateFcaBody(ports, step.taskId, metrics, signal)) await checked('fresh');
     const { recall: _recall, waiting: _waiting, ...rest } = request;
     asked = await freshen({ ...rest, messages: [], history: [...input.history, ...history] });

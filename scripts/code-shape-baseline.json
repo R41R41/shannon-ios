@@ -220,11 +220,11 @@
     },
     "services/api/src/contracts/minecraftActHandRules.ts": {
       "complex-function": 1,
-      "long-line": 5
+      "long-line": 6
     },
     "services/api/src/contracts/minecraftActShortHands.ts": {
       "complex-function": 1,
-      "long-line": 2
+      "long-line": 6
     },
     "services/api/src/contracts/minecraftBodyContract.ts": {
       "complex-function": 2,
@@ -747,7 +747,8 @@
       "long-line": 2
     },
     "services/api/src/mind/action/fca/fcaHistory.ts": {
-      "long-line": 1
+      "long-line": 1,
+      "complex-function": 1
     },
     "services/api/src/mind/action/fca/fcaObservation.ts": {
       "complex-function": 1,
@@ -1895,10 +1896,10 @@
       "complex-function": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPrepRules.ts": {
-      "long-line": 12
+      "long-line": 13
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts": {
-      "long-line": 3
+      "long-line": 4
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcUrgent.ts": {
       "long-line": 1
@@ -1908,11 +1909,11 @@
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
-      "long-line": 4
+      "long-line": 5
     },
     "services/api/src/surfaces/minecraft/minecraftOreRoute.ts": {
       "complex-function": 1,
-      "long-line": 3,
+      "long-line": 6,
       "multi-statement-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftPlanDone.ts": {
@@ -2294,7 +2295,7 @@
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcFacts.ts": {
       "complex-function": 1,
-      "long-line": 2
+      "long-line": 5
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcFurnaceWait.ts": {
       "complex-function": 1,
@@ -2312,7 +2313,7 @@
       "long-file": 1,
       "long-line": 1,
       "multi-statement-line": 2,
-      "complex-function": 1
+      "complex-function": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcQueueBody.ts": {
       "multi-statement-line": 1
@@ -2395,6 +2396,40 @@
     "services/api/src/wiring/minecraftLlmcWiring.ts": {
       "long-line": 1,
       "multi-statement-line": 1
+    },
+    "services/api/src/contracts/minecraftActContract.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/fca/fcaDecisionMetrics.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/fca/fcaPorts.ts": {
+      "long-line": 1
+    },
+    "services/api/src/mind/action/fca/fcaStretch.ts": {
+      "complex-function": 1,
+      "long-line": 3,
+      "multi-statement-line": 1
+    },
+    "services/api/src/mind/action/fca/fcaToolRound.ts": {
+      "complex-function": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftEyeLedger.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftEyeThrowHold.ts": {
+      "complex-function": 1,
+      "long-line": 3,
+      "multi-statement-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcQueueAdmission.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftLlmcQueueWords.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftPearlFacts.ts": {
+      "long-line": 1
     }
   }
 }

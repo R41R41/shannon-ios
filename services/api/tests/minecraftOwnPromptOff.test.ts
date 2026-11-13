@@ -13,7 +13,8 @@ import { quiet, requestDigest, scenario, WIDE_POLICY, SUMMARY_POLICY } from './f
 const GOLDEN = {
   transient_one_epoch: ['ff33a6f160d06a8a', '41a6b63de1858b9d', 'fd1cc22e4fde9eaf', '57b1790563b465cd', '56071f8faf322718', 'e5559d0bac45b8a2', '728c9857da850d8b', 'e5f6f559be79c883', '151028729e706a27', '182bd80cae803bbf', 'fa4ac8eded3016a9', 'dd4909e551b44607', '780dccb5b19409eb', '2fa713925af4e8d2', '57dda367f4b17273', '666d9681b367f2d7', '29b1ab440138c561', '50ca3bbe18198484', 'e2bdeafda9e3c095', 'a67559707ff6ec9e', '35c022c4d30251c3', '0b8cc31513d10fb8', 'c86039d6e693a8f7', '454fd1d5d3d7dd60', '6f09d3998fcbb058', '40ef69ad99b80863', '65794c1d1c86ac42', '7e206fa060a3c5f4', '46f9975157ae370d', 'c09164cf6e4e49f6'],
   transient_summaries: ['ff33a6f160d06a8a', '41a6b63de1858b9d', 'fd1cc22e4fde9eaf', '57b1790563b465cd', '56071f8faf322718', 'e5559d0bac45b8a2', '728c9857da850d8b', 'e5f6f559be79c883', '151028729e706a27', '182bd80cae803bbf', 'c140aa19fde60ce9', '1880da65c8aa039e', '32fabbe3f9519663', '18a711e99962b3ab', '35527622b8fcd17f', '3884a7be1ace3814', '5095f531c8c346e5', '972d6a4140ee201f', 'aa98aa1171a2c5f5', '32daf21aa358b61e', 'a6c748a0b6582d8b', '0d3977bc4f4056bc', 'c2b669212b027760', '774133ba92d2bca9', 'ccc692f07a8ff659', '3af4d4715b2303c4', 'a5a99f421b96e0ec', '2afb7c0808b79909', '69e0b3903999ac45', '521246ad8660176e'],
-  body_summary: ['b349b46c45a059b4'],
+  // Flow 1113 (e8665813): the body summary's instruction says its size (within 4,000 tokens), so its digest is new.
+  body_summary: ['7b60659dbbc760e6'],
   // 11/11 trim: the stage rules (and so the first plan, which carries them) lose the reference sentence of runs 41 and 42, whose example the descent's reason line says once.
   first_plan: ['1d03a04bc6c71595'],
 };

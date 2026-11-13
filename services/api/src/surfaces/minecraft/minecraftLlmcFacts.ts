@@ -145,7 +145,7 @@ function diamondClusters(layers: Layers): Cell3[][] {
     while (queue.length) {
       const at = queue.pop()!;
       for (let dx = -1; dx <= 1; dx += 1) for (let dy = -1; dy <= 1; dy += 1) for (let dz = -1; dz <= 1; dz += 1) {
-        const next = `${at.x + dx},${at.y + dy},${at.z + dz}`, found = left.get(next);
+        const next = `${at.x + dx},${at.y + dy},${at.z + dz}` as const, found = left.get(next);
         if (!found) continue;
         left.delete(next);
         cluster.push(found);
