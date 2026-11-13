@@ -431,6 +431,8 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '持っている金（箱・砦・余り）は、ピグリンが近ければ count=N で全部渡す。パールのために金を掘りに行かない: 金 1 個はパール約 0.07 個で、12 個に平均 190 個要り、掘って集める道にならない。'
       // end1109p06 replay: 3 of 7 went to dig gold once the roof fights had ended with 0 blows (the old "dig when a kill is slower than 2 min" line).
       + '屋根の戦いが打撃 0 で終わる時（怒った相手が足元より下にいる・近づかない）は、金ではなく屋根の場所を直す: 相手と同じ高さの地面へ下りて屋根を作る（階段で下りる・probe kind=roofsite）か、別の個体を fight target=enderman で呼ぶ。'
+      // run 10 (11/14): angry #10427 6 below; the head went to its cell through the fungus cap, fell 4, 20→9.4 in 1.2 s, dead 7 s later, 0 blows.
+      + '怒った相手のマス・真上・隣へは下りない（着く前に打たれ、屋根を作る間が無い）: 下りるなら相手から離れた地面で屋根を作ってから目を合わせる（10 回目: 怒った 2 体の居る菌の傘へ掘り下り、7 秒で死んだ）。'
       + '交換の副産物: 光の矢（金 1 で平均 0.77 本。矢 30 に数える）・糸・黒曜石（主目的にはしない）・泣く黒曜石（枠には使えない）。',
     '- ピグリンとの交換: use item=gold_ingot target=piglin count=N が金 N 個までの交換を行う（count は 1〜64、省略時 1）。'
       + '届く範囲の大人で怒っていない個体に、最大 3 体まで 1 個ずつ渡し、6 秒見終わるのを待って出た物を拾い、繰り返す。'
@@ -439,7 +441,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- fight target=enderman は seconds 120〜150（体の上限は 150）で出す。倒すたびに見張りが延びるので、1 回の手で何体も倒せる（短く切ると、そのたびに屋根を作り直す）。'
       + '倒したら、同じ act の次の手に pickup を並べる（判断を待たない。パールは落とし物で、待つ間に消える時間が進む）。',
     '- エンダーマン（HP 40・背が 3 マス）: 目を合わせると怒る。準備なしに合わせない（look で足元）。弓は使わない（テレポートでよける）。'
-      + 'fight target=enderman は体が屋根の穴を作って戦う: 平らな床で 3×3×2 の空きがある所に立って呼ぶ。建築用ブロック 11 個（黒曜石以外、丸石・土・ネザーラック等）が要り、'
+      + 'fight target=enderman は体が屋根の穴を作って戦う: 平らな地面（ナイリウム・ネザーラック）で 3×3×2 の空きがある所に立って呼ぶ。'
+      // run 10 (11/14): the fungus caps won on openness; about 4 minutes on them, 0 kills (the body's roofsite now says 足元 and （木の上）).
+      + '巨大な菌の傘・幹の上（wart ブロック・シュルームライト）は見通しが良くても、地面のエンダーマンは登って来ず、そばに出る場所も少ないので待ちが長い（10 回目: 傘の上で約 4 分、撃破 0）。roofsite の「足元」と「（木の上）」で見分け、地面の候補を選ぶ。建築用ブロック 11 個（黒曜石以外、丸石・土・ネザーラック等）が要り、'
       + '不足は missing_item、くり抜きかぼちゃは pumpkin。場所が悪いと近い屋根候補へ移動を試し、無理なら no_site。穴の中から目（足の 2.55 上）を見て怒らせ、'
       + '屋根の縁で打つ（自然湧きラボ25分で34体・パール11個、HP損失/死亡0。装備・場所固定の局所実績で、頭の場所選びから14個取得・帰還は未確認）。怒った後は目を見ない。離れる時は live の away の隣へ。',
     '- 怒ったエンダーマンが 4m 内で打って来る時は、歩いて離れない・その場で食べない: テレポートで追い付き、背を向けた間と食べる 1.6 秒に打たれる'
