@@ -26,8 +26,8 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   sneak: { needs: [['on']], may: [] },
   equip: { needs: [['item']], may: ['slot'] },
   craft: { needs: [['item']], may: ['count'] },
-  furnace: { needs: [['at'], ['op']], may: ['item', 'count', 'fuel', 'fuelCount'] },
-  chest: { needs: [['at'], ['op']], may: ['items'] },
+  furnace: { needs: [['at'], ['op']], may: ['item', 'count', 'fuel', 'fuelCount', 'canDig', 'maxDig'] },
+  chest: { needs: [['at'], ['op']], may: ['items', 'canDig', 'maxDig'] },
   attack: { needs: [['target']], may: ['untilDead', 'seconds', 'hold', 'style', 'retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] },
   shoot: { needs: [['target', 'at']], may: ['item', 'charge', 'n'] },
   eat: { needs: [], may: ['item'] },
@@ -40,7 +40,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig', 'exposeOk'] },
   hunt: { needs: [['target']], may: ['count', 'range', 'seconds'] },
   tidy: { needs: [], may: ['items', 'keep', 'room', 'smelt', 'seconds'] },
-  make: { needs: [['item']], may: ['count'] },
+  make: { needs: [['item']], may: ['count', 'canDig', 'maxDig'] },
   portal: { needs: [['at'], ['axis']], may: ['block', 'enter', 'canPlace', 'maxPlace', 'seconds'] },
   smelt: { needs: [['items']], may: ['fuel', 'fuelCount', 'furnaces', 'at', 'seconds'] },
   vertical: { needs: [['dir'], ['shape'], ['toY'], ['canDig'], ['liquid']], may: ['toward', 'maxDig', 'canPlace', 'maxPlace', 'range', 'seconds', 'exposeOk'] },
@@ -99,21 +99,21 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   place: hand => hand.at!.length > 16 ? 'at は 16 マスまで' : null,
   bed_burst: bedBurstProblem,
   use: useProblem,
-  furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : null,
-  chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : null,
+  furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : approachProblem(hand),
+  chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : approachProblem(hand),
   wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
   attack: attackProblem,
   go: goProblem,
   sleep: hand => seconds(hand, 10, 60) ?? (hand.item !== undefined && !/^[a-z_]+_bed$/u.test(hand.item) ? 'item はベッド（〜_bed）' : null),
   obsidian: hand => seconds(hand, 5, 300) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源（L）か黒曜石（O）のマス 1〜24 マス' : null)
     ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
-  fight: hand => seconds(hand, 5, 60) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
+  fight: hand => seconds(hand, 5, fightSecondsMax(hand)) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
     ?? denProblem(hand as unknown as Record<string, unknown>),
   mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
     ?? (BLOCK_NAME.test(hand.block!) ? null : 'block はブロックの id（例 iron_ore）') ?? names(hand),
   hunt: huntProblem,
   tidy: tidyProblem,
-  make: hand => count(hand, 64),
+  make: hand => count(hand, 64) ?? approachProblem(hand),
   portal: hand => seconds(hand, 5, 120) ?? (hand.at!.length !== 1 ? 'at は枠の内側の左下のマス 1 つ' : null) ?? names(hand),
   vertical: verticalProblem,
   smelt: hand => seconds(hand, 5, 60) ?? (hand.items!.length < 1 || hand.items!.length > 4 ? 'items は 1〜4 種類' : null)
@@ -192,6 +192,23 @@ function attackProblem(hand: ActHand): string | null {
 function useProblem(hand: ActHand): string | null {
   if (hand.count === undefined) return null;
   return Number.isInteger(hand.count) && hand.count >= 1 && hand.count <= 64 ? null : 'count は 1〜64 の整数';
+}
+/**
+ * fight's most seconds (the body's fightSecondsMax): the kind enderman (a name, `minecraft:` allowed, any case) 150 for pearl hunting, every other
+ * target 60 (an id is 60).
+ */
+export const FIGHT_SECONDS_MAX = 60, ENDERMAN_FIGHT_SECONDS_MAX = 150;
+const fightSecondsMax = (hand: ActHand): number =>
+  typeof hand.target === 'string' && /^(minecraft:)?enderman$/u.test(hand.target.trim().toLowerCase()) ? ENDERMAN_FIGHT_SECONDS_MAX : FIGHT_SECONDS_MAX;
+/**
+ * furnace, chest and make may take canDig and maxDig to dig the way to the furnace, box or table (the body's approachProblem: 1〜12 block ids or
+ * the words, maxDig 0〜200, and maxDig only with canDig).
+ */
+export function approachProblem(hand: ActHand): string | null {
+  if (hand.maxDig !== undefined && !(Number.isInteger(hand.maxDig) && hand.maxDig >= 0 && hand.maxDig <= 200)) return 'maxDig は 0〜200 の整数';
+  if (hand.canDig === undefined) return hand.maxDig !== undefined ? 'maxDig は canDig と一緒に書く（canDig が無ければ掘って近づかない）' : null;
+  if (!Array.isArray(hand.canDig) || hand.canDig.length < 1 || hand.canDig.length > 12) return 'canDig は 1〜12 個（書かなければ「しない」）';
+  return names(hand);
 }
 /** A hand's `seconds` within a kind's own range. */
 const seconds = (hand: ActHand, least: number, most: number): string | null =>

@@ -109,14 +109,15 @@ function verticalWords(hand: ActHand): Words {
 /** chest: the box's cell, the op, and the items with their counts (a list that does not read back is a json line). */
 function chestWords(hand: ActHand): Words {
   if (hand.at?.length !== 1 || !hand.op || hand.target !== undefined) return null;
-  return [pos(hand.at[0]!), hand.op, ...(hand.items ?? []).flatMap(entry => [entry.item, ...(entry.count !== undefined ? [String(entry.count)] : [])])];
+  return [pos(hand.at[0]!), hand.op, ...(hand.items ?? []).flatMap(entry => [entry.item, ...(entry.count !== undefined ? [String(entry.count)] : [])]), ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig)];
 }
 /** furnace: the cell, take, or put with the item, its count and the fuel. */
 function furnaceWords(hand: ActHand): Words {
   if (hand.at?.length !== 1 || (hand.op !== 'put' && hand.op !== 'take')) return null;
-  if (hand.op === 'take') return hand.item || hand.count !== undefined || hand.fuel ? null : [pos(hand.at[0]!), 'take'];
+  const way = [...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig)];
+  if (hand.op === 'take') return hand.item || hand.count !== undefined || hand.fuel ? null : [pos(hand.at[0]!), 'take', ...way];
   if (!hand.item || hand.count === undefined) return null;
-  return [pos(hand.at[0]!), 'put', hand.item, String(hand.count), ...given('fuel', hand.fuel), ...given('fuelCount', hand.fuelCount)];
+  return [pos(hand.at[0]!), 'put', hand.item, String(hand.count), ...given('fuel', hand.fuel), ...given('fuelCount', hand.fuelCount), ...way];
 }
 /** `物:数,物` (the count of a kind is optional). */
 const itemList = (entries: ReadonlyArray<{ item: string; count?: number }>): string =>
@@ -133,7 +134,7 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   fill: () => null, // Keep every group and required permission in the existing JSON fallback.
   chest: chestWords, furnace: furnaceWords,
   go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords, vertical: verticalWords, hunt: huntWords,
-  make: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
+  make: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : []), ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig)] : null,
   walk: hand => (hand.path && hand.to) || hand.path?.length === 1 || !points(hand).length
     ? null : [...points(hand).map(pos), ...flag(hand.sprint, 'sprint'), ...given('range', hand.range)],
   dig: hand => hand.at?.length
@@ -212,13 +213,13 @@ function chestHand({ cells, words, hand }: Read): ActHand | { error: string } {
     else if (!isCount(word)) items.push({ item: word });
     else return bad('chest', `個数 ${word} の前に物の名前が要る`);
   }
-  return done({ ...hand, at: cells, op, ...(items.length ? { items } : {}) });
+  return done(blocksOf({ ...hand, at: cells, op, ...(items.length ? { items } : {}) }));
 }
 function furnaceHand({ cells, words, hand }: Read): ActHand | { error: string } {
   const [op, item, count] = words;
   if (cells.length !== 1 || (op !== 'put' && op !== 'take')) return bad('furnace', 'かまどの座標 1 つと put か take が要る');
   if (op === 'put' && (!item || !isCount(count))) return bad('furnace', 'put には 物 と 個数 が要る（furnace X,Y,Z put iron_ore 8 fuel=coal fuelCount=2）');
-  return done({ ...hand, at: cells, op, ...(op === 'put' ? { item, count: Number(count) } : {}) });
+  return done(blocksOf({ ...hand, at: cells, op, ...(op === 'put' ? { item, count: Number(count) } : {}) }));
 }
 /** The names of vertical's fields written with `=` (a word of these in the place of the compass word is a field
  * written without it). */
@@ -248,7 +249,7 @@ const READERS: Record<string, Reader> = {
     const count = hand.count === undefined && counts.length ? { count: Number(counts[0]) } : {};
     return typeof target === 'string' && target ? done({ ...hand, target, ...count }) : bad('hunt', '食料の動物の種類が要る（hunt cow count=6、hunt pig,cow）');
   },
-  make: ({ words, hand }) => words[0] ? done({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) }) : bad('make', '物の名前が要る'),
+  make: ({ words, hand }) => words[0] ? done(blocksOf({ ...hand, item: words[0], ...(isCount(words[1]) ? { count: Number(words[1]) } : {}) })) : bad('make', '物の名前が要る'),
   fight: ({ words, hand }) => {
     if (!words[0]) return bad('fight', '相手（#id か名前）が要る');
     const { flee, ...rest } = hand;

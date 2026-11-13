@@ -92,9 +92,9 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
     + 'exposeOk は dig と同じ（敵に見られても掘る。「見られる」の止まりのあと、離れて掘れない時に付ける）。'
     + 'トンネルは repeat か go。理由: no_block・no_tool・tool_broke・full・unreachable・limit_time・limit_dig・danger。'
   ]),
-  'make 物 [個数]',
+  'make 物 [個数] [dig=名,名] [maxDig=N]',
   ("  作る（途中の物の板・棒なども持ち物の材料から作る。3×3 で作業台が近くに無ければ持っているものを置く）。材料が足りなければ何も作らず足りない物の一覧を返す。材料は集めに行かない。理由: " +
-"missing・no_table・no_recipe・full。"),
+"missing・no_table・no_recipe・full。dig= を書くと、作業台まで岩・土を掘って近づく（書かなければ掘らない）。"),
   manualPage('portal', 'portal（指定位置へゲート枠・点火・通過）', [
   'portal X,Y,Z x|z [block=obsidian] [place=名,名] [maxPlace=N] [seconds=N] [noEnter]',
   '  ポータルの枠。'
@@ -164,9 +164,9 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   ]),
   'pickup [range=N] [target=..]',
   ("chest X,Y,Z look|takeAll   chest X,Y,Z take|put 物 [数] [物 [数] ...]   （箱・樽。例: chest 12,64,-3 take coal 4 " +
-"iron_ingot）"),
+"iron_ingot）。箱まで掘って近づく時は末尾に dig=名,名 maxDig=N"),
   ("furnace X,Y,Z take   furnace X,Y,Z put 物 個数 [fuel=名] [fuelCount=N]   （かまど・溶鉱炉・燻製器。例: furnace 12,64,-3 put " +
-"raw_iron 8 fuel=coal fuelCount=2。")
+"raw_iron 8 fuel=coal fuelCount=2。かまどまで掘って近づく時は末尾に dig=名,名 maxDig=N。")
     + '裸で furnace/chest と書いても座標と op が無いと断られる）',
   manualPage('shoot', 'shoot（弓で指定した敵/座標を撃つ）', [
   'shoot 相手(#id か名前) か X,Y,Z [item=bow] [charge=秒] [n=本数]  弓で撃つ。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。',
@@ -184,7 +184,7 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   ("- go: to か goals（2〜8）・canDig・canPlace・maxDrop・waterOk・seconds・maxDig・maxPlace・range・sprint / obsidian: " +
 "at・count・seconds・canPlace・maxPlace・maxDig / ")
     + 'fight: target・stance(fight|flee)・item・retreatHp・range・seconds / '
-    + ("mine: block・at・count・tool・collect・exposeOk・seconds・canDig・maxDig / make: item・count / portal: " +
+    + ("mine: block・at・count・tool・collect・exposeOk・seconds・canDig・maxDig / make: item・count・canDig・maxDig / portal: " +
 "at・axis(x|z)・block・enter・canPlace・maxPlace・seconds / ")
     + ("smelt: items・fuel・fuelCount・furnaces・at・seconds / vertical: " +
 "dir・shape・toward・toY・canDig・maxDig・canPlace・maxPlace・liquid・range・exposeOk・seconds / walk: to か path・sprint・range " +
@@ -193,8 +193,8 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
 "item・at（1つ）・face・target・count"),
   ("- look: to か yaw・pitch / jump: n / sneak: on / equip: item・slot / craft: item・count / attack: " +
 "target・untilDead・seconds・hold（shield_rush は上の欄も） / eat: item"),
-  ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount / chest: " +
-"at（1つ）・op・items / hunt: target（種類。id は不可）・count・range・seconds"),
+  ("- pickup: target・range / wait: seconds / furnace: at（1つ）・op・item・count・fuel・fuelCount・canDig・maxDig / chest: " +
+"at（1つ）・op・items・canDig・maxDig / hunt: target（種類。id は不可）・count・range・seconds"),
   '- drop: items・target か at / shoot: target か at・item・charge・n',
   manualPage('examples', 'walk・furnace・chest・drop・shoot のJSON例', [
   'json {"do":"walk","to":{"x":1,"y":64,"z":2},"range":1,"sprint":true,"note":"村へ"}',
