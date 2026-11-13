@@ -16,9 +16,11 @@ import { framesOf } from './minecraftSeenMarks.js';
  *     nothing left to make more, the throw goes once after a point is out (the point is needed all the same, a second one only spends the frames' eyes).
  * (d) never for good: what is held is a throw from where one was thrown already. With the frames not seen, one more goes from the point itself (her feet
  *     within `AT_POINT_BLOCKS` of it and no throw from there: the way a good player checks the bearing when the frames are not where the point says) and,
- *     while the point is wider than the probe's reach, from outside its circle (within twice its radius) at least `NEW_PLACE_BLOCKS` from every throw
- *     (a line from a new side closes the crossing). A hold kept only by the ledger's 4 hours would leave a point the probe missed with no throw left
- *     (the review of 11/14: a point drawn by lines that disagree stays over 128 m whatever is thrown from it). One throw in five breaks; the rest are
+ *     while the point is wider than the probe's reach or right after the throw from the point itself, from outside its circle (max(128 m, error);
+ *     within twice that) at least `NEW_PLACE_BLOCKS` from every throw (a line from a new side closes the crossing; a throw from the point leaves the
+ *     point where it was, its line meets the old ones at the throw itself: two exact lines 200 m apart, each 0.3 degrees off, give a point 25 m wide
+ *     253 m from the stronghold, and after the throw from it nothing went anywhere; one such throw per point, so a point that is right spends no more).
+ *     A hold kept only by the ledger's 4 hours would leave a point the probe missed with no throw left (the review of 11/14: a point drawn by lines that disagree stays over 128 m whatever is thrown from it). One throw in five breaks; the rest are
  *     picked up.
  * A fact with the hand held; it moves no node. The ledger of a task is registered by its step (`registerEyeLedger`).
  */
@@ -44,24 +46,34 @@ const throwsEye = (hand: Record<string, unknown>): boolean => hand.do === 'use' 
 type Place = { x: number; z: number };
 const apart = (a: Place, b: Place): number => Math.hypot(a.x - b.x, a.z - b.z);
 
-/** (d): one more throw that repeats none (the frames not seen): at the point with none thrown there, or outside a wide point's circle from a new place. */
+/** Some throw went from the point itself (within `AT_POINT_BLOCKS`). */
+const thrownAt = (throws: readonly Place[], fix: Fix): boolean => throws.some(item => apart(item, fix) <= AT_POINT_BLOCKS);
+/** The newest throw went from the point itself: the next may go from a new place outside the circle. */
+const lastAt = (throws: readonly Place[], fix: Fix): boolean => { const last = throws.at(-1); return !!last && apart(last, fix) <= AT_POINT_BLOCKS; };
+
+/**
+ * (d): one more throw that repeats none (the frames not seen): at the point with none thrown there, or, for a wide point or right after the throw from
+ * the point, outside its circle from a new place.
+ */
 function againFrom(throws: readonly Place[], fix: Fix, feet: Place | null): boolean {
   if (!feet) return false;
-  const away = apart(feet, fix);
+  const away = apart(feet, fix), circle = Math.max(FRAME_SEARCH_RADIUS, fix.errorBlocks);
   if (away <= AT_POINT_BLOCKS) return throws.every(item => apart(item, feet) > AT_POINT_BLOCKS);
-  return fix.errorBlocks > FRAME_SEARCH_RADIUS && away > fix.errorBlocks && away <= 2 * fix.errorBlocks && throws.every(item => apart(item, feet) >= NEW_PLACE_BLOCKS);
+  return (fix.errorBlocks > FRAME_SEARCH_RADIUS || lastAt(throws, fix)) && away > circle && away <= 2 * circle
+    && throws.every(item => apart(item, feet) >= NEW_PLACE_BLOCKS);
 }
 
 /** (a): the words that hold a throw at a point within the probe's reach, or null (the one throw from near the point goes). */
 function pointReason(ledger: EyeLedger, fix: Fix, feet: Place | null, now: number, again: boolean): string | null {
   const near = (p: Place): boolean => apart(p, fix) <= FRAME_SEARCH_RADIUS;
   const throws = ledger.throws(now), thrownNear = throws.some(near);
-  if (feet && near(feet) && (!thrownNear || again)) return null;
+  if (again || (feet && near(feet) && !thrownNear)) return null;
   const there = feet ? `あと ${compassWord(bearingBetween(feet, fix))} ${Math.round(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m` : '';
   return `要塞の交点 (${fix.x},${fix.z})（誤差 ${Math.round(fix.errorBlocks)}m）がある${there ? `・${there}` : ''}。もう投げない: 交点まで歩き、`
     + `mc_probe kind=frames radius=${FRAME_SEARCH_RADIUS} で枠を探す（アイは枠 12 にそのまま要る。投げると 5 回に 1 回は割れる。落ちたアイ（割れなかった物）は拾う）`
     + (thrownNear ? '' : `。交点の ${FRAME_SEARCH_RADIUS}m 内まで来ても枠が見えない時だけ、そこで 1 回投げ直せる（沈めば要塞は真下）`)
-    + (throws.some(item => apart(item, fix) <= AT_POINT_BLOCKS) ? '' : `。交点（${AT_POINT_BLOCKS}m 内）に着いても枠が見えない時は、そこで 1 回投げて向きを確かめられる`);
+    + (lastAt(throws, fix) ? `。交点で投げても枠が見えない時は、交点から ${FRAME_SEARCH_RADIUS}〜${2 * FRAME_SEARCH_RADIUS}m の、前に投げた所から ${NEW_PLACE_BLOCKS}m 以上離れた所から 1 回投げられる`
+      : thrownAt(throws, fix) ? '' : `。交点（${AT_POINT_BLOCKS}m 内）に着いても枠が見えない時は、そこで 1 回投げて向きを確かめられる`);
 }
 
 /** Why a throw is held now, in words, or null. */

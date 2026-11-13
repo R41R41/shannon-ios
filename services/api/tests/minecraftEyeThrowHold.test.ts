@@ -109,4 +109,34 @@ describe('one more throw from the point itself or from a new place', () => {
     expect(eyeThrowHold(throwEye, frame(NONE, { x: after.x + 10, y: 70, z: after.z }), 'd')!.line).toContain('同じ辺りから投げ直さない');
     expect(eyeThrowHold(throwEye, frame(NONE, { x: after.x + after.errorBlocks + 20, y: 70, z: after.z }), 'd')).toBeNull();
   });
+  it('a narrow point the throw from it leaves where it was: one throw from a new place 128-256 m out, then held again', () => {
+    // Two exact lines 200 m apart, each 0.3 degrees off: a point 25 m wide, 253 m from the stronghold. The throw from it does not move it, and every
+    // place was held after it (rule (a) outside 128 m, the point's throw inside).
+    const truth = { x: -1100, z: 950 };
+    const eye = (x: number, z: number, off: number): EyeThrow => {
+      const bearingDeg = bearingBetween({ x, z }, truth) + off, r = bearingDeg * Math.PI / 180;
+      return { x, z, bearingDeg, flew: 12, broke: false, unit: { x: Math.sin(r), z: -Math.cos(r) } };
+    };
+    const throws = [eye(0, 0, 0.3), eye(200, 0, -0.3)];
+    const first = stronghold(throws)!;
+    expect(first.errorBlocks).toBeLessThanOrEqual(128);
+    expect(Math.hypot(first.x - truth.x, first.z - truth.z)).toBeGreaterThan(200);
+    throws.push(eye(first.x, first.z, 0));
+    const after = stronghold(throws)!;
+    expect(Math.hypot(after.x - first.x, after.z - first.z)).toBeLessThan(5);
+    registerEyeLedger('nw', { fix: () => stronghold(throws), throws: () => throws } as unknown as EyeLedger);
+    const there = eyeThrowHold(throwEye, frame(NONE, { x: after.x + 10, y: 70, z: after.z }), 'nw')!.line;
+    expect(there).toContain('もう投げない');
+    expect(there).toContain('交点で投げても枠が見えない時は、交点から 128〜256m の、前に投げた所から 64m 以上離れた所から 1 回投げられる');
+    expect(eyeThrowHold(throwEye, frame(NONE, { x: after.x + 60, y: 70, z: after.z }), 'nw')).not.toBeNull();
+    const ring = { x: after.x - 160, z: after.z };
+    expect(eyeThrowHold(throwEye, frame(NONE, { ...ring, y: 70 }), 'nw')).toBeNull();
+    // The line from the new side closes the crossing on the stronghold; one more from that side is held.
+    throws.push(eye(ring.x, ring.z, 0));
+    const closed = stronghold(throws)!;
+    expect(Math.hypot(closed.x - truth.x, closed.z - truth.z)).toBeLessThan(30);
+    const next = eyeThrowHold(throwEye, frame(NONE, { x: closed.x + 200, y: 70, z: closed.z }), 'nw')!.line;
+    expect(next).toContain('もう投げない');
+    expect(next).not.toContain('128〜256m');
+  });
 });
