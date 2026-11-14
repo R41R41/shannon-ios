@@ -35,13 +35,29 @@ export function targetUpdateProblem(before: PlanTree, after: PlanTree, observati
     const problem = targetConditionProblem(node);
     if (problem) return problem;
     const changedGoal = JSON.stringify(old?.target) !== JSON.stringify(node.target) || old?.doneWhen !== node.doneWhen;
-    if (node.target && node.state === 'done' && (old?.state !== 'done' || changedGoal)
-      && (!facts || acquired(facts.counts, node.target.item) < node.target.count)) {
-      return `${node.id}: 取得目標は現在の観測で未達か未確認。done にできるのは現物を持っている節だけ。`
-        + '直し方: しなくていい節は set state=done ではなく drop（id とその下を消す）で外す。待たせる節は state=blocked か wait';
+    if (node.target && node.state === 'done' && (old?.state !== 'done' || changedGoal)) {
+      if (!facts) return `${node.id}: 取得目標は現在の観測で未確認。${DONE_REPAIR}`;
+      const short = shortOfTarget(node.id, node.target, facts.counts);
+      if (short) return short;
     }
   }
   return null;
+}
+
+/**
+ * Why a target node cannot be closed now: the count and what is counted toward it, and that the count may be lowered (11/15b c1: with 13 eyes made
+ * and no pearl, 「パール 14」 was refused five times as 「未達か未確認」; the head took the pearls for spent, not knowing an eye counts as one).
+ */
+const DONE_REPAIR = 'done にできるのは現物を持っている節だけ。'
+  + '直し方: しなくていい節は set state=done ではなく drop（id とその下を消す）で外す。待たせる節は state=blocked か wait';
+
+function shortOfTarget(id: string, target: NonNullable<PlanNode['target']>, counts: ReadonlyMap<string, number>): string | null {
+  const have = acquired(counts, target.item);
+  if (have >= target.count) return null;
+  const parts = target.item === 'ender_pearl' ? `（ender_pearl ${carried(counts, 'ender_pearl')}＋ender_eye ${carried(counts, 'ender_eye')}。アイもパールとして数える）`
+    : target.item === 'blaze_rod' ? `（blaze_rod ${carried(counts, 'blaze_rod')}＋粉・アイから戻した分）` : '';
+  return `${id}: 取得目標 ${target.item}×${target.count} は今 ${have}${parts}、あと ${target.count - have}で未達。${DONE_REPAIR}。`
+    + `数を下げてよいなら同じ set で target の count と doneWhen の数を ${have} 以下に直す`;
 }
 
 function unreservedStock(node: PlanNode, counts: ReadonlyMap<string, number>, tree?: PlanTree) {

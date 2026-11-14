@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { applyPlanUpdate, planFromSeeds, readPlanTree } from '@shannon/mind';
 import { targetConditionProblem, targetRequirements, targetUpdateProblem } from '../src/surfaces/minecraft/minecraftPlanRequirements.js';
 import { planFromAnswer } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -66,10 +67,10 @@ describe('explicit current acquisition requirements', () => {
   });
   it('does not allow model self-report to create acquisition evidence and preserves unchanged history', () => {
     const before = bucket(), after = { ...before, nodes: before.nodes.map(n => ({ ...n, state: 'done' as const })) };
-    expect(targetUpdateProblem(before, after, null)).toContain('未達か未確認');
+    expect(targetUpdateProblem(before, after, null)).toContain('未確認');
     expect(targetUpdateProblem(after, after, null)).toBeNull();
     const rewritten = { ...after, nodes: after.nodes.map(n => ({ ...n, target: { item: 'diamond_pickaxe', count: 1 }, doneWhen: 'have:diamond_pickaxe' })) };
-    expect(targetUpdateProblem(after, rewritten, null)).toContain('未達か未確認');
+    expect(targetUpdateProblem(after, rewritten, null)).toContain('未確認');
   });
   it('keeps unknown wear separate from broken tools and does not erase a usable spare', () => {
     const pack = new Map([['stone_pickaxe', 2]]);
@@ -79,5 +80,22 @@ describe('explicit current acquisition requirements', () => {
   });
   it('does not substitute a wooden pickaxe for the required materials', () => {
     expect(ownFirstPlanSystem()).not.toMatch(/have:log>=\d+\|have:wooden_pickaxe/u);
+  });
+});
+
+describe('a target the head lowers itself (11/15b c1: 「パール 14」 with 13 eyes made was refused five times)', () => {
+  const pearls = () => planFromSeeds([{ id: 'p2', title: 'パール', target: { item: 'ender_pearl', count: 14 }, doneWhen: 'have:ender_pearl>=14' }])!;
+  const seen = { connected: true, facts: {}, state: { world: { inventory: [{ name: 'ender_eye', count: 13 }] } } } as unknown as BodyObservation;
+  it('says what is counted toward the target and how many now, and how to lower it', () => {
+    const before = pearls(), done = applyPlanUpdate(before, { ops: [{ op: 'set', id: 'p2', state: 'done' }] }).tree;
+    const problem = targetUpdateProblem(before, done, seen)!;
+    expect(problem).toContain('ender_pearl×14 に今 13（ender_pearl 0＋ender_eye 13。アイもパールとして数える）、あと 1');
+    expect(problem).toContain('target の count と doneWhen の数を 13 以下に直す');
+  });
+  it('takes the node closed when the head lowers the count and its doneWhen to what she has', () => {
+    const before = pearls();
+    const lowered = applyPlanUpdate(before, { ops: [{ op: 'set', id: 'p2', state: 'done', target: { item: 'ender_pearl', count: 13 }, doneWhen: 'have:ender_pearl>=13' }] });
+    expect(lowered.problem).toBeFalsy();
+    expect(targetUpdateProblem(before, lowered.tree, seen)).toBeNull();
   });
 });
