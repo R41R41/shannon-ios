@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEnderHunt, endermenNear, huntLine, killsInLine } from '../src/surfaces/minecraft/minecraftEnderHunt.js';
+import { createEnderHunt, endermenNear, huntLine, killsInLine, triesInLine } from '../src/surfaces/minecraft/minecraftEnderHunt.js';
 
 /** The enderman hunt as numbers: the time near them, the deaths since, the pearls gained, the average drop; no place and no hand. */
 const enders = (...distances: number[]) => ({ nearbyThreats: [], nearbyEntities: distances.map((distance, id) => ({ id, name: 'enderman', distance })) });
@@ -56,5 +56,32 @@ describe('createEnderHunt', () => {
     expect(hunt.line(enders(), pearls(0), NETHER, 4 * 60_000)).toBeNull();
     expect(hunt.line(enders(8), pearls(0), NETHER, 10 * 60_000)).toBeNull();
     expect(createEnderHunt(null).line(enders(8), pearls(0), 'the_end', 0)).toBeNull();
+  });
+});
+
+describe('the fights at one enderman, as the body tallied them (1115b c1: about 900 s waiting from a roof at two of them, no blow)', () => {
+  const stopped = (text: string, code = 'limit_time') => JSON.stringify({ v: 1, done: 0, of: 1, lines: [{ i: 1, do: 'fight', status: 'stopped', code, line: text, goal: 'failed', end: 'stopped' }] });
+  const words = 'fight 止まった limit_time: #6796 へは 4 回目の fight・計 396 秒・打撃 計 0。同じ個体を待ち続けても当たっていない。enderman #6796 は 90 秒で倒れなかった';
+  it('reads the tally the body wrote', () => {
+    expect(triesInLine(words)).toEqual({ id: 6796, hands: 4, seconds: 396, landed: 0 });
+    expect(triesInLine('fight 止まった limit_time: enderman #6796 は 90 秒で倒れなかった')).toBeNull();
+  });
+  it('says the tries at a near one with no blow, and the choice to meet it out of the roof, and forgets it at its death', () => {
+    const hunt = createEnderHunt(null);
+    const near = { nearbyThreats: [], nearbyEntities: [{ id: 6796, name: 'enderman', distance: 3.8 }] };
+    hunt.line(near, pearls(5), NETHER, 0);
+    hunt.note('r1', stopped(words), 60_000);
+    const line = hunt.line(near, pearls(5), NETHER, 3 * 60_000)!;
+    expect(line).toContain('#6796 へ fight 4 回・計 396 秒・打撃 0。待っても当たっていない');
+    expect(line).toContain('屋根の外で迎えるか、別の個体を選ぶ');
+    expect(createEnderHunt(hunt.checkpoint().minecraftEnderHunt).line(near, pearls(5), NETHER, 3 * 60_000)).toContain('#6796 へ fight 4 回'); // kept through the checkpoint
+    hunt.note('r2', stopped('fight enderman #6796 死んだ', 'target_killed'), 4 * 60_000);
+    expect(hunt.line(near, pearls(6), NETHER, 5 * 60_000)).not.toContain('#6796 へ fight');
+  });
+  it('says nothing of the tries at one that is not near', () => {
+    const hunt = createEnderHunt(null);
+    hunt.line(enders(8), pearls(0), NETHER, 0);
+    hunt.note('r1', stopped(words), 60_000);
+    expect(hunt.line(enders(8), pearls(0), NETHER, 3 * 60_000)).not.toContain('fight 4 回');
   });
 });

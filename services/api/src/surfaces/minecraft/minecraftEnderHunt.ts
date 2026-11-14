@@ -13,7 +13,27 @@ const SHOW_AFTER_MS = 2 * 60_000;
 const QUIET_MS = 3 * 60_000;
 const KEEP_KILLS = 40;
 
-interface HuntState { v: 1; since: number | null; lastNear: number; pearls0: number; kills: Array<{ key: string; at: number }> }
+/** What the fights at one enderman came to, as the body tallied them (its words, from the second hand at it on). */
+export interface EndermanTries { id: number; hands: number; seconds: number; landed: number }
+interface HuntState { v: 1; since: number | null; lastNear: number; pearls0: number; kills: Array<{ key: string; at: number }>; tries?: EndermanTries[] }
+const KEEP_TRIES = 4;
+/**
+ * 1115b c1: #5496 (3,227〜3,711 s) and #6796 (4,046〜4,497 s) were waited for from a roof hand after hand, about 900 s with no blow, each stop told on
+ * its own; out of the roof #6796 fell in 3.5 s. The body tallies the fights at one individual (「#6796 へは 4 回目の fight・計 396 秒・打撃 計 0」);
+ * the newest of each is kept and said while that one is near, so the next hand is chosen knowing what waiting at it came to.
+ */
+const TRIES = /#(\d+) へは (\d+) 回目の fight・計 (\d+) 秒・打撃 計 (\d+)/u;
+export function triesInLine(text: unknown): EndermanTries | null {
+  const found = typeof text === 'string' ? TRIES.exec(text) : null;
+  return found ? { id: Number(found[1]), hands: Number(found[2]), seconds: Number(found[3]), landed: Number(found[4]) } : null;
+}
+/** The words for the tries at the nearest enderman that has some (from its second fight; empty when none is near). */
+export function triesWords(tries: readonly EndermanTries[], nearIds: readonly unknown[]): string {
+  const one = nearIds.map(id => tries.find(item => item.id === id)).find(item => item && item.hands >= 2);
+  if (!one) return '';
+  const advice = one.landed === 0 ? '。待っても当たっていない: 同じ待ち方を続けず、体力 16 以上で 1 体なら屋根の外で迎えるか、別の個体を選ぶ' : '';
+  return `。#${one.id} へ fight ${one.hands} 回・計 ${one.seconds} 秒・打撃 ${one.landed}${advice}`;
+}
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const pearlsOf = (counts: ReadonlyMap<string, number>): number => carried(counts, 'ender_pearl') + carried(counts, 'ender_eye');
 
@@ -35,8 +55,10 @@ export function endermenNear(world: Record<string, unknown>): Array<{ id: unknow
 function storedOf(saved: unknown): HuntState {
   const raw = saved && typeof saved === 'object' && (saved as { v?: unknown }).v === 1 ? saved as Partial<HuntState> : null;
   const kills = Array.isArray(raw?.kills) ? raw.kills.filter(item => item && typeof item.key === 'string' && finite(item.at)).slice(-KEEP_KILLS) : [];
+  const tries = (Array.isArray(raw?.tries) ? raw.tries : []).filter(item => item && [item.id, item.hands, item.seconds, item.landed].every(finite))
+    .slice(-KEEP_TRIES);
   return { v: 1, since: finite(raw?.since) ? raw.since : null, lastNear: finite(raw?.lastNear) ? raw.lastNear : 0,
-    pearls0: finite(raw?.pearls0) ? raw.pearls0 : 0, kills };
+    pearls0: finite(raw?.pearls0) ? raw.pearls0 : 0, kills, tries };
 }
 
 /** The kills one fight line says: the body watches on after a kill and says "N 体倒した" when it killed more than one in the same hand. */
@@ -51,7 +73,15 @@ export function createEnderHunt(saved: unknown) {
     /** An act's result came back: the deaths of endermen in it are counted once each. */
     note(id: string | undefined, resultJson: string | undefined, now: number): void {
       const result = readActResult(resultJson);
-      if (!result || state.since === null) return;
+      if (!result) return;
+      for (const line of result.lines) {
+        if (line.do !== 'fight') continue;
+        const tried = triesInLine(line.line);
+        const killedId = line.code === 'target_killed' ? Number(/enderman #(\d+)/u.exec(line.line)?.[1]) : NaN;
+        const others = (state.tries ?? []).filter(item => item.id !== tried?.id && item.id !== killedId);
+        state = { ...state, tries: tried && tried.id !== killedId ? [...others, tried].slice(-KEEP_TRIES) : others };
+      }
+      if (state.since === null) return;
       const killed = result.lines.filter(line => line.do === 'fight' && line.code === 'target_killed' && /enderman/u.test(line.line));
       killed.forEach((line, index) => {
         const base = `${id ?? 'none'}:${line.i ?? index}`.slice(0, 72);
@@ -68,13 +98,14 @@ export function createEnderHunt(saved: unknown) {
         if (state.since === null) state = { ...state, since: now, pearls0: pearlsOf(counts), kills: [] };
         state.lastNear = now;
       } else if (state.since !== null && (!dimension || now - state.lastNear > QUIET_MS)) {
-        state = { v: 1, since: null, lastNear: 0, pearls0: 0, kills: [] };
+        state = { v: 1, since: null, lastNear: 0, pearls0: 0, kills: [], tries: state.tries };
       }
       if (state.since === null || near.length === 0) return null;
-      return huntLine({ near: near.length, nearest: near[0]!.distance, elapsedMs: now - state.since, kills: state.kills.length,
+      const line = huntLine({ near: near.length, nearest: near[0]!.distance, elapsedMs: now - state.since, kills: state.kills.length,
         gained: Math.max(0, pearlsOf(counts) - state.pearls0), have: pearlsOf(counts) });
+      return line && `${line}${triesWords(state.tries ?? [], near.map(item => item.id))}`;
     },
-    checkpoint: () => ({ minecraftEnderHunt: { ...state, kills: state.kills.map(item => ({ ...item })) } }),
+    checkpoint: () => ({ minecraftEnderHunt: { ...state, kills: state.kills.map(item => ({ ...item })), tries: (state.tries ?? []).map(item => ({ ...item })) } }),
   };
 }
 export type EnderHunt = ReturnType<typeof createEnderHunt>;
