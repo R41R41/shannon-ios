@@ -1,20 +1,20 @@
 {
  "producedBy": "backend/scripts/minecraft-continue-lab-probe.ts",
  "bench": "B",
- "bodyRevision": "5eaaea1d269d7a699de0d44fb0a4c132f45bc19e",
- "madeAt": "2026-11-13T17:20:13.315Z",
+ "bodyRevision": "dc37cb2625e20a386fbfe442c42e46e2f9634557",
+ "madeAt": "2026-11-13T19:21:44.081Z",
  "answers": null,
  "fixtureSha256": null,
  "output": {
   "seen": {
    "capability": "floor-last-stand",
-   "target": 146
+   "target": 101
   },
   "handover": {
    "from": "floor-last-stand",
-   "target": 146,
-   "waitedMs": 3,
-   "reflexSettledAt": "2026-11-13T17:20:08.261Z",
+   "target": 101,
+   "waitedMs": 2,
+   "reflexSettledAt": "2026-11-13T19:21:39.009Z",
    "confirmed": true,
    "shield": "none"
   },
@@ -32,7 +32,7 @@
     "reserved": false,
     "reflex": "floor-last-stand",
     "kind": "motor_state",
-    "at": "2026-11-13T17:20:08.261Z"
+    "at": "2026-11-13T19:21:39.009Z"
    },
    {
     "command": "lab:q16",
@@ -46,7 +46,7 @@
     "deactivatedSince": 0,
     "reflex": "floor-last-stand",
     "kind": "motor_state",
-    "at": "2026-11-13T17:20:08.261Z"
+    "at": "2026-11-13T19:21:39.009Z"
    },
    {
     "command": "lab:q16",
@@ -61,7 +61,7 @@
     "confirmed": true,
     "result": "none",
     "kind": "motor_state",
-    "at": "2026-11-13T17:20:08.264Z"
+    "at": "2026-11-13T19:21:39.011Z"
    },
    {
     "command": "lab:q16",
@@ -75,7 +75,7 @@
     "deactivatedSince": 0,
     "op": "setMovements",
     "kind": "motor_state",
-    "at": "2026-11-13T17:20:08.270Z"
+    "at": "2026-11-13T19:21:39.014Z"
    }
   ],
   "outcome": "failed",
@@ -84,8 +84,8 @@
    "end": "finished",
    "released": true,
    "code": "limit_time",
-   "startedAt": "2026-11-13T17:20:08.260Z"
+   "startedAt": "2026-11-13T19:21:39.009Z"
   },
-  "sentToLockMs": 12
+  "sentToLockMs": 37
  }
 }
