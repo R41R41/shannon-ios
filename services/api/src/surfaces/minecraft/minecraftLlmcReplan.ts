@@ -92,9 +92,13 @@ export function withAttempt(ledger: ReplanLedger, record: ReplanRecord): ReplanL
     nodes: { ...ledger.nodes, [record.node]: (ledger.nodes[record.node] ?? 0) + 1 }, last: [...ledger.last, record].slice(-3) };
 }
 
-/** The newest attempt with what came of it (it was counted when it was asked). */
+/**
+ * The newest attempt with what came of it (it was counted when it was asked). It keeps the clock of the ask, the one `recent` holds: the answer
+ * comes later on the running clock, and with its clock the 90 s wait of `replanVerdict` never matched (11/15 w1109r: `skipped:gap` 23 times).
+ */
 export function settledAttempt(ledger: ReplanLedger, record: ReplanRecord): ReplanLedger {
-  return { ...ledger, last: [...ledger.last.slice(0, -1), record] };
+  const asked = ledger.last.at(-1);
+  return { ...ledger, last: [...ledger.last.slice(0, -1), asked ? { ...record, at: asked.at } : record] };
 }
 
 /** The ops the strong model may write: the plan's own, without the promises (a new plan does not move what was set aside). */

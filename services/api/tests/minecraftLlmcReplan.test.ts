@@ -85,6 +85,15 @@ describe('the bounds of the plan made again', () => {
     expect(replanVerdict(three, 'p1', 10 * MIN)).toEqual({ ok: false, why: 'node' });
   });
 
+  it('keeps the 90 seconds when the answer comes later than the ask on the running clock', () => {
+    // As the flow does it: counted at the ask (0), settled with a record made when the answer came (40 s on).
+    const asked = withAttempt(empty, { ...record(0), outcome: 'failed' });
+    const settled = settledAttempt(asked, { ...record(40_000), outcome: 'changed' });
+    expect(settled.last.at(-1)).toMatchObject({ at: 0, outcome: 'changed' });
+    expect(replanVerdict(settled, 'p1', REPLAN.gapSameNodeMs - 1)).toEqual({ ok: false, why: 'gap' });
+    expect(replanVerdict(settled, 'p1', REPLAN.gapSameNodeMs)).toEqual({ ok: true });
+  });
+
   it('counts an attempt when it is asked, keeps the newest three for the next brief, and reads a checkpoint with care', () => {
     let ledger = empty;
     for (let index = 0; index < 5; index += 1) ledger = withAttempt(ledger, { ...record(index * 11 * MIN, 'p1'), why: `w${index}` });
