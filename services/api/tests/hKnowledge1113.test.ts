@@ -59,6 +59,7 @@ describe('the words of the stages and the results', () => {
     for (const piece of ['stairs は 1 段で向きへ 1 マス進む', 'obsidian X,Y,Z count=N maxDig=N', '黒曜石 n 個が (x,y,z) に未回収', '落ちた先 (x,y,z)・立てる所 (x,y,z)',
       'dependsOn' /* in the contract */ ].filter(piece => piece !== 'dependsOn')) expect(all, piece).toContain(piece);
     expect(V2_STAGES.nether).toContain('来た道（ゲートから）');
+    expect(V2_STAGES.nether).toContain('「来た道」だけなら最初の点は始まった所で、ゲートではない'); // 1115b c1
     expect(V2_STAGES.nether).toContain('立てる最寄り (x,y,z)');
     expect(V2_STAGES.pearl).toContain('seconds 120〜150');
     expect(V2_STAGES.pearl).toContain('アイが 13 個そろってから');
