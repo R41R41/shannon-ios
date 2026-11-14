@@ -98,6 +98,17 @@ const verticalMostMs = (hand: ActHand) => 1_000 * (hand.seconds ?? VERTICAL_DEFA
 const COMPASS_STEP: Readonly<Record<string, { x: number; z: number }>> = { north: { x: 0, z: -1 }, south: { x: 0, z: 1 }, east: { x: 1, z:
    0 }, west: { x: -1, z: 0 } };
 const goTypicalMs = (hand: ActHand, metres: number) => Math.min(goMostMs(hand), 1_000 + 1.3 * walkMs(hand, metres));
+/**
+ * furnace (11/15b: in w1109r, 7 furnace hands were cut at the act's 5 s, 「時間切れ: 命令が止められた（deadline）」): the body waits for a batch due within
+ * `FURNACE_TAKE_WAIT_SECONDS` before a take (the body's `TAKE_WAIT_DUE_SECONDS`, kept the same; it waits only when the wait fits the deadline), walks to
+ * the furnace itself for a take, and goes to it digging what `canDig` names. The ceiling is the window's 5 s, that wait for a take, and the way
+ * to the furnace (as walk's, with 1 s a block it may dig, 30 at most) when it walks; `metres` is 0 when it does not.
+ */
+export const FURNACE_TAKE_WAIT_SECONDS = 15;
+/** Whether a furnace hand walks to its furnace (a take does by itself; a put or a take that names canDig goes to it digging). */
+const furnaceWalks = (hand: ActHand) => hand.do === 'furnace' && (hand.op === 'take' || Boolean(hand.canDig?.length));
+const furnaceMostMs = (hand: ActHand, metres: number) => 5_000 + (hand.op === 'take' ? 1_000 * FURNACE_TAKE_WAIT_SECONDS + 700 : 0)
+  + (metres > 0 ? 3_000 + 2 * walkMs(hand, metres) + (hand.canDig?.length ? 1_000 * Math.min(30, hand.maxDig ?? 10) : 0) : 0);
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   bed_burst: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
   fill: mostMs,
@@ -108,7 +119,7 @@ const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   pillarUp: hand => 1_200 * times(hand), attack: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
   shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1)) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
   pickup: hand => 3_000 + 1_000 * (hand.range ?? 6), use: useMostMs, craft: hand => 2_000 + 300 * Math.min(64, hand.count ?? 1),
-  jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: () => 5_000, eat: () => 4_000,
+  jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: furnaceMostMs, eat: () => 4_000,
   // The sleep hand (S4, 11/5): its seconds (10–60, 45 when not written) to place, sleep, wait for the morning and take the bed up.
   // `on` set (not tonight / back on) is only a word: nothing is placed, and its `seconds` is how long the head keeps the skip.
   sleep: hand => hand.on !== undefined ? 500 : 1_000 * (hand.seconds ?? 45) + 5_000,
@@ -127,7 +138,7 @@ const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
   eat: () => 1_700, sleep: hand => hand.on !== undefined ? 500 : 15_000, pickup: hand => 1_000 + 300 * (hand.range ?? 6),
   use: hand => hand.item === 'gold_ingot' && hand.target !== undefined ? 6_000 * blocksOf(hand) : 1_000,
   shoot: hand => (500 + 1_000 * (hand.charge ?? 1)) * times(hand),
-  craft: hand => 500 + 150 * Math.min(64, hand.count ?? 1), jump: hand => 600 * times(hand), chest: () => 1_500, furnace: () => 1_200,
+  craft: hand => 500 + 150 * Math.min(64, hand.count ?? 1), jump: hand => 600 * times(hand), chest: () => 1_500, furnace: (hand, metres) => 1_200 + (metres > 0 ? 500 + walkMs(hand, metres) : 0),
   equip: () => 300, look: () => 200, sneak: () => 200, drop: hand => 300 * (hand.items?.length ?? 1),
 };
 const distance = (from: ActPos, to: ActPos) => Math.hypot(to.x - from.x, to.z - from.z) + Math.abs(to.y - from.y);
@@ -157,6 +168,12 @@ function handMetres(input: ActInput, from: ActPos | null): Array<{ hand: ActHand
     if (hand.do === 'fill') {
       at = null;
       return { hand, metres: 0 };
+    }
+    if (furnaceWalks(hand) && hand.at?.length) {
+      const cell = hand.rel && at ? { x: at.x + hand.at[0]!.x, y: at.y + hand.at[0]!.y, z: at.z + hand.at[0]!.z } : hand.at[0]!;
+      const metres = walkMetres([hand.rel && !at ? hand.at[0]! : cell], at, hand.rel);
+      at = hand.rel && !at ? null : cell;
+      return { hand, metres };
     }
     if (hand.do !== 'walk' && hand.do !== 'go') return { hand, metres: 0 };
     const points = nearestOf(hand, at).map(point => hand.rel && at
