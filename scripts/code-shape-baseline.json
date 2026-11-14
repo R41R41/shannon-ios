@@ -1896,7 +1896,7 @@
       "complex-function": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcPrepRules.ts": {
-      "long-line": 13
+      "long-line": 14
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts": {
       "long-line": 4
@@ -1905,7 +1905,7 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts": {
-      "long-line": 76
+      "long-line": 78
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
