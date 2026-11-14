@@ -122,13 +122,14 @@ describe('a decision is asked again inside its step after a provider error (C-20
     await f.run();
     const spent = f.budgetStore.spent(f.child.id);
     const total = f.usages.reduce((sum, usage) => sum + usage.estimatedCostUsd, 0);
+    const yen = (usd: number) => Math.ceil(usd * 160 * 100 - 1e-9) / 100; // in hundredths of a yen (11/14)
     expect(f.usages).toHaveLength(3); // the timeout, the tool step, the completing step
     // Honest accounting: the timeout is booked in full, but apart (an upper bound of a charge nobody confirmed), not as confirmed spend.
     expect(f.usages[0]!.usageComplete).toBe(false);
-    expect(spent.estimatedYen).toBeGreaterThanOrEqual(Math.ceil(f.usages[0]!.estimatedCostUsd * 160));
-    expect(spent.yen + spent.estimatedYen).toBeLessThanOrEqual(Math.ceil(total * 160) + 2);
+    expect(spent.estimatedYen).toBeGreaterThanOrEqual(yen(f.usages[0]!.estimatedCostUsd));
+    expect(spent.yen + spent.estimatedYen).toBeLessThanOrEqual(yen(total) + 0.02);
     const answeredUsd = f.usages[1]!.estimatedCostUsd + f.usages[2]!.estimatedCostUsd;
-    expect(spent.yen).toBeLessThanOrEqual(Math.ceil(answeredUsd * 160) + 1); // the confirmed part is the two answers only
+    expect(spent.yen).toBeLessThanOrEqual(yen(answeredUsd) + 0.01); // the confirmed part is the two answers only
     expect(spent.steps).toBe(2); // the tool step (with the timeout it retried) and the completing step
   });
 
@@ -148,16 +149,16 @@ describe('a decision is asked again inside its step after a provider error (C-20
 
   it('pauses (the owner may resume) rather than fails when only estimates would take the task over its cap, then goes on (M-4)', async () => {
     const f = fixture(['ETIMEDOUT', [call('task_list', 'list-1')]], { cap: 20 });
-    f.budgetStore.add(f.child.id, 'owner', 'owner_request', 19, '2026-10-19T09:00:00.000Z'); // 19 of the 20 yen are confirmed
+    f.budgetStore.add(f.child.id, 'owner', 'owner_request', 19.99, '2026-10-19T09:00:00.000Z'); // 19.99 of the 20 yen are confirmed (any paid step adds at least 0.01)
     await f.run();
-    // The timeout's estimate (about 1 yen) cannot fail the task: it takes 19 to 20 of 20, so the next step pauses instead.
+    // The timeout's estimate (about 0.7 yen, counted in hundredths since 11/14) cannot fail the task: it takes 19.99 past 20, so the next step pauses instead.
     expect(f.phase()).toBe('stopped');
     expect(f.driver.runtime.get('owner', f.child.id)).toMatchObject({ status: 'paused', pauseReason: 'fca_stopped' });
     expect(f.driver.runtime.get('owner', f.child.id)?.summary).toContain('見積り');
     expect(f.events()).not.toContain('fca_recovery_unknown');
     const paused = f.budgetStore.spent(f.child.id);
     expect(paused.cappedAt).toBeNull();
-    expect(paused.estimatedYen).toBeGreaterThanOrEqual(1);
+    expect(paused.estimatedYen).toBeGreaterThan(0.5);
     expect(paused.openEstimatedYen).toBe(0); // reviewed: the owner was asked
     // M-2: the owner is told, as he was by the report of the failure this replaced: once, with the reason and that it can be resumed.
     const notice = f.driver.runtime.progress!('owner', f.child.id)?.report;
@@ -171,7 +172,7 @@ describe('a decision is asked again inside its step after a provider error (C-20
     expect(f.driver.runtime.get('owner', f.child.id)?.summary).toBe('');
     expect(f.driver.runtime.progress!('owner', f.child.id)?.report).toBeUndefined(); // the progress it had before is put back, without the report
     await f.run();
-    // Resumed, it asks again (the estimates are reviewed and no longer stop it); its one yen step then reaches the cap by confirmed spend,
+    // Resumed, it asks again (the estimates are reviewed and no longer stop it); its one step (at least a hundredth of a yen) then reaches the cap by confirmed spend,
     // and that is the cap's to stop. 2026-11-10: the cap is the operator's own (20 yen), which the operator can raise, so the request
     // is paused there (resumable) and no longer failed.
     expect(f.provider.bodies).toHaveLength(2);

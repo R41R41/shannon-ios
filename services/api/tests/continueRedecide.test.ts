@@ -436,7 +436,7 @@ describe('A-10 through the real tool: an act that would break an open promise is
     expect(opus).toHaveLength(1);
     expect(opus[0]!.estimatedCostUsd).toBeGreaterThan(0.1);
     // the first model's decision was made outside the step (the scene's priming); the step books exactly the ask
-    expect(booked).toEqual([Math.ceil(opus[0]!.estimatedCostUsd * 160)]);
+    expect(booked).toEqual([Math.ceil(opus[0]!.estimatedCostUsd * 160 * 100 - 1e-9) / 100]); // in hundredths of a yen (11/14)
     expect(rows()[0]!.costUsd).toBe(opus[0]!.estimatedCostUsd);
   });
 
@@ -564,7 +564,7 @@ describe('A-11 2: an act of Opus that the checks before sending refuse is mended
     expect(opus).toHaveLength(2);
     const total = opus[0]!.estimatedCostUsd + opus[1]!.estimatedCostUsd;
     expect(row!.costUsd).toBeCloseTo(total, 10);
-    expect(booked).toEqual([Math.ceil(total * 160)]);
+    expect(booked).toEqual([Math.ceil(total * 160 * 100 - 1e-9) / 100]); // in hundredths of a yen (11/14)
   });
 
   it('a mended act that is refused too: the first model\'s act goes in as it was, once more is not asked, and the record has both refusals', SLOW, async () => {
