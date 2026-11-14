@@ -48,7 +48,10 @@ export function targetUpdateProblem(before: PlanTree, after: PlanTree, observati
  * Why a target node cannot be closed now: the count and what is counted toward it, and that the count may be lowered (11/15b c1: with 13 eyes made
  * and no pearl, 「パール 14」 was refused five times as 「未達か未確認」; the head took the pearls for spent, not knowing an eye counts as one).
  */
-const DONE_REPAIR = 'done にできるのは現物を持っている節だけ。'
+/** The portal frame takes 12 eyes; a pearl or eye target above it holds the spare for eyes that break when thrown. */
+const FRAME_EYES = 12;
+
+const DONE_REPAIR ='done にできるのは現物を持っている節だけ。'
   + '直し方: しなくていい節は set state=done ではなく drop（id とその下を消す）で外す。待たせる節は state=blocked か wait';
 
 function shortOfTarget(id: string, target: NonNullable<PlanNode['target']>, counts: ReadonlyMap<string, number>): string | null {
@@ -56,8 +59,11 @@ function shortOfTarget(id: string, target: NonNullable<PlanNode['target']>, coun
   if (have >= target.count) return null;
   const parts = target.item === 'ender_pearl' ? `（ender_pearl ${carried(counts, 'ender_pearl')}＋ender_eye ${carried(counts, 'ender_eye')}。アイもパールとして数える）`
     : target.item === 'blaze_rod' ? `（blaze_rod ${carried(counts, 'blaze_rod')}＋粉・アイから戻した分）` : '';
-  return `${id}: 取得目標 ${target.item}×${target.count} は今 ${have}${parts}、あと ${target.count - have}で未達。${DONE_REPAIR}。`
-    + `数を下げてよいなら同じ set で target の count と doneWhen の数を ${have} 以下に直す`;
+  const spare = target.item === 'ender_pearl' || target.item === 'ender_eye';
+  const lower = !spare ? '' : have >= FRAME_EYES
+    ? `予備を減らすなら同じ set で target の count と doneWhen の数を ${FRAME_EYES}〜${have} に下げてよい（枠の ${FRAME_EYES} は下回らない）`
+    : `枠に ${FRAME_EYES} 要るので数は下げない`;
+  return `${id}: 取得目標 ${target.item}×${target.count} は今 ${have}${parts}、あと ${target.count - have}で未達。${DONE_REPAIR}。${lower}`;
 }
 
 function unreservedStock(node: PlanNode, counts: ReadonlyMap<string, number>, tree?: PlanTree) {

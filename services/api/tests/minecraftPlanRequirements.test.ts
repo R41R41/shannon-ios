@@ -90,7 +90,20 @@ describe('a target the head lowers itself (11/15b c1: 「パール 14」 with 13
     const before = pearls(), done = applyPlanUpdate(before, { ops: [{ op: 'set', id: 'p2', state: 'done' }] }).tree;
     const problem = targetUpdateProblem(before, done, seen)!;
     expect(problem).toContain('ender_pearl×14 に今 13（ender_pearl 0＋ender_eye 13。アイもパールとして数える）、あと 1');
-    expect(problem).toContain('target の count と doneWhen の数を 13 以下に直す');
+    expect(problem).toContain('target の count と doneWhen の数を 12〜13 に下げてよい（枠の 12 は下回らない）');
+  });
+  it('does not offer lowering below the frame, nor for any other target', () => {
+    const few = { connected: true, facts: {}, state: { world: { inventory: [{ name: 'ender_pearl', count: 3 }] } } } as unknown as BodyObservation;
+    const before = pearls(), done = applyPlanUpdate(before, { ops: [{ op: 'set', id: 'p2', state: 'done' }] }).tree;
+    const pearlProblem = targetUpdateProblem(before, done, few)!;
+    expect(pearlProblem).toContain('今 3');
+    expect(pearlProblem).toContain('枠に 12 要るので数は下げない');
+    expect(pearlProblem).not.toMatch(/下げてよい|3 以下/u);
+    const rods = planFromSeeds([{ id: 'r1', title: 'ロッド', target: { item: 'blaze_rod', count: 7 }, doneWhen: 'have:blaze_rod>=7' }])!;
+    const empty = { connected: true, facts: {}, state: { world: { inventory: [] } } } as unknown as BodyObservation;
+    const rodProblem = targetUpdateProblem(rods, applyPlanUpdate(rods, { ops: [{ op: 'set', id: 'r1', state: 'done' }] }).tree, empty)!;
+    expect(rodProblem).toContain('blaze_rod×7 に今 0');
+    expect(rodProblem).not.toMatch(/下げ/u);
   });
   it('takes the node closed when the head lowers the count and its doneWhen to what she has', () => {
     const before = pearls();
