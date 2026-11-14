@@ -1,5 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { doneFacts } from './minecraftConditions.js';
+import { nearThreats } from './minecraftLlmcThreat.js';
 
 /**
  * The stall record (the coordinator's list for 11/4, item 1; S5 captures the same fields on leg 2b): one line a stall writes to the server log when
@@ -24,19 +25,16 @@ export interface StallRecord {
   vitals: StallVitals;
 }
 
-const HOSTILE = /^#\d+ \S+ ([\d.]+)m/u;
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
-/** What the frame says of the body now, for a record; nulls where it says nothing. */
+/**
+ * What the frame says of the body now, for a record; nulls where it says nothing. `enemies16` counts the body's `nearbyThreats` within 16 m
+ * (11/15b: it read `world.threats`/`world.urgent` strings, which the body's frame does not have, and was 0 in every record of 9 runs).
+ */
 export function stallVitals(frame: BodyObservation | null): StallVitals {
-  const facts = doneFacts(frame), world = frame?.state.world as { threats?: unknown; urgent?: unknown } | undefined;
-  const lines = [world?.threats, world?.urgent].flatMap(list => Array.isArray(list) ? list : []).filter((line): line is string => typeof line === 'string');
-  const near = new Set(lines.flatMap(line => {
-    const meters = HOSTILE.exec(line)?.[1];
-    return meters !== undefined && Number(meters) <= 16 ? [line.split(' ')[0]!] : [];
-  }));
+  const facts = doneFacts(frame);
   return { hp: finite(facts?.hp) ? facts.hp : null, hunger: finite(facts?.hunger) ? facts.hunger : null, dimension: facts?.dimension ?? null,
-    enemies16: near.size };
+    enemies16: nearThreats(frame).filter(threat => threat.distance <= 16).length };
 }
 
 /** The record as one log line. */

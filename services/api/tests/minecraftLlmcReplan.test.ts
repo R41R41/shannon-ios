@@ -21,6 +21,7 @@ import {
 import { nodeLine, nowLines, planLines, replanBrief, type BriefInput } from '../src/surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { createReplanFlow, readWaiting, type ReplanSources } from '../src/surfaces/minecraft/minecraftLlmcReplanFlow.js';
 import { pending } from '../src/surfaces/minecraft/minecraftLlmcOnceFacts.js';
+import { stallVitals } from '../src/surfaces/minecraft/minecraftLlmcStallRecord.js';
 import { llmcTokens } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 import { forgetStalls, noteProgress, type Stall } from '../src/surfaces/minecraft/minecraftLlmcStalls.js';
 import { closedUnder } from '../src/surfaces/minecraft/minecraftPlanDone.js';
@@ -436,12 +437,12 @@ describe('the flow of one task', () => {
     await flow.run(signal);
     expect(asked).toHaveLength(0);
   });
-  it('puts the ask off while the body is in danger, and gives up a wait that sees a hostile come (the audit of 11/4, order 12)', async () => {
-    let vitals = { hp: 20, hunger: 20, dimension: 'overworld', enemies16: 1 };
+  it('puts the ask off while health is low, and gives up a wait that sees health fall (the audit of 11/4, order 12)', async () => {
+    let vitals = { hp: 10, hunger: 20, dimension: 'overworld', enemies16: 3 };
     const asked: string[] = [], lines: string[] = [];
     const flow = createReplanFlow({ taskId: 'danger', saved: null, replanner: async (_system, brief, wait) => {
       asked.push(brief);
-      vitals = { ...vitals, enemies16: 2 };
+      vitals = { ...vitals, hp: 18 };
       return new Promise((_resolve, reject) => wait.addEventListener('abort', () => reject(new Error('aborted'))));
     }, clock: () => 0, sources: item => sources({ node: item.key }), check: () => null, vitals: () => vitals, log: line => lines.push(line) });
     flow.note(stall());
@@ -449,11 +450,24 @@ describe('the flow of one task', () => {
     await flow.run(signal);
     expect(asked).toHaveLength(0);
     expect(lines.filter(line => line.includes('put off') && line.includes('why=danger'))).toHaveLength(1);
-    vitals = { ...vitals, enemies16: 0 };
+    vitals = { ...vitals, hp: 20 };
     await flow.run(signal);
     expect(asked).toHaveLength(1);
-    expect(flow.ledger().last.at(-1)).toMatchObject({ outcome: 'failed', why: '待つ間に敵が来た・体力が減った（打ち切った）' });
+    expect(flow.ledger().last.at(-1)).toMatchObject({ outcome: 'failed', why: '待つ間に体力が減った（打ち切った）' });
     expect(lines.some(line => line.includes('replan failed') && line.includes('why=danger'))).toBe(true);
+  });
+  it('records the hostiles within 16 m from the body\'s nearbyThreats, and does not put the ask off for them (11/15b: a spawner always has some)', async () => {
+    const seen = frame({ health: 20, food: 18, dimension: 'the_nether', position: { x: 0, y: 64, z: 0 },
+      nearbyThreats: [{ id: 1, name: 'blaze', distance: 4.2 }, { id: 2, name: 'wither_skeleton', distance: 15.9 }, { id: 3, name: 'blaze', distance: 22 }] });
+    expect(stallVitals(seen)).toEqual({ hp: 20, hunger: 18, dimension: 'the_nether', enemies16: 2 });
+    const asked: string[] = [];
+    const flow = createReplanFlow({ taskId: 'spawner', saved: null, replanner: async (_system, brief) => {
+      asked.push(brief);
+      return { ops: [], why: '' };
+    }, clock: () => 0, sources: item => sources({ node: item.key }), check: () => null, vitals: () => stallVitals(seen), log: () => undefined });
+    flow.note(stall());
+    await flow.run(signal);
+    expect(asked).toHaveLength(1);
   });
 });
 

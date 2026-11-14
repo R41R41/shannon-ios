@@ -18,13 +18,14 @@ import { stallEscapedLine, stallRecordLine, type StallVitals } from './minecraft
 
 /**
  * The body is not left to wait for a new plan in danger (the whole-run audit of 11/4, order 12: the ask waits up to 120 s inside the step, and the
- * body stands while it does): a hostile within 16 m or health under `REPLAN.safeHp` puts the ask off to a later decision (the stall waits, for
- * `pendingMs`), and a wait that sees a hostile come or health fall is given up at once (it was counted when asked).
+ * body stands while it does): health under `REPLAN.safeHp` puts the ask off to a later decision (the stall waits, for `pendingMs`), and a wait
+ * that sees health fall by 2 is given up at once (it was counted when asked).
+ * The hostiles within 16 m are recorded (`enemies16`) but decide nothing (11/15b): their count read a field the frame does not have and was 0 in
+ * all 9 runs, so the hold never fired; the asks took at most 12 s (151 records), and at a spawner, where a hostile is within 16 m nearly always,
+ * holding for them would put every ask off until `pendingMs` drops it, and a wait cut each time one comes would spend the node's asks for nothing.
  */
-const inDanger = (vitals: StallVitals | undefined): boolean => vitals !== undefined
-  && (vitals.enemies16 > 0 || (vitals.hp !== null && vitals.hp < REPLAN.safeHp));
-const worse = (start: StallVitals, now: StallVitals): boolean => now.enemies16 > start.enemies16
-  || (start.hp !== null && now.hp !== null && now.hp <= start.hp - 2);
+const inDanger = (vitals: StallVitals | undefined): boolean => vitals !== undefined && vitals.hp !== null && vitals.hp < REPLAN.safeHp;
+const worse = (start: StallVitals, now: StallVitals): boolean => start.hp !== null && now.hp !== null && now.hp <= start.hp - 2;
 /** A watch over the wait: its signal aborts when the body's state gets worse than at the start; `stop` ends the watch. */
 function dangerWatch(vitals: (() => StallVitals) | undefined): { signal: AbortSignal; stop(): void } {
   const danger = new AbortController(), start = vitals?.();
@@ -146,7 +147,7 @@ export function createReplanFlow(deps: ReplanDeps) {
     } catch (error) {
       const cut = danger.signal.aborted ? ' why=danger' : '';
       say(`Shannon Minecraft replan failed task=${deps.taskId} node=${node} ms=${Date.now() - began}${cut} ${String(error).slice(0, 100)}`);
-      return record(node, stall, 'failed', danger.signal.aborted ? '待つ間に敵が来た・体力が減った（打ち切った）' : '答えが来なかった');
+      return record(node, stall, 'failed', danger.signal.aborted ? '待つ間に体力が減った（打ち切った）' : '答えが来なかった');
     } finally {
       danger.stop();
     }
