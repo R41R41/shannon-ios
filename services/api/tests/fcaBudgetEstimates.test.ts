@@ -52,6 +52,13 @@ describe('estimated charges are booked apart from the confirmed spend', () => {
     expect(store.spent('t-mc')).toMatchObject({ steps: 1, yen: 22, estimatedYen: 0, openEstimatedYen: 0 });
     expect(store.settleEstimate('t-mc', 'action-1:1', 12, at)).toBe(false); // an estimate is replaced once
   });
+
+  it('counts a cheap step at its own yen, not a whole yen (11/14: 537 Haiku steps were counted 1.4-1.7 times their cost)', async () => {
+    const { store, budget, step } = world(2000);
+    for (let i = 0; i < 10; i += 1) await step(() => { budget.recordUsage(0.3 / 160); }, { ...lease, id: `action-${i}` });
+    expect(store.spent('t-mc').steps).toBe(10);
+    expect(store.spent('t-mc').yen).toBeCloseTo(3, 1); // was 10 when each step was rounded up to a whole yen
+  });
 });
 
 describe('the records of estimates remain (L-6)', () => {

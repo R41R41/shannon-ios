@@ -109,7 +109,9 @@ export function fcaBudget(options: {
 }): FcaBudget {
   const booked = new Map<string, Booked>();
   const counted = (task: TaskView) => task.origin === 'own_time' || (task.origin === 'owner_request' && ['research', 'generic'].includes(task.kind));
-  const yenOf = (cost: number) => cost > 0 ? options.ownTime?.yen(cost) ?? Math.ceil(cost * 160) : 0;
+  // In hundredths of a yen, as her own time's yen are (`yenFromUsd`). A whole yen up for every step (11/14) counted a Haiku step of
+  // 0.1-0.8 yen as 1 yen, so a 250-yen run stopped at 147-184 real yen: 30% of its time was cut by rounding alone.
+  const yenOf = (cost: number) => cost > 0 ? options.ownTime?.yen(cost) ?? Math.ceil(cost * 160 * 100 - 1e-9) / 100 : 0;
   /** The unconfirmed yen that count toward the cap check: a bounded share of it, so that estimates alone never end a task. */
   const share = (estimatedYen: number, cap: { yen: number }) => Math.min(estimatedYen, cap.yen * ESTIMATE_SHARE);
   return {
