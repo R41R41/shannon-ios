@@ -347,7 +347,18 @@ describe('the flow of one task', () => {
     await flow.run(signal);
     expect(asked).toHaveLength(3);
     expect(replanLines(lines).at(-1)).toContain('replan skipped task=flow node=p1 kind=node_stalled why=node');
-    expect(pending('flow').some(fact => fact.key === 'replan_node:p1' && fact.text.includes('3 回立て直しても進まなかった'))).toBe(true);
+    expect(pending('flow').some(fact => fact.key.startsWith('replan_node:p1:') && fact.text.includes('上限 3 回を使い切った（最後の立て直しから 11 分')
+      && fact.text.includes('この節にはもう新しい計画は来ない'))).toBe(true);
+    // 11/15b: told again while the look still finds it stalled, every 15 minutes of the running clock (it stood an hour as skipped:node, told once)
+    const told = pending('flow').filter(fact => fact.key.startsWith('replan_node:p1:')).length;
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(pending('flow').filter(fact => fact.key.startsWith('replan_node:p1:'))).toHaveLength(told);
+    now += 15 * MIN;
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(pending('flow').filter(fact => fact.key.startsWith('replan_node:p1:'))).toHaveLength(told + 1);
+    expect(asked).toHaveLength(3);
     now += 1;
     flow.note(stall('node_stalled', 'p2'));
     flow.note(stall('node_stalled', 'p2'));
@@ -424,6 +435,11 @@ describe('the flow of one task', () => {
     await flow.run(signal);
     expect(asked[1]).toContain('節 p1（node_stalled）: 計画を直した。最初の直し');
     expect(asked[1]).toContain('この節で立て直しは 1 回目まで済み');
+    expect(asked[1]).not.toContain('これがこの節の最後');
+    now += 11 * MIN;
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(asked[2]).toContain('この節で立て直しは 2 回目まで済み。これがこの節の最後（上限 3 回）');
     expect(asked[1]).not.toContain('答えが来なかった');
   });
 

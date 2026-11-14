@@ -36,6 +36,9 @@ function dangerWatch(vitals: (() => StallVitals) | undefined): { signal: AbortSi
 }
 import { resumeStalls, type Stall } from './minecraftLlmcStalls.js';
 
+/** How often a node whose new plans are used up is told again while it stays stalled (ms of the running clock). */
+const NODE_RETELL_MS = 15 * 60_000;
+
 /**
  * The flow of one task: a stall is noted when the head's look finds it (`note`), and the strong model is asked at the next decision's
  * start (`run`, inside the step, so that its cost is the step's), if the bounds allow (`minecraftLlmcReplan.ts`). The answer's ops are
@@ -134,6 +137,17 @@ export function createReplanFlow(deps: ReplanDeps) {
     told = stall;
     return false;
   };
+  /**
+   * The node's new plans are used up (`REPLAN.perNode`): the decision is told, and told again every `NODE_RETELL_MS` of the running clock while
+   * the look still finds the node stalled (11/15b: with the 90 s re-ask the three were spent in about 8 minutes, and c1's p2 and w1109n's p1.3
+   * then stood about an hour as `skipped:node`, told once): that no plan comes for it any more, how long since the last, and what is left to her.
+   */
+  const nodeUsedUp = (node: string): void => {
+    const last = [...ledger.last].reverse().find(item => item.node === node);
+    const since = last ? `（最後の立て直しから ${Math.max(0, Math.round((deps.clock() - last.at) / 60_000))} 分、まだ進んでいない）` : '';
+    offer(deps.taskId, `replan_node:${node}:${Math.floor(deps.clock() / NODE_RETELL_MS)}`, `節 ${node} の立て直しは上限 ${REPLAN.perNode} 回を使い切った${since}。`
+      + 'この節にはもう新しい計画は来ない。同じ手を続けず、直近の結果から進まない理由を考え、自分で plan.update で節を割り直すか別の手段の節に替えるか、blocked にして別の節へ移る');
+  };
   /** `earlier`: the ledger before this attempt (what the brief tells of the plans made before). */
   async function answer(stall: Stall, parts: ReplanSources, signal: AbortSignal, earlier: ReplanLedger): Promise<ReplanRecord> {
     const node = nodeOf(stall, parts);
@@ -196,7 +210,7 @@ export function createReplanFlow(deps: ReplanDeps) {
         // The run's count is used up: the decision is told once (it was only a log line, and she went on waiting for a plan that never came).
         if (verdict.why === 'run') offer(deps.taskId, 'replan_run', `計画の立て直しは、この通しの上限 ${REPLAN.perRun} 回に達した。この先は止まっても新しい計画は来ない`
           + '（死んだ時だけ来る）。進まない節は、自分で plan.update で直すか、blocked にして別の道を計画する');
-        if (verdict.why === 'node') offer(deps.taskId, `replan_node:${node}`, `節 ${node} は、計画を ${REPLAN.perNode} 回立て直しても進まなかった。続けるか、blocked にして別の道を計画するかを決める`);
+        if (verdict.why === 'node') nodeUsedUp(node);
         return;
       }
       const earlier = ledger, asked = withAttempt(ledger, record(node, stall, 'failed', '頼んだ（答えを待っている）'));

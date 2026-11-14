@@ -108,7 +108,8 @@ export function plantLines(observation: BodyObservation | null): string[] {
 }
 
 const stalledWords = (input: BriefInput): string => `止まった節: ${input.stall.node}。${input.doneStatus ? `その条件の今: ${input.doneStatus}。` : ''}`
-  + `この節で立て直しは ${input.sameNode} 回目まで済み`;
+  + `この節で立て直しは ${input.sameNode} 回目まで済み${input.sameNode + 1 >= REPLAN.perNode ? `。これがこの節の最後（上限 ${REPLAN.perNode} 回）: `
+    + 'この後は止まっても新しい計画は来ない。前と同じ形の小さな直しにせず、節を割り直す・別の手段の節に替える・blocked にして別の道を書く' : ''}`;
 const minutes = (seconds: number): string => `${Math.floor(seconds / 60)} 分 ${Math.round(seconds % 60)} 秒`;
 const OUTCOME_WORDS: Readonly<Record<ReplanRecord['outcome'], string>> = { changed: '計画を直した', unchanged: '直さなかった', refused: '直しが通らなかった',
   failed: '答えが来なかった' };
