@@ -108,18 +108,42 @@ export function fcaBudget(options: {
   taskCapYen?(taskId: string): number | null;
 }): FcaBudget {
   const booked = new Map<string, Booked>();
+  /**
+   * The counted tasks of the steps settled lately, by lease (11/15b: a history summary asked beside a step, `detachedModelCall`, runs under the
+   * step's lease and mostly comes back after the step has settled; its cost found no booking and was dropped: about 22 yen of a 250-yen Haiku
+   * run, about 8%, so w1109n ran to 267.6 real yen while the ledger stood near 246). Such a call is booked straight to its task.
+   */
+  const settled = new Map<string, TaskView>();
+  let late = 0;
   const counted = (task: TaskView) => task.origin === 'own_time' || (task.origin === 'owner_request' && ['research', 'generic'].includes(task.kind));
   // In hundredths of a yen, as her own time's yen are (`yenFromUsd`). A whole yen up for every step (11/14) counted a Haiku step of
   // 0.1-0.8 yen as 1 yen, so a 250-yen run stopped at 147-184 real yen: 30% of its time was cut by rounding alone.
   const yenOf = (cost: number) => cost > 0 ? options.ownTime?.yen(cost) ?? Math.ceil(cost * 160 * 100 - 1e-9) / 100 : 0;
   /** The unconfirmed yen that count toward the cap check: a bounded share of it, so that estimates alone never end a task. */
   const share = (estimatedYen: number, cap: { yen: number }) => Math.min(estimatedYen, cap.yen * ESTIMATE_SHARE);
+  /** A call that came back after its step was settled: its yen go to the task at once, without counting a step. A record never fails a call. */
+  const bookLate = (task: TaskView, lease: string, cost: number, estimated: boolean): void => {
+    const yen = yenOf(cost), at = options.now();
+    try {
+      if (estimated) options.store.addEstimate(task.id, task.scopeKey, task.origin, `${lease}:late:${++late}`, yen, at);
+      else options.store.add(task.id, task.scopeKey, task.origin, yen, at, 0);
+      if (task.origin === 'own_time') options.ownTime?.recordSpend(task.scopeKey, at, { yen, usd: cost });
+      console.log(`Shannon FCA budget late usage task=${task.id} yen=${yen}${estimated ? ' estimated' : ''} spent=${options.store.spent(task.id).yen}`);
+    } catch {
+      /* the call's answer is kept whatever the record did */
+    }
+  };
   return {
     // Only a step this budget opened is counted (calls outside a counted step are not kept), and at most a bounded few are in flight.
     recordUsage(cost, estimated = false) {
       const lease = currentActionExecution()?.lease.id;
       const mine = lease ? booked.get(lease) : undefined;
-      if (!mine || !Number.isFinite(cost) || cost <= 0) return;
+      if (!Number.isFinite(cost) || cost <= 0) return;
+      if (!mine) {
+        const task = lease ? settled.get(lease) : undefined;
+        if (task) bookLate(task, lease!, cost, estimated);
+        return;
+      }
       if (estimated) mine.estimated += cost;
       else mine.confirmed += cost;
       mine.largest = Math.max(mine.largest, cost);
@@ -166,6 +190,9 @@ export function fcaBudget(options: {
       const mine = booked.get(lease.id) ?? { confirmed: 0, estimated: 0, largest: 0 };
       booked.delete(lease.id);
       if (!counted(task)) return;
+      settled.delete(lease.id);
+      settled.set(lease.id, task);
+      if (settled.size > IN_FLIGHT) settled.delete(settled.keys().next().value!);
       const at = options.now();
       // The total is what it always was; the part that is an upper bound of an unconfirmed charge is booked apart from the confirmed one.
       const yen = yenOf(mine.confirmed + mine.estimated), estimatedYen = Math.min(yen, yenOf(mine.estimated));

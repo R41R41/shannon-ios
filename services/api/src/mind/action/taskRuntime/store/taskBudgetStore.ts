@@ -33,12 +33,15 @@ export class TaskBudgetStore {
     return spent.yen + spent.estimatedYen;
   }
 
-  /** One paid step of the task, and its confirmed yen (0 for a step whose only charge is an unconfirmed one). */
-  add(taskId: string, scopeKey: string, origin: string, yen: number, at: string): TaskSpent {
+  /**
+   * One paid step of the task, and its confirmed yen (0 for a step whose only charge is an unconfirmed one). `steps` 0: the yen of a call that
+   * came back after its step was settled (a history summary asked beside the step), counted without counting a step again.
+   */
+  add(taskId: string, scopeKey: string, origin: string, yen: number, at: string, steps: 0 | 1 = 1): TaskSpent {
     this.db.prepare(`
-      INSERT INTO fca_task_budget (task_id, scope_key, origin, steps, yen, updated_at) VALUES (?, ?, ?, 1, ?, ?)
-      ON CONFLICT(task_id) DO UPDATE SET steps = steps + 1, yen = yen + excluded.yen, updated_at = excluded.updated_at
-    `).run(taskId, scopeKey, origin, Math.max(0, yen), at);
+      INSERT INTO fca_task_budget (task_id, scope_key, origin, steps, yen, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(task_id) DO UPDATE SET steps = steps + excluded.steps, yen = yen + excluded.yen, updated_at = excluded.updated_at
+    `).run(taskId, scopeKey, origin, steps, Math.max(0, yen), at);
     return this.spent(taskId);
   }
 

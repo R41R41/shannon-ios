@@ -194,3 +194,28 @@ describe('room for one more request', () => {
     });
   });
 });
+
+describe('a call that comes back after its step was settled (11/15b: summaries asked beside a step, about 8% of a Haiku run, were dropped)', () => {
+  it('books its yen to the task without counting a step, and its estimate apart', async () => {
+    const { store, budget, step } = world(2000);
+    let late: (() => Promise<void>) | undefined;
+    await step(() => {
+      budget.recordUsage(usdOfYen(10));
+      // the summary under the same lease, finishing after `after`
+      late = () => inActionExecution({ lease, signal: new AbortController().signal, permit: async () => true } as never, async () => {
+        budget.recordUsage(usdOfYen(5));
+        budget.recordUsage(usdOfYen(3), true);
+      });
+    });
+    expect(store.spent('t-mc')).toMatchObject({ steps: 1, yen: 10 });
+    await late!();
+    expect(store.spent('t-mc')).toMatchObject({ steps: 1, yen: 15, estimatedYen: 3 });
+  });
+  it('drops a call under a lease no counted step of this budget settled', async () => {
+    const { store, budget } = world(2000);
+    await inActionExecution({ lease: { ...lease, id: 'never' }, signal: new AbortController().signal, permit: async () => true } as never, async () => {
+      budget.recordUsage(usdOfYen(5));
+    });
+    expect(store.spent('t-mc')).toMatchObject({ steps: 0, yen: 0 });
+  });
+});
