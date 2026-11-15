@@ -55,6 +55,31 @@ describe('the way back to the drops of a death in another dimension (11/15c c1, 
     expect(line(c1({ lastDeath: '1分前 the_nether (150,74,75)「x」 落とした物: blaze_rod×2。消えるまで最長約5分（近くにいる間だけ減る）→拾いに戻れる' }), key)).not.toBeNull();
   });
 
+  it('keeps the block for a why that denies the giving up (the review of 11/15c), and ends it for one that gives up', () => {
+    for (const why of ['落とし物は捨てずに取りに戻る', '落とし物を諦めない。ゲートへ', '落とし物は捨てない', '落とし物は捨てるか戻るか比べて、戻る',
+      '落とし物を拾わないと鉄の剣が無い', '落とし物を諦めずに拾う', '落とし物は捨てたくない']) expect(givenUpBy(why, c1(), 'overworld')).toBeNull();
+    for (const why of ['落とし物は捨てる', '落とし物を諦めて村で作り直す', '落とし物は拾わない', '落とし物は取りに戻らない。干し草へ', '落とし物を放棄する'])
+      expect(givenUpBy(why, c1(), 'overworld')).toBe('nether:149,74,75');
+  });
+
+  it('says what the road lacks only while the rods and pearls are gathered: eyes made count, and not in the End nor with the frames found', () => {
+    // 12 eyes made, the rods used up: 6 rods' worth (an eye is half a rod), 12 of 13
+    const eyes = c1({ inventory: [{ name: 'ender_eye', count: 12 }] });
+    expect(line(eyes)).toContain('区間の目標まで: ロッド 今 6/7（落とし物に 5）・パール・アイ 今 12/13');
+    expect(line(c1({ inventory: [{ name: 'ender_eye', count: 13 }] }))).not.toContain('区間の目標まで');
+    // the frames remembered: the frame line counts the eyes exactly
+    const found = line(c1({ rememberedPlaces: { nether_portal: '31m 南 (138,79,102) ↔nether(17,70,12)', end_portal_frame: '40m 東 (300,20,80)' } }))!;
+    expect(found).toContain('帰り道: ゲート 31m (138,79,102)');
+    expect(found).not.toContain('区間の目標まで');
+    // a death in the End (beds and arrows), woken in the overworld: the way back and her state, no rods nor pearls
+    const end = line(c1({ lastDeath: '2分前 the_end (10,60,0)「I_am_Shannon was slain by Ender Dragon」 落とした物: white_bed×4, arrow×20。消えるまで最長約5分（近くにいる間だけ減る）→拾いに戻れる',
+      deaths: [{ dimension: 'the_end', position: { x: 10, y: 60, z: 0 }, cause: 'slain by Ender Dragon', lostItems: ['white_bed×4', 'arrow×20'] }] }))!;
+    expect(end).toContain('別の次元の落とし物（2 分前に死んだ所）: the_end (10,60,0) に white_bed×4・arrow×20');
+    expect(end).toContain('帰り道: この次元のゲートは体の控えに無い（エンドポータルの枠を探す）');
+    expect(end).toContain('今: 体力 20');
+    expect(end).not.toContain('区間の目標まで');
+  });
+
   it('is in the urgent version too (the 控え line is not), and an act that gives the drops up ends it for the task', () => {
     const endgame = createEndgame(null);
     const parts: LlmcBodyParts = { plan: () => undefined, planView: () => null, planTree: () => seedPlan('エンドラを討伐して')!, endgame };

@@ -1,5 +1,5 @@
 import type { DoneFacts } from './minecraftConditions.js';
-import { carried } from './minecraftConditions.js';
+import { acquired } from './minecraftConditions.js';
 import { WALK_METRES_PER_SECOND } from './minecraftDropsAdvice.js';
 import { PEARL_TARGET, RODS_FOR_EYES, SECONDS_PER_PEARL, SECONDS_PER_ROD, WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minecraftPearlFacts.js';
 
@@ -20,7 +20,10 @@ import { PEARL_TARGET, RODS_FOR_EYES, SECONDS_PER_PEARL, SECONDS_PER_ROD, WALK_B
 export const SHOWN_MINUTES = 20;
 /** The words of an act's why that give the drops up (the block says the first). */
 export const GIVE_UP_WORDS = '落とし物は捨てる';
-const GIVE_UP = /落とし物(?:は|を)?(?:捨て|諦め|あきらめ|拾わない|取りに戻らない|放棄)/u;
+/** Those words, but not when what follows denies them: 「捨てずに取りに戻る」「諦めない」「捨てるか戻るか」 keep the drops (the review of 11/15c:
+ * a why that goes back is the one that most needs the way back). 「拾わない」「取りに戻らない」 are the giving up, unless 「と」 makes them a must. */
+const KEPT = '(?!ず|ない|なかっ|たくない|ませ|られ|るか|るべきで|ては)';
+const GIVE_UP = new RegExp(`落とし物(?:は|を)?(?:捨て${KEPT}|諦め${KEPT}|あきらめ${KEPT}|放棄(?!しない|せず|しなかっ|しませ|するか|すべきで)|拾わない(?!と)|取りに戻らない(?!と))`, 'u');
 /** The body's line of the last death: 「3分前 the_nether (149,74,75)「…」 落とした物: …。消えるまで最長約5分（近くにいる間だけ減る）→拾いに戻れる」. */
 const DEATH_HEAD = /^(\d+)\s*(分|秒)前 (?:minecraft:)?([a-z_]+) \((-?\d+),(-?\d+),(-?\d+)\)/u;
 /** A remembered place's row: 「87m 北 (138,79,102) ↔nether(17,70,12)」 (the pair is the body's note of a gate gone through). */
@@ -78,9 +81,17 @@ function wayBack(world: Rec, death: { dimension: string; at: Cell }, here: strin
   return `帰り道: ゲート ${gate}（歩いて約 ${walk(Number(place[1]), here)} 秒）→ 向こう側 (${far.x},${far.y},${far.z}) から落とし物まで ${onward}m（約 ${walk(onward, death.dimension)} 秒）`;
 }
 
-/** What the road's targets lack now (rods, pearls and eyes), with what lies in the drops and what gathering that again takes; null when nothing lacks. */
-function shortOf(counts: ReadonlyMap<string, number>, items: readonly string[]): string | null {
-  const rods = carried(counts, 'blaze_rod') + Math.floor(carried(counts, 'blaze_powder') / 2), pearls = carried(counts, 'ender_pearl') + carried(counts, 'ender_eye');
+/**
+ * What the road's targets lack now (rods, pearls and eyes), with what lies in the drops and what gathering that again takes; null when nothing
+ * lacks, and null once the gathering is behind her (the review of 11/15c: after the eyes were made the rods are 0 and are no lack): a death in
+ * the End or a decision there, or the portal's frames found (remembered or in view; the frame line then counts the eyes exactly). The rods count
+ * what was made of them back (`acquired`: an eye or two powder is half a rod), the pearls the eyes made of them.
+ */
+function shortOf(world: Rec, facts: DoneFacts, deathDimension: string, items: readonly string[]): string | null {
+  const counts = facts.counts;
+  const framesFound = typeof rec(world.rememberedPlaces)?.end_portal_frame === 'string' || facts.seen?.has('end_portal_frame') === true;
+  if (bare(deathDimension) === 'end' || bare(facts.dimension ?? '') === 'end' || framesFound) return null;
+  const rods = acquired(counts, 'blaze_rod'), pearls = acquired(counts, 'ender_pearl');
   const lostRods = countIn(items, /^blaze_rod$/u) + Math.floor(countIn(items, /^blaze_powder$/u) / 2), lostPearls = countIn(items, /^ender_(?:pearl|eye)$/u);
   const parts = [...rods < RODS_FOR_EYES ? [`ロッド 今 ${rods}/${RODS_FOR_EYES}${lostRods ? `（落とし物に ${lostRods}）` : ''}`] : [],
     ...pearls < PEARL_TARGET ? [`パール・アイ 今 ${pearls}/${PEARL_TARGET}${lostPearls ? `（落とし物に ${lostPearls}）` : ''}`] : []];
@@ -100,6 +111,6 @@ export function deathReturnLine(world: Rec, facts: DoneFacts, givenUp: string | 
   return [`別の次元の落とし物（${death.minutes} 分前に死んだ所）: ${death.dimension} (${death.at.x},${death.at.y},${death.at.z})`
     + `${items.length ? ` に ${items.join('・')}` : ''}。${left}`,
   `この時間は、落とし物の所のチャンクが読み込まれている間（同じ次元で約 160m 以内にいる間）だけ減る。今は別の次元にいて、そこが読み込まれていなければ減らない`,
-  wayBack(world, death, facts.dimension), ...[shortOf(facts.counts, items)].filter((line): line is string => line !== null), `今: ${vitals}`,
+  wayBack(world, death, facts.dimension), ...[shortOf(world, facts, death.dimension, items)].filter((line): line is string => line !== null), `今: ${vitals}`,
   `戻って拾うか捨てて作り直すかは、道のりと集め直しの時間を比べて決める（体は勝手に戻らない）。捨てるなら act の why に「${GIVE_UP_WORDS}」と書く（この行は消える）`].join('。');
 }
