@@ -15,4 +15,7 @@
  * - 11/24 (try1124b, the owner's test of 07:12: a zombie in a pool, 22 urgent decisions each chose a move of 1 to 4 blocks and 15 of 38 acts were replaced before they arrived): the urgent rules say a move away
  *   is one go or walk of 10 blocks or more (about 60 llmc, about 25 real). The text measures 10,599, the cap is 10,610.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_610;
+// 11/26 (ported from 11/15c n: health 6.7 at fullness 17 with no food waited 1,600 s, the gate back 196 m off, held by 「do not travel far while lacking food」 and
+// 「eat, wait to recover」): the health rule says waiting brings nothing back below fullness 18 and allows the far trip for food, and the safety rule
+// waits only at fullness 18 or more (about 29 llmc, about 15 real); the text measures 10,348, the cap is 10,350.
+export const ALWAYS_TEXT_CAP_LLMC = 10_650;

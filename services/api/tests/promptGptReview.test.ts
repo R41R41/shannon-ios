@@ -110,7 +110,8 @@ describe('the rules are in the instructions', () => {
   });
   it('says the fight rule without lowering retreatHp, the health that does not come back, and the units of a fight', () => {
     expect(system).toContain('At health 8 or below, do not fight when the enemies are over the counts');
-    expect(system).toContain('While health does not recover (fullness below 18; recovery appears), eat before going down or fighting. Even with an enemy near, eat 1 item first');
+    expect(system).toContain('Below fullness 18 (recovery appears) health does not come back and waiting brings nothing: eat before going down or fighting; with no food go now to recovery\'s food lead, far or through the gate back');
+    expect(system).toContain('Near an enemy eat 1 item first');
     expect(SHORT_ACT_DESCRIPTION).toContain('retreatHp は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）');
     expect(SHORT_ACT_DESCRIPTION).not.toContain('retreatHp は今の体力より低く');
   });

@@ -1,6 +1,7 @@
 import { readActResult } from '../../contracts/minecraftActContract.js';
 import { progressEvents } from './minecraftProgressEvents.js';
 import { carried } from './minecraftConditions.js';
+import { carriedFood } from './minecraftLlmcLive.js';
 import { marksOf, namesOf } from './minecraftSeenMarks.js';
 import { BLOCKS } from './minecraftLlmcPrepRules.js';
 
@@ -193,7 +194,8 @@ export function createBlazeWatch(saved: unknown) {
       const arrows = carried(counts, 'bow') > 0 ? carried(counts, 'arrow') : 0;
       const said = watchLine(near, now - state.since, state.kills.length, rods, arrows, blazesInSpawnerBox(world));
       const joined = reach ? (said ? `${said}。${reach.line}` : reach.line) : said;
-      const retreat = rods < RODS ? retreatLine(world.health, near) : null;
+      const hunger = finite(world.food) && world.food < 18 && carriedFood(world, {}).points <= 0 ? world.food : null;
+      const retreat = rods < RODS ? retreatLine(world.health, near, hunger) : null;
       const closing = rods < RODS && !retreat ? strikeLine(world, new Set(state.unreached ?? []), state.wall ?? null) : null;
       const told = closing ? (joined ? `${closing}。${joined}` : closing) : joined;
       return retreat ? (told ? `${retreat}。${told}` : retreat) : told;
@@ -205,13 +207,18 @@ export function createBlazeWatch(saved: unknown) {
 export type BlazeWatch = ReturnType<typeof createBlazeWatch>;
 
 /** Below `RETREAT_HP` with blazes near: the way out comes before a meal or a blow (pure; null above it or with no health known). */
-export function retreatLine(health: unknown, near: number): string | null {
+export function retreatLine(health: unknown, near: number, hungerWithNoFood: number | null = null): string | null {
   if (!finite(health) || health <= 0 || health >= RETREAT_HP || near <= 0) return null;
+  // 11/15c n: health 6.7, fullness 17 and no food, and this line said 「着いてから食べ、体力 18 以上で野営マスへ戻る」 at every decision: she
+  // waited in the shade for 1,600 s for health that could not come back. With no food below fullness 18 the line says where the meal is.
+  const after = hungerWithNoFood !== null
+    ? `着いても食べ物が無く満腹 ${Math.round(hungerWithNoFood * 10) / 10}＜18 なので、隠れ場所で待っても体力は戻らない: 退いたら recovery の「食料の当て」へ行き、食べてから戻る`
+    : `着いてから食べ、体力 ${BACK_HP} 以上で野営マスへ戻る`;
   return `体力 ${Math.round(health * 10) / 10}（${RETREAT_HP} 未満）でブレイズ ${near} 体の近く: 今いる所で食べる・斬り返すと撃たれ続けて燃える`
     + `（end1108h20: 体力 11.3 で 2 体から見えたまま食べて斬り返し、8 秒で 5.8、48 秒後に死亡）。先に湧き場から見えない隠れ場所へ go で退く`
     + `（場所は手が止まった行の「隠れ場所」か probe kind=camp）。この act は hands が go 1 つだけで、act の accept に blaze を入れる`
     + `（ブレイズは system「敵と体力」で accept に入れないとされる近接敵ではない。accept が無いと燃えて見えている間の覆いの反射が go を 0m で止め、eat を前に置くとその間撃たれる:`
-    + ` end1109f23 は accept の無い退く go が 0m で止まり、食べてから退くを繰り返して 44 秒で体力 11.9→0）。着いてから食べ、体力 ${BACK_HP} 以上で野営マスへ戻る`;
+    + ` end1109f23 は accept の無い退く go が 0m で止まり、食べてから退くを繰り返して 44 秒で体力 11.9→0）。${after}`;
 }
 
 /** A blaze within this many metres that she sees is one the attack reaches by chasing (end1108h16, h22). */

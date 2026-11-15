@@ -149,8 +149,8 @@ describe('run 43: eat before a fight', () => {
     const counts = carriedItemCounts({ inventory: pack([['bread', 1]]) }, {});
     expect(recoveryLine(16, 10, 11, counts)).not.toContain('戦う前に');
     expect(recoveryLine(16, 10, 11, counts)).not.toContain('実走 42');
-    expect(V2_ALWAYS).toContain('Even with an enemy near, eat 1 item first');
-    expect(V2_ALWAYS).toContain('gets you killed by a fall or 2 to 3 arrows');
+    expect(V2_ALWAYS).toContain('Near an enemy eat 1 item first');
+    expect(V2_ALWAYS).toContain('Unrecovered, a fall or 2 to 3 arrows kill you');
   });
 });
 

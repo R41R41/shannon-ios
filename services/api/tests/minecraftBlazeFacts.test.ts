@@ -116,6 +116,16 @@ describe('the way out below 14 (end1108h20: she ate and struck back at 11.3 wher
     expect(line).toContain('体力 18 以上で野営マスへ戻る');
     expect(line).toContain('hands が go 1 つだけで、act の accept に blaze を入れる');
   });
+  it('with no food below fullness 18 (11/15c n: 1,600 s in the shade), says waiting there brings nothing back and to go for food', () => {
+    const hungry = createBlazeWatch(null).line({ ...blazes(2), health: 6.7, food: 17, inventory: { blaze_rod: 5 } }, counts(5), NETHER, 0)!;
+    expect(hungry).toContain('着いても食べ物が無く満腹 17＜18 なので、隠れ場所で待っても体力は戻らない: 退いたら recovery の「食料の当て」へ行き、食べてから戻る');
+    expect(hungry).not.toContain('野営マスへ戻る');
+    expect(hungry).toContain('隠れ場所へ go で退く');
+    const fed = createBlazeWatch(null).line({ ...blazes(2), health: 6.7, food: 17, inventory: { blaze_rod: 5, bread: 2 } }, counts(5), NETHER, 0)!;
+    expect(fed).toContain('着いてから食べ、体力 18 以上で野営マスへ戻る');
+    const full = createBlazeWatch(null).line({ ...blazes(2), health: 6.7, food: 18, inventory: { blaze_rod: 5 } }, counts(5), NETHER, 0)!;
+    expect(full).toContain('着いてから食べ、体力 18 以上で野営マスへ戻る');
+  });
   it('says nothing at 14 or above, with no blaze near, with seven rods, or with no health known', () => {
     expect(retreatLine(14, 2)).toBeNull();
     expect(retreatLine(9, 0)).toBeNull();

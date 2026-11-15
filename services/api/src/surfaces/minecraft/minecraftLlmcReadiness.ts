@@ -17,6 +17,7 @@ import { returningToEnd } from './minecraftEndEntry.js';
 import { framesOf } from './minecraftSeenMarks.js';
 import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
 import { workingFurnaces } from './minecraftFurnaceMeanwhile.js';
+import { WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minecraftPearlFacts.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
@@ -258,6 +259,8 @@ export function enemyNear(world: Record<string, unknown>): boolean {
   return threats.some(raw => { const distance = finite(record(raw)?.distance);
     return distance !== null && distance <= ATTACK_NEAR; });
 }
+/** No food in the pack below fullness 18: waiting brings nothing back, so food is to be fetched, far as it may be. */
+export const NO_FOOD_WORDS = '持ち物に食べ物が無い: 待っても戻らない。食料を取りに今行く（遠くても）';
 export function recoveryLine(hunger: number | null, health: number | null, food: number, counts?: ItemCounts): string | null {
   if (hunger === null || health === null || health >= 20 || hunger >= 18) return null;
   const fact = `体力 ${round1(health)}/20 は自然に戻らない（満腹 ${round1(hunger)}＜18、${foodPointsWords(food)}）`;
@@ -276,7 +279,8 @@ export function recoveryLine(hunger: number | null, health: number | null, food:
     got += take * each;
   }
   const plan = !counts ? '' : now + got >= 18 ? `。${eat.join('・')} を食べると満腹 ${Math.min(20, now + got)} になり、${back}`
-    : eat.length ? `。持ち物の食べ物（${eat.join('・')}）では満腹 ${now + got} までで 18 に届かない` : '。持ち物に食べ物が無い';
+    // 11/15c n: 「持ち物に食べ物が無い」 alone, and she chose wait for 1,600 s (d0359 wrote that waiting brings nothing back, and waited).
+    : eat.length ? `。持ち物の食べ物（${eat.join('・')}）では満腹 ${now + got} までで 18 に届かない` : `。${NO_FOOD_WORDS}`;
   return `${fact}${plan}`;
 }
 
@@ -302,13 +306,22 @@ export const firstPos = (text: string): Feet | null => readWhere(text, 'any');
  * distance from her feet). */
 function gateBack(world: Record<string, unknown>, rows: readonly string[], nodes: readonly PlanNode[], feet: Feet | null): string | null {
   const row = rows.find(line => /ネザーポータル|nether_portal/u.test(line));
-  if (row) return `帰りのゲート（走査）${row.replace(/^[^(（]*/u, '').slice(0, 50)}`;
+  if (row) {
+    const said = row.replace(/^[^(（]*/u, '').slice(0, 50), metres = /(\d+)m/u.exec(said);
+    return `帰りのゲート（走査）${said}${metres ? throughGate(Number(metres[1])) : ''}`;
+  }
   const node = nodes.find(item => kindOf(item) === 'portal' && item.where && firstPos(item.where));
   if (!node) return null;
   const at = firstPos(node.where!)!;
-  const far = feet ? ` 約 ${Math.round(Math.hypot(at.x - feet.x, at.z - feet.z))}m` : '';
-  return `帰りのゲート (${at.x},${at.y},${at.z})${far}（計画 ${node.id} の where）`;
+  const metres = feet ? Math.round(Math.hypot(at.x - feet.x, at.z - feet.z)) : null;
+  return `帰りのゲート (${at.x},${at.y},${at.z})${metres !== null ? ` 約 ${metres}m` : ''}（計画 ${node.id} の where）${metres !== null ? throughGate(metres) : ''}`;
 }
+/**
+ * 11/15c n: the gate back was in the food lead as 「(37,84,7) 北西 196m・上 18」 alone; she judged 「196 meters off is too far」 and waited
+ * 1,600 s at health 6.7 with no food. The walk in seconds and what the gate is for are said with it.
+ */
+const throughGate = (metres: number): string =>
+  `（歩いて約 ${Math.max(10, Math.round(metres / NETHER_WALK_BLOCKS_PER_SECOND / 10) * 10)} 秒。くぐって地上で食料を取り、同じゲートで戻る）`;
 
 /**
  * Where food is, from the frame alone: the animals near (nearest three), the scan's village, field and crop

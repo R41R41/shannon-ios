@@ -13,7 +13,7 @@ import { foodLeads, preparationShortage, readinessOf, recoveryLine } from '../sr
 import { BEFORE_GATE } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 /** Run 42: the fact, what to eat from the pack (none here) and what going on without it cost. */
 const NO_RECOVERY = '体力 3.7/20 は自然に戻らない（満腹 17＜18、食料 0 点）';
-const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い`;
+const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い: 待っても戻らない。食料を取りに今行く（遠くても）`;
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { v2tree } from './helpers/planTreeV2.js';
@@ -131,12 +131,16 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
   it('where food is: animals near, the scan\'s village and crimson rows, the gate back from the plan\'s where', () => {
     const nodes = [{ id: 'p4', parentId: null, order: 3, title: '帰りのゲートでオーバーワールドへ', state: 'continue' as const, kind: 'portal' as const, where: '(5,35,12)' }];
     expect(foodLeads(SHAFT, 'the_nether', nodes))
-      .toBe('食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）');
+      .toBe('食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）（歩いて約 260 秒。くぐって地上で食料を取り、同じゲートで戻る）');
     const near = { ...SHAFT, nearbyEntities: [{ id: 31, name: 'hoglin', distance: 24.2, position: at(330, 52, 80) }],
       scan: { at: 't', dimension: 'the_nether', text: '走査', rows: ['範囲 読み込み 353 チャンク', 'ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 西 112m'] } };
     // The scan's row is said with its age (here unknown) and its distance worked out again from her feet, not the scan's own.
     expect(foodLeads(near, 'the_nether', nodes)).toBe('食料の当て: #31 hoglin 24m・ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 今の足元から水平 111m・上 18（走査 時刻不明・今は未確認）'
-      + '・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）');
+      + '・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）（歩いて約 260 秒。くぐって地上で食料を取り、同じゲートで戻る）');
+    // 11/15c n: the scan's gate row with its walk and what it is for (she read 196 m alone as too far and waited 1,600 s with no food).
+    const scanned = { ...SHAFT, scan: { at: 't', dimension: 'the_nether', text: '走査', rows: ['ネザーポータル nether_portal (37,84,7) 北西 196m・上 18'] } };
+    expect(foodLeads(scanned, 'the_nether')).toBe('食料の当て: 近くに動物・村・畑は見えていない（走査の範囲）・ホグリン・真紅の森は見えていない'
+      + '・帰りのゲート（走査）(37,84,7) 北西 196m・上 18（歩いて約 160 秒。くぐって地上で食料を取り、同じゲートで戻る）');
     const village = { position: at(0, 64, 0), nearbyEntities: [{ id: 2, name: 'cow', distance: 9 }, { id: 3, name: 'zombie', distance: 4 }],
       scan: { at: 't', dimension: 'overworld', text: '走査', rows: ['村の鐘 最寄り (40,64,10) 東 41m', '原木 oak ×20 最寄り (3,64,3) 北 4m'] } };
     expect(foodLeads(village, 'overworld')).toBe('食料の当て: 村の鐘 最寄り (40,64,10) 今の足元から水平 41m（走査 時刻不明・今は未確認）・#2 cow 9m');
@@ -165,7 +169,7 @@ describe('the live state shows the plan\'s now, the shortage and the recovery ju
     expect(live.planNow).toBe('[p1.1] 作業台と板を作る＠(296,66,70)（済み: have:crafting_table）（道: 出発の点検（ネザーの奥へ））');
     expect(live.shortage).toBe('準備の不足（ネザーの奥へ）: 作業台・盾が無い。食料 0 点（目安 100）。目標（そろえば。必須ではない）— 金の防具が無い');
     expect(live.recovery).toEqual([NO_RECOVERY_LIVE,
-      '食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）']);
+      '食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）（歩いて約 260 秒。くぐって地上で食料を取り、同じゲートで戻る）']);
   });
 
   it('a wait\'s result says health does not come back; not at hunger 18 or more, not for an act without a wait', () => {

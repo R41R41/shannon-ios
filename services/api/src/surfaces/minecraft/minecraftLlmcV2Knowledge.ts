@@ -148,7 +148,10 @@ const DANGER = [
     // end1109f12b: a go with accept [wither_skeleton] dug through the wall to it; struck from 20 to 10 on the way, then lost the trade at 12. Run 4 (11/10): a go with accept [zombie] and no fighting hand, 4 hits, 10 health.
     + 'Never put a melee enemy in a go\'s accept (the go does not stop, walks beside the enemy and keeps digging through walls, and you are hit with no hand heading for the enemy). For an enemy that is hitting you, first attack target=#id untilDead (fight if you have a sword or axe).',
   '- At health 8 or below, do not fight when the enemies are over the counts, shoot from far away, or you are exposed at night. Instead: sprint away → enclose (the 4 sides around the feet and above the head) → eat → wait at fullness 18 or more. Beds are for sleeping at night (a bed in the Nether or the End explodes: do not sleep there).',
-  '- While health does not recover (fullness below 18; recovery appears), eat before going down or fighting. Even with an enemy near, eat 1 item first (1.6 seconds; if a melee enemy that is hitting you is within 4 m, attack comes first). Going down or fighting without recovering gets you killed by a fall or 2 to 3 arrows.',
+  // 11/15c n: health 6.7 at fullness 17 with no food, the gate back 196 m off in recovery's food lead; she waited 1,600 s ("196 meters is too far"),
+  // held by the far-travel rule above and by "wait to recover". Waiting brings nothing back below 18, so the far trip for food is the exception.
+  '- Below fullness 18 (recovery appears) health does not come back and waiting brings nothing: eat before going down or fighting; with no food go now to recovery\'s food lead, far or through the gate back (allowed without food). '
+    + 'Near an enemy eat 1 item first (1.6 s; a melee enemy hitting you within 4 m: attack first). Unrecovered, a fall or 2 to 3 arrows kill you.',
   '- A melee enemy (piglin, zombie, wither skeleton, drowned) within the self-defence counts is hit by the body: give it a sword or axe. When over the counts, not recovering, or at night: eat, or place 2 blocks between you. For a pillar use pillarUp 2, and for a wither skeleton 3 levels. Also check the headroom for a jump.',
 ].join('\n');
 
