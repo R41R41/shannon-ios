@@ -10,7 +10,7 @@ bodyAgeField,llmcPlanTokens,llmcTokens,minecraftLlmcLive,minecraftLlmcUrgentLive
 } from './minecraftLlmcLive.js';
 import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
-import { approachingIds,newApproach,planNowTitle,URGENT_NOTE } from './minecraftLlmcUrgent.js';
+import { approachingIds,nearMemory,newApproach,noteNear,planNowTitle,sameShooterBack,URGENT_NOTE } from './minecraftLlmcUrgent.js';
 import { createHitWatch,inputFacts,onceFor,queueNowLines,type HitWatch } from './minecraftLlmcFacts.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
 import {
@@ -172,6 +172,10 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   // awaited (`interrupted`: the decision is then asked again, `rebuild`: on the same events); the tokens of an
 // urgent state (logged with its seconds).
   let footing: string | null = null, baseline = new Set<number>(), interrupted: string | null = null, rebuild = false, urgentTokens: number | null = null;
+  // 11/15c w1109n: who was near at the requests, and her health then (`sameShooterBack`: a shooter back in sight with nothing else changed
+  // does not throw the decision away); `thinnedFor` says the thinning once a decision in the log.
+  const near = nearMemory();
+  let thinnedFor: number | null = null;
   const say = (line: string) => { try { (parts.log ?? (text => console.info(text)))(line); } catch { /* a log never fails a step */ } };
   /**
    * r8: the footing round her feet, from the map and the body's `column` probes for the gaps the map cannot
@@ -291,6 +295,7 @@ beginContextRead();
     },
     transient() {
       baseline = approachingIds(observation, urgentMeters);
+      noteNear(near, observation, urgentMeters, now());
       const minutes = Number.isFinite(began) ? Math.max(0, (now() - began) / 60_000) : null;
       // Tool rounds read a new frame without asking urgent() again. Classify the
       // context from that frame, rather than keeping the first round's mode.
@@ -308,7 +313,13 @@ beginContextRead();
  * `FcaBodyLifecycle.interrupt`. */
     interrupt: (): string | null => {
       if (interrupted !== null) return null;
-      interrupted = newApproach(observeNoted(), baseline, urgentMeters);
+      const frame = observeNoted(), at = now();
+      interrupted = newApproach(frame, baseline, urgentMeters, threat => {
+        const thinned = sameShooterBack(threat, frame, near, urgentMeters, at);
+        if (thinned && thinnedFor !== threat.id) say(`Shannon Minecraft urgent interrupt thinned task=${parts.taskId} id=${threat.id} name=${threat.name}`);
+        if (thinned) thinnedFor = threat.id;
+        return thinned;
+      });
       return interrupted;
     },
     rebuilding: () => { rebuild = true; },
@@ -326,6 +337,7 @@ beginContextRead();
       }
       urgentTokens = null;
       interrupted = null;
+      thinnedFor = null;
     },
     /**
      * r4: before the decision, the surprises since the last one (`createSurpriseWatch`) and their fixed probes, sent

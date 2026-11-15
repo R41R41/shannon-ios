@@ -11,9 +11,9 @@ import { LLMC_SYSTEM_APPENDIX_R7, LLMC_SYSTEM_APPENDIX_R8, R8_KNOWLEDGE } from '
 import {
   columnKey, footingFromMap, footingLine, footingProbes, forgetColumnFacts, keepColumnFact, keptColumnFact, lookAtFooting, readAroundFooting, readColumnFact, readMap,
 } from '../src/surfaces/minecraft/minecraftLlmcFooting.js';
-import { approaching, approachingIds, frameThreatLine, newApproach, planNowTitle } from '../src/surfaces/minecraft/minecraftLlmcUrgent.js';
+import { approaching, approachingIds, frameThreatLine, nearMemory, newApproach, noteNear, planNowTitle, REENTRY_MS, sameShooterBack } from '../src/surfaces/minecraft/minecraftLlmcUrgent.js';
 import { createFoodTrend, llmcTokens, minecraftLlmcLive, minecraftLlmcUrgentLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
-import { nearThreats } from '../src/surfaces/minecraft/minecraftLlmcThreat.js';
+import { nearThreats, type NearThreat } from '../src/surfaces/minecraft/minecraftLlmcThreat.js';
 import { createFcaPlanTools, planInput } from '../src/mind/action/fca/fcaPlanTools.js';
 import { bridgeAt, layersMap, surfaceMap } from './support/minecraftFootingMaps.js';
 import { v2tree } from './helpers/planTreeV2.js';
@@ -206,6 +206,44 @@ describe('a hostile she must act on (run 32: 「wither_skeleton #696 は見え�
     expect(frameThreatLine({ ...nearThreats(after)[0]!, canSee: false })).toBe('wither_skeleton #696 6.1m・上 6・道がある（回って来る）');
   });
 
+  it('a shooter near at the request that only comes back into sight, nothing else changed, throws nothing away; a hit, fire, one more, another kind or a new one does (11/15c w1109n)', () => {
+    const blaze = (id: number, canSee: boolean, distance = 4.5) => ({ id, name: 'blaze', kind: 'hostile', distance, position: at(254.5, 57, 76.5), canReachMe: true, canSee });
+    const world = (threats: object[], extra: Record<string, unknown> = {}) => frame({ position: WORLD_AT, health: 13.3, nearbyThreats: threats, ...extra });
+    // the request: two blazes behind the bricks (neither sees her: no baseline), health 13.3
+    const asked = world([blaze(2781, false), blaze(3042, false, 3.6)]);
+    const memory = nearMemory();
+    noteNear(memory, asked, meters, 1_000);
+    const baseline = approachingIds(asked, meters);
+    expect(baseline.size).toBe(0);
+    const thin = (now: BodyObservation, at = 3_000) => (threat: NearThreat) => sameShooterBack(threat, now, memory, meters, at);
+    const peek = world([blaze(2781, true), blaze(3042, false, 3.6)]);
+    expect(newApproach(peek, baseline, meters)).toBe('blaze #2781 4.5m・上 2・見える（射線の中）');
+    expect(newApproach(peek, baseline, meters, thin(peek))).toBeNull();
+    // health under the request's, burning, one more near, or long after it was seen: as before
+    expect(newApproach(world([blaze(2781, true), blaze(3042, false, 3.6)], { health: 12.3 }), baseline, meters, thin(world([blaze(2781, true), blaze(3042, false, 3.6)], { health: 12.3 })))).not.toBeNull();
+    const burning = world([blaze(2781, true), blaze(3042, false, 3.6)], { onFire: true });
+    expect(newApproach(burning, baseline, meters, thin(burning))).not.toBeNull();
+    const more = world([blaze(2781, true), blaze(3042, false, 3.6), blaze(3100, false, 6)]);
+    expect(newApproach(more, baseline, meters, thin(more))).not.toBeNull();
+    expect(newApproach(peek, baseline, meters, thin(peek, 1_000 + REENTRY_MS + 1))).not.toBeNull();
+    // a blaze not near at the request, in place of one that left: new
+    const stranger = world([blaze(4000, true), blaze(3042, false, 3.6)]);
+    expect(newApproach(stranger, baseline, meters, thin(stranger))).toBe('blaze #4000 4.5m・上 2・見える（射線の中）');
+    // no shooter: a walled zombie near at the request that finds a way is told as before
+    const zombie = { id: 77, name: 'zombie', kind: 'hostile', distance: 4, position: at(254.5, 55, 76.5) };
+    const zombieAsked = world([{ ...zombie, canReachMe: false }]);
+    const zombieMemory = nearMemory();
+    noteNear(zombieMemory, zombieAsked, meters, 1_000);
+    const comes = world([{ ...zombie, canReachMe: true, canSee: true }]);
+    expect(newApproach(comes, approachingIds(zombieAsked, meters), meters, threat => sameShooterBack(threat, comes, zombieMemory, meters, 2_000))).toBe('zombie #77 4.0m・見える（射線の中）');
+    // a blaze seen near at an earlier request within the time, out of range at this one: the same one coming back
+    noteNear(memory, world([blaze(3042, false, 3.6)]), meters, 2_000);
+    expect(memory.seen.has(2781)).toBe(true);
+    expect(memory.near).toBe(1);
+    const back = world([blaze(2781, true)]);
+    expect(newApproach(back, approachingIds(world([blaze(3042, false, 3.6)]), meters), meters, thin(back))).toBeNull();
+  });
+
   it('the plan\'s now by its title only', () => {
     expect(planNowTitle({ id: 'p1.2', title: '作業台と木のツルハシ' })).toBe('[p1.2] 作業台と木のツルハシ');
     expect(planNowTitle({ id: 'p4', title: '鉄（約30・兜・胸・脚まで）' })).toBe('[p4] 鉄（約30・兜・胸・脚まで）');
@@ -313,6 +351,21 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
     world = quiet;
     body.context();
     expect(body.transient!()).toHaveProperty('landmarks');
+  });
+
+  it('a blaze behind the bricks at the request that rises into sight while it is awaited throws nothing away until she is hit (11/15c w1109n)', async () => {
+    const blaze = (canSee: boolean) => ({ id: 2781, name: 'blaze', kind: 'hostile', distance: 4.5, position: at(254.5, 57, 76.5), canReachMe: true, canSee });
+    let world: Record<string, unknown> = { ...quiet, health: 13.3, nearbyThreats: [blaze(false)] };
+    const { body, lines } = lifecycle(() => world, input => input.kind === 'column' ? COLUMN : null, 'r8-thin');
+    await body.investigate!(new AbortController().signal);
+    body.context();
+    body.transient!();
+    world = { ...world, nearbyThreats: [blaze(true)] };
+    expect(body.interrupt!()).toBeNull();
+    expect(body.interrupt!()).toBeNull();
+    expect(lines.filter(line => line === 'Shannon Minecraft urgent interrupt thinned task=r8-thin id=2781 name=blaze')).toHaveLength(1);
+    world = { ...world, health: 11.3 };
+    expect(body.interrupt!()).toBe('blaze #2781 4.5m・上 2・見える（射線の中）');
   });
 
   it('what the first request showed once (the events, the results) is shown again by the one asked again, not lost', async () => {

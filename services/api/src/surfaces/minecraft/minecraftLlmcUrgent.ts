@@ -55,10 +55,60 @@ export function frameThreatLine(threat: NearThreat): string {
   return `${threat.name}${threat.id !== null ? ` #${threat.id}` : ''} ${threat.distance.toFixed(1)}m${height}${reach}`;
 }
 
-/** The nearest hostile she must act on now that was not so when the decision was asked (its id is not in `baseline`), as a line, or null. */
-export function newApproach(observation: BodyObservation | null, baseline: ReadonlySet<number>, meters: (name: string) => number): string | null {
-  const found = nearThreats(observation).find(threat => threat.id !== null && !baseline.has(threat.id) && approaching(threat, meters(threat.name)));
+/**
+ * The nearest hostile she must act on now that was not so when the decision was asked (its id is not in `baseline`), as a line, or null.
+ * `thinned` leaves out one that is only the same shooter back in sight (`sameShooterBack`); the next one is looked at in its place.
+ */
+export function newApproach(observation: BodyObservation | null, baseline: ReadonlySet<number>, meters: (name: string) => number,
+  thinned?: (threat: NearThreat) => boolean): string | null {
+  const found = nearThreats(observation).find(threat => threat.id !== null && !baseline.has(threat.id) && approaching(threat, meters(threat.name))
+    && !thinned?.(threat));
   return found ? frameThreatLine(found) : null;
+}
+
+/**
+ * 11/15c w1109n: 145 decisions were thrown away by the interrupt (and 96 by a changed queue; together 27% of the run's cost), nearly all while she
+ * sat in a covered cell at the blaze spawner with health steady at 13.3 and the same blazes (#2781, #2765) 3〜7 m off behind the bricks: a blaze is
+ * a shooter, a shooter counts only while it sees her (`approaching`), and each time one rose into sight during the 2〜3 s of a decision it was "new"
+ * against the baseline of the request. What a decision was asked with is kept (`NearMemory`, at each request): the hostiles within their urgent
+ * range whatever their sight or way, her health, and how many they were. A shooter seen so within `REENTRY_MS` that comes back into sight does not
+ * throw the decision away while nothing else has changed: her health is not under the request's, she is not burning, and no more hostiles are near
+ * than there were. Anything else is as it was: a hostile not seen near in that time, any that is no shooter (a creeper, a zombie that finds a way),
+ * a hit, a fire, one more near; and the poll goes on, so a blow during the same wait still throws it away.
+ */
+export const REENTRY_MS = 30_000;
+export interface NearMemory {
+  /** The hostiles within their urgent range at a request, by id, and when they were last seen so (ms). */
+  seen: Map<number, number>;
+  /** Her health, and how many hostiles were within their urgent range, when the newest request was built. */
+  hp: number | null;
+  near: number;
+}
+export const nearMemory = (): NearMemory => ({ seen: new Map(), hp: null, near: 0 });
+/** The hostiles within their urgent range, whatever their sight or way (a calm enderman is none). */
+function nearNow(observation: BodyObservation | null, meters: (name: string) => number): NearThreat[] {
+  return nearThreats(observation).filter(threat => !calmEnderman(threat) && threat.distance <= meters(threat.name));
+}
+const healthOf = (observation: BodyObservation | null): number | null => {
+  const hp = (observation?.state.world as { health?: unknown } | undefined)?.health;
+  return typeof hp === 'number' && Number.isFinite(hp) ? hp : null;
+};
+/** At a request: who is near, her health and the count; those not seen near for `REENTRY_MS` are forgotten. */
+export function noteNear(memory: NearMemory, observation: BodyObservation | null, meters: (name: string) => number, now: number): void {
+  const near = nearNow(observation, meters);
+  for (const threat of near) if (threat.id !== null) memory.seen.set(threat.id, now);
+  for (const [id, at] of memory.seen) if (now - at > REENTRY_MS) memory.seen.delete(id);
+  memory.hp = healthOf(observation);
+  memory.near = near.length;
+}
+/** The same shooter back in sight and nothing else changed since the request (see `REENTRY_MS`): its interrupt is left out. */
+export function sameShooterBack(threat: NearThreat, observation: BodyObservation | null, memory: NearMemory, meters: (name: string) => number,
+  now: number): boolean {
+  if (threat.id === null || !isShooter(threat.name)) return false;
+  const seen = memory.seen.get(threat.id), hp = healthOf(observation);
+  if (seen === undefined || now - seen > REENTRY_MS || memory.hp === null || hp === null || hp < memory.hp) return false;
+  if ((observation?.state.world as { onFire?: unknown } | undefined)?.onFire === true) return false;
+  return nearNow(observation, meters).length <= memory.near;
 }
 
 /**
