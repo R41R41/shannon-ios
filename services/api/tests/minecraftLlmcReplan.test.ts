@@ -391,6 +391,37 @@ describe('the flow of one task', () => {
     expect(flow.ledger().total).toBe(REPLAN.perRun + 1);
   });
 
+  it('tells the decision when the hour\'s count is used up, when the next new plan can come, and again 15 minutes on (11/15c w1109r)', async () => {
+    // six asks in 21 minutes (at 0, 4, 8, 12, 16, 21 min), then a stall at 24 min: the one at 0 leaves the hour at 60, so the next comes in about 36 minutes
+    const used = { v: 1, total: 6, recent: [0, 4, 8, 12, 16, 21].map(at => at * MIN), nodes: { p9: 1 }, last: [] };
+    let now = 24 * MIN;
+    const { flow, asked, lines } = make(async () => ({ ops: [], why: 'そのまま' }), { clock: () => now, saved: used });
+    const hourFacts = () => pending('flow').filter(fact => fact.key.startsWith('replan_hour:'));
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(asked).toHaveLength(0);
+    expect(lines.some(line => line.includes('replan skipped task=flow node=p1 kind=node_stalled why=hour'))).toBe(true);
+    expect(hourFacts()).toHaveLength(1);
+    expect(hourFacts()[0]!.text).toContain(`1 時間に ${REPLAN.perHour} 回の上限に達した。次の立て直しは約 36 分後`);
+    expect(hourFacts()[0]!.text).toContain('それまでは自分で計画を直す');
+    // the stall still waits for a slot (the hour holds it back, it is not dropped); a later decision within the 15 minutes says nothing new
+    expect(flow.checkpoint().minecraftReplanPending).not.toBeNull();
+    now = 30 * MIN;
+    await flow.run(signal);
+    expect(hourFacts()).toHaveLength(1);
+    now = 37 * MIN;
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(hourFacts()).toHaveLength(2);
+    expect(hourFacts()[1]!.text).toContain('次の立て直しは約 23 分後');
+    // the count itself is not widened: nothing was asked, and once the first ask leaves the hour the stall is asked
+    expect(asked).toHaveLength(0);
+    now = 60 * MIN + 1;
+    flow.note(stall('node_stalled', 'p1'));
+    await flow.run(signal);
+    expect(asked).toHaveLength(1);
+  });
+
   it('keeps a stall found at the end of a step for the next step, and one the gap holds back until the gap has passed', async () => {
     const first = make(async () => ({ ops: [], why: '' }), { clock: () => 5 * MIN });
     first.flow.note(stall('death', '1-1'));

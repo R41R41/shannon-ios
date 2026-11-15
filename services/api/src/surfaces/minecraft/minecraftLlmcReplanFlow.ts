@@ -38,6 +38,8 @@ import { resumeStalls, type Stall } from './minecraftLlmcStalls.js';
 
 /** How often a node whose new plans are used up is told again while it stays stalled (ms of the running clock). */
 const NODE_RETELL_MS = 15 * 60_000;
+/** An hour of the running clock (the window of `REPLAN.perHour`, as `replanVerdict` counts it). */
+const HOUR_MS = 60 * 60_000;
 
 /**
  * The flow of one task: a stall is noted when the head's look finds it (`note`), and the strong model is asked at the next decision's
@@ -148,6 +150,21 @@ export function createReplanFlow(deps: ReplanDeps) {
     offer(deps.taskId, `replan_node:${node}:${Math.floor(deps.clock() / NODE_RETELL_MS)}`, `節 ${node} の立て直しは上限 ${REPLAN.perNode} 回を使い切った${since}。`
       + 'この節にはもう新しい計画は来ない。同じ手を続けず、直近の結果から進まない理由を考え、自分で plan.update で節を割り直すか別の手段の節に替えるか、blocked にして別の節へ移る');
   };
+  /**
+   * The hour's count is used up (`REPLAN.perHour`): the decision is told when the next new plan can come and that until then the plan is hers to
+   * mend, once when the hour fills and again every `NODE_RETELL_MS` while stalls are still held by it (11/15c w1109r: the six were spent in 21
+   * minutes and `skipped:hour` stood 97 times for about 38 minutes, told nothing). The key holds the ask that has to leave the hour (a new hour's
+   * fill is told afresh) and the turn of the retelling counted from the newest ask; the flow is made again each step, so nothing is kept here.
+   */
+  const hourUsedUp = (): void => {
+    const now = deps.clock(), recent = ledger.recent.filter(at => now - at < HOUR_MS);
+    const leaving = recent[recent.length - REPLAN.perHour], newest = recent.at(-1);
+    if (leaving === undefined || newest === undefined) return;
+    const minutes = Math.max(1, Math.ceil((leaving + HOUR_MS - now) / 60_000));
+    offer(deps.taskId, `replan_hour:${leaving}:${Math.floor((now - newest) / NODE_RETELL_MS)}`, `計画の立て直しは 1 時間に ${REPLAN.perHour} 回の上限に達した。`
+      + `次の立て直しは約 ${minutes} 分後で、それまでは止まっても新しい計画は来ない。それまでは自分で計画を直す: 同じ手を続けず、直近の結果から進まない理由を考え、`
+      + 'plan.update で節を割り直すか別の手段の節に替えるか、blocked にして別の節へ移る');
+  };
   /** `earlier`: the ledger before this attempt (what the brief tells of the plans made before). */
   async function answer(stall: Stall, parts: ReplanSources, signal: AbortSignal, earlier: ReplanLedger): Promise<ReplanRecord> {
     const node = nodeOf(stall, parts);
@@ -211,6 +228,7 @@ export function createReplanFlow(deps: ReplanDeps) {
         if (verdict.why === 'run') offer(deps.taskId, 'replan_run', `計画の立て直しは、この通しの上限 ${REPLAN.perRun} 回に達した。この先は止まっても新しい計画は来ない`
           + '（死んだ時だけ来る）。進まない節は、自分で plan.update で直すか、blocked にして別の道を計画する');
         if (verdict.why === 'node') nodeUsedUp(node);
+        if (verdict.why === 'hour') hourUsedUp();
         return;
       }
       const earlier = ledger, asked = withAttempt(ledger, record(node, stall, 'failed', '頼んだ（答えを待っている）'));
