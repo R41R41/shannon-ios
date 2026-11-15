@@ -39,7 +39,9 @@ describe('the way to the dragon in the live state', () => {
     const died = (dimension: string) => frame({ dimension, position: { x: 0, y: 64, z: 0 }, health: 20, food: 20, inventory: [], deaths: [{ dimension: 'the_nether' }],
       lastDeath: '3分前 the_nether (89,67,40)「Shannon was slain by Blaze」 落とした物: iron_sword×1。消えるまで最長約5分（近くにいる間だけ減る）→拾いに戻れる' });
     const said = (at: BodyObservation) => inputFacts(at, factsContext(parts(), at, {}, undefined, {}), false).lines.join('\n');
-    expect(said(died('overworld'))).toContain('行くにはポータルを通る）。落とし物が残る間は、取りに戻れるように、ネザーへ入る手は準備の必須・金の防具が欠けていても止まらない');
+    // 11/15c: in another dimension the death is said as the way back to its drops (`minecraftDeathReturn.ts`), the entry's words after it
+    expect(said(died('overworld'))).toContain('別の次元の落とし物（3 分前に死んだ所）: the_nether (89,67,40)');
+    expect(said(died('overworld'))).toContain('（この行は消える）。落とし物が残る間は、取りに戻れるように、ネザーへ入る手は準備の必須・金の防具が欠けていても止まらない');
     expect(said(died('the_nether'))).toContain('最後の死: 3分前 the_nether');
     expect(said(died('the_nether'))).not.toContain('止まらない');
   });

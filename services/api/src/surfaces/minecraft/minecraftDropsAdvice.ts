@@ -5,7 +5,7 @@ const WORTH_FETCHING = /^(?:(?:iron|diamond|netherite)_[a-z]+|diamond|ender_eye|
 /** Those that take a trip to have again (the diamonds' depth, a fortress, the endermen): tens of minutes, where iron takes a few. */
 const SLOW_TO_REMAKE = /^(?:(?:diamond|netherite)_[a-z]+|diamond|ender_eye|ender_pearl|blaze_rod|blaze_powder)$/u;
 /** About how fast she covers ground on her way to the place she died (run 20: 117 m in 50 s and 91 m in 25 s). */
-const WALK_METRES_PER_SECOND = 2.5;
+export const WALK_METRES_PER_SECOND = 2.5;
 /** A fetch farther than this is said to be far (the caves on the way, the night). */
 const FAR_FETCH_METRES = 150;
 /** The body's row for a remembered place: `178m 南 (-125,75,839)`. */

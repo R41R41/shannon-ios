@@ -155,7 +155,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     return ids.length ? queue.replace(ids) : '';
   } });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
-  queue.onRan((_item, _result, receipt) => endgame.noteResult(receipt?.id, receipt?.result, observe()));
+  queue.onRan((item, _result, receipt) => { endgame.noteResult(receipt?.id, receipt?.result, observe()); endgame.noteWhy(item.why, observe()); });
   tapEyes(control, step.taskId, (id, result) => endgame.noteResult(id, result, observe()));
   // Run 45: the call id of the act a resume sends again (the body says when it failed for the reason it was held
 // for: `incident.repeated`).

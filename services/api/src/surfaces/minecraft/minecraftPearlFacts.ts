@@ -41,8 +41,9 @@ export function pearlLine(counts: ReadonlyMap<string, number>, dimension: string
  * pearls missing: the biomes the body reports (`world.biomesSeen`), where a warped forest was seen or none, how many times she searched and
  * scanned, the way back to the gate, and the two hunts' numbers side by side. Numbers and what the body said; nothing here stops a way.
  */
-const RODS_FOR_EYES = 7;
-const WALK_BLOCKS_PER_SECOND = 1.2;
+export const RODS_FOR_EYES = 7;
+/** How fast a go covers the Nether's ground (it says so beside the way to the gate). */
+export const WALK_BLOCKS_PER_SECOND = 1.2;
 export const SEARCH_GO_BLOCKS = 90;
 /** The eyes (a pearl is an eye to be) at which the plan leaves for the overworld; below it the search for pearls goes on in the Nether. */
 export const EYES_TO_LEAVE = 13;
@@ -87,8 +88,8 @@ export function pearlSearchLines(world: Record<string, unknown>, counts: Readonl
 }
 
 /** What a rod and a pearl cost to collect again, in seconds (run 9: 6 rods in 250 s; pearls by a head that chose the place, about 5 in 28 minutes). */
-const SECONDS_PER_ROD = 42;
-const SECONDS_PER_PEARL = 300;
+export const SECONDS_PER_ROD = 42;
+export const SECONDS_PER_PEARL = 300;
 /**
  * The cost of dying here, as a material and no gate: in the Nether with rods or pearls in the pack, what a death drops and about how long collecting it again
  * takes. Null with neither, or outside the Nether.
