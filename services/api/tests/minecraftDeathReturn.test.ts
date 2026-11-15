@@ -131,6 +131,18 @@ describe('the way back to the drops of a death in another dimension (11/15c c1, 
     // a full list from the body is taken as it is
     const full = c1({ inventory: [], deaths: [{ at: '2026-11-15T08:41:27Z', dimension: 'the_nether', position: { x: 149, y: 74, z: 75 }, lostItems: ['carrot×1'] }] });
     expect(endgame.lines(frame(full), true).lines.join('\n')).not.toContain('blaze_rod×5');
+    // the body's newest death says what the rest holds of note (05a6bd24): those are named, and the count is what is left of the rest
+    const among = c1({ ...woke, deaths: [{ at: '2026-11-15T08:41:27Z', dimension: 'the_nether', position: { x: 149, y: 74, z: 75 }, cause: 'burned',
+      lostItems: ['carrot×1', 'chicken×1', 'crafting_table×1', 'diamond_pickaxe×1', 'ほか25種（うち iron_boots×1, diamond_sword×1 など）'] }] });
+    const told = endgame.lines(frame(among), true).lines.join('\n');
+    expect(told).toContain('(149,74,75) に blaze_rod×5・diamond_pickaxe×1・diamond_sword×1・iron_chestplate×1・iron_boots×1・carrot×1・ほか23種（体の行に名前の無い物は、死ぬ直前の持ち物から）');
+    expect(told).toContain('ロッド 今 0/7（落とし物に 5）');
+  });
+
+  it('reads the body\'s line of the death with what the rest holds of note, not counting those names twice', () => {
+    const said = line(c1({ deaths: [{ at: '2026-11-15T08:41:27Z', dimension: 'the_nether', position: { x: 149, y: 74, z: 75 }, lostItems: [] }],
+      lastDeath: '3分前 the_nether (149,74,75)「x」 落とした物: carrot×2, cooked_beef×6 ほか3種（うち blaze_rod×5, iron_boots×1 など）。消えるまで最長約4分（近くにいる間だけ減る）→拾いに戻れる' }));
+    expect(said).toContain('(149,74,75) に blaze_rod×5・iron_boots×1・carrot×2・cooked_beef×6・ほか1種。');
   });
 
   it('a frame emptied just before the body\'s death still counts what she carried; a death already in the first frame does not take what she holds after', () => {

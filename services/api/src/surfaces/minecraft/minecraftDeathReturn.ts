@@ -23,7 +23,8 @@ import { PEARL_TARGET, RODS_FOR_EYES, SECONDS_PER_PEARL, SECONDS_PER_ROD, WALK_B
  *
  * What the death dropped: the body names only a few items of it (11/15c: four, the fewest first, and 「ほか25種」, so c1's five rods and iron
  * armour were never named), so the head keeps what she carried of the road's things (`createDeathWatch`: the frames before the death) and names
- * those the body's list leaves out. A full list from the body (no 「ほかN種」) is taken as it is.
+ * those the body's list leaves out. A full list from the body (no 「ほかN種」) is taken as it is. The body may say what the rest holds of note
+ * (「ほか25種（うち iron_boots×1, diamond_sword×1 など）」): those are named as the body says them, and the rest is what is left of the count.
  */
 export const SHOWN_MINUTES = 20;
 /** The words of an act's why that give the drops up (the block says the first). */
@@ -39,7 +40,9 @@ const PLACE_ROW = /^(\d{1,6})m\s+\S{1,4}\s+\((-?\d+),(-?\d+),(-?\d+)\)/u;
 const PAIR_NOTE = /↔([a-z_]+)\((-?\d+),(-?\d+),(-?\d+)\)/u;
 const GONE_IN = /lava|溶岩|void|虚空|out of the world/iu;
 const ITEM = /^([a-z_]+)×(\d+)$/u;
-const MORE = /^ほか(\d+)種$/u;
+/** 「ほかN種」, with the body's note of what the rest holds of note: 「ほか25種（うち iron_boots×1, diamond_sword×1 など）」 (05a6bd24). */
+const MORE = /^ほか(\d+)種(?:（うち([^）]*)）)?$/u;
+const AMONG = /([a-z_]+)×(\d+)/gu;
 /** The road's things a death costs time to make again, in the order they are named (beds after the arrows; the rest of the body's list follows). */
 const PROGRESS = ['blaze_rod', 'ender_eye', 'ender_pearl', 'blaze_powder', 'diamond_pickaxe', 'diamond_sword', 'diamond_axe', 'diamond_chestplate',
   'diamond_leggings', 'diamond_helmet', 'diamond_boots', 'iron_chestplate', 'iron_leggings', 'iron_helmet', 'iron_boots', 'iron_sword', 'iron_pickaxe',
@@ -177,13 +180,20 @@ export type DeathWatch = ReturnType<typeof createDeathWatch>;
 function dropped(world: Rec, carried: Items | null): { entries: string[]; shown: string; progress: string[] } {
   const lost = rec((Array.isArray(world.deaths) ? world.deaths : []).at(-1))?.lostItems;
   let said = (Array.isArray(lost) ? lost : []).filter((item): item is string => typeof item === 'string');
-  if (!said.length) said = /落とした物: ([^。]*)。/u.exec(typeof world.lastDeath === 'string' ? world.lastDeath : '')?.[1]?.match(/[a-z_]+×\d+|ほか\d+種/gu) ?? [];
+  // the 「（うち …）」 is taken with its 「ほかN種」: the names in it are of the rest, not more kinds
+  if (!said.length) said = /落とした物: ([^。]*)。/u.exec(typeof world.lastDeath === 'string' ? world.lastDeath : '')?.[1]?.match(/[a-z_]+×\d+|ほか\d+種(?:（うち[^）]*）)?/gu) ?? [];
   const named = new Map<string, number>();
   let more = 0;
   for (const item of said) {
     const found = ITEM.exec(item.trim()), rest = MORE.exec(item.trim());
     if (found) named.set(found[1]!, (named.get(found[1]!) ?? 0) + Number(found[2]));
-    else if (rest) more += Number(rest[1]);
+    else if (rest) {
+      more += Number(rest[1]);
+      for (const [, name, count] of (rest[2] ?? '').matchAll(AMONG)) {
+        if (!named.has(name!)) more = Math.max(0, more - 1);
+        named.set(name!, (named.get(name!) ?? 0) + Number(count));
+      }
+    }
   }
   const kinds = named.size + more;
   const guessed = more > 0 && carried ? Object.entries(carried).filter(([name]) => !named.has(name)) : [];
