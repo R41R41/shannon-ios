@@ -35,10 +35,11 @@ export function rigModelValues(
     SHANNON_MINECRAFT_LLMC_PLAN_MODEL: model,
     SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'none',
     SHANNON_MINECRAFT_LLMC_STRICT_MODEL: 'on',
-    // `reasoning.effort` of the OpenAI roles: one name per role (`<model setting>` without `_MODEL`, then `_REASONING_EFFORT`), the same for all.
+    // `reasoning.effort` of the OpenAI roles, under the names `wiring/minecraftLlmcConfiguration.ts` reads (main, plan, summary): the same for all.
     ...(openAi && wanted ? {
-      SHANNON_MINECRAFT_LLMC_REASONING_EFFORT: wanted,
-      SHANNON_MINECRAFT_LLMC_PLAN_REASONING_EFFORT: wanted,
+      SHANNON_MINECRAFT_LLMC_EFFORT: wanted,
+      SHANNON_MINECRAFT_LLMC_PLAN_EFFORT: wanted,
+      SHANNON_MINECRAFT_LLMC_SUMMARY_EFFORT: wanted,
     } : {}),
   };
 }

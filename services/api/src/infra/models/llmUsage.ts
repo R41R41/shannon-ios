@@ -114,7 +114,9 @@ export function estimatedOpenAICostUsd(
   // A row that knows the provider's cached-input price (the GPT-6 family) charges cached reads and cache writes at their own
   // prices; any other row charges cached input at the full input price, which keeps the local budget breaker conservative.
   const cached = prices.cachedInput === undefined ? 0 : Math.min(usage.inputTokens, usage.cachedInputTokens);
-  const writes = prices.cacheWrite === undefined ? 0 : Math.min(usage.inputTokens - cached, usage.cacheWriteTokens ?? 0);
+  // The FCA path hands a write over as `cacheCreationInputTokens` (the Anthropic name); for a GPT-6 row that is the same cache write.
+  const writeTokens = usage.cacheWriteTokens ?? (isGpt6Model(model) ? usage.cacheCreationInputTokens ?? 0 : 0);
+  const writes = prices.cacheWrite === undefined ? 0 : Math.min(usage.inputTokens - cached, writeTokens);
   const writes12h = Math.min(writes, usage.cacheWriteTokens12h ?? 0);
   const plain = usage.inputTokens - cached - writes;
   const writeCost = prices.cacheWrite === undefined ? 0 : (writes - writes12h) * prices.cacheWrite + writes12h * prices.cacheWrite * 2;

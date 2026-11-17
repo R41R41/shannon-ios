@@ -11,6 +11,13 @@ const usage = (input: number, cached: number, output: number, writes = 0, writes
   input_tokens_details: { cached_tokens: cached, ...(writes ? { cache_write_tokens: writes, cache_write_tokens_details: { ttl_12h_tokens: writes12h } } : {}) } } });
 
 describe('GPT-6 prices', () => {
+  it('reads a write handed over as cacheCreationInputTokens (the FCA path) like cacheWriteTokens', () => {
+    const fca = { inputTokens: 100_000, cachedInputTokens: 0, cacheCreationInputTokens: 40_000, outputTokens: 0, totalTokens: 100_000 };
+    // 60K*$2 + 40K*$2.5 = 0.12 + 0.10: the write counts at 1.25x the input price, through both cost functions.
+    expect(estimatedOpenAICostUsd('gpt-6.2-sol', fca, none)).toBeCloseTo(0.22, 9);
+    expect(estimatedOpenAICostWithCacheUsd('gpt-6.2-sol', fca, none)).toBeCloseTo(0.22, 9);
+    expect(estimatedOpenAICostUsd('gpt-6.2-sol', { ...fca, cacheCreationInputTokens: 0 }, none)).toBeCloseTo(0.2, 9);
+  });
   it('counts cached reads at the cached price and reasoning in the output', () => {
     // 200K input of which 120K cached: 80K*$2 + 120K*$0.10 + 20K*$10 = 0.16 + 0.012 + 0.2
     expect(estimatedOpenAICostUsd('gpt-6.2-sol', usage(200_000, 120_000, 20_000), none)).toBeCloseTo(0.372, 9);
