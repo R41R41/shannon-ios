@@ -483,7 +483,7 @@ queue.onRan(noteQueueResult);
       permitWindowMs: LLMC_PERMIT_WINDOW_MS, selector: LLMC_CATALOG_SELECTOR,
       history: { codec: anthropicFcaHistoryCodecV2,
         ...(llmc.summarizer ? { summarizer: llmc.summarizer } : {}), policy: llmc.policy,
-        ahead: { port: llmc.historyAhead, hard: LLMC_HISTORY_HARD } },
+        ahead: { port: llmc.historyAhead, hard: llmc.hard ?? LLMC_HISTORY_HARD } },
       // r3: the old path's evidence (its expectations, appraisals and shared context) is not the mode's: in run 27 it walked the task's
       // sources 114 times (about 51 s of the API's one thread) and wrote 1,600 characters of shared context into every live state.
       evidence: undefined },

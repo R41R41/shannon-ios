@@ -51,6 +51,13 @@ const THREATS = 24, OTHERS = 8, LANDMARKS = 12, STOPS = 5, INVENTORY = 80, EVENT
 type SeenMode = 'threat' | 'near';
 
 /**
+ * What a count is multiplied by for the model that reads it (1 for Claude, whose count the fit is made on; `OPENAI_TOKEN_SCALE` for an OpenAI
+ * model: its tokenizer is not measured yet, so every bound of the head that is a count of tokens is seen a fifth higher). Set once by the
+ * wiring (`configuredMinecraftLlmc`).
+ */
+let tokenScale = 1;
+export function setLlmcTokenScale(scale: number): void { tokenScale = Number.isFinite(scale) && scale >= 1 ? scale : 1; }
+/**
  * Tokens of a text as Claude counts it (Opus 5.5 / Sonnet 5.5 count_tokens), by character kind: non-ASCII 1.25,
  * `~` 2.45, `; @ ! $`
  * 1.4, a digit 0.67, a space 0.43, a line break (or its JSON escape) 3.2, any other 0.48; with 8% to spare (the
@@ -70,7 +77,8 @@ export function llmcTokens(text: string): number {
   }
   breaks += text.split('\\n').length - 1;
   const other = [...text].length - wide - tilde - heavy - digits - spaces - breaks;
-  return Math.ceil(1.08 * (wide * 1.25 + tilde * 2.45 + heavy * 1.4 + digits * 0.67 + spaces * 0.43 + breaks * 3.2 + Math.max(0, other) * 0.48));
+  const counted = 1.08 * (wide * 1.25 + tilde * 2.45 + heavy * 1.4 + digits * 0.67 + spaces * 0.43 + breaks * 3.2 + Math.max(0, other) * 0.48);
+  return Math.ceil(tokenScale === 1 ? counted : counted * tokenScale);
 }
 
 /** Food points of one item (hunger + saturation it restores), design 1.6. */

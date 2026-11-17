@@ -6,6 +6,9 @@ import { claudeClient } from '../infra/models/claude/claudeClient.js';
 import { structuredBody } from '../infra/models/claude/claudeStructured.js';
 import { closedUsage, estimatedAnthropicCostUsd, knownCount, unknownCostUpperBound } from '../infra/models/claude/claudeUsage.js';
 import { ROUTE_SCHEMA } from '../surfaces/minecraft/minecraftRoutePlanner.js';
+import { openAiCostUsd } from '../infra/models/openai/openAiFcaWire.js';
+import { isOpenAiModel, openAiApiKey, openAiEffort } from '../infra/models/openai/openAiModels.js';
+import { openAiStructured } from '../infra/models/openai/openAiStructured.js';
 
 /** What the planner sends with: the native client's one call it uses. */
 type RouteClient = { messages: { create(body: Anthropic.MessageCreateParamsNonStreaming, options: { signal: AbortSignal }): PromiseLike<Anthropic.Message> } };
@@ -13,6 +16,8 @@ type RouteClient = { messages: { create(body: Anthropic.MessageCreateParamsNonSt
 export const MINECRAFT_ROUTE_MODEL = 'claude-opus-5-5';
 /** Room for adaptive thinking at `medium` and the answer (the review: 2,000 was cut off by the thinking). */
 const ROUTE_OUTPUT_TOKENS = 6_000;
+/** An OpenAI model's reasoning is counted in the same ceiling as its answer: room for it at the `medium` effort. */
+const ROUTE_OPENAI_OUTPUT_TOKENS = 10_000;
 
 /** Tokens a character of the planner's request is counted as, at most (Japanese is about one a character; run 21 sent 2.9k for under 5k characters). */
 const TOKENS_PER_CHARACTER = 1;
@@ -29,7 +34,7 @@ export function abortedRouteUsage(model: string, characters: number, elapsedMill
   const output = Math.min(Math.max(0, maximumOutputTokens), Math.max(0, Math.floor(elapsedMilliseconds / 1000 * OUTPUT_TOKENS_PER_SECOND)));
   const counts = { input, cacheWrite: 0, cacheRead: 0, output, searches: 0, cacheWrite5m: 0, cacheWrite1h: 0 };
   return { model, usageComplete: false, inputTokens: input, cachedInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: output,
-    totalTokens: input + output, estimatedCostUsd: estimatedAnthropicCostUsd(model, counts) };
+    totalTokens: input + output, estimatedCostUsd: isOpenAiModel(model) ? openAiCostUsd(model, { input, cached: 0, cacheWrite: 0, output }) : estimatedAnthropicCostUsd(model, counts) };
 }
 
 /**
@@ -37,16 +42,22 @@ export function abortedRouteUsage(model: string, characters: number, elapsedMill
  * key: one native request with the answer's JSON schema and adaptive thinking at `medium`, its usage charged to the task's step like
  * the decisions' (`recordUsage`: the step's budget and the usage ledger), the answer's parsed JSON returned. No cache contract (the
  * request is one of its kind per task). Off, or without a key: none, and nothing is asked.
+ *
+ * With an OpenAI model in `SHANNON_MINECRAFT_ROUTE_MODEL` (gpt-6.2-sol …) the same request goes to the Responses API in structured output
+ * (`openAiStructured.ts`, key `OPENAI_API_KEY`, effort `SHANNON_MINECRAFT_ROUTE_EFFORT`, default medium); its usage is charged the same way.
  */
 export function configuredMinecraftRoutePlanner(values: Readonly<Record<string, string | undefined>>, parts: {
   recordUsage(usage: AnthropicFcaUsage): void; client?: RouteClient;
+  /** Tests: recorded responses of the OpenAI route. */
+  fetcher?: typeof fetch;
   /** Where the content-free line of how the request went goes (its seconds and tokens, so that a slow plan has a reason on record). */
   log?(line: string): void;
 }): ((system: string, input: string, signal: AbortSignal) => Promise<unknown>) | undefined {
   if (!switchOn(values, 'SHANNON_MINECRAFT_ROUTE_PLAN')) return undefined;
+  const model = values.SHANNON_MINECRAFT_ROUTE_MODEL?.trim() || MINECRAFT_ROUTE_MODEL;
+  if (isOpenAiModel(model)) return openAiRoutePlanner(values, model, parts);
   const apiKey = anthropicApiKey(values);
   if (!apiKey && !parts.client) return undefined;
-  const model = values.SHANNON_MINECRAFT_ROUTE_MODEL?.trim() || MINECRAFT_ROUTE_MODEL;
   const client = parts.client ?? clientFor(apiKey!);
   return async (system, input, signal) => {
     const body = structuredBody(model, system, input, ROUTE_SCHEMA, 'medium', ROUTE_OUTPUT_TOKENS);
@@ -75,6 +86,27 @@ export function configuredMinecraftRoutePlanner(values: Readonly<Record<string, 
     if (message.stop_reason !== 'end_turn') throw new Error('MINECRAFT_ROUTE_INCOMPLETE');
     const text = message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('').trim();
     return JSON.parse(text) as unknown;
+  };
+}
+
+/** The route plan on the Responses API: one structured request, its usage booked by the request itself (`openAiStructured.ts`). */
+function openAiRoutePlanner(values: Readonly<Record<string, string | undefined>>, model: string, parts: {
+  recordUsage(usage: AnthropicFcaUsage): void; fetcher?: typeof fetch; log?(line: string): void }): ((system: string, input: string, signal: AbortSignal) => Promise<unknown>) | undefined {
+  const apiKey = openAiApiKey(values);
+  if (!apiKey) return undefined;
+  const effort = openAiEffort(values.SHANNON_MINECRAFT_ROUTE_EFFORT, model);
+  return async (system, input, signal) => {
+    const began = Date.now();
+    const say = (line: string) => { try { parts.log?.(line); } catch { /* logging never fails a plan */ } };
+    try {
+      const value = await openAiStructured({ model, apiKey, effort, maximumOutputTokens: ROUTE_OPENAI_OUTPUT_TOKENS, timeoutMilliseconds: 60_000,
+        recordUsage: usage => parts.recordUsage(usage), label: 'route', ...(parts.fetcher ? { fetcher: parts.fetcher } : {}) }, { system, input, schema: ROUTE_SCHEMA, signal });
+      say(`Shannon Minecraft route model model=${model} ms=${Date.now() - began} effort=${effort}`);
+      return value;
+    } catch (error) {
+      say(`Shannon Minecraft route model model=${model} ms=${Date.now() - began} outcome=${signal.aborted ? 'aborted' : 'error'}`);
+      throw error;
+    }
   };
 }
 

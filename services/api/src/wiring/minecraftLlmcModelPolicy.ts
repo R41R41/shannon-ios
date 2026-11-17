@@ -1,6 +1,7 @@
 import type { RecordableClient } from '../infra/decisionRecords/decisionRecordClient.js';
 import { AnthropicRequestNotSentError } from '../infra/models/anthropic/anthropicFcaFailure.js';
 import { DEFAULT_HAIKU_MODEL } from '../infra/models/anthropic/haikuConfig.js';
+import { OPENAI_LLMC_MODELS } from '../infra/models/openai/openAiModels.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -12,7 +13,7 @@ export function strictMinecraftLlmcModel(values: Environment): string | null {
   const model = values.SHANNON_MINECRAFT_LLMC_MODEL?.trim();
   const plan = values.SHANNON_MINECRAFT_LLMC_PLAN_MODEL?.trim();
   const escalate = values.SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL?.trim();
-  if ((model !== DEFAULT_HAIKU_MODEL && model !== 'claude-sonnet-5-5')
+  if ((model !== DEFAULT_HAIKU_MODEL && model !== 'claude-sonnet-5-5' && !(model && OPENAI_LLMC_MODELS.includes(model)))
     || (plan && plan !== model) || (escalate && escalate !== 'none')) {
     throw new Error('MINECRAFT_LLMC_STRICT_MODEL_INVALID');
   }

@@ -9,7 +9,7 @@ import { closedUsage, estimatedAnthropicCostUsd, knownCount, unknownCostUpperBou
 import type { FcaExternalTools, FcaModel } from '../mind/action/fca/fcaPorts.js';
 import { FCA_MODEL_BILLING } from '../mind/action/fca/fcaProviderRetry.js';
 import type { FcaHistoryAhead, FcaHistoryPolicy } from '../mind/action/fca/fcaHistoryPorts.js';
-import { createFcaHistoryAhead } from '../mind/action/fca/fcaHistory.js';
+import { createFcaHistoryAhead, FCA_HISTORY_POLICY } from '../mind/action/fca/fcaHistory.js';
 import type { FcaToolSelector } from '../mind/selectors/selectorsPorts.js';
 import type { TaskStep } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import { readPlanTree, type PlanKind } from '@shannon/mind';
@@ -39,6 +39,11 @@ import { actionResource } from '../contracts/actionThreadContract.js';
 import { currentActionExecution } from '../infra/context/actionExecution.js';
 import { AnthropicRequestNotSentError } from '../infra/models/anthropic/anthropicFcaFailure.js';
 import { guardMinecraftLlmcModelClient, strictMinecraftLlmcModel } from './minecraftLlmcModelPolicy.js';
+import { createOpenAiFcaModel } from '../infra/models/openai/openAiFcaModel.js';
+import { createOpenAiFcaSummarizer } from '../infra/models/openai/openAiFcaSummary.js';
+import { openAiStructured } from '../infra/models/openai/openAiStructured.js';
+import { isOpenAiModel, OPENAI_LLMC_MODELS, OPENAI_TOKEN_SCALE, openAiApiKey, openAiEffort, type OpenAiEffort } from '../infra/models/openai/openAiModels.js';
+import { setLlmcTokenScale } from '../surfaces/minecraft/minecraftLlmcLive.js';
 
 /**
  * The models of a Minecraft body task's decisions (design mb-llm-centric; owner 2026-10-21: the main model is
@@ -54,6 +59,17 @@ import { guardMinecraftLlmcModelClient, strictMinecraftLlmcModel } from './minec
  * - `SHANNON_MINECRAFT_LLMC_STRICT_MODEL=on`: require one explicitly selected Haiku or Sonnet for every paid
  * Minecraft inference, including summaries and second judgments; missing keys or conflicting settings fail closed.
  * Each decision model carries the mode's instructions and knowledge in its cached instructions (`minecraftV2Hooks`).
+ *
+ * OpenAI (owner 2026-11-18: the monthly OpenAI credit, gpt-6.2-sol first): a name that starts with `gpt-` is OpenAI's, the others are
+ * Anthropic's, role by role. The names the settings above take now include gpt-6.2-sol, gpt-6.2-astra, gpt-6.1-sol, gpt-6.1-terra and
+ * gpt-6-luna (`OPENAI_LLMC_MODELS`), with `OPENAI_API_KEY`. A model is raised (`ESCALATE_MODEL`, `next`) only to one of the same maker, and
+ * the plan model decides in the End stages only when it is the main model's maker (a task's history never crosses a maker). More settings:
+ * - `SHANNON_MINECRAFT_LLMC_SUMMARY_MODEL`: the history summary's model (default Haiku; under the strict setting, the one model).
+ * - `SHANNON_MINECRAFT_LLMC_EFFORT`, `SHANNON_MINECRAFT_LLMC_PLAN_EFFORT`, `SHANNON_MINECRAFT_LLMC_SUMMARY_EFFORT`: the reasoning effort of an
+ *   OpenAI decision, of the plans (first plan, replan, the plan model's own decisions) and of the summary: none, minimal, low, medium (the
+ *   default), high or xhigh (sol and astra take no `none`). Claude's effort is not set by them.
+ * - `SHANNON_MINECRAFT_LLMC_REPLAY_REASONING=off`: an OpenAI decision's reasoning is not kept in the task's history (default: kept, and read
+ *   again by every later round).
  */
 export const LLMC_MAIN_MODEL = OPUS_MODEL;
 
@@ -79,6 +95,15 @@ export const LLMC_HISTORY_HARD: Readonly<Partial<FcaHistoryPolicy>> = Object.fre
   maximumRounds: 70,
   maximumConversationTokens: 56_000,
 });
+
+/** The bounds of a history seen by an OpenAI model: a count of tokens is held to what Claude's count allows over `OPENAI_TOKEN_SCALE`. */
+export function openAiHistoryBounds(bounds: Readonly<Partial<FcaHistoryPolicy>>, replay = false): Readonly<Partial<FcaHistoryPolicy>> {
+  const scaled = (value: number) => Math.max(1, Math.floor(value / OPENAI_TOKEN_SCALE));
+  return Object.freeze({ ...bounds,
+    ...(bounds.maximumConversationTokens !== undefined ? { maximumConversationTokens: scaled(bounds.maximumConversationTokens) } : {}),
+    ...(bounds.compactedConversationTokens !== undefined ? { compactedConversationTokens: scaled(bounds.compactedConversationTokens) } : {}),
+    ...(replay ? { maximumReplayTokens: scaled(FCA_HISTORY_POLICY.maximumReplayTokens) } : {}) });
+}
 
 /** The summarizer's output ceiling (run 27: three summaries cut at 4,000 tokens, `FCA_MODEL_TRUNCATED`, each a
  * fallback epoch). */
@@ -123,7 +148,7 @@ export function llmcTools(tools: FcaExternalTools, completion?: LlmcCompletion):
   };
 }
 
-export const MODELS = new Set([DEFAULT_HAIKU_MODEL, 'claude-sonnet-5-5', OPUS_MODEL]);
+export const MODELS = new Set([DEFAULT_HAIKU_MODEL, 'claude-sonnet-5-5', OPUS_MODEL, ...OPENAI_LLMC_MODELS]);
 
 export const known = (value: string | undefined, fallback: string) => {
   const model = value?.trim();
@@ -148,12 +173,13 @@ export function llmcModelNames(values: Readonly<Record<string, string | undefine
   if (strict) return { main: strict, escalate: null, plan: strict };
   const main = known(values.SHANNON_MINECRAFT_LLMC_MODEL, LLMC_MAIN_MODEL);
   const raised = values.SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL?.trim();
-  const escalate = raised === 'next' || raised === 'on' ? nextUp(main) : raised && MODELS.has(raised) && raised !== main ? raised : null;
+  const escalate = raised === 'next' || raised === 'on' ? nextUp(main) : raised && MODELS.has(raised) && raised !== main && isOpenAiModel(raised) === isOpenAiModel(main) ? raised : null;
   return { main, escalate, plan: known(values.SHANNON_MINECRAFT_LLMC_PLAN_MODEL, OPUS_MODEL) };
 }
 
 /** The key for a model (Haiku may have its own). */
 export function keyFor(values: Readonly<Record<string, string | undefined>>, model: string): string | null {
+  if (isOpenAiModel(model)) return openAiApiKey(values);
   return isHaikuModel(model) ? values.SHANNON_HAIKU_API_KEY?.trim() || anthropicApiKey(values) : anthropicApiKey(values);
 }
 
@@ -259,6 +285,8 @@ export interface LlmcWiring {
   models: { main: FcaModel; escalate: FcaModel | null; strong?: FcaModel | null };
   summarizer: ReturnType<typeof createAnthropicFcaSummarizer> | null;
   policy: Readonly<Partial<FcaHistoryPolicy>>;
+  /** The bounds the replay may reach while a summary is made beside the steps; absent: `LLMC_HISTORY_HARD`. */
+  hard?: Readonly<Partial<FcaHistoryPolicy>>;
   planner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>;
   /** The strong model that makes the plan again when the body stands still (`minecraftLlmcReplan.ts`); none without a key. */
   replanner?: (system: string, input: string, signal: AbortSignal) => Promise<unknown>;
@@ -283,8 +311,22 @@ export function configuredMinecraftLlmc(
     ? guardMinecraftLlmcModelClient(base.client ?? claudeClient({ apiKey: apiKey!, timeoutMilliseconds: base.timeoutMilliseconds ?? 90_000,
         ...(base.fetcher ? { fetch: base.fetcher } : {}) }), strict)
     : base.client;
-  const make = (model: string) => {
+  const openAi = isOpenAiModel(names.main);
+  setLlmcTokenScale(openAi ? OPENAI_TOKEN_SCALE : 1);
+  const effortOf = (name: string, model: string) => openAiEffort(values[name], model);
+  const make = (model: string, role: 'main' | 'plan' = 'main') => {
     const apiKey = keyFor(values, model);
+    if (isOpenAiModel(model)) {
+      return apiKey
+        ? createOpenAiFcaModel({ model, apiKey, maximumOutputTokens: LLMC_DECISION_OUTPUT_TOKENS, ...(base.fetcher ? { fetcher: base.fetcher } : {}),
+            ...(base.timeoutMilliseconds ? { timeoutMilliseconds: base.timeoutMilliseconds } : {}), ...(base.compactAboveTokens ? { compactAboveTokens: base.compactAboveTokens } : {}),
+            recordUsage: base.recordUsage, ...(base.clock ? { clock: base.clock } : {}),
+            ...(base.stopGraceMilliseconds !== undefined ? { stopGraceMilliseconds: base.stopGraceMilliseconds } : {}),
+            effort: effortOf(role === 'main' ? 'SHANNON_MINECRAFT_LLMC_EFFORT' : 'SHANNON_MINECRAFT_LLMC_PLAN_EFFORT', model),
+            replayReasoning: values.SHANNON_MINECRAFT_LLMC_REPLAY_REASONING?.trim().toLowerCase() !== 'off',
+            minecraftOwnPrompt: true, minecraftV2: minecraftV2Hooks() })
+        : null;
+    }
     return apiKey || base.client
       ? createAnthropicFcaModel({
           maximumOutputTokens: LLMC_DECISION_OUTPUT_TOKENS,
@@ -303,17 +345,25 @@ export function configuredMinecraftLlmc(
     log('Shannon Minecraft LLM-centric off: no key for its main model');
     return null;
   }
-  const summaryModel = strict ?? DEFAULT_HAIKU_MODEL;
+  const summaryModel = strict ?? known(values.SHANNON_MINECRAFT_LLMC_SUMMARY_MODEL, DEFAULT_HAIKU_MODEL);
   const summaryKey = keyFor(values, summaryModel);
   log(`Shannon Minecraft LLM-centric models main=${names.main} escalate=${names.escalate ?? 'none'} plan=${names.plan}`);
   const escalate = names.escalate ? make(names.escalate) : null;
   // The plan's model also decides in the stages of `LLMC_STRONG_KINDS`; when it is the main one, or the escalation, no second copy is made.
-  const strong = names.plan === names.main ? null : names.plan === names.escalate ? escalate : make(names.plan);
+  // A task's history never crosses a maker: a plan model of the other maker plans (first plan, replan) but does not decide in the End stages.
+  const crossing = isOpenAiModel(names.plan) !== isOpenAiModel(names.main);
+  if (crossing) log('Shannon Minecraft LLM-centric: the plan model is of another maker than the main model; the End stages are decided by the main model');
+  const strong = names.plan === names.main || crossing ? null : names.plan === names.escalate ? escalate : make(names.plan, 'plan');
   return {
     names,
     models: { main, escalate, strong },
-    summarizer:
-      summaryKey || base.client
+    summarizer: isOpenAiModel(summaryModel)
+      ? summaryKey
+        ? createOpenAiFcaSummarizer({ model: summaryModel, apiKey: summaryKey, effort: effortOf('SHANNON_MINECRAFT_LLMC_SUMMARY_EFFORT', summaryModel),
+            maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS, recordUsage: base.recordUsage, ...(base.fetcher ? { fetcher: base.fetcher } : {}),
+            ...(base.timeoutMilliseconds ? { timeoutMilliseconds: base.timeoutMilliseconds } : {}) })
+        : null
+      : summaryKey || base.client
         ? createAnthropicFcaSummarizer({
             ...base,
             model: summaryModel,
@@ -325,10 +375,11 @@ export function configuredMinecraftLlmc(
             maximumOutputTokens: LLMC_SUMMARY_OUTPUT_TOKENS,
           })
         : null,
-    policy: LLMC_HISTORY_POLICY,
+    policy: openAi ? openAiHistoryBounds(LLMC_HISTORY_POLICY, true) : LLMC_HISTORY_POLICY,
+    ...(openAi ? { hard: openAiHistoryBounds(LLMC_HISTORY_HARD) } : {}),
     historyAhead: createFcaHistoryAhead(),
-    ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, CURRENT_FIRST_PLAN_SCHEMA),
-    ...replannerPart(values, names.plan, base.recordUsage, log, parts.client),
+    ...firstPlanner(values, names.plan, base.recordUsage, log, parts.client, CURRENT_FIRST_PLAN_SCHEMA, undefined, base.fetcher),
+    ...replannerPart(values, names.plan, base.recordUsage, log, parts.client, base.fetcher),
   };
 }
 
@@ -413,9 +464,9 @@ export type PlanClient = {
 
 /** The strong model's request for the plan made again: the same route and charge as the first plan's, its own schema and bounds. */
 function replannerPart(values: Readonly<Record<string, string | undefined>>, model: string, recordUsage: (usage: AnthropicFcaUsage) => void | Promise<void>,
-  log: (line: string) => void, given?: PlanClient): { replanner?: LlmcWiring['planner'] } {
+  log: (line: string) => void, given?: PlanClient, fetcher?: typeof fetch): { replanner?: LlmcWiring['planner'] } {
   const limits: PlannerLimits = { outputTokens: REPLAN.outputTokens, giveUpMs: REPLAN.giveUpMs, label: 'replan', effort: 'medium' };
-  const made = firstPlanner(values, model, recordUsage, log, given, REPLAN_SCHEMA, limits);
+  const made = firstPlanner(values, model, recordUsage, log, given, REPLAN_SCHEMA, limits, fetcher);
   return made.planner ? { replanner: made.planner } : {};
 }
 
@@ -428,10 +479,12 @@ export function firstPlanner(
   given?: PlanClient,
   schema: Readonly<Record<string, unknown>> = FIRST_PLAN_SCHEMA_R4,
   limits: PlannerLimits = { outputTokens: FIRST_PLAN.outputTokens, giveUpMs: FIRST_PLAN.giveUpMs, label: 'first plan', effort: 'low' },
+  fetcher?: typeof fetch,
 ): { planner?: LlmcWiring['planner'] } {
   const strict = strictMinecraftLlmcModel(values);
   if (strict && model !== strict) throw new Error('MINECRAFT_LLMC_STRICT_MODEL_INVALID');
   const apiKey = keyFor(values, model);
+  if (isOpenAiModel(model)) return openAiPlanner(values, model, apiKey, recordUsage, log, schema, limits, fetcher);
   if (!apiKey && !given) {
     if (strict) throw new Error('MINECRAFT_LLMC_STRICT_MODEL_KEY_REQUIRED');
     return {};
@@ -488,4 +541,26 @@ export function firstPlanner(
       ) as unknown;
     },
   };
+}
+
+/**
+ * The plan's one structured request on OpenAI's Responses API (`openAiStructured.ts`): the same roles, schemas and bounds as the Messages
+ * route above. Its usage is charged by the request itself (an answer, or what a request that got none can have cost); the effort is
+ * `SHANNON_MINECRAFT_LLMC_PLAN_EFFORT` (default medium).
+ */
+function openAiPlanner(values: Readonly<Record<string, string | undefined>>, model: string, apiKey: string | null,
+  recordUsage: (usage: AnthropicFcaUsage) => void | Promise<void>, log: (line: string) => void, schema: Readonly<Record<string, unknown>>,
+  limits: PlannerLimits, fetcher?: typeof fetch): { planner?: LlmcWiring['planner'] } {
+  if (!apiKey) {
+    if (strictMinecraftLlmcModel(values)) throw new Error('MINECRAFT_LLMC_STRICT_MODEL_KEY_REQUIRED');
+    return {};
+  }
+  const effort: OpenAiEffort = openAiEffort(values.SHANNON_MINECRAFT_LLMC_PLAN_EFFORT, model);
+  return { planner: async (system, input, signal) => {
+    const began = Date.now();
+    const value = await openAiStructured({ model, apiKey, effort, maximumOutputTokens: limits.outputTokens, timeoutMilliseconds: limits.giveUpMs,
+      recordUsage, label: limits.label, ...(fetcher ? { fetcher } : {}) }, { system, input, schema, signal });
+    log(`Shannon Minecraft ${limits.label} model model=${model} ms=${Date.now() - began} effort=${effort}`);
+    return value;
+  } };
 }

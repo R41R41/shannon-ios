@@ -42,17 +42,24 @@ export function createAnthropicFcaSummarizer(options: AnthropicFcaOptions & { bo
     if (output.decision.kind !== 'tools' || output.decision.calls.length !== 1
       || output.decision.calls[0]!.name !== summaryTool.name) throw new FcaSummaryInvalidError('call');
     const args = output.decision.calls[0]!.input as { template?: unknown } | null;
-    const raw = args && typeof args === 'object' ? args.template : undefined;
-    const row = typeof raw === 'string' ? parsedObject(raw) : objectOf(raw);
-    const template = row ? checkedTemplate(row, undefined, itemCharacters) : null;
-    if (!row || !template) throw new FcaSummaryInvalidError('template');
-    logSummaryShape(typeof raw === 'string' ? 'string' : 'object', row, itemCharacters);
-    if (COMPACTION_SECTIONS.every(section => !template[section].length)) throw new FcaSummaryInvalidError('empty');
-    // A section the answer leaves out keeps the previous summary's items (as the conversation replay does); one it gives replaces them.
-    const named = COMPACTION_SECTIONS.filter(section => Array.isArray(row[section]) || typeof row[section] === 'string');
-    const result = input.previous ? mergedTemplate(input.previous, template, named, itemCharacters) : template;
-    return facts ? scrubbedSummary(result, input.previous) : result;
+    return finishedSummary(args && typeof args === 'object' ? args.template : undefined, input, itemCharacters, facts);
   } };
+}
+
+/**
+ * The summary a model's answer makes (the `template` of the call, or an answer in structured output: a JSON string or an object): checked by the shared
+ * rule, merged into the previous one, and with the mode's facts scrubbed. Shared by the OpenAI summarizer (`openAiFcaSummary.ts`).
+ */
+export function finishedSummary(raw: unknown, input: Parameters<FcaHistorySummarizer['summarize']>[0], itemCharacters: number, facts: boolean): Awaited<ReturnType<FcaHistorySummarizer['summarize']>> {
+  const row = typeof raw === 'string' ? parsedObject(raw) : objectOf(raw);
+  const template = row ? checkedTemplate(row, undefined, itemCharacters) : null;
+  if (!row || !template) throw new FcaSummaryInvalidError('template');
+  logSummaryShape(typeof raw === 'string' ? 'string' : 'object', row, itemCharacters);
+  if (COMPACTION_SECTIONS.every(section => !template[section].length)) throw new FcaSummaryInvalidError('empty');
+  // A section the answer leaves out keeps the previous summary's items (as the conversation replay does); one it gives replaces them.
+  const named = COMPACTION_SECTIONS.filter(section => Array.isArray(row[section]) || typeof row[section] === 'string');
+  const result = input.previous ? mergedTemplate(input.previous, template, named, itemCharacters) : template;
+  return facts ? scrubbedSummary(result, input.previous) : result;
 }
 
 /** What a body summary's model is given beyond the shared options: the own prompt (a body only), and with the mode's facts, the summary header alone. */
@@ -103,7 +110,7 @@ function scrubSections(template: object): { out: Record<string, unknown>; items:
  */
 /** A body summary's size (flow 1113, run 9: a summary cut at the output cap three times in a row, 37 s each): said in the instruction, the cap itself stays a safety valve. */
 const BODY_SUMMARY_LIMIT = 'The whole answer must stay within 4,000 tokens: write fewer, shorter items rather than be cut off. ';
-function summaryGoal(body: boolean, v2Facts = false): string {
+export function summaryGoal(body: boolean, v2Facts = false): string {
   if (v2Facts) return v2FactsGoal();
   const limit = body ? COMPACTION_BODY_ITEM_CHARACTERS : COMPACTION_V1.maximumItemCharacters;
   const keep = body ? ' Keep coordinates, the base and known places, the inventory, failures with their causes, '
