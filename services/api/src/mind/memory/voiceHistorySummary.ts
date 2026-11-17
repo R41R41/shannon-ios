@@ -1,7 +1,9 @@
 import { OWNER_AUDIENCE, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
 import { configuredResponseModel } from '../../infra/models/anthropic/haikuConfig.js';
 import { claudeBackground, completeStructured, type ClaudeBackground } from '../../infra/models/claude/claudeStructured.js';
-import { configuredBackgroundBudgetUsd, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
+import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, isGpt6Model, responseUsage, utcMonthKey, type LlmUsageStore } from '../../infra/models/llmUsage.js';
+import { extractOutputText, parseJson, errorDetail } from '../../infra/models/chatModelSupport.js';
+import { configuredOpenAIReasoningEffort, withReasoningEffort } from '../../infra/models/openAIReasoningEffort.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import type { ConversationStore, StoredConversationMessage, VoiceSummaryRecord } from './conversationContract.js';
 import { MemoryWithholding, visibleReplayMessages } from './memoryVisibility.js';
@@ -211,11 +213,46 @@ export class ClaudeVoiceSummaryWriter implements VoiceSummaryWriter {
   }
 }
 
-/** `SHANNON_CONVERSATION_SUMMARY_MODEL` (default Claude Haiku 5.5); no writer without its key or for a model that is not Claude. */
+/**
+ * The writer on OpenAI's Responses API, for a GPT-6 model (a trial that puts every role on one OpenAI model): the same instructions
+ * and input as Claude's, plain text out, `store: false`, one row of usage in the background lane. A reply with no text is an error.
+ */
+export class OpenAiVoiceSummaryWriter implements VoiceSummaryWriter {
+  constructor(private readonly options: {
+    apiKey: string; model: string; effort?: Parameters<typeof withReasoningEffort>[1]; fetcher?: typeof fetch;
+    endpoint?: string; usageStore?: Pick<LlmUsageStore, 'recordLlmUsage'>; now?: () => string;
+  }) {}
+
+  async write(scopeKey: string, input: { previousSummary: string | null; lines: readonly string[] }): Promise<string | null> {
+    const body = withReasoningEffort(JSON.stringify({
+      model: this.options.model, instructions: VOICE_SUMMARY_INSTRUCTIONS,
+      input: JSON.stringify({ previousSummary: input.previousSummary, newMessages: input.lines }),
+      reasoning: { effort: 'low' }, max_output_tokens: 700, store: false,
+    }), this.options.effort, this.options.model) as string;
+    const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
+      method: 'POST', headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
+      body, signal: AbortSignal.timeout(30_000),
+    });
+    const json = parseJson(await response.text());
+    if (!response.ok) throw new Error(`VOICE_SUMMARY_${response.status}: ${errorDetail(json)}`);
+    const usage = responseUsage(json);
+    this.options.usageStore?.recordLlmUsage({ scopeKey, lane: 'memory_background', model: this.options.model, ...usage,
+      estimatedCostUsd: estimatedOpenAICostUsd(this.options.model, usage), occurredAt: this.options.now?.() ?? new Date().toISOString() });
+    const text = extractOutputText(json).trim();
+    if (!text) throw new Error('VOICE_SUMMARY_EMPTY');
+    return text;
+  }
+}
+
+/** `SHANNON_CONVERSATION_SUMMARY_MODEL` (default Claude Haiku 5.5); no writer without its key or for a model that is neither Claude nor GPT-6. */
 export function createConfiguredVoiceSummaryWriter(
   environment: Readonly<Record<string, string | undefined>>, usageStore?: Pick<LlmUsageStore, 'recordLlmUsage'>,
 ): VoiceSummaryWriter | null {
   const selected = configuredResponseModel(environment, 'SHANNON_CONVERSATION_SUMMARY_MODEL');
+  if (selected && isGpt6Model(selected.model)) return new OpenAiVoiceSummaryWriter({
+    apiKey: selected.apiKey, model: selected.model, ...(usageStore ? { usageStore } : {}),
+    effort: configuredOpenAIReasoningEffort(environment, 'SHANNON_CONVERSATION_SUMMARY_MODEL', selected.model),
+  });
   const claude = selected ? claudeBackground(selected.model, { apiKey: selected.apiKey, ...(usageStore ? { usageStore } : {}) }) : null;
   return claude ? new ClaudeVoiceSummaryWriter(claude) : null;
 }

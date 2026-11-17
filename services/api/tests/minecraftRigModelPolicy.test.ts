@@ -34,6 +34,23 @@ describe('isolated Minecraft validation model policy', () => {
     });
   });
 
+  it('routes every paid role to one OpenAI model with its effort, and hands the OpenAI key to that run only', () => {
+    const values = { OPENAI_API_KEY: 'test-only', SHANNON_TIMEZONE: 'Asia/Tokyo' };
+    expect(rigModelValues(values, 'gpt-6.2-sol', 'high')).toEqual({
+      OPENAI_API_KEY: 'test-only', SHANNON_TIMEZONE: 'Asia/Tokyo',
+      SHANNON_MINECRAFT_LLMC_MODEL: 'gpt-6.2-sol', SHANNON_MINECRAFT_LLMC_PLAN_MODEL: 'gpt-6.2-sol',
+      SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'none', SHANNON_MINECRAFT_LLMC_STRICT_MODEL: 'on',
+      SHANNON_MINECRAFT_LLMC_REASONING_EFFORT: 'high', SHANNON_MINECRAFT_LLMC_PLAN_REASONING_EFFORT: 'high',
+    });
+    for (const name of ['gpt-6.2-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna'])
+      expect(rigModelValues({}, name)).toMatchObject({ SHANNON_MINECRAFT_LLMC_MODEL: name, SHANNON_MINECRAFT_LLMC_PLAN_MODEL: name });
+    expect(rigModelValues(values, 'gpt-6.2-sol')).not.toHaveProperty('SHANNON_MINECRAFT_LLMC_REASONING_EFFORT');
+    expect(rigModelValues(values, 'haiku', 'high')).not.toHaveProperty('OPENAI_API_KEY');
+    expect(rigModelValues(values, 'haiku', 'high')).not.toHaveProperty('SHANNON_MINECRAFT_LLMC_REASONING_EFFORT');
+    expect(() => rigModelValues({}, 'gpt-6.2-sol', 'none')).toThrow('RIG_LLM_EFFORT_INVALID');
+    expect(() => rigModelValues({}, 'gpt-5.6-sol')).toThrow('RIG_VALIDATION_REQUIRES_HAIKU_OR_SONNET');
+  });
+
   it.each(['opus', 'claude-opus-5-5', 'invalid', '', 'toString'])('rejects an unintended paid validation model: %s', requested => {
     expect(() => rigModelValues({}, requested)).toThrow('RIG_VALIDATION_REQUIRES_HAIKU_OR_SONNET');
   });

@@ -229,6 +229,47 @@ class RigSafetyTest(unittest.TestCase):
             self.assertEqual(env['RIG_CAPTURE_FIRST_PAYLOAD'], 'off')
             self.assertNotIn('SHANNON_FCA_MODEL', env)
 
+    def test_openai_models_are_named_in_full_and_pass_the_effort_to_the_head(self):
+        for name in ('gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna'):
+            self.assertEqual(rig.LLM_MODELS[name], name)
+        self.assertNotIn('gpt-6.2-sol', ('haiku', 'sonnet'))
+        self.assertEqual(rig.LLM_MODELS['haiku'], rig.HAIKU_MODEL)
+        for effort, model, expected in (('high', 'gpt-6.2-sol', 'high'), (None, 'gpt-6.2-sol', None), ('low', 'haiku', None)):
+            with self.subTest(model=model, effort=effort):
+                args = argparse.Namespace(**{**vars(self.args), 'llm_model': model, 'llm_effort': effort, 'port_from': 25580, 'port_to': 25580, 'heap': '1G', 'cores': 1,
+                                             'env_file': '/vm-only/api.env', 'node': '/node', 'body_node': '/node', 'ready_seconds': 1})
+                instance = REAL_RIG(args, self.section, 'c1', 'B', '', {})
+                models = {**dict.fromkeys(('main', 'plan', 'summary', 'redecide'), rig.LLM_MODELS[model]), 'escalate': None}
+
+                def reader(*_):
+                    instance.http = {'url': 'http://127.0.0.1:1'}
+                    instance.models = dict(models)
+                    instance.ready = {'db': '/fake/rig.db'}
+                instance._reader = reader
+                with patch.object(rig, 'free_slot', return_value=10), patch.object(rig, 'ensure_body', return_value='/fake/backend'),                         patch.object(rig.seedscan, 'Lab') as lab, patch.object(rig.subprocess, 'Popen') as process,                         patch.multiple(trials, DB='old-db', IOS='old-ios', NODE='old-node', RCON_TARGET=None):
+                    lab.return_value.port = 25580
+                    lab.return_value.rcon_port = 26580
+                    lab.return_value.password = 'fake-rcon'
+                    instance.start()
+                    env = process.call_args_list[0].kwargs['env']
+                    self.assertEqual(env['RIG_LLM_MODEL'], model)
+                    self.assertEqual(env.get('RIG_LLM_EFFORT'), expected)
+                    self.assertNotIn('OPENAI_API_KEY', env)
+                instance.check_models()
+                instance.models = {**models, 'plan': rig.SONNET_MODEL}
+                with self.assertRaises(trials.Stop): instance.check_models()
+
+    def test_openai_run_keeps_the_caps_and_the_dollar_to_yen_count(self):
+        instance = REAL_RIG(self.args, self.section, 'c1', 'B', '', {})
+        instance.head_started = True
+        instance._observe_line('RIG_STOPPED {"totalUsd":1.25,"calls":9,"complete":true}')
+        self.assertEqual(rig.account_result(instance, {'yen': 0})['yen'], 200)
+        for name, value in (('max_section_yen', None), ('batch_cap_yen', 0)):
+            with patch.object(trials, 'config') as config:
+                changed = argparse.Namespace(**{**vars(self.args), 'llm_model': 'gpt-6.2-sol', name: value})
+                with self.assertRaises(trials.Stop): rig.cmd_run(changed)
+                config.assert_not_called()
+
     def test_stop_waits_for_stdout_and_includes_the_last_usage(self):
         instance = REAL_RIG(self.args, self.section, 'c1', 'B', '', {})
         os.makedirs(instance.dir)

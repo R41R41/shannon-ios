@@ -36,7 +36,9 @@ EXIT_PLAN_DONE = 10      # `run` ends with this when nothing of the plan is left
 YEN_PER_USD = Decimal('160')       # fcaBudgetWiring's fixed accounting value, not a live exchange rate
 HAIKU_MODEL = 'claude-haiku-5-5'
 SONNET_MODEL = 'claude-sonnet-5-5'
-LLM_MODELS = {'haiku': HAIKU_MODEL, 'sonnet': SONNET_MODEL}     # sonnet: only the owner-approved thru run (--owner-ok-sonnet), never a section lane
+OPENAI_MODELS = ('gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna')     # paid from OPENAI_API_KEY (the monthly credit), named in full
+LLM_MODELS = {'haiku': HAIKU_MODEL, 'sonnet': SONNET_MODEL, **{m: m for m in OPENAI_MODELS}}     # sonnet: only the owner-approved thru run (--owner-ok-sonnet), never a section lane
+LLM_EFFORTS = ('low', 'medium', 'high')     # reasoning.effort of an OpenAI model (the head's default for Sol and Astra is medium; none is refused by Sol)
 HOME = os.path.expanduser('~')
 RIG_ROOT =os.path.join(HOME, '.cache', 'minebot-lab', 'rig')
 PRODUCTION_ENV = os.path.join(HOME, '.config', 'shannon-ios', 'api.env')
@@ -156,6 +158,7 @@ class Rig:
                'NODE_ENV': 'production', 'RIG_LLM_MODEL': a.llm_model, 'RIG_KEEP': str(bool(a.keep)).lower(),
                'RIG_CAPTURE_FIRST_PAYLOAD': 'all' if getattr(a, 'capture_payloads', False) else 'on' if getattr(a, 'capture_first_payload', False) else 'off'}
         if a.model == 'real': env['RIG_ENV_FILE'] = a.env_file
+        if getattr(a, 'llm_effort', None) and a.llm_model in OPENAI_MODELS: env['RIG_LLM_EFFORT'] = a.llm_effort
         env.update(self.head_environment())
         self.head_started = True
         self.head = subprocess.Popen([a.node, '--import', 'tsx', self.head_entry()], cwd=os.path.join(a.head_pin, 'services', 'api'), env=env, stdin=subprocess.DEVNULL,
@@ -319,12 +322,14 @@ def cmd_run(args):
         raise trials.Stop(f'S{", S".join(sorted({str(s["id"]) for s in asking}))} give items, teleport or build in the rig\'s lab world; the owner has not confirmed that yet. --owner-ok-supply "<who, when>"')
     if args.llm_model == 'sonnet' and args.model == 'real' and not (args.owner_ok_sonnet or '').strip():
         raise trials.Stop('--llm-model sonnet is paid by the owner approval of this one run: --owner-ok-sonnet "<who, when, cap>"')
+    if getattr(args, 'llm_effort', None) and args.llm_model not in OPENAI_MODELS:
+        trials.log(f'--llm-effort {args.llm_effort} is ignored: {args.llm_model} is not an OpenAI model')
     if args.model == 'real' and not os.path.exists(args.env_file): raise trials.Stop(f'no env file {args.env_file} for the real model (the keys are read there, on the VM only)')
     trials.MAX_SECTION_YEN = args.max_section_yen or None
     batch_cap = args.batch_cap_yen or cfg['batchCapYen']
     trials.save_json(os.path.join(folder, 'plan.json'), {'batch': batch, 'createdAt': trials.now_iso(), 'model': 'rig-' + args.model, 'batchCapYen': batch_cap,
                                                           'maxSectionYen': trials.MAX_SECTION_YEN, 'ownerOk': args.owner_ok_supply, 'dryRun': False,
-                                                          'llmModel': args.llm_model, 'ownerOkSonnet': args.owner_ok_sonnet, 'minutes': args.minutes, 'plan': [{'section': s['id'], 'seed': k} for s, k in plan], 'rig': True})
+                                                          'llmModel': args.llm_model, 'llmEffort': getattr(args, 'llm_effort', None), 'ownerOkSonnet': args.owner_ok_sonnet, 'minutes': args.minutes, 'plan': [{'section': s['id'], 'seed': k} for s, k in plan], 'rig': True})
     trials.log(f'rig batch {batch}: {len(plan)} trials: {", ".join(f"S{s["id"]}/{k}" for s, k in plan)}; model {args.model}; ceiling ¥{trials.MAX_SECTION_YEN}, batch ¥{batch_cap}')
     limit = args.load_limit if args.load_limit is not None else (3.5 if (os.cpu_count() or 2) <= 4 else 0)
     try:
@@ -466,6 +471,7 @@ def main(argv):
     p.add_argument('--sections'); p.add_argument('--seeds', default='c1'); p.add_argument('--batch')
     p.add_argument('--model', choices=['real', 'script'], default='real'); p.add_argument('--env-file', default=PRODUCTION_ENV)
     p.add_argument('--llm-model', choices=sorted(LLM_MODELS), default='haiku', help='all paid validation roles; never inherit production model overrides (sonnet: the approved thru run only)')
+    p.add_argument('--llm-effort', choices=LLM_EFFORTS, help='reasoning.effort of an OpenAI --llm-model (default: the head default, medium for Sol and Astra); ignored for Claude')
     p.add_argument('--owner-ok-sonnet', help='the owner approval of this one Sonnet run (who, when, cap); required with --llm-model sonnet')
     p.add_argument('--minutes', type=int, help='cut every trial to this many minutes (a short check of a long section, e.g. the thru T)')
     p.add_argument('--max-section-yen', type=int); p.add_argument('--batch-cap-yen', type=int); p.add_argument('--owner-ok-supply')

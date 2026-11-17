@@ -15,6 +15,7 @@ import { serverEnvironment } from '../config/serverEnvironment.js';
 import { VOICE_REPLY_INSTRUCTIONS } from '../../mind/action/respond/respondInstructions.js';
 import { AnthropicChatModel } from './anthropic/anthropicChatModel.js';
 import { configuredResponseModel, isHaikuModel } from './anthropic/haikuConfig.js';
+import { configuredOpenAIReasoningEffort, requiresOpenAIReasoning, withReasoningEffort, type OpenAIReasoningEffort } from './openAIReasoningEffort.js';
 import { haikuVoiceThinking } from './anthropic/anthropicConfig.js';
 export { VOICE_REPLY_INSTRUCTIONS } from '../../mind/action/respond/respondInstructions.js';
 
@@ -46,6 +47,8 @@ export interface OpenAIResponsesModelOptions {
   voiceStreamBounds?: Partial<VoiceStreamBounds>;
   /** A non-streaming voice reply (the body's `/delegations`): one total, room for the longest reply. */
   voiceResponseTimeoutMilliseconds?: number;
+  /** `reasoning.effort` for every request (`SHANNON_LLM_REASONING_EFFORT`); unset: what each request carries, `medium` for Sol and Astra. */
+  reasoningEffort?: OpenAIReasoningEffort;
 }
 
 /**
@@ -67,10 +70,12 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   private readonly timeoutMilliseconds: number;
   private readonly fetcher: typeof fetch;
   private readonly voiceStreamBounds: VoiceStreamBounds;
+  private readonly reasoningEffort: OpenAIReasoningEffort | undefined;
 
   constructor(private readonly options: OpenAIResponsesModelOptions) {
     if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
     this.model = validModel(options.model);
+    this.reasoningEffort = options.reasoningEffort ?? (requiresOpenAIReasoning(this.model) ? 'medium' : undefined);
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 30_000;
     const transport=options.fetcher ?? fetch;
@@ -79,7 +84,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       const active=currentActionExecution();
       const existing=init?.signal ?? (input instanceof Request ? input.signal : null);
       const signal=active ? existing ? AbortSignal.any([existing,active.signal]) : active.signal : existing;
-      return transport(input,{...init,...(signal?{signal}:{})});
+      const body=init?.body===undefined ? undefined : withReasoningEffort(init.body,this.reasoningEffort,this.model);
+      return transport(input,{...init,...(body===undefined?{}:{body:body as RequestInit['body']}),...(signal?{signal}:{})});
     };
     this.voiceStreamBounds = { ...DEFAULT_VOICE_STREAM_BOUNDS, ...options.voiceStreamBounds };
   }
@@ -337,5 +343,6 @@ export function createConfiguredChatModel(
     model,
     agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac',
     usageStore,
+    reasoningEffort: configuredOpenAIReasoningEffort(environment, 'SHANNON_LLM_MODEL', model),
   });
 }

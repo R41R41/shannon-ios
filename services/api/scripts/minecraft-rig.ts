@@ -11,7 +11,7 @@
 //
 //   cd <head tree>/services/api && node --import tsx scripts/minecraft-rig.ts
 //   env: RIG_DIR (work dir, made if missing)  RIG_PORT (the lab server's game port, for the record)  RIG_BODY_NAME (default I_am_Shannon)
-//        RIG_MODEL=real|script  RIG_LLM_MODEL=haiku|sonnet  RIG_ENV_FILE (api.env, for real)  RIG_STOP_FILE (default <RIG_DIR>/rig.stop)
+//        RIG_MODEL=real|script  RIG_LLM_MODEL=haiku|sonnet|gpt-6.2-sol|... RIG_LLM_EFFORT=low|medium|high (OpenAI only)  RIG_ENV_FILE (api.env, for real)  RIG_STOP_FILE (default <RIG_DIR>/rig.stop)
 // It prints `RIG_HTTP {port,url}` when the body's door is open, `RIG_READY {...}` when the operator socket is served and the body has polled, `RIG_USAGE {...}` for
 // every paid call, `RIG_LOG ...` lines of the head, and exits 0 on SIGTERM.
 import fs from 'node:fs';
@@ -65,12 +65,12 @@ function readValues(file: string): Record<string, string> {
     const m = /^([A-Z0-9_]+)=(.*)$/u.exec(line.trim());
     if (!m) continue;
     const key = m[1]!;
-    if (!/^(SHANNON_(ANTHROPIC|HAIKU|FCA_|MINECRAFT_LLMC|SONNET|TIMEZONE|OWNER)|ANTHROPIC_)/u.test(key)) continue;
+    if (!/^(SHANNON_(ANTHROPIC|HAIKU|FCA_|MINECRAFT_LLMC|SONNET|TIMEZONE|OWNER)|ANTHROPIC_|OPENAI_API_KEY$)/u.test(key)) continue;
     out[key] = m[2]!.replace(/^(['"])(.*)\1$/u, '$2');
   }
   return out;
 }
-const values: Record<string, string> = MODE === 'real' ? rigModelValues(readValues(env.RIG_ENV_FILE ?? ''), env.RIG_LLM_MODEL) : {};
+const values: Record<string, string> = MODE === 'real' ? rigModelValues(readValues(env.RIG_ENV_FILE ?? ''), env.RIG_LLM_MODEL, env.RIG_LLM_EFFORT) : {};
 const strictModel = strictMinecraftLlmcModel(values);
 
 // ---- the head (the hold lab's wiring, with the production's budget and models) ------------------------------------------------------------------

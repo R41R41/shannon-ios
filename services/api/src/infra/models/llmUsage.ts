@@ -57,6 +57,12 @@ export interface ResponseUsage {
   cacheCreationInputTokens?: number;
   cacheCreationInputTokens5m?: number;
   cacheCreationInputTokens1h?: number;
+  /**
+   * OpenAI (GPT-5.6 and later) cache writes: `input_tokens_details.cache_write_tokens`, a part of `inputTokens` charged at 1.25x the
+   * input price for the default 30-minute lifetime, 2.5x for 12 hours (`cacheWriteTokens12h`, a part of `cacheWriteTokens`).
+   */
+  cacheWriteTokens?: number;
+  cacheWriteTokens12h?: number;
   /** Missing native usage: keep known token counts and charge the bounded worst-case estimate, never a free success. */
   unknownCostUpperBoundUsd?: number;
 }
@@ -71,6 +77,8 @@ export function responseUsage(value: unknown): ResponseUsage {
   const outputTokens = integer(row.output_tokens);
   const creation = integer(row.cache_creation_input_tokens);
   const cacheCreation = object(row.cache_creation);
+  const writes = Math.min(Math.max(0, inputTokens - Math.min(inputTokens, integer(inputDetails?.cached_tokens))), integer(inputDetails?.cache_write_tokens));
+  const writes12h = Math.min(writes, integer(object(inputDetails?.cache_write_tokens_details)?.ttl_12h_tokens));
   return Object.freeze({
     inputTokens,
     cachedInputTokens: Math.min(inputTokens, integer(inputDetails?.cached_tokens)),
@@ -81,6 +89,7 @@ export function responseUsage(value: unknown): ResponseUsage {
       cacheCreationInputTokens5m: integer(cacheCreation?.ephemeral_5m_input_tokens),
       cacheCreationInputTokens1h: integer(cacheCreation?.ephemeral_1h_input_tokens),
     } : {}),
+    ...(writes > 0 ? { cacheWriteTokens: writes, ...(writes12h > 0 ? { cacheWriteTokens12h: writes12h } : {}) } : {}),
     ...(row.usage_complete === false && typeof row.unknown_cost_upper_bound_usd === 'number' && Number.isFinite(row.unknown_cost_upper_bound_usd) && row.unknown_cost_upper_bound_usd > 0
       ? { unknownCostUpperBoundUsd: row.unknown_cost_upper_bound_usd } : {}),
   });
@@ -101,10 +110,15 @@ export function estimatedOpenAICostUsd(
   const configuredOutput = positiveNumber(environment.SHANNON_LLM_OUTPUT_USD_PER_MILLION);
   const prices = configuredInput !== null && configuredOutput !== null
     ? { input: configuredInput, output: configuredOutput }
-    : modelPrices(model);
-  // Cached input is intentionally charged at the full input price here. This
-  // makes the local budget breaker conservative if provider discounts change.
-  return roundUsd((usage.inputTokens * prices.input + usage.outputTokens * prices.output) / 1_000_000);
+    : modelPrices(model, usage.inputTokens);
+  // A row that knows the provider's cached-input price (the GPT-6 family) charges cached reads and cache writes at their own
+  // prices; any other row charges cached input at the full input price, which keeps the local budget breaker conservative.
+  const cached = prices.cachedInput === undefined ? 0 : Math.min(usage.inputTokens, usage.cachedInputTokens);
+  const writes = prices.cacheWrite === undefined ? 0 : Math.min(usage.inputTokens - cached, usage.cacheWriteTokens ?? 0);
+  const writes12h = Math.min(writes, usage.cacheWriteTokens12h ?? 0);
+  const plain = usage.inputTokens - cached - writes;
+  const writeCost = prices.cacheWrite === undefined ? 0 : (writes - writes12h) * prices.cacheWrite + writes12h * prices.cacheWrite * 2;
+  return roundUsd((plain * prices.input + cached * (prices.cachedInput ?? 0) + writeCost + usage.outputTokens * prices.output) / 1_000_000);
 }
 
 /**
@@ -123,6 +137,8 @@ export function estimatedOpenAICostWithCacheUsd(
   environment: Readonly<Record<string, string | undefined>> = serverEnvironment(),
 ): number {
   if (isHaikuModel(model)) return estimatedOpenAICostUsd(model, usage, environment);
+  // The GPT-6 rows already count cached reads and cache writes at their own prices.
+  if (isGpt6Model(model) && !positiveNumber(environment.SHANNON_LLM_CACHED_INPUT_USD_PER_MILLION)) return estimatedOpenAICostUsd(model, usage, environment);
   const full = estimatedOpenAICostUsd(model, { ...usage, inputTokens: 1_000_000, outputTokens: 0 }, environment);
   const cachedPrice = positiveNumber(environment.SHANNON_LLM_CACHED_INPUT_USD_PER_MILLION) ?? full * CACHED_INPUT_PRICE_SHARE;
   const cached = Math.min(usage.inputTokens, usage.cachedInputTokens);
@@ -150,7 +166,39 @@ export function configuredSkillBudgetUsd(
   return positiveNumber(environment.SHANNON_SKILL_MONTHLY_BUDGET_USD) ?? 5;
 }
 
-function modelPrices(model: string): { input: number; output: number } {
+interface ModelPrice { input: number; output: number; cachedInput?: number; cacheWrite?: number }
+
+/** The long-context step of the GPT-6 family: input, cached input and cache writes cost 2x, output 1.5x, above this many input tokens. */
+export const GPT6_LONG_CONTEXT_TOKENS = 272_000;
+
+/**
+ * GPT-6 family, USD per million tokens, standard tier, from OpenAI's pricing page (developers.openai.com/api/docs/pricing, read
+ * 2026-11-18): [prefix, input, cached input, output]. A cache write (30-minute lifetime) is 1.25x the input price
+ * (developers.openai.com/api/docs/guides/prompt-caching, same day). Reasoning tokens are part of `output_tokens`.
+ */
+const GPT6_PRICES: readonly (readonly [string, number, number, number])[] = [
+  ['gpt-6.2-sol', 2, 0.1, 10],
+  ['gpt-6.2-astra', 8, 0.4, 40],
+  ['gpt-6.1-sol', 2, 0.1, 10],
+  ['gpt-6.1-terra', 1, 0.05, 5],
+  ['gpt-6-luna', 0.1, 0.01, 0.5],
+];
+
+export function isGpt6Model(model: string): boolean {
+  return GPT6_PRICES.some(([prefix]) => model === prefix || model.startsWith(`${prefix}-`));
+}
+
+function gpt6Price(model: string, inputTokens: number): ModelPrice | null {
+  const row = GPT6_PRICES.find(([prefix]) => model === prefix || model.startsWith(`${prefix}-`));
+  if (!row) return null;
+  const [, input, cachedInput, output] = row;
+  const step = inputTokens > GPT6_LONG_CONTEXT_TOKENS ? 2 : 1;
+  return { input: input * step, cachedInput: cachedInput * step, cacheWrite: input * 1.25 * step, output: step === 2 ? output * 1.5 : output };
+}
+
+function modelPrices(model: string, inputTokens = 0): ModelPrice {
+  const gpt6 = gpt6Price(model, inputTokens);
+  if (gpt6) return gpt6;
   if (model.startsWith('gpt-5.6-luna')) return { input: 0.2, output: 1.2 };
   if (model.startsWith('text-embedding-3-small')) return { input: 0.02, output: 0 };
   if (model.startsWith('text-embedding-3-large')) return { input: 0.13, output: 0 };

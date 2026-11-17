@@ -6,21 +6,40 @@ import { FcaNoDecisionError } from '../src/mind/action/fca/fcaNoResponse.js';
 import type { LlmcWiring } from '../src/wiring/minecraftLlmcConfiguration.js';
 
 /** Paid roles of the isolated rig, by the rig's --llm-model. Haiku validates; Sonnet is only the owner-approved thru run (11/10 filming shape). */
-const RIG_MODELS: Readonly<Record<string, string>> = { haiku: DEFAULT_HAIKU_MODEL, sonnet: DEFAULT_SONNET_MODEL };
+const RIG_MODELS: Readonly<Record<string, string>> = {
+  haiku: DEFAULT_HAIKU_MODEL, sonnet: DEFAULT_SONNET_MODEL,
+  // OpenAI (the OPENAI_API_KEY credit trial): the full model name is the rig's name for it.
+  'gpt-6.2-sol': 'gpt-6.2-sol', 'gpt-6.2-astra': 'gpt-6.2-astra', 'gpt-6.1-sol': 'gpt-6.1-sol', 'gpt-6.1-terra': 'gpt-6.1-terra', 'gpt-6-luna': 'gpt-6-luna',
+};
+const RIG_EFFORTS: readonly string[] = ['low', 'medium', 'high'];
+
+export function isOpenAiRigModel(requested: string): boolean { return requested.startsWith('gpt-') && Object.hasOwn(RIG_MODELS, requested); }
 
 /** Validation is isolated from the production environment and uses one model (Haiku, or Sonnet for the approved thru run) for every paid model path. */
 export function rigModelValues(
   values: Readonly<Record<string, string>>,
   requested = 'haiku',
+  effort?: string,
 ): Record<string, string> {
   const model = Object.hasOwn(RIG_MODELS, requested) ? RIG_MODELS[requested] : undefined;
-  if (!model) throw new Error('RIG_VALIDATION_REQUIRES_HAIKU_OR_SONNET');
+  if (!model) throw new Error('RIG_VALIDATION_REQUIRES_HAIKU_OR_SONNET_OR_OPENAI');
+  const openAi = isOpenAiRigModel(requested);
+  const wanted = effort?.trim();
+  if (wanted && !RIG_EFFORTS.includes(wanted)) throw new Error('RIG_LLM_EFFORT_INVALID');
+  // The OpenAI key reaches the head only for an OpenAI run: a Claude run never wakes anything that is paid with it.
+  const { OPENAI_API_KEY: key, ...rest } = values;
   return {
-    ...values,
+    ...rest,
+    ...(openAi && key ? { OPENAI_API_KEY: key } : {}),
     SHANNON_MINECRAFT_LLMC_MODEL: model,
     SHANNON_MINECRAFT_LLMC_PLAN_MODEL: model,
     SHANNON_MINECRAFT_LLMC_ESCALATE_MODEL: 'none',
     SHANNON_MINECRAFT_LLMC_STRICT_MODEL: 'on',
+    // `reasoning.effort` of the OpenAI roles: one name per role (`<model setting>` without `_MODEL`, then `_REASONING_EFFORT`), the same for all.
+    ...(openAi && wanted ? {
+      SHANNON_MINECRAFT_LLMC_REASONING_EFFORT: wanted,
+      SHANNON_MINECRAFT_LLMC_PLAN_REASONING_EFFORT: wanted,
+    } : {}),
   };
 }
 
