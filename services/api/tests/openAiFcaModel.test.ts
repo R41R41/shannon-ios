@@ -122,6 +122,9 @@ describe('the OpenAI decision model', () => {
     expect(JSON.stringify(one.history)).not.toContain('redacted_thinking');
     await kept.decide(input([...one.history, kept.toolResults([{ id: 'call_1', text: 'no', ok: false }])]), signal());
     expect(sent[1]!.body.input.find((item: { type?: string }) => item.type === 'function_call_output').output).toBe('[tool error]\nno');
+    const echoed = sent[1]!.body.input.filter((item: { type?: string }) => item.type === 'function_call' || item.type === 'message');
+    expect(echoed.length).toBeGreaterThan(0);
+    for (const item of echoed) expect(item).not.toHaveProperty('id');
   });
 
   it('writes usage as the ledger keeps it: all input, the cache read, the reasoning in the output, at the ledger price', async () => {

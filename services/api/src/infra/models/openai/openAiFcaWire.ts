@@ -76,10 +76,11 @@ export function inputItems(messages: readonly Anthropic.MessageParam[], replayRe
         const item = object(block.openai_item);
         if (item && replayReasoning) items.push(item);
       } else if (block.type === 'text') {
-        const id = typeof block.openai_id === 'string' ? { id: block.openai_id } : {};
+        // Without the reasoning item, an item sent back with its id is refused (store:false), so it goes as plain input.
+        const id = replayReasoning && typeof block.openai_id === 'string' ? { id: block.openai_id } : {};
         items.push({ type: 'message', ...id, role: 'assistant', content: [{ type: 'output_text', text: String(block.text ?? '') }] });
       } else if (block.type === 'tool_use') {
-        const id = typeof block.openai_id === 'string' ? { id: block.openai_id } : {};
+        const id = replayReasoning && typeof block.openai_id === 'string' ? { id: block.openai_id } : {};
         items.push({ type: 'function_call', ...id, call_id: block.id, name: block.name,
           arguments: typeof block.openai_arguments === 'string' ? block.openai_arguments : JSON.stringify(block.input ?? {}) });
       }
