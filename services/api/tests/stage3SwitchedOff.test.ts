@@ -63,7 +63,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * Two digests of `minecraft` (its first and third provider requests) were changed by hand on 2026-11-21 for a change that is not stage 3's
  * (the owner's requests for her body are a list: the intent field of the owner's game-chat turn has more kinds and two more fields).
  * The same two were changed by hand again on 2026-11-22 for a change that is not stage 3's (the guide of the list of requests says that a word
- * pointing at a thing, 「この…の上に」, is kept as it was said): the first and third provider requests carry that guide.
+ * pointing at a thing, 「この…の上に」, is kept as it was said, and says who reads where the person looks: the head's own judgment, when it takes up the
+ * request): the first and third provider requests carry that guide.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

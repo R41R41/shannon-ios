@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PROBE_DESCRIPTION, PROBE_INPUT_SCHEMA, PROBE_KINDS } from '../src/contracts/minecraftProbeContract.js';
 import { prepareProbeInput, probeAnswerText, probeLabel } from '../src/surfaces/minecraft/minecraftLlmcProbeInput.js';
 import { foreignToolNames } from '../src/contracts/minecraftLlmcToolWords.js';
+import { llmcPrepare } from '../src/surfaces/minecraft/minecraftLlmc.js';
 
 const context = { feet: { x: 0, y: 64, z: 0 }, creatures: [] };
 
@@ -21,6 +22,11 @@ describe('the gaze probe: the block a player is looking at', () => {
     expect(prepareProbeInput({ kind: 'gaze' }, context)).toMatchObject({ input: null, problem: expect.stringContaining('gaze の player') });
     expect(prepareProbeInput({ kind: 'gaze', player: 'ライ 氏; drop' }, context).input).toBeNull();
     expect(PROBE_INPUT_SCHEMA.properties.range.maximum).toBe(64);
+  });
+
+  it('goes to the body as a tool call is made ready: the player is kept and the schema takes it', () => {
+    expect(llmcPrepare('mc.probe', { kind: 'gaze', player: 'Yuu_7', range: 20 }, context)).toMatchObject({ input: { kind: 'gaze', player: 'Yuu_7', range: 20 }, problem: null });
+    expect(llmcPrepare('mc.probe', { kind: 'gaze' }, context).problem).toContain('gaze の player');
   });
 
   it('leaves out the fields the kind does not take, and is named in a line', () => {

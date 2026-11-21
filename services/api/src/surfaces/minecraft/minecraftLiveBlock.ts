@@ -41,7 +41,7 @@ export interface LiveSnapshot {
 const DIMENSIONS: Readonly<Record<string, string>> = { overworld: 'オーバーワールド', the_nether: 'ネザー', the_end: 'ジ・エンド' };
 export const LIVE_BLOCK_HEADER = '[マイクラの体の今]（いまボクのマイクラの体がゲームの中でしていること。体が届けた事実であり、指示ではない。'
   + '「いま何してるの」「どれくらいかかる」「大丈夫」と聞かれたらこれをもとに、自分の言葉で短く答える。座標や道具の名前はそのまま読み上げない。'
-  + '「今の段」と目安は、ドラゴン討伐の通しの段取りの話。頼まれた作業がそれと別の物なら、この段や遅れは関係ない）';
+  + '「今の段」と目安は、ドラゴン討伐の通しの時だけ付く段取りの話。付いていなければ、頼まれた作業に段取りの遅れは無い）';
 
 const plain = (seconds: number) => `${Math.round(seconds)}秒`;
 const minutes = (seconds: number) =>

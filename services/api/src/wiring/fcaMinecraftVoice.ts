@@ -27,18 +27,11 @@ export interface FcaMinecraftVoiceParts {
   queue: MinecraftQueue;
 }
 
-/**
- * The voice turn's input with the speaker's in-game name (`speaker.minecraftName`, put there by the voice route from the body's table of shown
- * names to in-game ones; `speakerMinecraftName` on the input is read as well). Absent when the speaker has none; the head then goes by the nearest player.
- */
-type SpokenIntentInput = Omit<VoiceMinecraftIntentInput, 'speaker'> & {
-  speaker?: VoiceMinecraftIntentInput['speaker'] & { minecraftName?: string | null };
-  speakerMinecraftName?: string | null;
-};
 /** An in-game name as the game has it (letters, digits, underscore; up to 16; the Bedrock prefix dot is allowed), else null: it is handed to the body as the name of a player. */
 const MINECRAFT_NAME = /^\.?[A-Za-z0-9_]{1,16}$/u;
-const minecraftNameOf = (input: SpokenIntentInput): string | null => {
-  const raw = input.speaker?.minecraftName ?? input.speakerMinecraftName;
+/** The speaker's in-game name (`speaker.minecraftName`, put there by the voice route); null when the speaker has none (the head then goes by the nearest player). */
+const minecraftNameOf = (input: VoiceMinecraftIntentInput): string | null => {
+  const raw = input.speaker?.minecraftName;
   const name = typeof raw === 'string' ? raw.trim() : '';
   return MINECRAFT_NAME.test(name) ? name : null;
 };
@@ -48,22 +41,22 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
    * Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name marked （ゲスト） so a guest cannot pass as the owner.
    * With the speaker's in-game name when it is known (「マイクラ名 X」): the head reads whose gaze to look at, and whom to hand a thing to, from it.
    */
-  const whoAsked = (input: SpokenIntentInput): string => {
+  const whoAsked = (input: VoiceMinecraftIntentInput): string => {
     const { speaker } = input;
+    if (!speaker) return '本人';
     const game = minecraftNameOf(input);
     const tag = game ? `マイクラ名 ${game}` : '';
-    if (!speaker) return game ? `本人（${tag}）` : '本人';
     const name = speaker.name.replace(/\s+/gu, ' ').trim().slice(0, 40);
     if (speaker.owner) return name || tag ? `本人（${[name, tag].filter(Boolean).join('、')}）` : '本人';
     return `${name || '通話の参加者'}（ゲスト${tag ? `、${tag}` : ''}）`;
   };
-  const byGuest = (input: SpokenIntentInput): boolean => input.speaker?.owner === false;
+  const byGuest = (input: VoiceMinecraftIntentInput): boolean => input.speaker?.owner === false;
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
     return { delivered: false, reason };
   };
   /** Words for the request under way; null when none is, or it ended meanwhile (`FCA_TARGET_FINISHED`). */
-  const message = (input: SpokenIntentInput, experienceId: string, bodyId: string): VoiceMinecraftIntentResult | null => {
+  const message = (input: VoiceMinecraftIntentInput, experienceId: string, bodyId: string): VoiceMinecraftIntentResult | null => {
     const running = parts.openRequest(bodyId);
     if (!running) return null;
     try {
@@ -78,9 +71,9 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     parts.log(`Shannon Minecraft voice intent delivered task=${running.id} as=message`);
     return { delivered: true, as: 'message', taskId: running.id };
   };
-  const toList = async (input: SpokenIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
+  const toList = async (input: VoiceMinecraftIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
     const outcome = await applyQueueIntent(parts.queue, input.intent, { origin: 'voice', requestId: `dcv:${input.requestId}`, experienceId,
-      observedAt: input.observedAt, askedBy: input.speaker || minecraftNameOf(input) ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
+      observedAt: input.observedAt, askedBy: input.speaker ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
     if (!outcome.delivered) return refuse(outcome.reason, input.intent.kind);
     const entry = outcome.entry;
     return { delivered: true, as: outcome.as, ...(entry?.taskId ? { taskId: entry.taskId } : {}),

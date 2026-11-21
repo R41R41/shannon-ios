@@ -67,6 +67,7 @@ interface TaskState {
 const brief = (value: unknown, limit = 24): string => String(value ?? '').replace(/\s+/gu, ' ').replace(/^\[[^\]]{1,12}\]\s*/u, '').trim().slice(0, limit);
 const HAVE = /have:([a-z][a-z0-9_]{0,40})\s*>=\s*(\d{1,4})/gu;
 const DONE_AFTER_SECONDS = 120;
+/** The goals of a run toward the dragon: only for these are the stages and their pace told (moments and the block alike). */
 const DRAGON_RUN = /エンドラ|ドラゴン|ネザー|エンド|ブレイズ|ダイヤ|討伐|クリア|dragon|nether|blaze|diamond/iu;
 /** What she says of her work as it goes: the block's recent moments are of the world, and the plan has a place of its own. */
 const WORK_MOMENTS: ReadonlySet<string> = new Set(['thinking', 'plan_step', 'plan_changed', 'material_needed', 'material_got']);
@@ -337,7 +338,7 @@ eplying, heard). */
       .map(moment => ({ ageSeconds: Math.round((now - moment.at) / 1000), line: liveFactLine(moment).replace(/。$/u, '') }));
     const stall = this.stall && now - this.stall.at <= STUCK_SHOWN_SECONDS * 1000 ? `${this.stall.what}が${this.stall.seconds}秒ほど進んでいない` : null;
     const plan = task ? this.planSummary(task) : null;
-    return { ...base, ...(plan ? { plan } : {}), frameAgeSeconds: Math.round(ageMs / 1000), milestone: step ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
+    return { ...base, ...(plan ? { plan } : {}), frameAgeSeconds: Math.round(ageMs / 1000), milestone: step && task && DRAGON_RUN.test(task.info.goal) ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
       dimension: dimensionOfWorld(world, observation.facts), biome: typeof world.biome === 'string' ? world.biome.slice(0, 40).replace(/_/gu, ' ') : null,
       time: timeWords(dimensionOfWorld(world, observation.facts) === 'overworld' ? dayTick(world) : null),
       health: health === null ? null : Math.round(health), food, threats, carried: carriedWords(counts), map: mapWords(world.mapSummary),

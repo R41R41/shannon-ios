@@ -5,7 +5,8 @@ import {
 import { endsAsQuestion } from '../src/mind/perception/spokenQuestion.js';
 import { LIVE_BLOCK_HEADER, liveBlock, type LiveSnapshot } from '../src/surfaces/minecraft/minecraftLiveBlock.js';
 import { VoiceRooms } from '../src/surfaces/platform/voiceRoom.js';
-import { validatedVoiceTurn, workOf } from '../src/surfaces/platform/platformVoice.js';
+import { validatedVoiceTurn } from '../src/surfaces/platform/platformVoice.js';
+import { workOf } from '../src/surfaces/platform/platformVoiceAddressed.js';
 import { validatedConversationTurn, voiceRequestOf } from '../src/surfaces/platform/platformConverse.js';
 import { askedBackBlock, situationBlock } from '../src/surfaces/platform/platformVoicePrompt.js';
 
@@ -139,7 +140,7 @@ describe('the body\'s present for a call', () => {
   });
 
   it('says that the dragon run\'s step and pace are not about another job', () => {
-    expect(LIVE_BLOCK_HEADER).toContain('ドラゴン討伐の通しの段取りの話');
+    expect(LIVE_BLOCK_HEADER).toContain('ドラゴン討伐の通しの時だけ付く段取りの話');
   });
 });
 

@@ -24,6 +24,9 @@ export interface AddressedCase {
 const HER = 'そっか、じゃあ次はネザーに行ってみようか。';
 const ASKED = 'できた！どこに置けばいい？';
 const CAKE = { goal: 'ケーキを1個作る', list: ['#1 実行中 「ケーキを1個作る」（ユウ）'] };
+const IRON = { goal: '鉄のインゴットを10個集める', list: ['#1 実行中 「鉄のインゴットを10個集める」（ミキ）'] };
+const HOUSE = { goal: '木の家を建てる', list: ['#1 実行中 「木の家を建てる」（ユウ）'] };
+const ASKED_IRON = '鉄が10個たまったよ。どの箱に入れておけばいい？';
 
 export const ADDRESSED_CASES: readonly AddressedCase[] = [
   // Called by name, to her.
@@ -88,10 +91,17 @@ export const ADDRESSED_CASES: readonly AddressedCase[] = [
   { id: 'work-chat-game', group: 'work', transcript: 'そういえば新しいゲーム出たよね', humans: 3, speaker: 'ミキ', work: CAKE, to: false, ask: true },
   { id: 'work-laugh', group: 'work', transcript: 'あはは、それはおもしろい', humans: 3, speaker: 'ユウ', work: CAKE, to: false, ask: true },
   { id: 'work-about-her', group: 'work', transcript: 'シャノンってさ、昨日エンドラの前で死んだんだって', humans: 3, speaker: 'ユウ', work: CAKE, to: false, ask: true },
+  { id: 'work-iron-tip', group: 'work', transcript: '鉄鉱石はかまどで焼かないとインゴットにならないよ', humans: 3, speaker: 'ミキ', work: IRON, to: true, ask: true },
+  { id: 'work-iron-progress', group: 'work', transcript: '鉄はあと何個くらい？', humans: 2, speaker: 'ユウ', work: IRON, to: true, ask: true },
+  { id: 'work-iron-chat', group: 'work', transcript: '明日の朝は雨らしいよ', humans: 3, speaker: 'ユウ', work: IRON, to: false, ask: true },
+  { id: 'work-house-request', group: 'work', transcript: '窓もつけてほしいな', humans: 3, speaker: 'ミキ', work: HOUSE, to: true, ask: true },
+  { id: 'work-house-tip', group: 'work', transcript: '屋根は階段ブロックのほうがかわいいよ', humans: 3, speaker: 'ミキ', work: HOUSE, to: true, ask: true },
+  { id: 'work-house-chat', group: 'work', transcript: 'お昼ごはんどうしようか', humans: 3, speaker: 'ユウ', work: HOUSE, to: false, ask: true },
   { id: 'work-idle', group: 'work', transcript: 'ついでに松明も作っておいて', humans: 3, speaker: 'ミキ', to: false, ask: false },
   // Words after a question she asked herself: a rule, from anyone when it was for the room, within the longer window.
   { id: 'asked-here', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: ASKED, asked: true }, to: true, ask: false },
   { id: 'asked-yes', group: 'asked', transcript: 'うん、お願い', humans: 1, spoke: { secondsAgo: 25, toSpeaker: true, line: ASKED, asked: true }, to: true, ask: false },
+  { id: 'asked-iron-box', group: 'asked', transcript: 'あの作業台の隣の箱に入れておいて', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 20, toSpeaker: null, line: ASKED_IRON, asked: true }, to: true, ask: false },
   { id: 'asked-late', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 50, toSpeaker: null, line: ASKED, asked: true }, to: false, ask: false },
   { id: 'asked-to-another', group: 'asked', transcript: 'ここがいいと思う', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 10, toSpeaker: false, line: ASKED, asked: true }, to: false, ask: false },
   { id: 'asked-not-a-question', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: 'ケーキができたよ。' }, to: false, ask: false },

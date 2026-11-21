@@ -1446,6 +1446,9 @@
       "complex-function": 1,
       "long-line": 1
     },
+    "services/api/src/mind/perception/addressed.ts": {
+      "long-line": 2
+    },
     "services/api/src/mind/perception/chatAudience.ts": {
       "long-line": 2
     },
@@ -1463,6 +1466,9 @@
       "multi-statement-line": 1,
       "complex-function": 1,
       "long-line": 2
+    },
+    "services/api/src/mind/perception/spokenQuestion.ts": {
+      "long-line": 1
     },
     "services/api/src/mind/perception/store/ownerCallFacts.ts": {
       "long-line": 2
@@ -1873,13 +1879,23 @@
       "complex-function": 3,
       "long-line": 11
     },
+    "services/api/src/surfaces/minecraft/minecraftLive.ts": {
+      "complex-function": 1,
+      "long-line": 3
+    },
+    "services/api/src/surfaces/minecraft/minecraftLiveBody.ts": {
+      "long-line": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftLiveWriter.ts": {
+      "long-line": 3
+    },
     "services/api/src/surfaces/minecraft/minecraftLlmc.ts": {
       "long-line": 2,
       "complex-function": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcBodyFacts.ts": {
       "complex-function": 1,
-      "long-line": 6
+      "long-line": 7
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcCaution.ts": {
       "complex-function": 1
@@ -1905,11 +1921,14 @@
     "services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts": {
       "long-line": 4
     },
+    "services/api/src/surfaces/minecraft/minecraftLlmcReplanBrief.ts": {
+      "long-line": 1
+    },
     "services/api/src/surfaces/minecraft/minecraftLlmcUrgent.ts": {
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts": {
-      "long-line": 79
+      "long-line": 80
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
@@ -1931,6 +1950,12 @@
       "multi-statement-line": 22,
       "complex-function": 2,
       "long-line": 15
+    },
+    "services/api/src/surfaces/minecraft/minecraftRequestPeople.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/minecraft/minecraftRequestSteps.ts": {
+      "long-line": 4
     },
     "services/api/src/surfaces/minecraft/serverMinecraftBodyRoute.ts": {
       "multi-statement-line": 2,
@@ -1979,8 +2004,20 @@
       "complex-function": 1,
       "long-line": 6
     },
+    "services/api/src/surfaces/platform/platformVoice.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/platform/platformVoiceAddressed.ts": {
+      "long-line": 1
+    },
     "services/api/src/surfaces/platform/platformVoiceRoute.ts": {
       "complex-function": 1,
+      "long-line": 1
+    },
+    "services/api/src/surfaces/platform/platformVoiceWords.ts": {
+      "long-line": 1
+    },
+    "services/api/src/surfaces/platform/voiceRoom.ts": {
       "long-line": 1
     },
     "services/api/src/surfaces/text/apiConversationRead.ts": {
@@ -2098,6 +2135,9 @@
       "multi-statement-line": 1,
       "long-line": 2
     },
+    "services/api/src/wiring/fcaMinecraftVoice.ts": {
+      "long-line": 2
+    },
     "services/api/src/wiring/fcaReadSources.ts": {
       "long-function": 1,
       "complex-function": 1,
@@ -2178,6 +2218,9 @@
       "complex-function": 2,
       "multi-statement-line": 4,
       "long-line": 3
+    },
+    "services/api/src/wiring/minecraftLiveWiring.ts": {
+      "long-line": 1
     },
     "services/api/src/wiring/opsMinecraftLifecycleWiring.ts": {
       "multi-statement-line": 2
@@ -2362,7 +2405,7 @@
       "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcProbeInput.ts": {
-      "long-line": 1
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftStockLevels.ts": {
       "long-line": 1
@@ -2402,10 +2445,11 @@
       "multi-statement-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftPlanFacts.ts": {
-      "long-line": 1
+      "long-line": 2,
+      "complex-function": 1
     },
     "services/api/src/wiring/minecraftLlmcWiring.ts": {
-      "long-line": 1,
+      "long-line": 2,
       "multi-statement-line": 1
     },
     "services/api/src/contracts/minecraftActContract.ts": {

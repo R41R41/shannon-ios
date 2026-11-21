@@ -134,6 +134,19 @@ describe('MinecraftLive', () => {
     expect(f.live.block({ alone: false })).toContain('取り組んでいること: 木を集める');
   });
 
+  it('tells the stage and its pace only for a run toward the dragon, not for another job', () => {
+    const run = fixture();
+    run.live.begin(run.task({ goal: 'kill the ender dragon' }));
+    expect(run.live.snapshot()?.milestone).not.toBeNull();
+    const other = fixture();
+    other.live.begin(other.task({ goal: 'ケーキを1個作る' }));
+    expect(other.live.snapshot()?.milestone).toBeNull();
+    expect(other.live.block({ alone: true })).not.toContain('今の段:');
+    const iron = fixture();
+    iron.live.begin(iron.task({ goal: '鉄のインゴットを10個集める' }));
+    expect(iron.live.block({ alone: true })).not.toContain('今の段:');
+  });
+
   it('adds exchanges about her work for the owner alone when they are given', () => {
     const f = fixture();
     const live = new MinecraftLive({ now: f.now, frames: { latest: () => ({ observation: observation(), ageMs: 0 }), available: () => ['minecraft:world'] },

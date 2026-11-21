@@ -8,9 +8,9 @@ import {
   type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService,
 } from '../../mind/memory/platformMemoryPorts.js';
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
-import { isAcknowledgement, isNoiseOnly, voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
-import { askedHer, type AddressedJudge, type AddressedWork } from '../../mind/perception/addressed.js';
-import { addressedInputOf } from './platformVoiceAddressed.js';
+import { voiceAddress, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
+import type { AddressedJudge } from '../../mind/perception/addressed.js';
+import { addressedInputOf, questionJudged, workOf } from './platformVoiceAddressed.js';
 import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -83,17 +83,6 @@ export interface PlatformVoiceDependencies {
   environment?: () => SwitchValues;
   /** Content-free lines; `console.log` when absent. */
   log?(line: string): void;
-}
-
-/**
- * Whether she is at work in the game for the people on the call: a request running, or any waiting on the list (a held or stopped one counts:
- * 「再開して」 and 「続けて」 are about the work too). What `AddressedJudge` is shown of it; null when the body is off, not connected or idle.
- */
-export function workOf(state: VoiceMinecraftState | undefined): AddressedWork | null {
-  if (!state?.connected) return null;
-  const list = state.queue ?? [];
-  const goal = state.running?.goal ?? null;
-  return goal !== null || list.length > 0 ? { goal, list } : null;
 }
 
 /** Who is speaking where, as the platform policy settled it. */
@@ -265,22 +254,12 @@ export class PlatformVoiceService {
     const bodyRunning = (body?.state.running ?? null) !== null;
     const built = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning,
       guestsMayStop: this.offersIntent(seat, body), work: workOf(body?.state) });
-    // Her question counts only while it still waits (45 seconds, for this speaker): after that it is no longer told to the judge as a question either.
-    const waiting = askedHer(built, judge.questionWindowMilliseconds);
-    const shown: typeof built = built.shannon?.asked && !waiting ? { ...built, shannon: { ...built.shannon, asked: false } } : built;
-    // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through; so does a waiting question of hers, but only
-    // for a real answer: a thinking sound (「うーん」) takes neither the question nor its turn).
-    const spokeAgo = shown.shannon?.spokeAgoMs ?? null;
-    if (waiting && isNoiseOnly(request.userMessage) && !isAcknowledgement(request.userMessage)) return { respond: false, reason: 'fragment' };
-    const follows = (spokeAgo !== null && spokeAgo <= judge.windowMilliseconds) || (waiting && isAcknowledgement(request.userMessage));
-    if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: follows })) {
-      return { respond: false, reason: 'fragment' };
-    }
+    const { shown, waiting, fragment } = questionJudged(built, judge, request.userMessage);
+    if (fragment) return { respond: false, reason: 'fragment' };
     const verdict = await judge.judge(shown);
     // These words took the question she had asked, answered or not: the next ones are judged as usual.
     if (waiting) this.rooms.closeQuestion(room);
-    const said = { role: 'person' as const, userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt };
-    this.rooms.noteExchange(room, said);
+    this.rooms.noteExchange(room, { role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt });
     this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} ms=${verdict.ms} humans=${humans}`);
     return { respond: verdict.addressed, reason: verdict.reason };
   }
