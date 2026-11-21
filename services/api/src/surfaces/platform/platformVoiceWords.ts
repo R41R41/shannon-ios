@@ -8,6 +8,7 @@ import { PLATFORM_VOICE_LIMITS, badRequest, bodyText, identifier, notBound, reco
 import { situationBlock, heardBlock } from './platformVoicePrompt.js';
 import { VOICE_MOUTH_LIMITS } from './voiceMouth.js';
 import { VOICE_ROOM_LIMITS, clipVoiceText, type HeardLine, type VoiceRooms } from './voiceRoom.js';
+import { endsWithQuestionMark } from '../../mind/perception/spokenQuestion.js';
 
 /**
  * What her mouth in a voice channel asks of the head besides the turn (dc-voice, 2026-10-20, `dc-speak-interface.md`): to keep what she
@@ -61,7 +62,7 @@ export class VoiceWords {
     const digest = createHash('sha256').update(`${body.conversationId}\u0000${at}\u0000${body.source}\u0000${content}`).digest('hex');
     this.note(body.conversationId, `dcv-said:${digest.slice(0, 32)}`, content);
     // A line from her mouth is said to the room, to nobody in particular: a friend's reaction to it may be to her (`SHANNON_ADDRESSED`).
-    if (body.source === 'mouth' && body.interrupted !== true) this.dependencies.rooms.noteShannon(body.conversationId, { at, userId: '', text: content });
+    if (body.source === 'mouth' && body.interrupted !== true) this.dependencies.rooms.noteShannon(body.conversationId, { at, userId: '', text: content, asked: endsWithQuestionMark(content) });
   }
 
   private kept(text: string, interrupted: boolean, spokenText: string): string {

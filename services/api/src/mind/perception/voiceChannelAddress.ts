@@ -23,6 +23,18 @@ const MINIMUM_CHARACTERS = 2;
 const spokenLength = (text: string): number => Array.from(text.replace(/[\s、。,.!！?？…「」『』（）()]/gu, '')).length;
 
 /** A breath, a key press or a lone acknowledgement nobody waits on: never a turn (and never worth asking Jev about). */
+/** A lone 「うん」「はい」「ええ」: an answer to a question, unlike a thinking sound (「うーん」「えー」) which only holds the floor. */
+const ACKNOWLEDGEMENT = /^(?:うん|はい|ええ|はーい)(?:[、。,.!！\s]|うん|はい|ええ)*$/u;
+
+export function isAcknowledgement(transcript: string): boolean {
+  return ACKNOWLEDGEMENT.test(transcript.trim());
+}
+
+/** Only breath, thinking sounds and acknowledgements, no words (`voiceFragment`'s second case). */
+export function isNoiseOnly(transcript: string): boolean {
+  return NOISE.test(transcript.trim());
+}
+
 export function voiceFragment(input: { transcript: string; followsShannonTurn: boolean }): boolean {
   const text = input.transcript.trim();
   if (spokenLength(text) < MINIMUM_CHARACTERS) return true;

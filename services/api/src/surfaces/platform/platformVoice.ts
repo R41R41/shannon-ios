@@ -8,7 +8,7 @@ import {
   type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService,
 } from '../../mind/memory/platformMemoryPorts.js';
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
-import { voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
+import { isAcknowledgement, isNoiseOnly, voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
 import { askedHer, type AddressedJudge, type AddressedWork } from '../../mind/perception/addressed.js';
 import { addressedInputOf } from './platformVoiceAddressed.js';
 import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
@@ -263,17 +263,22 @@ export class PlatformVoiceService {
     // A request of anyone may be under way, and anyone's stop word stops it (the body part on: `offersIntent`).
     const body = this.bodyFor(seat);
     const bodyRunning = (body?.state.running ?? null) !== null;
-    const shown = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning,
+    const built = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning,
       guestsMayStop: this.offersIntent(seat, body), work: workOf(body?.state) });
-    // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window, and the longer one of a question she asked, let a bare answer through).
+    // Her question counts only while it still waits (45 seconds, for this speaker): after that it is no longer told to the judge as a question either.
+    const waiting = askedHer(built, judge.questionWindowMilliseconds);
+    const shown: typeof built = built.shannon?.asked && !waiting ? { ...built, shannon: { ...built.shannon, asked: false } } : built;
+    // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through; so does a waiting question of hers, but only
+    // for a real answer: a thinking sound (「うーん」) takes neither the question nor its turn).
     const spokeAgo = shown.shannon?.spokeAgoMs ?? null;
-    const follows = (spokeAgo !== null && spokeAgo <= judge.windowMilliseconds) || askedHer(shown, judge.questionWindowMilliseconds);
+    if (waiting && isNoiseOnly(request.userMessage) && !isAcknowledgement(request.userMessage)) return { respond: false, reason: 'fragment' };
+    const follows = (spokeAgo !== null && spokeAgo <= judge.windowMilliseconds) || (waiting && isAcknowledgement(request.userMessage));
     if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: follows })) {
       return { respond: false, reason: 'fragment' };
     }
     const verdict = await judge.judge(shown);
     // These words took the question she had asked, answered or not: the next ones are judged as usual.
-    if (askedHer(shown, judge.questionWindowMilliseconds)) this.rooms.closeQuestion(room);
+    if (waiting) this.rooms.closeQuestion(room);
     const said = { role: 'person' as const, userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt };
     this.rooms.noteExchange(room, said);
     this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} ms=${verdict.ms} humans=${humans}`);

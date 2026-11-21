@@ -12,3 +12,11 @@ export function endsAsQuestion(text: string): boolean {
   return text.split(AFTER_SENTENCE_END).map(part => part.replace(TRAILING_MARKS, '').trim()).filter(Boolean).slice(-2)
     .some(sentence => QUESTION_MARK.test(sentence) || SPOKEN_QUESTION.test(sentence));
 }
+
+/**
+ * Only a mark ends the question (「鉄が必要か？」), not a spoken ending (「鉄が必要か」). For the words she says by herself: a thought said aloud that
+ * ends 「…か」 is no question to the room, and must not open the way for the next nameless words.
+ */
+export function endsWithQuestionMark(text: string): boolean {
+  return text.split(AFTER_SENTENCE_END).map(part => part.replace(TRAILING_MARKS, '').trim()).filter(Boolean).slice(-2).some(sentence => QUESTION_MARK.test(sentence));
+}
