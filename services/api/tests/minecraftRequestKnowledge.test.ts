@@ -107,10 +107,11 @@ describe('what she is told when people talk to her during a request of one thing
     expect(text).toContain('mc_view の only=[その名前]');
     expect(text).toContain('mc_probe kind=gaze player=');
     // A gaze that lands on the ground beside the noun's block is a hint toward the nearest candidate, not the place; a name that is not found is read again from the answer's list.
-    expect(text).toContain('その placeAt も at も置き場にしない');
-    expect(text).toContain('mc_view の center を答えの point（視線が当たった点。整数に丸める）、radius 3、only=[名詞]');
-    expect(text).toContain('地面に置いてしまうとケーキは持ち物から消え');
-    expect(text).toContain('答えが並べる「今いるのは …」');
+    expect(text).toContain('near=言われた名詞のブロック名');
+    expect(text).toContain('near.blocks');
+    expect(text).toContain('その placeAt は置き場にしない');
+    expect(text).toContain('地面に置くとケーキが消える');
+    expect(text).toContain('今いる人（体に近い順に 3 人まで）それぞれの視線を gazes');
     expect(text).toContain('聞き返さず進む');
     expect(text).toContain('一番近いプレイヤーに一番近い候補');
     expect(text).toContain('drop cake target=');

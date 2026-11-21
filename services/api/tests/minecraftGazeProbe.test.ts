@@ -19,14 +19,17 @@ describe('the gaze probe: the block a player is looking at', () => {
     expect(prepareProbeInput({ kind: 'gaze', player: 'Rai_41' }, context)).toMatchObject({ input: { kind: 'gaze', player: 'Rai_41' }, problem: null, fixes: [] });
     expect(prepareProbeInput({ kind: 'gaze', player: '@Rai_41 ', range: 99 }, context).input).toEqual({ kind: 'gaze', player: 'Rai_41', range: 64 });
     expect(prepareProbeInput({ kind: 'looking_at', player: 'Yami', range: 40 }, context).input).toEqual({ kind: 'gaze', player: 'Yami', range: 40 });
-    expect(prepareProbeInput({ kind: 'gaze' }, context)).toMatchObject({ input: null, problem: expect.stringContaining('gaze の player') });
-    expect(prepareProbeInput({ kind: 'gaze', player: 'ライ 氏; drop' }, context).input).toBeNull();
+    // A name that is not an in-game name (a display name) or none is sent as it is: the body answers for the people who are here.
+    expect(prepareProbeInput({ kind: 'gaze' }, context)).toMatchObject({ input: { kind: 'gaze' }, problem: null });
+    expect(prepareProbeInput({ kind: 'gaze', player: 'ユウ' }, context).input).toEqual({ kind: 'gaze', player: 'ユウ' });
+    expect(prepareProbeInput({ kind: 'gaze', player: '#2', near: ' Oak Planks ' }, context).input).toEqual({ kind: 'gaze', player: '#2', near: 'oak_planks' });
+    expect(prepareProbeInput({ kind: 'gaze', player: 'Yami', near: 'oak planks; drop' }, context).input).toEqual({ kind: 'gaze', player: 'Yami' });
     expect(PROBE_INPUT_SCHEMA.properties.range.maximum).toBe(64);
   });
 
   it('goes to the body as a tool call is made ready: the player is kept and the schema takes it', () => {
     expect(llmcPrepare('mc.probe', { kind: 'gaze', player: 'Yuu_7', range: 20 }, context)).toMatchObject({ input: { kind: 'gaze', player: 'Yuu_7', range: 20 }, problem: null });
-    expect(llmcPrepare('mc.probe', { kind: 'gaze' }, context).problem).toContain('gaze の player');
+    expect(llmcPrepare('mc.probe', { kind: 'gaze' }, context)).toMatchObject({ input: { kind: 'gaze' }, problem: null });
   });
 
   it('leaves out the fields the kind does not take, and is named in a line', () => {
