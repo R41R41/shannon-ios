@@ -63,6 +63,8 @@ export class MemoryWithholding {
   private root: MemoryWithholding = this;
   private externalReadsPossible = true;
   private queryDepth = 0;
+  /** Where this read spent its time, for the slow-context line (`turnCognitiveContext.ts`): numbers only, nothing it decides. */
+  readonly timings = { hiddenMs: 0, sourceReads: 0, sourceReadMs: 0 };
   private readonly lookups: RecallLookups = {
     experience: id => this.experience(id),
     knowledgeSources: id => this.knowledge().get(id.slice(id.indexOf(':') + 1))?.sourceExperienceIds ?? [],
@@ -101,7 +103,13 @@ export class MemoryWithholding {
     return !read ? false : cautiousOutsideWalks(false, () => {
       if (this.queryDepth === 0) return read(this.scopeKey, source, observedAt);
       const key = `${source}\u0000${observedAt}`, known = this.memos.sources.get(key);
-      const result = known ?? read(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
+      let result = known;
+      if (result === undefined) {
+        const startedAt = performance.now();
+        result = read(this.scopeKey, source, observedAt, { state: this.state, withholding: this, walk: this.walk });
+        this.timings.sourceReads += 1;
+        this.timings.sourceReadMs += performance.now() - startedAt;
+      }
       this.memos.sources.set(key, result);
       return result;
     });
@@ -146,8 +154,10 @@ export class MemoryWithholding {
     // The same remembered turns (one store read while the database is unchanged) under the same state snapshot are judged once.
     const known = HIDDEN_BY_READ.get(candidates)?.get(this.state);
     if (known) return this.hiddenExperiences = known;
+    const startedAt = performance.now();
     const hidden = Object.freeze(candidates.filter(item => !visibleMemoryText(this.state, item.id, item.summary)
       || !isMemoryEvidenceVisible(this.state, item.userMessage)));
+    this.timings.hiddenMs += performance.now() - startedAt;
     let byState = HIDDEN_BY_READ.get(candidates);
     if (!byState) HIDDEN_BY_READ.set(candidates, byState = new WeakMap());
     byState.set(this.state, hidden);

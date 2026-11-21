@@ -12,7 +12,7 @@ import { recordCompletedCognitiveCycle } from '../../mind/action/respond/cogniti
 import { withCapabilitySources } from '../../mind/action/respond/conversationCapabilities.js';
 import { recordConversationProposal, settleVoiceTaskDecision, voiceTurnSetsImplementation } from '../../mind/action/respond/conversationOrchestration.js';
 import { assembledTurn } from '../../mind/action/respond/conversationTurn.js';
-import { tierRequest } from '../../mind/action/respond/turnRouting.js';
+import { textThinkingCase, tierRequest } from '../../mind/action/respond/turnRouting.js';
 import { innerNoteVoice } from '../../mind/emotion/companionPresence.js';
 import { feelingVoice } from '../../mind/emotion/feelingPorts.js';
 import {
@@ -153,14 +153,17 @@ class SpokenStream {
  * head: the owner's request to her body, streamed), else her plain spoken stream, which the stream route may already have opened with
  * the plan's waiting phrase (then the model's tool rounds add no second one).
  */
-function askModel(turn: VoiceConversation, request: ReturnType<typeof voiceModelRequest>, stream: SpokenStream, structured: boolean) {
+function askModel(turn: VoiceConversation, request: ReturnType<typeof voiceModelRequest>, stream: SpokenStream, structured: boolean, answersFirst: boolean) {
   const { dependencies: deps, threadId } = turn;
   const observer = turn.input.observer;
   const intentField = turn.seat?.offerMinecraftIntent ? { offerMinecraftIntent: true as const } : {};
   const asked = { ...request, generateThreadTitle: false, spokenReply: true, ...intentField };
   if (structured) return deps.chatModel.generate(asked);
-  // A spoken reply answers before it thinks, as her plain voice stream does (`voiceThinking`) and a read-aloud text turn does (`textTurnThinking`).
-  if (observer && turn.seat?.offerMinecraftIntent && deps.chatModel.generateStreaming) return deps.chatModel.generateStreaming({ ...asked, skipThinking: true }, stream.delta);
+  // A spoken reply answers before it thinks, as her plain voice stream does (`voiceThinking`) and a read-aloud text turn does, unless the turn is
+  // one that needs the care (`answersFirst`).
+  if (observer && turn.seat?.offerMinecraftIntent && deps.chatModel.generateStreaming) {
+    return deps.chatModel.generateStreaming({ ...asked, ...(answersFirst ? { skipThinking: true as const } : {}) }, stream.delta);
+  }
   if (observer && deps.chatModel.generateVoiceStreaming) {
     return deps.chatModel.generateVoiceStreaming({ ...request, threadKey: threadId, ...turn.waitingSaid }, stream.delta, observer.signal);
   }
@@ -183,7 +186,10 @@ export async function speakVoiceTurn(turn: VoiceConversation): Promise<VoiceSpok
   observer?.signal?.addEventListener('abort', () => turn.roomLook.cutOff(turn.threadId, displayedVoiceText(stream.prefix)), { once: true });
   const taskDecision = voiceTurnSetsImplementation(turn.orchestrationState, turn.transcript, turn.occurredAt);
   const structured = Boolean(work.placeSkill || (!work.work && turn.provisionalIntent) || taskDecision || turn.confirmedImplementationRequest);
-  const completion = await observeFcaConversation(turn.composed.fcaTurn, () => askModel(turn, request, stream, structured));
+  // The read-aloud text turn's rule (`textThinkingCase`): a hard turn (the tier policy) and research (work in hand, a web read) still think first.
+  const answersFirst = textThinkingCase({ tier: offered.tier, tools: offered.toolOffer.tools, readAloud: true,
+    research: [work.work, work.placeSkill, turn.selectedSkills.has('current_web')] }) !== null;
+  const completion = await observeFcaConversation(turn.composed.fcaTurn, () => askModel(turn, request, stream, structured, answersFirst));
   observer?.signal?.throwIfAborted();
   const unsaid = guard?.end(); // The last sentence, checked, once the model is done.
   if (unsaid) await observer?.onTextDelta(unsaid);
