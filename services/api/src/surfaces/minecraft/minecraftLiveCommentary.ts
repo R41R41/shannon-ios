@@ -77,6 +77,8 @@ export class LiveCommentary {
   private serial = 0;
   private stops: Array<() => void> = [];
   private readonly counts: Record<string, number> = {};
+  /** The ends of requests that were given a second try (the first line was lost); each gets one. */
+  private readonly retried = new Set<string>();
 
   constructor(private readonly parts: LiveCommentaryParts) {
     this.governor = parts.governor ?? new LiveGovernor();
@@ -176,15 +178,20 @@ export class LiveCommentary {
   /** The written line meets the room again: it may have changed while the model wrote. */
   private settle(main: { moment: LiveMoment; salience: number; rewrites: number }, folded: LiveMoment[], text: string | null, voice: boolean): void {
     const spendAll = () => [main.moment, ...folded].forEach(moment => this.governor.spend(moment));
+    // The end of a request is the one word that is not told again by anything else: a line lost for a reason of the line (empty, a repeat,
+    // the room) is written once more.
+    const giveUp = () => {
+      if (this.revive(main.moment)) return folded.forEach(moment => this.governor.spend(moment));
+      spendAll();
+      this.dropWaiting(main.moment, folded);
+    };
     if (!text) {
       this.count('write_empty');
-      spendAll();
-      return this.dropWaiting(main.moment, folded);
+      return giveUp();
     }
     if (!this.governor.fresh(text)) {
       this.count('write_repeat');
-      spendAll();
-      return this.dropWaiting(main.moment, folded);
+      return giveUp();
     }
     const again = this.governor.verdict(main.moment, this.room());
     if (!again.speak && (again.reason === 'human' || again.reason === 'replying') && main.rewrites < LIVE_COMMENTARY_ENGINE.rewrites) {
@@ -196,10 +203,23 @@ export class LiveCommentary {
     }
     if (!again.speak) {
       this.count(`write_dropped_${again.reason}`);
-      spendAll();
-      return this.dropWaiting(main.moment, folded);
+      return giveUp();
     }
     this.send(main, folded, text, voice);
+  }
+
+  /**
+   * The end of a request whose line was lost goes back to waiting, once, as new (its time runs from now); anything else is not given a
+   * second try. Returns whether it was put back.
+   */
+  private revive(moment: LiveMoment): boolean {
+    if (moment.kind !== 'task_done' || this.retried.has(moment.key)) return false;
+    this.retried.add(moment.key);
+    if (this.retried.size > 64) this.retried.delete(this.retried.values().next().value as string);
+    const again = { ...moment, at: this.now() }, waiting = this.waiting.find(item => item.moment.key === moment.key);
+    if (waiting) waiting.moment = again; else this.waiting.push({ moment: again, rewrites: 0 });
+    this.count('revived');
+    return true;
   }
 
   private dropWaiting(main: LiveMoment, folded: LiveMoment[]): void {
@@ -229,7 +249,11 @@ export class LiveCommentary {
     this.pending.delete(draft.id);
     this.count(`ended_${receipt.outcome}`);
     this.log(`Shannon Minecraft live ended id=${draft.id} kind=${draft.kind} outcome=${receipt.outcome}${receipt.reason ? ` reason=${receipt.reason}` : ''}`);
-    if (receipt.outcome !== 'spoken' && receipt.outcome !== 'posted') return;
+    if (receipt.outcome !== 'spoken' && receipt.outcome !== 'posted') {
+      // The body could not say it (someone kept talking, the wait ran out): the end of a request waits for the room once more.
+      if (this.revive(entry.main)) this.schedule(LIVE_COMMENTARY_ENGINE.retryMilliseconds);
+      return;
+    }
     this.governor.delivered(entry.main, entry.text, this.now());
     for (const moment of entry.also) this.governor.spend(moment);
     try {

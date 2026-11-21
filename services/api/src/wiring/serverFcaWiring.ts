@@ -250,7 +250,8 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
         const stepParts = ({ selector, observations, waitCounterpart, keepBodyTools, audienceAllowed, obsMode: fcaObsMode(
           values.SHANNON_FCA_OBS_MODE), ...(body ? { body: llmcLifecycle(small, withMinecraftLive(body, { live: parts.live, control:
              minecraft!.control, step, ...(small?.tools.llmc ? { plan: small.tools.llmc.plan } : {}),
-             phase: () => _runtime.get(step.scopeKey, step.taskId)?.phase ?? null }).body) } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false &&
+             // The end of a request is told for a Minecraft request's task only (a research task of the same runtime is not one).
+             ...(keepBodyTools() ? { phase: () => _runtime.get(step.scopeKey, step.taskId)?.phase ?? null } : {}) }).body) } : {}), safeToAcknowledgeStop: () => body?.safeToAcknowledgeStop() !== false &&
                 parts.minecraftLifecycle?.safe(step.lease.id) !== false, ...(shared ? { recall: shared.recall, bodyRecall:
                    shared.bodyRecall, evidence: shared.evidence, observeMemory: (ids: readonly string[]) => shared!.observeMemoryInTurns(step, ids) } : {}),
         sourcesVisible,

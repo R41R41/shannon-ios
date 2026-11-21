@@ -99,10 +99,30 @@ describe('the writer', () => {
   it('asks, when a request is done, for what was made and the next step as one question', () => {
     const { system } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキを作る' }), also: [], recent: [], voice: true });
     expect(liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキを作る' }), also: [], recent: [], voice: true }).message)
-      .toContain('置き場所か渡し方を聞く問い');
+      .toContain('置き場所か渡し方');
     for (const part of ['[依頼が終わった時]', 'どこに置けばいい？渡せばいいかな？', '聞くのは1つだけ', '新しい頼み事', '頼まれた作業「ケーキを作る」が終わった']) {
       expect(system).toContain(part);
     }
+  });
+
+  it('gives the end of a request room for the question, and asks of a request that made nothing what comes next', () => {
+    const done = moment('task_done', { goal: '鉄を集める' });
+    const { system, message } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: done, also: [], recent: [], voice: true });
+    expect(system).toContain(`1〜2文、${LIVE_LINE_LIMITS.doneVoiceCharacters}字以内`);
+    expect(system).toContain('次にどうするかを聞く');
+    expect(message).toContain('次にどうするか');
+    const line = `${'あ'.repeat(LIVE_LINE_LIMITS.voiceCharacters - 4)}。どこに置けばいい？`;
+    expect(cleanLiveLine(line, { voice: true })).toBe(`${'あ'.repeat(LIVE_LINE_LIMITS.voiceCharacters - 4)}。`);
+    expect(cleanLiveLine(line, { voice: true, done: true })).toBe(line);
+  });
+
+  it('writes for a public stream as it did: nothing of the work she was asked for, and no question at the end of a request', () => {
+    const asked = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキを作る' }), also: [], recent: [], voice: true, place: 'stream' });
+    expect(asked.system).toContain('頼まれた作業の中身は、この場では言わない');
+    expect(asked.system).not.toContain('ここにいる人はみんな、ボクの作業にいっしょに参加している');
+    expect(asked.system).not.toContain('[依頼が終わった時]');
+    expect(asked.system).toContain(`1〜2文、${LIVE_LINE_LIMITS.voiceCharacters}字以内`);
+    expect(asked.message).toBe('（実況の一言を、本文だけで）');
   });
 
   it('takes the first line of the answer as the one to say and refuses what is not a line', () => {

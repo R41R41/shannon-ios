@@ -133,6 +133,44 @@ describe('what her work needs, and what she gets of it', () => {
   });
 });
 
+describe('what the view keeps apart', () => {
+  it('counts a run to the dragon written in English, and still not another request', () => {
+    const dragon = fixture();
+    dragon.live.begin({ taskId: 'task', scopeKey: 'owner', goal: 'Kill the Ender Dragon', origin: 'owner_request', createdAtMs: T0, bodyId: 'minecraft:world', netherReached: null });
+    const run = [[], [{ name: 'oak_log', count: 5 }], [{ name: 'iron_pickaxe', count: 1 }, { name: 'iron_ingot', count: 9 }]];
+    for (const inventory of run) dragon.see(inventory);
+    expect(dragon.kinds()).toContain('milestone_passed');
+  });
+
+  it('keeps what she thinks and plans out of the recent moments the conversations read, which stay those of the world', () => {
+    const f = fixture();
+    f.see();
+    f.see([{ name: 'diamond', count: 1 }]);
+    f.live.thought('task', '鉄を探しに洞窟へ行く');
+    f.live.plan('task', view(1, 'a', [node('a', '木を集める')]));
+    f.live.need('task', { item: 'iron_ingot', count: 3, use: 'バケツ' });
+    expect(f.kinds()).toEqual(expect.arrayContaining(['thinking', 'plan_changed', 'material_needed']));
+    const recent = f.live.snapshot()?.recent.map(item => item.line) ?? [];
+    expect(recent.length).toBeGreaterThan(0);
+    expect(recent.join('/')).toContain('ダイヤモンド');
+    expect(recent.join('/')).not.toMatch(/いまの手のねらい|計画を直した|要ると分かった/u);
+  });
+
+  it('tells an item again to the next request that asks for it on the same body', () => {
+    const f = fixture();
+    f.see();
+    f.live.need('task', { item: 'wheat', count: 3, use: 'ケーキ' });
+    f.see([{ name: 'wheat', count: 3 }]);
+    expect(f.moments.filter(moment => moment.kind === 'material_got')).toHaveLength(1);
+    f.live.end('task');
+    f.see([]);
+    f.live.begin({ taskId: 'second', scopeKey: 'owner', goal: 'パンを作る', origin: 'owner_request', createdAtMs: T0, bodyId: 'minecraft:world', netherReached: null });
+    f.live.need('second', { item: 'wheat', count: 3, use: 'パン' });
+    f.see([{ name: 'wheat', count: 3 }]);
+    expect(f.moments.filter(moment => moment.kind === 'material_got')).toHaveLength(2);
+  });
+});
+
 describe('what she means, and the end of a request', () => {
   it('tells what an act is for, as a thought, once for the same words', () => {
     const f = fixture();
@@ -186,10 +224,16 @@ describe('the body of a task tells her work to the view', () => {
     const { f, body, setPlan } = wrapped();
     body.context();
     expect(f.kinds()).toEqual(['plan_changed']);
-    body.noteCall?.(call('plan.update', { ops: [{ op: 'promise', item: 'iron_ingot', count: 3, use: 'バケツ' }, { op: 'add', title: 'x' }] }), 'op1');
+    const promise = call('plan.update', { ops: [{ op: 'promise', item: 'iron_ingot', count: 3, use: 'バケツ' }, { op: 'add', title: 'x' }] });
+    body.noteCall?.(promise, 'op1');
     body.noteCall?.(call('mc.act', { why: '[p1] 木を切って板にする', hands: [], keep: [{ item: 'oak_planks', count: 4, use: '作業台' }] }), 'op2');
+    // A promise is a need once the plan took it: a refused one says nothing.
     expect(f.moments.slice(1).map(moment => [moment.kind, moment.facts.item ?? moment.facts.why])).toEqual([
-      ['material_needed', 'iron_ingot'], ['material_needed', 'oak_planks'], ['thinking', '木を切って板にする']]);
+      ['material_needed', 'oak_planks'], ['thinking', '木を切って板にする']]);
+    body.noteResult?.(promise, { ok: false, text: 'refused' } as never, 1);
+    expect(f.moments.filter(moment => moment.facts.item === 'iron_ingot')).toEqual([]);
+    body.noteResult?.(promise, { ok: true, text: '' } as never, 1);
+    expect(f.moments.at(-1)).toMatchObject({ kind: 'material_needed', facts: { item: 'iron_ingot', count: 3, use: 'バケツ' } });
     setPlan(view(2, 'b', [node('a', '木を集める', 'done'), node('b', '作業台を作る')]));
     body.noteResult?.(call('plan.update', {}), { ok: true, text: '' } as never, 1);
     expect(f.kinds().at(-1)).toBe('plan_step');
@@ -198,6 +242,15 @@ describe('the body of a task tells her work to the view', () => {
     body.noteResult?.(call('mc.probe', {}), { ok: true, text: '' } as never, 1);
     expect(f.kinds().at(-1)).toBe('plan_step');
     expect(f.moments.filter(moment => moment.kind === 'plan_step')).toHaveLength(1);
+  });
+
+  it('reads a keep written as the short line the model writes (品目:数:用途), one or several', () => {
+    const { f, body } = wrapped();
+    body.context();
+    body.noteCall?.(call('mc.act', { hands: ['mine stone'], keep: ['spruce_planks:4:作業台', '"coal:2:たいまつ: 夜のため"'] }), 'op1');
+    body.noteCall?.(call('mc.act', { hands: ['mine stone'], keep: 'iron_ingot:3:バケツ, not a line' }), 'op2');
+    expect(f.moments.filter(moment => moment.kind === 'material_needed').map(moment => [moment.facts.item, moment.facts.count, moment.facts.use])).toEqual([
+      ['spruce_planks', 4, '作業台'], ['coal', 2, 'たいまつ: 夜のため'], ['iron_ingot', 3, 'バケツ']]);
   });
 
   it('never fails a decision when the view throws', () => {
@@ -307,5 +360,37 @@ describe('her work in the commentary', () => {
     await g.settle();
     clock += 30_000;
     expect(g.outbox.take()[0]).toMatchObject({ kind: 'task_done' });
+  });
+
+  it('says the end of a request once more when the body could not say the first line, and no more than once', async () => {
+    const f = setup();
+    f.emit(moment('task_done', { goal: 'ケーキを作る' }, 'd'));
+    await f.settle();
+    const first = f.outbox.take()[0]!;
+    f.outbox.receive([{ id: first.id, outcome: 'failed', reason: 'human_speaking' }], null);
+    await vi.advanceTimersByTimeAsync(1_600);
+    expect(f.engine.stats().revived).toBe(1);
+    const second = f.outbox.take()[0]!;
+    expect(second).toMatchObject({ kind: 'task_done' });
+    expect(second.id).not.toBe(first.id);
+    f.outbox.receive([{ id: second.id, outcome: 'failed', reason: 'human_speaking' }], null);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(f.outbox.take()).toEqual([]);
+    expect(f.requests.map(request => request.main.kind)).toEqual(['task_done', 'task_done']);
+  });
+
+  it('writes the end of a request again when the first answer was empty, and lets any other kind go', async () => {
+    let calls = 0;
+    const f = setup(async () => (++calls === 1 ? null : '言葉'));
+    f.emit(moment('task_done', { goal: 'ケーキを作る' }, 'd'));
+    await f.settle();
+    await vi.advanceTimersByTimeAsync(1_600);
+    expect(f.requests.map(request => request.main.kind)).toEqual(['task_done', 'task_done']);
+    expect(f.outbox.take()[0]).toMatchObject({ kind: 'task_done', text: '言葉' });
+    const g = setup(async () => null);
+    g.emit(moment('material_got', { item: 'wheat', count: 1 }, 'm'));
+    await g.settle();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(g.requests).toHaveLength(1);
   });
 });

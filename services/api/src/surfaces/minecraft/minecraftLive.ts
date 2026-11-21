@@ -67,7 +67,9 @@ interface TaskState {
 const brief = (value: unknown, limit = 24): string => String(value ?? '').replace(/\s+/gu, ' ').replace(/^\[[^\]]{1,12}\]\s*/u, '').trim().slice(0, limit);
 const HAVE = /have:([a-z][a-z0-9_]{0,40})\s*>=\s*(\d{1,4})/gu;
 const DONE_AFTER_SECONDS = 120;
-const DRAGON_RUN = /エンドラ|ドラゴン|ネザー|エンド|ブレイズ|ダイヤ|討伐|クリア/u;
+const DRAGON_RUN = /エンドラ|ドラゴン|ネザー|エンド|ブレイズ|ダイヤ|討伐|クリア|dragon|nether|blaze|diamond/iu;
+/** What she says of her work as it goes: the block's recent moments are of the world, and the plan has a place of its own. */
+const WORK_MOMENTS: ReadonlySet<string> = new Set(['thinking', 'plan_step', 'plan_changed', 'material_needed', 'material_got']);
 
 export class MinecraftLive implements MinecraftLiveSink {
   private readonly tasks = new Map<string, TaskState>();
@@ -95,6 +97,8 @@ eplying, heard). */
   begin(info: LiveTaskInfo): void {
     const before = this.tasks.get(info.taskId);
     const now = this.now();
+    // A request that is new asks for its own things: what a detector told of an item for the one before is not news held against this.
+    if (!before) for (const detector of this.detectors.values()) detector.forgetWanted?.();
     for (const [id, task] of this.tasks) if (task.endedAt !== null && now - task.endedAt > 600_000) this.tasks.delete(id);
     this.tasks.set(info.taskId, { info, call: before?.call ?? null, updatedAt: now, endedAt: null, milestone: before?.milestone ?? null,
       late: before?.late ?? new Set(), plan: before?.plan ?? null, needs: before?.needs ?? new Map(), doneTold: before?.doneTold ?? false,
@@ -329,7 +333,7 @@ eplying, heard). */
       return threat && distance !== null && distance <= 24 && typeof threat.name === 'string'
         ? [{ text: `${mobWords(threat.name)}${Math.round(distance)}m${threat.canReachMe === false ? '（壁の向こう）' : ''}`, distance }] : [];
     }).sort((a, b) => a.distance - b.distance).slice(0, 3).map(item => item.text);
-    const recent = this.moments.filter(moment => now - moment.at <= SHOWN_MOMENT_MINUTES * 60_000 && moment.kind !== 'stuck').slice(-3).reverse()
+    const recent = this.moments.filter(moment => now - moment.at <= SHOWN_MOMENT_MINUTES * 60_000 && moment.kind !== 'stuck' && !WORK_MOMENTS.has(moment.kind)).slice(-3).reverse()
       .map(moment => ({ ageSeconds: Math.round((now - moment.at) / 1000), line: liveFactLine(moment).replace(/。$/u, '') }));
     const stall = this.stall && now - this.stall.at <= STUCK_SHOWN_SECONDS * 1000 ? `${this.stall.what}が${this.stall.seconds}秒ほど進んでいない` : null;
     const plan = task ? this.planSummary(task) : null;

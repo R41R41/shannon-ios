@@ -1,4 +1,4 @@
-import { LiveGovernor } from '@shannon/mind';
+import { LIVE_COMMENTARY_STREAM, LiveGovernor } from '@shannon/mind';
 import type { MinecraftLiveRoom, MinecraftLiveSpeechReceipt } from '../contracts/minecraftControlContract.js';
 import type { MinecraftLive } from '../surfaces/minecraft/minecraftLive.js';
 import { LiveCommentary } from '../surfaces/minecraft/minecraftLiveCommentary.js';
@@ -59,7 +59,7 @@ function commentaryOver(live: MinecraftLive, hooks: CommentaryHooks): Commentary
       onMoment: listener => live.onMoment(listener), inDanger: () => live.inDanger(),
       conversation: () => ({ replying: hooks.room().replying, sinceHumanMilliseconds: hooks.room().sinceHumanMilliseconds }),
     },
-    outbox, governor: new LiveGovernor(), now: () => hooks.now(), log: line => hooks.log(line),
+    outbox, governor: new LiveGovernor(LIVE_COMMENTARY_STREAM), now: () => hooks.now(), log: line => hooks.log(line),
     async write(request) {
       if (hooks.quiet()) return null;
       const body = live.block({ alone: false });

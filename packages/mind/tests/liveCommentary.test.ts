@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, itemWords, liveCommentaryLimits, liveFactLine, liveSalience, pickMoments, type LiveMoment,
+  LIVE_COMMENTARY_STREAM, LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, itemWords, liveCommentaryLimits, liveFactLine, liveSalience, pickMoments, type LiveMoment,
   type LiveMomentKind,
 } from '../src/index.js';
 
@@ -132,6 +132,22 @@ describe('LiveGovernor', () => {
     governor.delivered(moment('thinking', T0), 'a', T0);
     expect(governor.verdict(moment('thinking', T0 + 14_000), room(T0 + 14_000))).toMatchObject({ reason: 'topic' });
     expect(governor.verdict(moment('material_got', T0 + 14_000, { item: 'iron_ingot', count: 1 }), room(T0 + 14_000))).toMatchObject({ speak: true });
+  });
+
+  it('lets the end of a second request through soon after the first, and through a full minute budget', () => {
+    const governor = new LiveGovernor();
+    governor.delivered(moment('task_done', T0, { goal: 'ケーキを作る' }), 'a', T0);
+    expect(governor.verdict(moment('task_done', T0 + 30_000, { goal: '鉄を集める' }), room(T0 + 30_000))).toMatchObject({ speak: true });
+    const busy = new LiveGovernor();
+    (['diamond_found', 'slept', 'item_got', 'dragon_stage'] as LiveMomentKind[]).forEach((kind, index) =>
+      busy.delivered(moment(kind, T0 + index * 6_000), kind, T0 + index * 6_000));
+    expect(busy.verdict(moment('structure_found', T0 + 30_000), room(T0 + 30_000))).toMatchObject({ reason: 'rate' });
+    expect(busy.verdict(moment('task_done', T0 + 30_000, { goal: 'ケーキを作る' }), room(T0 + 30_000))).toMatchObject({ speak: true });
+  });
+
+  it('keeps a public stream to the two words a minute it had, whatever the call is given', () => {
+    expect(LIVE_COMMENTARY_STREAM).toMatchObject({ perMinute: 2, perTenMinutes: 7, gapSeconds: { ordinary: 18, urgent: 6 } });
+    expect(LIVE_COMMENTARY_STREAM.perMinute).toBeLessThan(LIVE_COMMENTARY_V1.perMinute);
   });
 
   it('keeps a gap, shorter for an urgent moment', () => {

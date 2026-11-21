@@ -107,7 +107,8 @@ export class LiveGovernor {
     const { limits } = this;
     const urgent = salience >= limits.urgent;
     const within = (seconds: number) => this.told.filter(item => now - item.at < seconds * 1000);
-    if (within(60).length >= limits.perMinute || within(600).length >= limits.perTenMinutes) return 'rate';
+    // The end of a request is the word she must say: the budget of chatter does not hold it back (the gap still does).
+    if (moment.kind !== 'task_done' && (within(60).length >= limits.perMinute || within(600).length >= limits.perTenMinutes)) return 'rate';
     const last = this.told.at(-1);
     if (last && (now - last.at) / 1000 < limits.gapSeconds[urgent ? 'urgent' : 'ordinary']) return 'gap';
     const own = liveOwnSpacing(moment.kind);

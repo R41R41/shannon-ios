@@ -26,17 +26,28 @@ export function withMinecraftLive<Made extends { body: FcaBodyLifecycle }>(made:
   };
   // What her calls say of her work: a promise of the plan and a `keep` of an act are what a step needs; an act's `why` is what she means by it.
   const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  // An act's `keep` is a line `品目:数:用途` (the short form the model writes; the use may hold colons), or an entry of the JSON form.
+  const keepLine = /^([^:\s]+)\s*:\s*(\d+)\s*:\s*(\S[\s\S]*)$/u;
   const needed = (entry: unknown) => {
+    if (typeof entry === 'string') {
+      const read = keepLine.exec(entry.trim().replace(/^["']+|["']+$/gu, ''));
+      if (read) live.need?.(step.taskId, { item: read[1]!, count: Number(read[2]), use: read[3]!.trim() });
+      return;
+    }
     const row = record(entry);
     if (row && typeof row.item === 'string' && typeof row.count === 'number') live.need?.(step.taskId, { item: row.item, count: row.count, use: String(row.use ?? '') });
+  };
+  // A promise of the plan is a need once the plan took it (a refused one is not something she needs).
+  const promised = (call: { name: string; input: unknown }) => {
+    const input = record(call.input);
+    if (call.name !== 'plan.update' || !input) return;
+    for (const op of Array.isArray(input.ops) ? input.ops : []) if (record(op)?.op === 'promise') needed(op);
   };
   const saying = (call: { name: string; input: unknown }) => {
     const input = record(call.input);
     if (!input) return;
-    if (call.name === 'plan.update') {
-      for (const op of Array.isArray(input.ops) ? input.ops : []) if (record(op)?.op === 'promise') needed(op);
-    } else if (call.name === 'mc.act') {
-      for (const entry of Array.isArray(input.keep) ? input.keep : []) needed(entry);
+    if (call.name === 'mc.act') {
+      for (const entry of Array.isArray(input.keep) ? input.keep : typeof input.keep === 'string' ? input.keep.split(/[,\n]/u) : []) needed(entry);
       if (typeof input.why === 'string') live.thought?.(step.taskId, input.why);
     }
   };
@@ -60,6 +71,7 @@ export function withMinecraftLive<Made extends { body: FcaBodyLifecycle }>(made:
     noteResult(call, result, durationMilliseconds) {
       inner.noteResult?.(call, result, durationMilliseconds);
       if (call.name.startsWith('mc.')) told(() => live.activity(step.taskId, null));
+      if (call.name === 'plan.update' && result.ok) told(() => promised(call));
       if (call.name === 'plan.update' || call.name === 'mc.act') told(() => live.plan?.(step.taskId, parts.plan?.()));
       if (call.name === 'mc.goal-evidence' && result.ok) nether = minecraftMilestones(result.text)?.netherReached ?? nether;
     },

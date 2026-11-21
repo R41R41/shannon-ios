@@ -42,6 +42,14 @@ export const LIVE_COMMENTARY_V1: LiveCommentaryLimits = Object.freeze({
   remembered: 6,
 });
 
+/**
+ * The numbers of a public stream's commentary: what the commentary had before she worked with people in a call (two words a minute, a gap
+ * of eighteen seconds). A stream's room is many people who did not ask for anything, so it is not made busier by the call's numbers.
+ */
+export const LIVE_COMMENTARY_STREAM: LiveCommentaryLimits = Object.freeze({
+  ...LIVE_COMMENTARY_V1, perMinute: 2, perTenMinutes: 7, gapSeconds: Object.freeze({ ordinary: 18, urgent: 6 }),
+});
+
 export const LIVE_MOMENT_KINDS = Object.freeze([
   'died', 'near_death', 'diamond_found', 'armor_complete', 'tool_made', 'dimension_entered', 'night_fell', 'morning', 'slept',
   'lava_escape', 'lava_near', 'structure_found', 'blaze_seen', 'item_got', 'dragon_stage', 'milestone_passed', 'milestone_late', 'hungry', 'stuck',
@@ -99,8 +107,9 @@ const KINDS: Readonly<Record<LiveMomentKind, KindRow>> = Object.freeze({
   material_needed: { weight: 0.6, topic: 'material', lifetime: 20, topicSeconds: 25, kindSeconds: 20 },
   material_got: { weight: 0.66, topic: 'material', lifetime: 15, topicSeconds: 25, kindSeconds: 20 },
   thinking: { weight: 0.56, topic: 'thought', lifetime: 15, topicSeconds: 30, kindSeconds: 30 },
-  // The request ending is the loudest word of her work: urgent, so it breaks the quiet after someone's words and the spacing.
-  task_done: { weight: 0.92, topic: 'done', lifetime: 90 },
+  // The request ending is the loudest word of her work: urgent, so it breaks the quiet after someone's words and the spacing. Two short
+  // requests can end a minute apart and each end is its own word, so the same-kind spacing is only a few seconds.
+  task_done: { weight: 0.92, topic: 'done', lifetime: 90, kindSeconds: 5 },
 });
 
 export const liveTopicOf = (kind: LiveMomentKind): string => KINDS[kind].topic;

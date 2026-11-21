@@ -107,6 +107,8 @@ export interface MomentDetector {
   observe(observation: BodyObservation, at: number): LiveMoment[];
   /** Forgets the frame before: the next one is only remembered (a new connection, a new world). */
   reset(): void;
+  /** Forgets which of the wanted items were told (a new request wants them anew). */
+  forgetWanted?(): void;
 }
 
 /** The id a promise or a condition names, as the pattern of the carried items it means (`planks` is every plank). */
@@ -274,5 +276,6 @@ export function createMomentDetector(options: { wanted?: () => ReadonlyMap<strin
         ...surroundings(now, prev, at)];
     },
     reset() { before = null; },
+    forgetWanted() { told.wanted.clear(); },
   };
 }
