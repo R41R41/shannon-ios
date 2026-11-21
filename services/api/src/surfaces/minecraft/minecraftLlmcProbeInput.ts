@@ -70,7 +70,7 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
   path: ['to', 'from'], route: ['to', 'from', 'range'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
   scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], lane: ['spawner', 'from'], den: [], roofsite: ['radius'],
-  bedsite: ['target'], gaze: ['player', 'range'],
+  bedsite: ['target'], gaze: ['player', 'near', 'range'],
 };
 /** The radius each kind takes: its range and default (none: the body's own). */
 const RADIUS: Readonly<Partial<Record<ProbeKind, { low: number; high: number; fallback?: number }>>> = {
@@ -190,15 +190,22 @@ const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => stri
     return null;
   },
 };
-/** A player's in-game name (3 to 16 letters, digits or underscores; the Bedrock prefix dot is allowed), as a gaze names whose eyes are read. */
-const PLAYER_NAME = /^\.?[A-Za-z0-9_]{1,16}$/u;
-/** A gaze's player (the in-game name, required) and its ray length (1 to 64, the body's default 32 when left out). */
+/**
+ * A gaze's player (the in-game name; whatever the model has, a display name or none: the body answers for the people who are here when no one has that name),
+ * its ray length (1 to 64, the body's default 32 when left out) and `near` (a block name, oak_planks: the blocks of that name nearest the look).
+ */
 function prepareGaze(work: Preparing): string | null {
   const raw = work.fields.player;
-  const name = typeof raw === 'string' ? raw.trim().replace(/^@/u, '') : '';
-  if (!PLAYER_NAME.test(name)) return 'gaze の player はマイクラ名（必須）';
-  if (name !== raw) work.fixes.push('player を整えた');
-  work.out.player = name;
+  const name = typeof raw === 'string' ? raw.replace(/[\x00-\x1f]/gu, '').trim().replace(/^@/u, '').slice(0, 32) : '';
+  if (name) {
+    if (name !== raw) work.fixes.push('player を整えた');
+    work.out.player = name;
+  }
+  const near = typeof work.fields.near === 'string' ? work.fields.near.trim().toLowerCase().replace(/^minecraft:/u, '').replace(/\s+/gu, '_') : '';
+  if (near && /^[a-z0-9_]{1,48}$/u.test(near)) {
+    work.out.near = near;
+    if (near !== work.fields.near) work.fixes.push('near を整えた');
+  }
   const range = finite(work.fields.range);
   if (range !== null) {
     work.out.range = clamp(Math.round(range), 1, 64);
