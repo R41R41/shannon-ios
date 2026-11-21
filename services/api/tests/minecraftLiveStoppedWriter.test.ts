@@ -75,7 +75,7 @@ type Scene = Awaited<ReturnType<typeof scene>>;
 const decide = (f: Scene, revision: number, current: string, done: string[]) => {
   f.body.context();
   f.setPlan(view(revision, current, ['a', 'b', 'c'].map(id => node(id, `手順${id}`, done.includes(id) ? 'done' : 'continue'))));
-  f.body.noteResult({ name: 'plan.update', input: {} } as never, { ok: true, text: '' } as never, 1);
+  f.body.noteResult?.({ name: 'plan.update', input: {} } as never, { ok: true, text: '' } as never, 1);
 };
 
 describe('her live word is written outside the task step that gave rise to it', () => {

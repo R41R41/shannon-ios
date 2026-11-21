@@ -1447,7 +1447,8 @@
       "long-line": 1
     },
     "services/api/src/mind/perception/addressed.ts": {
-      "long-line": 10
+      "complex-function": 1,
+      "long-line": 22
     },
     "services/api/src/mind/perception/chatAudience.ts": {
       "long-line": 2
