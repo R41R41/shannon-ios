@@ -69,8 +69,11 @@ function placeLine(snapshot: LiveSnapshot): string {
   return place.length ? `- いる所: ${place.join('・')}` : '';
 }
 
+/** The request's content may be told here: he is alone, or everyone who reads is on the call, or the goal is her own pursuit. */
+const requestShown = (snapshot: LiveSnapshot, alone: boolean, participants: boolean) => alone || participants || !snapshot.goalIsRequest;
+
 function taskLines(snapshot: LiveSnapshot, alone: boolean, participants: boolean): string[] {
-  const shown = snapshot.goal !== null && (alone || participants || !snapshot.goalIsRequest);
+  const shown = snapshot.goal !== null && requestShown(snapshot, alone, participants);
   const asked = snapshot.goalIsRequest ? (!alone && participants ? '（通話の誰かに頼まれた）' : `（${SHANNON_OWNER_NAME}に頼まれた）`) : '';
   const goal = snapshot.goal === null ? '- いまは特に頼まれた作業は無い。'
     : shown ? `- 取り組んでいること: ${snapshot.goal}${asked}`
@@ -79,10 +82,13 @@ function taskLines(snapshot: LiveSnapshot, alone: boolean, participants: boolean
     snapshot.doing ? `- いましていること: ${snapshot.doing}` : '', snapshot.stuck ? `- 詰まり気味: ${snapshot.stuck}` : ''];
 }
 
-/** The plan's section and points, in her words: what the job is made of now. A few lines at most. */
-function planLines(snapshot: LiveSnapshot): string[] {
+/**
+ * The plan's section and points, in her words: what the job is made of now. A few lines at most. The section names carry the request's
+ * content, so they follow the task line's rule: left out where the request itself is left out.
+ */
+function planLines(snapshot: LiveSnapshot, shown: boolean): string[] {
   const plan = snapshot.plan;
-  if (!plan || (plan.section === null && !plan.points.length)) return [];
+  if (!shown || !plan || (plan.section === null && !plan.points.length)) return [];
   return [plan.section !== null ? `- 計画の今の節: ${plan.section}` : '', plan.points.length ? `- 計画の要点: ${plan.points.slice(0, 4).join(' → ')}` : ''];
 }
 
@@ -100,6 +106,7 @@ export function liveBlock(snapshot: LiveSnapshot | null, options: { alone: boole
   if (snapshot.frameAgeSeconds === null) return [LIVE_BLOCK_HEADER, '- マイクラの体は、いまワールドにつながっていない（動いていない）。'].join('\n');
   const old = snapshot.frameAgeSeconds > 20 ? [`- （この様子は${minutes(snapshot.frameAgeSeconds)}前のもの）`] : [];
   const exchanges = options.alone ? options.exchanges ?? '' : '';
-  const tasks = taskLines(snapshot, options.alone, options.participants === true);
-  return [LIVE_BLOCK_HEADER, ...tasks, ...planLines(snapshot), ...stateLines(snapshot), ...old, exchanges].filter(Boolean).join('\n');
+  const participants = options.participants === true;
+  const tasks = taskLines(snapshot, options.alone, participants);
+  return [LIVE_BLOCK_HEADER, ...tasks, ...planLines(snapshot, requestShown(snapshot, options.alone, participants)), ...stateLines(snapshot), ...old, exchanges].filter(Boolean).join('\n');
 }

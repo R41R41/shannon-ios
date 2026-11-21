@@ -100,7 +100,7 @@ describe('the writer', () => {
     const { system } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキを作る' }), also: [], recent: [], voice: true });
     expect(liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキを作る' }), also: [], recent: [], voice: true }).message)
       .toContain('置き場所か渡し方');
-    for (const part of ['[依頼が終わった時]', 'どこに置けばいい？渡せばいいかな？', '聞くのは1つだけ', '新しい頼み事', '頼まれた作業「ケーキを作る」が終わった']) {
+    for (const part of ['[依頼が終わった時]', '「？」で終える', 'どこに置けばいい？渡せばいいかな？', '聞くのは1つだけ', '新しい頼み事', '頼まれた作業「ケーキを作る」が終わった']) {
       expect(system).toContain(part);
     }
   });
