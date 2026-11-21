@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CallVoiceSpeechGateway,
   callVoiceChosen,
-  createConfiguredCallSpeechGateway,
+  createConfiguredCallVoiceCast,
 } from '../src/infra/models/callVoiceSpeech.js';
 import { GoogleGeminiSpeechGateway, type GeminiSpeechRequest } from '../src/infra/models/geminiSpeech.js';
 import { handlePlatformVoiceRequest } from '../src/surfaces/platform/platformVoiceRoute.js';
@@ -53,8 +53,8 @@ describe('the call voice (Gemini)', () => {
     expect(callVoiceChosen({})).toBe(false);
     expect(callVoiceChosen({ SHANNON_GEMINI_TTS_VOICE: 'Leda', SHANNON_ELEVEN_TTS_VOICE_ID: 'abcdefgh' })).toBe(false);
     expect(callVoiceChosen({ SHANNON_CALL_TTS_VOICE: ' voice_x ' })).toBe(true);
-    expect(createConfiguredCallSpeechGateway({ SHANNON_CALL_TTS_VOICE: 'voice_x' })).toBeNull();
-    expect(createConfiguredCallSpeechGateway({ SHANNON_CALL_TTS_VOICE: 'voice_x', GEMINI_API_KEY: 'k' })).not.toBeNull();
+    expect(createConfiguredCallVoiceCast({ SHANNON_CALL_TTS_VOICE: "voice_x" })).toBeNull();
+    expect(createConfiguredCallVoiceCast({ SHANNON_CALL_TTS_VOICE: "voice_x", GEMINI_API_KEY: "k" })?.current()).toBe("gemini");
   });
 
   it('asks for the voice, model and core style, with the acting tags as a direction and no tag in the text', async () => {

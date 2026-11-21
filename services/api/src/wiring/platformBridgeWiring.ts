@@ -28,8 +28,8 @@ import type { PlatformVoiceRoutes } from '../surfaces/platform/platformVoiceRout
 import { voiceMouth } from '../surfaces/platform/voiceMouth.js';
 import { voiceRooms } from '../surfaces/platform/voiceRoom.js';
 import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
-import { createConfiguredElevenSpeechGateway } from '../infra/models/elevenSpeech.js';
-import { callVoiceChosen, createConfiguredCallSpeechGateway } from '../infra/models/callVoiceSpeech.js';
+import { createConfiguredCallVoiceCast } from '../infra/models/callVoiceSpeech.js';
+import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { ChatSentenceSplitter, splitChatSentences } from '../surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../surfaces/text/chatSentenceStream.js';
 import { oneHeadEnabled } from '../contracts/oneHeadContract.js';
@@ -60,6 +60,8 @@ export function createConfiguredPlatformBridgeRoute(
   facts: ConstructorParameters<typeof PlatformPeople>[4] = null,
   /** 「話しかけられたか」 (`SHANNON_ADDRESSED`): the judge of whom a spoken line was said to; null while the switch is off. */
   addressed: AddressedJudge | null = null,
+  /** Where the call voice's synthesis is booked as usage (`voice` lane); without it nothing is booked. */
+  usageStore?: LlmUsageStore,
 ): PlatformBridgeRouteDependencies | null {
   const configuration = configuredPlatformBridge(environment);
   if (!configuration) return null;
@@ -78,7 +80,7 @@ export function createConfiguredPlatformBridgeRoute(
       chatModel, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), splitter: () => new ChatSentenceSplitter(VOICE_SENTENCE_CUT),
       environment: () => environment, rooms: voiceRooms, addressed, ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
     }),
-    mouth: voiceMouth, speech: configuredVoiceSpeech(environment), scopeKey: configuration.scopeKey, environment: () => environment,
+    mouth: voiceMouth, ...callVoices(environment, usageStore), scopeKey: configuration.scopeKey, environment: () => environment,
     listening: replies.listening ?? null,
   } : null;
   return { configuration, chatModel, service, reply, reactions, voice, environment: () => environment, close: () => {
@@ -105,13 +107,15 @@ function typedReplies(replies: { conversation: PlatformReplyConversation; databa
 }
 
 /**
- * Her voice for the voice channel: the Gemini call voice when `SHANNON_CALL_TTS_VOICE` is set, else her ElevenLabs voice. Null when the
- * chosen one is not configured (the route then answers 503 and the bot says the line in its own voice).
+ * Her voice for the voice channel: the named candidates (`SHANNON_CALL_VOICES`, and the voices the settings had before), the one in use
+ * changed by `POST /v1/platform/voice/cast`. Null for both when no candidate can be made (the route then answers 503 and the bot says
+ * the line in its own voice).
  */
-function configuredVoiceSpeech(environment: Readonly<Record<string, string | undefined>>) {
+function callVoices(environment: Readonly<Record<string, string | undefined>>, usageStore?: LlmUsageStore) {
   try {
-    return callVoiceChosen(environment) ? createConfiguredCallSpeechGateway(environment) : createConfiguredElevenSpeechGateway(environment);
+    const cast = createConfiguredCallVoiceCast(environment, usageStore);
+    return { speech: cast, cast };
   } catch {
-    return null;
+    return { speech: null, cast: null };
   }
 }

@@ -5,6 +5,7 @@ import { startStream, writeEvent } from '../../infra/http/ndjsonStream.js';
 import { PlatformBridgeError } from '../../mind/memory/platformMemoryPorts.js';
 import { ElevenSpeechError, validatedElevenTags } from '../../infra/models/elevenSpeech.js';
 import { GeminiSpeechError, normalizedSpeechText, type GeminiSpeechRequest, type GeminiSpeechStreamResult } from '../../infra/models/geminiSpeech.js';
+import type { CallVoiceCastPort } from '../../infra/models/callVoiceSpeech.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { switchOn, type SwitchValues } from '@shannon/switches';
 import { SHANNON_PLATFORM_VOICE_PREFIX, platformVoiceEnabled, type VoiceTurnLine } from './platformVoiceRequest.js';
@@ -19,7 +20,10 @@ import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from '../../infra/mod
  * token only, like the rest of `/v1/platform/*`; every route answers 503 `PLATFORM_VOICE_DISABLED` while `SHANNON_DC_VOICE` is off.
  *
  * - `POST turn` (NDJSON): the reply to what was said (`PlatformVoiceService.turn`).
- * - `POST speech`: PCM audio (24 kHz, mono, s16le) of a line in her ElevenLabs voice, streamed as it is made.
+ * - `POST speech`: PCM audio (24 kHz, mono, s16le) of a line in her call voice, streamed as it is made. `x-shannon-voice-name` says which
+ *   named voice made it; a 502/503 answer carries `voice` and `noSubstitute: true` when the settings choose the call voice (the body
+ *   then drops the line instead of saying it in VOICEPEAK).
+ * - `POST cast`: `{}` reads the call voice (`current`, `default`, `items`); `{name}` changes it (memory only; 404 `UNKNOWN_VOICE`).
  * - `GET fillers`: the short sounds a `decision` line may name, for the body to keep as audio.
  * - `POST say` / `POST mouth/poll` / `POST mouth/result`: her mouth (`voiceMouth.ts`, `dc-speak-interface.md`).
  * - `POST wording`: event facts put into her words. `POST said`: what she said by herself, or was heard saying before being talked over.
@@ -33,6 +37,8 @@ export interface PlatformVoiceRoutes {
   mouth: VoiceMouthQueue;
   /** The voice of this server's calls (ElevenLabs, or the Gemini call voice); null while its key or voice is not configured (speech answers 503). */
   speech: SpeechGateway | null;
+  /** The named call voices and which is in use (`callVoiceSpeech.ts`); null while `speech` is (cast answers 503). */
+  cast?: CallVoiceCastPort | null;
   scopeKey: string;
   environment?: () => SwitchValues;
   /** Listening transcription (`listening.ts`); null without `GROQ_API_KEY` (transcribe answers 503). */
@@ -99,6 +105,7 @@ async function dispatch(name: string, request: IncomingMessage, response: Server
   if (name === 'turn') return turn(request, response, routes);
   if (name === 'transcribe') return transcribe(request, response, routes);
   if (name === 'speech') return speech(request, response, routes);
+  if (name === 'cast') return cast(request, response, routes);
   if (name === 'fillers') return sendJson(response, 200, { items: VOICE_FILLERS.map(({ id, text, style }) => ({ id, text, style })) });
   if (name === 'wording') return sendJson(response, 200, await routes.service.wording(await readJson(request, 8 * 1024)));
   if (name === 'said') {
@@ -181,10 +188,33 @@ function validatedSpeech(values: Record<string, unknown>): SpeechAsk | null {
   }
 }
 
+function castState(port: CallVoiceCastPort) {
+  return { current: port.current(), default: port.defaultName(), chosen: port.chosen, items: port.list() };
+}
+
+/** The call voice: read it with `{}`, change it with `{name}`. Kept in memory, so a restart is the default again. */
+async function cast(request: IncomingMessage, response: ServerResponse, routes: PlatformVoiceRoutes): Promise<void> {
+  const body = await readJson(request, 1024);
+  const values = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  const port = routes.cast;
+  if (!port) return sendJson(response, 503, { error: 'ELEVEN_SPEECH_NOT_CONFIGURED', message: '声の合成は、いま使えません。' });
+  if (values.name !== undefined) {
+    if (typeof values.name !== 'string' || !port.select(values.name)) {
+      return sendJson(response, 404, { error: 'UNKNOWN_VOICE', message: 'その名前の声はありません。', ...castState(port) });
+    }
+    console.warn('Shannon call voice changed', { voice: port.current() });
+  }
+  sendJson(response, 200, castState(port));
+}
+
 async function speech(request: IncomingMessage, response: ServerResponse, routes: PlatformVoiceRoutes): Promise<void> {
   const body = await readJson(request, 8 * 1024);
   const values = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
-  if (!routes.speech) return sendJson(response, 503, { error: 'ELEVEN_SPEECH_NOT_CONFIGURED', message: '声の合成は、いま使えません。' });
+  // The settings chose the call voice: the body must not say a dropped line in another voice (`noSubstitute`).
+  const noSubstitute = routes.cast?.chosen === true ? { noSubstitute: true } : {};
+  if (!routes.speech) {
+    return sendJson(response, 503, { error: 'ELEVEN_SPEECH_NOT_CONFIGURED', message: '声の合成は、いま使えません。', ...noSubstitute });
+  }
   const ask = validatedSpeech(values);
   if (!ask) return sendJson(response, 400, { error: 'SPEECH_INVALID', message: '読み上げる文章または演技指定が不正です。' });
   if (speechActive >= SPEECH_AT_ONCE) return sendJson(response, 429, { error: 'BUSY', message: 'いまの返答を音声にしています。' });
@@ -198,11 +228,15 @@ async function speech(request: IncomingMessage, response: ServerResponse, routes
     if (!(error instanceof ElevenSpeechError || error instanceof GeminiSpeechError)) throw error;
     // The line is not said by another voice; this record is how a dropped line is found.
     console.warn('Shannon voice speech failed', {
-      code: error.code, ...(error instanceof GeminiSpeechError ? { status: error.upstreamStatus, upstream: error.upstreamCode } : {}),
+      code: error.code, voice: routes.cast?.current() ?? null, ...(error instanceof GeminiSpeechError ? { status: error.upstreamStatus, upstream: error.upstreamCode } : {}),
       charactersAsked: Array.from(ask.text).length, audioStarted: response.headersSent,
     });
     if (response.headersSent) response.destroy();
-    else sendJson(response, 502, { error: error.code, message: '音声を生成できませんでした。' });
+    else {
+      sendJson(response, 502, {
+        error: error.code, message: '音声を生成できませんでした。', ...(routes.cast ? { voice: routes.cast.current() } : {}), ...noSubstitute,
+      });
+    }
   } finally {
     speechActive -= 1;
   }
@@ -249,6 +283,7 @@ async function streamPcm(
       'x-content-type-options': 'nosniff',
       'x-accel-buffering': 'no',
       'x-shannon-voice-engine': stream.model.startsWith('gemini') ? 'gemini' : 'eleven',
+      ...('callVoiceName' in stream && typeof stream.callVoiceName === 'string' ? { 'x-shannon-voice-name': stream.callVoiceName } : {}),
       'x-shannon-first-chunk-ms': String(Math.round(performance.now() - startedAt)),
     });
     await writeChunk(response, first.value);
