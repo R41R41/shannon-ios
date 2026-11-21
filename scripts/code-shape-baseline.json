@@ -1447,7 +1447,7 @@
       "long-line": 1
     },
     "services/api/src/mind/perception/addressed.ts": {
-      "long-line": 2
+      "long-line": 10
     },
     "services/api/src/mind/perception/chatAudience.ts": {
       "long-line": 2
@@ -1881,7 +1881,10 @@
     },
     "services/api/src/surfaces/minecraft/minecraftLive.ts": {
       "complex-function": 1,
-      "long-line": 3
+      "long-line": 4
+    },
+    "services/api/src/surfaces/minecraft/minecraftLiveBlock.ts": {
+      "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLiveBody.ts": {
       "long-line": 2

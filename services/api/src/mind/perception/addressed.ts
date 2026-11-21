@@ -263,7 +263,7 @@ export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name
   const target = jevChoice(answers, 'target', ADDRESSED_TARGETS);
   const directed = target === 'shannon' && noul >= (unnamed ? ADDRESSED_DECISION.unnamed : ADDRESSED_DECISION.shannon);
   const addressed = directed && jevNoul(answers, 'reply_needed') >= ADDRESSED_DECISION.replyNeeded;
-  const reason: AddressedReason = addressed ? (unnamed === 'working' ? 'asked_while_working' : unnamed ? 'asked_alone' : name ? 'named' : 'continuation')
+  const reason: AddressedReason = addressed ? (unnamed ? 'asked_alone' : name ? 'named' : 'continuation')
     : directed ? 'no_reply_needed' : target === 'about_shannon' ? 'about_her' : unnamed ? 'no_name' : 'not_to_her';
   return { addressed, target, noul, reason };
 }
