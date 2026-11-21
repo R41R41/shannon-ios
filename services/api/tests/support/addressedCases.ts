@@ -143,6 +143,7 @@ export const ADDRESSED_CASES: readonly AddressedCase[] = [
   { id: 'awc-laugh', group: 'asked_work_chat', transcript: 'あはは、それはおもしろい', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 21, toSpeaker: null, line: ASKED_MUTTER, asked: true }, work: IRON, to: false, ask: true },
   { id: 'awc-rain', group: 'asked_work_chat', transcript: '明日の朝は雨らしいよ', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 37, toSpeaker: null, line: 'この壁、何色にしようかな…', asked: true }, work: HOUSE, to: false, ask: true },
   // Short answers right after a question (not working).
+  { id: 'ans-yes-offer', group: 'asked', transcript: 'うん、お願い', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 5, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
   { id: 'ans-short-un', group: 'asked', transcript: 'うん', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 8, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
   { id: 'ans-short-later', group: 'asked', transcript: 'あとで', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 13, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
   { id: 'ans-short-here', group: 'asked', transcript: 'ここ！', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 7, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
