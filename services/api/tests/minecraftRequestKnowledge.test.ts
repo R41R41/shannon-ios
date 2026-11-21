@@ -106,6 +106,10 @@ describe('what she is told when people talk to her during a request of one thing
     expect(text).toContain('mc_probe kind=gaze player=');
     expect(text).toContain('聞き返さず、一番近いプレイヤー');
     expect(text).toContain('drop items=[{item: cake, count: 1}] target=');
+    expect(text).toContain('place block=cake at=[placeAt] face=against');
+    expect(text).toContain('7m を超える先へは歩かず');
+    expect(text).toContain('先に go でそのマスの近く');
+    expect(text).toContain('着いてから drop');
     expect(text).toContain('have:cake<1');
     // It names only the tools the mode has (a gaze is a kind of the probe).
     expect(foreignToolNames(text)).toEqual([]);
