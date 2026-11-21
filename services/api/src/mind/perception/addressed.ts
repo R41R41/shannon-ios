@@ -222,7 +222,7 @@ type Gate =
   | { kind: 'quiet'; reason: AddressedReason }
   | { kind: 'yes'; reason: AddressedReason }
   /** `unnamed`: no name and outside her window, with the owner alone (case 3, `alone`) or while she works (case 4, `working`), or inside the window of a question she asked (case 5, `answering`: Jev says whether it answers; not answering in time counts as yes). */
-  | { kind: 'ask'; name: NameMatch | null; follows: boolean; unnamed?: 'alone' | 'working' | 'answering' };
+  | { kind: 'ask'; name: NameMatch | null; follows: boolean; unnamed?: 'alone' | 'working' | 'answering'; working?: boolean };
 
 /** The owner alone with her: no one else in the room, and the speaker is the owner (case 3). */
 export function ownerAlone(input: AddressedInput): boolean {
@@ -255,7 +255,8 @@ export function addressedGate(
   if (name?.bare && name.tier === 'strong') return { kind: 'yes', reason: 'bare_call' };
   if (askedHer(input, questionWindowMilliseconds)) {
     // Called by name inside the window: taken as the answer, as before. Without her name, Jev says whether it answers her question.
-    return name ? { kind: 'yes', reason: 'answer_to_question' } : { kind: 'ask', name: null, follows, unnamed: 'answering' };
+    // While she works on a job, a tip said to the room is not an answer to her question but is still about the job: either one is taken.
+    return name ? { kind: 'yes', reason: 'answer_to_question' } : { kind: 'ask', name: null, follows, unnamed: 'answering', ...(input.work ? { working: true } : {}) };
   }
   if (!name && !follows) {
     if (ownerAlone(input)) return { kind: 'ask', name: null, follows: false, unnamed: 'alone' };
@@ -280,7 +281,7 @@ export const ADDRESSED_DECISION = Object.freeze({ shannon: 0.7, unnamed: 0.8, re
   /** Inside the window of a question she asked (`answers_her_question`): low, since a real answer can be three words and a missed one costs more than a late chat line. Not yet read against the real Jev. */
   answer: 0.4 });
 
-export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' | 'answering' = false): Parsed {
+export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' | 'answering' = false, working = false): Parsed {
   if (unnamed === 'working') {
     const job = jevNoul(answers, 'about_the_job');
     const about = job >= ADDRESSED_DECISION.job;
@@ -289,7 +290,11 @@ export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name
   if (unnamed === 'answering') {
     const answer = jevNoul(answers, 'answers_her_question');
     const replies = answer >= ADDRESSED_DECISION.answer;
-    return { addressed: replies, target: 'shannon', noul: answer, reason: replies ? 'answer_to_question' : 'no_name' };
+    if (replies || !working) return { addressed: replies, target: 'shannon', noul: answer, reason: replies ? 'answer_to_question' : 'no_name' };
+    // Working: new talk about the job inside the window of her question is taken too (all five questions are in the one call).
+    const job = jevNoul(answers, 'about_the_job');
+    const about = job >= ADDRESSED_DECISION.job;
+    return { addressed: about, target: 'shannon', noul: Math.max(answer, job), reason: about ? 'asked_while_working' : 'no_name' };
   }
   const noul = jevNoul(answers, 'addressed_to_shannon');
   const target = jevChoice(answers, 'target', ADDRESSED_TARGETS);
@@ -347,11 +352,11 @@ export class AddressedJudge {
       const decision = await this.options.chooser.decide<Parsed>({
         scopeKey: input.scopeKey, surface: 'voice', decision: 'addressed', sets: [JEV_QUESTION_SETS.addressed],
         state: addressedState(input, gate.name, gate.follows), questions: addressedQuestions(),
-        parse: answers => parsedAddressed(answers, gate.name, gate.unnamed ?? false),
+        parse: answers => parsedAddressed(answers, gate.name, gate.unnamed ?? false, gate.working === true),
         fallback: () => ({ ...local(), target: 'fallback', noul: 0 }),
         traceAnswers: (value, source) => ({
           addressed: value.addressed, target: value.target, noul: value.noul, name: gate.name ? (gate.name.tier === 'strong' ? 'exact' : 'possible') : 'none',
-          follows: gate.follows, unnamed: gate.unnamed !== undefined, ...(gate.unnamed === 'working' ? { working: true } : {}), ...(gate.unnamed === 'answering' ? { answering: true } : {}), source,
+          follows: gate.follows, unnamed: gate.unnamed !== undefined, ...(gate.unnamed === 'working' ? { working: true } : {}), ...(gate.unnamed === 'answering' ? { answering: true } : {}), ...(gate.working ? { working: true } : {}), source,
         }),
         signal: timeout.signal,
       });

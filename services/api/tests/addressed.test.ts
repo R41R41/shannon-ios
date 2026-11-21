@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { JevChoiceClient, JevChooser, type JevChoiceTrace } from '../src/infra/models/jev/jevChoice.js';
 import {
   ADDRESSED_TIMEOUT_MILLISECONDS, ADDRESSED_WINDOW_MILLISECONDS, AddressedJudge, addressedGate, addressedQuestions, addressedState, fallbackAddressed, followsHer,
-  type AddressedInput, type AddressedVerdict,
+  parsedAddressed, type AddressedInput, type AddressedVerdict,
 } from '../src/mind/perception/addressed.js';
 import { hasName, nameMatch, normalizedForName } from '../src/mind/perception/addressedName.js';
 import { ADDRESSED_CASES, type AddressedCase } from './support/addressedCases.js';
@@ -267,5 +267,25 @@ describe('stop words (止めて, 待って, ストップ...) without her name (o
     expect(await judge.judge({ ...base, transcript: '止めて', owner: false, shannonSpeaking: true, bodyRunning: true })).toMatchObject({ addressed: false, reason: 'no_name' });
     expect(await judge.judge({ ...base, transcript: '止めて', owner: true })).toMatchObject({ addressed: false, reason: 'no_name' });
     expect(await judge.judge({ ...base, transcript: '今日は疲れたな', owner: true, shannonSpeaking: true, bodyRunning: true })).toMatchObject({ addressed: false });
+  });
+});
+
+describe('talk about the job inside the window of a question she asked', () => {
+  const answers = (answer: number, job: number) => ({ answers_her_question: { type: 'noul', noul: answer }, about_the_job: { type: 'noul', noul: job } });
+  it('is taken while she works when it is about the job, though it answers nothing she asked', () => {
+    expect(parsedAddressed(answers(0.1, 0.95), null, 'answering', true)).toMatchObject({ addressed: true, reason: 'asked_while_working' });
+    expect(parsedAddressed(answers(0.9, 0.05), null, 'answering', true)).toMatchObject({ addressed: true, reason: 'answer_to_question' });
+    expect(parsedAddressed(answers(0.1, 0.1), null, 'answering', true)).toMatchObject({ addressed: false, reason: 'no_name' });
+  });
+  it('is decided by the answer alone when she is not working', () => {
+    expect(parsedAddressed(answers(0.1, 0.95), null, 'answering', false)).toMatchObject({ addressed: false, reason: 'no_name' });
+    expect(parsedAddressed(answers(0.9, 0.05), null, 'answering')).toMatchObject({ addressed: true });
+  });
+  it('marks the gate as working only when a job is under way', () => {
+    const input: AddressedInput = { scopeKey: 'owner', transcript: '小麦は骨粉で早く成長させよう', speaker: { id: 'a', name: 'ユウ' }, humans: 3, recent: [],
+      shannon: { spokeAgoMs: 11_000, toSpeaker: null, line: 'えっと、次は小麦の種がいるのかな？', asked: true } };
+    expect(addressedGate(input)).toMatchObject({ kind: 'ask', unnamed: 'answering' });
+    expect(addressedGate(input)).not.toHaveProperty('working');
+    expect(addressedGate({ ...input, work: { goal: 'ケーキを1個作る', list: [] } })).toMatchObject({ kind: 'ask', unnamed: 'answering', working: true });
   });
 });
