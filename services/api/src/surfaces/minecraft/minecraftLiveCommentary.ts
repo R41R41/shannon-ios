@@ -46,10 +46,12 @@ export interface LiveCommentaryParts {
   /** Where moments come from, what only the API sees of the room, and her danger. */
   live: {
     onMoment(listener: (moment: LiveMoment) => void): () => void;
+    /** Her work was stopped, cancelled or held: what waits of it is dropped (absent: nothing tells). */
+    onRelease?(listener: () => void): () => void;
     inDanger(): boolean;
     conversation(): { replying: boolean; sinceHumanMilliseconds: number | null };
   };
-  outbox: Pick<LiveSpeechOutbox, 'enqueue' | 'onEnd' | 'room'>;
+  outbox: Pick<LiveSpeechOutbox, 'enqueue' | 'onEnd' | 'room'> & Partial<Pick<LiveSpeechOutbox, 'withdraw'>>;
   /** The line for these moments in her voice, or null when she has none; may throw (the moment is then dropped). */
   write(request: LiveWriteRequest): Promise<string | null>;
   /** A line was delivered (said or posted): the wiring keeps it in the conversation it went into. */
@@ -80,6 +82,8 @@ export class LiveCommentary {
   private readonly pending = new Map<string, Pending>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private writing = false;
+  /** Rises at each release of her work: a line whose writing began before it is about a story that ended. */
+  private released = 0;
   private serial = 0;
   private stops: Array<() => void> = [];
   private readonly counts: Record<string, number> = {};
@@ -97,6 +101,22 @@ export class LiveCommentary {
   start(): void {
     if (this.stops.length) return;
     this.stops.push(this.parts.live.onMoment(moment => this.hear(moment)), this.parts.outbox.onEnd((receipt, draft) => this.ended(receipt, draft)));
+    const unhear = this.parts.live.onRelease?.(() => this.release());
+    if (unhear) this.stops.push(unhear);
+  }
+
+  /**
+   * Her work was stopped, cancelled or held: what she was about to say of it (a moment not written yet, a line being written, a line not
+   * handed to the body yet) is about a story that is no longer going on. The end of a request is not of it, and the next request's own
+   * moments are heard as usual.
+   */
+  private release(): void {
+    this.released += 1;
+    const work = LIVE_COMMENTARY_ENGINE.workKinds;
+    const before = this.waiting.length;
+    this.waiting = this.waiting.filter(item => !work.includes(item.moment.kind));
+    this.parts.outbox.withdraw?.(work);
+    if (this.waiting.length < before || this.writing) this.count('released');
   }
 
   stop(): void {
@@ -175,10 +195,16 @@ export class LiveCommentary {
 
   private async compose(main: { moment: LiveMoment; salience: number; rewrites: number }, also: ReadonlyArray<{ moment: LiveMoment }>): Promise<void> {
     this.writing = true;
+    const released = this.released;
     try {
       const voice = this.parts.outbox.room()?.voice === true, folded = also.map(item => item.moment);
       const text = await within(this.parts.write({ main: main.moment, also: folded, recent: this.governor.recentWords(), voice }).catch(() => null),
         LIVE_COMMENTARY_ENGINE.writeMilliseconds);
+      // Her work was released while the model wrote (the line is of the work, not the end of a request): the line is not said.
+      if (released !== this.released && LIVE_COMMENTARY_ENGINE.workKinds.includes(main.moment.kind)) {
+        this.count('write_released');
+        return;
+      }
       this.settle(main, folded, text, voice);
     } finally { this.writing = false; }
   }
