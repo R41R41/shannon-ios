@@ -75,12 +75,13 @@ export function nearbyLines(resources: readonly NearbyResource[], feet: P | null
     const [label, unit] = LABEL[purpose];
     const parts = group.map(item => {
       if (item.count <= 0 || !item.sites.length) return `${item.kind} ${item.range}m 内に なし`;
-      const sites = [...item.sites].sort((a, b) => feet ? dist(feet, a) - dist(feet, b) : 0).slice(0, 3);
+      // A plan not about the plants gets each plant's nearest place only (every kind stays said; the input stays short).
+      const sites = [...item.sites].sort((a, b) => feet ? dist(feet, a) - dist(feet, b) : 0).slice(0, purpose === 'plant' && first !== 'plant' ? 1 : 3);
       const where = feet ? sites.map((site, index) => siteWords(feet, site, index === 0)).join(' / ')
         : sites.map(site => `(${site.x},${site.y},${site.z})${site.note ? `（${site.note}）` : ''}`).join(' / ');
       // The lava's count is the sources (the body's `count`), with the pools they make when the body says (`pools`).
       // A cane is counted by its stand (a column of canes), so its unit is 株, not 個 (the body's `plant` entry of sugar_cane).
-      const many = purpose === 'lava' ? `源 ${item.count} マス${item.pools !== undefined ? `・溜まり ${item.pools}` : ''}` : `${item.count}${purpose === 'plant' && item.kind === 'sugar_cane' ? '株' : unit}`;
+      const many = purpose === 'lava' ? `源 ${item.count} マス${item.pools !== undefined ? `・溜まり ${item.pools}` : ''}` : `${item.count}${purpose === 'plant' && item.kind === 'sugar_cane' ? '株' : unit}${purpose === 'plant' && item.kind !== 'sugar_cane' && item.count >= 256 ? '以上' : ''}`;
       return `${item.kind} ${item.range}m 内に ${many}。${where}`;
     });
     lines.push(`${label}: ${parts.join('／')}`);

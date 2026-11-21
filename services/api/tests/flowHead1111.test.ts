@@ -121,7 +121,10 @@ describe('what is near, by purpose', () => {
   it('says a plant of the request by name (a cane by its stands), and puts it first when the now of the plan is sugar', () => {
     const plants = [...raw, { purpose: 'plant', kind: 'sugar_cane', count: 2, range: 48, sites: [{ x: 258, y: 66, z: -95, note: '根元・高さ 3 段・水に接する' }, { x: 270, y: 66, z: -80 }] }];
     const lines = nearbyLines(nearbyResourcesOf(plants), feet);
-    expect(lines.find(line => line.startsWith('植物'))).toBe('植物（材料）: sugar_cane 48m 内に 2株。最寄り (258,66,-95) 西2・北4・下1 5m（根元・高さ 3 段・水に接する） / (270,66,-80) 15m');
+    expect(lines.find(line => line.startsWith('植物'))).toBe('植物（材料）: sugar_cane 48m 内に 2株。最寄り (258,66,-95) 西2・北4・下1 5m（根元・高さ 3 段・水に接する）');
+    // A plan about the plants gets the three places; the wheat of a field past the cap is said as 以上.
+    expect(nearbyLines(nearbyResourcesOf(plants), feet, '[p2] 砂糖を作る')[0]).toContain('/ (270,66,-80) 15m');
+    expect(nearbyLines(nearbyResourcesOf([{ purpose: 'plant', kind: 'wheat', count: 256, range: 48, sites: [{ x: 250, y: 66, z: -95 }] }]), feet)[0]).toContain('256個以上');
     expect(nearbyLines(nearbyResourcesOf(plants), feet, '[p2] 砂糖を作る（サトウキビ 2 本）')[0]!.startsWith('植物（材料）')).toBe(true);
   });
   it('is a field of the live state when the body sends it, and absent when it does not', () => {
