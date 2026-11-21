@@ -29,6 +29,7 @@ import { voiceMouth } from '../surfaces/platform/voiceMouth.js';
 import { voiceRooms } from '../surfaces/platform/voiceRoom.js';
 import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
 import { createConfiguredElevenSpeechGateway } from '../infra/models/elevenSpeech.js';
+import { callVoiceChosen, createConfiguredCallSpeechGateway } from '../infra/models/callVoiceSpeech.js';
 import { ChatSentenceSplitter, splitChatSentences } from '../surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../surfaces/text/chatSentenceStream.js';
 import { oneHeadEnabled } from '../contracts/oneHeadContract.js';
@@ -103,10 +104,13 @@ function typedReplies(replies: { conversation: PlatformReplyConversation; databa
   } };
 }
 
-/** Her ElevenLabs voice for the voice channel, or null when it is not configured (the route then answers 503 and the bot says the line in its own voice). */
+/**
+ * Her voice for the voice channel: the Gemini call voice when `SHANNON_CALL_TTS_VOICE` is set, else her ElevenLabs voice. Null when the
+ * chosen one is not configured (the route then answers 503 and the bot says the line in its own voice).
+ */
 function configuredVoiceSpeech(environment: Readonly<Record<string, string | undefined>>) {
   try {
-    return createConfiguredElevenSpeechGateway(environment);
+    return callVoiceChosen(environment) ? createConfiguredCallSpeechGateway(environment) : createConfiguredElevenSpeechGateway(environment);
   } catch {
     return null;
   }

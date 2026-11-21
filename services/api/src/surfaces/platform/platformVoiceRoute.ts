@@ -3,8 +3,8 @@ import { bearerAuthorized } from '../../infra/auth/apiAuth.js';
 import { consumeDeviceAllowance, readJson, sendJson } from '../../infra/http/serverHttp.js';
 import { startStream, writeEvent } from '../../infra/http/ndjsonStream.js';
 import { PlatformBridgeError } from '../../mind/memory/platformMemoryPorts.js';
-import { ElevenSpeechError, validatedElevenTags, type ElevenSpeechGateway } from '../../infra/models/elevenSpeech.js';
-import { GeminiSpeechError, normalizedSpeechText } from '../../infra/models/geminiSpeech.js';
+import { ElevenSpeechError, validatedElevenTags } from '../../infra/models/elevenSpeech.js';
+import { GeminiSpeechError, normalizedSpeechText, type GeminiSpeechRequest, type GeminiSpeechStreamResult } from '../../infra/models/geminiSpeech.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { switchOn, type SwitchValues } from '@shannon/switches';
 import { SHANNON_PLATFORM_VOICE_PREFIX, platformVoiceEnabled, type VoiceTurnLine } from './platformVoiceRequest.js';
@@ -31,13 +31,16 @@ import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from '../../infra/mod
 export interface PlatformVoiceRoutes {
   service: PlatformVoiceService;
   mouth: VoiceMouthQueue;
-  /** The ElevenLabs gateway of this server; null while its key or voice is not configured (speech answers 503). */
-  speech: Pick<ElevenSpeechGateway, 'stream'> | null;
+  /** The voice of this server's calls (ElevenLabs, or the Gemini call voice); null while its key or voice is not configured (speech answers 503). */
+  speech: SpeechGateway | null;
   scopeKey: string;
   environment?: () => SwitchValues;
   /** Listening transcription (`listening.ts`); null without `GROQ_API_KEY` (transcribe answers 503). */
   listening?: Listening | null;
 }
+
+/** What a call's voice is: ElevenLabs, or the Gemini call voice (`callVoiceSpeech.ts`); both stream raw 24 kHz PCM. */
+type SpeechGateway = { stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult> };
 
 const MAXIMUM_SPEECH_CHARACTERS = 400;
 const SPEECH_PER_MINUTE = 180;
@@ -192,8 +195,12 @@ async function speech(request: IncomingMessage, response: ServerResponse, routes
   try {
     await streamPcm(request, response, routes.speech, { scopeKey: routes.scopeKey, ...ask });
   } catch (error) {
-    if (!(error instanceof ElevenSpeechError)) throw error;
-    console.warn('Shannon voice speech failed', { code: error.code });
+    if (!(error instanceof ElevenSpeechError || error instanceof GeminiSpeechError)) throw error;
+    // The line is not said by another voice; this record is how a dropped line is found.
+    console.warn('Shannon voice speech failed', {
+      code: error.code, ...(error instanceof GeminiSpeechError ? { status: error.upstreamStatus, upstream: error.upstreamCode } : {}),
+      charactersAsked: Array.from(ask.text).length, audioStarted: response.headersSent,
+    });
     if (response.headersSent) response.destroy();
     else sendJson(response, 502, { error: error.code, message: '音声を生成できませんでした。' });
   } finally {
@@ -223,7 +230,7 @@ async function writeChunk(response: ServerResponse, chunk: Uint8Array): Promise<
 
 /** Her voice as it is made: raw PCM, 24 kHz mono s16le, chunk by chunk; the first chunk's time in a header. A caller that left stops it. */
 async function streamPcm(
-  request: IncomingMessage, response: ServerResponse, gateway: Pick<ElevenSpeechGateway, 'stream'>, ask: SpeechAsk & { scopeKey: string },
+  request: IncomingMessage, response: ServerResponse, gateway: SpeechGateway, ask: SpeechAsk & { scopeKey: string },
 ): Promise<void> {
   const startedAt = performance.now();
   const controller = new AbortController();
@@ -241,7 +248,7 @@ async function streamPcm(
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
       'x-accel-buffering': 'no',
-      'x-shannon-voice-engine': 'eleven',
+      'x-shannon-voice-engine': stream.model.startsWith('gemini') ? 'gemini' : 'eleven',
       'x-shannon-first-chunk-ms': String(Math.round(performance.now() - startedAt)),
     });
     await writeChunk(response, first.value);
