@@ -7,5 +7,7 @@
  *   of the English text with a few percent of room, so it still stops the text from growing; the real size is measured with the API's counter.
  * - 11/13 (review of the run-8 fixes): the urgent rules say a lone skeleton the urgent line says 「詰めて斬れる」 is fought first (about 20 llmc, about 12
  *   real; the urgent decision otherwise reads only 「離れる・間に置く」 against the line); the text measures 10,306, the cap is 10,320.
+ * - 11/22 (four runs of a cake asked with bone meal, bn1 to bn4): the descent's preparation (food, stone tools) is told to be for the whole game and not for a
+ *   one-thing request, and the yardstick is told what it is for one (about 220 llmc, about 60 real); the text measures 10,526, the cap is 10,560.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_320;
+export const ALWAYS_TEXT_CAP_LLMC = 10_560;

@@ -6,6 +6,8 @@ import type { FcaStepPorts } from '../mind/action/fca/fcaStepPorts.js';
 import { readinessParts, type LlmcBodyParts } from '../surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { strongStageNow } from './minecraftLlmcConfiguration.js';
 import { stageTextsForKind } from '../surfaces/minecraft/minecraftLlmcV2Knowledge.js';
+import { planGoal } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { REQUEST_REPLAN_KNOWLEDGE } from '../surfaces/minecraft/minecraftRequestSteps.js';
 import { doneFacts, doneStatusWords, parseDoneWhen, predicateHolds } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { kindOf } from '../surfaces/minecraft/minecraftPlanFacts.js';
 import { obsidianTallyLine } from '../surfaces/minecraft/minecraftLlmcWaterNode.js';
@@ -99,7 +101,9 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
     now: nowLines(frame), facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(obsidian ? [obsidian] : []), ...(readiness.recovery ?? []),
       ...endgame, ...stops],
     results: [...results], queue: parts.queue.lines(frame),
-    knowledge: stageTextsForKind(stalled ? kindOf(stalled) : 'other', facts?.dimension ?? 'overworld') };
+    // A one-thing request is shown its own short text: the stage's text is over the brief's bound and was dropped whole (bn1 to bn4, 11/21).
+    knowledge: planGoal(parts.goal) === null ? REQUEST_REPLAN_KNOWLEDGE
+      : stageTextsForKind(stalled ? kindOf(stalled) : 'other', facts?.dimension ?? 'overworld') };
 }
 
 /** The problem a plan made from another (a new plan of the strong model) would have, by the plan's own checks and the observation's. */
