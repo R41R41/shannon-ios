@@ -76,9 +76,12 @@ export class CallVoiceSpeechGateway {
 
   async stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult> {
     // The acting tags come first, so the directions of `style` and of the sentence are made together.
-    const asked = geminiVoiceRequest(`${request.style ?? ''} ${normalizedSpeechText(request.text)}`.trim(), undefined);
-    const text = normalizedSpeechText(asked.text);
-    const style = this.styleFor(asked.style);
+    // The directions come from the acting tags and the sentence's own tags together; what is spoken comes from the sentence alone
+    // (a capitalised bracketed word among the acting tags would otherwise be read aloud as text).
+    const sentence = normalizedSpeechText(request.text);
+    const directions = geminiVoiceRequest(`${request.style ?? ''} ${sentence}`.trim(), undefined).style;
+    const text = normalizedSpeechText(geminiVoiceRequest(sentence, undefined).text);
+    const style = this.styleFor(directions);
     const startedAt = performance.now();
     let lastError: unknown = new GeminiSpeechError('GEMINI_SPEECH_FAILED');
     for (let attempt = 1; attempt <= this.attempts; attempt += 1) {

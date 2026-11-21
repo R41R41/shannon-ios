@@ -36,6 +36,19 @@ async function drain(chunks: AsyncIterable<Uint8Array>): Promise<Buffer> {
 const ask = (text: string, style?: string): GeminiSpeechRequest => ({ scopeKey: 'owner', text, ...(style ? { style } : {}) });
 
 describe('the call voice (Gemini)', () => {
+  it('never reads an acting tag aloud, even one that is not a listed tag', async () => {
+    let body: Record<string, any> | null = null;
+    const gateway = gatewayWith(async (_input, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, any>;
+      return sse(Buffer.alloc(2_400, 1));
+    });
+    const result = await gateway.stream(ask('ほら、見て。', '[Smiles] [whispers]'));
+    await drain(result.chunks);
+    const content = body!.input[0].content[0];
+    expect(content.text).toBe('ほら、見て。');
+    expect(content.annotations[0].style).toContain('ささやき声');
+  });
+
   it('is chosen only by its own voice setting, and the app voice settings do not choose it', () => {
     expect(callVoiceChosen({})).toBe(false);
     expect(callVoiceChosen({ SHANNON_GEMINI_TTS_VOICE: 'Leda', SHANNON_ELEVEN_TTS_VOICE_ID: 'abcdefgh' })).toBe(false);
