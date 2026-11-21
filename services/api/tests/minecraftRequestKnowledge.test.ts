@@ -43,4 +43,23 @@ describe('what she is told for a request that is one thing to make', () => {
     expect(text).toContain('種を植える');
     expect(text).toContain('ニワトリが見えなければ');
   });
+
+  it('has the head break cane and grass directly, and raise wheat from seeds instead of walking to look for a village', () => {
+    const text = MATERIAL_ACQUISITION_LINES.join(' ');
+    // cane: the stand itself is dug (the body breaks a plant that is named), the one above the root keeps the root growing; a stand of one is the root
+    expect(text).toContain('株は dig で直接壊せる');
+    expect(text).toContain('根元が残ってまた伸びる');
+    expect(text).toContain('高さ 1 の株は根元しか無いので、根元を壊す');
+    // grass gives seeds now and then, and the answer to it is read in the result
+    expect(text).toContain('壊すと時々 wheat_seeds が落ちる');
+    expect(text).toContain('拾った: wheat_seeds+1');
+    // no village in nearby or landmarks: none is searched for, with the reason
+    expect(text).toContain('村は探さず、草から種を集めて育てる');
+    expect(text).toContain('探しに歩くより種から育てる方が早い');
+    // the hoe, the seeds and the wait for the crop
+    expect(text).toContain('use item=wooden_hoe');
+    expect(text).toContain('use item=wheat_seeds');
+    expect(text).toContain('待たずに別の材料');
+    expect(text).not.toContain('根元の 1 つ上の段を dig すると、その上の段も一緒に壊れて');
+  });
 });
