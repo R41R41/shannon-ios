@@ -436,8 +436,11 @@
         "give": { "minecraft:crafting_table": 1, "minecraft:bucket": 3 },
         "prep": [ { "fill": [3, -1, 2, 6, -1, 2, "minecraft:farmland[moisture=7]"] }, { "fill": [3, 0, 2, 6, 0, 2, "minecraft:wheat[age=7]"] },
                   { "setblock": [3, -1, -2, "minecraft:sand"] }, { "setblock": [4, -1, -2, "minecraft:sand"] },
+                  { "setblock": [3, -1, -3, "minecraft:sand"] }, { "setblock": [4, -1, -3, "minecraft:sand"] },
                   { "setblock": [2, -1, -2, "minecraft:water"] }, { "setblock": [5, -1, -2, "minecraft:water"] },
+                  { "setblock": [2, -1, -3, "minecraft:water"] }, { "setblock": [5, -1, -3, "minecraft:water"] },
                   { "setblock": [3, 0, -2, "minecraft:sugar_cane[age=0]"] }, { "setblock": [4, 0, -2, "minecraft:sugar_cane[age=0]"] },
+                  { "setblock": [3, 0, -3, "minecraft:sugar_cane[age=0]"] }, { "setblock": [4, 0, -3, "minecraft:sugar_cane[age=0]"] },
                   { "summon": [-3, 0, 0, "minecraft:cow", "{PersistenceRequired:1b}"] }, { "summon": [-3, 0, 2, "minecraft:cow", "{PersistenceRequired:1b}"] },
                   { "summon": [0, 0, -4, "minecraft:chicken", "{PersistenceRequired:1b,EggLayTime:200}"] },
                   { "summon": [1, 0, -4, "minecraft:chicken", "{PersistenceRequired:1b,EggLayTime:200}"] },
@@ -461,7 +464,7 @@
       "failure": "死亡・15 分・¥300・列の依頼が failed・列の台本が最後まで進まない・期待（完了順 c→b→a、同時に走る行が 2 つ以上にならない、保留の後 10 秒以内に体が止まる）を外した時",
       "start": { "time": 1000, "give": {} },
       "queue": {
-        "entries": [ { "ref": "a", "goal": "オークの原木を 3 個集める" }, { "ref": "b", "goal": "作業台を作る" }, { "ref": "c", "goal": "木の棒を 4 本作る" } ],
+        "entries": [ { "ref": "a", "goal": "オークの原木を 5 個集める" }, { "ref": "b", "goal": "作業台を作る" }, { "ref": "c", "goal": "木の棒を 4 本作る" } ],
         "script": [
           { "id": "moveC", "when": { "ref": "a", "state": "running", "for": 5 }, "op": "move", "ref": "c", "before": "b" },
           { "id": "holdA", "when": { "milestone": "原木 1" }, "op": "hold", "ref": "a" },
@@ -484,17 +487,17 @@
       "start": { "time": 1000, "give": {} },
       "queue": {
         "entries": [ { "ref": "a", "goal": "オークの原木を 3 個集める" }, { "ref": "b", "goal": "作業台を作る" },
-                     { "ref": "c", "goal": "木の棒を 4 本作る" }, { "ref": "d", "goal": "オークの原木を 2 個集める" } ],
+                     { "ref": "c", "goal": "木の棒を 4 本作る" }, { "ref": "d", "goal": "オークの原木を 12 個集める" } ],
         "script": [
           { "id": "startD", "when": { "ref": "a", "state": "running", "for": 3 }, "op": "start", "ref": "d" },
           { "id": "stopAll", "when": { "ref": "d", "state": "running", "for": 10 }, "op": "stop" },
           { "id": "resumeD", "when": { "seconds": 22 }, "op": "resume", "ref": "d" },
           { "id": "startAll", "when": { "seconds": 1 }, "op": "start" },
-          { "id": "deleteC", "when": { "ref": "d", "state": "running", "for": 3 }, "op": "delete", "ref": "c" },
+          { "id": "deleteC", "when": { "seconds": 3 }, "op": "delete", "ref": "c" },
           { "id": "cancelB", "when": { "ref": "b", "state": "running" }, "op": "cancel", "ref": "b" },
           { "id": "resumeA", "when": { "ref": "b", "state": "cancelled" }, "op": "resume", "ref": "a" } ],
         "expect": { "maxRunning": 1, "order": ["d", "a"], "final": { "a": "done", "b": "cancelled", "c": "absent", "d": "done" },
-                    "seen": { "a": ["paused"], "d": ["stopped"] }, "quiet": { "step": "stopAll", "seconds": 20 } } },
+                    "seen": { "a": ["paused"], "d": ["stopped"] }, "quiet": { "step": "stopAll", "seconds": 20, "graceSeconds": 5 } } },
       "alsoCount": [ "minecraft:oak_log", "minecraft:oak_planks", "minecraft:stick", "minecraft:crafting_table" ],
       "milestones": [
         { "name": "d が done", "queue": { "ref": "d", "state": "done" } },

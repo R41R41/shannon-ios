@@ -1282,11 +1282,22 @@ class QueueRun:
     """A trial that goes through the request queue (section \"via\": \"queue\"): the entries are added one by one, the script is played while the trial polls,
     and the rows of the queue stand in for the one task of an operator trial."""
 
-    def __init__(self, section):
+    def __init__(self, section, trial_id=''):
         self.cfg = section['queue']
+        self.trial_id = trial_id
         self.trial = queue_trial.QueueTrial(self.cfg, [m['name'] for m in section['milestones']])
         self.rows = []
         self.errors = []
+        self.before = []           # states of the rows that were in the table before this trial added its own (they are never read as the trial's)
+
+    def snapshot(self):
+        """Remember the rows already in the table: earlier runs leave their finished rows (with their task ids and the same goals), and a row of someone else may be live."""
+        try: rows = queue_trial.read_rows(DB)
+        except sqlite3.Error as error:
+            self.errors.append(f'read:{type(error).__name__}')
+            return
+        self.trial.ignore = {r['id'] for r in rows}
+        self.before = [r.get('state') for r in rows if r.get('state') not in queue_trial.TERMINAL]
 
     def post(self, body):
         reply = queue_trial.post(QUEUE_TARGET, body)
@@ -1297,7 +1308,7 @@ class QueueRun:
     def add_all(self):
         """The entries, in order. Returns the code of the first refusal, else None."""
         for e in self.cfg['entries']:
-            reply = self.post({'op': 'add', 'goal': e['goal'], 'placement': e.get('placement', 'end'), 'requestId': f'trials:{e["ref"]}'})
+            reply = self.post({'op': 'add', 'goal': e['goal'], 'placement': e.get('placement', 'end'), 'requestId': f'trials:{self.trial_id}:{e["ref"]}'})
             if not reply['ok']: return reply['code']
         return None
 
@@ -1305,8 +1316,12 @@ class QueueRun:
         self.rows = queue_trial.read_rows(DB)
         return self.rows
 
+    def mine(self):
+        """The rows this trial added: a goal of its entries, and not one of the rows that were there before."""
+        return [r for r in self.rows if r.get('goal') in self.trial.goal_ref and r.get('id') not in self.trial.ignore]
+
     def goals_ok(self):
-        goals = {r['goal'] for r in self.rows}
+        goals = {r['goal'] for r in self.mine()}
         return all(e['goal'] in goals for e in self.cfg['entries'])
 
     def poll(self, elapsed, body, counts, latched):
@@ -1316,16 +1331,21 @@ class QueueRun:
             self.errors.append(f'read:{type(error).__name__}')
             return self.row()
         items = sum(counts.values()) if counts else None
-        for _, request in self.trial.observe(elapsed, self.rows, {'pos': (body or {}).get('pos'), 'items': items}, latched): self.post(request)
+        held = {}          # task id -> True while that task still holds the body (only for the rows an expectation watches)
+        for ref in self.trial.halt_refs:
+            tid = self.trial.taskids.get(ref)
+            if tid:
+                with contextlib.suppress(sqlite3.Error): held[tid] = not settled(task_row(tid) or {})
+        for _, request in self.trial.observe(elapsed, self.rows, {'pos': (body or {}).get('pos'), 'items': items}, latched, held): self.post(request)
         return self.row()
 
     def task_ids(self):
-        return [r['taskId'] for r in self.rows if r.get('taskId') and r.get('goal') in self.trial.goal_ref]
+        return [r['taskId'] for r in self.mine() if r.get('taskId')]
 
     def row(self):
         """The loop's view of the run: the sum of its tasks' yen and steps; `failed` when a row failed that the script did not mean to fail."""
         tasks = [task_row(t) or {} for t in self.task_ids()]
-        failed = [r for r in self.rows if r.get('state') == 'failed' and r.get('goal') in self.trial.goal_ref]
+        failed = [r for r in self.mine() if r.get('state') == 'failed']
         return {'status': 'failed' if failed else 'running', 'execState': None, 'pauseReason': 'queue_entry_failed' if failed else None,
                 'yen': round(sum(t.get('yen', 0) for t in tasks), 2), 'steps': sum(t.get('steps', 0) for t in tasks)}
 
@@ -1337,8 +1357,8 @@ class QueueRun:
         """Stop the whole queue and cancel what is left, so no task keeps the body. Returns notes for the result."""
         notes = [f'stop:{self.post({"op": "stop"})["code"]}']
         with contextlib.suppress(sqlite3.Error): self.read()
-        for r in self.rows:
-            if r.get('goal') in self.trial.goal_ref and r.get('state') not in queue_trial.TERMINAL:
+        for r in self.mine():
+            if r.get('state') not in queue_trial.TERMINAL:
                 notes.append(f'cancel {self.trial.goal_ref[r["goal"]]}:{self.post({"op": "cancel", "id": r["id"]})["code"]}')
         return notes
 
@@ -1421,8 +1441,10 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
         result['reason'] = f'setup_failed:preflight:{failed_check}'
         body_logout(); return result
     goal = section_goal(section)
-    queue = QueueRun(section) if section.get('via', 'operator') == 'queue' else None
+    queue = QueueRun(section, trial_id) if section.get('via', 'operator') == 'queue' else None
     if queue:
+        queue.snapshot()
+        if queue.before: log(f'trial {trial_id}: the queue already held rows that are not finished: {queue.before} (they are not read as part of this trial)')
         refused = queue.add_all()
         if refused:
             result['reason'] = f'request_refused:{refused}'
@@ -1504,6 +1526,7 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     if rig and reason == 'stopped_by_file':
         cleanup.append('no cancel: the stop file asks the rig to give way at once (its processes and database are thrown away)')
     elif queue:
+        op_errors = [e for e in queue.errors if not e.startswith('read:')]          # the trial's own operations; the cleanup's below are not the script's
         cleanup += queue.cleanup()
         for _ in range(5 if rig else 60):
             if queue.settled(): break
@@ -1528,18 +1551,21 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     if queue:
         row = queue.row()
         cleanup.append(f'settled={queue.settled()} tasks={len(queue.task_ids())}')
-        result['stepUnknown'] = []
+        result['stepUnknown'] = [c for t in queue.task_ids() for c in step_unknown_codes(t, result['startedAt'])]
     else:
         row = task_row(task_id) or {}
         cleanup.append(f'settled={settled(row)} status={row.get("status")}/{row.get("execState")}')
         result['stepUnknown'] = step_unknown_codes(task_id, result['startedAt'])
     result['cleanup'] = cleanup
-    try: result['stall'] = {'error': 'queue trial: see result.queue'} if queue else stall_tail(task_id)
+    stall_of = (queue.task_ids() or [None])[-1] if queue else task_id          # a queue trial: the stall of the last task it started
+    try: result['stall'] = stall_tail(stall_of) if stall_of else {'error': 'queue trial: no task was started'}
     except Exception as error:   # noqa: BLE001 - a history we cannot read must not lose the trial's result
         result['stall'] = {'error': f'{type(error).__name__}: {error}'[:160]}
     if queue:
         result['queue'] = queue.trial.report()
         result['queueErrors'] = queue.errors
+        result['queueBefore'] = queue.before
+        result['queue']['verdict'] += [f'op_refused:{e}' for e in op_errors]          # an operation the door refused is a failure of the trial, whatever the end state says
         if reason == 'reached' and result['queue']['verdict']: reason = 'queue_check:' + result['queue']['verdict'][0]
     result.update({'ok': reason == 'reached', 'reason': reason, 'seconds': end_seconds(section, latched) if reason in ('reached',) or reason.startswith('queue_check:') else None,
                    'elapsed': round(elapsed, 1), 'milestones': latched, 'firstSeen': first_seen, 'maxCounts': maxima,

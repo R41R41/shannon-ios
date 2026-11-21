@@ -15,10 +15,13 @@ The section's `queue` (all of it optional except entries):
               order [refs]                    these rows became done in this order
               final {ref: state}              the state each row ends in (absent = the row is gone)
               seen {ref: [states]}            these states were read at some time
-              halt {step, withinSeconds, stillSeconds}   after that step the body held still (position and item counts) for stillSeconds, starting within withinSeconds
-              quiet {step, seconds}           after that step no row was `running` for that many seconds
+              halt {step, withinSeconds, stillSeconds}   the row that step is about stopped using the body within withinSeconds after the step: its task is finished or paused as stopped
+                                              (agent_tasks, the head's own word for it). A row without a task is judged by the body holding still (position and item counts)
+                                              for stillSeconds instead; with a task, the body's stillness is only reported (`haltBodyStill`), because the next row may start at once
+              quiet {step, seconds, graceSeconds?}   after that step (and graceSeconds, default 5, for the head to switch the rows over) no row was `running` for that many seconds
               scriptDone                      every step ran (default: always checked)
 
+Rows that were in the table before the trial added its own (earlier runs keep their finished rows) are told apart by id (`ignore`) and never read as the trial's.
 The queue is read from the head's database (read only, like agent_tasks) and written through the door the mod uses: the body's POST /queue (production: 127.0.0.1:8092),
 or, in an isolated rig (which has no body door), the head's POST /v1/body/minecraft/queue with the rig body's device token. Tokens are never logged.
 """
@@ -36,6 +39,7 @@ WHEN_KEYS = {'seconds', 'milestone', 'ref', 'state', 'for'}
 EXPECT_KEYS = {'maxRunning', 'order', 'final', 'seen', 'halt', 'quiet', 'scriptDone'}
 PLACEMENTS = ('end', 'next', 'now')
 TABLE = 'minecraft_request_queue'
+QUIET_GRACE = 5.0           # seconds after a stop in which a row may still read `running` (the head switches the rows over after it answered)
 STILL_MOVE = 0.5            # blocks the body may drift and still count as holding still
 BODY_URL = os.environ.get('SHANNON_TRIALS_QUEUE_URL', 'http://127.0.0.1:8092/queue')
 SENDER = 'trials'
@@ -73,6 +77,7 @@ def validate(cfg, milestone_names, where):
         if k not in EXPECT_KEYS: out.append(f'{where}: expect key {k!r} is unknown')
     for k in ('halt', 'quiet'):
         if k in expect and expect[k].get('step') not in ids: out.append(f'{where}: expect {k} names a step that has no id')
+    if 'halt' in expect and not any(s.get('id') == expect['halt'].get('step') and s.get('ref') for s in steps): out.append(f'{where}: expect halt needs a step about one row (a ref)')
     for ref in list(expect.get('order', [])) + list(expect.get('final', {})) + list(expect.get('seen', {})):
         if ref not in refs: out.append(f'{where}: expect names {ref!r}, which is not an entry')
     for ref, state in expect.get('final', {}).items():
@@ -93,7 +98,7 @@ def read_rows(db_path):
     """All rows of the queue table (read only). A head without the table has no queue: that is an error the trial reports, not an empty queue."""
     con = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True, timeout=10)
     try:
-        cur = con.execute(f'SELECT * FROM {TABLE}')
+        cur = con.execute(f'SELECT * FROM {TABLE} ORDER BY seq')
         names = [d[0] for d in cur.description]
         return [normalise_row(dict(zip(names, r))) for r in cur.fetchall()]
     finally:
@@ -130,7 +135,11 @@ class QueueTrial:
         self.goal_ref = {e['goal']: e['ref'] for e in self.entries}
         self.script = cfg.get('script', [])
         self.expect = cfg.get('expect', {})
+        self.ignore = set()              # ids of rows that were there before the trial's own were added: never the trial's
         self.ids = {}                    # ref -> the row id the head gave it
+        self.taskids = {}                # ref -> the last task id its row showed
+        self.settled_at = {}             # ref -> the first reading (seconds) at which its task no longer held the body, after a halt step had fired on it
+        self.halt_refs = {s.get('ref'): s['id'] for s in cfg.get('script', []) if s.get('id') and s.get('id') == (cfg.get('expect', {}).get('halt') or {}).get('step')}
         self.states = {r: 'absent' for r in self.refs}
         self.since = {r: 0.0 for r in self.refs}
         self.seen = {r: set() for r in self.refs}
@@ -145,9 +154,17 @@ class QueueTrial:
         self.log = []
 
     # -- readings
-    def observe(self, t, rows, body=None, latched=None):
-        """One reading of the queue (rows from read_rows) and of the body. Returns the operations due now: [(step index, body of the post)]."""
-        mine = {self.goal_ref[r['goal']]: r for r in rows if r.get('goal') in self.goal_ref}
+    def observe(self, t, rows, body=None, latched=None, held=None):
+        """One reading of the queue (rows from read_rows), of the body, and of the tasks (held: task id -> True while that task still holds the body).
+        Returns the operations due now: [(step index, body of the post)]."""
+        mine = {self.goal_ref[r['goal']]: r for r in rows if r.get('goal') in self.goal_ref and r.get('id') not in self.ignore}
+        for ref, row in mine.items():
+            if row.get('taskId'): self.taskids[ref] = row['taskId']
+        if held is not None:
+            for step in self.fired:
+                ref = step['ref']
+                if step['id'] in self.halt_refs.values() and ref not in self.settled_at and self.taskids.get(ref) in held and not held[self.taskids[ref]] and t >= step['at']:
+                    self.settled_at[ref] = t
         now = {ref: (mine[ref]['state'] if ref in mine else 'absent') for ref in self.refs}
         for ref, row in mine.items(): self.ids[ref] = row['id']
         for ref in self.refs:
@@ -192,6 +209,12 @@ class QueueTrial:
             if f['id'] == step_id: return f['at']
         return None
 
+    def halt_task(self, step_id):
+        """(ref, task id) of the row the halt step was about, or (ref, None) when its row never showed a task."""
+        for f in self.fired:
+            if f['id'] == step_id: return f['ref'], self.taskids.get(f['ref'])
+        return None, None
+
     def _still(self, start, within, hold):
         """True when the body held still for `hold` seconds, starting at most `within` seconds after `start`."""
         run = None
@@ -222,16 +245,24 @@ class QueueTrial:
         if 'halt' in e:
             at = self.fired_at(e['halt']['step'])
             if at is None: fails.append('halt:step_not_run')
-            elif not self._still(at, e['halt'].get('withinSeconds', 10), e['halt'].get('stillSeconds', 4)): fails.append('halt:body_kept_moving')
+            else:
+                within = e['halt'].get('withinSeconds', 10)
+                ref, task = self.halt_task(e['halt']['step'])
+                still = self._still(at, within, e['halt'].get('stillSeconds', 4))
+                if task is None:
+                    if not still: fails.append('halt:body_kept_moving')
+                elif ref not in self.settled_at or self.settled_at[ref] > at + within: fails.append('halt:task_kept_the_body')
         if 'quiet' in e:
             at = self.fired_at(e['quiet']['step'])
             if at is None: fails.append('quiet:step_not_run')
             elif self.last_t < at + e['quiet']['seconds']: fails.append('quiet:trial_ended_too_early')
-            elif any(at < t <= at + e['quiet']['seconds'] for t in self.running_at): fails.append('quiet:a_row_ran')
+            elif any(at + e['quiet'].get('graceSeconds', QUIET_GRACE) < t <= at + e['quiet']['seconds'] for t in self.running_at): fails.append('quiet:a_row_ran')
         return fails
 
     def report(self):
-        return {'states': dict(self.states), 'completed': list(self.completed), 'fired': list(self.fired), 'changes': self.log[-60:],
+        halt = self.expect.get('halt')
+        still = self._still(self.fired_at(halt['step']) or 0, halt.get('withinSeconds', 10), halt.get('stillSeconds', 4)) if halt and self.fired_at(halt['step']) is not None else None
+        return {'states': dict(self.states), 'haltBodyStill': still, 'taskSettledAt': dict(self.settled_at), 'completed': list(self.completed), 'fired': list(self.fired), 'changes': self.log[-60:],
                 'verdict': self.verdict()}
 
 

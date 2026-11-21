@@ -95,16 +95,21 @@ class SimQueue:
         con.commit(); con.close()
 
 
-def play(section_id, durations, settle=10, keep_moving=False, camel=False, limit=900):
+def play(section_id, durations, settle=10, keep_moving=False, camel=False, limit=900, stale=False):
     """Runs one queue section's script against the simulated queue the way run_trial's loop does; returns (trial, latched, sim, ended_at)."""
     section = SECTIONS[section_id]
     fd, path = tempfile.mkstemp(suffix='.sqlite'); os.close(fd)
     goal_of = {e['ref']: e['goal'] for e in section['queue']['entries']}
     sim = SimQueue(path, {goal_of[k]: v for k, v in durations.items()}, settle, camel)
+    if stale:          # finished rows of an earlier run: the same goals, a failed one among them, with task ids
+        for n, state in enumerate(('failed', 'done', 'cancelled'), start=1):
+            sim.rows.append({'id': f'old{n}', 'seq': -n, 'goal': list(goal_of.values())[n - 1], 'state': state, 'task_id': f'task-old{n}'})
+        sim.write()
     old_db, old_post = trials.DB, queue_trial.post
     trials.DB, queue_trial.post = path, sim.apply
     try:
-        q = trials.QueueRun(section)
+        q = trials.QueueRun(section, 'trial-1')
+        q.snapshot()
         assert q.add_all() is None
         q.read()
         assert q.goals_ok()
@@ -154,6 +159,34 @@ class ScriptedSectionsTest(unittest.TestCase):
         self.assertIsNotNone(ended)
         self.assertIn('halt:body_kept_moving', q.trial.verdict())
 
+    def test_the_halt_check_reads_the_held_rows_task_and_not_the_body(self):
+        cfg = SECTIONS['Q1']['queue']
+        def run(settles_at):
+            t = queue_trial.QueueTrial(cfg)
+            rows = lambda st: [{'id': 'r1', 'goal': 'オークの原木を 5 個集める', 'state': st, 'taskId': 'tk'}, {'id': 'r2', 'goal': '作業台を作る', 'state': 'queued', 'taskId': None},
+                               {'id': 'r3', 'goal': '木の棒を 4 本作る', 'state': 'queued', 'taskId': None}]
+            t.observe(1.0, rows('running'), {'pos': (0, 0, 0), 'items': 0}, {}, {'tk': True})
+            t.next = 1                                   # moveC has run; holdA fires at 20 s
+            t.fired.append({'id': 'holdA', 'index': 1, 'op': 'hold', 'ref': 'a', 'at': 20.0})
+            t.next = 2
+            for sec in (22.0, 26.0, 40.0):
+                t.observe(sec, rows('paused'), {'pos': (sec, 0, 0), 'items': 5}, {}, {'tk': sec < settles_at})      # the body keeps moving (the next row works)
+            t.next = len(t.script)
+            return t.verdict()
+        self.assertNotIn('halt:body_kept_moving', run(24.0))
+        self.assertNotIn('halt:task_kept_the_body', run(24.0))
+        self.assertIn('halt:task_kept_the_body', run(99.0))
+
+    def test_a_row_that_still_reads_running_just_after_the_stop_is_inside_the_grace(self):
+        t = queue_trial.QueueTrial(SECTIONS['Q2']['queue'])
+        t.fired.append({'id': 'stopAll', 'index': 1, 'op': 'stop', 'ref': None, 'at': 100.0})
+        t.running_at = [102.0, 104.0]
+        t.last_t = 130.0
+        t.next = len(t.script)
+        self.assertNotIn('quiet:a_row_ran', t.verdict())
+        t.running_at = [102.0, 106.0]
+        self.assertIn('quiet:a_row_ran', t.verdict())
+
     def test_a_next_row_that_starts_at_once_after_the_stop_fails_the_quiet_check(self):
         section = SECTIONS['Q2']
         t = queue_trial.QueueTrial(section['queue'])
@@ -168,10 +201,19 @@ class ScriptedSectionsTest(unittest.TestCase):
 
     def test_two_running_rows_are_a_violation_when_first_read(self):
         t = queue_trial.QueueTrial(SECTIONS['Q1']['queue'])
-        rows = [{'id': 'x1', 'goal': 'オークの原木を 3 個集める', 'state': 'running', 'taskId': None},
+        rows = [{'id': 'x1', 'goal': 'オークの原木を 5 個集める', 'state': 'running', 'taskId': None},
                 {'id': 'x2', 'goal': '作業台を作る', 'state': 'running', 'taskId': None}]
         t.observe(4.0, rows)
         self.assertTrue(t.violations and t.violations[0].startswith('running_2_at_4s'))
+
+    def test_rows_left_by_an_earlier_run_are_never_read_as_this_runs(self):
+        q, _, sim, ended = play('Q1', {'a': 40, 'b': 10, 'c': 10}, stale=True)
+        self.assertIsNotNone(ended)
+        self.assertEqual(q.trial.verdict(), [])
+        self.assertEqual(q.trial.completed, ['c', 'b', 'a'])
+        self.assertEqual(q.row()['status'], 'running')          # the old failed row does not end the trial
+        self.assertEqual(q.task_ids(), [])
+        self.assertTrue(all(s['requestId'] == f'trials:trial-1:{s["goal"] and q.trial.goal_ref[s["goal"]]}' for s in sim.sent if s['op'] == 'add'))
 
     def test_a_script_that_never_finishes_is_a_failure(self):
         q, _, _, ended = play('Q1', {'a': 40, 'b': 10, 'c': 10}, limit=8)       # cut after the first steps

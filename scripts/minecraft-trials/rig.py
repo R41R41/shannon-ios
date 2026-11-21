@@ -41,6 +41,7 @@ HOME = os.path.expanduser('~')
 RIG_ROOT =os.path.join(HOME, '.cache', 'minebot-lab', 'rig')
 PRODUCTION_ENV = os.path.join(HOME, '.config', 'shannon-ios', 'api.env')
 BODY_RUN_RELATIVE = os.path.join('scripts', 'lab', 'rig-body-run.ts')
+RIG_DEVICE_TOKEN = 'rig-device-token-0000'      # the rig body's token at the head: the body's own loop and the queue door of trials.QUEUE_TARGET use this one value
 BODY_RUN_SOURCE = """// The body's half of S4's isolated head + body rig (rig.py writes this file into the body pin; the same text is backend/scripts/lab/rig-body-run.ts).
 import { createProbeBot, closeProbeBot } from '../../src/services/minebot/testing/MinecraftProbeBot.js';
 import { NativeCommonFcaBody } from '../../src/services/minebot/integration/commonFca/nativeBody.js';
@@ -59,7 +60,7 @@ actor.on('error', (error: Error) => say('RIG_BODY_ERROR', String(error?.message 
 actor.on('death', () => say('RIG_EVENT', { event: 'death', at: new Date().toISOString() }));
 actor.on('end', (reason: unknown) => say('RIG_EVENT', { event: 'body_end', reason: String(reason).slice(0, 120) }));
 const body = new NativeCommonFcaBody(actor, { serverId: 'rig', capture: async () => { throw new Error('no picture in the rig'); }, rendererConfigured: () => false });
-const loop = new CommonFcaControlLoop({ baseUrl: head, token: 'rig-device-token-0000', serverId: 'rig', actuator: body, pollMilliseconds: 150 });
+const loop = new CommonFcaControlLoop({ baseUrl: head, token: '""" + RIG_DEVICE_TOKEN + """', serverId: 'rig', actuator: body, pollMilliseconds: 150 });
 loop.start();
 say('RIG_BODY_UP', { name, port, head });
 
@@ -176,7 +177,7 @@ class Rig:
         self.saved = {'DB': trials.DB, 'IOS': trials.IOS, 'NODE': trials.NODE, 'RCON_TARGET': trials.RCON_TARGET, 'QUEUE_TARGET': trials.QUEUE_TARGET}
         trials.DB, trials.IOS, trials.NODE = self.ready['db'], a.head_pin, a.node
         trials.RCON_TARGET = ('127.0.0.1', self.lab.rcon_port, self.lab.password)
-        trials.QUEUE_TARGET = ('head', self.http['url'], 'rig-device-token-0000')      # the rig body has no door of its own: queue operations go to the head's door (as the body's own client would)
+        trials.QUEUE_TARGET = ('head', self.http['url'], RIG_DEVICE_TOKEN)      # the rig body has no door of its own: queue operations go to the head's door (as the body's own client would)
         return self
 
     def _wait(self, done, seconds, what, *procs):

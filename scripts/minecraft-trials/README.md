@@ -259,10 +259,13 @@ python3 -I rig.py report
 |---|---|---|
 | C1 ケーキ（支給） | 作業台・バケツ 3・卵 1・砂糖 2・小麦 3 を渡し、牛 2 頭を近くに置く | ケーキ 1 個を持ち、列の依頼が done。死亡 0、¥300 以内、10 分 |
 | C2 ケーキ（自力） | 作業台・バケツ 3 だけ。小麦畑・サトウキビ・牛 2・鶏 3 を近くに RCON で作る | 同じ。15 分。卵は `EggLayTime:200` で早める（台の補助で、自然な産卵ではない） |
-| Q1 保留・再開・入れ替え | a 原木 3・b 作業台・c 木の棒 4 を積む。a が走って 5 秒後に c を b の前へ、a が原木 1 を持ったら a を保留、b が終わったら a を再開 | 完了順 c・b・a、同時に走る行は 1 つ以下、保留の後 10 秒以内に体が 4 秒止まる、死亡 0 |
-| Q2 開始・停止・やめる・削除 | a・b・c・d を積む。a が 3 秒走ったら d を開始（a は保留）、d が 10 秒走ったら全体を停止、22 秒後に d を再開して全体を開始、c を削除、b が走ったら cancel、b が cancelled になったら a を再開 | 最終 a=done・b=cancelled・c=行なし・d=done、停止の後 20 秒は走る行が無い |
+| Q1 保留・再開・入れ替え | a 原木 5・b 作業台・c 木の棒 4 を積む（持ち物は全依頼で共有なので、a は c・b が使う分より多くする）。a が走って 5 秒後に c を b の前へ、a が原木 1 を持ったら a を保留、b が終わったら a を再開 | 完了順 c・b・a、同時に走る行は 1 つ以下、保留の後 10 秒以内に a のタスクが体を手放す（agent_tasks が finished か paused/stopped。タスクの無い行だけ体が 4 秒静止で見る）、死亡 0 |
+| Q2 開始・停止・やめる・削除 | a（原木 3）・b・c・d（原木 12。a の取り分で終わらない量）を積む。a が 3 秒走ったら d を開始（a は保留）、d が 10 秒走ったら全体を停止、22 秒後に d を再開して全体を開始、その 3 秒後に c を削除、b が走ったら cancel、b が cancelled になったら a を再開 | 最終 a=done・b=cancelled・c=行なし・d=done、停止の 5 秒後から 20 秒後までは走る行が無い（最初の 5 秒は、頭が行を切り替えるまでの猶予） |
 
 - 台本は `sections.json` の `queue`（`entries`・`script`・`expect`）。書き方と判定の一覧は `queue_trial.py` の先頭に書いてあります。節目に `{ "queue": {"ref", "state"} }` が使えます。`prepAtBody` の区間は、準備（`fill`・`setblock`・`summon`）を体が立っている位置からの相対で行います。
 - 読みは頭の DB の表 `minecraft_request_queue`（読み取りだけ。列名は snake_case、camelCase も読む）。操作は、本番では体の `POST 127.0.0.1:8092/queue`（`SHANNON_TRIALS_QUEUE_URL` で変えられる）、`rig.py` では頭の `POST /v1/body/minecraft/queue`（rig の体に窓口が無いため。device token は出力に出さない）。`queue_trial.py` は `trials.py` と同じ場所に置いて配ります。
 - 点検（モデルなし）：`python3 -m unittest queue_trial_test`。小さな模擬の列で Q1・Q2 の台本を最後まで通します。模擬は仕様書の意味の写しで、本物の頭の動きではありません。
 - 既定のモデルは、rig では Haiku（`--llm-model` の既定）。VM の `trials.py` 直では `defaultModel: current`。他の実走と同時に回さない（4 vCPU）。
+- 前の実走の行：頭の表は終端の行を残す（task id も同じ goal も）。台は追加の前に既存の行の id を控え（`QueueTrial.ignore`）、以後その行を自分のものとして読まない。`requestId` は `trials:<trial_id>:<ref>`。控えの時点で終わっていない行があれば、記録（`queueBefore`）と log に出す（止めはしない）。
+- 判定：頭の窓口が断った操作は `op_refused:<op>:<code>` で不合格。`stepUnknown` は列の依頼のタスクごとに集め、`stall` は最後のタスクの分。
+- 合っているか分からない所（実走が無い）：`halt` の閾値、保留が agent_tasks の状態に出るか（出ない頭なら、`halt` は `task_kept_the_body` で落ちる。その時は台でなく頭の契約を見る）、停止の猶予 5 秒、d が 10 秒以内に終わらないか。
