@@ -73,10 +73,10 @@ of a device's, and `expression` lines may come before the sentences. Conversatio
 ## The call voice (named candidates)
 
 The voice of `speech` is one of a few named candidates; the body's `voice_cast` command (the owner only) reads and changes which, through
-`POST /v1/platform/voice/cast` (`{}` reads: `current`, `default`, `chosen`, `items`; `{"name":"kid-el"}` changes; 404 `UNKNOWN_VOICE`).
+`POST /v1/platform/voice/cast` (`{}` reads: `current`, `default`, `chosen`, `items`; `{"name":"voice-a"}` changes; 404 `UNKNOWN_VOICE`).
 The choice is in memory: a restart is the default again. The app's own voice (`SHANNON_GEMINI_TTS_*`) is not touched.
 
-- `SHANNON_CALL_VOICES`: a JSON list, each `{"name":"kid-el","engine":"eleven","voice":"<id>"}` (`engine` is `eleven` or `gemini`; `name` is
+- `SHANNON_CALL_VOICES`: a JSON list, each `{"name":"voice-a","engine":"eleven","voice":"<id>"}` (`engine` is `eleven` or `gemini`; `name` is
   lowercase letters, digits and hyphens; `style` is the voice's core: Gemini's whole core style, ElevenLabs' default tags; `model` is Gemini's).
 - `SHANNON_CALL_VOICE_DEFAULT`: the name used at start. Without it: `gemini` when `SHANNON_CALL_TTS_VOICE` is set, else `eleven` when there is no list, else the first listed.
 - Before the list existed: `SHANNON_CALL_TTS_VOICE` is the candidate `gemini` (its core style `SHANNON_CALL_TTS_STYLE`, model `SHANNON_CALL_TTS_MODEL`;

@@ -192,7 +192,8 @@ export function configuredCallVoices(environment: Environment): { candidates: Ca
   const has = (engine: CallVoiceEngine, voice: string) => candidates.some(item => item.engine === engine && item.voice === voice);
   const geminiVoice = environment.SHANNON_CALL_TTS_VOICE?.trim();
   const elevenVoice = environment.SHANNON_ELEVEN_TTS_VOICE_ID?.trim();
-  const listed = Boolean(environment.SHANNON_CALL_VOICES?.trim());
+  // A list that gave no usable candidate (broken JSON, every entry dropped) is as good as none: it must not make the voice 'chosen'.
+  const listed = candidates.length > 0;
   if (geminiVoice && !has('gemini', geminiVoice) && !named(LEGACY_GEMINI_NAME)) {
     candidates.push({ name: LEGACY_GEMINI_NAME, engine: 'gemini', voice: geminiVoice });
   }
@@ -268,26 +269,29 @@ export class CallVoiceCast implements CallVoiceCastPort {
     return { ...result, chunks, callVoiceName: entry.candidate.name };
   }
 
-  /** ElevenLabs' gateway keeps no usage record of its own: the call, the characters and the audio's length are booked here when a line ends. */
+  /** ElevenLabs' gateway keeps no usage record of its own: the call, the characters and the audio's length are booked here when a line ends or is stopped. */
   private async *recorded(result: GeminiSpeechStreamResult, request: GeminiSpeechRequest): AsyncGenerator<Uint8Array> {
     let bytes = 0;
-    let completed = false;
     try {
       for await (const chunk of result.chunks) {
         bytes += chunk.byteLength;
         yield chunk;
       }
-      completed = true;
     } finally {
-      if (completed && this.usage && bytes > 0) {
-        const seconds = bytes / 48_000;
-        const input = Math.max(1, Math.ceil(request.text.length / 4));
-        const output = Math.max(1, Math.round(seconds * 25));
-        this.usage.store.recordLlmUsage({
-          scopeKey: request.scopeKey, lane: 'voice', model: result.model, inputTokens: input, cachedInputTokens: 0, outputTokens: output,
-          totalTokens: input + output, estimatedCostUsd: Math.round(seconds / 10 * this.usage.elevenUsdPerTenSeconds * 1e6) / 1e6,
-          occurredAt: new Date().toISOString(),
-        });
+      // A line a person talked over was asked of ElevenLabs all the same: what was read is booked too. A failed booking never cuts the audio.
+      if (this.usage && bytes > 0) {
+        try {
+          const seconds = bytes / 48_000;
+          const input = Math.max(1, Math.ceil(request.text.length / 4));
+          const output = Math.max(1, Math.round(seconds * 25));
+          this.usage.store.recordLlmUsage({
+            scopeKey: request.scopeKey, lane: 'voice', model: result.model, inputTokens: input, cachedInputTokens: 0, outputTokens: output,
+            totalTokens: input + output, estimatedCostUsd: Math.round(seconds / 10 * this.usage.elevenUsdPerTenSeconds * 1e6) / 1e6,
+            occurredAt: new Date().toISOString(),
+          });
+        } catch {
+          console.warn('A call voice usage record could not be written');
+        }
       }
     }
   }
@@ -375,6 +379,8 @@ export function createConfiguredCallVoiceCast(environment: Environment, usageSto
       } else if (candidate.engine === 'eleven' && elevenKey) {
         if (candidate.style) validatedElevenTags(candidate.style);
         entries.push(elevenEntry(candidate, elevenKey));
+      } else {
+        console.warn('A call voice candidate is left out: its key is not set', { name: candidate.name, engine: candidate.engine });
       }
     } catch (error) {
       if (!(error instanceof ElevenSpeechError || error instanceof GeminiSpeechError)) throw error;

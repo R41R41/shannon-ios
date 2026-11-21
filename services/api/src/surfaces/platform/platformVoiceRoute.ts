@@ -217,9 +217,9 @@ async function speech(request: IncomingMessage, response: ServerResponse, routes
   }
   const ask = validatedSpeech(values);
   if (!ask) return sendJson(response, 400, { error: 'SPEECH_INVALID', message: '読み上げる文章または演技指定が不正です。' });
-  if (speechActive >= SPEECH_AT_ONCE) return sendJson(response, 429, { error: 'BUSY', message: 'いまの返答を音声にしています。' });
+  if (speechActive >= SPEECH_AT_ONCE) return sendJson(response, 429, { error: 'BUSY', message: 'いまの返答を音声にしています。', ...noSubstitute });
   if (!consumeDeviceAllowance(speechUsage, routes.scopeKey, SPEECH_PER_MINUTE)) {
-    return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
+    return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。', ...noSubstitute });
   }
   speechActive += 1;
   try {

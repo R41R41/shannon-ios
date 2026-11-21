@@ -1,15 +1,15 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { RetryingElevenSpeech, configuredCallVoices, createConfiguredCallVoiceCast } from '../src/infra/models/callVoiceSpeech.js';
+import { CallVoiceCast, RetryingElevenSpeech, configuredCallVoices, createConfiguredCallVoiceCast } from '../src/infra/models/callVoiceSpeech.js';
 import { ElevenSpeechError } from '../src/infra/models/elevenSpeech.js';
 import type { GeminiSpeechRequest } from '../src/infra/models/geminiSpeech.js';
 import { handlePlatformVoiceRequest } from '../src/surfaces/platform/platformVoiceRoute.js';
 
 const KEYS = { GEMINI_API_KEY: 'g', ELEVENLABS_API_KEY: 'e' };
 const LIST = JSON.stringify([
-  { name: 'kid-el', engine: 'eleven', voice: 'kidElevenVoice01' },
-  { name: 'kid-gm', engine: 'gemini', voice: 'voice_kid', style: '子供の核。' },
+  { name: 'voice-a', engine: 'eleven', voice: 'voiceAElevenX001' },
+  { name: 'voice-b', engine: 'gemini', voice: 'voice_b', style: '声の核。' },
   { name: 'mosaku', engine: 'eleven', voice: 'mosakuVoice0001' },
 ]);
 
@@ -53,11 +53,11 @@ describe('the named call voices', () => {
   });
 
   it('takes the list and the default name; an unknown default falls back to the first, a broken entry is dropped', () => {
-    const named = configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: ' Kid-GM ' });
-    expect(named.candidates.map(item => item.name)).toEqual(['kid-el', 'kid-gm', 'mosaku']);
-    expect(named).toMatchObject({ defaultName: 'kid-gm', chosen: true });
-    expect(configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: 'nope' }).defaultName).toBe('kid-el');
-    expect(configuredCallVoices({ SHANNON_CALL_VOICES: LIST }).defaultName).toBe('kid-el');
+    const named = configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: ' Voice-B ' });
+    expect(named.candidates.map(item => item.name)).toEqual(['voice-a', 'voice-b', 'mosaku']);
+    expect(named).toMatchObject({ defaultName: 'voice-b', chosen: true });
+    expect(configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: 'nope' }).defaultName).toBe('voice-a');
+    expect(configuredCallVoices({ SHANNON_CALL_VOICES: LIST }).defaultName).toBe('voice-a');
     const dropped = configuredCallVoices({ SHANNON_CALL_VOICES: JSON.stringify([
       { name: 'Bad Name', engine: 'eleven', voice: 'v' }, { name: 'ok', engine: 'other', voice: 'v' }, { name: 'fine', engine: 'eleven', voice: 'v1234567' },
     ]) });
@@ -67,24 +67,24 @@ describe('the named call voices', () => {
 
   it('does not repeat a voice the list already names under the earlier setting', () => {
     const result = configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_ELEVEN_TTS_VOICE_ID: 'mosakuVoice0001' });
-    expect(result.candidates.map(item => item.name)).toEqual(['kid-el', 'kid-gm', 'mosaku']);
+    expect(result.candidates.map(item => item.name)).toEqual(['voice-a', 'voice-b', 'mosaku']);
   });
 
   it('reads and changes the voice by name, in memory; the default stays what it was', () => {
-    const cast = createConfiguredCallVoiceCast({ ...KEYS, SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: 'kid-gm' })!;
+    const cast = createConfiguredCallVoiceCast({ ...KEYS, SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: 'voice-b' })!;
     expect(cast.list()).toEqual([
-      { name: 'kid-el', engine: 'eleven' }, { name: 'kid-gm', engine: 'gemini' }, { name: 'mosaku', engine: 'eleven' },
+      { name: 'voice-a', engine: 'eleven' }, { name: 'voice-b', engine: 'gemini' }, { name: 'mosaku', engine: 'eleven' },
     ]);
-    expect([cast.current(), cast.defaultName()]).toEqual(['kid-gm', 'kid-gm']);
+    expect([cast.current(), cast.defaultName()]).toEqual(['voice-b', 'voice-b']);
     expect(cast.select(' MOSAKU ')).toBe(true);
     expect(cast.select('missing')).toBe(false);
-    expect([cast.current(), cast.defaultName()]).toEqual(['mosaku', 'kid-gm']);
+    expect([cast.current(), cast.defaultName()]).toEqual(['mosaku', 'voice-b']);
   });
 
   it('leaves out a candidate whose key is missing, and has no cast without any', () => {
     const cast = createConfiguredCallVoiceCast({ GEMINI_API_KEY: 'g', SHANNON_CALL_VOICES: LIST })!;
-    expect(cast.list().map(item => item.name)).toEqual(['kid-gm']);
-    expect(cast.current()).toBe('kid-gm');
+    expect(cast.list().map(item => item.name)).toEqual(['voice-b']);
+    expect(cast.current()).toBe('voice-b');
     expect(createConfiguredCallVoiceCast({ SHANNON_CALL_VOICES: LIST })).toBeNull();
   });
 
@@ -123,6 +123,44 @@ describe('the named call voices', () => {
   });
 });
 
+describe('the voice of a call that is configured wrongly', () => {
+  it('is not taken as chosen when the list gave no usable voice', () => {
+    for (const broken of ['{not json', '{"a":1}', JSON.stringify([{ name: 'Bad Name', engine: 'eleven', voice: 'v' }])]) {
+      const result = configuredCallVoices({ SHANNON_CALL_VOICES: broken, SHANNON_ELEVEN_TTS_VOICE_ID: 'abcdefgh' });
+      expect(result).toMatchObject({ defaultName: 'eleven', chosen: false });
+    }
+    expect(configuredCallVoices({ SHANNON_CALL_VOICES: LIST }).chosen).toBe(true);
+  });
+});
+
+describe('the usage record of an ElevenLabs call voice', () => {
+  const entry = (chunks: () => AsyncGenerator<Uint8Array>) => ({
+    candidate: { name: 'voice-a', engine: 'eleven' as const, voice: 'voiceAElevenX001' },
+    gateway: {
+      stream: async () => ({
+        contentType: 'audio/l16' as const, sampleRate: 24_000, channels: 1, bitsPerSample: 16, model: 'eleven_v4_turbo', voice: 'v', outputUsdPerTenSeconds: 0, chunks: chunks(),
+      }) as never,
+    },
+  });
+  const two = async function* (): AsyncGenerator<Uint8Array> { yield Buffer.alloc(48_000, 1); yield Buffer.alloc(48_000, 2); };
+
+  it('does not cut a line that was read to the end when the record cannot be written', async () => {
+    const store = { recordLlmUsage: () => { throw new Error('database is locked'); }, backgroundLlmCostUsd: () => 0 };
+    const cast = new CallVoiceCast([entry(two)], 'voice-a', false, { store: store as never, elevenUsdPerTenSeconds: 0 });
+    let bytes = 0;
+    for await (const chunk of (await cast.stream(ask('はい。'))).chunks) bytes += chunk.byteLength;
+    expect(bytes).toBe(96_000);
+  });
+
+  it('books the part that was read when a line is stopped early', async () => {
+    const events: Array<{ lane: string; scopeKey: string }> = [];
+    const store = { recordLlmUsage: (event: { lane: string; scopeKey: string }) => events.push(event), backgroundLlmCostUsd: () => 0 };
+    const cast = new CallVoiceCast([entry(two)], 'voice-a', false, { store: store as never, elevenUsdPerTenSeconds: 0 });
+    for await (const chunk of (await cast.stream(ask('はい。'))).chunks) { void chunk; break; }
+    expect(events).toEqual([expect.objectContaining({ lane: 'voice', scopeKey: 'owner' })]);
+  });
+});
+
 describe('the cast route', () => {
   let server: Server | null = null;
   afterEach(() => new Promise<void>(resolve => (server ? server.close(() => resolve()) : resolve())));
@@ -143,7 +181,7 @@ describe('the cast route', () => {
 
   const castOf = () => createConfiguredCallVoiceCast({
     GEMINI_API_KEY: 'g', ELEVENLABS_API_KEY: 'e', SHANNON_CALL_VOICES: JSON.stringify([
-      { name: 'kid-gm', engine: 'gemini', voice: 'voice_kid' }, { name: 'mosaku', engine: 'eleven', voice: 'mosakuVoice0001' },
+      { name: 'voice-b', engine: 'gemini', voice: 'voice_b' }, { name: 'mosaku', engine: 'eleven', voice: 'mosakuVoice0001' },
     ]),
   })!;
 
@@ -151,11 +189,11 @@ describe('the cast route', () => {
     const cast = castOf();
     const read = await post('cast', {}, { cast, speech: cast });
     expect(await read.json()).toEqual({
-      current: 'kid-gm', default: 'kid-gm', chosen: true, items: [{ name: 'kid-gm', engine: 'gemini' }, { name: 'mosaku', engine: 'eleven' }],
+      current: 'voice-b', default: 'voice-b', chosen: true, items: [{ name: 'voice-b', engine: 'gemini' }, { name: 'mosaku', engine: 'eleven' }],
     });
     const changed = await post('cast', { name: 'mosaku' }, { cast, speech: cast });
     expect(changed.status).toBe(200);
-    expect(await changed.json()).toMatchObject({ current: 'mosaku', default: 'kid-gm' });
+    expect(await changed.json()).toMatchObject({ current: 'mosaku', default: 'voice-b' });
     expect(cast.current()).toBe('mosaku');
   });
 
@@ -163,7 +201,7 @@ describe('the cast route', () => {
     const cast = castOf();
     const unknown = await post('cast', { name: 'nobody' }, { cast, speech: cast });
     expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toMatchObject({ error: 'UNKNOWN_VOICE', current: 'kid-gm' });
+    expect(await unknown.json()).toMatchObject({ error: 'UNKNOWN_VOICE', current: 'voice-b' });
     expect((await post('cast', {}, { cast: null, speech: null })).status).toBe(503);
   });
 
@@ -180,12 +218,12 @@ describe('the cast route', () => {
       queue.push(sse(Buffer.alloc(2_400, 1)));
       const ok = await post('speech', { text: 'おはよう。' }, { cast, speech: cast });
       expect(ok.status).toBe(200);
-      expect(ok.headers.get('x-shannon-voice-name')).toBe('kid-gm');
+      expect(ok.headers.get('x-shannon-voice-name')).toBe('voice-b');
       await ok.arrayBuffer();
       await new Promise<void>(resolve => server!.close(() => resolve()));
       const failed = await post('speech', { text: 'おはよう。' }, { cast, speech: cast });
       expect(failed.status).toBe(502);
-      expect(await failed.json()).toMatchObject({ error: 'GEMINI_SPEECH_FAILED', voice: 'kid-gm', noSubstitute: true });
+      expect(await failed.json()).toMatchObject({ error: 'GEMINI_SPEECH_FAILED', voice: 'voice-b', noSubstitute: true });
       await new Promise<void>(resolve => server!.close(() => resolve()));
       const unconfigured = await post('speech', { text: 'おはよう。' }, { cast, speech: null });
       expect(unconfigured.status).toBe(503);
@@ -202,6 +240,34 @@ describe('the cast route', () => {
     expect(await none.json()).not.toHaveProperty('noSubstitute');
     const old = createConfiguredCallVoiceCast({ ELEVENLABS_API_KEY: 'e', SHANNON_ELEVEN_TTS_VOICE_ID: 'abcdefgh' })!;
     expect(old.chosen).toBe(false);
+  });
+});
+
+describe('a chosen call voice that is turned away for being busy', () => {
+  it('says no other voice may say the line, as it does for a failure', async () => {
+    const cast = createConfiguredCallVoiceCast({ ELEVENLABS_API_KEY: 'e', SHANNON_CALL_VOICES: JSON.stringify([{ name: 'voice-a', engine: 'eleven', voice: 'voiceAElevenX001' }]) })!;
+    const failing = { current: () => 'voice-a', stream: async () => { throw new ElevenSpeechError('ELEVEN_SPEECH_FAILED'); } };
+    const server = createServer((request, response) => {
+      void handlePlatformVoiceRequest('/v1/platform/voice/speech', request, response, { token: 't' }, {
+        service: {} as never, mouth: {} as never, scopeKey: 'rate-limit-probe', environment: () => ({ SHANNON_DC_VOICE: 'on' }), cast, speech: failing,
+      } as never);
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      let limited: Response | null = null;
+      for (let count = 0; count < 200 && !limited; count += 1) {
+        const answer = await fetch(`http://127.0.0.1:${port}/v1/platform/voice/speech`, {
+          method: 'POST', headers: { authorization: 'Bearer t', 'content-type': 'application/json' }, body: JSON.stringify({ text: 'うん。' }),
+        });
+        if (answer.status === 429) limited = answer;
+        else await answer.arrayBuffer();
+      }
+      expect(limited).not.toBeNull();
+      expect(await limited!.json()).toMatchObject({ error: 'RATE_LIMITED', noSubstitute: true });
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
   });
 });
 
