@@ -750,7 +750,7 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
         asked.push({ utterance: state.utterance, working: state.shannon_is_working_in_minecraft });
         const aboutJob = /骨粉|作って|置いて|どこまで|いま何/u.test(state.utterance);
         const answers = { addressed_to_shannon: { type: 'noul', noul: aboutJob ? 0.93 : 0.05 }, target: { type: 'choice', choice: aboutJob ? 'shannon' : 'other_person' },
-          reply_needed: { type: 'noul', noul: aboutJob ? 0.95 : 0.05 } };
+          about_the_job: { type: 'noul', noul: aboutJob ? 0.93 : 0.05 }, reply_needed: { type: 'noul', noul: aboutJob ? 0.95 : 0.05 } };
         return { value: request.parse(answers), source: 'jev' as const };
       },
     } as unknown as Pick<JevChooser, 'decide'>;
@@ -878,7 +878,7 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     const states: Array<Record<string, unknown>> = [];
     const chooser = { decide: async (request: { state: unknown; parse: (answers: Record<string, unknown>) => unknown }) => {
       states.push(request.state as Record<string, unknown>);
-      return { value: request.parse({ addressed_to_shannon: { type: 'noul', noul: 0.05 }, target: { type: 'choice', choice: 'other_person' }, reply_needed: { type: 'noul', noul: 0.05 } }), source: 'jev' as const };
+      return { value: request.parse({ addressed_to_shannon: { type: 'noul', noul: 0.05 }, target: { type: 'choice', choice: 'other_person' }, about_the_job: { type: 'noul', noul: 0.05 }, reply_needed: { type: 'noul', noul: 0.05 } }), source: 'jev' as const };
     } } as unknown as Pick<JevChooser, 'decide'>;
     const { say, service, body, advance, now, close } = harness(ADDRESSED, undefined, new AddressedJudge({ chooser }));
     body.running = CAKE;

@@ -84,14 +84,18 @@ describe('what Jev is shown and what its answer makes of it', () => {
     expect(text).toContain('shannon_last_line_was_a_question');
   });
 
-  it('answers a nameless request while she works as `asked_while_working`, with the unnamed bar (0.8)', () => {
-    const answers = (noul: number, target = 'shannon', reply = 0.95) => ({
-      addressed_to_shannon: { type: 'noul', noul }, target: { type: 'choice', choice: target }, reply_needed: { type: 'noul', noul: reply },
+  it('answers a nameless request while she works as `asked_while_working` by whether it is about the job alone (0.4), not by whom it is said to', () => {
+    const answers = (job: number, noul = 0.9, target = 'shannon', reply = 0.95) => ({
+      addressed_to_shannon: { type: 'noul', noul }, target: { type: 'choice', choice: target }, about_the_job: { type: 'noul', noul: job }, reply_needed: { type: 'noul', noul: reply },
     });
     expect(parsedAddressed(answers(0.9), null, 'working')).toMatchObject({ addressed: true, reason: 'asked_while_working' });
-    expect(parsedAddressed(answers(0.75), null, 'working')).toMatchObject({ addressed: false, reason: 'no_name' });
-    expect(parsedAddressed(answers(0.9, 'other_person'), null, 'working')).toMatchObject({ addressed: false, reason: 'no_name' });
-    expect(parsedAddressed(answers(0.9), null, true)).toMatchObject({ addressed: true, reason: 'asked_alone' });
+    // The real Jev read a tip said to the room as "to another person" and scored a suggestion low on "needs an answer": neither stops a talk about the job.
+    expect(parsedAddressed(answers(0.5, 0.22, 'other_person', 0.2), null, 'working')).toMatchObject({ addressed: true, reason: 'asked_while_working' });
+    expect(parsedAddressed(answers(0.3), null, 'working')).toMatchObject({ addressed: false, reason: 'no_name' });
+    expect(parsedAddressed(answers(0.1, 0.9), null, 'working')).toMatchObject({ addressed: false, reason: 'no_name' });
+    // Alone with her, the old three questions decide, as before.
+    expect(parsedAddressed(answers(0.05, 0.9), null, true)).toMatchObject({ addressed: true, reason: 'asked_alone' });
+    expect(parsedAddressed(answers(0.9, 0.75), null, true)).toMatchObject({ addressed: false, reason: 'no_name' });
   });
 });
 

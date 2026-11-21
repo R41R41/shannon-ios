@@ -92,7 +92,7 @@ type Target = typeof ADDRESSED_TARGETS[number];
 
 interface Parsed { addressed: boolean; target: Target | 'fallback'; noul: number; reason: AddressedReason }
 
-/** 固定した3問（addressed.v4）。文面や判定条件を変えたら版も変える。 */
+/** 固定した4問（addressed.v5。作業中の名前なしの発話は `about_the_job` だけで決める）。文面や判定条件を変えたら版も変える。 */
 export function addressedQuestions(): Record<string, JevQuestion> {
   return {
     addressed_to_shannon: {
@@ -128,6 +128,22 @@ export function addressedQuestions(): Record<string, JevQuestion> {
         other_person: 'To another person in the room, or to someone on the other end of a call.',
         self: 'To oneself: muttering, thinking aloud, reading aloud.',
         unclear: 'It cannot be told from the words and the context.',
+      },
+    },
+    // While she works on a job, the people watch and help and say things to the room: whether it is meant for her is not the question there (the real
+    // Jev read a tip said to the room as "to another person" and scored a suggestion low on "needs an answer"); whether it is about her work is.
+    about_the_job: {
+      type: 'noul',
+      instructions: 'state.shannon_is_working_in_minecraft says whether Shannon is working on a job in the game right now (state.current_work and state.request_list say what). '
+        + 'While she does, the people on this call watch and help, so what they say about the game and her work is meant for her to hear, whoever it is said to. '
+        + 'Decide whether the latest utterance (state.utterance) is that kind of talk: a request for her to do or add something in the game, a suggestion, tip or correction '
+        + 'about what she makes or how (the materials, tools, steps, places and tricks the job needs, such as how to get or grow something), or a question about how far she '
+        + 'has got or what she is doing. A tip about a thing the job is made of or needs, or about how to get or grow it, counts even when the job itself is not named '
+        + '(think what the job needs). It is NOT that kind of talk when it is chat between the people about something outside the game (what to eat, a video, the weather, '
+        + 'other games, jokes, laughter), or when it talks about Shannon herself and not her work. When shannon_is_working_in_minecraft is not true, answer false.',
+      criteria: {
+        true: 'The utterance asks her to do something in the game, suggests or corrects something about her work, or asks about her work.',
+        false: 'It is chat about something else, or no job is under way.',
       },
     },
     reply_needed: {
@@ -233,9 +249,16 @@ export function fallbackAddressed(_input: AddressedInput, _name: NameMatch | nul
  * 宛先が明確にshannon、宛先の確信、今返事が必要という確信が揃った時だけ応答する。
  * unclearは確率が高くても黙り、名前なしの新しい話しかけは一段厳しくする。
  */
-export const ADDRESSED_DECISION = Object.freeze({ shannon: 0.7, unnamed: 0.8, replyNeeded: 0.8 });
+export const ADDRESSED_DECISION = Object.freeze({ shannon: 0.7, unnamed: 0.8, replyNeeded: 0.8,
+  /** While she works (`about_the_job`): the real Jev scored what people said about the job 0.5 to 0.98 and the chat between them 0.01 to 0.20 (2026-11-22), so the bar sits between. */
+  job: 0.4 });
 
 export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' = false): Parsed {
+  if (unnamed === 'working') {
+    const job = jevNoul(answers, 'about_the_job');
+    const about = job >= ADDRESSED_DECISION.job;
+    return { addressed: about, target: 'shannon', noul: job, reason: about ? 'asked_while_working' : 'no_name' };
+  }
   const noul = jevNoul(answers, 'addressed_to_shannon');
   const target = jevChoice(answers, 'target', ADDRESSED_TARGETS);
   const directed = target === 'shannon' && noul >= (unnamed ? ADDRESSED_DECISION.unnamed : ADDRESSED_DECISION.shannon);

@@ -230,6 +230,23 @@ describe('MinecraftLive', () => {
     expect(f.live.block({ alone: true })).toContain('さっきあったこと');
   });
 
+  it('tells the places of diamond ore the map knows only on a run toward diamonds, not on another job', () => {
+    const told = (goal: string): string[] => {
+      const f = fixture();
+      const heard: LiveMoment[] = [];
+      f.live.onMoment(moment => heard.push(moment));
+      f.live.begin(f.task({ goal }));
+      f.live.frame('minecraft:world', observation({ mapSummary: '鉱石: 鉄 1か所' }), { newConnection: true });
+      f.advance(500);
+      f.live.frame('minecraft:world', observation({ mapSummary: '鉱石: ダイヤ 3か所' }), { newConnection: false });
+      f.advance(500);
+      f.live.frame('minecraft:world', observation({ mapSummary: '鉱石: ダイヤ 9か所' }), { newConnection: false });
+      return heard.map(moment => moment.kind);
+    };
+    expect(told('ケーキを1個作る')).toEqual([]);
+    expect(told('エンドラを討伐してください')).toEqual(['diamond_found', 'diamond_found']);
+  });
+
   it('knows she is in danger from the newest frame', () => {
     const f = fixture();
     f.live.frame('minecraft:world', observation({ health: 6 }), { newConnection: true });

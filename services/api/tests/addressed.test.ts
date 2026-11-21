@@ -38,7 +38,7 @@ function standInJev(options: { calls?: { count: number; bodies: unknown[] }; del
     const target = to ? 'shannon' : item?.group === 'about' ? 'about_shannon' : item?.group === 'self' ? 'self' : 'other_person';
     return new Response(JSON.stringify({ answers: {
       addressed_to_shannon: { type: 'noul', noul: to ? 0.93 : 0.06 }, target: { type: 'choice', choice: target },
-      reply_needed: { type: 'noul', noul: to ? 0.95 : 0.05 },
+      about_the_job: { type: 'noul', noul: to ? 0.93 : 0.05 }, reply_needed: { type: 'noul', noul: to ? 0.95 : 0.05 },
     } }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as unknown as typeof fetch;
   return fetcher;
@@ -109,7 +109,7 @@ describe('when Jev is asked at all', () => {
     expect(state.recent_talk).toEqual([{ who: 'ミキ', text: 'さっきのボスやばかった', seconds_ago: 30 }, { who: 'シャノン', text: '次はネザーだね。', seconds_ago: 7 }]);
     expect(JSON.stringify(state)).not.toContain('u1');
     const questions = addressedQuestions();
-    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'reply_needed']);
+    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'about_the_job', 'reply_needed']);
     expect(Object.keys(questions.target!.criteria)).toEqual(['shannon', 'about_shannon', 'other_person', 'self', 'unclear']);
   });
 });
@@ -147,7 +147,7 @@ describe('the judgement over the cases (Jev stood in for by the label)', () => {
     expect(body.model).toBe('jev-latest');
     expect(body.state).toMatchObject({ utterance: item.transcript, alone_with_shannon: true, shannon_spoke_seconds_ago: 5, follows_her_last_words: true });
     expect(Object.fromEntries(Object.entries(body.questions).map(([key, question]) => [key, question.type])))
-      .toEqual({ addressed_to_shannon: 'noul', target: 'choice', reply_needed: 'noul' });
+      .toEqual({ addressed_to_shannon: 'noul', target: 'choice', about_the_job: 'noul', reply_needed: 'noul' });
   });
 
   it('needs both answers to agree for a yes: the choice says her and the probability backs it', async () => {

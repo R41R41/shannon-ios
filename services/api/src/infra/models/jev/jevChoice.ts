@@ -119,7 +119,7 @@ export const JEV_QUESTION_SETS = Object.freeze({
   minecraftOpportunity: 'mc_opportunity.v1',
   /** Owner 2026-10-21 (`SHANNON_ADDRESSED`): whether words in a voice conversation were said to her
  * (`mind/perception/addressed.ts`). */
-  addressed: 'addressed.v4',
+  addressed: 'addressed.v5',
   /** Owner 2026-10-28: which kept picture of the mini Shannon fits a reply, and whether the reply shows a gesture none has
  * (`surfaces/mini/miniPoseChooser.ts`). */
   miniPose: 'mini_pose.v2',
