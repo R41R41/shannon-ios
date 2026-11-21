@@ -1,5 +1,5 @@
 import { liveFactLine, type LiveMoment, type WorkingEvent } from '@shannon/mind';
-import type { BodyObservation } from '../../contracts/bodyControlContract.js';
+import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts } from './minecraftItems.js';
 import { liveBlock, type LiveSnapshot } from './minecraftLiveBlock.js';
 import { bodyInDanger, createMomentDetector, dayTick, dimensionOfWorld, type MomentDetector } from './minecraftMoments.js';
@@ -23,6 +23,8 @@ export interface LiveTaskInfo {
   createdAtMs: number;
   bodyId: string | null;
   netherReached: boolean | null;
+  /** The task's phase now (`completed` when its request is done), asked while the task's body is quiet: nothing else tells the end. */
+  phase?: () => string | null;
 }
 
 /** What the task's body tells this: begin (again, for an update), the running tool, the end. */
@@ -30,6 +32,12 @@ export interface MinecraftLiveSink {
   begin(info: LiveTaskInfo): void;
   activity(taskId: string, call: { name: string; input: unknown } | null): void;
   end(taskId: string): void;
+  /** The plan she keeps now (a change from the one before is a moment: a node done, nodes added or dropped). */
+  plan?(taskId: string, view: BodyPlanView | undefined): void;
+  /** Something her work needs (a promise of the plan, a `keep` of an act): item, how many, and what for. */
+  need?(taskId: string, need: { item: string; count: number; use: string }): void;
+  /** What she means by the hands she sends (an act's `why`). */
+  thought?(taskId: string, why: string): void;
 }
 
 export interface LiveFrames {
@@ -50,9 +58,18 @@ const SKILL_WORDS: Readonly<Record<string, string>> = {
 
 /** A task's step ended: the next step of the same task begins within this long, so the view keeps it meanwhile. */
 const STEP_GAP_MS = 20_000;
+interface PlanMemory { revision: number; nodes: Map<string, { title: string; state: string; parent: string | null }>; current: string | null }
 interface TaskState {
   info: LiveTaskInfo; call: { name: string; input: unknown } | null; updatedAt: number; endedAt: number | null; milestone: number | null; late: Set<string>;
+  plan: PlanMemory | null; needs: Map<string, number>; doneTold: boolean; lastThought: string;
 }
+/** A title or a use as a moment carries it: one line, short, nothing the room should not read aloud. */
+const brief = (value: unknown, limit = 24): string => String(value ?? '').replace(/\s+/gu, ' ').replace(/^\[[^\]]{1,12}\]\s*/u, '').trim().slice(0, limit);
+const HAVE = /have:([a-z][a-z0-9_]{0,40})\s*>=\s*(\d{1,4})/gu;
+const DONE_AFTER_SECONDS = 120;
+const DRAGON_RUN = /エンドラ|ドラゴン|ネザー|エンド|ブレイズ|ダイヤ|討伐|クリア|dragon|nether|blaze|diamond/iu;
+/** What she says of her work as it goes: the block's recent moments are of the world, and the plan has a place of its own. */
+const WORK_MOMENTS: ReadonlySet<string> = new Set(['thinking', 'plan_step', 'plan_changed', 'material_needed', 'material_got']);
 
 export class MinecraftLive implements MinecraftLiveSink {
   private readonly tasks = new Map<string, TaskState>();
@@ -80,9 +97,99 @@ eplying, heard). */
   begin(info: LiveTaskInfo): void {
     const before = this.tasks.get(info.taskId);
     const now = this.now();
+    // A request that is new asks for its own things: what a detector told of an item for the one before is not news held against this.
+    if (!before) for (const detector of this.detectors.values()) detector.forgetWanted?.();
     for (const [id, task] of this.tasks) if (task.endedAt !== null && now - task.endedAt > 600_000) this.tasks.delete(id);
     this.tasks.set(info.taskId, { info, call: before?.call ?? null, updatedAt: now, endedAt: null, milestone: before?.milestone ?? null,
-      late: before?.late ?? new Set() });
+      late: before?.late ?? new Set(), plan: before?.plan ?? null, needs: before?.needs ?? new Map(), doneTold: before?.doneTold ?? false,
+      lastThought: before?.lastThought ?? '' });
+  }
+
+  /** The items her tasks ask for now, with how many: the detector tells what she gets of them (`material_got`). */
+  private wanted(): ReadonlyMap<string, number> {
+    const all = new Map<string, number>();
+    for (const task of this.tasks.values()) {
+      if (task.endedAt !== null && this.now() - task.endedAt > STEP_GAP_MS * 6) continue;
+      for (const [item, count] of task.needs) all.set(item, Math.max(all.get(item) ?? 0, count));
+    }
+    return all;
+  }
+
+  plan(taskId: string, view: BodyPlanView | undefined): void {
+    try {
+      const task = this.tasks.get(taskId);
+      if (!task || !view || !view.nodes.length) return;
+      const now = this.now(), prev = task.plan;
+      const nodes = new Map(view.nodes.map(node => [node.id, { title: brief(node.title), state: node.state, parent: node.parentId }]));
+      task.plan = { revision: view.revision, nodes, current: view.current };
+      for (const node of view.nodes) {
+        for (const match of `${node.doneWhen ?? ''}`.matchAll(HAVE)) task.needs.set(match[1]!, Math.max(task.needs.get(match[1]!) ?? 0, Number(match[2])));
+      }
+      const key = (what: string) => `plan:${taskId}:${view.revision}:${what}`;
+      const titles = (ids: string[]) => ids.slice(0, 3).map(id => nodes.get(id)?.title ?? prev?.nodes.get(id)?.title ?? '').filter(Boolean).join('、');
+      if (!prev) {
+        const top = view.nodes.filter(node => node.parentId === null).map(node => node.id);
+        this.emit({ kind: 'plan_changed', key: key('first'), at: now, facts: { added: titles(top), first: true } });
+        return;
+      }
+      if (prev.revision === view.revision) return;
+      const added = [...nodes.keys()].filter(id => !prev.nodes.has(id)), dropped = [...prev.nodes.keys()].filter(id => !nodes.has(id));
+      const blocked = [...nodes].filter(([id, node]) => node.state === 'blocked' && prev.nodes.get(id)?.state !== 'blocked').map(([id]) => id);
+      const finished = [...nodes].filter(([id, node]) => node.state === 'done' && prev.nodes.has(id) && prev.nodes.get(id)?.state !== 'done').map(([id]) => id);
+      // Of the nodes that closed together the innermost is the step; a parent that closed with its last child is not a second step.
+      const leaf = finished.filter(id => !finished.some(other => nodes.get(other)?.parent === id)).at(-1);
+      if (leaf !== undefined) {
+        this.emit({ kind: 'plan_step', key: key('step'), at: now, facts: { done: nodes.get(leaf)!.title,
+          next: view.current ? nodes.get(view.current)?.title ?? '' : '' } });
+      }
+      if (added.length || dropped.length || blocked.length) {
+        this.emit({ kind: 'plan_changed', key: key('changed'), at: now, facts: { added: titles(added), dropped: titles(dropped), blocked: titles(blocked) } });
+      }
+    } catch { /* the commentary never fails a decision */ }
+  }
+
+  /** The plan as a conversation tells it: the section she is on, and the points of what is left (the top nodes not done), in order. */
+  private planSummary(task: TaskState): { section: string | null; points: string[] } | null {
+    const memory = task.plan;
+    if (!memory || !memory.nodes.size) return null;
+    const section = memory.current ? memory.nodes.get(memory.current)?.title ?? null : null;
+    const points = [...memory.nodes.values()].filter(node => node.parent === null && node.state !== 'done').map(node => node.title).filter(Boolean).slice(0, 4);
+    return section || points.length ? { section: section || null, points } : null;
+  }
+
+  need(taskId: string, need: { item: string; count: number; use: string }): void {
+    try {
+      const task = this.tasks.get(taskId), item = need.item.trim();
+      if (!task || !/^[a-z][a-z0-9_]{0,40}$/u.test(item) || !Number.isFinite(need.count) || need.count < 1) return;
+      const known = task.needs.get(item) ?? 0;
+      task.needs.set(item, Math.max(known, need.count));
+      if (known >= need.count) return;
+      this.emit({ kind: 'material_needed', key: `need:${taskId}:${item}:${need.count}`, at: this.now(),
+        facts: { item, count: Math.floor(need.count), use: brief(need.use, 30) } });
+    } catch { /* the commentary never fails a decision */ }
+  }
+
+  thought(taskId: string, why: string): void {
+    try {
+      const task = this.tasks.get(taskId), text = brief(why, 90);
+      if (!task || text.length < 4 || text === task.lastThought) return;
+      task.lastThought = text;
+      this.emit({ kind: 'thinking', key: `why:${taskId}:${this.now()}`, at: this.now(), facts: { why: text } });
+    } catch { /* the commentary never fails a decision */ }
+  }
+
+  /** A request that was done lately (its task's phase says so) is told once; her own errands are not asked about. */
+  private finished(now: number): LiveMoment[] {
+    const out: LiveMoment[] = [];
+    for (const [taskId, task] of this.tasks) {
+      if (task.doneTold || task.endedAt === null || now - task.endedAt > DONE_AFTER_SECONDS * 1000 || task.info.origin === 'own_time') continue;
+      let phase: string | null = null;
+      try { phase = task.info.phase?.() ?? null; } catch { phase = null; }
+      if (phase !== 'completed') continue;
+      task.doneTold = true;
+      out.push({ kind: 'task_done', key: `done:${taskId}`, at: now, facts: { goal: brief(task.info.goal, 50) } });
+    }
+    return out;
   }
   activity(taskId: string, call: { name: string; input: unknown } | null): void {
     const task = this.tasks.get(taskId);
@@ -134,7 +241,7 @@ eplying, heard). */
   /** One frame of a body (the control calls this on each poll). Cheap; at most one reading in `DETECT_EVERY_MS` per body. */
   frame(bodyId: string, observation: BodyObservation, arrival: { newConnection: boolean }): void {
     try {
-      const now = this.now(), detector = this.detectors.get(bodyId) ?? createMomentDetector();
+      const now = this.now(), detector = this.detectors.get(bodyId) ?? createMomentDetector({ wanted: () => this.wanted() });
       this.detectors.set(bodyId, detector);
       if (arrival.newConnection) detector.reset();
       this.danger = bodyInDanger(observation);
@@ -142,6 +249,7 @@ eplying, heard). */
       this.seenAt.set(bodyId, now);
       for (const moment of detector.observe(observation, now)) this.emit(moment);
       for (const moment of this.progress(bodyId, observation, now)) this.emit(moment);
+      for (const moment of this.finished(now)) this.emit(moment);
     } catch (error) {
       this.parts.log?.(`Shannon Minecraft live frame failed reason=${error instanceof Error ? error.message.slice(0, 80) : 'unknown'}`);
     }
@@ -153,11 +261,13 @@ eplying, heard). */
     if (!task) return [];
     const { name, index } = this.stepOf(task, observation), seconds = Math.round((now - task.info.createdAtMs) / 1000), out: LiveMoment[] = [];
     const before = task.milestone !== null ? MILESTONES[task.milestone]?.name : undefined;
-    if (before && task.milestone !== null && index > task.milestone) {
+    if (before && task.milestone !== null && index > task.milestone && DRAGON_RUN.test(task.info.goal)) {
       out.push({ kind: 'milestone_passed', key: `milestone:${task.info.taskId}:${before}`, at: now, facts: { name: before, seconds } });
     }
     task.milestone = index;
     const target = milestoneTargetSeconds(name);
+    // The stages are those of a run toward the dragon: another request (a cake) is not late for an iron pickaxe.
+    if (!DRAGON_RUN.test(task.info.goal)) return out;
     if (target !== undefined && seconds > target + 120 && !task.late.has(name)) {
       task.late.add(name);
       out.push({ kind: 'milestone_late', key: `late:${task.info.taskId}:${name}`, at: now, facts: { name, target, over: seconds - target } });
@@ -223,10 +333,11 @@ eplying, heard). */
       return threat && distance !== null && distance <= 24 && typeof threat.name === 'string'
         ? [{ text: `${mobWords(threat.name)}${Math.round(distance)}m${threat.canReachMe === false ? '（壁の向こう）' : ''}`, distance }] : [];
     }).sort((a, b) => a.distance - b.distance).slice(0, 3).map(item => item.text);
-    const recent = this.moments.filter(moment => now - moment.at <= SHOWN_MOMENT_MINUTES * 60_000 && moment.kind !== 'stuck').slice(-3).reverse()
+    const recent = this.moments.filter(moment => now - moment.at <= SHOWN_MOMENT_MINUTES * 60_000 && moment.kind !== 'stuck' && !WORK_MOMENTS.has(moment.kind)).slice(-3).reverse()
       .map(moment => ({ ageSeconds: Math.round((now - moment.at) / 1000), line: liveFactLine(moment).replace(/。$/u, '') }));
     const stall = this.stall && now - this.stall.at <= STUCK_SHOWN_SECONDS * 1000 ? `${this.stall.what}が${this.stall.seconds}秒ほど進んでいない` : null;
-    return { ...base, frameAgeSeconds: Math.round(ageMs / 1000), milestone: step ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
+    const plan = task ? this.planSummary(task) : null;
+    return { ...base, ...(plan ? { plan } : {}), frameAgeSeconds: Math.round(ageMs / 1000), milestone: step ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
       dimension: dimensionOfWorld(world, observation.facts), biome: typeof world.biome === 'string' ? world.biome.slice(0, 40).replace(/_/gu, ' ') : null,
       time: timeWords(dimensionOfWorld(world, observation.facts) === 'overworld' ? dayTick(world) : null),
       health: health === null ? null : Math.round(health), food, threats, carried: carriedWords(counts), map: mapWords(world.mapSummary),
@@ -234,7 +345,7 @@ eplying, heard). */
   }
 
   /** The block a conversation reads; '' while she has neither a task nor a body in the world. `alone`: the owner alone reads it. */
-  block(options: { alone: boolean }): string {
+  block(options: { alone: boolean; /** Everyone who reads the reply is on the call and takes part in her work (the block does not hold the request back). */ participants?: boolean }): string {
     try { return liveBlock(this.snapshot(), { ...options, exchanges: this.parts.exchanges?.(Math.floor(this.now() / 60_000)) ?? '' }); } catch { return ''; }
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, itemWords, liveFactLine, liveSalience, pickMoments, type LiveMoment, type LiveMomentKind,
+  LIVE_COMMENTARY_STREAM, LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, itemWords, liveCommentaryLimits, liveFactLine, liveSalience, pickMoments, type LiveMoment,
+  type LiveMomentKind,
 } from '../src/index.js';
 
 const T0 = Date.parse('2026-10-20T10:00:00.000Z');
@@ -37,6 +38,8 @@ describe('liveFactLine', () => {
     expect(liveFactLine(moment('dragon_stage', T0, { stage: 'crystals', crystals: 4 }))).toContain('残り4個');
     expect(itemWords('white_bed')).toBe('ベッド');
     expect(itemWords('diamond_pickaxe')).toBe('ダイヤのツルハシ');
+    expect(itemWords('wheat_seeds')).toBe('小麦の種');
+    expect(itemWords('some_new_item')).toBe('some new item');
   });
   it('never carries an instruction', () => {
     for (const kind of LIVE_MOMENT_KINDS) expect(liveFactLine(moment(kind))).not.toMatch(/すべき|しろ|して(?:くだ|ね)|言(?:え|って)/u);
@@ -98,10 +101,53 @@ describe('LiveGovernor', () => {
 
   it('holds the minute budget exactly', () => {
     const governor = new LiveGovernor();
-    governor.delivered(moment('diamond_found', T0), 'a', T0);
-    governor.delivered(moment('slept', T0 + 20_000), 'b', T0 + 20_000);
-    expect(governor.verdict(moment('structure_found', T0 + 40_000), room(T0 + 40_000))).toMatchObject({ reason: 'rate' });
+    const kinds: LiveMomentKind[] = ['diamond_found', 'slept', 'item_got', 'dragon_stage'];
+    kinds.slice(0, LIVE_COMMENTARY_V1.perMinute).forEach((kind, index) => governor.delivered(moment(kind, T0 + index * 13_000), `${kind}`, T0 + index * 13_000));
+    const last = T0 + (LIVE_COMMENTARY_V1.perMinute - 1) * 13_000;
+    expect(governor.verdict(moment('structure_found', last + 14_000), room(last + 14_000))).toMatchObject({ reason: 'rate' });
     expect(governor.verdict(moment('structure_found', T0 + 62_000), room(T0 + 62_000))).toMatchObject({ speak: true });
+  });
+
+  it('says about four a minute while she works, and a number from the environment moves it', () => {
+    expect(LIVE_COMMENTARY_V1.perMinute).toBe(4);
+    const tuned = liveCommentaryLimits({ SHANNON_MINECRAFT_LIVE_PER_MINUTE: '6', SHANNON_MINECRAFT_LIVE_GAP_SECONDS: '9' });
+    expect(tuned).toMatchObject({ perMinute: 6, gapSeconds: { ordinary: 9 } });
+    expect(tuned.perTenMinutes).toBeGreaterThanOrEqual(42);
+    expect(liveCommentaryLimits({ SHANNON_MINECRAFT_LIVE_PER_MINUTE: 'many', SHANNON_MINECRAFT_LIVE_PER_TEN_MINUTES: '0' }))
+      .toMatchObject({ perMinute: 4, perTenMinutes: 28 });
+    expect(liveCommentaryLimits({})).toEqual(LIVE_COMMENTARY_V1);
+  });
+
+  it('speaks of her work as it goes: a plan step and a thought are short-lived, the end of a request is urgent', () => {
+    const governor = new LiveGovernor();
+    expect(governor.verdict(moment('thinking', T0, { why: '牛乳にはバケツがいる' }), room(T0 + 1_000))).toMatchObject({ speak: true });
+    expect(governor.verdict(moment('thinking', T0, { why: '牛乳にはバケツがいる' }), room(T0 + 21_000))).toMatchObject({ reason: 'stale' });
+    const done = governor.verdict(moment('task_done', T0, { goal: 'ケーキを作る' }), room(T0 + 1_000, { sinceHumanMilliseconds: 4_000 }));
+    expect(done).toMatchObject({ speak: true });
+    expect(done.salience).toBeGreaterThanOrEqual(LIVE_COMMENTARY_V1.urgent);
+    expect(liveFactLine(moment('task_done', T0, { goal: 'ケーキを作る' }))).toContain('ケーキを作る');
+    expect(liveFactLine(moment('plan_step', T0, { done: '鉄を掘る', next: 'バケツを作る' }))).toBe('「鉄を掘る」が済んだ（次は「バケツを作る」）。');
+    expect(liveFactLine(moment('material_got', T0, { item: 'wheat_seeds', count: 2, need: 3 }))).toContain('小麦の種');
+    // Spaced by their own seconds: a thought, then a plan step, then a material in the same minute are told; the same kind again soon is not.
+    governor.delivered(moment('thinking', T0), 'a', T0);
+    expect(governor.verdict(moment('thinking', T0 + 14_000), room(T0 + 14_000))).toMatchObject({ reason: 'topic' });
+    expect(governor.verdict(moment('material_got', T0 + 14_000, { item: 'iron_ingot', count: 1 }), room(T0 + 14_000))).toMatchObject({ speak: true });
+  });
+
+  it('lets the end of a second request through soon after the first, and through a full minute budget', () => {
+    const governor = new LiveGovernor();
+    governor.delivered(moment('task_done', T0, { goal: 'ケーキを作る' }), 'a', T0);
+    expect(governor.verdict(moment('task_done', T0 + 30_000, { goal: '鉄を集める' }), room(T0 + 30_000))).toMatchObject({ speak: true });
+    const busy = new LiveGovernor();
+    (['diamond_found', 'slept', 'item_got', 'dragon_stage'] as LiveMomentKind[]).forEach((kind, index) =>
+      busy.delivered(moment(kind, T0 + index * 6_000), kind, T0 + index * 6_000));
+    expect(busy.verdict(moment('structure_found', T0 + 30_000), room(T0 + 30_000))).toMatchObject({ reason: 'rate' });
+    expect(busy.verdict(moment('task_done', T0 + 30_000, { goal: 'ケーキを作る' }), room(T0 + 30_000))).toMatchObject({ speak: true });
+  });
+
+  it('keeps a public stream to the two words a minute it had, whatever the call is given', () => {
+    expect(LIVE_COMMENTARY_STREAM).toMatchObject({ perMinute: 2, perTenMinutes: 7, gapSeconds: { ordinary: 18, urgent: 6 } });
+    expect(LIVE_COMMENTARY_STREAM.perMinute).toBeLessThan(LIVE_COMMENTARY_V1.perMinute);
   });
 
   it('keeps a gap, shorter for an urgent moment', () => {

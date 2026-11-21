@@ -107,12 +107,24 @@ export interface MomentDetector {
   observe(observation: BodyObservation, at: number): LiveMoment[];
   /** Forgets the frame before: the next one is only remembered (a new connection, a new world). */
   reset(): void;
+  /** Forgets which of the wanted items were told (a new request wants them anew). */
+  forgetWanted?(): void;
 }
 
-export function createMomentDetector(): MomentDetector {
+/** The id a promise or a condition names, as the pattern of the carried items it means (`planks` is every plank). */
+const wantedPattern = (item: string): RegExp | null =>
+  item === 'planks' ? /_planks$/u : NAME.test(item) ? new RegExp(`^${item}$`, 'u') : null;
+
+/**
+ * `wanted`: the items her work asks for now, with how many (read from the plan she keeps: its promises and the `have:` of a node's
+ * condition). What she gets of those is a moment of its own (`material_got`): which items are worth a word is what her work needs, not a
+ * table of names.
+ */
+export function createMomentDetector(options: { wanted?: () => ReadonlyMap<string, number> } = {}): MomentDetector {
   let before: Reading | null = null;
   // What was told in this run, so a thing is news once: the items, the pickaxe tiers, the structures, the diamond places.
-  const told = { items: new Set<string>(), tools: new Set<string>(), structures: new Set<string>(), diamondOre: 0, armor: false };
+  const told = { items: new Set<string>(), tools: new Set<string>(), structures: new Set<string>(), diamondOre: 0, armor: false,
+    wanted: new Set<string>() };
   // Edges that re-arm: the near death after her health recovers, the blaze and the dragon after they were gone.
   const armed = { life: true, hunger: true, blaze: true, dragon: true, lava: true };
   let serial = 0;
@@ -197,7 +209,23 @@ export function createMomentDetector(): MomentDetector {
         out.push(make('item_got', at, { item, count: have }, `item:${item}`));
       }
     }
-    return out;
+    return [...out, ...wanted(now, prev, at)];
+  }
+
+  /** An item her work asks for: told when she first has one, and again when she has all that was asked. */
+  function wanted(now: Reading, prev: Reading, at: number): LiveMoment[] {
+    const out: LiveMoment[] = [];
+    for (const [item, asked] of options.wanted?.() ?? []) {
+      const pattern = wantedPattern(item);
+      if (!pattern || FIRST_ITEMS.some(([id]) => id === item)) continue;
+      const have = countMatching(now.counts, pattern), was = countMatching(prev.counts, pattern), need = Math.max(1, Math.min(asked, 4_096));
+      // One moment for a jump that crosses both (the first one and all of it): the higher is what she says.
+      const crossed = [...new Set([1, need])].filter(step => have >= step && was < step && !told.wanted.has(`${item}:${step}`));
+      crossed.forEach(step => told.wanted.add(`${item}:${step}`));
+      const top = crossed.at(-1);
+      if (top !== undefined) out.push(make('material_got', at, { item, count: have, ...(need > 1 ? { need } : {}) }, `material:${item}:${top}`));
+    }
+    return out.slice(0, 3);
   }
 
   function surroundings(now: Reading, prev: Reading, at: number): LiveMoment[] {
@@ -248,5 +276,6 @@ export function createMomentDetector(): MomentDetector {
         ...surroundings(now, prev, at)];
     },
     reset() { before = null; },
+    forgetWanted() { told.wanted.clear(); },
   };
 }

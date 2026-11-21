@@ -15,8 +15,20 @@ export const LIVE_COMMENTARY_ENGINE = Object.freeze({
   retryMilliseconds: 1_500,
   /** A model call that takes longer than this is given up. */
   writeMilliseconds: 12_000,
-  /** How long a line stays worth saying once written (it is about a moment that is going by). */
-  lineLifetimeMilliseconds: Object.freeze({ ordinary: 25_000, urgent: 35_000 }),
+  /**
+   * How long a line stays worth saying once written (it is about a moment that is going by). From the event to the voice it already took the
+   * poll, the model and the voice; a line the body could not say within this (someone kept talking) is dropped, not said late.
+   */
+  lineLifetimeMilliseconds: Object.freeze({ ordinary: 15_000, urgent: 25_000 }),
+  /**
+   * A kind's own time, from how much the word matters later: a thought of the moment is gone in ten seconds, the end of a request (the
+   * thing she must say, and ask) waits for the room. The body waits at most as long as the line's time says (and, today, at most eight).
+   */
+  lineLifetimeByKindMilliseconds: Object.freeze<Record<string, number>>({ thinking: 10_000, plan_step: 12_000, material_got: 12_000, task_done: 40_000 }),
+  /** Of these kinds only the newest waiting moment is worth a word: an older one is about a step that has already passed. */
+  supersededKinds: Object.freeze(['thinking', 'plan_step']),
+  /** The moments of her work as she does it: the end of a request closes them. */
+  workKinds: Object.freeze(['thinking', 'plan_step', 'plan_changed', 'material_needed', 'material_got']),
   /** A moment whose line was written but held back by the room (someone started talking) is written again at most this many times. */
   rewrites: 1,
 });
@@ -65,6 +77,8 @@ export class LiveCommentary {
   private serial = 0;
   private stops: Array<() => void> = [];
   private readonly counts: Record<string, number> = {};
+  /** The ends of requests that were given a second try (the first line was lost); each gets one. */
+  private readonly retried = new Set<string>();
 
   constructor(private readonly parts: LiveCommentaryParts) {
     this.governor = parts.governor ?? new LiveGovernor();
@@ -90,6 +104,15 @@ export class LiveCommentary {
 
   private hear(moment: LiveMoment): void {
     this.count('moments');
+    // The request ended: what waits of her work (a step, a thought, a material) is about a story that is over, and the end says it.
+    if (moment.kind === 'task_done') {
+      this.waiting = this.waiting.filter(item => !LIVE_COMMENTARY_ENGINE.workKinds.includes(item.moment.kind));
+    }
+    if (LIVE_COMMENTARY_ENGINE.supersededKinds.includes(moment.kind)) {
+      const older = this.waiting.length;
+      this.waiting = this.waiting.filter(item => item.moment.kind !== moment.kind);
+      if (this.waiting.length < older) this.count('superseded');
+    }
     this.waiting.push({ moment, rewrites: 0 });
     if (this.waiting.length > LIVE_COMMENTARY_ENGINE.waitingLimit) this.waiting.shift();
     this.schedule(0);
@@ -155,15 +178,20 @@ export class LiveCommentary {
   /** The written line meets the room again: it may have changed while the model wrote. */
   private settle(main: { moment: LiveMoment; salience: number; rewrites: number }, folded: LiveMoment[], text: string | null, voice: boolean): void {
     const spendAll = () => [main.moment, ...folded].forEach(moment => this.governor.spend(moment));
+    // The end of a request is the one word that is not told again by anything else: a line lost for a reason of the line (empty, a repeat,
+    // the room) is written once more.
+    const giveUp = () => {
+      if (this.revive(main.moment)) return folded.forEach(moment => this.governor.spend(moment));
+      spendAll();
+      this.dropWaiting(main.moment, folded);
+    };
     if (!text) {
       this.count('write_empty');
-      spendAll();
-      return this.dropWaiting(main.moment, folded);
+      return giveUp();
     }
     if (!this.governor.fresh(text)) {
       this.count('write_repeat');
-      spendAll();
-      return this.dropWaiting(main.moment, folded);
+      return giveUp();
     }
     const again = this.governor.verdict(main.moment, this.room());
     if (!again.speak && (again.reason === 'human' || again.reason === 'replying') && main.rewrites < LIVE_COMMENTARY_ENGINE.rewrites) {
@@ -175,10 +203,23 @@ export class LiveCommentary {
     }
     if (!again.speak) {
       this.count(`write_dropped_${again.reason}`);
-      spendAll();
-      return this.dropWaiting(main.moment, folded);
+      return giveUp();
     }
     this.send(main, folded, text, voice);
+  }
+
+  /**
+   * The end of a request whose line was lost goes back to waiting, once, as new (its time runs from now); anything else is not given a
+   * second try. Returns whether it was put back.
+   */
+  private revive(moment: LiveMoment): boolean {
+    if (moment.kind !== 'task_done' || this.retried.has(moment.key)) return false;
+    this.retried.add(moment.key);
+    if (this.retried.size > 64) this.retried.delete(this.retried.values().next().value as string);
+    const again = { ...moment, at: this.now() }, waiting = this.waiting.find(item => item.moment.key === moment.key);
+    if (waiting) waiting.moment = again; else this.waiting.push({ moment: again, rewrites: 0 });
+    this.count('revived');
+    return true;
   }
 
   private dropWaiting(main: LiveMoment, folded: LiveMoment[]): void {
@@ -190,7 +231,8 @@ export class LiveCommentary {
     const id = `live-${this.now().toString(36)}-${++this.serial}`;
     const urgent = main.salience >= 0.9;
     const draft: LiveSpeechDraft = { id, text, urgency: urgent ? 'urgent' : 'ordinary', kind: main.moment.kind,
-      ttlMilliseconds: LIVE_COMMENTARY_ENGINE.lineLifetimeMilliseconds[urgent ? 'urgent' : 'ordinary'] };
+      ttlMilliseconds: LIVE_COMMENTARY_ENGINE.lineLifetimeByKindMilliseconds[main.moment.kind]
+        ?? LIVE_COMMENTARY_ENGINE.lineLifetimeMilliseconds[urgent ? 'urgent' : 'ordinary'] };
     this.pending.set(id, { main: main.moment, also: folded, text });
     if (this.pending.size > 8) this.pending.delete(this.pending.keys().next().value as string);
     this.dropWaiting(main.moment, folded);
@@ -207,7 +249,11 @@ export class LiveCommentary {
     this.pending.delete(draft.id);
     this.count(`ended_${receipt.outcome}`);
     this.log(`Shannon Minecraft live ended id=${draft.id} kind=${draft.kind} outcome=${receipt.outcome}${receipt.reason ? ` reason=${receipt.reason}` : ''}`);
-    if (receipt.outcome !== 'spoken' && receipt.outcome !== 'posted') return;
+    if (receipt.outcome !== 'spoken' && receipt.outcome !== 'posted') {
+      // The body could not say it (someone kept talking, the wait ran out): the end of a request waits for the room once more.
+      if (this.revive(entry.main)) this.schedule(LIVE_COMMENTARY_ENGINE.retryMilliseconds);
+      return;
+    }
     this.governor.delivered(entry.main, entry.text, this.now());
     for (const moment of entry.also) this.governor.spend(moment);
     try {

@@ -1,6 +1,6 @@
 import { novelty } from './salience.js';
 import {
-  LIVE_COMMENTARY_V1, itemWords, liveLifetimeSeconds, liveSalience, liveTopicOf, type LiveMoment, type LiveMomentKind, type LiveScalar,
+  LIVE_COMMENTARY_V1, itemWords, liveLifetimeSeconds, liveOwnSpacing, liveSalience, liveTopicOf, type LiveMoment, type LiveMomentKind, type LiveScalar,
 } from './liveCommentary.js';
 
 /**
@@ -51,6 +51,13 @@ const FACT_LINES: Readonly<Record<LiveMomentKind, FactWriter>> = Object.freeze({
   milestone_late: f => `「${text(f.name)}」は目安の${text(f.target)}秒を${text(f.over)}秒すぎている。`,
   hungry: f => `満腹度が${text(f.food)}/20まで下がった。`,
   stuck: f => `${text(f.what) || '作業'}が${text(f.seconds)}秒ほど進んでいない。`,
+  plan_changed: f => `計画を直した（${[text(f.added) && `${text(f.added)}を足した`, text(f.dropped) && `${text(f.dropped)}をやめた`,
+    text(f.blocked) && `${text(f.blocked)}が止まっている`].filter(Boolean).join('、') || '順番や中身を変えた'}）。`,
+  plan_step: f => `「${text(f.done) || 'ひとつ前の節'}」が済んだ${text(f.next) ? `（次は「${text(f.next)}」）` : ''}。`,
+  material_needed: f => `${itemWords(text(f.item))}が${text(f.count) || 'いくつか'}個ほど要ると分かった${text(f.use) ? `（使い道: ${text(f.use)}）` : ''}。`,
+  material_got: f => `${itemWords(text(f.item))}が手に入った（いま${text(f.count)}個${text(f.need) ? `、要るのは${text(f.need)}個` : ''}）。`,
+  thinking: f => `いまの手のねらい: ${text(f.why)}`,
+  task_done: f => `頼まれた作業「${text(f.goal) || 'いまの依頼'}」が終わった。`,
 });
 
 /**
@@ -100,12 +107,14 @@ export class LiveGovernor {
     const { limits } = this;
     const urgent = salience >= limits.urgent;
     const within = (seconds: number) => this.told.filter(item => now - item.at < seconds * 1000);
-    if (within(60).length >= limits.perMinute || within(600).length >= limits.perTenMinutes) return 'rate';
+    // The end of a request is the word she must say: the budget of chatter does not hold it back (the gap still does).
+    if (moment.kind !== 'task_done' && (within(60).length >= limits.perMinute || within(600).length >= limits.perTenMinutes)) return 'rate';
     const last = this.told.at(-1);
     if (last && (now - last.at) / 1000 < limits.gapSeconds[urgent ? 'urgent' : 'ordinary']) return 'gap';
-    if (!urgent && within(limits.topicSeconds).some(item => item.topic === liveTopicOf(moment.kind))) return 'topic';
+    const own = liveOwnSpacing(moment.kind);
+    if (!urgent && within(own.topicSeconds ?? limits.topicSeconds).some(item => item.topic === liveTopicOf(moment.kind))) return 'topic';
     const life = moment.kind === 'died' || moment.kind === 'near_death';
-    return within(life ? 30 : limits.kindSeconds).some(item => item.kind === moment.kind) ? 'kind' : null;
+    return within(life ? 30 : own.kindSeconds ?? limits.kindSeconds).some(item => item.kind === moment.kind) ? 'kind' : null;
   }
 
   /** The moment will not be weighed again (it was told, or it went stale and was dropped). */
