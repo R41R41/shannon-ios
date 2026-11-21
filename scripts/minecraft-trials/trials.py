@@ -1114,6 +1114,32 @@ def run_prep(r, start, at, sites):
         r.cmd(f'execute in {dim} run forceload remove all')
 
 
+PREP_TRIES = 3
+
+
+def prep_holds(r, start, at):
+    """The first of the start's `prepCheck` blocks (offsets from `at`, as the prep's) that is not as prepared, or None. Read after `prepSettleSeconds`, once falling sand and flowing water have had their say."""
+    dim = start.get('dimension', DIMENSION_NAMES['overworld'])
+    time.sleep(start.get('prepSettleSeconds', 4))
+    for check in start.get('prepCheck', []):
+        x, y, z = (math.floor(at[i] + check['at'][i]) for i in range(3))
+        if not passed(r.cmd(f'execute in {dim} if block {x} {y} {z} {check["block"]}')): return check
+    return None
+
+
+def run_prep_checked(r, start, at, sites):
+    """`run_prep`, then (when the start lists a `prepCheck`) a look that the prepared blocks stood: a prep that fell apart is cleared and made again, up to PREP_TRIES, so a start that failed is the start's and not the head's (11/21: a body put at a cliff edge saw its sand fall and its water run, and the head was blamed for a cane that was never there)."""
+    dim = start.get('dimension', DIMENSION_NAMES['overworld'])
+    for attempt in range(1, PREP_TRIES + 1):
+        run_prep(r, start, at, sites)
+        if not start.get('prepCheck'): return
+        failed = prep_holds(r, start, at)
+        if failed is None: return
+        print(f'  prep attempt {attempt}: {failed["block"]} at offset {failed["at"]} did not stay', flush=True)
+        r.cmd(f'execute in {dim} positioned {at[0]} {at[1]} {at[2]} run kill @e[type=!minecraft:player,distance=..14]')
+    raise Stop(f'prep did not hold after {PREP_TRIES} tries: {failed["block"]} at offset {failed["at"]}')
+
+
 def setup_body(r, section, start_at, sites=None):
     start = section['start']
     r.cmd(f'clear {BODY}')
@@ -1132,7 +1158,7 @@ def setup_body(r, section, start_at, sites=None):
     if start.get('prepAtBody'):       # prep steps relative to where she stands now (a start with no site: the world's spawn or a located place)
         pos = body_state(r).get('pos')
         if not pos: raise Stop('prepAtBody: the body has no position')
-        run_prep(r, start, [math.floor(pos[0]), math.floor(pos[1]), math.floor(pos[2])], sites or {})
+        run_prep_checked(r, start, [math.floor(pos[0]), math.floor(pos[1]), math.floor(pos[2])], sites or {})
     r.cmd(f'effect clear {BODY}')
     r.cmd(f'effect give {BODY} minecraft:instant_health 1 10 true')
     r.cmd(f'effect give {BODY} minecraft:saturation 1 10 true')

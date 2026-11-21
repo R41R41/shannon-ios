@@ -118,6 +118,12 @@ describe('what is near, by purpose', () => {
     expect(nearbyResourcesOf([{ purpose: 'gold', kind: 'x', count: 1, range: 1, sites: [] }, null, 'x'])).toEqual([]);
     expect(nearbyLines([], feet)).toEqual([]);
   });
+  it('says a plant of the request by name (a cane by its stands), and puts it first when the now of the plan is sugar', () => {
+    const plants = [...raw, { purpose: 'plant', kind: 'sugar_cane', count: 2, range: 48, sites: [{ x: 258, y: 66, z: -95, note: '根元・高さ 3 段・水に接する' }, { x: 270, y: 66, z: -80 }] }];
+    const lines = nearbyLines(nearbyResourcesOf(plants), feet);
+    expect(lines.find(line => line.startsWith('植物'))).toBe('植物（材料）: sugar_cane 48m 内に 2株。最寄り (258,66,-95) 西2・北4・下1 5m（根元・高さ 3 段・水に接する） / (270,66,-80) 15m');
+    expect(nearbyLines(nearbyResourcesOf(plants), feet, '[p2] 砂糖を作る（サトウキビ 2 本）')[0]!.startsWith('植物（材料）')).toBe(true);
+  });
   it('is a field of the live state when the body sends it, and absent when it does not', () => {
     const base = { position: { x: 260, y: 67, z: -91 }, inventory: [] };
     const parts = (world: Record<string, unknown>) => ({ observation: frame(world), elapsedMinutes: 1, trend: createFoodTrend(() => 0), events: [] });

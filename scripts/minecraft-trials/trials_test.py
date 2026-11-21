@@ -411,6 +411,33 @@ class SetupOrderTest(unittest.TestCase):
         self.assertIn('execute in minecraft:the_nether positioned 111 77 -295 if entity @a[name=I_am_Shannon,distance=..100]', r.log)
 
 
+class CakePrepTest(unittest.TestCase):
+    cfg = trials.load_json(os.path.join(trials.HERE, 'sections.json'))
+    start = {str(s['id']): s for s in cfg['sections']}['C2']['start']
+
+    def test_the_cane_stands_on_a_floor_made_first_and_under_air_made_clear(self):
+        commands = [c for step in self.start['prep'] for c in trials.expand_prep(step, [10, 70, -4], SITES)]
+        floor = commands.index('fill 11 66 -8 17 69 -1 minecraft:dirt')
+        self.assertEqual(commands[floor + 1], 'fill 11 70 -8 17 73 -1 minecraft:air')
+        self.assertTrue(all(i > floor for i, c in enumerate(commands) if 'water' in c or 'sugar_cane' in c or 'sand' in c))
+
+    def test_a_prep_that_fell_apart_is_made_again_and_one_that_never_holds_stops(self):
+        start = dict(self.start, prepSettleSeconds=0)
+        class Falls(FakeRcon):
+            def __init__(self, bad): super().__init__(); self.bad = bad
+            def cmd(self, text):
+                self.log.append(text)
+                if 'if block' in text:
+                    self.bad -= 1
+                    return 'Test failed' if self.bad >= 0 else 'Test passed'
+                return 'Test passed'
+        r = Falls(bad=1)
+        trials.run_prep_checked(r, start, [10, 70, -4], SITES)
+        self.assertEqual(sum(1 for c in r.log if c.startswith('execute in minecraft:overworld run fill 11 66 -8')), 2)
+        self.assertTrue(any('kill @e[type=!minecraft:player,distance=..14]' in c for c in r.log))
+        with self.assertRaises(trials.Stop): trials.run_prep_checked(Falls(bad=99), start, [10, 70, -4], SITES)
+
+
 class OwnerGuardTest(unittest.TestCase):
     def test_a_supplied_batch_does_not_run_without_the_owner(self):
         import argparse

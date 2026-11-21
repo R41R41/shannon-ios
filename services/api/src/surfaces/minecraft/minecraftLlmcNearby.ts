@@ -7,12 +7,12 @@ import type { P } from './minecraftLlmcWalkRules.js';
  * least wood while trees stood round it. The body counts (`state.world.nearbyResources`: the count, the range and the nearest three sites of each
  * purpose); the head works the place out from her feet now and writes a line for each. Facts only: no hand and no choice is made here.
  */
-export type NearbyPurpose = 'wood' | 'food_animal' | 'food_village' | 'ore' | 'bed' | 'water' | 'lava';
+export type NearbyPurpose = 'wood' | 'food_animal' | 'food_village' | 'plant' | 'ore' | 'bed' | 'water' | 'lava';
 export interface NearbySite { x: number; y: number; z: number; note?: string }
 export interface NearbyResource { purpose: NearbyPurpose; kind: string; count: number; range: number; sites: NearbySite[]; trees?: number; pools?: number }
 
 const LABEL: Readonly<Record<NearbyPurpose, readonly [string, string]>> = {
-  wood: ['木', '本'], food_animal: ['食料（動物）', '体'], food_village: ['食料（村）', '個'], ore: ['鉱石（空気に面した物）', '個'], bed: ['寝床', '台'], water: ['水', 'マス'],
+  wood: ['木', '本'], food_animal: ['食料（動物）', '体'], food_village: ['食料（村）', '個'], plant: ['植物（材料）', '個'], ore: ['鉱石（空気に面した物）', '個'], bed: ['寝床', '台'], water: ['水', 'マス'],
   lava: ['溶岩の溜まり', 'マス'],
 };
 /**
@@ -21,7 +21,7 @@ const LABEL: Readonly<Record<NearbyPurpose, readonly [string, string]>> = {
  * source with 「源 N・…・覆い ○/×」 in its note; the line says 「源 N マス・溜まり P」). Last in the order; first while the plan's now is the obsidian
  * (`firstPurpose`).
  */
-const ORDER: readonly NearbyPurpose[] = ['wood', 'food_animal', 'food_village', 'ore', 'bed', 'water', 'lava'];
+const ORDER: readonly NearbyPurpose[] = ['wood', 'food_animal', 'food_village', 'plant', 'ore', 'bed', 'water', 'lava'];
 const PURPOSES = new Set<string>(ORDER);
 
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -48,6 +48,7 @@ export function nearbyResourcesOf(raw: unknown): NearbyResource[] {
 function firstPurpose(hint: string): NearbyPurpose | null {
   if (/黒曜石|溶岩|obsidian|lava/u.test(hint)) return 'lava';
   if (/原木|木材|木を|wood|stock:wood/u.test(hint)) return 'wood';
+  if (/サトウキビ|砂糖|sugar|小麦|wheat|ニンジン|ジャガイモ|カボチャ|スイカ|ベリー|ビートルート/u.test(hint)) return 'plant';
   if (/食料|食べ物|動物|干し草|food|狩/u.test(hint)) return 'food_animal';
   if (/ベッド|羊|bed/u.test(hint)) return 'bed';
   if (/鉄|石炭|ダイヤ|鉱石|iron|coal|diamond/u.test(hint)) return 'ore';
@@ -78,7 +79,8 @@ export function nearbyLines(resources: readonly NearbyResource[], feet: P | null
       const where = feet ? sites.map((site, index) => siteWords(feet, site, index === 0)).join(' / ')
         : sites.map(site => `(${site.x},${site.y},${site.z})${site.note ? `（${site.note}）` : ''}`).join(' / ');
       // The lava's count is the sources (the body's `count`), with the pools they make when the body says (`pools`).
-      const many = purpose === 'lava' ? `源 ${item.count} マス${item.pools !== undefined ? `・溜まり ${item.pools}` : ''}` : `${item.count}${unit}`;
+      // A cane is counted by its stand (a column of canes), so its unit is 株, not 個 (the body's `plant` entry of sugar_cane).
+      const many = purpose === 'lava' ? `源 ${item.count} マス${item.pools !== undefined ? `・溜まり ${item.pools}` : ''}` : `${item.count}${purpose === 'plant' && item.kind === 'sugar_cane' ? '株' : unit}`;
       return `${item.kind} ${item.range}m 内に ${many}。${where}`;
     });
     lines.push(`${label}: ${parts.join('／')}`);

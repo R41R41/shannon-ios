@@ -183,7 +183,8 @@ export const NIGHT_PASS = '【夜の通し】';
  * said nothing at all (its two choices both need a bed or a pickaxe); she stood on the shore at 2.3 health and the zombies and a stray killed
  * her three times in 70 s. Dirt, sand, gravel and snow come by hand: the hole of `sealHands` without the stone, and its cap from what was dug.
  */
-const HAND_DIG = 'dirt,grass_block,coarse_dirt,podzol,rooted_dirt,mud,clay,sand,red_sand,gravel,snow,snow_block';
+/** Ten ids, not twelve: the body takes 1 to 12 in one canDig and refuses the whole act at 13, and the head adds one or two of its own (11/21: 13 ids refused 20 acts, two of them the cane's pickup). */
+const HAND_DIG = 'dirt,grass_block,coarse_dirt,podzol,rooted_dirt,mud,clay,sand,gravel,snow';
 function handSealHands(at: { x?: unknown; y?: unknown; z?: unknown } | null): string {
   const [x, y, z] = [at?.x, at?.y, at?.z].map(value => typeof value === 'number' ? Math.floor(value) : null);
   const hands = x === null || y === null || z === null ? '「vertical down shaft で y を今の足の y−2」と、今の足のマスへ place'
