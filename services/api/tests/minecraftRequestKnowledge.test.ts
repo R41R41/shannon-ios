@@ -54,7 +54,7 @@ describe('what she is told for a request that is one thing to make', () => {
     expect(text).toContain('壊すと時々 wheat_seeds が落ちる');
     expect(text).toContain('拾った: wheat_seeds+1');
     // no village in nearby or landmarks: none is searched for, with the reason
-    expect(text).toContain('村は探さず、草から種を集めて育てる');
+    expect(text).toContain('村は探しに遠出せず、草から種を集めて育てる');
     expect(text).toContain('探しに歩くより種から育てる方が早い');
     // the hoe, the seeds and the wait for the crop
     expect(text).toContain('use item=wooden_hoe');
