@@ -10,7 +10,7 @@ const KEYS = { GEMINI_API_KEY: 'g', ELEVENLABS_API_KEY: 'e' };
 const LIST = JSON.stringify([
   { name: 'voice-a', engine: 'eleven', voice: 'voiceAElevenX001' },
   { name: 'voice-b', engine: 'gemini', voice: 'voice_b', style: '声の核。' },
-  { name: 'mosaku', engine: 'eleven', voice: 'mosakuVoice0001' },
+  { name: 'voice-c', engine: 'eleven', voice: 'voice-cVoice0001' },
 ]);
 
 function sse(...pcm: Buffer[]): Response {
@@ -54,7 +54,7 @@ describe('the named call voices', () => {
 
   it('takes the list and the default name; an unknown default falls back to the first, a broken entry is dropped', () => {
     const named = configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: ' Voice-B ' });
-    expect(named.candidates.map(item => item.name)).toEqual(['voice-a', 'voice-b', 'mosaku']);
+    expect(named.candidates.map(item => item.name)).toEqual(['voice-a', 'voice-b', 'voice-c']);
     expect(named).toMatchObject({ defaultName: 'voice-b', chosen: true });
     expect(configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: 'nope' }).defaultName).toBe('voice-a');
     expect(configuredCallVoices({ SHANNON_CALL_VOICES: LIST }).defaultName).toBe('voice-a');
@@ -66,19 +66,19 @@ describe('the named call voices', () => {
   });
 
   it('does not repeat a voice the list already names under the earlier setting', () => {
-    const result = configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_ELEVEN_TTS_VOICE_ID: 'mosakuVoice0001' });
-    expect(result.candidates.map(item => item.name)).toEqual(['voice-a', 'voice-b', 'mosaku']);
+    const result = configuredCallVoices({ SHANNON_CALL_VOICES: LIST, SHANNON_ELEVEN_TTS_VOICE_ID: 'voice-cVoice0001' });
+    expect(result.candidates.map(item => item.name)).toEqual(['voice-a', 'voice-b', 'voice-c']);
   });
 
   it('reads and changes the voice by name, in memory; the default stays what it was', () => {
     const cast = createConfiguredCallVoiceCast({ ...KEYS, SHANNON_CALL_VOICES: LIST, SHANNON_CALL_VOICE_DEFAULT: 'voice-b' })!;
     expect(cast.list()).toEqual([
-      { name: 'voice-a', engine: 'eleven' }, { name: 'voice-b', engine: 'gemini' }, { name: 'mosaku', engine: 'eleven' },
+      { name: 'voice-a', engine: 'eleven' }, { name: 'voice-b', engine: 'gemini' }, { name: 'voice-c', engine: 'eleven' },
     ]);
     expect([cast.current(), cast.defaultName()]).toEqual(['voice-b', 'voice-b']);
-    expect(cast.select(' MOSAKU ')).toBe(true);
+    expect(cast.select(' VOICE-C ')).toBe(true);
     expect(cast.select('missing')).toBe(false);
-    expect([cast.current(), cast.defaultName()]).toEqual(['mosaku', 'voice-b']);
+    expect([cast.current(), cast.defaultName()]).toEqual(['voice-c', 'voice-b']);
   });
 
   it('leaves out a candidate whose key is missing, and has no cast without any', () => {
@@ -181,7 +181,7 @@ describe('the cast route', () => {
 
   const castOf = () => createConfiguredCallVoiceCast({
     GEMINI_API_KEY: 'g', ELEVENLABS_API_KEY: 'e', SHANNON_CALL_VOICES: JSON.stringify([
-      { name: 'voice-b', engine: 'gemini', voice: 'voice_b' }, { name: 'mosaku', engine: 'eleven', voice: 'mosakuVoice0001' },
+      { name: 'voice-b', engine: 'gemini', voice: 'voice_b' }, { name: 'voice-c', engine: 'eleven', voice: 'voice-cVoice0001' },
     ]),
   })!;
 
@@ -189,12 +189,12 @@ describe('the cast route', () => {
     const cast = castOf();
     const read = await post('cast', {}, { cast, speech: cast });
     expect(await read.json()).toEqual({
-      current: 'voice-b', default: 'voice-b', chosen: true, items: [{ name: 'voice-b', engine: 'gemini' }, { name: 'mosaku', engine: 'eleven' }],
+      current: 'voice-b', default: 'voice-b', chosen: true, items: [{ name: 'voice-b', engine: 'gemini' }, { name: 'voice-c', engine: 'eleven' }],
     });
-    const changed = await post('cast', { name: 'mosaku' }, { cast, speech: cast });
+    const changed = await post('cast', { name: 'voice-c' }, { cast, speech: cast });
     expect(changed.status).toBe(200);
-    expect(await changed.json()).toMatchObject({ current: 'mosaku', default: 'voice-b' });
-    expect(cast.current()).toBe('mosaku');
+    expect(await changed.json()).toMatchObject({ current: 'voice-c', default: 'voice-b' });
+    expect(cast.current()).toBe('voice-c');
   });
 
   it('answers 404 with the voices for a name it does not have, and 503 without a cast', async () => {
