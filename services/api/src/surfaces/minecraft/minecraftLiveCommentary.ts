@@ -54,6 +54,11 @@ export interface LiveCommentaryParts {
   write(request: LiveWriteRequest): Promise<string | null>;
   /** A line was delivered (said or posted): the wiring keeps it in the conversation it went into. */
   delivered?(told: { id: string; moment: LiveMoment; text: string; outcome: 'spoken' | 'posted'; conversationId?: string }): void;
+  /**
+   * What she says for the end of a request when the writer gave her nothing twice: the question after a finished job starts the
+   * answer (where to put it, what next), so the end is never left unsaid. Absent: the end is dropped like any lost line.
+   */
+  doneFallback?: string;
   governor?: LiveGovernor;
   now?: () => number;
   log?: (line: string) => void;
@@ -188,14 +193,18 @@ export class LiveCommentary {
       spendAll();
       this.dropWaiting(main.moment, folded);
     };
-    if (!text) {
+    // The end was already written once more and is still lost for a reason of the line: the fixed line is said (it is not judged as a repeat).
+    if ((!text || !this.governor.fresh(text)) && main.moment.kind === 'task_done' && this.retried.has(main.moment.key) && this.parts.doneFallback) {
+      this.count('done_fallback');
+      text = this.parts.doneFallback;
+    } else if (!text) {
       this.count('write_empty');
       return giveUp();
-    }
-    if (!this.governor.fresh(text)) {
+    } else if (!this.governor.fresh(text)) {
       this.count('write_repeat');
       return giveUp();
     }
+    if (!text) return;
     const again = this.governor.verdict(main.moment, this.room());
     if (!again.speak && (again.reason === 'human' || again.reason === 'replying') && main.rewrites < LIVE_COMMENTARY_ENGINE.rewrites) {
       // Someone began to talk while the line was written: it is not said over them; the moment waits, and is written again if it still stands.
