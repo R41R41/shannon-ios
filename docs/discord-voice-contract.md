@@ -82,7 +82,7 @@ The choice is in memory: a restart is the default again. The app's own voice (`S
 - Before the list existed: `SHANNON_CALL_TTS_VOICE` is the candidate `gemini` (its core style `SHANNON_CALL_TTS_STYLE`, model `SHANNON_CALL_TTS_MODEL`;
   the style is also the core of every Gemini candidate that has none of its own), and `SHANNON_ELEVEN_TTS_VOICE_ID` is the candidate `eleven`.
   Nothing set but the latter is exactly the voice a call had.
-- `speech` answers with `x-shannon-voice-name`. When the list, the default name or `SHANNON_CALL_TTS_VOICE` is set (`chosen`), a 502 or 503 of
+- `speech` answers with `x-shannon-voice-name`. When the list, the default name or `SHANNON_CALL_TTS_VOICE` is set (`chosen`), a 429, 502 or 503 of
   `speech` also says `noSubstitute: true` and the `voice`: the body then drops the line and logs why, instead of saying it in VOICEPEAK.
 - A call voice's synthesis is booked as usage (lane `voice`); ElevenLabs audio is priced by `SHANNON_CALL_TTS_ELEVEN_USD_PER_10_SECONDS` (unset: counted, not priced).
 
