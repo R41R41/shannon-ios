@@ -1905,11 +1905,11 @@
       "long-line": 1
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts": {
-      "long-line": 78
+      "long-line": 79
     },
     "services/api/src/surfaces/minecraft/minecraftNightArms.ts": {
       "complex-function": 2,
-      "long-line": 5
+      "long-line": 6
     },
     "services/api/src/surfaces/minecraft/minecraftOreRoute.ts": {
       "complex-function": 1,
@@ -1919,6 +1919,9 @@
     "services/api/src/surfaces/minecraft/minecraftPlanDone.ts": {
       "long-line": 3,
       "complex-function": 2
+    },
+    "services/api/src/surfaces/minecraft/minecraftRequestKnowledge.ts": {
+      "long-line": 3
     },
     "services/api/src/surfaces/minecraft/minecraftReflexAdapter.ts": {
       "multi-statement-line": 22,
@@ -2348,7 +2351,7 @@
       "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcNearby.ts": {
-      "long-line": 1
+      "long-line": 2
     },
     "services/api/src/surfaces/minecraft/minecraftLlmcProbeInput.ts": {
       "long-line": 1
