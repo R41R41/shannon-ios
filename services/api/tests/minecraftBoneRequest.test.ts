@@ -102,6 +102,41 @@ describe('a request of one thing asked with a method (bone meal): the words that
   });
 });
 
+describe('a request of one thing gathers what its recipe needs and no more', () => {
+  const steps = REQUEST_STEPS_LINES.join('\n');
+
+  it('says it for any made thing with the reason, in the steps of the first plan and of every decision, and in the plan made again', () => {
+    expect(steps).toContain('頼まれた物の配合に要る物と数だけを集める');
+    expect(steps).toContain('鉄のツルハシ');
+    expect(steps).toContain('それが無いと先へ進めない時だけ');
+    expect(steps).toContain('理由: 配合に無い物を集めた分だけ');
+    expect(REQUEST_REPLAN_KNOWLEDGE).toContain('配合に要る物と数だけを集める');
+    expect(singleRequestFirstPlanSystem()).toContain('配合に要る物と数だけを集める');
+    expect(stageKnowledge(asked)!).toContain('配合に要る物と数だけを集める');
+  });
+
+  it('counts what the queue is about to make as held, so the cake\'s three buckets are not made twice', () => {
+    expect(steps).toContain('ケーキのバケツは牛乳と同じ 3 個で、6 個は要らない');
+    expect(steps).toContain('次の手で増える見込み');
+    expect(steps).toContain('同じ make を重ねて積まない');
+    expect(REQUEST_REPLAN_KNOWLEDGE).toContain('同じ make を重ねない');
+  });
+
+  it('does not read the recovery line or the descent note as an order to hunt while the health is high', () => {
+    expect(steps).toContain('体力が 15 以上の間は');
+    expect(steps).toContain('「食料の当て」は、食べる必要が出た時の候補で、今狩れという指示ではない');
+    expect(steps).toContain('準備の状態: 未達 — 食料');
+    expect(REQUEST_REPLAN_KNOWLEDGE).toContain('体力が 15 以上なら');
+  });
+
+  it('is not in the whole game\'s texts (the dragon run\'s inputs are as they were)', () => {
+    const whole = [stageKnowledge({ body: { state: { dimension: 'overworld' } } })!,
+      stageKnowledge({ body: { state: { dimension: 'overworld' }, planFacts: { now: null, above: [], next: [] } } })!,
+      ownFirstPlanSystem(), candidateInstructions()];
+    for (const text of whole) for (const mark of ['配合に要る物と数だけ', 'ケーキのバケツは牛乳と同じ', '体力が 15 以上の間は']) expect(text).not.toContain(mark);
+  });
+});
+
 describe('the whole game\'s preparation is for the whole game', () => {
   it('tells the always-on instructions that the descent\'s rules (food, stone tools) are not for a one-thing request', () => {
     const text = candidateInstructions();
