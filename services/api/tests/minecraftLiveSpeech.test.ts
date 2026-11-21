@@ -83,14 +83,26 @@ describe('the writer', () => {
     const { system, message } = liveWriterPrompt({ identity: '【ボクの人物】', persona: '[いまのボク]\nいまのボク: いつもの', body: '[マイクラの体の今]\n- 体力 20/20',
       main: moment('diamond_found', { count: 2 }), also: [moment('armor_complete')], recent: ['夜だね'], voice: true });
     expect(system.startsWith('【ボクの人物】')).toBe(true);
-    for (const part of ['[いまのボク]', '[実況の一言]', '声に出す一言。1文、54字以内', '[マイクラの体の今]', '[さっき言ったこと]\n- 夜だね', '[いま起きたこと]\n- ダイヤモンドの鉱石を見つけた（2か所）。',
-      '[ほかにあったこと（ついでに触れてもよい）]\n- 鉄以上の防具が頭から足までそろい、着ている。', 'ライ氏に頼まれた作業の中身は、この場では言わない']) {
+    for (const part of ['[いまのボク]', '[実況の一言]', '声に出す一言。1〜2文、64字以内', '[マイクラの体の今]', '[さっき言ったこと]\n- 夜だね', '[いま起きたこと]\n- ダイヤモンドの鉱石を見つけた（2か所）。',
+      '[ほかにあったこと（ついでに触れてもよい）]\n- 鉄以上の防具が頭から足までそろい、着ている。', '作業の中身（作る物・材料・順番・迷い）は、ためらわず言ってよい', '考え（なぜそうするか', '気持ち（うれしい', '元気で明るい女の子']) {
       expect(system).toContain(part);
     }
+    // The old wall that kept her silent about the work she was asked for is gone; every rule that is left says why.
+    expect(system).not.toContain('頼まれた作業の中身は、この場では言わない');
+    expect(system).not.toContain('[依頼が終わった時]');
     expect(message).toContain('実況の一言');
     const text = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('night_fell'), also: [], recent: [], voice: false });
-    expect(text.system).toContain('文字で書く一言。1文、100字以内');
+    expect(text.system).toContain('文字で書く一言。1〜2文、110字以内');
     expect(text.system).not.toContain('[さっき言ったこと]');
+  });
+
+  it('asks, when a request is done, for what was made and the next step as one question', () => {
+    const { system } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキを作る' }), also: [], recent: [], voice: true });
+    expect(liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキを作る' }), also: [], recent: [], voice: true }).message)
+      .toContain('置き場所か渡し方を聞く問い');
+    for (const part of ['[依頼が終わった時]', 'どこに置けばいい？渡せばいいかな？', '聞くのは1つだけ', '新しい頼み事', '頼まれた作業「ケーキを作る」が終わった']) {
+      expect(system).toContain(part);
+    }
   });
 
   it('takes the first line of the answer as the one to say and refuses what is not a line', () => {

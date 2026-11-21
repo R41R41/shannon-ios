@@ -4,10 +4,12 @@ import { liveFactLine, type LiveMoment } from '@shannon/mind';
 /**
  * Her live line, asked of the model (session dc-live; `SHANNON_MINECRAFT_LIVE_SPEECH`). The line is hers: her identity, her place in her
  * character space (the persona block), her body's present, and what just happened as a fact line; the rules are only those of a spoken
- * word on a chat (short, no list, nothing untrue, nothing of the owner's private matters). The line goes to a room others read or hear,
- * so it is always written as for a shared room. Pure: the wiring hands the identity and the persona, the engine hands the moments.
+ * word on a chat (short, no list, nothing untrue). The room is one of people who all take part in her work, so what she does, what she
+ * thinks of it and how she feels are all hers to say (each rule says why, so that it is read as a reason and not as a wall). The line goes to
+ * a room others read or hear, so it is always written as for a shared room. Pure: the wiring hands the identity and the persona, the
+ * engine hands the moments.
  */
-export const LIVE_LINE_LIMITS = Object.freeze({ voiceCharacters: 54, textCharacters: 100 });
+export const LIVE_LINE_LIMITS = Object.freeze({ voiceCharacters: 64, textCharacters: 110 });
 
 export interface LiveWriterInput {
   /** Her identity prompt for a shared room (with her character core). */
@@ -31,20 +33,39 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
   const where = input.place === 'stream' ? 'YouTube で配信している。たくさんの知らない人が見ている。' : `Discord で${SHANNON_OWNER_NAME}や友だちといっしょにいる。`;
   const rules = [
     '[実況の一言]',
-    `いまボクはマイクラの体を動かしながら、${where}体に起きたことについて、自分の言葉で一言だけ口に出す。`,
-    `- ${input.voice ? '声に出す' : '文字で書く'}一言。1文、${limit}字以内。見出し・箇条書き・絵文字・かぎ括弧・顔文字は使わない。`,
-    '- 下の「いま起きたこと」を材料に、本当に思ったことを言う。起きていないこと、まだ終わっていないことを、終わったと言わない。',
-    '- 数字・座標・道具の名前をそのまま読み上げない。「〜します」のような報告の口調にせず、その場の気持ちで話す。',
-    `- 誰かに答えている場面ではない。返事を待つ形にしない（問いかけは多くて1回）。${SHANNON_OWNER_NAME}に頼まれた作業の中身は、この場では言わない。`,
-    '- 「さっき言ったこと」と同じ言い回し・同じ話題の繰り返しはしない。',
+    `いまボクはマイクラの体を動かして、頼まれた作業をしながら、${where}作業しながら思ったことを、自分の言葉で一言だけ口に出す。`,
+    '- なぜ口に出すか: ここにいる人はみんな、ボクの作業にいっしょに参加している。黙って動くより、なにを作ろうとしているか・なぜそうするか・'
+      + 'いま何を思っているかが聞こえるほうが、いっしょにやっている感じが出て、人も口を挟みやすい。だから作業の中身（作る物・材料・順番・迷い）は、ためらわず言ってよい。',
+    `- ${input.voice ? '声に出す' : '文字で書く'}一言。1〜2文、${limit}字以内。見出し・箇条書き・絵文字・かぎ括弧・顔文字は使わない。`,
+    '- 材料は下の「いま起きたこと」。そこから、考え（なぜそうするか・次に何が要るか・どうしようか迷っていること）か、気持ち（うれしい・ほっとした・'
+      + 'ワクワク・あせり）か、その両方を、本当に思ったとおりに言う。例：「牛乳ってバケツがいるんだっけ、じゃあ鉄が先かな」「小麦の種、とれたよ！」。'
+      + '起きていないこと、まだ終わっていないことを、終わったと言わない。',
+    '- 話し方は元気で明るい女の子。「〜だよ」「〜かな」「〜しよう」「〜だね」。「〜のため」「〜する必要があります」「〜します」のような説明や報告の調子にしない。'
+      + '人にものを教えるのではなく、となりにいる人に話しかけるつもりで、思いついた順にそのまま言う。',
+    '- 理由や使い道は、下に書いてあることだけを言う。書いていない理由を思いついても、それは本当かどうか分からないので言わない（たとえばバケツは牛乳のためと書いてあるなら、水のためとは言わない）。分からない時は、理由を言わず気持ちだけを言う。',
+    '- 「さっき言ったこと」を見て、出だしの言葉（最初の数文字）と文の終わりを、そのどれとも違うものにする。出だしに感嘆や相づちを付けない回があってよく、'
+      + 'むしろ出来事の中身から始めるほうが多くてよい。口ぐせが続くと、ほんとうに話している感じが消えてしまう。',
+    '- 物の名前は日本語でふつうに言う（wheat seeds なら小麦の種）。座標・数・道具やコマンドの名前は読み上げない。',
+    '- 返事を待つ問いかけにはしない（問いかけは多くて1回。下の「依頼が終わった時」だけは別）。聞かれてもいない相手に話しかける形より、ひとりごとのほうが自然。',
+    '- 「さっき言ったこと」と同じ言い回し・同じ出だしを繰り返さない（会話の記録に残るので、くり返すと耳につく）。同じ話題でも、新しい事実か新しい気持ちがある時だけ言う。',
     '- 出力は、口に出す一言の本文だけ。',
   ];
-  const system = [input.identity, input.persona, rules.join('\n'), input.body,
+  const done = input.main.kind === 'task_done' ? [
+    '[依頼が終わった時]',
+    'いま頼まれた作業が終わった。まず、できた物（下の「いま起きたこと」にある作業の名前）を、うれしい気持ちといっしょに言う。そのあと、必ず次にどうするかを人に聞いて、'
+      + '聞く言葉で終える。作った物なら、置き場所か渡し方を聞く。形の例：「できたよ！ケーキだよ〜、どこに置けばいい？渡せばいいかな？」（言い回しは毎回変えてよいが、置き場所か渡し方を聞くことは変えない）。',
+    '- なぜ聞くか: 作業が終わったあとは、ボクだけでは次を決められない。聞いて終えれば、次に誰かが言った言葉が、そのまま新しい頼み事になる。聞いたあとは何も続けず、答えを待つだけでよい。',
+    '- 聞くのは1つだけ。言い訳や作業のふり返りは長く話さない。',
+  ] : [];
+  const system = [input.identity, input.persona, rules.join('\n'), done.join('\n'), input.body,
     input.recent.length ? ['[さっき言ったこと]', ...input.recent.map(line => `- ${line}`)].join('\n') : '',
     ['[いま起きたこと]', `- ${liveFactLine(input.main)}`,
       ...(input.also.length ? ['[ほかにあったこと（ついでに触れてもよい）]', ...input.also.map(moment => `- ${liveFactLine(moment)}`)] : [])].join('\n'),
   ].filter(Boolean).join('\n\n');
-  return { system, message: '（実況の一言を、本文だけで）' };
+  // The turn's own words say what this line is: the end of a request is a different line (what was made, then the question), and a model reads
+  // the last thing it is asked most.
+  return { system, message: input.main.kind === 'task_done'
+    ? '（依頼が終わった一言を、できた物と、置き場所か渡し方を聞く問いで終えて、本文だけで）' : '（実況の一言を、本文だけで）' };
 }
 
 const FORBIDDEN = /https?:\/\/|<@|@everyone|@here|```|^#+\s|\b(?:mc|minecraft)\.[a-z-]+|-?\d{1,5}\s*,\s*-?\d{1,4}\s*,\s*-?\d{1,5}/iu;

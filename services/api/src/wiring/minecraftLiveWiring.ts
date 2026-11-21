@@ -1,4 +1,5 @@
 import { feelingActor, shannonIdentityPrompt, workExchangeLines, type CompanionStateSnapshot } from '@shannon/cognition';
+import { LiveGovernor, liveCommentaryLimits } from '@shannon/mind';
 import { switchOn } from '@shannon/switches';
 import type { PlatformBridgeConfiguration } from '../mind/memory/platformBridge.js';
 import { platformBridgeThreadId } from '../mind/memory/platformBridge.js';
@@ -19,7 +20,8 @@ import { cleanLiveLine, liveWriterPrompt } from '../surfaces/minecraft/minecraft
  * - `SHANNON_MINECRAFT_LIVE`: the body's present as a block in every conversation (the app, Discord text, a call), read from the
  *   body's latest frame (`minecraftLive.ts`); the moments her frames show are noticed. Nothing is said without the second switch.
  * - `SHANNON_MINECRAFT_LIVE_SPEECH`: with the first, she says a word of her own about a moment, in the voice channel she is in or the
- *   text channel the body is set to (`minecraftLiveCommentary.ts`), at most one or two a minute, never over someone who is talking.
+ *   text channel the body is set to (`minecraftLiveCommentary.ts`), about four a minute (`SHANNON_MINECRAFT_LIVE_PER_MINUTE`,
+ *   `_PER_TEN_MINUTES` and `_GAP_SECONDS` set other numbers), never over someone who is talking.
  *
  * The block is made before the kernel (the kernel is handed it), the commentary after everything else exists.
  */
@@ -68,7 +70,7 @@ export function configuredMinecraftLive(values: Environment): MinecraftLiveWirin
     },
     startCommentary(parts) {
       if (!minecraftLiveSpeechEnabled(values) || commentary) return commentary;
-      commentary = createCommentary(live, outbox, parts);
+      commentary = createCommentary(live, outbox, parts, values);
       commentary.start();
       return commentary;
     },
@@ -88,7 +90,7 @@ export function streamOnlyMinecraftLive(control: MinecraftControl): MinecraftLiv
   return live;
 }
 
-function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: CommentaryParts): LiveCommentary {
+function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: CommentaryParts, values: Environment): LiveCommentary {
   const clock = parts.now ?? (() => new Date().toISOString());
   const log = parts.log ?? ((line: string) => console.info(line));
   // Always written for a shared room: the line goes where others read or hear it (the identity without his profile, the persona of a group).
@@ -102,8 +104,10 @@ function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: 
   };
   return new LiveCommentary({
     live, outbox, log,
+    // How many words a minute (and the gap) is a number of hers to tune from the environment, not a switch.
+    governor: new LiveGovernor(liveCommentaryLimits(values)),
     async write(request) {
-      const { system, message } = liveWriterPrompt({ identity: identity(), persona: persona(), body: live.block({ alone: false }), ...request });
+      const { system, message } = liveWriterPrompt({ identity: identity(), persona: persona(), body: live.block({ alone: false, participants: true }), ...request });
       const result = await parts.model.generate({ scopeKey: parts.scopeKey, systemPrompt: system, history: [], message, skipThinking: true });
       return cleanLiveLine(result.reply, { voice: request.voice });
     },

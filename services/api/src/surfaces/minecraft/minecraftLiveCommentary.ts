@@ -15,8 +15,20 @@ export const LIVE_COMMENTARY_ENGINE = Object.freeze({
   retryMilliseconds: 1_500,
   /** A model call that takes longer than this is given up. */
   writeMilliseconds: 12_000,
-  /** How long a line stays worth saying once written (it is about a moment that is going by). */
-  lineLifetimeMilliseconds: Object.freeze({ ordinary: 25_000, urgent: 35_000 }),
+  /**
+   * How long a line stays worth saying once written (it is about a moment that is going by). From the event to the voice it already took the
+   * poll, the model and the voice; a line the body could not say within this (someone kept talking) is dropped, not said late.
+   */
+  lineLifetimeMilliseconds: Object.freeze({ ordinary: 15_000, urgent: 25_000 }),
+  /**
+   * A kind's own time, from how much the word matters later: a thought of the moment is gone in ten seconds, the end of a request (the
+   * thing she must say, and ask) waits for the room. The body waits at most as long as the line's time says (and, today, at most eight).
+   */
+  lineLifetimeByKindMilliseconds: Object.freeze<Record<string, number>>({ thinking: 10_000, plan_step: 12_000, material_got: 12_000, task_done: 40_000 }),
+  /** Of these kinds only the newest waiting moment is worth a word: an older one is about a step that has already passed. */
+  supersededKinds: Object.freeze(['thinking', 'plan_step']),
+  /** The moments of her work as she does it: the end of a request closes them. */
+  workKinds: Object.freeze(['thinking', 'plan_step', 'plan_changed', 'material_needed', 'material_got']),
   /** A moment whose line was written but held back by the room (someone started talking) is written again at most this many times. */
   rewrites: 1,
 });
@@ -90,6 +102,15 @@ export class LiveCommentary {
 
   private hear(moment: LiveMoment): void {
     this.count('moments');
+    // The request ended: what waits of her work (a step, a thought, a material) is about a story that is over, and the end says it.
+    if (moment.kind === 'task_done') {
+      this.waiting = this.waiting.filter(item => !LIVE_COMMENTARY_ENGINE.workKinds.includes(item.moment.kind));
+    }
+    if (LIVE_COMMENTARY_ENGINE.supersededKinds.includes(moment.kind)) {
+      const older = this.waiting.length;
+      this.waiting = this.waiting.filter(item => item.moment.kind !== moment.kind);
+      if (this.waiting.length < older) this.count('superseded');
+    }
     this.waiting.push({ moment, rewrites: 0 });
     if (this.waiting.length > LIVE_COMMENTARY_ENGINE.waitingLimit) this.waiting.shift();
     this.schedule(0);
@@ -190,7 +211,8 @@ export class LiveCommentary {
     const id = `live-${this.now().toString(36)}-${++this.serial}`;
     const urgent = main.salience >= 0.9;
     const draft: LiveSpeechDraft = { id, text, urgency: urgent ? 'urgent' : 'ordinary', kind: main.moment.kind,
-      ttlMilliseconds: LIVE_COMMENTARY_ENGINE.lineLifetimeMilliseconds[urgent ? 'urgent' : 'ordinary'] };
+      ttlMilliseconds: LIVE_COMMENTARY_ENGINE.lineLifetimeByKindMilliseconds[main.moment.kind]
+        ?? LIVE_COMMENTARY_ENGINE.lineLifetimeMilliseconds[urgent ? 'urgent' : 'ordinary'] };
     this.pending.set(id, { main: main.moment, also: folded, text });
     if (this.pending.size > 8) this.pending.delete(this.pending.keys().next().value as string);
     this.dropWaiting(main.moment, folded);
