@@ -406,6 +406,105 @@
         { "name": "竜を倒した", "advancement": "minecraft:end/kill_dragon", "end": true }
       ],
       "seeds": []
+    },
+    {
+      "id": "C1", "name": "ケーキ（材料を支給）", "via": "queue", "goal": "ケーキを作ってください", "targetSeconds": 300, "limitMinutes": 10, "anySeed": true,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current",
+      "failure": "死亡・10 分・¥300・列の依頼が failed。ケーキを 1 個持ち、列の依頼が done になれば成功（置くところまでは見ない）",
+      "prediction": { "successRate": 0.5, "seconds": 300, "yen": 120, "builds": "未実走",
+        "basis": "牛乳を入れる手（バケツ＋牛）と作業台での作成は、実走で一度も通していない。竜以外の依頼 1 つの費用は未測定で、ここの予測は推測" },
+      "start": { "time": 1000, "prepAtBody": true,
+        "give": { "minecraft:crafting_table": 1, "minecraft:bucket": 3, "minecraft:egg": 1, "minecraft:sugar": 2, "minecraft:wheat": 3 },
+        "prep": [ { "summon": [3, 0, 3, "minecraft:cow", "{PersistenceRequired:1b}"] }, { "summon": [3, 0, -3, "minecraft:cow", "{PersistenceRequired:1b}"] } ] },
+      "queue": { "entries": [ { "ref": "cake", "goal": "ケーキを作ってください", "placement": "end" } ],
+        "expect": { "final": { "cake": "done" } } },
+      "alsoCount": [ "minecraft:milk_bucket", "minecraft:bucket" ],
+      "milestones": [
+        { "name": "牛乳入りバケツ 3", "any": ["minecraft:milk_bucket"], "count": 3 },
+        { "name": "ケーキ", "any": ["minecraft:cake"], "end": true },
+        { "name": "列の依頼が done", "queue": { "ref": "cake", "state": "done" }, "end": true }
+      ],
+      "seeds": ["r17"]
+    },
+    {
+      "id": "C2", "name": "ケーキ（作業台とバケツだけ。小麦・サトウキビ・牛・鶏は近くに用意）", "via": "queue", "goal": "ケーキを作ってください", "targetSeconds": 600, "limitMinutes": 15, "anySeed": true,
+      "requiresOwnerOk": true, "supplied": true, "defaultModel": "current",
+      "failure": "死亡・15 分・¥300・列の依頼が failed。ケーキを 1 個持ち、列の依頼が done になれば成功。卵は産卵の間隔を短くして待つ（台の補助で、自然な産卵ではない）",
+      "prediction": { "successRate": 0.25, "seconds": 600, "yen": 200, "builds": "未実走",
+        "basis": "小麦・サトウキビを刈る手と、卵を拾う手は C1 より多く、頭が材料の順を組む必要がある。実走は無く、推測" },
+      "start": { "time": 1000, "prepAtBody": true,
+        "give": { "minecraft:crafting_table": 1, "minecraft:bucket": 3 },
+        "prep": [ { "fill": [3, -1, 2, 6, -1, 2, "minecraft:farmland[moisture=7]"] }, { "fill": [3, 0, 2, 6, 0, 2, "minecraft:wheat[age=7]"] },
+                  { "setblock": [3, -1, -2, "minecraft:sand"] }, { "setblock": [4, -1, -2, "minecraft:sand"] },
+                  { "setblock": [3, -1, -3, "minecraft:sand"] }, { "setblock": [4, -1, -3, "minecraft:sand"] },
+                  { "setblock": [2, -1, -2, "minecraft:water"] }, { "setblock": [5, -1, -2, "minecraft:water"] },
+                  { "setblock": [2, -1, -3, "minecraft:water"] }, { "setblock": [5, -1, -3, "minecraft:water"] },
+                  { "setblock": [3, 0, -2, "minecraft:sugar_cane[age=0]"] }, { "setblock": [4, 0, -2, "minecraft:sugar_cane[age=0]"] },
+                  { "setblock": [3, 0, -3, "minecraft:sugar_cane[age=0]"] }, { "setblock": [4, 0, -3, "minecraft:sugar_cane[age=0]"] },
+                  { "summon": [-3, 0, 0, "minecraft:cow", "{PersistenceRequired:1b}"] }, { "summon": [-3, 0, 2, "minecraft:cow", "{PersistenceRequired:1b}"] },
+                  { "summon": [0, 0, -4, "minecraft:chicken", "{PersistenceRequired:1b,EggLayTime:200}"] },
+                  { "summon": [1, 0, -4, "minecraft:chicken", "{PersistenceRequired:1b,EggLayTime:200}"] },
+                  { "summon": [2, 0, -5, "minecraft:chicken", "{PersistenceRequired:1b,EggLayTime:200}"] } ] },
+      "queue": { "entries": [ { "ref": "cake", "goal": "ケーキを作ってください", "placement": "end" } ],
+        "expect": { "final": { "cake": "done" } } },
+      "alsoCount": [ "minecraft:milk_bucket", "minecraft:wheat", "minecraft:sugar", "minecraft:sugar_cane", "minecraft:egg" ],
+      "milestones": [
+        { "name": "小麦 3", "any": ["minecraft:wheat"], "count": 3 },
+        { "name": "砂糖", "any": ["minecraft:sugar"], "count": 2 },
+        { "name": "卵", "any": ["minecraft:egg"] },
+        { "name": "牛乳入りバケツ 3", "any": ["minecraft:milk_bucket"], "count": 3 },
+        { "name": "ケーキ", "any": ["minecraft:cake"], "end": true },
+        { "name": "列の依頼が done", "queue": { "ref": "cake", "state": "done" }, "end": true }
+      ],
+      "seeds": ["r17"]
+    },
+    {
+      "id": "Q1", "name": "保留・再開・入れ替え（3 つ積んで、順番を変え、1 つを保留して戻す）", "via": "queue", "targetSeconds": 420, "limitMinutes": 15, "anySeed": true,
+      "defaultModel": "current", "pollSeconds": 2,
+      "failure": "死亡・15 分・¥300・列の依頼が failed・列の台本が最後まで進まない・期待（完了順 c→b→a、同時に走る行が 2 つ以上にならない、保留の後 10 秒以内に体が止まる）を外した時",
+      "start": { "time": 1000, "give": {} },
+      "queue": {
+        "entries": [ { "ref": "a", "goal": "オークの原木を 5 個集める" }, { "ref": "b", "goal": "作業台を作る" }, { "ref": "c", "goal": "木の棒を 4 本作る" } ],
+        "script": [
+          { "id": "moveC", "when": { "ref": "a", "state": "running", "for": 5 }, "op": "move", "ref": "c", "before": "b" },
+          { "id": "holdA", "when": { "milestone": "原木 1" }, "op": "hold", "ref": "a" },
+          { "id": "resumeA", "when": { "ref": "b", "state": "done" }, "op": "resume", "ref": "a" } ],
+        "expect": { "maxRunning": 1, "order": ["c", "b", "a"], "final": { "a": "done", "b": "done", "c": "done" }, "seen": { "a": ["paused"] },
+                    "halt": { "step": "holdA", "withinSeconds": 10, "stillSeconds": 4 } } },
+      "alsoCount": [ "minecraft:oak_log", "minecraft:oak_planks", "minecraft:stick", "minecraft:crafting_table" ],
+      "milestones": [
+        { "name": "原木 1", "any": ["#minecraft:logs"] },
+        { "name": "c が done", "queue": { "ref": "c", "state": "done" } },
+        { "name": "b が done", "queue": { "ref": "b", "state": "done" } },
+        { "name": "a が done", "queue": { "ref": "a", "state": "done" }, "end": true }
+      ],
+      "seeds": ["r17"]
+    },
+    {
+      "id": "Q2", "name": "開始・停止・やめる・削除（4 つ積んで、途中の依頼を始め、全体を止め、消し、やめる）", "via": "queue", "targetSeconds": 600, "limitMinutes": 20, "anySeed": true,
+      "defaultModel": "current", "pollSeconds": 2,
+      "failure": "死亡・20 分・¥300・列の依頼が failed・列の台本が最後まで進まない・期待（最終の状態 a=done b=cancelled c=行なし d=done、止めた後 20 秒は走る行が無い）を外した時",
+      "start": { "time": 1000, "give": {} },
+      "queue": {
+        "entries": [ { "ref": "a", "goal": "オークの原木を 3 個集める" }, { "ref": "b", "goal": "作業台を作る" },
+                     { "ref": "c", "goal": "木の棒を 4 本作る" }, { "ref": "d", "goal": "オークの原木を 12 個集める" } ],
+        "script": [
+          { "id": "startD", "when": { "ref": "a", "state": "running", "for": 3 }, "op": "start", "ref": "d" },
+          { "id": "stopAll", "when": { "ref": "d", "state": "running", "for": 10 }, "op": "stop" },
+          { "id": "resumeD", "when": { "seconds": 22 }, "op": "resume", "ref": "d" },
+          { "id": "startAll", "when": { "seconds": 1 }, "op": "start" },
+          { "id": "deleteC", "when": { "seconds": 3 }, "op": "delete", "ref": "c" },
+          { "id": "cancelB", "when": { "ref": "b", "state": "running" }, "op": "cancel", "ref": "b" },
+          { "id": "resumeA", "when": { "ref": "b", "state": "cancelled" }, "op": "resume", "ref": "a" } ],
+        "expect": { "maxRunning": 1, "order": ["d", "a"], "final": { "a": "done", "b": "cancelled", "c": "absent", "d": "done" },
+                    "seen": { "a": ["paused"], "d": ["stopped"] }, "quiet": { "step": "stopAll", "seconds": 20, "graceSeconds": 5 } } },
+      "alsoCount": [ "minecraft:oak_log", "minecraft:oak_planks", "minecraft:stick", "minecraft:crafting_table" ],
+      "milestones": [
+        { "name": "d が done", "queue": { "ref": "d", "state": "done" } },
+        { "name": "b が cancelled", "queue": { "ref": "b", "state": "cancelled" } },
+        { "name": "a が done", "queue": { "ref": "a", "state": "done" }, "end": true }
+      ],
+      "seeds": ["r17"]
     }
   ]
 }

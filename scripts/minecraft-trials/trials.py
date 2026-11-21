@@ -38,6 +38,9 @@ import sys
 import time
 import zlib
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))        # `python3 -I` leaves the script's own directory out of the path
+import queue_trial  # noqa: E402
+
 try:
     import fcntl          # Linux (the VM, the WSL lab); the module is only imported elsewhere for its readers
 except ImportError:
@@ -62,7 +65,7 @@ API_ENV = os.path.join(HOME, '.config', 'shannon-ios', 'api.env')
 ENV_BACKUPS = os.path.join(HOME, 'shannon-ios-data', 'deploy-backups')
 SERVICES = ['shannon-ios', 'shannon-ios-mind', 'shannon-ios-worker', 'shannon-ios-world', 'shannon-agent-host', 'shannon-ios-autonomy']
 MODEL_LINE = b'SHANNON_FCA_MODEL=claude-sonnet-5-5\n'
-GOAL = 'エンドラを討伐してください'
+GOAL = 'エンドラを討伐してください'      # the request of a section that names no goal of its own (sections.json "goal")
 OPERATOR = 'trials'
 RATE_PER_HOUR = 20          # OPERATOR_LIMITS.requestsPerHour (accepted invocations of every operator)
 FINISHED = {'completed', 'failed', 'cancelled'}
@@ -77,6 +80,7 @@ PROD_LOCK = os.path.join(HOME, '.cache', 'minebot-lab', 'prod.lock')     # `floc
 PARTIAL_EVERY = 20           # seconds between the saves of a running trial: the VM is a Spot machine and may stop under it
 STOP_FILE = os.path.join(HOME, '.cache', 'minebot-lab', 'trials.stop')   # `touch` it and the running trial ends at its next poll (cancel, logout, restore); `run` refuses to start while it exists
 MAX_SECTION_YEN = None       # --max-section-yen: a ceiling over every section's capYen (the coordinator's window rule: at most ¥500 a section)
+QUEUE_TARGET = None         # ('head', url, device token) of an isolated rig, whose body has no door of its own; None = the body's POST /queue (queue_trial.BODY_URL)
 RCON_TARGET = None           # (host, port, password) of an isolated rig's lab server while rig.py runs a trial; None = shannon-home (server.properties)
 
 
@@ -888,6 +892,7 @@ def check_milestones(section, counts, state, latched, maxima, elapsed):
       near + within (+ dimension)     the body is within `within` blocks of a site, in that dimension
       framesFilled                    this many of the stronghold's end_portal_frame blocks hold an eye
       entity (+ dimension)            an entity matching the selector exists (the dragon)
+      queue {ref, state}              a row of the request queue is in that state (queue sections only)
     """
     extra = state.get('extra') or {}
     for m in section['milestones']:
@@ -896,6 +901,8 @@ def check_milestones(section, counts, state, latched, maxima, elapsed):
         ok = False
         if 'dimension' in m and 'near' not in m and 'entity' not in m:
             ok = state.get('dimension') == m['dimension']
+        elif 'queue' in m:
+            ok = bool(extra.get('queue:' + name))
         elif 'advancement' in m:
             ok = bool(extra.get('adv:' + m['advancement']))
         elif 'near' in m:
@@ -1005,6 +1012,15 @@ def validate_sections(cfg):
             problems.append(f'S{sid}: teleports or builds but is not marked requiresOwnerOk')
         for m in s['milestones']:
             if 'name' not in m: problems.append(f'S{sid}: a milestone without a name')
+        if s.get('via', 'operator') not in ('operator', 'queue'): problems.append(f'S{sid}: via must be operator or queue')
+        if 'goal' in s and not (isinstance(s['goal'], str) and 0 < len(s['goal']) <= 120): problems.append(f'S{sid}: goal must be 1-120 characters')
+        if s.get('via') == 'queue':
+            problems += queue_trial.validate(s.get('queue'), [m.get('name') for m in s['milestones']], f'S{sid}')
+        elif 'queue' in s: problems.append(f'S{sid}: has a queue but is not via queue')
+        for m in s['milestones']:
+            if 'queue' in m and not (s.get('via') == 'queue' and m['queue'].get('ref') in [e.get('ref') for e in (s.get('queue') or {}).get('entries', [])]
+                                     and m['queue'].get('state') in queue_trial.STATES):
+                problems.append(f'S{sid}: milestone {m.get("name")}: queue needs a queue section, one of its refs and a state')
         pred = s.get('prediction')
         if s.get('requiresOwnerOk') and not (pred and all(k in pred for k in ('successRate', 'seconds', 'yen'))):
             problems.append(f'S{sid}: no prediction (successRate, seconds, yen)')
@@ -1113,6 +1129,10 @@ def setup_body(r, section, start_at, sites=None):
         r.cmd(f'execute in {start.get("dimension", DIMENSION_NAMES["overworld"])} run tp {BODY} {at[0] + 0.5} {at[1]} {at[2] + 0.5}')
     elif start_at:   # on the ground there (spreadplayers finds the top block; the chunks generate as she arrives)
         r.cmd(f'spreadplayers {start_at[0]} {start_at[1]} 0 6 false {BODY}')
+    if start.get('prepAtBody'):       # prep steps relative to where she stands now (a start with no site: the world's spawn or a located place)
+        pos = body_state(r).get('pos')
+        if not pos: raise Stop('prepAtBody: the body has no position')
+        run_prep(r, start, [math.floor(pos[0]), math.floor(pos[1]), math.floor(pos[2])], sites or {})
     r.cmd(f'effect clear {BODY}')
     r.cmd(f'effect give {BODY} minecraft:instant_health 1 10 true')
     r.cmd(f'effect give {BODY} minecraft:saturation 1 10 true')
@@ -1254,6 +1274,108 @@ def fail_rule_hit(section, state, since, elapsed):
     return hit
 
 
+def section_goal(section):
+    return section.get('goal', GOAL)
+
+
+class QueueRun:
+    """A trial that goes through the request queue (section \"via\": \"queue\"): the entries are added one by one, the script is played while the trial polls,
+    and the rows of the queue stand in for the one task of an operator trial."""
+
+    def __init__(self, section, trial_id=''):
+        self.cfg = section['queue']
+        self.trial_id = trial_id
+        self.trial = queue_trial.QueueTrial(self.cfg, [m['name'] for m in section['milestones']])
+        self.rows = []
+        self.errors = []
+        self.before = []           # states of the rows that were in the table before this trial added its own (they are never read as the trial's)
+
+    def snapshot(self):
+        """Remember the rows already in the table: earlier runs leave their finished rows (with their task ids and the same goals), and a row of someone else may be live."""
+        try: rows = queue_trial.read_rows(DB)
+        except sqlite3.Error as error:
+            self.errors.append(f'read:{type(error).__name__}')
+            return
+        self.trial.ignore = {r['id'] for r in rows}
+        self.before = [r.get('state') for r in rows if r.get('state') not in queue_trial.TERMINAL]
+
+    def post(self, body):
+        reply = queue_trial.post(QUEUE_TARGET, body)
+        log(f'queue {body.get("op")}: ok={reply["ok"]} code={reply["code"]}')
+        if not reply['ok']: self.errors.append(f'{body.get("op")}:{reply["code"]}')
+        return reply
+
+    def add_all(self):
+        """The entries, in order. Returns the code of the first refusal, else None."""
+        for e in self.cfg['entries']:
+            reply = self.post({'op': 'add', 'goal': e['goal'], 'placement': e.get('placement', 'end'), 'requestId': f'trials:{self.trial_id}:{e["ref"]}'})
+            if not reply['ok']: return reply['code']
+        return None
+
+    def read(self):
+        self.rows = queue_trial.read_rows(DB)
+        return self.rows
+
+    def mine(self):
+        """The rows this trial added: a goal of its entries, and not one of the rows that were there before."""
+        return [r for r in self.rows if r.get('goal') in self.trial.goal_ref and r.get('id') not in self.trial.ignore]
+
+    def goals_ok(self):
+        goals = {r['goal'] for r in self.mine()}
+        return all(e['goal'] in goals for e in self.cfg['entries'])
+
+    def poll(self, elapsed, body, counts, latched):
+        """Read the queue, run the script steps that are due, and return what the trial loop reads as `row`."""
+        try: self.read()
+        except sqlite3.Error as error:
+            self.errors.append(f'read:{type(error).__name__}')
+            return self.row()
+        items = sum(counts.values()) if counts else None
+        held = {}          # task id -> True while that task still holds the body (only for the rows an expectation watches)
+        for ref in self.trial.halt_refs:
+            tid = self.trial.taskids.get(ref)
+            if tid:
+                with contextlib.suppress(sqlite3.Error): held[tid] = not settled(task_row(tid) or {})
+        for _, request in self.trial.observe(elapsed, self.rows, {'pos': (body or {}).get('pos'), 'items': items}, latched, held): self.post(request)
+        return self.row()
+
+    def task_ids(self):
+        return [r['taskId'] for r in self.mine() if r.get('taskId')]
+
+    def row(self):
+        """The loop's view of the run: the sum of its tasks' yen and steps; `failed` when a row failed that the script did not mean to fail."""
+        tasks = [task_row(t) or {} for t in self.task_ids()]
+        failed = [r for r in self.mine() if r.get('state') == 'failed']
+        return {'status': 'failed' if failed else 'running', 'execState': None, 'pauseReason': 'queue_entry_failed' if failed else None,
+                'yen': round(sum(t.get('yen', 0) for t in tasks), 2), 'steps': sum(t.get('steps', 0) for t in tasks)}
+
+    def milestone_facts(self, section):
+        facts = self.trial.facts()
+        return {'queue:' + m['name']: facts.get(m['queue']['ref']) == m['queue']['state'] for m in section['milestones'] if 'queue' in m}
+
+    def cleanup(self):
+        """Stop the whole queue and cancel what is left, so no task keeps the body. Returns notes for the result."""
+        notes = [f'stop:{self.post({"op": "stop"})["code"]}']
+        with contextlib.suppress(sqlite3.Error): self.read()
+        for r in self.mine():
+            if r.get('state') not in queue_trial.TERMINAL:
+                notes.append(f'cancel {self.trial.goal_ref[r["goal"]]}:{self.post({"op": "cancel", "id": r["id"]})["code"]}')
+        return notes
+
+    def settled(self):
+        with contextlib.suppress(sqlite3.Error): self.read()
+        return all(settled(task_row(t) or {}) for t in self.task_ids())
+
+    def decisions(self):
+        total = {'decisions': 0, 'toolCalls': 0, 'failedToolResults': 0, 'topTools': {}, 'lastThought': ''}
+        for t in self.task_ids():
+            d = decisions(t)
+            for k in ('decisions', 'toolCalls', 'failedToolResults'): total[k] += d[k]
+            for name, n in d['topTools'].items(): total['topTools'][name] = total['topTools'].get(name, 0) + n
+            total['lastThought'] = d['lastThought'] or total['lastThought']
+        return total
+
+
 def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     trial_id = f'{batch}-s{section["id"]}-{seed_key}'
     variant = seed_variant(seed_key)
@@ -1318,17 +1440,34 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
     if failed_check:
         result['reason'] = f'setup_failed:preflight:{failed_check}'
         body_logout(); return result
-    request = ops('request', '--max-minutes', str(section['limitMinutes'] + 2), '--budget-yen', str(cap), GOAL)
-    task_id = request.get('taskId')
-    if request.get('outcome') != 'accepted' or not task_id:
-        result['reason'] = f'request_refused:{request.get("code")}'
-        body_logout(); return result
-    t0 = time.monotonic()
-    result['taskId'] = task_id
-    row = task_row(task_id)
-    result['goalChars'] = len(row['goal']) if row else None
-    result['goalOk'] = bool(row) and row['goal'] == GOAL and len(row['goal']) == 13
-    log(f'trial {trial_id}: task {task_id} goal={result["goalChars"]} chars ok={result["goalOk"]}')
+    goal = section_goal(section)
+    queue = QueueRun(section, trial_id) if section.get('via', 'operator') == 'queue' else None
+    if queue:
+        queue.snapshot()
+        if queue.before: log(f'trial {trial_id}: the queue already held rows that are not finished: {queue.before} (they are not read as part of this trial)')
+        refused = queue.add_all()
+        if refused:
+            result['reason'] = f'request_refused:{refused}'
+            result['cleanup'] = queue.cleanup()
+            body_logout(); return result
+        task_id = None
+        t0 = time.monotonic()
+        with contextlib.suppress(sqlite3.Error): queue.read()
+        result['goalChars'] = sum(len(e['goal']) for e in section['queue']['entries'])
+        result['goalOk'] = queue.goals_ok()
+        log(f'trial {trial_id}: queue of {len(section["queue"]["entries"])} entries ok={result["goalOk"]}')
+    else:
+        request = ops('request', '--max-minutes', str(section['limitMinutes'] + 2), '--budget-yen', str(cap), goal)
+        task_id = request.get('taskId')
+        if request.get('outcome') != 'accepted' or not task_id:
+            result['reason'] = f'request_refused:{request.get("code")}'
+            body_logout(); return result
+        t0 = time.monotonic()
+        result['taskId'] = task_id
+        row = task_row(task_id)
+        result['goalChars'] = len(row['goal']) if row else None
+        result['goalOk'] = bool(row) and row['goal'] == goal and len(row['goal']) == len(goal)
+        log(f'trial {trial_id}: task {task_id} goal={result["goalChars"]} chars ok={result["goalOk"]}')
     latched, maxima, first_seen, last, fail_since = {}, {}, {}, {}, {}
     deaths, gate = [], section.get('deathFailsAfter')      # the thru (T) goes on through a death, as the filmed run would; a death after the gate is a failure of the run
     items = tracked_items(section)
@@ -1344,11 +1483,15 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
         except (OSError, ConnectionError) as error:
             counts, state = {}, {}
             log(f'trial {trial_id}: rcon {error}')
+        qrow = None
+        if queue:          # the script runs on this poll's readings; its operations go out now and show in the next poll
+            qrow = queue.poll(elapsed, state, counts, latched)
+            state.setdefault('extra', {}).update(queue.milestone_facts(section))
         for i, n in counts.items():
             maxima[i] = max(maxima.get(i, 0), n)
             if n and i not in first_seen: first_seen[i] = round(elapsed, 1)
         done = check_milestones(section, counts, state, latched, maxima, elapsed)
-        row = task_row(task_id) or {}
+        row = qrow if queue else (task_row(task_id) or {})
         last = {'counts': counts, 'state': state, 'row': row}
         if elapsed - last_saved >= PARTIAL_EVERY:          # a stop of the VM leaves what this trial had reached and spent
             last_saved = elapsed
@@ -1374,14 +1517,23 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
         if row.get('yen', 0) >= cap - 1: reason = 'budget'; break
         if elapsed >= section['limitMinutes'] * 60: reason = 'time_limit'; break
         if stop_requested(): reason = 'stopped_by_file'; break
-        time.sleep(cfg['pollSeconds'])
+        time.sleep(section.get('pollSeconds', cfg['pollSeconds']))
     elapsed = time.monotonic() - t0
     log(f'trial {trial_id}: {reason} at {elapsed:.0f} s; milestones {latched}')
     # The body stays logged in until the task holds it no more: a logout under an unknown step leaves the task waiting for the body.
-    row = task_row(task_id) or {}
+    row = queue.row() if queue else (task_row(task_id) or {})
     cleanup = []
     if rig and reason == 'stopped_by_file':
         cleanup.append('no cancel: the stop file asks the rig to give way at once (its processes and database are thrown away)')
+    elif queue:
+        op_errors = [e for e in queue.errors if not e.startswith('read:')]          # the trial's own operations; the cleanup's below are not the script's
+        cleanup += queue.cleanup()
+        for _ in range(5 if rig else 60):
+            if queue.settled(): break
+            time.sleep(2)
+        if not queue.settled() and not rig:
+            wait_rate(2)
+            cleanup.append('release:' + str(ops('release').get('code')))
     elif not settled(row):
         cleanup.append('cancel:' + str(ops('cancel', task_id).get('code')))
         for _ in range(5 if rig else 60):          # a rig's processes and database are thrown away right after: it gives way fast (the stop file is asked to be obeyed within a minute)
@@ -1396,19 +1548,31 @@ def run_trial(section, seed_key, batch, cfg, dry_run, owner_ok=None):
                 if settled(row): break
                 time.sleep(2)
     time.sleep(1 if rig else 3)
-    row = task_row(task_id) or {}
-    cleanup.append(f'settled={settled(row)} status={row.get("status")}/{row.get("execState")}')
+    if queue:
+        row = queue.row()
+        cleanup.append(f'settled={queue.settled()} tasks={len(queue.task_ids())}')
+        result['stepUnknown'] = [c for t in queue.task_ids() for c in step_unknown_codes(t, result['startedAt'])]
+    else:
+        row = task_row(task_id) or {}
+        cleanup.append(f'settled={settled(row)} status={row.get("status")}/{row.get("execState")}')
+        result['stepUnknown'] = step_unknown_codes(task_id, result['startedAt'])
     result['cleanup'] = cleanup
-    result['stepUnknown'] = step_unknown_codes(task_id, result['startedAt'])
-    try: result['stall'] = stall_tail(task_id)
+    stall_of = (queue.task_ids() or [None])[-1] if queue else task_id          # a queue trial: the stall of the last task it started
+    try: result['stall'] = stall_tail(stall_of) if stall_of else {'error': 'queue trial: no task was started'}
     except Exception as error:   # noqa: BLE001 - a history we cannot read must not lose the trial's result
         result['stall'] = {'error': f'{type(error).__name__}: {error}'[:160]}
-    result.update({'ok': reason == 'reached', 'reason': reason, 'seconds': end_seconds(section, latched) if reason == 'reached' else None,
+    if queue:
+        result['queue'] = queue.trial.report()
+        result['queueErrors'] = queue.errors
+        result['queueBefore'] = queue.before
+        result['queue']['verdict'] += [f'op_refused:{e}' for e in op_errors]          # an operation the door refused is a failure of the trial, whatever the end state says
+        if reason == 'reached' and result['queue']['verdict']: reason = 'queue_check:' + result['queue']['verdict'][0]
+    result.update({'ok': reason == 'reached', 'reason': reason, 'seconds': end_seconds(section, latched) if reason in ('reached',) or reason.startswith('queue_check:') else None,
                    'elapsed': round(elapsed, 1), 'milestones': latched, 'firstSeen': first_seen, 'maxCounts': maxima,
                    'missing': [m['name'] for m in section['milestones'] if m.get('end') and m['name'] not in latched],
                    'deaths': deaths, 'deathsAfterGate': sum(1 for d in deaths if d['afterGate']),
                    'final': last.get('state'), 'yen': row.get('yen'), 'budgetSteps': row.get('steps'),
-                   'taskStatus': row.get('status'), 'pauseReason': row.get('pauseReason'), **decisions(task_id)})
+                   'taskStatus': row.get('status'), 'pauseReason': row.get('pauseReason'), **(queue.decisions() if queue else decisions(task_id))})
     if body_logout():
         for _ in range(20):
             if BODY not in (online_players() or []): break
