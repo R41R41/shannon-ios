@@ -96,6 +96,7 @@ export function voiceIntentInstructions(state: VoiceMinecraftState, who: string)
   return [
     ...minecraftQueueGuide({ queueLines: state.queue ?? [], who, running: state.running?.goal ?? null }),
     `通話には何人もいる。体への頼みは、${who}がはっきり頼んだ時だけ受ける（聞き間違いかもしれない言葉や、ほかの人どうしの話は kind=none）。`,
+    '「待って」「ちょっと待って」は、ほかの人に向けた言葉のことも多い。シャノンに向けて止めてほしいと分かる時だけ kind=stop にする（理由: stop は体の仕事ぜんたいを止めるから）。',
   ].join('\n');
 }
 

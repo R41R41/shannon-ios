@@ -97,6 +97,8 @@ export const STRATEGY_KNOWLEDGE_V2 = [
     + '旧無効版や有効状態が未確認なら頼らない。下りは事前に水を置くか vertical で、自動救済を当てに跳び降りない。'),
 ].join('\n');
 
+const WHOLE_GAME_PLAN_LINES: readonly string[] = ['- エンドラ討伐の後半は', '- 準備の不足は、'];
+
 /** The active template is assembled directly; no historical exact-string replacements. */
 export function ownFirstPlanSystem(): string {
   return [CURRENT_PLAN_STRUCTURE, PLAN_PREP_WORDS, STRATEGY_KNOWLEDGE_V2].join('\n');
@@ -107,7 +109,10 @@ export function ownFirstPlanSystem(): string {
  * and in place of the whole-game route and the descent's preparation the words of a request (`minecraftRequestKnowledge.ts`).
  */
 export function singleRequestFirstPlanSystem(): string {
-  return [CURRENT_PLAN_STRUCTURE, SINGLE_REQUEST_PLAN_WORDS].join('\n');
+  // Two lines of the structure speak of the whole game and point at a preparation policy this text does not carry (「下の方針」, the village's
+  // hay and beds, the dragon's second half): left in, they contradict the request's own words that no food or night node comes first.
+  const structure = CURRENT_PLAN_STRUCTURE.split('\n').filter(line => !WHOLE_GAME_PLAN_LINES.some(start => line.startsWith(start)));
+  return [structure.join('\n'), SINGLE_REQUEST_PLAN_WORDS].join('\n');
 }
 
 /** The first plan's words for a goal: the whole game's for the dragon and the Nether, the request's for any other. */

@@ -268,7 +268,7 @@ export function firstPlanInput(goal: string, world: Record<string, unknown> | nu
   const scan = options.scan ? scanForPlan(world?.scan) : null;
   return [`依頼: ${text(goal, 400)}`, ...part('位置', world?.position, 80), ...part('ディメンション', world?.dimension, 40),
     ...part('バイオーム', world?.biome, 60), ...part('時刻', world?.time, 20), ...part('持ち物', world?.inventory, 800),
-    ...(options.readiness && world ? [...part('着ている物', world.worn, 200), ...readinessInput(world, options.journeyReadiness)] : []),
+    ...(options.readiness && world ? [...part('着ている物', world.worn, 200), ...readinessInput(world, options.journeyReadiness, planGoal(goal) === null)] : []),
     ...(options.draft ? [options.draft.slice(0, 3_200)] : []),
     ...(scan ? [`走査（読み込み済みの範囲の目印）:\n${scan.slice(0, 2_400)}`] : []),
     ...part('目印', world?.mapLandmarks, 1_500), ...part('地図の要約', world?.mapSummary, 1_500),
@@ -310,12 +310,15 @@ export function openingDraft(seed: PlanTree | null): string | null {
  * there), and health that does
  * not come back: the code's facts, for the first node.
  */
-function readinessInput(world: Record<string, unknown>, journeyReadiness?: boolean): string[] {
+function readinessInput(world: Record<string, unknown>, journeyReadiness?: boolean, singleRequest = false): string[] {
   const dimension = typeof world.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;
   const food = carriedFood(world, {}).points, health = typeof world.health === 'number' ? world.health : null;
   const counts = carriedItemCounts(world, {});
   const shortage = preparationShortage({ dimension, counts, food, nowKinds: null, world, journeyReadiness });
   const recovery = recoveryLine(typeof world.food === 'number' ? world.food : null, health, food, counts);
+  // A request of one thing (`planGoal` is null) is planned from the request alone (`SINGLE_REQUEST_PLAN_WORDS`): the descent's food count and
+  // shortage would put a food node first again; the health that does not come back is still a fact of the place.
+  if (singleRequest) return recovery ? [recovery] : [];
   const eyes = eyesForStronghold(world);
   return [...(eyes !== null ? [EYES_IN_HAND(eyes)] : []), foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }

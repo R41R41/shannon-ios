@@ -190,7 +190,7 @@ describe('a Discord voice channel through the one voice turn', () => {
     expect(request.message).toBe('ユウ: シャノン、いまマイクラで何してるの？');
     const prompt = promptOf(request);
     expect(prompt).toContain('いま話しかけているのは「ユウ」');
-    expect(prompt).toContain('体や道具を動かす頼みごとは引き受けない');
+    expect(prompt).toContain('ユウがマイクラでしてほしいこと'); // anyone in the channel may ask (owner decision 2026-11-21)
     expect(prompt).toContain(shannonIdentityPrompt('guest').slice(0, 40));
     await close();
   });
@@ -203,7 +203,7 @@ describe('a Discord voice channel through the one voice turn', () => {
     const lines = await say('シャノン、先に鉄の剣を作ってからにして', { participants: [OWNER, FRIEND] });
     expect(model.kinds).toEqual(['structured-stream']);
     expect((model.requests[0] as ShannonChatModelRequest).offerMinecraftIntent).toBe(true);
-    expect(body.calls[0]).toMatchObject({ allowNew: false, intent: { kind: 'task' } });
+    expect(body.calls[0]).toMatchObject({ intent: { kind: 'task' } });
     expect(body.calls[0]!.experienceId).toBeTruthy();
     expect(lines.find(line => line.type === 'intent')).toMatchObject({ kind: 'task_message', delivered: true });
     await close();

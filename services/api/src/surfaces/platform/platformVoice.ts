@@ -326,7 +326,7 @@ export class PlatformVoiceService {
     const situation = request.situation ?? this.rooms.situation(roomKey) ?? this.rooms.situation('default');
     const running = body?.state.running?.goal ?? null;
     const ownerTools = seat.owner && seat.policy.gate.ownerOnly;
-    const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName || '話している人';
+    const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName?.replace(/s+/gu, ' ').trim().slice(0, 40) || '話している人';
     const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who) : '';
     return [
       platformVoiceInstructions({
