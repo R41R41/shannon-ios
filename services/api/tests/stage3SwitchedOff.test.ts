@@ -65,6 +65,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * The same two were changed by hand again on 2026-11-22 for a change that is not stage 3's (the guide of the list of requests says that a word
  * pointing at a thing, 「この…の上に」, is kept as it was said, and says who reads where the person looks: the head's own judgment, when it takes up the
  * request): the first and third provider requests carry that guide.
+ * The same two were changed by hand again on 2026-11-22 for a change that is not stage 3's (the request guide's wording: how to read the build steps of a
+ * single thing, and what is asked again when a request could not be checked against the record): the first and third provider requests carry it.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 
