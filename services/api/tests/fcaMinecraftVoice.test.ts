@@ -130,3 +130,29 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(await fixture({ visible: false }).port.intent(task1())).toEqual({ delivered: false, reason: 'turn_not_visible' });
   });
 });
+
+describe('the speaker\'s in-game name', () => {
+  const owner = { id: '1', name: 'ライ氏', owner: true }, guest = { id: '2', name: 'ユウ', owner: false };
+  it('travels in the words the head reads, for a message and for a request, and marks a guest as one', async () => {
+    const message = fixture({ running: task('t1', 'ケーキを作る') });
+    await message.port.intent(input({ speaker: guest, speakerMinecraftName: 'Yuu_7' }));
+    expect(message.calls[0]).toContain('Discordの通話でのユウ（ゲスト、マイクラ名 Yuu_7）の言葉（いまのタスクへ）: まず鉄の剣を作って');
+    const ask = fixture();
+    await ask.port.intent(task1({ speaker: owner, speakerMinecraftName: 'Rai_41' }));
+    expect(ask.queue.view().entries[0]).toMatchObject({ askedBy: '本人（ライ氏、マイクラ名 Rai_41）' });
+    const guestAsk = fixture();
+    await guestAsk.port.intent(task1({ speaker: guest, speakerMinecraftName: 'Yuu_7' }));
+    expect(guestAsk.queue.view().entries[0]).toMatchObject({ askedBy: 'ユウ（ゲスト、マイクラ名 Yuu_7）' });
+  });
+
+  it('is left out when it is absent or is not a game name, and the words stay as they were', async () => {
+    for (const name of [undefined, null, '', 'ユウ', 'a b', 'x'.repeat(17)]) {
+      const f = fixture();
+      await f.port.intent(task1({ speaker: guest, speakerMinecraftName: name }));
+      expect(f.queue.view().entries[0]).toMatchObject({ askedBy: 'ユウ（ゲスト）' });
+    }
+    const noSpeaker = fixture({ running: task('t1', 'ケーキを作る') });
+    await noSpeaker.port.intent(input({ speakerMinecraftName: 'Rai_41' }));
+    expect(noSpeaker.calls[0]).toContain('Discordの通話での本人（マイクラ名 Rai_41）の言葉');
+  });
+});

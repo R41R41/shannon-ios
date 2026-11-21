@@ -5,6 +5,7 @@ import type { PlanKind } from '@shannon/mind';
 import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 import { MATERIAL_ACQUISITION_LINES } from './minecraftRequestKnowledge.js';
 import { REQUEST_NIGHT_LINE, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
+import { REQUEST_PEOPLE_LINES } from './minecraftRequestPeople.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -122,7 +123,7 @@ function stageText(id: StageId, ids: readonly StageId[], request = false): strin
   if (id !== 'prep' || (!stronghold && !request)) return V2_STAGES[id];
   const all = V2_STAGES.prep.split('\n');
   // A request of one thing: its steps go first and its night replaces the whole game's (the whole game keeps both as they were).
-  const lines = request ? [all[0]!, ...REQUEST_STEPS_LINES, ...all.slice(1).map(line => line === NO_BED_NIGHT ? REQUEST_NIGHT_LINE : line)] : all;
+  const lines = request ? [all[0]!, ...REQUEST_STEPS_LINES, ...REQUEST_PEOPLE_LINES, ...all.slice(1).map(line => line === NO_BED_NIGHT ? REQUEST_NIGHT_LINE : line)] : all;
   if (!stronghold) return lines.join('\n');
   const at = lines.findIndex(line => PREP_NIGHT_LINES.has(line));
   const kept = lines.filter(line => !PREP_NIGHT_LINES.has(line));

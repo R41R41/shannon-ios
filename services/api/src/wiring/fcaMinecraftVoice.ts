@@ -27,21 +27,39 @@ export interface FcaMinecraftVoiceParts {
   queue: MinecraftQueue;
 }
 
+/**
+ * The voice turn's input with the speaker's in-game name (`speakerMinecraftName`, from the voice route: the table of the shown names to the
+ * in-game ones). Absent when the speaker has none; the head then goes by the nearest player.
+ */
+type SpokenIntentInput = VoiceMinecraftIntentInput & { speakerMinecraftName?: string | null };
+/** An in-game name as the game has it (letters, digits, underscore; up to 16), else null: it is handed to the body as the name of a player. */
+const MINECRAFT_NAME = /^[A-Za-z0-9_]{1,16}$/u;
+const minecraftNameOf = (input: SpokenIntentInput): string | null => {
+  const name = typeof input.speakerMinecraftName === 'string' ? input.speakerMinecraftName.trim() : '';
+  return MINECRAFT_NAME.test(name) ? name : null;
+};
+
 export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraftPort {
-  /** Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name marked （ゲスト） so a guest cannot pass as the owner. */
-  const whoAsked = (input: VoiceMinecraftIntentInput): string => {
+  /**
+   * Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name marked （ゲスト） so a guest cannot pass as the owner.
+   * With the speaker's in-game name when it is known (「マイクラ名 X」): the head reads whose gaze to look at, and whom to hand a thing to, from it.
+   */
+  const whoAsked = (input: SpokenIntentInput): string => {
     const { speaker } = input;
-    if (!speaker) return '本人';
+    const game = minecraftNameOf(input);
+    const tag = game ? `マイクラ名 ${game}` : '';
+    if (!speaker) return game ? `本人（${tag}）` : '本人';
     const name = speaker.name.replace(/\s+/gu, ' ').trim().slice(0, 40);
-    return speaker.owner ? (name ? `本人（${name}）` : '本人') : `${name || '通話の参加者'}（ゲスト）`;
+    if (speaker.owner) return name || tag ? `本人（${[name, tag].filter(Boolean).join('、')}）` : '本人';
+    return `${name || '通話の参加者'}（ゲスト${tag ? `、${tag}` : ''}）`;
   };
-  const byGuest = (input: VoiceMinecraftIntentInput): boolean => input.speaker?.owner === false;
+  const byGuest = (input: SpokenIntentInput): boolean => input.speaker?.owner === false;
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
     return { delivered: false, reason };
   };
   /** Words for the request under way; null when none is, or it ended meanwhile (`FCA_TARGET_FINISHED`). */
-  const message = (input: VoiceMinecraftIntentInput, experienceId: string, bodyId: string): VoiceMinecraftIntentResult | null => {
+  const message = (input: SpokenIntentInput, experienceId: string, bodyId: string): VoiceMinecraftIntentResult | null => {
     const running = parts.openRequest(bodyId);
     if (!running) return null;
     try {
@@ -56,7 +74,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     parts.log(`Shannon Minecraft voice intent delivered task=${running.id} as=message`);
     return { delivered: true, as: 'message', taskId: running.id };
   };
-  const toList = async (input: VoiceMinecraftIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
+  const toList = async (input: SpokenIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
     const outcome = await applyQueueIntent(parts.queue, input.intent, { origin: 'voice', requestId: `dcv:${input.requestId}`, experienceId,
       observedAt: input.observedAt, askedBy: input.speaker ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
     if (!outcome.delivered) return refuse(outcome.reason, input.intent.kind);

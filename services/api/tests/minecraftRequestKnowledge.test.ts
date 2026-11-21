@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { firstPlanSystemFor, ownFirstPlanSystem, singleRequestFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { firstPlanInput } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { MATERIAL_ACQUISITION_LINES } from '../src/surfaces/minecraft/minecraftRequestKnowledge.js';
+import { PERSON_WORDS_LINES, PLACE_AND_HANDOVER_LINES, REQUEST_PEOPLE_LINES } from '../src/surfaces/minecraft/minecraftRequestPeople.js';
+import { foreignToolNames } from '../src/contracts/minecraftLlmcToolWords.js';
+import { minecraftQueueGuide } from '../src/contracts/minecraftQueuePrompt.js';
 import { stageKnowledge } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 
 describe('what she is told for a request that is one thing to make', () => {
@@ -82,5 +85,43 @@ describe('bone meal on a crop', () => {
   it('is in the first plan of a single request and in every overworld decision', () => {
     expect(singleRequestFirstPlanSystem()).toContain('use item=bone_meal');
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })!).toContain('手A) コンポスター');
+  });
+});
+
+describe('what she is told when people talk to her during a request of one thing', () => {
+  const live = { body: { state: { dimension: 'overworld' }, planFacts: { request: true } } };
+  it('reads a person\'s words as a suggestion to take into the plan, with the reason, and goes on when it cannot be followed', () => {
+    const text = PERSON_WORDS_LINES.join('\n');
+    expect(text).toContain('plan_update で計画に取り込む');
+    expect(text).toContain('理由: 計画に書かなかった言葉は');
+    expect(text).toContain('固まらず、人の返事を待たない');
+    expect(text).toContain('手A のコンポスター');
+  });
+
+  it('keeps a finished thing until it is asked for, finds the place by a noun and then by the gaze, and hands it over near the person', () => {
+    const text = PLACE_AND_HANDOVER_LINES.join('\n');
+    expect(text).toContain('置く・渡すと言われるまで持ち物に持っておく');
+    expect(text).toContain('自分から置かない・食べない・捨てない');
+    expect(text).toContain('mc_view の only=[その名前]');
+    expect(text).toContain('mc_probe kind=gaze player=');
+    expect(text).toContain('聞き返さず、一番近いプレイヤー');
+    expect(text).toContain('drop items=[{item: cake, count: 1}] target=');
+    expect(text).toContain('have:cake<1');
+    // It names only the tools the mode has (a gaze is a kind of the probe).
+    expect(foreignToolNames(text)).toEqual([]);
+  });
+
+  it('is in the first plan and the overworld decisions of a request of one thing, and not in the whole game\'s', () => {
+    for (const line of REQUEST_PEOPLE_LINES) expect(singleRequestFirstPlanSystem()).toContain(line);
+    const request = stageKnowledge(live)!;
+    for (const line of REQUEST_PEOPLE_LINES) expect(request).toContain(line);
+    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })!).not.toContain('作業中に人の言葉が届いた時');
+    expect(ownFirstPlanSystem()).not.toContain('作業中に人の言葉が届いた時');
+  });
+
+  it('tells the voice her request guide to keep the pointing words as they were said', () => {
+    const guide = minecraftQueueGuide({ queueLines: [], running: null }).join('\n');
+    expect(guide).toContain('「置いて」「ちょうだい」「渡して」');
+    expect(guide).toContain('「この」「あそこ」を座標や別の言葉に直さない');
   });
 });
