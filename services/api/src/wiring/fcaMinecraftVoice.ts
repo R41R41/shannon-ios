@@ -35,8 +35,8 @@ type SpokenIntentInput = Omit<VoiceMinecraftIntentInput, 'speaker'> & {
   speaker?: VoiceMinecraftIntentInput['speaker'] & { minecraftName?: string | null };
   speakerMinecraftName?: string | null;
 };
-/** An in-game name as the game has it (letters, digits, underscore; up to 16), else null: it is handed to the body as the name of a player. */
-const MINECRAFT_NAME = /^[A-Za-z0-9_]{1,16}$/u;
+/** An in-game name as the game has it (letters, digits, underscore; up to 16; the Bedrock prefix dot is allowed), else null: it is handed to the body as the name of a player. */
+const MINECRAFT_NAME = /^\.?[A-Za-z0-9_]{1,16}$/u;
 const minecraftNameOf = (input: SpokenIntentInput): string | null => {
   const raw = input.speaker?.minecraftName ?? input.speakerMinecraftName;
   const name = typeof raw === 'string' ? raw.trim() : '';
@@ -80,7 +80,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
   };
   const toList = async (input: SpokenIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
     const outcome = await applyQueueIntent(parts.queue, input.intent, { origin: 'voice', requestId: `dcv:${input.requestId}`, experienceId,
-      observedAt: input.observedAt, askedBy: input.speaker ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
+      observedAt: input.observedAt, askedBy: input.speaker || minecraftNameOf(input) ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
     if (!outcome.delivered) return refuse(outcome.reason, input.intent.kind);
     const entry = outcome.entry;
     return { delivered: true, as: outcome.as, ...(entry?.taskId ? { taskId: entry.taskId } : {}),

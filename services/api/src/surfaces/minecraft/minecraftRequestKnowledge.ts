@@ -1,5 +1,5 @@
 import { REQUEST_PLAN_SHAPE_LINES, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
-import { REQUEST_PEOPLE_LINES } from './minecraftRequestPeople.js';
+import { FIRST_PLAN_PEOPLE_LINES } from './minecraftRequestPeople.js';
 
 /**
  * What the head is told for a request that is one thing to make or fetch (「ケーキを作って」「羊毛を3つ」), not the whole game.
@@ -69,5 +69,5 @@ export const SINGLE_REQUEST_PLAN_WORDS = [
   '',
   ...MATERIAL_ACQUISITION_LINES,
   '',
-  ...REQUEST_PEOPLE_LINES,
+  ...FIRST_PLAN_PEOPLE_LINES,
 ].join('\n');

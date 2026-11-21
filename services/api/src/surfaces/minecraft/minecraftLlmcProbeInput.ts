@@ -349,7 +349,10 @@ function pathExtras(fields: Fields, text: string): string[] {
 function gazeExtras(fields: Fields, text: string): string[] {
   if (fields.hit !== true) return [];
   const block = plain(fields.block), at = readPos(block?.at), place = readPos(fields.placeAt), above = readPos(fields.above);
-  if (!at || text.includes(posText(at))) return [];
+  if (!at) return [];
+  // The body's text names the cells already; what it leaves out (the direction a hand's face takes) is still said.
+  if (text.includes(posText(at))) return typeof fields.against === 'string' && !text.includes(fields.against) && place
+    ? [`place の face には against=${fields.against}（置くマス ${posText(place)}）`] : [];
   const distance = finite(fields.distance), name = typeof block?.name === 'string' ? block.name : '?';
   return [`見ている先: ${name} ${posText(at)}${typeof fields.face === 'string' ? ` 面 ${fields.face}` : ''}${distance === null ? '' : ` 距離 ${distance.toFixed(1)}m`}`,
     ...(place ? [`置くマス: ${posText(place)}${typeof fields.against === 'string' ? ` against=${fields.against}` : ''}${above ? ` 真上: ${posText(above)}` : ''}`] : []),

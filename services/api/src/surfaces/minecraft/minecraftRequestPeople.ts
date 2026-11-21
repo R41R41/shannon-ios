@@ -36,14 +36,31 @@ export const PLACE_AND_HANDOVER_LINES: readonly string[] = Object.freeze([
     + '理由: 人が「この」と言う時は見ているブロックを指していて、体からは指は見えない。視線が唯一の手掛かり。',
   '  3) 頼んだ人のマイクラ名が入力に無い時や、gaze が読めない時は、聞き返さず、一番近いプレイヤー（mc_probe kind=around で読む）に一番近い候補（無ければ体に一番近い候補）で進む。'
     + '理由: 聞き返す手が無く、止まるより、決めて置いて直してもらう方が早い。',
-  '- 置く: gaze が当たったブロックなら、答えの placeAt を at に、against を face に渡す（place block=cake at=[placeAt] face=against。ケーキは上の面（face が up）に置ける。横の面なら above を at にする）。'
-    + '名詞で探したブロックなら、その真上のマス（y+1）が空気で空いている事を確かめて at にする。'
+  '- 置く: gaze が当たったブロックなら、答えの placeAt を at に、against の値を手の face に渡す（例: place cake 12,64,3 face=down）。'
+    + '手の face は「置くマスから見て、支えにするブロックのある向き」で、gaze の答えの face（見ているブロックの面）とは別の物。上の面（face が up）の上に置くなら、手の face は down（=against）。'
+    + '理由: 手の face に up を書くと、置くマスの上を支えにする事になり置けない。ケーキは上の面に置ける（横の面なら above を at にし、face=down）。'
+    + '名詞で探したブロックなら、その真上のマス（y+1）が空気で空いている事を確かめて at にする（face=down）。'
     + 'place は、手が届く所（reach:true、約 5m 以内）からは自分で少し寄るが、7m を超える先へは歩かず out_of_reach で止まる。reach:false や遠い時は、先に go でそのマスの近く（range 2〜3）へ行ってから place する。'
     + 'ケーキは固いブロックの上にしか置けない。置けなかった時は、結果の行の理由を読み、別の候補の上へ置くか、頼んだ人の近くへ行って渡す。',
-  '- 渡す（「ちょうだい」「渡して」「持ってきて」）: 頼んだ人の位置を live の nearby か mc_probe kind=around で読み、先にその人の近く（range 2〜3）へ go し、着いてから drop items=[{item: cake, count: 1}] target=その人のマイクラ名（無ければ around の #id）。'
+  '- 渡す（「ちょうだい」「渡して」「持ってきて」）: 頼んだ人の位置を live の nearby か mc_probe kind=around で読み、先にその人の近く（range 2〜3）へ go し、着いてから drop cake target=その人のマイクラ名（数を言う時は drop cake 1 target=…）と書く。'
+    + 'マイクラ名が無ければ around の #id。物名と数を cake:1 のようにコロンで結ぶと「複数の物」の書き方になり、target を付けると読めない（複数の物は target なしで投げる形）。'
     + '理由: drop は向いた方へ投げるので、遠いと届かず（人の近くへ行ってからなら 7m 先からでも拾われた）、落ちた物は人が拾う。投げた後、体は離れる。',
-  '- 置いた・渡した後は、持ち物の完成品が減った事（doneWhen は have:cake<1 の形）と手の結果の行で確かめてから終える。置けた・渡せたと見なす根拠は結果の行で、動いた事ではない。',
+  '- 置く・渡す節は、完成品を持ってから計画に足す（同じ依頼で「作って置いて」と言われた時も、作る節を先に置き、置く節は作り終えて持った時に plan_update で足す）。'
+    + '置く・渡す節の doneWhen は have:cake<1 の形で書けるが、持っていない間は最初から満たされているので、持つ前に計画へ書くと、作る前に済んだ事になり、置かずに完了する。'
+    + '理由: 「持ち物が無い」は、まだ作っていない時も、置いた後も同じ観測になり、順番は観測に出ない。',
+  '- 置いた・渡した後は、持ち物の完成品が減った事（have:cake<1）と手の結果の行で確かめてから終える。置けた・渡せたと見なす根拠は結果の行で、動いた事ではない。',
 ]);
 
 /** The two together, in the order a request reads them. */
 export const REQUEST_PEOPLE_LINES: readonly string[] = Object.freeze([...PERSON_WORDS_LINES, '', ...PLACE_AND_HANDOVER_LINES]);
+
+/**
+ * The first plan's part of the same: it has no tools, so how to look for a block or throw a thing does not help it; only what shapes the plan does
+ * (a thing made is kept until a person says where it goes, and when the node for putting it down is added).
+ */
+export const FIRST_PLAN_PEOPLE_LINES: readonly string[] = Object.freeze([
+  '### 人の言葉と完成した物（計画の形）',
+  '- 作業中に人の提案が届いたら、判断のうちに plan_update で計画へ取り込まれる。最初の計画は依頼どおりに立てればよい。',
+  '- 作った物（ケーキなど）は、置く・渡すと言われるまで持っておく。「作って置いて」でも、最初の計画は作る節（have:cake>=1）までにし、置く・渡す節は持ってから足す。'
+    + '理由: 置く節の have:cake<1 は、持っていない間は最初から満たされるので、先に書くと作る前に済んだ事になり、置かずに完了する。',
+]);

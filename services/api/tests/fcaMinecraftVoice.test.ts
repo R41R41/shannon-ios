@@ -157,6 +157,12 @@ describe('the speaker\'s in-game name', () => {
       await f.port.intent(task1({ speaker: guest, speakerMinecraftName: name }));
       expect(f.queue.view().entries[0]).toMatchObject({ askedBy: 'ユウ（ゲスト）' });
     }
+    const dotted = fixture();
+    await dotted.port.intent(task1({ speaker: guest, speakerMinecraftName: '.Yuu7' }));
+    expect(dotted.queue.view().entries[0]).toMatchObject({ askedBy: 'ユウ（ゲスト、マイクラ名 .Yuu7）' });
+    const named = fixture();
+    await named.port.intent(task1({ speakerMinecraftName: 'Rai_41' }));
+    expect(named.queue.view().entries[0]).toMatchObject({ askedBy: '本人（マイクラ名 Rai_41）' });
     const noSpeaker = fixture({ running: task('t1', 'ケーキを作る') });
     await noSpeaker.port.intent(input({ speakerMinecraftName: 'Rai_41' }));
     expect(noSpeaker.calls[0]).toContain('Discordの通話での本人（マイクラ名 Rai_41）の言葉');

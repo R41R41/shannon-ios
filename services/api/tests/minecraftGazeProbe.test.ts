@@ -36,6 +36,10 @@ describe('the gaze probe: the block a player is looking at', () => {
     expect(probeAnswerText(hit, true)).toBe('Yami は oak_planks を見ている ／ 見ている先: oak_planks (12,64,-3) 面 up 距離 6.4m ／ 置くマス: (12,65,-3) against=down 真上: (12,65,-3) ／ 体の手は届かない（先に go で近づく）');
     const said = JSON.stringify({ v: 1, kind: 'gaze', hit: true, text: 'Yami は oak_planks (12,64,-3) を見ている', block: { name: 'oak_planks', at: { x: 12, y: 64, z: -3 } } });
     expect(probeAnswerText(said, true)).toBe('Yami は oak_planks (12,64,-3) を見ている');
+    // The body's text names the cells; the direction a hand's face takes is still said (the live answer, where only the text is shown).
+    const sayAgainst = JSON.stringify({ v: 1, kind: 'gaze', hit: true, text: 'Yami は oak_planks (12,64,-3) を見ている。置くマス (12,65,-3)', block: { name: 'oak_planks', at: { x: 12, y: 64, z: -3 } },
+      face: 'up', placeAt: { x: 12, y: 65, z: -3 }, against: 'down' });
+    expect(probeAnswerText(sayAgainst, true)).toBe('Yami は oak_planks (12,64,-3) を見ている。置くマス (12,65,-3) ／ place の face には against=down（置くマス (12,65,-3)）');
     expect(probeAnswerText(JSON.stringify({ v: 1, kind: 'gaze', hit: false, reason: 'none', text: 'Yami は空を見ている' }), true)).toBe('Yami は空を見ている');
   });
 });

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { firstPlanSystemFor, ownFirstPlanSystem, singleRequestFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { firstPlanInput } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
 import { MATERIAL_ACQUISITION_LINES } from '../src/surfaces/minecraft/minecraftRequestKnowledge.js';
-import { PERSON_WORDS_LINES, PLACE_AND_HANDOVER_LINES, REQUEST_PEOPLE_LINES } from '../src/surfaces/minecraft/minecraftRequestPeople.js';
+import { lineToHand } from '../src/contracts/minecraftActShortHands.js';
+import { nodesSeenDone } from '../src/surfaces/minecraft/minecraftPlanDone.js';
+import { FIRST_PLAN_PEOPLE_LINES, PERSON_WORDS_LINES, PLACE_AND_HANDOVER_LINES, REQUEST_PEOPLE_LINES } from '../src/surfaces/minecraft/minecraftRequestPeople.js';
 import { foreignToolNames } from '../src/contracts/minecraftLlmcToolWords.js';
 import { minecraftQueueGuide } from '../src/contracts/minecraftQueuePrompt.js';
 import { stageKnowledge } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
@@ -105,8 +107,8 @@ describe('what she is told when people talk to her during a request of one thing
     expect(text).toContain('mc_view の only=[その名前]');
     expect(text).toContain('mc_probe kind=gaze player=');
     expect(text).toContain('聞き返さず、一番近いプレイヤー');
-    expect(text).toContain('drop items=[{item: cake, count: 1}] target=');
-    expect(text).toContain('place block=cake at=[placeAt] face=against');
+    expect(text).toContain('drop cake target=');
+    expect(text).toContain('place cake 12,64,3 face=down');
     expect(text).toContain('7m を超える先へは歩かず');
     expect(text).toContain('先に go でそのマスの近く');
     expect(text).toContain('着いてから drop');
@@ -116,11 +118,37 @@ describe('what she is told when people talk to her during a request of one thing
   });
 
   it('is in the first plan and the overworld decisions of a request of one thing, and not in the whole game\'s', () => {
-    for (const line of REQUEST_PEOPLE_LINES) expect(singleRequestFirstPlanSystem()).toContain(line);
+    for (const line of FIRST_PLAN_PEOPLE_LINES) expect(singleRequestFirstPlanSystem()).toContain(line);
+    expect(singleRequestFirstPlanSystem()).not.toContain('mc_probe kind=gaze');
     const request = stageKnowledge(live)!;
     for (const line of REQUEST_PEOPLE_LINES) expect(request).toContain(line);
     expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })!).not.toContain('作業中に人の言葉が届いた時');
     expect(ownFirstPlanSystem()).not.toContain('作業中に人の言葉が届いた時');
+  });
+
+  it('writes the hands as the short forms read them, and keeps the gaze\'s face and the hand\'s face apart', () => {
+    const text = PLACE_AND_HANDOVER_LINES.join('\n');
+    // `drop cake target=Yuu` reads as one kind with a target; `drop cake:1 target=Yuu` is the several-kinds form, which takes no target.
+    expect(lineToHand('drop cake target=Yuu')).toMatchObject({ do: 'drop', items: [{ item: 'cake' }], target: 'Yuu' });
+    expect(lineToHand('drop cake 1 target=Yuu')).toMatchObject({ items: [{ item: 'cake', count: 1 }], target: 'Yuu' });
+    expect(lineToHand('drop cake:1 target=Yuu')).toHaveProperty('error');
+    expect(lineToHand('place cake 12,64,3 face=down')).toMatchObject({ do: 'place', block: 'cake', at: [{ x: 12, y: 64, z: 3 }], face: 'down' });
+    expect(text).toContain('手の face に up を書くと');
+    expect(text).not.toContain('items=[{item: cake');
+  });
+
+  it('adds the node for putting a thing down only after she holds it, because have:cake<1 holds before it is made', () => {
+    const text = PLACE_AND_HANDOVER_LINES.join('\n');
+    expect(text).toContain('完成品を持ってから計画に足す');
+    expect(text).toContain('作る前に済んだ事になり、置かずに完了する');
+    expect(FIRST_PLAN_PEOPLE_LINES.join('\n')).toContain('置く・渡す節は持ってから足す');
+    // The reason in the words is the code's own reading: with no cake in the pack the put node is seen done before the cake is made.
+    const tree = { nodes: [
+      { id: 'p1', parentId: null, order: 0, title: 'ケーキを作る', state: 'continue', doneWhen: 'have:cake>=1' },
+      { id: 'p2', parentId: null, order: 1, title: 'ケーキを置く', state: 'continue', doneWhen: 'have:cake<1' },
+    ] } as never;
+    const facts = { counts: new Map(), dimension: 'overworld', feet: null, food: 20 } as never;
+    expect(nodesSeenDone(tree, facts, true)).toEqual(['p2']);
   });
 
   it('tells the voice her request guide to keep the pointing words as they were said', () => {
