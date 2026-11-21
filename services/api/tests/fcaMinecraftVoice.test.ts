@@ -24,7 +24,7 @@ function fixture(options: { bodies?: string[]; running?: TaskView | null; visibl
   const queue = fcaMinecraftQueue({
     db, scopeKey: 'owner', atomic: work => underWriteLock(db, null, '', work, 'voice_test'),
     phase: id => (tasks.has(id) ? tasks.get(id)! : null), open: () => [...tasks].filter(([, phase]) => phase === 'executing')
-      .map(([taskId]) => ({ taskId, goal: taskId, origin: null })),
+      .map(([taskId]) => ({ taskId, goal: taskId, phase: 'executing', origin: null })),
     bodyReady: () => (options.bodies ?? ['minecraft:world']).length === 1,
     stop: async (id, reason) => { calls.push(`queue-stop ${id} ${reason}`); tasks.set(id, 'stopped'); },
     resume: id => { tasks.set(id, 'executing'); return true; },

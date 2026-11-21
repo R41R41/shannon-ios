@@ -104,9 +104,14 @@ const FIELD_CHECKS = new Map<string, (value: unknown) => boolean>([
   ['requestId', shaped],
 ]);
 
+/** A field a sender fills with nothing (an empty text, or null where null is not a value) is a field not sent. */
+const unsent = (key: string, value: unknown): boolean => (['id', 'before', 'requestId', 'placement'].includes(key) && value === '')
+  || (['id', 'requestId', 'placement'].includes(key) && value === null);
+
 /** The request of a POST body, or null when it is not one (the route answers 400). Unknown fields are refused. */
 export function parsedMinecraftQueueRequest(value: unknown): MinecraftQueueRequest | null {
   if (!isRecord(value) || !('op' in value)) return null;
-  if (Object.keys(value).some(key => !FIELD_CHECKS.get(key)?.(value[key]))) return null;
-  return { ...value } as unknown as MinecraftQueueRequest;
+  const sent = Object.fromEntries(Object.entries(value).filter(([key, item]) => !unsent(key, item)));
+  if (Object.keys(sent).some(key => !FIELD_CHECKS.get(key)?.(sent[key]))) return null;
+  return sent as unknown as MinecraftQueueRequest;
 }

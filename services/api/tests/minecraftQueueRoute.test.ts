@@ -30,7 +30,7 @@ function setup() {
   const queue = fcaMinecraftQueue({
     db, scopeKey: 'owner', atomic: work => underWriteLock(db, null, '', work, 'queue_route_test'),
     phase: id => tasks.get(id) ?? null,
-    open: () => [...tasks].filter(([, phase]) => phase === 'executing').map(([taskId]) => ({ taskId, goal: taskId, origin: null })),
+    open: () => [...tasks].filter(([, phase]) => phase === 'executing').map(([taskId]) => ({ taskId, goal: taskId, phase: 'executing', origin: null })),
     bodyReady: () => true,
     stop: async id => { tasks.set(id, 'stopped'); },
     resume: id => { tasks.set(id, 'executing'); return true; },
@@ -94,6 +94,10 @@ describe('the owner\'s list of requests on the game device\'s route', () => {
     expect(parsedMinecraftQueueRequest({ op: 'add', goal: 'x', placement: 'now', requestId: 'mod:1' })).toMatchObject({ placement: 'now' });
     expect(parsedMinecraftQueueRequest({ id: 'x' })).toBeNull();
     expect(parsedMinecraftQueueRequest({ op: 'add', toString: 'x' })).toBeNull();
+    // A sender that fills what it does not mean with nothing (empty texts): the fields are not sent.
+    expect(parsedMinecraftQueueRequest({ op: 'add', goal: 'x', id: '', before: '', requestId: '', placement: '' })).toEqual({ op: 'add', goal: 'x' });
+    expect(parsedMinecraftQueueRequest({ op: 'cancel', id: null, requestId: null })).toEqual({ op: 'cancel' });
+    expect(parsedMinecraftQueueRequest({ op: 'add', goal: 'x', sender: 'mod' })).toBeNull();
     expect(parsedMinecraftQueueRequest(null)).toBeNull();
   });
 });

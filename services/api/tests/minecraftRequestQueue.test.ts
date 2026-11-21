@@ -162,6 +162,47 @@ describe('the list says what the tasks are', () => {
   });
 });
 
+describe('the list against tasks that do not match it', () => {
+  const later = '2026-11-21T01:00:00.000Z';
+  const facts = (phases: Record<string, string | null>, unowned: Array<{ taskId: string; goal: string }> = [], starting: string[] = []) => ({
+    phases: new Map(Object.entries(phases)), starting: new Set(starting), newId: () => 'adopted',
+    unowned: unowned.map(task => ({ ...task, origin: 'operator' as const })),
+  });
+  it('does not undo a hold, a cancel or a removal when the start that was under way fails', () => {
+    const claim = claimFromQueue(add(EMPTY_QUEUE, 'x'), at()) as Good;
+    const held = ok(holdInQueue(claim.snapshot, 'id-x', at()));
+    expect(unclaimInQueue(held, 'id-x', 'no_task', false, at())).toEqual({ ok: false, code: 'bad_state' });
+    const cancelled = ok(cancelInQueue(claim.snapshot, 'id-x', at()));
+    expect(unclaimInQueue(cancelled, 'id-x', 'no_task', true, at())).toEqual({ ok: false, code: 'bad_state' });
+  });
+  it('links the task a lost start made (the same goal) instead of taking it for a second request', () => {
+    const claim = claimFromQueue(add(EMPTY_QUEUE, 'a'), at()) as Good;
+    const synced = ok(syncQueue(claim.snapshot, facts({}, [{ taskId: 'orphan', goal: 'a' }]), at())!);
+    expect(synced.entries).toHaveLength(1);
+    expect(synced.entries[0]).toMatchObject({ state: 'running', taskId: 'orphan' });
+  });
+  it('keeps one entry running: a task made from outside meanwhile is held on the list and stopped', () => {
+    const s = started(add(EMPTY_QUEUE, 'a'));
+    const change = syncQueue(s, facts({ 'task-a': 'executing' }, [{ taskId: 'op-1', goal: 'b' }]), at())!;
+    expect(states(ok(change))).toEqual(['a:running', 'b:paused']);
+    expect((change as Good).stops).toEqual([{ entryId: 'adopted', taskId: 'op-1', reason: 'queue_extra_task' }]);
+  });
+  it('stops again a task that works for an entry the list holds or has ended, after a grace; puts back what was resumed from outside', () => {
+    const s = started(add(add(EMPTY_QUEUE, 'a'), 'b'));
+    const t0 = '2026-11-21T00:00:00.000Z';
+    const held = ok(holdInQueue(s, 'id-a', t0));
+    expect(syncQueue(held, facts({ 'task-a': 'executing' }), '2026-11-21T00:00:02.000Z')).toBeNull();
+    const again = syncQueue(held, facts({ 'task-a': 'executing' }), later) as Good;
+    expect(again.stops).toEqual([{ entryId: 'id-a', taskId: 'task-a', reason: 'queue_stray_stop' }]);
+    const gone = ok(cancelInQueue(s, 'id-a', t0));
+    expect((syncQueue(gone, facts({ 'task-a': 'executing' }), later) as Good).stops).toHaveLength(1);
+    expect(syncQueue(gone, facts({ 'task-a': 'stopping' }), later)).toBeNull();
+    const stopped = ok(stopQueue(s, t0));
+    const back = ok(syncQueue(stopped, facts({ 'task-a': 'executing' }), later)!);
+    expect(states(back)).toEqual(['a:running', 'b:queued']);
+  });
+});
+
 describe('naming an entry and telling her the list', () => {
   it('finds an entry by id, by 「#3」 or by 「3」', () => {
     const s = add(add(EMPTY_QUEUE, 'a'), 'b');

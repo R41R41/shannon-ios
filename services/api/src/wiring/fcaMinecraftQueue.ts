@@ -14,6 +14,8 @@ import { MinecraftRequestQueueStore } from '../surfaces/minecraft/store/minecraf
 export const QUEUE_STOP_WAIT_MS = 3_000;
 /** A start that failed waits again (the next pass tries it); at the third failure the entry ends as failed. */
 export const QUEUE_START_ATTEMPTS = 3;
+/** How long an operation's answer waits for the pass its change started (a slow start goes on; the list shows it). */
+export const QUEUE_ANSWER_WAIT_MS = 2_000;
 
 /** What the queue needs of the task runtime and the body (`fcaMinecraftRequests.ts` gives it). */
 export interface QueueParts {
@@ -24,15 +26,18 @@ export interface QueueParts {
   /** The phase of a task; null when there is no such task. */
   phase(taskId: string): string | null;
   /** Tasks bound to the body that are not stopped, completed or failed (a stopping one too), with the origin when it is a request of his. */
-  open(): Array<{ taskId: string; goal: string; origin: MinecraftQueueOrigin | null }>;
+  open(): Array<{ taskId: string; goal: string; phase: string; origin: MinecraftQueueOrigin | null }>;
   /** A current frame of one connected body is there: something can be started. */
   bodyReady(): boolean;
   /** Stops the task (the runtime's stop: it waits for the body's acknowledgement). */
   stop(taskId: string, reason: string): Promise<unknown>;
   /** Puts a stopped task back to work; false when it could not be. */
   resume(taskId: string): boolean;
-  /** Makes the task for an entry and binds it to the body; its id, or null when it could not be made. */
-  start(entry: QueueRecord): Promise<string | null>;
+  /**
+   * Makes the task for an entry and binds it to the body; its id, or null when it could not be made. `again`: a new task for an entry
+   * whose stopped one could not be put back to work.
+   */
+  start(entry: QueueRecord, again?: boolean): Promise<string | null>;
   now(): string;
   log(line: string): void;
   newId?(): string;
@@ -110,22 +115,41 @@ export function fcaMinecraftQueue(parts: QueueParts) {
     parts.log(`Shannon Minecraft queue op=${op} entry=${name} state=${was}→${entry?.state ?? '-'} origin=${entry?.origin ?? '-'} code=ok`);
   };
 
+  const LIVE = ['ready', 'executing', 'waiting', 'stopping', 'unknown'];
   const facts = () => {
-    const open = parts.open();
+    const open = [...parts.open()];
+    const byTask = new Map(open.map(task => [task.taskId, task]));
     const snapshot = store.read(parts.scopeKey);
     const known = new Set(snapshot.entries.map(entry => entry.taskId).filter(Boolean));
     const phases = new Map<string, string | null>();
     for (const entry of snapshot.entries) {
-      if (entry.taskId && !queueEnded(entry.state)) phases.set(entry.taskId, parts.phase(entry.taskId));
+      if (!entry.taskId) continue;
+      const seen = byTask.get(entry.taskId);
+      if (queueEnded(entry.state)) {
+        // An ended entry matters only while its task still works (a stop that did not get through).
+        if (seen) phases.set(entry.taskId, seen.phase);
+        continue;
+      }
+      const phase = seen?.phase ?? parts.phase(entry.taskId);
+      phases.set(entry.taskId, phase);
+      // The list's own tasks are always counted, even when they fell out of the runtime's newest tasks (`open` looks at the newest ones only).
+      if (!seen && phase && LIVE.includes(phase)) open.push({ taskId: entry.taskId, goal: entry.goal, phase, origin: entry.origin });
     }
-    const unowned = open.filter(task => task.origin && !known.has(task.taskId)).map(task => ({ taskId: task.taskId, goal: task.goal, origin: task.origin! }));
+    // A task that is stopping is on its way out (its entry may just have been removed): it is not taken for a request made from outside.
+    const unowned = open.filter(task => task.origin && !known.has(task.taskId) && task.phase !== 'stopping')
+      .map(task => ({ taskId: task.taskId, goal: task.goal, origin: task.origin! }));
     return { open, facts: { phases, unowned, starting, newId } };
   };
 
-  const sync = (): void => {
+  /** Makes the list say what the tasks are; stops it asked for are carried out. Gives the tasks that are open, as read for it. */
+  const sync = () => {
     const read = facts();
     const done = transact(snapshot => syncQueue(snapshot, read.facts, parts.now()));
-    if (done?.ok && done.entry === null) parts.log('Shannon Minecraft queue op=sync code=ok');
+    if (done?.ok) {
+      if (done.stops.length) void settleStops(done);
+      if (done.entry === null) parts.log('Shannon Minecraft queue op=sync code=ok');
+    }
+    return read.open;
   };
 
   const giveUp = (entry: QueueRecord, reason: string): void => {
@@ -135,10 +159,28 @@ export function fcaMinecraftQueue(parts: QueueParts) {
     parts.log(`Shannon Minecraft queue op=start entry=#${entry.seq} code=failed reason=${reason.slice(0, 40)} attempt=${count}`);
   };
 
+  /**
+   * The task of an entry that has run before, put back to work. Already working (put back from outside): it is that one. Not
+   * settled yet (a stop still going): 'wait'. Stopped but refused by the runtime: a new task for the request, since a request is
+   * not lost for a task that cannot be resumed (a refusal is not a failed start).
+   */
+  const takeUp = async (entry: QueueRecord): Promise<string | null> => {
+    const phase = parts.phase(entry.taskId!);
+    if (phase === 'stopping' || phase === 'unknown') return 'wait';
+    if (phase !== 'stopped') return entry.taskId;
+    if (parts.resume(entry.taskId!)) return entry.taskId;
+    parts.log(`Shannon Minecraft queue op=start entry=#${entry.seq} resume refused, a new task`);
+    return parts.start(entry, true);
+  };
+
   const begin = async (entry: QueueRecord): Promise<void> => {
     starting.add(entry.id);
     try {
-      const taskId = entry.taskId ? (parts.resume(entry.taskId) ? entry.taskId : null) : await parts.start(entry);
+      const taskId = entry.taskId ? await takeUp(entry) : await parts.start(entry);
+      if (taskId === 'wait') {
+        transact(snapshot => unclaimInQueue(snapshot, entry.id, 'task_not_settled', false, parts.now()));
+        return;
+      }
       if (!taskId) {
         giveUp(entry, 'no_task');
         return;
@@ -159,8 +201,7 @@ export function fcaMinecraftQueue(parts: QueueParts) {
 
   /** One pass: the list says what the tasks are, and when the body is free the next waiting request is started. */
   const pumpOnce = async (): Promise<void> => {
-    sync();
-    const { open } = facts();
+    const open = sync();
     if (open.length || !parts.bodyReady()) return;
     const claimed = transact(snapshot => claimFromQueue(snapshot, parts.now()));
     if (claimed?.ok && claimed.entry) await begin(claimed.entry);
@@ -203,7 +244,7 @@ export function fcaMinecraftQueue(parts: QueueParts) {
     // A pass already under way (a slow start) is asked to go round again, not waited for: an answer never waits on another request's start.
     const fresh = !pumping;
     const going = pump();
-    if (fresh) await going;
+    if (fresh) await Promise.race([going, new Promise<void>(resolve => setTimeout(resolve, QUEUE_ANSWER_WAIT_MS).unref())]);
     const duplicate = changed.duplicate === true;
     const waitingForBody = request.op === 'add' && !parts.bodyReady();
     const now = entry ? store.read(parts.scopeKey).entries.find(item => item.id === entry.id) ?? entry : null;

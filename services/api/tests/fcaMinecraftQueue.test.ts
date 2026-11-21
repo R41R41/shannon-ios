@@ -13,6 +13,7 @@ function world(options: { db?: DatabaseSync; slowStop?: boolean } = {}) {
   const db = options.db ?? new DatabaseSync(':memory:');
   if (!options.db) databases.push(db);
   const tasks = new Map<string, { phase: string; goal: string; origin: 'chat' | 'operator' | null }>();
+  const clock = { at: Date.parse('2026-11-21T00:00:00.000Z') };
   const log: string[] = [];
   const calls: string[] = [];
   let ready = true;
@@ -21,7 +22,7 @@ function world(options: { db?: DatabaseSync; slowStop?: boolean } = {}) {
     db, scopeKey: 'owner', atomic: work => underWriteLock(db, null, '', work, 'queue_test'),
     phase: id => tasks.get(id)?.phase ?? null,
     open: () => [...tasks].filter(([, task]) => !['stopped', 'completed', 'failed'].includes(task.phase))
-      .map(([taskId, task]) => ({ taskId, goal: task.goal, origin: task.origin })),
+      .map(([taskId, task]) => ({ taskId, goal: task.goal, phase: task.phase, origin: task.origin })),
     bodyReady: () => ready,
     stop: async (id, reason) => {
       calls.push(`stop ${id} ${reason}`);
@@ -41,7 +42,7 @@ function world(options: { db?: DatabaseSync; slowStop?: boolean } = {}) {
       tasks.set(id, { phase: 'executing', goal: entry.goal, origin: 'chat' });
       return id;
     },
-    now: () => '2026-11-21T00:00:00.000Z',
+    now: () => new Date(clock.at).toISOString(),
     log: line => log.push(line),
   };
   const queue = fcaMinecraftQueue(parts);
@@ -54,7 +55,7 @@ function world(options: { db?: DatabaseSync; slowStop?: boolean } = {}) {
   const ack = () => { for (const task of tasks.values()) if (task.phase === 'stopping') task.phase = 'stopped'; };
   const executing = () => [...tasks.values()].filter(task => task.phase === 'executing').map(task => task.goal);
   const add = (goal: string, placement?: 'end' | 'next' | 'now') => queue.operate({ op: 'add', goal, ...(placement ? { placement } : {}) }, { origin: 'mod' });
-  return { db, tasks, parts, queue, log, calls, running, states, finish, ack, executing, add, ready: (value: boolean) => { ready = value; } };
+  return { clock, db, tasks, parts, queue, log, calls, running, states, finish, ack, executing, add, ready: (value: boolean) => { ready = value; } };
 }
 
 describe('the list starts one request at a time', () => {
@@ -228,6 +229,68 @@ describe('the list is kept and kept true', () => {
     await w.queue.operate({ op: 'start' }, { origin: 'mod' });
     expect(w.states()).toEqual(['エンドラを倒して:running', 'b:queued']);
     expect(w.calls).toContain('resume operator-task');
+  });
+});
+
+describe('the list against what the runtime does', () => {
+  it('puts the entry on a new task when the runtime refuses to resume the stopped one, and does not fail it', async () => {
+    const w = world();
+    await w.add('a');
+    await w.queue.operate({ op: 'hold', id: '#1' }, { origin: 'mod' });
+    w.parts.resume = () => false;
+    await w.queue.operate({ op: 'resume', id: '#1' }, { origin: 'mod' });
+    expect(w.states()).toEqual(['a:running']);
+    expect(w.queue.snapshot().entries[0]!.taskId).toBe('task-2');
+    expect(w.executing()).toEqual(['a']);
+  });
+
+  it('waits while the task of a resumed entry is still stopping, and starts it when the stop is acknowledged', async () => {
+    const w = world({ slowStop: true });
+    await w.add('a');
+    await w.queue.operate({ op: 'hold', id: '#1' }, { origin: 'mod' });
+    await w.queue.operate({ op: 'resume', id: '#1' }, { origin: 'mod' });
+    expect(w.states()).toEqual(['a:queued']);
+    expect(w.queue.view().recent).toEqual([]);
+    w.ack();
+    await w.queue.pump();
+    expect(w.states()).toEqual(['a:running']);
+    expect(w.calls.filter(call => call.startsWith('start '))).toHaveLength(1);
+  });
+
+  it('stops a task again when the stop of a held entry did not get through, and leaves it alone before the grace is over', async () => {
+    const w = world();
+    await w.add('a');
+    const real = w.parts.stop;
+    let failing = true;
+    w.parts.stop = async (id, reason) => { if (failing) throw new Error('STOP_FAILED'); await real(id, reason); };
+    await w.queue.operate({ op: 'hold', id: '#1' }, { origin: 'mod' });
+    expect(w.executing()).toEqual(['a']);
+    await w.queue.pump();
+    expect(w.executing()).toEqual(['a']);
+    failing = false;
+    w.clock.at += 10_000;
+    await w.queue.pump();
+    expect(w.executing()).toEqual([]);
+    expect(w.calls).toContain('stop task-1 queue_stray_stop');
+  });
+
+  it('counts a task of the list as open even when the runtime lists it no more among the newest, so no second request starts beside it', async () => {
+    const w = world();
+    await w.add('a');
+    await w.add('b');
+    const queue = fcaMinecraftQueue({ ...w.parts, open: () => [] });
+    await queue.pump();
+    expect(w.states()).toEqual(['a:running', 'b:queued']);
+    expect(w.calls.filter(call => call.startsWith('start '))).toHaveLength(1);
+  });
+
+  it('does not take a task that is stopping for a request made from outside when its entry was removed', async () => {
+    const w = world({ slowStop: true });
+    await w.add('a');
+    await w.queue.operate({ op: 'hold', id: '#1' }, { origin: 'mod' });
+    await w.queue.operate({ op: 'delete', id: '#1' }, { origin: 'mod' });
+    await w.queue.pump();
+    expect(w.states()).toEqual([]);
   });
 });
 

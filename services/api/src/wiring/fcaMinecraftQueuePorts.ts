@@ -8,6 +8,8 @@ import type { QueueParts } from './fcaMinecraftQueue.js';
 
 /** How many of the newest tasks are looked at for ones still working: a task that works is always among the most recently changed. */
 const RECENT_TASKS = 60;
+/** The origins whose goal is his own typed words (the game's chat, the mod's list); the others were written by her or by the voice. */
+const TYPED_BY_HIM: ReadonlySet<MinecraftQueueOrigin> = new Set<MinecraftQueueOrigin>(['chat', 'mod']);
 /** The words that tell the task where its request came from (the first line of its inbox). */
 const ASKED_BY: Readonly<Partial<Record<MinecraftQueueOrigin, string>>> = Object.freeze({
   chat: 'ゲーム内の本人の依頼', voice: 'Discordの通話での本人の依頼',
@@ -50,17 +52,19 @@ export function queueTaskPorts(parts: {
     phase: id => parts.runtime.get(parts.ownerScope, id)?.phase ?? null,
     open: () => parts.runtime.list(parts.ownerScope, { limit: RECENT_TASKS, order: 'recent' })
       .filter(task => parts.control.store.body(task.id) && !finished(task))
-      .map(task => ({ taskId: task.id, goal: task.goal, origin: parts.requestOrigin(task) })),
+      .map(task => ({ taskId: task.id, goal: task.goal, phase: task.phase, origin: parts.requestOrigin(task) })),
     bodyReady: () => {
       const id = body();
       return id !== null && !!parts.control.latest(id, LLMC_STALE_FRAME_MS);
     },
     stop: (id, reason) => parts.stop(id, reason),
     resume: id => parts.runtime.resume(parts.ownerScope, id) !== null,
-    async start(entry) {
+    async start(entry, again) {
       const bodyId = body();
       if (!bodyId) return null;
-      return parts.newTask(entry.goal, entry.goal, bodyId, () => create(entry, bodyId, entry.requestId ?? `queue:${entry.id}`));
+      const key = again ? `queue:${entry.id}:${entry.updatedAt}` : entry.requestId ?? `queue:${entry.id}`;
+      // Only words he typed himself may open the dragon run (its budget): a goal she or the voice wrote is a task like any other.
+      return parts.newTask(TYPED_BY_HIM.has(entry.origin) ? entry.goal : '', entry.goal, bodyId, () => create(entry, bodyId, key));
     },
     now: () => new Date().toISOString(),
     log: parts.log,

@@ -285,13 +285,15 @@ export function unclaimInQueue(snapshot: QueueSnapshot, entryId: string, reason:
   const draft = draftOf(snapshot, at);
   const entry = find(draft, entryId);
   if (!entry) return failed('not_found');
+  // Let go (held, cancelled, removed) while it was starting: what the owner decided stands; a failed start does not undo it.
+  if (entry.state !== 'running') return failed('bad_state');
   settle(draft, entry, giveUp ? 'failed' : 'queued', 'queue_start_failed', reason);
   return changed(draft, entry);
 }
 
 /** What the caller read of the task runtime and the body, for `syncQueue`. */
 export interface QueueFacts {
-  /** The phase of a task by its id; null when there is no such task. */
+  /** The phase of a task by its id; null when there is no such task. Of the tasks of entries not ended, and of ended ones that still work. */
   phases: ReadonlyMap<string, string | null>;
   /** Tasks bound to the body, not ended and not stopped, that no entry has: one made from outside (the operator's CLI, an older path). */
   unowned: ReadonlyArray<{ taskId: string; goal: string; origin: MinecraftQueueOrigin }>;
@@ -300,25 +302,51 @@ export interface QueueFacts {
   newId(): string;
 }
 
-/** Makes the list say what the tasks are. Null when it already does. */
+/** A task that is working: a stop has not been asked of it, and it is not stopped or ended. */
+const working = (phase: string | null | undefined): boolean => phase === 'ready' || phase === 'executing' || phase === 'waiting';
+/** How long a stop is given to show (the task turns `stopping`) before a task that still works against the list is stopped again. */
+export const QUEUE_STRAY_GRACE_MS = 5_000;
+const aged = (entry: QueueRecord, at: string): boolean => Date.parse(at) - Date.parse(entry.updatedAt) > QUEUE_STRAY_GRACE_MS;
+
+/** Makes the list say what the tasks are. Null when it already does (and nothing is to be stopped). */
 export function syncQueue(snapshot: QueueSnapshot, facts: QueueFacts, at: string): QueueChange | null {
   const draft = draftOf(snapshot, at);
-  for (const entry of [...draft.order]) syncEntry(draft, entry, facts);
+  const taken = new Set<string>();
+  for (const entry of [...draft.order]) syncEntry(draft, entry, facts, taken);
+  // A task that works for an entry that ended (a stop that did not get through) is asked to stop again.
+  for (const entry of draft.ended) {
+    if (entry.taskId && working(facts.phases.get(entry.taskId)) && aged(entry, at)) {
+      draft.stops.push({ entryId: entry.id, taskId: entry.taskId, reason: 'queue_stray_stop' });
+    }
+  }
   for (const task of facts.unowned) {
-    const entry: QueueRecord = { id: facts.newId(), seq: draft.nextSeq, goal: queueGoal(task.goal) || '(依頼)', state: 'running', pos: 0,
-      origin: task.origin, requestId: null, experienceId: null, observedAt: null, taskId: task.taskId, createdAt: at, updatedAt: at,
-      endedAt: null, note: null };
+    if (taken.has(task.taskId)) continue;
+    // The body is one: a task made from outside while an entry runs is kept on the list, held, and stopped.
+    const other = running(draft) !== undefined;
+    const entry: QueueRecord = { id: facts.newId(), seq: draft.nextSeq, goal: queueGoal(task.goal) || '(依頼)', state: other ? 'paused' : 'running',
+      pos: 0, origin: task.origin, requestId: null, experienceId: null, observedAt: null, taskId: task.taskId, createdAt: at, updatedAt: at,
+      endedAt: null, note: other ? 'made_outside_while_running' : null };
     draft.nextSeq += 1;
-    draft.order.splice(0, 0, entry);
+    if (other) {
+      draft.order.push(entry);
+      draft.stops.push({ entryId: entry.id, taskId: task.taskId, reason: 'queue_extra_task' });
+    } else draft.order.splice(0, 0, entry);
   }
   const next = changed(draft, null);
-  return next.ok && sameList(snapshot, next.snapshot) ? null : next;
+  return next.ok && !next.stops.length && sameList(snapshot, next.snapshot) ? null : next;
 }
 
-function syncEntry(draft: Draft, entry: QueueRecord, facts: QueueFacts): void {
+function syncEntry(draft: Draft, entry: QueueRecord, facts: QueueFacts, taken: Set<string>): void {
   if (!entry.taskId) {
-    // A start that no process is making any more (the head restarted in it) waits again.
-    if (entry.state === 'running' && !facts.starting.has(entry.id)) settle(draft, entry, 'queued', 'queue_start_lost', 'start_lost');
+    if (entry.state !== 'running' || facts.starting.has(entry.id)) return;
+    // A start that no process is making any more (the head restarted in it): the task it made, if it got that far, is its own
+    // (the same goal, seen from outside as a task nobody holds), not a second request beside it. Otherwise it waits again.
+    const made = facts.unowned.find(task => !taken.has(task.taskId) && task.goal === entry.goal);
+    if (made) {
+      taken.add(made.taskId);
+      entry.taskId = made.taskId;
+      entry.updatedAt = draft.at;
+    } else settle(draft, entry, 'queued', 'queue_start_lost', 'start_lost');
     return;
   }
   const phase = facts.phases.get(entry.taskId);
@@ -329,6 +357,14 @@ function syncEntry(draft: Draft, entry: QueueRecord, facts: QueueFacts): void {
     // The task was stopped from outside the list (the mod's old button, the operator): the list stops with it.
     settle(draft, entry, 'stopped', 'queue_stopped_outside', 'stopped_outside');
     draft.autoRun = false;
+  } else if (entry.state !== 'running' && working(phase) && aged(entry, draft.at)) {
+    // A task works that the list does not say runs. A held one (its stop did not get through) is stopped again. One that was
+    // stopped or waiting and works again was put back to work from outside: it is the one running, unless another is.
+    if (entry.state === 'paused' || running(draft)) draft.stops.push({ entryId: entry.id, taskId: entry.taskId, reason: 'queue_stray_stop' });
+    else {
+      settle(draft, entry, 'running', 'queue_resumed_outside', 'resumed_outside');
+      place(draft, entry, 0);
+    }
   }
 }
 
