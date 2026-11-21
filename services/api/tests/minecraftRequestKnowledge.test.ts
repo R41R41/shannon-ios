@@ -63,3 +63,24 @@ describe('what she is told for a request that is one thing to make', () => {
     expect(text).not.toContain('根元の 1 つ上の段を dig すると、その上の段も一緒に壊れて');
   });
 });
+
+describe('bone meal on a crop', () => {
+  const text = MATERIAL_ACQUISITION_LINES.join('\n');
+  it('says what bone meal does to wheat and what the result shows', () => {
+    expect(text).toContain('use item=bone_meal at=その作物');
+    expect(text).toContain('育ち 2/7→5/7');
+    expect(text).toContain('育ち切った作物には効かず、骨粉も減らない');
+  });
+  it('lists the ways to get it for a daytime meadow, composter first, with the reason, and a nearest move when none comes', () => {
+    expect(text).toContain('昼の地上にはスケルトンが出ず');
+    expect(text.indexOf('手A) コンポスター')).toBeLessThan(text.indexOf('手B) スケルトンの骨'));
+    expect(text).toContain('make composter');
+    expect(text).toContain('place block=composter');
+    expect(text).toContain('pickup item=bone_meal');
+    expect(text).toContain('頼まれた「早く育てる」に一番近い手');
+  });
+  it('is in the first plan of a single request and in every overworld decision', () => {
+    expect(singleRequestFirstPlanSystem()).toContain('use item=bone_meal');
+    expect(stageKnowledge({ body: { state: { dimension: 'overworld' } } })!).toContain('手A) コンポスター');
+  });
+});
