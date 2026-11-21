@@ -145,6 +145,7 @@
     "infra/models/anthropic/haikuConfig.ts",
     "infra/models/anthropic/observerProjection.ts",
     "infra/models/backgroundModelAttempt.ts",
+    "infra/models/callVoiceSpeech.ts",
     "infra/models/chatModel.ts",
     "infra/models/chatModelStream.ts",
     "infra/models/chatModelSupport.ts",
