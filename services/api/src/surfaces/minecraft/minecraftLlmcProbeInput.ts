@@ -64,12 +64,13 @@ const KIND_WORDS: Readonly<Record<string, ProbeKind>> = {
   frames: 'frames', frame: 'frames', stronghold: 'frames', portal_frames: 'frames', camp: 'camp', blaze_camp: 'camp', spawner: 'camp',
   den: 'den', enderman_den: 'den', tunnel: 'den',
   roofsite: 'roofsite', roof: 'roofsite', roof_site: 'roofsite', enderman_roof: 'roofsite',
+  gaze: 'gaze', looking_at: 'gaze', look_target: 'gaze', player_gaze: 'gaze', eyes: 'gaze', cursor: 'gaze',
 };
 /** The fields each kind takes (everything else is left out and said). */
 const KIND_FIELDS: Readonly<Record<ProbeKind, readonly string[]>> = {
   path: ['to', 'from'], route: ['to', 'from', 'range'], sight: ['target', 'from'], column: ['x', 'z', 'yFrom', 'yTo'], around: ['radius'], history: ['at', 'radius'],
   scan: ['radius'], worksite: ['target', 'to', 'retreat'], frames: ['x', 'z', 'radius'], camp: [], lane: ['spawner', 'from'], den: [], roofsite: ['radius'],
-  bedsite: ['target'],
+  bedsite: ['target'], gaze: ['player', 'range'],
 };
 /** The radius each kind takes: its range and default (none: the body's own). */
 const RADIUS: Readonly<Partial<Record<ProbeKind, { low: number; high: number; fallback?: number }>>> = {
@@ -135,6 +136,7 @@ function position(work: Preparing, key: string): ActPos | null | undefined {
 }
 /** Each kind's own fields (a problem, or null); around and scan have none of their own (their radius is `prepareRadius`'s). */
 const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => string | null>>> = {
+  gaze: prepareGaze,
   bedsite(work) {
     const problem = bedBurstTargetProblem(work.fields.target);
     if (problem) return `bedsite の ${problem}`;
@@ -188,6 +190,22 @@ const KIND_PREPARE: Readonly<Partial<Record<ProbeKind, (work: Preparing) => stri
     return null;
   },
 };
+/** A player's in-game name (3 to 16 letters, digits or underscores; the Bedrock prefix dot is allowed), as a gaze names whose eyes are read. */
+const PLAYER_NAME = /^\.?[A-Za-z0-9_]{1,16}$/u;
+/** A gaze's player (the in-game name, required) and its ray length (1 to 64, the body's default 32 when left out). */
+function prepareGaze(work: Preparing): string | null {
+  const raw = work.fields.player;
+  const name = typeof raw === 'string' ? raw.trim().replace(/^@/u, '') : '';
+  if (!PLAYER_NAME.test(name)) return 'gaze の player はマイクラ名（必須）';
+  if (name !== raw) work.fixes.push('player を整えた');
+  work.out.player = name;
+  const range = finite(work.fields.range);
+  if (range !== null) {
+    work.out.range = clamp(Math.round(range), 1, 64);
+    if (work.out.range !== work.fields.range) work.fixes.push(`range を ${work.out.range} にした`);
+  }
+  return null;
+}
 /** A path's or a route's `to` (and `from`): the place, as whole blocks. */
 function preparePath(work: Preparing, kind: 'path' | 'route'): string | null {
   const to = position(work, 'to') ?? position(work, 'at') ?? (typeof work.fields.target === 'string' ? readPos(work.fields.target) : null);
@@ -293,6 +311,7 @@ const LABELS: Readonly<Record<ProbeKind, (input: ProbeInput, feet: ActPos | null
   den: () => 'den',
   roofsite: input => `roofsite ${input.radius ?? 16}m`,
   lane: input => `lane${input.spawner ? ` ${posText(input.spawner)}` : ''}`,
+  gaze: input => `gaze→${input.player ?? '?'}`,
 };
 
 const posList = (value: unknown, limit: number): string[] => (Array.isArray(value) ? value : []).flatMap(item => {
@@ -315,7 +334,8 @@ export function probeAnswerText(result: string | undefined, live: boolean): stri
     const rest = Object.keys(fields).length ? JSON.stringify(fields) : '';
     return rest ? `${text}\n${rest.length > LLMC_PROBE.toolFieldChars ? `${rest.slice(0, LLMC_PROBE.toolFieldChars)}…（後略）` : rest}` : text;
   }
-  const extra = read.kind === 'path' || read.kind === 'route' ? pathExtras(fields, text) : read.kind === 'sight' ? sightExtras(fields, text) : [];
+  const extra = read.kind === 'path' || read.kind === 'route' ? pathExtras(fields, text) : read.kind === 'sight' ? sightExtras(fields, text)
+    : read.kind === 'gaze' ? gazeExtras(fields, text) : [];
   return [text, ...extra].join(' ／ ');
 }
 /** A path's points (for walk's path), where to stand near the target and the nearest point it reaches, when the text lacks them. */
@@ -324,6 +344,19 @@ function pathExtras(fields: Fields, text: string): string[] {
   return [...(points.length && !points.every(point => text.includes(point)) ? [`道の点（walk の path に使える）: ${points.join(' ')}`] : []),
     ...(stands.length && !stands.every(point => text.includes(point)) ? [`的の近くに立てる所: ${stands.join(' ')}`] : []),
     ...(nearest && !text.includes(posText(nearest)) ? [`行ける所で一番近い点: ${posText(nearest)}`] : [])];
+}
+/** The block a player looks at (its cell, face and distance; where to put a thing and whether the hand reaches), when the text lacks its cell. */
+function gazeExtras(fields: Fields, text: string): string[] {
+  if (fields.hit !== true) return [];
+  const block = plain(fields.block), at = readPos(block?.at), place = readPos(fields.placeAt), above = readPos(fields.above);
+  if (!at) return [];
+  // The body's text names the cells already; what it leaves out (the direction a hand's face takes) is still said.
+  if (text.includes(posText(at))) return typeof fields.against === 'string' && !text.includes(fields.against) && place
+    ? [`place の face には against=${fields.against}（置くマス ${posText(place)}）`] : [];
+  const distance = finite(fields.distance), name = typeof block?.name === 'string' ? block.name : '?';
+  return [`見ている先: ${name} ${posText(at)}${typeof fields.face === 'string' ? ` 面 ${fields.face}` : ''}${distance === null ? '' : ` 距離 ${distance.toFixed(1)}m`}`,
+    ...(place ? [`置くマス: ${posText(place)}${typeof fields.against === 'string' ? ` against=${fields.against}` : ''}${above ? ` 真上: ${posText(above)}` : ''}`] : []),
+    ...(fields.reach === false ? ['体の手は届かない（先に go で近づく）'] : fields.reach === true ? ['体の手が届く'] : [])];
 }
 /** What stands between in a sight (at most 4), when the text lacks it. */
 function sightExtras(fields: Fields, text: string): string[] {

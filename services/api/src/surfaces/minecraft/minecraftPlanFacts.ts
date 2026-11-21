@@ -42,6 +42,8 @@ export interface PlanFacts {
   next: Array<{ id: string; kind: PlanKind }>;
   /** What the open promises hold back (item and count; none when no promise is open): the tidy words keep these from a throw. */
   promised?: Array<{ item: string; count: number }>;
+  /** The task is a request of one thing to make or fetch (not the dragon or the Nether): the stage knowledge adds the request's steps (set from the goal, never from a title). */
+  request?: true;
 }
 const NEXT_SHOWN = 3;
 
@@ -50,7 +52,7 @@ const NEXT_SHOWN = 3;
  * (continue or wait), with
  * nothing open under them and no done node above them.
  */
-export function planFactsOf(tree: PlanTree | null | undefined): PlanFacts | null {
+export function planFactsOf(tree: PlanTree | null | undefined, request = false): PlanFacts | null {
   if (!tree) return null;
   const byId = new Map(tree.nodes.map(node => [node.id, node] as const));
   const now = tree.current ? byId.get(tree.current) ?? null : null;
@@ -71,7 +73,7 @@ export function planFactsOf(tree: PlanTree | null | undefined): PlanFacts | null
     .filter(node => !order.some(other => other.parentId === node.id && other.state !== 'done') && !doneAbove(node)).slice(0, NEXT_SHOWN)
     .map(node => ({ id: node.id, kind: kindOf(node) }));
   const promised = (tree.promises ?? []).filter(item => item.state !== 'closed' && item.count > 0).map(item => ({ item: item.item, count: item.count }));
-  return { ...(promised.length ? { promised } : {}), now: now ? { id: now.id, kind: kindOf(now), ...(now.where ? { where: now.where } : {}), ...(now.doneWhen ? { doneWhen: now.doneWhen } : {}),
+  return { ...(promised.length ? { promised } : {}), ...(request ? { request: true as const } : {}), now: now ? { id: now.id, kind: kindOf(now), ...(now.where ? { where: now.where } : {}), ...(now.doneWhen ? { doneWhen: now.doneWhen } : {}),
     ...(now.prep ? { prep: now.prep.state } : {}) } : null, above, next };
 }
 
@@ -100,7 +102,7 @@ export function factsIn(body: Record<string, unknown> | null | undefined): PlanF
     const entry = item && typeof item === 'object' ? item as Record<string, unknown> : null, name = text(entry?.item), count = entry?.count;
     return name && typeof count === 'number' && count > 0 ? [{ item: name, count }] : [];
   });
-  return { now, above, next, ...(promised.length ? { promised } : {}) };
+  return { now, above, next, ...(promised.length ? { promised } : {}), ...(record.request === true ? { request: true as const } : {}) };
 }
 
 /** The kinds of the current node and the nodes above it, the nearest first (empty with no current node). */

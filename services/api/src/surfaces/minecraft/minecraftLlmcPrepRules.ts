@@ -16,6 +16,7 @@
  * - before the Nether's depth and the End: as they were (the check after she is in, and the End's beds, bow and eyes).
  */
 import { BED_ITEM } from './minecraftItems.js';
+import { REQUEST_SCOPE_EN } from './minecraftRequestSteps.js';
 /**
  * `goal`: wanted when it can be had, not required (the golden boots, when 4 gold is found). `weight`: what one stack of a matching item is worth in the count
  * (a diamond pickaxe stands for three iron ones).
@@ -255,6 +256,7 @@ export const PREP_DESCENT_LINES: readonly string[] = [
 export const PREP_DESCENT_RULE: string = ['## 準備の決まり（鉄を掘りに地下へ下りる前）', ...PREP_DESCENT_LINES].join('\n');
 /** The same lines in English for the always-on instructions (the first plan keeps `PREP_DESCENT_LINES`, in Japanese, for the planner's Japanese prompt). */
 export const PREP_DESCENT_LINES_EN: readonly string[] = [
+  REQUEST_SCOPE_EN,
   ("- Required (while unmet, do not go down or dig iron; to skip one, write skipped and the reason in prep; a skipped section does not count as achieved): food points 40 or more (foodPoints.total; fullness " +
 "does not count), a stone pickaxe and a stone axe, and 1 crafting table or 4 or more planks (carried)."),
   '- Amounts: least/safe. Food 40/100 points; wood 12/24 logs (whole run; safe one when many trees are near); 2 stone picks, 4 coal.',

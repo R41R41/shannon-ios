@@ -4,6 +4,8 @@ import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
 import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 import { MATERIAL_ACQUISITION_LINES } from './minecraftRequestKnowledge.js';
+import { REQUEST_NIGHT_LINE, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
+import { REQUEST_PEOPLE_LINES } from './minecraftRequestPeople.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -116,9 +118,13 @@ const NO_BED_NIGHT = '- ベッドが無い間は、岩の中で待っても朝�
  */
 const PREP_NIGHT_LINES: ReadonlySet<string> = new Set([LONG_WALK, PREP_NIGHT_STOP]);
 const PREP_NIGHT_ELSEWHERE = '- 夜と長い道の動き方は、下のストロングホールドの段の行に従う（材料の段の「朝に出る」「11500 を過ぎたら始めない」はこの場面では使わない）。';
-function stageText(id: StageId, ids: readonly StageId[]): string {
-  if (id !== 'prep' || !ids.includes('stronghold')) return V2_STAGES[id];
-  const lines = V2_STAGES.prep.split('\n');
+function stageText(id: StageId, ids: readonly StageId[], request = false): string {
+  const stronghold = id === 'prep' && ids.includes('stronghold');
+  if (id !== 'prep' || (!stronghold && !request)) return V2_STAGES[id];
+  const all = V2_STAGES.prep.split('\n');
+  // A request of one thing: its steps go first and its night replaces the whole game's (the whole game keeps both as they were).
+  const lines = request ? [all[0]!, ...REQUEST_STEPS_LINES, ...REQUEST_PEOPLE_LINES, ...all.slice(1).map(line => line === NO_BED_NIGHT ? REQUEST_NIGHT_LINE : line)] : all;
+  if (!stronghold) return lines.join('\n');
   const at = lines.findIndex(line => PREP_NIGHT_LINES.has(line));
   const kept = lines.filter(line => !PREP_NIGHT_LINES.has(line));
   kept.splice(at < 0 ? 1 : at, 0, PREP_NIGHT_ELSEWHERE);
@@ -716,5 +722,6 @@ export function stageTextsForKind(kind: PlanKind, dimension: string): string {
 export function stageKnowledge(live: Rec): string | null {
   if (!rec(live.body)) return null;
   const ids = stagesFor(live);
-  return `（この場面の知識: ${ids.join('・')}）\n${ids.map(id => stageText(id, ids)).join('\n\n')}`;
+  const request = factsIn(rec(live.body))?.request === true;
+  return `（この場面の知識: ${ids.join('・')}）\n${ids.map(id => stageText(id, ids, request)).join('\n\n')}`;
 }

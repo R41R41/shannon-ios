@@ -124,7 +124,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
   });
 
   it('the system prompt stays inside its cap (English since 11/11), and the live state\'s growth is measured', async () => {
-    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_500);
+    // 11/22: 8,500 -> 8,640 for one line of scope (the descent's preparation is for the whole game, not for a one-thing request: about 180; the text measures 8,621; bn1 to bn4).
+    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_640);
     const got = await extractRequestBytes({ ...options, variant: 'normal', taskId: 'size' });
     // What this chapter added to the live state, taken off again: the `facts` lines and the queue's 「予定」 and 「（見込み）」.
     const { facts, queue, ...rest } = got.live.body as Record<string, any>;

@@ -1013,6 +1013,7 @@
     "surfaces/minecraft/minecraftReflexAdapter.ts",
     "surfaces/minecraft/minecraftReflexAdapterParts.ts",
     "surfaces/minecraft/minecraftRequestKnowledge.ts",
+    "surfaces/minecraft/minecraftRequestPeople.ts",
     "surfaces/minecraft/minecraftRequestQueue.ts",
     "surfaces/minecraft/minecraftRetiredConnections.ts",
     "surfaces/minecraft/minecraftRoutePlanner.ts",

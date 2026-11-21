@@ -8,9 +8,11 @@ import { ACT_CONTRACT_VERSION, type ActPos } from './minecraftActContract.js';
  */
 export const MC_PROBE_SKILL = 'probe' as const;
 export const MC_PROBE_TOOL = `mc.${MC_PROBE_SKILL}` as const;
+// gaze: the block a player is looking at (the request "put it on this block"; the body reads the player's eye and direction).
 // roofsite: S6's body fb180c10 (11/5), where an enderman roof can be built, by the endermen whose eyes are seen from there.
 export const PROBE_KINDS = [
   'path', 'sight', 'column', 'around', 'history', 'scan', 'worksite', 'frames', 'camp', 'lane', 'den', 'roofsite', 'bedsite', 'route',
+  'gaze',
 ] as const;
 export type ProbeKind = typeof PROBE_KINDS[number];
 export interface ProbeInput {
@@ -34,6 +36,8 @@ export interface ProbeInput {
   /** around: blocks (1–16, default 8); history: blocks (1–32, default 4); scan: chunks (1–16, default the view distance);
    * frames: blocks (16–128, default 64). */
   radius?: number;
+  /** gaze: whose gaze (the player's in-game name, required). */
+  player?: string;
 }
 /**
  * The body's answer (the receipt's `result`): one line of JSON, `text` first (Japanese, short, the dangerous fact said as it is: 「下 7 段は
@@ -80,6 +84,9 @@ export const PROBE_DESCRIPTION = [
     + 'lane(spawner, from: 省くと近い湧き場と現在地。暗い1列の通路の四方向の必要数、最少候補の栓・待ち場・通路・立つ所・支え・危険の事実) / '
     + 'den(エンダーマンの横穴の候補: 壁に掘れる 2 高×2 奥の穴の入口と向き・入口正面の見通し・未掘削のマス数を、良い順に最大 8 件。引数なし) / '
     + 'roofsite(radius 4〜24、既定 16: エンダーマンの屋根を作れる所を、そこから 8〜48m に目の見える個体の多い順に最大 5 件。マス・見える数・要るブロック・距離)。',
+  'gaze(player: 見ている人のマイクラ名（必須）, range: 光線の長さ 1〜64、既定 32: その人が今見ているブロックの名前・座標・面（up/down/north/south/east/west）・距離と、'
+    + 'reach（体の手が届くか）・placeAt（そこへ置く時のマス）・against（place の face にそのまま渡す向き）・above（そのブロックの真上のマス）。'
+    + '何も見ていない時は hit:false とその向き。居ない名前は not_found（今居る人の名前が返る）。「この〇〇の上に」の「この」を解く時に、名前で探した候補が複数ある時に使う。体は動かない）。',
   'worksite(target または at: 目的物、to: 作業する立ち位置、省略なら届く現在地か隣接候補、retreat: 帰還先): 接近・作業の射程/呼吸/道具・逆向きの帰路を別々に調べる。結果は観測時点の短区間だけ。施工後は再確認。',
   '省いた座標は足から。column の yFrom・yTo を省くと足の上下。',
 ].join('\n');
@@ -100,7 +107,8 @@ export const PROBE_INPUT_SCHEMA = Object.freeze({
     at: pos('sight の的のブロック、history の場所'),
     x: intField(-30_000_000, 30_000_000), z: intField(-30_000_000, 30_000_000),
     yFrom: intField(-64, 320), yTo: intField(-64, 320),
-    range: intField(0, 32),
+    range: intField(0, 64),
+    player: { type: 'string', maxLength: 32, description: 'gaze の人: マイクラ名（必須）' },
     radius: intField(1, 128),
   },
 });
