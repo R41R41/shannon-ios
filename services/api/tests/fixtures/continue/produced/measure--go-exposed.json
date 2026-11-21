@@ -1,13 +1,13 @@
 {
  "producedBy": "backend/scripts/minecraft-continue-lab-probe.ts",
  "bench": "B",
- "bodyRevision": "dc37cb2625e20a386fbfe442c42e46e2f9634557",
- "madeAt": "2026-11-13T19:23:32.031Z",
+ "bodyRevision": "036562cebfaf4004055d2ff11d7dbd4ac0e710a6",
+ "madeAt": "2026-11-21T16:39:21.936Z",
  "answers": null,
  "fixtureSha256": null,
  "output": {
   "noWay": {
-   "ms": 734,
+   "ms": 736,
    "line": "go 止まった threat_exposed: zombie（約4m）から見える所を掘らないと進めない（守りが止めた 1 マス (2,101,0)） (1,100,0) 道 1 歩・掘 0・置 0・引き直し 2 回。敵が離れるのを待つか、別の道・行き先を",
    "code": "threat_exposed",
    "goal": "partial",
@@ -15,18 +15,18 @@
    "refused": 1
   },
   "detour": {
-   "ms": 18764,
+   "ms": 19120,
    "goal": "done",
-   "line": "go 着いた (14,100,0) 道 20 歩・掘 36・置 0・引き直し 1 回・diamond_pickaxe 残り 1525（18.7秒）",
+   "line": "go 着いた (14,100,0) 道 20 歩・掘 36・置 0・引き直し 1 回・diamond_pickaxe 残り 1525（19.1秒）",
    "x": 14,
    "wallStillThere": true
   },
   "wide": {
-   "ms": 12876,
+   "ms": 8471,
    "goal": "partial",
-   "code": "interrupted_by_reflex",
-   "line": "反射: 近接の敵が近い時の最小の 1 手（打ち返す・間にブロック・2 段上がる・空所の縁から離れる）（手の途中）",
-   "refused": 8
+   "code": "threat_exposed",
+   "line": "go 止まった threat_exposed: zombie（約4m）から見える所を掘らないと進めない（守りが止めた 7 マス (2,101,0)） (1,100,-3) 道 10 歩・掘 14・置 0・引き直し 9 回・diamond_pickaxe 残り 1547。敵が離れるのを待つか、別の道・行き先を",
+   "refused": 9
   }
  }
 }
