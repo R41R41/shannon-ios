@@ -117,6 +117,14 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     expect(await api.intent({ ...input, request: { ...f.request, serverId: 'elsewhere' } })).toMatchObject({ reason: 'body_unavailable' });
     expect(lines).toEqual(['Shannon Minecraft intent refused reason=turn_not_visible kind=task',
       'Shannon Minecraft intent refused reason=no_turn kind=task', 'Shannon Minecraft intent refused reason=body_unavailable kind=task']);
+    // The journal says why a turn was not a source, when the wiring can tell (once per refusal, before its own line).
+    const why: string[] = [];
+    const explained = fcaMinecraftRequests({ db: f.db, runtime: f.runtime, control: f.control, conversation: f.conversation, visible: createFcaSourceGuard({ runtime: f.runtime,
+      state: f.state, conversations: f.conversations, ownerScope: 'owner', ownerAlone: () => true }), ownerScope: 'owner', ownerAlone: () => alone,
+      sourceVisible: () => false, sourceWhy: id => `alone=${alone} id=${id === input.experienceId}`, stop: async (id, reason) => f.runtime.stop('owner', id, reason),
+      atomic: work => underWriteLock(f.db, null, '', work, 'minecraft_test'), log: line => why.push(line) });
+    expect(await explained.intent(input)).toMatchObject({ reason: 'turn_not_visible' });
+    expect(why).toEqual(['Shannon Minecraft source not visible kind=task alone=false id=true', 'Shannon Minecraft intent refused reason=turn_not_visible kind=task']);
     visibleTurn = true;
     const first = (await api.intent(input))!;
     expect(first).toMatchObject({ kind: 'task', goal: '羊を探す' });
@@ -221,9 +229,25 @@ describe('the owner\'s list of requests, through the game chat and the mod, on t
     f.api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: id }, experienceId: said(f, id), intent });
   const listed = (f: ReturnType<typeof fixture>) => f.api.queue.view().entries.map(entry => `${entry.goal}:${entry.state}`);
 
-  it('adds a second request to the list (never as words for the first), starts it when the first ends, and says nothing is running to a message when none is', async () => {
+  it('takes words for a request as a request of their own when none is running (a cake just made: put it on this oak), and still gives them to the one that runs', async () => {
     const f = fixture();
-    expect(await ask(f, 'm0', { kind: 'message', goal: '続けて' })).toMatchObject({ rejected: 'queue_unavailable', reason: 'nothing_running' });
+    const put = (await ask(f, 'm0', { kind: 'message', goal: 'ケーキをこのオークの木材の上に置く' }))!;
+    expect(put).toMatchObject({ kind: 'task', goal: 'ケーキをこのオークの木材の上に置く' });
+    expect(put).not.toHaveProperty('rejected');
+    expect(listed(f)).toEqual(['ケーキをこのオークの木材の上に置く:running']);
+    // A request is running now: words for it are still words for it, not a second request.
+    const again = (await ask(f, 'm1', { kind: 'message', goal: '数は2個にして' }))!;
+    expect(again).toMatchObject({ kind: 'task', request: { id: put.request!.id } });
+    expect(listed(f)).toEqual(['ケーキをこのオークの木材の上に置く:running']);
+  });
+  it('adds nothing for a chat, a feeling or a question when none is running (kind none stays none)', async () => {
+    const f = fixture();
+    expect(await ask(f, 'c0', { kind: 'none', goal: '' })).toEqual({ kind: 'none', goal: '' });
+    expect(listed(f)).toEqual([]);
+    expect(f.runtime.list('owner').filter(task => f.bodyStore.body(task.id))).toEqual([]);
+  });
+  it('adds a second request to the list (never as words for the first) and starts it when the first ends', async () => {
+    const f = fixture();
     const first = (await ask(f, 'g1', { kind: 'task', goal: 'ケーキを1個作る' }))!;
     const second = (await ask(f, 'g2', { kind: 'task', goal: '木材を64個集める' }))!;
     expect(second.request!.id).not.toBe(first.request!.id);

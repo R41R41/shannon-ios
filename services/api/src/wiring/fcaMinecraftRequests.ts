@@ -3,6 +3,7 @@ import type { FcaConversationPort, FcaSourceGuard } from '../mind/action/fca/fca
 import type { TaskRecord, TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftBodyDependencies, MinecraftIntentRefusal } from '../surfaces/minecraft/minecraftBody.js';
+import type { MinecraftIntent } from '../surfaces/minecraft/minecraftIntent.js';
 import { minecraftTaskUnavailable, type MinecraftTaskToolPort } from '../mind/tools/shannonToolRunner.js';
 import { toolOk, toolFailure } from '../mind/tools/shannonTools.js';
 import { withToolEvidence } from '../mind/tools/toolEvidence.js';
@@ -66,6 +67,8 @@ export function ownDragonWords(message: unknown): string | null {
 export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime: TaskRuntime; conversation: FcaConversationPort;
   visible: FcaSourceGuard; ownerScope: string; ownerAlone(): boolean; stop(id: string, reason: string): Promise<TaskView[]>;
   sourceVisible(id: string): boolean;
+  /** Content-free words for why `sourceVisible` was false (alone or not, whether the turn was found, which recalled id is hidden); for the journal only. */
+  sourceWhy?(id: string): string;
   /** Same SQLite connection as task authority and body bindings; nested authority writes use savepoints. */
   atomic<T>(work: () => T): T;
   /** That connection: the list of requests is kept in it (`fcaMinecraftQueue.ts`). */
@@ -135,7 +138,13 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     const needsBody = input.intent.kind === 'task' || input.intent.kind === 'message';
     if (early && (needsBody || early !== 'body_unavailable')) return early;
     if (!input.experienceId) return 'no_turn';
-    return parts.sourceVisible(input.experienceId) ? null : 'turn_not_visible';
+    if (parts.sourceVisible(input.experienceId)) return null;
+    if (parts.sourceWhy) {
+      let why = 'unknown';
+      try { why = parts.sourceWhy(input.experienceId); } catch { /* the line is only for the journal */ }
+      log(`Shannon Minecraft source not visible kind=${input.intent.kind} ${why}`);
+    }
+    return 'turn_not_visible';
   };
   /** A stop of the list also stops every other task bound to the body that is not already stopping (the old stop of the chat). */
   const stopOthers = async (): Promise<void> => {
@@ -155,10 +164,13 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     await queue.operate({ op: 'cancel', id: listed.id }, { origin: 'app', stopReason: 'owner_minecraft_stop' });
     return [parts.runtime.get(parts.ownerScope, taskId)!];
   };
-  /** His words for the request under way: delivered to its task as a message (never a second request); refused when none is running. */
+  /**
+   * His words for the request under way: delivered to its task as a message (never a second request). Null when none is running (or it ended
+   * meanwhile): the words then are a request of their own, not words for work that is not there (`intent` below), so he is not asked to say them again.
+   */
   const message = (input: Parameters<NonNullable<MinecraftBodyDependencies['fcaIntent']>>[0], sourceId: string, goal: string) => {
     const running = openRequest(parts.control.bodyId(input.request.serverId));
-    if (!running) return refused('nothing_running', 'message');
+    if (!running) return null;
     try {
       parts.runtime.observeExternal(input.scopeKey, running.id, { eventId: `mc:${input.request.requestId}`, experienceIds: [sourceId],
         observedAt: input.request.observedAt, text: `ゲーム内の本人の言葉（いまのタスクへ）: ${goal}` });
@@ -167,7 +179,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     } catch (error) {
       // It ended meanwhile (`FCA_TARGET_FINISHED`): nothing is running to take the words.
       if (!(error instanceof Error) || error.message !== 'FCA_TARGET_FINISHED') throw error;
-      return refused('nothing_running', 'message');
+      return null;
     }
   };
   /**
@@ -304,12 +316,20 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       const sourceId = input.experienceId!;
       // His own dragon words, not her rewrite of them, are what the task keeps (a message to it too).
       const goal = intent.kind === 'task' || intent.kind === 'message' ? ownDragonWords(input.request.message) ?? intent.goal : intent.goal;
-      if (intent.kind === 'message') return message(input, sourceId, goal);
-      const outcome = await applyQueueIntent(queue, { ...intent, goal }, { origin: 'chat', requestId: `mc:${input.request.requestId}`,
+      let asked: MinecraftIntent = intent;
+      if (intent.kind === 'message') {
+        const told = message(input, sourceId, goal);
+        if (told) return told;
+        // Words for a request, and none is under way (it just ended, or the list is empty): they stay his words, as a request of their own on the
+        // list. Refusing them told him to say again what he had said (a cake just made, "put it on this oak"): the request was in the words.
+        log('Shannon Minecraft intent message with nothing running added as task');
+        asked = { kind: 'task', goal, placement: 'end' };
+      }
+      const outcome = await applyQueueIntent(queue, { ...asked, goal }, { origin: 'chat', requestId: `mc:${input.request.requestId}`,
         experienceId: sourceId, observedAt: input.request.observedAt, stopReason: 'owner_game_stop' });
-      if (!outcome.delivered) return refused(outcome.reason, intent.kind);
-      if (intent.kind === 'stop') await stopOthers();
-      return intent.kind === 'task' ? { kind: 'task' as const, goal, request: { id: outcome.entry!.taskId ?? outcome.entry!.id } } : bodyIntentOf(intent);
+      if (!outcome.delivered) return refused(outcome.reason, asked.kind);
+      if (asked.kind === 'stop') await stopOthers();
+      return asked.kind === 'task' ? { kind: 'task' as const, goal, request: { id: outcome.entry!.taskId ?? outcome.entry!.id } } : bodyIntentOf(asked);
     },
   };
 }

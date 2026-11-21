@@ -26,9 +26,13 @@ const add = (who: string) => [
     + '理由: 「この」は、あとで依頼に取りかかる側が、言った人の視線を調べ（その人が見ているブロックを読む）、近くのブロックの名前と合わせて解く。ここで推測して書き換えると、その手掛かりが消える。',
 ];
 
-const others = (who: string) => [
-  `いま実行中の依頼について${who}が言うこと（数や作り方を変えてほしい・続けてほしい・それでいい）は kind=message にし、`
-    + 'goal に伝える言葉を書く。新しい依頼にはならず、いまの作業への伝言として渡る。',
+const others = (who: string, idle: boolean) => [
+  idle
+    ? `いま実行中の依頼も待っている依頼も無い。${who}の頼みごとは、したいことが言われていれば kind=task にする（kind=message は使わない）。`
+      + '理由: message は走っている依頼に言葉を足すだけなので、足す先が無いと体に届かず、頼んだ人がもう一度言い直すことになる。'
+      + '直前に終わった依頼の成果物（作ったケーキなど）についての頼みも、終わった依頼は動かせないので新しい依頼（kind=task）。'
+    : `いま実行中の依頼について${who}が言うこと（数や作り方を変えてほしい・続けてほしい・それでいい）は kind=message にし、`
+      + 'goal に伝える言葉を書く。新しい依頼にはならず、いまの作業への伝言として渡る。',
   '「全部止めて」「ちょっと待って」のように列ぜんたいを止めたい時は kind=stop。止めた列は、始めてと言われるまで次の依頼を動かさない。',
   '一つの依頼だけを扱う時は target に依頼の番号（[依頼の列] の #3 なら "#3"）を入れる。空ならいま実行中の依頼。'
     + 'もういい・やめて＝cancel、後回し・いったん保留＝hold（列は次へ進む）、保留や停止のものを戻す＝resume'
@@ -42,7 +46,7 @@ export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
     '体は一度に一つの依頼だけを動かす。頼みごとは「依頼の列」に積まれ、順番に実行される。言葉がどれにあたるかは、あなたが判断する。'];
   if (options.running) lines.push(`いま体は「${options.running}」をしている。`);
   const who = options.who ?? SHANNON_OWNER_NAME;
-  lines.push(...add(who), ...others(who));
+  lines.push(...add(who), ...others(who, !options.running && options.queueLines.length === 0));
   if (options.queueLines.length) lines.push('[依頼の列]', ...options.queueLines);
   else lines.push('[依頼の列] いまは空');
   lines.push('task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。');

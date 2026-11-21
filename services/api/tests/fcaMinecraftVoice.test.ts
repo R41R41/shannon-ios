@@ -74,11 +74,14 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(f.port.state()).toEqual({ connected: true, running: null, queue: ['#1 実行中 「まず鉄の剣を作って」'] });
   });
 
-  it('delivers words for the request under way as a message to that task, and refuses them when none is running', async () => {
+  it('delivers words for the request under way as a message to that task, and adds them as a request of their own when none is running', async () => {
     const { port, calls } = fixture({ running: task('t1', 'エンドラを倒す') });
     expect(await port.intent(input())).toEqual({ delivered: true, as: 'message', taskId: 't1' });
     expect(calls).toEqual(['observe t1 dcv:r1 exp-1 Discordの通話での本人の言葉（いまのタスクへ）: まず鉄の剣を作って']);
-    expect(await fixture().port.intent(input())).toEqual({ delivered: false, reason: 'nothing_running' });
+    const idle = fixture();
+    expect(await idle.port.intent(input())).toMatchObject({ delivered: true, as: 'task' });
+    expect(idle.queue.view().entries).toHaveLength(1);
+    expect(idle.queue.view().entries[0]).toMatchObject({ goal: 'まず鉄の剣を作って', origin: 'voice' });
   });
 
   it('adds a new request whoever is in the channel, as a request of the list that keeps who asked', async () => {

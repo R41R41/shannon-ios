@@ -330,6 +330,11 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
     })() : null;
     const requests = minecraft && conversation && visible ? fcaMinecraftRequests({ ...parts, db, control: minecraft.control,
       runtime: runtime.runtime, conversation, visible, stop: runtime.stop, sourceVisible: id => sourceVisible(parts.ownerScope, id),
+      sourceWhy: id => {
+        const scope = parts.ownerScope, turn = parts.conversations?.experiencesById?.(scope, [id])[0];
+        const recalled = turn?.recalledMemoryIds ?? [], hidden = recalled.filter(ref => !shared?.memory.read(scope, [ref], { kind: 'owner' }).length);
+        return `alone=${parts.ownerAlone()} turn=${turn ? 'found' : 'missing'} recalled=${recalled.length} hidden=${hidden.length} first=${hidden[0] ?? '-'}`;
+      },
       atomic: work => underWriteLock(db, null, '', work, 'fca_minecraft_admission') }) : null;
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
     if (requests && parts.tools) parts.tools.useMinecraftTasks(requests.tools);
