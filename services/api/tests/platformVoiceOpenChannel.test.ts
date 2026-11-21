@@ -120,14 +120,14 @@ describe('a voice channel of three: anyone may ask for her body', () => {
     expect(calls.filter(call => call.startsWith('log '))).toEqual([]);
     expect(first.find(line => line.type === 'intent')).toMatchObject({ kind: 'task', delivered: true, taskId: 'task-1' });
     expect(calls).toContain('task 鉄の剣を作る');
-    expect(calls.some(call => call === 'task-1 Discordの通話でのユウの依頼: 鉄の剣を作る')).toBe(true);
+    expect(calls.some(call => call === 'task-1 Discordの通話でのユウ（ゲスト）の依頼: 鉄の剣を作る')).toBe(true);
     // The task stands on a turn the owner can read (the real memory read), written with the friend's name on it.
     expect(sources[0]).toHaveLength(1);
     // A third person asks while it is under way: a message to that task, not a second task.
     model.intent = { kind: 'task', goal: '先にパンを3個作って' };
     const second = await say('シャノン、先にパンを3個作って', { id: OTHER, name: 'ミキ' });
     expect(second.find(line => line.type === 'intent')).toMatchObject({ kind: 'task_message', delivered: true, taskId: 'task-1' });
-    expect(calls.some(call => call === 'task-1 Discordの通話でのミキの言葉（いまのタスクへ）: 先にパンを3個作って')).toBe(true);
+    expect(calls.some(call => call === 'task-1 Discordの通話でのミキ（ゲスト）の言葉（いまのタスクへ）: 先にパンを3個作って')).toBe(true);
     expect(calls.filter(call => call.startsWith('task '))).toHaveLength(1);
     // The owner speaks too, as 「本人」.
     model.intent = { kind: 'task', goal: '終わったら家を建てて' };

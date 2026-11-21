@@ -705,12 +705,15 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     // A friend's 止めて is heard too while her body works (2026-11-21), since a friend's stop reaches the body as the owner's does.
     const friend = await say('止めて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
     expect(friend[0]).toMatchObject({ respond: true, reason: 'stop' });
+    // Everyday 待って between friends is not a stop for a guest (only the plain stop words are).
+    const chat = await say('ちょっと待って', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
+    expect(chat[0]).not.toMatchObject({ reason: 'stop' });
     // With her body idle a friend's 止めて is judged like any other words (here she was speaking, so Jev is asked).
     body.running = null;
     const idle = await say('止めて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ', speakingNow: true });
     expect(idle[0]).not.toMatchObject({ reason: 'stop' });
-    // The first 止めて (the owner alone, she was not speaking) was asked as words without her name; the idle friend's was asked too.
-    expect(asked).toEqual(['止めて', '止めて']);
+    // The first 止めて (the owner alone, she was not speaking), the guest's 待って and the idle friend's 止めて were each asked as words without her name.
+    expect(asked).toEqual(['止めて', 'ちょっと待って', '止めて']);
     expect(model.requests.length).toBeGreaterThanOrEqual(3);
     await close();
   });

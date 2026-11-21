@@ -1,5 +1,5 @@
 import { JEV_QUESTION_SETS, jevChoice, jevNoul, stallTolerantTimeout, type JevChooser, type JevQuestion } from '../../infra/models/jev/jevChoice.js';
-import { isStopRequest, nameMatch, type NameMatch } from './addressedName.js';
+import { isStopRequest, isStrongStopRequest, nameMatch, type NameMatch } from './addressedName.js';
 
 /**
  * Was it said to her? (owner decision 2026-10-21, 「作る・続きの言葉も通す」). One place for every voice entry (the Discord voice channel
@@ -159,9 +159,10 @@ export function ownerAlone(input: AddressedInput): boolean {
  * (`guestsMayStop`): heard without her name, whoever they were said to.
  */
 export function stopsHer(input: AddressedInput): boolean {
-  if (!isStopRequest(input.transcript)) return false;
-  if (input.owner === true) return input.shannonSpeaking === true || input.bodyRunning === true;
-  return input.guestsMayStop === true && input.bodyRunning === true;
+  if (input.owner === true) {
+    return isStopRequest(input.transcript) && (input.shannonSpeaking === true || input.bodyRunning === true);
+  }
+  return input.guestsMayStop === true && input.bodyRunning === true && isStrongStopRequest(input.transcript);
 }
 
 /** The part that needs no model: nothing to ask about, or a call that cannot be anything else. */

@@ -66,10 +66,10 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(owner.calls[1]).toContain('Discordの通話での本人（ライ氏）の依頼: まず鉄の剣を作って');
     const guest = fixture();
     expect(await guest.port.intent(input({ speaker: { id: '2', name: 'ユウ', owner: false } }))).toEqual({ delivered: true, as: 'task', taskId: 'new-task' });
-    expect(guest.calls[1]).toContain('Discordの通話でのユウの依頼: まず鉄の剣を作って');
+    expect(guest.calls[1]).toContain('Discordの通話でのユウ（ゲスト）の依頼: まず鉄の剣を作って');
     const message = fixture({ running: task('t1', 'エンドラを倒す') });
     await message.port.intent(input({ speaker: { id: '2', name: 'ユウ', owner: false } }));
-    expect(message.calls[0]).toContain('Discordの通話でのユウの言葉（いまのタスクへ）: まず鉄の剣を作って');
+    expect(message.calls[0]).toContain('Discordの通話でのユウ（ゲスト）の言葉（いまのタスクへ）: まず鉄の剣を作って');
   });
 
   it('goes on to a new task when the one under way ended meanwhile', async () => {

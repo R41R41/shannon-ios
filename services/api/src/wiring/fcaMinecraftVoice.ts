@@ -26,12 +26,12 @@ export interface FcaMinecraftVoiceParts {
 }
 
 export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraftPort {
-  /** Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name. */
+  /** Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name marked （ゲスト） so a guest cannot pass as the owner. */
   const whoAsked = (input: VoiceMinecraftIntentInput): string => {
     const { speaker } = input;
     if (!speaker) return '本人';
     const name = speaker.name.replace(/\s+/gu, ' ').trim().slice(0, 40);
-    return speaker.owner ? (name ? `本人（${name}）` : '本人') : (name || '通話の参加者');
+    return speaker.owner ? (name ? `本人（${name}）` : '本人') : `${name || '通話の参加者'}（ゲスト）`;
   };
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
