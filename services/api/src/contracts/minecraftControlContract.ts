@@ -100,8 +100,9 @@ o_channel, error). */
  * line in that thread. */
   conversationId?: string;
 }
-/** The room she plays in, as the body reads it each poll: in a voice channel or not, someone speaking, and how
- * long since someone spoke or wrote. */
+/** The room she plays in, as the body reads it each poll: whether someone is listening to her voice (in a Discord voice channel, or in the
+ * game with the mod's voice on), someone speaking, and how long since someone spoke or wrote. The head only writes a spoken or a written line
+ * by it; who is in the room is the body's to say. */
 export interface MinecraftLiveRoom { voice: boolean; humanSpeaking: boolean; sinceHumanMs: number | null }
 
 export interface MinecraftControlPoll {

@@ -53,6 +53,8 @@ export interface ConversationTurn {
     participants: string[];
     heard?: ConversationHeardLine[];
     followsShannonTurn?: boolean;
+    /** The speaker pressed a key to talk: the words were said to her, so she answers them without being named. */
+    directed?: boolean;
     speakingNow?: boolean;
     /** How long ago she last finished speaking here, in ms (0: speaking now): the follow-up window of `SHANNON_ADDRESSED`. */
     shannonSpokeMsAgo?: number;
