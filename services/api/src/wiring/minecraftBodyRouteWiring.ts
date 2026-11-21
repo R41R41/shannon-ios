@@ -27,6 +27,7 @@ export function createMinecraftBodyRoute(
     peopleFacts?: MinecraftBodyDependencies['peopleFacts'];
     fcaIntent?: MinecraftBodyDependencies['fcaIntent'];
     fcaAdmission?: MinecraftBodyDependencies['fcaAdmission'];
+    fcaQueueLines?: MinecraftBodyDependencies['fcaQueueLines'];
   },
 ): MinecraftBodyRoute {
   const configuration = configuredMinecraftBody(environment);

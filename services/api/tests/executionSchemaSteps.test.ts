@@ -44,14 +44,15 @@ type Row = Record<string, unknown>;
 
 /**
  * What the S3 and S4 steps add (008, 009 and 010): columns appended by ALTER TABLE, and two tables (011 changes rows only); and
- * the operator's audit table of 012 (2026-10-14), and the FCA provenance sets of 013 (2026-10-15).
+ * the operator's audit table of 012 (2026-10-14), and the FCA provenance sets of 013 (2026-10-15), and the list of requests for her Minecraft body of 014 (2026-11-21).
  */
 const S3_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
     'exec_state_at TEXT', 'exec_starting INTEGER'],
   mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
 };
-const S3_TABLES = ['mind_action_slot_pools', 'mind_action_slot_classes', 'operator_audit', 'fca_provenance_sets'];
+const S3_TABLES = ['mind_action_slot_pools', 'mind_action_slot_classes', 'operator_audit', 'fca_provenance_sets', 'minecraft_request_queue',
+  'minecraft_request_queue_state'];
 
 /** The schema rows without the S3 additions: what the S2 steps alone must leave unchanged. */
 function withoutS3(rows: Row[]): Row[] {
@@ -312,6 +313,7 @@ const PINNED: Readonly<Record<string, string>> = {
   'execution/011_owner_slot_limits': '5632ae89a55a1426831052ece071b46b1fcaa4ab67b6676a1e09d98cf0cc8e98',
   'execution/012_operator_audit': '162f55b8b8119d4cfe58226f25898d12b94ec1e81dd3ad3bda14f0c4f27fcc8c',
   'execution/013_fca_provenance_sets': '628187523990f2531313993c8788fdba8f041441225a1aa61838349decc7aa55',
+  'execution/014_minecraft_request_queue': '9f06cbddacbc47fcd6d2df2e45508b2aa861fe0dbd4d19be9a7037cd4491a8bd',
 };
 
 function reindented(step: SchemaStep): SchemaStep {

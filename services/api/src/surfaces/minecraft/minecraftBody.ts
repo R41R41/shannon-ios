@@ -11,7 +11,8 @@ import {
   type MinecraftBodyConfiguration, type MinecraftConversationKind, type MinecraftIntent, type MinecraftServerBinding, type MinecraftTurnRequest, type MinecraftTurnResponse,
 } from '../../contracts/minecraftBodyContract.js';
 import type { MinecraftTurnLog } from '../../mind/action/respond/respondPorts.js';
-import { MINECRAFT_INTENT_GOAL_CHARACTERS } from './minecraftIntent.js';
+import { bodyIntentOf } from './minecraftIntent.js';
+import { minecraftQueueGuide } from '../../contracts/minecraftQueuePrompt.js';
 import { minecraftBodyStateBlock, type MinecraftBodyState } from './minecraftBodyState.js';
 import { MinecraftTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
 import { PlatformBridgeError, PlatformBridgeService, platformBridgeThreadId, type PlatformAudiencePolicy } from '../../mind/memory/platformMemoryPorts.js';
@@ -36,7 +37,8 @@ export interface MinecraftConversation {
  * Why an in-game request of the owner's was not handed to her body (Minecraft run 19, 10:54 JST: four checks gave one
  * `queue_unavailable`, a reply about "the selected model" that matched none of them, and no line).
  */
-export type MinecraftIntentRefusal = 'not_owner_scope' | 'others_present' | 'body_unavailable' | 'no_turn' | 'turn_not_visible';
+export type MinecraftIntentRefusal = 'not_owner_scope' | 'others_present' | 'body_unavailable' | 'no_turn' | 'turn_not_visible'
+  | 'nothing_running' | 'no_such_request' | 'queue_full';
 /** What she says for each, fixed words: never the model or a connection when neither was the cause. */
 export const MINECRAFT_INTENT_REFUSALS: Readonly<Record<MinecraftIntentRefusal, string>> = Object.freeze({
   not_owner_scope: 'この頼みは、いまはマイクラの体に渡せない。',
@@ -44,6 +46,9 @@ export const MINECRAFT_INTENT_REFUSALS: Readonly<Record<MinecraftIntentRefusal, 
   body_unavailable: 'マイクラの体がいまつながっていないので、頼みごとを渡せなかった。体がつながったら、もう一度頼んでほしい。',
   no_turn: 'いまの頼みを記録できなかったので、マイクラの体に渡せなかった。もう一度頼んでほしい。',
   turn_not_visible: 'いまの頼みを記録から確かめられなかったので、マイクラの体に渡せなかった。もう一度頼んでほしい。',
+  nothing_running: 'いま体が動かしている依頼がないので、それは渡せなかった。どの依頼か番号で言ってくれたら、そのとおりにする。',
+  no_such_request: 'その番号の依頼が列に見つからなかった。いまの列を見て、もう一度言ってほしい。',
+  queue_full: '依頼の列がいっぱいで、新しい依頼を足せなかった。どれかが終わってから、もう一度頼んでほしい。',
 });
 /** The prompt line for a refusal known before her reply: she says it herself, so what she keeps is what she said. */
 const intentBlocked = (reason: MinecraftIntentRefusal) => `[マイクラの体への頼みごと: いまは渡せない]\n${MINECRAFT_INTENT_REFUSALS[reason]}`
@@ -52,6 +57,8 @@ const intentBlocked = (reason: MinecraftIntentRefusal) => `[マイクラの体�
 export interface MinecraftBodyDependencies {
   fcaIntent?(input: { scopeKey: string; request: MinecraftTurnRequest; intent: MinecraftIntent; experienceId: string | null })
     : Promise<(MinecraftTurnResponse['intent'] & { reason?: MinecraftIntentRefusal }) | undefined>;
+  /** The lines of the owner's list of requests for her turn (`[依頼の列]`, `fcaMinecraftQueue.ts`); none when absent. */
+  fcaQueueLines?(): string[];
   /** The refusal known before her reply (`fcaMinecraftRequests.ts`): who is present, the scope, the body's frame; null when none. */
   fcaAdmission?(input: { scopeKey: string; request: MinecraftTurnRequest }): MinecraftIntentRefusal | null;
   configuration: MinecraftBodyConfiguration;
@@ -157,7 +164,7 @@ export class MinecraftBody {
       scopeKey, policy,
       message: owner ? request.message : `${request.speaker.name}: ${request.message}`, rawMessage: request.message,
       prompt: [minecraftDeliveryInstructions(server, kind, owner ? null : request.speaker.name), bodyNow,
-        owner ? blocked ? intentBlocked(blocked) : MINECRAFT_INTENT_INSTRUCTIONS : ''].filter(Boolean).join('\n\n'),
+        owner ? blocked ? intentBlocked(blocked) : this.intentInstructions() : ''].filter(Boolean).join('\n\n'),
       threadTitle: server.title,
       // Game chat asks her body through the turn's intent, not through her tools.
       ...(owner && !blocked ? { offerMinecraftIntent: true } : {}),
@@ -174,9 +181,10 @@ export class MinecraftBody {
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');
     const proposed = blocked ? { kind: 'none' as const, goal: '' } : completion.minecraftIntent ?? { kind: 'none' as const, goal: '' };
+    const asked = bodyIntentOf(proposed);
     // The owner's intent enters the common task tree (`fcaIntent`); without it (a switched-off part) it is answered as proposed.
     const decided: (MinecraftTurnResponse['intent'] & { reason?: MinecraftIntentRefusal }) | undefined = owner
-      ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : proposed : undefined;
+      ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : asked : undefined;
     // The reason stays here (the body's contract is unchanged); what is sent is the intent as before.
     const { reason, ...intent } = decided ?? {};
     const said = decided?.rejected ? this.refusedAfterReply(scopeKey, request, threadId, reason)
@@ -188,6 +196,13 @@ export class MinecraftBody {
       duplicate: false,
       ...(ignored ? { ignored } : {}),
     };
+  }
+
+  /** The owner's turn: what the intent field can do to the list of requests, and the list as it stands. */
+  private intentInstructions(): string {
+    let queueLines: string[] = [];
+    try { queueLines = this.dependencies.fcaQueueLines?.() ?? []; } catch { /* the list is only context */ }
+    return minecraftQueueGuide({ queueLines, allowNew: true, running: null }).join('\n');
   }
 
   private log(line: string): void {
@@ -297,11 +312,5 @@ export function minecraftDeliveryInstructions(server: MinecraftServerBinding, ki
 /** Where nobody can be told apart: no memory of the owner or of anyone else is given. */
 const UNKNOWN_SPEAKER_PROJECTION = `[相手が分からない場]\n相手が誰かは分からない。${SHANNON_OWNER_NAME}やほかの人の個人的なこと、覚えていることは話さない。覚えているふりもしない。`;
 
-/** The owner's turn only: the one structured field by which she asks her Minecraft body to do something. */
-export const MINECRAFT_INTENT_INSTRUCTIONS = [
-  '[マイクラの体への頼みごと]（返答の minecraftIntent）',
-  `${SHANNON_OWNER_NAME}がマイクラでできること（作る・集める・取ってくる・掘る・倒す・行く・建てるなど）を頼んだら、聞き返さずに引き受けて kind=task にし、`
-    + `goal に何をどれだけするかを具体的に${MINECRAFT_INTENT_GOAL_CHARACTERS}字以内で書く（例: 「パンを3個作る」「オークの原木を16個集める」）。数が言われていなければ、ほどよい数を自分で決める。`,
-  '今していることをやめて・止まってと言われたら kind=stop。雑談・質問・何をしてほしいか本当に分からない時は kind=none で、goal は空にする。',
-  'task にした時の返事は引き受ける短い一言にとどめ、もう終わったとは言わない。いま別のことをしていても、頼みごとを引き受けてよい。',
-].join('\n');
+/** The owner's turn only: the one structured field by which she asks her Minecraft body to do something (the list is empty here). */
+export const MINECRAFT_INTENT_INSTRUCTIONS = minecraftQueueGuide({ queueLines: [], allowNew: true, running: null }).join('\n');

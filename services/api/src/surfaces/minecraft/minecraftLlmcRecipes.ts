@@ -44,6 +44,9 @@ const FIXED: Readonly<Record<string, Recipe>> = {
   fishing_rod: { yields: 1, needs: [{ item: 'stick', count: 3 }, { item: 'string', count: 2 }] },
   shears: { yields: 1, needs: [{ item: 'iron_ingot', count: 2 }] },
   bread: { yields: 1, needs: [{ item: 'wheat', count: 3 }] },
+  // The cake: the three buckets come back empty after the milk is used, which the table does not count.
+  cake: { yields: 1, needs: [{ item: 'milk_bucket', count: 3 }, { item: 'sugar', count: 2 }, { item: 'egg', count: 1 }, { item: 'wheat', count: 3 }] },
+  sugar: { yields: 1, needs: [{ item: 'sugar_cane', count: 1 }] },
   bowl: { yields: 4, needs: [{ item: 'planks', count: 3 }] },
   cobblestone_slab: { yields: 6, needs: [{ item: 'cobblestone', count: 3 }] },
 };

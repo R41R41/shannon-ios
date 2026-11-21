@@ -29,7 +29,7 @@ function fixture(provenanceRefs = false) {
   control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, { schemaVersion: 1, serverId: 'world', connectionId: 'connection',
     observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: 1, stateAt: at, receivedAt: at, connected: true, state: {}, facts: {} },
     skills: [], candidates: [], receipts: [], activeOperationIds: [] });
-  const api = fcaMinecraftRequests({ runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => owner,
+  const api = fcaMinecraftRequests({ db: h.db, runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => owner,
     sourceVisible: () => source, stop: async (id, reason) => runtime.stop('owner', id, reason),
     atomic: work => underWriteLock(h.db, null, '', work, 'minecraft_test') });
   const context = { scopeKey: 'owner', surface: 'text' as const, audience: 'owner_alone' as const, memory: toolSessionMemory() };
@@ -73,9 +73,15 @@ describe('Minecraft requests enter the canonical common task tree', () => {
   it('rolls back every new child, event and source when body binding fails in either ingress', async () => {
     const f = fixture(), before = f.runtime.list('owner').length;
     f.bodyStore.bind = () => false;
-    await expect(f.api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'existing', intent: { kind: 'task', goal: 'private goal' } })).rejects.toThrow('BINDING_CONFLICT');
+    // The request is on the list; its start fails inside the one write, so nothing of it is left (the entry waits and is tried again, then fails).
+    const made = (await f.api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'existing', intent: { kind: 'task', goal: 'private goal' } }))!;
+    expect(made.kind).toBe('task');
     expect(f.runtime.list('owner')).toHaveLength(before);
     expect(f.db.prepare('SELECT * FROM fca_task_messages').all()).toEqual([]);
+    await f.api.queue.pump();
+    await f.api.queue.pump();
+    expect(f.api.queue.view().recent[0]).toMatchObject({ state: 'failed', note: expect.stringContaining('BINDING_CONFLICT') });
+    expect(f.runtime.list('owner')).toHaveLength(before);
     await f.foreground(async turn => {
       const count = f.runtime.list('owner').length;
       await expect(f.execute('minecraft.request', { goal: 'private foreground goal' })).rejects.toThrow('BINDING_CONFLICT');
@@ -96,7 +102,7 @@ describe('Minecraft requests enter the canonical common task tree', () => {
 
   it('names each refusal (run 19: one queue_unavailable for four checks), and gives the words to a task under way as a message', async () => {
     const lines: string[] = [], f = fixture();
-    const api = fcaMinecraftRequests({ runtime: f.runtime, control: f.control, conversation: f.conversation, visible: createFcaSourceGuard({ runtime: f.runtime,
+    const api = fcaMinecraftRequests({ db: f.db, runtime: f.runtime, control: f.control, conversation: f.conversation, visible: createFcaSourceGuard({ runtime: f.runtime,
       state: f.state, conversations: f.conversations, ownerScope: 'owner', ownerAlone: () => true }), ownerScope: 'owner', ownerAlone: () => alone,
       sourceVisible: () => visibleTurn, stop: async (id, reason) => f.runtime.stop('owner', id, reason), atomic: work => underWriteLock(f.db, null, '', work, 'minecraft_test'),
       log: line => lines.push(line) });
@@ -115,7 +121,7 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     visibleTurn = true;
     const first = (await api.intent(input))!;
     // 「続けて」 while it is under way: the same task, its inbox, with the turn as the message's source; no second task.
-    const again = (await api.intent({ ...input, experienceId: said('続けて'), request: { ...f.request, requestId: 'game-two' }, intent: { kind: 'task', goal: '続けて羊を探す' } }))!;
+    const again = (await api.intent({ ...input, experienceId: said('続けて'), request: { ...f.request, requestId: 'game-two' }, intent: { kind: 'message', goal: '続けて羊を探す' } }))!;
     expect(again.request?.id).toBe(first.request?.id);
     expect(f.runtime.list('owner').filter(task => f.bodyStore.body(task.id))).toHaveLength(1);
     const messages = f.runtime.snapshot('owner', first.request!.id)!.messages.filter(message => message.id.startsWith('external:'));
@@ -149,17 +155,22 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     });
   });
 
-  it('cancel without an ID stops only the newest open task, preserving other parallel work', async () => {
+  it('a second request while the body has one joins the list; cancel without an ID cancels the one running and the list goes on', async () => {
     const f = fixture();
     await f.foreground(async turn => {
       await f.execute('minecraft.request', { goal: 'Find stone' });
       const first = f.runtime.list('owner').find(task => f.bodyStore.body(task.id))!;
-      f.db.prepare('UPDATE agent_tasks SET created_at=? WHERE task_id=?').run('2026-10-08T23:59:00.000Z', first.id);
-      await f.execute('minecraft.request', { goal: 'Find wood' });
-      const second = f.runtime.list('owner').find(task => task.id !== first.id && f.bodyStore.body(task.id))!;
+      const added = await f.execute('minecraft.request', { goal: 'Find wood' });
+      expect(added).toMatchObject({ ok: true, evidence: { outcome: 'queued', action: 'request' } });
+      expect(f.runtime.list('owner').filter(task => f.bodyStore.body(task.id))).toHaveLength(1);
+      expect(f.api.queue.view().entries.map(entry => `${entry.goal}:${entry.state}:${entry.origin}`)).toEqual(['Find stone:running:app', 'Find wood:queued:app']);
+      expect((await f.execute('minecraft.status', {})).text).toContain('依頼の列');
       expect((await f.execute('minecraft.cancel', {})).ok).toBe(true);
-      expect(f.runtime.get('owner', second.id)?.phase).toBe('stopped');
-      expect(f.runtime.get('owner', first.id)?.phase).not.toBe('stopped');
+      expect(f.runtime.get('owner', first.id)?.phase).toBe('stopped');
+      expect(f.api.queue.view().recent[0]).toMatchObject({ goal: 'Find stone', state: 'cancelled' });
+      // The list goes on with the next request, which has its own task now.
+      await f.api.queue.pump();
+      expect(f.api.queue.view().entries.map(entry => `${entry.goal}:${entry.state}`)).toEqual(['Find wood:running']);
       turn.abort();
     });
   });
@@ -167,7 +178,7 @@ describe('Minecraft requests enter the canonical common task tree', () => {
   it('stops the owner\'s unfinished body task from the mod\'s 「やめる」 whatever its turn shows, naming the task or not (dragon26 fix 4)', async () => {
     const lines: string[] = [], f = fixture();
     let visibleTurn = true;
-    const api = fcaMinecraftRequests({ runtime: f.runtime, control: f.control, conversation: f.conversation, visible: createFcaSourceGuard({ runtime: f.runtime, state: f.state, conversations: f.conversations,
+    const api = fcaMinecraftRequests({ db: f.db, runtime: f.runtime, control: f.control, conversation: f.conversation, visible: createFcaSourceGuard({ runtime: f.runtime, state: f.state, conversations: f.conversations,
       ownerScope: 'owner', ownerAlone: () => false }), ownerScope: 'owner',
       ownerAlone: () => false, sourceVisible: () => visibleTurn, stop: async (id, reason) => { lines.push(`stop ${reason}`); return f.runtime.stop('owner', id, reason); },
       atomic: work => underWriteLock(f.db, null, '', work, 'minecraft_test'), log: line => lines.push(line) });
@@ -201,5 +212,78 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     const made = (await f.api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'asking-turn', intent: { kind: 'task', goal: 'Find stone' } }))!;
     const ids = f.runtime.taskSources('owner', made.request!.id).flatMap(source => source.recalledMemoryIds);
     expect(ids).toEqual(on ? ['asking-turn'] : expect.arrayContaining(['accumulated', 'asking-turn']));
+  });
+});
+
+describe('the owner\'s list of requests, through the game chat and the mod, on the real task tree', () => {
+  const said = (f: ReturnType<typeof fixture>, text: string) => f.conversations.appendTurn('owner', 'platform:minecraft:world', text, 'はい', at).id;
+  const ask = (f: ReturnType<typeof fixture>, id: string, intent: Parameters<typeof f.api.intent>[0]['intent']) =>
+    f.api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: id }, experienceId: said(f, id), intent });
+  const listed = (f: ReturnType<typeof fixture>) => f.api.queue.view().entries.map(entry => `${entry.goal}:${entry.state}`);
+
+  it('adds a second request to the list (never as words for the first), starts it when the first ends, and says nothing is running to a message when none is', async () => {
+    const f = fixture();
+    expect(await ask(f, 'm0', { kind: 'message', goal: '続けて' })).toMatchObject({ rejected: 'queue_unavailable', reason: 'nothing_running' });
+    const first = (await ask(f, 'g1', { kind: 'task', goal: 'ケーキを1個作る' }))!;
+    const second = (await ask(f, 'g2', { kind: 'task', goal: '木材を64個集める' }))!;
+    expect(second.request!.id).not.toBe(first.request!.id);
+    expect(listed(f)).toEqual(['ケーキを1個作る:running', '木材を64個集める:queued']);
+    expect(f.runtime.list('owner').filter(task => f.bodyStore.body(task.id))).toHaveLength(1);
+    // The body has one request: the second has no task until its turn.
+    f.authority.event('owner', first.request!.id, 'test_completed', at, { status: 'completed' });
+    await f.api.queue.pump();
+    expect(listed(f)).toEqual(['木材を64個集める:running']);
+    const task = f.runtime.get('owner', f.api.queue.snapshot().entries.find(entry => entry.goal.startsWith('木材'))!.taskId!)!;
+    expect(task).toMatchObject({ goal: '木材を64個集める', phase: expect.any(String) });
+    expect(f.runtime.snapshot('owner', task.id)!.messages.map(message => message.text)).toContain('ゲーム内の本人の依頼: 木材を64個集める');
+    expect(f.api.queue.view().recent[0]).toMatchObject({ goal: 'ケーキを1個作る', state: 'done' });
+  });
+
+  it('puts a request first (pausing the one running with a real stop), holds, resumes with the same task, and stops the list', async () => {
+    const f = fixture();
+    const first = (await ask(f, 'g1', { kind: 'task', goal: 'ケーキを1個作る' }))!;
+    await ask(f, 'g2', { kind: 'task', goal: '木材を64個集める', placement: 'now' });
+    expect(listed(f)).toEqual(['木材を64個集める:running', 'ケーキを1個作る:paused']);
+    expect(f.runtime.get('owner', first.request!.id)?.phase).toBe('stopped');
+    expect(await ask(f, 'g3', { kind: 'resume', goal: '', target: '#1' })).toEqual({ kind: 'none', goal: '' });
+    await ask(f, 'g4', { kind: 'hold', goal: '' });
+    // The one held is stopped and the paused one waits no more: the list goes on with it, by its own task.
+    expect(listed(f)).toEqual(['ケーキを1個作る:running', '木材を64個集める:paused']);
+    expect(f.api.queue.snapshot().entries.find(entry => entry.goal.startsWith('ケーキ'))!.taskId).toBe(first.request!.id);
+    expect(f.runtime.get('owner', first.request!.id)?.phase).not.toBe('stopped');
+    expect(await ask(f, 'g5', { kind: 'stop', goal: '' })).toEqual({ kind: 'stop', goal: '' });
+    expect(listed(f)).toEqual(['ケーキを1個作る:stopped', '木材を64個集める:paused']);
+    expect(f.api.queue.view().autoRun).toBe(false);
+    expect(await ask(f, 'g6', { kind: 'cancel', goal: '', target: '#9' })).toMatchObject({ reason: 'no_such_request' });
+    expect(await ask(f, 'g7', { kind: 'cancel', goal: '' })).toMatchObject({ reason: 'nothing_running' });
+  });
+
+  it('starts a request of the mod\'s screen, which came from no turn, as a task of its own with no source to observe', async () => {
+    const f = fixture();
+    const added = await f.api.queue.operate({ op: 'add', goal: 'ケーキを作る' }, { origin: 'mod' });
+    expect(added).toMatchObject({ ok: true, entry: { state: 'running', taskId: expect.any(String), origin: 'mod' } });
+    const task = f.runtime.get('owner', added.entry!.taskId!)!;
+    expect(task).toMatchObject({ goal: 'ケーキを作る', origin: 'owner_request' });
+    expect(f.bodyStore.body(task.id)).toBe('minecraft:world');
+    expect(f.runtime.snapshot('owner', task.id)!.messages.filter(message => message.id.startsWith('external:'))).toEqual([]);
+    expect(f.runtime.readyTasks('owner').map(item => item.id)).toContain(task.id);
+  });
+
+  it('takes a request that was made from outside as the one running, and the mod\'s stop of a named request cancels it so the list goes on', async () => {
+    const f = fixture();
+    const own = f.runtime.createChild('owner', f.root.id, { title: 'external', goal: 'エンドラを倒して', completionCriteria: 'x' }, 'external-1');
+    expect(f.bodyStore.bind(own.id, 'minecraft:world')).toBe(true);
+    await f.api.queue.pump();
+    // Not his request by its criteria and parent kind: not adopted, but it holds the body, so nothing else starts beside it.
+    expect(listed(f)).toEqual([]);
+    await f.api.queue.operate({ op: 'add', goal: 'パンを作る' }, { origin: 'mod' });
+    expect(listed(f)).toEqual(['パンを作る:queued']);
+    f.runtime.stop('owner', own.id, 'test');
+    await f.api.queue.pump();
+    expect(listed(f)).toEqual(['パンを作る:running']);
+    const taskId = f.api.queue.snapshot().entries[0]!.taskId!;
+    expect(await f.api.ownerStop({ taskId })).toEqual({ stopped: [taskId], open: 1 });
+    expect(f.runtime.get('owner', taskId)?.phase).toBe('stopped');
+    expect(f.api.queue.view().recent[0]).toMatchObject({ goal: 'パンを作る', state: 'cancelled' });
   });
 });

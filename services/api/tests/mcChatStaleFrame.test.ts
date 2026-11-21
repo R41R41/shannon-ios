@@ -51,7 +51,7 @@ function fixture() {
     { now: () => clock, leaseValid: () => true, ownerAlone: () => true });
   poll({ control, now: () => clock }, 1);
   const lines: string[] = [];
-  const api = fcaMinecraftRequests({ runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
+  const api = fcaMinecraftRequests({ db: h.db, runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
     sourceVisible: () => true, stop: async (id, reason) => runtime.stop('owner', id, reason),
     atomic: work => underWriteLock(h.db, null, '', work, 'minecraft_test'), log: line => lines.push(line) });
   const request = { requestId: 'game-one', serverId: 'world', observedAt: at } as MinecraftTurnRequest;
@@ -246,7 +246,7 @@ describe('finding the open request does not walk the provenance of every task ev
     const real = createFcaSourceGuard({ runtime: f.runtime, state: f.state, conversations: f.conversations, ownerScope: 'owner', ownerAlone: () => true });
     const visible = Object.assign((scope: string, id: string, pending?: string, via?: never) => { asked.push(id); return real(scope, id, pending, via); }, real);
     const conversation = createFcaConversationBridge({ runtime: f.runtime, ownerScope: 'owner', visible });
-    const api = fcaMinecraftRequests({ runtime: f.runtime, control: f.control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
+    const api = fcaMinecraftRequests({ db: f.db, runtime: f.runtime, control: f.control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
       sourceVisible: () => true, stop: async (id, reason) => f.runtime.stop('owner', id, reason),
       atomic: work => underWriteLock(f.db, null, '', work, 'minecraft_test') });
     return { api, asked };
@@ -276,7 +276,7 @@ describe('finding the open request does not walk the provenance of every task ev
     const first = (await api.intent({ scopeKey: 'owner', request: f.request, experienceId: said(f, 'エンドラを倒して'), intent: { kind: 'task', goal: 'エンドラを倒して' } }))!;
     asked.length = 0;
     const again = (await api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: 'game-two' }, experienceId: said(f, '続けて'),
-      intent: { kind: 'task', goal: '続けて' } }))!;
+      intent: { kind: 'message', goal: '続けて' } }))!;
     expect(again.request?.id).toBe(first.request?.id);
     expect([...new Set(asked)]).toEqual([first.request!.id]);
     expect(asked.filter(id => old.includes(id))).toEqual([]);
@@ -312,7 +312,7 @@ describe('the task keeps his words when they are a dragon request (the model rew
     const first = (await f.api.intent({ scopeKey: 'owner', request: { ...f.request, message: 'エンドラを討伐して' }, experienceId: said(f, 'エンドラを討伐して'),
       intent: { kind: 'task', goal: rewritten } }))!;
     const again = (await f.api.intent({ scopeKey: 'owner', request: { ...f.request, requestId: 'game-two', message: 'エンドラ討伐して' },
-      experienceId: said(f, 'エンドラ討伐して'), intent: { kind: 'task', goal: '続ける' } }))!;
+      experienceId: said(f, 'エンドラ討伐して'), intent: { kind: 'message', goal: '続ける' } }))!;
     expect(again.request?.id).toBe(first.request?.id);
     expect(f.runtime.snapshot('owner', first.request!.id)!.messages.map(message => message.text)).toContain('ゲーム内の本人の言葉（いまのタスクへ）: エンドラ討伐して');
     f.runtime.stop('owner', first.request!.id, 'test');

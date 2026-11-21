@@ -1,4 +1,4 @@
-import { MINECRAFT_INTENT_GOAL_CHARACTERS, type MinecraftIntent } from '../surfaces/minecraft/minecraftIntent.js';
+import { MINECRAFT_INTENT_GOAL_CHARACTERS, type MinecraftBodyIntent } from '../surfaces/minecraft/minecraftIntent.js';
 import { validatedMinecraftBodyState, type MinecraftBodyState } from '../surfaces/minecraft/minecraftBodyState.js';
 import type { PlatformBridgeBinding, PlatformBridgeConfiguration } from '../mind/memory/platformBridge.js';
 import { composedPlatformBridgeConfiguration } from '../mind/memory/platformBridgeBindings.js';
@@ -14,7 +14,7 @@ import { composedPlatformBridgeConfiguration } from '../mind/memory/platformBrid
 export const MINECRAFT_BODY_TURN_PATH = '/v1/body/minecraft/turns';
 export const MINECRAFT_PLATFORM = 'minecraft' as const;
 
-export type { MinecraftIntent } from '../surfaces/minecraft/minecraftIntent.js';
+export type { MinecraftBodyIntent, MinecraftIntent } from '../surfaces/minecraft/minecraftIntent.js';
 
 export const MINECRAFT_BODY_LIMITS = Object.freeze({
   messageCharacters: 600,
@@ -74,7 +74,7 @@ export interface MinecraftTurnResponse {
    * Present on a turn of the owner only. `request`: phase 4, a task that was queued as a request to her body (the body
    * claims it like any other request, `/v1/body/minecraft/claim`); absent when no body was claiming, as before.
    */
-  intent?: MinecraftIntent & { request?: { id: string }; rejected?: 'model_unavailable' | 'queue_unavailable' };
+  intent?: MinecraftBodyIntent & { request?: { id: string }; rejected?: 'model_unavailable' | 'queue_unavailable' };
   threadId: string;
   duplicate: boolean;
   /** Why the turn was answered and not remembered: `offline_server`, `people_disabled`, `rate_limited`, or a platform-people reason. */

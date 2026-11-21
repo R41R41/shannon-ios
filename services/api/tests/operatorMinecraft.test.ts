@@ -414,7 +414,7 @@ describe('the operator request in the common task tree', () => {
     control.poll({ scopeKey: 'owner', deviceId: 'minebot' }, { schemaVersion: 1, serverId: 'world', connectionId: 'connection',
       observation: { schemaVersion: 1, bodyId: 'minecraft:world', sequence: 1, stateAt: at, receivedAt: at, connected: true, state: {}, facts: {} },
       skills: [], candidates: [], receipts: [], activeOperationIds: [] });
-    const api = fcaMinecraftRequests({ runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
+    const api = fcaMinecraftRequests({ db: h.db, runtime, control, conversation, visible, ownerScope: 'owner', ownerAlone: () => true,
       sourceVisible: () => true, stop: async (id, reason) => runtime.stop('owner', id, reason),
       atomic: work => underWriteLock(h.db, null, '', work, 'operator_test') });
     return { runtime, bodyStore, operator: api.operator, db: h.db, visible, alone };

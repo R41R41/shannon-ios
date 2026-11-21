@@ -29,7 +29,7 @@ import {
 import { VoiceWords } from './platformVoiceWords.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
-import type { VoiceMinecraftIntentResult, VoiceMinecraftPort, VoiceMinecraftState } from './voiceMinecraftPort.js';
+import { voiceIntentLineKind, type VoiceMinecraftIntentResult, type VoiceMinecraftPort, type VoiceMinecraftState } from './voiceMinecraftPort.js';
 
 /**
  * The reply to what someone said in a Discord voice channel (dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、Discordでライ氏や
@@ -404,7 +404,7 @@ export class PlatformVoiceService {
       experienceId: answer.experienceId ?? null, allowNew: seat.humans.size <= 1,
     }).catch((): VoiceMinecraftIntentResult => ({ delivered: false }));
     out.line({
-      type: 'intent', kind: outcome.as === 'message' ? 'task_message' : intent.kind, delivered: outcome.delivered,
+      type: 'intent', kind: voiceIntentLineKind(intent.kind, outcome.as), delivered: outcome.delivered,
       ...(outcome.taskId ? { taskId: outcome.taskId } : {}), ...(outcome.reason ? { reason: outcome.reason } : {}),
     });
     this.log(`Shannon platform voice intent kind=${intent.kind} delivered=${outcome.delivered} as=${outcome.as ?? '-'} reason=${outcome.reason ?? '-'}`);

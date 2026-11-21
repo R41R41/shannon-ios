@@ -1,6 +1,6 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { switchOn } from '@shannon/switches';
-import { MINECRAFT_BODY_LIMITS } from '../../contracts/minecraftBodyContract.js';
+import { minecraftQueueGuide } from '../../contracts/minecraftQueuePrompt.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { VOICE_AUDIO_TAG_LINES } from '../../infra/models/voiceAudioTags.js';
 import type { HeardLine } from './voiceRoom.js';
@@ -77,6 +77,9 @@ export const VOICE_MINECRAFT_REFUSALS: Readonly<Record<VoiceMinecraftRefusal, st
   no_turn: 'ごめん、いまの頼みを記録できなくて、マイクラの体に渡せなかった。もう一回言ってくれる？',
   turn_not_visible: 'ごめん、いまの頼みを記録から確かめられなくて、マイクラの体に渡せなかった。もう一回言ってくれる？',
   others_present: 'ほかの人がいる間は、新しい作業を体に頼むのはやめてるんだ。いま動いてる作業への伝言なら渡せるよ。',
+  nothing_running: 'ごめん、いま体が動かしてる依頼がなくて、それは渡せなかった。どの依頼か番号で言ってくれたら、そうするね。',
+  no_such_request: 'ごめん、その番号の依頼が列に見つからなかった。もう一回言ってくれる？',
+  queue_full: 'ごめん、依頼の列がいっぱいで、新しい依頼を足せなかった。どれかが終わってからまた頼んでね。',
 });
 
 /** The owner's turn, with others in the channel or alone in a conversation that is not private: the intent field and what it can do now. */
@@ -88,27 +91,7 @@ export function voiceIntentInstructions(state: VoiceMinecraftState, allowNew: bo
       '体への頼みごとをされた時だけ、引き受けたとは言わずに短くそう伝える。雑談には普通に答え、このことには触れない。',
     ].join('\n');
   }
-  const lines = [
-    '[マイクラの体への頼みごと]（返答の minecraftIntent）',
-  ];
-  if (state.running) {
-    lines.push(
-      `いま体は「${state.running.goal}」をしている。${SHANNON_OWNER_NAME}がその作業について言うこと（変えてほしい・続けてほしい・次はこうしてほしい・それでいい）は、`
-        + `kind=task にして、goal に${MINECRAFT_BODY_LIMITS.goalCharacters}字以内で伝言を書く。それはいまの作業への伝言として渡る（新しい作業にはならない）。`,
-    );
-  } else if (allowNew) {
-    lines.push(
-      `${SHANNON_OWNER_NAME}がマイクラでしてほしいこと（作る・集める・取ってくる・掘る・倒す・行く・建てるなど）をはっきり頼んだら kind=task にし、`
-        + `goal に何をどれだけするかを${MINECRAFT_BODY_LIMITS.goalCharacters}字以内で書く。数が言われていなければ、ほどよい数を自分で決める。`,
-    );
-  } else {
-    lines.push('いま体は作業をしていない。ほかの人がいる間は新しい作業を頼めないので、頼まれても引き受けたとは言わず、そう短く伝える（kind=none）。');
-  }
-  lines.push(
-    '今していることをやめて・止まってと言われたら kind=stop。雑談・質問・何をしてほしいか本当に分からない時は kind=none で、goal は空にする。',
-    'task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。',
-  );
-  return lines.join('\n');
+  return minecraftQueueGuide({ queueLines: state.queue ?? [], allowNew, running: state.running?.goal ?? null }).join('\n');
 }
 
 /** A friend's turn: no one but the owner moves her body. */

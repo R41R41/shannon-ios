@@ -9,6 +9,7 @@ import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/infra/models/chatModel.js';
 import { MINECRAFT_INTENT_REFUSALS, MinecraftBody, type MinecraftBodyDependencies } from '../src/surfaces/minecraft/minecraftBody.js';
+import { bodyIntentOf } from '../src/surfaces/minecraft/minecraftIntent.js';
 import { configuredMinecraftBody } from '../src/contracts/minecraftBodyContract.js';
 import { SQLiteMinecraftTurnLog } from '../src/mind/action/respond/store/surfaceTurnStore.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
@@ -72,7 +73,7 @@ class GameModel implements ShannonChatModel {
 }
 const OWNER_UUID = 'b9191317-c52d-4d67-85fe-ab831e6db146';
 
-function harness(intent: Pick<MinecraftBodyDependencies, 'fcaIntent' | 'fcaAdmission'>) {
+function harness(intent: Pick<MinecraftBodyDependencies, 'fcaIntent' | 'fcaAdmission' | 'fcaQueueLines'>) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-run19-')); directories.push(directory);
   const path = join(directory, 'shannon.sqlite'), now = () => '2026-10-20T01:54:24.000Z';
   const store = new SQLiteShannonStore({ path, now }), background = new BackgroundUpdateCoordinator(store, store);
@@ -91,7 +92,7 @@ function harness(intent: Pick<MinecraftBodyDependencies, 'fcaIntent' | 'fcaAdmis
 describe('「続けて」 refused, and said as it was', () => {
   it('says a refusal known before her reply in her own words, offers no intent, and keeps what she said', async () => {
     let asked = 0;
-    const h = harness({ fcaAdmission: () => 'others_present', fcaIntent: async input => { asked += 1; return input.intent; } });
+    const h = harness({ fcaAdmission: () => 'others_present', fcaIntent: async input => { asked += 1; return bodyIntentOf(input.intent); } });
     const response = await h.turn('one');
     expect(promptOf(h.model.requests.at(-1)!)).toContain(MINECRAFT_INTENT_REFUSALS.others_present);
     expect(h.model.requests.at(-1)!.offerMinecraftIntent).toBeUndefined();
@@ -102,10 +103,20 @@ describe('「続けて」 refused, and said as it was', () => {
     await h.background.waitForIdle('owner');
   });
   it('leaves a body without a frame to the check after her reply, so that a stop still reaches the body task', async () => {
-    const h = harness({ fcaAdmission: () => 'body_unavailable', fcaIntent: async input => input.intent });
+    const h = harness({ fcaAdmission: () => 'body_unavailable', fcaIntent: async input => bodyIntentOf(input.intent) });
     await h.turn('three');
     expect(h.model.requests.at(-1)!.offerMinecraftIntent).toBe(true);
     expect(h.lines).toEqual([]);
+    await h.background.waitForIdle('owner');
+  });
+  it('gives her the list of requests with her turn, and says a refusal about the list in fixed words', async () => {
+    const h = harness({ fcaAdmission: () => null, fcaQueueLines: () => ['#1 実行中 「ケーキを作る」', '#2 待ち 「木材を集める」'],
+      fcaIntent: async () => ({ kind: 'none', goal: '', rejected: 'queue_unavailable', reason: 'nothing_running' }) });
+    const response = await h.turn('four');
+    const prompt = promptOf(h.model.requests.at(-1)!);
+    expect(prompt).toContain('[依頼の列]\n#1 実行中 「ケーキを作る」\n#2 待ち 「木材を集める」');
+    expect(prompt).toContain('placement');
+    expect(response.reply).toBe(MINECRAFT_INTENT_REFUSALS.nothing_running);
     await h.background.waitForIdle('owner');
   });
   it('sends the words of a refusal found after her reply, notes them in her thread, and keeps the reason off the wire', async () => {

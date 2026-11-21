@@ -1,14 +1,34 @@
 /**
  * What she would like her Minecraft body to do, as a field of the structured reply of a turn with the owner
  * (`minecraftBody.ts`). No imports: the chat model's parsing reads it without the body's wiring.
+ *
+ * The owner's requests for the body are a list (`contracts/minecraftQueueContract.ts`), so the kinds say what is done to the list:
+ * `task` adds a request (where: `placement`), `message` is words for the request that is running, `stop` stops the whole list,
+ * `cancel` / `hold` / `resume` act on one request (`target`, 「#3」 or 「3」; empty is the one running, and for `resume` the whole
+ * list), and `move` puts the target request at `placement`. Which of them his words are is hers to judge.
  */
+export const MINECRAFT_INTENT_KINDS = ['none', 'task', 'message', 'stop', 'cancel', 'hold', 'resume', 'move'] as const;
+export type MinecraftIntentKind = typeof MINECRAFT_INTENT_KINDS[number];
+export const MINECRAFT_INTENT_PLACEMENTS = ['end', 'next', 'now'] as const;
+
 export interface MinecraftIntent {
+  kind: MinecraftIntentKind;
+  /** What to do, in her words, for `task` (and the words for `message`). Empty otherwise. */
+  goal: string;
+  /** For `task` and `move`: after all (`end`), straight after the one running (`next`), before it (`now`). Empty: `end`. */
+  placement?: typeof MINECRAFT_INTENT_PLACEMENTS[number] | '';
+  /** For `cancel`, `hold`, `resume`, `move`: the request, as 「#3」 or 「3」. Empty: the one running (`resume`: the whole list). */
+  target?: string;
+}
+
+/** What the body is told of an intent: the kinds it has always known. It does the work through the common task, not through this. */
+export interface MinecraftBodyIntent {
   kind: 'none' | 'task' | 'stop';
-  /** What to do, in her words, for `task`. Empty otherwise. */
   goal: string;
 }
 
 export const MINECRAFT_INTENT_GOAL_CHARACTERS = 120;
+const TARGET_CHARACTERS = 12;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -18,21 +38,47 @@ export const MINECRAFT_INTENT_SCHEMA = Object.freeze({
   additionalProperties: false,
   properties: {
     kind: {
-      type: 'string', enum: ['none', 'task', 'stop'],
-      description: 'マイクラの体に頼むこと。task=ライ氏にゲームの中でしてほしいことをはっきり頼まれた。stop=今していることをやめてと言われた。none=それ以外',
+      type: 'string', enum: [...MINECRAFT_INTENT_KINDS],
+      description: 'マイクラの体の「依頼の列」への頼み。task=新しい依頼を足す（ゲームの中でしてほしいことをはっきり頼まれた）。'
+        + 'message=いま実行中の依頼への言葉（変えてほしい・続けてほしい）。stop=列ぜんたいを止める。cancel=依頼をやめる。hold=依頼を保留する。'
+        + 'resume=保留・停止の依頼を戻す。move=列の中で依頼の順番を変える。none=それ以外',
     },
-    goal: { type: 'string', description: `task の時だけ、何をどれだけするかを${MINECRAFT_INTENT_GOAL_CHARACTERS}字以内で。それ以外は空文字` },
+    goal: { type: 'string', description: `task か message の時だけ、何をどれだけするか（message は伝える言葉）を${MINECRAFT_INTENT_GOAL_CHARACTERS}字以内で。それ以外は空文字` },
+    placement: {
+      type: 'string', enum: [...MINECRAFT_INTENT_PLACEMENTS, ''],
+      description: 'task と move の時だけ。end=ほかの依頼のあと（あとで・ついでに）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる。それ以外は空文字',
+    },
+    target: { type: 'string', description: 'cancel・hold・resume・move の時だけ、依頼の番号（「#3」か「3」）。いま実行中の依頼なら空文字。resume の空文字は列ぜんたい。それ以外は空文字' },
   },
-  required: ['kind', 'goal'],
+  required: ['kind', 'goal', 'placement', 'target'],
 });
 
-/** The intent of a structured reply, or null when it is absent or unreadable. A task without a goal is no task. */
+const words = (value: unknown, limit: number): string => (typeof value === 'string'
+  ? value.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim().slice(0, limit) : '');
+
+const USES_GOAL: ReadonlySet<MinecraftIntentKind> = new Set(['task', 'message']);
+const USES_PLACEMENT: ReadonlySet<MinecraftIntentKind> = new Set(['task', 'move']);
+const USES_TARGET: ReadonlySet<MinecraftIntentKind> = new Set(['cancel', 'hold', 'resume', 'move']);
+
+/**
+ * The intent of a structured reply, or null when it is absent or unreadable. A task or a message without words is nothing, and a move
+ * without a target is nothing. The older shape (`kind`, `goal`) is read as before.
+ */
 export function parsedMinecraftIntent(value: unknown): MinecraftIntent | null {
-  if (!isRecord(value)) return null;
-  const goal = typeof value.goal === 'string'
-    ? value.goal.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim().slice(0, MINECRAFT_INTENT_GOAL_CHARACTERS) : '';
-  if (value.kind === 'task') return goal ? { kind: 'task', goal } : null;
-  if (value.kind === 'stop') return { kind: 'stop', goal: '' };
-  if (value.kind === 'none') return { kind: 'none', goal: '' };
-  return null;
+  if (!isRecord(value) || !(MINECRAFT_INTENT_KINDS as readonly unknown[]).includes(value.kind)) return null;
+  const kind = value.kind as MinecraftIntentKind;
+  const goal = USES_GOAL.has(kind) ? words(value.goal, MINECRAFT_INTENT_GOAL_CHARACTERS) : '';
+  const target = USES_TARGET.has(kind) ? words(value.target, TARGET_CHARACTERS) : '';
+  const placement = USES_PLACEMENT.has(kind) && (MINECRAFT_INTENT_PLACEMENTS as readonly unknown[]).includes(value.placement)
+    ? value.placement as 'end' | 'next' | 'now' : '';
+  if (USES_GOAL.has(kind) && !goal) return null;
+  if (kind === 'move' && !target) return null;
+  return { kind, goal, ...(placement ? { placement } : {}), ...(target ? { target } : {}) };
+}
+
+/** What the body is told when nothing else decided: a stop of any kind is a stop, a task is a task, the rest is nothing. */
+export function bodyIntentOf(intent: MinecraftIntent): MinecraftBodyIntent {
+  if (intent.kind === 'task') return { kind: 'task', goal: intent.goal };
+  if (intent.kind === 'stop' || intent.kind === 'cancel' || intent.kind === 'hold') return { kind: 'stop', goal: '' };
+  return { kind: 'none', goal: '' };
 }

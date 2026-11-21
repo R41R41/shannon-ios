@@ -13,6 +13,9 @@ import type { MinecraftBodyRoute } from '../surfaces/minecraft/serverMinecraftBo
 import { createMinecraftBodyRoute } from './minecraftBodyRouteWiring.js';
 import { configuredMinecraftLive, streamOnlyMinecraftLive, type CommentaryParts } from './minecraftLiveWiring.js';
 import type { MinecraftLive } from '../surfaces/minecraft/minecraftLive.js';
+import { MINECRAFT_QUEUE_LIMITS, MINECRAFT_QUEUE_PATH, parsedMinecraftQueueRequest } from '../contracts/minecraftQueueContract.js';
+import type { MinecraftQueue } from './fcaMinecraftQueue.js';
+import { answerQueueRequest } from './fcaMinecraftQueueIntent.js';
 
 /** Every route of her Minecraft body (`docs/minecraft-body-contract.md`). */
 export const MINECRAFT_BODY_ROUTE_PREFIX = '/v1/body/minecraft/';
@@ -27,7 +30,7 @@ export function gameBodyMayCall(method: string | undefined, path: string): boole
     || (method === 'POST' && path === '/v1/body/events') || (method === 'GET' && path === '/v1/body/presence');
 }
 
-type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'fcaIntent' | 'fcaAdmission'>;
+type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'fcaIntent' | 'fcaAdmission' | 'fcaQueueLines'>;
 
 /**
  * Her Minecraft body as the server wires it: its game experiences, the game-chat route whose owner intents enter the common
@@ -48,7 +51,32 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
     admission?: MinecraftBodyDependencies['fcaAdmission'];
     /** The mod's 「やめる」, straight to the stop of the owner's body task(s) (`MINECRAFT_STOP_PATH`). */
-    stop?(input: { taskId?: string }): Promise<{ stopped: string[]; open: number }> } | null = null;
+    stop?(input: { taskId?: string }): Promise<{ stopped: string[]; open: number }>;
+    /** The owner's list of requests (`MINECRAFT_QUEUE_PATH`, `fcaMinecraftQueue.ts`). */
+    queue?: MinecraftQueue } | null = null;
+  /**
+   * The owner's list of requests (`MINECRAFT_QUEUE_PATH`): read by `GET` (`?since=<rev>`), changed by `POST` of one operation. It is the
+   * game device in the owner's scope, as the stop's route is, and like it does not ask whether others are near: it is the owner's own
+   * list screen (the chat's new requests still ask).
+   */
+  async function serveQueue(request: IncomingMessage, response: ServerResponse, principal: ShannonDevicePrincipal | null): Promise<void> {
+    if (request.method !== 'GET' && request.method !== 'POST') sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+    else if (!principal || !isGameBody(principal) || principal.scopeKey !== configuration?.ownerScopeKey) {
+      sendJson(response, 403, { error: 'FCA_BODY_DEVICE_DENIED' });
+    } else if (!common?.queue) sendJson(response, 503, { error: 'FCA_BODY_NOT_ENABLED' });
+    else if (request.method === 'GET') {
+      const since = new URL(request.url ?? '', 'http://queue.invalid').searchParams.get('since');
+      sendJson(response, 200, common.queue.read(since !== null && /^\d{1,12}$/u.test(since) ? Number(since) : undefined));
+    } else {
+      const input = await readJson(request, MINECRAFT_QUEUE_LIMITS.bodyBytes).catch(() => undefined);
+      const parsed = parsedMinecraftQueueRequest(input);
+      if (!parsed) sendJson(response, 400, { error: 'MINECRAFT_QUEUE_INPUT_INVALID' });
+      else {
+        try { sendJson(response, 200, await answerQueueRequest(common.queue, parsed, { origin: 'mod' })); }
+        catch { sendJson(response, 500, { error: 'MINECRAFT_QUEUE_FAILED' }); }
+      }
+    }
+  }
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
@@ -75,7 +103,8 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
         : Promise.resolve({ kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason: 'body_unavailable' as const });
       // Without the common runtime there is no body to hand anything to; said after her reply (a stop is answered there too).
       const fcaAdmission: MinecraftBodyDependencies['fcaAdmission'] = input => common ? common.admission?.(input) ?? null : 'body_unavailable';
-      route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, fcaIntent, fcaAdmission });
+      const fcaQueueLines = () => common?.queue?.promptLines() ?? [];
+      route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, fcaIntent, fcaAdmission, fcaQueueLines });
     },
     /** The operations console authenticates on its own: her Minecraft body's token is refused there before it is read. */
     refusesConsole(request: IncomingMessage, response: ServerResponse, devices: { authenticate(authorization: string | undefined): ShannonDevicePrincipal | null } | null): boolean {
@@ -140,6 +169,10 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
             catch { sendJson(response, 500, { error: 'MINECRAFT_STOP_FAILED' }); }
           }
         }
+        return true;
+      }
+      if (path === MINECRAFT_QUEUE_PATH) {
+        await serveQueue(request, response, principal);
         return true;
       }
       const body = request.method === 'POST' ? await readJson(request, 64 * 1024) : undefined;

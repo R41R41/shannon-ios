@@ -41,6 +41,8 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'execution/012_operator_audit': '162f55b8b8119d4cfe58226f25898d12b94ec1e81dd3ad3bda14f0c4f27fcc8c',
   // 2026-10-15: the FCA provenance sets, made when SHANNON_FCA_PROVENANCE_REFS (on by default) first opens the task runtime.
   'execution/013_fca_provenance_sets': '628187523990f2531313993c8788fdba8f041441225a1aa61838349decc7aa55',
+  // 2026-11-21: the owner's list of requests for her Minecraft body, made when the head's request list first opens its store.
+  'execution/014_minecraft_request_queue': '9f06cbddacbc47fcd6d2df2e45508b2aa861fe0dbd4d19be9a7037cd4491a8bd',
   // Her inner note (Syzygy ADR-0012, services/api/src/infra/sqlite/migrations/emotion/), as production's ledger holds them since
   // 2026-10-13 (read 2026-10-14): without them every deploy check reported `unknown step emotion/…`.
   'emotion/001_inner_notes': 'd683a488c6ec1095487a1f8cb721506c571bc59e9bbff5e0b876c7fa9c49e3cc',
@@ -96,6 +98,8 @@ export const S3_ADDITIONS = Object.freeze({
     'operator_audit',
     // 2026-10-15: the FCA provenance sets (execution/013), made when SHANNON_FCA_PROVENANCE_REFS first opens the task runtime.
     'fca_provenance_sets',
+    // 2026-11-21: the list of requests for her Minecraft body (execution/014), made when its store first opens (the head's wake).
+    'minecraft_request_queue', 'minecraft_request_queue_state',
     // 2026-10-14: the voice history's summaries and wants, made when SHANNON_VOICE_HISTORY_SUMMARY first takes effect.
     'conversation_voice_summaries', 'conversation_voice_summary_wants',
     // 2026-10-14: her feeling events (emotion/004, ADR-0013 stage 1), with their time index and primary-key index, made when

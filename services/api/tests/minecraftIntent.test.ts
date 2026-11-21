@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { bodyIntentOf, MINECRAFT_INTENT_KINDS, MINECRAFT_INTENT_SCHEMA, parsedMinecraftIntent } from '../src/surfaces/minecraft/minecraftIntent.js';
+import { minecraftQueueGuide } from '../src/contracts/minecraftQueuePrompt.js';
+import { materialsOf, recipeOf } from '../src/surfaces/minecraft/minecraftLlmcRecipes.js';
+
+describe('the intent field of her reply', () => {
+  it('has every field required and every kind of the list in the enum', () => {
+    expect(MINECRAFT_INTENT_SCHEMA.required).toEqual(['kind', 'goal', 'placement', 'target']);
+    expect(MINECRAFT_INTENT_SCHEMA.properties.kind.enum).toEqual([...MINECRAFT_INTENT_KINDS]);
+    expect(MINECRAFT_INTENT_SCHEMA.properties.placement.enum).toEqual(['end', 'next', 'now', '']);
+    expect(Object.keys(MINECRAFT_INTENT_SCHEMA.properties)).toEqual(MINECRAFT_INTENT_SCHEMA.required);
+  });
+
+  it('reads each kind with only the fields it uses, and the older shape as it was', () => {
+    expect(parsedMinecraftIntent({ kind: 'task', goal: ' ケーキを\n作る ', placement: 'next', target: '#2' })).toEqual({ kind: 'task', goal: 'ケーキを 作る', placement: 'next' });
+    expect(parsedMinecraftIntent({ kind: 'task', goal: '丸石を集める' })).toEqual({ kind: 'task', goal: '丸石を集める' });
+    expect(parsedMinecraftIntent({ kind: 'message', goal: '16個にして', placement: 'now' })).toEqual({ kind: 'message', goal: '16個にして' });
+    expect(parsedMinecraftIntent({ kind: 'stop', goal: 'x', placement: 'now', target: '3' })).toEqual({ kind: 'stop', goal: '' });
+    expect(parsedMinecraftIntent({ kind: 'cancel', goal: '', placement: '', target: ' #3 ' })).toEqual({ kind: 'cancel', goal: '', target: '#3' });
+    expect(parsedMinecraftIntent({ kind: 'hold', goal: '', placement: '', target: '' })).toEqual({ kind: 'hold', goal: '' });
+    expect(parsedMinecraftIntent({ kind: 'resume', goal: '', target: '2' })).toEqual({ kind: 'resume', goal: '', target: '2' });
+    expect(parsedMinecraftIntent({ kind: 'move', goal: '', placement: 'end', target: '#1' })).toEqual({ kind: 'move', goal: '', placement: 'end', target: '#1' });
+    expect(parsedMinecraftIntent({ kind: 'none', goal: 'x' })).toEqual({ kind: 'none', goal: '' });
+  });
+
+  it('reads nothing from a task without words, a move without a target, an unknown kind, or a placement that is not one', () => {
+    expect(parsedMinecraftIntent({ kind: 'task', goal: '' })).toBeNull();
+    expect(parsedMinecraftIntent({ kind: 'message', goal: '  ' })).toBeNull();
+    expect(parsedMinecraftIntent({ kind: 'move', goal: '', placement: 'next', target: '' })).toBeNull();
+    expect(parsedMinecraftIntent({ kind: 'fly' })).toBeNull();
+    expect(parsedMinecraftIntent(null)).toBeNull();
+    expect(parsedMinecraftIntent({ kind: 'task', goal: 'a', placement: 'later' })).toEqual({ kind: 'task', goal: 'a' });
+    expect(parsedMinecraftIntent({ kind: 'task', goal: 'あ'.repeat(200) })?.goal).toHaveLength(120);
+    expect(parsedMinecraftIntent({ kind: 'cancel', target: '1234567890123456' })?.target).toHaveLength(12);
+  });
+
+  it('tells the body only the kinds it has always known', () => {
+    expect(bodyIntentOf({ kind: 'task', goal: 'a', placement: 'now' })).toEqual({ kind: 'task', goal: 'a' });
+    for (const kind of ['stop', 'cancel', 'hold'] as const) expect(bodyIntentOf({ kind, goal: '' })).toEqual({ kind: 'stop', goal: '' });
+    for (const kind of ['none', 'message', 'resume', 'move'] as const) expect(bodyIntentOf({ kind, goal: 'x' })).toEqual({ kind: 'none', goal: '' });
+  });
+});
+
+describe('what she is told of the list', () => {
+  const guide = (options: Partial<Parameters<typeof minecraftQueueGuide>[0]> = {}) =>
+    minecraftQueueGuide({ queueLines: [], allowNew: true, running: null, ...options }).join('\n');
+
+  it('says how his ways of asking map to the kinds, with the reason, and leaves the judgment to her', () => {
+    const text = guide();
+    for (const word of ['kind=task', 'kind=message', 'kind=stop', 'cancel', 'hold', 'resume', 'move', 'placement', 'end', 'next', 'now']) expect(text).toContain(word);
+    // Examples of his ways of saying it, as hers to match; the words are never matched by the code.
+    for (const example of ['あとで', '次に', '今のはやめて', '全部止めて']) expect(text).toContain(example);
+    expect(text).toContain('一度に一つ');
+    expect(text).toContain('[依頼の列] いまは空');
+  });
+
+  it('shows the list as it stands, the running request, and what others present change', () => {
+    const lines = ['#1 実行中 「ケーキを作る」', '#2 待ち 「木材を集める」'];
+    const text = guide({ queueLines: lines, running: 'ケーキを作る' });
+    expect(text).toContain('いま体は「ケーキを作る」をしている');
+    expect(text).toContain(`[依頼の列]\n${lines.join('\n')}`);
+    const others = guide({ allowNew: false });
+    expect(others).not.toContain('placement は言い方で選ぶ');
+    expect(others).toContain('新しい依頼（kind=task）は足せない');
+    expect(others).toContain('kind=message');
+  });
+});
+
+describe('the cake in the table of recipes', () => {
+  it('counts the cake and the sugar it needs, and the sugar from its cane', () => {
+    expect(recipeOf('cake')).toEqual({ yields: 1, needs: [{ item: 'milk_bucket', count: 3 }, { item: 'sugar', count: 2 }, { item: 'egg', count: 1 }, { item: 'wheat', count: 3 }] });
+    expect(recipeOf('minecraft:sugar')).toEqual({ yields: 1, needs: [{ item: 'sugar_cane', count: 1 }] });
+    expect(materialsOf('cake', 1, { chain: false })).toEqual({ spends: expect.arrayContaining([{ item: 'egg', count: 1 }]), uncounted: false });
+  });
+});

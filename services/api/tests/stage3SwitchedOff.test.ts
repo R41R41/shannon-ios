@@ -60,6 +60,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * tool-round, body-touch, body-touch-others and platform (and text-name's second chat request, which carries that prompt).
  * One digest of `reach-out` was changed by hand on 2026-10-26 for a change that is not stage 3's (owner: her face shows beside a
  * message she starts, so the Talk's icon is not the usual face): `conversation_messages`, whose row now keeps `messageEmotion`.
+ * Two digests of `minecraft` (its first and third provider requests) were changed by hand on 2026-11-21 for a change that is not stage 3's
+ * (the owner's requests for her body are a list: the intent field of the owner's game-chat turn has more kinds and two more fields).
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

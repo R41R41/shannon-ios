@@ -105,7 +105,7 @@ export function integratedFcaHarness(parts: {
     connectFcaMemoryTools({ tools, memory: shared.memory, conversation: bridge, ownerScope: 'owner', ownerAlone });
     tools.useTaskRuntime({ available: scope => bridge.taskToolsAvailable(scope), execute: (name, input, context) => bridge.executeTaskTool(name, input, context),
       observeRead: (scope, receipt) => bridge.observeRead(scope, receipt) });
-    const requests = fcaMinecraftRequests({ control, runtime: driver.runtime, conversation: bridge, visible,
+    const requests = fcaMinecraftRequests({ db: actions.db, control, runtime: driver.runtime, conversation: bridge, visible,
       ownerScope: 'owner', ownerAlone, stop: driver.stop,
       sourceVisible: id => shared.memory.read('owner', [id], { kind: 'owner' }).length === 1,
       atomic: work => underWriteLock(actions.db, null, '', work, 'fca_integration_admission') });

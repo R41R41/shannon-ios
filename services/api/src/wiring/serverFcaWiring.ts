@@ -324,7 +324,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
       return createFcaTouchWiring({ db, runtime: runtime.runtime, actions, selector: new JevTouchSelector(jev), ownerScope: parts.ownerScope,
         allowed: parts.touchAllowed, sourceVisible, sourcesVisible, threadId: scope => parts.conversations?.threadId(scope) ?? null });
     })() : null;
-    const requests = minecraft && conversation && visible ? fcaMinecraftRequests({ ...parts, control: minecraft.control,
+    const requests = minecraft && conversation && visible ? fcaMinecraftRequests({ ...parts, db, control: minecraft.control,
       runtime: runtime.runtime, conversation, visible, stop: runtime.stop, sourceVisible: id => sourceVisible(parts.ownerScope, id),
       atomic: work => underWriteLock(db, null, '', work, 'fca_minecraft_admission') }) : null;
     if (minecraft && !requests) throw new Error('FCA_MINECRAFT_REQUIRES_CONVERSATION');
@@ -332,6 +332,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
     // `requests.bodyWake`: a task that slept for a body that was not there is woken when its frame is
 // (mc-chat-stale-frame, 2026-10-26).
     const wake = () => { requests?.bodyWake.tick();
+      requests?.queue.tick();
       minecraft?.skillOutcomes?.tick((scope, id) => runtime.runtime.get(scope,
        id)?.phase ?? null); try { sleep?.jobs.reconcile(runtime.runtime);
          sleep?.jobs.admit(runtime.runtime); } catch {
@@ -339,6 +340,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
             if (!parts.ownerAlone(
             )) void shared?.recall.cancelAll(); void shared?.evidence?.drain({ segments: true }).catch(() => {
                /* Durable evidence remains for retry. */ }); void runtime.tick().catch(() => {}); };
+    requests?.queue.useWake(() => { void runtime.tick().catch(() => {}); });
     const timer = setInterval(() => timedTick('fca_wake', wake), 1000);
       timer.unref();
     const operator = parts.operator ? startOperatorMinecraft({ ...parts.operator, audit: operatorAudit, path: parts.path, scopeKey: parts.ownerScope,
@@ -374,7 +376,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
       lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId);
         return ids ? [...new Set(ids)].sort() :
          null; }, minecraft: minecraft && requests ? { control: minecraft.control, intent: requests.intent, admission: requests.admission,
-            voice: requests.voice, stop: requests.ownerStop } : null,
+            voice: requests.voice, stop: requests.ownerStop, queue: requests.queue } : null,
       // Whether a Minecraft-bound task is running, stopping or unknown (the phases that are not final); null when that cannot be read.
       // 「新しいワールドで始める」 (`freshWorldWiring.ts`) makes a new world only when this is exactly false.
       minecraftTasksOpen: (): boolean | null => { try { return requests ? requests.operator.open().length > 0 : null; } catch { return null; } },

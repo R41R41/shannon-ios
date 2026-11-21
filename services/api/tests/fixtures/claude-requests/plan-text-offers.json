@@ -429,18 +429,39 @@
            "enum": [
             "none",
             "task",
-            "stop"
+            "message",
+            "stop",
+            "cancel",
+            "hold",
+            "resume",
+            "move"
            ],
-           "description": "マイクラの体に頼むこと。task=ライ氏にゲームの中でしてほしいことをはっきり頼まれた。stop=今していることをやめてと言われた。none=それ以外"
+           "description": "マイクラの体の「依頼の列」への頼み。task=新しい依頼を足す（ゲームの中でしてほしいことをはっきり頼まれた）。message=いま実行中の依頼への言葉（変えてほしい・続けてほしい）。stop=列ぜんたいを止める。cancel=依頼をやめる。hold=依頼を保留する。resume=保留・停止の依頼を戻す。move=列の中で依頼の順番を変える。none=それ以外"
           },
           "goal": {
            "type": "string",
-           "description": "task の時だけ、何をどれだけするかを120字以内で。それ以外は空文字"
+           "description": "task か message の時だけ、何をどれだけするか（message は伝える言葉）を120字以内で。それ以外は空文字"
+          },
+          "placement": {
+           "type": "string",
+           "enum": [
+            "end",
+            "next",
+            "now",
+            ""
+           ],
+           "description": "task と move の時だけ。end=ほかの依頼のあと（あとで・ついでに）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる。それ以外は空文字"
+          },
+          "target": {
+           "type": "string",
+           "description": "cancel・hold・resume・move の時だけ、依頼の番号（「#3」か「3」）。いま実行中の依頼なら空文字。resume の空文字は列ぜんたい。それ以外は空文字"
           }
          },
          "required": [
           "kind",
-          "goal"
+          "goal",
+          "placement",
+          "target"
          ]
         }
        },
@@ -489,7 +510,7 @@
    "prefix": {
     "tools": "f60390fc",
     "system": "d4c7dbee",
-    "schema": "c9452d16",
+    "schema": "bce902ff",
     "effort": "8a3bb108",
     "history": "f1fca6c8"
    },
