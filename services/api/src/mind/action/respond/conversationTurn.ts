@@ -39,6 +39,8 @@ export interface ConversationModality<R> {
   /** Who is there, whether she answers at all; a turn answered without the model (a command, silence, a duplicate) closes here. */
   open(): MaybePromise<ClosedTurn<R> | null>;
   memoryAsk(): TurnMemoryAsk;
+  /** What the modality already read for `memoryAsk` while it waited for its router (valid only for the ask it then makes), or nothing. */
+  preparedMemory?(): PreparedTurnMemory | null;
   /** Right after the state is read: what starts beside recall (a text turn's feeling turn, perception and tool menu). */
   begin(memory: StartedTurnMemory): void;
   identityAsk(memory: StartedTurnMemory): TurnIdentityAsk;
@@ -65,7 +67,7 @@ export async function runConversationTurn<R>(stages: TurnStageDependencies, turn
   const opening = turn.open();
   const opened = opening instanceof Promise ? await opening : opening;
   if (opened) return opened.closed;
-  const memory = startTurnMemory(stages, turn.memoryAsk());
+  const memory = startTurnMemory(stages, turn.memoryAsk(), turn.preparedMemory?.() ?? null);
   turn.begin(memory);
   const { identity, pending } = observedStep('identity', () => {
     const who = identifyTurn(stages, turn.identityAsk(memory));
@@ -135,18 +137,34 @@ export interface RememberedTurn extends Omit<StartedTurnMemory, 'semantic'> {
   cognitive: TurnCognitiveContext;
 }
 
-/** What she remembers: the state now (after anything a command changed), the people here, the deterministic context; recall started. */
-export function startTurnMemory(stages: TurnStageDependencies, ask: TurnMemoryAsk): StartedTurnMemory {
+/** The part of what she remembers that is read without a model: the state, the people here and the deterministic context. */
+export interface PreparedTurnMemory {
+  captured: CompanionStateSnapshot;
+  peopleRecall: PeopleRecall | undefined;
+  deterministic: TurnCognitiveContext;
+  /** How long reading it took, so a turn that prepared it early still reports its own time. */
+  spentMs: number;
+}
+
+/** The synchronous part of `startTurnMemory`, for a modality that can read it while its router is still answering. */
+export function prepareTurnMemory(stages: TurnStageDependencies, ask: Omit<TurnMemoryAsk, 'semantic'>): PreparedTurnMemory {
   const startedAt = performance.now();
+  const captured = observedStep('snapshot', () => stages.stateStore.snapshot(ask.scopeKey));
+  const peopleRecall = observedStep('people', () => ask.people(captured));
+  const deterministic = observedStep('deterministic', () => prepareTurnCognitiveContext(captured, stages.conversationStore, {
+    scopeKey: ask.scopeKey, message: ask.message, occurredAt: ask.occurredAt, channel: ask.channel, threadId: ask.threadId, present: ask.present,
+    intents: ask.intents, provisionalIntent: ask.provisionalIntent, additionalCandidates: peopleRecall?.candidates ?? [],
+    ...(ask.timeZone ? { timeZone: ask.timeZone } : {}), ...(ask.openOnly ? { openOnly: true } : {}),
+    ...(ask.participants ? { participants: [...ask.participants] } : {}),
+  }));
+  return { captured, peopleRecall, deterministic, spentMs: performance.now() - startedAt };
+}
+
+/** What she remembers: the state now (after anything a command changed), the people here, the deterministic context; recall started. */
+export function startTurnMemory(stages: TurnStageDependencies, ask: TurnMemoryAsk, prepared?: PreparedTurnMemory | null): StartedTurnMemory {
+  const startedAt = performance.now() - (prepared?.spentMs ?? 0);
   return observeSync('recall', { strategy: 'deterministic', surface: ask.surface }, () => {
-    const captured = observedStep('snapshot', () => stages.stateStore.snapshot(ask.scopeKey));
-    const peopleRecall = observedStep('people', () => ask.people(captured));
-    const deterministic = observedStep('deterministic', () => prepareTurnCognitiveContext(captured, stages.conversationStore, {
-      scopeKey: ask.scopeKey, message: ask.message, occurredAt: ask.occurredAt, channel: ask.channel, threadId: ask.threadId, present: ask.present,
-      intents: ask.intents, provisionalIntent: ask.provisionalIntent, additionalCandidates: peopleRecall?.candidates ?? [],
-      ...(ask.timeZone ? { timeZone: ask.timeZone } : {}), ...(ask.openOnly ? { openOnly: true } : {}),
-      ...(ask.participants ? { participants: [...ask.participants] } : {}),
-    }));
+    const { captured, peopleRecall, deterministic } = prepared ?? prepareTurnMemory(stages, ask);
     const semantic = ask.semantic && stages.memoryRecall ? semanticRecall(stages.memoryRecall, ask, ask.semantic, captured, deterministic) : null;
     return { captured, peopleRecall, deterministic, semantic, startedAt, ...(ask.timing ? { timing: ask.timing } : {}) };
   }, value => ({ snapshotVersion: value.captured.version, peopleCount: value.peopleRecall?.ids.length ?? 0,

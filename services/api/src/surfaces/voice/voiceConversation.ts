@@ -12,7 +12,7 @@ import {
 } from '../../mind/action/respond/conversationOrchestration.js';
 import { namedParticipants } from '../../mind/action/respond/apiTextTurn.js';
 import {
-  closedTurn, type ConversationModality, type StartedTurnMemory, type TurnCapabilityAsk, type TurnIdentityAsk, type TurnMemoryAsk, type TurnParts,
+  closedTurn, prepareTurnMemory, type PreparedTurnMemory, type ConversationModality, type StartedTurnMemory, type TurnCapabilityAsk, type TurnIdentityAsk, type TurnMemoryAsk, type TurnParts,
   type TurnStageDependencies,
 } from '../../mind/action/respond/conversationTurn.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
@@ -123,6 +123,8 @@ export class VoiceConversation implements ConversationModality<ApiResponse> {
   provisionalIntent: ReturnType<typeof extractExplicitUserIntent> = null;
   complexTurn = false;
   memory!: StartedTurnMemory;
+  /** A platform seat's memory read while the router answered (`prefetchMemory`), with the goal it was read for. */
+  private prefetched: { intent: ReturnType<typeof extractExplicitUserIntent>; memory: PreparedTurnMemory } | null = null;
   composed!: VoiceComposed;
   spoken!: VoiceSpoken;
 
@@ -241,8 +243,46 @@ export class VoiceConversation implements ConversationModality<ApiResponse> {
     const localRules = new LocalVoiceDecisionGateway(); // Also what decides when the router is past its bound.
     const router = this.address && !this.address.respond ? localRules : this.dependencies.voiceDecision;
     const input = this.routeInput;
-    this.decision = await this.input.timing.measure('route', () => this.bounded('route_timeout', router.decide(input), () => localRules.decide(input)));
+    // With a platform's seat the router's answer is waited for while the part of her memory that needs no decision is read (the router's call is
+    // in flight meanwhile): the two overlap instead of following each other. `route` is then the time to the decision, `recall` the read itself.
+    this.decision = await this.input.timing.measure('route', () => {
+      const deciding = router.decide(input);
+      this.prefetchMemory();
+      return this.bounded('route_timeout', deciding, () => localRules.decide(input));
+    });
     this.input.observer?.signal?.throwIfAborted();
+  }
+
+  /**
+   * What `memoryAsk` will ask of the deterministic read, given what is known before the router answers: the same state, people and
+   * channel. Only the owner's goal taken from his words depends on the decision (it is read from them only when he alone hears her and
+   * they can be trusted); it is read here as if they could, and the read is used only when the decision agrees (`preparedMemory`).
+   */
+  private prefetchMemory(): void {
+    this.prefetched = null;
+    if (!this.seat) return;
+    try {
+      const { dependencies: deps, scopeKey, transcript, threadId } = this;
+      const intent = this.alone ? extractExplicitUserIntent(transcript, threadId, this.occurredAt) : null;
+      const memory = prepareTurnMemory(voiceTurnStages(deps), {
+        scopeKey, threadId, message: transcript, occurredAt: this.occurredAt, channel: 'voice', present: this.present,
+        intents: deps.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent: intent,
+        timeZone: this.input.deviceContext?.timeZoneIdentifier, ...(this.openOnly ? { openOnly: true } : {}),
+        participants: namedParticipants(deps.personIdentities, scopeKey, transcript),
+        people: captured => this.people(captured), surface: 'voice',
+      });
+      this.prefetched = { intent, memory };
+    } catch {
+      this.prefetched = null; // The read is done again, in its place, by the turn.
+    }
+  }
+
+  /** The memory read early, when the goal `memoryAsk` took is the one it was read for; else nothing (the turn reads it as it always did). */
+  preparedMemory(): PreparedTurnMemory | null {
+    const early = this.prefetched;
+    this.prefetched = null;
+    if (!early || JSON.stringify(early.intent) !== JSON.stringify(this.provisionalIntent)) return null;
+    return early.memory;
   }
 
   /** Words trusted to act (commands, writes, goals; the client's confidence only lowers it) or to talk, look and run FCA. */

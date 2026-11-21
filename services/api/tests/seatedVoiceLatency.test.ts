@@ -14,6 +14,7 @@ import { ChatSentenceSplitter, splitChatSentences } from '../src/surfaces/text/c
 import { VOICE_SENTENCE_CUT } from '../src/surfaces/text/chatSentenceStream.js';
 import { oneHeadEnabled } from '../src/contracts/oneHeadContract.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
+import { LocalVoiceDecisionGateway, type VoiceDecisionGateway } from '../src/mind/selectors/voiceDecision.js';
 import type { VoiceMinecraftPort } from '../src/surfaces/platform/voiceMinecraftPort.js';
 import { claudeTextBody } from '../src/infra/models/anthropic/anthropicRequest.js';
 import { sonnetSettings } from '../src/infra/models/anthropic/anthropicConfig.js';
@@ -43,7 +44,7 @@ class Model implements ShannonChatModel {
   }
 }
 
-async function seatedTurn(): Promise<{ model: Model; lines: VoiceTurnLine[]; close: () => Promise<void> }> {
+async function seatedTurn(events: string[] = []): Promise<{ model: Model; lines: VoiceTurnLine[]; close: () => Promise<void> }> {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-seated-latency-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -52,7 +53,16 @@ async function seatedTurn(): Promise<{ model: Model; lines: VoiceTurnLine[]; clo
   const peopleStore = new SQLitePeopleMemoryStore(path);
   const background = new BackgroundUpdateCoordinator(store, store);
   const model = new Model();
-  const api = createLocalApiKernel(now, { chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore });
+  const read = store.experienceCandidates.bind(store);
+  store.experienceCandidates = (...input: Parameters<typeof read>) => { events.push('read'); return read(...input); };
+  const local = new LocalVoiceDecisionGateway();
+  const voiceDecision: VoiceDecisionGateway = { mode: local.mode, model: local.model, decide: async input => {
+    events.push('route-start');
+    await new Promise(resolve => setTimeout(resolve, 40));
+    events.push('route-end');
+    return local.decide(input);
+  } };
+  const api = createLocalApiKernel(now, { voiceDecision, chatModel: model, stateStore: store, conversationStore: store, knowledgeStore: store, background, peopleMemory: peopleStore });
   const bridge = new PlatformBridgeService(configuredPlatformBridge(BRIDGE)!, store, store, background, now, new PlatformPeople(peopleStore, store),
     () => true, () => oneHeadEnabled(ENV));
   const turns = new SQLiteSurfaceTurnLog(path, 'platform_voice_turns');
@@ -70,6 +80,17 @@ async function seatedTurn(): Promise<{ model: Model; lines: VoiceTurnLine[]; clo
 }
 
 describe('a seated voice turn of a shared channel', () => {
+  it('reads what she remembers while the router is still answering, and the model is asked once the router has answered', async () => {
+    const events: string[] = [];
+    const { model, close } = await seatedTurn(events);
+    expect(events.indexOf('route-start')).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf('read')).toBeGreaterThan(events.indexOf('route-start'));
+    expect(events.indexOf('read')).toBeLessThan(events.indexOf('route-end'));
+    expect(model.kinds).toEqual(['structured-stream']);
+    expect((model.requests[0] as ShannonChatModelRequest).turnContext).toContain('[Voice route]');
+    await close();
+  });
+
   it('asks for the structured stream without thinking first, and the Sonnet request then thinks only between tools', async () => {
     const { model, close } = await seatedTurn();
     expect(model.kinds).toEqual(['structured-stream']);
