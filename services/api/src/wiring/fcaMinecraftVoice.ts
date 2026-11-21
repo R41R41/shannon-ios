@@ -5,10 +5,10 @@ import type {
 } from '../surfaces/platform/voiceMinecraftPort.js';
 
 /**
- * An owner's spoken request in a Discord voice channel, as the common task tree takes it (dc-voice, `platformVoice.ts`). The platform
- * policy has already said that the verified owner spoke. A request while one of his is under way is a message to that task, as game
- * chat's is (`fcaMinecraftRequests.ts`), and a stop stops the body's tasks, whoever else is in the channel; a new task is made only
- * when he is alone there (`allowNew`).
+ * A spoken request in a Discord voice channel, as the common task tree takes it (dc-voice, `platformVoice.ts`), from the owner or anyone
+ * else in the channel (owner decision 2026-11-21). A request while one is under way is a message to that task, as game chat's is
+ * (`fcaMinecraftRequests.ts`), a stop stops the body's tasks, and anything else is a new task. The speaker's shown name is in the words
+ * the task's head reads, so it knows who asked.
  */
 export interface FcaMinecraftVoiceParts {
   control: MinecraftControl;
@@ -26,6 +26,13 @@ export interface FcaMinecraftVoiceParts {
 }
 
 export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraftPort {
+  /** Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name. */
+  const whoAsked = (input: VoiceMinecraftIntentInput): string => {
+    const { speaker } = input;
+    if (!speaker) return '本人';
+    const name = speaker.name.replace(/\s+/gu, ' ').trim().slice(0, 40);
+    return speaker.owner ? (name ? `本人（${name}）` : '本人') : (name || '通話の参加者');
+  };
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
     return { delivered: false, reason };
@@ -37,7 +44,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     try {
       parts.runtime.observeExternal(input.scopeKey, running.id, {
         eventId: `dcv:${input.requestId}`, experienceIds: [experienceId], observedAt: input.observedAt,
-        text: `Discordの通話での本人の言葉（いまのタスクへ）: ${input.intent.goal}`,
+        text: `Discordの通話での${whoAsked(input)}の言葉（いまのタスクへ）: ${input.intent.goal}`,
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'FCA_TARGET_FINISHED') return null;
@@ -51,7 +58,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     const task = parts.runtime.createChild(input.scopeKey, root, parts.spec(input.intent.goal), `dcv:${input.requestId}`, { sources: 'asking' });
     parts.runtime.observeExternal(input.scopeKey, task.id, {
       eventId: `dcv:${input.requestId}`, experienceIds: [experienceId], observedAt: input.observedAt,
-      text: `Discordの通話での本人の依頼: ${input.intent.goal}`,
+      text: `Discordの通話での${whoAsked(input)}の依頼: ${input.intent.goal}`,
     });
     if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     return { delivered: true, as: 'task', taskId: task.id };
@@ -68,6 +75,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       if (intent.kind === 'none') return { delivered: false };
       if (input.scopeKey !== parts.ownerScope) return refuse('not_owner_scope', intent.kind);
       if (intent.kind === 'stop') {
+        parts.log(`Shannon Minecraft voice stop by=${input.speaker && !input.speaker.owner ? 'guest' : 'owner'}`);
         for (const task of parts.bound()) await parts.stop(task.id, 'owner_voice_stop');
         return { delivered: true, as: 'stop' };
       }
@@ -77,7 +85,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       if (!parts.sourceVisible(input.experienceId)) return refuse('turn_not_visible', intent.kind);
       const delivered = message(input, input.experienceId, bodies[0]!);
       if (delivered) return delivered;
-      return input.allowNew ? newTask(input, input.experienceId, bodies[0]!) : refuse('others_present', intent.kind);
+      return newTask(input, input.experienceId, bodies[0]!);
     },
   };
 }

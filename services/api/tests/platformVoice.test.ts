@@ -193,8 +193,9 @@ describe('POST /v1/platform/voice/turn', () => {
     const prompt = promptOf(request);
     expect(prompt).toContain('いま話しかけているのは「ユウ」');
     expect(prompt).toContain('- ユウ: 昨日のボスまじでやばかった');
-    expect(prompt).toContain('体や道具を動かす頼みごとは引き受けない');
-    expect(request.offerMinecraftIntent).toBeUndefined();
+    // A friend may ask for her body too (2026-11-21): the intent field is offered.
+    expect(prompt).toContain('ユウがマイクラでしてほしいこと');
+    expect(request.offerMinecraftIntent).toBe(true);
     expect(peopleStore).toBeDefined();
     await close();
   });
@@ -298,7 +299,7 @@ describe('what the turn is told besides the words', () => {
     await close();
   });
 
-  it('adds what the body is doing to every reply, and what the owner asked of it only to the owner', async () => {
+  it('adds what the body is doing and the request under way to every reply', async () => {
     const { service, say, model, body, close } = harness();
     body.running = { id: 'task-1', goal: 'エンダードラゴンを倒す' };
     service.rooms.setSituation('default', '洞窟を下りている。体力 14/20。');
@@ -309,7 +310,8 @@ describe('what the turn is told besides the words', () => {
     await say('シャノン、いま何してるの？', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
     prompt = promptOf(model.requests[1]!);
     expect(prompt).toContain('洞窟を下りている。体力 14/20。');
-    expect(prompt).not.toContain('エンダードラゴンを倒す');
+    // Anyone's request may be the one under way (2026-11-21), so the friend is told it too.
+    expect(prompt).toContain('「エンダードラゴンを倒す」をしている');
     await say('シャノン、今の様子は？', { participants: [OWNER, FRIEND], situation: '鉄の鉱石の前にいる。' });
     expect(promptOf(model.requests[2]!)).toContain('鉄の鉱石の前にいる。');
     expect(promptOf(model.requests[2]!)).not.toContain('洞窟を下りている');
@@ -317,7 +319,7 @@ describe('what the turn is told besides the words', () => {
   });
 });
 describe('the owner\'s spoken request for her Minecraft body', () => {
-  it('is offered the intent field only to the owner with the body connected and others in the channel, and a friend never moves it', async () => {
+  it('is offered the intent field to anyone with the body connected, and a friend\'s request moves it as the owner\'s does', async () => {
     const { say, model, body, close } = harness();
     const together = { participants: [OWNER, FRIEND] };
     body.running = { id: 'task-1', goal: 'エンダードラゴンを倒す' };
@@ -330,14 +332,18 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     expect(prompt).toContain('エンダードラゴンを倒す');
     expect(prompt).toContain('いまの作業への伝言');
     expect(body.calls).toHaveLength(1);
-    expect(body.calls[0]).toMatchObject({ scopeKey: 'owner', allowNew: false, intent: { kind: 'task', goal: 'まず鉄の剣を作ってから向かって' } });
+    expect(body.calls[0]).toMatchObject({ scopeKey: 'owner', speaker: { id: OWNER, name: 'ライ氏', owner: true }, intent: { kind: 'task', goal: 'まず鉄の剣を作ってから向かって' } });
     expect(body.calls[0]!.experienceId).toBeTruthy();
     expect(lines.find(line => line.type === 'intent')).toMatchObject({ kind: 'task_message', delivered: true, taskId: 'task-1' });
-    // A friend asks for the same: no field, no delivery.
+    // A friend asks for the same: the field is offered, and the request is delivered with their name, on a record of their own words.
     model.requests.length = 0; body.calls.length = 0;
+    model.intent = { kind: 'task', goal: 'ダイヤを掘ってくる' };
     await say('シャノン、体を動かしてダイヤを掘ってきて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
-    expect(model.requests[0]!.offerMinecraftIntent).toBeUndefined();
-    expect(body.calls).toHaveLength(0);
+    expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
+    expect(promptOf(model.requests[0]!)).toContain('ユウがその作業について言うこと');
+    expect(body.calls).toHaveLength(1);
+    expect(body.calls[0]).toMatchObject({ scopeKey: 'owner', speaker: { id: FRIEND, name: 'ユウ', owner: false }, intent: { kind: 'task', goal: 'ダイヤを掘ってくる' } });
+    expect(body.calls[0]!.experienceId).toBeTruthy();
     await close();
   });
 
@@ -345,13 +351,13 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     const { say, model, body, store, background, close } = harness();
     model.reply = 'うん、やっておくね。';
     model.intent = { kind: 'task', goal: '鉄を16個集める' };
-    body.outcome = { delivered: false, reason: 'others_present' };
+    body.outcome = { delivered: false, reason: 'turn_not_visible' };
     const lines = await say('シャノン、鉄を16個集めておいて', { participants: [OWNER, FRIEND] });
     const last = sentences(lines).at(-1)!;
-    expect(last).toMatchObject({ correction: true, text: VOICE_MINECRAFT_REFUSALS.others_present });
-    expect(lines.find(line => line.type === 'intent')).toMatchObject({ delivered: false, reason: 'others_present' });
+    expect(last).toMatchObject({ correction: true, text: VOICE_MINECRAFT_REFUSALS.turn_not_visible });
+    expect(lines.find(line => line.type === 'intent')).toMatchObject({ delivered: false, reason: 'turn_not_visible' });
     await background.waitForIdle('owner');
-    expect(store.conversationHistory('owner', roomThread).map(message => message.content)).toContain(VOICE_MINECRAFT_REFUSALS.others_present);
+    expect(store.conversationHistory('owner', roomThread).map(message => message.content)).toContain(VOICE_MINECRAFT_REFUSALS.turn_not_visible);
     body.connected = false; body.calls.length = 0; model.requests.length = 0;
     await say('シャノン、もう一回お願い', { participants: [OWNER, FRIEND] });
     expect(model.requests[0]!.offerMinecraftIntent).toBeUndefined();
@@ -360,13 +366,16 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     await close();
   });
 
-  it('allows a new task only when the owner is alone, and leaves the owner alone in his own room to her ordinary tools', async () => {
+  it('allows a new task with others in the channel too, and leaves the owner alone in his own room to her ordinary tools', async () => {
     const { say, model, body, close } = harness();
     model.reply = 'わかった、行ってくるね。';
     model.intent = { kind: 'task', goal: 'パンを3個作る' };
     // Alone in a shared server channel: the field is offered, and a new task may be made.
     await say('パンを3個作って', { conversationId: SERVER_ROOM, participants: [OWNER] });
-    expect(body.calls[0]).toMatchObject({ allowNew: true });
+    expect(body.calls[0]).toMatchObject({ intent: { kind: 'task' } });
+    model.requests.length = 0; body.calls.length = 0;
+    await say('シャノン、パンを3個作って', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND, OTHER] });
+    expect(body.calls[0]).toMatchObject({ intent: { kind: 'task' }, speaker: { owner: true } });
     // Alone in his own room: tools, not the field.
     model.requests.length = 0; body.calls.length = 0;
     await say('パンを3個作って', { participants: [OWNER] });
@@ -685,7 +694,7 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     await silent.close();
   });
 
-  it('hears 止めて without her name from the owner while she speaks or her body works, and from nobody else', async () => {
+  it('hears 止めて without her name from the owner while she speaks or her body works, and from anyone while her body works', async () => {
     const { asked, judge: j } = judge();
     const { say, body, model, close } = harness(ADDRESSED, undefined, j);
     expect((await say('止めて'))[0]).toMatchObject({ respond: false, reason: 'no_name' });
@@ -693,10 +702,14 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     expect((await say('止めて', { shannonSpokeMsAgo: 0 }))[0]).toMatchObject({ respond: true, reason: 'stop' });
     body.running = { id: 'task-1', goal: '鉄を掘る' };
     expect((await say('ちょっと待って'))[0]).toMatchObject({ respond: true, reason: 'stop' });
-    const friend = await say('止めて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ', speakingNow: true });
-    // A friend's 止めて is no stop word for her: it is judged like any other words (here she was speaking, so Jev is asked).
-    expect(friend[0]).not.toMatchObject({ reason: 'stop' });
-    // The first 止めて (the owner alone, she was not speaking) was asked as words without her name; the friend's was asked too.
+    // A friend's 止めて is heard too while her body works (2026-11-21), since a friend's stop reaches the body as the owner's does.
+    const friend = await say('止めて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
+    expect(friend[0]).toMatchObject({ respond: true, reason: 'stop' });
+    // With her body idle a friend's 止めて is judged like any other words (here she was speaking, so Jev is asked).
+    body.running = null;
+    const idle = await say('止めて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ', speakingNow: true });
+    expect(idle[0]).not.toMatchObject({ reason: 'stop' });
+    // The first 止めて (the owner alone, she was not speaking) was asked as words without her name; the idle friend's was asked too.
     expect(asked).toEqual(['止めて', '止めて']);
     expect(model.requests.length).toBeGreaterThanOrEqual(3);
     await close();

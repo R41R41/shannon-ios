@@ -5,9 +5,10 @@ import type { MinecraftIntent } from '../../contracts/minecraftBodyContract.js';
  * Discordでライ氏や友人と会話」). The port is the common task tree's side of it (`fcaMinecraftRequests.ts`, `voice`): the voice route
  * asks it what the body is doing before her reply, and hands it the owner's spoken request after.
  *
- * - Only the verified owner's words ever reach it (the platform policy decides who wrote); a friend's never do.
- * - A request while one of his is under way is a message to that task (the in-game 「続けて」 of run 19); `stop` stops the body's
- *   tasks. A new task is made only when he is alone in the channel (`allowNew`), as in game chat.
+ * - Anyone in the channel may ask (owner decision 2026-11-21: 「全員と自由に話せてほしい」; before it only the verified owner's words
+ *   reached it, and a new task only while he was alone). The speaker travels with the request (`speaker`), so the task's head knows who asked.
+ * - A request while one is under way is a message to that task (the in-game 「続けて」 of run 19); `stop` stops the body's tasks;
+ *   anything else is a new task.
  */
 export interface VoiceMinecraftState {
   /** Her body is connected to a world. */
@@ -16,7 +17,14 @@ export interface VoiceMinecraftState {
   running: { id: string; goal: string } | null;
 }
 
-export type VoiceMinecraftRefusal = 'not_owner_scope' | 'body_unavailable' | 'no_turn' | 'turn_not_visible' | 'others_present';
+export type VoiceMinecraftRefusal = 'not_owner_scope' | 'body_unavailable' | 'no_turn' | 'turn_not_visible';
+
+/** Who spoke: a member of the channel (shown name); `owner` when it is the verified owner. */
+export interface VoiceSpeaker {
+  id: string;
+  name: string;
+  owner: boolean;
+}
 
 export interface VoiceMinecraftIntentInput {
   scopeKey: string;
@@ -24,10 +32,10 @@ export interface VoiceMinecraftIntentInput {
   requestId: string;
   observedAt: string;
   intent: MinecraftIntent;
-  /** The stored turn of the owner's words (the provenance of a message or a task); null when it was kept nowhere. */
+  /** The stored turn of the words (the provenance of a message or a task); null when it was kept nowhere. */
   experienceId: string | null;
-  /** A new task may be made when none is running (the owner is alone in the channel). */
-  allowNew: boolean;
+  /** Who said it; absent, the owner (the form before 2026-11-21). */
+  speaker?: VoiceSpeaker;
 }
 
 export interface VoiceMinecraftIntentResult {

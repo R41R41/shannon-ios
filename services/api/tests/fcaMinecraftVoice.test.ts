@@ -37,7 +37,7 @@ function fixture(options: { bodies?: string[]; running?: TaskView | null; visibl
 }
 
 const input = (fields: Record<string, unknown> = {}) => ({
-  scopeKey: 'owner', requestId: 'r1', observedAt: '2026-10-20T12:00:00.000Z', experienceId: 'exp-1', allowNew: false,
+  scopeKey: 'owner', requestId: 'r1', observedAt: '2026-10-20T12:00:00.000Z', experienceId: 'exp-1',
   intent: { kind: 'task' as const, goal: 'まず鉄の剣を作って' }, ...fields,
 });
 
@@ -55,19 +55,26 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(calls).toEqual(['observe t1 dcv:r1 exp-1 Discordの通話での本人の言葉（いまのタスクへ）: まず鉄の剣を作って']);
   });
 
-  it('makes a new task only when he is alone, and refuses with a reason otherwise', async () => {
-    const alone = fixture();
-    expect(await alone.port.intent(input({ allowNew: true }))).toEqual({ delivered: true, as: 'task', taskId: 'new-task' });
-    expect(alone.calls[0]).toBe('child root まず鉄の剣を作って dcv:r1 asking');
-    expect(alone.calls).toContain('bind new-task minecraft:world');
-    expect(await fixture().port.intent(input())).toEqual({ delivered: false, reason: 'others_present' });
+  it('makes a new task whoever is in the channel, with who asked in the words the head reads', async () => {
+    const first = fixture();
+    expect(await first.port.intent(input())).toEqual({ delivered: true, as: 'task', taskId: 'new-task' });
+    expect(first.calls[0]).toBe('child root まず鉄の剣を作って dcv:r1 asking');
+    expect(first.calls[1]).toBe('observe new-task dcv:r1 exp-1 Discordの通話での本人の依頼: まず鉄の剣を作って');
+    expect(first.calls).toContain('bind new-task minecraft:world');
+    const owner = fixture();
+    await owner.port.intent(input({ speaker: { id: '1', name: 'ライ氏', owner: true } }));
+    expect(owner.calls[1]).toContain('Discordの通話での本人（ライ氏）の依頼: まず鉄の剣を作って');
+    const guest = fixture();
+    expect(await guest.port.intent(input({ speaker: { id: '2', name: 'ユウ', owner: false } }))).toEqual({ delivered: true, as: 'task', taskId: 'new-task' });
+    expect(guest.calls[1]).toContain('Discordの通話でのユウの依頼: まず鉄の剣を作って');
+    const message = fixture({ running: task('t1', 'エンドラを倒す') });
+    await message.port.intent(input({ speaker: { id: '2', name: 'ユウ', owner: false } }));
+    expect(message.calls[0]).toContain('Discordの通話でのユウの言葉（いまのタスクへ）: まず鉄の剣を作って');
   });
 
-  it('goes on to a new task when the one under way ended meanwhile, if he is alone', async () => {
+  it('goes on to a new task when the one under way ended meanwhile', async () => {
     const ended = fixture({ running: task('t1', 'x'), finished: true });
-    expect(await ended.port.intent(input())).toEqual({ delivered: false, reason: 'others_present' });
-    const aloneEnded = fixture({ running: task('t1', 'x'), finished: true });
-    expect(await aloneEnded.port.intent(input({ allowNew: true }))).toMatchObject({ delivered: true, as: 'task' });
+    expect(await ended.port.intent(input())).toMatchObject({ delivered: true, as: 'task' });
   });
 
   it('stops the body\'s tasks whoever is in the channel, and refuses what has no turn, no body or another scope', async () => {

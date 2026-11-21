@@ -204,9 +204,9 @@ describe('the voice prompt blocks', () => {
     expect(heardBlock([{ userId: 'u', name: 'ミキ', text: 'まだだよ', at: '2026-10-20T12:00:00.000Z' }])).toContain('- ミキ: まだだよ');
     expect(situationBlock(null, null)).toBe('');
     expect(situationBlock('洞窟にいる。', 'エンドラを倒す')).toContain('「エンドラを倒す」をしている');
-    expect(voiceIntentInstructions({ connected: false, running: null }, true)).toContain('いまは渡せない');
-    expect(voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' } }, false)).toContain('いまの作業への伝言');
-    expect(voiceIntentInstructions({ connected: true, running: null }, true)).toContain('はっきり頼んだら kind=task');
-    expect(voiceIntentInstructions({ connected: true, running: null }, false)).toContain('新しい作業を頼めない');
+    expect(voiceIntentInstructions({ connected: false, running: null }, 'ライ氏')).toContain('いまは渡せない');
+    expect(voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' } }, 'ユウ')).toContain('ユウがその作業について');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('ユウがマイクラでしてほしいこと');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('はっきり頼んだら kind=task');
   });
 });

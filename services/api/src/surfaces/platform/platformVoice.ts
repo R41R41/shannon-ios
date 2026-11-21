@@ -30,6 +30,7 @@ import { VoiceWords } from './platformVoiceWords.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
 import type { VoiceMinecraftIntentResult, VoiceMinecraftPort, VoiceMinecraftState } from './voiceMinecraftPort.js';
+import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 
 /**
  * The reply to what someone said in a Discord voice channel (dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、Discordでライ氏や
@@ -43,8 +44,8 @@ import type { VoiceMinecraftIntentResult, VoiceMinecraftPort, VoiceMinecraftStat
  *   is kept for a few minutes in memory as context (`voiceRoom.ts`), never in her memory.
  * - The reply goes out as lines while the model writes it (`ChatStreamLine` sentences, cut at a clause, with the voice's own tags
  *   apart from the text shown), after a first `decision` line that may name a short filler for the body to play at once.
- * - The owner's spoken request for her Minecraft body is a message to the task under way (or a stop, or, with him alone, a new task),
- *   through the body port; a friend's words never move it.
+ * - A spoken request for her Minecraft body, from the owner or anyone in the channel (owner decision 2026-11-21), is a message to the task
+ *   under way, a stop, or a new task, through the body port, with who asked.
  * - What is stored and shown never has the voice's audio tags (`displayedVoiceText`).
  */
 export type { VoiceTurnLine, VoiceTurnRequest } from './platformVoiceRequest.js';
@@ -102,6 +103,14 @@ interface VoiceAnswer {
   experienceId?: string;
   spoken: SpokenSentences;
   ignored: string | undefined;
+  /** The turn as it was completed, for the record a request may need (`requestRecord`). */
+  turn?: CompletedTurn | undefined;
+}
+
+/** What `keep` leaves for the turn's answer. */
+interface KeptTurn {
+  ignored: string | undefined;
+  turn?: CompletedTurn;
 }
 
 export class PlatformVoiceService {
@@ -222,7 +231,7 @@ export class PlatformVoiceService {
     const body = this.bodyFor(seat);
     const seated = this.seated;
     const answer = seated ? await this.askOneHead(seated, seat, request, hash, filler, body, out) : await this.ask(seat, request, hash, filler, body, out);
-    await this.carryIntent(seat, request, answer, body, out);
+    await this.carryIntent(seat, request, hash, answer, body, out);
     this.finish(seat, request, hash, key, answer, { decisionMs, address: address.reason, filler }, out);
   }
 
@@ -239,8 +248,11 @@ export class PlatformVoiceService {
     const room = request.conversationId;
     // What the body heard of the others and did not send as a turn belongs to the talk the judgement reads.
     for (const line of request.heard) this.rooms.noteExchange(room, { role: 'person', userId: line.userId, name: line.name, text: line.text, at: line.at });
-    const bodyRunning = seat.owner && (this.bodyFor(seat)?.state.running ?? null) !== null;
-    const shown = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning });
+    // A request of anyone may be under way, and anyone's stop word stops it (the body part on: `offersIntent`).
+    const body = this.bodyFor(seat);
+    const bodyRunning = (body?.state.running ?? null) !== null;
+    const shown = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning,
+      guestsMayStop: this.offersIntent(seat, body) });
     // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through).
     const spokeAgo = shown.shannon?.spokeAgoMs ?? null;
     if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: spokeAgo !== null && spokeAgo <= judge.windowMilliseconds })) {
@@ -300,18 +312,22 @@ export class PlatformVoiceService {
     }
   }
 
-  /** Whether the intent field is offered: the owner, in a conversation that is not his alone, with the body connected. */
+  /**
+   * Whether the intent field is offered: anyone in the channel (owner decision 2026-11-21), with the body connected, except the owner alone
+   * in his private room, who has her ordinary tools.
+   */
   private offersIntent(seat: ChannelSeat, body: { state: VoiceMinecraftState } | null): boolean {
-    return seat.owner && !seat.policy.gate.ownerOnly && body !== null && body.state.connected;
+    return !seat.policy.gate.ownerOnly && body !== null && body.state.connected;
   }
 
   private promptFor(seat: ChannelSeat, request: VoiceTurnRequest, filler: VoiceFiller | null, body: { state: VoiceMinecraftState } | null): string {
     const roomKey = request.conversationId;
     this.rooms.noteHeard(roomKey, request.heard);
     const situation = request.situation ?? this.rooms.situation(roomKey) ?? this.rooms.situation('default');
-    const running = seat.owner ? body?.state.running?.goal ?? null : null;
+    const running = body?.state.running?.goal ?? null;
     const ownerTools = seat.owner && seat.policy.gate.ownerOnly;
-    const intent = seat.owner && !ownerTools && body ? voiceIntentInstructions(body.state, seat.humans.size <= 1) : '';
+    const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName || '話している人';
+    const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who) : '';
     return [
       platformVoiceInstructions({
         title: seat.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
@@ -319,7 +335,7 @@ export class PlatformVoiceService {
       }),
       situationBlock(situation, running),
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
-      seat.owner ? intent : FRIEND_NO_BODY_LINE,
+      intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE),
     ].filter(Boolean).join('\n\n');
   }
 
@@ -330,7 +346,7 @@ export class PlatformVoiceService {
     const { scopeKey, conversation } = this.dependencies;
     const spoken = new SpokenSentences(out);
     const sink: ChatSentenceSink = { write: line => { if (line.type === 'sentence') spoken.stream(line.text); } };
-    const kept: { ignored: string | undefined } = { ignored: undefined };
+    const kept: KeptTurn = { ignored: undefined };
     const transcript = request.userMessage;
     const result = await conversation.textTurn({
       ...platformTextTurnInput({
@@ -348,7 +364,7 @@ export class PlatformVoiceService {
     spoken.rest(result.completion.reply, this.dependencies.sentences);
     const { reply, minecraftIntent } = result.completion;
     const experience = result.experienceId ? { experienceId: result.experienceId } : {};
-    return { reply, ...(minecraftIntent ? { minecraftIntent } : {}), ...experience, spoken, ignored: kept.ignored };
+    return { reply, ...(minecraftIntent ? { minecraftIntent } : {}), ...experience, spoken, ignored: kept.ignored, turn: kept.turn };
   }
 
   /**
@@ -359,7 +375,7 @@ export class PlatformVoiceService {
     seated: SeatedVoiceTurn, seat: ChannelSeat, request: VoiceTurnRequest, hash: string, filler: VoiceFiller | null,
     body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
   ): Promise<VoiceAnswer> {
-    const kept: { ignored: string | undefined } = { ignored: undefined };
+    const kept: KeptTurn = { ignored: undefined };
     const transcript = request.userMessage;
     const voiceSeat = platformVoiceSeat({
       policy: seat.policy, owner: seat.owner, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`,
@@ -369,15 +385,16 @@ export class PlatformVoiceService {
     const answer = await askSeated(seated, { scopeKey: this.dependencies.scopeKey, transcript, seat: voiceSeat }, out, {
       sentences: this.dependencies.sentences, ...(this.dependencies.splitter ? { splitter: this.dependencies.splitter } : {}),
     });
-    return { ...answer, ignored: kept.ignored };
+    return { ...answer, ignored: kept.ignored, turn: kept.turn };
   }
 
   /** The turn where the platform keeps it: the owner's in his platform thread, anyone else's as person memory. Never with the voice's tags. */
-  private keep(seat: ChannelSeat, request: VoiceTurnRequest, hash: string, turn: CompletedTurn, kept: { ignored: string | undefined }) {
+  private keep(seat: ChannelSeat, request: VoiceTurnRequest, hash: string, turn: CompletedTurn, kept: KeptTurn) {
     const { conversationStore, bridge } = this.dependencies;
     const heard = { ...turn, shannonReply: displayedVoiceText(turn.shannonReply) };
     const receipt = { platform: request.platform, requestId: `voice:${request.requestId}`, payloadHash: hash };
     try {
+      kept.turn = heard;
       if (seat.owner) return keepOwnerPlatformTurn(conversationStore, receipt, heard);
       kept.ignored = rememberPlatformPerson(bridge, {
         platform: request.platform, requestId: receipt.requestId, conversationId: request.conversationId, sourceUserId: request.sourceUserId,
@@ -391,18 +408,43 @@ export class PlatformVoiceService {
     }
   }
 
-  /** The owner's spoken request for her body: delivered after the reply, and the fixed words of a refusal said after a reply that promised. */
+  /**
+   * The record a request stands on, written into the channel's thread with the speaker's name on it (`keepOwnerPlatformTurn`: no background
+   * learning from it). A guest's turn was kept only as person memory, which no task may read as its source, so theirs is always written. The
+   * owner's own turn is already in his thread (`answer.experienceId`) and is used first; this is the one to fall back on when it is refused
+   * as not visible (the reply recalled what a task source may not stand on, e.g. a guest's person memory). Null when it could not be written.
+   */
+  private requestRecord(seat: ChannelSeat, request: VoiceTurnRequest, hash: string, answer: VoiceAnswer): string | null {
+    if (!answer.turn) return null;
+    const name = request.sourceDisplayName || '通話の参加者';
+    try {
+      const receipt = { platform: request.platform, requestId: `voice-request:${request.requestId}`, payloadHash: hash };
+      // Without the reply's recall: it read other people's memory (`person:…`), which no task source may stand on, and the record is only their words.
+      const { recalledMemoryIds: _recalled, ...record } = answer.turn;
+      const kept = keepOwnerPlatformTurn(this.dependencies.conversationStore, receipt, { ...record, userMessage: `${name}（通話）: ${request.userMessage}` });
+      return kept?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** A spoken request for her body: delivered after the reply, and the fixed words of a refusal said after a reply that promised. */
   private async carryIntent(
-    seat: ChannelSeat, request: VoiceTurnRequest, answer: VoiceAnswer,
+    seat: ChannelSeat, request: VoiceTurnRequest, hash: string, answer: VoiceAnswer,
     body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
   ): Promise<void> {
     const intent = answer.minecraftIntent;
     if (!body || !intent || intent.kind === 'none' || !this.offersIntent(seat, body)) return;
     const { scopeKey } = this.dependencies;
-    const outcome = await body.port.intent({
-      scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent,
-      experienceId: answer.experienceId ?? null, allowNew: seat.humans.size <= 1,
+    const ask = (experienceId: string | null) => body.port.intent({
+      scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent, experienceId,
+      speaker: { id: request.sourceUserId, name: request.sourceDisplayName, owner: seat.owner },
     }).catch((): VoiceMinecraftIntentResult => ({ delivered: false }));
+    let outcome = await ask(seat.owner || intent.kind !== 'task' ? answer.experienceId ?? null : this.requestRecord(seat, request, hash, answer));
+    if (!outcome.delivered && outcome.reason === 'turn_not_visible' && seat.owner && intent.kind === 'task') {
+      const record = this.requestRecord(seat, request, hash, answer);
+      if (record) outcome = await ask(record);
+    }
     out.line({
       type: 'intent', kind: outcome.as === 'message' ? 'task_message' : intent.kind, delivered: outcome.delivered,
       ...(outcome.taskId ? { taskId: outcome.taskId } : {}), ...(outcome.reason ? { reason: outcome.reason } : {}),
