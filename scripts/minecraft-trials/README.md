@@ -249,3 +249,20 @@ python3 -I rig.py report
 - 走らせ方（VM。11/4 の反映の後に、その頭と体のピンで）：`RIG_HEAD_PIN=<頭のピン> RIG_BODY_PIN=<体のピン> ./rig-window.sh --beside --batch L-<日付> --sections L --seeds c1 --max-wait 900 -- --max-section-yen 2000 --keep-going --keep`（`--keep` でデータベースを残すと、止まりの理由が agent_task_events の fca_stop_requested に残る）。隔離台のあいだ、`vm-lab` の枠とは別に動く。
 - つなぎ目の記録：`PYTHONIOENCODING=utf-8 python3 -I seams.py results/<batch>/<trial>.json results/<batch>/rig-<trial>.log` が、節目と節目のあいだの判断数・使った道具・待ち（fca_wait）・止まった時の次元と所持を出す。S3 の「次の手が出るまでの判断数（再生では 1〜2）」の実走版。
 - S3 のつなぎ目の場面（`services/api/tests/fixtures/minecraft/seam-scenes.json`）の順：ロッド 7→パール（歪んだ森は 90m ずつ go→走査）→パール 14→目玉を作る→ゲートへ戻る→点検（ベッド 4・弓・矢 30・水入りバケツ・食料 80）→要塞を測る→枠→ポータルが開いたら（積める物 64・水・ベッド 4・食料 80）を持って入る。現在節が遅れる場面（ポータルが開いても、エンドに入っても節が p15.2 のまま）は、この区間では意図せず起きるかを見る（作為はしない）。
+
+## 依頼の列の区間（`via: "queue"`、`queue_trial.py`）
+
+細かい依頼（ケーキ・原木集めなど）を、頭の「依頼の列」へ積んで操作する区間です。S1〜S11 など、`via` の無い区間は今まで通り運用 CLI で 1 つの目標（既定は `GOAL`、区間に `goal` があればそれ）を送ります。
+`goalOk` は「届いた goal が区間の goal と一致」で見ます（13 文字の固定はやめました）。
+
+| 区間 | 内容 | 合格 |
+|---|---|---|
+| C1 ケーキ（支給） | 作業台・バケツ 3・卵 1・砂糖 2・小麦 3 を渡し、牛 2 頭を近くに置く | ケーキ 1 個を持ち、列の依頼が done。死亡 0、¥300 以内、10 分 |
+| C2 ケーキ（自力） | 作業台・バケツ 3 だけ。小麦畑・サトウキビ・牛 2・鶏 3 を近くに RCON で作る | 同じ。15 分。卵は `EggLayTime:200` で早める（台の補助で、自然な産卵ではない） |
+| Q1 保留・再開・入れ替え | a 原木 3・b 作業台・c 木の棒 4 を積む。a が走って 5 秒後に c を b の前へ、a が原木 1 を持ったら a を保留、b が終わったら a を再開 | 完了順 c・b・a、同時に走る行は 1 つ以下、保留の後 10 秒以内に体が 4 秒止まる、死亡 0 |
+| Q2 開始・停止・やめる・削除 | a・b・c・d を積む。a が 3 秒走ったら d を開始（a は保留）、d が 10 秒走ったら全体を停止、22 秒後に d を再開して全体を開始、c を削除、b が走ったら cancel、b が cancelled になったら a を再開 | 最終 a=done・b=cancelled・c=行なし・d=done、停止の後 20 秒は走る行が無い |
+
+- 台本は `sections.json` の `queue`（`entries`・`script`・`expect`）。書き方と判定の一覧は `queue_trial.py` の先頭に書いてあります。節目に `{ "queue": {"ref", "state"} }` が使えます。`prepAtBody` の区間は、準備（`fill`・`setblock`・`summon`）を体が立っている位置からの相対で行います。
+- 読みは頭の DB の表 `minecraft_request_queue`（読み取りだけ。列名は snake_case、camelCase も読む）。操作は、本番では体の `POST 127.0.0.1:8092/queue`（`SHANNON_TRIALS_QUEUE_URL` で変えられる）、`rig.py` では頭の `POST /v1/body/minecraft/queue`（rig の体に窓口が無いため。device token は出力に出さない）。`queue_trial.py` は `trials.py` と同じ場所に置いて配ります。
+- 点検（モデルなし）：`python3 -m unittest queue_trial_test`。小さな模擬の列で Q1・Q2 の台本を最後まで通します。模擬は仕様書の意味の写しで、本物の頭の動きではありません。
+- 既定のモデルは、rig では Haiku（`--llm-model` の既定）。VM の `trials.py` 直では `defaultModel: current`。他の実走と同時に回さない（4 vCPU）。

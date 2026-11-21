@@ -173,9 +173,10 @@ class Rig:
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
         self._reader(self.body, 'body.log')
         self._wait(lambda: self.ready is not None, a.ready_seconds, 'the rig did not come up', self.head, self.body)
-        self.saved = {'DB': trials.DB, 'IOS': trials.IOS, 'NODE': trials.NODE, 'RCON_TARGET': trials.RCON_TARGET}
+        self.saved = {'DB': trials.DB, 'IOS': trials.IOS, 'NODE': trials.NODE, 'RCON_TARGET': trials.RCON_TARGET, 'QUEUE_TARGET': trials.QUEUE_TARGET}
         trials.DB, trials.IOS, trials.NODE = self.ready['db'], a.head_pin, a.node
         trials.RCON_TARGET = ('127.0.0.1', self.lab.rcon_port, self.lab.password)
+        trials.QUEUE_TARGET = ('head', self.http['url'], 'rig-device-token-0000')      # the rig body has no door of its own: queue operations go to the head's door (as the body's own client would)
         return self
 
     def _wait(self, done, seconds, what, *procs):
@@ -247,7 +248,7 @@ class Rig:
 
     def stop(self):
         if self.saved:
-            trials.DB, trials.IOS, trials.NODE, trials.RCON_TARGET = (self.saved[k] for k in ('DB', 'IOS', 'NODE', 'RCON_TARGET'))
+            trials.DB, trials.IOS, trials.NODE, trials.RCON_TARGET, trials.QUEUE_TARGET = (self.saved[k] for k in ('DB', 'IOS', 'NODE', 'RCON_TARGET', 'QUEUE_TARGET'))
             self.saved = {}
         for proc in (self.body, self.head):          # the body first: it polls the head; each is its own process group, ended whole (nothing may stay behind holding the slot or the memory)
             if proc and proc.poll() is None:

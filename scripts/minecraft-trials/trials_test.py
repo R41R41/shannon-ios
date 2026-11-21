@@ -113,7 +113,7 @@ class SitesTest(unittest.TestCase):
         cfg = trials.load_json(os.path.join(trials.HERE, 'sections.json'))
         self.assertEqual(trials.validate_sections(cfg), [])
         ids = [str(s['id']) for s in cfg['sections']]
-        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '67', '8a', '8b', '9', '10', '11', 'Z', 'O', 'M', 'L', 'T'])
+        self.assertEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '67', '8a', '8b', '9', '10', '11', 'Z', 'O', 'M', 'L', 'T', 'C1', 'C2', 'Q1', 'Q2'])
         by_id = {str(s['id']): s for s in cfg['sections']}
         s6, s67 = by_id['6']['start'], by_id['67']['start']     # S6 and S7 joined: the nether arrival of S6, the rods of S7 (7, not 6)
         self.assertEqual((s67['dimension'], s67['at'], s67['prep']), (s6['dimension'], s6['at'], s6['prep']))
