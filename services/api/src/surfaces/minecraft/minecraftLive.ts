@@ -121,7 +121,10 @@ eplying, heard). */
 
   /** Whether her work for this task is being stopped (or is stopped): what its last step still shows is not a thing to say. */
   private halted(task: TaskState): boolean {
-    try { const phase = task.info.phase?.(); return phase === 'stopping' || phase === 'stopped'; } catch { return false; }
+    try {
+      const phase = task.info.phase?.();
+      return phase === 'stopping' || phase === 'stopped';
+    } catch { return false; }
   }
 
   /** A moment of her work as it goes: said unless the work is being stopped. */
@@ -157,7 +160,8 @@ eplying, heard). */
           next: view.current ? nodes.get(view.current)?.title ?? '' : '' } });
       }
       if (added.length || dropped.length || blocked.length) {
-        this.emitWork(task, { kind: 'plan_changed', key: key('changed'), at: now, facts: { added: titles(added), dropped: titles(dropped), blocked: titles(blocked) } });
+        this.emitWork(task, { kind: 'plan_changed', key: key('changed'), at: now,
+          facts: { added: titles(added), dropped: titles(dropped), blocked: titles(blocked) } });
       }
     } catch { /* the commentary never fails a decision */ }
   }
