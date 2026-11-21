@@ -16,7 +16,9 @@ const speakerOf = (item: AddressedCase) => ({ id: item.speaker ?? 'owner', name:
 const inputOf = (item: AddressedCase): AddressedInput => ({
   scopeKey: 'owner', transcript: item.transcript, speaker: speakerOf(item), humans: item.humans,
   recent: (item.recent ?? []).map(line => ({ who: line.who, text: line.text, secondsAgo: line.secondsAgo, ...(line.shannon ? { shannon: true as const } : {}) })),
-  ...(item.spoke ? { shannon: { spokeAgoMs: item.spoke.secondsAgo * 1000, toSpeaker: item.spoke.toSpeaker, ...(item.spoke.line ? { line: item.spoke.line } : {}) } } : {}),
+  ...(item.spoke ? { shannon: { spokeAgoMs: item.spoke.secondsAgo * 1000, toSpeaker: item.spoke.toSpeaker, ...(item.spoke.line ? { line: item.spoke.line } : {}),
+    ...(item.spoke.asked ? { asked: true } : {}) } } : {}),
+  ...(item.work ? { work: item.work } : {}),
 });
 
 /** A Jev that knows the answer: it reads the utterance (and how long ago she spoke) out of the request and answers from the label. */

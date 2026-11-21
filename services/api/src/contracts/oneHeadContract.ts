@@ -47,7 +47,7 @@ export interface ConversationTurn {
     title?: string;
     voiceChannelId?: string;
   };
-  who: { userId: string; displayName: string };
+  who: { userId: string; displayName: string; speakerMinecraftName?: string };
   presence: {
     /** The people there (bots excluded), the speaker included. */
     participants: string[];

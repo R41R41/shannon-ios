@@ -69,7 +69,7 @@ function bodyBlocks(turn: VoiceConversation, parts: TurnParts): Array<string | u
   const ownerAlone = turn.alone && !turn.temporaryGuest;
   const touch = deps.reactions?.voiceTouchContext?.(scopeKey, occurredAt, turn.input.reactionLine, ownerAlone) ?? '';
   const note = innerNoteVoice.context(deps.innerNote, scopeKey, turn.alone, turn.guestVoice, occurredAt); // ADR-0012: her inner note.
-  return [touch, deps.minecraftLive?.block({ alone: ownerAlone }), parts.capability.prompt, note];
+  return [touch, deps.minecraftLive?.block({ alone: ownerAlone, ...(turn.seat ? { participants: true } : {}) }), parts.capability.prompt, note];
 }
 
 /** What the router decided, said to her, and the feeling she is told to show. */

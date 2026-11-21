@@ -1,3 +1,5 @@
+import { endsAsQuestion } from '../../mind/perception/spokenQuestion.js';
+
 /**
  * What the server remembers of a voice channel for the next few minutes, in memory only (dc-voice, 2026-10-20): the talk she heard and
  * did not answer (people speaking to each other), the Minecraft situation her body's side described, and the filler she used last.
@@ -40,6 +42,8 @@ export interface ShannonSaid {
   text: string;
   /** About how long saying them takes; the follow-up window is counted from the end of it when the body does not tell. */
   speechMs?: number;
+  /** The words ask something of the room or of the person they were for (`endsAsQuestion`): the next answer to it needs no name, for a while. */
+  asked?: boolean;
 }
 
 /** About 130 ms a character for a spoken Japanese reply, at most 30 s. */
@@ -129,8 +133,16 @@ export class VoiceRooms {
   noteShannon(key: string, said: ShannonSaid): void {
     const room = this.room(key);
     const text = clip(said.text, VOICE_ROOM_LIMITS.lineCharacters);
-    room.shannon = { at: said.at, userId: said.userId, text, speechMs: said.speechMs ?? spokenMilliseconds(Array.from(said.text).length) };
+    // Read before the text is cut short: the question is at its end.
+    const asked = said.asked ?? endsAsQuestion(said.text);
+    room.shannon = { at: said.at, userId: said.userId, text, speechMs: said.speechMs ?? spokenMilliseconds(Array.from(said.text).length), ...(asked ? { asked } : {}) };
     this.noteExchange(key, { role: 'shannon', userId: 'shannon', name: 'シャノン', text, at: said.at });
+  }
+
+  /** The next person's words took the question she asked (answered or not): it no longer opens the way for a nameless answer. */
+  closeQuestion(key: string): void {
+    const room = this.rooms.get(key);
+    if (room?.shannon?.asked) room.shannon = { ...room.shannon, asked: false };
   }
 
   /** What she last said in this room, while it is still the talk of the moment (10 minutes). */

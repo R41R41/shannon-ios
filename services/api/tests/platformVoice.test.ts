@@ -22,6 +22,7 @@ import { createConfiguredPlatformBridgeRoute } from '../src/wiring/platformBridg
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
 import { AddressedJudge } from '../src/mind/perception/addressed.js';
+import { liveBlock } from '../src/surfaces/minecraft/minecraftLiveBlock.js';
 import type { JevChooser } from '../src/infra/models/jev/jevChoice.js';
 
 const OWNER = '900000000000000001';
@@ -75,13 +76,14 @@ class Model implements ShannonChatModel {
 class Body implements VoiceMinecraftPort {
   connected = true;
   running: { id: string; goal: string } | null = null;
+  queue: string[] | undefined;
   calls: VoiceMinecraftIntentInput[] = [];
   outcome: Awaited<ReturnType<VoiceMinecraftPort['intent']>> = { delivered: true, as: 'message', taskId: 'task-1' };
-  state() { return { connected: this.connected, running: this.running }; }
+  state() { return { connected: this.connected, running: this.running, ...(this.queue ? { queue: this.queue } : {}) }; }
   async intent(input: VoiceMinecraftIntentInput) { this.calls.push(input); return this.outcome; }
 }
 
-interface LiveReader { block(options: { alone: boolean }): string; replying?(on: boolean): void; heard?(): void }
+interface LiveReader { block(options: { alone: boolean; participants?: boolean }): string; replying?(on: boolean): void; heard?(): void }
 
 function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }, live?: LiveReader, addressed?: AddressedJudge) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-platform-voice-'));
@@ -552,17 +554,17 @@ describe('/v1/platform/voice/*', () => {
 
 describe('her Minecraft body\'s present in a voice reply (dc-live, SHANNON_MINECRAFT_LIVE)', () => {
   const reader = (marks: string[]): LiveReader => ({
-    block: ({ alone }) => `[マイクラの体の今]\n${alone ? 'エンドラを倒す作業の最中' : '頼まれた作業の最中'}`,
+    block: ({ alone, participants }) => `[マイクラの体の今]\n${alone || participants ? 'エンドラを倒す作業の最中' : '頼まれた作業の最中'}`,
     replying: on => { marks.push(on ? 'on' : 'off'); },
     heard: () => { marks.push('heard'); },
   });
 
-  it('is in the prompt of a channel turn with the request left out while others are there, and in the owner\'s own room with it', async () => {
+  it('is in the prompt of a channel turn with the request told to everyone on the call (they may all ask), and in the owner\'s own room', async () => {
     const marks: string[] = [];
     const { say, model, close } = harness({ SHANNON_DC_VOICE: 'on' }, reader(marks));
     await say('シャノン、いま何してる？', { participants: [OWNER, FRIEND] });
-    expect(promptOf(model.requests[0]!)).toContain('頼まれた作業の最中');
-    expect(promptOf(model.requests[0]!)).not.toContain('エンドラを倒す作業');
+    expect(promptOf(model.requests[0]!)).toContain('エンドラを倒す作業の最中');
+    expect(promptOf(model.requests[0]!)).not.toContain('頼まれた作業の最中');
     await say('いま何してるの？', { participants: [OWNER] });
     expect(promptOf(model.requests[1]!)).toContain('エンドラを倒す作業の最中');
     expect(marks).toEqual(['heard', 'on', 'off', 'heard', 'on', 'off']);
@@ -728,5 +730,198 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
       participants: [OWNER], shannonSpokeMsAgo: -1,
     }, () => undefined))).toBe('400 BAD_REQUEST');
     await off.close();
+  });
+});
+
+/**
+ * Talk while she works on a request in the game, and the answer to a question she asked herself (2026-11-22): the words of a call of three, through
+ * the voice turn, with a Jev that says "to her" for what is about the job and "to someone else" for the people's own chat.
+ */
+describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own question', () => {
+  const ADDRESSED = { SHANNON_DC_VOICE: 'on', SHANNON_ADDRESSED: 'on' };
+  const together = { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND, OTHER], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' };
+  const CAKE = { id: 'task-1', goal: 'ケーキを1個作る' };
+
+  function workJudge() {
+    const asked: Array<{ utterance: string; working: unknown }> = [];
+    const chooser = {
+      decide: async (request: { state: unknown; parse: (answers: Record<string, unknown>) => unknown }) => {
+        const state = request.state as { utterance: string; shannon_is_working_in_minecraft?: boolean; name_in_utterance: string };
+        asked.push({ utterance: state.utterance, working: state.shannon_is_working_in_minecraft });
+        const aboutJob = /骨粉|作って|置いて|どこまで|いま何/u.test(state.utterance);
+        const answers = { addressed_to_shannon: { type: 'noul', noul: aboutJob ? 0.93 : 0.05 }, target: { type: 'choice', choice: aboutJob ? 'shannon' : 'other_person' },
+          reply_needed: { type: 'noul', noul: aboutJob ? 0.95 : 0.05 } };
+        return { value: request.parse(answers), source: 'jev' as const };
+      },
+    } as unknown as Pick<JevChooser, 'decide'>;
+    return { asked, judge: new AddressedJudge({ chooser }) };
+  }
+
+  it('answers a nameless suggestion about the job in a call of three, and stays quiet for the people\'s own chat', async () => {
+    const { asked, judge: j } = workJudge();
+    const { say, model, body, close } = harness(ADDRESSED, undefined, j);
+    body.running = CAKE;
+    model.reply = 'いいね、やってみるね。';
+    const suggestion = await say('小麦は骨粉で早く成長させよう', together);
+    expect(suggestion[0]).toMatchObject({ type: 'decision', respond: true, reason: 'asked_while_working' });
+    expect(model.requests).toHaveLength(1);
+    // The reply is told what is going on and not to promise what is not settled.
+    const prompt = promptOf(model.requests[0]!);
+    expect(prompt).toContain('「ケーキを1個作る」をしている');
+    expect(prompt).toContain('やってみるね');
+    const chat = await say('今夜のご飯なに食べる？', { ...together, sourceUserId: OTHER, sourceDisplayName: 'ミキ' });
+    expect(chat[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect(model.requests).toHaveLength(1);
+    expect(asked).toEqual([{ utterance: '小麦は骨粉で早く成長させよう', working: true }, { utterance: '今夜のご飯なに食べる？', working: true }]);
+    await close();
+  });
+
+  it('counts a request waiting on the list as work, and asks nobody when she is not at work (as before)', async () => {
+    const { asked, judge: j } = workJudge();
+    const { say, model, body, close } = harness(ADDRESSED, undefined, j);
+    const idle = await say('ついでに松明も作って', together);
+    expect(idle[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect(asked).toEqual([]);
+    body.queue = ['#2 待ち 「小麦を3個集める」（ユウ）'];
+    const waiting = await say('先に小麦のほうを作って', together);
+    expect(waiting[0]).toMatchObject({ respond: true, reason: 'asked_while_working' });
+    expect(model.requests).toHaveLength(1);
+    await close();
+  });
+
+  it('answers by name as before, while she works too', async () => {
+    const { asked, judge: j } = workJudge();
+    const { say, body, close } = harness(ADDRESSED, undefined, j);
+    body.running = CAKE;
+    const named = await say('シャノン、いま何してるの', together);
+    expect(named[0]).toMatchObject({ respond: true, reason: 'named' });
+    expect(asked).toHaveLength(1);
+    await close();
+  });
+
+  it('takes the first nameless words after a question from her own mouth, from anyone, and not the ones after', async () => {
+    const { asked, judge: j } = workJudge();
+    const { say, service, model, body, advance, now, close } = harness(ADDRESSED, undefined, j);
+    body.running = CAKE;
+    // A line from her mouth (the cake is done): to the room, to nobody in particular.
+    service.said({ conversationId: SERVER_ROOM, text: 'できた！どこに置けばいい？渡せばいいかな？', source: 'mouth', at: now() });
+    advance(30_000);
+    model.reply = 'うん、ここだね。';
+    const answer = await say('このオークの木材ブロックの上に置いて', together);
+    expect(answer[0]).toMatchObject({ respond: true, reason: 'answer_to_question' });
+    const prompt = promptOf(model.requests[0]!);
+    expect(prompt).toContain('[ボクがさっき聞いたこと]');
+    expect(prompt).toContain('どこに置けばいい？');
+    // No question to Jev: it is a rule. The next words are judged as ever (chat, with her reply as the last line, is not to her).
+    expect(asked).toEqual([]);
+    advance(5_000);
+    const chat = await say('今夜のご飯なに食べる？', { ...together, sourceUserId: OTHER, sourceDisplayName: 'ミキ' });
+    expect(chat[0]).toMatchObject({ respond: false });
+    await close();
+  });
+
+  it('does not take an answer that came too late', async () => {
+    const { judge: j } = workJudge();
+    const { say, service, model, advance, now, close } = harness(ADDRESSED, undefined, j);
+    service.said({ conversationId: SERVER_ROOM, text: 'できた！どこに置けばいい？', source: 'mouth', at: now() });
+    advance(60_000);
+    const late = await say('このオークの木材ブロックの上に置いて', together);
+    expect(late[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect(model.requests).toHaveLength(0);
+    await close();
+  });
+
+  it('takes the owner\'s answer to the question in her own reply to him, and not a friend\'s', async () => {
+    const { judge: j } = workJudge();
+    const { say, model, advance, close } = harness(ADDRESSED, undefined, j);
+    model.reply = 'ケーキができたよ。どこに置けばいい？';
+    await say('シャノン、ケーキはどこまで進んだ？', { ...together, sourceUserId: OWNER, sourceDisplayName: 'ライ氏' });
+    advance(25_000);
+    const friend = await say('ここがいいと思う', together);
+    expect(friend[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    const owner = await say('そこの作業台の上に置いて', { ...together, sourceUserId: OWNER, sourceDisplayName: 'ライ氏' });
+    expect(owner[0]).toMatchObject({ respond: true, reason: 'answer_to_question' });
+    await close();
+  });
+
+  it('does not take a thought she said aloud that ends 「…か」 as a question to the room', async () => {
+    const { asked, judge: j } = workJudge();
+    const { say, service, model, body, advance, now, close } = harness(ADDRESSED, undefined, j);
+    body.running = CAKE;
+    service.said({ conversationId: SERVER_ROOM, text: 'バケツがいるから鉄が必要か', source: 'mouth', at: now() });
+    advance(10_000);
+    const chat = await say('ユウ、お昼ごはんなに食べる？', { ...together, sourceUserId: OTHER, sourceDisplayName: 'ミキ' });
+    expect(chat[0]).toMatchObject({ respond: false });
+    expect(chat[0]).not.toMatchObject({ reason: 'answer_to_question' });
+    expect(model.requests).toHaveLength(0);
+    // The judge was asked instead of a rule answering.
+    expect(asked).toHaveLength(1);
+    await close();
+  });
+
+  it('keeps her question open through a thinking sound, and takes 「うん」 as the answer', async () => {
+    const { asked, judge: j } = workJudge();
+    const { say, service, model, advance, now, close } = harness(ADDRESSED, undefined, j);
+    service.said({ conversationId: SERVER_ROOM, text: 'できた！ここに置けばいいかな？', source: 'mouth', at: now() });
+    advance(30_000);
+    const thinking = await say('うーん', together);
+    expect(thinking[0]).toMatchObject({ respond: false, reason: 'fragment' });
+    advance(3_000);
+    model.reply = 'うん、置くね。';
+    const answer = await say('うん', together);
+    expect(answer[0]).toMatchObject({ respond: true, reason: 'answer_to_question' });
+    expect(asked).toEqual([]);
+    await close();
+  });
+
+  it('does not tell the judge about a question of hers that no longer waits', async () => {
+    const states: Array<Record<string, unknown>> = [];
+    const chooser = { decide: async (request: { state: unknown; parse: (answers: Record<string, unknown>) => unknown }) => {
+      states.push(request.state as Record<string, unknown>);
+      return { value: request.parse({ addressed_to_shannon: { type: 'noul', noul: 0.05 }, target: { type: 'choice', choice: 'other_person' }, reply_needed: { type: 'noul', noul: 0.05 } }), source: 'jev' as const };
+    } } as unknown as Pick<JevChooser, 'decide'>;
+    const { say, service, body, advance, now, close } = harness(ADDRESSED, undefined, new AddressedJudge({ chooser }));
+    body.running = CAKE;
+    service.said({ conversationId: SERVER_ROOM, text: 'できた！どこに置けばいい？', source: 'mouth', at: now() });
+    advance(120_000);
+    await say('そろそろ骨粉も作って', together);
+    expect(states).toHaveLength(1);
+    expect(states[0]).not.toHaveProperty('shannon_last_line_was_a_question');
+    await close();
+  });
+
+  it('carries the speaker\'s Minecraft name to the request, and refuses a bad one', async () => {
+    const { say, model, body, close, refusal, service, now } = harness({ SHANNON_DC_VOICE: 'on' });
+    model.reply = 'いいよ、置くね。';
+    model.intent = { kind: 'task', goal: 'ケーキをオークの木材の上に置く' };
+    await say('シャノン、そこに置いて', { ...together, speakerMinecraftName: 'Yuu_1234' });
+    expect(body.calls).toHaveLength(1);
+    expect(body.calls[0]!.speaker).toMatchObject({ id: FRIEND, name: 'ユウ', owner: false, minecraftName: 'Yuu_1234' });
+    await say('シャノン、これもお願い', together);
+    expect(body.calls[1]!.speaker).not.toHaveProperty('minecraftName');
+    expect(await refusal(service.turn({
+      platform: 'discord', requestId: 'bad-mc', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんにちは',
+      observedAt: now(), participants: [OWNER], speakerMinecraftName: 'a'.repeat(100),
+    }, () => undefined))).toBe('400 BAD_REQUEST');
+    await close();
+  });
+
+  it('tells a call of several what was asked in the body\'s present, which the old rule kept from them', async () => {
+    const blocks: Array<{ alone: boolean; participants?: boolean }> = [];
+    const live: LiveReader = {
+      block: options => {
+        blocks.push(options);
+        return liveBlock({ frameAgeSeconds: 1, goal: 'ケーキを1個作る', goalIsRequest: true, elapsedSeconds: 60, doing: '', milestone: null, dimension: null, biome: null,
+          time: '', health: 20, food: 20, threats: [], carried: [], map: '', furnace: null, recent: [], stuck: null,
+          plan: { section: '小麦を育てる', points: ['種を植える', '骨粉で育てる'] } }, options);
+      },
+    };
+    const { say, model, close } = harness({ SHANNON_DC_VOICE: 'on' }, live);
+    await say('シャノン、いま何してるの', together);
+    expect(blocks.at(-1)).toMatchObject({ alone: false, participants: true });
+    const prompt = promptOf(model.requests[0]!);
+    expect(prompt).toContain('取り組んでいること: ケーキを1個作る（通話の誰かに頼まれた）');
+    expect(prompt).toContain('計画の今の節: 小麦を育てる');
+    await close();
   });
 });

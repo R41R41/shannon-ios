@@ -8,8 +8,8 @@ import {
   type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService,
 } from '../../mind/memory/platformMemoryPorts.js';
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
-import { voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
-import type { AddressedJudge } from '../../mind/perception/addressed.js';
+import { isAcknowledgement, isNoiseOnly, voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
+import { askedHer, type AddressedJudge, type AddressedWork } from '../../mind/perception/addressed.js';
 import { addressedInputOf } from './platformVoiceAddressed.js';
 import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
@@ -24,7 +24,7 @@ import {
   PLATFORM_VOICE_ALLOWANCE, PLATFORM_VOICE_LIMITS, StoredVoiceTurn, VoiceTurnLine, VoiceTurnRequest, conflict, notBound, validatedVoiceTurn, voiceHash,
 } from './platformVoiceRequest.js';
 import {
-  FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions,
+  FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, askedBackBlock, heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
@@ -83,6 +83,17 @@ export interface PlatformVoiceDependencies {
   environment?: () => SwitchValues;
   /** Content-free lines; `console.log` when absent. */
   log?(line: string): void;
+}
+
+/**
+ * Whether she is at work in the game for the people on the call: a request running, or any waiting on the list (a held or stopped one counts:
+ * 「再開して」 and 「続けて」 are about the work too). What `AddressedJudge` is shown of it; null when the body is off, not connected or idle.
+ */
+export function workOf(state: VoiceMinecraftState | undefined): AddressedWork | null {
+  if (!state?.connected) return null;
+  const list = state.queue ?? [];
+  const goal = state.running?.goal ?? null;
+  return goal !== null || list.length > 0 ? { goal, list } : null;
 }
 
 /** Who is speaking where, as the platform policy settled it. */
@@ -230,7 +241,8 @@ export class PlatformVoiceService {
     const decisionMs = Math.round(performance.now() - seat.startedAt);
     const body = this.bodyFor(seat);
     const seated = this.seated;
-    const answer = seated ? await this.askOneHead(seated, seat, request, hash, filler, body, out) : await this.ask(seat, request, hash, filler, body, out);
+    const answer = seated ? await this.askOneHead(seated, seat, request, hash, filler, body, address, out)
+      : await this.ask(seat, request, hash, filler, body, address, out);
     await this.carryIntent(seat, request, hash, answer, body, out);
     this.finish(seat, request, hash, key, answer, { decisionMs, address: address.reason, filler }, out);
   }
@@ -251,14 +263,22 @@ export class PlatformVoiceService {
     // A request of anyone may be under way, and anyone's stop word stops it (the body part on: `offersIntent`).
     const body = this.bodyFor(seat);
     const bodyRunning = (body?.state.running ?? null) !== null;
-    const shown = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning,
-      guestsMayStop: this.offersIntent(seat, body) });
-    // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through).
+    const built = addressedInputOf(this.rooms, request, { scopeKey: this.dependencies.scopeKey, humans, owner: seat.owner, bodyRunning,
+      guestsMayStop: this.offersIntent(seat, body), work: workOf(body?.state) });
+    // Her question counts only while it still waits (45 seconds, for this speaker): after that it is no longer told to the judge as a question either.
+    const waiting = askedHer(built, judge.questionWindowMilliseconds);
+    const shown: typeof built = built.shannon?.asked && !waiting ? { ...built, shannon: { ...built.shannon, asked: false } } : built;
+    // A breath, a key press or a lone 「うん」 nobody waits on: no question (the follow-up window lets a bare answer through; so does a waiting question of hers, but only
+    // for a real answer: a thinking sound (「うーん」) takes neither the question nor its turn).
     const spokeAgo = shown.shannon?.spokeAgoMs ?? null;
-    if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: spokeAgo !== null && spokeAgo <= judge.windowMilliseconds })) {
+    if (waiting && isNoiseOnly(request.userMessage) && !isAcknowledgement(request.userMessage)) return { respond: false, reason: 'fragment' };
+    const follows = (spokeAgo !== null && spokeAgo <= judge.windowMilliseconds) || (waiting && isAcknowledgement(request.userMessage));
+    if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: follows })) {
       return { respond: false, reason: 'fragment' };
     }
     const verdict = await judge.judge(shown);
+    // These words took the question she had asked, answered or not: the next ones are judged as usual.
+    if (waiting) this.rooms.closeQuestion(room);
     const said = { role: 'person' as const, userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt };
     this.rooms.noteExchange(room, said);
     this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} ms=${verdict.ms} humans=${humans}`);
@@ -320,7 +340,9 @@ export class PlatformVoiceService {
     return !seat.policy.gate.ownerOnly && body !== null && body.state.connected;
   }
 
-  private promptFor(seat: ChannelSeat, request: VoiceTurnRequest, filler: VoiceFiller | null, body: { state: VoiceMinecraftState } | null): string {
+  private promptFor(
+    seat: ChannelSeat, request: VoiceTurnRequest, filler: VoiceFiller | null, body: { state: VoiceMinecraftState } | null, address: VoiceAddress,
+  ): string {
     const roomKey = request.conversationId;
     this.rooms.noteHeard(roomKey, request.heard);
     const situation = request.situation ?? this.rooms.situation(roomKey) ?? this.rooms.situation('default');
@@ -334,6 +356,7 @@ export class PlatformVoiceService {
         speakerName: seat.owner ? null : request.sourceDisplayName, humans: seat.humans.size, fillerText: filler?.text,
       }),
       situationBlock(situation, running),
+      address.reason === 'answer_to_question' ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
       intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE),
     ].filter(Boolean).join('\n\n');
@@ -341,7 +364,7 @@ export class PlatformVoiceService {
 
   private async ask(
     seat: ChannelSeat, request: VoiceTurnRequest, hash: string, filler: VoiceFiller | null,
-    body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
+    body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, address: VoiceAddress, out: VoiceOut,
   ): Promise<VoiceAnswer> {
     const { scopeKey, conversation } = this.dependencies;
     const spoken = new SpokenSentences(out);
@@ -351,7 +374,7 @@ export class PlatformVoiceService {
     const result = await conversation.textTurn({
       ...platformTextTurnInput({
         scopeKey, policy: seat.policy, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`, rawMessage: transcript,
-        prompt: this.promptFor(seat, request, filler, body), threadTitle: seat.title, voice: true, ownOutreach: false,
+        prompt: this.promptFor(seat, request, filler, body, address), threadTitle: seat.title, voice: true, ownOutreach: false,
         ...(seat.owner && seat.policy.gate.ownerOnly ? { minecraftTools: true } : {}),
         ...(this.offersIntent(seat, body) ? { offerMinecraftIntent: true } : {}),
         perception: { surface: 'platform', ownerWrote: seat.owner },
@@ -373,13 +396,13 @@ export class PlatformVoiceService {
    */
   private async askOneHead(
     seated: SeatedVoiceTurn, seat: ChannelSeat, request: VoiceTurnRequest, hash: string, filler: VoiceFiller | null,
-    body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
+    body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, address: VoiceAddress, out: VoiceOut,
   ): Promise<VoiceAnswer> {
     const kept: KeptTurn = { ignored: undefined };
     const transcript = request.userMessage;
     const voiceSeat = platformVoiceSeat({
       policy: seat.policy, owner: seat.owner, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`,
-      prompt: this.promptFor(seat, request, filler, body), title: seat.title, offerMinecraftIntent: this.offersIntent(seat, body),
+      prompt: this.promptFor(seat, request, filler, body, address), title: seat.title, offerMinecraftIntent: this.offersIntent(seat, body),
       keep: turn => this.keep(seat, request, hash, turn, kept),
     });
     const answer = await askSeated(seated, { scopeKey: this.dependencies.scopeKey, transcript, seat: voiceSeat }, out, {
@@ -453,7 +476,8 @@ export class PlatformVoiceService {
     const { scopeKey } = this.dependencies;
     const ask = (experienceId: string | null) => body.port.intent({
       scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent, experienceId,
-      speaker: { id: request.sourceUserId, name: request.sourceDisplayName, owner: seat.owner },
+      speaker: { id: request.sourceUserId, name: request.sourceDisplayName, owner: seat.owner,
+        ...(request.speakerMinecraftName ? { minecraftName: request.speakerMinecraftName } : {}) },
     }).catch((): VoiceMinecraftIntentResult => ({ delivered: false }));
     const outcome = await this.deliver(seat, request, hash, answer, intent.kind, ask);
     out.line({

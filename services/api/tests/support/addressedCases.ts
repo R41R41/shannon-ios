@@ -8,18 +8,22 @@
  */
 export interface AddressedCase {
   id: string;
-  group: 'call' | 'about' | 'self' | 'misheard' | 'follow' | 'other' | 'alone';
+  group: 'call' | 'about' | 'self' | 'misheard' | 'follow' | 'other' | 'alone' | 'work' | 'asked';
   transcript: string;
   humans: number;
   speaker?: string;
   /** She last spoke this many seconds ago (absent: not lately) and whether it was to this speaker. */
-  spoke?: { secondsAgo: number; toSpeaker: boolean | null; line?: string };
+  spoke?: { secondsAgo: number; toSpeaker: boolean | null; line?: string; /** Her last words asked something nobody has taken yet. */ asked?: true };
+  /** She is working on a job in the game for the people in the room (a request running or waiting). */
+  work?: { goal: string | null; list: string[] };
   recent?: Array<{ who: string; text: string; secondsAgo: number; shannon?: true }>;
   to: boolean;
   ask: boolean;
 }
 
 const HER = 'そっか、じゃあ次はネザーに行ってみようか。';
+const ASKED = 'できた！どこに置けばいい？';
+const CAKE = { goal: 'ケーキを1個作る', list: ['#1 実行中 「ケーキを1個作る」（ユウ）'] };
 
 export const ADDRESSED_CASES: readonly AddressedCase[] = [
   // Called by name, to her.
@@ -73,4 +77,22 @@ export const ADDRESSED_CASES: readonly AddressedCase[] = [
   { id: 'alone-phone', group: 'alone', transcript: 'もしもし、うん、今から行くよ', humans: 1, spoke: { secondsAgo: 8, toSpeaker: true, line: HER }, to: false, ask: true },
   { id: 'alone-mother', group: 'alone', transcript: 'お母さん、ご飯まだ？', humans: 1, spoke: { secondsAgo: 10, toSpeaker: true, line: HER }, to: false, ask: true },
   { id: 'alone-tv', group: 'alone', transcript: 'このドラマ、続きが気になるなあ', humans: 1, to: false, ask: false },
+  // While she works on a job for the people in the room: a request, a tip or a question about it is to her without her name; their own chat is not.
+  { id: 'work-bonemeal', group: 'work', transcript: '小麦は骨粉で早く成長させよう', humans: 3, speaker: 'ユウ', work: CAKE, to: true, ask: true },
+  { id: 'work-request', group: 'work', transcript: 'ついでに松明も作っておいて', humans: 3, speaker: 'ミキ', work: CAKE, to: true, ask: true },
+  { id: 'work-progress', group: 'work', transcript: '今どこまで進んだ？', humans: 2, speaker: 'ユウ', work: CAKE, to: true, ask: true },
+  { id: 'work-tip', group: 'work', transcript: '牛乳はバケツがいるから、鉄が必要だよ', humans: 3, speaker: 'ミキ', work: CAKE, to: true, ask: true },
+  { id: 'work-waiting', group: 'work', transcript: '先に小麦のほうをお願い', humans: 3, speaker: 'ユウ', work: { goal: null, list: ['#2 待ち 「小麦を3個集める」'] }, to: true, ask: true },
+  { id: 'work-chat-food', group: 'work', transcript: '今夜のご飯なに食べる？', humans: 3, speaker: 'ミキ', work: CAKE, to: false, ask: true },
+  { id: 'work-chat-person', group: 'work', transcript: 'ミキ、さっきの動画見た？', humans: 3, speaker: 'ユウ', work: CAKE, to: false, ask: true },
+  { id: 'work-chat-game', group: 'work', transcript: 'そういえば新しいゲーム出たよね', humans: 3, speaker: 'ミキ', work: CAKE, to: false, ask: true },
+  { id: 'work-laugh', group: 'work', transcript: 'あはは、それはおもしろい', humans: 3, speaker: 'ユウ', work: CAKE, to: false, ask: true },
+  { id: 'work-about-her', group: 'work', transcript: 'シャノンってさ、昨日エンドラの前で死んだんだって', humans: 3, speaker: 'ユウ', work: CAKE, to: false, ask: true },
+  { id: 'work-idle', group: 'work', transcript: 'ついでに松明も作っておいて', humans: 3, speaker: 'ミキ', to: false, ask: false },
+  // Words after a question she asked herself: a rule, from anyone when it was for the room, within the longer window.
+  { id: 'asked-here', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: ASKED, asked: true }, to: true, ask: false },
+  { id: 'asked-yes', group: 'asked', transcript: 'うん、お願い', humans: 1, spoke: { secondsAgo: 25, toSpeaker: true, line: ASKED, asked: true }, to: true, ask: false },
+  { id: 'asked-late', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 50, toSpeaker: null, line: ASKED, asked: true }, to: false, ask: false },
+  { id: 'asked-to-another', group: 'asked', transcript: 'ここがいいと思う', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 10, toSpeaker: false, line: ASKED, asked: true }, to: false, ask: false },
+  { id: 'asked-not-a-question', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: 'ケーキができたよ。' }, to: false, ask: false },
 ];

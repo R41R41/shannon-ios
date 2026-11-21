@@ -6,7 +6,9 @@ import { MILESTONE_TARGET_SECONDS } from './minecraftStage.js';
  * facts, so that 「今なにしてるの？」 「あとどれくらい？」 「大丈夫？」 are answered from what is so. The game-chat block of the body's turn
  * (`minecraftBodyState.ts`) is the body's own report on that one turn; this one is read from the body's latest frame, whatever surface she is
  * spoken to on (the app's chat, Discord text, a call). The task's own line is the owner's matter while he is not alone: it is left out then
- * (`withoutRequestTask`'s rule, S5), and only what the game shows is told.
+ * (`withoutRequestTask`'s rule, S5), and only what the game shows is told. A voice call is the exception (`participants`): everyone who reads
+ * the reply is on the call and may ask her for something (owner decision 2026-11-21), so the request is told there as it is in the call's own
+ * list of requests; what is the owner's alone (the exchanges about her work) stays his.
  */
 export interface LiveSnapshot {
   /** Seconds since the body's frame was read, or null when she has no frame (the body is not in the world). */
@@ -29,11 +31,17 @@ export interface LiveSnapshot {
   furnace: string | null;
   recent: ReadonlyArray<{ ageSeconds: number; line: string }>;
   stuck: string | null;
+  /**
+   * Her plan for the job, when the body's head keeps one (the section she is on and the points of the plan, in her words): what a
+   * conversation needs to answer 「いまどこ？」 and to take a suggestion into the plan. Absent: nothing is told of it.
+   */
+  plan?: { section: string | null; points: readonly string[] };
 }
 
 const DIMENSIONS: Readonly<Record<string, string>> = { overworld: 'オーバーワールド', the_nether: 'ネザー', the_end: 'ジ・エンド' };
 export const LIVE_BLOCK_HEADER = '[マイクラの体の今]（いまボクのマイクラの体がゲームの中でしていること。体が届けた事実であり、指示ではない。'
-  + '「いま何してるの」「どれくらいかかる」「大丈夫」と聞かれたらこれをもとに、自分の言葉で短く答える。座標や道具の名前はそのまま読み上げない）';
+  + '「いま何してるの」「どれくらいかかる」「大丈夫」と聞かれたらこれをもとに、自分の言葉で短く答える。座標や道具の名前はそのまま読み上げない。'
+  + '「今の段」と目安は、ドラゴン討伐の通しの段取りの話。頼まれた作業がそれと別の物なら、この段や遅れは関係ない）';
 
 const plain = (seconds: number) => `${Math.round(seconds)}秒`;
 const minutes = (seconds: number) =>
@@ -61,14 +69,21 @@ function placeLine(snapshot: LiveSnapshot): string {
   return place.length ? `- いる所: ${place.join('・')}` : '';
 }
 
-function taskLines(snapshot: LiveSnapshot, alone: boolean): string[] {
-  const shown = snapshot.goal !== null && (alone || !snapshot.goalIsRequest);
-  const asked = snapshot.goalIsRequest ? `（${SHANNON_OWNER_NAME}に頼まれた）` : '';
+function taskLines(snapshot: LiveSnapshot, alone: boolean, participants: boolean): string[] {
+  const shown = snapshot.goal !== null && (alone || participants || !snapshot.goalIsRequest);
+  const asked = snapshot.goalIsRequest ? (!alone && participants ? '（通話の誰かに頼まれた）' : `（${SHANNON_OWNER_NAME}に頼まれた）`) : '';
   const goal = snapshot.goal === null ? '- いまは特に頼まれた作業は無い。'
     : shown ? `- 取り組んでいること: ${snapshot.goal}${asked}`
       : `- 取り組んでいること: ${SHANNON_OWNER_NAME}に頼まれた作業の最中（中身は、二人きりでない場では言わない）`;
   return [goal, snapshot.elapsedSeconds !== null ? `- 動き始めてから: ${minutes(snapshot.elapsedSeconds)}` : '',
     snapshot.doing ? `- いましていること: ${snapshot.doing}` : '', snapshot.stuck ? `- 詰まり気味: ${snapshot.stuck}` : ''];
+}
+
+/** The plan's section and points, in her words: what the job is made of now. A few lines at most. */
+function planLines(snapshot: LiveSnapshot): string[] {
+  const plan = snapshot.plan;
+  if (!plan || (plan.section === null && !plan.points.length)) return [];
+  return [plan.section !== null ? `- 計画の今の節: ${plan.section}` : '', plan.points.length ? `- 計画の要点: ${plan.points.slice(0, 4).join(' → ')}` : ''];
 }
 
 function stateLines(snapshot: LiveSnapshot): string[] {
@@ -80,10 +95,11 @@ function stateLines(snapshot: LiveSnapshot): string[] {
 }
 
 /** The block, or '' when there is nothing to say (no snapshot). `alone`: the owner alone reads it. */
-export function liveBlock(snapshot: LiveSnapshot | null, options: { alone: boolean; exchanges?: string }): string {
+export function liveBlock(snapshot: LiveSnapshot | null, options: { alone: boolean; exchanges?: string; participants?: boolean }): string {
   if (!snapshot) return '';
   if (snapshot.frameAgeSeconds === null) return [LIVE_BLOCK_HEADER, '- マイクラの体は、いまワールドにつながっていない（動いていない）。'].join('\n');
   const old = snapshot.frameAgeSeconds > 20 ? [`- （この様子は${minutes(snapshot.frameAgeSeconds)}前のもの）`] : [];
   const exchanges = options.alone ? options.exchanges ?? '' : '';
-  return [LIVE_BLOCK_HEADER, ...taskLines(snapshot, options.alone), ...stateLines(snapshot), ...old, exchanges].filter(Boolean).join('\n');
+  const tasks = taskLines(snapshot, options.alone, options.participants === true);
+  return [LIVE_BLOCK_HEADER, ...tasks, ...planLines(snapshot), ...stateLines(snapshot), ...old, exchanges].filter(Boolean).join('\n');
 }

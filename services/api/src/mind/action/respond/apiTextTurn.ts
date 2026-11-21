@@ -71,7 +71,8 @@ eplying and heard tell the
  * live commentary that someone is being answered, and that someone just wrote or spoke, so that she does not talk over them.
  */
 export interface LiveBodyReader {
-  block(options: { alone: boolean }): string;
+  /** `participants`: everyone who reads the reply is on the call (a Discord voice channel) and may ask her for something: the request is told. */
+  block(options: { alone: boolean; participants?: boolean }): string;
   replying?(on: boolean): void;
   heard?(): void;
 }
@@ -381,7 +382,7 @@ export function textTurnSystemPrompt(dependencies: TextTurnDependencies, input: 
   // Her work with the owner is his: on another surface it is given only while he alone reads the reply.
   const ownerWork = !surface || audience.alone;
   // Her body in the game, for every conversation but the game's own chat (which carries the body's report of that turn): the task's words only while he alone reads.
-  const bodyNow = surface?.perception?.surface === 'minecraft' ? '' : dependencies.minecraftLive?.block({ alone: audience.alone }) ?? '';
+  const bodyNow = surface?.perception?.surface === 'minecraft' ? '' : dependencies.minecraftLive?.block({ alone: audience.alone, ...(surface?.voice ? { participants: true } : {}) }) ?? '';
   const turnContext = [
     basePrompt.state, memory(cognitiveContext.prompt), memory(peopleRecall.prompt), memory(dailyMindPrompt), memory(capability.prompt), bodyNow,
     ...(ownerWork ? [buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(body.scopeKey)),

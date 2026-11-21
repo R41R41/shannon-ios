@@ -38,7 +38,7 @@ export function platformVoiceInstructions(facts: VoiceDeliveryFacts): string {
     ...(facts.speakerName ? [`いま話しかけているのは「${facts.speakerName}」。`] : []),
     '- 声に出して自然な日本語で、短く返す。たいてい1〜2文。見出し・箇条書き・URL・絵文字・かっこでの補足は使わない。',
     '- 相手の言葉は聞き取った文字で、聞き間違いがある。意味の取れない言葉は推測で答えず、短く聞き返す。',
-    ...(facts.humans > 1 ? ['- ほかの人どうしの話に口をはさまない。ボクに向けた話の時と、名前を呼ばれた時だけ話す。'] : []),
+    ...(facts.humans > 1 ? ['- ほかの人どうしの話に口をはさまない。ボクに向けた話の時と、名前を呼ばれた時、ボクがいましている作業についての頼み・提案・問いの時（名前がなくても）だけ話す。'] : []),
     '- 話している人の声の高さや表情は、文字からは分からない。',
     '- 声の返事で、体を動かした・マイクラで何かをした、とは言わない（体を動かすのは別の仕組み）。',
     ...(facts.fillerText ? [`- この返事の前に、ボクはもう「${facts.fillerText}」と声に出している。同じ言葉で始めず、その続きとして自然につなぐ。`] : []),
@@ -67,6 +67,21 @@ export function situationBlock(situation: string | null, runningGoal: string | n
     ...(situation ? [situation] : []),
     ...(runningGoal ? [`頼まれて、体はいま「${runningGoal}」をしている。`] : []),
     '- これは、いまの様子の説明。書かれていないことは分からないと言う。体を動かすのは別の仕組みで、この返事だけで終わったことにしない。',
+    ...(runningGoal ? [
+      '- 作業の途中のことは、まだ決まっていない。材料が集まるか、うまくいくかは、やってみないと分からず、計画も途中で変わる。'
+        + 'だから「できるよ」「大丈夫」と言い切らず、「やってみるね」「たぶんいけると思う」くらいで返す。',
+      '- いまの作業と、書かれている計画やこれまでの様子に合わせて返す。いまの作業とぶつかる頼みなら、それが終わってからか、先にやるかを短く言う。',
+    ] : []),
+  ].join('\n');
+}
+
+/** Her own question that the words just heard answer (`answer_to_question`): so that 「ここ」 and 「うん」 are read as what they answer. */
+export function askedBackBlock(line: string | null): string {
+  if (!line) return '';
+  return [
+    '[ボクがさっき聞いたこと]',
+    `「${line.replace(/\s+/gu, ' ').trim().slice(0, 160)}」`,
+    '- いま聞こえた言葉は、たぶんその答え。答えとして受け取って、頼まれたことは頼みごととして扱う（置く場所・渡す相手・やり方など）。',
   ].join('\n');
 }
 
