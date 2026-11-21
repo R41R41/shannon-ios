@@ -1,4 +1,5 @@
 import { LiveGovernor, pickMoments, type LiveMoment, type LiveRoom } from '@shannon/mind';
+import { outsideActionExecution } from '../../infra/context/actionExecution.js';
 import type { MinecraftLiveRoom, MinecraftLiveSpeechReceipt } from '../../contracts/minecraftControlContract.js';
 import type { LiveSpeechDraft, LiveSpeechOutbox } from './minecraftLiveSpeech.js';
 
@@ -45,14 +46,21 @@ export interface LiveCommentaryParts {
   /** Where moments come from, what only the API sees of the room, and her danger. */
   live: {
     onMoment(listener: (moment: LiveMoment) => void): () => void;
+    /** Her work was stopped, cancelled or held: what waits of it is dropped (absent: nothing tells). */
+    onRelease?(listener: () => void): () => void;
     inDanger(): boolean;
     conversation(): { replying: boolean; sinceHumanMilliseconds: number | null };
   };
-  outbox: Pick<LiveSpeechOutbox, 'enqueue' | 'onEnd' | 'room'>;
+  outbox: Pick<LiveSpeechOutbox, 'enqueue' | 'onEnd' | 'room'> & Partial<Pick<LiveSpeechOutbox, 'withdraw'>>;
   /** The line for these moments in her voice, or null when she has none; may throw (the moment is then dropped). */
   write(request: LiveWriteRequest): Promise<string | null>;
   /** A line was delivered (said or posted): the wiring keeps it in the conversation it went into. */
   delivered?(told: { id: string; moment: LiveMoment; text: string; outcome: 'spoken' | 'posted'; conversationId?: string }): void;
+  /**
+   * What she says for the end of a request when the writer gave her nothing twice: the question after a finished job starts the
+   * answer (where to put it, what next), so the end is never left unsaid. Absent: the end is dropped like any lost line.
+   */
+  doneFallback?: string;
   governor?: LiveGovernor;
   now?: () => number;
   log?: (line: string) => void;
@@ -74,6 +82,8 @@ export class LiveCommentary {
   private readonly pending = new Map<string, Pending>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private writing = false;
+  /** Rises at each release of her work: a line whose writing began before it is about a story that ended. */
+  private released = 0;
   private serial = 0;
   private stops: Array<() => void> = [];
   private readonly counts: Record<string, number> = {};
@@ -91,6 +101,22 @@ export class LiveCommentary {
   start(): void {
     if (this.stops.length) return;
     this.stops.push(this.parts.live.onMoment(moment => this.hear(moment)), this.parts.outbox.onEnd((receipt, draft) => this.ended(receipt, draft)));
+    const unhear = this.parts.live.onRelease?.(() => this.release());
+    if (unhear) this.stops.push(unhear);
+  }
+
+  /**
+   * Her work was stopped, cancelled or held: what she was about to say of it (a moment not written yet, a line being written, a line not
+   * handed to the body yet) is about a story that is no longer going on. The end of a request is not of it, and the next request's own
+   * moments are heard as usual.
+   */
+  private release(): void {
+    this.released += 1;
+    const work = LIVE_COMMENTARY_ENGINE.workKinds;
+    const before = this.waiting.length;
+    this.waiting = this.waiting.filter(item => !work.includes(item.moment.kind));
+    this.parts.outbox.withdraw?.(work);
+    if (this.waiting.length < before || this.writing) this.count('released');
   }
 
   stop(): void {
@@ -120,10 +146,12 @@ export class LiveCommentary {
 
   private schedule(milliseconds: number): void {
     if (this.timer) return;
-    this.timer = setTimeout(() => {
+    // A moment is heard from inside the task step that made it, and a timer keeps the action of the place it was set in: the model call it
+    // leads to would be asked of a step that is over (ACTION_STOPPED), and so would every later timer of the chain. The word is hers, not the step's.
+    this.timer = outsideActionExecution(() => setTimeout(() => {
       this.timer = undefined;
       void this.tick();
-    }, milliseconds);
+    }, milliseconds));
     this.timer.unref?.();
   }
 
@@ -167,10 +195,16 @@ export class LiveCommentary {
 
   private async compose(main: { moment: LiveMoment; salience: number; rewrites: number }, also: ReadonlyArray<{ moment: LiveMoment }>): Promise<void> {
     this.writing = true;
+    const released = this.released;
     try {
       const voice = this.parts.outbox.room()?.voice === true, folded = also.map(item => item.moment);
       const text = await within(this.parts.write({ main: main.moment, also: folded, recent: this.governor.recentWords(), voice }).catch(() => null),
         LIVE_COMMENTARY_ENGINE.writeMilliseconds);
+      // Her work was released while the model wrote (the line is of the work, not the end of a request): the line is not said.
+      if (released !== this.released && LIVE_COMMENTARY_ENGINE.workKinds.includes(main.moment.kind)) {
+        this.count('write_released');
+        return;
+      }
       this.settle(main, folded, text, voice);
     } finally { this.writing = false; }
   }
@@ -185,14 +219,18 @@ export class LiveCommentary {
       spendAll();
       this.dropWaiting(main.moment, folded);
     };
-    if (!text) {
+    // The end was already written once more and is still lost for a reason of the line: the fixed line is said (it is not judged as a repeat).
+    if ((!text || !this.governor.fresh(text)) && main.moment.kind === 'task_done' && this.retried.has(main.moment.key) && this.parts.doneFallback) {
+      this.count('done_fallback');
+      text = this.parts.doneFallback;
+    } else if (!text) {
       this.count('write_empty');
       return giveUp();
-    }
-    if (!this.governor.fresh(text)) {
+    } else if (!this.governor.fresh(text)) {
       this.count('write_repeat');
       return giveUp();
     }
+    if (!text) return;
     const again = this.governor.verdict(main.moment, this.room());
     if (!again.speak && (again.reason === 'human' || again.reason === 'replying') && main.rewrites < LIVE_COMMENTARY_ENGINE.rewrites) {
       // Someone began to talk while the line was written: it is not said over them; the moment waits, and is written again if it still stands.

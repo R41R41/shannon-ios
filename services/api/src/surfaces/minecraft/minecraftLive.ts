@@ -38,6 +38,8 @@ export interface MinecraftLiveSink {
   need?(taskId: string, need: { item: string; count: number; use: string }): void;
   /** What she means by the hands she sends (an act's `why`). */
   thought?(taskId: string, why: string): void;
+  /** Her work was stopped, cancelled or held (a stop of a task; the list's cancel, hold or stop): what is still to be said of it is not said. */
+  released?(): void;
 }
 
 export interface LiveFrames {
@@ -78,6 +80,7 @@ export class MinecraftLive implements MinecraftLiveSink {
   private readonly seenAt = new Map<string, number>();
   private readonly moments: LiveMoment[] = [];
   private readonly listeners = new Set<(moment: LiveMoment) => void>();
+  private readonly releaseListeners = new Set<() => void>();
   private danger = false;
   /** Replies being written now, and when someone last wrote or spoke to her (the conversations tell: 
 eplying, heard). */
@@ -116,6 +119,19 @@ eplying, heard). */
     return all;
   }
 
+  /** Whether her work for this task is being stopped (or is stopped): what its last step still shows is not a thing to say. */
+  private halted(task: TaskState): boolean {
+    try {
+      const phase = task.info.phase?.();
+      return phase === 'stopping' || phase === 'stopped';
+    } catch { return false; }
+  }
+
+  /** A moment of her work as it goes: said unless the work is being stopped. */
+  private emitWork(task: TaskState, moment: LiveMoment): void {
+    if (!this.halted(task)) this.emit(moment);
+  }
+
   plan(taskId: string, view: BodyPlanView | undefined): void {
     try {
       const task = this.tasks.get(taskId);
@@ -130,7 +146,7 @@ eplying, heard). */
       const titles = (ids: string[]) => ids.slice(0, 3).map(id => nodes.get(id)?.title ?? prev?.nodes.get(id)?.title ?? '').filter(Boolean).join('、');
       if (!prev) {
         const top = view.nodes.filter(node => node.parentId === null).map(node => node.id);
-        this.emit({ kind: 'plan_changed', key: key('first'), at: now, facts: { added: titles(top), first: true } });
+        this.emitWork(task, { kind: 'plan_changed', key: key('first'), at: now, facts: { added: titles(top), first: true } });
         return;
       }
       if (prev.revision === view.revision) return;
@@ -140,11 +156,12 @@ eplying, heard). */
       // Of the nodes that closed together the innermost is the step; a parent that closed with its last child is not a second step.
       const leaf = finished.filter(id => !finished.some(other => nodes.get(other)?.parent === id)).at(-1);
       if (leaf !== undefined) {
-        this.emit({ kind: 'plan_step', key: key('step'), at: now, facts: { done: nodes.get(leaf)!.title,
+        this.emitWork(task, { kind: 'plan_step', key: key('step'), at: now, facts: { done: nodes.get(leaf)!.title,
           next: view.current ? nodes.get(view.current)?.title ?? '' : '' } });
       }
       if (added.length || dropped.length || blocked.length) {
-        this.emit({ kind: 'plan_changed', key: key('changed'), at: now, facts: { added: titles(added), dropped: titles(dropped), blocked: titles(blocked) } });
+        this.emitWork(task, { kind: 'plan_changed', key: key('changed'), at: now,
+          facts: { added: titles(added), dropped: titles(dropped), blocked: titles(blocked) } });
       }
     } catch { /* the commentary never fails a decision */ }
   }
@@ -165,7 +182,7 @@ eplying, heard). */
       const known = task.needs.get(item) ?? 0;
       task.needs.set(item, Math.max(known, need.count));
       if (known >= need.count) return;
-      this.emit({ kind: 'material_needed', key: `need:${taskId}:${item}:${need.count}`, at: this.now(),
+      this.emitWork(task, { kind: 'material_needed', key: `need:${taskId}:${item}:${need.count}`, at: this.now(),
         facts: { item, count: Math.floor(need.count), use: brief(need.use, 30) } });
     } catch { /* the commentary never fails a decision */ }
   }
@@ -175,7 +192,7 @@ eplying, heard). */
       const task = this.tasks.get(taskId), text = brief(why, 90);
       if (!task || text.length < 4 || text === task.lastThought) return;
       task.lastThought = text;
-      this.emit({ kind: 'thinking', key: `why:${taskId}:${this.now()}`, at: this.now(), facts: { why: text } });
+      this.emitWork(task, { kind: 'thinking', key: `why:${taskId}:${this.now()}`, at: this.now(), facts: { why: text } });
     } catch { /* the commentary never fails a decision */ }
   }
 
@@ -208,6 +225,18 @@ eplying, heard). */
   onMoment(listener: (moment: LiveMoment) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Told when her work is released (stopped, cancelled, held). */
+  onRelease(listener: () => void): () => void {
+    this.releaseListeners.add(listener);
+    return () => this.releaseListeners.delete(listener);
+  }
+
+  released(): void {
+    for (const listener of this.releaseListeners) {
+      try { listener(); } catch { /* the commentary never fails a stop */ }
+    }
   }
 
   /** A reply is being written (true) or done (false), for the commentary not to talk over it. */

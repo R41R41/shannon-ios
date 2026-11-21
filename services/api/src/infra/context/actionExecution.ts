@@ -37,6 +37,8 @@ export interface ActionExecution {
 }
 const executions=new AsyncLocalStorage<ActionExecution>();
 export function inActionExecution<T>(execution:ActionExecution,work:()=>Promise<T>):Promise<T>{return executions.run(execution,work);}
+/** `work` outside any action: a timer or a model call begun here is not the step's (its permit ends with the step) even when it is started from inside one. */
+export function outsideActionExecution<T>(work:()=>T):T{return executions.exit(work);}
 export function currentActionExecution():ActionExecution|undefined{return executions.getStore();}
 export async function actionPermit(resources:readonly string[]=[]):Promise<void>{
   const execution=currentActionExecution();

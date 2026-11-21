@@ -84,11 +84,14 @@ export interface TaskRuntimeWiringOptions {
    * Absent (tests that tick by hand): the interval alone.
    */
   continueAtOnce?: boolean;
+  /** Told when tasks were stopped (a stop, an owner stop, a budget pause): the tasks that stopped, children included. Never changes the stop. */
+  stopped?(tasks: readonly TaskView[]): void;
 }
 /** The existing mind worker remains the sole action writer. This connection reads its lease as a commit fence. */
 export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   const { db, actions, scopeKey } = options;
   const now = options.now ?? (() => new Date().toISOString());
+  const told = (tasks: readonly TaskView[]) => { try { options.stopped?.(tasks); } catch { /* a listener never changes a stop */ } };
   migrateAgentTasks(db);
   const authority = new SQLiteFcaTaskAuthority(db);
   const leases = new ActionLeaseReader(db);
@@ -355,6 +358,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
     const open = (id: string) => !['completed', 'failed', 'stopped', undefined].includes(runtime.get(scopeKey, id)?.phase);
     if (pausing || task?.childIds.some(open)) {
       const stopped = runtime.stop(scopeKey, step.taskId, pausing || 'fca_budget_capped');
+      told(stopped);
       for (const item of stopped) if (item.id !== step.taskId) running.get(item.id)?.controller.abort();
       for (const live of runtime.activeSteps(scopeKey)) {
         if (live.taskId !== step.taskId && stopped.some(item => item.id === live.taskId)) await actions.stop(scopeKey, live.lease.id, randomUUID());
@@ -440,6 +444,7 @@ export function createTaskRuntimeWiring(options: TaskRuntimeWiringOptions) {
   }
   async function stop(taskId: string, reason: string) {
     const tasks = runtime.stop(scopeKey, taskId, reason);
+    told(tasks);
     for (const task of tasks) running.get(task.id)?.controller.abort();
     for (const active of runtime.activeSteps(scopeKey)) {
       if (tasks.some(task => task.id === active.taskId)) await actions.stop(scopeKey, active.lease.id, randomUUID());

@@ -269,7 +269,7 @@ describe('her work in the commentary', () => {
   afterEach(() => vi.useRealTimers());
   const moment = (kind: LiveMoment['kind'], facts: LiveMoment['facts'] = {}, key = `${kind}:${clock}`): LiveMoment => ({ kind, key, at: clock, facts });
 
-  function setup(write?: () => Promise<string | null>) {
+  function setup(write?: () => Promise<string | null>, doneFallback?: string) {
     const listeners = new Set<(item: LiveMoment) => void>();
     const room = { replying: false, sinceHumanMilliseconds: null as number | null };
     const outbox = new LiveSpeechOutbox(() => clock);
@@ -281,6 +281,7 @@ describe('her work in the commentary', () => {
       live: { onMoment: listener => { listeners.add(listener); return () => listeners.delete(listener); }, inDanger: () => false,
         conversation: () => ({ replying: room.replying, sinceHumanMilliseconds: room.sinceHumanMilliseconds }) },
       outbox, write: async request => { requests.push(request); return write ? write() : `言葉:${request.main.kind}`; }, now: () => clock,
+      ...(doneFallback ? { doneFallback } : {}),
     });
     engine.start();
     return { engine, outbox, room, requests, emit: (item: LiveMoment) => listeners.forEach(listener => listener(item)),
@@ -360,6 +361,26 @@ describe('her work in the commentary', () => {
     await g.settle();
     clock += 30_000;
     expect(g.outbox.take()[0]).toMatchObject({ kind: 'task_done' });
+  });
+
+  it('says a fixed line for the end of a request when the writer gave nothing twice, and never for a thought', async () => {
+    const f = setup(async () => null, 'できたよ！どこに置けばいい？');
+    f.emit(moment('thinking', { why: '卵' }, 'w'));
+    f.emit(moment('task_done', { goal: 'ケーキを作る' }, 'd'));
+    await f.settle();
+    expect(f.outbox.take()).toEqual([]);
+    expect(f.engine.stats().revived).toBe(1);
+    await vi.advanceTimersByTimeAsync(3_200);
+    expect(f.engine.stats().done_fallback).toBe(1);
+    expect(f.outbox.take().map(line => [line.kind, line.text])).toEqual([['task_done', 'できたよ！どこに置けばいい？']]);
+  });
+
+  it('drops the end of a request after two empty writes when no fixed line is given', async () => {
+    const f = setup(async () => null);
+    f.emit(moment('task_done', { goal: 'ケーキを作る' }, 'd'));
+    await vi.advanceTimersByTimeAsync(3_200);
+    expect(f.engine.stats().done_fallback).toBeUndefined();
+    expect(f.outbox.take()).toEqual([]);
   });
 
   it('says the end of a request once more when the body could not say the first line, and no more than once', async () => {

@@ -178,6 +178,8 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
     let visible: ReturnType<typeof createFcaSourceGuard> | undefined;
     // Owner decision 2026-10-15: a body task inherits only the asking conversation, and step records keep sources by reference.
     const runtime = createTaskRuntimeWiring({ db, actions, model, provenanceRefs: switchOn(values, 'SHANNON_FCA_PROVENANCE_REFS'), continueAtOnce: true,
+      // A Minecraft request stopped (cancelled, held, a stop of all): what she was about to say of that work is not said (`LiveCommentary`).
+      stopped: tasks => { if (minecraft && tasks.some(task => minecraft.control.store.body(task.id))) parts.live?.released?.(); },
       scopeKey: parts.ownerScope, ownerAlone: tasksOpen, budget, publicTaskAllowed: id => gameOnly(id), ownTimeAllowed:
          ownTimeTaskAllowed(values, parts.ownTime, ownTimeBudget),
       // A Minecraft request left unknown (a restart, a lost answer) goes on once its body has proven its release

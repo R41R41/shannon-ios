@@ -106,6 +106,7 @@ function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: 
     live, outbox, log,
     // How many words a minute (and the gap) is a number of hers to tune from the environment, not a switch.
     governor: new LiveGovernor(liveCommentaryLimits(values)),
+    doneFallback: 'できたよ！どこに置けばいい？渡せばいいかな？',
     async write(request) {
       const { system, message } = liveWriterPrompt({ identity: identity(), persona: persona(), body: live.block({ alone: false, participants: true }), ...request });
       const result = await parts.model.generate({ scopeKey: parts.scopeKey, systemPrompt: system, history: [], message, skipThinking: true });

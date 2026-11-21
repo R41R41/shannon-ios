@@ -50,6 +50,11 @@ export class LiveSpeechOutbox {
     this.waiting.push({ ...draft, expiresAt: this.now() + draft.ttlMilliseconds, offeredAt: null, offers: 0 });
   }
 
+  /** Lines of these kinds that the body has not been handed yet are taken back (their story is over); one it was handed is its own. */
+  withdraw(kinds: readonly string[]): void {
+    for (const item of [...this.waiting]) if (item.offeredAt === null && kinds.includes(item.kind)) this.drop(item, 'withdrawn');
+  }
+
   /** The line due in this reply (at most one), as the wire carries it. */
   take(): MinecraftLiveSpeech[] {
     const now = this.now();
