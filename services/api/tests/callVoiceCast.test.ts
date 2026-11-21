@@ -1,7 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { configuredCallVoices, createConfiguredCallVoiceCast } from '../src/infra/models/callVoiceSpeech.js';
+import { RetryingElevenSpeech, configuredCallVoices, createConfiguredCallVoiceCast } from '../src/infra/models/callVoiceSpeech.js';
+import { ElevenSpeechError } from '../src/infra/models/elevenSpeech.js';
 import type { GeminiSpeechRequest } from '../src/infra/models/geminiSpeech.js';
 import { handlePlatformVoiceRequest } from '../src/surfaces/platform/platformVoiceRoute.js';
 
@@ -201,5 +202,48 @@ describe('the cast route', () => {
     expect(await none.json()).not.toHaveProperty('noSubstitute');
     const old = createConfiguredCallVoiceCast({ ELEVENLABS_API_KEY: 'e', SHANNON_ELEVEN_TTS_VOICE_ID: 'abcdefgh' })!;
     expect(old.chosen).toBe(false);
+  });
+});
+
+describe('an ElevenLabs call voice that is busy for a moment', () => {
+  const result = (chunks: AsyncIterable<Uint8Array>) => ({
+    contentType: 'audio/l16' as const, sampleRate: 24_000, channels: 1, bitsPerSample: 16, model: 'eleven_v4_turbo', voice: 'v', outputUsdPerTenSeconds: 0, chunks,
+  }) as never;
+  const failing = async function* (): AsyncGenerator<Uint8Array> { throw new ElevenSpeechError('ELEVEN_SPEECH_FAILED'); };
+  const good = async function* (): AsyncGenerator<Uint8Array> { yield Buffer.alloc(2_400, 1); yield Buffer.alloc(2_400, 2); };
+  const inner = (...plans: Array<() => AsyncGenerator<Uint8Array>>) => {
+    const calls: number[] = [];
+    return { calls, stream: async () => { calls.push(1); return result(plans[Math.min(calls.length - 1, plans.length - 1)]!()); } };
+  };
+
+  it('asks once more after a failure before any audio, and uses the second answer', async () => {
+    const voice = inner(failing, good);
+    const out = await new RetryingElevenSpeech(voice).stream(ask('おはよう。'));
+    let bytes = 0;
+    for await (const chunk of out.chunks) bytes += chunk.byteLength;
+    expect(bytes).toBe(4_800);
+    expect(voice.calls).toHaveLength(2);
+  });
+
+  it('gives up after the second failure, and does not ask again for a line the voice cannot take', async () => {
+    const twice = inner(failing);
+    await expect(new RetryingElevenSpeech(twice).stream(ask('x'))).rejects.toBeInstanceOf(ElevenSpeechError);
+    expect(twice.calls).toHaveLength(2);
+    const invalid = { calls: 0, stream: async () => { invalid.calls += 1; throw new ElevenSpeechError('ELEVEN_SPEECH_INVALID_STYLE'); } };
+    await expect(new RetryingElevenSpeech(invalid).stream(ask('x'))).rejects.toBeInstanceOf(ElevenSpeechError);
+    expect(invalid.calls).toBe(1);
+  });
+
+  it('does not ask again once audio has started, and not when the caller left', async () => {
+    const broken = async function* (): AsyncGenerator<Uint8Array> { yield Buffer.alloc(2_400, 1); throw new ElevenSpeechError('ELEVEN_SPEECH_FAILED'); };
+    const voice = inner(broken, good);
+    const out = await new RetryingElevenSpeech(voice).stream(ask('x'));
+    await expect(drain(out.chunks)).rejects.toBeInstanceOf(ElevenSpeechError);
+    expect(voice.calls).toHaveLength(1);
+    const controller = new AbortController();
+    controller.abort();
+    const left = inner(good);
+    await expect(new RetryingElevenSpeech(left).stream(ask('x'), controller.signal)).rejects.toBeDefined();
+    expect(left.calls).toHaveLength(0);
   });
 });

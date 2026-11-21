@@ -293,13 +293,63 @@ export class CallVoiceCast implements CallVoiceCastPort {
   }
 }
 
+/**
+ * An ElevenLabs voice in a call: a busy answer (`system_busy`) or a dropped connection before any audio is asked once more, the same
+ * way as the Gemini voice. A first sound later than the budget is given up (the caller has stopped waiting), and audio that has
+ * started is never asked again. The app's own ElevenLabs voice (`ElevenSpeechGateway` alone) is not changed.
+ */
+export class RetryingElevenSpeech {
+  private readonly budget: number;
+  private readonly attempts: number;
+
+  constructor(private readonly inner: Pick<GeminiSpeechGateway, 'stream'>, options: CallVoiceOptions = {}) {
+    this.budget = options.firstChunkBudgetMilliseconds ?? CALL_VOICE_FIRST_CHUNK_BUDGET_MS;
+    this.attempts = Math.max(1, options.attempts ?? 2);
+  }
+
+  async stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult> {
+    const startedAt = performance.now();
+    let lastError: unknown = new ElevenSpeechError('ELEVEN_SPEECH_FAILED');
+    for (let attempt = 1; attempt <= this.attempts; attempt += 1) {
+      const remaining = this.budget - (performance.now() - startedAt);
+      if (remaining <= 0 || signal?.aborted) break;
+      const controller = new AbortController();
+      const relay = () => controller.abort();
+      signal?.addEventListener('abort', relay, { once: true });
+      let timedOut = false;
+      const timer = setTimeout(() => { timedOut = true; controller.abort(); }, remaining);
+      const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', relay); };
+      try {
+        const stream = await this.inner.stream(request, controller.signal);
+        const iterator = stream.chunks[Symbol.asyncIterator]();
+        const first = await iterator.next();
+        if (first.done) {
+          await iterator.return?.().catch(() => undefined);
+          throw new ElevenSpeechError('ELEVEN_SPEECH_FAILED');
+        }
+        clearTimeout(timer);
+        return { ...stream, chunks: firstThenRest(first.value, iterator, () => { cleanup(); controller.abort(); }) };
+      } catch (error) {
+        cleanup();
+        controller.abort();
+        if (signal?.aborted) throw error;
+        lastError = timedOut ? new ElevenSpeechError('ELEVEN_SPEECH_FAILED') : error;
+        // A line the voice cannot take (a bad tag) will not change; a first sound that came too late is not asked again.
+        if (timedOut || !(error instanceof ElevenSpeechError) || error.code !== 'ELEVEN_SPEECH_FAILED') break;
+      }
+    }
+    throw lastError;
+  }
+}
+
 /** An ElevenLabs candidate: the line's own tags are used, else the candidate's default tags. */
 function elevenEntry(candidate: CallVoiceCandidate, apiKey: string): CastEntry {
   const inner = new ElevenSpeechGateway(apiKey, candidate.voice);
+  const retrying = new RetryingElevenSpeech(inner);
   const defaults = candidate.style;
   return {
     candidate,
-    gateway: { stream: (request, signal) => inner.stream(defaults && !request.style ? { ...request, style: defaults } : request, signal) },
+    gateway: { stream: (request, signal) => retrying.stream(defaults && !request.style ? { ...request, style: defaults } : request, signal) },
   };
 }
 
