@@ -130,6 +130,35 @@ describe('「続けて」 refused, and said as it was', () => {
     expect(h.store.conversationHistory('owner', thread).map(message => message.content)).toContain(MINECRAFT_INTENT_REFUSALS.turn_not_visible);
     await h.background.waitForIdle('owner');
   });
+  it('asks again on a record of the words when her own turn is not a source the check can read, and delivers instead of refusing', async () => {
+    const asked: Array<string | null> = [];
+    const h = harness({ fcaAdmission: () => null, fcaIntent: async input => {
+      asked.push(input.experienceId);
+      return asked.length === 1 ? { kind: 'none', goal: '', rejected: 'queue_unavailable', reason: 'turn_not_visible' } : bodyIntentOf(input.intent);
+    } });
+    const response = await h.turn('five');
+    expect(asked).toHaveLength(2);
+    expect(asked[1]).not.toBe(asked[0]);
+    expect(response.reply).toBe('はいはい、続けますよ。');
+    expect(response.intent).toEqual({ kind: 'task', goal: '羊を探す' });
+    const record = h.store.experiencesById!('owner', [asked[1]!])[0]!;
+    expect(record.userMessage).toBe('続けて');
+    expect(record.recalledMemoryIds ?? []).toEqual([]);
+    expect(h.lines).toContain('Shannon Minecraft intent retried reason=turn_not_visible record=kept outcome=delivered');
+    await h.background.waitForIdle('owner');
+  });
+  it('still says the fixed words when the record is not a source either', async () => {
+    let asked = 0;
+    const h = harness({ fcaAdmission: () => null, fcaIntent: async () => {
+      asked += 1;
+      return { kind: 'none', goal: '', rejected: 'queue_unavailable', reason: 'turn_not_visible' };
+    } });
+    const response = await h.turn('six');
+    expect(asked).toBe(2);
+    expect(response.reply).toBe(MINECRAFT_INTENT_REFUSALS.turn_not_visible);
+    expect(h.lines).toContain('Shannon Minecraft intent retried reason=turn_not_visible record=kept outcome=turn_not_visible');
+    await h.background.waitForIdle('owner');
+  });
 });
 
 const observation = (world: Record<string, unknown>): BodyObservation => ({ schemaVersion: 1, bodyId: 'minecraft:world', sequence: 1,

@@ -155,6 +155,7 @@ export class MinecraftBody {
     const bodyNow = owner || kind === 'channel' ? minecraftBodyStateBlock(owner ? request.body : withoutRequestTask(request.body)) : '';
     let ignored: string | undefined;
     let experienceId: string | null = null;
+    let keptTurn: CompletedTurn | null = null;
     // A refusal known before her reply is hers to say, and no intent is offered (what she keeps is what she said).
     // Not a body without a frame: a stop is still taken then (the check after her reply lets it through, review of run 19).
     const admitted = owner && this.dependencies.fcaIntent ? this.dependencies.fcaAdmission?.({ scopeKey, request }) ?? null : null;
@@ -171,7 +172,7 @@ export class MinecraftBody {
       // What she did on her own to reach the owner, by the upstream audience rules (others present: times only; owner decision 2026-10-06).
       ownOutreach: true,
       store: turn => {
-        if (owner) { const saved = this.keepOwnerTurn(request, hash, turn); experienceId = saved?.id ?? null; return saved; }
+        if (owner) { keptTurn = turn; const saved = this.keepOwnerTurn(request, hash, turn); experienceId = saved?.id ?? null; return saved; }
         ignored = this.rememberPerson(request, conversationId, sourceUserId, turn.shannonReply);
         return null;
       },
@@ -183,8 +184,16 @@ export class MinecraftBody {
     const proposed = blocked ? { kind: 'none' as const, goal: '' } : completion.minecraftIntent ?? { kind: 'none' as const, goal: '' };
     const asked = bodyIntentOf(proposed);
     // The owner's intent enters the common task tree (`fcaIntent`); without it (a switched-off part) it is answered as proposed.
-    const decided: (MinecraftTurnResponse['intent'] & { reason?: MinecraftIntentRefusal }) | undefined = owner
+    let decided: (MinecraftTurnResponse['intent'] & { reason?: MinecraftIntentRefusal }) | undefined = owner
       ? this.dependencies.fcaIntent ? await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId }) : asked : undefined;
+    // Her reply may have recalled what a task source may not stand on (a long conversation summary, a guest's memory), and then her own
+    // turn is not a source the check can read. The words themselves are in hand: written as a record without that recall they are the
+    // source, and the same words are asked again (what the call's voice does, `platformVoice.ts`), instead of telling him to say them again.
+    if (owner && decided?.reason === 'turn_not_visible' && this.dependencies.fcaIntent) {
+      const record = keptTurn ? this.requestRecord(request, hash, keptTurn) : null;
+      if (record) decided = await this.dependencies.fcaIntent({ scopeKey, request, intent: proposed, experienceId: record });
+      this.log(`Shannon Minecraft intent retried reason=turn_not_visible record=${record ? 'kept' : 'none'} outcome=${decided?.reason ?? (decided?.rejected ? 'rejected' : 'delivered')}`);
+    }
     // The reason stays here (the body's contract is unchanged); what is sent is the intent as before.
     const { reason, ...intent } = decided ?? {};
     const said = decided?.rejected ? this.refusedAfterReply(scopeKey, request, threadId, reason)
@@ -239,6 +248,20 @@ export class MinecraftBody {
       message: `${request.speaker.name}: ${request.message}`,
     });
     return { reply: result.reply.trim().slice(0, MINECRAFT_BODY_LIMITS.replyCharacters), threadId, duplicate: false, ignored };
+  }
+
+  /**
+   * The words of a request as a record in his thread, without the recall of the reply that answered them (`platformVoice.ts` `requestRecord`):
+   * what a task is asked to stand on when the turn itself is not visible. Null when it could not be written or was already.
+   */
+  private requestRecord(request: MinecraftTurnRequest, hash: string, turn: CompletedTurn): string | null {
+    try {
+      const { recalledMemoryIds: _recalled, ...record } = turn;
+      return keepOwnerPlatformTurn(this.dependencies.conversationStore,
+        { platform: MINECRAFT_PLATFORM, requestId: `mc-request:${request.requestId}`, payloadHash: hash }, record)?.id ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** The owner's turn in his platform thread, with the platform receipt of its requestId, as the bridge keeps a Discord turn. */

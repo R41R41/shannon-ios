@@ -66,6 +66,8 @@ export function ownDragonWords(message: unknown): string | null {
 export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime: TaskRuntime; conversation: FcaConversationPort;
   visible: FcaSourceGuard; ownerScope: string; ownerAlone(): boolean; stop(id: string, reason: string): Promise<TaskView[]>;
   sourceVisible(id: string): boolean;
+  /** Content-free words for why `sourceVisible` was false (alone or not, whether the turn was found, which recalled id is hidden); for the journal only. */
+  sourceWhy?(id: string): string;
   /** Same SQLite connection as task authority and body bindings; nested authority writes use savepoints. */
   atomic<T>(work: () => T): T;
   /** That connection: the list of requests is kept in it (`fcaMinecraftQueue.ts`). */
@@ -135,7 +137,13 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     const needsBody = input.intent.kind === 'task' || input.intent.kind === 'message';
     if (early && (needsBody || early !== 'body_unavailable')) return early;
     if (!input.experienceId) return 'no_turn';
-    return parts.sourceVisible(input.experienceId) ? null : 'turn_not_visible';
+    if (parts.sourceVisible(input.experienceId)) return null;
+    if (parts.sourceWhy) {
+      let why = 'unknown';
+      try { why = parts.sourceWhy(input.experienceId); } catch { /* the line is only for the journal */ }
+      log(`Shannon Minecraft source not visible kind=${input.intent.kind} ${why}`);
+    }
+    return 'turn_not_visible';
   };
   /** A stop of the list also stops every other task bound to the body that is not already stopping (the old stop of the chat). */
   const stopOthers = async (): Promise<void> => {
