@@ -27,6 +27,8 @@ export interface VoiceSpeaker {
   id: string;
   name: string;
   owner: boolean;
+  /** Who they are in the game, when the body knows (`speakerMinecraftName` of the voice turn): the player whose look 「ここ」 is read from. */
+  minecraftName?: string;
 }
 
 export interface VoiceMinecraftIntentInput {

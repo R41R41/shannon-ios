@@ -1,4 +1,4 @@
-import type { AddressedInput, AddressedLine } from '../../mind/perception/addressed.js';
+import type { AddressedInput, AddressedLine, AddressedWork } from '../../mind/perception/addressed.js';
 import type { VoiceRooms } from './voiceRoom.js';
 import type { VoiceTurnRequest } from './platformVoiceRequest.js';
 
@@ -20,7 +20,8 @@ export function shannonSpokeAgoMs(rooms: VoiceRooms, request: VoiceTurnRequest):
 
 /** What the judge is shown of this turn: the words, who is there, the talk of the last minutes, and her last words and whom they were for. */
 export function addressedInputOf(
-  rooms: VoiceRooms, request: VoiceTurnRequest, input: { scopeKey: string; humans: number; owner: boolean; bodyRunning: boolean; guestsMayStop?: boolean },
+  rooms: VoiceRooms, request: VoiceTurnRequest,
+  input: { scopeKey: string; humans: number; owner: boolean; bodyRunning: boolean; guestsMayStop?: boolean; work?: AddressedWork | null },
 ): AddressedInput {
   const room = request.conversationId;
   const observed = Date.parse(request.observedAt);
@@ -34,12 +35,15 @@ export function addressedInputOf(
   return {
     scopeKey: input.scopeKey, transcript: request.userMessage, speaker: { id: request.sourceUserId, name: request.sourceDisplayName },
     humans: input.humans, recent, owner: input.owner, bodyRunning: input.bodyRunning, ...(input.guestsMayStop ? { guestsMayStop: true } : {}),
+    ...(input.work ? { work: input.work } : {}),
     shannonSpeaking: request.speakingNow || request.shannonSpokeMsAgo === 0,
     shannon: {
       spokeAgoMs: shannonSpokeAgoMs(rooms, request),
       // Her words to the room (a line from her mouth) were for nobody in particular: unknown, not "someone else".
       toSpeaker: last && last.userId ? last.userId === request.sourceUserId : null,
       ...(last ? { line: last.text } : {}),
+      // A question of hers nobody has taken yet (`VoiceRooms.closeQuestion`, told when the next person's words were judged).
+      ...(last?.asked ? { asked: true } : {}),
     },
   };
 }

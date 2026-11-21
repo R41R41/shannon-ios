@@ -44,6 +44,11 @@ export interface VoiceTurnRequest {
   voiceChannelId?: string;
   sourceUserId: string;
   sourceDisplayName: string;
+  /**
+   * The speaker's Minecraft name, when the body knows who in the game this Discord member is (the body's Discord-to-Minecraft table). It goes
+   * on to the Minecraft request (`VoiceSpeaker.minecraftName`) so that 「ここ」 and 「こっち」 can be read from where that player looks.
+   */
+  speakerMinecraftName?: string;
   userMessage: string;
   observedAt: string;
   participants: string[];
@@ -86,7 +91,7 @@ export interface StoredVoiceTurn {
 }
 
 const REQUEST_FIELDS = new Set([
-  'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'userMessage', 'observedAt',
+  'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'speakerMinecraftName', 'userMessage', 'observedAt',
   'participants', 'heard', 'followsShannonTurn', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId', 'situation', 'sttMs', 'utteranceMs',
 ]);
 
@@ -156,6 +161,7 @@ function validatedIdentity(body: Record<string, unknown>): void {
   if (body.voiceChannelId !== undefined && !identifier(body.voiceChannelId, 160)) throw badRequest('voiceChannelId is invalid.');
   if (!identifier(body.sourceUserId, 160)) throw badRequest('sourceUserId is invalid.');
   if (!bodyText(body.sourceDisplayName, 80)) throw badRequest('sourceDisplayName is invalid.');
+  if (body.speakerMinecraftName !== undefined && !identifier(body.speakerMinecraftName, 80)) throw badRequest('speakerMinecraftName is invalid.');
   if (!bodyText(body.userMessage, PLATFORM_VOICE_LIMITS.messageCharacters)) throw badRequest('userMessage is invalid.');
   if (typeof body.observedAt !== 'string' || !Number.isFinite(Date.parse(body.observedAt))) throw badRequest('observedAt is invalid.');
   validatedFlags(body);
@@ -179,6 +185,7 @@ export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
     ...(body.voiceChannelId !== undefined ? { voiceChannelId: trimmed('voiceChannelId') } : {}),
     sourceUserId: trimmed('sourceUserId'),
     sourceDisplayName: trimmed('sourceDisplayName'),
+    ...(body.speakerMinecraftName !== undefined ? { speakerMinecraftName: trimmed('speakerMinecraftName') } : {}),
     userMessage: trimmed('userMessage'),
     observedAt: new Date(body.observedAt as string).toISOString(),
     participants: validatedParticipants(body.participants),

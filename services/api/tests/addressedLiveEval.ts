@@ -19,7 +19,9 @@ const judgeFor = () => new AddressedJudge({ chooser: configuredJevChooser(proces
 const inputOf = (item: (typeof ADDRESSED_CASES)[number]): AddressedInput => ({
   scopeKey: 'live-eval', transcript: item.transcript, speaker: { id: item.speaker ?? 'owner', name: item.speaker ?? 'ライ氏' }, humans: item.humans,
   recent: (item.recent ?? []).map(line => ({ who: line.who, text: line.text, secondsAgo: line.secondsAgo, ...(line.shannon ? { shannon: true as const } : {}) })),
-  ...(item.spoke ? { shannon: { spokeAgoMs: item.spoke.secondsAgo * 1000, toSpeaker: item.spoke.toSpeaker, ...(item.spoke.line ? { line: item.spoke.line } : {}) } } : {}),
+  ...(item.spoke ? { shannon: { spokeAgoMs: item.spoke.secondsAgo * 1000, toSpeaker: item.spoke.toSpeaker, ...(item.spoke.line ? { line: item.spoke.line } : {}),
+    ...(item.spoke.asked ? { asked: true } : {}) } } : {}),
+  ...(item.work ? { work: item.work } : {}),
 });
 
 const rows: Array<{ id: string; group: string; to: boolean; verdict: AddressedVerdict }> = [];
