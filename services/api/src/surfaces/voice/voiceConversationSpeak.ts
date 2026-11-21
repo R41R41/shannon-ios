@@ -159,7 +159,8 @@ function askModel(turn: VoiceConversation, request: ReturnType<typeof voiceModel
   const intentField = turn.seat?.offerMinecraftIntent ? { offerMinecraftIntent: true as const } : {};
   const asked = { ...request, generateThreadTitle: false, spokenReply: true, ...intentField };
   if (structured) return deps.chatModel.generate(asked);
-  if (observer && turn.seat?.offerMinecraftIntent && deps.chatModel.generateStreaming) return deps.chatModel.generateStreaming(asked, stream.delta);
+  // A spoken reply answers before it thinks, as her plain voice stream does (`voiceThinking`) and a read-aloud text turn does (`textTurnThinking`).
+  if (observer && turn.seat?.offerMinecraftIntent && deps.chatModel.generateStreaming) return deps.chatModel.generateStreaming({ ...asked, skipThinking: true }, stream.delta);
   if (observer && deps.chatModel.generateVoiceStreaming) {
     return deps.chatModel.generateVoiceStreaming({ ...request, threadKey: threadId, ...turn.waitingSaid }, stream.delta, observer.signal);
   }
