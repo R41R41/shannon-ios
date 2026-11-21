@@ -40,6 +40,8 @@ import type { Endgame } from './minecraftEndgame.js';
 export interface LlmcBodyParts {
   /** Original task's native dragon binding; absent keeps legacy helper inputs unchanged. */
   journeyReadiness?: boolean;
+  /** The task's goal is a request of one thing (`planGoal` is null): said in `planFacts`, so that the decision's stage knowledge carries the request's steps. */
+  singleRequest?: boolean;
   plan(): BodyPlanView | undefined;
   /** The plan's path as the decision reads it (its tokens count against the live state's bound). */
   planView(): object | null;
@@ -134,7 +136,7 @@ export function readinessParts(
   const tree = planTreeOf(llmc),
     nodes = tree?.nodes ?? [],
     planNow = planNowOf(tree, view, observation);
-  const planFacts = planFactsOf(tree) ?? undefined;
+  const planFacts = planFactsOf(tree, llmc.singleRequest === true) ?? undefined;
   const out = { ...(planNow ? { planNow } : {}), ...(planFacts ? { planFacts } : {}) };
   if (!facts) return out;
   const display = llmc.plan();

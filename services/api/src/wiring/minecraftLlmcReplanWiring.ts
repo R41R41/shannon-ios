@@ -14,7 +14,7 @@ import { obsidianTallyLine } from '../surfaces/minecraft/minecraftLlmcWaterNode.
 import { isDragonPlan } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import { paceDelay, paceKey } from '../surfaces/minecraft/minecraftLlmcPace.js';
 import { boundTo } from '../surfaces/minecraft/minecraftLlmcReplan.js';
-import { nowLines } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
+import { nowLines, plantLines } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { createReplanFlow, type ReplanFlow, type Replanner, type ReplanSources } from '../surfaces/minecraft/minecraftLlmcReplanFlow.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueueState.js';
 import { treeQuestions, workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
@@ -84,6 +84,8 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
   const tree = parts.plan.tree();
   const frame = parts.observe();
   if (!tree.nodes.length || resolvedNodeStall(tree, stall)) return null;
+  // A request of one thing (the goal is not the dragon or the Nether): its own short knowledge and the plants she has planted (bn1 to bn4, 11/21).
+  const request = planGoal(parts.goal) === null;
   const node = stall.kind === 'node_stalled' ? stall.key : workingNode(parts.taskId, tree.current) ?? tree.current;
   const stalled = tree.nodes.find(item => item.id === node);
   const facts = doneFacts(frame);
@@ -98,11 +100,11 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
   const current = tree.nodes.find(item => item.id === tree.current);
   const obsidian = [stalled, current].some(item => item && OBSIDIAN_STAGE.has(kindOf(item))) ? obsidianTallyLine(frame) : null;
   return { node: stalled ? stalled.id : null, goal: parts.goal, seconds, pace, tree, doneStatus,
-    now: nowLines(frame), facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(obsidian ? [obsidian] : []), ...(readiness.recovery ?? []),
+    now: [...nowLines(frame), ...(request ? plantLines(frame) : [])], facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(obsidian ? [obsidian] : []), ...(readiness.recovery ?? []),
       ...endgame, ...stops],
     results: [...results], queue: parts.queue.lines(frame),
     // A one-thing request is shown its own short text: the stage's text is over the brief's bound and was dropped whole (bn1 to bn4, 11/21).
-    knowledge: planGoal(parts.goal) === null ? REQUEST_REPLAN_KNOWLEDGE
+    knowledge: request ? REQUEST_REPLAN_KNOWLEDGE
       : stageTextsForKind(stalled ? kindOf(stalled) : 'other', facts?.dimension ?? 'overworld') };
 }
 

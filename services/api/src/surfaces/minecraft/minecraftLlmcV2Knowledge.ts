@@ -4,7 +4,7 @@ import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
 import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 import { MATERIAL_ACQUISITION_LINES } from './minecraftRequestKnowledge.js';
-import { REQUEST_NIGHT_LINE as NO_BED_NIGHT, REQUEST_YARDSTICK_EN } from './minecraftRequestSteps.js';
+import { REQUEST_NIGHT_LINE, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -23,7 +23,7 @@ import { REQUEST_NIGHT_LINE as NO_BED_NIGHT, REQUEST_YARDSTICK_EN } from './mine
  */
 const GOAL = [
   '## Purpose and yardstick (目的と物差し)',
-  `- The purpose is the task's goal. The owner's yardstick is speed: a dragon kill within 3 hours (ideally 1.5 hours). Aim to enter the Nether in about ${Math.round(NETHER_BY_SECONDS / 60)} minutes (preparation included), moving smoothly.${REQUEST_YARDSTICK_EN}`,
+  `- The purpose is the task's goal. The owner's yardstick is speed: a dragon kill within 3 hours (ideally 1.5 hours). Aim to enter the Nether in about ${Math.round(NETHER_BY_SECONDS / 60)} minutes (preparation included), moving smoothly.`,
   '- Order of priority: avoid imminent danger → meet the preparation requirements → advance quickly to the goal (staying alive matters as much as speed: a death loses items and time, and costs more time than caution does). '
     + 'Never stop or complete early because of time. The yardstick is a guide, not something that decides a hand.',
 ].join('\n');
@@ -108,6 +108,8 @@ const LONG_WALK = '- 地上の長い歩き（1 km 超）は朝に出る。ベッ
 /** The coordinator's outside view of 11/4 (night-rules-external-20261104.md): the hour to stop starting, the night before the armour, the climb. */
 const PREP_NIGHT_STOP = '- ベッドがあれば、11500 を過ぎて地上にいたら長い移動・探索を始めず、洞窟から離れた岩の中に 1×2 を掘って塞ぎ、12542 に寝る（敵は壁越しでも水平 8・上下 5 で寝させない）。'
   + 'sleep の手は起きたらベッドを拾い直す。鉄の兜・胸の前は夜に地上を歩かない。地上に着くのが 12500〜23500 になるなら岩の中で寝てから上る。';
+/** Run qr7 (a cake, 65 moves): with no bed and no weapon the night's line may have been read as 「dig a hole and wait」, which does not bring the morning (a hypothesis, not confirmed). */
+const NO_BED_NIGHT = '- ベッドが無い間は、岩の中で待っても朝は早く来ない（時間が過ぎるだけ）。夜は、囲いか水辺・草原の近くでできる仕事（作業台での製作、牛や鶏の近くの作業）を進め、洞窟と遠出だけ朝にする。穴に入るのは寝る時だけ。';
 /**
  * With 12 eyes on the ground the stages are prep and stronghold at once, and prep's "walk long ways in the morning" and "stop starting at 11500"
  * went in with the stronghold's "go on through the night, no hole before dark" (the outside review of 11/10, Q1; end1109s14's detour to a village
@@ -115,9 +117,13 @@ const PREP_NIGHT_STOP = '- ベッドがあれば、11500 を過ぎて地上に�
  */
 const PREP_NIGHT_LINES: ReadonlySet<string> = new Set([LONG_WALK, PREP_NIGHT_STOP]);
 const PREP_NIGHT_ELSEWHERE = '- 夜と長い道の動き方は、下のストロングホールドの段の行に従う（材料の段の「朝に出る」「11500 を過ぎたら始めない」はこの場面では使わない）。';
-function stageText(id: StageId, ids: readonly StageId[]): string {
-  if (id !== 'prep' || !ids.includes('stronghold')) return V2_STAGES[id];
-  const lines = V2_STAGES.prep.split('\n');
+function stageText(id: StageId, ids: readonly StageId[], request = false): string {
+  const stronghold = id === 'prep' && ids.includes('stronghold');
+  if (id !== 'prep' || (!stronghold && !request)) return V2_STAGES[id];
+  const all = V2_STAGES.prep.split('\n');
+  // A request of one thing: its steps go first and its night replaces the whole game's (the whole game keeps both as they were).
+  const lines = request ? [all[0]!, ...REQUEST_STEPS_LINES, ...all.slice(1).map(line => line === NO_BED_NIGHT ? REQUEST_NIGHT_LINE : line)] : all;
+  if (!stronghold) return lines.join('\n');
   const at = lines.findIndex(line => PREP_NIGHT_LINES.has(line));
   const kept = lines.filter(line => !PREP_NIGHT_LINES.has(line));
   kept.splice(at < 0 ? 1 : at, 0, PREP_NIGHT_ELSEWHERE);
@@ -715,5 +721,6 @@ export function stageTextsForKind(kind: PlanKind, dimension: string): string {
 export function stageKnowledge(live: Rec): string | null {
   if (!rec(live.body)) return null;
   const ids = stagesFor(live);
-  return `（この場面の知識: ${ids.join('・')}）\n${ids.map(id => stageText(id, ids)).join('\n\n')}`;
+  const request = factsIn(rec(live.body))?.request === true;
+  return `（この場面の知識: ${ids.join('・')}）\n${ids.map(id => stageText(id, ids, request)).join('\n\n')}`;
 }

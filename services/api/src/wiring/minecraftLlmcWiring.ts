@@ -20,7 +20,7 @@ import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
 import type { PlanTree } from '@shannon/mind';
 import { type ToolResult } from '../mind/tools/shannonTools.js';
 import { redecideParts } from './minecraftLlmcRedecideWiring.js';
-import { firstPlanInbox,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { firstPlanInbox,planGoal,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { createLlmcEvents,urgentDecision,withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
@@ -431,7 +431,7 @@ queue.onRan(noteQueueResult);
       } };
   })() : null;
   const bodyParts = {
-    plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(), endgame, journeyReadiness,
+    plan: display, planView: () => plan.port.view(), planTree: () => plan.port.tree(), endgame, journeyReadiness, singleRequest: planGoal(step.snapshot.task.goal) === null,
     returnRoute: (observation: ReturnType<typeof observe>) => [...journey.read(observation), ...worksite.read(observation)] };
   // A request that is not held on a failure still looks for its stalls and asks for a new plan (`minecraftLlmcReplanWiring.ts`).
   const unheld = unheldReplan({ held: stalls !== null, taskId: step.taskId, goal: step.snapshot.task.goal, createdAt: step.snapshot.task.createdAt,

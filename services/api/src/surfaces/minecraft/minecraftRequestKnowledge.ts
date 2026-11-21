@@ -47,7 +47,6 @@ export const MATERIAL_ACQUISITION_LINES: readonly string[] = Object.freeze([
   '- 材料の植物（小麦・ニンジン・ジャガイモ・ビートルート・カボチャ・スイカ・ベリー）も同じ nearby の「植物（材料）」の行に出る。作物は「育った」の物を dig する。',
   '- 同じ物を探す手（水辺を見回す・別の岸へ行く）を 3 回続けて見つからない時は、4 回目は同じ探し方にせず、遠くの別の水辺・別の向きの地図（mc_view の center を動かす）・'
     + '別の入手法へ切り替える。同じ節に長くいても持ち物が増えていない事は、live の持ち物で確かめられる。',
-  ...REQUEST_STEPS_LINES,
 ]);
 
 /**
@@ -64,6 +63,8 @@ export const SINGLE_REQUEST_PLAN_WORDS = [
   '- 持ち物にある物は引く。完成品の節の doneWhen は have:完成品>=1 の形にして、材料ごとの節は材料の取り方（下の知識）に沿って、材料の数を note でなく節の title に書く。',
   '- 空腹や体力は live の事実で、体が食べる。食料の節は、live の食料が尽きかけている時だけ。',
   ...REQUEST_PLAN_SHAPE_LINES,
+  '',
+  ...REQUEST_STEPS_LINES,
   '',
   ...MATERIAL_ACQUISITION_LINES,
 ].join('\n');

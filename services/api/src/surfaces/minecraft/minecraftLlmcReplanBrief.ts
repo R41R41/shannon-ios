@@ -4,6 +4,7 @@ import { carriedFood, llmcTokens, stacks } from './minecraftLlmcLive.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { REPLAN, type ReplanRecord } from './minecraftLlmcReplan.js';
 import type { PaceDelay } from './minecraftLlmcPace.js';
+import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
 
 /**
  * The brief the strong model makes the plan again from (no history of the talk: the head's own record of the task, in order of how much it
@@ -91,6 +92,17 @@ export function nowLines(observation: BodyObservation | null): string[] {
   const worn = typeof world.worn === 'string' ? `・着ている物 ${world.worn}` : '';
   return [`場所: ${dimension} ${place}・体力 ${world.health ?? '?'}/20・満腹 ${world.food ?? '?'}/20・食料の点 ${food.points}${worn}`,
     `持ち物: ${pack || '空'}`];
+}
+
+/**
+ * The plants of a request's materials that stand near her (the body's `nearbyResources`, as the decision reads them: kind, count, place, 育った or 育ち中).
+ * The plan made again for a request is shown them: in bn4 it read only the pack, took the wheat she had planted for no wheat, and added the crafting table and
+ * the seeds again. A kind with none near is left out here (the decision's own line says 「なし」).
+ */
+export function plantLines(observation: BodyObservation | null): string[] {
+  const world = rec(observation?.state.world), at = rec(world?.position);
+  const feet = at && [at.x, at.y, at.z].every(value => typeof value === 'number') ? { x: Math.floor(Number(at.x)), y: Math.floor(Number(at.y)), z: Math.floor(Number(at.z)) } : null;
+  return nearbyLines(nearbyResourcesOf(world?.nearbyResources).filter(item => item.purpose === 'plant' && item.count > 0), feet, '小麦');
 }
 
 const stalledWords = (input: BriefInput): string => `止まった節: ${input.stall.node}。${input.doneStatus ? `その条件の今: ${input.doneStatus}。` : ''}`
