@@ -8,7 +8,7 @@
  */
 export interface AddressedCase {
   id: string;
-  group: 'call' | 'about' | 'self' | 'misheard' | 'follow' | 'other' | 'alone' | 'work' | 'asked';
+  group: 'call' | 'about' | 'self' | 'misheard' | 'follow' | 'other' | 'alone' | 'work' | 'asked' | 'asked_chat';
   transcript: string;
   humans: number;
   speaker?: string;
@@ -26,6 +26,8 @@ const ASKED = 'できた！どこに置けばいい？';
 const CAKE = { goal: 'ケーキを1個作る', list: ['#1 実行中 「ケーキを1個作る」（ユウ）'] };
 const IRON = { goal: '鉄のインゴットを10個集める', list: ['#1 実行中 「鉄のインゴットを10個集める」（ミキ）'] };
 const HOUSE = { goal: '木の家を建てる', list: ['#1 実行中 「木の家を建てる」（ユウ）'] };
+const ASKED_PLACE = 'できたよ！ケーキ、ほんとにできたかも〜。どこに置けばいい？渡せばいいかな？';
+const ASKED_WHEAT = '小麦はあと何個いるかな？';
 const ASKED_IRON = '鉄が10個たまったよ。どの箱に入れておけばいい？';
 
 export const ADDRESSED_CASES: readonly AddressedCase[] = [
@@ -98,10 +100,35 @@ export const ADDRESSED_CASES: readonly AddressedCase[] = [
   { id: 'work-house-tip', group: 'work', transcript: '屋根は階段ブロックのほうがかわいいよ', humans: 3, speaker: 'ミキ', work: HOUSE, to: true, ask: true },
   { id: 'work-house-chat', group: 'work', transcript: 'お昼ごはんどうしようか', humans: 3, speaker: 'ユウ', work: HOUSE, to: false, ask: true },
   { id: 'work-idle', group: 'work', transcript: 'ついでに松明も作っておいて', humans: 3, speaker: 'ミキ', to: false, ask: false },
-  // Words after a question she asked herself: a rule, from anyone when it was for the room, within the longer window.
-  { id: 'asked-here', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: ASKED, asked: true }, to: true, ask: false },
-  { id: 'asked-yes', group: 'asked', transcript: 'うん、お願い', humans: 1, spoke: { secondsAgo: 25, toSpeaker: true, line: ASKED, asked: true }, to: true, ask: false },
-  { id: 'asked-iron-box', group: 'asked', transcript: 'あの作業台の隣の箱に入れておいて', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 20, toSpeaker: null, line: ASKED_IRON, asked: true }, to: true, ask: false },
+  // Words after a question she asked herself, within the longer window, from anyone when it was for the room: Jev says whether they answer it.
+  { id: 'asked-here', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: ASKED, asked: true }, to: true, ask: true },
+  { id: 'asked-yes', group: 'asked', transcript: 'うん、お願い', humans: 1, spoke: { secondsAgo: 25, toSpeaker: true, line: ASKED, asked: true }, to: true, ask: true },
+  { id: 'asked-iron-box', group: 'asked', transcript: 'あの作業台の隣の箱に入れておいて', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 20, toSpeaker: null, line: ASKED_IRON, asked: true }, to: true, ask: true },
+  { id: 'ans-board', group: 'asked', transcript: 'そこの板の上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 12, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-yes-hand', group: 'asked', transcript: 'うん渡して', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 20, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-give-me', group: 'asked', transcript: 'こっちにちょうだい', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 15, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-later', group: 'asked', transcript: 'あとでいいよ', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 25, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-oak', group: 'asked', transcript: 'オークの板のとこ', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 18, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-here', group: 'asked', transcript: 'ここ！ここに置いて', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 10, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-to-miki', group: 'asked', transcript: 'ミキに渡してあげて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-chest', group: 'asked', transcript: 'えっと、チェストの中に入れといて', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 38, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-back-count', group: 'asked', transcript: 'それ、何個できたの？', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 22, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-back-which', group: 'asked', transcript: 'どこって、どこがいいかな', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 28, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: true, ask: true },
+  { id: 'ans-wheat-three', group: 'asked', transcript: '3個あれば足りるよ', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 14, toSpeaker: null, line: ASKED_WHEAT, asked: true }, to: true, ask: true },
+  { id: 'ans-wheat-few', group: 'asked', transcript: 'あと5個くらいかな', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 33, toSpeaker: null, line: ASKED_WHEAT, asked: true }, to: true, ask: true },
+  { id: 'ans-iron-box', group: 'asked', transcript: '作業台の隣の箱でいいよ', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 16, toSpeaker: null, line: ASKED_IRON, asked: true }, to: true, ask: true },
+  { id: 'chat-food', group: 'asked_chat', transcript: '今夜のご飯なに食べる？', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 38, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-person', group: 'asked_chat', transcript: 'ミキ、さっきの動画見た？', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 14, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-self-hungry', group: 'asked_chat', transcript: 'あー、お腹すいた', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 22, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-self-homework', group: 'asked_chat', transcript: 'えーと、宿題どこやったっけ', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 27, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-comment', group: 'asked_chat', transcript: '視聴者さんから「ケーキおいしそう」ってコメント来てるよ', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 16, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-rain', group: 'asked_chat', transcript: '明日は雨らしいよ', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 33, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-call-other', group: 'asked_chat', transcript: 'ユウ、そこのドア閉めてくれる？', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 24, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-game', group: 'asked_chat', transcript: 'そういえば新しいゲーム出たよね', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 41, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-laugh', group: 'asked_chat', transcript: 'あはは、それおもしろい', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 29, toSpeaker: null, line: ASKED_PLACE, asked: true }, to: false, ask: true },
+  { id: 'chat-wheat-dinner', group: 'asked_chat', transcript: '今日の晩ごはんどうする？', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 19, toSpeaker: null, line: ASKED_WHEAT, asked: true }, to: false, ask: true },
+  { id: 'chat-wheat-toilet', group: 'asked_chat', transcript: 'ちょっとトイレ行ってくる', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 36, toSpeaker: null, line: ASKED_WHEAT, asked: true }, to: false, ask: true },
+  { id: 'chat-iron-video', group: 'asked_chat', transcript: 'この動画やばくない？', humans: 3, speaker: 'ミキ', spoke: { secondsAgo: 12, toSpeaker: null, line: ASKED_IRON, asked: true }, to: false, ask: true },
   { id: 'asked-late', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 50, toSpeaker: null, line: ASKED, asked: true }, to: false, ask: false },
   { id: 'asked-to-another', group: 'asked', transcript: 'ここがいいと思う', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 10, toSpeaker: false, line: ASKED, asked: true }, to: false, ask: false },
   { id: 'asked-not-a-question', group: 'asked', transcript: 'このオークの木材ブロックの上に置いて', humans: 3, speaker: 'ユウ', spoke: { secondsAgo: 30, toSpeaker: null, line: 'ケーキができたよ。' }, to: false, ask: false },

@@ -13,8 +13,10 @@ import { isStopRequest, isStrongStopRequest, nameMatch, type NameMatch } from '.
  * Two more ways in (2026-11-22), for talk while she works on a job in the game and for the answer to a question she asked herself:
  *   4. while she works on a job (`work`), a request, a suggestion or a question about it, even without her name and with others in the
  *      room: Jev judges, as strictly as case 3 (talk between the people that has nothing to do with the job stays unanswered);
- *   5. the first words after a question she asked the room or this speaker (`shannon.asked`, `ADDRESSED_QUESTION_WINDOW_MILLISECONDS`): a
- *      rule, no question to Jev, since an answer to her own question is to her whoever says it (to the room), however long they took.
+ *   5. the first words after a question she asked the room or this speaker (`shannon.asked`, `ADDRESSED_QUESTION_WINDOW_MILLISECONDS`),
+ *      without her name: whether they answer THAT question is Jev's to say (`answers_her_question`, shown the question as she said it). An
+ *      answer is to her whoever says it, however short or pointing (「そこの板の上」「うん」), but chat between the people that came in the
+ *      same window is not. Jev not answering in time keeps the old reading: the words are taken as the answer.
  *
  * 2026-10-31: 会話中も毎回、宛先と今返事が必要かを判定する。名前なしの質問も残す。
  * 会話モード・直前の返事・一人であることだけでは応答しない。曖昧な宛先や判定失敗は黙る。
@@ -92,7 +94,7 @@ type Target = typeof ADDRESSED_TARGETS[number];
 
 interface Parsed { addressed: boolean; target: Target | 'fallback'; noul: number; reason: AddressedReason }
 
-/** 固定した4問（addressed.v5。作業中の名前なしの発話は `about_the_job` だけで決める）。文面や判定条件を変えたら版も変える。 */
+/** 固定した5問（addressed.v6。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` だけで決める）。文面や判定条件を変えたら版も変える。 */
 export function addressedQuestions(): Record<string, JevQuestion> {
   return {
     addressed_to_shannon: {
@@ -146,6 +148,23 @@ export function addressedQuestions(): Record<string, JevQuestion> {
         false: 'It is chat about something else, or no job is under way.',
       },
     },
+    // After a question she asked aloud, anyone may answer her without her name, but the people also go on talking to one another in the same
+    // 45 seconds: whether the words answer THAT question is the whole question (it needs her own words, `state.shannon_question`).
+    answers_her_question: {
+      type: 'noul',
+      instructions: 'state.shannon_question is a question Shannon just asked out loud to the people on this call (state.shannon_spoke_seconds_ago seconds ago), '
+        + 'and nobody has answered it yet. Decide whether the latest utterance (state.utterance) is a reply to THAT question. A reply may be very short or only '
+        + 'point at things (for example "そこ", "うん、渡して", "こっちにちょうだい", "あとでいいよ"), may answer only part of the question, may ask her back about it '
+        + '(for example "どれのこと？", "何個？"), or may say what to do about what she asked about; it does not repeat the question\'s words and does not need her name. '
+        + 'Read it against what she asked: an answer to "where should I put it" names a place, a person or a way to hand it over; an answer to "how many do you need" '
+        + 'gives a number or an amount. It is NOT a reply when it is chat between the people about something else (what to eat, a video, the weather, other games, jokes, '
+        + 'laughter), when it calls or talks to another person, when it is muttering or thinking aloud, when it reads a message aloud, or when it is about Shannon and not '
+        + 'to her. A new subject that does not fit the question is not a reply even if it is a question too.',
+      criteria: {
+        true: 'The utterance answers, or asks back about, the question Shannon just asked.',
+        false: 'It is about something else, said to another person, to oneself, or background talk.',
+      },
+    },
     reply_needed: {
       type: 'noul',
       instructions: 'Decide whether Shannon should answer this utterance NOW. A voice conversation being open, a recent reply, or being '
@@ -162,6 +181,7 @@ export function addressedQuestions(): Record<string, JevQuestion> {
   };
 }
 
+const QUESTION_LINE_CHARACTERS = 160;
 const clip = (text: string, length: number): string => Array.from(text.replace(/\s+/gu, ' ').trim()).slice(0, length).join('');
 
 /** What Jev is shown. The speaker's words are data; the names are the room's. */
@@ -178,6 +198,8 @@ export function addressedState(input: AddressedInput, name: NameMatch | null, fo
     follows_her_last_words: follows,
     ...(shannon?.line ? { shannon_last_line: clip(shannon.line, 120) } : {}),
     ...(shannon?.asked ? { shannon_last_line_was_a_question: true } : {}),
+    // The question is at the end of her line: keep the end when the line is long (what she asked is what the answer is read against).
+    ...(shannon?.asked && shannon.line ? { shannon_question: Array.from(shannon.line.replace(/\s+/gu, ' ').trim()).slice(-QUESTION_LINE_CHARACTERS).join('') } : {}),
     ...(input.work ? {
       shannon_is_working_in_minecraft: true,
       current_work: input.work.goal === null ? null : clip(input.work.goal, 120),
@@ -199,8 +221,8 @@ export function followsHer(input: AddressedInput, windowMilliseconds = ADDRESSED
 type Gate =
   | { kind: 'quiet'; reason: AddressedReason }
   | { kind: 'yes'; reason: AddressedReason }
-  /** `unnamed`: no name and outside her window, with the owner alone (case 3, `alone`) or while she works (case 4, `working`): Jev alone may say yes. */
-  | { kind: 'ask'; name: NameMatch | null; follows: boolean; unnamed?: 'alone' | 'working' };
+  /** `unnamed`: no name and outside her window, with the owner alone (case 3, `alone`) or while she works (case 4, `working`), or inside the window of a question she asked (case 5, `answering`: Jev says whether it answers; not answering in time counts as yes). */
+  | { kind: 'ask'; name: NameMatch | null; follows: boolean; unnamed?: 'alone' | 'working' | 'answering' };
 
 /** The owner alone with her: no one else in the room, and the speaker is the owner (case 3). */
 export function ownerAlone(input: AddressedInput): boolean {
@@ -231,7 +253,10 @@ export function addressedGate(
   const name = nameMatch(input.transcript);
   const follows = followsHer(input, windowMilliseconds);
   if (name?.bare && name.tier === 'strong') return { kind: 'yes', reason: 'bare_call' };
-  if (askedHer(input, questionWindowMilliseconds)) return { kind: 'yes', reason: 'answer_to_question' };
+  if (askedHer(input, questionWindowMilliseconds)) {
+    // Called by name inside the window: taken as the answer, as before. Without her name, Jev says whether it answers her question.
+    return name ? { kind: 'yes', reason: 'answer_to_question' } : { kind: 'ask', name: null, follows, unnamed: 'answering' };
+  }
   if (!name && !follows) {
     if (ownerAlone(input)) return { kind: 'ask', name: null, follows: false, unnamed: 'alone' };
     return input.work ? { kind: 'ask', name: null, follows: false, unnamed: 'working' } : { kind: 'quiet', reason: 'no_name' };
@@ -251,13 +276,20 @@ export function fallbackAddressed(_input: AddressedInput, _name: NameMatch | nul
  */
 export const ADDRESSED_DECISION = Object.freeze({ shannon: 0.7, unnamed: 0.8, replyNeeded: 0.8,
   /** While she works (`about_the_job`): the real Jev scored what people said about the job 0.5 to 0.98 and the chat between them 0.01 to 0.20 (2026-11-22), so the bar sits between. */
-  job: 0.4 });
+  job: 0.4,
+  /** Inside the window of a question she asked (`answers_her_question`): low, since a real answer can be three words and a missed one costs more than a late chat line. Not yet read against the real Jev. */
+  answer: 0.4 });
 
-export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' = false): Parsed {
+export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' | 'answering' = false): Parsed {
   if (unnamed === 'working') {
     const job = jevNoul(answers, 'about_the_job');
     const about = job >= ADDRESSED_DECISION.job;
     return { addressed: about, target: 'shannon', noul: job, reason: about ? 'asked_while_working' : 'no_name' };
+  }
+  if (unnamed === 'answering') {
+    const answer = jevNoul(answers, 'answers_her_question');
+    const replies = answer >= ADDRESSED_DECISION.answer;
+    return { addressed: replies, target: 'shannon', noul: answer, reason: replies ? 'answer_to_question' : 'no_name' };
   }
   const noul = jevNoul(answers, 'addressed_to_shannon');
   const target = jevChoice(answers, 'target', ADDRESSED_TARGETS);
@@ -306,7 +338,9 @@ export class AddressedJudge {
     if (gate.kind === 'quiet') return done({ addressed: false, reason: gate.reason, source: 'rule', asked: false });
     if (gate.kind === 'yes') return done({ addressed: true, reason: gate.reason, source: 'rule', asked: false });
     // Cases 3 and 4 are Jev's alone: without an answer in time, a sentence with no name stays unanswered (better quiet than talking over him).
-    const local = () => (gate.unnamed ? { addressed: false, reason: 'no_name' as const } : fallbackAddressed(input, gate.name, gate.follows));
+    // Case 5 keeps the old reading when he does not answer: words right after her question are taken as its answer (a lost answer costs more).
+    const local = () => (gate.unnamed === 'answering' ? { addressed: true, reason: 'answer_to_question' as const }
+      : gate.unnamed ? { addressed: false, reason: 'no_name' as const } : fallbackAddressed(input, gate.name, gate.follows));
     if (!this.options.chooser) return done({ ...local(), source: 'fallback', asked: false });
     const timeout = stallTolerantTimeout(this.timeoutMilliseconds);
     try {
@@ -317,7 +351,7 @@ export class AddressedJudge {
         fallback: () => ({ ...local(), target: 'fallback', noul: 0 }),
         traceAnswers: (value, source) => ({
           addressed: value.addressed, target: value.target, noul: value.noul, name: gate.name ? (gate.name.tier === 'strong' ? 'exact' : 'possible') : 'none',
-          follows: gate.follows, unnamed: gate.unnamed !== undefined, ...(gate.unnamed === 'working' ? { working: true } : {}), source,
+          follows: gate.follows, unnamed: gate.unnamed !== undefined, ...(gate.unnamed === 'working' ? { working: true } : {}), ...(gate.unnamed === 'answering' ? { answering: true } : {}), source,
         }),
         signal: timeout.signal,
       });
