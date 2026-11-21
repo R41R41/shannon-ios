@@ -10,7 +10,7 @@ const text = (value: unknown): string | null => (typeof value === 'string' ? val
 function recordOf(row: Record<string, unknown>): QueueRecord {
   return { id: String(row.id), seq: Number(row.seq), goal: String(row.goal), state: String(row.state) as MinecraftQueueState,
     pos: Number(row.pos), origin: String(row.origin) as MinecraftQueueOrigin, requestId: text(row.request_id),
-    experienceId: text(row.experience_id), observedAt: text(row.observed_at), taskId: text(row.task_id),
+    experienceId: text(row.experience_id), observedAt: text(row.observed_at), askedBy: text(row.asked_by), taskId: text(row.task_id),
     createdAt: String(row.created_at), updatedAt: String(row.updated_at), endedAt: text(row.ended_at), note: text(row.note) };
 }
 
@@ -41,9 +41,9 @@ export class MinecraftRequestQueueStore {
       const rev = before.rev + 1;
       this.db.prepare('DELETE FROM minecraft_request_queue WHERE scope_key = ?').run(scopeKey);
       const insert = this.db.prepare(`INSERT INTO minecraft_request_queue(id, scope_key, seq, goal, state, pos, origin, request_id, experience_id,
-        observed_at, task_id, created_at, updated_at, ended_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        observed_at, asked_by, task_id, created_at, updated_at, ended_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const e of snapshot.entries) {
-        insert.run(e.id, scopeKey, e.seq, e.goal, e.state, e.pos, e.origin, e.requestId, e.experienceId, e.observedAt, e.taskId,
+        insert.run(e.id, scopeKey, e.seq, e.goal, e.state, e.pos, e.origin, e.requestId, e.experienceId, e.observedAt, e.askedBy, e.taskId,
           e.createdAt, e.updatedAt, e.endedAt, e.note);
       }
       this.db.prepare(`INSERT INTO minecraft_request_queue_state(scope_key, auto_run, rev, next_seq) VALUES (?, ?, ?, ?)

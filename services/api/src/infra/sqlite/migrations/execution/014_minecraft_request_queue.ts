@@ -22,6 +22,7 @@ export const MINECRAFT_REQUEST_QUEUE_STEP: SchemaStep = {
         request_id TEXT,
         experience_id TEXT,
         observed_at TEXT,
+        asked_by TEXT,
         task_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,

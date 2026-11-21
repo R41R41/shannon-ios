@@ -349,8 +349,8 @@ export const SWITCHES = [
   },
   {
     name: 'SHANNON_DC_VOICE_MINECRAFT', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],
-    doc: 'The owner\'s spoken request in a voice channel reaches her Minecraft body: '
-      + 'a message to the task under way, a stop, or (alone) a new task.',
+    doc: 'A spoken request in a voice channel, from the owner or anyone in it (owner 2026-11-21), reaches her Minecraft body: '
+      + 'a message to the task under way, a stop, or a new task, with the speaker\'s name.',
   },
   {
     name: 'SHANNON_DC_VOICE_MOUTH', default: 'on', kind: 'default_on', owner: 'platform', requires: ['SHANNON_DC_VOICE'],

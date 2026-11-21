@@ -1,5 +1,5 @@
 import { JEV_QUESTION_SETS, jevChoice, jevNoul, stallTolerantTimeout, type JevChooser, type JevQuestion } from '../../infra/models/jev/jevChoice.js';
-import { isStopRequest, nameMatch, type NameMatch } from './addressedName.js';
+import { isStopRequest, isStrongStopRequest, nameMatch, type NameMatch } from './addressedName.js';
 
 /**
  * Was it said to her? (owner decision 2026-10-21, 「作る・続きの言葉も通す」). One place for every voice entry (the Discord voice channel
@@ -42,6 +42,8 @@ export interface AddressedInput {
    * (`shannonSpeaking`) or her Minecraft body has a task running (`bodyRunning`). Owner 2026-10-21, Discord and the resident alike.
    */
   owner?: boolean;
+  /** Anyone in the room, not only the owner, may stop her body's running task with a stop word (the Discord voice channel's guests, owner 2026-11-21). */
+  guestsMayStop?: boolean;
   shannonSpeaking?: boolean;
   bodyRunning?: boolean;
   shannon?: {
@@ -152,9 +154,15 @@ export function ownerAlone(input: AddressedInput): boolean {
   return input.humans <= 1 && input.owner === true;
 }
 
-/** Stop words from the owner while she speaks or her body works: heard without her name, whoever they were said to. */
+/**
+ * Stop words from the owner while she speaks or her body works, and from anyone while her body works where guests may stop it
+ * (`guestsMayStop`): heard without her name, whoever they were said to.
+ */
 export function stopsHer(input: AddressedInput): boolean {
-  return input.owner === true && (input.shannonSpeaking === true || input.bodyRunning === true) && isStopRequest(input.transcript);
+  if (input.owner === true) {
+    return isStopRequest(input.transcript) && (input.shannonSpeaking === true || input.bodyRunning === true);
+  }
+  return input.guestsMayStop === true && input.bodyRunning === true && isStrongStopRequest(input.transcript);
 }
 
 /** The part that needs no model: nothing to ask about, or a call that cannot be anything else. */

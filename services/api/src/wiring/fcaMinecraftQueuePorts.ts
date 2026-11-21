@@ -40,7 +40,7 @@ export function queueTaskPorts(parts: {
     // A request from no turn (the mod's list) has no source to observe: it is a task of the root's own, as the operator's.
     if (entry.experienceId) {
       parts.runtime.observeExternal(parts.ownerScope, task.id, { eventId: key, experienceIds: [entry.experienceId],
-        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${ASKED_BY[entry.origin] ?? '本人の依頼'}: ${entry.goal}` });
+        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${entry.askedBy ? `Discordの通話での${entry.askedBy}の依頼` : ASKED_BY[entry.origin] ?? '本人の依頼'}: ${entry.goal}` });
     }
     if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     return task.id;

@@ -59,13 +59,13 @@ export function heardBlock(lines: readonly HeardLine[]): string {
   ].join('\n');
 }
 
-/** The body's side of Minecraft, as the body's process described it; the owner's own request only when the owner is the one talking. */
+/** The body's side of Minecraft, as the body's process described it, and the request under way (anyone in the channel may have made it). */
 export function situationBlock(situation: string | null, runningGoal: string | null): string {
   if (!situation && !runningGoal) return '';
   return [
     '[マイクラの体の様子（ボイスチャンネルの側からの説明）]',
     ...(situation ? [situation] : []),
-    ...(runningGoal ? [`${SHANNON_OWNER_NAME}に頼まれて、体はいま「${runningGoal}」をしている。`] : []),
+    ...(runningGoal ? [`頼まれて、体はいま「${runningGoal}」をしている。`] : []),
     '- これは、いまの様子の説明。書かれていないことは分からないと言う。体を動かすのは別の仕組みで、この返事だけで終わったことにしない。',
   ].join('\n');
 }
@@ -76,14 +76,16 @@ export const VOICE_MINECRAFT_REFUSALS: Readonly<Record<VoiceMinecraftRefusal, st
   body_unavailable: 'ごめん、いまマイクラの体がつながっていなくて、頼みを渡せなかった。',
   no_turn: 'ごめん、いまの頼みを記録できなくて、マイクラの体に渡せなかった。もう一回言ってくれる？',
   turn_not_visible: 'ごめん、いまの頼みを記録から確かめられなくて、マイクラの体に渡せなかった。もう一回言ってくれる？',
-  others_present: 'ほかの人がいる間は、新しい作業を体に頼むのはやめてるんだ。いま動いてる作業への伝言なら渡せるよ。',
   nothing_running: 'ごめん、いま体が動かしてる依頼がなくて、それは渡せなかった。どの依頼か番号で言ってくれたら、そうするね。',
   no_such_request: 'ごめん、その番号の依頼が列に見つからなかった。もう一回言ってくれる？',
   queue_full: 'ごめん、依頼の列がいっぱいで、新しい依頼を足せなかった。どれかが終わってからまた頼んでね。',
 });
 
-/** The owner's turn, with others in the channel or alone in a conversation that is not private: the intent field and what it can do now. */
-export function voiceIntentInstructions(state: VoiceMinecraftState, allowNew: boolean): string {
+/**
+ * A turn of anyone in the channel (the owner decided on 2026-11-21 that everyone may ask), except the owner alone in his private room, who has her tools:
+ * the intent field and what it can do now. `who` is the one talking (the owner's name or a guest's shown name).
+ */
+export function voiceIntentInstructions(state: VoiceMinecraftState, who: string): string {
   if (!state.connected) {
     return [
       '[マイクラの体への頼みごと: いまは渡せない]',
@@ -91,8 +93,11 @@ export function voiceIntentInstructions(state: VoiceMinecraftState, allowNew: bo
       '体への頼みごとをされた時だけ、引き受けたとは言わずに短くそう伝える。雑談には普通に答え、このことには触れない。',
     ].join('\n');
   }
-  return minecraftQueueGuide({ queueLines: state.queue ?? [], allowNew, running: state.running?.goal ?? null }).join('\n');
+  return [
+    ...minecraftQueueGuide({ queueLines: state.queue ?? [], who, running: state.running?.goal ?? null }),
+    `通話には何人もいる。体への頼みは、${who}がはっきり頼んだ時だけ受ける（聞き間違いかもしれない言葉や、ほかの人どうしの話は kind=none）。`,
+  ].join('\n');
 }
 
-/** A friend's turn: no one but the owner moves her body. */
+/** A friend's turn while the body part is off (`SHANNON_DC_VOICE_MINECRAFT`): nothing moves her body for a friend. */
 export const FRIEND_NO_BODY_LINE = `- ここでは体や道具を動かす頼みごとは引き受けない。頼まれたら、引き受けたとは言わず、${SHANNON_OWNER_NAME}に頼んでもらうよう軽く言う。`;

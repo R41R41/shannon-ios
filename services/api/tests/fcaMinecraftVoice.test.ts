@@ -58,7 +58,7 @@ function fixture(options: { bodies?: string[]; running?: TaskView | null; visibl
 }
 
 const input = (fields: Record<string, unknown> = {}) => ({
-  scopeKey: 'owner', requestId: 'r1', observedAt: '2026-10-20T12:00:00.000Z', experienceId: 'exp-1', allowNew: false,
+  scopeKey: 'owner', requestId: 'r1', observedAt: '2026-10-20T12:00:00.000Z', experienceId: 'exp-1',
   intent: { kind: 'message' as const, goal: 'まず鉄の剣を作って' }, ...fields,
 });
 const task1 = (fields: Record<string, unknown> = {}) => input({ intent: { kind: 'task', goal: 'まず鉄の剣を作って' }, ...fields });
@@ -70,7 +70,7 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(fixture().port.state()).toEqual({ connected: true, running: null });
     expect(fixture({ running: task('t1', 'エンドラを倒す') }).port.state()).toEqual({ connected: true, running: { id: 't1', goal: 'エンドラを倒す' } });
     const f = fixture();
-    await f.port.intent(task1({ allowNew: true }));
+    await f.port.intent(task1());
     expect(f.port.state()).toEqual({ connected: true, running: null, queue: ['#1 実行中 「まず鉄の剣を作って」'] });
   });
 
@@ -81,25 +81,34 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(await fixture().port.intent(input())).toEqual({ delivered: false, reason: 'nothing_running' });
   });
 
-  it('adds a new request only when he is alone, as a request of the list, and refuses with a reason otherwise', async () => {
-    const alone = fixture();
-    expect(await alone.port.intent(task1({ allowNew: true }))).toMatchObject({ delivered: true, as: 'task', taskId: 'new-task-1' });
-    expect(alone.calls[0]).toBe('start new-task-1 まず鉄の剣を作って dcv:r1 exp-1');
-    expect(await fixture().port.intent(task1())).toEqual({ delivered: false, reason: 'others_present' });
+  it('adds a new request whoever is in the channel, as a request of the list that keeps who asked', async () => {
+    const f = fixture();
+    expect(await f.port.intent(task1())).toMatchObject({ delivered: true, as: 'task', taskId: 'new-task-1' });
+    expect(f.calls[0]).toBe('start new-task-1 まず鉄の剣を作って dcv:r1 exp-1');
+    const guest = fixture();
+    await guest.port.intent(task1({ speaker: { id: '2', name: 'ユウ', owner: false } }));
+    expect(guest.queue.view().entries[0]).toMatchObject({ origin: 'voice', askedBy: 'ユウ（ゲスト）' });
+    expect(guest.queue.promptLines()[0]).toContain('（ユウ（ゲスト））');
+    const owner = fixture();
+    await owner.port.intent(task1({ speaker: { id: '1', name: 'ライ氏', owner: true } }));
+    expect(owner.queue.view().entries[0]).toMatchObject({ origin: 'voice', askedBy: '本人（ライ氏）' });
+    const message = fixture({ running: task('t1', 'エンドラを倒す') });
+    await message.port.intent(input({ speaker: { id: '2', name: 'ユウ', owner: false } }));
+    expect(message.calls[0]).toContain('Discordの通話でのユウ（ゲスト）の言葉（いまのタスクへ）: まず鉄の剣を作って');
     // A request while one is under way is a second request on the list, not words for the first.
     const busy = fixture();
-    await busy.port.intent(task1({ allowNew: true }));
-    expect(await busy.port.intent(task1({ allowNew: true, requestId: 'r2', intent: { kind: 'task', goal: 'パンを作って' } }))).toMatchObject({ delivered: true, as: 'task' });
+    await busy.port.intent(task1());
+    expect(await busy.port.intent(task1({ requestId: 'r2', intent: { kind: 'task', goal: 'パンを作って' } }))).toMatchObject({ delivered: true, as: 'task' });
     expect(busy.queue.view().entries.map(entry => `${entry.goal}:${entry.state}`)).toEqual(['まず鉄の剣を作って:running', 'パンを作って:queued']);
     // The same turn heard again is the same request.
-    await busy.port.intent(task1({ allowNew: true, requestId: 'r2', intent: { kind: 'task', goal: 'パンを作って' } }));
+    await busy.port.intent(task1({ requestId: 'r2', intent: { kind: 'task', goal: 'パンを作って' } }));
     expect(busy.queue.view().entries).toHaveLength(2);
   });
 
   it('takes every word about the list whoever is in the channel, and names a request that is not there', async () => {
     const f = fixture();
-    await f.port.intent(task1({ allowNew: true }));
-    await f.port.intent(task1({ allowNew: true, requestId: 'r2', intent: { kind: 'task', goal: 'パンを作って' } }));
+    await f.port.intent(task1());
+    await f.port.intent(task1({ requestId: 'r2', intent: { kind: 'task', goal: 'パンを作って' } }));
     const say = (kind: string, fields: Record<string, unknown> = {}) => f.port.intent(input({ requestId: `r-${kind}`, intent: { kind, goal: '', placement: '', target: '', ...fields } }));
     expect(await say('hold')).toMatchObject({ delivered: true, as: 'queue' });
     expect(f.queue.view().entries.map(entry => `${entry.goal}:${entry.state}`)).toEqual(['パンを作って:running', 'まず鉄の剣を作って:paused']);
@@ -116,8 +125,8 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(stopping.queue.view().autoRun).toBe(false);
     expect(await fixture().port.intent(input({ intent: { kind: 'none', goal: '' } }))).toEqual({ delivered: false });
     expect(await fixture().port.intent(input({ scopeKey: 'someone' }))).toEqual({ delivered: false, reason: 'not_owner_scope' });
-    expect(await fixture({ bodies: [] }).port.intent(task1({ allowNew: true }))).toEqual({ delivered: false, reason: 'body_unavailable' });
-    expect(await fixture().port.intent(task1({ allowNew: true, experienceId: null }))).toEqual({ delivered: false, reason: 'no_turn' });
-    expect(await fixture({ visible: false }).port.intent(task1({ allowNew: true }))).toEqual({ delivered: false, reason: 'turn_not_visible' });
+    expect(await fixture({ bodies: [] }).port.intent(task1())).toEqual({ delivered: false, reason: 'body_unavailable' });
+    expect(await fixture().port.intent(task1({ experienceId: null }))).toEqual({ delivered: false, reason: 'no_turn' });
+    expect(await fixture({ visible: false }).port.intent(task1())).toEqual({ delivered: false, reason: 'turn_not_visible' });
   });
 });

@@ -204,15 +204,15 @@ describe('the voice prompt blocks', () => {
     expect(heardBlock([{ userId: 'u', name: 'ミキ', text: 'まだだよ', at: '2026-10-20T12:00:00.000Z' }])).toContain('- ミキ: まだだよ');
     expect(situationBlock(null, null)).toBe('');
     expect(situationBlock('洞窟にいる。', 'エンドラを倒す')).toContain('「エンドラを倒す」をしている');
-    expect(voiceIntentInstructions({ connected: false, running: null }, true)).toContain('いまは渡せない');
-    expect(voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' } }, false)).toContain('いまの作業への伝言');
-    expect(voiceIntentInstructions({ connected: true, running: null }, true)).toContain('はっきり頼んだら、聞き返さずに引き受けて kind=task');
-    expect(voiceIntentInstructions({ connected: true, running: null }, false)).toContain('新しい依頼（kind=task）は足せない');
-    // With others present the words for the one running and for the list still go through.
-    expect(voiceIntentInstructions({ connected: true, running: null }, false)).toContain('kind=message');
-    expect(voiceIntentInstructions({ connected: true, running: null }, true)).toContain('[依頼の列] いまは空');
+    expect(voiceIntentInstructions({ connected: false, running: null }, 'ライ氏')).toContain('いまは渡せない');
+    expect(voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' } }, 'ユウ')).toContain('いまの作業への伝言');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ライ氏')).toContain('はっきり頼んだら、聞き返さずに引き受けて kind=task');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('ユウがマイクラでしてほしいこと');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('ほかの人どうしの話は kind=none');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('kind=message');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ライ氏')).toContain('[依頼の列] いまは空');
     const listed = voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' },
-      queue: ['#1 実行中 「鉄を集める」', '#2 待ち 「ケーキを作る」'] }, true);
+      queue: ['#1 実行中 「鉄を集める」', '#2 待ち 「ケーキを作る」'] }, 'ライ氏');
     expect(listed).toContain('[依頼の列]\n#1 実行中 「鉄を集める」\n#2 待ち 「ケーキを作る」');
     expect(listed).toContain('placement');
     expect(listed).toContain('cancel');

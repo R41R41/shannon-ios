@@ -85,3 +85,10 @@ const STOP_WORDS = /とめて|止めて|ストップ|すとっぷ|まって|待�
 export function isStopRequest(text: string): boolean {
   return STOP_WORDS.test(normalizedForName(text)) || STOP_WORDS.test(text);
 }
+
+/** The plain stop words only: what a guest may say without her name while her body works (everyday 待って・静かに between friends is not one). */
+const STRONG_STOP_WORDS = /とめて|止めて|ストップ|すとっぷ|止まって|とまって/u;
+
+export function isStrongStopRequest(text: string): boolean {
+  return STRONG_STOP_WORDS.test(normalizedForName(text)) || STRONG_STOP_WORDS.test(text);
+}

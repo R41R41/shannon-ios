@@ -110,16 +110,16 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     const said = (text: string) => f.conversations.appendTurn('owner', 'platform:minecraft:world', text, 'はい', at).id;
     const input = { scopeKey: 'owner', request: f.request, experienceId: said('羊を探して'), intent: { kind: 'task' as const, goal: '羊を探す' } };
     expect(api.admission({ scopeKey: 'other', request: f.request })).toBe('not_owner_scope');
-    alone = false;
-    expect(await api.intent(input)).toEqual({ kind: 'none', goal: '', rejected: 'queue_unavailable', reason: 'others_present' });
-    alone = true; visibleTurn = false;
+    // Others on the server no longer refuse a request (owner decision 2026-11-21): everything below runs with someone else present.
+    alone = false; visibleTurn = false;
     expect(await api.intent(input)).toMatchObject({ reason: 'turn_not_visible' });
     expect(await api.intent({ ...input, experienceId: null })).toMatchObject({ reason: 'no_turn' });
     expect(await api.intent({ ...input, request: { ...f.request, serverId: 'elsewhere' } })).toMatchObject({ reason: 'body_unavailable' });
-    expect(lines).toEqual(['Shannon Minecraft intent refused reason=others_present kind=task', 'Shannon Minecraft intent refused reason=turn_not_visible kind=task',
+    expect(lines).toEqual(['Shannon Minecraft intent refused reason=turn_not_visible kind=task',
       'Shannon Minecraft intent refused reason=no_turn kind=task', 'Shannon Minecraft intent refused reason=body_unavailable kind=task']);
     visibleTurn = true;
     const first = (await api.intent(input))!;
+    expect(first).toMatchObject({ kind: 'task', goal: '羊を探す' });
     // 「続けて」 while it is under way: the same task, its inbox, with the turn as the message's source; no second task.
     const again = (await api.intent({ ...input, experienceId: said('続けて'), request: { ...f.request, requestId: 'game-two' }, intent: { kind: 'message', goal: '続けて羊を探す' } }))!;
     expect(again.request?.id).toBe(first.request?.id);
@@ -186,7 +186,7 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     const id = made.request!.id;
     // The same call that the in-game words 「今の作業をやめて」 would make is refused here, as it was on 2026-10-26.
     visibleTurn = false; f.source(false);
-    expect(await api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'asking-turn', intent: { kind: 'stop', goal: '' } })).toMatchObject({ reason: 'others_present' });
+    expect(await api.intent({ scopeKey: 'owner', request: f.request, experienceId: 'asking-turn', intent: { kind: 'stop', goal: '' } })).toMatchObject({ reason: 'turn_not_visible' });
     // The button needs neither the turn, the source guard nor the owner being alone: only that the task is the owner's and bound to a body.
     expect(await api.ownerStop({ taskId: 'not-this-one' })).toEqual({ stopped: [], open: 1 });
     expect(f.runtime.get('owner', id)?.phase).not.toBe('stopped');

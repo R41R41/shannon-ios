@@ -23,6 +23,8 @@ export interface QueueRecord {
   /** The stored turn the request was made in, and when it was said; null for a request that came from no turn. */
   experienceId: string | null;
   observedAt: string | null;
+  /** Who asked, in the words of the entry (a Discord member's shown name, a guest marked as one); null when the entry does not say. */
+  askedBy: string | null;
   taskId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -129,6 +131,7 @@ export interface NewQueueEntry {
   requestId?: string | null;
   experienceId?: string | null;
   observedAt?: string | null;
+  askedBy?: string | null;
 }
 
 /**
@@ -153,7 +156,7 @@ export function addToQueue(snapshot: QueueSnapshot, input: NewQueueEntry, at: st
 
 function newRecord(input: NewQueueEntry, goal: string, seq: number, at: string): QueueRecord {
   return { id: input.id, seq, goal, state: 'queued', pos: 0, origin: input.origin, requestId: input.requestId ?? null,
-    experienceId: input.experienceId ?? null, observedAt: input.observedAt ?? null, taskId: null, createdAt: at, updatedAt: at,
+    experienceId: input.experienceId ?? null, observedAt: input.observedAt ?? null, askedBy: input.askedBy ?? null, taskId: null, createdAt: at, updatedAt: at,
     endedAt: null, note: null };
 }
 
@@ -324,7 +327,7 @@ export function syncQueue(snapshot: QueueSnapshot, facts: QueueFacts, at: string
     // The body is one: a task made from outside while an entry runs is kept on the list, held, and stopped.
     const other = running(draft) !== undefined;
     const entry: QueueRecord = { id: facts.newId(), seq: draft.nextSeq, goal: queueGoal(task.goal) || '(依頼)', state: other ? 'paused' : 'running',
-      pos: 0, origin: task.origin, requestId: null, experienceId: null, observedAt: null, taskId: task.taskId, createdAt: at, updatedAt: at,
+      pos: 0, origin: task.origin, requestId: null, experienceId: null, observedAt: null, askedBy: null, taskId: task.taskId, createdAt: at, updatedAt: at,
       endedAt: null, note: other ? 'made_outside_while_running' : null };
     draft.nextSeq += 1;
     if (other) {
@@ -374,7 +377,7 @@ function sameList(a: QueueSnapshot, b: QueueSnapshot): boolean {
 
 export const queueWire = (entry: QueueRecord): MinecraftQueueEntry => ({
   id: entry.id, seq: entry.seq, goal: entry.goal, state: entry.state, pos: entry.pos, origin: entry.origin,
-  ...(entry.taskId ? { taskId: entry.taskId } : {}), createdAt: entry.createdAt, ...(entry.note ? { note: entry.note } : {}),
+  ...(entry.askedBy ? { askedBy: entry.askedBy } : {}), ...(entry.taskId ? { taskId: entry.taskId } : {}), createdAt: entry.createdAt, ...(entry.note ? { note: entry.note } : {}),
 });
 
 /** The list as the game side reads it. */
@@ -397,7 +400,7 @@ export function queuePromptLines(snapshot: QueueSnapshot): string[] {
   const live = snapshot.entries.filter(entry => !queueEnded(entry.state)).sort((a, b) => a.pos - b.pos);
   if (!live.length) return [];
   const limit = MINECRAFT_QUEUE_LIMITS.promptLines;
-  const lines = live.slice(0, limit).map(entry => `#${entry.seq} ${LABELS[entry.state]} 「${entry.goal.slice(0, 40)}」`);
+  const lines = live.slice(0, limit).map(entry => `#${entry.seq} ${LABELS[entry.state]} 「${entry.goal.slice(0, 40)}」${entry.askedBy ? `（${entry.askedBy}）` : ''}`);
   if (live.length > limit) lines.splice(limit - 1, 1, `ほか ${live.length - limit + 1} 件`);
   if (!snapshot.autoRun) lines.push('（列は止めてある。始めると続きから動く）');
   return lines.slice(0, limit + 1);

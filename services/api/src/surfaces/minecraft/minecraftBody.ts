@@ -202,7 +202,7 @@ export class MinecraftBody {
   private intentInstructions(): string {
     let queueLines: string[] = [];
     try { queueLines = this.dependencies.fcaQueueLines?.() ?? []; } catch { /* the list is only context */ }
-    return minecraftQueueGuide({ queueLines, allowNew: true, running: null }).join('\n');
+    return minecraftQueueGuide({ queueLines, running: null }).join('\n');
   }
 
   private log(line: string): void {
@@ -313,4 +313,4 @@ export function minecraftDeliveryInstructions(server: MinecraftServerBinding, ki
 const UNKNOWN_SPEAKER_PROJECTION = `[相手が分からない場]\n相手が誰かは分からない。${SHANNON_OWNER_NAME}やほかの人の個人的なこと、覚えていることは話さない。覚えているふりもしない。`;
 
 /** The owner's turn only: the one structured field by which she asks her Minecraft body to do something (the list is empty here). */
-export const MINECRAFT_INTENT_INSTRUCTIONS = minecraftQueueGuide({ queueLines: [], allowNew: true, running: null }).join('\n');
+export const MINECRAFT_INTENT_INSTRUCTIONS = minecraftQueueGuide({ queueLines: [], running: null }).join('\n');

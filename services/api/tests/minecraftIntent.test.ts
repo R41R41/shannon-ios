@@ -43,7 +43,7 @@ describe('the intent field of her reply', () => {
 
 describe('what she is told of the list', () => {
   const guide = (options: Partial<Parameters<typeof minecraftQueueGuide>[0]> = {}) =>
-    minecraftQueueGuide({ queueLines: [], allowNew: true, running: null, ...options }).join('\n');
+    minecraftQueueGuide({ queueLines: [], running: null, ...options }).join('\n');
 
   it('says how his ways of asking map to the kinds, with the reason, and leaves the judgment to her', () => {
     const text = guide();
@@ -54,15 +54,15 @@ describe('what she is told of the list', () => {
     expect(text).toContain('[依頼の列] いまは空');
   });
 
-  it('shows the list as it stands, the running request, and what others present change', () => {
+  it('shows the list as it stands, the running request, and who is asking', () => {
     const lines = ['#1 実行中 「ケーキを作る」', '#2 待ち 「木材を集める」'];
     const text = guide({ queueLines: lines, running: 'ケーキを作る' });
     expect(text).toContain('いま体は「ケーキを作る」をしている');
     expect(text).toContain(`[依頼の列]\n${lines.join('\n')}`);
-    const others = guide({ allowNew: false });
-    expect(others).not.toContain('placement は言い方で選ぶ');
-    expect(others).toContain('新しい依頼（kind=task）は足せない');
-    expect(others).toContain('kind=message');
+    const asked = guide({ who: 'ユウ' });
+    expect(asked).toContain('ユウがマイクラでしてほしいこと');
+    expect(asked).toContain('placement は言い方で選ぶ');
+    expect(asked).not.toContain('足せない');
   });
 });
 

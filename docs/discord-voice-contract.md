@@ -22,7 +22,7 @@ A voice channel's turn is a turn of the conversation kernel through the platform
 - With `SHANNON_ADDRESSED` on (owner 2026-10-21, `docs/addressed-contract.md`) the rule is the same for one person and for many: she
   answers only words that call her by name and are said to her, and the same person's follow-up within ~20 s of her last words;
   Jev judges, and only in those two cases. A `decision` of `respond: false` has the reasons `no_name`, `about_her`, `not_to_her`,
-  `fragment`; `respond: true` has `named`, `bare_call`, `continuation`, `stop` (止めて, 待って... from the owner while she speaks or her body works, without her name).
+  `fragment`; `respond: true` has `named`, `bare_call`, `continuation`, `stop` (止めて, 待って... from the owner while she speaks or her body works, and the plain stop words 止めて・ストップ from a guest while her body works, without her name).
 
 ## `POST /v1/platform/voice/turn` (NDJSON)
 
@@ -38,10 +38,16 @@ clause after 14 characters), `intent` (the owner's spoken request for her body: 
 `done` (`reply`, `threadId`, `duplicate`, `timings`), or `error` after a first line. A refusal before the first line is JSON
 (400, 403, 409, 429). A retried `requestId` replays the stored answer. `silent: true` on `done` means she had nothing to say.
 
-The owner's spoken request for her Minecraft body: with the body connected and the owner not alone in a private conversation, the
-reply may carry `minecraftIntent`; a request while one of his is under way is a message to that task, `stop` stops the body's tasks,
-and a new task is made only when he is alone in the channel. If it is refused after her reply promised it, the fixed words of the
-refusal are the last `sentence` (`correction: true`) and are kept as what she said. A friend's words never move her body.
+A spoken request for her Minecraft body (owner decision 2026-11-21, 「全員と自由に話せてほしい」; before it only the verified owner's words
+reached the body, and a new task only while he was alone in the channel): with the body connected and the speaker not the owner alone in a
+private conversation, the reply may carry `minecraftIntent`, whoever speaks. The requests are the owner's list (`minecraftQueueContract.ts`, the one game chat and the mod use): `task` adds an entry (`origin` voice, `askedBy` the speaker), `message` is words for the one running, and `stop`, `cancel`, `hold`, `resume` and `move` (「やめて」「あとで」「次にこれ」「保留」「再開」) change the list, whoever speaks. The speaker (`sourceUserId`, `sourceDisplayName`, owner or not) travels
+with the request, and the words the task's head reads say who asked (「Discordの通話でのユウの依頼: …」, the owner's as 「本人（名前）」).
+A guest's turn is kept as person memory, which no task may stand on, so a request of theirs is also written into the channel's thread with
+their name on it (no background learning from it) and that turn is the task's source; the owner's own turn is the source, and when the
+reply recalled what a source may not stand on (a guest's person memory) the same record is written for him and tried once more. If it is
+refused after her reply promised it, the fixed words of the refusal are the last `sentence` (`correction: true`) and are kept as what she
+said. What stays: she answers only what is said to her (`SHANNON_ADDRESSED`), the body hears no bot (itself included), and its turns
+run one at a time per channel (`turnQueue.ts`). A stop word without her name is heard from anyone while her body works.
 
 ## Other routes
 

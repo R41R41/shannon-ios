@@ -7,10 +7,11 @@ import type { MinecraftQueue } from './fcaMinecraftQueue.js';
 import { applyQueueIntent } from './fcaMinecraftQueueIntent.js';
 
 /**
- * An owner's spoken request in a Discord voice channel, as the common task tree takes it (dc-voice, `platformVoice.ts`). The platform
- * policy has already said that the verified owner spoke. His requests are the list (`fcaMinecraftQueue.ts`), as game chat's are
- * (`fcaMinecraftRequests.ts`): a new request is added only when he is alone in the channel (`allowNew`); words for the request under way
- * (`message`) and every word that only changes the list (stop, cancel, hold, resume, move) are taken whoever else is in the channel.
+ * A spoken request in a Discord voice channel, as the common task tree takes it (dc-voice, `platformVoice.ts`), from the owner or anyone
+ * else in the channel (owner decision 2026-11-21). Their requests are the list (`fcaMinecraftQueue.ts`), as game chat's are
+ * (`fcaMinecraftRequests.ts`): a new request is added whoever else is in the channel; words for the request under way (`message`) and every
+ * word that changes the list (stop, cancel, hold, resume, move) are taken the same way. The speaker's shown name is in the words the
+ * task's head reads (a message) and in the entry's goal line, so it knows who asked.
  */
 export interface FcaMinecraftVoiceParts {
   control: MinecraftControl;
@@ -27,6 +28,13 @@ export interface FcaMinecraftVoiceParts {
 }
 
 export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraftPort {
+  /** Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name marked （ゲスト） so a guest cannot pass as the owner. */
+  const whoAsked = (input: VoiceMinecraftIntentInput): string => {
+    const { speaker } = input;
+    if (!speaker) return '本人';
+    const name = speaker.name.replace(/\s+/gu, ' ').trim().slice(0, 40);
+    return speaker.owner ? (name ? `本人（${name}）` : '本人') : `${name || '通話の参加者'}（ゲスト）`;
+  };
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
     return { delivered: false, reason };
@@ -38,7 +46,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     try {
       parts.runtime.observeExternal(input.scopeKey, running.id, {
         eventId: `dcv:${input.requestId}`, experienceIds: [experienceId], observedAt: input.observedAt,
-        text: `Discordの通話での本人の言葉（いまのタスクへ）: ${input.intent.goal}`,
+        text: `Discordの通話での${whoAsked(input)}の言葉（いまのタスクへ）: ${input.intent.goal}`,
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'FCA_TARGET_FINISHED') return null;
@@ -49,7 +57,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
   };
   const toList = async (input: VoiceMinecraftIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
     const outcome = await applyQueueIntent(parts.queue, input.intent, { origin: 'voice', requestId: `dcv:${input.requestId}`, experienceId,
-      observedAt: input.observedAt, stopReason: 'owner_voice_stop' });
+      observedAt: input.observedAt, askedBy: input.speaker ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
     if (!outcome.delivered) return refuse(outcome.reason, input.intent.kind);
     const entry = outcome.entry;
     return { delivered: true, as: outcome.as, ...(entry?.taskId ? { taskId: entry.taskId } : {}),
@@ -68,6 +76,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       if (intent.kind === 'none') return { delivered: false };
       if (input.scopeKey !== parts.ownerScope) return refuse('not_owner_scope', intent.kind);
       if (intent.kind === 'stop') {
+        parts.log(`Shannon Minecraft voice stop by=${input.speaker && !input.speaker.owner ? 'guest' : 'owner'}`);
         const done = await toList(input, null);
         for (const task of parts.bound()) if (task.phase !== 'stopping') await parts.stop(task.id, 'owner_voice_stop');
         return done.delivered ? { ...done, as: 'stop' } : done;
@@ -78,7 +87,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       if (!input.experienceId) return refuse('no_turn', intent.kind);
       if (!parts.sourceVisible(input.experienceId)) return refuse('turn_not_visible', intent.kind);
       if (intent.kind === 'message') return message(input, input.experienceId, bodies[0]!) ?? refuse('nothing_running', intent.kind);
-      return input.allowNew ? toList(input, input.experienceId) : refuse('others_present', intent.kind);
+      return toList(input, input.experienceId);
     },
   };
 }

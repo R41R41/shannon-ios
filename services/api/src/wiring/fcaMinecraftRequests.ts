@@ -106,12 +106,12 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     context: MINECRAFT_REQUEST_CONTEXT });
   const log = parts.log ?? ((line: string) => console.log(line));
   /**
-   * What refuses an in-game request before her reply is made: the scope, someone else known to be present, no frame of the body. A frame
+   * What refuses an in-game request before her reply is made: the scope and no frame of the body (others on the server no longer refuse: owner decision 2026-11-21, 「全員と自由に」). A frame
    * a few seconds old still shows a body (mc-chat-stale-frame, 2026-10-26: a stall of the API's thread made a body that had
    * polled 4 s before look gone); the task's decisions are told how old their picture is.
    */
   const admission = (input: { scopeKey: string; request: { serverId: string } }): MinecraftIntentRefusal | null =>
-    input.scopeKey !== parts.ownerScope ? 'not_owner_scope' : !parts.ownerAlone() ? 'others_present'
+    input.scopeKey !== parts.ownerScope ? 'not_owner_scope'
       : !parts.control.latest(parts.control.bodyId(input.request.serverId), LLMC_STALE_FRAME_MS) ? 'body_unavailable' : null;
   /**
    * The newest Minecraft request of his (`admittedMinecraftRequest`, not a task that merely touched the body) on this body that can

@@ -58,6 +58,8 @@ export interface QueueContext {
   observedAt?: string | null;
   /** The reason the runtime's stop is given when this operation lets the running request go (journal and summaries: who asked). */
   stopReason?: string;
+  /** Who asked (a voice channel's speaker), kept on the entry. */
+  askedBy?: string | null;
 }
 
 /** One operation of a request on the list as a pure change. */
@@ -66,7 +68,7 @@ function applied(request: MinecraftQueueRequest, context: QueueContext, snapshot
   const { at, id } = make;
   switch (request.op) {
     case 'add': return addToQueue(snapshot, { id: make.newId, goal: request.goal ?? '', placement: request.placement ?? 'end', origin: context.origin,
-      requestId: request.requestId ?? context.requestId, experienceId: context.experienceId, observedAt: context.observedAt }, at);
+      requestId: request.requestId ?? context.requestId, experienceId: context.experienceId, observedAt: context.observedAt, askedBy: context.askedBy }, at);
     case 'delete': return id ? deleteFromQueue(snapshot, id, at) : { ok: false, code: 'invalid' };
     case 'move': return id ? moveInQueue(snapshot, id, request.before ?? null, at) : { ok: false, code: 'invalid' };
     case 'start': return startQueue(snapshot, id, at);

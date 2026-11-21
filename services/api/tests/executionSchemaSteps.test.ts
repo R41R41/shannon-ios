@@ -313,7 +313,7 @@ const PINNED: Readonly<Record<string, string>> = {
   'execution/011_owner_slot_limits': '5632ae89a55a1426831052ece071b46b1fcaa4ab67b6676a1e09d98cf0cc8e98',
   'execution/012_operator_audit': '162f55b8b8119d4cfe58226f25898d12b94ec1e81dd3ad3bda14f0c4f27fcc8c',
   'execution/013_fca_provenance_sets': '628187523990f2531313993c8788fdba8f041441225a1aa61838349decc7aa55',
-  'execution/014_minecraft_request_queue': '9f06cbddacbc47fcd6d2df2e45508b2aa861fe0dbd4d19be9a7037cd4491a8bd',
+  'execution/014_minecraft_request_queue': '1d5bd8a8fec986d3d4201fe774d6ad38e4ff43a87c46d07c38a02a89915f9097',
 };
 
 function reindented(step: SchemaStep): SchemaStep {
