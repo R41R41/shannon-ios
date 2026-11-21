@@ -54,6 +54,18 @@ describe('what she is told of the list', () => {
     expect(text).toContain('[依頼の列] いまは空');
   });
 
+  it('says that words for work are a new request when nothing runs, with the reason, and keeps the message line when something does', () => {
+    const idle = guide();
+    expect(idle).toContain('いま実行中の依頼も待っている依頼も無い');
+    expect(idle).toContain('kind=message は使わない');
+    expect(idle).toContain('足す先が無いと体に届かず');
+    expect(idle).toContain('直前に終わった依頼の成果物');
+    for (const busy of [guide({ running: 'ケーキを作る' }), guide({ queueLines: ['#1 待ち 「木材を集める」'] })]) {
+      expect(busy).not.toContain('いま実行中の依頼も待っている依頼も無い');
+      expect(busy).toContain('新しい依頼にはならず、いまの作業への伝言として渡る');
+    }
+  });
+
   it('shows the list as it stands, the running request, and who is asking', () => {
     const lines = ['#1 実行中 「ケーキを作る」', '#2 待ち 「木材を集める」'];
     const text = guide({ queueLines: lines, running: 'ケーキを作る' });

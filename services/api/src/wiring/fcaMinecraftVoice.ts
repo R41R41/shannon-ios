@@ -102,7 +102,13 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       if (bodies.length !== 1) return refuse('body_unavailable', intent.kind);
       if (!input.experienceId) return refuse('no_turn', intent.kind);
       if (!parts.sourceVisible(input.experienceId)) return refuse('turn_not_visible', intent.kind);
-      if (intent.kind === 'message') return message(input, input.experienceId, bodies[0]!) ?? refuse('nothing_running', intent.kind);
+      if (intent.kind === 'message') {
+        const told = message(input, input.experienceId, bodies[0]!);
+        if (told) return told;
+        // Words for a request, and none is under way: a request of their own (as in game chat, `fcaMinecraftRequests.ts`), not a refusal.
+        parts.log('Shannon Minecraft voice intent message with nothing running added as task');
+        return toList({ ...input, intent: { kind: 'task', goal: intent.goal, placement: 'end' } }, input.experienceId);
+      }
       return toList(input, input.experienceId);
     },
   };
