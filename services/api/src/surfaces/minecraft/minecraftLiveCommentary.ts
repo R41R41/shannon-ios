@@ -1,4 +1,5 @@
 import { LiveGovernor, pickMoments, type LiveMoment, type LiveRoom } from '@shannon/mind';
+import { outsideActionExecution } from '../../infra/context/actionExecution.js';
 import type { MinecraftLiveRoom, MinecraftLiveSpeechReceipt } from '../../contracts/minecraftControlContract.js';
 import type { LiveSpeechDraft, LiveSpeechOutbox } from './minecraftLiveSpeech.js';
 
@@ -120,10 +121,12 @@ export class LiveCommentary {
 
   private schedule(milliseconds: number): void {
     if (this.timer) return;
-    this.timer = setTimeout(() => {
+    // A moment is heard from inside the task step that made it, and a timer keeps the action of the place it was set in: the model call it
+    // leads to would be asked of a step that is over (ACTION_STOPPED), and so would every later timer of the chain. The word is hers, not the step's.
+    this.timer = outsideActionExecution(() => setTimeout(() => {
       this.timer = undefined;
       void this.tick();
-    }, milliseconds);
+    }, milliseconds));
     this.timer.unref?.();
   }
 
