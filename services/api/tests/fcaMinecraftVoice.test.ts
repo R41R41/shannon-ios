@@ -145,6 +145,12 @@ describe('the speaker\'s in-game name', () => {
     expect(guestAsk.queue.view().entries[0]).toMatchObject({ askedBy: 'ユウ（ゲスト、マイクラ名 Yuu_7）' });
   });
 
+  it('is read from the speaker too', async () => {
+    const f = fixture();
+    await f.port.intent(task1({ speaker: { ...guest, minecraftName: 'Yuu_7' } }));
+    expect(f.queue.view().entries[0]).toMatchObject({ askedBy: 'ユウ（ゲスト、マイクラ名 Yuu_7）' });
+  });
+
   it('is left out when it is absent or is not a game name, and the words stay as they were', async () => {
     for (const name of [undefined, null, '', 'ユウ', 'a b', 'x'.repeat(17)]) {
       const f = fixture();

@@ -28,14 +28,18 @@ export interface FcaMinecraftVoiceParts {
 }
 
 /**
- * The voice turn's input with the speaker's in-game name (`speakerMinecraftName`, from the voice route: the table of the shown names to the
- * in-game ones). Absent when the speaker has none; the head then goes by the nearest player.
+ * The voice turn's input with the speaker's in-game name (`speaker.minecraftName`, put there by the voice route from the body's table of shown
+ * names to in-game ones; `speakerMinecraftName` on the input is read as well). Absent when the speaker has none; the head then goes by the nearest player.
  */
-type SpokenIntentInput = VoiceMinecraftIntentInput & { speakerMinecraftName?: string | null };
+type SpokenIntentInput = Omit<VoiceMinecraftIntentInput, 'speaker'> & {
+  speaker?: VoiceMinecraftIntentInput['speaker'] & { minecraftName?: string | null };
+  speakerMinecraftName?: string | null;
+};
 /** An in-game name as the game has it (letters, digits, underscore; up to 16), else null: it is handed to the body as the name of a player. */
 const MINECRAFT_NAME = /^[A-Za-z0-9_]{1,16}$/u;
 const minecraftNameOf = (input: SpokenIntentInput): string | null => {
-  const name = typeof input.speakerMinecraftName === 'string' ? input.speakerMinecraftName.trim() : '';
+  const raw = input.speaker?.minecraftName ?? input.speakerMinecraftName;
+  const name = typeof raw === 'string' ? raw.trim() : '';
   return MINECRAFT_NAME.test(name) ? name : null;
 };
 
