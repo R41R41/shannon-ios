@@ -4,7 +4,7 @@ import { queueTaskPorts } from '../src/wiring/fcaMinecraftQueuePorts.js';
 import type { QueueRecord } from '../src/surfaces/minecraft/minecraftRequestQueue.js';
 
 const entry = (origin: QueueRecord['origin']): QueueRecord => ({ id: 'e1', seq: 1, goal: 'エンドラを倒して', state: 'running', pos: 0, origin, requestId: null,
-  experienceId: null, observedAt: null, taskId: null, createdAt: 'x', updatedAt: 'x', endedAt: null, note: null });
+  experienceId: null, observedAt: null, askedBy: null, taskId: null, createdAt: 'x', updatedAt: 'x', endedAt: null, note: null });
 
 describe('how an entry becomes a task', () => {
   const made = (origin: QueueRecord['origin']) => {

@@ -156,8 +156,8 @@ export function addToQueue(snapshot: QueueSnapshot, input: NewQueueEntry, at: st
 
 function newRecord(input: NewQueueEntry, goal: string, seq: number, at: string): QueueRecord {
   return { id: input.id, seq, goal, state: 'queued', pos: 0, origin: input.origin, requestId: input.requestId ?? null,
-    experienceId: input.experienceId ?? null, observedAt: input.observedAt ?? null, askedBy: input.askedBy ?? null, taskId: null, createdAt: at, updatedAt: at,
-    endedAt: null, note: null };
+    experienceId: input.experienceId ?? null, observedAt: input.observedAt ?? null,
+    askedBy: input.askedBy ?? null, taskId: null, createdAt: at, updatedAt: at, endedAt: null, note: null };
 }
 
 function insertionIndex(placement: MinecraftQueuePlacement, order: readonly QueueRecord[], current: QueueRecord | undefined): number {
@@ -377,7 +377,8 @@ function sameList(a: QueueSnapshot, b: QueueSnapshot): boolean {
 
 export const queueWire = (entry: QueueRecord): MinecraftQueueEntry => ({
   id: entry.id, seq: entry.seq, goal: entry.goal, state: entry.state, pos: entry.pos, origin: entry.origin,
-  ...(entry.askedBy ? { askedBy: entry.askedBy } : {}), ...(entry.taskId ? { taskId: entry.taskId } : {}), createdAt: entry.createdAt, ...(entry.note ? { note: entry.note } : {}),
+  ...(entry.askedBy ? { askedBy: entry.askedBy } : {}),
+  ...(entry.taskId ? { taskId: entry.taskId } : {}), createdAt: entry.createdAt, ...(entry.note ? { note: entry.note } : {}),
 });
 
 /** The list as the game side reads it. */
@@ -400,7 +401,8 @@ export function queuePromptLines(snapshot: QueueSnapshot): string[] {
   const live = snapshot.entries.filter(entry => !queueEnded(entry.state)).sort((a, b) => a.pos - b.pos);
   if (!live.length) return [];
   const limit = MINECRAFT_QUEUE_LIMITS.promptLines;
-  const lines = live.slice(0, limit).map(entry => `#${entry.seq} ${LABELS[entry.state]} 「${entry.goal.slice(0, 40)}」${entry.askedBy ? `（${entry.askedBy}）` : ''}`);
+  const asker = (entry: QueueRecord) => (entry.askedBy ? `（${entry.askedBy}）` : '');
+  const lines = live.slice(0, limit).map(entry => `#${entry.seq} ${LABELS[entry.state]} 「${entry.goal.slice(0, 40)}」${asker(entry)}`);
   if (live.length > limit) lines.splice(limit - 1, 1, `ほか ${live.length - limit + 1} 件`);
   if (!snapshot.autoRun) lines.push('（列は止めてある。始めると続きから動く）');
   return lines.slice(0, limit + 1);

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { MinecraftIntent } from '../src/contracts/minecraftBodyContract.js';
 import { fcaMinecraftQueue } from '../src/wiring/fcaMinecraftQueue.js';
 import { queueTaskPorts } from '../src/wiring/fcaMinecraftQueuePorts.js';
 import { underWriteLock } from '../src/infra/sqlite/lockWaits.js';
@@ -44,7 +45,7 @@ class Model implements ShannonChatModel {
   readonly mode = 'openai' as const;
   readonly model = 'test-model';
   readonly requests: ShannonChatModelRequest[] = [];
-  intent: { kind: string; goal: string; placement?: string; target?: string } | null = null;
+  intent: MinecraftIntent | null = null;
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
     return { mode: this.mode, model: this.model, reply: 'うん、いいよ。', ...(this.intent ? { minecraftIntent: this.intent } : {}) };

@@ -428,6 +428,21 @@ export class PlatformVoiceService {
     }
   }
 
+  /**
+   * Hands the intent to the body's port. A request or a message needs a source the owner can read: a guest's own turn is person memory, so
+   * theirs is written as a record (`requestRecord`); the owner's own turn is tried first and the record only when it was not visible.
+   */
+  private async deliver(
+    seat: ChannelSeat, request: VoiceTurnRequest, hash: string, answer: VoiceAnswer, kind: string,
+    ask: (experienceId: string | null) => Promise<VoiceMinecraftIntentResult>,
+  ): Promise<VoiceMinecraftIntentResult> {
+    const needsSource = kind === 'task' || kind === 'message';
+    const outcome = await ask(seat.owner || !needsSource ? answer.experienceId ?? null : this.requestRecord(seat, request, hash, answer));
+    if (outcome.delivered || outcome.reason !== 'turn_not_visible' || !seat.owner || !needsSource) return outcome;
+    const record = this.requestRecord(seat, request, hash, answer);
+    return record ? ask(record) : outcome;
+  }
+
   /** A spoken request for her body: delivered after the reply, and the fixed words of a refusal said after a reply that promised. */
   private async carryIntent(
     seat: ChannelSeat, request: VoiceTurnRequest, hash: string, answer: VoiceAnswer,
@@ -440,13 +455,7 @@ export class PlatformVoiceService {
       scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent, experienceId,
       speaker: { id: request.sourceUserId, name: request.sourceDisplayName, owner: seat.owner },
     }).catch((): VoiceMinecraftIntentResult => ({ delivered: false }));
-    // A request or a message needs a source the owner can read: a guest's own turn is person memory, so theirs is written as a record (`requestRecord`).
-    const needsSource = intent.kind === 'task' || intent.kind === 'message';
-    let outcome = await ask(seat.owner || !needsSource ? answer.experienceId ?? null : this.requestRecord(seat, request, hash, answer));
-    if (!outcome.delivered && outcome.reason === 'turn_not_visible' && seat.owner && needsSource) {
-      const record = this.requestRecord(seat, request, hash, answer);
-      if (record) outcome = await ask(record);
-    }
+    const outcome = await this.deliver(seat, request, hash, answer, intent.kind, ask);
     out.line({
       type: 'intent', kind: voiceIntentLineKind(intent.kind, outcome.as), delivered: outcome.delivered,
       ...(outcome.taskId ? { taskId: outcome.taskId } : {}), ...(outcome.reason ? { reason: outcome.reason } : {}),

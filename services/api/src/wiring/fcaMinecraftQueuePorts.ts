@@ -14,6 +14,8 @@ const TYPED_BY_HIM: ReadonlySet<MinecraftQueueOrigin> = new Set<MinecraftQueueOr
 const ASKED_BY: Readonly<Partial<Record<MinecraftQueueOrigin, string>>> = Object.freeze({
   chat: 'ゲーム内の本人の依頼', voice: 'Discordの通話での本人の依頼',
 });
+/** The line for the entry: a voice request names who asked (a guest marked as one), the others say where it came from. */
+const askedBy = (entry: QueueRecord): string => (entry.askedBy ? `Discordの通話での${entry.askedBy}の依頼` : ASKED_BY[entry.origin] ?? '本人の依頼');
 
 /**
  * What the list of requests needs of the common task tree and the body (`fcaMinecraftQueue.ts`), made from the same parts as the
@@ -40,7 +42,7 @@ export function queueTaskPorts(parts: {
     // A request from no turn (the mod's list) has no source to observe: it is a task of the root's own, as the operator's.
     if (entry.experienceId) {
       parts.runtime.observeExternal(parts.ownerScope, task.id, { eventId: key, experienceIds: [entry.experienceId],
-        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${entry.askedBy ? `Discordの通話での${entry.askedBy}の依頼` : ASKED_BY[entry.origin] ?? '本人の依頼'}: ${entry.goal}` });
+        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${askedBy(entry)}: ${entry.goal}` });
     }
     if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     return task.id;

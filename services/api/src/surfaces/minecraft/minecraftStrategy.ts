@@ -1,6 +1,8 @@
 import { CURRENT_PLAN_STRUCTURE } from './minecraftCurrentPlanPrompt.js';
 import { PLAN_PREP_WORDS, PREP_DESCENT_LINES, PREP_RULES_WORDS } from './minecraftLlmcPrepRules.js';
 import { FOOD_ACQUISITION_KNOWLEDGE } from './minecraftFoodAcquisition.js';
+import { SINGLE_REQUEST_PLAN_WORDS } from './minecraftRequestKnowledge.js';
+import { planGoal } from './minecraftFirstPlan.js';
 
 function endKnowledge(bucketCaution: string): string {
   return [
@@ -98,4 +100,17 @@ export const STRATEGY_KNOWLEDGE_V2 = [
 /** The active template is assembled directly; no historical exact-string replacements. */
 export function ownFirstPlanSystem(): string {
   return [CURRENT_PLAN_STRUCTURE, PLAN_PREP_WORDS, STRATEGY_KNOWLEDGE_V2].join('\n');
+}
+
+/**
+ * The first plan's words for a request that is one thing to make or fetch (`planGoal` is null: not the dragon, not the Nether): the same structure,
+ * and in place of the whole-game route and the descent's preparation the words of a request (`minecraftRequestKnowledge.ts`).
+ */
+export function singleRequestFirstPlanSystem(): string {
+  return [CURRENT_PLAN_STRUCTURE, SINGLE_REQUEST_PLAN_WORDS].join('\n');
+}
+
+/** The first plan's words for a goal: the whole game's for the dragon and the Nether, the request's for any other. */
+export function firstPlanSystemFor(goal: string): string {
+  return planGoal(goal) === null ? singleRequestFirstPlanSystem() : ownFirstPlanSystem();
 }

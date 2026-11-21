@@ -35,6 +35,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     const name = speaker.name.replace(/\s+/gu, ' ').trim().slice(0, 40);
     return speaker.owner ? (name ? `本人（${name}）` : '本人') : `${name || '通話の参加者'}（ゲスト）`;
   };
+  const byGuest = (input: VoiceMinecraftIntentInput): boolean => input.speaker?.owner === false;
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
     return { delivered: false, reason };
@@ -76,7 +77,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       if (intent.kind === 'none') return { delivered: false };
       if (input.scopeKey !== parts.ownerScope) return refuse('not_owner_scope', intent.kind);
       if (intent.kind === 'stop') {
-        parts.log(`Shannon Minecraft voice stop by=${input.speaker && !input.speaker.owner ? 'guest' : 'owner'}`);
+        parts.log(`Shannon Minecraft voice stop by=${byGuest(input) ? 'guest' : 'owner'}`);
         const done = await toList(input, null);
         for (const task of parts.bound()) if (task.phase !== 'stopping') await parts.stop(task.id, 'owner_voice_stop');
         return done.delivered ? { ...done, as: 'stop' } : done;

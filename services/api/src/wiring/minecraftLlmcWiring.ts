@@ -33,7 +33,7 @@ stallsCheckpoint,restoreStalls,deathCounterOf,noteDeath,noteProgress,noteRan,not
 type Stall
 } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
-import { ownFirstPlanSystem } from '../surfaces/minecraft/minecraftStrategy.js';
+import { firstPlanSystemFor } from '../surfaces/minecraft/minecraftStrategy.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
@@ -108,7 +108,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const planner = recordedPlanner({ taskId: step.taskId, stepId: step.id }, llmc.planner);
   const journeyReadiness = isNativeDragonGoal(step.snapshot.task.goal);
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner, log, world: worldOf(),
-    r4: { world: worldOf, system: ownFirstPlanSystem(), readiness: true, journeyReadiness } });
+    r4: { world: worldOf, system: firstPlanSystemFor(step.snapshot.task.goal), readiness: true, journeyReadiness } });
   const display = () => plan.port.display();
   // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step
 // decides again while its items run.

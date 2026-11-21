@@ -3,6 +3,7 @@ import { END_BOW_KNOWLEDGE, NETHER_BY_SECONDS, PREP_DESCENT_RULE_EN, PREP_RULES_
 import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
 import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFoodAcquisition.js';
+import { MATERIAL_ACQUISITION_LINES } from './minecraftRequestKnowledge.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -156,6 +157,7 @@ export const STAGE_IDS: readonly StageId[] = ['prep', 'nether', 'blaze', 'pearl'
 export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
   prep: [
     '## 材料と手順',
+    ...MATERIAL_ACQUISITION_LINES,
     LONG_WALK,
     '- ファントムは 3 夜寝ていないと夜に現れることがあり、空から急降下して襲う。',
     '- ベッドで寝ると、ファントムが現れるまでの不眠の数えが戻る。',
