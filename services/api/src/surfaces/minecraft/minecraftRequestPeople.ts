@@ -31,7 +31,7 @@ export const PLACE_AND_HANDOVER_LINES: readonly string[] = Object.freeze([
   '- 置き場所は、言われた名詞で探し、候補が複数ある時だけ頼んだ人の視線で絞る:',
   '  1) 名詞（「オークの木材ブロック」は oak_planks、「作業台」は crafting_table）のブロックを、mc_view の only=[その名前] で近くから探す。1 か所だけならそこ。',
   '  2) 候補が複数ある時、または「この」「あそこ」「ここ」の時は、mc_probe kind=gaze player=頼んだ人のマイクラ名 near=言われた名詞のブロック名（「この板」なら oak_planks）で、その人の視線を読む。'
-    + '答えの near.blocks は、視線の点に近い順の候補（位置・視線からの距離 distance・上が空いているか free・置く先 placeAt）で、見ている物そのものがあれば先頭（looked:true）。'
+    + '答えの 1 行目が一番近い候補で、near.blocks は視線の点に近い順の候補（位置・視線からの距離 distance・上が空いているか free・置く先 placeAt）で、見ている物そのものがあれば先頭（looked:true）。'
     + '先頭の候補を置き場にする（free:false なら次の候補）。答えの block が地面（grass_block・dirt・stone など）でも、その placeAt は置き場にしない（地面に置くとケーキが消える）。'
     + 'near.blocks が空（視線の近くに無い）の時や、名詞が無い「この」の時は、答えの block の名前が言われた名詞ならその placeAt、違えば mc_view の center を答えの point、radius 6、only=[名詞] にして出た候補を使う。'
     + '何も見ていない（hit:false）時は、near.blocks があればそれを、無ければ聞き返さず次の 3) で進む。'
