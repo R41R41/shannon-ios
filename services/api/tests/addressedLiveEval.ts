@@ -1,16 +1,20 @@
 import { configuredJevChooser } from '../src/wiring/skillRoutingWiring.js';
 import { AddressedJudge, type AddressedInput, type AddressedVerdict } from '../src/mind/perception/addressed.js';
-import { ADDRESSED_CASES } from './support/addressedCases.js';
+import { ADDRESSED_CASES as ALL_CASES } from './support/addressedCases.js';
 
 /**
  * 「話しかけられたか」 (owner 2026-10-21) against the real Jev: every case of `support/addressedCases.ts` once through the judge as the
  * server composes it (the gate, then Jev at 400 ms, the local rules when it does not answer). Billable (one Jev call per question asked):
  * run on purpose with `TYPESAFE_API_KEY` (`pnpm --filter @shannon/api test:llm-addressed`). `SHANNON_ADDRESSED_TIMEOUT_MS` changes the
  * 400 ms; `SHANNON_ADDRESSED_EVAL_ROUNDS` (default 1) repeats the set to see Jev's drift. Prints the accuracy, by group, the misses
- * and how often Jev answered in time, and the latency of the judgement (p50 / p95) over the questions asked.
+ * and how often Jev answered in time (`SHANNON_ADDRESSED_EVAL_GROUPS=asked,asked_chat` runs only those groups, to pay for only what changed; `SHANNON_ADDRESSED_EVAL_IDS=ans-short-un` runs chosen cases by id), and the latency of the judgement (p50 / p95) over the questions asked.
  */
 const chooser = configuredJevChooser(process.env, { trace: null });
 if (!chooser) throw new Error('TYPESAFE_API_KEY is required for the live addressed evaluation');
+const groups = (process.env.SHANNON_ADDRESSED_EVAL_GROUPS ?? '').split(',').map(group => group.trim()).filter(Boolean);
+const ids = (process.env.SHANNON_ADDRESSED_EVAL_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
+const ADDRESSED_CASES = ALL_CASES.filter(item => (groups.length === 0 || groups.includes(item.group)) && (ids.length === 0 || ids.includes(item.id)));
+if (ADDRESSED_CASES.length === 0) throw new Error('no case matches SHANNON_ADDRESSED_EVAL_GROUPS / SHANNON_ADDRESSED_EVAL_IDS');
 const timeout = Number(process.env.SHANNON_ADDRESSED_TIMEOUT_MS);
 const rounds = Math.max(1, Math.min(5, Number(process.env.SHANNON_ADDRESSED_EVAL_ROUNDS) || 1));
 // A fresh cache for every round: the same question twice within a minute would be answered from memory.

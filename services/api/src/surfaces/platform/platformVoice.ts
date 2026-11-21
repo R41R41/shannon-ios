@@ -257,8 +257,8 @@ export class PlatformVoiceService {
     const { shown, waiting, fragment } = questionJudged(built, judge, request.userMessage);
     if (fragment) return { respond: false, reason: 'fragment' };
     const verdict = await judge.judge(shown);
-    // These words took the question she had asked, answered or not: the next ones are judged as usual.
-    if (waiting) this.rooms.closeQuestion(room);
+    // The question is taken when she takes these words (an answer, or a named call): chat judged not to be an answer leaves it open for the real one.
+    if (waiting && verdict.addressed) this.rooms.closeQuestion(room);
     this.rooms.noteExchange(room, { role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt });
     this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} ms=${verdict.ms} humans=${humans}`);
     return { respond: verdict.addressed, reason: verdict.reason };

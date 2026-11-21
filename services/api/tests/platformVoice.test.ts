@@ -746,11 +746,13 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     const asked: Array<{ utterance: string; working: unknown }> = [];
     const chooser = {
       decide: async (request: { state: unknown; parse: (answers: Record<string, unknown>) => unknown }) => {
-        const state = request.state as { utterance: string; shannon_is_working_in_minecraft?: boolean; name_in_utterance: string };
+        const state = request.state as { utterance: string; shannon_is_working_in_minecraft?: boolean; shannon_last_line_was_a_question?: boolean; name_in_utterance: string };
         asked.push({ utterance: state.utterance, working: state.shannon_is_working_in_minecraft });
         const aboutJob = /骨粉|作って|置いて|どこまで|いま何/u.test(state.utterance);
+        // The answer to her own question (the first of its words that fit a place or a yes), asked only while the question waits.
+        const replies = state.shannon_last_line_was_a_question === true && /置いて|そこ|ここ|うん|オーク/u.test(state.utterance);
         const answers = { addressed_to_shannon: { type: 'noul', noul: aboutJob ? 0.93 : 0.05 }, target: { type: 'choice', choice: aboutJob ? 'shannon' : 'other_person' },
-          about_the_job: { type: 'noul', noul: aboutJob ? 0.93 : 0.05 }, reply_needed: { type: 'noul', noul: aboutJob ? 0.95 : 0.05 } };
+          about_the_job: { type: 'noul', noul: aboutJob ? 0.93 : 0.05 }, answers_her_question: { type: 'noul', noul: replies ? 0.93 : 0.05 }, reply_needed: { type: 'noul', noul: aboutJob ? 0.95 : 0.05 } };
         return { value: request.parse(answers), source: 'jev' as const };
       },
     } as unknown as Pick<JevChooser, 'decide'>;
@@ -812,8 +814,8 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('[ボクがさっき聞いたこと]');
     expect(prompt).toContain('どこに置けばいい？');
-    // No question to Jev: it is a rule. The next words are judged as ever (chat, with her reply as the last line, is not to her).
-    expect(asked).toEqual([]);
+    // Jev was asked whether the words answer her question (not a rule), and said yes. The next words are judged as ever (chat, with her reply as the last line, is not to her).
+    expect(asked).toEqual([{ utterance: 'このオークの木材ブロックの上に置いて', working: true }]);
     advance(5_000);
     const chat = await say('今夜のご飯なに食べる？', { ...together, sourceUserId: OTHER, sourceDisplayName: 'ミキ' });
     expect(chat[0]).toMatchObject({ respond: false });
@@ -870,7 +872,38 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     model.reply = 'うん、置くね。';
     const answer = await say('うん', together);
     expect(answer[0]).toMatchObject({ respond: true, reason: 'answer_to_question' });
-    expect(asked).toEqual([]);
+    expect(asked).toEqual([{ utterance: 'うん', working: undefined }]);
+    await close();
+  });
+
+  it('does not take chat between the people inside the window as the answer, keeps her question open for the real one, and then closes it', async () => {
+    const { asked, judge: j } = workJudge();
+    const { say, service, model, advance, now, close } = harness(ADDRESSED, undefined, j);
+    service.said({ conversationId: SERVER_ROOM, text: 'できた！どこに置けばいい？渡せばいいかな？', source: 'mouth', at: now() });
+    advance(38_000);
+    const chat = await say('今夜のご飯なに食べる？', { ...together, sourceUserId: OTHER, sourceDisplayName: 'ミキ' });
+    expect(chat[0]).toMatchObject({ respond: false, reason: 'no_name' });
+    expect(model.requests).toHaveLength(0);
+    advance(4_000);
+    model.reply = 'うん、そこに置くね。';
+    const answer = await say('そこの板の上に置いて', together);
+    expect(answer[0]).toMatchObject({ respond: true, reason: 'answer_to_question' });
+    expect(asked.map(line => line.utterance)).toEqual(['今夜のご飯なに食べる？', 'そこの板の上に置いて']);
+    // Taken once: a later line is not read against her question again.
+    advance(2_000);
+    await say('そこの板の上に置いて', { ...together, sourceUserId: OTHER, sourceDisplayName: 'ミキ' });
+    expect(asked).toHaveLength(2);
+    await close();
+  });
+
+  it('takes the words as the answer when Jev does not answer in time (a lost answer costs more than a late chat line)', async () => {
+    const chooser = { decide: async (request: { fallback: () => unknown }) => ({ value: request.fallback(), source: 'fallback' as const }) } as unknown as Pick<JevChooser, 'decide'>;
+    const { say, service, model, advance, now, close } = harness(ADDRESSED, undefined, new AddressedJudge({ chooser }));
+    service.said({ conversationId: SERVER_ROOM, text: 'できた！どこに置けばいい？', source: 'mouth', at: now() });
+    advance(20_000);
+    model.reply = 'うん、置くね。';
+    const answer = await say('そこの板の上に置いて', together);
+    expect(answer[0]).toMatchObject({ respond: true, reason: 'answer_to_question' });
     await close();
   });
 

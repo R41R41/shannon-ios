@@ -55,12 +55,14 @@ describe('the gate while she works and after her question', () => {
     expect(addressedGate({ ...base, transcript: 'シャノン、いま何してるの', work })).not.toHaveProperty('unnamed');
   });
 
-  it('takes the first words after a question she asked the room, without asking anyone, for 45 seconds', () => {
+  it('asks Jev whether the first nameless words after a question she asked the room answer it, for 45 seconds', () => {
     const asked = (secondsAgo: number, toSpeaker: boolean | null, flag = true) => ({
       ...base, transcript: 'このオークの木材ブロックの上に置いて', shannon: { spokeAgoMs: secondsAgo * 1000, toSpeaker, ...(flag ? { asked: true } : {}) },
     });
-    expect(addressedGate(asked(30, null))).toMatchObject({ kind: 'yes', reason: 'answer_to_question' });
-    expect(addressedGate(asked(44, true))).toMatchObject({ kind: 'yes', reason: 'answer_to_question' });
+    // Without her name, Jev says whether they answer it; called by name inside the window, as before, they are taken as the answer.
+    expect(addressedGate(asked(30, null))).toMatchObject({ kind: 'ask', unnamed: 'answering', name: null });
+    expect(addressedGate(asked(44, true))).toMatchObject({ kind: 'ask', unnamed: 'answering' });
+    expect(addressedGate({ ...asked(30, null), transcript: 'シャノン、ここに置いて' })).toMatchObject({ kind: 'yes', reason: 'answer_to_question' });
     expect(addressedGate(asked(46, null))).toMatchObject({ kind: 'quiet' });
     // For someone else, or not a question: the old rules.
     expect(addressedGate(asked(10, false))).toMatchObject({ kind: 'quiet' });
@@ -82,6 +84,23 @@ describe('what Jev is shown and what its answer makes of it', () => {
     const text = JSON.stringify(addressedQuestions());
     expect(text).toContain('shannon_is_working_in_minecraft');
     expect(text).toContain('shannon_last_line_was_a_question');
+  });
+
+  it('shows Jev her question as she said it (its end when the line is long), and answers by `answers_her_question` alone (0.4) inside the window', () => {
+    const long = `${'ケーキの材料がだいぶそろってきたよ。'.repeat(12)}どこに置けばいい？渡せばいいかな？`;
+    const state = addressedState({ ...base, transcript: 'そこの板の上に置いて', shannon: { spokeAgoMs: 12_000, toSpeaker: null, asked: true, line: long } }, null, true);
+    expect(String(state.shannon_question).endsWith('どこに置けばいい？渡せばいいかな？')).toBe(true);
+    expect(Array.from(String(state.shannon_question)).length).toBeLessThanOrEqual(160);
+    expect(addressedState({ ...base, transcript: 'x', shannon: { spokeAgoMs: 12_000, toSpeaker: null, line: long } }, null, false)).not.toHaveProperty('shannon_question');
+    const text = JSON.stringify(addressedQuestions().answers_her_question);
+    expect(text).toContain('shannon_question');
+    const answers = (reply: number, others = 0.9) => ({
+      addressed_to_shannon: { type: 'noul', noul: others }, target: { type: 'choice', choice: 'shannon' }, about_the_job: { type: 'noul', noul: others },
+      answers_her_question: { type: 'noul', noul: reply }, reply_needed: { type: 'noul', noul: others },
+    });
+    expect(parsedAddressed(answers(0.7, 0.05), null, 'answering')).toMatchObject({ addressed: true, reason: 'answer_to_question' });
+    expect(parsedAddressed(answers(0.4, 0.05), null, 'answering')).toMatchObject({ addressed: true, reason: 'answer_to_question' });
+    expect(parsedAddressed(answers(0.15, 0.95), null, 'answering')).toMatchObject({ addressed: false, reason: 'no_name' });
   });
 
   it('answers a nameless request while she works as `asked_while_working` by whether it is about the job alone (0.4), not by whom it is said to', () => {

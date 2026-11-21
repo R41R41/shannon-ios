@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { JevChoiceClient, JevChooser, type JevChoiceTrace } from '../src/infra/models/jev/jevChoice.js';
 import {
   ADDRESSED_TIMEOUT_MILLISECONDS, ADDRESSED_WINDOW_MILLISECONDS, AddressedJudge, addressedGate, addressedQuestions, addressedState, fallbackAddressed, followsHer,
-  type AddressedInput, type AddressedVerdict,
+  parsedAddressed, type AddressedInput, type AddressedVerdict,
 } from '../src/mind/perception/addressed.js';
 import { hasName, nameMatch, normalizedForName } from '../src/mind/perception/addressedName.js';
 import { ADDRESSED_CASES, type AddressedCase } from './support/addressedCases.js';
@@ -38,7 +38,7 @@ function standInJev(options: { calls?: { count: number; bodies: unknown[] }; del
     const target = to ? 'shannon' : item?.group === 'about' ? 'about_shannon' : item?.group === 'self' ? 'self' : 'other_person';
     return new Response(JSON.stringify({ answers: {
       addressed_to_shannon: { type: 'noul', noul: to ? 0.93 : 0.06 }, target: { type: 'choice', choice: target },
-      about_the_job: { type: 'noul', noul: to ? 0.93 : 0.05 }, reply_needed: { type: 'noul', noul: to ? 0.95 : 0.05 },
+      about_the_job: { type: 'noul', noul: to ? 0.93 : 0.05 }, answers_her_question: { type: 'noul', noul: to ? 0.93 : 0.05 }, reply_needed: { type: 'noul', noul: to ? 0.95 : 0.05 },
     } }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as unknown as typeof fetch;
   return fetcher;
@@ -109,7 +109,7 @@ describe('when Jev is asked at all', () => {
     expect(state.recent_talk).toEqual([{ who: 'ミキ', text: 'さっきのボスやばかった', seconds_ago: 30 }, { who: 'シャノン', text: '次はネザーだね。', seconds_ago: 7 }]);
     expect(JSON.stringify(state)).not.toContain('u1');
     const questions = addressedQuestions();
-    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'about_the_job', 'reply_needed']);
+    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'about_the_job', 'answers_her_question', 'reply_needed']);
     expect(Object.keys(questions.target!.criteria)).toEqual(['shannon', 'about_shannon', 'other_person', 'self', 'unclear']);
   });
 });
@@ -147,7 +147,7 @@ describe('the judgement over the cases (Jev stood in for by the label)', () => {
     expect(body.model).toBe('jev-latest');
     expect(body.state).toMatchObject({ utterance: item.transcript, alone_with_shannon: true, shannon_spoke_seconds_ago: 5, follows_her_last_words: true });
     expect(Object.fromEntries(Object.entries(body.questions).map(([key, question]) => [key, question.type])))
-      .toEqual({ addressed_to_shannon: 'noul', target: 'choice', about_the_job: 'noul', reply_needed: 'noul' });
+      .toEqual({ addressed_to_shannon: 'noul', target: 'choice', about_the_job: 'noul', answers_her_question: 'noul', reply_needed: 'noul' });
   });
 
   it('needs both answers to agree for a yes: the choice says her and the probability backs it', async () => {
@@ -243,7 +243,10 @@ describe('the local rules alone over the cases', () => {
     // eslint-disable-next-line no-console
     console.log(`addressed local rules only: ${ADDRESSED_CASES.length - wrong.length}/${ADDRESSED_CASES.length} right (${Math.round(accuracy * 100)}%); misses: ${wrong.join(', ')}`);
     expect(ADDRESSED_CASES.filter(item => !item.to && !item.ask).every(item => !wrong.includes(item.id))).toBe(true);
-    expect(ADDRESSED_CASES.filter(item => item.ask).every(item => wrong.includes(item.id) === item.to)).toBe(true);
+    // Where Jev alone may say yes, silence is the local answer; after her own question (`answering`) the local answer is yes, so the chat in that window is the miss.
+    const answering = (item: AddressedCase) => item.spoke?.asked === true;
+    expect(ADDRESSED_CASES.filter(item => item.ask && !answering(item)).every(item => wrong.includes(item.id) === item.to)).toBe(true);
+    expect(ADDRESSED_CASES.filter(item => item.ask && answering(item)).every(item => wrong.includes(item.id) === !item.to)).toBe(true);
   });
 });
 
@@ -264,5 +267,25 @@ describe('stop words (止めて, 待って, ストップ...) without her name (o
     expect(await judge.judge({ ...base, transcript: '止めて', owner: false, shannonSpeaking: true, bodyRunning: true })).toMatchObject({ addressed: false, reason: 'no_name' });
     expect(await judge.judge({ ...base, transcript: '止めて', owner: true })).toMatchObject({ addressed: false, reason: 'no_name' });
     expect(await judge.judge({ ...base, transcript: '今日は疲れたな', owner: true, shannonSpeaking: true, bodyRunning: true })).toMatchObject({ addressed: false });
+  });
+});
+
+describe('talk about the job inside the window of a question she asked', () => {
+  const answers = (answer: number, job: number) => ({ answers_her_question: { type: 'noul', noul: answer }, about_the_job: { type: 'noul', noul: job } });
+  it('is taken while she works when it is about the job, though it answers nothing she asked', () => {
+    expect(parsedAddressed(answers(0.1, 0.95), null, 'answering', true)).toMatchObject({ addressed: true, reason: 'asked_while_working' });
+    expect(parsedAddressed(answers(0.9, 0.05), null, 'answering', true)).toMatchObject({ addressed: true, reason: 'answer_to_question' });
+    expect(parsedAddressed(answers(0.1, 0.1), null, 'answering', true)).toMatchObject({ addressed: false, reason: 'no_name' });
+  });
+  it('is decided by the answer alone when she is not working', () => {
+    expect(parsedAddressed(answers(0.1, 0.95), null, 'answering', false)).toMatchObject({ addressed: false, reason: 'no_name' });
+    expect(parsedAddressed(answers(0.9, 0.05), null, 'answering')).toMatchObject({ addressed: true });
+  });
+  it('marks the gate as working only when a job is under way', () => {
+    const input: AddressedInput = { scopeKey: 'owner', transcript: '小麦は骨粉で早く成長させよう', speaker: { id: 'a', name: 'ユウ' }, humans: 3, recent: [],
+      shannon: { spokeAgoMs: 11_000, toSpeaker: null, line: 'えっと、次は小麦の種がいるのかな？', asked: true } };
+    expect(addressedGate(input)).toMatchObject({ kind: 'ask', unnamed: 'answering' });
+    expect(addressedGate(input)).not.toHaveProperty('working');
+    expect(addressedGate({ ...input, work: { goal: 'ケーキを1個作る', list: [] } })).toMatchObject({ kind: 'ask', unnamed: 'answering', working: true });
   });
 });
