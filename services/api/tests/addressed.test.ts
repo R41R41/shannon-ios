@@ -270,6 +270,26 @@ describe('stop words (止めて, 待って, ストップ...) without her name (o
   });
 });
 
+describe('talk about the job inside the window after a line of her own commentary', () => {
+  const answers = (to: number, job: number, target = 'other_person', reply = 0.1) => ({ addressed_to_shannon: { type: 'noul', noul: to }, target: { type: 'choice', choice: target }, about_the_job: { type: 'noul', noul: job }, reply_needed: { type: 'noul', noul: reply } });
+  const spoke: AddressedInput = { scopeKey: 'owner', transcript: '牛乳はバケツが 3 つあれば足りるよ', speaker: { id: 'a', name: 'ライ' }, humans: 2, recent: [], owner: true,
+    shannon: { spokeAgoMs: 2_000, toSpeaker: null, line: 'よーし、まずは小麦の種を集めちゃおっと。' }, work: { goal: 'ケーキを1個作る', list: [] } };
+  it('marks the gate as working when she works and the words carry no name', () => {
+    expect(addressedGate(spoke)).toMatchObject({ kind: 'ask', follows: true, working: true });
+    expect(addressedGate({ ...spoke, work: undefined })).not.toHaveProperty('working');
+    expect(addressedGate({ ...spoke, transcript: 'シャノン、牛乳はバケツが 3 つあれば足りるよ' })).not.toHaveProperty('working');
+  });
+  it('takes a tip about the job when the general question says no, and keeps the chat between people out', () => {
+    expect(parsedAddressed(answers(0.27, 0.46), null, false, true)).toMatchObject({ addressed: true, reason: 'asked_while_working' });
+    expect(parsedAddressed(answers(0.07, 0.02), null, false, true)).toMatchObject({ addressed: false });
+  });
+  it('changes nothing for her name, outside a job, or when the general question already says yes', () => {
+    expect(parsedAddressed(answers(0.27, 0.9), null, false, false)).toMatchObject({ addressed: false });
+    expect(parsedAddressed(answers(0.27, 0.9), { bare: false, tier: 'strong' } as never, false, true)).toMatchObject({ addressed: false });
+    expect(parsedAddressed(answers(0.95, 0.1, 'shannon', 0.95), null, false, true)).toMatchObject({ addressed: true, reason: 'continuation' });
+  });
+});
+
 describe('talk about the job inside the window of a question she asked', () => {
   const answers = (answer: number, job: number) => ({ answers_her_question: { type: 'noul', noul: answer }, about_the_job: { type: 'noul', noul: job } });
   it('is taken while she works when it is about the job, though it answers nothing she asked', () => {

@@ -262,7 +262,9 @@ export function addressedGate(
     if (ownerAlone(input)) return { kind: 'ask', name: null, follows: false, unnamed: 'alone' };
     return input.work ? { kind: 'ask', name: null, follows: false, unnamed: 'working' } : { kind: 'quiet', reason: 'no_name' };
   }
-  return { kind: 'ask', name, follows };
+  // Without her name, inside the window after a line of her own (while she works her own commentary keeps this window open nearly all the time), what people say about the job is still
+  // about the job: the same question that is asked outside the window is read here too.
+  return { kind: 'ask', name, follows, ...(!name && input.work ? { working: true } : {}) };
 }
 
 
@@ -300,6 +302,10 @@ export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name
   const target = jevChoice(answers, 'target', ADDRESSED_TARGETS);
   const directed = target === 'shannon' && noul >= (unnamed ? ADDRESSED_DECISION.unnamed : ADDRESSED_DECISION.shannon);
   const addressed = directed && jevNoul(answers, 'reply_needed') >= ADDRESSED_DECISION.replyNeeded;
+  if (!addressed && working && !name && !unnamed) {
+    const job = jevNoul(answers, 'about_the_job');
+    if (job >= ADDRESSED_DECISION.job) return { addressed: true, target: 'shannon', noul: Math.max(noul, job), reason: 'asked_while_working' };
+  }
   const reason: AddressedReason = addressed ? (unnamed ? 'asked_alone' : name ? 'named' : 'continuation')
     : directed ? 'no_reply_needed' : target === 'about_shannon' ? 'about_her' : unnamed ? 'no_name' : 'not_to_her';
   return { addressed, target, noul, reason };
