@@ -103,7 +103,11 @@ o_channel, error). */
 /** The room she plays in, as the body reads it each poll: whether someone is listening to her voice (in a Discord voice channel, or in the
  * game with the mod's voice on), someone speaking, and how long since someone spoke or wrote. The head only writes a spoken or a written line
  * by it; who is in the room is the body's to say. */
-export interface MinecraftLiveRoom { voice: boolean; humanSpeaking: boolean; sinceHumanMs: number | null }
+export interface MinecraftLiveRoom {
+  voice: boolean; humanSpeaking: boolean; sinceHumanMs: number | null;
+  /** The owner's choice of her ordinary monologue, sent by the body only as 'off' (the others are told by `voice`): she writes then only the line that ends a request. */
+  monologue?: 'off';
+}
 
 export interface MinecraftControlPoll {
   schemaVersion: 1; serverId: string; connectionId: string;

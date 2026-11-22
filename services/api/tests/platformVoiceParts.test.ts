@@ -5,6 +5,7 @@ import { voiceAddress } from '../src/mind/perception/voiceChannelAddress.js';
 import { VOICE_ROOM_LIMITS, VoiceRooms } from '../src/surfaces/platform/voiceRoom.js';
 import { ChatSentenceSplitter, splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../src/surfaces/text/chatSentenceStream.js';
+import { SpokenSentences, VoiceOut } from '../src/surfaces/platform/platformVoiceLines.js';
 import { heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions } from '../src/surfaces/platform/platformVoicePrompt.js';
 
 describe('the mouth queue (dc-speak-interface.md)', () => {
@@ -199,7 +200,13 @@ describe('the voice prompt blocks', () => {
     expect(friend).toContain('3人いる');
     expect(friend).toContain('「ユウ」');
     expect(friend).toContain('「えっと、」と声に出している');
-    expect(friend).toContain('[whispers]');
+    // A call does not offer the tags that come out 9 dB quieter, and says why; a whisper only on request.
+    expect(friend).toContain('[laughs] [giggles] [sighs] [gasps] [excited] [happy] [curious] [pouting]');
+    expect(friend).toContain('never use [whispers], [softly], [sleepy], [yawns], [crying] or [tearfully]');
+    expect(friend).toContain('9 dB quieter');
+    expect(friend).toContain('「ささやいて」「小声で」');
+    for (const tag of ['[sleepy] or [yawns]', '[softly] or [sweetly]', '[tearfully] or [crying] only']) expect(friend).not.toContain(tag);
+    expect(friend).toContain('そうなんだ、見てみるね');
     expect(heardBlock([])).toBe('');
     expect(heardBlock([{ userId: 'u', name: 'ミキ', text: 'まだだよ', at: '2026-10-20T12:00:00.000Z' }])).toContain('- ミキ: まだだよ');
     expect(situationBlock(null, null)).toBe('');
@@ -216,5 +223,18 @@ describe('the voice prompt blocks', () => {
     expect(listed).toContain('[依頼の列]\n#1 実行中 「鉄を集める」\n#2 待ち 「ケーキを作る」');
     expect(listed).toContain('placement');
     expect(listed).toContain('cancel');
+  });
+});
+
+describe('the tags of a reply, counted for the log (no text)', () => {
+  it('counts each tag that went to the voice, once per sentence it stands in, and says - when there is none', () => {
+    const lines: unknown[] = [];
+    const spoken = new SpokenSentences(new VoiceOut(line => { lines.push(line); }));
+    expect(spoken.tagSummary).toBe('-');
+    spoken.say('うん、いいよ。');
+    spoken.say('[laughs] それはおもしろいね。');
+    spoken.say('[happy] やった！ [laughs] ほんとに？');
+    expect(spoken.tagSummary).toBe('laughs:2,happy:1');
+    expect(spoken.count).toBe(3);
   });
 });

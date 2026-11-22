@@ -42,7 +42,8 @@ import { guardMinecraftLlmcModelClient, strictMinecraftLlmcModel } from './minec
 import { createOpenAiFcaModel } from '../infra/models/openai/openAiFcaModel.js';
 import { createOpenAiFcaSummarizer } from '../infra/models/openai/openAiFcaSummary.js';
 import { openAiStructured } from '../infra/models/openai/openAiStructured.js';
-import { isOpenAiModel, OPENAI_LLMC_MODELS, OPENAI_TOKEN_SCALE, openAiApiKey, openAiEffort, type OpenAiEffort } from '../infra/models/openai/openAiModels.js';
+import { isGpt6Model } from '../infra/models/llmUsage.js';
+import { isOpenAiModel, OPENAI_COMPACT_ABOVE_TOKENS, OPENAI_LLMC_MODELS, OPENAI_TOKEN_SCALE, openAiApiKey, openAiEffort, type OpenAiEffort } from '../infra/models/openai/openAiModels.js';
 import { setLlmcTokenScale } from '../surfaces/minecraft/minecraftLlmcLive.js';
 
 /**
@@ -319,7 +320,8 @@ export function configuredMinecraftLlmc(
     if (isOpenAiModel(model)) {
       return apiKey
         ? createOpenAiFcaModel({ model, apiKey, maximumOutputTokens: LLMC_DECISION_OUTPUT_TOKENS, ...(base.fetcher ? { fetcher: base.fetcher } : {}),
-            ...(base.timeoutMilliseconds ? { timeoutMilliseconds: base.timeoutMilliseconds } : {}), ...(base.compactAboveTokens ? { compactAboveTokens: base.compactAboveTokens } : {}),
+            ...(base.timeoutMilliseconds ? { timeoutMilliseconds: base.timeoutMilliseconds } : {}), ...(isGpt6Model(model) ? { compactAboveTokens: Math.max(base.compactAboveTokens ?? 0, OPENAI_COMPACT_ABOVE_TOKENS) }
+              : base.compactAboveTokens ? { compactAboveTokens: base.compactAboveTokens } : {}),
             recordUsage: base.recordUsage, ...(base.clock ? { clock: base.clock } : {}),
             ...(base.stopGraceMilliseconds !== undefined ? { stopGraceMilliseconds: base.stopGraceMilliseconds } : {}),
             effort: effortOf(role === 'main' ? 'SHANNON_MINECRAFT_LLMC_EFFORT' : 'SHANNON_MINECRAFT_LLMC_PLAN_EFFORT', model),

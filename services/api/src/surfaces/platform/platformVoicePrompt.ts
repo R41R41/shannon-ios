@@ -2,7 +2,7 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { switchOn } from '@shannon/switches';
 import { minecraftQueueGuide } from '../../contracts/minecraftQueuePrompt.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
-import { VOICE_AUDIO_TAG_LINES } from '../../infra/models/voiceAudioTags.js';
+import { VOICE_CALL_AUDIO_TAG_LINES } from '../../infra/models/voiceAudioTags.js';
 import type { HeardLine } from './voiceRoom.js';
 import type { VoiceMinecraftRefusal, VoiceMinecraftState } from './voiceMinecraftPort.js';
 
@@ -46,7 +46,8 @@ export function platformVoiceInstructions(facts: VoiceDeliveryFacts): string {
     '- あいさつ・雑談・お礼やお詫びへの返事は1〜2文で終える。説明や謝罪を重ねない。',
     `- 返事を毎回「${SHANNON_OWNER_NAME}、」で始めない。名前で呼ぶのはときどきにして、たいていは名前なしで話し始める。`,
     '- 見えた・聞こえた・感じたと言えるのは、この文脈に書かれていることだけ。話に出ていない話題（ゲームなど）に結びつけない。',
-    ...((facts.audioTags ?? audioTagsOn()) ? VOICE_AUDIO_TAG_LINES : []),
+    '- 人に「持ってるよ」「それはもうあるよ」のように事実を直された時は、まず持ち物・計画の欄に書いてあるか確かめる。書いてなければ「そうなんだ、見てみるね」と受ける。責めない・言い返さない。体に届いていないことを「やっておく」と約束しない（体を動かすのは別の仕組みで、欄に無い事は知らない。間違った約束だと人が何度も言い直すことになる）。',
+    ...((facts.audioTags ?? audioTagsOn()) ? VOICE_CALL_AUDIO_TAG_LINES : []),
   ].join('\n');
 }
 

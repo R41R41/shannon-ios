@@ -18,14 +18,17 @@ describe('what she told is kept as events, not as her own words', () => {
     expect(told.list()).toEqual([]);
   });
 
-  it('shows the writer the events in place of her last words, and her words only when no events are kept', () => {
+  it('shows the writer the events and her last words both, so that the opening she just used is in front of it', () => {
     const base = { identity: 'I', persona: '', body: '', main: moment('thinking', { why: '草を壊す' }), also: [], recent: ['あ、小麦の種だ！'], voice: true };
     const withTold = liveWriterPrompt({ ...base, told: ['小麦の種が手に入った（いま1個、要るのは3個）。'] }).system;
     expect(withTold).toContain('[さっき話した出来事]');
     expect(withTold).toContain('- 小麦の種が手に入った（いま1個、要るのは3個）。');
-    expect(withTold).not.toContain('あ、小麦の種だ！');
-    expect(liveWriterPrompt({ ...base, told: [] }).system).not.toContain('[さっき');
+    expect(withTold).toContain('[さっき言ったこと]\n- あ、小麦の種だ！');
+    expect(withTold).toContain('同じ出だし・同じ言い方の形を繰り返さない');
+    expect(liveWriterPrompt({ ...base, recent: [], told: [] }).system).not.toContain('[さっき');
+    expect(liveWriterPrompt({ ...base, recent: [], told: [] }).system).toContain('同じ出だし・同じ言い方の形を繰り返さない');
     expect(liveWriterPrompt(base).system).toContain('- あ、小麦の種だ！');
+    expect(withTold.indexOf('「〇〇、とれたよ！」')).toBeLessThan(withTold.indexOf('「〇〇がいるんだっけ'));
   });
 
   it('does not name a first syllable to avoid, and asks for the content to come first with its reason', () => {
@@ -74,6 +77,17 @@ describe('LiveCommentary keeps the events it told, and closes them with the requ
     f.emit(moment('structure_found', { name: '難破船', distance: 180 }, 's1', clock));
     await f.settle();
     expect(f.requests[1]?.told).toEqual(['小麦の種が手に入った（いま1個、要るのは3個）。']);
+  });
+
+  it('writes nothing while the owner has the monologue off, except the line that ends a request', async () => {
+    const f = setup();
+    f.outbox.receive([], { voice: true, humanSpeaking: false, sinceHumanMs: null, monologue: 'off' });
+    f.emit(moment('material_got', { item: 'wheat_seeds', count: 1, need: 3 }, 'g1'));
+    await f.settle();
+    expect(f.requests).toHaveLength(0);
+    f.emit(moment('task_done', { goal: 'ケーキ' }, 'd1', clock));
+    await f.settle();
+    expect(f.requests.map(request => request.main.kind)).toEqual(['task_done']);
   });
 
   it('closes the story at the end of the request: what is told after it starts clean', async () => {

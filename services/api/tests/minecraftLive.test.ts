@@ -48,6 +48,14 @@ describe('the words', () => {
     expect(carriedWords(counts)).toEqual(['鉄のツルハシ', '防具2/4', '食べ物4個（焼いた物4）', 'ベッドを持っている', '鉄の原鉱×8', '石炭×12']);
     expect(carriedWords(new Map())).toEqual(['ツルハシはまだ無い', '食べ物は無い', 'ベッドは持っていない']);
   });
+  it('says what an ordinary job runs on (seeds, an egg, sugar, a bucket) after the table, most first, the plain blocks last, at most 12 kinds', () => {
+    const counts = new Map<string, number>([['wheat_seeds', 3], ['sugar', 2], ['egg', 1], ['pumpkin', 1], ['bucket', 1], ['dirt', 90], ['oak_planks', 7], ['stone_pickaxe', 1], ['cooked_beef', 2], ['cobblestone', 30]]);
+    expect(carriedWords(counts)).toEqual(['石のツルハシ', '食べ物2個（焼いた物2）', 'ベッドは持っていない', '丸石×30',
+      'オークの板材×7', '小麦の種×3', '砂糖×2', 'バケツ×1', '卵×1', 'カボチャ×1', '土×90']);
+    const many = new Map(Array.from({ length: 20 }, (_, index) => [`thing_${String.fromCharCode(97 + index)}`, 20 - index] as const));
+    expect(carriedWords(many).length).toBe(3 + 12);
+    expect(carriedWords(many)).not.toContain('thing t×1');
+  });
   it('shortens the map the body keeps', () => {
     const map = '構造物: 村: 171m 東 (287,85,13)／ネザー要塞: 90m 北 (1,2,3)\n鉱石: 鉄 5か所（10m 東）／ダイヤ 2か所（30m 南）\n溶岩の溜まり 1か所: 20m 西\n洞窟の入口 3か所（地表から）';
     expect(mapWords(map)).toBe('村(171m)・ネザー要塞(90m)・ダイヤ2か所・鉄5か所・溶岩1か所・洞窟の入口3か所');
@@ -67,6 +75,8 @@ describe('liveBlock', () => {
   it('tells the owner alone what he asked, and everyone else only that something was asked', () => {
     const alone = liveBlock(snapshot(), { alone: true });
     expect(alone.startsWith(LIVE_BLOCK_HEADER)).toBe(true);
+    expect(LIVE_BLOCK_HEADER).toContain('「持ち物の要点」に書いてない物は持っていない');
+    expect(LIVE_BLOCK_HEADER).toContain('話が食い違うため');
     expect(alone).toContain('取り組んでいること: エンドラを討伐してください（ライ氏に頼まれた）');
     const shared = liveBlock(snapshot(), { alone: false });
     expect(shared).not.toContain('エンドラ');

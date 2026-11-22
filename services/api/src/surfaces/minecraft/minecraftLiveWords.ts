@@ -87,7 +87,33 @@ const TIERS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^stone_pickaxe$/u, '石のツルハシ'], [/^wooden_pickaxe$/u, '木のツルハシ'],
 ];
 
-/** What she carries that is worth saying: the best pickaxe, the armour, the food, a bed, and the few items the way to the dragon runs on. */
+/** Plain blocks she picks up in passing: told after everything else, so a bag full of dirt does not push seeds and eggs out of the list. */
+const FILLER_ITEM = /^(?:dirt|grass_block|coarse_dirt|stone|gravel|sand|red_sand|andesite|diorite|granite|tuff|deepslate|cobbled_deepslate|netherrack|dripstone_block|short_grass|tall_grass|grass|fern|dead_bush|vine|leaf_litter|flint|rotten_flesh|spider_eye|bone|string|gunpowder|(?:[a-z]+_)?leaves|[a-z]+_sapling)$/u;
+/** Words for what her ordinary work carries that `itemWords` does not hold yet. */
+const MORE_ITEM_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  pumpkin: 'カボチャ', melon_slice: 'スイカの切れ端', beetroot_seeds: 'ビートの種', pumpkin_seeds: 'カボチャの種', melon_seeds: 'スイカの種', paper: '紙',
+  leather: '革', cocoa_beans: 'カカオ豆', dandelion: 'タンポポ', oak_sapling: 'オークの苗木', oak_leaves: 'オークの葉', dirt: '土', gold_ingot: '金インゴット',
+  copper_ingot: '銅インゴット', redstone: 'レッドストーン', lapis_lazuli: 'ラピスラズリ', glass: 'ガラス', sand: '砂', gravel: '砂利', stone: '石', flint: '火打石',
+});
+/** How many other kinds she carries are told, most first. */
+const OTHER_KINDS = 12;
+
+/**
+ * What she carries beyond the table above (seeds, an egg, sugar, a bucket, planks: what an ordinary job runs on), most first, at most
+ * `OTHER_KINDS` kinds, the plain blocks last. The model that talks takes what is not here for what she does not have, so a thing she holds
+ * has to be here.
+ */
+function otherCarried(counts: ItemCounts): string[] {
+  const told = [...LABELS, ...TIERS].map(([pattern]) => pattern);
+  const rows = [...counts].filter(([id, have]) => have > 0 && !told.some(pattern => pattern.test(id)) && !ARMOR_PIECES.some(piece => piece.test(id))
+    && !BED_ITEM.test(id) && !EDIBLE_FOOD.test(id) && !/_pickaxe$/u.test(id));
+  const order = (a: readonly [string, number], b: readonly [string, number]) => b[1] - a[1] || a[0].localeCompare(b[0]);
+  const plain = rows.filter(([id]) => !FILLER_ITEM.test(id)).sort(order);
+  const filler = rows.filter(([id]) => FILLER_ITEM.test(id)).sort(order);
+  return [...plain, ...filler].slice(0, OTHER_KINDS).map(([id, have]) => `${MORE_ITEM_WORDS[id] ?? itemWords(id)}×${have}`);
+}
+
+/** What she carries that is worth saying: the best pickaxe, the armour, the food, a bed, the few items the way to the dragon runs on, and then the rest by number. */
 export function carriedWords(counts: ItemCounts): string[] {
   const pickaxe = TIERS.find(([pattern]) => countMatching(counts, pattern) > 0)?.[1];
   const pieces = ARMOR_PIECES.filter(piece => countMatching(counts, piece) > 0).length;
@@ -97,7 +123,8 @@ export function carriedWords(counts: ItemCounts): string[] {
     return have > 0 ? [`${label}×${have}`] : [];
   });
   return [...(pickaxe ? [pickaxe] : ['ツルハシはまだ無い']), ...(pieces ? [`防具${pieces}/4`] : []),
-    food > 0 ? `食べ物${food}個${cooked > 0 ? `（焼いた物${cooked}）` : ''}` : '食べ物は無い', countMatching(counts, BED_ITEM) > 0 ? 'ベッドを持っている' : 'ベッドは持っていない', ...items];
+    food > 0 ? `食べ物${food}個${cooked > 0 ? `（焼いた物${cooked}）` : ''}` : '食べ物は無い', countMatching(counts, BED_ITEM) > 0 ? 'ベッドを持っている' : 'ベッドは持っていない', ...items,
+    ...otherCarried(counts)];
 }
 
 /** The map the body keeps, in a few words: the structures with the nearest one's distance, and how many ores, lava pools and cave mouths. */

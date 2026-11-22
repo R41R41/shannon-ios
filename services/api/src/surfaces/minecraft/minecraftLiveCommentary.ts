@@ -176,6 +176,13 @@ export class LiveCommentary {
     try {
       // One line at a time: a line the body has not answered yet is not followed by another.
       if (this.writing || this.pending.size > 0) return;
+      // The owner turned her monologue off: only the line that ends a request is written. What else waits is dropped before the model is asked
+      // (a body that is older than this still refuses such a line itself, so nothing else changes for it).
+      if (this.parts.outbox.room()?.monologue === 'off') {
+        const kept = this.waiting.filter(item => item.moment.kind === 'task_done');
+        for (let dropped = this.waiting.length - kept.length; dropped > 0; dropped -= 1) this.count('muted');
+        this.waiting = kept;
+      }
       const room = this.room(), ready: Array<{ moment: LiveMoment; salience: number; rewrites: number }> = [];
       this.waiting = this.waiting.filter(item => {
         const verdict = this.governor.verdict(item.moment, room);

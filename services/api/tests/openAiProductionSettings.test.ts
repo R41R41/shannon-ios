@@ -4,7 +4,7 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { AnthropicFcaModel, type AnthropicFcaUsage } from '../src/infra/models/anthropic/anthropicFcaModel.js';
 import { createConfiguredChatModel } from '../src/infra/models/chatModel.js';
 import { estimatedOpenAICostUsd, responseUsage } from '../src/infra/models/llmUsage.js';
-import { OpenAiFcaModel } from '../src/infra/models/openai/openAiFcaModel.js';
+import { createOpenAiFcaModel, OpenAiFcaModel } from '../src/infra/models/openai/openAiFcaModel.js';
 import { openAiCostUsd } from '../src/infra/models/openai/openAiFcaWire.js';
 import type { FcaModelInput } from '../src/mind/action/fca/fcaPorts.js';
 import { LLMC_MAIN_MODEL, configuredMinecraftLlmc, llmcModelNames } from '../src/wiring/minecraftLlmcConfiguration.js';
@@ -148,5 +148,29 @@ describe('luna in the ledger', () => {
   it('prices an unlisted GPT-6 name high, which is what luna cost before its row existed', () => {
     const expected = (4_000 * 0.1 + 36_000 * 0.01 + 900 * 0.5) / 1e6;
     expect(estimatedOpenAICostUsd('gpt-6-unlisted', counted, {})).toBeGreaterThan(expected * 20);
+  });
+});
+
+describe('where the decision message of luna is cut', () => {
+  // About 100,000 estimated tokens of live state: over the Claude default (95,000), far under luna's context and its dearer price step.
+  const big = () => {
+    const base = input();
+    const words = Array.from({ length: 2_600 }, (_, index) => `地図の${index}番目の場所にある洞窟と鉱石と溶岩の様子`).join('。');
+    return { ...base, transient: { ...base.transient, map: words } } as FcaModelInput;
+  };
+  const compacted = () => (console.info as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter(row => String(row[0]).includes('fca_request_compacted'));
+
+  it('keeps an observation of about 100,000 estimated tokens whole for luna, where the Claude bound would cut it to a few hundred characters', async () => {
+    const { fetcher } = recorder([act]);
+    const control = createOpenAiFcaModel({ model: LUNA, apiKey: 'k', fetcher, compactAboveTokens: 95_000, recordUsage() {}, minecraftOwnPrompt: true });
+    await control.decide(big(), signal()).catch(() => undefined);
+    expect(compacted()).toHaveLength(1);
+    (console.info as unknown as { mockClear(): void }).mockClear();
+
+    const wired = recorder([act]);
+    const wiring = configuredMinecraftLlmc(LUNA_ENV, { recordUsage() {}, fetcher: wired.fetcher, compactAboveTokens: 95_000, client: noAnthropic }, { log: () => {}, client: noAnthropic })!;
+    await wiring.models.main.decide(big(), signal());
+    expect(compacted()).toHaveLength(0);
+    expect(JSON.stringify(wired.sent[0]!.body)).toContain('地図の2599番目の場所');
   });
 });

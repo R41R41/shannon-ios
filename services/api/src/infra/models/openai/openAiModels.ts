@@ -14,6 +14,14 @@ export function isOpenAiModel(model: string): boolean { return model.startsWith(
  */
 export const OPENAI_TOKEN_SCALE = 1.2;
 
+/**
+ * Where the decision message is shortened for a GPT-6 model (in the unit of the head's own estimate, the journal's `estimatedInputTokens`).
+ * The family's context is 1,050,000 tokens and its dearer price starts at 272,000 input tokens; the head's estimate is about 1.8 times
+ * the real count, so 160,000 here is about 89,000 real tokens. The Claude default (95,000) cut the map and the observation to a few hundred
+ * characters in a fifth of the decisions for no gain in price.
+ */
+export const OPENAI_COMPACT_ABOVE_TOKENS = 160_000;
+
 export type OpenAiEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 export const DEFAULT_OPENAI_EFFORT: OpenAiEffort = 'medium';
 const EFFORTS: ReadonlySet<string> = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);

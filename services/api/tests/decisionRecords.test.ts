@@ -11,6 +11,7 @@ import { renderDecisions } from '../src/infra/decisionRecords/decisionRecordMark
 import { beginDecisionRound, setDecisionStepIndex, withDecisionCall, withDecisionScope } from '../src/infra/decisionRecords/decisionRecordScope.js';
 import { pruneRuns, runName, scrubSecrets, type DecisionRecordLimits } from '../src/infra/decisionRecords/decisionRecordStore.js';
 import { headVersion } from '../src/infra/decisionRecords/decisionRecordVersion.js';
+import { openAiCostUsd } from '../src/infra/models/openai/openAiFcaWire.js';
 import type { MinecraftControlCommand } from '../src/contracts/minecraftControlContract.js';
 
 const directories: string[] = [];
@@ -171,6 +172,18 @@ describe('decision records: what a run keeps and how it is read back', () => {
     });
     return readRun(join(root, 'task-a'));
   }
+
+  it('prices an OpenAI answer at the ledger price, not as Anthropic cache writes and reads', async () => {
+    const { root } = recorder();
+    // The usage as `messageShaped` makes it: the part of the input that was neither cached nor written, the write, the read.
+    const luna = { ...MESSAGE('東へ'), model: 'gpt-6-luna', usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 1_000, cache_read_input_tokens: 9_000 } };
+    const client = recordedClient(fake(async () => luna), 'decision');
+    await scope(async () => { await client.messages.create({ ...BODY([{ role: 'user', content: '状態' }]), model: 'gpt-6-luna' } as never, {} as never); });
+    const answer = readRun(join(root, 'task-a')).events.find(event => event.ev === 'response')!;
+    const ledger = openAiCostUsd('gpt-6-luna', { input: 10_100, cached: 9_000, cacheWrite: 1_000, output: 50 });
+    expect(ledger).toBeGreaterThan(0);
+    expect(answer.costUsd).toBe(ledger);
+  });
 
   it('finds a decision by its number, its step, its id, a time, or the queue item its act became', async () => {
     const { root } = recorder();

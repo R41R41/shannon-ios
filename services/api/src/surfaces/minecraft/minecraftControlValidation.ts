@@ -95,7 +95,8 @@ function validLiveSpeech(value: Record<string, unknown>): boolean {
     && SPEECH_OUTCOMES.includes(String(item.outcome)) && (item.reason === undefined || typeof item.reason === 'string' && /^[a-z_]{1,40}$/.test(item.reason))
     && (item.conversationId === undefined || typeof item.conversationId === 'string' && CONVERSATION_ID.test(item.conversationId))));
   const roomOk = room === undefined || (record(room) && typeof room.voice === 'boolean' && typeof room.humanSpeaking === 'boolean'
-    && (room.sinceHumanMs === null || typeof room.sinceHumanMs === 'number' && Number.isFinite(room.sinceHumanMs) && room.sinceHumanMs >= 0));
+    && (room.sinceHumanMs === null || typeof room.sinceHumanMs === 'number' && Number.isFinite(room.sinceHumanMs) && room.sinceHumanMs >= 0)
+    && (room.monologue === undefined || typeof room.monologue === 'string' && room.monologue.length <= 16));
   return receiptsOk && roomOk;
 }
 /**

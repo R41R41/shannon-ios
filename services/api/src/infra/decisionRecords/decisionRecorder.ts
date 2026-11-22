@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { TraceIds } from '../../contracts/continueContract.js';
 import { estimatedAnthropicCostUsd, knownCount, tokenCount } from '../models/claude/claudeUsage.js';
+import { estimatedOpenAICostWithCacheUsd, isGpt6Model } from '../models/llmUsage.js';
 import type { DecisionScopeState } from './decisionRecordScope.js';
 import { tailRun } from './decisionRecordRead.js';
 import { DECISION_RECORD_LIMITS, pruneRuns, RunWriter, runName, scrubSecrets, type DecisionRecordLimits } from './decisionRecordStore.js';
@@ -32,6 +33,18 @@ export interface ResponseNote {
   signal?: AbortSignal | undefined;
 }
 
+/**
+ * An OpenAI answer's usage reaches the record in the Anthropic shape (`input_tokens` is the part that was not cached), which the Anthropic
+ * prices read as cache writes at 1.25 times and everything dear: the cost is the ledger's own (`estimatedOpenAICostWithCacheUsd`).
+ */
+function openAiCostUsd(model: string, counts: { input: number; output: number; cacheWrite: number; cacheRead: number }): number {
+  const inputTokens = counts.input + counts.cacheRead + counts.cacheWrite;
+  return estimatedOpenAICostWithCacheUsd(model, {
+    inputTokens, cachedInputTokens: counts.cacheRead, cacheCreationInputTokens: counts.cacheWrite, outputTokens: counts.output,
+    totalTokens: inputTokens + counts.output,
+  });
+}
+
 /** The tokens of an answer and what they cost at the prices the budget uses (null when the provider's counts are
  * not all there). */
 function spent(model: string, usage: Json | null): Json {
@@ -42,7 +55,7 @@ function spent(model: string, usage: Json | null): Json {
     ...(ttl ? { cacheWrite5m: knownCount(ttl.ephemeral_5m_input_tokens), cacheWrite1h: knownCount(ttl.ephemeral_1h_input_tokens) } : {}) };
   const complete = [usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens].every(tokenCount);
   return { usage, tokens: { input: counts.input, cacheWrite: counts.cacheWrite, cacheRead: counts.cacheRead, output: counts.output },
-    costUsd: complete ? estimatedAnthropicCostUsd(model, counts) : null };
+    costUsd: !complete ? null : isGpt6Model(model) ? openAiCostUsd(model, counts) : estimatedAnthropicCostUsd(model, counts) };
 }
 
 /** The longest text a row of the contract (`live`'s `raw` and `shown`) keeps inline; the request itself keeps the

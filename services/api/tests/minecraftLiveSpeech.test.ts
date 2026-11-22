@@ -84,7 +84,7 @@ describe('the writer', () => {
       main: moment('diamond_found', { count: 2 }), also: [moment('armor_complete')], recent: ['夜だね'], voice: true });
     expect(system.startsWith('【ボクの人物】')).toBe(true);
     for (const part of ['[いまのボク]', '[実況の一言]', '声に出す一言。1〜2文、64字以内', '[マイクラの体の今]', '[さっき言ったこと]\n- 夜だね', '[いま起きたこと]\n- ダイヤモンドの鉱石を見つけた（2か所）。',
-      '[ほかにあったこと（ついでに触れてもよい）]\n- 鉄以上の防具が頭から足までそろい、着ている。', '作業の中身（作る物・材料・順番・迷い）は、ためらわず言ってよい', '考え（なぜそうするか', '気持ち（うれしい', '元気で明るい女の子']) {
+      '[ほかにあったこと（ついでに触れてもよい）]\n- 鉄以上の防具が頭から足までそろい、着ている。', '作業の中身（作る物・材料・順番・迷い）は、ためらわず言ってよい', '考え（なぜそうするか', '気持ち（うれしい', '元気で明るい子']) {
       expect(system).toContain(part);
     }
     // The old wall that kept her silent about the work she was asked for is gone; every rule that is left says why.

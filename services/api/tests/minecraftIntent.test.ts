@@ -54,6 +54,15 @@ describe('what she is told of the list', () => {
     expect(text).toContain('[依頼の列] いまは空');
   });
 
+  it('sends a fact about the work under way (has, has not, where, a correction) to the body as a message, with the reason, and leaves small talk to none', () => {
+    const running = guide({ running: 'ケーキを作る' });
+    expect(running).toContain('持っている');
+    expect(running).toContain('間違いの指摘');
+    expect(running).toContain('goal に事実をそのまま書く');
+    expect(running).toContain('人が何度も言い直すことになる');
+    expect(running).toContain('相づちは none のまま');
+  });
+
   it('says that words for work are a new request when nothing runs, with the reason, and keeps the message line when something does', () => {
     const idle = guide();
     expect(idle).toContain('いま実行中の依頼も待っている依頼も無い');

@@ -1,4 +1,4 @@
-import { VoiceSegmentTags } from '../../infra/models/voiceAudioTags.js';
+import { VoiceSegmentTags, voiceAudioTagsIn } from '../../infra/models/voiceAudioTags.js';
 import type { VoiceTurnLine } from './platformVoiceRequest.js';
 
 /**
@@ -26,10 +26,17 @@ export class SpokenSentences {
   private readonly streamed: string[] = [];
   private index = 0;
   firstAt: number | null = null;
+  /** How many of each audio tag went to the voice in this reply (no text): for the one line of the turn's log. */
+  private readonly tagCounts = new Map<string, number>();
 
   constructor(private readonly out: VoiceOut) {}
 
   get count(): number { return this.index; }
+
+  /** `whispers:1,happy:2`, or `-` when no tag went out. */
+  get tagSummary(): string {
+    return this.tagCounts.size ? [...this.tagCounts].map(([tag, n]) => `${tag.replace(/ /gu, '_')}:${n}`).join(',') : '-';
+  }
 
   /** A sentence that went out while the model wrote. */
   stream(raw: string): void {
@@ -43,6 +50,7 @@ export class SpokenSentences {
     if (!spoken || !text) return;
     this.firstAt ??= performance.now();
     const voiceText = spoken.voiceText?.trim();
+    for (const tag of voiceAudioTagsIn(voiceText ?? '')) this.tagCounts.set(tag, (this.tagCounts.get(tag) ?? 0) + 1);
     this.out.line({
       type: 'sentence', index: this.index, text,
       ...(voiceText && voiceText !== text ? { voiceText } : {}),

@@ -534,7 +534,7 @@ export class PlatformVoiceService {
     out.line({ type: 'done', reply, threadId, duplicate: false, timings: { decisionMs: facts.decisionMs, firstSentenceMs, totalMs } });
     const who = `owner=${seat.owner} humans=${seat.humans.size} filler=${facts.filler?.id ?? '-'}`;
     const times = `decisionMs=${facts.decisionMs} firstSentenceMs=${firstSentenceMs ?? '-'} totalMs=${totalMs}`;
-    const tail = `sentences=${answer.spoken.count} ignored=${answer.ignored ?? '-'}`;
+    const tail = `sentences=${answer.spoken.count} tags=${answer.spoken.tagSummary} ignored=${answer.ignored ?? '-'}`;
     this.log(`Shannon platform voice turn respond=true reason=${facts.address} ${who} ${times} ${tail}`);
   }
 }

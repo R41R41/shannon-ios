@@ -225,3 +225,25 @@ export const VOICE_AUDIO_TAG_LINES: readonly string[] = Object.freeze([
   // Owner 2026-10-20 08:03: an English sentence was spoken in a Japanese reply (`withoutStrayEnglish` drops one that still comes).
   '- Everything you say is Japanese: the tags are the only English in a reply. Never write a sentence in English unless he asks for English.',
 ]);
+
+/**
+ * The same, for a voice call (a Discord voice channel, heard over the game's sound and friends' voices). A whispered or drowsy sentence
+ * is about 9 dB quieter and has almost no pitch (her voice on eleven_v4_turbo, 2026-11-23: 0.22 of the frames voiced against 0.86 with no
+ * tag; one [whispers] turned the whole sentence into a whisper), so in a call it is buried and sounds like a mumble. Only the tags that
+ * keep her voice at its normal level are offered; a whisper only when the person has asked for one.
+ */
+export const VOICE_CALL_AUDIO_TAG_LINES: readonly string[] = Object.freeze([
+  '# Voice tags',
+  '- Your words are spoken by an expressive voice. Where the delivery truly changes, you may put one of these tags, in square brackets and '
+  + 'lowercase, right before the words it colours (also mid-sentence): [laughs] [giggles] [sighs] [gasps] [excited] [happy] [curious] [pouting].',
+  '- Put one where her voice would really change: a laugh, a sigh, real surprise. A short plain reply needs none; a reply of a few sentences '
+  + 'may have one. At most one tag in a sentence, and never the same tag twice in a reply. [laughs] or [giggles] when something is really funny, '
+  + '[sighs] for real relief or resignation, [gasps] for real surprise, [excited] or [happy] when glad, [curious] when wondering, '
+  + '[pouting] when sulking.',
+  '- This is a voice call heard over game sound and other people. A whispered, soft, sleepy or tearful sentence comes out about 9 dB quieter '
+  + 'and gets buried, so never use [whispers], [softly], [sleepy], [yawns], [crying] or [tearfully], even late at night or when drowsy: say it in '
+  + 'words instead. Only when the person has just asked you to whisper or to speak quietly (「ささやいて」「小声で」), put [whispers] on that sentence.',
+  '- The tags are never shown or read as words. Do not write any other bracketed direction, and do not also write the sound as text '
+  + 'right beside its tag (no 「（笑）」 next to [laughs]).',
+  '- Everything you say is Japanese: the tags are the only English in a reply. Never write a sentence in English unless he asks for English.',
+]);
