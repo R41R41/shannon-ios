@@ -23,6 +23,7 @@ import { MINECRAFT_TURN_ALLOWANCE, MinecraftTurnAllowance } from '../src/mind/in
 import { SQLiteSurfaceTurnLog } from '../src/mind/action/respond/store/surfaceTurnStore.js';
 import { PLATFORM_REPLY_LIMITS } from '../src/surfaces/platform/platformReply.js';
 import { MINECRAFT_STOP_PATH } from '../src/contracts/minecraftControlContract.js';
+import { MINECRAFT_LIFECYCLE_PATH, MINECRAFT_LIFECYCLE_REQUEST_PATH } from '../src/contracts/minecraftLifecycleContract.js';
 import { createMinecraftBodyWiring, gameBodyMayCall } from '../src/wiring/serverMinecraftBodyWiring.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { readApiSource } from './support/sources.js';
@@ -119,6 +120,36 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     // Another device of the owner is not her body (the same answer as the control route gives).
     expect(await post('{}', 'owner-iphone')).toMatchObject({ handled: true, status: 403, body: { error: 'FCA_BODY_DEVICE_DENIED' } });
     expect(asked).toHaveLength(2);
+    wiring.close();
+  });
+
+  it('answers the owner\'s login/logout request (POST /v1/body/minecraft/lifecycle-request) for the body device in the owner scope, with a closed input', async () => {
+    const path = databasePath();
+    const wiring = createMinecraftBodyWiring({ SHANNON_MINECRAFT_BODY_JSON: CONFIGURATION }, path);
+    const post = (body: string, who = DEVICE, method = 'POST', scopeKey = 'owner') => {
+      const done: { status?: number; body?: unknown } = {};
+      const response = { writeHead: (status: number) => { done.status = status; }, end: (text: string) => { done.body = JSON.parse(text); } } as unknown as ServerResponse;
+      const incoming = Object.assign(Readable.from(body ? [Buffer.from(body)] : []), { method, headers: { authorization: '' } }) as unknown as IncomingMessage;
+      return wiring.serve(incoming, response, MINECRAFT_LIFECYCLE_REQUEST_PATH, { ...principal(who), scopeKey }).then(handled => ({ handled, ...done }));
+    };
+    const valid = '{"action":"login","via":"mod","actor":"RaiRai"}';
+    expect(await post(valid)).toMatchObject({ handled: true, status: 503, body: { error: 'MINECRAFT_LIFECYCLE_NOT_ENABLED' } });
+    const asked: unknown[] = [];
+    wiring.connectLifecycleRequest({ request: async input => { asked.push(input); return { ok: true, lifecycleId: 'operator:1', state: 'accepted' }; } });
+    expect(await post(valid)).toMatchObject({ status: 200, body: { ok: true, lifecycleId: 'operator:1', state: 'accepted' } });
+    expect(asked).toEqual([{ action: 'login', via: 'mod', actor: 'RaiRai' }]);
+    expect(await post('{"action":"logout","via":"discord_slash"}')).toMatchObject({ status: 200 });
+    expect(await post('{"action":"login","via":"voice"}')).toMatchObject({ status: 400, body: { error: 'MINECRAFT_LIFECYCLE_REQUEST_INVALID' } });
+    expect(await post('{"action":"start","via":"mod"}')).toMatchObject({ status: 400 });
+    expect(await post('{bad')).toMatchObject({ status: 400 });
+    expect(await post('')).toMatchObject({ status: 400 });
+    expect(await post(valid, DEVICE, 'GET')).toMatchObject({ status: 405 });
+    expect(await post(valid, 'owner-iphone')).toMatchObject({ handled: true, status: 403 });
+    expect(await post(valid, DEVICE, 'POST', 'someone-else')).toMatchObject({ status: 403, body: { error: 'MINECRAFT_LIFECYCLE_DEVICE_DENIED' } });
+    expect(asked).toHaveLength(2);
+    // The body's own poll path is another one (an exact match, not a prefix).
+    expect(MINECRAFT_LIFECYCLE_REQUEST_PATH).not.toBe(MINECRAFT_LIFECYCLE_PATH);
+    expect(gameBodyMayCall('POST', MINECRAFT_LIFECYCLE_REQUEST_PATH)).toBe(true);
     wiring.close();
   });
 

@@ -157,7 +157,8 @@ export class PlatformReplyService {
     request: PlatformReplyRequest, hash: string, policy: PlatformAudiencePolicy, intent: ShannonChatModelResult['minecraftIntent'],
     stored: { experienceId?: string; turn?: CompletedTurn }, body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null,
   ): Promise<string> {
-    if (!body?.state.connected || !intent || intent.kind === 'none' || intent.kind === 'speech') return '';
+    if (!body?.state.connected || !intent || intent.kind === 'none' || intent.kind === 'speech'
+      || intent.kind === 'login' || intent.kind === 'logout') return '';
     const { port } = body, { turn } = stored;
     const { scopeKey } = this.dependencies;
     const needsSource = intent.kind === 'task' || intent.kind === 'message';

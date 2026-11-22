@@ -10,7 +10,7 @@ import type { RequesterOf } from '../mind/action/fca/fcaSpokenReport.js';
 import { OPERATOR_NOTE_KIND, OPERATOR_TITLE_PREFIX } from '../contracts/operatorContract.js';
 import type { OperatorLifecycle } from './operatorLifecycleWiring.js';
 import { feet, setIncidentHoldPort } from './minecraftIncidentHold.js';
-import { createOperatorMinecraft, type OperatorActivity } from './operatorMinecraftWiring.js';
+import { createOperatorMinecraft, type OperatorActivity, type OperatorMinecraft } from './operatorMinecraftWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { MinecraftBodyRecheck } from './minecraftBodyRecheckWiring.js';
 import type { SkillImportCommandDeps } from '../infra/http/skillImportCommand.js';
@@ -106,7 +106,7 @@ const failure = (error: unknown) => (error instanceof Error ? error.message : 'u
  * Starts the operator's Minecraft path: the socket's directory always (the other units hide it), the time-limit tick whenever the
  * audit is open, and the socket only while the switch is on. A socket that cannot be served is logged and leaves the API running.
  */
-export function startOperatorMinecraft(parts: OperatorServerParts): { close(): Promise<void> } {
+export function startOperatorMinecraft(parts: OperatorServerParts): { close(): Promise<void>; handle?: OperatorMinecraft['handle']; actionLive?: OperatorMinecraft['actionLive'] } {
   const socketPath = operatorSocketPath(parts.path);
   const directory = ensureOperatorDirectory(dirname(socketPath))
     .catch((error: unknown) => parts.log(`Shannon operator Minecraft: directory unavailable (${failure(error)})`));
@@ -162,6 +162,8 @@ export function startOperatorMinecraft(parts: OperatorServerParts): { close(): P
     })
     : Promise.resolve(null);
   return {
+    // The same door the socket serves, for the head's own callers (lifecycleRequest.ts): audited and gated alike.
+    handle: service.handle, actionLive: service.actionLive,
     async close() {
       clearInterval(timer);
       setIncidentHoldPort(null);

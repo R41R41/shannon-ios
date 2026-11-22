@@ -9,8 +9,11 @@
  *
  * `speech` is not about the list: the owner asked how she speaks (`speechMode`) or how often she speaks of her own accord (`speechRate`). It
  * is carried to her voice's body by the voice call alone (`platformVoice.ts`), and only for the owner; every other surface reads it as none.
+ *
+ * `login` and `logout` are not about the list either: the owner asked her to go into, or out of, the Minecraft server. They carry nothing else, go
+ * through the operator's door (`lifecycleRequest.ts`) from the voice call alone, only for the owner, and every other surface reads them as none.
  */
-export const MINECRAFT_INTENT_KINDS = ['none', 'task', 'message', 'stop', 'cancel', 'hold', 'resume', 'move', 'speech'] as const;
+export const MINECRAFT_INTENT_KINDS = ['none', 'task', 'message', 'stop', 'cancel', 'hold', 'resume', 'move', 'speech', 'login', 'logout'] as const;
 export type MinecraftIntentKind = typeof MINECRAFT_INTENT_KINDS[number];
 export const MINECRAFT_INTENT_PLACEMENTS = ['end', 'next', 'now'] as const;
 
@@ -53,7 +56,8 @@ export const MINECRAFT_INTENT_SCHEMA = Object.freeze({
       description: 'マイクラの体の「依頼の列」への頼み。task=新しい依頼を足す（ゲームの中でしてほしいことをはっきり頼まれた）。'
         + 'message=いま実行中の依頼への言葉（変えてほしい・続けてほしい）。stop=列ぜんたいを止める。cancel=依頼をやめる。hold=依頼を保留する。'
         + 'resume=保留・停止の依頼を戻す。move=列の中で依頼の順番を変える。none=それ以外。'
-        + 'speech=持ち主が、これからの話し方（声を出すか・独り言をするか・どのくらいするか）を変えてほしいと言った時だけ（体への頼みではない）',
+        + 'speech=持ち主が、これからの話し方（声を出すか・独り言をするか・どのくらいするか）を変えてほしいと言った時だけ（体への頼みではない）。'
+        + 'login=マイクラの体をサーバーへ入れてほしいと持ち主が頼んだ時だけ。logout=マイクラの体をサーバーから出してほしいと持ち主が頼んだ時だけ（体への頼みではない）',
     },
     goal: { type: 'string', description: `task か message の時だけ、何をどれだけするか（message は伝える言葉）を${MINECRAFT_INTENT_GOAL_CHARACTERS}字以内で。それ以外は空文字` },
     placement: {

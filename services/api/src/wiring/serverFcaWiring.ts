@@ -380,7 +380,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
       ...(source.experienceId ? [`experience:${source.experienceId}`] : []),
       ...source.recalledMemoryIds.map(id => `memory:${id}`), ...(source.readSourceIds ?? []).map(id => `read:${id}`),
     ]);
-    return { route, conversation, voice, touch, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope,
+    return { route, conversation, voice, touch, operatorDoor: operator?.handle && operator.actionLive ? { handle: operator.handle, actionLive: operator.actionLive } : null, reportCardVisible: (taskId: string) => { try { return visible?.(parts.ownerScope,
        taskId) === true; } catch { return false; } }, lifecycleTaskAllowed: (executionId: string) => lifecycleTask(executionId) !== null,
       lifecycleTaskSources: (executionId: string) => { const ids = lifecycleSources(executionId);
         return ids ? [...new Set(ids)].sort() :

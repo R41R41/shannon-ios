@@ -142,7 +142,9 @@ const SPEECH_RATE_NAMES: Readonly<Record<SpeechRate, string>> = { low: '少な�
  * How she speaks, as the owner can change it (the intent field's `speech`, `speechMode`, `speechRate`), and what is now. Offered where the intent
  * field is. Anyone may be told what it is; only the owner's words change it (the head says so here, and the body checks the speaker again).
  */
-export function speechInstructions(input: { owner: boolean; who: string; mode?: SpeechMode | undefined; rate?: SpeechRate | undefined; speechOnly?: boolean }): string {
+export function speechInstructions(input: { owner: boolean; who: string; mode?: SpeechMode | undefined; rate?: SpeechRate | undefined; speechOnly?: boolean;
+  /** The way in or out the field also carries now (`lifecycleInstructions`): named so that the one kind list in the prompt is the whole list. */
+  lifecycle?: 'login' | 'logout' | null | undefined }): string {
   const mode = input.mode ?? 'chatty', rate = input.rate ?? 'normal';
   const now = mode === 'chatty' ? `${SPEECH_MODE_NAMES[mode]}（独り言の多さ: ${SPEECH_RATE_NAMES[rate]}）` : SPEECH_MODE_NAMES[mode];
   const lines = [
@@ -162,10 +164,25 @@ export function speechInstructions(input: { owner: boolean; who: string; mode?: 
       + '「これから」「ずっと」「独り言は」など、続く話がついた時だけ変える。理由: 話し方を変えたつもりがないのに「黙って」のたびに話さなくなると、次に話しかけた時に返事がなく、困るから。',
     '- 「もう少し多めに」「ちょっと減らして」のような言葉は、いまの値から1段だけ動かす（少なめ・ふつう・多め の順）。独り言の多さを頼まれた時にいまが「よく話す」でなければ、speechMode も chatty にする（独り言が出る話し方でないと、多さを変えても聞こえないから）。',
     '- 変えた時の返事は、変えたことを短く言う。例：「うん、必要な時だけにするね」。「話さない」にした時も、この返事はいまの声で言ってよい（その次から静かになる）。',
-    ...(input.speechOnly ? ['- ここで kind に使うのは speech と none だけ。体への頼み（作る・取る・止める など）は、ふだんの道具で行い、kind には入れない（理由: ここの kind は話し方のためだけに置いてあり、ほかの kind は届かないから）。'] : []),
+    ...(input.speechOnly ? [`- ここで kind に使うのは speech${input.lifecycle ? ` と ${input.lifecycle}` : ''} と none だけ。体への頼み（作る・取る・止める など）は、ふだんの道具で行い、kind には入れない（理由: ここの kind は話し方${input.lifecycle ? 'とマイクラの出入り' : ''}のためだけに置いてあり、ほかの kind は届かないから）。`] : []),
     '- 変えるかどうか分からない言葉（独り言のつもりのつぶやき・ほかの人への話）は、kind=none にする。',
   );
   return lines.join('\n');
+}
+
+/**
+ * Going into and out of the Minecraft server by voice (the intent field's `login` and `logout`), offered to the owner's own words only. `offer` is the one
+ * that fits where her body is now (it is out: login; it is in: logout). The words say why each rule is there: a model follows a rule it understands.
+ */
+export function lifecycleInstructions(input: { offer: 'login' | 'logout'; who: string }): string {
+  const now = input.offer === 'login' ? 'マイクラの体はいまサーバーの外にいる。選べるのは login だけ。' : 'マイクラの体はいまサーバーの中にいる。選べるのは logout だけ。';
+  return [
+    '[ボクのマイクラへの出入り]',
+    '入る・出るは、マイクラの体（ボクのキャラクター）をサーバーへ出し入れする操作。' + now,
+    `- 「マイクラに入ってきて」「ゲームに来て」「ログインして」「ログアウトして」「マイクラから出て」など、言い方は自由。意味で読み、${input.who}本人が頼んだ時だけ kind=${input.offer} にする（ほかの人の頼みでは選ばない。理由: 体を勝手に出し入れされると、${SHANNON_OWNER_NAME}の作業が止まってしまうから）。`,
+    '- これはマイクラの出入りだけを指す。通話や Discord から抜ける意味の「抜けて」「落ちて」「切って」は選ばない（その操作はボクには無いので、ふつうに返事する。理由: 通話から抜けるつもりの言葉で体が出てしまうと、作業が止まるから）。',
+    '- 入るには数秒から数十秒かかる。返事は「入るね、ちょっと待ってて」のように短く言い、もう入ったことにはしない（理由: まだ入っていないのに「入ったよ」と言うと、嘘になるから）。出る時は短い挨拶でよい。',
+  ].join('\n');
 }
 
 /** A friend's turn while the body part is off (`SHANNON_DC_VOICE_MINECRAFT`): nothing moves her body for a friend. */

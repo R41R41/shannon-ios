@@ -1,5 +1,6 @@
 import { createApiRequestHandler } from './wiring/serverRequestHandler.js';
 import { configuredMinecraftLifecycle } from './wiring/minecraftLifecycleWiring.js';
+import { createLifecycleRequests } from './wiring/lifecycleRequest.js';
 import { configuredSkillImporter } from './wiring/skillImportWiring.js';
 import { standardSkillPack } from './infra/config/standardSkillPack.js';
 import { configuredServerFca } from './wiring/serverFcaWiring.js';
@@ -273,7 +274,7 @@ const listening = configuredListening(process.env, configuredDatabasePath()), bo
      salt: traceSalt, bodyRunning }), platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore,
         backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (
           turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: (
-            ) => fca?.minecraft?.voice ?? null, listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge, persistentStore), serveListen =
+            ) => fca?.minecraft?.voice ?? null, voiceLifecycle: () => lifecycleRequests?.voicePort() ?? null, listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge, persistentStore), serveListen =
                configuredListenRoute(listening, addressed.judge, bodyRunning);
 // The mini Shannon's pictures (owner 2026-10-28): `/v1/mini/*` for the residents.
 const miniPoses = configuredMiniPoses(process.env, { databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
@@ -349,6 +350,15 @@ const fca = configuredServerFca(process.env, { live: minecraft.live ?? undefined
                                   revision) => skills?.readSource?.(scope, id, revision) ?? null, skillChecks: (scope,
                                      renew) => skills?.readSourceChecks?.(scope, renew) ?? null } }); if (
                                        fca?.minecraft) minecraft.connectControl(fca.minecraft);
+// The owner's going in and out of the server from the game mod, a Discord command and her voice: one door, the operator's (`lifecycleRequest.ts`).
+const lifecycleOwnerScope = shannonNowOwnerScope(process.env);
+const lifecycleRequests = lifecycle ? createLifecycleRequests({ scopeKey: lifecycleOwnerScope, operator: () => fca?.operatorDoor ?? null,
+  stop: () => { const stop = fca?.minecraft?.stop; return stop ? () => stop({}) : null; }, server: requested => lifecycle.operator.server(requested),
+  available: () => lifecycle.service.available(lifecycleOwnerScope),
+  status: serverId => lifecycle.service.status(lifecycleOwnerScope).find(state => state.serverId === serverId),
+  unresolved: () => lifecycle.service.store.unresolved(), ...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}),
+  log: line => console.info(line) }) : null;
+if (lifecycleRequests) minecraft.connectLifecycleRequest(lifecycleRequests);
 minecraft.startLive({ model: haiku, innerNote: innerNote?.port, feeling: feeling?.port, store: persistentStore, bridge: platformBridge?.configuration });
 // The YouTube stream's place (docs/stream-contract.md): no switch; nothing runs until a stream is started from the desktop.
 const stream = configuredStream({ scopeKey: shannonNowOwnerScope(process.env), now: () => Date.now(), feeling: feeling?.port ?? null,

@@ -1,4 +1,5 @@
-import { MINECRAFT_LIFECYCLE_PATH } from '../contracts/minecraftLifecycleContract.js';
+import { MINECRAFT_LIFECYCLE_PATH, MINECRAFT_LIFECYCLE_REQUEST_PATH } from '../contracts/minecraftLifecycleContract.js';
+import type { LifecycleRequestInput, LifecycleRequestResult } from './lifecycleRequest.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { MINECRAFT_CONTROL_PATH, MINECRAFT_STOP_PATH } from '../contracts/minecraftControlContract.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -30,6 +31,27 @@ export function gameBodyMayCall(method: string | undefined, path: string): boole
     || (method === 'POST' && path === '/v1/body/events') || (method === 'GET' && path === '/v1/body/presence');
 }
 
+/** The owner's login/logout, asked from the body's process (`MINECRAFT_LIFECYCLE_REQUEST_PATH`): only the two ways a person presses a button. */
+export interface LifecycleRequestPort { request(input: LifecycleRequestInput): Promise<LifecycleRequestResult> }
+const REQUEST_FIELDS = ['action', 'serverId', 'via', 'actor', 'requestId'];
+const REQUEST_SERVER_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u;
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u;
+/** The request's body as the port takes it, or null when its shape is not exactly the contract's (a closed list of fields, bounded values). */
+export function parsedLifecycleRequest(value: unknown): LifecycleRequestInput | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (Object.keys(input).some(key => !REQUEST_FIELDS.includes(key))) return null;
+  if (input.action !== 'login' && input.action !== 'logout') return null;
+  if (input.via !== 'mod' && input.via !== 'discord_slash') return null;
+  if (input.serverId !== undefined && (typeof input.serverId !== 'string' || !REQUEST_SERVER_ID.test(input.serverId))) return null;
+  const label = (field: unknown): string | undefined | null => (field === undefined ? undefined
+    : typeof field === 'string' && field.length >= 1 && field.length <= 64 && !CONTROL_CHARACTER.test(field) ? field : null);
+  const actor = label(input.actor), requestId = label(input.requestId);
+  if (actor === null || requestId === null) return null;
+  return { action: input.action, via: input.via, ...(input.serverId !== undefined ? { serverId: input.serverId as string } : {}),
+    ...(actor !== undefined ? { actor } : {}), ...(requestId !== undefined ? { requestId } : {}) };
+}
+
 type RouteDependencies = Omit<Parameters<typeof createMinecraftBodyRoute>[2], 'fcaIntent' | 'fcaAdmission' | 'fcaQueueLines'>;
 
 /**
@@ -48,6 +70,7 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   let streamOnly: MinecraftLive | null = null;
   let route: MinecraftBodyRoute | null = null;
   let lifecycle: MinecraftLifecycle | null = null;
+  let lifecycleRequests: LifecycleRequestPort | null = null;
   let common: { control: MinecraftControl; intent: NonNullable<MinecraftBodyDependencies['fcaIntent']>;
     admission?: MinecraftBodyDependencies['fcaAdmission'];
     /** The mod's 「やめる」, straight to the stop of the owner's body task(s) (`MINECRAFT_STOP_PATH`). */
@@ -80,6 +103,8 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
+    /** The owner's login/logout asked from the body's process (`lifecycleRequest.ts`). */
+    connectLifecycleRequest(value: LifecycleRequestPort): void { lifecycleRequests = value; },
     /** Her body's present (SHANNON_MINECRAFT_LIVE), handed to the conversation kernel and the task bodies; null while the switch is off. */
     live: live?.live ?? null,
     connectControl(value: NonNullable<typeof common>): void {
@@ -168,6 +193,21 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
             try { sendJson(response, 200, await common.stop(taskId === undefined ? {} : { taskId: taskId as string })); }
             catch { sendJson(response, 500, { error: 'MINECRAFT_STOP_FAILED' }); }
           }
+        }
+        return true;
+      }
+      if (path === MINECRAFT_LIFECYCLE_REQUEST_PATH) {
+        if (request.method !== 'POST') sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+        else if (!principal || !isGameBody(principal) || principal.scopeKey !== configuration?.ownerScopeKey) {
+          sendJson(response, 403, { error: 'MINECRAFT_LIFECYCLE_DEVICE_DENIED' });
+        } else if (!lifecycleRequests) sendJson(response, 503, { error: 'MINECRAFT_LIFECYCLE_NOT_ENABLED' });
+        else {
+          // The person was settled by the body's process before it asked (the game mod's owner name, a Discord command's owner check); this
+          // door only knows the device. A refusal is an answer (200, `ok: false`), not a failure of the call.
+          const input = await readJson(request, 4 * 1024).catch(() => undefined);
+          const parsed = parsedLifecycleRequest(input);
+          if (!parsed) sendJson(response, 400, { error: 'MINECRAFT_LIFECYCLE_REQUEST_INVALID' });
+          else sendJson(response, 200, await lifecycleRequests.request(parsed));
         }
         return true;
       }

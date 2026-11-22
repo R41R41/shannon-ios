@@ -28,6 +28,7 @@ import type { PlatformVoiceRoutes } from '../surfaces/platform/platformVoiceRout
 import { voiceMouth } from '../surfaces/platform/voiceMouth.js';
 import { voiceRooms } from '../surfaces/platform/voiceRoom.js';
 import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort.js';
+import type { VoiceLifecyclePort } from '../surfaces/platform/voiceLifecyclePort.js';
 import { createConfiguredCallVoiceCast } from '../infra/models/callVoiceSpeech.js';
 import type { LlmUsageStore } from '../infra/models/llmUsage.js';
 import { ChatSentenceSplitter, splitChatSentences } from '../surfaces/text/chatSentenceSplitter.js';
@@ -52,6 +53,8 @@ export function createConfiguredPlatformBridgeRoute(
     conversation: PlatformReplyConversation & Pick<PlatformVoiceConversation, 'seatedVoiceTurn'>; databasePath: string;
     /** `SHANNON_DC_VOICE`: her Minecraft body's side of an owner's spoken request, read at each turn (the part may connect later). */
     voiceMinecraft?: () => VoiceMinecraftPort | null;
+    /** Her going into and out of the Minecraft server for the owner's spoken request (`lifecycleRequest.ts`), read at each turn. */
+    voiceLifecycle?: () => VoiceLifecyclePort | null;
     /** Listening transcription for the voice channel (`POST /v1/platform/voice/transcribe`); null without `GROQ_API_KEY`. */
     listening?: Listening | null;
   } | null = null,
@@ -80,6 +83,7 @@ export function createConfiguredPlatformBridgeRoute(
       scopeKey: configuration.scopeKey, bridge: service, conversationStore, conversation: replies.conversation, turns: voiceTurns, now,
       chatModel, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), splitter: () => new ChatSentenceSplitter(VOICE_SENTENCE_CUT),
       environment: () => environment, rooms: voiceRooms, addressed, ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
+      ...(replies.voiceLifecycle ? { lifecycle: replies.voiceLifecycle } : {}),
     }),
     mouth: voiceMouth, ...callVoices(environment, usageStore), scopeKey: configuration.scopeKey, environment: () => environment,
     listening: replies.listening ?? null,

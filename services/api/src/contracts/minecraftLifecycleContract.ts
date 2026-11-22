@@ -3,6 +3,11 @@ import type { ActionLease } from '@shannon/mind';
 /** Always-on operator channel; independent of world-body presence and paid game planning. */
 export const MINECRAFT_LIFECYCLE_PATH = '/v1/body/minecraft/lifecycle';
 /**
+ * The owner's own login/logout of her body, asked by the body's process on the owner's behalf (the game mod's button or a Discord
+ * command); the head runs it through the operator's path. POST only, the game device in the owner's scope, one answer per request.
+ */
+export const MINECRAFT_LIFECYCLE_REQUEST_PATH = '/v1/body/minecraft/lifecycle-request';
+/**
  * `set_day` (owner request via the Minebot lane, 2026-10-14; body ea1ef4ce): the operator runs exactly `time set day` over its private
  * RCON on the running server, only after a fresh authority check and with no other player online. Accepted completion is
  * `completed`/`changed` on a running server, with no stop guard; others online refuse it as `players_present`; an RCON error or

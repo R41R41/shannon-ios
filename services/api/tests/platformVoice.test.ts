@@ -19,6 +19,7 @@ import { handlePlatformBridgeRequest, isPlatformBridgePath, type PlatformBridgeR
 import type { PlatformVoiceRoutes } from '../src/surfaces/platform/platformVoiceRoute.js';
 import { VoiceMouthQueue } from '../src/surfaces/platform/voiceMouth.js';
 import type { VoiceMinecraftIntentInput, VoiceMinecraftPort } from '../src/surfaces/platform/voiceMinecraftPort.js';
+import type { LifecycleRequestAction, LifecycleRequestResult, VoiceLifecyclePort } from '../src/surfaces/platform/voiceLifecyclePort.js';
 import { VOICE_MINECRAFT_REFUSALS } from '../src/surfaces/platform/platformVoicePrompt.js';
 import { createConfiguredPlatformBridgeRoute } from '../src/wiring/platformBridgeWiring.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
@@ -53,7 +54,7 @@ class Model implements ShannonChatModel {
   readonly model = 'test-model';
   readonly requests: ShannonChatModelRequest[] = [];
   reply = 'うん、いいよ。';
-  intent: { kind: 'none' | 'task' | 'stop' | 'speech'; goal: string; speechMode?: 'chatty' | 'needed' | 'silent'; speechRate?: 'low' | 'normal' | 'high' } | null = null;
+  intent: { kind: 'none' | 'task' | 'stop' | 'speech' | 'login' | 'logout'; goal: string; speechMode?: 'chatty' | 'needed' | 'silent'; speechRate?: 'low' | 'normal' | 'high' } | null = null;
   streams = true;
   /** Holds the model after this many characters until the promise settles (the first words are out, the rest is not written yet). */
   pause: { after: number; until: Promise<void> } | null = null;
@@ -85,6 +86,19 @@ class Body implements VoiceMinecraftPort {
   async intent(input: VoiceMinecraftIntentInput) { this.calls.push(input); return this.outcome; }
 }
 
+/** Her going into and out of the server: the state it reads, what it would refuse at once, and the requests it was asked for. */
+class Lifecycle implements VoiceLifecyclePort {
+  current: ReturnType<VoiceLifecyclePort['state']> = null;
+  refusal: LifecycleRequestResult | null = null;
+  asked: Array<{ action: LifecycleRequestAction; threadId?: string | null | undefined; actor?: string | undefined }> = [];
+  state() { return this.current; }
+  check() { return this.refusal; }
+  async request(action: LifecycleRequestAction, options: { threadId?: string | null; actor?: string }): Promise<LifecycleRequestResult> {
+    this.asked.push({ action, threadId: options.threadId, actor: options.actor });
+    return { ok: true, lifecycleId: 'operator:1', state: 'accepted' };
+  }
+}
+
 interface LiveReader { block(options: { alone: boolean; participants?: boolean }): string; replying?(on: boolean): void; heard?(): void }
 
 function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }, live?: LiveReader, addressed?: AddressedJudge, cutShortWaitMilliseconds?: number) {
@@ -101,8 +115,9 @@ function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' 
   const bridge = new PlatformBridgeService(configuredPlatformBridge(BRIDGE)!, store, store, background, now, new PlatformPeople(peopleStore, store), () => true);
   const turns = new SQLiteSurfaceTurnLog(path, 'platform_voice_turns');
   const body = new Body();
+  const lifecycle = new Lifecycle();
   const service = new PlatformVoiceService({
-    scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now, chatModel: model, minecraft: () => body, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT),
+    scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now, chatModel: model, minecraft: () => body, lifecycle: () => lifecycle, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT),
     environment: () => environment, log: () => undefined, ...(addressed ? { addressed } : {}), ...(cutShortWaitMilliseconds !== undefined ? { cutShortWaitMilliseconds } : {}),
   });
   let counter = 0;
@@ -123,7 +138,7 @@ function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' 
     await background.waitForIdle('owner');
     turns.close(); peopleStore.close(); store.close();
   };
-  return { path, store, peopleStore, background, bridge, api, model, body, service, say, refusal, close, now, turns, advance: (milliseconds: number) => { clock += milliseconds; } };
+  return { path, store, peopleStore, background, bridge, api, model, body, lifecycle, service, say, refusal, close, now, turns, advance: (milliseconds: number) => { clock += milliseconds; } };
 }
 
 const sentences = (lines: VoiceTurnLine[]) => lines.flatMap(line => (line.type === 'sentence' ? [line] : []));
@@ -435,6 +450,119 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     expect(task.some(line => line.type === 'speech' || line.type === 'intent')).toBe(false);
     expect(body.calls).toHaveLength(0);
     await close();
+  });
+
+  describe('going into and out of the server by voice', () => {
+    const outside = { running: 'running', bot: 'absent', pending: null } as const;
+    const inside = { running: 'running', bot: 'joined', pending: null } as const;
+    const shared = { conversationId: SERVER_ROOM, participants: [OWNER] };
+
+    it('offers login to the owner while her body is out, with the reasons, even when the body is not connected', async () => {
+      const { say, model, body, lifecycle, close } = harness();
+      body.connected = false;
+      lifecycle.current = outside;
+      model.reply = 'うん、入るね。ちょっと待ってて。';
+      model.intent = { kind: 'login', goal: '' };
+      const lines = await say('シャノン、マイクラに入ってきて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND] });
+      expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
+      const prompt = promptOf(model.requests[0]!);
+      expect(prompt).toContain('[ボクのマイクラへの出入り]');
+      expect(prompt).toContain('選べるのは login だけ');
+      expect(prompt).toContain('「抜けて」「落ちて」「切って」は選ばない');
+      expect(prompt).toContain('もう入ったことにはしない');
+      expect(lifecycle.asked).toEqual([{ action: 'login', threadId: platformBridgeThreadId('discord', SERVER_ROOM), actor: 'ライ氏' }]);
+      expect(body.calls).toHaveLength(0);
+      expect(sentences(lines).map(line => line.text).join('')).toBe(model.reply);
+      await close();
+    });
+
+    it('offers logout while her body is in, and not both: a login chosen then is dropped', async () => {
+      const { say, model, lifecycle, close } = harness();
+      lifecycle.current = inside;
+      model.reply = 'うん、またね。';
+      model.intent = { kind: 'logout', goal: '' };
+      await say('ログアウトして', shared);
+      expect(promptOf(model.requests[0]!)).toContain('選べるのは logout だけ');
+      expect(lifecycle.asked.map(item => item.action)).toEqual(['logout']);
+      model.intent = { kind: 'login', goal: '' };
+      await say('マイクラに入って', shared);
+      expect(lifecycle.asked.map(item => item.action)).toEqual(['logout']);
+      await close();
+    });
+
+    it('offers nothing while it is under way or when the state is not known', async () => {
+      const { say, model, lifecycle, close } = harness();
+      for (const current of [{ ...outside, pending: 'login' as const }, { running: 'stopped' as const, bot: 'absent' as const, pending: null },
+        { running: 'running' as const, bot: 'unknown' as const, pending: null }, null]) {
+        lifecycle.current = current;
+        model.requests.length = 0;
+        model.intent = { kind: 'login', goal: '' };
+        await say('マイクラに入ってきて', shared);
+        expect(promptOf(model.requests[0]!)).not.toContain('[ボクのマイクラへの出入り]');
+      }
+      expect(lifecycle.asked).toEqual([]);
+      await close();
+    });
+
+    it('offers nothing with the body part switched off', async () => {
+      const off = harness({ SHANNON_DC_VOICE: 'on', SHANNON_DC_VOICE_MINECRAFT: 'off' });
+      off.lifecycle.current = outside;
+      off.model.intent = { kind: 'login', goal: '' };
+      await off.say('マイクラに入ってきて', shared);
+      expect(promptOf(off.model.requests[0]!)).not.toContain('[ボクのマイクラへの出入り]');
+      expect(off.lifecycle.asked).toEqual([]);
+      await off.close();
+    });
+
+    it('never offers it for a friend, and drops it even when the model names it (the seat decides)', async () => {
+      const { say, model, lifecycle, close } = harness();
+      lifecycle.current = outside;
+      model.intent = { kind: 'login', goal: '' };
+      await say('シャノン、マイクラに入ってきて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
+      expect(promptOf(model.requests[0]!)).not.toContain('[ボクのマイクラへの出入り]');
+      expect(lifecycle.asked).toEqual([]);
+      await close();
+    });
+
+    it("offers it to the owner alone in his own room, where the request kinds stay her tools'", async () => {
+      const { say, model, body, lifecycle, close } = harness();
+      lifecycle.current = outside;
+      model.intent = { kind: 'login', goal: '' };
+      await say('マイクラに入ってきて', { participants: [OWNER] });
+      expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
+      expect(promptOf(model.requests[0]!)).toContain('kind に使うのは speech と login と none だけ');
+      expect(lifecycle.asked.map(item => item.action)).toEqual(['login']);
+      model.intent = { kind: 'task', goal: 'パンを3個作る' };
+      await say('パンを作って', { participants: [OWNER] });
+      expect(body.calls).toHaveLength(0);
+      await close();
+    });
+
+    it('says a fixed sentence when the request is refused at once, and nothing when it is already so', async () => {
+      const { say, model, lifecycle, close } = harness();
+      lifecycle.current = outside;
+      lifecycle.refusal = { ok: false, code: 'server_not_running', message: '' };
+      model.reply = 'うん、入るね。';
+      model.intent = { kind: 'login', goal: '' };
+      const lines = await say('マイクラに入ってきて', shared);
+      expect(lifecycle.asked).toEqual([]);
+      expect(sentences(lines).at(-1)).toMatchObject({ text: 'サーバーが動いてないから、入れないみたい。', correction: true });
+      lifecycle.refusal = { ok: true, lifecycleId: null, state: 'pending' };
+      const folded = await say('マイクラに入ってきて', shared);
+      expect(sentences(folded).map(line => line.text).join('')).toBe(model.reply);
+      expect(lifecycle.asked).toEqual([]);
+      await close();
+    });
+
+    it('does not make the spoken turn wait for it', async () => {
+      const { say, model, lifecycle, close } = harness();
+      lifecycle.current = outside;
+      lifecycle.request = () => new Promise<never>(() => {});
+      model.intent = { kind: 'login', goal: '' };
+      const lines = await say('マイクラに入ってきて', shared);
+      expect(typeOf(lines).at(-1)).toBe('done');
+      await close();
+    });
   });
 
   it('reads speechMode and speechRate of the request, and refuses a value it does not know', () => {

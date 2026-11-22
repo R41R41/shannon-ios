@@ -1,5 +1,5 @@
 import { createRecoveredResume } from './operatorRecoveredResume.js';
-import { createOperatorRequests } from './operatorMinecraftCommandRequests.js';
+import { createOperatorRequests, type OperatorHandleHooks } from './operatorMinecraftCommandRequests.js';
 import { createOperatorContext } from './operatorMinecraftContext.js';
 import { FINISHED,holdDetail,holdDetailText,takeWords,holdWhy,HOUR_MS,ago,isRecoveredPause,MESSAGES,SKILL_IMPORT_MESSAGES,skillImportCode,
   RECHECK_UNAVAILABLE } from './operatorMinecraftWords.js';
@@ -16,6 +16,7 @@ import { driftWords,headIncidentKind,HEAD_INCIDENT_WORDS,takeEnd,type Feet,type 
 import { heldAgainWords } from '../surfaces/minecraft/minecraftLlmcResultWords.js';
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN } from '@shannon/cognition';
 export type { OperatorActivity, OperatorMinecraftParts } from './operatorMinecraftWords.js';
+export type { OperatorHandleHooks } from './operatorMinecraftCommandRequests.js';
 
 const stopControl = (input: OperatorInput): boolean => input.command === 'cancel'
   || (input.command === 'lifecycle' && (input.action === 'logout' || input.action === 'stop'));
@@ -373,7 +374,7 @@ const resumed = resumeHeldTask();
       { skillImport: result.body });
   }
 
-  async function handle(value: unknown): Promise<{ status: number; body: unknown }> {
+  async function handle(value: unknown, hooks?: OperatorHandleHooks): Promise<{ status: number; body: unknown }> {
     const turnedAway = flooded(parts.now(), operatorLabel((value as { operator?: unknown } | null)?.operator));
     if (turnedAway) return turnedAway;
     const c = context(value);
@@ -390,7 +391,7 @@ const resumed = resumeHeldTask();
       && parts.audit.acceptedSince(parts.scopeKey, new Date(Date.parse(c.at) - 3600_000).toISOString()) >= OPERATOR_LIMITS.requestsPerHour) {
       return c.refuse('rate_limited');
     }
-    if (parsed.command === 'lifecycle') return lifecycle(c, parsed, serverId);
+    if (parsed.command === 'lifecycle') return lifecycle(c, parsed, serverId, hooks);
     if (parsed.command === 'request') return request(c, parsed);
     if (parsed.command === 'budget') return budget(c, parsed);
     if (parsed.command === 'release') return release(c);
@@ -492,6 +493,6 @@ const { resumeRecovered } = createRecoveredResume(parts, { audit, skipNotes, aft
       }, () => undefined);
   }
 
-  return { handle, tick, socketRefused, hold, notHeld, bodyHeld, resumeChecked, skipNote, heldAgainNote, heldMs, repeated };
+  return { handle, tick, actionLive: minecraftActionLive, socketRefused, hold, notHeld, bodyHeld, resumeChecked, skipNote, heldAgainNote, heldMs, repeated };
 }
 export type OperatorMinecraft = ReturnType<typeof createOperatorMinecraft>;

@@ -9,6 +9,11 @@ import type { LifecycleSettlement } from './minecraftLifecycleRunner.js';
 import { preparedWorldOfReceipt } from './freshWorldWiring.js';
 import type { OperatorMinecraftRequests } from './operatorMinecraftRequests.js';
 import type { OperatorContext as Context } from './operatorMinecraftContext.js';
+/** What a caller of `handle` may add to a lifecycle operation: to be told when it settles, and to keep the owner's Talk free of its notice. */
+export interface OperatorHandleHooks {
+  onSettled?(settlement: LifecycleSettlement, operationId: string): void;
+  quiet?: boolean;
+}
 export function createOperatorRequests(
   parts: OperatorMinecraftParts,
   shared: Pick<ReturnType<typeof createOperatorContext>, 'audit' | 'minecraftActionLive' | 'observed'>,
@@ -16,7 +21,7 @@ export function createOperatorRequests(
 ) {
   const { audit, minecraftActionLive, observed } = shared;
 
-  async function lifecycle(c: Context, input: Extract<OperatorInput, { command: 'lifecycle' }>, serverId: string | null) {
+  async function lifecycle(c: Context, input: Extract<OperatorInput, { command: 'lifecycle' }>, serverId: string | null, hooks?: OperatorHandleHooks) {
     if (!parts.lifecycle) return c.refuse('lifecycle_unavailable');
     if (!serverId) return c.refuse('invalid_input', '登録されたサーバーIDを指定してください（--server）。');
     const settled = (settlement: LifecycleSettlement) => {
@@ -40,6 +45,7 @@ export function createOperatorRequests(
         lifecycleId: c.operationId,
         detail: settlement.receipt ? `${settlement.receipt.outcome}${world}` : seen ? `unknown${world}` : null,
       });
+      try { hooks?.onSettled?.(settlement, c.operationId); } catch { /* a caller's own report never fails the audit */ }
     };
     const asked = { id: c.operationId, serverId, action: input.action, ...(input.keepWorld ? { keepWorld: true } : {}) };
     const admission = await parts.lifecycle.execute(asked, settled);
@@ -64,7 +70,7 @@ export function createOperatorRequests(
       reasonCode: 'operator_cli',
       detail: `operation=${c.operationId} server=${serverId}`,
     });
-    parts.note(`${c.operationId}:lifecycle`, operatorTalkNote('lifecycle', `${input.action}・${serverId}`), c.at);
+    if (!hooks?.quiet) parts.note(`${c.operationId}:lifecycle`, operatorTalkNote('lifecycle', `${input.action}・${serverId}`), c.at);
     return c.reply('accepted', 'accepted', '受け付けました。結果は監査記録に settled として残ります。', {
       lifecycleId: admission.lifecycleId,
       actionId: admission.actionId,
