@@ -134,11 +134,12 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
       .toBe('食料の当て: 近くに動物・村・畑は見えていない・ホグリン・真紅の森は見えていない・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）');
     const near = { ...SHAFT, nearbyEntities: [{ id: 31, name: 'hoglin', distance: 24.2, position: at(330, 52, 80) }],
       scan: { at: 't', dimension: 'the_nether', text: '走査', rows: ['範囲 読み込み 353 チャンク', 'ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 西 112m'] } };
-    expect(foodLeads(near, 'the_nether', nodes)).toBe('食料の当て: #31 hoglin 24m・ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 西 112m'
+    // The scan's row is said with its age (here unknown) and its distance worked out again from her feet, not the scan's own.
+    expect(foodLeads(near, 'the_nether', nodes)).toBe('食料の当て: #31 hoglin 24m・ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 今の足元から水平 111m・上 18（走査 時刻不明・今は未確認）'
       + '・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）');
     const village = { position: at(0, 64, 0), nearbyEntities: [{ id: 2, name: 'cow', distance: 9 }, { id: 3, name: 'zombie', distance: 4 }],
       scan: { at: 't', dimension: 'overworld', text: '走査', rows: ['村の鐘 最寄り (40,64,10) 東 41m', '原木 oak ×20 最寄り (3,64,3) 北 4m'] } };
-    expect(foodLeads(village, 'overworld')).toBe('食料の当て: 村の鐘 最寄り (40,64,10) 東 41m・#2 cow 9m');
+    expect(foodLeads(village, 'overworld')).toBe('食料の当て: 村の鐘 最寄り (40,64,10) 今の足元から水平 41m（走査 時刻不明・今は未確認）・#2 cow 9m');
   });
 });
 

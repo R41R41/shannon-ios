@@ -57,7 +57,8 @@ describe('the food line: the village first with its points, the cow with what it
     scan: { rows: ['範囲 読み込み', '干し草 ×25 最寄り (195,63,-167) 北西 102m', '畑 小麦 ×9 最寄り (202,64,-129) 西 58m'] } };
   it('lists the village hay and fields before the animals, and says a sword or an axe is needed while she has none', () => {
     const line = foodLine(frame(world), 6)!;
-    expect(line.startsWith('村の食べ物: 干し草 ×25')).toBe(true);
+    // A scan row is said as a scan (its age and base), not under the name of what is seen now.
+    expect(line.startsWith('村の食べ物（走査 時刻不明・今は未確認）: 干し草 ×25')).toBe(true);
     expect(line).toContain('1 個でパン 3＝約 33 点・焼かずに食べられる');
     expect(line.indexOf('村の食べ物')).toBeLessThan(line.indexOf('近くの食べ物の候補'));
     expect(line).toContain('（狩りは石以上の剣か斧が要る: 今 無し）');

@@ -89,7 +89,7 @@ describe('end1109o09 (opening lane): the now wants iron and the map shows none: 
   const world = (extra: Record<string, unknown> = {}) => ({ position: { x: 614.5, y: 32, z: -267.5 }, mapLandmarks: ['o 銅[copper_ore] (613,36,-269) 西1 ×8 見えている'], ...extra });
   it('says the scan, then the stair to y=16 and one row sideways', () => {
     const line = ironSearchLine(world(), pack({ iron_pickaxe: 1 }), 'overworld', now)!;
-    expect(line).toContain('鉄鉱石: 今の節 p3.3 に要るが、地図に見えていない');
+    expect(line).toContain('鉄鉱石: 今の節 p3.3 に要るが、地図にも走査の行にも見えていない');
     expect(line).toContain('夜を待たない');
     expect(line).toContain('「vertical down stairs north y=16 dig=');
     expect(line).toContain('「go 614,16,-314 dig=');

@@ -26,7 +26,7 @@ function recordSurvey(state: Journey, feet: Point, world: Record<string, unknown
   if (!surface(world) || !Array.isArray(world.nearbyEntities)) return;
   const here = cell(feet);
   state.surveys = [...state.surveys.filter(s => s.cell !== here),
-    { cell: here, point: point(feet)!, at: state.at, lead: foodLeads(world, 'overworld').slice(0, 220) }].slice(-12);
+    { cell: here, point: point(feet)!, at: state.at, lead: foodLeads({ ...world, scan: undefined }, 'overworld') /* the scan's rows are not a find of this visit: no scan, no time of this visit on it */.slice(0, 220) }].slice(-12);
 }
 
 function journeyFrame(observation: BodyObservation | null) {

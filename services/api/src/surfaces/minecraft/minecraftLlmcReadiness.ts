@@ -9,6 +9,7 @@ import {
   type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { agedScan } from './minecraftLlmcScanAge.js';
 import { fetchingNetherDrops, portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
@@ -314,7 +315,7 @@ function gateBack(world: Record<string, unknown>, rows: readonly string[], nodes
  * rows, in the Nether a hoglin
  * and the crimson forest's stems, and the gate back. One line, or the fact that none is near.
  */
-export function foodLeads(world: Record<string, unknown>, dimension: string | null, nodes: readonly PlanNode[] = []): string {
+export function foodLeads(world: Record<string, unknown>, dimension: string | null, nodes: readonly PlanNode[] = [], nowMs: number | null = null): string {
   const animals = (Array.isArray(world.nearbyEntities) ? world.nearbyEntities : []).flatMap(item => {
     const entity = record(item), name = typeof entity?.name === 'string' ? entity.name : '';
     const distance = finite(entity?.distance), id = finite(entity?.id) !== null ? `#${String(entity!.id)} ` : '';
@@ -323,15 +324,19 @@ export function foodLeads(world: Record<string, unknown>, dimension: string | nu
   const scan = record(world.scan);
   const sameDimension = !scan?.dimension || String(scan.dimension).replace(/^minecraft:/u, '') === dimension;
   const rows = sameDimension && Array.isArray(scan?.rows) ? (scan!.rows as unknown[]).filter((row): row is string => typeof row === 'string') : [];
-  const places = rows.filter(row => VILLAGE_ROW.test(row) || (dimension === 'the_nether' && /crimson|真紅/u.test(row)))
-    .slice(0, 3).map(row => row.slice(0, 60));
+  // The scan is read once and kept: its rows go through the one judgment of age and base (`agedScan`) and are said as a scan, never as what is seen now.
+  const aged = agedScan(sameDimension ? scan : null, nowMs, feetOf(world));
+  const places = aged.rows.filter(row => VILLAGE_ROW.test(row) || (dimension === 'the_nether' && /crimson|真紅/u.test(row)))
+    .slice(0, 3).map(row => row.slice(0, 80));
   const village = places.filter(row => VILLAGE_ROW.test(row)), others = places.filter(row => !VILLAGE_ROW.test(row));
   const gate = dimension === 'the_nether' ? gateBack(world, rows, nodes, feetOf(world)) : null;
   // 11/11 run 7: the village's hay and fields first (food that needs no fire and no sword), then the animals.
   const near = [...village, ...animals, ...others];
   const unexplored = dimension === 'overworld' && !near.length ? '。走査外は未確認。地下や水中の食料・地表への帰路も未確認。水が見えるだけでは魚の所在も未確認' : '';
   const nether = dimension === 'the_nether' && !near.some(line => /hoglin|crimson|真紅/u.test(line)) ? '・ホグリン・真紅の森は見えていない' : '';
-  return `食料の当て: ${near.length ? near.join('・') : `近くに動物・村・畑は見えていない${scan ? '（走査の範囲）' : ''}`}${nether}${gate ? `・${gate}` : ''}${unexplored}`;
+  const asScan = (group: string[]) => group.length ? [`${group.join('・')}（${aged.mark}）`] : [];
+  const none = `近くに動物・村・畑は見えていない${scan ? '（走査の範囲）' : ''}${aged.dropped ? `。${aged.mark}の行 ${aged.dropped} 件は古いので使わない` : ''}`;
+  return `食料の当て: ${near.length ? [...asScan(village), ...animals, ...asScan(others)].join('・') : none}${nether}${gate ? `・${gate}` : ''}${unexplored}`;
 }
 
 /** A plan node about food: its kind is `food` (chapter 7: the kind the model wrote, not the title's words or the condition's). */
@@ -384,12 +389,12 @@ export function feetIn(world: Record<string, unknown>): Feet | null { return fee
 
 /** The readiness facts of a frame: its dimension, counts, food points, hunger and health. */
 export function readinessOf(observation: BodyObservation | null): { world: Record<string, unknown>; dimension: string | null; counts: ItemCounts;
-  food: number; hunger: number | null; health: number | null } | null {
+  food: number; hunger: number | null; health: number | null; at?: number | null } | null {
   const world = record(observation?.state.world);
   if (!observation || !world) return null;
   const dimension = world.dimension ?? observation.facts.dimension;
   return { world, counts: carriedItemCounts(world, observation.facts), food: carriedFood(world, observation.facts).points,
-    hunger: finite(world.food), health: finite(world.health),
+    hunger: finite(world.food), health: finite(world.health), at: finite(Date.parse(observation.stateAt)),
     dimension: typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null };
 }
 
@@ -545,17 +550,26 @@ const IRON_MARK = /鉄鉱石\[(?:deepslate_)?iron_ore\]/u;
  * to find it: the scan, then the stair down to y=16 and one row dug sideways (`oreRouteHands`). The line is said only while the now wants
  * iron and the map shows none, in the overworld, with a pickaxe that takes iron.
  */
-export function ironSearchLine(world: Record<string, unknown>, counts: ItemCounts, dimension: string | null, now: PlanNode | undefined): string | null {
+export function ironSearchLine(world: Record<string, unknown>, counts: ItemCounts, dimension: string | null, now: PlanNode | undefined,
+  nowMs: number | null = null): string | null {
   if (dimension !== 'overworld' || !now) return null;
   const wants = /iron/u.test(String(now.doneWhen ?? '')) || /鉄(?!ゴーレム)/u.test(String(now.title ?? ''));
   if (!wants) return null;
   if (!['stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe'].some(name => (counts.get(name) ?? 0) > 0)) return null;
+  // The scan's iron row (read once; aged and marked by `agedScan`) is kept in the input while the iron is wanted, so that the nearest ore, buried or not, is
+  // always in front of her: with only the map's exposed ore and the stair down to y=16 said, she went 40 down for 2 pieces in 8 minutes while buried ore 12 m away gave 3 in 13 seconds.
+  const scan = agedScan(world.scan, nowMs, feetOf(world));
+  const lead = scan.rows.find(row => /^鉄鉱石/u.test(row));
+  if (lead) {
+    return `鉄鉱石の当て（${scan.mark}）: ${lead.slice(0, 160)}。埋まった近い鉄は go で掘り進んで mine すると早い（階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へは約 13 秒で 3 個だった）。`
+      + '空気に面した遠い鉄は、近い鉄が要る数に足りない時だけ。y=16 へ下りるのは、近くに鉄が無い時だけ';
+  }
   const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter((line): line is string => typeof line === 'string');
   if (marks.some(line => IRON_MARK.test(line))) return null;
   const route = oreRouteHands(world, 'iron', counts);
   if (!route) return null;
-  return `鉄鉱石: 今の節 ${now.id} に要るが、地図に見えていない（待っても見えてこない。地下は昼も夜も同じ暗さなので夜を待たない）。探す手: ① mc_probe kind=scan（鉱石の行）`
-    + ` ② それでも無ければ ${route}`;
+  return `鉄鉱石: 今の節 ${now.id} に要るが、地図にも走査の行にも見えていない（待っても見えてこない。地下は昼も夜も同じ暗さなので夜を待たない）。探す手: ① mc_probe kind=scan（鉱石の行）`
+    + ` ② それでも無ければ（近くに無い時だけ。鉄は地表〜y=70 の岩・谷・洞窟の壁にも出る。理由: 下りるほど時間がかかる）${route}`;
 }
 
 const WANTS_WOOL = (node: PlanNode): boolean => /wool|_bed(?![a-z_])|(?:^|[^a-z_])bed(?:[^a-z_]|$)/u.test(String(node.doneWhen ?? '')) || /羊|ベッド/u.test(String(node.title ?? ''));
@@ -702,8 +716,8 @@ export function descentNote(input: unknown, frame: BodyObservation | null): stri
   if (!lacks.length) return null;
   const lowest = lowestReach(record(input)?.hands, feet.y);
   if (feet.y - lowest < DESCENT) return null;
-  const cows = foodLeads(facts.world, facts.dimension).replace(/^食料の当て: /u, '');
-  const near = /m/u.test(cows) && !cows.startsWith('近くに動物') ? `。近くに ${cows} が見えている` : '';
+  const cows = foodLeads(facts.world, facts.dimension, [], facts.at ?? null).replace(/^食料の当て: /u, '');
+  const near = /m/u.test(cows) && !cows.startsWith('近くに動物') ? `。食料の当て: ${cows}` : '';
   // Run 42: she went down at health 11.3 that did not come back, fell and was shot dead; the health is the descent's too.
   const health = finite(facts.world.health), hunger = finite(facts.world.food);
   const recoveryWords = () => (health !== null && hunger !== null && health < 20 && hunger < 18 ? `。体力 ${round1(

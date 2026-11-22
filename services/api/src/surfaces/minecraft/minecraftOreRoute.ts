@@ -107,7 +107,7 @@ export function oreRouteHands(world: Record<string, unknown>, ore: 'iron' | 'dia
   // A stair goes one block across for each block down: the row starts where the stair ends and goes on the same way.
   const foot = feet.z - (descend ? feet.y - y : 0);
   const down = descend ? `「vertical down stairs ${STAIR_WAY} y=${y} dig=${STAIR_DIG[ore]} ${SEAL_WORDS}」で y=${y} へ下り（${SEAL_NOTE}）、` : '';
-  return `${wood(row)}${down}横へ 1 列掘り進む「go ${feet.x},${row},${foot - 30} dig=${WAY_DIG} maxDig=60」（${ore === 'iron' ? '鉄は y=16' : 'ダイヤは y=-58'} 前後に最も多い。掘った壁に見えた鉱石は mine で掘る。y=0 より下は deepslate_ の付く名前）`;
+  return `${wood(row)}${down}横へ 1 列掘り進む「go ${feet.x},${row},${foot - 30} dig=${WAY_DIG} maxDig=60」（${ore === 'iron' ? '鉄は y=16 前後に最も多いが、地表〜y=70 の岩・谷・洞窟の壁にも出る。走査の鉄の行が近ければ先にそこ' : 'ダイヤは y=-58 前後に最も多い'}。掘った壁に見えた鉱石は mine で掘る。y=0 より下は deepslate_ の付く名前）`;
 }
 
 /**

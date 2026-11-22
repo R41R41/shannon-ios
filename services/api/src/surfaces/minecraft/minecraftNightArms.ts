@@ -13,6 +13,8 @@ export const NIGHT_FROM = 13_000, NIGHT_TO = 23_000, DAY_LENGTH = 24_000, TICKS_
 const NEAR_TICKS = 3 * TICKS_PER_MINUTE;
 /** The owner's ruler to the Nether, the one the goal's text and the road's milestone use (`NETHER_BY_SECONDS`): the night's lines say their share of it. */
 const NETHER_MINUTES = Math.round(NETHER_BY_SECONDS / 60), NETHER_TICKS = NETHER_BY_SECONDS * 20;
+/** What waiting costs against the Nether's target, said only while the Nether is the goal (a request of one thing has no such target: the share was said to a cake). */
+const netherShare = (left: number, nether: boolean): string => nether ? `（ネザーまで ${NETHER_MINUTES} 分の目標の ${Math.round(100 * left / NETHER_TICKS)}%）` : '';
 const WEAPON = /(?:^|:)(?:wooden|stone|golden|iron|diamond|netherite)_(?:sword|axe)$/u;
 /** The blade of the iron gear: the weapon the night and the gate are met with (a stone one is what the first hour makes). */
 const IRON_BLADE = /(?:^|:)(?:iron|diamond|netherite)_sword$/u;
@@ -136,14 +138,14 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
  * body like the night's choices. Null: not the overworld, no clock, a storm (the storm's bed line), no bed carried, or within the bed line's
  * minute.
  */
-export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null, pearlNow = false): string | null {
+export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null, pearlNow = false, nether = true): string | null {
   if (dimension !== 'overworld' || thunderstorm(world)) return null;
   const tick = dayTick(world);
   if (tick === null || tick >= BED_FROM - BED_NEAR_TICKS) return null;
   if (![...counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
   const left = BED_FROM - tick;
   return `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない`
-    + `（ネザーまで ${NETHER_MINUTES} 分の目標の ${Math.round(100 * left / NETHER_TICKS)}%）。今の節を進め、夜に地上で動く予定なら sleep を作業の act の先頭か末尾に 1 手入れる（夜になり次第、体が次の手の前で寝る。待たなくてよい）。寝るのは、これから地上で動く夜を飛ばす時か、地上へ出る手の直前が夜の時。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒。地上へ出る見込みの時刻と比べる）${pearlNightWord(counts, pearlNow)}`;
+    + `${netherShare(left, nether)}。今の節を進め、夜に地上で動く予定なら sleep を作業の act の先頭か末尾に 1 手入れる（夜になり次第、体が次の手の前で寝る。待たなくてよい）。寝るのは、これから地上で動く夜を飛ばす時か、地上へ出る手の直前が夜の時。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒。地上へ出る見込みの時刻と比べる）${pearlNightWord(counts, pearlNow)}`;
 }
 
 /**
@@ -199,7 +201,7 @@ function handSealHands(at: { x?: unknown; y?: unknown; z?: unknown } | null): st
 export const FOOD_PASS = '【動物なし】';
 const BED_MARK = /^B [^()]*ベッド \((-?\d+),(-?\d+),(-?\d+)\)/u;
 export function nightChoiceLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null,
-  underground = false, food?: number): string | null {
+  underground = false, food?: number, nether = true): string | null {
   if (dimension !== 'overworld') return null;
   const tick = dayTick(world);
   // end1109o06: she dug in about 3 minutes before night (before the old 1-minute window), stairs with an open mouth: the choice is said from then.
@@ -250,10 +252,10 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
   if (!choices.length && !underground && !pick) choices.push(handSealHands(at));
   if (!choices.length) return null;
   const left = tick >= NIGHT_FROM ? NIGHT_TO - tick : NIGHT_TO - NIGHT_FROM;
-  const share = Math.round(100 * left / NETHER_TICKS);
+
   return `${tick >= NIGHT_FROM ? `夜（朝まで ${minutes(NIGHT_TO - tick)}）` : `夜まで ${minutes(NIGHT_FROM - tick)}`}・ベッドを持っていない。`
-    + `${underground ? '穴で' : '夜に地上で'}待てば ${minutes(left)} なにも進まない（ネザーまで ${NETHER_MINUTES} 分の目標の ${share}%）。次の 1 手はどれか: `
-    + choices.map((text, index) => `${'AB'[index]}) ${text}`).join(' ') + '。囲いで待つのは、どれもできない時だけ';
+    + `${underground ? '穴で' : '夜に地上で'}待てば ${minutes(left)} なにも進まない${netherShare(left, nether)}。次の 1 手はどれか: `
+    + choices.map((text, index) => `${'AB'[index]}) ${text}`).join(' ') + '。穴は、地下で掘るために塞いで下りる入口であって、朝まで待つ場所ではない。囲いで待つのは、どれもできない時だけ';
 }
 
 /** Thunderstorm sleep changes the weather; it need not advance a daytime clock to morning. */
