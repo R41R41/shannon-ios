@@ -103,6 +103,12 @@ describe('iron: the nearest ore\'s hands are in the input as they can be sent, a
     expect(line).toContain('先に probe で確かめなくてよい');
     expect(line).toContain('go -73,61,-119');
   });
+  it('iron the map shows near her is mined where it is: the scan\'s nearest is the nearest to its base, so its hands (and the "no probe" sentence) are not said', () => {
+    const seen = ironSearchLine({ position: { x: -50, y: 72, z: -115 }, mapLandmarks: ['i 鉄鉱石[iron_ore] (-52,70,-118) 西2・南3・下2 ×1 見えている'], scan }, pack, 'overworld', now, T0 + 3 * 60_000)!;
+    expect(seen).toContain('鉄鉱石の当て（走査 3 分前');
+    expect(seen).not.toContain('この鉄の手');
+    expect(seen).not.toContain('先に probe で確かめなくてよい');
+  });
   it('a row past the still limit is not said as a lead (the time is passed, so the old row is not "there")', () => {
     const line = ironSearchLine({ position: { x: -50, y: 72, z: -115 }, mapLandmarks: [], scan }, pack, 'overworld', now, T0 + 100 * 60_000) ?? '';
     expect(line).not.toContain('鉄鉱石の当て');

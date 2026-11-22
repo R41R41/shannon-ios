@@ -580,12 +580,15 @@ export function ironSearchLine(world: Record<string, unknown>, counts: ItemCount
   // always in front of her: with only the map's exposed ore and the stair down to y=16 said, she went 40 down for 2 pieces in 8 minutes while buried ore 12 m away gave 3 in 13 seconds.
   const scan = agedScan(world.scan, nowMs, feetOf(world));
   const lead = scan.rows.find(row => /^鉄鉱石/u.test(row));
+  const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter((line): line is string => typeof line === 'string');
   if (lead) {
-    return `鉄鉱石の当て（${(scan.mark ?? '').replace('・今は未確認', '')}）: ${lead.slice(0, 160)}。鉄鉱石は動かない（掘られた所だけ変わる）ので、走査の座標を信じてよい。着いて無ければ手の結果が理由を返すので、先に probe で確かめなくてよい。`
-      + `埋まった近い鉄は go で掘り進んで mine すると早い（階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へは約 13 秒で 3 個だった）。${nearIronHands(lead, feetOf(world))}`
+    // Iron the map shows (open to the air, near her) is mined where it is: the scan's nearest iron is the nearest to the scan's base, not to her, and its hands would take her away from it.
+    const seen = marks.some(line => IRON_MARK.test(line));
+    return `鉄鉱石の当て（${(scan.mark ?? '').replace('・今は未確認', '')}）: ${lead.slice(0, 160)}。`
+      + (seen ? '' : '鉄鉱石は動かない（掘られた所だけ変わる）ので、走査の座標を信じてよい。着いて無ければ手の結果が理由を返すので、先に probe で確かめなくてよい。')
+      + `埋まった近い鉄は go で掘り進んで mine すると早い（階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へは約 13 秒で 3 個だった）。${seen ? '' : nearIronHands(lead, feetOf(world))}`
       + '空気に面した遠い鉄は、近い鉄が要る数に足りない時だけ。y=16 へ下りるのは、近くに鉄が無い時だけ';
   }
-  const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter((line): line is string => typeof line === 'string');
   if (marks.some(line => IRON_MARK.test(line))) return null;
   const route = oreRouteHands(world, 'iron', counts);
   if (!route) return null;
