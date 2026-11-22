@@ -247,6 +247,16 @@ describe('MinecraftLive', () => {
     expect(told('エンドラを討伐してください')).toEqual(['diamond_found', 'diamond_found']);
   });
 
+  it('does not tell the places of diamond ore the map knows while no job is running (the body has just come in)', () => {
+    const f = fixture();
+    const heard: LiveMoment[] = [];
+    f.live.onMoment(moment => heard.push(moment));
+    f.live.frame('minecraft:world', observation({ mapSummary: '鉱石: 鉄 1か所' }), { newConnection: true });
+    f.advance(500);
+    f.live.frame('minecraft:world', observation({ mapSummary: '鉱石: ダイヤ 40か所' }), { newConnection: false });
+    expect(heard.map(moment => moment.kind)).toEqual([]);
+  });
+
   it('knows she is in danger from the newest frame', () => {
     const f = fixture();
     f.live.frame('minecraft:world', observation({ health: 6 }), { newConnection: true });

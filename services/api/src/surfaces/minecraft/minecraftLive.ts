@@ -277,10 +277,10 @@ eplying, heard). */
       this.danger = bodyInDanger(observation);
       if (now - (this.seenAt.get(bodyId) ?? -Infinity) < DETECT_EVERY_MS) return;
       this.seenAt.set(bodyId, now);
-      // The places of ore the map knows are news for a run toward diamonds; on another job (a cake) they only grow in number and the room would hear them over and over.
+      // The places of ore the map knows are news for a run toward diamonds; on another job (a cake), or with no job yet (the body has just come in), they only grow in number and the room would hear them over and over.
       const goal = this.activeTask()?.info.goal;
       for (const moment of detector.observe(observation, now)) {
-        if (moment.kind === 'diamond_found' && moment.facts.carried === false && goal !== undefined && !DRAGON_RUN.test(goal)) continue;
+        if (moment.kind === 'diamond_found' && moment.facts.carried === false && !(goal !== undefined && DRAGON_RUN.test(goal))) continue;
         this.emit(moment);
       }
       for (const moment of this.progress(bodyId, observation, now)) this.emit(moment);
