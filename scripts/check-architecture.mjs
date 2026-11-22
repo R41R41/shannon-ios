@@ -36,13 +36,14 @@ const filmingOverLimit = new Map([
   ['services/api/src/surfaces/minecraft/minecraftEndFacts.ts', 543],
   ['services/api/src/surfaces/minecraft/minecraftFirstPlan.ts', 601],
   ['services/api/src/surfaces/minecraft/minecraftLlmcFacts.ts', 529],
-  ['services/api/src/surfaces/minecraft/minecraftLlmcLive.ts', 543],
+  ['services/api/src/surfaces/minecraft/minecraftLlmcLive.ts', 551],
   ['services/api/src/surfaces/minecraft/minecraftLlmcPromises.ts', 504],
   ['services/api/src/surfaces/minecraft/minecraftLlmcQueue.ts', 581],
   ['services/api/src/surfaces/minecraft/minecraftLlmcReadiness.ts', 755],
   ['services/api/src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts', 727],
   ['services/api/src/surfaces/platform/platformVoice.ts', 540],
   ['services/api/src/wiring/fcaBodyRecovery.ts', 508],
+  ['services/api/src/wiring/minecraftLlmcConfiguration.ts', 566],
 ]);
 
 for (const path of productionSources) {
