@@ -1,4 +1,5 @@
-import { LiveGovernor, liveFactLine, pickMoments, type LiveMoment, type LiveRoom } from '@shannon/mind';
+import { LIVE_COMMENTARY_V1, LiveGovernor, SPEECH_NEEDED_KINDS, isSpeechMode, isSpeechRate, liveFactLine, liveRateLimits, pickMoments,
+  type LiveCommentaryLimits, type LiveMoment, type LiveRoom, type SpeechMode, type SpeechRate } from '@shannon/mind';
 import { outsideActionExecution } from '../../infra/context/actionExecution.js';
 import type { MinecraftLiveRoom, MinecraftLiveSpeechReceipt } from '../../contracts/minecraftControlContract.js';
 import type { LiveSpeechDraft, LiveSpeechOutbox } from './minecraftLiveSpeech.js';
@@ -43,6 +44,8 @@ export interface LiveWriteRequest {
   told: readonly string[];
   /** The line will be spoken (she is in a voice channel), not written. */
   voice: boolean;
+  /** How she speaks now (the owner's choice, told by the body): absent is chatty. Only a line of a kind she says when not chatty is written otherwise. */
+  speech?: SpeechMode;
 }
 
 export interface LiveCommentaryParts {
@@ -65,6 +68,8 @@ export interface LiveCommentaryParts {
    */
   doneFallback?: string;
   governor?: LiveGovernor;
+  /** The numbers the governor was made with: the speech rate scales these, and a rate of normal is these as they are. Absent: the defaults. */
+  limits?: LiveCommentaryLimits;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -95,6 +100,8 @@ export class LiveCommentary {
   private readonly counts: Record<string, number> = {};
   /** The ends of requests that were given a second try (the first line was lost); each gets one. */
   private readonly retried = new Set<string>();
+  /** The speech rate the governor's numbers are made for (the body tells it in each poll; the numbers are set again only when it changes). */
+  private rate: SpeechRate = 'normal';
 
   constructor(private readonly parts: LiveCommentaryParts) {
     this.governor = parts.governor ?? new LiveGovernor();
@@ -163,6 +170,20 @@ export class LiveCommentary {
     this.timer.unref?.();
   }
 
+  /** How she speaks now, as the body told it (a body that does not tell: chatty at a normal rate). */
+  private speech(): { mode: SpeechMode; rate: SpeechRate } {
+    const body = this.parts.outbox.room();
+    return { mode: isSpeechMode(body?.speechMode) ? body.speechMode : 'chatty', rate: isSpeechRate(body?.speechRate) ? body.speechRate : 'normal' };
+  }
+
+  /** Only a change of rate sets the governor's numbers again (what she told is kept), so that a governor given by the wiring is left alone until then. */
+  private useRate(rate: SpeechRate): void {
+    if (rate === this.rate) return;
+    this.rate = rate;
+    this.governor.setLimits(liveRateLimits(this.parts.limits ?? LIVE_COMMENTARY_V1, rate));
+    this.log(`Shannon Minecraft live rate=${rate}`);
+  }
+
   /** What the room is, as the governor weighs it: the body's reading, what the API sees, and her danger. */
   private room(): LiveRoom {
     const body: MinecraftLiveRoom | null = this.parts.outbox.room(), seen = this.parts.live.conversation();
@@ -174,15 +195,17 @@ export class LiveCommentary {
   /** Weighs what waits; the loudest that may speak is written. Never throws. */
   private async tick(): Promise<void> {
     try {
-      // One line at a time: a line the body has not answered yet is not followed by another.
-      if (this.writing || this.pending.size > 0) return;
-      // The owner turned her monologue off: only the line that ends a request is written. What else waits is dropped before the model is asked
-      // (a body that is older than this still refuses such a line itself, so nothing else changes for it).
-      if (this.parts.outbox.room()?.monologue === 'off') {
-        const kept = this.waiting.filter(item => item.moment.kind === 'task_done');
+      // Not chatty (the owner's choice): her ordinary monologue is not written at all, so no model is asked and nothing is spent. What is
+      // still said is the end of a request, being stuck and danger (`SPEECH_NEEDED_KINDS`; the body holds the same list and declines the rest).
+      const { mode, rate } = this.speech();
+      if (mode !== 'chatty') {
+        const kept = this.waiting.filter(item => SPEECH_NEEDED_KINDS.includes(item.moment.kind));
         for (let dropped = this.waiting.length - kept.length; dropped > 0; dropped -= 1) this.count('muted');
         this.waiting = kept;
       }
+      this.useRate(rate);
+      // One line at a time: a line the body has not answered yet is not followed by another.
+      if (this.writing || this.pending.size > 0) return;
       const room = this.room(), ready: Array<{ moment: LiveMoment; salience: number; rewrites: number }> = [];
       this.waiting = this.waiting.filter(item => {
         const verdict = this.governor.verdict(item.moment, room);
@@ -213,7 +236,9 @@ export class LiveCommentary {
     const released = this.released, ending = this.endings;
     try {
       const voice = this.parts.outbox.room()?.voice === true, folded = also.map(item => item.moment);
-      const request: LiveWriteRequest = { main: main.moment, also: folded, recent: this.governor.recentWords(), told: this.toldFacts.list(), voice };
+      const mode = this.speech().mode;
+      const request: LiveWriteRequest = { main: main.moment, also: folded, recent: this.governor.recentWords(), told: this.toldFacts.list(), voice,
+        ...(mode !== 'chatty' ? { speech: mode } : {}) };
       const text = await within(this.parts.write(request).catch(() => null), LIVE_COMMENTARY_ENGINE.writeMilliseconds);
       // Her work was released while the model wrote (the line is of the work, not the end of a request): the line is not said.
       if ((released !== this.released || ending !== this.endings) && LIVE_COMMENTARY_ENGINE.workKinds.includes(main.moment.kind)) {

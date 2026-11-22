@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { SPEECH_MODES, SPEECH_RATES } from '@shannon/mind';
 import { bodyIntentOf, MINECRAFT_INTENT_KINDS, MINECRAFT_INTENT_SCHEMA, parsedMinecraftIntent } from '../src/surfaces/minecraft/minecraftIntent.js';
 import { minecraftQueueGuide } from '../src/contracts/minecraftQueuePrompt.js';
 import { materialsOf, recipeOf } from '../src/surfaces/minecraft/minecraftLlmcRecipes.js';
 
 describe('the intent field of her reply', () => {
   it('has every field required and every kind of the list in the enum', () => {
-    expect(MINECRAFT_INTENT_SCHEMA.required).toEqual(['kind', 'goal', 'placement', 'target']);
+    expect(MINECRAFT_INTENT_SCHEMA.required).toEqual(['kind', 'goal', 'placement', 'target', 'speechMode', 'speechRate']);
     expect(MINECRAFT_INTENT_SCHEMA.properties.kind.enum).toEqual([...MINECRAFT_INTENT_KINDS]);
     expect(MINECRAFT_INTENT_SCHEMA.properties.placement.enum).toEqual(['end', 'next', 'now', '']);
     expect(Object.keys(MINECRAFT_INTENT_SCHEMA.properties)).toEqual(MINECRAFT_INTENT_SCHEMA.required);
@@ -21,6 +22,19 @@ describe('the intent field of her reply', () => {
     expect(parsedMinecraftIntent({ kind: 'resume', goal: '', target: '2' })).toEqual({ kind: 'resume', goal: '', target: '2' });
     expect(parsedMinecraftIntent({ kind: 'move', goal: '', placement: 'end', target: '#1' })).toEqual({ kind: 'move', goal: '', placement: 'end', target: '#1' });
     expect(parsedMinecraftIntent({ kind: 'none', goal: 'x' })).toEqual({ kind: 'none', goal: '' });
+  });
+
+  it('reads a way of speaking from either field, with the words of the head (no copy of the lists drifts from them)', () => {
+    expect(MINECRAFT_INTENT_SCHEMA.properties.speechMode.enum).toEqual([...SPEECH_MODES, '']);
+    expect(MINECRAFT_INTENT_SCHEMA.properties.speechRate.enum).toEqual([...SPEECH_RATES, '']);
+    expect(parsedMinecraftIntent({ kind: 'speech', goal: 'x', placement: 'now', target: '3', speechMode: 'needed', speechRate: '' })).toEqual({ kind: 'speech', goal: '', speechMode: 'needed' });
+    expect(parsedMinecraftIntent({ kind: 'speech', goal: '', placement: '', target: '', speechMode: '', speechRate: 'high' })).toEqual({ kind: 'speech', goal: '', speechRate: 'high' });
+    expect(parsedMinecraftIntent({ kind: 'speech', speechMode: 'silent', speechRate: 'low' })).toEqual({ kind: 'speech', goal: '', speechMode: 'silent', speechRate: 'low' });
+    expect(parsedMinecraftIntent({ kind: 'speech', goal: '', speechMode: '', speechRate: '' })).toBeNull();
+    expect(parsedMinecraftIntent({ kind: 'speech', speechMode: 'loud' })).toBeNull();
+    // Another kind keeps none of it, and the body is never told of a way of speaking as a request.
+    expect(parsedMinecraftIntent({ kind: 'task', goal: 'パン', speechMode: 'silent' })).toEqual({ kind: 'task', goal: 'パン' });
+    expect(bodyIntentOf({ kind: 'speech', goal: '', speechMode: 'silent' })).toEqual({ kind: 'none', goal: '' });
   });
 
   it('reads nothing from a task without words, a move without a target, an unknown kind, or a placement that is not one', () => {

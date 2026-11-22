@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { liveFactLine, type LiveMoment } from '@shannon/mind';
+import { liveFactLine, type LiveMoment, type SpeechMode } from '@shannon/mind';
 
 /**
  * Her live line, asked of the model (session dc-live; `SHANNON_MINECRAFT_LIVE_SPEECH`). The line is hers: her identity, her place in her
@@ -30,6 +30,8 @@ export interface LiveWriterInput {
   voice: boolean;
   /** Where the line goes: a public YouTube Live (`surfaces/stream/`) or, by default, Discord with friends. */
   place?: 'discord' | 'stream';
+  /** How she speaks now when it is not chatty (the owner's choice): the line is then not a monologue, but a word to a person. */
+  speech?: SpeechMode;
 }
 
 export function liveWriterPrompt(input: LiveWriterInput): { system: string; message: string } {
@@ -54,7 +56,7 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
     '- 理由や使い道は、下に書いてあることだけを言う。書いていない理由を思いついても、それは本当かどうか分からないので言わない（たとえばバケツは牛乳のためと書いてあるなら、水のためとは言わない）。分からない時は、理由を言わず気持ちだけを言う。',
     '- 出だしは、その一言でいちばん言いたい中身（物の名前・やる事・数・気持ち）の言葉から入る。なぜ: 前置きの相づちから始めると、毎回同じ調子に聞こえて、ほんとうに話している感じが消える。',
     '- 物の名前は日本語でふつうに言う。下に英語の名前が書いてあっても、日本語のふだんの呼び方（たとえば「小麦の種」「クワ」）で言う。なぜ: 声で英語の名前を読み上げると、聞いている人には意味が通らない。座標・数・道具やコマンドの名前は読み上げない。',
-    '- 返事を待つ問いかけにはしない（問いかけは多くて1回。下の「依頼が終わった時」だけは別）。聞かれてもいない相手に話しかける形より、ひとりごとのほうが自然。',
+    '- 返事を待つ問いかけにはしない（問いかけは多くて1回。下の「依頼が終わった時」「進まなくて困っている時」は別）。聞かれてもいない相手に話しかける形より、ひとりごとのほうが自然。',
     ...(input.told ? ['- 「さっき話した出来事」と同じことは、新しい事実か新しい気持ちがある時だけ言う。なぜ: 同じ話を何度も聞かされると耳につく。'] : []),
     '- 「さっき言ったこと」と同じ出だし・同じ言い方の形を繰り返さない。同じ話題でも、新しい事実か新しい気持ちがある時だけ言い、言うなら出だしの言葉も文の形もかえる。'
       + 'なぜ: 同じ形が続くと、毎回同じ台詞を再生しているように聞こえて、ほんとうに話している感じが消える（記録に残るので、直前の言葉は下で確かめられる）。',
@@ -70,7 +72,7 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
     '- 終わった作業が「置く」「渡す」「持っていく」だった時は、置き場所も渡す相手も人がもう決めて、そのとおりにした。だから置き場所や渡し方はもう聞かない。置いた・渡したことを言って、次にどうするかだけ聞く。形の例：「置いたよ！ほかにやることある？」。なぜ: 人が決めたことをまた聞くと、話を聞いていなかったように聞こえる。',
     '- 聞くのは1つだけ。言い訳や作業のふり返りは長く話さない。',
   ] : [];
-  const system = [input.identity, input.persona, rules.join('\n'), done.join('\n'), input.body,
+  const system = [input.identity, input.persona, rules.join('\n'), done.join('\n'), kindBlock(input, stream), input.body,
     toldBlock(input),
     ['[いま起きたこと]', `- ${liveFactLine(input.main)}`,
       ...(input.also.length ? ['[ほかにあったこと（ついでに触れてもよい）]', ...input.also.map(moment => `- ${liveFactLine(moment)}`)] : [])].join('\n'),
@@ -79,6 +81,32 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
   // the last thing it is asked most.
   return { system, message: ended
     ? '（依頼が終わった一言を、できたことと、次にどうするか（作った物なら置き場所か渡し方。置く・渡す依頼だったなら、置いた・渡したことを言って、ほかにやることを）を聞く問いで終えて、本文だけで）' : '（実況の一言を、本文だけで）' };
+}
+
+/**
+ * What a line of being stuck or of danger is, and what any line is when she speaks only when needed (`SPEECH_NEEDED_KINDS`). Each rule says
+ * why: a stuck line that is not a question leaves the person with nothing to answer, and a danger line that is long is said after the danger.
+ */
+function kindBlock(input: LiveWriterInput, stream: boolean): string {
+  if (stream) return '';
+  const kind = input.main.kind, lines: string[] = [];
+  if (kind === 'stuck') {
+    lines.push('[進まなくて困っている時]',
+      `いま作業が進んでいない。困っていることを${SHANNON_OWNER_NAME}に伝えて、どうしたらいいかを聞く（何が進まないかは下の「いま起きたこと」にあることだけを言う）。`
+        + '形の例：「なんか進まなくなっちゃった、どうしよう？」。',
+      '- 文の最後は「？」で終える。なぜ: 聞き手が問いかけと分かり、次に返ってくる言葉をそのまま答えとして受け取れる。「。」で終えると、ただの独り言に聞こえて、誰も答えない。',
+      '- 聞くのは1つだけ。進まない理由を、下に書いていないのに決めつけて言わない（本当かどうか分からないので）。');
+  } else if (kind === 'near_death' || kind === 'died') {
+    lines.push('[危ない・倒れた時]',
+      '体が危ない、または倒れた。ひとことで短く知らせる。形の例：「あぶない！やられそう」「やられちゃった…」。',
+      '- できるだけ短く（10字から20字くらい）。なぜ: 長く話している間に、危ない場面は終わってしまうし、聞く人の声にも重なる。');
+  }
+  if (input.speech && input.speech !== 'chatty') {
+    lines.push(`[いまの話し方: ${input.speech === 'needed' ? '必要な時だけ話す' : '話さない（文字で出る）'}]`,
+      'この一言は、ふだんの独り言ではない。人に知らせる・聞くための一言だけ。感想や、作業の実況のような話はしない。',
+      `- なぜ: ${SHANNON_OWNER_NAME}が、独り言は要らない、必要な時だけ話してほしいと選んだ。だから、人に知らせることか聞くことがある時だけ口を開く。`);
+  }
+  return lines.join('\n');
 }
 
 /** What she said before, for the writer: the events already told (when the caller keeps them), and her own last words. */

@@ -46,7 +46,8 @@ describe('LiveCommentary keeps the events it told, and closes them with the requ
   function setup(write?: (request: LiveWriteRequest) => Promise<string | null>) {
     const listeners = new Set<(item: LiveMoment) => void>();
     const outbox = new LiveSpeechOutbox(() => clock);
-    const refresh = () => outbox.receive([], { voice: true, humanSpeaking: false, sinceHumanMs: null });
+    let room: Parameters<LiveSpeechOutbox['receive']>[1] = { voice: true, humanSpeaking: false, sinceHumanMs: null };
+    const refresh = () => outbox.receive([], room);
     refresh();
     setInterval(refresh, 1000);
     const requests: LiveWriteRequest[] = [];
@@ -64,7 +65,8 @@ describe('LiveCommentary keeps the events it told, and closes them with the requ
       await settle();
     };
     const next = async () => { clock += 20_000; await vi.advanceTimersByTimeAsync(2_000); };
-    return { engine, outbox, requests, settle, say, next, emit: (item: LiveMoment) => listeners.forEach(listener => listener(item)) };
+    const setRoom = (value: NonNullable<typeof room>) => { room = value; refresh(); };
+    return { engine, outbox, requests, settle, say, next, setRoom, emit: (item: LiveMoment) => listeners.forEach(listener => listener(item)) };
   }
 
   it('hands the writer the events already spoken of, oldest last, and none of its own words', async () => {
@@ -79,15 +81,51 @@ describe('LiveCommentary keeps the events it told, and closes them with the requ
     expect(f.requests[1]?.told).toEqual(['小麦の種が手に入った（いま1個、要るのは3個）。']);
   });
 
-  it('writes nothing while the owner has the monologue off, except the line that ends a request', async () => {
+  it.each(['needed', 'silent'] as const)('writes no monologue while she speaks %s, only the end of a request, being stuck and danger', async mode => {
     const f = setup();
-    f.outbox.receive([], { voice: true, humanSpeaking: false, sinceHumanMs: null, monologue: 'off' });
+    f.setRoom({ voice: mode !== 'silent', humanSpeaking: false, sinceHumanMs: null, speechMode: mode, speechRate: 'normal' });
     f.emit(moment('material_got', { item: 'wheat_seeds', count: 1, need: 3 }, 'g1'));
+    f.emit(moment('thinking', { why: '草を壊す' }, 't1'));
     await f.settle();
     expect(f.requests).toHaveLength(0);
+    expect(f.engine.stats().muted).toBe(2);
     f.emit(moment('task_done', { goal: 'ケーキ' }, 'd1', clock));
     await f.settle();
     expect(f.requests.map(request => request.main.kind)).toEqual(['task_done']);
+    expect(f.requests[0]?.speech).toBe(mode);
+    expect(f.requests[0]?.voice).toBe(mode !== 'silent');
+    await f.say();
+    await f.next();
+    f.emit(moment('near_death', { health: 3 }, 'n1', clock));
+    await f.settle();
+    expect(f.requests.map(request => request.main.kind)).toEqual(['task_done', 'near_death']);
+  });
+
+  it('asks the writer for a question when she is stuck, a short word in danger, and a word to a person when she speaks only when needed', () => {
+    const base = { identity: 'I', persona: '', body: '', also: [], recent: [], told: [], voice: true };
+    const stuck = liveWriterPrompt({ ...base, main: moment('stuck', { what: '小麦集め', seconds: 40 }), speech: 'needed' }).system;
+    expect(stuck).toContain('[進まなくて困っている時]');
+    expect(stuck).toContain('文の最後は「？」で終える');
+    expect(stuck).toContain('[いまの話し方: 必要な時だけ話す]');
+    expect(stuck).toContain('独り言ではない');
+    expect(liveWriterPrompt({ ...base, main: moment('died', { cause: 'lava' }) }).system).toContain('[危ない・倒れた時]');
+    const chatty = liveWriterPrompt({ ...base, main: moment('thinking', { why: 'x' }) }).system;
+    expect(chatty).not.toContain('[いまの話し方');
+    expect(chatty).not.toContain('[進まなくて');
+    expect(liveWriterPrompt({ ...base, main: moment('stuck'), place: 'stream' }).system).not.toContain('[進まなくて');
+  });
+
+  it("sets the governor's numbers again only when the rate changes", async () => {
+    const f = setup();
+    expect(f.engine.governor.numbers).toMatchObject({ perMinute: 4, perTenMinutes: 28, gapSeconds: { ordinary: 12 } });
+    f.setRoom({ voice: true, humanSpeaking: false, sinceHumanMs: null, speechMode: 'chatty', speechRate: 'low' });
+    f.emit(moment('material_got', { item: 'wheat_seeds', count: 1, need: 3 }, 'g1'));
+    await f.settle();
+    expect(f.engine.governor.numbers).toMatchObject({ perMinute: 2, perTenMinutes: 14, gapSeconds: { ordinary: 24 } });
+    f.setRoom({ voice: true, humanSpeaking: false, sinceHumanMs: null, speechMode: 'chatty', speechRate: 'high' });
+    f.emit(moment('item_got', { item: 'bread', count: 1 }, 'g2'));
+    await f.settle();
+    expect(f.engine.governor.numbers).toMatchObject({ perMinute: 6, perTenMinutes: 42, gapSeconds: { ordinary: 8 } });
   });
 
   it('closes the story at the end of the request: what is told after it starts clean', async () => {

@@ -6,8 +6,11 @@
  * `task` adds a request (where: `placement`), `message` is words for the request that is running, `stop` stops the whole list,
  * `cancel` / `hold` / `resume` act on one request (`target`, 「#3」 or 「3」; empty is the one running, and for `resume` the whole
  * list), and `move` puts the target request at `placement`. Which of them his words are is hers to judge.
+ *
+ * `speech` is not about the list: the owner asked how she speaks (`speechMode`) or how often she speaks of her own accord (`speechRate`). It
+ * is carried to her voice's body by the voice call alone (`platformVoice.ts`), and only for the owner; every other surface reads it as none.
  */
-export const MINECRAFT_INTENT_KINDS = ['none', 'task', 'message', 'stop', 'cancel', 'hold', 'resume', 'move'] as const;
+export const MINECRAFT_INTENT_KINDS = ['none', 'task', 'message', 'stop', 'cancel', 'hold', 'resume', 'move', 'speech'] as const;
 export type MinecraftIntentKind = typeof MINECRAFT_INTENT_KINDS[number];
 export const MINECRAFT_INTENT_PLACEMENTS = ['end', 'next', 'now'] as const;
 
@@ -19,6 +22,10 @@ export interface MinecraftIntent {
   placement?: typeof MINECRAFT_INTENT_PLACEMENTS[number] | '';
   /** For `cancel`, `hold`, `resume`, `move`: the request, as 「#3」 or 「3」. Empty: the one running (`resume`: the whole list). */
   target?: string;
+  /** For `speech`: how she speaks from now on (at least one of the two is set). */
+  speechMode?: SpeechMode;
+  /** For `speech`: how often she speaks of her own accord while chatty. */
+  speechRate?: SpeechRate;
 }
 
 /** What the body is told of an intent: the kinds it has always known. It does the work through the common task, not through this. */
@@ -26,6 +33,10 @@ export interface MinecraftBodyIntent {
   kind: 'none' | 'task' | 'stop';
   goal: string;
 }
+
+const SPEECH_MODE_WORDS = ['chatty', 'needed', 'silent'] as const, SPEECH_RATE_WORDS = ['low', 'normal', 'high'] as const;
+type SpeechMode = typeof SPEECH_MODE_WORDS[number];
+type SpeechRate = typeof SPEECH_RATE_WORDS[number];
 
 export const MINECRAFT_INTENT_GOAL_CHARACTERS = 120;
 const TARGET_CHARACTERS = 12;
@@ -41,7 +52,8 @@ export const MINECRAFT_INTENT_SCHEMA = Object.freeze({
       type: 'string', enum: [...MINECRAFT_INTENT_KINDS],
       description: 'マイクラの体の「依頼の列」への頼み。task=新しい依頼を足す（ゲームの中でしてほしいことをはっきり頼まれた）。'
         + 'message=いま実行中の依頼への言葉（変えてほしい・続けてほしい）。stop=列ぜんたいを止める。cancel=依頼をやめる。hold=依頼を保留する。'
-        + 'resume=保留・停止の依頼を戻す。move=列の中で依頼の順番を変える。none=それ以外',
+        + 'resume=保留・停止の依頼を戻す。move=列の中で依頼の順番を変える。none=それ以外。'
+        + 'speech=持ち主が、これからの話し方（声を出すか・独り言をするか・どのくらいするか）を変えてほしいと言った時だけ（体への頼みではない）',
     },
     goal: { type: 'string', description: `task か message の時だけ、何をどれだけするか（message は伝える言葉）を${MINECRAFT_INTENT_GOAL_CHARACTERS}字以内で。それ以外は空文字` },
     placement: {
@@ -49,8 +61,17 @@ export const MINECRAFT_INTENT_SCHEMA = Object.freeze({
       description: 'task と move の時だけ。end=ほかの依頼のあと（あとで・ついでに）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる。それ以外は空文字',
     },
     target: { type: 'string', description: 'cancel・hold・resume・move の時だけ、依頼の番号（「#3」か「3」）。いま実行中の依頼なら空文字。resume の空文字は列ぜんたい。それ以外は空文字' },
+    speechMode: {
+      type: 'string', enum: [...SPEECH_MODE_WORDS, ''],
+      description: 'speech の時だけ。chatty=よく話す（独り言も声にする）。needed=必要な時だけ（独り言はしない。返事・人への問い・作業の完了と危険の知らせだけ声にする）。'
+        + 'silent=話さない（声を出さず、返事は文字で出る）。話し方を変えない時（頻度だけ変える時）は空文字。speech 以外は空文字',
+    },
+    speechRate: {
+      type: 'string', enum: [...SPEECH_RATE_WORDS, ''],
+      description: 'speech の時だけ。独り言の多さ。low=少なめ。normal=ふつう。high=多め（よく話す時だけ効く）。変えない時は空文字。speech 以外は空文字',
+    },
   },
-  required: ['kind', 'goal', 'placement', 'target'],
+  required: ['kind', 'goal', 'placement', 'target', 'speechMode', 'speechRate'],
 });
 
 const words = (value: unknown, limit: number): string => (typeof value === 'string'
@@ -73,6 +94,12 @@ export function parsedMinecraftIntent(value: unknown): MinecraftIntent | null {
     ? value.placement as 'end' | 'next' | 'now' : '';
   if (USES_GOAL.has(kind) && !goal) return null;
   if (kind === 'move' && !target) return null;
+  if (kind === 'speech') {
+    const speechMode = (SPEECH_MODE_WORDS as readonly unknown[]).includes(value.speechMode) ? value.speechMode as SpeechMode : undefined;
+    const speechRate = (SPEECH_RATE_WORDS as readonly unknown[]).includes(value.speechRate) ? value.speechRate as SpeechRate : undefined;
+    if (!speechMode && !speechRate) return null;
+    return { kind, goal: '', ...(speechMode ? { speechMode } : {}), ...(speechRate ? { speechRate } : {}) };
+  }
   return { kind, goal, ...(placement ? { placement } : {}), ...(target ? { target } : {}) };
 }
 

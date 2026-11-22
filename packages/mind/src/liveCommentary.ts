@@ -140,6 +140,38 @@ export function liveCommentaryLimits(values: Readonly<Record<string, string | un
       urgent: Math.min(gap ?? LIVE_COMMENTARY_V1.gapSeconds.urgent, LIVE_COMMENTARY_V1.gapSeconds.urgent) }) });
 }
 
+/**
+ * How she speaks (the owner's choice, held by her body: `chatty` says her ordinary monologue aloud, `needed` writes none and speaks only to
+ * answer, to ask a person and to tell a finished job or a danger, `silent` makes no sound at all) and how often she speaks of her own
+ * accord while chatty. The body holds the value and tells it in each poll; the head reads it. Numbers on the wire: mode 0/1/2, rate 0/1/2.
+ */
+export const SPEECH_MODES = Object.freeze(['chatty', 'needed', 'silent'] as const);
+export type SpeechMode = typeof SPEECH_MODES[number];
+export const SPEECH_RATES = Object.freeze(['low', 'normal', 'high'] as const);
+export type SpeechRate = typeof SPEECH_RATES[number];
+/**
+ * The moments she still says when she is not chatty: the end of a request (and the question that goes with it), being stuck (asking for
+ * help), and danger. The body holds the same list (`services/common/speechMode.ts`); change neither alone.
+ */
+export const SPEECH_NEEDED_KINDS: readonly LiveMomentKind[] = Object.freeze(['task_done', 'stuck', 'near_death', 'died'] as const);
+export const isSpeechMode = (value: unknown): value is SpeechMode => (SPEECH_MODES as readonly unknown[]).includes(value);
+export const isSpeechRate = (value: unknown): value is SpeechRate => (SPEECH_RATES as readonly unknown[]).includes(value);
+
+const RATE_SCALE: Readonly<Record<SpeechRate, number>> = Object.freeze({ low: 0.5, normal: 1, high: 1.5 });
+const clamp = (value: number, least: number, most: number): number => Math.min(most, Math.max(least, Math.round(value)));
+
+/**
+ * The limits of a speech rate over the base ones (`liveCommentaryLimits`): the words a minute and in ten minutes scale by the rate and the
+ * gap between two ordinary words by its inverse; the urgent gap, the topic and kind spacing and the thresholds stay. At the defaults:
+ * low 2 a minute / 14 / 24 s, normal 4 / 28 / 12 s, high 6 / 42 / 8 s (the body's mouth holds six a minute, so high is the most it can say).
+ */
+export function liveRateLimits(base: LiveCommentaryLimits, rate: SpeechRate): LiveCommentaryLimits {
+  const scale = RATE_SCALE[rate];
+  if (scale === 1) return base;
+  return Object.freeze({ ...base, perMinute: clamp(base.perMinute * scale, 1, 20), perTenMinutes: clamp(base.perTenMinutes * scale, 1, 200),
+    gapSeconds: Object.freeze({ ordinary: clamp(base.gapSeconds.ordinary / scale, 1, 120), urgent: base.gapSeconds.urgent }) });
+}
+
 const unit = (value: number) => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0);
 
 /**

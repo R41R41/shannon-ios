@@ -3,6 +3,7 @@ import { switchOn } from '@shannon/switches';
 import { minecraftQueueGuide } from '../../contracts/minecraftQueuePrompt.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 import { VOICE_CALL_AUDIO_TAG_LINES } from '../../infra/models/voiceAudioTags.js';
+import type { SpeechMode, SpeechRate } from '@shannon/mind';
 import type { HeardLine } from './voiceRoom.js';
 import type { VoiceMinecraftRefusal, VoiceMinecraftState } from './voiceMinecraftPort.js';
 
@@ -132,6 +133,38 @@ export function voiceIntentInstructions(state: VoiceMinecraftState, who: string)
     `通話には何人もいる。体への頼みは、${who}がはっきり頼んだ時だけ受ける（聞き間違いかもしれない言葉や、ほかの人どうしの話は kind=none）。`,
     '「待って」「ちょっと待って」は、ほかの人に向けた言葉のことも多い。シャノンに向けて止めてほしいと分かる時だけ kind=stop にする（理由: stop は体の仕事ぜんたいを止めるから）。',
   ].join('\n');
+}
+
+const SPEECH_MODE_NAMES: Readonly<Record<SpeechMode, string>> = { chatty: 'よく話す', needed: '必要な時だけ', silent: '話さない' };
+const SPEECH_RATE_NAMES: Readonly<Record<SpeechRate, string>> = { low: '少なめ', normal: 'ふつう', high: '多め' };
+
+/**
+ * How she speaks, as the owner can change it (the intent field's `speech`, `speechMode`, `speechRate`), and what is now. Offered where the intent
+ * field is. Anyone may be told what it is; only the owner's words change it (the head says so here, and the body checks the speaker again).
+ */
+export function speechInstructions(input: { owner: boolean; who: string; mode?: SpeechMode | undefined; rate?: SpeechRate | undefined }): string {
+  const mode = input.mode ?? 'chatty', rate = input.rate ?? 'normal';
+  const now = mode === 'chatty' ? `${SPEECH_MODE_NAMES[mode]}（独り言の多さ: ${SPEECH_RATE_NAMES[rate]}）` : SPEECH_MODE_NAMES[mode];
+  const lines = [
+    '[ボクの話し方]',
+    '話し方は3つ。「よく話す」＝作業しながら独り言も声にする（多さは 少なめ・ふつう・多め）。「必要な時だけ」＝独り言はせず、話しかけへの返事・人への問い・作業の完了と危険の知らせだけ声にする。'
+      + '「話さない」＝声を出さない（返事も文字で出る。話しかけは聞いていて、頼みも受けられる）。',
+    `いまの話し方: ${now}。`,
+  ];
+  if (!input.owner) {
+    lines.push(`- 話し方を変えられるのは${SHANNON_OWNER_NAME}だけ。${input.who}に頼まれても kind=speech にせず、変えない。変えたい時は${SHANNON_OWNER_NAME}に言ってもらうよう、軽く伝える（理由: 知らない人の一言で、持ち主の選んだ話し方が変わってしまうから）。`);
+    return lines.join('\n');
+  }
+  lines.push(
+    '- 話し方をこれからずっと変えてほしいという話（「独り言はやめて」「必要な時だけ話して」「声を出さないで」「普通に話していいよ」「独り言多めで」など）の時だけ、kind=speech にして、変えたい方を speechMode・speechRate に入れる（変えない方は空文字）。'
+      + '決まった言い回しでなくても、意味で読む。',
+    '- 「黙って」「静かに」だけの言葉は、いま鳴っている声を止めてほしいという、その場だけの頼み。体が声を止めるので、話し方は変えない（kind=none。返すなら短く）。'
+      + '「これから」「ずっと」「独り言は」など、続く話がついた時だけ変える。理由: 話し方を変えたつもりがないのに「黙って」のたびに話さなくなると、次に話しかけた時に返事がなく、困るから。',
+    '- 「もう少し多めに」「ちょっと減らして」のような言葉は、いまの値から1段だけ動かす（少なめ・ふつう・多め の順）。独り言の多さを頼まれた時にいまが「よく話す」でなければ、speechMode も chatty にする（独り言が出る話し方でないと、多さを変えても聞こえないから）。',
+    '- 変えた時の返事は、変えたことを短く言う。例：「うん、必要な時だけにするね」。「話さない」にした時も、この返事はいまの声で言ってよい（その次から静かになる）。',
+    '- 変えるかどうか分からない言葉（独り言のつもりのつぶやき・ほかの人への話）は、kind=none にする。',
+  );
+  return lines.join('\n');
 }
 
 /** A friend's turn while the body part is off (`SHANNON_DC_VOICE_MINECRAFT`): nothing moves her body for a friend. */

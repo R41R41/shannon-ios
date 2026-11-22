@@ -105,8 +105,12 @@ o_channel, error). */
  * by it; who is in the room is the body's to say. */
 export interface MinecraftLiveRoom {
   voice: boolean; humanSpeaking: boolean; sinceHumanMs: number | null;
-  /** The owner's choice of her ordinary monologue, sent by the body only as 'off' (the others are told by `voice`): she writes then only the line that ends a request. */
-  monologue?: 'off';
+  /**
+   * How she speaks and how often she speaks of her own accord (the owner's choice, kept by the body and told in each poll: `chatty`, `needed`,
+   * `silent`; `low`, `normal`, `high`). Absent from a body before it: read as chatty and normal. `voice` is false while `silent`.
+   */
+  speechMode?: 'chatty' | 'needed' | 'silent';
+  speechRate?: 'low' | 'normal' | 'high';
 }
 
 export interface MinecraftControlPoll {

@@ -1,6 +1,6 @@
 import { novelty } from './salience.js';
 import {
-  LIVE_COMMENTARY_V1, itemWords, liveLifetimeSeconds, liveOwnSpacing, liveSalience, liveTopicOf, type LiveMoment, type LiveMomentKind, type LiveScalar,
+  LIVE_COMMENTARY_V1, type LiveCommentaryLimits, itemWords, liveLifetimeSeconds, liveOwnSpacing, liveSalience, liveTopicOf, type LiveMoment, type LiveMomentKind, type LiveScalar,
 } from './liveCommentary.js';
 
 /**
@@ -71,7 +71,13 @@ export class LiveGovernor {
   private readonly kinds = new Set<LiveMomentKind>();
   private readonly spent = new Set<string>();
 
-  constructor(private readonly limits: typeof LIVE_COMMENTARY_V1 = LIVE_COMMENTARY_V1) {}
+  constructor(private limits: LiveCommentaryLimits = LIVE_COMMENTARY_V1) {}
+
+  /** Other numbers from now on (the owner changed how often she speaks); what she told is kept. */
+  setLimits(limits: LiveCommentaryLimits): void { this.limits = limits; }
+
+  /** The numbers in force now. */
+  get numbers(): LiveCommentaryLimits { return this.limits; }
 
   /** Whether this kind has not been told yet in this run (the first of a kind weighs more). */
   firstOf(kind: LiveMomentKind): boolean { return !this.kinds.has(kind); }

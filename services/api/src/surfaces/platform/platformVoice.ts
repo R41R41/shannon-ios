@@ -25,7 +25,7 @@ import {
   validatedVoiceTurn, voiceHash,
 } from './platformVoiceRequest.js';
 import {
-  FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, askedBackBlock, directedBlock, heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions,
+  FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, askedBackBlock, directedBlock, heardBlock, platformVoiceInstructions, situationBlock, speechInstructions, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
@@ -369,6 +369,8 @@ export class PlatformVoiceService {
     const ownerTools = seat.owner && seat.policy.gate.ownerOnly;
     const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName?.replace(/s+/gu, ' ').trim().slice(0, 40) || '話している人';
     const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who) : '';
+    // The way of speaking is a kind of the intent field, so it is offered where the field is.
+    const speech = this.offersIntent(seat, body) ? speechInstructions({ owner: seat.owner, who, mode: request.speechMode, rate: request.speechRate }) : '';
     return [
       platformVoiceInstructions({
         title: seat.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
@@ -377,7 +379,7 @@ export class PlatformVoiceService {
       situationBlock(situation, running),
       answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
-      intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE), directedBlock(request.directed === true, who, intent !== ''),
+      intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE), speech, directedBlock(request.directed === true, who, intent !== ''),
     ].filter(Boolean).join('\n\n');
   }
 
@@ -491,6 +493,7 @@ export class PlatformVoiceService {
     body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
   ): Promise<void> {
     const intent = answer.minecraftIntent;
+    if (intent?.kind === 'speech') return this.carrySpeech(seat, intent, out);
     if (!body || !intent || intent.kind === 'none' || !this.offersIntent(seat, body)) return;
     const { scopeKey } = this.dependencies;
     const ask = (experienceId: string | null) => body.port.intent({
@@ -505,6 +508,20 @@ export class PlatformVoiceService {
     });
     this.log(`Shannon platform voice intent kind=${intent.kind} delivered=${outcome.delivered} as=${outcome.as ?? '-'} reason=${outcome.reason ?? '-'}`);
     if (!outcome.delivered) this.refuse(seat, request, answer, outcome.reason ?? 'not_owner_scope');
+  }
+
+  /**
+   * The owner's words about how she speaks, handed to the body in the turn's lines (not through the Minecraft port: the voice's body holds it).
+   * Only the owner's seat: anyone else's words never change it, and no refusal is said (what a guest asked for is just not done). The body
+   * checks the speaker again before it changes anything.
+   */
+  private carrySpeech(seat: ChannelSeat, intent: NonNullable<VoiceAnswer['minecraftIntent']>, out: VoiceOut): void {
+    if (!seat.owner || (!intent.speechMode && !intent.speechRate)) {
+      this.log(`Shannon platform voice speech dropped owner=${seat.owner}`);
+      return;
+    }
+    out.line({ type: 'speech', ...(intent.speechMode ? { mode: intent.speechMode } : {}), ...(intent.speechRate ? { rate: intent.speechRate } : {}) });
+    this.log(`Shannon platform voice speech mode=${intent.speechMode ?? '-'} rate=${intent.speechRate ?? '-'}`);
   }
 
   private refuse(seat: ChannelSeat, request: VoiceTurnRequest, answer: VoiceAnswer, reason: keyof typeof VOICE_MINECRAFT_REFUSALS): void {

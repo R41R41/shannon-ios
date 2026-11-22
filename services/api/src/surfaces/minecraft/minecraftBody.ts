@@ -181,7 +181,9 @@ export class MinecraftBody {
     }));
     const completion = result.completion;
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');
-    const proposed = blocked ? { kind: 'none' as const, goal: '' } : completion.minecraftIntent ?? { kind: 'none' as const, goal: '' };
+    // A way of speaking is carried by the voice call alone (`platformVoice.ts`): game chat reads it as nothing.
+    const offered = completion.minecraftIntent?.kind === 'speech' ? undefined : completion.minecraftIntent;
+    const proposed = blocked ? { kind: 'none' as const, goal: '' } : offered ?? { kind: 'none' as const, goal: '' };
     const asked = bodyIntentOf(proposed);
     // The owner's intent enters the common task tree (`fcaIntent`); without it (a switched-off part) it is answered as proposed.
     let decided: (MinecraftTurnResponse['intent'] & { reason?: MinecraftIntentRefusal }) | undefined = owner

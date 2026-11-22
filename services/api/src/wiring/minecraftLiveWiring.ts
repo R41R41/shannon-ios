@@ -102,10 +102,11 @@ function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: 
       return lines?.space?.block ?? '';
     } catch { return ''; }
   };
+  const base = liveCommentaryLimits(values);
   return new LiveCommentary({
     live, outbox, log,
     // How many words a minute (and the gap) is a number of hers to tune from the environment, not a switch.
-    governor: new LiveGovernor(liveCommentaryLimits(values)),
+    governor: new LiveGovernor(base), limits: base,
     doneFallback: 'できたよ！どこに置けばいい？渡せばいいかな？',
     async write(request) {
       const { system, message } = liveWriterPrompt({ identity: identity(), persona: persona(), body: live.block({ alone: false, participants: true }), ...request });

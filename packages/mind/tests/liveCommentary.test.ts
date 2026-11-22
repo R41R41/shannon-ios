@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LIVE_COMMENTARY_STREAM, LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, itemWords, liveCommentaryLimits, liveFactLine, liveSalience, pickMoments, type LiveMoment,
+  LIVE_COMMENTARY_STREAM, LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, SPEECH_MODES, SPEECH_NEEDED_KINDS, SPEECH_RATES, isSpeechMode, isSpeechRate, itemWords, liveCommentaryLimits, liveRateLimits, liveFactLine, liveSalience, pickMoments, type LiveMoment,
   type LiveMomentKind,
 } from '../src/index.js';
 
@@ -119,6 +119,44 @@ describe('LiveGovernor', () => {
     expect(liveCommentaryLimits({ SHANNON_MINECRAFT_LIVE_PER_MINUTE: 'many', SHANNON_MINECRAFT_LIVE_PER_TEN_MINUTES: '0' }))
       .toMatchObject({ perMinute: 4, perTenMinutes: 28 });
     expect(liveCommentaryLimits({})).toEqual(LIVE_COMMENTARY_V1);
+  });
+
+  it('scales the commentary by the speech rate: low is half, normal is as it was, high is one and a half with a shorter gap', () => {
+    const summary = (rate: 'low' | 'normal' | 'high') => {
+      const limits = liveRateLimits(LIVE_COMMENTARY_V1, rate);
+      return [limits.perMinute, limits.perTenMinutes, limits.gapSeconds.ordinary, limits.gapSeconds.urgent];
+    };
+    expect(summary('low')).toEqual([2, 14, 24, 5]);
+    expect(summary('normal')).toEqual([4, 28, 12, 5]);
+    expect(summary('high')).toEqual([6, 42, 8, 5]);
+    expect(liveRateLimits(LIVE_COMMENTARY_V1, 'normal')).toBe(LIVE_COMMENTARY_V1);
+    expect(liveRateLimits(LIVE_COMMENTARY_V1, 'high')).toMatchObject({ topicSeconds: 90, kindSeconds: 240, threshold: 0.55 });
+    // Over a tuned base the same scale applies, and the ends of the range hold.
+    const tuned = liveCommentaryLimits({ SHANNON_MINECRAFT_LIVE_PER_MINUTE: '1', SHANNON_MINECRAFT_LIVE_GAP_SECONDS: '120' });
+    expect(liveRateLimits(tuned, 'low')).toMatchObject({ perMinute: 1, gapSeconds: { ordinary: 120 } });
+    expect(liveRateLimits(tuned, 'high').gapSeconds.ordinary).toBe(80);
+  });
+
+  it('holds the new numbers in the governor and keeps what she told when the rate changes', () => {
+    const governor = new LiveGovernor();
+    governor.delivered(moment('diamond_found', T0), 'a', T0);
+    governor.setLimits(liveRateLimits(LIVE_COMMENTARY_V1, 'low'));
+    expect(governor.numbers.perMinute).toBe(2);
+    // The gap is now 24 s: a word 14 s after the last is held, one 26 s after is not.
+    expect(governor.verdict(moment('structure_found', T0 + 14_000), room(T0 + 14_000))).toMatchObject({ reason: 'gap' });
+    expect(governor.verdict(moment('structure_found', T0 + 26_000), room(T0 + 26_000))).toMatchObject({ speak: true });
+    expect(governor.recentWords()).toEqual(['a']);
+  });
+
+  it('names the kinds she still says when not chatty, and every one is a live moment of hers', () => {
+    expect([...SPEECH_NEEDED_KINDS]).toEqual(['task_done', 'stuck', 'near_death', 'died']);
+    for (const kind of SPEECH_NEEDED_KINDS) expect(LIVE_MOMENT_KINDS).toContain(kind);
+    expect(SPEECH_MODES).toEqual(['chatty', 'needed', 'silent']);
+    expect(SPEECH_RATES).toEqual(['low', 'normal', 'high']);
+    expect(isSpeechMode('needed')).toBe(true);
+    expect(isSpeechMode('loud')).toBe(false);
+    expect(isSpeechRate('high')).toBe(true);
+    expect(isSpeechRate(2)).toBe(false);
   });
 
   it('speaks of her work as it goes: a plan step and a thought are short-lived, the end of a request is urgent', () => {

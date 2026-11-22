@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isSpeechMode, isSpeechRate, type SpeechMode, type SpeechRate } from '@shannon/mind';
 import { switchOn, type SwitchValues } from '@shannon/switches';
 import { PlatformBridgeError, type ShannonPlatform } from '../../mind/memory/platformMemoryPorts.js';
 import type { SurfaceTurnLimits } from '../../mind/inhibition/minecraftTurnAllowance.js';
@@ -75,6 +76,9 @@ export interface VoiceTurnRequest {
   /** The filler the body already began to play (it may start one without waiting for the decision line); she goes on from it. */
   fillerId?: string;
   situation?: string;
+  /** How she speaks now and how often she speaks of her own accord (the body holds them): so that she can answer 「いまどうなってる？」 and change them from where they are. Absent: chatty, normal. */
+  speechMode?: SpeechMode;
+  speechRate?: SpeechRate;
   sttMs?: number;
   utteranceMs?: number;
   /** One head (`POST /v1/converse`, never on this route's wire): a DM, and the channel's own name for a conversation nobody bound. */
@@ -87,6 +91,8 @@ export type VoiceTurnLine =
   | ExpressionEvent
   | { type: 'sentence'; index: number; text: string; voiceText?: string; correction?: true }
   | { type: 'intent'; kind: 'task_message' | 'task' | 'stop' | 'none'; delivered: boolean; taskId?: string; reason?: string }
+  /** The owner asked how she speaks (from the intent field's `speech`): at least one is set. The body checks the speaker is the owner again. */
+  | { type: 'speech'; mode?: SpeechMode; rate?: SpeechRate }
   | { type: 'done'; reply: string; threadId: string; duplicate: boolean; silent?: true; reason?: string;
     timings?: { decisionMs: number; firstSentenceMs: number | null; totalMs: number };
     /** A typed message's answer only (rich chat §4): the emoji she put on the message she answered; the entry adds it as her reaction. */
@@ -105,7 +111,7 @@ export interface StoredVoiceTurn {
 const REQUEST_FIELDS = new Set([
   'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'speakerMinecraftName', 'speakerIsOwner',
   'userMessage', 'observedAt', 'participants', 'heard', 'followsShannonTurn', 'directed', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId',
-  'situation', 'sttMs', 'utteranceMs',
+  'situation', 'sttMs', 'utteranceMs', 'speechMode', 'speechRate',
 ]);
 
 export const identifier = (value: unknown, maximum: number): value is string =>
@@ -152,14 +158,18 @@ function validatedHeard(value: unknown): HeardLine[] {
   return list.map(validatedHeardLine);
 }
 
-function validatedExtras(body: Record<string, unknown>): Pick<VoiceTurnRequest, 'situation' | 'sttMs' | 'utteranceMs' | 'shannonSpokeMsAgo'> {
+function validatedExtras(body: Record<string, unknown>): Pick<VoiceTurnRequest, 'situation' | 'sttMs' | 'utteranceMs' | 'shannonSpokeMsAgo' | 'speechMode' | 'speechRate'> {
   if (body.situation !== undefined && !bodyText(body.situation, 600)) throw badRequest('situation is invalid.');
+  if (body.speechMode !== undefined && !isSpeechMode(body.speechMode)) throw badRequest('speechMode is invalid.');
+  if (body.speechRate !== undefined && !isSpeechRate(body.speechRate)) throw badRequest('speechRate is invalid.');
   for (const field of ['sttMs', 'utteranceMs', 'shannonSpokeMsAgo'] as const) {
     if (body[field] !== undefined && !milliseconds(body[field])) throw badRequest(`${field} is invalid.`);
   }
   return {
     ...(body.shannonSpokeMsAgo !== undefined ? { shannonSpokeMsAgo: body.shannonSpokeMsAgo as number } : {}),
     ...(body.situation !== undefined ? { situation: clipVoiceText(body.situation as string, VOICE_ROOM_LIMITS.situationCharacters) } : {}),
+    ...(body.speechMode !== undefined ? { speechMode: body.speechMode as SpeechMode } : {}),
+    ...(body.speechRate !== undefined ? { speechRate: body.speechRate as SpeechRate } : {}),
     ...(body.sttMs !== undefined ? { sttMs: body.sttMs as number } : {}),
     ...(body.utteranceMs !== undefined ? { utteranceMs: body.utteranceMs as number } : {}),
   };

@@ -438,5 +438,7 @@ describe('the control carries her lines', () => {
     expect(ok({ speechReceipts: 'no' as never })).toBe(false);
     expect(ok({ liveRoom: { voice: 'yes', humanSpeaking: false, sinceHumanMs: 0 } as never })).toBe(false);
     expect(ok({ liveRoom: { voice: true, humanSpeaking: false, sinceHumanMs: -5 } })).toBe(false);
+    expect(ok({ liveRoom: { voice: false, humanSpeaking: false, sinceHumanMs: null, speechMode: 'silent', speechRate: 'high' } })).toBe(true);
+    expect(ok({ liveRoom: { voice: true, humanSpeaking: false, sinceHumanMs: null, speechMode: 5 } as never })).toBe(false);
   });
 });

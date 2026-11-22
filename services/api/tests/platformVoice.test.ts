@@ -53,7 +53,7 @@ class Model implements ShannonChatModel {
   readonly model = 'test-model';
   readonly requests: ShannonChatModelRequest[] = [];
   reply = 'うん、いいよ。';
-  intent: { kind: 'none' | 'task' | 'stop'; goal: string } | null = null;
+  intent: { kind: 'none' | 'task' | 'stop' | 'speech'; goal: string; speechMode?: 'chatty' | 'needed' | 'silent'; speechRate?: 'low' | 'normal' | 'high' } | null = null;
   streams = true;
   /** Holds the model after this many characters until the promise settles (the first words are out, the rest is not written yet). */
   pause: { after: number; until: Promise<void> } | null = null;
@@ -386,6 +386,55 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     expect(model.requests[0]!.offerMinecraftIntent).toBeUndefined();
     expect(body.calls).toHaveLength(0);
     await close();
+  });
+
+  it("carries the owner's words about how she speaks as a line of the turn, not to the body, and drops a friend's", async () => {
+    const { say, model, body, close } = harness();
+    model.reply = 'うん、必要な時だけにするね。';
+    model.intent = { kind: 'speech', goal: '', speechMode: 'needed' };
+    const lines = await say('これからは必要な時だけ話して', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], speechMode: 'chatty', speechRate: 'normal' });
+    const prompt = promptOf(model.requests[0]!);
+    expect(prompt).toContain('[ボクの話し方]');
+    expect(prompt).toContain('いまの話し方: よく話す（独り言の多さ: ふつう）');
+    expect(prompt).toContain('「黙って」「静かに」だけの言葉は');
+    expect(body.calls).toHaveLength(0);
+    // After the reply's sentences and before the end, where the intent line stands.
+    expect(typeOf(lines).at(-1)).toBe('done');
+    expect(lines.at(-2)).toEqual({ type: 'speech', mode: 'needed' });
+    expect(lines.filter(line => line.type === 'speech')).toHaveLength(1);
+    // A friend asking the same is told it is the owner's to change, and nothing is carried.
+    model.requests.length = 0;
+    const friend = await say('シャノン、これからは声を出さないで', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ', speechMode: 'needed' });
+    expect(friend.some(line => line.type === 'speech')).toBe(false);
+    expect(promptOf(model.requests[0]!)).toContain('話し方を変えられるのはライ氏だけ');
+    expect(promptOf(model.requests[0]!)).toContain('いまの話し方: 必要な時だけ');
+    // The same words from a friend's seat are dropped even when the model names a way of speaking (the seat decides, not the model).
+    model.intent = { kind: 'speech', goal: '', speechRate: 'high' };
+    const dropped = await say('シャノン、独り言多めで', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
+    expect(dropped.some(line => line.type === 'speech')).toBe(false);
+    expect(body.calls).toHaveLength(0);
+    // The owner's relative words come with the rate alone.
+    const owner = await say('シャノン、独り言もう少し多めで', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND] });
+    expect(owner.find(line => line.type === 'speech')).toEqual({ type: 'speech', rate: 'high' });
+    await close();
+  });
+
+  it('does not offer the speech words where the intent field is not offered (the owner alone in his own room)', async () => {
+    const { say, model, close } = harness();
+    await say('声を出さないで', { participants: [OWNER] });
+    expect(model.requests[0]!.offerMinecraftIntent).toBeUndefined();
+    expect(promptOf(model.requests[0]!)).not.toContain('[ボクの話し方]');
+    await close();
+  });
+
+  it('reads speechMode and speechRate of the request, and refuses a value it does not know', () => {
+    const flat = { platform: 'discord', requestId: 'r1', conversationId: 'discord:1:2', sourceUserId: 'u1', sourceDisplayName: 'ライ', userMessage: 'こんにちは',
+      observedAt: '2026-11-22T12:00:00.000Z', participants: ['u1'] };
+    expect(validatedVoiceTurn({ ...flat, speechMode: 'silent', speechRate: 'low' })).toMatchObject({ speechMode: 'silent', speechRate: 'low' });
+    expect(validatedVoiceTurn(flat).speechMode).toBeUndefined();
+    expect(() => validatedVoiceTurn({ ...flat, speechMode: 'quiet' })).toThrow();
+    expect(() => validatedVoiceTurn({ ...flat, speechRate: 'fast' })).toThrow();
+    expect(voiceHash(validatedVoiceTurn({ ...flat, speechMode: 'silent' }))).toBe(voiceHash(validatedVoiceTurn(flat)));
   });
 
   it('leaves the body alone when the switch is off', async () => {
