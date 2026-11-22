@@ -308,6 +308,11 @@ export class VoiceConversation implements ConversationModality<ApiResponse> {
       deps.conversationStore.conversationHistory(scopeKey, threadId).slice(-2), this.occurredAt) : null;
     let decision = settleOwnerVoiceTurn(this.decision, { transcript, facts: this.facts, uncertain: this.uncertainTranscript });
     if (this.address) decision = applyGuestAddressing(decision, this.address);
+    // The channel decided these words are said to her: a router's `no_response` for a bare 「うん」 after her question would drop the answer.
+    if (this.seat?.answered && !decision.shouldRespond) {
+      const { silence: _silence, ...spoken } = decision;
+      decision = { ...spoken, shouldRespond: true, conversationClass: decision.selectedSkills.length ? 'skill_simple' : 'direct' };
+    }
     this.decision = decision;
     // Stage 3: the turn as the mind perceives it, once the router has heard it: a transcript it scored uncertain, or words not his to her
     // (an echo, overheard), are not taken as his. A transcript with no score keeps the handling it had.

@@ -16,6 +16,8 @@ export type VoiceAddressReason = GuestAddressReason | 'solo' | 'fragment'
 export interface VoiceAddress {
   respond: boolean;
   reason: VoiceAddressReason;
+  /** `directed` words that answer a question of hers that was still waiting. */
+  answersQuestion?: boolean;
 }
 
 /** Sounds a speech recogniser makes of breath, a cough or a key press; and a lone acknowledgement nobody waits on. */

@@ -94,7 +94,7 @@ const CONFIRMED_IMPLEMENTATION = (request: string) => `[Confirmed implementation
 /** The turn's own grounding last: a confirmed proposal, the voice's grounding, the look, an unclear transcript, a platform's seat. */
 function groundingBlocks(turn: VoiceConversation): string[] {
   const confirmed = turn.confirmedImplementationRequest;
-  const interpretation = voiceTranscriptInterpretationPrompt(turn.unclearTranscript, turn.rawTranscript, turn.uncertainTranscript);
+  const interpretation = voiceTranscriptInterpretationPrompt(turn.unclearTranscript, turn.rawTranscript, turn.uncertainTranscript, turn.seat !== null);
   // One head: the platform's audience and channel (its typed turn's own blocks, spoken).
   return [confirmed ? CONFIRMED_IMPLEMENTATION(confirmed) : '', turn.backendInstructions, turn.roomLook.prompt, interpretation, turn.seat?.prompt ?? ''];
 }
