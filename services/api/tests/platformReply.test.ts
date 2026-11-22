@@ -21,6 +21,7 @@ import { handlePlatformBridgeReply, isPlatformBridgePath } from '../src/surfaces
 import { createConfiguredPlatformBridgeRoute } from '../src/wiring/platformBridgeWiring.js';
 import { SQLiteShannonStore } from '../src/infra/sqlite/sqliteStore.js';
 import { promptOf } from './modelPrompt.js';
+import type { VoiceMinecraftIntentInput, VoiceMinecraftIntentResult, VoiceMinecraftPort, VoiceMinecraftState } from '../src/surfaces/platform/voiceMinecraftPort.js';
 import { readApiSource } from './support/sources.js';
 
 const OWNER = '900000000000000001';
@@ -48,10 +49,11 @@ class Model implements ShannonChatModel {
   readonly requests: ShannonChatModelRequest[] = [];
   readonly toolResults: string[] = [];
   callTool: { name: string; input: Record<string, unknown> } | null = null;
+  intent: ShannonChatModelResult['minecraftIntent'];
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
     if (this.callTool && request.tools) this.toolResults.push(await request.tools.call(this.callTool.name, JSON.stringify(this.callTool.input)));
-    return { mode: this.mode, model: this.model, reply: `はい、${this.requests.length}回目です。` };
+    return { mode: this.mode, model: this.model, reply: `はい、${this.requests.length}回目です。`, ...(this.intent ? { minecraftIntent: this.intent } : {}) };
   }
   /** Voice turns are recorded beside text turns (the review test of /v1/chat and voice). */
   async generateVoice(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
@@ -60,7 +62,7 @@ class Model implements ShannonChatModel {
   }
 }
 
-function harness(options: { minecraft?: boolean; ownOutreach?: OwnOutreachReader } = {}) {
+function harness(options: { minecraft?: boolean; ownOutreach?: OwnOutreachReader; port?: VoiceMinecraftPort } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-platform-reply-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -85,7 +87,8 @@ function harness(options: { minecraft?: boolean; ownOutreach?: OwnOutreachReader
     peopleMemory: peopleStore, autonomy, ...(options.ownOutreach ? { ownOutreach: options.ownOutreach } : {}) });
   const bridge = new PlatformBridgeService(configuredPlatformBridge(ENVIRONMENT)!, store, store, background, now, new PlatformPeople(peopleStore, store), () => true);
   const turns = new SQLiteSurfaceTurnLog(path, 'platform_reply_turns');
-  const service = new PlatformReplyService({ scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now });
+  const service = new PlatformReplyService({ scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now,
+    ...(options.port ? { minecraft: () => options.port!, environment: () => ({ SHANNON_DC_VOICE_MINECRAFT: 'on' }) } : {}) });
   const reply = (fields: Record<string, unknown> = {}) => service.reply({
     platform: 'discord', requestId: `m-${Math.random().toString(36).slice(2)}`, conversationId: DM, sourceUserId: OWNER,
     userMessage: 'こんばんは', observedAt: now(), ...fields,
@@ -213,6 +216,91 @@ describe('one mind on Discord: requests to her Minecraft body', () => {
     await reply({ requestId: 'mc-4', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'マイクラでダイヤ掘って' });
     expect(model.requests.at(-1)!.tools).toBeUndefined();
     expect(requests!.recent('owner')).toHaveLength(1);
+    await close();
+  });
+});
+
+describe('the owner\'s typed request reaches her body through the intent, as a spoken one does', () => {
+  /** The port the voice channel asks, with a body that is in the world (or not) and what it says to an intent. */
+  function body(state: Partial<VoiceMinecraftState>, answer: (input: VoiceMinecraftIntentInput, call: number) => VoiceMinecraftIntentResult = () => ({ delivered: true, as: 'task' })) {
+    const intents: VoiceMinecraftIntentInput[] = [];
+    const port: VoiceMinecraftPort = { state: () => ({ connected: true, running: null, ...state }), async intent(input) { intents.push(input); return answer(input, intents.length); } };
+    return { port, intents };
+  }
+
+  it('offers the intent and the guide with nothing running, and hands the request over with the turn it stands on, in his DM and in a shared channel', async () => {
+    const { port, intents } = body({});
+    const { reply, model, close } = harness({ port });
+    model.intent = { kind: 'task', goal: 'ケーキをもう1個作って渡す', placement: 'end' };
+    const answer = await reply({ requestId: 'ix-1', userMessage: 'もう1個作って、今度は渡して' });
+    expect(model.requests.at(-1)!.offerMinecraftIntent).toBe(true);
+    expect(promptOf(model.requests.at(-1)!)).toContain('[マイクラの体への頼みごと]');
+    expect(promptOf(model.requests.at(-1)!)).toContain('[依頼の列] いまは空');
+    expect(promptOf(model.requests.at(-1)!)).not.toContain('道具が出ていない時は');
+    expect(model.requests.at(-1)!.tools?.definitions.map(tool => tool.name) ?? []).not.toContain('minecraft.request');
+    expect(answer.reply).toBe('はい、1回目です。');
+    expect(intents).toHaveLength(1);
+    expect(intents[0]).toMatchObject({ scopeKey: 'owner', requestId: 'ix-1', intent: { kind: 'task', goal: 'ケーキをもう1個作って渡す' }, speaker: { id: OWNER, owner: true } });
+    expect(intents[0]!.experienceId).toBeTruthy();
+    await reply({ requestId: 'ix-2', conversationId: CHANNEL, conversationKind: 'channel', userMessage: '棒を4本作って' });
+    expect(model.requests.at(-1)!.offerMinecraftIntent).toBe(true);
+    expect(intents).toHaveLength(2);
+    await close();
+  });
+
+  it('is told plainly that the body is not in the world while the port says so, offers no intent, and never hands anything over', async () => {
+    const { port, intents } = body({ connected: false });
+    const { reply, model, close } = harness({ port });
+    model.intent = { kind: 'task', goal: 'ケーキを作る', placement: 'end' };
+    await reply({ requestId: 'ix-3', userMessage: 'ケーキを作って' });
+    const request = model.requests.at(-1)!;
+    expect(request.offerMinecraftIntent).toBeUndefined();
+    expect(promptOf(request)).toContain('いまワールドにつながっていない');
+    expect(promptOf(request)).not.toContain('[マイクラの体への頼みごと]');
+    expect(intents).toEqual([]);
+    await close();
+  });
+
+  it('tells her what is running and queued, so that a request between jobs is a new one', async () => {
+    const { port } = body({ running: { id: 't1', goal: 'ケーキを作る' }, queue: ['#1 実行中: ケーキを作る'] });
+    const { reply, model, close } = harness({ port });
+    await reply({ requestId: 'ix-4', userMessage: '牛乳はバケツ3つでいいよ' });
+    expect(promptOf(model.requests.at(-1)!)).toContain('いま体は「ケーキを作る」をしている');
+    expect(promptOf(model.requests.at(-1)!)).toContain('#1 実行中: ケーキを作る');
+    await close();
+  });
+
+  it('adds the words of a refusal to the reply that promised, and keeps them in the thread', async () => {
+    const { port } = body({}, () => ({ delivered: false, reason: 'queue_full' }));
+    const { reply, model, store, close } = harness({ port });
+    model.intent = { kind: 'task', goal: 'ケーキを作る', placement: 'end' };
+    const answer = await reply({ requestId: 'ix-5', userMessage: 'ケーキを作って' });
+    expect(answer.reply).toContain('はい、1回目です。');
+    expect(answer.reply).toContain('依頼の列がいっぱい');
+    expect(store.conversationHistory('owner', dmThread).map(message => message.content).join('\n')).toContain('依頼の列がいっぱい');
+    await close();
+  });
+
+  it('asks again with a record of his words when the turn is refused as a source, and adds nothing when that one is taken', async () => {
+    const { port, intents } = body({}, (_input, call) => (call === 1 ? { delivered: false, reason: 'turn_not_visible' } : { delivered: true, as: 'task' }));
+    const { reply, model, close } = harness({ port });
+    model.intent = { kind: 'task', goal: '棒を4本作る', placement: 'end' };
+    const answer = await reply({ requestId: 'ix-6', userMessage: '棒を4本作って' });
+    expect(answer.reply).toBe('はい、1回目です。');
+    expect(intents).toHaveLength(2);
+    expect(intents[1]!.experienceId).toBeTruthy();
+    expect(intents[1]!.experienceId).not.toBe(intents[0]!.experienceId);
+    await close();
+  });
+
+  it('keeps a guest\'s words out of her body: no intent for anyone but the owner, as before', async () => {
+    const { port, intents } = body({});
+    const { reply, model, close } = harness({ port });
+    model.intent = { kind: 'task', goal: 'ダイヤを掘る', placement: 'end' };
+    await reply({ requestId: 'ix-7', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'マイクラでダイヤ掘って' });
+    expect(model.requests.at(-1)!.offerMinecraftIntent).toBeUndefined();
+    expect(promptOf(model.requests.at(-1)!)).toContain('ここでは体や道具を動かす頼みごとは引き受けない');
+    expect(intents).toEqual([]);
     await close();
   });
 });

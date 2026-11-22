@@ -70,7 +70,8 @@ export function createConfiguredPlatformBridgeRoute(
     peopleStore ? new PlatformPeople(peopleStore, stateStore, undefined, memory, facts) : null, () => platformPeopleEnabled(environment),
     () => oneHeadEnabled(environment));
   const typed = replies && platformReplyEnabled(environment)
-    ? typedReplies(replies, { scopeKey: configuration.scopeKey, bridge: service, conversationStore, now }) : null;
+    ? typedReplies(replies, { scopeKey: configuration.scopeKey, bridge: service, conversationStore, now, environment: () => environment })
+    : null;
   const reply = typed?.reply ?? null, reactions = typed?.reactions ?? null;
   // A Discord voice channel (`SHANNON_DC_VOICE`, dc-voice): its own turn log, the one mouth queue, her ElevenLabs voice.
   const voiceTurns = replies && platformVoiceEnabled(environment) ? new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_voice_turns') : null;
@@ -93,13 +94,15 @@ export function createConfiguredPlatformBridgeRoute(
  * `POST /v1/platform/reply` (`SHANNON_PLATFORM_REPLY`): its turn log and the reply service, and the reactions there (rich chat §4),
  * which go with it: they are told to her next typed turn in that conversation.
  */
-function typedReplies(replies: { conversation: PlatformReplyConversation; databasePath: string }, parts: {
+function typedReplies(replies: { conversation: PlatformReplyConversation; databasePath: string; voiceMinecraft?: () => VoiceMinecraftPort | null }, parts: {
   scopeKey: string; bridge: PlatformBridgeService; conversationStore: ConversationStore; now: CompanionClock;
+  environment: () => Readonly<Record<string, string | undefined>>;
 }) {
   const turns = new SQLiteSurfaceTurnLog(replies.databasePath, 'platform_reply_turns');
   const log = new SQLitePlatformReactionLog(replies.databasePath);
   const reactions = new PlatformReactions({ scopeKey: parts.scopeKey, bridge: parts.bridge, log, now: parts.now });
-  const reply = new PlatformReplyService({ ...parts, conversation: replies.conversation, turns, reactions });
+  const minecraft = replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {};
+  const reply = new PlatformReplyService({ ...parts, conversation: replies.conversation, turns, reactions, ...minecraft });
   return { reply, reactions, close: () => {
     turns.close();
     log.close();
