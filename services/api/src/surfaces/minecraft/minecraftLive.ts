@@ -113,7 +113,8 @@ eplying, heard). */
   private wanted(): ReadonlyMap<string, number> {
     const all = new Map<string, number>();
     for (const task of this.tasks.values()) {
-      if (task.endedAt !== null && this.now() - task.endedAt > STEP_GAP_MS * 6) continue;
+      // A request that was done asks for nothing more: what it wanted is not news to hold against the next one.
+      if (task.doneTold || (task.endedAt !== null && this.now() - task.endedAt > STEP_GAP_MS * 6)) continue;
       for (const [item, count] of task.needs) all.set(item, Math.max(all.get(item) ?? 0, count));
     }
     return all;

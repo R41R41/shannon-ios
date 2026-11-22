@@ -24,6 +24,8 @@ export interface LiveWriterInput {
   also: readonly LiveMoment[];
   /** Her last live lines, newest last. */
   recent: readonly string[];
+  /** What she already told of this request's work, as events (fact lines), oldest last: shown in place of her own words when given. */
+  told?: readonly string[];
   /** The line will be spoken in a voice channel (shorter, no marks), not written. */
   voice: boolean;
   /** Where the line goes: a public YouTube Live (`surfaces/stream/`) or, by default, Discord with friends. */
@@ -50,11 +52,11 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
     '- 話し方は元気で明るい女の子。「〜だよ」「〜かな」「〜しよう」「〜だね」。「〜のため」「〜する必要があります」「〜します」のような説明や報告の調子にしない。'
       + '人にものを教えるのではなく、となりにいる人に話しかけるつもりで、思いついた順にそのまま言う。',
     '- 理由や使い道は、下に書いてあることだけを言う。書いていない理由を思いついても、それは本当かどうか分からないので言わない（たとえばバケツは牛乳のためと書いてあるなら、水のためとは言わない）。分からない時は、理由を言わず気持ちだけを言う。',
-    '- 「さっき言ったこと」を見て、出だしの言葉（最初の数文字）と文の終わりを、そのどれとも違うものにする。出だしに感嘆や相づちを付けない回があってよく、'
-      + 'むしろ出来事の中身から始めるほうが多くてよい。口ぐせが続くと、ほんとうに話している感じが消えてしまう。',
+    '- 出だしは、その一言でいちばん言いたい中身（物の名前・やる事・数・気持ち）の言葉から入る。なぜ: 前置きの相づちから始めると、毎回同じ調子に聞こえて、ほんとうに話している感じが消える。',
     '- 物の名前は日本語でふつうに言う。下に英語の名前が書いてあっても、日本語のふだんの呼び方（たとえば「小麦の種」「クワ」）で言う。なぜ: 声で英語の名前を読み上げると、聞いている人には意味が通らない。座標・数・道具やコマンドの名前は読み上げない。',
     '- 返事を待つ問いかけにはしない（問いかけは多くて1回。下の「依頼が終わった時」だけは別）。聞かれてもいない相手に話しかける形より、ひとりごとのほうが自然。',
-    '- 「さっき言ったこと」と同じ言い回し・同じ出だしを繰り返さない（会話の記録に残るので、くり返すと耳につく）。同じ話題でも、新しい事実か新しい気持ちがある時だけ言う。',
+    ...(input.told ? ['- 「さっき話した出来事」と同じことは、新しい事実か新しい気持ちがある時だけ言う。なぜ: 同じ話を何度も聞かされると耳につく。']
+      : ['- 「さっき言ったこと」と同じ言い回し・同じ出だしを繰り返さない（会話の記録に残るので、くり返すと耳につく）。同じ話題でも、新しい事実か新しい気持ちがある時だけ言う。']),
     '- 出力は、口に出す一言の本文だけ。',
   ];
   const done = ended ? [
@@ -68,7 +70,7 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
     '- 聞くのは1つだけ。言い訳や作業のふり返りは長く話さない。',
   ] : [];
   const system = [input.identity, input.persona, rules.join('\n'), done.join('\n'), input.body,
-    input.recent.length ? ['[さっき言ったこと]', ...input.recent.map(line => `- ${line}`)].join('\n') : '',
+    toldBlock(input),
     ['[いま起きたこと]', `- ${liveFactLine(input.main)}`,
       ...(input.also.length ? ['[ほかにあったこと（ついでに触れてもよい）]', ...input.also.map(moment => `- ${liveFactLine(moment)}`)] : [])].join('\n'),
   ].filter(Boolean).join('\n\n');
@@ -76,6 +78,14 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
   // the last thing it is asked most.
   return { system, message: ended
     ? '（依頼が終わった一言を、できたことと、次にどうするか（作った物なら置き場所か渡し方。置く・渡す依頼だったなら、置いた・渡したことを言って、ほかにやることを）を聞く問いで終えて、本文だけで）' : '（実況の一言を、本文だけで）' };
+}
+
+/** What she said before, for the writer: the events already told (when the caller keeps them), else her own last words. */
+function toldBlock(input: LiveWriterInput): string {
+  if (input.told) {
+    return input.told.length ? ['[さっき話した出来事]（ボクが言った言葉ではなく、出来事）', ...input.told.map(line => `- ${line}`)].join('\n') : '';
+  }
+  return input.recent.length ? ['[さっき言ったこと]', ...input.recent.map(line => `- ${line}`)].join('\n') : '';
 }
 
 const FORBIDDEN = /https?:\/\/|<@|@everyone|@here|```|^#+\s|\b(?:mc|minecraft)\.[a-z-]+|-?\d{1,5}\s*,\s*-?\d{1,4}\s*,\s*-?\d{1,5}/iu;
