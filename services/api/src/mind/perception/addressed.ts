@@ -94,7 +94,7 @@ type Target = typeof ADDRESSED_TARGETS[number];
 
 interface Parsed { addressed: boolean; target: Target | 'fallback'; noul: number; reason: AddressedReason }
 
-/** 固定した5問（addressed.v6。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
+/** 固定した5問（addressed.v7。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
 export function addressedQuestions(): Record<string, JevQuestion> {
   return {
     addressed_to_shannon: {
@@ -141,7 +141,9 @@ export function addressedQuestions(): Record<string, JevQuestion> {
         + 'Decide whether the latest utterance (state.utterance) is that kind of talk: a request for her to do or add something in the game, a suggestion, tip or correction '
         + 'about what she makes or how (the materials, tools, steps, places and tricks the job needs, such as how to get or grow something), or a question about how far she '
         + 'has got or what she is doing. A tip about a thing the job is made of or needs, or about how to get or grow it, counts even when the job itself is not named '
-        + '(think what the job needs). It is NOT that kind of talk when it is chat between the people about something outside the game (what to eat, a video, the weather, '
+        + '(think what the job needs). So does a remark on how much or how many of something the job needs or has (enough, too many, too few: "あれば足りる", "もっといる"), '
+        + 'even when it is said as reassurance and not as an instruction: the people say it so that she knows what to gather and what to leave. '
+        + 'It is NOT that kind of talk when it is chat between the people about something outside the game (what to eat, a video, the weather, '
         + 'other games, jokes, laughter), or when it talks about Shannon herself and not her work. When shannon_is_working_in_minecraft is not true, answer false.',
       criteria: {
         true: 'The utterance asks her to do something in the game, suggests or corrects something about her work, or asks about her work.',
@@ -278,8 +280,8 @@ export function fallbackAddressed(_input: AddressedInput, _name: NameMatch | nul
  * unclearは確率が高くても黙り、名前なしの新しい話しかけは一段厳しくする。
  */
 export const ADDRESSED_DECISION = Object.freeze({ shannon: 0.7, unnamed: 0.8, replyNeeded: 0.8,
-  /** While she works (`about_the_job`): the real Jev scored what people said about the job 0.5 to 0.98 and the chat between them 0.01 to 0.20 (2026-11-22), so the bar sits between. */
-  job: 0.4,
+  /** While she works (`about_the_job`): the real Jev scored what people said about the job 0.3 to 0.99 (a remark on how much the job needs, "牛乳はバケツが 3 つあれば足りるよ", 0.28 to 0.36) and the chat between them 0.01 to 0.20 (2026-11-22), so the bar sits at 0.3. */
+  job: 0.3,
   /** Inside the window of a question she asked (`answers_her_question`): low, since a real answer can be three words and a missed one costs more than a late chat line. Not yet read against the real Jev. */
   answer: 0.4 });
 
