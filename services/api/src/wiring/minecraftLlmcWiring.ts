@@ -422,7 +422,7 @@ queue.onRan(noteQueueResult);
     // A-20 (run 47: the credit ran out): the decision was refused for the account's credit. The request is held (the
 // body is asked to hold, the audit's hold row, the owner's stop path) with
     // the reason billing, and the runner pauses it (`pauseForBilling`); the operator resumes it when the balance is filled.
-    const billing = (): void => headHold({ kind: 'decide_error', key: 'billing', why: 'Anthropic の利用残高が足りず（課金・残高の誤り）、判断を頼めなかった。理由 billing。補充の後に resume で続ける' });
+    const billing = (): void => headHold({ kind: 'decide_error', key: 'billing', why: 'モデルの利用残高（Anthropic または OpenAI）が足りず（課金・残高の誤り）、判断を頼めなかった。理由 billing。補充の後に resume で続ける' });
     return { look, refused, billing, settled: () => holding ?? Promise.resolve(),
       prepareStop: async (reason: string) => {
         headHold({ kind: 'decide_error', key: reason, why: `判断の失敗停止（${reason}）。世界と現場を保全して、修正後の resume を待つ` }, null, true);
