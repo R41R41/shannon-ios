@@ -887,6 +887,7 @@
     "surfaces/minecraft/minecraftLiveBody.ts",
     "surfaces/minecraft/minecraftLiveCommentary.ts",
     "surfaces/minecraft/minecraftLiveSpeech.ts",
+    "surfaces/minecraft/minecraftLiveTold.ts",
     "surfaces/minecraft/minecraftLiveWords.ts",
     "surfaces/minecraft/minecraftLiveWriter.ts",
     "surfaces/minecraft/minecraftLlmc.ts",

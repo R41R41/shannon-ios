@@ -1,7 +1,8 @@
-import { LiveGovernor, pickMoments, type LiveMoment, type LiveRoom } from '@shannon/mind';
+import { LiveGovernor, liveFactLine, pickMoments, type LiveMoment, type LiveRoom } from '@shannon/mind';
 import { outsideActionExecution } from '../../infra/context/actionExecution.js';
 import type { MinecraftLiveRoom, MinecraftLiveSpeechReceipt } from '../../contracts/minecraftControlContract.js';
 import type { LiveSpeechDraft, LiveSpeechOutbox } from './minecraftLiveSpeech.js';
+import { LiveToldFacts } from './minecraftLiveTold.js';
 
 /**
  * Her live commentary (session dc-live; `SHANNON_MINECRAFT_LIVE_SPEECH`): the moments her body shows (`MinecraftLive`) are weighed by the
@@ -38,6 +39,8 @@ export interface LiveWriteRequest {
   main: LiveMoment;
   also: readonly LiveMoment[];
   recent: readonly string[];
+  /** The events she already told of this request's work (fact lines): the writer sees these, not her own words. */
+  told: readonly string[];
   /** The line will be spoken (she is in a voice channel), not written. */
   voice: boolean;
 }
@@ -84,6 +87,9 @@ export class LiveCommentary {
   private writing = false;
   /** Rises at each release of her work: a line whose writing began before it is about a story that ended. */
   private released = 0;
+  /** Rises at the end of each request: a line of its work whose writing began before it is about a story that ended. */
+  private endings = 0;
+  private readonly toldFacts = new LiveToldFacts();
   private serial = 0;
   private stops: Array<() => void> = [];
   private readonly counts: Record<string, number> = {};
@@ -112,6 +118,7 @@ export class LiveCommentary {
    */
   private release(): void {
     this.released += 1;
+    this.toldFacts.close();
     const work = LIVE_COMMENTARY_ENGINE.workKinds;
     const before = this.waiting.length;
     this.waiting = this.waiting.filter(item => !work.includes(item.moment.kind));
@@ -132,6 +139,7 @@ export class LiveCommentary {
     this.count('moments');
     // The request ended: what waits of her work (a step, a thought, a material) is about a story that is over, and the end says it.
     if (moment.kind === 'task_done') {
+      this.endings += 1;
       this.waiting = this.waiting.filter(item => !LIVE_COMMENTARY_ENGINE.workKinds.includes(item.moment.kind));
     }
     if (LIVE_COMMENTARY_ENGINE.supersededKinds.includes(moment.kind)) {
@@ -195,13 +203,13 @@ export class LiveCommentary {
 
   private async compose(main: { moment: LiveMoment; salience: number; rewrites: number }, also: ReadonlyArray<{ moment: LiveMoment }>): Promise<void> {
     this.writing = true;
-    const released = this.released;
+    const released = this.released, ending = this.endings;
     try {
       const voice = this.parts.outbox.room()?.voice === true, folded = also.map(item => item.moment);
-      const text = await within(this.parts.write({ main: main.moment, also: folded, recent: this.governor.recentWords(), voice }).catch(() => null),
-        LIVE_COMMENTARY_ENGINE.writeMilliseconds);
+      const request: LiveWriteRequest = { main: main.moment, also: folded, recent: this.governor.recentWords(), told: this.toldFacts.list(), voice };
+      const text = await within(this.parts.write(request).catch(() => null), LIVE_COMMENTARY_ENGINE.writeMilliseconds);
       // Her work was released while the model wrote (the line is of the work, not the end of a request): the line is not said.
-      if (released !== this.released && LIVE_COMMENTARY_ENGINE.workKinds.includes(main.moment.kind)) {
+      if ((released !== this.released || ending !== this.endings) && LIVE_COMMENTARY_ENGINE.workKinds.includes(main.moment.kind)) {
         this.count('write_released');
         return;
       }
@@ -293,6 +301,7 @@ export class LiveCommentary {
       return;
     }
     this.governor.delivered(entry.main, entry.text, this.now());
+    if (entry.main.kind === 'task_done') this.toldFacts.close(); else this.toldFacts.add(liveFactLine(entry.main));
     for (const moment of entry.also) this.governor.spend(moment);
     try {
       this.parts.delivered?.({ id: draft.id, moment: entry.main, text: entry.text, outcome: receipt.outcome,
