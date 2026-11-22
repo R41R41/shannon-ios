@@ -262,8 +262,8 @@ export function addressedGate(
     if (ownerAlone(input)) return { kind: 'ask', name: null, follows: false, unnamed: 'alone' };
     return input.work ? { kind: 'ask', name: null, follows: false, unnamed: 'working' } : { kind: 'quiet', reason: 'no_name' };
   }
-  // Without her name, inside the window after a line of her own (while she works her own commentary keeps this window open nearly all the time), what people say about the job is still
-  // about the job: the same question that is asked outside the window is read here too.
+  // Without her name, inside the window after a line of her own (while she works her own commentary keeps this window open nearly all the time),
+  // what people say about the job is still about the job: the same question that is asked outside the window is read here too.
   return { kind: 'ask', name, follows, ...(!name && input.work ? { working: true } : {}) };
 }
 
