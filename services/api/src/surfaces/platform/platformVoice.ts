@@ -8,9 +8,9 @@ import {
   type PlatformAudiencePolicy, type PlatformBridgeBinding, type PlatformBridgeService,
 } from '../../mind/memory/platformMemoryPorts.js';
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
-import { voiceAddress, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
-import type { AddressedJudge } from '../../mind/perception/addressed.js';
-import { addressedInputOf, questionJudged, workOf } from './platformVoiceAddressed.js';
+import { voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
+import { ADDRESSED_WINDOW_MILLISECONDS, type AddressedJudge } from '../../mind/perception/addressed.js';
+import { addressedInputOf, questionJudged, shannonSpokeAgoMs, workOf } from './platformVoiceAddressed.js';
 import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -243,12 +243,13 @@ export class PlatformVoiceService {
   private async addressOf(seat: ChannelSeat, request: VoiceTurnRequest): Promise<VoiceAddress> {
     const judge = this.dependencies.addressed ?? null;
     const humans = seat.humans.size;
-    if (!judge || !switchOn(this.environment, 'SHANNON_ADDRESSED')) {
+    const judged = judge !== null && switchOn(this.environment, 'SHANNON_ADDRESSED');
+    if (request.directed) return this.directedAddress(request, judged ? judge : null);
+    if (!judge || !judged) {
       return voiceAddress({ transcript: request.userMessage, humans, followsShannonTurn: request.followsShannonTurn });
     }
     const room = request.conversationId;
-    // What the body heard of the others and did not send as a turn belongs to the talk the judgement reads.
-    for (const line of request.heard) this.rooms.noteExchange(room, { role: 'person', userId: line.userId, name: line.name, text: line.text, at: line.at });
+    this.noteHeardLines(request);
     // A request of anyone may be under way, and anyone's stop word stops it (the body part on: `offersIntent`).
     const body = this.bodyFor(seat);
     const bodyRunning = (body?.state.running ?? null) !== null;
@@ -262,6 +263,34 @@ export class PlatformVoiceService {
     this.rooms.noteExchange(room, { role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt });
     this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} ms=${verdict.ms} humans=${humans}`);
     return { respond: verdict.addressed, reason: verdict.reason };
+  }
+
+  /** What the body heard of the others and did not send as a turn belongs to the talk the judgement reads. */
+  private noteHeardLines(request: VoiceTurnRequest): void {
+    for (const line of request.heard) {
+      this.rooms.noteExchange(request.conversationId, { role: 'person', userId: line.userId, name: line.name, text: line.text, at: line.at });
+    }
+  }
+
+  /**
+   * Words said with the push-to-talk key held are to her: she answers them without being named, whoever else is in the room and with or
+   * without `SHANNON_ADDRESSED`. A breath, a key press or a lone sound nobody waits on is still no turn (`voiceFragment`). The words go into the
+   * room's talk as every answered turn's do, and they take a question of hers that was waiting.
+   */
+  private directedAddress(request: VoiceTurnRequest, judge: AddressedJudge | null): VoiceAddress {
+    const spokeAgo = shannonSpokeAgoMs(this.rooms, request);
+    const window = judge?.windowMilliseconds ?? ADDRESSED_WINDOW_MILLISECONDS;
+    const follows = request.followsShannonTurn || (spokeAgo !== null && spokeAgo <= window);
+    if (voiceFragment({ transcript: request.userMessage, followsShannonTurn: follows })) return { respond: false, reason: 'fragment' };
+    if (judge) {
+      const room = request.conversationId;
+      this.noteHeardLines(request);
+      this.rooms.closeQuestion(room);
+      this.rooms.noteExchange(room, {
+        role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt,
+      });
+    }
+    return { respond: true, reason: 'directed' };
   }
 
   /** Heard, not answered: context for a few minutes, nothing in her memory. */

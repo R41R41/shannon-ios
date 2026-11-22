@@ -54,6 +54,11 @@ export interface VoiceTurnRequest {
   participants: string[];
   heard: HeardLine[];
   followsShannonTurn: boolean;
+  /**
+   * The speaker pressed a key to talk (push to talk): the words were said to her, name or no name. She answers them without being named; a
+   * breath or a key press with no words in it is still not a turn (`platformVoice.ts`, `addressOf`).
+   */
+  directed?: boolean;
   speakingNow: boolean;
   /**
    * How long ago she last finished speaking in the channel, as the body measured it (0: she is speaking now). `SHANNON_ADDRESSED` reads
@@ -92,7 +97,7 @@ export interface StoredVoiceTurn {
 
 const REQUEST_FIELDS = new Set([
   'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'speakerMinecraftName', 'userMessage', 'observedAt',
-  'participants', 'heard', 'followsShannonTurn', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId', 'situation', 'sttMs', 'utteranceMs',
+  'participants', 'heard', 'followsShannonTurn', 'directed', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId', 'situation', 'sttMs', 'utteranceMs',
 ]);
 
 export const identifier = (value: unknown, maximum: number): value is string =>
@@ -168,7 +173,7 @@ function validatedIdentity(body: Record<string, unknown>): void {
 }
 
 function validatedFlags(body: Record<string, unknown>): void {
-  for (const flag of ['followsShannonTurn', 'speakingNow'] as const) {
+  for (const flag of ['followsShannonTurn', 'directed', 'speakingNow'] as const) {
     if (body[flag] !== undefined && typeof body[flag] !== 'boolean') throw badRequest(`${flag} is invalid.`);
   }
   if (body.fillerId !== undefined && !identifier(body.fillerId, 80)) throw badRequest('fillerId is invalid.');
@@ -191,6 +196,7 @@ export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
     participants: validatedParticipants(body.participants),
     heard: validatedHeard(body.heard),
     followsShannonTurn: body.followsShannonTurn === true,
+    directed: body.directed === true,
     speakingNow: body.speakingNow === true,
     ...(body.fillerId !== undefined ? { fillerId: trimmed('fillerId') } : {}),
     ...validatedExtras(body),

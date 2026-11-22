@@ -10,6 +10,8 @@ import { SQLiteSurfaceTurnLog } from '../src/mind/action/respond/store/surfaceTu
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { PlatformBridgeError, PlatformBridgeService, configuredPlatformBridge, platformBridgeThreadId } from '../src/mind/memory/platformBridge.js';
 import { PlatformPeople } from '../src/mind/memory/platformPeople.js';
+import { validatedConversationTurn, voiceRequestOf } from '../src/surfaces/platform/platformConverse.js';
+import { voiceHash } from '../src/surfaces/platform/platformVoiceRequest.js';
 import { PlatformVoiceService, PLATFORM_VOICE_ALLOWANCE, platformVoiceEnabled, validatedVoiceTurn, type VoiceTurnLine } from '../src/surfaces/platform/platformVoice.js';
 import { splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../src/surfaces/text/chatSentenceStream.js';
@@ -956,5 +958,94 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     expect(prompt).toContain('取り組んでいること: ケーキを1個作る（通話の誰かに頼まれた）');
     expect(prompt).toContain('計画の今の節: 小麦を育てる');
     await close();
+  });
+});
+
+/**
+ * Words said with the push-to-talk key held (`directed`) are to her: answered without her name, with or without `SHANNON_ADDRESSED`, from a
+ * person the head knows only by their Minecraft account. Without the mark nothing is different from before.
+ */
+describe('directed: words said with the push-to-talk key held', () => {
+  const ADDRESSED = { SHANNON_DC_VOICE: 'on', SHANNON_ADDRESSED: 'on' };
+  const GUEST = 'mc:11111111-2222-3333-4444-555555555555';
+  const call = { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' };
+  /** A Jev that never hears the words as said to her; it counts how many times it is asked. */
+  function deaf() {
+    const asked: string[] = [];
+    const chooser = { decide: async (request: { state: unknown }) => {
+      asked.push((request.state as { utterance: string }).utterance);
+      return { value: { addressed: false, target: 'other_person', noul: 0.05, reason: 'not_to_her' }, source: 'jev' as const };
+    } } as unknown as Pick<JevChooser, 'decide'>;
+    return { asked, judge: new AddressedJudge({ chooser }) };
+  }
+
+  it('answers a nameless sentence in a call of three without asking Jev, and answers it as it did when the mark is not there', async () => {
+    const { asked, judge } = deaf();
+    const { say, model, close } = harness(ADDRESSED, undefined, judge);
+    const inWindow = { ...call, shannonSpokeMsAgo: 5_000 };
+    const plain = await say('ここに置いておくね', inWindow);
+    expect(plain[0]).toMatchObject({ respond: false });
+    expect(asked).toHaveLength(1);
+    const lines = await say('ここに置いておくね', { ...inWindow, directed: true });
+    expect(lines[0]).toMatchObject({ type: 'decision', respond: true, reason: 'directed' });
+    expect(typeOf(lines)).toContain('sentence');
+    expect(lines.at(-1)).toMatchObject({ type: 'done', duplicate: false });
+    // Not asked again, and she wrote one reply.
+    expect(asked).toHaveLength(1);
+    expect(model.requests).toHaveLength(1);
+    await close();
+  });
+
+  it('answers also with the judge off (the shared-table rules would keep quiet for people talking to each other)', async () => {
+    const { say, model, close } = harness({ SHANNON_DC_VOICE: 'on' });
+    expect((await say('ここに置いておくね', call))[0]).toMatchObject({ respond: false });
+    expect((await say('ここに置いておくね', { ...call, directed: true }))[0]).toMatchObject({ respond: true, reason: 'directed' });
+    expect(model.requests).toHaveLength(1);
+    await close();
+  });
+
+  it('is still no turn for a breath or a key press, and a bare 「うん」 counts only right after she spoke', async () => {
+    const { judge } = deaf();
+    const { say, model, close } = harness(ADDRESSED, undefined, judge);
+    expect((await say('えー', { ...call, directed: true }))[0]).toMatchObject({ respond: false, reason: 'fragment' });
+    expect((await say('うん', { ...call, directed: true }))[0]).toMatchObject({ respond: false, reason: 'fragment' });
+    expect((await say('うん', { ...call, directed: true, shannonSpokeMsAgo: 3_000 }))[0]).toMatchObject({ respond: true, reason: 'directed' });
+    expect(model.requests).toHaveLength(1);
+    await close();
+  });
+
+  it('answers someone the head knows only by a Minecraft account (no Discord id), as a guest of the call', async () => {
+    const { judge } = deaf();
+    for (const environment of [ADDRESSED, { SHANNON_DC_VOICE: 'on' }]) {
+      const { say, model, body, close } = harness(environment, undefined, judge);
+      model.reply = 'いいよ、置くね。';
+      const lines = await say('ケーキできたんだね、ここにお願い', { conversationId: SERVER_ROOM, participants: [OWNER, GUEST], sourceUserId: GUEST, sourceDisplayName: 'Yuu_1234', directed: true });
+      expect(lines[0]).toMatchObject({ respond: true, reason: 'directed' });
+      expect(sentences(lines).map(line => line.text).join('')).toContain('置くね');
+      expect(body.calls).toHaveLength(0);
+      await close();
+    }
+  });
+
+  it('is a field of both wire forms; a mark that is not true or false is a 400 and a field it does not know still is', () => {
+    const flat = { platform: 'discord', requestId: 'r1', conversationId: 'discord:1:2', sourceUserId: 'u1', sourceDisplayName: 'ユウ', userMessage: 'そこに置いて',
+      observedAt: '2026-11-22T12:00:00.000Z', participants: ['u1'] };
+    expect(validatedVoiceTurn({ ...flat, directed: true })).toMatchObject({ directed: true });
+    expect(validatedVoiceTurn({ ...flat, directed: false })).toMatchObject({ directed: false });
+    expect(validatedVoiceTurn(flat).directed).not.toBe(true);
+    expect(() => validatedVoiceTurn({ ...flat, directed: 'yes' })).toThrow();
+    expect(() => validatedVoiceTurn({ ...flat, directedBy: true })).toThrow();
+    const one = (presence: Record<string, unknown>) => voiceRequestOf(validatedConversationTurn({ version: 1, requestId: 'c1', observedAt: '2026-11-22T12:00:00.000Z', modality: 'voice',
+      where: { platform: 'discord', conversationId: 'discord:1:2', conversationKind: 'channel' },
+      who: { userId: 'u1', displayName: 'ユウ' }, presence: { participants: ['u1'], ...presence }, words: 'そこに置いて' }));
+    expect(one({ directed: true })).toMatchObject({ directed: true });
+    expect(one({}).directed).not.toBe(true);
+    expect(() => one({ directed: 'yes' })).toThrow();
+  });
+
+  it('does not change the hash a retry is matched by', () => {
+    const base = { platform: 'discord', requestId: 'r1', conversationId: 'discord:1:2', sourceUserId: 'u1', sourceDisplayName: 'ユウ', userMessage: 'そこに置いて',
+      observedAt: '2026-11-22T12:00:00.000Z', participants: ['u1'] };
+    expect(voiceHash(validatedVoiceTurn({ ...base, directed: true }))).toBe(voiceHash(validatedVoiceTurn(base)));
   });
 });
