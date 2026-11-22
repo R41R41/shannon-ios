@@ -179,7 +179,7 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
       const words = `${clause.item} ${Math.min(acquired(facts.counts, clause.item), clause.count)}/${clause.count}`;
       // Wheat is the slowest material to come (it grows): its lack says the seeds she holds and that it takes time, so the lack is read as a thing to start, not to wait for.
       return clause.item === 'wheat' && acquired(facts.counts, 'wheat') < clause.count
-        ? `${words}（種 ${carried(facts.counts, 'wheat_seeds')} 個。育つまで時間がかかる（骨粉で短くなる）ので植えるのは早い方がよい。植えた株は掘らない）` : words;
+        ? `${words}（種 ${carried(facts.counts, 'wheat_seeds')} 個。育つまで時間がかかる（骨粉で短くなる）ので植えるのは早い方がよい）` : words;
     }
     case 'act': return clauseLack(clause.clause, facts);
     case 'food': return foodPointsWords(facts.food, clause.points);

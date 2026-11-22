@@ -23,6 +23,8 @@ const LABEL: Readonly<Record<NearbyPurpose, readonly [string, string]>> = {
  */
 const ORDER: readonly NearbyPurpose[] = ['wood', 'food_animal', 'food_village', 'plant', 'ore', 'bed', 'water', 'lava'];
 const PURPOSES = new Set<string>(ORDER);
+/** The crops that have a growth stage (a grown one is dug for its food; a young one only gives its seed back). */
+const CROPS: ReadonlySet<string> = new Set(['wheat', 'beetroots']);
 
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 
@@ -82,7 +84,10 @@ export function nearbyLines(resources: readonly NearbyResource[], feet: P | null
       // The lava's count is the sources (the body's `count`), with the pools they make when the body says (`pools`).
       // A cane is counted by its stand (a column of canes), so its unit is 株, not 個 (the body's `plant` entry of sugar_cane).
       const many = purpose === 'lava' ? `源 ${item.count} マス${item.pools !== undefined ? `・溜まり ${item.pools}` : ''}` : `${item.count}${purpose === 'plant' && item.kind === 'sugar_cane' ? '株' : unit}${purpose === 'plant' && item.kind !== 'sugar_cane' && item.count >= 256 ? '以上' : ''}`;
-      return `${item.kind} ${item.range}m 内に ${many}。${where}`;
+      // A crop that is not grown gives only a seed when it is dug (the planting is lost): said at the row she reads the dig's target from, with the way to grow it.
+      const unripe = (purpose === 'plant' || purpose === 'food_village') && CROPS.has(item.kind) && item.sites.some(site => /育ち中/u.test(site.note ?? ''))
+        ? `。育ち中の株は dig すると種に戻る（植えた分が消える）。育ちは「育ち中 age/最大」で、最大になるまで待つか、骨粉を use して進めてから dig（育った株だけ dig）` : '';
+      return `${item.kind} ${item.range}m 内に ${many}。${where}${unripe}`;
     });
     lines.push(`${label}: ${parts.join('／')}`);
   }

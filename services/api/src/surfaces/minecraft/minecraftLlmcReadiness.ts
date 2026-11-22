@@ -542,6 +542,26 @@ export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts,
   return `燃料: 焼く物 ${items} 個${what}に石炭 ${coal} が要る（石炭 1 で 8 個、板 1 枚は 1.5 個。板 ${planks} は作業台と道具の分）。${where}。${meanwhile}`;
 }
 
+/** The rock a way to an ore is dug through (`go`'s own categories), as the body's hands name it. */
+const IRON_ROAD = 'stone,dirt,gravel,andesite,diorite,granite,tuff,deepslate';
+const IRON_CELL = /最寄り \((-?\d+),(-?\d+),(-?\d+)\)/u;
+/**
+ * The hands that take the scan row's nearest iron, in the form she can send as they are. `mine` walks to a cell for only a few seconds and gives the cell up, so an ore farther
+ * than a few steps is gone to first (`go`, digging only the rock named, at most `maxDig` cells: the way down plus a margin; the walk on the surface digs nothing). In the replay of
+ * the morning's decisions she was given the ore's place and distance and no hand, and chose to look (probe, view) instead of mining in 12 of 13 decisions. Empty with no place in the row.
+ */
+export function nearIronHands(row: string, feet: { x: number; y: number; z: number } | null): string {
+  const found = IRON_CELL.exec(row);
+  if (!found) return '';
+  const [x, y, z] = [Number(found[1]), Number(found[2]), Number(found[3])];
+  const mine = `mine ${y < 0 ? 'deepslate_iron_ore' : 'iron_ore'} ${x},${y},${z} count=3`;
+  if (!feet) return `この鉄の手: 「${mine}」。`;
+  const across = Math.round(Math.hypot(x - feet.x, z - feet.z)), down = Math.max(0, Math.floor(feet.y) - y);
+  if (across <= 8 && down <= 4) return `この鉄の手: 「${mine}」（近いので mine だけで届く）。`;
+  const maxDig = Math.min(80, Math.max(16, down + 12)), seconds = Math.min(90, Math.max(20, Math.round(across / 3) + 15));
+  return `この鉄の手（そのまま出せる。mine は 1 マスにつき数秒しか歩かず諦めるので、遠い時は go が先）: 「go ${x},${y},${z} range=2 dig=${IRON_ROAD} maxDig=${maxDig} seconds=${seconds}」の次に「${mine}」。`;
+}
+
 const IRON_MARK = /鉄鉱石\[(?:deepslate_)?iron_ore\]/u;
 
 /**
@@ -561,7 +581,8 @@ export function ironSearchLine(world: Record<string, unknown>, counts: ItemCount
   const scan = agedScan(world.scan, nowMs, feetOf(world));
   const lead = scan.rows.find(row => /^鉄鉱石/u.test(row));
   if (lead) {
-    return `鉄鉱石の当て（${scan.mark}）: ${lead.slice(0, 160)}。埋まった近い鉄は go で掘り進んで mine すると早い（階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へは約 13 秒で 3 個だった）。`
+    return `鉄鉱石の当て（${(scan.mark ?? '').replace('・今は未確認', '')}）: ${lead.slice(0, 160)}。鉄鉱石は動かない（掘られた所だけ変わる）ので、走査の座標を信じてよい。着いて無ければ手の結果が理由を返すので、先に probe で確かめなくてよい。`
+      + `埋まった近い鉄は go で掘り進んで mine すると早い（階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へは約 13 秒で 3 個だった）。${nearIronHands(lead, feetOf(world))}`
       + '空気に面した遠い鉄は、近い鉄が要る数に足りない時だけ。y=16 へ下りるのは、近くに鉄が無い時だけ';
   }
   const marks = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).filter((line): line is string => typeof line === 'string');
@@ -644,7 +665,7 @@ const WANTS_FOOD = (node: PlanNode): boolean => /food\s*>=|foodPoints|stock:food
  * are under 40 and no animal that is food is in sight, in the overworld.
  */
 export function foodAbsentLine(world: Record<string, unknown>, food: number, dimension: string | null, now: PlanNode | undefined,
-  counts?: ItemCounts, nodes: readonly PlanNode[] = []): string | null {
+  counts?: ItemCounts, nodes: readonly PlanNode[] = [], nowMs: number | null = null): string | null {
   if (dimension !== 'overworld' || !now || food >= 40) return null;
   const aside = foodSetAside(now, nodes, counts);
   if (!WANTS_FOOD(now) && !aside) return null;
@@ -659,7 +680,7 @@ export function foodAbsentLine(world: Record<string, unknown>, food: number, dim
   const full = hunger !== null && hunger >= 10 ? `満腹 ${round1(hunger)}/20 はまだ十分で、食料を持たずに鉄まで下りられる（満腹が 6 を切る前に、途中で見えた動物を狩る）。` : '';
   if (aside) {
     // The iron line (`ironSearchLine`) says the way down when the now wants iron; the hands are said here only when it is silent.
-    const hands = counts && !ironSearchLine(world, counts, dimension, now) ? foodAbsentHands(world, counts, false) : '';
+    const hands = counts && !ironSearchLine(world, counts, dimension, now, nowMs) ? foodAbsentHands(world, counts, false) : '';
     return `${FOOD_PASS} 食料: 食料の節 ${aside.id} は外してある（prep skipped）ので、食料 ${round1(food)}/40 点のまま鉄へ下りてよい`
       + `（見える所に食べられる動物がいない。探し歩いても出てくる保証は無く、途中で見えた動物・村の畑で補う方が速い）。${full}`
       + `動物が見えたら狩って ${aside.id} を state=continue で戻す${hands}`;
