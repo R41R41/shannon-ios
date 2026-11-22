@@ -87,7 +87,7 @@ class Body implements VoiceMinecraftPort {
 
 interface LiveReader { block(options: { alone: boolean; participants?: boolean }): string; replying?(on: boolean): void; heard?(): void }
 
-function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }, live?: LiveReader, addressed?: AddressedJudge) {
+function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' }, live?: LiveReader, addressed?: AddressedJudge, cutShortWaitMilliseconds?: number) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-platform-voice-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -103,7 +103,7 @@ function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' 
   const body = new Body();
   const service = new PlatformVoiceService({
     scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now, chatModel: model, minecraft: () => body, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT),
-    environment: () => environment, log: () => undefined, ...(addressed ? { addressed } : {}),
+    environment: () => environment, log: () => undefined, ...(addressed ? { addressed } : {}), ...(cutShortWaitMilliseconds !== undefined ? { cutShortWaitMilliseconds } : {}),
   });
   let counter = 0;
   const say = async (userMessage: string, fields: Record<string, unknown> = {}) => {
@@ -1047,5 +1047,113 @@ describe('directed: words said with the push-to-talk key held', () => {
     const base = { platform: 'discord', requestId: 'r1', conversationId: 'discord:1:2', sourceUserId: 'u1', sourceDisplayName: 'ユウ', userMessage: 'そこに置いて',
       observedAt: '2026-11-22T12:00:00.000Z', participants: ['u1'] };
     expect(voiceHash(validatedVoiceTurn({ ...base, directed: true }))).toBe(voiceHash(validatedVoiceTurn(base)));
+  });
+});
+
+/**
+ * Words said over her reply: the answer is written once the body has reported how far she got (`said`, cut short), for at most a second;
+ * without the mark, or with no report, nothing waits longer than that.
+ */
+describe('words said over her reply wait for the report of how far she got', () => {
+  const cut = { source: 'reply', interrupted: true, spokenText: 'えっと、それはね、', text: 'さっきの長い返事を全部言う予定だった' };
+  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+
+  it('writes the answer from the conversation as it is after the report, not before it', async () => {
+    const { say, model, service, now, store, close } = harness({ SHANNON_DC_VOICE: 'on' }, undefined, undefined, 2_000);
+    const running = say('待って、それより先にこっちを見て', { speakingNow: true });
+    await settle();
+    expect(model.requests).toHaveLength(0);
+    service.said({ conversationId: ROOM, at: now(), ...cut });
+    const lines = await running;
+    expect(lines[0]).toMatchObject({ type: 'decision', respond: true });
+    expect(model.requests).toHaveLength(1);
+    const kept = store.conversationHistory('owner', roomThread).map(message => message.content).join('\n');
+    expect(kept).toContain('までしか言えなかった');
+    await close();
+  });
+
+  it('goes on without a report after the wait, and does not wait at all for words not said over her', async () => {
+    const { say, model, close } = harness({ SHANNON_DC_VOICE: 'on' }, undefined, undefined, 120);
+    const quick = Date.now();
+    await say('今日はいい天気だね');
+    expect(Date.now() - quick).toBeLessThan(100);
+    const before = Date.now();
+    const lines = await say('ねえ、聞いてる？', { speakingNow: true });
+    expect(Date.now() - before).toBeGreaterThanOrEqual(110);
+    expect(lines.at(-1)).toMatchObject({ type: 'done' });
+    expect(model.requests).toHaveLength(2);
+    await close();
+  });
+
+  it('a report that came before these words is not the one waited for', async () => {
+    const { say, service, now, close } = harness({ SHANNON_DC_VOICE: 'on' }, undefined, undefined, 120);
+    service.said({ conversationId: ROOM, at: now(), ...cut });
+    const before = Date.now();
+    await say('ねえ、聞いてる？', { speakingNow: true });
+    expect(Date.now() - before).toBeGreaterThanOrEqual(110);
+    await close();
+  });
+
+  it('a report of another room is not the one waited for', async () => {
+    const { say, service, now, close } = harness({ SHANNON_DC_VOICE: 'on' }, undefined, undefined, 150);
+    const running = say('ねえ、聞いてる？', { speakingNow: true });
+    await settle();
+    service.said({ conversationId: SERVER_ROOM, at: now(), ...cut });
+    const before = Date.now();
+    await running;
+    expect(Date.now() - before).toBeGreaterThanOrEqual(80);
+    await close();
+  });
+});
+
+/**
+ * A person at the game's voice with no Discord id: the body checks that the account is the owner's and says so (`speakerIsOwner`), and the
+ * words are the owner's. Without the mark an id the head does not know is a guest, as before.
+ */
+describe('speakerIsOwner: the owner at the game voice', () => {
+  const MC = 'mc:11111111-2222-3333-4444-555555555555';
+  const alone = { conversationId: ROOM, participants: [MC], sourceUserId: MC, sourceDisplayName: 'ライ' };
+  const inServer = { ...alone, conversationId: SERVER_ROOM };
+
+  it('is the owner and the only one there in his own room, also when his own id is in the list of people; others there make it shared', async () => {
+    const { say, model, close } = harness({ SHANNON_DC_VOICE: 'on' });
+    await say('今日はいい天気だね', { ...alone, speakerIsOwner: true });
+    expect(promptOf(model.requests[0]!)).toContain('いま聞こえているのはライ');
+    await say('そうだよね', { ...alone, participants: [MC, OWNER], speakerIsOwner: true });
+    expect(promptOf(model.requests[1]!)).toContain('いま聞こえているのはライ');
+    await say('ねえ聞いて', { ...alone, participants: [MC, FRIEND], speakerIsOwner: true });
+    expect(promptOf(model.requests[2]!)).not.toContain('いま聞こえているのはライ');
+    await say('もう一回', alone);
+    expect(promptOf(model.requests[3]!)).not.toContain('いま聞こえているのはライ');
+    await close();
+  });
+
+  it('sends his request to the body as the owner, under the id the conversation is bound to', async () => {
+    const { say, model, body, close } = harness({ SHANNON_DC_VOICE: 'on' });
+    model.reply = 'いいよ、作るね。';
+    model.intent = { kind: 'task', goal: 'ケーキを作る' };
+    await say('シャノン、ケーキを作って', { ...inServer, speakerIsOwner: true });
+    expect(body.calls).toHaveLength(1);
+    expect(body.calls[0]!.speaker).toMatchObject({ id: OWNER, name: 'ライ', owner: true });
+    await close();
+  });
+
+  it('is a guest without the mark, and the mark must be true or false in both wire forms', async () => {
+    const { say, model, body, close } = harness({ SHANNON_DC_VOICE: 'on' });
+    model.intent = { kind: 'task', goal: 'ケーキを作る' };
+    await say('シャノン、ケーキを作って', inServer);
+    expect(body.calls[0]!.speaker).toMatchObject({ id: MC, owner: false });
+    await close();
+    const flat = { platform: 'discord', requestId: 'r1', conversationId: 'discord:1:2', sourceUserId: 'u1', sourceDisplayName: 'ライ', userMessage: 'ケーキを作って',
+      observedAt: '2026-11-22T12:00:00.000Z', participants: ['u1'] };
+    expect(validatedVoiceTurn({ ...flat, speakerIsOwner: true })).toMatchObject({ speakerIsOwner: true });
+    expect(validatedVoiceTurn({ ...flat, speakerIsOwner: false }).speakerIsOwner).toBeUndefined();
+    expect(() => validatedVoiceTurn({ ...flat, speakerIsOwner: 'yes' })).toThrow();
+    const one = (who: Record<string, unknown>) => voiceRequestOf(validatedConversationTurn({ version: 1, requestId: 'c1', observedAt: '2026-11-22T12:00:00.000Z', modality: 'voice',
+      where: { platform: 'discord', conversationId: 'discord:1:2', conversationKind: 'channel' },
+      who: { userId: 'u1', displayName: 'ライ', ...who }, presence: { participants: ['u1'] }, words: 'ケーキを作って' }));
+    expect(one({ speakerIsOwner: true })).toMatchObject({ speakerIsOwner: true });
+    expect(one({}).speakerIsOwner).toBeUndefined();
+    expect(() => one({ speakerIsOwner: 'yes' })).toThrow();
   });
 });

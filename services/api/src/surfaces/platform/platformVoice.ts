@@ -21,7 +21,8 @@ import { SpokenSentences, VoiceOut } from './platformVoiceLines.js';
 import { askSeated, platformVoiceSeat, type SeatedVoiceTurn, type SentenceSplitter } from './platformVoiceOneHead.js';
 import { OPEN_CONVERSATION_TITLE } from '../../mind/memory/platformMemoryPorts.js';
 import {
-  PLATFORM_VOICE_ALLOWANCE, PLATFORM_VOICE_LIMITS, StoredVoiceTurn, VoiceTurnLine, VoiceTurnRequest, conflict, notBound, validatedVoiceTurn, voiceHash,
+  PLATFORM_VOICE_ALLOWANCE, PLATFORM_VOICE_LIMITS, StoredVoiceTurn, VoiceTurnLine, VoiceTurnRequest, conflict, notBound, ownerAsBound,
+  validatedVoiceTurn, voiceHash,
 } from './platformVoiceRequest.js';
 import {
   FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, askedBackBlock, heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions,
@@ -81,6 +82,8 @@ export interface PlatformVoiceDependencies {
   /** The auxiliary model (Haiku) that puts event facts into her words (`wording`). */
   chatModel: Pick<ShannonChatModel, 'generate'>;
   environment?: () => SwitchValues;
+  /** How long an answer to words said over her reply waits for the report of how far she got (default `PLATFORM_VOICE_LIMITS.cutShortWaitMilliseconds`). */
+  cutShortWaitMilliseconds?: number;
   /** Content-free lines; `console.log` when absent. */
   log?(line: string): void;
 }
@@ -220,14 +223,22 @@ export class PlatformVoiceService {
     return oneHeadEnabled(this.environment) ? this.dependencies.conversation.seatedVoiceTurn ?? null : null;
   }
 
-  private async answer(request: VoiceTurnRequest, hash: string, key: string, out: VoiceOut): Promise<void> {
+  private async answer(asked: VoiceTurnRequest, hash: string, key: string, out: VoiceOut): Promise<void> {
+    const binding = this.dependencies.bridge.bindingOf({ platform: asked.platform, conversationId: asked.conversationId });
+    const request = binding ? ownerAsBound(asked, binding.ownerUserId) : asked;
     const seat = this.seat(request);
+    const cutShortBefore = this.words.cutShortCount(request.conversationId);
     const address = await this.addressOf(seat, request);
     if (!address.respond) return this.stayQuiet(seat, request, hash, key, address, out);
     this.admit(seat, request);
     const filler = this.fillerFor(request, address);
     out.line({ type: 'decision', respond: true, reason: address.reason, filler: filler ? { id: filler.id, text: filler.text } : null });
     const decisionMs = Math.round(performance.now() - seat.startedAt);
+    // Said over her reply: the decision line above is what stops it, and the body then reports how far she got. The answer waits for that.
+    if (request.speakingNow) {
+      const wait = this.dependencies.cutShortWaitMilliseconds ?? PLATFORM_VOICE_LIMITS.cutShortWaitMilliseconds;
+      await this.words.untilCutShort(request.conversationId, cutShortBefore, wait);
+    }
     const body = this.bodyFor(seat);
     const seated = this.seated;
     const answer = seated ? await this.askOneHead(seated, seat, request, hash, filler, body, address, out)

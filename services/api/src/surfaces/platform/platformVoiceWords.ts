@@ -37,6 +37,8 @@ const WORDING_INSTRUCTIONS = [
 
 export class VoiceWords {
   private readonly wordingTimes: number[] = [];
+  /** How many replies of each room were reported cut short (`said`), and who waits for the next one. */
+  private readonly cutShort = new Map<string, { count: number; waiters: Set<() => void> }>();
 
   constructor(private readonly dependencies: VoiceWordsDependencies) {}
 
@@ -63,6 +65,43 @@ export class VoiceWords {
     this.note(body.conversationId, `dcv-said:${digest.slice(0, 32)}`, content);
     // A line from her mouth is said to the room, to nobody in particular: a friend's reaction to it may be to her (`SHANNON_ADDRESSED`).
     if (body.source === 'mouth' && body.interrupted !== true) this.dependencies.rooms.noteShannon(body.conversationId, { at, userId: '', text: content, asked: endsWithQuestionMark(content) });
+    this.reportCutShort(body.conversationId, body.source === 'reply' && body.interrupted === true);
+  }
+
+  private roomCutShort(conversationId: string): { count: number; waiters: Set<() => void> } {
+    const room = this.cutShort.get(conversationId) ?? { count: 0, waiters: new Set<() => void>() };
+    this.cutShort.set(conversationId, room);
+    return room;
+  }
+
+  private reportCutShort(conversationId: string, cut: boolean): void {
+    if (!cut) return;
+    const room = this.roomCutShort(conversationId);
+    room.count += 1;
+    for (const wake of [...room.waiters]) wake();
+  }
+
+  /** The number of cut-short replies reported for the room so far: what `untilCutShort` is given to tell a new report from an old one. */
+  cutShortCount(conversationId: string): number { return this.cutShort.get(conversationId)?.count ?? 0; }
+
+  /**
+   * Waits (at most `milliseconds`) for the room to report that a reply of hers was cut short after `seen` reports. The words that cut
+   * it short reach the head before that report does, and the answer to them is written from the conversation as it is then: this keeps
+   * it from being written as if she had said all of the reply before. Returns at once when the report is already there.
+   */
+  untilCutShort(conversationId: string, seen: number, milliseconds: number): Promise<void> {
+    if (this.cutShortCount(conversationId) > seen || milliseconds <= 0) return Promise.resolve();
+    const room = this.roomCutShort(conversationId);
+    return new Promise(resolve => {
+      const done = () => {
+        clearTimeout(timer);
+        room.waiters.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, milliseconds);
+      timer.unref?.();
+      room.waiters.add(done);
+    });
   }
 
   private kept(text: string, interrupted: boolean, spokenText: string): string {

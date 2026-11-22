@@ -21,6 +21,8 @@ export const PLATFORM_VOICE_LIMITS = Object.freeze({
   heardLines: VOICE_ROOM_LIMITS.heardLines,
   replayDays: 1,
   replyCharacters: 1_200,
+  /** Words said over her reply are answered after the report of how far she got, for at most this long (no report: the answer goes on). */
+  cutShortWaitMilliseconds: 1_000,
 });
 
 /** Spoken turns come in faster than typed ones; the owner and everyone else still count apart (`minecraftTurnAllowance.ts`). */
@@ -49,6 +51,11 @@ export interface VoiceTurnRequest {
    * on to the Minecraft request (`VoiceSpeaker.minecraftName`) so that 「ここ」 and 「こっち」 can be read from where that player looks.
    */
   speakerMinecraftName?: string;
+  /**
+   * The body checked that the speaker is the owner (a person at the game's voice whose Minecraft account is the owner's, who has no Discord id
+   * the body could give): the words are the owner's, as if they came with the owner's id (`ownerAsBound`). Present only when true.
+   */
+  speakerIsOwner?: boolean;
   userMessage: string;
   observedAt: string;
   participants: string[];
@@ -96,8 +103,9 @@ export interface StoredVoiceTurn {
 }
 
 const REQUEST_FIELDS = new Set([
-  'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'speakerMinecraftName', 'userMessage', 'observedAt',
-  'participants', 'heard', 'followsShannonTurn', 'directed', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId', 'situation', 'sttMs', 'utteranceMs',
+  'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'speakerMinecraftName', 'speakerIsOwner',
+  'userMessage', 'observedAt', 'participants', 'heard', 'followsShannonTurn', 'directed', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId',
+  'situation', 'sttMs', 'utteranceMs',
 ]);
 
 export const identifier = (value: unknown, maximum: number): value is string =>
@@ -173,7 +181,7 @@ function validatedIdentity(body: Record<string, unknown>): void {
 }
 
 function validatedFlags(body: Record<string, unknown>): void {
-  for (const flag of ['followsShannonTurn', 'directed', 'speakingNow'] as const) {
+  for (const flag of ['followsShannonTurn', 'directed', 'speakingNow', 'speakerIsOwner'] as const) {
     if (body[flag] !== undefined && typeof body[flag] !== 'boolean') throw badRequest(`${flag} is invalid.`);
   }
   if (body.fillerId !== undefined && !identifier(body.fillerId, 80)) throw badRequest('fillerId is invalid.');
@@ -191,6 +199,7 @@ export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
     sourceUserId: trimmed('sourceUserId'),
     sourceDisplayName: trimmed('sourceDisplayName'),
     ...(body.speakerMinecraftName !== undefined ? { speakerMinecraftName: trimmed('speakerMinecraftName') } : {}),
+    ...(body.speakerIsOwner === true ? { speakerIsOwner: true } : {}),
     userMessage: trimmed('userMessage'),
     observedAt: new Date(body.observedAt as string).toISOString(),
     participants: validatedParticipants(body.participants),
@@ -201,6 +210,16 @@ export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
     ...(body.fillerId !== undefined ? { fillerId: trimmed('fillerId') } : {}),
     ...validatedExtras(body),
   };
+}
+
+/**
+ * The owner as the body confirmed him (`speakerIsOwner`): he carries the id the conversation is bound to, in the words and among the people
+ * there, so that he is the owner and the only one there whichever id the body knew him by. Nothing changes without the mark.
+ */
+export function ownerAsBound(request: VoiceTurnRequest, ownerUserId: string): VoiceTurnRequest {
+  if (!request.speakerIsOwner) return request;
+  const people = request.participants.map(id => (id === request.sourceUserId ? ownerUserId : id));
+  return { ...request, sourceUserId: ownerUserId, participants: [...new Set(people)] };
 }
 
 /** The words and who said them where; not who else is in the channel, so a retry with people coming and going still gets the answer. */

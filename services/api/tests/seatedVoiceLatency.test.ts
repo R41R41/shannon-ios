@@ -49,7 +49,7 @@ class Model implements ShannonChatModel {
 }
 
 const FRIEND = '900000000000000002';
-interface SeatedTurnOptions { message?: string; participants?: string[]; skills?: Awaited<ReturnType<VoiceDecisionGateway['decide']>>['selectedSkills']; room?: string }
+interface SeatedTurnOptions { message?: string; participants?: string[]; skills?: Awaited<ReturnType<VoiceDecisionGateway['decide']>>['selectedSkills']; room?: string; fields?: Record<string, unknown> }
 
 async function seatedTurn(events: string[] = [], options: SeatedTurnOptions = {}): Promise<{ model: Model; lines: VoiceTurnLine[]; close: () => Promise<void> }> {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-seated-latency-'));
@@ -83,7 +83,7 @@ async function seatedTurn(events: string[] = [], options: SeatedTurnOptions = {}
   });
   const lines: VoiceTurnLine[] = [];
   await voice.turn({ platform: 'discord', requestId: 'v-1', conversationId: options.room ?? SERVER_ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
-    userMessage: options.message ?? 'シャノン、聞こえる？', observedAt: START, participants: options.participants ?? [OWNER] }, line => lines.push(line));
+    userMessage: options.message ?? 'シャノン、聞こえる？', observedAt: START, participants: options.participants ?? [OWNER], ...options.fields }, line => lines.push(line));
   return { model, lines, close: async () => { await background.waitForIdle('owner'); await new Promise(resolve => setImmediate(resolve)); turns.close(); peopleStore.close(); store.close(); } };
 }
 
@@ -113,6 +113,16 @@ describe('a seated voice turn of a shared channel', () => {
     const { model, close } = await seatedTurn(events, { message: '目標は、みんなでケーキを作ることです', room: PRIVATE_ROOM });
     expect(events.indexOf('read')).toBeGreaterThan(events.indexOf('route-start'));
     expect(events.slice(events.indexOf('route-end'))).toEqual(['route-end']);
+    expect(model.requests).toHaveLength(1);
+    await close();
+  });
+
+  it('reads ahead for words said with the talk key held too, though nobody is named and others are there', async () => {
+    const events: string[] = [];
+    const { model, lines, close } = await seatedTurn(events, { message: '駅前に新しいカフェができたらしい', participants: [OWNER, FRIEND], fields: { directed: true } });
+    expect(lines.find(line => line.type === 'decision')).toMatchObject({ respond: true, reason: 'directed' });
+    expect(events.indexOf('read')).toBeGreaterThan(events.indexOf('route-start'));
+    expect(events.indexOf('read')).toBeLessThan(events.indexOf('route-end'));
     expect(model.requests).toHaveLength(1);
     await close();
   });

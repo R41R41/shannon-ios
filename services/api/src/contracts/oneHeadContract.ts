@@ -47,7 +47,8 @@ export interface ConversationTurn {
     title?: string;
     voiceChannelId?: string;
   };
-  who: { userId: string; displayName: string; speakerMinecraftName?: string };
+  /** `speakerIsOwner`: the body checked that the speaker is the owner (present only when true); the words are the owner's whatever id they carry. */
+  who: { userId: string; displayName: string; speakerMinecraftName?: string; speakerIsOwner?: boolean };
   presence: {
     /** The people there (bots excluded), the speaker included. */
     participants: string[];
