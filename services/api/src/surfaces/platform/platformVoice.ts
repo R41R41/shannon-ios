@@ -359,6 +359,14 @@ export class PlatformVoiceService {
     return !seat.policy.gate.ownerOnly && body !== null && body.state.connected;
   }
 
+  /**
+   * Whether the intent field is offered for the way of speaking: wherever the field is, and also to the owner alone in his private room (who
+   * has her ordinary tools for requests, so there the field only carries `speech`; anything else it carries is dropped by `carryIntent`).
+   */
+  private offersSpeech(seat: ChannelSeat, body: { state: VoiceMinecraftState } | null): boolean {
+    return this.offersIntent(seat, body) || (seat.owner && seat.policy.gate.ownerOnly);
+  }
+
   private promptFor(
     seat: ChannelSeat, request: VoiceTurnRequest, filler: VoiceFiller | null, body: { state: VoiceMinecraftState } | null, address: VoiceAddress,
   ): string {
@@ -370,7 +378,8 @@ export class PlatformVoiceService {
     const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName?.replace(/s+/gu, ' ').trim().slice(0, 40) || '話している人';
     const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who) : '';
     // The way of speaking is a kind of the intent field, so it is offered where the field is.
-    const speech = this.offersIntent(seat, body) ? speechInstructions({ owner: seat.owner, who, mode: request.speechMode, rate: request.speechRate }) : '';
+    const speech = this.offersSpeech(seat, body)
+      ? speechInstructions({ owner: seat.owner, who, mode: request.speechMode, rate: request.speechRate, speechOnly: !this.offersIntent(seat, body) }) : '';
     return [
       platformVoiceInstructions({
         title: seat.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
@@ -397,7 +406,7 @@ export class PlatformVoiceService {
         scopeKey, policy: seat.policy, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`, rawMessage: transcript,
         prompt: this.promptFor(seat, request, filler, body, address), threadTitle: seat.title, voice: true, ownOutreach: false,
         ...(seat.owner && seat.policy.gate.ownerOnly ? { minecraftTools: true } : {}),
-        ...(this.offersIntent(seat, body) ? { offerMinecraftIntent: true } : {}),
+        ...(this.offersSpeech(seat, body) ? { offerMinecraftIntent: true } : {}),
         perception: { surface: 'platform', ownerWrote: seat.owner },
         store: turn => this.keep(seat, request, hash, turn, kept),
       }),
@@ -423,7 +432,7 @@ export class PlatformVoiceService {
     const transcript = request.userMessage;
     const voiceSeat = platformVoiceSeat({
       policy: seat.policy, owner: seat.owner, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`,
-      prompt: this.promptFor(seat, request, filler, body, address), title: seat.title, offerMinecraftIntent: this.offersIntent(seat, body),
+      prompt: this.promptFor(seat, request, filler, body, address), title: seat.title, offerMinecraftIntent: this.offersSpeech(seat, body),
       answered: saidToHer(address), keep: turn => this.keep(seat, request, hash, turn, kept),
     });
     const answer = await askSeated(seated, { scopeKey: this.dependencies.scopeKey, transcript, seat: voiceSeat }, out, {

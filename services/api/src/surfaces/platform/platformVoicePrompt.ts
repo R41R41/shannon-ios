@@ -142,7 +142,7 @@ const SPEECH_RATE_NAMES: Readonly<Record<SpeechRate, string>> = { low: '少な�
  * How she speaks, as the owner can change it (the intent field's `speech`, `speechMode`, `speechRate`), and what is now. Offered where the intent
  * field is. Anyone may be told what it is; only the owner's words change it (the head says so here, and the body checks the speaker again).
  */
-export function speechInstructions(input: { owner: boolean; who: string; mode?: SpeechMode | undefined; rate?: SpeechRate | undefined }): string {
+export function speechInstructions(input: { owner: boolean; who: string; mode?: SpeechMode | undefined; rate?: SpeechRate | undefined; speechOnly?: boolean }): string {
   const mode = input.mode ?? 'chatty', rate = input.rate ?? 'normal';
   const now = mode === 'chatty' ? `${SPEECH_MODE_NAMES[mode]}（独り言の多さ: ${SPEECH_RATE_NAMES[rate]}）` : SPEECH_MODE_NAMES[mode];
   const lines = [
@@ -162,6 +162,7 @@ export function speechInstructions(input: { owner: boolean; who: string; mode?: 
       + '「これから」「ずっと」「独り言は」など、続く話がついた時だけ変える。理由: 話し方を変えたつもりがないのに「黙って」のたびに話さなくなると、次に話しかけた時に返事がなく、困るから。',
     '- 「もう少し多めに」「ちょっと減らして」のような言葉は、いまの値から1段だけ動かす（少なめ・ふつう・多め の順）。独り言の多さを頼まれた時にいまが「よく話す」でなければ、speechMode も chatty にする（独り言が出る話し方でないと、多さを変えても聞こえないから）。',
     '- 変えた時の返事は、変えたことを短く言う。例：「うん、必要な時だけにするね」。「話さない」にした時も、この返事はいまの声で言ってよい（その次から静かになる）。',
+    ...(input.speechOnly ? ['- ここで kind に使うのは speech と none だけ。体への頼み（作る・取る・止める など）は、ふだんの道具で行い、kind には入れない（理由: ここの kind は話し方のためだけに置いてあり、ほかの kind は届かないから）。'] : []),
     '- 変えるかどうか分からない言葉（独り言のつもりのつぶやき・ほかの人への話）は、kind=none にする。',
   );
   return lines.join('\n');

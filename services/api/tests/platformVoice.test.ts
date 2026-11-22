@@ -383,7 +383,7 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     // Alone in his own room: tools, not the field.
     model.requests.length = 0; body.calls.length = 0;
     await say('パンを3個作って', { participants: [OWNER] });
-    expect(model.requests[0]!.offerMinecraftIntent).toBeUndefined();
+    expect(model.requests[0]!.offerMinecraftIntent).toBe(true); // speech only there: the task itself is not carried (her tools do it)
     expect(body.calls).toHaveLength(0);
     await close();
   });
@@ -419,11 +419,21 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     await close();
   });
 
-  it('does not offer the speech words where the intent field is not offered (the owner alone in his own room)', async () => {
-    const { say, model, close } = harness();
-    await say('声を出さないで', { participants: [OWNER] });
-    expect(model.requests[0]!.offerMinecraftIntent).toBeUndefined();
-    expect(promptOf(model.requests[0]!)).not.toContain('[ボクの話し方]');
+  it('offers the speech words alone to the owner in his own room (her tools take the requests), and carries only speech from there', async () => {
+    const { say, model, body, close } = harness();
+    model.reply = 'うん、声は出さないね。';
+    model.intent = { kind: 'speech', goal: '', speechMode: 'silent' };
+    const lines = await say('これから声を出さないで', { participants: [OWNER] });
+    expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
+    const prompt = promptOf(model.requests[0]!);
+    expect(prompt).toContain('[ボクの話し方]');
+    expect(prompt).toContain('kind に使うのは speech と none だけ');
+    expect(lines.at(-2)).toEqual({ type: 'speech', mode: 'silent' });
+    // A request kind named there is not carried to the body (her tools do that).
+    model.intent = { kind: 'task', goal: 'パンを3個作る' };
+    const task = await say('パンを作って', { participants: [OWNER] });
+    expect(task.some(line => line.type === 'speech' || line.type === 'intent')).toBe(false);
+    expect(body.calls).toHaveLength(0);
     await close();
   });
 
