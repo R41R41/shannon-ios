@@ -39,6 +39,9 @@ describe('liveFactLine', () => {
     expect(itemWords('white_bed')).toBe('ベッド');
     expect(itemWords('diamond_pickaxe')).toBe('ダイヤのツルハシ');
     expect(itemWords('wheat_seeds')).toBe('小麦の種');
+    expect(itemWords('wooden_hoe')).toBe('木のクワ');
+    expect(itemWords('stone_axe')).toBe('石の斧');
+    expect(itemWords('iron_sword')).toBe('鉄の剣');
     expect(itemWords('some_new_item')).toBe('some new item');
   });
   it('never carries an instruction', () => {

@@ -160,5 +160,12 @@ const ITEM_WORDS: Readonly<Record<string, string>> = Object.freeze({
   iron_ingot: '鉄インゴット', raw_iron: '鉄の原石', planks: '板材', oak_planks: 'オークの板材', oak_log: 'オークの原木', crafting_table: '作業台',
   cobblestone: '丸石', coal: '石炭', stick: '棒', furnace: 'かまど', bread: 'パン', carrot: 'ニンジン', potato: 'ジャガイモ',
 });
-export const itemWords = (id: string): string => ITEM_WORDS[id] ?? (/^[a-z]+(?:_[a-z]+)*_bed$/u.test(id) ? 'ベッド' : id.replace(/_/gu, ' '));
+const TOOL_MATERIAL: Readonly<Record<string, string>> = Object.freeze({ wooden: '木の', stone: '石の', iron: '鉄の', golden: '金の', diamond: 'ダイヤの', netherite: 'ネザライトの' });
+const TOOL_KIND: Readonly<Record<string, string>> = Object.freeze({ pickaxe: 'ツルハシ', axe: '斧', shovel: 'シャベル', hoe: 'クワ', sword: '剣' });
+/** A tool of the ordinary work (a hoe for a field, an axe for wood) in the words she would say it in; the table above holds the rest. */
+const toolWords = (id: string): string | null => {
+  const match = /^(wooden|stone|iron|golden|diamond|netherite)_(pickaxe|axe|shovel|hoe|sword)$/u.exec(id);
+  return match ? `${TOOL_MATERIAL[match[1]!]}${TOOL_KIND[match[2]!]}` : null;
+};
+export const itemWords = (id: string): string => ITEM_WORDS[id] ?? toolWords(id) ?? (/^[a-z]+(?:_[a-z]+)*_bed$/u.test(id) ? 'ベッド' : id.replace(/_/gu, ' '));
 

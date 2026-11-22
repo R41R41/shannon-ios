@@ -105,6 +105,13 @@ describe('the writer', () => {
     }
   });
 
+  it('does not put an English item name in front of the writer as an example, and says why names are said in Japanese', () => {
+    const { system } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('material_got', { item: 'wooden_hoe', count: 1 }), also: [], recent: [], voice: true });
+    expect(system).not.toContain('wheat seeds');
+    expect(system).toContain('声で英語の名前を読み上げると');
+    expect(system).toContain('木のクワが手に入った');
+  });
+
   it('does not ask again where to put a thing when the request that ended was the putting or the handing over itself', () => {
     const { system, message } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキをそこのオークの板の上に置く' }), also: [], recent: [], voice: true });
     expect(system).toContain('置いた・渡したことを言って、次にどうするかだけ聞く');
