@@ -85,6 +85,24 @@ export function askedBackBlock(line: string | null): string {
   ].join('\n');
 }
 
+/**
+ * Words said with the push-to-talk key held (`directed`): the speaker pressed the key to say this to her, so there is no one else it could be for,
+ * named or not. `offersTask`: the intent field is offered this turn.
+ */
+export function directedBlock(directed: boolean, who: string, offersTask: boolean): string {
+  if (!directed) return '';
+  return [
+    `[キーを押して話した言葉]`,
+    `${who}がキーを押して、ボクに向けて言った言葉。名前を呼ばれていなくても、ボクへの言葉として受け取る。`,
+    ...(offersTask ? [
+      '- マイクラでしてほしいことがはっきり言われていれば、確かめずに引き受けて kind=task にする。聞き取りの注意に「確かめる」とあっても同じ。'
+        + `理由: 聞き返されると、${who}はもう一度キーを押して言い直すことになり、会話が止まる。違っていたら、引き受けたあとで「やめて」「変えて」と言ってもらえば直せる。`,
+      '- 何を作る・どこへ行くかが本当に分からない時だけ、短く一つ聞く。',
+    ] : []),
+    '- 雑談・感想・独り言は、頼みごとにせず、ふつうの雑談として返す。',
+  ].join('\n');
+}
+
 /** What each refusal sounds like in the channel: fixed words, never the model's guess at why. */
 export const VOICE_MINECRAFT_REFUSALS: Readonly<Record<VoiceMinecraftRefusal, string>> = Object.freeze({
   not_owner_scope: 'ごめん、この頼みはいまマイクラの体に渡せない。',

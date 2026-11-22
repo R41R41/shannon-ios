@@ -1,6 +1,8 @@
 import { askedHer, type AddressedInput, type AddressedJudge, type AddressedLine, type AddressedWork } from '../../mind/perception/addressed.js';
+import { endsAsQuestion } from '../../mind/perception/spokenQuestion.js';
 import { isAcknowledgement, isNoiseOnly, voiceFragment } from '../../mind/perception/voiceChannelAddress.js';
 import type { VoiceMinecraftState } from './voiceMinecraftPort.js';
+import type { VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
 import type { VoiceRooms } from './voiceRoom.js';
 import type { VoiceTurnRequest } from './platformVoiceRequest.js';
 
@@ -19,6 +21,18 @@ export function shannonSpokeAgoMs(rooms: VoiceRooms, request: VoiceTurnRequest):
   if (last) return Math.max(0, Date.parse(request.observedAt) - Date.parse(last.at) - (last.speechMs ?? 0));
   return request.followsShannonTurn ? FOLLOWS_WITHOUT_RECORD_MILLISECONDS : null;
 }
+
+/** `directed` words that come while a question of hers still waits (the 45 seconds the judged path counts) answer it: the mark to put on the address. */
+export function answersHerQuestion(rooms: VoiceRooms, request: VoiceTurnRequest, windowMilliseconds = 45_000): { answersQuestion?: true } {
+  const last = rooms.lastShannon(request.conversationId);
+  return last && endsAsQuestion(last.text) && Date.parse(request.observedAt) - Date.parse(last.at) <= windowMilliseconds ? { answersQuestion: true } : {};
+}
+
+/** Words the channel took as said to her: the talk key held, or the answer to a question of hers (the router's silence does not overrule it). */
+export const saidToHer = (address: VoiceAddress): boolean => address.reason === 'directed' || address.reason === 'answer_to_question';
+
+/** The words answer a question of hers (the judged path's `answer_to_question`, or `directed` words that came while one waited). */
+export const answersAsk = (address: VoiceAddress): boolean => address.reason === 'answer_to_question' || address.answersQuestion === true;
 
 /**
  * Whether she is at work in the game for the people on the call: a request running, or any waiting on the list (a held or stopped one counts:

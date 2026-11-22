@@ -10,7 +10,7 @@ import {
 import { SurfaceTurnAllowance } from '../../mind/inhibition/minecraftTurnAllowance.js';
 import { voiceAddress, voiceFragment, type VoiceAddress } from '../../mind/perception/voiceChannelAddress.js';
 import { ADDRESSED_WINDOW_MILLISECONDS, type AddressedJudge } from '../../mind/perception/addressed.js';
-import { addressedInputOf, questionJudged, shannonSpokeAgoMs, workOf } from './platformVoiceAddressed.js';
+import { addressedInputOf, answersAsk, answersHerQuestion, saidToHer, questionJudged, shannonSpokeAgoMs, workOf } from './platformVoiceAddressed.js';
 import type { ShannonChatModel, ShannonChatModelResult } from '../../infra/models/chatModel.js';
 import { displayedVoiceText } from '../../infra/models/voiceAudioTags.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -25,7 +25,7 @@ import {
   validatedVoiceTurn, voiceHash,
 } from './platformVoiceRequest.js';
 import {
-  FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, askedBackBlock, heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions,
+  FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, askedBackBlock, directedBlock, heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
@@ -301,7 +301,7 @@ export class PlatformVoiceService {
         role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt,
       });
     }
-    return { respond: true, reason: 'directed' };
+    return { respond: true, reason: 'directed', ...answersHerQuestion(this.rooms, request, judge?.questionWindowMilliseconds) };
   }
 
   /** Heard, not answered: context for a few minutes, nothing in her memory. */
@@ -375,9 +375,9 @@ export class PlatformVoiceService {
         speakerName: seat.owner ? null : request.sourceDisplayName, humans: seat.humans.size, fillerText: filler?.text,
       }),
       situationBlock(situation, running),
-      address.reason === 'answer_to_question' ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
+      answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
-      intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE),
+      intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE), directedBlock(request.directed === true, who, intent !== ''),
     ].filter(Boolean).join('\n\n');
   }
 
@@ -422,7 +422,7 @@ export class PlatformVoiceService {
     const voiceSeat = platformVoiceSeat({
       policy: seat.policy, owner: seat.owner, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`,
       prompt: this.promptFor(seat, request, filler, body, address), title: seat.title, offerMinecraftIntent: this.offersIntent(seat, body),
-      keep: turn => this.keep(seat, request, hash, turn, kept),
+      answered: saidToHer(address), keep: turn => this.keep(seat, request, hash, turn, kept),
     });
     const answer = await askSeated(seated, { scopeKey: this.dependencies.scopeKey, transcript, seat: voiceSeat }, out, {
       sentences: this.dependencies.sentences, ...(this.dependencies.splitter ? { splitter: this.dependencies.splitter } : {}),

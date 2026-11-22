@@ -27,7 +27,7 @@ export interface SentenceSplitter {
 /** The seat of this speaker, from the bridge's policy: what the one voice turn reads instead of a paired device's. */
 export function platformVoiceSeat(input: {
   policy: PlatformAudiencePolicy; owner: boolean; message: string; prompt: string; title: string; offerMinecraftIntent: boolean;
-  keep: VoiceSeat['keep'];
+  answered?: boolean; keep: VoiceSeat['keep'];
 }): VoiceSeat {
   const { policy } = input;
   const audience = platformAudienceTurn(policy);
@@ -36,7 +36,7 @@ export function platformVoiceSeat(input: {
     ...(policy.speaker ? { speaker: policy.speaker } : {}), message: input.message,
     // The audience's own instructions first, the channel's after them: the order of the platform's typed turn.
     prompt: [audience.instructions, input.prompt].filter(Boolean).join('\n\n'), threadTitle: input.title, turnLabel: audience.turnLabel,
-    offerMinecraftIntent: input.offerMinecraftIntent, keep: input.keep,
+    offerMinecraftIntent: input.offerMinecraftIntent, ...(input.answered ? { answered: true } : {}), keep: input.keep,
   };
 }
 

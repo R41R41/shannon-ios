@@ -1027,6 +1027,32 @@ describe('directed: words said with the push-to-talk key held', () => {
     }
   });
 
+  it('tells her in the prompt that the words were said to her with the key held, and why a clear request is taken without asking back', async () => {
+    const { say, model, close } = harness({ SHANNON_DC_VOICE: 'on' });
+    const shared = { conversationId: SERVER_ROOM, participants: [OWNER] };
+    await say('ケーキを作って', { ...shared, directed: true });
+    const directed = promptOf(model.requests[0]!);
+    expect(directed).toContain('[キーを押して話した言葉]');
+    expect(directed).toContain('確かめずに引き受けて kind=task');
+    expect(directed).toContain('理由: 聞き返されると');
+    await say('ケーキを作って', shared);
+    expect(promptOf(model.requests[1]!)).not.toContain('[キーを押して話した言葉]');
+    await close();
+  });
+
+  it('shows her own waiting question with the words that answer it, also when the answer was said with the key held', async () => {
+    const { say, model, advance, close } = harness({ SHANNON_DC_VOICE: 'on' });
+    model.reply = 'ケーキを作る、で合ってる？';
+    await say('ケーキを作って', { directed: true });
+    advance(8_000);
+    model.reply = 'うん、作るね。';
+    await say('お願い', { directed: true });
+    const prompt = promptOf(model.requests[1]!);
+    expect(prompt).toContain('[ボクがさっき聞いたこと]');
+    expect(prompt).toContain('ケーキを作る、で合ってる？');
+    await close();
+  });
+
   it('is a field of both wire forms; a mark that is not true or false is a 400 and a field it does not know still is', () => {
     const flat = { platform: 'discord', requestId: 'r1', conversationId: 'discord:1:2', sourceUserId: 'u1', sourceDisplayName: 'ユウ', userMessage: 'そこに置いて',
       observedAt: '2026-11-22T12:00:00.000Z', participants: ['u1'] };

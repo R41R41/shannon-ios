@@ -111,6 +111,8 @@ export interface VoiceSeat {
   threadTitle: string;
   /** What a stored turn is labelled with (`ChatAudienceTurn.turnLabel`). */
   turnLabel: { audience?: MemoryAudience; speaker?: 'owner' | 'unknown' };
+  /** The channel took these words as said to her (the talk key held, or the answer to a question of hers): the router's silence does not overrule that. */
+  answered?: boolean;
   /** The structured reply carries `minecraftIntent` (the owner, not alone in his own conversation, with the body connected). */
   offerMinecraftIntent: boolean;
   /** Keeps the completed turn where the platform keeps it: the experience, or null when it is kept nowhere in his conversation. */
