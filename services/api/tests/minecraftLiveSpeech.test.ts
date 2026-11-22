@@ -112,6 +112,13 @@ describe('the writer', () => {
     expect(system).toContain('木のクワが手に入った');
   });
 
+  it('gives the writer the shape of a line, not an example that names a material her work may not need', () => {
+    const { system } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('material_got', { item: 'egg', count: 1 }), also: [], recent: [], voice: true });
+    expect(system).not.toContain('牛乳ってバケツがいるんだっけ');
+    expect(system).toContain('〇〇がいるんだっけ、じゃあ△△が先かな');
+    expect(system).toContain('例の中身をそのまま言わない');
+  });
+
   it('does not ask again where to put a thing when the request that ended was the putting or the handing over itself', () => {
     const { system, message } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキをそこのオークの板の上に置く' }), also: [], recent: [], voice: true });
     expect(system).toContain('置いた・渡したことを言って、次にどうするかだけ聞く');
