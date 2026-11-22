@@ -105,6 +105,13 @@ describe('the writer', () => {
     }
   });
 
+  it('does not ask again where to put a thing when the request that ended was the putting or the handing over itself', () => {
+    const { system, message } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: moment('task_done', { goal: 'ケーキをそこのオークの板の上に置く' }), also: [], recent: [], voice: true });
+    expect(system).toContain('置いた・渡したことを言って、次にどうするかだけ聞く');
+    expect(system).toContain('人が決めたことをまた聞くと');
+    expect(message).toContain('置いた・渡したこと');
+  });
+
   it('gives the end of a request room for the question, and asks of a request that made nothing what comes next', () => {
     const done = moment('task_done', { goal: '鉄を集める' });
     const { system, message } = liveWriterPrompt({ identity: 'I', persona: '', body: '', main: done, also: [], recent: [], voice: true });

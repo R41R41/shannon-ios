@@ -63,6 +63,7 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
       + '集める・行くなど、物を作る依頼でなければ、できたことを言って次にどうするかを聞く。形の例：「鉄、10個そろったよ！次はどうしようか？」。（言い回しは毎回変えてよいが、聞いて終えることは変えない）',
     '- なぜ聞くか: 作業が終わったあとは、ボクだけでは次を決められない。聞いて終えれば、次に誰かが言った言葉が、そのまま新しい頼み事になる。聞いたあとは何も続けず、答えを待つだけでよい。',
     '- 文の最後は「？」で終える（「どこに置こうか。」でなく「どこに置けばいい？」）。なぜ: 通話の聞き手側は、文の最後の「？」でボクが問いかけたと見分けて、次の人の言葉を名前なしでも返事として受ける。「。」で終えると、ただの独り言と区別がつかず、次の言葉が受けられない。',
+    '- 終わった作業が「置く」「渡す」「持っていく」だった時は、置き場所も渡す相手も人がもう決めて、そのとおりにした。だから置き場所や渡し方はもう聞かない。置いた・渡したことを言って、次にどうするかだけ聞く。形の例：「置いたよ！ほかにやることある？」。なぜ: 人が決めたことをまた聞くと、話を聞いていなかったように聞こえる。',
     '- 聞くのは1つだけ。言い訳や作業のふり返りは長く話さない。',
   ] : [];
   const system = [input.identity, input.persona, rules.join('\n'), done.join('\n'), input.body,
@@ -73,7 +74,7 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
   // The turn's own words say what this line is: the end of a request is a different line (what was made, then the question), and a model reads
   // the last thing it is asked most.
   return { system, message: ended
-    ? '（依頼が終わった一言を、できたことと、次にどうするか（作った物なら置き場所か渡し方）を聞く問いで終えて、本文だけで）' : '（実況の一言を、本文だけで）' };
+    ? '（依頼が終わった一言を、できたことと、次にどうするか（作った物なら置き場所か渡し方。置く・渡す依頼だったなら、置いた・渡したことを言って、ほかにやることを）を聞く問いで終えて、本文だけで）' : '（実況の一言を、本文だけで）' };
 }
 
 const FORBIDDEN = /https?:\/\/|<@|@everyone|@here|```|^#+\s|\b(?:mc|minecraft)\.[a-z-]+|-?\d{1,5}\s*,\s*-?\d{1,4}\s*,\s*-?\d{1,5}/iu;
