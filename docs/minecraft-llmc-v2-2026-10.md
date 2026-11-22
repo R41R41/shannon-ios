@@ -300,3 +300,20 @@ search_timeoutと10m以内の中継点の案内は再開後のモデル要求に
 # 掘削許可の異なる停止（実走57）
 
 階段が砂で止まり、許可を修正して進んだ後に石炭鉱石で止まる場合、`cannot_dig`というcodeだけでは同じ未修正障害と判断できない。修正可能な材質名を原因に含め、同じ材質なら座標が変わっても反復停止を維持する。材質不明・掘れない物の停止も従来どおり数える。材料の知識では、通路と頭上の材質、道具、重力、液体を確認して許可を組み立て、stoneが鉱石を含まないことを明示する。これだけでモデルの手順選択が改善したとは判断せず、実走で確かめる。
+
+## OpenAI
+
+The head's paid roles can run on OpenAI's Responses API, role by role, by the name of the model: a name that starts with `gpt-` is OpenAI's (`gpt-6.2-sol`, `gpt-6.2-astra`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-luna`), any other is Anthropic's. With none of these settings set, nothing changes.
+
+| Role | Model | Effort |
+|---|---|---|
+| decisions | `SHANNON_MINECRAFT_LLMC_MODEL` | `SHANNON_MINECRAFT_LLMC_EFFORT` |
+| first plan, replan, the plan model's own decisions in the End stages | `SHANNON_MINECRAFT_LLMC_PLAN_MODEL` | `SHANNON_MINECRAFT_LLMC_PLAN_EFFORT` |
+| history summary | `SHANNON_MINECRAFT_LLMC_SUMMARY_MODEL` | `SHANNON_MINECRAFT_LLMC_SUMMARY_EFFORT` |
+| route plan | `SHANNON_MINECRAFT_ROUTE_MODEL` | `SHANNON_MINECRAFT_ROUTE_EFFORT` |
+
+- The key is `OPENAI_API_KEY` (the environment of the API service). A model of OpenAI with no key turns the mode's head off, as a missing Anthropic key does; the line `Shannon Minecraft LLM-centric models main=… plan=…` at start shows what was chosen.
+- Effort is `none`, `minimal`, `low`, `medium` (default), `high` or `xhigh` (sol and astra take no `none`). Anthropic roles ignore it.
+- The raise to a stronger model (`ESCALATE_MODEL`) goes only to a model of the same maker; `next` after an OpenAI model raises nothing. A plan model of the other maker plans but does not decide in the End stages.
+- The ledger and the yen of a request's cap count an OpenAI answer by the GPT-6 prices of `infra/models/llmUsage.ts` (USD per million tokens, standard tier, read from OpenAI's pricing page on 2026-11-18): luna 0.10 input, 0.01 cached input, 0.50 output; terra 1 / 0.05 / 5; sol 2 / 0.1 / 10; astra 8 / 0.4 / 40. A cache write is 1.25 times the input price; above 272,000 input tokens input counts twice and output 1.5 times. Reasoning tokens are part of the output.
+- A rate limit (429), a server error and a refusal of credit arrive as the same errors as Anthropic's (`FcaProviderError` with the provider's `retry-after`, `FCA_MODEL_BILLING`), so the runner's retries and the task's pause work as they do for Anthropic. The adapter never sends a request twice by itself.

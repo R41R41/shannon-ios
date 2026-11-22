@@ -94,7 +94,7 @@ export const ACT_DESCRIPTION = [
   '体は自分で決めない: 回り道・置き場所・道具作り・片づけ・夜の睡眠・戦うかどうかは、あなたが地図と状態を見て手で出す。',
   '手（do）と引数: walk(to か path, sprint, range: 掘らない・置かない。段差1と泳ぎだけ。地図の外の遠い点は64mごとに区切って歩き、掘る所で止まる) / '
     + ("go(to か goals: 行き先（goals は候補のマス 2〜8、どれか 1 つに着けば済み）, canDig: 掘ってよい物, canPlace: 置いてよい物, maxDrop, waterOk, " +
-"seconds, maxDig, maxPlace: ")
+"seconds, maxDig, maxPlace: これらは上限で、既定は 60 秒・掘る 40・置く 24。長い道や厚い石では足す。上限に届くと着かずに止まって返る。")
     + '道は体が引く。許した物だけ掘り・置いて着くまで歩く。溶岩は避ける) / '
     + ("dig(at: 順に掘る（草・サトウキビ・花も指せば壊す。落ちた物は拾う）, tool, collect, exposeOk: 敵に見られても掘る, takeOk: 村の物も掘る) / place(block, at, face) / pillarUp(n: " +
 "真下に置きながら n 段登る, block) / ")
