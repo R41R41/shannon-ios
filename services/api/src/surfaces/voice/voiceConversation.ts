@@ -12,8 +12,8 @@ import {
 } from '../../mind/action/respond/conversationOrchestration.js';
 import { namedParticipants } from '../../mind/action/respond/apiTextTurn.js';
 import {
-  closedTurn, type ConversationModality, type StartedTurnMemory, type TurnCapabilityAsk, type TurnIdentityAsk, type TurnMemoryAsk, type TurnParts,
-  type TurnStageDependencies,
+  closedTurn, prepareTurnMemory, type PreparedTurnMemory, type ConversationModality, type StartedTurnMemory, type TurnCapabilityAsk, type TurnIdentityAsk,
+  type TurnMemoryAsk, type TurnParts, type TurnStageDependencies,
 } from '../../mind/action/respond/conversationTurn.js';
 import { TurnDeadline, VOICE_TURN_DEADLINE } from '../../mind/action/respond/turnDeadline.js';
 import { asksAboutNotion } from '../../integrations/notion/notionConversation.js';
@@ -72,6 +72,12 @@ export function voiceTurnStages(dependencies: LiveVoiceDependencies): TurnStageD
 type GuestPresence = ReturnType<PeopleMemory['resolveCall']> | null;
 type Recall = ReturnType<PeopleMemory['recall']>;
 
+/** The same goal in the same words: two extractions of one utterance differ only by the id each makes. */
+function sameGoal(left: ReturnType<typeof extractExplicitUserIntent>, right: ReturnType<typeof extractExplicitUserIntent>): boolean {
+  if (!left || !right) return left === right;
+  return JSON.stringify({ ...left, id: '' }) === JSON.stringify({ ...right, id: '' });
+}
+
 /** Who is there, as the voice turn reads it (the apps' device or a platform's seat), and what the router decided. */
 export class VoiceConversation implements ConversationModality<ApiResponse> {
   readonly bounded: ReturnType<typeof turnStages>;
@@ -123,6 +129,8 @@ export class VoiceConversation implements ConversationModality<ApiResponse> {
   provisionalIntent: ReturnType<typeof extractExplicitUserIntent> = null;
   complexTurn = false;
   memory!: StartedTurnMemory;
+  /** A platform seat's memory read while the router answered (`prefetchMemory`), with the goal it was read for. */
+  private prefetched: { intent: ReturnType<typeof extractExplicitUserIntent>; memory: PreparedTurnMemory } | null = null;
   composed!: VoiceComposed;
   spoken!: VoiceSpoken;
 
@@ -241,8 +249,53 @@ export class VoiceConversation implements ConversationModality<ApiResponse> {
     const localRules = new LocalVoiceDecisionGateway(); // Also what decides when the router is past its bound.
     const router = this.address && !this.address.respond ? localRules : this.dependencies.voiceDecision;
     const input = this.routeInput;
-    this.decision = await this.input.timing.measure('route', () => this.bounded('route_timeout', router.decide(input), () => localRules.decide(input)));
+    // With a platform's seat the router's answer is waited for while the part of her memory that needs no decision is read (the router's call is
+    // in flight meanwhile): the two overlap instead of following each other. `route` is then the time to the decision, `recall` the read itself.
+    this.decision = await this.input.timing.measure('route', () => {
+      const deciding = router.decide(input);
+      this.prefetchMemory();
+      return this.bounded('route_timeout', deciding, () => localRules.decide(input));
+    });
     this.input.observer?.signal?.throwIfAborted();
+  }
+
+  /**
+   * What `memoryAsk` will ask of the deterministic read, given what is known before the router answers: the same state, people and
+   * channel. Only the owner's goal taken from his words depends on the decision (it is read from them only when he alone hears her and
+   * they can be trusted); it is read here as if they could, and the read is used only when the decision agrees (`preparedMemory`).
+   */
+  private prefetchMemory(): void {
+    this.prefetched = null;
+    // A platform's channel reaches this turn only once it has decided she answers these words (`PlatformVoiceService.answer`: named, a
+    // follow-up inside the window, pushed to talk, work in progress); overheard talk between people never gets here, so it reads nothing.
+    if (!this.seat) return;
+    try {
+      const { dependencies: deps, scopeKey, transcript, threadId } = this;
+      const intent = this.alone ? extractExplicitUserIntent(transcript, threadId, this.occurredAt) : null;
+      const memory = prepareTurnMemory(voiceTurnStages(deps), {
+        scopeKey, threadId, message: transcript, occurredAt: this.occurredAt, channel: 'voice', present: this.present,
+        intents: deps.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent: intent,
+        timeZone: this.input.deviceContext?.timeZoneIdentifier, ...(this.openOnly ? { openOnly: true } : {}),
+        participants: namedParticipants(deps.personIdentities, scopeKey, transcript),
+        people: captured => this.people(captured), surface: 'voice',
+      });
+      this.prefetched = { intent, memory };
+    } catch {
+      this.prefetched = null; // The read is done again, in its place, by the turn.
+    }
+  }
+
+  /**
+   * The memory read early, when the goal `memoryAsk` took is the one it was read for (the same words; each extraction makes its own id,
+   * so the id is not compared); else nothing (the turn reads it as it always did). The turn then holds the goal the read was made with:
+   * the cognitive frame names it by id, and the cycle recorded after the reply finds the goal again by that id.
+   */
+  preparedMemory(): PreparedTurnMemory | null {
+    const early = this.prefetched;
+    this.prefetched = null;
+    if (!early || !sameGoal(early.intent, this.provisionalIntent)) return null;
+    this.provisionalIntent = early.intent;
+    return early.memory;
   }
 
   /** Words trusted to act (commands, writes, goals; the client's confidence only lowers it) or to talk, look and run FCA. */

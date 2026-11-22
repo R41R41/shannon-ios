@@ -107,8 +107,18 @@ export function prepareTurnCognitiveContext(
   // Forgetting is judged against the whole state; the audience rule is a second, independent gate.
   const withholding = input.withholding ?? new MemoryWithholding(full, conversationStore, input.scopeKey, recentExperiences);
   // One synchronous read: every remembered turn shares one walk of the recall graph (not one walk per turn).
-  const visibleTurns = parts.time('visible', () => withholding.withReadSnapshot(() =>
-    recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item))));
+  // Of the time it takes, how much is the audience gate and how much the withholding (the slow-context line below tells them apart).
+  const visibleSpent = { gateMs: 0, withheldMs: 0 };
+  const visibleTurns = parts.time('visible', () => withholding.withReadSnapshot(() => recentExperiences.filter(item => {
+    const gateStarted = performance.now();
+    const allowed = gate.allowsTurn(item);
+    const gateEnded = performance.now();
+    visibleSpent.gateMs += gateEnded - gateStarted;
+    if (!allowed) return false;
+    const withheld = withholding.withholdsExperience(item);
+    visibleSpent.withheldMs += performance.now() - gateEnded;
+    return !withheld;
+  })));
   const remembered = new Set(recentExperiences.map(item => item.id));
   const fullText = parts.time('fullText', () => fullTextCandidates(withholding, gate, conversationStore, input, remembered));
   const candidates = [
@@ -163,7 +173,8 @@ export function prepareTurnCognitiveContext(
   });
   const prompt = parts.time('prompt', () => [turnPrompt(snapshot, situation, memories, frame, gate, openOnly), impressions.prompt, selfInterestPrompt]
     .filter(Boolean).join('\n\n'));
-  parts.report();
+  parts.report(() => ({ turns: recentExperiences.length, visible: visibleTurns.length, rules: withholding.rules.length, gateMs: visibleSpent.gateMs,
+    withheldMs: visibleSpent.withheldMs, ...withholding.timings }));
   return Object.freeze({
     situation,
     memories: Object.freeze(memories),
@@ -207,6 +218,10 @@ export function withRecalledMemories(
  * turn, 15 ms on a production-shaped local world, so the part that is slow there is not known from here). Only above 250 ms.
  */
 const SLOW_CONTEXT_MS = 250;
+/** The counts and times inside the withholding read (`visible`) that the slow-context line adds to the parts: closed numbers only. */
+interface ContextInside {
+  turns: number; visible: number; rules: number; gateMs: number; withheldMs: number; hiddenMs: number; sourceReads: number; sourceReadMs: number;
+}
 function partTimer() {
   const started = performance.now(), spent: Array<[string, number]> = [];
   return {
@@ -214,10 +229,14 @@ function partTimer() {
       const at = performance.now();
       try { return work(); } finally { spent.push([name, performance.now() - at]); }
     },
-    report(): void {
+    report(inside: () => ContextInside): void {
       const total = performance.now() - started;
       if (total < SLOW_CONTEXT_MS) return;
-      console.warn(`Shannon slow deterministic context total=${Math.round(total)}ms ${spent.map(([name, ms]) => `${name}=${Math.round(ms)}ms`).join(' ')}`);
+      const ms = (value: number) => `${Math.round(value)}ms`;
+      const part = inside();
+      console.warn(`Shannon slow deterministic context total=${ms(total)} ${spent.map(([name, took]) => `${name}=${ms(took)}`).join(' ')} `
+        + `inside visible: turns=${part.turns} kept=${part.visible} rules=${part.rules} gate=${ms(part.gateMs)} withheld=${ms(part.withheldMs)} `
+        + `hidden=${ms(part.hiddenMs)} sourceReads=${part.sourceReads} sourceReadTime=${ms(part.sourceReadMs)}`);
     },
   };
 }
