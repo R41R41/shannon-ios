@@ -27,8 +27,8 @@ export const MAP_LEGEND_V2 = [
  * model's outputs stay Japanese). The symbols and their order are the body's: a test compares the symbol keys of each line with `MAP_LEGEND_V2`'s.
  */
 export const MAP_LEGEND_V2_EN: readonly string[] = [
-  '@ my feet / ! enemy\'s feet / & neutral mob\'s feet / m animal\'s feet / * air walked on within 60 s / . air / , passable grass and flowers, snow / ? not loaded / X undiggable (bedrock, barrier)',
-  '# stone kinds (stone, deepslate, andesite, diorite, granite, tuff, cobblestone, stone bricks) / : dirt, grass, snow, clay / s sand, gravel / I ice',
+  '@ my feet / ! enemy\'s feet / & neutral mob\'s feet / m animal\'s feet / * air walked on within 60 s / . air / , grass plants and flowers, snow (passable) / ? not loaded / X undiggable (bedrock, barrier)',
+  '# stone kinds (stone, deepslate, andesite, diorite, granite, tuff, cobblestone, stone bricks) / : dirt, grass blocks, snow, clay / s sand, gravel / I ice',
   'w water source / - flowing water / L lava source / l flowing lava / f fire / x cobweb',
   'i iron / c coal / d diamond / g gold / r redstone / o other ores (copper, lapis, emerald, quartz, ancient debris)',
   'W logs (Nether stems too) / % leaves (broken through while walking) / Y Nether wart blocks and shroomlight (solid) / P planks, stairs, slabs, bookshelves (solid) / h ladders, vines / t torch / = rail',

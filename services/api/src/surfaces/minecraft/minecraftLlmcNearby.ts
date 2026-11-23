@@ -1,4 +1,6 @@
 import { relText } from './minecraftLlmcLiveEnemies.js';
+import { carriedItemCounts } from './minecraftItems.js';
+import { readLayers } from './minecraftLlmcPreflightMap.js';
 import type { P } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -122,4 +124,40 @@ export function lavaSitesIn(lines: readonly string[]): { range: number; sites: L
       covered: cover ? cover[1] === '○' : null };
   });
   return { range, sites };
+}
+
+/**
+ * 2026-11-23 (run a666362e, the seeds for a cake's wheat: the first dig hit the grass blocks, then 48 of 65 aimed cells were air): a plant has no row
+ * in the body's `nearbyResources` (the cane has), so the model picked the grass cells from the map's layers by itself, one layer too low or in a
+ * row of the same y. This row says them: the map's `,` cells (grass and flowers; a cane's column left out) nearest to her feet, each at its own
+ * layer's y (the map's own numbers, nothing added), so the cells to put in `dig at=` can be copied. Only while the plan's now is about the wheat or
+ * the seeds, she holds under 3 seeds and no wheat stands near (planted or the village's).
+ */
+const SEED_PLAN = /小麦|wheat|種|seed/u;
+const GRASS_CELLS = 10;
+export function grassLines(world: Record<string, unknown>, feet: P | null, hint: string): string[] {
+  if (!feet || !SEED_PLAN.test(hint) || (carriedItemCounts(world, {}).get('wheat_seeds') ?? 0) >= 3) return [];
+  const resources = nearbyResourcesOf(world.nearbyResources);
+  if (resources.some(item => item.kind === 'wheat' && item.count > 0)) return [];
+  const layers = readLayers(typeof world.localMap === 'string' ? world.localMap : undefined);
+  if (!layers) return [];
+  const canes = new Set(resources.filter(item => item.kind === 'sugar_cane').flatMap(item => item.sites.map(site => `${site.x},${site.z}`)));
+  const columns = new Map<string, NearbySite>();
+  for (const [y, cells] of layers.layers) for (const [key, symbol] of cells) {
+    if (symbol !== ',' || canes.has(key) || (columns.get(key)?.y ?? Infinity) <= y) continue;
+    const [x, z] = key.split(',').map(Number);
+    columns.set(key, { x: x!, y, z: z! });
+  }
+  const label = '草（種を取る用）';
+  const sites = [...columns.values()].sort((a, b) => dist(feet, a) - dist(feet, b));
+  if (!sites.length) return [`${label}: 地図の層に「,」のマスが無い。草の多い所へ歩いてから（地図の外は mc_view で見る）`];
+  const first = (site: NearbySite): string => ` ${relText({ ...feet }, site)} ${dist(feet, site)}m`;
+  const where = sites.slice(0, GRASS_CELLS).map((site, index) => `(${site.x},${site.y},${site.z})${index === 0 ? first(site) : ''}`).join(' / ');
+  return [`${label}: 地図の「,」（草・花）が ${sites.length} マス。足から近い順。y は地図の層の高さそのまま（1 を足さない）: ${where}`];
+}
+
+/** `nearby` of a decision: the body's rows, and (when the plan is about seeds) the grass row first; no key when there is neither. */
+export function nearbyWithGrass(lines: string[], world: Record<string, unknown>, feet: P | null, hint: string): Record<string, unknown> {
+  const all = [...grassLines(world, feet, hint), ...lines];
+  return all.length ? { nearby: all } : {};
 }
