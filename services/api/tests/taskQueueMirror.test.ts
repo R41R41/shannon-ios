@@ -542,3 +542,27 @@ describe('a step that ends on an error: the items are taken off, and the outcome
     });
   });
 });
+
+describe('the owner\'s words while the running item only waits (play 1124: 3.5 minutes of waits, two messages unread)', () => {
+  it('stops a running item whose hands are all waits, and the ones behind it', async () => {
+    const f = setup();
+    await f.queue.add(f.spec([{ do: 'wait', seconds: 30 }, { do: 'wait', seconds: 30 }]));
+    await f.queue.add(f.spec(dig(1)));
+    f.take();
+    const running = f.running[0]!;
+    expect(f.queue.dropWaiting()).toBe(1);
+    await delay(100);
+    expect(f.poll().cancel).toContain(running);
+  });
+
+  it('does not stop a running item that has a hand other than a wait (a furnace or a walk goes on)', async () => {
+    const f = setup();
+    await f.queue.add(f.spec([{ do: 'wait', seconds: 30 }, ...dig(1)]));
+    await f.queue.add(f.spec(dig(2)));
+    f.take();
+    const running = f.running[0]!;
+    expect(f.queue.dropWaiting()).toBe(1);
+    await delay(100);
+    expect(f.poll().cancel).not.toContain(running);
+  });
+});

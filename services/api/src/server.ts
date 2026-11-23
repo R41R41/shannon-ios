@@ -395,9 +395,15 @@ server.listen(port, host, () => {
   console.log(selfDiagnosis.startupLine());
 });
 let shuttingDown = false;
+/** Under the service manager's stop timeout (30 s), so the exit is ours and not a SIGKILL. */
+const SHUTDOWN_FORCE_MS = 20_000;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
+  // The stores close in the callback below, which waits for every open connection: one that stays open (a keep-alive, a stream) held the stop until the
+  // service manager's 30 s ended it with SIGKILL, mid-close. This exits first (exit code 0), and the idle connections go at once.
+  setTimeout(() => { console.log(`Shannon shutdown: still open after ${SHUTDOWN_FORCE_MS} ms, exiting`); process.exit(0); }, SHUTDOWN_FORCE_MS).unref();
+  server.closeIdleConnections?.();
   server.close(async () => {
     await fca?.close();
     signalObserver?.close();

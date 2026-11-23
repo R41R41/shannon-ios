@@ -131,6 +131,13 @@ export const VIEW_DESCRIPTION = [
   'center（既定は足）、radius（1〜32、既定12）、yFrom・yTo、only（見たい種類だけ。ほかは # と . にまとめる）。6,000マスを超えると top を2×2にまとめる。',
 ].join('\n');
 
+/**
+ * What `seconds` and `range` may be, hand by hand (the schema's bounds are the widest of any hand; `minecraftActHandRules.ts` holds each one's own).
+ * Play 1124: 7 of 18 turned-away acts were a go with range above 4 (the old schema said 16) or seconds above a hand's top: the model wrote what the schema allowed.
+ */
+const SECONDS_LIMITS = 'wait 0.5〜30・attack 30 まで・go/mine/portal/hunt/tidy 5〜120・smelt 5〜60・sleep 10〜60・obsidian 5〜300・fight 5〜（種類で上限が違う）。範囲外の手は動かさずに断られる（その act は全部動かない）';
+const RANGE_LIMITS = 'go 0〜4・fight 0〜16・hunt 4〜48・vertical 1 か 2・walk と pickup は m。範囲外の手は動かさずに断られる（その act は全部動かない）';
+
 const pos = (description: string) => ({ type: 'object', description, additionalProperties: false, required: ['x', 'y', 'z'],
   properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } });
 const itemCounts = { type: 'array', maxItems: 8, items: { type: 'object', additionalProperties: false, required: ['item'],
@@ -194,11 +201,11 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         enter: { type: 'boolean' },
         maxDig: { type: 'integer', minimum: 0, maximum: 200 },
         maxPlace: { type: 'integer', minimum: 0, maximum: 100 },
-        seconds: { type: 'number', minimum: 0.5, maximum: 300 },
+        seconds: { type: 'number', minimum: 0.5, maximum: 300, description: SECONDS_LIMITS },
         charge: { type: 'number', minimum: 0.2, maximum: 3 },
         n: { type: 'integer', minimum: 1, maximum: 16 },
         sprint: { type: 'boolean' },
-        range: { type: 'number', minimum: 0, maximum: 16 },
+        range: { type: 'number', minimum: 0, maximum: 48, description: RANGE_LIMITS },
         slot: { type: 'string', enum: [...EQUIP_SLOTS] },
         on: { type: 'boolean' },
         yaw: { type: 'number', minimum: -360, maximum: 360 },

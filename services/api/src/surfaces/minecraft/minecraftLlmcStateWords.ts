@@ -11,6 +11,21 @@ const NIGHT_FROM = 13_000, NIGHT_TO = 23_000, DAY_LENGTH = 24_000;
 export const thunderstorm = (world: Record<string, unknown>): boolean => typeof world.weather === 'string'
   && /thunder|雷/u.test(world.weather);
 
+/** The world's clock that reads the same this long (in the body's own time) is stopped: the day cycle is off, or a command set it. */
+export const CLOCK_STALLED_SECONDS = 30;
+const lastClock = new Map<string, { raw: string; since: number }>();
+/**
+ * How long the clock has read `raw` (ms of the observation's own time, `stateAt`) for this body, 0 when it moved or is first seen. Play 1124: the
+ * world's time did not move for 14 minutes (「夜まで 約 10 分」 in every decision) and the work waited for a night that could not come.
+ */
+export function clockStalledSeconds(key: string, raw: string, at: number): number {
+  if (!/^[0-9]+$/u.test(raw.trim()) || !Number.isFinite(at)) return 0;
+  const last = lastClock.get(key);
+  if (!last || last.raw !== raw.trim() || at < last.since) { lastClock.set(key, { raw: raw.trim(), since: at }); if (lastClock.size > 8) lastClock.delete(lastClock.keys().next().value as string); return 0; }
+  return (at - last.since) / 1_000;
+}
+export const forgetClocks = (): void => { lastClock.clear(); };
+
 function span(ticks: number): string {
   const seconds = Math.max(0, Math.round(ticks / TICKS_PER_SECOND));
   return seconds < 120 ? `${seconds} 秒` : `約 ${Math.round(seconds / 60)} 分`;
@@ -21,9 +36,10 @@ function span(ticks: number): string {
  * 「夜（朝まで 約 7 分）」. The Nether and the End have no time of day: 「（時刻なし）」. A time that is not a plain number (the body's own words) is
  * null, kept as it is.
  */
-export function timeWords(raw: string, dimension: string | undefined, weather?: unknown): string | null {
+export function timeWords(raw: string, dimension: string | undefined, weather?: unknown, stalledSeconds = 0): string | null {
   if (dimension !== undefined && /nether|end/u.test(dimension)) return '（時刻なし）';
-  const clock = clockWords(raw);
+  const base = clockWords(raw);
+  const clock = base && stalledSeconds >= CLOCK_STALLED_SECONDS ? `${base}・時刻が止まっている（${Math.round(stalledSeconds)} 秒 動かない。「夜まで」「朝まで」は進まないので、待っても夜も朝も来ない）` : base;
   if (!thunderstorm({ weather })) return clock;
   const storm = '雷雨（時刻に関係なく寝られる・昼でも地上に敵が湧く）';
   return clock ? `${clock}・${storm}` : storm;
