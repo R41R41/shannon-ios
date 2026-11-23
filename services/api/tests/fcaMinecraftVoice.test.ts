@@ -64,6 +64,9 @@ const input = (fields: Record<string, unknown> = {}) => ({
 const task1 = (fields: Record<string, unknown> = {}) => input({ intent: { kind: 'task', goal: 'まず鉄の剣を作って' }, ...fields });
 
 describe('the owner\'s spoken request, as the task tree takes it', () => {
+  /** A row of the list that changed a moment ago carries 変わった: HH:mm (2026-11-23); the rows are compared without it. */
+  const unmarked = (state: { queue?: string[] }) => ({ ...state, ...(state.queue ? { queue: state.queue.map(line => line.replace(/（変わった: \d\d:\d\d に始まった。いまの話はこれ）/u, '').replace(/変わった: \d\d:\d\d に保留。/u, '')) } : {}) });
+
   it('says whether the body is connected, what he asked of it, and the list', async () => {
     expect(fixture({ bodies: [] }).port.state()).toEqual({ connected: false, running: null });
     expect(fixture({ bodies: ['a', 'b'] }).port.state()).toEqual({ connected: false, running: null });
@@ -72,14 +75,14 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     const f = fixture();
     await f.port.intent(task1());
     // The list says which request runs (here the task runtime's open request is none yet): her reply is told that one.
-    expect(f.port.state()).toEqual({ connected: true, running: { id: 'new-task-1', goal: 'まず鉄の剣を作って' }, queue: ['#1 実行中 「まず鉄の剣を作って」'] });
+    expect(unmarked(f.port.state())).toEqual({ connected: true, running: { id: 'new-task-1', goal: 'まず鉄の剣を作って' }, queue: ['#1 実行中 「まず鉄の剣を作って」'] });
   });
 
   it('after a swap tells her the request put in front as the one under way, and the one put aside as waiting for it (2026-11-23)', async () => {
     const f = fixture();
     await f.port.intent(task1({ requestId: 'r1', intent: { kind: 'task', goal: 'ケーキを1個作る' } }));
     await f.port.intent(task1({ requestId: 'r2', intent: { kind: 'task', goal: 'ベッドを作る', placement: 'now' } }));
-    expect(f.port.state()).toEqual({ connected: true, running: { id: 'new-task-2', goal: 'ベッドを作る' },
+    expect(unmarked(f.port.state())).toEqual({ connected: true, running: { id: 'new-task-2', goal: 'ベッドを作る' },
       queue: ['#2 実行中 「ベッドを作る」', '#1 保留（いまはしていない。#2 のあとで戻る） 「ケーキを1個作る」'] });
   });
 

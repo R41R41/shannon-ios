@@ -192,7 +192,7 @@ describe('Minecraft requests enter the canonical common task tree', () => {
       const now = await f.execute('minecraft.request', { goal: 'Make a bed', placement: 'now' });
       expect(now.text).toContain('いまの依頼を保留にして先に始める');
       expect(f.api.queue.view().entries.map(entry => `${entry.goal}:${entry.state}`)).toEqual(['Make a bed:running', 'Make a cake:paused', 'Find stone:queued']);
-      expect(f.api.queue.promptLines()[1]).toContain('保留（いまはしていない。#3 のあとで戻る）');
+      expect(f.api.queue.promptLines()[1]).toContain('いまはしていない。#3 のあとで戻る）');
       // Without a placement, or with one the list does not know, the request goes to the end as it always did.
       await f.execute('minecraft.request', { goal: 'Find wood' });
       await f.execute('minecraft.request', { goal: 'Find sand', placement: 'sideways' });

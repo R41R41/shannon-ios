@@ -700,9 +700,9 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     const seen = { ...off.seen, requests: off.seen.requests.map(({ clock: _clock, ...rest }) => rest) };
     const withoutThread = { ...seen, requests: seen.requests.map(({ threadKey: _thread, richBlocks: _rich, ...rest }) => rest) };
     const withoutRich = { ...seen, requests: seen.requests.map(({ richBlocks: _rich, ...rest }) => rest) };
-    expect(createHash('sha256').update(JSON.stringify(withoutRich)).digest('hex')).toBe('6f49a12a5264297db119cd4fda677c732f1efecec9434a1ba9431dd6d0be5334');
-    expect(createHash('sha256').update(JSON.stringify(withoutThread)).digest('hex')).toBe('b1c796c60b42a13cfadeb46b657322dc3f823dcc3a97f11aafc8e039ecbe074c');
-    expect(createHash('sha256').update(JSON.stringify(seen)).digest('hex')).toBe('913f7728f28761715ebdf88a90c2fa51822d503360be566c20c4ba0a809ee50c'); // 08e050f8… before 2026-10-19
+    expect(createHash('sha256').update(JSON.stringify(withoutRich)).digest('hex')).toBe('67ed40ca501812817ac1f3382e892021a83132622c07c896bd3aaa60bdef711f'); // 6f49a12a… before 2026-11-23 (the recalled lines are dated)
+    expect(createHash('sha256').update(JSON.stringify(withoutThread)).digest('hex')).toBe('ed421c6a1b45e2c7e9df6344d4d2c068de1d018fcc86e7f9a3bd32a19947f565'); // b1c796c6… before 2026-11-23
+    expect(createHash('sha256').update(JSON.stringify(seen)).digest('hex')).toBe('67c6ee4f0b22c2330638a6cb56c020cb23f508aab9f8f829f2b1336c40141974'); // 913f7728… before 2026-11-23 (the recalled lines are dated), 08e050f8… before 2026-10-19
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

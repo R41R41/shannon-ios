@@ -100,9 +100,18 @@ export function buildCompanionStatePrompt(
       ? `関係について分かっていること:\n${relationships.map(relationship => `- ${relationship.statement} (確信 ${fixed(relationship.confidence)})`).join('\n')}`
       : '関係について分かっていること: まだない'], Math.floor(maximumCharacters * 0.14)),
     fitSections([activeMemories.length
-      ? `今、想起されている記憶:\n${activeMemories.map(memory => `- ${memory.summary}`).join('\n')}`
+      ? `${RECALL_HEADER}:\n${activeMemories.map(memory => `- ${recallTime(memory.observedAt)}${memory.summary}`).join('\n')}`
       : '今、想起されている記憶: なし'], Math.floor(maximumCharacters * 0.14)),
   ], maximumCharacters);
+}
+
+const RECALL_HEADER = '今、想起されている記憶（各行の（日時）はその話をした時。その時の状況の話で、いまの状況は別に出ている）';
+const recallClock = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** When a recalled line was said (JST, 11/23 17:29): a recalled word of hers about the situation is dated, so it is not read as the situation now. */
+function recallTime(observedAt: string): string {
+  const time = Date.parse(observedAt);
+  return Number.isFinite(time) ? `（${recallClock.format(new Date(time)).replace(',', '')}）` : '';
 }
 
 /**

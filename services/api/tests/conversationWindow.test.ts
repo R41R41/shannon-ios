@@ -291,9 +291,10 @@ describe('helpers keep their small windows', () => {
     expect(h.store.history('owner', 'thread')).toHaveLength(20);
     expect(visibleConversationHistory(h.state.snapshot('owner'), h.store, 'owner', 'thread', OWNER_AUDIENCE)).toHaveLength(20);
     const session = h.api.realtimeVoiceSession('owner', 'thread', { clientDelegation: true });
-    const rows = session.instructions.split('\n').filter(line => /^(?:User|Shannon): しりとり語/u.test(line));
+    const rows = session.instructions.split('\n').filter(line => /^(?:\[\d\d:\d\d\] )?(?:User|Shannon): しりとり語/u.test(line));
     expect(rows).toHaveLength(12);
-    expect(rows[0]).toBe(`User: ${word(108)}`);
+    // Each line carries the time it was said (2026-11-23).
+    expect(rows[0]).toMatch(new RegExp(`^(?:\\[\\d\\d:\\d\\d\\] )?User: ${word(108)}$`, 'u'));
   });
 
   it('a 「友人も一緒」 call replays its own turns only and never the owner thread', async () => {

@@ -436,15 +436,26 @@ const LABELS: Readonly<Record<MinecraftQueueState, string>> = Object.freeze({
  * The list as lines for her turn (`[依頼の列]`): the one running first, then the order, at most `promptLines`. Empty when the list is
  * empty. A list that is stopped says so on its own line, so that 「再開して」 can be told from 「続けて」.
  */
-export function queuePromptLines(snapshot: QueueSnapshot): string[] {
+/** The owner's clock (Asia/Tokyo) as 17:29, for the line of a row that changed. */
+const clockFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const CHANGED_MS = 15 * 60_000;
+/**
+ * `at` (ISO, the clock now): a row that changed in the last quarter of an hour says 「変わった」 and when (17:29 に保留), so that what her earlier words said of
+ * the list (「ケーキの途中」) is read as the list then, not now. Absent: the rows as before.
+ */
+export function queuePromptLines(snapshot: QueueSnapshot, at?: string): string[] {
   const live = snapshot.entries.filter(entry => !queueEnded(entry.state)).sort((a, b) => a.pos - b.pos);
   if (!live.length) return [];
   const limit = MINECRAFT_QUEUE_LIMITS.promptLines;
   const asker = (entry: QueueRecord) => (entry.askedBy ? `（${entry.askedBy}）` : '');
   const label = (entry: QueueRecord): string => {
     const by = entry.state === 'paused' && entry.resumeAfter ? live.find(other => other.id === entry.resumeAfter) : undefined;
+    const changed = at && Date.parse(at) - Date.parse(entry.updatedAt) < CHANGED_MS && Date.parse(at) >= Date.parse(entry.updatedAt)
+      ? clockFormat.format(new Date(entry.updatedAt)) : null;
+    if (entry.state === 'running') return changed ? `${LABELS.running}（変わった: ${changed} に始まった。いまの話はこれ）` : LABELS.running;
     if (entry.state !== 'paused') return LABELS[entry.state];
-    return by ? `${LABELS.paused}（いまはしていない。#${by.seq} のあとで戻る）` : `${LABELS.paused}（いまはしていない）`;
+    const since = changed ? `変わった: ${changed} に保留。` : '';
+    return by ? `${LABELS.paused}（${since}いまはしていない。#${by.seq} のあとで戻る）` : `${LABELS.paused}（${since}いまはしていない）`;
   };
   const lines = live.slice(0, limit).map(entry => `#${entry.seq} ${label(entry)} 「${entry.goal.slice(0, 40)}」${asker(entry)}`);
   if (live.length > limit) lines.splice(limit - 1, 1, `ほか ${live.length - limit + 1} 件`);

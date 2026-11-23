@@ -13,7 +13,7 @@ import type { CognitiveIntentStore } from '../../mind/action/respond/cognitiveIn
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import type { KnowledgeStore } from '../../mind/memory/memoryPorts.js';
-import { visibleConversationHistory } from '../../mind/memory/memoryVisibility.js';
+import { visibleConversationHistoryTimed } from '../../mind/memory/memoryVisibility.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 
 export type VoiceParticipantMode = 'owner' | 'guest';
@@ -63,7 +63,7 @@ export function realtimeVoiceSessionProjection(
   const basePrompt = withStage5Capabilities(dependencies.autonomy?.identityProjection(scopeKey, identity) ?? identity, dependencies.stage5Capabilities);
   const dailyMindPrompt = [dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '', withoutUnshownTitles(dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '')]
     .filter(Boolean).join('\n\n');
-  const history = voiceHistoryProjection(visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId, OWNER_AUDIENCE));
+  const history = voiceHistoryProjection(visibleConversationHistoryTimed(captured, dependencies.conversationStore, scopeKey, threadId, OWNER_AUDIENCE));
   const occurredAt = dependencies.now();
   const primaryIntent = selectPrimaryIntent('', threadId, dependencies.cognitiveIntents.list(scopeKey, 'active'), occurredAt);
   const intentionPrompt = primaryIntent ? buildIntentPrompt(Object.freeze({

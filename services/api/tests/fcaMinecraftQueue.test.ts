@@ -356,7 +356,10 @@ describe('a request put aside for another is taken back by the pump (2026-11-23)
     await w.add('bed', 'now');
     expect(w.states()).toEqual(['bed:running', 'cake:paused']);
     expect(w.queue.snapshot().entries.find(entry => entry.goal === 'cake')!.resumeAfter).toBe(w.queue.snapshot().entries.find(entry => entry.goal === 'bed')!.id);
-    expect(w.queue.promptLines()).toEqual(['#2 実行中 「bed」', '#1 保留（いまはしていない。#2 のあとで戻る） 「cake」']);
+    // A row that changed just now says so and when (変わった: HH:mm …), so that her earlier words about the list are read as the list then (2026-11-23).
+    const rows = w.queue.promptLines();
+    expect(rows[0]).toMatch(/^#2 実行中（変わった: \d\d:\d\d に始まった。いまの話はこれ） 「bed」$/u);
+    expect(rows[1]).toMatch(/^#1 保留（変わった: \d\d:\d\d に保留。いまはしていない。#2 のあとで戻る） 「cake」$/u);
     expect(w.log).toContain('Shannon Minecraft queue op=add entry=#2 state=-→queued origin=mod code=ok placement=now');
     await w.queue.pump();
     expect(w.states()).toEqual(['bed:running', 'cake:paused']);

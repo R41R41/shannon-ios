@@ -1,14 +1,27 @@
 import type { AgentTask } from '../agentTasks/agentTasksPorts.js';
 import { agentTaskNeedsOwner, agentTaskStateLabel } from '../agentTasks/agentTasksPorts.js';
 
-export function voiceHistoryProjection(history: readonly { role: 'user' | 'assistant'; content: string }[]): string {
+const clockFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const timeMark = (at: string | undefined): string => {
+  const time = at ? Date.parse(at) : NaN;
+  return Number.isFinite(time) ? `[${clockFormat.format(new Date(time))}] ` : '';
+};
+
+/**
+ * The last twelve lines of the conversation. A line that comes with the time it was said (`observedAt`) starts with it, and the block says why: what was
+ * said then about the situation (「いまはケーキの途中」) was true then, and is read as that, not as now (a reply kept saying the cake was under way
+ * after the body had gone on to the bed, 2026-11-23).
+ */
+export function voiceHistoryProjection(history: readonly { role: 'user' | 'assistant'; content: string; observedAt?: string }[]): string {
   const rows = history.slice(-12).map(item => {
     const speaker = item.role === 'user' ? 'User' : 'Shannon';
     const content = item.content.trim().replace(/\s+/gu, ' ').slice(0, 600);
-    return `${speaker}: ${content}`;
-  }).filter(row => !row.endsWith(': '));
+    return { row: `${speaker}: ${content}`, mark: timeMark(item.observedAt) };
+  }).filter(item => !item.row.endsWith(': '));
   if (!rows.length) return '';
-  const projection = `[Recent conversation]\n${rows.join('\n')}`;
+  const note = rows.some(item => item.mark)
+    ? '（行頭の [時刻] はその発言の時刻。発言にある「いまは〇〇の途中」「いま〇〇している」はその時刻の話で、いまの状況は上の状況と依頼の列を正とする。時刻は返事に書かない）\n' : '';
+  const projection = `[Recent conversation]\n${note}${rows.map(item => item.mark + item.row).join('\n')}`;
   return projection.length <= 6_000 ? projection : `${projection.slice(-5_999)}…`;
 }
 

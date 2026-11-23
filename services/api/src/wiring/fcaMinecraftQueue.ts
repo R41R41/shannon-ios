@@ -274,7 +274,7 @@ export function fcaMinecraftQueue(parts: QueueParts) {
     /** The entry that runs, if any. */
     current: (): QueueRecord | null => store.read(parts.scopeKey).entries.find(entry => entry.state === 'running') ?? null,
     /** The lines of `[依頼の列]` for her turn. */
-    promptLines: (): string[] => queuePromptLines(store.read(parts.scopeKey)),
+    promptLines: (): string[] => queuePromptLines(store.read(parts.scopeKey), parts.now()),
     /** Called from the one-second wake: a pass that never throws and never overlaps itself. */
     tick(): void { void pump(); },
     /** What to call after a task was put back to work, so that the runtime looks at it now. */
