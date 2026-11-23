@@ -137,7 +137,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     const others = Object.fromEntries(await Promise.all((['urgent', 'compressed'] as Variant[]).map(async variant => [variant, llmcTokens(JSON.stringify((await extractRequestBytes({ ...options, variant, taskId: `size-${variant}`,
       ...variant === 'compressed' ? { compactAboveTokens: 16_000 } : {} })).live.body.facts))])));
     console.info(`continueFacts size ${JSON.stringify({ ...added, factsTokensByVersion: { normal: added.factsTokens, ...others } })}`);
-    expect(added.liveAfter - added.liveBefore).toBeLessThan(700);
+    // 11/24: 700 -> 760 for the pack and gear lines (two facts lines with hostiles listed: about 120).
+    expect(added.liveAfter - added.liveBefore).toBeLessThan(760);
     expect(added.liveAfter).toBeLessThan(12_000);
   });
 });
