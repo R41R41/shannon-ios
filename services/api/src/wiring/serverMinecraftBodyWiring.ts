@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonDevicePrincipal } from '../infra/auth/deviceAuth.js';
 import { namesDesktopBody } from '../mind/inhibition/desktopBodyIdentity.js';
 import { SQLiteGameExperiences } from '../mind/memory/store/gameExperiences.js';
+import { BODY_MIND_PATH } from '../contracts/bodyMindContract.js';
 import { configuredMinecraftBody } from '../contracts/minecraftBodyContract.js';
 import { readJson, sendJson } from '../infra/http/serverHttp.js';
 import type { MinecraftBodyRoute } from '../surfaces/minecraft/serverMinecraftBodyRoute.js';
@@ -22,13 +23,15 @@ import { answerQueueRequest } from './fcaMinecraftQueueIntent.js';
 export const MINECRAFT_BODY_ROUTE_PREFIX = '/v1/body/minecraft/';
 
 /**
- * What the device of `SHANNON_MINECRAFT_BODY_JSON` may call (review S1, 2026-10-06): its own routes, game events, and the
- * presence read. Its token is a paired device's, so without this it could do what the owner's apps do (his chat, her
+ * What the device of `SHANNON_MINECRAFT_BODY_JSON` may call (review S1, 2026-10-06): its own routes, game events, the
+ * presence read, and the feeling read for the game screen (`GET /v1/body/mind`, added 2026-11-24 after the first reflection found it refused).
+ * Its token is a paired device's, so without this it could do what the owner's apps do (his chat, her
  * study and folder, his memory); everything else answers `403 GAME_BODY_DEVICE_DENIED`.
  */
 export function gameBodyMayCall(method: string | undefined, path: string): boolean {
   return path.startsWith(MINECRAFT_BODY_ROUTE_PREFIX)
-    || (method === 'POST' && path === '/v1/body/events') || (method === 'GET' && path === '/v1/body/presence');
+    || (method === 'POST' && path === '/v1/body/events')
+    || (method === 'GET' && (path === '/v1/body/presence' || path === BODY_MIND_PATH));
 }
 
 /** The owner's login/logout, asked from the body's process (`MINECRAFT_LIFECYCLE_REQUEST_PATH`): only the two ways a person presses a button. */
