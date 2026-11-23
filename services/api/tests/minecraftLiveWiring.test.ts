@@ -129,7 +129,7 @@ describe('the wiring, end to end through the control', () => {
     expect(f.model.requests).toEqual([]);
     expect(f.poll({ health: 17 }).speech).toBeUndefined();
     expect(f.wiring.live.recentMoments().map(moment => moment.kind)).toEqual(['diamond_found']);
-    expect(f.wiring.live.block({ alone: true })).toContain('体力 17/20');
+    expect(f.wiring.live.block({ alone: true })).toContain('体力 20のうち17');
   });
 
   it('writes nothing when the model gives no line, and drops a line with a coordinate in it', async () => {

@@ -86,7 +86,7 @@ describe('her body\'s present in a conversation (SHANNON_MINECRAFT_LIVE)', () =>
     expect(prompt).toContain('エンドラを討伐してください');
     expect(prompt).toContain('いましていること: 鉄鉱石を掘っている');
     expect(prompt).toContain('今の段:');
-    expect(prompt).toContain('体力 17/20、満腹度 15/20');
+    expect(prompt).toContain('体力 20のうち17、満腹度 20のうち15');
     await f.close();
   });
 
@@ -97,7 +97,7 @@ describe('her body\'s present in a conversation (SHANNON_MINECRAFT_LIVE)', () =>
     expect(owner).toContain('[マイクラの体の今]');
     expect(owner).toContain('頼まれた作業の最中');
     expect(owner).not.toContain('エンドラを討伐してください');
-    expect(owner).toContain('体力 17/20');
+    expect(owner).toContain('体力 20のうち17');
     await f.close();
   });
 

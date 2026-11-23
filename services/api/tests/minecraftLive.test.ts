@@ -100,7 +100,7 @@ describe('liveBlock', () => {
   });
   it('tells the body, the danger, what she carries, what she found, and how old the picture is', () => {
     const block = liveBlock(snapshot({ threats: ['ゾンビ6m', 'クリーパー12m'], recent: [{ ageSeconds: 130, line: '鉄の防具がそろった' }], frameAgeSeconds: 45, stuck: '掘る作業が20秒ほど進んでいない', furnace: '1台が動いている' }), { alone: true });
-    expect(block).toContain('体力 18/20、満腹度 14/20');
+    expect(block).toContain('体力 20のうち18、満腹度 20のうち14');
     expect(block).toContain('いる所: オーバーワールド・snowy plains・昼');
     expect(block).toContain('近くの敵: ゾンビ6m、クリーパー12m');
     expect(block).toContain('持ち物の要点: 鉄のツルハシ');
@@ -124,7 +124,7 @@ describe('MinecraftLive', () => {
     const f = fixture();
     const block = f.live.block({ alone: true });
     expect(block).toContain('特に頼まれた作業は無い');
-    expect(block).toContain('体力 20/20');
+    expect(block).toContain('体力 20のうち20');
   });
 
   it('tells the task, what runs, the step, and keeps the owner\'s words from the room', () => {

@@ -1,4 +1,5 @@
 import type { LlmUsageStore } from './llmUsage.js';
+import { spokenNumbers } from './spokenNumbers.js';
 
 export const SHANNON_GEMINI_SPEECH_MAXIMUM_CHARACTERS = 8_000;
 export const SHANNON_GEMINI_SPEECH_MAXIMUM_BYTES = 8 * 1024 * 1024;
@@ -93,7 +94,7 @@ export class GoogleGeminiSpeechGateway implements GeminiSpeechGateway {
   }
 
   async synthesize(request: GeminiSpeechRequest): Promise<GeminiSpeechResult> {
-    const text = normalizedSpeechText(request.text);
+    const text = spokenNumbers(normalizedSpeechText(request.text));
     const style = optionalText(request.style ?? this.style, 500);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMilliseconds);
@@ -159,7 +160,7 @@ export class GoogleGeminiSpeechGateway implements GeminiSpeechGateway {
   }
 
   async stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult> {
-    const text = normalizedSpeechText(request.text);
+    const text = spokenNumbers(normalizedSpeechText(request.text));
     const style = optionalText(request.style ?? this.style, 500);
     const controller = new AbortController();
     const abortFromCaller = () => controller.abort();

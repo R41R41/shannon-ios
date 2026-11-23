@@ -61,7 +61,7 @@ function paceLine(snapshot: LiveSnapshot): string[] {
 }
 
 function bodyLine(snapshot: LiveSnapshot): string {
-  const vitals = [snapshot.health !== null ? `体力 ${snapshot.health}/20` : '', snapshot.food !== null ? `満腹度 ${snapshot.food}/20` : ''].filter(Boolean);
+  const vitals = [snapshot.health !== null ? `体力 20のうち${snapshot.health}` : '', snapshot.food !== null ? `満腹度 20のうち${snapshot.food}` : ''].filter(Boolean);
   return vitals.length ? `- 体: ${vitals.join('、')}` : '';
 }
 

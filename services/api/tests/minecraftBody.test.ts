@@ -276,7 +276,7 @@ describe('the body\'s present (`body`) on a turn', () => {
     await turn({ requestId: 'now-1', message: '今何してるとこ？', body: BODY_NOW });
     const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('[マイクラの体の今]（');
-    for (const line of ['自分の目標の冒険を進めている', 'エンドラを倒す → 今は鉄のツルハシ作り', 'いる場所: ネザー', '体力 14/20、満腹度 18/20', 'ゲーム内の時間: 夜', '最近できたこと: 鉄を精錬した']) {
+    for (const line of ['自分の目標の冒険を進めている', 'エンドラを倒す → 今は鉄のツルハシ作り', 'いる場所: ネザー', '体力 20のうち14、満腹度 20のうち18', 'ゲーム内の時間: 夜', '最近できたこと: 鉄を精錬した']) {
       expect(prompt).toContain(line);
     }
     expect(prompt).not.toContain('somemod');
