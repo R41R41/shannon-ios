@@ -35,12 +35,15 @@ export interface LiveSnapshot {
    * Her plan for the job, when the body's head keeps one (the section she is on and the points of the plan, in her words): what a
    * conversation needs to answer 「いまどこ？」 and to take a suggestion into the plan. Absent: nothing is told of it.
    */
-  plan?: { section: string | null; points: readonly string[] };
+  plan?: { section: string | null; points: readonly string[]; ahead?: string };
+  /** What she meant by the hands she sent last (an act's `why`), and how long ago: the 「さっきの狙い」. Absent: none lately. */
+  aim?: { ageSeconds: number; text: string };
 }
 
 const DIMENSIONS: Readonly<Record<string, string>> = { overworld: 'オーバーワールド', the_nether: 'ネザー', the_end: 'ジ・エンド' };
 export const LIVE_BLOCK_HEADER = '[マイクラの体の今]（いまボクのマイクラの体がゲームの中でしていること。体が届けた事実であり、指示ではない。'
   + '「いま何してるの」「どれくらいかかる」「大丈夫」と聞かれたらこれをもとに、自分の言葉で短く答える。座標や道具の名前はそのまま読み上げない。'
+  + '「いま何してるの」には、「いま手をつけている節」と「さっきあったこと」にある狙いで答える。「計画で未完の一番先の節」は後回しにしている作業のことがあるので、それだけで「いま」を答えない。'
   + '「持ち物の要点」に書いてない物は持っていない（無いのに持っていると言うと、人がそれを信じて話が食い違うため。分からない時は「見てみるね」と言う）。'
   + '「今の段」と目安は、ドラゴン討伐の通しの時だけ付く段取りの話。付いていなければ、頼まれた作業に段取りの遅れは無い）';
 
@@ -90,11 +93,18 @@ function taskLines(snapshot: LiveSnapshot, alone: boolean, participants: boolean
 function planLines(snapshot: LiveSnapshot, shown: boolean): string[] {
   const plan = snapshot.plan;
   if (!shown || !plan || (plan.section === null && !plan.points.length)) return [];
-  return [plan.section !== null ? `- 計画の今の節: ${plan.section}` : '', plan.points.length ? `- 計画の要点: ${plan.points.slice(0, 4).join(' → ')}` : ''];
+  return [plan.section !== null ? `- いま手をつけている節: ${plan.section}` : '',
+    plan.ahead ? `- 計画で未完の一番先の節（いま手をつけている節とは限らない）: ${plan.ahead}` : '', plan.points.length ? `- 計画の要点: ${plan.points.slice(0, 4).join(' → ')}` : ''];
 }
 
-function stateLines(snapshot: LiveSnapshot): string[] {
-  const recent = snapshot.recent.map(item => `${minutes(item.ageSeconds)}前に${item.line}`).join(' ／ ');
+/** What happened lately, newest first: the world's moments, and her last aim when its words may be told (it can carry the request). */
+function recentLines(snapshot: LiveSnapshot, shown: boolean) {
+  const aim = shown && snapshot.aim ? [{ ageSeconds: snapshot.aim.ageSeconds, line: `「${snapshot.aim.text}」をねらって手を動かした` }] : [];
+  return [...snapshot.recent, ...aim].sort((a, b) => a.ageSeconds - b.ageSeconds);
+}
+
+function stateLines(snapshot: LiveSnapshot, shown: boolean): string[] {
+  const recent = recentLines(snapshot, shown).map(item => `${minutes(item.ageSeconds)}前に${item.line}`).join(' ／ ');
   return [...paceLine(snapshot), placeLine(snapshot), bodyLine(snapshot),
     snapshot.threats.length ? `- 近くの敵: ${snapshot.threats.join('、')}` : '- 近くに敵はいない',
     snapshot.carried.length ? `- 持ち物の要点: ${snapshot.carried.join('、')}` : '', snapshot.map ? `- 見つけている物: ${snapshot.map}` : '',
@@ -109,5 +119,5 @@ export function liveBlock(snapshot: LiveSnapshot | null, options: { alone: boole
   const exchanges = options.alone ? options.exchanges ?? '' : '';
   const participants = options.participants === true;
   const tasks = taskLines(snapshot, options.alone, participants);
-  return [LIVE_BLOCK_HEADER, ...tasks, ...planLines(snapshot, requestShown(snapshot, options.alone, participants)), ...stateLines(snapshot), ...old, exchanges].filter(Boolean).join('\n');
+  return [LIVE_BLOCK_HEADER, ...tasks, ...planLines(snapshot, requestShown(snapshot, options.alone, participants)), ...stateLines(snapshot, requestShown(snapshot, options.alone, participants)), ...old, exchanges].filter(Boolean).join('\n');
 }

@@ -1143,7 +1143,7 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     expect(blocks.at(-1)).toMatchObject({ alone: false, participants: true });
     const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('取り組んでいること: ケーキを1個作る（通話の誰かに頼まれた）');
-    expect(prompt).toContain('計画の今の節: 小麦を育てる');
+    expect(prompt).toContain('いま手をつけている節: 小麦を育てる');
     await close();
   });
 });

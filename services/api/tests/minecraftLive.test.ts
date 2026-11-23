@@ -89,9 +89,9 @@ describe('liveBlock', () => {
     const shared = liveBlock(snapshot({ plan }), { alone: false });
     expect(shared).not.toContain('計画の');
     expect(shared).not.toContain('矢');
-    expect(liveBlock(snapshot({ plan }), { alone: true })).toContain('計画の今の節: エンドラ用の矢を作る');
+    expect(liveBlock(snapshot({ plan }), { alone: true })).toContain('いま手をつけている節: エンドラ用の矢を作る');
     expect(liveBlock(snapshot({ plan }), { alone: false, participants: true })).toContain('計画の要点: 矢を作る → 弓を強くする');
-    expect(liveBlock(snapshot({ plan, goalIsRequest: false, goal: '木を集める' }), { alone: false })).toContain('計画の今の節');
+    expect(liveBlock(snapshot({ plan, goalIsRequest: false, goal: '木を集める' }), { alone: false })).toContain('いま手をつけている節');
   });
   it('says the step against its target seconds: early, and late', () => {
     expect(liveBlock(snapshot(), { alone: true })).toContain('「鉄」（目安は開始から7分00秒までで、いま6分20秒。あと40秒の目安）。次は「バケツ」');

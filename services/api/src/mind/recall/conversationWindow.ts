@@ -304,6 +304,8 @@ export interface ConversationReplay extends ReplayWindow {
   request(turnContext: string): { turnContext?: string; history: ShannonConversationItem[] };
   /** Under replay epochs: the epoch's number, and whether this turn began it. */
   epoch?: { number: number; rebased: boolean };
+  /** The time of the oldest replayed message (for the turn's journal line: how far back the window reaches). Absent when nothing is replayed. */
+  firstAt?: string;
 }
 
 /**
@@ -387,6 +389,7 @@ function windowReplay(channel: ReplayChannel, input: ReplayInput, openOnly: bool
   const epochFields = epoch ? { epoch: { number: epoch.record.epoch, rebased: epoch.rebased } } : {};
   return {
     history, start: window.start, characters: window.characters, truncated, ...(summary ? { summary } : {}), ...epochFields,
+    ...(live.messages[window.start] ? { firstAt: live.messages[window.start]!.message.observedAt } : {}),
     request: turnContext => {
       // A structured summary (F7) is at most 900 characters with its marker; the 600-character one keeps its 640 limit.
       const context = [turnContext, live.line,

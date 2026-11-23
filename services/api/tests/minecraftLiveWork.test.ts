@@ -4,6 +4,7 @@ import type { BodyObservation, BodyPlanView } from '../src/contracts/bodyControl
 import type { FcaBodyLifecycle } from '../src/mind/action/fca/fcaPorts.js';
 import { MinecraftLive, type LiveFrames, type LiveTaskInfo } from '../src/surfaces/minecraft/minecraftLive.js';
 import { withMinecraftLive } from '../src/surfaces/minecraft/minecraftLiveBody.js';
+import { noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LiveCommentary } from '../src/surfaces/minecraft/minecraftLiveCommentary.js';
 import { LiveSpeechOutbox } from '../src/surfaces/minecraft/minecraftLiveSpeech.js';
 
@@ -57,6 +58,62 @@ describe('her plan, said as it changes', () => {
     expect(plan).toEqual({ section: '作業台を作る', points: ['作業台を作る', '鉄を掘る'] });
     expect(fixture().live.snapshot()).not.toHaveProperty('plan');
     expect(f.live.block({ alone: false, participants: true })).toContain('マイクラの体の今');
+  });
+
+  describe('the section she is on now, which is not always the first one left (the plan 「いま何してる」 answered with the old section, 2026-11-24)', () => {
+    const nodes = [node('p1', 'ケーキを作る'), node('p1.1', '作業台と木のツルハシ', 'continue', 'p1'), node('p1.2', '小麦3', 'continue', 'p1'), node('p1.3', '牛乳3', 'continue', 'p1')];
+    function started(working: () => string | null) {
+      const f = fixture();
+      f.live.begin({ taskId: 'task', scopeKey: 'owner', goal: 'ケーキを作る', origin: 'owner_request', createdAtMs: T0, bodyId: 'minecraft:world', netherReached: null, working });
+      f.see();
+      f.live.plan('task', view(7, 'p1.1', nodes));
+      return f;
+    }
+
+    it('tells the node the work is on as the section, and the first one left apart from it, when the plan current node is behind', () => {
+      const f = started(() => 'p1.2');
+      const snapshot = f.live.snapshot();
+      expect(snapshot?.doing).toBe('');
+      expect(snapshot?.plan).toEqual({ section: '小麦3', points: ['ケーキを作る'], ahead: '作業台と木のツルハシ' });
+      const block = f.live.block({ alone: false, participants: true });
+      expect(block).toContain('- いま手をつけている節: 小麦3');
+      expect(block).toContain('- 計画で未完の一番先の節（いま手をつけている節とは限らない）: 作業台と木のツルハシ');
+      expect(block).not.toContain('計画の今の節');
+      expect(block).toContain('「いま何してるの」には、「いま手をつけている節」');
+    });
+
+    it('tells one section when the work is on the plan current node, on none yet, or on a node the plan does not have or has done', () => {
+      for (const working of [() => 'p1.1', () => null, () => 'n9', () => { throw new Error('no'); }]) {
+        const plan = started(working).live.snapshot()?.plan;
+        expect(plan).toEqual({ section: '作業台と木のツルハシ', points: ['ケーキを作る'] });
+      }
+      const done = started(() => 'p1.2');
+      done.live.plan('task', view(8, 'p1.1', [node('p1', 'ケーキを作る'), node('p1.1', '作業台と木のツルハシ', 'continue', 'p1'), node('p1.2', '小麦3', 'done', 'p1')]));
+      expect(done.live.snapshot()?.plan?.section).toBe('作業台と木のツルハシ');
+    });
+
+    it('tells her last aim with how long ago in the recent things, left out where the request is not told, and not after ten minutes', () => {
+      const f = started(() => 'p1.2');
+      f.live.thought('task', '[p1.2] 小麦が育つ間に種を集める');
+      f.advance(30_000);
+      const block = f.live.block({ alone: false, participants: true });
+      expect(block).toContain('30秒前に「小麦が育つ間に種を集める」をねらって手を動かした');
+      expect(f.live.block({ alone: false })).not.toContain('小麦が育つ間');
+      f.advance(11 * 60_000);
+      expect(f.live.block({ alone: true })).not.toContain('小麦が育つ間');
+    });
+
+    it('writes one line for each block with its length, a short hash and the nodes, and none of its words', () => {
+      const lines: string[] = [];
+      const f = fixture();
+      const live = new MinecraftLive({ frames: { latest: () => ({ observation: observation(), ageMs: 0 }), available: () => ['minecraft:world'] }, now: () => T0, log: line => lines.push(line) });
+      live.begin({ taskId: 'task', scopeKey: 'owner', goal: 'ケーキを作る', origin: 'owner_request', createdAtMs: T0, bodyId: 'minecraft:world', netherReached: null, working: () => 'p1.2' });
+      live.plan('task', view(7, 'p1.1', nodes));
+      const block = live.block({ alone: false, participants: true });
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(new RegExp(`^Shannon Minecraft live block len=${block.length} hash=[0-9a-f]{8} working=p1.2 current=p1.1 aim=-$`));
+      expect(f.moments).toEqual([]);
+    });
   });
 
   it('counts a parent that closed with its last child as one step, the inner one', () => {
@@ -219,6 +276,17 @@ describe('the body of a task tells her work to the view', () => {
     return { f, body, setPlan: (next: BodyPlanView) => { plan = next; } };
   }
   const call = (name: string, input: unknown) => ({ id: 'c', name, input }) as never;
+
+  it('tells the node the body started work for (the rule of the mod) as the section while the plan current node is behind', () => {
+    const { f, body, setPlan } = wrapped();
+    setPlan(view(5, 'a', [node('a', '作業台を作る'), node('b', '小麦3')]));
+    f.see();
+    body.context();
+    expect(f.live.snapshot()?.plan).toEqual({ section: '作業台を作る', points: ['作業台を作る', '小麦3'] });
+    // The queue started an item for b while the plan still has a as current.
+    noteItemStart('task', 'b', 'a');
+    expect(f.live.snapshot()?.plan).toEqual({ section: '小麦3', points: ['作業台を作る', '小麦3'], ahead: '作業台を作る' });
+  });
 
   it('reads the plan at each decision and after a plan or an act, a promise and a keep as needs, and an act\'s why as a thought', () => {
     const { f, body, setPlan } = wrapped();

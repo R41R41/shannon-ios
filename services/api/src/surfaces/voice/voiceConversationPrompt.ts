@@ -109,8 +109,17 @@ export function composeVoiceTurn(turn: VoiceConversation, parts: TurnParts): Voi
   const { dependencies: deps, scopeKey, threadId } = turn;
   const replay = turn.temporaryGuest ? null : turnReplay(voiceTurnStages(deps), { channel: 'voice', captured: parts.memory.captured, scopeKey, threadId,
     present: turn.present, tools: toolTraceReader(deps.toolServer, scopeKey), openOnly: turn.openOnly, at: turn.occurredAt });
+  journalReplayWindow(replay);
   const fcaStartedAt = performance.now(); // From the FCA bridge to the finished tool offer: where 2026-10-12's turns stalled.
   return { parts, basePrompt: basePromptOf(turn, parts), turnContext, replay, fcaTurn: beginVoiceFca(turn, parts), fcaStartedAt };
+}
+
+/** One content-free line for the window of history a spoken reply reads (see `MinecraftLive.journal`): how many characters, and from when. */
+function journalReplayWindow(replay: VoiceComposed['replay']): void {
+  if (!replay) return;
+  try {
+    console.info(`Shannon voice history window items=${replay.history.length} characters=${replay.characters} from=${replay.firstAt ?? '-'}`);
+  } catch { /* a log never fails a reply */ }
 }
 
 function beginVoiceFca(turn: VoiceConversation, parts: TurnParts): VoiceComposed['fcaTurn'] {
