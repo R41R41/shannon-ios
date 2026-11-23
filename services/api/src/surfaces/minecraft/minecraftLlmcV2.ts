@@ -5,7 +5,7 @@ import { expandShortAct, SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA } from '.
 import { MINECRAFT_CONTRACT_READ_SCHEMA } from '../../contracts/minecraftContractBook.js';
 import type { FcaToolDefinition } from '../../mind/action/fca/fcaPorts.js';
 import { llmcPrepare } from './minecraftLlmc.js';
-import { heldBeforeSend } from './minecraftLlmcPartial.js';
+import { heldBeforeSend, peekHeldOfFrame } from './minecraftLlmcPartial.js';
 import { checkedStopIf } from './minecraftLlmcStopIf.js';
 import { deliverOnceFacts } from './minecraftLlmcFacts.js';
 import { noteLiveState } from '../../infra/decisionRecords/decisionRecordNotes.js';
@@ -138,6 +138,18 @@ export function minecraftV2Hooks(): { knowledge: string; rewriteLive(live: Recor
     return liveNoted(live, made.live, made.notes); },
      stageKnowledge: candidateStage, callInput: candidateInput,
     progress: progressWithPlain, requestSent: (taskId, request) => { deliverOnceFacts(taskId, request); } };
+}
+
+/**
+ * Whether a model's `mc.act` would go to the body at its first hand: its shape reads, and no guard before send holds the first hand.
+ * Looked at without counting a hold
+ * (the first request's answer after an interrupt is used only when it can go: `fcaUrgentDecision.ts`).
+ */
+export function actReaches(raw: unknown, frame: BodyObservation | null, taskId: string): boolean {
+  const prepared = llmcPrepare(MC_ACT_TOOL, candidateInput(MC_ACT_TOOL, raw));
+  if (prepared.problem) return false;
+  const held = peekHeldOfFrame(checkedStopIf(prepared.input, frame).input, frame, taskId, true);
+  return !held || held.hand > 1;
 }
 
 /** What the head does to a model's `mc.act` before the body sees it, for the replay: the same order as `fcaMinecraftTools.ts`. */

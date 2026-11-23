@@ -2,6 +2,7 @@ import { targetRequirements } from './minecraftPlanRequirements.js';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { carriedFood } from './minecraftLlmcLive.js';
+import { requestFlag } from './minecraftLlmcFightFacts.js';
 import { doneFacts, parseDoneWhen, prepUnmetFacts, undergroundInOverworld } from './minecraftPlanDone.js';
 import { dayBedLine, nightChoiceLine } from './minecraftNightArms.js';
 import { furnaceMeanwhileLine } from './minecraftFurnaceMeanwhile.js';
@@ -81,6 +82,7 @@ export function factsContext(
   return {
     ...(judge.hits ? { hits: judge.hits } : {}),
     nowKinds: nowKinds(planFacts),
+    ...requestFlag(planFacts),
     ...(endgame?.lines.length ? { endgame } : {}),
     ...(tree?.promises.length ? { promises: tree.promises } : {}),
     ...(judge.since

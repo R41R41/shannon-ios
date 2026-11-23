@@ -36,6 +36,10 @@ export const REQUEST_STEPS_LINES: readonly string[] = Object.freeze([
   '- 体力が 15 以上の間は、live の recovery に「自然に戻らない」「食料の当て」が出ていても、回復のための狩りはしない（「食料の当て」は、食べる必要が出た時の候補で、今狩れという指示ではない）。'
     + '鉄を掘りに下りる手（バケツ用）に付く「準備の状態: 未達 — 食料 …」の注は攻略全体の準備の点検で、この依頼では下りる条件にしない（石のツルハシと作業台があれば下りてよい）。'
     + '理由: 実走では、体力 19.3/20 でその 2 行が出ていた時に、牛・羊を狩って焼くのに約 2 分を使った。',
+  '- 例外: 依頼そのものが敵（ゾンビ・骸骨・クモなど襲ってくる物）を倒す・敵の出る所へ行く物（スケルトンを倒す・骨や糸や火薬を取る）の時は、その敵と戦う身支度は依頼の一部。'
+    + '剣・盾（板 6 と鉄 1。作業台で作る）・食べ物 1 つを持ってから向かう（食べ物は、近くの牛か豚 1 体で足りる。それ以上は狩らない）。上の「食料や石の道具は要らない」は、戦わない依頼（ケーキ・羊毛）の話。'
+    + '揃わない夜は、敵の群れへ向かわず、近くで身支度の材料か依頼の続きを進め、揃ってから向かう（揃うまでが朝までかかるなら朝に回す）。'
+    + '理由: 無装備で夜に、骸骨とゾンビの群れへ 40m 向かって、4 回続けて死んだ（食料狩りを止める直しが、敵を倒す依頼まで巻き込んでいた）。',
 ]);
 
 /** The first plan's lines for the shape of the nodes of a request (the structure `SINGLE_REQUEST_PLAN_WORDS` is given in). */
@@ -54,7 +58,8 @@ export const REQUEST_PLAN_SHAPE_LINES: readonly string[] = Object.freeze([
 export const REQUEST_SCOPE_EN =
   '- Scope: these rules are for the dragon run and the way to the Nether. A one-thing request (a cake, wool) has none of them: '
   + 'no food target, stone tools, hunting, cooking or bed, and a pack with no food is no reason to hunt (they took its time in four cake runs). '
-  + 'Its yardstick is that one thing, made as fast as possible.';
+  + 'Its yardstick is that one thing, made as fast as possible. '
+  + 'Exception: fighting enemies (skeletons, bones) needs gear first (stage text).';
 
 /**
  * The night with no bed (a stage line of the overworld, Japanese): work on, near, with the body's own defence, and no hole. The line before was
@@ -92,4 +97,27 @@ export const REQUEST_REPLAN_KNOWLEDGE = [
   '- 植えた作物は「今の様子」の植物の行にある（育ち中・育った）。小麦が持ち物に 0 でも、植えた株があれば小麦の節は済みでない。種・クワ・作業台の節を足し直さない。',
   '- 食料は live の満腹（fullness）が 8 以下に下がった時だけ。持っている食べ物の点が 0 でも、満腹が高い間は、狩りも調理の節も足さない。'
     + '体力が 15 以上なら、recovery の「自然に戻らない」「食料の当て」でも狩らない。',
+  '- 例外: 依頼そのものが敵を倒す・敵の出る所へ行く物（骸骨を倒す・骨を取る）なら、剣・盾・食べ物 1 つの身支度は依頼の一部。揃えてから向かい、揃わない夜は近くで待つ。',
 ].join('\n');
+
+/**
+ * 11/24 (the night deaths of 11/23: four deaths in a row from a pack of one skeleton and three zombies, with no gear, and the urgent hands that never held):
+ * the lines of the overworld stage for a fight at night, with their reasons: the urgent hands (leave away from the pack, no shelter of 5 blocks or more,
+ * dirt from grass, a hand that does not rely on the queue), the entry to a pack, the materials kept before a deadly work, and the way back after a death
+ * with no gear.
+ */
+export const NIGHT_FIGHT_LINES: readonly string[] = Object.freeze([
+  '- 急ぎの手（「急ぎの版」の決断）の選び方: '
+    + '離れる向きは敵の群れと逆（丘や、敵がもっといる方へ向かわない）。囲い（体の回りを塞ぐ）は 4 ブロックまでで、5 個以上要る囲いは作らない: 急ぎの手は 3 つまでで、体の反射が先に動き、'
+    + '置く手は途中で捨てられやすい（夜の死亡の 12 回の急ぎのうち 7 回が囲いを選び、1 回も成立しなかった）。囲うより先に、離れる・食べる・牛や豚を狩る（hunt。食べる物が手元に無い時は eat より hunt）。'
+    + 'ブロックも武器も無い時は、足元の草を dig して土を得て（1 ブロック約 1 秒）、その土を 1 枚置いて射線を切る。木が遠い（原木が 40m 以上先）時に、剣や盾を作り直す手は勧めない（材料に着く前に死ぬ）。'
+    + '身を守る手（離れる・食べる・斬る）は dependsOn: [] で出す。理由: 書かないと、列の前の項目が失敗した時に古い判断として捨てられる（夜の死亡では 2〜5 秒かけた答えが 12 回捨てられた）。',
+  '- 敵の群れ（live の「周り 10m」の行が 2 体以上）へは、手前 25m 以上で止まる。詰めるのは 1 体ずつ: 群れから離れた所で撃ってくる 1 体を、ブロック 1 枚の陰へ引き寄せて斬る。'
+    + '明るい所（松明・水辺）で、背中側に来た道（逃げ道）を残す。live の「戦う装備」の行が「詰める目安に届かない」「体は斬らない」なら、群れへ詰める fight・go は出さず、離れる・作る・隠れる手を選ぶ。'
+    + '体力が 12 を割ったら fight を出し続けず、離れて食べてから戻る（体力 12 未満では戦いへ進まない）。武器が無い時は、体の反射が斬らないので、wait や素手の attack で待たない（平地での wait は見通しの中で撃たれ続ける）。'
+    + '理由: 夜に骸骨 1・ゾンビ 3 の中へ 40m 詰めて、10 秒で体力が 20 から 7 に減って死んだ。その後も体力 9・7・5 で fight を出し続け、素手の attack と wait を重ねて死んだ。',
+  '- 死にやすい作業（夜の戦い・洞窟・ネザー）へ移る前に、作りかけの材料（鉄・牛乳バケツ・卵など、取り直しに時間がかかる物）は、箱に預けるか、剣・盾・ベッドなど完成品に変えてから出る。'
+    + '理由: 死ぬと持ち物を全部落とし、材料のまま持って出た分は取り戻す前に消える（夜の死亡では、牛乳バケツ 3・鉄 3・卵が一度に消え、骨粉づくりが数分遅れた）。体が自動で預けることはしない。',
+  '- 死んだ直後（夜で無装備）: 依頼の続きより先に、身支度（剣・盾・食べ物）か、明るくなるまでの近くの作業。原木が近くに無い時は、作り直しを勧めない: 草を掘って土を得て遮蔽にし、敵の群れと逆へ離れる。'
+    + '理由: 死んだ後に無装備で夜の草地へ戻り、続けて 3 回死んだ（最寄りの原木は 127m 先で、剣は作れなかった）。'
+]);

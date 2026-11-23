@@ -63,3 +63,17 @@ describe('the deaths of run62', () => {
     expect(deathReturnHold(back, over('1分前 overworld (89,67,40) 「Cave Spider に倒された」', 6000), 'd5')).toMatchObject({ hand: 1 });
   });
 });
+
+describe('an enemy in front of her is not a place she goes back to (11/24, d0028 of the night of 11/23)', () => {
+  const dead = { lastDeath: '1分前 the_nether (89,67,40) 「Skeleton に倒された」' };
+  it('lets an attack or a fight on its killer through when it stands within 4 m, and holds it farther away', () => {
+    const close = { threats: ['#20060 skeleton 1.5m (1,64,0) 見える（射線の中）'] }, far = { threats: ['#20060 skeleton 9.0m (8,64,0) 見える（射線の中）'] };
+    for (const hand of [{ do: 'attack', target: '#20060' }, { do: 'fight', target: '#20060' }, { do: 'fight', target: 'skeleton' }]) {
+      expect(deathReturnHold({ hands: [hand] }, frame([], { ...dead, ...close }), 'f1'), JSON.stringify(hand)).toBeNull();
+    }
+    expect(deathReturnHold({ hands: [{ do: 'attack', target: '#20060' }] }, frame([], { ...dead, ...far }), 'f2')).toMatchObject({ hand: 1, kind: 'attack' });
+    const near = { nearbyThreats: [{ id: 20060, name: 'skeleton', distance: 2.1 }] };
+    expect(deathReturnHold({ hands: [{ do: 'attack', target: '#20060' }] }, frame([], { ...dead, ...near }), 'f3')).toBeNull();
+    expect(deathReturnHold({ hands: [{ do: 'go', to: { x: 74, y: 66, z: 22 } }] }, frame([], { ...dead, ...close }), 'f4')).toMatchObject({ hand: 1, kind: 'go' });
+  });
+});

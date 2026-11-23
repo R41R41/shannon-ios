@@ -185,7 +185,7 @@ describe('work with almost no health', () => {
     for (const world of [{}, { threats: ['#9 skeleton 1.0m (1,2,3)'] }]) {
       const held = deadlyGateHold(mine, overworld(5.7, world));
       expect(held).toMatchObject({ hand: 2, kind: 'work' });
-      expect(held!.line).toContain('体力が 8 を切っている間は掘る・作る・拾うなどの作業の手を送らない');
+      expect(held!.line).toContain('体力が 8 を切っている間は掘る・精錬するなどの作業の手を送らない');
       expect(held!.line).toContain('戦う・逃げる・食べる・遮蔽に入る手は出せる');
     }
     expect(heldOfFrame(mine, overworld(5.7), 'lh')).toMatchObject({ hand: 2, code: 'gate_required' });
@@ -197,10 +197,19 @@ describe('work with almost no health', () => {
       { do: 'smelt', items: [{ item: 'beef', count: 4 }], fuel: 'coal' }, { do: 'chest', op: 'look', at: [{ x: 1, y: 2, z: 3 }] }]) {
       expect(deadlyGateHold({ hands: [hand] }, hungry), String(hand.do)).toBeNull();
     }
-    for (const hand of [{ do: 'make', item: 'iron_pickaxe' }, { do: 'chest', op: 'take', items: [{ item: 'iron_ingot', count: 4 }], at: [{ x: 1, y: 2, z: 3 }] },
+    for (const hand of [{ do: 'chest', op: 'take', items: [{ item: 'iron_ingot', count: 4 }], at: [{ x: 1, y: 2, z: 3 }] },
       { do: 'chest', op: 'takeAll', at: [{ x: 1, y: 2, z: 3 }] }, { do: 'smelt', items: [{ item: 'raw_iron', count: 4 }], fuel: 'coal' }]) {
       expect(deadlyGateHold({ hands: [hand] }, hungry), `${hand.do} ${JSON.stringify(hand)}`).toMatchObject({ kind: 'work' });
     }
+  });
+  it('lets the hands that take no time or only a step through (11/24: craft and make hurt nothing, a near pickup brings a drop back, a dig of the cell at her feet is the cover)', () => {
+    const hurt = overworld(1.8, { position: { x: 0, y: 64, z: 0 } });
+    for (const hand of [{ do: 'make', item: 'bone_meal' }, { do: 'craft', item: 'iron_pickaxe' }, { do: 'pickup', range: 3 },
+      { do: 'dig', at: [{ x: 1, y: 63, z: 0 }, { x: 2, y: 64, z: 1 }] }]) {
+      expect(deadlyGateHold({ hands: [hand] }, hurt), JSON.stringify(hand)).toBeNull();
+    }
+    // a dig of cells far from her feet is still work
+    expect(deadlyGateHold({ hands: [{ do: 'dig', at: [{ x: 20, y: 40, z: 0 }] }] }, hurt)).toMatchObject({ kind: 'work' });
   });
   it('lets go the hands of defence, and everything at 8 or more', () => {
     expect(deadlyGateHold(mine, overworld(8))).toBeNull();

@@ -78,10 +78,32 @@ function targetKind(hand: Record<string, unknown>, world: Record<string, unknown
   return listed ?? (typeof threat?.name === 'string' ? threat.name : '');
 }
 
+/**
+ * An enemy this close is in front of her, not a place she goes back to: hitting it is defence (d0028 of the night of 11/23: a skeleton at 1.5 m,
+ * shooting, and an attack on it was held as a return to the killer).
+ */
+export const IN_FRONT_METERS = 4;
+/** Whether the hand's target (an `#id`, or a kind) is a listed hostile within `IN_FRONT_METERS` of her now. */
+function inFront(hand: Record<string, unknown>, world: Record<string, unknown>): boolean {
+  const target = typeof hand.target === 'string' ? hand.target : '';
+  const id = /^#(\d+)$/u.exec(target)?.[1], kind = norm(target);
+  const lines = [world.urgent, world.threats].flatMap(list => Array.isArray(list) ? list : []).filter((line): line is string => typeof line === 'string');
+  const listed = lines.flatMap(line => {
+    const m = /^#(\d+) (\S+) ([\d.]+)m/u.exec(line);
+    return m ? [{ id: m[1]!, name: m[2]!, meters: Number(m[3]) }] : [];
+  });
+  const body = (Array.isArray(world.nearbyThreats) ? world.nearbyThreats : []).flatMap(raw => {
+    const item = objectOf(raw);
+    return item && typeof item.distance === 'number' ? [{ id: String(item.id ?? ''), name: String(item.name ?? ''), meters: item.distance }] : [];
+  });
+  return [...listed, ...body].some(item => item.meters <= IN_FRONT_METERS && (id ? item.id === id : kind.length > 0 && norm(item.name) === kind));
+}
+
 type Death = NonNullable<ReturnType<typeof lastDeathOf>>;
 /** Whether a hand goes back to a fresh death: a fight or an attack on its killer, or a go or a walk ending within `RETURN_BLOCKS` of it. */
 function goesBack(hand: Record<string, unknown>, death: Death, world: Record<string, unknown>, feetY: number): boolean {
   if (hand.do === 'fight' || hand.do === 'attack' || hand.do === 'shoot') {
+    if (hand.do !== 'shoot' && inFront(hand, world)) return false;
     const kind = norm(targetKind(hand, world));
     return kind.length > 0 && norm(death.cause).includes(kind);
   }
@@ -136,6 +158,7 @@ export function deathReturnHold(input: unknown, frame: BodyObservation | null, t
   if (at < 0) return null;
   const line = `最後の死から ${death.minutes} 分（${death.cause.slice(0, 40)}）。夜・洞窟・ネザーでは、胸当てと鉄の剣がそろうまで死んだ所（${RETURN_BLOCKS}m 内）や同じ相手へ戻る手は送らない`
     + `（11/10 の撮影: 鉄の防具の 4 分後から 4 分で 5 回死んだ）。落とし物を拾いに戻れるのは、昼の地上でゾンビ・スケルトン・クモに倒された時だけ。`
-    + `今は明るく敵のいない所で、木・石から剣・盾・防具を作り直す（${count + 1}/${RETURN_HOLDS} 回目）`;
+    + `今は明るく敵のいない所で、木・石から剣・盾・防具を作り直す。木が遠い時や敵に付かれている時は、作り直しでなく、敵の群れと逆へ離れ、草を掘って土を得て遮蔽にする。`
+    + `（${count + 1}/${RETURN_HOLDS} 回目。目の前 4m 以内の敵を斬る手は止めない）`;
   return { hand: at + 1, kind: String(objectOf(hands[at])?.do ?? 'go'), line, commit: () => { held.set(key, count + 1); } };
 }

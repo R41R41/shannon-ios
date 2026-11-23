@@ -24,6 +24,8 @@ threatSightMeters,threatSightTargets,walledOff,type NearThreat,type ThreatSight
 } from './minecraftLlmcThreat.js';
 import { queueLifecycle,type LlmcQueue } from './minecraftLlmcQueueBody.js';
 import { driftOf,madeInOf } from './minecraftMadeIn.js';
+import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
+import { actReaches } from './minecraftLlmcV2.js';
 import type { MadeIn } from '../../contracts/continueContract.js';
 export { readinessParts, staleNodeFacts, withRecoveryFact } from './minecraftLlmcBodyFacts.js';
 export type { LlmcBodyParts, JudgeParts } from './minecraftLlmcBodyFacts.js';
@@ -310,6 +312,7 @@ beginContextRead();
       return interrupted;
     },
     rebuilding: () => { rebuild = true; },
+    reaches: calls => calls.some(call => call.name === MC_ACT_TOOL && actReaches(call.input, observeNoted(), parts.taskId)),
     /** Continue contract 5: the frame the last context read, and whether the body has left it (died, another
  * generation of the dimension, another connection) since. */
     readOf: () => read,

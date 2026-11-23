@@ -105,7 +105,7 @@ describe('the rules are in the instructions', () => {
   it('gives the urgent answer once, in the instructions (a short thought, one act of three hands at most)', () => {
     expect(system).toContain('## Urgent decisions (「急ぎの時」)');
     expect(system).toContain('send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer');
-    expect(system).toContain('Move away, put a block between you and the enemy, enclose yourself, eat: before any mining or crafting');
+    expect(system).toContain('Move away, put a block between you and the enemy, eat: before any mining or crafting');
     expect(URGENT_NOTE).toBe('急ぎの版（決まりは system の「急ぎの時」）');
   });
   it('says the fight rule without lowering retreatHp, the health that does not come back, and the units of a fight', () => {

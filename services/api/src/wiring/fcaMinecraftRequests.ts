@@ -12,6 +12,7 @@ import type { VoiceMinecraftPort } from '../surfaces/platform/voiceMinecraftPort
 import { fcaMinecraftVoice } from './fcaMinecraftVoice.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import { fcaMinecraftBodyWake } from './fcaMinecraftBodyWake.js';
+import { fcaMinecraftHitWake } from './fcaMinecraftHitWake.js';
 import { isNativeDragonGoal } from './fcaMinecraftGoalBinding.js';
 import { operatorSocketPath, requestOperatorSocket } from '../infra/ops/operatorSocket.js';
 import { OPERATOR_LIMITS } from '../contracts/operatorContract.js';
@@ -85,6 +86,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   ownerStop(input: { taskId?: string }): Promise<{ stopped: string[]; open: number }>;
   /** Wakes a task that slept for a body that was not there, once the body is (`fcaMinecraftBodyWake.ts`); ticked every second by the wake. */
   bodyWake: ReturnType<typeof fcaMinecraftBodyWake>;
+  hitWake: ReturnType<typeof fcaMinecraftHitWake>;
   /** The owner's list of requests for the body (`fcaMinecraftQueue.ts`); ticked every second by the wake too. */
   queue: ReturnType<typeof fcaMinecraftQueue> } {
   /**
@@ -265,6 +267,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     ownerStop,
     queue,
     bodyWake: fcaMinecraftBodyWake({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, log }),
+    hitWake: fcaMinecraftHitWake({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, log }),
     operator: operatorMinecraftRequests({ ...parts, bound: () => bound(() => true), spec }),
     tools: { available: scope => scope === parts.ownerScope && parts.conversation.taskToolsAvailable(scope), async execute(name, input, context, signal) {
       signal?.throwIfAborted();

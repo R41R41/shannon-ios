@@ -169,7 +169,20 @@ function rodsDoneHold(input: unknown, facts: Facts): DeadlyHold | null {
 
 const LOW_HEALTH = 8;
 /** The hands that are work, not defence: held below `LOW_HEALTH` whether an enemy is near or not (fighting, fleeing, eating, getting into cover go). */
-const WORK_HANDS: ReadonlySet<string> = new Set(['mine', 'dig', 'make', 'craft', 'smelt', 'furnace', 'chest', 'obsidian', 'drop', 'pickup']);
+const WORK_HANDS: ReadonlySet<string> = new Set(['mine', 'dig', 'smelt', 'furnace', 'chest', 'obsidian', 'drop']);
+/**
+ * 11/24 (the night of 11/23, d0016 at health 0.3): a `dig` of the dirt at her feet, meant as the cover, was held as work. `make` and `craft` take no time and
+ * hurt nothing, and a `pickup` of what lies near is how a drop comes back, so they are not held; a `dig` is not work when every cell it names is within
+ * `COVER_METERS` of her feet (the ground she stands on, the wall she hides behind).
+ */
+const COVER_METERS = 3;
+function isWorkHand(hand: Record<string, unknown>, facts: Facts): boolean {
+  const kind = String(hand.do ?? '');
+  if (!WORK_HANDS.has(kind)) return false;
+  if (kind !== 'dig') return true;
+  const feet = cellOf(facts.world.position), cells = Array.isArray(hand.at) ? hand.at.map(cellOf) : [];
+  return !(feet && cells.length > 0 && cells.every(cell => cell && near(cell, feet, COVER_METERS)));
+}
 
 const isFood = (name: unknown): boolean => typeof name === 'string' && Object.hasOwn(FULLNESS, name.replace(/^minecraft:/u, ''));
 const foodItems = (hand: Record<string, unknown>): boolean => Array.isArray(hand.items) && hand.items.length > 0
@@ -195,10 +208,10 @@ function foodWork(hand: Record<string, unknown>): boolean {
 function lowHealthHold(input: unknown, facts: Facts): DeadlyHold | null {
   const hands = (input as { hands?: unknown } | null)?.hands;
   if (!Array.isArray(hands) || facts.health === null || facts.health >= LOW_HEALTH) return null;
-  const at = hands.findIndex(raw => WORK_HANDS.has(String(objectOf(raw)?.do ?? '')) && !foodWork(objectOf(raw) ?? {}));
+  const at = hands.findIndex(raw => isWorkHand(objectOf(raw) ?? {}, facts) && !foodWork(objectOf(raw) ?? {}));
   if (at < 0) return null;
   const back = recoveryLine(facts.hunger, facts.health, facts.food, facts.counts) ?? `体力 ${facts.health}/20`;
-  const line = `体力が ${LOW_HEALTH} を切っている間は掘る・作る・拾うなどの作業の手を送らない（敵が近くても）。${back}。`
+  const line = `体力が ${LOW_HEALTH} を切っている間は掘る・精錬するなどの作業の手を送らない（敵が近くても。作る・近くの拾う・足元の遮蔽のための dig は止めない）。${back}。`
     + '戦う・逃げる・食べる・遮蔽に入る手は出せる。回復してから作業をもう一度出す（どう回復するかは自分で決める）';
   return { hand: at + 1, kind: 'work', line };
 }
