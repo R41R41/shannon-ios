@@ -179,7 +179,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     item.state = stored ?? 'settled_known';
     item.unit = unitOfReceipt(receipt);
     const taken = neverRan(receipt, item) || item.because !== null;
-    const result = itemResult(item, receipt, item.fixes);
+    const result = itemResult(item, receipt, item.fixes, deps.observe());
     // A placement the body counted and then found gone (A-5 3): a fact said once, delivered when the request's bytes carry it.
     for (const fact of placementCorrections(item.item, receipt.result)) offerOnceFact(deps.taskId, `placement_corrected:${fact.id}`, fact.text);
     const ms = item.startedAt === null ? 0 : now() - item.startedAt;

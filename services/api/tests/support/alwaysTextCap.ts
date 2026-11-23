@@ -10,5 +10,7 @@
  * - 11/22 (four runs of a cake asked with bone meal, bn1 to bn4): one line says the descent's preparation (food, stone tools) and the yardstick are for the whole game and not
  *   for a one-thing request (about 180 llmc, about 50 real). It has to be in this text: the request's steps are in the stage knowledge, which yields to this text where they
  *   disagree, and they are given only to a request. The text measures 10,486, the cap is 10,500.
+ * - 11/24 (the night deaths of 11/23): the scope line says a request to fight enemies needs gear first (the stage text carries the rest, the urgent rules point to it; about 50 llmc,
+ *   about 20 real). The text measures 10,538, the cap is 10,550.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_500;
+export const ALWAYS_TEXT_CAP_LLMC = 10_550;

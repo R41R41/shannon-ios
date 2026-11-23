@@ -6,6 +6,7 @@ import { readActResult } from '../../contracts/minecraftActContract.js';
 import { carriedItemCounts,EDIBLE_FOOD } from './minecraftItems.js';
 import { FOOD_POINTS,stacks } from './minecraftLlmcLive.js';
 import { markDelivered,offer,pending,type OnceFact } from './minecraftLlmcOnceFacts.js';
+import { fightLines } from './minecraftLlmcFightFacts.js';
 import { dropAdvice,FULL_COST,packFacts,PACK_SLOTS,reportedFree } from './minecraftLlmcPack.js';
 import { heldBack,promiseLines } from './minecraftLlmcPromises.js';
 import { FOOD_FISH,nearNeeds } from './minecraftLlmcReachWords.js';
@@ -24,7 +25,6 @@ export const FOOD_NEAR_METERS = 24;
 export const FOOD_KEPT = 3, FOOD_NORMAL_MAX = 6;
 
 // ---- health, hunger and what she can eat
-// ------------------------------------------------------------------------------------------------------
 
 /** The food she carries as 「bread×1（+11 点）」, the best first. */
 function foodItems(observation: BodyObservation | null): { text: string; points: number }[] {
@@ -218,7 +218,6 @@ export function liveFactLines(observation: BodyObservation | null, kinds: readon
 }
 
 // ---- the pack, and the queue
-// ----------------------------------------------------------------------------------------------------------------
 
 /** What one hand does, in the hand's own words, for the queue's line: where it goes, what it places, digs, makes,
  * whom it hits. */
@@ -397,7 +396,6 @@ export function packLines(observation: BodyObservation | null, ahead: readonly A
 }
 
 // ---- where a go or a vertical stopped
-// ----------------------------------------------------------------------------------------------------------
 
 /**
  * A go's or a vertical's stop, from the act's result (the receipt's `result` JSON, not its words): 「go の止まり:
@@ -466,6 +464,8 @@ export interface FactsContext {
   endgame?: { lines: readonly string[]; short: readonly string[] };
   /** The plan's kinds now: the current node's kind, then those above it (`nowKinds`). The diamond veins and flint lines read them. */
   nowKinds?: readonly PlanKind[];
+  /** The request is one thing (`planFacts.request`): the night line's limit is said beside the distance to the enemy. */
+  request?: boolean;
 }
 export interface InputFacts { lines: string[]; compressed: string[] }
 /**
@@ -478,7 +478,7 @@ export interface InputFacts { lines: string[]; compressed: string[] }
  */
 export function inputFacts(observation: BodyObservation | null, context: FactsContext, urgent: boolean): InputFacts {
   const ahead = context.ahead ?? [];
-  const head = [vitalsLine(observation), context.hits ?? null, holderLine(observation)];
+  const head = [vitalsLine(observation), context.hits ?? null, holderLine(observation), ...fightLines(observation, context.request === true)];
   const promises = promiseLines(context.promises ?? [], { ...context.since ? { since: context.since } : {}, observation, limit: 4 });
   const stops = [...context.stops ?? []];
   const food = (shown: number) => context.wantsFood ? [foodLine(observation, shown)] : [];

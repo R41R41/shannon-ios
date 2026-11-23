@@ -341,6 +341,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
     // `requests.bodyWake`: a task that slept for a body that was not there is woken when its frame is
 // (mc-chat-stale-frame, 2026-10-26).
     const wake = () => { requests?.bodyWake.tick();
+      requests?.hitWake.tick();
       requests?.queue.tick();
       minecraft?.skillOutcomes?.tick((scope, id) => runtime.runtime.get(scope,
        id)?.phase ?? null); try { sleep?.jobs.reconcile(runtime.runtime);

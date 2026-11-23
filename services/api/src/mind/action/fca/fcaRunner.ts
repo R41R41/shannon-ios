@@ -12,7 +12,7 @@ import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { fcaRecallContext } from './fcaRecallContext.js';
 import type { FcaDecision,FcaModelInput,FcaModelOutput,FcaToolCall } from './fcaPorts.js';
 import { decideWithRetry,FCA_RETRY_REFRESH_MS } from './fcaProviderRetry.js';
-import { decideInterruptibly } from './fcaUrgentDecision.js';
+import { decideInterruptibly, keptFirst } from './fcaUrgentDecision.js';
 import { fcaDecisionMetrics } from './fcaDecisionMetrics.js';
 import { selectFcaTools,selectedFcaTools } from './fcaToolState.js';
 import { prepareFcaHistory } from './fcaHistory.js';
@@ -254,7 +254,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
       refresh: async () => { latest = { asked: await freshen(latest.asked), at: Date.now() }; } });
   };
   const decide = (asked: FcaModelInput, cancel: AbortSignal = signal) => decideInterruptibly({ body: ports.body, signal: cancel, request: asked, ask,
-    interrupted: ({ thrownMs }) => metrics.interrupted(thrownMs),
+    interrupted: ({ thrownMs }) => metrics.interrupted(thrownMs), usable: keptFirst(ports.body, read),
     again: async request => { ports.body?.rebuilding?.();
       await checked('fresh');
       return freshen(request); } });

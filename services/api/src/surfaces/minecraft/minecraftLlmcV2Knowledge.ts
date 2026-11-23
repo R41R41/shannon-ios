@@ -4,7 +4,7 @@ import { factsIn, hasKind, nearKinds } from './minecraftPlanFacts.js';
 import type { PlanKind } from '@shannon/mind';
 import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFoodAcquisition.js';
 import { MATERIAL_ACQUISITION_LINES } from './minecraftRequestKnowledge.js';
-import { REQUEST_NIGHT_LINE, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
+import { NIGHT_FIGHT_LINES, REQUEST_NIGHT_LINE, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
 import { REQUEST_PEOPLE_LINES } from './minecraftRequestPeople.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
@@ -55,7 +55,7 @@ const DECIDE = [
 const URGENT = [
   '## Urgent decisions (「急ぎの時」)',
   '- In a decision where live\'s mode is 「急ぎの版」: think in 2 to 3 sentences, send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer (「[急ぎ] …」). '
-    + 'Move away, put a block between you and the enemy, enclose yourself, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
+    + 'Move away, put a block between you and the enemy, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
     + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating. If an urgent line says 「詰めて斬れる」, its fight comes first.',
 ].join('\n');
 
@@ -215,7 +215,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '走って離れても 15m の中なら射たれ続け、4m の内へは自分から来ない（体の反射は 4m の内しか斬らない）。見えなくなると寄って来て、約 3 秒で狙いを忘れる。'
       + '剣と防具（鉄 3 部位か盾）・体力 10 以上で、撃ってくる骸骨が 1 体なら（urgent の行に「詰めて斬れる」と出る）、その場で fight target=#id range=16 seconds=15 で詰めて斬る（矢が来る時は体が盾を構える）。'
       + '2 体以上か、盾も防具も無い時は、ブロック 1 枚で射線を切って陰で待つ（寄って来れば 4m の内で体が斬る。来なければ狙いは外れた）。その後、近い方から fight。'
-      + '走って離れるのは、体力 8 以下の時と骸骨が 3 体以上の時。倒したら元の作業へ戻る（次々来る夜の地上は、囲い・地下へ）。弓で撃ち返さない（矢はエンド用）。',
+      + '走って離れるのは、体力 8 以下の時と骸骨が 3 体以上の時。倒したら元の作業へ戻る（次々来る夜の地上は、囲い・地下へ）。弓で撃ち返さない（矢はエンド用）。', ...NIGHT_FIGHT_LINES,
     '- ほかの射手（ブレイズ・ガスト・ピリジャーなど）に撃たれている間は、分かっている敵の向きと足場から射線を切る・離れる手を先に選ぶ。'
       + '同じsight・around・columnを何度も読む間も攻撃される。追加の読取りは逃げる手を決めるために必要な不明だけに絞り、工作・回収・食事は安全な位置で行う。'
       + 'ウィッチは例外: 薬（毒・負傷）は 10m 先まで投げ、走って離れる背中にも当たる（end1110r1 は 2.8m から逃げて 6 秒で体力 7→0）。'

@@ -47,6 +47,12 @@ const handLine = (stop: HandStop): string => `手 ${stop.hand} ${stop.kind}: ${s
  * The guards' stops, the one with the smallest hand number (the same hand: the act-preflight's, then the rule guard's, the seen-again dig, the
  * urgent limit). `urgent`: the decision was an urgent one (its live state's answer line says 「手は 3 つまで」). Null when none holds.
  */
+let peeking = false;
+/** The first hold of an act looked at without being counted (`heldOfFrame` counts a hold against its bound when it stops the act). */
+export function peekHeldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false): Held | null {
+  peeking = true;
+  try { return heldOfFrame(input, frame, taskId, urgent); } finally { peeking = false; }
+}
 export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskId: string, urgent = false, notes?: string[], ownFrom = 0): Held | null {
   const wait = furnaceWaitNote(input, frame), table = tableNote(input, frame);
   if (wait) notes?.push(wait);
@@ -71,7 +77,7 @@ export function heldOfFrame(input: unknown, frame: BodyObservation | null, taskI
     if (stop) found.push({ hand: stop.hand, code: stop.code, kind: stop.kind, line: handLine(stop) });
   }
   const first = found.reduce<Held | null>((held, next) => !held || next.hand < held.hand ? next : held, null);
-  counted.find(item => item.held === first)?.commit();
+  if (!peeking) counted.find(item => item.held === first)?.commit();
   return first;
 }
 

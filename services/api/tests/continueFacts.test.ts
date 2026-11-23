@@ -125,7 +125,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
 
   it('the system prompt stays inside its cap (English since 11/11), and the live state\'s growth is measured', async () => {
     // 11/22: 8,500 -> 8,640 for one line of scope (the descent's preparation is for the whole game, not for a one-thing request: about 180; the text measures 8,621; bn1 to bn4).
-    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_640);
+    // 11/24: 8,640 -> 8,680 for the scope line's exception (a fight needs gear first: about 40; the text measures 8,660; the night deaths of 11/23).
+    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_680);
     const got = await extractRequestBytes({ ...options, variant: 'normal', taskId: 'size' });
     // What this chapter added to the live state, taken off again: the `facts` lines and the queue's 「予定」 and 「（見込み）」.
     const { facts, queue, ...rest } = got.live.body as Record<string, any>;
@@ -136,7 +137,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     const others = Object.fromEntries(await Promise.all((['urgent', 'compressed'] as Variant[]).map(async variant => [variant, llmcTokens(JSON.stringify((await extractRequestBytes({ ...options, variant, taskId: `size-${variant}`,
       ...variant === 'compressed' ? { compactAboveTokens: 16_000 } : {} })).live.body.facts))])));
     console.info(`continueFacts size ${JSON.stringify({ ...added, factsTokensByVersion: { normal: added.factsTokens, ...others } })}`);
-    expect(added.liveAfter - added.liveBefore).toBeLessThan(700);
+    // 11/24: 700 -> 760 for the pack and gear lines (two facts lines with hostiles listed: about 120).
+    expect(added.liveAfter - added.liveBefore).toBeLessThan(760);
     expect(added.liveAfter).toBeLessThan(12_000);
   });
 });

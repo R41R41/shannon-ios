@@ -8,6 +8,7 @@ import type { MinecraftControlReceipt, MinecraftQueueProgress } from '../../cont
 import { toolFailure, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { conditionWords } from './minecraftConditions.js';
 import { llmcResult } from './minecraftLlmc.js';
+import { withDrops } from './minecraftLlmcDropsLine.js';
 import { droppedWords, keptWords, releasedWords, replayWords, unknownWords } from './minecraftLlmcResultWords.js';
 
 /** The words of the head's mirror of the body's queue (`minecraftLlmcQueue.ts`): what an item's end is told as,
@@ -107,7 +108,7 @@ function behind(because: string | null): string {
  * did not rely on the one that stopped; a second try
  * of a held act says whose it is. (A result that is not known is `unknownResult`.)
  */
-export function itemResult(item: QueueWordsItem, receipt: MinecraftControlReceipt, fixes: readonly string[]): ToolResult {
+export function itemResult(item: QueueWordsItem, receipt: MinecraftControlReceipt, fixes: readonly string[], frame: BodyObservation | null = null): ToolResult {
   const unit = unitOfReceipt(receipt);
   if (neverRan(receipt, item)) {
     const cause = unit.droppedBecause ? droppedWords(unit.droppedBecause) : (receipt.failureType === 'cleanup_stop' ||
@@ -118,7 +119,7 @@ export function itemResult(item: QueueWordsItem, receipt: MinecraftControlReceip
   }
   if ((receipt.failureType === 'precondition' || receipt.failureType === 'precondition_unknown') && receipt.result) return toolFailure(
     'failed', receipt.result, { retryable: true });
-  const result = llmcResult(MC_ACT_TOOL, receipt, item.reason(), fixes);
+  const result = withDrops(llmcResult(MC_ACT_TOOL, receipt, item.reason(), fixes), frame);
   const lead = [...(item.resume ? [replayWords(item.resume.item)] : []), ...(item.because ? [`${item.because}で止めた（頭が取り除いた）。`] : []),
     ...(unit.keptDespite ? [keptWords(unit.keptDespite).trim()] : [])];
   return lead.length ? { ...result, text: `${lead.join('\n')}\n${result.text}` } : result;

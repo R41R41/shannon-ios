@@ -204,6 +204,11 @@ export interface FcaBodyLifecycle {
   interrupt?(): string | null;
   /** r8: the request is built again for a decision asked after an `interrupt`: the next `context()` is the same decision's. */
   rebuilding?(): void;
+  /**
+   * 11/24: whether the calls of an answer can reach the body now: at least one act that the guards before send would not stop at its first hand
+   * (looked at without counting a hold). Asked of the first request's answer after an `interrupt`, which is used only when it can. Absent: it cannot be known.
+   */
+  reaches?(calls: readonly FcaToolCall[]): boolean;
   /** r8: a decision made on an urgent state has come: how long the model took on it, whether an earlier request was
  * thrown away, and
  * how long that had run. */
