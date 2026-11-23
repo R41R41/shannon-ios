@@ -250,8 +250,8 @@ export class PlatformVoiceService {
     const seated = this.seated;
     const answer = seated ? await this.askOneHead(seated, seat, request, hash, filler, body, address, out)
       : await this.ask(seat, request, hash, filler, body, address, out);
-    await this.carryIntent(seat, request, hash, answer, body, out);
-    this.finish(seat, request, hash, key, answer, { decisionMs, address: address.reason, filler }, out);
+    const handed = await this.carryIntent(seat, request, hash, answer, body, out);
+    this.finish(seat, request, hash, key, answer, { decisionMs, address: address.reason, filler, handed }, out);
   }
 
   /**
@@ -416,7 +416,7 @@ export class PlatformVoiceService {
         title: seat.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
         speakerName: seat.owner ? null : request.sourceDisplayName, humans: seat.humans.size, fillerText: filler?.text,
       }),
-      situationBlock(situation, running, body?.state.resting ?? []),
+      situationBlock(situation, running, body?.state.resting ?? [], body ? this.rooms.unhanded(roomKey) : []),
       answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
       intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE), speech, lifecycle, directedBlock(request.directed === true, who, intent !== ''),
@@ -529,15 +529,18 @@ export class PlatformVoiceService {
     return record ? ask(record) : outcome;
   }
 
-  /** A spoken request for her body: delivered after the reply, and the fixed words of a refusal said after a reply that promised. */
+  /**
+   * A spoken request for her body: delivered after the reply, and the fixed words of a refusal said after a reply that promised.
+   * True when the reply went with something the body took (a request, a way of speaking, a way in or out): false for words only.
+   */
   private async carryIntent(
     seat: ChannelSeat, request: VoiceTurnRequest, hash: string, answer: VoiceAnswer,
     body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null, out: VoiceOut,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const intent = answer.minecraftIntent;
-    if (intent?.kind === 'speech') return this.carrySpeech(seat, intent, out);
-    if (intent?.kind === 'login' || intent?.kind === 'logout') return this.carryLifecycle(seat, intent.kind, answer);
-    if (!body || !intent || intent.kind === 'none' || !this.offersIntent(seat, body)) return;
+    if (intent?.kind === 'speech') { this.carrySpeech(seat, intent, out); return true; }
+    if (intent?.kind === 'login' || intent?.kind === 'logout') { this.carryLifecycle(seat, intent.kind, answer); return true; }
+    if (!body || !intent || intent.kind === 'none' || !this.offersIntent(seat, body)) return false;
     const { scopeKey } = this.dependencies;
     const ask = (experienceId: string | null) => body.port.intent({
       scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent, experienceId,
@@ -551,6 +554,7 @@ export class PlatformVoiceService {
     });
     this.log(intentLog(intent, outcome));
     if (!outcome.delivered) this.refuse(seat, request, answer, outcome.reason ?? 'not_owner_scope');
+    return outcome.delivered;
   }
 
   /**
@@ -605,14 +609,14 @@ export class PlatformVoiceService {
 
   private finish(
     seat: ChannelSeat, request: VoiceTurnRequest, hash: string, key: string, answer: VoiceAnswer,
-    facts: { decisionMs: number; address: string; filler: VoiceFiller | null }, out: VoiceOut,
+    facts: { decisionMs: number; address: string; filler: VoiceFiller | null; handed: boolean }, out: VoiceOut,
   ): void {
     const { scopeKey, turns, now } = this.dependencies;
     const reply = displayedVoiceText(answer.reply).trim().slice(0, PLATFORM_VOICE_LIMITS.replyCharacters);
     const threadId = seat.policy.threadId;
     const response: StoredVoiceTurn = { reply, threadId, respond: true, reason: facts.address };
     // Her words are for this speaker: the follow-up window of 「話しかけられたか」 opens from here (`addressOf`).
-    if (reply) this.rooms.noteShannon(request.conversationId, { at: now(), userId: request.sourceUserId, text: reply });
+    if (reply) this.rooms.noteShannon(request.conversationId, { at: now(), userId: request.sourceUserId, text: reply }, facts.handed);
     turns.save(scopeKey, key, request.platform, hash, response as unknown as Record<string, unknown>, now(), PLATFORM_VOICE_LIMITS.replayDays);
     const totalMs = Math.round(performance.now() - seat.startedAt);
     const firstSentenceMs = answer.spoken.firstAt === null ? null : Math.round(answer.spoken.firstAt - seat.startedAt);

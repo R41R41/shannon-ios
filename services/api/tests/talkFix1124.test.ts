@@ -5,6 +5,7 @@ import { DisclosureGate } from '../src/mind/inhibition/disclosurePorts.js';
 import { cleanLiveLine, liveWriterPrompt } from '../src/surfaces/minecraft/minecraftLiveWriter.js';
 import { deathCauseWords } from '../src/surfaces/minecraft/minecraftMoments.js';
 import { platformVoiceInstructions, situationBlock } from '../src/surfaces/platform/platformVoicePrompt.js';
+import { VoiceRooms } from '../src/surfaces/platform/voiceRoom.js';
 import { memoryWorld } from './support/memoryWorld.js';
 
 /**
@@ -101,5 +102,28 @@ describe('the audience gate of a voice turn', () => {
     const reads = vi.spyOn(world.store, 'experiencesById');
     new DisclosureGate(peopleAudience([]), world.store.snapshot('owner'), world.store as never, 'owner', []).prime([{ recalledMemoryIds: ['x'] }]);
     expect(reads).not.toHaveBeenCalled();
+  });
+});
+
+describe('her replies that were only words', () => {
+  it('keeps the ones no request went with, with how long ago, and drops the old and the handed', () => {
+    let now = Date.parse('2026-11-24T10:00:00Z');
+    const rooms = new VoiceRooms(() => now);
+    const say = (text: string, handed: boolean) => rooms.noteShannon('r', { at: new Date(now).toISOString(), userId: 'u', text }, handed);
+    say('羊は倒すね', false);
+    now += 16 * 60_000;
+    say('ケーキを作るね', true);
+    now += 2 * 60_000;
+    say('作業台を用意してるよ', false);
+    expect(rooms.unhanded('r')).toEqual(['「羊は倒すね」（18分前）', '「作業台を用意してるよ」（いま）']);
+    now += 45 * 60_000;
+    expect(rooms.unhanded('r')).toEqual([]);
+  });
+  it('is said in the situation as not taken by the body, in the present form', () => {
+    const block = situationBlock('夜の草原。', 'ケーキを作る', [], ['「羊は倒すね」（18分前）']);
+    expect(block).toContain('体には渡していない返事');
+    expect(block).toContain('「羊は倒すね」（18分前）');
+    expect(block).toContain('理由');
+    expect(situationBlock('夜の草原。', null, [], [])).not.toContain('体には渡していない返事');
   });
 });

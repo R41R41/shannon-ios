@@ -17,6 +17,10 @@ export const VOICE_ROOM_LIMITS = Object.freeze({
   heardLines: 8,
   heardMinutes: 3,
   exchangeLines: 10,
+  /** Her replies that were not handed to the body (words only) are kept this long, so that a promise in them is not read as work under way. */
+  unhandedMinutes: 40,
+  unhandedLines: 3,
+  unhandedCharacters: 50,
   shannonMinutes: 10,
   lineCharacters: 160,
   situationCharacters: 300,
@@ -53,6 +57,8 @@ interface Room {
   heard: HeardLine[];
   exchange: ExchangeLine[];
   shannon: ShannonSaid | null;
+  /** Her replies that no request of the body went with, oldest first. */
+  unhanded: Array<{ at: string; text: string }>;
   situation: { text: string; until: number } | null;
   fillerId: string | undefined;
   touched: number;
@@ -72,7 +78,7 @@ export class VoiceRooms {
         const oldest = [...this.rooms.entries()].sort((a, b) => a[1].touched - b[1].touched)[0]?.[0];
         if (oldest !== undefined) this.rooms.delete(oldest);
       }
-      room = { heard: [], exchange: [], shannon: null, situation: null, fillerId: undefined, touched: this.now() };
+      room = { heard: [], exchange: [], shannon: null, unhanded: [], situation: null, fillerId: undefined, touched: this.now() };
       this.rooms.set(key, room);
     }
     room.touched = this.now();
@@ -130,13 +136,28 @@ export class VoiceRooms {
   }
 
   /** She spoke to `userId` (her reply, told when it is done). */
-  noteShannon(key: string, said: ShannonSaid): void {
+  noteShannon(key: string, said: ShannonSaid, handed = false): void {
     const room = this.room(key);
     const text = clip(said.text, VOICE_ROOM_LIMITS.lineCharacters);
     // Read before the text is cut short: the question is at its end.
     const asked = said.asked ?? endsAsQuestion(said.text);
     room.shannon = { at: said.at, userId: said.userId, text, speechMs: said.speechMs ?? spokenMilliseconds(Array.from(said.text).length), ...(asked ? { asked } : {}) };
     this.noteExchange(key, { role: 'shannon', userId: 'shannon', name: 'シャノン', text, at: said.at });
+    // Words only: no request went to the body with them, so a promise in them is nobody's work (talk-fix 2026-11-24).
+    if (!handed && text.trim()) room.unhanded = [...room.unhanded, { at: said.at, text }].slice(-8);
+  }
+
+  /** Her recent replies that were only words (no request went with them), oldest first, as 「words」（N分前）: for the voice prompt. */
+  unhanded(key: string): string[] {
+    const room = this.rooms.get(key);
+    if (!room) return [];
+    const now = this.now();
+    const oldest = now - VOICE_ROOM_LIMITS.unhandedMinutes * 60_000;
+    room.unhanded = room.unhanded.filter(item => Date.parse(item.at) >= oldest);
+    return room.unhanded.slice(-VOICE_ROOM_LIMITS.unhandedLines).map(item => {
+      const minutes = Math.max(0, Math.round((now - Date.parse(item.at)) / 60_000));
+      return `「${item.text.replace(/s+/gu, ' ').slice(0, VOICE_ROOM_LIMITS.unhandedCharacters)}」（${minutes < 1 ? 'いま' : `${minutes}分前`}）`;
+    });
   }
 
   /** The next person's words took the question she asked (answered or not): it no longer opens the way for a nameless answer. */

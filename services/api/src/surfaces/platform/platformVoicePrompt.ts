@@ -68,13 +68,14 @@ export function heardBlock(lines: readonly HeardLine[]): string {
 }
 
 /** The body's side of Minecraft, as the body's process described it, and the request under way (anyone in the channel may have made it). */
-export function situationBlock(situation: string | null, runningGoal: string | null, resting: readonly string[] = []): string {
+export function situationBlock(situation: string | null, runningGoal: string | null, resting: readonly string[] = [], said: readonly string[] = []): string {
   if (!situation && !runningGoal) return '';
   const idle = '- 体がいましているのは、上に書いてある作業だけ。履歴にあるボク自身の約束（「羊は倒すね」「ベッドはそのあとだよ」など）も、[依頼の列] に無ければ、体はまだ受け取っていなくて、動いていない。それを「予定」「そのあとやる」「つもり」「進めておく」とつなげず、聞かれたら「いまは動いていない」と言う。まだやってほしそうなら、「もう一度頼んでね」と返す。理由: 動いていない作業を進んでいるように言うと、頼んだ人は待ち続けて、あとで気づいて言い直すことになる。';
   return [
     '[マイクラの体の様子（ボイスチャンネルの側からの説明）]',
     ...(situation ? [situation] : []),
     ...(runningGoal ? [`頼まれて、体はいま「${runningGoal}」をしている。いま動いている作業は、これだけ。`] : ['いま、頼まれて動いている作業は無い。']),
+    ...(said.length ? [`ボクが最近言っただけで、体には渡していない返事（依頼の列に入っていない）: ${said.join('、')}。この中の約束（「〜するね」「そのあと〜」）は、言っただけで、体は受け取っておらず、動いていない。いま何をしているか聞かれたら、これらを「倒すね」「そのあとやる」「予定」のような先の形で言わず、「まだ受け取っていなくて動いていない」と、いまの形で言う（理由: 先の形で言うと、動き出す約束に聞こえて、頼んだ人が待ってしまう）。やってほしそうなら「もう一度頼んでね」と添える。`] : []),
     ...(resting.length ? [`いま動いていない、最近の依頼: ${resting.join('、')}。これらは進んでいない。「進めてるよ」「そのあとにやるね」とは言わず、聞かれたら、止まっていると言う。`] : []),
     '- これは、いまの様子の説明。書かれていないことは分からないと言う。体を動かすのは別の仕組みで、この返事だけで終わったことにしない。',
     idle,
