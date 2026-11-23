@@ -58,6 +58,10 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
     ("set（id の state=done|blocked|continue|wait・title・where・doneWhen・note・reason）、move（id を parent・after " +
 "へ）、drop（id とその下を消す）。"),
     'current で今の節を決める。今の節を done にして current を書かなければ、次の済んでいない節が今になる。子が全部 done の親は done になる。',
+    ('節に target（取る物と数）がある時は、title や doneWhen を変えるなら target も合わせて直す。doneWhen のどの枝（|）にも have:その物>=数 が要り、' +
+'取る物が変わったなら target も新しい物と数に set する。取得目標をやめる時は set で target=null。合わないと ops が全部通らない（理由: 頼みが変わって計画を直す時、doneWhen だけを書き直して同じ所で弾かれ続けたから）。'),
+    ('持ち主が途中で言い直した事（先に・やめて・〜じゃなくて・〜しなくていい）は、元の依頼文より強い。いらなくなった節は drop か set state=blocked（待たせる）・done にし、' +
+'新しい節を add して current にする。元の依頼文を理由に元の節へ戻さない。'),
     '計画が変わった時・節が済んだ時・止まった時に出す（毎回は要らない）。体の手と同じ応答で出してよい。',
     '約束（残す物と用途）: promise（item・count・use。期間は until、代わりに足りる条件は instead。id を書けば改訂）、release（id・why）。約束を書くのは自分だけ。',
     '頭は使われた量と理由を帳簿にして live に出す。条件の文は have:crafting_table>=1 の形。',
@@ -92,6 +96,7 @@ export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
   description: [
     PLAN_UPDATE_DEFINITION.description,
     `禁止と注意: forbid（id の節で、してはいけない事を 1 行足す）・caution（気をつける事を 1 行足す）・lift（text の行を消す）。id が無ければ今の節。`,
+    'lift の text は、その節の行を写して書く（行を特定できる一部の言葉でも、空白や末尾の「…」「。」が違っても通る）。その節に無い行は消せず、失敗の文に節の行が出る。',
     `1 行 ${PLAN_LIMITS.rule}字まで、各 ${PLAN_LIMITS.rules} 行まで（超えると古い行から消える）。add・split の節にも forbid・caution の配列を書ける。`,
     'live の plan.rules に、今の節と親の道の禁止・注意が出る（その節を離れると出ない）。驚きの後に原因が分かったら書き、要らなくなったら lift する。',
     '済み（r9）: doneWhen が観測の形の節は、頭のコードがその節自身の条件で済みにする。親が済みでも子は済みにならない（子は自分の条件か set state=done で）。',

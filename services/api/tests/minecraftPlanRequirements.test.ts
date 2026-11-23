@@ -24,6 +24,28 @@ describe('explicit current acquisition requirements', () => {
     expect(kept.nodes[0]!.target).toBeUndefined();
     expect(kept.nodes[0]!.doneWhen).toBe('have:iron_ingot>=30|have:iron_chestplate');
   });
+  it('says in the refusal how to mend it: doneWhen to the target, or the target changed with it, or dropped (2026-11-23)', () => {
+    const node = { ...bucket().nodes[0]!, doneWhen: 'have:iron_ingot>=2' };
+    const problem = targetConditionProblem(node)!;
+    expect(problem).toContain('各 | の枝に have:bucket>=1 が必要');
+    expect(problem).toContain('set で target も新しい物・数に直す');
+    expect(problem).toContain('set で target=null');
+    // A change of what is to be taken is made in one set (target and doneWhen together), and it passes.
+    const changed = applyPlanUpdate(bucket(), { ops: [{ op: 'set', id: 'bucket', title: '羊毛', doneWhen: 'have:white_wool>=2', target: { item: 'white_wool', count: 2 } }] });
+    expect(changed.problem).toBeNull();
+    expect(targetConditionProblem(changed.tree.nodes[0]!)).toBeNull();
+  });
+  it('says in the refusal how to mend it: doneWhen to the target, or the target changed with it, or dropped (2026-11-23)', () => {
+    const node = { ...bucket().nodes[0]!, doneWhen: 'have:iron_ingot>=2' };
+    const problem = targetConditionProblem(node)!;
+    expect(problem).toContain('各 | の枝に have:bucket>=1 が必要');
+    expect(problem).toContain('set で target も新しい物・数に直す');
+    expect(problem).toContain('set で target=null');
+    // A change of what is to be taken is made in one set (target and doneWhen together), and it passes.
+    const changed = applyPlanUpdate(bucket(), { ops: [{ op: 'set', id: 'bucket', title: '羊毛', doneWhen: 'have:white_wool>=2', target: { item: 'white_wool', count: 2 } }] });
+    expect(changed.problem).toBeNull();
+    expect(targetConditionProblem(changed.tree.nodes[0]!)).toBeNull();
+  });
   it('uses two ingots and one raw iron for one bucket, without demanding thirty more iron', () => {
     const words = targetRequirements(bucket().nodes[0], new Map([['iron_ingot', 2], ['raw_iron', 1]]));
     expect(words).toContain('raw_iron×1を精錬');

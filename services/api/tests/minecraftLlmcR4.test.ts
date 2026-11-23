@@ -345,7 +345,30 @@ describe('forbid and caution on the plan\'s nodes (shared note 4; arch-check 23:
     expect(plan.tree.nodes.find(node => node.id === 'p1')).not.toHaveProperty('caution');
     expect(applyPlanUpdate(plan.tree, { ops: [{ op: 'lift', text: '無い行' }] }).problem).toMatch(/禁止・注意は無い/u);
     expect(applyPlanUpdate(plan.tree, { ops: [{ op: 'forbid', text: 'x'.repeat(PLAN_LIMITS.rule + 1) }] }).problem).toMatch(/長すぎる/u);
-    expect(applyPlanUpdate(plan.tree, { ops: [{ op: 'forbid', id: 'n99', text: 'x' }] }).problem).toBe('ops[0]: n99 が無い');
+    expect(applyPlanUpdate(plan.tree, { ops: [{ op: 'forbid', id: 'n99', text: 'x' }] }).problem).toMatch(/^ops\[0\]: n99 が無い/u);
+  });
+
+  it('a lift finds a line by its words with the spaces, the ends and the width of the letters left out, and a miss says which lines the node has (2026-11-23)', () => {
+    const plan = applyPlanUpdate(tree(), { ops: [{ op: 'forbid', id: 'p1.1', text: '羊は 囲って飼わない。柵を作らない' }, { op: 'caution', id: 'p1.1', text: '夜は地下へ下りない' }] });
+    expect(plan.problem).toBeNull();
+    // The words as the model wrote them from memory: the spaces, the dots it puts at the end.
+    const loose = applyPlanUpdate(plan.tree, { ops: [{ op: 'lift', id: 'p1.1', text: '羊は囲って飼わない…' }] });
+    expect(loose.problem).toBeNull();
+    expect(loose.tree.nodes.find(node => node.id === 'p1.1')!.forbid).toBeUndefined();
+    expect(loose.tree.nodes.find(node => node.id === 'p1.1')!.caution).toEqual(['夜は地下へ下りない']);
+    const miss = applyPlanUpdate(plan.tree, { ops: [{ op: 'lift', id: 'p1.1', text: '羊を飼う' }] });
+    expect(miss.problem).toContain('の禁止・注意は無い');
+    expect(miss.problem).toContain('この節の行: 「羊は 囲って飼わない。柵を作らない」「夜は地下へ下りない」');
+    expect(applyPlanUpdate(plan.tree, { ops: [{ op: 'lift', id: 'p2', text: '羊' }] }).problem).toContain('この節に禁止・注意の行は無い');
+    // The old way still passes: the whole line, or the one line that contains the words.
+    expect(applyPlanUpdate(plan.tree, { ops: [{ op: 'lift', id: 'p1.1', text: '夜は地下へ下りない' }] }).problem).toBeNull();
+    expect(applyPlanUpdate(plan.tree, { ops: [{ op: 'lift', id: 'p1.1', text: '柵を作らない' }] }).problem).toBeNull();
+  });
+
+  it('a node that is not there is answered with the nodes that are, so that an id made up (p9) is corrected in the next try (2026-11-23)', () => {
+    for (const op of [{ op: 'set', id: 'p9', state: 'done' }, { op: 'drop', id: 'p9' }, { op: 'lift', id: 'p9', text: 'x' }, { op: 'move', id: 'p9', parent: null }] as const) {
+      expect(applyPlanUpdate(tree(), { ops: [op] }).problem).toContain('p9 が無い（いまある節: p1・p1.1・p1.2・p2）');
+    }
   });
 
   it('the path shows the current node\'s and its parents\' lines (at most 8), and none of another branch; a tree with none shows no key', () => {

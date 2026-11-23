@@ -110,12 +110,23 @@ function draftNode(draft: PlanNodeDraft, id: string, parent: string | null, forb
     ...(draft.where ? { where: draft.where } : {}), ...(draft.doneWhen ? { doneWhen: draft.doneWhen } : {}), ...(draft.note ? { note: draft.note } : {}),
     ...(forbid ? { forbid } : {}), ...(caution ? { caution } : {}) };
 }
-/** r4: takes `text` off a node's forbid and caution (the same line, or else the one line that contains it), or says why not. */
+/** A line as it is compared for a lift: width and spaces unified, the ends a model adds or drops (「…」, a full stop) left out. */
+const squashed = (line: string): string => line.normalize('NFKC').replace(/\s+/gu, '').replace(/^[…・\-]+|[…。.]+$/gu, '').toLowerCase();
+/**
+ * r4: takes `text` off a node's forbid and caution: the same line, or else the one line that contains it (or, with the spaces, the dots at the
+ * ends and the width of the letters left out, the one line that starts with it or contains it), or says why not. A miss names the node's lines,
+ * so that the next try can copy one (a lift that named a line from memory, or from another node's, failed again and again).
+ */
 function liftRule(node: PlanNode, id: string, text: string): string | null {
   const all = [...(node.forbid ?? []), ...(node.caution ?? [])];
   const exact = all.filter(line => line === text), within = all.filter(line => line.includes(text));
-  const gone = exact.length ? exact : within.length === 1 ? within : [];
-  if (!gone.length) return within.length > 1 ? `${id} に「${text}」を含む行が ${within.length} つある（全文で書く）` : `${id} に「${text}」の禁止・注意は無い`;
+  const needle = squashed(text), loose = needle ? all.filter(line => squashed(line).includes(needle) || needle.includes(squashed(line))) : [];
+  const gone = exact.length ? exact : within.length === 1 ? within : within.length === 0 && loose.length === 1 ? loose : [];
+  if (!gone.length) {
+    if (within.length > 1) return `${id} に「${text}」を含む行が ${within.length} つある（全文で書く）`;
+    const lines = all.map(line => `「${line.slice(0, 40)}」`).join('');
+    return `${id} に「${text}」の禁止・注意は無い${lines ? `。この節の行: ${lines}（そのまま写して書く）` : '（この節に禁止・注意の行は無い）'}`;
+  }
   for (const key of ['forbid', 'caution'] as const) {
     const kept = (node[key] ?? []).filter(line => !gone.includes(line));
     if (kept.length) node[key] = kept;
@@ -219,7 +230,7 @@ class PlanEdit {
   }
   /** Puts `node` among `parent`'s children right after `after` (null or absent: last), renumbering the siblings. */
   place(node: PlanNode, parent: string | null, after: string | null | undefined): string | null {
-    if (parent !== null && !this.nodes.has(parent)) return `親 ${parent} が無い`;
+    if (parent !== null && !this.nodes.has(parent)) return `親 ${this.gone(parent)}`;
     for (let up = parent; up !== null; up = this.nodes.get(up)?.parentId ?? null) if (up === node.id) return `${node.id} を自分の下へは動かせない`;
     const siblings = this.children(parent).filter(item => item.id !== node.id);
     const index = after === undefined || after === null ? siblings.length : siblings.findIndex(item => item.id === after) + 1;
@@ -238,11 +249,16 @@ class PlanEdit {
     if (forbid.problem || caution.problem) return forbid.problem ?? caution.problem!;
     return this.place(draftNode(draft, id, parent, forbid.rules, caution.rules), parent, after);
   }
+  /** A node an op named is not there: says which ones are (an id the model made up, like p3, is then corrected in the next try). */
+  gone(id: string): string {
+    const ids = [...this.nodes.keys()].slice(0, 12);
+    return `${id} が無い${ids.length ? `（いまある節: ${ids.join('・')}${this.nodes.size > ids.length ? ' ほか' : ''}）` : ''}`;
+  }
   /** r4: the node an op names for its forbid or caution (absent id: the current one), or why there is none. */
   ruleNode(id: string | undefined, op: string): { node: PlanNode; id: string } | { problem: string } {
     const named = id ?? this.current;
     const node = named === null ? undefined : this.nodes.get(named);
-    return node ? { node, id: node.id } : { problem: named === null ? `${op} の id が無く、今の節も無い` : `${named} が無い` };
+    return node ? { node, id: node.id } : { problem: named === null ? `${op} の id が無く、今の節も無い` : this.gone(named) };
   }
   /** r4: one forbid or caution line added to a node (absent id: the current one), the oldest dropped past the bound. */
   rule(op: { op: 'forbid' | 'caution'; id?: string; text: string }): string | null {
@@ -269,7 +285,7 @@ class PlanEdit {
   }
   set(op: Extract<PlanOp, { op: 'set' }>): string | null {
     const node = this.nodes.get(op.id);
-    if (!node) return `${op.id} が無い`;
+    if (!node) return this.gone(op.id);
     const problem = setProblem(op);
     if (problem) return problem;
     if (op.state) node.state = op.state;
@@ -293,7 +309,7 @@ class PlanEdit {
     return null;
   }
   split(op: Extract<PlanOp, { op: 'split' }>): string | null {
-    if (!this.nodes.has(op.id)) return `${op.id} が無い`;
+    if (!this.nodes.has(op.id)) return this.gone(op.id);
     if (!Array.isArray(op.into) || !op.into.length || op.into.length > PLAN_LIMITS.split) return `split は 1〜${PLAN_LIMITS.split} 個`;
     for (const draft of op.into) {
       const problem = this.draft(draft, op.id);
@@ -303,11 +319,11 @@ class PlanEdit {
   }
   move(op: Extract<PlanOp, { op: 'move' }>): string | null {
     const node = this.nodes.get(op.id);
-    if (!node) return `${op.id} が無い`;
+    if (!node) return this.gone(op.id);
     return this.place(node, op.parent === undefined ? node.parentId : op.parent, op.after);
   }
   dropOne(op: Extract<PlanOp, { op: 'drop' }>): string | null {
-    if (!this.nodes.has(op.id)) return `${op.id} が無い`;
+    if (!this.nodes.has(op.id)) return this.gone(op.id);
     this.drop(op.id);
     return null;
   }
@@ -427,7 +443,7 @@ const PROBLEM_WORDS: Readonly<Record<string, string>> = { PLAN_TOO_MANY: `節は
  * gone, or set aside (`asideNext`). A problem, or null. */
 function settleCurrent(edit: PlanEdit, named: string | null | undefined): string | null {
   if (named !== undefined) {
-    if (named !== null && !edit.nodes.has(named)) return `current の ${named} が無い`;
+    if (named !== null && !edit.nodes.has(named)) return `current の ${edit.gone(named)}`;
     edit.current = named;
   }
   edit.settleParents();
