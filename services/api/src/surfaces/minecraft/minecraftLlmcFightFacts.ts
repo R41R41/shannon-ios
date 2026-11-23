@@ -99,6 +99,9 @@ function directionWords(dx: number, dz: number): string {
 }
 /** 'at' of a hostile as a bearing word from the feet (東 = +x, 南 = +z; the map's north is up). */
 const bearing = (dx: number, dz: number): string => DIRECTIONS[(Math.round(Math.atan2(dz, dx) / (Math.PI / 4)) + 8) % 8]!;
+const WATER_SYMBOLS = new Set(['w', '-']);
+const LAND_SYMBOLS = new Set([':', 's', '#', 'I', ',']);
+const OVERLAY_SYMBOLS = new Set(['*', '!', 'm']);
 /** The surface map as a grid: the feet cell, and the symbol and height of each cell. Null for another mode or a map that does not read. */
 function surfaceGrid(map: string): { feet: { x: number; y: number; z: number }; cells: Map<string, { sym: string; h: number }> } | null {
   const lines = map.split('\n');
@@ -115,10 +118,24 @@ function surfaceGrid(map: string): { feet: { x: number; y: number; z: number }; 
       if (height) cells.set(`${x0 + index},${z}`, { sym: height[1]!, h: /\d/u.test(height[2]!) ? Number(height[2]) : height[2] === '+' ? 10 : -1 });
     });
   }
-  return cells.size ? { feet, cells } : null;
+  if (!cells.size) return null;
+  // The drawing puts `*` (walked in the last minute), `!` (a hostile) and `m` (an animal) over the block's own letter (localMap.ts drawTop), so after a swim part of the pool around
+  // her is `*`. Such a cell counts as water when most of its eight known neighbours are water (one pass, from the letters as drawn). It is never taken for land: the nearest land
+  // is read from the drawn land letters only, so a bank cell under the trail is missed rather than a wrong cell named.
+  const wetOverlaid: string[] = [];
+  for (const [key, cell] of cells) {
+    if (!OVERLAY_SYMBOLS.has(cell.sym)) continue;
+    const [x, z] = key.split(',').map(Number) as [number, number];
+    let wet = 0, dry = 0;
+    for (let dx = -1; dx <= 1; dx += 1) for (let dz = -1; dz <= 1; dz += 1) {
+      const sym = cells.get(`${x + dx},${z + dz}`)?.sym;
+      if (sym && WATER_SYMBOLS.has(sym)) wet += 1; else if (sym && LAND_SYMBOLS.has(sym)) dry += 1;
+    }
+    if (wet > dry) wetOverlaid.push(key);
+  }
+  for (const key of wetOverlaid) cells.set(key, { ...cells.get(key)!, sym: 'w' });
+  return { feet, cells };
 }
-const WATER_SYMBOLS = new Set(['w', '-']);
-const LAND_SYMBOLS = new Set([':', 's', '#', 'I', ',']);
 /** Whether her feet are in water and where the nearest land (a ground cell level with her or one above) is, as a line; null when she is not in water, no hostile is near, or the map does not read. */
 export function waterLine(world: Record<string, unknown>): string | null {
   const near = hostilesOf(world).filter(e => e.distance <= WATER_ENEMY_METERS).sort((a, b) => a.distance - b.distance);

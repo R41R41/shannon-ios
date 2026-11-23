@@ -67,6 +67,14 @@ describe('the water line (11/24 try1124b: a zombie came while she stood in a poo
     expect(waterLine({ localMap: POOL, nearbyThreats: [threat(1, 'zombie', 13, 20, 62, 20)] })).toBeNull();
     expect(waterLine({ localMap: POOL.replace('方式=surface', '方式=layers'), nearbyThreats: [ZOMBIE] })).toBeNull();
   });
+  it('still says it after she swam about: the drawing puts * (the trail) over the block letters, and a trail cell with water around it is water; a bank cell under the trail is never named as the land', () => {
+    const swum = POOL.replace('19 w1 w1 w1 w1 w1 w1 :1', '19 w1 *1 *1 *1 *1 *1 :1').replace('20 w1 w1 w1 @0 w1 w1 :1', '20 w1 *1 *1 @0 *1 *1 :1').replace('21 w1 w1 w1 w1 w1 w1 :1', '21 w1 w1 w1 *1 *1 w1 :1');
+    const line = waterLine({ localMap: swum, nearbyThreats: [ZOMBIE] })!;
+    expect(line).toContain('今は水の中');
+    expect(line).toContain('最寄りの陸は 東2・北2');
+    const bank = POOL.replace('18 w1 w1 w1 w1 w1 :1 :1', '18 w1 w1 w1 w1 w1 *1 :1');
+    expect(waterLine({ localMap: bank, nearbyThreats: [ZOMBIE] })).not.toContain('(13,');
+  });
   it('is one of the fight lines, so the normal and the urgent live state both carry it', () => {
     const obs = frame({ localMap: POOL, nearbyThreats: [ZOMBIE] }, [['bread', 2]]);
     expect(fightLines(obs, false).some(line => line.startsWith('今は水の中'))).toBe(true);
