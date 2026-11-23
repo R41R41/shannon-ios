@@ -49,7 +49,7 @@ export const COMEBACK_DRAWER: Readonly<Record<Exclude<ComebackDrawer, 'none'>, D
     marks: /しゃっくり|噛んだだけ|なんでもない(?:です)?/u, note: '自分の反応についての、ふざけたごまかし。事実についての嘘にはしない。' },
   ai_double_standard: { meaning: 'Pointing at the double standard of treating her badly because she is an AI (withdrawn: not offered).', words: [], hint: '',
     marks: /AIだからって|AIなら何/u },
-  laugh_angry: { meaning: 'Smiling while clearly angry (withdrawn: not offered).', words: [], hint: '', marks: /（笑）|(笑)|あはは…/u },
+  laugh_angry: { meaning: 'Smiling while clearly angry (withdrawn: not offered).', words: [], hint: '', marks: /（笑）|\(笑\)|あはは…/u },
   order_out: { meaning: 'Calmly and plainly asks a troll to stop or to leave (said only; a person operates moderation).', words: [],
     hint: 'しつこい相手に、落ち着いてやめてほしいと伝える', marks: /出てって|BAN/u,
     note: '追い出す・禁止は言うだけ。操作は人がする。自分で実行したとは言わない。' },
