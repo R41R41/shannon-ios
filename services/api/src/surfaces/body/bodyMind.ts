@@ -1,5 +1,5 @@
 /** Her feeling for the game screen (`GET /v1/body/mind`, `contracts/bodyMindContract.ts`): the present feeling with its reason, and the last ten minutes of it. */
-import { presentShannonFeeling, type CompanionStateSnapshot, type ShannonEmotionTiming } from '@shannon/cognition';
+import { presentShannonFeeling, SHANNON_CONVERSATION_CAUSES, SHANNON_SETTLED_CAUSE, type CompanionStateSnapshot, type ShannonEmotionTiming } from '@shannon/cognition';
 import { BODY_MIND_LIMITS, BODY_MIND_SCHEMA_VERSION, type BodyMind, type BodyMindPoint } from '../../contracts/bodyMindContract.js';
 
 const round = (value: number, digits: number) => Math.round(value * 10 ** digits) / 10 ** digits;
@@ -8,6 +8,8 @@ const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 /** The reason as one short line: no control characters or brackets, the game prefix dropped (the screen is the game), at most 40 characters. */
 export function mindCauseLine(cause: unknown): string {
   if (typeof cause !== 'string') return '';
+  // The wordings her own resolver gives a feeling that came from talking are not a reason a person should read: leave the reason empty.
+  if (cause === SHANNON_SETTLED_CAUSE || SHANNON_CONVERSATION_CAUSES.includes(cause)) return '';
   const line = cause.replace(/[「」『』【】<>]/gu, '').replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/\s+/gu, ' ').trim().replace(/^マイクラで\s*/u, '');
   return Array.from(line).slice(0, BODY_MIND_LIMITS.causeCharacters).join('');
 }

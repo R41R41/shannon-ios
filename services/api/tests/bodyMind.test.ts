@@ -46,6 +46,16 @@ describe('GET /v1/body/mind', () => {
     expect(JSON.stringify(presence)).not.toContain('骨を取る');
   });
 
+  it('leaves the reason empty when the feeling came from talking or settled down, but still shows the feeling', async () => {
+    const { mind, feel } = harness();
+    for (const cause of ['生成した応答の内容と会話文脈', 'Jevの暫定判断と会話文脈', '直前の感情が自然に続いている', '前の気持ちは時間とともに落ち着いた']) {
+      feel('happy', 0.6, cause);
+      const view = await mind();
+      expect(view.feeling.primary).toBe('happy');
+      expect(view.feeling.cause).toBe('');
+    }
+  });
+
   it('builds the flow from reads: a change or a step of strength is a point, the same one is not, ten minutes is the edge', async () => {
     const { mind, feel, advance } = harness();
     await mind();
@@ -73,6 +83,7 @@ describe('GET /v1/body/mind', () => {
 describe('mindCauseLine', () => {
   it('makes one short line without the game prefix, brackets or control characters', () => {
     expect(mindCauseLine('マイクラで「骨」を\n取った')).toBe('骨を 取った');
+    expect(mindCauseLine('生成した応答の内容と会話文脈')).toBe('');
     expect(mindCauseLine('あ'.repeat(80))).toHaveLength(BODY_MIND_LIMITS.causeCharacters);
     expect(mindCauseLine(undefined)).toBe('');
   });
