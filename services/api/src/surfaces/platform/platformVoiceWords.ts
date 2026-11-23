@@ -140,6 +140,27 @@ export class VoiceWords {
     return lines;
   }
 
+  private warmedAt = 0;
+
+  /**
+   * One empty call to the auxiliary model when a call opens: the first real line otherwise pays a cold connection and a prompt that is not
+   * cached yet (the first reply of a call took 7.1 s, the next ones 3.6 s). Its answer is thrown away and nothing is kept or said; a failure is
+   * not an error (the first real line then does what it did before). At most once in five minutes, so a body that asks at every join cannot
+   * make it a stream of calls.
+   */
+  async warm(): Promise<{ warmed: boolean }> {
+    const at = Date.parse(this.dependencies.now());
+    if (this.warmedAt && at - this.warmedAt < 5 * 60_000) return { warmed: false };
+    this.warmedAt = at;
+    try {
+      const { scopeKey, chatModel } = this.dependencies;
+      await chatModel.generate({ scopeKey, systemPrompt: [shannonIdentityPrompt('guest'), WORDING_INSTRUCTIONS].join('\n\n'), history: [], message: '出来事:\n- （通話が始まった。準備の呼びかけで、返事はいらない）' });
+      return { warmed: true };
+    } catch {
+      return { warmed: false };
+    }
+  }
+
   /** Event facts put into her words for a line from her mouth, or nothing when there is nothing worth saying (`{ say: false }`). */
   async wording(value: unknown): Promise<{ say: boolean; text?: string }> {
     const body = recordOf(value);

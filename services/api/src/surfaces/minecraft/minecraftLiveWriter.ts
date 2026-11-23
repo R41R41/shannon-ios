@@ -98,8 +98,10 @@ function kindBlock(input: LiveWriterInput, stream: boolean): string {
       '- 聞くのは1つだけ。進まない理由を、下に書いていないのに決めつけて言わない（本当かどうか分からないので）。');
   } else if (kind === 'near_death' || kind === 'died') {
     lines.push('[危ない・倒れた時]',
-      '体が危ない、または倒れた。ひとことで短く知らせる。形の例：「あぶない！やられそう」「やられちゃった…」。',
-      '- できるだけ短く（10字から20字くらい）。なぜ: 長く話している間に、危ない場面は終わってしまうし、聞く人の声にも重なる。');
+      '体が危ない、または倒れた。上の「〇〇、とれたよ」のような作業の実況ではなく、危ない知らせを、ひとことで短く言う。',
+      '- 10字から20字くらい、1文だけ（24字を超える時は、最初の文だけが声になる。上の字数の上限より、これを優先する）。なぜ: 長く話している間に、危ない場面は終わってしまうし、聞く人の声にも重なる。',
+      '- 言うのは、下の「いま起きたこと」にある危なさ（体力・襲ってきた物・倒れた原因）だけ。原因が「不明」の時は、原因を言い当てずに気持ちだけを言う。なぜ: 見ていない敵の名前を言うと、聞いている人に嘘を教えることになる。襲ってきた物の名前は、日本語のふだんの呼び方で言う。',
+      '- 言い方の形は、毎回かえる。そのとき一番強く思ったこと（こわい・いたい・びっくり・くやしい）を、出だしの言葉からかえて、「さっき言ったこと」とは違う言い方で言う。体力の数を読み上げたり、「立て直さなきゃ」「距離を取ろう」に決まった形にしたりしない。なぜ: 危ない時ほど同じ型が続くと、台詞を再生しているように聞こえる。');
   }
   if (input.speech && input.speech !== 'chatty') {
     lines.push(`[いまの話し方: ${input.speech === 'needed' ? '必要な時だけ話す' : '話さない（文字で出る）'}]`,
@@ -117,6 +119,9 @@ function toldBlock(input: LiveWriterInput): string {
   return [told, said].filter(Boolean).join('\n\n');
 }
 
+/** A line of danger or of a fall is asked to be 10-20 characters; past this many only its first sentence is said. */
+export const DANGER_LINE_CHARACTERS = 24;
+
 const FORBIDDEN = /https?:\/\/|<@|@everyone|@here|```|^#+\s|\b(?:mc|minecraft)\.[a-z-]+|-?\d{1,5}\s*,\s*-?\d{1,4}\s*,\s*-?\d{1,5}/iu;
 const LABEL = /^(?:ボク|シャノン|Shannon)\s*[:：]\s*/u;
 const QUOTES = /^[「『"“'‘]+|[」』"”'’]+$/gu;
@@ -125,11 +130,16 @@ const QUOTES = /^[「『"“'‘]+|[」』"”'’]+$/gu;
  * The model's answer as the one line to say, or null when it is not one: empty, a list or a link, a coordinate or a tool's name, or longer
  * than the room allows (cut at the last sentence end within the limit; one sentence that is too long is refused, not clipped).
  */
-export function cleanLiveLine(raw: string, options: { voice: boolean; done?: boolean }): string | null {
+export function cleanLiveLine(raw: string, options: { voice: boolean; done?: boolean; danger?: boolean }): string | null {
   const limit = options.voice ? LIVE_LINE_LIMITS[options.done ? 'doneVoiceCharacters' : 'voiceCharacters'] : LIVE_LINE_LIMITS[options.done ? 'doneTextCharacters' : 'textCharacters'];
   const first = raw.split(/\r?\n/u).map(line => line.trim()).find(Boolean) ?? '';
   const line = first.replace(LABEL, '').replace(QUOTES, '').replace(/\s+/gu, ' ').trim();
   if (!line || FORBIDDEN.test(line) || /^[-*・•]\s/u.test(line)) return null;
+  // A line of danger is a word, not a talk: past a few more characters than asked for, only its first sentence is said (the rest comes after the danger).
+  if (options.danger && Array.from(line).length > DANGER_LINE_CHARACTERS) {
+    const sentence = line.match(/^.*?[。！？!?…]/u)?.[0]?.trim();
+    return sentence && Array.from(sentence).length <= limit ? sentence : (Array.from(line).length <= limit ? line : null);
+  }
   if (Array.from(line).length <= limit) return line;
   const ends = [...line.matchAll(/[。！？!?]/gu)].map(match => match.index! + 1).filter(end => end <= limit);
   const cut = ends.at(-1);

@@ -601,6 +601,22 @@ describe('what she said by herself, and what the mouth has put into words', () =
     await close();
   });
 
+  it('warms the auxiliary model once when a call opens, says nothing, keeps nothing, and not again within five minutes', async () => {
+    const { service, model, advance, store, close } = harness();
+    const before = store.experienceCandidates('owner').length;
+    expect(await service.warm()).toEqual({ warmed: true });
+    expect(model.requests).toHaveLength(1);
+    expect(model.requests[0]!.message).toContain('返事はいらない');
+    expect(await service.warm()).toEqual({ warmed: false });
+    advance(4 * 60_000);
+    expect(await service.warm()).toEqual({ warmed: false });
+    expect(model.requests).toHaveLength(1);
+    advance(2 * 60_000);
+    expect(await service.warm()).toEqual({ warmed: true });
+    expect(store.experienceCandidates('owner')).toHaveLength(before);
+    await close();
+  });
+
   it('puts event facts into her words, or says nothing when there is nothing to say', async () => {
     const { service, model, refusal, close } = harness();
     model.reply = 'ダイヤ、見つけたよ！';

@@ -99,7 +99,8 @@ describe('createMomentDetector', () => {
     expect(detector.observe(frame({ food: 6 }), T0 + 500).map(moment => moment.facts)).toEqual([{ food: 6 }]);
     expect(detector.observe(frame({ food: 5 }), T0 + 1000)).toEqual([]);
     const died = detector.observe(frame({ health: 0, deaths: [{ cause: 'minecraft:lava' }] }, { alive: false }), T0 + 1500);
-    expect(died.map(moment => [moment.kind, moment.facts])).toEqual([['died', { cause: 'minecraft:lava' }]]);
+    expect(died.map(moment => [moment.kind, moment.facts])).toEqual([['died', { cause: '溶岩に落ちた' }]]);
+    expect(detector.observe(frame({ health: 0, deaths: [{ cause: 'minecraft:arrow' }] }, { alive: false }), T0 + 9000)).toEqual([]);
     expect(detector.observe(frame({ health: 0 }, { alive: false }), T0 + 2000)).toEqual([]);
   });
 

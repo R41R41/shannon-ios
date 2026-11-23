@@ -135,6 +135,9 @@ export class PlatformVoiceService {
 
   wording(value: unknown): Promise<{ say: boolean; text?: string }> { return this.words.wording(value); }
 
+  /** A call opened: warms the auxiliary model (`VoiceWords.warm`). */
+  warm(): Promise<{ warmed: boolean }> { return this.words.warm(); }
+
   private get environment(): SwitchValues { return this.dependencies.environment?.() ?? serverEnvironment(); }
 
   private log(line: string): void {

@@ -162,9 +162,15 @@ export class DisclosureGate {
     // A person memory cannot be resolved here and may be from an unnamed guest's call.
     if (id.startsWith('person:')) return false;
     if (id.startsWith('impression:')) return this.allowsImpression(id);
+    // Decided once a gate (the state and the turns it reads do not change under it): a turn's recalls overlap with every other turn's.
+    const known = this.sourceDecisions.get(id);
+    if (known !== undefined) return known;
     const item = this.labelled(id);
-    return item ? this.allows(id, item.disclosure) : this.allows(id, this.experience(id)?.disclosure);
+    const decided = item ? this.allows(id, item.disclosure) : this.allows(id, this.experience(id)?.disclosure);
+    this.sourceDecisions.set(id, decided);
+    return decided;
   }
+  private readonly sourceDecisions = new Map<string, boolean>();
 
   /**
    * An impression that was in front of her: the owner's own by its label and the labels of the turns it was
@@ -210,9 +216,36 @@ export class DisclosureGate {
     return item ? this.marker(id, item.disclosure) : this.marker(id, this.experience(id)?.disclosure);
   }
 
+  /** The labelled items by id, built once (a turn asks for each recalled id of every remembered turn: a scan per ask was 40% of a voice turn's read). A fact first, then a relationship, then a promise, as the scan took them. */
+  private labelledItems?: Map<string, { id: string; disclosure?: MemoryDisclosure | undefined }>;
   private labelled(id: string) {
-    return this.state.userFacts.find(item => item.id === id) ?? this.state.relationships.find(item => item.id === id)
-      ?? this.state.prospectiveMemories.find(item => item.id === id);
+    if (!this.labelledItems) {
+      const items = new Map<string, { id: string; disclosure?: MemoryDisclosure | undefined }>();
+      for (const item of [...this.state.userFacts, ...this.state.relationships, ...this.state.prospectiveMemories]) if (!items.has(item.id)) items.set(item.id, item);
+      this.labelledItems = items;
+    }
+    return this.labelledItems.get(id);
+  }
+
+  /**
+   * Reads the turns the candidates recalled that are not among the candidates, in as few reads as possible (one a time: a read each, about
+   * a thousand turns over). What is read is what `experience` would have read one by one; a turn that is not found is remembered as not found.
+   */
+  prime(candidates: readonly Pick<ShannonExperience, 'recalledMemoryIds'>[]): void {
+    if (this.ownerOnly || !this.store?.experiencesById) return;
+    const wanted = new Set<string>();
+    for (const turn of candidates) {
+      for (const id of turn.recalledMemoryIds ?? []) {
+        if (/^(?:thread|knowledge|person|impression):/u.test(id) || this.experiences.has(id) || this.labelled(id)) continue;
+        wanted.add(id);
+      }
+    }
+    const ids = [...wanted];
+    for (let from = 0; from < ids.length; from += 200) {
+      const chunk = ids.slice(from, from + 200);
+      const found = new Map(this.store.experiencesById(this.scopeKey, chunk).map(turn => [turn.id, turn] as const));
+      for (const id of chunk) this.experiences.set(id, found.get(id) ?? null);
+    }
   }
 
   private experience(id: string): ShannonExperience | null {

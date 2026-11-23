@@ -101,6 +101,19 @@ function read(observation: BodyObservation, at: number): Reading {
     crystals: crystals > 0 ? crystals : null, armor: fullArmor(counts), lavaDistance: mapLavaDistance(world.mapSummary) };
 }
 
+/**
+ * What the game's own name for a death says, in her words (`minecraft:arrow` is an arrow, not a zombie): the writer is shown Japanese, so it
+ * has no English name to guess a mob from. A cause not in the list is left out (the fact line then says it is not known), never guessed.
+ */
+const DEATH_CAUSES: Readonly<Record<string, string>> = Object.freeze({
+  arrow: '矢で撃たれた', mob_attack: 'モンスターに殴られた', player_attack: '人に攻撃された', fall: '高い所から落ちた', drown: 'おぼれた', lava: '溶岩に落ちた',
+  in_fire: '火に焼かれた', on_fire: '火に焼かれた', explosion: '爆発に巻き込まれた', 'explosion.player': '爆発に巻き込まれた', starve: 'お腹がすきすぎた', magic: '魔法のダメージ',
+  fireball: '火の玉に当たった', thorns: 'とげにやられた', cactus: 'サボテンに刺された', fly_into_wall: '壁にぶつかった', out_of_world: '世界の外に落ちた',
+  wither: 'ウィザーのダメージ', trident: 'トライデントに刺された', sting: '蜂に刺された', sweet_berry_bush: 'ベリーのとげにやられた', freeze: '凍えた',
+  lightning_bolt: '雷に打たれた', hot_floor: '熱い床で焼けた', stalagmite: '鍾乳石に刺された', falling_anvil: 'かなとこが落ちてきた', falling_block: 'ブロックが落ちてきた',
+});
+export const deathCauseWords = (cause: string): string => DEATH_CAUSES[cause.replace(/^minecraft:/u, '')] ?? '';
+
 type Facts = Record<string, LiveScalar>;
 export interface MomentDetector {
   /** The moments this frame shows beside the one before (none for the first). `at`: milliseconds since the epoch. */
@@ -133,7 +146,7 @@ export function createMomentDetector(options: { wanted?: () => ReadonlyMap<strin
   function life(now: Reading, prev: Reading, observation: BodyObservation, at: number): LiveMoment[] {
     const world = record(observation.state.world) ?? {};
     if (prev.alive && !now.alive) {
-      const last = list(world.deaths).at(-1), cause = typeof last?.cause === 'string' && /^[a-z_:]{1,40}$/u.test(last.cause) ? last.cause : '';
+      const last = list(world.deaths).at(-1), cause = deathCauseWords(typeof last?.cause === 'string' && /^[a-z_:]{1,40}$/u.test(last.cause) ? last.cause : '');
       armed.life = true;
       return [make('died', at, { cause })];
     }

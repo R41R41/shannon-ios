@@ -111,7 +111,7 @@ function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: 
     async write(request) {
       const { system, message } = liveWriterPrompt({ identity: identity(), persona: persona(), body: live.block({ alone: false, participants: true }), ...request });
       const result = await parts.model.generate({ scopeKey: parts.scopeKey, systemPrompt: system, history: [], message, skipThinking: true });
-      return cleanLiveLine(result.reply, { voice: request.voice, done: request.main.kind === 'task_done' });
+      return cleanLiveLine(result.reply, { voice: request.voice, done: request.main.kind === 'task_done', danger: request.main.kind === 'near_death' || request.main.kind === 'died' });
     },
     delivered(told) {
       log(`Shannon Minecraft live delivered id=${told.id} kind=${told.moment.kind} outcome=${told.outcome} length=${told.text.length}`);
