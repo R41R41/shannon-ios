@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { heldOfFrame } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
-import { forgetNightWaitHolds, NIGHT_WAIT_HOLDS, NIGHT_WAIT_WINDOW_MS, nightWaitHold } from '../src/surfaces/minecraft/minecraftLlmcNightWaitHold.js';
+import { forgetNightWaitHolds, NIGHT_WAIT_HOLDS, NIGHT_WAIT_WINDOW_MS, nightWaitHold, registerSingleRequest } from '../src/surfaces/minecraft/minecraftLlmcNightWaitHold.js';
 import { forgetSleepHolds } from '../src/surfaces/minecraft/minecraftLlmcSleepHold.js';
 import { forgetTableHolds, tableDescentHold } from '../src/surfaces/minecraft/minecraftLlmcTableHold.js';
 import { expandShortAct } from '../src/contracts/minecraftActShortContract.js';
@@ -23,6 +23,13 @@ const sealWait = { hands: [{ do: 'vertical', dir: 'down', toY: 60 }, { do: 'plac
 beforeEach(() => { forgetNightWaitHolds(); forgetSleepHolds(); forgetTableHolds(); });
 
 describe('the night\'s wait with the way down open', () => {
+  it('a one-thing request\'s night is not held (its line has no way down); a task not told as one is held as before', () => {
+    registerSingleRequest('one', true);
+    expect(nightWaitHold(sealWait, frame(KIT), 'one')).toBeNull();
+    expect(nightWaitHold(sealWait, frame(KIT), 'dragon')).not.toBeNull();
+    registerSingleRequest('one', false);
+    expect(nightWaitHold(sealWait, frame(KIT), 'one')).not.toBeNull();
+  });
   it('sends the seal and holds the wait, with the night line\'s act', () => {
     const held = nightWaitHold(sealWait, frame(KIT), 't1');
     expect(held).toMatchObject({ hand: 3, kind: 'wait' });

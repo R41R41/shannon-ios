@@ -41,3 +41,11 @@ describe('the night with no bed, one thing asked: the live and the stage say the
     expect(all).toContain('持ち主がベッドなどそれ自体を頼んだ時は別');
   });
 });
+
+describe('the night\'s reach (11/23, replay: a 32 m walk to sheep at dusk in 5 of 13)', () => {
+  it('says the reach with its reason, in the live line and the stage line alike', () => {
+    expect(REQUEST_NIGHT_WAY).toContain('20〜25m を超えて出ない');
+    expect(REQUEST_NIGHT_WAY).toContain('暗いと敵が湧き');
+    expect(REQUEST_NIGHT_LINE).toContain('20〜25m');
+  });
+});
