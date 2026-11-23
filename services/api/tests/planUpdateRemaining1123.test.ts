@@ -96,3 +96,23 @@ describe('the list, the history and the recalled words are dated', () => {
     expect(voiceHistoryProjection([{ role: 'user', content: 'こんにちは' }])).toBe('[Recent conversation]\nUser: こんにちは');
   });
 });
+
+describe('a pair of ops that fit only together', () => {
+  it('keeps a target set in one op and its doneWhen in the next (the rule judges the whole, as before the ops were taken one by one)', () => {
+    const before = plan();
+    const check = (after: Parameters<typeof targetUpdateProblem>[1]) => targetUpdateProblem(before, after, null);
+    const pair = [{ op: 'set' as const, id: 'p1.1', target: { item: 'sheep', count: 3 } }, { op: 'set' as const, id: 'p1.1', doneWhen: 'have:sheep>=3' }];
+    const result = applyPlanUpdate(before, { ops: pair }, { partial: true, check });
+    expect(result.problem).toBeNull();
+    expect(result.rejected).toBeUndefined();
+    expect(result.tree.nodes.find(node => node.id === 'p1.1')?.doneWhen).toBe('have:sheep>=3');
+  });
+  it('still turns away an op that does not fit even as a whole', () => {
+    const before = plan();
+    const check = (after: Parameters<typeof targetUpdateProblem>[1]) => targetUpdateProblem(before, after, null);
+    const ops = [{ op: 'set' as const, id: 'p1.1', target: { item: 'sheep', count: 3 } }, { op: 'set' as const, id: 'p1.2', title: '小麦を3つ育てる' }];
+    const result = applyPlanUpdate(before, { ops }, { partial: true, check });
+    expect(result.rejected?.length).toBe(1);
+    expect(result.tree.nodes.find(node => node.id === 'p1.2')?.title).toBe('小麦を3つ育てる');
+  });
+});

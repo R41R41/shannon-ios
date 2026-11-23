@@ -406,8 +406,7 @@ export function applyPlanUpdate(tree: PlanTree, update: PlanUpdate, context: Pla
   if (typeof goal === 'string' && !isText(goal, PLAN_LIMITS.goal)) {
     return { tree, changed: false, problem: `goal は ${PLAN_LIMITS.goal}字までの文（消すなら null）` };
   }
-  const edit = new PlanEdit(tree, context);
-  const applied = applyOps(edit, tree, ops, context);
+  const { edit, applied } = runOps(tree, ops, context);
   if (applied.problem) return { tree, changed: false, problem: applied.problem, ...(applied.rejected.length ? { rejected: applied.rejected } : {}) };
   const rejected = applied.rejected;
   const current = settleCurrent(edit, update.current);
@@ -428,21 +427,32 @@ function finishUpdate(edit: PlanEdit, tree: PlanTree, goal: string | null | unde
      p: next.promises, g: next.goal });
   return { tree: changed ? next : tree, changed, problem: null, ...(rejected.length ? { rejected } : {}) };
 }
-/**
- * The ops in order. All or nothing without `partial`: the first op that does not fit is the problem. With it, an op that does not fit (or after which
- * `check` names a problem) is put back and listed in `rejected`; the problem is only that none was applied.
- */
-function applyOps(edit: PlanEdit, tree: PlanTree, ops: readonly PlanOp[], context: PlanUpdateContext): { problem: string | null; rejected: string[] } {
+type OpsApplied = { problem: string | null; rejected: string[]; byCheck: boolean };
+/** The ops on a new edit. A misfit op may be half of a pair (target, then doneWhen): the whole as written is tried once and kept if it fits. */
+function runOps(tree: PlanTree, ops: readonly PlanOp[], context: PlanUpdateContext): { edit: PlanEdit; applied: OpsApplied } {
+  const edit = new PlanEdit(tree, context);
+  const applied = applyOps(edit, tree, ops, context);
+  if (!applied.byCheck) return { edit, applied };
+  const whole = new PlanEdit(tree, context);
+  const all = applyOps(whole, tree, ops, { ...context, check: undefined });
+  const fits = !all.problem && !all.rejected.length && !context.check!(whole.toTree(tree));
+  return fits ? { edit: whole, applied: all } : { edit, applied };
+}
+/** The ops in order. All or nothing without `partial`; with it a misfit op is put back and listed in `rejected`. */
+function applyOps(edit: PlanEdit, tree: PlanTree, ops: readonly PlanOp[], context: PlanUpdateContext): OpsApplied {
   const rejected: string[] = [];
+  let byCheck = false;
   for (const [index, op] of ops.entries()) {
     const saved = context.partial ? edit.snapshot() : null;
-    const problem = edit.apply(op) ?? (saved && context.check ? context.check(edit.toTree(tree)) : null);
+    const applyProblem = edit.apply(op);
+    const problem = applyProblem ?? (saved && context.check ? context.check(edit.toTree(tree)) : null);
     if (!problem) continue;
-    if (!saved) return { problem: `ops[${index}]: ${problem}`, rejected };
+    if (!applyProblem) byCheck = true;
+    if (!saved) return { problem: `ops[${index}]: ${problem}`, rejected, byCheck };
     edit.restore(saved);
     rejected.push(`ops[${index}]: ${problem}`);
   }
-  return { problem: rejected.length && rejected.length === ops.length ? rejected.join('\n') : null, rejected };
+  return { problem: rejected.length && rejected.length === ops.length ? rejected.join('\n') : null, rejected, byCheck };
 }
 const PROBLEM_WORDS: Readonly<Record<string, string>> = { PLAN_TOO_MANY: `節は ${PLAN_LIMITS.nodes} 個まで`, PLAN_DEPTH: `深さは ${PLAN_LIMITS.depth} まで`,
   PLAN_PROMISES: '約束の形が合わない' };
