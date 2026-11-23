@@ -97,18 +97,19 @@ describe('the claim of the body and the slot waits for the hold of the work the 
     expect(f.count().dispatches).toBe(1);
   });
 
-  it('claims the slot after the operation that just ended lets it go, withdrawing each refused claim', async () => {
+  it('claims the slot after the operation that just ended lets it go, keeping the queued row between looks', async () => {
     const f = runnerOf({ dispatchAfter: 0, claimAfter: 3 });
     const own = await f.runner.admit(f.draft, true, wait);
     expect(own).not.toBeNull();
     expect(f.count().claims).toBe(4);
-    expect(f.withdrawn).toHaveLength(3);
+    expect(f.withdrawn).toHaveLength(0);
     own!.stop();
   });
 
   it('returns null, as before, when the slot stays taken after the limit', async () => {
     const f = runnerOf({ dispatchAfter: 0, claimAfter: Infinity });
     expect(await f.runner.admit(f.draft, true, { ms: 40, stepMs: 5 })).toBeNull();
+    expect(f.withdrawn).toEqual(['own']);
     const once = runnerOf({ dispatchAfter: 0, claimAfter: Infinity });
     expect(await once.runner.admit(once.draft, true)).toBeNull();
     expect(once.count().claims).toBe(1);

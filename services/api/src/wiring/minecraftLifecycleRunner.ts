@@ -42,12 +42,11 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
     async admit(draft: ActionDraft, withdraw: boolean, wait?: ClaimWait): Promise<RunningAction | null> {
       const claim = async (): Promise<RunningAction | null> => {
         let claimed: RunningAction | null = null;
-        // A slot held by the operation that just ended is looked at again for `wait`; each refused claim is withdrawn before the next.
+        // A slot held by the operation that just ended is looked at again for `wait`. The queued row stays between looks (the store keys a
+        // row by its source: a withdrawn one is cancelled for good and a second claim of it never succeeds); it is withdrawn once, below.
         const blocked = async () => {
           claimed = await acquireAction(parts.actions, { ...draft, kind: 'minecraft' }, controller.signal);
-          if (claimed || !withdraw || !wait) return false;
-          await withdrawQueued(parts.actions, draft);
-          return true;
+          return !claimed && !!wait;
         };
         await waitWhileBlocked(blocked, wait?.ms ?? 0, wait?.stepMs ?? 0);
         return claimed;
