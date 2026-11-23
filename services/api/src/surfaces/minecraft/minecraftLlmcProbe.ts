@@ -350,8 +350,10 @@ export function scanLines(scan: unknown, shownAt: string | null): { lines: strin
   // r5: the body's first row says the range it read (「範囲 読み込み …」), so one row more is shown (still 10 lines at most).
   const rows = (Array.isArray(value.rows) ? value.rows : []).filter(row => typeof row === 'string').slice(0, portal ? 8 : 9).map(row => row.slice(0, 120));
   const words = { login: 'ログイン', reconnect: '再接続', respawn: 'リスポーン', portal: '次元の移動' } as Record<string, string>;
+  const base = value.center && Number.isFinite(value.center.x) && Number.isFinite(value.center.y) && Number.isFinite(value.center.z)
+    ? `・基点 (${Math.floor(value.center.x)},${Math.floor(value.center.y)},${Math.floor(value.center.z)})` : '';
   return { at: value.at, lines: [`走査（${words[value.trigger ?? ''] ?? '体'}の後${value.dimension ? `・${String(value.dimension).replace(/^minecraft:/u, '')}` : ''}`
-    + `${typeof value.reach === 'number' ? `・${Math.round(value.reach)}m 内` : ''}）: ${value.text.slice(0, 300)}`, ...rows,
+    + `${typeof value.reach === 'number' ? `・${Math.round(value.reach)}m 内` : ''}・${value.at.slice(0, 19)}${base}。読んだ時の物）: ${value.text.slice(0, 300)}`, ...rows,
     ...(portal ? ['次元が変わった（この走査は新しい次元のもの）。計画の次の節を、この走査と landmarks で見直す'] : [])] };
 }
 /** The scan as the first plan reads it: its words and every row. */
@@ -359,7 +361,11 @@ export function scanForPlan(scan: unknown): string | null {
   const value = plain(scan) as Partial<WorldScan> | null;
   if (!value || typeof value.text !== 'string') return null;
   const rows = (Array.isArray(value.rows) ? value.rows : []).filter(row => typeof row === 'string').slice(0, 20);
-  return [value.text.slice(0, 400), ...rows.map(row => `- ${row.slice(0, 160)}`)].join('\n');
+  // The time and the base point head it: the rows' directions and distances are from the base, and the rows are what was read then.
+  const base = value.center && Number.isFinite(value.center.x) && Number.isFinite(value.center.y) && Number.isFinite(value.center.z)
+    ? `・基点 (${Math.floor(value.center.x)},${Math.floor(value.center.y)},${Math.floor(value.center.z)})` : '';
+  const head = `読んだ時刻 ${typeof value.at === 'string' ? value.at.slice(0, 19) : '不明'}${base}。方角・距離は基点から。読んだ時の物で、着く頃には変わる`;
+  return [head, value.text.slice(0, 400), ...rows.map(row => `- ${row.slice(0, 160)}`)].join('\n');
 }
 
 /** For tests: no task holds a watch. */

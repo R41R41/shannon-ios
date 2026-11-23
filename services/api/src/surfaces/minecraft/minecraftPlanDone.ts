@@ -175,7 +175,12 @@ export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): bool
 /** A clause as the status says it: `iron_leggings 0/1`, `食料 32/40 点`, `次元 the_nether`, `(10,64,5) から 12m`. */
 function clauseWords(clause: DoneClause, facts: DoneFacts): string {
   switch (clause.kind) {
-    case 'have': return `${clause.item} ${Math.min(acquired(facts.counts, clause.item), clause.count)}/${clause.count}`;
+    case 'have': {
+      const words = `${clause.item} ${Math.min(acquired(facts.counts, clause.item), clause.count)}/${clause.count}`;
+      // Wheat is the slowest material to come (it grows): its lack says the seeds she holds and that it takes time, so the lack is read as a thing to start, not to wait for.
+      return clause.item === 'wheat' && acquired(facts.counts, 'wheat') < clause.count
+        ? `${words}（種 ${carried(facts.counts, 'wheat_seeds')} 個。育つまで時間がかかる（骨粉で短くなる）ので植えるのは早い方がよい）` : words;
+    }
     case 'act': return clauseLack(clause.clause, facts);
     case 'food': return foodPointsWords(facts.food, clause.points);
     case 'stock': return clause.what === 'food' ? foodStockWords(facts.food, facts.foodNear, facts.foodHay) : woodStockWords(woodLogs(facts.counts), facts.woodNear);

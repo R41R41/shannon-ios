@@ -246,7 +246,7 @@ describe('the lifecycle investigates before the decision and says it first in th
     scan = { trigger: 'portal', at: '2026-10-22T04:00:00Z', dimension: 'the_nether', text: 'ネザーの幹 4m 東、溶岩の海 20m 下', reach: 160,
       rows: ['W crimson_stem (11,35,13) 東4m', 'N nether_bricks (200,60,40) 東190m 要塞'] };
     lifecycle.context();
-    expect((lifecycle.transient!() as { scan: string[] }).scan).toEqual(['走査（次元の移動の後・the_nether・160m 内）: ネザーの幹 4m 東、溶岩の海 20m 下',
+    expect((lifecycle.transient!() as { scan: string[] }).scan).toEqual(['走査（次元の移動の後・the_nether・160m 内・2026-10-22T04:00:00。読んだ時の物）: ネザーの幹 4m 東、溶岩の海 20m 下',
       'W crimson_stem (11,35,13) 東4m', 'N nether_bricks (200,60,40) 東190m 要塞', '次元が変わった（この走査は新しい次元のもの）。計画の次の節を、この走査と landmarks で見直す']);
     lifecycle.context();
     expect(lifecycle.transient!()).not.toHaveProperty('scan');
@@ -394,7 +394,7 @@ describe('the body\'s scan to the first plan (shared note 3; arch-check 6: run 2
   it('r4\'s input has the scan\'s words and rows; r3\'s has none', () => {
     const world = { position: at(-6, 69, 10), scan };
     const input = firstPlanInput('ネザーへ', world, { scan: true });
-    expect(input).toContain('走査（読み込み済みの範囲の目印）:\n160m 内に地表の原木なし。村なし。\n- C dungeon の箱 (10,20,5) 北40m');
+    expect(input).toContain('走査（読み込み済みの範囲の目印）:\n読んだ時刻 2026-10-22T04:00:00。方角・距離は基点から。読んだ時の物で、着く頃には変わる\n160m 内に地表の原木なし。村なし。\n- C dungeon の箱 (10,20,5) 北40m');
     expect(firstPlanInput('ネザーへ', world)).not.toContain('走査');
     expect(scanForPlan(undefined)).toBeNull();
   });

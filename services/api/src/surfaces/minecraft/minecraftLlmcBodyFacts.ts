@@ -156,10 +156,10 @@ export function readinessParts(
       }),
       fuelShortage(facts.world, facts.counts, nowKinds(planFacts)),
       parallelFurnaceLine(facts.world, facts.counts),
-      ironSearchLine(facts.world, facts.counts, facts.dimension, tree?.nodes.find(node => node.id === tree.current)),
+      ironSearchLine(facts.world, facts.counts, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.at ?? null),
       sheepAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
       goldAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
-      foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.counts, tree?.nodes),
+      foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.counts, tree?.nodes, facts.at ?? null),
       targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),
     ]
       .filter(Boolean)
@@ -176,8 +176,8 @@ export function readinessParts(
   // end1109o03: the night with no bed: the choices before the plan's now (`nightChoiceLine`); end1109o04: by day with a bed, the day is the plan's (`dayBedLine`).
   const done = doneFacts(observation);
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
-    facts.food) : null;
-  const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl')) : null);
+    facts.food, llmc.singleRequest !== true) : null;
+  const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true) : null);
   // Run 6 (2026-11-11): while a furnace works, the hands to take instead of standing (the iron and coal in reach, the plan's next section that does not need the furnace's output),
   // said first like the night's choices (the replay of the night's line moved 3/6 to 6/6); the same choices are in the hold of a long wait (`furnaceStandHold`).
   const meanwhile = planNow ? furnaceMeanwhileLine(facts.world, facts.counts, nodes, display?.current ?? tree?.current ?? null, taskId) : null;
@@ -194,7 +194,7 @@ export function readinessParts(
     ...(planNow ? { planNow: huntWaits ? `${[meanwhile, night].filter(Boolean).join('。')}。今の節 ${planNow} は地上の用事なので朝へ回す（夜の地上は骸骨・クリーパー・ゾンビが多い。朝になったら続ける）。${underNode ? `夜の間は地下の節 [${underNode.id}] ${underNode.title} を進める（地下の暗さは昼も夜も同じ）` : '夜の間は地下で鉱石を掘る'}`
       : [meanwhile, night, first].filter(Boolean).length ? `${[meanwhile, night, first].filter(Boolean).join('。')}。その後に今の節 ${planNow}` : planNow } : {}),
     ...(shortage ? { shortage } : {}),
-    ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes), route),
+    ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes, facts.at ?? null), route),
     ...(planFacts ? { planFacts } : {}),
     ...(onceFacts?.length ? { onceFacts } : {}),
   };

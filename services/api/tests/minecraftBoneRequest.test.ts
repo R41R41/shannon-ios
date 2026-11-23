@@ -88,9 +88,9 @@ describe('a request of one thing asked with a method (bone meal): the words that
     expect(request).not.toContain('穴に入るのは寝る時だけ');
   });
 
-  it('keeps the whole game\'s night line as it was: a hole is for sleeping, the pen is not forbidden', () => {
+  it('keeps the whole game\'s night line: a hole is the entrance to the work underground (as the night\'s choice A says), not a place to wait; the pen is not forbidden', () => {
     const whole = stageKnowledge({ body: { state: { dimension: 'overworld' } } })!;
-    expect(whole).toContain('穴に入るのは寝る時だけ');
+    expect(whole).toContain('穴に入るのは、石のツルハシがあり、地下で鉱石を掘る作業がある時に、塞いだ縦穴を下りる入口にする場合だけ');
     expect(whole).not.toContain(REQUEST_NIGHT_LINE);
   });
 

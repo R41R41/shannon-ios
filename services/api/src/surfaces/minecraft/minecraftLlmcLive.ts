@@ -151,7 +151,8 @@ function nearbyField(world: Record<string, unknown>, planNow: string | null | un
   const at = world.position as { x?: unknown; y?: unknown; z?: unknown } | undefined;
   const feet = at && [at.x, at.y, at.z].every(value => typeof value === 'number' && Number.isFinite(value))
     ? { x: Math.floor(at.x as number), y: Math.floor(at.y as number), z: Math.floor(at.z as number) } : null;
-  const lines = nearbyLines(nearbyResourcesOf(world.nearbyResources), feet, planNow ?? '');
+  // A young crop's place is left out of its row unless she holds bone meal (using it needs the cell): `QUIET_UNRIPE_WORDS` in minecraftLlmcNearby.ts.
+  const lines = nearbyLines(nearbyResourcesOf(world.nearbyResources), feet, planNow ?? '', !JSON.stringify(world.inventory ?? '').includes('bone_meal'));
   return lines.length ? { nearby: lines } : {};
 }
 

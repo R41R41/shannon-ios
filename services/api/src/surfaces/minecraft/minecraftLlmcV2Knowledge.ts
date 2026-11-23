@@ -110,7 +110,8 @@ const LONG_WALK = '- 地上の長い歩き（1 km 超）は朝に出る。ベッ
 const PREP_NIGHT_STOP = '- ベッドがあれば、11500 を過ぎて地上にいたら長い移動・探索を始めず、洞窟から離れた岩の中に 1×2 を掘って塞ぎ、12542 に寝る（敵は壁越しでも水平 8・上下 5 で寝させない）。'
   + 'sleep の手は起きたらベッドを拾い直す。鉄の兜・胸の前は夜に地上を歩かない。地上に着くのが 12500〜23500 になるなら岩の中で寝てから上る。';
 /** Run qr7 (a cake, 65 moves): with no bed and no weapon the night's line may have been read as 「dig a hole and wait」, which does not bring the morning (a hypothesis, not confirmed). */
-const NO_BED_NIGHT = '- ベッドが無い間は、岩の中で待っても朝は早く来ない（時間が過ぎるだけ）。夜は、囲いか水辺・草原の近くでできる仕事（作業台での製作、牛や鶏の近くの作業）を進め、洞窟と遠出だけ朝にする。穴に入るのは寝る時だけ。';
+const NO_BED_NIGHT = '- ベッドが無い間は、岩の中で待っても朝は早く来ない（時間が過ぎるだけ）。穴に入るのは、石のツルハシがあり、地下で鉱石を掘る作業がある時に、塞いだ縦穴を下りる入口にする場合だけ（夜の促しの A と同じ。待つためではない）。'
+  + 'それ以外の夜は、囲いか水辺・草原の近くでできる仕事（作業台での製作、牛や鶏の近くの作業）を進め、洞窟と遠出だけ朝にする。理由: 穴で待つのは時間が過ぎるだけで、実走では夜の穴に 13 回入り、掘れずに止まった。';
 /**
  * With 12 eyes on the ground the stages are prep and stronghold at once, and prep's "walk long ways in the morning" and "stop starting at 11500"
  * went in with the stronghold's "go on through the night, no hole before dark" (the outside review of 11/10, Q1; end1109s14's detour to a village
@@ -200,7 +201,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // (margin.descentKit / gated never reaches the head's input: read1107d3 found it in none of the 285 non-assistant entries, so it is not explained here.)
     '- ベッドが無い夜（暗くなる少し前から朝まで）の順番: '
       + '① 木・葉・柱の上なら、まず地面（土・石の上）へ下りる（葉や空気の隣には何も置けない）。'
-      + '② その場で足元を 2 段掘って入り（vertical の shaft で toY を今の足の y−2）、頭の上に土か丸石を 1 個置いて塞ぐ。4 方に壁を建てるより速く、地面ならどこでも作れる囲い。'
+      + '② その場で足元を 2 段掘って入り（vertical の shaft で toY を今の足の y−2）、頭の上に土か丸石を 1 個置いて塞ぐ。4 方に壁を建てるより速く、地面ならどこでも作れる囲い（③で地下へ掘り下る入口にするためで、石のツルハシが無い時や地下の作業が無い時は、ここで待たない）。'
       + '③ 石のツルハシがあれば、その底から facts の「鉄」の行の鉄鉱石へ vertical（stairs）で toY まで掘り下り、鉄・石炭を掘る（「鉄」の行が無ければ mc_probe kind=scan の鉄鉱石の行の座標へ）（地下の暗さは昼も夜も同じで、塞いだ縦穴なら夜でも危険は増えない。洞窟に抜けたら塞ぐ）。'
       + '満腹度 14・体力 16 以上なら食料 40 点の前でもよい。石のツルハシが無ければ、囲いの中で工作・調理をする。'
       + '④ 囲いの外で wait しない（外の待ちは敵に見つかる）。朝になったら地上へ戻り、食料とベッドの続きをする（ベッドが一番: 寝れば夜を飛ばせる）。',
@@ -243,7 +244,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 村（landmarks の B 村・走査のベッド）は鉄より前に回る。1 周は約 2.5 分（以前の通し: ベッド 6＋パン 12 が 146 秒）。ベッド 1 個を羊で作ると 100 秒ほど、干し草 1 個＝パン 3。ベッド 8 個（竜戦の最低）に足りない間は回る。',
     '  取り方: 家の外 3〜4m に go X,Y,Z range=3 → dig ベッドの座標 takeOk（壁は体が壊す）→ pickup。箱は 3〜4m まで go してから chest X,Y,Z takeAll（chest は歩かない）。go の行き先を家の中のマスにしない・go に takeOk は付けない。鉄ゴーレムと村人は打たない。',
     PREP_RULES_WORDS,
-    '- 鉄は facts の「鉄」の行・走査の鉄鉱石の行・地図の i の座標へ掘りに行く（全体では y=16 前後に多いが、座標の分かる鉄があれば y=16 まで下りなくてよい。埋まった近い鉄は遠くの空気に面した鉄より早い）。ダイヤは y=-58 前後（d、鉄のツルハシ）。水バケツは水源（w）に use bucket（流れ - からは汲めない）。体が乾いた床の立ち位置を探し、間に石が 1 枚なら開けて汲んで塞ぐ（塞ぐ dirt か cobblestone を 1 個持っておく）ので、石を自分で dig しない（水の壁を dig すると坑道が水没して出られなくなる）。',
+    '- 鉄は facts の「鉄」の行・走査の鉄鉱石の行・地図の i の座標へ掘りに行く（全体では y=16 前後に多いが、座標の分かる鉄があれば y=16 まで下りなくてよい。埋まった近い鉄は遠くの空気に面した鉄より早い。鉄は地表〜y=70 の岩・谷・洞窟の壁にも出る。理由: 階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へ go で掘り進むと約 13 秒で 3 個だった）。ダイヤは y=-58 前後（d、鉄のツルハシ）。水バケツは水源（w）に use bucket（流れ - からは汲めない）。体が乾いた床の立ち位置を探し、間に石が 1 枚なら開けて汲んで塞ぐ（塞ぐ dirt か cobblestone を 1 個持っておく）ので、石を自分で dig しない（水の壁を dig すると坑道が水没して出られなくなる）。',
+    '- 調べた結果（mc_probe・mc_view・column）が、live の行・走査の行・計画の where・記憶と食い違ったら、結果を信じる。その判断のうちに plan_update で where か note を直し（場所が無いなら set で where を "" にして note に「ここには無かった」）、同じ場所を 2 回確かめない。'
+    + '理由: 走査の行は spawn の時に 1 回読んだだけの物で、毎判断出続けるため、直さないと次の判断でまた古い行を信じて同じ場所へ戻る。「空気」「丸石」「該当 0」と出た場所には、その物は今無い。',
     '- 鉱石（鉄・石炭・ダイヤ・銅）は mine ブロック名 X,Y,Z の 1 マスだけ書く。つながった鉱脈は体が全部たどって拾う（count は要る個数。dig の並べ書きは遅く落とし物も落とす）。dig は岩・土・木だけ。',
     // Fix 11/13 (G4, M7, M2, P11): the stairs down to the ore, the diagonal, and the drop that lies in rock.
     '- 鉄・ダイヤへ stairs で下りる: 荷に丸石があるのが普通なので liquid=seal place=cobblestone で書く（stop は止まって判断し直す 1 回が、塞ぐ数秒より高い）。丸石が 20 個未満の時だけ liquid=stop。'

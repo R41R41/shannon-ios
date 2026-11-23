@@ -13,6 +13,7 @@ import { PLAN_FACTS_KEY,type PlanFacts } from './minecraftPlanFacts.js';
 import { round1 } from './minecraftTransientObservation.js';
 import { foodChoices, foodYieldWords, huntWeaponIn } from './minecraftFoodAcquisition.js';
 import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
+import { agedScan } from './minecraftLlmcScanAge.js';
 import { AIRISH, readLayers, type Layers } from './minecraftLlmcPreflightMap.js';
 export { FACT_WINDOW_MS, controlOf, lifeOf, holderWords, holderLine, createHitWatch } from './minecraftLlmcHealth.js';
 export type { Hit, HitWatch } from './minecraftLlmcHealth.js';
@@ -90,7 +91,7 @@ export function wantsFood(parts: { fullness: number | null; points: number; shor
     ...parts.recovery?.length ? { recovery: [...parts.recovery] } : {}, ...parts.planFacts ? { [PLAN_FACTS_KEY]: parts.planFacts } : {} }).food;
 }
 /**
- * The village's food from the body: the hay, the fields and the crops of its nearby count (`nearbyResources`, purpose food_village), else the first scan's rows.
+ * The village's food from the body: the hay, the fields and the crops of its nearby count (`nearbyResources`, purpose food_village), else the scan's rows (read once, kept; aged and marked as a scan).
  * Said before the animals (run 7: a cow was the first candidate, with points, and the village's hay none, so a cow was hunted bare-handed): the foods that
  * need no fire first, with their points, then the animals with what they need. Null when none is known.
  */
@@ -99,10 +100,18 @@ function villageFoodWords(observation: BodyObservation | null): string | null {
   const feet = at && finite(at.x) !== null && finite(at.y) !== null && finite(at.z) !== null
     ? { x: Math.floor(Number(at.x)), y: Math.floor(Number(at.y)), z: Math.floor(Number(at.z)) } : null;
   const body = nearbyLines(nearbyResourcesOf(w.nearbyResources).filter(item => item.purpose === 'food_village' && item.count > 0), feet);
-  const scan = rec(w.scan), rows = Array.isArray(scan?.rows) ? (scan!.rows as unknown[]).filter((row): row is string => typeof row === 'string' && /^(?:干し草|畑|作物)/u.test(row)) : [];
-  const places = body.length ? body.map(line => line.replace(/^食料（村）: /u, '')) : rows.slice(0, 3).map(row => row.slice(0, 60));
-  return places.length ? `村の食べ物: ${places.join('・')}（干し草は 1 個でパン 3＝約 33 点・焼かずに食べられる。hay_block→wheat→bread は make。育った作物は収穫）` : null;
+  const stateAt = Date.parse(observation?.stateAt ?? '');
+  // The scan is read once at a spawn: its rows go through `agedScan` (the one judgment of age and base) and are said as a scan, never as what is seen now.
+  const scan = agedScan(w.scan, Number.isFinite(stateAt) ? stateAt : null, feet);
+  const rows = scan.rows.filter(row => /^(?:干し草|畑|作物)/u.test(row)).slice(0, 3).map(row => row.slice(0, 80));
+  const seenHay = (Array.isArray(rec(w.scan)?.rows) ? rec(w.scan)!.rows as unknown[] : []).some(row => typeof row === 'string' && /^干し草/u.test(row));
+  // The know-how of hay is not a row: it stays when a row is dropped for its age (she may be standing in the village).
+  const knowHow = `（${HAY_KNOW_HOW}）`;
+  if (body.length) return `村の食べ物: ${body.map(line => line.replace(/^食料（村）: /u, '')).join('・')}${knowHow}`;
+  if (rows.length) return `村の食べ物（${scan.mark}）: ${rows.join('・')}${knowHow}`;
+  return seenHay ? `村の食べ物: 干し草などの走査の行は古いので今は未確認${knowHow}` : null;
 }
+const HAY_KNOW_HOW = '干し草は 1 個でパン 3＝約 33 点・焼かずに食べられる。hay_block→wheat→bread は make。育った作物は収穫';
 export function foodLine(observation: BodyObservation | null, shown: number): string | null {
   const list = foodChoices(foodCandidates(observation), shown, FOOD_FISH);
   const village = villageFoodWords(observation);

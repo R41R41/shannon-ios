@@ -6,6 +6,7 @@ import {
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { blazeShutLong } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
+import { whereCheckLine } from './minecraftLlmcWhereCheck.js';
 
 /**
  * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes
@@ -166,7 +167,9 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   // below the surface it is one not to be met now.
   const word = facts && undergroundInOverworld(facts) ? PREP_NOT_NOW : PREP_NOTE;
   const held = node.state !== 'done' && holdsNow(node) && status !== '満たしている' ? { ...node, note: node.note ? `${word} ${node.note}` : word } : node;
-  return currentNodeLine(held, shown?.path, status);
+  // The place it names, read against her feet and the body's count of what is round her (`whereCheckLine`: said at the node, where the coordinate is).
+  const check = node.state !== 'done' ? whereCheckLine(node, observation) : null;
+  return `${currentNodeLine(held, shown?.path, status)}${check ?? ''}`;
 }
 
 /** The work of the overworld, which is not what a body in the Nether or the End does now. */
