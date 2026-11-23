@@ -416,7 +416,7 @@ export class PlatformVoiceService {
         title: seat.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
         speakerName: seat.owner ? null : request.sourceDisplayName, humans: seat.humans.size, fillerText: filler?.text,
       }),
-      situationBlock(situation, running),
+      situationBlock(situation, running, body?.state.resting ?? []),
       answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
       intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE), speech, lifecycle, directedBlock(request.directed === true, who, intent !== ''),

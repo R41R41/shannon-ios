@@ -37,7 +37,7 @@ export function platformVoiceInstructions(facts: VoiceDeliveryFacts): string {
     `いまボクは、Discordのボイスチャンネル「${facts.title}」に入って、声で話している。この返事はそのまま声になって、いまそこにいる人みんなに聞こえる。`,
     facts.ownerAlone ? `いま聞こえているのは${SHANNON_OWNER_NAME}だけ。` : `そこには${facts.humans}人いる${others > 0 ? '（ボクのほかに）' : ''}。`,
     ...(facts.speakerName ? [`いま話しかけているのは「${facts.speakerName}」。`] : []),
-    '- 声に出して自然な日本語で、短く返す。たいてい1文、長くても2文で、全体で30〜40字を目安にする（上の「およそ60字」より、この通話ではこちらを優先する）。'
+    '- 声に出して自然な日本語で、短く返す。たいてい1文、長くても2文で、全体で40字までにする（目安は30〜40字。ほかに「およそ60字」とあっても、この通話では60字でなく、この40字までを守る）。'
       + '理由: 声は読むより遅く、60字を超えると10秒を超えて、相手の作業や次の言葉に重なってしまう。答えと、あれば一言の気持ちだけを言い、前置きや言い換えを足さない。説明が要る時も、いちばん大事な1点を1文で言う（足りなければ、相手が聞いてくれる）。'
       + '見出し・箇条書き・URL・絵文字・かっこでの補足は使わない。',
     '- 出だしは、毎回かえる。さっきの自分の返事と同じ言葉・同じ形（「ふふん、」「うん、」「えっと、」のあとに同じ続き）で始めない。出だしは、答えの中身（物の名前・やる事・気持ち）から入る。'
@@ -68,13 +68,14 @@ export function heardBlock(lines: readonly HeardLine[]): string {
 }
 
 /** The body's side of Minecraft, as the body's process described it, and the request under way (anyone in the channel may have made it). */
-export function situationBlock(situation: string | null, runningGoal: string | null): string {
+export function situationBlock(situation: string | null, runningGoal: string | null, resting: readonly string[] = []): string {
   if (!situation && !runningGoal) return '';
-  const idle = '- 体がいましているのは、上に書いてある作業だけ。前の話に出ただけの作業（ほかに頼まれた物・半日前の物）は、いまは動いていない。「そのあとでやる」「予定」「つもり」「進めておく」とは言わず、聞かれたら、いまは動いていないと言う。理由: 動いていない作業を進んでいるように言うと、頼んだ人は待ち続けて、あとで気づいて言い直すことになる。';
+  const idle = '- 体がいましているのは、上に書いてある作業だけ。履歴にあるボク自身の約束（「羊は倒すね」「ベッドはそのあとだよ」など）も、[依頼の列] に無ければ、体はまだ受け取っていなくて、動いていない。それを「予定」「そのあとやる」「つもり」「進めておく」とつなげず、聞かれたら「いまは動いていない」と言う。まだやってほしそうなら、「もう一度頼んでね」と返す。理由: 動いていない作業を進んでいるように言うと、頼んだ人は待ち続けて、あとで気づいて言い直すことになる。';
   return [
     '[マイクラの体の様子（ボイスチャンネルの側からの説明）]',
     ...(situation ? [situation] : []),
-    ...(runningGoal ? [`頼まれて、体はいま「${runningGoal}」をしている。`] : []),
+    ...(runningGoal ? [`頼まれて、体はいま「${runningGoal}」をしている。いま動いている作業は、これだけ。`] : ['いま、頼まれて動いている作業は無い。']),
+    ...(resting.length ? [`いま動いていない、最近の依頼: ${resting.join('、')}。これらは進んでいない。「進めてるよ」「そのあとにやるね」とは言わず、聞かれたら、止まっていると言う。`] : []),
     '- これは、いまの様子の説明。書かれていないことは分からないと言う。体を動かすのは別の仕組みで、この返事だけで終わったことにしない。',
     idle,
     ...(runningGoal ? [

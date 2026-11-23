@@ -17,6 +17,8 @@ export interface VoiceMinecraftState {
   running: { id: string; goal: string } | null;
   /** The list of his requests as lines (`[依頼の列]`); none when it is empty or the port does not keep one. */
   queue?: string[];
+  /** His recent requests that are not going on, as 「goal」（止めた・終わった…）: not work that is coming. */
+  resting?: string[];
 }
 
 export type VoiceMinecraftRefusal = 'not_owner_scope' | 'body_unavailable' | 'no_turn' | 'turn_not_visible'

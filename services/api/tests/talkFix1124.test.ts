@@ -26,12 +26,24 @@ describe('what a reply may promise', () => {
   it('tells a voice turn the length, the opening and the old topics, each with its reason', () => {
     const text = platformVoiceInstructions({ title: '通話', ownerAlone: true, ownerSpeaking: true, speakerName: null, humans: 1, audioTags: false });
     expect(text).toContain('30〜40字');
+    expect(text).toContain('40字までを守る');
+    expect(text).not.toContain('上の「およそ60字」');
     expect(text).toContain('理由: 声は読むより遅く');
     expect(text).toContain('出だしは、毎回かえる');
     expect(text).toContain('昔の話');
   });
-  it('says in the situation that work that is not running is not coming', () => {
-    expect(situationBlock('夜の草原', 'ケーキを作る')).toContain('「そのあとでやる」「予定」「つもり」「進めておく」とは言わず');
+  it('says in the situation that work that is not running is not coming, and that the promises of the history are not taken either', () => {
+    const text = situationBlock('夜の草原', 'ケーキを作る');
+    expect(text).toContain('「予定」「そのあとやる」「つもり」「進めておく」とつなげず');
+    expect(text).toContain('いま動いている作業は、これだけ');
+    expect(text).toContain('履歴にあるボク自身の約束');
+  });
+  it('names the requests that stopped or ended, and says that nothing is running when nothing is', () => {
+    expect(situationBlock('夜の草原', null)).toContain('動いている作業は無い');
+    const text = situationBlock('夜の草原', 'ケーキを作る', ['「羊を倒す」（止めた）']);
+    expect(text).toContain('いま動いていない、最近の依頼: 「羊を倒す」（止めた）');
+    expect(text).toContain('止まっていると言う');
+    expect(situationBlock('夜の草原', null, [])).not.toContain('最近の依頼');
   });
 });
 
