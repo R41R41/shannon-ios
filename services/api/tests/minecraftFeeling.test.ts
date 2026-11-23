@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { CompanionStateEvent } from '@shannon/cognition';
+import {
+  SHANNON_GAME_THOUGHT_KINDS, createInitialCompanionState, faceForEmotionKind, presentShannonMood, reduceCompanionState, type CompanionStateEvent,
+} from '@shannon/cognition';
 import {
   MINECRAFT_THOUGHT_LIMITS, MinecraftFeelings, configuredMinecraftFeelings, minecraftThoughtsOn, minecraftThoughtInstructions, parsedMinecraftThought,
   type MinecraftActNote, type MinecraftThought, type MinecraftThoughtInput,
@@ -80,24 +82,55 @@ describe('her feeling from her own acts in Minecraft', () => {
   });
 });
 
-describe('the Haiku appraisal is off unless SHANNON_MINECRAFT_THOUGHTS=on (owner 2026-11-11, temporary)', () => {
-  it('reads only the explicit on', () => {
-    expect(minecraftThoughtsOn({})).toBe(false);
+describe('the Haiku appraisal is on whenever a key is there (owner 2026-11-23); SHANNON_MINECRAFT_THOUGHTS=off holds it back', () => {
+  it('reads only the explicit off as off', () => {
+    expect(minecraftThoughtsOn({})).toBe(true);
+    expect(minecraftThoughtsOn({ SHANNON_MINECRAFT_THOUGHTS: 'on' })).toBe(true);
+    expect(minecraftThoughtsOn({ SHANNON_MINECRAFT_THOUGHTS: ' OFF ' })).toBe(false);
     expect(minecraftThoughtsOn({ SHANNON_MINECRAFT_THOUGHTS: 'off' })).toBe(false);
-    expect(minecraftThoughtsOn({ SHANNON_MINECRAFT_THOUGHTS: '1' })).toBe(false);
-    expect(minecraftThoughtsOn({ SHANNON_MINECRAFT_THOUGHTS: ' ON ' })).toBe(true);
   });
 
-  it('builds no appraiser with a key and no switch, but still feels failures in a row; with the switch it builds one', () => {
+  it('builds an appraiser with a key and no switch, none without a key or with off, and always feels failures in a row', () => {
     const applied: CompanionStateEvent[] = [];
     const parts = { state: { apply: (_scope: string, event: CompanionStateEvent) => { applied.push(event); return {} as never; } } };
     const appraiserOf = (feelings: unknown) => (feelings as { dependencies: { appraiser: unknown } }).dependencies.appraiser;
-    const off = configuredMinecraftFeelings({ ANTHROPIC_API_KEY: 'test-key', SHANNON_HAIKU_API_KEY: 'test-key' }, parts);
+    const byDefault = configuredMinecraftFeelings({ SHANNON_HAIKU_API_KEY: 'test-key' }, parts);
+    expect(appraiserOf(byDefault)).not.toBeNull();
+    expect(appraiserOf(configuredMinecraftFeelings({}, parts))).toBeNull();
+    const off = configuredMinecraftFeelings({ SHANNON_HAIKU_API_KEY: 'test-key', SHANNON_MINECRAFT_THOUGHTS: 'off' }, parts);
     expect(appraiserOf(off)).toBeNull();
     const fail = note({ ok: false, outcome: 'act 0/2 済みで止まった（failure）' });
     for (let index = 0; index < 3; index += 1) off.noted(fail);
     expect(applied).toContainEqual({ type: 'game-felt', moment: { kind: 'stuck', count: 3 } });
-    const on = configuredMinecraftFeelings({ SHANNON_HAIKU_API_KEY: 'test-key', SHANNON_MINECRAFT_THOUGHTS: 'on' }, parts);
-    expect(appraiserOf(on)).not.toBeNull();
+  });
+});
+
+describe('what the appraisal is told to feel in each scene reaches the face she shows', () => {
+  const kindsNamed = (text: string) => SHANNON_GAME_THOUGHT_KINDS.filter(kind => text.includes(kind));
+  it('names every scene feeling the instructions give as one of the kinds a thought may bring', () => {
+    const named = kindsNamed(minecraftThoughtInstructions());
+    for (const kind of ['focused', 'happy', 'excited', 'fun', 'relief', 'curiosity', 'surprised', 'confused', 'blocked', 'frustrated', 'annoyed', 'retrying',
+      'cautious', 'anxious', 'tired', 'pride', 'smug', 'triumphant', 'determined'] as const) expect(named).toContain(kind);
+  });
+  it('shows steady work as the thinking face, a success as a smile, a relief as relieved, being lost as confused', () => {
+    expect(faceForEmotionKind('focused').expression).toBe('thinking');
+    expect(faceForEmotionKind('happy').expression).toBe('joyful');
+    expect(faceForEmotionKind('excited').expression).toBe('excited');
+    expect(faceForEmotionKind('relief').expression).toBe('relieved');
+    expect(faceForEmotionKind('confused').expression).toBe('confused');
+    expect(faceForEmotionKind('frustrated').expression).toBe('annoyed');
+    expect(faceForEmotionKind('surprised').expression).toBe('surprised');
+  });
+  it('a thought of steady work is a visible feeling in the state she shows, and its face is thinking (not the quiet mood)', async () => {
+    const start = '2026-11-23T00:00:00.000Z';
+    let state = createInitialCompanionState('owner', start);
+    const feelings = new MinecraftFeelings({ state: { apply: (_scope: string, event: CompanionStateEvent) => { state = reduceCompanionState(state, event, start); return state; } },
+      appraiser: { appraise: async () => ({ primary: 'focused', intensity: 0.5, words: '穴を掘って進んでいる' }) }, log: () => undefined });
+    for (let index = 0; index < 3; index += 1) feelings.noted(note({}));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const shown = presentShannonMood(state, start);
+    expect(shown).toMatchObject({ fromConversation: true, expression: 'thinking', cause: 'マイクラで穴を掘って進んでいる' });
+    // Still shown when the next appraisal can come (90 s), so steady work keeps one face without a gap.
+    expect(presentShannonMood(state, '2026-11-23T00:02:00.000Z')).toMatchObject({ fromConversation: true, expression: 'thinking' });
   });
 });
