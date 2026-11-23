@@ -126,22 +126,49 @@ describe('iron: the nearest ore\'s hands are in the input as they can be sent, a
     expect(nearIronHands(row.replace('(-73,61,-119)', '(-73,-12,-119)'), { x: -70, y: -10, z: -120 })).toContain('mine deepslate_iron_ore -73,-12,-119 count=3');
     expect(nearIronHands('鉄鉱石 ×3', null)).toBe('');
   });
-  it('the iron line carries the hands, says the scan\'s iron does not move (so no probe first), and has no "unconfirmed" mark', () => {
+  it('the iron line carries the hands and the form of mine (so its contract is not read first), and has no "unconfirmed" mark', () => {
     const line = ironSearchLine({ position: { x: -50, y: 72, z: -115 }, mapLandmarks: [], scan }, pack, 'overworld', now, T0 + 3 * 60_000)!;
     expect(line).toContain('鉄鉱石の当て（走査 3 分前');
     expect(line).not.toContain('今は未確認');
-    expect(line).toContain('動かない');
-    expect(line).toContain('先に probe で確かめなくてよい');
+    expect(line).not.toContain('先に probe で確かめなくてよい');
+    expect(line).toContain('契約（skill_read）を読まずにそのまま出せる: 「mine iron_ore X,Y,Z count=3」');
+    expect(line).toContain('岩に埋まっていても岩・土を掘って届く');
     expect(line).toContain('go -73,61,-119');
   });
-  it('iron the map shows near her is mined where it is: the scan\'s nearest is the nearest to its base, so its hands (and the "no probe" sentence) are not said', () => {
+  it('iron the map shows near her is mined where it is: the scan\'s nearest is the nearest to its base, so its hands are not said (the form of mine is)', () => {
     const seen = ironSearchLine({ position: { x: -50, y: 72, z: -115 }, mapLandmarks: ['i 鉄鉱石[iron_ore] (-52,70,-118) 西2・南3・下2 ×1 見えている'], scan }, pack, 'overworld', now, T0 + 3 * 60_000)!;
     expect(seen).toContain('鉄鉱石の当て（走査 3 分前');
     expect(seen).not.toContain('この鉄の手');
-    expect(seen).not.toContain('先に probe で確かめなくてよい');
+    expect(seen).toContain('契約（skill_read）を読まずにそのまま出せる');
   });
   it('a row past the still limit is not said as a lead (the time is passed, so the old row is not "there")', () => {
     const line = ironSearchLine({ position: { x: -50, y: 72, z: -115 }, mapLandmarks: [], scan }, pack, 'overworld', now, T0 + 100 * 60_000) ?? '';
     expect(line).not.toContain('鉄鉱石の当て');
+  });
+});
+
+describe('iron wanted through the buckets of a cake: the iron line and its ledger are in front of her though the node is not about iron', () => {
+  const T0 = Date.parse('2026-01-01T00:00:00Z');
+  const row = '鉄鉱石 ×33031 最寄り (-129,66,-151) 北 12m・下 5 埋まり・17マス掘り歩き｜空気に面した最寄り (-131,28,-140) 西 6m・下 43';
+  const scan = { trigger: 'login', at: new Date(T0).toISOString(), center: { x: -125, y: 71, z: -140 }, text: '鉄', rows: [row] };
+  const cake = { id: 'p1.5', title: 'ケーキを工作台で作る', doneWhen: 'have:cake>=1', target: { item: 'cake', count: 1 } } as never;
+  const world = { position: { x: -125, y: 71, z: -140 }, mapLandmarks: [], scan };
+  const pack = (extra: Record<string, number> = {}) => new Map<string, number>([['stone_pickaxe', 1], ['raw_iron', 2], ...Object.entries(extra)]);
+  it('3 buckets lacking and 2 raw iron: the ledger (7 raw iron to dig and smelt), the scan row, the hand of the near ore and the form of mine', () => {
+    const line = ironSearchLine(world, pack(), 'overworld', cake, T0 + 60_000)!;
+    expect(line).toContain('鉄の勘定: インゴット 9 要る（今 インゴット 0・生の鉄 2');
+    expect(line).toContain('あと生の鉄 7 を掘って焼く');
+    expect(line).toContain('make は材料不足で止まる');
+    expect(line).toContain('mine iron_ore -129,66,-151 count=3');
+    expect(line).toContain('契約（skill_read）を読まずにそのまま出せる');
+  });
+  it('a milk bucket held counts as a bucket made: 2 lacking is 6 ingots; the buckets all held, the line is not said', () => {
+    expect(ironSearchLine(world, pack({ milk_bucket: 1 }), 'overworld', cake, T0 + 60_000)).toContain('インゴット 6 要る');
+    expect(ironSearchLine(world, pack({ milk_bucket: 3 }), 'overworld', cake, T0 + 60_000)).toBeNull();
+  });
+  it('enough ingots and raw iron for them: say to smelt, not to dig; a node with no iron in it and no cake says nothing', () => {
+    const smelt = ironSearchLine(world, pack({ raw_iron: 9 }), 'overworld', { id: 'p1.4.1.1', title: '鉄', doneWhen: 'have:iron_ingot>=9' } as never, T0 + 60_000)!;
+    expect(smelt).toContain('生の鉄は足りている。炉で焼く');
+    expect(ironSearchLine(world, pack(), 'overworld', { id: 'p1.1', title: '木を集める', doneWhen: 'have:log>=4' } as never, T0 + 60_000)).toBeNull();
   });
 });

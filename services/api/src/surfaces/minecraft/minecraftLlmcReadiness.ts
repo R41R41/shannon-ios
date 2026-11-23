@@ -562,6 +562,36 @@ export function nearIronHands(row: string, feet: { x: number; y: number; z: numb
   return `この鉄の手（そのまま出せる。mine は 1 マスにつき数秒しか歩かず諦めるので、遠い時は go が先）: 「go ${x},${y},${z} range=2 dig=${IRON_ROAD} maxDig=${maxDig} seconds=${seconds}」の次に「${mine}」。`;
 }
 
+/**
+ * The hand `mine` is a page of its own in the contract (`skill_read`), not a line of the act's description, and the scan's hand shows only a coordinate. In the replay of the cake's
+ * decision with iron 12 m away she read that page in 12 of 13 decisions and mined in 1; with this said beside the coordinate (and the iron's count) she mined in 12 of 13 and read it in 1.
+ */
+const MINE_FORM = 'mine の書き方は契約（skill_read）を読まずにそのまま出せる: 「mine iron_ore X,Y,Z count=3」（X,Y,Z は走査の行・landmarks の鉄の座標）。'
+  + '1 マスだけ書けばよい（つながった同じ鉱石は体が全部たどる）。岩に埋まっていても岩・土を掘って届く。count は要る個数（鉄のツルハシなら 3）';
+
+/**
+ * The iron ingots the now asks for: as the node says it (`have:iron_ingot>=N`) or as its buckets need them (a cake takes 3 milk buckets, a bucket takes 3 ingots; a milk bucket she
+ * holds is a bucket made). Null when it asks for none. The cake's own node is not about iron, so without this the iron line (and the scan's iron, in front of her while iron is wanted)
+ * was not there when she had 2 raw iron and wanted 3 buckets.
+ */
+function ironIngotsWanted(now: PlanNode, counts: ItemCounts): number | null {
+  const done = String(now.doneWhen ?? '');
+  const ingots = /have:iron_ingot>=(\d+)/u.exec(done);
+  if (ingots) return Number(ingots[1]);
+  const milk = /have:milk_bucket>=(\d+)/u.exec(done), cake = /have:cake>=/u.test(done) || now.target?.item === 'cake';
+  const buckets = milk ? Number(milk[1]) : cake ? 3 : 0;
+  const lacking = Math.max(0, buckets - countMatching(counts, /^(?:milk_)?bucket$/u));
+  return lacking > 0 ? lacking * 3 : null;
+}
+
+/** What the iron wanted comes to against the pack: the raw iron is smelted before it is an ingot, and a make of an iron thing waits for the ingots (the body answers it as missing: she was using that as a check). */
+function ironLedger(need: number, counts: ItemCounts): string {
+  const ingots = countMatching(counts, /^iron_ingot$/u), raw = countMatching(counts, /^raw_iron$/u), rest = need - ingots - raw;
+  return `鉄の勘定: インゴット ${need} 要る（今 インゴット ${ingots}・生の鉄 ${raw}。生の鉄は炉で焼くとインゴット 1 個）。`
+    + (rest > 0 ? `あと生の鉄 ${rest} を掘って焼く。` : '生の鉄は足りている。炉で焼く。')
+    + 'インゴットが揃うまで、鉄で作る物（バケツなど）の make は材料不足で止まる。';
+}
+
 const IRON_MARK = /鉄鉱石\[(?:deepslate_)?iron_ore\]/u;
 
 /**
@@ -573,7 +603,9 @@ const IRON_MARK = /鉄鉱石\[(?:deepslate_)?iron_ore\]/u;
 export function ironSearchLine(world: Record<string, unknown>, counts: ItemCounts, dimension: string | null, now: PlanNode | undefined,
   nowMs: number | null = null): string | null {
   if (dimension !== 'overworld' || !now) return null;
-  const wants = /iron/u.test(String(now.doneWhen ?? '')) || /鉄(?!ゴーレム)/u.test(String(now.title ?? ''));
+  const need = ironIngotsWanted(now, counts);
+  const held = countMatching(counts, /^(?:iron_ingot|raw_iron)$/u);
+  const wants = /iron/u.test(String(now.doneWhen ?? '')) || /鉄(?!ゴーレム)/u.test(String(now.title ?? '')) || (need !== null && need > held);
   if (!wants) return null;
   if (!['stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe'].some(name => (counts.get(name) ?? 0) > 0)) return null;
   // The scan's iron row (read once; aged and marked by `agedScan`) is kept in the input while the iron is wanted, so that the nearest ore, buried or not, is
@@ -584,10 +616,9 @@ export function ironSearchLine(world: Record<string, unknown>, counts: ItemCount
   if (lead) {
     // Iron the map shows (open to the air, near her) is mined where it is: the scan's nearest iron is the nearest to the scan's base, not to her, and its hands would take her away from it.
     const seen = marks.some(line => IRON_MARK.test(line));
-    return `鉄鉱石の当て（${(scan.mark ?? '').replace('・今は未確認', '')}）: ${lead.slice(0, 160)}。`
-      + (seen ? '' : '鉄鉱石は動かない（掘られた所だけ変わる）ので、走査の座標を信じてよい。着いて無ければ手の結果が理由を返すので、先に probe で確かめなくてよい。')
+    return (need !== null ? ironLedger(need, counts) : '') + `鉄鉱石の当て（${(scan.mark ?? '').replace('・今は未確認', '')}）: ${lead.slice(0, 160)}。`
       + `埋まった近い鉄は go で掘り進んで mine すると早い（階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へは約 13 秒で 3 個だった）。${seen ? '' : nearIronHands(lead, feetOf(world))}`
-      + '空気に面した遠い鉄は、近い鉄が要る数に足りない時だけ。y=16 へ下りるのは、近くに鉄が無い時だけ';
+      + `空気に面した遠い鉄は、近い鉄が要る数に足りない時だけ。y=16 へ下りるのは、近くに鉄が無い時だけ。${MINE_FORM}`;
   }
   if (marks.some(line => IRON_MARK.test(line))) return null;
   const route = oreRouteHands(world, 'iron', counts);
