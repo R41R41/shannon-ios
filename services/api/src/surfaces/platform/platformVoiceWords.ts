@@ -64,7 +64,7 @@ export class VoiceWords {
     const digest = createHash('sha256').update(`${body.conversationId}\u0000${at}\u0000${body.source}\u0000${content}`).digest('hex');
     this.note(body.conversationId, `dcv-said:${digest.slice(0, 32)}`, content);
     // A line from her mouth is said to the room, to nobody in particular: a friend's reaction to it may be to her (`SHANNON_ADDRESSED`).
-    if (body.source === 'mouth' && body.interrupted !== true) this.dependencies.rooms.noteShannon(body.conversationId, { at, userId: '', text: content, asked: endsWithQuestionMark(content) });
+    if (body.source === 'mouth' && body.interrupted !== true) this.dependencies.rooms.noteShannon(body.conversationId, { at, userId: '', text: content, asked: endsWithQuestionMark(content) }, true);
     this.reportCutShort(body.conversationId, body.source === 'reply' && body.interrupted === true);
   }
 

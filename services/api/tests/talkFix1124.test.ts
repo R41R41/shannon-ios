@@ -116,6 +116,8 @@ describe('her replies that were only words', () => {
     now += 2 * 60_000;
     say('作業台を用意してるよ', false);
     expect(rooms.unhanded('r')).toEqual(['「羊は倒すね」（18分前）', '「作業台を用意してるよ」（いま）']);
+    say('see ships   soon', false);
+    expect(rooms.unhanded('r').at(-1)).toBe('「see ships soon」（いま）');
     now += 45 * 60_000;
     expect(rooms.unhanded('r')).toEqual([]);
   });

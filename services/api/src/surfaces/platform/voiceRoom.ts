@@ -156,7 +156,7 @@ export class VoiceRooms {
     room.unhanded = room.unhanded.filter(item => Date.parse(item.at) >= oldest);
     return room.unhanded.slice(-VOICE_ROOM_LIMITS.unhandedLines).map(item => {
       const minutes = Math.max(0, Math.round((now - Date.parse(item.at)) / 60_000));
-      return `「${item.text.replace(/s+/gu, ' ').slice(0, VOICE_ROOM_LIMITS.unhandedCharacters)}」（${minutes < 1 ? 'いま' : `${minutes}分前`}）`;
+      return `「${item.text.replace(/\s+/gu, ' ').slice(0, VOICE_ROOM_LIMITS.unhandedCharacters)}」（${minutes < 1 ? 'いま' : `${minutes}分前`}）`;
     });
   }
 
