@@ -156,10 +156,12 @@ describe('the body\'s present for a call', () => {
 
   it('tells her plan\'s section and points when the body\'s head keeps them, and nothing when it does not', () => {
     const planned = liveBlock(snapshot({ plan: { section: '小麦を育てる', points: ['種を植える', '骨粉で育てる', '刈り取る', 'パンを作る', '牛乳を用意する'] } }), { alone: false, participants: true });
-    expect(planned).toContain('計画の今の節: 小麦を育てる');
+    expect(planned).toContain('いま手をつけている節: 小麦を育てる');
     expect(planned).toContain('計画の要点: 種を植える → 骨粉で育てる → 刈り取る → パンを作る');
     expect(planned).not.toContain('牛乳を用意する');
-    expect(liveBlock(snapshot(), { alone: false, participants: true })).not.toContain('計画');
+    const none = liveBlock(snapshot(), { alone: false, participants: true });
+    expect(none).not.toContain('- いま手をつけている節');
+    expect(none).not.toContain('計画の要点');
   });
 
   it('says that the dragon run\'s step and pace are not about another job', () => {

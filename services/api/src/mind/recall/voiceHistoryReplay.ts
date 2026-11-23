@@ -105,6 +105,7 @@ export function summarizedVoiceReplay(
   return {
     history, start: window.start, characters: window.characters, truncated, ...(stored ? { summary: stored.text } : {}),
     epoch: { number: window.record.epoch, rebased: window.rebased },
+    ...(entries[window.start] ? { firstAt: entries[window.start]!.message.observedAt } : {}),
     request: turnContext => {
       const context = [turnContext, live.line, fallback, toolBlock].filter(Boolean).join('\n\n');
       return { ...(context ? { turnContext: context } : {}), history };

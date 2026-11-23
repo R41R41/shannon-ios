@@ -3,6 +3,7 @@ import type { TaskStep } from '../../mind/action/taskRuntime/taskRuntimePorts.js
 import type { BodyPlanView } from '../../contracts/bodyControlContract.js';
 import type { MinecraftControl } from './minecraftControl.js';
 import type { MinecraftLiveSink } from './minecraftLive.js';
+import { workingNode } from './minecraftLlmcNode.js';
 import { minecraftMilestones } from './minecraftReflexAdapter.js';
 
 /**
@@ -58,7 +59,9 @@ export function withMinecraftLive<Made extends { body: FcaBodyLifecycle }>(made:
       told(() => live.begin({ taskId: step.taskId, scopeKey: step.scopeKey, goal: step.snapshot.task.goal.slice(0, 120), origin: step.snapshot.task.origin,
         createdAtMs: Date.parse(step.snapshot.task.createdAt),
         bodyId: control.store.body(step.taskId) ?? (control.available().length === 1 ? control.available()[0]! : null),
-        netherReached: nether, ...(parts.phase ? { phase: parts.phase } : {}) }));
+        netherReached: nether, ...(parts.phase ? { phase: parts.phase } : {}),
+        // The node the model last started work for, as the body's mod shows it (`workingNode`): read when a conversation asks, not at each decision.
+        ...(parts.plan ? { working: () => workingNode(step.taskId, parts.plan?.()?.current) } : {}) }));
       // The plan as the head's own checks left it since the last decision (a node seen done is a step she may say).
       told(() => live.plan?.(step.taskId, parts.plan?.()));
       return value;

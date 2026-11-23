@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { liveFactLine, type LiveMoment, type WorkingEvent } from '@shannon/mind';
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts } from './minecraftItems.js';
@@ -25,6 +26,11 @@ export interface LiveTaskInfo {
   netherReached: boolean | null;
   /** The task's phase now (`completed` when its request is done), asked while the task's body is quiet: nothing else tells the end. */
   phase?: () => string | null;
+  /**
+   * The plan node the model last started work for (`workingNode`, the rule the body's mod uses for its 「今」), asked when a conversation reads
+   * the block: the plan's own current node is the first one not done, which the work may have left for another.
+   */
+  working?: () => string | null;
 }
 
 /** What the task's body tells this: begin (again, for an update), the running tool, the end. */
@@ -63,7 +69,7 @@ const STEP_GAP_MS = 20_000;
 interface PlanMemory { revision: number; nodes: Map<string, { title: string; state: string; parent: string | null }>; current: string | null }
 interface TaskState {
   info: LiveTaskInfo; call: { name: string; input: unknown } | null; updatedAt: number; endedAt: number | null; milestone: number | null; late: Set<string>;
-  plan: PlanMemory | null; needs: Map<string, number>; doneTold: boolean; lastThought: string;
+  plan: PlanMemory | null; needs: Map<string, number>; doneTold: boolean; lastThought: string; lastThoughtAt: number | null;
 }
 /** A title or a use as a moment carries it: one line, short, nothing the room should not read aloud. */
 const brief = (value: unknown, limit = 24): string => String(value ?? '').replace(/\s+/gu, ' ').replace(/^\[[^\]]{1,12}\]\s*/u, '').trim().slice(0, limit);
@@ -106,7 +112,7 @@ eplying, heard). */
     for (const [id, task] of this.tasks) if (task.endedAt !== null && now - task.endedAt > 600_000) this.tasks.delete(id);
     this.tasks.set(info.taskId, { info, call: before?.call ?? null, updatedAt: now, endedAt: null, milestone: before?.milestone ?? null,
       late: before?.late ?? new Set(), plan: before?.plan ?? null, needs: before?.needs ?? new Map(), doneTold: before?.doneTold ?? false,
-      lastThought: before?.lastThought ?? '' });
+      lastThought: before?.lastThought ?? '', lastThoughtAt: before?.lastThoughtAt ?? null });
   }
 
   /** The items her tasks ask for now, with how many: the detector tells what she gets of them (`material_got`). */
@@ -167,13 +173,23 @@ eplying, heard). */
     } catch { /* the commentary never fails a decision */ }
   }
 
-  /** The plan as a conversation tells it: the section she is on, and the points of what is left (the top nodes not done), in order. */
-  private planSummary(task: TaskState): { section: string | null; points: string[] } | null {
+  /**
+   * The plan as a conversation tells it: the section the work is on now (the node the model last started work for, else the plan's current
+   * node), the first section not done when the work is elsewhere (`ahead`), and the points of what is left (the top nodes not done), in order.
+   */
+  private planSummary(task: TaskState): { section: string | null; points: string[]; ahead?: string } | null {
     const memory = task.plan;
     if (!memory || !memory.nodes.size) return null;
-    const section = memory.current ? memory.nodes.get(memory.current)?.title ?? null : null;
+    const first = memory.current ? memory.nodes.get(memory.current)?.title || null : null;
+    const workingId = this.workingNode(task), working = workingId ? memory.nodes.get(workingId) : undefined;
+    const section = working && working.state !== 'done' && working.title ? working.title : first;
     const points = [...memory.nodes.values()].filter(node => node.parent === null && node.state !== 'done').map(node => node.title).filter(Boolean).slice(0, 4);
-    return section || points.length ? { section: section || null, points } : null;
+    if (!section && !points.length) return null;
+    return { section: section || null, points, ...(first && section && first !== section ? { ahead: first } : {}) };
+  }
+
+  private workingNode(task: TaskState): string | null {
+    try { return task.info.working?.() ?? null; } catch { return null; }
   }
 
   need(taskId: string, need: { item: string; count: number; use: string }): void {
@@ -191,7 +207,9 @@ eplying, heard). */
   thought(taskId: string, why: string): void {
     try {
       const task = this.tasks.get(taskId), text = brief(why, 90);
-      if (!task || text.length < 4 || text === task.lastThought) return;
+      if (!task || text.length < 4) return;
+      task.lastThoughtAt = this.now();
+      if (text === task.lastThought) return;
       task.lastThought = text;
       this.emitWork(task, { kind: 'thinking', key: `why:${taskId}:${this.now()}`, at: this.now(), facts: { why: text } });
     } catch { /* the commentary never fails a decision */ }
@@ -373,16 +391,37 @@ eplying, heard). */
       .map(moment => ({ ageSeconds: Math.round((now - moment.at) / 1000), line: liveFactLine(moment).replace(/。$/u, '') }));
     const stall = this.stall && now - this.stall.at <= STUCK_SHOWN_SECONDS * 1000 ? `${this.stall.what}が${this.stall.seconds}秒ほど進んでいない` : null;
     const plan = task ? this.planSummary(task) : null;
-    return { ...base, ...(plan ? { plan } : {}), frameAgeSeconds: Math.round(ageMs / 1000), milestone: step && task && DRAGON_RUN.test(task.info.goal) ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
+    const aim = task && task.lastThoughtAt !== null && task.lastThought && now - task.lastThoughtAt <= SHOWN_MOMENT_MINUTES * 60_000
+      ? { ageSeconds: Math.max(0, Math.round((now - task.lastThoughtAt) / 1000)), text: task.lastThought } : null;
+    return { ...base, ...(plan ? { plan } : {}), ...(aim ? { aim } : {}), frameAgeSeconds: Math.round(ageMs / 1000), milestone: step && task && DRAGON_RUN.test(task.info.goal) ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
       dimension: dimensionOfWorld(world, observation.facts), biome: typeof world.biome === 'string' ? world.biome.slice(0, 40).replace(/_/gu, ' ') : null,
       time: timeWords(dimensionOfWorld(world, observation.facts) === 'overworld' ? dayTick(world) : null),
       health: health === null ? null : Math.round(health), food, threats, carried: carriedWords(counts), map: mapWords(world.mapSummary),
       furnace: furnaceWords(world.jobs), recent, stuck: stall };
   }
 
+  /**
+   * One content-free line for each block a reply reads, so that the next 「いま何してる」 answered with an old state can be told apart (a plan
+   * line that was behind, or an old history): the block's length and a short hash, the node the work is on, the plan's current one, and how old
+   * the model's last aim is. No words of the block are written.
+   */
+  private journal(block: string): void {
+    if (!this.parts.log || !block) return;
+    try {
+      const task = this.activeTask(), now = this.now();
+      const hash = createHash('sha256').update(block).digest('hex').slice(0, 8);
+      const aim = task?.lastThoughtAt != null ? `${Math.max(0, Math.round((now - task.lastThoughtAt) / 1000))}s` : '-';
+      this.parts.log(`Shannon Minecraft live block len=${block.length} hash=${hash} working=${task ? this.workingNode(task) ?? '-' : '-'} current=${task?.plan?.current ?? '-'} aim=${aim}`);
+    } catch { /* a log never fails a reply */ }
+  }
+
   /** The block a conversation reads; '' while she has neither a task nor a body in the world. `alone`: the owner alone reads it. */
   block(options: { alone: boolean; /** Everyone who reads the reply is on the call and takes part in her work (the block does not hold the request back). */ participants?: boolean }): string {
-    try { return liveBlock(this.snapshot(), { ...options, exchanges: this.parts.exchanges?.(Math.floor(this.now() / 60_000)) ?? '' }); } catch { return ''; }
+    try {
+      const block = liveBlock(this.snapshot(), { ...options, exchanges: this.parts.exchanges?.(Math.floor(this.now() / 60_000)) ?? '' });
+      this.journal(block);
+      return block;
+    } catch { return ''; }
   }
 }
 
