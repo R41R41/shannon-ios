@@ -1,4 +1,5 @@
 import { normalizedSpeechText } from './geminiSpeech.js';
+import { spokenNumbers } from './spokenNumbers.js';
 import type { GeminiSpeechRequest, GeminiSpeechStreamResult } from './geminiSpeech.js';
 import { elevenVoiceText, heldWhisper } from './voiceAudioTags.js';
 
@@ -74,7 +75,7 @@ export class ElevenSpeechGateway {
 
   async stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult> {
     // Tags inside the sentence are kept only when they are hers to use (`VOICE_AUDIO_TAGS`); any other bracketed direction is dropped.
-    const text = normalizedSpeechText(elevenVoiceText(normalizedSpeechText(request.text)));
+    const text = normalizedSpeechText(spokenNumbers(elevenVoiceText(normalizedSpeechText(request.text))));
     const tags = validatedElevenTags(request.style);
     const params = new URLSearchParams({
       model_id: this.model, output_format: 'pcm_24000', language_code: 'ja',

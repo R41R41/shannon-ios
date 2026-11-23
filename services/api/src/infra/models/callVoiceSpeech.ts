@@ -8,6 +8,7 @@ import {
 } from './geminiSpeech.js';
 import { ElevenSpeechError, ElevenSpeechGateway, validatedElevenTags } from './elevenSpeech.js';
 import { geminiVoiceRequest } from './voiceAudioTags.js';
+import { spokenNumbers } from './spokenNumbers.js';
 import type { LlmUsageStore } from './llmUsage.js';
 
 /**
@@ -82,7 +83,7 @@ export class CallVoiceSpeechGateway {
     // (a capitalised bracketed word among the acting tags would otherwise be read aloud as text).
     const sentence = normalizedSpeechText(request.text);
     const directions = geminiVoiceRequest(`${request.style ?? ''} ${sentence}`.trim(), undefined).style;
-    const text = normalizedSpeechText(geminiVoiceRequest(sentence, undefined).text);
+    const text = spokenNumbers(normalizedSpeechText(geminiVoiceRequest(sentence, undefined).text));
     const style = this.styleFor(directions);
     const startedAt = performance.now();
     let lastError: unknown = new GeminiSpeechError('GEMINI_SPEECH_FAILED');

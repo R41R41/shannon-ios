@@ -129,7 +129,7 @@ export function minecraftBodyStateBlock(state: MinecraftBodyState | undefined): 
     ...(state.task ? [`- 取り組んでいること（体の報告）: ${state.task}`] : []),
     ...(state.dimension ? [`- いる場所: ${DIMENSIONS[state.dimension]}`] : []),
     ...(state.health !== undefined || state.food !== undefined
-      ? [`- ${[state.health !== undefined ? `体力 ${state.health}/20` : '', state.food !== undefined ? `満腹度 ${state.food}/20` : ''].filter(Boolean).join('、')}`] : []),
+      ? [`- ${[state.health !== undefined ? `体力 20のうち${state.health}` : '', state.food !== undefined ? `満腹度 20のうち${state.food}` : ''].filter(Boolean).join('、')}`] : []),
     ...(state.timeOfDay ? [`- ゲーム内の時間: ${TIMES[state.timeOfDay]}`] : []),
     ...(advancements.length ? [`- 最近できたこと: ${[...new Set(advancements)].join('、')}`] : []),
   ];

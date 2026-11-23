@@ -33,7 +33,7 @@ const DIMENSIONS: Readonly<Record<string, string>> = { the_nether: 'ネザー', 
 type FactWriter = (facts: LiveMoment['facts']) => string;
 const FACT_LINES: Readonly<Record<LiveMomentKind, FactWriter>> = Object.freeze({
   died: f => `体が倒れた（原因: ${text(f.cause) || '不明'}）。`,
-  near_death: f => `体力が${text(f.health)}/20まで減った（${text(f.from) ? `${text(f.from)}に襲われている` : '危ない状態'}）。`,
+  near_death: f => `体力が20のうち${text(f.health)}まで減った（${text(f.from) ? `${text(f.from)}に襲われている` : '危ない状態'}）。`,
   diamond_found: f => (f.carried === true ? `ダイヤモンドを手に入れた（${text(f.count)}個）。` : `ダイヤモンドの鉱石を見つけた（${text(f.count)}か所）。`),
   armor_complete: () => '鉄以上の防具が頭から足までそろい、着ている。',
   tool_made: f => `${itemWords(text(f.item))}ができた。`,
@@ -49,7 +49,7 @@ const FACT_LINES: Readonly<Record<LiveMomentKind, FactWriter>> = Object.freeze({
   dragon_stage: f => (text(f.stage) === 'seen' ? 'エンダードラゴンが見えた。' : `エンドクリスタルが残り${text(f.crystals)}個になった。`),
   milestone_passed: f => `「${text(f.name)}」の段が済んだ（開始から${text(f.seconds)}秒）。`,
   milestone_late: f => `「${text(f.name)}」は目安の${text(f.target)}秒を${text(f.over)}秒すぎている。`,
-  hungry: f => `満腹度が${text(f.food)}/20まで下がった。`,
+  hungry: f => `満腹度が20のうち${text(f.food)}まで下がった。`,
   stuck: f => `${text(f.what) || '作業'}が${text(f.seconds)}秒ほど進んでいない。`,
   plan_changed: f => `計画を直した（${[text(f.added) && `${text(f.added)}を足した`, text(f.dropped) && `${text(f.dropped)}をやめた`,
     text(f.blocked) && `${text(f.blocked)}が止まっている`].filter(Boolean).join('、') || '順番や中身を変えた'}）。`,

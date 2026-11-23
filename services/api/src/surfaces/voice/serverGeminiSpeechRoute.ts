@@ -9,6 +9,7 @@ import type { LlmUsageStore } from '../../infra/models/llmUsage.js';
 import type { GeminiSpeechGateway } from '../../infra/models/geminiSpeech.js';
 import { createConfiguredElevenSpeechGateway, ElevenSpeechError, validatedElevenTags } from '../../infra/models/elevenSpeech.js';
 import { geminiVoiceRequest } from '../../infra/models/voiceAudioTags.js';
+import { spokenNumbers } from '../../infra/models/spokenNumbers.js';
 import { readJson, sendJson } from '../../infra/http/serverHttp.js';
 import { observeAsync } from '../../infra/observer/observerContext.js';
 
@@ -88,7 +89,7 @@ export function createGeminiSpeechRoute(
       }
       // The Gemini voice reads no audio tag (`voiceAudioTags.ts`): the tags of her sentence become a Japanese direction in its style.
       const spoken = provider === 'gemini' ? geminiVoiceRequest(requested, requestedStyle) : { text: requested, style: requestedStyle };
-      const text = normalizedSpeechText(spoken.text);
+      const text = spokenNumbers(normalizedSpeechText(spoken.text));
       const style = spoken.style;
       if (provider === 'eleven') validatedElevenTags(style);
       if (!activeScopes.acquire(principal.scopeKey)) return refuseSpeech(response, 'BUSY', provider);
