@@ -83,8 +83,77 @@ export function gearLine(observation: BodyObservation | null, world: Record<stri
 /** Dusk or night in the overworld (the day's tick from 12000: the one-thing request's night line applies). */
 const nightly = (world: Record<string, unknown>): boolean =>
   (finite(world.timeOfDay) ?? -1) >= 12_000 && (world.dimension === undefined || world.dimension === 'overworld');
+/**
+ * 11/24 try1124b (the owner's test, 07:12–07:15: a zombie came while she stood in a pool; 22 urgent decisions of gpt-6-luna each chose a go of 1 to 4 blocks
+ * inside the water (7 hits, health 20 to 6.7), the land was 4 blocks east on the map she was given, and a swimmer moves at 1 to 2 m/s while a zombie on
+ * the bank runs at about 3): where she stands (water) and the nearest land read from the surface map, as a fact. It decides no hand.
+ * Said only while a hostile is within `WATER_ENEMY_METERS`.
+ */
+export const WATER_ENEMY_METERS = 12;
+/** A land cell counts as one she reaches first when the enemy is at least this much farther from it than she is. */
+export const LAND_GAP_METERS = 2;
+const DIRECTIONS = ['東', '南東', '南', '南西', '西', '北西', '北', '北東'];
+function directionWords(dx: number, dz: number): string {
+  const parts = [...dx ? [`${dx > 0 ? '東' : '西'}${Math.abs(dx)}`] : [], ...dz ? [`${dz > 0 ? '南' : '北'}${Math.abs(dz)}`] : []];
+  return parts.join('・') || 'ここ';
+}
+/** 'at' of a hostile as a bearing word from the feet (東 = +x, 南 = +z; the map's north is up). */
+const bearing = (dx: number, dz: number): string => DIRECTIONS[(Math.round(Math.atan2(dz, dx) / (Math.PI / 4)) + 8) % 8]!;
+/** The surface map as a grid: the feet cell, and the symbol and height of each cell. Null for another mode or a map that does not read. */
+function surfaceGrid(map: string): { feet: { x: number; y: number; z: number }; cells: Map<string, { sym: string; h: number }> } | null {
+  const lines = map.split('\n');
+  const head = /足=\((-?\d+),(-?\d+),(-?\d+)\) x=(-?\d+)\.\.(-?\d+) z=-?\d+\.\.-?\d+ 方式=surface/u.exec(lines[0] ?? '');
+  if (!head) return null;
+  const feet = { x: Number(head[1]), y: Number(head[2]), z: Number(head[3]) }, x0 = Number(head[4]), width = Number(head[5]) - x0 + 1;
+  const cells = new Map<string, { sym: string; h: number }>();
+  for (const line of lines.slice(2)) {
+    const tokens = line.trim().split(/\s+/u);
+    if (!/^-?\d+$/u.test(tokens[0] ?? '') || tokens.length !== width + 1) { if (cells.size) break; continue; }
+    const z = Number(tokens[0]);
+    tokens.slice(1).forEach((token, index) => {
+      const height = /^(.)([0-9+a-iv])$/u.exec(token);
+      if (height) cells.set(`${x0 + index},${z}`, { sym: height[1]!, h: /\d/u.test(height[2]!) ? Number(height[2]) : height[2] === '+' ? 10 : -1 });
+    });
+  }
+  return cells.size ? { feet, cells } : null;
+}
+const WATER_SYMBOLS = new Set(['w', '-']);
+const LAND_SYMBOLS = new Set([':', 's', '#', 'I', ',']);
+/** Whether her feet are in water and where the nearest land (a ground cell level with her or one above) is, as a line; null when she is not in water, no hostile is near, or the map does not read. */
+export function waterLine(world: Record<string, unknown>): string | null {
+  const near = hostilesOf(world).filter(e => e.distance <= WATER_ENEMY_METERS).sort((a, b) => a.distance - b.distance);
+  const map = typeof world.localMap === 'string' ? world.localMap : '';
+  const grid = near.length && map ? surfaceGrid(map) : null;
+  if (!grid) return null;
+  const { feet, cells } = grid;
+  let wet = 0, dry = 0;
+  for (let dx = -1; dx <= 1; dx += 1) for (let dz = -1; dz <= 1; dz += 1) {
+    if (!dx && !dz) continue;
+    const sym = cells.get(`${feet.x + dx},${feet.z + dz}`)?.sym;
+    if (sym && WATER_SYMBOLS.has(sym)) wet += 1; else if (sym && LAND_SYMBOLS.has(sym)) dry += 1;
+  }
+  if (wet < 4 || wet <= dry) return null;
+  const enemy = near[0]!, at = enemy.at;
+  interface Land { dx: number; dz: number; h: number; d: number; gap: number | null }
+  const lands: Land[] = [];
+  for (const [key, cell] of cells) {
+    if (!LAND_SYMBOLS.has(cell.sym) || cell.h < 0 || cell.h > 2) continue;
+    const [x, z] = key.split(',').map(Number) as [number, number];
+    const dx = x - feet.x, dz = z - feet.z, d = Math.hypot(dx, dz);
+    // gap: how much farther the enemy is from that cell than she is (positive: she gets there first).
+    lands.push({ dx, dz, h: cell.h, d, gap: at ? Math.hypot(x + 0.5 - at.x, z + 0.5 - at.z) - d : null });
+  }
+  const nearest = lands.reduce<Land | null>((best, land) => !best || land.d < best.d ? land : best, null);
+  const away = lands.filter(land => land.gap !== null && land.gap >= LAND_GAP_METERS).reduce<Land | null>((best, land) => !best || land.d < best.d ? land : best, null);
+  const spot = (land: Land) => `${directionWords(land.dx, land.dz)}（約 ${Math.round(land.d)}m・立つ所 (${feet.x + land.dx},${feet.y + land.h},${feet.z + land.dz})）`;
+  const side = at ? `敵 #${enemy.id} ${enemy.name} は ${bearing(at.x - feet.x - 0.5, at.z - feet.z - 0.5)} ${Math.round(enemy.distance)}m` : `敵 ${enemy.name} ${Math.round(enemy.distance)}m`;
+  const land = !nearest ? '地図の中に陸が見えない'
+    : away && away !== nearest && nearest.gap !== null && nearest.gap < LAND_GAP_METERS ? `最寄りの陸は ${spot(nearest)}だが敵に近い。敵より先に着ける陸は ${spot(away)}`
+    : `最寄りの陸は ${spot(nearest)}`;
+  return `今は水の中（周り 8 マスのうち水 ${wet}）・${land}・${side}。水の中の歩みは 1〜2 m/s で、陸の敵の走り（約 3 m/s）より遅い。水の中を数マス泳いでも距離は開かない: 陸へ上がり（go は waterOk を付ける。walk は付けずに泳ぐ）、陸で 10 マス以上離れる手を同じ act に入れる。敵が陸の側にいる時は、敵から遠い陸を選ぶ`;
+}
 export function fightLines(observation: BodyObservation | null, request: boolean): string[] {
   const world = rec(observation?.state.world);
   if (!world) return [];
-  return [packLine(world, nightly(world), request), gearLine(observation, world)].filter((line): line is string => !!line);
+  return [packLine(world, nightly(world), request), gearLine(observation, world), waterLine(world)].filter((line): line is string => !!line);
 }

@@ -57,6 +57,8 @@ const URGENT = [
   '- In a decision where live\'s mode is 「急ぎの版」: think in 2 to 3 sentences, send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer (「[急ぎ] …」). '
     + 'Move away, put a block between you and the enemy, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
     + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating. If an urgent line says 「詰めて斬れる」, its fight comes first.',
+  // try1124b (the owner's test 11/24: 15 of 38 acts were replaced by the next decision before they arrived; in a replay the moves were 1 to 6 m in 14 of 15 answers).
+  '- A move away is one go or walk of 10 blocks or more: a move of 1 to 4 blocks leaves the enemy as near, and the next decision replaces it.',
 ].join('\n');
 
 /**

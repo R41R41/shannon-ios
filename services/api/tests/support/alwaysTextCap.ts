@@ -12,5 +12,7 @@
  *   disagree, and they are given only to a request. The text measures 10,486, the cap is 10,500.
  * - 11/24 (the night deaths of 11/23): the scope line says a request to fight enemies needs gear first (the stage text carries the rest, the urgent rules point to it; about 50 llmc,
  *   about 20 real). The text measures 10,538, the cap is 10,550.
+ * - 11/24 (try1124b, the owner's test of 07:12: a zombie in a pool, 22 urgent decisions each chose a move of 1 to 4 blocks and 15 of 38 acts were replaced before they arrived): the urgent rules say a move away
+ *   is one go or walk of 10 blocks or more (about 60 llmc, about 25 real). The text measures 10,599, the cap is 10,610.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_550;
+export const ALWAYS_TEXT_CAP_LLMC = 10_610;

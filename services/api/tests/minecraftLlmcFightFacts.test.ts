@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { fightLines, gearLine, packLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
+import { fightLines, gearLine, packLine, waterLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 
 /** The night of 11/23 (d0001): a skeleton 45 m away with zombies around it, a stone sword, an iron, no armour, no shield, no food. */
@@ -40,5 +40,36 @@ describe('the pack and the gear as facts (11/24)', () => {
       expect(lines.some(line => line.startsWith('戦う装備:'))).toBe(true);
     }
     expect(fightLines(frame({ nearbyThreats: [] }), true)).toEqual([]);
+  });
+});
+
+describe('the water line (11/24 try1124b: a zombie came while she stood in a pool, and every decision chose a move of 1 to 4 blocks inside the water)', () => {
+  const POOL = ['地図 v1 足=(10,62,20) x=7..13 z=18..22 方式=surface 上=北', 'z/x 7 8 9 0 1 2 3',
+    '18 w1 w1 w1 w1 w1 :1 :1', '19 w1 w1 w1 w1 w1 w1 :1', '20 w1 w1 w1 @0 w1 w1 :1', '21 w1 w1 w1 w1 w1 w1 :1', '22 w1 w1 w1 w1 w1 :1 :2'].join('\n');
+  const ZOMBIE = threat(1513, 'zombie', 3.2, 7, 62, 21);
+  it('says that she stands in water, the nearest land with the cell to stand on, and the side of the enemy', () => {
+    const line = waterLine({ localMap: POOL, nearbyThreats: [ZOMBIE] })!;
+    expect(line).toContain('今は水の中（周り 8 マスのうち水 8）');
+    expect(line).toContain('最寄りの陸は 東2・北2（約 3m・立つ所 (12,63,18)）');
+    expect(line).toContain('敵 #1513 zombie は 西 3m');
+    expect(line).not.toContain('敵に近い');
+  });
+  it('names the land she reaches before the enemy when the nearest land is on the enemy side', () => {
+    const both = ['地図 v1 足=(10,62,20) x=3..13 z=18..22 方式=surface 上=北', 'z/x 3 4 5 6 7 8 9 0 1 2 3',
+      ...[18, 19].map(z => `${z} ${Array(11).fill('w1').join(' ')}`), '20 :1 w1 w1 w1 w1 w1 w1 @0 w1 :1 :1', ...[21, 22].map(z => `${z} ${Array(11).fill('w1').join(' ')}`)].join('\n');
+    const line = waterLine({ localMap: both, nearbyThreats: [threat(1513, 'zombie', 3.1, 13, 62, 20)] })!;
+    expect(line).toContain('最寄りの陸は 東2（約 2m・立つ所 (12,63,20)）だが敵に近い。敵より先に着ける陸は 西7（約 7m・立つ所 (3,63,20)）');
+  });
+  it('is silent on land, with no hostile within 12 m, or on a map that is not the surface map', () => {
+    const ashore = POOL.replace('@0', ':1').replace('w1 w1 w1 :1 w1 w1', 'w1 w1 w1 :1 w1 w1');
+    expect(waterLine({ localMap: ashore.replace(/w1/gu, ':1'), nearbyThreats: [ZOMBIE] })).toBeNull();
+    expect(waterLine({ localMap: POOL, nearbyThreats: [] })).toBeNull();
+    expect(waterLine({ localMap: POOL, nearbyThreats: [threat(1, 'zombie', 13, 20, 62, 20)] })).toBeNull();
+    expect(waterLine({ localMap: POOL.replace('方式=surface', '方式=layers'), nearbyThreats: [ZOMBIE] })).toBeNull();
+  });
+  it('is one of the fight lines, so the normal and the urgent live state both carry it', () => {
+    const obs = frame({ localMap: POOL, nearbyThreats: [ZOMBIE] }, [['bread', 2]]);
+    expect(fightLines(obs, false).some(line => line.startsWith('今は水の中'))).toBe(true);
+    expect(inputFacts(obs, {}, true).compressed.some(line => line.startsWith('今は水の中'))).toBe(true);
   });
 });
