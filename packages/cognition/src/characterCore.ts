@@ -5,7 +5,6 @@ import { CHARACTER_CORE_KID, KID_CORE_SPEECH } from './characterCoreKid.js';
  * 2026-11-24 (owner: every entrance is the child Shannon): `CHARACTER_CORE` below is now the child's core (`characterCoreKid.ts`). The
  * text this file wrote until then is kept as `CHARACTER_CORE_V2` (hash pinned by the test) and is read by no entrance.
  */
-import { CHARACTER_CORE_KID, KID_CORE_SPEECH } from './characterCoreKid.js';
 
 /**
  * Her character core (Syzygy ADR-0012 D6): who she is — her temperament, what she values and likes, how she speaks, her habits —
