@@ -9,6 +9,7 @@ import { parseCondition } from '../../../contracts/minecraftActCondition.js';
 import { applyLedger, readLedgerSeen, type LedgerAdded, type LedgerInput, type LedgerSeen } from '../../../surfaces/minecraft/minecraftLlmcPromises.js';
 import { offer, withdraw } from '../../../surfaces/minecraft/minecraftLlmcOnceFacts.js';
 import { noteKindRaw } from '../../../infra/decisionRecords/decisionRecordNotes.js';
+import { droppedOpenProblem } from './fcaPlanDrops.js';
 
 /**
  * `plan.update` (design mb-llm-centric 2.7): a core tool of the FCA, for a task that keeps a plan tree
@@ -227,6 +228,11 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   /** A surface may reject an explicit model update before any of its operations are committed. */
   validateUpdate?(before: PlanTree, after: PlanTree): string | null;
   /**
+   * Play 1124: before the nodes seen done, the done nodes the pack no longer shows after a death (`lostDoneUpdate`) go back to open, and the plan's
+   * note says so once. Absent: a node done stays done.
+   */
+  lost?(tree: PlanTree): { update: PlanUpdate; ids: readonly string[]; words: string } | null;
+  /**
    * mb-llmc r5: at each read of the plan, the change the body's frame shows (the nodes seen done,
  * `minecraftPlanDone.ts`), applied before
    * the decision reads the path. Absent: none.
@@ -280,6 +286,9 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   };
   /** r5: the nodes the frame shows done, marked so before the path is read. */
   const settle = () => {
+    let lost: ReturnType<NonNullable<typeof parts.lost>> = null;
+    try { lost = tree.nodes.length ? parts.lost?.(tree) ?? null : null; } catch { lost = null; }
+    if (lost?.ids.length && amend(lost.update, 'reopened', ` lost=${lost.ids.slice(0, 8).join(',')}`)) note = note ? `${note} ${lost.words}` : lost.words;
     let seen: ReturnType<NonNullable<typeof parts.seen>> = null;
     try { seen = tree.nodes.length ? parts.seen?.(tree) ?? null : null; } catch { seen = null; }
     const closed = (seen?.closed?.length ? ` closed=${seen.closed.join(',')}` : '') + (seen?.descended?.length ? ` descended=${seen.descended.join(',')}` : '');
@@ -399,6 +408,8 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       if (result.problem) return toolFailure('invalid_input', `計画は変えていない: ${result.problem}\n${planText(tree)}`, { retryable: false });
       const problem = parts.validateUpdate?.(tree, result.tree);
       if (problem) return toolFailure('invalid_input', `計画は変えていない: ${problem}\n${planText(tree)}`, { retryable: false });
+      const dropped = result.changed ? droppedOpenProblem(tree, result.tree) : null;
+      if (dropped) return toolFailure('invalid_input', `計画は変えていない: ${dropped}\n${planText(tree)}`, { retryable: false });
       if (result.changed) {
         // Continue contract 7 and 8: a kind outside the list was taken as `other`; the word the model wrote goes into
 // the decision's record (`kindRaw`).

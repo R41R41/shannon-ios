@@ -7,7 +7,7 @@ import { carriedItemCounts, EDIBLE_FOOD } from './minecraftItems.js';
 import { BLOCKS } from './minecraftLlmcPrepRules.js';
 import { foodPreparation } from './minecraftFoodPreparation.js';
 import { itemWords, reachSuffix } from './minecraftLlmcReachWords.js';
-import { breathWords, timeWords } from './minecraftLlmcStateWords.js';
+import { breathWords, clockStalledSeconds, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 import { furnaceLedgerLines } from './minecraftLlmcFurnaceWait.js';
 
@@ -241,9 +241,11 @@ export function stacks(value: unknown): string[] {
  * mb-llmc-cand 9 (run 37: "time":"99" with no unit): the time of day in words, from the body's numeric `timeOfDay`
  * (0–23999) first and its `time` string as the fallback; null when it is neither a number nor the Nether's or the End's.
  */
-function timeOf(world: Record<string, unknown>, dimension: BodyValue | undefined): string | null {
+function timeOf(world: Record<string, unknown>, dimension: BodyValue | undefined, observation?: BodyObservation): string | null {
   const raw = finite(world.timeOfDay) !== null ? String(world.timeOfDay) : String(world.time);
-  return timeWords(raw, typeof dimension === 'string' ? dimension : undefined, world.weather);
+  const overworld = typeof dimension !== 'string' || !/nether|end/u.test(dimension);
+  const stalled = observation && overworld ? clockStalledSeconds(observation.bodyId, raw, Date.parse(observation.stateAt)) : 0;
+  return timeWords(raw, typeof dimension === 'string' ? dimension : undefined, world.weather, stalled);
 }
 
 /** Her state in one object: where, the time, health, hunger, air, what she holds and wears. */
@@ -255,7 +257,7 @@ function stateOf(world: Record<string, unknown>, observation: BodyObservation): 
   if (typeof dimension === 'string') out.dimension = dimension.replace(/^minecraft:/u, '');
   for (const key of ['inside', 'biome', 'time', 'weather', 'heldItem', 'worn', 'feetWater'] as const) {
     if (typeof world[key] !== 'string') continue;
-    out[key] = (key === 'time' ? timeOf(world, out.dimension) : null) ?? cleanText(world[key] as string);
+    out[key] = (key === 'time' ? timeOf(world, out.dimension, observation) : null) ?? cleanText(world[key] as string);
   }
   // Run 46: the body's own count of the empty pack slots (`freeSlots`), the pack lines' ground (the inventory is one line a kind).
   const free = finite(world.freeSlots);

@@ -484,7 +484,13 @@ void restoreReceipts();
       return taken;
     },
     dropWaiting() {
-      const waiting = open().slice(1);
+      const [running, ...waiting] = open();
+      // Owner's words while the running item only waits (every hand is `wait`): nothing in it is worth finishing first (a furnace or a walk is not cut),
+      // so it stops and the decision that reads the words comes now, not after minutes of waits (play 1124: 3.5 minutes, two messages unread).
+      if (running && running.input.hands.every(hand => hand.do === 'wait')) {
+        running.because ??= '依頼者の言葉';
+        running.abort.abort('message');
+      }
       for (const item of waiting) {
         item.because ??= '依頼者の言葉';
         item.abort.abort('message');

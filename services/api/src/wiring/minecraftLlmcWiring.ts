@@ -35,6 +35,7 @@ type Stall
 } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { anthropicFcaHistoryCodecV2 } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { firstPlanSystemFor } from '../surfaces/minecraft/minecraftStrategy.js';
+import { lostDoneUpdate } from '../surfaces/minecraft/minecraftPlanLost.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
@@ -91,6 +92,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const adopted = (before: PlanTree, after: PlanTree) => adoptProblem({ validate, observe }, before, after);
   const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withReplanInbox(firstPlanInbox, log, adopted), log,
     validateUpdate: validate,
+    lost: tree => lostDoneUpdate(step.taskId, tree, observe()),
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
        tree => withChestsDone(seenDoneUpdate(tree, observe()), chestNodesDone(step.taskId, tree)),
     follow: tree => followBack(step.taskId, tree, doneFacts(observe())) ?? followDimensionHeld(step.taskId, tree, doneFacts(observe()))
