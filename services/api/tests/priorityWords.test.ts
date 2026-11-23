@@ -98,7 +98,7 @@ describe('minecraft.request takes a placement', () => {
   it('offers end, next and now, and does not require it', () => {
     const properties = definition.input.properties as Record<string, { enum?: string[]; description?: string }>;
     expect(properties.placement!.enum).toEqual(['end', 'next', 'now']);
-    expect(properties.placement!.description).toContain('書かなければこれ');
+    expect(properties.placement!.description).toContain('（既定）');
     expect(definition.input.required).toEqual(['goal']);
   });
 });

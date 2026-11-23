@@ -31,7 +31,7 @@ import {
 import { VoiceWords } from './platformVoiceWords.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
-import { voiceIntentLineKind, type VoiceMinecraftIntentResult, type VoiceMinecraftPort, type VoiceMinecraftState } from './voiceMinecraftPort.js';
+import { voiceIntentLineKind, intentLog, type VoiceMinecraftIntentResult, type VoiceMinecraftPort, type VoiceMinecraftState } from './voiceMinecraftPort.js';
 import { lifecycleRefusalLine, type LifecycleRequestAction, type VoiceLifecyclePort } from './voiceLifecyclePort.js';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 
@@ -544,8 +544,7 @@ export class PlatformVoiceService {
       type: 'intent', kind: voiceIntentLineKind(intent.kind, outcome.as), delivered: outcome.delivered,
       ...(outcome.taskId ? { taskId: outcome.taskId } : {}), ...(outcome.reason ? { reason: outcome.reason } : {}),
     });
-    this.log(`Shannon platform voice intent kind=${intent.kind} delivered=${outcome.delivered} as=${outcome.as ?? '-'} reason=${outcome.reason ?? '-'}`
-      + ` placement=${intent.placement || '-'} target=${intent.target || '-'}`);
+    this.log(intentLog(intent, outcome));
     if (!outcome.delivered) this.refuse(seat, request, answer, outcome.reason ?? 'not_owner_scope');
   }
 

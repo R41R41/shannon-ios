@@ -240,7 +240,7 @@ export function fcaMinecraftQueue(parts: QueueParts) {
       before = snapshot;
       return applied(request, context, snapshot, { at, id, newId: newId() });
     })!;
-    logChange(request.op, before, changed, request.op === 'add' ? ` placement=${request.placement ?? 'end'}` : request.op === 'move' ? ` before=${request.before ?? 'end'}` : '');
+    logChange(request.op, before, changed, request.op === 'add' ? ` placement=${request.placement ?? 'end'}` : '');
     if (!changed.ok) return { ok: false, code: changed.code, entry: null };
     await settleStops(changed, context.stopReason);
     const entry = changed.entry;
