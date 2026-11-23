@@ -150,13 +150,14 @@ describe('the switch', () => {
 });
 
 describe('a Discord voice channel through the one voice turn', () => {
-  it('speaks the owner\'s room through the apps\' voice turn (plain stream), keeps it in the room\'s thread without voice tags', async () => {
+  it('speaks the owner\'s room through the apps\' voice turn (the speech field is offered, so the structured stream), keeps it in the room\'s thread without voice tags', async () => {
     const { say, model, store, background, close } = harness();
     model.reply = 'ねえ、[whispers] 今日はもう寝ようかな。おやすみ。';
     const lines = await say('今日はもう遅いね、そろそろ寝ようか');
     expect(lines[0]).toMatchObject({ type: 'decision', respond: true });
     expect(typeOf(lines).filter(type => type !== 'expression').at(-1)).toBe('done');
-    expect(model.kinds).toEqual(['voice-stream']);
+    // Alone in his own room the speech words are offered (hers to carry), so the turn reads the field: the structured stream, not the plain one.
+    expect(model.kinds).toEqual(['structured-stream']);
     const spoken = sentences(lines);
     expect(spoken.map(line => line.text).join('')).not.toContain('[');
     expect(spoken.some(line => line.voiceText?.includes('[whispers]'))).toBe(true);

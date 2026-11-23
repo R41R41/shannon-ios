@@ -434,9 +434,12 @@
             "cancel",
             "hold",
             "resume",
-            "move"
+            "move",
+            "speech",
+            "login",
+            "logout"
            ],
-           "description": "マイクラの体の「依頼の列」への頼み。task=新しい依頼を足す（ゲームの中でしてほしいことをはっきり頼まれた）。message=いま実行中の依頼への言葉（変えてほしい・続けてほしい）。stop=列ぜんたいを止める。cancel=依頼をやめる。hold=依頼を保留する。resume=保留・停止の依頼を戻す。move=列の中で依頼の順番を変える。none=それ以外"
+           "description": "マイクラの体の「依頼の列」への頼み。task=新しい依頼を足す（ゲームの中でしてほしいことをはっきり頼まれた）。message=いま実行中の依頼への言葉（変えてほしい・続けてほしい）。stop=列ぜんたいを止める。cancel=依頼をやめる。hold=依頼を保留する。resume=保留・停止の依頼を戻す。move=列の中で依頼の順番を変える。none=それ以外。speech=持ち主が、これからの話し方（声を出すか・独り言をするか・どのくらいするか）を変えてほしいと言った時だけ（体への頼みではない）。login=マイクラの体をサーバーへ入れてほしいと持ち主が頼んだ時だけ。logout=マイクラの体をサーバーから出してほしいと持ち主が頼んだ時だけ（体への頼みではない）"
           },
           "goal": {
            "type": "string",
@@ -455,13 +458,35 @@
           "target": {
            "type": "string",
            "description": "cancel・hold・resume・move の時だけ、依頼の番号（「#3」か「3」）。いま実行中の依頼なら空文字。resume の空文字は列ぜんたい。それ以外は空文字"
+          },
+          "speechMode": {
+           "type": "string",
+           "enum": [
+            "chatty",
+            "needed",
+            "silent",
+            ""
+           ],
+           "description": "speech の時だけ。chatty=よく話す（独り言も声にする）。needed=必要な時だけ（独り言はしない。返事・人への問い・作業の完了と危険の知らせだけ声にする）。silent=話さない（声を出さず、返事は文字で出る）。話し方を変えない時（頻度だけ変える時）は空文字。speech 以外は空文字"
+          },
+          "speechRate": {
+           "type": "string",
+           "enum": [
+            "low",
+            "normal",
+            "high",
+            ""
+           ],
+           "description": "speech の時だけ。独り言の多さ。low=少なめ。normal=ふつう。high=多め（よく話す時だけ効く）。変えない時は空文字。speech 以外は空文字"
           }
          },
          "required": [
           "kind",
           "goal",
           "placement",
-          "target"
+          "target",
+          "speechMode",
+          "speechRate"
          ]
         }
        },
@@ -510,7 +535,7 @@
    "prefix": {
     "tools": "f60390fc",
     "system": "d4c7dbee",
-    "schema": "bce902ff",
+    "schema": "c33483dd",
     "effort": "8a3bb108",
     "history": "f1fca6c8"
    },

@@ -67,6 +67,9 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * request): the first and third provider requests carry that guide.
  * The same two were changed by hand again on 2026-11-22 for a change that is not stage 3's (the request guide's wording: how to read the build steps of a
  * single thing, and what is asked again when a request could not be checked against the record): the first and third provider requests carry it.
+ * The same two were changed by hand again on 2026-11-23 for a change that is not stage 3's (the owner's words about how she speaks, and going into or
+ * out of the server: the intent field has the kinds speech, login and logout and the two fields speechMode and speechRate): the first and third
+ * provider requests carry that schema.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 
