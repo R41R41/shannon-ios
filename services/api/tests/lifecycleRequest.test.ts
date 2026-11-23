@@ -29,6 +29,7 @@ function fixture(options: { state?: MinecraftLifecycleState | undefined; availab
   let liveLeft = options.liveFor ?? 0;
   const parts: LifecycleRequestParts = {
     scopeKey: 'owner', now: () => clock, log: line => lines.push(line), stopWaitMs: 50, stopStepMs: 1,
+    unresolvedWaitMs: 5, unresolvedStepMs: 1,
     operator: () => (options.operator === false ? null : {
       async handle(value, hooks) {
         door.calls.push({ value, hooks });

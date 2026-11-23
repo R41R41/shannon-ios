@@ -3,6 +3,10 @@ import type { MinecraftLifecycleCommand, MinecraftLifecycleReceipt, MinecraftLif
 import { inActionExecution } from '../infra/context/actionExecution.js';
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import { acquireAction } from './actionExecutionWiring.js';
+import { waitWhileBlocked } from './lifecycleWait.js';
+
+/** How long a claim of the slot or the body looks again before it is refused (`lifecycleWait.ts`): both ms, absent: not at all. */
+export interface ClaimWait { ms: number; stepMs: number }
 
 /** How a detached lifecycle operation ended for its caller: an accepted native receipt, or none (not started, or unknown). */
 export interface LifecycleSettlement {
@@ -35,9 +39,21 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
   const body = actionResource(parts.deviceId, 'minecraft-body');
   return {
     /** Claims the operation's own action. Null when the Minecraft slot is not free now; a refused new claim is withdrawn. */
-    async admit(draft: ActionDraft, withdraw: boolean): Promise<RunningAction | null> {
+    async admit(draft: ActionDraft, withdraw: boolean, wait?: ClaimWait): Promise<RunningAction | null> {
+      const claim = async (): Promise<RunningAction | null> => {
+        let claimed: RunningAction | null = null;
+        // A slot held by the operation that just ended is looked at again for `wait`; each refused claim is withdrawn before the next.
+        const blocked = async () => {
+          claimed = await acquireAction(parts.actions, { ...draft, kind: 'minecraft' }, controller.signal);
+          if (claimed || !withdraw || !wait) return false;
+          await withdrawQueued(parts.actions, draft);
+          return true;
+        };
+        await waitWhileBlocked(blocked, wait?.ms ?? 0, wait?.stepMs ?? 0);
+        return claimed;
+      };
       let active: RunningAction | null;
-      try { active = await acquireAction(parts.actions, { ...draft, kind: 'minecraft' }, controller.signal); } catch (error) {
+      try { active = await claim(); } catch (error) {
         // The claim failed after the action was queued (a missed IPC deadline under load, 2026-11-03 00:56: a queued row with no holder and no
         // deadline stayed and refused every later request with `lease_conflict`): the queued row is withdrawn before the failure goes on.
         await withdrawQueued(parts.actions, draft);
@@ -58,9 +74,13 @@ function lifecycleRunner(parts: { actions: ActionThreads; service: MinecraftLife
      * would end `unknown` with `sent=0`, outside the action store's one unknown exit, and `unresolved()` would refuse every start,
      * login, logout and stop for good (2026-10-21, run 22's stop f67261ba). A dispatch refused here closes it as never started.
      */
-    async takeBody(active: RunningAction, onlyLostSteps?: () => boolean): Promise<boolean> {
-      if (await parts.actions.dispatch(active.execution.lease, [body]).catch(() => false)) return true;
-      if (onlyLostSteps?.() && await parts.actions.dispatch(active.execution.lease, []).catch(() => false)) return true;
+    async takeBody(active: RunningAction, onlyLostSteps?: () => boolean, wait?: ClaimWait): Promise<boolean> {
+      // `wait`: the hold of the plan the logout just stopped is let go within seconds, so the body is asked for again before it is refused.
+      const taken = async (): Promise<boolean> => {
+        if (await parts.actions.dispatch(active.execution.lease, [body]).catch(() => false)) return true;
+        return !!onlyLostSteps?.() && await parts.actions.dispatch(active.execution.lease, []).catch(() => false);
+      };
+      if (await waitWhileBlocked(async () => !await taken(), wait?.ms ?? 0, wait?.stepMs ?? 0)) return true;
       await active.finish('cancelled', 'lifecycle_body_unavailable').catch(() => {});
       return false;
     },

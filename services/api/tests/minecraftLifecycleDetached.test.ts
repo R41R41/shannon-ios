@@ -42,7 +42,7 @@ function fixture(told?: LifecycleOutcomeTeller) {
   const autonomy = new ShannonAutonomyService({ store, config: configuredAutonomy({ SHANNON_AUTONOMY_ENABLED: 'true' }), now: () => at });
   const h = actionHarness(() => at, path); close.push(h.close);
   const configured = configuredMinecraftLifecycle(values, { path, autonomy, actions: h.actions, ownerAlone: () => alone,
-    taskAllowed: () => false, now: () => at, ...(told ? { told } : {}) })!;
+    taskAllowed: () => false, now: () => at, waits: { unresolvedMs: 30, bodyMs: 30, stepMs: 5 }, ...(told ? { told } : {}) })!;
   // Closing aborts a running operation; its cancellation drain waits on this clock, so the clock moves while it closes.
   close.push(async () => { const ticking = setInterval(() => { at = new Date(Date.parse(at) + 1000).toISOString(); }, 20);
     try { await configured.close(); } finally { clearInterval(ticking); } });

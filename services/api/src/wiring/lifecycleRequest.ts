@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { MinecraftLifecycleAction, MinecraftLifecycleState } from '../contracts/minecraftLifecycleContract.js';
 import type { LifecycleOutcomeTeller } from './lifecycleOutcomeTellingWiring.js';
 import type { OperatorHandleHooks } from './operatorMinecraftCommandRequests.js';
+import { askWhileBlocked, resolveWaits } from './lifecycleWait.js';
 import { settledOutcome } from './minecraftLifecycleWiring.js';
 import type { LifecycleRequestAction, LifecycleRequestCode, LifecycleRequestResult, VoiceLifecyclePort } from '../surfaces/platform/voiceLifecyclePort.js';
 export type { LifecycleRequestAction, LifecycleRequestCode, LifecycleRequestResult, VoiceLifecyclePort } from '../surfaces/platform/voiceLifecyclePort.js';
@@ -48,7 +49,7 @@ export interface LifecycleRequestParts {
   now?(): number;
   log?(line: string): void;
   /** Tests shorten these. */
-  inflightMs?: number; stopWaitMs?: number; stopStepMs?: number;
+  inflightMs?: number; stopWaitMs?: number; stopStepMs?: number; unresolvedWaitMs?: number; unresolvedStepMs?: number;
 }
 
 /** A pending operation is forgotten after this, whatever happened to it (a settled report that never came). */
@@ -87,6 +88,13 @@ const messageOf = (code: LifecycleRequestCode): string => ({
   rate_limited: WORDS.rateLimited,
 }[code]);
 
+const blockedByUnresolved = (answer: LifecycleRequestResult | null): boolean =>
+  !!answer && !answer.ok && answer.code === 'unresolved_operation';
+
+/** What the operator's door is asked: the operator's own envelope, labelled by the way in. */
+const envelopeOf = (input: LifecycleRequestInput) => ({ v: 1, operator: LIFECYCLE_OPERATOR_LABELS[input.via], domain: 'minecraft', op: input.action,
+  ...(input.serverId ? { args: { serverId: input.serverId } } : {}) });
+
 /** A label for the log: no spaces or control characters, bounded. */
 const loggable = (value: string | undefined): string => (value ?? '-').replace(/[^\p{L}\p{N}._@-]/gu, '_').slice(0, 64) || '-';
 
@@ -94,6 +102,7 @@ export function createLifecycleRequests(parts: LifecycleRequestParts) {
   const now = parts.now ?? (() => Date.now());
   const log = (line: string) => { try { (parts.log ?? console.info)(line); } catch { /* a log never fails a request */ } };
   const inflight = new Map<string, Pending>();
+  const waits = resolveWaits({ unresolvedMs: parts.unresolvedWaitMs, stepMs: parts.unresolvedStepMs });
 
   /** The operation under way on a server, with the ones past their time forgotten. */
   function pendingOf(serverId: string): Pending | null {
@@ -126,6 +135,14 @@ export function createLifecycleRequests(parts: LifecycleRequestParts) {
     return null;
   }
 
+  /**
+   * An earlier operation whose receipt is not written yet is looked at again for a short while (`lifecycleWait.ts`): each look is the whole
+   * check, so a second press of the same direction made meanwhile is answered `pending`. The first look (`request`) is synchronous: nothing is
+   * awaited before a request registers as in flight. Still unresolved after the wait: the same refusal as before.
+   */
+  const checkAfterWaiting = (input: Pick<LifecycleRequestInput, 'action' | 'serverId'>) =>
+    askWhileBlocked(() => check(input), blockedByUnresolved, waits.unresolvedMs, waits.stepMs);
+
   /** Her work stopped and kept, then the body's hold waited for: so that the leaving is not refused for a busy body. Never refuses it. */
   async function stopAndKeep(serverId: string, door: NonNullable<ReturnType<LifecycleRequestParts['operator']>>): Promise<void> {
     try {
@@ -148,7 +165,8 @@ export function createLifecycleRequests(parts: LifecycleRequestParts) {
   async function request(input: LifecycleRequestInput): Promise<LifecycleRequestResult> {
     const serverId = parts.server(input.serverId ?? null);
     const tell = (result: string, id: string | null) => log(`Shannon Minecraft lifecycle request ${input.action} via=${input.via} actor=${loggable(input.actor)} server=${loggable(serverId ?? undefined)} result=${result} id=${id ?? '-'}`);
-    const quick = check(input);
+    const first = check(input);
+    const quick = blockedByUnresolved(first) ? await checkAfterWaiting(input) : first;
     if (quick) {
       tell(quick.ok ? quick.state : `refused:${quick.code}`, quick.ok ? quick.lifecycleId : null);
       return quick;
@@ -176,9 +194,7 @@ export function createLifecycleRequests(parts: LifecycleRequestParts) {
           }
         },
       };
-      const envelope = { v: 1, operator: LIFECYCLE_OPERATOR_LABELS[input.via], domain: 'minecraft', op: input.action,
-        ...(input.serverId ? { args: { serverId: input.serverId } } : {}) };
-      const answered = await door.handle(envelope, hooks);
+      const answered = await door.handle(envelopeOf(input), hooks);
       const body = (answered.body ?? {}) as { outcome?: unknown; code?: unknown; lifecycleId?: unknown; message?: unknown };
       if (body.outcome === 'accepted') {
         const id = typeof body.lifecycleId === 'string' ? body.lifecycleId : null;
@@ -199,6 +215,11 @@ export function createLifecycleRequests(parts: LifecycleRequestParts) {
     }
   }
 
+  function voiceCheck(action: LifecycleRequestAction): LifecycleRequestResult | null {
+    const quick = check({ action });
+    return blockedByUnresolved(quick) ? null : quick;
+  }
+
   /** What a spoken turn reads and asks, for the one registered server (a choice among several is not made by voice). */
   function voicePort(): VoiceLifecyclePort {
     return {
@@ -209,7 +230,9 @@ export function createLifecycleRequests(parts: LifecycleRequestParts) {
         if (!state) return null;
         return { running: state.running, bot: state.bot, pending: pendingOf(serverId)?.action ?? null };
       },
-      check: action => check({ action }),
+      // Never an unresolved refusal at once: her reply has already promised, the words of a late one could not be said after it, and
+      // the request itself waits for the receipt (`request`), so that case goes on to it.
+      check: action => voiceCheck(action),
       request: (action, options) => request({ action, via: 'voice', actor: options.actor, threadId: options.threadId ?? null }),
     };
   }
