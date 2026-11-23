@@ -32,6 +32,8 @@ import { feelingEventsCapability } from '../../contracts/feelingEventContract.js
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from '../../mind/attention/attentionPorts.js';
 import { type BodyPresence, type BodyPresenceUnchanged, type BodyNudges, bodyDoing } from './bodyPresence.js';
+import { MindFlow, bodyMindView } from './bodyMind.js';
+import type { BodyMind } from '../../contracts/bodyMindContract.js';
 import { innerNoteFaceOf, innerNoteMood } from '../../mind/emotion/innerNotePorts.js';
 import { switchOn } from '@shannon/switches';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
@@ -112,6 +114,7 @@ export class ShannonBody {
   private readonly seen = new Map<string, { etag: string; changedAt: string }>();
   private readonly audiences = new Map<string, { audience: BodyAudience; at: number }>();
   private readonly presenceMarks = new Map<string, number>();
+  private readonly mindFlow = new MindFlow();
   /** Looking at the room through the body's camera. */
   readonly looks: BodyLooks;
   /** Looking through the camera of the owner's app, in the turn that came from it. */
@@ -408,6 +411,11 @@ export class ShannonBody {
       touchVocabulary: BODY_TOUCH_VOCABULARY, ...feelingEventsCapability(this.feelingEvents),
     };
     return knownEtag === etag ? { ...head, unchanged: true } : { ...head, ...content };
+  }
+
+  /** Her feeling with its reason and the last ten minutes of it, for the game screen (`GET /v1/body/mind`). Presence keeps the reason out; this does not. */
+  mind(scopeKey: string): BodyMind {
+    return bodyMindView(this.dependencies.stateStore.snapshot(scopeKey), this.dependencies.now(), emotionTiming(), this.mindFlow, scopeKey);
   }
 
   /**

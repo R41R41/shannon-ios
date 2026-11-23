@@ -274,6 +274,23 @@ Her Minecraft body never registers: from the device of `SHANNON_MINECRAFT_BODY_J
 
 The registration is stored and returned in `presence`. Two flags are read by the server: `camera`, and `touchOnly` (see [A body that only feels touch](#a-body-that-only-feels-touch)). Nothing else of the registration is in any prompt, so Shannon does not yet know which expressions and gestures her body has.
 
+## `GET /v1/body/mind`
+
+How she feels, for the body that draws it in the game (owner decision 2026-11-24: a sign over her head and a small window). `presence` keeps the cause of a feeling out because a stream may show the apps that read it; this route carries it, so only a body that shows it on the game screen asks. Same device authentication and `scopeKey` as presence. Nothing is stored and no model is called.
+
+```json
+{ "schemaVersion": 1, "generatedAt": "…", "pollAfterSeconds": 4,
+  "feeling": { "primary": "frustrated", "intensity": 0.6, "cause": "骨を取るのに何度も落ちてしまう", "since": "…" },
+  "mood": { "valence": 0.3, "arousal": 0.6, "openness": 0.5 },
+  "flow": [ { "at": "…", "primary": "neutral", "intensity": 0 } ] }
+```
+
+- `primary` is one of her feeling kinds (the game's thought kinds among them), `intensity` is 0 to 1. When no feeling shows, or she hides it, `primary` is `neutral`, `intensity` 0, `cause` empty and `since` absent.
+- `cause` is one line of at most 40 characters, without the 「マイクラで」 prefix.
+- `flow` is the last ten minutes, oldest first, at most 24 points. A point is added when a read finds the feeling changed, stronger or weaker by 0.1, or a minute after the last point. It is kept in memory; a restart of the server empties it.
+- Her line of thinking and the plan node in hand are not here: the body already holds them from the task the server sends.
+- A body that does not know the field ignores it; a server that does not know the route answers 404, and the body shows nothing.
+
 ## `GET /v1/body/nudges`
 
 **Retired by the owner's decision of 2026-10-14** (Syzygy ADR-0002 note of that day: 「全てやめる代わりに、それらが本心からシャノンから自発的に発言され得るようにしておきたい」). The route keeps its shape for bodies that still ask, and `nudges` is always empty, at every hour and in every situation; `quietUntil` is always `null`. The five seed lines (`bodyNudges.ts`) and the server's scene windows are gone, so an old body says nothing from this route and needs no update.

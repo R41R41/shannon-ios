@@ -164,6 +164,8 @@ export {
   SHANNON_EMOTION_CUE_STRENGTH,
   buildExpressiveEmotionPrompt,
   carriedShannonEmotion,
+  SHANNON_CONVERSATION_CAUSES,
+  SHANNON_SETTLED_CAUSE,
   currentShannonEmotion,
   holdsShannonFeeling,
   normalizeShannonExpressiveEmotion,

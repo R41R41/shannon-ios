@@ -7,6 +7,7 @@ import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } fr
 import type { BodyLookAnswer } from './bodyLook.js';
 import type { BodyReactionOutcome } from './bodyReaction.js';
 import { BODY_REACTION_PATH, validatedBodyReactionRequest } from '../../contracts/bodyReactionContract.js';
+import { BODY_MIND_PATH } from '../../contracts/bodyMindContract.js';
 import type { ShannonBody } from './shannonBody.js';
 import { dispatchAppLookRequest } from './apiAppLookRoutes.js';
 import { APP_LOOK_ROUTE_PREFIX } from '../../contracts/appLookContract.js';
@@ -40,6 +41,7 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
       if (audience !== undefined && audience !== 'owner' && audience !== 'others') return badRequest('audience must be owner or others');
       return { status: 200, body: body.presence(scopeKey, deviceId, etag, audience) };
     }
+    if (request.path === BODY_MIND_PATH) return { status: 200, body: body.mind(scopeKey) };
     if (request.path === '/v1/body/nudges') return { status: 200, body: body.nudges(scopeKey) };
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }
