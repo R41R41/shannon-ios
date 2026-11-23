@@ -27,6 +27,7 @@ import { withToolEvidence } from '../mind/tools/toolEvidence.js';
 import type { MinecraftLifecycleToolPort } from '../mind/tools/shannonMinecraftLifecycleTools.js';
 import type { ToolRun } from '../mind/tools/shannonToolTypes.js';
 import type { ShannonAutonomyService } from '../mind/action/ownTime/autonomyService.js';
+import { resolveWaits, waitWhileBlocked, type LifecycleWaits } from './lifecycleWait.js';
 
 /** What she says when a conversation's request cannot be accepted now. */
 const BUSY_TEXT = Object.freeze({
@@ -80,11 +81,14 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
    * worker, tests): no start ever asks for a new world.
    */
   freshWorld?: FreshWorldPorts;
+  /** How long an unresolved earlier operation and a held slot or body are waited out (`lifecycleWait.ts`); tests shorten them. */
+  waits?: LifecycleWaits;
 }) {
   if (!switchOn(values, 'SHANNON_MINECRAFT_LIFECYCLE')) return null;
   const configuration = configuredMinecraftBody(values);
   if (!configuration || !stage4Enabled(values)) throw new Error('MINECRAFT_LIFECYCLE_CONFIG_REQUIRED');
   const now = parts.now ?? (() => new Date().toISOString());
+  const waits = resolveWaits(parts.waits);
   let ids: unknown;
   try { ids = JSON.parse(values.SHANNON_MINECRAFT_LIFECYCLE_SERVERS ?? '[]'); } catch { throw new Error('MINECRAFT_LIFECYCLE_SERVERS_REQUIRED'); }
   if (!Array.isArray(ids) || !ids.length || ids.length > 16 || new Set(ids).size !== ids.length
@@ -137,11 +141,14 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
     if (kind !== 'respond' || !context.threadId) return [];
     return [`conversation:${context.threadId}`, `turn:${createHash('sha256').update(context.memory.turnKey ?? '').digest('hex')}`];
   };
+  const claimWait = { ms: waits.bodyMs, stepMs: waits.stepMs };
   const detached = async (request: { id: string; serverId: string; action: MinecraftLifecycleAction; sourceIds: readonly string[]; threadId: string | null },
     failure: (kind: 'unavailable' | 'refused' | 'conflict', text: string) => ToolRun): Promise<ToolRun> => {
-    if (service.store.unresolved()) return failure('conflict', BUSY_TEXT.unresolved);
+    if (!await waitWhileBlocked(() => service.store.unresolved(), waits.unresolvedMs, waits.stepMs)) {
+      return failure('conflict', BUSY_TEXT.unresolved);
+    }
     const draft = { scopeKey: configuration.ownerScopeKey, kind: 'minecraft' as const, origin: 'owner_request' as const, sourceId: request.id };
-    const own = await runner!.admit({ ...draft, ownerInformed: true }, true);
+    const own = await runner!.admit({ ...draft, ownerInformed: true }, true, claimWait);
     if (!own) return failure('conflict', BUSY_TEXT.slot);
     const authority: MinecraftLifecycleAuthority = { scopeKey: configuration.ownerScopeKey, origin: 'owner_request', executionId: own.execution.lease.id,
       lease: own.execution.lease, sourceIds: request.sourceIds };
@@ -149,7 +156,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
       await own.finish('cancelled', 'lifecycle_not_allowed').catch(() => {});
       return failure('refused', '実行権・停止設定・現在の入力条件を確認できません。');
     }
-    if (!await runner!.takeBody(own)) return failure('conflict', BUSY_TEXT.body);
+    if (!await runner!.takeBody(own, undefined, claimWait)) return failure('conflict', BUSY_TEXT.body);
     // Its end is told to him in her words when it settles (`lifecycleOutcomeTellingWiring.ts`); the notice tells her either way. Not
     // awaited: writing the line (up to 20 s) never holds the operation's close or a shutdown.
     // Decided last, with the body taken: the state it reads is the freshest, and nothing after it can refuse the start.
@@ -227,7 +234,7 @@ export function configuredMinecraftLifecycle(values: Readonly<Record<string, str
     deviceId: configuration.deviceId, now, ownerAlone: parts.ownerAlone, freshWorld }) : null;
   const bodyKey = actionResource(configuration.deviceId, 'minecraft-body');
   const operator = createOperatorLifecycle({ service, runner, scopeKey: configuration.ownerScopeKey, serverIds, ownerAlone: parts.ownerAlone, allowed,
-    freshWorld, log: line => console.info(line),
+    freshWorld, log: line => console.info(line), waits: parts.waits,
     onlyLostSteps: (serverId, ownActionId) => {
       try {
         // Not in the server by the operator's fresh state (joined or not known: the body may be moving), a step of the owner's whose

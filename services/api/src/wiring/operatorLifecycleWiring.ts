@@ -5,6 +5,7 @@ import type {
 import type { MinecraftLifecycle } from '../surfaces/minecraft/minecraftLifecycle.js';
 import type { LifecycleRunner, LifecycleSettlement } from './minecraftLifecycleRunner.js';
 import type { FreshWorldAdmission } from './freshWorldWiring.js';
+import { resolveWaits, waitWhileBlocked, type LifecycleWaits } from './lifecycleWait.js';
 
 /** The source and command id of an operator's lifecycle operation: `operator:<operation uuid>`. */
 export const OPERATOR_LIFECYCLE_SOURCE = /^operator:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -45,6 +46,8 @@ export function createOperatorLifecycle(parts: {
   allowed(authority: MinecraftLifecycleAuthority, command?: Pick<MinecraftLifecycleCommand, 'id' | 'serverId' | 'action'>): boolean;
   /** How long set_day waits for an unsettled state, and how often it looks (tests shorten both). */
   setDaySettleMs?: number; setDayStepMs?: number;
+  /** How long an unresolved earlier operation, and a slot or body still held by the work just stopped, are waited out (`lifecycleWait.ts`; tests shorten). */
+  waits?: LifecycleWaits | undefined;
   /** 「新しいワールドで始める」 (`freshWorldWiring.ts`), decided when an operator's start is admitted. Absent: never. */
   freshWorld?: FreshWorldAdmission;
   /**
@@ -68,6 +71,8 @@ export function createOperatorLifecycle(parts: {
       await delay(parts.setDayStepMs ?? SET_DAY_STEP_MS);
     }
   }
+  const waits = resolveWaits(parts.waits);
+  const claimWait = { ms: waits.bodyMs, stepMs: waits.stepMs };
   return {
     servers: parts.serverIds,
     /** The server an operation names, or the only registered one. */
@@ -85,9 +90,10 @@ export function createOperatorLifecycle(parts: {
         const readiness = await settledForDay(request.serverId);
         if (readiness !== 'ready') return refused(SET_DAY_REFUSALS[readiness].code, SET_DAY_REFUSALS[readiness].message);
       }
-      if (parts.service.store.unresolved()) return refused('unresolved_operation', '前のマイクラ管理操作の結果がまだ確認できていません。');
+      const settledBefore = await waitWhileBlocked(() => parts.service.store.unresolved(), waits.unresolvedMs, waits.stepMs);
+      if (!settledBefore) return refused('unresolved_operation', '前のマイクラ管理操作の結果がまだ確認できていません。');
       const own = await parts.runner.admit({ scopeKey: parts.scopeKey, kind: 'minecraft', origin: 'owner_request', sourceId: request.id,
-        ownerInformed: true }, true);
+        ownerInformed: true }, true, claimWait);
       if (!own) return refused('lease_conflict', 'いまはマイクラの作業枠が空いていません。');
       const authority: MinecraftLifecycleAuthority = { scopeKey: parts.scopeKey, origin: 'owner_request', executionId: own.execution.lease.id,
         lease: own.execution.lease, sourceIds: [request.id] };
@@ -101,7 +107,7 @@ export function createOperatorLifecycle(parts: {
           if (lost) parts.log?.(`Shannon Minecraft operator ${request.action} goes on without the body: only lost steps hold it, the body is out`);
           return lost;
         } : undefined;
-      if (!await parts.runner.takeBody(own, goesWithoutBody)) return refused('lease_conflict', 'マイクラの体がほかの作業で使われています。');
+      if (!await parts.runner.takeBody(own, goesWithoutBody, claimWait)) return refused('lease_conflict', 'マイクラの体がほかの作業で使われています。');
       // `--keep-world` is the operator's opt-out; the switch is followed by default.
       const { keepWorld, ...operation } = request;
       const options = parts.freshWorld?.({ ...operation, origin: authority.origin, via: 'operator', keepWorld: keepWorld === true });
