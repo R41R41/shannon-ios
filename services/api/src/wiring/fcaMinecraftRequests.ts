@@ -151,10 +151,14 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     for (const task of bound(undefined, stoppable)) await parts.stop(task.id, 'owner_game_stop');
   };
   /** The app's request while the body has one: it joins the list. */
-  const joinList = async (goal: string) => {
-    const added = await queue.operate({ op: 'add', goal }, { origin: 'app' });
+  const joinList = async (goal: string, placement?: string) => {
+    const where = placement === 'now' || placement === 'next' ? placement : 'end';
+    const added = await queue.operate({ op: 'add', goal, placement: where }, { origin: 'app' });
     if (!added.ok || !added.entry) return toolFailure('unavailable', '依頼の列がいっぱいで足せなかった。');
-    return withToolEvidence(toolOk(`依頼の列に足した（#${added.entry.seq}）。順番が来たら始まる。まだ達成していない。`),
+    const order = where === 'now' ? 'いまの依頼を保留にして先に始める（先の依頼が終われば保留は自動で戻る）。'
+      : where === 'next' ? 'いまの依頼のすぐ次に始まる。' : '順番が来たら始まる。';
+    log(`Shannon Minecraft app request placement=${where} entry=#${added.entry.seq}`);
+    return withToolEvidence(toolOk(`依頼の列に足した（#${added.entry.seq}）。${order}まだ達成していない。`),
       { outcome: 'queued', action: 'request', target: { kind: 'minecraft_request', id: added.entry.id }, operationId: added.entry.id });
   };
   /** The app's cancel of a task: through the list when it is on it (the list goes on with the next), else the runtime's stop. */
@@ -269,12 +273,12 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
       if (context.scopeKey !== parts.ownerScope || !parts.ownerAlone() || !parts.conversation.taskToolsAvailable(context.scopeKey)) {
         return minecraftTaskUnavailable(name);
       }
-      const value = input as { goal?: string; id?: string };
+      const value = input as { goal?: string; id?: string; placement?: string };
       if (name === 'minecraft.request') {
         const bodies = parts.control.available();
         if (bodies.length !== 1) return toolFailure('unavailable', '利用するマイクラの体が一つに決まっていないか、接続されていない。');
         // The body is busy or the list has requests: his new one joins the list (the body has one request at a time).
-        if (queueBusy(queue, bound(() => true, unfinished).length > 0)) return joinList(value.goal!);
+        if (queueBusy(queue, bound(() => true, unfinished).length > 0)) return joinList(value.goal!, value.placement);
         return parts.atomic(() => {
           const result = parts.conversation.executeTaskTool('task.create', spec(value.goal!), context);
           if (!result.ok) return result;

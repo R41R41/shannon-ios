@@ -288,6 +288,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
     description: `${MINECRAFT}に、ゲーム内の目標の実行を頼む（採集・製作・採掘・探索・建築・戦闘など）。何段階もかかる目標も、頼まれた元の目標のまま渡す。準備や手順への分解は体が決めるので、攻略の説明だけで済ませたり、別の小目標に置き換えたりしない。ライ氏にマイクラの中で実行を頼まれた時に、聞き返さずに使う。頼むと体の順番待ちに入り、体が受け取って動き、進み具合と結果があとで届く。頼んだ時点ではまだ達成していないので、完了を確認できる結果が届くまで終わった・集めた・倒したとは言わない。現実の用事には使わない。`,
     input: schema({
       goal: { type: 'string', description: `頼まれた元の目標を${MINECRAFT_GOAL_CHARACTERS}字以内。達成条件を保ち、準備の小目標や手順に置き換えない。個数を要する採集・製作の依頼で数がなければ、ほどよい数を決める（例: オークの原木を16個集める）`, minLength: 1, maxLength: MINECRAFT_GOAL_CHARACTERS },
+      placement: { type: 'string', enum: ['end', 'next', 'now'], description: '体がほかの依頼をしている時の順番。end=ほかの依頼のあと（順番に触れない頼み・あとで。書かなければこれ）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる（先に・優先・今のはやめて、と言われた時や夜・危険で急ぐ時。先の依頼が終われば保留は自動で戻る）' },
     }, ['goal']) }),
   conversationTool({ name: 'minecraft.status', domain: 'minecraft_body', effect: 'read',
     description: `${MINECRAFT}に頼んだことの、いまの様子と結果を見る（新しいものから5件）。体がいまゲームに入っているかも分かる。`,
