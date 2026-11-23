@@ -17,6 +17,13 @@ export const NIGHT_WAIT_WINDOW_MS = 10 * 60_000;
 const holds = new Map<string, number[]>();
 const WORKS_DOWN = 4;
 
+/**
+ * A one-thing request's night says its own words (`nightChoiceLine`'s `single`), not the dragon run's way down; the hold must read the same line, so the
+ * wiring tells it which tasks are one-thing requests (a task not told is the dragon run's, as before).
+ */
+const singles = new Set<string>();
+export function registerSingleRequest(taskId: string, single: boolean): void { if (single) singles.add(taskId); else singles.delete(taskId); }
+
 /** For tests: no task has held a night's wait. */
 export function forgetNightWaitHolds(): void { holds.clear(); }
 
@@ -42,7 +49,7 @@ export function nightWaitHold(input: unknown, frame: BodyObservation | null, tas
   if (feetY !== null && feetY - lowestReach(before, feetY) >= WORKS_DOWN) return null;
   const done = doneFacts(frame);
   const underground = (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world);
-  const line = nightChoiceLine(facts.world, facts.counts, facts.dimension, underground, facts.food);
+  const line = nightChoiceLine(facts.world, facts.counts, facts.dimension, underground, facts.food, true, singles.has(taskId));
   const act = line && /を掘り進む/u.test(line) ? /mc_act (\[[^\]]*\])/u.exec(line)?.[1] : undefined;
   if (!act) return null;
   const clock = now(), recent = (holds.get(taskId) ?? []).filter(when => clock - when < NIGHT_WAIT_WINDOW_MS);

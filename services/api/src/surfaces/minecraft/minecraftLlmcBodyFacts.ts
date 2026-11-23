@@ -176,7 +176,7 @@ export function readinessParts(
   // end1109o03: the night with no bed: the choices before the plan's now (`nightChoiceLine`); end1109o04: by day with a bed, the day is the plan's (`dayBedLine`).
   const done = doneFacts(observation);
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
-    facts.food, llmc.singleRequest !== true) : null;
+    facts.food, llmc.singleRequest !== true, llmc.singleRequest === true) : null;
   const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true) : null);
   // Run 6 (2026-11-11): while a furnace works, the hands to take instead of standing (the iron and coal in reach, the plan's next section that does not need the furnace's output),
   // said first like the night's choices (the replay of the night's line moved 3/6 to 6/6); the same choices are in the hold of a long wait (`furnaceStandHold`).
@@ -184,7 +184,7 @@ export function readinessParts(
   // end1109o06 (meta 13:10, the fifth first night lost) and o08 (the village's beds, meta 14:58): at dusk with the now an errand on the surface, it waits for the morning and the night's
   // choice (the sealed shaft down to the iron) goes first; the plan is not changed, its now is said as the morning's.
   const current = nodes.find(node => node.id === (display?.current ?? tree?.current));
-  const huntWaits = !!choice && !!current && SURFACE_ERRAND.test(current.title ?? '') && !INDOOR.test(current.title ?? '');
+  const huntWaits = !!choice && llmc.singleRequest !== true && !!current && SURFACE_ERRAND.test(current.title ?? '') && !INDOOR.test(current.title ?? '');
   // end1109o10: 「朝へ回す」 alone left the night with no now; the first open node of the ore (iron, then the diamonds) is said as the night's.
   const underNode = huntWaits ? nodes.find(node => node.state !== 'done' && node.state !== 'blocked' && node.id !== current?.id
     && !nodes.some(kid => kid.parentId === node.id && kid.state !== 'done') && /鉄(?!ゴーレム)|ダイヤ|iron|diamond/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)) : undefined;
