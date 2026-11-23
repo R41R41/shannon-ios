@@ -710,7 +710,7 @@ describe('the frame is never kept', () => {
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
     // `@shannon/switches`: her one-line voice is her character core's while SHANNON_INNER_NOTE is on (Syzygy ADR-0012); a pure package.
     expect(imports('bodyLookVision.ts').sort()).toEqual(['@shannon/cognition', '@shannon/switches', 'bodyLookContract.ts', 'chatModelSupport.ts', 'claudeStructured.ts', 'haikuConfig.ts', 'llmUsage.ts', 'serverEnvironment.ts']);
-    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
+    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['apiAppLookRoutes.ts', 'apiValidation.ts', 'appLookContract.ts', 'bodyContract.ts', 'bodyLook.ts', 'bodyLookContract.ts', 'bodyMindContract.ts', 'bodyReaction.ts', 'bodyReactionContract.ts', 'contracts.ts', 'shannonBody.ts']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookWords.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);
     }
