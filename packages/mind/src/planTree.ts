@@ -1,5 +1,7 @@
 import { depthOf,orderedPlan } from './planTreeView.js';
 import { migratePlanTree } from './planTreeMigration.js';
+import { isText,optionalText,promiseItemFits,promisesProblem,kindFits,prepFits } from './planTreeFit.js';
+import { liftRule,ruleLinesOf } from './planTreeLift.js';
 import type { PlanTreeV1 } from './planTreeMigration.js';
 import { PLAN_TREE_SCHEMA,PLAN_TREE_SCHEMA_V1,PLAN_LIMITS,PLAN_NODE_STATES,PLAN_KINDS,PREP_STATES } from './planTreeTypes.js';
 import type {
@@ -8,6 +10,7 @@ PromiseOp,PlanOp,PlanUpdate,PlanUpdateContext,PlanUpdateResult
 } from './planTreeTypes.js';
 export { orderedPlan, planRules, planPath, planText, flatPlan, planDisplay } from './planTreeView.js';
 export type { PlanPathView } from './planTreeView.js';
+export { promiseItemFits } from './planTreeFit.js';
 export { migratePlanTree } from './planTreeMigration.js';
 export type { PlanTreeV1 } from './planTreeMigration.js';
 export { PLAN_TREE_SCHEMA, PLAN_TREE_SCHEMA_V1, PLAN_LIMITS, PLAN_NODE_STATES, PLAN_KINDS, PREP_STATES } from './planTreeTypes.js';
@@ -15,9 +18,6 @@ export type { PlanNodeState, PlanKind, PrepState, PlanPrep, PlanCondition, Promi
    PromiseOp, PlanOp, PlanUpdate, PlanUpdateContext, PlanUpdateResult } from './planTreeTypes.js';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/u;
-const isText = (value: unknown, limit: number): value is string =>
-  typeof value === 'string' && value.trim().length > 0 && value.length <= limit && !value.includes('\0');
-const optionalText = (value: unknown, limit: number) => value === undefined || isText(value, limit);
 
 /** A done condition on what is held (`have:物` / `food>=点`, the Minecraft head's predicate words): the frame closes such a node, its children do not. */
 const heldCondition = (doneWhen: string | undefined): boolean => typeof doneWhen === 'string' && /(?:^|[&|])\s*(?:have:|food>=)/u.test(doneWhen);
@@ -40,27 +40,6 @@ export function planTreeProblem(tree: PlanTree): string | null {
   if (tree.current !== null && !byId.has(tree.current)) return 'PLAN_CURRENT';
   return promisesProblem(tree.promises) ? 'PLAN_PROMISES' : null;
 }
-const PROMISE_ITEM = /^[a-z][a-z0-9_]{0,63}$/u;
-const kindFits = (value: unknown) => value === undefined || (PLAN_KINDS as readonly string[]).includes(String(value));
-const prepFits = (value: unknown) => value === undefined || (!!value && typeof value === 'object' && (
-  PREP_STATES as readonly string[]).includes(String((value as PlanPrep).state))
-  && optionalText((value as PlanPrep).why, PLAN_LIMITS.text) && optionalText((value as PlanPrep).at, 40));
-/** What is wrong with the promises of a tree (the shape and bounds of each; the ledger is the head's), or null. */
-function promisesProblem(promises: unknown): string | null {
-  if (!Array.isArray(promises) || promises.length > PLAN_LIMITS.promises) return 'promises';
-  const ids = new Set<number>();
-  for (const item of promises as PlanPromise[]) {
-    if (invalidPromiseIdentity(item, ids)) return 'id';
-    ids.add(item.id);
-    if (!promiseItemFits(item.item) || !Number.isSafeInteger(item.count) || item.count < 1 || !isText(item.use, PLAN_LIMITS.promiseUse)) return 'fields';
-    if (!['open', 'kept_by_instead', 'closed'].includes(item.state) || !Array.isArray(item.ledger)) return 'state';
-    if (item.have !== undefined && !(typeof item.have === 'number' && Number.isFinite(item.have) && item.have >= 0)) return 'have';
-  }
-  return null;
-}
-/** A promise's item: `food` (food points) or a concrete item name (`oak_planks`; `planks` counts every kind, as
- * `have` reads it). */
-export const promiseItemFits = (value: unknown): boolean => typeof value === 'string' && PROMISE_ITEM.test(value);
 function targetFits(value: unknown): boolean {
   if (value === undefined) return true;
   const target = value as { item?: unknown; count?: number } | null;
@@ -109,36 +88,6 @@ function draftNode(draft: PlanNodeDraft, id: string, parent: string | null, forb
     ...(draft.target ? { target: { ...draft.target } } : {}),
     ...(draft.where ? { where: draft.where } : {}), ...(draft.doneWhen ? { doneWhen: draft.doneWhen } : {}), ...(draft.note ? { note: draft.note } : {}),
     ...(forbid ? { forbid } : {}), ...(caution ? { caution } : {}) };
-}
-/** A line as it is compared for a lift: width and spaces unified, the ends a model adds or drops (「…」, a full stop) left out. */
-const squashed = (line: string): string => line.normalize('NFKC').replace(/\s+/gu, '').replace(/^[…・\-]+|[…。.]+$/gu, '').toLowerCase();
-/**
- * r4: takes `text` off a node's forbid and caution: the same line, or else the one line that contains it (or, with the spaces, the dots at the
- * ends and the width of the letters left out, the one line that starts with it or contains it), or says why not. A miss names the node's lines,
- * so that the next try can copy one (a lift that named a line from memory, or from another node's, failed again and again).
- */
-function liftMatches(node: PlanNode, text: string) {
-  const all = [...(node.forbid ?? []), ...(node.caution ?? [])];
-  const exact = all.filter(line => line === text), within = all.filter(line => line.includes(text));
-  const needle = squashed(text), loose = needle ? all.filter(line => squashed(line).includes(needle) || needle.includes(squashed(line))) : [];
-  const gone = exact.length ? exact : within.length === 1 ? within : within.length === 0 && loose.length === 1 ? loose : [];
-  return { all, within, gone };
-}
-/** The lines of a node that a lift of `text` would take off. */
-const ruleLinesOf = (node: PlanNode, text: string): string[] => liftMatches(node, text).gone;
-function liftRule(node: PlanNode, id: string, text: string): string | null {
-  const { all, within, gone } = liftMatches(node, text);
-  if (!gone.length) {
-    if (within.length > 1) return `${id} に「${text}」を含む行が ${within.length} つある（全文で書く）`;
-    const lines = all.map(line => `「${line.slice(0, 40)}」`).join('');
-    return `${id} に「${text}」の禁止・注意は無い${lines ? `。この節の行: ${lines}（そのまま写して書く）` : '（この節に禁止・注意の行は無い）'}`;
-  }
-  for (const key of ['forbid', 'caution'] as const) {
-    const kept = (node[key] ?? []).filter(line => !gone.includes(line));
-    if (kept.length) node[key] = kept;
-    else delete node[key];
-  }
-  return null;
 }
 /** A draft's forbid or caution as the node keeps it (trimmed, no repeats), or a problem. */
 function draftRules(value: unknown, id: string, label: string): { rules?: string[]; problem?: string } {
@@ -528,11 +477,6 @@ export function planFromSeeds(seeds: readonly PlanSeed[]): PlanTree | null {
   edit.current = edit.nextOpen(null);
   const tree: PlanTree = { schema: PLAN_TREE_SCHEMA, revision: 1, current: edit.current, nodes: orderedPlan([...edit.nodes.values()]), promises: [] };
   return planTreeProblem(tree) ? null : tree;
-}
-
-/** 約束の識別子・改訂番号・重複の確認。 */
-function invalidPromiseIdentity(item: PlanPromise, ids: Set<number>): boolean {
-  return !item || !Number.isSafeInteger(item.id) || item.id < 1 || ids.has(item.id) || !Number.isSafeInteger(item.rev) || item.rev < 1;
 }
 
 /** 約束を書き換える前に入力を確認する。 */

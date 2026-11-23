@@ -605,6 +605,7 @@
     "mind/memory/memoryStepsPorts.ts",
     "mind/memory/memoryVisibility.ts",
     "mind/memory/memoryVisibilityPorts.ts",
+    "mind/memory/memoryVisibilityTimed.ts",
     "mind/memory/memoryWriter.ts",
     "mind/memory/ownerUpcoming.ts",
     "mind/memory/peopleMemory.ts",

@@ -13,7 +13,7 @@ import type { CognitiveIntentStore } from '../../mind/action/respond/cognitiveIn
 import type { ConversationStore } from '../../mind/memory/memoryPorts.js';
 import type { DailyMindReader } from '../../mind/action/respond/dailyMind.js';
 import type { KnowledgeStore } from '../../mind/memory/memoryPorts.js';
-import { visibleConversationHistoryTimed } from '../../mind/memory/memoryVisibility.js';
+import { visibleConversationHistoryTimed } from '../../mind/memory/memoryVisibilityTimed.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 
 export type VoiceParticipantMode = 'owner' | 'guest';

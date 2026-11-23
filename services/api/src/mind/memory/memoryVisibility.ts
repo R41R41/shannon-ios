@@ -401,7 +401,7 @@ function experienceRows(store: ConversationStore | null, scopeKey: string, ids: 
   return rows;
 }
 
-function visibleMessages(
+export function visibleMessages(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string,
   stored: readonly StoredConversationMessage[], present: MemoryAudience,
 ): VisibleMessage[] {
@@ -422,17 +422,6 @@ function visibleMessages(
  * (the store's model window, 20 messages) for helpers that decide or route; the reply
  * model's history comes from `conversationReplay`.
  */
-/** The same history with the time each message was said (`observedAt`), for a prompt that dates what was said. */
-export function visibleConversationHistoryTimed(
-  state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadID: string,
-  present: MemoryAudience,
-): readonly (ShannonConversationItem & { observedAt: string })[] {
-  const count = store.history(scopeKey, threadID).length;
-  if (!count) return [];
-  return visibleMessages(state, store, scopeKey, store.conversationHistory(scopeKey, threadID).slice(-count), present)
-    .map(entry => ({ ...entry.item, observedAt: entry.message.observedAt }));
-}
-
 export function visibleConversationHistory(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadID: string,
   present: MemoryAudience,
