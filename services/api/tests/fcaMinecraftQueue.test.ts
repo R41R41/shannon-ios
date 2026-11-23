@@ -4,6 +4,8 @@ import { fcaMinecraftQueue, type QueueParts } from '../src/wiring/fcaMinecraftQu
 import { applyQueueIntent } from '../src/wiring/fcaMinecraftQueueIntent.js';
 import { underWriteLock } from '../src/infra/sqlite/lockWaits.js';
 import type { MinecraftIntent } from '../src/surfaces/minecraft/minecraftIntent.js';
+import { applySchemaSteps } from '../src/infra/sqlite/migrations/schemaSteps.js';
+import { MINECRAFT_REQUEST_QUEUE_STEP } from '../src/infra/sqlite/migrations/execution/014_minecraft_request_queue.js';
 
 const databases: DatabaseSync[] = [];
 afterEach(() => { for (const db of databases.splice(0)) db.close(); });
@@ -70,7 +72,7 @@ describe('the list starts one request at a time', () => {
     expect(w.states()).toEqual(['b:running']);
     expect(w.queue.view().recent.map(entry => `${entry.goal}:${entry.state}`)).toEqual(['a:done']);
     expect(w.executing()).toEqual(['b']);
-    expect(w.log).toContain('Shannon Minecraft queue op=add entry=#1 state=-→queued origin=mod code=ok');
+    expect(w.log).toContain('Shannon Minecraft queue op=add entry=#1 state=-→queued origin=mod code=ok placement=end');
     expect(w.log.some(line => line.includes('goal') || line.includes('「'))).toBe(false);
   });
 
@@ -175,7 +177,8 @@ describe('the scene of start, stop, cancel and delete', () => {
     expect(await w.queue.operate({ op: 'delete', id: '#4' }, { origin: 'mod' })).toMatchObject({ ok: false, code: 'running' });
     expect(w.states()).toEqual(['d:running', 'a:paused', 'b:queued']);
     await w.queue.operate({ op: 'cancel' }, { origin: 'mod' });
-    expect(w.states()).toEqual(['b:running', 'a:paused']);
+    // `d` was put in front of `a` (a start of another): when it ends, `a` is taken back, ahead of `b` (2026-11-23).
+    expect(w.states()).toEqual(['a:running', 'b:queued']);
     expect(w.queue.view().recent.map(entry => `${entry.goal}:${entry.state}`)).toEqual(['d:cancelled']);
   });
 
@@ -322,23 +325,88 @@ describe('her words about the list', () => {
     await applyQueueIntent(w.queue, said('move', { target: '#3', placement: 'now' }), chat);
     expect(w.states()).toEqual(['c:running', 'a:paused', 'b:queued']);
     await applyQueueIntent(w.queue, said('hold'), chat);
-    expect(w.states()).toEqual(['b:running', 'c:paused', 'a:paused']);
+    // Her hold of `c`, which was in front of `a`, sets `c` aside: `a` comes back (2026-11-23), and `c` stays held.
+    expect(w.states()).toEqual(['a:running', 'c:paused', 'b:queued']);
     expect(await applyQueueIntent(w.queue, said('cancel', { target: '#9' }), chat)).toEqual({ delivered: false, reason: 'no_such_request' });
     await applyQueueIntent(w.queue, said('cancel'), chat);
-    expect(w.states()).toEqual(['c:paused', 'a:paused']);
+    expect(w.states()).toEqual(['b:running', 'c:paused']);
+    await applyQueueIntent(w.queue, said('cancel'), chat);
+    expect(w.states()).toEqual(['c:paused']);
     expect(await applyQueueIntent(w.queue, said('cancel'), chat)).toEqual({ delivered: false, reason: 'nothing_running' });
     expect(await applyQueueIntent(w.queue, said('hold'), chat)).toEqual({ delivered: false, reason: 'nothing_running' });
     await applyQueueIntent(w.queue, said('resume'), chat);
-    expect(w.states()).toEqual(['c:running', 'a:queued']);
+    expect(w.states()).toEqual(['c:running']);
     await applyQueueIntent(w.queue, said('stop'), chat);
-    expect(w.states()).toEqual(['c:stopped', 'a:queued']);
+    expect(w.states()).toEqual(['c:stopped']);
     await applyQueueIntent(w.queue, said('resume', { target: '#3' }), chat);
-    expect(w.states()).toEqual(['c:running', 'a:queued']);
+    expect(w.states()).toEqual(['c:running']);
   });
 
   it('refuses a new request when the list is full', async () => {
     const w = world();
     for (let i = 0; i < 22; i += 1) await w.add(`g${i}`);
     expect(await applyQueueIntent(w.queue, said('task', { goal: 'too many' }), chat)).toEqual({ delivered: false, reason: 'queue_full' });
+  });
+});
+
+describe('a request put aside for another is taken back by the pump (2026-11-23)', () => {
+  it('puts a running request aside for a `now` and runs it again, by its own task, when the other is done', async () => {
+    const w = world();
+    await w.add('cake');
+    await w.add('bed', 'now');
+    expect(w.states()).toEqual(['bed:running', 'cake:paused']);
+    expect(w.queue.snapshot().entries.find(entry => entry.goal === 'cake')!.resumeAfter).toBe(w.queue.snapshot().entries.find(entry => entry.goal === 'bed')!.id);
+    expect(w.queue.promptLines()).toEqual(['#2 実行中 「bed」', '#1 保留（いまはしていない。#2 のあとで戻る） 「cake」']);
+    expect(w.log).toContain('Shannon Minecraft queue op=add entry=#2 state=-→queued origin=mod code=ok placement=now');
+    await w.queue.pump();
+    expect(w.states()).toEqual(['bed:running', 'cake:paused']);
+    w.finish('bed');
+    await w.queue.pump();
+    expect(w.states()).toEqual(['cake:running']);
+    expect(w.executing()).toEqual(['cake']);
+    expect(w.calls).toContain('resume task-1');
+  });
+
+  it('does the same for a start of another request (the list screen) and for a move to `now` from her words', async () => {
+    const w = world();
+    await w.add('cake');
+    await w.add('sheep');
+    await w.queue.operate({ op: 'start', id: '#2' }, { origin: 'mod' });
+    expect(w.states()).toEqual(['sheep:running', 'cake:paused']);
+    w.finish('sheep');
+    await w.queue.pump();
+    expect(w.states()).toEqual(['cake:running']);
+    await w.add('bed');
+    const moved = await applyQueueIntent(w.queue, { kind: 'move', goal: '', target: '#3', placement: 'now' } satisfies MinecraftIntent, { origin: 'voice' });
+    expect(moved).toMatchObject({ delivered: true });
+    expect(w.states()).toEqual(['bed:running', 'cake:paused']);
+    w.finish('bed');
+    await w.queue.pump();
+    expect(w.states()).toEqual(['cake:running']);
+  });
+
+  it('leaves a request she held herself held, even after the one she put in front is done', async () => {
+    const w = world();
+    await w.add('cake');
+    await w.add('bed', 'now');
+    await applyQueueIntent(w.queue, { kind: 'hold', goal: '', target: '#1' } satisfies MinecraftIntent, { origin: 'voice' });
+    w.finish('bed');
+    await w.queue.pump();
+    expect(w.states()).toEqual(['cake:paused']);
+  });
+
+  it('keeps the mark across a restart (the stored list), and opens a list stored before the column existed', async () => {
+    const w = world();
+    await w.add('cake');
+    await w.add('bed', 'now');
+    const again = fcaMinecraftQueue(w.parts);
+    expect(again.snapshot().entries.find(entry => entry.goal === 'cake')!.resumeAfter).not.toBeNull();
+    const old = new DatabaseSync(':memory:');
+    databases.push(old);
+    applySchemaSteps(old, [MINECRAFT_REQUEST_QUEUE_STEP]);
+    old.prepare(`INSERT INTO minecraft_request_queue(id, scope_key, seq, goal, state, pos, origin, created_at, updated_at) VALUES ('e1', 'owner', 1, 'cake', 'paused', 0, 'mod', 'x', 'x')`).run();
+    old.prepare(`INSERT INTO minecraft_request_queue_state(scope_key, auto_run, rev, next_seq) VALUES ('owner', 1, 1, 2)`).run();
+    const reopened = world({ db: old });
+    expect(reopened.queue.snapshot().entries[0]).toMatchObject({ goal: 'cake', state: 'paused', resumeAfter: null });
   });
 });

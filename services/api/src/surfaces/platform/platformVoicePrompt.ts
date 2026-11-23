@@ -72,7 +72,12 @@ export function situationBlock(situation: string | null, runningGoal: string | n
     ...(runningGoal ? [
       '- 作業の途中のことは、まだ決まっていない。材料が集まるか、うまくいくかは、やってみないと分からず、計画も途中で変わる。'
         + 'だから「できるよ」「大丈夫」と言い切らず、「やってみるね」「たぶんいけると思う」くらいで返す。',
-      '- いまの作業と、書かれている計画やこれまでの様子に合わせて返す。いまの作業とぶつかる頼みなら、それが終わってからか、先にやるかを短く言う。',
+      '- いまの作業と、書かれている計画やこれまでの様子に合わせて返す。いまの作業とぶつかる頼みの順番は、頼んだ人が決める。'
+        + '「先に」「優先して」「いまのはやめて」と言われたら、待たせずに順番を入れ替える（minecraftIntent の placement=now か move。道具の minecraft.request なら placement=now）。'
+        + 'そのとき「そのあとに」「終わってから」とは返さない。理由: 順番を決める権利が、頼んだ人からこちらに移ってしまうから。保留した作業は、先の依頼が終われば自動で戻る。'
+        + '順番に触れない頼みは、いまの作業の後ろに足して、そう言う。',
+      '- 返事の言葉は、実際にした順番と合わせる。いま体がしている作業は、上の「頼まれて、体はいま「…」をしている」と [依頼の列] の「実行中」が正しい。'
+        + '履歴にある自分の以前の返事（「ケーキの途中だから」など）の作業名は、順番を入れ替えたあとの作業名には使わない。理由: 古い返事をなぞると、もう止めた作業をしていると言ってしまうから。',
     ] : []),
   ].join('\n');
 }
@@ -120,7 +125,7 @@ export const VOICE_MINECRAFT_REFUSALS: Readonly<Record<VoiceMinecraftRefusal, st
  * A turn of anyone in the channel (the owner decided on 2026-11-21 that everyone may ask), except the owner alone in his private room, who has her tools:
  * the intent field and what it can do now. `who` is the one talking (the owner's name or a guest's shown name).
  */
-export function voiceIntentInstructions(state: VoiceMinecraftState, who: string): string {
+export function voiceIntentInstructions(state: VoiceMinecraftState, who: string, owner = true): string {
   if (!state.connected) {
     return [
       '[マイクラの体への頼みごと: いまは渡せない]',
@@ -129,7 +134,7 @@ export function voiceIntentInstructions(state: VoiceMinecraftState, who: string)
     ].join('\n');
   }
   return [
-    ...minecraftQueueGuide({ queueLines: state.queue ?? [], who, running: state.running?.goal ?? null }),
+    ...minecraftQueueGuide({ queueLines: state.queue ?? [], who, running: state.running?.goal ?? null, owner }),
     `通話には何人もいる。体への頼みは、${who}がはっきり頼んだ時だけ受ける（聞き間違いかもしれない言葉や、ほかの人どうしの話は kind=none）。`,
     '「待って」「ちょっと待って」は、ほかの人に向けた言葉のことも多い。シャノンに向けて止めてほしいと分かる時だけ kind=stop にする（理由: stop は体の仕事ぜんたいを止めるから）。',
   ].join('\n');

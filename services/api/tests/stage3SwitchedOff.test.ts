@@ -70,6 +70,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * The same two were changed by hand again on 2026-11-23 for a change that is not stage 3's (the owner's words about how she speaks, and going into or
  * out of the server: the intent field has the kinds speech, login and logout and the two fields speechMode and speechRate): the first and third
  * provider requests carry that schema.
+ * The same two were changed by hand again on 2026-11-23 for a change that is not stage 3's (the owner decides the order of the list: the words of the
+ * request guide about 先に and a repeat, and the placement field's description): the first and third provider requests carry them.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

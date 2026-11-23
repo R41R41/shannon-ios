@@ -43,6 +43,7 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   'execution/013_fca_provenance_sets': '628187523990f2531313993c8788fdba8f041441225a1aa61838349decc7aa55',
   // 2026-11-21: the owner's list of requests for her Minecraft body, made when the head's request list first opens its store.
   'execution/014_minecraft_request_queue': '1d5bd8a8fec986d3d4201fe774d6ad38e4ff43a87c46d07c38a02a89915f9097',
+  'execution/015_minecraft_queue_resume_after': 'b5fa8e49fa80beffc444715cb04cc3ef4ead7da6f17fb31e498aac34ffb25c9c',
   // Her inner note (Syzygy ADR-0012, services/api/src/infra/sqlite/migrations/emotion/), as production's ledger holds them since
   // 2026-10-13 (read 2026-10-14): without them every deploy check reported `unknown step emotion/…`.
   'emotion/001_inner_notes': 'd683a488c6ec1095487a1f8cb721506c571bc59e9bbff5e0b876c7fa9c49e3cc',

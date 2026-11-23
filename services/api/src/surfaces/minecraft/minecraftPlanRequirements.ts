@@ -20,7 +20,8 @@ export function targetConditionProblem(node: PlanNode): string | null {
   if (!target) return null;
   const predicate = parseDoneWhen(node.doneWhen);
   if (!predicate || predicate.some(clauses => !clauses.some(c => c.kind === 'have' && sameItem(target.item, c.item) && c.count >= target.count))) {
-    return `${node.id}: target ${target.item}×${target.count} と doneWhen が不一致。各 | の枝に have:${target.item}>=${target.count} が必要（材料を持つだけでは完成品の取得ではない）`;
+    return `${node.id}: target ${target.item}×${target.count} と doneWhen が不一致。各 | の枝に have:${target.item}>=${target.count} が必要（材料を持つだけでは完成品の取得ではない）。`
+      + `直し方: doneWhen を have:${target.item}>=${target.count} に合わせる。取る物や数が変わったなら、set で target も新しい物・数に直す（doneWhen だけを書き直さない）。取得目標をやめるなら set で target=null`;
   }
   return null;
 }

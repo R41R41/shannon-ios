@@ -296,7 +296,7 @@ describe('Haiku full registry and strict tool admission', () => {
     expect(t.requests.recent('owner')).toEqual([]);
     expect(log.mock.calls).toEqual([
       [JSON.stringify({ event: 'anthropic_request_rejected', status: 400, type: 'invalid_request_error', class: 'tool_schema_invalid', hadTools: true })],
-      [JSON.stringify({ event: 'anthropic_tool_offer_refused', status: 400, category: 'tool_schema_invalid', schemaUsage: { tools: 7, optional: 11, unions: 9 } })],
+      [JSON.stringify({ event: 'anthropic_tool_offer_refused', status: 400, category: 'tool_schema_invalid', schemaUsage: { tools: 7, optional: 12, unions: 9 } })],
     ]);
   });
 

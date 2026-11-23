@@ -13,14 +13,24 @@ export interface QueueGuideOptions {
   who?: string;
   /** The request that is running, in her words, or null. */
   running: string | null;
+  /** Whether the one asking is the owner (default: yes). Only the owner decides the order of the list; a guest's words about it are a suggestion. */
+  owner?: boolean;
 }
 
-const add = (who: string) => [
+const add = (who: string, owner: boolean) => [
   `${who}がマイクラでしてほしいこと（作る・集める・取ってくる・掘る・倒す・行く・建てるなど）をはっきり頼んだら、聞き返さずに引き受けて kind=task にし、`
     + `goal に何をどれだけするかを${MINECRAFT_QUEUE_LIMITS.goalCharacters}字以内で書く（例: 「ケーキを1個作る」「オークの原木を16個集める」）。`
     + '数が言われていなければ、ほどよい数を自分で決める。いま別のことをしていても引き受けてよい。新しい依頼は列に積まれて順番に実行される。',
-  'placement は言い方で選ぶ。「あとで」「ついでに」「それが終わったら」など、順番の指定がない・後回しなら end。'
-    + '「次に」「その次に」なら next。「今のはやめて〜を先に」「先に〜して」なら now（いまの依頼は保留になって、あとで戻せる）。',
+  'placement は、順番に触れた言葉があるかで選ぶ。順番に触れない新しい頼み（「ベッドを作って」）・「あとで」「ついでに」「それが終わったら」は end（理由: 走っている作業を勝手に止めない）。'
+    + '「次に」「その次に」は next。'
+    + `「先に」「優先して」「〜からやって」「〜をやる前に」「今のはやめて〜を」は now。理由: 順番を決めるのは頼んだ${who}で、「先に」と言われたのに「いまの作業が終わってから」と返すと、順番を決める権利を取ってしまう。`
+    + 'now はいまの依頼を保留にして先にやる形で、先の依頼が終われば保留は自動で戻る（失うものは無い）ので、ためらわない。'
+    + `夜になった（暗い）・危険がある・${who}が「いますぐ」と言った時は、順番に触れていなくても now（例: 夜に「ベッドを作って」と頼まれたら now。夜は寝て朝にするのが先）。`
+    + '理由: いまの作業を続けると、夜は襲われて間に合わなくなる。返事にその理由を一言入れる。'
+    + (owner ? '' : `${who}は持ち主ではなく、順番を決めるのは持ち主なので、「先に」と言われても now や move の now にはせず end か next にして、先にしたいなら持ち主に言ってほしいと軽く伝える。`),
+  '列にすでに同じ頼み（言い換えでも、[依頼の列] の待ち・保留の依頼と同じ内容）がある時は、kind=task にせず kind=move にして、target にその番号、placement=now（先にと言われた時）か next にする。'
+    + '例: 「#8 待ち 「羊を飼ってベッドを作る」」がある時に「羊とベッドを先に」と言われたら、kind=move・target=#8・placement=now。'
+    + '理由: task で足すと同じ依頼が二つになり、片方が終わっても残る。保留のものを先に動かす時も move の now。',
   `作った物を「置いて」「ちょうだい」「渡して」と${who}が言った時も kind=task にする。goal には、何をどこへ・誰へするかを、言われた言葉のまま残す`
     + '（例: 「ケーキをこのオークの木材ブロックの上に置く」「ケーキを渡す」）。「この」「あそこ」を座標や別の言葉に直さない。'
     + '理由: 「この」は、あとで依頼に取りかかる側が、言った人の視線を調べ（その人が見ているブロックを読む）、近くのブロックの名前と合わせて解く。ここで推測して書き換えると、その手掛かりが消える。',
@@ -38,7 +48,9 @@ const others = (who: string, idle: boolean) => [
   '「全部止めて」「ちょっと待って」のように列ぜんたいを止めたい時は kind=stop。止めた列は、始めてと言われるまで次の依頼を動かさない。',
   '一つの依頼だけを扱う時は target に依頼の番号（[依頼の列] の #3 なら "#3"）を入れる。空ならいま実行中の依頼。'
     + 'もういい・やめて＝cancel、後回し・いったん保留＝hold（列は次へ進む）、保留や停止のものを戻す＝resume'
-    + '（target が空の resume は列ぜんたいを動かす）、順番を変える＝move（target と、placement に end / next / now）。',
+    + '（target が空の resume は列ぜんたいを動かす）、順番を変える＝move（target と、placement に end / next / now）。'
+    + '「Xは後でいい」「Xはあとで」と言われたら、Xがいま走っていても hold（Xは止まり、列の次が動く）。この hold は、戻してと言われるまで戻らない。'
+    + 'いまの依頼を止めて別のことを先にと言われた時は、その別のことを now にする（task か move）。いまの依頼の hold にはしない（now の保留は、先のことが終われば自動で戻る）。',
   '雑談・質問・何をしてほしいか本当に分からない時は kind=none で、goal・placement・target は空にする。',
 ];
 
@@ -48,9 +60,13 @@ export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
     '体は一度に一つの依頼だけを動かす。頼みごとは「依頼の列」に積まれ、順番に実行される。言葉がどれにあたるかは、あなたが判断する。'];
   if (options.running) lines.push(`いま体は「${options.running}」をしている。`);
   const who = options.who ?? SHANNON_OWNER_NAME;
-  lines.push(...add(who), ...others(who, !options.running && options.queueLines.length === 0));
+  lines.push(...add(who, options.owner !== false), ...others(who, !options.running && options.queueLines.length === 0));
   if (options.queueLines.length) lines.push('[依頼の列]', ...options.queueLines);
   else lines.push('[依頼の列] いまは空');
   lines.push('task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。');
+  lines.push('返事の言葉は、minecraftIntent でした順番と合わせる。now なら「先にベッドを作るね。ケーキは止めておくよ、終わったら続ける」、end なら「ケーキのあとでやるね」。'
+    + 'now にしたのに「そのあとに」と言ったり、end にしたのに「先にやるね」と言ったりしない。'
+    + '待たせる理由が「いまの作業の途中だから」だけの時は、待たせない（待たせてよいのは、頼んだ人が「あとで」と言った時と、体がいまそれをできない時だけ）。'
+    + 'いま体がしている作業の名前は、上の「いま体は…」と [依頼の列] の「実行中」から取る。これまでの自分の返事に出てくる作業名は、順番を入れ替えたあとは古いので使わない。');
   return lines;
 }

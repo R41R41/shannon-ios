@@ -59,6 +59,13 @@ export interface VoiceMinecraftPort {
 }
 
 /** The kind of the intent line the voice client is sent: the kinds it has always known (words about the list besides a stop are `none` to it). */
+/** The journal's line for an intent and what became of it (no text): kind, outcome, and where her words put a request (`-` for none). */
+export function intentLog(intent: MinecraftIntent, outcome: VoiceMinecraftIntentResult): string {
+  const where = `placement=${intent.placement || '-'} target=${intent.target || '-'}`;
+  const done = `delivered=${outcome.delivered} as=${outcome.as ?? '-'} reason=${outcome.reason ?? '-'}`;
+  return `Shannon platform voice intent kind=${intent.kind} ${done} ${where}`;
+}
+
 export function voiceIntentLineKind(kind: MinecraftIntent['kind'], as: VoiceMinecraftIntentResult['as']): 'task_message' | 'task' | 'stop' | 'none' {
   if (as === 'message' || kind === 'message') return 'task_message';
   if (kind === 'task' || kind === 'stop') return kind;

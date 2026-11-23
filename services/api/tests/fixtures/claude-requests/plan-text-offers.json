@@ -453,7 +453,7 @@
             "now",
             ""
            ],
-           "description": "task と move の時だけ。end=ほかの依頼のあと（あとで・ついでに）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる。それ以外は空文字"
+           "description": "task と move の時だけ。end=ほかの依頼のあと（順番に触れない新しい頼み・あとで・ついでに）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる（先の依頼が終われば保留は自動で戻る。先に・優先・やめてと言われた時、夜や危険で急ぐ時）。それ以外は空文字"
           },
           "target": {
            "type": "string",
@@ -535,7 +535,7 @@
    "prefix": {
     "tools": "f60390fc",
     "system": "d4c7dbee",
-    "schema": "c33483dd",
+    "schema": "0322ac88",
     "effort": "8a3bb108",
     "history": "f1fca6c8"
    },

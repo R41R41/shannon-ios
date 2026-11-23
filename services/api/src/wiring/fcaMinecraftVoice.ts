@@ -84,8 +84,12 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       const bodies = parts.control.available();
       const queue = parts.queue.promptLines();
       if (bodies.length !== 1) return { connected: false, running: null, ...(queue.length ? { queue } : {}) };
+      // The list says which request runs: right after a swap the task of the one put aside may not have stopped yet (or the new one's not
+      // started), and her reply must not name the old one as the work under way.
+      const entry = parts.queue.current();
       const open = parts.openRequest(bodies[0]!);
-      return { connected: true, running: open ? { id: open.id, goal: open.goal } : null, ...(queue.length ? { queue } : {}) };
+      const running = entry ? { id: entry.taskId ?? entry.id, goal: entry.goal } : open ? { id: open.id, goal: open.goal } : null;
+      return { connected: true, running, ...(queue.length ? { queue } : {}) };
     },
     async intent(input) {
       const { intent } = input;

@@ -31,7 +31,7 @@ import {
 import { VoiceWords } from './platformVoiceWords.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
-import { voiceIntentLineKind, type VoiceMinecraftIntentResult, type VoiceMinecraftPort, type VoiceMinecraftState } from './voiceMinecraftPort.js';
+import { voiceIntentLineKind, intentLog, type VoiceMinecraftIntentResult, type VoiceMinecraftPort, type VoiceMinecraftState } from './voiceMinecraftPort.js';
 import { lifecycleRefusalLine, type LifecycleRequestAction, type VoiceLifecyclePort } from './voiceLifecyclePort.js';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 
@@ -402,7 +402,7 @@ export class PlatformVoiceService {
     const running = body?.state.running?.goal ?? null;
     const ownerTools = seat.owner && seat.policy.gate.ownerOnly;
     const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName?.replace(/s+/gu, ' ').trim().slice(0, 40) || '話している人';
-    const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who) : '';
+    const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who, seat.owner) : '';
     // The way of speaking is a kind of the intent field, so it is offered where the field is.
     const offer = this.lifecycleOffer(seat);
     const speech = this.offersSpeech(seat, body)
@@ -544,7 +544,7 @@ export class PlatformVoiceService {
       type: 'intent', kind: voiceIntentLineKind(intent.kind, outcome.as), delivered: outcome.delivered,
       ...(outcome.taskId ? { taskId: outcome.taskId } : {}), ...(outcome.reason ? { reason: outcome.reason } : {}),
     });
-    this.log(`Shannon platform voice intent kind=${intent.kind} delivered=${outcome.delivered} as=${outcome.as ?? '-'} reason=${outcome.reason ?? '-'}`);
+    this.log(intentLog(intent, outcome));
     if (!outcome.delivered) this.refuse(seat, request, answer, outcome.reason ?? 'not_owner_scope');
   }
 
