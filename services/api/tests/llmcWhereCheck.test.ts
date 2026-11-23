@@ -4,6 +4,7 @@ import { whereCheckLine, ARRIVED_METERS } from '../src/surfaces/minecraft/minecr
 import { planNowOf } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { nearbyLines, nearbyResourcesOf } from '../src/surfaces/minecraft/minecraftLlmcNearby.js';
 import { ironSearchLine, nearIronHands } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
+import { createFoodTrend, minecraftLlmcLive } from '../src/surfaces/minecraft/minecraftLlmcLive.js';
 
 /**
  * The place a node names is said at the node: far from it, as what was read when the plan was written; at it, against the body's count of the plants round her.
@@ -74,6 +75,36 @@ describe('a crop that is not grown says what a dig does to it, at the row the di
   });
   it('a grown crop says nothing of it', () => {
     expect(nearbyLines(nearbyResourcesOf(raw('育った')), feet)[0]).not.toContain('種に戻る');
+  });
+  describe('in the decision own input (quiet): a young crop has no place to aim a hand at, and the growth is said to be counted again', () => {
+    it('leaves the cell out of the young crop row, keeps the way (west/north/up and metres), and says no go, look or dig is needed to see its growth', () => {
+      const line = nearbyLines(nearbyResourcesOf(raw('育ち中 1/7')), { x: -113, y: 69, z: -149 }, '', true)[0]!;
+      expect(line).toContain('wheat 48m 内に 3個。最寄り 西1・北1・上1 2m（育ち中 1/7）');
+      expect(line).not.toContain('(-114,70,-150)');
+      expect(line).toContain('育ちを確かめるのに go・look・dig は要らない');
+      expect(line).toContain('「育った」と出たら座標つきで出る');
+    });
+    it('keeps the cell of a grown crop and gives a young one after it only as metres', () => {
+      const mixed = [{ purpose: 'plant', kind: 'wheat', count: 3, range: 48, sites: [{ x: -114, y: 70, z: -150, note: '育った' }, { x: -113, y: 70, z: -150, note: '育ち中 3/7' }] }];
+      const line = nearbyLines(nearbyResourcesOf(mixed), { x: -116, y: 69, z: -151 }, '小麦', true)[0]!;
+      expect(line).toContain('最寄り (-114,70,-150)');
+      expect(line).toContain('（育った） / 3m（育ち中 3/7）');
+      expect(line).not.toContain('(-113,70,-150)');
+    });
+    it('says nothing different of a row with no young crop, and the row not quiet keeps the cell and the bone meal words', () => {
+      expect(nearbyLines(nearbyResourcesOf(raw('育った')), feet, '', true)[0]).toBe(nearbyLines(nearbyResourcesOf(raw('育った')), feet)[0]);
+      const loud = nearbyLines(nearbyResourcesOf(raw('育ち中 1/7')), feet)[0]!;
+      expect(loud).toContain('(-114,70,-150)');
+      expect(loud).toContain('骨粉を use');
+    });
+    it('the live nearby is quiet unless she holds bone meal (using it needs the cell)', () => {
+      const liveFor = (inventory: string[]): string => JSON.stringify(minecraftLlmcLive({ elapsedMinutes: 1, trend: createFoodTrend(() => 0), events: [],
+        observation: observation({ position: { x: -113, y: 69, z: -149 }, dimension: 'overworld', inventory, nearbyResources: raw('育ち中 1/7') }) }).nearby);
+      expect(liveFor(['coal×4'])).not.toContain('(-114,70,-150)');
+      expect(liveFor(['coal×4'])).toContain('手を向ける物ではない');
+      expect(liveFor(['coal×4', 'bone_meal×3'])).toContain('(-114,70,-150)');
+      expect(liveFor(['coal×4', 'bone_meal×3'])).not.toContain('手を向ける物ではない');
+    });
   });
 });
 
