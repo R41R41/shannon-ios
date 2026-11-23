@@ -208,9 +208,10 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
   // end1109o06: she dug in about 3 minutes before night (before the old 1-minute window), stairs with an open mouth: the choice is said from then.
   if (tick === null || tick >= NIGHT_TO || tick < BED_FROM - NIGHT_CHOICE_NEAR_TICKS) return null;
   if ([...counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
-  // 11/23 (the cake's evening, a night with no bed: she dug a dirt hole under the village and stayed, and the owner's bed request did not move her): a one-thing
-  // request has no iron, so the dragon run's hole (A) was the only choice said and the model followed it about ten times, while the stage knowledge of the same
-  // input said the opposite. For a one-thing request the night is said once, in the stage's own words (`REQUEST_NIGHT_WAY`); the dragon run's night is as it was.
+  // 11/23 (the cake's evening, a night with no bed: she dug a dirt hole under the village and stayed, and the owner's bed request did not
+  // move her): a one-thing request has no iron, so the dragon run's hole (A) was the only choice said and the model followed it about ten
+  // times, while the stage knowledge of the same input said the opposite. For a one-thing request the night is said once, in the stage's
+  // own words (`REQUEST_NIGHT_WAY`); the dragon run's night is as it was.
   if (single) return `${tick >= NIGHT_FROM ? `夜（朝まで ${minutes(NIGHT_TO - tick)}）` : `夜まで ${minutes(NIGHT_FROM - tick)}`}・ベッドを持っていない。${REQUEST_NIGHT_WAY}`;
   // The iron is the night's work until the armour is made, then the diamonds' (end1109o10: the way to either is said as hands, `oreRouteHands`).
   // end1109o13: the diamonds' prep wants the helmet, chestplate and leggings worn; with the chestplate alone the line said the diamonds and she

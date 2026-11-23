@@ -69,7 +69,8 @@ export const REQUEST_NIGHT_WAY =
   + '依頼の続きを、今いる所の近く（明るい所・囲い・松明の近く）で進める。植える・骨粉を使う・牛乳・卵・砂糖・羊毛・作業台での製作は夜でもできる。'
   + 'act には stopIf hostileWithin=8 を付け、敵が近くに来た時だけ体が自分で迎える。'
   + '囲いは、3 体以上に近づかれた時と体力 8 以下の時だけ。洞窟・遠出・初めての場所の探索は朝に回す。夕方と夜は、今いる所から 20〜25m を超えて出ない（暗いと敵が湧き、遠いと戻る間に囲まれる）';
-/** The same words as `REQUEST_NIGHT_WAY`, as a line of the stage knowledge; the live's night line (`nightChoiceLine`, a one-thing request) says the very same words. */
+/** The same words as `REQUEST_NIGHT_WAY`, as a line of the stage knowledge;
+ * the live's night line (`nightChoiceLine`, a one-thing request) says the very same words. */
 export const REQUEST_NIGHT_LINE = `- ベッドが無い間の夜: ${REQUEST_NIGHT_WAY}。`;
 
 /**
