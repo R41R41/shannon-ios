@@ -62,7 +62,7 @@ export const MINECRAFT_INTENT_SCHEMA = Object.freeze({
     goal: { type: 'string', description: `task か message の時だけ、何をどれだけするか（message は伝える言葉）を${MINECRAFT_INTENT_GOAL_CHARACTERS}字以内で。それ以外は空文字` },
     placement: {
       type: 'string', enum: [...MINECRAFT_INTENT_PLACEMENTS, ''],
-      description: 'task と move の時だけ。end=ほかの依頼のあと（あとで・ついでに）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる。それ以外は空文字',
+      description: 'task と move の時だけ。end=ほかの依頼のあと（順番に触れない新しい頼み・あとで・ついでに）。next=いまの依頼のすぐ次。now=いまの依頼を保留して先にやる（先の依頼が終われば保留は自動で戻る。先に・優先・やめてと言われた時、夜や危険で急ぐ時）。それ以外は空文字',
     },
     target: { type: 'string', description: 'cancel・hold・resume・move の時だけ、依頼の番号（「#3」か「3」）。いま実行中の依頼なら空文字。resume の空文字は列ぜんたい。それ以外は空文字' },
     speechMode: {

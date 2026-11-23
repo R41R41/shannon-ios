@@ -106,7 +106,7 @@ describe('what she is told of the list', () => {
     expect(text).toContain(`[依頼の列]\n${lines.join('\n')}`);
     const asked = guide({ who: 'ユウ' });
     expect(asked).toContain('ユウがマイクラでしてほしいこと');
-    expect(asked).toContain('placement は言い方で選ぶ');
+    expect(asked).toContain('placement は、順番に触れた言葉があるかで選ぶ');
     expect(asked).not.toContain('足せない');
   });
 });
