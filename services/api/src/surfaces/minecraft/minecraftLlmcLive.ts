@@ -1,4 +1,4 @@
-import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
+import { nearbyLines, nearbyResourcesOf, nearbyWithGrass } from './minecraftLlmcNearby.js';
 import type { PlanPromise } from '@shannon/mind';
 import { shareStacks } from './minecraftLlmcPromises.js';
 import type { BodyObservation, BodyValue } from '../../contracts/bodyControlContract.js';
@@ -153,7 +153,7 @@ function nearbyField(world: Record<string, unknown>, planNow: string | null | un
     ? { x: Math.floor(at.x as number), y: Math.floor(at.y as number), z: Math.floor(at.z as number) } : null;
   // A young crop's place is left out of its row unless she holds bone meal (using it needs the cell): `QUIET_UNRIPE_WORDS` in minecraftLlmcNearby.ts.
   const lines = nearbyLines(nearbyResourcesOf(world.nearbyResources), feet, planNow ?? '', !JSON.stringify(world.inventory ?? '').includes('bone_meal'));
-  return lines.length ? { nearby: lines } : {};
+  return nearbyWithGrass(lines, world, feet, planNow ?? '');
 }
 
 /** The food she carries, as points (design 2.6): the total and each kind. */
