@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bodySummaryRequest, firstPlanRequest, llmcRequests } from './support/minecraftBodyRequests.js';
+import { toLegacyPersonaDeep } from './legacyPersona.js';
 import { quiet, requestDigest, scenario, WIDE_POLICY, SUMMARY_POLICY } from './fcaCoreToolsHarness.js';
 
 /**
@@ -26,15 +27,15 @@ async function transientDigests(policy: typeof WIDE_POLICY): Promise<string[]> {
   const run = scenario({ mode: () => 'transient', policy, body: live });
   expect(await run.settle()).toBe('completed');
   expect(run.violations).toEqual([]);
-  return run.bodies.map(requestDigest);
+  return run.bodies.map(body => requestDigest(toLegacyPersonaDeep(body)));
 }
 
 describe('SHANNON_MINECRAFT_OWN_PROMPT off is the production request, byte for byte', () => {
   it('prints the digests (golden capture)', async () => {
     const found = {
       transient_one_epoch: await transientDigests(WIDE_POLICY), transient_summaries: await transientDigests(SUMMARY_POLICY),
-      body_summary: [requestDigest(await bodySummaryRequest())],
-      first_plan: [requestDigest((await firstPlanRequest(false)).body)],
+      body_summary: [requestDigest(toLegacyPersonaDeep(await bodySummaryRequest()))],
+      first_plan: [requestDigest(toLegacyPersonaDeep((await firstPlanRequest(false)).body))],
     };
     if (process.env.GOLDEN_CAPTURE) console.error(`GOLDEN ${JSON.stringify(found)}`);
     expect(found).toEqual(GOLDEN);

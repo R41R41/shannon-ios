@@ -109,6 +109,8 @@ export function prepareTurnCognitiveContext(
   // One synchronous read: every remembered turn shares one walk of the recall graph (not one walk per turn).
   // Of the time it takes, how much is the audience gate and how much the withholding (the slow-context line below tells them apart).
   const visibleSpent = { gateMs: 0, withheldMs: 0 };
+  // The turns the remembered turns recalled are read together, in one read, not one read a turn each (the audience gate's time in a voice turn).
+  gate.prime(recentExperiences);
   const visibleTurns = parts.time('visible', () => withholding.withReadSnapshot(() => recentExperiences.filter(item => {
     const gateStarted = performance.now();
     const allowed = gate.allowsTurn(item);

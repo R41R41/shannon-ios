@@ -156,6 +156,18 @@ describe('the re-review of stage 4', () => {
     expect(feelingVoice.block(owner, undefined)).not.toMatch(PRIVATE);
   });
 
+  it('11/24: the owner alone in a platform voice channel is his own room for her feelings, anyone else there is a group', async () => {
+    const { port, clock } = composed();
+    clock.at = TODAY;
+    const base = { scopeKey: 'owner', alone: false, guest: false, threadId: 'platform:discord:x', transcript: 'ねえ', at: TODAY, snapshot: snapshot() };
+    // The channel is bound as a shared place, so the bridge's policy is a group (`alone` false) even when only he is in it; the seat says he is.
+    const solo = feelingVoice.start(port, { ...base, platform: { ownerAlone: true } });
+    expect(solo?.key).toMatchObject({ audience: 'owner_alone', personKey: 'owner' });
+    expect(solo?.key.sceneId).toBeNull();
+    expect(feelingVoice.start(port, { ...base, platform: {} })?.key.audience).toBe('group');
+    expect(feelingVoice.start(port, { ...base, platform: { ownerAlone: false } })?.key.audience).toBe('group');
+  });
+
   it('S4-2: the audience layers need the reply check', () => {
     expect(SWITCHES.find(item => item.name === 'SHANNON_FEELING_AUDIENCE')!.requires).toContain('SHANNON_REPLY_CHECK');
   });

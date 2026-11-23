@@ -107,6 +107,7 @@ async function dispatch(name: string, request: IncomingMessage, response: Server
   if (name === 'speech') return speech(request, response, routes);
   if (name === 'cast') return cast(request, response, routes);
   if (name === 'fillers') return sendJson(response, 200, { items: VOICE_FILLERS.map(({ id, text, style }) => ({ id, text, style })) });
+  if (name === 'warm') return sendJson(response, 200, await routes.service.warm());
   if (name === 'wording') return sendJson(response, 200, await routes.service.wording(await readJson(request, 8 * 1024)));
   if (name === 'said') {
     routes.service.said(await readJson(request, 8 * 1024));

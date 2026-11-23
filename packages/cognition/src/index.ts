@@ -25,6 +25,7 @@ export {
   SHANNON_SUITE_PRODUCTS,
   SHANNON_TEMPERAMENT,
   mentionsSuiteProduct,
+  shannonPersonaCharacter,
   shannonPersonaPrompt,
   shannonTemperament,
   shannonSuitePrompt,
@@ -398,7 +399,7 @@ export { SELF_INTEREST_LIMITS, selfInterestTopicKey, selfInterestWeight, selfInt
   type SelfInterestChange, type SelfInterestSnapshot, type SelfInterestDetail, type SelfInterestEvidenceView, type SelfInterestVisible } from './selfInterests.js';
 // Syzygy ADR-0012 stage 1: her character core and her inner note (pure parts; `SHANNON_INNER_NOTE`).
 export {
-  CHARACTER_CORE, CHARACTER_CORE_SPEECH, SHANNON_ONE_LINE_VOICE_INNER, characterCoreBlock, characterCoreHashInput, shannonOneLineVoice, type CharacterCore,
+  CHARACTER_CORE, CHARACTER_CORE_V2, CHARACTER_CORE_SPEECH, SHANNON_ONE_LINE_VOICE_INNER, characterCoreBlock, characterCoreHashInput, shannonOneLineVoice, type CharacterCore,
 } from './characterCore.js';
 export { INNER_NOTE_UNPLEASANT_LINE, LINGERING_UNDERTONE_LINE } from './emotionContinuity.js';
 export {
@@ -443,7 +444,8 @@ export * from './characterSpace.js';
 export * from './characterRegions.js';
 export * from './characterPersona.js';
 export * from './characterDialogues.js';
-export { NATURAL_TONE_LINE, characterCoreForSpace } from './characterCoreSpace.js';
+export { CHARACTER_CORE_KID } from './characterCoreKid.js';
+export { NATURAL_TONE_LINE, characterCoreForSpace, legacyCharacterCoreForSpace } from './characterCoreSpace.js';
 export * from './feelingDays.js';
 export * from './episodeMemory.js';
 export * from './boundaryMemory.js';

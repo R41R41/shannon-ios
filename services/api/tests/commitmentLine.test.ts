@@ -106,7 +106,7 @@ describe('the review of f23a3c94: late with others, 「あとで」, a date only
   it('offers the cheerful phrases only on time', () => {
     const late = promisePhraseChoices({ ...TIMED, overdueMinutes: 47 }).map(entry => entry.text);
     const onTime = promisePhraseChoices(TIMED).map(entry => entry.text);
-    for (const cheerful of ['えへへ、', 'ねえねえ、', 'ふふん、ちゃんと覚えてましたよ。', 'べつに、言いたかったわけじゃないですけど。']) {
+    for (const cheerful of ['えへへ、', 'ねえねえ、', 'えへへ、ちゃんと覚えてたよ！', 'ちゃんと言えてよかった。']) {
       expect(onTime).toContain(cheerful);
       expect(late).not.toContain(cheerful);
       expect(commitmentMessage({ phrase: cheerful, position: 'before' }, { ...TIMED, overdueMinutes: 47 })).toBe('9時20分の約束：「起こして」（47分遅れのお知らせ）');
@@ -346,12 +346,12 @@ describe('at the moment it is due', () => {
   it('delivers the fact with her phrase, asked once, on the voiced path (it takes no moment cap)', async () => {
     const f = fixture();
     f.setNow(NINE);
-    const writer = new FakeWriter({ phrase: 'ふふん、ちゃんと覚えてましたよ。', position: 'before' });
+    const writer = new FakeWriter({ phrase: 'えへへ、ちゃんと覚えてたよ！', position: 'before' });
     const lines = prepare(f, writer);
     const prepared = await lines(NINE);
     expect(writer.asked).toEqual([expect.objectContaining({ title: '明日プレゼンの練習しよう', others: false })]);
     expect(f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared)).toMatchObject({ sent: 1 });
-    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('ふふん、ちゃんと覚えてましたよ。今日の約束：「プレゼンの練習しよう」');
+    expect(f.state.conversationHistory('owner', f.threadId).at(-1)?.content).toBe('えへへ、ちゃんと覚えてたよ！今日の約束：「プレゼンの練習しよう」');
     expect(await lines(NINE)).toEqual(new Map());
     expect(writer.asked).toHaveLength(1);
     f.close();

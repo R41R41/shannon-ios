@@ -22,6 +22,8 @@ export interface FcaMinecraftVoiceParts {
   /** The tasks bound to a body, and the newest open request of his on a body (`fcaMinecraftRequests`). */
   bound(): TaskView[];
   openRequest(bodyId: string): TaskView | undefined;
+  /** His recent requests that are not going on (stopped, failed, done, paused): for the voice's words about work that is not coming. */
+  resting?(bodyId: string): Array<{ goal: string; how: string }>;
   log(line: string): void;
   /** His list of requests. */
   queue: MinecraftQueue;
@@ -89,7 +91,8 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       const entry = parts.queue.current();
       const open = parts.openRequest(bodies[0]!);
       const running = entry ? { id: entry.taskId ?? entry.id, goal: entry.goal } : open ? { id: open.id, goal: open.goal } : null;
-      return { connected: true, running, ...(queue.length ? { queue } : {}) };
+      const resting = (parts.resting?.(bodies[0]!) ?? []).filter(item => item.goal !== running?.goal.replace(/s+/gu, ' ').trim().slice(0, 40)).map(item => `「${item.goal}」（${item.how}）`);
+      return { connected: true, running, ...(queue.length ? { queue } : {}), ...(resting.length ? { resting } : {}) };
     },
     async intent(input) {
       const { intent } = input;

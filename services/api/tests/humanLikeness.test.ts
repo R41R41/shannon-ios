@@ -49,7 +49,7 @@ describe('the touch prompt with her note on (A)', () => {
     const blocks = prompt.split('\n\n');
     expect(blocks[0]).toContain(CHARACTER_CORE.summary);
     expect(blocks[0]).toContain(CHARACTER_CORE_SPEECH);
-    for (const cue of ['ひゃっ', 'ふふん', 'じゃん', '同じ言い回しが続くと、自分でも飽きる']) expect(blocks[0]).toContain(cue);
+    for (const cue of ['ひゃっ', 'やった！', '〜だよ', '同じ言い回しが続くと、自分でも飽きる']) expect(blocks[0]).toContain(cue);
     expect(blocks[1]!.startsWith('[いまの場面]')).toBe(true);
     expect(prompt.indexOf('[いまの場面]')).toBeLessThan(prompt.indexOf('[体に触れられた]'));
     const scene = blocks[1]!.split('\n').slice(1);

@@ -1,5 +1,6 @@
 import { historicalSearchRequest } from './support/historicalSearchRequest.js';
 import { createHash } from 'node:crypto';
+import { toLegacyPersona } from './legacyPersona.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { type ShannonApiKernelOptions } from '../src/infra/http/apiKernel.js';
@@ -29,7 +30,7 @@ import { configuredSkillExport, configuredSkillMemory, skillTurnPorts } from '..
 const fixture = new URL('./fixtures/stage2-switched-off-v1.json', import.meta.url);
 const at = '2026-10-07T03:00:00.000Z';
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
-const digest = (text: string) => createHash('sha256').update(text.replace(UUID, 'ID')).digest('hex').slice(0, 24);
+const digest = (text: string) => createHash('sha256').update(toLegacyPersona(text, true).replace(UUID, 'ID')).digest('hex').slice(0, 24);
 
 const structured = (reply: string) => JSON.stringify({
   reply, feeling: null, threadSummary: null, threadTitle: null, taskDecision: { disposition: 'none', reason: '雑談' }, taskProposal: null, intentPlan: null, artifacts: null,

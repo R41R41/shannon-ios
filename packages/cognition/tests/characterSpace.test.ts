@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  AFFECTION_GUARD_LINE, CHARACTER_CORE, CHARACTER_REGIONS, DEFAULT_PERSONALITY, GUARD_FLAGS, PERSONA_HEADER, REGION_IDS, VIVID_FEELING_LINE,
-  characterCoreBlock, characterCoreForSpace, characterCoreHashInput, checkBeforeSending, checkReply, cuesOfEvent, cuesOfWords, feelingTurnBlock, guardFlags,
+  AFFECTION_GUARD_LINE, CHARACTER_CORE, CHARACTER_CORE_V2, CHARACTER_REGIONS, DEFAULT_PERSONALITY, GUARD_FLAGS, PERSONA_HEADER, REGION_IDS, VIVID_FEELING_LINE,
+  characterCoreBlock, characterCoreForSpace, characterCoreHashInput, legacyCharacterCoreForSpace, checkBeforeSending, checkReply, cuesOfEvent, cuesOfWords, feelingTurnBlock, guardFlags,
   moodAxes, neutralFeelingTurn, personaBlock, regionTurn, selectPersona, spacePosition, strongReplyReason,
   type FeelingEvent, type FeelingTurnDecision, type ReplyCheckContext, type SpaceCue,
 } from '../src/index.js';
@@ -118,14 +118,14 @@ describe('the regions', () => {
   it('shows the model the portrait and lines, never a number', () => {
     const block = personaBlock({ primary: 'smug', secondary: 'cheeky_tsundere' });
     expect(block.startsWith(PERSONA_HEADER)).toBe(true);
-    expect(block).toContain('いまのボク: ドヤ顔（得意げ）');
-    expect(block).toContain('少しまざる: 生意気ツンデレ（いつものボク）');
+    expect(block).toContain('いまのボク: えっへん（得意げ）');
+    expect(block).toContain('少しまざる: いつものボク（明るく素直）');
     expect(block).not.toMatch(/[0-9]|快|覚醒|優位|好意|安心/u);
   });
 
   it('turns a plain turn into the region\'s stance (sulking when he takes leave at 本気), and shows a vivid one はっきり', () => {
     expect(regionTurn(neutralFeelingTurn(), 'devoted', { words: 'ただいま', otherAi: false })).toMatchObject({ stance: 'affectionate', intensity: 'moderate' });
-    expect(regionTurn(neutralFeelingTurn(), 'devoted', { words: '友達と飲みに行ってくる', otherAi: false })).toMatchObject({ stance: 'sulk' });
+    expect(regionTurn(neutralFeelingTurn(), 'devoted', { words: '友達と飲みに行ってくる', otherAi: false })).toMatchObject({ stance: 'worry' });
     expect(regionTurn(neutralFeelingTurn(), 'devoted', { words: 'もう寝るね', otherAi: false })).toMatchObject({ stance: 'affectionate' });
     expect(regionTurn(turn('tease', 'subtle'), 'devoted', { words: 'ただいま', otherAi: false })).toMatchObject({ stance: 'affectionate' });
     expect(regionTurn(turn('tease', 'subtle'), 'imp', { words: '', otherAi: false })).toEqual(turn('tease', 'subtle'));
@@ -188,8 +188,10 @@ describe('the feeling turn and the reply check in her space', () => {
 });
 
 describe('her core while her space is on', () => {
-  it('is a versioned draft, its hash the sha256 of its version, text and summary', () => {
-    const core = characterCoreForSpace();
+  it('is the child Shannon\'s core whatever the region (2026-11-24), and the old v3-space is kept with its hash pinned', () => {
+    expect(characterCoreForSpace()).toBe(CHARACTER_CORE);
+    expect(characterCoreForSpace(true)).toBe(CHARACTER_CORE);
+    const core = legacyCharacterCoreForSpace();
     expect(core.version).toBe('v3-space');
     expect(core.status).toBe('approved');
     expect(createHash('sha256').update(characterCoreHashInput(core)).digest('hex')).toBe(core.hash);
@@ -198,10 +200,10 @@ describe('her core while her space is on', () => {
 
   it('changes only §6, §7 and §9, defers who she is now to [いまのボク], and keeps the owner\'s v2 decisions word for word', () => {
     const split = (text: string) => Object.fromEntries(text.split(/\n(?=\d+\. )/u).map(part => [part.split('\n')[0]!, part]));
-    const v2 = split(CHARACTER_CORE.text), v3 = split(characterCoreForSpace().text);
+    const v2 = split(CHARACTER_CORE_V2.text), v3 = split(legacyCharacterCoreForSpace().text);
     expect(Object.keys(v3)).toEqual(Object.keys(v2));
     expect(Object.keys(v2).filter(heading => v2[heading] !== v3[heading])).toEqual(['6. 気質', '7. 好意の見せ方', '9. 怒る・すねる']);
-    const text = characterCoreForSpace().text;
+    const text = legacyCharacterCoreForSpace().text;
     expect(text).toContain('[いまのボク] に書いてある');
     for (const kept of ['自分のミスは、言い訳や言い返しを付けずに、そのまま認める。', '本当にいやな時は、可愛くまとめる余裕が無く、はっきり嫌がる。',
       '頼まれた手伝いは、機嫌とは別にちゃんとやる。']) expect(text).toContain(kept);

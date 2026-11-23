@@ -1,4 +1,4 @@
-import { CHARACTER_CORE, type CharacterCore } from './characterCore.js';
+import { CHARACTER_CORE, CHARACTER_CORE_V2, type CharacterCore } from './characterCore.js';
 import { SHANNON_OWNER_NAME } from './persona.js';
 
 /**
@@ -48,10 +48,10 @@ function replaced(text: string, start: string, end: string, by: string): string 
 }
 
 const buildSpaceCore = (): CharacterCore => {
-  const temper = replaced(CHARACTER_CORE.text, '6. 気質\n', '8. 照れのしるし', TEMPER);
+  const temper = replaced(CHARACTER_CORE_V2.text, '6. 気質\n', '8. 照れのしるし', TEMPER);
   // The owner approved this wording and the fifteen regions on 2026-10-20 (「承認して MAX も点ける」).
   return Object.freeze({ version: 'v3-space', status: 'approved' as const, text: replaced(temper, '9. 怒る・すねる\n', '10. 真面目な時\n', SULK),
-    hash: 'a03c48680754b6804c438c9e53e93670c1282a6dde7022bc06516af86ae8bc2c', summary: CHARACTER_CORE.summary });
+    hash: 'a03c48680754b6804c438c9e53e93670c1282a6dde7022bc06516af86ae8bc2c', summary: CHARACTER_CORE_V2.summary });
 };
 
 /**
@@ -74,10 +74,10 @@ let spaceCore: CharacterCore | null | undefined;
 let naturalCore: CharacterCore | null | undefined;
 
 /**
- * Her core while her character space is on; v2 itself when v2's sections cannot be found (its text changed; the test fails on that).
- * `natural` (`SHANNON_NATURAL_TALK`, the owner alone): v3-space with her tone line (`v3-natural`), else v3-space as it was.
+ * The v3-space core as it was (the old cheeky character), built from v2's text; read by no entrance since 2026-11-24 and kept with its
+ * hash pinned by the test. `natural`: with its tone line (`v3-natural`).
  */
-export function characterCoreForSpace(natural = false): CharacterCore {
+export function legacyCharacterCoreForSpace(natural = false): CharacterCore {
   if (spaceCore === undefined) {
     try {
       spaceCore = buildSpaceCore();
@@ -85,7 +85,7 @@ export function characterCoreForSpace(natural = false): CharacterCore {
       spaceCore = null;
     }
   }
-  if (!natural || !spaceCore) return spaceCore ?? CHARACTER_CORE;
+  if (!natural || !spaceCore) return spaceCore ?? CHARACTER_CORE_V2;
   if (naturalCore === undefined) {
     try {
       naturalCore = buildNaturalCore(spaceCore);
@@ -94,4 +94,12 @@ export function characterCoreForSpace(natural = false): CharacterCore {
     }
   }
   return naturalCore ?? spaceCore;
+}
+
+/**
+ * Her core while her character space is on (`SHANNON_CHARACTER_SPACE`): the child Shannon's, one fixed text whatever the region and
+ * whatever `natural` says (owner 2026-11-24: no entrance reads the old cheeky core; her tone is the core's §3 and the region's portrait).
+ */
+export function characterCoreForSpace(_natural = false): CharacterCore {
+  return CHARACTER_CORE;
 }

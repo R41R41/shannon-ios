@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHANNON_TEMPERAMENT, SHANNON_TOUCH_FEELINGS, shannonTemperament } from '@shannon/cognition';
+import { toLegacyPersona, toLegacyPersonaDeep } from './legacyPersona.js';
 import type { BodyReactionAnswer } from '../src/contracts/bodyReactionContract.js';
 import { OpenAIBodyReactionSpeaker } from '../src/surfaces/body/bodyReactionModel.js';
 import {
@@ -75,11 +76,11 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     // Recorded on a10fdedd, the production commit before stage 1b: f8a35ecb…. Since owner decision "a" (2026-10-06) every touch
     // prompt carries her temperament (`SHANNON_TEMPERAMENT`, one line in its rules, outside the stage-2 switch). Re-recorded for
     // that line alone: taken out of each prompt, the day is f8a35ecb… again, so nothing else changed.
-    const without = { ...day, calls: day.calls.map(call => ({ ...call, prompt: call.prompt.replace(`\n- ${SHANNON_TEMPERAMENT}`, '').replace(`\n- ${shannonTemperament('others')}`, '') })) };
+    const without = { ...day, calls: day.calls.map(call => ({ ...call, prompt: toLegacyPersona(call.prompt).replace(`\n- ${SHANNON_TEMPERAMENT}`, '').replace(`\n- ${shannonTemperament('others')}`, '') })) };
     // Owner 2026-10-19: the day's carry is being moved, not touched (no feeling, a line saying so, no stance): 804fe1a5… since.
     expect(digest(without)).toBe('804fe1a53b0e3fd0d9b2dbf1468688596b52a0faaaa005c58c516df6bb92a101');
     // 466fd4ef… with the owner's wording in every prompt; with scope (a) a touch while others are present says 「相手に」.
-    expect(digest(day)).toBe('5b3049e830353c3c4e2213a4ca565f38260ae335c23b95fc74a0b00e27a946a1'); // fdb92212… before 2026-10-19 (the carry)
+    expect(digest(toLegacyPersonaDeep(day))).toBe('5b3049e830353c3c4e2213a4ca565f38260ae335c23b95fc74a0b00e27a946a1'); // fdb92212… before 2026-10-19 (the carry)
   });
 
   it('under stage 2 (ADR-0006, on by default) is asked her stance and moved by it instead of the table: the same day, recorded', async () => {
@@ -94,7 +95,7 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     // the record (here an in-memory one), and an old-shape touch whose stance is not welcome or fine is told without favour.
     // 8606cfd2… before scope (a): the touch while others are present now says 「相手に」 in her temperament.
     // Owner 2026-10-19: the carry is not asked and moves nothing (da6bf623… before).
-    expect(digest(day)).toBe('f7f52842eeda550fa377f5a4afdcbfcb20801fb73bfd4efee369295b8c44def5');
+    expect(digest(toLegacyPersonaDeep(day))).toBe('f7f52842eeda550fa377f5a4afdcbfcb20801fb73bfd4efee369295b8c44def5');
   });
 
   it('is asked with the answer of before, without a stance; a touch that names its part is asked its stance too', async () => {

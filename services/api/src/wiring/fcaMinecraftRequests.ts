@@ -126,6 +126,19 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     && task.status !== 'paused' && parts.control.store.body(task.id) === bodyId
     && admittedMinecraftRequest(task, task.parentId ? parts.runtime.get(parts.ownerScope, task.parentId) : null, true))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
+  /**
+   * His recent requests that are not going on: stopped, failed, done, or put aside (paused). They are shown to the voice so that a promise in
+   * the talk history (「羊は倒すね」) is not carried on as work that is coming (talk-fix 2026-11-24). Newest first, at most three, from the last 3 hours.
+   */
+  const resting = (bodyId: string): Array<{ goal: string; how: string }> => {
+    const since = Date.now() - 3 * 60 * 60_000;
+    const how = (task: TaskView): string | null => task.status === 'paused' && unfinished(task) ? '保留中'
+      : task.phase === 'stopped' || task.status === 'cancelled' ? '止めた' : task.phase === 'failed' ? 'できなかった' : task.phase === 'completed' ? '終わった' : null;
+    return bound(undefined, task => how(task) !== null && parts.control.store.body(task.id) === bodyId && Date.parse(task.updatedAt) >= since
+      && admittedMinecraftRequest(task, task.parentId ? parts.runtime.get(parts.ownerScope, task.parentId) : null, true))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id)).slice(0, 3)
+      .map(task => ({ goal: task.goal.replace(/s+/gu, ' ').trim().slice(0, 40), how: how(task)! }));
+  };
   const refused = (reason: MinecraftIntentRefusal, kind: string) => {
     log(`Shannon Minecraft intent refused reason=${reason} kind=${kind}`);
     return { kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason };
@@ -232,7 +245,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   const queue = fcaMinecraftQueue(queueTaskPorts({ db: parts.db, control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope,
     atomic: parts.atomic, stop: parts.stop, log, spec, newTask, requestOrigin: task => requestOrigin(task) }));
   const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
-    sourceVisible: parts.sourceVisible, bound: () => bound(undefined, unfinished), openRequest, log, queue });
+    sourceVisible: parts.sourceVisible, bound: () => bound(undefined, unfinished), openRequest, resting, log, queue });
   /**
    * dragon26 (the mod's 「やめる」 was said to her as 「今の作業をやめて」 and refused twice as `turn_not_visible`, so the task ran on): the stop of
    * the owner's own button. It is the owner's body device (the route checked it) stopping the owner's tasks bound to a body, so no turn's

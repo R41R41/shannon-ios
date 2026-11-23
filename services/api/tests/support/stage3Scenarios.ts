@@ -1,6 +1,7 @@
 import { historicalSearchRequest } from './historicalSearchRequest.js';
 import { historicalSkillImportState } from './historicalSkillImportState.js';
 import { createHash } from 'node:crypto';
+import { toLegacyPersona } from '../legacyPersona.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -77,7 +78,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
 const DERIVED_ID = /\b([a-z]+)-[0-9a-f]{8,}\b/gu;
 /** The text with its random ids taken out. */
 export const normalized = (text: string) => text.replace(UUID, 'ID').replace(DERIVED_ID, '$1-HEX');
-export const digest = (text: string) => createHash('sha256').update(normalized(text)).digest('hex').slice(0, 24);
+export const digest = (text: string) => createHash('sha256').update(toLegacyPersona(normalized(text), true)).digest('hex').slice(0, 24);
 
 const AT = '2026-10-07T03:00:00.000Z'; // 12:00 in Tokyo
 const TIMINGS = new Set(['voiceMetrics', 'decisionLatencyMilliseconds']);

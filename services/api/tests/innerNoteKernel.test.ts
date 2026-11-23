@@ -55,7 +55,8 @@ describe('a text turn reads her inner note (ADR-0012 stage 1)', () => {
     const { model, chat } = await harness(false);
     await chat('こんばんは', 'こんばんは。');
     const request = model.requests.at(-1)!;
-    expect(request.systemPrompt).toContain('メイドAI');
+    expect(request.systemPrompt).not.toContain('メイドAI');
+    expect(request.systemPrompt).toContain('経験はまだ浅い');
     expect(request.turnContext ?? '').not.toContain('[心のメモ]');
   });
 

@@ -292,7 +292,7 @@ describe('what she is told and what she remembers', () => {
     // Worded for who is there (scope (a)): 「ライ氏に」 with the owner alone, 「相手に」 with others present; once in each prompt.
     expect(w.speaker.prompts[0]).toContain(`- ${SHANNON_TEMPERAMENT}`);
     expect(w.speaker.prompts[1]).toContain(`- ${shannonTemperament('others')}`);
-    for (const prompt of w.speaker.prompts) expect(prompt.split('丸く収めなくていい').length - 1).toBe(1);
+    for (const prompt of w.speaker.prompts) expect(prompt.split('嫌味では返さない').length - 1).toBe(1);
   });
 
   it('words an old-shape touch with favour only when she took it as welcome or fine (iPhone and Mac send that shape)', async () => {

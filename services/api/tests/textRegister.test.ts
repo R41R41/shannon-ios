@@ -34,7 +34,7 @@ async function turn(options: { register: boolean; choice: FeelingChoice; said?: 
   return { response, prompt: chatModel.requests.at(-1)!.turnContext ?? '' };
 }
 
-const sulk = { stance: 'sulk', intensity: 'strong', drawer: 'none' };
+const sulk = { stance: 'sulky', intensity: 'strong', drawer: 'none' };
 
 describe('the text register on the reply (SHANNON_TEXT_REGISTER)', () => {
   it('is off by default: no field, and the prompt of before', async () => {
@@ -46,7 +46,8 @@ describe('the text register on the reply (SHANNON_TEXT_REGISTER)', () => {
 
   it('carries the pacing and the two messages, and tells the model the form', async () => {
     const { response, prompt } = await turn({ register: true, choice: sulk });
-    expect(response.textRegister).toMatchObject({ version: 1, pauseMs: 20_000, split: true, emoji: 'none', parts: ['別に。', '怒ってません。'] });
+    // 2026-11-24: 「すねる」 (a 20-second silence) is not the child Shannon's stance, so the test asks 「むっとする」 (4 s).
+    expect(response.textRegister).toMatchObject({ version: 1, pauseMs: 4_000, split: true, emoji: 'none', parts: ['別に。', '怒ってません。'] });
     expect(response.textRegister!.bypass).toBeUndefined();
     expect(prompt).toContain('[この番の書き方]');
     expect(prompt.indexOf('[この番の書き方]')).toBeGreaterThan(prompt.indexOf('[この番の気持ち]'));

@@ -64,7 +64,7 @@ export class VoiceWords {
     const digest = createHash('sha256').update(`${body.conversationId}\u0000${at}\u0000${body.source}\u0000${content}`).digest('hex');
     this.note(body.conversationId, `dcv-said:${digest.slice(0, 32)}`, content);
     // A line from her mouth is said to the room, to nobody in particular: a friend's reaction to it may be to her (`SHANNON_ADDRESSED`).
-    if (body.source === 'mouth' && body.interrupted !== true) this.dependencies.rooms.noteShannon(body.conversationId, { at, userId: '', text: content, asked: endsWithQuestionMark(content) });
+    if (body.source === 'mouth' && body.interrupted !== true) this.dependencies.rooms.noteShannon(body.conversationId, { at, userId: '', text: content, asked: endsWithQuestionMark(content) }, true);
     this.reportCutShort(body.conversationId, body.source === 'reply' && body.interrupted === true);
   }
 
@@ -138,6 +138,27 @@ export class VoiceWords {
       if (sound && Number.isFinite(Date.parse(line.at as string))) lines.push(line as HeardLine);
     }
     return lines;
+  }
+
+  private warmedAt = 0;
+
+  /**
+   * One empty call to the auxiliary model when a call opens: the first real line otherwise pays a cold connection and a prompt that is not
+   * cached yet (the first reply of a call took 7.1 s, the next ones 3.6 s). Its answer is thrown away and nothing is kept or said; a failure is
+   * not an error (the first real line then does what it did before). At most once in five minutes, so a body that asks at every join cannot
+   * make it a stream of calls.
+   */
+  async warm(): Promise<{ warmed: boolean }> {
+    const at = Date.parse(this.dependencies.now());
+    if (this.warmedAt && at - this.warmedAt < 5 * 60_000) return { warmed: false };
+    this.warmedAt = at;
+    try {
+      const { scopeKey, chatModel } = this.dependencies;
+      await chatModel.generate({ scopeKey, systemPrompt: [shannonIdentityPrompt('guest'), WORDING_INSTRUCTIONS].join('\n\n'), history: [], message: '出来事:\n- （通話が始まった。準備の呼びかけで、返事はいらない）' });
+      return { warmed: true };
+    } catch {
+      return { warmed: false };
+    }
   }
 
   /** Event facts put into her words for a line from her mouth, or nothing when there is nothing worth saying (`{ say: false }`). */

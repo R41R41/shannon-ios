@@ -328,12 +328,14 @@ export const feelingText = Object.freeze({
 /** The voice turn's hooks (`apiLiveVoice.ts`). The feeling questions ride on the router's Jev call (`voice_route.v6`). */
 export const feelingVoice = Object.freeze({
   start: (port: FeelingPort | null | undefined, input: { scopeKey: string; alone: boolean; guest: boolean; threadId: string; transcript: string; at: string;
-    snapshot: CompanionStateSnapshot; platform?: { speaker?: FeelingSpeaker } }): FeelingTurnHandle | null => {
+    snapshot: CompanionStateSnapshot; platform?: { speaker?: FeelingSpeaker; ownerAlone?: boolean } }): FeelingTurnHandle | null => {
     if (!port) return null;
     // A 「友人も一緒」 call, or the owner's call with someone beside him: the call is the scene; nothing is the owner's. A platform's voice
     // channel (one head) is keyed as its typed turns are (`feelingText.start`): a group, by who spoke while stage 4 is on.
     const speaker = port.audience && input.platform?.speaker ? { speaker: input.platform.speaker } : {};
-    const key = input.platform ? feelingActor({ ownerAlone: false, group: true, ...speaker })
+    // The owner alone in the channel (`VoiceSeat.ownerAloneInRoom`) is his own room, not a group (11/24: a call with only him in it was a group, so
+    // the way she talks to him alone and the owner-only layer never applied).
+    const key = input.platform ? (input.platform.ownerAlone ? feelingActor({ ownerAlone: true }) : feelingActor({ ownerAlone: false, group: true, ...speaker }))
       : feelingActor({ ownerAlone: input.alone && !input.guest, sceneId: input.alone && !input.guest ? null : `call:${input.threadId}` });
     const { scopeKey, transcript: words, at, snapshot } = input;
     if (port.audience && key.sceneId) safely(() => port.events.noteScene(scopeKey, key.sceneId!, at), undefined);

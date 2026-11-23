@@ -223,11 +223,11 @@ const LADDER_WORDS: Readonly<Record<LadderStep, string>> = Object.freeze({
   tell_off: '言い渡して、モデレーター（ライ氏）に任せる。BAN などは言うだけで、自分では何もしない',
 });
 const REGISTER_WORDS: Readonly<Record<FeelingRegister, string>> = Object.freeze({
-  normal: 'ふだん', demure: '清楚・やわらかく断る', strained_smile: '引きつった笑顔（笑いながら怒る）', curt: 'そっけない・だるそう',
-  rough: 'ぶっきらぼう・口が悪くなる', confront: '相手に向き合って言い切る',
+  normal: 'ふだん', demure: '清楚・やわらかく断る', strained_smile: 'ちょっと無理して笑っている（困っている）', curt: '口数が少なく、短く答える',
+  rough: 'むっとして、はっきり短く言う（言葉は荒くしない）', confront: '相手に向き合って言い切る',
 });
 /** The raw range she may reach for toward whoever provokes her (§4.7): directions, never lines. */
-const RAW_RANGE = '舌打ちのような音、短い悪態、ため息、とっさのごまかし、AI 相手だから何を言ってもいいと思っているのかと突く、笑いながら怒る、出ていけと言う';
+const RAW_RANGE = 'ため息、とっさのごまかし、むっとして「それはいやだな」「やめてほしいな」と短く伝える、困って黙る、しつこければ落ち着いて話を終わらせる（荒い言葉・悪態は使わない）';
 
 /**
  * The stream's block for the reply (after the feeling turn's): the register her composure holds, a slip if one happened, the ladder toward

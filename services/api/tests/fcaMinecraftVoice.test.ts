@@ -14,7 +14,7 @@ const databases: DatabaseSync[] = [];
 afterEach(() => { for (const db of databases.splice(0)) db.close(); });
 
 /** The queue runs on a small fake of the task runtime (a task per start); the voice parts are as `fcaMinecraftRequests` gives them. */
-function fixture(options: { bodies?: string[]; running?: TaskView | null; visible?: boolean; finished?: boolean } = {}) {
+function fixture(options: { bodies?: string[]; running?: TaskView | null; visible?: boolean; finished?: boolean; resting?: Array<{ goal: string; how: string }> } = {}) {
   const calls: string[] = [];
   const db = new DatabaseSync(':memory:');
   databases.push(db);
@@ -51,6 +51,7 @@ function fixture(options: { bodies?: string[]; running?: TaskView | null; visibl
     sourceVisible: () => options.visible ?? true,
     bound: () => bound,
     openRequest: () => options.running ?? undefined,
+    ...(options.resting ? { resting: () => options.resting! } : {}),
     log: () => undefined,
     queue,
   };
@@ -72,6 +73,9 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(fixture({ bodies: ['a', 'b'] }).port.state()).toEqual({ connected: false, running: null });
     expect(fixture().port.state()).toEqual({ connected: true, running: null });
     expect(fixture({ running: task('t1', 'エンドラを倒す') }).port.state()).toEqual({ connected: true, running: { id: 't1', goal: 'エンドラを倒す' } });
+    // The requests that are not going on are told to the voice (not the one that runs), so a promise in the history is not read as work to come.
+    expect(fixture({ running: task('t1', 'ケーキを作る'), resting: [{ goal: '羊を倒す', how: '止めた' }, { goal: 'ケーキを作る', how: '保留中' }] }).port.state())
+      .toEqual({ connected: true, running: { id: 't1', goal: 'ケーキを作る' }, resting: ['「羊を倒す」（止めた）'] });
     const f = fixture();
     await f.port.intent(task1());
     // The list says which request runs (here the task runtime's open request is none yet): her reply is told that one.

@@ -68,7 +68,7 @@ describe('one Shannon across text and voice', () => {
     });
     expect(prompt.startsWith(shannonIdentityPrompt('guest'))).toBe(true);
     expect(prompt).toContain(temporaryGuestVoiceInstructions);
-    expect(prompt).toContain('少しポンコツなメイドAI');
+    expect(prompt).toContain('経験はまだ浅い');
     expect(prompt).toContain('相手を「ライ氏」と呼ばない');
     // PP-07: no block may instruct her to address the current speaker as the owner.
     expect(prompt).not.toContain('「ライ氏」と呼び、');

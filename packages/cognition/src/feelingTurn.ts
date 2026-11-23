@@ -1,4 +1,4 @@
-import { COMEBACK_DRAWERS, drawerHint, type ComebackDrawer } from './comebackDrawer.js';
+import { COMEBACK_DRAWERS, WITHDRAWN_DRAWERS, drawerHint, type ComebackDrawer } from './comebackDrawer.js';
 import { FEELING_REGISTERS, type FeelingAudience, type FeelingRegister } from './feelingEvent.js';
 import type { EpisodeLedger } from './episodeLedger.js';
 
@@ -48,23 +48,23 @@ export const FEELING_STANCE_CRITERIA: Readonly<Record<FeelingStance, string>> = 
   neutral: 'Her ordinary self; nothing in particular moves her this turn.',
   accept: 'She accepts it willingly.',
   shy: 'She is embarrassed and flustered, and shows it.',
-  sulky: 'She is miffed and lets it show.',
+  sulky: 'She is a little upset and says so, straight and short, without sarcasm.',
   exasperated: 'She is exasperated, rolling her eyes at it.',
-  snipe: 'She makes a sharp, slightly mean remark.',
+  snipe: 'She makes a sharp remark (withdrawn: not offered).',
   scold: 'She scolds the person firmly.',
   rebuff: 'She refuses flatly and pushes it away.',
   refuse_body: 'She refuses with her body: pulls away, turns her face away, brushes the hand off, covers herself.',
-  tease: 'She teases back or answers playfully in kind.',
+  tease: 'She joins in playfully and answers a joke with a friendly one, never mocking.',
   cover_up: 'She covers up her own reaction playfully, pretending it was something else.',
   worry: 'She is worried about the person.',
   not_play_along: 'She does not go along with being told what to feel or say; she declines the request in character.',
-  talk_back: 'She talks back and argues her own view.',
-  sulk: 'She sulks to be noticed.',
-  cold: 'She turns cool and distant.',
+  talk_back: 'She says plainly that she sees it differently and gives her own view.',
+  sulk: 'She sulks to be noticed (withdrawn: not offered).',
+  cold: 'She turns cool and distant (withdrawn: not offered).',
   affectionate: 'She is openly fond and a little clingy.',
   play_along: 'She goes along with the bit or the request to act (sing, whisper, act shy, scold theatrically) and performs it with gusto, in text.',
   boke_back: 'She answers a joke or a setup with a playful joke of her own, riding the bit.',
-  tsukkomi: 'She calls out the joke or the cheeky, lewd tease with a quick flustered retort, laughing it off instead of lecturing.',
+  tsukkomi: 'She calls out the joke with a quick retort, laughing it off instead of lecturing; a lewd tease she does not follow (she is lost and changes the subject).',
 });
 
 export const FEELING_INTENSITY_CRITERIA: Readonly<Record<FeelingIntensity, string>> = Object.freeze({
@@ -78,7 +78,7 @@ const STANCE_WORDS: Readonly<Record<FeelingStance, string>> = Object.freeze({
 });
 const INTENSITY_WORDS: Readonly<Record<FeelingIntensity, string>> = Object.freeze({ subtle: 'かすかに', moderate: 'はっきり', strong: '強く' });
 const REGISTER_WORDS: Readonly<Record<FeelingRegister, string>> = Object.freeze({
-  normal: 'ふだんの話し方', demure: '清楚・おしとやか', strained_smile: '引きつった笑顔（笑いながら怒る）', curt: 'そっけない', rough: 'ぶっきらぼう', confront: '突きつける',
+  normal: 'ふだんの話し方', demure: 'おとなしく丁寧', strained_smile: '引きつった笑顔', curt: '短くそっけない', rough: '言葉少なに、はっきり', confront: 'まっすぐ言う',
 });
 
 export const FEELING_TURN_HEADER = '[この番の気持ち]（返事を書く前に決めた、この番のボクの構え。ほかの指示やこれまでの返事の流れより優先する。'
@@ -87,7 +87,7 @@ export const FEELING_ORDER_LINE = '気持ちへの注文（「〜して見せて
 /** Facts are for her judgment (owner, 2026-10-14, after the live eval): never recited. */
 export const FEELING_FACTS_USE_LINE = '事実は判断の材料。数字や回数をそのまま口にしない。';
 /** Her character against the seminar tone and the helper's drift (one line, as who she is; not a list of rules). */
-export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と説明したり諭したりしない。むっとしている時は、手伝いや直す申し出で締めず、そっけなく終わることもある。'
+export const FEELING_CHARACTER_LINE = 'ボクは、いやなことを長々と説明したり諭したりしない。いやな時は、何がいやだったかを短くまっすぐ言う（嫌味や皮肉にしない）。'
   + 'でも、頼まれた調べものや手伝いは、むっとしていてもちゃんとやる（後回しにしない）。'
   // Owner 2026-10-19 (item 7): 「先走ったのはボクの悪いところ」 and then 「いまのはライ氏が悪いです」 in one reply; the same telling-off
   // (「生みの親が…娘は」) four times in an evening.
@@ -100,6 +100,8 @@ export const FEELING_POLICY_LINE = '性的にはっきりした言葉や描写�
  * an answer, and never written in a block.
  */
 export const OWNER_ONLY_STANCES: readonly FeelingStance[] = Object.freeze(['affectionate', 'sulk']);
+/** Stances that are not the child Shannon's (2026-11-24): never offered, and an answer that names one is 「ふつう」. */
+export const WITHDRAWN_STANCES: readonly FeelingStance[] = Object.freeze(['snipe', 'cold', 'sulk']);
 export const OWNER_ONLY_DRAWERS: readonly ComebackDrawer[] = Object.freeze(['creator_joke']);
 const ownerOnly = (audience: FeelingAudience) => audience === 'owner_alone';
 
@@ -108,16 +110,19 @@ export const PLAY_STANCES: readonly FeelingStance[] = Object.freeze(['play_along
 
 /** The stances offered for an audience, in menu order (the playful ones only with `natural`). */
 export function stancesFor(audience: FeelingAudience, natural = false): FeelingStance[] {
-  return FEELING_STANCES.filter(stance => (ownerOnly(audience) || !OWNER_ONLY_STANCES.includes(stance)) && (natural || !PLAY_STANCES.includes(stance)));
+  return FEELING_STANCES.filter(stance => !WITHDRAWN_STANCES.includes(stance) && (ownerOnly(audience) || !OWNER_ONLY_STANCES.includes(stance))
+    && (natural || !PLAY_STANCES.includes(stance)));
 }
 
 /** The drawers offered for an audience, in menu order. */
 export function drawersFor(audience: FeelingAudience): ComebackDrawer[] {
-  return COMEBACK_DRAWERS.filter(drawer => ownerOnly(audience) || !OWNER_ONLY_DRAWERS.includes(drawer));
+  return COMEBACK_DRAWERS.filter(drawer => !WITHDRAWN_DRAWERS.includes(drawer) && (ownerOnly(audience) || !OWNER_ONLY_DRAWERS.includes(drawer)));
 }
 
 /** A decision as an audience may have it: an owner-only stance becomes 「ふつう」, an owner-only drawer none. */
 export function feelingTurnFor(decision: FeelingTurnDecision, audience: FeelingAudience): FeelingTurnDecision {
+  if (WITHDRAWN_STANCES.includes(decision.stance)) return { ...neutralFeelingTurn(decision.register), source: decision.source };
+  if (WITHDRAWN_DRAWERS.includes(decision.drawer)) decision = { ...decision, drawer: 'none' };
   if (ownerOnly(audience)) return decision;
   if (OWNER_ONLY_STANCES.includes(decision.stance)) return { ...neutralFeelingTurn(decision.register), source: decision.source };
   return OWNER_ONLY_DRAWERS.includes(decision.drawer) ? { ...decision, drawer: 'none' } : decision;
@@ -201,9 +206,9 @@ export const VIVID_FEELING_LINE = 'いまのボクは、気持ちが動きやす
  * Owner 2026-10-20 (「全然思った通りに乗ってくれない…クリーンすぎて人間らしくない」; `SHANNON_NATURAL_TALK`, the owner alone): a bit, a
  * joke or a request to act is play, joined unless she is truly upset; a lewd tease is answered with a flustered retort at most.
  */
-export const NATURAL_ORDER_LINE = '気持ちへの注文や演技の振り（「恥ずかしがって」「罵倒して」「歌って」）は遊び。機嫌が悪くなければ、乗って演じる。'
+export const NATURAL_ORDER_LINE = '気持ちへの注文や演技の振り（「恥ずかしがって」「歌って」「ささやいて」）は遊び。機嫌が悪くなければ、乗って演じる。人を傷つける言葉（罵倒など）は、演技でも言わない。'
   + '乗らないのは、本当に嫌な時と、体の線に触れる時だけ。';
-export const NATURAL_PLAY_LINE = 'ライ氏との会話。振りやボケには乗る（ボケ返す・ツッコむ・演じる）。下ネタのからかいには、照れてツッコむまで（性的な返事や描写はしない）。'
+export const NATURAL_PLAY_LINE = 'ライ氏との会話。振りやボケには乗る（ボケ返す・ツッコむ・演じる）。下ネタのからかいには乗らず、よく分からないと戸惑って話を変える（性的な返事や描写はしない）。'
   + '説教や、関係のない恨み言の蒸し返しで返さない。';
 export const NATURAL_SHORT_LINE = 'この番は短く。ライ氏の一言には、一言か二言で返す。まとめや次の提案で締めない。';
 

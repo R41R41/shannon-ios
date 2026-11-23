@@ -1,4 +1,11 @@
 import { SHANNON_CURRENT_GOAL, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME } from './persona.js';
+import { CHARACTER_CORE_KID, KID_CORE_SPEECH } from './characterCoreKid.js';
+
+/*
+ * 2026-11-24 (owner: every entrance is the child Shannon): `CHARACTER_CORE` below is now the child's core (`characterCoreKid.ts`). The
+ * text this file wrote until then is kept as `CHARACTER_CORE_V2` (hash pinned by the test) and is read by no entrance.
+ */
+import { CHARACTER_CORE_KID, KID_CORE_SPEECH } from './characterCoreKid.js';
 
 /**
  * Her character core (Syzygy ADR-0012 D6): who she is — her temperament, what she values and likes, how she speaks, her habits —
@@ -131,15 +138,20 @@ const CORE_SUMMARY = `シャノン（${I}）。明るくて生意気で、自分
  * How she speaks, in the core's own words (§3), for the touch prompt beside `summary` (2026-10-14, the owner's Windows call: nine of ten
  * touch lines said 「びっくり」). The lines are the approved text's, so the hash covers them; they are tone hints, not lines to say.
  */
-export const CHARACTER_CORE_SPEECH = `話し方: ${SPEECH_SURPRISE}${SPEECH_LOOSE}${SPEECH_BORED}（${CHARACTER_CORE_TONE_NOTE}）`;
+export const CHARACTER_CORE_SPEECH = KID_CORE_SPEECH;
+/** The v2 speech lines (the old core's §3), kept with it. */
+export const CHARACTER_CORE_V2_SPEECH = `話し方: ${SPEECH_SURPRISE}${SPEECH_LOOSE}${SPEECH_BORED}（${CHARACTER_CORE_TONE_NOTE}）`;
 
-export const CHARACTER_CORE: CharacterCore = Object.freeze({
+export const CHARACTER_CORE_V2: CharacterCore = Object.freeze({
   version: 'v2',
   status: 'approved',
   hash: 'cb69b70fe805b744e60e52f49a837018af5de7e6a1d9b61b8ca864e88dc8bb94',
   text: CORE_TEXT,
   summary: CORE_SUMMARY,
 });
+
+/** The core every entrance reads: the child Shannon's (`characterCoreKid.ts`). */
+export const CHARACTER_CORE: CharacterCore = CHARACTER_CORE_KID;
 
 /** What `hash` is the sha256 of: the version, the text and the summary, one per line. */
 export function characterCoreHashInput(core: Pick<CharacterCore, 'version' | 'text' | 'summary'>): string {
