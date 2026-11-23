@@ -286,7 +286,7 @@ How she feels, for the body that draws it in the game (owner decision 2026-11-24
 ```
 
 - `primary` is one of her feeling kinds (the game's thought kinds among them), `intensity` is 0 to 1. When no feeling shows, or she hides it, `primary` is `neutral`, `intensity` 0, `cause` empty and `since` absent.
-- `cause` is one line of at most 40 characters, without the 「マイクラで」 prefix.
+- `cause` is one line of at most 240 characters (the game screen wraps all of it), without the 「マイクラで」 prefix.
 - `flow` is the last ten minutes, oldest first, at most 24 points. A point is added when a read finds the feeling changed, stronger or weaker by 0.1, or a minute after the last point. It is kept in memory; a restart of the server empties it.
 - Her line of thinking and the plan node in hand are not here: the body already holds them from the task the server sends.
 - A body that does not know the field ignores it; a server that does not know the route answers 404, and the body shows nothing.

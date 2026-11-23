@@ -85,6 +85,7 @@ describe('mindCauseLine', () => {
     expect(mindCauseLine('マイクラで「骨」を\n取った')).toBe('骨を 取った');
     expect(mindCauseLine('生成した応答の内容と会話文脈')).toBe('');
     expect(mindCauseLine('あ'.repeat(80))).toHaveLength(BODY_MIND_LIMITS.causeCharacters);
+    expect(mindCauseLine('あ'.repeat(120))).toHaveLength(120); // a long reason reaches the game screen whole, which wraps it
     expect(mindCauseLine(undefined)).toBe('');
   });
 });

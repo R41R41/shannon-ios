@@ -18,8 +18,8 @@ export const BODY_MIND_LIMITS = Object.freeze({
   samePointMilliseconds: 60_000,
   /** A change of strength this big is a new point. */
   strengthStep: 0.1,
-  /** The reason is one line of at most this many characters. */
-  causeCharacters: 40,
+  /** The reason is one line of at most this many characters (the mod's "きもち" tab wraps all of it; 240 is the longest the mind keeps). */
+  causeCharacters: 240,
   /** The body asks again after this many seconds. */
   pollAfterSeconds: 4,
   scopes: 64,

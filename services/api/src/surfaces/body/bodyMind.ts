@@ -5,7 +5,7 @@ import { BODY_MIND_LIMITS, BODY_MIND_SCHEMA_VERSION, type BodyMind, type BodyMin
 const round = (value: number, digits: number) => Math.round(value * 10 ** digits) / 10 ** digits;
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
-/** The reason as one short line: no control characters or brackets, the game prefix dropped (the screen is the game), at most 40 characters. */
+/** The reason as one short line: no control characters or brackets, the game prefix dropped (the screen is the game), at most 240 characters. */
 export function mindCauseLine(cause: unknown): string {
   if (typeof cause !== 'string') return '';
   // The wordings her own resolver gives a feeling that came from talking are not a reason a person should read: leave the reason empty.
