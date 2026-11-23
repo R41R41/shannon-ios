@@ -99,6 +99,10 @@ export interface AnthropicChatModelOptions {
   voiceCachePlan?: boolean;
 }
 
+/** A warm-up asks for this many output tokens (the reply is thrown away) and waits this long for the provider. */
+const WARM_OUTPUT_TOKENS = 8;
+const WARM_TIMEOUT_MILLISECONDS = 15_000;
+
 export class AnthropicChatModel implements ShannonChatModel {
   readonly mode = 'anthropic' as const;
   readonly model: string;
@@ -171,6 +175,7 @@ export class AnthropicChatModel implements ShannonChatModel {
   };
 
   private async text(request: ShannonChatModelRequest, onReplyText: ((text: string) => void | Promise<void>) | null): Promise<ShannonChatModelResult> {
+    if (request.warmOnly) return this.warmedTurn(request);
     const searchDeadline = request.tools?.deadline ?? new TurnDeadline(TEXT_TURN_DEADLINE, this.clock);
     // The explicit app button keeps its intent while letting the primary form a query from this conversation.
     if (request.useWebSearch && !request.placeSearch && request.tools && baseToolSession(request.tools).definitions.some(tool => tool.name === 'web.search')) {
@@ -236,6 +241,21 @@ export class AnthropicChatModel implements ShannonChatModel {
     const webSources = searched?.sources ?? read?.sources ?? webSourcesOf(result);
     const { webSources: _luna, ...rest } = turn;
     return { ...rest, mode: this.mode, model: this.model, ...(webSources.length ? { webSources } : {}) };
+  }
+
+  /**
+   * Only the cache (`warmOnly`, a call opening): this turn's own request — the same tools, system, format and thinking as a reply's, so the
+   * provider writes the prefix the first real reply then reads — with a few output tokens, no tool round, nothing parsed, said or kept. Its
+   * usage goes through the transport like any request's. No Talk is named, so the plan's warm-turn counts do not see it.
+   */
+  private async warmedTurn(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
+    const { tools: _tools, warmOnly: _warm, threadKey: _thread, ...plain } = request;
+    const body = { ...this.textBody(this.boundedToolMenu(plain)), max_tokens: WARM_OUTPUT_TOKENS };
+    const started = this.clock();
+    const send = this.sender({ scopeKey: request.scopeKey, route: 'text' }, null, AbortSignal.timeout(WARM_TIMEOUT_MILLISECONDS));
+    const { usage } = await send(body, null, 0);
+    return { mode: this.mode, model: this.model, reply: '', warmed: { input: usage.input_tokens, cacheRead: usage.cache_read_input_tokens ?? 0,
+      cacheWrite: usage.cache_creation_input_tokens ?? 0, output: usage.output_tokens, milliseconds: Math.round(this.clock() - started) } };
   }
 
   /** Her fixed line after what was already written (also the tiered model's answer when a fallback would repeat a word or a tool). */

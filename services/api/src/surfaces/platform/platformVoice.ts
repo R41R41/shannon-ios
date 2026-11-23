@@ -29,6 +29,7 @@ import {
   speechInstructions, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
+import { warmedAudiences, type VoiceWarmAsk, type WarmAudience } from '../voice/voiceWarm.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
 import { voiceIntentLineKind, intentLog, type VoiceMinecraftIntentResult, type VoiceMinecraftPort, type VoiceMinecraftState } from './voiceMinecraftPort.js';
@@ -60,6 +61,8 @@ export interface PlatformVoiceConversation {
   textTurn(input: TextTurnInput): Promise<TextTurnResult>;
   /** One head (`SHANNON_ONE_HEAD`): the one voice turn the apps use, with this channel's seat (`ShannonApiKernel.seatedVoiceTurn`). */
   seatedVoiceTurn?: SeatedVoiceTurn;
+  /** A call opening: the cache of a spoken reply filled for one audience (`voiceWarm.ts`), nothing said or kept; null for a model with nothing to warm. */
+  warmVoiceReply?(ask: VoiceWarmAsk): Promise<ShannonChatModelResult['warmed'] | null>;
 }
 
 export interface PlatformVoiceDependencies {
@@ -120,6 +123,12 @@ interface KeptTurn {
   turn?: CompletedTurn;
 }
 
+/** An audience's warm-up of the spoken reply's cache is not asked again within this time (the provider keeps it an hour). */
+const REPLY_WARM_INTERVAL_MILLISECONDS = 10 * 60_000;
+
+/** What one audience's warm-up counted (tokens the provider read from and wrote to its cache), for the caller's log. */
+export interface ReplyWarm { audience: WarmAudience; warmed: boolean; input?: number; cacheRead?: number; cacheWrite?: number; output?: number; milliseconds?: number }
+
 export class PlatformVoiceService {
   private readonly pending = new Map<string, { hash: string; done: Promise<void> }>();
   private readonly allowance = new SurfaceTurnAllowance(PLATFORM_VOICE_ALLOWANCE);
@@ -135,8 +144,41 @@ export class PlatformVoiceService {
 
   wording(value: unknown): Promise<{ say: boolean; text?: string }> { return this.words.wording(value); }
 
-  /** A call opened: warms the auxiliary model (`VoiceWords.warm`). */
-  warm(): Promise<{ warmed: boolean }> { return this.words.warm(); }
+  /**
+   * A call opened (or the channel was silent for long): warms the auxiliary model (`VoiceWords.warm`) and the cache of the spoken reply, the
+   * first reply's own request with a few output tokens (`voiceWarm.ts`), for the audiences the channel may hear. `others`: someone but the owner is
+   * in the channel. Each audience at most once in ten minutes; nothing is said, kept or remembered; a failure is not an error.
+   */
+  async warm(value?: unknown): Promise<{ warmed: boolean; reply?: ReplyWarm[] }> {
+    const [words, reply] = await Promise.all([this.words.warm(), this.warmReply(value)]);
+    return reply.length ? { ...words, reply } : words;
+  }
+
+  private readonly replyWarmedAt = new Map<WarmAudience, number>();
+
+  private async warmReply(value: unknown): Promise<ReplyWarm[]> {
+    const warm = this.dependencies.conversation.warmVoiceReply;
+    if (!warm || !this.seated) return [];
+    const body = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    const at = Date.parse(this.dependencies.now());
+    const wanted = warmedAudiences(body.others === true).filter(audience => {
+      const last = this.replyWarmedAt.get(audience);
+      return last === undefined || at - last >= REPLY_WARM_INTERVAL_MILLISECONDS;
+    });
+    for (const audience of wanted) this.replyWarmedAt.set(audience, at);
+    const offerMinecraftIntent = body.intent !== false;
+    const settled = await Promise.all(wanted.map(async (audience): Promise<ReplyWarm> => {
+      try {
+        const used = await warm.call(this.dependencies.conversation, { scopeKey: this.dependencies.scopeKey, audience, offerMinecraftIntent });
+        this.log(`Shannon platform voice reply warm audience=${audience} ${used ? `input=${used.input} cacheRead=${used.cacheRead} cacheWrite=${used.cacheWrite} ms=${used.milliseconds}` : 'skipped'}`);
+        return { audience, warmed: used !== null, ...(used ?? {}) };
+      } catch {
+        this.replyWarmedAt.delete(audience); // The next call may try again.
+        return { audience, warmed: false };
+      }
+    }));
+    return settled;
+  }
 
   private get environment(): SwitchValues { return this.dependencies.environment?.() ?? serverEnvironment(); }
 

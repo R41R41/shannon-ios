@@ -11,6 +11,7 @@ import {
   dispatchLiveVoiceRequest, dispatchSeatedVoiceTurn, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode,
 } from '../../surfaces/voice/apiLiveVoice.js';
 import type { VoiceSeat } from '../../contracts/oneHeadContract.js';
+import { warmVoiceReply, type VoiceWarmAsk } from '../../surfaces/voice/voiceWarm.js';
 import { runConversationTurn } from '../../mind/action/respond/conversationTurn.js';
 import { TextConversation, textTurnStages, type TextConversationParts } from './textConversation.js';
 import {
@@ -257,6 +258,8 @@ export class ShannonApiKernel {
     const keep = keptBySurface({ toolServer: this.toolServer, background: this.background }, turn.seat.keep);
     return dispatchSeatedVoiceTurn({ ...turn, seat: { ...turn.seat, keep } }, this.liveVoiceDependencies(), observer);
   }
+  /** A call opening: the cache of a spoken reply filled for one audience (`voiceWarm.ts`); nothing said, kept or remembered. */
+  warmVoiceReply(ask: VoiceWarmAsk): ReturnType<typeof warmVoiceReply> { return warmVoiceReply(this.liveVoiceDependencies(), ask); }
   async dispatch(request: ApiRequest): Promise<ApiResponse> {
     const preferenceResponse = dispatchPreferenceRequest(request, {
       chatModel: this.chatModel, voiceDecision: this.voiceDecision, background: this.background,

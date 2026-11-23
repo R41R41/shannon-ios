@@ -273,7 +273,7 @@ const listening = configuredListening(process.env, configuredDatabasePath()), bo
   ).running ?? null) !== null, addressed = configuredAddressedVoice(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null,
      salt: traceSalt, bodyRunning }), platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore,
         backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (
-          turn, observer) => kernel.seatedVoiceTurn(turn, observer) }, databasePath: configuredDatabasePath(), voiceMinecraft: (
+          turn, observer) => kernel.seatedVoiceTurn(turn, observer), warmVoiceReply: ask => kernel.warmVoiceReply(ask) }, databasePath: configuredDatabasePath(), voiceMinecraft: (
             ) => fca?.minecraft?.voice ?? null, voiceLifecycle: () => lifecycleRequests?.voicePort() ?? null, listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge, persistentStore), serveListen =
                configuredListenRoute(listening, addressed.judge, bodyRunning);
 // The mini Shannon's pictures (owner 2026-10-28): `/v1/mini/*` for the residents.

@@ -48,6 +48,11 @@ export interface ShannonChatModelRequest extends ShannonPromptLayers, ShannonPre
   naturalTalk?: true;
   /** A voice turn answered through the structured request: its reply is spoken (the Claude adapter keeps the short spoken rules). */
   spokenReply?: boolean;
+  /**
+   * Only the cache is wanted (a call opening, `voiceWarm.ts`): the Claude adapter sends this turn's own request with a few output tokens,
+   * keeps and says nothing, and books its usage like any request's. A model that has no cache to warm does nothing.
+   */
+  warmOnly?: true;
   /** A conversation turn's reply (typed, read aloud, or a platform's turn): with `SHANNON_REPLY_SONNET` it is Sonnet's (`ReplySonnetChatModel`). */
   conversationReply?: true;
   /**
@@ -132,6 +137,8 @@ export interface ShannonChatModelResult {
   mode: ShannonChatMode;
   model: string;
   reply: string;
+  /** A `warmOnly` request: the tokens the provider counted (the cache read and written are what the warm-up is for). */
+  warmed?: { input: number; cacheRead: number; cacheWrite: number; output: number; milliseconds: number };
   webSources?: ShannonWebSource[];
   places?: ShannonPlace[];
   roomLook?: 'asked' | 'curious';

@@ -50,7 +50,7 @@ export function createConfiguredPlatformBridgeRoute(
   /** The app's conversation kernel and the database, for `POST /v1/platform/reply`. Without them the route answers 503. */
   replies: {
     /** The kernel: its text turn, and (one head) its voice turn with a platform's seat. */
-    conversation: PlatformReplyConversation & Pick<PlatformVoiceConversation, 'seatedVoiceTurn'>; databasePath: string;
+    conversation: PlatformReplyConversation & Pick<PlatformVoiceConversation, 'seatedVoiceTurn' | 'warmVoiceReply'>; databasePath: string;
     /** `SHANNON_DC_VOICE`: her Minecraft body's side of an owner's spoken request, read at each turn (the part may connect later). */
     voiceMinecraft?: () => VoiceMinecraftPort | null;
     /** Her going into and out of the Minecraft server for the owner's spoken request (`lifecycleRequest.ts`), read at each turn. */
