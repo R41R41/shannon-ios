@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BODY_MIND_PATH } from '../src/contracts/bodyMindContract.js';
@@ -46,14 +46,20 @@ describe('what the Minecraft body calls on the head, against what the head lets 
   const bodyRoot = [process.env.SHANNON_BODY_REPO, resolve(repositoryRoot, '..', 'release-body-1124')]
     .find((candidate): candidate is string => Boolean(candidate) && existsSync(join(candidate!, 'backend/src')));
   it.skipIf(!bodyRoot)('names no /v1/body/* path in the body\'s source that the list above (and so the gate) does not hold', () => {
-    const files = ['backend/src/services/minebot/integration/CompanionBodyClient.ts', 'backend/src/services/minebot/integration/expressionBridge.ts',
-      'backend/src/services/minebot/integration/commonFca/uiModMind.ts', 'backend/src/services/integration/minecraftLifecycleContract.ts',
-      'backend/src/services/integration/shannonLifecycle.ts', 'backend/src/services/minebot/integration/commonFca/minecraftControlContract.ts'];
+    // Every non-test source of the body, not a fixed list: the call that was refused on 2026-11-24 was written as
+    // `${this.baseUrl}/v1/body/mind` (a path after a template placeholder, in a file nobody had listed), so a pattern that
+    // wants the quote right before the path, or a hand-kept file list, missed exactly that call.
+    const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return entry.name === 'testing' || entry.name === 'node_modules' ? [] : walk(full);
+      return /\.ts$/u.test(entry.name) && !/\.test\.ts$/u.test(entry.name) ? [full] : [];
+    });
     const named = new Set<string>();
-    for (const file of files) {
-      const source = readFileSync(join(bodyRoot!, file), 'utf8');
-      for (const match of source.matchAll(/['"`](\/v1\/body\/[A-Za-z0-9_\/-]+)/gu)) named.add(match[1]!.replace(/\/$/u, ''));
+    for (const file of walk(join(bodyRoot!, 'backend/src'))) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/['"`}](\/v1\/body\/[A-Za-z0-9_\/-]+)/gu)) named.add(match[1]!.replace(/\/$/u, ''));
     }
+    expect(named, 'the scan must see the feeling read written after ${baseUrl}').toContain(BODY_MIND_PATH);
     expect(named.size).toBeGreaterThan(5);
     const known = new Set(BODY_BEARER_CALLS.map(([, path]) => path));
     // `/v1/body/minecraft/requests/<id>` is a prefix the body appends an id to; the prefix rule of the gate covers it.
