@@ -74,6 +74,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * request guide about 先に and a repeat, and the placement field's description): the first and third provider requests carry them.
  * One digest of `reach-out` (autonomy_loop_steps) was changed by hand on 2026-11-24 for a change that is not stage 3's (owner: every entrance is the
  * child Shannon): the stored step keeps the reworded fixed phrase of the autonomy loop.
+ * The two digests of `minecraft` (its first and third provider requests) were changed by hand again on 2026-11-24 for a change that is not stage 3's (what a
+ * reply may promise: only the list is what was accepted, and the order example is a blank): the first and third provider requests carry the guide.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 
