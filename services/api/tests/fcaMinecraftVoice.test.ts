@@ -71,7 +71,16 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(fixture({ running: task('t1', 'エンドラを倒す') }).port.state()).toEqual({ connected: true, running: { id: 't1', goal: 'エンドラを倒す' } });
     const f = fixture();
     await f.port.intent(task1());
-    expect(f.port.state()).toEqual({ connected: true, running: null, queue: ['#1 実行中 「まず鉄の剣を作って」'] });
+    // The list says which request runs (here the task runtime's open request is none yet): her reply is told that one.
+    expect(f.port.state()).toEqual({ connected: true, running: { id: 'new-task-1', goal: 'まず鉄の剣を作って' }, queue: ['#1 実行中 「まず鉄の剣を作って」'] });
+  });
+
+  it('after a swap tells her the request put in front as the one under way, and the one put aside as waiting for it (2026-11-23)', async () => {
+    const f = fixture();
+    await f.port.intent(task1({ requestId: 'r1', intent: { kind: 'task', goal: 'ケーキを1個作る' } }));
+    await f.port.intent(task1({ requestId: 'r2', intent: { kind: 'task', goal: 'ベッドを作る', placement: 'now' } }));
+    expect(f.port.state()).toEqual({ connected: true, running: { id: 'new-task-2', goal: 'ベッドを作る' },
+      queue: ['#2 実行中 「ベッドを作る」', '#1 保留（いまはしていない。#2 のあとで戻る） 「ケーキを1個作る」'] });
   });
 
   it('delivers words for the request under way as a message to that task, and adds them as a request of their own when none is running', async () => {

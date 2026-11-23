@@ -30,6 +30,11 @@ export interface QueueRecord {
   updatedAt: string;
   endedAt: string | null;
   note: string | null;
+  /**
+   * The entry this one waits for, when it was let go only because that one was put in front of it (`now`, or a start of another): it is
+   * taken back when that one has ended (`returnInterrupted`). Null for a request the owner held himself, which stays held until he says so.
+   */
+  resumeAfter: string | null;
 }
 
 export interface QueueSnapshot {
@@ -110,6 +115,8 @@ function settle(draft: Draft, entry: QueueRecord, to: MinecraftQueueState, reaso
   if (entry.state === 'running' && to !== 'running') draft.stops.push({ entryId: entry.id, taskId: entry.taskId, reason });
   entry.state = to;
   entry.updatedAt = draft.at;
+  // Whatever takes an entry out of the held state ends its wait; a hold that follows (`interrupt`) marks it again.
+  if (to !== 'paused') entry.resumeAfter = null;
   if (note !== undefined) entry.note = note ? queueNote(note) : null;
   if (!queueEnded(to)) return;
   entry.endedAt = draft.at;
@@ -149,7 +156,7 @@ export function addToQueue(snapshot: QueueSnapshot, input: NewQueueEntry, at: st
   draft.nextSeq += 1;
   draft.autoRun = true;
   const current = running(draft);
-  if (input.placement === 'now' && current) settle(draft, current, 'paused', 'queue_now');
+  if (input.placement === 'now' && current) interrupt(draft, current, entry, 'queue_now');
   draft.order.splice(insertionIndex(input.placement, draft.order, current), 0, entry);
   return changed(draft, entry);
 }
@@ -157,7 +164,16 @@ export function addToQueue(snapshot: QueueSnapshot, input: NewQueueEntry, at: st
 function newRecord(input: NewQueueEntry, goal: string, seq: number, at: string): QueueRecord {
   return { id: input.id, seq, goal, state: 'queued', pos: 0, origin: input.origin, requestId: input.requestId ?? null,
     experienceId: input.experienceId ?? null, observedAt: input.observedAt ?? null,
-    askedBy: input.askedBy ?? null, taskId: null, createdAt: at, updatedAt: at, endedAt: null, note: null };
+    askedBy: input.askedBy ?? null, taskId: null, createdAt: at, updatedAt: at, endedAt: null, note: null, resumeAfter: null };
+}
+
+/**
+ * The running entry let go for `by`, which is put in front of it: held, and marked to come back when `by` has ended. The owner's own hold
+ * (`holdInQueue`) carries no mark.
+ */
+function interrupt(draft: Draft, current: QueueRecord, by: QueueRecord, reason: string): void {
+  settle(draft, current, 'paused', reason);
+  current.resumeAfter = by.id;
 }
 
 function insertionIndex(placement: MinecraftQueuePlacement, order: readonly QueueRecord[], current: QueueRecord | undefined): number {
@@ -207,8 +223,8 @@ export function startQueue(snapshot: QueueSnapshot, target: string | null, at: s
   if (queueEnded(entry.state)) return failed('bad_state');
   const current = running(draft);
   if (current === entry) return changed(draft, entry);
-  if (current) settle(draft, current, 'paused', 'queue_start_other');
   settle(draft, entry, 'queued', 'queue_start');
+  if (current) interrupt(draft, current, entry, 'queue_start_other');
   place(draft, entry, 0);
   return changed(draft, entry);
 }
@@ -244,6 +260,8 @@ export function holdInQueue(snapshot: QueueSnapshot, target: string | null, at: 
   if (!entry) return failed('not_found');
   if (queueEnded(entry.state)) return failed('bad_state');
   if (entry.state !== 'paused') settle(draft, entry, 'paused', 'queue_hold');
+  // His own hold stands: a request held for another's sake that he then holds himself no longer comes back by itself.
+  entry.resumeAfter = null;
   return changed(draft, entry);
 }
 
@@ -328,15 +346,36 @@ export function syncQueue(snapshot: QueueSnapshot, facts: QueueFacts, at: string
     const other = running(draft) !== undefined;
     const entry: QueueRecord = { id: facts.newId(), seq: draft.nextSeq, goal: queueGoal(task.goal) || '(依頼)', state: other ? 'paused' : 'running',
       pos: 0, origin: task.origin, requestId: null, experienceId: null, observedAt: null, askedBy: null, taskId: task.taskId, createdAt: at, updatedAt: at,
-      endedAt: null, note: other ? 'made_outside_while_running' : null };
+      endedAt: null, note: other ? 'made_outside_while_running' : null, resumeAfter: null };
     draft.nextSeq += 1;
     if (other) {
       draft.order.push(entry);
       draft.stops.push({ entryId: entry.id, taskId: task.taskId, reason: 'queue_extra_task' });
     } else draft.order.splice(0, 0, entry);
   }
+  returnInterrupted(draft);
   const next = changed(draft, null);
   return next.ok && !next.stops.length && sameList(snapshot, next.snapshot) ? null : next;
+}
+
+/**
+ * A request that was let go for another's sake comes back (queued, in front of the others, after the one running if one is) when that other
+ * has ended or is gone, or is held by the owner himself (it is set aside: the list must not stand still for it). One that waits for a
+ * request that is itself waiting for another (a chain), stopped by a stop of the whole list, or still waiting its turn keeps waiting.
+ * A request the owner held has no mark and is never taken back here.
+ */
+function returnInterrupted(draft: Draft): void {
+  const back = draft.order.filter(entry => entry.state === 'paused' && entry.resumeAfter !== null && interrupterDone(draft, entry.resumeAfter));
+  const first = running(draft) ? 1 : 0;
+  back.forEach((entry, index) => {
+    settle(draft, entry, 'queued', 'queue_resume_after');
+    place(draft, entry, first + index);
+  });
+}
+
+function interrupterDone(draft: Draft, id: string): boolean {
+  const other = draft.order.find(entry => entry.id === id);
+  return !other || (other.state === 'paused' && other.resumeAfter === null);
 }
 
 function syncEntry(draft: Draft, entry: QueueRecord, facts: QueueFacts, taken: Set<string>): void {
@@ -402,7 +441,12 @@ export function queuePromptLines(snapshot: QueueSnapshot): string[] {
   if (!live.length) return [];
   const limit = MINECRAFT_QUEUE_LIMITS.promptLines;
   const asker = (entry: QueueRecord) => (entry.askedBy ? `（${entry.askedBy}）` : '');
-  const lines = live.slice(0, limit).map(entry => `#${entry.seq} ${LABELS[entry.state]} 「${entry.goal.slice(0, 40)}」${asker(entry)}`);
+  const label = (entry: QueueRecord): string => {
+    const by = entry.state === 'paused' && entry.resumeAfter ? live.find(other => other.id === entry.resumeAfter) : undefined;
+    if (entry.state !== 'paused') return LABELS[entry.state];
+    return by ? `${LABELS.paused}（いまはしていない。#${by.seq} のあとで戻る）` : `${LABELS.paused}（いまはしていない）`;
+  };
+  const lines = live.slice(0, limit).map(entry => `#${entry.seq} ${label(entry)} 「${entry.goal.slice(0, 40)}」${asker(entry)}`);
   if (live.length > limit) lines.splice(limit - 1, 1, `ほか ${live.length - limit + 1} 件`);
   if (!snapshot.autoRun) lines.push('（列は止めてある。始めると続きから動く）');
   return lines.slice(0, limit + 1);

@@ -183,6 +183,24 @@ describe('Minecraft requests enter the canonical common task tree', () => {
     });
   });
 
+  it('a request with a placement joins the list there: now puts the running one aside (it comes back after), next goes after it (2026-11-23)', async () => {
+    const f = fixture();
+    await f.foreground(async turn => {
+      await f.execute('minecraft.request', { goal: 'Make a cake' });
+      const next = await f.execute('minecraft.request', { goal: 'Find stone', placement: 'next' });
+      expect(next.text).toContain('すぐ次に始まる');
+      const now = await f.execute('minecraft.request', { goal: 'Make a bed', placement: 'now' });
+      expect(now.text).toContain('いまの依頼を保留にして先に始める');
+      expect(f.api.queue.view().entries.map(entry => `${entry.goal}:${entry.state}`)).toEqual(['Make a bed:running', 'Make a cake:paused', 'Find stone:queued']);
+      expect(f.api.queue.promptLines()[1]).toContain('保留（いまはしていない。#3 のあとで戻る）');
+      // Without a placement, or with one the list does not know, the request goes to the end as it always did.
+      await f.execute('minecraft.request', { goal: 'Find wood' });
+      await f.execute('minecraft.request', { goal: 'Find sand', placement: 'sideways' });
+      expect(f.api.queue.view().entries.map(entry => entry.goal)).toEqual(['Make a bed', 'Make a cake', 'Find stone', 'Find wood', 'Find sand']);
+      turn.abort();
+    });
+  });
+
   it('stops the owner\'s unfinished body task from the mod\'s 「やめる」 whatever its turn shows, naming the task or not (dragon26 fix 4)', async () => {
     const lines: string[] = [], f = fixture();
     let visibleTurn = true;

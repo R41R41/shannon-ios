@@ -13,10 +13,11 @@ import { OWNER_SLOT_LIMITS_STEP } from './execution/011_owner_slot_limits.js';
 import { OPERATOR_AUDIT_STEP } from './execution/012_operator_audit.js';
 import { FCA_PROVENANCE_SETS_STEP } from './execution/013_fca_provenance_sets.js';
 import { MINECRAFT_REQUEST_QUEUE_STEP } from './execution/014_minecraft_request_queue.js';
+import { MINECRAFT_QUEUE_RESUME_AFTER_STEP } from './execution/015_minecraft_queue_resume_after.js';
 
 export {
   ACTION_SLOTS_STEP, ACTION_THREADS_STEP, FCA_PROVENANCE_SETS_STEP, FCA_TASK_AUTHORITY_STEP, FCA_TASK_RUNTIME_STEP, FCA_TOUCH_STEP,
-  LIVENESS_EPISODES_STEP, MIND_WORKER_STARTS_STEP, MINECRAFT_REQUEST_QUEUE_STEP, OPERATOR_AUDIT_STEP, OWNER_SLOT_LIMITS_STEP, TASK_EXECUTION_COLUMNS_STEP,
+  LIVENESS_EPISODES_STEP, MIND_WORKER_STARTS_STEP, MINECRAFT_QUEUE_RESUME_AFTER_STEP, MINECRAFT_REQUEST_QUEUE_STEP, OPERATOR_AUDIT_STEP, OWNER_SLOT_LIMITS_STEP, TASK_EXECUTION_COLUMNS_STEP,
   TASK_HOST_STARTING_STEP, TASK_TREES_STEP,
 };
 
@@ -24,12 +25,12 @@ export {
  * Every schema step of the execution system, in order (Syzygy ADR-0009 stage 1: 001-007 moved the historical DDL in S2, 008 and
  * 009 are the additive columns and slot tables of S3, 010 the stored Host starting flag of S4, 011 the owner's slot limits of
  * S6), 012 the operator's append-only audit (2026-10-14), 013 the FCA provenance sets (2026-10-15), 014 the list of requests for her
- * Minecraft body (2026-11-21). Each owner applies its own
+ * Minecraft body (2026-11-21), 015 which request a held one waits for (2026-11-23). Each owner applies its own
  * step when it opens (a step stays where its switch is: a database that never ran the common runtime, the touch reflex or the
  * task trees keeps its historical schema); this list is for tests and the deploy check.
  */
 export const EXECUTION_STEPS: readonly SchemaStep[] = Object.freeze([
   ACTION_THREADS_STEP, MIND_WORKER_STARTS_STEP, LIVENESS_EPISODES_STEP, FCA_TASK_AUTHORITY_STEP, FCA_TASK_RUNTIME_STEP, TASK_TREES_STEP,
   FCA_TOUCH_STEP, TASK_EXECUTION_COLUMNS_STEP, ACTION_SLOTS_STEP, TASK_HOST_STARTING_STEP, OWNER_SLOT_LIMITS_STEP, OPERATOR_AUDIT_STEP,
-  FCA_PROVENANCE_SETS_STEP, MINECRAFT_REQUEST_QUEUE_STEP,
+  FCA_PROVENANCE_SETS_STEP, MINECRAFT_REQUEST_QUEUE_STEP, MINECRAFT_QUEUE_RESUME_AFTER_STEP,
 ]);

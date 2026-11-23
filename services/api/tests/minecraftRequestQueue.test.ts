@@ -227,3 +227,87 @@ describe('naming an entry and telling her the list', () => {
     expect(lines.at(-1)).toBe('ほか 8 件');
   });
 });
+
+describe('a request put aside for another comes back by itself (2026-11-23)', () => {
+  const facts = (phases: Record<string, string | null>) => ({ phases: new Map(Object.entries(phases)), starting: new Set<string>(), newId: () => 'x', unowned: [] });
+  /** The pass the pump makes: the list says what the tasks are, and the body, free again, takes the next one. */
+  const pass = (s: QueueSnapshot, phases: Record<string, string | null>): QueueSnapshot => {
+    const synced = syncQueue(s, facts(phases), at());
+    return synced ? ok(synced) : s;
+  };
+  const entryOf = (s: QueueSnapshot, goal: string) => s.entries.find(entry => entry.goal === goal)!;
+  /** `a` running, `urgent` put in front with `now`, and the pump has started it. */
+  const swapped = () => {
+    const first = started(add(add(EMPTY_QUEUE, 'a'), 'b'));
+    const now = add(first, 'urgent', 'now');
+    return started(now);
+  };
+
+  it('marks the one let go by a `now` with the request that went in front, and says so in the prompt lines', () => {
+    const s = swapped();
+    expect(states(s)).toEqual(['urgent:running', 'a:paused', 'b:queued']);
+    expect(entryOf(s, 'a').resumeAfter).toBe('id-urgent');
+    expect(queuePromptLines(s)).toEqual(['#3 実行中 「urgent」', '#1 保留（いまはしていない。#3 のあとで戻る） 「a」', '#2 待ち 「b」']);
+  });
+
+  it('takes it back in front of the others when the one that went in front is done, failed or cancelled', () => {
+    for (const how of ['completed', 'failed'] as const) {
+      const back = pass(swapped(), { 'task-urgent': how, 'task-a': 'stopped' });
+      expect(states(back)).toEqual(['a:queued', 'b:queued']);
+      expect(entryOf(back, 'a').resumeAfter).toBeNull();
+      expect((claimFromQueue(back, at()) as Good).entry!.goal).toBe('a');
+    }
+    const cancelled = ok(cancelInQueue(swapped(), 'id-urgent', at()));
+    expect(states(pass(cancelled, { 'task-a': 'stopped' }))).toEqual(['a:queued', 'b:queued']);
+    const removed = ok(deleteFromQueue(ok(cancelInQueue(swapped(), 'id-urgent', at())), 'id-urgent', at()));
+    expect(states(pass(removed, { 'task-a': 'stopped' }))).toEqual(['a:queued', 'b:queued']);
+  });
+
+  it('waits while the one that went in front still runs, and while the whole list is stopped', () => {
+    const s = swapped();
+    expect(syncQueue(s, facts({ 'task-urgent': 'executing', 'task-a': 'stopped' }), at())).toBeNull();
+    const halted = ok(stopQueue(s, at()));
+    expect(entryOf(pass(halted, { 'task-a': 'stopped' }), 'a').state).toBe('paused');
+  });
+
+  it('does not take back what the owner held himself, before or after the swap', () => {
+    const own = ok(holdInQueue(started(add(add(EMPTY_QUEUE, 'a'), 'b')), 'id-a', at()));
+    expect(entryOf(own, 'a').resumeAfter).toBeNull();
+    expect(queuePromptLines(own)[0]).toBe('#1 保留（いまはしていない） 「a」');
+    expect(states(pass(own, { 'task-a': 'stopped' }))).toEqual(['a:paused', 'b:queued']);
+    // He holds, himself, the one that was put aside: it stays held when the other is done.
+    const held = ok(holdInQueue(swapped(), 'id-a', at()));
+    expect(entryOf(held, 'a').resumeAfter).toBeNull();
+    expect(entryOf(pass(held, { 'task-urgent': 'completed', 'task-a': 'stopped' }), 'a').state).toBe('paused');
+  });
+
+  it('sets the request aside for good when he says it can wait (a hold of the one that went in front): the other comes back and the list goes on', () => {
+    const later = ok(holdInQueue(swapped(), 'id-urgent', at()));
+    const back = pass(later, { 'task-urgent': 'stopped', 'task-a': 'stopped' });
+    expect(states(back)).toEqual(['a:queued', 'urgent:paused', 'b:queued']);
+  });
+
+  it('marks the one let go by a start of another (the list screen), and a start of the one that waits for the other cancels the mark', () => {
+    const s = ok(startQueue(started(add(add(EMPTY_QUEUE, 'a'), 'b')), 'id-b', at()));
+    expect(entryOf(s, 'a')).toMatchObject({ state: 'paused', resumeAfter: 'id-b' });
+    expect(states(pass(started(s), { 'task-b': 'completed', 'task-a': 'stopped' }))).toEqual(['a:queued']);
+    const swap = started(s);
+    const again = ok(startQueue(swap, 'id-a', at()));
+    expect(entryOf(again, 'a').resumeAfter).toBeNull();
+    expect(entryOf(again, 'b')).toMatchObject({ state: 'paused', resumeAfter: 'id-a' });
+  });
+
+  it('keeps a chain in its order: the one waiting for a request that itself waits does not come back before it', () => {
+    const second = started(add(swapped(), 'third', 'now'));
+    expect(states(second)).toEqual(['third:running', 'urgent:paused', 'a:paused', 'b:queued']);
+    const mid = pass(second, { 'task-third': 'completed', 'task-urgent': 'stopped', 'task-a': 'stopped' });
+    expect(states(mid)).toEqual(['urgent:queued', 'a:paused', 'b:queued']);
+    const run = started(mid);
+    expect(states(pass(run, { 'task-urgent': 'completed', 'task-a': 'stopped' }))).toEqual(['a:queued', 'b:queued']);
+  });
+
+  it('never takes back an entry held before the marks existed (no mark, no return)', () => {
+    const old = { ...swapped(), entries: swapped().entries.map(entry => ({ ...entry, resumeAfter: null })) };
+    expect(states(pass(old, { 'task-urgent': 'completed', 'task-a': 'stopped' }))).toEqual(['a:paused', 'b:queued']);
+  });
+});

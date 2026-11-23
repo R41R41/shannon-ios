@@ -106,7 +106,8 @@ export function fcaMinecraftQueue(parts: QueueParts) {
     await Promise.race([Promise.allSettled(stops), new Promise<void>(resolve => setTimeout(resolve, QUEUE_STOP_WAIT_MS).unref())]);
   };
 
-  const logChange = (op: string, before: QueueSnapshot, after: QueueChange): void => {
+  /** `detail`: what the journal also keeps of the word (an add's placement, a start's target), so that a swap is seen in it. */
+  const logChange = (op: string, before: QueueSnapshot, after: QueueChange, detail = ''): void => {
     if (!after.ok) {
       parts.log(`Shannon Minecraft queue op=${op} code=${after.code}`);
       return;
@@ -114,7 +115,7 @@ export function fcaMinecraftQueue(parts: QueueParts) {
     const entry = after.entry;
     const was = entry ? before.entries.find(item => item.id === entry.id)?.state ?? '-' : '-';
     const name = entry ? `#${entry.seq}` : '-';
-    parts.log(`Shannon Minecraft queue op=${op} entry=${name} state=${was}→${entry?.state ?? '-'} origin=${entry?.origin ?? '-'} code=ok`);
+    parts.log(`Shannon Minecraft queue op=${op} entry=${name} state=${was}→${entry?.state ?? '-'} origin=${entry?.origin ?? '-'} code=ok${detail}`);
   };
 
   const LIVE = ['ready', 'executing', 'waiting', 'stopping', 'unknown'];
@@ -239,7 +240,7 @@ export function fcaMinecraftQueue(parts: QueueParts) {
       before = snapshot;
       return applied(request, context, snapshot, { at, id, newId: newId() });
     })!;
-    logChange(request.op, before, changed);
+    logChange(request.op, before, changed, request.op === 'add' ? ` placement=${request.placement ?? 'end'}` : request.op === 'move' ? ` before=${request.before ?? 'end'}` : '');
     if (!changed.ok) return { ok: false, code: changed.code, entry: null };
     await settleStops(changed, context.stopReason);
     const entry = changed.entry;
